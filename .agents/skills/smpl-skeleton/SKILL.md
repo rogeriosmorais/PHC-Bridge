@@ -5,10 +5,15 @@ description: SMPL body model joint definitions, coordinate system, and reference
 
 # SMPL Skeleton Reference
 
+> Status: planning reference. Use this as a starting point for later implementation, but verify the final transform against UE5 runtime data before treating it as implementation-safe.
+
 ## Coordinate System
+
 - **SMPL uses Y-up, right-handed** (Y is up, X is right, Z is forward)
 - **UE5 uses Z-up, left-handed** (Z is up, X is forward, Y is right)
-- Conversion: `UE5.X = SMPL.Z`, `UE5.Y = SMPL.X`, `UE5.Z = SMPL.Y`
+- The simple axis permutation `UE5.X = SMPL.Z`, `UE5.Y = SMPL.X`, `UE5.Z = SMPL.Y` only changes axis order. It does **not** by itself account for the handedness change.
+- Treat the final handedness-aware transform as unresolved until it is verified against UE5 implementation data and reference poses.
+- Safe planning assumption: the Stage 1 bridge must include an explicit, tested coordinate-frame conversion step rather than relying on axis permutation alone.
 
 ## SMPL Joint Indices (24 joints)
 
@@ -36,30 +41,31 @@ description: SMPL body model joint definitions, coordinate system, and reference
 | 19 | R_Elbow | 17 | lowerarm_r |
 | 20 | L_Wrist | 18 | hand_l |
 | 21 | R_Wrist | 19 | hand_r |
-| 22 | L_Hand | 20 | (unmapped — fingers) |
-| 23 | R_Hand | 21 | (unmapped — fingers) |
+| 22 | L_Hand | 20 | (unmapped - fingers) |
+| 23 | R_Hand | 21 | (unmapped - fingers) |
 
 ## SMPL Pose Representation
 
-- Pose is stored as **axis-angle** rotation vectors: 24 joints × 3 floats = 72 floats
+- Pose is stored as **axis-angle** rotation vectors: 24 joints x 3 floats = 72 floats
 - Each 3-float vector represents the axis of rotation (direction) and the angle (magnitude in radians)
 - To convert to quaternion: use Rodrigues' rotation formula
 - **T-pose** = all zeros (identity rotation for every joint)
 
-## PHC Observation Space (approximate, ~131 floats)
+## PHC Observation Space (approximate planning reference, ~131 floats)
 
 The exact observation space depends on the PHC version, but typically includes:
+
 - Root position (3)
 - Root orientation as quaternion (4)
 - Root linear velocity (3)
 - Root angular velocity (3)
-- Joint positions relative to root (23 × 3 = 69)
-- Joint rotations as 6D rotation representation (23 × 6 = 138) or quaternions (23 × 4 = 92)
-- Joint angular velocities (23 × 3 = 69)
+- Joint positions relative to root (23 x 3 = 69)
+- Joint rotations as 6D rotation representation (23 x 6 = 138) or quaternions (23 x 4 = 92)
+- Joint angular velocities (23 x 3 = 69)
 
-Check the specific PHC config for the exact observation and action spaces.
+Check the specific PHC config for the exact observation and action spaces before implementation.
 
-## PHC Action Space (approximate, ~69 floats for joint targets)
+## PHC Action Space (approximate planning reference, ~69 floats for joint targets)
 
 - Typically outputs target joint rotations in axis-angle or quaternion format
 - Some versions also output PD gains (stiffness/damping per joint)
