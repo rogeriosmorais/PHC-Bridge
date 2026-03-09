@@ -29,7 +29,7 @@ Use only:
 - `plans/stage1/manual-verification.md`
 - `plans/stage1/assumption-ledger.md`
 
-## Criterion 1: PHC Output Looks Alive In Training
+## Criterion 1: Pretrained Policy Output Looks Alive In Training
 
 - `Status`: pending
 - `Checkpoint`: `MV-G1-01`
@@ -81,6 +81,16 @@ Use only:
   - settings used:
   - clip or log:
   - notes on stability:
+- `Verdict`: pending
+- `Why this verdict was chosen`:
+
+## Motion Set Coverage Review
+
+- `Status`: pending
+- `Evidence`:
+  - locomotion-core source note:
+  - combat-core source note:
+  - missing motions:
 - `Verdict`: pending
 - `Why this verdict was chosen`:
 

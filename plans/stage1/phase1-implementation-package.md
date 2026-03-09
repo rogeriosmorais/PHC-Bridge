@@ -15,6 +15,7 @@ Do not start Phase 1 implementation until all of these are true:
 - Gate G1 is explicitly `pass` in [g1-evidence.md](/F:/NewEngine/plans/stage1/g1-evidence.md)
 - `bridge-spec.md` is locked for the chosen PHC config
 - `retargeting-spec.md` is locked for the Stage 1 mapped subset
+- `motion-set.md` is locked for the Stage 1 locomotion and combat core
 - `test-strategy.md` is stable enough to define Phase 1 evidence
 - the orchestrator has reviewed `assumption-ledger.md` and confirmed there is no `red` assumption blocking one-character implementation
 
@@ -22,7 +23,7 @@ Do not start Phase 1 implementation until all of these are true:
 
 1. One-character implementation package for the Stage 1 bridge
 2. ONNX / NNE integration plan for the selected PHC model
-3. PoseSearch content-integration plan for locomotion and fight clips
+3. PoseSearch content-integration plan for the locked locomotion and fight clips
 4. PD tuning plan for one-character stability and comparison readiness
 5. A clear setup for the G2 side-by-side evaluation package
 
@@ -88,6 +89,19 @@ Phase 1 does not include:
   - expected runtime evidence for successful loading and inference
 - Escalate if:
   - the selected model export path no longer fits the Stage 1 assumptions
+
+### P1-03b: Pretrained Versus Fine-Tuned Runtime Decision
+
+- Owner: orchestrator
+- Goal: decide whether Phase 1 should run on the pretrained model directly or on a fine-tuned version
+- Inputs:
+  - G1 evidence
+  - motion-set coverage review
+- Output:
+  - explicit `pretrained`, `fine-tuned`, or `stop/replan` decision
+- Default:
+  - use pretrained only if it is good enough for the locked motion set
+  - otherwise fine-tune on the locked motion set before expecting G2 to be meaningful
 
 ### P1-04: PoseSearch Content Scope
 

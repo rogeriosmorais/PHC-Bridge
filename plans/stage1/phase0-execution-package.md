@@ -14,6 +14,7 @@ The required outputs are:
 
 - confirmed PHC bridge contract
 - confirmed retargeting validation plan
+- confirmed pretrained-first viability
 - confirmed test/evidence shape for G1
 - evidence that the UE5 control path and Manny/Chaos smoke path are viable
 
@@ -31,8 +32,9 @@ Do not start Phase 0 until all of these are true:
 
 1. Updated `bridge-spec.md` with confirmed PHC config details
 2. Updated `retargeting-spec.md` with the exact validation cases chosen for G1
-3. A completed [g1-evidence.md](/F:/NewEngine/plans/stage1/g1-evidence.md) package
-4. A short go / no-go conclusion for Gate G1
+3. Motion-source review against [motion-set.md](/F:/NewEngine/plans/stage1/motion-set.md)
+4. A completed [g1-evidence.md](/F:/NewEngine/plans/stage1/g1-evidence.md) package
+5. A short go / no-go conclusion for Gate G1
 
 ## Current Known Local Environment Note
 
@@ -93,6 +95,23 @@ Do not start Phase 0 until all of these are true:
 - Escalate if:
   - the chosen config does not support the intended Stage 1 bridge without scope changes
 
+### P0-03b: Confirm Motion Sources
+
+- Owner: AI worker
+- Goal: confirm that the locked Stage 1 motion set is actually sourceable
+- Inputs:
+  - `plans/stage1/motion-set.md`
+  - available pretrained model context
+  - planned AMASS / Mixamo sources
+- Output:
+  - short motion-source note or update to `motion-set.md`
+- Must confirm:
+  - which locomotion-core motions are covered by the broad pretrained / AMASS path
+  - which combat-core motions require fine-tuning data
+  - which motions are at risk of being missing
+- Escalate if:
+  - the locked motion set cannot be sourced without changing scope
+
 ### P0-04: Confirm Retargeting Validation Set
 
 - Owner: AI worker
@@ -112,17 +131,18 @@ Do not start Phase 0 until all of these are true:
 ### P0-05: Training-Side Feasibility Check
 
 - Owner: AI + user
-- Goal: confirm that PHC training-side output is worth continuing
+- Goal: confirm that pretrained policy output is worth continuing
 - Inputs:
   - training workflow
+  - `plans/stage1/motion-set.md`
   - manual check `MV-G1-01`
 - Output:
   - evidence entry in `g1-evidence.md`
 - Required evidence:
-  - clip or visualization of PHC locomotion
+  - clip or visualization of pretrained broad motion evaluation
   - verdict: `pass`, `fail`, or `unclear`
 - Escalate if:
-  - the motion is unstable or clearly robotic
+  - the pretrained result is unstable or clearly robotic
 
 ### P0-06: UE5 Control-Path Check
 

@@ -159,24 +159,45 @@ Stage 2 replaces CPU-based Chaos systems with custom GPU compute shaders to demo
 
 Newton is built on NVIDIA Warp + OpenUSD, co-developed with Google DeepMind and Disney Research. ProtoMotions already supports multiple simulator backends (Isaac Gym, Isaac Sim, Isaac Lab), so switching to Newton/Isaac Lab is a config change, not a rewrite. Newton's differentiable physics could also enable gradient-based fine-tuning of the sim-to-sim gap.
 
+### Pretrained-First Strategy
+
+Stage 1 should not assume training from scratch on day one.
+
+The first attempt should use an available pretrained ProtoMotions-compatible policy for fast feasibility testing. The best documented starting point currently available is the pretrained **MaskedMimic SMPL humanoid** model, which is described as:
+
+- pretrained for the **SMPL humanoid (no fingers)**
+- intended to generate motion from partial constraints
+- trained in **IsaacLab**
+- associated with datasets listed on the model card: **AMASS** and **HumanML3D**
+
+This makes it a good feasibility shortcut for broad human motion, but not a guarantee of combat-specific behavior or clean transfer to UE/Chaos.
+
+So the Stage 1 order is:
+
+1. try pretrained policy for feasibility
+2. fine-tune if the pretrained result is promising but not sufficient
+3. train from scratch only if pretrained and fine-tuned paths are inadequate
+
 ### Data Sources
 
 | Source | Format | Use | Notes |
 |---|---|---|---|
 | **AMASS dataset** | SMPL (native) | Locomotion training for PHC | 40+ hours, 300+ subjects, free for research. No conversion needed |
 | **Mixamo** | FBX -> AMASS conversion | Fighting-specific clips (punches, kicks, blocks) | Requires retargeting script to SMPL skeleton |
+| **HumanML3D** | Motion-language dataset derived from AMASS + HumanAct12 | Broad motion coverage for pretrained model context and optional evaluation references | Broad actions such as daily activities, sports, acrobatics, and dance. Not combat-focused |
 
 ### Training Stages
 
 | Stage | What | Starting Point | Est. Time (4070S) |
 |---|---|---|---|
-| 1. PHC baseline on AMASS | Locomotion tracking | Existing PHC code + AMASS data | ~2-4 hours |
-| 2. Fine-tune on fight mocap | Add Mixamo fighting clips | PHC weights | 4-8 hours |
-| 3. Impact response | External force perturbation curriculum | Fine-tuned PHC | 4-8 hours |
+| 0. Pretrained feasibility eval | Evaluate available pretrained policy on representative motions | Pretrained ProtoMotions-compatible checkpoint | ~0.5-2 hours plus setup |
+| 1. Fine-tune on Stage 1 locomotion set | Adapt pretrained model to the project's locomotion subset | Pretrained checkpoint | ~2-4 hours |
+| 2. Fine-tune on Stage 1 fight set | Add selected fighting clips | Locomotion-adapted weights | 4-8 hours |
+| 3. Impact response | External force perturbation curriculum | Fine-tuned combat tracker | 4-8 hours |
 | 4. Muscle stiffness head (Stage 2 only) | Extend output for XPBD flesh | Trained policy | 2-4 hours |
 | 5. MaskedMimic upgrade (Stage 2 only) | Multi-skill composition from partial cues | Trained PHC as foundation | 8-16 hours |
 
-**Total Stage 1: ~12-24 GPU-hours** (2-4 overnight runs).
+**Total Stage 1 after setup: ~10-20 GPU-hours** if fine-tuning is sufficient, or more if training from scratch becomes necessary.
 **Total with Stage 2 upgrades: ~24-40 GPU-hours** (with Newton, potentially 2-4x faster).
 
 ### Sim-to-Sim Transfer
@@ -185,6 +206,33 @@ Newton is built on NVIDIA Warp + OpenUSD, co-developed with Google DeepMind and 
 - The `UPhysicsControlComponent`'s spring/damper drives approximate Isaac Gym's PD controllers. Tuning strength/damping values is the main calibration work.
 - If using Newton: Newton's MuJoCo-Warp physics may be closer to Chaos Physics than Isaac Gym's, potentially reducing the sim-to-sim gap.
 - **Fallback:** Hand-tuned PD controller via the Physics Control Component with fixed gains. No RL needed - less capable but functional.
+
+### Stage 1 Motion Set (locked planning scope)
+
+Stage 1 should not leave the target motions undefined. Use this motion scope:
+
+- **Locomotion core**
+  - idle / stand
+  - walk forward
+  - jog / run forward
+  - start / stop transitions
+  - left and right turns / pivots
+  - side-step / strafe left and right
+  - short recovery / rebalance motions
+- **Combat core**
+  - left jab
+  - right cross
+  - left hook
+  - right hook
+  - front kick
+  - round kick
+  - block / guard pose
+  - dodge / lean / evade
+- **Out of scope for Stage 1**
+  - grappling
+  - weapon use
+  - acrobatics-heavy combat
+  - long cinematic combos
 
 ### Policy Evolution Path
 
@@ -237,8 +285,8 @@ Note: the workflow docs in `.agents/workflows/` are planned procedures for these
 
 | Task | Deliverable |
 |---|---|
-| Set up ProtoMotions + Isaac Gym; run PHC on AMASS locomotion data | Visual: physics-driven motion looks alive |
-| Fine-tune PHC on one Mixamo fighting clip | Visual: PHC tracks a punch/kick while balanced |
+| Set up ProtoMotions + Isaac Gym/Lab; evaluate an available pretrained policy on the Stage 1 locomotion core | Visual: pretrained policy produces promising motion |
+| Fine-tune the pretrained policy on the locked Stage 1 combat core if needed | Visual: policy tracks at least one punch/kick while balanced |
 | Lock the exact PHC observation/action contract from the chosen ProtoMotions config | Bridge spec: observation fields, pose/velocity representation, reference-pose handling, output mapping assumptions |
 | Create UE5 5.5 project; Manny with Physics Asset + Physics Control Component | Articulated ragdoll with motor-driven joints |
 | Test: drive Physics Control Component targets from C++ each frame | Confirm programmatic joint control works |
@@ -247,7 +295,7 @@ Note: the workflow docs in `.agents/workflows/` are planned procedures for these
 | Prototype: SMPL <-> UE5 joint mapping (static table, test with hardcoded poses) | Confirm retargeting produces correct poses |
 | End-to-end bridge smoke test: feed minimal SMPL/PHC-style output through mapping into Manny under Chaos | Confirm integrated transfer path works without obvious mapping failure or instability |
 
-**Gate G1:** PHC output looks alive in Isaac Gym AND the PHC observation/action contract is locked AND Physics Control Component responds to programmatic targets AND a minimal SMPL/PHC output can drive Manny in Chaos without obvious mapping failure or instability AND substep rate is stable. If any fails, stop.
+**Gate G1:** Pretrained or fine-tuned policy output looks alive in the training simulator AND the PHC observation/action contract is locked AND Physics Control Component responds to programmatic targets AND a minimal SMPL/PHC output can drive Manny in Chaos without obvious mapping failure or instability AND substep rate is stable. If any fails, stop.
 
 #### Phase 1: One Physics-Driven Character (Weeks 3-4)
 
