@@ -6,10 +6,33 @@ This document defines what each AI-owned Stage 1 task is supposed to do, what it
 
 ## Delegation Rules
 
+- Stage 1 uses one orchestrator agent and one or more worker agents, not a peer swarm.
+- The orchestrator owns sequencing, dependency freeze, task assignment, blocker handling, and final integration.
+- Worker agents own one task ID at a time and produce one primary artifact plus a handoff.
 - AI tasks may reshape task sequencing only within the locked architecture.
 - AI tasks must produce a concrete artifact, not just discussion.
 - AI tasks must flag blockers instead of guessing when an external dependency, license, editor action, or subjective quality gate is involved.
 - AI tasks that touch retargeting must use `.agents/skills/smpl-skeleton/SKILL.md` as a planning reference and must keep its transform caveats intact.
+- Worker agents must not edit shared planning or implementation files outside the paths assigned by the orchestrator.
+- Worker agents must not self-assign downstream tasks.
+
+## Orchestrator Responsibilities
+
+- select the next runnable task IDs
+- freeze required inputs before delegating work
+- maintain the live assumption and failure ledger
+- assign non-overlapping writable outputs
+- stop or reissue tasks when upstream assumptions change
+- collect handoffs and decide whether artifacts are accepted
+- escalate to the user when a blocker falls under `plans/stage1/user-interventions.md`
+
+## Worker Responsibilities
+
+- execute only the assigned task scope
+- produce the artifact named in the task definition
+- report blockers immediately instead of improvising around them
+- return work using the shared handoff format
+- treat upstream inputs as frozen for the life of the assignment
 
 ## AI Tasks
 

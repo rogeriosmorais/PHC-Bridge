@@ -38,6 +38,8 @@ Before implementation starts, this plan must produce these concrete artifacts. T
 ## Planning Bundle
 
 - [Task Graph](/F:/NewEngine/plans/stage1/task-graph.md)
+- [Orchestration Model](/F:/NewEngine/plans/stage1/orchestration.md)
+- [Assumption Ledger](/F:/NewEngine/plans/stage1/assumption-ledger.md)
 - [Delegation Spec](/F:/NewEngine/plans/stage1/delegation-spec.md)
 - [Handoff Format](/F:/NewEngine/plans/stage1/handoff-format.md)
 - [User Intervention Checklist](/F:/NewEngine/plans/stage1/user-interventions.md)
@@ -50,6 +52,17 @@ The Stage 1 planning bundle now exists. The next planning pass should fill in th
 1. the Phase 0 execution package
 2. the G1 evidence package template
 3. the Phase 1 implementation package
+
+## Execution Model
+
+Stage 1 uses a **hub-and-spoke** execution model:
+
+- one **orchestrator agent** owns planning, sequencing, dependency control, and final integration
+- the orchestrator also owns the live assumption and failure ledger
+- one or more **worker agents** own individual task IDs and produce exactly one artifact per task
+- the **user** intervenes only at explicitly defined checkpoints
+
+Do not run Stage 1 as a group of peer agents editing shared work opportunistically. Use the orchestration rules in [orchestration.md](/F:/NewEngine/plans/stage1/orchestration.md).
 
 ## AI Task Template
 
