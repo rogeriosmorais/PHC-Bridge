@@ -47,11 +47,11 @@ Before implementation starts, this plan must produce these concrete artifacts. T
 
 ## Current Status
 
-The Stage 1 planning bundle now exists. The next planning pass should fill in the task-specific specs referenced by the delegation document, starting with:
+The Stage 1 planning bundle now includes the core planning specs plus the Phase 0 execution package and G1 evidence template. The next planning pass should fill in:
 
-1. the Phase 0 execution package
-2. the G1 evidence package template
-3. the Phase 1 implementation package
+1. the Phase 1 implementation package
+2. the G2 evaluation package
+3. the Phase 2 demo package
 
 ## Execution Model
 
