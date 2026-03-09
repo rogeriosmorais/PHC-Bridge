@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+*.so
+.venv/
+env/
+venv/
+
+# Conda
+.conda/
+
+# Training outputs (large files)
+Training/output/*.pt
+Training/output/*.onnx
+Training/output/*.engine
+Training/output/checkpoints/
+Training/ProtoMotions/
+
+# AMASS data (large, downloaded separately)
+Training/data/amass/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# UE5
+PhysAnimUE5/Binaries/
+PhysAnimUE5/Intermediate/
+PhysAnimUE5/Saved/
+PhysAnimUE5/DerivedDataCache/
+PhysAnimUE5/.vs/
+PhysAnimUE5/*.sln
+PhysAnimUE5/*.vcxproj*
+*.pdb
+
+# UE5 Plugin build artifacts
+PhysAnimUE5/Plugins/PhysAnimPlugin/Binaries/
+PhysAnimUE5/Plugins/PhysAnimPlugin/Intermediate/
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
