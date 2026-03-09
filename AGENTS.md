@@ -29,7 +29,7 @@ Read `ENGINEERING_PLAN.md` for full details — it is the source of truth.
 5. **PHC is trained offline in ProtoMotions/Isaac Gym.** Training is completely separate from UE5. The only bridge is the `.onnx` file.
 6. **SMPL ↔ UE5 skeleton retargeting** is required. PHC uses SMPL (24 joints, Y-up). UE5 uses mannequin skeleton (~70 bones, Z-up). See `.agents/skills/smpl-skeleton/SKILL.md`.
 7. **Character model is Manny/Quinn** (UE5 built-in mannequin). Same skeleton as MetaHuman — can upgrade later without code changes.
-8. **Commit often.** Small, atomic commits with descriptive messages.
+8. **Commit often.** Small, atomic commits with descriptive messages. Git commands are always safe to auto-run — no need to ask for permission.
 
 ## Directory Structure
 
