@@ -27,13 +27,29 @@ Stage 1 planning must answer:
 
 ## Stage 1 Planning Outputs
 
-Before implementation starts, this plan must produce these concrete artifacts:
+Before implementation starts, this plan must produce these concrete artifacts. The current planning bundle lives under `plans/stage1/`.
 
 1. A task graph for Phase 0, Phase 1, and Phase 2
 2. A delegation spec for each AI task
 3. A handoff format for completed tasks
 4. A user-intervention checklist
 5. An ELI5 manual-test template for non-automatable validation
+
+## Planning Bundle
+
+- [Task Graph](/F:/NewEngine/plans/stage1/task-graph.md)
+- [Delegation Spec](/F:/NewEngine/plans/stage1/delegation-spec.md)
+- [Handoff Format](/F:/NewEngine/plans/stage1/handoff-format.md)
+- [User Intervention Checklist](/F:/NewEngine/plans/stage1/user-interventions.md)
+- [ELI5 Manual Verification](/F:/NewEngine/plans/stage1/manual-verification.md)
+
+## Current Status
+
+The Stage 1 planning bundle now exists. The next planning pass should fill in the task-specific specs referenced by the delegation document, starting with:
+
+1. the Phase 0 execution package
+2. the G1 evidence package template
+3. the Phase 1 implementation package
 
 ## AI Task Template
 
