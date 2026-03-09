@@ -36,4 +36,4 @@ pytest f:\NewEngine\Training\tests\test_phc_training.py -v
 & "$env:UE5_PATH\Binaries\Win64\UnrealEditor-Cmd.exe" "f:\NewEngine\PhysAnimUE5\PhysAnimUE5.uproject" -ExecCmds="Automation RunTests PhysAnim" -NullRHI -NoSound -Unattended -Log
 ```
 
-Note: Set `UE5_PATH` first. During pre-Phase 0, treat these as intended commands rather than guaranteed-runnable steps.
+Note: Set `UE5_PATH` to the UE `Engine` directory first. For the current local plan, once installation finishes, that should be `E:\UE_5.7\Engine`. During pre-Phase 0, treat these as intended commands rather than guaranteed-runnable steps.

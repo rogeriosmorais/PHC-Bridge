@@ -34,6 +34,12 @@ Do not start Phase 0 until all of these are true:
 3. A completed [g1-evidence.md](/F:/NewEngine/plans/stage1/g1-evidence.md) package
 4. A short go / no-go conclusion for Gate G1
 
+## Current Known Local Environment Note
+
+- UE installation in progress: `UE 5.7.3`
+- Planned install root: `E:\UE_5.7`
+- Planned `UE5_PATH` value after install completes: `E:\UE_5.7\Engine`
+
 ## Work Breakdown
 
 ### P0-01: Freeze Inputs
@@ -64,6 +70,7 @@ Do not start Phase 0 until all of these are true:
 - Evidence required back:
   - tool versions and install paths
   - confirmation of dataset / repo locations
+  - confirmation that UE `5.7.3` finished installing at `E:\UE_5.7` or a corrected path if it changed
   - project path and brief note that the UE5 scaffold exists
 
 ### P0-03: Confirm PHC Contract

@@ -10,6 +10,7 @@ description: How to build the PhysAnimPlugin for UE5
 ```
 echo $env:UE5_PATH
 ```
+Expected meaning: `UE5_PATH` points to the UE `Engine` directory, not the install root. For the current local plan, once installation finishes, that should be `E:\UE_5.7\Engine`.
 
 // turbo
 2. Build the plugin once `PhysAnimUE5` and `PhysAnimPlugin.uplugin` exist:

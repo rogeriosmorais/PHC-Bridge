@@ -47,11 +47,11 @@ Before implementation starts, this plan must produce these concrete artifacts. T
 
 ## Current Status
 
-The Stage 1 planning bundle now includes the core planning specs plus the Phase 0 execution package and G1 evidence template. The next planning pass should fill in:
+The Stage 1 planning bundle now includes the core planning specs plus the Phase 0 execution package, G1 evidence template, and the Phase 1 implementation package. The next planning pass should fill in:
 
-1. the Phase 1 implementation package
-2. the G2 evaluation package
-3. the Phase 2 demo package
+1. the G2 evaluation package
+2. the Phase 2 demo package
+3. the G3 evaluation package
 
 ## Execution Model
 
