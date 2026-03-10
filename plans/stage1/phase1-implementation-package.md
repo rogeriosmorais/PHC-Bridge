@@ -12,6 +12,59 @@ The bridge is not considered fully specced for implementation until [ue-bridge-i
 
 The human-owned UE Editor asset wiring and startup path for the current implementation is documented in [phase1-ue-bridge-bringup-runbook.md](/F:/NewEngine/plans/stage1/phase1-ue-bridge-bringup-runbook.md).
 
+## Frozen Phase 1 Decisions
+
+These decisions are now frozen for the current Phase 1 implementation pass.
+
+### Runtime Model Decision
+
+- `Decision`: `pretrained`
+- `Chosen runtime model`: `motion_tracker/smpl`
+- `Checkpoint path`: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt`
+- `Why this is frozen now`:
+  - G1 passed on the locomotion-only thesis without requiring a fine-tuned model first
+  - the selected checkpoint already matches the locked bridge contract in [bridge-spec.md](/F:/NewEngine/plans/stage1/bridge-spec.md)
+  - no fine-tuned Stage 1 checkpoint currently exists, so waiting for one would reopen Phase 1 instead of starting it
+
+### ONNX Export / Import Freeze
+
+- export entry point:
+  - `F:\NewEngine\Training\scripts\export_onnx.py`
+- export output:
+  - `F:\NewEngine\Training\output\phc_policy.onnx`
+- UE import source path:
+  - `F:\NewEngine\PhysAnimUE5\Content\NNEModels\phc_policy.onnx`
+- accepted opset:
+  - `17`
+- offline validation:
+  - `onnxruntime 1.24.3` CPU session parity against the PyTorch export wrapper
+  - max abs diff: `1.64e-7`
+  - mean abs diff: `3.36e-8`
+- frozen tensor interface:
+  - `self_obs = 358`
+  - `mimic_target_poses = 6495`
+  - `terrain = 256`
+  - output `actions = 69`
+
+### Minimal PoseSearch Content For G2
+
+For the first one-character comparison path, Phase 1 content stays frozen to the locomotion set already named in [phase1-ue-bridge-bringup-runbook.md](/F:/NewEngine/plans/stage1/phase1-ue-bridge-bringup-runbook.md):
+
+- `/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle`
+- every `MF_Unarmed_Walk_*` clip in `/Game/Characters/Mannequins/Anims/Unarmed/Walk`
+- every `MF_Unarmed_Jog_*` clip in `/Game/Characters/Mannequins/Anims/Unarmed/Jog`
+
+Do not widen the Phase 1 comparison content beyond this locomotion core unless the orchestrator explicitly reopens the sequence lock.
+
+### Stable Enough For G2
+
+For the current Phase 1 pass, `stable enough for G2` means:
+
+- the character starts the full bridge without startup-blocking asset or control-name failures
+- the imported PHC model loads through NNE in UE5 and runs at least one successful inference pass
+- the one-character runtime remains controllable for about `30` seconds at the frozen synchronous substep settings in `DefaultEngine.ini`
+- instability or bridge faults do not dominate the capture to the point that the user cannot make a fair side-by-side judgment
+
 ## Entry Criteria
 
 Do not start Phase 1 implementation until all of these are true:
@@ -114,6 +167,8 @@ Phase 1 does not include:
 - Default:
   - use pretrained only if it is good enough for the locked motion set
   - otherwise fine-tune on the locked motion set before expecting G2 to be meaningful
+- Frozen outcome for the current pass:
+  - `pretrained`
 
 ### P1-04: PoseSearch Content Scope
 

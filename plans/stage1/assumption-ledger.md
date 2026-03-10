@@ -82,7 +82,8 @@ Only the orchestrator updates status.
   - `A-03` now moves from `yellow` to `green` because the Manny smoke-test mapping check completed without leaving an open mapping-failure blocker
   - `A-04` now moves from `yellow` to `green` because the Physics Control command path and Manny response checks both passed
   - `A-05` now moves from `yellow` to `green` because the documented synchronous-substep path stayed controllable on this machine
-  - `A-06` remains `yellow`: the local ORT runtime is present and reports GPU interface availability, but no exported Stage 1 model has been loaded in UE yet
+  - the selected pretrained `motion_tracker/smpl` checkpoint now exports successfully to `F:\NewEngine\Training\output\phc_policy.onnx` through `Training\scripts\export_onnx.py`, with accepted opset `17` and offline `onnxruntime 1.24.3` parity max abs diff `1.64e-7`
+  - `A-06` remains `yellow`: the offline export and parity path is now proven, but the real UE-side import and NNE runtime creation step is still outstanding
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

@@ -21,6 +21,7 @@ Use it after the user returns with setup evidence. Do not treat the environment 
 | `UE5_PATH` | `E:\UE_5.7\Engine` | `E:\UE_5.7\Engine` | confirmed | path exists locally |
 | Python version | `3.11` | `3.11.9` | confirmed | updated to match the Isaac Sim `5.x` requirement |
 | ProtoMotions env | `physanim_proto` | `F:\NewEngine\Training\.venv\physanim_proto311` | confirmed | editable installs and `requirements_isaaclab.txt` completed successfully in the `3.11` environment |
+| Python ONNX validation runtime | `onnxruntime` | `1.24.3` | confirmed | installed into the locked training env for offline export parity validation |
 | optional PyRoki env | `physanim_pyroki` |  | planned | only if needed |
 
 ## External Source Lock
@@ -37,7 +38,8 @@ Use it after the user returns with setup evidence. Do not treat the environment 
 | host platform for ProtoMotions | `Windows-native first; WSL only if blocked` | `Windows-native` | confirmed | current setup attempt stayed Windows-native |
 | pretrained source | `ProtoMotions repo-bundled motion_tracker/smpl asset` | `ProtoMotions repo-bundled motion_tracker/smpl asset` | confirmed | the cloned repo already contains the pretrained model folder and README |
 | pretrained checkpoint path | `Training/ProtoMotions/data/pretrained_models/motion_tracker/smpl/last.ckpt` | `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt` | confirmed | checkpoint exists locally |
-| ONNX opset | `17 -> 16 -> 15 fallback order` |  | planned | record first accepted opset |
+| ONNX export entry point | `F:\NewEngine\Training\scripts\export_onnx.py` | `F:\NewEngine\Training\scripts\export_onnx.py` | confirmed | explicit Stage 1 export script now exists and exports the pretrained `motion_tracker/smpl` actor path |
+| ONNX opset | `17 -> 16 -> 15 fallback order` | `17` | confirmed | exported successfully with opset `17`; no fallback was needed |
 | Unreal runtime target | `NNERuntimeORTDml` |  | planned | `NNERuntimeORTCpu` debug fallback only |
 
 ## Dataset Lock
@@ -47,6 +49,8 @@ Use it after the user returns with setup evidence. Do not treat the environment 
 | AMASS root | `F:\NewEngine\Training\data\amass` |  | blocked | not present, but not required for the current pretrained-first checkpoint |
 | combat clips root | not required for locomotion-only Stage 1 |  | planned | deferred out of Stage 1 scope |
 | UE project root | `F:\NewEngine\PhysAnimUE5` | `F:\NewEngine\PhysAnimUE5` | confirmed | project exists locally and `PhysAnimUE5.uproject` is present |
+| exported Stage 1 ONNX path | `F:\NewEngine\Training\output\phc_policy.onnx` | `F:\NewEngine\Training\output\phc_policy.onnx` | confirmed | export completed on March 10, 2026 with numeric parity max abs diff `1.64e-7` against the PyTorch actor wrapper |
+| UE ONNX import source path | `F:\NewEngine\PhysAnimUE5\Content\NNEModels\phc_policy.onnx` | `F:\NewEngine\PhysAnimUE5\Content\NNEModels\phc_policy.onnx` | confirmed | copied into the UE content import location; the `UNNEModelData` asset still requires Unreal import/editor validation |
 
 ## Orchestrator Rule
 

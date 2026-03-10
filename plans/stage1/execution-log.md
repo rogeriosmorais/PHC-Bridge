@@ -14,9 +14,9 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 0 complete / Gate G1 pass / Phase 1 unblocked
-- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; the UE scaffold is verified on disk with Manny assets present, `PoseSearch` and `PhysicsControl` enabled in the project file, `NNERuntimeORT` mounting in editor logs, and successful PIE bring-up recorded on March 10, 2026; Stage 1 remains narrowed to locomotion-only, the selected runtime checkpoint is `motion_tracker/smpl`, Gate G1 now passes through `MV-G1-01` to `MV-G1-04`, and the next real blocker is Phase 1 ONNX export / model import rather than Phase 0 viability evidence
-- `Last planning milestone`: orchestrator accepted the `MV-G1-04` synchronous-substep stability result and closed Gate G1 on March 10, 2026
+- `Current phase`: Phase 1 / `S1-P1-A1` completed / `S1-P1-A2` unblocked
+- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Gate G1 is explicitly `pass`; the selected Phase 1 runtime model is the pretrained `motion_tracker/smpl` checkpoint; the Stage 1 ONNX export path now exists, exports successfully with opset `17`, validates numerically against the PyTorch actor wrapper, and the resulting `phc_policy.onnx` has been copied into the UE content import location
+- `Last planning milestone`: worker completed the `S1-P1-A1` export/package handoff on March 10, 2026, removing ONNX export discovery from the Phase 1 critical path
 
 ## Active Tasks
 
@@ -27,6 +27,7 @@ Use it to track:
 | S1-P0-U2 | User | completed | `plans/stage1/ue-project-scaffold.md`, `plans/stage1/user-interventions.md`, `plans/stage1/user-return-template.md` | UE editor setup | none |
 | S1-P0-A1 | AI | completed | `plans/stage1/task-packet-s1-p0-a1.md` plus frozen Phase 0 inputs | `plans/stage1/phase0-execution-package.md`, `plans/stage1/bridge-spec.md`, `plans/stage1/retargeting-spec.md`, `plans/stage1/assumption-ledger.md`, `plans/stage1/execution-log.md` | none |
 | S1-P0-A2 | AI + User | completed | `plans/stage1/phase0-execution-package.md`, `plans/stage1/manual-verification.md`, `plans/stage1/acceptance-thresholds.md`, `plans/stage1/g1-evidence.md` | `plans/stage1/g1-evidence.md`, `plans/stage1/assumption-ledger.md`, `plans/stage1/execution-log.md` | none |
+| S1-P1-A1 | AI | completed | `plans/stage1/task-packet-s1-p1-a1.md`, `plans/stage1/phase1-implementation-package.md`, `plans/stage1/onnx-export-spec.md`, `plans/stage1/ue-bridge-implementation-spec.md` | `Training/scripts/export_onnx.py`, `Training/physanim/export_onnx.py`, `Training/tests/test_onnx_export.py`, `plans/stage1/phase1-implementation-package.md`, `plans/stage1/dependency-lock.md`, `plans/stage1/execution-log.md`, `plans/stage1/assumption-ledger.md` | none |
 
 ## Frozen Inputs For Phase 0 Preparation
 
@@ -54,8 +55,8 @@ Use it to track:
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-P1-A1 | runnable now; Gate G1 is now explicitly `pass` |
-| 2 | S1-P1-A2 | runnable when the ONNX export path exists and the UE import handoff is ready |
+| 1 | S1-P1-A2 | runnable now; the Phase 1 model choice, export path, and one-character implementation package are frozen |
+| 2 | user UE import / runtime validation | runnable now; Unreal still needs to import `Content/NNEModels/phc_policy.onnx` into a `UNNEModelData` asset and prove NNE runtime creation in-editor |
 | 3 | S1-P2-A1 | not runnable until G2 is explicitly passed |
 
 ## Waiting On User
@@ -85,6 +86,10 @@ Use it to track:
 - the selected pretrained checkpoint still exists at `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt`, so the missing ONNX file is an orchestration/process gap rather than a missing model-source artifact
 - user evidence on March 10, 2026 now confirms the frozen `120 Hz` synchronous-substep configuration (`Tick Physics Async = false`, `Substepping = true`, `Max Substep Delta Time = 0.008333`, `Max Substeps = 4`) stayed controllable without jitter or wobble dominating the run
 - Gate G1 now passes; Phase 0 evidence capture is complete and Phase 1 is unblocked
+- `Training\scripts\export_onnx.py` now exists and exports the selected pretrained `motion_tracker/smpl` actor path through the locked three-input Stage 1 contract
+- `Training\tests\test_onnx_export.py` now validates the real input/output names and numeric parity requirement instead of skipping behind a placeholder contract
+- March 10, 2026 worker validation exported `F:\NewEngine\Training\output\phc_policy.onnx` with accepted opset `17` and `onnxruntime 1.24.3` parity max abs diff `1.64e-7`
+- the exported ONNX was copied to `F:\NewEngine\PhysAnimUE5\Content\NNEModels\phc_policy.onnx`, so the next runtime step is UE import / NNE model-creation validation rather than more offline export work
 
 ## Accepted Handoffs
 
@@ -98,13 +103,13 @@ Use it to track:
 | S1-PLAN-06 | task packets / lock sheets / user return path | yes | re-entry into Phase 0 is now operationally defined |
 | S1-PLAN-07 | retrieval / export / comparison lock bundle | yes | remaining Phase 0-1 planning gaps materially reduced |
 | S1-P0-A1 | Phase 0 machine-specific execution package | yes | Windows-native Isaac Sim / Isaac Lab path is frozen and Phase 0 can advance without more setup replanning |
+| S1-P1-A1 | single-character implementation package freeze + ONNX export path | pending orchestrator acceptance | handoff prepared in `plans/stage1/s1-p1-a1-handoff.md` |
 
 ## Blocked / Deferred
 
 | Task ID | Status | Reason |
 |---|---|---|
-| S1-P1-A1 | blocked | depends on G1 pass |
-| S1-P1-A2 | blocked | depends on Phase 1 result |
+| S1-P1-A2 | unblocked | depends on orchestrator accepting the `S1-P1-A1` handoff and then driving UE runtime import / tuning work |
 | S1-P2-A1 | blocked | depends on G2 pass |
 | S1-P2-A2 | blocked | depends on Phase 2 result |
 

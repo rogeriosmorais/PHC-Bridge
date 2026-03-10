@@ -19,6 +19,7 @@ venv/
 Training/output/*.pt
 Training/output/*.onnx
 Training/output/*.engine
+Training/output/*.export.json
 Training/output/checkpoints/
 Training/ProtoMotions/
 
