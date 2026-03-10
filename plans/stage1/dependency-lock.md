@@ -28,9 +28,12 @@ Use it after the user returns with setup evidence. Do not treat the environment 
 | Item | Planned Value | Confirmed Value | Status | Notes |
 |---|---|---|---|---|
 | ProtoMotions release | `v2.3.2` | `v2.3.2` | confirmed | cloned locally at tag `v2.3.2` |
-| ProtoMotions path | `F:\NewEngine\Training\ProtoMotions` | `F:\NewEngine\Training\ProtoMotions` | confirmed | repo cloned locally |
-| simulator path | `isaaclab` |  | blocked | pretrained path is still pinned to IsaacLab, but no IsaacLab runtime was found locally |
-| IsaacLab install path | user-chosen install path |  | blocked | no `isaaclab` launcher was found in common locations or on `PATH` |
+| ProtoMotions path | `F:\NewEngine\Training\ProtoMotions` | `F:\NewEngine\Training\ProtoMotions` | confirmed | repo cloned locally; local Python `3.11` compatibility patch applied in simulator config files |
+| simulator path | `isaaclab` | `isaaclab` | confirmed | pretrained path remains pinned to IsaacLab |
+| Isaac Sim package | `5.1.x` | `5.1.0.0` | confirmed | installed into the locked Python `3.11` env via pip |
+| Isaac Lab package | `2.3.x` | `2.3.2.post1` | confirmed | installed into the locked Python `3.11` env via pip |
+| IsaacLab install path | user-chosen install path | `F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaaclab.exe` | confirmed | Windows launcher exists locally |
+| IsaacSim install path | user-chosen install path | `F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaacsim.exe` | confirmed | Windows launcher exists locally |
 | host platform for ProtoMotions | `Windows-native first; WSL only if blocked` | `Windows-native` | confirmed | current setup attempt stayed Windows-native |
 | pretrained source | `ctessler/MaskedMimic` | `ProtoMotions repo bundle / ctessler MaskedMimic release lineage` | confirmed | the cloned repo already contains the pretrained model folder and README |
 | pretrained checkpoint path | `Training/ProtoMotions/data/pretrained_models/masked_mimic/smpl/last.ckpt` | `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt` | confirmed | checkpoint exists locally (`303850268` bytes) |

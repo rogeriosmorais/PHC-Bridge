@@ -44,7 +44,7 @@ Only the orchestrator updates status.
 
 ## Latest Orchestrator Review
 
-- `Review commit`: `0a9bf13`
+- `Review commit`: `4ebd859`
 - `Reviewed artifacts`:
   - `plans/stage1/bridge-spec.md`
   - `plans/stage1/retargeting-spec.md`
@@ -54,12 +54,14 @@ Only the orchestrator updates status.
   - `plans/stage1/motion-source-lock-table.md`
   - `plans/stage1/phase0-execution-package.md`
 - `Conclusion`:
-  - the Phase 0 planning contract is coherent enough to proceed once user prerequisite evidence is returned
-  - no G1-critical assumption moves out of `yellow` yet because the dependency lock is still unconfirmed and `g1-evidence.md` has no runtime evidence
+  - the Phase 0 planning contract is now concrete enough to execute on this exact Windows machine without more setup replanning
+  - no G1-critical assumption moves out of `yellow` yet because `g1-evidence.md` still has no training-side motion evidence or UE-side manual evidence
   - partial setup evidence now confirms the planned UE install root and `UE5_PATH`, but it does not yet reduce any G1-critical risk
   - updated setup evidence now also confirms UE `5.7.3` and the presence of the `F:\NewEngine\PhysAnimUE5` scaffold with Manny content paths available
   - ProtoMotions `v2.3.2`, the pretrained MaskedMimic checkpoint, and a Python `3.11` Windows-native environment are now local and consistent with the Isaac Sim `5.x` requirement
-  - the remaining environment blocker is now the absence of an installed IsaacLab / Isaac Sim runtime rather than a Python package mismatch
+  - Isaac Sim `5.1.0.0` and Isaac Lab `2.3.2.post1` are now installed in the locked env and headless `SimulationApp` startup succeeded locally
+  - the current Windows path also required a small local ProtoMotions compatibility patch for Python `3.11` dataclass defaults plus a single-device Fabric override to bypass the default DDP / NCCL path
+  - the Phase 0 eval command, retargeting validation set, and evidence paths are now frozen for `S1-P0-A2`
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`
@@ -99,8 +101,8 @@ Before starting the next execution-planning pass, the orchestrator should:
 
 The next meaningful ledger updates should come from:
 
-- confirming the selected pretrained checkpoint and eval command
-- confirming the environment contract actually used in Phase 0
-- confirming the PHC observation/action contract
-- choosing the retargeting validation cases for G1
+- running the first pretrained evaluation and judging `MV-G1-01`
+- confirming the PHC observation/action contract from the frozen local ProtoMotions sources
+- capturing UE evidence for `MV-G1-02`
+- capturing Manny bridge smoke-test evidence for `MV-G1-03`
 - defining the exact evidence required to call `UPhysicsControlComponent` viable for Stage 1

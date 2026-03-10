@@ -44,9 +44,78 @@ Do not start Phase 0 until all of these are true:
 
 ## Current Known Local Environment Note
 
-- UE installation in progress: `UE 5.7.3`
-- Planned install root: `E:\UE_5.7`
-- Planned `UE5_PATH` value after install completes: `E:\UE_5.7\Engine`
+- Confirmed UE version: `5.7.3`
+- Confirmed UE install root: `E:\UE_5.7`
+- Confirmed `UE5_PATH`: `E:\UE_5.7\Engine`
+- Confirmed UE project path: `F:\NewEngine\PhysAnimUE5`
+- Confirmed ProtoMotions root: `F:\NewEngine\Training\ProtoMotions`
+- Confirmed Python env: `F:\NewEngine\Training\.venv\physanim_proto311`
+- Confirmed Isaac Sim launcher: `F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaacsim.exe`
+- Confirmed Isaac Lab launcher: `F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaaclab.exe`
+- Confirmed pretrained checkpoint: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt`
+- Frozen first motion file for Phase 0 training-side eval: `F:\NewEngine\Training\ProtoMotions\data\motions\smpl_humanoid_walk.npy`
+
+## Frozen Phase 0 Command And Evidence Path
+
+Use these exact local paths unless Phase 0 evidence proves they are wrong.
+
+### P0-03: Bridge Contract Confirmation
+
+- Working source of truth for the selected pretrained config:
+  - `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\config.yaml`
+  - `F:\NewEngine\Training\ProtoMotions\protomotions\eval_agent.py`
+  - `F:\NewEngine\Training\ProtoMotions\protomotions\envs\mimic\components\mimic_obs.py`
+  - `F:\NewEngine\Training\ProtoMotions\protomotions\agents\masked_mimic\agent.py`
+- Record confirmed observation/action facts back into:
+  - `plans/stage1/bridge-spec.md`
+- Record gate-facing conclusions into:
+  - `plans/stage1/g1-evidence.md`
+
+### P0-04: Retargeting Validation Freeze
+
+- Record the final validation set and handedness note in:
+  - `plans/stage1/retargeting-spec.md`
+- Record runtime pass/fail evidence in:
+  - `plans/stage1/g1-evidence.md`
+
+### P0-05: Training-Side Feasibility Check
+
+- Working directory:
+  - `F:\NewEngine\Training\ProtoMotions`
+- Required environment variable:
+  - `OMNI_KIT_ACCEPT_EULA=YES`
+- Frozen smoke-validation command already exercised successfully on this machine:
+
+```powershell
+$env:OMNI_KIT_ACCEPT_EULA='YES'
+& 'F:\NewEngine\Training\.venv\physanim_proto311\Scripts\python.exe' protomotions/eval_agent.py +robot=smpl +simulator=isaaclab +motion_file=F:\NewEngine\Training\ProtoMotions\data\motions\smpl_humanoid_walk.npy +checkpoint=F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt +terrain=flat +headless=True +num_envs=1 +agent.config.max_eval_steps=10 +fabric.strategy=auto +experiment_name=phase0_eval_smoke
+```
+
+- Runtime sanity check already completed for this environment:
+
+```powershell
+$env:OMNI_KIT_ACCEPT_EULA='YES'
+& 'F:\NewEngine\Training\.venv\physanim_proto311\Scripts\python.exe' -c "from isaacsim import SimulationApp; app = SimulationApp({'headless': True}); print('runtime_ok'); app.close()"
+```
+
+- Record the resulting clip / verdict in:
+  - `plans/stage1/g1-evidence.md`
+- Local compatibility note:
+  - the current Windows `3.11` path required local `default_factory` fixes in:
+    - `Training/ProtoMotions/protomotions/simulator/base_simulator/config.py`
+    - `Training/ProtoMotions/protomotions/simulator/isaacgym/config.py`
+    - `Training/ProtoMotions/protomotions/simulator/isaaclab/config.py`
+  - the current pretrained config also needed `+fabric.strategy=auto` to bypass the default DDP / NCCL path on Windows
+
+### P0-06 / P0-07 / P0-08: UE Manual Evidence Path
+
+- Use the manual checkpoints:
+  - `MV-G1-02`
+  - `MV-G1-03`
+- Record all UE-side evidence in:
+  - `plans/stage1/g1-evidence.md`
+- If any UE-side setup differs from the frozen scaffold, note it in:
+  - `plans/stage1/execution-log.md`
 
 ## Work Breakdown
 
@@ -80,6 +149,7 @@ Do not start Phase 0 until all of these are true:
   - confirmation of dataset / repo locations
   - confirmation that UE `5.7.3` finished installing at `E:\UE_5.7` or a corrected path if it changed
   - project path and brief note that the UE5 scaffold exists
+  - confirmation that `PoseSearch`, `PhysicsControl`, and `NNERuntimeORT` are enabled
 
 ### P0-03: Confirm PHC Contract
 

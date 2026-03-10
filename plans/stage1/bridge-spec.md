@@ -67,6 +67,12 @@ Before implementation starts, confirm:
 - whether the policy expects only current-frame targets or some short history / future reference
 - whether ground-contact bits or normals are required
 
+Phase 0 should confirm those fields from these exact local sources first:
+
+- `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\config.yaml`
+- `F:\NewEngine\Training\ProtoMotions\protomotions\eval_agent.py`
+- `F:\NewEngine\Training\ProtoMotions\protomotions\envs\mimic\components\mimic_obs.py`
+
 ## Action Contract
 
 ### Required Action Categories
@@ -91,6 +97,12 @@ Before implementation starts, confirm:
 - joint order used by the policy head
 - output numeric range and normalization assumptions
 - whether the output is local-joint space, parent-relative space, or another frame
+
+Phase 0 should confirm those facts from these exact local sources first:
+
+- `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\config.yaml`
+- `F:\NewEngine\Training\ProtoMotions\protomotions\agents\masked_mimic\agent.py`
+- `F:\NewEngine\Training\ProtoMotions\protomotions\agents\ppo\agent.py`
 
 ## Pose Representation Rules
 

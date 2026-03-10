@@ -90,18 +90,27 @@ These cases must be exercised before the retargeting layer is trusted.
 
 ### Required Static Cases
 
-- identity / T-pose case
-- isolated left elbow flexion
-- isolated right hip rotation
-- pelvis orientation change
-- spine bend / twist case
-- left/right asymmetry case to catch mirroring mistakes
+- neutral identity case with all mapped joints at rest
+- isolated left elbow flexion with the right arm held neutral
+- isolated right hip rotation with the left leg held neutral
+- pelvis yaw change without intentional spine or limb motion
+- spine bend plus mild twist
+- explicit left/right asymmetry case to catch mirroring mistakes
 
 ### Required Dynamic Cases
 
 - small random-pose round-trip within the mapped subset
 - simple multi-joint pose sent through the mapping and visualized on Manny
+- frozen first training-side motion reference:
+  - `F:\NewEngine\Training\ProtoMotions\data\motions\smpl_humanoid_walk.npy`
 - minimal PHC-style output driving Manny in Chaos for the G1 smoke test
+
+### Phase 0 Evidence Capture
+
+Record the chosen validation-pose names, the handedness note, and the Manny smoke-test result in:
+
+- `plans/stage1/retargeting-spec.md`
+- `plans/stage1/g1-evidence.md`
 
 ## Acceptance Criteria
 
