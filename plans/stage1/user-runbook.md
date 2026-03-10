@@ -136,38 +136,61 @@ Short version:
 
 ### MV-G1-02: Manny Responds To Programmatic Control
 
-This step is not honestly runnable until the orchestrator names all of these:
+This step is now frozen to one exact path:
 
-- exact UE map path
-- exact actor / blueprint / utility asset to place or run
+- exact UE map path:
+  - `/Game/ThirdPerson/Lvl_ThirdPerson`
+- exact runtime owner:
+  - `UPhysAnimMvG102Subsystem`
 - exact trigger method:
-  - PIE only
-  - key press
-  - button click
-  - console command
-- exact body region expected to move first
+  - start PIE
+  - open the in-game console with `` ` `` or `~`
+  - run `PhysAnim.MVG102.Start`
+- exact body region expected to move first:
+  - left arm, especially the left hand / forearm chain
+- exact evidence format expected back:
+  - short clip preferred
+  - screenshot acceptable if needed
 
-If any of those are missing, stop and ask for them.
+The current Third Person scaffold is using `SKM_Quinn_Simple` on `CharacterMesh0`. That is acceptable for this checkpoint because Manny and Quinn share the same mannequin skeleton family.
+The `PhysAnimPlugin` runtime harness also built successfully on this machine on March 10, 2026.
 
-When those fields are provided, use this procedure:
+This check is narrower than `MV-G1-03`.
 
-1. Open the exact map named by the orchestrator.
-2. Confirm the named test actor or blueprint is present.
-3. Start PIE.
-4. Trigger the named control-path test exactly once.
-5. Watch the first commanded body region.
-6. Let the test continue for about `30` seconds unless it fails earlier.
-7. Record a short clip or at minimum one screenshot.
-8. Write one sentence saying:
-   - what region was supposed to move
+- `MV-G1-02` asks: can `UPhysicsControlComponent` move the intended body region at all?
+- `MV-G1-03` asks: can the full SMPL/PHC-style bridge drive Manny without obvious mapping failure?
+
+Use this procedure:
+
+1. Open `F:\NewEngine\PhysAnimUE5\PhysAnimUE5.uproject`.
+2. If Unreal prompts to rebuild the project plugin, allow it.
+3. If the rebuild fails because Visual Studio 2022 / MSVC v143 is missing, stop and report `blocked`.
+4. Open `/Game/ThirdPerson/Lvl_ThirdPerson`.
+5. Start PIE.
+6. Do not move the character yet.
+7. Open the in-game console with `` ` `` or `~`.
+8. Run `PhysAnim.MVG102.Start`.
+9. Watch the first `3` to `5` seconds closely.
+10. Check whether the left arm / left hand region moves first.
+11. Let the test continue for about `30` seconds unless it fails earlier. The harness auto-stops after that window.
+12. Record a short clip if practical. If not, capture at least one screenshot.
+13. Write one sentence saying:
+   - what region was supposed to move: left arm / left hand
    - what actually moved
-   - whether Manny stayed controllable
+   - whether the mannequin stayed controllable
+   - final verdict: `pass`, `fail`, or `blocked`
 
 Choose `fail` immediately if:
 
 - nothing responds
 - the wrong body region responds
 - the ragdoll explodes or collapses immediately
+
+Choose `blocked` instead of `fail` if:
+
+- the plugin cannot be built because the required MSVC toolchain is missing
+- the `PhysAnim.MVG102.Start` console command does not exist in PIE
+- the capture is too unclear to tell what moved
 
 ### UE Substep Stability Check
 
@@ -323,4 +346,3 @@ Use this when sending results back:
 - observed result:
 - blockers or weird behavior:
 ```
-

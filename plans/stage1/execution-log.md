@@ -15,7 +15,7 @@ Use it to track:
 ## Current State
 
 - `Current phase`: Phase 0 / `S1-P0-A1` complete / `S1-P0-A2` in progress
-- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; the UE scaffold is now also verified on disk with Manny assets present, `PoseSearch` and `PhysicsControl` enabled in the project file, `NNERuntimeORT` mounting in editor logs, and a successful PIE launch recorded on March 10, 2026; Stage 1 remains narrowed to locomotion-only, the selected runtime checkpoint is `motion_tracker/smpl`, the Windows command path for Phase 0 is frozen, and the only remaining G1 work is user-observed training-side and UE-side evidence capture
+- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; the UE scaffold is now also verified on disk with Manny assets present, `PoseSearch` and `PhysicsControl` enabled in the project file, `NNERuntimeORT` mounting in editor logs, and a successful PIE launch recorded on March 10, 2026; Stage 1 remains narrowed to locomotion-only, the selected runtime checkpoint is `motion_tracker/smpl`, the Windows command path for Phase 0 is frozen, `MV-G1-01` now has a saved clip artifact and a `pass` verdict, and the remaining G1 work is UE-side evidence capture
 - `Last planning milestone`: orchestrator reviewed the current UE scaffold artifacts, confirmed Manny content and plugin state from local project files and logs, and re-synced the Phase 0 blocker list to the remaining manual G1 checkpoints
 
 ## Active Tasks
@@ -62,8 +62,7 @@ Use it to track:
 
 | Item | Expected Evidence |
 |---|---|
-| `MV-G1-01` verdict | short note saying `pass`, `fail`, or `unclear` after reviewing the first pretrained evaluation clip or visualization |
-| `MV-G1-02` evidence | screenshot or short clip showing whether Manny responds to control-target updates in UE |
+| `MV-G1-02` evidence | screenshot or short clip from `/Game/ThirdPerson/Lvl_ThirdPerson` after running `PhysAnim.MVG102.Start`, plus a note saying whether the left arm / left hand responded first |
 | `MV-G1-03` evidence | clip plus short note naming the expected pose or mapped output and what Manny actually did |
 | substep-stability evidence | substep settings used plus a short clip or note saying whether Manny stayed controllable for roughly `30` seconds |
 
@@ -75,7 +74,11 @@ Use it to track:
 - the UE scaffold is now verified more concretely: `PhysAnimUE5.uproject` lists `PoseSearch` and `PhysicsControl`, Manny content exists under `Content/Characters/Mannequins`, editor logs show `NNERuntimeORT` runtime availability, and PIE launched successfully
 - March 10, 2026 IsaacLab debug work identified one real launch hazard and several compatibility mismatches in the local ProtoMotions path: overlay/capture hooks could crash Vulkan startup, `h5py` had to be imported before Isaac Lab app launch on this setup, the local Isaac Lab package requires `Se2KeyboardCfg`, and the installed MoviePy package uses the new root-level `ImageSequenceClip` export instead of `moviepy.editor`
 - the current visual eval path now renders and records locally with those compatibility fixes in place; noisy RTX sensor DLL errors still appear in the console, but they are not currently blocking `MV-G1-01`
-- G1 remains blocked overall because the user-observed training and UE manual checks are still missing
+- user evidence now confirms `F:\NewEngine\Training\ProtoMotions\output\renderings\phase0_eval_visual-2026-03-10-10-15-07.mp4` was saved successfully for `MV-G1-01`
+- user evidence now also confirms a `pass` verdict for `MV-G1-01`
+- `MV-G1-02` is now frozen to `/Game/ThirdPerson/Lvl_ThirdPerson` plus the plugin runtime harness command `PhysAnim.MVG102.Start`
+- Visual Studio Build Tools 2022 with MSVC v143 and Windows SDK `22621` were installed on March 10, 2026, and Unreal built `PhysAnimPlugin` successfully on this machine
+- G1 remains blocked overall because the UE manual checks are still missing
 
 ## Accepted Handoffs
 

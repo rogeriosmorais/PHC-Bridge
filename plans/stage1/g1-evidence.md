@@ -32,16 +32,20 @@ Use only:
 
 ## Criterion 1: Pretrained Policy Output Looks Alive In Training
 
-- `Status`: in_progress
+- `Status`: complete
 - `Checkpoint`: `MV-G1-01`
 - `Evidence`:
-  - clip: user reported on March 10, 2026 that they were able to see the walk animation and record it after the local compatibility fixes landed
+  - clip:
+    - `F:\NewEngine\Training\ProtoMotions\output\renderings\phase0_eval_visual-2026-03-10-10-15-07.mp4`
+    - file saved successfully on March 10, 2026 at `10:15:14`
   - notes:
+    - user reported on March 10, 2026 that `phase0_eval_visual-2026-03-10-10-15-07.mp4` was created successfully for `MV-G1-01`
+    - user judged the clip `pass` on March 10, 2026
     - the working path required closing overlay/capture tools first, especially `MSI Afterburner` and related RTSS hooks
     - the visual eval path now depends on local compatibility fixes in the ProtoMotions checkout for IsaacLab startup, keyboard setup, and MoviePy recording
     - Isaac sensor DLL warnings are still present in the console but did not prevent rendering or recording for this locomotion-only check
-- `Verdict`: pending
-- `Why this verdict was chosen`: runtime execution and recording are now confirmed strongly enough to mark this checkpoint in progress, but the explicit human quality judgment for `pass`, `fail`, or `unclear` is still not written down
+- `Verdict`: pass
+- `Why this verdict was chosen`: the frozen visual-evidence command ran successfully, produced a concrete mp4 artifact, and the user explicitly judged the resulting motion clip as a `pass`
 
 ## Criterion 2: PHC Observation/Action Contract Is Locked
 
@@ -108,7 +112,7 @@ Use only:
 
 List every assumption changed by Phase 0 evidence:
 
-- `A-01`:
+- `A-01`: move from `yellow` to `green`; the training-side visual path is proven runnable and the user judged `MV-G1-01` as `pass`
 - `A-02`:
 - `A-03`:
 - `A-04`:
@@ -124,7 +128,6 @@ List every assumption changed by Phase 0 evidence:
 
 ## Missing Evidence
 
-- `MV-G1-01` training-side visual verdict
 - `MV-G1-02` Manny control-path evidence
 - `MV-G1-03` Manny smoke-test evidence
 - UE-side substep-stability evidence
@@ -133,7 +136,7 @@ List every assumption changed by Phase 0 evidence:
 
 - `Final verdict`: pending
 - `Decision date`:
-- `Decision summary`: the bridge contract and motion-source review are now documented strongly enough to score those subchecks, but G1 remains blocked on the training-side and UE-side evidence package
+- `Decision summary`: the bridge contract, motion-source review, and training-side `MV-G1-01` checkpoint now all score `pass`, but G1 remains blocked on the UE-side evidence package
 - `Can Phase 1 begin?`: no
 
 ## If Verdict Is Not Pass

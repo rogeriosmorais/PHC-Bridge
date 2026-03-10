@@ -244,6 +244,11 @@ $env:OMNI_KIT_ACCEPT_EULA='YES'
 - Inputs:
   - UE5 scaffold
   - manual check `MV-G1-02`
+- Frozen runtime path:
+  - map: `/Game/ThirdPerson/Lvl_ThirdPerson`
+  - runtime owner: `UPhysAnimMvG102Subsystem`
+  - trigger: PIE console command `PhysAnim.MVG102.Start`
+  - expected first-moving region: left arm / left hand on the current mannequin pawn
 - Output:
   - evidence entry in `g1-evidence.md`
 - Required evidence:

@@ -58,20 +58,79 @@ $env:OMNI_KIT_ACCEPT_EULA='YES'
 ### MV-G1-02: Manny Responds To Programmatic Control In UE5
 
 - `What you are checking`: whether Manny's physics-driven body actually responds when control targets are updated
-- `Why it matters`: if the control path is broken, the Stage 1 bridge cannot work
+- `Why it matters`: if the Physics Control path is broken, the Stage 1 bridge cannot work even if the PHC model itself is fine
+- `What this checkpoint is and is not`:
+  - this checkpoint is only about proving that `UPhysicsControlComponent` can move the intended body region when a UE-side test updates targets
+  - this checkpoint is not the full PHC bridge, not the SMPL mapping test, and not the final motion-quality comparison
+- `Current truth on March 10, 2026`:
+  - the exact Stage 1 test path is now frozen
+  - the current scaffold pawn is `BP_ThirdPersonCharacter` using `CharacterMesh0` with `/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple`
+  - Quinn is acceptable here because Stage 1 is locked to the Manny/Quinn mannequin skeleton family
+  - the `PhysAnimPlugin` runtime harness built successfully on this machine on March 10, 2026
+- `Frozen test inputs`:
+  1. exact UE map path:
+     - `/Game/ThirdPerson/Lvl_ThirdPerson`
+  2. exact runtime owner:
+     - `UPhysAnimMvG102Subsystem`
+     - source path: `F:\NewEngine\PhysAnimUE5\Plugins\PhysAnimPlugin\Source\PhysAnimPlugin\Public\PhysAnimMvG102Subsystem.h`
+  3. exact trigger method:
+     - start PIE in `Lvl_ThirdPerson`
+     - open the in-game console with `` ` `` or `~`
+     - run `PhysAnim.MVG102.Start`
+     - optional stop command: `PhysAnim.MVG102.Stop`
+  4. exact body region expected to move first:
+     - left arm, especially the left hand / forearm chain
+  5. exact evidence format required back:
+     - short clip preferred
+     - screenshot acceptable if a clip is not practical
+  6. exact local build note:
+     - on this machine the plugin already built successfully on March 10, 2026
+     - if Unreal prompts to build the new project plugin again, accept the build
+     - if the build fails because this machine is missing the required Visual Studio 2022 MSVC v143 toolchain, mark the checkpoint `blocked`, not `fail`
 - `What to click or run`:
-  - first confirm the orchestrator has named the exact map, actor/blueprint, and trigger method
-  - if those named assets are missing, stop and ask for them instead of improvising
-  - once they are named:
-    1. open the exact UE map
-    2. confirm the named actor or blueprint is present
-    3. start PIE
-    4. trigger the control-path test exactly as instructed
-    5. watch the first body region that is supposed to move
-    6. let the test run for about `30` seconds unless it fails earlier
-- `What good looks like`: Manny moves in response to target updates without exploding, freezing, or ignoring the controls
-- `What bad looks like`: nothing happens, the ragdoll collapses immediately, or joints behave erratically
-- `What evidence to send back`: screenshot or short clip plus one sentence naming the expected body region, the actual body region that moved, and whether Manny stayed controllable
+  1. Open Unreal project `F:\NewEngine\PhysAnimUE5\PhysAnimUE5.uproject`.
+  2. If Unreal says the project or plugin needs to be rebuilt, allow it.
+  3. If the rebuild fails with a missing MSVC / Visual Studio toolchain error, stop and report `blocked`.
+  4. Open `/Game/ThirdPerson/Lvl_ThirdPerson`.
+  5. Start PIE.
+  6. Do not move the character yet. Let the template character idle so the arm response is easy to judge.
+  7. Open the in-game console with `` ` `` or `~`.
+  8. Run:
+
+```text
+PhysAnim.MVG102.Start
+```
+
+  9. Watch the first `3` to `5` seconds closely:
+     - did anything move at all
+     - did the left arm / left hand region move first
+     - did the body stay roughly upright long enough to judge it
+  10. Let the test keep running for about `30` seconds unless it fails earlier. The harness auto-stops after that window.
+  11. Record a short clip if possible. If a clip is not practical, capture at least one screenshot and write down exactly what happened in the first few seconds.
+- `What good looks like`:
+  - the current mannequin pawn visibly responds to repeated target updates
+  - the left arm / left hand region clearly responds first
+  - the mannequin stays controllable for about `30` seconds
+  - any instability is limited enough that Stage 1 tuning still looks plausible
+- `What bad looks like`:
+  - nothing responds at all
+  - the wrong body region responds
+  - Manny collapses or explodes immediately
+  - joint behavior is erratic enough that you cannot tell what was being commanded
+- `When to mark blocked instead of fail`:
+  - Unreal cannot build the plugin because the required MSVC toolchain is missing
+  - the `PhysAnim.MVG102.Start` command does not exist in the console after the plugin should have loaded
+  - the capture is too weak to tell what moved
+- `What evidence to send back`:
+  - exact map path used: `/Game/ThirdPerson/Lvl_ThirdPerson`
+  - exact runtime owner used: `UPhysAnimMvG102Subsystem`
+  - exact trigger method used: `PhysAnim.MVG102.Start`
+  - one short clip or screenshot
+  - one sentence saying:
+    - what body region was expected to move first: left arm / left hand
+    - what actually moved first
+    - whether the mannequin stayed controllable for about `30` seconds
+    - final checkpoint verdict: `pass`, `fail`, or `blocked`
 
 ### MV-G1-03: End-To-End Bridge Smoke Test
 

@@ -30,7 +30,7 @@ Only the orchestrator updates status.
 
 | ID | Assumption | Why It Matters | Current Status | How It Will Be Tested | Falsification Signal | Fallback | Stop If False |
 |---|---|---|---|---|---|---|---|
-| A-01 | Pretrained policy motion in training looks convincingly alive enough to justify Stage 1 | Stage 1 is pointless if the starting policy already looks robotic | yellow | G1 training visualization and manual check `MV-G1-01` | motion looks stiff, unstable, or puppet-like in training | narrow to locomotion-only test or stop before deeper integration | yes |
+| A-01 | Pretrained policy motion in training looks convincingly alive enough to justify Stage 1 | Stage 1 is pointless if the starting policy already looks robotic | green | G1 training visualization and manual check `MV-G1-01` | motion looks stiff, unstable, or puppet-like in training | narrow to locomotion-only test or stop before deeper integration | yes |
 | A-02 | The selected ProtoMotions/PHC config can be mapped cleanly into a UE5 bridge contract | the plugin cannot be built safely without a stable observation/action contract | green | `bridge-spec.md` confirmed in Phase 0 | tensor fields, ordering, or representation stay unclear | narrow the chosen config or pause until a workable config is selected | yes |
 | A-03 | SMPL <-> UE5 retargeting can be made stable enough for Manny | wrong transforms or mirroring will invalidate the entire bridge | yellow | `retargeting-spec.md` plus G1 Manny smoke test | wrong limbs move, mirroring appears, or instability comes from mapping errors | revise mapping and transform layer | yes |
 | A-04 | `UPhysicsControlComponent` can express the policy intent well enough for Stage 1 | the entire low-custom-code thesis depends on it | yellow | control-path prototype and Manny response checks | targets are ignored, unstable, or too limited to drive plausible motion | explicit fallback to raw torque control if the project chooses it | yes |
@@ -70,6 +70,8 @@ Only the orchestrator updates status.
   - the visual IsaacLab path additionally required local compatibility shims for this machine and package set: preloading `h5py` before `AppLauncher`, excluding broken RTX sensor extensions from Kit launch, constructing `Se2Keyboard` with `Se2KeyboardCfg`, and supporting MoviePy `2.x` without `moviepy.editor`
   - the earlier Vulkan startup crash was consistent with an external graphics hook conflict rather than a PHC or IsaacLab logic failure; future visual checks on this machine should start with overlays and capture hooks disabled
   - Isaac sensor DLL warnings for `generic_mo_io.dll`, lidar, radar, and `isaacsim.sensors.rtx` are still present, but the current evidence suggests they are non-blocking noise for the locomotion-only `MV-G1-01` visual path
+  - user evidence on March 10, 2026 now confirms the saved clip `F:\NewEngine\Training\ProtoMotions\output\renderings\phase0_eval_visual-2026-03-10-10-15-07.mp4`, so the `MV-G1-01` recording path itself is no longer in doubt
+  - user evidence on March 10, 2026 also judges `MV-G1-01` as `pass`, so `A-01` now moves from `yellow` to `green`
   - the Phase 0 eval command, retargeting validation set, and evidence paths are now frozen for `S1-P0-A2`
   - the current UE scaffold review is stronger now: `PhysAnimUE5.uproject` enables `PoseSearch` and `PhysicsControl`, Manny assets are present under `Content/Characters/Mannequins`, editor logs show `NNERuntimeORT` runtime initialization, and a PIE session launched successfully on March 10, 2026
   - this stronger scaffold evidence reduces setup ambiguity, but it does not by itself satisfy `MV-G1-02`, `MV-G1-03`, or the substep-stability threshold because those still require user-observed motion behavior
@@ -113,7 +115,6 @@ Before starting the next execution-planning pass, the orchestrator should:
 
 The next meaningful ledger updates should come from:
 
-- running the first pretrained evaluation and judging `MV-G1-01`
 - confirming the PHC observation/action contract from the frozen local ProtoMotions sources
 - capturing UE evidence for `MV-G1-02`
 - capturing Manny bridge smoke-test evidence for `MV-G1-03`
