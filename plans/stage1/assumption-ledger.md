@@ -44,7 +44,7 @@ Only the orchestrator updates status.
 
 ## Latest Orchestrator Review
 
-- `Review commit`: `4ebd859`
+- `Review commit`: `b0661d8`
 - `Reviewed artifacts`:
   - `plans/stage1/bridge-spec.md`
   - `plans/stage1/retargeting-spec.md`
@@ -53,6 +53,10 @@ Only the orchestrator updates status.
   - `plans/stage1/motion-source-map.md`
   - `plans/stage1/motion-source-lock-table.md`
   - `plans/stage1/phase0-execution-package.md`
+  - `PhysAnimUE5/PhysAnimUE5.uproject`
+  - `PhysAnimUE5/Config/DefaultEngine.ini`
+  - `PhysAnimUE5/Saved/Logs/PhysAnimUE5.log`
+  - `PhysAnimUE5/Saved/Logs/PhysAnimUE5_2.log`
 - `Conclusion`:
   - the Phase 0 planning contract is now concrete enough to execute on this exact Windows machine without more setup replanning
   - the selected `motion_tracker/smpl` checkpoint is now the preferred Stage 1 runtime target because its inference contract is materially simpler than the deferred MaskedMimic path
@@ -63,7 +67,13 @@ Only the orchestrator updates status.
   - ProtoMotions `v2.3.2`, the selected `motion_tracker/smpl` checkpoint, and a Python `3.11` Windows-native environment are now local and consistent with the Isaac Sim `5.x` requirement
   - Isaac Sim `5.1.0.0` and Isaac Lab `2.3.2.post1` are now installed in the locked env and headless `SimulationApp` startup succeeded locally
   - the current Windows path also required a small local ProtoMotions compatibility patch for Python `3.11` dataclass defaults plus a single-device Fabric override to bypass the default DDP / NCCL path
+  - the visual IsaacLab path additionally required local compatibility shims for this machine and package set: preloading `h5py` before `AppLauncher`, excluding broken RTX sensor extensions from Kit launch, constructing `Se2Keyboard` with `Se2KeyboardCfg`, and supporting MoviePy `2.x` without `moviepy.editor`
+  - the earlier Vulkan startup crash was consistent with an external graphics hook conflict rather than a PHC or IsaacLab logic failure; future visual checks on this machine should start with overlays and capture hooks disabled
+  - Isaac sensor DLL warnings for `generic_mo_io.dll`, lidar, radar, and `isaacsim.sensors.rtx` are still present, but the current evidence suggests they are non-blocking noise for the locomotion-only `MV-G1-01` visual path
   - the Phase 0 eval command, retargeting validation set, and evidence paths are now frozen for `S1-P0-A2`
+  - the current UE scaffold review is stronger now: `PhysAnimUE5.uproject` enables `PoseSearch` and `PhysicsControl`, Manny assets are present under `Content/Characters/Mannequins`, editor logs show `NNERuntimeORT` runtime initialization, and a PIE session launched successfully on March 10, 2026
+  - this stronger scaffold evidence reduces setup ambiguity, but it does not by itself satisfy `MV-G1-02`, `MV-G1-03`, or the substep-stability threshold because those still require user-observed motion behavior
+  - `A-06` remains `yellow`: the local ORT runtime is present and reports GPU interface availability, but no exported Stage 1 model has been loaded in UE yet
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

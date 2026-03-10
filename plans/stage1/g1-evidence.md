@@ -32,13 +32,16 @@ Use only:
 
 ## Criterion 1: Pretrained Policy Output Looks Alive In Training
 
-- `Status`: pending
+- `Status`: in_progress
 - `Checkpoint`: `MV-G1-01`
 - `Evidence`:
-  - clip:
+  - clip: user reported on March 10, 2026 that they were able to see the walk animation and record it after the local compatibility fixes landed
   - notes:
+    - the working path required closing overlay/capture tools first, especially `MSI Afterburner` and related RTSS hooks
+    - the visual eval path now depends on local compatibility fixes in the ProtoMotions checkout for IsaacLab startup, keyboard setup, and MoviePy recording
+    - Isaac sensor DLL warnings are still present in the console but did not prevent rendering or recording for this locomotion-only check
 - `Verdict`: pending
-- `Why this verdict was chosen`:
+- `Why this verdict was chosen`: runtime execution and recording are now confirmed strongly enough to mark this checkpoint in progress, but the explicit human quality judgment for `pass`, `fail`, or `unclear` is still not written down
 
 ## Criterion 2: PHC Observation/Action Contract Is Locked
 

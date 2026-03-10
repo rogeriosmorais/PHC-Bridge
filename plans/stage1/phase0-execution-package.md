@@ -84,12 +84,30 @@ Use these exact local paths unless Phase 0 evidence proves they are wrong.
   - `F:\NewEngine\Training\ProtoMotions`
 - Required environment variable:
   - `OMNI_KIT_ACCEPT_EULA=YES`
-- Frozen smoke-validation command already exercised successfully on this machine:
+- Frozen headless smoke-validation command already exercised successfully on this machine:
 
 ```powershell
 $env:OMNI_KIT_ACCEPT_EULA='YES'
 & 'F:\NewEngine\Training\.venv\physanim_proto311\Scripts\python.exe' protomotions/eval_agent.py +robot=smpl +simulator=isaaclab +motion_file=F:\NewEngine\Training\ProtoMotions\data\motions\smpl_humanoid_walk.npy +checkpoint=F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt +terrain=flat +headless=True +num_envs=1 +agent.config.max_eval_steps=10 +fabric.strategy=auto +experiment_name=phase0_eval_smoke
 ```
+
+- Frozen visual-evidence command for `MV-G1-01`:
+
+```powershell
+$env:OMNI_KIT_ACCEPT_EULA='YES'
+& 'F:\NewEngine\Training\.venv\physanim_proto311\Scripts\python.exe' protomotions/eval_agent.py +robot=smpl +simulator=isaaclab +motion_file=F:\NewEngine\Training\ProtoMotions\data\motions\smpl_humanoid_walk.npy +checkpoint=F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt +terrain=flat +headless=False +num_envs=1 +agent.config.max_eval_steps=3000 +fabric.strategy=auto +experiment_name=phase0_eval_visual
+```
+
+- Viewer recording controls for the visual-evidence run:
+  - press `L` to start recording
+  - press `L` again to stop and write the mp4
+  - wait for the console line `Video saved to ...mp4`
+  - press `Q` to close the viewer after the save completes
+- Expected output path for the clip:
+  - `F:\NewEngine\Training\ProtoMotions\output\renderings\phase0_eval_visual-<timestamp>.mp4`
+- Why there are two commands:
+  - the headless command is the already-proven runtime sanity check
+  - the non-headless command is the one the user must run for the actual `MV-G1-01` visual verdict
 
 - Runtime sanity check already completed for this environment:
 
