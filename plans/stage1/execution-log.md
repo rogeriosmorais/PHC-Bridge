@@ -14,33 +14,56 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Pre-Phase 0 / setup transition
-- `Overall status`: waiting on user prerequisites and environment confirmation
-- `Last planning milestone`: planning bundle extended with checkpoint-retrieval, ONNX-export, and comparison-sequence lock artifacts
+- `Current phase`: Phase 0 entry / frozen-input checkpoint
+- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, and the Python `3.11` ProtoMotions environment are confirmed; Phase 0 is now blocked only on missing IsaacLab / Isaac Sim runtime availability
+- `Last planning milestone`: orchestrator corrected the Python contract to `3.11` for Isaac Sim `5.x` and rebuilt the ProtoMotions environment successfully
 
 ## Active Tasks
 
 | Task ID | Owner | Status | Frozen Inputs | Writable Paths | Waiting On |
 |---|---|---|---|---|---|
-| S1-U-01 | User | in_progress | planning bundle as of commit `a68310a` | external machine setup | UE install completion, tool/version confirmation |
-| S1-PLAN-05 | Orchestrator | in_progress | planning bundle as of commit `a68310a` | `plans/stage1/execution-log.md`, `plans/stage1/assumption-ledger.md` | real setup evidence |
+| P0-01 | Orchestrator | completed | planning bundle as of commit `0a9bf13` | `plans/stage1/execution-log.md`, `plans/stage1/assumption-ledger.md` | none |
+| S1-P0-U1 | User | in_progress | `plans/stage1/environment-spec.md`, `plans/stage1/user-interventions.md`, `plans/stage1/user-return-template.md` | external tool/runtime setup and license acceptance | IsaacLab / Isaac Sim availability or an explicit alternate simulator decision |
+| S1-P0-U2 | User | completed | `plans/stage1/ue-project-scaffold.md`, `plans/stage1/user-interventions.md`, `plans/stage1/user-return-template.md` | UE editor setup | none |
+| S1-PLAN-05 | Orchestrator | in_progress | planning bundle as of commit `0a9bf13` | `plans/stage1/execution-log.md`, `plans/stage1/assumption-ledger.md` | real setup evidence |
+
+## Frozen Inputs For Phase 0 Preparation
+
+- `Freeze point`: commit `0a9bf13`
+- `Frozen docs`:
+  - `AGENTS.md`
+  - `ENGINEERING_PLAN.md`
+  - `plans/stage1/bridge-spec.md`
+  - `plans/stage1/retargeting-spec.md`
+  - `plans/stage1/test-strategy.md`
+  - `plans/stage1/manual-verification.md`
+  - `plans/stage1/assumption-ledger.md`
+  - `plans/stage1/acceptance-thresholds.md`
+  - `plans/stage1/pretrained-model-selection.md`
+  - `plans/stage1/pretrained-checkpoint-retrieval.md`
+  - `plans/stage1/environment-spec.md`
+  - `plans/stage1/motion-set.md`
+  - `plans/stage1/motion-source-map.md`
+  - `plans/stage1/motion-source-lock-table.md`
+  - `plans/stage1/ue-project-scaffold.md`
+  - `plans/stage1/phase0-execution-package.md`
+- `Unfreeze rule`: only unfreeze if the user returns setup evidence that changes a planned value or if an assumption moves materially in the ledger
 
 ## Next Runnable Tasks
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-U-01 | user is already installing UE |
-| 2 | S1-P0-A1 | becomes runnable after setup evidence arrives |
-| 3 | S1-P0-A2 | depends on S1-P0-A1 |
+| 1 | S1-P0-U1 | runnable now; pretrained eval is pinned to IsaacLab, but no IsaacLab runtime or launcher is present locally |
+| 2 | S1-P0-A1 | partially prepared, but not runnable to completion until the simulator path is concrete enough to execute |
+| 3 | S1-P0-A2 | depends on `S1-P0-A1` and the simulator/runtime blocker being resolved |
 
 ## Waiting On User
 
 | Item | Expected Evidence |
 |---|---|
-| UE install complete | final install path, ideally `E:\UE_5.7` |
-| `UE5_PATH` confirmed | expected `E:\UE_5.7\Engine` |
-| toolchain state | versions / paths for Python, conda, and any simulator tooling |
-| UE scaffold created later | project path, screenshots, Manny confirmation |
+| IsaacLab / Isaac Sim state | install path if already present, or confirmation that you will install the required simulator/runtime and accept any NVIDIA terms needed for it |
+| Simulator decision | stay on `isaaclab` as planned, or explicitly authorize a fallback to a different supported simulator if you want to abandon the primary path |
+| Evidence bundle | install path, launcher path, any errors encountered, and anything that differed from the plan |
 
 ## Accepted Handoffs
 
@@ -58,7 +81,7 @@ Use it to track:
 
 | Task ID | Status | Reason |
 |---|---|---|
-| S1-P0-A1 | blocked | waiting for real environment evidence |
+| S1-P0-A1 | blocked | waiting for a concrete simulator/runtime path; the Python environment is now ready, but no IsaacLab / Isaac Sim launcher is installed locally yet |
 | S1-P0-A2 | blocked | depends on S1-P0-A1 |
 | S1-P1-A1 | blocked | depends on G1 pass |
 | S1-P1-A2 | blocked | depends on Phase 1 result |

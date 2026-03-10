@@ -34,16 +34,24 @@ IsaacGym remains relevant as a fallback or comparison path, but not as the first
 
 ## Python Version Expectations
 
-The official ProtoMotions docs do not present one single pinned Python version for every simulator path in the snippets we found, but:
+The Python version must follow the simulator/runtime actually chosen.
+
+For the current Stage 1 primary path:
+
+- **Isaac Sim `5.x` + IsaacLab:** `python=3.11`
+  - this is required because Isaac Sim `5.x` is built against Python `3.11`
+
+Secondary references still matter, but they are not the primary path:
 
 - the PyRoki retargeting workflow explicitly uses `python=3.10`
-- Genesis installation notes in the ProtoMotions README snippet also call out Python 3.10
+- Genesis notes in the ProtoMotions README also call out Python `3.10`
 
-So the Stage 1 planning default is:
+So the Stage 1 planning default is now:
 
-- **primary Python target:** `3.10`
+- **primary Python target for pretrained-first IsaacLab path:** `3.11`
+- **secondary Python target for other workflows that still document it:** `3.10`
 
-Do not upgrade this casually unless an official dependency requirement forces it.
+Do not change the primary target again unless the selected Isaac Sim / IsaacLab version changes.
 
 ## ProtoMotions Install Contract
 

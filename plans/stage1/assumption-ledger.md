@@ -42,6 +42,35 @@ Only the orchestrator updates status.
 | A-08 | Physics-driven motion will look noticeably better than kinematic playback | this is the thesis tested by G2 | yellow | G2 side-by-side evaluation | user judges difference as negligible or worse | ship only as experiment documentation, do not continue to Stage 2 | yes |
 | A-09 | The final two-character demo will be compelling enough to justify Stage 2 | Stage 2 is optional and should not start on weak evidence | yellow | G3 observer evaluation | observers find the result unconvincing | stop at Stage 1 | no |
 
+## Latest Orchestrator Review
+
+- `Review commit`: `0a9bf13`
+- `Reviewed artifacts`:
+  - `plans/stage1/bridge-spec.md`
+  - `plans/stage1/retargeting-spec.md`
+  - `plans/stage1/test-strategy.md`
+  - `plans/stage1/motion-set.md`
+  - `plans/stage1/motion-source-map.md`
+  - `plans/stage1/motion-source-lock-table.md`
+  - `plans/stage1/phase0-execution-package.md`
+- `Conclusion`:
+  - the Phase 0 planning contract is coherent enough to proceed once user prerequisite evidence is returned
+  - no G1-critical assumption moves out of `yellow` yet because the dependency lock is still unconfirmed and `g1-evidence.md` has no runtime evidence
+  - partial setup evidence now confirms the planned UE install root and `UE5_PATH`, but it does not yet reduce any G1-critical risk
+  - updated setup evidence now also confirms UE `5.7.3` and the presence of the `F:\NewEngine\PhysAnimUE5` scaffold with Manny content paths available
+  - ProtoMotions `v2.3.2`, the pretrained MaskedMimic checkpoint, and a Python `3.11` Windows-native environment are now local and consistent with the Isaac Sim `5.x` requirement
+  - the remaining environment blocker is now the absence of an installed IsaacLab / Isaac Sim runtime rather than a Python package mismatch
+- `Phase 0 critical assumptions`:
+  - `A-01`
+  - `A-02`
+  - `A-03`
+  - `A-04`
+  - `A-05`
+  - `A-06`
+  - `A-07`
+  - `A-07b`
+  - `A-07c`
+
 ## Reassessment Triggers
 
 The orchestrator must revisit ledger status when:
@@ -62,7 +91,7 @@ The orchestrator must revisit ledger status when:
 
 Before starting the next execution-planning pass, the orchestrator should:
 
-1. review `bridge-spec.md`, `retargeting-spec.md`, and `test-strategy.md`
+1. record whether the current commit's review of `bridge-spec.md`, `retargeting-spec.md`, and `test-strategy.md` is complete
 2. update each assumption above from `yellow` only if evidence justifies it
 3. note which assumptions block the Phase 0 execution package
 

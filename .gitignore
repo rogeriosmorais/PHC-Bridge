@@ -8,6 +8,7 @@ build/
 .eggs/
 *.so
 .venv/
+Training/.venv/
 env/
 venv/
 
