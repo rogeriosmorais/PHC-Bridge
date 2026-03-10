@@ -16,7 +16,7 @@ Use it to track:
 
 - `Current phase`: Pre-Phase 0 / setup transition
 - `Overall status`: waiting on user prerequisites and environment confirmation
-- `Last planning milestone`: planning bundle extended with environment, source-lock, dependency-lock, task-packet, and threshold artifacts
+- `Last planning milestone`: planning bundle extended with checkpoint-retrieval, ONNX-export, and comparison-sequence lock artifacts
 
 ## Active Tasks
 
@@ -52,6 +52,7 @@ Use it to track:
 | S1-PLAN-04 | `test-strategy.md` | yes | verification split defined |
 | S1-PLAN-05 | environment / pretrained / scaffold / threshold bundle | yes | execution-planning gaps materially reduced |
 | S1-PLAN-06 | task packets / lock sheets / user return path | yes | re-entry into Phase 0 is now operationally defined |
+| S1-PLAN-07 | retrieval / export / comparison lock bundle | yes | remaining Phase 0-1 planning gaps materially reduced |
 
 ## Blocked / Deferred
 

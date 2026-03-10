@@ -22,6 +22,7 @@ Turn the planning bundle plus the user's real setup evidence into a finalized Ph
 - [retargeting-spec.md](/F:/NewEngine/plans/stage1/retargeting-spec.md)
 - [test-strategy.md](/F:/NewEngine/plans/stage1/test-strategy.md)
 - [pretrained-model-selection.md](/F:/NewEngine/plans/stage1/pretrained-model-selection.md)
+- [pretrained-checkpoint-retrieval.md](/F:/NewEngine/plans/stage1/pretrained-checkpoint-retrieval.md)
 - [environment-spec.md](/F:/NewEngine/plans/stage1/environment-spec.md)
 - [motion-source-map.md](/F:/NewEngine/plans/stage1/motion-source-map.md)
 - [ue-project-scaffold.md](/F:/NewEngine/plans/stage1/ue-project-scaffold.md)
@@ -41,16 +42,17 @@ Do not edit any other Stage 1 planning files in this task unless the orchestrato
 ## Required Work
 
 1. Confirm the real environment details against `environment-spec.md`.
-2. Confirm the selected pretrained checkpoint path and eval command against `pretrained-model-selection.md`.
-3. Freeze the exact Phase 0 command path and evidence path for:
+2. Confirm the selected pretrained checkpoint path and retrieval result against `pretrained-checkpoint-retrieval.md`.
+3. Confirm the selected eval command against `pretrained-model-selection.md`.
+4. Freeze the exact Phase 0 command path and evidence path for:
    - pretrained evaluation
    - bridge-contract confirmation
    - retargeting validation
    - Manny control-path check
    - substep stability check
    - Manny smoke test
-4. Update the assumption ledger only where user evidence materially changes confidence.
-5. Update the execution log so the next runnable task is accurate.
+5. Update the assumption ledger only where user evidence materially changes confidence.
+6. Update the execution log so the next runnable task is accurate.
 
 ## Definition Of Done
 

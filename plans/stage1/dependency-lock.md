@@ -30,8 +30,11 @@ Use it after the user returns with setup evidence. Do not treat the environment 
 | ProtoMotions release | `v2.3.2` |  | planned | record exact tag or commit |
 | ProtoMotions path | `F:\NewEngine\Training\ProtoMotions` |  | planned | |
 | simulator path | `isaaclab` |  | planned | `isaacgym` only with explicit note |
+| host platform for ProtoMotions | `Windows-native first; WSL only if blocked` |  | planned | record blocker if WSL is used |
 | pretrained source | `ctessler/MaskedMimic` |  | planned | |
 | pretrained checkpoint path | `Training/ProtoMotions/data/pretrained_models/masked_mimic/smpl/last.ckpt` |  | planned | record actual local path if it differs |
+| ONNX opset | `17 -> 16 -> 15 fallback order` |  | planned | record first accepted opset |
+| Unreal runtime target | `NNERuntimeORTDml` |  | planned | `NNERuntimeORTCpu` debug fallback only |
 
 ## Dataset Lock
 

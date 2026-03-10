@@ -12,6 +12,8 @@ This is the first Stage 1 training-side workflow.
 
 Use it before `/train-phc` so Phase 0 can answer whether the documented pretrained shortcut is already good enough, needs fine-tuning, or should be abandoned.
 
+Use [pretrained-checkpoint-retrieval.md](/F:/NewEngine/plans/stage1/pretrained-checkpoint-retrieval.md) first so the checkpoint path is locked before evaluation starts.
+
 ## Prerequisites
 
 - conda environment `physanim_proto` activated

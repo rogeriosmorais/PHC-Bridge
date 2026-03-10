@@ -15,6 +15,7 @@ The required outputs are:
 - confirmed PHC bridge contract
 - confirmed retargeting validation plan
 - confirmed pretrained-first viability
+- confirmed pretrained checkpoint retrieval path
 - confirmed test/evidence shape for G1
 - evidence that the UE5 control path and Manny/Chaos smoke path are viable
 
@@ -29,6 +30,7 @@ Do not start Phase 0 until all of these are true:
 - [test-strategy.md](/F:/NewEngine/plans/stage1/test-strategy.md) exists
 - [assumption-ledger.md](/F:/NewEngine/plans/stage1/assumption-ledger.md) has been reviewed by the orchestrator for Phase 0
 - [acceptance-thresholds.md](/F:/NewEngine/plans/stage1/acceptance-thresholds.md) exists
+- [pretrained-checkpoint-retrieval.md](/F:/NewEngine/plans/stage1/pretrained-checkpoint-retrieval.md) exists
 - the orchestrator has identified which assumptions Phase 0 is intended to confirm or falsify
 
 ## Phase 0 Deliverables
@@ -36,8 +38,9 @@ Do not start Phase 0 until all of these are true:
 1. Updated `bridge-spec.md` with confirmed PHC config details
 2. Updated `retargeting-spec.md` with the exact validation cases chosen for G1
 3. Motion-source review against [motion-set.md](/F:/NewEngine/plans/stage1/motion-set.md)
-4. A completed [g1-evidence.md](/F:/NewEngine/plans/stage1/g1-evidence.md) package
-5. A short go / no-go conclusion for Gate G1
+4. Checkpoint retrieval recorded in [dependency-lock.md](/F:/NewEngine/plans/stage1/dependency-lock.md)
+5. A completed [g1-evidence.md](/F:/NewEngine/plans/stage1/g1-evidence.md) package
+6. A short go / no-go conclusion for Gate G1
 
 ## Current Known Local Environment Note
 

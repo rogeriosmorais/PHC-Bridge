@@ -16,6 +16,7 @@ Do not start Phase 1 implementation until all of these are true:
 - `bridge-spec.md` is locked for the chosen PHC config
 - `retargeting-spec.md` is locked for the Stage 1 mapped subset
 - `motion-set.md` is locked for the Stage 1 locomotion and combat core
+- `comparison-sequence-lock.md` is locked for the intended G2 sequence
 - `test-strategy.md` is stable enough to define Phase 1 evidence
 - the orchestrator has reviewed `assumption-ledger.md` and confirmed there is no `red` assumption blocking one-character implementation
 
@@ -26,6 +27,7 @@ Do not start Phase 1 implementation until all of these are true:
 3. PoseSearch content-integration plan for the locked locomotion and fight clips
 4. PD tuning plan for one-character stability and comparison readiness
 5. A clear setup for the G2 side-by-side evaluation package
+6. An ONNX export/import path that no longer requires discovery work during Phase 1
 
 ## Scope
 
@@ -83,7 +85,7 @@ Phase 1 does not include:
 - Goal: define how the chosen PHC model becomes a UE5-usable NNE asset
 - Inputs:
   - locked bridge spec
-  - export workflow assumptions
+  - [onnx-export-spec.md](/F:/NewEngine/plans/stage1/onnx-export-spec.md)
 - Output:
   - model import / validation plan
   - expected runtime evidence for successful loading and inference
@@ -110,6 +112,7 @@ Phase 1 does not include:
 - Inputs:
   - `ENGINEERING_PLAN.md`
   - G1 outcome
+  - [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/comparison-sequence-lock.md)
 - Output:
   - clip / database setup plan
   - clear statement of which locomotion and fight content is needed in Phase 1
@@ -155,6 +158,7 @@ Before Phase 1 can be considered complete enough for G2 packaging, there must be
 - one-character bridge works end to end
 - PHC model runs through NNE in UE5
 - PoseSearch content is available for the chosen comparison sequence
+- the comparison sequence is frozen in `comparison-sequence-lock.md`
 - tuning reaches a stable-enough state for comparison
 - no unresolved `red` assumptions remain for G2
 

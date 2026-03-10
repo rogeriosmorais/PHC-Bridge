@@ -11,6 +11,7 @@ Gate text from the engineering plan:
 This package exists so the user does not have to invent the comparison method at evaluation time.
 
 Use [acceptance-thresholds.md](/F:/NewEngine/plans/stage1/acceptance-thresholds.md) as the tie-breaker when the verdict feels vague.
+Use [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/comparison-sequence-lock.md) to decide what sequence is allowed to count as a valid G2 comparison.
 
 ## Gate Status
 

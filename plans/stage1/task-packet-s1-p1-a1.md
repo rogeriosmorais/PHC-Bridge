@@ -15,6 +15,8 @@ Turn a passed G1 into an implementation-ready one-character package without reop
 - [bridge-spec.md](/F:/NewEngine/plans/stage1/bridge-spec.md)
 - [retargeting-spec.md](/F:/NewEngine/plans/stage1/retargeting-spec.md)
 - [test-strategy.md](/F:/NewEngine/plans/stage1/test-strategy.md)
+- [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/comparison-sequence-lock.md)
+- [onnx-export-spec.md](/F:/NewEngine/plans/stage1/onnx-export-spec.md)
 - [acceptance-thresholds.md](/F:/NewEngine/plans/stage1/acceptance-thresholds.md)
 - current [assumption-ledger.md](/F:/NewEngine/plans/stage1/assumption-ledger.md)
 
@@ -32,8 +34,9 @@ Turn a passed G1 into an implementation-ready one-character package without reop
    - NNE inference
    - action unpacking
    - physics-control writes
-3. Freeze the minimal PoseSearch content required for G2.
-4. Freeze the tuning definition for "stable enough for G2."
+3. Freeze the ONNX export/import path for the chosen runtime model.
+4. Freeze the minimal PoseSearch content required for G2.
+5. Freeze the tuning definition for "stable enough for G2."
 
 ## Definition Of Done
 

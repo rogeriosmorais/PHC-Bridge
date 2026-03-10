@@ -106,21 +106,19 @@ For Stage 1:
 
 ## Windows / Linux / WSL Planning Constraint
 
-This is still a partially open execution detail.
+Use this decision rule instead of leaving the platform choice open:
 
-What is already safe to say:
+1. try Windows-native setup first for ProtoMotions Stage 1 evaluation
+2. switch to WSL only if Windows-native setup fails for a concrete blocker such as:
+   - IsaacLab install incompatibility
+   - GPU/runtime access failure
+   - repeatable package-resolution failure that blocks the documented path
+3. record the final choice in [dependency-lock.md](/F:/NewEngine/plans/stage1/dependency-lock.md)
 
-- UE work is local Windows work
-- ProtoMotions Python setup may or may not be easiest in Windows-native Python depending on IsaacLab installation behavior
+Planning rule:
 
-What is not yet fully locked:
-
-- whether the training/eval stack should run Windows-native or through WSL/Linux tooling
-
-So for now:
-
-- treat this as a setup confirmation item
-- do not assume a mixed Windows + WSL path unless the install actually forces it
+- do not start with a mixed Windows + WSL setup by default
+- earn the WSL switch with an explicit blocker note
 
 ## GPU / Runtime Expectations
 
@@ -148,5 +146,4 @@ Before the orchestrator treats the environment as ready, capture:
 These details still need to be recorded during execution:
 
 - exact IsaacLab install path
-- whether WSL is needed
 - exact checkpoint retrieval path for the pretrained model

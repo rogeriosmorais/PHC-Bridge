@@ -28,7 +28,7 @@ cd f:\NewEngine\Training\ProtoMotions
 python phc/run.py --cfg_env phc/data/cfg/phc_kp_mcp_iccv.yaml --cfg_train phc/data/cfg/train/rlg/im_mcp.yaml --motion_file ../data/amass/ --headless
 ```
 
-Note: Exact command may vary based on ProtoMotions version. Check ProtoMotions README and record the exact observation/action contract used for the Stage 1 bridge.
+Note: This command is the planning default. If the locally pinned ProtoMotions source in `dependency-lock.md` uses a different entry point or config path, record the exact replacement command in the execution log before running it.
 
 3. Monitor training loss. Expect convergence after ~2-4 hours on a 4070 SUPER.
 
