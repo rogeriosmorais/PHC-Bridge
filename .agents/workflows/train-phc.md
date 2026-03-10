@@ -2,13 +2,15 @@
 description: How to train PHC policy with ProtoMotions
 ---
 
-# Train PHC Policy
+# Train Or Fine-Tune PHC Policy
 
 > Status: planned workflow. This may be blocked until ProtoMotions, datasets, configs, and training scripts are in place.
 
+Use `/eval-pretrained` first. This workflow is for the fine-tune or train-from-scratch path after the pretrained shortcut has been evaluated.
+
 ## Prerequisites
 
-- conda environment `physanim` activated
+- conda environment `physanim_proto` activated
 - ProtoMotions cloned to `f:\NewEngine\Training\ProtoMotions`
 - AMASS data in `f:\NewEngine\Training\data\amass\`
 - chosen ProtoMotions/PHC config identified so the observation/action contract is known
@@ -17,7 +19,7 @@ description: How to train PHC policy with ProtoMotions
 
 1. Activate the environment once it exists:
 ```
-conda activate physanim
+conda activate physanim_proto
 ```
 
 2. Start PHC baseline training on AMASS locomotion once the repo/config path is confirmed:

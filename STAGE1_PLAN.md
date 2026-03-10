@@ -41,6 +41,22 @@ Before implementation starts, this plan must produce these concrete artifacts. T
 - [Orchestration Model](/F:/NewEngine/plans/stage1/orchestration.md)
 - [Assumption Ledger](/F:/NewEngine/plans/stage1/assumption-ledger.md)
 - [Motion Set](/F:/NewEngine/plans/stage1/motion-set.md)
+- [Pretrained Model Selection](/F:/NewEngine/plans/stage1/pretrained-model-selection.md)
+- [Environment Spec](/F:/NewEngine/plans/stage1/environment-spec.md)
+- [Motion Source Map](/F:/NewEngine/plans/stage1/motion-source-map.md)
+- [Motion Source Lock Table](/F:/NewEngine/plans/stage1/motion-source-lock-table.md)
+- [UE Project Scaffold](/F:/NewEngine/plans/stage1/ue-project-scaffold.md)
+- [Execution Log](/F:/NewEngine/plans/stage1/execution-log.md)
+- [Dependency Lock](/F:/NewEngine/plans/stage1/dependency-lock.md)
+- [Acceptance Thresholds](/F:/NewEngine/plans/stage1/acceptance-thresholds.md)
+- [Task Packet S1-P0-A1](/F:/NewEngine/plans/stage1/task-packet-s1-p0-a1.md)
+- [Task Packet S1-P0-A2](/F:/NewEngine/plans/stage1/task-packet-s1-p0-a2.md)
+- [Task Packet S1-P1-A1](/F:/NewEngine/plans/stage1/task-packet-s1-p1-a1.md)
+- [Task Packet S1-P1-A2](/F:/NewEngine/plans/stage1/task-packet-s1-p1-a2.md)
+- [Task Packet S1-P2-A1](/F:/NewEngine/plans/stage1/task-packet-s1-p2-a1.md)
+- [Task Packet S1-P2-A2](/F:/NewEngine/plans/stage1/task-packet-s1-p2-a2.md)
+- [User Return Template](/F:/NewEngine/plans/stage1/user-return-template.md)
+- [ELI5 UE Project Setup](/F:/NewEngine/plans/stage1/eli5-ue-project-setup.md)
 - [Delegation Spec](/F:/NewEngine/plans/stage1/delegation-spec.md)
 - [Handoff Format](/F:/NewEngine/plans/stage1/handoff-format.md)
 - [User Intervention Checklist](/F:/NewEngine/plans/stage1/user-interventions.md)
@@ -48,7 +64,7 @@ Before implementation starts, this plan must produce these concrete artifacts. T
 
 ## Current Status
 
-The Stage 1 planning bundle now covers the major planning and execution-package artifacts for Phase 0, Phase 1, and the Stage 1 gates.
+The Stage 1 planning bundle now covers the major planning and execution-package artifacts for Phase 0, Phase 1, the Stage 1 gates, the pretrained-first path, the environment contract, the motion-source map and lock table, the UE scaffold, the live execution log, the dependency lock sheet, explicit gate thresholds, and task packets for each AI-owned execution step.
 
 The next useful work is no longer broad planning structure. The next useful work is either:
 

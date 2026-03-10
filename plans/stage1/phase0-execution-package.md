@@ -18,6 +18,8 @@ The required outputs are:
 - confirmed test/evidence shape for G1
 - evidence that the UE5 control path and Manny/Chaos smoke path are viable
 
+The fastest way to resume this package after user setup work is to gather evidence with [user-return-template.md](/F:/NewEngine/plans/stage1/user-return-template.md) and then issue [task-packet-s1-p0-a1.md](/F:/NewEngine/plans/stage1/task-packet-s1-p0-a1.md).
+
 ## Entry Criteria
 
 Do not start Phase 0 until all of these are true:
@@ -26,6 +28,7 @@ Do not start Phase 0 until all of these are true:
 - [retargeting-spec.md](/F:/NewEngine/plans/stage1/retargeting-spec.md) exists
 - [test-strategy.md](/F:/NewEngine/plans/stage1/test-strategy.md) exists
 - [assumption-ledger.md](/F:/NewEngine/plans/stage1/assumption-ledger.md) has been reviewed by the orchestrator for Phase 0
+- [acceptance-thresholds.md](/F:/NewEngine/plans/stage1/acceptance-thresholds.md) exists
 - the orchestrator has identified which assumptions Phase 0 is intended to confirm or falsify
 
 ## Phase 0 Deliverables
@@ -214,6 +217,7 @@ The following must be present before G1 can be called `pass`:
 - substep-stability evidence
 - end-to-end Manny smoke-test evidence
 - explicit G1 verdict from the orchestrator
+- threshold checks from [acceptance-thresholds.md](/F:/NewEngine/plans/stage1/acceptance-thresholds.md)
 
 ## Failure Handling
 

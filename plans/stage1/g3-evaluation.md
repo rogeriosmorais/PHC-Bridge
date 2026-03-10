@@ -10,6 +10,8 @@ Gate text from the engineering plan:
 
 This package exists so observer feedback is collected consistently instead of casually.
 
+Use [acceptance-thresholds.md](/F:/NewEngine/plans/stage1/acceptance-thresholds.md) as the minimum standard for calling the demo compelling.
+
 ## Gate Status
 
 - `Current status`: blocked

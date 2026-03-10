@@ -11,7 +11,7 @@ description: How to run all automated tests (Python + UE5)
 
 1. Activate the conda environment when it exists:
 ```
-conda activate physanim
+conda activate physanim_proto
 ```
 
 2. Run retargeting tests when the test file and implementation exist:

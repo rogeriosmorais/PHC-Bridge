@@ -10,7 +10,7 @@ description: How to export trained PHC model to ONNX format
 
 1. Activate the training environment once it exists:
 ```
-conda activate physanim
+conda activate physanim_proto
 ```
 
 // turbo

@@ -28,7 +28,7 @@ This repository is currently a planning scaffold. Workflow docs under `.agents/w
 2. **TDD is mandatory during implementation phases.** Write tests before writing implementation code. Every feature must have automated tests. Run `/run-tests` before committing once the relevant test suites exist.
 3. **No TensorRT dependency.** Use UE5 NNE with ONNX Runtime instead.
 4. **No custom Python pipeline for UE5 asset authoring.** Use Chaos Flesh Dataflow for tet-mesh/muscle authoring in the UE5 editor. Python is allowed for offline training, dataset conversion, retargeting, and ONNX export outside UE5.
-5. **PHC is trained offline in ProtoMotions/Isaac Gym.** Training is completely separate from UE5. The only bridge is the `.onnx` file.
+5. **PHC-family policies are trained or evaluated offline in ProtoMotions.** Stage 1 uses a pretrained-first path in IsaacLab where possible, with Isaac Gym as a fallback. Training remains completely separate from UE5. The only bridge is the `.onnx` file.
 6. **SMPL <-> UE5 skeleton retargeting** is required. PHC uses SMPL (24 joints, Y-up). UE5 uses mannequin skeleton (~70 bones, Z-up). See `.agents/skills/smpl-skeleton/SKILL.md`.
 7. **Character model is Manny/Quinn** (UE5 built-in mannequin). Same skeleton as MetaHuman - can upgrade later without code changes.
 8. **Commit often.** Small, atomic commits with descriptive messages. Git commands are always safe to auto-run - no need to ask for permission.
@@ -47,6 +47,7 @@ NewEngine/
 |   |-- workflows/               # Planned step-by-step procedures (use /slash-commands)
 |   |   |-- run-tests.md         # /run-tests - run phase-appropriate automated tests
 |   |   |-- build-plugin.md      # /build-plugin - compile UE5 plugin once project exists
+|   |   |-- eval-pretrained.md   # /eval-pretrained - evaluate the Stage 1 pretrained policy
 |   |   |-- train-phc.md         # /train-phc - run PHC training
 |   |   `-- export-onnx.md       # /export-onnx - export model to ONNX
 |   `-- skills/
@@ -78,11 +79,11 @@ Put that material in [STAGE1_PLAN.md](/F:/NewEngine/STAGE1_PLAN.md). Treat `AGEN
 |---|---|---|
 | Physics solver (Stage 1) | Chaos Physics (CPU) | Built-in, proven, good enough for 2 characters |
 | Joint motor control | UPhysicsControlComponent | Built-in spring/damper PD controller |
-| RL policy | PHC -> MaskedMimic (Stage 2) | PHC for full-body tracking, MaskedMimic for partial cues |
+| RL policy | PHC family, pretrained MaskedMimic first | Fastest documented feasibility path while preserving the PHC-style bridge |
 | Policy inference | UE5 NNE + ONNX Runtime | Built-in, no TensorRT dependency |
 | Motion matching | UE5 PoseSearch | Built-in |
 | Training framework | ProtoMotions (Apache 2.0) | NVIDIA's framework, supports PHC + MaskedMimic |
-| Training backend | Isaac Gym (Stage 1), NVIDIA Newton (Stage 2 option) | Newton is 70x faster but beta |
+| Training backend | IsaacLab first (Stage 1), Isaac Gym fallback, NVIDIA Newton (Stage 2 option) | IsaacLab matches the documented pretrained path; Isaac Gym remains a proven backup |
 | Training data | AMASS (locomotion) + Mixamo (fighting) | AMASS is native SMPL format |
 | Character model | Manny/Quinn | Built-in, same skeleton as MetaHuman |
 

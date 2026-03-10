@@ -70,6 +70,8 @@ Before starting the next execution-planning pass, the orchestrator should:
 
 The next meaningful ledger updates should come from:
 
+- confirming the selected pretrained checkpoint and eval command
+- confirming the environment contract actually used in Phase 0
 - confirming the PHC observation/action contract
 - choosing the retargeting validation cases for G1
 - defining the exact evidence required to call `UPhysicsControlComponent` viable for Stage 1

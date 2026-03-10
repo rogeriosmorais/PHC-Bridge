@@ -10,6 +10,8 @@ This checklist defines the work that must be done by the human user rather than 
 - Planned install root: `E:\UE_5.7`
 - Planned `UE5_PATH` value after install: `E:\UE_5.7\Engine`
 
+When the user returns with setup progress, use [user-return-template.md](/F:/NewEngine/plans/stage1/user-return-template.md) so the orchestrator can resume without guessing.
+
 ## User-Owned Actions
 
 | ID | When | User Action | Why AI Cannot Finish It Alone | Evidence Expected Back |
@@ -37,3 +39,7 @@ This checklist defines the work that must be done by the human user rather than 
 - that a dataset is present and valid
 - that a visual gate passed without human confirmation
 - that the user wants to expand scope past the Stage 1 proof-of-concept
+
+## ELI5 Setup Link
+
+For the initial Unreal project creation step, use [eli5-ue-project-setup.md](/F:/NewEngine/plans/stage1/eli5-ue-project-setup.md).

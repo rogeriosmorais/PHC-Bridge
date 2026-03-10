@@ -19,7 +19,7 @@ Build a real-time demo of two human fighters in **Unreal Engine 5** where **phys
 ## 2. Stage 1 Architecture (All UE5 Built-In)
 
 ```text
-Unreal Engine 5.5+
+Unreal Engine 5.7.3 (current local plan; 5.5+ in principle)
 
 UE5 PoseSearch (CPU)
   -> target joint angles/velocities from mocap database
@@ -154,10 +154,11 @@ Stage 2 replaces CPU-based Chaos systems with custom GPU compute shaders to demo
 
 | Backend | Status | Speedup | When to Use |
 |---|---|---|---|
-| **Isaac Gym** | Stable, proven with PHC | Baseline | Stage 1 - safest option, well-documented |
-| **NVIDIA Newton** (via Isaac Lab) | Beta (Sept 2025), open-source, Linux Foundation | 70x for humanoid sims (MuJoCo-Warp) | Stage 2 or if Isaac Gym is too slow - faster training, more accurate physics, differentiable |
+| **IsaacLab** | Best fit for the documented pretrained MaskedMimic path | Baseline Stage 1 eval path | Stage 1 pretrained evaluation and likely first fine-tuning path |
+| **Isaac Gym** | Stable, proven with PHC | Baseline fallback | Use if IsaacLab setup or runtime becomes impractical locally |
+| **NVIDIA Newton** (via Isaac Lab) | Beta (Sept 2025), open-source, Linux Foundation | 70x for humanoid sims (MuJoCo-Warp) | Stage 2 or if later training speed becomes the main bottleneck |
 
-Newton is built on NVIDIA Warp + OpenUSD, co-developed with Google DeepMind and Disney Research. ProtoMotions already supports multiple simulator backends (Isaac Gym, Isaac Sim, Isaac Lab), so switching to Newton/Isaac Lab is a config change, not a rewrite. Newton's differentiable physics could also enable gradient-based fine-tuning of the sim-to-sim gap.
+Newton is built on NVIDIA Warp + OpenUSD, co-developed with Google DeepMind and Disney Research. ProtoMotions already supports multiple simulator backends (Isaac Gym, Isaac Sim, Isaac Lab), so switching simulator backends is a config change, not a rewrite. Newton's differentiable physics could also enable gradient-based fine-tuning of the sim-to-sim gap.
 
 ### Pretrained-First Strategy
 
@@ -202,9 +203,9 @@ So the Stage 1 order is:
 
 ### Sim-to-Sim Transfer
 
-- Stage 1: Isaac Gym -> Chaos Physics (rigid-body articulation, similar dynamics)
-- The `UPhysicsControlComponent`'s spring/damper drives approximate Isaac Gym's PD controllers. Tuning strength/damping values is the main calibration work.
-- If using Newton: Newton's MuJoCo-Warp physics may be closer to Chaos Physics than Isaac Gym's, potentially reducing the sim-to-sim gap.
+- Stage 1: IsaacLab first -> Chaos Physics, with Isaac Gym as the fallback comparison path
+- The `UPhysicsControlComponent`'s spring/damper drives must be calibrated against the chosen training simulator's controller behavior. Tuning strength/damping values is the main calibration work.
+- If using Newton later: Newton's MuJoCo-Warp physics may be closer to Chaos Physics than Isaac Gym's, potentially reducing the sim-to-sim gap.
 - **Fallback:** Hand-tuned PD controller via the Physics Control Component with fixed gains. No RL needed - less capable but functional.
 
 ### Stage 1 Motion Set (locked planning scope)
@@ -285,10 +286,10 @@ Note: the workflow docs in `.agents/workflows/` are planned procedures for these
 
 | Task | Deliverable |
 |---|---|
-| Set up ProtoMotions + Isaac Gym/Lab; evaluate an available pretrained policy on the Stage 1 locomotion core | Visual: pretrained policy produces promising motion |
+| Set up ProtoMotions + IsaacLab; evaluate the selected pretrained policy on the Stage 1 locomotion core | Visual: pretrained policy produces promising motion |
 | Fine-tune the pretrained policy on the locked Stage 1 combat core if needed | Visual: policy tracks at least one punch/kick while balanced |
 | Lock the exact PHC observation/action contract from the chosen ProtoMotions config | Bridge spec: observation fields, pose/velocity representation, reference-pose handling, output mapping assumptions |
-| Create UE5 5.5 project; Manny with Physics Asset + Physics Control Component | Articulated ragdoll with motor-driven joints |
+| Create UE5 5.7.3 project; Manny with Physics Asset + Physics Control Component | Articulated ragdoll with motor-driven joints |
 | Test: drive Physics Control Component targets from C++ each frame | Confirm programmatic joint control works |
 | Test: NNE + ONNX Runtime with dummy model | Confirm inference runs in UE5 |
 | Test: physics substep stability at 120 Hz and 240 Hz with substepping enabled | Confirm articulated body is stable under PD control |
@@ -304,7 +305,7 @@ Note: the workflow docs in `.agents/workflows/` are planned procedures for these
 | Write `PhysAnimPlugin`: PoseSearch -> NNE inference -> Physics Control Component targets | Core plugin bridge (low hundreds of lines) |
 | Export PHC policy to ONNX -> import as NNE asset | Policy runs in UE5 |
 | Set up PoseSearch with Mixamo locomotion + fight clips | Motion matching provides target poses |
-| Tune Physics Control Component strength/damping to approximate Isaac Gym dynamics | Reduce sim-to-sim gap |
+| Tune Physics Control Component strength/damping to approximate the chosen training simulator dynamics | Reduce sim-to-sim gap |
 | Set up Chaos Flesh + ML Deformer on character (optional visual bonus) | Flesh deformation |
 | **Gate G2:** Side-by-side - physics-driven vs kinematic PoseSearch | Must look noticeably more natural |
 
@@ -393,8 +394,8 @@ Note: the workflow docs in `.agents/workflows/` are planned procedures for these
 
 | Risk | Stage | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
-| Physics-driven motion doesn't look better | 1 | Medium | **Fatal** | Gate G1 tests in Isaac Gym at Week 2 |
-| Sim-to-sim gap (Isaac Gym -> Chaos Physics) | 1 | High | High | Physics Control Component's spring/damper drives approximate Isaac Gym's PD controllers. Tune strength/damping |
+| Physics-driven motion doesn't look better | 1 | Medium | **Fatal** | Gate G1 tests in the selected training simulator at Week 2 |
+| Sim-to-sim gap (training simulator -> Chaos Physics) | 1 | High | High | Physics Control Component tuning must be calibrated against the chosen training simulator |
 | Physics Control Component (experimental) is too limited or buggy | 1 | Medium | Medium | Fallback: use raw `AddTorqueInRadians()` on Physics Asset bones (~100 more lines) |
 | Chaos Physics substeps insufficient for stability | 1 | Medium | High | Try sync substepping first (120-240 Hz), then async fixed timestep. Increase solver iterations. Ultimate fallback: Stage 2's custom XPBD runs at any rate |
 | SMPL <-> UE5 skeleton mapping produces wrong rotations | 1 | Medium | Medium | Phase 0 tests with hardcoded poses. Coordinate conversion and handedness handling must be verified explicitly |
@@ -421,11 +422,11 @@ Note: the workflow docs in `.agents/workflows/` are planned procedures for these
 
 | Dependency | Purpose | License | Stage |
 |---|---|---|---|
-| **Unreal Engine 5.5+** | Rendering, Chaos Physics, PoseSearch, NNE, Physics Control Component, Physical Animation Component, Chaos Flesh, ML Deformer | Epic EULA | 1+2 |
+| **Unreal Engine 5.7.3** | Rendering, Chaos Physics, PoseSearch, NNE, Physics Control Component, Physical Animation Component, Chaos Flesh, ML Deformer | Epic EULA | 1+2 |
 | **ProtoMotions** | RL training framework | Apache 2.0 | 1+2 |
 | **PHC** | Motion tracking policy (Stage 1) | Check repo | 1 |
 | **MaskedMimic** | Multi-skill composition policy (Stage 2) | CC BY-NC-SA 4.0 (non-commercial) | 2 |
-| **Isaac Gym / Lab** | Training simulation (Stage 1 default) | Free for research | 1 |
+| **IsaacLab / Isaac Gym** | Training simulation (Stage 1 pretrained-first path) | Free for research | 1 |
 | **NVIDIA Newton** | Training simulation (Stage 2 option, 70x faster) | Open source, Linux Foundation | 2 |
 | **AMASS dataset** | Locomotion mocap (SMPL format) | Free for research | 1+2 |
 | **Mixamo** | Fighting mocap (FBX) | Free | 1+2 |

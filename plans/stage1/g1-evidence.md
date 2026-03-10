@@ -6,7 +6,7 @@ This document is the evidence bundle for Gate G1.
 
 Gate text from the engineering plan:
 
-> PHC output looks alive in Isaac Gym AND the PHC observation/action contract is locked AND Physics Control Component responds to programmatic targets AND a minimal SMPL/PHC output can drive Manny in Chaos without obvious mapping failure or instability AND substep rate is stable.
+> PHC output looks alive in the selected training simulator AND the PHC observation/action contract is locked AND Physics Control Component responds to programmatic targets AND a minimal SMPL/PHC output can drive Manny in Chaos without obvious mapping failure or instability AND substep rate is stable.
 
 ## Gate Status
 
@@ -28,6 +28,7 @@ Use only:
 - `plans/stage1/test-strategy.md`
 - `plans/stage1/manual-verification.md`
 - `plans/stage1/assumption-ledger.md`
+- `plans/stage1/acceptance-thresholds.md`
 
 ## Criterion 1: Pretrained Policy Output Looks Alive In Training
 
