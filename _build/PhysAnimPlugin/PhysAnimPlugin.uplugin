@@ -22,6 +22,14 @@
 	],
 	"Plugins": [
 		{
+			"Name": "NNERuntimeORT",
+			"Enabled": true
+		},
+		{
+			"Name": "PoseSearch",
+			"Enabled": true
+		},
+		{
 			"Name": "PhysicsControl",
 			"Enabled": true
 		}

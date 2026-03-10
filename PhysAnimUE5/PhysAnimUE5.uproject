@@ -20,6 +20,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "NNERuntimeORT",
+			"Enabled": true
+		},
+		{
 			"Name": "PhysicsControl",
 			"Enabled": true
 		},

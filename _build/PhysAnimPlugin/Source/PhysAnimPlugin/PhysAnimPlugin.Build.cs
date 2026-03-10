@@ -12,8 +12,10 @@ public class PhysAnimPlugin : ModuleRules
                 "Core",
                 "CoreUObject",
                 "Engine",
+                "NNE",
                 "PhysicsCore",
-                "PhysicsControl"
+                "PhysicsControl",
+                "PoseSearch"
             });
     }
 }
