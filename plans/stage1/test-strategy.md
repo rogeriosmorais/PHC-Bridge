@@ -36,7 +36,6 @@ Stage 1 validation is split into four layers:
 | Claim | Verification Mode | Evidence |
 |---|---|---|
 | PHC baseline produces plausible locomotion | manual (`MV-G1-01`) | clip + pass/fail note |
-| PHC fight fine-tune tracks at least one combat clip plausibly | manual | clip + pass/fail note |
 | chosen ProtoMotions config is understood | static review | bridge spec updated with confirmed fields |
 | SMPL mapping table is coherent | unit/static review | mapping review + validation cases |
 | NNE dummy model loads | UE5 runtime check | runtime log or screenshot |
@@ -58,9 +57,7 @@ Stage 1 validation is split into four layers:
 
 | Claim | Verification Mode | Evidence |
 |---|---|---|
-| two-character setup works without breaking Stage 1 assumptions | integration + runtime | demo capture |
-| impact response behaves plausibly | runtime + manual | clip + short judgment |
-| knockdown/recovery transitions are usable | runtime + manual | clip + short judgment |
+| locomotion showcase packaging is clear enough to judge | integration + runtime | demo capture |
 | final demo is compelling enough for further investment | manual (`MV-G3-01`) | observer notes + final decision |
 
 ## TDD Rules For Stage 1

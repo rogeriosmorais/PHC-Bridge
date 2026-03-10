@@ -6,7 +6,7 @@
 
 ## Goal
 
-Turn a passed G2 into a tightly scoped two-character demo package without letting Stage 1 expand into a full game.
+Turn a passed G2 into a tightly scoped locomotion showcase demo package without letting Stage 1 expand into a full game.
 
 ## Frozen Inputs
 
@@ -23,11 +23,10 @@ Turn a passed G2 into a tightly scoped two-character demo package without lettin
 
 ## Required Work
 
-1. Freeze the duplication plan for the second fighter.
-2. Freeze the minimal impact-response scope or an explicit defer decision.
+1. Freeze the final showcase structure for the locomotion demo.
+2. Freeze whether optional duplication is included or omitted.
 3. Freeze the smallest presentation layer needed for G3:
-   - player input
-   - basic opponent
+   - demo flow
    - camera
    - HUD
 4. Keep demo scope focused on motion quality, not feature completeness.

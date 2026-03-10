@@ -13,20 +13,18 @@ It defines:
 
 ## Official Sources
 
-- ProtoMotions releases page: https://github.com/NVlabs/ProtoMotions/releases
-- MaskedMimic model card: https://huggingface.co/ctessler/MaskedMimic
-- Hugging Face CLI guide: https://huggingface.co/docs/huggingface_hub/guides/cli
-- Hugging Face model download guide: https://huggingface.co/docs/hub/en/models-downloading
+- local pretrained asset: [motion_tracker/smpl](/F:/NewEngine/Training/ProtoMotions/data/pretrained_models/motion_tracker/smpl)
+- local checkpoint README: [README.md](/F:/NewEngine/Training/ProtoMotions/data/pretrained_models/motion_tracker/smpl/README.md)
 
 ## Locked Retrieval Policy
 
-Use the pretrained **MaskedMimic SMPL humanoid** model from `ctessler/MaskedMimic`.
+Use the repo-bundled pretrained **motion_tracker SMPL humanoid** asset.
 
 The local target layout is:
 
-- repo root target: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl`
+- repo root target: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl`
 - expected checkpoint filename for Stage 1 eval: `last.ckpt`
-- expected full path: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt`
+- expected full path: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt`
 
 Planning rule:
 
@@ -35,28 +33,19 @@ Planning rule:
 
 ## Preferred Retrieval Method
 
-Use the Hugging Face CLI to download the model repo into the planned local directory:
+Use the repo-bundled local asset already present under:
 
-```powershell
-hf download ctessler/MaskedMimic --local-dir F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl
-```
+- `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl`
 
-If the CLI is not installed yet:
-
-```powershell
-pip install -U huggingface_hub
-```
-
-This is the preferred path because it is scriptable and repeatable.
+This is the preferred path because it avoids unnecessary retrieval work and keeps the Stage 1 runtime target aligned with the local checked-in asset bundle.
 
 ## Manual Fallback Method
 
-If CLI download is blocked, use the model page in the browser:
+If the local asset is missing or invalid:
 
-1. open `https://huggingface.co/ctessler/MaskedMimic`
-2. download the checkpoint files manually
-3. place or rename the Stage 1 checkpoint so the final local path is:
-   - `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt`
+1. restore the missing files into `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl`
+2. place or rename the Stage 1 checkpoint so the final local path is:
+   - `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt`
 
 ## Verification Rule
 

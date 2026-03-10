@@ -37,10 +37,10 @@ Only the orchestrator updates status.
 | A-05 | Chaos substepping at 120-240 Hz is stable enough for the articulated body | unstable simulation breaks any quality comparison | yellow | Phase 0 substep stability check | persistent instability despite tuning and solver adjustments | try async physics, then reassess Stage 1 viability | yes |
 | A-06 | NNE + ONNX Runtime can run the exported policy fast enough and compatibly in UE5 | inference must fit inside Stage 1 without adding a new runtime stack | yellow | dummy-model check, then real ONNX load using `onnx-export-spec.md` | model fails to load, runtime creation fails, or runtime cost is unacceptable | shrink/re-export model, reassess viability | yes |
 | A-07 | PoseSearch output is sufficient as the upstream motion-intent source for Stage 1 | the bridge assumes PoseSearch can supply the needed target motion intent | yellow | bridge-spec confirmation and one-character integration | required target features are unavailable or unusable | narrow conditioning assumptions rather than inventing a new architecture | maybe |
-| A-07b | The available pretrained policy covers enough broad motion to make pretrained-first worthwhile | if not, we should switch to fine-tuning or training earlier | yellow | pretrained evaluation on the locked motion set | pretrained result is obviously not useful even for locomotion / general motion | go straight to fine-tuning on the locked motion set | no |
-| A-07c | The locked Stage 1 locomotion and combat motion set is sourceable without major scope creep | undefined or missing motions create silent planning drift | yellow | motion-source review against `motion-set.md` | key motions are missing or only available through major extra pipeline work | replace or remove missing motions explicitly | maybe |
+| A-07b | The available pretrained policy covers enough broad locomotion to make pretrained-first worthwhile | if not, we should switch to fine-tuning or training earlier | yellow | pretrained evaluation on the locked locomotion set | pretrained result is obviously not useful even for locomotion / general motion | go straight to fine-tuning on the locked locomotion set | no |
+| A-07c | The locked Stage 1 locomotion-only motion set is sourceable without major scope creep | undefined or missing motions create silent planning drift | yellow | motion-source review against `motion-set.md` | key locomotion motions are missing or only available through major extra pipeline work | replace or remove missing motions explicitly | maybe |
 | A-08 | Physics-driven motion will look noticeably better than kinematic playback | this is the thesis tested by G2 | yellow | G2 side-by-side evaluation | user judges difference as negligible or worse | ship only as experiment documentation, do not continue to Stage 2 | yes |
-| A-09 | The final two-character demo will be compelling enough to justify Stage 2 | Stage 2 is optional and should not start on weak evidence | yellow | G3 observer evaluation | observers find the result unconvincing | stop at Stage 1 | no |
+| A-09 | The final Stage 1 locomotion showcase will be compelling enough to justify Stage 2 | Stage 2 is optional and should not start on weak evidence | yellow | G3 observer evaluation | observers find the result unconvincing | stop at Stage 1 | no |
 
 ## Latest Orchestrator Review
 
@@ -55,12 +55,12 @@ Only the orchestrator updates status.
   - `plans/stage1/phase0-execution-package.md`
 - `Conclusion`:
   - the Phase 0 planning contract is now concrete enough to execute on this exact Windows machine without more setup replanning
-  - the selected MaskedMimic SMPL checkpoint's inference contract is now locked from local sources strongly enough for Phase 1 bridge implementation planning
+  - the selected `motion_tracker/smpl` checkpoint is now the preferred Stage 1 runtime target because its inference contract is materially simpler than the deferred MaskedMimic path
   - no G1-critical assumption beyond `A-02` moves out of `yellow` yet because `g1-evidence.md` still has no training-side motion evidence or UE-side manual evidence
   - `A-02` now moves to `green` because the local runtime input set, action shape, representation path, and fixed-gain policy are explicit in `bridge-spec.md`
   - partial setup evidence now confirms the planned UE install root and `UE5_PATH`, but it does not yet reduce any G1-critical risk
   - updated setup evidence now also confirms UE `5.7.3` and the presence of the `F:\NewEngine\PhysAnimUE5` scaffold with Manny content paths available
-  - ProtoMotions `v2.3.2`, the pretrained MaskedMimic checkpoint, and a Python `3.11` Windows-native environment are now local and consistent with the Isaac Sim `5.x` requirement
+  - ProtoMotions `v2.3.2`, the selected `motion_tracker/smpl` checkpoint, and a Python `3.11` Windows-native environment are now local and consistent with the Isaac Sim `5.x` requirement
   - Isaac Sim `5.1.0.0` and Isaac Lab `2.3.2.post1` are now installed in the locked env and headless `SimulationApp` startup succeeded locally
   - the current Windows path also required a small local ProtoMotions compatibility patch for Python `3.11` dataclass defaults plus a single-device Fabric override to bypass the default DDP / NCCL path
   - the Phase 0 eval command, retargeting validation set, and evidence paths are now frozen for `S1-P0-A2`

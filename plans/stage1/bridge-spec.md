@@ -4,7 +4,7 @@
 
 This document defines the Stage 1 `PoseSearch -> PHC -> Physics Control` bridge contract for the currently selected local ProtoMotions checkpoint.
 
-The planning-level assumptions in this file have now been checked against the frozen local MaskedMimic SMPL config and code path used for Phase 0.
+The planning-level assumptions in this file are now checked against the frozen local `motion_tracker/smpl` config and code path selected for the locomotion-only Stage 1 runtime.
 
 ## Scope
 
@@ -22,10 +22,10 @@ This spec does not invent a new policy format or change the locked architecture.
 
 - simulator path: `IsaacLabSimulator`
 - robot/body type: `smpl_humanoid`
-- config source: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\config.yaml`
-- checkpoint source: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt`
-- agent class: `protomotions.agents.masked_mimic.agent.MaskedMimic`
-- model class: `protomotions.agents.masked_mimic.model.VaeDeterministicOutputModel`
+- config source: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\config.yaml`
+- checkpoint source: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt`
+- agent class: `protomotions.agents.mimic.agent.Mimic`
+- model class: `protomotions.agents.ppo.model.PPOModel`
 - simulator-side control type: `built_in_pd`
 - action mapping mode: `map_actions_to_pd_range: true`
 
@@ -52,18 +52,13 @@ Per render tick, the Stage 1 plugin does this:
 
 ### Confirmed Runtime Input Set
 
-The selected MaskedMimic checkpoint does not consume one monolithic observation tensor at inference time. `model.act()` consumes a keyed runtime input dictionary.
+The selected motion-tracker checkpoint still uses a keyed runtime input dictionary, but it is materially simpler than the previous MaskedMimic path.
 
 The required inference-time keys are:
 
 - `self_obs`: `358` floats
-- `masked_mimic_target_poses`: `2024` floats
-- `masked_mimic_target_poses_masks`: `11` bools
-- `historical_pose_obs`: `5385` floats
-- `motion_text_embeddings`: `512` floats
-- `motion_text_embeddings_mask`: `1` bool
+- `mimic_target_poses`: `6495` floats
 - `terrain`: `256` floats
-- `vae_noise`: `64` floats
 
 ### Confirmed Grouping And Field Order
 
@@ -77,32 +72,18 @@ The required inference-time keys are:
 
 Total: `358`
 
-`masked_mimic_target_poses` is the sparse conditioning tensor used by the prior network:
+`mimic_target_poses` is the dense future target-pose tensor:
 
-- `(10 near-future sparse poses + 1 far target pose) * 184 = 2024`
-- conditionable-body order:
-  - `Pelvis`
-  - `L_Ankle`
-  - `R_Ankle`
-  - `L_Hand`
-  - `R_Hand`
-  - `Head`
-  - heading / planar-velocity pseudo-entry
-- each sparse pose entry encodes masked target translation and rotation features plus mask bits and time information
-
-`historical_pose_obs` is:
-
-- `15` subsampled historical `self_obs` frames
-- each historical frame appends `1` time scalar
-- total: `15 * (358 + 1) = 5385`
+- `15 future target poses * 433 floats = 6495`
+- each target pose is built from the `max-coords-future-rel` path plus time
+- per-future-pose grouping:
+  - target relative body positions: `24 * 3 = 72`
+  - target body positions relative to current root: `24 * 3 = 72`
+  - target relative body rotations in tan-norm form: `24 * 6 = 144`
+  - target body rotations in heading-aligned tan-norm form: `24 * 6 = 144`
+  - future-time scalar: `1`
 
 `terrain` is a `16 x 16` height-sample map flattened to `256` floats.
-
-`motion_text_embeddings` is a `512`-float vector plus a `1`-bit visibility mask.
-Stage 1 should supply a zero vector and false mask unless text-conditioned runtime control is explicitly added later.
-
-`vae_noise` is a `64`-float latent-noise vector.
-For deterministic Stage 1 inference, use the eval path behavior already frozen in the config and runtime wrapper.
 
 ### Planning Assumptions
 
@@ -111,16 +92,17 @@ For deterministic Stage 1 inference, use the eval path behavior already frozen i
 - Do not include finger or twist-bone state in the PHC observation. Those remain outside the mapped SMPL subset.
 - Unmapped UE5 bones are visual followers of animation/PoseSearch rather than policy-driven control variables.
 
-### Training-Only Inputs Not Required At Runtime
+### Runtime-Simplification Note
 
-The local code path distinguishes between training-time encoder inputs and inference-time prior inputs.
+The selected checkpoint deliberately avoids the extra runtime inputs that were present in the earlier MaskedMimic plan:
 
-These are present in training but not required by `model.act()` inference:
+- no sparse masked target-pose tensor
+- no target-pose mask tensor
+- no historical pose conditioning tensor
+- no motion-text embedding input
+- no `vae_noise` input
 
-- `mimic_target_poses`: `6495` floats
-- `masked_mimic_target_bodies_masks`: `140` bools
-
-This matters for Stage 1 because the UE bridge only needs to reproduce the inference-time contract, not the training-only encoder contract.
+This is the main reason it is now the preferred Stage 1 runtime target.
 
 ## Action Contract
 
@@ -128,7 +110,7 @@ This matters for Stage 1 because the UE bridge only needs to reproduce the infer
 
 The selected checkpoint outputs a single action tensor of `69` floats.
 
-- model output head: `torch.tanh(...)`
+- model output head: PPO actor mean over `69` action values
 - numeric range before PD mapping: `[-1, 1]`
 - semantic meaning: per-DoF position targets in the robot's exponential-map DoF space
 - simulator application: `_action_to_pd_targets(offset + scale * action)` and then built-in PD position targets
@@ -237,15 +219,15 @@ This spec is considered locked only when all of the following are written down f
 
 ## Confirmed Assumptions
 
-- the selected local pretrained path is the MaskedMimic SMPL checkpoint under the repo's `data/pretrained_models` tree
-- inference uses a keyed input dictionary rather than one flattened observation tensor
-- the runtime bridge must provide `self_obs`, sparse masked-mimic target poses, historical pose context, terrain, text-conditioning placeholders, and `vae_noise`
+- the selected local pretrained path is the `motion_tracker/smpl` checkpoint under the repo's `data/pretrained_models` tree
+- inference uses a small keyed input dictionary rather than one flattened observation tensor
+- the runtime bridge must provide `self_obs`, dense future `mimic_target_poses`, and `terrain`
 - the model outputs `69` normalized action values that become built-in PD position targets after deterministic offset/scale mapping
 - gains are fixed outside the model
 
 ## Rejected Assumptions
 
-- the runtime bridge does not need to reproduce every training-time encoder input
+- the Stage 1 runtime bridge does not need MaskedMimic-specific sparse conditioning inputs
 - the selected checkpoint does not output direct joint quaternions
 - the selected checkpoint does not output per-joint stiffness or damping values
 

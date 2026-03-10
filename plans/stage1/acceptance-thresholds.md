@@ -61,9 +61,6 @@ The motion-source map counts as `usable` only if:
 - every locked locomotion-core motion has either:
   - a named source family, or
   - an explicit approved replacement
-- every combat-core motion is explicitly marked as:
-  - covered by pretrained evidence, or
-  - requiring fine-tuning data
 - every missing or risky motion is written down explicitly
 
 If a motion is merely assumed to exist with no source note, the map is not usable.

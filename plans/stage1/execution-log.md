@@ -15,7 +15,7 @@ Use it to track:
 ## Current State
 
 - `Current phase`: Phase 0 / `S1-P0-A1` complete / `S1-P0-A2` in progress
-- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; the Windows command path for Phase 0 is frozen, the MaskedMimic runtime bridge contract is now locked from local sources, and the next step is the remaining training-side and UE-side evidence collection for G1
+- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Stage 1 is now narrowed to locomotion-only, the selected runtime checkpoint is `motion_tracker/smpl`, the Windows command path for Phase 0 is frozen, and the next step is the remaining training-side and UE-side evidence collection for G1
 - `Last planning milestone`: orchestrator installed Isaac Sim `5.1.0.0` and Isaac Lab `2.3.2.post1`, patched the local ProtoMotions clone for Python `3.11` dataclass compatibility, and validated a short IsaacLab smoke run with the pretrained checkpoint using a single-device Fabric override on Windows
 
 ## Active Tasks
@@ -68,7 +68,7 @@ Use it to track:
 
 ## Latest Phase 0 Evidence Progress
 
-- the selected local MaskedMimic SMPL checkpoint contract is now written down in `bridge-spec.md`
+- the selected local `motion_tracker/smpl` checkpoint contract is now written down in `bridge-spec.md`
 - G1 Criterion 2 now has concrete evidence in `g1-evidence.md` and scores `pass`
 - the motion-source review in `g1-evidence.md` now scores `pass`
 - G1 remains blocked overall because the user-observed training and UE manual checks are still missing

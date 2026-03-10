@@ -44,17 +44,17 @@ Use only:
 
 - `Status`: complete
 - `Evidence`:
-  - confirmed observation tensor shape: inference uses a keyed runtime input dictionary, not one flat tensor; required keys are `self_obs=358`, `masked_mimic_target_poses=2024`, `masked_mimic_target_poses_masks=11`, `historical_pose_obs=5385`, `motion_text_embeddings=512`, `motion_text_embeddings_mask=1`, `terrain=256`, and `vae_noise=64`
+  - confirmed observation tensor shape: inference uses a keyed runtime input dictionary, not one flat tensor; required keys are `self_obs=358`, `mimic_target_poses=6495`, and `terrain=256`
   - confirmed action tensor shape: `69` floats ordered by `robot.dof_names` (`23` joints x `3` DoFs)
-  - representation format: `self_obs` uses heading-aligned max-coords features with tan-norm rotation encoding; actions are exponential-map DoF targets normalized through `tanh`
+  - representation format: `self_obs` uses heading-aligned max-coords features with tan-norm rotation encoding; `mimic_target_poses` uses `15` dense future target poses from the `max-coords-future-rel` builder; actions are exponential-map DoF targets normalized into PD target range
   - gain-output policy: no gain head; Stage 1 uses fixed external gains and maps actions into built-in PD target ranges
   - source config:
-    - `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\config.yaml`
+    - `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\config.yaml`
     - `F:\NewEngine\Training\ProtoMotions\protomotions\envs\base_env\components\humanoid_obs.py`
-    - `F:\NewEngine\Training\ProtoMotions\protomotions\envs\mimic\components\masked_mimic_obs.py`
+    - `F:\NewEngine\Training\ProtoMotions\protomotions\envs\mimic\components\mimic_obs.py`
     - `F:\NewEngine\Training\ProtoMotions\protomotions\envs\base_env\env_utils\humanoid_utils.py`
     - `F:\NewEngine\Training\ProtoMotions\protomotions\simulator\base_simulator\simulator.py`
-    - `F:\NewEngine\Training\ProtoMotions\protomotions\agents\masked_mimic\model.py`
+    - `F:\NewEngine\Training\ProtoMotions\protomotions\agents\mimic\agent.py`
 - `Verdict`: pass
 - `Why this verdict was chosen`: the local selected checkpoint, simulator path, runtime input grouping, action shape, representation path, and fixed-gain policy are now explicit in `bridge-spec.md`, satisfying the contract-lock threshold
 
@@ -96,7 +96,7 @@ Use only:
 - `Status`: complete
 - `Evidence`:
   - locomotion-core source note: `motion-source-map.md` assigns every locomotion motion to `broad-pretrained`, `amass-target`, or an explicit `source-risk` bucket with an approved downgrade path
-  - combat-core source note: every combat-core motion is explicitly marked `combat-finetune` rather than silently assumed to be covered by the pretrained checkpoint
+  - combat-core source note: Stage 1 is now locomotion-only, so combat clips are explicitly out of scope rather than silently deferred
   - missing motions: strafes and short recovery / rebalance remain the main source-risk items and are already called out explicitly with replacement rules
 - `Verdict`: pass
 - `Why this verdict was chosen`: the motion-source threshold only requires named source families or approved replacements plus explicit risk notes, and the current source map satisfies that bar even though the actual clip list is still deferred

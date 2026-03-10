@@ -15,7 +15,6 @@ It must compare one locked sequence that tests the Stage 1 thesis:
 - braking
 - turning
 - recovery
-- at least one combat-style action if the combat path is ready
 
 ## Primary G2 Sequence
 
@@ -30,17 +29,6 @@ The default G2 comparison sequence is:
 
 This is the minimum sequence required for G2.
 
-## Combat Add-On Sequence
-
-If the combat path is already viable by the end of Phase 1, add this short second sequence:
-
-1. guard pose
-2. jab
-3. cross or hook
-4. dodge / evade
-5. front kick or round kick
-6. return to stance
-
 ## Lock Rules
 
 Before G2:
@@ -49,22 +37,12 @@ Before G2:
 - the comparison capture must name the exact clips or motion sources used
 - kinematic and physics-driven versions must use the same sequence order
 
-## Minimum Acceptable G2 Scope
-
-G2 may proceed with locomotion-only evidence only if:
-
-- the primary sequence above is fully locked
-- the combat path is explicitly marked not ready yet
-- the orchestrator writes that limitation into [g2-evaluation.md](/F:/NewEngine/plans/stage1/g2-evaluation.md)
-
-Do not silently downgrade G2 to a weaker sequence.
-
 ## Not Allowed
 
 Do not use any of these as the sole G2 basis:
 
 - idle only
-- one isolated punch only
+- one isolated locomotion fragment with no transitions
 - a hand-picked best-looking fragment with no braking or recovery
 - a sequence that differs between baseline and physics-driven capture
 
@@ -74,6 +52,4 @@ The comparison-sequence handoff must include:
 
 - exact motion list in order
 - exact clip/file references once known
-- whether combat add-on is included
-- reason if combat add-on is omitted
 - confirmation that the same sequence is used in both captures

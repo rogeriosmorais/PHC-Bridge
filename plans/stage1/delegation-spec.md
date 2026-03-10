@@ -98,7 +98,7 @@ This document defines what each AI-owned Stage 1 task is supposed to do, what it
 
 ### S1-P1-A1: Single-Character Implementation Package
 
-- `Goal`: define the implementation-ready package for one physics-driven fighter
+- `Goal`: define the implementation-ready package for one physics-driven locomotion character
 - `Inputs`: G1 evidence, bridge spec, retargeting spec, test strategy
 - `Work`: package the expected code changes, asset dependencies, test coverage, and risks for Phase 1
 - `Output`: `plans/stage1/phase1-implementation-package.md`
@@ -118,9 +118,9 @@ This document defines what each AI-owned Stage 1 task is supposed to do, what it
 
 ### S1-P2-A1: Two-Character Demo Package
 
-- `Goal`: define the implementation-ready package for the full Stage 1 demo
+- `Goal`: define the implementation-ready package for the locomotion-only Stage 1 demo
 - `Inputs`: approved G2 result, prior specs, Phase 2 tasks in `ENGINEERING_PLAN.md`
-- `Work`: package the second fighter, impact response, opponent behavior, camera, HUD, and verification steps
+- `Work`: package the final locomotion showcase presentation, any optional duplication decision, camera, HUD, and verification steps
 - `Output`: `plans/stage1/phase2-demo-package.md`
 - `Definition of done`: implementation can begin without new structural planning work
 - `Escalate to user when`: gameplay scope expands beyond the proof-of-concept target

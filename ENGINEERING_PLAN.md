@@ -2,9 +2,9 @@
 
 ## 1. Objective
 
-Build a real-time demo of two human fighters in **Unreal Engine 5** where **physics simulation is the animation system**, in two stages:
+Build a real-time demo in **Unreal Engine 5** where **physics simulation is the animation system**, in two stages:
 
-- **Stage 1 (Proof of Quality):** Prove physics-driven animation looks fundamentally better than kinematic animation, using almost entirely UE5 built-in systems. **~6 weeks, minimal bridge code expected to stay in the low hundreds of lines.**
+- **Stage 1 (Proof of Quality):** Prove physics-driven locomotion looks fundamentally better than kinematic animation, using almost entirely UE5 built-in systems. **~6 weeks, minimal bridge code expected to stay in the low hundreds of lines.**
 - **Stage 2 (GPU Migration):** Move physics from CPU to GPU compute shaders, proving idle GPU resources should be used for animation. **~7 additional weeks.**
 
 **Hardware:** Intel i7-14700 + RTX 4070 SUPER.
@@ -154,7 +154,7 @@ Stage 2 replaces CPU-based Chaos systems with custom GPU compute shaders to demo
 
 | Backend | Status | Speedup | When to Use |
 |---|---|---|---|
-| **IsaacLab** | Best fit for the documented pretrained MaskedMimic path | Baseline Stage 1 eval path | Stage 1 pretrained evaluation and likely first fine-tuning path |
+| **IsaacLab** | Best fit for the local pretrained motion-tracker path | Baseline Stage 1 eval path | Stage 1 pretrained evaluation and likely first fine-tuning path |
 | **Isaac Gym** | Stable, proven with PHC | Baseline fallback | Use if IsaacLab setup or runtime becomes impractical locally |
 | **NVIDIA Newton** (via Isaac Lab) | Beta (Sept 2025), open-source, Linux Foundation | 70x for humanoid sims (MuJoCo-Warp) | Stage 2 or if later training speed becomes the main bottleneck |
 
@@ -164,14 +164,14 @@ Newton is built on NVIDIA Warp + OpenUSD, co-developed with Google DeepMind and 
 
 Stage 1 should not assume training from scratch on day one.
 
-The first attempt should use an available pretrained ProtoMotions-compatible policy for fast feasibility testing. The best documented starting point currently available is the pretrained **MaskedMimic SMPL humanoid** model, which is described as:
+The first attempt should use an available pretrained ProtoMotions-compatible policy for fast feasibility testing. The current Stage 1 execution path uses the repo-bundled pretrained **motion_tracker SMPL humanoid** model, which is:
 
 - pretrained for the **SMPL humanoid (no fingers)**
-- intended to generate motion from partial constraints
+- intended to track target poses in simulation
 - trained in **IsaacLab**
-- associated with datasets listed on the model card: **AMASS** and **HumanML3D**
+- materially simpler at runtime than the richer MaskedMimic path
 
-This makes it a good feasibility shortcut for broad human motion, but not a guarantee of combat-specific behavior or clean transfer to UE/Chaos.
+This makes it a better Stage 1 deployment candidate for locomotion-only proof of quality, though not a guarantee of clean transfer to UE/Chaos.
 
 So the Stage 1 order is:
 
@@ -184,8 +184,7 @@ So the Stage 1 order is:
 | Source | Format | Use | Notes |
 |---|---|---|---|
 | **AMASS dataset** | SMPL (native) | Locomotion training for PHC | 40+ hours, 300+ subjects, free for research. No conversion needed |
-| **Mixamo** | FBX -> AMASS conversion | Fighting-specific clips (punches, kicks, blocks) | Requires retargeting script to SMPL skeleton |
-| **HumanML3D** | Motion-language dataset derived from AMASS + HumanAct12 | Broad motion coverage for pretrained model context and optional evaluation references | Broad actions such as daily activities, sports, acrobatics, and dance. Not combat-focused |
+| **HumanML3D** | Motion-language dataset derived from AMASS + HumanAct12 | Optional broader reference context for pretrained motion coverage | Broad actions such as daily activities, sports, acrobatics, and dance |
 
 ### Training Stages
 
@@ -193,8 +192,8 @@ So the Stage 1 order is:
 |---|---|---|---|
 | 0. Pretrained feasibility eval | Evaluate available pretrained policy on representative motions | Pretrained ProtoMotions-compatible checkpoint | ~0.5-2 hours plus setup |
 | 1. Fine-tune on Stage 1 locomotion set | Adapt pretrained model to the project's locomotion subset | Pretrained checkpoint | ~2-4 hours |
-| 2. Fine-tune on Stage 1 fight set | Add selected fighting clips | Locomotion-adapted weights | 4-8 hours |
-| 3. Impact response | External force perturbation curriculum | Fine-tuned combat tracker | 4-8 hours |
+| 2. Optional further locomotion adaptation | Improve weak locomotion transitions if needed | Locomotion-adapted weights | 2-4 hours |
+| 3. Impact response | External force perturbation curriculum | Fine-tuned locomotion tracker | 4-8 hours |
 | 4. Muscle stiffness head (Stage 2 only) | Extend output for XPBD flesh | Trained policy | 2-4 hours |
 | 5. MaskedMimic upgrade (Stage 2 only) | Multi-skill composition from partial cues | Trained PHC as foundation | 8-16 hours |
 
@@ -220,19 +219,11 @@ Stage 1 should not leave the target motions undefined. Use this motion scope:
   - left and right turns / pivots
   - side-step / strafe left and right
   - short recovery / rebalance motions
-- **Combat core**
-  - left jab
-  - right cross
-  - left hook
-  - right hook
-  - front kick
-  - round kick
-  - block / guard pose
-  - dodge / lean / evade
 - **Out of scope for Stage 1**
+  - combat clips and combat fine-tuning
   - grappling
   - weapon use
-  - acrobatics-heavy combat
+  - acrobatics-heavy motion
   - long cinematic combos
 
 ### Policy Evolution Path
@@ -241,8 +232,8 @@ The RL policy upgrades naturally across stages without architectural changes:
 
 ```text
 Stage 1:  PHC (full-body tracking)
-            | "Track this exact pose from PoseSearch"
-            | Input: full target pose -> Output: joint orientations
+            | "Track this exact locomotion pose from PoseSearch"
+            | Input: full target pose -> Output: PD-oriented joint targets
             |
 Stage 2:  MaskedMimic (built on PHC)
             | "Left hand here, head facing there, figure out the rest"
@@ -268,8 +259,7 @@ Both policies output the same format (joint orientations + stiffness), so the UE
 | Chaos Flesh (muscles, tet-mesh) | Chaos Flesh Dataflow in-editor | No. In-editor setup |
 | ML Deformer | Train on Chaos Flesh data in-editor | No. In-editor workflow |
 | Mocap (locomotion) | AMASS dataset -> PoseSearch | No. Direct import |
-| Mocap (fighting) | Mixamo FBX -> UE5 PoseSearch | No. Standard import |
-| Mocap (training) | AMASS (locomotion) + Mixamo -> AMASS (fighting) | Yes. Offline retargeting script outside UE5 |
+| Mocap (training) | AMASS locomotion | No for Stage 1 default path |
 | PHC policy | ProtoMotions -> ONNX -> NNE asset | Yes. Offline export |
 
 ---
@@ -287,7 +277,6 @@ Note: the workflow docs in `.agents/workflows/` are planned procedures for these
 | Task | Deliverable |
 |---|---|
 | Set up ProtoMotions + IsaacLab; evaluate the selected pretrained policy on the Stage 1 locomotion core | Visual: pretrained policy produces promising motion |
-| Fine-tune the pretrained policy on the locked Stage 1 combat core if needed | Visual: policy tracks at least one punch/kick while balanced |
 | Lock the exact PHC observation/action contract from the chosen ProtoMotions config | Bridge spec: observation fields, pose/velocity representation, reference-pose handling, output mapping assumptions |
 | Create UE5 5.7.3 project; Manny with Physics Asset + Physics Control Component | Articulated ragdoll with motor-driven joints |
 | Test: drive Physics Control Component targets from C++ each frame | Confirm programmatic joint control works |
@@ -304,24 +293,21 @@ Note: the workflow docs in `.agents/workflows/` are planned procedures for these
 |---|---|
 | Write `PhysAnimPlugin`: PoseSearch -> NNE inference -> Physics Control Component targets | Core plugin bridge (low hundreds of lines) |
 | Export PHC policy to ONNX -> import as NNE asset | Policy runs in UE5 |
-| Set up PoseSearch with Mixamo locomotion + fight clips | Motion matching provides target poses |
+| Set up PoseSearch with locomotion clips for the locked comparison sequence | Motion matching provides target poses |
 | Tune Physics Control Component strength/damping to approximate the chosen training simulator dynamics | Reduce sim-to-sim gap |
 | Set up Chaos Flesh + ML Deformer on character (optional visual bonus) | Flesh deformation |
 | **Gate G2:** Side-by-side - physics-driven vs kinematic PoseSearch | Must look noticeably more natural |
 
-#### Phase 2: Two Characters + Demo (Weeks 5-6)
+#### Phase 2: Demo Packaging (Weeks 5-6)
 
 | Task | Deliverable |
 |---|---|
-| Second character with same pipeline | Two physics-driven fighters |
-| Train impact response policy (Stage 3 training) | Characters react physically to hits |
-| Configure Physical Animation Component for knockdown/recovery transitions | Smooth blend between states |
-| Input handling (Enhanced Input) for Player 1 | Controllable character |
-| Basic AI opponent (state machine or trained policy) | Player 2 fights back |
-| Camera (Spring Arm orbital), basic HUD | Fight-game presentation |
+| Package the locomotion showcase cleanly | Clear proof-of-quality demo |
+| Optional duplication of the same pipeline for presentation only | Stronger visual evidence if needed |
+| Camera (Spring Arm orbital), basic HUD | Clear presentation |
 | **Gate G3:** Show to observers - "Does this look robotic?" | Subjective but critical |
 
-**Stage 1 deliverable:** Working UE5 demo, two physics-driven fighters, with custom bridge code kept to the low hundreds of lines.
+**Stage 1 deliverable:** Working UE5 locomotion proof-of-quality demo with custom bridge code kept to the low hundreds of lines.
 
 ---
 
@@ -400,7 +386,7 @@ Note: the workflow docs in `.agents/workflows/` are planned procedures for these
 | Chaos Physics substeps insufficient for stability | 1 | Medium | High | Try sync substepping first (120-240 Hz), then async fixed timestep. Increase solver iterations. Ultimate fallback: Stage 2's custom XPBD runs at any rate |
 | SMPL <-> UE5 skeleton mapping produces wrong rotations | 1 | Medium | Medium | Phase 0 tests with hardcoded poses. Coordinate conversion and handedness handling must be verified explicitly |
 | NNE/ONNX Runtime too slow or incompatible | 1 | Low | Medium | Model is tiny (~1M params). Reassess export path, model size, or Stage 1 viability rather than adding a new inference stack |
-| PHC doesn't track fighting motions | 1 | Medium | High | Gate G1 tests one clip. Fallback: locomotion-only from AMASS |
+| Pretrained motion tracker still fails important locomotion transitions | 1 | Medium | High | Gate G1 tests multiple locomotion motions. Fallback: locomotion fine-tune on AMASS |
 | Chaos Flesh too experimental | 1 | Medium | Low | It's a visual bonus; skip it in Stage 1 if problematic |
 | GPU XPBD doesn't match CPU Chaos quality | 2 | Medium | Medium | Stage 1 provides ground truth for comparison |
 | UE5 RDG compute dispatch complexity | 2 | Medium | Medium | Bypass RDG with raw compute if needed |

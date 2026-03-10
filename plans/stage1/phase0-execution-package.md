@@ -52,7 +52,7 @@ Do not start Phase 0 until all of these are true:
 - Confirmed Python env: `F:\NewEngine\Training\.venv\physanim_proto311`
 - Confirmed Isaac Sim launcher: `F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaacsim.exe`
 - Confirmed Isaac Lab launcher: `F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaaclab.exe`
-- Confirmed pretrained checkpoint: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt`
+- Confirmed pretrained checkpoint: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt`
 - Frozen first motion file for Phase 0 training-side eval: `F:\NewEngine\Training\ProtoMotions\data\motions\smpl_humanoid_walk.npy`
 
 ## Frozen Phase 0 Command And Evidence Path
@@ -62,10 +62,10 @@ Use these exact local paths unless Phase 0 evidence proves they are wrong.
 ### P0-03: Bridge Contract Confirmation
 
 - Working source of truth for the selected pretrained config:
-  - `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\config.yaml`
+  - `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\config.yaml`
   - `F:\NewEngine\Training\ProtoMotions\protomotions\eval_agent.py`
   - `F:\NewEngine\Training\ProtoMotions\protomotions\envs\mimic\components\mimic_obs.py`
-  - `F:\NewEngine\Training\ProtoMotions\protomotions\agents\masked_mimic\agent.py`
+  - `F:\NewEngine\Training\ProtoMotions\protomotions\agents\mimic\agent.py`
 - Record confirmed observation/action facts back into:
   - `plans/stage1/bridge-spec.md`
 - Record gate-facing conclusions into:
@@ -88,7 +88,7 @@ Use these exact local paths unless Phase 0 evidence proves they are wrong.
 
 ```powershell
 $env:OMNI_KIT_ACCEPT_EULA='YES'
-& 'F:\NewEngine\Training\.venv\physanim_proto311\Scripts\python.exe' protomotions/eval_agent.py +robot=smpl +simulator=isaaclab +motion_file=F:\NewEngine\Training\ProtoMotions\data\motions\smpl_humanoid_walk.npy +checkpoint=F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt +terrain=flat +headless=True +num_envs=1 +agent.config.max_eval_steps=10 +fabric.strategy=auto +experiment_name=phase0_eval_smoke
+& 'F:\NewEngine\Training\.venv\physanim_proto311\Scripts\python.exe' protomotions/eval_agent.py +robot=smpl +simulator=isaaclab +motion_file=F:\NewEngine\Training\ProtoMotions\data\motions\smpl_humanoid_walk.npy +checkpoint=F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt +terrain=flat +headless=True +num_envs=1 +agent.config.max_eval_steps=10 +fabric.strategy=auto +experiment_name=phase0_eval_smoke
 ```
 
 - Runtime sanity check already completed for this environment:
@@ -183,7 +183,6 @@ $env:OMNI_KIT_ACCEPT_EULA='YES'
   - short motion-source note or update to `motion-set.md`
 - Must confirm:
   - which locomotion-core motions are covered by the broad pretrained / AMASS path
-  - which combat-core motions require fine-tuning data
   - which motions are at risk of being missing
 - Escalate if:
   - the locked motion set cannot be sourced without changing scope

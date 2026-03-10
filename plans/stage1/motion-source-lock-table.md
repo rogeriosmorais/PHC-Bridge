@@ -30,25 +30,6 @@ Do not claim the Stage 1 motion set is fully sourced until every required row is
 | strafe right | AMASS or approved replacement |  | maybe | fine-tune | planned | |
 | short recovery / rebalance step | AMASS or approved replacement |  | maybe | fine-tune | planned | |
 
-## Combat Core
-
-| Motion | Final Source Family | Exact Clip / File | Conversion Needed? | Pretrained / Fine-Tune / Both | Status | Notes |
-|---|---|---|---|---|---|---|
-| left jab | Mixamo or approved equivalent |  | yes | fine-tune | planned | |
-| right cross | Mixamo or approved equivalent |  | yes | fine-tune | planned | |
-| left hook | Mixamo or approved equivalent |  | yes | fine-tune | planned | |
-| right hook | Mixamo or approved equivalent |  | yes | fine-tune | planned | |
-| front kick | Mixamo or approved equivalent |  | yes | fine-tune | planned | |
-| round kick | Mixamo or approved equivalent |  | yes | fine-tune | planned | |
-| guard / block pose | Mixamo or approved equivalent |  | yes | fine-tune | planned | |
-| dodge / lean / evade | Mixamo or approved equivalent |  | yes | fine-tune | planned | |
-
 ## Lock Rule
-
-Before fine-tuning starts, every combat-core row must be either:
-
-- `locked`
-- `replaced`
-- `removed`
 
 Before G2, every motion used in the comparison sequence must be `locked`.

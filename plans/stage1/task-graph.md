@@ -22,7 +22,7 @@ The graph assumes a single orchestrator agent assigns work, freezes inputs, and 
 | S1-P1-A1 | Phase 1 | AI | Produce the single-character implementation package | S1-P0-A2 | implementation-ready package for `PhysAnimPlugin`, NNE integration, and PoseSearch wiring | No |
 | S1-P1-A2 | Phase 1 | AI | Produce the tuning and side-by-side evaluation package for G2 | S1-P1-A1 | PD tuning plan, comparison rubric, and evidence checklist | Yes for visual comparison |
 | S1-P1-U1 | Phase 1 | User | Run G2 evaluation and approve or reject Stage 1 quality | S1-P1-A2 | human judgment with evidence | Yes |
-| S1-P2-A1 | Phase 2 | AI | Produce the two-character demo package | S1-P1-U1 | implementation-ready package for second fighter, impact response, opponent logic, camera, and HUD | No |
+| S1-P2-A1 | Phase 2 | AI | Produce the locomotion showcase demo package | S1-P1-U1 | implementation-ready package for demo flow, optional duplication, camera, and HUD | No |
 | S1-P2-A2 | Phase 2 | AI | Produce the final demo verification package for G3 | S1-P2-A1 | demo checklist, observer script, and evidence checklist | Yes for observer feedback |
 | S1-P2-U1 | Phase 2 | User | Run G3 evaluation and decide whether Stage 2 work is justified | S1-P2-A2 | human judgment with evidence | Yes |
 

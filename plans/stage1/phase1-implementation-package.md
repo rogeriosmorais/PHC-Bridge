@@ -15,7 +15,7 @@ Do not start Phase 1 implementation until all of these are true:
 - Gate G1 is explicitly `pass` in [g1-evidence.md](/F:/NewEngine/plans/stage1/g1-evidence.md)
 - `bridge-spec.md` is locked for the chosen PHC config
 - `retargeting-spec.md` is locked for the Stage 1 mapped subset
-- `motion-set.md` is locked for the Stage 1 locomotion and combat core
+- `motion-set.md` is locked for the Stage 1 locomotion-only core
 - `comparison-sequence-lock.md` is locked for the intended G2 sequence
 - `test-strategy.md` is stable enough to define Phase 1 evidence
 - the orchestrator has reviewed `assumption-ledger.md` and confirmed there is no `red` assumption blocking one-character implementation
@@ -24,7 +24,7 @@ Do not start Phase 1 implementation until all of these are true:
 
 1. One-character implementation package for the Stage 1 bridge
 2. ONNX / NNE integration plan for the selected PHC model
-3. PoseSearch content-integration plan for the locked locomotion and fight clips
+3. PoseSearch content-integration plan for the locked locomotion clips
 4. PD tuning plan for one-character stability and comparison readiness
 5. A clear setup for the G2 side-by-side evaluation package
 6. An ONNX export/import path that no longer requires discovery work during Phase 1
@@ -43,8 +43,7 @@ Phase 1 includes:
 Phase 1 does not include:
 
 - two-character gameplay
-- impact response policy for combat interactions
-- opponent behavior
+- impact response policy
 - camera / HUD / demo packaging
 - any Stage 2 GPU work
 
@@ -115,7 +114,7 @@ Phase 1 does not include:
   - [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/comparison-sequence-lock.md)
 - Output:
   - clip / database setup plan
-  - clear statement of which locomotion and fight content is needed in Phase 1
+  - clear statement of which locomotion content is needed in Phase 1
 - Constraint:
   - keep content scope small enough that G2 is a quality test, not a content-production project
 

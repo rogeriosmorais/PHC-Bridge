@@ -35,8 +35,8 @@ Use it after the user returns with setup evidence. Do not treat the environment 
 | IsaacLab install path | user-chosen install path | `F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaaclab.exe` | confirmed | Windows launcher exists locally |
 | IsaacSim install path | user-chosen install path | `F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaacsim.exe` | confirmed | Windows launcher exists locally |
 | host platform for ProtoMotions | `Windows-native first; WSL only if blocked` | `Windows-native` | confirmed | current setup attempt stayed Windows-native |
-| pretrained source | `ctessler/MaskedMimic` | `ProtoMotions repo bundle / ctessler MaskedMimic release lineage` | confirmed | the cloned repo already contains the pretrained model folder and README |
-| pretrained checkpoint path | `Training/ProtoMotions/data/pretrained_models/masked_mimic/smpl/last.ckpt` | `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt` | confirmed | checkpoint exists locally (`303850268` bytes) |
+| pretrained source | `ProtoMotions repo-bundled motion_tracker/smpl asset` | `ProtoMotions repo-bundled motion_tracker/smpl asset` | confirmed | the cloned repo already contains the pretrained model folder and README |
+| pretrained checkpoint path | `Training/ProtoMotions/data/pretrained_models/motion_tracker/smpl/last.ckpt` | `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt` | confirmed | checkpoint exists locally |
 | ONNX opset | `17 -> 16 -> 15 fallback order` |  | planned | record first accepted opset |
 | Unreal runtime target | `NNERuntimeORTDml` |  | planned | `NNERuntimeORTCpu` debug fallback only |
 
@@ -45,7 +45,7 @@ Use it after the user returns with setup evidence. Do not treat the environment 
 | Item | Planned Value | Confirmed Value | Status | Notes |
 |---|---|---|---|---|
 | AMASS root | `F:\NewEngine\Training\data\amass` |  | blocked | not present, but not required for the current pretrained-first checkpoint |
-| combat clips root | `F:\NewEngine\Training\data\mixamo_fight` |  | blocked | intentionally deferred until fine-tuning or motion-source lock requires it |
+| combat clips root | not required for locomotion-only Stage 1 |  | planned | deferred out of Stage 1 scope |
 | UE project root | `F:\NewEngine\PhysAnimUE5` | `F:\NewEngine\PhysAnimUE5` | confirmed | project exists locally and `PhysAnimUE5.uproject` is present |
 
 ## Orchestrator Rule

@@ -6,44 +6,47 @@ This document locks the first pretrained model we will try for Stage 1 and defin
 
 ## Selected Starting Model
 
-Use the documented pretrained **MaskedMimic SMPL humanoid** model as the first feasibility checkpoint.
+Use the documented pretrained **motion_tracker SMPL humanoid** model as the Stage 1 checkpoint.
 
 What this model is:
 
-- a pretrained **MaskedMimic** agent
+- a pretrained **motion tracker** agent
 - for the **SMPL humanoid (no fingers)**
 - trained in **IsaacLab**
-- trained using datasets listed on the model card: **AMASS** and **HumanML3D**
-- designed to generate motion from **partial constraints**
+- designed to reproduce kinematic recordings inside simulation
+- built around the simpler tracking-style runtime contract:
+  - current body state
+  - future target poses
+  - terrain height samples
 
-This is the highest-confidence documented pretrained starting point currently available in the ProtoMotions ecosystem.
+This is the lowest-resistance Stage 1 runtime candidate currently available in the local ProtoMotions assets.
 
 ## Official Source
 
-- ProtoMotions release note announcing the pretrained SMPL model: [NVlabs/ProtoMotions releases](https://github.com/NVlabs/ProtoMotions/releases)
-- Model card: [ctessler/MaskedMimic](https://huggingface.co/ctessler/MaskedMimic)
+- Local pretrained asset path: [motion_tracker/smpl](/F:/NewEngine/Training/ProtoMotions/data/pretrained_models/motion_tracker/smpl)
+- Local README: [README.md](/F:/NewEngine/Training/ProtoMotions/data/pretrained_models/motion_tracker/smpl/README.md)
 
 ## Planning Retrieval Target
 
 Until execution proves otherwise, use this target layout locally:
 
-- source repo / model hub: `ctessler/MaskedMimic`
-- local checkpoint target: `Training/ProtoMotions/data/pretrained_models/masked_mimic/smpl/last.ckpt`
+- local checkpoint target: `Training/ProtoMotions/data/pretrained_models/motion_tracker/smpl/last.ckpt`
+- local config target: `Training/ProtoMotions/data/pretrained_models/motion_tracker/smpl/config.yaml`
 
-Inference: this mirrors the checkpoint path used by the official evaluation command. The execution log must record the actual retrieval method used.
+Inference: this mirrors the checkpoint path used by the local pretrained asset's eval command. The execution log must record the actual retrieval method used.
 
 Recommended retrieval rule:
 
-1. fetch the model files from the Hugging Face model page
-2. place or mirror the checkpoint into the exact local path expected by the eval command
-3. do not change the eval command first; change the local file layout first
+1. use the repo-bundled pretrained asset already present locally
+2. keep the checkpoint in the exact path expected by the eval command
+3. do not fork the file layout unless execution proves the local asset is invalid
 
 ## First Evaluation Command
 
-The officially documented evaluation command on the model card is:
+The documented local evaluation command is:
 
 ```bash
-PYTHON_PATH protomotions/eval_agent.py +robot=smpl +simulator=isaaclab +motion_file=<path to motion file> +checkpoint=data/pretrained_models/masked_mimic/smpl/last.ckpt
+PYTHON_PATH protomotions/eval_agent.py +robot=smpl +simulator=isaaclab +motion_file=<path to motion file> +checkpoint=data/pretrained_models/motion_tracker/smpl/last.ckpt
 ```
 
 Recommended first add-on flag for faster loading:
@@ -52,30 +55,25 @@ Recommended first add-on flag for faster loading:
 +terrain=flat
 ```
 
-Recommended no-constraint evaluation add-on when checking pure target-pose behavior:
-
-```bash
-+opt=masked_mimic/constraints/no_constraint env.config.masked_mimic.masked_mimic_masking.target_pose_visible_prob=1
-```
-
 ## Why This Model Wins First
 
 This model is the right first choice because:
 
-- it is explicitly documented as pretrained and ProtoMotions-compatible
+- it is already present in the local ProtoMotions checkout
 - it matches the SMPL body family we already planned around
-- it gives us the fastest path to a real feasibility result
-- it lets us test the training stack without first paying the full cost of training from scratch
+- it keeps the runtime bridge closer to the original Stage 1 mental model
+- it removes the extra MaskedMimic runtime inputs that were increasing UE-side complexity
+- it is a better fit for a locomotion-only Stage 1
 
 ## Why It Might Still Fail For Our Project
 
-Do not confuse "general pretrained humanoid motion" with "already good enough for our Stage 1 demo."
+Do not confuse "pretrained motion tracker" with "already good enough for our Stage 1 demo."
 
 Likely limitations:
 
-- it is not combat-specialized
 - it was trained in IsaacLab and may transfer worse to IsaacGym or UE/Chaos
-- it may cover broad human motion but still fail our locked combat core
+- it may track some locomotion classes better than others
+- it may still be awkward once driven from UE target poses instead of the native training pipeline
 - it may be sufficient for G1 but insufficient for G2
 
 ## Decision Rule
@@ -87,15 +85,14 @@ Stay on the pretrained path only if:
 - the model runs successfully in the selected simulator
 - the result looks broadly believable in training
 - the locomotion core appears adequately covered
-- no early evidence shows that fine-tuning is obviously required for the first quality comparison
+- no early evidence shows that fine-tuning is obviously required even for the locomotion-only comparison
 
 ### Switch To Fine-Tuning
 
 Switch to fine-tuning if:
 
 - pretrained motion is broadly plausible
-- but the combat core is weak or missing
-- or the locked motion set is only partially covered
+- but the locomotion-only Stage 1 set is only partially covered
 - or the motion style is good enough to justify adaptation rather than restart
 
 ### Abandon Pretrained Shortcut
@@ -107,6 +104,18 @@ Abandon pretrained-first only if:
 - or the model/runtime mismatch creates too much execution risk
 
 If this happens, update the assumption ledger before proceeding.
+
+## Deferred Alternative
+
+The local repo also contains a richer pretrained `masked_mimic/smpl` checkpoint.
+
+That checkpoint is no longer the default Stage 1 runtime target because:
+
+- its inference contract is materially more complex
+- Stage 1 is now locomotion-only
+- its extra sparse-conditioning flexibility is not needed for the narrowed Stage 1 scope
+
+Keep it as a fallback or later-stage research path, not the first UE runtime target.
 
 ## Required Outputs From Pretrained Evaluation
 

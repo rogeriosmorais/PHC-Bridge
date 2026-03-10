@@ -10,7 +10,6 @@ When exact clip decisions are made, record them in [motion-source-lock-table.md]
 
 - `broad-pretrained`: expected to be broadly covered by the general pretrained model
 - `amass-target`: should be sourced primarily from AMASS-style locomotion data
-- `combat-finetune`: expected to require combat-specific fine-tuning data
 - `source-risk`: not yet confidently sourceable
 
 ## Acquisition Rules
@@ -37,9 +36,6 @@ Stage 1 should not start fine-tuning without at least this minimum content plan:
 | turns / pivots | 2 | cover left/right or a mirrored pair |
 | strafes | 2 | left and right required |
 | recovery / rebalance | 2 | short corrective steps, not knockdown recovery |
-| each combat strike family | 2 | jab, cross, hook, kick families need at least a clean pair |
-| guard / block | 2 | one neutral guard, one active block transition |
-| dodge / evade | 2 | one left-leaning and one right-leaning or equivalent |
 
 ## Locomotion Core
 
@@ -57,23 +53,9 @@ Stage 1 should not start fine-tuning without at least this minimum content plan:
 | strafe right | locomotion side-step clips or approved replacement | source-risk | same as left strafe |
 | short recovery / rebalance step | broad pretrained motion + selected locomotion clips | source-risk | if unavailable, use a short corrective step after a stop/turn rather than inventing a knockdown flow |
 
-## Combat Core
-
-| Motion | Expected Source | Coverage Status | Notes |
-|---|---|---|---|
-| left jab | Mixamo or equivalent fighting clip | combat-finetune | choose a single-strike clip, not a combo chain |
-| right cross | Mixamo or equivalent fighting clip | combat-finetune | same |
-| left hook | Mixamo or equivalent fighting clip | combat-finetune | same |
-| right hook | Mixamo or equivalent fighting clip | combat-finetune | same |
-| front kick | Mixamo or equivalent fighting clip | combat-finetune | prefer a standing kick with clear chamber and recovery |
-| round kick | Mixamo or equivalent fighting clip | combat-finetune | avoid spinning or jumping variants for Stage 1 |
-| guard / block pose | Mixamo or equivalent fighting clip | combat-finetune | prefer a neutral boxing-style guard and one block transition |
-| dodge / lean / evade | Mixamo or equivalent fighting clip | combat-finetune | prefer short evasive motions that return to stance |
-
 ## Planning Implications
 
 - The locomotion core is suitable for pretrained-first feasibility.
-- The combat core should be assumed to need fine-tuning unless evidence proves otherwise.
 - Strafing and rebalance motions are currently the least well-specified parts of the locomotion set and need explicit source confirmation during Phase 0.
 
 ## Required Next Confirmation
@@ -81,7 +63,6 @@ Stage 1 should not start fine-tuning without at least this minimum content plan:
 During execution, this map must be upgraded from source categories to actual clip references:
 
 - exact AMASS subsets or files for locomotion
-- exact Mixamo clip list for combat core
 - explicit note for any motion replaced or removed
 
 ## Default Replacement Rules
@@ -90,10 +71,6 @@ If the preferred source family is unavailable, replacements must preserve the th
 
 - `strafe` may downgrade to a short lateral step if true strafe data is unavailable
 - `recovery / rebalance` may downgrade to a corrective step after stop or turn
-- `guard / block` may use a simple boxing guard if an active block transition is missing
-- `dodge / evade` may use a lean or quick slip if a larger evade clip is unavailable
-
-Do not replace strikes with long combos or cinematic attack chains.
 
 ## Default Rule If A Motion Is Missing
 
