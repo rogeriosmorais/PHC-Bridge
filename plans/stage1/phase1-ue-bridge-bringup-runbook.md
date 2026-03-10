@@ -59,7 +59,7 @@ You will create:
 
 1. one PoseSearch database for locomotion
 2. one Anim Blueprint that contains a `Pose History` node tagged `PoseHistory_Stage1`
-3. one character Blueprint that hosts `UPhysAnimComponent`, `UPhysicsControlComponent`, and `UPhysicsControlInitializerComponent`
+3. one character Blueprint that hosts `UPhysAnimComponent`, `UPhysicsControlComponent`, and `UPhysAnimStage1InitializerComponent`
 4. one imported `UNNEModelData` asset from the PHC `.onnx`
 5. one live map setup that spawns the new character and lets the bridge auto-start in PIE
 
@@ -260,15 +260,36 @@ On the inherited skeletal mesh component:
 - set Anim Class to `/Game/Characters/Mannequins/Animations/ABP_PhysAnim`
 - confirm the component name remains `CharacterMesh0`
 
+### 4A.1. Verify Required Physics Bodies In `PA_Mannequin`
+
+Open `/Game/Characters/Mannequins/Rigs/PA_Mannequin` in the Physics Asset Editor.
+
+In the Skeleton Tree, verify that physics bodies exist for these bones:
+
+- `spine_01`
+- `ball_l`
+- `ball_r`
+
+If any of those bones show up in the tree with no body assigned, create the missing body manually:
+
+1. select the missing bone in the Skeleton Tree
+2. right-click the bone
+3. choose `Create Bodies / Constraints`
+4. choose `Create Bodies with Capsule`
+5. leave `Create Constraints` enabled
+6. save `PA_Mannequin`
+
+The current local Manny setup required manual body creation for those three bones during bring-up. If you skip this, the bridge will fail before model loading.
+
 ### 4B. Add The Required Components
 
 Add exactly these components to `BP_PhysAnimCharacter`:
 
 - one `PhysAnimComponent`
 - one `PhysicsControlComponent`
-- one `PhysicsControlInitializerComponent`
+- one `PhysAnim Stage1 Physics Control Initializer`
 
-The initializer component is the editor-authored helper for building the required named controls and modifiers at BeginPlay. The bridge code itself still only validates and uses the resulting `UPhysicsControlComponent`.
+The Stage 1 initializer component owns the exact `InitialControls` and `InitialBodyModifiers` defaults required by the bridge. The bridge still validates and uses the resulting `UPhysicsControlComponent`.
 
 ### 4C. Leave `UPhysAnimComponent` Model Asset On Its Default Path
 
@@ -278,139 +299,36 @@ The initializer component is the editor-authored helper for building the require
 
 Leave that as-is unless you are deliberately overriding it with the exact same asset path.
 
-## Step 5: Populate The Required Physics Control Set
+## Step 5: Verify The Stage 1 Physics Control Defaults
 
-The Stage 1 bridge expects the required controls and body modifiers to already exist in `PhysicsControlInitializerComponent`.
+The Stage 1 initializer component now owns the required map defaults directly. Do not hand-author the numeric tuning fields or the control/body-modifier names for the standard bring-up path.
 
-### 5A. Run The Helper
+### 5A. Check The Pre-Populated Defaults
 
 1. Open `BP_PhysAnimCharacter`.
-2. Select the `PhysAnim` component.
-3. In the Details panel, click `Populate Stage 1 Physics Control Defaults`.
-4. Select the `PhysicsControlInitializer` component.
-5. Check these values immediately after the helper runs:
+2. Select the `PhysAnim Stage1 Physics Control Initializer` component.
+3. Check these values:
    - `bCreateControlsAtBeginPlay = true`
    - `InitialControls` contains `21` entries
    - `InitialBodyModifiers` contains `22` entries
-6. Spot-check these entries:
+4. Spot-check these entries:
    - `InitialControls` contains `PACtrl_thigh_l` with `Parent Bone = pelvis` and `Child Bone = thigh_l`
    - `InitialBodyModifiers` contains `PAMod_pelvis` with `Bone Name = pelvis`
-7. Compile `BP_PhysAnimCharacter` and save it.
+5. Leave the pre-populated numeric fields and mesh component names as-is unless you are deliberately debugging the bridge contract.
 
-If the helper button is unavailable or the counts do not match, use the fallback tables below.
+### 5B. Actor Reference Overrides
 
-### 5B. Initial Control Defaults
+The only user-facing override fields on the initializer are:
 
-For the first bring-up pass, use the same initial control data for every required control:
+- `DefaultControlParentActor`
+- `DefaultControlChildActor`
+- `DefaultBodyModifierActor`
 
-| Field | Value |
-|---|---|
-| `bEnabled` | `true` |
-| `LinearStrength` | `0.0` |
-| `LinearDampingRatio` | `1.0` |
-| `LinearExtraDamping` | `0.0` |
-| `MaxForce` | `0.0` |
-| `AngularStrength` | `800.0` |
-| `AngularDampingRatio` | `1.25` |
-| `AngularExtraDamping` | `30.0` |
-| `MaxTorque` | `0.0` |
-| `LinearTargetVelocityMultiplier` | `0.0` |
-| `AngularTargetVelocityMultiplier` | `0.0` |
-| `bUseSkeletalAnimation` | `true` |
-| `bDisableCollision` | `true` |
-| `bOnlyControlChildObject` | `true` |
+For the normal single-character bring-up path, leave all three blank. At runtime the initializer resolves blank actor references to the owning character automatically.
 
-These are initial bring-up values, not frozen final tuning values.
+Only set those three fields if you deliberately need the controls or body modifiers to target a different actor than the owner.
 
-Use these same non-name fields for every control entry unless a later tuning pass says otherwise.
-
-### 5C. Initial Body Modifier Defaults
-
-For every required body modifier, use:
-
-| Field | Value |
-|---|---|
-| `MovementType` | `Simulated` |
-| `CollisionType` | `QueryAndPhysics` |
-| `GravityMultiplier` | `1.0` |
-| `PhysicsBlendWeight` | `1.0` |
-| `KinematicTargetSpace` | `OffsetInBoneSpace` |
-| `bUpdateKinematicFromSimulation` | `true` |
-
-### 5D. Fallback Control Entries
-
-In `PhysicsControlInitializerComponent.InitialControls`, create one map entry per row below.
-
-Use these common values for every row:
-
-- `ParentActor = self`
-- `ParentMeshComponentName = CharacterMesh0`
-- `ChildActor = self`
-- `ChildMeshComponentName = CharacterMesh0`
-
-Then set the exact names and bones from this table:
-
-| Map Key | Parent Bone | Child Bone |
-|---|---|---|
-| `PACtrl_thigh_l` | `pelvis` | `thigh_l` |
-| `PACtrl_calf_l` | `thigh_l` | `calf_l` |
-| `PACtrl_foot_l` | `calf_l` | `foot_l` |
-| `PACtrl_ball_l` | `foot_l` | `ball_l` |
-| `PACtrl_thigh_r` | `pelvis` | `thigh_r` |
-| `PACtrl_calf_r` | `thigh_r` | `calf_r` |
-| `PACtrl_foot_r` | `calf_r` | `foot_r` |
-| `PACtrl_ball_r` | `foot_r` | `ball_r` |
-| `PACtrl_spine_01` | `pelvis` | `spine_01` |
-| `PACtrl_spine_02` | `spine_01` | `spine_02` |
-| `PACtrl_spine_03` | `spine_02` | `spine_03` |
-| `PACtrl_neck_01` | `spine_03` | `neck_01` |
-| `PACtrl_head` | `neck_01` | `head` |
-| `PACtrl_clavicle_l` | `spine_03` | `clavicle_l` |
-| `PACtrl_upperarm_l` | `clavicle_l` | `upperarm_l` |
-| `PACtrl_lowerarm_l` | `upperarm_l` | `lowerarm_l` |
-| `PACtrl_hand_l` | `lowerarm_l` | `hand_l` |
-| `PACtrl_clavicle_r` | `spine_03` | `clavicle_r` |
-| `PACtrl_upperarm_r` | `clavicle_r` | `upperarm_r` |
-| `PACtrl_lowerarm_r` | `upperarm_r` | `lowerarm_r` |
-| `PACtrl_hand_r` | `lowerarm_r` | `hand_r` |
-
-### 5E. Fallback Body Modifier Entries
-
-In `PhysicsControlInitializerComponent.InitialBodyModifiers`, create one map entry per row below.
-
-Use these common values for every row:
-
-- `Actor = self`
-- `MeshComponentName = CharacterMesh0`
-
-Then set the exact map key and bone name from this table:
-
-| Map Key | Bone Name |
-|---|---|
-| `PAMod_pelvis` | `pelvis` |
-| `PAMod_thigh_l` | `thigh_l` |
-| `PAMod_calf_l` | `calf_l` |
-| `PAMod_foot_l` | `foot_l` |
-| `PAMod_ball_l` | `ball_l` |
-| `PAMod_thigh_r` | `thigh_r` |
-| `PAMod_calf_r` | `calf_r` |
-| `PAMod_foot_r` | `foot_r` |
-| `PAMod_ball_r` | `ball_r` |
-| `PAMod_spine_01` | `spine_01` |
-| `PAMod_spine_02` | `spine_02` |
-| `PAMod_spine_03` | `spine_03` |
-| `PAMod_neck_01` | `neck_01` |
-| `PAMod_head` | `head` |
-| `PAMod_clavicle_l` | `clavicle_l` |
-| `PAMod_upperarm_l` | `upperarm_l` |
-| `PAMod_lowerarm_l` | `lowerarm_l` |
-| `PAMod_hand_l` | `hand_l` |
-| `PAMod_clavicle_r` | `clavicle_r` |
-| `PAMod_upperarm_r` | `upperarm_r` |
-| `PAMod_lowerarm_r` | `lowerarm_r` |
-| `PAMod_hand_r` | `hand_r` |
-
-### 5F. Compile And Save
+### 5C. Compile And Save
 
 Compile `BP_PhysAnimCharacter` and save.
 
@@ -419,7 +337,9 @@ Compile `BP_PhysAnimCharacter` and save.
 - the Blueprint compiles
 - the character now contains one `PhysAnimComponent`
 - the character now contains one `PhysicsControlComponent`
+- the character now contains one `PhysAnim Stage1 Physics Control Initializer`
 - the initializer map entries exist for every required `PACtrl_*` and `PAMod_*`
+- `PA_Mannequin` contains physics bodies for `spine_01`, `ball_l`, and `ball_r`
 
 ### What To Send Back If Blocked
 
@@ -434,6 +354,14 @@ Import the current Stage 1 PHC `.onnx` model into Unreal so it becomes a `UNNEMo
 
 - `/Game/NNEModels/phc_policy`
 
+If the first PIE run after fixing the Physics Control setup reports:
+
+```text
+[PhysAnim] Startup blocked: Failed to load model asset '/Game/NNEModels/phc_policy.phc_policy'.
+```
+
+that means the bridge has progressed to the model-loading step and the PHC policy asset has not been imported yet.
+
 Use the ONNX file produced by the locked export path in [onnx-export-spec.md](/F:/NewEngine/plans/stage1/onnx-export-spec.md).
 
 If no current Stage 1 ONNX file exists yet, stop and report `blocked`.
@@ -444,6 +372,7 @@ If Unreal assigns a different auto-generated name, rename or reimport it so the 
 
 - the asset type is `NNE Model Data`
 - the asset path is exactly `/Game/NNEModels/phc_policy`
+- PIE no longer reports `Failed to load model asset '/Game/NNEModels/phc_policy.phc_policy'`
 
 ### What To Send Back If Blocked
 
@@ -522,11 +451,12 @@ Use this to classify the first failure reason from the log.
 |---|---|
 | `Expected Manny mesh` | the character is still using the wrong skeletal mesh asset |
 | `Expected physics asset` | the mesh is not using `PA_Mannequin` |
+| `Missing required physics bodies` | `PA_Mannequin` is missing one or more required bodies; on the current Manny setup, `spine_01`, `ball_l`, and `ball_r` had to be created manually |
 | `Expected AnimBlueprint` | the live anim class is not `/Game/Characters/Mannequins/Animations/ABP_PhysAnim` |
 | `PoseHistory_Stage1 was not found` | the AnimBP is missing the exact pose history node name |
 | `Missing required pre-authored controls` | one or more `PACtrl_*` map entries did not get created |
 | `Missing required pre-authored body modifiers` | one or more `PAMod_*` map entries did not get created |
-| `Failed to load model asset` | `/Game/NNEModels/phc_policy` is missing or the component override is wrong |
+| `Failed to load model asset` | the bridge reached model loading, but `/Game/NNEModels/phc_policy` does not exist yet or the component override points at the wrong asset |
 | `Could not create an NNE model instance` | ORT runtime/plugin/model compatibility is broken |
 | `PoseSearch query was invalid for two consecutive ticks` | the direct `MotionMatch(...)` query did not produce a valid result from the current pose history + database |
 | `UPoseSearchLibrary::MotionMatch returned no selected animation` | PoseSearch ran but did not select any clip from `PSDB_Stage1_Locomotion` |

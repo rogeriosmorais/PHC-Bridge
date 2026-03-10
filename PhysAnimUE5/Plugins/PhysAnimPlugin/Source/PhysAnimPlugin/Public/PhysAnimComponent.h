@@ -33,9 +33,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	void StopBridge();
 
-	UFUNCTION(CallInEditor, BlueprintCallable, Category = "PhysAnim|Setup")
-	void PopulateStage1PhysicsControlDefaults();
-
 protected:
 	UPROPERTY(EditAnywhere, Category = "PhysAnim")
 	TSoftObjectPtr<UNNEModelData> ModelDataAsset;
@@ -43,6 +40,7 @@ protected:
 private:
 	bool ResolveRuntimeContext(FString& OutError);
 	bool ValidateRequiredBodies(FString& OutError) const;
+	bool EnsurePreauthoredPhysicsControl(FString& OutError);
 	bool ValidatePreauthoredPhysicsControl(FString& OutError) const;
 	bool ValidatePoseSearchIntegration(FString& OutError);
 	bool InitializeModel(FString& OutError);

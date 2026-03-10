@@ -1,7 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "PhysAnimBridge.h"
-#include "PhysAnimComponent.h"
+#include "PhysAnimStage1InitializerComponent.h"
 
 #include "Misc/AutomationTest.h"
 #include "PhysicsControlActor.h"
@@ -131,34 +131,19 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-		FPhysAnimPopulateDefaultsTest,
-		"PhysAnim.Component.PopulateStage1Defaults",
+		FPhysAnimStage1InitializerDefaultsTest,
+		"PhysAnim.Component.Stage1InitializerDefaults",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-	bool FPhysAnimPopulateDefaultsTest::RunTest(const FString& Parameters)
+	bool FPhysAnimStage1InitializerDefaultsTest::RunTest(const FString& Parameters)
 	{
-		AActor* const Owner = NewObject<AActor>();
-		TestNotNull(TEXT("Transient owner actor should exist"), Owner);
-		if (!Owner)
+		UPhysAnimStage1InitializerComponent* const Initializer =
+			NewObject<UPhysAnimStage1InitializerComponent>();
+		TestNotNull(TEXT("Stage 1 initializer should exist"), Initializer);
+		if (!Initializer)
 		{
 			return false;
 		}
-
-		UPhysicsControlInitializerComponent* const Initializer =
-			NewObject<UPhysicsControlInitializerComponent>(Owner, TEXT("PhysicsControlInitializer"));
-		UPhysAnimComponent* const PhysAnimComponent =
-			NewObject<UPhysAnimComponent>(Owner, TEXT("PhysAnim"));
-
-		Owner->AddOwnedComponent(Initializer);
-		Owner->AddOwnedComponent(PhysAnimComponent);
-
-		FInitialPhysicsControl StaleControl;
-		Initializer->InitialControls.Add(TEXT("StaleControl"), StaleControl);
-
-		FInitialBodyModifier StaleModifier;
-		Initializer->InitialBodyModifiers.Add(TEXT("StaleModifier"), StaleModifier);
-
-		PhysAnimComponent->PopulateStage1PhysicsControlDefaults();
 
 		TestTrue(TEXT("Create controls at begin play is enabled"), Initializer->bCreateControlsAtBeginPlay);
 		TestEqual(TEXT("Control count matches Stage 1 expectation"), Initializer->InitialControls.Num(), NumControlledBones);
@@ -166,15 +151,13 @@ namespace
 			TEXT("Body modifier count matches Stage 1 expectation"),
 			Initializer->InitialBodyModifiers.Num(),
 			NumRequiredBodyModifiers);
-		TestFalse(TEXT("Stale control entry is removed"), Initializer->InitialControls.Contains(TEXT("StaleControl")));
-		TestFalse(TEXT("Stale modifier entry is removed"), Initializer->InitialBodyModifiers.Contains(TEXT("StaleModifier")));
 
 		const FInitialPhysicsControl* const LeftThighControl = Initializer->InitialControls.Find(MakeControlName(TEXT("thigh_l")));
 		TestNotNull(TEXT("thigh_l control exists"), LeftThighControl);
 		if (LeftThighControl)
 		{
-			TestTrue(TEXT("Control parent actor points at owner"), LeftThighControl->ParentActor.Get() == Owner);
-			TestTrue(TEXT("Control child actor points at owner"), LeftThighControl->ChildActor.Get() == Owner);
+			TestFalse(TEXT("Control parent actor starts unset"), LeftThighControl->ParentActor.IsValid());
+			TestFalse(TEXT("Control child actor starts unset"), LeftThighControl->ChildActor.IsValid());
 			TestEqual(TEXT("Control parent mesh component name"), LeftThighControl->ParentMeshComponentName, FName(TEXT("CharacterMesh0")));
 			TestEqual(TEXT("Control child mesh component name"), LeftThighControl->ChildMeshComponentName, FName(TEXT("CharacterMesh0")));
 			TestEqual(TEXT("Control parent bone"), LeftThighControl->ParentBoneName, FName(TEXT("pelvis")));
@@ -188,7 +171,7 @@ namespace
 		TestNotNull(TEXT("pelvis body modifier exists"), PelvisModifier);
 		if (PelvisModifier)
 		{
-			TestTrue(TEXT("Body modifier actor points at owner"), PelvisModifier->Actor.Get() == Owner);
+			TestFalse(TEXT("Body modifier actor starts unset"), PelvisModifier->Actor.IsValid());
 			TestEqual(TEXT("Body modifier mesh component name"), PelvisModifier->MeshComponentName, FName(TEXT("CharacterMesh0")));
 			TestEqual(TEXT("Body modifier bone"), PelvisModifier->BoneName, FName(TEXT("pelvis")));
 			TestEqual(TEXT("Body modifier movement type"), PelvisModifier->BodyModifierData.MovementType, EPhysicsMovementType::Simulated);
@@ -196,6 +179,53 @@ namespace
 				TEXT("Body modifier target space"),
 				PelvisModifier->BodyModifierData.KinematicTargetSpace,
 				EPhysicsControlKinematicTargetSpace::OffsetInBoneSpace);
+		}
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimStage1InitializerRuntimeRefsTest,
+		"PhysAnim.Component.Stage1InitializerRuntimeRefs",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimStage1InitializerRuntimeRefsTest::RunTest(const FString& Parameters)
+	{
+		AActor* const Owner = NewObject<AActor>();
+		UPhysAnimStage1InitializerComponent* const Initializer =
+			NewObject<UPhysAnimStage1InitializerComponent>(Owner, TEXT("PhysAnimStage1Initializer"));
+		TestNotNull(TEXT("Transient owner actor should exist"), Owner);
+		TestNotNull(TEXT("Transient initializer should exist"), Initializer);
+		if (!Owner || !Initializer)
+		{
+			return false;
+		}
+
+		Owner->AddOwnedComponent(Initializer);
+
+		AActor* const ParentOverride = NewObject<AActor>();
+		AActor* const ChildOverride = NewObject<AActor>();
+		AActor* const BodyOverride = NewObject<AActor>();
+
+		Initializer->DefaultControlParentActor = ParentOverride;
+		Initializer->DefaultControlChildActor = ChildOverride;
+		Initializer->DefaultBodyModifierActor = BodyOverride;
+		Initializer->PrepareRuntimeDefaults();
+
+		const FInitialPhysicsControl* const LeftThighControl = Initializer->InitialControls.Find(MakeControlName(TEXT("thigh_l")));
+		TestNotNull(TEXT("thigh_l control exists after runtime prep"), LeftThighControl);
+		if (LeftThighControl)
+		{
+			TestTrue(TEXT("Runtime prep applies parent actor override"), LeftThighControl->ParentActor.Get() == ParentOverride);
+			TestTrue(TEXT("Runtime prep applies child actor override"), LeftThighControl->ChildActor.Get() == ChildOverride);
+		}
+
+		const FInitialBodyModifier* const PelvisModifier =
+			Initializer->InitialBodyModifiers.Find(MakeBodyModifierName(TEXT("pelvis")));
+		TestNotNull(TEXT("pelvis body modifier exists after runtime prep"), PelvisModifier);
+		if (PelvisModifier)
+		{
+			TestTrue(TEXT("Runtime prep applies body actor override"), PelvisModifier->Actor.Get() == BodyOverride);
 		}
 
 		return true;

@@ -1,6 +1,7 @@
 #include "PhysAnimComponent.h"
 
 #include "PhysAnimBridge.h"
+#include "PhysAnimStage1InitializerComponent.h"
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimationAsset.h"
@@ -18,7 +19,6 @@
 #include "PoseSearch/PoseSearchLibrary.h"
 #include "PoseSearch/PoseSearchSchema.h"
 #include "PhysicsEngine/BodyInstance.h"
-#include "UObject/Package.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
 
@@ -34,12 +34,6 @@ namespace PhysAnimComponentInternal
 	const TCHAR* PreferredGpuRuntime = TEXT("NNERuntimeORTDml");
 	const TCHAR* FallbackCpuRuntime = TEXT("NNERuntimeORTCpu");
 
-	struct FControlBonePair
-	{
-		FName ParentBone;
-		FName ChildBone;
-	};
-
 	FString JoinNames(const TArray<FName>& Names)
 	{
 		TArray<FString> Strings;
@@ -49,70 +43,6 @@ namespace PhysAnimComponentInternal
 			Strings.Add(Name.ToString());
 		}
 		return FString::Join(Strings, TEXT(", "));
-	}
-
-	const TArray<FControlBonePair>& GetStage1ControlBonePairs()
-	{
-		static const TArray<FControlBonePair> Pairs =
-		{
-			{ TEXT("pelvis"), TEXT("thigh_l") },
-			{ TEXT("thigh_l"), TEXT("calf_l") },
-			{ TEXT("calf_l"), TEXT("foot_l") },
-			{ TEXT("foot_l"), TEXT("ball_l") },
-			{ TEXT("pelvis"), TEXT("thigh_r") },
-			{ TEXT("thigh_r"), TEXT("calf_r") },
-			{ TEXT("calf_r"), TEXT("foot_r") },
-			{ TEXT("foot_r"), TEXT("ball_r") },
-			{ TEXT("pelvis"), TEXT("spine_01") },
-			{ TEXT("spine_01"), TEXT("spine_02") },
-			{ TEXT("spine_02"), TEXT("spine_03") },
-			{ TEXT("spine_03"), TEXT("neck_01") },
-			{ TEXT("neck_01"), TEXT("head") },
-			{ TEXT("spine_03"), TEXT("clavicle_l") },
-			{ TEXT("clavicle_l"), TEXT("upperarm_l") },
-			{ TEXT("upperarm_l"), TEXT("lowerarm_l") },
-			{ TEXT("lowerarm_l"), TEXT("hand_l") },
-			{ TEXT("spine_03"), TEXT("clavicle_r") },
-			{ TEXT("clavicle_r"), TEXT("upperarm_r") },
-			{ TEXT("upperarm_r"), TEXT("lowerarm_r") },
-			{ TEXT("lowerarm_r"), TEXT("hand_r") }
-		};
-
-		return Pairs;
-	}
-
-	FPhysicsControlData MakeDefaultStage1ControlData()
-	{
-		FPhysicsControlData Data;
-		Data.bEnabled = true;
-		Data.LinearStrength = 0.0f;
-		Data.LinearDampingRatio = 1.0f;
-		Data.LinearExtraDamping = 0.0f;
-		Data.MaxForce = 0.0f;
-		Data.AngularStrength = 800.0f;
-		Data.AngularDampingRatio = 1.25f;
-		Data.AngularExtraDamping = 30.0f;
-		Data.MaxTorque = 0.0f;
-		Data.LinearTargetVelocityMultiplier = 0.0f;
-		Data.AngularTargetVelocityMultiplier = 0.0f;
-		Data.CustomControlPoint = FVector::ZeroVector;
-		Data.bUseCustomControlPoint = false;
-		Data.bUseSkeletalAnimation = true;
-		Data.bDisableCollision = true;
-		Data.bOnlyControlChildObject = true;
-		return Data;
-	}
-
-	FPhysicsControlModifierData MakeDefaultStage1BodyModifierData()
-	{
-		FPhysicsControlModifierData Data;
-		Data.MovementType = EPhysicsMovementType::Simulated;
-		Data.CollisionType = ECollisionEnabled::QueryAndPhysics;
-		Data.GravityMultiplier = 1.0f;
-		Data.PhysicsBlendWeight = 1.0f;
-		Data.KinematicTargetSpace = EPhysicsControlKinematicTargetSpace::OffsetInBoneSpace;
-		Data.bUpdateKinematicFromSimulation = true;
-		return Data;
 	}
 }
 
@@ -135,76 +65,6 @@ void UPhysAnimComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopBridge();
 	Super::EndPlay(EndPlayReason);
-}
-
-void UPhysAnimComponent::PopulateStage1PhysicsControlDefaults()
-{
-	AActor* OwnerActor = GetOwner();
-	if (!OwnerActor)
-	{
-		OwnerActor = GetTypedOuter<AActor>();
-	}
-
-	if (!OwnerActor)
-	{
-		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Could not populate Stage 1 defaults because no owning actor/template was found."));
-		return;
-	}
-
-	UPhysicsControlInitializerComponent* const Initializer = OwnerActor->FindComponentByClass<UPhysicsControlInitializerComponent>();
-	if (!Initializer)
-	{
-		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Could not populate Stage 1 defaults because the actor is missing a PhysicsControlInitializerComponent."));
-		return;
-	}
-
-	OwnerActor->Modify();
-	Initializer->Modify();
-
-	Initializer->bCreateControlsAtBeginPlay = true;
-	Initializer->InitialControls.Reset();
-	Initializer->InitialBodyModifiers.Reset();
-
-	const FPhysicsControlData DefaultControlData = PhysAnimComponentInternal::MakeDefaultStage1ControlData();
-	for (const PhysAnimComponentInternal::FControlBonePair& Pair : PhysAnimComponentInternal::GetStage1ControlBonePairs())
-	{
-		FInitialPhysicsControl InitialControl;
-		InitialControl.ParentActor = OwnerActor;
-		InitialControl.ParentMeshComponentName = TEXT("CharacterMesh0");
-		InitialControl.ParentBoneName = Pair.ParentBone;
-		InitialControl.ChildActor = OwnerActor;
-		InitialControl.ChildMeshComponentName = TEXT("CharacterMesh0");
-		InitialControl.ChildBoneName = Pair.ChildBone;
-		InitialControl.ControlData = DefaultControlData;
-
-		Initializer->InitialControls.Add(PhysAnimBridge::MakeControlName(Pair.ChildBone), InitialControl);
-	}
-
-	const FPhysicsControlModifierData DefaultBodyModifierData = PhysAnimComponentInternal::MakeDefaultStage1BodyModifierData();
-	for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
-	{
-		FInitialBodyModifier InitialBodyModifier;
-		InitialBodyModifier.Actor = OwnerActor;
-		InitialBodyModifier.MeshComponentName = TEXT("CharacterMesh0");
-		InitialBodyModifier.BoneName = BoneName;
-		InitialBodyModifier.BodyModifierData = DefaultBodyModifierData;
-
-		Initializer->InitialBodyModifiers.Add(PhysAnimBridge::MakeBodyModifierName(BoneName), InitialBodyModifier);
-	}
-
-	OwnerActor->MarkPackageDirty();
-	Initializer->MarkPackageDirty();
-	if (UPackage* const OwnerPackage = OwnerActor->GetOutermost())
-	{
-		OwnerPackage->MarkPackageDirty();
-	}
-
-	UE_LOG(
-		LogPhysAnimBridge,
-		Log,
-		TEXT("[PhysAnim] Populated Stage 1 Physics Control defaults: %d controls, %d body modifiers."),
-		Initializer->InitialControls.Num(),
-		Initializer->InitialBodyModifiers.Num());
 }
 
 void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -302,7 +162,7 @@ bool UPhysAnimComponent::StartBridge()
 	FString Error;
 	if (!ResolveRuntimeContext(Error) ||
 		!ValidateRequiredBodies(Error) ||
-		!ValidatePreauthoredPhysicsControl(Error) ||
+		!EnsurePreauthoredPhysicsControl(Error) ||
 		!ValidatePoseSearchIntegration(Error) ||
 		!InitializeModel(Error))
 	{
@@ -323,6 +183,38 @@ bool UPhysAnimComponent::StartBridge()
 		*ActiveRuntimeName,
 		*GetPathNameSafe(LoadedModelData));
 	return true;
+}
+
+bool UPhysAnimComponent::EnsurePreauthoredPhysicsControl(FString& OutError)
+{
+	FString ValidationError;
+	if (ValidatePreauthoredPhysicsControl(ValidationError))
+	{
+		return true;
+	}
+
+	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
+	AActor* const OwnerActor = GetOwner();
+	if (!PhysicsControl || !OwnerActor)
+	{
+		OutError = ValidationError.IsEmpty() ? TEXT("Physics Control creation requires both the owning actor and Physics Control component.") : ValidationError;
+		return false;
+	}
+
+	if (UPhysAnimStage1InitializerComponent* const Stage1Initializer = OwnerActor->FindComponentByClass<UPhysAnimStage1InitializerComponent>())
+	{
+		Stage1Initializer->CreateControls(PhysicsControl);
+		return ValidatePreauthoredPhysicsControl(OutError);
+	}
+
+	if (UPhysicsControlInitializerComponent* const Initializer = OwnerActor->FindComponentByClass<UPhysicsControlInitializerComponent>())
+	{
+		Initializer->CreateControls(PhysicsControl);
+		return ValidatePreauthoredPhysicsControl(OutError);
+	}
+
+	OutError = ValidationError;
+	return false;
 }
 
 void UPhysAnimComponent::StopBridge()
