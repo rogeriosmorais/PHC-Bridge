@@ -11,6 +11,8 @@ Use it to answer:
 - what exact evidence to send back
 - when you should stop instead of inventing missing setup
 
+For the detailed Phase 1 editor bring-up path for the new component-based bridge, use [phase1-ue-bridge-bringup-runbook.md](/F:/NewEngine/plans/stage1/phase1-ue-bridge-bringup-runbook.md).
+
 If this file disagrees with a gate package, the gate package still owns the pass/fail rules. This file exists to make the user actions concrete.
 
 ## Current Status Map

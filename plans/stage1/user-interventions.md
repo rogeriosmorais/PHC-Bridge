@@ -46,4 +46,6 @@ When the user returns with setup progress, use [user-return-template.md](/F:/New
 
 For the initial Unreal project creation step, use [eli5-ue-project-setup.md](/F:/NewEngine/plans/stage1/eli5-ue-project-setup.md).
 
+For the Phase 1 editor asset wiring and bridge startup path, use [phase1-ue-bridge-bringup-runbook.md](/F:/NewEngine/plans/stage1/phase1-ue-bridge-bringup-runbook.md).
+
 For the full user-owned workflow across Phase 0, Phase 1, and Phase 2, use [user-runbook.md](/F:/NewEngine/plans/stage1/user-runbook.md).

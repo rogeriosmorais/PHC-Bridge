@@ -10,6 +10,8 @@ Can one Manny character run the full `PoseSearch -> PHC -> Physics Control -> Ch
 
 The bridge is not considered fully specced for implementation until [ue-bridge-implementation-spec.md](/F:/NewEngine/plans/stage1/ue-bridge-implementation-spec.md) is completed and reviewed.
 
+The human-owned UE Editor asset wiring and startup path for the current implementation is documented in [phase1-ue-bridge-bringup-runbook.md](/F:/NewEngine/plans/stage1/phase1-ue-bridge-bringup-runbook.md).
+
 ## Entry Criteria
 
 Do not start Phase 1 implementation until all of these are true:
