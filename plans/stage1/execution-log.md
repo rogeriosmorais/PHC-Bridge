@@ -15,7 +15,7 @@ Use it to track:
 ## Current State
 
 - `Current phase`: Phase 0 / `S1-P0-A1` complete / `S1-P0-A2` in progress
-- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; the UE scaffold is now also verified on disk with Manny assets present, `PoseSearch` and `PhysicsControl` enabled in the project file, `NNERuntimeORT` mounting in editor logs, and a successful PIE launch recorded on March 10, 2026; Stage 1 remains narrowed to locomotion-only, the selected runtime checkpoint is `motion_tracker/smpl`, the Windows command path for Phase 0 is frozen, `MV-G1-01` now has a saved clip artifact and a `pass` verdict, and the remaining G1 work is UE-side evidence capture
+- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; the UE scaffold is now also verified on disk with Manny assets present, `PoseSearch` and `PhysicsControl` enabled in the project file, `NNERuntimeORT` mounting in editor logs, and a successful PIE launch recorded on March 10, 2026; Stage 1 remains narrowed to locomotion-only, the selected runtime checkpoint is `motion_tracker/smpl`, the Windows command path for Phase 0 is frozen, `MV-G1-01` has a saved clip artifact and a `pass` verdict, and `MV-G1-02` is now accepted as a screenshot-backed stationary control-path `pass`
 - `Last planning milestone`: orchestrator reviewed the current UE scaffold artifacts, confirmed Manny content and plugin state from local project files and logs, and re-synced the Phase 0 blocker list to the remaining manual G1 checkpoints
 
 ## Active Tasks
@@ -62,8 +62,7 @@ Use it to track:
 
 | Item | Expected Evidence |
 |---|---|
-| `MV-G1-02` evidence | screenshot or short clip from `/Game/ThirdPerson/Lvl_ThirdPerson` after running `PhysAnim.MVG102.Start`, plus a note saying whether the left arm / left hand responded first |
-| `MV-G1-03` evidence | clip plus short note naming the expected pose or mapped output and what Manny actually did |
+| `MV-G1-03` evidence | clip plus short note from `/Game/ThirdPerson/Lvl_ThirdPerson` after running `PhysAnim.MVG103.Start`, naming the expected pose `isolated left elbow flexion`, what actually moved, and whether the right arm stayed neutral |
 | substep-stability evidence | substep settings used plus a short clip or note saying whether Manny stayed controllable for roughly `30` seconds |
 
 ## Latest Phase 0 Evidence Progress
@@ -78,7 +77,11 @@ Use it to track:
 - user evidence now also confirms a `pass` verdict for `MV-G1-01`
 - `MV-G1-02` is now frozen to `/Game/ThirdPerson/Lvl_ThirdPerson` plus the plugin runtime harness command `PhysAnim.MVG102.Start`
 - Visual Studio Build Tools 2022 with MSVC v143 and Windows SDK `22621` were installed on March 10, 2026, and Unreal built `PhysAnimPlugin` successfully on this machine
-- G1 remains blocked overall because the UE manual checks are still missing
+- the UE `MV-G1-02` harness was debugged through missing visible motion, a Live Coding linker failure, and one Live Coding class-reload crash; a normal closed-editor rebuild then succeeded and user evidence on March 10, 2026 confirmed visible left-elbow movement in the frozen test path
+- later March 10, 2026 discussion narrowed `MV-G1-02` to an explicitly stationary proof; movement-induced shoulder artifacts were judged out of scope for this checkpoint and deferred to later integrated UE checks
+- the user explicitly accepted screenshot-only evidence for `MV-G1-02`, so that checkpoint now scores `pass`
+- `MV-G1-03` is now frozen to `/Game/ThirdPerson/Lvl_ThirdPerson` plus the dedicated mapped-joint smoke harness command `PhysAnim.MVG103.Start`, using the explicit validation case `isolated left elbow flexion`
+- G1 remains blocked overall because `MV-G1-03` and the UE substep-stability check are still missing
 
 ## Accepted Handoffs
 

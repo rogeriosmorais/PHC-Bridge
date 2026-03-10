@@ -67,14 +67,24 @@ Use only:
 
 ## Criterion 3: Physics Control Component Responds To Programmatic Targets
 
-- `Status`: pending
+- `Status`: complete
 - `Checkpoint`: `MV-G1-02`
 - `Evidence`:
-  - clip or screenshot:
+  - screenshot:
+    - user-provided in-editor screenshot from March 10, 2026 showing visible left-arm response during the frozen stationary `MV-G1-02` path
+    - no local file path was retained; the user explicitly accepted screenshot-only evidence for this checkpoint on March 10, 2026
   - scene or command used:
+    - map: `/Game/ThirdPerson/Lvl_ThirdPerson`
+    - runtime owner: `UPhysAnimMvG102Subsystem`
+    - command: `PhysAnim.MVG102.Start`
   - notes:
-- `Verdict`: pending
-- `Why this verdict was chosen`:
+    - earlier March 10, 2026 runs proved the command path and on-screen harness message but showed no visible limb response
+    - the UE plugin harness was then patched, rebuilt successfully outside Live Coding, and relaunched from a fresh editor process
+    - user evidence on March 10, 2026 confirms visible left-elbow / left-arm response during the stationary test, matching the expected first-moving region
+    - later user discussion and screenshots showed shoulder artifacts once the whole character was moved, but the orchestrator explicitly scoped those concerns out of `MV-G1-02` and into later integrated UE checks
+    - the user explicitly directed the orchestrator on March 10, 2026 to attach screenshot evidence and move on without requiring a clip
+- `Verdict`: pass
+- `Why this verdict was chosen`: under the frozen stationary-check definition, the UE runtime harness produces clear left-arm-first response from the named programmatic target path, which is sufficient to prove the Physics Control command path is alive
 
 ## Criterion 4: Minimal SMPL/PHC Output Drives Manny In Chaos Without Obvious Mapping Failure
 
@@ -83,10 +93,16 @@ Use only:
 - `Evidence`:
   - clip:
   - expected pose:
+    - `isolated left elbow flexion`
+  - frozen runtime path:
+    - map: `/Game/ThirdPerson/Lvl_ThirdPerson`
+    - runtime owner: `UPhysAnimMvG103Subsystem`
+    - command: `PhysAnim.MVG103.Start`
+    - mapped subset: `L_Elbow -> lowerarm_l`, with `upperarm_l` parent context and `hand_l` held near neutral
   - observed result:
   - mapping issues found:
 - `Verdict`: pending
-- `Why this verdict was chosen`:
+- `Why this verdict was chosen`: the runtime smoke harness is now frozen, but no user evidence has been recorded yet
 
 ## Criterion 5: Substep Rate Is Stable
 
@@ -115,7 +131,6 @@ List every assumption changed by Phase 0 evidence:
 - `A-01`: move from `yellow` to `green`; the training-side visual path is proven runnable and the user judged `MV-G1-01` as `pass`
 - `A-02`:
 - `A-03`:
-- `A-04`:
 - `A-05`:
 - `A-06`:
 - `A-07`:
@@ -128,7 +143,6 @@ List every assumption changed by Phase 0 evidence:
 
 ## Missing Evidence
 
-- `MV-G1-02` Manny control-path evidence
 - `MV-G1-03` Manny smoke-test evidence
 - UE-side substep-stability evidence
 
@@ -136,7 +150,7 @@ List every assumption changed by Phase 0 evidence:
 
 - `Final verdict`: pending
 - `Decision date`:
-- `Decision summary`: the bridge contract, motion-source review, and training-side `MV-G1-01` checkpoint now all score `pass`, but G1 remains blocked on the UE-side evidence package
+- `Decision summary`: the bridge contract, motion-source review, training-side `MV-G1-01`, and stationary UE control-path checkpoint `MV-G1-02` now score `pass`, but G1 remains blocked on the Manny smoke test and UE-side substep-stability evidence
 - `Can Phase 1 begin?`: no
 
 ## If Verdict Is Not Pass

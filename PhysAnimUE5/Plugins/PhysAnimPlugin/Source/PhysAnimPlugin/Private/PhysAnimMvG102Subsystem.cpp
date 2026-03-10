@@ -2,25 +2,64 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "PhysicsControlComponent.h"
 #include "PhysicsControlData.h"
+#include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/PhysicsAsset.h"
 #include "Stats/Stats.h"
+#include "Templates/Tuple.h"
 
 namespace PhysAnimMvG102
 {
 	static const FName BodyModifierSetName(TEXT("MVG102_LeftArm"));
 	static const FName ControlName(TEXT("MVG102_LeftHandWorld"));
 	static const FName ControlSetName(TEXT("MVG102_LeftHandWorld"));
-	static const FName ArmRootBoneName(TEXT("clavicle_l"));
+	static const FName ArmRootBoneName(TEXT("lowerarm_l"));
 	static const FName HandBoneName(TEXT("hand_l"));
 	static constexpr float TestDurationSeconds = 30.0f;
 	static constexpr float OscillationHz = 0.55f;
-	static constexpr float VerticalAmplitudeCm = 18.0f;
-	static constexpr float ForwardAmplitudeCm = 10.0f;
+	static constexpr float VerticalAmplitudeCm = 6.0f;
+	static constexpr float ForwardAmplitudeCm = 2.0f;
+
+	struct FMeshCollisionState
+	{
+		FName ProfileName = NAME_None;
+		ECollisionEnabled::Type CollisionEnabled = ECollisionEnabled::NoCollision;
+	};
+
+	static TMap<TWeakObjectPtr<USkeletalMeshComponent>, FMeshCollisionState> OriginalCollisionStates;
+
+	static void LogMeshDiagnostics(const TCHAR* Context, USkeletalMeshComponent* MeshComponent)
+	{
+		if (!MeshComponent)
+		{
+			return;
+		}
+
+		const UPhysicsAsset* const PhysicsAsset = MeshComponent->GetPhysicsAsset();
+		const FBodyInstance* const ArmRootBody = MeshComponent->GetBodyInstance(ArmRootBoneName);
+		const FBodyInstance* const HandBody = MeshComponent->GetBodyInstance(HandBoneName);
+
+		UE_LOG(
+			LogTemp,
+			Display,
+			TEXT("[MV-G1-02] %s | mesh=%s profile=%s collision=%s physics_state=%s physics_asset=%s arm_root_body=%s arm_root_sim=%s hand_body=%s hand_sim=%s"),
+			Context,
+			*MeshComponent->GetName(),
+			*MeshComponent->GetCollisionProfileName().ToString(),
+			*UEnum::GetValueAsString(MeshComponent->GetCollisionEnabled()),
+			MeshComponent->IsPhysicsStateCreated() ? TEXT("true") : TEXT("false"),
+			PhysicsAsset ? *PhysicsAsset->GetPathName() : TEXT("None"),
+			ArmRootBody ? TEXT("true") : TEXT("false"),
+			ArmRootBody && ArmRootBody->bSimulatePhysics && ArmRootBody->IsValidBodyInstance() ? TEXT("true") : TEXT("false"),
+			HandBody ? TEXT("true") : TEXT("false"),
+			HandBody && HandBody->bSimulatePhysics && HandBody->IsValidBodyInstance() ? TEXT("true") : TEXT("false"));
+	}
 
 	static void StartCommand(const TArray<FString>& Args, UWorld* World)
 	{
@@ -124,14 +163,25 @@ bool UPhysAnimMvG102Subsystem::StartControlPathTest()
 
 	ControlledCharacter = Character;
 	ControlledMesh = MeshComponent;
-	InitialHandLocation = MeshComponent->GetSocketLocation(PhysAnimMvG102::HandBoneName);
-	InitialHandOrientation = MeshComponent->GetSocketRotation(PhysAnimMvG102::HandBoneName);
+	InitialHandLocation = Character->GetTransform().InverseTransformPosition(
+		MeshComponent->GetSocketLocation(PhysAnimMvG102::HandBoneName));
+	InitialHandOrientation = Character->GetTransform().InverseTransformRotation(
+		MeshComponent->GetSocketQuaternion(PhysAnimMvG102::HandBoneName)).Rotator();
 	ElapsedTimeSeconds = 0.0f;
 	bTestActive = true;
+
+	ActivateVisualPhysicsState(MeshComponent);
+	PhysAnimMvG102::LogMeshDiagnostics(TEXT("after visual activation"), MeshComponent);
 
 	ControlComponent->SetBodyModifiersInSetMovementType(
 		PhysAnimMvG102::BodyModifierSetName,
 		EPhysicsMovementType::Simulated);
+	ControlComponent->SetBodyModifiersInSetPhysicsBlendWeight(
+		PhysAnimMvG102::BodyModifierSetName,
+		1.0f);
+	ResetControlTarget();
+	ControlComponent->UpdateControls(0.0f);
+	PhysAnimMvG102::LogMeshDiagnostics(TEXT("after body modifiers"), MeshComponent);
 
 	const FString MeshPath = MeshComponent->GetSkinnedAsset()
 		? MeshComponent->GetSkinnedAsset()->GetPathName()
@@ -158,6 +208,11 @@ void UPhysAnimMvG102Subsystem::StopControlPathTest(bool bResetTarget)
 	if (bResetTarget)
 	{
 		ResetControlTarget();
+	}
+
+	if (USkeletalMeshComponent* const MeshComponent = ControlledMesh.Get())
+	{
+		ResetVisualPhysicsState(MeshComponent);
 	}
 
 	ControlComponent->SetBodyModifiersInSetMovementType(
@@ -205,6 +260,8 @@ bool UPhysAnimMvG102Subsystem::EnsureHarnessCreated(ACharacter* Character, USkel
 	}
 
 	ControlComponent = ExistingComponent;
+	ControlComponent->SetComponentTickEnabled(true);
+	ControlComponent->RegisterAllComponentTickFunctions(true);
 
 	ControlComponent->DestroyControl(PhysAnimMvG102::ControlName, true, false);
 	ControlComponent->DestroyBodyModifier(PhysAnimMvG102::BodyModifierSetName, false, true);
@@ -232,14 +289,14 @@ bool UPhysAnimMvG102Subsystem::EnsureHarnessCreated(ACharacter* Character, USkel
 
 	FPhysicsControlData ControlData;
 	ControlData.bEnabled = true;
-	ControlData.LinearStrength = 1400.0f;
-	ControlData.LinearDampingRatio = 1.2f;
-	ControlData.LinearExtraDamping = 40.0f;
-	ControlData.MaxForce = 0.0f;
-	ControlData.AngularStrength = 400.0f;
-	ControlData.AngularDampingRatio = 1.1f;
-	ControlData.AngularExtraDamping = 10.0f;
-	ControlData.MaxTorque = 0.0f;
+	ControlData.LinearStrength = 2200.0f;
+	ControlData.LinearDampingRatio = 1.35f;
+	ControlData.LinearExtraDamping = 110.0f;
+	ControlData.MaxForce = 1400.0f;
+	ControlData.AngularStrength = 500.0f;
+	ControlData.AngularDampingRatio = 1.2f;
+	ControlData.AngularExtraDamping = 40.0f;
+	ControlData.MaxTorque = 800.0f;
 	ControlData.LinearTargetVelocityMultiplier = 0.0f;
 	ControlData.AngularTargetVelocityMultiplier = 0.0f;
 	ControlData.bUseSkeletalAnimation = false;
@@ -263,6 +320,50 @@ bool UPhysAnimMvG102Subsystem::EnsureHarnessCreated(ACharacter* Character, USkel
 	return true;
 }
 
+void UPhysAnimMvG102Subsystem::ActivateVisualPhysicsState(USkeletalMeshComponent* MeshComponent)
+{
+	if (!MeshComponent)
+	{
+		return;
+	}
+
+	PhysAnimMvG102::OriginalCollisionStates.FindOrAdd(MeshComponent) =
+		{ MeshComponent->GetCollisionProfileName(), MeshComponent->GetCollisionEnabled() };
+
+	MeshComponent->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
+	MeshComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	MeshComponent->RecreatePhysicsState();
+	MeshComponent->SetEnablePhysicsBlending(true);
+	MeshComponent->SetAllBodiesBelowSimulatePhysics(PhysAnimMvG102::ArmRootBoneName, true, true);
+	MeshComponent->SetAllBodiesBelowPhysicsBlendWeight(PhysAnimMvG102::ArmRootBoneName, 1.0f, false, true);
+	MeshComponent->WakeAllRigidBodies();
+}
+
+void UPhysAnimMvG102Subsystem::ResetVisualPhysicsState(USkeletalMeshComponent* MeshComponent)
+{
+	if (!MeshComponent)
+	{
+		return;
+	}
+
+	if (MeshComponent->IsPhysicsStateCreated())
+	{
+		MeshComponent->SetAllBodiesBelowPhysicsBlendWeight(PhysAnimMvG102::ArmRootBoneName, 0.0f, false, true);
+		MeshComponent->SetAllBodiesBelowSimulatePhysics(PhysAnimMvG102::ArmRootBoneName, false, true);
+		MeshComponent->PutAllRigidBodiesToSleep();
+	}
+
+	MeshComponent->SetEnablePhysicsBlending(false);
+	if (const PhysAnimMvG102::FMeshCollisionState* const OriginalState =
+		PhysAnimMvG102::OriginalCollisionStates.Find(MeshComponent))
+	{
+		MeshComponent->SetCollisionProfileName(OriginalState->ProfileName);
+		MeshComponent->SetCollisionEnabled(OriginalState->CollisionEnabled);
+		PhysAnimMvG102::OriginalCollisionStates.Remove(MeshComponent);
+	}
+}
+
 void UPhysAnimMvG102Subsystem::UpdateControlTarget(float DeltaTime)
 {
 	ACharacter* const Character = ControlledCharacter.Get();
@@ -277,15 +378,19 @@ void UPhysAnimMvG102Subsystem::UpdateControlTarget(float DeltaTime)
 	ElapsedTimeSeconds += DeltaTime;
 
 	const float Phase = FMath::Sin(ElapsedTimeSeconds * PhysAnimMvG102::OscillationHz * 2.0f * PI);
+	const FTransform CharacterTransform = Character->GetActorTransform();
+	const FVector BaseHandLocation = CharacterTransform.TransformPosition(InitialHandLocation);
+	const FRotator BaseHandOrientation =
+		CharacterTransform.TransformRotation(InitialHandOrientation.Quaternion()).Rotator();
 	const FVector TargetLocation =
-		InitialHandLocation +
+		BaseHandLocation +
 		(Character->GetActorUpVector() * (PhysAnimMvG102::VerticalAmplitudeCm * Phase)) +
 		(Character->GetActorForwardVector() * (PhysAnimMvG102::ForwardAmplitudeCm * Phase));
 
 	ControlComponent->SetControlTargetPositionAndOrientation(
 		PhysAnimMvG102::ControlName,
 		TargetLocation,
-		InitialHandOrientation,
+		BaseHandOrientation,
 		DeltaTime,
 		true,
 		true,
@@ -308,8 +413,12 @@ void UPhysAnimMvG102Subsystem::ResetControlTarget()
 
 	ControlComponent->SetControlTargetPositionAndOrientation(
 		PhysAnimMvG102::ControlName,
-		InitialHandLocation,
-		InitialHandOrientation,
+		ControlledCharacter.IsValid()
+			? ControlledCharacter->GetActorTransform().TransformPosition(InitialHandLocation)
+			: InitialHandLocation,
+		ControlledCharacter.IsValid()
+			? ControlledCharacter->GetActorTransform().TransformRotation(InitialHandOrientation.Quaternion()).Rotator()
+			: InitialHandOrientation,
 		0.0f,
 		true,
 		true,

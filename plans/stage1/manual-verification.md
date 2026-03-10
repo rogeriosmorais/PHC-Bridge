@@ -61,6 +61,7 @@ $env:OMNI_KIT_ACCEPT_EULA='YES'
 - `Why it matters`: if the Physics Control path is broken, the Stage 1 bridge cannot work even if the PHC model itself is fine
 - `What this checkpoint is and is not`:
   - this checkpoint is only about proving that `UPhysicsControlComponent` can move the intended body region when a UE-side test updates targets
+  - this checkpoint is a stationary control-path proof, not a locomotion or whole-character stability test
   - this checkpoint is not the full PHC bridge, not the SMPL mapping test, and not the final motion-quality comparison
 - `Current truth on March 10, 2026`:
   - the exact Stage 1 test path is now frozen
@@ -105,18 +106,22 @@ PhysAnim.MVG102.Start
      - did anything move at all
      - did the left arm / left hand region move first
      - did the body stay roughly upright long enough to judge it
-  10. Let the test keep running for about `30` seconds unless it fails earlier. The harness auto-stops after that window.
-  11. Record a short clip if possible. If a clip is not practical, capture at least one screenshot and write down exactly what happened in the first few seconds.
+  10. Keep the character stationary for this checkpoint. Do not treat movement while manually driving the character as part of `MV-G1-02`.
+  11. Let the test keep running for about `30` seconds unless it fails earlier. The harness auto-stops after that window.
+  12. Record a short clip if possible. If a clip is not practical, capture at least one screenshot and write down exactly what happened in the first few seconds.
 - `What good looks like`:
   - the current mannequin pawn visibly responds to repeated target updates
   - the left arm / left hand region clearly responds first
-  - the mannequin stays controllable for about `30` seconds
-  - any instability is limited enough that Stage 1 tuning still looks plausible
+  - the mannequin stays upright and visually readable for about `30` seconds while stationary
 - `What bad looks like`:
   - nothing responds at all
   - the wrong body region responds
   - Manny collapses or explodes immediately
   - joint behavior is erratic enough that you cannot tell what was being commanded
+  - no stationary screenshot or clip can show a clean first-moving left-arm response
+- `What does not fail this checkpoint by itself`:
+  - artifacts that only appear once the user starts moving the character around
+  - broader whole-body stability concerns that belong to the later smoke test or substep-stability check
 - `When to mark blocked instead of fail`:
   - Unreal cannot build the plugin because the required MSVC toolchain is missing
   - the `PhysAnim.MVG102.Start` command does not exist in the console after the plugin should have loaded
@@ -136,25 +141,73 @@ PhysAnim.MVG102.Start
 
 - `What you are checking`: whether minimal SMPL/PHC-style output can drive Manny in Chaos without obvious mapping failure
 - `Why it matters`: this is the integrated transfer check at the center of G1
+- `What this checkpoint is and is not`:
+  - this checkpoint is a deterministic mapped-joint smoke harness that stands in for minimal SMPL/PHC-style output
+  - this checkpoint is not the final learned-policy bridge, not the final transform proof, and not the G2 quality comparison
+- `Frozen test inputs`:
+  1. exact UE map path:
+     - `/Game/ThirdPerson/Lvl_ThirdPerson`
+  2. exact runtime owner:
+     - `UPhysAnimMvG103Subsystem`
+     - source path: `F:\NewEngine\PhysAnimUE5\Plugins\PhysAnimPlugin\Source\PhysAnimPlugin\Public\PhysAnimMvG103Subsystem.h`
+  3. exact trigger method:
+     - start PIE in `Lvl_ThirdPerson`
+     - open the in-game console with `` ` `` or `~`
+     - run `PhysAnim.MVG103.Start`
+     - optional stop command: `PhysAnim.MVG103.Stop`
+  4. exact frozen validation pose:
+     - `isolated left elbow flexion`
+  5. exact mapped subset being exercised:
+     - `L_Elbow -> lowerarm_l`
+     - with `upperarm_l` as parent context and `hand_l` held near neutral
+  6. exact evidence format required back:
+     - short clip preferred
+     - screenshot acceptable only if the pose is clearly readable
 - `What to click or run`:
-  - first confirm the orchestrator has named the exact map, smoke-test tool, and expected pose
-  - if those named assets are missing, stop and ask for them instead of improvising
-  - once they are named:
-    1. open the exact UE map
-    2. start PIE or run the named smoke-test tool
-    3. trigger the named pose or pose sequence
-    4. watch which limbs move first
-    5. record a short clip
-  - acceptable expected-pose names should come from `retargeting-spec.md`, for example:
-    - neutral identity
-    - isolated left elbow flexion
-    - isolated right hip rotation
-    - pelvis yaw
-    - spine bend plus mild twist
-    - explicit left/right asymmetry
-- `What good looks like`: the intended limbs move, left/right are not mirrored incorrectly, and the pose stays plausible
-- `What bad looks like`: wrong limbs move, the body mirrors incorrectly, or the character becomes unstable immediately
-- `What evidence to send back`: one clip and a short note naming the expected pose, the observed result, and any mapping issues found
+  1. Open `F:\NewEngine\PhysAnimUE5\PhysAnimUE5.uproject`.
+  2. If Unreal says the project or plugin needs to be rebuilt, allow it.
+  3. If the rebuild fails because the required MSVC / Visual Studio toolchain is missing, stop and report `blocked`.
+  4. Open `/Game/ThirdPerson/Lvl_ThirdPerson`.
+  5. Start PIE.
+  6. Keep the character stationary for this checkpoint.
+  7. Open the in-game console with `` ` `` or `~`.
+  8. Run:
+
+```text
+PhysAnim.MVG103.Start
+```
+
+  9. Watch the first `3` to `6` seconds closely:
+     - does the left elbow / left forearm move into a recognizable elbow-flexed pose
+     - does the right arm stay neutral enough to make mirroring mistakes obvious
+     - does the pose remain readable rather than collapsing into instability
+  10. Let the full `10` second window play once unless it fails earlier. The harness auto-stops.
+  11. Record a short clip if practical. If not, capture at least one screenshot during the elbow-flexed hold.
+- `What good looks like`:
+  - the intended left arm region moves, especially the left elbow / forearm
+  - the right arm does not mirror the motion unexpectedly
+  - the resulting pose is recognizable as left elbow flexion
+  - the character stays stable enough to judge mapping
+- `What bad looks like`:
+  - the wrong limb moves
+  - left and right appear mirrored or swapped
+  - torso or unrelated limbs dominate the motion instead of the left elbow chain
+  - the character becomes unstable before the pose can be judged
+- `When to mark blocked instead of fail`:
+  - the plugin cannot be rebuilt because required MSVC tooling is missing
+  - the `PhysAnim.MVG103.Start` command does not exist after the plugin should have loaded
+  - the clip or screenshot is too unclear to tell which limb moved
+- `What evidence to send back`:
+  - exact map path used: `/Game/ThirdPerson/Lvl_ThirdPerson`
+  - exact runtime owner used: `UPhysAnimMvG103Subsystem`
+  - exact trigger method used: `PhysAnim.MVG103.Start`
+  - exact expected pose: `isolated left elbow flexion`
+  - one clip or clearly readable screenshot
+  - one sentence saying:
+    - what body region was expected to move: left elbow / left forearm
+    - what actually moved
+    - whether the right arm stayed neutral enough to rule out obvious mirroring
+    - final checkpoint verdict: `pass`, `fail`, or `blocked`
 
 ### MV-G2-01: Physics-Driven Versus Kinematic Comparison
 

@@ -279,6 +279,12 @@ $env:OMNI_KIT_ACCEPT_EULA='YES'
   - confirmed bridge spec
   - confirmed retargeting validation set
   - manual check `MV-G1-03`
+- Frozen runtime path:
+  - map: `/Game/ThirdPerson/Lvl_ThirdPerson`
+  - runtime owner: `UPhysAnimMvG103Subsystem`
+  - trigger: PIE console command `PhysAnim.MVG103.Start`
+  - frozen pose case: `isolated left elbow flexion`
+  - mapped subset under test: `L_Elbow -> lowerarm_l`, with `upperarm_l` parent context and `hand_l` held near neutral
 - Output:
   - evidence entry in `g1-evidence.md`
 - Required evidence:

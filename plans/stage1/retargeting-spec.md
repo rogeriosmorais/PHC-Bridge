@@ -105,6 +105,37 @@ These cases must be exercised before the retargeting layer is trusted.
   - `F:\NewEngine\Training\ProtoMotions\data\motions\smpl_humanoid_walk.npy`
 - minimal PHC-style output driving Manny in Chaos for the G1 smoke test
 
+### Frozen MV-G1-03 Smoke Case
+
+The first runnable G1 smoke case is now frozen to one explicit validation packet:
+
+- checkpoint: `MV-G1-03`
+- case name: `isolated left elbow flexion`
+- SMPL intent:
+  - source joint: `L_Elbow`
+  - neighboring expectation: `L_Shoulder` and `L_Wrist` remain supportive only; the right arm stays neutral
+- UE5 mapped subset exercised:
+  - parent bone: `upperarm_l`
+  - driven bone: `lowerarm_l`
+  - supporting neutral child: `hand_l`
+- runtime form:
+  - a stationary parent-space Physics Control smoke harness
+  - the control target is applied as an offset on top of the current skeletal animation pose rather than as a free world-space drag target
+- frozen runtime path:
+  - map: `/Game/ThirdPerson/Lvl_ThirdPerson`
+  - runtime owner: `UPhysAnimMvG103Subsystem`
+  - trigger: PIE console command `PhysAnim.MVG103.Start`
+- frozen user-facing expectation:
+  - Manny or Quinn should show recognizable left elbow flexion on the left arm
+  - the right arm should remain neutral enough that left/right mirroring mistakes are obvious
+  - the pose should stay stable enough to judge mapping rather than only a failure mode
+
+This case was chosen because it is the smallest mapped-arm validation that can still catch:
+
+- wrong limb selection
+- left/right mirroring
+- obvious upperarm versus lowerarm mapping mistakes
+
 ### Phase 0 Evidence Capture
 
 Record the chosen validation-pose names, the handedness note, and the Manny smoke-test result in:

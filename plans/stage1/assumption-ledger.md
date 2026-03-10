@@ -44,7 +44,7 @@ Only the orchestrator updates status.
 
 ## Latest Orchestrator Review
 
-- `Review commit`: `b0661d8`
+- `Review commit`: `eb6944f` plus local uncommitted UE harness debug changes
 - `Reviewed artifacts`:
   - `plans/stage1/bridge-spec.md`
   - `plans/stage1/retargeting-spec.md`
@@ -74,7 +74,10 @@ Only the orchestrator updates status.
   - user evidence on March 10, 2026 also judges `MV-G1-01` as `pass`, so `A-01` now moves from `yellow` to `green`
   - the Phase 0 eval command, retargeting validation set, and evidence paths are now frozen for `S1-P0-A2`
   - the current UE scaffold review is stronger now: `PhysAnimUE5.uproject` enables `PoseSearch` and `PhysicsControl`, Manny assets are present under `Content/Characters/Mannequins`, editor logs show `NNERuntimeORT` runtime initialization, and a PIE session launched successfully on March 10, 2026
-  - this stronger scaffold evidence reduces setup ambiguity, but it does not by itself satisfy `MV-G1-02`, `MV-G1-03`, or the substep-stability threshold because those still require user-observed motion behavior
+  - this stronger scaffold evidence reduces setup ambiguity, but it does not by itself satisfy `MV-G1-03` or the substep-stability threshold because those still require user-observed motion behavior
+  - user evidence on March 10, 2026 confirms visible left-elbow / left-arm motion after running `PhysAnim.MVG102.Start` in `/Game/ThirdPerson/Lvl_ThirdPerson`
+  - the orchestrator narrowed `MV-G1-02` to a stationary proof only, so later movement-induced shoulder artifacts are recorded as out of scope for that checkpoint rather than as a failure of the basic command path
+  - `MV-G1-03` now has a frozen UE runtime path on March 10, 2026: `/Game/ThirdPerson/Lvl_ThirdPerson` plus `UPhysAnimMvG103Subsystem` and the `PhysAnim.MVG103.Start` smoke harness for the explicit `isolated left elbow flexion` validation case
   - `A-06` remains `yellow`: the local ORT runtime is present and reports GPU interface availability, but no exported Stage 1 model has been loaded in UE yet
 - `Phase 0 critical assumptions`:
   - `A-01`
@@ -116,6 +119,5 @@ Before starting the next execution-planning pass, the orchestrator should:
 The next meaningful ledger updates should come from:
 
 - confirming the PHC observation/action contract from the frozen local ProtoMotions sources
-- capturing UE evidence for `MV-G1-02`
 - capturing Manny bridge smoke-test evidence for `MV-G1-03`
 - defining the exact evidence required to call `UPhysicsControlComponent` viable for Stage 1

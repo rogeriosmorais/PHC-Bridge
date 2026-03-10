@@ -21,9 +21,9 @@ If this file disagrees with a gate package, the gate package still owns the pass
 | `S1-U-02` | complete locally, keep as verification fallback | only if repo/data paths change or a missing asset must be rechecked |
 | `S1-U-03` | complete locally, keep as recreate guide | only if the UE project must be recreated or repaired |
 | `S1-U-04 / MV-G1-01` | runnable now | run now for the training-side visual verdict |
-| `S1-U-04 / MV-G1-02` | blocked on exact UE test asset | do not invent the scene or trigger method |
+| `S1-U-04 / MV-G1-02` | complete locally | frozen stationary control-path proof captured |
 | `S1-U-04 / substep stability` | blocked on exact UE test asset | do not invent the scene or physics settings |
-| `S1-U-04 / MV-G1-03` | blocked on exact UE smoke-test asset | do not invent the bridge tool or expected pose source |
+| `S1-U-04 / MV-G1-03` | runnable now | use the frozen stationary smoke harness exactly |
 | `S1-U-05 / G2` | future-only | wait for Phase 1 handoff |
 | `S1-U-06 / G3` | future-only | wait for Phase 2 handoff |
 
@@ -159,6 +159,7 @@ This check is narrower than `MV-G1-03`.
 
 - `MV-G1-02` asks: can `UPhysicsControlComponent` move the intended body region at all?
 - `MV-G1-03` asks: can the full SMPL/PHC-style bridge drive Manny without obvious mapping failure?
+- `MV-G1-02` is a stationary proof only. Do not broaden it into a moving-character stability test.
 
 Use this procedure:
 
@@ -172,12 +173,13 @@ Use this procedure:
 8. Run `PhysAnim.MVG102.Start`.
 9. Watch the first `3` to `5` seconds closely.
 10. Check whether the left arm / left hand region moves first.
-11. Let the test continue for about `30` seconds unless it fails earlier. The harness auto-stops after that window.
-12. Record a short clip if practical. If not, capture at least one screenshot.
-13. Write one sentence saying:
+11. Keep the character stationary for this checkpoint.
+12. Let the test continue for about `30` seconds unless it fails earlier. The harness auto-stops after that window.
+13. Record a short clip if practical. If not, capture at least one screenshot.
+14. Write one sentence saying:
    - what region was supposed to move: left arm / left hand
    - what actually moved
-   - whether the mannequin stayed controllable
+   - whether the stationary mannequin stayed readable and upright
    - final verdict: `pass`, `fail`, or `blocked`
 
 Choose `fail` immediately if:
@@ -185,6 +187,8 @@ Choose `fail` immediately if:
 - nothing responds
 - the wrong body region responds
 - the ragdoll explodes or collapses immediately
+
+Do not fail `MV-G1-02` only because the arm behaves poorly once you start moving the whole character. That broader behavior belongs to later UE checks, not this stationary proof.
 
 Choose `blocked` instead of `fail` if:
 
@@ -216,41 +220,57 @@ When those fields are provided:
 
 ### MV-G1-03: Manny Smoke Test
 
-This step is not honestly runnable until the orchestrator names:
+This step is now frozen to one exact path:
 
-- exact UE map path
-- exact smoke-test tool or blueprint
-- exact expected pose or pose source
-- exact mapped subset being exercised
+- exact UE map path:
+  - `/Game/ThirdPerson/Lvl_ThirdPerson`
+- exact runtime owner:
+  - `UPhysAnimMvG103Subsystem`
+- exact trigger method:
+  - start PIE
+  - open the in-game console with `` ` `` or `~`
+  - run `PhysAnim.MVG103.Start`
+- exact expected pose:
+  - `isolated left elbow flexion`
+- exact mapped subset being exercised:
+  - `L_Elbow -> lowerarm_l`
+  - with `upperarm_l` as the parent-space context and `hand_l` held near neutral
+- exact evidence format expected back:
+  - short clip preferred
+  - screenshot acceptable if the pose is clearly readable
 
-Do not invent the expected pose from memory. The acceptable pose family must come from the retargeting validation cases in [retargeting-spec.md](/F:/NewEngine/plans/stage1/retargeting-spec.md#L78).
+This is a narrower smoke harness than the future full PHC runtime.
 
-When those fields are provided:
+- `MV-G1-03` asks: does a minimal mapped-joint pose packet drive the expected Manny limb without obvious mirroring or wrong-limb errors?
+- it does not ask whether the full learned policy bridge is already complete
 
-1. Open the named map.
-2. Start PIE or run the named tool.
-3. Trigger the smoke-test pose.
-4. Watch which limbs move first.
-5. Record a short clip.
-6. Send back:
-   - `expected pose`
-   - `observed result`
-   - `mapping issues found`
+Use this procedure:
 
-Expected pose names should use one of these validation cases unless the orchestrator freezes a different named case:
-
-- neutral identity
-- isolated left elbow flexion
-- isolated right hip rotation
-- pelvis yaw
-- spine bend plus mild twist
-- explicit left/right asymmetry case
+1. Open `F:\NewEngine\PhysAnimUE5\PhysAnimUE5.uproject`.
+2. If Unreal prompts to rebuild the project plugin, allow it.
+3. If the rebuild fails because Visual Studio 2022 / MSVC v143 is missing, stop and report `blocked`.
+4. Open `/Game/ThirdPerson/Lvl_ThirdPerson`.
+5. Start PIE.
+6. Keep the character stationary.
+7. Open the in-game console with `` ` `` or `~`.
+8. Run `PhysAnim.MVG103.Start`.
+9. Watch the first `3` to `6` seconds closely.
+10. Check whether the left elbow / left forearm moves into a recognizable left-elbow-flexed pose.
+11. Check whether the right arm stays neutral enough to make mirroring mistakes obvious.
+12. Let the full `10` second window finish unless it fails earlier. The harness auto-stops.
+13. Record a short clip if practical. If not, capture at least one clear screenshot during the elbow-flexed hold.
+14. Write one sentence saying:
+   - what region was supposed to move: left elbow / left forearm
+   - what actually moved
+   - whether the right arm stayed neutral enough to rule out obvious mirroring
+   - final verdict: `pass`, `fail`, or `blocked`
 
 Choose `fail` immediately if:
 
-- left and right are swapped
+- left and right are swapped or mirrored
 - the wrong limb moves
-- Manny becomes unstable from an obvious mapping error
+- torso or unrelated limbs dominate the pose instead of the left elbow chain
+- Manny becomes unstable before the pose can be judged
 
 ## S1-U-05: G2 Side-By-Side Judgment
 
