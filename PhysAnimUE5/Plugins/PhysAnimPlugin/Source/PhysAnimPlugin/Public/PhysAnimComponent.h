@@ -33,6 +33,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	void StopBridge();
 
+	UFUNCTION(CallInEditor, BlueprintCallable, Category = "PhysAnim|Setup")
+	void PopulateStage1PhysicsControlDefaults();
+
 protected:
 	UPROPERTY(EditAnywhere, Category = "PhysAnim")
 	TSoftObjectPtr<UNNEModelData> ModelDataAsset;

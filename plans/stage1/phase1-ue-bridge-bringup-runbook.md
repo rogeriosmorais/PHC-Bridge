@@ -26,13 +26,7 @@ Important design update on March 10, 2026:
 - bridge runtime: the component-based Stage 1 path introduced after the smoke-test subsystems
 - test map: `/Game/ThirdPerson/Lvl_ThirdPerson`
 
-Do not use this runbook for:
-
-- `MV-G1-02`
-- `MV-G1-03`
-- the old subsystem console commands `PhysAnim.MVG102.Start` or `PhysAnim.MVG103.Start`
-
-The Phase 1 bridge starts automatically from `UPhysAnimComponent::BeginPlay()`. There is no console command for the production path.
+The Phase 1 bridge starts automatically from `UPhysAnimComponent::BeginPlay()`.
 
 ## Rule Zero
 
@@ -107,8 +101,6 @@ Create these folders in the Content Browser if they do not already exist:
 - `/Game/PoseSearch/Databases`
 - `/Game/NNEModels`
 
-Do not rename or relocate these folders afterward.
-
 ## Step 2: Create The PoseSearch Schema And Database
 
 ### 2A. Create The Schema
@@ -131,8 +123,6 @@ For the first bring-up pass, keep the schema simple:
 - Data Preprocessor: leave the default `Normalize`
 - Channels: keep the default locomotion channels the factory created
 
-Do not try to custom-design the schema yet.
-
 This first pass only needs a valid locomotion schema so the database and AnimBP can be authored cleanly.
 
 ### 2B. Create The Database
@@ -150,8 +140,6 @@ For the first bring-up pass, populate it only with the built-in unarmed locomoti
 - `/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle`
 - every `MF_Unarmed_Walk_*` asset in `/Game/Characters/Mannequins/Anims/Unarmed/Walk`
 - every `MF_Unarmed_Jog_*` asset in `/Game/Characters/Mannequins/Anims/Unarmed/Jog`
-
-Do not add jump, attack, death, rifle, or pistol clips to this first Phase 1 database.
 
 ### What To Check Before Moving On
 
@@ -187,13 +175,11 @@ There is no reparent step for the revised direct-query path.
 
 Keep the duplicated AnimBP on its existing parent class.
 
-Do not change it to `PhysAnimAnimInstance` or any other custom plugin parent.
-
 Compile and save.
 
 ### 3B. Keep The Existing Locomotion Graph
 
-Do not replace the locomotion graph with a custom state machine if the duplicated `ABP_Unarmed` already has a working locomotion setup.
+Keep the duplicated `ABP_Unarmed` locomotion graph in place if it already previews locomotion correctly.
 
 The point of this AnimBP is:
 
@@ -204,8 +190,6 @@ The point of this AnimBP is:
 ### 3C. Add A `Pose History` Node
 
 The revised Phase 1 path requires a `Pose History` node in the `Anim Graph`.
-
-Use the `Anim Graph`, not the `Event Graph`.
 
 The practical goal is:
 
@@ -225,19 +209,9 @@ Use this sequence:
    - `PoseHistory_Stage1`
 6. Leave its sampling settings at defaults unless Unreal forces a required value.
 
-Do not add a Motion Matching node here.
+### 3D. Database Binding For This Phase
 
-### 3D. No Motion Matching Node Is Required
-
-The direct-query Phase 1 path is intentionally avoiding a full authored Motion Matching Anim Graph setup.
-
-Do not spend more time looking for:
-
-- a Motion Matching node in `ABP_Unarmed`
-- an `On Motion Matching State Updated` function
-- a `GetStage1MotionMatchResult()` wrapper path in the AnimBP
-
-Those belonged to the superseded handoff design.
+The direct-query Phase 1 path queries PoseSearch from code. The authored AnimBP change for this phase is the `Pose History` node above.
 
 ### 3E. Point The Content At The Stage 1 Database
 
@@ -251,7 +225,7 @@ So at the AnimBP/content level, the required authored asset is the database itse
 
 ### 3F. Compile And Save
 
-Do not continue until `ABP_PhysAnim` compiles cleanly.
+Compile and save `ABP_PhysAnim` before moving to Step 4.
 
 ### What Good Looks Like
 
@@ -284,8 +258,7 @@ On the inherited skeletal mesh component:
 - set Skeletal Mesh to `/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple`
 - set Physics Asset to `/Game/Characters/Mannequins/Rigs/PA_Mannequin`
 - set Anim Class to `/Game/Characters/Mannequins/Animations/ABP_PhysAnim`
-
-Do not use Quinn for this path. The current code hard-checks Manny's mesh asset path.
+- confirm the component name remains `CharacterMesh0`
 
 ### 4B. Add The Required Components
 
@@ -294,8 +267,6 @@ Add exactly these components to `BP_PhysAnimCharacter`:
 - one `PhysAnimComponent`
 - one `PhysicsControlComponent`
 - one `PhysicsControlInitializerComponent`
-
-Do not add a second `PhysicsControlComponent`.
 
 The initializer component is the editor-authored helper for building the required named controls and modifiers at BeginPlay. The bridge code itself still only validates and uses the resulting `UPhysicsControlComponent`.
 
@@ -307,17 +278,28 @@ The initializer component is the editor-authored helper for building the require
 
 Leave that as-is unless you are deliberately overriding it with the exact same asset path.
 
-## Step 5: Author The Required Physics Control Set
+## Step 5: Populate The Required Physics Control Set
 
-Use the `PhysicsControlInitializerComponent` on `BP_PhysAnimCharacter`.
+The Stage 1 bridge expects the required controls and body modifiers to already exist in `PhysicsControlInitializerComponent`.
 
-Leave:
+### 5A. Run The Helper
 
-- `bCreateControlsAtBeginPlay = true`
+1. Open `BP_PhysAnimCharacter`.
+2. Select the `PhysAnim` component.
+3. In the Details panel, click `Populate Stage 1 Physics Control Defaults`.
+4. Select the `PhysicsControlInitializer` component.
+5. Check these values immediately after the helper runs:
+   - `bCreateControlsAtBeginPlay = true`
+   - `InitialControls` contains `21` entries
+   - `InitialBodyModifiers` contains `22` entries
+6. Spot-check these entries:
+   - `InitialControls` contains `PACtrl_thigh_l` with `Parent Bone = pelvis` and `Child Bone = thigh_l`
+   - `InitialBodyModifiers` contains `PAMod_pelvis` with `Bone Name = pelvis`
+7. Compile `BP_PhysAnimCharacter` and save it.
 
-The goal of this step is not to invent a custom runtime path. It is to author, in the Blueprint asset, the exact named controls and body modifiers that `UPhysAnimComponent` validates at startup.
+If the helper button is unavailable or the counts do not match, use the fallback tables below.
 
-### 5A. Initial Control Defaults
+### 5B. Initial Control Defaults
 
 For the first bring-up pass, use the same initial control data for every required control:
 
@@ -342,7 +324,7 @@ These are initial bring-up values, not frozen final tuning values.
 
 Use these same non-name fields for every control entry unless a later tuning pass says otherwise.
 
-### 5B. Initial Body Modifier Defaults
+### 5C. Initial Body Modifier Defaults
 
 For every required body modifier, use:
 
@@ -355,7 +337,7 @@ For every required body modifier, use:
 | `KinematicTargetSpace` | `OffsetInBoneSpace` |
 | `bUpdateKinematicFromSimulation` | `true` |
 
-### 5C. Required Control Entries
+### 5D. Fallback Control Entries
 
 In `PhysicsControlInitializerComponent.InitialControls`, create one map entry per row below.
 
@@ -392,9 +374,7 @@ Then set the exact names and bones from this table:
 | `PACtrl_lowerarm_r` | `upperarm_r` | `lowerarm_r` |
 | `PACtrl_hand_r` | `lowerarm_r` | `hand_r` |
 
-Do not skip any row.
-
-### 5D. Required Body Modifier Entries
+### 5E. Fallback Body Modifier Entries
 
 In `PhysicsControlInitializerComponent.InitialBodyModifiers`, create one map entry per row below.
 
@@ -430,9 +410,7 @@ Then set the exact map key and bone name from this table:
 | `PAMod_lowerarm_r` | `lowerarm_r` |
 | `PAMod_hand_r` | `hand_r` |
 
-Do not skip `PAMod_pelvis`. The bridge requires it.
-
-### 5E. Compile And Save
+### 5F. Compile And Save
 
 Compile `BP_PhysAnimCharacter` and save.
 
@@ -460,9 +438,7 @@ Use the ONNX file produced by the locked export path in [onnx-export-spec.md](/F
 
 If no current Stage 1 ONNX file exists yet, stop and report `blocked`.
 
-Do not leave the imported asset under a different auto-generated name.
-
-Rename or reimport it so the asset path matches exactly.
+If Unreal assigns a different auto-generated name, rename or reimport it so the asset path is exactly `/Game/NNEModels/phc_policy`.
 
 ### What To Check Before Moving On
 
@@ -484,9 +460,7 @@ For the first bring-up pass, use the simplest spawn path:
 
 1. Place `BP_PhysAnimCharacter` in the level.
 2. Set `Auto Possess Player` on that placed actor to `Player 0`.
-3. Make sure the old template pawn is not also being possessed at the same time.
-
-If the level already contains a default character spawn path through the game mode, disable or remove the conflicting path for this test.
+3. Remove or disable any other pawn path that would take possession during PIE.
 
 The goal is simple:
 
@@ -500,8 +474,7 @@ Then:
 
 1. Save all assets.
 2. Start PIE in `/Game/ThirdPerson/Lvl_ThirdPerson`.
-3. Do not run any console commands.
-4. Watch the Output Log immediately.
+3. Watch the Output Log immediately.
 
 ### Expected Success Line
 
@@ -527,8 +500,6 @@ or
 [PhysAnim] Fail-stop: ...
 ```
 
-Do not guess at the cause from viewport behavior alone. Use the first logged reason.
-
 ## Step 9: First Validation Checklist
 
 If startup succeeds:
@@ -542,11 +513,10 @@ If startup is blocked or fail-stops:
 
 1. copy the first relevant `[PhysAnim]` log line
 2. capture one screenshot of the Output Log
-3. do not start changing asset names or component names until the blocker is understood
 
 ## Fast Diagnosis Map
 
-Use this only to classify the failure. Do not treat it as permission to improvise.
+Use this to classify the first failure reason from the log.
 
 | Log Text Pattern | Meaning |
 |---|---|

@@ -1,8 +1,10 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "PhysAnimBridge.h"
+#include "PhysAnimComponent.h"
 
 #include "Misc/AutomationTest.h"
+#include "PhysicsControlActor.h"
 
 namespace
 {
@@ -125,6 +127,77 @@ namespace
 		TestTrue(TEXT("Collapsed hand target exists"), ControlRotations.Contains(TEXT("hand_l")));
 		TestFalse(TEXT("There is no standalone wrist control"), ControlRotations.Contains(TEXT("wrist_l")));
 		TestTrue(TEXT("Collapsed hand target is non-identity"), !ControlRotations[TEXT("hand_l")].Equals(FQuat::Identity, 1.0e-3f));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPopulateDefaultsTest,
+		"PhysAnim.Component.PopulateStage1Defaults",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPopulateDefaultsTest::RunTest(const FString& Parameters)
+	{
+		AActor* const Owner = NewObject<AActor>();
+		TestNotNull(TEXT("Transient owner actor should exist"), Owner);
+		if (!Owner)
+		{
+			return false;
+		}
+
+		UPhysicsControlInitializerComponent* const Initializer =
+			NewObject<UPhysicsControlInitializerComponent>(Owner, TEXT("PhysicsControlInitializer"));
+		UPhysAnimComponent* const PhysAnimComponent =
+			NewObject<UPhysAnimComponent>(Owner, TEXT("PhysAnim"));
+
+		Owner->AddOwnedComponent(Initializer);
+		Owner->AddOwnedComponent(PhysAnimComponent);
+
+		FInitialPhysicsControl StaleControl;
+		Initializer->InitialControls.Add(TEXT("StaleControl"), StaleControl);
+
+		FInitialBodyModifier StaleModifier;
+		Initializer->InitialBodyModifiers.Add(TEXT("StaleModifier"), StaleModifier);
+
+		PhysAnimComponent->PopulateStage1PhysicsControlDefaults();
+
+		TestTrue(TEXT("Create controls at begin play is enabled"), Initializer->bCreateControlsAtBeginPlay);
+		TestEqual(TEXT("Control count matches Stage 1 expectation"), Initializer->InitialControls.Num(), NumControlledBones);
+		TestEqual(
+			TEXT("Body modifier count matches Stage 1 expectation"),
+			Initializer->InitialBodyModifiers.Num(),
+			NumRequiredBodyModifiers);
+		TestFalse(TEXT("Stale control entry is removed"), Initializer->InitialControls.Contains(TEXT("StaleControl")));
+		TestFalse(TEXT("Stale modifier entry is removed"), Initializer->InitialBodyModifiers.Contains(TEXT("StaleModifier")));
+
+		const FInitialPhysicsControl* const LeftThighControl = Initializer->InitialControls.Find(MakeControlName(TEXT("thigh_l")));
+		TestNotNull(TEXT("thigh_l control exists"), LeftThighControl);
+		if (LeftThighControl)
+		{
+			TestTrue(TEXT("Control parent actor points at owner"), LeftThighControl->ParentActor.Get() == Owner);
+			TestTrue(TEXT("Control child actor points at owner"), LeftThighControl->ChildActor.Get() == Owner);
+			TestEqual(TEXT("Control parent mesh component name"), LeftThighControl->ParentMeshComponentName, FName(TEXT("CharacterMesh0")));
+			TestEqual(TEXT("Control child mesh component name"), LeftThighControl->ChildMeshComponentName, FName(TEXT("CharacterMesh0")));
+			TestEqual(TEXT("Control parent bone"), LeftThighControl->ParentBoneName, FName(TEXT("pelvis")));
+			TestEqual(TEXT("Control child bone"), LeftThighControl->ChildBoneName, FName(TEXT("thigh_l")));
+			TestTrue(TEXT("Control is enabled"), LeftThighControl->ControlData.bEnabled);
+			TestEqual(TEXT("Angular strength uses Stage 1 default"), LeftThighControl->ControlData.AngularStrength, 800.0f);
+		}
+
+		const FInitialBodyModifier* const PelvisModifier =
+			Initializer->InitialBodyModifiers.Find(MakeBodyModifierName(TEXT("pelvis")));
+		TestNotNull(TEXT("pelvis body modifier exists"), PelvisModifier);
+		if (PelvisModifier)
+		{
+			TestTrue(TEXT("Body modifier actor points at owner"), PelvisModifier->Actor.Get() == Owner);
+			TestEqual(TEXT("Body modifier mesh component name"), PelvisModifier->MeshComponentName, FName(TEXT("CharacterMesh0")));
+			TestEqual(TEXT("Body modifier bone"), PelvisModifier->BoneName, FName(TEXT("pelvis")));
+			TestEqual(TEXT("Body modifier movement type"), PelvisModifier->BodyModifierData.MovementType, EPhysicsMovementType::Simulated);
+			TestEqual(
+				TEXT("Body modifier target space"),
+				PelvisModifier->BodyModifierData.KinematicTargetSpace,
+				EPhysicsControlKinematicTargetSpace::OffsetInBoneSpace);
+		}
+
 		return true;
 	}
 }
