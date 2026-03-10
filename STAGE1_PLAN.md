@@ -2,7 +2,11 @@
 
 ## Purpose
 
-This document owns Stage 1 planning and task decomposition.
+This document is the **Stage 1 index and control document**.
+
+It owns the Stage 1 planning structure, execution model, and artifact map.
+
+It is **not** the most detailed source for every execution lock. The detailed, phase-specific truth lives in the planning bundle under `plans/stage1/`.
 
 Use it for:
 
@@ -13,6 +17,7 @@ Use it for:
 - writing ELI5 manual verification instructions for anything that cannot be automated
 
 Do not use `AGENTS.md` as a rolling status or next-steps document.
+Do not expect this file to duplicate every detailed lock from the planning bundle.
 
 ## Current Planning Focus
 
@@ -36,6 +41,8 @@ Before implementation starts, this plan must produce these concrete artifacts. T
 5. An ELI5 manual-test template for non-automatable validation
 
 ## Planning Bundle
+
+These files are the detailed source of truth for Stage 1 execution planning. When a detail in this file is summarized, the linked planning artifact below is the more precise reference.
 
 - [Task Graph](/F:/NewEngine/plans/stage1/task-graph.md)
 - [Orchestration Model](/F:/NewEngine/plans/stage1/orchestration.md)
@@ -74,6 +81,23 @@ The next useful work is no longer broad planning structure. The next useful work
 1. executing the user-owned Phase 0 prerequisites
 2. updating the assumption ledger with real setup evidence
 3. preparing task-specific execution handoffs as Phase 0 starts
+
+## How To Read This File
+
+Use this file to answer:
+
+- what Stage 1 is trying to accomplish
+- how work is organized
+- which planning artifacts exist
+- which role owns which kind of decision
+
+Use the detailed planning bundle to answer:
+
+- exact checkpoint retrieval path
+- exact environment lock values
+- exact G2 comparison sequence
+- exact ONNX export/import policy
+- exact task packet and handoff rules
 
 ## Execution Model
 
