@@ -46,6 +46,9 @@ PhysAnimUE5/*.vcxproj*
 PhysAnimUE5/Plugins/PhysAnimPlugin/Binaries/
 PhysAnimUE5/Plugins/PhysAnimPlugin/Intermediate/
 
+# Local packaged plugin / scratch build output
+_build/
+
 # OS
 Thumbs.db
 .DS_Store
