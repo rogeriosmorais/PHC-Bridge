@@ -140,29 +140,39 @@ Use:
 
 If Phase 1 later needs a tunable config asset, that is a replan item, not an implicit scope expansion.
 
+#### Built-In Systems Intentionally Left Outside The Bridge
+
+The bridge does not take ownership of every Stage 1 built-in system named in the engineering plan.
+
+- `UPhysicalAnimationComponent` remains available as the built-in answer for blend transitions, but locomotion-only Phase 1 does not require bridge-driven blend weights
+- knockdown, recovery, and other transition-blending behaviors are out of scope for the one-character locomotion comparison
+- if G2 later proves that explicit physics-animation blending is required for a fair comparison, that is a focused scope addition, not something the bridge should preemptively implement now
+
 ### 3. PoseSearch Integration
 
-Stage 1 uses a two-part PoseSearch integration:
+Stage 1 uses one PoseSearch ownership path:
 
 1. the current frame's animated target pose comes from `UPhysicsControlComponent` cached bone data after animation has already evaluated
-2. the future reference window for `mimic_target_poses` comes from a game-thread `UPoseSearchLibrary::MotionMatch(...)` query plus `UPoseSearchAssetSamplerLibrary`
+2. the future reference window for `mimic_target_poses` comes from the current motion-matching result already owned by the Anim Blueprint, read on the game thread through `UMotionMatchingAnimNodeLibrary`
 
-This is intentionally redundant. The duplication is allowed because it keeps the bridge on the game thread and avoids making the Phase 1 bridge depend on anim-node callback threading.
+This keeps PoseSearch asset ownership and motion-selection responsibility inside the authored Anim Blueprint instead of duplicating it in the bridge.
 
 #### Frozen PoseSearch Owner Model
 
 - The Anim Blueprint remains the owner of the visual locomotion graph.
-- `UPhysAnimComponent` performs its own `UPoseSearchLibrary::MotionMatch(...)` query each tick using the same search assets and the same pose history tag.
-- `UPhysAnimComponent` owns the bridge-side source of truth for `AssetsToSearch` as:
-  - `UPROPERTY(EditDefaultsOnly)` `TArray<TObjectPtr<UObject>> PoseSearchAssetsToSearch`
-- the default production value for that property contains exactly:
-  - `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
+- the Anim Blueprint remains the only production owner of `AssetsToSearch`
+- the Anim Blueprint exposes one bridge-facing accessor:
+  - `GetStage1MotionMatchResult()`
+  - return type: `FPoseSearchBlueprintResult`
+  - implementation: a thin wrapper around `UMotionMatchingAnimNodeLibrary::GetMotionMatchingSearchResult(...)`
+- `UPhysAnimComponent` does not own a duplicate `AssetsToSearch` property
+- `UPhysAnimComponent` does not run `UPoseSearchLibrary::MotionMatch(...)` in the production path
 - the Anim Blueprint must be authored against that same database asset. No chooser-only divergence is allowed.
 
 Startup must validate:
 
-- `PoseSearchAssetsToSearch.Num() == 1`
-- `PoseSearchAssetsToSearch[0]` resolves to `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
+- the live Anim Blueprint class used by the production character is the locomotion Anim Blueprint authored for `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
+- the live Anim Instance implements `GetStage1MotionMatchResult()`
 
 #### Frozen Pose History Tag
 
@@ -187,22 +197,20 @@ This makes the bridge read the actual post-AnimBP pose that Physics Control will
 
 The future reference window used for `mimic_target_poses` comes from:
 
-1. `UPoseSearchLibrary::MotionMatch(AnimInstance, AssetsToSearch, PoseHistory_Stage1, ContinuingProperties, Future, SearchResult)`
+1. `UMotionMatchingAnimNodeLibrary::GetMotionMatchingSearchResult(...)`
 2. `UPoseSearchAssetSamplerLibrary::SamplePose(...)`
 3. `UPoseSearchAssetSamplerLibrary::GetTransformByName(...)`
 
-#### Frozen PoseSearch Query State
+#### Frozen PoseSearch Result Consumption
 
-`UPhysAnimComponent` owns one persistent `FPoseSearchBlueprintResult LastPoseSearchResult`.
+`UPhysAnimComponent` may keep one cached last-valid motion-matching result only for the one-tick grace period allowed by runtime failure handling.
 
 Per tick:
 
-1. Build `FPoseSearchContinuingProperties`.
-2. If `LastPoseSearchResult.SelectedAnim` is valid, call `ContinuingProperties.InitFrom(LastPoseSearchResult, EPoseSearchInterruptMode::DoNotInterrupt)`.
-3. Otherwise use default `FPoseSearchContinuingProperties` with `InterruptMode = DoNotInterrupt`.
-4. Use default `FPoseSearchFutureProperties` in Phase 1. No custom future event search is added.
-5. Run `UPoseSearchLibrary::MotionMatch(...)`.
-6. Store the new `LastPoseSearchResult` only if the result is valid.
+1. call the live Anim Instance's `GetStage1MotionMatchResult()` accessor
+2. if the result is valid, use it as the source of truth for future-pose sampling and cache it as the last-valid result
+3. if the result is invalid for one tick, reuse the cached last-valid result
+4. if the result is invalid for `2` consecutive ticks, fail per the runtime failure rules already frozen below
 
 #### Frozen Future Sampling Schedule
 
@@ -247,11 +255,11 @@ Then read named transforms with:
 
 #### Debug-Only PoseSearch API
 
-`UMotionMatchingAnimNodeLibrary::GetMotionMatchingSearchResult(...)` is allowed only for:
+`UPoseSearchLibrary::MotionMatch(...)` is allowed only for:
 
 - debugging
-- validation in AnimBP functions
-- comparing the AnimBP's current search result against the bridge's own query
+- smoke-test harnesses
+- authoring validation when the Anim Blueprint result path is unavailable
 
 It is not the production bridge handoff path.
 
@@ -389,6 +397,7 @@ Successful startup must log all of:
 The production Stage 1 character owns one `UPhysicsControlComponent` directly.
 
 The bridge does not create the component dynamically in the production path.
+The production component is pre-authored in editor with the required control and body-modifier set.
 
 Startup must fail if the component is missing.
 
@@ -417,7 +426,7 @@ Rationale:
 
 The root/pelvis is observed but not actuated by the policy.
 
-The bridge creates controls for these UE bones:
+The pre-authored Physics Control component must already contain named controls for these UE bones:
 
 - `thigh_l`
 - `calf_l`
@@ -471,16 +480,16 @@ This is the only accepted Stage 1 collapse approximation. If it materially degra
 
 #### Frozen Naming Scheme
 
-All bridge-created names are deterministic:
+All required authored names are deterministic:
 
 - controls: `PACtrl_<BoneName>`
 - body modifiers: `PAMod_<BoneName>`
 
-The bridge must never rely on auto-generated names for production controls.
+The bridge must never rely on auto-generated names for production controls or modifiers.
 
 #### Frozen Body Modifier Set
 
-Create body modifiers for:
+Pre-author body modifiers for:
 
 - `pelvis`
 - every controlled bone listed above that has a physics body in `PA_Mannequin`
@@ -511,15 +520,12 @@ Required startup validation bodies:
 - `hand_r`
 
 If any required body is missing from the active skeletal mesh/physics asset pair, startup is `blocked`.
+If any required control or body-modifier name is missing from the pre-authored component, startup is `blocked`.
 
 #### Frozen Runtime Write APIs
 
 Use these functions only:
 
-- create control:
-  - `CreateNamedControl(...)`
-- create body modifier:
-  - `CreateNamedBodyModifier(...)`
 - set angular gains:
   - `SetControlAngularData(...)`
 - set target orientation:
@@ -531,10 +537,9 @@ Use these functions only:
 - runtime reset:
   - `ResetBodyModifiersToCachedBoneTransforms(...)`
   - `SetCachedBoneVelocitiesToZero()`
-- teardown:
-  - `DestroyAllControlsAndBodyModifiers()`
 
 Phase 1 does not use raw torque writes in the production path.
+Phase 1 does not create or destroy production controls dynamically.
 
 #### Frozen Gain Policy
 
@@ -560,8 +565,8 @@ The bridge may report startup success only after all of these are true:
 - model asset exists
 - NNE runtime/model/model-instance creation succeeded
 - tensor descriptors and shapes matched the locked contract
-- all named controls were created
-- all named body modifiers were created
+- all required authored control names were validated
+- all required authored body-modifier names were validated
 - one initial `UpdateTargetCaches(0.0f)` and `UpdateControls(0.0f)` pass completed without missing-body diagnostics
 
 ### 6. Tick And Threading Model
@@ -585,7 +590,7 @@ Each render tick executes in this order:
 3. `PhysicsControl->UpdateTargetCaches(DeltaTime)`
 4. read current cached animation targets from Physics Control
 5. read current simulated-body state from the skeletal mesh / primitive component
-6. run `UPoseSearchLibrary::MotionMatch(...)`
+6. call the live Anim Instance's `GetStage1MotionMatchResult()` accessor
 7. sample the `15` future poses with `UPoseSearchAssetSamplerLibrary`
 8. pack `self_obs`, `mimic_target_poses`, and `terrain`
 9. call `ModelInstance->RunSync(...)`
@@ -652,7 +657,7 @@ That produces the locked `358`-float `self_obs`.
 
 Per tick:
 
-1. run `UPoseSearchLibrary::MotionMatch(...)`
+1. call the live Anim Instance's `GetStage1MotionMatchResult()` accessor
 2. sample `15` future poses from the selected animation at:
    - `SelectedTime + n * (1 / 30)` seconds
    - `n = 1..15`
@@ -773,6 +778,7 @@ The bridge is not implementation-complete if deterministic helpers land without 
 #### UE Runtime Checks Required
 
 - PoseSearch history collector validation
+- motion-matching result retrieval from the Anim Blueprint
 - model runtime creation
 - manual Physics Control update order
 - required-body validation
@@ -789,7 +795,7 @@ The bridge is not considered alive unless logs show all of:
 
 - PoseSearch path alive:
   - pose history node found
-  - valid `SelectedAnim`
+  - valid motion-matching search result from `GetStage1MotionMatchResult()`
 - NNE path alive:
   - runtime chosen
   - shapes accepted
@@ -798,11 +804,11 @@ The bridge is not considered alive unless logs show all of:
   - mapped subset count
   - wrist/hand collapse path active
 - Physics Control path alive:
-  - control count created
-  - body modifier count created
+  - required pre-authored control names validated
+  - required pre-authored body-modifier names validated
   - first `UpdateControls` pass succeeded
 - full loop alive:
-  - one tick completed through `MotionMatch -> SamplePose -> RunSync -> UpdateControls`
+  - one tick completed through `GetMotionMatchingSearchResult -> SamplePose -> RunSync -> UpdateControls`
 
 ## Required API Mapping Table
 
@@ -811,8 +817,8 @@ The bridge is not considered alive unless logs show all of:
 | runtime owner | `UPhysAnimComponent` | `BeginPlay`, `TickComponent`, `EndPlay` | New plugin component; production Stage 1 owner |
 | mesh prerequisite | `UActorComponent` / `USkeletalMeshComponent` | `AddTickPrerequisiteComponent` | `UPhysAnimComponent` must tick after the mesh |
 | pose history validation | `UPoseSearchLibrary` | `FindPoseHistoryNode` | Must find `PoseHistory_Stage1` at startup |
-| PoseSearch query | `UPoseSearchLibrary` | `MotionMatch` | Production game-thread query path |
-| PoseSearch debug read | `UMotionMatchingAnimNodeLibrary` | `GetMotionMatchingSearchResult` | Debug only, not the production handoff |
+| PoseSearch result handoff | `UAnimInstance` subclass + `UMotionMatchingAnimNodeLibrary` | `GetStage1MotionMatchResult`, `GetMotionMatchingSearchResult` | Thin AnimBP-owned wrapper is the production handoff |
+| PoseSearch debug query | `UPoseSearchLibrary` | `MotionMatch` | Debug and smoke-test only, not the production handoff |
 | future pose sample | `UPoseSearchAssetSamplerLibrary` | `SamplePose`, `GetTransformByName` | Used to build `mimic_target_poses` |
 | current animation target read | `UPhysicsControlComponent` | `UpdateTargetCaches`, `GetCachedBoneTransform`, `GetCachedBoneTransforms` | Authoritative current-frame animated pose |
 | live current-state read | `USkinnedMeshComponent`, `UPrimitiveComponent` | `GetBoneTransform`, `GetBoneQuaternion`, `GetPhysicsLinearVelocity`, `GetPhysicsAngularVelocityInRadians`, `GetBodyInstance` | Runtime body state and validation |
@@ -821,13 +827,10 @@ The bridge is not considered alive unless logs show all of:
 | session creation | `UE::NNE::IModelGPU` / `UE::NNE::IModelCPU` | `CreateModelInstanceGPU`, `CreateModelInstanceCPU` | Owned by `UPhysAnimComponent` |
 | input/output validation | `UE::NNE::IModelInstanceRunSync` | `GetInputTensorDescs`, `GetOutputTensorDescs`, `SetInputTensorShapes` | Validate names and fixed shapes before start |
 | inference execution | `UE::NNE::IModelInstanceRunSync` | `RunSync` | One synchronous call per render tick |
-| control creation | `UPhysicsControlComponent` | `CreateNamedControl` | Parent-space controls only |
-| body modifier creation | `UPhysicsControlComponent` | `CreateNamedBodyModifier` | One per required simulated body |
 | control target write | `UPhysicsControlComponent` | `SetControlTargetOrientation` | Use `DeltaTime` as angular velocity delta time |
 | gain write | `UPhysicsControlComponent` | `SetControlAngularData` | Fixed gains only |
 | manual Physics Control push | `UPhysicsControlComponent` | `UpdateControls` | Must run after all bridge writes |
 | runtime reset | `UPhysicsControlComponent` | `ResetBodyModifiersToCachedBoneTransforms`, `SetCachedBoneVelocitiesToZero` | Used on stop/fail-stop |
-| teardown | `UPhysicsControlComponent` | `DestroyAllControlsAndBodyModifiers` | Required in `EndPlay` |
 
 ## Acceptance Criteria
 
@@ -835,10 +838,10 @@ This spec is implementation-ready because it now freezes:
 
 - the runtime owner
 - the content paths
-- the PoseSearch query path
+- the PoseSearch result-consumption path
 - the future pose sampling path
 - the NNE runtime/model/session lifecycle
-- the Physics Control manual-update path
+- the Physics Control manual-update path on a pre-authored control set
 - the exact tick ordering
 - the only allowed joint-collapse approximation
 - the startup, stop, and fail-stop behavior

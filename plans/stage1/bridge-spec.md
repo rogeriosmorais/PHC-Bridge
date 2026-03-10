@@ -35,6 +35,7 @@ This spec does not invent a new policy format or change the locked architecture.
 
 - `PoseSearch` remains the source of the target motion intent.
 - Stage 1 assumes `PoseSearch` provides one current selected animation state that can be sampled each render tick for the currently selected clip/state.
+- The bridge consumes that existing motion-selection result; it does not own a second production `MotionMatch` decision path.
 - Stage 1 uses a dense `15`-step future reference window derived from that selected animation state at the locked simulator cadence, not a separate custom trajectory predictor invented in UE5.
 
 ### Runtime Flow

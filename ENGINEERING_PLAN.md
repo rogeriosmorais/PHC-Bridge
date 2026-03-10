@@ -24,7 +24,7 @@ Unreal Engine 5.7.3 (current local plan; 5.5+ in principle)
 UE5 PoseSearch (CPU)
   -> target joint angles/velocities from mocap database
 PHC Policy via NNE (GPU, ~0.4ms)         <- CUSTOM (low hundreds)
-  -> desired joint orientations + stiffness
+  -> desired joint orientations; the selected Stage 1 checkpoint uses fixed gains rather than a learned stiffness head
 UPhysicsControlComponent (CPU)           <- BUILT-IN
   -> SetControlTargetOrientation() per bone
   -> SetControlAngularData() for strength/damping
@@ -46,9 +46,9 @@ A C++ plugin (`PhysAnimPlugin`) that each frame:
 
 1. **Gathers body state** from the Physics Asset (~131 floats: joint orientations, angular velocities, center-of-mass, ground contacts).
 2. **Retargets** UE5 skeleton state -> SMPL observation vector (static joint mapping table, ~50 lines).
-3. **Runs PHC inference** via UE5 NNE (ONNX Runtime GPU) - outputs ~106 floats (desired orientations + stiffness per joint).
+3. **Runs PHC inference** via UE5 NNE (ONNX Runtime GPU) - for the selected Stage 1 checkpoint, outputs `69` action floats that map to desired joint-relative orientation targets.
 4. **Retargets** SMPL output -> UE5 bone targets (inverse mapping).
-5. **Writes results** to the `UPhysicsControlComponent` via `SetControlTargetOrientation()` and `SetControlAngularData()`.
+5. **Writes results** to the `UPhysicsControlComponent` via `SetControlTargetOrientation()` and fixed/authored `SetControlAngularData()` gains.
 
 That's it. PD control, collision, contact, blend transitions, flesh deformation, rendering - all built-in UE5.
 
@@ -242,7 +242,7 @@ Stage 2:  MaskedMimic (built on PHC)
             |          ("aggressive", "cautious"), object interaction
 ```
 
-Both policies output the same format (joint orientations + stiffness), so the UE5 plugin doesn't change - only the ONNX model file is swapped. MaskedMimic is available in ProtoMotions v2.3+ with a pre-trained SMPL model.
+Both policy families still fit the same high-level `PoseSearch -> policy -> Physics Control` bridge slot, so the UE5 plugin architecture does not need to change when the ONNX model changes. The currently selected Stage 1 checkpoint uses joint-target outputs with fixed gains; later variants may add stiffness or richer conditioning without changing that outer chain. MaskedMimic is available in ProtoMotions v2.3+ with a pre-trained SMPL model.
 
 **License note:** MaskedMimic's paper is CC BY-NC-SA 4.0 (non-commercial). For commercial use, PHC (check repo license) or a custom-trained policy would be needed.
 
