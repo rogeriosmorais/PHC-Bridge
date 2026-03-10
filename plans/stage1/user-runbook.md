@@ -1,0 +1,326 @@
+# Stage 1 User Runbook
+
+## Purpose
+
+This is the detailed user-facing runbook for every Stage 1 step owned by the human.
+
+Use it to answer:
+
+- what you need to do
+- whether that step is runnable yet
+- what exact evidence to send back
+- when you should stop instead of inventing missing setup
+
+If this file disagrees with a gate package, the gate package still owns the pass/fail rules. This file exists to make the user actions concrete.
+
+## Current Status Map
+
+| Step ID | Status Today | When To Use It |
+|---|---|---|
+| `S1-U-01` | complete locally, keep as verification fallback | only if tool paths change or setup must be rechecked |
+| `S1-U-02` | complete locally, keep as verification fallback | only if repo/data paths change or a missing asset must be rechecked |
+| `S1-U-03` | complete locally, keep as recreate guide | only if the UE project must be recreated or repaired |
+| `S1-U-04 / MV-G1-01` | runnable now | run now for the training-side visual verdict |
+| `S1-U-04 / MV-G1-02` | blocked on exact UE test asset | do not invent the scene or trigger method |
+| `S1-U-04 / substep stability` | blocked on exact UE test asset | do not invent the scene or physics settings |
+| `S1-U-04 / MV-G1-03` | blocked on exact UE smoke-test asset | do not invent the bridge tool or expected pose source |
+| `S1-U-05 / G2` | future-only | wait for Phase 1 handoff |
+| `S1-U-06 / G3` | future-only | wait for Phase 2 handoff |
+
+## Rule Zero
+
+If a step below says an exact map, blueprint, command, or sequence must be named by the orchestrator, do not guess. Stop and ask for that missing named asset instead.
+
+That is not user hesitation. That is the correct Stage 1 operating rule.
+
+## S1-U-01: Verify Toolchain And Paths
+
+Use this only if setup changed, needs to be rechecked, or must be reproduced on another machine.
+
+### What To Verify
+
+- Unreal Engine `5.7.3`
+- `UE5_PATH` at `E:\UE_5.7\Engine`
+- Python env at `F:\NewEngine\Training\.venv\physanim_proto311`
+- ProtoMotions root at `F:\NewEngine\Training\ProtoMotions`
+- Isaac Sim launcher at `F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaacsim.exe`
+- Isaac Lab launcher at `F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaaclab.exe`
+
+### What To Run
+
+Open PowerShell and run:
+
+```powershell
+Test-Path 'E:\UE_5.7\Engine'
+Test-Path 'F:\NewEngine\Training\.venv\physanim_proto311\Scripts\python.exe'
+Test-Path 'F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaacsim.exe'
+Test-Path 'F:\NewEngine\Training\.venv\physanim_proto311\Scripts\isaaclab.exe'
+Test-Path 'F:\NewEngine\Training\ProtoMotions'
+& 'F:\NewEngine\Training\.venv\physanim_proto311\Scripts\python.exe' --version
+```
+
+### What Good Looks Like
+
+- every `Test-Path` returns `True`
+- Python reports `3.11.x`
+
+### What To Send Back
+
+- the command output text
+- any path that returned `False`
+- any path that differs from the locked plan
+
+## S1-U-02: Verify External Repo / Data Availability
+
+Use this only if the repo/data layout changed, or if we need to prove the current machine still matches the plan.
+
+### What To Verify
+
+- ProtoMotions checkout exists
+- selected pretrained checkpoint exists
+- frozen first motion file exists
+- if AMASS or Mixamo are not present yet, say `not needed yet` instead of pretending they are available
+
+### What To Run
+
+```powershell
+Test-Path 'F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt'
+Test-Path 'F:\NewEngine\Training\ProtoMotions\data\motions\smpl_humanoid_walk.npy'
+```
+
+### What To Send Back
+
+- whether each path exists
+- any corrected path if the file moved
+- any blocker such as a missing checkpoint or missing motion file
+
+## S1-U-03: Create Or Recreate The UE Project Scaffold
+
+Use [eli5-ue-project-setup.md](/F:/NewEngine/plans/stage1/eli5-ue-project-setup.md) for the click-by-click path.
+
+Use this section only if the project must be recreated or if the current scaffold becomes invalid.
+
+### Minimum Success Criteria
+
+- project exists at `F:\NewEngine\PhysAnimUE5`
+- `PhysAnimUE5.uproject` opens
+- PIE runs once
+- Manny assets are visible
+- `PoseSearch`, `PhysicsControl`, and `NNERuntimeORT` can be enabled
+
+### What To Send Back
+
+- final project path
+- one screenshot with the editor open
+- one note saying whether Manny was found
+- one note saying whether the required plugins enabled cleanly
+- any blocking error text
+
+## S1-U-04: G1 Manual Evidence
+
+This is the current active user-owned work.
+
+### MV-G1-01: Training-Side Visual Verdict
+
+Run [manual-verification.md](/F:/NewEngine/plans/stage1/manual-verification.md) exactly.
+
+Short version:
+
+1. Open PowerShell in `F:\NewEngine\Training\ProtoMotions`.
+2. Run the `phase0_eval_visual` command from [manual-verification.md](/F:/NewEngine/plans/stage1/manual-verification.md#L21).
+3. Press `L` to start recording once the viewer is moving.
+4. Let it run `10` to `15` seconds.
+5. Press `L` again to save the mp4.
+6. Press `Q` to quit after the save completes.
+7. Send the clip plus one line: `pass`, `fail`, or `unclear`.
+
+### MV-G1-02: Manny Responds To Programmatic Control
+
+This step is not honestly runnable until the orchestrator names all of these:
+
+- exact UE map path
+- exact actor / blueprint / utility asset to place or run
+- exact trigger method:
+  - PIE only
+  - key press
+  - button click
+  - console command
+- exact body region expected to move first
+
+If any of those are missing, stop and ask for them.
+
+When those fields are provided, use this procedure:
+
+1. Open the exact map named by the orchestrator.
+2. Confirm the named test actor or blueprint is present.
+3. Start PIE.
+4. Trigger the named control-path test exactly once.
+5. Watch the first commanded body region.
+6. Let the test continue for about `30` seconds unless it fails earlier.
+7. Record a short clip or at minimum one screenshot.
+8. Write one sentence saying:
+   - what region was supposed to move
+   - what actually moved
+   - whether Manny stayed controllable
+
+Choose `fail` immediately if:
+
+- nothing responds
+- the wrong body region responds
+- the ragdoll explodes or collapses immediately
+
+### UE Substep Stability Check
+
+This step is usually the same UE prototype run as `MV-G1-02`, but the judgment is different.
+
+Do not run it until the orchestrator names:
+
+- exact map or test scene
+- exact substep-related settings to use
+- exact runtime path to capture
+
+When those fields are provided:
+
+1. Open the named map.
+2. Apply or confirm the named physics settings.
+3. Start PIE.
+4. Run the named prototype for about `30` seconds.
+5. Capture a clip if the motion is visible enough to judge.
+6. Write one short note covering:
+   - the settings used
+   - whether Manny stayed controllable
+   - whether violent jitter, launch behavior, or ground penetration dominated the run
+
+### MV-G1-03: Manny Smoke Test
+
+This step is not honestly runnable until the orchestrator names:
+
+- exact UE map path
+- exact smoke-test tool or blueprint
+- exact expected pose or pose source
+- exact mapped subset being exercised
+
+Do not invent the expected pose from memory. The acceptable pose family must come from the retargeting validation cases in [retargeting-spec.md](/F:/NewEngine/plans/stage1/retargeting-spec.md#L78).
+
+When those fields are provided:
+
+1. Open the named map.
+2. Start PIE or run the named tool.
+3. Trigger the smoke-test pose.
+4. Watch which limbs move first.
+5. Record a short clip.
+6. Send back:
+   - `expected pose`
+   - `observed result`
+   - `mapping issues found`
+
+Expected pose names should use one of these validation cases unless the orchestrator freezes a different named case:
+
+- neutral identity
+- isolated left elbow flexion
+- isolated right hip rotation
+- pelvis yaw
+- spine bend plus mild twist
+- explicit left/right asymmetry case
+
+Choose `fail` immediately if:
+
+- left and right are swapped
+- the wrong limb moves
+- Manny becomes unstable from an obvious mapping error
+
+## S1-U-05: G2 Side-By-Side Judgment
+
+Do not run this until Phase 1 is complete and the orchestrator explicitly says G2 evidence is ready.
+
+When ready, use:
+
+- [manual-verification.md](/F:/NewEngine/plans/stage1/manual-verification.md#L64)
+- [g2-evaluation.md](/F:/NewEngine/plans/stage1/g2-evaluation.md)
+- [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/comparison-sequence-lock.md)
+
+### Required Inputs Before You Start
+
+- one locked comparison sequence
+- one kinematic capture
+- one physics-driven capture
+- confirmation that camera, speed, and environment match
+
+### What To Do
+
+1. Watch the kinematic version once without judging.
+2. Watch the physics-driven version once without judging.
+3. Watch them again side by side, or alternate between them in the same order.
+4. Score whether the physics-driven version is clearly better on:
+   - weight
+   - momentum
+   - balance recovery
+   - contact response
+   - overall non-robotic feel
+5. Write down which of those points actually drove your judgment.
+6. Return one final verdict: `pass`, `fail`, or `blocked`.
+
+### Evidence To Send Back
+
+- side-by-side clip or two comparable clips
+- final verdict
+- short reasons tied to the five rubric points above
+
+## S1-U-06: G3 Observer Evaluation
+
+Do not run this until Phase 2 is complete and the orchestrator explicitly says G3 evidence is ready.
+
+When ready, use:
+
+- [manual-verification.md](/F:/NewEngine/plans/stage1/manual-verification.md#L75)
+- [g3-evaluation.md](/F:/NewEngine/plans/stage1/g3-evaluation.md)
+
+### Observer Procedure
+
+1. Show the demo clip or live demo.
+2. Before explaining the tech, ask this first-impression prompt:
+
+> You are looking only at the motion quality. Does this look robotic, or does it feel weighty and physically believable enough to be interesting?
+
+3. Let the observer answer in their own words.
+4. Do not argue with the first reaction.
+5. Repeat for at least `3` observers when practical.
+6. If you only get `1` or `2` observers, say so explicitly instead of pretending the sample is stronger.
+7. Summarize the common positive and negative reactions.
+8. Return one final user verdict: `pass`, `fail`, or `blocked`.
+
+### Evidence To Send Back
+
+- demo version shown
+- observer count
+- short observer notes
+- common positive reactions
+- common negative reactions
+- your final continue / stop judgment
+
+## Copyable Evidence Return
+
+Use this when sending results back:
+
+```md
+# Stage 1 User Evidence Return
+
+## Step Or Checkpoint
+- ID:
+
+## What I Ran
+- map / command / clip:
+
+## Evidence
+- clip or screenshot path:
+- settings used:
+
+## Verdict
+- pass / fail / blocked / unclear:
+
+## Notes
+- expected result:
+- observed result:
+- blockers or weird behavior:
+```
+

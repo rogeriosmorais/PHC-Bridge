@@ -51,6 +51,16 @@ Keep these fixed between both captures:
 - same arena or environment setup
 - same playback speed
 
+## User Procedure
+
+1. Confirm the orchestrator has named the exact comparison clips or build version.
+2. Confirm the capture pair uses the same frozen sequence from [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/comparison-sequence-lock.md).
+3. Watch the kinematic version once without judging.
+4. Watch the physics-driven version once without judging.
+5. Watch them again side by side, or alternate in the same order.
+6. Judge only the motion thesis, not missing features or unrelated polish.
+7. Fill the evidence template before choosing the final verdict.
+
 ## What G2 Is Actually Judging
 
 The goal is not perfect realism. The goal is whether the physics-driven version is clearly better on the thesis criteria:
@@ -94,6 +104,22 @@ Choose `blocked` if:
 - one side-by-side clip or two clearly comparable clips
 - one short written verdict from the user
 - notes on which rubric points drove the decision
+
+## User Scoring Checklist
+
+Write `better`, `same`, or `worse` for the physics-driven version on each point:
+
+- weight
+- momentum
+- balance recovery
+- contact response
+- overall non-robotic feel
+
+Then choose:
+
+- `pass` only if the physics-driven version is noticeably better overall
+- `fail` if the difference is negligible or worse
+- `blocked` if the captures are not fair to compare
 
 ## Manual Check Mapping
 

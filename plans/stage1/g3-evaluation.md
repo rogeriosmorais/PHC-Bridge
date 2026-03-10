@@ -40,6 +40,17 @@ Use a short prompt like this:
 
 Do not overload observers with technical explanation before the first impression.
 
+## User Procedure
+
+1. Confirm the orchestrator has frozen the exact demo build or clip to show.
+2. Show the demo without a long technical preface.
+3. Ask the observer prompt exactly once before discussing implementation details.
+4. Record the first reaction in the observer's own words.
+5. Repeat for at least `3` observers when practical.
+6. If you only have `1` or `2` observers, record the smaller sample honestly.
+7. Summarize the common positive and negative reactions.
+8. Only after that choose the final `pass`, `fail`, or `blocked` verdict.
+
 ## What G3 Is Actually Judging
 
 G3 is not measuring engineering completeness. It is measuring whether the demo is compelling enough to justify more work.
@@ -56,6 +67,14 @@ The judgment criteria are:
 - demo clip or live demo notes
 - short observer reactions
 - user summary of whether the demo justifies continuing
+
+## Observer Capture Template
+
+- `Observer label`:
+- `First reaction`:
+- `Did they call it robotic?`: yes/no
+- `Did they mention weight or momentum?`: yes/no
+- `Anything they found distracting?`:
 
 ## Manual Check Mapping
 

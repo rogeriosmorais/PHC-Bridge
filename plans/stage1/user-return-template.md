@@ -8,6 +8,16 @@ It gives the orchestrator the minimum information needed to resume Phase 0 witho
 
 After the user sends this back, transfer the confirmed values into [dependency-lock.md](/F:/NewEngine/plans/stage1/dependency-lock.md).
 
+For the detailed user-side workflow, use [user-runbook.md](/F:/NewEngine/plans/stage1/user-runbook.md).
+
+## How To Fill This In
+
+- if a path exists, paste the exact absolute path
+- if a thing is missing, write `missing`
+- if a thing is not needed yet, write `not needed yet`
+- if a planned value changed, include the corrected value instead of the planned one
+- do not leave lines blank if the item matters to setup
+
 ## Copyable Template
 
 ```md

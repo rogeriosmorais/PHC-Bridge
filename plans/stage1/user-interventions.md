@@ -4,6 +4,8 @@
 
 This checklist defines the work that must be done by the human user rather than an AI agent.
 
+For the detailed step-by-step version, use [user-runbook.md](/F:/NewEngine/plans/stage1/user-runbook.md).
+
 ## Current Known Local Setup
 
 - UE version being installed: `5.7.3`
@@ -43,3 +45,5 @@ When the user returns with setup progress, use [user-return-template.md](/F:/New
 ## ELI5 Setup Link
 
 For the initial Unreal project creation step, use [eli5-ue-project-setup.md](/F:/NewEngine/plans/stage1/eli5-ue-project-setup.md).
+
+For the full user-owned workflow across Phase 0, Phase 1, and Phase 2, use [user-runbook.md](/F:/NewEngine/plans/stage1/user-runbook.md).
