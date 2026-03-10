@@ -10,8 +10,9 @@
 
 #include "PhysAnimComponent.generated.h"
 
-class UPhysAnimAnimInstance;
+class UAnimInstance;
 class UPhysicsControlComponent;
+class UPoseSearchDatabase;
 class USkeletalMeshComponent;
 
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
@@ -40,9 +41,10 @@ private:
 	bool ResolveRuntimeContext(FString& OutError);
 	bool ValidateRequiredBodies(FString& OutError) const;
 	bool ValidatePreauthoredPhysicsControl(FString& OutError) const;
-	bool ValidatePoseSearchIntegration(FString& OutError) const;
+	bool ValidatePoseSearchIntegration(FString& OutError);
 	bool InitializeModel(FString& OutError);
 	bool ValidateModelDescriptorContract(FString& OutError);
+	bool QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	bool GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& OutBodySamples, FString& OutError) const;
 	bool SampleFuturePoses(const FPoseSearchBlueprintResult& SearchResult, TArray<FPhysAnimFuturePoseSample>& OutFutureSamples, FString& OutError) const;
 	bool RunInference(FString& OutError);
@@ -55,7 +57,7 @@ private:
 
 	TWeakObjectPtr<USkeletalMeshComponent> MeshComponent;
 	TWeakObjectPtr<UPhysicsControlComponent> PhysicsControlComponent;
-	TWeakObjectPtr<UPhysAnimAnimInstance> PhysAnimAnimInstance;
+	TWeakObjectPtr<UAnimInstance> AnimInstance;
 
 	TWeakInterfacePtr<INNERuntimeGPU> RuntimeGPU;
 	TWeakInterfacePtr<INNERuntimeCPU> RuntimeCPU;
@@ -65,6 +67,7 @@ private:
 	TSharedPtr<UE::NNE::IModelInstanceCPU> ModelInstanceCPU;
 
 	TObjectPtr<UNNEModelData> LoadedModelData = nullptr;
+	TObjectPtr<UPoseSearchDatabase> LoadedPoseSearchDatabase = nullptr;
 
 	FPhysAnimTensorIndexMap TensorIndexMap;
 

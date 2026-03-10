@@ -30,7 +30,6 @@ This spec was written against:
   - `PoseSearchLibrary.h`
   - `PoseSearchResult.h`
   - `PoseSearchAssetSamplerLibrary.h`
-  - `MotionMatchingAnimNodeLibrary.h`
   - `NNE.h`
   - `NNERuntimeGPU.h`
   - `NNERuntimeRunSync.h`
@@ -42,7 +41,6 @@ This spec was written against:
   - Physics Control plugin API index: https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Plugins/PhysicsControl
   - `UPoseSearchLibrary` API page: https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Plugins/PoseSearch/UPoseSearchLibrary
   - `UPoseSearchAssetSamplerLibrary` API page: https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Plugins/PoseSearch/UPoseSearchAssetSamplerLibrary
-  - `UMotionMatchingAnimNodeLibrary` API page: https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Plugins/PoseSearch/UMotionMatchingAnimNodeLibrary
 
 Epic's public docs are useful for API existence and intended usage. Exact signatures and call ordering in this spec were verified against the local `5.7.3` headers because some PoseSearch pages lag between `5.6` and `5.7`.
 
@@ -155,26 +153,28 @@ The bridge does not take ownership of every Stage 1 built-in system named in the
 Stage 1 uses one PoseSearch ownership path:
 
 1. the current frame's animated target pose comes from `UPhysicsControlComponent` cached bone data after animation has already evaluated
-2. the future reference window for `mimic_target_poses` comes from the current motion-matching result already owned by the Anim Blueprint, read on the game thread through `UMotionMatchingAnimNodeLibrary`
+2. the future reference window for `mimic_target_poses` comes from a direct `UPoseSearchLibrary::MotionMatch(...)` query owned by `UPhysAnimComponent`
 
-This keeps PoseSearch asset ownership and motion-selection responsibility inside the authored Anim Blueprint instead of duplicating it in the bridge.
+This keeps content authoring on built-in PoseSearch assets while avoiding the need to author a full Motion Matching Anim Graph path that does not currently exist in the project.
 
 #### Frozen PoseSearch Owner Model
 
 - The Anim Blueprint remains the owner of the visual locomotion graph.
-- the Anim Blueprint remains the only production owner of `AssetsToSearch`
-- the Anim Blueprint exposes one bridge-facing accessor:
-  - `GetStage1MotionMatchResult()`
-  - return type: `FPoseSearchBlueprintResult`
-  - implementation: a thin wrapper around `UMotionMatchingAnimNodeLibrary::GetMotionMatchingSearchResult(...)`
-- `UPhysAnimComponent` does not own a duplicate `AssetsToSearch` property
-- `UPhysAnimComponent` does not run `UPoseSearchLibrary::MotionMatch(...)` in the production path
-- the Anim Blueprint must be authored against that same database asset. No chooser-only divergence is allowed.
+- `UPhysAnimComponent` is the production owner of the PoseSearch query call.
+- `UPhysAnimComponent` owns the Phase 1 `AssetsToSearch` array and it is frozen to:
+  - `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
+- `UPhysAnimComponent` calls `UPoseSearchLibrary::MotionMatch(...)` in the production path.
+- The Anim Blueprint does not need an authored Motion Matching node.
+- The Anim Blueprint does need a pose-history collector node tagged `PoseHistory_Stage1`.
+- The Anim Blueprint does not need a custom `UPhysAnimAnimInstance` parent for the production direct-query path.
+- The production path does not depend on an AnimBP wrapper like `GetStage1MotionMatchResult()`.
+- No chooser-only divergence is allowed; the direct query must search the same authored database asset that the comparison content is built around.
 
 Startup must validate:
 
 - the live Anim Blueprint class used by the production character is the locomotion Anim Blueprint authored for `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
-- the live Anim Instance implements `GetStage1MotionMatchResult()`
+- the live Anim Instance can resolve `PoseHistory_Stage1`
+- the production bridge can load `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion` directly
 - the authored database must use the Stage 1 locomotion schema at `/Game/PoseSearch/Schemas/PSS_Stage1_Locomotion`
 
 #### Frozen Initial Schema Authoring Rule
@@ -198,6 +198,24 @@ Startup must validate:
 
 If that lookup fails, startup is `blocked`.
 
+#### Frozen Direct Query Rule
+
+`UPhysAnimComponent` owns one `FPoseSearchBlueprintResult` plus one `FPoseSearchContinuingProperties` state for the production path.
+
+Per tick, the component calls:
+
+- `UPoseSearchLibrary::MotionMatch(...)`
+
+with:
+
+- `AnimInstance = live AnimInstance`
+- `AssetsToSearch = { /Game/PoseSearch/Databases/PSDB_Stage1_Locomotion }`
+- `PoseHistoryName = PoseHistory_Stage1`
+- `ContinuingProperties = previous valid search result converted with the continuing-properties helper`
+- `Future = default/empty for locomotion-only Phase 1`
+
+The returned `FPoseSearchBlueprintResult` is the source of truth for future-pose sampling.
+
 #### Current Target Pose Source
 
 The current animation target pose used by the bridge comes from:
@@ -211,17 +229,17 @@ This makes the bridge read the actual post-AnimBP pose that Physics Control will
 
 The future reference window used for `mimic_target_poses` comes from:
 
-1. `UMotionMatchingAnimNodeLibrary::GetMotionMatchingSearchResult(...)`
+1. `UPoseSearchLibrary::MotionMatch(...)`
 2. `UPoseSearchAssetSamplerLibrary::SamplePose(...)`
 3. `UPoseSearchAssetSamplerLibrary::GetTransformByName(...)`
 
 #### Frozen PoseSearch Result Consumption
 
-`UPhysAnimComponent` may keep one cached last-valid motion-matching result only for the one-tick grace period allowed by runtime failure handling.
+`UPhysAnimComponent` may keep one cached last-valid PoseSearch result only for the one-tick grace period allowed by runtime failure handling.
 
 Per tick:
 
-1. call the live Anim Instance's `GetStage1MotionMatchResult()` accessor
+1. call `UPoseSearchLibrary::MotionMatch(...)`
 2. if the result is valid, use it as the source of truth for future-pose sampling and cache it as the last-valid result
 3. if the result is invalid for one tick, reuse the cached last-valid result
 4. if the result is invalid for `2` consecutive ticks, fail per the runtime failure rules already frozen below
@@ -269,13 +287,17 @@ Then read named transforms with:
 
 #### Debug-Only PoseSearch API
 
-`UPoseSearchLibrary::MotionMatch(...)` is allowed only for:
+The production Phase 1 handoff path is:
 
-- debugging
-- smoke-test harnesses
-- authoring validation when the Anim Blueprint result path is unavailable
+- `UPoseSearchLibrary::MotionMatch(...)`
 
-It is not the production bridge handoff path.
+The old AnimBP-owned Motion Matching wrapper path is now legacy planning only and must not be treated as the production dependency.
+
+The production path must not require:
+
+- a Motion Matching node in the Anim Graph
+- `UMotionMatchingAnimNodeLibrary`
+- a custom AnimBP callback that copies a search result into bridge-owned state
 
 ### 4. NNE Integration
 
@@ -604,7 +626,7 @@ Each render tick executes in this order:
 3. `PhysicsControl->UpdateTargetCaches(DeltaTime)`
 4. read current cached animation targets from Physics Control
 5. read current simulated-body state from the skeletal mesh / primitive component
-6. call the live Anim Instance's `GetStage1MotionMatchResult()` accessor
+6. call `UPoseSearchLibrary::MotionMatch(...)` using the live AnimInstance, `PoseHistory_Stage1`, and `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
 7. sample the `15` future poses with `UPoseSearchAssetSamplerLibrary`
 8. pack `self_obs`, `mimic_target_poses`, and `terrain`
 9. call `ModelInstance->RunSync(...)`
@@ -671,7 +693,7 @@ That produces the locked `358`-float `self_obs`.
 
 Per tick:
 
-1. call the live Anim Instance's `GetStage1MotionMatchResult()` accessor
+1. call `UPoseSearchLibrary::MotionMatch(...)`
 2. sample `15` future poses from the selected animation at:
    - `SelectedTime + n * (1 / 30)` seconds
    - `n = 1..15`
@@ -728,7 +750,7 @@ Treat these as startup blockers:
 
 These may hold the previous valid target for one tick, then escalate:
 
-- a single invalid PoseSearch result frame
+- a single invalid direct PoseSearch query result frame
 - a single sampler failure for one future pose
 
 If the failure persists for `2` consecutive ticks:
@@ -792,7 +814,7 @@ The bridge is not implementation-complete if deterministic helpers land without 
 #### UE Runtime Checks Required
 
 - PoseSearch history collector validation
-- motion-matching result retrieval from the Anim Blueprint
+- direct `UPoseSearchLibrary::MotionMatch(...)` query result retrieval
 - model runtime creation
 - manual Physics Control update order
 - required-body validation
@@ -809,7 +831,7 @@ The bridge is not considered alive unless logs show all of:
 
 - PoseSearch path alive:
   - pose history node found
-  - valid motion-matching search result from `GetStage1MotionMatchResult()`
+  - valid direct search result from `UPoseSearchLibrary::MotionMatch(...)`
 - NNE path alive:
   - runtime chosen
   - shapes accepted
@@ -822,7 +844,7 @@ The bridge is not considered alive unless logs show all of:
   - required pre-authored body-modifier names validated
   - first `UpdateControls` pass succeeded
 - full loop alive:
-  - one tick completed through `GetMotionMatchingSearchResult -> SamplePose -> RunSync -> UpdateControls`
+  - one tick completed through `MotionMatch -> SamplePose -> RunSync -> UpdateControls`
 
 ## Required API Mapping Table
 
@@ -831,8 +853,7 @@ The bridge is not considered alive unless logs show all of:
 | runtime owner | `UPhysAnimComponent` | `BeginPlay`, `TickComponent`, `EndPlay` | New plugin component; production Stage 1 owner |
 | mesh prerequisite | `UActorComponent` / `USkeletalMeshComponent` | `AddTickPrerequisiteComponent` | `UPhysAnimComponent` must tick after the mesh |
 | pose history validation | `UPoseSearchLibrary` | `FindPoseHistoryNode` | Must find `PoseHistory_Stage1` at startup |
-| PoseSearch result handoff | `UAnimInstance` subclass + `UMotionMatchingAnimNodeLibrary` | `GetStage1MotionMatchResult`, `GetMotionMatchingSearchResult` | Thin AnimBP-owned wrapper is the production handoff |
-| PoseSearch debug query | `UPoseSearchLibrary` | `MotionMatch` | Debug and smoke-test only, not the production handoff |
+| PoseSearch production query | `UPoseSearchLibrary` | `MotionMatch` | Production Stage 1 handoff owned by `UPhysAnimComponent` |
 | future pose sample | `UPoseSearchAssetSamplerLibrary` | `SamplePose`, `GetTransformByName` | Used to build `mimic_target_poses` |
 | current animation target read | `UPhysicsControlComponent` | `UpdateTargetCaches`, `GetCachedBoneTransform`, `GetCachedBoneTransforms` | Authoritative current-frame animated pose |
 | live current-state read | `USkinnedMeshComponent`, `UPrimitiveComponent` | `GetBoneTransform`, `GetBoneQuaternion`, `GetPhysicsLinearVelocity`, `GetPhysicsAngularVelocityInRadians`, `GetBodyInstance` | Runtime body state and validation |
@@ -852,7 +873,7 @@ This spec is implementation-ready because it now freezes:
 
 - the runtime owner
 - the content paths
-- the PoseSearch result-consumption path
+- the direct PoseSearch query path
 - the future pose sampling path
 - the NNE runtime/model/session lifecycle
 - the Physics Control manual-update path on a pre-authored control set

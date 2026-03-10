@@ -34,8 +34,10 @@ This spec does not invent a new policy format or change the locked architecture.
 ### Upstream Source
 
 - `PoseSearch` remains the source of the target motion intent.
-- Stage 1 assumes `PoseSearch` provides one current selected animation state that can be sampled each render tick for the currently selected clip/state.
-- The bridge consumes that existing motion-selection result; it does not own a second production `MotionMatch` decision path.
+- Stage 1 assumes one authored locomotion `UPoseSearchDatabase` and one live pose-history stream in the AnimBP.
+- The bridge owns the production `UPoseSearchLibrary::MotionMatch(...)` query directly in Phase 1.
+- This replaces the earlier assumption that an authored Motion Matching Anim Graph node already existed and could hand the result to the bridge.
+- The production Stage 1 bridge therefore does not depend on a custom AnimBP callback or a Motion Matching node wrapper.
 - Stage 1 uses a dense `15`-step future reference window derived from that selected animation state at the locked simulator cadence, not a separate custom trajectory predictor invented in UE5.
 
 ### Runtime Flow
@@ -43,7 +45,7 @@ This spec does not invent a new policy format or change the locked architecture.
 Per render tick, the Stage 1 plugin does this:
 
 1. Read current articulated-body state from Manny's simulated skeleton.
-2. Read the current target pose from the active `PoseSearch` result.
+2. Query `PoseSearch` directly through `UPoseSearchLibrary::MotionMatch(...)` using the live pose history and the authored locomotion database.
 3. Convert UE5 state and target data into the PHC observation format required by the chosen ProtoMotions config.
 4. Run PHC inference through UE5 NNE.
 5. Convert the PHC action output into mapped UE5 bone target orientations and angular-drive values.

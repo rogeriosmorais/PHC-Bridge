@@ -1,8 +1,8 @@
 #include "PhysAnimComponent.h"
 
-#include "PhysAnimAnimInstance.h"
 #include "PhysAnimBridge.h"
 
+#include "Animation/AnimInstance.h"
 #include "Animation/AnimationAsset.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/AssetManager.h"
@@ -12,9 +12,10 @@
 #include "NNEStatus.h"
 #include "PhysicsControlComponent.h"
 #include "PhysicsEngine/PhysicsAsset.h"
-#include "PoseSearch/MotionMatchingAnimNodeLibrary.h"
 #include "PoseSearch/PoseSearchAssetSamplerLibrary.h"
+#include "PoseSearch/PoseSearchDatabase.h"
 #include "PoseSearch/PoseSearchLibrary.h"
+#include "PoseSearch/PoseSearchSchema.h"
 #include "PhysicsEngine/BodyInstance.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
@@ -25,6 +26,8 @@ namespace PhysAnimComponentInternal
 	const TCHAR* ExpectedMeshPath = TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple");
 	const TCHAR* ExpectedPhysicsAssetPath = TEXT("/Game/Characters/Mannequins/Rigs/PA_Mannequin.PA_Mannequin");
 	const TCHAR* ExpectedAnimBlueprintPath = TEXT("/Game/Characters/Mannequins/Animations/ABP_PhysAnim.ABP_PhysAnim_C");
+	const TCHAR* ExpectedPoseSearchDatabasePath = TEXT("/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion.PSDB_Stage1_Locomotion");
+	const TCHAR* ExpectedPoseSearchSchemaPath = TEXT("/Game/PoseSearch/Schemas/PSS_Stage1_Locomotion.PSS_Stage1_Locomotion");
 	const TCHAR* DefaultModelPath = TEXT("/Game/NNEModels/phc_policy.phc_policy");
 	const TCHAR* PreferredGpuRuntime = TEXT("NNERuntimeORTDml");
 	const TCHAR* FallbackCpuRuntime = TEXT("NNERuntimeORTCpu");
@@ -73,8 +76,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
-	UPhysAnimAnimInstance* const AnimInstance = PhysAnimAnimInstance.Get();
-	if (!PhysicsControl || !SkeletalMesh || !AnimInstance)
+	UAnimInstance* const LocalAnimInstance = this->AnimInstance.Get();
+	if (!PhysicsControl || !SkeletalMesh || !LocalAnimInstance)
 	{
 		FailStop(TEXT("Runtime context became invalid after startup."));
 		return;
@@ -83,8 +86,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	PhysicsControl->UpdateTargetCaches(DeltaTime);
 	PhysicsControl->GetCachedBoneTransforms(SkeletalMesh, PhysAnimBridge::GetControlledBoneNames());
 
+	FString TickError;
 	FPoseSearchBlueprintResult SearchResult;
-	if (AnimInstance->GetStage1MotionMatchResult(SearchResult))
+	if (QueryPoseSearch(SearchResult, TickError))
 	{
 		LastValidPoseSearchResult = SearchResult;
 		ConsecutiveInvalidPoseSearchFrames = 0;
@@ -94,52 +98,52 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		++ConsecutiveInvalidPoseSearchFrames;
 		if (ConsecutiveInvalidPoseSearchFrames > 1 || LastValidPoseSearchResult.SelectedAnim == nullptr)
 		{
-			FailStop(TEXT("Motion matching result was invalid for two consecutive ticks."));
+			FailStop(FString::Printf(TEXT("PoseSearch query was invalid for two consecutive ticks. %s"), *TickError));
 			return;
 		}
 
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] Reusing last valid PoseSearch result for one grace tick. Reason: %s"), *TickError);
 		SearchResult = LastValidPoseSearchResult;
 	}
 
 	TArray<FPhysAnimBodySample> CurrentBodySamples;
-	FString Error;
-	if (!GatherCurrentBodySamples(CurrentBodySamples, Error))
+	if (!GatherCurrentBodySamples(CurrentBodySamples, TickError))
 	{
-		FailStop(Error);
+		FailStop(TickError);
 		return;
 	}
 
 	TArray<FPhysAnimFuturePoseSample> FuturePoseSamples;
-	if (!SampleFuturePoses(SearchResult, FuturePoseSamples, Error))
+	if (!SampleFuturePoses(SearchResult, FuturePoseSamples, TickError))
 	{
-		FailStop(Error);
+		FailStop(TickError);
 		return;
 	}
 
-	if (!PhysAnimBridge::BuildSelfObservation(CurrentBodySamples, 0.0f, SelfObservationBuffer, Error))
+	if (!PhysAnimBridge::BuildSelfObservation(CurrentBodySamples, 0.0f, SelfObservationBuffer, TickError))
 	{
-		FailStop(Error);
+		FailStop(TickError);
 		return;
 	}
 
-	if (!PhysAnimBridge::BuildMimicTargetPoses(CurrentBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, Error))
+	if (!PhysAnimBridge::BuildMimicTargetPoses(CurrentBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, TickError))
 	{
-		FailStop(Error);
+		FailStop(TickError);
 		return;
 	}
 
 	PhysAnimBridge::BuildZeroTerrain(TerrainBuffer);
 
-	if (!RunInference(Error))
+	if (!RunInference(TickError))
 	{
-		FailStop(Error);
+		FailStop(TickError);
 		return;
 	}
 
-	ApplyControlTargets(DeltaTime, Error);
-	if (!Error.IsEmpty())
+	ApplyControlTargets(DeltaTime, TickError);
+	if (!TickError.IsEmpty())
 	{
-		FailStop(Error);
+		FailStop(TickError);
 		return;
 	}
 
@@ -220,16 +224,16 @@ bool UPhysAnimComponent::ResolveRuntimeContext(FString& OutError)
 		return false;
 	}
 
-	UPhysAnimAnimInstance* const AnimInstance = Cast<UPhysAnimAnimInstance>(SkeletalMesh->GetAnimInstance());
-	if (!AnimInstance)
+	UAnimInstance* const LocalAnimInstance = SkeletalMesh->GetAnimInstance();
+	if (!LocalAnimInstance)
 	{
-		OutError = TEXT("The live AnimInstance must derive from UPhysAnimAnimInstance.");
+		OutError = TEXT("The live AnimInstance was not resolved from the skeletal mesh.");
 		return false;
 	}
 
 	MeshComponent = SkeletalMesh;
 	PhysicsControlComponent = PhysicsControl;
-	PhysAnimAnimInstance = AnimInstance;
+	this->AnimInstance = LocalAnimInstance;
 
 	AddTickPrerequisiteComponent(SkeletalMesh);
 	PhysicsControl->SetComponentTickEnabled(false);
@@ -322,32 +326,94 @@ bool UPhysAnimComponent::ValidatePreauthoredPhysicsControl(FString& OutError) co
 	return true;
 }
 
-bool UPhysAnimComponent::ValidatePoseSearchIntegration(FString& OutError) const
+bool UPhysAnimComponent::ValidatePoseSearchIntegration(FString& OutError)
 {
-	const UPhysAnimAnimInstance* const AnimInstance = PhysAnimAnimInstance.Get();
-	if (!AnimInstance)
+	const UAnimInstance* const LocalAnimInstance = this->AnimInstance.Get();
+	if (!LocalAnimInstance)
 	{
-		OutError = TEXT("PhysAnim AnimInstance was not resolved.");
+		OutError = TEXT("AnimInstance was not resolved.");
 		return false;
 	}
 
-	const FString AnimClassPath = GetPathNameSafe(AnimInstance->GetClass());
+	const FString AnimClassPath = GetPathNameSafe(LocalAnimInstance->GetClass());
 	if (AnimClassPath != PhysAnimComponentInternal::ExpectedAnimBlueprintPath)
 	{
 		OutError = FString::Printf(TEXT("Expected AnimBlueprint '%s' but found '%s'."), PhysAnimComponentInternal::ExpectedAnimBlueprintPath, *AnimClassPath);
 		return false;
 	}
 
-	if (UPoseSearchLibrary::FindPoseHistoryNode(PhysAnimComponentInternal::PoseHistoryName, AnimInstance) == nullptr)
+	if (UPoseSearchLibrary::FindPoseHistoryNode(PhysAnimComponentInternal::PoseHistoryName, LocalAnimInstance) == nullptr)
 	{
 		OutError = TEXT("PoseHistory_Stage1 was not found on the live AnimInstance.");
 		return false;
 	}
 
-	FPoseSearchBlueprintResult SearchResult;
-	if (!AnimInstance->GetStage1MotionMatchResult(SearchResult))
+	LoadedPoseSearchDatabase = LoadObject<UPoseSearchDatabase>(nullptr, PhysAnimComponentInternal::ExpectedPoseSearchDatabasePath);
+	if (!LoadedPoseSearchDatabase)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] Motion matching result is not valid yet at startup. One-tick grace path will be used once ticking begins."));
+		OutError = FString::Printf(TEXT("Failed to load PoseSearch database '%s'."), PhysAnimComponentInternal::ExpectedPoseSearchDatabasePath);
+		return false;
+	}
+
+	if (GetPathNameSafe(LoadedPoseSearchDatabase) != PhysAnimComponentInternal::ExpectedPoseSearchDatabasePath)
+	{
+		OutError = FString::Printf(
+			TEXT("Expected PoseSearch database '%s' but found '%s'."),
+			PhysAnimComponentInternal::ExpectedPoseSearchDatabasePath,
+			*GetPathNameSafe(LoadedPoseSearchDatabase));
+		return false;
+	}
+
+	if (GetPathNameSafe(LoadedPoseSearchDatabase->Schema.Get()) != PhysAnimComponentInternal::ExpectedPoseSearchSchemaPath)
+	{
+		OutError = FString::Printf(
+			TEXT("Expected PoseSearch schema '%s' but found '%s'."),
+			PhysAnimComponentInternal::ExpectedPoseSearchSchemaPath,
+			*GetPathNameSafe(LoadedPoseSearchDatabase->Schema.Get()));
+		return false;
+	}
+
+	return true;
+}
+
+bool UPhysAnimComponent::QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError)
+{
+	UAnimInstance* const LocalAnimInstance = AnimInstance.Get();
+	if (!LocalAnimInstance)
+	{
+		OutError = TEXT("AnimInstance was not resolved.");
+		return false;
+	}
+
+	if (!LoadedPoseSearchDatabase)
+	{
+		OutError = TEXT("PoseSearch database was not loaded.");
+		return false;
+	}
+
+	TArray<UObject*> AssetsToSearch;
+	AssetsToSearch.Add(LoadedPoseSearchDatabase);
+
+	FPoseSearchContinuingProperties ContinuingProperties;
+	if (LastValidPoseSearchResult.SelectedAnim != nullptr)
+	{
+		ContinuingProperties.InitFrom(LastValidPoseSearchResult, EPoseSearchInterruptMode::DoNotInterrupt);
+	}
+
+	FPoseSearchFutureProperties FutureProperties;
+	OutSearchResult = FPoseSearchBlueprintResult();
+	UPoseSearchLibrary::MotionMatch(
+		LocalAnimInstance,
+		AssetsToSearch,
+		PhysAnimComponentInternal::PoseHistoryName,
+		ContinuingProperties,
+		FutureProperties,
+		OutSearchResult);
+
+	if (OutSearchResult.SelectedAnim == nullptr)
+	{
+		OutError = TEXT("UPoseSearchLibrary::MotionMatch returned no selected animation.");
+		return false;
 	}
 
 	return true;
@@ -487,9 +553,9 @@ bool UPhysAnimComponent::SampleFuturePoses(
 	TArray<FPhysAnimFuturePoseSample>& OutFutureSamples,
 	FString& OutError) const
 {
-	const UPhysAnimAnimInstance* const AnimInstance = PhysAnimAnimInstance.Get();
+	const UAnimInstance* const LocalAnimInstance = this->AnimInstance.Get();
 	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
-	if (!AnimInstance || !SkeletalMesh)
+	if (!LocalAnimInstance || !SkeletalMesh)
 	{
 		OutError = TEXT("Pose sampling requires both the AnimInstance and skeletal mesh.");
 		return false;
@@ -517,7 +583,7 @@ bool UPhysAnimComponent::SampleFuturePoses(
 		SamplerInput.BlendParameters = SearchResult.BlendParameters;
 		SamplerInput.RootTransformOrigin = SkeletalMesh->GetComponentTransform();
 
-		FPoseSearchAssetSamplerPose SampledPose = UPoseSearchAssetSamplerLibrary::SamplePose(AnimInstance, SamplerInput);
+		FPoseSearchAssetSamplerPose SampledPose = UPoseSearchAssetSamplerLibrary::SamplePose(LocalAnimInstance, SamplerInput);
 
 		FPhysAnimFuturePoseSample FutureSample;
 		FutureSample.FutureTimeSeconds = FutureOffset;

@@ -6,9 +6,18 @@ This is the human-facing runbook for bringing the new Stage 1 bridge online insi
 
 Use it when the code-side bridge is already in the repo, but the required UE assets and Blueprint wiring do not exist yet.
 
-This runbook is intentionally strict because the current `UPhysAnimComponent` startup path validates exact asset paths, exact class ancestry, exact PoseSearch hooks, and exact Physics Control names.
+This runbook is intentionally strict because the current `UPhysAnimComponent` startup path validates exact asset paths, the live Anim Blueprint class path, exact PoseSearch hooks, and exact Physics Control names.
 
 If you improvise the content layout, the bridge will fail at startup.
+
+In the Unreal Content Browser, `/Game/...` means the project's `Content/...` root. There is no literal top-level folder named `Game` in the browser UI.
+
+Important design update on March 10, 2026:
+
+- Phase 1 is now frozen to the direct-query PoseSearch path
+- the bridge is expected to call `UPoseSearchLibrary::MotionMatch(...)` itself
+- the Anim Blueprint no longer needs an authored Motion Matching node
+- the Anim Blueprint does still need a `Pose History` node tagged `PoseHistory_Stage1`
 
 ## Applies To
 
@@ -44,8 +53,7 @@ The current code will only accept this exact content contract:
 | PoseSearch schema | `/Game/PoseSearch/Schemas/PSS_Stage1_Locomotion` |
 | PoseSearch database | `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion` |
 | NNE model asset | `/Game/NNEModels/phc_policy` |
-| AnimBP parent class | `UPhysAnimAnimInstance` |
-| pose history collector name | `PoseHistory_Stage1` |
+| pose history node tag | `PoseHistory_Stage1` |
 | controlled mesh component name for Physics Control initialization | `CharacterMesh0` |
 | Physics Control component count | exactly one on the character |
 | required control naming | `PACtrl_<BoneName>` |
@@ -56,7 +64,7 @@ The current code will only accept this exact content contract:
 You will create:
 
 1. one PoseSearch database for locomotion
-2. one Anim Blueprint that derives from `UPhysAnimAnimInstance`
+2. one Anim Blueprint that contains a `Pose History` node tagged `PoseHistory_Stage1`
 3. one character Blueprint that hosts `UPhysAnimComponent`, `UPhysicsControlComponent`, and `UPhysicsControlInitializerComponent`
 4. one imported `UNNEModelData` asset from the PHC `.onnx`
 5. one live map setup that spawns the new character and lets the bridge auto-start in PIE
@@ -82,6 +90,12 @@ These assets already exist locally and are the intended starting point:
 - `/Game/Characters/Mannequins/Anims/Unarmed/MM_Idle`
 - all `MF_Unarmed_Walk_*` clips under `/Game/Characters/Mannequins/Anims/Unarmed/Walk`
 - all `MF_Unarmed_Jog_*` clips under `/Game/Characters/Mannequins/Anims/Unarmed/Jog`
+
+Important current local truth on March 10, 2026:
+
+- `ABP_Unarmed` is a locomotion Anim Blueprint reference, not a pre-existing Motion Matching Anim Blueprint
+- local asset inspection does not show an authored `Motion Matching` node or existing PoseSearch database binding inside `ABP_Unarmed`
+- the direct-query Phase 1 path does not require that Motion Matching node
 
 ## Step 1: Create The Required Content Folders
 
@@ -169,11 +183,7 @@ Save the duplicate here:
 
 Open `ABP_PhysAnim`.
 
-Change its parent class to:
-
-- `PhysAnimAnimInstance`
-
-This must resolve to the plugin C++ class `UPhysAnimAnimInstance`.
+Do not reparent it for the revised direct-query path.
 
 Compile and save.
 
@@ -184,54 +194,56 @@ Do not replace the locomotion graph with a custom state machine if the duplicate
 The point of this AnimBP is:
 
 - keep Epic's existing locomotion graph as much as possible
-- expose the motion-matching result to the bridge
-- keep the visual animation and the bridge sampling the same motion source
+- expose a live pose-history stream to the bridge
+- keep the visual animation and the bridge sampling the same authored locomotion database
 
-### 3C. Point Motion Matching At `PSDB_Stage1_Locomotion`
+### 3C. Add A `Pose History` Node
 
-Find the existing Motion Matching node or its owning variable path inside the duplicated AnimBP.
+The revised Phase 1 path requires a `Pose History` node in the `Anim Graph`.
 
-Bind it to:
+Use the `Anim Graph`, not the `Event Graph`.
+
+The practical goal is:
+
+- take the final locomotion pose already produced by the graph
+- pass it through a `Pose History` node
+- send that node's output to the final `Output Pose`
+- tag that node as `PoseHistory_Stage1`
+
+Use this sequence:
+
+1. In `ABP_PhysAnim`, open the `Anim Graph`.
+2. Find the final pose wire that currently feeds the graph's output pose.
+3. Add the node named `Pose History`.
+4. Insert it into that final pose wire so:
+   - existing locomotion result -> `Pose History` -> final output pose
+5. In the `Details` panel for that `Pose History` node, set its node tag / tag name to:
+   - `PoseHistory_Stage1`
+6. Leave its sampling settings at defaults unless Unreal forces a required value.
+
+Do not add a Motion Matching node here.
+
+### 3D. No Motion Matching Node Is Required
+
+The direct-query Phase 1 path is intentionally avoiding a full authored Motion Matching Anim Graph setup.
+
+Do not spend more time looking for:
+
+- a Motion Matching node in `ABP_Unarmed`
+- an `On Motion Matching State Updated` function
+- a `GetStage1MotionMatchResult()` wrapper path in the AnimBP
+
+Those belonged to the superseded handoff design.
+
+### 3E. Point The Content At The Stage 1 Database
+
+The authored locomotion content for this branch is still:
 
 - `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
 
-If `ABP_Unarmed` does not already contain a Motion Matching node and there is no clean authored path to one, stop and report `blocked`.
+The current production bridge queries that database directly through `UPoseSearchLibrary::MotionMatch(...)`.
 
-Do not invent a second motion-selection system in the AnimBP.
-
-### 3D. Add Or Verify The Pose History Collector
-
-The live bridge startup will fail unless the AnimBP contains a pose history collector named exactly:
-
-- `PoseHistory_Stage1`
-
-Add or rename the pose history collector node so the name matches exactly.
-
-Do not use:
-
-- `PoseHistory`
-- `Stage1PoseHistory`
-- any other variant
-
-### 3E. Register The Motion Matching Node For The Bridge
-
-This step is required because `UPhysAnimComponent` expects `UPhysAnimAnimInstance::GetStage1MotionMatchResult()` to return the live motion-matching result.
-
-Use an Anim Node Function on the Motion Matching node:
-
-1. Select the Motion Matching node in the Anim Graph.
-2. Create or open the node function that runs when the motion-matching state is updated.
-3. Inside that function:
-   - use the function's incoming node reference
-   - convert it to `Motion Matching Anim Node Reference`
-   - if conversion succeeds, call `Set Stage1 Motion Matching Node` on `self`
-   - if conversion fails, call `Clear Stage1 Motion Matching Node` on `self`
-4. In `Blueprint Initialize Animation`, also call `Clear Stage1 Motion Matching Node` once so stale references are not carried through a reinit.
-
-The target result is simple:
-
-- whenever the Motion Matching node is live, `ABP_PhysAnim` stores a valid `FMotionMatchingAnimNodeReference`
-- the C++ bridge can then query it each tick through `GetStage1MotionMatchResult()`
+So at the AnimBP/content level, the required authored asset is the database itself plus the `Pose History` node. There is no extra database binding step to a Motion Matching node in this revised path.
 
 ### 3F. Compile And Save
 
@@ -239,15 +251,14 @@ Do not continue until `ABP_PhysAnim` compiles cleanly.
 
 ### What Good Looks Like
 
-- the parent class is `PhysAnimAnimInstance`
 - the AnimBP still previews locomotion
-- the Motion Matching node points at `PSDB_Stage1_Locomotion`
-- the pose history collector name is exactly `PoseHistory_Stage1`
+- the final locomotion pose now passes through one `Pose History` node
+- the `Pose History` node tag is exactly `PoseHistory_Stage1`
 
 ### What To Send Back If Blocked
 
 - a screenshot of the Anim Graph
-- a screenshot of the Motion Matching node details
+- a screenshot of the `Pose History` node details
 - the exact compile error or Blueprint error text
 
 ## Step 4: Create `BP_PhysAnimCharacter`
@@ -543,7 +554,8 @@ Use this only to classify the failure. Do not treat it as permission to improvis
 | `Missing required pre-authored body modifiers` | one or more `PAMod_*` map entries did not get created |
 | `Failed to load model asset` | `/Game/NNEModels/phc_policy` is missing or the component override is wrong |
 | `Could not create an NNE model instance` | ORT runtime/plugin/model compatibility is broken |
-| `Motion matching result was invalid for two consecutive ticks` | the AnimBP did not register or maintain a live Motion Matching node reference |
+| `PoseSearch query was invalid for two consecutive ticks` | the direct `MotionMatch(...)` query did not produce a valid result from the current pose history + database |
+| `UPoseSearchLibrary::MotionMatch returned no selected animation` | PoseSearch ran but did not select any clip from `PSDB_Stage1_Locomotion` |
 
 ## What To Send Back After The Full Pass
 
