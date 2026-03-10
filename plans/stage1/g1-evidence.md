@@ -88,10 +88,11 @@ Use only:
 
 ## Criterion 4: Minimal SMPL/PHC Output Drives Manny In Chaos Without Obvious Mapping Failure
 
-- `Status`: pending
+- `Status`: complete
 - `Checkpoint`: `MV-G1-03`
 - `Evidence`:
   - clip:
+    - no local file path retained
   - expected pose:
     - `isolated left elbow flexion`
   - frozen runtime path:
@@ -100,9 +101,12 @@ Use only:
     - command: `PhysAnim.MVG103.Start`
     - mapped subset: `L_Elbow -> lowerarm_l`, with `upperarm_l` parent context and `hand_l` held near neutral
   - observed result:
+    - user reported the checkpoint completed on March 10, 2026
+    - downstream bring-up work proceeded past the dedicated Manny smoke harness into the integrated Phase 1 bridge bring-up path
+    - no obvious left/right mirroring blocker remained open after the smoke-check stage
   - mapping issues found:
-- `Verdict`: pending
-- `Why this verdict was chosen`: the runtime smoke harness is now frozen, but no user evidence has been recorded yet
+- `Verdict`: pass
+- `Why this verdict was chosen`: the user explicitly reported `MV-G1-03` completed, and no unresolved mapping-failure blocker remained at the smoke-test stage; the remaining open issue moved downstream to substep stability and ONNX export, not joint mapping correctness
 
 ## Criterion 5: Substep Rate Is Stable
 
@@ -143,14 +147,13 @@ List every assumption changed by Phase 0 evidence:
 
 ## Missing Evidence
 
-- `MV-G1-03` Manny smoke-test evidence
 - UE-side substep-stability evidence
 
 ## Final Orchestrator Decision
 
 - `Final verdict`: pending
 - `Decision date`:
-- `Decision summary`: the bridge contract, motion-source review, training-side `MV-G1-01`, and stationary UE control-path checkpoint `MV-G1-02` now score `pass`, but G1 remains blocked on the Manny smoke test and UE-side substep-stability evidence
+- `Decision summary`: the bridge contract, motion-source review, training-side `MV-G1-01`, stationary UE control-path checkpoint `MV-G1-02`, and Manny smoke test `MV-G1-03` now score `pass`, but G1 remains blocked on UE-side substep-stability evidence
 - `Can Phase 1 begin?`: no
 
 ## If Verdict Is Not Pass

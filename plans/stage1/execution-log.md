@@ -62,7 +62,6 @@ Use it to track:
 
 | Item | Expected Evidence |
 |---|---|
-| `MV-G1-03` evidence | clip plus short note from `/Game/ThirdPerson/Lvl_ThirdPerson` after running `PhysAnim.MVG103.Start`, naming the expected pose `isolated left elbow flexion`, what actually moved, and whether the right arm stayed neutral |
 | substep-stability evidence | substep settings used plus a short clip or note saying whether Manny stayed controllable for roughly `30` seconds |
 
 ## Latest Phase 0 Evidence Progress
@@ -81,7 +80,10 @@ Use it to track:
 - later March 10, 2026 discussion narrowed `MV-G1-02` to an explicitly stationary proof; movement-induced shoulder artifacts were judged out of scope for this checkpoint and deferred to later integrated UE checks
 - the user explicitly accepted screenshot-only evidence for `MV-G1-02`, so that checkpoint now scores `pass`
 - `MV-G1-03` is now frozen to `/Game/ThirdPerson/Lvl_ThirdPerson` plus the dedicated mapped-joint smoke harness command `PhysAnim.MVG103.Start`, using the explicit validation case `isolated left elbow flexion`
-- G1 remains blocked overall because `MV-G1-03` and the UE substep-stability check are still missing
+- the user later confirmed `MV-G1-03` completed; the Manny smoke-test mapping check is now accepted as `pass`, with no remaining open blocker at the isolated left-elbow smoke-harness stage
+- later March 10, 2026 Phase 1 bring-up work reached the UE model-loading gate and confirmed the next blocker is not Unreal wiring but missing export output: `F:\NewEngine\Training\output\phc_policy.onnx` does not exist, `Training\scripts\export_onnx.py` does not exist, the ONNX validation test is still a skip-if-placeholder, and no accepted ONNX export handoff exists yet
+- the selected pretrained checkpoint still exists at `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt`, so the missing ONNX file is an orchestration/process gap rather than a missing model-source artifact
+- G1 remains blocked overall because the UE substep-stability check is still missing
 
 ## Accepted Handoffs
 
