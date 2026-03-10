@@ -6,7 +6,7 @@
 
 #include "PhysAnimAnimInstance.generated.h"
 
-UCLASS(Abstract, Blueprintable)
+UCLASS(BlueprintType, Blueprintable)
 class PHYSANIMPLUGIN_API UPhysAnimAnimInstance : public UAnimInstance
 {
 	GENERATED_BODY()

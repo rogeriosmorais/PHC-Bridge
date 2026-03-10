@@ -179,11 +179,15 @@ Save the duplicate here:
 
 - target: `/Game/Characters/Mannequins/Animations/ABP_PhysAnim`
 
-### 3A. Change The Parent Class
+### 3A. Keep The Existing Parent Class
 
 Open `ABP_PhysAnim`.
 
-Do not reparent it for the revised direct-query path.
+There is no reparent step for the revised direct-query path.
+
+Keep the duplicated AnimBP on its existing parent class.
+
+Do not change it to `PhysAnimAnimInstance` or any other custom plugin parent.
 
 Compile and save.
 
