@@ -119,6 +119,8 @@ The production runtime character must:
   - `/Game/Characters/Mannequins/Rigs/PA_Mannequin`
 - locomotion Anim Blueprint to be created for Phase 1:
   - `/Game/Characters/Mannequins/Animations/ABP_PhysAnim`
+- PoseSearch schema to be created for Phase 1:
+  - `/Game/PoseSearch/Schemas/PSS_Stage1_Locomotion`
 - PoseSearch database to be created for Phase 1:
   - `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
 - imported `UNNEModelData` asset:
@@ -173,6 +175,18 @@ Startup must validate:
 
 - the live Anim Blueprint class used by the production character is the locomotion Anim Blueprint authored for `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
 - the live Anim Instance implements `GetStage1MotionMatchResult()`
+- the authored database must use the Stage 1 locomotion schema at `/Game/PoseSearch/Schemas/PSS_Stage1_Locomotion`
+
+#### Frozen Initial Schema Authoring Rule
+
+For first implementation bring-up:
+
+- create one schema asset at `/Game/PoseSearch/Schemas/PSS_Stage1_Locomotion`
+- choose the Manny/Quinn mannequin skeleton asset `SK_Mannequin` when the schema factory asks for a skeleton
+- keep the factory-created default locomotion channels
+- leave the mirror data table empty for the initial unmirrored-only database pass
+
+This is the lowest-resistance authored schema path for UE `5.7.3`.
 
 #### Frozen Pose History Tag
 

@@ -41,6 +41,7 @@ The current code will only accept this exact content contract:
 | skeletal mesh | `/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple` |
 | physics asset | `/Game/Characters/Mannequins/Rigs/PA_Mannequin` |
 | Anim Blueprint | `/Game/Characters/Mannequins/Animations/ABP_PhysAnim` |
+| PoseSearch schema | `/Game/PoseSearch/Schemas/PSS_Stage1_Locomotion` |
 | PoseSearch database | `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion` |
 | NNE model asset | `/Game/NNEModels/phc_policy` |
 | AnimBP parent class | `UPhysAnimAnimInstance` |
@@ -88,16 +89,47 @@ Create these folders in the Content Browser if they do not already exist:
 
 - `/Game/Characters/Mannequins/Animations`
 - `/Game/Characters/Mannequins/Blueprints`
+- `/Game/PoseSearch/Schemas`
 - `/Game/PoseSearch/Databases`
 - `/Game/NNEModels`
 
 Do not rename or relocate these folders afterward.
 
-## Step 2: Create The PoseSearch Database
+## Step 2: Create The PoseSearch Schema And Database
+
+### 2A. Create The Schema
+
+Create a new Pose Search Schema asset at:
+
+- `/Game/PoseSearch/Schemas/PSS_Stage1_Locomotion`
+
+When Unreal asks for the skeleton, choose:
+
+- `/Game/Characters/Mannequins/Meshes/SK_Mannequin`
+
+On UE `5.7.3`, the schema factory automatically adds the default locomotion channels after you pick the skeleton.
+
+For the first bring-up pass, keep the schema simple:
+
+- Skeleton: `SK_Mannequin`
+- Mirror Data Table: leave empty
+- Sample Rate: `30`
+- Data Preprocessor: leave the default `Normalize`
+- Channels: keep the default locomotion channels the factory created
+
+Do not try to custom-design the schema yet.
+
+This first pass only needs a valid locomotion schema so the database and AnimBP can be authored cleanly.
+
+### 2B. Create The Database
 
 Create a new PoseSearch database asset at:
 
 - `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
+
+Set its schema to:
+
+- `/Game/PoseSearch/Schemas/PSS_Stage1_Locomotion`
 
 For the first bring-up pass, populate it only with the built-in unarmed locomotion clips already in the project:
 
@@ -109,12 +141,17 @@ Do not add jump, attack, death, rifle, or pistol clips to this first Phase 1 dat
 
 ### What To Check Before Moving On
 
+- the schema asset saves cleanly
+- the schema uses `SK_Mannequin`
+- the database points at `/Game/PoseSearch/Schemas/PSS_Stage1_Locomotion`
 - the database asset saves cleanly
 - the database points only at Manny/Quinn mannequin-compatible locomotion clips
+- there is exactly one asset at `/Game/PoseSearch/Schemas/PSS_Stage1_Locomotion`
 - there is exactly one asset at `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
 
 ### What To Send Back If Blocked
 
+- a screenshot of the schema asset
 - a screenshot of the database asset
 - the exact error text if Unreal rejects any clip or schema setting
 
