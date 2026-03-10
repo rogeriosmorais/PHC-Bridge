@@ -14,9 +14,9 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 1 / `S1-P1-A1` completed / `S1-P1-A2` unblocked
-- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Gate G1 is explicitly `pass`; the selected Phase 1 runtime model is the pretrained `motion_tracker/smpl` checkpoint; the Stage 1 ONNX export path now exists, exports successfully with opset `17`, validates numerically against the PyTorch actor wrapper, and the resulting `phc_policy.onnx` has been copied into the UE content import location
-- `Last planning milestone`: worker completed the `S1-P1-A1` export/package handoff on March 10, 2026, removing ONNX export discovery from the Phase 1 critical path
+- `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` in progress
+- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Gate G1 is explicitly `pass`; the selected Phase 1 runtime model is the pretrained `motion_tracker/smpl` checkpoint; the full UE startup path now succeeds through `NNERuntimeORTDml`; the active blocker is no longer import/startup discovery but uncontrolled post-startup runtime instability (`flying` / `spinning uncontrollably`)
+- `Last planning milestone`: orchestrator accepted the `S1-P1-A1` handoff and reclassified the next task as stabilization/tuning before G2 packaging on March 10, 2026
 
 ## Active Tasks
 
@@ -28,6 +28,7 @@ Use it to track:
 | S1-P0-A1 | AI | completed | `plans/stage1/task-packet-s1-p0-a1.md` plus frozen Phase 0 inputs | `plans/stage1/phase0-execution-package.md`, `plans/stage1/bridge-spec.md`, `plans/stage1/retargeting-spec.md`, `plans/stage1/assumption-ledger.md`, `plans/stage1/execution-log.md` | none |
 | S1-P0-A2 | AI + User | completed | `plans/stage1/phase0-execution-package.md`, `plans/stage1/manual-verification.md`, `plans/stage1/acceptance-thresholds.md`, `plans/stage1/g1-evidence.md` | `plans/stage1/g1-evidence.md`, `plans/stage1/assumption-ledger.md`, `plans/stage1/execution-log.md` | none |
 | S1-P1-A1 | AI | completed | `plans/stage1/task-packet-s1-p1-a1.md`, `plans/stage1/phase1-implementation-package.md`, `plans/stage1/onnx-export-spec.md`, `plans/stage1/ue-bridge-implementation-spec.md` | `Training/scripts/export_onnx.py`, `Training/physanim/export_onnx.py`, `Training/tests/test_onnx_export.py`, `plans/stage1/phase1-implementation-package.md`, `plans/stage1/dependency-lock.md`, `plans/stage1/execution-log.md`, `plans/stage1/assumption-ledger.md` | none |
+| S1-P1-A2 | AI | in_progress | accepted `S1-P1-A1` handoff, `phase1-implementation-package.md`, `manual-verification.md`, `acceptance-thresholds.md`, `phase1-ue-bridge-bringup-runbook.md` | `plans/stage1/task-packet-s1-p1-a2.md`, `plans/stage1/manual-verification.md`, `plans/stage1/acceptance-thresholds.md`, `plans/stage1/g2-evaluation.md`, `plans/stage1/execution-log.md`, `plans/stage1/assumption-ledger.md` | none |
 
 ## Frozen Inputs For Phase 0 Preparation
 
@@ -55,8 +56,8 @@ Use it to track:
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-P1-A2 | runnable now; the Phase 1 model choice, export path, and one-character implementation package are frozen |
-| 2 | user UE import / runtime validation | runnable now; Unreal still needs to import `Content/NNEModels/phc_policy.onnx` into a `UNNEModelData` asset and prove NNE runtime creation in-editor |
+| 1 | S1-P1-A2 | runnable now; startup succeeds through `NNERuntimeORTDml`, so the next safe task is stabilization/tuning planning before G2 |
+| 2 | stabilization implementation pass | runnable after the updated `S1-P1-A2` package is accepted |
 | 3 | S1-P2-A1 | not runnable until G2 is explicitly passed |
 
 ## Waiting On User
@@ -90,6 +91,12 @@ Use it to track:
 - `Training\tests\test_onnx_export.py` now validates the real input/output names and numeric parity requirement instead of skipping behind a placeholder contract
 - March 10, 2026 worker validation exported `F:\NewEngine\Training\output\phc_policy.onnx` with accepted opset `17` and `onnxruntime 1.24.3` parity max abs diff `1.64e-7`
 - the exported ONNX was copied to `F:\NewEngine\PhysAnimUE5\Content\NNEModels\phc_policy.onnx`, so the next runtime step is UE import / NNE model-creation validation rather than more offline export work
+- user evidence on March 10, 2026 now confirms the startup-success line:
+  - `[PhysAnim] Startup success. Runtime=NNERuntimeORTDml Model=/Game/NNEModels/phc_policy.phc_policy`
+- the active Phase 1 blocker has changed:
+  - model loading is proven
+  - the current failure mode is uncontrolled post-startup flight / spinning
+  - the next required planning artifact is a stabilization/tuning package, not a G2 comparison handoff
 
 ## Accepted Handoffs
 
@@ -103,13 +110,13 @@ Use it to track:
 | S1-PLAN-06 | task packets / lock sheets / user return path | yes | re-entry into Phase 0 is now operationally defined |
 | S1-PLAN-07 | retrieval / export / comparison lock bundle | yes | remaining Phase 0-1 planning gaps materially reduced |
 | S1-P0-A1 | Phase 0 machine-specific execution package | yes | Windows-native Isaac Sim / Isaac Lab path is frozen and Phase 0 can advance without more setup replanning |
-| S1-P1-A1 | single-character implementation package freeze + ONNX export path | pending orchestrator acceptance | handoff prepared in `plans/stage1/s1-p1-a1-handoff.md` |
+| S1-P1-A1 | single-character implementation package freeze + ONNX export path | yes | startup now succeeds through `NNERuntimeORTDml`, so export/import discovery is no longer on the critical path |
 
 ## Blocked / Deferred
 
 | Task ID | Status | Reason |
 |---|---|---|
-| S1-P1-A2 | unblocked | depends on orchestrator accepting the `S1-P1-A1` handoff and then driving UE runtime import / tuning work |
+| G2 | blocked | do not package or judge G2 while the physics-driven runtime is still dominated by immediate post-startup instability |
 | S1-P2-A1 | blocked | depends on G2 pass |
 | S1-P2-A2 | blocked | depends on Phase 2 result |
 

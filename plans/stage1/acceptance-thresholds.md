@@ -125,10 +125,28 @@ G1 counts as `fail` if any of the above are `fail`.
 
 G1 counts as `blocked` if none fail outright but at least one is still `blocked`.
 
+## Phase 1 Runtime-Stability Threshold
+
+The current Phase 1 one-character runtime counts as `stable enough for G2` only if:
+
+- the bridge reaches a real startup-success line in UE
+- the physics-driven character does not immediately enter persistent launch, spin, or tumble behavior
+- the motion remains visually readable for roughly `30 seconds`
+- instability, if present, is limited enough that tuning work still looks plausible rather than hopeless
+
+Choose `fail` if startup succeeds but the capture is dominated by uncontrollable flight, spinning, tumbling, or other instability that makes the physics-driven version unreadable.
+
+Choose `blocked` if:
+
+- the bridge does not reach startup success yet
+- the wrong pawn/map/settings were used
+- the evidence is too weak to tell whether the runtime was actually controllable
+
 ## G2 Threshold
 
 G2 counts as `pass` only if:
 
+- the Phase 1 runtime-stability threshold already scores `pass`
 - the kinematic and physics-driven captures are directly comparable
 - the user judges the physics-driven version noticeably better on at least `3` of these `5` points:
   - weight

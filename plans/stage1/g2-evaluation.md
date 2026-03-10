@@ -31,6 +31,7 @@ Do not run G2 until:
 
 - Phase 1 is complete enough for comparison
 - the one-character bridge runs end to end
+- the Phase 1 runtime-stability threshold already scores `pass`
 - the comparison sequence is chosen and frozen
 - the orchestrator confirms no `red` assumption blocks the quality comparison
 
@@ -95,6 +96,7 @@ Choose `fail` if any of these are true:
 
 Choose `blocked` if:
 
+- the physics-driven runtime is still dominated by immediate startup instability
 - the captures are not comparable
 - the sequence is not frozen
 - the user cannot make a fair judgment from the available evidence

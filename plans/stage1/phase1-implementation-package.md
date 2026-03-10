@@ -65,6 +65,30 @@ For the current Phase 1 pass, `stable enough for G2` means:
 - the one-character runtime remains controllable for about `30` seconds at the frozen synchronous substep settings in `DefaultEngine.ini`
 - instability or bridge faults do not dominate the capture to the point that the user cannot make a fair side-by-side judgment
 
+### Current Runtime Truth
+
+Current local Phase 1 truth on March 10, 2026:
+
+- startup now succeeds through `NNERuntimeORTDml`
+- the current blocker is no longer model loading
+- the current blocker is uncontrolled post-startup runtime behavior (`flying` / `spinning uncontrollably`)
+
+This means Phase 1 is now in stabilization/tuning, not in export discovery and not yet in G2 packaging.
+
+### Frozen Stabilization Order
+
+The Phase 1 stabilization pass must proceed in this order:
+
+1. keep the working startup path fixed:
+   - same model asset
+   - same character Blueprint
+   - same PoseSearch content
+   - same physics settings unless the task explicitly says otherwise
+2. reduce action influence before changing mapping assumptions
+3. adjust fixed Physics Control gains/damping next
+4. inspect mapping / frame-assumption faults only if low-influence tuning still produces pathological motion
+5. do not ask the user to run G2 until the runtime-stability threshold passes
+
 ## Entry Criteria
 
 Do not start Phase 1 implementation until all of these are true:
@@ -196,6 +220,8 @@ Phase 1 does not include:
   - definition of what "stable enough for G2" means
 - Escalate if:
   - tuning work would effectively require architectural changes
+- Frozen immediate purpose:
+  - eliminate the current post-startup flight/spin failure mode before any G2 capture packaging
 
 ### P1-06: Optional Visual Bonus Decision
 

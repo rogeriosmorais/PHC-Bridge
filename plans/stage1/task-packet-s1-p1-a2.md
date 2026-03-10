@@ -6,11 +6,17 @@
 
 ## Goal
 
-Package the G2 comparison so the user can judge Stage 1 quality without inventing the methodology at runtime.
+Turn the first end-to-end UE runtime success into a stabilization-ready one-character package, then prepare the G2 comparison only after the runtime is stable enough to judge fairly.
 
 ## Frozen Inputs
 
-- accepted one-character Phase 1 result
+- accepted `S1-P1-A1` handoff
+- current Phase 1 runtime state:
+  - startup succeeds in UE
+  - runtime log confirms `NNERuntimeORTDml`
+  - the character currently flies / spins uncontrollably after startup
+- [phase1-implementation-package.md](/F:/NewEngine/plans/stage1/phase1-implementation-package.md)
+- [phase1-ue-bridge-bringup-runbook.md](/F:/NewEngine/plans/stage1/phase1-ue-bridge-bringup-runbook.md)
 - [g2-evaluation.md](/F:/NewEngine/plans/stage1/g2-evaluation.md)
 - [manual-verification.md](/F:/NewEngine/plans/stage1/manual-verification.md)
 - [acceptance-thresholds.md](/F:/NewEngine/plans/stage1/acceptance-thresholds.md)
@@ -18,27 +24,56 @@ Package the G2 comparison so the user can judge Stage 1 quality without inventin
 
 ## Writable Paths
 
+- [phase1-implementation-package.md](/F:/NewEngine/plans/stage1/phase1-implementation-package.md)
+- [phase1-ue-bridge-bringup-runbook.md](/F:/NewEngine/plans/stage1/phase1-ue-bridge-bringup-runbook.md)
+- [manual-verification.md](/F:/NewEngine/plans/stage1/manual-verification.md)
+- [acceptance-thresholds.md](/F:/NewEngine/plans/stage1/acceptance-thresholds.md)
 - [g2-evaluation.md](/F:/NewEngine/plans/stage1/g2-evaluation.md)
 - [execution-log.md](/F:/NewEngine/plans/stage1/execution-log.md)
 - [assumption-ledger.md](/F:/NewEngine/plans/stage1/assumption-ledger.md)
 
 ## Required Work
 
-1. Freeze the comparison sequence.
-2. Freeze the capture parity rules for kinematic vs physics-driven clips.
-3. Prepare the exact evidence the user must return.
-4. Pre-score any obvious blockers before the user is asked to judge G2.
+1. Record the current runtime truth explicitly:
+   - startup success is proven
+   - NNE runtime/model loading is no longer the blocker
+   - uncontrolled post-startup flight / spin is the active Phase 1 blocker
+2. Freeze one manual stabilization checkpoint for the current one-character runtime.
+3. Freeze the tuning order so implementation does not improvise:
+   - keep the working asset/model/startup path fixed
+   - reduce action influence before changing mapping assumptions
+   - adjust fixed Physics Control gains/damping next
+   - inspect mapping / frame assumptions only if low-influence tuning still produces pathological motion
+4. Define exactly what counts as `stable enough for G2`.
+5. Only after the stabilization checkpoint is explicit, update the G2 package so it cannot be run on an obviously unstable build.
+
+## Execution Order
+
+1. Accept the current runtime truth as frozen:
+   - startup succeeds
+   - the runtime is unstable after startup
+   - do not reopen model-import or asset-path discovery unless startup stops working again
+2. Use [manual-verification.md](/F:/NewEngine/plans/stage1/manual-verification.md) to classify the current runtime with `MV-P1-01`.
+3. Treat the first implementation pass as a stabilization pass, not a quality pass.
+4. Keep the working startup path fixed while testing the first stabilization adjustments.
+5. Apply tuning changes only in the frozen order from [phase1-implementation-package.md](/F:/NewEngine/plans/stage1/phase1-implementation-package.md):
+   - action influence first
+   - fixed Physics Control gains and damping next
+   - mapping / frame assumptions only after the simpler causes are ruled out
+6. Re-run `MV-P1-01` after each meaningful stabilization pass and record whether the result moved from `fail` toward `pass`.
+7. Do not ask the user to run `G2` until `MV-P1-01` is explicitly recorded as `pass`.
 
 ## Definition Of Done
 
-- the user can run G2 with one clear comparison method
-- the evidence package can support `pass`, `fail`, or `blocked`
-- no hidden setup mismatch remains in the comparison plan
+- the current Phase 1 blocker is documented precisely
+- the stabilization checkpoint can support `pass`, `fail`, or `blocked`
+- the tuning order is frozen tightly enough to avoid ad hoc runtime debugging
+- G2 remains blocked until the stabilization checkpoint passes
 
 ## Escalate To User When
 
-- the comparison sequence cannot be frozen cleanly
-- the evidence is not comparable enough for a fair judgment
+- the runtime is so unstable that no fair stabilization checkpoint can be written
+- the required tuning work would change the locked bridge contract or widen scope materially
 
 ## Verification
 
@@ -47,4 +82,5 @@ Package the G2 comparison so the user can judge Stage 1 quality without inventin
 
 ## Next Consumer
 
-- user for `G2`
+- implementation owner for Phase 1 stabilization work
+- then user for `G2` only after stabilization is accepted

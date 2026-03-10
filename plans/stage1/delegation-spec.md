@@ -106,15 +106,15 @@ This document defines what each AI-owned Stage 1 task is supposed to do, what it
 - `Escalate to user when`: asset, content, or scope choices exceed the Stage 1 boundaries
 - `Verification`: static review against Phase 1 tasks and G2
 
-### S1-P1-A2: G2 Evaluation Package
+### S1-P1-A2: Runtime Stabilization Package
 
-- `Goal`: define how to judge physics-driven versus kinematic quality
-- `Inputs`: Phase 1 implementation result, manual verification template
-- `Work`: specify comparison setup, expected evidence, and pass/fail rubric
-- `Output`: `plans/stage1/g2-evaluation.md`
-- `Definition of done`: the user can run G2 without inventing the comparison method
-- `Escalate to user when`: comparison criteria remain subjective or contested
-- `Verification`: review against the G2 gate text
+- `Goal`: turn the first successful UE runtime boot into a stable, judgeable one-character Phase 1 result
+- `Inputs`: Phase 1 implementation result, runtime evidence, manual verification template
+- `Work`: document the current runtime truth, freeze the stabilization checkpoint, freeze the tuning order, and update G2 so it stays blocked until runtime stability passes
+- `Output`: `plans/stage1/task-packet-s1-p1-a2.md`, `plans/stage1/manual-verification.md`, `plans/stage1/acceptance-thresholds.md`, `plans/stage1/g2-evaluation.md`, `plans/stage1/execution-log.md`
+- `Definition of done`: a worker can execute stabilization without inventing test conditions or tuning order, and G2 remains explicitly blocked until the runtime-stability threshold passes
+- `Escalate to user when`: runtime evidence is too weak to classify as pass, fail, or blocked, or when the next tuning move would change frozen bridge/model assumptions
+- `Verification`: review against the Phase 1 package, runtime-stability threshold, and the updated G2 entry criteria
 
 ### S1-P2-A1: Two-Character Demo Package
 

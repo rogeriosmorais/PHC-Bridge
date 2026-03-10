@@ -40,7 +40,7 @@ Use it after the user returns with setup evidence. Do not treat the environment 
 | pretrained checkpoint path | `Training/ProtoMotions/data/pretrained_models/motion_tracker/smpl/last.ckpt` | `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt` | confirmed | checkpoint exists locally |
 | ONNX export entry point | `F:\NewEngine\Training\scripts\export_onnx.py` | `F:\NewEngine\Training\scripts\export_onnx.py` | confirmed | explicit Stage 1 export script now exists and exports the pretrained `motion_tracker/smpl` actor path |
 | ONNX opset | `17 -> 16 -> 15 fallback order` | `17` | confirmed | exported successfully with opset `17`; no fallback was needed |
-| Unreal runtime target | `NNERuntimeORTDml` |  | planned | `NNERuntimeORTCpu` debug fallback only |
+| Unreal runtime target | `NNERuntimeORTDml` | `NNERuntimeORTDml` | confirmed | startup-success line reached in UE on March 10, 2026; CPU fallback remains debug-only |
 
 ## Dataset Lock
 

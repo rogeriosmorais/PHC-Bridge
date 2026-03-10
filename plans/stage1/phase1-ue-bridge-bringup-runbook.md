@@ -415,6 +415,12 @@ The current bridge reports startup success with a log line in this shape:
 
 If you see that line, the minimum content contract is now satisfied and the bridge is alive.
 
+Important current truth:
+
+- startup success does not automatically mean the runtime is stable enough for comparison
+- if the character immediately flies, spins, or tumbles after this line appears, that is a Phase 1 stabilization failure, not an asset bring-up failure
+- do not go back and improvise asset-path changes once this line is proven; the next work is tuning / stabilization
+
 ### Expected Failure Shape
 
 The current bridge reports startup failure with:
@@ -437,6 +443,7 @@ If startup succeeds:
 2. confirm the Output Log shows the startup success line
 3. watch whether the character remains stable enough to judge basic bridge activity
 4. capture the first `10` to `20` seconds with a short clip if possible
+5. if the character immediately flies or spins uncontrollably, classify the run as `runtime unstable after startup`
 
 If startup is blocked or fail-stops:
 
@@ -460,6 +467,7 @@ Use this to classify the first failure reason from the log.
 | `Could not create an NNE model instance` | ORT runtime/plugin/model compatibility is broken |
 | `PoseSearch query was invalid for two consecutive ticks` | the direct `MotionMatch(...)` query did not produce a valid result from the current pose history + database |
 | `UPoseSearchLibrary::MotionMatch returned no selected animation` | PoseSearch ran but did not select any clip from `PSDB_Stage1_Locomotion` |
+| `Startup success` followed by immediate flight/spin/tumble | the bridge and NNE path are alive; move to the Phase 1 stabilization/tuning task instead of revisiting bring-up assets |
 
 ## What To Send Back After The Full Pass
 
@@ -474,6 +482,7 @@ Return exactly this evidence bundle:
    - `startup success`
    - `blocked at step <n>`
    - `runtime fail-stop after startup`
+   - `runtime unstable after startup`
 
 ## Future Maintenance Rule
 

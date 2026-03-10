@@ -310,6 +310,70 @@ Max Substeps = 8
     - which configuration you consider the best documented Stage 1 setting on this machine
     - final checkpoint verdict: `pass`, `fail`, or `blocked`
 
+### MV-P1-01: Phase 1 Runtime Stabilization Check
+
+- `What you are checking`: whether the full Phase 1 runtime can start successfully in UE and remain visually controllable long enough to tune, instead of immediately flying, spinning, or exploding
+- `Why it matters`: a startup-success line by itself is not enough for G2; if the character launches or spins uncontrollably right after startup, the physics-driven capture is not fair to compare yet
+- `What this checkpoint is and is not`:
+  - this checkpoint starts after the full bridge is already alive
+  - this checkpoint is not about asset paths, ONNX export, or whether NNE exists
+  - this checkpoint is the first Phase 1 post-startup stability gate before G2 packaging
+- `Frozen test inputs`:
+  1. exact UE map path:
+     - `/Game/ThirdPerson/Lvl_ThirdPerson`
+  2. exact production character:
+     - `/Game/Characters/Mannequins/Blueprints/BP_PhysAnimCharacter`
+  3. exact expected startup-success line shape:
+     - `[PhysAnim] Startup success. Runtime=... Model=/Game/NNEModels/phc_policy.phc_policy`
+  4. exact physics settings:
+     - use the current project defaults in `PhysAnimUE5/Config/DefaultEngine.ini`
+     - `Tick Physics Async = false`
+     - `Substepping = true`
+     - `Max Substep Delta Time = 0.008333`
+     - `Max Substeps = 4`
+  5. exact evidence format required back:
+     - short clip strongly preferred
+     - startup success log line plus one written verdict
+- `What to click or run`:
+  1. Open `F:\NewEngine\PhysAnimUE5\PhysAnimUE5.uproject`.
+  2. Open `/Game/ThirdPerson/Lvl_ThirdPerson`.
+  3. Confirm the placed/possessed pawn is `BP_PhysAnimCharacter`.
+  4. Open the Output Log before PIE.
+  5. Start PIE and do not move the character manually yet.
+  6. Watch the Output Log for the startup-success line.
+  7. If startup does not succeed, stop. This checkpoint is `blocked`, not `fail`.
+  8. Once startup succeeds, watch the first `10` seconds closely:
+     - does the character stay roughly upright
+     - does the body immediately launch upward
+     - does the body enter continuous spinning or tumbling
+     - is the motion still readable enough to tune
+  9. If the first `10` seconds are readable, let the run continue for about `30` seconds total.
+  10. Record a short clip if practical. If not, capture at least one screenshot and write down exactly what dominated the run.
+- `What good looks like`:
+  - the startup-success line appears
+  - the character does not immediately launch, spin uncontrollably, or collapse into unreadable motion
+  - the run remains visually controllable for about `30` seconds
+  - the result is stable enough that tuning adjustments would be meaningful
+- `What bad looks like`:
+  - startup succeeds, but the character immediately flies away
+  - startup succeeds, but the character spins or tumbles continuously
+  - the first seconds are dominated by instability rather than recognizable motion
+  - the result is too chaotic to use as a fair G2 candidate
+- `When to mark blocked instead of fail`:
+  - the startup-success line never appears because the bridge is blocked earlier
+  - the wrong pawn or map was used
+  - the clip or written note is too weak to judge what dominated the run
+- `What evidence to send back`:
+  - exact map path used: `/Game/ThirdPerson/Lvl_ThirdPerson`
+  - exact character used: `BP_PhysAnimCharacter`
+  - the first `[PhysAnim]` startup success or failure line
+  - one short clip or screenshot
+  - one sentence saying:
+    - whether startup succeeded
+    - whether the body stayed controllable for about `30` seconds
+    - whether flying, spinning, tumbling, or another failure mode dominated
+    - final checkpoint verdict: `pass`, `fail`, or `blocked`
+
 ### MV-G2-01: Physics-Driven Versus Kinematic Comparison
 
 - `What you are checking`: whether the physics-driven version looks noticeably more natural than the kinematic PoseSearch version
