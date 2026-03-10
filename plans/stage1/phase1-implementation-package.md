@@ -8,12 +8,15 @@ Phase 1 exists to answer the next question after G1:
 
 Can one Manny character run the full `PoseSearch -> PHC -> Physics Control -> Chaos` loop well enough to support a credible quality comparison for G2?
 
+The bridge is not considered fully specced for implementation until [ue-bridge-implementation-spec.md](/F:/NewEngine/plans/stage1/ue-bridge-implementation-spec.md) is completed and reviewed.
+
 ## Entry Criteria
 
 Do not start Phase 1 implementation until all of these are true:
 
 - Gate G1 is explicitly `pass` in [g1-evidence.md](/F:/NewEngine/plans/stage1/g1-evidence.md)
 - `bridge-spec.md` is locked for the chosen PHC config
+- `ue-bridge-implementation-spec.md` is implementation-ready for the UE `5.7.3` runtime path
 - `retargeting-spec.md` is locked for the Stage 1 mapped subset
 - `motion-set.md` is locked for the Stage 1 locomotion-only core
 - `comparison-sequence-lock.md` is locked for the intended G2 sequence
@@ -28,6 +31,7 @@ Do not start Phase 1 implementation until all of these are true:
 4. PD tuning plan for one-character stability and comparison readiness
 5. A clear setup for the G2 side-by-side evaluation package
 6. An ONNX export/import path that no longer requires discovery work during Phase 1
+7. A UE integration spec that freezes exact runtime owner classes, API calls, and tick/update flow before further bridge code changes
 
 ## Scope
 
@@ -66,6 +70,8 @@ Phase 1 does not include:
 
 - Owner: AI worker
 - Goal: define the exact bridge responsibilities for `PhysAnimPlugin`
+- Required reference:
+  - [ue-bridge-implementation-spec.md](/F:/NewEngine/plans/stage1/ue-bridge-implementation-spec.md)
 - Output:
   - implementation-ready breakdown for:
     - state gathering
@@ -157,6 +163,7 @@ Before Phase 1 can be considered complete enough for G2 packaging, there must be
 - one-character bridge works end to end
 - PHC model runs through NNE in UE5
 - PoseSearch content is available for the chosen comparison sequence
+- the UE integration path is frozen well enough that no new UE API discovery work is still blocking implementation
 - the comparison sequence is frozen in `comparison-sequence-lock.md`
 - tuning reaches a stable-enough state for comparison
 - no unresolved `red` assumptions remain for G2

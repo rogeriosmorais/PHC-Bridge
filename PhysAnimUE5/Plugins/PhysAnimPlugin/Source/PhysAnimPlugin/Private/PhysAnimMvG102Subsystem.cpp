@@ -3,6 +3,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/CollisionProfile.h"
+#include "Engine/SkinnedAsset.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "HAL/IConsoleManager.h"

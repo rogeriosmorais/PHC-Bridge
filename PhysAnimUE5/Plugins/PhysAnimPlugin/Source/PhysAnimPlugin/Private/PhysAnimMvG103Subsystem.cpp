@@ -9,6 +9,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "PhysicsControlComponent.h"
 #include "PhysicsControlData.h"
+#include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/PhysicsAsset.h"
 #include "Stats/Stats.h"
 
 namespace PhysAnimMvG103
@@ -37,6 +39,68 @@ namespace PhysAnimMvG103
 	};
 
 	static TMap<TWeakObjectPtr<USkeletalMeshComponent>, FMeshCollisionState> OriginalCollisionStates;
+
+	static void LogMeshDiagnostics(const TCHAR* Context, USkeletalMeshComponent* MeshComponent)
+	{
+		if (!MeshComponent)
+		{
+			return;
+		}
+
+		const UPhysicsAsset* const PhysicsAsset = MeshComponent->GetPhysicsAsset();
+		const FBodyInstance* const UpperarmBody = MeshComponent->GetBodyInstance(UpperarmBoneName);
+		const FBodyInstance* const LowerarmBody = MeshComponent->GetBodyInstance(LowerarmBoneName);
+		const FBodyInstance* const HandBody = MeshComponent->GetBodyInstance(HandBoneName);
+
+		UE_LOG(
+			LogTemp,
+			Display,
+			TEXT("[MV-G1-03] %s | mesh=%s profile=%s collision=%s physics_state=%s physics_asset=%s upperarm_body=%s lowerarm_body=%s hand_body=%s"),
+			Context,
+			*MeshComponent->GetName(),
+			*MeshComponent->GetCollisionProfileName().ToString(),
+			*UEnum::GetValueAsString(MeshComponent->GetCollisionEnabled()),
+			MeshComponent->IsPhysicsStateCreated() ? TEXT("true") : TEXT("false"),
+			PhysicsAsset ? *PhysicsAsset->GetPathName() : TEXT("None"),
+			UpperarmBody ? TEXT("true") : TEXT("false"),
+			LowerarmBody ? TEXT("true") : TEXT("false"),
+			HandBody ? TEXT("true") : TEXT("false"));
+	}
+
+	static bool ValidateRequiredPhysicsBodies(USkeletalMeshComponent* MeshComponent, FString& OutMissingBodies)
+	{
+		if (!MeshComponent)
+		{
+			OutMissingBodies = TEXT("no mesh");
+			return false;
+		}
+
+		TArray<FString> MissingBodies;
+
+		if (!MeshComponent->GetBodyInstance(UpperarmBoneName))
+		{
+			MissingBodies.Add(UpperarmBoneName.ToString());
+		}
+
+		if (!MeshComponent->GetBodyInstance(LowerarmBoneName))
+		{
+			MissingBodies.Add(LowerarmBoneName.ToString());
+		}
+
+		if (!MeshComponent->GetBodyInstance(HandBoneName))
+		{
+			MissingBodies.Add(HandBoneName.ToString());
+		}
+
+		if (MissingBodies.IsEmpty())
+		{
+			OutMissingBodies.Reset();
+			return true;
+		}
+
+		OutMissingBodies = FString::Join(MissingBodies, TEXT(", "));
+		return false;
+	}
 
 	static float ComputeElbowBlendAlpha(const float TimeSeconds)
 	{
@@ -155,6 +219,16 @@ bool UPhysAnimMvG103Subsystem::StartSmokeTest()
 		return false;
 	}
 
+	FString MissingBodies;
+	if (!PhysAnimMvG103::ValidateRequiredPhysicsBodies(MeshComponent, MissingBodies))
+	{
+		LogStatus(FString::Printf(
+			TEXT("Start failed: required mannequin physics bodies were not found on the current mesh (%s)."),
+			*MissingBodies));
+		PhysAnimMvG103::LogMeshDiagnostics(TEXT("missing required physics bodies"), MeshComponent);
+		return false;
+	}
+
 	if (!EnsureHarnessCreated(Character, MeshComponent))
 	{
 		return false;
@@ -166,6 +240,11 @@ bool UPhysAnimMvG103Subsystem::StartSmokeTest()
 	bTestActive = true;
 
 	ActivateVisualPhysicsState(MeshComponent);
+	PhysAnimMvG103::LogMeshDiagnostics(TEXT("after visual activation"), MeshComponent);
+
+	// Parent-space controls with skeletal-animation targets need a warm bone cache before their
+	// first UpdateControls call, otherwise the control component cannot resolve the authored pose.
+	ControlComponent->UpdateTargetCaches(0.0f);
 
 	ControlComponent->SetBodyModifiersInSetMovementType(
 		PhysAnimMvG103::BodyModifierSetName,
@@ -176,6 +255,7 @@ bool UPhysAnimMvG103Subsystem::StartSmokeTest()
 
 	ResetPoseTargets();
 	ControlComponent->UpdateControls(0.0f);
+	PhysAnimMvG103::LogMeshDiagnostics(TEXT("after body modifiers"), MeshComponent);
 
 	LogStatus(TEXT("MV-G1-03 started. Frozen pose case: isolated left elbow flexion. Expected result: left elbow bends while the right arm stays neutral. Command: PhysAnim.MVG103.Start"));
 	return true;

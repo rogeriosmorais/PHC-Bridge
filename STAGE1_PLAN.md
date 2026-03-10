@@ -48,6 +48,7 @@ These files are the detailed source of truth for Stage 1 execution planning and 
 - [Orchestration Model](/F:/NewEngine/plans/stage1/orchestration.md)
 - [Assumption Ledger](/F:/NewEngine/plans/stage1/assumption-ledger.md)
 - [Bridge Spec](/F:/NewEngine/plans/stage1/bridge-spec.md)
+- [UE Bridge Implementation Spec](/F:/NewEngine/plans/stage1/ue-bridge-implementation-spec.md)
 - [Retargeting Spec](/F:/NewEngine/plans/stage1/retargeting-spec.md)
 - [Test Strategy](/F:/NewEngine/plans/stage1/test-strategy.md)
 - [Motion Set](/F:/NewEngine/plans/stage1/motion-set.md)

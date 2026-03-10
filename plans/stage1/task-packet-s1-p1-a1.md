@@ -13,6 +13,7 @@ Turn a passed G1 into an implementation-ready one-character package without reop
 - `G1` marked `pass`
 - [phase1-implementation-package.md](/F:/NewEngine/plans/stage1/phase1-implementation-package.md)
 - [bridge-spec.md](/F:/NewEngine/plans/stage1/bridge-spec.md)
+- [ue-bridge-implementation-spec.md](/F:/NewEngine/plans/stage1/ue-bridge-implementation-spec.md)
 - [retargeting-spec.md](/F:/NewEngine/plans/stage1/retargeting-spec.md)
 - [test-strategy.md](/F:/NewEngine/plans/stage1/test-strategy.md)
 - [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/comparison-sequence-lock.md)
@@ -34,9 +35,11 @@ Turn a passed G1 into an implementation-ready one-character package without reop
    - NNE inference
    - action unpacking
    - physics-control writes
+   - exact UE runtime owner classes, API calls, and tick/update flow
 3. Freeze the ONNX export/import path for the chosen runtime model.
 4. Freeze the minimal PoseSearch content required for G2.
 5. Freeze the tuning definition for "stable enough for G2."
+6. Do not resume bridge code changes until the UE integration spec is explicit enough to remove fresh Unreal API discovery from Phase 1 implementation.
 
 ## Definition Of Done
 
