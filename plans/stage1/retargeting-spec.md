@@ -46,8 +46,8 @@ Stage 1 only needs a mapping for the subset of Manny that corresponds to the SMP
 | R_Elbow | lowerarm_r | required |
 | L_Wrist | hand_l | required |
 | R_Wrist | hand_r | required |
-| L_Hand | unmapped | leave animation-driven |
-| R_Hand | unmapped | leave animation-driven |
+| L_Hand | hand_l | collapsed onto the same UE target as `L_Wrist` |
+| R_Hand | hand_r | collapsed onto the same UE target as `R_Wrist` |
 
 ## Unmapped-Bone Policy
 
@@ -59,6 +59,29 @@ The following stay outside the Stage 1 policy-controlled subset:
 
 These bones keep their animation-driven pose from the upstream animation/PoseSearch path.
 
+## Distal-Hand Collapse Rule
+
+Stage 1 does not drop the policy-space `L_Hand` and `R_Hand` joints.
+
+Instead:
+
+- `L_Wrist` and `L_Hand` share UE destination `hand_l`
+- `R_Wrist` and `R_Hand` share UE destination `hand_r`
+
+Frozen control-side composition:
+
+- `Q_hand_l = Q_L_Wrist * Q_L_Hand`
+- `Q_hand_r = Q_R_Wrist * Q_R_Hand`
+
+with parent-first composition order.
+
+Frozen observation-side surrogate:
+
+- both left-side distal SMPL joints read Manny `hand_l`
+- both right-side distal SMPL joints read Manny `hand_r`
+
+This is the only approved Stage 1 distal-hand approximation. If it proves too lossy for the locomotion comparison, that is an assumption failure, not an implementation detail.
+
 ## Transform Policy
 
 ### Locked Rules
@@ -67,22 +90,33 @@ These bones keep their animation-driven pose from the upstream animation/PoseSea
 - Left/right mapping must never be inferred implicitly from naming conventions at runtime.
 - The bridge must preserve the SMPL joint order used by the selected PHC model.
 - Mapping tables must be static data, not discovered heuristically at runtime.
+- Vector conversion at the feature-construction boundary is frozen as:
+  - `UE.X = SMPL.Z`
+  - `UE.Y = SMPL.X`
+  - `UE.Z = SMPL.Y`
+- Rotations must be converted by basis change, never by quaternion-component permutation:
+  - `B = [[0,0,1],[1,0,0],[0,1,0]]`
+  - `R_ue = B * R_smpl * B^T`
+  - `R_smpl = B^T * R_ue * B`
 
-### Still-Unresolved Risk
+### Residual Risk
 
-The final handedness-aware transform is not yet proven. The current skill explicitly warns that axis permutation alone is insufficient.
+The remaining risk is not "which basis conversion do we use?" anymore.
 
-Until Phase 0 confirms the transform against UE5 runtime data:
+The remaining risk is:
 
-- treat coordinate conversion as a dedicated validation target
-- do not call the mapping implementation-safe
-- do not assume round-trip correctness from naming or axis order alone
+- reference-pose mismatch
+- parent-space composition mistakes
+- visual handedness or mirroring errors that only show up in Manny runtime validation
+
+Those risks are covered by the existing validation matrix and G1 smoke cases.
 
 ## Representation Policy
 
 - The retargeting layer must accept whatever joint representation the selected PHC config actually uses.
 - The conversion boundary between UE5 transforms and model representation must be centralized.
 - If the model expects local parent-relative joint rotations, the mapping must preserve that relationship rather than converting to ad hoc world-space control values.
+- The selected Stage 1 runtime uses local parent-relative quaternions at the bridge boundary, with `xyzw` / `w_last=True`.
 
 ## Validation Cases
 
@@ -148,7 +182,7 @@ Record the chosen validation-pose names, the handedness note, and the Manny smok
 The retargeting plan is considered implementation-ready when:
 
 - every required SMPL joint has an explicit UE5 destination or an explicit unmapped policy
-- handedness handling is called out as an explicit conversion step
+- the frame-conversion basis and rotation-conversion rule are frozen explicitly
 - left/right mapping is fixed and documented
 - the validation matrix exists and is tied to G1 evidence
 
@@ -168,4 +202,4 @@ The implementation-ready output from this planning task should be:
 - this document
 - a final static mapping table in code-ready order
 - a list of validation poses to encode in tests or prototypes
-- a short note confirming the handedness transform chosen during Phase 0
+- a short note confirming whether runtime Manny evidence matches the frozen conversion rule

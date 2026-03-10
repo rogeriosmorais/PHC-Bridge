@@ -153,7 +153,16 @@ This is intentionally redundant. The duplication is allowed because it keeps the
 
 - The Anim Blueprint remains the owner of the visual locomotion graph.
 - `UPhysAnimComponent` performs its own `UPoseSearchLibrary::MotionMatch(...)` query each tick using the same search assets and the same pose history tag.
-- The Anim Blueprint and the component must use the same PoseSearch database set for Stage 1. No chooser-only divergence is allowed.
+- `UPhysAnimComponent` owns the bridge-side source of truth for `AssetsToSearch` as:
+  - `UPROPERTY(EditDefaultsOnly)` `TArray<TObjectPtr<UObject>> PoseSearchAssetsToSearch`
+- the default production value for that property contains exactly:
+  - `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
+- the Anim Blueprint must be authored against that same database asset. No chooser-only divergence is allowed.
+
+Startup must validate:
+
+- `PoseSearchAssetsToSearch.Num() == 1`
+- `PoseSearchAssetsToSearch[0]` resolves to `/Game/PoseSearch/Databases/PSDB_Stage1_Locomotion`
 
 #### Frozen Pose History Tag
 
@@ -322,6 +331,36 @@ The only accepted Phase 1 shapes are:
 - inference runs once per render tick
 - inference runs on the game thread in Phase 1
 - no async task, RDG path, or batched multi-character session is allowed in Phase 1
+
+#### Frozen Action Mapping Math
+
+The locked local ProtoMotions helper uses:
+
+- `pd_target = pd_action_offset + pd_action_scale * action`
+
+For the selected `smpl_humanoid` runtime path:
+
+- `action_scale = 1.0`
+- `map_actions_to_pd_range = true`
+- all `23` policy joints are `3`-DoF groups
+- the helper clamps every joint group's scale to `pi`
+- every joint group's offset is `0`
+
+So the frozen Stage 1 simplification is:
+
+- `pd_target_i = pi * action_i`
+
+for all `69` output DoFs.
+
+After that:
+
+1. group the `69` DoFs into `23` contiguous `3`-float joints
+2. convert each `3`-float group from exponential-map DoF space into a local quaternion
+3. convert the quaternion through the frozen SMPL->UE frame-conversion layer
+4. map each quaternion onto the Manny control subset
+5. compose distal hand targets in parent-first order:
+   - `Q_hand_l = Q_L_Wrist * Q_L_Hand`
+   - `Q_hand_r = Q_R_Wrist * Q_R_Hand`
 
 #### Frozen Terrain Policy
 
@@ -586,7 +625,68 @@ The bridge gathers current runtime state with these UE calls:
 
 Use direct `FBodyInstance*` access only when the component-level APIs are insufficient for validation or diagnostics.
 
-### 8. Failure Handling
+### 8. Frozen Feature-Construction Algorithms
+
+The UE implementation is not allowed to invent new observation builders. It must reproduce the locked training-side builders.
+
+#### Frozen `self_obs` Build
+
+Per tick:
+
+1. gather the `24` SMPL-ordered bodies from Manny in runtime order
+2. use Manny `hand_l` as the surrogate current state for both `L_Wrist` and `L_Hand`
+3. use Manny `hand_r` as the surrogate current state for both `R_Wrist` and `R_Hand`
+4. express body positions, rotations, linear velocities, and angular velocities in the frozen SMPL ordering
+5. on the flat-floor comparison map, use `ground_height = 0`
+6. compute heading-inverse rotation from the pelvis/root quaternion
+7. emit:
+   - root height above ground: `1`
+   - root-relative local body positions with root removed: `23 * 3`
+   - heading-aligned body rotations in tan-norm form for all `24` bodies: `24 * 6`
+   - heading-aligned body linear velocities for all `24` bodies: `24 * 3`
+   - heading-aligned body angular velocities for all `24` bodies: `24 * 3`
+
+That produces the locked `358`-float `self_obs`.
+
+#### Frozen `mimic_target_poses` Build
+
+Per tick:
+
+1. run `UPoseSearchLibrary::MotionMatch(...)`
+2. sample `15` future poses from the selected animation at:
+   - `SelectedTime + n * (1 / 30)` seconds
+   - `n = 1..15`
+3. clamp each sample time to the selected asset play length
+4. sample each future pose with `UPoseSearchAssetSamplerLibrary::SamplePose(...)`
+5. read the `24` SMPL-ordered target body transforms from the sampled pose
+6. build the reference pose stream by shifting the future stream one step back and inserting the current body state as step `0`
+7. compute the locked four feature groups per future step:
+   - target body position relative to the previous reference pose
+   - target body position relative to the current root
+   - target body rotation relative to the previous reference pose
+   - target body rotation heading-aligned to the reference root
+8. append the future time scalar for each sampled step
+
+That produces the locked `15 * 433 = 6495`-float `mimic_target_poses`.
+
+#### Frozen Frame-Conversion Rule
+
+The bridge must use one explicit frame-conversion layer for both current-state and target-state features.
+
+Frozen vector basis conversion:
+
+- `UE.X = SMPL.Z`
+- `UE.Y = SMPL.X`
+- `UE.Z = SMPL.Y`
+
+Frozen rotation conversion:
+
+- `B = [[0,0,1],[1,0,0],[0,1,0]]`
+- `R_ue = B * R_smpl * B^T`
+
+The implementation must not permute quaternion components directly.
+
+### 9. Failure Handling
 
 #### Startup `blocked`
 
@@ -643,7 +743,7 @@ Even if the runtime stays alive, the Stage 1 comparison is failed if:
 
 That is a Stage 1 viability failure, not a hidden tuning issue.
 
-### 9. Required Test Seams
+### 10. Required Test Seams
 
 #### Deterministic Logic That Must Be Tested Before Code
 

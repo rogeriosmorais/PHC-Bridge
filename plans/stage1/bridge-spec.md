@@ -34,8 +34,8 @@ This spec does not invent a new policy format or change the locked architecture.
 ### Upstream Source
 
 - `PoseSearch` remains the source of the target motion intent.
-- Stage 1 assumes `PoseSearch` provides a target pose that can be sampled each render tick for the currently selected clip/state.
-- Planning assumption: Stage 1 uses a single current target pose plus any immediately available derived kinematic quantities, not a long custom trajectory window invented in UE5.
+- Stage 1 assumes `PoseSearch` provides one current selected animation state that can be sampled each render tick for the currently selected clip/state.
+- Stage 1 uses a dense `15`-step future reference window derived from that selected animation state at the locked simulator cadence, not a separate custom trajectory predictor invented in UE5.
 
 ### Runtime Flow
 
@@ -89,7 +89,8 @@ Total: `358`
 
 - Use root-relative coordinates where the PHC config expects invariance to world translation.
 - Use the pelvis as the root anchor unless the chosen config proves otherwise.
-- Do not include finger or twist-bone state in the PHC observation. Those remain outside the mapped SMPL subset.
+- Do not include mannequin finger or twist-bone state in the PHC observation.
+- The runtime still needs `24` SMPL bodies. `L_Hand` and `R_Hand` are therefore not dropped; they are approximated from Manny `hand_l` and `hand_r` on the UE side.
 - Unmapped UE5 bones are visual followers of animation/PoseSearch rather than policy-driven control variables.
 
 ### Runtime-Simplification Note
@@ -147,6 +148,77 @@ The action tensor is ordered by `robot.dof_names`, which groups `23` joints at `
 - Stage 1 must use fixed editor-configured or hand-tuned `UPhysicsControlComponent` gains.
 - The Stage 1 plugin does not emit raw torques directly unless `UPhysicsControlComponent` proves unusable and the project explicitly accepts the fallback path already documented in `ENGINEERING_PLAN.md`.
 
+### Exact PD-Range Mapping
+
+The selected runtime path uses the simulator helper:
+
+- `pd_target = pd_action_offset + pd_action_scale * action`
+
+Frozen Stage 1 inputs to that helper:
+
+- `map_actions_to_pd_range: true`
+- `action_scale: 1.0`
+
+The offset/scale vectors are produced by `build_pd_action_offset_scale(...)`.
+
+For the selected `smpl_humanoid` asset:
+
+- every policy joint is a `3`-DoF group
+- each group is first expanded to a symmetric range:
+  - `joint_scale = min(1.2 * max(abs(low_xyz), abs(high_xyz)), pi)`
+  - `joint_offset = 0`
+- the final per-DoF mapping is the group scale copied across the `x/y/z` entries
+
+Because the selected `smpl_humanoid.xml` ranges are all at least `[-180 deg, 180 deg]` and several are wider, every Stage 1 joint group reaches the clamp:
+
+- `joint_scale = pi`
+- `joint_offset = 0`
+
+So the frozen Stage 1 simplification is:
+
+- `pd_target_i = pi * action_i`
+
+for all `69` action dimensions.
+
+### Exact Action-To-Local-Rotation Conversion
+
+After PD-range mapping:
+
+1. group the `69` DoFs into `23` joints in `robot.dof_names` order
+2. use the implicit `3`-DoF offsets:
+   - `0, 3, 6, ..., 69`
+3. convert each `3`-float group from exponential-map DoF space into a local quaternion with `w_last=True`
+4. pass that quaternion through the frozen SMPL->UE frame-conversion layer
+5. map the resulting local parent-space rotation onto the UE control target
+
+### Exact Distal-Hand Collapse Rule
+
+The selected checkpoint has:
+
+- `L_Wrist`
+- `L_Hand`
+- `R_Wrist`
+- `R_Hand`
+
+Manny has only one practical distal hand control body per side:
+
+- `hand_l`
+- `hand_r`
+
+Frozen Stage 1 collapse:
+
+- `Q_hand_l = Q_L_Wrist * Q_L_Hand`
+- `Q_hand_r = Q_R_Wrist * Q_R_Hand`
+
+where the multiplication order is parent first, child second.
+
+Observation-side surrogate:
+
+- both `L_Wrist` and `L_Hand` read from Manny `hand_l`
+- both `R_Wrist` and `R_Hand` read from Manny `hand_r`
+
+This is the only approved Stage 1 distal-hand approximation.
+
 ## Pose Representation Rules
 
 - The bridge must use the representation required by the selected local config, not the representation most convenient in UE5.
@@ -157,10 +229,17 @@ The action tensor is ordered by `robot.dof_names`, which groups `23` joints at `
 ## Coordinate Frame Rules
 
 - UE5 and SMPL frame conversion must be explicit and tested.
-- Do not rely on a simple axis permutation alone because handedness is unresolved at planning level.
+- Do not shuffle quaternion components directly.
 - All bridge code must pass through a named frame-conversion layer before writing model inputs or consuming model outputs.
 - The selected IsaacLab simulator uses `w_last: false` internally, but the common observation-building path converts data before feature construction and the relevant observation builders here operate with `w_last=True`.
 - Stage 1 should treat the confirmed model-facing quaternion/tan-norm path as `xyzw` / `w_last=True` at the feature-construction boundary.
+- Freeze the basis conversion at the vector boundary as:
+  - `UE.X = SMPL.Z`
+  - `UE.Y = SMPL.X`
+  - `UE.Z = SMPL.Y`
+- Freeze the rotation conversion as a basis change, not a quaternion component permutation:
+  - `B = [[0,0,1],[1,0,0],[0,1,0]]`
+  - `R_ue = B * R_smpl * B^T`
 
 ## Mapping Rules
 
@@ -176,6 +255,9 @@ The action tensor is ordered by `robot.dof_names`, which groups `23` joints at `
   - lower arms
   - hands
   - neck / head
+- Distal-hand policy rule:
+  - `L_Wrist` and `L_Hand` collapse onto UE `hand_l`
+  - `R_Wrist` and `R_Hand` collapse onto UE `hand_r`
 - Unmapped bones:
   - fingers
   - twist bones
@@ -187,6 +269,7 @@ Unmapped bones keep their animation-driven pose unless a later spec says otherwi
 
 - Orientation targets are written through `SetControlTargetOrientation()`.
 - Strength / damping updates are written through `SetControlAngularData()` if the bridge has per-joint gain data.
+- Control targets are parent-space targets derived from the mapped local joint quaternions, not world-space drags.
 - PHC inference runs once per render tick.
 - Physics substeps reuse the most recent target until the next render-tick inference result arrives.
 
