@@ -263,6 +263,20 @@ $env:OMNI_KIT_ACCEPT_EULA='YES'
 - Goal: confirm that the articulated body can remain stable enough for Stage 1
 - Inputs:
   - physics-substep plan from `ENGINEERING_PLAN.md`
+- Frozen runtime path:
+  - map: `/Game/ThirdPerson/Lvl_ThirdPerson`
+  - runtime owner: `UPhysAnimMvG102Subsystem`
+  - trigger: PIE console command `PhysAnim.MVG102.Start`
+  - first configuration:
+    - `Tick Physics Async = false`
+    - `Substepping = true`
+    - `Max Substep Delta Time = 0.008333`
+    - `Max Substeps = 4`
+  - fallback second configuration only if the first is clearly unstable:
+    - `Tick Physics Async = false`
+    - `Substepping = true`
+    - `Max Substep Delta Time = 0.004167`
+    - `Max Substeps = 8`
 - Output:
   - evidence entry in `g1-evidence.md`
 - Required evidence:

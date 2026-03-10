@@ -10,9 +10,9 @@ Gate text from the engineering plan:
 
 ## Gate Status
 
-- `Current status`: blocked
+- `Current status`: pass
 - `Decision owner`: orchestrator with required user evidence
-- `Final verdict`: pending
+- `Final verdict`: pass
 
 Use only:
 
@@ -110,13 +110,22 @@ Use only:
 
 ## Criterion 5: Substep Rate Is Stable
 
-- `Status`: pending
+- `Status`: complete
+- `Checkpoint`: `MV-G1-04`
 - `Evidence`:
   - settings used:
+    - `Tick Physics Async = false`
+    - `Substepping = true`
+    - `Max Substep Delta Time = 0.008333`
+    - `Max Substeps = 4`
   - clip or log:
+    - user-provided Project Settings screenshot from March 10, 2026 showing the frozen `120 Hz` synchronous-substep configuration
+    - no local clip path was retained
   - notes on stability:
-- `Verdict`: pending
-- `Why this verdict was chosen`:
+    - user reported on March 10, 2026 that the run was `perfectly fine`, with `no jitter` and `no wobble`
+    - no fallback `240 Hz` rerun was needed because the first documented configuration already stayed controllable
+- `Verdict`: pass
+- `Why this verdict was chosen`: the frozen `120 Hz` synchronous-substep configuration remained controllable for the checkpoint run without violent jitter, wobble, or dominant instability
 
 ## Motion Set Coverage Review
 
@@ -133,9 +142,10 @@ Use only:
 List every assumption changed by Phase 0 evidence:
 
 - `A-01`: move from `yellow` to `green`; the training-side visual path is proven runnable and the user judged `MV-G1-01` as `pass`
-- `A-02`:
-- `A-03`:
-- `A-05`:
+- `A-02`: already `green`; no further change from the substep-stability checkpoint
+- `A-03`: move from `yellow` to `green`; the Manny smoke test completed without leaving an open mapping-failure blocker
+- `A-04`: move from `yellow` to `green`; the Physics Control command path and Manny response checks both passed
+- `A-05`: move from `yellow` to `green`; the documented `120 Hz` synchronous-substep configuration stayed controllable without jitter-dominated failure
 - `A-06`:
 - `A-07`:
 - `A-08`:
@@ -147,14 +157,14 @@ List every assumption changed by Phase 0 evidence:
 
 ## Missing Evidence
 
-- UE-side substep-stability evidence
+- none for Gate G1
 
 ## Final Orchestrator Decision
 
-- `Final verdict`: pending
-- `Decision date`:
-- `Decision summary`: the bridge contract, motion-source review, training-side `MV-G1-01`, stationary UE control-path checkpoint `MV-G1-02`, and Manny smoke test `MV-G1-03` now score `pass`, but G1 remains blocked on UE-side substep-stability evidence
-- `Can Phase 1 begin?`: no
+- `Final verdict`: pass
+- `Decision date`: March 10, 2026
+- `Decision summary`: the bridge contract, motion-source review, training-side `MV-G1-01`, stationary UE control-path checkpoint `MV-G1-02`, Manny smoke test `MV-G1-03`, and synchronous-substep stability checkpoint `MV-G1-04` now all score `pass`, so Gate G1 is satisfied
+- `Can Phase 1 begin?`: yes
 
 ## If Verdict Is Not Pass
 

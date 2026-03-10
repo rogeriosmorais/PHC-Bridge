@@ -209,6 +209,107 @@ PhysAnim.MVG103.Start
     - whether the right arm stayed neutral enough to rule out obvious mirroring
     - final checkpoint verdict: `pass`, `fail`, or `blocked`
 
+### MV-G1-04: UE Substep Stability Check
+
+- `What you are checking`: whether the UE articulated-body setup stays controllable for about `30` seconds when Chaos synchronous substepping is enabled at a documented Stage 1 setting
+- `Why it matters`: Stage 1 is not credible if the Physics Control path only works at render rate but becomes unstable once physics is stepped at the higher PD-friendly rates called for in [ENGINEERING_PLAN.md](/F:/NewEngine/ENGINEERING_PLAN.md)
+- `What this checkpoint is and is not`:
+  - this checkpoint is a UE physics-stability check, not the ONNX export step and not the final PHC bridge
+  - this checkpoint uses the same known runtime harness as `MV-G1-02`, but the judgment is whole-body stability over time rather than “which limb moved first”
+  - this checkpoint is only about the synchronous substepping path described in the engineering plan
+- `Frozen test inputs`:
+  1. exact UE map path:
+     - `/Game/ThirdPerson/Lvl_ThirdPerson`
+  2. exact runtime owner:
+     - `UPhysAnimMvG102Subsystem`
+     - source path: `F:\NewEngine\PhysAnimUE5\Plugins\PhysAnimPlugin\Source\PhysAnimPlugin\Public\PhysAnimMvG102Subsystem.h`
+  3. exact trigger method:
+     - start PIE in `Lvl_ThirdPerson`
+     - open the in-game console with `` ` `` or `~`
+     - run `PhysAnim.MVG102.Start`
+     - optional stop command: `PhysAnim.MVG102.Stop`
+  4. exact first substep configuration to test:
+     - Project Settings -> Engine -> Physics
+     - `Tick Physics Async = false`
+     - `Substepping = true`
+     - `Max Substep Delta Time = 0.008333`
+     - `Max Substeps = 4`
+     - this is the `120 Hz` synchronous substep path from the engineering plan
+  5. exact second configuration to test only if the first one is clearly unstable:
+     - keep `Tick Physics Async = false`
+     - keep `Substepping = true`
+     - set `Max Substep Delta Time = 0.004167`
+     - set `Max Substeps = 8`
+     - this is the `240 Hz` synchronous substep path from the engineering plan
+  6. exact evidence format required back:
+     - short clip preferred
+     - screenshot acceptable only if the result is obviously stable and the written note explains the full `30` second behavior
+- `What to click or run`:
+  1. Open `F:\NewEngine\PhysAnimUE5\PhysAnimUE5.uproject`.
+  2. If Unreal says the project or plugin needs to be rebuilt, allow it.
+  3. Open `/Game/ThirdPerson/Lvl_ThirdPerson`.
+  4. Open Project Settings -> Engine -> Physics.
+  5. Turn `Tick Physics Async` off.
+  6. Turn `Substepping` on.
+  7. Set:
+
+```text
+Max Substep Delta Time = 0.008333
+Max Substeps = 4
+```
+
+  8. Save project settings if Unreal prompts.
+  9. Start PIE.
+  10. Keep the character stationary for this checkpoint.
+  11. Open the in-game console with `` ` `` or `~`.
+  12. Run:
+
+```text
+PhysAnim.MVG102.Start
+```
+
+  13. Let the run continue for about `30` seconds unless it fails earlier.
+  14. Judge the whole run, not just the first seconds:
+      - did the character remain upright and readable
+      - did violent whole-body jitter dominate
+      - did ground penetration or sudden launch dominate
+      - could you still tell what the body was trying to do
+  15. If the `120 Hz` configuration is obviously unstable, stop PIE, change to:
+
+```text
+Max Substep Delta Time = 0.004167
+Max Substeps = 8
+```
+
+  16. Run the same PIE test once more with `PhysAnim.MVG102.Start`.
+  17. Capture a short clip if practical. If not, write a short note immediately after the run while the result is still fresh.
+- `What good looks like`:
+  - at least one of the two documented synchronous-substep configurations remains controllable for about `30` seconds
+  - the body may wobble or look imperfect, but violent jitter does not dominate the entire run
+  - the character does not repeatedly tunnel into the ground or launch uncontrollably
+  - the motion remains visually judgeable rather than turning into pure failure noise
+- `What bad looks like`:
+  - both documented synchronous-substep configurations become uncontrollable quickly
+  - repeated whole-body jitter dominates most of the run
+  - repeated ground penetration or launch behavior dominates the run
+  - the character becomes unreadable as an articulated body rather than merely rough or under-tuned
+- `When to mark blocked instead of fail`:
+  - the plugin cannot be rebuilt because required MSVC tooling is missing
+  - the `PhysAnim.MVG102.Start` command does not exist after the plugin should have loaded
+  - the settings were not applied cleanly enough to know which configuration was actually tested
+  - no clip or written note is clear enough to judge the `30` second behavior
+- `What evidence to send back`:
+  - exact map path used: `/Game/ThirdPerson/Lvl_ThirdPerson`
+  - exact runtime owner used: `UPhysAnimMvG102Subsystem`
+  - exact trigger method used: `PhysAnim.MVG102.Start`
+  - exact substep settings used for each run
+  - one short clip or one clear written note
+  - one sentence saying:
+    - whether `120 Hz` passed, failed, or was not tested
+    - whether `240 Hz` passed, failed, or was not tested
+    - which configuration you consider the best documented Stage 1 setting on this machine
+    - final checkpoint verdict: `pass`, `fail`, or `blocked`
+
 ### MV-G2-01: Physics-Driven Versus Kinematic Comparison
 
 - `What you are checking`: whether the physics-driven version looks noticeably more natural than the kinematic PoseSearch version

@@ -80,7 +80,18 @@ Choose `fail` if targets are ignored, obviously mapped to the wrong body region,
 
 Substep stability counts as `pass` only if:
 
-- one documented Stage 1 configuration remains controllable for roughly `30 seconds`
+- at least one documented synchronous Stage 1 configuration remains controllable for roughly `30 seconds`
+- the documented configuration must name the exact UE settings used, not just say "substepping was on"
+- the preferred first configuration is:
+  - `Tick Physics Async = false`
+  - `Substepping = true`
+  - `Max Substep Delta Time = 0.008333`
+  - `Max Substeps = 4`
+- if that configuration fails, the secondary documented configuration is:
+  - `Tick Physics Async = false`
+  - `Substepping = true`
+  - `Max Substep Delta Time = 0.004167`
+  - `Max Substeps = 8`
 - no persistent violent jitter dominates the whole body
 - no repeated ground-penetration or launch behavior dominates the test
 - the user can still visually judge the motion rather than only the failure mode

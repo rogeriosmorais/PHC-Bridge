@@ -24,7 +24,7 @@ If this file disagrees with a gate package, the gate package still owns the pass
 | `S1-U-03` | complete locally, keep as recreate guide | only if the UE project must be recreated or repaired |
 | `S1-U-04 / MV-G1-01` | runnable now | run now for the training-side visual verdict |
 | `S1-U-04 / MV-G1-02` | complete locally | frozen stationary control-path proof captured |
-| `S1-U-04 / substep stability` | blocked on exact UE test asset | do not invent the scene or physics settings |
+| `S1-U-04 / MV-G1-04` | runnable now | use the frozen `MV-G1-02` runtime path with the exact synchronous substep settings from `manual-verification.md` |
 | `S1-U-04 / MV-G1-03` | runnable now | use the frozen stationary smoke harness exactly |
 | `S1-U-05 / G2` | future-only | wait for Phase 1 handoff |
 | `S1-U-06 / G3` | future-only | wait for Phase 2 handoff |
@@ -198,27 +198,27 @@ Choose `blocked` instead of `fail` if:
 - the `PhysAnim.MVG102.Start` console command does not exist in PIE
 - the capture is too unclear to tell what moved
 
-### UE Substep Stability Check
+### MV-G1-04: UE Substep Stability Check
 
-This step is usually the same UE prototype run as `MV-G1-02`, but the judgment is different.
+This step is now frozen to the same runtime harness as `MV-G1-02`, but the judgment is whole-body stability over about `30` seconds.
 
-Do not run it until the orchestrator names:
+Run [manual-verification.md](/F:/NewEngine/plans/stage1/manual-verification.md) exactly.
 
-- exact map or test scene
-- exact substep-related settings to use
-- exact runtime path to capture
+Short version:
 
-When those fields are provided:
-
-1. Open the named map.
-2. Apply or confirm the named physics settings.
+1. Open `/Game/ThirdPerson/Lvl_ThirdPerson`.
+2. In Project Settings -> Engine -> Physics, set:
+   - `Tick Physics Async = false`
+   - `Substepping = true`
+   - `Max Substep Delta Time = 0.008333`
+   - `Max Substeps = 4`
 3. Start PIE.
-4. Run the named prototype for about `30` seconds.
-5. Capture a clip if the motion is visible enough to judge.
-6. Write one short note covering:
-   - the settings used
-   - whether Manny stayed controllable
-   - whether violent jitter, launch behavior, or ground penetration dominated the run
+4. Run `PhysAnim.MVG102.Start`.
+5. Let it run about `30` seconds and judge whether violent jitter, launch behavior, or ground penetration dominates.
+6. If the `120 Hz` setup is clearly unstable, rerun once with:
+   - `Max Substep Delta Time = 0.004167`
+   - `Max Substeps = 8`
+7. Send back the exact settings used plus one line saying whether at least one configuration stayed controllable.
 
 ### MV-G1-03: Manny Smoke Test
 

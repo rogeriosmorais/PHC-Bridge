@@ -14,9 +14,9 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 0 / `S1-P0-A1` complete / `S1-P0-A2` in progress
-- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; the UE scaffold is now also verified on disk with Manny assets present, `PoseSearch` and `PhysicsControl` enabled in the project file, `NNERuntimeORT` mounting in editor logs, and a successful PIE launch recorded on March 10, 2026; Stage 1 remains narrowed to locomotion-only, the selected runtime checkpoint is `motion_tracker/smpl`, the Windows command path for Phase 0 is frozen, `MV-G1-01` has a saved clip artifact and a `pass` verdict, and `MV-G1-02` is now accepted as a screenshot-backed stationary control-path `pass`
-- `Last planning milestone`: orchestrator reviewed the current UE scaffold artifacts, confirmed Manny content and plugin state from local project files and logs, and re-synced the Phase 0 blocker list to the remaining manual G1 checkpoints
+- `Current phase`: Phase 0 complete / Gate G1 pass / Phase 1 unblocked
+- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; the UE scaffold is verified on disk with Manny assets present, `PoseSearch` and `PhysicsControl` enabled in the project file, `NNERuntimeORT` mounting in editor logs, and successful PIE bring-up recorded on March 10, 2026; Stage 1 remains narrowed to locomotion-only, the selected runtime checkpoint is `motion_tracker/smpl`, Gate G1 now passes through `MV-G1-01` to `MV-G1-04`, and the next real blocker is Phase 1 ONNX export / model import rather than Phase 0 viability evidence
+- `Last planning milestone`: orchestrator accepted the `MV-G1-04` synchronous-substep stability result and closed Gate G1 on March 10, 2026
 
 ## Active Tasks
 
@@ -26,7 +26,7 @@ Use it to track:
 | S1-P0-U1 | User | completed | `plans/stage1/environment-spec.md`, `plans/stage1/user-interventions.md`, `plans/stage1/user-return-template.md` | external tool/runtime setup and license acceptance | none |
 | S1-P0-U2 | User | completed | `plans/stage1/ue-project-scaffold.md`, `plans/stage1/user-interventions.md`, `plans/stage1/user-return-template.md` | UE editor setup | none |
 | S1-P0-A1 | AI | completed | `plans/stage1/task-packet-s1-p0-a1.md` plus frozen Phase 0 inputs | `plans/stage1/phase0-execution-package.md`, `plans/stage1/bridge-spec.md`, `plans/stage1/retargeting-spec.md`, `plans/stage1/assumption-ledger.md`, `plans/stage1/execution-log.md` | none |
-| S1-P0-A2 | AI + User | in_progress | `plans/stage1/phase0-execution-package.md`, `plans/stage1/manual-verification.md`, `plans/stage1/acceptance-thresholds.md`, `plans/stage1/g1-evidence.md` | `plans/stage1/g1-evidence.md`, `plans/stage1/assumption-ledger.md`, `plans/stage1/execution-log.md` | G1 evidence capture, including user-observed manual checks |
+| S1-P0-A2 | AI + User | completed | `plans/stage1/phase0-execution-package.md`, `plans/stage1/manual-verification.md`, `plans/stage1/acceptance-thresholds.md`, `plans/stage1/g1-evidence.md` | `plans/stage1/g1-evidence.md`, `plans/stage1/assumption-ledger.md`, `plans/stage1/execution-log.md` | none |
 
 ## Frozen Inputs For Phase 0 Preparation
 
@@ -54,15 +54,15 @@ Use it to track:
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-P0-A2 | runnable now; the simulator/runtime path is concrete, the Windows eval command is frozen, and the remaining work is evidence collection plus manual judgment |
-| 2 | S1-P1-A1 | not runnable until G1 is explicitly passed |
-| 3 | S1-P1-A2 | not runnable until Phase 1 starts |
+| 1 | S1-P1-A1 | runnable now; Gate G1 is now explicitly `pass` |
+| 2 | S1-P1-A2 | runnable when the ONNX export path exists and the UE import handoff is ready |
+| 3 | S1-P2-A1 | not runnable until G2 is explicitly passed |
 
 ## Waiting On User
 
 | Item | Expected Evidence |
 |---|---|
-| substep-stability evidence | substep settings used plus a short clip or note saying whether Manny stayed controllable for roughly `30` seconds |
+| none | no Phase 0 evidence remains outstanding |
 
 ## Latest Phase 0 Evidence Progress
 
@@ -83,7 +83,8 @@ Use it to track:
 - the user later confirmed `MV-G1-03` completed; the Manny smoke-test mapping check is now accepted as `pass`, with no remaining open blocker at the isolated left-elbow smoke-harness stage
 - later March 10, 2026 Phase 1 bring-up work reached the UE model-loading gate and confirmed the next blocker is not Unreal wiring but missing export output: `F:\NewEngine\Training\output\phc_policy.onnx` does not exist, `Training\scripts\export_onnx.py` does not exist, the ONNX validation test is still a skip-if-placeholder, and no accepted ONNX export handoff exists yet
 - the selected pretrained checkpoint still exists at `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt`, so the missing ONNX file is an orchestration/process gap rather than a missing model-source artifact
-- G1 remains blocked overall because the UE substep-stability check is still missing
+- user evidence on March 10, 2026 now confirms the frozen `120 Hz` synchronous-substep configuration (`Tick Physics Async = false`, `Substepping = true`, `Max Substep Delta Time = 0.008333`, `Max Substeps = 4`) stayed controllable without jitter or wobble dominating the run
+- Gate G1 now passes; Phase 0 evidence capture is complete and Phase 1 is unblocked
 
 ## Accepted Handoffs
 
