@@ -37,6 +37,7 @@ PhysAnimUE5/Intermediate/
 PhysAnimUE5/Saved/
 PhysAnimUE5/DerivedDataCache/
 PhysAnimUE5/.vs/
+PhysAnimUE5/Config/DefaultEditorPerProjectUserSettings.ini
 PhysAnimUE5/*.sln
 PhysAnimUE5/*.vcxproj*
 *.pdb
