@@ -2,7 +2,9 @@
 
 ## Purpose
 
-This document defines the planning-level contract for the Stage 1 `PoseSearch -> PHC -> Physics Control` bridge. It is intentionally conservative: it locks the bridge shape tightly enough for implementation planning, while reserving exact tensor dimensions for confirmation against the chosen ProtoMotions/PHC config during Phase 0.
+This document defines the Stage 1 `PoseSearch -> PHC -> Physics Control` bridge contract for the currently selected local ProtoMotions checkpoint.
+
+The planning-level assumptions in this file have now been checked against the frozen local MaskedMimic SMPL config and code path used for Phase 0.
 
 ## Scope
 
@@ -15,6 +17,17 @@ This spec covers:
 - what must be confirmed during Phase 0 before implementation starts
 
 This spec does not invent a new policy format or change the locked architecture.
+
+## Confirmed Selected Local Policy
+
+- simulator path: `IsaacLabSimulator`
+- robot/body type: `smpl_humanoid`
+- config source: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\config.yaml`
+- checkpoint source: `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt`
+- agent class: `protomotions.agents.masked_mimic.agent.MaskedMimic`
+- model class: `protomotions.agents.masked_mimic.model.VaeDeterministicOutputModel`
+- simulator-side control type: `built_in_pd`
+- action mapping mode: `map_actions_to_pd_range: true`
 
 ## Stage 1 Bridge Contract
 
@@ -37,18 +50,59 @@ Per render tick, the Stage 1 plugin does this:
 
 ## Observation Contract
 
-### Required Observation Categories
+### Confirmed Runtime Input Set
 
-The final observation tensor must be confirmed from the selected ProtoMotions config, but the Stage 1 bridge must be able to provide these categories:
+The selected MaskedMimic checkpoint does not consume one monolithic observation tensor at inference time. `model.act()` consumes a keyed runtime input dictionary.
 
-- root position or root-relative translation state
-- root orientation
-- root linear velocity
-- root angular velocity
-- mapped joint rotations for the SMPL-covered body
-- mapped joint angular velocities for the SMPL-covered body
-- contact-related state if the chosen PHC config requires it
-- target-pose features derived from the current `PoseSearch` result if the chosen PHC variant conditions on a reference pose
+The required inference-time keys are:
+
+- `self_obs`: `358` floats
+- `masked_mimic_target_poses`: `2024` floats
+- `masked_mimic_target_poses_masks`: `11` bools
+- `historical_pose_obs`: `5385` floats
+- `motion_text_embeddings`: `512` floats
+- `motion_text_embeddings_mask`: `1` bool
+- `terrain`: `256` floats
+- `vae_noise`: `64` floats
+
+### Confirmed Grouping And Field Order
+
+`self_obs` is produced by `compute_humanoid_observations_max(...)` and is grouped as:
+
+- root height: `1`
+- root-relative local body positions with root position removed: `23 * 3 = 69`
+- heading-aligned body rotations in tan-norm form for all `24` bodies: `24 * 6 = 144`
+- heading-aligned body linear velocities for all `24` bodies: `24 * 3 = 72`
+- heading-aligned body angular velocities for all `24` bodies: `24 * 3 = 72`
+
+Total: `358`
+
+`masked_mimic_target_poses` is the sparse conditioning tensor used by the prior network:
+
+- `(10 near-future sparse poses + 1 far target pose) * 184 = 2024`
+- conditionable-body order:
+  - `Pelvis`
+  - `L_Ankle`
+  - `R_Ankle`
+  - `L_Hand`
+  - `R_Hand`
+  - `Head`
+  - heading / planar-velocity pseudo-entry
+- each sparse pose entry encodes masked target translation and rotation features plus mask bits and time information
+
+`historical_pose_obs` is:
+
+- `15` subsampled historical `self_obs` frames
+- each historical frame appends `1` time scalar
+- total: `15 * (358 + 1) = 5385`
+
+`terrain` is a `16 x 16` height-sample map flattened to `256` floats.
+
+`motion_text_embeddings` is a `512`-float vector plus a `1`-bit visibility mask.
+Stage 1 should supply a zero vector and false mask unless text-conditioned runtime control is explicitly added later.
+
+`vae_noise` is a `64`-float latent-noise vector.
+For deterministic Stage 1 inference, use the eval path behavior already frozen in the config and runtime wrapper.
 
 ### Planning Assumptions
 
@@ -57,57 +111,65 @@ The final observation tensor must be confirmed from the selected ProtoMotions co
 - Do not include finger or twist-bone state in the PHC observation. Those remain outside the mapped SMPL subset.
 - Unmapped UE5 bones are visual followers of animation/PoseSearch rather than policy-driven control variables.
 
-### Phase 0 Confirmation Required
+### Training-Only Inputs Not Required At Runtime
 
-Before implementation starts, confirm:
+The local code path distinguishes between training-time encoder inputs and inference-time prior inputs.
 
-- exact observation tensor field order
-- exact observation tensor dimension
-- whether the policy expects quaternions, 6D rotations, axis-angle, or another representation
-- whether the policy expects only current-frame targets or some short history / future reference
-- whether ground-contact bits or normals are required
+These are present in training but not required by `model.act()` inference:
 
-Phase 0 should confirm those fields from these exact local sources first:
+- `mimic_target_poses`: `6495` floats
+- `masked_mimic_target_bodies_masks`: `140` bools
 
-- `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\config.yaml`
-- `F:\NewEngine\Training\ProtoMotions\protomotions\eval_agent.py`
-- `F:\NewEngine\Training\ProtoMotions\protomotions\envs\mimic\components\mimic_obs.py`
+This matters for Stage 1 because the UE bridge only needs to reproduce the inference-time contract, not the training-only encoder contract.
 
 ## Action Contract
 
-### Required Action Categories
+### Confirmed Action Shape And Meaning
 
-The PHC output must be treated as producing:
+The selected checkpoint outputs a single action tensor of `69` floats.
 
-- desired joint orientation targets for the SMPL-covered joints
-- optional stiffness / damping or other PD-gain-like values if the chosen PHC head exposes them
+- model output head: `torch.tanh(...)`
+- numeric range before PD mapping: `[-1, 1]`
+- semantic meaning: per-DoF position targets in the robot's exponential-map DoF space
+- simulator application: `_action_to_pd_targets(offset + scale * action)` and then built-in PD position targets
+
+The action tensor is ordered by `robot.dof_names`, which groups `23` joints at `3` DoFs each:
+
+- `L_Hip`
+- `L_Knee`
+- `L_Ankle`
+- `L_Toe`
+- `R_Hip`
+- `R_Knee`
+- `R_Ankle`
+- `R_Toe`
+- `Torso`
+- `Spine`
+- `Chest`
+- `Neck`
+- `Head`
+- `L_Thorax`
+- `L_Shoulder`
+- `L_Elbow`
+- `L_Wrist`
+- `L_Hand`
+- `R_Thorax`
+- `R_Shoulder`
+- `R_Elbow`
+- `R_Wrist`
+- `R_Hand`
 
 ### Planning Assumptions
 
-- If the PHC head does not emit gains, Stage 1 uses fixed editor-configured or hand-tuned `UPhysicsControlComponent` gains.
-- If the PHC head emits gains, Stage 1 maps them into UE5 angular-drive strength/damping ranges through a deterministic normalization layer.
+- The selected checkpoint does not emit gains.
+- Stage 1 must use fixed editor-configured or hand-tuned `UPhysicsControlComponent` gains.
 - The Stage 1 plugin does not emit raw torques directly unless `UPhysicsControlComponent` proves unusable and the project explicitly accepts the fallback path already documented in `ENGINEERING_PLAN.md`.
-
-### Phase 0 Confirmation Required
-
-Before implementation starts, confirm:
-
-- exact action tensor field order
-- exact action tensor dimension
-- joint order used by the policy head
-- output numeric range and normalization assumptions
-- whether the output is local-joint space, parent-relative space, or another frame
-
-Phase 0 should confirm those facts from these exact local sources first:
-
-- `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\config.yaml`
-- `F:\NewEngine\Training\ProtoMotions\protomotions\agents\masked_mimic\agent.py`
-- `F:\NewEngine\Training\ProtoMotions\protomotions\agents\ppo\agent.py`
 
 ## Pose Representation Rules
 
-- The bridge must use the representation required by the chosen PHC config, not the representation most convenient in UE5.
-- Stage 1 planning assumes conversions may be required between UE5 transforms and SMPL-friendly policy inputs.
+- The bridge must use the representation required by the selected local config, not the representation most convenient in UE5.
+- `self_obs` and target-pose features use heading-aligned tan-norm rotation features derived from quaternion state.
+- The action head represents joint targets in exponential-map DoF space before PD-range mapping.
 - The bridge must keep conversion code isolated so the representation decision does not leak into unrelated plugin code.
 
 ## Coordinate Frame Rules
@@ -115,6 +177,8 @@ Phase 0 should confirm those facts from these exact local sources first:
 - UE5 and SMPL frame conversion must be explicit and tested.
 - Do not rely on a simple axis permutation alone because handedness is unresolved at planning level.
 - All bridge code must pass through a named frame-conversion layer before writing model inputs or consuming model outputs.
+- The selected IsaacLab simulator uses `w_last: false` internally, but the common observation-building path converts data before feature construction and the relevant observation builders here operate with `w_last=True`.
+- Stage 1 should treat the confirmed model-facing quaternion/tan-norm path as `xyzw` / `w_last=True` at the feature-construction boundary.
 
 ## Mapping Rules
 
@@ -164,12 +228,26 @@ Unmapped bones keep their animation-driven pose unless a later spec says otherwi
 
 This spec is considered locked only when all of the following are written down from the selected ProtoMotions config:
 
-- observation tensor shape and field order
+- runtime observation input set shape and field grouping
 - action tensor shape and field order
 - required pose representation
 - required frame assumptions
 - gain-output policy
 - exact SMPL joint order used by the model
+
+## Confirmed Assumptions
+
+- the selected local pretrained path is the MaskedMimic SMPL checkpoint under the repo's `data/pretrained_models` tree
+- inference uses a keyed input dictionary rather than one flattened observation tensor
+- the runtime bridge must provide `self_obs`, sparse masked-mimic target poses, historical pose context, terrain, text-conditioning placeholders, and `vae_noise`
+- the model outputs `69` normalized action values that become built-in PD position targets after deterministic offset/scale mapping
+- gains are fixed outside the model
+
+## Rejected Assumptions
+
+- the runtime bridge does not need to reproduce every training-time encoder input
+- the selected checkpoint does not output direct joint quaternions
+- the selected checkpoint does not output per-joint stiffness or damping values
 
 ## Deliverable For S1-PLAN-02
 

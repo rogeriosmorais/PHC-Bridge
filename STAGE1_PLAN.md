@@ -19,16 +19,16 @@ Use it for:
 Do not use `AGENTS.md` as a rolling status or next-steps document.
 Do not expect this file to duplicate every detailed lock from the planning bundle.
 
-## Current Planning Focus
+## Current Execution Focus
 
-The next step is **planning Stage 1 execution**, not starting environment setup yet.
+The planning bundle is now execution-ready. The next step is **Phase 0 evidence collection for Gate G1**, not more broad planning or environment discovery.
 
-Stage 1 planning must answer:
+The current Stage 1 execution focus is:
 
-1. How the work is split into AI-agent-sized tasks
-2. What artifact each task must produce
-3. What depends on human intervention
-4. What can be automated with tests versus what needs ELI5 manual verification
+1. lock the exact PHC observation/action contract from the frozen local ProtoMotions sources
+2. capture the G1 training-side and UE-side evidence package
+3. update the assumption ledger with real setup and gate evidence
+4. decide whether G1 is `pass`, `fail`, or `blocked`
 
 ## Stage 1 Planning Outputs
 
@@ -42,11 +42,14 @@ Before implementation starts, this plan must produce these concrete artifacts. T
 
 ## Planning Bundle
 
-These files are the detailed source of truth for Stage 1 execution planning. When a detail in this file is summarized, the linked planning artifact below is the more precise reference.
+These files are the detailed source of truth for Stage 1 execution planning and gate handling. When a detail in this file is summarized, the linked artifact below is the more precise reference.
 
 - [Task Graph](/F:/NewEngine/plans/stage1/task-graph.md)
 - [Orchestration Model](/F:/NewEngine/plans/stage1/orchestration.md)
 - [Assumption Ledger](/F:/NewEngine/plans/stage1/assumption-ledger.md)
+- [Bridge Spec](/F:/NewEngine/plans/stage1/bridge-spec.md)
+- [Retargeting Spec](/F:/NewEngine/plans/stage1/retargeting-spec.md)
+- [Test Strategy](/F:/NewEngine/plans/stage1/test-strategy.md)
 - [Motion Set](/F:/NewEngine/plans/stage1/motion-set.md)
 - [Pretrained Model Selection](/F:/NewEngine/plans/stage1/pretrained-model-selection.md)
 - [Pretrained Checkpoint Retrieval](/F:/NewEngine/plans/stage1/pretrained-checkpoint-retrieval.md)
@@ -59,6 +62,12 @@ These files are the detailed source of truth for Stage 1 execution planning. Whe
 - [Dependency Lock](/F:/NewEngine/plans/stage1/dependency-lock.md)
 - [Acceptance Thresholds](/F:/NewEngine/plans/stage1/acceptance-thresholds.md)
 - [ONNX Export Spec](/F:/NewEngine/plans/stage1/onnx-export-spec.md)
+- [Phase 0 Execution Package](/F:/NewEngine/plans/stage1/phase0-execution-package.md)
+- [Phase 1 Implementation Package](/F:/NewEngine/plans/stage1/phase1-implementation-package.md)
+- [Phase 2 Demo Package](/F:/NewEngine/plans/stage1/phase2-demo-package.md)
+- [G1 Evidence](/F:/NewEngine/plans/stage1/g1-evidence.md)
+- [G2 Evaluation](/F:/NewEngine/plans/stage1/g2-evaluation.md)
+- [G3 Evaluation](/F:/NewEngine/plans/stage1/g3-evaluation.md)
 - [Task Packet S1-P0-A1](/F:/NewEngine/plans/stage1/task-packet-s1-p0-a1.md)
 - [Task Packet S1-P0-A2](/F:/NewEngine/plans/stage1/task-packet-s1-p0-a2.md)
 - [Task Packet S1-P1-A1](/F:/NewEngine/plans/stage1/task-packet-s1-p1-a1.md)
@@ -74,13 +83,23 @@ These files are the detailed source of truth for Stage 1 execution planning. Whe
 
 ## Current Status
 
-The Stage 1 planning bundle now covers the major planning and execution-package artifacts for Phase 0, Phase 1, the Stage 1 gates, the pretrained-first path, checkpoint retrieval, the environment contract, the motion-source map and lock table, the G2 comparison sequence, the UE scaffold, the live execution log, the dependency lock sheet, the ONNX export path, explicit gate thresholds, and task packets for each AI-owned execution step.
+The Stage 1 bundle now covers the major planning, execution-package, and gate-evidence artifacts for Phase 0, Phase 1, and Phase 2, including the PHC bridge spec, the SMPL-to-UE5 retargeting spec, the pretrained-first path, checkpoint retrieval, the environment contract, the motion-source map and lock table, the G2 comparison sequence, the UE scaffold, the live execution log, the dependency lock sheet, the ONNX export path, explicit gate thresholds, and task packets for each AI-owned execution step.
 
-The next useful work is no longer broad planning structure. The next useful work is either:
+Local Phase 0 setup evidence already confirms:
 
-1. executing the user-owned Phase 0 prerequisites
-2. updating the assumption ledger with real setup evidence
-3. preparing task-specific execution handoffs as Phase 0 starts
+- UE `5.7.3` at `E:\UE_5.7`
+- `UE5_PATH` at `E:\UE_5.7\Engine`
+- UE project scaffold at `F:\NewEngine\PhysAnimUE5`
+- ProtoMotions `v2.3.2` at `F:\NewEngine\Training\ProtoMotions`
+- Python `3.11.9` environment at `F:\NewEngine\Training\.venv\physanim_proto311`
+- Isaac Sim `5.1.0.0` and Isaac Lab `2.3.2.post1`
+- local pretrained MaskedMimic checkpoint at `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt`
+
+The next useful work is now:
+
+1. completing `S1-P0-A2` by collecting G1 evidence in [g1-evidence.md](/F:/NewEngine/plans/stage1/g1-evidence.md)
+2. updating [assumption-ledger.md](/F:/NewEngine/plans/stage1/assumption-ledger.md) and [execution-log.md](/F:/NewEngine/plans/stage1/execution-log.md) from that evidence
+3. making the explicit G1 go / no-go decision before any Phase 1 implementation begins
 
 ## How To Read This File
 
@@ -90,11 +109,14 @@ Use this file to answer:
 - how work is organized
 - which planning artifacts exist
 - which role owns which kind of decision
+- where current Phase 0 execution is anchored at a high level
 
 Use the detailed planning bundle to answer:
 
 - exact checkpoint retrieval path
 - exact environment lock values
+- exact current execution status and frozen inputs
+- exact G1, G2, and G3 evidence requirements
 - exact G2 comparison sequence
 - exact ONNX export/import policy
 - exact task packet and handoff rules

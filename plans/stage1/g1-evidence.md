@@ -42,15 +42,21 @@ Use only:
 
 ## Criterion 2: PHC Observation/Action Contract Is Locked
 
-- `Status`: pending
+- `Status`: complete
 - `Evidence`:
-  - confirmed observation tensor shape:
-  - confirmed action tensor shape:
-  - representation format:
-  - gain-output policy:
+  - confirmed observation tensor shape: inference uses a keyed runtime input dictionary, not one flat tensor; required keys are `self_obs=358`, `masked_mimic_target_poses=2024`, `masked_mimic_target_poses_masks=11`, `historical_pose_obs=5385`, `motion_text_embeddings=512`, `motion_text_embeddings_mask=1`, `terrain=256`, and `vae_noise=64`
+  - confirmed action tensor shape: `69` floats ordered by `robot.dof_names` (`23` joints x `3` DoFs)
+  - representation format: `self_obs` uses heading-aligned max-coords features with tan-norm rotation encoding; actions are exponential-map DoF targets normalized through `tanh`
+  - gain-output policy: no gain head; Stage 1 uses fixed external gains and maps actions into built-in PD target ranges
   - source config:
-- `Verdict`: pending
-- `Why this verdict was chosen`:
+    - `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\config.yaml`
+    - `F:\NewEngine\Training\ProtoMotions\protomotions\envs\base_env\components\humanoid_obs.py`
+    - `F:\NewEngine\Training\ProtoMotions\protomotions\envs\mimic\components\masked_mimic_obs.py`
+    - `F:\NewEngine\Training\ProtoMotions\protomotions\envs\base_env\env_utils\humanoid_utils.py`
+    - `F:\NewEngine\Training\ProtoMotions\protomotions\simulator\base_simulator\simulator.py`
+    - `F:\NewEngine\Training\ProtoMotions\protomotions\agents\masked_mimic\model.py`
+- `Verdict`: pass
+- `Why this verdict was chosen`: the local selected checkpoint, simulator path, runtime input grouping, action shape, representation path, and fixed-gain policy are now explicit in `bridge-spec.md`, satisfying the contract-lock threshold
 
 ## Criterion 3: Physics Control Component Responds To Programmatic Targets
 
@@ -87,13 +93,13 @@ Use only:
 
 ## Motion Set Coverage Review
 
-- `Status`: pending
+- `Status`: complete
 - `Evidence`:
-  - locomotion-core source note:
-  - combat-core source note:
-  - missing motions:
-- `Verdict`: pending
-- `Why this verdict was chosen`:
+  - locomotion-core source note: `motion-source-map.md` assigns every locomotion motion to `broad-pretrained`, `amass-target`, or an explicit `source-risk` bucket with an approved downgrade path
+  - combat-core source note: every combat-core motion is explicitly marked `combat-finetune` rather than silently assumed to be covered by the pretrained checkpoint
+  - missing motions: strafes and short recovery / rebalance remain the main source-risk items and are already called out explicitly with replacement rules
+- `Verdict`: pass
+- `Why this verdict was chosen`: the motion-source threshold only requires named source families or approved replacements plus explicit risk notes, and the current source map satisfies that bar even though the actual clip list is still deferred
 
 ## Assumption Ledger Impact
 
@@ -115,13 +121,16 @@ List every assumption changed by Phase 0 evidence:
 
 ## Missing Evidence
 
-- 
+- `MV-G1-01` training-side visual verdict
+- `MV-G1-02` Manny control-path evidence
+- `MV-G1-03` Manny smoke-test evidence
+- UE-side substep-stability evidence
 
 ## Final Orchestrator Decision
 
 - `Final verdict`: pending
 - `Decision date`:
-- `Decision summary`:
+- `Decision summary`: the bridge contract and motion-source review are now documented strongly enough to score those subchecks, but G1 remains blocked on the training-side and UE-side evidence package
 - `Can Phase 1 begin?`: no
 
 ## If Verdict Is Not Pass

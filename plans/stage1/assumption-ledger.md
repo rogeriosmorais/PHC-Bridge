@@ -31,7 +31,7 @@ Only the orchestrator updates status.
 | ID | Assumption | Why It Matters | Current Status | How It Will Be Tested | Falsification Signal | Fallback | Stop If False |
 |---|---|---|---|---|---|---|---|
 | A-01 | Pretrained policy motion in training looks convincingly alive enough to justify Stage 1 | Stage 1 is pointless if the starting policy already looks robotic | yellow | G1 training visualization and manual check `MV-G1-01` | motion looks stiff, unstable, or puppet-like in training | narrow to locomotion-only test or stop before deeper integration | yes |
-| A-02 | The selected ProtoMotions/PHC config can be mapped cleanly into a UE5 bridge contract | the plugin cannot be built safely without a stable observation/action contract | yellow | `bridge-spec.md` confirmed in Phase 0 | tensor fields, ordering, or representation stay unclear | narrow the chosen config or pause until a workable config is selected | yes |
+| A-02 | The selected ProtoMotions/PHC config can be mapped cleanly into a UE5 bridge contract | the plugin cannot be built safely without a stable observation/action contract | green | `bridge-spec.md` confirmed in Phase 0 | tensor fields, ordering, or representation stay unclear | narrow the chosen config or pause until a workable config is selected | yes |
 | A-03 | SMPL <-> UE5 retargeting can be made stable enough for Manny | wrong transforms or mirroring will invalidate the entire bridge | yellow | `retargeting-spec.md` plus G1 Manny smoke test | wrong limbs move, mirroring appears, or instability comes from mapping errors | revise mapping and transform layer | yes |
 | A-04 | `UPhysicsControlComponent` can express the policy intent well enough for Stage 1 | the entire low-custom-code thesis depends on it | yellow | control-path prototype and Manny response checks | targets are ignored, unstable, or too limited to drive plausible motion | explicit fallback to raw torque control if the project chooses it | yes |
 | A-05 | Chaos substepping at 120-240 Hz is stable enough for the articulated body | unstable simulation breaks any quality comparison | yellow | Phase 0 substep stability check | persistent instability despite tuning and solver adjustments | try async physics, then reassess Stage 1 viability | yes |
@@ -55,7 +55,9 @@ Only the orchestrator updates status.
   - `plans/stage1/phase0-execution-package.md`
 - `Conclusion`:
   - the Phase 0 planning contract is now concrete enough to execute on this exact Windows machine without more setup replanning
-  - no G1-critical assumption moves out of `yellow` yet because `g1-evidence.md` still has no training-side motion evidence or UE-side manual evidence
+  - the selected MaskedMimic SMPL checkpoint's inference contract is now locked from local sources strongly enough for Phase 1 bridge implementation planning
+  - no G1-critical assumption beyond `A-02` moves out of `yellow` yet because `g1-evidence.md` still has no training-side motion evidence or UE-side manual evidence
+  - `A-02` now moves to `green` because the local runtime input set, action shape, representation path, and fixed-gain policy are explicit in `bridge-spec.md`
   - partial setup evidence now confirms the planned UE install root and `UE5_PATH`, but it does not yet reduce any G1-critical risk
   - updated setup evidence now also confirms UE `5.7.3` and the presence of the `F:\NewEngine\PhysAnimUE5` scaffold with Manny content paths available
   - ProtoMotions `v2.3.2`, the pretrained MaskedMimic checkpoint, and a Python `3.11` Windows-native environment are now local and consistent with the Isaac Sim `5.x` requirement
