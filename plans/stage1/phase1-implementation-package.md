@@ -21,6 +21,7 @@ Do not start Phase 1 implementation until all of these are true:
 - `motion-set.md` is locked for the Stage 1 locomotion-only core
 - `comparison-sequence-lock.md` is locked for the intended G2 sequence
 - `test-strategy.md` is stable enough to define Phase 1 evidence
+- the deterministic bridge-core behaviors that must be TDD-first are explicitly frozen in `test-strategy.md`
 - the orchestrator has reviewed `assumption-ledger.md` and confirmed there is no `red` assumption blocking one-character implementation
 
 ## Phase 1 Deliverables
@@ -83,6 +84,8 @@ Phase 1 does not include:
   - keep custom code to the low hundreds where feasible
   - do not add a new inference runtime
   - do not widen scope into Stage 2 systems
+  - split deterministic bridge helpers away from live UE glue so they can be tested first
+  - do not implement deterministic bridge logic before its tests exist
 
 ### P1-03: ONNX / NNE Integration Scope
 
@@ -167,6 +170,7 @@ Before Phase 1 can be considered complete enough for G2 packaging, there must be
 - the comparison sequence is frozen in `comparison-sequence-lock.md`
 - tuning reaches a stable-enough state for comparison
 - no unresolved `red` assumptions remain for G2
+- deterministic bridge-core tests were written before implementation and remain passing
 
 ## Failure Handling
 

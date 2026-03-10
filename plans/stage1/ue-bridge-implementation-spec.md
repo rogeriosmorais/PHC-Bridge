@@ -745,12 +745,28 @@ That is a Stage 1 viability failure, not a hidden tuning issue.
 
 ### 10. Required Test Seams
 
+Phase 1 uses a mixed verification model, not a fake "all of Unreal is TDDable" model.
+
+Implementation must follow this boundary:
+
+- deterministic bridge-core logic is test-first and must exist behind seams that can run without a live Manny world
+- live UE integration is verified with automation where practical, then runtime and manual evidence
+
+The bridge is not implementation-complete if deterministic helpers land without tests first.
+
 #### Deterministic Logic That Must Be Tested Before Code
 
 - tensor descriptor name-to-index mapping
 - fixed input/output shape validation
+- `69 -> 23 x 3` action grouping
+- `pd_target_i = pi * action_i` conversion
 - future time schedule (`15` steps at `1/30` seconds)
+- future sample-time end-of-clip clamping
 - wrist-plus-hand collapse composition rule
+- SMPL-to-UE basis and rotation conversion helpers
+- mapped subset tables and control/body-name lookup tables
+- `self_obs` packing from mocked runtime state into the locked `358`-float tensor
+- `mimic_target_poses` packing from mocked future samples into the locked `6495`-float tensor
 - terrain-zero path
 - mapped control-name generation
 

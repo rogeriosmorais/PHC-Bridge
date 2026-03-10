@@ -60,16 +60,62 @@ Stage 1 validation is split into four layers:
 | locomotion showcase packaging is clear enough to judge | integration + runtime | demo capture |
 | final demo is compelling enough for further investment | manual (`MV-G3-01`) | observer notes + final decision |
 
-## TDD Rules For Stage 1
+## Mixed Validation Rule
 
-- Any new deterministic logic introduced in Python or C++ should be covered by tests before implementation.
-- Deterministic logic includes:
-  - mapping tables
-  - observation packing
-  - action unpacking
-  - tensor-shape validation
-  - normalization and conversion helpers
-- Subjective quality gates are not a reason to skip TDD for deterministic helpers.
+Stage 1 uses a mixed strategy on purpose:
+
+- strict TDD for deterministic bridge logic
+- runtime or automation checks for live UE system integration
+- manual verification for subjective quality and gate decisions
+
+The implementation rule is:
+
+- if a behavior can be expressed as pure math, fixed packing, table lookup, fixed-shape validation, or deterministic conversion, it must be written test-first
+- if a behavior depends on live UE runtime state, editor-authored assets, physics stability, or visual judgment, it is not required to be written test-first but it still needs scripted/runtime/manual evidence
+
+This is not optional guidance. Phase 1 implementation must obey it.
+
+## Deterministic Logic That Must Be TDD-First
+
+Before implementation code is added, tests must be written first for any new deterministic bridge logic in Python or C++.
+
+This includes:
+
+- SMPL joint ordering and Stage 1 mapped-subset tables
+- Manny target-body and control-name lookup tables derived from the locked mapping
+- `69 -> 23 x 3` action grouping
+- the frozen PD mapping `pd_target_i = pi * action_i`
+- wrist-plus-hand collapse composition
+- basis and frame-conversion helpers between SMPL and UE
+- future sample schedule generation (`15` steps at `1/30` seconds) and end-of-clip clamping
+- fixed tensor descriptor name-to-index mapping
+- fixed input/output shape validation
+- `self_obs` packing from mocked UE-style inputs into the locked tensor layout
+- `mimic_target_poses` packing from mocked future-pose samples into the locked tensor layout
+- terrain-zero and other fixed Stage 1 filler paths
+- startup validation helpers that only inspect provided descriptors, names, or mapping tables
+
+Recommended test level by area:
+
+- Python/unit tests for training-side conversion, export, and parity fixtures
+- C++ unit or automation tests for pure bridge helpers that do not require a live world
+- bridge-level fixture tests for full packed input/output buffers built from mocked data
+
+Subjective quality gates are not a reason to skip TDD for deterministic helpers.
+
+## Live UE Integration That Is Not TDD-First
+
+These areas still require evidence, but they are not strong candidates for pure red-green-refactor:
+
+- NNE runtime creation and model/session startup in UE
+- PoseSearch history collector lookup and live `MotionMatch` behavior
+- `UPoseSearchAssetSamplerLibrary` sampling against authored assets
+- `UPhysicsControlComponent` control creation, cache updates, and manual-update ordering
+- required-body discovery on Manny's physics asset
+- Chaos stability under runtime stepping
+- visual correctness on Manny and side-by-side quality judgment
+
+For these areas, use UE automation where practical, then runtime logs and manual verification for the rest.
 
 ## What Stays Manual
 
