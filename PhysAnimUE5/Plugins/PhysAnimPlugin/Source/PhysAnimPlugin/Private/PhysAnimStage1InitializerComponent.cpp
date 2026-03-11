@@ -70,12 +70,12 @@ namespace PhysAnimStage1InitializerComponentInternal
 	FPhysicsControlModifierData MakeDefaultStage1BodyModifierData()
 	{
 		FPhysicsControlModifierData Data;
-		Data.MovementType = EPhysicsMovementType::Simulated;
-		Data.CollisionType = ECollisionEnabled::QueryAndPhysics;
+		Data.MovementType = EPhysicsMovementType::Kinematic;
+		Data.CollisionType = ECollisionEnabled::NoCollision;
 		Data.GravityMultiplier = 1.0f;
-		Data.PhysicsBlendWeight = 1.0f;
+		Data.PhysicsBlendWeight = 0.0f;
 		Data.KinematicTargetSpace = EPhysicsControlKinematicTargetSpace::OffsetInBoneSpace;
-		Data.bUpdateKinematicFromSimulation = true;
+		Data.bUpdateKinematicFromSimulation = false;
 		return Data;
 	}
 

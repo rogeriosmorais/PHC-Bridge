@@ -370,6 +370,76 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPerBodyInstabilityDiagnosticsTest,
+		"PhysAnim.Component.PerBodyInstabilityDiagnostics.Basic",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPerBodyInstabilityDiagnosticsTest::RunTest(const FString& Parameters)
+	{
+		TArray<FPhysAnimBodyInstabilitySample> Samples;
+
+		FPhysAnimBodyInstabilitySample& PelvisSample = Samples.AddDefaulted_GetRef();
+		PelvisSample.BoneName = TEXT("pelvis");
+		PelvisSample.Location = FVector(0.0f, 0.0f, 100.0f);
+		PelvisSample.LinearVelocity = FVector::ZeroVector;
+		PelvisSample.AngularVelocity = FVector::ZeroVector;
+		PelvisSample.bIsSimulatingPhysics = false;
+
+		FPhysAnimBodyInstabilitySample& HandSample = Samples.AddDefaulted_GetRef();
+		HandSample.BoneName = TEXT("hand_l");
+		HandSample.Location = FVector(0.0f, 0.0f, 180.0f);
+		HandSample.LinearVelocity = FVector(10.0f, 0.0f, 0.0f);
+		HandSample.AngularVelocity = FVector(900.0f, 0.0f, 0.0f);
+		HandSample.bIsSimulatingPhysics = true;
+
+		FPhysAnimBodyInstabilitySample& FootSample = Samples.AddDefaulted_GetRef();
+		FootSample.BoneName = TEXT("foot_r");
+		FootSample.Location = FVector(0.0f, 0.0f, 95.0f);
+		FootSample.LinearVelocity = FVector(400.0f, 0.0f, 0.0f);
+		FootSample.AngularVelocity = FVector(200.0f, 0.0f, 0.0f);
+		FootSample.bIsSimulatingPhysics = true;
+
+		FPhysAnimRuntimeInstabilityDiagnostics Diagnostics;
+		PhysAnimBridge::EvaluatePerBodyInstabilitySamples(Samples, FVector(0.0f, 0.0f, 100.0f), Diagnostics);
+
+		TestEqual(TEXT("Per-body diagnostics count all samples"), Diagnostics.NumBodiesConsidered, 3);
+		TestEqual(TEXT("Per-body diagnostics count simulating samples"), Diagnostics.NumSimulatingBodies, 2);
+		TestEqual(TEXT("Max linear speed bone is captured"), Diagnostics.MaxLinearSpeedBoneName, FName(TEXT("foot_r")));
+		TestEqual(TEXT("Max linear speed magnitude is captured"), Diagnostics.MaxBodyLinearSpeedCmPerSecond, 400.0f);
+		TestTrue(TEXT("Max linear speed bone sim state is captured"), Diagnostics.bMaxLinearSpeedBoneSimulatingPhysics);
+		TestEqual(TEXT("Max angular speed bone is captured"), Diagnostics.MaxAngularSpeedBoneName, FName(TEXT("hand_l")));
+		TestEqual(TEXT("Max angular speed magnitude is captured"), Diagnostics.MaxBodyAngularSpeedDegPerSecond, 900.0f);
+		TestTrue(TEXT("Max angular speed bone sim state is captured"), Diagnostics.bMaxAngularSpeedBoneSimulatingPhysics);
+		TestEqual(TEXT("Max body height delta bone is captured"), Diagnostics.MaxHeightDeltaBoneName, FName(TEXT("hand_l")));
+		TestEqual(TEXT("Max body height delta magnitude is captured"), Diagnostics.MaxBodyHeightDeltaCm, 80.0f);
+		TestTrue(TEXT("Max body height delta sim state is captured"), Diagnostics.bMaxHeightDeltaBoneSimulatingPhysics);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPerBodyInstabilityDiagnosticsEmptyTest,
+		"PhysAnim.Component.PerBodyInstabilityDiagnostics.Empty",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPerBodyInstabilityDiagnosticsEmptyTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimRuntimeInstabilityDiagnostics Diagnostics;
+		Diagnostics.MaxLinearSpeedBoneName = TEXT("stale");
+		Diagnostics.MaxAngularSpeedBoneName = TEXT("stale");
+		Diagnostics.MaxHeightDeltaBoneName = TEXT("stale");
+		const TArray<FPhysAnimBodyInstabilitySample> Samples;
+
+		PhysAnimBridge::EvaluatePerBodyInstabilitySamples(Samples, FVector(0.0f, 0.0f, 100.0f), Diagnostics);
+
+		TestEqual(TEXT("Empty diagnostics reset body count"), Diagnostics.NumBodiesConsidered, 0);
+		TestEqual(TEXT("Empty diagnostics reset simulating count"), Diagnostics.NumSimulatingBodies, 0);
+		TestEqual(TEXT("Empty diagnostics clear max linear speed bone"), Diagnostics.MaxLinearSpeedBoneName, NAME_None);
+		TestEqual(TEXT("Empty diagnostics clear max angular speed bone"), Diagnostics.MaxAngularSpeedBoneName, NAME_None);
+		TestEqual(TEXT("Empty diagnostics clear max height delta bone"), Diagnostics.MaxHeightDeltaBoneName, NAME_None);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimInitialPoseSearchTimeoutTest,
 		"PhysAnim.Component.InitialPoseSearchTimeout",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -486,18 +556,201 @@ namespace
 	{
 		EPhysicsMovementType MovementType = EPhysicsMovementType::Default;
 		float PhysicsBlendWeight = -1.0f;
+		bool bUpdateKinematicFromSimulation = true;
 
-		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(true, false, MovementType, PhysicsBlendWeight);
+		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			true,
+			true,
+			true,
+			false,
+			MovementType,
+			PhysicsBlendWeight,
+			bUpdateKinematicFromSimulation);
 		TestEqual(TEXT("Force-zero mode keeps body modifiers kinematic"), MovementType, EPhysicsMovementType::Kinematic);
 		TestEqual(TEXT("Force-zero mode keeps body modifiers at zero blend"), PhysicsBlendWeight, 0.0f);
+		TestFalse(TEXT("Force-zero mode disables update kinematic from simulation"), bUpdateKinematicFromSimulation);
 
-		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(false, true, MovementType, PhysicsBlendWeight);
-		TestEqual(TEXT("Activation prepass keeps body modifiers kinematic"), MovementType, EPhysicsMovementType::Kinematic);
-		TestEqual(TEXT("Activation prepass keeps body modifiers at zero blend"), PhysicsBlendWeight, 0.0f);
+		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			false,
+			false,
+			false,
+			false,
+			MovementType,
+			PhysicsBlendWeight,
+			bUpdateKinematicFromSimulation);
+		TestEqual(TEXT("Settling phase keeps non-root body modifiers kinematic"), MovementType, EPhysicsMovementType::Kinematic);
+		TestEqual(TEXT("Settling phase keeps non-root body modifiers at zero blend"), PhysicsBlendWeight, 0.0f);
+		TestFalse(TEXT("Settling phase disables update kinematic from simulation"), bUpdateKinematicFromSimulation);
 
-		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(false, false, MovementType, PhysicsBlendWeight);
-		TestEqual(TEXT("Post-prepass active mode enables simulated body modifiers"), MovementType, EPhysicsMovementType::Simulated);
-		TestEqual(TEXT("Post-prepass active mode enables full blend"), PhysicsBlendWeight, 1.0f);
+		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			false,
+			true,
+			true,
+			true,
+			MovementType,
+			PhysicsBlendWeight,
+			bUpdateKinematicFromSimulation);
+		TestEqual(TEXT("Completed handoff still keeps root body modifier kinematic"), MovementType, EPhysicsMovementType::Kinematic);
+		TestEqual(TEXT("Completed handoff keeps root body modifier at zero blend"), PhysicsBlendWeight, 0.0f);
+		TestFalse(TEXT("Completed handoff keeps root update kinematic from simulation disabled"), bUpdateKinematicFromSimulation);
+
+		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			false,
+			true,
+			true,
+			false,
+			MovementType,
+			PhysicsBlendWeight,
+			bUpdateKinematicFromSimulation);
+		TestEqual(TEXT("Completed handoff enables non-root simulated body modifiers"), MovementType, EPhysicsMovementType::Simulated);
+		TestEqual(TEXT("Completed handoff enables full blend"), PhysicsBlendWeight, 1.0f);
+		TestFalse(TEXT("Completed handoff keeps simulated body modifiers from writing back to kinematic"), bUpdateKinematicFromSimulation);
+
+		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			false,
+			true,
+			false,
+			false,
+			MovementType,
+			PhysicsBlendWeight,
+			bUpdateKinematicFromSimulation);
+		TestEqual(TEXT("Locked bring-up group keeps non-root body modifiers kinematic"), MovementType, EPhysicsMovementType::Kinematic);
+		TestEqual(TEXT("Locked bring-up group keeps non-root body modifiers at zero blend"), PhysicsBlendWeight, 0.0f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBodyModifierCollisionModeTest,
+		"PhysAnim.Component.BodyModifierCollisionMode",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBodyModifierCollisionModeTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(
+			TEXT("Force-zero mode keeps body modifier collision disabled"),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(true, true, true, false),
+			ECollisionEnabled::NoCollision);
+		TestEqual(
+			TEXT("Settling phase keeps non-root body modifier collision disabled"),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, false, false, false),
+			ECollisionEnabled::NoCollision);
+		TestEqual(
+			TEXT("Completed handoff still keeps root body modifier collision disabled"),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, true, true),
+			ECollisionEnabled::NoCollision);
+		TestEqual(
+			TEXT("Completed handoff enables non-root body modifier collision"),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, true, false),
+			ECollisionEnabled::QueryAndPhysics);
+		TestEqual(
+			TEXT("Locked bring-up group keeps non-root body modifier collision disabled"),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, false, false),
+			ECollisionEnabled::NoCollision);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBodyModifierCachedResetTest,
+		"PhysAnim.Component.BodyModifierCachedReset",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBodyModifierCachedResetTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("Force-zero mode does not reset body modifiers to cached transforms"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(true, true, true, false));
+		TestFalse(
+			TEXT("Non-settling ticks do not reset body modifiers to cached transforms"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, false, true, false));
+		TestFalse(
+			TEXT("Root body modifier does not reset on settle tick"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, true, true));
+		TestTrue(
+			TEXT("Non-root body modifier resets on settle tick"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, true, false));
+		TestFalse(
+			TEXT("Locked bring-up group does not reset on settle tick"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, false, false));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBringUpGroupMappingTest,
+		"PhysAnim.Component.BringUpGroupMapping",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBringUpGroupMappingTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(TEXT("Spine group unlocks first"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("spine_01")), 0);
+		TestEqual(TEXT("Thigh group unlocks first"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("thigh_r")), 0);
+		TestEqual(TEXT("Upper arms unlock second"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("upperarm_l")), 1);
+		TestEqual(TEXT("Feet and lower arms unlock third"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("ball_l")), 2);
+		TestEqual(TEXT("Hands and head unlock last"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("hand_r")), 3);
+		TestEqual(TEXT("Root pelvis is not a staged non-root group"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("pelvis")), INDEX_NONE);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimControlAuthorityAlphaTest,
+		"PhysAnim.Component.ControlAuthorityAlpha",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimControlAuthorityAlphaTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(
+			TEXT("Force-zero mode keeps control authority at zero"),
+			UPhysAnimComponent::CalculateControlAuthorityAlpha(true, true, 1.0f, 1.0f),
+			0.0f);
+		TestEqual(
+			TEXT("Unsettled handoff keeps control authority at zero"),
+			UPhysAnimComponent::CalculateControlAuthorityAlpha(false, false, 1.0f, 1.0f),
+			0.0f);
+		TestEqual(
+			TEXT("Settled handoff starts with zero control authority"),
+			UPhysAnimComponent::CalculateControlAuthorityAlpha(false, true, 0.0f, 1.0f),
+			0.0f);
+		TestEqual(
+			TEXT("Control authority ramps linearly during startup"),
+			UPhysAnimComponent::CalculateControlAuthorityAlpha(false, true, 0.25f, 1.0f),
+			0.25f);
+		TestEqual(
+			TEXT("Control authority reaches one after the ramp duration"),
+			UPhysAnimComponent::CalculateControlAuthorityAlpha(false, true, 1.0f, 1.0f),
+			1.0f);
+		TestEqual(
+			TEXT("Non-positive ramp durations snap to full authority once settled"),
+			UPhysAnimComponent::CalculateControlAuthorityAlpha(false, true, 0.0f, 0.0f),
+			1.0f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyInfluenceAlphaTest,
+		"PhysAnim.Component.PolicyInfluenceAlpha",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPolicyInfluenceAlphaTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(
+			TEXT("Force-zero mode keeps policy influence at zero"),
+			UPhysAnimComponent::CalculatePolicyInfluenceAlpha(true, true, 1.0f, 1.0f),
+			0.0f);
+		TestEqual(
+			TEXT("Locked bring-up groups keep policy influence at zero"),
+			UPhysAnimComponent::CalculatePolicyInfluenceAlpha(false, false, 1.0f, 1.0f),
+			0.0f);
+		TestEqual(
+			TEXT("Final group activation starts policy influence at zero"),
+			UPhysAnimComponent::CalculatePolicyInfluenceAlpha(false, true, 0.0f, 1.0f),
+			0.0f);
+		TestEqual(
+			TEXT("Policy influence ramps linearly after all groups unlock"),
+			UPhysAnimComponent::CalculatePolicyInfluenceAlpha(false, true, 0.5f, 1.0f),
+			0.5f);
+		TestEqual(
+			TEXT("Policy influence reaches one after the ramp duration"),
+			UPhysAnimComponent::CalculatePolicyInfluenceAlpha(false, true, 1.0f, 1.0f),
+			1.0f);
 		return true;
 	}
 
@@ -546,7 +799,12 @@ namespace
 			TestFalse(TEXT("Body modifier actor starts unset"), PelvisModifier->Actor.IsValid());
 			TestEqual(TEXT("Body modifier mesh component name"), PelvisModifier->MeshComponentName, FName(TEXT("CharacterMesh0")));
 			TestEqual(TEXT("Body modifier bone"), PelvisModifier->BoneName, FName(TEXT("pelvis")));
-			TestEqual(TEXT("Body modifier movement type"), PelvisModifier->BodyModifierData.MovementType, EPhysicsMovementType::Simulated);
+			TestEqual(TEXT("Body modifier movement type"), PelvisModifier->BodyModifierData.MovementType, EPhysicsMovementType::Kinematic);
+			TestEqual(TEXT("Body modifier collision type"), PelvisModifier->BodyModifierData.CollisionType, ECollisionEnabled::NoCollision);
+			TestEqual(TEXT("Body modifier physics blend weight"), PelvisModifier->BodyModifierData.PhysicsBlendWeight, 0.0f);
+			TestFalse(
+				TEXT("Body modifier defaults disable update kinematic from simulation"),
+				PelvisModifier->BodyModifierData.bUpdateKinematicFromSimulation);
 			TestEqual(
 				TEXT("Body modifier target space"),
 				PelvisModifier->BodyModifierData.KinematicTargetSpace,

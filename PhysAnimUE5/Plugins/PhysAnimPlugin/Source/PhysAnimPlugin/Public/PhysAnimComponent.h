@@ -164,13 +164,24 @@ private:
 		const TCHAR* Context,
 		bool bCurrentPoseTargetsSeeded,
 		bool bActivationPrepassCompleted,
-		bool bSimulationHandoffPending) const;
+		float SimulationHandoffProgress) const;
 	bool ConditionModelActions(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
+	void UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Context);
+	void AdvanceBringUpState(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
+	bool AreAllBringUpGroupsUnlocked() const;
+	bool IsBringUpGroupUnlocked(int32 GroupIndex) const;
+	bool IsBoneInUnlockedBringUpGroup(FName BoneName) const;
+	bool GatherRuntimeInstabilityBodySamples(TArray<FPhysAnimBodyInstabilitySample>& OutSamples) const;
 	bool CheckRuntimeInstability(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
+	void LogBodyModifierTelemetrySnapshot(const TCHAR* Context) const;
+	void ResetPendingBodyModifiersToCachedTargets();
 	void ApplyControlTargets(float DeltaTime, FString& OutError);
 	void MaybeLogRuntimeDiagnostics(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	void ResetStabilizationRuntimeState();
 	void FailStop(const FString& Reason);
+	float CalculateSimulationHandoffAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
+	float CalculateCurrentControlAuthorityAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
+	float CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 
 	UE::NNE::IModelInstanceRunSync* GetModelInstanceRunSync() const;
 	TConstArrayView<UE::NNE::FTensorDesc> GetInputTensorDescs() const;
@@ -210,9 +221,15 @@ private:
 	FPhysAnimRuntimeInstabilityState RuntimeInstabilityState;
 	FPhysAnimRuntimeInstabilityDiagnostics LastRuntimeInstabilityDiagnostics;
 	TMap<FName, FQuat> PreviousControlTargetRotations;
-	bool bPendingSimulationHandoff = false;
-	bool bLastAppliedPendingSimulationHandoff = false;
+	float SimulationHandoffAlpha = 0.0f;
+	bool bLastAppliedSimulationHandoffSettled = false;
+	float LastAppliedControlAuthorityAlpha = -1.0f;
 	double BridgeStartTimeSeconds = 0.0;
+	double SimulationHandoffCompletedTimeSeconds = -1.0;
+	int32 HighestUnlockedBringUpGroupIndex = INDEX_NONE;
+	float BringUpGroupStableAccumulatedSeconds = 0.0f;
+	TArray<double> BringUpGroupActivationTimeSeconds;
+	TArray<FName> PendingBodyModifierCachedResetNames;
 	double LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
 	FName OriginalMeshCollisionProfileName = NAME_None;
 	ECollisionEnabled::Type OriginalMeshCollisionEnabled = ECollisionEnabled::NoCollision;
@@ -254,9 +271,34 @@ public:
 		const FQuat& ChildWorldRotation);
 	static void ResolveBodyModifierRuntimeMode(
 		bool bForceZeroActions,
-		bool bPendingSimulationHandoff,
+		bool bSimulationHandoffSettled,
+		bool bBringUpGroupUnlocked,
+		bool bIsRootBodyModifier,
 		EPhysicsMovementType& OutMovementType,
-		float& OutPhysicsBlendWeight);
+		float& OutPhysicsBlendWeight,
+		bool& bOutUpdateKinematicFromSimulation);
+	static ECollisionEnabled::Type ResolveBodyModifierCollisionType(
+		bool bForceZeroActions,
+		bool bSimulationHandoffSettled,
+		bool bBringUpGroupUnlocked,
+		bool bIsRootBodyModifier);
+	static bool ShouldResetBodyModifierToCachedBoneTransform(
+		bool bForceZeroActions,
+		bool bSimulationHandoffCompletedThisTick,
+		bool bBringUpGroupUnlocked,
+		bool bIsRootBodyModifier);
+	static int32 ResolveBringUpGroupIndex(FName BoneName);
+	static int32 GetBringUpGroupCount();
+	static float CalculateControlAuthorityAlpha(
+		bool bForceZeroActions,
+		bool bSimulationHandoffSettled,
+		float ElapsedSinceHandoffSettledSeconds,
+		float RampDurationSeconds);
+	static float CalculatePolicyInfluenceAlpha(
+		bool bForceZeroActions,
+		bool bAllBringUpGroupsUnlocked,
+		float ElapsedSinceAllBringUpGroupsUnlockedSeconds,
+		float RampDurationSeconds);
 	static bool IsInitialPoseSearchWaitTimedOut(double ElapsedSeconds, double TimeoutSeconds);
 	static EPhysAnimRuntimeState ResolveInitialPoseSearchSuccessState(bool bForceZeroActions);
 	static bool ShouldActivateBridgeFromSafeMode(EPhysAnimRuntimeState State, bool bForceZeroActions);

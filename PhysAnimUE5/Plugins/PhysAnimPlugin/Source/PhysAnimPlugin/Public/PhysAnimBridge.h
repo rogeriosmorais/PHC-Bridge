@@ -62,6 +62,15 @@ struct FPhysAnimRuntimeInstabilityState
 	float UnstableAccumulatedSeconds = 0.0f;
 };
 
+struct FPhysAnimBodyInstabilitySample
+{
+	FName BoneName = NAME_None;
+	FVector Location = FVector::ZeroVector;
+	FVector LinearVelocity = FVector::ZeroVector;
+	FVector AngularVelocity = FVector::ZeroVector;
+	bool bIsSimulatingPhysics = false;
+};
+
 struct FPhysAnimRuntimeInstabilityDiagnostics
 {
 	float RootHeightDeltaCm = 0.0f;
@@ -71,6 +80,17 @@ struct FPhysAnimRuntimeInstabilityDiagnostics
 	bool bLinearSpeedExceeded = false;
 	bool bAngularSpeedExceeded = false;
 	float UnstableAccumulatedSeconds = 0.0f;
+	int32 NumBodiesConsidered = 0;
+	int32 NumSimulatingBodies = 0;
+	FName MaxLinearSpeedBoneName = NAME_None;
+	float MaxBodyLinearSpeedCmPerSecond = 0.0f;
+	bool bMaxLinearSpeedBoneSimulatingPhysics = false;
+	FName MaxAngularSpeedBoneName = NAME_None;
+	float MaxBodyAngularSpeedDegPerSecond = 0.0f;
+	bool bMaxAngularSpeedBoneSimulatingPhysics = false;
+	FName MaxHeightDeltaBoneName = NAME_None;
+	float MaxBodyHeightDeltaCm = 0.0f;
+	bool bMaxHeightDeltaBoneSimulatingPhysics = false;
 };
 
 namespace PhysAnimBridge
@@ -151,4 +171,9 @@ namespace PhysAnimBridge
 		FPhysAnimRuntimeInstabilityState& InOutState,
 		FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics,
 		FString& OutError);
+
+	PHYSANIMPLUGIN_API void EvaluatePerBodyInstabilitySamples(
+		const TArray<FPhysAnimBodyInstabilitySample>& Samples,
+		const FVector& ReferenceRootLocationCm,
+		FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics);
 }

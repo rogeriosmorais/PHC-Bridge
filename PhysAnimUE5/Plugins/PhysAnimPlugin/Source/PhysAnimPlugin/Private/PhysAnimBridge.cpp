@@ -718,4 +718,57 @@ namespace PhysAnimBridge
 			*FString::Join(ExceededReasons, TEXT(", ")));
 		return false;
 	}
+
+	void EvaluatePerBodyInstabilitySamples(
+		const TArray<FPhysAnimBodyInstabilitySample>& Samples,
+		const FVector& ReferenceRootLocationCm,
+		FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics)
+	{
+		OutDiagnostics.NumBodiesConsidered = Samples.Num();
+		OutDiagnostics.NumSimulatingBodies = 0;
+		OutDiagnostics.MaxLinearSpeedBoneName = NAME_None;
+		OutDiagnostics.MaxBodyLinearSpeedCmPerSecond = 0.0f;
+		OutDiagnostics.bMaxLinearSpeedBoneSimulatingPhysics = false;
+		OutDiagnostics.MaxAngularSpeedBoneName = NAME_None;
+		OutDiagnostics.MaxBodyAngularSpeedDegPerSecond = 0.0f;
+		OutDiagnostics.bMaxAngularSpeedBoneSimulatingPhysics = false;
+		OutDiagnostics.MaxHeightDeltaBoneName = NAME_None;
+		OutDiagnostics.MaxBodyHeightDeltaCm = 0.0f;
+		OutDiagnostics.bMaxHeightDeltaBoneSimulatingPhysics = false;
+
+		for (const FPhysAnimBodyInstabilitySample& Sample : Samples)
+		{
+			if (Sample.bIsSimulatingPhysics)
+			{
+				++OutDiagnostics.NumSimulatingBodies;
+			}
+
+			const float LinearSpeedCmPerSecond = Sample.LinearVelocity.Size();
+			if (OutDiagnostics.MaxLinearSpeedBoneName == NAME_None ||
+				LinearSpeedCmPerSecond > OutDiagnostics.MaxBodyLinearSpeedCmPerSecond)
+			{
+				OutDiagnostics.MaxLinearSpeedBoneName = Sample.BoneName;
+				OutDiagnostics.MaxBodyLinearSpeedCmPerSecond = LinearSpeedCmPerSecond;
+				OutDiagnostics.bMaxLinearSpeedBoneSimulatingPhysics = Sample.bIsSimulatingPhysics;
+			}
+
+			const float AngularSpeedDegPerSecond = Sample.AngularVelocity.Size();
+			if (OutDiagnostics.MaxAngularSpeedBoneName == NAME_None ||
+				AngularSpeedDegPerSecond > OutDiagnostics.MaxBodyAngularSpeedDegPerSecond)
+			{
+				OutDiagnostics.MaxAngularSpeedBoneName = Sample.BoneName;
+				OutDiagnostics.MaxBodyAngularSpeedDegPerSecond = AngularSpeedDegPerSecond;
+				OutDiagnostics.bMaxAngularSpeedBoneSimulatingPhysics = Sample.bIsSimulatingPhysics;
+			}
+
+			const float HeightDeltaCm = FMath::Abs(Sample.Location.Z - ReferenceRootLocationCm.Z);
+			if (OutDiagnostics.MaxHeightDeltaBoneName == NAME_None ||
+				HeightDeltaCm > OutDiagnostics.MaxBodyHeightDeltaCm)
+			{
+				OutDiagnostics.MaxHeightDeltaBoneName = Sample.BoneName;
+				OutDiagnostics.MaxBodyHeightDeltaCm = HeightDeltaCm;
+				OutDiagnostics.bMaxHeightDeltaBoneSimulatingPhysics = Sample.bIsSimulatingPhysics;
+			}
+		}
+	}
 }

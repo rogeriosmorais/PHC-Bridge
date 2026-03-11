@@ -338,6 +338,11 @@ Max Substeps = 8
     - bridge owns physics and may apply stabilization/tuning
     - bridge may now create live runtime controls/body modifiers
     - bridge may now suspend the normal `ACharacter` shell and apply bridge-owned tuning
+    - the current bridge no longer enables all non-root bodies and full policy influence at once
+    - after handoff, the bridge now enters a staged bring-up program:
+      - non-root body/control groups unlock in order
+      - control authority ramps per unlocked group
+      - policy influence stays suppressed until all bring-up groups are unlocked
   - `FailStopped`:
     - bridge released ownership after a fault
     - bridge must destroy live runtime controls/body modifiers on entry
@@ -356,6 +361,10 @@ Max Substeps = 8
      - `physanim.ActionClampAbs 0.20`
      - `physanim.ActionSmoothingAlpha 0.25`
      - `physanim.StartupRampSeconds 1.0`
+     - on the current bridge, this does not mean immediate live policy driving:
+       - first the handoff settles
+       - then staged bring-up unlocks non-root groups
+       - only after all groups unlock does policy influence ramp above zero
   3. if the runtime is still dominated by flight / spinning, lower control aggression next:
      - `physanim.AngularStrengthMultiplier 0.35`
      - `physanim.AngularDampingRatioMultiplier 1.50`
@@ -363,17 +372,22 @@ Max Substeps = 8
   4. only after those steps fail should you investigate deeper mapping / frame faults
 - `Frozen automated instability monitor for this checkpoint`:
   - the bridge now tracks the root body (`pelvis`) every tick
+  - the bridge also emits per-body diagnostics every runtime interval
   - the bridge auto-fail-stops if any of these conditions persist longer than the grace window:
     - `root height delta > 120 cm`
     - `root linear speed > 1200 cm/s`
     - `root angular speed > 720 deg/s`
     - `grace window = 0.25 s`
   - the runtime log now emits periodic diagnostics for:
+    - staged bring-up progress
+    - control authority alpha
+    - policy influence alpha
     - conditioned action magnitude
     - root height delta
     - root linear speed
     - root angular speed
     - accumulated unstable time
+    - per-body max linear/angular/height offenders
 - `Frozen test inputs`:
   1. exact UE map path:
      - `/Game/ThirdPerson/Lvl_ThirdPerson`
@@ -412,11 +426,17 @@ Max Substeps = 8
        - explicit-target mode is active by default
        - current-pose target seeding completed
        - activation prepass completed before simulation handoff
+       - bring-up starts at group `1/4`
+       - policy influence is still `0.00` when the first group unlocks
   9. Once startup succeeds, watch the first `10` seconds closely:
      - does the character stay roughly upright
      - does the body immediately launch upward
      - does the body enter continuous spinning or tumbling
      - is the motion still readable enough to tune
+     - do the runtime diagnostics show:
+       - `bringUpGroup=1/4` advancing over time
+       - `controlAuthorityAlpha` rising for unlocked groups
+       - `policyInfluenceAlpha` staying near `0.00` until the final group unlocks
   10. If the first `10` seconds are readable, let the run continue for about `30` seconds total.
   11. Record a short clip if practical. If not, capture at least one screenshot and write down exactly what dominated the run.
 - `Useful live knobs during this checkpoint`:
@@ -439,6 +459,8 @@ Max Substeps = 8
   - the startup-success line appears
   - default safe-mode startup reaches `ReadyForActivation` without live operators
   - active-bridge startup uses explicit targets by default, not skeletal-animation target blending
+  - staged bring-up advances without immediate per-body velocity spikes in distal limbs
+  - policy influence stays suppressed until the final bring-up group is active
   - the character does not immediately launch, spin uncontrollably, or collapse into unreadable motion
   - the run remains visually controllable for about `30` seconds
   - the result is stable enough that tuning adjustments would be meaningful
@@ -458,6 +480,7 @@ Max Substeps = 8
   - the first `[PhysAnim]` startup success or failure line
   - the first `[PhysAnim] Runtime state: ...` transition lines
   - the first `[PhysAnim] Runtime diagnostics ...` line if one appears
+  - at least one later `[PhysAnim] Runtime diagnostics ...` line showing staged bring-up progress
   - the first `[PhysAnim] Fail-stop: Runtime instability detected ...` line if one appears
   - one short clip or screenshot
   - one sentence saying:
