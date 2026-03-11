@@ -88,6 +88,15 @@ Current local Phase 1 truth on March 11, 2026:
 
 This means Phase 1 is now in stabilization/tuning, not in export discovery and not yet in G2 packaging.
 
+The first deterministic movement-stability milestone is also now green:
+
+- `run-pie-movement-smoke.ps1` completes without `BridgeActive -> FailStopped`
+- preserved-gameplay-shell locomotion no longer trips false fail-stop from world-space root drift
+
+The next Phase 1 runtime question is no longer “can the bridge move?” It is:
+
+- does locomotion stay stable over longer repeated movement cycles and manual real-`WASD` play long enough to support G2 capture
+
 The active execution contract for the remaining bridge fault now lives in
 [phase1-policy-stabilization-plan.md](/F:/NewEngine/plans/stage1/20-execution/phase1-policy-stabilization-plan.md).
 Do not continue policy-phase runtime edits without following that plan.

@@ -135,3 +135,5 @@ Whenever new setup or gate evidence arrives:
   - movement-triggered fail-stop false positives were traced to world-space root instability checks after gameplay-shell preservation
   - fix: when the gameplay shell is preserved, runtime instability now evaluates root/body translation relative to the owning actor shell instead of the original world-space activation frame
   - verification: `run-pie-movement-smoke.ps1` now completes without `BridgeActive -> FailStopped`
+  - first movement-stability milestone is now treated as `pass`
+  - next validation pass is a longer deterministic locomotion soak over repeated scripted movement cycles plus short manual real-`WASD` confirmation

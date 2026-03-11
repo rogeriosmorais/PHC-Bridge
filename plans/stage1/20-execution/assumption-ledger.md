@@ -94,10 +94,12 @@ Only the orchestrator updates status.
   - `BridgeActive` can now preserve capsule collision and `CharacterMovement` in normal editor/runtime sessions through `physanim.AllowCharacterMovementInBridgeActive`
   - movement smoke still exists for deterministic automation, but it is no longer the only path that keeps the gameplay shell alive
   - the passive smoke path remained green after that harness was added
-  - the first valid movement-smoke run also showed that the bridge is not yet stable under real forward movement:
-    - scripted movement now starts only after policy settle
-    - the first forward window still drives root height delta past the fail-stop threshold within about `0.26s`
-  - the next Phase 1 risk is now movement stability under gameplay-shell coexistence, not passive startup or passive policy activation
+  - the first valid movement-smoke run initially failed because runtime fail-stop still judged root instability in world space from the activation frame
+  - after fixing instability evaluation to use gameplay-shell-relative root/body motion when the shell is preserved:
+    - the deterministic `WASD`-equivalent movement smoke now completes without `BridgeActive -> FailStopped`
+    - passive smoke remains green
+    - the first movement-stability milestone is now considered passed
+  - the next Phase 1 risk is no longer “can the bridge move at all?”; it is now longer-duration locomotion soak coverage, manual real-`WASD` evidence, and G2 capture readiness
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

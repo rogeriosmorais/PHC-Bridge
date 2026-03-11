@@ -350,6 +350,7 @@ public:
 	static FVector ResolveMovementSmokeLocalIntent(float ElapsedSeconds);
 	static FName ResolveMovementSmokePhaseName(float ElapsedSeconds);
 	static float GetMovementSmokeDurationSeconds();
+	static float GetMovementSmokeTotalDurationSeconds(int32 NumLoops);
 	static float CalculatePolicyInfluenceAlpha(
 		bool bForceZeroActions,
 		bool bAllBringUpGroupsUnlocked,

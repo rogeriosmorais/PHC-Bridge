@@ -120,6 +120,10 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.MovementSmokeMode"),
 		0,
 		TEXT("Enables the deterministic PIE movement smoke mode that preserves the gameplay shell and applies scripted WASD-equivalent input."));
+	TAutoConsoleVariable<int32> CVarPhysAnimMovementSmokeLoopCount(
+		TEXT("physanim.MovementSmokeLoopCount"),
+		1,
+		TEXT("How many times the deterministic PIE movement smoke timeline repeats before completing."));
 	TAutoConsoleVariable<int32> CVarPhysAnimAllowCharacterMovementInBridgeActive(
 		TEXT("physanim.AllowCharacterMovementInBridgeActive"),
 		1,
@@ -2200,8 +2204,18 @@ void UPhysAnimComponent::ApplyMovementSmokeInput(const FPhysAnimStabilizationSet
 	}
 
 	const float ScriptElapsedSeconds = static_cast<float>(CurrentTimeSeconds - ScriptStartTimeSeconds);
-	const FVector LocalIntent = ResolveMovementSmokeLocalIntent(ScriptElapsedSeconds);
-	const FName PhaseName = ResolveMovementSmokePhaseName(ScriptElapsedSeconds);
+	const int32 NumLoops = FMath::Max(PhysAnimComponentInternal::CVarPhysAnimMovementSmokeLoopCount.GetValueOnGameThread(), 1);
+	const float TotalDurationSeconds = GetMovementSmokeTotalDurationSeconds(NumLoops);
+	const bool bScriptComplete = ScriptElapsedSeconds >= TotalDurationSeconds;
+	const float PhaseElapsedSeconds = bScriptComplete
+		? GetMovementSmokeDurationSeconds()
+		: FMath::Fmod(ScriptElapsedSeconds, GetMovementSmokeDurationSeconds());
+	const FVector LocalIntent = bScriptComplete
+		? FVector::ZeroVector
+		: ResolveMovementSmokeLocalIntent(PhaseElapsedSeconds);
+	const FName PhaseName = bScriptComplete
+		? TEXT("Complete")
+		: ResolveMovementSmokePhaseName(PhaseElapsedSeconds);
 
 	FRotator IntentRotation = CharacterOwner->GetActorRotation();
 	if (const AController* const Controller = CharacterOwner->GetController())
@@ -2235,14 +2249,15 @@ void UPhysAnimComponent::ApplyMovementSmokeInput(const FPhysAnimStabilizationSet
 		CharacterOwner->AddMovementInput(WorldIntent, 1.0f, true);
 	}
 
-	if (!bMovementSmokeCompletionLogged && ScriptElapsedSeconds >= GetMovementSmokeDurationSeconds())
+	if (!bMovementSmokeCompletionLogged && bScriptComplete)
 	{
 		const FVector CurrentLocation = CharacterOwner->GetActorLocation();
 		const float TotalDisplacementCm = FVector::Dist2D(CurrentLocation, MovementSmokeStartLocation);
 		UE_LOG(
 			LogPhysAnimBridge,
 			Log,
-			TEXT("[PhysAnim] Movement smoke complete: totalDisplacementCm=%.1f finalPhase=%s runtime=%s"),
+			TEXT("[PhysAnim] Movement smoke complete: loops=%d totalDisplacementCm=%.1f finalPhase=%s runtime=%s"),
+			NumLoops,
 			TotalDisplacementCm,
 			*PhaseName.ToString(),
 			GetRuntimeStateName(RuntimeState));
@@ -2749,6 +2764,11 @@ FName UPhysAnimComponent::ResolveMovementSmokePhaseName(float ElapsedSeconds)
 float UPhysAnimComponent::GetMovementSmokeDurationSeconds()
 {
 	return PhysAnimComponentInternal::MovementSmokeTimelineDurationSeconds;
+}
+
+float UPhysAnimComponent::GetMovementSmokeTotalDurationSeconds(int32 NumLoops)
+{
+	return GetMovementSmokeDurationSeconds() * FMath::Max(NumLoops, 1);
 }
 
 float UPhysAnimComponent::CalculatePolicyInfluenceAlpha(

@@ -120,10 +120,16 @@ Latest result on `March 11, 2026`:
 - the dedicated movement-smoke harness is implemented
 - the passive smoke path remains green
 - the passive idle smoke now also passes at `65` seconds without delayed drift or collapse
-- movement is now held off until after live policy has settled
-- the first true forward movement window still destabilizes the bridge within about `0.26s`
+- movement is held off until after live policy has settled
+- the first movement-smoke failure was traced to world-space fail-stop checks that did not account for gameplay-shell translation
+- after changing runtime instability evaluation to use gameplay-shell-relative root/body motion when `BridgeActive` preserves `CharacterMovement`, the deterministic movement smoke sequence completes without `BridgeActive -> FailStopped`
 
-So the harness is now considered valid, but the movement milestone is not yet passed.
+So the first movement-stability milestone is now passed.
+
+The next follow-up is:
+
+- longer deterministic locomotion soak coverage
+- short manual real-`WASD` confirmation
 
 ## Success Criteria
 
@@ -158,4 +164,5 @@ Escalate only if:
 
 If the first movement smoke passes, the next follow-up becomes:
 
+- longer deterministic locomotion soak
 - short manual verification with real `WASD`

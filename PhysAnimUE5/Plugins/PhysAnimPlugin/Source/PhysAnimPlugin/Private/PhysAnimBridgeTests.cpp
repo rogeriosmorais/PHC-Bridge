@@ -23,8 +23,11 @@ namespace
 	const FString PhysAnimPieSmokeMap = TEXT("/Game/ThirdPerson/Lvl_ThirdPerson");
 	const TCHAR* PhysAnimPieSmokePrefix = TEXT("[PhysAnimPieSmoke]");
 	const TCHAR* PhysAnimPieMovementSmokePrefix = TEXT("[PhysAnimPieMovementSmoke]");
+	const TCHAR* PhysAnimPieMovementSoakPrefix = TEXT("[PhysAnimPieMovementSoak]");
 	constexpr float PhysAnimPieSmokeDurationSeconds = 65.0f;
 	constexpr float PhysAnimPieMovementSmokeDurationSeconds = 50.0f;
+	constexpr int32 PhysAnimPieMovementSoakLoopCount = 3;
+	constexpr float PhysAnimPieMovementSoakDurationSeconds = 115.0f;
 	constexpr float PhysAnimPieSmokeStartTimeoutSeconds = 30.0f;
 	constexpr float PhysAnimPieSmokeStopTimeoutSeconds = 30.0f;
 
@@ -909,6 +912,14 @@ namespace
 			TEXT("Movement smoke duration is the frozen scripted window"),
 			UPhysAnimComponent::GetMovementSmokeDurationSeconds(),
 			32.0f);
+		TestEqual(
+			TEXT("Movement smoke total duration scales by loop count"),
+			UPhysAnimComponent::GetMovementSmokeTotalDurationSeconds(3),
+			96.0f);
+		TestEqual(
+			TEXT("Movement smoke total duration clamps loop count to one"),
+			UPhysAnimComponent::GetMovementSmokeTotalDurationSeconds(0),
+			32.0f);
 		return true;
 	}
 
@@ -1230,6 +1241,11 @@ namespace
 		"PhysAnim.PIE.MovementSmoke",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPieMovementSoakTest,
+		"PhysAnim.PIE.MovementSoak",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 	bool FPhysAnimPieSmokeTest::RunTest(const FString& Parameters)
 	{
 		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
@@ -1321,6 +1337,57 @@ namespace
 				return true;
 			},
 			PhysAnimPieSmokeStopTimeoutSeconds));
+		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeMode"), 0));
+
+		return true;
+	}
+
+	bool FPhysAnimPieMovementSoakTest::RunTest(const FString& Parameters)
+	{
+		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
+		{
+			AddError(FString::Printf(TEXT("%s Failed to open map '%s'."), PhysAnimPieMovementSoakPrefix, *PhysAnimPieSmokeMap));
+			return false;
+		}
+
+		AddCommand(new FEditorAutomationLogCommand(FString::Printf(
+			TEXT("%s PIE movement soak opening '%s'."),
+			PhysAnimPieMovementSoakPrefix,
+			*PhysAnimPieSmokeMap)));
+		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeMode"), 1));
+		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeLoopCount"), PhysAnimPieMovementSoakLoopCount));
+		AddCommand(new FStartPIECommand(false));
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor != nullptr && IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("%s PIE did not start within %.1f seconds."),
+					PhysAnimPieMovementSoakPrefix,
+					PhysAnimPieSmokeStartTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStartTimeoutSeconds));
+		AddCommand(new FWaitLatentCommand(PhysAnimPieMovementSoakDurationSeconds));
+		AddCommand(new FEndPlayMapCommand());
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor == nullptr || !IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("%s PIE did not stop within %.1f seconds."),
+					PhysAnimPieMovementSoakPrefix,
+					PhysAnimPieSmokeStopTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStopTimeoutSeconds));
+		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeLoopCount"), 1));
 		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeMode"), 0));
 
 		return true;
