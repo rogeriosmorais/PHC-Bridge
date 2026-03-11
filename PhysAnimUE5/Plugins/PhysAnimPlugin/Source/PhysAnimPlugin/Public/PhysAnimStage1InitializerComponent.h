@@ -29,7 +29,7 @@ public:
 	TMap<FName, FInitialBodyModifier> InitialBodyModifiers;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysicsControls")
-	bool bCreateControlsAtBeginPlay = true;
+	bool bCreateControlsAtBeginPlay = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Setup")
 	TWeakObjectPtr<AActor> DefaultControlParentActor;

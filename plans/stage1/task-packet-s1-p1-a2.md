@@ -48,6 +48,7 @@ Turn the first end-to-end UE runtime success into a stabilization-ready one-char
    - `Uninitialized`
    - `RuntimeReady`
    - `WaitingForPoseSearch`
+   - `ReadyForActivation`
    - `BridgeActive`
    - `FailStopped`
    - only `BridgeActive` may own bridge physics
@@ -66,7 +67,8 @@ Turn the first end-to-end UE runtime success into a stabilization-ready one-char
 5. Keep startup and fail-stop behavior inside the frozen runtime state machine:
    - startup prerequisites may advance to `RuntimeReady`
    - the bridge must wait in `WaitingForPoseSearch` until the first valid `MotionMatch(...)` result exists
-   - only then may the runtime enter `BridgeActive`
+   - with zero-action safe mode enabled, the runtime must enter `ReadyForActivation` first
+   - only after actions are explicitly enabled may the runtime enter `BridgeActive`
    - any startup/runtime fault must end in `FailStopped`, with bridge-owned physics released
 6. Apply tuning changes only in the frozen order from [phase1-implementation-package.md](/F:/NewEngine/plans/stage1/phase1-implementation-package.md):
    - action influence first

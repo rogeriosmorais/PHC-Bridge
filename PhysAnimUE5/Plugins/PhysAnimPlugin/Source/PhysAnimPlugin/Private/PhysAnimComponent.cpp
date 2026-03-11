@@ -153,6 +153,64 @@ namespace PhysAnimComponentInternal
 		}
 		return FString::Join(Strings, TEXT(", "));
 	}
+
+	bool ValidateInitialPhysicsControlAuthoring(
+		const TMap<FName, FInitialPhysicsControl>& InitialControls,
+		const TMap<FName, FInitialBodyModifier>& InitialBodyModifiers,
+		FString& OutError)
+	{
+		TArray<FName> MissingControls;
+		for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+		{
+			const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+			if (!InitialControls.Contains(ControlName))
+			{
+				MissingControls.Add(ControlName);
+			}
+		}
+
+		TArray<FName> MissingModifiers;
+		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+		{
+			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+			if (!InitialBodyModifiers.Contains(ModifierName))
+			{
+				MissingModifiers.Add(ModifierName);
+			}
+		}
+
+		if (InitialControls.Num() != PhysAnimBridge::GetControlledBoneNames().Num())
+		{
+			OutError = FString::Printf(
+				TEXT("Expected %d authored controls but found %d."),
+				PhysAnimBridge::GetControlledBoneNames().Num(),
+				InitialControls.Num());
+			return false;
+		}
+
+		if (InitialBodyModifiers.Num() != PhysAnimBridge::GetRequiredBodyModifierBoneNames().Num())
+		{
+			OutError = FString::Printf(
+				TEXT("Expected %d authored body modifiers but found %d."),
+				PhysAnimBridge::GetRequiredBodyModifierBoneNames().Num(),
+				InitialBodyModifiers.Num());
+			return false;
+		}
+
+		if (MissingControls.Num() > 0)
+		{
+			OutError = FString::Printf(TEXT("Missing required authored controls: %s"), *JoinNames(MissingControls));
+			return false;
+		}
+
+		if (MissingModifiers.Num() > 0)
+		{
+			OutError = FString::Printf(TEXT("Missing required authored body modifiers: %s"), *JoinNames(MissingModifiers));
+			return false;
+		}
+
+		return true;
+	}
 }
 
 UPhysAnimComponent::UPhysAnimComponent()
@@ -227,6 +285,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	if (RuntimeState != EPhysAnimRuntimeState::WaitingForPoseSearch &&
+		RuntimeState != EPhysAnimRuntimeState::ReadyForActivation &&
 		RuntimeState != EPhysAnimRuntimeState::BridgeActive)
 	{
 		return;
@@ -241,6 +300,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		return;
 	}
 
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	FString TickError;
 	FPoseSearchBlueprintResult SearchResult;
 	if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
@@ -258,16 +318,17 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		LastValidPoseSearchResult = SearchResult;
 		ConsecutiveInvalidPoseSearchFrames = 0;
-		TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
-		LogBridgeStateSnapshot(TEXT("BeforeActivateBridgePhysicsState"));
-		ActivateBridgePhysicsState();
-		LogBridgeStateSnapshot(TEXT("AfterActivateBridgePhysicsState"));
-		ResetStabilizationRuntimeState();
-		BridgeStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		if (ResolveInitialPoseSearchSuccessState(EffectiveSettings.bForceZeroActions) == EPhysAnimRuntimeState::ReadyForActivation)
+		{
+			EnterReadyForActivation(EffectiveSettings, TEXT("StartupReadyForActivation"), true);
+			return;
+		}
 
-		const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-		ApplyRuntimeControlTuning(EffectiveSettings);
-		LogBridgeStateSnapshot(TEXT("AfterApplyRuntimeControlTuning"));
+		if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("StartupActivation"), TickError))
+		{
+			FailStop(TickError);
+			return;
+		}
 		UE_LOG(
 			LogPhysAnimBridge,
 			Log,
@@ -275,6 +336,36 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			*ActiveRuntimeName,
 			*GetPathNameSafe(LoadedModelData));
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
+		return;
+	}
+
+	if (ShouldDeactivateBridgeToSafeMode(RuntimeState, EffectiveSettings.bForceZeroActions))
+	{
+		DeactivateRuntimePhysicsControl(TEXT("ReadyForActivation"));
+		ResetBridgePhysicsState();
+		EnterReadyForActivation(EffectiveSettings, TEXT("AfterDeferredDeactivation"), false);
+		return;
+	}
+
+	if (ShouldActivateBridgeFromSafeMode(RuntimeState, EffectiveSettings.bForceZeroActions))
+	{
+		if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("DeferredActivation"), TickError))
+		{
+			FailStop(TickError);
+			return;
+		}
+
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Deferred activation complete. Runtime=%s Model=%s"),
+			*ActiveRuntimeName,
+			*GetPathNameSafe(LoadedModelData));
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
+	}
+
+	if (RuntimeState == EPhysAnimRuntimeState::ReadyForActivation)
+	{
 		return;
 	}
 
@@ -306,7 +397,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		return;
 	}
 
-	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	if (!CheckRuntimeInstability(DeltaTime, EffectiveSettings, TickError))
 	{
 		FailStop(TickError);
@@ -361,15 +451,25 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 bool UPhysAnimComponent::StartBridge()
 {
 	if (RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
-		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
+		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
+		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation)
 	{
 		return true;
 	}
 
 	FString Error;
-	if (!ResolveRuntimeContext(Error) ||
-		!ValidateRequiredBodies(Error) ||
-		!EnsurePreauthoredPhysicsControl(Error) ||
+	if (!ResolveRuntimeContext(Error))
+	{
+		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked: %s"), *Error);
+		SetComponentTickEnabled(false);
+		TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+		return false;
+	}
+
+	DeactivateRuntimePhysicsControl(TEXT("StartupReset"));
+
+	if (!ValidateRequiredBodies(Error) ||
+		!ValidatePhysicsControlAuthoring(Error) ||
 		!ValidatePoseSearchIntegration(Error) ||
 		!InitializeModel(Error))
 	{
@@ -390,56 +490,92 @@ bool UPhysAnimComponent::StartBridge()
 	return true;
 }
 
-bool UPhysAnimComponent::EnsurePreauthoredPhysicsControl(FString& OutError)
+bool UPhysAnimComponent::ValidatePhysicsControlAuthoring(FString& OutError) const
 {
-	FString ValidationError;
-	if (ValidatePreauthoredPhysicsControl(ValidationError))
-	{
-		return true;
-	}
-
-	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	AActor* const OwnerActor = GetOwner();
-	if (!PhysicsControl || !OwnerActor)
+	if (!OwnerActor)
 	{
-		OutError = ValidationError.IsEmpty() ? TEXT("Physics Control creation requires both the owning actor and Physics Control component.") : ValidationError;
+		OutError = TEXT("Physics Control authoring validation requires an owning actor.");
 		return false;
 	}
 
-	if (UPhysAnimStage1InitializerComponent* const Stage1Initializer = OwnerActor->FindComponentByClass<UPhysAnimStage1InitializerComponent>())
+	if (const UPhysAnimStage1InitializerComponent* const Stage1Initializer = OwnerActor->FindComponentByClass<UPhysAnimStage1InitializerComponent>())
 	{
-		Stage1Initializer->CreateControls(PhysicsControl);
-		return ValidatePreauthoredPhysicsControl(OutError);
+		return PhysAnimComponentInternal::ValidateInitialPhysicsControlAuthoring(
+			Stage1Initializer->InitialControls,
+			Stage1Initializer->InitialBodyModifiers,
+			OutError);
 	}
 
-	if (UPhysicsControlInitializerComponent* const Initializer = OwnerActor->FindComponentByClass<UPhysicsControlInitializerComponent>())
+	if (const UPhysicsControlInitializerComponent* const Initializer = OwnerActor->FindComponentByClass<UPhysicsControlInitializerComponent>())
 	{
-		Initializer->CreateControls(PhysicsControl);
-		return ValidatePreauthoredPhysicsControl(OutError);
+		return PhysAnimComponentInternal::ValidateInitialPhysicsControlAuthoring(
+			Initializer->InitialControls,
+			Initializer->InitialBodyModifiers,
+			OutError);
 	}
 
-	OutError = ValidationError;
+	OutError = TEXT("Owning actor is missing a Stage 1 Physics Control initializer.");
 	return false;
 }
 
 void UPhysAnimComponent::StopBridge()
 {
-	if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
-	{
-		const TArray<FName> BodyModifierNames = PhysicsControl->GetAllBodyModifierNames();
-		if (BodyModifierNames.Num() > 0)
-		{
-			PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(BodyModifierNames);
-		}
-		PhysicsControl->SetCachedBoneVelocitiesToZero();
-	}
-
+	DeactivateRuntimePhysicsControl(TEXT("StopBridge"));
 	ResetBridgePhysicsState();
 	TransitionRuntimeState(EPhysAnimRuntimeState::Uninitialized);
 	SetComponentTickEnabled(false);
 	ConsecutiveInvalidPoseSearchFrames = 0;
 	LastValidPoseSearchResult = FPoseSearchBlueprintResult();
 	ResetStabilizationRuntimeState();
+}
+
+bool UPhysAnimComponent::ActivateBridgeFromReadyState(
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	const TCHAR* ActivationContext,
+	FString& OutError)
+{
+	if (!ActivateRuntimePhysicsControl(OutError))
+	{
+		return false;
+	}
+
+	TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
+	LogBridgeStateSnapshot(TEXT("BeforeActivateBridgePhysicsState"));
+	ActivateBridgePhysicsState();
+	LogBridgeStateSnapshot(TEXT("AfterActivateBridgePhysicsState"));
+	ResetStabilizationRuntimeState();
+	BridgeStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	ApplyRuntimeControlTuning(EffectiveSettings);
+	LogBridgeStateSnapshot(TEXT("AfterApplyRuntimeControlTuning"));
+
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Bridge physics activation[%s] complete."), ActivationContext);
+	return true;
+}
+
+void UPhysAnimComponent::EnterReadyForActivation(
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	const TCHAR* Context,
+	bool bLogDeferredStartupSuccess)
+{
+	ResetStabilizationRuntimeState();
+	TransitionRuntimeState(EPhysAnimRuntimeState::ReadyForActivation);
+	LogBridgeStateSnapshot(Context);
+
+	if (bLogDeferredStartupSuccess)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Startup success. Runtime=%s Model=%s DeferredActivation=true"),
+			*ActiveRuntimeName,
+			*GetPathNameSafe(LoadedModelData));
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Bridge physics activation deferred by zero-action safe mode."));
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
+	}
 }
 
 bool UPhysAnimComponent::ResolveRuntimeContext(FString& OutError)
@@ -523,7 +659,7 @@ bool UPhysAnimComponent::ValidateRequiredBodies(FString& OutError) const
 	return true;
 }
 
-bool UPhysAnimComponent::ValidatePreauthoredPhysicsControl(FString& OutError) const
+bool UPhysAnimComponent::ValidateRuntimePhysicsControl(FString& OutError) const
 {
 	const UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	if (!PhysicsControl)
@@ -554,13 +690,13 @@ bool UPhysAnimComponent::ValidatePreauthoredPhysicsControl(FString& OutError) co
 
 	if (MissingControls.Num() > 0)
 	{
-		OutError = FString::Printf(TEXT("Missing required pre-authored controls: %s"), *PhysAnimComponentInternal::JoinNames(MissingControls));
+		OutError = FString::Printf(TEXT("Missing required runtime controls: %s"), *PhysAnimComponentInternal::JoinNames(MissingControls));
 		return false;
 	}
 
 	if (MissingModifiers.Num() > 0)
 	{
-		OutError = FString::Printf(TEXT("Missing required pre-authored body modifiers: %s"), *PhysAnimComponentInternal::JoinNames(MissingModifiers));
+		OutError = FString::Printf(TEXT("Missing required runtime body modifiers: %s"), *PhysAnimComponentInternal::JoinNames(MissingModifiers));
 		return false;
 	}
 
@@ -959,6 +1095,7 @@ void UPhysAnimComponent::LogBridgeStateSnapshot(const TCHAR* Context) const
 	const ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
 	const UCapsuleComponent* const CapsuleComponent = CharacterOwner ? CharacterOwner->GetCapsuleComponent() : nullptr;
 	const UCharacterMovementComponent* const CharacterMovement = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr;
+	const UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	const FBodyInstance* const RootBody = SkeletalMesh ? SkeletalMesh->GetBodyInstance(RootBoneName) : nullptr;
 	const FVector RootLinearVelocity = RootBody ? RootBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
@@ -967,10 +1104,12 @@ void UPhysAnimComponent::LogBridgeStateSnapshot(const TCHAR* Context) const
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
-		TEXT("[PhysAnim] Snapshot[%s] state=%s bridgeOwnsPhysics=%s forceZero=%s controlsDesiredEnabled=%s meshProfile=%s meshCollision=%s meshPawnResponse=%s capsuleCollision=%s charMoveTick=%s movementMode=%s rootBodyValid=%s rootBodySim=%s rootLinCmPerSec=(%.1f,%.1f,%.1f) rootAngDegPerSec=(%.1f,%.1f,%.1f)"),
+		TEXT("[PhysAnim] Snapshot[%s] state=%s bridgeOwnsPhysics=%s liveControls=%d liveBodyModifiers=%d forceZero=%s controlsDesiredEnabled=%s meshProfile=%s meshCollision=%s meshPawnResponse=%s capsuleCollision=%s charMoveTick=%s movementMode=%s rootBodyValid=%s rootBodySim=%s rootLinCmPerSec=(%.1f,%.1f,%.1f) rootAngDegPerSec=(%.1f,%.1f,%.1f)"),
 		Context,
 		GetRuntimeStateName(RuntimeState),
 		RuntimeStateOwnsBridgePhysics(RuntimeState) ? TEXT("true") : TEXT("false"),
+		PhysicsControl ? PhysicsControl->GetAllControlNames().Num() : 0,
+		PhysicsControl ? PhysicsControl->GetAllBodyModifierNames().Num() : 0,
 		EffectiveSettings.bForceZeroActions ? TEXT("true") : TEXT("false"),
 		EffectiveSettings.bForceZeroActions ? TEXT("false") : TEXT("true"),
 		SkeletalMesh ? *SkeletalMesh->GetCollisionProfileName().ToString() : TEXT("None"),
@@ -987,6 +1126,82 @@ void UPhysAnimComponent::LogBridgeStateSnapshot(const TCHAR* Context) const
 		RootAngularVelocity.X,
 		RootAngularVelocity.Y,
 		RootAngularVelocity.Z);
+}
+
+bool UPhysAnimComponent::ActivateRuntimePhysicsControl(FString& OutError)
+{
+	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
+	AActor* const OwnerActor = GetOwner();
+	if (!PhysicsControl || !OwnerActor)
+	{
+		OutError = TEXT("Runtime Physics Control activation requires both the owning actor and Physics Control component.");
+		return false;
+	}
+
+	DeactivateRuntimePhysicsControl(TEXT("ActivateRuntimePhysicsControl"));
+
+	if (UPhysAnimStage1InitializerComponent* const Stage1Initializer = OwnerActor->FindComponentByClass<UPhysAnimStage1InitializerComponent>())
+	{
+		Stage1Initializer->CreateControls(PhysicsControl);
+	}
+	else if (UPhysicsControlInitializerComponent* const Initializer = OwnerActor->FindComponentByClass<UPhysicsControlInitializerComponent>())
+	{
+		Initializer->CreateControls(PhysicsControl);
+	}
+	else
+	{
+		OutError = TEXT("Owning actor is missing a runtime Physics Control initializer.");
+		return false;
+	}
+
+	if (!ValidateRuntimePhysicsControl(OutError))
+	{
+		return false;
+	}
+
+	UE_LOG(
+		LogPhysAnimBridge,
+		Log,
+		TEXT("[PhysAnim] Runtime operator activation: controls=%d bodyModifiers=%d"),
+		PhysicsControl->GetAllControlNames().Num(),
+		PhysicsControl->GetAllBodyModifierNames().Num());
+	return true;
+}
+
+void UPhysAnimComponent::DeactivateRuntimePhysicsControl(const TCHAR* Context)
+{
+	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
+	if (!PhysicsControl)
+	{
+		return;
+	}
+
+	const TArray<FName> ControlNames = PhysicsControl->GetAllControlNames();
+	const TArray<FName> BodyModifierNames = PhysicsControl->GetAllBodyModifierNames();
+	if (ControlNames.Num() == 0 && BodyModifierNames.Num() == 0)
+	{
+		return;
+	}
+
+	UE_LOG(
+		LogPhysAnimBridge,
+		Log,
+		TEXT("[PhysAnim] Runtime operator deactivation[%s]: controls=%d bodyModifiers=%d"),
+		Context,
+		ControlNames.Num(),
+		BodyModifierNames.Num());
+
+	if (BodyModifierNames.Num() > 0)
+	{
+		PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(BodyModifierNames);
+		PhysicsControl->SetCachedBoneVelocitiesToZero();
+		PhysicsControl->DestroyBodyModifiers(BodyModifierNames, true, false);
+	}
+
+	if (ControlNames.Num() > 0)
+	{
+		PhysicsControl->DestroyControls(ControlNames, true, false);
+	}
 }
 
 void UPhysAnimComponent::ActivateBridgePhysicsState()
@@ -1283,17 +1498,7 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 {
 	LogBridgeStateSnapshot(TEXT("FailStop"));
 	UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: %s"), *Reason);
-
-	if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
-	{
-		const TArray<FName> BodyModifierNames = PhysicsControl->GetAllBodyModifierNames();
-		if (BodyModifierNames.Num() > 0)
-		{
-			PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(BodyModifierNames);
-		}
-		PhysicsControl->SetCachedBoneVelocitiesToZero();
-	}
-
+	DeactivateRuntimePhysicsControl(TEXT("FailStop"));
 	ResetBridgePhysicsState();
 	TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
 	SetComponentTickEnabled(false);
@@ -1303,6 +1508,23 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 bool UPhysAnimComponent::IsInitialPoseSearchWaitTimedOut(double ElapsedSeconds, double TimeoutSeconds)
 {
 	return TimeoutSeconds > 0.0 && ElapsedSeconds >= TimeoutSeconds;
+}
+
+EPhysAnimRuntimeState UPhysAnimComponent::ResolveInitialPoseSearchSuccessState(bool bForceZeroActions)
+{
+	return bForceZeroActions
+		? EPhysAnimRuntimeState::ReadyForActivation
+		: EPhysAnimRuntimeState::BridgeActive;
+}
+
+bool UPhysAnimComponent::ShouldActivateBridgeFromSafeMode(EPhysAnimRuntimeState State, bool bForceZeroActions)
+{
+	return State == EPhysAnimRuntimeState::ReadyForActivation && !bForceZeroActions;
+}
+
+bool UPhysAnimComponent::ShouldDeactivateBridgeToSafeMode(EPhysAnimRuntimeState State, bool bForceZeroActions)
+{
+	return State == EPhysAnimRuntimeState::BridgeActive && bForceZeroActions;
 }
 
 bool UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState State)
@@ -1320,6 +1542,8 @@ const TCHAR* UPhysAnimComponent::GetRuntimeStateName(EPhysAnimRuntimeState State
 		return TEXT("RuntimeReady");
 	case EPhysAnimRuntimeState::WaitingForPoseSearch:
 		return TEXT("WaitingForPoseSearch");
+	case EPhysAnimRuntimeState::ReadyForActivation:
+		return TEXT("ReadyForActivation");
 	case EPhysAnimRuntimeState::BridgeActive:
 		return TEXT("BridgeActive");
 	case EPhysAnimRuntimeState::FailStopped:

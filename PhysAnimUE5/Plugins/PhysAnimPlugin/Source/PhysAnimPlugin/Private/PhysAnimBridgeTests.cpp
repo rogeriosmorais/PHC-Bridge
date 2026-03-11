@@ -393,8 +393,56 @@ namespace
 		TestFalse(TEXT("Uninitialized does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::Uninitialized));
 		TestFalse(TEXT("RuntimeReady does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::RuntimeReady));
 		TestFalse(TEXT("WaitingForPoseSearch does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::WaitingForPoseSearch));
+		TestFalse(TEXT("ReadyForActivation does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::ReadyForActivation));
 		TestTrue(TEXT("BridgeActive owns bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::BridgeActive));
 		TestFalse(TEXT("FailStopped does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::FailStopped));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimInitialPoseSearchSuccessStateTest,
+		"PhysAnim.Component.InitialPoseSearchSuccessState",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimInitialPoseSearchSuccessStateTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(
+			TEXT("Zero-action startup resolves to deferred activation"),
+			UPhysAnimComponent::ResolveInitialPoseSearchSuccessState(true),
+			EPhysAnimRuntimeState::ReadyForActivation);
+		TestEqual(
+			TEXT("Action-enabled startup resolves to live bridge activation"),
+			UPhysAnimComponent::ResolveInitialPoseSearchSuccessState(false),
+			EPhysAnimRuntimeState::BridgeActive);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimSafeModeActivationTransitionTest,
+		"PhysAnim.Component.SafeModeActivationTransition",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimSafeModeActivationTransitionTest::RunTest(const FString& Parameters)
+	{
+		TestTrue(
+			TEXT("ReadyForActivation activates bridge physics only when zero-action mode is disabled"),
+			UPhysAnimComponent::ShouldActivateBridgeFromSafeMode(EPhysAnimRuntimeState::ReadyForActivation, false));
+		TestFalse(
+			TEXT("ReadyForActivation does not activate bridge physics while zero-action mode remains enabled"),
+			UPhysAnimComponent::ShouldActivateBridgeFromSafeMode(EPhysAnimRuntimeState::ReadyForActivation, true));
+		TestFalse(
+			TEXT("WaitingForPoseSearch does not activate bridge physics directly"),
+			UPhysAnimComponent::ShouldActivateBridgeFromSafeMode(EPhysAnimRuntimeState::WaitingForPoseSearch, false));
+
+		TestTrue(
+			TEXT("BridgeActive returns to deferred activation when zero-action mode is enabled"),
+			UPhysAnimComponent::ShouldDeactivateBridgeToSafeMode(EPhysAnimRuntimeState::BridgeActive, true));
+		TestFalse(
+			TEXT("BridgeActive stays active while zero-action mode remains disabled"),
+			UPhysAnimComponent::ShouldDeactivateBridgeToSafeMode(EPhysAnimRuntimeState::BridgeActive, false));
+		TestFalse(
+			TEXT("ReadyForActivation cannot deactivate what it does not own"),
+			UPhysAnimComponent::ShouldDeactivateBridgeToSafeMode(EPhysAnimRuntimeState::ReadyForActivation, true));
 		return true;
 	}
 
@@ -413,7 +461,7 @@ namespace
 			return false;
 		}
 
-		TestTrue(TEXT("Create controls at begin play is enabled"), Initializer->bCreateControlsAtBeginPlay);
+		TestFalse(TEXT("Create controls at begin play is disabled"), Initializer->bCreateControlsAtBeginPlay);
 		TestEqual(TEXT("Control count matches Stage 1 expectation"), Initializer->InitialControls.Num(), NumControlledBones);
 		TestEqual(
 			TEXT("Body modifier count matches Stage 1 expectation"),

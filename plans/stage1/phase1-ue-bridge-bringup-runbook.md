@@ -289,7 +289,13 @@ Add exactly these components to `BP_PhysAnimCharacter`:
 - one `PhysicsControlComponent`
 - one `PhysAnim Stage1 Physics Control Initializer`
 
-The Stage 1 initializer component owns the exact `InitialControls` and `InitialBodyModifiers` defaults required by the bridge. The bridge still validates and uses the resulting `UPhysicsControlComponent`.
+The Stage 1 initializer component owns the exact `InitialControls` and `InitialBodyModifiers` defaults required by the bridge.
+
+Important current ownership rule:
+
+- the initializer is defaults-only
+- it must not create live Physics Control operators at `BeginPlay`
+- the bridge creates and destroys the live controls/body modifiers itself on runtime state transitions
 
 ### 4C. Leave `UPhysAnimComponent` Model Asset On Its Default Path
 
@@ -308,7 +314,7 @@ The Stage 1 initializer component now owns the required map defaults directly. D
 1. Open `BP_PhysAnimCharacter`.
 2. Select the `PhysAnim Stage1 Physics Control Initializer` component.
 3. Check these values:
-   - `bCreateControlsAtBeginPlay = true`
+   - `bCreateControlsAtBeginPlay = false`
    - `InitialControls` contains `21` entries
    - `InitialBodyModifiers` contains `22` entries
 4. Spot-check these entries:
@@ -324,7 +330,7 @@ The only user-facing override fields on the initializer are:
 - `DefaultControlChildActor`
 - `DefaultBodyModifierActor`
 
-For the normal single-character bring-up path, leave all three blank. At runtime the initializer resolves blank actor references to the owning character automatically.
+For the normal single-character bring-up path, leave all three blank. At runtime the initializer resolves blank actor references to the owning character automatically when the bridge activates runtime Physics Control ownership.
 
 Only set those three fields if you deliberately need the controls or body modifiers to target a different actor than the owner.
 
@@ -339,6 +345,7 @@ Compile `BP_PhysAnimCharacter` and save.
 - the character now contains one `PhysicsControlComponent`
 - the character now contains one `PhysAnim Stage1 Physics Control Initializer`
 - the initializer map entries exist for every required `PACtrl_*` and `PAMod_*`
+- no live Physics Control operators should exist before the bridge reaches `BridgeActive`
 - `PA_Mannequin` contains physics bodies for `spine_01`, `ball_l`, and `ball_r`
 
 ### What To Send Back If Blocked
@@ -413,7 +420,13 @@ The current bridge reports startup success with a log line in this shape:
 [PhysAnim] Startup success. Runtime=... Model=/Game/NNEModels/phc_policy.phc_policy
 ```
 
-If you see that line, the minimum content contract is now satisfied and the bridge is alive.
+With the default zero-action safe-mode startup, the current bridge now reports:
+
+```text
+[PhysAnim] Startup success. Runtime=... Model=/Game/NNEModels/phc_policy.phc_policy DeferredActivation=true
+```
+
+If you see either success form, the minimum content contract is now satisfied and the bridge is alive.
 
 Important current truth:
 
@@ -444,8 +457,11 @@ If startup succeeds:
 3. confirm the runtime-state log transitions make sense:
    - `Uninitialized -> RuntimeReady`
    - `RuntimeReady -> WaitingForPoseSearch`
-   - only after the first valid PoseSearch result:
-     - `WaitingForPoseSearch -> BridgeActive`
+   - with the default safe-mode startup:
+     - `WaitingForPoseSearch -> ReadyForActivation`
+     - snapshots in that state should show `liveControls=0`, `liveBodyModifiers=0`, and `bridgeOwnsPhysics=false`
+   - only after actions are explicitly enabled:
+     - `ReadyForActivation -> BridgeActive`
 4. watch whether the character remains stable enough to judge basic bridge activity
 5. capture the first `10` to `20` seconds with a short clip if possible
 6. if the character immediately flies or spins uncontrollably, classify the run as `runtime unstable after startup`
@@ -498,23 +514,24 @@ That is now also the default component startup behavior, so the bridge should bo
 
 In the current bridge, zero-action mode is now a true safe mode:
 
-- explicit control-target writes are suppressed
-- production controls are disabled
-- body modifiers switch out of full simulated mode
-- the `ACharacter` capsule and `CharacterMovement` shell are suspended while the bridge is active
+- startup succeeds into `ReadyForActivation`
+- no live runtime controls/body modifiers are created yet
+- bridge-owned physics ownership is deferred
+- the normal `ACharacter` capsule and `CharacterMovement` shell remain untouched until activation
 
-The production bridge now also applies the same mesh collision safety used by the earlier UE harnesses:
+Only after you explicitly run `physanim.ForceZeroActions 0` should the runtime create operators, take bridge-owned physics ownership, and apply the mesh/shell overrides. At that point the production bridge applies the same mesh collision safety used by the earlier UE harnesses:
 
 - mesh collision profile switches to `PhysicsActor`
 - mesh collision response to `Pawn` switches to `Ignore`
 
-So if the character still launches or spins in zero-action mode after rebuilding, the remaining cause is deeper than raw policy output, full-body control target writes, or the normal character capsule/movement shell.
+So if the character still launches or spins before `ReadyForActivation`, the remaining cause is outside bridge-owned Physics Control ownership. If instability starts only after `physanim.ForceZeroActions 0`, then the problem is inside the active bridge-owned path.
 
 Frozen runtime ownership rule:
 
 - `WaitingForPoseSearch` must not take bridge-owned physics ownership
+- `ReadyForActivation` must not take bridge-owned physics ownership
 - only `BridgeActive` may disable the normal character shell and own the physics-control path
-- `FailStopped` must release bridge-owned physics before returning control
+- `FailStopped` must destroy live runtime controls/body modifiers and release bridge-owned physics before returning control
 
 If zero-action mode is calm, re-enable the policy conservatively:
 
@@ -547,8 +564,8 @@ Use this to classify the first failure reason from the log.
 | `Missing required physics bodies` | `PA_Mannequin` is missing one or more required bodies; on the current Manny setup, `spine_01`, `ball_l`, and `ball_r` had to be created manually |
 | `Expected AnimBlueprint` | the live anim class is not `/Game/Characters/Mannequins/Animations/ABP_PhysAnim` |
 | `PoseHistory_Stage1 was not found` | the AnimBP is missing the exact pose history node name |
-| `Missing required pre-authored controls` | one or more `PACtrl_*` map entries did not get created |
-| `Missing required pre-authored body modifiers` | one or more `PAMod_*` map entries did not get created |
+| `Missing required authored controls` | one or more `PACtrl_*` map entries are missing from the initializer defaults |
+| `Missing required authored body modifiers` | one or more `PAMod_*` map entries are missing from the initializer defaults |
 | `Failed to load model asset` | the bridge reached model loading, but `/Game/NNEModels/phc_policy` does not exist yet or the component override points at the wrong asset |
 | `Could not create an NNE model instance` | ORT runtime/plugin/model compatibility is broken |
 | `PoseSearch query was invalid for two consecutive ticks` | the direct `MotionMatch(...)` query did not produce a valid result from the current pose history + database |

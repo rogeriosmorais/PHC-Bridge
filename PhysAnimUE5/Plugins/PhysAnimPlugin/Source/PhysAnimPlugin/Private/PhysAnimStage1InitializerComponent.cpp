@@ -104,7 +104,7 @@ namespace PhysAnimStage1InitializerComponentInternal
 
 UPhysAnimStage1InitializerComponent::UPhysAnimStage1InitializerComponent()
 {
-	bCreateControlsAtBeginPlay = true;
+	bCreateControlsAtBeginPlay = false;
 	InitialControls.Reset();
 	InitialBodyModifiers.Reset();
 
@@ -139,18 +139,7 @@ UPhysAnimStage1InitializerComponent::UPhysAnimStage1InitializerComponent()
 void UPhysAnimStage1InitializerComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
 	PrepareRuntimeDefaults();
-	if (bCreateControlsAtBeginPlay)
-	{
-		if (AActor* const OwnerActor = GetOwner())
-		{
-			if (UPhysicsControlComponent* const PhysicsControlComponent = OwnerActor->FindComponentByClass<UPhysicsControlComponent>())
-			{
-				CreateControls(PhysicsControlComponent);
-			}
-		}
-	}
 }
 
 void UPhysAnimStage1InitializerComponent::CreateControls(UPhysicsControlComponent* PhysicsControlComponent)

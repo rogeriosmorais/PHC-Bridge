@@ -328,17 +328,27 @@ Max Substeps = 8
   - `WaitingForPoseSearch`:
     - bridge is waiting for the first valid `MotionMatch(...)` result
     - bridge still does not own physics
+    - bridge must not have live runtime controls/body modifiers yet
+  - `ReadyForActivation`:
+    - startup succeeded and the first valid `MotionMatch(...)` result already exists
+    - bridge still does not own physics
+    - bridge must still have `liveControls=0` and `liveBodyModifiers=0`
+    - zero-action safe mode now parks the runtime here until actions are explicitly enabled
   - `BridgeActive`:
     - bridge owns physics and may apply stabilization/tuning
+    - bridge may now create live runtime controls/body modifiers
+    - bridge may now suspend the normal `ACharacter` shell and apply bridge-owned tuning
   - `FailStopped`:
     - bridge released ownership after a fault
+    - bridge must destroy live runtime controls/body modifiers on entry
   - frozen rule:
     - only `BridgeActive` is allowed to own bridge physics during `MV-P1-01`
 - `Recommended stabilization order before declaring the runtime hopeless`:
   1. first prove the bridge can stay calm with zero actions:
      - the current default startup path already boots with `physanim.ForceZeroActions = 1`
-     - zero-action mode now suppresses explicit control-target writes, disables the production controls, and switches body modifiers out of full simulated mode
-     - the bridge also suspends the `ACharacter` movement/capsule shell while it owns the body
+     - operator-free safe mode now stops at `ReadyForActivation`
+     - in that state the bridge does not create live runtime controls/body modifiers yet
+     - in that state the bridge does not disable the capsule or `CharacterMovement`
   2. then re-enable actions conservatively:
      - `physanim.ForceZeroActions 0`
      - `physanim.ActionScale 0.10`
@@ -369,7 +379,10 @@ Max Substeps = 8
   2. exact production character:
      - `/Game/Characters/Mannequins/Blueprints/BP_PhysAnimCharacter`
   3. exact expected startup-success line shape:
-     - `[PhysAnim] Startup success. Runtime=... Model=/Game/NNEModels/phc_policy.phc_policy`
+     - default safe-mode startup:
+       - `[PhysAnim] Startup success. Runtime=... Model=/Game/NNEModels/phc_policy.phc_policy DeferredActivation=true`
+     - direct action-enabled startup:
+       - `[PhysAnim] Startup success. Runtime=... Model=/Game/NNEModels/phc_policy.phc_policy`
   4. exact physics settings:
      - use the current project defaults in `PhysAnimUE5/Config/DefaultEngine.ini`
      - `Tick Physics Async = false`
@@ -388,6 +401,12 @@ Max Substeps = 8
   6. Watch the Output Log for the startup-success line.
   7. If startup does not succeed, stop. This checkpoint is `blocked`, not `fail`.
   8. Confirm from the first `[PhysAnim] Runtime state: ...` lines that the runtime reaches `WaitingForPoseSearch` before it reaches `BridgeActive`.
+     - with the default safe-mode path, confirm:
+       - `WaitingForPoseSearch -> ReadyForActivation`
+       - `liveControls=0`
+       - `liveBodyModifiers=0`
+       - `bridgeOwnsPhysics=false`
+     - only after `physanim.ForceZeroActions 0` should the runtime move from `ReadyForActivation -> BridgeActive`
   9. Once startup succeeds, watch the first `10` seconds closely:
      - does the character stay roughly upright
      - does the body immediately launch upward
@@ -412,6 +431,7 @@ Max Substeps = 8
   - `physanim.InstabilityGracePeriodSeconds`
 - `What good looks like`:
   - the startup-success line appears
+  - default safe-mode startup reaches `ReadyForActivation` without live operators
   - the character does not immediately launch, spin uncontrollably, or collapse into unreadable motion
   - the run remains visually controllable for about `30` seconds
   - the result is stable enough that tuning adjustments would be meaningful

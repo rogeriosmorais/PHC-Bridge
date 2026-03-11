@@ -102,6 +102,7 @@ enum class EPhysAnimRuntimeState : uint8
 	Uninitialized,
 	RuntimeReady,
 	WaitingForPoseSearch,
+	ReadyForActivation,
 	BridgeActive,
 	FailStopped,
 };
@@ -134,8 +135,8 @@ protected:
 private:
 	bool ResolveRuntimeContext(FString& OutError);
 	bool ValidateRequiredBodies(FString& OutError) const;
-	bool EnsurePreauthoredPhysicsControl(FString& OutError);
-	bool ValidatePreauthoredPhysicsControl(FString& OutError) const;
+	bool ValidatePhysicsControlAuthoring(FString& OutError) const;
+	bool ValidateRuntimePhysicsControl(FString& OutError) const;
 	bool ValidatePoseSearchIntegration(FString& OutError);
 	bool InitializeModel(FString& OutError);
 	bool ValidateModelDescriptorContract(FString& OutError);
@@ -145,6 +146,10 @@ private:
 	bool RunInference(FString& OutError);
 	FPhysAnimStabilizationSettings ResolveEffectiveStabilizationSettings() const;
 	void LogBridgeStateSnapshot(const TCHAR* Context) const;
+	bool ActivateRuntimePhysicsControl(FString& OutError);
+	void DeactivateRuntimePhysicsControl(const TCHAR* Context);
+	bool ActivateBridgeFromReadyState(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* ActivationContext, FString& OutError);
+	void EnterReadyForActivation(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* Context, bool bLogDeferredStartupSuccess);
 	void ActivateBridgePhysicsState();
 	void ResetBridgePhysicsState();
 	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings);
@@ -231,6 +236,9 @@ public:
 		FString& OutError);
 
 	static bool IsInitialPoseSearchWaitTimedOut(double ElapsedSeconds, double TimeoutSeconds);
+	static EPhysAnimRuntimeState ResolveInitialPoseSearchSuccessState(bool bForceZeroActions);
+	static bool ShouldActivateBridgeFromSafeMode(EPhysAnimRuntimeState State, bool bForceZeroActions);
+	static bool ShouldDeactivateBridgeToSafeMode(EPhysAnimRuntimeState State, bool bForceZeroActions);
 	static bool RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState State);
 	static const TCHAR* GetRuntimeStateName(EPhysAnimRuntimeState State);
 

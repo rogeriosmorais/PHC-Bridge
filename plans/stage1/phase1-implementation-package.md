@@ -112,9 +112,24 @@ Stage 1 runtime ownership is now defined by this explicit state machine:
    - timeout:
      - fail-stop if no initial valid result appears within the frozen timeout window
    - allowed exits:
+     - `ReadyForActivation`
      - `BridgeActive`
      - `FailStopped`
-4. `BridgeActive`
+4. `ReadyForActivation`
+   - meaning:
+     - startup succeeded and the first valid PoseSearch result already exists
+     - the bridge is intentionally parked in operator-free safe mode
+     - no live controls/body modifiers exist yet
+   - bridge-owned physics:
+     - no
+   - required prerequisites:
+     - all `RuntimeReady` prerequisites
+     - first valid PoseSearch result
+   - allowed exits:
+     - `BridgeActive`
+     - `FailStopped`
+     - `Uninitialized`
+5. `BridgeActive`
    - meaning:
      - bridge-owned physics state is active
      - the bridge owns capsule/movement suspension, mesh collision overrides, control tuning, and control-target application
@@ -126,7 +141,8 @@ Stage 1 runtime ownership is now defined by this explicit state machine:
    - allowed exits:
      - `FailStopped`
      - `Uninitialized`
-5. `FailStopped`
+     - `ReadyForActivation` when zero-action safe mode is re-enabled at runtime
+6. `FailStopped`
    - meaning:
      - the bridge has explicitly stopped itself after a runtime or startup fault
      - bridge-owned physics must already be released on entry to this state
@@ -140,6 +156,7 @@ Frozen ownership rule:
 
 - only `BridgeActive` is allowed to own bridge physics
 - `WaitingForPoseSearch` must never disable the normal character shell or enable the bridge-owned controls
+- `ReadyForActivation` must remain operator-free and non-owning
 - `FailStopped` must leave the runtime in a released, non-owning state
 
 ### Frozen Stabilization Order
