@@ -11,6 +11,8 @@
 #include "PhysAnimComponent.generated.h"
 
 class UAnimInstance;
+class UCapsuleComponent;
+class UCharacterMovementComponent;
 class UPhysicsControlComponent;
 class UPoseSearchDatabase;
 class USkeletalMeshComponent;
@@ -94,6 +96,16 @@ struct FPhysAnimStabilizationSettings
 	}
 };
 
+UENUM()
+enum class EPhysAnimRuntimeState : uint8
+{
+	Uninitialized,
+	RuntimeReady,
+	WaitingForPoseSearch,
+	BridgeActive,
+	FailStopped,
+};
+
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
 class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent
 {
@@ -132,6 +144,7 @@ private:
 	bool SampleFuturePoses(const FPoseSearchBlueprintResult& SearchResult, TArray<FPhysAnimFuturePoseSample>& OutFutureSamples, FString& OutError) const;
 	bool RunInference(FString& OutError);
 	FPhysAnimStabilizationSettings ResolveEffectiveStabilizationSettings() const;
+	void LogBridgeStateSnapshot(const TCHAR* Context) const;
 	void ActivateBridgePhysicsState();
 	void ResetBridgePhysicsState();
 	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings);
@@ -173,7 +186,6 @@ private:
 
 	FPoseSearchBlueprintResult LastValidPoseSearchResult;
 	int32 ConsecutiveInvalidPoseSearchFrames = 0;
-	bool bBridgeActive = false;
 	bool bStartupReported = false;
 	FString ActiveRuntimeName;
 	FPhysAnimStabilizationSettings LastAppliedStabilizationSettings;
@@ -187,6 +199,12 @@ private:
 	ECollisionEnabled::Type OriginalMeshCollisionEnabled = ECollisionEnabled::NoCollision;
 	TEnumAsByte<ECollisionResponse> OriginalMeshPawnResponse = ECollisionResponse::ECR_Block;
 	bool bHasSavedMeshCollisionState = false;
+	ECollisionEnabled::Type OriginalCapsuleCollisionEnabled = ECollisionEnabled::NoCollision;
+	bool bHasSavedCapsuleCollisionState = false;
+	bool bHasSavedCharacterMovementState = false;
+	bool bOriginalCharacterMovementTickEnabled = false;
+	uint8 OriginalCharacterMovementMode = 0;
+	uint8 OriginalCharacterCustomMovementMode = 0;
 
 public:
 	static bool BuildConditionedActions(
@@ -211,4 +229,13 @@ public:
 		FPhysAnimRuntimeInstabilityState& InOutState,
 		FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics,
 		FString& OutError);
+
+	static bool IsInitialPoseSearchWaitTimedOut(double ElapsedSeconds, double TimeoutSeconds);
+	static bool RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState State);
+	static const TCHAR* GetRuntimeStateName(EPhysAnimRuntimeState State);
+
+private:
+	void TransitionRuntimeState(EPhysAnimRuntimeState NewState);
+	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
+	double InitialPoseSearchWaitStartTimeSeconds = 0.0;
 };

@@ -5,12 +5,15 @@
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimationAsset.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/AssetManager.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "HAL/IConsoleManager.h"
 #include "Logging/LogMacros.h"
 #include "NNEStatus.h"
@@ -36,6 +39,7 @@ namespace PhysAnimComponentInternal
 	const TCHAR* DefaultModelPath = TEXT("/Game/NNEModels/phc_policy.phc_policy");
 	const TCHAR* PreferredGpuRuntime = TEXT("NNERuntimeORTDml");
 	const TCHAR* FallbackCpuRuntime = TEXT("NNERuntimeORTCpu");
+	constexpr double InitialPoseSearchWaitTimeoutSeconds = 2.0;
 
 	TAutoConsoleVariable<float> CVarPhysAnimActionScale(
 		TEXT("physanim.ActionScale"),
@@ -97,6 +101,10 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.EnableInstabilityFailStop"),
 		-1,
 		TEXT("Override for PhysAnim runtime instability fail-stop. -1 keeps the component default, 0 disables, 1 enables."));
+	TAutoConsoleVariable<int32> CVarPhysAnimLogBridgeStateSnapshots(
+		TEXT("physanim.LogBridgeStateSnapshots"),
+		1,
+		TEXT("Whether PhysAnim emits startup and fail-stop bridge state snapshots."));
 
 	float ResolveFloatOverride(const TAutoConsoleVariable<float>& CVar, float DefaultValue)
 	{
@@ -218,7 +226,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!bBridgeActive)
+	if (RuntimeState != EPhysAnimRuntimeState::WaitingForPoseSearch &&
+		RuntimeState != EPhysAnimRuntimeState::BridgeActive)
 	{
 		return;
 	}
@@ -232,11 +241,46 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		return;
 	}
 
+	FString TickError;
+	FPoseSearchBlueprintResult SearchResult;
+	if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
+	{
+		if (!QueryPoseSearch(SearchResult, TickError))
+		{
+			const double WorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+			const double WaitSeconds = WorldTimeSeconds - InitialPoseSearchWaitStartTimeSeconds;
+			if (IsInitialPoseSearchWaitTimedOut(WaitSeconds, PhysAnimComponentInternal::InitialPoseSearchWaitTimeoutSeconds))
+			{
+				FailStop(FString::Printf(TEXT("Initial PoseSearch result was never produced within %.2fs. %s"), PhysAnimComponentInternal::InitialPoseSearchWaitTimeoutSeconds, *TickError));
+			}
+			return;
+		}
+
+		LastValidPoseSearchResult = SearchResult;
+		ConsecutiveInvalidPoseSearchFrames = 0;
+		TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
+		LogBridgeStateSnapshot(TEXT("BeforeActivateBridgePhysicsState"));
+		ActivateBridgePhysicsState();
+		LogBridgeStateSnapshot(TEXT("AfterActivateBridgePhysicsState"));
+		ResetStabilizationRuntimeState();
+		BridgeStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+
+		const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+		ApplyRuntimeControlTuning(EffectiveSettings);
+		LogBridgeStateSnapshot(TEXT("AfterApplyRuntimeControlTuning"));
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Startup success. Runtime=%s Model=%s"),
+			*ActiveRuntimeName,
+			*GetPathNameSafe(LoadedModelData));
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
+		return;
+	}
+
 	PhysicsControl->UpdateTargetCaches(DeltaTime);
 	PhysicsControl->GetCachedBoneTransforms(SkeletalMesh, PhysAnimBridge::GetControlledBoneNames());
 
-	FString TickError;
-	FPoseSearchBlueprintResult SearchResult;
 	if (QueryPoseSearch(SearchResult, TickError))
 	{
 		LastValidPoseSearchResult = SearchResult;
@@ -316,7 +360,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 bool UPhysAnimComponent::StartBridge()
 {
-	if (bBridgeActive)
+	if (RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
+		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
 	{
 		return true;
 	}
@@ -330,27 +375,18 @@ bool UPhysAnimComponent::StartBridge()
 	{
 		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked: %s"), *Error);
 		SetComponentTickEnabled(false);
-		bBridgeActive = false;
+		TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
 		return false;
 	}
 
-	bBridgeActive = true;
 	bStartupReported = true;
 	SetComponentTickEnabled(true);
-	ActivateBridgePhysicsState();
-	ResetStabilizationRuntimeState();
-	BridgeStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-
-	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	ApplyRuntimeControlTuning(EffectiveSettings);
-
-	UE_LOG(
-		LogPhysAnimBridge,
-		Log,
-		TEXT("[PhysAnim] Startup success. Runtime=%s Model=%s"),
-		*ActiveRuntimeName,
-		*GetPathNameSafe(LoadedModelData));
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
+	TransitionRuntimeState(EPhysAnimRuntimeState::RuntimeReady);
+	TransitionRuntimeState(EPhysAnimRuntimeState::WaitingForPoseSearch);
+	InitialPoseSearchWaitStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	ConsecutiveInvalidPoseSearchFrames = 0;
+	LastValidPoseSearchResult = FPoseSearchBlueprintResult();
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Startup pending initial PoseSearch result before taking physics ownership."));
 	return true;
 }
 
@@ -399,7 +435,7 @@ void UPhysAnimComponent::StopBridge()
 	}
 
 	ResetBridgePhysicsState();
-	bBridgeActive = false;
+	TransitionRuntimeState(EPhysAnimRuntimeState::Uninitialized);
 	SetComponentTickEnabled(false);
 	ConsecutiveInvalidPoseSearchFrames = 0;
 	LastValidPoseSearchResult = FPoseSearchBlueprintResult();
@@ -911,6 +947,48 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 	return EffectiveSettings;
 }
 
+void UPhysAnimComponent::LogBridgeStateSnapshot(const TCHAR* Context) const
+{
+	if (PhysAnimComponentInternal::CVarPhysAnimLogBridgeStateSnapshots.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	const ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
+	const UCapsuleComponent* const CapsuleComponent = CharacterOwner ? CharacterOwner->GetCapsuleComponent() : nullptr;
+	const UCharacterMovementComponent* const CharacterMovement = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr;
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	const FBodyInstance* const RootBody = SkeletalMesh ? SkeletalMesh->GetBodyInstance(RootBoneName) : nullptr;
+	const FVector RootLinearVelocity = RootBody ? RootBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
+	const FVector RootAngularVelocity = RootBody ? FMath::RadiansToDegrees(RootBody->GetUnrealWorldAngularVelocityInRadians()) : FVector::ZeroVector;
+
+	UE_LOG(
+		LogPhysAnimBridge,
+		Log,
+		TEXT("[PhysAnim] Snapshot[%s] state=%s bridgeOwnsPhysics=%s forceZero=%s controlsDesiredEnabled=%s meshProfile=%s meshCollision=%s meshPawnResponse=%s capsuleCollision=%s charMoveTick=%s movementMode=%s rootBodyValid=%s rootBodySim=%s rootLinCmPerSec=(%.1f,%.1f,%.1f) rootAngDegPerSec=(%.1f,%.1f,%.1f)"),
+		Context,
+		GetRuntimeStateName(RuntimeState),
+		RuntimeStateOwnsBridgePhysics(RuntimeState) ? TEXT("true") : TEXT("false"),
+		EffectiveSettings.bForceZeroActions ? TEXT("true") : TEXT("false"),
+		EffectiveSettings.bForceZeroActions ? TEXT("false") : TEXT("true"),
+		SkeletalMesh ? *SkeletalMesh->GetCollisionProfileName().ToString() : TEXT("None"),
+		SkeletalMesh ? *UEnum::GetValueAsString(SkeletalMesh->GetCollisionEnabled()) : TEXT("None"),
+		SkeletalMesh ? *UEnum::GetValueAsString(SkeletalMesh->GetCollisionResponseToChannel(ECC_Pawn)) : TEXT("None"),
+		CapsuleComponent ? *UEnum::GetValueAsString(CapsuleComponent->GetCollisionEnabled()) : TEXT("None"),
+		CharacterMovement && CharacterMovement->IsComponentTickEnabled() ? TEXT("true") : TEXT("false"),
+		CharacterMovement ? *UEnum::GetValueAsString(static_cast<EMovementMode>(CharacterMovement->MovementMode)) : TEXT("None"),
+		RootBody && RootBody->IsValidBodyInstance() ? TEXT("true") : TEXT("false"),
+		RootBody && RootBody->IsValidBodyInstance() && RootBody->IsInstanceSimulatingPhysics() ? TEXT("true") : TEXT("false"),
+		RootLinearVelocity.X,
+		RootLinearVelocity.Y,
+		RootLinearVelocity.Z,
+		RootAngularVelocity.X,
+		RootAngularVelocity.Y,
+		RootAngularVelocity.Z);
+}
+
 void UPhysAnimComponent::ActivateBridgePhysicsState()
 {
 	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
@@ -933,6 +1011,34 @@ void UPhysAnimComponent::ActivateBridgePhysicsState()
 	SkeletalMesh->RecreatePhysicsState();
 	SkeletalMesh->SetEnablePhysicsBlending(true);
 	SkeletalMesh->WakeAllRigidBodies();
+
+	if (ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner()))
+	{
+		if (UCapsuleComponent* const CapsuleComponent = CharacterOwner->GetCapsuleComponent())
+		{
+			if (!bHasSavedCapsuleCollisionState)
+			{
+				OriginalCapsuleCollisionEnabled = CapsuleComponent->GetCollisionEnabled();
+				bHasSavedCapsuleCollisionState = true;
+			}
+
+			CapsuleComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+
+		if (UCharacterMovementComponent* const CharacterMovement = CharacterOwner->GetCharacterMovement())
+		{
+			if (!bHasSavedCharacterMovementState)
+			{
+				OriginalCharacterMovementMode = CharacterMovement->MovementMode;
+				OriginalCharacterCustomMovementMode = CharacterMovement->CustomMovementMode;
+				bOriginalCharacterMovementTickEnabled = CharacterMovement->IsComponentTickEnabled();
+				bHasSavedCharacterMovementState = true;
+			}
+
+			CharacterMovement->DisableMovement();
+			CharacterMovement->SetComponentTickEnabled(false);
+		}
+	}
 }
 
 void UPhysAnimComponent::ResetBridgePhysicsState()
@@ -952,6 +1058,28 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 		SkeletalMesh->SetCollisionResponseToChannel(ECC_Pawn, OriginalMeshPawnResponse);
 		bHasSavedMeshCollisionState = false;
 	}
+
+	if (ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner()))
+	{
+		if (UCapsuleComponent* const CapsuleComponent = CharacterOwner->GetCapsuleComponent())
+		{
+			if (bHasSavedCapsuleCollisionState)
+			{
+				CapsuleComponent->SetCollisionEnabled(OriginalCapsuleCollisionEnabled);
+				bHasSavedCapsuleCollisionState = false;
+			}
+		}
+
+		if (UCharacterMovementComponent* const CharacterMovement = CharacterOwner->GetCharacterMovement())
+		{
+			if (bHasSavedCharacterMovementState)
+			{
+				CharacterMovement->SetComponentTickEnabled(bOriginalCharacterMovementTickEnabled);
+				CharacterMovement->SetMovementMode(static_cast<EMovementMode>(OriginalCharacterMovementMode), OriginalCharacterCustomMovementMode);
+				bHasSavedCharacterMovementState = false;
+			}
+		}
+	}
 }
 
 void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings)
@@ -966,7 +1094,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	ControlMultiplier.AngularStrengthMultiplier = EffectiveSettings.AngularStrengthMultiplier;
 	ControlMultiplier.AngularDampingRatioMultiplier = EffectiveSettings.AngularDampingRatioMultiplier;
 	ControlMultiplier.AngularExtraDampingMultiplier = EffectiveSettings.AngularExtraDampingMultiplier;
-	PhysicsControl->SetControlMultipliersInSet(TEXT("All"), ControlMultiplier, true);
+	PhysicsControl->SetControlMultipliersInSet(TEXT("All"), ControlMultiplier, !EffectiveSettings.bForceZeroActions);
+	PhysicsControl->SetControlsInSetEnabled(TEXT("All"), !EffectiveSettings.bForceZeroActions);
+	PhysicsControl->SetBodyModifiersInSetMovementType(
+		TEXT("All"),
+		EffectiveSettings.bForceZeroActions ? EPhysicsMovementType::Kinematic : EPhysicsMovementType::Simulated);
+	PhysicsControl->SetBodyModifiersInSetPhysicsBlendWeight(TEXT("All"), EffectiveSettings.bForceZeroActions ? 0.0f : 1.0f);
 
 	LastAppliedStabilizationSettings = EffectiveSettings;
 }
@@ -1148,6 +1281,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 
 void UPhysAnimComponent::FailStop(const FString& Reason)
 {
+	LogBridgeStateSnapshot(TEXT("FailStop"));
 	UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: %s"), *Reason);
 
 	if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
@@ -1161,9 +1295,54 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 	}
 
 	ResetBridgePhysicsState();
-	bBridgeActive = false;
+	TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
 	SetComponentTickEnabled(false);
 	ResetStabilizationRuntimeState();
+}
+
+bool UPhysAnimComponent::IsInitialPoseSearchWaitTimedOut(double ElapsedSeconds, double TimeoutSeconds)
+{
+	return TimeoutSeconds > 0.0 && ElapsedSeconds >= TimeoutSeconds;
+}
+
+bool UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState State)
+{
+	return State == EPhysAnimRuntimeState::BridgeActive;
+}
+
+const TCHAR* UPhysAnimComponent::GetRuntimeStateName(EPhysAnimRuntimeState State)
+{
+	switch (State)
+	{
+	case EPhysAnimRuntimeState::Uninitialized:
+		return TEXT("Uninitialized");
+	case EPhysAnimRuntimeState::RuntimeReady:
+		return TEXT("RuntimeReady");
+	case EPhysAnimRuntimeState::WaitingForPoseSearch:
+		return TEXT("WaitingForPoseSearch");
+	case EPhysAnimRuntimeState::BridgeActive:
+		return TEXT("BridgeActive");
+	case EPhysAnimRuntimeState::FailStopped:
+		return TEXT("FailStopped");
+	default:
+		return TEXT("Unknown");
+	}
+}
+
+void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
+{
+	if (RuntimeState == NewState)
+	{
+		return;
+	}
+
+	UE_LOG(
+		LogPhysAnimBridge,
+		Log,
+		TEXT("[PhysAnim] Runtime state: %s -> %s"),
+		GetRuntimeStateName(RuntimeState),
+		GetRuntimeStateName(NewState));
+	RuntimeState = NewState;
 }
 
 UE::NNE::IModelInstanceRunSync* UPhysAnimComponent::GetModelInstanceRunSync() const

@@ -75,6 +75,73 @@ Current local Phase 1 truth on March 10, 2026:
 
 This means Phase 1 is now in stabilization/tuning, not in export discovery and not yet in G2 packaging.
 
+### Frozen Runtime State Machine
+
+Stage 1 runtime ownership is now defined by this explicit state machine:
+
+1. `Uninitialized`
+   - meaning:
+     - the component has not claimed bridge ownership
+     - normal `ACharacter` shell behavior remains in charge
+   - bridge-owned physics:
+     - no
+   - allowed exits:
+     - `RuntimeReady`
+2. `RuntimeReady`
+   - meaning:
+     - runtime context, required bodies, Physics Control, PoseSearch integration, and NNE model are all resolved
+     - no bridge-owned physics has been activated yet
+   - bridge-owned physics:
+     - no
+   - required prerequisites:
+     - `ResolveRuntimeContext`
+     - `ValidateRequiredBodies`
+     - `EnsurePreauthoredPhysicsControl`
+     - `ValidatePoseSearchIntegration`
+     - `InitializeModel`
+   - allowed exits:
+     - `WaitingForPoseSearch`
+     - `FailStopped`
+3. `WaitingForPoseSearch`
+   - meaning:
+     - the bridge is initialized but must not take physics ownership until PoseSearch produces the first valid result
+   - bridge-owned physics:
+     - no
+   - required prerequisite to exit forward:
+     - first valid `UPoseSearchLibrary::MotionMatch(...)` result
+   - timeout:
+     - fail-stop if no initial valid result appears within the frozen timeout window
+   - allowed exits:
+     - `BridgeActive`
+     - `FailStopped`
+4. `BridgeActive`
+   - meaning:
+     - bridge-owned physics state is active
+     - the bridge owns capsule/movement suspension, mesh collision overrides, control tuning, and control-target application
+   - bridge-owned physics:
+     - yes
+   - required prerequisites:
+     - all `RuntimeReady` prerequisites
+     - first valid PoseSearch result
+   - allowed exits:
+     - `FailStopped`
+     - `Uninitialized`
+5. `FailStopped`
+   - meaning:
+     - the bridge has explicitly stopped itself after a runtime or startup fault
+     - bridge-owned physics must already be released on entry to this state
+   - bridge-owned physics:
+     - no
+   - allowed exits:
+     - `Uninitialized`
+     - `RuntimeReady` via a fresh startup attempt
+
+Frozen ownership rule:
+
+- only `BridgeActive` is allowed to own bridge physics
+- `WaitingForPoseSearch` must never disable the normal character shell or enable the bridge-owned controls
+- `FailStopped` must leave the runtime in a released, non-owning state
+
 ### Frozen Stabilization Order
 
 The Phase 1 stabilization pass must proceed in this order:

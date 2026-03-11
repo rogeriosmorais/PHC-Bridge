@@ -441,9 +441,14 @@ If startup succeeds:
 
 1. confirm the possessed pawn is `BP_PhysAnimCharacter`
 2. confirm the Output Log shows the startup success line
-3. watch whether the character remains stable enough to judge basic bridge activity
-4. capture the first `10` to `20` seconds with a short clip if possible
-5. if the character immediately flies or spins uncontrollably, classify the run as `runtime unstable after startup`
+3. confirm the runtime-state log transitions make sense:
+   - `Uninitialized -> RuntimeReady`
+   - `RuntimeReady -> WaitingForPoseSearch`
+   - only after the first valid PoseSearch result:
+     - `WaitingForPoseSearch -> BridgeActive`
+4. watch whether the character remains stable enough to judge basic bridge activity
+5. capture the first `10` to `20` seconds with a short clip if possible
+6. if the character immediately flies or spins uncontrollably, classify the run as `runtime unstable after startup`
 
 ### Live Stabilization Knobs
 
@@ -491,14 +496,25 @@ physanim.ForceZeroActions 1
 
 That is now also the default component startup behavior, so the bridge should boot in zero-action mode unless you explicitly override it.
 
-In the current bridge, zero-action mode also suppresses explicit control-target writes. That means the startup path no longer interprets "zero actions" as "write identity rotations to every control."
+In the current bridge, zero-action mode is now a true safe mode:
+
+- explicit control-target writes are suppressed
+- production controls are disabled
+- body modifiers switch out of full simulated mode
+- the `ACharacter` capsule and `CharacterMovement` shell are suspended while the bridge is active
 
 The production bridge now also applies the same mesh collision safety used by the earlier UE harnesses:
 
 - mesh collision profile switches to `PhysicsActor`
 - mesh collision response to `Pawn` switches to `Ignore`
 
-So if the character still launches or spins in zero-action mode after rebuilding, the remaining cause is deeper than raw policy output or capsule/mesh pawn-channel collision.
+So if the character still launches or spins in zero-action mode after rebuilding, the remaining cause is deeper than raw policy output, full-body control target writes, or the normal character capsule/movement shell.
+
+Frozen runtime ownership rule:
+
+- `WaitingForPoseSearch` must not take bridge-owned physics ownership
+- only `BridgeActive` may disable the normal character shell and own the physics-control path
+- `FailStopped` must release bridge-owned physics before returning control
 
 If zero-action mode is calm, re-enable the policy conservatively:
 
@@ -537,6 +553,7 @@ Use this to classify the first failure reason from the log.
 | `Could not create an NNE model instance` | ORT runtime/plugin/model compatibility is broken |
 | `PoseSearch query was invalid for two consecutive ticks` | the direct `MotionMatch(...)` query did not produce a valid result from the current pose history + database |
 | `UPoseSearchLibrary::MotionMatch returned no selected animation` | PoseSearch ran but did not select any clip from `PSDB_Stage1_Locomotion` |
+| `Initial PoseSearch result was never produced within 2.00s` | startup prerequisites resolved, but the bridge never received the first valid PoseSearch result, so it correctly refused to take physics ownership |
 | `Fail-stop: Runtime instability detected` | the bridge is alive, but the automated instability monitor observed sustained launch / spin metrics; stay in Phase 1 tuning and use the runtime diagnostics plus stabilization CVars |
 | `Startup success` followed by immediate flight/spin/tumble | the bridge and NNE path are alive; move to the Phase 1 stabilization/tuning task instead of revisiting bring-up assets |
 

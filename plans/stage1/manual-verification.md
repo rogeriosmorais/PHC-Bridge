@@ -319,10 +319,26 @@ Max Substeps = 8
   - this checkpoint is not about asset paths, ONNX export, or whether NNE exists
   - this checkpoint is the first Phase 1 post-startup stability gate before G2 packaging
   - this checkpoint now uses the bridge's built-in instability monitor as primary evidence for obvious launch / spin failures, not only subjective viewing
+- `Frozen runtime state machine for this checkpoint`:
+  - `Uninitialized`:
+    - bridge does not own physics
+  - `RuntimeReady`:
+    - all startup prerequisites resolved
+    - bridge still does not own physics
+  - `WaitingForPoseSearch`:
+    - bridge is waiting for the first valid `MotionMatch(...)` result
+    - bridge still does not own physics
+  - `BridgeActive`:
+    - bridge owns physics and may apply stabilization/tuning
+  - `FailStopped`:
+    - bridge released ownership after a fault
+  - frozen rule:
+    - only `BridgeActive` is allowed to own bridge physics during `MV-P1-01`
 - `Recommended stabilization order before declaring the runtime hopeless`:
   1. first prove the bridge can stay calm with zero actions:
      - the current default startup path already boots with `physanim.ForceZeroActions = 1`
-     - zero-action mode now suppresses explicit control-target writes, so this step is a real "policy disabled" check instead of "apply zero rotations"
+     - zero-action mode now suppresses explicit control-target writes, disables the production controls, and switches body modifiers out of full simulated mode
+     - the bridge also suspends the `ACharacter` movement/capsule shell while it owns the body
   2. then re-enable actions conservatively:
      - `physanim.ForceZeroActions 0`
      - `physanim.ActionScale 0.10`
@@ -371,13 +387,14 @@ Max Substeps = 8
   5. Start PIE and do not move the character manually yet.
   6. Watch the Output Log for the startup-success line.
   7. If startup does not succeed, stop. This checkpoint is `blocked`, not `fail`.
-  8. Once startup succeeds, watch the first `10` seconds closely:
+  8. Confirm from the first `[PhysAnim] Runtime state: ...` lines that the runtime reaches `WaitingForPoseSearch` before it reaches `BridgeActive`.
+  9. Once startup succeeds, watch the first `10` seconds closely:
      - does the character stay roughly upright
      - does the body immediately launch upward
      - does the body enter continuous spinning or tumbling
      - is the motion still readable enough to tune
-  9. If the first `10` seconds are readable, let the run continue for about `30` seconds total.
-  10. Record a short clip if practical. If not, capture at least one screenshot and write down exactly what dominated the run.
+  10. If the first `10` seconds are readable, let the run continue for about `30` seconds total.
+  11. Record a short clip if practical. If not, capture at least one screenshot and write down exactly what dominated the run.
 - `Useful live knobs during this checkpoint`:
   - `physanim.ForceZeroActions`
   - `physanim.ActionScale`
@@ -412,6 +429,7 @@ Max Substeps = 8
   - exact map path used: `/Game/ThirdPerson/Lvl_ThirdPerson`
   - exact character used: `BP_PhysAnimCharacter`
   - the first `[PhysAnim]` startup success or failure line
+  - the first `[PhysAnim] Runtime state: ...` transition lines
   - the first `[PhysAnim] Runtime diagnostics ...` line if one appears
   - the first `[PhysAnim] Fail-stop: Runtime instability detected ...` line if one appears
   - one short clip or screenshot

@@ -44,8 +44,15 @@ Turn the first end-to-end UE runtime success into a stabilization-ready one-char
    - reduce action influence before changing mapping assumptions
    - adjust fixed Physics Control gains/damping next
    - inspect mapping / frame assumptions only if low-influence tuning still produces pathological motion
-4. Define exactly what counts as `stable enough for G2`.
-5. Only after the stabilization checkpoint is explicit, update the G2 package so it cannot be run on an obviously unstable build.
+4. Freeze an explicit runtime state machine so startup and fail-stop ownership semantics are no longer implicit:
+   - `Uninitialized`
+   - `RuntimeReady`
+   - `WaitingForPoseSearch`
+   - `BridgeActive`
+   - `FailStopped`
+   - only `BridgeActive` may own bridge physics
+5. Define exactly what counts as `stable enough for G2`.
+6. Only after the stabilization checkpoint is explicit, update the G2 package so it cannot be run on an obviously unstable build.
 
 ## Execution Order
 
@@ -56,7 +63,12 @@ Turn the first end-to-end UE runtime success into a stabilization-ready one-char
 2. Use [manual-verification.md](/F:/NewEngine/plans/stage1/manual-verification.md) to classify the current runtime with `MV-P1-01`.
 3. Treat the first implementation pass as a stabilization pass, not a quality pass.
 4. Keep the working startup path fixed while testing the first stabilization adjustments.
-5. Apply tuning changes only in the frozen order from [phase1-implementation-package.md](/F:/NewEngine/plans/stage1/phase1-implementation-package.md):
+5. Keep startup and fail-stop behavior inside the frozen runtime state machine:
+   - startup prerequisites may advance to `RuntimeReady`
+   - the bridge must wait in `WaitingForPoseSearch` until the first valid `MotionMatch(...)` result exists
+   - only then may the runtime enter `BridgeActive`
+   - any startup/runtime fault must end in `FailStopped`, with bridge-owned physics released
+6. Apply tuning changes only in the frozen order from [phase1-implementation-package.md](/F:/NewEngine/plans/stage1/phase1-implementation-package.md):
    - action influence first
    - fixed Physics Control gains and damping next
    - mapping / frame assumptions only after the simpler causes are ruled out
@@ -75,8 +87,8 @@ Turn the first end-to-end UE runtime success into a stabilization-ready one-char
      - `physanim.MaxRootLinearSpeedCmPerSec`
      - `physanim.MaxRootAngularSpeedDegPerSec`
      - `physanim.InstabilityGracePeriodSeconds`
-6. Re-run `MV-P1-01` after each meaningful stabilization pass and record whether the result moved from `fail` toward `pass`.
-7. Do not ask the user to run `G2` until `MV-P1-01` is explicitly recorded as `pass`.
+7. Re-run `MV-P1-01` after each meaningful stabilization pass and record whether the result moved from `fail` toward `pass`.
+8. Do not ask the user to run `G2` until `MV-P1-01` is explicitly recorded as `pass`.
 
 ## Definition Of Done
 

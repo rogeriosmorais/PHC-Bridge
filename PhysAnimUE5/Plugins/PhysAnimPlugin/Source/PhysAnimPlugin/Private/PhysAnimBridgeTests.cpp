@@ -370,6 +370,35 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimInitialPoseSearchTimeoutTest,
+		"PhysAnim.Component.InitialPoseSearchTimeout",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimInitialPoseSearchTimeoutTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(TEXT("Negative elapsed time does not time out"), UPhysAnimComponent::IsInitialPoseSearchWaitTimedOut(-0.1, 2.0));
+		TestFalse(TEXT("Elapsed time below timeout does not time out"), UPhysAnimComponent::IsInitialPoseSearchWaitTimedOut(1.99, 2.0));
+		TestTrue(TEXT("Elapsed time at timeout does time out"), UPhysAnimComponent::IsInitialPoseSearchWaitTimedOut(2.0, 2.0));
+		TestFalse(TEXT("Non-positive timeout disables timeout"), UPhysAnimComponent::IsInitialPoseSearchWaitTimedOut(10.0, 0.0));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimRuntimeStateOwnershipTest,
+		"PhysAnim.Component.RuntimeStateOwnership",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimRuntimeStateOwnershipTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(TEXT("Uninitialized does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::Uninitialized));
+		TestFalse(TEXT("RuntimeReady does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::RuntimeReady));
+		TestFalse(TEXT("WaitingForPoseSearch does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::WaitingForPoseSearch));
+		TestTrue(TEXT("BridgeActive owns bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::BridgeActive));
+		TestFalse(TEXT("FailStopped does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::FailStopped));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimStage1InitializerDefaultsTest,
 		"PhysAnim.Component.Stage1InitializerDefaults",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
