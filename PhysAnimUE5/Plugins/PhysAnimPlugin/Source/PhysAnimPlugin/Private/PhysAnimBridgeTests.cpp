@@ -6,10 +6,26 @@
 
 #include "Misc/AutomationTest.h"
 #include "PhysicsControlActor.h"
+#include "Tests/AutomationCommon.h"
+
+#if WITH_EDITOR
+#include "Editor.h"
+#include "Tests/AutomationEditorCommon.h"
+#include "UnrealEdGlobals.h"
+#endif
 
 namespace
 {
 	using namespace PhysAnimBridge;
+
+#if WITH_EDITOR
+	const FString PhysAnimPieSmokeMap = TEXT("/Game/ThirdPerson/Lvl_ThirdPerson");
+	const TCHAR* PhysAnimPieSmokePrefix = TEXT("[PhysAnimPieSmoke]");
+	constexpr float PhysAnimPieSmokeDurationSeconds = 10.0f;
+	constexpr float PhysAnimPieSmokeStartTimeoutSeconds = 30.0f;
+	constexpr float PhysAnimPieSmokeStopTimeoutSeconds = 30.0f;
+
+#endif
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimFutureScheduleTest,
@@ -217,6 +233,18 @@ namespace
 				Error));
 		TestEqual(TEXT("Smoothed first action"), ConditionedActions[0], 0.125f);
 		TestEqual(TEXT("Smoothed second action"), ConditionedActions[1], 0.025f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimStabilizationDefaultsTest,
+		"PhysAnim.Component.StabilizationDefaults",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimStabilizationSettings Settings;
+		TestFalse(TEXT("Force-zero actions defaults to disabled"), Settings.bForceZeroActions);
 		return true;
 	}
 
@@ -860,6 +888,60 @@ namespace
 
 		return true;
 	}
+
+#if WITH_EDITOR
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPieSmokeTest,
+		"PhysAnim.PIE.Smoke",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPieSmokeTest::RunTest(const FString& Parameters)
+	{
+		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
+		{
+			AddError(FString::Printf(TEXT("%s Failed to open map '%s'."), PhysAnimPieSmokePrefix, *PhysAnimPieSmokeMap));
+			return false;
+		}
+
+		AddCommand(new FEditorAutomationLogCommand(FString::Printf(
+			TEXT("%s PIE smoke opening '%s'."),
+			PhysAnimPieSmokePrefix,
+			*PhysAnimPieSmokeMap)));
+		AddCommand(new FStartPIECommand(false));
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor != nullptr && IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("%s PIE did not start within %.1f seconds."),
+					PhysAnimPieSmokePrefix,
+					PhysAnimPieSmokeStartTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStartTimeoutSeconds));
+		AddCommand(new FWaitLatentCommand(PhysAnimPieSmokeDurationSeconds));
+		AddCommand(new FEndPlayMapCommand());
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor == nullptr || !IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("%s PIE did not stop within %.1f seconds."),
+					PhysAnimPieSmokePrefix,
+					PhysAnimPieSmokeStopTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStopTimeoutSeconds));
+
+		return true;
+	}
+#endif
 }
 
 #endif

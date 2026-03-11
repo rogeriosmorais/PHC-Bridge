@@ -24,7 +24,7 @@ struct FPhysAnimStabilizationSettings
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
-	bool bForceZeroActions = true;
+	bool bForceZeroActions = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float ActionScale = 0.1f;

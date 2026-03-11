@@ -17,5 +17,15 @@ public class PhysAnimPlugin : ModuleRules
                 "PhysicsControl",
                 "PoseSearch"
             });
+
+        if (Target.bBuildEditor)
+        {
+            PrivateDependencyModuleNames.AddRange(
+                new[]
+                {
+                    "LevelEditor",
+                    "UnrealEd"
+                });
+        }
     }
 }
