@@ -40,7 +40,7 @@ namespace PhysAnimComponentInternal
 	const TCHAR* PreferredGpuRuntime = TEXT("NNERuntimeORTDml");
 	const TCHAR* FallbackCpuRuntime = TEXT("NNERuntimeORTCpu");
 	constexpr double InitialPoseSearchWaitTimeoutSeconds = 2.0;
-	constexpr int32 NumBringUpGroups = 4;
+	constexpr int32 NumBringUpGroups = 5;
 
 	TAutoConsoleVariable<float> CVarPhysAnimActionScale(
 		TEXT("physanim.ActionScale"),
@@ -1457,18 +1457,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	{
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
 		const bool bBringUpGroupUnlocked = IsBringUpGroupUnlocked(BringUpGroupIndex);
-		const double GroupActivationTimeSeconds =
-			BringUpGroupActivationTimeSeconds.IsValidIndex(BringUpGroupIndex)
-				? BringUpGroupActivationTimeSeconds[BringUpGroupIndex]
-				: -1.0;
-		const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
-		const float ElapsedSinceGroupActivationSeconds =
-			static_cast<float>(FMath::Max(CurrentTimeSeconds - GroupActivationTimeSeconds, 0.0));
-		const float ControlAuthorityAlpha = CalculateControlAuthorityAlpha(
-			EffectiveSettings.bForceZeroActions,
-			bBringUpGroupUnlocked,
-			ElapsedSinceGroupActivationSeconds,
-			EffectiveSettings.StartupRampSeconds);
+		const float ControlAuthorityAlpha =
+			CalculateBringUpGroupControlAuthorityAlpha(BringUpGroupIndex, EffectiveSettings);
 
 		FPhysicsControlMultiplier ControlMultiplier;
 		ControlMultiplier.AngularStrengthMultiplier = EffectiveSettings.AngularStrengthMultiplier * ControlAuthorityAlpha;
@@ -1576,24 +1566,11 @@ float UPhysAnimComponent::CalculateCurrentControlAuthorityAlpha(const FPhysAnimS
 	}
 
 	float MaxControlAuthorityAlpha = 0.0f;
-	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 	for (int32 GroupIndex = 0; GroupIndex <= HighestUnlockedBringUpGroupIndex; ++GroupIndex)
 	{
-		if (!BringUpGroupActivationTimeSeconds.IsValidIndex(GroupIndex) ||
-			BringUpGroupActivationTimeSeconds[GroupIndex] < 0.0)
-		{
-			continue;
-		}
-
-		const float ElapsedSinceGroupActivationSeconds = static_cast<float>(
-			FMath::Max(CurrentTimeSeconds - BringUpGroupActivationTimeSeconds[GroupIndex], 0.0));
 		MaxControlAuthorityAlpha = FMath::Max(
 			MaxControlAuthorityAlpha,
-			CalculateControlAuthorityAlpha(
-				EffectiveSettings.bForceZeroActions,
-				true,
-				ElapsedSinceGroupActivationSeconds,
-				EffectiveSettings.StartupRampSeconds));
+			CalculateBringUpGroupControlAuthorityAlpha(GroupIndex, EffectiveSettings));
 	}
 
 	return MaxControlAuthorityAlpha;
@@ -1608,14 +1585,16 @@ float UPhysAnimComponent::CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimSt
 
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
 	if (!BringUpGroupActivationTimeSeconds.IsValidIndex(FinalGroupIndex) ||
-		BringUpGroupActivationTimeSeconds[FinalGroupIndex] < 0.0)
+		BringUpGroupActivationTimeSeconds[FinalGroupIndex] < 0.0 ||
+		!BringUpGroupControlRampStartTimeSeconds.IsValidIndex(FinalGroupIndex) ||
+		BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] < 0.0)
 	{
 		return 0.0f;
 	}
 
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 	const float ElapsedSinceFinalGroupActivationSeconds = static_cast<float>(
-		FMath::Max(CurrentTimeSeconds - BringUpGroupActivationTimeSeconds[FinalGroupIndex], 0.0));
+		FMath::Max(CurrentTimeSeconds - BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex], 0.0));
 	return CalculatePolicyInfluenceAlpha(
 		EffectiveSettings.bForceZeroActions,
 		true,
@@ -1634,9 +1613,21 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 	{
 		BringUpGroupActivationTimeSeconds.Init(-1.0, GetBringUpGroupCount());
 	}
+	if (!BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex))
+	{
+		BringUpGroupControlRampStartTimeSeconds.Init(-1.0, GetBringUpGroupCount());
+	}
 
 	const double ActivationTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 	BringUpGroupActivationTimeSeconds[GroupIndex] = ActivationTimeSeconds;
+	const bool bDelayControlRamp = ShouldDelayBringUpGroupControlRamp(GroupIndex, GetBringUpGroupCount());
+	const bool bStartControlRampImmediately = ShouldStartBringUpGroupControlRamp(
+		false,
+		true,
+		bDelayControlRamp,
+		false);
+	BringUpGroupControlRampStartTimeSeconds[GroupIndex] =
+		bStartControlRampImmediately ? ActivationTimeSeconds : -1.0;
 	HighestUnlockedBringUpGroupIndex = GroupIndex;
 	BringUpGroupStableAccumulatedSeconds = 0.0f;
 
@@ -1669,7 +1660,7 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 
 void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
-	if (EffectiveSettings.bForceZeroActions || !IsBringUpGroupUnlocked(0) || AreAllBringUpGroupsUnlocked())
+	if (EffectiveSettings.bForceZeroActions || !IsBringUpGroupUnlocked(0))
 	{
 		return;
 	}
@@ -1694,6 +1685,30 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 		return;
 	}
 
+	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
+	if (AreAllBringUpGroupsUnlocked())
+	{
+		if (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(FinalGroupIndex) &&
+			BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] < 0.0 &&
+			ShouldStartBringUpGroupControlRamp(
+				EffectiveSettings.bForceZeroActions,
+				true,
+				ShouldDelayBringUpGroupControlRamp(FinalGroupIndex, GetBringUpGroupCount()),
+				true))
+		{
+			BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] =
+				GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+			BringUpGroupStableAccumulatedSeconds = 0.0f;
+			UE_LOG(
+				LogPhysAnimBridge,
+				Log,
+				TEXT("[PhysAnim] Stabilization final-group control ramp enabled for group %d/%d [hand_l, hand_r]."),
+				FinalGroupIndex + 1,
+				GetBringUpGroupCount());
+		}
+		return;
+	}
+
 	UnlockBringUpGroup(HighestUnlockedBringUpGroupIndex + 1, TEXT("StableRuntimeWindow"));
 }
 
@@ -1707,9 +1722,37 @@ bool UPhysAnimComponent::IsBringUpGroupUnlocked(int32 GroupIndex) const
 	return GroupIndex >= 0 && GroupIndex <= HighestUnlockedBringUpGroupIndex;
 }
 
+bool UPhysAnimComponent::IsBringUpGroupControlRampActive(int32 GroupIndex) const
+{
+	return GroupIndex >= 0 &&
+		BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex) &&
+		BringUpGroupControlRampStartTimeSeconds[GroupIndex] >= 0.0;
+}
+
 bool UPhysAnimComponent::IsBoneInUnlockedBringUpGroup(FName BoneName) const
 {
 	return IsBringUpGroupUnlocked(ResolveBringUpGroupIndex(BoneName));
+}
+
+float UPhysAnimComponent::CalculateBringUpGroupControlAuthorityAlpha(
+	int32 GroupIndex,
+	const FPhysAnimStabilizationSettings& EffectiveSettings) const
+{
+	if (!IsBringUpGroupUnlocked(GroupIndex) ||
+		!BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex) ||
+		BringUpGroupControlRampStartTimeSeconds[GroupIndex] < 0.0)
+	{
+		return 0.0f;
+	}
+
+	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+	const float ElapsedSinceGroupControlRampStartSeconds = static_cast<float>(
+		FMath::Max(CurrentTimeSeconds - BringUpGroupControlRampStartTimeSeconds[GroupIndex], 0.0));
+	return CalculateControlAuthorityAlpha(
+		EffectiveSettings.bForceZeroActions,
+		true,
+		ElapsedSinceGroupControlRampStartSeconds,
+		EffectiveSettings.StartupRampSeconds);
 }
 
 bool UPhysAnimComponent::CheckRuntimeInstability(
@@ -1960,11 +2003,12 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
-		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
+		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
 		SimulationHandoffAlpha,
 		FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
 		GetBringUpGroupCount(),
 		CalculateCurrentControlAuthorityAlpha(EffectiveSettings),
+		CalculateBringUpGroupControlAuthorityAlpha(HighestUnlockedBringUpGroupIndex, EffectiveSettings),
 		CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings),
 		LastActionDiagnostics.RawMin,
 		LastActionDiagnostics.RawMax,
@@ -2004,6 +2048,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	HighestUnlockedBringUpGroupIndex = INDEX_NONE;
 	BringUpGroupStableAccumulatedSeconds = 0.0f;
 	BringUpGroupActivationTimeSeconds.Init(-1.0, GetBringUpGroupCount());
+	BringUpGroupControlRampStartTimeSeconds.Init(-1.0, GetBringUpGroupCount());
 	PendingBodyModifierCachedResetNames.Reset();
 	LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
 	LastAppliedStabilizationSettings = {};
@@ -2108,12 +2153,16 @@ int32 UPhysAnimComponent::ResolveBringUpGroupIndex(FName BoneName)
 		return 2;
 	}
 
-	if (BoneName == TEXT("hand_l") ||
-		BoneName == TEXT("hand_r") ||
-		BoneName == TEXT("neck_01") ||
+	if (BoneName == TEXT("neck_01") ||
 		BoneName == TEXT("head"))
 	{
 		return 3;
+	}
+
+	if (BoneName == TEXT("hand_l") ||
+		BoneName == TEXT("hand_r"))
+	{
+		return 4;
 	}
 
 	return INDEX_NONE;
@@ -2122,6 +2171,25 @@ int32 UPhysAnimComponent::ResolveBringUpGroupIndex(FName BoneName)
 int32 UPhysAnimComponent::GetBringUpGroupCount()
 {
 	return PhysAnimComponentInternal::NumBringUpGroups;
+}
+
+bool UPhysAnimComponent::ShouldDelayBringUpGroupControlRamp(int32 GroupIndex, int32 NumBringUpGroups)
+{
+	return NumBringUpGroups > 0 && GroupIndex == (NumBringUpGroups - 1);
+}
+
+bool UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(
+	bool bForceZeroActions,
+	bool bBringUpGroupUnlocked,
+	bool bDelayBringUpGroupControlRamp,
+	bool bPostUnlockSettleComplete)
+{
+	if (bForceZeroActions || !bBringUpGroupUnlocked)
+	{
+		return false;
+	}
+
+	return !bDelayBringUpGroupControlRamp || bPostUnlockSettleComplete;
 }
 
 float UPhysAnimComponent::CalculateControlAuthorityAlpha(

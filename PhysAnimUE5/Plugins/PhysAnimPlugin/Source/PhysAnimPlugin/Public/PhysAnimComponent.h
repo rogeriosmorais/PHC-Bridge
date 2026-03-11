@@ -170,7 +170,9 @@ private:
 	void AdvanceBringUpState(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	bool AreAllBringUpGroupsUnlocked() const;
 	bool IsBringUpGroupUnlocked(int32 GroupIndex) const;
+	bool IsBringUpGroupControlRampActive(int32 GroupIndex) const;
 	bool IsBoneInUnlockedBringUpGroup(FName BoneName) const;
+	float CalculateBringUpGroupControlAuthorityAlpha(int32 GroupIndex, const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	bool GatherRuntimeInstabilityBodySamples(TArray<FPhysAnimBodyInstabilitySample>& OutSamples) const;
 	bool CheckRuntimeInstability(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
 	void LogBodyModifierTelemetrySnapshot(const TCHAR* Context) const;
@@ -229,6 +231,7 @@ private:
 	int32 HighestUnlockedBringUpGroupIndex = INDEX_NONE;
 	float BringUpGroupStableAccumulatedSeconds = 0.0f;
 	TArray<double> BringUpGroupActivationTimeSeconds;
+	TArray<double> BringUpGroupControlRampStartTimeSeconds;
 	TArray<FName> PendingBodyModifierCachedResetNames;
 	double LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
 	FName OriginalMeshCollisionProfileName = NAME_None;
@@ -289,6 +292,12 @@ public:
 		bool bIsRootBodyModifier);
 	static int32 ResolveBringUpGroupIndex(FName BoneName);
 	static int32 GetBringUpGroupCount();
+	static bool ShouldDelayBringUpGroupControlRamp(int32 GroupIndex, int32 NumBringUpGroups);
+	static bool ShouldStartBringUpGroupControlRamp(
+		bool bForceZeroActions,
+		bool bBringUpGroupUnlocked,
+		bool bDelayBringUpGroupControlRamp,
+		bool bPostUnlockSettleComplete);
 	static float CalculateControlAuthorityAlpha(
 		bool bForceZeroActions,
 		bool bSimulationHandoffSettled,

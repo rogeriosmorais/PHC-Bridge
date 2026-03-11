@@ -709,12 +709,45 @@ namespace
 
 	bool FPhysAnimBringUpGroupMappingTest::RunTest(const FString& Parameters)
 	{
+		TestEqual(TEXT("Bring-up group count matches staged unlock plan"), UPhysAnimComponent::GetBringUpGroupCount(), 5);
 		TestEqual(TEXT("Spine group unlocks first"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("spine_01")), 0);
 		TestEqual(TEXT("Thigh group unlocks first"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("thigh_r")), 0);
 		TestEqual(TEXT("Upper arms unlock second"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("upperarm_l")), 1);
 		TestEqual(TEXT("Feet and lower arms unlock third"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("ball_l")), 2);
-		TestEqual(TEXT("Hands and head unlock last"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("hand_r")), 3);
+		TestEqual(TEXT("Head and neck unlock before hands"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("head")), 3);
+		TestEqual(TEXT("Hands unlock last"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("hand_r")), 4);
 		TestEqual(TEXT("Root pelvis is not a staged non-root group"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("pelvis")), INDEX_NONE);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBringUpGroupControlRampTest,
+		"PhysAnim.Component.BringUpGroupControlRamp",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBringUpGroupControlRampTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("Non-final bring-up groups do not require a post-unlock settle delay"),
+			UPhysAnimComponent::ShouldDelayBringUpGroupControlRamp(3, 5));
+		TestTrue(
+			TEXT("Final bring-up group requires a post-unlock settle delay"),
+			UPhysAnimComponent::ShouldDelayBringUpGroupControlRamp(4, 5));
+		TestFalse(
+			TEXT("Force-zero mode blocks bring-up group control ramp start"),
+			UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(true, true, false, true));
+		TestFalse(
+			TEXT("Locked bring-up groups cannot start their control ramp"),
+			UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(false, false, false, true));
+		TestTrue(
+			TEXT("Unlocked non-delayed bring-up groups start their control ramp immediately"),
+			UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(false, true, false, false));
+		TestFalse(
+			TEXT("Delayed bring-up groups wait for a post-unlock settle window"),
+			UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(false, true, true, false));
+		TestTrue(
+			TEXT("Delayed bring-up groups can start after the post-unlock settle window completes"),
+			UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(false, true, true, true));
 		return true;
 	}
 
