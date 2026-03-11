@@ -76,6 +76,7 @@ Turn the first end-to-end UE runtime success into a stabilization-ready one-char
    - mapping / frame assumptions only after the simpler causes are ruled out
    - use the live runtime knobs first:
      - `physanim.ForceZeroActions`
+     - `physanim.UseSkeletalAnimationTargets`
      - `physanim.ActionScale`
      - `physanim.ActionClampAbs`
      - `physanim.ActionSmoothingAlpha`

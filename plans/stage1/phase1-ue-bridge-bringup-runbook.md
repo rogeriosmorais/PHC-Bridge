@@ -473,6 +473,7 @@ The current bridge includes a thin runtime stabilization layer inside `UPhysAnim
 Use these console variables for the first stabilization pass before changing assets or reopening the model path:
 
 - `physanim.ForceZeroActions`
+- `physanim.UseSkeletalAnimationTargets`
 - `physanim.ActionScale`
 - `physanim.ActionClampAbs`
 - `physanim.ActionSmoothingAlpha`
@@ -523,6 +524,8 @@ Only after you explicitly run `physanim.ForceZeroActions 0` should the runtime c
 
 - mesh collision profile switches to `PhysicsActor`
 - mesh collision response to `Pawn` switches to `Ignore`
+- explicit targets are seeded from the current pose before the bridge allows the first full simulation handoff
+- the bridge now defaults to explicit targets instead of skeletal-animation target blending during active runtime
 
 So if the character still launches or spins before `ReadyForActivation`, the remaining cause is outside bridge-owned Physics Control ownership. If instability starts only after `physanim.ForceZeroActions 0`, then the problem is inside the active bridge-owned path.
 
@@ -537,6 +540,7 @@ If zero-action mode is calm, re-enable the policy conservatively:
 
 ```text
 physanim.ForceZeroActions 0
+physanim.UseSkeletalAnimationTargets 0
 physanim.ActionScale 0.10
 physanim.ActionClampAbs 0.20
 physanim.ActionSmoothingAlpha 0.25

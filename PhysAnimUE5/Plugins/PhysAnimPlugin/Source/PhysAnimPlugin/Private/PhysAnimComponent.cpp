@@ -73,6 +73,10 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.AngularExtraDampingMultiplier"),
 		-1.0f,
 		TEXT("Override for PhysAnim angular extra damping multiplier. Negative values keep the component default."));
+	TAutoConsoleVariable<int32> CVarPhysAnimUseSkeletalAnimationTargets(
+		TEXT("physanim.UseSkeletalAnimationTargets"),
+		-1,
+		TEXT("Override for PhysAnim skeletal-animation target blending. -1 keeps the component default, 0 disables, 1 enables."));
 	TAutoConsoleVariable<int32> CVarPhysAnimForceZeroActions(
 		TEXT("physanim.ForceZeroActions"),
 		-1,
@@ -126,7 +130,7 @@ namespace PhysAnimComponentInternal
 	FString BuildStabilizationSummary(const FPhysAnimStabilizationSettings& Settings)
 	{
 		return FString::Printf(
-			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
+			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
 			Settings.bForceZeroActions ? TEXT("true") : TEXT("false"),
 			Settings.ActionScale,
 			Settings.ActionClampAbs,
@@ -136,6 +140,7 @@ namespace PhysAnimComponentInternal
 			Settings.AngularStrengthMultiplier,
 			Settings.AngularDampingRatioMultiplier,
 			Settings.AngularExtraDampingMultiplier,
+			Settings.bUseSkeletalAnimationTargets ? TEXT("true") : TEXT("false"),
 			Settings.bEnableInstabilityFailStop ? TEXT("true") : TEXT("false"),
 			Settings.MaxRootHeightDeltaCm,
 			Settings.MaxRootLinearSpeedCmPerSecond,
@@ -362,10 +367,21 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			*ActiveRuntimeName,
 			*GetPathNameSafe(LoadedModelData));
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
+		return;
 	}
 
 	if (RuntimeState == EPhysAnimRuntimeState::ReadyForActivation)
 	{
+		return;
+	}
+
+	if (bPendingSimulationHandoff)
+	{
+		bPendingSimulationHandoff = false;
+		ApplyRuntimeControlTuning(EffectiveSettings);
+		PhysicsControl->UpdateControls(0.0f);
+		LogBridgeStateSnapshot(TEXT("AfterSimulationHandoff"));
+		LogActivationSummary(EffectiveSettings, TEXT("SimulationHandoffComplete"), true, true, false);
 		return;
 	}
 
@@ -535,6 +551,13 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 	const TCHAR* ActivationContext,
 	FString& OutError)
 {
+	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
+	if (!PhysicsControl)
+	{
+		OutError = TEXT("Bridge activation requires a valid Physics Control component.");
+		return false;
+	}
+
 	if (!ActivateRuntimePhysicsControl(OutError))
 	{
 		return false;
@@ -546,8 +569,16 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 	LogBridgeStateSnapshot(TEXT("AfterActivateBridgePhysicsState"));
 	ResetStabilizationRuntimeState();
 	BridgeStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	PhysicsControl->UpdateTargetCaches(0.0f);
+	if (!SeedControlTargetsFromCurrentPose(0.0f, OutError))
+	{
+		return false;
+	}
+	bPendingSimulationHandoff = true;
 	ApplyRuntimeControlTuning(EffectiveSettings);
-	LogBridgeStateSnapshot(TEXT("AfterApplyRuntimeControlTuning"));
+	PhysicsControl->UpdateControls(0.0f);
+	LogBridgeStateSnapshot(TEXT("AfterActivationPrepass"));
+	LogActivationSummary(EffectiveSettings, ActivationContext, true, true, true);
 
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Bridge physics activation[%s] complete."), ActivationContext);
 	return true;
@@ -576,6 +607,82 @@ void UPhysAnimComponent::EnterReadyForActivation(
 			TEXT("[PhysAnim] Bridge physics activation deferred by zero-action safe mode."));
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
 	}
+}
+
+bool UPhysAnimComponent::SeedControlTargetsFromCurrentPose(float DeltaTime, FString& OutError)
+{
+	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	AActor* const OwnerActor = GetOwner();
+	if (!PhysicsControl || !SkeletalMesh || !OwnerActor)
+	{
+		OutError = TEXT("Current-pose target seeding requires the owner, skeletal mesh, and Physics Control component.");
+		return false;
+	}
+
+	auto FindInitialControl = [OwnerActor](const FName ControlName) -> const FInitialPhysicsControl*
+	{
+		if (const UPhysAnimStage1InitializerComponent* const Stage1Initializer = OwnerActor->FindComponentByClass<UPhysAnimStage1InitializerComponent>())
+		{
+			return Stage1Initializer->InitialControls.Find(ControlName);
+		}
+
+		if (const UPhysicsControlInitializerComponent* const Initializer = OwnerActor->FindComponentByClass<UPhysicsControlInitializerComponent>())
+		{
+			return Initializer->InitialControls.Find(ControlName);
+		}
+
+		return nullptr;
+	};
+
+	PreviousControlTargetRotations.Reset();
+
+	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+	{
+		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+		if (!PhysicsControl->GetControlExists(ControlName))
+		{
+			OutError = FString::Printf(TEXT("Missing required control '%s' while seeding current-pose targets."), *ControlName.ToString());
+			return false;
+		}
+
+		const FInitialPhysicsControl* const InitialControl = FindInitialControl(ControlName);
+		if (!InitialControl)
+		{
+			OutError = FString::Printf(TEXT("Missing authored control definition for '%s' while seeding current-pose targets."), *ControlName.ToString());
+			return false;
+		}
+
+		if (SkeletalMesh->GetBoneIndex(InitialControl->ParentBoneName) == INDEX_NONE ||
+			SkeletalMesh->GetBoneIndex(InitialControl->ChildBoneName) == INDEX_NONE)
+		{
+			OutError = FString::Printf(
+				TEXT("Could not resolve current-pose bones for control '%s' (parent='%s', child='%s')."),
+				*ControlName.ToString(),
+				*InitialControl->ParentBoneName.ToString(),
+				*InitialControl->ChildBoneName.ToString());
+			return false;
+		}
+
+		const FQuat ParentWorldRotation =
+			SkeletalMesh->GetBoneQuaternion(InitialControl->ParentBoneName, EBoneSpaces::WorldSpace);
+		const FQuat ChildWorldRotation =
+			SkeletalMesh->GetBoneQuaternion(InitialControl->ChildBoneName, EBoneSpaces::WorldSpace);
+		const FQuat TargetOrientation =
+			BuildCurrentPoseControlTargetOrientation(ParentWorldRotation, ChildWorldRotation);
+
+		PreviousControlTargetRotations.Add(ControlName, TargetOrientation);
+		PhysicsControl->SetControlTargetOrientation(
+			ControlName,
+			TargetOrientation.Rotator(),
+			DeltaTime,
+			true,
+			false,
+			true,
+			false);
+	}
+
+	return true;
 }
 
 bool UPhysAnimComponent::ResolveRuntimeContext(FString& OutError)
@@ -1054,6 +1161,10 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimAngularExtraDampingMultiplier,
 			EffectiveSettings.AngularExtraDampingMultiplier);
+	EffectiveSettings.bUseSkeletalAnimationTargets =
+		PhysAnimComponentInternal::ResolveBoolOverride(
+			PhysAnimComponentInternal::CVarPhysAnimUseSkeletalAnimationTargets,
+			EffectiveSettings.bUseSkeletalAnimationTargets);
 	EffectiveSettings.bForceZeroActions =
 		PhysAnimComponentInternal::ResolveBoolOverride(PhysAnimComponentInternal::CVarPhysAnimForceZeroActions, EffectiveSettings.bForceZeroActions);
 	EffectiveSettings.bLogActionDiagnostics =
@@ -1126,6 +1237,24 @@ void UPhysAnimComponent::LogBridgeStateSnapshot(const TCHAR* Context) const
 		RootAngularVelocity.X,
 		RootAngularVelocity.Y,
 		RootAngularVelocity.Z);
+}
+
+void UPhysAnimComponent::LogActivationSummary(
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	const TCHAR* Context,
+	bool bCurrentPoseTargetsSeeded,
+	bool bActivationPrepassCompleted,
+	bool bSimulationHandoffPending) const
+{
+	UE_LOG(
+		LogPhysAnimBridge,
+		Log,
+		TEXT("[PhysAnim] Activation[%s]: skeletalTargets=%s currentPoseTargetsSeeded=%s activationPrepassCompleted=%s simulationHandoff=%s"),
+		Context,
+		EffectiveSettings.bUseSkeletalAnimationTargets ? TEXT("true") : TEXT("false"),
+		bCurrentPoseTargetsSeeded ? TEXT("true") : TEXT("false"),
+		bActivationPrepassCompleted ? TEXT("true") : TEXT("false"),
+		bSimulationHandoffPending ? TEXT("pending") : TEXT("complete"));
 }
 
 bool UPhysAnimComponent::ActivateRuntimePhysicsControl(FString& OutError)
@@ -1300,7 +1429,9 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
-	if (!PhysicsControl || EffectiveSettings == LastAppliedStabilizationSettings)
+	if (!PhysicsControl ||
+		(EffectiveSettings == LastAppliedStabilizationSettings &&
+		 bPendingSimulationHandoff == bLastAppliedPendingSimulationHandoff))
 	{
 		return;
 	}
@@ -1311,12 +1442,24 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	ControlMultiplier.AngularExtraDampingMultiplier = EffectiveSettings.AngularExtraDampingMultiplier;
 	PhysicsControl->SetControlMultipliersInSet(TEXT("All"), ControlMultiplier, !EffectiveSettings.bForceZeroActions);
 	PhysicsControl->SetControlsInSetEnabled(TEXT("All"), !EffectiveSettings.bForceZeroActions);
-	PhysicsControl->SetBodyModifiersInSetMovementType(
+	PhysicsControl->SetControlsInSetUseSkeletalAnimation(
 		TEXT("All"),
-		EffectiveSettings.bForceZeroActions ? EPhysicsMovementType::Kinematic : EPhysicsMovementType::Simulated);
-	PhysicsControl->SetBodyModifiersInSetPhysicsBlendWeight(TEXT("All"), EffectiveSettings.bForceZeroActions ? 0.0f : 1.0f);
+		EffectiveSettings.bUseSkeletalAnimationTargets,
+		0.0f,
+		0.0f);
+
+	EPhysicsMovementType BodyModifierMovementType = EPhysicsMovementType::Kinematic;
+	float BodyModifierPhysicsBlendWeight = 0.0f;
+	ResolveBodyModifierRuntimeMode(
+		EffectiveSettings.bForceZeroActions,
+		bPendingSimulationHandoff,
+		BodyModifierMovementType,
+		BodyModifierPhysicsBlendWeight);
+	PhysicsControl->SetBodyModifiersInSetMovementType(TEXT("All"), BodyModifierMovementType);
+	PhysicsControl->SetBodyModifiersInSetPhysicsBlendWeight(TEXT("All"), BodyModifierPhysicsBlendWeight);
 
 	LastAppliedStabilizationSettings = EffectiveSettings;
+	bLastAppliedPendingSimulationHandoff = bPendingSimulationHandoff;
 }
 
 bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError)
@@ -1489,6 +1632,8 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	LastActionDiagnostics = {};
 	RuntimeInstabilityState = {};
 	LastRuntimeInstabilityDiagnostics = {};
+	bPendingSimulationHandoff = false;
+	bLastAppliedPendingSimulationHandoff = false;
 	BridgeStartTimeSeconds = 0.0;
 	LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
 	LastAppliedStabilizationSettings = {};
@@ -1508,6 +1653,30 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 bool UPhysAnimComponent::IsInitialPoseSearchWaitTimedOut(double ElapsedSeconds, double TimeoutSeconds)
 {
 	return TimeoutSeconds > 0.0 && ElapsedSeconds >= TimeoutSeconds;
+}
+
+FQuat UPhysAnimComponent::BuildCurrentPoseControlTargetOrientation(
+	const FQuat& ParentWorldRotation,
+	const FQuat& ChildWorldRotation)
+{
+	return (ParentWorldRotation.Inverse() * ChildWorldRotation).GetNormalized();
+}
+
+void UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+	bool bForceZeroActions,
+	bool bPendingSimulationHandoff,
+	EPhysicsMovementType& OutMovementType,
+	float& OutPhysicsBlendWeight)
+{
+	if (bForceZeroActions || bPendingSimulationHandoff)
+	{
+		OutMovementType = EPhysicsMovementType::Kinematic;
+		OutPhysicsBlendWeight = 0.0f;
+		return;
+	}
+
+	OutMovementType = EPhysicsMovementType::Simulated;
+	OutPhysicsBlendWeight = 1.0f;
 }
 
 EPhysAnimRuntimeState UPhysAnimComponent::ResolveInitialPoseSearchSuccessState(bool bForceZeroActions)

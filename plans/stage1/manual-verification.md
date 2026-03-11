@@ -351,6 +351,7 @@ Max Substeps = 8
      - in that state the bridge does not disable the capsule or `CharacterMovement`
   2. then re-enable actions conservatively:
      - `physanim.ForceZeroActions 0`
+     - `physanim.UseSkeletalAnimationTargets 0`
      - `physanim.ActionScale 0.10`
      - `physanim.ActionClampAbs 0.20`
      - `physanim.ActionSmoothingAlpha 0.25`
@@ -407,6 +408,10 @@ Max Substeps = 8
        - `liveBodyModifiers=0`
        - `bridgeOwnsPhysics=false`
      - only after `physanim.ForceZeroActions 0` should the runtime move from `ReadyForActivation -> BridgeActive`
+     - on the current active-bridge path, also confirm:
+       - explicit-target mode is active by default
+       - current-pose target seeding completed
+       - activation prepass completed before simulation handoff
   9. Once startup succeeds, watch the first `10` seconds closely:
      - does the character stay roughly upright
      - does the body immediately launch upward
@@ -424,6 +429,7 @@ Max Substeps = 8
   - `physanim.AngularStrengthMultiplier`
   - `physanim.AngularDampingRatioMultiplier`
   - `physanim.AngularExtraDampingMultiplier`
+  - `physanim.UseSkeletalAnimationTargets`
   - `physanim.EnableInstabilityFailStop`
   - `physanim.MaxRootHeightDeltaCm`
   - `physanim.MaxRootLinearSpeedCmPerSec`
@@ -432,6 +438,7 @@ Max Substeps = 8
 - `What good looks like`:
   - the startup-success line appears
   - default safe-mode startup reaches `ReadyForActivation` without live operators
+  - active-bridge startup uses explicit targets by default, not skeletal-animation target blending
   - the character does not immediately launch, spin uncontrollably, or collapse into unreadable motion
   - the run remains visually controllable for about `30` seconds
   - the result is stable enough that tuning adjustments would be meaningful

@@ -180,10 +180,12 @@ The first implementation pass uses a thin UE-native stabilization layer, not a s
 - action conditioning lives in `UPhysAnimComponent`
 - control strength/damping scaling stays on `UPhysicsControlComponent`
 - live iteration happens through component defaults plus runtime console variables
+- explicit targets are now the default active-bridge mode for the full-body production bridge
 
 Frozen first-pass live knobs:
 
 - `physanim.ForceZeroActions`
+- `physanim.UseSkeletalAnimationTargets`
 - `physanim.ActionScale`
 - `physanim.ActionClampAbs`
 - `physanim.ActionSmoothingAlpha`

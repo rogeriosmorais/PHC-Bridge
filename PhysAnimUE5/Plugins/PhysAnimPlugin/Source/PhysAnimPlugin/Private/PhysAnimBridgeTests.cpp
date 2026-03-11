@@ -447,6 +447,61 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimExplicitTargetDefaultsTest,
+		"PhysAnim.Component.ExplicitTargetDefaults",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimExplicitTargetDefaultsTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimStabilizationSettings Settings;
+		TestFalse(TEXT("Explicit targets are the default active-bridge mode"), Settings.bUseSkeletalAnimationTargets);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimCurrentPoseTargetOrientationTest,
+		"PhysAnim.Component.CurrentPoseTargetOrientation",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimCurrentPoseTargetOrientationTest::RunTest(const FString& Parameters)
+	{
+		const FQuat ParentWorldRotation(FVector::UpVector, FMath::DegreesToRadians(90.0f));
+		const FQuat ChildWorldRotation(FVector::UpVector, FMath::DegreesToRadians(135.0f));
+		const FQuat TargetOrientation =
+			UPhysAnimComponent::BuildCurrentPoseControlTargetOrientation(ParentWorldRotation, ChildWorldRotation);
+		const FQuat ExpectedRelative(FVector::UpVector, FMath::DegreesToRadians(45.0f));
+
+		TestTrue(
+			TEXT("Current-pose orientation seeding produces parent-space child rotation"),
+			TargetOrientation.Equals(ExpectedRelative, 1.0e-4f));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBodyModifierRuntimeModeTest,
+		"PhysAnim.Component.BodyModifierRuntimeMode",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBodyModifierRuntimeModeTest::RunTest(const FString& Parameters)
+	{
+		EPhysicsMovementType MovementType = EPhysicsMovementType::Default;
+		float PhysicsBlendWeight = -1.0f;
+
+		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(true, false, MovementType, PhysicsBlendWeight);
+		TestEqual(TEXT("Force-zero mode keeps body modifiers kinematic"), MovementType, EPhysicsMovementType::Kinematic);
+		TestEqual(TEXT("Force-zero mode keeps body modifiers at zero blend"), PhysicsBlendWeight, 0.0f);
+
+		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(false, true, MovementType, PhysicsBlendWeight);
+		TestEqual(TEXT("Activation prepass keeps body modifiers kinematic"), MovementType, EPhysicsMovementType::Kinematic);
+		TestEqual(TEXT("Activation prepass keeps body modifiers at zero blend"), PhysicsBlendWeight, 0.0f);
+
+		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(false, false, MovementType, PhysicsBlendWeight);
+		TestEqual(TEXT("Post-prepass active mode enables simulated body modifiers"), MovementType, EPhysicsMovementType::Simulated);
+		TestEqual(TEXT("Post-prepass active mode enables full blend"), PhysicsBlendWeight, 1.0f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimStage1InitializerDefaultsTest,
 		"PhysAnim.Component.Stage1InitializerDefaults",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -480,6 +535,7 @@ namespace
 			TestEqual(TEXT("Control child bone"), LeftThighControl->ChildBoneName, FName(TEXT("thigh_l")));
 			TestTrue(TEXT("Control is enabled"), LeftThighControl->ControlData.bEnabled);
 			TestEqual(TEXT("Angular strength uses Stage 1 default"), LeftThighControl->ControlData.AngularStrength, 800.0f);
+			TestFalse(TEXT("Stage 1 defaults use explicit targets, not skeletal-animation targets"), LeftThighControl->ControlData.bUseSkeletalAnimation);
 		}
 
 		const FInitialBodyModifier* const PelvisModifier =

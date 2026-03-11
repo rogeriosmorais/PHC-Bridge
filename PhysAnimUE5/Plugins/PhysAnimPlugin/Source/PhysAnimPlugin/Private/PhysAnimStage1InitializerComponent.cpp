@@ -61,7 +61,7 @@ namespace PhysAnimStage1InitializerComponentInternal
 		Data.AngularTargetVelocityMultiplier = 0.0f;
 		Data.CustomControlPoint = FVector::ZeroVector;
 		Data.bUseCustomControlPoint = false;
-		Data.bUseSkeletalAnimation = true;
+		Data.bUseSkeletalAnimation = false;
 		Data.bDisableCollision = true;
 		Data.bOnlyControlChildObject = true;
 		return Data;

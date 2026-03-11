@@ -5,6 +5,7 @@
 #include "NNEModelData.h"
 #include "NNERuntimeCPU.h"
 #include "NNERuntimeGPU.h"
+#include "PhysicsControlActor.h"
 #include "PoseSearch/PoseSearchResult.h"
 #include "PhysAnimBridge.h"
 
@@ -50,6 +51,9 @@ struct FPhysAnimStabilizationSettings
 	float AngularExtraDampingMultiplier = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
+	bool bUseSkeletalAnimationTargets = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
 	bool bLogActionDiagnostics = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.1"))
@@ -81,6 +85,7 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(AngularStrengthMultiplier, Other.AngularStrengthMultiplier) &&
 			FMath::IsNearlyEqual(AngularDampingRatioMultiplier, Other.AngularDampingRatioMultiplier) &&
 			FMath::IsNearlyEqual(AngularExtraDampingMultiplier, Other.AngularExtraDampingMultiplier) &&
+			bUseSkeletalAnimationTargets == Other.bUseSkeletalAnimationTargets &&
 			bLogActionDiagnostics == Other.bLogActionDiagnostics &&
 			FMath::IsNearlyEqual(ActionDiagnosticsIntervalSeconds, Other.ActionDiagnosticsIntervalSeconds) &&
 			bEnableInstabilityFailStop == Other.bEnableInstabilityFailStop &&
@@ -152,7 +157,14 @@ private:
 	void EnterReadyForActivation(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* Context, bool bLogDeferredStartupSuccess);
 	void ActivateBridgePhysicsState();
 	void ResetBridgePhysicsState();
+	bool SeedControlTargetsFromCurrentPose(float DeltaTime, FString& OutError);
 	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void LogActivationSummary(
+		const FPhysAnimStabilizationSettings& EffectiveSettings,
+		const TCHAR* Context,
+		bool bCurrentPoseTargetsSeeded,
+		bool bActivationPrepassCompleted,
+		bool bSimulationHandoffPending) const;
 	bool ConditionModelActions(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
 	bool CheckRuntimeInstability(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
 	void ApplyControlTargets(float DeltaTime, FString& OutError);
@@ -198,6 +210,8 @@ private:
 	FPhysAnimRuntimeInstabilityState RuntimeInstabilityState;
 	FPhysAnimRuntimeInstabilityDiagnostics LastRuntimeInstabilityDiagnostics;
 	TMap<FName, FQuat> PreviousControlTargetRotations;
+	bool bPendingSimulationHandoff = false;
+	bool bLastAppliedPendingSimulationHandoff = false;
 	double BridgeStartTimeSeconds = 0.0;
 	double LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
 	FName OriginalMeshCollisionProfileName = NAME_None;
@@ -235,6 +249,14 @@ public:
 		FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics,
 		FString& OutError);
 
+	static FQuat BuildCurrentPoseControlTargetOrientation(
+		const FQuat& ParentWorldRotation,
+		const FQuat& ChildWorldRotation);
+	static void ResolveBodyModifierRuntimeMode(
+		bool bForceZeroActions,
+		bool bPendingSimulationHandoff,
+		EPhysicsMovementType& OutMovementType,
+		float& OutPhysicsBlendWeight);
 	static bool IsInitialPoseSearchWaitTimedOut(double ElapsedSeconds, double TimeoutSeconds);
 	static EPhysAnimRuntimeState ResolveInitialPoseSearchSuccessState(bool bForceZeroActions);
 	static bool ShouldActivateBridgeFromSafeMode(EPhysAnimRuntimeState State, bool bForceZeroActions);
