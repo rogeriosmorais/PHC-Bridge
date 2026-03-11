@@ -82,6 +82,10 @@ Current local Phase 1 truth on March 11, 2026:
 
 This means Phase 1 is now in stabilization/tuning, not in export discovery and not yet in G2 packaging.
 
+The active execution contract for the remaining bridge fault now lives in
+[phase1-policy-stabilization-plan.md](/F:/NewEngine/plans/stage1/20-execution/phase1-policy-stabilization-plan.md).
+Do not continue policy-phase runtime edits without following that plan.
+
 ### Frozen Runtime State Machine
 
 Stage 1 runtime ownership is now defined by this explicit state machine:
@@ -181,9 +185,9 @@ The Phase 1 stabilization pass must proceed in this order:
    - same physics settings unless the task explicitly says otherwise
 2. stabilize passive simulation entry and staged bring-up before changing mapping assumptions
 3. ramp control authority in stages before restoring policy influence
-4. for the current active pass, isolate hand-group policy target writes from hand-group control entry before adjusting gains
-5. adjust fixed Physics Control gains/damping only after staged bring-up behavior is characterized
-6. inspect mapping / frame-assumption faults only if the simpler staged-runtime causes are ruled out
+4. for the current active pass, follow the frozen policy-phase execution order in [phase1-policy-stabilization-plan.md](/F:/NewEngine/plans/stage1/20-execution/phase1-policy-stabilization-plan.md)
+5. adjust fixed Physics Control gains/damping only after policy target scope and continuity are characterized
+6. inspect mapping / frame-assumption faults only if the simpler staged-runtime and policy-target causes are ruled out
 7. do not ask the user to run G2 until the runtime-stability threshold passes
 
 ### Frozen Stabilization Surface

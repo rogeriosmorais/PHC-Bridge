@@ -7,6 +7,10 @@ description: Autonomous Stage 1 bridge stabilization loop
 
 Use this workflow for iterative UE bridge stabilization work inside the locked Stage 1 architecture.
 
+The current active sub-loop for the remaining bridge fault is the policy-phase plan in
+[phase1-policy-stabilization-plan.md](/F:/NewEngine/plans/stage1/20-execution/phase1-policy-stabilization-plan.md).
+When the dominant failure is in the first live policy-target phase, follow that plan before making further runtime edits.
+
 ## Goal
 
 Run a disciplined loop until one of these outcomes occurs:
@@ -68,6 +72,8 @@ The loop owns these documentation surfaces:
   - update when operator steps, expected logs, or pass/fail expectations change
 - [phase1-implementation-package.md](/F:/NewEngine/plans/stage1/20-execution/phase1-implementation-package.md)
   - update when the active bridge implementation strategy changes materially
+- [phase1-policy-stabilization-plan.md](/F:/NewEngine/plans/stage1/20-execution/phase1-policy-stabilization-plan.md)
+  - update when the active policy-phase hypothesis ladder, pass order, or stop rules change
 - [ARCHITECTURE_REVIEW_RESPONSE.md](/F:/NewEngine/ARCHITECTURE_REVIEW_RESPONSE.md)
   - update only when the stabilization results materially change the standing architectural argument
 

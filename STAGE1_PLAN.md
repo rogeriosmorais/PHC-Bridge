@@ -26,7 +26,7 @@ The planning bundle is no longer in pre-implementation mode. Phase 1 bridge impl
 The current Stage 1 execution focus is:
 
 1. stabilize the `ReadyForActivation -> BridgeActive` runtime using the staged bring-up path now implemented in the bridge
-2. verify the current handoff / staged activation / delayed policy-influence behavior with logs and manual evidence
+2. execute the frozen policy-phase stabilization plan for the first live policy-target phase
 3. update the assumption ledger and execution log from real stabilization evidence
 4. decide whether the one-character bridge is stable enough to resume G2-readiness work
 
@@ -67,6 +67,7 @@ Execution:
 - [Execution Log](/F:/NewEngine/plans/stage1/20-execution/execution-log.md)
 - [Phase 0 Execution Package](/F:/NewEngine/plans/stage1/20-execution/phase0-execution-package.md)
 - [Phase 1 Implementation Package](/F:/NewEngine/plans/stage1/20-execution/phase1-implementation-package.md)
+- [Phase 1 Policy Stabilization Plan](/F:/NewEngine/plans/stage1/20-execution/phase1-policy-stabilization-plan.md)
 - [Phase 1 UE Bridge Bring-Up Runbook](/F:/NewEngine/plans/stage1/20-execution/phase1-ue-bridge-bringup-runbook.md)
 - [Phase 2 Demo Package](/F:/NewEngine/plans/stage1/20-execution/phase2-demo-package.md)
 - [S1-P1-A1 Handoff](/F:/NewEngine/plans/stage1/20-execution/s1-p1-a1-handoff.md)
@@ -126,9 +127,9 @@ Phase 1 implementation is already underway in the local repo. The bridge now inc
 
 The next useful work is now:
 
-1. capture fresh runtime evidence from the staged bring-up path
-2. update [assumption-ledger.md](/F:/NewEngine/plans/stage1/20-execution/assumption-ledger.md) and [execution-log.md](/F:/NewEngine/plans/stage1/20-execution/execution-log.md) from that evidence
-3. continue targeted stabilization on the first live policy-target phase, which is now the isolated remaining fault surface
+1. follow [phase1-policy-stabilization-plan.md](/F:/NewEngine/plans/stage1/20-execution/phase1-policy-stabilization-plan.md) for the first live policy-target phase
+2. update [assumption-ledger.md](/F:/NewEngine/plans/stage1/20-execution/assumption-ledger.md) and [execution-log.md](/F:/NewEngine/plans/stage1/20-execution/execution-log.md) from each policy-phase pass
+3. continue autonomous stabilization only while passes remain inside that frozen policy-phase contract
 
 ## How To Read This File
 
