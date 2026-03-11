@@ -334,6 +334,16 @@ public:
 		bool bSimulationHandoffSettled,
 		float ElapsedSinceHandoffSettledSeconds,
 		float RampDurationSeconds);
+	static void ResolveRuntimeInstabilityRootFrame(
+		bool bPreserveGameplayShell,
+		const FVector& RootLocationCm,
+		const FVector& RootLinearVelocityCmPerSecond,
+		const FVector& OwnerLocationCm,
+		const FVector& OwnerLinearVelocityCmPerSecond,
+		FVector& OutEffectiveRootLocationCm,
+		FVector& OutEffectiveRootLinearVelocityCmPerSecond);
+	static FString BuildBridgeStatusIndicatorText(EPhysAnimRuntimeState State, bool bBridgeOwnsPhysics);
+	static FColor ResolveBridgeStatusIndicatorColor(EPhysAnimRuntimeState State, bool bBridgeOwnsPhysics);
 	static bool ShouldPreserveGameplayShellDuringBridgeActive(
 		bool bMovementSmokeModeEnabled,
 		bool bAllowCharacterMovementInBridgeActive);
@@ -353,6 +363,7 @@ public:
 	static const TCHAR* GetRuntimeStateName(EPhysAnimRuntimeState State);
 
 private:
+	void UpdateBridgeStatusIndicator(float DisplayDurationSeconds) const;
 	void TransitionRuntimeState(EPhysAnimRuntimeState NewState);
 	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
 	double InitialPoseSearchWaitStartTimeSeconds = 0.0;

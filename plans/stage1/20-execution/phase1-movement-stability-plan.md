@@ -64,6 +64,7 @@ The first movement-stability implementation must obey these rules:
 3. The movement harness must not depend on real OS keyboard events.
 4. The movement harness must be deterministic and runnable through automation.
 5. The movement harness must log enough state to interpret failures without relying only on video.
+6. If `BridgeActive` preserves the gameplay shell, runtime fail-stop checks must evaluate locomotion-relative root motion, not world-space displacement from the original activation point.
 
 ## Deterministic Input Script
 

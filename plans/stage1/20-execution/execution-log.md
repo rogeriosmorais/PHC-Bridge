@@ -131,3 +131,7 @@ Whenever new setup or gate evidence arrives:
 - March 11, 2026:
   - normal manual runtime now preserves capsule collision and `CharacterMovement` during `BridgeActive` through `physanim.AllowCharacterMovementInBridgeActive = 1`
   - the deterministic movement smoke harness remains valid, but gameplay-shell preservation is no longer smoke-only
+  - manual/runtime visibility now also includes an always-visible on-screen bridge state indicator controlled by `physanim.ShowBridgeStatusIndicator`
+  - movement-triggered fail-stop false positives were traced to world-space root instability checks after gameplay-shell preservation
+  - fix: when the gameplay shell is preserved, runtime instability now evaluates root/body translation relative to the owning actor shell instead of the original world-space activation frame
+  - verification: `run-pie-movement-smoke.ps1` now completes without `BridgeActive -> FailStopped`

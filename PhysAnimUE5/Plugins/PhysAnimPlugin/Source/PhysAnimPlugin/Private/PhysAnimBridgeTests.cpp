@@ -368,6 +368,25 @@ namespace
 				Diagnostics,
 				Error));
 		TestTrue(TEXT("Fail-stop reason mentions runtime instability"), Error.Contains(TEXT("Runtime instability detected")));
+
+		FVector EffectiveRootLocation;
+		FVector EffectiveRootVelocity;
+		UPhysAnimComponent::ResolveRuntimeInstabilityRootFrame(
+			true,
+			FVector(500.0f, 0.0f, 260.0f),
+			FVector(600.0f, 0.0f, 0.0f),
+			FVector(500.0f, 0.0f, 160.0f),
+			FVector(600.0f, 0.0f, 0.0f),
+			EffectiveRootLocation,
+			EffectiveRootVelocity);
+		TestEqual(
+			TEXT("Gameplay-shell-relative instability frame removes owner translation"),
+			EffectiveRootLocation,
+			FVector(0.0f, 0.0f, 100.0f));
+		TestEqual(
+			TEXT("Gameplay-shell-relative instability frame removes owner linear velocity"),
+			EffectiveRootVelocity,
+			FVector::ZeroVector);
 		return true;
 	}
 
@@ -538,6 +557,20 @@ namespace
 		TestFalse(TEXT("ReadyForActivation does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::ReadyForActivation));
 		TestTrue(TEXT("BridgeActive owns bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::BridgeActive));
 		TestFalse(TEXT("FailStopped does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::FailStopped));
+		TestTrue(
+			TEXT("BridgeActive status text reports active"),
+			UPhysAnimComponent::BuildBridgeStatusIndicatorText(EPhysAnimRuntimeState::BridgeActive, true).Contains(TEXT("ACTIVE")));
+		TestTrue(
+			TEXT("ReadyForActivation status text reports inactive"),
+			UPhysAnimComponent::BuildBridgeStatusIndicatorText(EPhysAnimRuntimeState::ReadyForActivation, false).Contains(TEXT("INACTIVE")));
+		TestEqual(
+			TEXT("BridgeActive indicator is green"),
+			UPhysAnimComponent::ResolveBridgeStatusIndicatorColor(EPhysAnimRuntimeState::BridgeActive, true),
+			FColor::Green);
+		TestEqual(
+			TEXT("FailStopped indicator is red"),
+			UPhysAnimComponent::ResolveBridgeStatusIndicatorColor(EPhysAnimRuntimeState::FailStopped, false),
+			FColor::Red);
 		return true;
 	}
 

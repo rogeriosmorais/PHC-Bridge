@@ -8,6 +8,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/CollisionProfile.h"
+#include "Engine/Engine.h"
 #include "Engine/AssetManager.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
@@ -123,6 +124,10 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.AllowCharacterMovementInBridgeActive"),
 		1,
 		TEXT("When enabled, BridgeActive preserves capsule collision and CharacterMovement so the player can drive the character with normal gameplay input."));
+	TAutoConsoleVariable<int32> CVarPhysAnimShowBridgeStatusIndicator(
+		TEXT("physanim.ShowBridgeStatusIndicator"),
+		1,
+		TEXT("Whether PhysAnim shows an always-visible on-screen bridge status indicator."));
 
 	float ResolveFloatOverride(const TAutoConsoleVariable<float>& CVar, float DefaultValue)
 	{
@@ -302,6 +307,7 @@ void UPhysAnimComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	UpdateBridgeStatusIndicator(0.25f);
 
 	if (RuntimeState != EPhysAnimRuntimeState::WaitingForPoseSearch &&
 		RuntimeState != EPhysAnimRuntimeState::ReadyForActivation &&
@@ -528,6 +534,7 @@ bool UPhysAnimComponent::StartBridge()
 	ConsecutiveInvalidPoseSearchFrames = 0;
 	LastValidPoseSearchResult = FPoseSearchBlueprintResult();
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Startup pending initial PoseSearch result before taking physics ownership."));
+	UpdateBridgeStatusIndicator(1.0f);
 	return true;
 }
 
@@ -565,6 +572,7 @@ void UPhysAnimComponent::StopBridge()
 	DeactivateRuntimePhysicsControl(TEXT("StopBridge"));
 	ResetBridgePhysicsState();
 	TransitionRuntimeState(EPhysAnimRuntimeState::Uninitialized);
+	UpdateBridgeStatusIndicator(5.0f);
 	SetComponentTickEnabled(false);
 	ConsecutiveInvalidPoseSearchFrames = 0;
 	LastValidPoseSearchResult = FPoseSearchBlueprintResult();
@@ -1836,11 +1844,27 @@ bool UPhysAnimComponent::CheckRuntimeInstability(
 	const FVector RootLocationCm = SkeletalMesh->GetBoneLocation(RootBoneName, EBoneSpaces::WorldSpace);
 	const FVector RootLinearVelocityCmPerSecond = SkeletalMesh->GetPhysicsLinearVelocity(RootBoneName);
 	const FVector RootAngularVelocityDegPerSecond = SkeletalMesh->GetPhysicsAngularVelocityInDegrees(RootBoneName);
+	const AActor* const OwnerActor = GetOwner();
+	const bool bPreserveGameplayShell = ShouldPreserveGameplayShellDuringBridgeActive(
+		IsMovementSmokeModeEnabled(),
+		PhysAnimComponentInternal::CVarPhysAnimAllowCharacterMovementInBridgeActive.GetValueOnGameThread() != 0);
+	const FVector OwnerLocationCm = OwnerActor ? OwnerActor->GetActorLocation() : FVector::ZeroVector;
+	const FVector OwnerLinearVelocityCmPerSecond = OwnerActor ? OwnerActor->GetVelocity() : FVector::ZeroVector;
+	FVector EffectiveRootLocationCm = RootLocationCm;
+	FVector EffectiveRootLinearVelocityCmPerSecond = RootLinearVelocityCmPerSecond;
+	ResolveRuntimeInstabilityRootFrame(
+		bPreserveGameplayShell,
+		RootLocationCm,
+		RootLinearVelocityCmPerSecond,
+		OwnerLocationCm,
+		OwnerLinearVelocityCmPerSecond,
+		EffectiveRootLocationCm,
+		EffectiveRootLinearVelocityCmPerSecond);
 
 	FString InstabilityError;
 	const bool bStable = EvaluateRuntimeInstability(
-		RootLocationCm,
-		RootLinearVelocityCmPerSecond,
+		EffectiveRootLocationCm,
+		EffectiveRootLinearVelocityCmPerSecond,
 		RootAngularVelocityDegPerSecond,
 		DeltaTime,
 		InstabilitySettings,
@@ -1851,9 +1875,18 @@ bool UPhysAnimComponent::CheckRuntimeInstability(
 	TArray<FPhysAnimBodyInstabilitySample> BodySamples;
 	if (GatherRuntimeInstabilityBodySamples(BodySamples))
 	{
+		if (bPreserveGameplayShell && OwnerActor)
+		{
+			for (FPhysAnimBodyInstabilitySample& Sample : BodySamples)
+			{
+				Sample.Location -= OwnerLocationCm;
+				Sample.LinearVelocity -= OwnerLinearVelocityCmPerSecond;
+			}
+		}
+
 		const FVector ReferenceRootLocationCm = RuntimeInstabilityState.bHasReferenceRootLocation
 			? RuntimeInstabilityState.ReferenceRootLocation
-			: RootLocationCm;
+			: EffectiveRootLocationCm;
 		PhysAnimBridge::EvaluatePerBodyInstabilitySamples(
 			BodySamples,
 			ReferenceRootLocationCm,
@@ -2565,6 +2598,70 @@ bool UPhysAnimComponent::ShouldPreserveGameplayShellDuringBridgeActive(
 	return bMovementSmokeModeEnabled || bAllowCharacterMovementInBridgeActive;
 }
 
+FString UPhysAnimComponent::BuildBridgeStatusIndicatorText(EPhysAnimRuntimeState State, bool bBridgeOwnsPhysics)
+{
+	const TCHAR* const StateName = GetRuntimeStateName(State);
+	return FString::Printf(
+		TEXT("PhysAnim Bridge: %s (%s)"),
+		StateName,
+		bBridgeOwnsPhysics ? TEXT("ACTIVE") : TEXT("INACTIVE"));
+}
+
+FColor UPhysAnimComponent::ResolveBridgeStatusIndicatorColor(EPhysAnimRuntimeState State, bool bBridgeOwnsPhysics)
+{
+	if (State == EPhysAnimRuntimeState::FailStopped)
+	{
+		return FColor::Red;
+	}
+
+	if (bBridgeOwnsPhysics)
+	{
+		return FColor::Green;
+	}
+
+	if (State == EPhysAnimRuntimeState::ReadyForActivation)
+	{
+		return FColor::Yellow;
+	}
+
+	return FColor(160, 160, 160);
+}
+
+void UPhysAnimComponent::UpdateBridgeStatusIndicator(float DisplayDurationSeconds) const
+{
+	if (!GEngine || PhysAnimComponentInternal::CVarPhysAnimShowBridgeStatusIndicator.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+
+	const uint64 MessageKey = static_cast<uint64>(reinterpret_cast<UPTRINT>(this));
+	const bool bBridgeOwnsPhysics = RuntimeStateOwnsBridgePhysics(RuntimeState);
+	const FString Message = BuildBridgeStatusIndicatorText(RuntimeState, bBridgeOwnsPhysics);
+	const FColor Color = ResolveBridgeStatusIndicatorColor(RuntimeState, bBridgeOwnsPhysics);
+	GEngine->AddOnScreenDebugMessage(MessageKey, DisplayDurationSeconds, Color, Message, false, FVector2D(1.25f, 1.25f));
+}
+
+void UPhysAnimComponent::ResolveRuntimeInstabilityRootFrame(
+	bool bPreserveGameplayShell,
+	const FVector& RootLocationCm,
+	const FVector& RootLinearVelocityCmPerSecond,
+	const FVector& OwnerLocationCm,
+	const FVector& OwnerLinearVelocityCmPerSecond,
+	FVector& OutEffectiveRootLocationCm,
+	FVector& OutEffectiveRootLinearVelocityCmPerSecond)
+{
+	OutEffectiveRootLocationCm = RootLocationCm;
+	OutEffectiveRootLinearVelocityCmPerSecond = RootLinearVelocityCmPerSecond;
+
+	if (!bPreserveGameplayShell)
+	{
+		return;
+	}
+
+	OutEffectiveRootLocationCm -= OwnerLocationCm;
+	OutEffectiveRootLinearVelocityCmPerSecond -= OwnerLinearVelocityCmPerSecond;
+}
+
 FVector UPhysAnimComponent::ResolveMovementSmokeLocalIntent(float ElapsedSeconds)
 {
 	if (ElapsedSeconds < 0.0f)
@@ -2730,6 +2827,7 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 		GetRuntimeStateName(RuntimeState),
 		GetRuntimeStateName(NewState));
 	RuntimeState = NewState;
+	UpdateBridgeStatusIndicator(60.0f);
 }
 
 UE::NNE::IModelInstanceRunSync* UPhysAnimComponent::GetModelInstanceRunSync() const

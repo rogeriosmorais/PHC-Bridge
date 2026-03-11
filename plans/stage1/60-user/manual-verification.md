@@ -367,6 +367,11 @@ Max Substeps = 8
        - only after that final-group control settle does policy influence ramp above zero
        - when live policy influence begins, the bridge now switches into skeletal-animation target mode automatically and clears stale explicit control offsets before writing policy offsets
      - current runtime default also keeps capsule collision and `CharacterMovement` active in `BridgeActive`, so normal `WASD` input remains available unless you explicitly disable it with `physanim.AllowCharacterMovementInBridgeActive 0`
+     - the runtime also shows an always-visible on-screen bridge status indicator:
+       - `PhysAnim Bridge: BridgeActive (ACTIVE)` while the bridge owns physics
+       - `PhysAnim Bridge: ReadyForActivation (INACTIVE)` or similar while it does not
+       - disable it with `physanim.ShowBridgeStatusIndicator 0` if needed
+     - when `BridgeActive` preserves normal gameplay movement, runtime fail-stop checks now evaluate the root relative to the moving gameplay shell instead of the original world-space activation point, so normal walking/strafe/backward travel does not trip a false instability stop by itself
   3. if the runtime is still dominated by flight / spinning, lower control aggression next:
      - `physanim.AngularStrengthMultiplier 0.35`
      - `physanim.AngularDampingRatioMultiplier 1.50`
