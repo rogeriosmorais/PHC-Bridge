@@ -6,6 +6,7 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimationAsset.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/AssetManager.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
@@ -336,6 +337,7 @@ bool UPhysAnimComponent::StartBridge()
 	bBridgeActive = true;
 	bStartupReported = true;
 	SetComponentTickEnabled(true);
+	ActivateBridgePhysicsState();
 	ResetStabilizationRuntimeState();
 	BridgeStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 
@@ -396,6 +398,7 @@ void UPhysAnimComponent::StopBridge()
 		PhysicsControl->SetCachedBoneVelocitiesToZero();
 	}
 
+	ResetBridgePhysicsState();
 	bBridgeActive = false;
 	SetComponentTickEnabled(false);
 	ConsecutiveInvalidPoseSearchFrames = 0;
@@ -908,6 +911,49 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 	return EffectiveSettings;
 }
 
+void UPhysAnimComponent::ActivateBridgePhysicsState()
+{
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		return;
+	}
+
+	if (!bHasSavedMeshCollisionState)
+	{
+		OriginalMeshCollisionProfileName = SkeletalMesh->GetCollisionProfileName();
+		OriginalMeshCollisionEnabled = SkeletalMesh->GetCollisionEnabled();
+		OriginalMeshPawnResponse = SkeletalMesh->GetCollisionResponseToChannel(ECC_Pawn);
+		bHasSavedMeshCollisionState = true;
+	}
+
+	SkeletalMesh->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
+	SkeletalMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	SkeletalMesh->RecreatePhysicsState();
+	SkeletalMesh->SetEnablePhysicsBlending(true);
+	SkeletalMesh->WakeAllRigidBodies();
+}
+
+void UPhysAnimComponent::ResetBridgePhysicsState()
+{
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		bHasSavedMeshCollisionState = false;
+		return;
+	}
+
+	SkeletalMesh->SetEnablePhysicsBlending(false);
+	if (bHasSavedMeshCollisionState)
+	{
+		SkeletalMesh->SetCollisionProfileName(OriginalMeshCollisionProfileName);
+		SkeletalMesh->SetCollisionEnabled(OriginalMeshCollisionEnabled);
+		SkeletalMesh->SetCollisionResponseToChannel(ECC_Pawn, OriginalMeshPawnResponse);
+		bHasSavedMeshCollisionState = false;
+	}
+}
+
 void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
@@ -1017,6 +1063,12 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 	}
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	if (EffectiveSettings.bForceZeroActions)
+	{
+		PreviousControlTargetRotations.Reset();
+		return;
+	}
+
 	const float MaxAngularStepDegrees = FMath::Max(0.0f, EffectiveSettings.MaxAngularStepDegreesPerSecond) * DeltaTime;
 
 	for (const TPair<FName, FQuat>& Pair : ControlRotations)
@@ -1108,6 +1160,7 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 		PhysicsControl->SetCachedBoneVelocitiesToZero();
 	}
 
+	ResetBridgePhysicsState();
 	bBridgeActive = false;
 	SetComponentTickEnabled(false);
 	ResetStabilizationRuntimeState();

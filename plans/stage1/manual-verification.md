@@ -321,7 +321,8 @@ Max Substeps = 8
   - this checkpoint now uses the bridge's built-in instability monitor as primary evidence for obvious launch / spin failures, not only subjective viewing
 - `Recommended stabilization order before declaring the runtime hopeless`:
   1. first prove the bridge can stay calm with zero actions:
-     - `physanim.ForceZeroActions 1`
+     - the current default startup path already boots with `physanim.ForceZeroActions = 1`
+     - zero-action mode now suppresses explicit control-target writes, so this step is a real "policy disabled" check instead of "apply zero rotations"
   2. then re-enable actions conservatively:
      - `physanim.ForceZeroActions 0`
      - `physanim.ActionScale 0.10`

@@ -489,6 +489,17 @@ Recommended first-pass commands:
 physanim.ForceZeroActions 1
 ```
 
+That is now also the default component startup behavior, so the bridge should boot in zero-action mode unless you explicitly override it.
+
+In the current bridge, zero-action mode also suppresses explicit control-target writes. That means the startup path no longer interprets "zero actions" as "write identity rotations to every control."
+
+The production bridge now also applies the same mesh collision safety used by the earlier UE harnesses:
+
+- mesh collision profile switches to `PhysicsActor`
+- mesh collision response to `Pawn` switches to `Ignore`
+
+So if the character still launches or spins in zero-action mode after rebuilding, the remaining cause is deeper than raw policy output or capsule/mesh pawn-channel collision.
+
 If zero-action mode is calm, re-enable the policy conservatively:
 
 ```text

@@ -21,7 +21,7 @@ struct FPhysAnimStabilizationSettings
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
-	bool bForceZeroActions = false;
+	bool bForceZeroActions = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float ActionScale = 0.1f;
@@ -132,6 +132,8 @@ private:
 	bool SampleFuturePoses(const FPoseSearchBlueprintResult& SearchResult, TArray<FPhysAnimFuturePoseSample>& OutFutureSamples, FString& OutError) const;
 	bool RunInference(FString& OutError);
 	FPhysAnimStabilizationSettings ResolveEffectiveStabilizationSettings() const;
+	void ActivateBridgePhysicsState();
+	void ResetBridgePhysicsState();
 	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	bool ConditionModelActions(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
 	bool CheckRuntimeInstability(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
@@ -181,6 +183,10 @@ private:
 	TMap<FName, FQuat> PreviousControlTargetRotations;
 	double BridgeStartTimeSeconds = 0.0;
 	double LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
+	FName OriginalMeshCollisionProfileName = NAME_None;
+	ECollisionEnabled::Type OriginalMeshCollisionEnabled = ECollisionEnabled::NoCollision;
+	TEnumAsByte<ECollisionResponse> OriginalMeshPawnResponse = ECollisionResponse::ECR_Block;
+	bool bHasSavedMeshCollisionState = false;
 
 public:
 	static bool BuildConditionedActions(
