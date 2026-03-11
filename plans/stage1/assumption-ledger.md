@@ -85,6 +85,7 @@ Only the orchestrator updates status.
   - the selected pretrained `motion_tracker/smpl` checkpoint now exports successfully to `F:\NewEngine\Training\output\phc_policy.onnx` through `Training\scripts\export_onnx.py`, with accepted opset `17` and offline `onnxruntime 1.24.3` parity max abs diff `1.64e-7`
   - user evidence on March 10, 2026 now confirms a real UE startup-success line through `NNERuntimeORTDml`, so `A-06` now moves from `yellow` to `green`
   - the next Phase 1 blocker is not model loading but post-startup instability, so remaining Phase 1 risk now sits in stabilization/tuning and later G2 quality judgment rather than in NNE viability
+  - the current Phase 1 runtime now includes an automated instability monitor and objective fail-stop thresholds for obvious launch / spin failures, reducing ambiguity in later stabilization evidence even though `A-08` remains unresolved
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

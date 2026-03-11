@@ -53,6 +53,21 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.1"))
 	float ActionDiagnosticsIntervalSeconds = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
+	bool bEnableInstabilityFailStop = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
+	float MaxRootHeightDeltaCm = 120.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
+	float MaxRootLinearSpeedCmPerSecond = 1200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
+	float MaxRootAngularSpeedDegPerSecond = 720.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
+	float InstabilityGracePeriodSeconds = 0.25f;
+
 	bool operator==(const FPhysAnimStabilizationSettings& Other) const
 	{
 		return bForceZeroActions == Other.bForceZeroActions &&
@@ -65,7 +80,12 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(AngularDampingRatioMultiplier, Other.AngularDampingRatioMultiplier) &&
 			FMath::IsNearlyEqual(AngularExtraDampingMultiplier, Other.AngularExtraDampingMultiplier) &&
 			bLogActionDiagnostics == Other.bLogActionDiagnostics &&
-			FMath::IsNearlyEqual(ActionDiagnosticsIntervalSeconds, Other.ActionDiagnosticsIntervalSeconds);
+			FMath::IsNearlyEqual(ActionDiagnosticsIntervalSeconds, Other.ActionDiagnosticsIntervalSeconds) &&
+			bEnableInstabilityFailStop == Other.bEnableInstabilityFailStop &&
+			FMath::IsNearlyEqual(MaxRootHeightDeltaCm, Other.MaxRootHeightDeltaCm) &&
+			FMath::IsNearlyEqual(MaxRootLinearSpeedCmPerSecond, Other.MaxRootLinearSpeedCmPerSecond) &&
+			FMath::IsNearlyEqual(MaxRootAngularSpeedDegPerSecond, Other.MaxRootAngularSpeedDegPerSecond) &&
+			FMath::IsNearlyEqual(InstabilityGracePeriodSeconds, Other.InstabilityGracePeriodSeconds);
 	}
 
 	bool operator!=(const FPhysAnimStabilizationSettings& Other) const
@@ -114,8 +134,9 @@ private:
 	FPhysAnimStabilizationSettings ResolveEffectiveStabilizationSettings() const;
 	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	bool ConditionModelActions(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
+	bool CheckRuntimeInstability(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
 	void ApplyControlTargets(float DeltaTime, FString& OutError);
-	void MaybeLogActionDiagnostics(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
+	void MaybeLogRuntimeDiagnostics(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	void ResetStabilizationRuntimeState();
 	void FailStop(const FString& Reason);
 
@@ -155,9 +176,11 @@ private:
 	FString ActiveRuntimeName;
 	FPhysAnimStabilizationSettings LastAppliedStabilizationSettings;
 	FPhysAnimActionDiagnostics LastActionDiagnostics;
+	FPhysAnimRuntimeInstabilityState RuntimeInstabilityState;
+	FPhysAnimRuntimeInstabilityDiagnostics LastRuntimeInstabilityDiagnostics;
 	TMap<FName, FQuat> PreviousControlTargetRotations;
 	double BridgeStartTimeSeconds = 0.0;
-	double LastActionDiagnosticsLogTimeSeconds = -1.0;
+	double LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
 
 public:
 	static bool BuildConditionedActions(
@@ -172,4 +195,14 @@ public:
 		const FQuat& PreviousRotation,
 		const FQuat& TargetRotation,
 		float MaxAngularStepDegrees);
+
+	static bool EvaluateRuntimeInstability(
+		const FVector& RootLocationCm,
+		const FVector& RootLinearVelocityCmPerSecond,
+		const FVector& RootAngularVelocityDegPerSecond,
+		float DeltaTimeSeconds,
+		const FPhysAnimRuntimeInstabilitySettings& Settings,
+		FPhysAnimRuntimeInstabilityState& InOutState,
+		FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics,
+		FString& OutError);
 };

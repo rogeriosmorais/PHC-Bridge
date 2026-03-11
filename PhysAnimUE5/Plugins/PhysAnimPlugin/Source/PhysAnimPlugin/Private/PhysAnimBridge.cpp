@@ -102,6 +102,11 @@ namespace PhysAnimBridge
 			return Bones;
 		}
 
+		FName MakeRootBone()
+		{
+			return TEXT("pelvis");
+		}
+
 		FQuat MakeAxisAngleQuaternion(const FVector& Axis, double AngleRadians)
 		{
 			if (FMath::IsNearlyZero(AngleRadians))
@@ -161,6 +166,11 @@ namespace PhysAnimBridge
 	const TArray<FName>& GetSmplObservationBoneNames()
 	{
 		return MakeSmplObservationBones();
+	}
+
+	FName GetRootBoneName()
+	{
+		return MakeRootBone();
 	}
 
 	FName MakeControlName(const FName BoneName)
@@ -617,5 +627,95 @@ namespace PhysAnimBridge
 
 		const double SlerpAlpha = MaxAngularStepRadians / AngularDistance;
 		return FQuat::Slerp(PreviousRotation, TargetRotation, SlerpAlpha).GetNormalized();
+	}
+
+	bool UpdateRuntimeInstabilityState(
+		const FVector& RootLocationCm,
+		const FVector& RootLinearVelocityCmPerSecond,
+		const FVector& RootAngularVelocityDegPerSecond,
+		float DeltaTimeSeconds,
+		const FPhysAnimRuntimeInstabilitySettings& Settings,
+		FPhysAnimRuntimeInstabilityState& InOutState,
+		FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics,
+		FString& OutError)
+	{
+		OutDiagnostics = {};
+		OutError.Reset();
+
+		if (!Settings.bEnableAutomaticFailStop)
+		{
+			if (!InOutState.bHasReferenceRootLocation)
+			{
+				InOutState.bHasReferenceRootLocation = true;
+				InOutState.ReferenceRootLocation = RootLocationCm;
+			}
+
+			return true;
+		}
+
+		if (!InOutState.bHasReferenceRootLocation)
+		{
+			InOutState.bHasReferenceRootLocation = true;
+			InOutState.ReferenceRootLocation = RootLocationCm;
+		}
+
+		OutDiagnostics.RootHeightDeltaCm = FMath::Abs(RootLocationCm.Z - InOutState.ReferenceRootLocation.Z);
+		OutDiagnostics.RootLinearSpeedCmPerSecond = RootLinearVelocityCmPerSecond.Size();
+		OutDiagnostics.RootAngularSpeedDegPerSecond = RootAngularVelocityDegPerSecond.Size();
+
+		OutDiagnostics.bHeightExceeded =
+			OutDiagnostics.RootHeightDeltaCm > FMath::Max(Settings.MaxRootHeightDeltaCm, 0.0f);
+		OutDiagnostics.bLinearSpeedExceeded =
+			OutDiagnostics.RootLinearSpeedCmPerSecond > FMath::Max(Settings.MaxRootLinearSpeedCmPerSecond, 0.0f);
+		OutDiagnostics.bAngularSpeedExceeded =
+			OutDiagnostics.RootAngularSpeedDegPerSecond > FMath::Max(Settings.MaxRootAngularSpeedDegPerSecond, 0.0f);
+
+		const bool bAnyLimitExceeded =
+			OutDiagnostics.bHeightExceeded ||
+			OutDiagnostics.bLinearSpeedExceeded ||
+			OutDiagnostics.bAngularSpeedExceeded;
+		if (bAnyLimitExceeded)
+		{
+			InOutState.UnstableAccumulatedSeconds += FMath::Max(DeltaTimeSeconds, 0.0f);
+		}
+		else
+		{
+			InOutState.UnstableAccumulatedSeconds = 0.0f;
+		}
+
+		OutDiagnostics.UnstableAccumulatedSeconds = InOutState.UnstableAccumulatedSeconds;
+		if (InOutState.UnstableAccumulatedSeconds < FMath::Max(Settings.UnstableGracePeriodSeconds, 0.0f))
+		{
+			return true;
+		}
+
+		TArray<FString> ExceededReasons;
+		if (OutDiagnostics.bHeightExceeded)
+		{
+			ExceededReasons.Add(FString::Printf(
+				TEXT("rootHeightDeltaCm=%.1f>%.1f"),
+				OutDiagnostics.RootHeightDeltaCm,
+				Settings.MaxRootHeightDeltaCm));
+		}
+		if (OutDiagnostics.bLinearSpeedExceeded)
+		{
+			ExceededReasons.Add(FString::Printf(
+				TEXT("rootLinearSpeedCmPerSec=%.1f>%.1f"),
+				OutDiagnostics.RootLinearSpeedCmPerSecond,
+				Settings.MaxRootLinearSpeedCmPerSecond));
+		}
+		if (OutDiagnostics.bAngularSpeedExceeded)
+		{
+			ExceededReasons.Add(FString::Printf(
+				TEXT("rootAngularSpeedDegPerSec=%.1f>%.1f"),
+				OutDiagnostics.RootAngularSpeedDegPerSecond,
+				Settings.MaxRootAngularSpeedDegPerSecond));
+		}
+
+		OutError = FString::Printf(
+			TEXT("Runtime instability detected after %.2fs (%s)."),
+			InOutState.UnstableAccumulatedSeconds,
+			*FString::Join(ExceededReasons, TEXT(", ")));
+		return false;
 	}
 }

@@ -15,7 +15,7 @@ Use it to track:
 ## Current State
 
 - `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` in progress
-- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Gate G1 is explicitly `pass`; the selected Phase 1 runtime model is the pretrained `motion_tracker/smpl` checkpoint; the full UE startup path now succeeds through `NNERuntimeORTDml`; the active blocker is no longer import/startup discovery but uncontrolled post-startup runtime instability (`flying` / `spinning uncontrollably`)
+- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Gate G1 is explicitly `pass`; the selected Phase 1 runtime model is the pretrained `motion_tracker/smpl` checkpoint; the full UE startup path now succeeds through `NNERuntimeORTDml`; the active blocker is no longer import/startup discovery but uncontrolled post-startup runtime instability (`flying` / `spinning uncontrollably`); the bridge now also has an automated instability monitor and objective fail-stop thresholds for that failure mode
 - `Last planning milestone`: orchestrator accepted the `S1-P1-A1` handoff and reclassified the next task as stabilization/tuning before G2 packaging on March 10, 2026
 
 ## Active Tasks
@@ -97,6 +97,7 @@ Use it to track:
   - model loading is proven
   - the current failure mode is uncontrolled post-startup flight / spinning
   - the next required planning artifact is a stabilization/tuning package, not a G2 comparison handoff
+  - the current implementation now includes objective instability monitoring on the root body, so the next stabilization loop can use fail-stop metrics and runtime diagnostics instead of relying only on visual judgment
 
 ## Accepted Handoffs
 

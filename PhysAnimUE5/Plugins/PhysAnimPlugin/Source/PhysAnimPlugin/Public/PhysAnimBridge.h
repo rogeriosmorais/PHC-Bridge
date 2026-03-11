@@ -46,6 +46,33 @@ struct FPhysAnimActionDiagnostics
 	int32 NumClampedActionFloats = 0;
 };
 
+struct FPhysAnimRuntimeInstabilitySettings
+{
+	bool bEnableAutomaticFailStop = true;
+	float MaxRootHeightDeltaCm = 120.0f;
+	float MaxRootLinearSpeedCmPerSecond = 1200.0f;
+	float MaxRootAngularSpeedDegPerSecond = 720.0f;
+	float UnstableGracePeriodSeconds = 0.25f;
+};
+
+struct FPhysAnimRuntimeInstabilityState
+{
+	bool bHasReferenceRootLocation = false;
+	FVector ReferenceRootLocation = FVector::ZeroVector;
+	float UnstableAccumulatedSeconds = 0.0f;
+};
+
+struct FPhysAnimRuntimeInstabilityDiagnostics
+{
+	float RootHeightDeltaCm = 0.0f;
+	float RootLinearSpeedCmPerSecond = 0.0f;
+	float RootAngularSpeedDegPerSecond = 0.0f;
+	bool bHeightExceeded = false;
+	bool bLinearSpeedExceeded = false;
+	bool bAngularSpeedExceeded = false;
+	float UnstableAccumulatedSeconds = 0.0f;
+};
+
 namespace PhysAnimBridge
 {
 	PHYSANIMPLUGIN_API inline constexpr int32 NumSmplBodies = 24;
@@ -62,6 +89,7 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API const TArray<FName>& GetControlledBoneNames();
 	PHYSANIMPLUGIN_API const TArray<FName>& GetRequiredBodyModifierBoneNames();
 	PHYSANIMPLUGIN_API const TArray<FName>& GetSmplObservationBoneNames();
+	PHYSANIMPLUGIN_API FName GetRootBoneName();
 
 	PHYSANIMPLUGIN_API FName MakeControlName(FName BoneName);
 	PHYSANIMPLUGIN_API FName MakeBodyModifierName(FName BoneName);
@@ -113,4 +141,14 @@ namespace PhysAnimBridge
 		const FQuat& PreviousRotation,
 		const FQuat& TargetRotation,
 		float MaxAngularStepDegrees);
+
+	PHYSANIMPLUGIN_API bool UpdateRuntimeInstabilityState(
+		const FVector& RootLocationCm,
+		const FVector& RootLinearVelocityCmPerSecond,
+		const FVector& RootAngularVelocityDegPerSecond,
+		float DeltaTimeSeconds,
+		const FPhysAnimRuntimeInstabilitySettings& Settings,
+		FPhysAnimRuntimeInstabilityState& InOutState,
+		FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics,
+		FString& OutError);
 }

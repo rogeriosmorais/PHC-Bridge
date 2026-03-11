@@ -70,6 +70,11 @@ Turn the first end-to-end UE runtime success into a stabilization-ready one-char
      - `physanim.AngularStrengthMultiplier`
      - `physanim.AngularDampingRatioMultiplier`
      - `physanim.AngularExtraDampingMultiplier`
+     - `physanim.EnableInstabilityFailStop`
+     - `physanim.MaxRootHeightDeltaCm`
+     - `physanim.MaxRootLinearSpeedCmPerSec`
+     - `physanim.MaxRootAngularSpeedDegPerSec`
+     - `physanim.InstabilityGracePeriodSeconds`
 6. Re-run `MV-P1-01` after each meaningful stabilization pass and record whether the result moved from `fail` toward `pass`.
 7. Do not ask the user to run `G2` until `MV-P1-01` is explicitly recorded as `pass`.
 
@@ -78,6 +83,7 @@ Turn the first end-to-end UE runtime success into a stabilization-ready one-char
 - the current Phase 1 blocker is documented precisely
 - the stabilization checkpoint can support `pass`, `fail`, or `blocked`
 - the tuning order is frozen tightly enough to avoid ad hoc runtime debugging
+- the bridge exposes objective instability evidence instead of relying only on visual judgment
 - G2 remains blocked until the stabilization checkpoint passes
 
 ## Escalate To User When

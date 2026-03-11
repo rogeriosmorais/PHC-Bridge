@@ -318,6 +318,7 @@ Max Substeps = 8
   - this checkpoint starts after the full bridge is already alive
   - this checkpoint is not about asset paths, ONNX export, or whether NNE exists
   - this checkpoint is the first Phase 1 post-startup stability gate before G2 packaging
+  - this checkpoint now uses the bridge's built-in instability monitor as primary evidence for obvious launch / spin failures, not only subjective viewing
 - `Recommended stabilization order before declaring the runtime hopeless`:
   1. first prove the bridge can stay calm with zero actions:
      - `physanim.ForceZeroActions 1`
@@ -332,6 +333,19 @@ Max Substeps = 8
      - `physanim.AngularDampingRatioMultiplier 1.50`
      - `physanim.AngularExtraDampingMultiplier 2.0`
   4. only after those steps fail should you investigate deeper mapping / frame faults
+- `Frozen automated instability monitor for this checkpoint`:
+  - the bridge now tracks the root body (`pelvis`) every tick
+  - the bridge auto-fail-stops if any of these conditions persist longer than the grace window:
+    - `root height delta > 120 cm`
+    - `root linear speed > 1200 cm/s`
+    - `root angular speed > 720 deg/s`
+    - `grace window = 0.25 s`
+  - the runtime log now emits periodic diagnostics for:
+    - conditioned action magnitude
+    - root height delta
+    - root linear speed
+    - root angular speed
+    - accumulated unstable time
 - `Frozen test inputs`:
   1. exact UE map path:
      - `/Game/ThirdPerson/Lvl_ThirdPerson`
@@ -373,6 +387,11 @@ Max Substeps = 8
   - `physanim.AngularStrengthMultiplier`
   - `physanim.AngularDampingRatioMultiplier`
   - `physanim.AngularExtraDampingMultiplier`
+  - `physanim.EnableInstabilityFailStop`
+  - `physanim.MaxRootHeightDeltaCm`
+  - `physanim.MaxRootLinearSpeedCmPerSec`
+  - `physanim.MaxRootAngularSpeedDegPerSec`
+  - `physanim.InstabilityGracePeriodSeconds`
 - `What good looks like`:
   - the startup-success line appears
   - the character does not immediately launch, spin uncontrollably, or collapse into unreadable motion
@@ -383,6 +402,7 @@ Max Substeps = 8
   - startup succeeds, but the character spins or tumbles continuously
   - the first seconds are dominated by instability rather than recognizable motion
   - the result is too chaotic to use as a fair G2 candidate
+  - the bridge triggers a fail-stop with `Runtime instability detected ...`
 - `When to mark blocked instead of fail`:
   - the startup-success line never appears because the bridge is blocked earlier
   - the wrong pawn or map was used
@@ -391,6 +411,8 @@ Max Substeps = 8
   - exact map path used: `/Game/ThirdPerson/Lvl_ThirdPerson`
   - exact character used: `BP_PhysAnimCharacter`
   - the first `[PhysAnim]` startup success or failure line
+  - the first `[PhysAnim] Runtime diagnostics ...` line if one appears
+  - the first `[PhysAnim] Fail-stop: Runtime instability detected ...` line if one appears
   - one short clip or screenshot
   - one sentence saying:
     - whether startup succeeded

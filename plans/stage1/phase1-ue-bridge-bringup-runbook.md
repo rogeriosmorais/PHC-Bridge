@@ -460,6 +460,28 @@ Use these console variables for the first stabilization pass before changing ass
 - `physanim.AngularStrengthMultiplier`
 - `physanim.AngularDampingRatioMultiplier`
 - `physanim.AngularExtraDampingMultiplier`
+- `physanim.EnableInstabilityFailStop`
+- `physanim.MaxRootHeightDeltaCm`
+- `physanim.MaxRootLinearSpeedCmPerSec`
+- `physanim.MaxRootAngularSpeedDegPerSec`
+- `physanim.InstabilityGracePeriodSeconds`
+
+The bridge now also includes an automated instability monitor on the root body (`pelvis`).
+
+Default fail-stop thresholds:
+
+- `root height delta > 120 cm`
+- `root linear speed > 1200 cm/s`
+- `root angular speed > 720 deg/s`
+- `grace window = 0.25 s`
+
+If one or more thresholds stay exceeded longer than that grace window, the bridge now triggers:
+
+```text
+[PhysAnim] Fail-stop: Runtime instability detected ...
+```
+
+That means the startup path is still valid, but the current tuning is not stable enough yet.
 
 Recommended first-pass commands:
 
@@ -504,6 +526,7 @@ Use this to classify the first failure reason from the log.
 | `Could not create an NNE model instance` | ORT runtime/plugin/model compatibility is broken |
 | `PoseSearch query was invalid for two consecutive ticks` | the direct `MotionMatch(...)` query did not produce a valid result from the current pose history + database |
 | `UPoseSearchLibrary::MotionMatch returned no selected animation` | PoseSearch ran but did not select any clip from `PSDB_Stage1_Locomotion` |
+| `Fail-stop: Runtime instability detected` | the bridge is alive, but the automated instability monitor observed sustained launch / spin metrics; stay in Phase 1 tuning and use the runtime diagnostics plus stabilization CVars |
 | `Startup success` followed by immediate flight/spin/tumble | the bridge and NNE path are alive; move to the Phase 1 stabilization/tuning task instead of revisiting bring-up assets |
 
 ## What To Send Back After The Full Pass

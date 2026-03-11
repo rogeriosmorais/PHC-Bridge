@@ -76,6 +76,26 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.LogActionDiagnostics"),
 		-1,
 		TEXT("Override for PhysAnim action diagnostics logging. -1 keeps the component default, 0 disables, 1 enables."));
+	TAutoConsoleVariable<float> CVarPhysAnimMaxRootHeightDeltaCm(
+		TEXT("physanim.MaxRootHeightDeltaCm"),
+		-1.0f,
+		TEXT("Override for PhysAnim runtime root height delta fail-stop threshold in cm. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimMaxRootLinearSpeedCmPerSec(
+		TEXT("physanim.MaxRootLinearSpeedCmPerSec"),
+		-1.0f,
+		TEXT("Override for PhysAnim runtime root linear speed fail-stop threshold in cm/s. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimMaxRootAngularSpeedDegPerSec(
+		TEXT("physanim.MaxRootAngularSpeedDegPerSec"),
+		-1.0f,
+		TEXT("Override for PhysAnim runtime root angular speed fail-stop threshold in deg/s. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimInstabilityGracePeriodSeconds(
+		TEXT("physanim.InstabilityGracePeriodSeconds"),
+		-1.0f,
+		TEXT("Override for PhysAnim runtime instability grace period in seconds. Negative values keep the component default."));
+	TAutoConsoleVariable<int32> CVarPhysAnimEnableInstabilityFailStop(
+		TEXT("physanim.EnableInstabilityFailStop"),
+		-1,
+		TEXT("Override for PhysAnim runtime instability fail-stop. -1 keeps the component default, 0 disables, 1 enables."));
 
 	float ResolveFloatOverride(const TAutoConsoleVariable<float>& CVar, float DefaultValue)
 	{
@@ -97,7 +117,7 @@ namespace PhysAnimComponentInternal
 	FString BuildStabilizationSummary(const FPhysAnimStabilizationSettings& Settings)
 	{
 		return FString::Printf(
-			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f"),
+			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
 			Settings.bForceZeroActions ? TEXT("true") : TEXT("false"),
 			Settings.ActionScale,
 			Settings.ActionClampAbs,
@@ -106,7 +126,12 @@ namespace PhysAnimComponentInternal
 			Settings.MaxAngularStepDegreesPerSecond,
 			Settings.AngularStrengthMultiplier,
 			Settings.AngularDampingRatioMultiplier,
-			Settings.AngularExtraDampingMultiplier);
+			Settings.AngularExtraDampingMultiplier,
+			Settings.bEnableInstabilityFailStop ? TEXT("true") : TEXT("false"),
+			Settings.MaxRootHeightDeltaCm,
+			Settings.MaxRootLinearSpeedCmPerSecond,
+			Settings.MaxRootAngularSpeedDegPerSecond,
+			Settings.InstabilityGracePeriodSeconds);
 	}
 
 	FString JoinNames(const TArray<FName>& Names)
@@ -153,6 +178,27 @@ FQuat UPhysAnimComponent::LimitTargetRotationStep(
 	float MaxAngularStepDegrees)
 {
 	return PhysAnimBridge::LimitControlRotationStep(PreviousRotation, TargetRotation, MaxAngularStepDegrees);
+}
+
+bool UPhysAnimComponent::EvaluateRuntimeInstability(
+	const FVector& RootLocationCm,
+	const FVector& RootLinearVelocityCmPerSecond,
+	const FVector& RootAngularVelocityDegPerSecond,
+	float DeltaTimeSeconds,
+	const FPhysAnimRuntimeInstabilitySettings& Settings,
+	FPhysAnimRuntimeInstabilityState& InOutState,
+	FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics,
+	FString& OutError)
+{
+	return PhysAnimBridge::UpdateRuntimeInstabilityState(
+		RootLocationCm,
+		RootLinearVelocityCmPerSecond,
+		RootAngularVelocityDegPerSecond,
+		DeltaTimeSeconds,
+		Settings,
+		InOutState,
+		OutDiagnostics,
+		OutError);
 }
 
 void UPhysAnimComponent::BeginPlay()
@@ -215,6 +261,13 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		return;
 	}
 
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	if (!CheckRuntimeInstability(DeltaTime, EffectiveSettings, TickError))
+	{
+		FailStop(TickError);
+		return;
+	}
+
 	TArray<FPhysAnimFuturePoseSample> FuturePoseSamples;
 	if (!SampleFuturePoses(SearchResult, FuturePoseSamples, TickError))
 	{
@@ -242,7 +295,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		return;
 	}
 
-	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	ApplyRuntimeControlTuning(EffectiveSettings);
 	if (!ConditionModelActions(EffectiveSettings, TickError))
 	{
@@ -258,7 +310,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	}
 
 	PhysicsControl->UpdateControls(DeltaTime);
-	MaybeLogActionDiagnostics(EffectiveSettings);
+	MaybeLogRuntimeDiagnostics(EffectiveSettings);
 }
 
 bool UPhysAnimComponent::StartBridge()
@@ -833,6 +885,26 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveBoolOverride(
 			PhysAnimComponentInternal::CVarPhysAnimLogActionDiagnostics,
 			EffectiveSettings.bLogActionDiagnostics);
+	EffectiveSettings.MaxRootHeightDeltaCm =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimMaxRootHeightDeltaCm,
+			EffectiveSettings.MaxRootHeightDeltaCm);
+	EffectiveSettings.MaxRootLinearSpeedCmPerSecond =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimMaxRootLinearSpeedCmPerSec,
+			EffectiveSettings.MaxRootLinearSpeedCmPerSecond);
+	EffectiveSettings.MaxRootAngularSpeedDegPerSecond =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimMaxRootAngularSpeedDegPerSec,
+			EffectiveSettings.MaxRootAngularSpeedDegPerSecond);
+	EffectiveSettings.InstabilityGracePeriodSeconds =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimInstabilityGracePeriodSeconds,
+			EffectiveSettings.InstabilityGracePeriodSeconds);
+	EffectiveSettings.bEnableInstabilityFailStop =
+		PhysAnimComponentInternal::ResolveBoolOverride(
+			PhysAnimComponentInternal::CVarPhysAnimEnableInstabilityFailStop,
+			EffectiveSettings.bEnableInstabilityFailStop);
 	return EffectiveSettings;
 }
 
@@ -887,6 +959,48 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 	return bSuccess;
 }
 
+bool UPhysAnimComponent::CheckRuntimeInstability(
+	float DeltaTime,
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	FString& OutError)
+{
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		OutError = TEXT("Skeletal mesh component was not resolved.");
+		return false;
+	}
+
+	FPhysAnimRuntimeInstabilitySettings InstabilitySettings;
+	InstabilitySettings.bEnableAutomaticFailStop = EffectiveSettings.bEnableInstabilityFailStop;
+	InstabilitySettings.MaxRootHeightDeltaCm = EffectiveSettings.MaxRootHeightDeltaCm;
+	InstabilitySettings.MaxRootLinearSpeedCmPerSecond = EffectiveSettings.MaxRootLinearSpeedCmPerSecond;
+	InstabilitySettings.MaxRootAngularSpeedDegPerSecond = EffectiveSettings.MaxRootAngularSpeedDegPerSecond;
+	InstabilitySettings.UnstableGracePeriodSeconds = EffectiveSettings.InstabilityGracePeriodSeconds;
+
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	const FVector RootLocationCm = SkeletalMesh->GetBoneLocation(RootBoneName, EBoneSpaces::WorldSpace);
+	const FVector RootLinearVelocityCmPerSecond = SkeletalMesh->GetPhysicsLinearVelocity(RootBoneName);
+	const FVector RootAngularVelocityDegPerSecond = SkeletalMesh->GetPhysicsAngularVelocityInDegrees(RootBoneName);
+
+	FString InstabilityError;
+	const bool bStable = EvaluateRuntimeInstability(
+		RootLocationCm,
+		RootLinearVelocityCmPerSecond,
+		RootAngularVelocityDegPerSecond,
+		DeltaTime,
+		InstabilitySettings,
+		RuntimeInstabilityState,
+		LastRuntimeInstabilityDiagnostics,
+		InstabilityError);
+	if (!bStable)
+	{
+		OutError = InstabilityError;
+	}
+
+	return bStable;
+}
+
 void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
@@ -931,7 +1045,7 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 	}
 }
 
-void UPhysAnimComponent::MaybeLogActionDiagnostics(const FPhysAnimStabilizationSettings& EffectiveSettings) const
+void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
 	if (!EffectiveSettings.bLogActionDiagnostics)
 	{
@@ -945,22 +1059,26 @@ void UPhysAnimComponent::MaybeLogActionDiagnostics(const FPhysAnimStabilizationS
 	}
 
 	const double CurrentTimeSeconds = World->GetTimeSeconds();
-	if (LastActionDiagnosticsLogTimeSeconds >= 0.0 &&
-		(CurrentTimeSeconds - LastActionDiagnosticsLogTimeSeconds) < EffectiveSettings.ActionDiagnosticsIntervalSeconds)
+	if (LastRuntimeDiagnosticsLogTimeSeconds >= 0.0 &&
+		(CurrentTimeSeconds - LastRuntimeDiagnosticsLogTimeSeconds) < EffectiveSettings.ActionDiagnosticsIntervalSeconds)
 	{
 		return;
 	}
 
-	const_cast<UPhysAnimComponent*>(this)->LastActionDiagnosticsLogTimeSeconds = CurrentTimeSeconds;
+	const_cast<UPhysAnimComponent*>(this)->LastRuntimeDiagnosticsLogTimeSeconds = CurrentTimeSeconds;
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
-		TEXT("[PhysAnim] Action diagnostics: raw[min=%.3f max=%.3f meanAbs=%.3f] conditioned[meanAbs=%.3f clamped=%d]"),
+		TEXT("[PhysAnim] Runtime diagnostics: action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f]"),
 		LastActionDiagnostics.RawMin,
 		LastActionDiagnostics.RawMax,
 		LastActionDiagnostics.RawMeanAbs,
 		LastActionDiagnostics.ConditionedMeanAbs,
-		LastActionDiagnostics.NumClampedActionFloats);
+		LastActionDiagnostics.NumClampedActionFloats,
+		LastRuntimeInstabilityDiagnostics.RootHeightDeltaCm,
+		LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
+		LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond,
+		LastRuntimeInstabilityDiagnostics.UnstableAccumulatedSeconds);
 }
 
 void UPhysAnimComponent::ResetStabilizationRuntimeState()
@@ -969,8 +1087,10 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	PreviousConditionedActionBuffer.Reset();
 	PreviousControlTargetRotations.Reset();
 	LastActionDiagnostics = {};
+	RuntimeInstabilityState = {};
+	LastRuntimeInstabilityDiagnostics = {};
 	BridgeStartTimeSeconds = 0.0;
-	LastActionDiagnosticsLogTimeSeconds = -1.0;
+	LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
 	LastAppliedStabilizationSettings = {};
 }
 

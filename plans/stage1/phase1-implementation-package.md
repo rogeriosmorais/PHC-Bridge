@@ -108,6 +108,22 @@ Frozen first-pass live knobs:
 - `physanim.AngularStrengthMultiplier`
 - `physanim.AngularDampingRatioMultiplier`
 - `physanim.AngularExtraDampingMultiplier`
+- `physanim.EnableInstabilityFailStop`
+- `physanim.MaxRootHeightDeltaCm`
+- `physanim.MaxRootLinearSpeedCmPerSec`
+- `physanim.MaxRootAngularSpeedDegPerSec`
+- `physanim.InstabilityGracePeriodSeconds`
+
+Frozen automated guardrail for this pass:
+
+- the bridge monitors the root body (`pelvis`) every tick
+- the bridge auto-fail-stops if one or more instability thresholds stay exceeded longer than the grace window
+- default automatic fail-stop thresholds:
+  - `root height delta > 120 cm`
+  - `root linear speed > 1200 cm/s`
+  - `root angular speed > 720 deg/s`
+  - `grace window = 0.25 s`
+- this automated fail-stop is now the default objective Phase 1 stop condition for obvious launch / spin failures
 
 ## Entry Criteria
 

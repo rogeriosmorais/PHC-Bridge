@@ -241,6 +241,135 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimRuntimeInstabilityThresholdTest,
+		"PhysAnim.Component.RuntimeInstabilityThreshold",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimRuntimeInstabilityThresholdTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimRuntimeInstabilitySettings Settings;
+		Settings.MaxRootHeightDeltaCm = 50.0f;
+		Settings.MaxRootLinearSpeedCmPerSecond = 500.0f;
+		Settings.MaxRootAngularSpeedDegPerSecond = 360.0f;
+		Settings.UnstableGracePeriodSeconds = 0.2f;
+
+		FPhysAnimRuntimeInstabilityState State;
+		FPhysAnimRuntimeInstabilityDiagnostics Diagnostics;
+		FString Error;
+
+		TestTrue(
+			TEXT("First stable sample seeds reference location"),
+			UPhysAnimComponent::EvaluateRuntimeInstability(
+				FVector(0.0f, 0.0f, 100.0f),
+				FVector::ZeroVector,
+				FVector::ZeroVector,
+				0.016f,
+				Settings,
+				State,
+				Diagnostics,
+				Error));
+		TestTrue(TEXT("Reference root location is captured"), State.bHasReferenceRootLocation);
+
+		TestTrue(
+			TEXT("Short threshold breach stays inside grace window"),
+			UPhysAnimComponent::EvaluateRuntimeInstability(
+				FVector(0.0f, 0.0f, 180.0f),
+				FVector::ZeroVector,
+				FVector::ZeroVector,
+				0.10f,
+				Settings,
+				State,
+				Diagnostics,
+				Error));
+		TestTrue(TEXT("Height threshold is detected"), Diagnostics.bHeightExceeded);
+		TestTrue(TEXT("Unstable time accumulates"), FMath::IsNearlyEqual(Diagnostics.UnstableAccumulatedSeconds, 0.10f));
+
+		TestFalse(
+			TEXT("Threshold breach fails after grace window"),
+			UPhysAnimComponent::EvaluateRuntimeInstability(
+				FVector(0.0f, 0.0f, 180.0f),
+				FVector::ZeroVector,
+				FVector::ZeroVector,
+				0.11f,
+				Settings,
+				State,
+				Diagnostics,
+				Error));
+		TestTrue(TEXT("Fail-stop reason mentions runtime instability"), Error.Contains(TEXT("Runtime instability detected")));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimRuntimeInstabilityRecoveryTest,
+		"PhysAnim.Component.RuntimeInstabilityRecovery",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimRuntimeInstabilityRecoveryTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimRuntimeInstabilitySettings Settings;
+		Settings.MaxRootHeightDeltaCm = 1000.0f;
+		Settings.MaxRootLinearSpeedCmPerSecond = 100.0f;
+		Settings.MaxRootAngularSpeedDegPerSecond = 1000.0f;
+		Settings.UnstableGracePeriodSeconds = 0.5f;
+
+		FPhysAnimRuntimeInstabilityState State;
+		FPhysAnimRuntimeInstabilityDiagnostics Diagnostics;
+		FString Error;
+
+		TestTrue(
+			TEXT("First stable sample seeds reference location"),
+			UPhysAnimComponent::EvaluateRuntimeInstability(
+				FVector(0.0f, 0.0f, 100.0f),
+				FVector::ZeroVector,
+				FVector::ZeroVector,
+				0.016f,
+				Settings,
+				State,
+				Diagnostics,
+				Error));
+
+		TestTrue(
+			TEXT("Short speed breach starts instability accumulation"),
+			UPhysAnimComponent::EvaluateRuntimeInstability(
+				FVector(0.0f, 0.0f, 100.0f),
+				FVector(150.0f, 0.0f, 0.0f),
+				FVector::ZeroVector,
+				0.2f,
+				Settings,
+				State,
+				Diagnostics,
+				Error));
+		TestTrue(TEXT("Instability accumulated before recovery"), FMath::IsNearlyEqual(Diagnostics.UnstableAccumulatedSeconds, 0.2f));
+
+		TestTrue(
+			TEXT("Stable frame resets instability accumulation"),
+			UPhysAnimComponent::EvaluateRuntimeInstability(
+				FVector(0.0f, 0.0f, 100.0f),
+				FVector::ZeroVector,
+				FVector::ZeroVector,
+				0.016f,
+				Settings,
+				State,
+				Diagnostics,
+				Error));
+		TestTrue(TEXT("Instability accumulated resets to zero"), FMath::IsNearlyZero(Diagnostics.UnstableAccumulatedSeconds));
+
+		TestTrue(
+			TEXT("Fresh short breach after recovery does not fail"),
+			UPhysAnimComponent::EvaluateRuntimeInstability(
+				FVector(0.0f, 0.0f, 100.0f),
+				FVector(150.0f, 0.0f, 0.0f),
+				FVector::ZeroVector,
+				0.2f,
+				Settings,
+				State,
+				Diagnostics,
+				Error));
+		TestTrue(TEXT("Second accumulation starts from zero"), FMath::IsNearlyEqual(Diagnostics.UnstableAccumulatedSeconds, 0.2f));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimStage1InitializerDefaultsTest,
 		"PhysAnim.Component.Stage1InitializerDefaults",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
