@@ -356,7 +356,6 @@ Max Substeps = 8
      - in that state the bridge does not disable the capsule or `CharacterMovement`
   2. then re-enable actions conservatively:
      - `physanim.ForceZeroActions 0`
-     - `physanim.UseSkeletalAnimationTargets 0`
      - `physanim.ActionScale 0.10`
      - `physanim.ActionClampAbs 0.20`
      - `physanim.ActionSmoothingAlpha 0.25`
@@ -366,6 +365,7 @@ Max Substeps = 8
        - then staged bring-up unlocks non-root groups
        - then the final hand group enters a control-only settle window
        - only after that final-group control settle does policy influence ramp above zero
+       - when live policy influence begins, the bridge now switches into skeletal-animation target mode automatically and clears stale explicit control offsets before writing policy offsets
   3. if the runtime is still dominated by flight / spinning, lower control aggression next:
      - `physanim.AngularStrengthMultiplier 0.35`
      - `physanim.AngularDampingRatioMultiplier 1.50`
@@ -384,6 +384,12 @@ Max Substeps = 8
     - control authority alpha
     - policy influence alpha
     - conditioned action magnitude
+    - policy target diagnostics:
+      - `policyActive`
+      - `firstPolicyFrame`
+      - `written`
+      - `maxDelta`
+      - `meanDelta`
     - root height delta
     - root linear speed
     - root angular speed
@@ -440,6 +446,8 @@ Max Substeps = 8
        - `policyInfluenceAlpha` staying near `0.00` through final-group unlock and the first hand-control-only window
        - a later log line:
          - `[PhysAnim] Stabilization policy influence ramp enabled after final-group control settle.`
+       - on the first policy-enabled frame, the log now also reports:
+         - `First policy-enabled frame: targets=... maxTargetDelta=... meanTargetDelta=...`
   10. If the first `10` seconds are readable, let the run continue for about `30` seconds total.
   11. Record a short clip if practical. If not, capture at least one screenshot and write down exactly what dominated the run.
 - `Useful live knobs during this checkpoint`:
@@ -458,12 +466,13 @@ Max Substeps = 8
   - `physanim.MaxRootLinearSpeedCmPerSec`
   - `physanim.MaxRootAngularSpeedDegPerSec`
   - `physanim.InstabilityGracePeriodSeconds`
-- `What good looks like`:
+  - `What good looks like`:
   - the startup-success line appears
   - default safe-mode startup reaches `ReadyForActivation` without live operators
   - active-bridge startup uses explicit targets by default, not skeletal-animation target blending
   - staged bring-up advances without immediate per-body velocity spikes in distal limbs
   - policy influence stays suppressed until the final bring-up group is active
+  - when policy influence begins, first-policy-frame target diagnostics stay near zero or low single digits instead of jumping into large three-digit offsets
   - the character does not immediately launch, spin uncontrollably, or collapse into unreadable motion
   - the run remains visually controllable for about `30` seconds
   - the result is stable enough that tuning adjustments would be meaningful
@@ -484,6 +493,7 @@ Max Substeps = 8
   - the first `[PhysAnim] Runtime state: ...` transition lines
   - the first `[PhysAnim] Runtime diagnostics ...` line if one appears
   - at least one later `[PhysAnim] Runtime diagnostics ...` line showing staged bring-up progress
+  - the `First policy-enabled frame: ...` line if it appears
   - the first `[PhysAnim] Fail-stop: Runtime instability detected ...` line if one appears
   - one short clip or screenshot
   - one sentence saying:

@@ -77,8 +77,14 @@ Current local Phase 1 truth on March 11, 2026:
 - current evidence shows:
   - hand simulation entry is stable
   - final hand control-only entry is also stable
-  - the first new spike appears only after policy influence begins
-  - deferring direct hand policy targets did not remove the failure, so the remaining issue is broader than hand-target writes alone
+  - policy onset is now stable through the current `10` second smoke target
+  - the final policy-phase fix set was:
+    - continuity blending for first live policy targets
+    - skeletal-animation target mode for the live policy phase
+    - resetting all explicit control offsets on that representation switch
+    - correcting the SMPL->UE quaternion basis conversion so identity local rotations stay identity
+  - after the conversion fix, first-policy-frame raw lower-body offsets dropped from roughly `120-144 deg` to about `0-2 deg`
+  - the latest `run-pie-smoke.ps1` window completed without catastrophic per-body spikes
 
 This means Phase 1 is now in stabilization/tuning, not in export discovery and not yet in G2 packaging.
 

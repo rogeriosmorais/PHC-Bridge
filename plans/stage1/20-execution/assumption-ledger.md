@@ -84,8 +84,12 @@ Only the orchestrator updates status.
   - `A-05` now moves from `yellow` to `green` because the documented synchronous-substep path stayed controllable on this machine
   - the selected pretrained `motion_tracker/smpl` checkpoint now exports successfully to `F:\NewEngine\Training\output\phc_policy.onnx` through `Training\scripts\export_onnx.py`, with accepted opset `17` and offline `onnxruntime 1.24.3` parity max abs diff `1.64e-7`
   - user evidence on March 10, 2026 now confirms a real UE startup-success line through `NNERuntimeORTDml`, so `A-06` now moves from `yellow` to `green`
-  - the next Phase 1 blocker is not model loading but post-startup instability, so remaining Phase 1 risk now sits in stabilization/tuning and later G2 quality judgment rather than in NNE viability
-  - the current Phase 1 runtime now includes an automated instability monitor and objective fail-stop thresholds for obvious launch / spin failures, reducing ambiguity in later stabilization evidence even though `A-08` remains unresolved
+  - March 11, 2026 policy-phase stabilization passes then removed the remaining live-policy blow-up:
+    - first-policy-frame continuity is now bounded
+    - stale explicit targets are cleared when switching into skeletal-animation target mode
+    - the bridge quaternion basis conversion now preserves identity local rotations correctly
+  - the latest `run-pie-smoke.ps1` evidence shows first-policy-frame raw offsets collapsed from roughly `120-144 deg` to about `0-2 deg`, later full-policy raw offsets stayed around low double digits, and the `10` second smoke window completed without catastrophic per-body spikes
+  - the next Phase 1 risk is no longer immediate stabilization failure; it is longer-duration validation and later G2 quality judgment
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

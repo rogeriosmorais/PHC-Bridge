@@ -2,28 +2,25 @@
 
 ## Purpose
 
-This document freezes the next stabilization phase for the Stage 1 bridge.
+This document froze the policy-phase stabilization work for the Stage 1 bridge.
 
-It begins from the current proven baseline:
+That work started from a proven baseline where:
 
-- startup succeeds
-- handoff succeeds
-- staged non-root bring-up succeeds
-- final hand-group simulation entry succeeds
-- final hand-group control-only entry succeeds
+- startup succeeded
+- handoff succeeded
+- staged non-root bring-up succeeded
+- final hand-group simulation entry succeeded
+- final hand-group control-only entry succeeded
 
-The current blocker begins only when live policy targets start affecting the runtime.
+The remaining blocker at that point began only when live policy targets started affecting the runtime.
 
-This plan exists to stop ad hoc policy-phase fixes and replace them with a concrete, testable execution sequence.
+## Final Root-Cause Boundary
 
-## Current Root-Cause Boundary
+The policy-phase stabilization work converged on three concrete faults:
 
-Current evidence from PIE smoke shows:
-
-- the first catastrophic spike no longer happens during bridge activation
-- the first catastrophic spike no longer happens during simulation entry
-- the first catastrophic spike no longer happens during final hand-group control entry
-- the first catastrophic spike begins only after policy influence starts
+- large first-frame target jumps during the first live policy phase
+- stale explicit targets being reinterpreted as offsets when controls switched into `bUseSkeletalAnimation` mode
+- an incorrect SMPL->UE quaternion basis conversion that violated the frozen `R_ue = B * R_smpl * B^T` rule
 
 Current falsified hypotheses:
 
@@ -37,6 +34,14 @@ So the active fault surface is now:
 - the first live policy-target phase as a whole
 - target continuity between seeded/current-pose control targets and policy-driven targets
 - policy target scope and target-step semantics
+
+Final decisive evidence from the last smoke passes on `March 11, 2026`:
+
+- after continuity fixes, first written target deltas were already small, but raw offsets stayed around `120-144deg`
+- that pointed to representation, not timing
+- after correcting the bridge rotation conversion, first-policy-frame raw offsets collapsed to about `0-2deg`
+- at full policy influence, raw offsets stayed around low double digits instead of three digits
+- the `10` second PIE smoke completed without catastrophic per-body spikes
 
 ## Frozen Baseline
 
@@ -201,17 +206,18 @@ Every policy-phase pass must produce:
    - `run-pie-smoke.ps1`
 5. documentation updates
 
-## Current Active Next Pass
+## Final Result
 
-The next pass should target `policy target continuity`, not gain tuning.
+The active policy-phase stabilization work is complete for the current smoke target.
 
-Specifically:
+Frozen final decisions from this phase:
 
-- add first-policy-frame target-delta instrumentation
-- log the max target delta bone and angle
-- compare it to the first unstable offender bone in the same run
-
-Do not change control gains in that pass.
+- keep the staged bring-up order at `5` groups
+- keep the final hand-group control settle window
+- switch controls into skeletal-animation target mode once live policy influence begins
+- clear all control offsets on that representation switch
+- keep the corrected quaternion basis-change implementation in the bridge
+- keep the target-delta and raw-offset diagnostics as regression evidence
 
 ## Success Gates
 
@@ -231,6 +237,7 @@ Do not change control gains in that pass.
 ### Gate P4
 
 - full-body policy can run for the required smoke window without catastrophic per-body spikes
+- status: passed on `March 11, 2026` via `run-pie-smoke.ps1`
 
 ## Stop / Escalation Rules
 
@@ -245,6 +252,11 @@ Escalate if:
 
 - policy-region isolation and continuity instrumentation both fail to explain the onset behavior
 - the next move would require reopening the bridge contract, action representation, or model contract
+
+Current status:
+
+- no escalation is needed for the current `10` second smoke target
+- follow-up work is now longer-duration validation, broader policy-scope re-expansion, or G2-readiness work rather than emergency stabilization
 
 ## Related Documents
 

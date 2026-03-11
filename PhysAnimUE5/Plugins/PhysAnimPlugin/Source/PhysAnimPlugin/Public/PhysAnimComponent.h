@@ -220,9 +220,12 @@ private:
 	FString ActiveRuntimeName;
 	FPhysAnimStabilizationSettings LastAppliedStabilizationSettings;
 	FPhysAnimActionDiagnostics LastActionDiagnostics;
+	FPhysAnimControlTargetDiagnostics LastControlTargetDiagnostics;
 	FPhysAnimRuntimeInstabilityState RuntimeInstabilityState;
 	FPhysAnimRuntimeInstabilityDiagnostics LastRuntimeInstabilityDiagnostics;
 	TMap<FName, FQuat> PreviousControlTargetRotations;
+	TMap<FName, FQuat> PolicyBlendStartControlTargetRotations;
+	bool bPolicyTargetsAppliedLastFrame = false;
 	float SimulationHandoffAlpha = 0.0f;
 	bool bLastAppliedSimulationHandoffSettled = false;
 	float LastAppliedControlAuthorityAlpha = -1.0f;
@@ -305,6 +308,18 @@ public:
 		bool bFinalBringUpGroupControlRampActive,
 		bool bPostFinalGroupControlSettleComplete);
 	static bool ShouldApplyPolicyTargetToBone(FName BoneName, bool bPolicyInfluenceActive);
+	static bool ShouldUseSkeletalAnimationTargetRepresentation(
+		bool bConfiguredUseSkeletalAnimationTargets,
+		bool bPolicyInfluenceActive);
+	static bool ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(
+		bool bUseSkeletalAnimationTargetRepresentation,
+		bool bFirstPolicyEnabledFrame);
+	static float ResolvePolicyTargetWriteDeltaTime(
+		bool bUseSkeletalAnimationTargetRepresentation,
+		bool bFirstPolicyEnabledFrame,
+		float DeltaTime);
+	static FQuat BlendPolicyTargetRotation(const FQuat& BaselineRotation, const FQuat& PolicyTargetRotation, float PolicyAlpha);
+	static float CalculateControlTargetDeltaDegrees(const FQuat& PreviousRotation, const FQuat& TargetRotation);
 	static float CalculateControlAuthorityAlpha(
 		bool bForceZeroActions,
 		bool bSimulationHandoffSettled,

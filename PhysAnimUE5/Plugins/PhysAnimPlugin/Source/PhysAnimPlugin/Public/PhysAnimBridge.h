@@ -46,6 +46,19 @@ struct FPhysAnimActionDiagnostics
 	int32 NumClampedActionFloats = 0;
 };
 
+struct FPhysAnimControlTargetDiagnostics
+{
+	bool bPolicyInfluenceActive = false;
+	bool bFirstPolicyEnabledFrame = false;
+	int32 NumPolicyTargetsWritten = 0;
+	FName MaxTargetDeltaBoneName = NAME_None;
+	float MaxTargetDeltaDegrees = 0.0f;
+	float MeanTargetDeltaDegrees = 0.0f;
+	FName MaxRawPolicyOffsetBoneName = NAME_None;
+	float MaxRawPolicyOffsetDegrees = 0.0f;
+	float MeanRawPolicyOffsetDegrees = 0.0f;
+};
+
 struct FPhysAnimRuntimeInstabilitySettings
 {
 	bool bEnableAutomaticFailStop = true;

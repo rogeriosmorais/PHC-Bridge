@@ -1441,6 +1441,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	const bool bSimulationHandoffSettled = SimulationHandoffAlpha >= (1.0f - KINDA_SMALL_NUMBER);
+	const bool bPolicyInfluenceActive = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) > KINDA_SMALL_NUMBER;
+	const bool bUseSkeletalAnimationTargetRepresentation =
+		ShouldUseSkeletalAnimationTargetRepresentation(
+			EffectiveSettings.bUseSkeletalAnimationTargets,
+			bPolicyInfluenceActive);
 	if (!PhysicsControl)
 	{
 		return;
@@ -1449,7 +1454,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	PhysicsControl->SetControlsInSetEnabled(TEXT("All"), false);
 	PhysicsControl->SetControlsInSetUseSkeletalAnimation(
 		TEXT("All"),
-		EffectiveSettings.bUseSkeletalAnimationTargets,
+		bUseSkeletalAnimationTargetRepresentation,
 		0.0f,
 		0.0f);
 
@@ -1944,16 +1949,32 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 	}
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	const bool bPolicyInfluenceActive = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) > KINDA_SMALL_NUMBER;
+	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+	const bool bPolicyInfluenceActive = PolicyInfluenceAlpha > KINDA_SMALL_NUMBER;
+	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
+	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
+	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
 	if (EffectiveSettings.bForceZeroActions)
 	{
 		PreviousControlTargetRotations.Reset();
+		PolicyBlendStartControlTargetRotations.Reset();
+		LastControlTargetDiagnostics = {};
+		bPolicyTargetsAppliedLastFrame = false;
 		return;
 	}
 
 	if (!bPolicyInfluenceActive)
 	{
+		PolicyBlendStartControlTargetRotations.Reset();
+		LastControlTargetDiagnostics = ControlTargetDiagnostics;
+		bPolicyTargetsAppliedLastFrame = false;
 		return;
+	}
+
+	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame)
+	{
+		PreviousControlTargetRotations.Reset();
+		PolicyBlendStartControlTargetRotations.Reset();
 	}
 
 	TMap<FName, FQuat> ControlRotations;
@@ -1963,6 +1984,22 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 	}
 
 	const float MaxAngularStepDegrees = FMath::Max(0.0f, EffectiveSettings.MaxAngularStepDegreesPerSecond) * DeltaTime;
+	const bool bUseSkeletalAnimationTargetRepresentation =
+		ShouldUseSkeletalAnimationTargetRepresentation(
+			EffectiveSettings.bUseSkeletalAnimationTargets,
+			bPolicyInfluenceActive);
+	const float TargetWriteDeltaTime =
+		ResolvePolicyTargetWriteDeltaTime(
+			bUseSkeletalAnimationTargetRepresentation,
+			ControlTargetDiagnostics.bFirstPolicyEnabledFrame,
+			DeltaTime);
+
+	if (ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(
+		bUseSkeletalAnimationTargetRepresentation,
+		ControlTargetDiagnostics.bFirstPolicyEnabledFrame))
+	{
+		PhysicsControl->SetControlTargetOrientationsInSet(TEXT("All"), FRotator::ZeroRotator, 0.0f, true, false);
+	}
 
 	for (const TPair<FName, FQuat>& Pair : ControlRotations)
 	{
@@ -1977,21 +2014,78 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 			OutError = FString::Printf(TEXT("Missing required control '%s' during target write."), *ControlName.ToString());
 			return;
 		}
-
-		const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
-		const FQuat LimitedRotation = PreviousRotation
-			? LimitTargetRotationStep(*PreviousRotation, Pair.Value, MaxAngularStepDegrees)
+		const FQuat IdentityRotation = FQuat::Identity;
+		const FQuat* const PreviousRotation =
+			ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? &IdentityRotation : PreviousControlTargetRotations.Find(ControlName);
+		const FQuat* const BlendStartRotation =
+			ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? &IdentityRotation : PolicyBlendStartControlTargetRotations.Find(ControlName);
+		if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame)
+		{
+			PolicyBlendStartControlTargetRotations.Add(ControlName, IdentityRotation);
+		}
+		const float RawPolicyOffsetDegrees = BlendStartRotation
+			? CalculateControlTargetDeltaDegrees(*BlendStartRotation, Pair.Value)
+			: 0.0f;
+		const FQuat BlendedPolicyRotation = BlendStartRotation
+			? BlendPolicyTargetRotation(*BlendStartRotation, Pair.Value, PolicyInfluenceAlpha)
 			: Pair.Value;
+		const float TargetDeltaDegrees = PreviousRotation
+			? CalculateControlTargetDeltaDegrees(*PreviousRotation, BlendedPolicyRotation)
+			: 0.0f;
+		const FQuat LimitedRotation = PreviousRotation
+			? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
+			: BlendedPolicyRotation;
+
+		++ControlTargetDiagnostics.NumPolicyTargetsWritten;
+		ControlTargetDiagnostics.MeanTargetDeltaDegrees += TargetDeltaDegrees;
+		ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees += RawPolicyOffsetDegrees;
+		if (TargetDeltaDegrees > ControlTargetDiagnostics.MaxTargetDeltaDegrees)
+		{
+			ControlTargetDiagnostics.MaxTargetDeltaDegrees = TargetDeltaDegrees;
+			ControlTargetDiagnostics.MaxTargetDeltaBoneName = Pair.Key;
+		}
+		if (RawPolicyOffsetDegrees > ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees)
+		{
+			ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees = RawPolicyOffsetDegrees;
+			ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName = Pair.Key;
+		}
+
 		PreviousControlTargetRotations.Add(ControlName, LimitedRotation);
 
 		PhysicsControl->SetControlTargetOrientation(
 			ControlName,
 			LimitedRotation.Rotator(),
-			DeltaTime,
+			TargetWriteDeltaTime,
 			true,
 			false,
 			true,
 			false);
+	}
+
+	if (ControlTargetDiagnostics.NumPolicyTargetsWritten > 0)
+	{
+		ControlTargetDiagnostics.MeanTargetDeltaDegrees /=
+			static_cast<float>(ControlTargetDiagnostics.NumPolicyTargetsWritten);
+		ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees /=
+			static_cast<float>(ControlTargetDiagnostics.NumPolicyTargetsWritten);
+	}
+
+	LastControlTargetDiagnostics = ControlTargetDiagnostics;
+	bPolicyTargetsAppliedLastFrame = bPolicyInfluenceActive;
+
+	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] First policy-enabled frame: targets=%d maxTargetDelta=%s:%.1fdeg meanTargetDelta=%.1fdeg maxRawPolicyOffset=%s:%.1fdeg meanRawPolicyOffset=%.1fdeg"),
+			ControlTargetDiagnostics.NumPolicyTargetsWritten,
+			*ControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
+			ControlTargetDiagnostics.MaxTargetDeltaDegrees,
+			ControlTargetDiagnostics.MeanTargetDeltaDegrees,
+			*ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
+			ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees,
+			ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees);
 	}
 }
 
@@ -2019,7 +2113,7 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
-		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
+		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s written=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
 		SimulationHandoffAlpha,
 		FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
 		GetBringUpGroupCount(),
@@ -2031,6 +2125,15 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 		LastActionDiagnostics.RawMeanAbs,
 		LastActionDiagnostics.ConditionedMeanAbs,
 		LastActionDiagnostics.NumClampedActionFloats,
+		LastControlTargetDiagnostics.bPolicyInfluenceActive ? TEXT("true") : TEXT("false"),
+		LastControlTargetDiagnostics.bFirstPolicyEnabledFrame ? TEXT("true") : TEXT("false"),
+		LastControlTargetDiagnostics.NumPolicyTargetsWritten,
+		*LastControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
+		LastControlTargetDiagnostics.MaxTargetDeltaDegrees,
+		LastControlTargetDiagnostics.MeanTargetDeltaDegrees,
+		*LastControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
+		LastControlTargetDiagnostics.MaxRawPolicyOffsetDegrees,
+		LastControlTargetDiagnostics.MeanRawPolicyOffsetDegrees,
 		LastRuntimeInstabilityDiagnostics.RootHeightDeltaCm,
 		LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
 		LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond,
@@ -2054,6 +2157,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	PreviousConditionedActionBuffer.Reset();
 	PreviousControlTargetRotations.Reset();
 	LastActionDiagnostics = {};
+	LastControlTargetDiagnostics = {};
 	RuntimeInstabilityState = {};
 	LastRuntimeInstabilityDiagnostics = {};
 	SimulationHandoffAlpha = 0.0f;
@@ -2068,6 +2172,8 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	BringUpGroupControlRampStartTimeSeconds.Init(-1.0, GetBringUpGroupCount());
 	PendingBodyModifierCachedResetNames.Reset();
 	LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
+	PolicyBlendStartControlTargetRotations.Reset();
+	bPolicyTargetsAppliedLastFrame = false;
 	LastAppliedStabilizationSettings = {};
 }
 
@@ -2231,13 +2337,64 @@ bool UPhysAnimComponent::ShouldApplyPolicyTargetToBone(FName BoneName, bool bPol
 	}
 
 	return BoneName != TEXT("clavicle_l") &&
+		BoneName != TEXT("spine_01") &&
+		BoneName != TEXT("spine_02") &&
+		BoneName != TEXT("spine_03") &&
 		BoneName != TEXT("upperarm_l") &&
 		BoneName != TEXT("lowerarm_l") &&
 		BoneName != TEXT("hand_l") &&
+		BoneName != TEXT("neck_01") &&
+		BoneName != TEXT("head") &&
 		BoneName != TEXT("clavicle_r") &&
 		BoneName != TEXT("upperarm_r") &&
 		BoneName != TEXT("lowerarm_r") &&
 		BoneName != TEXT("hand_r");
+}
+
+bool UPhysAnimComponent::ShouldUseSkeletalAnimationTargetRepresentation(
+	bool bConfiguredUseSkeletalAnimationTargets,
+	bool bPolicyInfluenceActive)
+{
+	return bConfiguredUseSkeletalAnimationTargets || bPolicyInfluenceActive;
+}
+
+bool UPhysAnimComponent::ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(
+	bool bUseSkeletalAnimationTargetRepresentation,
+	bool bFirstPolicyEnabledFrame)
+{
+	return bUseSkeletalAnimationTargetRepresentation && bFirstPolicyEnabledFrame;
+}
+
+float UPhysAnimComponent::ResolvePolicyTargetWriteDeltaTime(
+	bool bUseSkeletalAnimationTargetRepresentation,
+	bool bFirstPolicyEnabledFrame,
+	float DeltaTime)
+{
+	return (bUseSkeletalAnimationTargetRepresentation && bFirstPolicyEnabledFrame) ? 0.0f : DeltaTime;
+}
+
+FQuat UPhysAnimComponent::BlendPolicyTargetRotation(
+	const FQuat& BaselineRotation,
+	const FQuat& PolicyTargetRotation,
+	float PolicyAlpha)
+{
+	const float ClampedPolicyAlpha = FMath::Clamp(PolicyAlpha, 0.0f, 1.0f);
+	if (ClampedPolicyAlpha <= KINDA_SMALL_NUMBER)
+	{
+		return BaselineRotation;
+	}
+
+	if (ClampedPolicyAlpha >= (1.0f - KINDA_SMALL_NUMBER))
+	{
+		return PolicyTargetRotation;
+	}
+
+	return FQuat::Slerp(BaselineRotation, PolicyTargetRotation, ClampedPolicyAlpha).GetNormalized();
+}
+
+float UPhysAnimComponent::CalculateControlTargetDeltaDegrees(const FQuat& PreviousRotation, const FQuat& TargetRotation)
+{
+	return FMath::RadiansToDegrees(static_cast<float>(PreviousRotation.AngularDistance(TargetRotation)));
 }
 
 float UPhysAnimComponent::CalculateControlAuthorityAlpha(

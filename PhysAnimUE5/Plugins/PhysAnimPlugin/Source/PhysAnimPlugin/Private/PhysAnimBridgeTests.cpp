@@ -75,6 +75,12 @@ namespace
 		const FVector SmplUp(0.0, 1.0, 0.0);
 		const FVector UeUp = SmplVectorToUe(SmplUp);
 		TestTrue(TEXT("SMPL Y-up becomes UE Z-up"), UeUp.Equals(FVector(0.0, 0.0, 1.0), KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Identity SMPL local rotation stays identity after UE basis conversion"),
+			SmplQuaternionToUe(FQuat::Identity).Equals(FQuat::Identity, KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Identity UE local rotation stays identity after SMPL basis conversion"),
+			UeQuaternionToSmpl(FQuat::Identity).Equals(FQuat::Identity, KINDA_SMALL_NUMBER));
 
 		const FQuat SmplRotation = ExpMapToQuaternion(FVector(0.2, -0.1, 0.3));
 		const FQuat RoundTrip = UeQuaternionToSmpl(SmplQuaternionToUe(SmplRotation));
@@ -144,6 +150,31 @@ namespace
 		TestTrue(TEXT("Collapsed hand target exists"), ControlRotations.Contains(TEXT("hand_l")));
 		TestFalse(TEXT("There is no standalone wrist control"), ControlRotations.Contains(TEXT("wrist_l")));
 		TestTrue(TEXT("Collapsed hand target is non-identity"), !ControlRotations[TEXT("hand_l")].Equals(FQuat::Identity, 1.0e-3f));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimZeroActionConversionTest,
+		"PhysAnim.Bridge.ZeroActionConversion",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimZeroActionConversionTest::RunTest(const FString& Parameters)
+	{
+		TArray<float> Actions;
+		Actions.Init(0.0f, NumActionFloats);
+
+		TMap<FName, FQuat> ControlRotations;
+		FString Error;
+		TestTrue(TEXT("Zero-action conversion should succeed"), ConvertModelActionsToControlRotations(Actions, ControlRotations, Error));
+		TestEqual(TEXT("Zero-action conversion writes the full control set"), ControlRotations.Num(), NumControlledBones);
+
+		for (const TPair<FName, FQuat>& Pair : ControlRotations)
+		{
+			TestTrue(
+				FString::Printf(TEXT("Zero action keeps %s at identity"), *Pair.Key.ToString()),
+				Pair.Value.Equals(FQuat::Identity, 1.0e-3f));
+		}
+
 		return true;
 	}
 
@@ -800,6 +831,21 @@ namespace
 		"PhysAnim.Component.PolicyTargetBoneFilter",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyTargetRepresentationModeTest,
+		"PhysAnim.Component.PolicyTargetRepresentationMode",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimControlTargetDeltaTest,
+		"PhysAnim.Component.ControlTargetDelta",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyTargetBlendTest,
+		"PhysAnim.Component.PolicyTargetBlend",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 	bool FPhysAnimPolicyInfluenceAlphaTest::RunTest(const FString& Parameters)
 	{
 		TestEqual(
@@ -851,8 +897,17 @@ namespace
 			TEXT("Policy-inactive frames never write targets"),
 			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("spine_01"), false));
 		TestTrue(
-			TEXT("Active policy can still drive non-hand bones"),
+			TEXT("Active policy can still drive lower-body bones"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("thigh_l"), true));
+		TestFalse(
+			TEXT("Active policy now defers spine_01 targets during the current scope split"),
 			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("spine_01"), true));
+		TestFalse(
+			TEXT("Active policy now defers spine_02 targets during the current scope split"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("spine_02"), true));
+		TestFalse(
+			TEXT("Active policy now defers spine_03 targets during the current scope split"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("spine_03"), true));
 		TestFalse(
 			TEXT("Active policy defers left clavicle targets during the current stabilization pass"),
 			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("clavicle_l"), true));
@@ -866,6 +921,12 @@ namespace
 			TEXT("Active policy defers left-hand targets during the current stabilization pass"),
 			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("hand_l"), true));
 		TestFalse(
+			TEXT("Active policy defers neck targets during the current stabilization pass"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("neck_01"), true));
+		TestFalse(
+			TEXT("Active policy defers head targets during the current stabilization pass"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("head"), true));
+		TestFalse(
 			TEXT("Active policy defers right clavicle targets during the current stabilization pass"),
 			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("clavicle_r"), true));
 		TestFalse(
@@ -877,6 +938,81 @@ namespace
 		TestFalse(
 			TEXT("Active policy defers right-hand targets during the current stabilization pass"),
 			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("hand_r"), true));
+		return true;
+	}
+
+	bool FPhysAnimControlTargetDeltaTest::RunTest(const FString& Parameters)
+	{
+		TestTrue(
+			TEXT("Identical targets produce zero angular delta"),
+			FMath::IsNearlyZero(
+				UPhysAnimComponent::CalculateControlTargetDeltaDegrees(FQuat::Identity, FQuat::Identity),
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Quarter-turn target delta is reported in degrees"),
+			FMath::IsNearlyEqual(
+				UPhysAnimComponent::CalculateControlTargetDeltaDegrees(
+					FQuat::Identity,
+					FQuat(FVector::UpVector, FMath::DegreesToRadians(90.0f))),
+				90.0f,
+				0.1f));
+		return true;
+	}
+
+	bool FPhysAnimPolicyTargetRepresentationModeTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("Configured explicit-target mode stays disabled when policy is inactive"),
+			UPhysAnimComponent::ShouldUseSkeletalAnimationTargetRepresentation(false, false));
+		TestTrue(
+			TEXT("Live policy phase uses skeletal-animation target representation"),
+			UPhysAnimComponent::ShouldUseSkeletalAnimationTargetRepresentation(false, true));
+		TestTrue(
+			TEXT("Configured skeletal-animation target mode stays enabled"),
+			UPhysAnimComponent::ShouldUseSkeletalAnimationTargetRepresentation(true, false));
+		TestTrue(
+			TEXT("First policy frame resets all control offsets when switching into skeletal-animation target mode"),
+			UPhysAnimComponent::ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(true, true));
+		TestFalse(
+			TEXT("Later policy frames do not keep resetting all control offsets"),
+			UPhysAnimComponent::ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(true, false));
+		TestFalse(
+			TEXT("Explicit-target mode never resets all control offsets on policy start"),
+			UPhysAnimComponent::ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(false, true));
+		TestEqual(
+			TEXT("First policy frame in skeletal-animation target mode zeros target angular velocity delta time"),
+			UPhysAnimComponent::ResolvePolicyTargetWriteDeltaTime(true, true, 0.25f),
+			0.0f);
+		TestEqual(
+			TEXT("Subsequent policy frames keep the runtime delta time"),
+			UPhysAnimComponent::ResolvePolicyTargetWriteDeltaTime(true, false, 0.25f),
+			0.25f);
+		TestEqual(
+			TEXT("Explicit-target mode keeps the runtime delta time even on the first policy frame"),
+			UPhysAnimComponent::ResolvePolicyTargetWriteDeltaTime(false, true, 0.25f),
+			0.25f);
+		return true;
+	}
+
+	bool FPhysAnimPolicyTargetBlendTest::RunTest(const FString& Parameters)
+	{
+		const FQuat Baseline = FQuat::Identity;
+		const FQuat PolicyTarget = FQuat(FVector::UpVector, FMath::DegreesToRadians(90.0f));
+
+		TestTrue(
+			TEXT("Zero policy alpha preserves the baseline target"),
+			UPhysAnimComponent::BlendPolicyTargetRotation(Baseline, PolicyTarget, 0.0f).Equals(Baseline, KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Full policy alpha reaches the policy target"),
+			UPhysAnimComponent::BlendPolicyTargetRotation(Baseline, PolicyTarget, 1.0f).Equals(PolicyTarget, KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Half policy alpha blends to the midpoint rotation"),
+			FMath::IsNearlyEqual(
+				UPhysAnimComponent::CalculateControlTargetDeltaDegrees(
+					Baseline,
+					UPhysAnimComponent::BlendPolicyTargetRotation(Baseline, PolicyTarget, 0.5f)),
+				45.0f,
+				0.1f));
 		return true;
 	}
 

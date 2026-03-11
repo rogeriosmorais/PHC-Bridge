@@ -25,10 +25,9 @@ The planning bundle is no longer in pre-implementation mode. Phase 1 bridge impl
 
 The current Stage 1 execution focus is:
 
-1. stabilize the `ReadyForActivation -> BridgeActive` runtime using the staged bring-up path now implemented in the bridge
-2. execute the frozen policy-phase stabilization plan for the first live policy-target phase
-3. update the assumption ledger and execution log from real stabilization evidence
-4. decide whether the one-character bridge is stable enough to resume G2-readiness work
+1. keep the newly stabilized one-character bridge green under the `10` second PIE smoke path
+2. update the assumption ledger and execution log from the completed stabilization passes
+3. decide whether longer-duration validation or G2-readiness work should be the next focus
 
 ## Stage 1 Planning Outputs
 
@@ -124,12 +123,14 @@ Phase 1 implementation is already underway in the local repo. The bridge now inc
 - staged non-root bring-up groups
 - per-group control-authority ramps
 - delayed policy influence until the final hand-group control ramp has settled
+- policy-phase skeletal-animation target switching with offset reset
+- corrected SMPL->UE quaternion basis conversion at the bridge boundary
 
 The next useful work is now:
 
-1. follow [phase1-policy-stabilization-plan.md](/F:/NewEngine/plans/stage1/20-execution/phase1-policy-stabilization-plan.md) for the first live policy-target phase
-2. update [assumption-ledger.md](/F:/NewEngine/plans/stage1/20-execution/assumption-ledger.md) and [execution-log.md](/F:/NewEngine/plans/stage1/20-execution/execution-log.md) from each policy-phase pass
-3. continue autonomous stabilization only while passes remain inside that frozen policy-phase contract
+1. record the stabilized smoke evidence in [assumption-ledger.md](/F:/NewEngine/plans/stage1/20-execution/assumption-ledger.md) and [execution-log.md](/F:/NewEngine/plans/stage1/20-execution/execution-log.md)
+2. decide whether to extend smoke duration / validation scope
+3. resume G2-readiness work only if the stabilized bridge remains reproducible
 
 ## How To Read This File
 

@@ -14,9 +14,9 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` in progress
-- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Gate G1 is explicitly `pass`; the selected Phase 1 runtime model is the pretrained `motion_tracker/smpl` checkpoint; the full UE startup path now succeeds through `NNERuntimeORTDml`; the active blocker is no longer import/startup discovery but uncontrolled post-startup runtime instability (`flying` / `spinning uncontrollably`); the bridge now also has an automated instability monitor and objective fail-stop thresholds for that failure mode
-- `Last planning milestone`: orchestrator accepted the `S1-P1-A1` handoff and reclassified the next task as stabilization/tuning before G2 packaging on March 10, 2026
+- `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` stabilization passes completed for the current smoke target
+- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Gate G1 is explicitly `pass`; the selected Phase 1 runtime model is the pretrained `motion_tracker/smpl` checkpoint; the full UE startup path succeeds through `NNERuntimeORTDml`; the one-character bridge now also completes the frozen `10` second PIE smoke window without catastrophic post-startup instability; the active bridge no longer appears blocked on emergency stabilization and is ready for longer-duration validation or G2-readiness decisions
+- `Last planning milestone`: the frozen policy-phase stabilization plan converged on March 11, 2026 after continuity fixes, representation-switch cleanup, and the corrected SMPL->UE quaternion basis conversion removed the remaining live-policy blow-up
 
 ## Active Tasks
 

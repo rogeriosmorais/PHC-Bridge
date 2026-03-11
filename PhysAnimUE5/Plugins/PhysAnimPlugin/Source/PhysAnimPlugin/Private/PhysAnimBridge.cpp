@@ -122,15 +122,6 @@ namespace PhysAnimBridge
 			return FRotationMatrix::MakeFromXZ(XAxis.GetSafeNormal(), ZAxis.GetSafeNormal()).ToQuat().GetNormalized();
 		}
 
-		FQuat BasisConvertedQuaternion(
-			const FQuat& InputRotation,
-			const TFunctionRef<FVector(const FVector&)>& ConvertVector)
-		{
-			const FVector RotatedXAxis = InputRotation.RotateVector(FVector::ForwardVector);
-			const FVector RotatedZAxis = InputRotation.RotateVector(FVector::UpVector);
-			return MakeQuaternionFromBasis(ConvertVector(RotatedXAxis), ConvertVector(RotatedZAxis));
-		}
-
 		void AppendQuaternionTanNorm(const FQuat& Rotation, TArray<float>& OutValues)
 		{
 			float TanNorm[6];
@@ -267,18 +258,20 @@ namespace PhysAnimBridge
 
 	FQuat SmplQuaternionToUe(const FQuat& SmplQuaternion)
 	{
-		return BasisConvertedQuaternion(SmplQuaternion, [](const FVector& SmplVector)
-		{
-			return SmplVectorToUe(SmplVector);
-		});
+		const FVector UeXAxisInSmpl = UeVectorToSmpl(FVector::ForwardVector);
+		const FVector UeZAxisInSmpl = UeVectorToSmpl(FVector::UpVector);
+		const FVector UeRotatedXAxis = SmplVectorToUe(SmplQuaternion.RotateVector(UeXAxisInSmpl));
+		const FVector UeRotatedZAxis = SmplVectorToUe(SmplQuaternion.RotateVector(UeZAxisInSmpl));
+		return MakeQuaternionFromBasis(UeRotatedXAxis, UeRotatedZAxis);
 	}
 
 	FQuat UeQuaternionToSmpl(const FQuat& UeQuaternion)
 	{
-		return BasisConvertedQuaternion(UeQuaternion, [](const FVector& UeVector)
-		{
-			return UeVectorToSmpl(UeVector);
-		});
+		const FVector SmplXAxisInUe = SmplVectorToUe(FVector::ForwardVector);
+		const FVector SmplZAxisInUe = SmplVectorToUe(FVector::UpVector);
+		const FVector SmplRotatedXAxis = UeVectorToSmpl(UeQuaternion.RotateVector(SmplXAxisInUe));
+		const FVector SmplRotatedZAxis = UeVectorToSmpl(UeQuaternion.RotateVector(SmplZAxisInUe));
+		return MakeQuaternionFromBasis(SmplRotatedXAxis, SmplRotatedZAxis);
 	}
 
 	FQuat ExpMapToQuaternion(const FVector& ExpMap)
