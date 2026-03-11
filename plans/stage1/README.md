@@ -1,33 +1,34 @@
 # Stage 1 Planning Bundle
 
-This folder is organized by role, not by chronology.
+> **FROZEN** as of March 11, 2026. See freeze policy below.
 
-Use these subfolders:
+## Freeze Policy
 
-- `00-control`
-  Control docs that define how Stage 1 is orchestrated and handed off.
-- `10-specs`
-  Frozen technical specs and lock documents.
-- `20-execution`
-  Live execution packages, ledgers, logs, and runbooks.
-- `30-evidence`
-  Gate evidence and evaluation verdict documents.
-- `40-tasks`
-  Task graph and task packets.
-- `50-content`
-  Content, motion, checkpoint, and scaffold locks.
-- `60-user`
-  Human-facing runbooks, checklists, and return templates.
+The planning phase is complete. Gate G1 has passed. Phase 1 implementation and stabilization are active.
 
-Source-of-truth rules:
+**Only these 3 files are living documents:**
+
+- `20-execution/execution-log.md` — active task state
+- `20-execution/assumption-ledger.md` — risk tracking
+- `30-evidence/g2-evaluation.md` — G2 gate evidence
+
+**Everything else in this bundle is frozen reference material.** Do not update specs, task packets, orchestration docs, delegation specs, handoff formats, or user runbooks during active execution unless a code change directly invalidates a frozen contract.
+
+If a frozen document becomes wrong because of a code change, update it in the same commit as the code change.
+
+## Folder Guide
+
+- `00-control` — **Frozen.** Orchestration model, delegation spec, handoff format.
+- `10-specs` — **Frozen.** Technical specs and lock documents.
+- `20-execution` — **Mixed.** `execution-log.md` and `assumption-ledger.md` are living. Everything else is frozen.
+- `30-evidence` — **Mixed.** `g2-evaluation.md` is living. `g1-evidence.md` and `g3-evaluation.md` are frozen.
+- `40-tasks` — **Frozen.** Task graph and task packets.
+- `50-content` — **Frozen.** Motion, checkpoint, and scaffold locks.
+- `60-user` — **Frozen.** User runbooks and verification instructions.
+
+## Source-of-Truth Rules
 
 - [`STAGE1_PLAN.md`](/F:/NewEngine/STAGE1_PLAN.md) is the Stage 1 index and control document.
-- Files in `10-specs` define frozen contracts unless an explicit later execution document says otherwise.
-- Files in `20-execution` record the active execution state.
-- Files in `30-evidence` record gate outcomes, not implementation intent.
-- Files in `60-user` should remain operator-facing and easy to follow.
-
-Reorganization rule:
-
-- Prefer moving a file only when its role has changed.
-- Prefer updating links in `STAGE1_PLAN.md` rather than duplicating summary content.
+- Files in `10-specs` define frozen contracts.
+- The 3 living documents record active execution state, not implementation intent.
+- Files in `60-user` remain operator-facing and easy to follow.
