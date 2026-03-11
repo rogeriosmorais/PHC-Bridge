@@ -334,7 +334,9 @@ public:
 		bool bSimulationHandoffSettled,
 		float ElapsedSinceHandoffSettledSeconds,
 		float RampDurationSeconds);
-	static bool ShouldPreserveGameplayShellForMovementSmoke(bool bMovementSmokeModeEnabled);
+	static bool ShouldPreserveGameplayShellDuringBridgeActive(
+		bool bMovementSmokeModeEnabled,
+		bool bAllowCharacterMovementInBridgeActive);
 	static FVector ResolveMovementSmokeLocalIntent(float ElapsedSeconds);
 	static FName ResolveMovementSmokePhaseName(float ElapsedSeconds);
 	static float GetMovementSmokeDurationSeconds();

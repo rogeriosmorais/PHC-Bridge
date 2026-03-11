@@ -119,6 +119,10 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.MovementSmokeMode"),
 		0,
 		TEXT("Enables the deterministic PIE movement smoke mode that preserves the gameplay shell and applies scripted WASD-equivalent input."));
+	TAutoConsoleVariable<int32> CVarPhysAnimAllowCharacterMovementInBridgeActive(
+		TEXT("physanim.AllowCharacterMovementInBridgeActive"),
+		1,
+		TEXT("When enabled, BridgeActive preserves capsule collision and CharacterMovement so the player can drive the character with normal gameplay input."));
 
 	float ResolveFloatOverride(const TAutoConsoleVariable<float>& CVar, float DefaultValue)
 	{
@@ -1381,7 +1385,9 @@ void UPhysAnimComponent::ActivateBridgePhysicsState()
 	SkeletalMesh->SetEnablePhysicsBlending(true);
 	SkeletalMesh->WakeAllRigidBodies();
 
-	const bool bPreserveGameplayShell = ShouldPreserveGameplayShellForMovementSmoke(IsMovementSmokeModeEnabled());
+	const bool bPreserveGameplayShell = ShouldPreserveGameplayShellDuringBridgeActive(
+		IsMovementSmokeModeEnabled(),
+		PhysAnimComponentInternal::CVarPhysAnimAllowCharacterMovementInBridgeActive.GetValueOnGameThread() != 0);
 	if (ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner()))
 	{
 		if (UCapsuleComponent* const CapsuleComponent = CharacterOwner->GetCapsuleComponent())
@@ -1429,7 +1435,7 @@ void UPhysAnimComponent::ActivateBridgePhysicsState()
 		UE_LOG(
 			LogPhysAnimBridge,
 			Log,
-			TEXT("[PhysAnim] Movement smoke mode active: preserving capsule collision and CharacterMovement during BridgeActive."));
+			TEXT("[PhysAnim] BridgeActive preserving capsule collision and CharacterMovement during bridge ownership."));
 	}
 }
 
@@ -2552,9 +2558,11 @@ float UPhysAnimComponent::CalculateControlAuthorityAlpha(
 	return FMath::Clamp(ElapsedSinceHandoffSettledSeconds / RampDurationSeconds, 0.0f, 1.0f);
 }
 
-bool UPhysAnimComponent::ShouldPreserveGameplayShellForMovementSmoke(bool bMovementSmokeModeEnabled)
+bool UPhysAnimComponent::ShouldPreserveGameplayShellDuringBridgeActive(
+	bool bMovementSmokeModeEnabled,
+	bool bAllowCharacterMovementInBridgeActive)
 {
-	return bMovementSmokeModeEnabled;
+	return bMovementSmokeModeEnabled || bAllowCharacterMovementInBridgeActive;
 }
 
 FVector UPhysAnimComponent::ResolveMovementSmokeLocalIntent(float ElapsedSeconds)

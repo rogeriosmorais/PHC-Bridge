@@ -837,11 +837,17 @@ namespace
 	bool FPhysAnimMovementSmokeScriptTest::RunTest(const FString& Parameters)
 	{
 		TestFalse(
-			TEXT("Movement smoke off does not preserve gameplay shell"),
-			UPhysAnimComponent::ShouldPreserveGameplayShellForMovementSmoke(false));
+			TEXT("BridgeActive releases the gameplay shell when both preservation flags are off"),
+			UPhysAnimComponent::ShouldPreserveGameplayShellDuringBridgeActive(false, false));
 		TestTrue(
-			TEXT("Movement smoke on preserves gameplay shell"),
-			UPhysAnimComponent::ShouldPreserveGameplayShellForMovementSmoke(true));
+			TEXT("Movement smoke preserves the gameplay shell during BridgeActive"),
+			UPhysAnimComponent::ShouldPreserveGameplayShellDuringBridgeActive(true, false));
+		TestTrue(
+			TEXT("Runtime movement enablement preserves the gameplay shell during BridgeActive"),
+			UPhysAnimComponent::ShouldPreserveGameplayShellDuringBridgeActive(false, true));
+		TestTrue(
+			TEXT("Either preservation path keeps the gameplay shell active"),
+			UPhysAnimComponent::ShouldPreserveGameplayShellDuringBridgeActive(true, true));
 		TestTrue(
 			TEXT("Initial movement smoke phase is idle"),
 			UPhysAnimComponent::ResolveMovementSmokePhaseName(1.0f) == TEXT("Idle_00"));

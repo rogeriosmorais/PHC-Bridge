@@ -89,7 +89,10 @@ Only the orchestrator updates status.
     - stale explicit targets are cleared when switching into skeletal-animation target mode
     - the bridge quaternion basis conversion now preserves identity local rotations correctly
   - the latest `run-pie-smoke.ps1` evidence shows first-policy-frame raw offsets collapsed from roughly `120-144 deg` to about `0-2 deg`, later full-policy raw offsets stayed around low double digits, and the passive smoke window now also passes at `65` seconds without drift, collapse, delayed fail-stop, or late root instability
-  - March 11, 2026 movement-smoke work then added a deterministic `WASD`-equivalent PIE harness behind test-only controls
+- March 11, 2026 movement-smoke work then added a deterministic `WASD`-equivalent PIE harness behind test-only controls
+- March 11, 2026 runtime integration then relaxed the earlier smoke-only assumption:
+  - `BridgeActive` can now preserve capsule collision and `CharacterMovement` in normal editor/runtime sessions through `physanim.AllowCharacterMovementInBridgeActive`
+  - movement smoke still exists for deterministic automation, but it is no longer the only path that keeps the gameplay shell alive
   - the passive smoke path remained green after that harness was added
   - the first valid movement-smoke run also showed that the bridge is not yet stable under real forward movement:
     - scripted movement now starts only after policy settle

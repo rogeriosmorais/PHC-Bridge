@@ -49,7 +49,7 @@ It is acceptable for this first milestone to run behind a dedicated test-only mo
 ## What This Pass Is Not
 
 - not a change to the locked Stage 1 architecture
-- not a product decision that normal `CharacterMovement` must remain enabled in production `BridgeActive`
+- not a commitment that the current default `BridgeActive` gameplay-shell preservation is the final product behavior
 - not a replacement for later manual real-keyboard validation
 - not a visual-quality or G2 checkpoint
 
@@ -57,9 +57,10 @@ It is acceptable for this first milestone to run behind a dedicated test-only mo
 
 The first movement-stability implementation must obey these rules:
 
-1. Default `BridgeActive` behavior remains unchanged.
-   - normal production path still disables capsule collision and `CharacterMovement`
-2. Movement testing is enabled only through dedicated test-only controls.
+1. `BridgeActive` movement preservation must remain explicitly controllable.
+   - runtime uses `physanim.AllowCharacterMovementInBridgeActive`
+   - movement smoke may also force gameplay-shell preservation for automation
+2. Movement testing must still be runnable through dedicated deterministic controls.
 3. The movement harness must not depend on real OS keyboard events.
 4. The movement harness must be deterministic and runnable through automation.
 5. The movement harness must log enough state to interpret failures without relying only on video.

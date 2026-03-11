@@ -128,3 +128,6 @@ Whenever new setup or gate evidence arrives:
 1. update `assumption-ledger.md`
 2. update this execution log
 3. only then issue or advance worker tasks
+- March 11, 2026:
+  - normal manual runtime now preserves capsule collision and `CharacterMovement` during `BridgeActive` through `physanim.AllowCharacterMovementInBridgeActive = 1`
+  - the deterministic movement smoke harness remains valid, but gameplay-shell preservation is no longer smoke-only

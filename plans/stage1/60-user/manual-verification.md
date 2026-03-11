@@ -366,6 +366,7 @@ Max Substeps = 8
        - then the final hand group enters a control-only settle window
        - only after that final-group control settle does policy influence ramp above zero
        - when live policy influence begins, the bridge now switches into skeletal-animation target mode automatically and clears stale explicit control offsets before writing policy offsets
+     - current runtime default also keeps capsule collision and `CharacterMovement` active in `BridgeActive`, so normal `WASD` input remains available unless you explicitly disable it with `physanim.AllowCharacterMovementInBridgeActive 0`
   3. if the runtime is still dominated by flight / spinning, lower control aggression next:
      - `physanim.AngularStrengthMultiplier 0.35`
      - `physanim.AngularDampingRatioMultiplier 1.50`

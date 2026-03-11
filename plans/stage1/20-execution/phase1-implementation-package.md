@@ -189,6 +189,7 @@ The Phase 1 stabilization pass must proceed in this order:
    - same character Blueprint
    - same PoseSearch content
    - same physics settings unless the task explicitly says otherwise
+   - current manual-runtime default preserves capsule collision and `CharacterMovement` during `BridgeActive` through `physanim.AllowCharacterMovementInBridgeActive = 1`
 2. stabilize passive simulation entry and staged bring-up before changing mapping assumptions
 3. ramp control authority in stages before restoring policy influence
 4. for the current active pass, follow the frozen policy-phase execution order in [phase1-policy-stabilization-plan.md](/F:/NewEngine/plans/stage1/20-execution/phase1-policy-stabilization-plan.md)
