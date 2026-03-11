@@ -23,7 +23,7 @@ namespace
 	const FString PhysAnimPieSmokeMap = TEXT("/Game/ThirdPerson/Lvl_ThirdPerson");
 	const TCHAR* PhysAnimPieSmokePrefix = TEXT("[PhysAnimPieSmoke]");
 	const TCHAR* PhysAnimPieMovementSmokePrefix = TEXT("[PhysAnimPieMovementSmoke]");
-	constexpr float PhysAnimPieSmokeDurationSeconds = 30.0f;
+	constexpr float PhysAnimPieSmokeDurationSeconds = 65.0f;
 	constexpr float PhysAnimPieMovementSmokeDurationSeconds = 50.0f;
 	constexpr float PhysAnimPieSmokeStartTimeoutSeconds = 30.0f;
 	constexpr float PhysAnimPieSmokeStopTimeoutSeconds = 30.0f;

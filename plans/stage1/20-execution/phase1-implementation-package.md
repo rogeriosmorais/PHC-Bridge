@@ -84,7 +84,7 @@ Current local Phase 1 truth on March 11, 2026:
     - resetting all explicit control offsets on that representation switch
     - correcting the SMPL->UE quaternion basis conversion so identity local rotations stay identity
   - after the conversion fix, first-policy-frame raw lower-body offsets dropped from roughly `120-144 deg` to about `0-2 deg`
-  - the latest `run-pie-smoke.ps1` window completed without catastrophic per-body spikes
+  - the latest `run-pie-smoke.ps1` window completed without catastrophic per-body spikes, and the passive idle smoke now remains green through `65` seconds
 
 This means Phase 1 is now in stabilization/tuning, not in export discovery and not yet in G2 packaging.
 

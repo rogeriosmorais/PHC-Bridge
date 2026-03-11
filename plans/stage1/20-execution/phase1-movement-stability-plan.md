@@ -117,6 +117,7 @@ Latest result on `March 11, 2026`:
 
 - the dedicated movement-smoke harness is implemented
 - the passive smoke path remains green
+- the passive idle smoke now also passes at `65` seconds without delayed drift or collapse
 - movement is now held off until after live policy has settled
 - the first true forward movement window still destabilizes the bridge within about `0.26s`
 
