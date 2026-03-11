@@ -21,14 +21,14 @@ Do not expect this file to duplicate every detailed lock from the planning bundl
 
 ## Current Execution Focus
 
-The planning bundle is now execution-ready. The next step is **Phase 0 evidence collection for Gate G1**, not more broad planning or environment discovery.
+The planning bundle is no longer in pre-implementation mode. Phase 1 bridge implementation is active, and the current execution focus is **runtime stabilization of the one-character UE bridge**.
 
 The current Stage 1 execution focus is:
 
-1. lock the exact PHC observation/action contract from the frozen local ProtoMotions sources
-2. capture the G1 training-side and UE-side evidence package
-3. update the assumption ledger with real setup and gate evidence
-4. decide whether G1 is `pass`, `fail`, or `blocked`
+1. stabilize the `ReadyForActivation -> BridgeActive` runtime using the staged bring-up path now implemented in the bridge
+2. verify the current handoff / staged activation / delayed policy-influence behavior with logs and manual evidence
+3. update the assumption ledger and execution log from real stabilization evidence
+4. decide whether the one-character bridge is stable enough to resume G2-readiness work
 
 ## Stage 1 Planning Outputs
 
@@ -44,44 +44,62 @@ Before implementation starts, this plan must produce these concrete artifacts. T
 
 These files are the detailed source of truth for Stage 1 execution planning and gate handling. When a detail in this file is summarized, the linked artifact below is the more precise reference.
 
-- [Task Graph](/F:/NewEngine/plans/stage1/task-graph.md)
-- [Orchestration Model](/F:/NewEngine/plans/stage1/orchestration.md)
-- [Assumption Ledger](/F:/NewEngine/plans/stage1/assumption-ledger.md)
-- [Bridge Spec](/F:/NewEngine/plans/stage1/bridge-spec.md)
-- [UE Bridge Implementation Spec](/F:/NewEngine/plans/stage1/ue-bridge-implementation-spec.md)
-- [Phase 1 UE Bridge Bring-Up Runbook](/F:/NewEngine/plans/stage1/phase1-ue-bridge-bringup-runbook.md)
-- [Retargeting Spec](/F:/NewEngine/plans/stage1/retargeting-spec.md)
-- [Test Strategy](/F:/NewEngine/plans/stage1/test-strategy.md)
-- [Motion Set](/F:/NewEngine/plans/stage1/motion-set.md)
-- [Pretrained Model Selection](/F:/NewEngine/plans/stage1/pretrained-model-selection.md)
-- [Pretrained Checkpoint Retrieval](/F:/NewEngine/plans/stage1/pretrained-checkpoint-retrieval.md)
-- [Environment Spec](/F:/NewEngine/plans/stage1/environment-spec.md)
-- [Motion Source Map](/F:/NewEngine/plans/stage1/motion-source-map.md)
-- [Motion Source Lock Table](/F:/NewEngine/plans/stage1/motion-source-lock-table.md)
-- [Comparison Sequence Lock](/F:/NewEngine/plans/stage1/comparison-sequence-lock.md)
-- [UE Project Scaffold](/F:/NewEngine/plans/stage1/ue-project-scaffold.md)
-- [Execution Log](/F:/NewEngine/plans/stage1/execution-log.md)
-- [Dependency Lock](/F:/NewEngine/plans/stage1/dependency-lock.md)
-- [Acceptance Thresholds](/F:/NewEngine/plans/stage1/acceptance-thresholds.md)
-- [ONNX Export Spec](/F:/NewEngine/plans/stage1/onnx-export-spec.md)
-- [Phase 0 Execution Package](/F:/NewEngine/plans/stage1/phase0-execution-package.md)
-- [Phase 1 Implementation Package](/F:/NewEngine/plans/stage1/phase1-implementation-package.md)
-- [Phase 2 Demo Package](/F:/NewEngine/plans/stage1/phase2-demo-package.md)
-- [G1 Evidence](/F:/NewEngine/plans/stage1/g1-evidence.md)
-- [G2 Evaluation](/F:/NewEngine/plans/stage1/g2-evaluation.md)
-- [G3 Evaluation](/F:/NewEngine/plans/stage1/g3-evaluation.md)
-- [Task Packet S1-P0-A1](/F:/NewEngine/plans/stage1/task-packet-s1-p0-a1.md)
-- [Task Packet S1-P0-A2](/F:/NewEngine/plans/stage1/task-packet-s1-p0-a2.md)
-- [Task Packet S1-P1-A1](/F:/NewEngine/plans/stage1/task-packet-s1-p1-a1.md)
-- [Task Packet S1-P1-A2](/F:/NewEngine/plans/stage1/task-packet-s1-p1-a2.md)
-- [Task Packet S1-P2-A1](/F:/NewEngine/plans/stage1/task-packet-s1-p2-a1.md)
-- [Task Packet S1-P2-A2](/F:/NewEngine/plans/stage1/task-packet-s1-p2-a2.md)
-- [User Return Template](/F:/NewEngine/plans/stage1/user-return-template.md)
-- [ELI5 UE Project Setup](/F:/NewEngine/plans/stage1/eli5-ue-project-setup.md)
-- [Delegation Spec](/F:/NewEngine/plans/stage1/delegation-spec.md)
-- [Handoff Format](/F:/NewEngine/plans/stage1/handoff-format.md)
-- [User Intervention Checklist](/F:/NewEngine/plans/stage1/user-interventions.md)
-- [ELI5 Manual Verification](/F:/NewEngine/plans/stage1/manual-verification.md)
+Folder guide:
+- [Stage 1 Planning README](/F:/NewEngine/plans/stage1/README.md)
+
+Control:
+- [Orchestration Model](/F:/NewEngine/plans/stage1/00-control/orchestration.md)
+- [Delegation Spec](/F:/NewEngine/plans/stage1/00-control/delegation-spec.md)
+- [Handoff Format](/F:/NewEngine/plans/stage1/00-control/handoff-format.md)
+
+Specs:
+- [Bridge Spec](/F:/NewEngine/plans/stage1/10-specs/bridge-spec.md)
+- [UE Bridge Implementation Spec](/F:/NewEngine/plans/stage1/10-specs/ue-bridge-implementation-spec.md)
+- [Retargeting Spec](/F:/NewEngine/plans/stage1/10-specs/retargeting-spec.md)
+- [Environment Spec](/F:/NewEngine/plans/stage1/10-specs/environment-spec.md)
+- [ONNX Export Spec](/F:/NewEngine/plans/stage1/10-specs/onnx-export-spec.md)
+- [Test Strategy](/F:/NewEngine/plans/stage1/10-specs/test-strategy.md)
+- [Acceptance Thresholds](/F:/NewEngine/plans/stage1/10-specs/acceptance-thresholds.md)
+- [Dependency Lock](/F:/NewEngine/plans/stage1/10-specs/dependency-lock.md)
+
+Execution:
+- [Assumption Ledger](/F:/NewEngine/plans/stage1/20-execution/assumption-ledger.md)
+- [Execution Log](/F:/NewEngine/plans/stage1/20-execution/execution-log.md)
+- [Phase 0 Execution Package](/F:/NewEngine/plans/stage1/20-execution/phase0-execution-package.md)
+- [Phase 1 Implementation Package](/F:/NewEngine/plans/stage1/20-execution/phase1-implementation-package.md)
+- [Phase 1 UE Bridge Bring-Up Runbook](/F:/NewEngine/plans/stage1/20-execution/phase1-ue-bridge-bringup-runbook.md)
+- [Phase 2 Demo Package](/F:/NewEngine/plans/stage1/20-execution/phase2-demo-package.md)
+- [S1-P1-A1 Handoff](/F:/NewEngine/plans/stage1/20-execution/s1-p1-a1-handoff.md)
+
+Evidence:
+- [G1 Evidence](/F:/NewEngine/plans/stage1/30-evidence/g1-evidence.md)
+- [G2 Evaluation](/F:/NewEngine/plans/stage1/30-evidence/g2-evaluation.md)
+- [G3 Evaluation](/F:/NewEngine/plans/stage1/30-evidence/g3-evaluation.md)
+
+Tasks:
+- [Task Graph](/F:/NewEngine/plans/stage1/40-tasks/task-graph.md)
+- [Task Packet S1-P0-A1](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p0-a1.md)
+- [Task Packet S1-P0-A2](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p0-a2.md)
+- [Task Packet S1-P1-A1](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p1-a1.md)
+- [Task Packet S1-P1-A2](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p1-a2.md)
+- [Task Packet S1-P2-A1](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p2-a1.md)
+- [Task Packet S1-P2-A2](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p2-a2.md)
+
+Content:
+- [Motion Set](/F:/NewEngine/plans/stage1/50-content/motion-set.md)
+- [Motion Source Map](/F:/NewEngine/plans/stage1/50-content/motion-source-map.md)
+- [Motion Source Lock Table](/F:/NewEngine/plans/stage1/50-content/motion-source-lock-table.md)
+- [Comparison Sequence Lock](/F:/NewEngine/plans/stage1/50-content/comparison-sequence-lock.md)
+- [Pretrained Model Selection](/F:/NewEngine/plans/stage1/50-content/pretrained-model-selection.md)
+- [Pretrained Checkpoint Retrieval](/F:/NewEngine/plans/stage1/50-content/pretrained-checkpoint-retrieval.md)
+- [UE Project Scaffold](/F:/NewEngine/plans/stage1/50-content/ue-project-scaffold.md)
+
+User:
+- [User Intervention Checklist](/F:/NewEngine/plans/stage1/60-user/user-interventions.md)
+- [User Return Template](/F:/NewEngine/plans/stage1/60-user/user-return-template.md)
+- [User Runbook](/F:/NewEngine/plans/stage1/60-user/user-runbook.md)
+- [ELI5 UE Project Setup](/F:/NewEngine/plans/stage1/60-user/eli5-ue-project-setup.md)
+- [ELI5 Manual Verification](/F:/NewEngine/plans/stage1/60-user/manual-verification.md)
 
 ## Current Status
 
@@ -97,11 +115,20 @@ Local Phase 0 setup evidence already confirms:
 - Isaac Sim `5.1.0.0` and Isaac Lab `2.3.2.post1`
 - local pretrained MaskedMimic checkpoint at `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\masked_mimic\smpl\last.ckpt`
 
+Phase 1 implementation is already underway in the local repo. The bridge now includes:
+
+- deferred activation via `ReadyForActivation`
+- per-body instability telemetry
+- kinematic-root handoff
+- staged non-root bring-up groups
+- per-group control-authority ramps
+- delayed policy influence until all bring-up groups unlock
+
 The next useful work is now:
 
-1. completing `S1-P0-A2` by collecting G1 evidence in [g1-evidence.md](/F:/NewEngine/plans/stage1/g1-evidence.md)
-2. updating [assumption-ledger.md](/F:/NewEngine/plans/stage1/assumption-ledger.md) and [execution-log.md](/F:/NewEngine/plans/stage1/execution-log.md) from that evidence
-3. making the explicit G1 go / no-go decision before any Phase 1 implementation begins
+1. capture fresh runtime evidence from the staged bring-up path
+2. update [assumption-ledger.md](/F:/NewEngine/plans/stage1/20-execution/assumption-ledger.md) and [execution-log.md](/F:/NewEngine/plans/stage1/20-execution/execution-log.md) from that evidence
+3. decide whether the staged bridge is stable enough to continue toward G2, or whether another targeted stabilization pass is required
 
 ## How To Read This File
 
@@ -111,13 +138,13 @@ Use this file to answer:
 - how work is organized
 - which planning artifacts exist
 - which role owns which kind of decision
-- where current Phase 0 execution is anchored at a high level
+- where current Stage 1 execution is anchored at a high level
 
 Use the detailed planning bundle to answer:
 
 - exact checkpoint retrieval path
 - exact environment lock values
-- exact current execution status and frozen inputs
+- exact current execution status, frozen inputs, and active stabilization procedure
 - exact G1, G2, and G3 evidence requirements
 - exact G2 comparison sequence
 - exact ONNX export/import policy
@@ -132,7 +159,7 @@ Stage 1 uses a **hub-and-spoke** execution model:
 - one or more **worker agents** own individual task IDs and produce exactly one artifact per task
 - the **user** intervenes only at explicitly defined checkpoints
 
-Do not run Stage 1 as a group of peer agents editing shared work opportunistically. Use the orchestration rules in [orchestration.md](/F:/NewEngine/plans/stage1/orchestration.md).
+Do not run Stage 1 as a group of peer agents editing shared work opportunistically. Use the orchestration rules in [orchestration.md](/F:/NewEngine/plans/stage1/00-control/orchestration.md).
 
 ## AI Task Template
 

@@ -12,7 +12,7 @@ This is the first Stage 1 training-side workflow.
 
 Use it before `/train-phc` so Phase 0 can answer whether the documented pretrained shortcut is already good enough, needs fine-tuning, or should be abandoned.
 
-Use [pretrained-checkpoint-retrieval.md](/F:/NewEngine/plans/stage1/pretrained-checkpoint-retrieval.md) first so the checkpoint path is locked before evaluation starts.
+Use [pretrained-checkpoint-retrieval.md](/F:/NewEngine/plans/stage1/50-content/pretrained-checkpoint-retrieval.md) first so the checkpoint path is locked before evaluation starts.
 
 ## Prerequisites
 
@@ -54,5 +54,5 @@ PYTHON_PATH protomotions/eval_agent.py +robot=smpl +simulator=isaaclab +motion_f
 ## Notes
 
 - Treat the checkpoint path in the command above as the planning target layout.
-- If the real local path differs, record it in `plans/stage1/execution-log.md` and `plans/stage1/g1-evidence.md`.
+- If the real local path differs, record it in `plans/stage1/20-execution/execution-log.md` and `plans/stage1/30-evidence/g1-evidence.md`.
 - If `isaaclab` is not practical locally, document why before switching to `isaacgym`.

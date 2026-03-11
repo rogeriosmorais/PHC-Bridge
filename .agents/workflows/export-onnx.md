@@ -6,7 +6,7 @@ description: How to export trained PHC model to ONNX format
 
 > Status: planned workflow. This may be blocked until the training code, checkpoints, and export script exist.
 
-Use [onnx-export-spec.md](/F:/NewEngine/plans/stage1/onnx-export-spec.md) as the source of truth for opset choice, runtime target, validation rules, and handoff requirements.
+Use [onnx-export-spec.md](/F:/NewEngine/plans/stage1/10-specs/onnx-export-spec.md) as the source of truth for opset choice, runtime target, validation rules, and handoff requirements.
 
 ## Steps
 
@@ -20,7 +20,7 @@ F:\NewEngine\Training\.venv\physanim_proto311\Scripts\activate
 ```
 python f:\NewEngine\Training\scripts\export_onnx.py --checkpoint f:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt --output f:\NewEngine\Training\output\phc_policy.onnx --copy-to-ue
 ```
-This writes the offline ONNX artifact, validates PyTorch-vs-ONNX parity, and copies the `.onnx` file into `f:\NewEngine\PhysAnimUE5\Content\NNEModels\phc_policy.onnx` for Unreal import. If the active export entry point is not `f:\NewEngine\Training\scripts\export_onnx.py`, update [onnx-export-spec.md](/F:/NewEngine/plans/stage1/onnx-export-spec.md) and the dependency lock first.
+This writes the offline ONNX artifact, validates PyTorch-vs-ONNX parity, and copies the `.onnx` file into `f:\NewEngine\PhysAnimUE5\Content\NNEModels\phc_policy.onnx` for Unreal import. If the active export entry point is not `f:\NewEngine\Training\scripts\export_onnx.py`, update [onnx-export-spec.md](/F:/NewEngine/plans/stage1/10-specs/onnx-export-spec.md) and the dependency lock first.
 
 // turbo
 3. Validate the export contract:
