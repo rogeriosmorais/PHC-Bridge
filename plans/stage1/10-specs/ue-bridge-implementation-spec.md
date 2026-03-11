@@ -88,7 +88,7 @@ Those remain owned by UE systems already chosen in the architecture.
 
 #### Smoke-Test Rule
 
-The existing `UPhysAnimMvG102Subsystem` and `UPhysAnimMvG103Subsystem` remain smoke-test-only harnesses. They are not the production runtime owner and must not grow into the Phase 1 bridge.
+The G1 smoke-test harnesses `UPhysAnimMvG102Subsystem` and `UPhysAnimMvG103Subsystem` were removed from the plugin after Gate G1 passed. They served their purpose during Phase 0 validation and are no longer needed in the production codebase. Historical evidence of their use is preserved in `g1-evidence.md` and `manual-verification.md`.
 
 ### 2. Character And Asset Binding
 
