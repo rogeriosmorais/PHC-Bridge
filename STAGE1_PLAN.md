@@ -122,13 +122,13 @@ Phase 1 implementation is already underway in the local repo. The bridge now inc
 - kinematic-root handoff
 - staged non-root bring-up groups
 - per-group control-authority ramps
-- delayed policy influence until all bring-up groups unlock
+- delayed policy influence until the final hand-group control ramp has settled
 
 The next useful work is now:
 
 1. capture fresh runtime evidence from the staged bring-up path
 2. update [assumption-ledger.md](/F:/NewEngine/plans/stage1/20-execution/assumption-ledger.md) and [execution-log.md](/F:/NewEngine/plans/stage1/20-execution/execution-log.md) from that evidence
-3. decide whether the staged bridge is stable enough to continue toward G2, or whether another targeted stabilization pass is required
+3. continue targeted stabilization on the first live policy-target phase, which is now the isolated remaining fault surface
 
 ## How To Read This File
 

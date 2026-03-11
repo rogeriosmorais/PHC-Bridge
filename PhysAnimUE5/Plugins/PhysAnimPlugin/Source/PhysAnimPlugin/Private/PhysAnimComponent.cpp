@@ -1583,22 +1583,18 @@ float UPhysAnimComponent::CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimSt
 		return 0.0f;
 	}
 
-	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
-	if (!BringUpGroupActivationTimeSeconds.IsValidIndex(FinalGroupIndex) ||
-		BringUpGroupActivationTimeSeconds[FinalGroupIndex] < 0.0 ||
-		!BringUpGroupControlRampStartTimeSeconds.IsValidIndex(FinalGroupIndex) ||
-		BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] < 0.0)
+	if (PolicyInfluenceRampStartTimeSeconds < 0.0)
 	{
 		return 0.0f;
 	}
 
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
-	const float ElapsedSinceFinalGroupActivationSeconds = static_cast<float>(
-		FMath::Max(CurrentTimeSeconds - BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex], 0.0));
+	const float ElapsedSincePolicyRampStartSeconds = static_cast<float>(
+		FMath::Max(CurrentTimeSeconds - PolicyInfluenceRampStartTimeSeconds, 0.0));
 	return CalculatePolicyInfluenceAlpha(
 		EffectiveSettings.bForceZeroActions,
 		true,
-		ElapsedSinceFinalGroupActivationSeconds,
+		ElapsedSincePolicyRampStartSeconds,
 		EffectiveSettings.StartupRampSeconds);
 }
 
@@ -1705,6 +1701,20 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 				TEXT("[PhysAnim] Stabilization final-group control ramp enabled for group %d/%d [hand_l, hand_r]."),
 				FinalGroupIndex + 1,
 				GetBringUpGroupCount());
+		}
+		else if (PolicyInfluenceRampStartTimeSeconds < 0.0 &&
+			ShouldStartPolicyInfluenceRamp(
+				EffectiveSettings.bForceZeroActions,
+				true,
+				IsBringUpGroupControlRampActive(FinalGroupIndex),
+				true))
+		{
+			PolicyInfluenceRampStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+			BringUpGroupStableAccumulatedSeconds = 0.0f;
+			UE_LOG(
+				LogPhysAnimBridge,
+				Log,
+				TEXT("[PhysAnim] Stabilization policy influence ramp enabled after final-group control settle."));
 		}
 		return;
 	}
@@ -1934,13 +1944,14 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 	}
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	const bool bPolicyInfluenceActive = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) > KINDA_SMALL_NUMBER;
 	if (EffectiveSettings.bForceZeroActions)
 	{
 		PreviousControlTargetRotations.Reset();
 		return;
 	}
 
-	if (CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) <= KINDA_SMALL_NUMBER)
+	if (!bPolicyInfluenceActive)
 	{
 		return;
 	}
@@ -1955,6 +1966,11 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 
 	for (const TPair<FName, FQuat>& Pair : ControlRotations)
 	{
+		if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
+		{
+			continue;
+		}
+
 		const FName ControlName = PhysAnimBridge::MakeControlName(Pair.Key);
 		if (!PhysicsControl->GetControlExists(ControlName))
 		{
@@ -2045,6 +2061,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	LastAppliedControlAuthorityAlpha = -1.0f;
 	BridgeStartTimeSeconds = 0.0;
 	SimulationHandoffCompletedTimeSeconds = -1.0;
+	PolicyInfluenceRampStartTimeSeconds = -1.0;
 	HighestUnlockedBringUpGroupIndex = INDEX_NONE;
 	BringUpGroupStableAccumulatedSeconds = 0.0f;
 	BringUpGroupActivationTimeSeconds.Init(-1.0, GetBringUpGroupCount());
@@ -2190,6 +2207,37 @@ bool UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(
 	}
 
 	return !bDelayBringUpGroupControlRamp || bPostUnlockSettleComplete;
+}
+
+bool UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(
+	bool bForceZeroActions,
+	bool bAllBringUpGroupsUnlocked,
+	bool bFinalBringUpGroupControlRampActive,
+	bool bPostFinalGroupControlSettleComplete)
+{
+	if (bForceZeroActions || !bAllBringUpGroupsUnlocked || !bFinalBringUpGroupControlRampActive)
+	{
+		return false;
+	}
+
+	return bPostFinalGroupControlSettleComplete;
+}
+
+bool UPhysAnimComponent::ShouldApplyPolicyTargetToBone(FName BoneName, bool bPolicyInfluenceActive)
+{
+	if (!bPolicyInfluenceActive)
+	{
+		return false;
+	}
+
+	return BoneName != TEXT("clavicle_l") &&
+		BoneName != TEXT("upperarm_l") &&
+		BoneName != TEXT("lowerarm_l") &&
+		BoneName != TEXT("hand_l") &&
+		BoneName != TEXT("clavicle_r") &&
+		BoneName != TEXT("upperarm_r") &&
+		BoneName != TEXT("lowerarm_r") &&
+		BoneName != TEXT("hand_r");
 }
 
 float UPhysAnimComponent::CalculateControlAuthorityAlpha(

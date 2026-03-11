@@ -342,7 +342,7 @@ Max Substeps = 8
     - after handoff, the bridge now enters a staged bring-up program:
       - non-root body/control groups unlock in order
       - control authority ramps per unlocked group
-      - policy influence stays suppressed until all bring-up groups are unlocked
+      - policy influence stays suppressed until the final hand-control group has already settled
   - `FailStopped`:
     - bridge released ownership after a fault
     - bridge must destroy live runtime controls/body modifiers on entry
@@ -364,7 +364,8 @@ Max Substeps = 8
      - on the current bridge, this does not mean immediate live policy driving:
        - first the handoff settles
        - then staged bring-up unlocks non-root groups
-       - only after all groups unlock does policy influence ramp above zero
+       - then the final hand group enters a control-only settle window
+       - only after that final-group control settle does policy influence ramp above zero
   3. if the runtime is still dominated by flight / spinning, lower control aggression next:
      - `physanim.AngularStrengthMultiplier 0.35`
      - `physanim.AngularDampingRatioMultiplier 1.50`
@@ -426,7 +427,7 @@ Max Substeps = 8
        - explicit-target mode is active by default
        - current-pose target seeding completed
        - activation prepass completed before simulation handoff
-       - bring-up starts at group `1/4`
+       - bring-up starts at group `1/5`
        - policy influence is still `0.00` when the first group unlocks
   9. Once startup succeeds, watch the first `10` seconds closely:
      - does the character stay roughly upright
@@ -434,9 +435,11 @@ Max Substeps = 8
      - does the body enter continuous spinning or tumbling
      - is the motion still readable enough to tune
      - do the runtime diagnostics show:
-       - `bringUpGroup=1/4` advancing over time
+       - `bringUpGroup=1/5` advancing over time
        - `controlAuthorityAlpha` rising for unlocked groups
-       - `policyInfluenceAlpha` staying near `0.00` until the final group unlocks
+       - `policyInfluenceAlpha` staying near `0.00` through final-group unlock and the first hand-control-only window
+       - a later log line:
+         - `[PhysAnim] Stabilization policy influence ramp enabled after final-group control settle.`
   10. If the first `10` seconds are readable, let the run continue for about `30` seconds total.
   11. Record a short clip if practical. If not, capture at least one screenshot and write down exactly what dominated the run.
 - `Useful live knobs during this checkpoint`:

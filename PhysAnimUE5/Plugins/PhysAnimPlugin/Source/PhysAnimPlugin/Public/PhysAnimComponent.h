@@ -228,6 +228,7 @@ private:
 	float LastAppliedControlAuthorityAlpha = -1.0f;
 	double BridgeStartTimeSeconds = 0.0;
 	double SimulationHandoffCompletedTimeSeconds = -1.0;
+	double PolicyInfluenceRampStartTimeSeconds = -1.0;
 	int32 HighestUnlockedBringUpGroupIndex = INDEX_NONE;
 	float BringUpGroupStableAccumulatedSeconds = 0.0f;
 	TArray<double> BringUpGroupActivationTimeSeconds;
@@ -298,6 +299,12 @@ public:
 		bool bBringUpGroupUnlocked,
 		bool bDelayBringUpGroupControlRamp,
 		bool bPostUnlockSettleComplete);
+	static bool ShouldStartPolicyInfluenceRamp(
+		bool bForceZeroActions,
+		bool bAllBringUpGroupsUnlocked,
+		bool bFinalBringUpGroupControlRampActive,
+		bool bPostFinalGroupControlSettleComplete);
+	static bool ShouldApplyPolicyTargetToBone(FName BoneName, bool bPolicyInfluenceActive);
 	static float CalculateControlAuthorityAlpha(
 		bool bForceZeroActions,
 		bool bSimulationHandoffSettled,

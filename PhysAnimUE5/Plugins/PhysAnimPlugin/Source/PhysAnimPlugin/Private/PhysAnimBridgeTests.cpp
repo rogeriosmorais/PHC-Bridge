@@ -790,6 +790,16 @@ namespace
 		"PhysAnim.Component.PolicyInfluenceAlpha",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyInfluenceRampGateTest,
+		"PhysAnim.Component.PolicyInfluenceRampGate",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyTargetBoneFilterTest,
+		"PhysAnim.Component.PolicyTargetBoneFilter",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 	bool FPhysAnimPolicyInfluenceAlphaTest::RunTest(const FString& Parameters)
 	{
 		TestEqual(
@@ -812,6 +822,61 @@ namespace
 			TEXT("Policy influence reaches one after the ramp duration"),
 			UPhysAnimComponent::CalculatePolicyInfluenceAlpha(false, true, 1.0f, 1.0f),
 			1.0f);
+		return true;
+	}
+
+	bool FPhysAnimPolicyInfluenceRampGateTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("Force-zero mode blocks policy influence ramp start"),
+			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(true, true, true, true));
+		TestFalse(
+			TEXT("Policy influence waits until all bring-up groups are unlocked"),
+			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, false, true, true));
+		TestFalse(
+			TEXT("Policy influence waits until final-group control ramp is active"),
+			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, false, true));
+		TestFalse(
+			TEXT("Policy influence waits for a post-final-group-control settle window"),
+			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, true, false));
+		TestTrue(
+			TEXT("Policy influence can start after final-group control settles"),
+			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, true, true));
+		return true;
+	}
+
+	bool FPhysAnimPolicyTargetBoneFilterTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("Policy-inactive frames never write targets"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("spine_01"), false));
+		TestTrue(
+			TEXT("Active policy can still drive non-hand bones"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("spine_01"), true));
+		TestFalse(
+			TEXT("Active policy defers left clavicle targets during the current stabilization pass"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("clavicle_l"), true));
+		TestFalse(
+			TEXT("Active policy defers left upper-arm targets during the current stabilization pass"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("upperarm_l"), true));
+		TestFalse(
+			TEXT("Active policy defers left lower-arm targets during the current stabilization pass"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("lowerarm_l"), true));
+		TestFalse(
+			TEXT("Active policy defers left-hand targets during the current stabilization pass"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("hand_l"), true));
+		TestFalse(
+			TEXT("Active policy defers right clavicle targets during the current stabilization pass"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("clavicle_r"), true));
+		TestFalse(
+			TEXT("Active policy defers right upper-arm targets during the current stabilization pass"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("upperarm_r"), true));
+		TestFalse(
+			TEXT("Active policy defers right lower-arm targets during the current stabilization pass"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("lowerarm_r"), true));
+		TestFalse(
+			TEXT("Active policy defers right-hand targets during the current stabilization pass"),
+			UPhysAnimComponent::ShouldApplyPolicyTargetToBone(TEXT("hand_r"), true));
 		return true;
 	}
 

@@ -71,9 +71,14 @@ Current local Phase 1 truth on March 11, 2026:
 
 - startup now succeeds through `NNERuntimeORTDml`
 - the current blocker is no longer model loading
-- the current blocker is delayed post-handoff instability during live runtime
+- the current blocker is now the first live policy-target phase after staged bring-up, not simulation entry or hand-control entry
 - the bridge no longer jumps directly from activation into full-body live policy driving
 - the active bridge strategy is now staged bring-up, not global immediate activation
+- current evidence shows:
+  - hand simulation entry is stable
+  - final hand control-only entry is also stable
+  - the first new spike appears only after policy influence begins
+  - deferring direct hand policy targets did not remove the failure, so the remaining issue is broader than hand-target writes alone
 
 This means Phase 1 is now in stabilization/tuning, not in export discovery and not yet in G2 packaging.
 
@@ -138,7 +143,7 @@ Stage 1 runtime ownership is now defined by this explicit state machine:
      - the bridge may still be in staged bring-up while in this state:
        - non-root simulation groups unlock progressively
        - control authority ramps per unlocked group
-       - policy influence remains suppressed until the final group unlocks
+       - policy influence remains suppressed until the final hand-group control ramp has already settled
    - bridge-owned physics:
      - yes
    - required prerequisites:
@@ -176,9 +181,10 @@ The Phase 1 stabilization pass must proceed in this order:
    - same physics settings unless the task explicitly says otherwise
 2. stabilize passive simulation entry and staged bring-up before changing mapping assumptions
 3. ramp control authority in stages before restoring policy influence
-4. adjust fixed Physics Control gains/damping only after staged bring-up behavior is characterized
-5. inspect mapping / frame-assumption faults only if the simpler staged-runtime causes are ruled out
-6. do not ask the user to run G2 until the runtime-stability threshold passes
+4. for the current active pass, isolate hand-group policy target writes from hand-group control entry before adjusting gains
+5. adjust fixed Physics Control gains/damping only after staged bring-up behavior is characterized
+6. inspect mapping / frame-assumption faults only if the simpler staged-runtime causes are ruled out
+7. do not ask the user to run G2 until the runtime-stability threshold passes
 
 ### Frozen Stabilization Surface
 
