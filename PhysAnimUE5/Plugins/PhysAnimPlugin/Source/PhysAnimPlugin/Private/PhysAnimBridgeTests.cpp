@@ -4,6 +4,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimStage1InitializerComponent.h"
 
+#include "HAL/IConsoleManager.h"
 #include "Misc/AutomationTest.h"
 #include "PhysicsControlActor.h"
 #include "Tests/AutomationCommon.h"
@@ -21,9 +22,21 @@ namespace
 #if WITH_EDITOR
 	const FString PhysAnimPieSmokeMap = TEXT("/Game/ThirdPerson/Lvl_ThirdPerson");
 	const TCHAR* PhysAnimPieSmokePrefix = TEXT("[PhysAnimPieSmoke]");
-	constexpr float PhysAnimPieSmokeDurationSeconds = 10.0f;
+	const TCHAR* PhysAnimPieMovementSmokePrefix = TEXT("[PhysAnimPieMovementSmoke]");
+	constexpr float PhysAnimPieSmokeDurationSeconds = 30.0f;
+	constexpr float PhysAnimPieMovementSmokeDurationSeconds = 50.0f;
 	constexpr float PhysAnimPieSmokeStartTimeoutSeconds = 30.0f;
 	constexpr float PhysAnimPieSmokeStopTimeoutSeconds = 30.0f;
+
+	DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FSetIntConsoleVariableCommand, FString, Name, int32, Value);
+	bool FSetIntConsoleVariableCommand::Update()
+	{
+		if (IConsoleVariable* const ConsoleVariable = IConsoleManager::Get().FindConsoleVariable(*Name))
+		{
+			ConsoleVariable->Set(Value);
+		}
+		return true;
+	}
 
 #endif
 
@@ -787,6 +800,11 @@ namespace
 		"PhysAnim.Component.ControlAuthorityAlpha",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMovementSmokeScriptTest,
+		"PhysAnim.Component.MovementSmokeScript",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 	bool FPhysAnimControlAuthorityAlphaTest::RunTest(const FString& Parameters)
 	{
 		TestEqual(
@@ -813,6 +831,45 @@ namespace
 			TEXT("Non-positive ramp durations snap to full authority once settled"),
 			UPhysAnimComponent::CalculateControlAuthorityAlpha(false, true, 0.0f, 0.0f),
 			1.0f);
+		return true;
+	}
+
+	bool FPhysAnimMovementSmokeScriptTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("Movement smoke off does not preserve gameplay shell"),
+			UPhysAnimComponent::ShouldPreserveGameplayShellForMovementSmoke(false));
+		TestTrue(
+			TEXT("Movement smoke on preserves gameplay shell"),
+			UPhysAnimComponent::ShouldPreserveGameplayShellForMovementSmoke(true));
+		TestTrue(
+			TEXT("Initial movement smoke phase is idle"),
+			UPhysAnimComponent::ResolveMovementSmokePhaseName(1.0f) == TEXT("Idle_00"));
+		TestEqual(
+			TEXT("Forward phase emits forward intent"),
+			UPhysAnimComponent::ResolveMovementSmokeLocalIntent(4.0f),
+			FVector(1.0f, 0.0f, 0.0f));
+		TestTrue(
+			TEXT("Left strafe phase is named correctly"),
+			UPhysAnimComponent::ResolveMovementSmokePhaseName(12.0f) == TEXT("StrafeLeft"));
+		TestEqual(
+			TEXT("Left strafe emits negative local right intent"),
+			UPhysAnimComponent::ResolveMovementSmokeLocalIntent(12.0f),
+			FVector(0.0f, -1.0f, 0.0f));
+		TestTrue(
+			TEXT("Right strafe phase is named correctly"),
+			UPhysAnimComponent::ResolveMovementSmokePhaseName(21.0f) == TEXT("StrafeRight"));
+		TestEqual(
+			TEXT("Backward phase emits backward intent"),
+			UPhysAnimComponent::ResolveMovementSmokeLocalIntent(29.0f),
+			FVector(-1.0f, 0.0f, 0.0f));
+		TestTrue(
+			TEXT("Completed movement smoke reports the complete phase"),
+			UPhysAnimComponent::ResolveMovementSmokePhaseName(40.0f) == TEXT("Complete"));
+		TestEqual(
+			TEXT("Movement smoke duration is the frozen scripted window"),
+			UPhysAnimComponent::GetMovementSmokeDurationSeconds(),
+			32.0f);
 		return true;
 	}
 
@@ -1129,6 +1186,11 @@ namespace
 		"PhysAnim.PIE.Smoke",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPieMovementSmokeTest,
+		"PhysAnim.PIE.MovementSmoke",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 	bool FPhysAnimPieSmokeTest::RunTest(const FString& Parameters)
 	{
 		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
@@ -1172,6 +1234,55 @@ namespace
 				return true;
 			},
 			PhysAnimPieSmokeStopTimeoutSeconds));
+
+		return true;
+	}
+
+	bool FPhysAnimPieMovementSmokeTest::RunTest(const FString& Parameters)
+	{
+		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
+		{
+			AddError(FString::Printf(TEXT("%s Failed to open map '%s'."), PhysAnimPieMovementSmokePrefix, *PhysAnimPieSmokeMap));
+			return false;
+		}
+
+		AddCommand(new FEditorAutomationLogCommand(FString::Printf(
+			TEXT("%s PIE movement smoke opening '%s'."),
+			PhysAnimPieMovementSmokePrefix,
+			*PhysAnimPieSmokeMap)));
+		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeMode"), 1));
+		AddCommand(new FStartPIECommand(false));
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor != nullptr && IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("%s PIE did not start within %.1f seconds."),
+					PhysAnimPieMovementSmokePrefix,
+					PhysAnimPieSmokeStartTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStartTimeoutSeconds));
+		AddCommand(new FWaitLatentCommand(PhysAnimPieMovementSmokeDurationSeconds));
+		AddCommand(new FEndPlayMapCommand());
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor == nullptr || !IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("%s PIE did not stop within %.1f seconds."),
+					PhysAnimPieMovementSmokePrefix,
+					PhysAnimPieSmokeStopTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStopTimeoutSeconds));
+		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeMode"), 0));
 
 		return true;
 	}

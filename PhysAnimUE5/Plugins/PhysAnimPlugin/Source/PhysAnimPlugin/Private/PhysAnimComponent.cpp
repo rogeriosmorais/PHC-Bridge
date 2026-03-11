@@ -14,8 +14,10 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Controller.h"
 #include "HAL/IConsoleManager.h"
 #include "Logging/LogMacros.h"
+#include "Math/RotationMatrix.h"
 #include "NNEStatus.h"
 #include "PhysicsControlActor.h"
 #include "PhysicsControlComponent.h"
@@ -41,6 +43,9 @@ namespace PhysAnimComponentInternal
 	const TCHAR* FallbackCpuRuntime = TEXT("NNERuntimeORTCpu");
 	constexpr double InitialPoseSearchWaitTimeoutSeconds = 2.0;
 	constexpr int32 NumBringUpGroups = 5;
+	constexpr float MovementSmokeIdleDurationSeconds = 3.0f;
+	constexpr float MovementSmokeMoveDurationSeconds = 5.0f;
+	constexpr float MovementSmokeTimelineDurationSeconds = 32.0f;
 
 	TAutoConsoleVariable<float> CVarPhysAnimActionScale(
 		TEXT("physanim.ActionScale"),
@@ -110,6 +115,10 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.LogBridgeStateSnapshots"),
 		1,
 		TEXT("Whether PhysAnim emits startup and fail-stop bridge state snapshots."));
+	TAutoConsoleVariable<int32> CVarPhysAnimMovementSmokeMode(
+		TEXT("physanim.MovementSmokeMode"),
+		0,
+		TEXT("Enables the deterministic PIE movement smoke mode that preserves the gameplay shell and applies scripted WASD-equivalent input."));
 
 	float ResolveFloatOverride(const TAutoConsoleVariable<float>& CVar, float DefaultValue)
 	{
@@ -307,6 +316,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	}
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	ApplyMovementSmokeInput(EffectiveSettings);
 	FString TickError;
 	FPoseSearchBlueprintResult SearchResult;
 	if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
@@ -580,6 +590,10 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 	LogBridgeStateSnapshot(TEXT("AfterActivateBridgePhysicsState"));
 	ResetStabilizationRuntimeState();
 	BridgeStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (const AActor* const OwnerActor = GetOwner())
+	{
+		MovementSmokeStartLocation = OwnerActor->GetActorLocation();
+	}
 	SimulationHandoffAlpha = CalculateSimulationHandoffAlpha(EffectiveSettings);
 	PhysicsControl->UpdateTargetCaches(0.0f);
 	if (!SeedControlTargetsFromCurrentPose(0.0f, OutError))
@@ -1367,6 +1381,7 @@ void UPhysAnimComponent::ActivateBridgePhysicsState()
 	SkeletalMesh->SetEnablePhysicsBlending(true);
 	SkeletalMesh->WakeAllRigidBodies();
 
+	const bool bPreserveGameplayShell = ShouldPreserveGameplayShellForMovementSmoke(IsMovementSmokeModeEnabled());
 	if (ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner()))
 	{
 		if (UCapsuleComponent* const CapsuleComponent = CharacterOwner->GetCapsuleComponent())
@@ -1377,7 +1392,10 @@ void UPhysAnimComponent::ActivateBridgePhysicsState()
 				bHasSavedCapsuleCollisionState = true;
 			}
 
-			CapsuleComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			if (!bPreserveGameplayShell)
+			{
+				CapsuleComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			}
 		}
 
 		if (UCharacterMovementComponent* const CharacterMovement = CharacterOwner->GetCharacterMovement())
@@ -1390,9 +1408,28 @@ void UPhysAnimComponent::ActivateBridgePhysicsState()
 				bHasSavedCharacterMovementState = true;
 			}
 
-			CharacterMovement->DisableMovement();
-			CharacterMovement->SetComponentTickEnabled(false);
+			if (!bPreserveGameplayShell)
+			{
+				CharacterMovement->DisableMovement();
+				CharacterMovement->SetComponentTickEnabled(false);
+			}
+			else
+			{
+				CharacterMovement->SetComponentTickEnabled(true);
+				if (CharacterMovement->MovementMode == MOVE_None)
+				{
+					CharacterMovement->SetMovementMode(MOVE_Walking);
+				}
+			}
 		}
+	}
+
+	if (bPreserveGameplayShell)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Movement smoke mode active: preserving capsule collision and CharacterMovement during BridgeActive."));
 	}
 }
 
@@ -2089,6 +2126,91 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 	}
 }
 
+bool UPhysAnimComponent::IsMovementSmokeModeEnabled() const
+{
+	return PhysAnimComponentInternal::CVarPhysAnimMovementSmokeMode.GetValueOnGameThread() != 0;
+}
+
+void UPhysAnimComponent::ApplyMovementSmokeInput(const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	LastMovementSmokeLocalIntent = FVector::ZeroVector;
+	LastMovementSmokeWorldIntent = FVector::ZeroVector;
+	LastMovementSmokePhaseName = NAME_None;
+
+	if (!IsMovementSmokeModeEnabled() || RuntimeState != EPhysAnimRuntimeState::BridgeActive)
+	{
+		return;
+	}
+
+	ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
+	if (!CharacterOwner)
+	{
+		return;
+	}
+
+	const UWorld* const World = GetWorld();
+	const double CurrentTimeSeconds = World ? World->GetTimeSeconds() : BridgeStartTimeSeconds;
+	const double ScriptStartTimeSeconds = PolicyInfluenceRampStartTimeSeconds >= 0.0
+		? (PolicyInfluenceRampStartTimeSeconds + EffectiveSettings.StartupRampSeconds)
+		: -1.0;
+	if (ScriptStartTimeSeconds < 0.0 || CurrentTimeSeconds < ScriptStartTimeSeconds)
+	{
+		LastMovementSmokePhaseName = TEXT("WaitingForPolicy");
+		LastMovementSmokeOwnerVelocityCmPerSecond = CharacterOwner->GetVelocity();
+		return;
+	}
+
+	const float ScriptElapsedSeconds = static_cast<float>(CurrentTimeSeconds - ScriptStartTimeSeconds);
+	const FVector LocalIntent = ResolveMovementSmokeLocalIntent(ScriptElapsedSeconds);
+	const FName PhaseName = ResolveMovementSmokePhaseName(ScriptElapsedSeconds);
+
+	FRotator IntentRotation = CharacterOwner->GetActorRotation();
+	if (const AController* const Controller = CharacterOwner->GetController())
+	{
+		IntentRotation = Controller->GetControlRotation();
+	}
+	IntentRotation.Pitch = 0.0f;
+	IntentRotation.Roll = 0.0f;
+
+	const FVector Forward = FRotationMatrix(IntentRotation).GetScaledAxis(EAxis::X).GetSafeNormal2D();
+	const FVector Right = FRotationMatrix(IntentRotation).GetScaledAxis(EAxis::Y).GetSafeNormal2D();
+	const FVector WorldIntent = ((Forward * LocalIntent.X) + (Right * LocalIntent.Y)).GetClampedToMaxSize(1.0f);
+
+	if (!bMovementSmokeScriptStarted)
+	{
+		MovementSmokeStartLocation = CharacterOwner->GetActorLocation();
+		bMovementSmokeScriptStarted = true;
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Movement smoke script started after policy settle."));
+	}
+
+	LastMovementSmokeLocalIntent = LocalIntent;
+	LastMovementSmokeWorldIntent = WorldIntent;
+	LastMovementSmokePhaseName = PhaseName;
+	LastMovementSmokeOwnerVelocityCmPerSecond = CharacterOwner->GetVelocity();
+
+	if (!WorldIntent.IsNearlyZero())
+	{
+		CharacterOwner->AddMovementInput(WorldIntent, 1.0f, true);
+	}
+
+	if (!bMovementSmokeCompletionLogged && ScriptElapsedSeconds >= GetMovementSmokeDurationSeconds())
+	{
+		const FVector CurrentLocation = CharacterOwner->GetActorLocation();
+		const float TotalDisplacementCm = FVector::Dist2D(CurrentLocation, MovementSmokeStartLocation);
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Movement smoke complete: totalDisplacementCm=%.1f finalPhase=%s runtime=%s"),
+			TotalDisplacementCm,
+			*PhaseName.ToString(),
+			GetRuntimeStateName(RuntimeState));
+		bMovementSmokeCompletionLogged = true;
+	}
+}
+
 void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
 	if (!EffectiveSettings.bLogActionDiagnostics)
@@ -2113,13 +2235,20 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
-		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s written=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
+		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s written=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
 		SimulationHandoffAlpha,
 		FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
 		GetBringUpGroupCount(),
 		CalculateCurrentControlAuthorityAlpha(EffectiveSettings),
 		CalculateBringUpGroupControlAuthorityAlpha(HighestUnlockedBringUpGroupIndex, EffectiveSettings),
 		CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings),
+		IsMovementSmokeModeEnabled() ? TEXT("true") : TEXT("false"),
+		*LastMovementSmokePhaseName.ToString(),
+		LastMovementSmokeLocalIntent.X,
+		LastMovementSmokeLocalIntent.Y,
+		LastMovementSmokeWorldIntent.X,
+		LastMovementSmokeWorldIntent.Y,
+		LastMovementSmokeOwnerVelocityCmPerSecond.Size2D(),
 		LastActionDiagnostics.RawMin,
 		LastActionDiagnostics.RawMax,
 		LastActionDiagnostics.RawMeanAbs,
@@ -2172,6 +2301,13 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	BringUpGroupControlRampStartTimeSeconds.Init(-1.0, GetBringUpGroupCount());
 	PendingBodyModifierCachedResetNames.Reset();
 	LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
+	LastMovementSmokeLocalIntent = FVector::ZeroVector;
+	LastMovementSmokeWorldIntent = FVector::ZeroVector;
+	LastMovementSmokeOwnerVelocityCmPerSecond = FVector::ZeroVector;
+	MovementSmokeStartLocation = FVector::ZeroVector;
+	LastMovementSmokePhaseName = NAME_None;
+	bMovementSmokeScriptStarted = false;
+	bMovementSmokeCompletionLogged = false;
 	PolicyBlendStartControlTargetRotations.Reset();
 	bPolicyTargetsAppliedLastFrame = false;
 	LastAppliedStabilizationSettings = {};
@@ -2414,6 +2550,100 @@ float UPhysAnimComponent::CalculateControlAuthorityAlpha(
 	}
 
 	return FMath::Clamp(ElapsedSinceHandoffSettledSeconds / RampDurationSeconds, 0.0f, 1.0f);
+}
+
+bool UPhysAnimComponent::ShouldPreserveGameplayShellForMovementSmoke(bool bMovementSmokeModeEnabled)
+{
+	return bMovementSmokeModeEnabled;
+}
+
+FVector UPhysAnimComponent::ResolveMovementSmokeLocalIntent(float ElapsedSeconds)
+{
+	if (ElapsedSeconds < 0.0f)
+	{
+		return FVector::ZeroVector;
+	}
+	if (ElapsedSeconds < 3.0f)
+	{
+		return FVector::ZeroVector;
+	}
+	if (ElapsedSeconds < 8.0f)
+	{
+		return FVector(1.0f, 0.0f, 0.0f);
+	}
+	if (ElapsedSeconds < 11.0f)
+	{
+		return FVector::ZeroVector;
+	}
+	if (ElapsedSeconds < 16.0f)
+	{
+		return FVector(0.0f, -1.0f, 0.0f);
+	}
+	if (ElapsedSeconds < 19.0f)
+	{
+		return FVector::ZeroVector;
+	}
+	if (ElapsedSeconds < 24.0f)
+	{
+		return FVector(0.0f, 1.0f, 0.0f);
+	}
+	if (ElapsedSeconds < 27.0f)
+	{
+		return FVector::ZeroVector;
+	}
+	if (ElapsedSeconds < PhysAnimComponentInternal::MovementSmokeTimelineDurationSeconds)
+	{
+		return FVector(-1.0f, 0.0f, 0.0f);
+	}
+
+	return FVector::ZeroVector;
+}
+
+FName UPhysAnimComponent::ResolveMovementSmokePhaseName(float ElapsedSeconds)
+{
+	if (ElapsedSeconds < 0.0f)
+	{
+		return TEXT("Inactive");
+	}
+	if (ElapsedSeconds < 3.0f)
+	{
+		return TEXT("Idle_00");
+	}
+	if (ElapsedSeconds < 8.0f)
+	{
+		return TEXT("Forward");
+	}
+	if (ElapsedSeconds < 11.0f)
+	{
+		return TEXT("Idle_01");
+	}
+	if (ElapsedSeconds < 16.0f)
+	{
+		return TEXT("StrafeLeft");
+	}
+	if (ElapsedSeconds < 19.0f)
+	{
+		return TEXT("Idle_02");
+	}
+	if (ElapsedSeconds < 24.0f)
+	{
+		return TEXT("StrafeRight");
+	}
+	if (ElapsedSeconds < 27.0f)
+	{
+		return TEXT("Idle_03");
+	}
+	if (ElapsedSeconds < PhysAnimComponentInternal::MovementSmokeTimelineDurationSeconds)
+	{
+		return TEXT("Backward");
+	}
+
+	return TEXT("Complete");
+}
+
+float UPhysAnimComponent::GetMovementSmokeDurationSeconds()
+{
+	return PhysAnimComponentInternal::MovementSmokeTimelineDurationSeconds;
 }
 
 float UPhysAnimComponent::CalculatePolicyInfluenceAlpha(

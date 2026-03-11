@@ -195,6 +195,7 @@ The Phase 1 stabilization pass must proceed in this order:
 5. adjust fixed Physics Control gains/damping only after policy target scope and continuity are characterized
 6. inspect mapping / frame-assumption faults only if the simpler staged-runtime and policy-target causes are ruled out
 7. do not ask the user to run G2 until the runtime-stability threshold passes
+8. after the passive smoke path is green, use [phase1-movement-stability-plan.md](/F:/NewEngine/plans/stage1/20-execution/phase1-movement-stability-plan.md) as the frozen contract for the first `WASD`-equivalent movement milestone
 
 ### Frozen Stabilization Surface
 

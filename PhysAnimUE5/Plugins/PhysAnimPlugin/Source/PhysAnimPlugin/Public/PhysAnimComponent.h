@@ -178,6 +178,8 @@ private:
 	void LogBodyModifierTelemetrySnapshot(const TCHAR* Context) const;
 	void ResetPendingBodyModifiersToCachedTargets();
 	void ApplyControlTargets(float DeltaTime, FString& OutError);
+	bool IsMovementSmokeModeEnabled() const;
+	void ApplyMovementSmokeInput(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void MaybeLogRuntimeDiagnostics(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	void ResetStabilizationRuntimeState();
 	void FailStop(const FString& Reason);
@@ -238,6 +240,13 @@ private:
 	TArray<double> BringUpGroupControlRampStartTimeSeconds;
 	TArray<FName> PendingBodyModifierCachedResetNames;
 	double LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
+	FVector LastMovementSmokeLocalIntent = FVector::ZeroVector;
+	FVector LastMovementSmokeWorldIntent = FVector::ZeroVector;
+	FVector LastMovementSmokeOwnerVelocityCmPerSecond = FVector::ZeroVector;
+	FVector MovementSmokeStartLocation = FVector::ZeroVector;
+	FName LastMovementSmokePhaseName = NAME_None;
+	bool bMovementSmokeScriptStarted = false;
+	bool bMovementSmokeCompletionLogged = false;
 	FName OriginalMeshCollisionProfileName = NAME_None;
 	ECollisionEnabled::Type OriginalMeshCollisionEnabled = ECollisionEnabled::NoCollision;
 	TEnumAsByte<ECollisionResponse> OriginalMeshPawnResponse = ECollisionResponse::ECR_Block;
@@ -325,6 +334,10 @@ public:
 		bool bSimulationHandoffSettled,
 		float ElapsedSinceHandoffSettledSeconds,
 		float RampDurationSeconds);
+	static bool ShouldPreserveGameplayShellForMovementSmoke(bool bMovementSmokeModeEnabled);
+	static FVector ResolveMovementSmokeLocalIntent(float ElapsedSeconds);
+	static FName ResolveMovementSmokePhaseName(float ElapsedSeconds);
+	static float GetMovementSmokeDurationSeconds();
 	static float CalculatePolicyInfluenceAlpha(
 		bool bForceZeroActions,
 		bool bAllBringUpGroupsUnlocked,

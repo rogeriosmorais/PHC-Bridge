@@ -89,7 +89,12 @@ Only the orchestrator updates status.
     - stale explicit targets are cleared when switching into skeletal-animation target mode
     - the bridge quaternion basis conversion now preserves identity local rotations correctly
   - the latest `run-pie-smoke.ps1` evidence shows first-policy-frame raw offsets collapsed from roughly `120-144 deg` to about `0-2 deg`, later full-policy raw offsets stayed around low double digits, and the `10` second smoke window completed without catastrophic per-body spikes
-  - the next Phase 1 risk is no longer immediate stabilization failure; it is longer-duration validation and later G2 quality judgment
+  - March 11, 2026 movement-smoke work then added a deterministic `WASD`-equivalent PIE harness behind test-only controls
+  - the passive smoke path remained green after that harness was added
+  - the first valid movement-smoke run also showed that the bridge is not yet stable under real forward movement:
+    - scripted movement now starts only after policy settle
+    - the first forward window still drives root height delta past the fail-stop threshold within about `0.26s`
+  - the next Phase 1 risk is now movement stability under gameplay-shell coexistence, not passive startup or passive policy activation
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`
