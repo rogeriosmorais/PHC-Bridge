@@ -71,32 +71,33 @@ namespace PhysAnimBridge
 
 		const TArray<FName>& MakeSmplObservationBones()
 		{
+			// Must match ProtoMotions smpl.yaml body_names (DFS traversal order).
 			static const TArray<FName> Bones =
 			{
-				TEXT("pelvis"),
-				TEXT("thigh_l"),
-				TEXT("thigh_r"),
-				TEXT("spine_01"),
-				TEXT("calf_l"),
-				TEXT("calf_r"),
-				TEXT("spine_02"),
-				TEXT("foot_l"),
-				TEXT("foot_r"),
-				TEXT("spine_03"),
-				TEXT("ball_l"),
-				TEXT("ball_r"),
-				TEXT("neck_01"),
-				TEXT("clavicle_l"),
-				TEXT("clavicle_r"),
-				TEXT("head"),
-				TEXT("upperarm_l"),
-				TEXT("upperarm_r"),
-				TEXT("lowerarm_l"),
-				TEXT("lowerarm_r"),
-				TEXT("hand_l"),
-				TEXT("hand_r"),
-				TEXT("hand_l"),
-				TEXT("hand_r")
+				TEXT("pelvis"),      // 0:  Pelvis
+				TEXT("thigh_l"),     // 1:  L_Hip
+				TEXT("calf_l"),      // 2:  L_Knee
+				TEXT("foot_l"),      // 3:  L_Ankle
+				TEXT("ball_l"),      // 4:  L_Toe
+				TEXT("thigh_r"),     // 5:  R_Hip
+				TEXT("calf_r"),      // 6:  R_Knee
+				TEXT("foot_r"),      // 7:  R_Ankle
+				TEXT("ball_r"),      // 8:  R_Toe
+				TEXT("spine_01"),    // 9:  Torso
+				TEXT("spine_02"),    // 10: Spine
+				TEXT("spine_03"),    // 11: Chest
+				TEXT("neck_01"),     // 12: Neck
+				TEXT("head"),        // 13: Head
+				TEXT("clavicle_l"),  // 14: L_Thorax
+				TEXT("upperarm_l"),  // 15: L_Shoulder
+				TEXT("lowerarm_l"),  // 16: L_Elbow
+				TEXT("hand_l"),      // 17: L_Wrist
+				TEXT("hand_l"),      // 18: L_Hand (collapsed with L_Wrist)
+				TEXT("clavicle_r"),  // 19: R_Thorax
+				TEXT("upperarm_r"),  // 20: R_Shoulder
+				TEXT("lowerarm_r"),  // 21: R_Elbow
+				TEXT("hand_r"),      // 22: R_Wrist
+				TEXT("hand_r")       // 23: R_Hand (collapsed with R_Wrist)
 			};
 
 			return Bones;
