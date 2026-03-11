@@ -15,8 +15,8 @@ Use it to track:
 ## Current State
 
 - `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` stabilization passes completed for the current smoke target
-- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Gate G1 is explicitly `pass`; the selected Phase 1 runtime model is the pretrained `motion_tracker/smpl` checkpoint; the full UE startup path succeeds through `NNERuntimeORTDml`; the one-character bridge now completes a `65` second passive idle PIE smoke window without catastrophic post-startup instability, drift, collapse, or delayed fail-stop; a dedicated movement-smoke harness now exists and has already shown that the first real post-policy forward movement is still unstable, so the active bridge is no longer blocked on passive stabilization but is not yet movement-stable
-- `Last planning milestone`: the frozen policy-phase stabilization plan converged on March 11, 2026 after continuity fixes, representation-switch cleanup, and the corrected SMPL->UE quaternion basis conversion removed the remaining live-policy blow-up; the passive idle validation window then extended from `30s` to `65s` and stayed green; the next frozen milestone is now the Phase 1 movement-stability plan
+- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Gate G1 is explicitly `pass`; the selected Phase 1 runtime model is the pretrained `motion_tracker/smpl` checkpoint; the full UE startup path succeeds through `NNERuntimeORTDml`; the one-character bridge now completes a `65` second passive idle PIE smoke window without catastrophic post-startup instability, drift, collapse, or delayed fail-stop; deterministic movement smoke and longer locomotion soak are both green; preserved-gameplay-shell manual `WASD` also works in `BridgeActive`; the next active Phase 1 task is G2 comparison packaging, not more blind stabilization
+- `Last planning milestone`: the frozen policy-phase stabilization plan converged on March 11, 2026 after continuity fixes, representation-switch cleanup, and the corrected SMPL->UE quaternion basis conversion removed the remaining live-policy blow-up; the passive idle validation window then extended from `30s` to `65s` and stayed green; movement-stability then passed through deterministic smoke, longer locomotion soak, and gameplay-shell-relative fail-stop evaluation; the next frozen milestone is now live side-by-side G2 comparison readiness
 
 ## Active Tasks
 
@@ -28,7 +28,7 @@ Use it to track:
 | S1-P0-A1 | AI | completed | `plans/stage1/40-tasks/task-packet-s1-p0-a1.md` plus frozen Phase 0 inputs | `plans/stage1/20-execution/phase0-execution-package.md`, `plans/stage1/10-specs/bridge-spec.md`, `plans/stage1/10-specs/retargeting-spec.md`, `plans/stage1/20-execution/assumption-ledger.md`, `plans/stage1/20-execution/execution-log.md` | none |
 | S1-P0-A2 | AI + User | completed | `plans/stage1/20-execution/phase0-execution-package.md`, `plans/stage1/60-user/manual-verification.md`, `plans/stage1/10-specs/acceptance-thresholds.md`, `plans/stage1/30-evidence/g1-evidence.md` | `plans/stage1/30-evidence/g1-evidence.md`, `plans/stage1/20-execution/assumption-ledger.md`, `plans/stage1/20-execution/execution-log.md` | none |
 | S1-P1-A1 | AI | completed | `plans/stage1/40-tasks/task-packet-s1-p1-a1.md`, `plans/stage1/20-execution/phase1-implementation-package.md`, `plans/stage1/10-specs/onnx-export-spec.md`, `plans/stage1/10-specs/ue-bridge-implementation-spec.md` | `Training/scripts/export_onnx.py`, `Training/physanim/export_onnx.py`, `Training/tests/test_onnx_export.py`, `plans/stage1/20-execution/phase1-implementation-package.md`, `plans/stage1/10-specs/dependency-lock.md`, `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none |
-| S1-P1-A2 | AI | in_progress | accepted `S1-P1-A1` handoff, `phase1-implementation-package.md`, `manual-verification.md`, `acceptance-thresholds.md`, `phase1-ue-bridge-bringup-runbook.md` | `plans/stage1/40-tasks/task-packet-s1-p1-a2.md`, `plans/stage1/60-user/manual-verification.md`, `plans/stage1/10-specs/acceptance-thresholds.md`, `plans/stage1/30-evidence/g2-evaluation.md`, `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none |
+| S1-P1-A2 | AI | in_progress | accepted `S1-P1-A1` handoff, `phase1-implementation-package.md`, `manual-verification.md`, `acceptance-thresholds.md`, `phase1-ue-bridge-bringup-runbook.md` | `plans/stage1/40-tasks/task-packet-s1-p1-a2.md`, `plans/stage1/60-user/manual-verification.md`, `plans/stage1/10-specs/acceptance-thresholds.md`, `plans/stage1/30-evidence/g2-evaluation.md`, `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none; current work is G2 comparison packaging and user-side judgment setup |
 
 ## Frozen Inputs For Phase 0 Preparation
 
@@ -56,8 +56,8 @@ Use it to track:
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-P1-A2 | runnable now; startup succeeds through `NNERuntimeORTDml`, so the next safe task is stabilization/tuning planning before G2 |
-| 2 | stabilization implementation pass | runnable after the updated `S1-P1-A2` package is accepted |
+| 1 | S1-P1-A2 | runnable now; runtime stability and first movement milestones are green, so the next safe task is G2 side-by-side packaging and evidence capture |
+| 2 | G2 evidence capture | runnable once the frozen comparison sequence and live side-by-side harness are accepted |
 | 3 | S1-P2-A1 | not runnable until G2 is explicitly passed |
 
 ## Waiting On User
@@ -117,7 +117,7 @@ Use it to track:
 
 | Task ID | Status | Reason |
 |---|---|---|
-| G2 | blocked | do not package or judge G2 while the physics-driven runtime is still dominated by immediate post-startup instability |
+| G2 | readying | runtime stability blockers are cleared for the current scope; remaining work is fair comparison packaging and user judgment |
 | S1-P2-A1 | blocked | depends on G2 pass |
 | S1-P2-A2 | blocked | depends on Phase 2 result |
 
@@ -137,3 +137,24 @@ Whenever new setup or gate evidence arrives:
   - verification: `run-pie-movement-smoke.ps1` now completes without `BridgeActive -> FailStopped`
   - first movement-stability milestone is now treated as `pass`
   - next validation pass is a longer deterministic locomotion soak over repeated scripted movement cycles plus short manual real-`WASD` confirmation
+  - the longer deterministic locomotion soak is now also green
+  - manual real-`WASD` in `BridgeActive` now works with preserved `CharacterMovement`
+  - a live side-by-side G2 harness now exists through `PhysAnim.G2.StartSideBySide` / `PhysAnim.G2.StopSideBySide`
+  - the preferred G2 format is now one PIE session with a `Physics-Driven` Manny and a spawned `Kinematic` Manny, not two separate recordings unless the live harness is unavailable
+  - a scripted G2 presentation harness now exists through `PhysAnim.G2.StartPresentation`
+    - it freezes player move/look input
+    - it drives both actors through the same short sequence
+    - it uses a fixed tracking comparison camera
+  - manual side-by-side remains available as a weaker fallback through `PhysAnim.G2.StartSideBySide`
+  - a later March 11, 2026 startup-stability pass found one remaining early lower-body edge case in manual runtime:
+    - staged bring-up was promoting thighs first, calves second, and feet/balls third
+    - that created a mixed simulated/kinematic lower-limb chain during startup
+    - the failing log showed the first bad spike in `calf_r` and `ball_r` before policy influence mattered
+  - fix:
+    - staged bring-up now unlocks calves, feet, and balls together as one lower-leg group
+    - the arm chain still remains separate from the final hand-only group
+  - verification after that lower-leg staging fix:
+    - `PhysAnim.Component` passed
+    - `run-pie-smoke.ps1` passed
+    - the fresh smoke log no longer shows the old early `calf_r/ball_r` blow-up at group `2/5`
+    - startup, policy activation, and the rest of the smoke window stayed bounded without `Fail-stop`

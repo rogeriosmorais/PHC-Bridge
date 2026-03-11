@@ -44,7 +44,7 @@ Only the orchestrator updates status.
 
 ## Latest Orchestrator Review
 
-- `Review commit`: `eb6944f` plus local uncommitted UE harness debug changes
+- `Review commit`: `5465b23` plus local uncommitted G2 comparison harness changes
 - `Reviewed artifacts`:
   - `plans/stage1/10-specs/bridge-spec.md`
   - `plans/stage1/10-specs/retargeting-spec.md`
@@ -99,7 +99,24 @@ Only the orchestrator updates status.
     - the deterministic `WASD`-equivalent movement smoke now completes without `BridgeActive -> FailStopped`
     - passive smoke remains green
     - the first movement-stability milestone is now considered passed
-  - the next Phase 1 risk is no longer “can the bridge move at all?”; it is now longer-duration locomotion soak coverage, manual real-`WASD` evidence, and G2 capture readiness
+  - the longer deterministic locomotion soak is now also green
+  - manual real-`WASD` now works during `BridgeActive` with no visible immediate problems reported by the user
+  - the next Phase 1 risk is no longer “can the bridge move at all?”; it is now fair G2 capture readiness and whether the side-by-side comparison actually demonstrates a noticeable quality win
+  - a live side-by-side G2 harness now exists:
+    - current player Manny remains `Physics-Driven`
+    - one duplicate Manny is spawned as the `Kinematic` baseline
+    - the preferred comparison path is now one PIE session with both actors visible at once
+  - the preferred G2 judgment path is now the scripted presentation harness, not free-walk comparison:
+    - `PhysAnim.G2.StartPresentation` locks camera and inputs
+    - both actors run the same deterministic sequence
+    - manual side-by-side remains only as a fallback sanity check
+  - one remaining manual-runtime startup edge case was then isolated to lower-limb bring-up order rather than policy onset or user timing:
+    - the old staged order split each leg across `thigh -> calf -> foot/ball`
+    - ProtoMotions locomotion control assumes a coherent hip-knee-ankle-toe chain, so that split was a bad runtime match
+    - failing logs showed the first large spike in `calf_r` / `ball_r` while `policyInfluenceAlpha = 0.00`
+  - the staged bring-up order is now corrected for lower legs:
+    - calves, feet, and balls unlock together before the upper-arm chain
+    - after this fix, the passive PIE smoke stays bounded through startup and policy activation with no early lower-body fail-stop
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

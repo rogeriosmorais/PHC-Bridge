@@ -52,14 +52,30 @@ Keep these fixed between both captures:
 - same arena or environment setup
 - same playback speed
 
+Preferred setup:
+
+1. **Live side-by-side PIE comparison**
+   - one `Physics-Driven` Manny and one `Kinematic` Manny in the same session
+   - identical scripted sequence or mirrored movement input
+   - fixed tracking camera preferred
+   - no pawn collision or physical interference between the pair
+   - clear on-screen role labels
+2. **Fallback**
+   - manual side-by-side or two clearly comparable recordings only if the scripted presentation harness is unavailable
+
 ## User Procedure
 
-1. Confirm the orchestrator has named the exact comparison clips or build version.
-2. Confirm the capture pair uses the same frozen sequence from [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/50-content/comparison-sequence-lock.md).
-3. Watch the kinematic version once without judging.
-4. Watch the physics-driven version once without judging.
-5. Watch them again side by side, or alternate in the same order.
-6. Judge only the motion thesis, not missing features or unrelated polish.
+1. Confirm the orchestrator has named the exact comparison sequence or build version.
+2. Confirm the setup uses the same frozen sequence from [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/50-content/comparison-sequence-lock.md).
+3. If the live side-by-side harness is available, prefer it:
+   - start PIE
+   - enter `BridgeActive`
+   - run `PhysAnim.G2.StartPresentation`
+4. Identify the labeled actors:
+   - `Kinematic`
+   - `Physics-Driven`
+5. Watch the full frozen scripted sequence once without judging.
+6. Watch it again and judge only the motion thesis, not missing features or unrelated polish.
 7. Fill the evidence template before choosing the final verdict.
 
 ## What G2 Is Actually Judging
@@ -103,7 +119,7 @@ Choose `blocked` if:
 
 ## Required Evidence
 
-- one side-by-side clip or two clearly comparable clips
+- one scripted live side-by-side clip preferred, or a clearly comparable fallback capture
 - one short written verdict from the user
 - notes on which rubric points drove the decision
 
@@ -130,8 +146,9 @@ Then choose:
 ## Evidence Template
 
 - `Comparison sequence`:
-- `Kinematic clip`:
-- `Physics-driven clip`:
+- `G2 format`: live side-by-side / two recordings
+- `Kinematic clip or actor label`:
+- `Physics-driven clip or actor label`:
 - `Camera/setup parity confirmed?`: yes/no
 - `User verdict`: pending
 - `Why this verdict was chosen`:

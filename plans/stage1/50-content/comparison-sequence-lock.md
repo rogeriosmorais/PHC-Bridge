@@ -29,6 +29,35 @@ The default G2 comparison sequence is:
 
 This is the minimum sequence required for G2.
 
+## Preferred G2 Format
+
+The preferred Stage 1 G2 format is now:
+
+- one live side-by-side PIE comparison
+- same map
+- same camera framing
+- same session
+- same moment-to-moment action sequence
+
+Preferred actor roles:
+
+- `Physics-Driven`: the active bridge Manny
+- `Kinematic`: a comparison Manny spawned as the baseline
+
+Preferred trigger path:
+
+- enter `BridgeActive`
+- run `PhysAnim.G2.StartPresentation`
+- compare both actors through the same scripted sequence and fixed camera
+
+Fallback trigger path:
+
+- enter `BridgeActive`
+- run `PhysAnim.G2.StartSideBySide`
+- use it only for ad hoc sanity checks when the scripted presentation harness is unavailable
+
+If the live side-by-side path is unavailable, two clearly comparable recordings are still acceptable, but they are now the fallback, not the default.
+
 ## Lock Rules
 
 Before G2:
@@ -36,6 +65,9 @@ Before G2:
 - every motion actually used in the comparison must be `locked` in [motion-source-lock-table.md](/F:/NewEngine/plans/stage1/50-content/motion-source-lock-table.md)
 - the comparison capture must name the exact clips or motion sources used
 - kinematic and physics-driven versions must use the same sequence order
+- if live side-by-side is used, both actors must be driven by the same frozen live sequence or mirrored input path
+- the two actors must not physically interfere with each other
+- labels or other role markers must make it obvious which actor is `Kinematic` and which is `Physics-Driven`
 
 ## Not Allowed
 

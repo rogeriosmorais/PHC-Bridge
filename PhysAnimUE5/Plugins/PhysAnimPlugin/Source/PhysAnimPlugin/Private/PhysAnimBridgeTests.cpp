@@ -1,6 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "PhysAnimBridge.h"
+#include "PhysAnimComparisonSubsystem.h"
 #include "PhysAnimComponent.h"
 #include "PhysAnimStage1InitializerComponent.h"
 
@@ -792,8 +793,10 @@ namespace
 		TestEqual(TEXT("Bring-up group count matches staged unlock plan"), UPhysAnimComponent::GetBringUpGroupCount(), 5);
 		TestEqual(TEXT("Spine group unlocks first"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("spine_01")), 0);
 		TestEqual(TEXT("Thigh group unlocks first"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("thigh_r")), 0);
-		TestEqual(TEXT("Upper arms unlock second"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("upperarm_l")), 1);
-		TestEqual(TEXT("Feet and lower arms unlock third"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("ball_l")), 2);
+		TestEqual(TEXT("Calves unlock with the rest of the lower leg"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("calf_l")), 1);
+		TestEqual(TEXT("Feet and balls unlock with calves"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("ball_l")), 1);
+		TestEqual(TEXT("Upper-arm chain unlocks after the full lower leg"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("upperarm_l")), 2);
+		TestEqual(TEXT("Lower arms unlock with the upper-arm chain"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("lowerarm_r")), 2);
 		TestEqual(TEXT("Head and neck unlock before hands"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("head")), 3);
 		TestEqual(TEXT("Hands unlock last"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("hand_r")), 4);
 		TestEqual(TEXT("Root pelvis is not a staged non-root group"), UPhysAnimComponent::ResolveBringUpGroupIndex(TEXT("pelvis")), INDEX_NONE);
@@ -920,6 +923,69 @@ namespace
 			TEXT("Movement smoke total duration clamps loop count to one"),
 			UPhysAnimComponent::GetMovementSmokeTotalDurationSeconds(0),
 			32.0f);
+		TestEqual(
+			TEXT("Physics-driven comparison label is stable"),
+			UPhysAnimComparisonSubsystem::ResolveComparisonRoleLabel(true),
+			FString(TEXT("Physics-Driven")));
+		TestEqual(
+			TEXT("Kinematic comparison label is stable"),
+			UPhysAnimComparisonSubsystem::ResolveComparisonRoleLabel(false),
+			FString(TEXT("Kinematic")));
+		TestEqual(
+			TEXT("Physics-driven comparison actor is offset to positive Y"),
+			UPhysAnimComparisonSubsystem::ResolveComparisonSpawnOffset(true, 250.0f),
+			FVector(0.0f, 125.0f, 0.0f));
+		TestEqual(
+			TEXT("Kinematic comparison actor is offset to negative Y"),
+			UPhysAnimComparisonSubsystem::ResolveComparisonSpawnOffset(false, 250.0f),
+			FVector(0.0f, -125.0f, 0.0f));
+		TestEqual(
+			TEXT("Pending movement input takes priority when mirroring"),
+			UPhysAnimComparisonSubsystem::ResolveMirroredWorldInput(FVector(1.0f, 0.0f, 0.0f), FVector(0.0f, 1.0f, 0.0f)),
+			FVector(1.0f, 0.0f, 0.0f));
+		TestEqual(
+			TEXT("Last movement input is used when pending input is empty"),
+			UPhysAnimComparisonSubsystem::ResolveMirroredWorldInput(FVector::ZeroVector, FVector(0.0f, 1.0f, 0.0f)),
+			FVector(0.0f, 1.0f, 0.0f));
+		TestTrue(
+			TEXT("G2 presentation starts in idle ready"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(1.0f) == TEXT("IdleReady"));
+		TestEqual(
+			TEXT("G2 presentation walk uses forward intent"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationLocalIntent(4.0f),
+			FVector(1.0f, 0.0f, 0.0f));
+		TestEqual(
+			TEXT("G2 presentation walk uses reduced input scale"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationInputScale(4.0f),
+			0.45f);
+		TestTrue(
+			TEXT("G2 presentation jog phase is named correctly"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(10.0f) == TEXT("JogForward"));
+		TestEqual(
+			TEXT("G2 presentation jog uses full input scale"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationInputScale(10.0f),
+			1.0f);
+		TestTrue(
+			TEXT("G2 presentation brake phase is named correctly"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(13.0f) == TEXT("BrakeStop"));
+		TestEqual(
+			TEXT("G2 presentation turn uses diagonal intent"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationLocalIntent(16.0f),
+			FVector(0.7f, 0.7f, 0.0f));
+		TestTrue(
+			TEXT("G2 presentation recovery phase is named correctly"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(19.5f) == TEXT("Recovery"));
+		TestTrue(
+			TEXT("G2 presentation reports complete after the frozen duration"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(25.0f) == TEXT("Complete"));
+		TestEqual(
+			TEXT("G2 presentation duration is the frozen scripted window"),
+			UPhysAnimComparisonSubsystem::GetPresentationDurationSeconds(),
+			21.0f);
+		TestEqual(
+			TEXT("G2 presentation camera offset is stable"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationCameraOffsetCm(),
+			FVector(-650.0f, 0.0f, 220.0f));
 		return true;
 	}
 

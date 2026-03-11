@@ -513,19 +513,45 @@ Max Substeps = 8
 - `What you are checking`: whether the physics-driven version looks noticeably more natural than the kinematic PoseSearch version
 - `Why it matters`: G2 is the core proof-of-quality gate for Stage 1
 - `What to click or run`:
-  1. confirm the orchestrator has frozen the exact G2 sequence and capture pair
-  2. watch the kinematic clip once
-  3. watch the physics-driven clip once
-  4. watch them again side by side, or alternate between them in the same order
-  5. judge the physics-driven version on:
+  1. confirm the orchestrator has frozen the exact G2 sequence
+  2. start PIE in `/Game/ThirdPerson/Lvl_ThirdPerson`
+  3. let the normal bridge startup finish, then enter `BridgeActive`
+  4. open the in-game console and run:
+
+```text
+PhysAnim.G2.StartPresentation
+```
+
+  5. confirm you can see two clearly labeled actors:
+     - `Physics-Driven`
+     - `Kinematic`
+  6. confirm the camera is now fixed/tracking automatically and your own mouse look is no longer driving the comparison
+  7. compare them through the same scripted sequence, with the same camera framing
+  8. if the scripted presentation harness is unavailable, fall back to:
+
+```text
+PhysAnim.G2.StartSideBySide
+```
+
+     but treat that as a weaker comparison path
+  9. judge the physics-driven version on:
      - weight
      - momentum
      - balance recovery
      - contact response
      - overall non-robotic feel
-- `What good looks like`: the physics-driven version shows better weight, momentum, balance recovery, and contact response
-- `What bad looks like`: the difference is negligible or the physics-driven version looks worse
-- `What evidence to send back`: a short written verdict tied to the five rubric points above, plus screenshots or a split-screen clip
+- `What good looks like`:
+  - both actors stay readable in the same view
+  - the `Physics-Driven` actor looks more grounded, weighty, or physically believable than the `Kinematic` actor
+- `What bad looks like`:
+  - the actors interfere with each other
+  - labels are unclear
+  - the difference is negligible
+  - the physics-driven version looks worse
+- `What evidence to send back`:
+  - whether `PhysAnim.G2.StartPresentation` worked
+  - one short clip or screenshot showing both labeled actors
+  - one short written verdict tied to the five rubric points above
 
 ### MV-G3-01: Final Demo Observer Check
 

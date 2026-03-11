@@ -2448,18 +2448,18 @@ int32 UPhysAnimComponent::ResolveBringUpGroupIndex(FName BoneName)
 
 	if (BoneName == TEXT("calf_l") ||
 		BoneName == TEXT("calf_r") ||
-		BoneName == TEXT("clavicle_l") ||
-		BoneName == TEXT("clavicle_r") ||
-		BoneName == TEXT("upperarm_l") ||
-		BoneName == TEXT("upperarm_r"))
+		BoneName == TEXT("foot_l") ||
+		BoneName == TEXT("foot_r") ||
+		BoneName == TEXT("ball_l") ||
+		BoneName == TEXT("ball_r"))
 	{
 		return 1;
 	}
 
-	if (BoneName == TEXT("foot_l") ||
-		BoneName == TEXT("foot_r") ||
-		BoneName == TEXT("ball_l") ||
-		BoneName == TEXT("ball_r") ||
+	if (BoneName == TEXT("clavicle_l") ||
+		BoneName == TEXT("clavicle_r") ||
+		BoneName == TEXT("upperarm_l") ||
+		BoneName == TEXT("upperarm_r") ||
 		BoneName == TEXT("lowerarm_l") ||
 		BoneName == TEXT("lowerarm_r"))
 	{

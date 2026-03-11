@@ -25,9 +25,9 @@ Phase 1 bridge implementation and stabilization are active. Gate G1 has passed.
 
 Current priorities:
 
-1. extend the stabilized bridge beyond the `10` second PIE smoke window
-2. capture video evidence of Manny under policy control
-3. prepare G2 side-by-side comparison (physics-driven vs. kinematic playback)
+1. freeze the exact G2 comparison sequence at the clip/action level
+2. capture live side-by-side G2 evidence (physics-driven vs. kinematic playback)
+3. package the evidence for user G2 judgment
 
 ## Planning Bundle Freeze
 
@@ -83,4 +83,3 @@ The user must intervene for:
 - visual quality judgment (G2, G3)
 
 The user does not need to intervene for code changes, doc updates, or task reshaping within the locked architecture.
-
