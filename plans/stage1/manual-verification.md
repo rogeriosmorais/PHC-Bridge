@@ -318,6 +318,20 @@ Max Substeps = 8
   - this checkpoint starts after the full bridge is already alive
   - this checkpoint is not about asset paths, ONNX export, or whether NNE exists
   - this checkpoint is the first Phase 1 post-startup stability gate before G2 packaging
+- `Recommended stabilization order before declaring the runtime hopeless`:
+  1. first prove the bridge can stay calm with zero actions:
+     - `physanim.ForceZeroActions 1`
+  2. then re-enable actions conservatively:
+     - `physanim.ForceZeroActions 0`
+     - `physanim.ActionScale 0.10`
+     - `physanim.ActionClampAbs 0.20`
+     - `physanim.ActionSmoothingAlpha 0.25`
+     - `physanim.StartupRampSeconds 1.0`
+  3. if the runtime is still dominated by flight / spinning, lower control aggression next:
+     - `physanim.AngularStrengthMultiplier 0.35`
+     - `physanim.AngularDampingRatioMultiplier 1.50`
+     - `physanim.AngularExtraDampingMultiplier 2.0`
+  4. only after those steps fail should you investigate deeper mapping / frame faults
 - `Frozen test inputs`:
   1. exact UE map path:
      - `/Game/ThirdPerson/Lvl_ThirdPerson`
@@ -349,6 +363,16 @@ Max Substeps = 8
      - is the motion still readable enough to tune
   9. If the first `10` seconds are readable, let the run continue for about `30` seconds total.
   10. Record a short clip if practical. If not, capture at least one screenshot and write down exactly what dominated the run.
+- `Useful live knobs during this checkpoint`:
+  - `physanim.ForceZeroActions`
+  - `physanim.ActionScale`
+  - `physanim.ActionClampAbs`
+  - `physanim.ActionSmoothingAlpha`
+  - `physanim.StartupRampSeconds`
+  - `physanim.MaxAngularStepDegPerSec`
+  - `physanim.AngularStrengthMultiplier`
+  - `physanim.AngularDampingRatioMultiplier`
+  - `physanim.AngularExtraDampingMultiplier`
 - `What good looks like`:
   - the startup-success line appears
   - the character does not immediately launch, spin uncontrollably, or collapse into unreadable motion

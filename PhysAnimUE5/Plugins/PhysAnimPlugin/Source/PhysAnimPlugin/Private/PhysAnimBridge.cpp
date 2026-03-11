@@ -496,6 +496,59 @@ namespace PhysAnimBridge
 		OutTerrain.Init(0.0f, TerrainSize);
 	}
 
+	bool ConditionModelActions(
+		const TArray<float>& RawActions,
+		const TArray<float>* PreviousConditionedActions,
+		const FPhysAnimActionConditioningSettings& Settings,
+		TArray<float>& OutConditionedActions,
+		FPhysAnimActionDiagnostics& OutDiagnostics,
+		FString& OutError)
+	{
+		if (RawActions.Num() != NumActionFloats)
+		{
+			OutError = FString::Printf(TEXT("Expected %d action floats but found %d."), NumActionFloats, RawActions.Num());
+			return false;
+		}
+
+		const bool bUsePrevious = PreviousConditionedActions && PreviousConditionedActions->Num() == RawActions.Num();
+		const float ClampAbs = FMath::Max(Settings.ActionClampAbs, 0.0f);
+		const float SmoothingAlpha = FMath::Clamp(Settings.ActionSmoothingAlpha, 0.0f, 1.0f);
+		const float Scale = FMath::Max(Settings.ActionScale, 0.0f);
+
+		OutConditionedActions.SetNumUninitialized(RawActions.Num());
+		OutDiagnostics = {};
+		OutDiagnostics.RawMin = RawActions[0];
+		OutDiagnostics.RawMax = RawActions[0];
+
+		for (int32 Index = 0; Index < RawActions.Num(); ++Index)
+		{
+			const float RawValue = RawActions[Index];
+			OutDiagnostics.RawMin = FMath::Min(OutDiagnostics.RawMin, RawValue);
+			OutDiagnostics.RawMax = FMath::Max(OutDiagnostics.RawMax, RawValue);
+			OutDiagnostics.RawMeanAbs += FMath::Abs(RawValue);
+
+			float ConditionedValue = Settings.bForceZeroActions ? 0.0f : (RawValue * Scale);
+			const float ClampedValue = FMath::Clamp(ConditionedValue, -ClampAbs, ClampAbs);
+			if (!FMath::IsNearlyEqual(ConditionedValue, ClampedValue))
+			{
+				++OutDiagnostics.NumClampedActionFloats;
+			}
+			ConditionedValue = ClampedValue;
+
+			if (bUsePrevious)
+			{
+				ConditionedValue = FMath::Lerp((*PreviousConditionedActions)[Index], ConditionedValue, SmoothingAlpha);
+			}
+
+			OutConditionedActions[Index] = ConditionedValue;
+			OutDiagnostics.ConditionedMeanAbs += FMath::Abs(ConditionedValue);
+		}
+
+		OutDiagnostics.RawMeanAbs /= static_cast<float>(RawActions.Num());
+		OutDiagnostics.ConditionedMeanAbs /= static_cast<float>(OutConditionedActions.Num());
+		return true;
+	}
+
 	bool ConvertModelActionsToControlRotations(
 		const TArray<float>& ModelActions,
 		TMap<FName, FQuat>& OutControlRotations,
@@ -543,5 +596,26 @@ namespace PhysAnimBridge
 		OutControlRotations.Add(TEXT("hand_r"), SmplQuaternionToUe(CollapseDistalHandRotation(SmplJointRotations[21], SmplJointRotations[22])));
 
 		return true;
+	}
+
+	FQuat LimitControlRotationStep(
+		const FQuat& PreviousRotation,
+		const FQuat& TargetRotation,
+		float MaxAngularStepDegrees)
+	{
+		if (MaxAngularStepDegrees <= 0.0f)
+		{
+			return TargetRotation;
+		}
+
+		const double MaxAngularStepRadians = FMath::DegreesToRadians(static_cast<double>(MaxAngularStepDegrees));
+		const double AngularDistance = PreviousRotation.AngularDistance(TargetRotation);
+		if (AngularDistance <= MaxAngularStepRadians || AngularDistance <= UE_DOUBLE_SMALL_NUMBER)
+		{
+			return TargetRotation;
+		}
+
+		const double SlerpAlpha = MaxAngularStepRadians / AngularDistance;
+		return FQuat::Slerp(PreviousRotation, TargetRotation, SlerpAlpha).GetNormalized();
 	}
 }

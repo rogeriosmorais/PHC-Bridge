@@ -60,6 +60,16 @@ Turn the first end-to-end UE runtime success into a stabilization-ready one-char
    - action influence first
    - fixed Physics Control gains and damping next
    - mapping / frame assumptions only after the simpler causes are ruled out
+   - use the live runtime knobs first:
+     - `physanim.ForceZeroActions`
+     - `physanim.ActionScale`
+     - `physanim.ActionClampAbs`
+     - `physanim.ActionSmoothingAlpha`
+     - `physanim.StartupRampSeconds`
+     - `physanim.MaxAngularStepDegPerSec`
+     - `physanim.AngularStrengthMultiplier`
+     - `physanim.AngularDampingRatioMultiplier`
+     - `physanim.AngularExtraDampingMultiplier`
 6. Re-run `MV-P1-01` after each meaningful stabilization pass and record whether the result moved from `fail` toward `pass`.
 7. Do not ask the user to run `G2` until `MV-P1-01` is explicitly recorded as `pass`.
 

@@ -89,6 +89,26 @@ The Phase 1 stabilization pass must proceed in this order:
 4. inspect mapping / frame-assumption faults only if low-influence tuning still produces pathological motion
 5. do not ask the user to run G2 until the runtime-stability threshold passes
 
+### Frozen Stabilization Surface
+
+The first implementation pass uses a thin UE-native stabilization layer, not a second control system.
+
+- action conditioning lives in `UPhysAnimComponent`
+- control strength/damping scaling stays on `UPhysicsControlComponent`
+- live iteration happens through component defaults plus runtime console variables
+
+Frozen first-pass live knobs:
+
+- `physanim.ForceZeroActions`
+- `physanim.ActionScale`
+- `physanim.ActionClampAbs`
+- `physanim.ActionSmoothingAlpha`
+- `physanim.StartupRampSeconds`
+- `physanim.MaxAngularStepDegPerSec`
+- `physanim.AngularStrengthMultiplier`
+- `physanim.AngularDampingRatioMultiplier`
+- `physanim.AngularExtraDampingMultiplier`
+
 ## Entry Criteria
 
 Do not start Phase 1 implementation until all of these are true:

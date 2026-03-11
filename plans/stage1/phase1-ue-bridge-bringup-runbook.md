@@ -445,6 +445,43 @@ If startup succeeds:
 4. capture the first `10` to `20` seconds with a short clip if possible
 5. if the character immediately flies or spins uncontrollably, classify the run as `runtime unstable after startup`
 
+### Live Stabilization Knobs
+
+The current bridge includes a thin runtime stabilization layer inside `UPhysAnimComponent`.
+
+Use these console variables for the first stabilization pass before changing assets or reopening the model path:
+
+- `physanim.ForceZeroActions`
+- `physanim.ActionScale`
+- `physanim.ActionClampAbs`
+- `physanim.ActionSmoothingAlpha`
+- `physanim.StartupRampSeconds`
+- `physanim.MaxAngularStepDegPerSec`
+- `physanim.AngularStrengthMultiplier`
+- `physanim.AngularDampingRatioMultiplier`
+- `physanim.AngularExtraDampingMultiplier`
+
+Recommended first-pass commands:
+
+```text
+physanim.ForceZeroActions 1
+```
+
+If zero-action mode is calm, re-enable the policy conservatively:
+
+```text
+physanim.ForceZeroActions 0
+physanim.ActionScale 0.10
+physanim.ActionClampAbs 0.20
+physanim.ActionSmoothingAlpha 0.25
+physanim.StartupRampSeconds 1.0
+physanim.AngularStrengthMultiplier 0.35
+physanim.AngularDampingRatioMultiplier 1.50
+physanim.AngularExtraDampingMultiplier 2.0
+```
+
+Only move on to deeper mapping/frame debugging if those safe settings still produce immediate flight, spinning, or tumbling.
+
 If startup is blocked or fail-stops:
 
 1. copy the first relevant `[PhysAnim]` log line

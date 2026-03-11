@@ -29,6 +29,23 @@ struct FPhysAnimFuturePoseSample
 	float FutureTimeSeconds = 0.0f;
 };
 
+struct FPhysAnimActionConditioningSettings
+{
+	bool bForceZeroActions = false;
+	float ActionScale = 1.0f;
+	float ActionClampAbs = 1.0f;
+	float ActionSmoothingAlpha = 1.0f;
+};
+
+struct FPhysAnimActionDiagnostics
+{
+	float RawMin = 0.0f;
+	float RawMax = 0.0f;
+	float RawMeanAbs = 0.0f;
+	float ConditionedMeanAbs = 0.0f;
+	int32 NumClampedActionFloats = 0;
+};
+
 namespace PhysAnimBridge
 {
 	PHYSANIMPLUGIN_API inline constexpr int32 NumSmplBodies = 24;
@@ -79,8 +96,21 @@ namespace PhysAnimBridge
 
 	PHYSANIMPLUGIN_API void BuildZeroTerrain(TArray<float>& OutTerrain);
 
+	PHYSANIMPLUGIN_API bool ConditionModelActions(
+		const TArray<float>& RawActions,
+		const TArray<float>* PreviousConditionedActions,
+		const FPhysAnimActionConditioningSettings& Settings,
+		TArray<float>& OutConditionedActions,
+		FPhysAnimActionDiagnostics& OutDiagnostics,
+		FString& OutError);
+
 	PHYSANIMPLUGIN_API bool ConvertModelActionsToControlRotations(
 		const TArray<float>& ModelActions,
 		TMap<FName, FQuat>& OutControlRotations,
 		FString& OutError);
+
+	PHYSANIMPLUGIN_API FQuat LimitControlRotationStep(
+		const FQuat& PreviousRotation,
+		const FQuat& TargetRotation,
+		float MaxAngularStepDegrees);
 }

@@ -1,6 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "PhysAnimBridge.h"
+#include "PhysAnimComponent.h"
 #include "PhysAnimStage1InitializerComponent.h"
 
 #include "Misc/AutomationTest.h"
@@ -127,6 +128,115 @@ namespace
 		TestTrue(TEXT("Collapsed hand target exists"), ControlRotations.Contains(TEXT("hand_l")));
 		TestFalse(TEXT("There is no standalone wrist control"), ControlRotations.Contains(TEXT("wrist_l")));
 		TestTrue(TEXT("Collapsed hand target is non-identity"), !ControlRotations[TEXT("hand_l")].Equals(FQuat::Identity, 1.0e-3f));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimActionConditioningTest,
+		"PhysAnim.Component.ActionConditioning",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimActionConditioningTest::RunTest(const FString& Parameters)
+	{
+		TArray<float> RawActions;
+		RawActions.Init(0.0f, NumActionFloats);
+		RawActions[0] = 1.0f;
+		RawActions[1] = -1.0f;
+		RawActions[2] = 0.5f;
+
+		FPhysAnimActionConditioningSettings Settings;
+		Settings.ActionScale = 0.5f;
+		Settings.ActionClampAbs = 0.25f;
+		Settings.ActionSmoothingAlpha = 1.0f;
+
+		TArray<float> ConditionedActions;
+		FPhysAnimActionDiagnostics Diagnostics;
+		FString Error;
+		TestTrue(
+			TEXT("Conditioning should succeed"),
+			UPhysAnimComponent::BuildConditionedActions(
+				RawActions,
+				nullptr,
+				Settings,
+				ConditionedActions,
+				Diagnostics,
+				Error));
+		TestEqual(TEXT("Conditioned action count"), ConditionedActions.Num(), NumActionFloats);
+		TestEqual(TEXT("Positive action is clamped"), ConditionedActions[0], 0.25f);
+		TestEqual(TEXT("Negative action is clamped"), ConditionedActions[1], -0.25f);
+		TestEqual(TEXT("Scaled half action remains inside clamp"), ConditionedActions[2], 0.25f);
+		TestEqual(TEXT("Two action dimensions were clamped"), Diagnostics.NumClampedActionFloats, 2);
+
+		Settings.bForceZeroActions = true;
+		TestTrue(
+			TEXT("Zero-action override should succeed"),
+			UPhysAnimComponent::BuildConditionedActions(
+				RawActions,
+				nullptr,
+				Settings,
+				ConditionedActions,
+				Diagnostics,
+				Error));
+		TestEqual(TEXT("Forced zero actions override positive sample"), ConditionedActions[0], 0.0f);
+		TestEqual(TEXT("Forced zero actions override negative sample"), ConditionedActions[1], 0.0f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimActionSmoothingTest,
+		"PhysAnim.Component.ActionSmoothing",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimActionSmoothingTest::RunTest(const FString& Parameters)
+	{
+		TArray<float> RawActions;
+		RawActions.Init(0.0f, NumActionFloats);
+		RawActions[0] = 1.0f;
+		RawActions[1] = -1.0f;
+
+		TArray<float> PreviousActions;
+		PreviousActions.Init(0.0f, NumActionFloats);
+		PreviousActions[1] = 0.2f;
+
+		FPhysAnimActionConditioningSettings Settings;
+		Settings.ActionScale = 0.5f;
+		Settings.ActionClampAbs = 1.0f;
+		Settings.ActionSmoothingAlpha = 0.25f;
+
+		TArray<float> ConditionedActions;
+		FPhysAnimActionDiagnostics Diagnostics;
+		FString Error;
+		TestTrue(
+			TEXT("Smoothing should succeed"),
+			UPhysAnimComponent::BuildConditionedActions(
+				RawActions,
+				&PreviousActions,
+				Settings,
+				ConditionedActions,
+				Diagnostics,
+				Error));
+		TestEqual(TEXT("Smoothed first action"), ConditionedActions[0], 0.125f);
+		TestEqual(TEXT("Smoothed second action"), ConditionedActions[1], 0.025f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimRotationLimitTest,
+		"PhysAnim.Component.RotationLimit",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimRotationLimitTest::RunTest(const FString& Parameters)
+	{
+		const FQuat PreviousRotation = FQuat::Identity;
+		const FQuat TargetRotation(FVector::UpVector, FMath::DegreesToRadians(180.0));
+		const FQuat LimitedRotation =
+			UPhysAnimComponent::LimitTargetRotationStep(PreviousRotation, TargetRotation, 90.0f);
+		const double LimitedAngleDegrees = FMath::RadiansToDegrees(PreviousRotation.AngularDistance(LimitedRotation));
+
+		TestTrue(TEXT("Rotation limiting should cap the step"), FMath::IsNearlyEqual(LimitedAngleDegrees, 90.0, 0.5));
+		TestTrue(
+			TEXT("Zero limit disables limiting"),
+			UPhysAnimComponent::LimitTargetRotationStep(PreviousRotation, TargetRotation, 0.0f).Equals(TargetRotation, 1.0e-4f));
 		return true;
 	}
 

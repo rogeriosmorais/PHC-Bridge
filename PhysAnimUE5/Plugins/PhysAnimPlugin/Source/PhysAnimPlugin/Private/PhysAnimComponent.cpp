@@ -8,7 +8,9 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/AssetManager.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "HAL/IConsoleManager.h"
 #include "Logging/LogMacros.h"
 #include "NNEStatus.h"
 #include "PhysicsControlActor.h"
@@ -34,6 +36,79 @@ namespace PhysAnimComponentInternal
 	const TCHAR* PreferredGpuRuntime = TEXT("NNERuntimeORTDml");
 	const TCHAR* FallbackCpuRuntime = TEXT("NNERuntimeORTCpu");
 
+	TAutoConsoleVariable<float> CVarPhysAnimActionScale(
+		TEXT("physanim.ActionScale"),
+		-1.0f,
+		TEXT("Override for PhysAnim action scale. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimActionClampAbs(
+		TEXT("physanim.ActionClampAbs"),
+		-1.0f,
+		TEXT("Override for PhysAnim absolute action clamp. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimActionSmoothingAlpha(
+		TEXT("physanim.ActionSmoothingAlpha"),
+		-1.0f,
+		TEXT("Override for PhysAnim action smoothing alpha. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimStartupRampSeconds(
+		TEXT("physanim.StartupRampSeconds"),
+		-1.0f,
+		TEXT("Override for PhysAnim startup ramp duration in seconds. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimMaxAngularStepDegPerSec(
+		TEXT("physanim.MaxAngularStepDegPerSec"),
+		-1.0f,
+		TEXT("Override for PhysAnim maximum target rotation step in degrees per second. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimAngularStrengthMultiplier(
+		TEXT("physanim.AngularStrengthMultiplier"),
+		-1.0f,
+		TEXT("Override for PhysAnim angular strength multiplier. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimAngularDampingRatioMultiplier(
+		TEXT("physanim.AngularDampingRatioMultiplier"),
+		-1.0f,
+		TEXT("Override for PhysAnim angular damping ratio multiplier. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimAngularExtraDampingMultiplier(
+		TEXT("physanim.AngularExtraDampingMultiplier"),
+		-1.0f,
+		TEXT("Override for PhysAnim angular extra damping multiplier. Negative values keep the component default."));
+	TAutoConsoleVariable<int32> CVarPhysAnimForceZeroActions(
+		TEXT("physanim.ForceZeroActions"),
+		-1,
+		TEXT("Override for PhysAnim zero-action mode. -1 keeps the component default, 0 disables, 1 forces zero actions."));
+	TAutoConsoleVariable<int32> CVarPhysAnimLogActionDiagnostics(
+		TEXT("physanim.LogActionDiagnostics"),
+		-1,
+		TEXT("Override for PhysAnim action diagnostics logging. -1 keeps the component default, 0 disables, 1 enables."));
+
+	float ResolveFloatOverride(const TAutoConsoleVariable<float>& CVar, float DefaultValue)
+	{
+		const float OverrideValue = CVar.GetValueOnGameThread();
+		return OverrideValue >= 0.0f ? OverrideValue : DefaultValue;
+	}
+
+	bool ResolveBoolOverride(const TAutoConsoleVariable<int32>& CVar, bool DefaultValue)
+	{
+		const int32 OverrideValue = CVar.GetValueOnGameThread();
+		if (OverrideValue < 0)
+		{
+			return DefaultValue;
+		}
+
+		return OverrideValue != 0;
+	}
+
+	FString BuildStabilizationSummary(const FPhysAnimStabilizationSettings& Settings)
+	{
+		return FString::Printf(
+			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f"),
+			Settings.bForceZeroActions ? TEXT("true") : TEXT("false"),
+			Settings.ActionScale,
+			Settings.ActionClampAbs,
+			Settings.ActionSmoothingAlpha,
+			Settings.StartupRampSeconds,
+			Settings.MaxAngularStepDegreesPerSecond,
+			Settings.AngularStrengthMultiplier,
+			Settings.AngularDampingRatioMultiplier,
+			Settings.AngularExtraDampingMultiplier);
+	}
+
 	FString JoinNames(const TArray<FName>& Names)
 	{
 		TArray<FString> Strings;
@@ -53,6 +128,31 @@ UPhysAnimComponent::UPhysAnimComponent()
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
 
 	ModelDataAsset = TSoftObjectPtr<UNNEModelData>(FSoftObjectPath(PhysAnimComponentInternal::DefaultModelPath));
+}
+
+bool UPhysAnimComponent::BuildConditionedActions(
+	const TArray<float>& RawActions,
+	const TArray<float>* PreviousConditionedActions,
+	const FPhysAnimActionConditioningSettings& Settings,
+	TArray<float>& OutConditionedActions,
+	FPhysAnimActionDiagnostics& OutDiagnostics,
+	FString& OutError)
+{
+	return PhysAnimBridge::ConditionModelActions(
+		RawActions,
+		PreviousConditionedActions,
+		Settings,
+		OutConditionedActions,
+		OutDiagnostics,
+		OutError);
+}
+
+FQuat UPhysAnimComponent::LimitTargetRotationStep(
+	const FQuat& PreviousRotation,
+	const FQuat& TargetRotation,
+	float MaxAngularStepDegrees)
+{
+	return PhysAnimBridge::LimitControlRotationStep(PreviousRotation, TargetRotation, MaxAngularStepDegrees);
 }
 
 void UPhysAnimComponent::BeginPlay()
@@ -142,6 +242,14 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		return;
 	}
 
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	ApplyRuntimeControlTuning(EffectiveSettings);
+	if (!ConditionModelActions(EffectiveSettings, TickError))
+	{
+		FailStop(TickError);
+		return;
+	}
+
 	ApplyControlTargets(DeltaTime, TickError);
 	if (!TickError.IsEmpty())
 	{
@@ -150,6 +258,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	}
 
 	PhysicsControl->UpdateControls(DeltaTime);
+	MaybeLogActionDiagnostics(EffectiveSettings);
 }
 
 bool UPhysAnimComponent::StartBridge()
@@ -175,6 +284,11 @@ bool UPhysAnimComponent::StartBridge()
 	bBridgeActive = true;
 	bStartupReported = true;
 	SetComponentTickEnabled(true);
+	ResetStabilizationRuntimeState();
+	BridgeStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	ApplyRuntimeControlTuning(EffectiveSettings);
 
 	UE_LOG(
 		LogPhysAnimBridge,
@@ -182,6 +296,7 @@ bool UPhysAnimComponent::StartBridge()
 		TEXT("[PhysAnim] Startup success. Runtime=%s Model=%s"),
 		*ActiveRuntimeName,
 		*GetPathNameSafe(LoadedModelData));
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
 	return true;
 }
 
@@ -233,6 +348,7 @@ void UPhysAnimComponent::StopBridge()
 	SetComponentTickEnabled(false);
 	ConsecutiveInvalidPoseSearchFrames = 0;
 	LastValidPoseSearchResult = FPoseSearchBlueprintResult();
+	ResetStabilizationRuntimeState();
 }
 
 bool UPhysAnimComponent::ResolveRuntimeContext(FString& OutError)
@@ -684,6 +800,93 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 	return true;
 }
 
+FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilizationSettings() const
+{
+	FPhysAnimStabilizationSettings EffectiveSettings = StabilizationSettings;
+	EffectiveSettings.ActionScale =
+		PhysAnimComponentInternal::ResolveFloatOverride(PhysAnimComponentInternal::CVarPhysAnimActionScale, EffectiveSettings.ActionScale);
+	EffectiveSettings.ActionClampAbs =
+		PhysAnimComponentInternal::ResolveFloatOverride(PhysAnimComponentInternal::CVarPhysAnimActionClampAbs, EffectiveSettings.ActionClampAbs);
+	EffectiveSettings.ActionSmoothingAlpha =
+		PhysAnimComponentInternal::ResolveFloatOverride(PhysAnimComponentInternal::CVarPhysAnimActionSmoothingAlpha, EffectiveSettings.ActionSmoothingAlpha);
+	EffectiveSettings.StartupRampSeconds =
+		PhysAnimComponentInternal::ResolveFloatOverride(PhysAnimComponentInternal::CVarPhysAnimStartupRampSeconds, EffectiveSettings.StartupRampSeconds);
+	EffectiveSettings.MaxAngularStepDegreesPerSecond =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimMaxAngularStepDegPerSec,
+			EffectiveSettings.MaxAngularStepDegreesPerSecond);
+	EffectiveSettings.AngularStrengthMultiplier =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimAngularStrengthMultiplier,
+			EffectiveSettings.AngularStrengthMultiplier);
+	EffectiveSettings.AngularDampingRatioMultiplier =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimAngularDampingRatioMultiplier,
+			EffectiveSettings.AngularDampingRatioMultiplier);
+	EffectiveSettings.AngularExtraDampingMultiplier =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimAngularExtraDampingMultiplier,
+			EffectiveSettings.AngularExtraDampingMultiplier);
+	EffectiveSettings.bForceZeroActions =
+		PhysAnimComponentInternal::ResolveBoolOverride(PhysAnimComponentInternal::CVarPhysAnimForceZeroActions, EffectiveSettings.bForceZeroActions);
+	EffectiveSettings.bLogActionDiagnostics =
+		PhysAnimComponentInternal::ResolveBoolOverride(
+			PhysAnimComponentInternal::CVarPhysAnimLogActionDiagnostics,
+			EffectiveSettings.bLogActionDiagnostics);
+	return EffectiveSettings;
+}
+
+void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
+	if (!PhysicsControl || EffectiveSettings == LastAppliedStabilizationSettings)
+	{
+		return;
+	}
+
+	FPhysicsControlMultiplier ControlMultiplier;
+	ControlMultiplier.AngularStrengthMultiplier = EffectiveSettings.AngularStrengthMultiplier;
+	ControlMultiplier.AngularDampingRatioMultiplier = EffectiveSettings.AngularDampingRatioMultiplier;
+	ControlMultiplier.AngularExtraDampingMultiplier = EffectiveSettings.AngularExtraDampingMultiplier;
+	PhysicsControl->SetControlMultipliersInSet(TEXT("All"), ControlMultiplier, true);
+
+	LastAppliedStabilizationSettings = EffectiveSettings;
+}
+
+bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError)
+{
+	FPhysAnimActionConditioningSettings ConditioningSettings;
+	ConditioningSettings.bForceZeroActions = EffectiveSettings.bForceZeroActions;
+	ConditioningSettings.ActionClampAbs = EffectiveSettings.ActionClampAbs;
+	ConditioningSettings.ActionSmoothingAlpha = EffectiveSettings.ActionSmoothingAlpha;
+
+	float RampAlpha = 1.0f;
+	if (EffectiveSettings.StartupRampSeconds > 0.0f)
+	{
+		const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+		const double ElapsedSeconds = CurrentTimeSeconds - BridgeStartTimeSeconds;
+		RampAlpha = FMath::Clamp(
+			static_cast<float>(ElapsedSeconds / static_cast<double>(EffectiveSettings.StartupRampSeconds)),
+			0.0f,
+			1.0f);
+	}
+
+	ConditioningSettings.ActionScale = EffectiveSettings.ActionScale * RampAlpha;
+	const bool bSuccess = BuildConditionedActions(
+		ActionOutputBuffer,
+		PreviousConditionedActionBuffer.Num() == ActionOutputBuffer.Num() ? &PreviousConditionedActionBuffer : nullptr,
+		ConditioningSettings,
+		ConditionedActionBuffer,
+		LastActionDiagnostics,
+		OutError);
+	if (bSuccess)
+	{
+		PreviousConditionedActionBuffer = ConditionedActionBuffer;
+	}
+
+	return bSuccess;
+}
+
 void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
@@ -694,10 +897,13 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 	}
 
 	TMap<FName, FQuat> ControlRotations;
-	if (!PhysAnimBridge::ConvertModelActionsToControlRotations(ActionOutputBuffer, ControlRotations, OutError))
+	if (!PhysAnimBridge::ConvertModelActionsToControlRotations(ConditionedActionBuffer, ControlRotations, OutError))
 	{
 		return;
 	}
+
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	const float MaxAngularStepDegrees = FMath::Max(0.0f, EffectiveSettings.MaxAngularStepDegreesPerSecond) * DeltaTime;
 
 	for (const TPair<FName, FQuat>& Pair : ControlRotations)
 	{
@@ -708,15 +914,64 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 			return;
 		}
 
+		const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
+		const FQuat LimitedRotation = PreviousRotation
+			? LimitTargetRotationStep(*PreviousRotation, Pair.Value, MaxAngularStepDegrees)
+			: Pair.Value;
+		PreviousControlTargetRotations.Add(ControlName, LimitedRotation);
+
 		PhysicsControl->SetControlTargetOrientation(
 			ControlName,
-			Pair.Value.Rotator(),
+			LimitedRotation.Rotator(),
 			DeltaTime,
 			true,
 			false,
 			true,
 			false);
 	}
+}
+
+void UPhysAnimComponent::MaybeLogActionDiagnostics(const FPhysAnimStabilizationSettings& EffectiveSettings) const
+{
+	if (!EffectiveSettings.bLogActionDiagnostics)
+	{
+		return;
+	}
+
+	const UWorld* const World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const double CurrentTimeSeconds = World->GetTimeSeconds();
+	if (LastActionDiagnosticsLogTimeSeconds >= 0.0 &&
+		(CurrentTimeSeconds - LastActionDiagnosticsLogTimeSeconds) < EffectiveSettings.ActionDiagnosticsIntervalSeconds)
+	{
+		return;
+	}
+
+	const_cast<UPhysAnimComponent*>(this)->LastActionDiagnosticsLogTimeSeconds = CurrentTimeSeconds;
+	UE_LOG(
+		LogPhysAnimBridge,
+		Log,
+		TEXT("[PhysAnim] Action diagnostics: raw[min=%.3f max=%.3f meanAbs=%.3f] conditioned[meanAbs=%.3f clamped=%d]"),
+		LastActionDiagnostics.RawMin,
+		LastActionDiagnostics.RawMax,
+		LastActionDiagnostics.RawMeanAbs,
+		LastActionDiagnostics.ConditionedMeanAbs,
+		LastActionDiagnostics.NumClampedActionFloats);
+}
+
+void UPhysAnimComponent::ResetStabilizationRuntimeState()
+{
+	ConditionedActionBuffer.Reset();
+	PreviousConditionedActionBuffer.Reset();
+	PreviousControlTargetRotations.Reset();
+	LastActionDiagnostics = {};
+	BridgeStartTimeSeconds = 0.0;
+	LastActionDiagnosticsLogTimeSeconds = -1.0;
+	LastAppliedStabilizationSettings = {};
 }
 
 void UPhysAnimComponent::FailStop(const FString& Reason)
@@ -735,6 +990,7 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 
 	bBridgeActive = false;
 	SetComponentTickEnabled(false);
+	ResetStabilizationRuntimeState();
 }
 
 UE::NNE::IModelInstanceRunSync* UPhysAnimComponent::GetModelInstanceRunSync() const
