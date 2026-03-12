@@ -418,3 +418,18 @@ Whenever new setup or gate evidence arrives:
     - current runtime read:
       - scalar distal range shaping helps, but does not finish the lower-limb problem
       - the next pass should inspect explicit distal target representation under locomotion
+  - March 12, 2026 movement-only distal representation note:
+    - implemented the first locomotion-time distal representation policy:
+      - activates above `50 cm/s` planar owner speed
+      - `foot_*` locomotion representation scale `0.75`
+      - `ball_*` locomotion representation scale `0.50`
+    - deterministic movement smoke stayed green:
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - early forward movement spikes improve somewhat relative to the distal-range baseline
+      - backward and strafe phases still produce large distal `ball_*` spikes
+    - current runtime read:
+      - this locomotion-time distal attenuation is not a clean new baseline
+      - the next pass should move to more structural distal target construction under locomotion, not another scalar attenuation

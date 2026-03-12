@@ -918,6 +918,45 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTrainingAlignedDistalLocomotionTargetPolicyTest,
+		"PhysAnim.Component.TrainingAlignedDistalLocomotionTargetPolicy",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTrainingAlignedDistalLocomotionTargetPolicyTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimStabilizationSettings Settings;
+		TestTrue(TEXT("Training-aligned distal locomotion target policy is enabled by default"), Settings.bApplyTrainingAlignedDistalLocomotionTargetPolicy);
+		TestEqual(TEXT("Training-aligned distal locomotion target policy defaults to full blend"), Settings.TrainingAlignedDistalLocomotionTargetPolicyBlend, 1.0f);
+		TestEqual(TEXT("Training-aligned distal locomotion target policy default activation speed is 50 cm/s"), Settings.DistalLocomotionTargetPolicyActivationSpeedCmPerSec, 50.0f);
+
+		TestTrue(
+			TEXT("Distal locomotion target policy disabled state returns false"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionTargetPolicy(false, 1.0f, 600.0f, 50.0f));
+		TestTrue(
+			TEXT("Zero blend disables distal locomotion target policy application"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionTargetPolicy(true, 0.0f, 600.0f, 50.0f));
+		TestTrue(
+			TEXT("Below-threshold speed disables distal locomotion target policy application"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionTargetPolicy(true, 1.0f, 25.0f, 50.0f));
+		TestTrue(
+			TEXT("Enabled distal locomotion target policy with positive blend and speed applies"),
+			UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionTargetPolicy(true, 1.0f, 600.0f, 50.0f));
+		TestEqual(
+			TEXT("Foot chain uses the milder locomotion-time distal attenuation"),
+			UPhysAnimComponent::ResolveTrainingAlignedDistalLocomotionTargetScaleForBone(TEXT("foot_l"), 1.0f),
+			0.75f);
+		TestEqual(
+			TEXT("Toe chain uses the stronger locomotion-time distal attenuation"),
+			UPhysAnimComponent::ResolveTrainingAlignedDistalLocomotionTargetScaleForBone(TEXT("ball_r"), 1.0f),
+			0.50f);
+		TestEqual(
+			TEXT("Distal locomotion target blend interpolates from neutral to the toe target"),
+			UPhysAnimComponent::ResolveTrainingAlignedDistalLocomotionTargetScaleForBone(TEXT("ball_l"), 0.5f),
+			0.75f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimConstraintLimitProxyTest,
 		"PhysAnim.Component.ConstraintLimitProxy",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

@@ -292,6 +292,18 @@ Only the orchestrator updates status.
     - implication:
       - scalar distal range shaping helps, but does not finish the lower-limb problem
       - the next lower-limb pass should inspect explicit distal target representation under locomotion
+  - March 12, 2026 movement-only distal representation follow-up:
+    - added a locomotion-time distal attenuation policy:
+      - activates above `50 cm/s` planar owner speed
+      - `foot_*` scale `0.75`
+      - `ball_*` scale `0.50`
+    - current evidence:
+      - deterministic movement smoke still passes with no fail-stop
+      - early forward movement spikes improve somewhat versus the distal-range baseline
+      - backward and strafe phases still keep large distal `ball_*` spikes
+    - implication:
+      - simple locomotion-time distal attenuation is not enough by itself
+      - the next lower-limb pass should move to structural distal target construction, not more scalar attenuation
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

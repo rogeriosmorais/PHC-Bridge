@@ -509,6 +509,18 @@ This gives us the highest-value correction with the least ambiguity.
   - current read:
     - scalar distal range shaping helps, but it is not the final fix
     - the next pass should inspect explicit distal target representation under locomotion, not only more scalar range changes
+  - first movement-only distal representation fit result:
+    - added a locomotion-time distal attenuation seam:
+      - activates above `50 cm/s` planar owner speed
+      - `foot_*` locomotion representation scale `0.75`
+      - `ball_*` locomotion representation scale `0.50`
+    - deterministic movement smoke stays green with no fail-stop
+    - measured result:
+      - early forward movement spikes improve somewhat relative to the distal-range baseline
+      - backward and strafe phases still produce large `ball_*` angular spikes
+    - current read:
+      - locomotion-time distal attenuation is a useful measured experiment, but not a clean new baseline
+      - the next pass should move to a more structural distal target construction experiment, not another scalar attenuation
 
 ## Working Hypothesis
 
