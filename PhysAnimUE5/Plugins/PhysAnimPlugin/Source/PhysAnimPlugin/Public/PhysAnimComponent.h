@@ -457,6 +457,12 @@ public:
 		bool bUseSkeletalAnimationTargetRepresentation,
 		bool bFirstPolicyEnabledFrame,
 		float DeltaTime);
+	static float ResolvePolicyTargetAngularVelocityDeltaTime(
+		FName BoneName,
+		bool bUseSkeletalAnimationTargetRepresentation,
+		bool bFirstPolicyEnabledFrame,
+		bool bDistalLocomotionCompositionModeActive,
+		float DeltaTime);
 	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);
 	static float ResolveTrainingAlignedMassScaleForBone(FName BoneName, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedMassScales(bool bApplyTrainingAlignedMassScales, float BlendAlpha);

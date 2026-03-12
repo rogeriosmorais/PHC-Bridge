@@ -364,6 +364,19 @@ Only the orchestrator updates status.
       - proximal widening is not the right next baseline
       - the code should stay on the transition-policy baseline
       - the next lower-limb pass should move to another locomotion-time mismatch surface, most likely target write timing or another policy-side transition seam
+  - March 12, 2026 distal explicit target-velocity follow-up:
+    - runtime experiment:
+      - kept the committed `foot_*` / `ball_*` hysteresis+dwell baseline
+      - zeroed explicit target angular-velocity synthesis only for those distal controls while the mode is active
+    - measured result:
+      - deterministic movement smoke still passes with no fail-stop
+      - first forward distal spikes drop materially into the low-thousands range
+      - lower-limb occupancy stays mostly around `~0.9x - 1.1x`
+      - some later peaks still migrate proximally into `calf_*`, `thigh_*`, and occasional `foot_*`
+    - implication:
+      - synthesized explicit target angular velocity was a real remaining mismatch surface
+      - this pass is a keepable improvement to the locomotion-time distal baseline
+      - the next lower-limb pass should inspect per-bone target-write smoothing or another proximal locomotion seam, not re-open whole-chain explicit-only switching
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

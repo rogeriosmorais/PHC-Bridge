@@ -577,6 +577,21 @@ This gives us the highest-value correction with the least ambiguity.
     - current read:
       - `thigh_* + foot_* + ball_*` explicit-only switching is not the right new baseline
       - the next pass should move to another locomotion-time mismatch surface, most likely lower-limb target write timing or another policy-side transition seam
+  - distal explicit target-velocity result:
+    - kept the committed `foot_*` / `ball_*` hysteresis+dwell locomotion-composition baseline unchanged
+    - changed only one seam:
+      - when distal explicit-only locomotion mode is active for `foot_*` / `ball_*`
+      - pass `AngularVelocityDeltaTime = 0.0f` into `SetControlTargetOrientation(...)`
+      - so UE does not synthesize explicit target angular velocity from target-orientation deltas for those controls
+    - deterministic movement smoke stays green with no fail-stop
+    - measured result:
+      - first forward distal spikes drop materially into the low-thousands range
+      - lower-limb occupancy remains mostly around `~0.9x - 1.1x`
+      - some later peaks still migrate proximally into `calf_*`, `thigh_*`, and occasional `foot_*`
+    - current read:
+      - synthesized explicit target angular velocity was a real mismatch surface
+      - this pass is a keepable improvement to the current locomotion-time distal baseline
+      - the next pass should inspect per-bone write smoothing or another proximal lower-limb seam, not re-open whole-chain explicit-only switching
 
 ## Working Hypothesis
 

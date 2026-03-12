@@ -1693,6 +1693,18 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Explicit-target mode keeps the runtime delta time even on the first policy frame"),
 			UPhysAnimComponent::ResolvePolicyTargetWriteDeltaTime(false, true, 0.25f),
 			0.25f);
+		TestEqual(
+			TEXT("Distal locomotion explicit-only mode zeros synthesized target angular velocity for feet"),
+			UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(TEXT("foot_l"), false, false, true, 0.25f),
+			0.0f);
+		TestEqual(
+			TEXT("Non-distal bones keep the runtime target angular velocity delta time"),
+			UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(TEXT("calf_l"), false, false, true, 0.25f),
+			0.25f);
+		TestEqual(
+			TEXT("Skeletal first-policy frame still zeros target angular velocity delta time for non-distal bones"),
+			UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(TEXT("spine_01"), true, true, false, 0.25f),
+			0.0f);
 		return true;
 	}
 

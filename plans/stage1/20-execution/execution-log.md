@@ -523,3 +523,24 @@ Whenever new setup or gate evidence arrives:
       - adding `thigh_*` to the explicit-only locomotion composition set is not the right new baseline
       - the code has been restored to the last safe transition-policy baseline
       - the next pass should target another locomotion-time mismatch surface, most likely lower-limb target write timing or another policy-side transition seam
+  - March 12, 2026 distal explicit target-velocity note:
+    - re-checked:
+      - official `UPhysicsControlComponent`, `SetControlsUseSkeletalAnimation`, and `UpdateControls` docs
+      - local UE 5.7 PhysicsControl source showing `SetControlTargetOrientation(...)` synthesizes explicit target angular velocity from orientation deltas unless `AngularVelocityDeltaTime == 0`
+      - ProtoMotions simulator PD-target path showing torque from target position and current velocity, without an equivalent explicit target angular velocity term
+    - implemented one narrow locomotion-time experiment:
+      - kept the committed `foot_*` / `ball_*` hysteresis+dwell baseline
+      - zeroed only the explicit target angular-velocity delta time for those distal controls while the mode is active
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - first forward distal spikes drop materially into the low-thousands range
+      - lower-limb occupancy stays mostly around `~0.9x - 1.1x`
+      - some later peaks still migrate proximally into `calf_*`, `thigh_*`, and occasional `foot_*`
+    - current runtime read:
+      - synthesized explicit target angular velocity was a real locomotion-time mismatch surface
+      - this is a keepable improvement to the current distal locomotion baseline
+      - the next pass should inspect per-bone write smoothing or another proximal lower-limb seam, not re-open whole-chain explicit-only switching

@@ -3086,11 +3086,18 @@ void UPhysAnimComponent::ApplyControlTargets(
 		}
 
 		PreviousControlTargetRotations.Add(ControlName, LimitedRotation);
+		const float TargetAngularVelocityDeltaTime =
+			ResolvePolicyTargetAngularVelocityDeltaTime(
+				Pair.Key,
+				bUseSkeletalAnimationTargetRepresentation,
+				ControlTargetDiagnostics.bFirstPolicyEnabledFrame,
+				bDistalLocomotionCompositionModeActive,
+				TargetWriteDeltaTime);
 
 		PhysicsControl->SetControlTargetOrientation(
 			ControlName,
 			LimitedRotation.Rotator(),
-			TargetWriteDeltaTime,
+			TargetAngularVelocityDeltaTime,
 			true,
 			false,
 			true,
@@ -3639,6 +3646,25 @@ float UPhysAnimComponent::ResolvePolicyTargetWriteDeltaTime(
 	float DeltaTime)
 {
 	return (bUseSkeletalAnimationTargetRepresentation && bFirstPolicyEnabledFrame) ? 0.0f : DeltaTime;
+}
+
+float UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(
+	FName BoneName,
+	bool bUseSkeletalAnimationTargetRepresentation,
+	bool bFirstPolicyEnabledFrame,
+	bool bDistalLocomotionCompositionModeActive,
+	float DeltaTime)
+{
+	if (bDistalLocomotionCompositionModeActive &&
+		ShouldForceExplicitOnlyDistalLocomotionTargetMode(BoneName))
+	{
+		return 0.0f;
+	}
+
+	return ResolvePolicyTargetWriteDeltaTime(
+		bUseSkeletalAnimationTargetRepresentation,
+		bFirstPolicyEnabledFrame,
+		DeltaTime);
 }
 
 float UPhysAnimComponent::ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz)
