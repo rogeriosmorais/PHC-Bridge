@@ -189,6 +189,14 @@ enum class EPhysAnimRuntimeState : uint8
 	FailStopped,
 };
 
+UENUM(BlueprintType)
+enum class EPhysAnimBridgeTraceOutputMode : uint8
+{
+	Off = 0,
+	MetadataAndEvents = 1,
+	Full = 2,
+};
+
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
 class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent
 {
@@ -225,6 +233,18 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
 	FPhysAnimStabilizationSettings StabilizationSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Trace")
+	bool bEnableBridgeTraceOutput = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Trace", meta = (EditCondition = "bEnableBridgeTraceOutput"))
+	EPhysAnimBridgeTraceOutputMode BridgeTraceOutputMode = EPhysAnimBridgeTraceOutputMode::Full;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Trace", meta = (EditCondition = "bEnableBridgeTraceOutput", ClampMin = "0.1"))
+	float BridgeTraceFlushIntervalSeconds = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Trace", meta = (EditCondition = "bEnableBridgeTraceOutput", ClampMin = "1"))
+	int32 BridgeTraceSampleEveryNthFrame = 1;
 
 private:
 	bool ResolveRuntimeContext(FString& OutError);
@@ -293,6 +313,16 @@ private:
 	void MaybeLogRuntimeDiagnostics(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	void ResetStabilizationRuntimeState();
 	void FailStop(const FString& Reason);
+	void StartBridgeTraceSession();
+	void StopBridgeTraceSession(const TCHAR* StopContext, const FString& Message);
+	void FlushBridgeTrace(bool bForce);
+	void EmitBridgeTraceEvent(
+		const TCHAR* EventType,
+		const FString& Message,
+		const FString& Error = FString(),
+		const TCHAR* PreviousRuntimeState = nullptr,
+		const TCHAR* NewRuntimeState = nullptr);
+	EPhysAnimBridgeTraceOutputMode ResolveBridgeTraceOutputMode() const;
 	void UpdateStabilizationStressTestState(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void TrackStabilizationStressTestObservations();
 	float ResolveStabilizationStressTestMultiplier() const;
@@ -339,6 +369,10 @@ private:
 	FPhysAnimControlTargetDiagnostics LastControlTargetDiagnostics;
 	FPhysAnimRuntimeInstabilityState RuntimeInstabilityState;
 	FPhysAnimRuntimeInstabilityDiagnostics LastRuntimeInstabilityDiagnostics;
+	TSharedPtr<class FPhysAnimBridgeTraceWriter> BridgeTraceWriter;
+	FString CurrentBridgeTraceSessionId;
+	int64 BridgeTraceTickCounter = 0;
+	double BridgeTraceLastFlushTimeSeconds = -1.0;
 	TMap<FName, FQuat> PreviousControlTargetRotations;
 	TMap<FName, FQuat> PolicyBlendStartControlTargetRotations;
 	bool bPolicyTargetsAppliedLastFrame = false;

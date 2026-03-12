@@ -1,6 +1,7 @@
 #include "PhysAnimComponent.h"
 
 #include "PhysAnimBridge.h"
+#include "PhysAnimBridgeTrace.h"
 #include "PhysAnimStage1InitializerComponent.h"
 
 #include "Animation/AnimInstance.h"
@@ -217,6 +218,10 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.ShowBridgeStatusIndicator"),
 		1,
 		TEXT("Whether PhysAnim shows an always-visible on-screen bridge status indicator."));
+	TAutoConsoleVariable<int32> CVarPhysAnimTraceOutput(
+		TEXT("physanim.TraceOutput"),
+		-1,
+		TEXT("Override for PhysAnim bridge trace output. -1 keeps the component default, 0 disables, 1 writes metadata+events, 2 writes metadata+events+frames."));
 	TAutoConsoleVariable<int32> CVarPaStabilizationStressTest(
 		TEXT("pa.StabilizationStressTest"),
 		0,
@@ -269,6 +274,47 @@ namespace PhysAnimComponentInternal
 		}
 
 		return OverrideValue != 0;
+	}
+
+	EPhysAnimBridgeTraceMode ToTraceMode(const EPhysAnimBridgeTraceOutputMode Mode)
+	{
+		switch (Mode)
+		{
+		case EPhysAnimBridgeTraceOutputMode::MetadataAndEvents:
+			return EPhysAnimBridgeTraceMode::MetadataAndEvents;
+		case EPhysAnimBridgeTraceOutputMode::Full:
+			return EPhysAnimBridgeTraceMode::Full;
+		default:
+			return EPhysAnimBridgeTraceMode::Off;
+		}
+	}
+
+	FString SanitizeTraceName(const FString& Value)
+	{
+		FString Sanitized = FPaths::MakeValidFileName(Value);
+		Sanitized.ReplaceInline(TEXT(" "), TEXT("_"));
+		return Sanitized.IsEmpty() ? TEXT("Unknown") : Sanitized;
+	}
+
+	FString GetTraceMapName(const UWorld* const World)
+	{
+		return World ? SanitizeTraceName(UWorld::RemovePIEPrefix(World->GetMapName())) : TEXT("UnknownMap");
+	}
+
+	FString GetTraceActorName(const AActor* const Actor)
+	{
+		return Actor ? SanitizeTraceName(Actor->GetName()) : TEXT("UnknownActor");
+	}
+
+	FString BuildTraceSessionId(const UWorld* const World, const AActor* const Actor)
+	{
+		const FString Timestamp = FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S"));
+		return FString::Printf(TEXT("%s-%s-%s"), *Timestamp, *GetTraceMapName(World), *GetTraceActorName(Actor));
+	}
+
+	FString GetTraceRootPath()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("PhysAnim"), TEXT("Traces"));
 	}
 
 	bool IsLowerLimbControlBone(const FName BoneName)
@@ -552,6 +598,158 @@ void UPhysAnimComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+EPhysAnimBridgeTraceOutputMode UPhysAnimComponent::ResolveBridgeTraceOutputMode() const
+{
+	const int32 OverrideMode = PhysAnimComponentInternal::CVarPhysAnimTraceOutput.GetValueOnGameThread();
+	if (OverrideMode >= 0)
+	{
+		switch (OverrideMode)
+		{
+		case 1:
+			return EPhysAnimBridgeTraceOutputMode::MetadataAndEvents;
+		case 2:
+			return EPhysAnimBridgeTraceOutputMode::Full;
+		default:
+			return EPhysAnimBridgeTraceOutputMode::Off;
+		}
+	}
+
+	if (!bEnableBridgeTraceOutput)
+	{
+		return EPhysAnimBridgeTraceOutputMode::Off;
+	}
+
+	return BridgeTraceOutputMode;
+}
+
+void UPhysAnimComponent::StartBridgeTraceSession()
+{
+	BridgeTraceWriter.Reset();
+	CurrentBridgeTraceSessionId.Reset();
+	BridgeTraceTickCounter = 0;
+	BridgeTraceLastFlushTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+
+	const EPhysAnimBridgeTraceOutputMode ResolvedMode = ResolveBridgeTraceOutputMode();
+	if (ResolvedMode == EPhysAnimBridgeTraceOutputMode::Off)
+	{
+		return;
+	}
+
+	const UWorld* const World = GetWorld();
+	const AActor* const OwnerActor = GetOwner();
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+
+	FPhysAnimBridgeTraceSessionMetadata Metadata;
+	Metadata.TraceVersion = 1;
+	Metadata.SessionId = PhysAnimComponentInternal::BuildTraceSessionId(World, OwnerActor);
+	Metadata.TimestampUtc = FDateTime::UtcNow().ToIso8601();
+	Metadata.MapName = PhysAnimComponentInternal::GetTraceMapName(World);
+	Metadata.ActorName = PhysAnimComponentInternal::GetTraceActorName(OwnerActor);
+	Metadata.RuntimeState = GetRuntimeStateName(RuntimeState);
+	Metadata.NneRuntimeName = ActiveRuntimeName;
+	Metadata.ModelAssetPath = ModelDataAsset.ToSoftObjectPath().ToString();
+	Metadata.PoseSearchDatabasePath = GetPathNameSafe(LoadedPoseSearchDatabase);
+	Metadata.TraceMode = static_cast<int32>(ResolvedMode);
+	Metadata.SampleEveryNthFrame = FMath::Max(BridgeTraceSampleEveryNthFrame, 1);
+	Metadata.FlushIntervalSeconds = FMath::Max(BridgeTraceFlushIntervalSeconds, 0.1f);
+	Metadata.bForceZeroActions = EffectiveSettings.bForceZeroActions;
+	Metadata.ActionScale = EffectiveSettings.ActionScale;
+	Metadata.ActionClampAbs = EffectiveSettings.ActionClampAbs;
+	Metadata.ActionSmoothingAlpha = EffectiveSettings.ActionSmoothingAlpha;
+	Metadata.StartupRampSeconds = EffectiveSettings.StartupRampSeconds;
+	Metadata.PolicyControlRateHz = EffectiveSettings.PolicyControlRateHz;
+	Metadata.MaxAngularStepDegreesPerSecond = EffectiveSettings.MaxAngularStepDegreesPerSecond;
+	Metadata.AngularStrengthMultiplier = EffectiveSettings.AngularStrengthMultiplier;
+	Metadata.AngularDampingRatioMultiplier = EffectiveSettings.AngularDampingRatioMultiplier;
+	Metadata.AngularExtraDampingMultiplier = EffectiveSettings.AngularExtraDampingMultiplier;
+	Metadata.bEnableInstabilityFailStop = EffectiveSettings.bEnableInstabilityFailStop;
+	Metadata.MaxRootHeightDeltaCm = EffectiveSettings.MaxRootHeightDeltaCm;
+	Metadata.MaxRootLinearSpeedCmPerSecond = EffectiveSettings.MaxRootLinearSpeedCmPerSecond;
+	Metadata.MaxRootAngularSpeedDegPerSecond = EffectiveSettings.MaxRootAngularSpeedDegPerSecond;
+	Metadata.InstabilityGracePeriodSeconds = EffectiveSettings.InstabilityGracePeriodSeconds;
+	Metadata.StabilizationSummary = PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings);
+
+	TSharedPtr<FPhysAnimBridgeTraceWriter> Writer = MakeShared<FPhysAnimBridgeTraceWriter>(
+		PhysAnimComponentInternal::ToTraceMode(ResolvedMode));
+	FString TraceError;
+	if (!Writer->StartSession(PhysAnimComponentInternal::GetTraceRootPath(), Metadata, TraceError))
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] Bridge trace disabled: %s"), *TraceError);
+		return;
+	}
+
+	BridgeTraceWriter = MoveTemp(Writer);
+	CurrentBridgeTraceSessionId = Metadata.SessionId;
+	EmitBridgeTraceEvent(TEXT("trace_started"), TEXT("Bridge trace session started."));
+}
+
+void UPhysAnimComponent::StopBridgeTraceSession(const TCHAR* StopContext, const FString& Message)
+{
+	if (!BridgeTraceWriter.IsValid())
+	{
+		return;
+	}
+
+	EmitBridgeTraceEvent(TEXT("trace_stopped"), Message.IsEmpty() ? FString(StopContext) : Message);
+	BridgeTraceWriter->Flush(true);
+	BridgeTraceWriter->Shutdown();
+	BridgeTraceWriter.Reset();
+	CurrentBridgeTraceSessionId.Reset();
+	BridgeTraceTickCounter = 0;
+	BridgeTraceLastFlushTimeSeconds = -1.0;
+}
+
+void UPhysAnimComponent::FlushBridgeTrace(const bool bForce)
+{
+	if (!BridgeTraceWriter.IsValid())
+	{
+		return;
+	}
+
+	const UWorld* const World = GetWorld();
+	const double CurrentTimeSeconds = World ? World->GetTimeSeconds() : BridgeTraceLastFlushTimeSeconds;
+	if (!bForce)
+	{
+		const double FlushIntervalSeconds = FMath::Max(BridgeTraceFlushIntervalSeconds, 0.1f);
+		if (BridgeTraceLastFlushTimeSeconds >= 0.0 &&
+			(CurrentTimeSeconds - BridgeTraceLastFlushTimeSeconds) < FlushIntervalSeconds)
+		{
+			return;
+		}
+	}
+
+	BridgeTraceWriter->Flush(bForce);
+	BridgeTraceLastFlushTimeSeconds = CurrentTimeSeconds;
+}
+
+void UPhysAnimComponent::EmitBridgeTraceEvent(
+	const TCHAR* EventType,
+	const FString& Message,
+	const FString& Error,
+	const TCHAR* PreviousRuntimeState,
+	const TCHAR* NewRuntimeState)
+{
+	if (!BridgeTraceWriter.IsValid() || !BridgeTraceWriter->IsEnabled())
+	{
+		return;
+	}
+
+	FPhysAnimBridgeTraceEvent Event;
+	Event.SessionId = CurrentBridgeTraceSessionId;
+	Event.EventTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	Event.EventType = EventType;
+	Event.RuntimeState = GetRuntimeStateName(RuntimeState);
+	Event.Message = Message;
+	Event.Error = Error;
+	Event.PreviousRuntimeState = PreviousRuntimeState ? FString(PreviousRuntimeState) : FString();
+	Event.NewRuntimeState = NewRuntimeState ? FString(NewRuntimeState) : FString();
+	Event.NneRuntimeName = ActiveRuntimeName;
+	Event.ModelAssetPath = GetPathNameSafe(LoadedModelData);
+	Event.MapName = PhysAnimComponentInternal::GetTraceMapName(GetWorld());
+	Event.ActorName = PhysAnimComponentInternal::GetTraceActorName(GetOwner());
+	BridgeTraceWriter->AppendEvent(Event);
+}
+
 void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -567,9 +765,61 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
 	UAnimInstance* const LocalAnimInstance = this->AnimInstance.Get();
+	const bool bCanTraceFrames = BridgeTraceWriter.IsValid() && BridgeTraceWriter->CanWriteFrames();
+	const int32 TraceSampleEveryNthFrame = FMath::Max(BridgeTraceSampleEveryNthFrame, 1);
+	const int64 TraceTickIndex = bCanTraceFrames ? BridgeTraceTickCounter++ : 0;
+	const bool bWriteTraceFrameThisTick = bCanTraceFrames && ((TraceTickIndex % TraceSampleEveryNthFrame) == 0);
+	const double BridgeTickStartSeconds = FPlatformTime::Seconds();
+	bool bTraceFrameFinalized = false;
+	FPhysAnimBridgeTraceFrame TraceFrame;
+	if (bWriteTraceFrameThisTick)
+	{
+		TraceFrame.SessionId = CurrentBridgeTraceSessionId;
+		TraceFrame.TraceVersion = 1;
+		TraceFrame.FrameIndex = TraceTickIndex;
+		TraceFrame.WorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		TraceFrame.DeltaTimeSeconds = DeltaTime;
+	}
+
+	auto MeasureElapsedMs = [](const double StartSeconds) -> float
+	{
+		return static_cast<float>((FPlatformTime::Seconds() - StartSeconds) * 1000.0);
+	};
+
+	auto FinalizeTraceFrame = [&]()
+	{
+		if (bTraceFrameFinalized)
+		{
+			return;
+		}
+
+		bTraceFrameFinalized = true;
+		if (bWriteTraceFrameThisTick && BridgeTraceWriter.IsValid() && BridgeTraceWriter->CanWriteFrames())
+		{
+			TraceFrame.RuntimeState = GetRuntimeStateName(RuntimeState);
+			TraceFrame.NneRuntimeName = ActiveRuntimeName;
+			TraceFrame.bPolicyInfluenceActive = LastControlTargetDiagnostics.bPolicyInfluenceActive;
+			TraceFrame.bFirstPolicyEnabledFrame = LastControlTargetDiagnostics.bFirstPolicyEnabledFrame;
+			TraceFrame.NumPolicyTargetsWritten = LastControlTargetDiagnostics.NumPolicyTargetsWritten;
+			TraceFrame.ActionDiagnostics = LastActionDiagnostics;
+			TraceFrame.ControlTargetDiagnostics = LastControlTargetDiagnostics;
+			TraceFrame.InstabilityDiagnostics = LastRuntimeInstabilityDiagnostics;
+			TraceFrame.BridgeTickTotalMs = MeasureElapsedMs(BridgeTickStartSeconds);
+			BridgeTraceWriter->AppendFrame(TraceFrame);
+		}
+
+		FlushBridgeTrace(false);
+	};
+
+	auto FailStopWithTrace = [&](const FString& Reason)
+	{
+		FinalizeTraceFrame();
+		FailStop(Reason);
+	};
+
 	if (!PhysicsControl || !SkeletalMesh || !LocalAnimInstance)
 	{
-		FailStop(TEXT("Runtime context became invalid after startup."));
+		FailStopWithTrace(TEXT("Runtime context became invalid after startup."));
 		return;
 	}
 
@@ -578,16 +828,28 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	ApplyMovementSmokeInput(EffectiveSettings);
 	FString TickError;
 	FPoseSearchBlueprintResult SearchResult;
+
 	if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
 	{
-		if (!QueryPoseSearch(SearchResult, TickError))
+		const double PoseSearchStartSeconds = FPlatformTime::Seconds();
+		const bool bPoseSearchValid = QueryPoseSearch(SearchResult, TickError);
+		if (bWriteTraceFrameThisTick)
+		{
+			TraceFrame.PoseSearchQueryMs = MeasureElapsedMs(PoseSearchStartSeconds);
+			TraceFrame.bPoseSearchValid = bPoseSearchValid;
+		}
+
+		if (!bPoseSearchValid)
 		{
 			const double WorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 			const double WaitSeconds = WorldTimeSeconds - InitialPoseSearchWaitStartTimeSeconds;
 			if (IsInitialPoseSearchWaitTimedOut(WaitSeconds, PhysAnimComponentInternal::InitialPoseSearchWaitTimeoutSeconds))
 			{
-				FailStop(FString::Printf(TEXT("Initial PoseSearch result was never produced within %.2fs. %s"), PhysAnimComponentInternal::InitialPoseSearchWaitTimeoutSeconds, *TickError));
+				FailStopWithTrace(FString::Printf(TEXT("Initial PoseSearch result was never produced within %.2fs. %s"), PhysAnimComponentInternal::InitialPoseSearchWaitTimeoutSeconds, *TickError));
+				return;
 			}
+
+			FinalizeTraceFrame();
 			return;
 		}
 
@@ -596,12 +858,14 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		if (ResolveInitialPoseSearchSuccessState(EffectiveSettings.bForceZeroActions) == EPhysAnimRuntimeState::ReadyForActivation)
 		{
 			EnterReadyForActivation(EffectiveSettings, TEXT("StartupReadyForActivation"), true);
+			EmitBridgeTraceEvent(TEXT("startup_success"), TEXT("Startup reached ReadyForActivation after the first valid PoseSearch result."));
+			FinalizeTraceFrame();
 			return;
 		}
 
 		if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("StartupActivation"), TickError))
 		{
-			FailStop(TickError);
+			FailStopWithTrace(TickError);
 			return;
 		}
 		UE_LOG(
@@ -611,6 +875,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			*ActiveRuntimeName,
 			*GetPathNameSafe(LoadedModelData));
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
+		EmitBridgeTraceEvent(TEXT("startup_success"), TEXT("Startup activated the bridge after the first valid PoseSearch result."));
+		FinalizeTraceFrame();
 		return;
 	}
 
@@ -619,6 +885,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		DeactivateRuntimePhysicsControl(TEXT("ReadyForActivation"));
 		ResetBridgePhysicsState();
 		EnterReadyForActivation(EffectiveSettings, TEXT("AfterDeferredDeactivation"), false);
+		FinalizeTraceFrame();
 		return;
 	}
 
@@ -626,7 +893,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("DeferredActivation"), TickError))
 		{
-			FailStop(TickError);
+			FailStopWithTrace(TickError);
 			return;
 		}
 
@@ -637,11 +904,13 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			*ActiveRuntimeName,
 			*GetPathNameSafe(LoadedModelData));
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
+		FinalizeTraceFrame();
 		return;
 	}
 
 	if (RuntimeState == EPhysAnimRuntimeState::ReadyForActivation)
 	{
+		FinalizeTraceFrame();
 		return;
 	}
 
@@ -671,7 +940,16 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		PolicyControlTicksSkipped += FMath::Max(ElapsedPolicySteps - 1, 0);
 		LastPolicyControlUpdateTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 
-		if (QueryPoseSearch(SearchResult, TickError))
+		const double PoseSearchStartSeconds = FPlatformTime::Seconds();
+		const bool bPoseSearchValid = QueryPoseSearch(SearchResult, TickError);
+		if (bWriteTraceFrameThisTick)
+		{
+			TraceFrame.PoseSearchQueryMs = MeasureElapsedMs(PoseSearchStartSeconds);
+			TraceFrame.bPoseSearchValid = bPoseSearchValid;
+			TraceFrame.bSampledPolicyStep = true;
+		}
+
+		if (bPoseSearchValid)
 		{
 			LastValidPoseSearchResult = SearchResult;
 			ConsecutiveInvalidPoseSearchFrames = 0;
@@ -681,7 +959,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			++ConsecutiveInvalidPoseSearchFrames;
 			if (ConsecutiveInvalidPoseSearchFrames > 1 || LastValidPoseSearchResult.SelectedAnim == nullptr)
 			{
-				FailStop(FString::Printf(TEXT("PoseSearch query was invalid for two consecutive policy ticks. %s"), *TickError));
+				FailStopWithTrace(FString::Printf(TEXT("PoseSearch query was invalid for two consecutive policy ticks. %s"), *TickError));
 				return;
 			}
 
@@ -690,23 +968,46 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 
 		TArray<FPhysAnimBodySample> CurrentBodySamples;
+		const double BodySampleStartSeconds = FPlatformTime::Seconds();
 		if (!GatherCurrentBodySamples(CurrentBodySamples, TickError))
 		{
-			FailStop(TickError);
+			if (bWriteTraceFrameThisTick)
+			{
+				TraceFrame.BodySampleMs = MeasureElapsedMs(BodySampleStartSeconds);
+			}
+			FailStopWithTrace(TickError);
 			return;
+		}
+		if (bWriteTraceFrameThisTick)
+		{
+			TraceFrame.BodySampleMs = MeasureElapsedMs(BodySampleStartSeconds);
 		}
 
 		TArray<FPhysAnimFuturePoseSample> FuturePoseSamples;
+		const double FuturePoseSampleStartSeconds = FPlatformTime::Seconds();
 		if (!SampleFuturePoses(SearchResult, FuturePoseSamples, TickError))
 		{
-			FailStop(TickError);
+			if (bWriteTraceFrameThisTick)
+			{
+				TraceFrame.FuturePoseSampleMs = MeasureElapsedMs(FuturePoseSampleStartSeconds);
+			}
+			FailStopWithTrace(TickError);
 			return;
+		}
+		if (bWriteTraceFrameThisTick)
+		{
+			TraceFrame.FuturePoseSampleMs = MeasureElapsedMs(FuturePoseSampleStartSeconds);
 		}
 
 		FVector2D MimicTargetReferenceDataOffsetXY = FVector2D::ZeroVector;
+		const double ObservationPackStartSeconds = FPlatformTime::Seconds();
 		if (!ResolveMimicTargetReferenceDataOffset(SearchResult, MimicTargetReferenceDataOffsetXY, TickError))
 		{
-			FailStop(TickError);
+			if (bWriteTraceFrameThisTick)
+			{
+				TraceFrame.ObservationPackMs = MeasureElapsedMs(ObservationPackStartSeconds);
+			}
+			FailStopWithTrace(TickError);
 			return;
 		}
 
@@ -717,7 +1018,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			SelfObservationBuffer,
 			TickError))
 		{
-			FailStop(TickError);
+			if (bWriteTraceFrameThisTick)
+			{
+				TraceFrame.ObservationPackMs = MeasureElapsedMs(ObservationPackStartSeconds);
+			}
+			FailStopWithTrace(TickError);
 			return;
 		}
 
@@ -730,20 +1035,42 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		if (!PhysAnimBridge::BuildMimicTargetPoses(MimicCurrentReferenceBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, TickError))
 		{
-			FailStop(TickError);
+			if (bWriteTraceFrameThisTick)
+			{
+				TraceFrame.ObservationPackMs = MeasureElapsedMs(ObservationPackStartSeconds);
+			}
+			FailStopWithTrace(TickError);
 			return;
 		}
 
 		if (!BuildTerrainObservation(CurrentBodySamples, TerrainBuffer, TickError))
 		{
-			FailStop(TickError);
+			if (bWriteTraceFrameThisTick)
+			{
+				TraceFrame.ObservationPackMs = MeasureElapsedMs(ObservationPackStartSeconds);
+			}
+			FailStopWithTrace(TickError);
 			return;
 		}
+		if (bWriteTraceFrameThisTick)
+		{
+			TraceFrame.ObservationPackMs = MeasureElapsedMs(ObservationPackStartSeconds);
+		}
 
+		const double InferenceStartSeconds = FPlatformTime::Seconds();
 		if (!RunInference(TickError))
 		{
-			FailStop(TickError);
+			if (bWriteTraceFrameThisTick)
+			{
+				TraceFrame.InferenceMs = MeasureElapsedMs(InferenceStartSeconds);
+			}
+			FailStopWithTrace(TickError);
 			return;
+		}
+		if (bWriteTraceFrameThisTick)
+		{
+			TraceFrame.InferenceMs = MeasureElapsedMs(InferenceStartSeconds);
+			TraceFrame.bRunSyncSucceeded = true;
 		}
 	}
 
@@ -752,12 +1079,25 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		ResetPendingBodyModifiersToCachedTargets();
 	}
-	if (bRunPolicyUpdateThisTick && !ConditionModelActions(EffectiveSettings, TickError))
+	if (bRunPolicyUpdateThisTick)
 	{
-		FailStop(TickError);
-		return;
+		const double ActionConditionStartSeconds = FPlatformTime::Seconds();
+		if (!ConditionModelActions(EffectiveSettings, TickError))
+		{
+			if (bWriteTraceFrameThisTick)
+			{
+				TraceFrame.ActionConditionMs = MeasureElapsedMs(ActionConditionStartSeconds);
+			}
+			FailStopWithTrace(TickError);
+			return;
+		}
+		if (bWriteTraceFrameThisTick)
+		{
+			TraceFrame.ActionConditionMs = MeasureElapsedMs(ActionConditionStartSeconds);
+		}
 	}
 
+	const double ControlTargetStartSeconds = FPlatformTime::Seconds();
 	ApplyControlTargets(
 		bRunPolicyUpdateThisTick
 			? (PolicyControlIntervalSeconds * FMath::Max(ElapsedPolicySteps, 1))
@@ -765,17 +1105,36 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		EffectiveSettings,
 		bRunPolicyUpdateThisTick,
 		TickError);
+	if (bWriteTraceFrameThisTick)
+	{
+		TraceFrame.ControlTargetMs = MeasureElapsedMs(ControlTargetStartSeconds);
+	}
 	if (!TickError.IsEmpty())
 	{
-		FailStop(TickError);
+		FailStopWithTrace(TickError);
 		return;
 	}
 
+	const double UpdateControlsStartSeconds = FPlatformTime::Seconds();
 	PhysicsControl->UpdateControls(DeltaTime);
+	if (bWriteTraceFrameThisTick)
+	{
+		TraceFrame.UpdateControlsMs = MeasureElapsedMs(UpdateControlsStartSeconds);
+		TraceFrame.bUpdateControlsSucceeded = true;
+	}
+	const double InstabilityCheckStartSeconds = FPlatformTime::Seconds();
 	if (!CheckRuntimeInstability(DeltaTime, EffectiveSettings, TickError))
 	{
-		FailStop(TickError);
+		if (bWriteTraceFrameThisTick)
+		{
+			TraceFrame.InstabilityCheckMs = MeasureElapsedMs(InstabilityCheckStartSeconds);
+		}
+		FailStopWithTrace(TickError);
 		return;
+	}
+	if (bWriteTraceFrameThisTick)
+	{
+		TraceFrame.InstabilityCheckMs = MeasureElapsedMs(InstabilityCheckStartSeconds);
 	}
 	TrackStabilizationStressTestObservations();
 	AdvanceBringUpState(DeltaTime, EffectiveSettings);
@@ -784,8 +1143,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		LogBridgeStateSnapshot(TEXT("AfterSimulationHandoff"));
 		LogBodyModifierTelemetrySnapshot(TEXT("AfterSimulationHandoff"));
 		LogActivationSummary(EffectiveSettings, TEXT("SimulationHandoffComplete"), true, true, SimulationHandoffAlpha);
+		EmitBridgeTraceEvent(TEXT("simulation_handoff_complete"), TEXT("Simulation handoff completed and bridge-owned physics is fully active."));
 	}
 	MaybeLogRuntimeDiagnostics(EffectiveSettings);
+	FinalizeTraceFrame();
 }
 
 bool UPhysAnimComponent::StartBridge()
@@ -797,12 +1158,16 @@ bool UPhysAnimComponent::StartBridge()
 		return true;
 	}
 
+	StartBridgeTraceSession();
+
 	FString Error;
 	if (!ResolveRuntimeContext(Error))
 	{
 		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked: %s"), *Error);
+		EmitBridgeTraceEvent(TEXT("startup_blocked"), TEXT("Runtime context resolution failed during startup."), Error);
 		SetComponentTickEnabled(false);
 		TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+		StopBridgeTraceSession(TEXT("StartupBlocked"), TEXT("Bridge trace session stopped after startup block."));
 		return false;
 	}
 
@@ -814,8 +1179,10 @@ bool UPhysAnimComponent::StartBridge()
 		!InitializeModel(Error))
 	{
 		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked: %s"), *Error);
+		EmitBridgeTraceEvent(TEXT("startup_blocked"), TEXT("Startup validation failed before bridge activation."), Error);
 		SetComponentTickEnabled(false);
 		TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+		StopBridgeTraceSession(TEXT("StartupBlocked"), TEXT("Bridge trace session stopped after startup block."));
 		return false;
 	}
 
@@ -865,6 +1232,7 @@ void UPhysAnimComponent::StopBridge()
 	DeactivateRuntimePhysicsControl(TEXT("StopBridge"));
 	ResetBridgePhysicsState();
 	TransitionRuntimeState(EPhysAnimRuntimeState::Uninitialized);
+	StopBridgeTraceSession(TEXT("StopBridge"), TEXT("Bridge stopped."));
 	UpdateBridgeStatusIndicator(5.0f);
 	SetComponentTickEnabled(false);
 	ConsecutiveInvalidPoseSearchFrames = 0;
@@ -3728,9 +4096,11 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 
 	LogBridgeStateSnapshot(TEXT("FailStop"));
 	UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: %s"), *Reason);
+	EmitBridgeTraceEvent(TEXT("fail_stop"), TEXT("Bridge entered fail-stop."), Reason);
 	DeactivateRuntimePhysicsControl(TEXT("FailStop"));
 	ResetBridgePhysicsState();
 	TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+	StopBridgeTraceSession(TEXT("FailStop"), TEXT("Bridge trace session stopped after fail-stop."));
 	SetComponentTickEnabled(false);
 	ResetStabilizationRuntimeState();
 }
@@ -4818,13 +5188,21 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 		return;
 	}
 
+	const TCHAR* const PreviousStateName = GetRuntimeStateName(RuntimeState);
+	const TCHAR* const NewStateName = GetRuntimeStateName(NewState);
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
 		TEXT("[PhysAnim] Runtime state: %s -> %s"),
-		GetRuntimeStateName(RuntimeState),
-		GetRuntimeStateName(NewState));
+		PreviousStateName,
+		NewStateName);
 	RuntimeState = NewState;
+	EmitBridgeTraceEvent(
+		TEXT("runtime_state_transition"),
+		FString::Printf(TEXT("Runtime state: %s -> %s"), PreviousStateName, NewStateName),
+		FString(),
+		PreviousStateName,
+		NewStateName);
 	UpdateBridgeStatusIndicator(60.0f);
 }
 
