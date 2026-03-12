@@ -3061,14 +3061,33 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const FVector OwnerVelocity = OwnerActor->GetVelocity();
 		return FVector(OwnerVelocity.X, OwnerVelocity.Y, 0.0f).Size();
 	}();
+	const bool bHasActiveMovementIntent = [this]() -> bool
+	{
+		const APawn* const OwnerPawn = Cast<APawn>(GetOwner());
+		const FVector PendingInput = OwnerPawn ? OwnerPawn->GetPendingMovementInputVector() : FVector::ZeroVector;
+		const FVector LastInput = OwnerPawn ? OwnerPawn->GetLastMovementInputVector() : FVector::ZeroVector;
+		const FVector PendingPlanarInput(PendingInput.X, PendingInput.Y, 0.0f);
+		const FVector LastPlanarInput(LastInput.X, LastInput.Y, 0.0f);
+
+		const ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
+		const UCharacterMovementComponent* const CharacterMovement = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr;
+		const FVector CurrentAcceleration = CharacterMovement ? CharacterMovement->GetCurrentAcceleration() : FVector::ZeroVector;
+		const FVector PlanarAcceleration(CurrentAcceleration.X, CurrentAcceleration.Y, 0.0f);
+
+		return PendingPlanarInput.SizeSquared() > UE_KINDA_SMALL_NUMBER ||
+			LastPlanarInput.SizeSquared() > UE_KINDA_SMALL_NUMBER ||
+			PlanarAcceleration.SizeSquared() > UE_KINDA_SMALL_NUMBER;
+	}();
 	const float RuntimeDeltaTimeSeconds =
 		GetWorld() ? FMath::Max(0.0f, GetWorld()->GetDeltaSeconds()) : 0.0f;
 	if (EffectiveSettings.bApplyTrainingAlignedDistalLocomotionCompositionPolicy)
 	{
+		const bool bPreviousDistalLocomotionCompositionModeActive = bDistalLocomotionCompositionModeActive;
 		bDistalLocomotionCompositionModeActive =
-			UpdateBinarySpeedModeWithHysteresis(
+			UpdateBinarySpeedModeWithIntentLatch(
 				bDistalLocomotionCompositionModeActive,
 				OwnerPlanarSpeedCmPerSec,
+				bHasActiveMovementIntent,
 				EffectiveSettings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec,
 				EffectiveSettings.DistalLocomotionCompositionPolicyExitSpeedCmPerSec,
 				EffectiveSettings.DistalLocomotionCompositionPolicyEnterHoldSeconds,
@@ -3076,6 +3095,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				RuntimeDeltaTimeSeconds,
 				DistalLocomotionCompositionTimeAboveEnterSeconds,
 				DistalLocomotionCompositionTimeBelowExitSeconds);
+		if (bPreviousDistalLocomotionCompositionModeActive != bDistalLocomotionCompositionModeActive)
+		{
+			TRACE_BOOKMARK(
+				TEXT("PhysAnim DistalCompositionMode %s speed=%.1f intent=%s"),
+				bDistalLocomotionCompositionModeActive ? TEXT("On") : TEXT("Off"),
+				OwnerPlanarSpeedCmPerSec,
+				bHasActiveMovementIntent ? TEXT("true") : TEXT("false"));
+		}
 	}
 	else
 	{
@@ -4726,6 +4753,37 @@ bool UPhysAnimComponent::UpdateBinarySpeedModeWithHysteresis(
 	}
 
 	return false;
+}
+
+bool UPhysAnimComponent::UpdateBinarySpeedModeWithIntentLatch(
+	bool bCurrentModeActive,
+	float SpeedCmPerSec,
+	bool bHasActiveMovementIntent,
+	float EnterThresholdCmPerSec,
+	float ExitThresholdCmPerSec,
+	float EnterHoldSeconds,
+	float ExitHoldSeconds,
+	float DeltaTimeSeconds,
+	float& InOutTimeAboveEnterSeconds,
+	float& InOutTimeBelowExitSeconds)
+{
+	if (bCurrentModeActive && bHasActiveMovementIntent)
+	{
+		InOutTimeAboveEnterSeconds = 0.0f;
+		InOutTimeBelowExitSeconds = 0.0f;
+		return true;
+	}
+
+	return UpdateBinarySpeedModeWithHysteresis(
+		bCurrentModeActive,
+		SpeedCmPerSec,
+		EnterThresholdCmPerSec,
+		ExitThresholdCmPerSec,
+		EnterHoldSeconds,
+		ExitHoldSeconds,
+		DeltaTimeSeconds,
+		InOutTimeAboveEnterSeconds,
+		InOutTimeBelowExitSeconds);
 }
 
 bool UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(FName BoneName)

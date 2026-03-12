@@ -573,6 +573,17 @@ public:
 		float DeltaTimeSeconds,
 		float& InOutTimeAboveEnterSeconds,
 		float& InOutTimeBelowExitSeconds);
+	static bool UpdateBinarySpeedModeWithIntentLatch(
+		bool bCurrentModeActive,
+		float SpeedCmPerSec,
+		bool bHasActiveMovementIntent,
+		float EnterThresholdCmPerSec,
+		float ExitThresholdCmPerSec,
+		float EnterHoldSeconds,
+		float ExitHoldSeconds,
+		float DeltaTimeSeconds,
+		float& InOutTimeAboveEnterSeconds,
+		float& InOutTimeBelowExitSeconds);
 	static bool ShouldForceExplicitOnlyDistalLocomotionTargetMode(FName BoneName);
 	static float ResolveTrainingAlignedControlStrengthScaleForBone(FName BoneName, float BlendAlpha);
 	static float ResolveTrainingAlignedLocomotionLowerLimbDampingRatioScaleForBone(FName BoneName, float BlendAlpha);

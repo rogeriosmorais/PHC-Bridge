@@ -962,3 +962,31 @@ Whenever new setup or gate evidence arrives:
   - `PhysAnim.Component`
   - `PhysAnim.PIE.MovementSmoke`
   - `PhysAnim.PIE.MovementTraceSmoke`
+## 2026-03-12 - Distal composition intent latch
+
+- Re-evaluated the next lower-limb seam after the cleaned policy-step trace and the failed distal-composition ablation.
+- New hypothesis:
+  - the explicit-only distal composition mode is still needed
+  - but its speed-only exit logic is too eager during live locomotion
+- Added an intent-aware latch:
+  - once distal composition mode is active, it now stays active while there is live movement intent
+  - movement intent is resolved from pending input, last input, or current movement acceleration
+- Added a component test that locks the low-speed-dip-with-intent case.
+- Verification passed:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `PhysAnim.Component`
+  - `PhysAnim.PIE.MovementSmoke`
+  - `PhysAnim.PIE.MovementTraceSmoke`
+- Result:
+  - keepable improvement
+  - within-phase deactivation count did not drop yet
+  - but movement-trace maxima improved materially:
+    - `Forward` max angular speed: `8304 -> 5749 deg/s`
+    - `StrafeLeft`: `5111 -> 3782 deg/s`
+    - `StrafeRight`: `7772 -> 5489 deg/s`
+    - `Backward`: roughly flat on max, but p95 improved `3838 -> 2948 deg/s`
+    - late `Complete` phase dropped strongly `5182 -> 1607 deg/s`
+- Current read:
+  - the exit path was part of the problem
+  - the intent-aware latch is worth keeping
+  - but another transition seam still remains because the same mid-phase off transitions still occur

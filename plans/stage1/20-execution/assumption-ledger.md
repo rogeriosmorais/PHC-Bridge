@@ -634,3 +634,15 @@ The next meaningful ledger updates should come from:
   - the CSV trace explains bridge-local inputs and decisions
   - Unreal Insights explains where those bridge phases sit relative to game thread, animation, physics, and render timing
   - both are required for the next locomotion-time investigations
+## 2026-03-12 - Distal composition should be sticky under live intent
+
+- Assumption tested:
+  - distal composition mode should not be allowed to exit purely on a transient speed dip while locomotion intent is still active
+- Result:
+  - supported
+- Evidence:
+  - intent-aware latching materially reduced locomotion-phase maxima and late settling noise
+  - but it did not fully eliminate within-phase deactivations
+- Updated assumption:
+  - distal composition mode needs stickier transition handling than a pure speed hysteresis
+  - the next remaining seam is not simple on/off removal, but why mode still drops out in a few live locomotion windows

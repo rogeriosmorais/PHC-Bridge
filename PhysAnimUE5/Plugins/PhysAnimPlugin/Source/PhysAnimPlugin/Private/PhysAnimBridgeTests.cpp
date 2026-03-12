@@ -1671,6 +1671,34 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 				0.10f,
 				TimeAboveEnterSeconds,
 				TimeBelowExitSeconds));
+		TimeAboveEnterSeconds = 0.0f;
+		TimeBelowExitSeconds = 0.0f;
+		TestTrue(
+			TEXT("Movement intent keeps locomotion composition mode latched through a low-speed dip"),
+			UPhysAnimComponent::UpdateBinarySpeedModeWithIntentLatch(
+				true,
+				90.0f,
+				true,
+				250.0f,
+				100.0f,
+				0.20f,
+				0.20f,
+				0.10f,
+				TimeAboveEnterSeconds,
+				TimeBelowExitSeconds));
+		TestTrue(
+			TEXT("Without movement intent, low-speed hold can still deactivate locomotion composition mode"),
+			!UPhysAnimComponent::UpdateBinarySpeedModeWithIntentLatch(
+				true,
+				90.0f,
+				false,
+				250.0f,
+				100.0f,
+				0.20f,
+				0.20f,
+				0.20f,
+				TimeAboveEnterSeconds,
+				TimeBelowExitSeconds));
 		TestTrue(
 			TEXT("Feet enter explicit-only locomotion composition mode"),
 			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("foot_l")));

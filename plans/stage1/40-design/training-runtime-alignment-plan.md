@@ -882,3 +882,14 @@ If that hypothesis is correct:
   - `RunSync`
   - control writes
 - Counters/bookmarks now expose bridge spikes and fail-stop directly in the engine trace timeline.
+## 2026-03-12 - Distal composition intent latch
+
+- Tested a movement-intent-aware exit policy for the explicit-only distal locomotion composition mode.
+- Outcome:
+  - keepable improvement
+  - maxima and p95 lower-limb outliers dropped materially across most locomotion phases
+  - the mode still deactivates in a small number of within-phase windows, so transition churn is reduced but not solved
+- Updated read:
+  - the explicit-only distal composition mode remains necessary
+  - stickier exit handling is directionally correct
+  - the next pass should investigate the remaining mid-phase deactivation seam rather than deleting the mode or reopening broad lower-limb tuning
