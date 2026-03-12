@@ -911,3 +911,14 @@ If that hypothesis is correct:
   - broader training/runtime alignment remains worth continuing
   - this transition-policy refinement is worth keeping
   - the next pass should be selected from the cleaned movement trace as a narrower transition/representation seam, not another guessed lower-limb retune
+## 2026-03-12 - Distal composition intent enter bypass
+
+- Tested a second transition-policy refinement: bypass the normal distal composition enter hold while live locomotion intent is active.
+- Outcome:
+  - falsified as a new baseline
+  - it removed most phase-start false rows
+  - but it regressed active locomotion maxima strongly enough that it should not stay live
+- Updated read:
+  - the remaining problem is not simply "activate earlier"
+  - composition-mode entry still needs restraint
+  - the next useful pass should move to a narrower transition or representation seam, not more aggressive composition-mode enter/exit tuning

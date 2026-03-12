@@ -1015,3 +1015,32 @@ Whenever new setup or gate evidence arrives:
 - Current read:
   - recent-intent grace is worth keeping
   - the dominant remaining issue is now the last few within-phase dropouts, not broad locomotion instability
+## 2026-03-12 - Distal composition intent enter bypass
+
+- Re-checked the remaining false rows after the grace-window pass and found that they clustered at the start of each active locomotion phase.
+- Hypothesis:
+  - the remaining seam was the normal `0.20s` enter hold delaying distal composition activation after locomotion intent was already live
+- Implemented experiment:
+  - added an intent-aware enter hold override with an effective `0.00s` hold while live movement intent was active
+- Verification stayed green:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `PhysAnim.Component`
+  - `PhysAnim.PIE.MovementTraceSmoke`
+- Result:
+  - not a keep
+  - the mode became too eager:
+    - `Forward` false rows dropped `6 -> 1`
+    - `StrafeLeft` `8 -> 1`
+    - `StrafeRight` `7 -> 1`
+    - `Backward` `8 -> 1`
+  - but active locomotion maxima regressed badly:
+    - `Forward`: `5112 -> 8988 deg/s`
+    - `StrafeLeft`: `3595 -> 6048 deg/s`
+    - `StrafeRight`: `5088 -> 7850 deg/s`
+    - `Backward`: `5422 -> 8388 deg/s`
+    - `Complete`: `1276 -> 2314 deg/s`
+- Runtime code was restored to the grace-window baseline after the experiment.
+- Current read:
+  - the remaining issue is not just delayed activation
+  - forcing early activation is too blunt
+  - the next pass should move to a narrower transition/representation seam, not more composition-mode enter/exit tuning

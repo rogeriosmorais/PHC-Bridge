@@ -659,3 +659,16 @@ The next meaningful ledger updates should come from:
 - Updated assumption:
   - the distal composition policy should stay sticky for a short recent-intent window
   - the remaining issue is narrower than before and should be investigated from the cleaned movement trace, not by reopening broad lower-limb heuristics
+## 2026-03-12 - Distal composition should not bypass enter hold purely on live intent
+
+- Assumption tested:
+  - the remaining phase-start false rows are mostly caused by the normal enter hold, so live locomotion intent should be allowed to bypass that hold
+- Result:
+  - falsified
+- Evidence:
+  - an intent-aware zero-second enter hold removed most phase-start false rows
+  - but it materially worsened active locomotion maxima across every major movement phase
+- Updated assumption:
+  - the remaining seam is not just delayed activation
+  - the distal composition policy still needs restraint on entry
+  - the next useful pass should target a narrower transition or representation mismatch, not more aggressive composition-mode activation
