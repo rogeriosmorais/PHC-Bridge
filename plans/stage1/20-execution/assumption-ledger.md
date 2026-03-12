@@ -598,3 +598,17 @@ The next meaningful ledger updates should come from:
 - Current working assumption:
   - the next locomotion-time alignment decision should be chosen from trace summaries of the packed inputs, not only from downstream lower-limb spike metrics
   - broader training/runtime alignment remains worth continuing, but the next primary lever should be evidence from the trace rather than another guessed lower-limb heuristic
+
+## 2026-03-12 - Trace row cadence
+
+- Previous assumption:
+  - writing trace rows every bridge tick was close enough, even though the packed-input summaries only updated on policy steps
+- Status:
+  - falsified
+- Evidence:
+  - the first movement trace contained thousands of blank-phase rows and only a minority of rows with meaningful packed-input summaries
+  - the trace design and implementation docs both define `frames.csv` as one row per sampled bridge policy step
+  - after switching frame emission to policy-step cadence, the latest movement trace had `0` blank phases and `0` non-policy rows
+- Current working assumption:
+  - `frames.csv` should be treated as a policy-step artifact, with sparse events carrying startup/shutdown/state-transition information
+  - the next locomotion-time alignment pass should be chosen from this cleaned trace, not from mixed tick-rate rows

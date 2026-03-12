@@ -832,3 +832,33 @@ If that hypothesis is correct:
 - Keepable.
 - No locomotion baseline regression.
 - The next locomotion-time runtime change should now be selected from trace evidence gathered during movement smoke, not from another guessed lower-limb heuristic split.
+
+## 2026-03-12 - Policy-step trace semantics
+
+### Direction Check
+
+- Keep going in the broader training/runtime alignment direction.
+- Do not treat the first-generation trace artifact as final just because the writer exists.
+- Align the trace row cadence with the actual policy cadence before using it to choose the next locomotion pass.
+
+### Why This Pass Was Worth Doing
+
+- The bridge trace design says `frames.csv` should contain one row per sampled bridge policy step.
+- The first movement trace still wrote rows every tick, but only populated the packed-input summaries on policy steps.
+- That produced thousands of blank-phase rows and made the new summaries much less useful for diagnosis.
+
+### Implemented Change
+
+- Trace frame rows now emit only on sampled policy steps during `BridgeActive`.
+- Sparse events continue to capture startup, shutdown, and runtime-state transitions.
+- Movement trace smoke automation now verifies:
+  - trace files exist
+  - the CSV schema contains the packed-input summary columns
+  - all trace rows are policy-step rows
+  - no blank movement phases remain
+
+### Outcome
+
+- Keepable.
+- Latest deterministic movement trace dropped to `1495` rows with `0` blank phases and `0` non-policy rows.
+- The next locomotion-time alignment decision can now be made from a much cleaner trace artifact.

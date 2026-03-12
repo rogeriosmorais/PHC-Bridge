@@ -841,21 +841,15 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
 	UAnimInstance* const LocalAnimInstance = this->AnimInstance.Get();
-	const bool bCanTraceFrames = BridgeTraceWriter.IsValid() && BridgeTraceWriter->CanWriteFrames();
+	const bool bCanTraceFrames =
+		BridgeTraceWriter.IsValid() &&
+		BridgeTraceWriter->CanWriteFrames() &&
+		RuntimeState == EPhysAnimRuntimeState::BridgeActive;
 	const int32 TraceSampleEveryNthFrame = FMath::Max(BridgeTraceSampleEveryNthFrame, 1);
-	const int64 TraceTickIndex = bCanTraceFrames ? BridgeTraceTickCounter++ : 0;
-	const bool bWriteTraceFrameThisTick = bCanTraceFrames && ((TraceTickIndex % TraceSampleEveryNthFrame) == 0);
 	const double BridgeTickStartSeconds = FPlatformTime::Seconds();
 	bool bTraceFrameFinalized = false;
+	bool bWriteTraceFrameThisTick = false;
 	FPhysAnimBridgeTraceFrame TraceFrame;
-	if (bWriteTraceFrameThisTick)
-	{
-		TraceFrame.SessionId = CurrentBridgeTraceSessionId;
-		TraceFrame.TraceVersion = 1;
-		TraceFrame.FrameIndex = TraceTickIndex;
-		TraceFrame.WorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-		TraceFrame.DeltaTimeSeconds = DeltaTime;
-	}
 
 	auto MeasureElapsedMs = [](const double StartSeconds) -> float
 	{
@@ -1015,6 +1009,20 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		++PolicyControlTicksExecuted;
 		PolicyControlTicksSkipped += FMath::Max(ElapsedPolicySteps - 1, 0);
 		LastPolicyControlUpdateTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+		if (bCanTraceFrames)
+		{
+			const int64 TraceFrameIndex = BridgeTraceTickCounter++;
+			bWriteTraceFrameThisTick = ((TraceFrameIndex % TraceSampleEveryNthFrame) == 0);
+			if (bWriteTraceFrameThisTick)
+			{
+				TraceFrame.SessionId = CurrentBridgeTraceSessionId;
+				TraceFrame.TraceVersion = 1;
+				TraceFrame.FrameIndex = TraceFrameIndex;
+				TraceFrame.WorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+				TraceFrame.DeltaTimeSeconds = DeltaTime;
+				TraceFrame.bSampledPolicyStep = true;
+			}
+		}
 
 		const double PoseSearchStartSeconds = FPlatformTime::Seconds();
 		const bool bPoseSearchValid = QueryPoseSearch(SearchResult, TickError);
@@ -1022,7 +1030,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		{
 			TraceFrame.PoseSearchQueryMs = MeasureElapsedMs(PoseSearchStartSeconds);
 			TraceFrame.bPoseSearchValid = bPoseSearchValid;
-			TraceFrame.bSampledPolicyStep = true;
 		}
 
 		if (bPoseSearchValid)

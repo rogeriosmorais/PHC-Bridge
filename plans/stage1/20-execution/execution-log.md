@@ -888,3 +888,37 @@ Whenever new setup or gate evidence arrives:
   - keepable
   - no locomotion baseline regression
   - the next runtime alignment decision can now be made from trace evidence instead of only from downstream instability symptoms
+
+## 2026-03-12 - Policy-step trace alignment
+
+- Direction check:
+  - still worth continuing in the broader training/runtime alignment direction
+  - not worth making another locomotion-time heuristic change before the trace artifact itself matches the intended policy-step semantics
+- New plan:
+  - [policy-step-trace-alignment-plan.md](/F:/NewEngine/plans/stage1/40-design/policy-step-trace-alignment-plan.md)
+- Sources re-checked before coding:
+  - UE PhysicsControl and CharacterMovement docs/source
+  - local bridge trace write path
+  - ProtoMotions config and observation packing paths
+- Evidence that triggered this pass:
+  - the first movement trace contained `4341` blank-phase rows and only a minority of rows carried valid packed-input summaries
+  - this came from writing `frames.csv` on non-policy ticks even though the new summaries were only populated on policy-update ticks
+- Implemented:
+  - trace frame rows now emit only on sampled policy steps during `BridgeActive`
+  - movement trace smoke automation now verifies:
+    - a new trace session folder was written
+    - trace start/stop events exist
+    - the CSV contains the packed-input summary columns
+    - all data rows are policy-step rows
+    - no blank movement phases remain
+  - trace startup now logs the resolved session folder path
+- Verification:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Bridge`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementTraceSmoke`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
+- Result:
+  - keepable
+  - latest movement trace dropped to `1495` rows with `0` blank phases and `0` non-policy rows
+  - the trace artifact is now much more usable for picking the next locomotion-time alignment pass

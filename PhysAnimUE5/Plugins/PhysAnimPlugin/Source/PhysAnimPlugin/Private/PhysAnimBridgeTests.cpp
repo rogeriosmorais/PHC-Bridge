@@ -171,24 +171,64 @@ namespace
 				return true;
 			}
 
+			TArray<FString> HeaderFields;
+			HeaderLine.ParseIntoArray(HeaderFields, TEXT(","), false);
+			const int32 SampledPolicyStepIndex = HeaderFields.IndexOfByKey(TEXT("sampled_policy_step"));
+			const int32 MovementSmokePhaseIndex = HeaderFields.IndexOfByKey(TEXT("movement_smoke_phase"));
+			if (SampledPolicyStepIndex == INDEX_NONE || MovementSmokePhaseIndex == INDEX_NONE)
+			{
+				Test->AddError(FString::Printf(TEXT("%s Trace frame CSV header was missing sampled_policy_step or movement_smoke_phase."), Prefix));
+				return true;
+			}
+
 			bool bFoundNamedMovementPhase = false;
+			bool bFoundBlankMovementPhase = false;
+			bool bFoundNonPolicyStepRow = false;
 			for (int32 LineIndex = 1; LineIndex < FrameLines.Num(); ++LineIndex)
 			{
 				const FString& Line = FrameLines[LineIndex];
-				if (Line.Contains(TEXT("\"Forward\"")) ||
-					Line.Contains(TEXT("\"Backward\"")) ||
-					Line.Contains(TEXT("\"StrafeLeft\"")) ||
-					Line.Contains(TEXT("\"StrafeRight\"")) ||
-					Line.Contains(TEXT("\"Idle_00\"")))
+				TArray<FString> RowFields;
+				Line.ParseIntoArray(RowFields, TEXT(","), false);
+				if (!RowFields.IsValidIndex(SampledPolicyStepIndex) || !RowFields.IsValidIndex(MovementSmokePhaseIndex))
+				{
+					Test->AddError(FString::Printf(TEXT("%s Trace frame CSV row %d had an unexpected field count."), Prefix, LineIndex));
+					return true;
+				}
+
+				if (RowFields[SampledPolicyStepIndex] != TEXT("true"))
+				{
+					bFoundNonPolicyStepRow = true;
+				}
+				const FString MovementSmokePhase = RowFields[MovementSmokePhaseIndex];
+				if (MovementSmokePhase == TEXT("\"\"") || MovementSmokePhase.IsEmpty())
+				{
+					bFoundBlankMovementPhase = true;
+				}
+				if (MovementSmokePhase == TEXT("\"Forward\"") ||
+					MovementSmokePhase == TEXT("\"Backward\"") ||
+					MovementSmokePhase == TEXT("\"StrafeLeft\"") ||
+					MovementSmokePhase == TEXT("\"StrafeRight\"") ||
+					MovementSmokePhase == TEXT("\"Idle_00\""))
 				{
 					bFoundNamedMovementPhase = true;
-					break;
 				}
 			}
 
 			if (!bFoundNamedMovementPhase)
 			{
 				Test->AddError(FString::Printf(TEXT("%s Trace frame CSV did not capture any named movement smoke phase."), Prefix));
+				return true;
+			}
+
+			if (bFoundBlankMovementPhase)
+			{
+				Test->AddError(FString::Printf(TEXT("%s Trace frame CSV still contained blank movement phases."), Prefix));
+				return true;
+			}
+
+			if (bFoundNonPolicyStepRow)
+			{
+				Test->AddError(FString::Printf(TEXT("%s Trace frame CSV still contained non-policy-step rows."), Prefix));
 				return true;
 			}
 
