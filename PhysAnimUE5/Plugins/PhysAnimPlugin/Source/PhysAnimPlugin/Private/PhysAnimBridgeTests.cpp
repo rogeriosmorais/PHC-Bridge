@@ -170,6 +170,17 @@ namespace
 		Frame.UpdateControlsMs = 0.2f;
 		Frame.InstabilityCheckMs = 0.1f;
 		Frame.BridgeTickTotalMs = 3.1f;
+		Frame.SelfObservationRootHeight = 88.0f;
+		Frame.SelfObservationMeanAbs = 12.5f;
+		Frame.MimicTargetPosesMeanAbs = 6.2f;
+		Frame.MimicTargetPosesMinFutureTimeSeconds = 1.0f / 30.0f;
+		Frame.MimicTargetPosesMaxFutureTimeSeconds = 0.5f;
+		Frame.TerrainMean = 2.0f;
+		Frame.TerrainMin = -1.0f;
+		Frame.TerrainMax = 4.0f;
+		Frame.TerrainCenter = 1.5f;
+		Frame.MovementSmokePhaseName = TEXT("Forward");
+		Frame.bDistalLocomotionCompositionModeActive = true;
 		Frame.ActionDiagnostics.RawMin = -0.4f;
 		Frame.ActionDiagnostics.RawMax = 0.6f;
 		Frame.ActionDiagnostics.RawMeanAbs = 0.2f;
@@ -229,7 +240,7 @@ namespace
 		TestEqual(
 			TEXT("Frame CSV header order stays stable"),
 			FPhysAnimBridgeTraceWriter::BuildFrameCsvHeader(),
-			FString(TEXT("session_id,trace_version,frame_index,world_time_seconds,delta_time_seconds,sampled_policy_step,runtime_state,nne_runtime_name,pose_search_valid,run_sync_succeeded,update_controls_succeeded,policy_influence_active,first_policy_enabled_frame,num_policy_targets_written,resolve_context_ms,pose_search_query_ms,future_pose_sample_ms,body_sample_ms,observation_pack_ms,inference_ms,action_condition_ms,control_target_ms,update_controls_ms,instability_check_ms,bridge_tick_total_ms,raw_action_min,raw_action_max,raw_action_mean_abs,conditioned_action_mean_abs,num_clamped_action_floats,max_target_delta_bone,max_target_delta_degrees,mean_target_delta_degrees,max_raw_policy_offset_bone,max_raw_policy_offset_degrees,mean_raw_policy_offset_degrees,max_lower_limb_limit_occupancy_bone,max_lower_limb_limit_occupancy,max_lower_limb_limit_proxy_degrees,mean_lower_limb_limit_occupancy,num_lower_limb_targets_considered,root_height_delta_cm,root_linear_speed_cm_per_second,root_angular_speed_deg_per_second,height_exceeded,linear_speed_exceeded,angular_speed_exceeded,unstable_accumulated_seconds,num_bodies_considered,num_simulating_bodies,max_body_linear_speed_bone,max_body_linear_speed_cm_per_second,max_body_angular_speed_bone,max_body_angular_speed_deg_per_second,max_body_height_delta_bone,max_body_height_delta_cm")));
+			FString(TEXT("session_id,trace_version,frame_index,world_time_seconds,delta_time_seconds,sampled_policy_step,runtime_state,nne_runtime_name,pose_search_valid,run_sync_succeeded,update_controls_succeeded,policy_influence_active,first_policy_enabled_frame,num_policy_targets_written,resolve_context_ms,pose_search_query_ms,future_pose_sample_ms,body_sample_ms,observation_pack_ms,inference_ms,action_condition_ms,control_target_ms,update_controls_ms,instability_check_ms,bridge_tick_total_ms,self_observation_root_height,self_observation_mean_abs,mimic_target_poses_mean_abs,mimic_target_poses_min_future_time_seconds,mimic_target_poses_max_future_time_seconds,terrain_mean,terrain_min,terrain_max,terrain_center,movement_smoke_phase,distal_locomotion_composition_mode_active,raw_action_min,raw_action_max,raw_action_mean_abs,conditioned_action_mean_abs,num_clamped_action_floats,max_target_delta_bone,max_target_delta_degrees,mean_target_delta_degrees,max_raw_policy_offset_bone,max_raw_policy_offset_degrees,mean_raw_policy_offset_degrees,max_lower_limb_limit_occupancy_bone,max_lower_limb_limit_occupancy,max_lower_limb_limit_proxy_degrees,mean_lower_limb_limit_occupancy,num_lower_limb_targets_considered,root_height_delta_cm,root_linear_speed_cm_per_second,root_angular_speed_deg_per_second,height_exceeded,linear_speed_exceeded,angular_speed_exceeded,unstable_accumulated_seconds,num_bodies_considered,num_simulating_bodies,max_body_linear_speed_bone,max_body_linear_speed_cm_per_second,max_body_angular_speed_bone,max_body_angular_speed_deg_per_second,max_body_height_delta_bone,max_body_height_delta_cm")));
 		return true;
 	}
 
@@ -244,6 +255,7 @@ namespace
 		const FString Row = FPhysAnimBridgeTraceWriter::BuildFrameCsvRow(MakeTraceFrame(TEXT("trace-session")));
 		TestEqual(TEXT("Serialized row field count matches the header"), CountDelimitedFields(Row), CountDelimitedFields(Header));
 		TestTrue(TEXT("Serialized row contains the runtime state"), Row.Contains(TEXT("\"BridgeActive\"")));
+		TestTrue(TEXT("Serialized row contains the movement smoke phase"), Row.Contains(TEXT("\"Forward\"")));
 		TestTrue(TEXT("Serialized row contains the max target delta bone"), Row.Contains(TEXT("\"foot_l\"")));
 		TestTrue(TEXT("Serialized row contains the max body height delta bone"), Row.Contains(TEXT("\"head\"")));
 		return true;

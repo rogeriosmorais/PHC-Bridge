@@ -72,6 +72,17 @@ struct FPhysAnimBridgeTraceFrame
 	float UpdateControlsMs = 0.0f;
 	float InstabilityCheckMs = 0.0f;
 	float BridgeTickTotalMs = 0.0f;
+	float SelfObservationRootHeight = 0.0f;
+	float SelfObservationMeanAbs = 0.0f;
+	float MimicTargetPosesMeanAbs = 0.0f;
+	float MimicTargetPosesMinFutureTimeSeconds = 0.0f;
+	float MimicTargetPosesMaxFutureTimeSeconds = 0.0f;
+	float TerrainMean = 0.0f;
+	float TerrainMin = 0.0f;
+	float TerrainMax = 0.0f;
+	float TerrainCenter = 0.0f;
+	FString MovementSmokePhaseName;
+	bool bDistalLocomotionCompositionModeActive = false;
 
 	FPhysAnimActionDiagnostics ActionDiagnostics;
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;

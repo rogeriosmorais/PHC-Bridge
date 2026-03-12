@@ -584,3 +584,17 @@ The next meaningful ledger updates should come from:
 - Current working assumption:
   - Stage 1 should emit a real terrain tensor, even on flat ground
   - the next observation/representation passes should assume terrain input is now part of the live runtime contract
+
+## 2026-03-12 - Locomotion alignment observability
+
+- Previous assumption:
+  - downstream control-target and instability diagnostics were enough to choose the next locomotion-time alignment pass
+- Status:
+  - falsified
+- Evidence:
+  - multiple locomotion-time lower-limb branches produced mixed results without isolating which packed input channel was still most mismatched
+  - the bridge trace writer existed but did not summarize the actual policy inputs per frame
+  - adding per-frame summaries for `self_obs`, `mimic_target_poses`, `terrain`, movement smoke phase, and distal composition mode kept build/tests/movement smoke green
+- Current working assumption:
+  - the next locomotion-time alignment decision should be chosen from trace summaries of the packed inputs, not only from downstream lower-limb spike metrics
+  - broader training/runtime alignment remains worth continuing, but the next primary lever should be evidence from the trace rather than another guessed lower-limb heuristic

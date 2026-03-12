@@ -794,3 +794,41 @@ If that hypothesis is correct:
 - shell-coupling corrections should not produce the main improvement, only cleaner diagnostics
 - the next useful wins should come from lower-limb locomotion-time target semantics, smoothing, or write policy
 - broad authoring pivots or gameplay-shell redesign should stay deferred unless new evidence contradicts the corrected shell audit
+
+## 2026-03-12 - Trace-first locomotion alignment pass
+
+### Direction Check
+
+- Keep going in the broader training/runtime alignment direction.
+- Stop choosing the next locomotion-time branch only from downstream lower-limb spike logs.
+- Use trace summaries of the actual packed model inputs to pick the next behavior change.
+
+### Why This Pass Was Worth Doing
+
+- The bridge already had a working trace writer.
+- Several contract-level fixes are now in place:
+  - policy cadence
+  - world-frame packing split
+  - terrain-relative self observation
+  - mimic current-reference terrain/data-origin alignment
+  - future target time-channel alignment
+  - terrain input packing
+- Remaining locomotion mismatches are subtle enough that downstream spike metrics alone are no longer enough to choose the next pass cleanly.
+
+### Implemented Observability
+
+- Extended trace frames with:
+  - `self_obs` root height scalar
+  - `self_obs` mean abs
+  - `mimic_target_poses` mean abs
+  - `mimic_target_poses` min/max clamped future-time channel
+  - `terrain` mean/min/max/center sample
+  - movement smoke phase name
+  - distal locomotion composition mode flag
+- Added trace regression coverage to lock the expanded CSV schema.
+
+### Outcome
+
+- Keepable.
+- No locomotion baseline regression.
+- The next locomotion-time runtime change should now be selected from trace evidence gathered during movement smoke, not from another guessed lower-limb heuristic split.

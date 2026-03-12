@@ -58,6 +58,77 @@ namespace PhysAnimComponentInternal
 	constexpr float TerrainTraceStartAboveRootCm = 200.0f;
 	constexpr float TerrainTraceEndBelowRootCm = 300.0f;
 
+	struct FFloatBufferSummary
+	{
+		float Mean = 0.0f;
+		float MeanAbs = 0.0f;
+		float Min = 0.0f;
+		float Max = 0.0f;
+		bool bHasValues = false;
+	};
+
+	FFloatBufferSummary SummarizeFloatBuffer(const TArray<float>& Buffer)
+	{
+		FFloatBufferSummary Summary;
+		if (Buffer.IsEmpty())
+		{
+			return Summary;
+		}
+
+		Summary.bHasValues = true;
+		Summary.Min = Buffer[0];
+		Summary.Max = Buffer[0];
+		double Sum = 0.0;
+		double SumAbs = 0.0;
+		for (const float Value : Buffer)
+		{
+			Summary.Min = FMath::Min(Summary.Min, Value);
+			Summary.Max = FMath::Max(Summary.Max, Value);
+			Sum += static_cast<double>(Value);
+			SumAbs += FMath::Abs(static_cast<double>(Value));
+		}
+
+		Summary.Mean = static_cast<float>(Sum / static_cast<double>(Buffer.Num()));
+		Summary.MeanAbs = static_cast<float>(SumAbs / static_cast<double>(Buffer.Num()));
+		return Summary;
+	}
+
+	float ResolveTerrainCenterSampleValue(const TArray<float>& TerrainBuffer)
+	{
+		constexpr int32 CenterAxisIndex = PhysAnimBridge::TerrainSamplesPerAxis / 2;
+		constexpr int32 CenterSampleIndex = (CenterAxisIndex * PhysAnimBridge::TerrainSamplesPerAxis) + CenterAxisIndex;
+		return TerrainBuffer.IsValidIndex(CenterSampleIndex) ? TerrainBuffer[CenterSampleIndex] : 0.0f;
+	}
+
+	void ResolveMimicTargetPoseTimeRange(
+		const TArray<float>& MimicTargetPosesBuffer,
+		float& OutMinFutureTimeSeconds,
+		float& OutMaxFutureTimeSeconds)
+	{
+		OutMinFutureTimeSeconds = 0.0f;
+		OutMaxFutureTimeSeconds = 0.0f;
+
+		constexpr int32 FloatsPerTargetPose = PhysAnimBridge::MimicTargetPosesSize / PhysAnimBridge::NumFutureSteps;
+		static_assert(
+			(FloatsPerTargetPose * PhysAnimBridge::NumFutureSteps) == PhysAnimBridge::MimicTargetPosesSize,
+			"MimicTargetPosesSize must divide cleanly by NumFutureSteps.");
+
+		if (MimicTargetPosesBuffer.Num() != PhysAnimBridge::MimicTargetPosesSize)
+		{
+			return;
+		}
+
+		OutMinFutureTimeSeconds = TNumericLimits<float>::Max();
+		OutMaxFutureTimeSeconds = -TNumericLimits<float>::Max();
+		for (int32 FutureStepIndex = 0; FutureStepIndex < PhysAnimBridge::NumFutureSteps; ++FutureStepIndex)
+		{
+			const int32 TimeChannelIndex = (FutureStepIndex * FloatsPerTargetPose) + (FloatsPerTargetPose - 1);
+			const float FutureTimeSeconds = MimicTargetPosesBuffer[TimeChannelIndex];
+			OutMinFutureTimeSeconds = FMath::Min(OutMinFutureTimeSeconds, FutureTimeSeconds);
+			OutMaxFutureTimeSeconds = FMath::Max(OutMaxFutureTimeSeconds, FutureTimeSeconds);
+		}
+	}
+
 	TAutoConsoleVariable<float> CVarPhysAnimActionScale(
 		TEXT("physanim.ActionScale"),
 		-1.0f,
@@ -1054,7 +1125,31 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 		if (bWriteTraceFrameThisTick)
 		{
+			const PhysAnimComponentInternal::FFloatBufferSummary SelfObservationSummary =
+				PhysAnimComponentInternal::SummarizeFloatBuffer(SelfObservationBuffer);
+			const PhysAnimComponentInternal::FFloatBufferSummary MimicTargetPosesSummary =
+				PhysAnimComponentInternal::SummarizeFloatBuffer(MimicTargetPosesBuffer);
+			const PhysAnimComponentInternal::FFloatBufferSummary TerrainSummary =
+				PhysAnimComponentInternal::SummarizeFloatBuffer(TerrainBuffer);
+			float MinMimicFutureTimeSeconds = 0.0f;
+			float MaxMimicFutureTimeSeconds = 0.0f;
+			PhysAnimComponentInternal::ResolveMimicTargetPoseTimeRange(
+				MimicTargetPosesBuffer,
+				MinMimicFutureTimeSeconds,
+				MaxMimicFutureTimeSeconds);
+
 			TraceFrame.ObservationPackMs = MeasureElapsedMs(ObservationPackStartSeconds);
+			TraceFrame.SelfObservationRootHeight = SelfObservationBuffer.IsValidIndex(0) ? SelfObservationBuffer[0] : 0.0f;
+			TraceFrame.SelfObservationMeanAbs = SelfObservationSummary.MeanAbs;
+			TraceFrame.MimicTargetPosesMeanAbs = MimicTargetPosesSummary.MeanAbs;
+			TraceFrame.MimicTargetPosesMinFutureTimeSeconds = MinMimicFutureTimeSeconds;
+			TraceFrame.MimicTargetPosesMaxFutureTimeSeconds = MaxMimicFutureTimeSeconds;
+			TraceFrame.TerrainMean = TerrainSummary.Mean;
+			TraceFrame.TerrainMin = TerrainSummary.bHasValues ? TerrainSummary.Min : 0.0f;
+			TraceFrame.TerrainMax = TerrainSummary.bHasValues ? TerrainSummary.Max : 0.0f;
+			TraceFrame.TerrainCenter = PhysAnimComponentInternal::ResolveTerrainCenterSampleValue(TerrainBuffer);
+			TraceFrame.MovementSmokePhaseName = LastMovementSmokePhaseName.ToString();
+			TraceFrame.bDistalLocomotionCompositionModeActive = bDistalLocomotionCompositionModeActive;
 		}
 
 		const double InferenceStartSeconds = FPlatformTime::Seconds();

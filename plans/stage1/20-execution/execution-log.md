@@ -859,3 +859,32 @@ Whenever new setup or gate evidence arrives:
   - objective terrain-channel contract fix
   - component tests and deterministic movement smoke both stayed green
   - this should be treated as another correct runtime-alignment step, not a guaranteed locomotion breakthrough by itself
+
+## 2026-03-12 - Locomotion trace input summaries
+
+- Direction check:
+  - still worth continuing in the broader training/runtime alignment direction
+  - not worth making the next locomotion change from downstream lower-limb spikes alone
+- New plan:
+  - [locomotion-trace-summary-plan.md](/F:/NewEngine/plans/stage1/40-design/locomotion-trace-summary-plan.md)
+- Sources re-checked before coding:
+  - UE PhysicsControl and CharacterMovement docs/source
+  - local bridge trace writer and runtime packing paths
+  - ProtoMotions `humanoid_obs.py`, `mimic_obs.py`, `terrain_obs.py`, and active checkpoint config
+- Implemented:
+  - extended bridge trace frames with input-side summaries for:
+    - `self_obs` root height and mean abs
+    - `mimic_target_poses` mean abs and min/max clamped future-time channel
+    - `terrain` mean/min/max/center sample
+    - movement smoke phase name
+    - distal locomotion composition mode flag
+  - added trace regression coverage for the expanded CSV schema
+- Verification:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Bridge`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
+- Result:
+  - keepable
+  - no locomotion baseline regression
+  - the next runtime alignment decision can now be made from trace evidence instead of only from downstream instability symptoms
