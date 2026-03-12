@@ -408,6 +408,18 @@ Only the orchestrator updates status.
     - implication:
       - locomotion-time proximal response fitting is a keepable improvement on top of the current distal baseline
       - the next likely useful experiment is a more selective per-bone proximal profile, not another broad target-semantics change
+  - March 12, 2026 locomotion-time thigh de-intensification follow-up:
+    - runtime experiment:
+      - reduced `thigh_*` to `1.05 / 1.10`
+      - kept `calf_*` at `1.20 / 1.35`
+    - measured result:
+      - deterministic movement smoke still passes with no fail-stop
+      - some strafe samples improve
+      - but forward does not materially beat the shared proximal baseline
+      - backward and late idle reopen larger outliers
+    - implication:
+      - selective thigh de-intensification is not a clean new baseline
+      - the shared proximal-response profile remains the best measured response-fit baseline so far
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

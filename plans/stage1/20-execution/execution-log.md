@@ -587,3 +587,23 @@ Whenever new setup or gate evidence arrives:
     - current runtime read:
       - this is a keepable improvement on top of the current distal locomotion baseline
       - the next pass should stay in locomotion-time response fitting, most likely with a more selective per-bone proximal profile
+  - March 12, 2026 locomotion-time thigh de-intensification note:
+    - re-used:
+      - official UE PhysicsControl docs
+      - local UE 5.7 PhysicsControl source
+      - ProtoMotions docs and local control code
+    - implemented one narrow selective-response experiment:
+      - `thigh_*` reduced to damping ratio `1.05`, extra damping `1.10`
+      - `calf_*` stayed at damping ratio `1.20`, extra damping `1.35`
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - some strafe samples improve
+      - forward does not materially beat the shared proximal-response baseline
+      - backward and late idle re-open larger outliers than the shared baseline
+    - current runtime read:
+      - thigh de-intensification is not a clean new baseline
+      - runtime code has been restored to the shared proximal-response profile

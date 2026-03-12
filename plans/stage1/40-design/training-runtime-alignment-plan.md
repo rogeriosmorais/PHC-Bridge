@@ -622,6 +622,18 @@ This gives us the highest-value correction with the least ambiguity.
     - current read:
       - this is a keepable improvement on top of the distal-only suppression baseline
       - the next pass should stay in locomotion-time response fitting, most likely with a more selective per-bone proximal profile rather than another target-semantics experiment
+  - locomotion-time thigh de-intensification result:
+    - tested a narrower selective variant:
+      - `thigh_*` reduced to `1.05 / 1.10`
+      - `calf_*` kept at `1.20 / 1.35`
+    - deterministic movement smoke stayed green with no fail-stop
+    - measured result:
+      - some strafe samples improved
+      - but forward did not materially beat the shared-profile baseline
+      - backward and late idle re-opened larger outliers
+    - current read:
+      - the selective thigh de-intensification pass is not a clean new baseline
+      - runtime code should stay on the shared proximal-response profile for now
 
 ## Working Hypothesis
 
