@@ -607,3 +607,16 @@ Whenever new setup or gate evidence arrives:
     - current runtime read:
       - thigh de-intensification is not a clean new baseline
       - runtime code has been restored to the shared proximal-response profile
+  - March 12, 2026 corrected locomotion shell-coupling audit note:
+    - the first shell/body drift read turned out to be invalid:
+      - shell telemetry was accidentally derived from an already shell-relative root diagnostic
+      - that double-counted shell/body separation and made the drift look much worse than it was
+    - after fixing the reference-frame bug and rerunning deterministic movement smoke:
+      - shell planar offset delta is modest, commonly around `~10 - 16 cm` at peak
+      - shell/root planar velocity mismatch is modest, commonly around `~2 - 36 cm/s`
+      - shell/root planar velocity alignment stays near `1.00` during active movement
+      - no fail-stop appears in the corrected movement smoke
+    - current runtime read:
+      - the shell-coupling audit was worth doing because it ruled out the wrong pivot
+      - gameplay-shell coupling is not the dominant remaining locomotion blocker
+      - the next useful work should stay on lower-limb locomotion-time representation / response

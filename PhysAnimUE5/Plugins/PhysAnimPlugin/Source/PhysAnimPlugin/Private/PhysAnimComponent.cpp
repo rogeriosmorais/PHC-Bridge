@@ -2798,6 +2798,8 @@ bool UPhysAnimComponent::CheckRuntimeInstability(
 		RuntimeInstabilityState,
 		LastRuntimeInstabilityDiagnostics,
 		InstabilityError);
+	LastRuntimeInstabilityDiagnostics.RawRootLocationCm = RootLocationCm;
+	LastRuntimeInstabilityDiagnostics.RawRootLinearVelocityCmPerSecondVector = RootLinearVelocityCmPerSecond;
 
 	TArray<FPhysAnimBodyInstabilitySample> BodySamples;
 	if (GatherRuntimeInstabilityBodySamples(BodySamples))
@@ -3324,10 +3326,34 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 			}
 		}
 	}
+	float ShellPlanarOffsetDeltaCm = 0.0f;
+	float ShellPlanarVelocityDeltaCmPerSecond = 0.0f;
+	float ShellPlanarVelocityAlignment = 0.0f;
+	if (const AActor* const OwnerActor = GetOwner())
+	{
+		const FVector OwnerLocation = OwnerActor->GetActorLocation();
+		const FVector RootLocation = LastRuntimeInstabilityDiagnostics.RawRootLocationCm;
+		if (!bHasShellCouplingReferenceRootLocalOffset)
+		{
+			const_cast<UPhysAnimComponent*>(this)->ShellCouplingReferenceRootLocalOffsetCm = RootLocation - OwnerLocation;
+			const_cast<UPhysAnimComponent*>(this)->bHasShellCouplingReferenceRootLocalOffset = true;
+		}
+
+		ShellPlanarOffsetDeltaCm = ResolveShellCouplingPlanarOffsetDeltaCm(
+			OwnerLocation,
+			RootLocation,
+			ShellCouplingReferenceRootLocalOffsetCm);
+		ShellPlanarVelocityDeltaCmPerSecond = ResolveShellCouplingPlanarVelocityDeltaCmPerSecond(
+			OwnerActor->GetVelocity(),
+			LastRuntimeInstabilityDiagnostics.RawRootLinearVelocityCmPerSecondVector);
+		ShellPlanarVelocityAlignment = ResolveShellCouplingPlanarVelocityAlignment(
+			OwnerActor->GetVelocity(),
+			LastRuntimeInstabilityDiagnostics.RawRootLinearVelocityCmPerSecondVector);
+	}
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
-		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s written=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
+		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] shell[offsetDeltaCm=%.1f velDeltaCmPerSec=%.1f velAlign=%.2f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s written=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
 		SimulationHandoffAlpha,
 		FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
 		GetBringUpGroupCount(),
@@ -3362,6 +3388,9 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 		LastMovementSmokeWorldIntent.X,
 		LastMovementSmokeWorldIntent.Y,
 		LastMovementSmokeOwnerVelocityCmPerSecond.Size2D(),
+		ShellPlanarOffsetDeltaCm,
+		ShellPlanarVelocityDeltaCmPerSecond,
+		ShellPlanarVelocityAlignment,
 		LastActionDiagnostics.RawMin,
 		LastActionDiagnostics.RawMax,
 		LastActionDiagnostics.RawMeanAbs,
@@ -3430,9 +3459,11 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	LastMovementSmokeWorldIntent = FVector::ZeroVector;
 	LastMovementSmokeOwnerVelocityCmPerSecond = FVector::ZeroVector;
 	MovementSmokeStartLocation = FVector::ZeroVector;
+	ShellCouplingReferenceRootLocalOffsetCm = FVector::ZeroVector;
 	LastMovementSmokePhaseName = NAME_None;
 	bMovementSmokeScriptStarted = false;
 	bMovementSmokeCompletionLogged = false;
+	bHasShellCouplingReferenceRootLocalOffset = false;
 	PresentationPerturbationOverrideEndTimeSeconds = -1.0;
 	bLastAppliedPresentationRootSimulationEnabled = false;
 	StabilizationStressTestStartTimeSeconds = -1.0;
@@ -4024,6 +4055,42 @@ bool UPhysAnimComponent::ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePo
 	return bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy &&
 		bLocomotionModeActive &&
 		BlendAlpha > UE_SMALL_NUMBER;
+}
+
+float UPhysAnimComponent::ResolveShellCouplingPlanarOffsetDeltaCm(
+	const FVector& OwnerLocationCm,
+	const FVector& RootLocationCm,
+	const FVector& ReferenceRootLocalOffsetCm)
+{
+	const FVector CurrentOffset = RootLocationCm - OwnerLocationCm;
+	const FVector CurrentPlanarOffset(CurrentOffset.X, CurrentOffset.Y, 0.0f);
+	const FVector ReferencePlanarOffset(ReferenceRootLocalOffsetCm.X, ReferenceRootLocalOffsetCm.Y, 0.0f);
+	return FVector::Dist(CurrentPlanarOffset, ReferencePlanarOffset);
+}
+
+float UPhysAnimComponent::ResolveShellCouplingPlanarVelocityDeltaCmPerSecond(
+	const FVector& OwnerVelocityCmPerSecond,
+	const FVector& RootVelocityCmPerSecond)
+{
+	const FVector OwnerPlanarVelocity(OwnerVelocityCmPerSecond.X, OwnerVelocityCmPerSecond.Y, 0.0f);
+	const FVector RootPlanarVelocity(RootVelocityCmPerSecond.X, RootVelocityCmPerSecond.Y, 0.0f);
+	return FVector::Dist(OwnerPlanarVelocity, RootPlanarVelocity);
+}
+
+float UPhysAnimComponent::ResolveShellCouplingPlanarVelocityAlignment(
+	const FVector& OwnerVelocityCmPerSecond,
+	const FVector& RootVelocityCmPerSecond)
+{
+	const FVector OwnerPlanarVelocity(OwnerVelocityCmPerSecond.X, OwnerVelocityCmPerSecond.Y, 0.0f);
+	const FVector RootPlanarVelocity(RootVelocityCmPerSecond.X, RootVelocityCmPerSecond.Y, 0.0f);
+	const float OwnerSpeed = OwnerPlanarVelocity.Size();
+	const float RootSpeed = RootPlanarVelocity.Size();
+	if (OwnerSpeed <= UE_SMALL_NUMBER || RootSpeed <= UE_SMALL_NUMBER)
+	{
+		return 0.0f;
+	}
+
+	return FVector::DotProduct(OwnerPlanarVelocity / OwnerSpeed, RootPlanarVelocity / RootSpeed);
 }
 
 float UPhysAnimComponent::CalculateConstraintMinLimitedAngleDegrees(

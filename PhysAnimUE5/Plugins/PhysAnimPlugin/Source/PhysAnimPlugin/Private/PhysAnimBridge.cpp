@@ -653,6 +653,8 @@ namespace PhysAnimBridge
 			InOutState.ReferenceRootLocation = RootLocationCm;
 		}
 
+		OutDiagnostics.RootLocationCm = RootLocationCm;
+		OutDiagnostics.RootLinearVelocityCmPerSecondVector = RootLinearVelocityCmPerSecond;
 		OutDiagnostics.RootHeightDeltaCm = FMath::Abs(RootLocationCm.Z - InOutState.ReferenceRootLocation.Z);
 		OutDiagnostics.RootLinearSpeedCmPerSecond = RootLinearVelocityCmPerSecond.Size();
 		OutDiagnostics.RootAngularSpeedDegPerSecond = RootAngularVelocityDegPerSecond.Size();

@@ -91,6 +91,10 @@ struct FPhysAnimBodyInstabilitySample
 
 struct FPhysAnimRuntimeInstabilityDiagnostics
 {
+	FVector RawRootLocationCm = FVector::ZeroVector;
+	FVector RawRootLinearVelocityCmPerSecondVector = FVector::ZeroVector;
+	FVector RootLocationCm = FVector::ZeroVector;
+	FVector RootLinearVelocityCmPerSecondVector = FVector::ZeroVector;
 	float RootHeightDeltaCm = 0.0f;
 	float RootLinearSpeedCmPerSecond = 0.0f;
 	float RootAngularSpeedDegPerSecond = 0.0f;

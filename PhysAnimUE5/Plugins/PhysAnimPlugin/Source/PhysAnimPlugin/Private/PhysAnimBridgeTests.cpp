@@ -1718,6 +1718,25 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Spine stays neutral in the locomotion-time lower-limb response profile"),
 			UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(TEXT("spine_01"), 1.0f),
 			1.0f);
+		TestEqual(
+			TEXT("Shell coupling planar offset delta is zero at the reference offset"),
+			UPhysAnimComponent::ResolveShellCouplingPlanarOffsetDeltaCm(
+				FVector(100.0f, 200.0f, 0.0f),
+				FVector(110.0f, 230.0f, 0.0f),
+				FVector(10.0f, 30.0f, 0.0f)),
+			0.0f);
+		TestEqual(
+			TEXT("Shell coupling planar velocity delta measures planar mismatch"),
+			UPhysAnimComponent::ResolveShellCouplingPlanarVelocityDeltaCmPerSecond(
+				FVector(100.0f, 0.0f, 0.0f),
+				FVector(40.0f, 0.0f, 0.0f)),
+			60.0f);
+		TestEqual(
+			TEXT("Shell coupling planar velocity alignment is one for matching directions"),
+			UPhysAnimComponent::ResolveShellCouplingPlanarVelocityAlignment(
+				FVector(100.0f, 0.0f, 0.0f),
+				FVector(10.0f, 0.0f, 0.0f)),
+			1.0f);
 		return true;
 	}
 

@@ -353,9 +353,11 @@ private:
 	FVector LastMovementSmokeWorldIntent = FVector::ZeroVector;
 	FVector LastMovementSmokeOwnerVelocityCmPerSecond = FVector::ZeroVector;
 	FVector MovementSmokeStartLocation = FVector::ZeroVector;
+	FVector ShellCouplingReferenceRootLocalOffsetCm = FVector::ZeroVector;
 	FName LastMovementSmokePhaseName = NAME_None;
 	bool bMovementSmokeScriptStarted = false;
 	bool bMovementSmokeCompletionLogged = false;
+	bool bHasShellCouplingReferenceRootLocalOffset = false;
 	double PresentationPerturbationOverrideEndTimeSeconds = -1.0;
 	bool bLastAppliedPresentationRootSimulationEnabled = false;
 	double StabilizationStressTestStartTimeSeconds = -1.0;
@@ -420,6 +422,16 @@ public:
 	static FQuat BuildCurrentPoseControlTargetOrientation(
 		const FQuat& ParentWorldRotation,
 		const FQuat& ChildWorldRotation);
+	static float ResolveShellCouplingPlanarOffsetDeltaCm(
+		const FVector& OwnerLocationCm,
+		const FVector& RootLocationCm,
+		const FVector& ReferenceRootLocalOffsetCm);
+	static float ResolveShellCouplingPlanarVelocityDeltaCmPerSecond(
+		const FVector& OwnerVelocityCmPerSecond,
+		const FVector& RootVelocityCmPerSecond);
+	static float ResolveShellCouplingPlanarVelocityAlignment(
+		const FVector& OwnerVelocityCmPerSecond,
+		const FVector& RootVelocityCmPerSecond);
 	static void ResolveBodyModifierRuntimeMode(
 		bool bForceZeroActions,
 		bool bSimulationHandoffSettled,

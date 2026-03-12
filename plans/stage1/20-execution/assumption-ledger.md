@@ -420,6 +420,17 @@ Only the orchestrator updates status.
     - implication:
       - selective thigh de-intensification is not a clean new baseline
       - the shared proximal-response profile remains the best measured response-fit baseline so far
+  - March 12, 2026 corrected locomotion shell-coupling follow-up:
+    - the first shell-coupling alarm was caused by a reference-frame bug in the telemetry:
+      - shell offset/velocity deltas were computed from root diagnostics that were already shell-relative
+    - after fixing that bug and rerunning deterministic movement smoke:
+      - shell planar offset delta is only modest, typically around `~10 - 16 cm` at peak
+      - shell/root planar velocity mismatch is only modest, typically around `~2 - 36 cm/s`
+      - planar velocity alignment remains near `1.00` through the movement phases
+      - movement smoke still passes without fail-stop
+    - implication:
+      - gameplay-shell coupling is not the dominant remaining locomotion risk
+      - it is still worth monitoring, but it should not displace lower-limb alignment as the main direction
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

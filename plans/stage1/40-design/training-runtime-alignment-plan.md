@@ -634,13 +634,24 @@ This gives us the highest-value correction with the least ambiguity.
     - current read:
       - the selective thigh de-intensification pass is not a clean new baseline
       - runtime code should stay on the shared proximal-response profile for now
+  - corrected locomotion shell-coupling audit result:
+    - the first shell/body drift read was invalid because shell telemetry was computed from an already shell-relative root diagnostic
+    - after fixing that reference-frame bug and rerunning deterministic movement smoke:
+      - shell planar offset delta is modest, usually around `~10 - 16 cm` at peak during scripted locomotion
+      - shell/root planar velocity mismatch is also modest, usually around `~2 - 36 cm/s`
+      - planar velocity alignment stays near `1.00` during the active movement phases
+      - movement smoke still completes without fail-stop
+    - current read:
+      - gameplay-shell coupling is not the dominant remaining locomotion blocker
+      - it was worth auditing because it ruled out the wrong pivot
+      - the next alignment pass should stay on lower-limb locomotion-time representation / response, not switch the main effort to shell-authority work
 
 ## Working Hypothesis
 
-The most likely major mismatch today is not mass or joint limits first. It is that the Stage 1 bridge is still operating at a different control cadence and with a different effective action-range interpretation than the pretrained ProtoMotions SMPL policy expected.
+The most likely major mismatch today is lower-limb locomotion-time representation / response under the now-aligned cadence, operating limits, family mass policy, distal target-velocity suppression, and shared proximal-response baseline.
 
 If that hypothesis is correct:
 
-- control cadence alignment should change runtime behavior immediately
-- joint-limit alignment should reduce policy-target mismatch next
-- mass and PD-family fitting should then become more interpretable instead of compensating for cadence/range errors
+- shell-coupling corrections should not produce the main improvement, only cleaner diagnostics
+- the next useful wins should come from lower-limb locomotion-time target semantics, smoothing, or write policy
+- broad authoring pivots or gameplay-shell redesign should stay deferred unless new evidence contradicts the corrected shell audit
