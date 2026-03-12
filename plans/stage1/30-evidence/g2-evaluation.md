@@ -88,6 +88,13 @@ The goal is not perfect realism. The goal is whether the physics-driven version 
 - contact response
 - overall non-robotic feel
 
+The scripted presentation now begins with a fixed physical perturbation. This is intentional:
+
+- the `Physics-Driven` actor should visibly react and rebalance
+- the `Kinematic` actor should mostly ignore the shove
+- the perturbation is now delivered as a short scripted burst, not a single one-frame tap
+- the perturbation phase uses a closer camera framing before the sequence returns to the standard comparison shot
+
 ## Evaluation Rubric
 
 ### Pass

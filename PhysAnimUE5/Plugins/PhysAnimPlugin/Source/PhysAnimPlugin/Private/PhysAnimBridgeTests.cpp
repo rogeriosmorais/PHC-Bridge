@@ -25,10 +25,13 @@ namespace
 	const TCHAR* PhysAnimPieSmokePrefix = TEXT("[PhysAnimPieSmoke]");
 	const TCHAR* PhysAnimPieMovementSmokePrefix = TEXT("[PhysAnimPieMovementSmoke]");
 	const TCHAR* PhysAnimPieMovementSoakPrefix = TEXT("[PhysAnimPieMovementSoak]");
+	const TCHAR* PhysAnimPieG2PresentationPrefix = TEXT("[PhysAnimPieG2Presentation]");
 	constexpr float PhysAnimPieSmokeDurationSeconds = 65.0f;
 	constexpr float PhysAnimPieMovementSmokeDurationSeconds = 50.0f;
 	constexpr int32 PhysAnimPieMovementSoakLoopCount = 3;
 	constexpr float PhysAnimPieMovementSoakDurationSeconds = 115.0f;
+	constexpr float PhysAnimPieG2PresentationLeadInSeconds = 1.0f;
+	constexpr float PhysAnimPieG2PresentationDurationSeconds = 35.0f;
 	constexpr float PhysAnimPieSmokeStartTimeoutSeconds = 30.0f;
 	constexpr float PhysAnimPieSmokeStopTimeoutSeconds = 30.0f;
 
@@ -38,6 +41,16 @@ namespace
 		if (IConsoleVariable* const ConsoleVariable = IConsoleManager::Get().FindConsoleVariable(*Name))
 		{
 			ConsoleVariable->Set(Value);
+		}
+		return true;
+	}
+
+	DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FExecPieConsoleCommand, FString, Command);
+	bool FExecPieConsoleCommand::Update()
+	{
+		if (GEditor && IsValid(GEditor->PlayWorld))
+		{
+			GEditor->Exec(GEditor->PlayWorld, *Command);
 		}
 		return true;
 	}
@@ -948,44 +961,65 @@ namespace
 			UPhysAnimComparisonSubsystem::ResolveMirroredWorldInput(FVector::ZeroVector, FVector(0.0f, 1.0f, 0.0f)),
 			FVector(0.0f, 1.0f, 0.0f));
 		TestTrue(
-			TEXT("G2 presentation starts in idle ready"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(1.0f) == TEXT("IdleReady"));
+			TEXT("G2 presentation now starts with the perturbation phase"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(0.5f) == TEXT("PerturbationPush"));
+		TestFalse(
+			TEXT("G2 perturbation does not fire before the lead-in ends"),
+			UPhysAnimComparisonSubsystem::ShouldApplyPresentationPerturbation(0.5f));
+		TestTrue(
+			TEXT("G2 perturbation fires after the lead-in ends"),
+			UPhysAnimComparisonSubsystem::ShouldApplyPresentationPerturbation(1.0f));
+		TestEqual(
+			TEXT("G2 perturbation impulse is a lateral shove"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPerturbationImpulseCmPerSec(),
+			FVector(0.0f, 5000.0f, 0.0f));
+		TestEqual(
+			TEXT("G2 perturbation targets the lower torso so the whole body reacts"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPerturbationBoneName(),
+			FName(TEXT("spine_01")));
+		TestTrue(
+			TEXT("G2 presentation reaches idle ready after the perturbation intro"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(4.5f) == TEXT("IdleReady"));
 		TestEqual(
 			TEXT("G2 presentation walk uses forward intent"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationLocalIntent(4.0f),
+			UPhysAnimComparisonSubsystem::ResolvePresentationLocalIntent(8.0f),
 			FVector(1.0f, 0.0f, 0.0f));
 		TestEqual(
 			TEXT("G2 presentation walk uses reduced input scale"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationInputScale(4.0f),
+			UPhysAnimComparisonSubsystem::ResolvePresentationInputScale(8.0f),
 			0.45f);
 		TestTrue(
 			TEXT("G2 presentation jog phase is named correctly"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(10.0f) == TEXT("JogForward"));
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(14.0f) == TEXT("JogForward"));
 		TestEqual(
 			TEXT("G2 presentation jog uses full input scale"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationInputScale(10.0f),
+			UPhysAnimComparisonSubsystem::ResolvePresentationInputScale(14.0f),
 			1.0f);
 		TestTrue(
 			TEXT("G2 presentation brake phase is named correctly"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(13.0f) == TEXT("BrakeStop"));
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(17.0f) == TEXT("BrakeStop"));
 		TestEqual(
 			TEXT("G2 presentation turn uses diagonal intent"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationLocalIntent(16.0f),
+			UPhysAnimComparisonSubsystem::ResolvePresentationLocalIntent(20.0f),
 			FVector(0.7f, 0.7f, 0.0f));
 		TestTrue(
 			TEXT("G2 presentation recovery phase is named correctly"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(19.5f) == TEXT("Recovery"));
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(23.5f) == TEXT("Recovery"));
 		TestTrue(
 			TEXT("G2 presentation reports complete after the frozen duration"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(25.0f) == TEXT("Complete"));
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(30.0f) == TEXT("Complete"));
 		TestEqual(
 			TEXT("G2 presentation duration is the frozen scripted window"),
 			UPhysAnimComparisonSubsystem::GetPresentationDurationSeconds(),
-			21.0f);
+			25.0f);
 		TestEqual(
-			TEXT("G2 presentation camera offset is stable"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationCameraOffsetCm(),
-			FVector(-650.0f, 0.0f, 220.0f));
+			TEXT("G2 perturbation camera offset is the closer framing"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationCameraOffsetCm(true),
+			FVector(220.0f, 0.0f, 155.0f));
+		TestEqual(
+			TEXT("G2 locomotion camera offset is the wider framing"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationCameraOffsetCm(false),
+			FVector(325.0f, 0.0f, 170.0f));
 		return true;
 	}
 
@@ -1312,6 +1346,11 @@ namespace
 		"PhysAnim.PIE.MovementSoak",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPieG2PresentationTest,
+		"PhysAnim.PIE.G2Presentation",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 	bool FPhysAnimPieSmokeTest::RunTest(const FString& Parameters)
 	{
 		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
@@ -1455,6 +1494,55 @@ namespace
 			PhysAnimPieSmokeStopTimeoutSeconds));
 		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeLoopCount"), 1));
 		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeMode"), 0));
+
+		return true;
+	}
+
+	bool FPhysAnimPieG2PresentationTest::RunTest(const FString& Parameters)
+	{
+		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
+		{
+			AddError(FString::Printf(TEXT("%s Failed to open map '%s'."), PhysAnimPieG2PresentationPrefix, *PhysAnimPieSmokeMap));
+			return false;
+		}
+
+		AddCommand(new FEditorAutomationLogCommand(FString::Printf(
+			TEXT("%s PIE G2 presentation opening '%s'."),
+			PhysAnimPieG2PresentationPrefix,
+			*PhysAnimPieSmokeMap)));
+		AddCommand(new FStartPIECommand(false));
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor != nullptr && IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("%s PIE did not start within %.1f seconds."),
+					PhysAnimPieG2PresentationPrefix,
+					PhysAnimPieSmokeStartTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStartTimeoutSeconds));
+		AddCommand(new FWaitLatentCommand(PhysAnimPieG2PresentationLeadInSeconds));
+		AddCommand(new FExecPieConsoleCommand(TEXT("PhysAnim.G2.StartPresentation")));
+		AddCommand(new FWaitLatentCommand(PhysAnimPieG2PresentationDurationSeconds));
+		AddCommand(new FEndPlayMapCommand());
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor == nullptr || !IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("%s PIE did not stop within %.1f seconds."),
+					PhysAnimPieG2PresentationPrefix,
+					PhysAnimPieSmokeStopTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStopTimeoutSeconds));
 
 		return true;
 	}

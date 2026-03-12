@@ -31,8 +31,11 @@ public:
 	static FVector ResolvePresentationLocalIntent(float ElapsedSeconds);
 	static float ResolvePresentationInputScale(float ElapsedSeconds);
 	static FName ResolvePresentationPhaseName(float ElapsedSeconds);
+	static bool ShouldApplyPresentationPerturbation(float ElapsedSeconds);
 	static float GetPresentationDurationSeconds();
-	static FVector ResolvePresentationCameraOffsetCm();
+	static FVector ResolvePresentationCameraOffsetCm(bool bPerturbationPhase = false);
+	static FVector ResolvePresentationPerturbationImpulseCmPerSec();
+	static FName ResolvePresentationPerturbationBoneName();
 
 private:
 	bool StartComparison(bool bEnablePresentationMode, FString& OutError);
@@ -43,6 +46,8 @@ private:
 	void TickPresentationComparison(ACharacter& SourceCharacter, ACharacter& KinematicCharacter);
 	void TickComparisonLabels() const;
 	void UpdatePresentationCamera();
+	void CapturePerturbationBaseline(const ACharacter& SourceCharacter, const ACharacter& KinematicCharacter);
+	void MaybeLogPerturbationTelemetry(const ACharacter& SourceCharacter, const ACharacter& KinematicCharacter);
 	void RestoreSourcePhysicsCharacter();
 	void RestorePresentationMode();
 
@@ -57,6 +62,7 @@ private:
 	TEnumAsByte<ECollisionResponse> SourceOriginalMeshPawnResponse = ECollisionResponse::ECR_Block;
 	FRotator ComparisonAnchorRotation = FRotator::ZeroRotator;
 	double PresentationStartTimeSeconds = -1.0;
+	bool bPresentationPerturbationApplied = false;
 	bool bPresentationModeActive = false;
 	bool bHasSavedControllerInputState = false;
 	bool bOriginalIgnoreMoveInput = false;
@@ -64,4 +70,18 @@ private:
 	FName LastPresentationPhaseName = NAME_None;
 	bool bComparisonActive = false;
 	float LateralSeparationCm = 250.0f;
+	double PresentationPerturbationAppliedTimeSeconds = -1.0;
+	double LastPerturbationPulseTimeSeconds = -1.0;
+	double LastPerturbationTelemetryLogTimeSeconds = -1.0;
+	int32 PresentationPerturbationBurstPulsesApplied = 0;
+	FVector SourcePerturbationBaselineLocation = FVector::ZeroVector;
+	FVector KinematicPerturbationBaselineLocation = FVector::ZeroVector;
+	FVector SourcePerturbationBaselineSpineLocation = FVector::ZeroVector;
+	FVector KinematicPerturbationBaselineSpineLocation = FVector::ZeroVector;
+	FVector SourcePerturbationBaselineHeadLocation = FVector::ZeroVector;
+	FVector KinematicPerturbationBaselineHeadLocation = FVector::ZeroVector;
+	FVector SourcePerturbationBaselineLeftFootLocation = FVector::ZeroVector;
+	FVector KinematicPerturbationBaselineLeftFootLocation = FVector::ZeroVector;
+	FVector SourcePerturbationBaselineRightFootLocation = FVector::ZeroVector;
+	FVector KinematicPerturbationBaselineRightFootLocation = FVector::ZeroVector;
 };

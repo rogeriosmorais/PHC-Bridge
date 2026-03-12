@@ -20,12 +20,13 @@ It must compare one locked sequence that tests the Stage 1 thesis:
 
 The default G2 comparison sequence is:
 
-1. relaxed idle / ready stance
-2. walk forward
-3. jog or short run
-4. stop / brake
-5. turn or pivot
-6. short recovery / rebalance step
+1. scripted physical perturbation / push
+2. relaxed idle / ready stance
+3. walk forward
+4. jog or short run
+5. stop / brake
+6. turn or pivot
+7. short recovery / rebalance step
 
 This is the minimum sequence required for G2.
 
@@ -49,6 +50,8 @@ Preferred trigger path:
 - enter `BridgeActive`
 - run `PhysAnim.G2.StartPresentation`
 - compare both actors through the same scripted sequence and fixed camera
+- the first phase is now a short perturbation burst on `spine_01`
+- the presentation camera uses a closer perturbation framing first, then returns to the wider locomotion framing
 
 Fallback trigger path:
 

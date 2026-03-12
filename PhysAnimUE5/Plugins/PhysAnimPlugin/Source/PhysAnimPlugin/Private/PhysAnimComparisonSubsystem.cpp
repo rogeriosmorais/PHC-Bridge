@@ -22,6 +22,15 @@ namespace
 	const TCHAR* const KinematicRoleName = TEXT("Kinematic");
 	const TCHAR* const PhysicsDrivenRoleName = TEXT("Physics-Driven");
 	const TCHAR* const PresentationCameraActorName = TEXT("PhysAnimG2Camera");
+	constexpr float PresentationPerturbationImpulseMagnitudeCmPerSec = 5000.0f;
+	constexpr float PresentationPerturbationLeadInSeconds = 1.0f;
+	constexpr int32 PresentationPerturbationBurstPulseCount = 5;
+	constexpr float PresentationPerturbationBurstPulseIntervalSeconds = 0.06f;
+	constexpr float PresentationPerturbationObserveSeconds = 3.0f;
+	constexpr float PresentationPerturbationDurationSeconds =
+		PresentationPerturbationLeadInSeconds + PresentationPerturbationObserveSeconds;
+	constexpr float PresentationPerturbationTelemetryDurationSeconds = 1.5f;
+	constexpr float PresentationPerturbationTelemetryIntervalSeconds = 0.25f;
 	constexpr float PresentationIdleDurationSeconds = 3.0f;
 	constexpr float PresentationWalkDurationSeconds = 5.0f;
 	constexpr float PresentationJogDurationSeconds = 4.0f;
@@ -29,6 +38,7 @@ namespace
 	constexpr float PresentationTurnDurationSeconds = 4.0f;
 	constexpr float PresentationRecoveryDurationSeconds = 3.0f;
 	constexpr float PresentationDurationSeconds =
+		PresentationPerturbationDurationSeconds +
 		PresentationIdleDurationSeconds +
 		PresentationWalkDurationSeconds +
 		PresentationJogDurationSeconds +
@@ -294,6 +304,13 @@ FVector UPhysAnimComparisonSubsystem::ResolveMirroredWorldInput(const FVector& P
 
 FVector UPhysAnimComparisonSubsystem::ResolvePresentationLocalIntent(float ElapsedSeconds)
 {
+	if (ElapsedSeconds < PresentationPerturbationDurationSeconds)
+	{
+		return FVector::ZeroVector;
+	}
+
+	ElapsedSeconds -= PresentationPerturbationDurationSeconds;
+
 	if (ElapsedSeconds < PresentationIdleDurationSeconds)
 	{
 		return FVector::ZeroVector;
@@ -329,6 +346,13 @@ FVector UPhysAnimComparisonSubsystem::ResolvePresentationLocalIntent(float Elaps
 
 float UPhysAnimComparisonSubsystem::ResolvePresentationInputScale(float ElapsedSeconds)
 {
+	if (ElapsedSeconds < PresentationPerturbationDurationSeconds)
+	{
+		return 0.0f;
+	}
+
+	ElapsedSeconds -= PresentationPerturbationDurationSeconds;
+
 	if (ElapsedSeconds < PresentationIdleDurationSeconds)
 	{
 		return 0.0f;
@@ -364,6 +388,13 @@ float UPhysAnimComparisonSubsystem::ResolvePresentationInputScale(float ElapsedS
 
 FName UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(float ElapsedSeconds)
 {
+	if (ElapsedSeconds < PresentationPerturbationDurationSeconds)
+	{
+		return TEXT("PerturbationPush");
+	}
+
+	ElapsedSeconds -= PresentationPerturbationDurationSeconds;
+
 	if (ElapsedSeconds < PresentationIdleDurationSeconds)
 	{
 		return TEXT("IdleReady");
@@ -397,14 +428,31 @@ FName UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(float ElapsedSe
 	return TEXT("Complete");
 }
 
+bool UPhysAnimComparisonSubsystem::ShouldApplyPresentationPerturbation(float ElapsedSeconds)
+{
+	return ElapsedSeconds >= PresentationPerturbationLeadInSeconds;
+}
+
 float UPhysAnimComparisonSubsystem::GetPresentationDurationSeconds()
 {
 	return PresentationDurationSeconds;
 }
 
-FVector UPhysAnimComparisonSubsystem::ResolvePresentationCameraOffsetCm()
+FVector UPhysAnimComparisonSubsystem::ResolvePresentationCameraOffsetCm(bool bPerturbationPhase)
 {
-	return FVector(-650.0f, 0.0f, 220.0f);
+	return bPerturbationPhase
+		? FVector(220.0f, 0.0f, 155.0f)
+		: FVector(325.0f, 0.0f, 170.0f);
+}
+
+FVector UPhysAnimComparisonSubsystem::ResolvePresentationPerturbationImpulseCmPerSec()
+{
+	return FVector(0.0f, PresentationPerturbationImpulseMagnitudeCmPerSec, 0.0f);
+}
+
+FName UPhysAnimComparisonSubsystem::ResolvePresentationPerturbationBoneName()
+{
+	return TEXT("spine_01");
 }
 
 bool UPhysAnimComparisonSubsystem::ConfigureSourcePhysicsCharacter(ACharacter& Character, FString& OutError)
@@ -423,7 +471,11 @@ bool UPhysAnimComparisonSubsystem::ConfigureSourcePhysicsCharacter(ACharacter& C
 
 	if (UPhysAnimComponent* const PhysAnim = Character.FindComponentByClass<UPhysAnimComponent>())
 	{
-		PhysAnim->StartBridge();
+		if (PhysAnim->GetRuntimeState() == EPhysAnimRuntimeState::Uninitialized ||
+			PhysAnim->GetRuntimeState() == EPhysAnimRuntimeState::FailStopped)
+		{
+			PhysAnim->StartBridge();
+		}
 		return true;
 	}
 
@@ -509,8 +561,11 @@ bool UPhysAnimComparisonSubsystem::ActivatePresentationMode(FString& OutError)
 	}
 
 	ComparisonCameraActor = CameraActor;
-	PresentationStartTimeSeconds = World->GetTimeSeconds();
-	LastPresentationPhaseName = TEXT("IdleReady");
+	PresentationStartTimeSeconds = -1.0;
+	LastPresentationPhaseName = TEXT("WaitingForBridgeReady");
+	bPresentationPerturbationApplied = false;
+	PresentationPerturbationBurstPulsesApplied = 0;
+	LastPerturbationPulseTimeSeconds = -1.0;
 	bPresentationModeActive = true;
 	UpdatePresentationCamera();
 	PlayerController->SetViewTarget(CameraActor);
@@ -536,7 +591,98 @@ void UPhysAnimComparisonSubsystem::TickPresentationComparison(ACharacter& Source
 		return;
 	}
 
+	if (PresentationStartTimeSeconds < 0.0)
+	{
+		if (const UPhysAnimComponent* const PhysAnim = SourceCharacter.FindComponentByClass<UPhysAnimComponent>())
+		{
+			if (!PhysAnim->IsReadyForScriptedPresentation())
+			{
+				LastPresentationPhaseName = TEXT("WaitingForBridgeReady");
+				return;
+			}
+		}
+
+		PresentationStartTimeSeconds = World->GetTimeSeconds();
+		LastPresentationPhaseName = TEXT("PerturbationPush");
+		UE_LOG(LogTemp, Log, TEXT("%s Scripted G2 presentation sequence started from steady BridgeActive state."), PhysAnimG2LogPrefix);
+	}
+
 	const float ElapsedSeconds = static_cast<float>(World->GetTimeSeconds() - PresentationStartTimeSeconds);
+	if (ShouldApplyPresentationPerturbation(ElapsedSeconds) && PresentationPerturbationBurstPulsesApplied < PresentationPerturbationBurstPulseCount)
+	{
+		const bool bCanApplyNextPulse =
+			PresentationPerturbationBurstPulsesApplied == 0 ||
+			(World->GetTimeSeconds() - LastPerturbationPulseTimeSeconds) >= PresentationPerturbationBurstPulseIntervalSeconds;
+		if (bCanApplyNextPulse)
+		{
+			const FRotator ImpulseRotation(0.0f, ComparisonAnchorRotation.Yaw, 0.0f);
+			const FVector WorldImpulse = ImpulseRotation.RotateVector(ResolvePresentationPerturbationImpulseCmPerSec());
+			const FName PerturbationBoneName = ResolvePresentationPerturbationBoneName();
+			FVector PerturbationOrigin = SourceCharacter.GetActorLocation() + FVector(0.0f, 0.0f, 120.0f);
+
+			if (PresentationPerturbationBurstPulsesApplied == 0)
+			{
+				CapturePerturbationBaseline(SourceCharacter, KinematicCharacter);
+				PresentationPerturbationAppliedTimeSeconds = World->GetTimeSeconds();
+				LastPerturbationTelemetryLogTimeSeconds =
+					PresentationPerturbationAppliedTimeSeconds - PresentationPerturbationTelemetryIntervalSeconds;
+			}
+
+			if (USkeletalMeshComponent* const PhysicsMesh = SourceCharacter.GetMesh())
+			{
+				PerturbationOrigin = PhysicsMesh->GetBoneLocation(PerturbationBoneName);
+				PhysicsMesh->AddImpulseToAllBodiesBelow(WorldImpulse, PerturbationBoneName, true, true);
+			}
+
+			if (USkeletalMeshComponent* const KinematicMesh = KinematicCharacter.GetMesh())
+			{
+				KinematicMesh->AddImpulseToAllBodiesBelow(WorldImpulse, PerturbationBoneName, true, true);
+			}
+
+			PresentationPerturbationBurstPulsesApplied += 1;
+			LastPerturbationPulseTimeSeconds = World->GetTimeSeconds();
+			bPresentationPerturbationApplied = true;
+
+			DrawDebugDirectionalArrow(
+				World,
+				PerturbationOrigin,
+				PerturbationOrigin + (WorldImpulse.GetSafeNormal() * 180.0f),
+				70.0f,
+				FColor::Orange,
+				false,
+				3.0f,
+				0,
+				8.0f);
+			DrawDebugSphere(
+				World,
+				PerturbationOrigin,
+				12.0f,
+				12,
+				FColor::Orange,
+				false,
+				3.0f,
+				0,
+				2.0f);
+
+			if (PresentationPerturbationBurstPulsesApplied == 1)
+			{
+				UE_LOG(
+					LogTemp,
+					Log,
+					TEXT("%s Applied scripted G2 perturbation burst: bone=%s impulse=(%.1f, %.1f, %.1f) pulses=%d interval=%.2fs"),
+					PhysAnimG2LogPrefix,
+					*PerturbationBoneName.ToString(),
+					WorldImpulse.X,
+					WorldImpulse.Y,
+					WorldImpulse.Z,
+					PresentationPerturbationBurstPulseCount,
+					PresentationPerturbationBurstPulseIntervalSeconds);
+			}
+		}
+	}
+
+	MaybeLogPerturbationTelemetry(SourceCharacter, KinematicCharacter);
+
 	const FVector LocalIntent = ResolvePresentationLocalIntent(ElapsedSeconds);
 	const float InputScale = ResolvePresentationInputScale(ElapsedSeconds);
 	LastPresentationPhaseName = ResolvePresentationPhaseName(ElapsedSeconds);
@@ -615,11 +761,97 @@ void UPhysAnimComparisonSubsystem::UpdatePresentationCamera()
 	}
 
 	const FVector Midpoint = (SourceCharacter->GetActorLocation() + KinematicCharacter->GetActorLocation()) * 0.5f;
-	const FVector Offset = ComparisonAnchorRotation.RotateVector(ResolvePresentationCameraOffsetCm());
+	const bool bPerturbationPhase = LastPresentationPhaseName == TEXT("PerturbationPush");
+	const FVector Offset = ComparisonAnchorRotation.RotateVector(ResolvePresentationCameraOffsetCm(bPerturbationPhase));
 	const FVector CameraLocation = Midpoint + Offset;
 	const FVector LookAtLocation = Midpoint + FVector(0.0f, 0.0f, 90.0f);
 	const FRotator CameraRotation = (LookAtLocation - CameraLocation).Rotation();
 	CameraActor->SetActorLocationAndRotation(CameraLocation, CameraRotation, false, nullptr, ETeleportType::TeleportPhysics);
+}
+
+void UPhysAnimComparisonSubsystem::CapturePerturbationBaseline(const ACharacter& SourceCharacter, const ACharacter& KinematicCharacter)
+{
+	SourcePerturbationBaselineLocation = SourceCharacter.GetActorLocation();
+	KinematicPerturbationBaselineLocation = KinematicCharacter.GetActorLocation();
+
+	if (const USkeletalMeshComponent* const SourceMesh = SourceCharacter.GetMesh())
+	{
+		SourcePerturbationBaselineSpineLocation = SourceMesh->GetBoneLocation(TEXT("spine_01"));
+		SourcePerturbationBaselineHeadLocation = SourceMesh->GetBoneLocation(TEXT("head"));
+		SourcePerturbationBaselineLeftFootLocation = SourceMesh->GetBoneLocation(TEXT("foot_l"));
+		SourcePerturbationBaselineRightFootLocation = SourceMesh->GetBoneLocation(TEXT("foot_r"));
+	}
+
+	if (const USkeletalMeshComponent* const KinematicMesh = KinematicCharacter.GetMesh())
+	{
+		KinematicPerturbationBaselineSpineLocation = KinematicMesh->GetBoneLocation(TEXT("spine_01"));
+		KinematicPerturbationBaselineHeadLocation = KinematicMesh->GetBoneLocation(TEXT("head"));
+		KinematicPerturbationBaselineLeftFootLocation = KinematicMesh->GetBoneLocation(TEXT("foot_l"));
+		KinematicPerturbationBaselineRightFootLocation = KinematicMesh->GetBoneLocation(TEXT("foot_r"));
+	}
+}
+
+void UPhysAnimComparisonSubsystem::MaybeLogPerturbationTelemetry(const ACharacter& SourceCharacter, const ACharacter& KinematicCharacter)
+{
+	UWorld* const World = GetWorld();
+	if (!World || PresentationPerturbationAppliedTimeSeconds < 0.0)
+	{
+		return;
+	}
+
+	const double ElapsedSincePerturbation = World->GetTimeSeconds() - PresentationPerturbationAppliedTimeSeconds;
+	if (ElapsedSincePerturbation < 0.0 || ElapsedSincePerturbation > PresentationPerturbationTelemetryDurationSeconds)
+	{
+		return;
+	}
+
+	if ((World->GetTimeSeconds() - LastPerturbationTelemetryLogTimeSeconds) < PresentationPerturbationTelemetryIntervalSeconds)
+	{
+		return;
+	}
+
+	LastPerturbationTelemetryLogTimeSeconds = World->GetTimeSeconds();
+
+	const USkeletalMeshComponent* const SourceMesh = SourceCharacter.GetMesh();
+	const USkeletalMeshComponent* const KinematicMesh = KinematicCharacter.GetMesh();
+	if (!SourceMesh || !KinematicMesh)
+	{
+		return;
+	}
+
+	const float SourceActorDeltaCm = FVector::Dist(SourceCharacter.GetActorLocation(), SourcePerturbationBaselineLocation);
+	const float KinematicActorDeltaCm = FVector::Dist(KinematicCharacter.GetActorLocation(), KinematicPerturbationBaselineLocation);
+	const float SourceSpineDeltaCm = FVector::Dist(SourceMesh->GetBoneLocation(TEXT("spine_01")), SourcePerturbationBaselineSpineLocation);
+	const float KinematicSpineDeltaCm = FVector::Dist(KinematicMesh->GetBoneLocation(TEXT("spine_01")), KinematicPerturbationBaselineSpineLocation);
+	const float SourceHeadDeltaCm = FVector::Dist(SourceMesh->GetBoneLocation(TEXT("head")), SourcePerturbationBaselineHeadLocation);
+	const float KinematicHeadDeltaCm = FVector::Dist(KinematicMesh->GetBoneLocation(TEXT("head")), KinematicPerturbationBaselineHeadLocation);
+	const float SourceMaxFootDeltaCm = FMath::Max(
+		FVector::Dist(SourceMesh->GetBoneLocation(TEXT("foot_l")), SourcePerturbationBaselineLeftFootLocation),
+		FVector::Dist(SourceMesh->GetBoneLocation(TEXT("foot_r")), SourcePerturbationBaselineRightFootLocation));
+	const float KinematicMaxFootDeltaCm = FMath::Max(
+		FVector::Dist(KinematicMesh->GetBoneLocation(TEXT("foot_l")), KinematicPerturbationBaselineLeftFootLocation),
+		FVector::Dist(KinematicMesh->GetBoneLocation(TEXT("foot_r")), KinematicPerturbationBaselineRightFootLocation));
+	const float SpineGapCm = SourceSpineDeltaCm - KinematicSpineDeltaCm;
+	const float HeadGapCm = SourceHeadDeltaCm - KinematicHeadDeltaCm;
+	const float FootGapCm = SourceMaxFootDeltaCm - KinematicMaxFootDeltaCm;
+
+	UE_LOG(
+		LogTemp,
+		Log,
+		TEXT("%s Perturbation telemetry t=%.2fs physics[actorDelta=%.1f spineDelta=%.1f headDelta=%.1f maxFootDelta=%.1f] kinematic[actorDelta=%.1f spineDelta=%.1f headDelta=%.1f maxFootDelta=%.1f] gap[spine=%.1f head=%.1f foot=%.1f]"),
+		PhysAnimG2LogPrefix,
+		ElapsedSincePerturbation,
+		SourceActorDeltaCm,
+		SourceSpineDeltaCm,
+		SourceHeadDeltaCm,
+		SourceMaxFootDeltaCm,
+		KinematicActorDeltaCm,
+		KinematicSpineDeltaCm,
+		KinematicHeadDeltaCm,
+		KinematicMaxFootDeltaCm,
+		SpineGapCm,
+		HeadGapCm,
+		FootGapCm);
 }
 
 void UPhysAnimComparisonSubsystem::RestoreSourcePhysicsCharacter()
@@ -674,6 +906,11 @@ void UPhysAnimComparisonSubsystem::RestorePresentationMode()
 	bOriginalIgnoreMoveInput = false;
 	bOriginalIgnoreLookInput = false;
 	PresentationStartTimeSeconds = -1.0;
+	bPresentationPerturbationApplied = false;
+	PresentationPerturbationAppliedTimeSeconds = -1.0;
+	LastPerturbationPulseTimeSeconds = -1.0;
+	LastPerturbationTelemetryLogTimeSeconds = -1.0;
+	PresentationPerturbationBurstPulsesApplied = 0;
 	bPresentationModeActive = false;
 	LastPresentationPhaseName = NAME_None;
 }

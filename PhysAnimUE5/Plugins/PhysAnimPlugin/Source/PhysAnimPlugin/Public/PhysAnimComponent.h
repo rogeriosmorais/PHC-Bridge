@@ -130,6 +130,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	void StopBridge();
 
+	UFUNCTION(BlueprintPure, Category = "PhysAnim")
+	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
+
+	UFUNCTION(BlueprintPure, Category = "PhysAnim")
+	bool IsReadyForScriptedPresentation() const;
+
 protected:
 	UPROPERTY(EditAnywhere, Category = "PhysAnim")
 	TSoftObjectPtr<UNNEModelData> ModelDataAsset;

@@ -583,6 +583,22 @@ void UPhysAnimComponent::StopBridge()
 	ResetStabilizationRuntimeState();
 }
 
+bool UPhysAnimComponent::IsReadyForScriptedPresentation() const
+{
+	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive)
+	{
+		return false;
+	}
+
+	if (!AreAllBringUpGroupsUnlocked())
+	{
+		return false;
+	}
+
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	return CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) >= (1.0f - KINDA_SMALL_NUMBER);
+}
+
 bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 	const FPhysAnimStabilizationSettings& EffectiveSettings,
 	const TCHAR* ActivationContext,
