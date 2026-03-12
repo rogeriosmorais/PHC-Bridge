@@ -492,7 +492,16 @@ This gives us the highest-value correction with the least ambiguity.
   - lower-limb occupancy result:
     - under deterministic movement, `calf_*` repeatedly over-occupies the current tightest direct-limit proxy
     - measured range is about `1.7x - 2.6x` once locomotion is active
-  - next pass should keep the `0.50` toe-limit baseline and move to a calf-first lower-limb target-range policy
+  - next pass should keep the `0.50` toe-limit baseline and move to a knee/ankle-chain lower-limb target-range policy
+  - first knee/ankle-chain target-range result:
+    - training-side review confirmed the relevant ProtoMotions lower-limb path is the `3-DoF` symmetric `1.2x` action-range expansion used by the SMPL knee/ankle/toe joints
+    - runtime policy now scales:
+      - `calf_*` targets to `0.50`
+      - `foot_*` targets to `0.75`
+    - deterministic movement smoke stays green with no fail-stop
+    - lower-limb occupancy falls materially, commonly to about `0.7x - 1.2x`
+    - but the largest remaining body spikes still propagate into the distal foot/toe chain
+  - next pass should inspect lower-limb representation / distal coupling, not revert to more constraint-authoring tweaks
 
 ## Working Hypothesis
 

@@ -98,6 +98,14 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.TrainingAlignedToeLimitPolicyBlend"),
 		0.5f,
 		TEXT("Override for the Stage 1 training-aligned toe operating-limit policy blend. Negative values keep the component default."));
+	TAutoConsoleVariable<int32> CVarPhysAnimApplyTrainingAlignedLowerLimbTargetRangePolicy(
+		TEXT("physanim.ApplyTrainingAlignedLowerLimbTargetRangePolicy"),
+		-1,
+		TEXT("Override for the Stage 1 training-aligned lower-limb target-range policy. -1 keeps the component default, 0 disables, 1 enables."));
+	TAutoConsoleVariable<float> CVarPhysAnimTrainingAlignedLowerLimbTargetRangePolicyBlend(
+		TEXT("physanim.TrainingAlignedLowerLimbTargetRangePolicyBlend"),
+		-1.0f,
+		TEXT("Override for the Stage 1 training-aligned lower-limb target-range policy blend. Negative values keep the component default."));
 	TAutoConsoleVariable<float> CVarPhysAnimMaxAngularStepDegPerSec(
 		TEXT("physanim.MaxAngularStepDegPerSec"),
 		-1.0f,
@@ -329,7 +337,7 @@ namespace PhysAnimComponentInternal
 	FString BuildStabilizationSummary(const FPhysAnimStabilizationSettings& Settings)
 	{
 		return FString::Printf(
-			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f MassPolicy=%s MassBlend=%.2f FamilyPd=%s FamilyPdBlend=%.2f ToePolicy=%s ToeBlend=%.2f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
+			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f MassPolicy=%s MassBlend=%.2f FamilyPd=%s FamilyPdBlend=%.2f ToePolicy=%s ToeBlend=%.2f LowerLimbRangePolicy=%s LowerLimbRangeBlend=%.2f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
 			Settings.bForceZeroActions ? TEXT("true") : TEXT("false"),
 			Settings.ActionScale,
 			Settings.ActionClampAbs,
@@ -342,6 +350,8 @@ namespace PhysAnimComponentInternal
 			Settings.TrainingAlignedControlFamilyProfileBlend,
 			Settings.bApplyTrainingAlignedToeLimitPolicy ? TEXT("true") : TEXT("false"),
 			Settings.TrainingAlignedToeLimitPolicyBlend,
+			Settings.bApplyTrainingAlignedLowerLimbTargetRangePolicy ? TEXT("true") : TEXT("false"),
+			Settings.TrainingAlignedLowerLimbTargetRangePolicyBlend,
 			Settings.MaxAngularStepDegreesPerSecond,
 			Settings.AngularStrengthMultiplier,
 			Settings.AngularDampingRatioMultiplier,
@@ -1637,6 +1647,14 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimTrainingAlignedToeLimitPolicyBlend,
 			EffectiveSettings.TrainingAlignedToeLimitPolicyBlend);
+	EffectiveSettings.bApplyTrainingAlignedLowerLimbTargetRangePolicy =
+		PhysAnimComponentInternal::ResolveBoolOverride(
+			PhysAnimComponentInternal::CVarPhysAnimApplyTrainingAlignedLowerLimbTargetRangePolicy,
+			EffectiveSettings.bApplyTrainingAlignedLowerLimbTargetRangePolicy);
+	EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimTrainingAlignedLowerLimbTargetRangePolicyBlend,
+			EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend);
 	EffectiveSettings.MaxAngularStepDegreesPerSecond =
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimMaxAngularStepDegPerSec,
@@ -2869,12 +2887,27 @@ void UPhysAnimComponent::ApplyControlTargets(
 		{
 			PolicyBlendStartControlTargetRotations.Add(ControlName, IdentityRotation);
 		}
+		const bool bApplyTrainingAlignedLowerLimbTargetRangePolicy =
+			ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
+				EffectiveSettings.bApplyTrainingAlignedLowerLimbTargetRangePolicy,
+				EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend);
+		const float LowerLimbTargetRangeScale = bApplyTrainingAlignedLowerLimbTargetRangePolicy
+			? ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(
+				Pair.Key,
+				EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend)
+			: 1.0f;
 		const float RawPolicyOffsetDegrees = BlendStartRotation
 			? CalculateControlTargetDeltaDegrees(*BlendStartRotation, Pair.Value)
 			: 0.0f;
-		const FQuat BlendedPolicyRotation = BlendStartRotation
-			? BlendPolicyTargetRotation(*BlendStartRotation, Pair.Value, PolicyInfluenceAlpha)
+		const FQuat RangeAlignedPolicyRotation = BlendStartRotation
+			? BlendPolicyTargetRotation(*BlendStartRotation, Pair.Value, LowerLimbTargetRangeScale)
 			: Pair.Value;
+		const float RangeAlignedPolicyOffsetDegrees = BlendStartRotation
+			? CalculateControlTargetDeltaDegrees(*BlendStartRotation, RangeAlignedPolicyRotation)
+			: 0.0f;
+		const FQuat BlendedPolicyRotation = BlendStartRotation
+			? BlendPolicyTargetRotation(*BlendStartRotation, RangeAlignedPolicyRotation, PolicyInfluenceAlpha)
+			: RangeAlignedPolicyRotation;
 		const float TargetDeltaDegrees = PreviousRotation
 			? CalculateControlTargetDeltaDegrees(*PreviousRotation, BlendedPolicyRotation)
 			: 0.0f;
@@ -2899,7 +2932,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 			PhysAnimComponentInternal::ResolveLowerLimbConstraintLimitProxyDegrees(PhysicsAsset, Pair.Key);
 		if (LowerLimbLimitProxyDegrees > UE_SMALL_NUMBER)
 		{
-			const float LowerLimbLimitOccupancy = RawPolicyOffsetDegrees / LowerLimbLimitProxyDegrees;
+			const float LowerLimbLimitOccupancy = RangeAlignedPolicyOffsetDegrees / LowerLimbLimitProxyDegrees;
 			++ControlTargetDiagnostics.NumLowerLimbTargetsConsidered;
 			ControlTargetDiagnostics.MeanLowerLimbLimitOccupancy += LowerLimbLimitOccupancy;
 			if (LowerLimbLimitOccupancy > ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy)
@@ -3530,6 +3563,30 @@ bool UPhysAnimComponent::ShouldApplyTrainingAlignedMassScales(bool bApplyTrainin
 bool UPhysAnimComponent::ShouldApplyTrainingAlignedToeLimitPolicy(bool bApplyTrainingAlignedToeLimitPolicy, float BlendAlpha)
 {
 	return bApplyTrainingAlignedToeLimitPolicy && BlendAlpha > UE_SMALL_NUMBER;
+}
+
+bool UPhysAnimComponent::ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
+	bool bApplyTrainingAlignedLowerLimbTargetRangePolicy,
+	float BlendAlpha)
+{
+	return bApplyTrainingAlignedLowerLimbTargetRangePolicy && BlendAlpha > UE_SMALL_NUMBER;
+}
+
+float UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(FName BoneName, float BlendAlpha)
+{
+	const float ClampedBlendAlpha = FMath::Clamp(BlendAlpha, 0.0f, 1.0f);
+	float TargetScale = 1.0f;
+
+	if (BoneName == TEXT("calf_l") || BoneName == TEXT("calf_r"))
+	{
+		TargetScale = 0.50f;
+	}
+	else if (BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r"))
+	{
+		TargetScale = 0.75f;
+	}
+
+	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);
 }
 
 float UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(FName BoneName, float BlendAlpha)

@@ -384,3 +384,21 @@ Whenever new setup or gate evidence arrives:
     - current runtime read:
       - the remaining lower-limb mismatch is target-range / limit-occupancy, not malformed toe or ankle authoring
       - the next pass should test a temporary lower-limb target-range policy, starting with `calf_*`
+  - March 12, 2026 lower-limb target-range policy note:
+    - reviewed ProtoMotions lower-limb action mapping again:
+      - the relevant SMPL lower-limb path is the `3-DoF` symmetric `1.2x` expansion
+      - not the `1-DoF` extend-past-limit path
+    - implemented the first runtime target-range policy on the knee/ankle chain:
+      - `calf_*` target scale `0.50`
+      - `foot_*` target scale `0.75`
+      - `ball_*` unchanged in this pass
+    - measured result in deterministic movement smoke:
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+      - lower-limb occupancy falls materially from the old `~1.7x - 2.6x` common range to roughly `~0.7x - 1.2x` for most active samples
+      - first forward movement samples now sit near `~0.95x - 1.03x`
+    - current runtime read:
+      - lower-limb target-range mismatch is confirmed as real
+      - this knee/ankle-chain target-range policy is the new baseline candidate
+      - remaining distal foot/toe spikes mean the next pass should inspect lower-limb representation / distal coupling, not more authoring tweaks

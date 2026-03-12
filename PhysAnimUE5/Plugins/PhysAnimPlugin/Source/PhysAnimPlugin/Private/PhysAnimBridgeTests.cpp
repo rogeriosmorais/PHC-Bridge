@@ -875,6 +875,45 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTrainingAlignedLowerLimbTargetRangePolicyTest,
+		"PhysAnim.Component.TrainingAlignedLowerLimbTargetRangePolicy",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTrainingAlignedLowerLimbTargetRangePolicyTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimStabilizationSettings Settings;
+		TestTrue(TEXT("Training-aligned lower-limb target-range policy is enabled by default"), Settings.bApplyTrainingAlignedLowerLimbTargetRangePolicy);
+		TestEqual(TEXT("Training-aligned lower-limb target-range policy defaults to full blend"), Settings.TrainingAlignedLowerLimbTargetRangePolicyBlend, 1.0f);
+
+		TestTrue(
+			TEXT("Lower-limb target-range policy disabled state returns false"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(false, 1.0f));
+		TestTrue(
+			TEXT("Zero blend disables lower-limb target-range policy application"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(true, 0.0f));
+		TestTrue(
+			TEXT("Enabled lower-limb target-range policy with positive blend applies"),
+			UPhysAnimComponent::ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(true, 1.0f));
+		TestEqual(
+			TEXT("Calf chain uses the strongest lower-limb target-range reduction"),
+			UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(TEXT("calf_l"), 1.0f),
+			0.50f);
+		TestEqual(
+			TEXT("Foot chain uses the milder ankle target-range reduction"),
+			UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(TEXT("foot_r"), 1.0f),
+			0.75f);
+		TestEqual(
+			TEXT("Toe chain remains unchanged in the first knee-ankle target-range pass"),
+			UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(TEXT("ball_l"), 1.0f),
+			1.0f);
+		TestEqual(
+			TEXT("Target-range blend interpolates from neutral to the calf target"),
+			UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(TEXT("calf_r"), 0.5f),
+			0.75f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimConstraintLimitProxyTest,
 		"PhysAnim.Component.ConstraintLimitProxy",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

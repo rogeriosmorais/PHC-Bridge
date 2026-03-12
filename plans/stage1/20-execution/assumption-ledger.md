@@ -267,6 +267,19 @@ Only the orchestrator updates status.
       - after the verified `0.50` toe-limit baseline, the strongest remaining movement peaks are still anchored in `calf_l(sim)` body linear speed and `ball_l(sim)` body angular speed
     - implication:
       - the next question is whether `foot_* <- calf_*` is structurally sane or merely sensitive under movement
+  - March 12, 2026 knee/ankle target-range result:
+    - the training-side lower-limb review is now specific:
+      - this SMPL asset uses the `3-DoF` symmetric `1.2x` action-range expansion for knee/ankle/toe joints
+      - not the `1-DoF` extend-past-limit branch
+    - current evidence:
+      - a first runtime knee/ankle-chain target-range policy is implemented
+      - `calf_*` target scale `0.50`
+      - `foot_*` target scale `0.75`
+      - deterministic movement smoke still passes with no fail-stop
+      - lower-limb occupancy drops materially versus the previous baseline, commonly into the `~0.7x - 1.2x` range
+    - implication:
+      - target-range mismatch was a real part of the problem
+      - the next lower-limb pass should inspect distal coupling / representation, not go back to basic authoring checks
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

@@ -51,8 +51,10 @@ Instead, add a temporary Stage 1 lower-limb target-range policy:
    - `ball_*`
 2. scale raw policy target rotations toward the current baseline before writing control targets
 3. start with the most likely high-value subset:
-   - `calf_*` first
-   - optionally `foot_*` second
+   - knee/ankle chain first:
+     - `calf_*`
+     - `foot_*`
+   - leave `ball_*` unchanged in the first pass so toe behavior stays measurable
 4. judge success only on deterministic movement smoke
 
 ## Success Criteria
@@ -70,8 +72,29 @@ The first lower-limb target-range pass is good if:
 ## Decision Rule
 
 - If calf-only target-range scaling improves both occupancy and movement spikes:
-  - keep it as the next baseline candidate
+  - superseded by the broader knee/ankle-chain first pass
 - If it reduces occupancy but worsens movement behavior:
   - move the next pass to `foot_*` or a different lower-limb representation surface
 - If it does not reduce occupancy meaningfully:
   - the next mismatch is not target amplitude first and we should inspect lower-limb representation / frame semantics instead
+
+## First Knee/Ankle Pass Result
+
+- March 12, 2026
+- training-side review confirmed the relevant ProtoMotions path for the SMPL lower limb is the `3-DoF` symmetric `1.2x` expansion, not the `1-DoF` extend-past-limit path
+- implemented first runtime target-range reduction on:
+  - `calf_*`
+  - `foot_*`
+- current policy:
+  - `calf_*` target scale `0.50`
+  - `foot_*` target scale `0.75`
+  - policy enabled by default at full blend
+- measured movement-smoke result:
+  - no fail-stop
+  - lower-limb occupancy falls materially from the earlier `~1.7x - 2.6x` common range to roughly `~0.7x - 1.2x` for most active samples
+  - first forward samples now commonly sit near `~0.95x - 1.03x`
+  - peak body spikes still exist in the distal foot/toe chain even after occupancy improves
+- current runtime read:
+  - the target-range mismatch was real
+  - the knee/ankle-chain policy is worth keeping as the new baseline candidate
+  - the next pass should move to lower-limb representation / distal coupling, not back to toe or ankle authoring
