@@ -566,7 +566,17 @@ This gives us the highest-value correction with the least ambiguity.
     - current read:
       - abrupt runtime representation flips were part of the locomotion problem
       - stateful hysteresis/dwell is the best measured locomotion-composition baseline so far
-      - the next pass should inspect more proximal lower-limb composition or target-velocity handling, not widen the distal explicit-only set again
+      - the next pass should inspect more proximal lower-limb composition or another locomotion-time policy seam, not widen the distal explicit-only set again
+  - proximal lower-limb composition result:
+    - tested adding `thigh_*` to the same explicit-only locomotion composition set while keeping `calf_*` on the composed path
+    - deterministic movement smoke stayed green with no fail-stop
+    - measured result:
+      - forward regressed materially, with `ball_r` rising into roughly `~6177 - 7009 deg/s`
+      - backward also regressed materially, with `foot_r` / `ball_r` angular spikes rising into roughly `~8700 - 11979 deg/s`
+      - repeated `calf_r` linear spikes also rose into the `~2200 - 3080 cm/s` range
+    - current read:
+      - `thigh_* + foot_* + ball_*` explicit-only switching is not the right new baseline
+      - the next pass should move to another locomotion-time mismatch surface, most likely lower-limb target write timing or another policy-side transition seam
 
 ## Working Hypothesis
 

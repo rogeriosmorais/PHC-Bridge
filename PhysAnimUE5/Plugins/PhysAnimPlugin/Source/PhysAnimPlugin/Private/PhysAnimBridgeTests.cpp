@@ -1041,6 +1041,9 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		TestFalse(
 			TEXT("Calves stay on the non-distal locomotion composition path in the transition pass"),
 			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("calf_l")));
+		TestFalse(
+			TEXT("Thighs stay on the non-distal locomotion composition path in the transition baseline"),
+			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("thigh_l")));
 		return true;
 	}
 

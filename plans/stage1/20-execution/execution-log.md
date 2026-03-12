@@ -500,3 +500,26 @@ Whenever new setup or gate evidence arrives:
       - abrupt representation switching was part of the locomotion mismatch
       - this stateful transition policy is the best measured locomotion-composition baseline so far
       - the next pass should inspect more proximal lower-limb composition or target-velocity handling, not widen the distal explicit-only set again
+  - March 12, 2026 proximal lower-limb composition note:
+    - re-checked:
+      - official UE PhysicsControl docs
+      - local UE 5.7 PhysicsControl source
+      - ProtoMotions simulator/control mapping code
+    - implemented one narrow structural experiment:
+      - kept the current locomotion-speed hysteresis+dwell baseline
+      - added `thigh_*` to the explicit-only locomotion composition set
+      - kept `calf_*` on the composed path
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - the pass regressed materially versus the transition-policy baseline
+      - forward samples rose into repeated `ball_r` spikes around `~6177 - 7009 deg/s`
+      - backward samples rose into repeated `foot_r` / `ball_r` spikes around `~8700 - 11979 deg/s`
+      - repeated `calf_r` linear spikes also rose into the `~2200 - 3080 cm/s` range
+    - current runtime read:
+      - adding `thigh_*` to the explicit-only locomotion composition set is not the right new baseline
+      - the code has been restored to the last safe transition-policy baseline
+      - the next pass should target another locomotion-time mismatch surface, most likely lower-limb target write timing or another policy-side transition seam

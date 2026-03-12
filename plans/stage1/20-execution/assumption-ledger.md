@@ -351,6 +351,19 @@ Only the orchestrator updates status.
       - abrupt locomotion-time representation switching was part of the remaining lower-limb mismatch
       - the stateful transition policy is now the best measured locomotion-composition baseline
       - the next lower-limb pass should inspect more proximal composition or target-velocity handling, not widen the distal explicit-only set again
+  - March 12, 2026 proximal lower-limb composition follow-up:
+    - runtime experiment:
+      - kept the current hysteresis+dwell baseline
+      - added `thigh_*` to the explicit-only locomotion composition set
+      - left `calf_*` on the composed path
+    - measured result:
+      - deterministic movement smoke still passes with no fail-stop
+      - but forward and backward both regress materially
+      - repeated `ball_r` / `foot_r` / `calf_r` peaks become much larger than the transition-policy baseline
+    - implication:
+      - proximal widening is not the right next baseline
+      - the code should stay on the transition-policy baseline
+      - the next lower-limb pass should move to another locomotion-time mismatch surface, most likely target write timing or another policy-side transition seam
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`
