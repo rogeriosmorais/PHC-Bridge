@@ -475,3 +475,28 @@ Whenever new setup or gate evidence arrives:
     - current runtime read:
       - whole-chain explicit-only switching is not a clean new baseline
       - the remaining mismatch is likely locomotion transition handling or more proximal lower-limb composition, not more distal-set widening alone
+  - March 12, 2026 lower-limb composition transition-policy note:
+    - re-checked:
+      - official `UPhysicsControlComponent` and `SetControlsUseSkeletalAnimation` docs
+      - local UE 5.7 PhysicsControl source confirming the runtime mode switch is binary
+      - ProtoMotions simulator/control mapping code confirming there is no equivalent locomotion-time representation flip in training
+    - implemented the next transition-handling experiment:
+      - reverted the explicit-only affected set back to `foot_*` and `ball_*`
+      - added locomotion-speed hysteresis and dwell:
+        - enter `50 cm/s`
+        - exit `100 cm/s`
+        - enter hold `0.20 s`
+        - exit hold `0.20 s`
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - no locomotion-start discontinuity
+      - forward and backward peaks are materially lower than the failed full-chain composition pass
+      - remaining spikes often migrate proximally into `thigh_*` or other non-distal bodies
+    - current runtime read:
+      - abrupt representation switching was part of the locomotion mismatch
+      - this stateful transition policy is the best measured locomotion-composition baseline so far
+      - the next pass should inspect more proximal lower-limb composition or target-velocity handling, not widen the distal explicit-only set again

@@ -331,6 +331,26 @@ Only the orchestrator updates status.
       - lower-limb composition mode remains a real mismatch surface
       - but simply widening explicit-only switching to the full knee/ankle/toe chain is not a clean baseline
       - the next lower-limb pass should target locomotion transition handling or more proximal lower-limb composition, not more distal-set widening by itself
+  - March 12, 2026 lower-limb composition transition-policy follow-up:
+    - current evidence:
+      - local UE 5.7 PhysicsControl source confirms the locomotion-time representation switch is binary
+      - ProtoMotions training does not perform an equivalent runtime mode flip
+    - runtime experiment:
+      - reverted the explicit-only set back to `foot_*` and `ball_*`
+      - added stateful speed hysteresis and dwell:
+        - enter `50 cm/s`
+        - exit `100 cm/s`
+        - enter hold `0.20 s`
+        - exit hold `0.20 s`
+    - measured result:
+      - deterministic movement smoke still passes with no fail-stop
+      - no locomotion-start discontinuity appears
+      - forward and backward peaks are materially lower than the failed full-chain composition pass
+      - remaining spikes often migrate proximally into `thigh_*` or other non-distal bodies
+    - implication:
+      - abrupt locomotion-time representation switching was part of the remaining lower-limb mismatch
+      - the stateful transition policy is now the best measured locomotion-composition baseline
+      - the next lower-limb pass should inspect more proximal composition or target-velocity handling, not widen the distal explicit-only set again
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

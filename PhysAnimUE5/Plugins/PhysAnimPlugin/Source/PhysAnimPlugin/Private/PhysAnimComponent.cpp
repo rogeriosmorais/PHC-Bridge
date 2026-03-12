@@ -126,6 +126,18 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec"),
 		-1.0f,
 		TEXT("Override for the Stage 1 distal locomotion target composition activation speed in cm/s. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimDistalLocomotionCompositionPolicyExitSpeedCmPerSec(
+		TEXT("physanim.DistalLocomotionCompositionPolicyExitSpeedCmPerSec"),
+		-1.0f,
+		TEXT("Override for the Stage 1 distal locomotion target composition exit speed in cm/s. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimDistalLocomotionCompositionPolicyEnterHoldSeconds(
+		TEXT("physanim.DistalLocomotionCompositionPolicyEnterHoldSeconds"),
+		-1.0f,
+		TEXT("Override for the Stage 1 distal locomotion target composition enter-hold in seconds. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimDistalLocomotionCompositionPolicyExitHoldSeconds(
+		TEXT("physanim.DistalLocomotionCompositionPolicyExitHoldSeconds"),
+		-1.0f,
+		TEXT("Override for the Stage 1 distal locomotion target composition exit-hold in seconds. Negative values keep the component default."));
 	TAutoConsoleVariable<float> CVarPhysAnimMaxAngularStepDegPerSec(
 		TEXT("physanim.MaxAngularStepDegPerSec"),
 		-1.0f,
@@ -357,7 +369,7 @@ namespace PhysAnimComponentInternal
 	FString BuildStabilizationSummary(const FPhysAnimStabilizationSettings& Settings)
 	{
 		return FString::Printf(
-			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f MassPolicy=%s MassBlend=%.2f FamilyPd=%s FamilyPdBlend=%.2f ToePolicy=%s ToeBlend=%.2f LowerLimbRangePolicy=%s LowerLimbRangeBlend=%.2f DistalMovePolicy=%s DistalMoveBlend=%.2f DistalMoveSpeed=%.1f DistalMoveCompose=%s DistalMoveComposeSpeed=%.1f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
+			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f MassPolicy=%s MassBlend=%.2f FamilyPd=%s FamilyPdBlend=%.2f ToePolicy=%s ToeBlend=%.2f LowerLimbRangePolicy=%s LowerLimbRangeBlend=%.2f DistalMovePolicy=%s DistalMoveBlend=%.2f DistalMoveSpeed=%.1f DistalMoveCompose=%s DistalMoveComposeEnter=%.1f DistalMoveComposeExit=%.1f EnterHold=%.2f ExitHold=%.2f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
 			Settings.bForceZeroActions ? TEXT("true") : TEXT("false"),
 			Settings.ActionScale,
 			Settings.ActionClampAbs,
@@ -377,6 +389,9 @@ namespace PhysAnimComponentInternal
 			Settings.DistalLocomotionTargetPolicyActivationSpeedCmPerSec,
 			Settings.bApplyTrainingAlignedDistalLocomotionCompositionPolicy ? TEXT("true") : TEXT("false"),
 			Settings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec,
+			Settings.DistalLocomotionCompositionPolicyExitSpeedCmPerSec,
+			Settings.DistalLocomotionCompositionPolicyEnterHoldSeconds,
+			Settings.DistalLocomotionCompositionPolicyExitHoldSeconds,
 			Settings.MaxAngularStepDegreesPerSecond,
 			Settings.AngularStrengthMultiplier,
 			Settings.AngularDampingRatioMultiplier,
@@ -1700,6 +1715,18 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimDistalLocomotionCompositionPolicyActivationSpeedCmPerSec,
 			EffectiveSettings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec);
+	EffectiveSettings.DistalLocomotionCompositionPolicyExitSpeedCmPerSec =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimDistalLocomotionCompositionPolicyExitSpeedCmPerSec,
+			EffectiveSettings.DistalLocomotionCompositionPolicyExitSpeedCmPerSec);
+	EffectiveSettings.DistalLocomotionCompositionPolicyEnterHoldSeconds =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimDistalLocomotionCompositionPolicyEnterHoldSeconds,
+			EffectiveSettings.DistalLocomotionCompositionPolicyEnterHoldSeconds);
+	EffectiveSettings.DistalLocomotionCompositionPolicyExitHoldSeconds =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimDistalLocomotionCompositionPolicyExitHoldSeconds,
+			EffectiveSettings.DistalLocomotionCompositionPolicyExitHoldSeconds);
 	EffectiveSettings.MaxAngularStepDegreesPerSecond =
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimMaxAngularStepDegPerSec,
@@ -2283,11 +2310,28 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const FVector OwnerVelocity = OwnerActor->GetVelocity();
 		return FVector(OwnerVelocity.X, OwnerVelocity.Y, 0.0f).Size();
 	}();
-	const bool bApplyTrainingAlignedDistalLocomotionCompositionPolicy =
-		ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(
-			EffectiveSettings.bApplyTrainingAlignedDistalLocomotionCompositionPolicy,
-			OwnerPlanarSpeedCmPerSec,
-			EffectiveSettings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec);
+	const float RuntimeDeltaTimeSeconds =
+		GetWorld() ? FMath::Max(0.0f, GetWorld()->GetDeltaSeconds()) : 0.0f;
+	if (EffectiveSettings.bApplyTrainingAlignedDistalLocomotionCompositionPolicy)
+	{
+		bDistalLocomotionCompositionModeActive =
+			UpdateBinarySpeedModeWithHysteresis(
+				bDistalLocomotionCompositionModeActive,
+				OwnerPlanarSpeedCmPerSec,
+				EffectiveSettings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec,
+				EffectiveSettings.DistalLocomotionCompositionPolicyExitSpeedCmPerSec,
+				EffectiveSettings.DistalLocomotionCompositionPolicyEnterHoldSeconds,
+				EffectiveSettings.DistalLocomotionCompositionPolicyExitHoldSeconds,
+				RuntimeDeltaTimeSeconds,
+				DistalLocomotionCompositionTimeAboveEnterSeconds,
+				DistalLocomotionCompositionTimeBelowExitSeconds);
+	}
+	else
+	{
+		bDistalLocomotionCompositionModeActive = false;
+		DistalLocomotionCompositionTimeAboveEnterSeconds = 0.0f;
+		DistalLocomotionCompositionTimeBelowExitSeconds = 0.0f;
+	}
 
 	PhysicsControl->SetControlsInSetEnabled(TEXT("All"), false);
 	PhysicsControl->SetControlsInSetUseSkeletalAnimation(
@@ -2327,7 +2371,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale;
 
 		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
-		if (bApplyTrainingAlignedDistalLocomotionCompositionPolicy &&
+		if (bDistalLocomotionCompositionModeActive &&
 			ShouldForceExplicitOnlyDistalLocomotionTargetMode(BoneName))
 		{
 			PhysicsControl->SetControlUseSkeletalAnimation(
@@ -3338,6 +3382,9 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	PolicyControlTicksExecuted = 0;
 	PolicyControlTicksSkipped = 0;
 	LastPolicyControlUpdateTimeSeconds = -1.0;
+	bDistalLocomotionCompositionModeActive = false;
+	DistalLocomotionCompositionTimeAboveEnterSeconds = 0.0f;
+	DistalLocomotionCompositionTimeBelowExitSeconds = 0.0f;
 	LastMovementSmokeLocalIntent = FVector::ZeroVector;
 	LastMovementSmokeWorldIntent = FVector::ZeroVector;
 	LastMovementSmokeOwnerVelocityCmPerSecond = FVector::ZeroVector;
@@ -3719,21 +3766,65 @@ float UPhysAnimComponent::ResolveTrainingAlignedDistalLocomotionTargetScaleForBo
 	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);
 }
 
-bool UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(
-	bool bApplyTrainingAlignedDistalLocomotionCompositionPolicy,
-	float OwnerPlanarSpeedCmPerSec,
-	float ActivationSpeedCmPerSec)
+bool UPhysAnimComponent::UpdateBinarySpeedModeWithHysteresis(
+	bool bCurrentModeActive,
+	float SpeedCmPerSec,
+	float EnterThresholdCmPerSec,
+	float ExitThresholdCmPerSec,
+	float EnterHoldSeconds,
+	float ExitHoldSeconds,
+	float DeltaTimeSeconds,
+	float& InOutTimeAboveEnterSeconds,
+	float& InOutTimeBelowExitSeconds)
 {
-	return bApplyTrainingAlignedDistalLocomotionCompositionPolicy &&
-		OwnerPlanarSpeedCmPerSec > FMath::Max(0.0f, ActivationSpeedCmPerSec);
+	const float ClampedDeltaTime = FMath::Max(0.0f, DeltaTimeSeconds);
+	const float EnterThreshold = FMath::Max(0.0f, EnterThresholdCmPerSec);
+	const float ExitThreshold = FMath::Min(EnterThreshold, FMath::Max(0.0f, ExitThresholdCmPerSec));
+	const float EnterHold = FMath::Max(0.0f, EnterHoldSeconds);
+	const float ExitHold = FMath::Max(0.0f, ExitHoldSeconds);
+
+	if (bCurrentModeActive)
+	{
+		InOutTimeAboveEnterSeconds = 0.0f;
+		if (SpeedCmPerSec <= ExitThreshold)
+		{
+			InOutTimeBelowExitSeconds += ClampedDeltaTime;
+			if (InOutTimeBelowExitSeconds >= ExitHold)
+			{
+				InOutTimeBelowExitSeconds = 0.0f;
+				return false;
+			}
+		}
+		else
+		{
+			InOutTimeBelowExitSeconds = 0.0f;
+		}
+
+		return true;
+	}
+
+	InOutTimeBelowExitSeconds = 0.0f;
+	if (SpeedCmPerSec >= EnterThreshold)
+	{
+		InOutTimeAboveEnterSeconds += ClampedDeltaTime;
+		if (InOutTimeAboveEnterSeconds >= EnterHold)
+		{
+			InOutTimeAboveEnterSeconds = 0.0f;
+			return true;
+		}
+	}
+	else
+	{
+		InOutTimeAboveEnterSeconds = 0.0f;
+	}
+
+	return false;
 }
 
 bool UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(FName BoneName)
 {
-	return BoneName == TEXT("calf_l") ||
-		BoneName == TEXT("foot_l") ||
+	return BoneName == TEXT("foot_l") ||
 		BoneName == TEXT("ball_l") ||
-		BoneName == TEXT("calf_r") ||
 		BoneName == TEXT("foot_r") ||
 		BoneName == TEXT("ball_r");
 }

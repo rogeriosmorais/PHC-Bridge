@@ -548,6 +548,25 @@ This gives us the highest-value correction with the least ambiguity.
       - representation mode is still a valid mismatch surface
       - but simple whole-chain explicit-only switching is not a clean new baseline
       - the next pass should move to locomotion transition handling or a more proximal lower-limb composition experiment rather than more distal-set widening
+  - lower-limb composition transition result:
+    - reverted the affected set back to:
+      - `foot_*`
+      - `ball_*`
+    - added stateful locomotion-time composition switching:
+      - enter threshold `50 cm/s`
+      - exit threshold `100 cm/s`
+      - enter hold `0.20 s`
+      - exit hold `0.20 s`
+    - deterministic movement smoke stays green with no fail-stop
+    - measured result:
+      - no locomotion-start discontinuity
+      - forward outliers are materially lower than the failed full-chain pass
+      - backward outliers are also materially lower than the failed full-chain pass
+      - some remaining peaks migrate proximally into `thigh_*` or other non-distal bodies instead of disappearing entirely
+    - current read:
+      - abrupt runtime representation flips were part of the locomotion problem
+      - stateful hysteresis/dwell is the best measured locomotion-composition baseline so far
+      - the next pass should inspect more proximal lower-limb composition or target-velocity handling, not widen the distal explicit-only set again
 
 ## Working Hypothesis
 

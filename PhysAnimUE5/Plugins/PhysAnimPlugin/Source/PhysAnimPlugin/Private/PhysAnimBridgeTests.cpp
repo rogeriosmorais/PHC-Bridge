@@ -966,19 +966,72 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		FPhysAnimStabilizationSettings Settings;
 		TestTrue(TEXT("Training-aligned distal locomotion composition policy is enabled by default"), Settings.bApplyTrainingAlignedDistalLocomotionCompositionPolicy);
 		TestEqual(TEXT("Training-aligned distal locomotion composition policy default activation speed is 50 cm/s"), Settings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec, 50.0f);
+		TestEqual(TEXT("Training-aligned distal locomotion composition policy default exit speed is 100 cm/s"), Settings.DistalLocomotionCompositionPolicyExitSpeedCmPerSec, 100.0f);
+		TestEqual(TEXT("Training-aligned distal locomotion composition policy default enter hold is 0.20 s"), Settings.DistalLocomotionCompositionPolicyEnterHoldSeconds, 0.20f);
+		TestEqual(TEXT("Training-aligned distal locomotion composition policy default exit hold is 0.20 s"), Settings.DistalLocomotionCompositionPolicyExitHoldSeconds, 0.20f);
 
+		float TimeAboveEnterSeconds = 0.0f;
+		float TimeBelowExitSeconds = 0.0f;
 		TestTrue(
-			TEXT("Distal locomotion composition policy disabled state returns false"),
-			!UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(false, 600.0f, 50.0f));
+			TEXT("Below-threshold locomotion composition mode remains inactive"),
+			!UPhysAnimComponent::UpdateBinarySpeedModeWithHysteresis(
+				false,
+				25.0f,
+				250.0f,
+				100.0f,
+				0.20f,
+				0.20f,
+				0.10f,
+				TimeAboveEnterSeconds,
+				TimeBelowExitSeconds));
 		TestTrue(
-			TEXT("Below-threshold speed disables distal locomotion composition policy application"),
-			!UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(true, 25.0f, 50.0f));
+			TEXT("Enter hold prevents immediate locomotion composition activation"),
+			!UPhysAnimComponent::UpdateBinarySpeedModeWithHysteresis(
+				false,
+				300.0f,
+				250.0f,
+				100.0f,
+				0.20f,
+				0.20f,
+				0.10f,
+				TimeAboveEnterSeconds,
+				TimeBelowExitSeconds));
 		TestTrue(
-			TEXT("Enabled distal locomotion composition policy with sufficient speed applies"),
-			UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(true, 600.0f, 50.0f));
+			TEXT("Sustained high speed activates locomotion composition mode"),
+			UPhysAnimComponent::UpdateBinarySpeedModeWithHysteresis(
+				false,
+				300.0f,
+				250.0f,
+				100.0f,
+				0.20f,
+				0.20f,
+				0.10f,
+				TimeAboveEnterSeconds,
+				TimeBelowExitSeconds));
 		TestTrue(
-			TEXT("Calves enter explicit-only locomotion composition mode in the chain follow-up"),
-			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("calf_l")));
+			TEXT("Exit hold prevents immediate locomotion composition deactivation"),
+			UPhysAnimComponent::UpdateBinarySpeedModeWithHysteresis(
+				true,
+				90.0f,
+				250.0f,
+				100.0f,
+				0.20f,
+				0.20f,
+				0.10f,
+				TimeAboveEnterSeconds,
+				TimeBelowExitSeconds));
+		TestTrue(
+			TEXT("Sustained low speed deactivates locomotion composition mode"),
+			!UPhysAnimComponent::UpdateBinarySpeedModeWithHysteresis(
+				true,
+				90.0f,
+				250.0f,
+				100.0f,
+				0.20f,
+				0.20f,
+				0.10f,
+				TimeAboveEnterSeconds,
+				TimeBelowExitSeconds));
 		TestTrue(
 			TEXT("Feet enter explicit-only locomotion composition mode"),
 			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("foot_l")));
@@ -986,8 +1039,8 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Toes enter explicit-only locomotion composition mode"),
 			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("ball_r")));
 		TestFalse(
-			TEXT("Thighs remain on the non-distal locomotion composition path"),
-			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("thigh_l")));
+			TEXT("Calves stay on the non-distal locomotion composition path in the transition pass"),
+			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("calf_l")));
 		return true;
 	}
 
