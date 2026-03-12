@@ -810,3 +810,28 @@ Whenever new setup or gate evidence arrives:
   - objective current-reference contract fix
   - component tests and movement smoke both stayed green, with MovementSmoke completing successfully
   - this does not by itself claim a large locomotion breakthrough
+## 2026-03-12 - Mimic target data-origin alignment
+
+- Direction check:
+  - still worth continuing in the broader training/runtime alignment direction
+  - not worth reopening falsified lower-limb write smoothing, step-cap tuning, or multiplier reshuffling branches
+- New plan:
+  - [mimic-target-data-origin-alignment-plan.md](/F:/NewEngine/plans/stage1/40-design/mimic-target-data-origin-alignment-plan.md)
+- Sources re-checked before coding:
+  - UE PoseSearch sampler docs and local PoseSearch sampler source
+  - UE `CharacterMovement` docs
+  - ProtoMotions config and local `mimic_obs.py` / `mimic_utils.py` / `env.py`
+- Implemented:
+  - `mimic_target_poses` future targets now sample with `RootTransformOrigin = Identity`
+  - the bridge derives a Stage 1 proxy for Proto's `respawn_offset_relative_to_data` by sampling the selected current pose root once with the live mesh origin and once with identity origin
+  - that XY offset is subtracted from the current body reference samples
+  - the previously-correct terrain-relative `Z` normalization remains active
+- Verification:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
+- Result:
+  - keepable
+  - objective target-frame contract improvement
+  - movement smoke stayed stable and completed successfully
+  - locomotion remains mixed enough that this should be treated as another correct alignment step, not the final lower-limb fix

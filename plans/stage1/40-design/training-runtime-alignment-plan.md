@@ -70,6 +70,22 @@ Why this is not yet the final locomotion fix:
 - it is a correct current-reference contract fix, not a broad locomotion-response retune
 - deeper lower-limb outliers can still remain after this pass
 
+Most recent keepable data-origin pass:
+- align `mimic_target_poses` more closely with ProtoMotions' data-relative target-pose contract
+- sample future target poses with `RootTransformOrigin = Identity`
+- derive a Stage 1 XY data-origin proxy by sampling the selected current pose once with the live mesh origin and once with identity origin
+- subtract that XY offset from the current reference body samples while keeping the terrain-relative `Z` normalization
+
+Why this is a keep:
+- local ProtoMotions `mimic_obs.py` builds target poses in the motion-data frame
+- local ProtoMotions removes both terrain height and `respawn_offset_relative_to_data` from the current reference before building `mimic_target_poses`
+- the UE bridge previously fed world-origin dependent future targets into the target-pose packer
+- fresh component and movement smoke stayed green after the split
+
+Why this is not yet the final locomotion fix:
+- this is a Stage 1 proxy for Proto's respawn/data-origin contract, not a full respawn system
+- movement smoke stayed stable, but lower-limb outliers still remain
+
 Most recent falsified locomotion-time seam:
 - family-weighted lower-limb target-write smoothing
 

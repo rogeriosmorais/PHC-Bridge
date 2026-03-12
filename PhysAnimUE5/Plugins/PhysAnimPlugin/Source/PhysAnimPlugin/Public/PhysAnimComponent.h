@@ -237,6 +237,10 @@ private:
 	bool QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	bool GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& OutBodySamples, FString& OutError) const;
 	bool SampleFuturePoses(const FPoseSearchBlueprintResult& SearchResult, TArray<FPhysAnimFuturePoseSample>& OutFutureSamples, FString& OutError) const;
+	bool ResolveMimicTargetReferenceDataOffset(
+		const FPoseSearchBlueprintResult& SearchResult,
+		FVector2D& OutDataOffsetXY,
+		FString& OutError) const;
 	bool RunInference(FString& OutError);
 	FPhysAnimStabilizationSettings ResolveEffectiveStabilizationSettings() const;
 	void LogBridgeStateSnapshot(const TCHAR* Context) const;
@@ -499,6 +503,14 @@ public:
 		float GroundWorldZ);
 	static void MakeGroundRelativeCurrentReferenceBodySamples(
 		const TArray<FPhysAnimBodySample>& SourceBodySamples,
+		float GroundWorldZ,
+		TArray<FPhysAnimBodySample>& OutBodySamples);
+	static FVector2D ResolveMimicTargetReferenceDataOffsetXY(
+		const FVector& CurrentSelectedWorldRootPosition,
+		const FVector& CurrentSelectedDataRootPosition);
+	static void MakeMimicTargetCurrentReferenceBodySamples(
+		const TArray<FPhysAnimBodySample>& SourceBodySamples,
+		const FVector2D& DataOffsetXY,
 		float GroundWorldZ,
 		TArray<FPhysAnimBodySample>& OutBodySamples);
 	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);

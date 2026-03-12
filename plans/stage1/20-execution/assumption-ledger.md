@@ -554,3 +554,17 @@ The next meaningful ledger updates should come from:
 - Current working assumption:
   - the current-state reference used for `mimic_target_poses` should be terrain-relative in `Z`
   - full XY data-origin / respawn-offset alignment is still a separate future seam and should not be invented in Stage 1 without direct evidence
+## 2026-03-12 - Mimic target data-origin contract
+
+- Previous assumption:
+  - feeding world-origin dependent future target samples into `mimic_target_poses` was close enough
+- Status:
+  - falsified
+- Evidence:
+  - local ProtoMotions `mimic_obs.py` builds target poses in the motion-data frame
+  - local ProtoMotions normalizes the current reference by subtracting both terrain height and `respawn_offset_relative_to_data`
+  - UE PoseSearch sampling with `RootTransformOrigin = SkeletalMesh->GetComponentTransform()` makes future targets world-origin dependent
+  - switching future target sampling to identity origin and subtracting a matching XY data-origin proxy from the current reference kept component tests and deterministic movement smoke green
+- Current working assumption:
+  - `mimic_target_poses` should use data-origin-aligned future targets plus a similarly normalized current reference
+  - the current Stage 1 XY offset is a proxy derived from the selected current animation root, not a full replacement for Proto's respawn system

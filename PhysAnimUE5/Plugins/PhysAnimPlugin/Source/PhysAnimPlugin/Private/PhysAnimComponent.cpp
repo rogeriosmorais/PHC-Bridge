@@ -700,9 +700,17 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			return;
 		}
 
+		FVector2D MimicTargetReferenceDataOffsetXY = FVector2D::ZeroVector;
+		if (!ResolveMimicTargetReferenceDataOffset(SearchResult, MimicTargetReferenceDataOffsetXY, TickError))
+		{
+			FailStop(TickError);
+			return;
+		}
+
+		const float MimicTargetReferenceGroundHeight = ResolveSelfObservationGroundHeight(CurrentBodySamples);
 		if (!PhysAnimBridge::BuildSelfObservation(
 			CurrentBodySamples,
-			ResolveSelfObservationGroundHeight(CurrentBodySamples),
+			MimicTargetReferenceGroundHeight,
 			SelfObservationBuffer,
 			TickError))
 		{
@@ -711,9 +719,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 
 		TArray<FPhysAnimBodySample> MimicCurrentReferenceBodySamples;
-		MakeGroundRelativeCurrentReferenceBodySamples(
+		MakeMimicTargetCurrentReferenceBodySamples(
 			CurrentBodySamples,
-			ResolveSelfObservationGroundHeight(CurrentBodySamples),
+			MimicTargetReferenceDataOffsetXY,
+			MimicTargetReferenceGroundHeight,
 			MimicCurrentReferenceBodySamples);
 
 		if (!PhysAnimBridge::BuildMimicTargetPoses(MimicCurrentReferenceBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, TickError))
@@ -1646,7 +1655,7 @@ bool UPhysAnimComponent::SampleFuturePoses(
 		SamplerInput.AnimationTime = FMath::Clamp(SearchResult.SelectedTime + FutureOffset, 0.0f, AnimationLength);
 		SamplerInput.bMirrored = SearchResult.bIsMirrored;
 		SamplerInput.BlendParameters = SearchResult.BlendParameters;
-		SamplerInput.RootTransformOrigin = SkeletalMesh->GetComponentTransform();
+		SamplerInput.RootTransformOrigin = FTransform::Identity;
 
 		FPoseSearchAssetSamplerPose SampledPose = UPoseSearchAssetSamplerLibrary::SamplePose(LocalAnimInstance, SamplerInput);
 
@@ -1670,6 +1679,52 @@ bool UPhysAnimComponent::SampleFuturePoses(
 		OutFutureSamples.Add(MoveTemp(FutureSample));
 	}
 
+	return true;
+}
+
+bool UPhysAnimComponent::ResolveMimicTargetReferenceDataOffset(
+	const FPoseSearchBlueprintResult& SearchResult,
+	FVector2D& OutDataOffsetXY,
+	FString& OutError) const
+{
+	const UAnimInstance* const LocalAnimInstance = this->AnimInstance.Get();
+	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!LocalAnimInstance || !SkeletalMesh)
+	{
+		OutError = TEXT("Mimic target reference alignment requires both the AnimInstance and skeletal mesh.");
+		return false;
+	}
+
+	const UAnimationAsset* const AnimationAsset = Cast<UAnimationAsset>(SearchResult.SelectedAnim);
+	if (!AnimationAsset)
+	{
+		OutError = TEXT("PoseSearch result did not return a UAnimationAsset.");
+		return false;
+	}
+
+	const float AnimationTime = FMath::Clamp(SearchResult.SelectedTime, 0.0f, AnimationAsset->GetPlayLength());
+
+	FPoseSearchAssetSamplerInput WorldSamplerInput;
+	WorldSamplerInput.Animation = AnimationAsset;
+	WorldSamplerInput.AnimationTime = AnimationTime;
+	WorldSamplerInput.bMirrored = SearchResult.bIsMirrored;
+	WorldSamplerInput.BlendParameters = SearchResult.BlendParameters;
+	WorldSamplerInput.RootTransformOrigin = SkeletalMesh->GetComponentTransform();
+
+	FPoseSearchAssetSamplerInput DataSamplerInput = WorldSamplerInput;
+	DataSamplerInput.RootTransformOrigin = FTransform::Identity;
+
+	FPoseSearchAssetSamplerPose WorldPose = UPoseSearchAssetSamplerLibrary::SamplePose(LocalAnimInstance, WorldSamplerInput);
+	FPoseSearchAssetSamplerPose DataPose = UPoseSearchAssetSamplerLibrary::SamplePose(LocalAnimInstance, DataSamplerInput);
+
+	const FTransform WorldRootTransform =
+		UPoseSearchAssetSamplerLibrary::GetTransformByName(WorldPose, PhysAnimBridge::GetRootBoneName(), EPoseSearchAssetSamplerSpace::World);
+	const FTransform DataRootTransform =
+		UPoseSearchAssetSamplerLibrary::GetTransformByName(DataPose, PhysAnimBridge::GetRootBoneName(), EPoseSearchAssetSamplerSpace::World);
+
+	OutDataOffsetXY = ResolveMimicTargetReferenceDataOffsetXY(
+		PhysAnimBridge::UeWorldVectorToProtoRuntime(WorldRootTransform.GetLocation()),
+		PhysAnimBridge::UeWorldVectorToProtoRuntime(DataRootTransform.GetLocation()));
 	return true;
 }
 
@@ -3833,6 +3888,30 @@ void UPhysAnimComponent::MakeGroundRelativeCurrentReferenceBodySamples(
 	OutBodySamples = SourceBodySamples;
 	for (FPhysAnimBodySample& BodySample : OutBodySamples)
 	{
+		BodySample.Position.Z -= GroundWorldZ;
+	}
+}
+
+FVector2D UPhysAnimComponent::ResolveMimicTargetReferenceDataOffsetXY(
+	const FVector& CurrentSelectedWorldRootPosition,
+	const FVector& CurrentSelectedDataRootPosition)
+{
+	return FVector2D(
+		CurrentSelectedWorldRootPosition.X - CurrentSelectedDataRootPosition.X,
+		CurrentSelectedWorldRootPosition.Y - CurrentSelectedDataRootPosition.Y);
+}
+
+void UPhysAnimComponent::MakeMimicTargetCurrentReferenceBodySamples(
+	const TArray<FPhysAnimBodySample>& SourceBodySamples,
+	const FVector2D& DataOffsetXY,
+	float GroundWorldZ,
+	TArray<FPhysAnimBodySample>& OutBodySamples)
+{
+	OutBodySamples = SourceBodySamples;
+	for (FPhysAnimBodySample& BodySample : OutBodySamples)
+	{
+		BodySample.Position.X -= DataOffsetXY.X;
+		BodySample.Position.Y -= DataOffsetXY.Y;
 		BodySample.Position.Z -= GroundWorldZ;
 	}
 }

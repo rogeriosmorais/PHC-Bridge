@@ -502,6 +502,22 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("Ground-relative distal sample subtracts floor Z"), GroundRelativeBodySamples[1].Position.Z, -5.0);
 		TestEqual(TEXT("Ground-relative helper preserves X"), GroundRelativeBodySamples[1].Position.X, SourceBodySamples[1].Position.X);
 		TestEqual(TEXT("Ground-relative helper preserves source samples"), SourceBodySamples[0].Position.Z, 130.0);
+
+		const FVector2D DataOffsetXY = UPhysAnimComponent::ResolveMimicTargetReferenceDataOffsetXY(
+			FVector(140.0, 55.0, 0.0),
+			FVector(40.0, 25.0, 0.0));
+		TestEqual(TEXT("Mimic current-reference data offset uses selected root X"), DataOffsetXY.X, 100.0);
+		TestEqual(TEXT("Mimic current-reference data offset uses selected root Y"), DataOffsetXY.Y, 30.0);
+
+		TArray<FPhysAnimBodySample> MimicCurrentReferenceBodySamples;
+		UPhysAnimComponent::MakeMimicTargetCurrentReferenceBodySamples(
+			SourceBodySamples,
+			DataOffsetXY,
+			100.0f,
+			MimicCurrentReferenceBodySamples);
+		TestEqual(TEXT("Mimic current-reference helper subtracts X offset"), MimicCurrentReferenceBodySamples[0].Position.X, -90.0);
+		TestEqual(TEXT("Mimic current-reference helper subtracts Y offset"), MimicCurrentReferenceBodySamples[0].Position.Y, -10.0);
+		TestEqual(TEXT("Mimic current-reference helper subtracts terrain-relative Z"), MimicCurrentReferenceBodySamples[0].Position.Z, 30.0);
 		return true;
 	}
 
