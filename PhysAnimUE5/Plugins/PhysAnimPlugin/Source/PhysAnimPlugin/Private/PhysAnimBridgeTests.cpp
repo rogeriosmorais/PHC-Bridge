@@ -832,7 +832,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("spine_01"), 0.5f),
 			1.125f);
 		TestEqual(
-			TEXT("Distal toes now keep baseline extra damping with the locomotion leg family"),
+			TEXT("Distal toes keep baseline extra damping with the locomotion leg family"),
 			UPhysAnimComponent::ResolveTrainingAlignedControlExtraDampingScaleForBone(TEXT("ball_r"), 1.0f),
 			1.0f);
 		TestEqual(

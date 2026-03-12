@@ -313,3 +313,15 @@ Whenever new setup or gate evidence arrives:
     - current runtime read:
       - this is a modest improvement, not a decisive fix
       - the next fit should be more targeted, likely toe-specific extra damping rather than another broad family reassignment
+  - March 12, 2026 toe-local follow-up note:
+    - tested toe-specific follow-ups after the toe-family reassignment:
+      - raise `ball_*` extra damping above the leg baseline
+      - raise `ball_*` strength slightly above the leg baseline
+    - measured result:
+      - both variants remained stable
+      - both variants were worse than the committed toe-family mapping baseline
+      - toe-only extra damping increased both root and toe peaks
+      - toe-only strength increase was the worst result, with a large backward toe angular spike
+    - current runtime read:
+      - the committed toe-family reassignment remains the best measured toe-focused fit so far
+      - the next pass should stop retuning isolated toe gains and instead inspect a different mismatch surface

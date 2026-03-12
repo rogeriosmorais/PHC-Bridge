@@ -216,6 +216,14 @@ Only the orchestrator updates status.
     - implication:
       - the remaining fit problem is now more local than family-wide
       - next fit should target toe-specific damping response before changing broader lower-limb families again
+  - March 12, 2026 toe-local fit follow-up:
+    - the first two isolated toe-local fits were both worse than the committed toe-family mapping
+    - current evidence:
+      - toe-only extra damping is not the right next lever
+      - toe-only strength increase is also not the right next lever
+    - implication:
+      - the remaining lower-limb mismatch is probably not solved by simple isolated `ball_*` gain retuning
+      - the next alignment pass should move away from toe-only tuning and inspect a different lower-limb mismatch surface
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`
