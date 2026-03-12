@@ -893,3 +893,21 @@ If that hypothesis is correct:
   - the explicit-only distal composition mode remains necessary
   - stickier exit handling is directionally correct
   - the next pass should investigate the remaining mid-phase deactivation seam rather than deleting the mode or reopening broad lower-limb tuning
+## 2026-03-12 - Distal composition intent grace
+
+- Added a `0.20s` recent-intent grace window on top of the committed intent-aware latch.
+- Movement intent remains resolved from:
+  - pending movement input
+  - last movement input
+  - current movement acceleration
+- Outcome:
+  - keepable improvement
+  - within-phase deactivation count dropped from `6 -> 4`
+  - `Forward`, `StrafeLeft`, `StrafeRight`, and `Complete` improved on max angular speed
+  - `Backward` max regressed, so the pass narrows but does not close the remaining seam
+- Additional harness correction:
+  - `MovementTraceSmoke` regression coverage now parses `frames.csv` with UE's CSV parser, matching the current trace output design
+- Updated read:
+  - broader training/runtime alignment remains worth continuing
+  - this transition-policy refinement is worth keeping
+  - the next pass should be selected from the cleaned movement trace as a narrower transition/representation seam, not another guessed lower-limb retune

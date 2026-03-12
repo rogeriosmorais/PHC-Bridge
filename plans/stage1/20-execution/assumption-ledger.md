@@ -646,3 +646,16 @@ The next meaningful ledger updates should come from:
 - Updated assumption:
   - distal composition mode needs stickier transition handling than a pure speed hysteresis
   - the next remaining seam is not simple on/off removal, but why mode still drops out in a few live locomotion windows
+## 2026-03-12 - Distal composition needs a short recent-intent grace window
+
+- Assumption tested:
+  - the remaining within-phase distal-composition dropouts are partly caused by brief gaps between active locomotion intent and the current speed/acceleration surfaces
+- Result:
+  - supported
+- Evidence:
+  - after adding a `0.20s` recent-intent grace window, within-phase flips dropped from `6 -> 4`
+  - `Forward`, `StrafeLeft`, `StrafeRight`, and `Complete` all improved on max angular speed
+  - `Backward` max regressed, but remained stable and the phase p95 stayed acceptable
+- Updated assumption:
+  - the distal composition policy should stay sticky for a short recent-intent window
+  - the remaining issue is narrower than before and should be investigated from the cleaned movement trace, not by reopening broad lower-limb heuristics

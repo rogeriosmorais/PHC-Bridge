@@ -15,6 +15,7 @@
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "PhysicsEngine/PhysicsConstraintTemplate.h"
 #include "PhysicsEngine/SkeletalBodySetup.h"
+#include "Serialization/Csv/CsvParser.h"
 #include "PhysicsControlActor.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
@@ -152,27 +153,30 @@ namespace
 				return true;
 			}
 
-			TArray<FString> FrameLines;
-			FramesCsv.ParseIntoArrayLines(FrameLines, false);
-			if (FrameLines.Num() < 2)
+			const FCsvParser FrameParser(FramesCsv);
+			const FCsvParser::FRows& FrameRows = FrameParser.GetRows();
+			if (FrameRows.Num() < 2)
 			{
 				Test->AddError(FString::Printf(TEXT("%s Trace frame CSV contained no data rows: %s"), Prefix, *FramesPath));
 				return true;
 			}
 
-			const FString& HeaderLine = FrameLines[0];
-			if (!HeaderLine.Contains(TEXT("self_observation_root_height")) ||
-				!HeaderLine.Contains(TEXT("mimic_target_poses_mean_abs")) ||
-				!HeaderLine.Contains(TEXT("terrain_center")) ||
-				!HeaderLine.Contains(TEXT("movement_smoke_phase")) ||
-				!HeaderLine.Contains(TEXT("distal_locomotion_composition_mode_active")))
+			TArray<FString> HeaderFields;
+			for (const TCHAR* Field : FrameRows[0])
+			{
+				HeaderFields.Add(Field);
+			}
+
+			if (!HeaderFields.Contains(TEXT("self_observation_root_height")) ||
+				!HeaderFields.Contains(TEXT("mimic_target_poses_mean_abs")) ||
+				!HeaderFields.Contains(TEXT("terrain_center")) ||
+				!HeaderFields.Contains(TEXT("movement_smoke_phase")) ||
+				!HeaderFields.Contains(TEXT("distal_locomotion_composition_mode_active")))
 			{
 				Test->AddError(FString::Printf(TEXT("%s Trace frame CSV header is missing expected summary fields."), Prefix));
 				return true;
 			}
 
-			TArray<FString> HeaderFields;
-			HeaderLine.ParseIntoArray(HeaderFields, TEXT(","), false);
 			const int32 SampledPolicyStepIndex = HeaderFields.IndexOfByKey(TEXT("sampled_policy_step"));
 			const int32 MovementSmokePhaseIndex = HeaderFields.IndexOfByKey(TEXT("movement_smoke_phase"));
 			if (SampledPolicyStepIndex == INDEX_NONE || MovementSmokePhaseIndex == INDEX_NONE)
@@ -184,31 +188,34 @@ namespace
 			bool bFoundNamedMovementPhase = false;
 			bool bFoundBlankMovementPhase = false;
 			bool bFoundNonPolicyStepRow = false;
-			for (int32 LineIndex = 1; LineIndex < FrameLines.Num(); ++LineIndex)
+			for (int32 RowIndex = 1; RowIndex < FrameRows.Num(); ++RowIndex)
 			{
-				const FString& Line = FrameLines[LineIndex];
 				TArray<FString> RowFields;
-				Line.ParseIntoArray(RowFields, TEXT(","), false);
+				for (const TCHAR* Field : FrameRows[RowIndex])
+				{
+					RowFields.Add(Field);
+				}
+
 				if (!RowFields.IsValidIndex(SampledPolicyStepIndex) || !RowFields.IsValidIndex(MovementSmokePhaseIndex))
 				{
-					Test->AddError(FString::Printf(TEXT("%s Trace frame CSV row %d had an unexpected field count."), Prefix, LineIndex));
+					Test->AddError(FString::Printf(TEXT("%s Trace frame CSV row %d had an unexpected field count."), Prefix, RowIndex));
 					return true;
 				}
 
-				if (RowFields[SampledPolicyStepIndex] != TEXT("true"))
+				if (!RowFields[SampledPolicyStepIndex].Equals(TEXT("true"), ESearchCase::IgnoreCase))
 				{
 					bFoundNonPolicyStepRow = true;
 				}
 				const FString MovementSmokePhase = RowFields[MovementSmokePhaseIndex];
-				if (MovementSmokePhase == TEXT("\"\"") || MovementSmokePhase.IsEmpty())
+				if (MovementSmokePhase.IsEmpty())
 				{
 					bFoundBlankMovementPhase = true;
 				}
-				if (MovementSmokePhase == TEXT("\"Forward\"") ||
-					MovementSmokePhase == TEXT("\"Backward\"") ||
-					MovementSmokePhase == TEXT("\"StrafeLeft\"") ||
-					MovementSmokePhase == TEXT("\"StrafeRight\"") ||
-					MovementSmokePhase == TEXT("\"Idle_00\""))
+				if (MovementSmokePhase == TEXT("Forward") ||
+					MovementSmokePhase == TEXT("Backward") ||
+					MovementSmokePhase == TEXT("StrafeLeft") ||
+					MovementSmokePhase == TEXT("StrafeRight") ||
+					MovementSmokePhase == TEXT("Idle_00"))
 				{
 					bFoundNamedMovementPhase = true;
 				}
@@ -275,9 +282,9 @@ namespace
 
 	int32 CountDelimitedFields(const FString& Value)
 	{
-		TArray<FString> Fields;
-		Value.ParseIntoArray(Fields, TEXT(","), false);
-		return Fields.Num();
+		const FCsvParser Parser(Value);
+		const FCsvParser::FRows& Rows = Parser.GetRows();
+		return Rows.Num() > 0 ? Rows[0].Num() : 0;
 	}
 
 	FPhysAnimBridgeTraceSessionMetadata MakeTraceSessionMetadata(const FString& SessionId)
@@ -1607,6 +1614,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("Training-aligned distal locomotion composition policy default activation speed is 50 cm/s"), Settings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec, 50.0f);
 		TestEqual(TEXT("Training-aligned distal locomotion composition policy default exit speed is 100 cm/s"), Settings.DistalLocomotionCompositionPolicyExitSpeedCmPerSec, 100.0f);
 		TestEqual(TEXT("Training-aligned distal locomotion composition policy default enter hold is 0.20 s"), Settings.DistalLocomotionCompositionPolicyEnterHoldSeconds, 0.20f);
+		TestEqual(TEXT("Training-aligned distal locomotion composition policy default intent grace is 0.20 s"), Settings.DistalLocomotionCompositionPolicyIntentGraceSeconds, 0.20f);
 		TestEqual(TEXT("Training-aligned distal locomotion composition policy default exit hold is 0.20 s"), Settings.DistalLocomotionCompositionPolicyExitHoldSeconds, 0.20f);
 
 		float TimeAboveEnterSeconds = 0.0f;

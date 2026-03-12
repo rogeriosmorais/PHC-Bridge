@@ -97,6 +97,9 @@ struct FPhysAnimStabilizationSettings
 	float DistalLocomotionCompositionPolicyExitHoldSeconds = 0.20f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
+	float DistalLocomotionCompositionPolicyIntentGraceSeconds = 0.20f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float MaxAngularStepDegreesPerSecond = 180.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
@@ -157,6 +160,7 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(DistalLocomotionCompositionPolicyActivationSpeedCmPerSec, Other.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec) &&
 			FMath::IsNearlyEqual(DistalLocomotionCompositionPolicyExitSpeedCmPerSec, Other.DistalLocomotionCompositionPolicyExitSpeedCmPerSec) &&
 			FMath::IsNearlyEqual(DistalLocomotionCompositionPolicyEnterHoldSeconds, Other.DistalLocomotionCompositionPolicyEnterHoldSeconds) &&
+			FMath::IsNearlyEqual(DistalLocomotionCompositionPolicyIntentGraceSeconds, Other.DistalLocomotionCompositionPolicyIntentGraceSeconds) &&
 			FMath::IsNearlyEqual(DistalLocomotionCompositionPolicyExitHoldSeconds, Other.DistalLocomotionCompositionPolicyExitHoldSeconds) &&
 			FMath::IsNearlyEqual(MaxAngularStepDegreesPerSecond, Other.MaxAngularStepDegreesPerSecond) &&
 			FMath::IsNearlyEqual(AngularStrengthMultiplier, Other.AngularStrengthMultiplier) &&
@@ -396,6 +400,7 @@ private:
 	bool bDistalLocomotionCompositionModeActive = false;
 	float DistalLocomotionCompositionTimeAboveEnterSeconds = 0.0f;
 	float DistalLocomotionCompositionTimeBelowExitSeconds = 0.0f;
+	float DistalLocomotionCompositionTimeSinceActiveIntentSeconds = -1.0f;
 	FVector LastMovementSmokeLocalIntent = FVector::ZeroVector;
 	FVector LastMovementSmokeWorldIntent = FVector::ZeroVector;
 	FVector LastMovementSmokeOwnerVelocityCmPerSecond = FVector::ZeroVector;

@@ -990,3 +990,28 @@ Whenever new setup or gate evidence arrives:
   - the exit path was part of the problem
   - the intent-aware latch is worth keeping
   - but another transition seam still remains because the same mid-phase off transitions still occur
+## 2026-03-12 - Distal composition intent grace
+
+- Tested a short recent-intent grace window on top of the committed intent-aware latch.
+- Runtime change:
+  - distal composition mode now stays active for `0.20s` after live movement intent goes quiet
+  - live intent is still resolved from pending input, last input, or current movement acceleration
+- Also fixed the movement-trace regression test to parse `frames.csv` with UE's CSV parser instead of a raw comma split, which had become stale against the current trace schema.
+- Verification passed:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `PhysAnim.Component`
+  - `PhysAnim.PIE.MovementSmoke`
+  - `PhysAnim.PIE.MovementTraceSmoke`
+- Result:
+  - keepable improvement
+  - within-phase deactivation count dropped from `6 -> 4`
+  - phase maxima changed as follows:
+    - `Forward`: `5749 -> 5112 deg/s`
+    - `StrafeLeft`: `3782 -> 3595 deg/s`
+    - `StrafeRight`: `5489 -> 5088 deg/s`
+    - `Backward`: `4606 -> 5422 deg/s`
+    - `Complete`: `1607 -> 1276 deg/s`
+  - p95 angular speed improved in `Backward` and `Complete`, while `Forward` / `Strafe*` stayed mixed but acceptable
+- Current read:
+  - recent-intent grace is worth keeping
+  - the dominant remaining issue is now the last few within-phase dropouts, not broad locomotion instability
