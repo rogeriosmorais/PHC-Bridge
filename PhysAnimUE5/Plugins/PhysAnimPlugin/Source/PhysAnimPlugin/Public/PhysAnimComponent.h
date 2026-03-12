@@ -497,6 +497,10 @@ public:
 		float ObservationFrameRootZ,
 		float RootWorldZ,
 		float GroundWorldZ);
+	static void MakeGroundRelativeCurrentReferenceBodySamples(
+		const TArray<FPhysAnimBodySample>& SourceBodySamples,
+		float GroundWorldZ,
+		TArray<FPhysAnimBodySample>& OutBodySamples);
 	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);
 	static bool ShouldPrewarmPhysicsControlActivationPose(bool bHasSkeletalMeshComponent, bool bHasLeaderPoseComponent);
 	static float ResolveTrainingAlignedMassScaleForBone(FName BoneName, float BlendAlpha);

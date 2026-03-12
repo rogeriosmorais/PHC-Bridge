@@ -786,3 +786,27 @@ Whenever new setup or gate evidence arrives:
   - objective Proto target-contract fix
   - movement smoke remained stable and completed successfully
   - not a dramatic locomotion improvement by itself
+## 2026-03-12 - Mimic target current-reference ground alignment
+
+- Direction check:
+  - still worth continuing in the broader training/runtime alignment direction
+  - not worth reopening already falsified lower-limb write-smoothing or multiplier-shuffling branches
+- New plan:
+  - [mimic-target-current-reference-ground-plan.md](/F:/NewEngine/plans/stage1/40-design/mimic-target-current-reference-ground-plan.md)
+- Sources re-checked before coding:
+  - UE `CharacterMovement` docs and local floor-state usage
+  - UE PoseSearch sampler docs/source
+  - ProtoMotions config and local `mimic_obs.py`
+- Implemented:
+  - add a pure helper that copies `CurrentBodySamples` and subtracts the current walkable-floor `world Z` from every copied body-sample `Position.Z`
+  - use that terrain-relative copy only when calling `BuildMimicTargetPoses(...)`
+  - leave `self_obs`, future pose sampling, and local action conversion unchanged
+- Verification:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
+- Result:
+  - keepable
+  - objective current-reference contract fix
+  - component tests and movement smoke both stayed green, with MovementSmoke completing successfully
+  - this does not by itself claim a large locomotion breakthrough

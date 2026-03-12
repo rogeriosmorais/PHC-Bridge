@@ -710,7 +710,13 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			return;
 		}
 
-		if (!PhysAnimBridge::BuildMimicTargetPoses(CurrentBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, TickError))
+		TArray<FPhysAnimBodySample> MimicCurrentReferenceBodySamples;
+		MakeGroundRelativeCurrentReferenceBodySamples(
+			CurrentBodySamples,
+			ResolveSelfObservationGroundHeight(CurrentBodySamples),
+			MimicCurrentReferenceBodySamples);
+
+		if (!PhysAnimBridge::BuildMimicTargetPoses(MimicCurrentReferenceBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, TickError))
 		{
 			FailStop(TickError);
 			return;
@@ -3817,6 +3823,18 @@ float UPhysAnimComponent::ResolveSelfObservationSyntheticGroundHeight(
 {
 	const float DesiredRootHeight = RootWorldZ - GroundWorldZ;
 	return ObservationFrameRootZ - DesiredRootHeight;
+}
+
+void UPhysAnimComponent::MakeGroundRelativeCurrentReferenceBodySamples(
+	const TArray<FPhysAnimBodySample>& SourceBodySamples,
+	float GroundWorldZ,
+	TArray<FPhysAnimBodySample>& OutBodySamples)
+{
+	OutBodySamples = SourceBodySamples;
+	for (FPhysAnimBodySample& BodySample : OutBodySamples)
+	{
+		BodySample.Position.Z -= GroundWorldZ;
+	}
 }
 
 float UPhysAnimComponent::ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz)

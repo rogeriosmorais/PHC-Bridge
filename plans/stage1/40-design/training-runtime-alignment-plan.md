@@ -55,6 +55,21 @@ Why this is not yet the main locomotion fix:
 - movement smoke remained stable, but this was not a dramatic lower-limb outlier reduction
 - treat it as an objective target-contract correction, not as a large locomotion-response breakthrough
 
+Most recent keepable current-reference pass:
+- align the current-state reference used by `mimic_target_poses` with ProtoMotions' terrain-relative current-state normalization in `Z`
+- copy `CurrentBodySamples`
+- subtract the current walkable-floor `world Z` from every copied body-sample `Position.Z`
+- use that adjusted copy only for `BuildMimicTargetPoses(...)`
+
+Why this is a keep:
+- local ProtoMotions `mimic_obs.py` subtracts terrain height from all current body positions before building `mimic_target_poses`
+- the UE bridge previously built `mimic_target_poses` from raw world-space current body samples
+- fresh component and movement smoke stayed green after the fix
+
+Why this is not yet the final locomotion fix:
+- it is a correct current-reference contract fix, not a broad locomotion-response retune
+- deeper lower-limb outliers can still remain after this pass
+
 Most recent falsified locomotion-time seam:
 - family-weighted lower-limb target-write smoothing
 

@@ -541,3 +541,16 @@ The next meaningful ledger updates should come from:
 - Current working assumption:
   - the bridge should always emit the effective clamped future time delta for the time channel
   - treat this as a direct target-packing contract requirement, even when the locomotion impact is modest
+## 2026-03-12 - Mimic current-reference terrain normalization
+
+- Previous assumption:
+  - using raw world-space current body samples as the `mimic_target_poses` current reference was close enough
+- Status:
+  - falsified
+- Evidence:
+  - local ProtoMotions `mimic_obs.py` subtracts terrain height from all current body positions before building `mimic_target_poses`
+  - the UE bridge was still feeding raw world-space current body samples into `BuildMimicTargetPoses(...)`
+  - after switching the current reference to terrain-relative `Z`, component tests and deterministic movement smoke both stayed green
+- Current working assumption:
+  - the current-state reference used for `mimic_target_poses` should be terrain-relative in `Z`
+  - full XY data-origin / respawn-offset alignment is still a separate future seam and should not be invented in Stage 1 without direct evidence

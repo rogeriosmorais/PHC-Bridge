@@ -485,6 +485,23 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 				180.0f,
 				100.0f),
 			170.0f);
+
+		TArray<FPhysAnimBodySample> SourceBodySamples;
+		SourceBodySamples.SetNum(2);
+		SourceBodySamples[0].Position = FVector(10.0f, 20.0f, 130.0f);
+		SourceBodySamples[1].Position = FVector(-5.0f, 15.0f, 95.0f);
+
+		TArray<FPhysAnimBodySample> GroundRelativeBodySamples;
+		UPhysAnimComponent::MakeGroundRelativeCurrentReferenceBodySamples(
+			SourceBodySamples,
+			100.0f,
+			GroundRelativeBodySamples);
+
+		TestEqual(TEXT("Ground-relative body sample count is preserved"), GroundRelativeBodySamples.Num(), SourceBodySamples.Num());
+		TestEqual(TEXT("Ground-relative root sample subtracts floor Z"), GroundRelativeBodySamples[0].Position.Z, 30.0);
+		TestEqual(TEXT("Ground-relative distal sample subtracts floor Z"), GroundRelativeBodySamples[1].Position.Z, -5.0);
+		TestEqual(TEXT("Ground-relative helper preserves X"), GroundRelativeBodySamples[1].Position.X, SourceBodySamples[1].Position.X);
+		TestEqual(TEXT("Ground-relative helper preserves source samples"), SourceBodySamples[0].Position.Z, 130.0);
 		return true;
 	}
 
