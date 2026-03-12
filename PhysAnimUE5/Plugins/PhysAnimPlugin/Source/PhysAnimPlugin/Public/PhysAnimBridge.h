@@ -57,6 +57,11 @@ struct FPhysAnimControlTargetDiagnostics
 	FName MaxRawPolicyOffsetBoneName = NAME_None;
 	float MaxRawPolicyOffsetDegrees = 0.0f;
 	float MeanRawPolicyOffsetDegrees = 0.0f;
+	FName MaxLowerLimbLimitOccupancyBoneName = NAME_None;
+	float MaxLowerLimbLimitOccupancy = 0.0f;
+	float MaxLowerLimbLimitProxyDegrees = 0.0f;
+	float MeanLowerLimbLimitOccupancy = 0.0f;
+	int32 NumLowerLimbTargetsConsidered = 0;
 };
 
 struct FPhysAnimRuntimeInstabilitySettings

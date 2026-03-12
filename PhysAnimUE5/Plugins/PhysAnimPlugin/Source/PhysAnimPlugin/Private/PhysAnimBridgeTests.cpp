@@ -875,6 +875,28 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimConstraintLimitProxyTest,
+		"PhysAnim.Component.ConstraintLimitProxy",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimConstraintLimitProxyTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(
+			TEXT("Ankle-style limited constraint uses the tightest limited axis"),
+			UPhysAnimComponent::CalculateConstraintMinLimitedAngleDegrees(ACM_Limited, 35.0f, ACM_Limited, 10.0f, ACM_Limited, 20.0f),
+			10.0f);
+		TestEqual(
+			TEXT("Knee-style limited constraint uses the tightest limited axis"),
+			UPhysAnimComponent::CalculateConstraintMinLimitedAngleDegrees(ACM_Limited, 60.0f, ACM_Limited, 5.0f, ACM_Limited, 5.0f),
+			5.0f);
+		TestEqual(
+			TEXT("Free constraints do not report a limited-angle proxy"),
+			UPhysAnimComponent::CalculateConstraintMinLimitedAngleDegrees(ACM_Free, 45.0f, ACM_Free, 45.0f, ACM_Free, 45.0f),
+			0.0f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimCurrentPoseTargetOrientationTest,
 		"PhysAnim.Component.CurrentPoseTargetOrientation",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -1864,6 +1886,124 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 						RightToeConstraint->AngularRotationOffset.Roll,
 						RightToeConstraint->AngularRotationOffset.Pitch,
 						RightToeConstraint->AngularRotationOffset.Yaw)),
+					0.5f));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMannyAnkleConstraintAuthoringTest,
+		"PhysAnim.Component.MannyAnkleConstraintAuthoring",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimMannyAnkleConstraintAuthoringTest::RunTest(const FString& Parameters)
+	{
+		UPhysicsAsset* const PhysicsAsset =
+			LoadObject<UPhysicsAsset>(nullptr, TEXT("/Game/Characters/Mannequins/Rigs/PA_Mannequin.PA_Mannequin"));
+		TestNotNull(TEXT("Expected Manny physics asset should load"), PhysicsAsset);
+		if (!PhysicsAsset)
+		{
+			return false;
+		}
+
+		auto GetConstraint = [PhysicsAsset](FName ChildBoneName, FName ParentBoneName) -> FConstraintInstance*
+		{
+			const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(ChildBoneName, ParentBoneName);
+			if (ConstraintIndex == INDEX_NONE || !PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex))
+			{
+				return nullptr;
+			}
+
+			UPhysicsConstraintTemplate* const ConstraintTemplate = PhysicsAsset->ConstraintSetup[ConstraintIndex];
+			return ConstraintTemplate ? &ConstraintTemplate->DefaultInstance : nullptr;
+		};
+
+		FConstraintInstance* const LeftAnkleConstraint = GetConstraint(TEXT("foot_l"), TEXT("calf_l"));
+		FConstraintInstance* const RightAnkleConstraint = GetConstraint(TEXT("foot_r"), TEXT("calf_r"));
+		TestNotNull(TEXT("Left ankle direct Manny constraint should exist"), LeftAnkleConstraint);
+		TestNotNull(TEXT("Right ankle direct Manny constraint should exist"), RightAnkleConstraint);
+		if (!LeftAnkleConstraint || !RightAnkleConstraint)
+		{
+			return false;
+		}
+
+		auto MotionToString = [](EAngularConstraintMotion Motion) -> const TCHAR*
+		{
+			switch (Motion)
+			{
+			case ACM_Free:
+				return TEXT("Free");
+			case ACM_Limited:
+				return TEXT("Limited");
+			case ACM_Locked:
+				return TEXT("Locked");
+			default:
+				return TEXT("Unknown");
+			}
+		};
+
+		auto AbsVector = [](const FVector& Value) -> FVector
+		{
+			return FVector(FMath::Abs(Value.X), FMath::Abs(Value.Y), FMath::Abs(Value.Z));
+		};
+
+		auto LogConstraint = [this, MotionToString](const TCHAR* Label, const FConstraintInstance* Constraint)
+		{
+			this->AddInfo(FString::Printf(
+				TEXT("[PhysAnimAnkleAudit] side=%s twist=%s/%.1f swing1=%s/%.1f swing2=%s/%.1f pos1=(%.2f,%.2f,%.2f) pos2=(%.2f,%.2f,%.2f) pri1=(%.3f,%.3f,%.3f) sec1=(%.3f,%.3f,%.3f) pri2=(%.3f,%.3f,%.3f) sec2=(%.3f,%.3f,%.3f) rotOffset=(%.2f,%.2f,%.2f)"),
+				Label,
+				MotionToString(Constraint->GetAngularTwistMotion()),
+				Constraint->GetAngularTwistLimit(),
+				MotionToString(Constraint->GetAngularSwing1Motion()),
+				Constraint->GetAngularSwing1Limit(),
+				MotionToString(Constraint->GetAngularSwing2Motion()),
+				Constraint->GetAngularSwing2Limit(),
+				Constraint->Pos1.X, Constraint->Pos1.Y, Constraint->Pos1.Z,
+				Constraint->Pos2.X, Constraint->Pos2.Y, Constraint->Pos2.Z,
+				Constraint->PriAxis1.X, Constraint->PriAxis1.Y, Constraint->PriAxis1.Z,
+				Constraint->SecAxis1.X, Constraint->SecAxis1.Y, Constraint->SecAxis1.Z,
+				Constraint->PriAxis2.X, Constraint->PriAxis2.Y, Constraint->PriAxis2.Z,
+				Constraint->SecAxis2.X, Constraint->SecAxis2.Y, Constraint->SecAxis2.Z,
+				Constraint->AngularRotationOffset.Roll,
+				Constraint->AngularRotationOffset.Pitch,
+				Constraint->AngularRotationOffset.Yaw));
+		};
+
+		LogConstraint(TEXT("left"), LeftAnkleConstraint);
+		LogConstraint(TEXT("right"), RightAnkleConstraint);
+
+		TestEqual(TEXT("Left/right ankle twist motion matches"), LeftAnkleConstraint->GetAngularTwistMotion(), RightAnkleConstraint->GetAngularTwistMotion());
+		TestEqual(TEXT("Left/right ankle swing1 motion matches"), LeftAnkleConstraint->GetAngularSwing1Motion(), RightAnkleConstraint->GetAngularSwing1Motion());
+		TestEqual(TEXT("Left/right ankle swing2 motion matches"), LeftAnkleConstraint->GetAngularSwing2Motion(), RightAnkleConstraint->GetAngularSwing2Motion());
+		TestEqual(TEXT("Left/right ankle twist limit matches"), LeftAnkleConstraint->GetAngularTwistLimit(), RightAnkleConstraint->GetAngularTwistLimit());
+		TestEqual(TEXT("Left/right ankle swing1 limit matches"), LeftAnkleConstraint->GetAngularSwing1Limit(), RightAnkleConstraint->GetAngularSwing1Limit());
+		TestEqual(TEXT("Left/right ankle swing2 limit matches"), LeftAnkleConstraint->GetAngularSwing2Limit(), RightAnkleConstraint->GetAngularSwing2Limit());
+
+		constexpr float SymmetryTolerance = 0.05f;
+		constexpr float AxisTolerance = 0.01f;
+		TestTrue(TEXT("Ankle Pos1 magnitudes stay symmetric"), AbsVector(LeftAnkleConstraint->Pos1).Equals(AbsVector(RightAnkleConstraint->Pos1), SymmetryTolerance));
+		TestTrue(TEXT("Ankle Pos2 magnitudes stay symmetric"), AbsVector(LeftAnkleConstraint->Pos2).Equals(AbsVector(RightAnkleConstraint->Pos2), SymmetryTolerance));
+		TestTrue(TEXT("Ankle PriAxis1 magnitudes stay symmetric"), AbsVector(LeftAnkleConstraint->PriAxis1).Equals(AbsVector(RightAnkleConstraint->PriAxis1), SymmetryTolerance));
+		TestTrue(TEXT("Ankle SecAxis1 magnitudes stay symmetric"), AbsVector(LeftAnkleConstraint->SecAxis1).Equals(AbsVector(RightAnkleConstraint->SecAxis1), SymmetryTolerance));
+		TestTrue(TEXT("Ankle PriAxis2 magnitudes stay symmetric"), AbsVector(LeftAnkleConstraint->PriAxis2).Equals(AbsVector(RightAnkleConstraint->PriAxis2), SymmetryTolerance));
+		TestTrue(TEXT("Ankle SecAxis2 magnitudes stay symmetric"), AbsVector(LeftAnkleConstraint->SecAxis2).Equals(AbsVector(RightAnkleConstraint->SecAxis2), SymmetryTolerance));
+
+		TestTrue(TEXT("Ankle PriAxis1 is normalized enough"), FMath::IsNearlyEqual(LeftAnkleConstraint->PriAxis1.Size(), 1.0f, AxisTolerance));
+		TestTrue(TEXT("Ankle SecAxis1 is normalized enough"), FMath::IsNearlyEqual(LeftAnkleConstraint->SecAxis1.Size(), 1.0f, AxisTolerance));
+		TestTrue(TEXT("Ankle PriAxis2 is normalized enough"), FMath::IsNearlyEqual(LeftAnkleConstraint->PriAxis2.Size(), 1.0f, AxisTolerance));
+		TestTrue(TEXT("Ankle SecAxis2 is normalized enough"), FMath::IsNearlyEqual(LeftAnkleConstraint->SecAxis2.Size(), 1.0f, AxisTolerance));
+		TestTrue(TEXT("Left ankle primary/secondary axes are not degenerate"), FMath::Abs(FVector::DotProduct(LeftAnkleConstraint->PriAxis1, LeftAnkleConstraint->SecAxis1)) < 0.1f);
+		TestTrue(TEXT("Right ankle primary/secondary axes are not degenerate"), FMath::Abs(FVector::DotProduct(RightAnkleConstraint->PriAxis1, RightAnkleConstraint->SecAxis1)) < 0.1f);
+
+		TestTrue(
+			TEXT("Ankle angular rotation offset magnitudes stay symmetric"),
+			AbsVector(FVector(
+				LeftAnkleConstraint->AngularRotationOffset.Roll,
+				LeftAnkleConstraint->AngularRotationOffset.Pitch,
+				LeftAnkleConstraint->AngularRotationOffset.Yaw)).Equals(
+					AbsVector(FVector(
+						RightAnkleConstraint->AngularRotationOffset.Roll,
+						RightAnkleConstraint->AngularRotationOffset.Pitch,
+						RightAnkleConstraint->AngularRotationOffset.Yaw)),
 					0.5f));
 		return true;
 	}

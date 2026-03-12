@@ -242,6 +242,31 @@ Only the orchestrator updates status.
     - implication:
       - the toe limit mismatch is real
       - the next baseline should keep the toe operating-limit policy enabled at `0.50` and then be judged in the normal regression suite
+  - March 12, 2026 ankle-constraint audit result:
+    - the direct Manny ankle constraints are structurally sane
+    - current evidence:
+      - direct constraints exist on both sides
+      - left/right motions and limit angles match
+      - frames are symmetric
+      - axes are normalized and non-degenerate
+      - angular rotation offsets are zero
+    - implication:
+      - the next lower-limb problem is not gross ankle authoring
+      - the next pass should investigate lower-limb target-range and limit-occupancy behavior under movement
+  - March 12, 2026 lower-limb occupancy result:
+    - the new runtime diagnostics show repeated lower-limb over-occupancy during locomotion
+    - current evidence:
+      - first policy-enabled frame starts at `0.00x`
+      - once movement starts, `calf_*` repeatedly reaches about `1.7x - 2.6x` against the current `5.0deg` tightest-limit proxy
+    - implication:
+      - the next lower-limb problem is target-range semantics under movement, not malformed toe or ankle authoring
+      - the next runtime fit should start with a calf-family target-range policy before touching broader authoring or hard limits again
+  - March 12, 2026 ankle-chain follow-up:
+    - the next lower-limb mismatch surface is the ankle chain, not more isolated toe retuning
+    - reason:
+      - after the verified `0.50` toe-limit baseline, the strongest remaining movement peaks are still anchored in `calf_l(sim)` body linear speed and `ball_l(sim)` body angular speed
+    - implication:
+      - the next question is whether `foot_* <- calf_*` is structurally sane or merely sensitive under movement
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

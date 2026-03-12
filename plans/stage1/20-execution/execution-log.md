@@ -353,3 +353,34 @@ Whenever new setup or gate evidence arrives:
     - frozen baseline candidate:
       - keep `bApplyTrainingAlignedToeLimitPolicy = true`
       - keep `TrainingAlignedToeLimitPolicyBlend = 0.50`
+  - March 12, 2026 ankle-constraint authoring audit plan:
+    - next lower-limb pass moves one level up the chain:
+      - `foot_l <- calf_l`
+      - `foot_r <- calf_r`
+    - reason:
+      - after the verified `0.50` toe-limit baseline, deterministic movement still peaks at `calf_l(sim)` for body linear speed and `ball_l(sim)` for body angular speed
+    - immediate goal:
+      - prove whether the direct Manny ankle constraints are malformed or merely sensitive before making any broader lower-limb operating-limit change
+  - March 12, 2026 ankle-constraint authoring audit result:
+    - added `PhysAnim.Component.MannyAnkleConstraintAuthoring`
+    - current audit result:
+      - `foot_l <- calf_l` and `foot_r <- calf_r` both exist as direct Manny constraints
+      - left/right ankle motions and limit angles match exactly
+      - left/right reference frames are symmetric by magnitude
+      - ankle axes are normalized and non-degenerate
+      - angular rotation offsets are zero on both sides
+    - current runtime read:
+      - there is no gross sign that the ankle chain was authored incorrectly
+      - the next lower-limb mismatch surface is no longer manual ankle authoring
+      - the next pass should inspect lower-limb target-range / limit-occupancy behavior under movement
+  - March 12, 2026 lower-limb limit-occupancy instrumentation result:
+    - runtime diagnostics now log:
+      - `lowerLimbLimitOccupancy=<bone>:<ratio>x proxy=<deg>`
+    - measured result:
+      - first policy-enabled frame starts at `0.00x`
+      - once movement begins, `calf_l` / `calf_r` repeatedly climb above `1.0x`
+      - common measured range is about `1.7x - 2.6x`
+      - the proxy is consistently `5.0deg`, matching Manny's tightest direct calf/knee limited axis
+    - current runtime read:
+      - the remaining lower-limb mismatch is target-range / limit-occupancy, not malformed toe or ankle authoring
+      - the next pass should test a temporary lower-limb target-range policy, starting with `calf_*`

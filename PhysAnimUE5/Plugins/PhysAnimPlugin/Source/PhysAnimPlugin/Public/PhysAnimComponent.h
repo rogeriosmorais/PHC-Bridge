@@ -5,6 +5,7 @@
 #include "NNEModelData.h"
 #include "NNERuntimeCPU.h"
 #include "NNERuntimeGPU.h"
+#include "PhysicsEngine/ConstraintTypes.h"
 #include "PhysicsControlActor.h"
 #include "PoseSearch/PoseSearchResult.h"
 #include "PhysAnimBridge.h"
@@ -420,6 +421,13 @@ public:
 	static float ResolveTrainingAlignedControlStrengthScaleForBone(FName BoneName, float BlendAlpha);
 	static float ResolveTrainingAlignedControlExtraDampingScaleForBone(FName BoneName, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedControlFamilyProfile(bool bApplyTrainingAlignedControlFamilyProfile, float BlendAlpha);
+	static float CalculateConstraintMinLimitedAngleDegrees(
+		EAngularConstraintMotion TwistMotion,
+		float TwistLimit,
+		EAngularConstraintMotion Swing1Motion,
+		float Swing1Limit,
+		EAngularConstraintMotion Swing2Motion,
+		float Swing2Limit);
 	static bool AdvancePolicyControlAccumulator(
 		float DeltaTimeSeconds,
 		float PolicyControlIntervalSeconds,

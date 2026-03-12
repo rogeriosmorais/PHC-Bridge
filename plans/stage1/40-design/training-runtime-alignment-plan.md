@@ -483,10 +483,16 @@ This gives us the highest-value correction with the least ambiguity.
     - isolated toe-only gain changes were worse
   - authoring audit result:
     - the manually created toe constraints are structurally sane and left/right symmetric
+  - ankle authoring result:
+    - the direct Manny ankle constraints are structurally sane and symmetric
+    - there is no gross sign that `foot_* <- calf_*` was authored incorrectly
   - toe operating-limit result:
     - a full toe-limit blend is too aggressive
     - a `0.50` toe-limit blend is the first measured toe-limit baseline candidate
-  - next pass should keep the `0.50` toe-limit baseline and then decide whether the next mismatch surface is a broader lower-limb operating-limit policy or something above the toe chain
+  - lower-limb occupancy result:
+    - under deterministic movement, `calf_*` repeatedly over-occupies the current tightest direct-limit proxy
+    - measured range is about `1.7x - 2.6x` once locomotion is active
+  - next pass should keep the `0.50` toe-limit baseline and move to a calf-first lower-limb target-range policy
 
 ## Working Hypothesis
 

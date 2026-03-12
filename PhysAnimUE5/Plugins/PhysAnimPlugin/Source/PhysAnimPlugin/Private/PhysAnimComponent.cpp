@@ -220,6 +220,112 @@ namespace PhysAnimComponentInternal
 		return OverrideValue != 0;
 	}
 
+	bool IsLowerLimbControlBone(const FName BoneName)
+	{
+		return BoneName == TEXT("thigh_l") ||
+			BoneName == TEXT("calf_l") ||
+			BoneName == TEXT("foot_l") ||
+			BoneName == TEXT("ball_l") ||
+			BoneName == TEXT("thigh_r") ||
+			BoneName == TEXT("calf_r") ||
+			BoneName == TEXT("foot_r") ||
+			BoneName == TEXT("ball_r");
+	}
+
+	FName ResolveDirectConstraintParentBoneName(const FName ChildBoneName)
+	{
+		if (ChildBoneName == TEXT("thigh_l") || ChildBoneName == TEXT("thigh_r"))
+		{
+			return TEXT("pelvis");
+		}
+		if (ChildBoneName == TEXT("calf_l"))
+		{
+			return TEXT("thigh_l");
+		}
+		if (ChildBoneName == TEXT("calf_r"))
+		{
+			return TEXT("thigh_r");
+		}
+		if (ChildBoneName == TEXT("foot_l"))
+		{
+			return TEXT("calf_l");
+		}
+		if (ChildBoneName == TEXT("foot_r"))
+		{
+			return TEXT("calf_r");
+		}
+		if (ChildBoneName == TEXT("ball_l"))
+		{
+			return TEXT("foot_l");
+		}
+		if (ChildBoneName == TEXT("ball_r"))
+		{
+			return TEXT("foot_r");
+		}
+		return NAME_None;
+	}
+
+	float CalculateConstraintMinLimitedAngleDegrees(
+		const EAngularConstraintMotion TwistMotion,
+		const float TwistLimit,
+		const EAngularConstraintMotion Swing1Motion,
+		const float Swing1Limit,
+		const EAngularConstraintMotion Swing2Motion,
+		const float Swing2Limit)
+	{
+		float MinLimitedAngleDegrees = TNumericLimits<float>::Max();
+		bool bHasLimitedAxis = false;
+
+		auto AccumulateLimit = [&MinLimitedAngleDegrees, &bHasLimitedAxis](const EAngularConstraintMotion Motion, const float Limit)
+		{
+			if (Motion == ACM_Limited && Limit > UE_SMALL_NUMBER)
+			{
+				MinLimitedAngleDegrees = FMath::Min(MinLimitedAngleDegrees, Limit);
+				bHasLimitedAxis = true;
+			}
+		};
+
+		AccumulateLimit(TwistMotion, TwistLimit);
+		AccumulateLimit(Swing1Motion, Swing1Limit);
+		AccumulateLimit(Swing2Motion, Swing2Limit);
+		return bHasLimitedAxis ? MinLimitedAngleDegrees : 0.0f;
+	}
+
+	float ResolveLowerLimbConstraintLimitProxyDegrees(const UPhysicsAsset* const PhysicsAsset, const FName ChildBoneName)
+	{
+		if (!PhysicsAsset || !IsLowerLimbControlBone(ChildBoneName))
+		{
+			return 0.0f;
+		}
+
+		const FName ParentBoneName = ResolveDirectConstraintParentBoneName(ChildBoneName);
+		if (ParentBoneName.IsNone())
+		{
+			return 0.0f;
+		}
+
+		const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(ChildBoneName, ParentBoneName);
+		if (ConstraintIndex == INDEX_NONE || !PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex))
+		{
+			return 0.0f;
+		}
+
+		const UPhysicsConstraintTemplate* const ConstraintTemplate = PhysicsAsset->ConstraintSetup[ConstraintIndex];
+		if (!ConstraintTemplate)
+		{
+			return 0.0f;
+		}
+
+		const FConstraintInstance& Constraint = ConstraintTemplate->DefaultInstance;
+		return CalculateConstraintMinLimitedAngleDegrees(
+			Constraint.GetAngularTwistMotion(),
+			Constraint.GetAngularTwistLimit(),
+			Constraint.GetAngularSwing1Motion(),
+			Constraint.GetAngularSwing1Limit(),
+			Constraint.GetAngularSwing2Motion(),
+			Constraint.GetAngularSwing2Limit());
+	}
+
 	FString BuildStabilizationSummary(const FPhysAnimStabilizationSettings& Settings)
 	{
 		return FString::Printf(
@@ -2727,6 +2833,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		ShouldUseSkeletalAnimationTargetRepresentation(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
 			bPolicyInfluenceActive);
+	UPhysicsAsset* const PhysicsAsset = MeshComponent.IsValid() ? MeshComponent->GetPhysicsAsset() : nullptr;
 	const float TargetWriteDeltaTime =
 		ResolvePolicyTargetWriteDeltaTime(
 			bUseSkeletalAnimationTargetRepresentation,
@@ -2788,6 +2895,20 @@ void UPhysAnimComponent::ApplyControlTargets(
 			ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees = RawPolicyOffsetDegrees;
 			ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName = Pair.Key;
 		}
+		const float LowerLimbLimitProxyDegrees =
+			PhysAnimComponentInternal::ResolveLowerLimbConstraintLimitProxyDegrees(PhysicsAsset, Pair.Key);
+		if (LowerLimbLimitProxyDegrees > UE_SMALL_NUMBER)
+		{
+			const float LowerLimbLimitOccupancy = RawPolicyOffsetDegrees / LowerLimbLimitProxyDegrees;
+			++ControlTargetDiagnostics.NumLowerLimbTargetsConsidered;
+			ControlTargetDiagnostics.MeanLowerLimbLimitOccupancy += LowerLimbLimitOccupancy;
+			if (LowerLimbLimitOccupancy > ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy)
+			{
+				ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy = LowerLimbLimitOccupancy;
+				ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName = Pair.Key;
+				ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees = LowerLimbLimitProxyDegrees;
+			}
+		}
 
 		PreviousControlTargetRotations.Add(ControlName, LimitedRotation);
 
@@ -2808,6 +2929,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 		ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees /=
 			static_cast<float>(ControlTargetDiagnostics.NumPolicyTargetsWritten);
 	}
+	if (ControlTargetDiagnostics.NumLowerLimbTargetsConsidered > 0)
+	{
+		ControlTargetDiagnostics.MeanLowerLimbLimitOccupancy /=
+			static_cast<float>(ControlTargetDiagnostics.NumLowerLimbTargetsConsidered);
+	}
 
 	LastControlTargetDiagnostics = ControlTargetDiagnostics;
 	bPolicyTargetsAppliedLastFrame = bPolicyInfluenceActive;
@@ -2817,14 +2943,18 @@ void UPhysAnimComponent::ApplyControlTargets(
 		UE_LOG(
 			LogPhysAnimBridge,
 			Log,
-			TEXT("[PhysAnim] First policy-enabled frame: targets=%d maxTargetDelta=%s:%.1fdeg meanTargetDelta=%.1fdeg maxRawPolicyOffset=%s:%.1fdeg meanRawPolicyOffset=%.1fdeg"),
+			TEXT("[PhysAnim] First policy-enabled frame: targets=%d maxTargetDelta=%s:%.1fdeg meanTargetDelta=%.1fdeg maxRawPolicyOffset=%s:%.1fdeg meanRawPolicyOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx"),
 			ControlTargetDiagnostics.NumPolicyTargetsWritten,
 			*ControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
 			ControlTargetDiagnostics.MaxTargetDeltaDegrees,
 			ControlTargetDiagnostics.MeanTargetDeltaDegrees,
 			*ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
 			ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees,
-			ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees);
+			ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees,
+			*ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
+			ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
+			ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
+			ControlTargetDiagnostics.MeanLowerLimbLimitOccupancy);
 	}
 }
 
@@ -2981,7 +3111,7 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
-		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s written=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
+		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s written=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
 		SimulationHandoffAlpha,
 		FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
 		GetBringUpGroupCount(),
@@ -3030,6 +3160,10 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 		*LastControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
 		LastControlTargetDiagnostics.MaxRawPolicyOffsetDegrees,
 		LastControlTargetDiagnostics.MeanRawPolicyOffsetDegrees,
+		*LastControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
+		LastControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
+		LastControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
+		LastControlTargetDiagnostics.MeanLowerLimbLimitOccupancy,
 		LastRuntimeInstabilityDiagnostics.RootHeightDeltaCm,
 		LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
 		LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond,
@@ -3489,6 +3623,23 @@ float UPhysAnimComponent::ResolveTrainingAlignedControlExtraDampingScaleForBone(
 bool UPhysAnimComponent::ShouldApplyTrainingAlignedControlFamilyProfile(bool bApplyTrainingAlignedControlFamilyProfile, float BlendAlpha)
 {
 	return bApplyTrainingAlignedControlFamilyProfile && BlendAlpha > UE_SMALL_NUMBER;
+}
+
+float UPhysAnimComponent::CalculateConstraintMinLimitedAngleDegrees(
+	EAngularConstraintMotion TwistMotion,
+	float TwistLimit,
+	EAngularConstraintMotion Swing1Motion,
+	float Swing1Limit,
+	EAngularConstraintMotion Swing2Motion,
+	float Swing2Limit)
+{
+	return PhysAnimComponentInternal::CalculateConstraintMinLimitedAngleDegrees(
+		TwistMotion,
+		TwistLimit,
+		Swing1Motion,
+		Swing1Limit,
+		Swing2Motion,
+		Swing2Limit);
 }
 
 bool UPhysAnimComponent::AdvancePolicyControlAccumulator(
