@@ -544,3 +544,24 @@ Whenever new setup or gate evidence arrives:
       - synthesized explicit target angular velocity was a real locomotion-time mismatch surface
       - this is a keepable improvement to the current distal locomotion baseline
       - the next pass should inspect per-bone write smoothing or another proximal lower-limb seam, not re-open whole-chain explicit-only switching
+  - March 12, 2026 lower-limb composed target-velocity note:
+    - re-checked:
+      - official UE PhysicsControl docs
+      - local UE 5.7 source confirming explicit target angular velocity is added even when skeletal-animation targets are used
+      - ProtoMotions PD-target path confirming there is no directly equivalent explicit target angular-velocity term
+    - implemented one narrow locomotion-time experiment:
+      - kept the committed `foot_*` / `ball_*` hysteresis+dwell baseline
+      - widened angular-velocity suppression to `thigh_*`, `calf_*`, `foot_*`, and `ball_*`
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - forward is mixed, with some distal improvement but continued large proximal spikes
+      - backward regresses, with large `ball_*` spikes still present
+      - late idle/strafe also show new `ball_*` outliers
+    - current runtime read:
+      - broad lower-limb explicit target angular-velocity suppression is not a clean new baseline
+      - the code has been restored to the narrower distal-only suppression baseline
+      - the next pass should target per-bone target-write smoothing or another proximal locomotion transition seam

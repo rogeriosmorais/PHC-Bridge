@@ -592,6 +592,22 @@ This gives us the highest-value correction with the least ambiguity.
       - synthesized explicit target angular velocity was a real mismatch surface
       - this pass is a keepable improvement to the current locomotion-time distal baseline
       - the next pass should inspect per-bone write smoothing or another proximal lower-limb seam, not re-open whole-chain explicit-only switching
+  - lower-limb composed target-velocity result:
+    - kept the committed `foot_*` / `ball_*` hysteresis+dwell locomotion-composition baseline
+    - widened explicit target angular-velocity suppression to:
+      - `thigh_*`
+      - `calf_*`
+      - `foot_*`
+      - `ball_*`
+    - deterministic movement smoke stayed green with no fail-stop
+    - measured result:
+      - forward was mixed, with some distal improvement but continued large proximal spikes
+      - backward regressed, with large `ball_*` spikes still present
+      - late idle/strafe also showed new `ball_*` outliers
+    - current read:
+      - broad lower-limb explicit target angular-velocity suppression is not a clean new baseline
+      - the runtime code should stay on the narrower distal-only suppression baseline
+      - the next pass should target per-bone target-write smoothing or another proximal locomotion transition seam
 
 ## Working Hypothesis
 

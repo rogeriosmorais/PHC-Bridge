@@ -1699,7 +1699,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			0.0f);
 		TestEqual(
 			TEXT("Non-distal bones keep the runtime target angular velocity delta time"),
-			UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(TEXT("calf_l"), false, false, true, 0.25f),
+			UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(TEXT("spine_01"), false, false, true, 0.25f),
 			0.25f);
 		TestEqual(
 			TEXT("Skeletal first-policy frame still zeros target angular velocity delta time for non-distal bones"),
