@@ -431,6 +431,17 @@ Only the orchestrator updates status.
     - implication:
       - gameplay-shell coupling is not the dominant remaining locomotion risk
       - it is still worth monitoring, but it should not displace lower-limb alignment as the main direction
+  - March 12, 2026 lower-limb target-step policy follow-up:
+    - runtime experiment:
+      - tightened locomotion-time per-step target caps for `thigh_*`, `calf_*`, `foot_*`, and `ball_*`
+      - recorded explicit lower-limb target-step occupancy during the run
+    - measured result:
+      - deterministic movement smoke still passes with no fail-stop
+      - but forward regresses materially and backward still keeps large lower-limb outliers
+      - target-step occupancy stays only moderate rather than saturated
+    - implication:
+      - lower-limb target-step smoothing was worth falsifying, but it is not the dominant remaining locomotion seam
+      - the next lower-limb pass should move to another representation seam, not more step-cap tuning
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

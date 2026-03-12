@@ -620,3 +620,25 @@ Whenever new setup or gate evidence arrives:
       - the shell-coupling audit was worth doing because it ruled out the wrong pivot
       - gameplay-shell coupling is not the dominant remaining locomotion blocker
       - the next useful work should stay on lower-limb locomotion-time representation / response
+  - March 12, 2026 lower-limb target-step policy note:
+    - re-checked:
+      - official UE PhysicsControl docs
+      - local UE 5.7 PhysicsControl source
+      - ProtoMotions docs and local control code
+    - implemented one narrow locomotion-time experiment:
+      - tightened the per-step target envelope only for `thigh_*`, `calf_*`, `foot_*`, and `ball_*`
+      - added target-step occupancy diagnostics to make the pass falsifiable
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - the pass is not a clean win
+      - forward regresses materially, including `foot_l` around `~4029 deg/s`
+      - backward still shows large lower-limb outliers, including `thigh_l` around `~2942 deg/s`
+      - target-step occupancy stays only moderate, usually around `~0.25x - 0.79x`
+    - current runtime read:
+      - lower-limb target-step smoothing was worth testing, but it is not the dominant remaining seam
+      - runtime code has been restored to the shared proximal-response baseline
+      - the next pass should move to another locomotion-time representation seam instead of more step-cap tuning

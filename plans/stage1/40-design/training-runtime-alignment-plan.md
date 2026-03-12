@@ -645,6 +645,24 @@ This gives us the highest-value correction with the least ambiguity.
       - gameplay-shell coupling is not the dominant remaining locomotion blocker
       - it was worth auditing because it ruled out the wrong pivot
       - the next alignment pass should stay on lower-limb locomotion-time representation / response, not switch the main effort to shell-authority work
+  - lower-limb target-step policy result:
+    - re-checked official UE PhysicsControl docs/source plus ProtoMotions control code before changing runtime behavior
+    - tested a locomotion-time lower-limb angular step policy that tightened the per-step target envelope for:
+      - `thigh_*`
+      - `calf_*`
+      - `foot_*`
+      - `ball_*`
+    - also added explicit target-step occupancy diagnostics for that run
+    - deterministic movement smoke stayed green with no fail-stop
+    - measured result:
+      - the policy was not a clean win
+      - forward regressed materially, including a `foot_l` spike around `~4029 deg/s`
+      - backward still produced large lower-limb outliers, including `thigh_l` around `~2942 deg/s`
+      - target-step occupancy stayed only moderate, generally around `~0.25x - 0.79x`, so the new step caps were not the dominant remaining seam
+    - current read:
+      - lower-limb target-step smoothing was worth testing, but it is not the next baseline
+      - runtime code should stay on the shared proximal-response + distal angular-velocity suppression baseline
+      - the next pass should move to another locomotion-time representation seam, not more lower-limb step-cap tuning
 
 ## Working Hypothesis
 
