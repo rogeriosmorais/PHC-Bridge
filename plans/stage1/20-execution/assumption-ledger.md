@@ -528,3 +528,16 @@ The next meaningful ledger updates should come from:
 - Current working assumption:
   - world-space observation/future-target data should use a dedicated Proto-runtime-world conversion path
   - local action/joint rotation conversion should remain on the existing SMPL authoring-frame helpers unless separately disproven
+## 2026-03-12 - Future target time-channel semantics
+
+- Previous assumption:
+  - emitting the nominal future sample offset was close enough for the `with_time` channel in `mimic_target_poses`
+- Status:
+  - falsified
+- Evidence:
+  - active ProtoMotions checkpoint has `mimic_target_pose.with_time = true`
+  - local ProtoMotions `mimic_obs.py` clips future motion times before appending the time feature
+  - UE bridge was clamping the sampled animation time but still writing the original requested offset
+- Current working assumption:
+  - the bridge should always emit the effective clamped future time delta for the time channel
+  - treat this as a direct target-packing contract requirement, even when the locomotion impact is modest

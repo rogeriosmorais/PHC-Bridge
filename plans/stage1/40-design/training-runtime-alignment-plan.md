@@ -41,6 +41,20 @@ Why this is not yet the final locomotion fix:
 - lower-limb outliers still exist under forward/backward/strafe
 - so the pass corrected a real contract seam, but did not eliminate the deeper locomotion-time lower-limb representation problem
 
+Most recent keepable target-packing pass:
+- align `mimic_target_poses` time-channel packing with ProtoMotions `with_time` semantics
+- when future animation sampling clamps at the end of a clip, the bridge now emits the effective clamped future time delta instead of the nominal requested offset
+
+Why this is a keep:
+- the active pretrained checkpoint has `mimic_target_pose.with_time = true`
+- local ProtoMotions code clips future motion times before appending the time feature
+- the UE bridge was previously appending the nominal schedule even when the sampled pose time was already clamped
+- fresh component and movement smoke stayed green after the fix
+
+Why this is not yet the main locomotion fix:
+- movement smoke remained stable, but this was not a dramatic lower-limb outlier reduction
+- treat it as an objective target-contract correction, not as a large locomotion-response breakthrough
+
 Most recent falsified locomotion-time seam:
 - family-weighted lower-limb target-write smoothing
 

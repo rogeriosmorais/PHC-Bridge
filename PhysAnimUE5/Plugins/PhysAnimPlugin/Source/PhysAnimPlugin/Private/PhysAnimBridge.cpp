@@ -247,6 +247,14 @@ namespace PhysAnimBridge
 		return SampleTimes;
 	}
 
+	float ResolveFutureTargetTimeSeconds(float CurrentTimeSeconds, float RequestedFutureOffsetSeconds, float AnimationLengthSeconds)
+	{
+		const float ClampedCurrentTime = FMath::Clamp(CurrentTimeSeconds, 0.0f, AnimationLengthSeconds);
+		const float RequestedSampleTime = ClampedCurrentTime + FMath::Max(RequestedFutureOffsetSeconds, 0.0f);
+		const float ClampedSampleTime = FMath::Clamp(RequestedSampleTime, 0.0f, AnimationLengthSeconds);
+		return FMath::Max(ClampedSampleTime - ClampedCurrentTime, 0.0f);
+	}
+
 	FVector SmplVectorToUe(const FVector& SmplVector)
 	{
 		return FVector(SmplVector.Z, SmplVector.X, SmplVector.Y);

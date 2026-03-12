@@ -74,6 +74,14 @@ namespace
 		TestEqual(TEXT("Future step count"), Schedule.Num(), NumFutureSteps);
 		TestEqual(TEXT("First future step"), Schedule[0], FutureStepSeconds);
 		TestEqual(TEXT("Last future step"), Schedule.Last(), NumFutureSteps * FutureStepSeconds);
+		TestEqual(
+			TEXT("Unclamped future target time keeps the requested offset"),
+			ResolveFutureTargetTimeSeconds(0.5f, 0.2f, 2.0f),
+			0.2f);
+		TestEqual(
+			TEXT("Clamped future target time shrinks at animation end"),
+			ResolveFutureTargetTimeSeconds(1.9f, 0.4f, 2.0f),
+			0.1f);
 		return true;
 	}
 

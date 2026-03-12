@@ -142,6 +142,7 @@ namespace PhysAnimBridge
 		FString& OutError);
 
 	PHYSANIMPLUGIN_API TArray<float> BuildFutureSampleTimeSchedule();
+	PHYSANIMPLUGIN_API float ResolveFutureTargetTimeSeconds(float CurrentTimeSeconds, float RequestedFutureOffsetSeconds, float AnimationLengthSeconds);
 
 	PHYSANIMPLUGIN_API FVector SmplVectorToUe(const FVector& SmplVector);
 	PHYSANIMPLUGIN_API FVector UeVectorToSmpl(const FVector& UeVector);

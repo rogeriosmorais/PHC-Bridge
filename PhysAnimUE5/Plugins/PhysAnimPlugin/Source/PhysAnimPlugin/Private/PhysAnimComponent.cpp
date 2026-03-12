@@ -1645,7 +1645,10 @@ bool UPhysAnimComponent::SampleFuturePoses(
 		FPoseSearchAssetSamplerPose SampledPose = UPoseSearchAssetSamplerLibrary::SamplePose(LocalAnimInstance, SamplerInput);
 
 		FPhysAnimFuturePoseSample FutureSample;
-		FutureSample.FutureTimeSeconds = FutureOffset;
+		FutureSample.FutureTimeSeconds = PhysAnimBridge::ResolveFutureTargetTimeSeconds(
+			SearchResult.SelectedTime,
+			FutureOffset,
+			AnimationLength);
 		FutureSample.BodyTransforms.Reserve(PhysAnimBridge::NumSmplBodies);
 
 		for (const FName BoneName : PhysAnimBridge::GetSmplObservationBoneNames())

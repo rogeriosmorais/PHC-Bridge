@@ -763,3 +763,26 @@ Whenever new setup or gate evidence arrives:
   - keepable
   - the bridge stayed stable and movement smoke completed successfully
   - lower-limb outliers still exist, so this corrects a contract seam but does not finish locomotion-time lower-limb alignment
+## 2026-03-12 - Future target time-channel alignment
+
+- Direction check:
+  - still worth continuing in the broader training/runtime alignment direction
+  - not worth reopening falsified lower-limb write smoothing or more multiplier reshuffling
+- New plan:
+  - [future-target-time-alignment-plan.md](/F:/NewEngine/plans/stage1/40-design/future-target-time-alignment-plan.md)
+- Sources re-checked before coding:
+  - UE PoseSearch asset sampler docs and local PoseSearch sampler source
+  - ProtoMotions config and local `mimic_obs.py` / `mimic_utils.py`
+- Implemented:
+  - added a pure helper for the effective clamped future time delta
+  - `SampleFuturePoses(...)` now writes `FutureTimeSeconds = ClampedSampleTime - CurrentSelectedTime`
+  - this replaces the old nominal-offset write only for the `with_time` channel semantics
+- Verification:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
+- Result:
+  - keepable
+  - objective Proto target-contract fix
+  - movement smoke remained stable and completed successfully
+  - not a dramatic locomotion improvement by itself
