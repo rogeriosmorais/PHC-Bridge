@@ -23,6 +23,7 @@
 #include "PhysicsControlActor.h"
 #include "PhysicsControlComponent.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysicsEngine/SkeletalBodySetup.h"
 #include "PoseSearch/PoseSearchAssetSamplerLibrary.h"
 #include "PoseSearch/PoseSearchDatabase.h"
 #include "PoseSearch/PoseSearchLibrary.h"
@@ -71,6 +72,14 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.PolicyControlRateHz"),
 		-1.0f,
 		TEXT("Override for the fixed PhysAnim policy/control update rate in Hz. Negative values keep the component default."));
+	TAutoConsoleVariable<int32> CVarPhysAnimApplyTrainingAlignedMassScales(
+		TEXT("physanim.ApplyTrainingAlignedMassScales"),
+		-1,
+		TEXT("Override for the Stage 1 training-aligned Manny family mass policy. -1 keeps the component default, 0 disables, 1 enables."));
+	TAutoConsoleVariable<float> CVarPhysAnimTrainingAlignedMassScaleBlend(
+		TEXT("physanim.TrainingAlignedMassScaleBlend"),
+		-1.0f,
+		TEXT("Override for the Stage 1 training-aligned Manny family mass policy blend. Negative values keep the component default."));
 	TAutoConsoleVariable<float> CVarPhysAnimMaxAngularStepDegPerSec(
 		TEXT("physanim.MaxAngularStepDegPerSec"),
 		-1.0f,
@@ -196,13 +205,15 @@ namespace PhysAnimComponentInternal
 	FString BuildStabilizationSummary(const FPhysAnimStabilizationSettings& Settings)
 	{
 		return FString::Printf(
-			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
+			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f MassPolicy=%s MassBlend=%.2f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
 			Settings.bForceZeroActions ? TEXT("true") : TEXT("false"),
 			Settings.ActionScale,
 			Settings.ActionClampAbs,
 			Settings.ActionSmoothingAlpha,
 			Settings.StartupRampSeconds,
 			Settings.PolicyControlRateHz,
+			Settings.bApplyTrainingAlignedMassScales ? TEXT("true") : TEXT("false"),
+			Settings.TrainingAlignedMassScaleBlend,
 			Settings.MaxAngularStepDegreesPerSecond,
 			Settings.AngularStrengthMultiplier,
 			Settings.AngularDampingRatioMultiplier,
@@ -886,7 +897,7 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
 	LogBridgeStateSnapshot(TEXT("BeforeActivateBridgePhysicsState"));
-	ActivateBridgePhysicsState();
+	ActivateBridgePhysicsState(EffectiveSettings);
 	LogBridgeStateSnapshot(TEXT("AfterActivateBridgePhysicsState"));
 	ResetStabilizationRuntimeState();
 	BridgeStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
@@ -1474,6 +1485,14 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimPolicyControlRateHz,
 			EffectiveSettings.PolicyControlRateHz);
+	EffectiveSettings.bApplyTrainingAlignedMassScales =
+		PhysAnimComponentInternal::ResolveBoolOverride(
+			PhysAnimComponentInternal::CVarPhysAnimApplyTrainingAlignedMassScales,
+			EffectiveSettings.bApplyTrainingAlignedMassScales);
+	EffectiveSettings.TrainingAlignedMassScaleBlend =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimTrainingAlignedMassScaleBlend,
+			EffectiveSettings.TrainingAlignedMassScaleBlend);
 	EffectiveSettings.MaxAngularStepDegreesPerSecond =
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimMaxAngularStepDegPerSec,
@@ -1667,7 +1686,7 @@ void UPhysAnimComponent::DeactivateRuntimePhysicsControl(const TCHAR* Context)
 	}
 }
 
-void UPhysAnimComponent::ActivateBridgePhysicsState()
+void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
 	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
 	if (!SkeletalMesh)
@@ -1689,6 +1708,7 @@ void UPhysAnimComponent::ActivateBridgePhysicsState()
 	SkeletalMesh->RecreatePhysicsState();
 	SkeletalMesh->SetEnablePhysicsBlending(true);
 	SkeletalMesh->WakeAllRigidBodies();
+	ApplyTrainingAlignedMassScales(EffectiveSettings);
 
 	const bool bPreserveGameplayShell = ShouldPreserveGameplayShellDuringBridgeActive(
 		IsMovementSmokeModeEnabled(),
@@ -1744,15 +1764,103 @@ void UPhysAnimComponent::ActivateBridgePhysicsState()
 	}
 }
 
+void UPhysAnimComponent::ApplyTrainingAlignedMassScales(const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		return;
+	}
+
+	UPhysicsAsset* const PhysicsAsset = SkeletalMesh->GetPhysicsAsset();
+	if (!PhysicsAsset)
+	{
+		return;
+	}
+
+	const bool bApplyMassPolicy = ShouldApplyTrainingAlignedMassScales(
+		EffectiveSettings.bApplyTrainingAlignedMassScales,
+		EffectiveSettings.TrainingAlignedMassScaleBlend);
+	if (!bApplyMassPolicy)
+	{
+		return;
+	}
+
+	if (!bHasSavedBodyMassScales)
+	{
+		OriginalBodyMassScales.Reset();
+		for (const USkeletalBodySetup* const BodySetup : PhysicsAsset->SkeletalBodySetups)
+		{
+			if (!BodySetup)
+			{
+				continue;
+			}
+
+			OriginalBodyMassScales.Add(BodySetup->BoneName, SkeletalMesh->GetMassScale(BodySetup->BoneName));
+		}
+		bHasSavedBodyMassScales = OriginalBodyMassScales.Num() > 0;
+	}
+
+	int32 NumAdjustedBodies = 0;
+	for (const USkeletalBodySetup* const BodySetup : PhysicsAsset->SkeletalBodySetups)
+	{
+		if (!BodySetup)
+		{
+			continue;
+		}
+
+		const float MassScale =
+			ResolveTrainingAlignedMassScaleForBone(
+				BodySetup->BoneName,
+				EffectiveSettings.TrainingAlignedMassScaleBlend);
+		SkeletalMesh->SetMassScale(BodySetup->BoneName, MassScale);
+		++NumAdjustedBodies;
+	}
+
+	UE_LOG(
+		LogPhysAnimBridge,
+		Log,
+		TEXT("[PhysAnim] Applied training-aligned Manny mass scales: bodies=%d blend=%.2f"),
+		NumAdjustedBodies,
+		EffectiveSettings.TrainingAlignedMassScaleBlend);
+}
+
+void UPhysAnimComponent::ResetTrainingAlignedMassScales()
+{
+	if (!bHasSavedBodyMassScales)
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		OriginalBodyMassScales.Reset();
+		bHasSavedBodyMassScales = false;
+		return;
+	}
+
+	for (const TPair<FName, float>& Pair : OriginalBodyMassScales)
+	{
+		SkeletalMesh->SetMassScale(Pair.Key, Pair.Value);
+	}
+
+	OriginalBodyMassScales.Reset();
+	bHasSavedBodyMassScales = false;
+}
+
 void UPhysAnimComponent::ResetBridgePhysicsState()
 {
 	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
 	if (!SkeletalMesh)
 	{
 		bHasSavedMeshCollisionState = false;
+		OriginalBodyMassScales.Reset();
+		bHasSavedBodyMassScales = false;
 		return;
 	}
 
+	ResetTrainingAlignedMassScales();
 	SkeletalMesh->SetEnablePhysicsBlending(false);
 	if (bHasSavedMeshCollisionState)
 	{
@@ -2777,6 +2885,8 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	StabilizationStressTestBaselineHeadLocalOffset = FVector::ZeroVector;
 	StabilizationStressTestBaselineLeftFootLocalOffset = FVector::ZeroVector;
 	StabilizationStressTestBaselineRightFootLocalOffset = FVector::ZeroVector;
+	OriginalBodyMassScales.Reset();
+	bHasSavedBodyMassScales = false;
 	PolicyBlendStartControlTargetRotations.Reset();
 	bPolicyTargetsAppliedLastFrame = false;
 	LastAppliedStabilizationSettings = {};
@@ -3011,6 +3121,64 @@ float UPhysAnimComponent::ResolvePolicyControlIntervalSeconds(float PolicyContro
 {
 	const float ClampedRateHz = FMath::Max(PolicyControlRateHz, 1.0f);
 	return 1.0f / ClampedRateHz;
+}
+
+float UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(FName BoneName, float BlendAlpha)
+{
+	const float ClampedBlendAlpha = FMath::Clamp(BlendAlpha, 0.0f, 1.0f);
+	float TargetScale = 1.0f;
+
+	if (BoneName == TEXT("pelvis"))
+	{
+		TargetScale = 0.815f;
+	}
+	else if (
+		BoneName == TEXT("thigh_l") ||
+		BoneName == TEXT("calf_l") ||
+		BoneName == TEXT("foot_l") ||
+		BoneName == TEXT("ball_l") ||
+		BoneName == TEXT("thigh_r") ||
+		BoneName == TEXT("calf_r") ||
+		BoneName == TEXT("foot_r") ||
+		BoneName == TEXT("ball_r"))
+	{
+		TargetScale = 1.569f;
+	}
+	else if (
+		BoneName == TEXT("spine_01") ||
+		BoneName == TEXT("spine_02") ||
+		BoneName == TEXT("spine_03") ||
+		BoneName == TEXT("spine_04") ||
+		BoneName == TEXT("spine_05"))
+	{
+		TargetScale = 0.855f;
+	}
+	else if (
+		BoneName == TEXT("neck_01") ||
+		BoneName == TEXT("neck_02") ||
+		BoneName == TEXT("head"))
+	{
+		TargetScale = 0.762f;
+	}
+	else if (
+		BoneName == TEXT("clavicle_l") ||
+		BoneName == TEXT("upperarm_l") ||
+		BoneName == TEXT("lowerarm_l") ||
+		BoneName == TEXT("hand_l") ||
+		BoneName == TEXT("clavicle_r") ||
+		BoneName == TEXT("upperarm_r") ||
+		BoneName == TEXT("lowerarm_r") ||
+		BoneName == TEXT("hand_r"))
+	{
+		TargetScale = 0.725f;
+	}
+
+	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);
+}
+
+bool UPhysAnimComponent::ShouldApplyTrainingAlignedMassScales(bool bApplyTrainingAlignedMassScales, float BlendAlpha)
+{
+	return bApplyTrainingAlignedMassScales && BlendAlpha > UE_SMALL_NUMBER;
 }
 
 bool UPhysAnimComponent::AdvancePolicyControlAccumulator(

@@ -744,6 +744,55 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	{
 		FPhysAnimStabilizationSettings Settings;
 		TestFalse(TEXT("Explicit targets are the default active-bridge mode"), Settings.bUseSkeletalAnimationTargets);
+		TestTrue(TEXT("Training-aligned Manny mass policy is enabled by default"), Settings.bApplyTrainingAlignedMassScales);
+		TestEqual(TEXT("Training-aligned Manny mass policy defaults to full blend"), Settings.TrainingAlignedMassScaleBlend, 1.0f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTrainingAlignedMassScaleTest,
+		"PhysAnim.Component.TrainingAlignedMassScale",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTrainingAlignedMassScaleTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(
+			TEXT("Pelvis uses the audited family target scale"),
+			UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(TEXT("pelvis"), 1.0f),
+			0.815f);
+		TestEqual(
+			TEXT("Leg chain uses the audited family target scale"),
+			UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(TEXT("calf_l"), 1.0f),
+			1.569f);
+		TestEqual(
+			TEXT("Spine chain uses the audited family target scale"),
+			UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(TEXT("spine_04"), 1.0f),
+			0.855f);
+		TestEqual(
+			TEXT("Neck/head chain uses the audited family target scale"),
+			UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(TEXT("head"), 1.0f),
+			0.762f);
+		TestEqual(
+			TEXT("Arm chain uses the audited family target scale"),
+			UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(TEXT("upperarm_r"), 1.0f),
+			0.725f);
+		TestEqual(
+			TEXT("Unknown bones remain unchanged"),
+			UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(TEXT("index_01_l"), 1.0f),
+			1.0f);
+		TestEqual(
+			TEXT("Blend alpha linearly interpolates mass scale toward the family target"),
+			UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(TEXT("pelvis"), 0.5f),
+			0.9075f);
+		TestTrue(
+			TEXT("Mass policy disabled state returns false"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedMassScales(false, 1.0f));
+		TestTrue(
+			TEXT("Zero blend disables mass policy application"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedMassScales(true, 0.0f));
+		TestTrue(
+			TEXT("Enabled policy with positive blend applies the mass policy"),
+			UPhysAnimComponent::ShouldApplyTrainingAlignedMassScales(true, 0.25f));
 		return true;
 	}
 

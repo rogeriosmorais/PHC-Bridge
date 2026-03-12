@@ -270,3 +270,18 @@ Whenever new setup or gate evidence arrives:
       - do not broaden Manny hard limits blindly
       - keep current Manny constraints as the Stage 1 hard safety envelope
       - move next to family-level mass adjustment before any broad limit retuning
+  - March 12, 2026 family mass-policy implementation note:
+    - the first family-level Manny mass-adjustment policy is now implemented in the live bridge runtime
+    - current policy:
+      - pelvis scaled down
+      - full leg chains scaled up
+      - spine, neck/head, and shoulder/arm/hand families scaled down
+    - the bridge now applies those training-aligned family mass scales on bridge activation and restores original body mass scales on bridge teardown
+    - verification:
+      - `PhysAnim.Component` passed
+      - `PhysAnim.PIE.Smoke` passed
+      - `PhysAnim.PIE.MovementSmoke` passed
+      - `PhysAnim.PIE.G2Presentation` passed
+    - current runtime read:
+      - the mass-alignment pass is mechanically correct and regression-safe for the current smoke scope
+      - the next alignment decision is whether to keep this family policy as the Stage 1 baseline and move to PD-family response fitting

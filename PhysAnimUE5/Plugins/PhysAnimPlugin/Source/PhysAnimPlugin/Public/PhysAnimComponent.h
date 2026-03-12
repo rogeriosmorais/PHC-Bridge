@@ -41,6 +41,12 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "1.0"))
 	float PolicyControlRateHz = 30.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
+	bool bApplyTrainingAlignedMassScales = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float TrainingAlignedMassScaleBlend = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float MaxAngularStepDegreesPerSecond = 180.0f;
 
@@ -85,6 +91,8 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(ActionSmoothingAlpha, Other.ActionSmoothingAlpha) &&
 			FMath::IsNearlyEqual(StartupRampSeconds, Other.StartupRampSeconds) &&
 			FMath::IsNearlyEqual(PolicyControlRateHz, Other.PolicyControlRateHz) &&
+			bApplyTrainingAlignedMassScales == Other.bApplyTrainingAlignedMassScales &&
+			FMath::IsNearlyEqual(TrainingAlignedMassScaleBlend, Other.TrainingAlignedMassScaleBlend) &&
 			FMath::IsNearlyEqual(MaxAngularStepDegreesPerSecond, Other.MaxAngularStepDegreesPerSecond) &&
 			FMath::IsNearlyEqual(AngularStrengthMultiplier, Other.AngularStrengthMultiplier) &&
 			FMath::IsNearlyEqual(AngularDampingRatioMultiplier, Other.AngularDampingRatioMultiplier) &&
@@ -171,7 +179,9 @@ private:
 	void DeactivateRuntimePhysicsControl(const TCHAR* Context);
 	bool ActivateBridgeFromReadyState(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* ActivationContext, FString& OutError);
 	void EnterReadyForActivation(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* Context, bool bLogDeferredStartupSuccess);
-	void ActivateBridgePhysicsState();
+	void ActivateBridgePhysicsState(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void ApplyTrainingAlignedMassScales(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void ResetTrainingAlignedMassScales();
 	void ResetBridgePhysicsState();
 	bool SeedControlTargetsFromCurrentPose(float DeltaTime, FString& OutError);
 	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings);
@@ -293,6 +303,8 @@ private:
 	FVector StabilizationStressTestBaselineHeadLocalOffset = FVector::ZeroVector;
 	FVector StabilizationStressTestBaselineLeftFootLocalOffset = FVector::ZeroVector;
 	FVector StabilizationStressTestBaselineRightFootLocalOffset = FVector::ZeroVector;
+	TMap<FName, float> OriginalBodyMassScales;
+	bool bHasSavedBodyMassScales = false;
 	FName OriginalMeshCollisionProfileName = NAME_None;
 	ECollisionEnabled::Type OriginalMeshCollisionEnabled = ECollisionEnabled::NoCollision;
 	TEnumAsByte<ECollisionResponse> OriginalMeshPawnResponse = ECollisionResponse::ECR_Block;
@@ -377,6 +389,8 @@ public:
 		bool bFirstPolicyEnabledFrame,
 		float DeltaTime);
 	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);
+	static float ResolveTrainingAlignedMassScaleForBone(FName BoneName, float BlendAlpha);
+	static bool ShouldApplyTrainingAlignedMassScales(bool bApplyTrainingAlignedMassScales, float BlendAlpha);
 	static bool AdvancePolicyControlAccumulator(
 		float DeltaTimeSeconds,
 		float PolicyControlIntervalSeconds,

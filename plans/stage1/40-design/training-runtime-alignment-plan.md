@@ -457,8 +457,16 @@ This gives us the highest-value correction with the least ambiguity.
   - Manny is currently torso-heavy and upper-body-heavy relative to the ProtoMotions SMPL asset
   - Manny is currently leg-light relative to the ProtoMotions SMPL asset
   - `spine_01` is effectively massless in the current Manny inventory (`~0.005 kg` in the audit path), so the torso mass is concentrated higher in the chain than the training asset
+- completed next runtime pass:
+  - first family-level Manny mass-adjustment policy is now implemented in the live bridge runtime
+  - the bridge applies training-aligned Manny family mass scales on bridge activation and restores original scales on bridge teardown
+- current verified result:
+  - `PhysAnim.Component` passes with `PhysAnim.Component.MannyMassInventory` and the new mass-policy helper coverage
+  - `PhysAnim.PIE.Smoke` passes
+  - `PhysAnim.PIE.MovementSmoke` passes
+  - `PhysAnim.PIE.G2Presentation` passes
 - next alignment task:
-  - define an explicit Stage 1 operating-limit policy and a family-level mass-adjustment policy before any PD-family retuning
+  - decide whether the current family mass policy is enough to keep, or whether the next pass should move into PD-family response fitting
 
 ## Working Hypothesis
 

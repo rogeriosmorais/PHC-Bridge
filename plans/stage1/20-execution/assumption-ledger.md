@@ -191,6 +191,14 @@ Only the orchestrator updates status.
     - current orchestrator read:
       - hard-limit edits are now deliberately deferred
       - the next alignment pass should change family-level mass distribution before changing broad Manny constraint ranges
+  - March 12, 2026 family mass-policy note:
+    - that family-level mass distribution pass is now implemented in the bridge runtime
+    - the bridge now applies training-aligned Manny family mass scales on activation and restores original scales on teardown
+    - current evidence:
+      - component, idle smoke, movement smoke, and G2 presentation all remain green
+    - current orchestrator read:
+      - the family mass policy is now safe enough to keep as the active Stage 1 baseline
+      - the next open alignment question is PD-family response fitting, not whether mass alignment is feasible at all
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`
