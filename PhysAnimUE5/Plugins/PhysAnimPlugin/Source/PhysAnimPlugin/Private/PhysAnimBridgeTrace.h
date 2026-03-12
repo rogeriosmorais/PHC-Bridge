@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GenericPlatform/GenericPlatformFile.h"
 #include "PhysAnimBridge.h"
 
 enum class EPhysAnimBridgeTraceMode : uint8
