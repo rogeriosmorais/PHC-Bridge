@@ -402,3 +402,19 @@ Whenever new setup or gate evidence arrives:
       - lower-limb target-range mismatch is confirmed as real
       - this knee/ankle-chain target-range policy is the new baseline candidate
       - remaining distal foot/toe spikes mean the next pass should inspect lower-limb representation / distal coupling, not more authoring tweaks
+  - March 12, 2026 distal lower-limb target-range note:
+    - extended the same training-aligned lower-limb target-range policy into the distal chain:
+      - `calf_* = 0.50`
+      - `foot_* = 0.50`
+      - `ball_* = 0.35`
+    - deterministic movement smoke stayed green:
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - first forward movement spikes improve materially versus the previous knee/ankle-only baseline
+      - but later backward/strafe phases still produce large `ball_*` angular spikes
+      - some bursts shift the peak angular offender up the chain instead of removing the distal problem
+    - current runtime read:
+      - scalar distal range shaping helps, but does not finish the lower-limb problem
+      - the next pass should inspect explicit distal target representation under locomotion

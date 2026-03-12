@@ -3583,7 +3583,11 @@ float UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone
 	}
 	else if (BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r"))
 	{
-		TargetScale = 0.75f;
+		TargetScale = 0.50f;
+	}
+	else if (BoneName == TEXT("ball_l") || BoneName == TEXT("ball_r"))
+	{
+		TargetScale = 0.35f;
 	}
 
 	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);

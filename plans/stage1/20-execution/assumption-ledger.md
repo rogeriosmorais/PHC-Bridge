@@ -280,6 +280,18 @@ Only the orchestrator updates status.
     - implication:
       - target-range mismatch was a real part of the problem
       - the next lower-limb pass should inspect distal coupling / representation, not go back to basic authoring checks
+  - March 12, 2026 distal lower-limb target-range follow-up:
+    - extending the lower-limb target-range policy into the distal chain is safe:
+      - `calf_* = 0.50`
+      - `foot_* = 0.50`
+      - `ball_* = 0.35`
+      - deterministic movement smoke still passes with no fail-stop
+    - measured effect:
+      - the first forward burst is materially less explosive than the previous knee/ankle-only baseline
+      - later backward/strafe bursts still produce large `ball_*` angular spikes
+    - implication:
+      - scalar distal range shaping helps, but does not finish the lower-limb problem
+      - the next lower-limb pass should inspect explicit distal target representation under locomotion
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

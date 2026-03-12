@@ -499,9 +499,16 @@ This gives us the highest-value correction with the least ambiguity.
       - `calf_*` targets to `0.50`
       - `foot_*` targets to `0.75`
     - deterministic movement smoke stays green with no fail-stop
-    - lower-limb occupancy falls materially, commonly to about `0.7x - 1.2x`
-    - but the largest remaining body spikes still propagate into the distal foot/toe chain
+  - lower-limb occupancy falls materially, commonly to about `0.7x - 1.2x`
+  - but the largest remaining body spikes still propagate into the distal foot/toe chain
   - next pass should inspect lower-limb representation / distal coupling, not revert to more constraint-authoring tweaks
+  - distal-chain target-range fit result:
+    - extending the lower-limb range policy into the distal chain keeps movement smoke stable
+    - first forward-burst peaks improve materially versus the knee/ankle-only baseline
+    - but later backward/strafe phases still produce large `ball_*` spikes
+  - current read:
+    - scalar distal range shaping helps, but it is not the final fix
+    - the next pass should inspect explicit distal target representation under locomotion, not only more scalar range changes
 
 ## Working Hypothesis
 

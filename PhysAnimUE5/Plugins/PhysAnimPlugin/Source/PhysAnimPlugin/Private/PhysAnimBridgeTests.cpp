@@ -899,17 +899,21 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(TEXT("calf_l"), 1.0f),
 			0.50f);
 		TestEqual(
-			TEXT("Foot chain uses the milder ankle target-range reduction"),
+			TEXT("Foot chain now matches the knee-family target-range reduction"),
 			UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(TEXT("foot_r"), 1.0f),
-			0.75f);
+			0.50f);
 		TestEqual(
-			TEXT("Toe chain remains unchanged in the first knee-ankle target-range pass"),
+			TEXT("Toe chain uses the weakest distal target-range scale"),
 			UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(TEXT("ball_l"), 1.0f),
-			1.0f);
+			0.35f);
 		TestEqual(
 			TEXT("Target-range blend interpolates from neutral to the calf target"),
 			UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(TEXT("calf_r"), 0.5f),
 			0.75f);
+		TestEqual(
+			TEXT("Target-range blend interpolates from neutral to the toe target"),
+			UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(TEXT("ball_r"), 0.5f),
+			0.675f);
 		return true;
 	}
 
