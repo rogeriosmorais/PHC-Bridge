@@ -911,6 +911,22 @@ If that hypothesis is correct:
   - broader training/runtime alignment remains worth continuing
   - this transition-policy refinement is worth keeping
   - the next pass should be selected from the cleaned movement trace as a narrower transition/representation seam, not another guessed lower-limb retune
+## 2026-03-12 - Self-observation velocity alignment
+
+- Why this pass was worth trying:
+  - ProtoMotions `self_obs` consumes simulator body velocities for every body
+  - the movement trace suggested `self_obs` was a more suspicious remaining seam than `mimic_target_poses`
+- Experiment:
+  - keep physics-body velocity for simulating observation bones
+  - derive transform-delta velocity for non-sim observation bones
+- Outcome:
+  - falsified as a new runtime baseline
+  - movement stayed stable, but active locomotion maxima regressed broadly
+  - `self_observation_mean_abs` did not materially improve in active phases
+- Current read:
+  - broader training/runtime alignment is still worth continuing
+  - `self_obs` remains the right area to inspect next
+  - but mixed transform-delta velocity substitution is not the correct next baseline
 ## 2026-03-12 - Distal composition intent enter bypass
 
 - Tested a second transition-policy refinement: bypass the normal distal composition enter hold while live locomotion intent is active.

@@ -672,3 +672,17 @@ The next meaningful ledger updates should come from:
   - the remaining seam is not just delayed activation
   - the distal composition policy still needs restraint on entry
   - the next useful pass should target a narrower transition or representation mismatch, not more aggressive composition-mode activation
+## 2026-03-12 - Mixed transform-delta body velocities are not the next `self_obs` baseline
+
+- Assumption tested:
+  - ProtoMotions consumes simulator body velocities for all bodies, so UE should derive transform-delta velocities for non-sim observation bones instead of reading physics-body velocity for every observation bone
+- Result:
+  - falsified as the next runtime baseline
+- Evidence:
+  - movement stayed stable
+  - but active locomotion maxima regressed broadly versus the committed grace-window baseline
+  - `self_observation_mean_abs` did not materially improve in the active movement phases
+- Updated assumption:
+  - `self_obs` is still the right problem area
+  - but the remaining mismatch is not fixed by switching kinematic observation bones to transform-delta velocity packing
+  - the next useful pass should target another `self_obs` representation seam, not this velocity substitution

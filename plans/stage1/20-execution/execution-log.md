@@ -1044,3 +1044,27 @@ Whenever new setup or gate evidence arrives:
   - the remaining issue is not just delayed activation
   - forcing early activation is too blunt
   - the next pass should move to a narrower transition/representation seam, not more composition-mode enter/exit tuning
+## 2026-03-12 - Self-observation velocity alignment
+
+- Re-checked ProtoMotions `self_obs` and UE body-velocity APIs, then tested a mixed observation-velocity policy:
+  - simulating observation bones kept physics-body velocities
+  - non-simulating observation bones switched to transform-delta-derived velocities
+- Verification stayed green:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `PhysAnim.Component`
+  - `PhysAnim.PIE.MovementTraceSmoke`
+- Result:
+  - not a keep
+  - movement remained stable, but active locomotion got worse broadly versus the current grace-window baseline
+  - trace comparison versus the grace baseline `20260312-223242` showed:
+    - `Forward` max angular speed: `5112 -> 8454 deg/s`
+    - `StrafeLeft`: `3595 -> 4339 deg/s`
+    - `StrafeRight`: `5088 -> 7963 deg/s`
+    - `Backward`: `5422 -> 6044 deg/s`
+    - `Complete`: `1276 -> 5388 deg/s`
+  - `self_observation_mean_abs` did not materially improve in active locomotion phases
+- Runtime code was restored to the grace-window baseline after the experiment.
+- Current read:
+  - `self_obs` remains the right area to investigate
+  - but replacing non-sim body velocities with transform-delta velocities is not the correct next baseline
+  - the next useful pass should target another `self_obs` representation seam, not this mixed velocity policy
