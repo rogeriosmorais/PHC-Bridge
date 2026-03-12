@@ -34,6 +34,7 @@ namespace
 	const FString PhysAnimPieSmokeMap = TEXT("/Game/ThirdPerson/Lvl_ThirdPerson");
 	const TCHAR* PhysAnimPieSmokePrefix = TEXT("[PhysAnimPieSmoke]");
 	const TCHAR* PhysAnimPieMovementSmokePrefix = TEXT("[PhysAnimPieMovementSmoke]");
+	const TCHAR* PhysAnimPieMovementTraceSmokePrefix = TEXT("[PhysAnimPieMovementTraceSmoke]");
 	const TCHAR* PhysAnimPieMovementSoakPrefix = TEXT("[PhysAnimPieMovementSoak]");
 	const TCHAR* PhysAnimPieG2PresentationPrefix = TEXT("[PhysAnimPieG2Presentation]");
 	constexpr float PhysAnimPieSmokeDurationSeconds = 65.0f;
@@ -64,6 +65,155 @@ namespace
 		}
 		return true;
 	}
+
+	FString GetBridgeTraceRootPathForTests()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("PhysAnim"), TEXT("Traces"));
+	}
+
+	TSet<FString> GetExistingBridgeTraceSessionPaths()
+	{
+		TSet<FString> SessionPaths;
+		const FString RootPath = GetBridgeTraceRootPathForTests();
+		IFileManager::Get().MakeDirectory(*RootPath, true);
+
+		TArray<FString> FoundSessionPaths;
+		IFileManager::Get().FindFiles(FoundSessionPaths, *(RootPath / TEXT("*")), false, true);
+		for (const FString& SessionName : FoundSessionPaths)
+		{
+			SessionPaths.Add(FPaths::Combine(RootPath, SessionName));
+		}
+
+		return SessionPaths;
+	}
+
+	class FVerifyBridgeTraceSessionCommand final : public IAutomationLatentCommand
+	{
+	public:
+		FVerifyBridgeTraceSessionCommand(
+			FAutomationTestBase* InTest,
+			const TCHAR* InPrefix,
+			TSet<FString> InPreexistingSessionPaths)
+			: Test(InTest)
+			, Prefix(InPrefix)
+			, PreexistingSessionPaths(MoveTemp(InPreexistingSessionPaths))
+		{
+		}
+
+		virtual bool Update() override
+		{
+			TArray<FString> NewSessionPaths;
+			for (const FString& SessionPath : GetExistingBridgeTraceSessionPaths())
+			{
+				if (!PreexistingSessionPaths.Contains(SessionPath))
+				{
+					NewSessionPaths.Add(SessionPath);
+				}
+			}
+
+			if (NewSessionPaths.Num() <= 0)
+			{
+				Test->AddError(FString::Printf(TEXT("%s No new bridge trace session folder was created."), Prefix));
+				return true;
+			}
+
+			NewSessionPaths.Sort([](const FString& A, const FString& B)
+			{
+				return IFileManager::Get().GetTimeStamp(*A) > IFileManager::Get().GetTimeStamp(*B);
+			});
+
+			const FString SessionPath = NewSessionPaths[0];
+			const FString SessionJsonPath = FPaths::Combine(SessionPath, TEXT("session.json"));
+			const FString FramesPath = FPaths::Combine(SessionPath, TEXT("frames.csv"));
+			const FString EventsPath = FPaths::Combine(SessionPath, TEXT("events.jsonl"));
+
+			if (!IFileManager::Get().FileExists(*SessionJsonPath))
+			{
+				Test->AddError(FString::Printf(TEXT("%s Trace session metadata was not written: %s"), Prefix, *SessionJsonPath));
+				return true;
+			}
+
+			if (!IFileManager::Get().FileExists(*FramesPath))
+			{
+				Test->AddError(FString::Printf(TEXT("%s Trace frame CSV was not written: %s"), Prefix, *FramesPath));
+				return true;
+			}
+
+			if (!IFileManager::Get().FileExists(*EventsPath))
+			{
+				Test->AddError(FString::Printf(TEXT("%s Trace event log was not written: %s"), Prefix, *EventsPath));
+				return true;
+			}
+
+			FString FramesCsv;
+			if (!FFileHelper::LoadFileToString(FramesCsv, *FramesPath))
+			{
+				Test->AddError(FString::Printf(TEXT("%s Failed to read trace frame CSV: %s"), Prefix, *FramesPath));
+				return true;
+			}
+
+			TArray<FString> FrameLines;
+			FramesCsv.ParseIntoArrayLines(FrameLines, false);
+			if (FrameLines.Num() < 2)
+			{
+				Test->AddError(FString::Printf(TEXT("%s Trace frame CSV contained no data rows: %s"), Prefix, *FramesPath));
+				return true;
+			}
+
+			const FString& HeaderLine = FrameLines[0];
+			if (!HeaderLine.Contains(TEXT("self_observation_root_height")) ||
+				!HeaderLine.Contains(TEXT("mimic_target_poses_mean_abs")) ||
+				!HeaderLine.Contains(TEXT("terrain_center")) ||
+				!HeaderLine.Contains(TEXT("movement_smoke_phase")) ||
+				!HeaderLine.Contains(TEXT("distal_locomotion_composition_mode_active")))
+			{
+				Test->AddError(FString::Printf(TEXT("%s Trace frame CSV header is missing expected summary fields."), Prefix));
+				return true;
+			}
+
+			bool bFoundNamedMovementPhase = false;
+			for (int32 LineIndex = 1; LineIndex < FrameLines.Num(); ++LineIndex)
+			{
+				const FString& Line = FrameLines[LineIndex];
+				if (Line.Contains(TEXT("\"Forward\"")) ||
+					Line.Contains(TEXT("\"Backward\"")) ||
+					Line.Contains(TEXT("\"StrafeLeft\"")) ||
+					Line.Contains(TEXT("\"StrafeRight\"")) ||
+					Line.Contains(TEXT("\"Idle_00\"")))
+				{
+					bFoundNamedMovementPhase = true;
+					break;
+				}
+			}
+
+			if (!bFoundNamedMovementPhase)
+			{
+				Test->AddError(FString::Printf(TEXT("%s Trace frame CSV did not capture any named movement smoke phase."), Prefix));
+				return true;
+			}
+
+			FString EventsJson;
+			if (!FFileHelper::LoadFileToString(EventsJson, *EventsPath))
+			{
+				Test->AddError(FString::Printf(TEXT("%s Failed to read trace event log: %s"), Prefix, *EventsPath));
+				return true;
+			}
+
+			if (!EventsJson.Contains(TEXT("\"event_type\":\"trace_started\"")) ||
+				!EventsJson.Contains(TEXT("\"event_type\":\"trace_stopped\"")))
+			{
+				Test->AddError(FString::Printf(TEXT("%s Trace event log did not contain start/stop markers."), Prefix));
+				return true;
+			}
+
+			return true;
+		}
+
+	private:
+		FAutomationTestBase* Test = nullptr;
+		const TCHAR* Prefix = TEXT("[PhysAnimTraceVerify]");
+		TSet<FString> PreexistingSessionPaths;
+	};
 
 #endif
 
@@ -2772,6 +2922,11 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPieMovementTraceSmokeTest,
+		"PhysAnim.PIE.MovementTraceSmoke",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPieMovementSoakTest,
 		"PhysAnim.PIE.MovementSoak",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -2873,6 +3028,59 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			},
 			PhysAnimPieSmokeStopTimeoutSeconds));
 		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeMode"), 0));
+
+		return true;
+	}
+
+	bool FPhysAnimPieMovementTraceSmokeTest::RunTest(const FString& Parameters)
+	{
+		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
+		{
+			AddError(FString::Printf(TEXT("%s Failed to open map '%s'."), PhysAnimPieMovementTraceSmokePrefix, *PhysAnimPieSmokeMap));
+			return false;
+		}
+
+		const TSet<FString> PreexistingSessionPaths = GetExistingBridgeTraceSessionPaths();
+		AddCommand(new FEditorAutomationLogCommand(FString::Printf(
+			TEXT("%s PIE movement trace smoke opening '%s'."),
+			PhysAnimPieMovementTraceSmokePrefix,
+			*PhysAnimPieSmokeMap)));
+		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.TraceOutput"), 2));
+		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeMode"), 1));
+		AddCommand(new FStartPIECommand(false));
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor != nullptr && IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("%s PIE did not start within %.1f seconds."),
+					PhysAnimPieMovementTraceSmokePrefix,
+					PhysAnimPieSmokeStartTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStartTimeoutSeconds));
+		AddCommand(new FWaitLatentCommand(PhysAnimPieMovementSmokeDurationSeconds));
+		AddCommand(new FEndPlayMapCommand());
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor == nullptr || !IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("%s PIE did not stop within %.1f seconds."),
+					PhysAnimPieMovementTraceSmokePrefix,
+					PhysAnimPieSmokeStopTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStopTimeoutSeconds));
+		AddCommand(new FVerifyBridgeTraceSessionCommand(this, PhysAnimPieMovementTraceSmokePrefix, PreexistingSessionPaths));
+		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeMode"), 0));
+		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.TraceOutput"), -1));
 
 		return true;
 	}

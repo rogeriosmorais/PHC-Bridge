@@ -751,6 +751,11 @@ void UPhysAnimComponent::StartBridgeTraceSession()
 
 	BridgeTraceWriter = MoveTemp(Writer);
 	CurrentBridgeTraceSessionId = Metadata.SessionId;
+	UE_LOG(
+		LogPhysAnimBridge,
+		Log,
+		TEXT("[PhysAnim] Bridge trace session started: %s"),
+		*BridgeTraceWriter->GetSessionFolderPath());
 	EmitBridgeTraceEvent(TEXT("trace_started"), TEXT("Bridge trace session started."));
 }
 
