@@ -199,6 +199,14 @@ Only the orchestrator updates status.
     - current orchestrator read:
       - the family mass policy is now safe enough to keep as the active Stage 1 baseline
       - the next open alignment question is PD-family response fitting, not whether mass alignment is feasible at all
+  - March 12, 2026 PD-family response-fit note:
+    - the first control-family response-fit sweep under deterministic movement is now complete
+    - current evidence:
+      - `blend=0.50` is the best measured nonzero fit from the first sweep
+      - `blend=0.25` is not the right baseline because it introduces a worse late angular outlier
+      - `blend=1.00` is still stable, but it does not outperform `0.50`
+    - implication:
+      - Stage 1 should keep the training-aligned control-family profile enabled at `0.50` unless a later targeted fit disproves it
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

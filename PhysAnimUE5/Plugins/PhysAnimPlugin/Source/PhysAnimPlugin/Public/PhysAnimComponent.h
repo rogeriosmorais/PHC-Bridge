@@ -48,10 +48,10 @@ struct FPhysAnimStabilizationSettings
 	float TrainingAlignedMassScaleBlend = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
-	bool bApplyTrainingAlignedControlFamilyProfile = false;
+	bool bApplyTrainingAlignedControlFamilyProfile = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float TrainingAlignedControlFamilyProfileBlend = 0.0f;
+	float TrainingAlignedControlFamilyProfileBlend = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float MaxAngularStepDegreesPerSecond = 180.0f;

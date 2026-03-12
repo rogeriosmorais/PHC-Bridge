@@ -285,3 +285,19 @@ Whenever new setup or gate evidence arrives:
     - current runtime read:
       - the mass-alignment pass is mechanically correct and regression-safe for the current smoke scope
       - the next alignment decision is whether to keep this family policy as the Stage 1 baseline and move to PD-family response fitting
+  - March 12, 2026 PD-family fitting note:
+    - the first training-aligned control-family response fit is now enabled as the Stage 1 baseline
+    - first measured movement-smoke sweep:
+      - `blend=0.00`
+      - `blend=0.25`
+      - `blend=0.50`
+      - `blend=1.00`
+    - current measured result:
+      - all four blends passed `PhysAnim.PIE.MovementSmoke`
+      - `blend=0.50` produced the best nonzero movement fit in the first sweep:
+        - lower forward peak body linear speed than `0.00`, `0.25`, and `1.00`
+        - lower forward peak body angular speed than `0.00`, `0.25`, and `1.00`
+      - `blend=0.25` introduced a worse late angular outlier than the other tested blends
+    - frozen baseline:
+      - keep `bApplyTrainingAlignedControlFamilyProfile = true`
+      - keep `TrainingAlignedControlFamilyProfileBlend = 0.50`

@@ -804,8 +804,8 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	bool FPhysAnimTrainingAlignedControlFamilyProfileTest::RunTest(const FString& Parameters)
 	{
 		FPhysAnimStabilizationSettings Settings;
-		TestFalse(TEXT("Training-aligned control family profile is neutral by default"), Settings.bApplyTrainingAlignedControlFamilyProfile);
-		TestEqual(TEXT("Training-aligned control family profile defaults to zero blend"), Settings.TrainingAlignedControlFamilyProfileBlend, 0.0f);
+		TestTrue(TEXT("Training-aligned control family profile is enabled by default"), Settings.bApplyTrainingAlignedControlFamilyProfile);
+		TestEqual(TEXT("Training-aligned control family profile defaults to the first fitted blend"), Settings.TrainingAlignedControlFamilyProfileBlend, 0.5f);
 
 		TestEqual(
 			TEXT("Torso family uses the strongest training-aligned control scale"),

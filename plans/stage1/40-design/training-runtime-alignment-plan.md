@@ -460,13 +460,22 @@ This gives us the highest-value correction with the least ambiguity.
 - completed next runtime pass:
   - first family-level Manny mass-adjustment policy is now implemented in the live bridge runtime
   - the bridge applies training-aligned Manny family mass scales on bridge activation and restores original scales on bridge teardown
+- completed next runtime pass:
+  - first training-aligned control-family response fit is now enabled in the live bridge runtime
+  - the Stage 1 baseline now keeps the family profile enabled at `blend=0.50`
+  - tested movement-smoke sweep outcomes:
+    - `blend=0.00`: passes, but shows higher forward lower-body spikes
+    - `blend=0.25`: passes, but introduces a worse late angular outlier
+    - `blend=0.50`: best measured nonzero fit in the first sweep
+    - `blend=1.00`: passes, but does not improve the movement peaks versus `0.50`
 - current verified result:
   - `PhysAnim.Component` passes with `PhysAnim.Component.MannyMassInventory` and the new mass-policy helper coverage
   - `PhysAnim.PIE.Smoke` passes
   - `PhysAnim.PIE.MovementSmoke` passes
   - `PhysAnim.PIE.G2Presentation` passes
 - next alignment task:
-  - decide whether the current family mass policy is enough to keep, or whether the next pass should move into PD-family response fitting
+  - keep the current family mass policy and `0.50` control-family blend as the Stage 1 baseline
+  - then decide whether the next pass should fit family response more finely or move to perturbation/presentation validation
 
 ## Working Hypothesis
 
