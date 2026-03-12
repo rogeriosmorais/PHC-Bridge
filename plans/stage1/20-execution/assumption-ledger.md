@@ -612,3 +612,25 @@ The next meaningful ledger updates should come from:
 - Current working assumption:
   - `frames.csv` should be treated as a policy-step artifact, with sparse events carrying startup/shutdown/state-transition information
   - the next locomotion-time alignment pass should be chosen from this cleaned trace, not from mixed tick-rate rows
+## 2026-03-12 - Distal composition mode is still net-positive
+
+- Assumption tested:
+  - after the recent alignment fixes, the explicit-only distal locomotion composition heuristic might have become unnecessary and could now be hurting more than helping
+- Result:
+  - false
+- Evidence:
+  - disabling the policy removed all `distal_locomotion_composition_mode_active=true` trace rows
+  - but movement-trace maxima regressed across all major locomotion phases
+- Current assumption:
+  - distal composition mode is still net-positive in the current runtime baseline
+  - the next seam should be how the mode behaves while active or during transitions, not simple removal
+## 2026-03-12 - CSV trace and Insights are complementary
+
+- Assumption:
+  - the bridge CSV trace is enough by itself to understand where runtime spikes sit relative to animation, physics, and frame timing
+- Result:
+  - false
+- Updated assumption:
+  - the CSV trace explains bridge-local inputs and decisions
+  - Unreal Insights explains where those bridge phases sit relative to game thread, animation, physics, and render timing
+  - both are required for the next locomotion-time investigations

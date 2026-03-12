@@ -922,3 +922,43 @@ Whenever new setup or gate evidence arrives:
   - keepable
   - latest movement trace dropped to `1495` rows with `0` blank phases and `0` non-policy rows
   - the trace artifact is now much more usable for picking the next locomotion-time alignment pass
+## 2026-03-12 - Distal composition ablation
+
+- Used the cleaned policy-step movement trace as the decision surface for the next lower-limb pass.
+- Tested disabling the training-aligned distal locomotion composition policy by default.
+- Verification stayed green:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `PhysAnim.Component`
+  - `PhysAnim.PIE.MovementSmoke`
+  - `PhysAnim.PIE.MovementTraceSmoke`
+- Result: not a keep.
+  - The new trace removed all `distal_locomotion_composition_mode_active=true` rows.
+  - But locomotion got materially worse anyway:
+    - `Forward` max angular speed rose from `8107` to `9273 deg/s`
+    - `StrafeRight` rose from `9353` to `10038 deg/s`
+    - `Backward` rose from `5431` to `5810 deg/s`
+    - `Idle_03` and `Complete` also regressed
+- Conclusion: the explicit-only distal composition policy is still needed in the current baseline, even though active windows remain correlated with the worst outliers.
+- Runtime code was restored to the previous safe baseline after the experiment.
+## 2026-03-12 - Unreal Insights bridge instrumentation
+
+- Added first-class Unreal trace instrumentation directly in the bridge runtime.
+- Added CPU profiler scopes around:
+  - PoseSearch query
+  - future pose sampling
+  - observation packing
+  - `RunSync`
+  - control writes
+- Added trace counters for:
+  - bridge timing slices
+  - max body angular speed
+  - max lower-limb occupancy
+  - number of written policy targets
+  - runtime state
+  - fail-stop count
+- Added a `TRACE_BOOKMARK` on fail-stop so Timing Insights can line the shutdown up against engine timing.
+- Verification passed:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `PhysAnim.Component`
+  - `PhysAnim.PIE.MovementSmoke`
+  - `PhysAnim.PIE.MovementTraceSmoke`

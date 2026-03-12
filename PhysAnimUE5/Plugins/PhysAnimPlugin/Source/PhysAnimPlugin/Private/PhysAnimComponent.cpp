@@ -28,6 +28,9 @@
 #include "PhysicsEngine/ConstraintInstance.h"
 #include "PhysicsEngine/PhysicsConstraintTemplate.h"
 #include "PhysicsEngine/SkeletalBodySetup.h"
+#include "ProfilingDebugging/CountersTrace.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
+#include "ProfilingDebugging/MiscTrace.h"
 #include "PoseSearch/PoseSearchAssetSamplerLibrary.h"
 #include "PoseSearch/PoseSearchDatabase.h"
 #include "PoseSearch/PoseSearchLibrary.h"
@@ -35,6 +38,18 @@
 #include "PhysicsEngine/BodyInstance.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
+
+TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_PoseSearchQueryMs, TEXT("PhysAnim/PoseSearch Query ms"));
+TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_FuturePoseSampleMs, TEXT("PhysAnim/Future Pose Sample ms"));
+TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_ObservationPackMs, TEXT("PhysAnim/Observation Pack ms"));
+TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_RunSyncMs, TEXT("PhysAnim/RunSync ms"));
+TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_ControlWritesMs, TEXT("PhysAnim/Control Writes ms"));
+TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_UpdateControlsMs, TEXT("PhysAnim/UpdateControls ms"));
+TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_MaxBodyAngularSpeedDegPerSec, TEXT("PhysAnim/Max Body Angular Speed deg/s"));
+TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_MaxLowerLimbLimitOccupancy, TEXT("PhysAnim/Max Lower Limb Limit Occupancy"));
+TRACE_DECLARE_INT_COUNTER(COUNTER_PhysAnim_NumPolicyTargetsWritten, TEXT("PhysAnim/Policy Targets Written"));
+TRACE_DECLARE_INT_COUNTER(COUNTER_PhysAnim_RuntimeState, TEXT("PhysAnim/Runtime State"));
+TRACE_DECLARE_INT_COUNTER(COUNTER_PhysAnim_FailStopCount, TEXT("PhysAnim/FailStop Count"));
 
 namespace PhysAnimComponentInternal
 {
@@ -896,13 +911,16 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	UpdateStabilizationStressTestState(StabilizationSettings);
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	ApplyMovementSmokeInput(EffectiveSettings);
+	TRACE_COUNTER_SET(COUNTER_PhysAnim_RuntimeState, static_cast<int64>(RuntimeState));
 	FString TickError;
 	FPoseSearchBlueprintResult SearchResult;
 
 	if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
 	{
 		const double PoseSearchStartSeconds = FPlatformTime::Seconds();
+		TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_PoseSearchQuery);
 		const bool bPoseSearchValid = QueryPoseSearch(SearchResult, TickError);
+		TRACE_COUNTER_SET(COUNTER_PhysAnim_PoseSearchQueryMs, static_cast<float>(MeasureElapsedMs(PoseSearchStartSeconds)));
 		if (bWriteTraceFrameThisTick)
 		{
 			TraceFrame.PoseSearchQueryMs = MeasureElapsedMs(PoseSearchStartSeconds);
@@ -1025,7 +1043,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 
 		const double PoseSearchStartSeconds = FPlatformTime::Seconds();
+		TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_PoseSearchQuery);
 		const bool bPoseSearchValid = QueryPoseSearch(SearchResult, TickError);
+		TRACE_COUNTER_SET(COUNTER_PhysAnim_PoseSearchQueryMs, static_cast<float>(MeasureElapsedMs(PoseSearchStartSeconds)));
 		if (bWriteTraceFrameThisTick)
 		{
 			TraceFrame.PoseSearchQueryMs = MeasureElapsedMs(PoseSearchStartSeconds);
@@ -1068,15 +1088,18 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		TArray<FPhysAnimFuturePoseSample> FuturePoseSamples;
 		const double FuturePoseSampleStartSeconds = FPlatformTime::Seconds();
+		TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_FuturePoseSampling);
 		if (!SampleFuturePoses(SearchResult, FuturePoseSamples, TickError))
 		{
 			if (bWriteTraceFrameThisTick)
 			{
 				TraceFrame.FuturePoseSampleMs = MeasureElapsedMs(FuturePoseSampleStartSeconds);
 			}
+			TRACE_COUNTER_SET(COUNTER_PhysAnim_FuturePoseSampleMs, static_cast<float>(MeasureElapsedMs(FuturePoseSampleStartSeconds)));
 			FailStopWithTrace(TickError);
 			return;
 		}
+		TRACE_COUNTER_SET(COUNTER_PhysAnim_FuturePoseSampleMs, static_cast<float>(MeasureElapsedMs(FuturePoseSampleStartSeconds)));
 		if (bWriteTraceFrameThisTick)
 		{
 			TraceFrame.FuturePoseSampleMs = MeasureElapsedMs(FuturePoseSampleStartSeconds);
@@ -1084,12 +1107,14 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		FVector2D MimicTargetReferenceDataOffsetXY = FVector2D::ZeroVector;
 		const double ObservationPackStartSeconds = FPlatformTime::Seconds();
+		TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_ObservationPack);
 		if (!ResolveMimicTargetReferenceDataOffset(SearchResult, MimicTargetReferenceDataOffsetXY, TickError))
 		{
 			if (bWriteTraceFrameThisTick)
 			{
 				TraceFrame.ObservationPackMs = MeasureElapsedMs(ObservationPackStartSeconds);
 			}
+			TRACE_COUNTER_SET(COUNTER_PhysAnim_ObservationPackMs, static_cast<float>(MeasureElapsedMs(ObservationPackStartSeconds)));
 			FailStopWithTrace(TickError);
 			return;
 		}
@@ -1105,6 +1130,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			{
 				TraceFrame.ObservationPackMs = MeasureElapsedMs(ObservationPackStartSeconds);
 			}
+			TRACE_COUNTER_SET(COUNTER_PhysAnim_ObservationPackMs, static_cast<float>(MeasureElapsedMs(ObservationPackStartSeconds)));
 			FailStopWithTrace(TickError);
 			return;
 		}
@@ -1122,6 +1148,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			{
 				TraceFrame.ObservationPackMs = MeasureElapsedMs(ObservationPackStartSeconds);
 			}
+			TRACE_COUNTER_SET(COUNTER_PhysAnim_ObservationPackMs, static_cast<float>(MeasureElapsedMs(ObservationPackStartSeconds)));
 			FailStopWithTrace(TickError);
 			return;
 		}
@@ -1132,9 +1159,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			{
 				TraceFrame.ObservationPackMs = MeasureElapsedMs(ObservationPackStartSeconds);
 			}
+			TRACE_COUNTER_SET(COUNTER_PhysAnim_ObservationPackMs, static_cast<float>(MeasureElapsedMs(ObservationPackStartSeconds)));
 			FailStopWithTrace(TickError);
 			return;
 		}
+		TRACE_COUNTER_SET(COUNTER_PhysAnim_ObservationPackMs, static_cast<float>(MeasureElapsedMs(ObservationPackStartSeconds)));
 		if (bWriteTraceFrameThisTick)
 		{
 			const PhysAnimComponentInternal::FFloatBufferSummary SelfObservationSummary =
@@ -1205,6 +1234,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	}
 
 	const double ControlTargetStartSeconds = FPlatformTime::Seconds();
+	TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_ControlWrites);
 	ApplyControlTargets(
 		bRunPolicyUpdateThisTick
 			? (PolicyControlIntervalSeconds * FMath::Max(ElapsedPolicySteps, 1))
@@ -1216,6 +1246,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		TraceFrame.ControlTargetMs = MeasureElapsedMs(ControlTargetStartSeconds);
 	}
+	TRACE_COUNTER_SET(COUNTER_PhysAnim_ControlWritesMs, static_cast<float>(MeasureElapsedMs(ControlTargetStartSeconds)));
 	if (!TickError.IsEmpty())
 	{
 		FailStopWithTrace(TickError);
@@ -1224,6 +1255,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	const double UpdateControlsStartSeconds = FPlatformTime::Seconds();
 	PhysicsControl->UpdateControls(DeltaTime);
+	TRACE_COUNTER_SET(COUNTER_PhysAnim_UpdateControlsMs, static_cast<float>(MeasureElapsedMs(UpdateControlsStartSeconds)));
 	if (bWriteTraceFrameThisTick)
 	{
 		TraceFrame.UpdateControlsMs = MeasureElapsedMs(UpdateControlsStartSeconds);
@@ -1243,6 +1275,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		TraceFrame.InstabilityCheckMs = MeasureElapsedMs(InstabilityCheckStartSeconds);
 	}
+	TRACE_COUNTER_SET(COUNTER_PhysAnim_MaxBodyAngularSpeedDegPerSec, LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond);
+	TRACE_COUNTER_SET(COUNTER_PhysAnim_MaxLowerLimbLimitOccupancy, LastControlTargetDiagnostics.MaxLowerLimbLimitOccupancy);
+	TRACE_COUNTER_SET(COUNTER_PhysAnim_NumPolicyTargetsWritten, LastControlTargetDiagnostics.NumPolicyTargetsWritten);
 	TrackStabilizationStressTestObservations();
 	AdvanceBringUpState(DeltaTime, EffectiveSettings);
 	if (bSimulationHandoffCompletedThisTick)
@@ -1901,6 +1936,8 @@ bool UPhysAnimComponent::ValidatePoseSearchIntegration(FString& OutError)
 
 bool UPhysAnimComponent::QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_QueryPoseSearch);
+
 	UAnimInstance* const LocalAnimInstance = AnimInstance.Get();
 	if (!LocalAnimInstance)
 	{
@@ -2198,6 +2235,8 @@ bool UPhysAnimComponent::SampleFuturePoses(
 	TArray<FPhysAnimFuturePoseSample>& OutFutureSamples,
 	FString& OutError) const
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_SampleFuturePoses);
+
 	const UAnimInstance* const LocalAnimInstance = this->AnimInstance.Get();
 	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
 	if (!LocalAnimInstance || !SkeletalMesh)
@@ -2301,6 +2340,8 @@ bool UPhysAnimComponent::ResolveMimicTargetReferenceDataOffset(
 
 bool UPhysAnimComponent::RunInference(FString& OutError)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_RunInference);
+
 	UE::NNE::IModelInstanceRunSync* const ModelInstance = GetModelInstanceRunSync();
 	if (!ModelInstance)
 	{
@@ -2326,11 +2367,17 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		}
 	}
 
-	if (ModelInstance->RunSync(InputBindings, OutputBindings) != UE::NNE::EResultStatus::Ok)
+	const double RunSyncStartSeconds = FPlatformTime::Seconds();
 	{
-		OutError = TEXT("RunSync failed.");
-		return false;
+		TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_RunSync);
+		if (ModelInstance->RunSync(InputBindings, OutputBindings) != UE::NNE::EResultStatus::Ok)
+		{
+			TRACE_COUNTER_SET(COUNTER_PhysAnim_RunSyncMs, static_cast<float>((FPlatformTime::Seconds() - RunSyncStartSeconds) * 1000.0));
+			OutError = TEXT("RunSync failed.");
+			return false;
+		}
 	}
+	TRACE_COUNTER_SET(COUNTER_PhysAnim_RunSyncMs, static_cast<float>((FPlatformTime::Seconds() - RunSyncStartSeconds) * 1000.0));
 
 	for (const float Value : ActionOutputBuffer)
 	{
@@ -3638,6 +3685,8 @@ void UPhysAnimComponent::ApplyControlTargets(
 	bool bApplyNewPolicyStepThisTick,
 	FString& OutError)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_ApplyControlTargets);
+
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	if (!PhysicsControl)
 	{
@@ -4178,6 +4227,9 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 
 void UPhysAnimComponent::FailStop(const FString& Reason)
 {
+	TRACE_BOOKMARK(TEXT("PhysAnim FailStop: %s"), *Reason);
+	TRACE_COUNTER_ADD(COUNTER_PhysAnim_FailStopCount, 1);
+
 	if (PhysAnimComponentInternal::CVarPaStabilizationStressTest.GetValueOnGameThread() > 0 &&
 		StabilizationStressTestStartTimeSeconds >= 0.0)
 	{

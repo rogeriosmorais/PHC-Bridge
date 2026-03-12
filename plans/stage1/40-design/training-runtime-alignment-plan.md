@@ -862,3 +862,23 @@ If that hypothesis is correct:
 - Keepable.
 - Latest deterministic movement trace dropped to `1495` rows with `0` blank phases and `0` non-policy rows.
 - The next locomotion-time alignment decision can now be made from a much cleaner trace artifact.
+## 2026-03-12 - Distal composition ablation
+
+- The policy-step-aligned movement trace was used to test a full ablation of the training-aligned distal locomotion composition policy.
+- Outcome:
+  - the ablation is falsified as a new baseline
+  - disabling the policy worsened `Forward`, `StrafeLeft`, `StrafeRight`, `Backward`, and late post-movement settling
+- Updated read:
+  - the explicit-only distal composition policy remains necessary
+  - the remaining problem is not the existence of the policy, but the behavior of the runtime while that policy is active
+## 2026-03-12 - Insights instrumentation layer
+
+- Added direct Unreal Insights instrumentation to the bridge so the existing CSV trace can be correlated against engine timing.
+- This is an observability pass, not a behavioral alignment change.
+- Timing Insights now has bridge-local slices for:
+  - PoseSearch query
+  - future pose sampling
+  - observation packing
+  - `RunSync`
+  - control writes
+- Counters/bookmarks now expose bridge spikes and fail-stop directly in the engine trace timeline.
