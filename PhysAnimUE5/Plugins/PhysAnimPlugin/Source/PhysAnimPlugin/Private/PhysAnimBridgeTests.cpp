@@ -970,13 +970,25 @@ namespace
 			TEXT("G2 perturbation fires after the lead-in ends"),
 			UPhysAnimComparisonSubsystem::ShouldApplyPresentationPerturbation(1.0f));
 		TestEqual(
-			TEXT("G2 perturbation impulse is a lateral shove"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationPerturbationImpulseCmPerSec(),
-			FVector(0.0f, 5000.0f, 0.0f));
+			TEXT("G2 perturbation pusher starts from the actor's left side"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPusherStartOffsetCm(),
+			FVector(0.0f, -145.0f, 82.0f));
 		TestEqual(
-			TEXT("G2 perturbation targets the lower torso so the whole body reacts"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationPerturbationBoneName(),
-			FName(TEXT("spine_01")));
+			TEXT("G2 perturbation pusher uses the frozen half extent"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPusherHalfExtentCm(),
+			FVector(18.0f, 44.0f, 78.0f));
+		TestEqual(
+			TEXT("G2 perturbation pusher sweeps a fixed travel distance"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPusherTravelDistanceCm(),
+			240.0f);
+		TestEqual(
+			TEXT("G2 perturbation pusher sweeps over the frozen contact window"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPusherTravelSeconds(),
+			0.50f);
+		TestEqual(
+			TEXT("G2 perturbation applies a sustained body-level push to the pelvis physics body"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationBodyPushForce(),
+			FVector(0.0f, 350000.0f, 0.0f));
 		TestTrue(
 			TEXT("G2 presentation reaches idle ready after the perturbation intro"),
 			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(4.5f) == TEXT("IdleReady"));

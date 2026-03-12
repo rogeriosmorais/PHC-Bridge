@@ -47,6 +47,9 @@ namespace PhysAnimComponentInternal
 	constexpr float MovementSmokeIdleDurationSeconds = 3.0f;
 	constexpr float MovementSmokeMoveDurationSeconds = 5.0f;
 	constexpr float MovementSmokeTimelineDurationSeconds = 32.0f;
+	constexpr float PresentationPerturbationStrengthRelaxationMultiplier = 0.65f;
+	constexpr float PresentationPerturbationDampingRatioRelaxationMultiplier = 0.25f;
+	constexpr float PresentationPerturbationExtraDampingRelaxationMultiplier = 0.10f;
 
 	TAutoConsoleVariable<float> CVarPhysAnimActionScale(
 		TEXT("physanim.ActionScale"),
@@ -597,6 +600,29 @@ bool UPhysAnimComponent::IsReadyForScriptedPresentation() const
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	return CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) >= (1.0f - KINDA_SMALL_NUMBER);
+}
+
+void UPhysAnimComponent::SetPresentationPerturbationOverrideSeconds(float DurationSeconds)
+{
+	if (DurationSeconds <= 0.0f)
+	{
+		ClearPresentationPerturbationOverride();
+		return;
+	}
+
+	const UWorld* const World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	PresentationPerturbationOverrideEndTimeSeconds =
+		FMath::Max(PresentationPerturbationOverrideEndTimeSeconds, World->GetTimeSeconds() + DurationSeconds);
+}
+
+void UPhysAnimComponent::ClearPresentationPerturbationOverride()
+{
+	PresentationPerturbationOverrideEndTimeSeconds = -1.0;
 }
 
 bool UPhysAnimComponent::ActivateBridgeFromReadyState(
@@ -1248,6 +1274,7 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveBoolOverride(
 			PhysAnimComponentInternal::CVarPhysAnimEnableInstabilityFailStop,
 			EffectiveSettings.bEnableInstabilityFailStop);
+	ApplyPresentationPerturbationStabilizationOverride(IsPresentationPerturbationOverrideActive(), EffectiveSettings);
 	return EffectiveSettings;
 }
 

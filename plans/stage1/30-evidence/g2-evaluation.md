@@ -92,7 +92,8 @@ The scripted presentation now begins with a fixed physical perturbation. This is
 
 - the `Physics-Driven` actor should visibly react and rebalance
 - the `Kinematic` actor should mostly ignore the shove
-- the perturbation is now delivered as a short scripted burst, not a single one-frame tap
+- the perturbation is now delivered as a short scripted contact push, not a one-frame tap
+- the contact push includes a sustained gameplay-shell shove on the `Physics-Driven` actor during the contact window
 - the perturbation phase uses a closer camera framing before the sequence returns to the standard comparison shot
 
 ## Evaluation Rubric

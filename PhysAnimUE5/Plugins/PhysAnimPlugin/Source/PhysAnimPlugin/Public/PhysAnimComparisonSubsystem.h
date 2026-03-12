@@ -8,6 +8,7 @@ class ACharacter;
 class APlayerController;
 class ACameraActor;
 class AActor;
+class UBoxComponent;
 
 UCLASS()
 class PHYSANIMPLUGIN_API UPhysAnimComparisonSubsystem : public UTickableWorldSubsystem
@@ -34,18 +35,23 @@ public:
 	static bool ShouldApplyPresentationPerturbation(float ElapsedSeconds);
 	static float GetPresentationDurationSeconds();
 	static FVector ResolvePresentationCameraOffsetCm(bool bPerturbationPhase = false);
-	static FVector ResolvePresentationPerturbationImpulseCmPerSec();
-	static FName ResolvePresentationPerturbationBoneName();
+	static FVector ResolvePresentationPusherHalfExtentCm();
+	static FVector ResolvePresentationPusherStartOffsetCm();
+	static float ResolvePresentationPusherTravelDistanceCm();
+	static float ResolvePresentationPusherTravelSeconds();
+	static FVector ResolvePresentationBodyPushForce();
 
 private:
 	bool StartComparison(bool bEnablePresentationMode, FString& OutError);
 	bool ConfigureSourcePhysicsCharacter(ACharacter& Character, FString& OutError);
 	bool ConfigureKinematicBaselineCharacter(ACharacter& Character, FString& OutError);
 	bool ActivatePresentationMode(FString& OutError);
+	bool CreatePresentationPushers(FString& OutError);
 	void TickManualComparison(ACharacter& SourceCharacter, ACharacter& KinematicCharacter);
 	void TickPresentationComparison(ACharacter& SourceCharacter, ACharacter& KinematicCharacter);
 	void TickComparisonLabels() const;
 	void UpdatePresentationCamera();
+	void UpdatePerturbationPushers(ACharacter& SourceCharacter, ACharacter& KinematicCharacter, float ElapsedSeconds);
 	void CapturePerturbationBaseline(const ACharacter& SourceCharacter, const ACharacter& KinematicCharacter);
 	void MaybeLogPerturbationTelemetry(const ACharacter& SourceCharacter, const ACharacter& KinematicCharacter);
 	void RestoreSourcePhysicsCharacter();
@@ -56,10 +62,16 @@ private:
 	TWeakObjectPtr<APlayerController> PresentationPlayerController;
 	TWeakObjectPtr<AActor> OriginalViewTarget;
 	TWeakObjectPtr<ACameraActor> ComparisonCameraActor;
+	TWeakObjectPtr<AActor> SourcePerturbationPusherActor;
+	TWeakObjectPtr<AActor> KinematicPerturbationPusherActor;
+	TWeakObjectPtr<UBoxComponent> SourcePerturbationPusherBox;
+	TWeakObjectPtr<UBoxComponent> KinematicPerturbationPusherBox;
 	FTransform SourceOriginalTransform = FTransform::Identity;
 	bool bHasSavedSourceOriginalTransform = false;
 	TEnumAsByte<ECollisionResponse> SourceOriginalCapsulePawnResponse = ECollisionResponse::ECR_Block;
 	TEnumAsByte<ECollisionResponse> SourceOriginalMeshPawnResponse = ECollisionResponse::ECR_Block;
+	TEnumAsByte<ECollisionResponse> SourceOriginalCapsuleWorldDynamicResponse = ECollisionResponse::ECR_Block;
+	TEnumAsByte<ECollisionResponse> SourceOriginalMeshWorldDynamicResponse = ECollisionResponse::ECR_Block;
 	FRotator ComparisonAnchorRotation = FRotator::ZeroRotator;
 	double PresentationStartTimeSeconds = -1.0;
 	bool bPresentationPerturbationApplied = false;
@@ -71,9 +83,7 @@ private:
 	bool bComparisonActive = false;
 	float LateralSeparationCm = 250.0f;
 	double PresentationPerturbationAppliedTimeSeconds = -1.0;
-	double LastPerturbationPulseTimeSeconds = -1.0;
 	double LastPerturbationTelemetryLogTimeSeconds = -1.0;
-	int32 PresentationPerturbationBurstPulsesApplied = 0;
 	FVector SourcePerturbationBaselineLocation = FVector::ZeroVector;
 	FVector KinematicPerturbationBaselineLocation = FVector::ZeroVector;
 	FVector SourcePerturbationBaselineSpineLocation = FVector::ZeroVector;

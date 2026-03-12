@@ -527,7 +527,8 @@ PhysAnim.G2.StartPresentation
      - `Kinematic`
   6. confirm the camera is now fixed/tracking automatically and your own mouse look is no longer driving the comparison
   7. compare them through the same scripted sequence, with the same camera framing
-     - the scripted presentation now begins with a fixed perturbation burst on `spine_01`
+     - the scripted presentation now begins with a fixed scripted contact push
+     - the `Physics-Driven` actor now gets a sustained shell-level shove during that contact window
      - the camera starts closer for that perturbation moment, then returns to the wider locomotion framing
      - the important question in that first moment is whether the `Physics-Driven` actor reacts and rebalances while the `Kinematic` actor mostly does not
   8. if the scripted presentation harness is unavailable, fall back to:

@@ -136,6 +136,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	bool IsReadyForScriptedPresentation() const;
 
+	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
+	void SetPresentationPerturbationOverrideSeconds(float DurationSeconds);
+
+	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
+	void ClearPresentationPerturbationOverride();
+
 protected:
 	UPROPERTY(EditAnywhere, Category = "PhysAnim")
 	TSoftObjectPtr<UNNEModelData> ModelDataAsset;
@@ -192,6 +198,7 @@ private:
 	float CalculateSimulationHandoffAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	float CalculateCurrentControlAuthorityAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	float CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
+	bool IsPresentationPerturbationOverrideActive() const;
 
 	UE::NNE::IModelInstanceRunSync* GetModelInstanceRunSync() const;
 	TConstArrayView<UE::NNE::FTensorDesc> GetInputTensorDescs() const;
@@ -253,6 +260,7 @@ private:
 	FName LastMovementSmokePhaseName = NAME_None;
 	bool bMovementSmokeScriptStarted = false;
 	bool bMovementSmokeCompletionLogged = false;
+	double PresentationPerturbationOverrideEndTimeSeconds = -1.0;
 	FName OriginalMeshCollisionProfileName = NAME_None;
 	ECollisionEnabled::Type OriginalMeshCollisionEnabled = ECollisionEnabled::NoCollision;
 	TEnumAsByte<ECollisionResponse> OriginalMeshPawnResponse = ECollisionResponse::ECR_Block;
@@ -340,6 +348,9 @@ public:
 		bool bSimulationHandoffSettled,
 		float ElapsedSinceHandoffSettledSeconds,
 		float RampDurationSeconds);
+	static void ApplyPresentationPerturbationStabilizationOverride(
+		bool bOverrideActive,
+		FPhysAnimStabilizationSettings& InOutSettings);
 	static void ResolveRuntimeInstabilityRootFrame(
 		bool bPreserveGameplayShell,
 		const FVector& RootLocationCm,
