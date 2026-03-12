@@ -118,6 +118,14 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.DistalLocomotionTargetPolicyActivationSpeedCmPerSec"),
 		-1.0f,
 		TEXT("Override for the Stage 1 distal locomotion target policy activation speed in cm/s. Negative values keep the component default."));
+	TAutoConsoleVariable<int32> CVarPhysAnimApplyTrainingAlignedDistalLocomotionCompositionPolicy(
+		TEXT("physanim.ApplyTrainingAlignedDistalLocomotionCompositionPolicy"),
+		-1,
+		TEXT("Override for the Stage 1 distal locomotion target composition policy. -1 keeps the component default, 0 disables, 1 enables."));
+	TAutoConsoleVariable<float> CVarPhysAnimDistalLocomotionCompositionPolicyActivationSpeedCmPerSec(
+		TEXT("physanim.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec"),
+		-1.0f,
+		TEXT("Override for the Stage 1 distal locomotion target composition activation speed in cm/s. Negative values keep the component default."));
 	TAutoConsoleVariable<float> CVarPhysAnimMaxAngularStepDegPerSec(
 		TEXT("physanim.MaxAngularStepDegPerSec"),
 		-1.0f,
@@ -349,7 +357,7 @@ namespace PhysAnimComponentInternal
 	FString BuildStabilizationSummary(const FPhysAnimStabilizationSettings& Settings)
 	{
 		return FString::Printf(
-			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f MassPolicy=%s MassBlend=%.2f FamilyPd=%s FamilyPdBlend=%.2f ToePolicy=%s ToeBlend=%.2f LowerLimbRangePolicy=%s LowerLimbRangeBlend=%.2f DistalMovePolicy=%s DistalMoveBlend=%.2f DistalMoveSpeed=%.1f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
+			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f MassPolicy=%s MassBlend=%.2f FamilyPd=%s FamilyPdBlend=%.2f ToePolicy=%s ToeBlend=%.2f LowerLimbRangePolicy=%s LowerLimbRangeBlend=%.2f DistalMovePolicy=%s DistalMoveBlend=%.2f DistalMoveSpeed=%.1f DistalMoveCompose=%s DistalMoveComposeSpeed=%.1f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
 			Settings.bForceZeroActions ? TEXT("true") : TEXT("false"),
 			Settings.ActionScale,
 			Settings.ActionClampAbs,
@@ -367,6 +375,8 @@ namespace PhysAnimComponentInternal
 			Settings.bApplyTrainingAlignedDistalLocomotionTargetPolicy ? TEXT("true") : TEXT("false"),
 			Settings.TrainingAlignedDistalLocomotionTargetPolicyBlend,
 			Settings.DistalLocomotionTargetPolicyActivationSpeedCmPerSec,
+			Settings.bApplyTrainingAlignedDistalLocomotionCompositionPolicy ? TEXT("true") : TEXT("false"),
+			Settings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec,
 			Settings.MaxAngularStepDegreesPerSecond,
 			Settings.AngularStrengthMultiplier,
 			Settings.AngularDampingRatioMultiplier,
@@ -1682,6 +1692,14 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimDistalLocomotionTargetPolicyActivationSpeedCmPerSec,
 			EffectiveSettings.DistalLocomotionTargetPolicyActivationSpeedCmPerSec);
+	EffectiveSettings.bApplyTrainingAlignedDistalLocomotionCompositionPolicy =
+		PhysAnimComponentInternal::ResolveBoolOverride(
+			PhysAnimComponentInternal::CVarPhysAnimApplyTrainingAlignedDistalLocomotionCompositionPolicy,
+			EffectiveSettings.bApplyTrainingAlignedDistalLocomotionCompositionPolicy);
+	EffectiveSettings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimDistalLocomotionCompositionPolicyActivationSpeedCmPerSec,
+			EffectiveSettings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec);
 	EffectiveSettings.MaxAngularStepDegreesPerSecond =
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimMaxAngularStepDegPerSec,
@@ -2254,6 +2272,23 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		return;
 	}
 
+	const float OwnerPlanarSpeedCmPerSec = [this]() -> float
+	{
+		const AActor* const OwnerActor = GetOwner();
+		if (!OwnerActor)
+		{
+			return 0.0f;
+		}
+
+		const FVector OwnerVelocity = OwnerActor->GetVelocity();
+		return FVector(OwnerVelocity.X, OwnerVelocity.Y, 0.0f).Size();
+	}();
+	const bool bApplyTrainingAlignedDistalLocomotionCompositionPolicy =
+		ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(
+			EffectiveSettings.bApplyTrainingAlignedDistalLocomotionCompositionPolicy,
+			OwnerPlanarSpeedCmPerSec,
+			EffectiveSettings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec);
+
 	PhysicsControl->SetControlsInSetEnabled(TEXT("All"), false);
 	PhysicsControl->SetControlsInSetUseSkeletalAnimation(
 		TEXT("All"),
@@ -2292,6 +2327,17 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale;
 
 		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+		if (bApplyTrainingAlignedDistalLocomotionCompositionPolicy &&
+			ShouldForceExplicitOnlyDistalLocomotionTargetMode(BoneName))
+		{
+			PhysicsControl->SetControlUseSkeletalAnimation(
+				ControlName,
+				false,
+				0.0f,
+				0.0f,
+				true,
+				false);
+		}
 		PhysicsControl->SetControlMultiplier(
 			ControlName,
 			ControlMultiplier,
@@ -3671,6 +3717,23 @@ float UPhysAnimComponent::ResolveTrainingAlignedDistalLocomotionTargetScaleForBo
 	}
 
 	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);
+}
+
+bool UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(
+	bool bApplyTrainingAlignedDistalLocomotionCompositionPolicy,
+	float OwnerPlanarSpeedCmPerSec,
+	float ActivationSpeedCmPerSec)
+{
+	return bApplyTrainingAlignedDistalLocomotionCompositionPolicy &&
+		OwnerPlanarSpeedCmPerSec > FMath::Max(0.0f, ActivationSpeedCmPerSec);
+}
+
+bool UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(FName BoneName)
+{
+	return BoneName == TEXT("foot_l") ||
+		BoneName == TEXT("ball_l") ||
+		BoneName == TEXT("foot_r") ||
+		BoneName == TEXT("ball_r");
 }
 
 float UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(FName BoneName, float BlendAlpha)

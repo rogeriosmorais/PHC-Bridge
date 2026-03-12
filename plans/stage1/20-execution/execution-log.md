@@ -433,3 +433,23 @@ Whenever new setup or gate evidence arrives:
     - current runtime read:
       - this locomotion-time distal attenuation is not a clean new baseline
       - the next pass should move to more structural distal target construction under locomotion, not another scalar attenuation
+  - March 12, 2026 distal locomotion target-composition note:
+    - reviewed the next lower-limb mismatch surface against:
+      - official `UPhysicsControlComponent` / `FPhysicsControlData` docs
+      - local UE 5.7 PhysicsControl source showing explicit targets are applied in the space of the skeletal target transform
+      - ProtoMotions code confirming PD targets are authored in simulator joint space
+    - first runtime experiment:
+      - above `50 cm/s`, force `foot_*` and `ball_*` controls into explicit-only target mode
+      - leave the rest of the body on the current policy-active skeletal-target composition path
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - backward distal spikes improve materially versus the locomotion-time attenuation baseline
+      - strafe remains mixed, with some peaks shifting up into `foot_*`, `calf_*`, or `thigh_*`
+    - current runtime read:
+      - target composition mode is now confirmed as a real lower-limb mismatch surface
+      - distal-only composition switching is promising, but not yet a clean final baseline
+      - the next pass should test whether the explicit-only composition policy must expand to the full knee/ankle/toe chain or whether locomotion-transition handling is the remaining problem

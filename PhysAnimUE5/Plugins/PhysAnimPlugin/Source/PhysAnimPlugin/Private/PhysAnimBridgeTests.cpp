@@ -957,6 +957,38 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTrainingAlignedDistalLocomotionCompositionPolicyTest,
+		"PhysAnim.Component.TrainingAlignedDistalLocomotionCompositionPolicy",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTrainingAlignedDistalLocomotionCompositionPolicyTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimStabilizationSettings Settings;
+		TestTrue(TEXT("Training-aligned distal locomotion composition policy is enabled by default"), Settings.bApplyTrainingAlignedDistalLocomotionCompositionPolicy);
+		TestEqual(TEXT("Training-aligned distal locomotion composition policy default activation speed is 50 cm/s"), Settings.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec, 50.0f);
+
+		TestTrue(
+			TEXT("Distal locomotion composition policy disabled state returns false"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(false, 600.0f, 50.0f));
+		TestTrue(
+			TEXT("Below-threshold speed disables distal locomotion composition policy application"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(true, 25.0f, 50.0f));
+		TestTrue(
+			TEXT("Enabled distal locomotion composition policy with sufficient speed applies"),
+			UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(true, 600.0f, 50.0f));
+		TestTrue(
+			TEXT("Feet enter explicit-only locomotion composition mode"),
+			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("foot_l")));
+		TestTrue(
+			TEXT("Toes enter explicit-only locomotion composition mode"),
+			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("ball_r")));
+		TestFalse(
+			TEXT("Calves do not enter explicit-only locomotion composition mode in the first pass"),
+			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("calf_l")));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimConstraintLimitProxyTest,
 		"PhysAnim.Component.ConstraintLimitProxy",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

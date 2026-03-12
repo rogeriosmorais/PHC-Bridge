@@ -521,6 +521,18 @@ This gives us the highest-value correction with the least ambiguity.
     - current read:
       - locomotion-time distal attenuation is a useful measured experiment, but not a clean new baseline
       - the next pass should move to a more structural distal target construction experiment, not another scalar attenuation
+  - first distal locomotion target-composition result:
+    - added a per-control locomotion composition policy:
+      - above `50 cm/s`, `foot_*` and `ball_*` switch to explicit-only target mode
+      - the rest of the body stays on the current policy-active skeletal-target composition path
+    - deterministic movement smoke stays green with no fail-stop
+    - measured result:
+      - backward distal spikes improve materially relative to the locomotion-time attenuation baseline
+      - strafe remains mixed, with some peaks shifting up the lower-limb chain
+    - current read:
+      - composition mode is a real lower-limb mismatch surface
+      - distal-only composition switching is not yet a clean final baseline
+      - the next pass should test whether the explicit-only composition policy needs to expand to the full knee/ankle/toe chain or whether locomotion-transition handling is the real remaining problem
 
 ## Working Hypothesis
 

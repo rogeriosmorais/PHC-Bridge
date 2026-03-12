@@ -75,6 +75,12 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float DistalLocomotionTargetPolicyActivationSpeedCmPerSec = 50.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
+	bool bApplyTrainingAlignedDistalLocomotionCompositionPolicy = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
+	float DistalLocomotionCompositionPolicyActivationSpeedCmPerSec = 50.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float MaxAngularStepDegreesPerSecond = 180.0f;
 
@@ -130,6 +136,8 @@ struct FPhysAnimStabilizationSettings
 			bApplyTrainingAlignedDistalLocomotionTargetPolicy == Other.bApplyTrainingAlignedDistalLocomotionTargetPolicy &&
 			FMath::IsNearlyEqual(TrainingAlignedDistalLocomotionTargetPolicyBlend, Other.TrainingAlignedDistalLocomotionTargetPolicyBlend) &&
 			FMath::IsNearlyEqual(DistalLocomotionTargetPolicyActivationSpeedCmPerSec, Other.DistalLocomotionTargetPolicyActivationSpeedCmPerSec) &&
+			bApplyTrainingAlignedDistalLocomotionCompositionPolicy == Other.bApplyTrainingAlignedDistalLocomotionCompositionPolicy &&
+			FMath::IsNearlyEqual(DistalLocomotionCompositionPolicyActivationSpeedCmPerSec, Other.DistalLocomotionCompositionPolicyActivationSpeedCmPerSec) &&
 			FMath::IsNearlyEqual(MaxAngularStepDegreesPerSecond, Other.MaxAngularStepDegreesPerSecond) &&
 			FMath::IsNearlyEqual(AngularStrengthMultiplier, Other.AngularStrengthMultiplier) &&
 			FMath::IsNearlyEqual(AngularDampingRatioMultiplier, Other.AngularDampingRatioMultiplier) &&
@@ -442,6 +450,8 @@ public:
 	static float ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(FName BoneName, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedDistalLocomotionTargetPolicy(bool bApplyTrainingAlignedDistalLocomotionTargetPolicy, float BlendAlpha, float OwnerPlanarSpeedCmPerSec, float ActivationSpeedCmPerSec);
 	static float ResolveTrainingAlignedDistalLocomotionTargetScaleForBone(FName BoneName, float BlendAlpha);
+	static bool ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(bool bApplyTrainingAlignedDistalLocomotionCompositionPolicy, float OwnerPlanarSpeedCmPerSec, float ActivationSpeedCmPerSec);
+	static bool ShouldForceExplicitOnlyDistalLocomotionTargetMode(FName BoneName);
 	static float ResolveTrainingAlignedControlStrengthScaleForBone(FName BoneName, float BlendAlpha);
 	static float ResolveTrainingAlignedControlExtraDampingScaleForBone(FName BoneName, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedControlFamilyProfile(bool bApplyTrainingAlignedControlFamilyProfile, float BlendAlpha);

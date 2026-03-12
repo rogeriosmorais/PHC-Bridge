@@ -304,6 +304,21 @@ Only the orchestrator updates status.
     - implication:
       - simple locomotion-time distal attenuation is not enough by itself
       - the next lower-limb pass should move to structural distal target construction, not more scalar attenuation
+  - March 12, 2026 distal locomotion target-composition follow-up:
+    - current evidence:
+      - local UE 5.7 PhysicsControl source confirms explicit targets are applied in the space of the skeletal target transform
+      - ProtoMotions PD targets are authored in simulator joint space, not as additive animation offsets
+    - first runtime experiment:
+      - above `50 cm/s`, force `foot_*` and `ball_*` into explicit-only target mode
+      - keep the rest of the body on the current policy-active skeletal-target composition path
+    - measured result:
+      - deterministic movement smoke still passes with no fail-stop
+      - backward distal spikes improve materially versus the locomotion-time attenuation baseline
+      - strafe remains mixed, with some peaks shifting up the lower-limb chain
+    - implication:
+      - target composition mode is a real part of the remaining lower-limb mismatch
+      - distal-only composition switching is not yet sufficient for a final baseline
+      - the next lower-limb pass should test whether explicit-only composition needs to expand to the full knee/ankle/toe chain or whether locomotion-transition handling is the deeper remaining issue
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`
