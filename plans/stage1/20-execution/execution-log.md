@@ -694,3 +694,24 @@ Whenever new setup or gate evidence arrives:
       - PhysicsControl cache warmup/order was a real UE-side seam
       - this is a keepable startup-quality improvement
       - the broader training/runtime alignment direction remains worthwhile, but this pass does not change the remaining locomotion-time lower-limb target-semantics problem
+  - March 12, 2026 lower-limb target-write smoothing note:
+    - re-checked:
+      - official UE PhysicsControl docs
+      - local UE 5.7 PhysicsControl source
+      - ProtoMotions config/docs and local control path
+    - implemented one narrow locomotion-time experiment:
+      - family-weighted lower-limb target-write smoothing for `thigh_*`, `calf_*`, `foot_*`, and `ball_*`
+      - only while the locomotion-time distal composition mode was active
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - forward and backward stayed stable
+      - but strafe regressed materially, with new large upper/lower chain outliers
+      - the pass was not a clean new baseline
+    - current runtime read:
+      - lower-limb write smoothing was worth falsifying
+      - runtime code has been restored to the previous safe baseline
+      - the broader alignment direction is still worthwhile, but the next pass should move to another locomotion-time representation seam

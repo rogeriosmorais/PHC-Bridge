@@ -27,6 +27,11 @@ The most recent useful alignment pass was a UE-side PhysicsControl cache-prewarm
 
 That pass eliminated the startup PhysicsControl warning burst without regressing movement smoke, which makes it a keepable quality improvement. It did **not** change the deeper locomotion-time lower-limb representation problem, so the next passes should return to that seam rather than keep mining startup-order tweaks.
 
+Most recent falsified locomotion-time seam:
+- family-weighted lower-limb target-write smoothing
+
+That pass stayed stable but regressed strafe materially enough that it was not kept. So write smoothing should not be treated as the current primary lever.
+
 ## Non-Goals
 
 - Do not change the locked Stage 1 architecture in [ENGINEERING_PLAN.md](/F:/NewEngine/ENGINEERING_PLAN.md).

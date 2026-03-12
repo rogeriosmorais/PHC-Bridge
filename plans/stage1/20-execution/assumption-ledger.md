@@ -501,3 +501,10 @@ The next meaningful ledger updates should come from:
     - it is still worth continuing in the broader training/runtime alignment direction
     - but this pass reinforces that the remaining locomotion issue is not generic startup cache invalidity
     - the next useful pass should return to locomotion-time lower-limb target semantics / representation, not more startup warning cleanup
+- March 12, 2026:
+  - family-weighted lower-limb target-write smoothing was tested as a locomotion-time representation pass
+  - it stayed stable, but it was not a clean win
+  - strafe regressed materially enough that the runtime code was restored to the previous safe baseline
+  - implication:
+    - it is still worth continuing in the broader training/runtime alignment direction
+    - it is not worth continuing the lower-limb write-smoothing sub-direction as the primary next lever
