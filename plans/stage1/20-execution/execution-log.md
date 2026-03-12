@@ -16,7 +16,7 @@ Use it to track:
 
 - `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` stabilization passes completed for the current smoke target
 - `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Gate G1 is explicitly `pass`; the selected Phase 1 runtime model is the pretrained `motion_tracker/smpl` checkpoint; the full UE startup path succeeds through `NNERuntimeORTDml`; the one-character bridge now completes a `65` second passive idle PIE smoke window without catastrophic post-startup instability, drift, collapse, or delayed fail-stop; deterministic movement smoke and longer locomotion soak are both green; preserved-gameplay-shell manual `WASD` also works in `BridgeActive`; the next active Phase 1 task is G2 comparison packaging, not more blind stabilization
-- `Last planning milestone`: the frozen policy-phase stabilization plan converged on March 11, 2026 after continuity fixes, representation-switch cleanup, and the corrected SMPL->UE quaternion basis conversion removed the remaining live-policy blow-up; the passive idle validation window then extended from `30s` to `65s` and stayed green; movement-stability then passed through deterministic smoke, longer locomotion soak, and gameplay-shell-relative fail-stop evaluation; the next frozen milestone is now live side-by-side G2 comparison readiness
+- `Last planning milestone`: the frozen policy-phase stabilization plan converged on March 11, 2026 after continuity fixes, representation-switch cleanup, and the corrected SMPL->UE quaternion basis conversion removed the remaining live-policy blow-up; the passive idle validation window then extended from `30s` to `65s` and stayed green; movement-stability then passed through deterministic smoke, longer locomotion soak, and gameplay-shell-relative fail-stop evaluation; on March 12, 2026 the first training/runtime alignment pass then locked policy updates to the pretrained ProtoMotions control cadence (`30 Hz`) while leaving Chaos/PhysicsControl on their existing per-tick update path; the follow-up direct Manny constraint inventory is now frozen in [smpl-to-manny-limit-table.md](/F:/NewEngine/plans/stage1/40-design/smpl-to-manny-limit-table.md); the next frozen alignment milestone is operating-limit and mass-distribution policy, not ad hoc mass/gain copying
 
 ## Active Tasks
 
@@ -158,3 +158,97 @@ Whenever new setup or gate evidence arrives:
     - `run-pie-smoke.ps1` passed
     - the fresh smoke log no longer shows the old early `calf_r/ball_r` blow-up at group `2/5`
     - startup, policy activation, and the rest of the smoke window stayed bounded without `Fail-stop`
+  - a CVar-driven stabilization stress-test now exists in the live bridge runtime:
+    - `pa.StabilizationStressTest 1`
+    - `pa.StabilizationStressTestRampSeconds 45`
+    - it linearly ramps the three angular stabilization multipliers from `1.0 -> 0.0` after the bridge is fully settled
+    - the current runtime diagnostics now log `stressTest[enabled active multiplier elapsed]`
+    - the harness now also supports:
+      - recovery profile (`pa.StabilizationStressTestProfile 1`)
+      - target floor / hold / ramp-up controls
+      - per-parameter sweep mode
+      - first spike / first instability markers
+      - local pose drift metrics for spine, head, and feet
+  - first stress-test result:
+    - `PhysAnim.PIE.Smoke` stayed stable through the full idle ramp down to `multiplier=0.00`
+    - no `Fail-stop` occurred during that run
+    - conclusion: the current G2 perturbation problem is not simply “stabilization still too strong to relax”
+  - extended stress-test matrix results:
+    - idle answers are now concrete enough to answer the full question sheet:
+      - lower body remains the first weak link
+      - idle never collapses, even at `multiplier=0.00`
+      - recovery succeeds
+      - damping ratio is the most critical single lever
+    - movement materially changes those answers:
+      - first instability in the uniform movement sweep now appears around `multiplier=0.44`
+      - first angular spike shifts to `ball_r`
+      - first linear spike shifts to `foot_l`
+      - local foot drift grows into the `80-90 cm` range by the end of the movement sweeps
+      - the `ActionScale 0.0` proxy is not enough to claim “PD alone is safe” under locomotion
+  - perturbation debugging resumed after the stress matrix:
+    - shell-level shove was removed because it only produced sideways actor sliding
+    - the presentation harness now uses body-level contact push plus a temporary full low-gain perturbation override
+    - latest automated G2 evidence shows:
+      - no actor-shell slide (`actorDelta = 0.0 cm`)
+      - modest articulated response (`localHead ~= 2.3 cm`, `localFoot ~= 3.0-4.5 cm`)
+    - conclusion:
+      - the remaining perturbation readability problem is not “insufficient stabilization relaxation”
+      - it is now most likely rooted in the kinematic root / gameplay-shell anchoring and how contact couples into the articulated chain
+  - follow-up perturbation experiments then tested the opposite extreme:
+    - temporarily allowing the root body modifier to simulate during the G2 perturbation window
+    - keeping the contact push body-only
+    - trying:
+      - low gains
+      - normal gains
+      - gentler pusher parameters
+      - shorter root-unlock windows
+      - temporary policy suspension during the shove
+  - all of those root-unlock variants failed in the same direction:
+    - the perturbation became clearly visible
+    - but the bridge immediately crossed fail-stop thresholds
+    - the shortest / gentlest root-unlock runs still failed in about `0.25-0.35s`
+  - current conclusion:
+    - the standing external-push perturbation is now well-explored under the current Stage 1 bridge contract
+    - root-kine path is too subtle
+    - root-sim path is unstable
+    - the next perturbation attempt should change scenario, not just retune the same idle push again
+  - perturbation work then pivoted to that next scenario:
+    - the G2 presentation now starts with a locomotion-coupled perturbation instead of a standing shove
+    - both actors begin the same short scripted walk
+    - only the `Physics-Driven` actor receives the extra contact disturbance
+    - the kinematic comparison actor stays on the same scripted locomotion path without that extra contact
+    - the presentation shell-shove path remains disabled
+  - latest locomotion-coupled perturbation result:
+    - the presentation stays stable with no `Fail-stop`
+    - the perturbation now produces measurable divergence during the walk instead of the old standing twitch-only result
+    - current limitation: the difference is still likely subtle to the eye, so this improves the G2 setup but does not yet guarantee a clear `pass`
+  - a follow-up March 12, 2026 refinement pass then fixed one real implementation gap in that locomotion-coupled path:
+    - the presentation perturbation stabilization override had accidentally been left as a no-op (`1.0 / 1.0 / 1.0`)
+    - it now applies real movement-safe angular relaxation during the perturbation window
+    - current frozen override multipliers:
+      - strength `0.72`
+      - damping ratio `0.78`
+      - extra damping `0.74`
+  - the same pass also tightened the perturbation profile toward the lower body:
+    - slower initial perturbation walk
+    - lower / narrower pusher volume
+    - lead-leg-biased pusher placement
+  - result after those refinements:
+    - automated G2 presentation still stays stable with no `Fail-stop`
+    - but the measured source-vs-kinematic local gap remains modest
+    - current best reading is that the locomotion-coupled scenario is now correctly implemented and safer, but still presentation-limited rather than obviously persuasive
+  - March 12, 2026 alignment follow-up:
+    - `PhysAnim.Component.MannyConstraintInventory` now audits every Stage 1 bridge control against the Manny physics asset
+    - `17 / 21` bridge controls have direct Manny constraint pairs
+    - the four missing direct Manny pairs are:
+      - `neck_01 <- spine_03`
+      - `head <- neck_01`
+      - `clavicle_l <- spine_03`
+      - `clavicle_r <- spine_03`
+    - the explicit SMPL-vs-Manny inventory is now recorded in:
+      - `plans/stage1/40-design/smpl-to-manny-limit-table.md`
+    - current high-confidence mismatch:
+      - Manny lower-body joints, mid/upper spine, shoulders, and elbows are materially tighter than the broad SMPL training-side target ranges
+    - implication:
+      - current UE action-range semantics are narrower and less transparent than training
+      - next alignment work should define deliberate Stage 1 operating limits and then move to mass-distribution auditing, not blindly widen constraints

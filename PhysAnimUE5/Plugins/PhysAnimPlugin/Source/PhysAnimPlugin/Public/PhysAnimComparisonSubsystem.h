@@ -39,7 +39,12 @@ public:
 	static FVector ResolvePresentationPusherStartOffsetCm();
 	static float ResolvePresentationPusherTravelDistanceCm();
 	static float ResolvePresentationPusherTravelSeconds();
-	static FVector ResolvePresentationBodyPushForce();
+	static FVector ResolvePresentationShellPushForce();
+	static float ResolvePresentationStabilizationOverrideSeconds();
+	static float ResolvePresentationStrengthRelaxationMultiplier();
+	static float ResolvePresentationDampingRatioRelaxationMultiplier();
+	static float ResolvePresentationExtraDampingRelaxationMultiplier();
+	static FName ResolvePresentationRootBoneName();
 
 private:
 	bool StartComparison(bool bEnablePresentationMode, FString& OutError);
@@ -52,6 +57,8 @@ private:
 	void TickComparisonLabels() const;
 	void UpdatePresentationCamera();
 	void UpdatePerturbationPushers(ACharacter& SourceCharacter, ACharacter& KinematicCharacter, float ElapsedSeconds);
+	void SetPresentationSourceShellSuppressed(ACharacter& SourceCharacter, bool bSuppressed);
+	void UpdatePresentationSourceRootFollow(ACharacter& SourceCharacter);
 	void CapturePerturbationBaseline(const ACharacter& SourceCharacter, const ACharacter& KinematicCharacter);
 	void MaybeLogPerturbationTelemetry(const ACharacter& SourceCharacter, const ACharacter& KinematicCharacter);
 	void RestoreSourcePhysicsCharacter();
@@ -86,6 +93,7 @@ private:
 	double LastPerturbationTelemetryLogTimeSeconds = -1.0;
 	FVector SourcePerturbationBaselineLocation = FVector::ZeroVector;
 	FVector KinematicPerturbationBaselineLocation = FVector::ZeroVector;
+	FVector SourcePerturbationBaselineRootLocation = FVector::ZeroVector;
 	FVector SourcePerturbationBaselineSpineLocation = FVector::ZeroVector;
 	FVector KinematicPerturbationBaselineSpineLocation = FVector::ZeroVector;
 	FVector SourcePerturbationBaselineHeadLocation = FVector::ZeroVector;
@@ -94,4 +102,19 @@ private:
 	FVector KinematicPerturbationBaselineLeftFootLocation = FVector::ZeroVector;
 	FVector SourcePerturbationBaselineRightFootLocation = FVector::ZeroVector;
 	FVector KinematicPerturbationBaselineRightFootLocation = FVector::ZeroVector;
+	FVector SourcePerturbationBaselineRootLocalOffset = FVector::ZeroVector;
+	FVector SourcePerturbationBaselineSpineLocalOffset = FVector::ZeroVector;
+	FVector KinematicPerturbationBaselineSpineLocalOffset = FVector::ZeroVector;
+	FVector SourcePerturbationBaselineHeadLocalOffset = FVector::ZeroVector;
+	FVector KinematicPerturbationBaselineHeadLocalOffset = FVector::ZeroVector;
+	FVector SourcePerturbationBaselineLeftFootLocalOffset = FVector::ZeroVector;
+	FVector KinematicPerturbationBaselineLeftFootLocalOffset = FVector::ZeroVector;
+	FVector SourcePerturbationBaselineRightFootLocalOffset = FVector::ZeroVector;
+	FVector KinematicPerturbationBaselineRightFootLocalOffset = FVector::ZeroVector;
+	bool bPresentationSourceShellSuppressed = false;
+	bool bHasSavedPresentationSourceMovementState = false;
+	bool bSavedPresentationSourceMovementTickEnabled = false;
+	uint8 SavedPresentationSourceMovementMode = 0;
+	uint8 SavedPresentationSourceCustomMovementMode = 0;
+	TEnumAsByte<ECollisionEnabled::Type> SavedPresentationSourceCapsuleCollisionEnabled = ECollisionEnabled::QueryAndPhysics;
 };

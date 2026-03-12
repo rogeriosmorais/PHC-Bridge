@@ -117,6 +117,63 @@ Only the orchestrator updates status.
   - the staged bring-up order is now corrected for lower legs:
     - calves, feet, and balls unlock together before the upper-arm chain
     - after this fix, the passive PIE smoke stays bounded through startup and policy activation with no early lower-body fail-stop
+  - the stabilization stress-test assumption is now better constrained:
+    - a live runtime ramp can now reduce the three angular stabilization multipliers uniformly from `1.0 -> 0.0`
+    - first idle stress-test evidence stayed stable all the way to `multiplier=0.00`
+    - therefore the current G2 perturbation readability problem is not best explained by “the stabilization override cannot be relaxed enough”
+  - the stress-test question sheet is now effectively answered for both idle and simple deterministic movement:
+    - idle remains robust through full uniform relaxation
+    - movement sharply narrows the usable relaxation envelope and keeps the lower body as the main bottleneck
+    - damping ratio remains the most sensitive single stabilization lever
+  - the perturbation hypothesis has now changed again:
+    - full temporary relaxation is possible during idle without collapsing the bridge
+    - removing the shell shove removes the sideways slide
+    - but the remaining body-only contact perturbation still produces only modest body-level motion
+  - current best inference:
+    - the G2 perturbation limitation is now more about root anchoring / contact coupling than about PD gains being “too strong”
+  - new evidence after the stress matrix narrows that further:
+    - letting the root simulate during the perturbation does make the push visually obvious
+    - but every tested root-unlock variant immediately becomes unstable, even after:
+      - gentler pusher settings
+      - shorter override windows
+      - normal gains instead of relaxed gains
+      - temporary policy suspension
+  - updated working assumption:
+    - the current idle standing push is not a viable final G2 perturbation format under the present bridge contract
+    - future perturbation work should pivot to a different scenario, most likely a locomotion-coupled disturbance, rather than keep tuning the same standing push
+  - that locomotion-coupled perturbation pivot is now implemented in the live G2 harness:
+    - the scripted presentation starts with a short walking perturbation phase
+    - both actors follow the same scripted locomotion
+    - only the `Physics-Driven` actor receives the extra contact disturbance
+    - the shell-level shove remains disabled
+  - current evidence on that new path:
+    - no fail-stop in the automated G2 presentation run
+    - measurable divergence exists between the actors during the perturbation window
+    - but the visible quality gap may still be subtle, so `A-08` remains `yellow` until user judgment says the comparison is clearly better
+  - March 12, 2026 refinement note:
+    - the perturbation stabilization override was found to be incorrectly wired as a no-op in live code
+    - that is now corrected with movement-safe multipliers (`0.72 / 0.78 / 0.74`)
+    - a lower-body, lead-leg-biased locomotion perturbation profile is also now in place
+    - even after those fixes, the perturbation remains stable but only modestly divergent, so the core risk for `A-08` is still readability of the quality win, not runtime failure
+  - March 12, 2026 training/runtime alignment note:
+    - the first alignment pass is now implemented and verified
+    - policy inference and target writes are locked to the pretrained ProtoMotions control cadence (`30 Hz`) instead of free-running at game/render tick rate
+    - PhysicsControl and runtime instability checks still run every tick, so the solver path stays stable while policy targets are held between control steps
+    - current interpretation:
+      - cadence mismatch was real and is now reduced
+      - the next alignment work should move to joint-limit and action-range inventory before mass or PD-family retuning
+  - March 12, 2026 joint-limit inventory note:
+    - the first direct Manny constraint audit is now explicit and repeatable through `PhysAnim.Component.MannyConstraintInventory`
+    - `17 / 21` bridge controls map to direct Manny constraint pairs
+    - `neck_01`, `head`, `clavicle_l`, and `clavicle_r` do not currently expose direct one-to-one Manny pairs in the audit path
+    - the resulting comparison sheet is now saved in:
+      - `plans/stage1/40-design/smpl-to-manny-limit-table.md`
+    - current alignment risk:
+      - Manny's lower body, mid/upper spine, shoulders, and elbows are substantially tighter than the broad ProtoMotions SMPL training ranges
+      - that means UE action-range semantics are still narrower and partially indirect relative to training
+    - current orchestrator read:
+      - cadence alignment is now green enough to continue
+      - limit/range mismatch remains a real `yellow` alignment risk until explicit Stage 1 operating limits are chosen
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

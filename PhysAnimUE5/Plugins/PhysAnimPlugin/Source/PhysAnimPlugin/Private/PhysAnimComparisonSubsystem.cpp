@@ -28,7 +28,7 @@ namespace
 	constexpr float PresentationPerturbationObserveSeconds = 3.0f;
 	constexpr float PresentationPerturbationDurationSeconds =
 		PresentationPerturbationLeadInSeconds + PresentationPerturbationObserveSeconds;
-	constexpr float PresentationPerturbationTelemetryDurationSeconds = 1.5f;
+	constexpr float PresentationPerturbationTelemetryDurationSeconds = 2.0f;
 	constexpr float PresentationPerturbationTelemetryIntervalSeconds = 0.25f;
 	constexpr float PresentationIdleDurationSeconds = 3.0f;
 	constexpr float PresentationWalkDurationSeconds = 5.0f;
@@ -305,7 +305,7 @@ FVector UPhysAnimComparisonSubsystem::ResolvePresentationLocalIntent(float Elaps
 {
 	if (ElapsedSeconds < PresentationPerturbationDurationSeconds)
 	{
-		return FVector::ZeroVector;
+		return FVector(1.0f, 0.0f, 0.0f);
 	}
 
 	ElapsedSeconds -= PresentationPerturbationDurationSeconds;
@@ -347,7 +347,7 @@ float UPhysAnimComparisonSubsystem::ResolvePresentationInputScale(float ElapsedS
 {
 	if (ElapsedSeconds < PresentationPerturbationDurationSeconds)
 	{
-		return 0.0f;
+		return 0.32f;
 	}
 
 	ElapsedSeconds -= PresentationPerturbationDurationSeconds;
@@ -389,7 +389,7 @@ FName UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(float ElapsedSe
 {
 	if (ElapsedSeconds < PresentationPerturbationDurationSeconds)
 	{
-		return TEXT("PerturbationPush");
+		return TEXT("WalkPerturbation");
 	}
 
 	ElapsedSeconds -= PresentationPerturbationDurationSeconds;
@@ -440,33 +440,58 @@ float UPhysAnimComparisonSubsystem::GetPresentationDurationSeconds()
 FVector UPhysAnimComparisonSubsystem::ResolvePresentationCameraOffsetCm(bool bPerturbationPhase)
 {
 	return bPerturbationPhase
-		? FVector(220.0f, 0.0f, 155.0f)
+		? FVector(235.0f, 0.0f, 138.0f)
 		: FVector(325.0f, 0.0f, 170.0f);
 }
 
 FVector UPhysAnimComparisonSubsystem::ResolvePresentationPusherHalfExtentCm()
 {
-	return FVector(18.0f, 44.0f, 78.0f);
+	return FVector(18.0f, 24.0f, 48.0f);
 }
 
 FVector UPhysAnimComparisonSubsystem::ResolvePresentationPusherStartOffsetCm()
 {
-	return FVector(0.0f, -145.0f, 82.0f);
+	return FVector(52.0f, -86.0f, 54.0f);
 }
 
 float UPhysAnimComparisonSubsystem::ResolvePresentationPusherTravelDistanceCm()
 {
-	return 240.0f;
+	return 118.0f;
 }
 
 float UPhysAnimComparisonSubsystem::ResolvePresentationPusherTravelSeconds()
 {
-	return 0.50f;
+	return 1.1f;
 }
 
-FVector UPhysAnimComparisonSubsystem::ResolvePresentationBodyPushForce()
+FVector UPhysAnimComparisonSubsystem::ResolvePresentationShellPushForce()
 {
-	return FVector(0.0f, 350000.0f, 0.0f);
+	return FVector::ZeroVector;
+}
+
+float UPhysAnimComparisonSubsystem::ResolvePresentationStabilizationOverrideSeconds()
+{
+	return 0.45f;
+}
+
+float UPhysAnimComparisonSubsystem::ResolvePresentationStrengthRelaxationMultiplier()
+{
+	return 0.72f;
+}
+
+float UPhysAnimComparisonSubsystem::ResolvePresentationDampingRatioRelaxationMultiplier()
+{
+	return 0.78f;
+}
+
+float UPhysAnimComparisonSubsystem::ResolvePresentationExtraDampingRelaxationMultiplier()
+{
+	return 0.74f;
+}
+
+FName UPhysAnimComparisonSubsystem::ResolvePresentationRootBoneName()
+{
+	return TEXT("pelvis");
 }
 
 bool UPhysAnimComparisonSubsystem::ConfigureSourcePhysicsCharacter(ACharacter& Character, FString& OutError)
@@ -489,6 +514,16 @@ bool UPhysAnimComparisonSubsystem::ConfigureSourcePhysicsCharacter(ACharacter& C
 
 	if (UPhysAnimComponent* const PhysAnim = Character.FindComponentByClass<UPhysAnimComponent>())
 	{
+		if (UCharacterMovementComponent* const Movement = Character.GetCharacterMovement())
+		{
+			Movement->bRunPhysicsWithNoController = true;
+			Movement->SetComponentTickEnabled(true);
+			if (Movement->MovementMode == MOVE_None)
+			{
+				Movement->SetMovementMode(MOVE_Walking);
+			}
+		}
+
 		if (PhysAnim->GetRuntimeState() == EPhysAnimRuntimeState::Uninitialized ||
 			PhysAnim->GetRuntimeState() == EPhysAnimRuntimeState::FailStopped)
 		{
@@ -639,11 +674,12 @@ bool UPhysAnimComparisonSubsystem::CreatePresentationPushers(FString& OutError)
 		PusherBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		PusherBox->SetCollisionObjectType(ECC_WorldDynamic);
 		PusherBox->SetCollisionResponseToAllChannels(ECR_Ignore);
-		PusherBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 		PusherBox->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
 		PusherBox->SetGenerateOverlapEvents(false);
 		PusherBox->SetHiddenInGame(true);
+		PusherBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		PusherBox->RegisterComponent();
+		PusherActor->SetActorHiddenInGame(true);
 		PusherActor->SetActorEnableCollision(true);
 		PusherActor->SetActorLocationAndRotation(InitialLocation, PusherRotation, false, nullptr, ETeleportType::TeleportPhysics);
 
@@ -693,11 +729,13 @@ void UPhysAnimComparisonSubsystem::TickPresentationComparison(ACharacter& Source
 		}
 
 		PresentationStartTimeSeconds = World->GetTimeSeconds();
-		LastPresentationPhaseName = TEXT("PerturbationPush");
+		LastPresentationPhaseName = TEXT("WalkPerturbation");
 		UE_LOG(LogTemp, Log, TEXT("%s Scripted G2 presentation sequence started from steady BridgeActive state."), PhysAnimG2LogPrefix);
 	}
 
 	const float ElapsedSeconds = static_cast<float>(World->GetTimeSeconds() - PresentationStartTimeSeconds);
+	const bool bPerturbationPhaseActive = ShouldApplyPresentationPerturbation(ElapsedSeconds) &&
+		ElapsedSeconds < PresentationPerturbationDurationSeconds;
 	if (ShouldApplyPresentationPerturbation(ElapsedSeconds))
 	{
 		if (!bPresentationPerturbationApplied)
@@ -710,16 +748,22 @@ void UPhysAnimComparisonSubsystem::TickPresentationComparison(ACharacter& Source
 			UE_LOG(
 				LogTemp,
 				Log,
-				TEXT("%s Applied scripted G2 contact push: halfExtent=(%.1f, %.1f, %.1f) travel=%.1fcm duration=%.2fs shellForce=(%.1f, %.1f, %.1f)"),
+				TEXT("%s Applied scripted G2 contact push: halfExtent=(%.1f, %.1f, %.1f) travel=%.1fcm duration=%.2fs shellForce=(%.1f, %.1f, %.1f) stabilizationOverride=%.2fs"),
 				PhysAnimG2LogPrefix,
 				ResolvePresentationPusherHalfExtentCm().X,
 				ResolvePresentationPusherHalfExtentCm().Y,
 				ResolvePresentationPusherHalfExtentCm().Z,
 				ResolvePresentationPusherTravelDistanceCm(),
 				ResolvePresentationPusherTravelSeconds(),
-				ResolvePresentationBodyPushForce().X,
-				ResolvePresentationBodyPushForce().Y,
-				ResolvePresentationBodyPushForce().Z);
+				ResolvePresentationShellPushForce().X,
+				ResolvePresentationShellPushForce().Y,
+				ResolvePresentationShellPushForce().Z,
+				ResolvePresentationStabilizationOverrideSeconds());
+
+			if (UPhysAnimComponent* const PhysAnim = SourceCharacter.FindComponentByClass<UPhysAnimComponent>())
+			{
+				PhysAnim->SetPresentationPerturbationOverrideSeconds(ResolvePresentationStabilizationOverrideSeconds());
+			}
 		}
 
 		UpdatePerturbationPushers(SourceCharacter, KinematicCharacter, ElapsedSeconds);
@@ -805,7 +849,7 @@ void UPhysAnimComparisonSubsystem::UpdatePresentationCamera()
 	}
 
 	const FVector Midpoint = (SourceCharacter->GetActorLocation() + KinematicCharacter->GetActorLocation()) * 0.5f;
-	const bool bPerturbationPhase = LastPresentationPhaseName == TEXT("PerturbationPush");
+	const bool bPerturbationPhase = LastPresentationPhaseName == TEXT("WalkPerturbation");
 	const FRotator FramingRotation(0.0f, ComparisonAnchorRotation.Yaw, 0.0f);
 	const FVector Forward = FRotationMatrix(FramingRotation).GetScaledAxis(EAxis::X).GetSafeNormal();
 	const FVector Right = FRotationMatrix(FramingRotation).GetScaledAxis(EAxis::Y).GetSafeNormal();
@@ -821,7 +865,7 @@ void UPhysAnimComparisonSubsystem::UpdatePresentationCamera()
 		BaseOffset.Y,
 		BaseOffset.Z + (bPerturbationPhase ? (ExtraBackoffCm * 0.18f) : (ExtraBackoffCm * 0.10f)));
 	const FVector CameraLocation = Midpoint + ComparisonAnchorRotation.RotateVector(DynamicOffset);
-	const FVector LookAtLocation = Midpoint + FVector(0.0f, 0.0f, bPerturbationPhase ? 105.0f : 90.0f);
+	const FVector LookAtLocation = Midpoint + FVector(0.0f, 0.0f, bPerturbationPhase ? 88.0f : 90.0f);
 	const FRotator CameraRotation = (LookAtLocation - CameraLocation).Rotation();
 	CameraActor->SetActorLocationAndRotation(CameraLocation, CameraRotation, false, nullptr, ETeleportType::TeleportPhysics);
 
@@ -847,10 +891,9 @@ void UPhysAnimComparisonSubsystem::UpdatePerturbationPushers(
 	const FVector LocalStartOffset = ResolvePresentationPusherStartOffsetCm();
 	const FVector LocalTravelOffset(0.0f, ResolvePresentationPusherTravelDistanceCm() * PushAlpha, 0.0f);
 	const FVector WorldOffset = ComparisonAnchorRotation.RotateVector(LocalStartOffset + LocalTravelOffset);
-	const FVector WorldBodyForce = ComparisonAnchorRotation.RotateVector(ResolvePresentationBodyPushForce());
 	const FVector HalfExtent = ResolvePresentationPusherHalfExtentCm();
 
-	auto MovePusher = [&](const ACharacter& TargetCharacter, TWeakObjectPtr<AActor>& PusherActorPtr, TWeakObjectPtr<UBoxComponent>& PusherBoxPtr)
+	auto MovePusher = [&](const FVector& AnchorLocation, bool bIsSourcePusher, TWeakObjectPtr<AActor>& PusherActorPtr, TWeakObjectPtr<UBoxComponent>& PusherBoxPtr)
 	{
 		AActor* const PusherActor = PusherActorPtr.Get();
 		UBoxComponent* const PusherBox = PusherBoxPtr.Get();
@@ -859,35 +902,92 @@ void UPhysAnimComparisonSubsystem::UpdatePerturbationPushers(
 			return;
 		}
 
-		const FVector TargetLocation = TargetCharacter.GetActorLocation() + WorldOffset;
+		PusherActor->SetActorHiddenInGame(false);
+		PusherBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		const FVector TargetLocation = AnchorLocation + WorldOffset;
 		PusherActor->SetActorLocationAndRotation(TargetLocation, ComparisonAnchorRotation, true, nullptr, ETeleportType::TeleportPhysics);
 		DrawDebugBox(
 			GetWorld(),
 			TargetLocation,
 			HalfExtent,
 			ComparisonAnchorRotation.Quaternion(),
-			&TargetCharacter == &SourceCharacter ? FColor::Orange : FColor::Cyan,
+			bIsSourcePusher ? FColor::Orange : FColor::Cyan,
 			false,
 			0.05f,
 			0,
 			2.0f);
 	};
 
-	MovePusher(SourceCharacter, SourcePerturbationPusherActor, SourcePerturbationPusherBox);
-	MovePusher(KinematicCharacter, KinematicPerturbationPusherActor, KinematicPerturbationPusherBox);
+	MovePusher(SourcePerturbationBaselineLocation, true, SourcePerturbationPusherActor, SourcePerturbationPusherBox);
 
-	if (PushElapsedSeconds < ResolvePresentationPusherTravelSeconds())
+	if (UBoxComponent* const KinematicPusherBox = KinematicPerturbationPusherBox.Get())
 	{
-		auto ApplyBodyForce = [&](ACharacter& TargetCharacter)
-		{
-			if (USkeletalMeshComponent* const Mesh = TargetCharacter.GetMesh())
-			{
-				Mesh->AddForce(WorldBodyForce, TEXT("pelvis"));
-			}
-		};
-		ApplyBodyForce(SourceCharacter);
-		ApplyBodyForce(KinematicCharacter);
+		KinematicPusherBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
+	if (AActor* const KinematicPusherActor = KinematicPerturbationPusherActor.Get())
+	{
+		KinematicPusherActor->SetActorHiddenInGame(true);
+	}
+}
+
+void UPhysAnimComparisonSubsystem::SetPresentationSourceShellSuppressed(ACharacter& SourceCharacter, bool bSuppressed)
+{
+	if (bPresentationSourceShellSuppressed == bSuppressed)
+	{
+		return;
+	}
+
+	if (UCharacterMovementComponent* const Movement = SourceCharacter.GetCharacterMovement())
+	{
+		if (bSuppressed)
+		{
+			if (!bHasSavedPresentationSourceMovementState)
+			{
+				bSavedPresentationSourceMovementTickEnabled = Movement->IsComponentTickEnabled();
+				SavedPresentationSourceMovementMode = Movement->MovementMode;
+				SavedPresentationSourceCustomMovementMode = Movement->CustomMovementMode;
+				bHasSavedPresentationSourceMovementState = true;
+			}
+			Movement->DisableMovement();
+			Movement->SetComponentTickEnabled(false);
+		}
+		else if (bHasSavedPresentationSourceMovementState)
+		{
+			Movement->SetComponentTickEnabled(bSavedPresentationSourceMovementTickEnabled);
+			Movement->SetMovementMode(
+				static_cast<EMovementMode>(SavedPresentationSourceMovementMode),
+				SavedPresentationSourceCustomMovementMode);
+			bHasSavedPresentationSourceMovementState = false;
+		}
+	}
+
+	if (UCapsuleComponent* const Capsule = SourceCharacter.GetCapsuleComponent())
+	{
+		if (bSuppressed)
+		{
+			SavedPresentationSourceCapsuleCollisionEnabled = Capsule->GetCollisionEnabled();
+			Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+		else
+		{
+			Capsule->SetCollisionEnabled(SavedPresentationSourceCapsuleCollisionEnabled);
+		}
+	}
+
+	bPresentationSourceShellSuppressed = bSuppressed;
+}
+
+void UPhysAnimComparisonSubsystem::UpdatePresentationSourceRootFollow(ACharacter& SourceCharacter)
+{
+	USkeletalMeshComponent* const SourceMesh = SourceCharacter.GetMesh();
+	if (!SourceMesh)
+	{
+		return;
+	}
+
+	const FVector CurrentRootLocation = SourceMesh->GetBoneLocation(ResolvePresentationRootBoneName());
+	const FVector DesiredActorLocation = CurrentRootLocation - SourcePerturbationBaselineRootLocalOffset;
+	SourceCharacter.SetActorLocation(DesiredActorLocation, false, nullptr, ETeleportType::TeleportPhysics);
 }
 
 void UPhysAnimComparisonSubsystem::CapturePerturbationBaseline(const ACharacter& SourceCharacter, const ACharacter& KinematicCharacter)
@@ -897,10 +997,16 @@ void UPhysAnimComparisonSubsystem::CapturePerturbationBaseline(const ACharacter&
 
 	if (const USkeletalMeshComponent* const SourceMesh = SourceCharacter.GetMesh())
 	{
+		SourcePerturbationBaselineRootLocation = SourceMesh->GetBoneLocation(ResolvePresentationRootBoneName());
 		SourcePerturbationBaselineSpineLocation = SourceMesh->GetBoneLocation(TEXT("spine_01"));
 		SourcePerturbationBaselineHeadLocation = SourceMesh->GetBoneLocation(TEXT("head"));
 		SourcePerturbationBaselineLeftFootLocation = SourceMesh->GetBoneLocation(TEXT("foot_l"));
 		SourcePerturbationBaselineRightFootLocation = SourceMesh->GetBoneLocation(TEXT("foot_r"));
+		SourcePerturbationBaselineRootLocalOffset = SourcePerturbationBaselineRootLocation - SourcePerturbationBaselineLocation;
+		SourcePerturbationBaselineSpineLocalOffset = SourcePerturbationBaselineSpineLocation - SourcePerturbationBaselineLocation;
+		SourcePerturbationBaselineHeadLocalOffset = SourcePerturbationBaselineHeadLocation - SourcePerturbationBaselineLocation;
+		SourcePerturbationBaselineLeftFootLocalOffset = SourcePerturbationBaselineLeftFootLocation - SourcePerturbationBaselineLocation;
+		SourcePerturbationBaselineRightFootLocalOffset = SourcePerturbationBaselineRightFootLocation - SourcePerturbationBaselineLocation;
 	}
 
 	if (const USkeletalMeshComponent* const KinematicMesh = KinematicCharacter.GetMesh())
@@ -909,6 +1015,10 @@ void UPhysAnimComparisonSubsystem::CapturePerturbationBaseline(const ACharacter&
 		KinematicPerturbationBaselineHeadLocation = KinematicMesh->GetBoneLocation(TEXT("head"));
 		KinematicPerturbationBaselineLeftFootLocation = KinematicMesh->GetBoneLocation(TEXT("foot_l"));
 		KinematicPerturbationBaselineRightFootLocation = KinematicMesh->GetBoneLocation(TEXT("foot_r"));
+		KinematicPerturbationBaselineSpineLocalOffset = KinematicPerturbationBaselineSpineLocation - KinematicPerturbationBaselineLocation;
+		KinematicPerturbationBaselineHeadLocalOffset = KinematicPerturbationBaselineHeadLocation - KinematicPerturbationBaselineLocation;
+		KinematicPerturbationBaselineLeftFootLocalOffset = KinematicPerturbationBaselineLeftFootLocation - KinematicPerturbationBaselineLocation;
+		KinematicPerturbationBaselineRightFootLocalOffset = KinematicPerturbationBaselineRightFootLocation - KinematicPerturbationBaselineLocation;
 	}
 }
 
@@ -952,33 +1062,78 @@ void UPhysAnimComparisonSubsystem::MaybeLogPerturbationTelemetry(const ACharacte
 	const float KinematicMaxFootDeltaCm = FMath::Max(
 		FVector::Dist(KinematicMesh->GetBoneLocation(TEXT("foot_l")), KinematicPerturbationBaselineLeftFootLocation),
 		FVector::Dist(KinematicMesh->GetBoneLocation(TEXT("foot_r")), KinematicPerturbationBaselineRightFootLocation));
+	const float SourceSpineLocalDeltaCm = FVector::Dist(
+		SourceMesh->GetBoneLocation(TEXT("spine_01")) - SourceCharacter.GetActorLocation(),
+		SourcePerturbationBaselineSpineLocalOffset);
+	const float KinematicSpineLocalDeltaCm = FVector::Dist(
+		KinematicMesh->GetBoneLocation(TEXT("spine_01")) - KinematicCharacter.GetActorLocation(),
+		KinematicPerturbationBaselineSpineLocalOffset);
+	const float SourceHeadLocalDeltaCm = FVector::Dist(
+		SourceMesh->GetBoneLocation(TEXT("head")) - SourceCharacter.GetActorLocation(),
+		SourcePerturbationBaselineHeadLocalOffset);
+	const float KinematicHeadLocalDeltaCm = FVector::Dist(
+		KinematicMesh->GetBoneLocation(TEXT("head")) - KinematicCharacter.GetActorLocation(),
+		KinematicPerturbationBaselineHeadLocalOffset);
+	const float SourceMaxFootLocalDeltaCm = FMath::Max(
+		FVector::Dist(
+			SourceMesh->GetBoneLocation(TEXT("foot_l")) - SourceCharacter.GetActorLocation(),
+			SourcePerturbationBaselineLeftFootLocalOffset),
+		FVector::Dist(
+			SourceMesh->GetBoneLocation(TEXT("foot_r")) - SourceCharacter.GetActorLocation(),
+			SourcePerturbationBaselineRightFootLocalOffset));
+	const float KinematicMaxFootLocalDeltaCm = FMath::Max(
+		FVector::Dist(
+			KinematicMesh->GetBoneLocation(TEXT("foot_l")) - KinematicCharacter.GetActorLocation(),
+			KinematicPerturbationBaselineLeftFootLocalOffset),
+		FVector::Dist(
+			KinematicMesh->GetBoneLocation(TEXT("foot_r")) - KinematicCharacter.GetActorLocation(),
+			KinematicPerturbationBaselineRightFootLocalOffset));
 	const float SpineGapCm = SourceSpineDeltaCm - KinematicSpineDeltaCm;
 	const float HeadGapCm = SourceHeadDeltaCm - KinematicHeadDeltaCm;
 	const float FootGapCm = SourceMaxFootDeltaCm - KinematicMaxFootDeltaCm;
+	const float SpineLocalGapCm = SourceSpineLocalDeltaCm - KinematicSpineLocalDeltaCm;
+	const float HeadLocalGapCm = SourceHeadLocalDeltaCm - KinematicHeadLocalDeltaCm;
+	const float FootLocalGapCm = SourceMaxFootLocalDeltaCm - KinematicMaxFootLocalDeltaCm;
 
 	UE_LOG(
 		LogTemp,
 		Log,
-		TEXT("%s Perturbation telemetry t=%.2fs physics[actorDelta=%.1f spineDelta=%.1f headDelta=%.1f maxFootDelta=%.1f] kinematic[actorDelta=%.1f spineDelta=%.1f headDelta=%.1f maxFootDelta=%.1f] gap[spine=%.1f head=%.1f foot=%.1f]"),
+		TEXT("%s Perturbation telemetry t=%.2fs physics[actorDelta=%.1f spineDelta=%.1f headDelta=%.1f maxFootDelta=%.1f localSpine=%.1f localHead=%.1f localFoot=%.1f] kinematic[actorDelta=%.1f spineDelta=%.1f headDelta=%.1f maxFootDelta=%.1f localSpine=%.1f localHead=%.1f localFoot=%.1f] gap[spine=%.1f head=%.1f foot=%.1f localSpine=%.1f localHead=%.1f localFoot=%.1f]"),
 		PhysAnimG2LogPrefix,
 		ElapsedSincePerturbation,
 		SourceActorDeltaCm,
 		SourceSpineDeltaCm,
 		SourceHeadDeltaCm,
 		SourceMaxFootDeltaCm,
+		SourceSpineLocalDeltaCm,
+		SourceHeadLocalDeltaCm,
+		SourceMaxFootLocalDeltaCm,
 		KinematicActorDeltaCm,
 		KinematicSpineDeltaCm,
 		KinematicHeadDeltaCm,
 		KinematicMaxFootDeltaCm,
+		KinematicSpineLocalDeltaCm,
+		KinematicHeadLocalDeltaCm,
+		KinematicMaxFootLocalDeltaCm,
 		SpineGapCm,
 		HeadGapCm,
-		FootGapCm);
+		FootGapCm,
+		SpineLocalGapCm,
+		HeadLocalGapCm,
+		FootLocalGapCm);
 }
 
 void UPhysAnimComparisonSubsystem::RestoreSourcePhysicsCharacter()
 {
 	if (ACharacter* const SourceCharacter = SourcePhysicsCharacter.Get())
 	{
+		SetPresentationSourceShellSuppressed(*SourceCharacter, false);
+
+		if (UPhysAnimComponent* const PhysAnim = SourceCharacter->FindComponentByClass<UPhysAnimComponent>())
+		{
+			PhysAnim->ClearPresentationPerturbationOverride();
+		}
+
 		if (UCapsuleComponent* const Capsule = SourceCharacter->GetCapsuleComponent())
 		{
 			Capsule->SetCollisionResponseToChannel(ECC_Pawn, SourceOriginalCapsulePawnResponse);
@@ -1048,4 +1203,10 @@ void UPhysAnimComparisonSubsystem::RestorePresentationMode()
 	LastPerturbationTelemetryLogTimeSeconds = -1.0;
 	bPresentationModeActive = false;
 	LastPresentationPhaseName = NAME_None;
+	bPresentationSourceShellSuppressed = false;
+	bHasSavedPresentationSourceMovementState = false;
+	bSavedPresentationSourceMovementTickEnabled = false;
+	SavedPresentationSourceMovementMode = 0;
+	SavedPresentationSourceCustomMovementMode = 0;
+	SavedPresentationSourceCapsuleCollisionEnabled = ECollisionEnabled::QueryAndPhysics;
 }

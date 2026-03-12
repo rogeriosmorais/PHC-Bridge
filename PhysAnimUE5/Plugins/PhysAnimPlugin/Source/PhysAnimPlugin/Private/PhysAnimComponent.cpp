@@ -47,9 +47,9 @@ namespace PhysAnimComponentInternal
 	constexpr float MovementSmokeIdleDurationSeconds = 3.0f;
 	constexpr float MovementSmokeMoveDurationSeconds = 5.0f;
 	constexpr float MovementSmokeTimelineDurationSeconds = 32.0f;
-	constexpr float PresentationPerturbationStrengthRelaxationMultiplier = 0.65f;
-	constexpr float PresentationPerturbationDampingRatioRelaxationMultiplier = 0.25f;
-	constexpr float PresentationPerturbationExtraDampingRelaxationMultiplier = 0.10f;
+	constexpr float PresentationPerturbationStrengthRelaxationMultiplier = 0.72f;
+	constexpr float PresentationPerturbationDampingRatioRelaxationMultiplier = 0.78f;
+	constexpr float PresentationPerturbationExtraDampingRelaxationMultiplier = 0.74f;
 
 	TAutoConsoleVariable<float> CVarPhysAnimActionScale(
 		TEXT("physanim.ActionScale"),
@@ -67,6 +67,10 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.StartupRampSeconds"),
 		-1.0f,
 		TEXT("Override for PhysAnim startup ramp duration in seconds. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimPolicyControlRateHz(
+		TEXT("physanim.PolicyControlRateHz"),
+		-1.0f,
+		TEXT("Override for the fixed PhysAnim policy/control update rate in Hz. Negative values keep the component default."));
 	TAutoConsoleVariable<float> CVarPhysAnimMaxAngularStepDegPerSec(
 		TEXT("physanim.MaxAngularStepDegPerSec"),
 		-1.0f,
@@ -135,6 +139,42 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.ShowBridgeStatusIndicator"),
 		1,
 		TEXT("Whether PhysAnim shows an always-visible on-screen bridge status indicator."));
+	TAutoConsoleVariable<int32> CVarPaStabilizationStressTest(
+		TEXT("pa.StabilizationStressTest"),
+		0,
+		TEXT("Enable the idle stabilization stress-test ramp. 0 disables, 1 linearly relaxes all angular stabilization gains after the bridge is fully settled."));
+	TAutoConsoleVariable<float> CVarPaStabilizationStressTestRampSeconds(
+		TEXT("pa.StabilizationStressTestRampSeconds"),
+		45.0f,
+		TEXT("Duration in seconds for the stabilization stress-test gain ramp from 1.0 to 0.0. Values <= 0 clamp the ramp immediately to zero."));
+	TAutoConsoleVariable<int32> CVarPaStabilizationStressTestProfile(
+		TEXT("pa.StabilizationStressTestProfile"),
+		0,
+		TEXT("Stabilization stress-test profile. 0 = ramp down only, 1 = ramp down / hold / ramp back up."));
+	TAutoConsoleVariable<float> CVarPaStabilizationStressTestTargetMultiplier(
+		TEXT("pa.StabilizationStressTestTargetMultiplier"),
+		0.0f,
+		TEXT("Target floor multiplier for the stabilization stress-test profile. Used as the hold floor for down/hold/up mode."));
+	TAutoConsoleVariable<float> CVarPaStabilizationStressTestHoldSeconds(
+		TEXT("pa.StabilizationStressTestHoldSeconds"),
+		3.0f,
+		TEXT("Hold duration in seconds for the stabilization stress-test recovery profile."));
+	TAutoConsoleVariable<float> CVarPaStabilizationStressTestRecoveryRampSeconds(
+		TEXT("pa.StabilizationStressTestRecoveryRampSeconds"),
+		5.0f,
+		TEXT("Ramp-up duration in seconds for the stabilization stress-test recovery profile."));
+	TAutoConsoleVariable<int32> CVarPaStabilizationStressTestSweepMode(
+		TEXT("pa.StabilizationStressTestSweepMode"),
+		0,
+		TEXT("Which stabilization parameter the stress-test ramps. 0 = all, 1 = strength only, 2 = damping ratio only, 3 = extra damping only."));
+	TAutoConsoleVariable<float> CVarPaStabilizationStressTestAngularSpikeThreshold(
+		TEXT("pa.StabilizationStressTestAngularSpikeThresholdDegPerSec"),
+		500.0f,
+		TEXT("Angular velocity threshold used to mark the first stress-test per-bone spike."));
+	TAutoConsoleVariable<float> CVarPaStabilizationStressTestLinearSpikeThreshold(
+		TEXT("pa.StabilizationStressTestLinearSpikeThresholdCmPerSec"),
+		100.0f,
+		TEXT("Linear velocity threshold used to mark the first stress-test per-bone spike."));
 
 	float ResolveFloatOverride(const TAutoConsoleVariable<float>& CVar, float DefaultValue)
 	{
@@ -156,12 +196,13 @@ namespace PhysAnimComponentInternal
 	FString BuildStabilizationSummary(const FPhysAnimStabilizationSettings& Settings)
 	{
 		return FString::Printf(
-			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
+			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
 			Settings.bForceZeroActions ? TEXT("true") : TEXT("false"),
 			Settings.ActionScale,
 			Settings.ActionClampAbs,
 			Settings.ActionSmoothingAlpha,
 			Settings.StartupRampSeconds,
+			Settings.PolicyControlRateHz,
 			Settings.MaxAngularStepDegreesPerSecond,
 			Settings.AngularStrengthMultiplier,
 			Settings.AngularDampingRatioMultiplier,
@@ -332,6 +373,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		return;
 	}
 
+	UpdateStabilizationStressTestState(StabilizationSettings);
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	ApplyMovementSmokeInput(EffectiveSettings);
 	FString TickError;
@@ -416,56 +458,71 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	PhysicsControl->UpdateTargetCaches(DeltaTime);
 	PhysicsControl->GetCachedBoneTransforms(SkeletalMesh, PhysAnimBridge::GetControlledBoneNames());
 
-	if (QueryPoseSearch(SearchResult, TickError))
+	const float PolicyControlIntervalSeconds = ResolvePolicyControlIntervalSeconds(EffectiveSettings.PolicyControlRateHz);
+	int32 ElapsedPolicySteps = 0;
+	const bool bRunPolicyUpdateThisTick = AdvancePolicyControlAccumulator(
+		DeltaTime,
+		PolicyControlIntervalSeconds,
+		PolicyUpdateAccumulatorSeconds,
+		ElapsedPolicySteps);
+	LastPolicyElapsedSteps = ElapsedPolicySteps;
+	if (bRunPolicyUpdateThisTick)
 	{
-		LastValidPoseSearchResult = SearchResult;
-		ConsecutiveInvalidPoseSearchFrames = 0;
-	}
-	else
-	{
-		++ConsecutiveInvalidPoseSearchFrames;
-		if (ConsecutiveInvalidPoseSearchFrames > 1 || LastValidPoseSearchResult.SelectedAnim == nullptr)
+		++PolicyControlTicksExecuted;
+		PolicyControlTicksSkipped += FMath::Max(ElapsedPolicySteps - 1, 0);
+		LastPolicyControlUpdateTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+
+		if (QueryPoseSearch(SearchResult, TickError))
 		{
-			FailStop(FString::Printf(TEXT("PoseSearch query was invalid for two consecutive ticks. %s"), *TickError));
+			LastValidPoseSearchResult = SearchResult;
+			ConsecutiveInvalidPoseSearchFrames = 0;
+		}
+		else
+		{
+			++ConsecutiveInvalidPoseSearchFrames;
+			if (ConsecutiveInvalidPoseSearchFrames > 1 || LastValidPoseSearchResult.SelectedAnim == nullptr)
+			{
+				FailStop(FString::Printf(TEXT("PoseSearch query was invalid for two consecutive policy ticks. %s"), *TickError));
+				return;
+			}
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] Reusing last valid PoseSearch result for one grace policy tick. Reason: %s"), *TickError);
+			SearchResult = LastValidPoseSearchResult;
+		}
+
+		TArray<FPhysAnimBodySample> CurrentBodySamples;
+		if (!GatherCurrentBodySamples(CurrentBodySamples, TickError))
+		{
+			FailStop(TickError);
 			return;
 		}
 
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] Reusing last valid PoseSearch result for one grace tick. Reason: %s"), *TickError);
-		SearchResult = LastValidPoseSearchResult;
-	}
+		TArray<FPhysAnimFuturePoseSample> FuturePoseSamples;
+		if (!SampleFuturePoses(SearchResult, FuturePoseSamples, TickError))
+		{
+			FailStop(TickError);
+			return;
+		}
 
-	TArray<FPhysAnimBodySample> CurrentBodySamples;
-	if (!GatherCurrentBodySamples(CurrentBodySamples, TickError))
-	{
-		FailStop(TickError);
-		return;
-	}
+		if (!PhysAnimBridge::BuildSelfObservation(CurrentBodySamples, 0.0f, SelfObservationBuffer, TickError))
+		{
+			FailStop(TickError);
+			return;
+		}
 
-	TArray<FPhysAnimFuturePoseSample> FuturePoseSamples;
-	if (!SampleFuturePoses(SearchResult, FuturePoseSamples, TickError))
-	{
-		FailStop(TickError);
-		return;
-	}
+		if (!PhysAnimBridge::BuildMimicTargetPoses(CurrentBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, TickError))
+		{
+			FailStop(TickError);
+			return;
+		}
 
-	if (!PhysAnimBridge::BuildSelfObservation(CurrentBodySamples, 0.0f, SelfObservationBuffer, TickError))
-	{
-		FailStop(TickError);
-		return;
-	}
+		PhysAnimBridge::BuildZeroTerrain(TerrainBuffer);
 
-	if (!PhysAnimBridge::BuildMimicTargetPoses(CurrentBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, TickError))
-	{
-		FailStop(TickError);
-		return;
-	}
-
-	PhysAnimBridge::BuildZeroTerrain(TerrainBuffer);
-
-	if (!RunInference(TickError))
-	{
-		FailStop(TickError);
-		return;
+		if (!RunInference(TickError))
+		{
+			FailStop(TickError);
+			return;
+		}
 	}
 
 	ApplyRuntimeControlTuning(EffectiveSettings);
@@ -473,13 +530,19 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		ResetPendingBodyModifiersToCachedTargets();
 	}
-	if (!ConditionModelActions(EffectiveSettings, TickError))
+	if (bRunPolicyUpdateThisTick && !ConditionModelActions(EffectiveSettings, TickError))
 	{
 		FailStop(TickError);
 		return;
 	}
 
-	ApplyControlTargets(DeltaTime, TickError);
+	ApplyControlTargets(
+		bRunPolicyUpdateThisTick
+			? (PolicyControlIntervalSeconds * FMath::Max(ElapsedPolicySteps, 1))
+			: 0.0f,
+		EffectiveSettings,
+		bRunPolicyUpdateThisTick,
+		TickError);
 	if (!TickError.IsEmpty())
 	{
 		FailStop(TickError);
@@ -492,6 +555,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		FailStop(TickError);
 		return;
 	}
+	TrackStabilizationStressTestObservations();
 	AdvanceBringUpState(DeltaTime, EffectiveSettings);
 	if (bSimulationHandoffCompletedThisTick)
 	{
@@ -623,6 +687,184 @@ void UPhysAnimComponent::SetPresentationPerturbationOverrideSeconds(float Durati
 void UPhysAnimComponent::ClearPresentationPerturbationOverride()
 {
 	PresentationPerturbationOverrideEndTimeSeconds = -1.0;
+}
+
+void UPhysAnimComponent::UpdateStabilizationStressTestState(const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	const bool bStressTestEnabled = PhysAnimComponentInternal::CVarPaStabilizationStressTest.GetValueOnGameThread() > 0;
+	if (!bStressTestEnabled)
+	{
+		StabilizationStressTestStartTimeSeconds = -1.0;
+		bStabilizationStressTestCompletionLogged = false;
+		return;
+	}
+
+	UWorld* const World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive || !AreAllBringUpGroupsUnlocked())
+	{
+		return;
+	}
+
+	FPhysAnimStabilizationSettings PolicyRampSettings = EffectiveSettings;
+	PolicyRampSettings.bForceZeroActions =
+		PhysAnimComponentInternal::ResolveBoolOverride(
+			PhysAnimComponentInternal::CVarPhysAnimForceZeroActions,
+			PolicyRampSettings.bForceZeroActions);
+	PolicyRampSettings.StartupRampSeconds =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimStartupRampSeconds,
+			PolicyRampSettings.StartupRampSeconds);
+	if (CalculateCurrentPolicyInfluenceAlpha(PolicyRampSettings) < (1.0f - KINDA_SMALL_NUMBER))
+	{
+		return;
+	}
+
+	if (StabilizationStressTestStartTimeSeconds < 0.0)
+	{
+		StabilizationStressTestStartTimeSeconds = World->GetTimeSeconds();
+		bStabilizationStressTestCompletionLogged = false;
+		StabilizationStressTestFirstAngularSpikeTimeSeconds = -1.0;
+		StabilizationStressTestFirstLinearSpikeTimeSeconds = -1.0;
+		StabilizationStressTestFirstInstabilitySignTimeSeconds = -1.0;
+		StabilizationStressTestFirstAngularSpikeMultiplier = 1.0f;
+		StabilizationStressTestFirstLinearSpikeMultiplier = 1.0f;
+		StabilizationStressTestFirstInstabilityMultiplier = 1.0f;
+		StabilizationStressTestFirstAngularSpikeBoneName = NAME_None;
+		StabilizationStressTestFirstLinearSpikeBoneName = NAME_None;
+		if (const AActor* const OwnerActor = GetOwner())
+		{
+			StabilizationStressTestBaselineActorLocation = OwnerActor->GetActorLocation();
+		}
+		if (const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get())
+		{
+			StabilizationStressTestBaselineSpineLocalOffset =
+				SkeletalMesh->GetBoneLocation(TEXT("spine_01")) - StabilizationStressTestBaselineActorLocation;
+			StabilizationStressTestBaselineHeadLocalOffset =
+				SkeletalMesh->GetBoneLocation(TEXT("head")) - StabilizationStressTestBaselineActorLocation;
+			StabilizationStressTestBaselineLeftFootLocalOffset =
+				SkeletalMesh->GetBoneLocation(TEXT("foot_l")) - StabilizationStressTestBaselineActorLocation;
+			StabilizationStressTestBaselineRightFootLocalOffset =
+				SkeletalMesh->GetBoneLocation(TEXT("foot_r")) - StabilizationStressTestBaselineActorLocation;
+		}
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Stabilization stress-test started: profile=%d sweep=%d rampSeconds=%.1f targetMultiplier=%.2f holdSeconds=%.1f recoveryRampSeconds=%.1f baseStrength=%.2f baseDampingRatio=%.2f baseExtraDamping=%.2f"),
+			PhysAnimComponentInternal::CVarPaStabilizationStressTestProfile.GetValueOnGameThread(),
+			PhysAnimComponentInternal::CVarPaStabilizationStressTestSweepMode.GetValueOnGameThread(),
+			PhysAnimComponentInternal::CVarPaStabilizationStressTestRampSeconds.GetValueOnGameThread(),
+			PhysAnimComponentInternal::CVarPaStabilizationStressTestTargetMultiplier.GetValueOnGameThread(),
+			PhysAnimComponentInternal::CVarPaStabilizationStressTestHoldSeconds.GetValueOnGameThread(),
+			PhysAnimComponentInternal::CVarPaStabilizationStressTestRecoveryRampSeconds.GetValueOnGameThread(),
+			PolicyRampSettings.AngularStrengthMultiplier,
+			PolicyRampSettings.AngularDampingRatioMultiplier,
+			PolicyRampSettings.AngularExtraDampingMultiplier);
+	}
+
+	const float StressMultiplier = ResolveStabilizationStressTestMultiplier();
+	if (!bStabilizationStressTestCompletionLogged && StressMultiplier <= KINDA_SMALL_NUMBER)
+	{
+		bStabilizationStressTestCompletionLogged = true;
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Stabilization stress-test reached zero gain multiplier after %.2fs."),
+			World->GetTimeSeconds() - StabilizationStressTestStartTimeSeconds);
+	}
+}
+
+float UPhysAnimComponent::ResolveStabilizationStressTestMultiplier() const
+{
+	if (PhysAnimComponentInternal::CVarPaStabilizationStressTest.GetValueOnGameThread() <= 0 ||
+		StabilizationStressTestStartTimeSeconds < 0.0)
+	{
+		return 1.0f;
+	}
+
+	const UWorld* const World = GetWorld();
+	const double CurrentTimeSeconds = World ? World->GetTimeSeconds() : StabilizationStressTestStartTimeSeconds;
+	const float ElapsedSeconds = static_cast<float>(FMath::Max(CurrentTimeSeconds - StabilizationStressTestStartTimeSeconds, 0.0));
+	return CalculateStabilizationStressTestMultiplier(
+		PhysAnimComponentInternal::CVarPaStabilizationStressTestProfile.GetValueOnGameThread(),
+		ElapsedSeconds,
+		PhysAnimComponentInternal::CVarPaStabilizationStressTestRampSeconds.GetValueOnGameThread(),
+		PhysAnimComponentInternal::CVarPaStabilizationStressTestTargetMultiplier.GetValueOnGameThread(),
+		PhysAnimComponentInternal::CVarPaStabilizationStressTestHoldSeconds.GetValueOnGameThread(),
+		PhysAnimComponentInternal::CVarPaStabilizationStressTestRecoveryRampSeconds.GetValueOnGameThread());
+}
+
+void UPhysAnimComponent::TrackStabilizationStressTestObservations()
+{
+	if (PhysAnimComponentInternal::CVarPaStabilizationStressTest.GetValueOnGameThread() <= 0 ||
+		StabilizationStressTestStartTimeSeconds < 0.0)
+	{
+		return;
+	}
+
+	UWorld* const World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const float StressMultiplier = ResolveStabilizationStressTestMultiplier();
+	const float AngularSpikeThresholdDegPerSec =
+		PhysAnimComponentInternal::CVarPaStabilizationStressTestAngularSpikeThreshold.GetValueOnGameThread();
+	const float LinearSpikeThresholdCmPerSec =
+		PhysAnimComponentInternal::CVarPaStabilizationStressTestLinearSpikeThreshold.GetValueOnGameThread();
+
+	if (StabilizationStressTestFirstAngularSpikeTimeSeconds < 0.0 &&
+		LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond >= AngularSpikeThresholdDegPerSec)
+	{
+		StabilizationStressTestFirstAngularSpikeTimeSeconds = World->GetTimeSeconds();
+		StabilizationStressTestFirstAngularSpikeMultiplier = StressMultiplier;
+		StabilizationStressTestFirstAngularSpikeBoneName = LastRuntimeInstabilityDiagnostics.MaxAngularSpeedBoneName;
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Stabilization stress-test first angular spike: bone=%s multiplier=%.2f elapsed=%.2fs angularDegPerSec=%.1f"),
+			*StabilizationStressTestFirstAngularSpikeBoneName.ToString(),
+			StressMultiplier,
+			World->GetTimeSeconds() - StabilizationStressTestStartTimeSeconds,
+			LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond);
+	}
+
+	if (StabilizationStressTestFirstLinearSpikeTimeSeconds < 0.0 &&
+		LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond >= LinearSpikeThresholdCmPerSec)
+	{
+		StabilizationStressTestFirstLinearSpikeTimeSeconds = World->GetTimeSeconds();
+		StabilizationStressTestFirstLinearSpikeMultiplier = StressMultiplier;
+		StabilizationStressTestFirstLinearSpikeBoneName = LastRuntimeInstabilityDiagnostics.MaxLinearSpeedBoneName;
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Stabilization stress-test first linear spike: bone=%s multiplier=%.2f elapsed=%.2fs linearCmPerSec=%.1f"),
+			*StabilizationStressTestFirstLinearSpikeBoneName.ToString(),
+			StressMultiplier,
+			World->GetTimeSeconds() - StabilizationStressTestStartTimeSeconds,
+			LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond);
+	}
+
+	if (StabilizationStressTestFirstInstabilitySignTimeSeconds < 0.0 &&
+		RuntimeInstabilityState.UnstableAccumulatedSeconds > 0.0f)
+	{
+		StabilizationStressTestFirstInstabilitySignTimeSeconds = World->GetTimeSeconds();
+		StabilizationStressTestFirstInstabilityMultiplier = StressMultiplier;
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Stabilization stress-test first instability sign: multiplier=%.2f elapsed=%.2fs rootHeightDeltaCm=%.1f rootLinearCmPerSec=%.1f rootAngularDegPerSec=%.1f"),
+			StressMultiplier,
+			World->GetTimeSeconds() - StabilizationStressTestStartTimeSeconds,
+			LastRuntimeInstabilityDiagnostics.RootHeightDeltaCm,
+			LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
+			LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond);
+	}
 }
 
 bool UPhysAnimComponent::ActivateBridgeFromReadyState(
@@ -1228,6 +1470,10 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveFloatOverride(PhysAnimComponentInternal::CVarPhysAnimActionSmoothingAlpha, EffectiveSettings.ActionSmoothingAlpha);
 	EffectiveSettings.StartupRampSeconds =
 		PhysAnimComponentInternal::ResolveFloatOverride(PhysAnimComponentInternal::CVarPhysAnimStartupRampSeconds, EffectiveSettings.StartupRampSeconds);
+	EffectiveSettings.PolicyControlRateHz =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimPolicyControlRateHz,
+			EffectiveSettings.PolicyControlRateHz);
 	EffectiveSettings.MaxAngularStepDegreesPerSecond =
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimMaxAngularStepDegPerSec,
@@ -1275,6 +1521,10 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 			PhysAnimComponentInternal::CVarPhysAnimEnableInstabilityFailStop,
 			EffectiveSettings.bEnableInstabilityFailStop);
 	ApplyPresentationPerturbationStabilizationOverride(IsPresentationPerturbationOverrideActive(), EffectiveSettings);
+	ApplyStabilizationStressTestRamp(
+		ResolveStabilizationStressTestMultiplier(),
+		PhysAnimComponentInternal::CVarPaStabilizationStressTestSweepMode.GetValueOnGameThread(),
+		EffectiveSettings);
 	return EffectiveSettings;
 }
 
@@ -1539,6 +1789,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	const bool bSimulationHandoffSettled = SimulationHandoffAlpha >= (1.0f - KINDA_SMALL_NUMBER);
+	const bool bSimulationHandoffCompletedThisTick = bSimulationHandoffSettled && !bLastAppliedSimulationHandoffSettled;
+	const bool bPresentationPerturbationOverrideActive = IsPresentationPerturbationOverrideActive();
 	const bool bPolicyInfluenceActive = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) > KINDA_SMALL_NUMBER;
 	const bool bUseSkeletalAnimationTargetRepresentation =
 		ShouldUseSkeletalAnimationTargetRepresentation(
@@ -1592,7 +1844,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
-		const bool bBringUpGroupUnlocked = IsBringUpGroupUnlocked(BringUpGroupIndex);
+		const bool bIsRootBodyModifier = BoneName == RootBoneName;
+		const bool bAllowRootBodyModifierSimulation = false;
+		const bool bBringUpGroupUnlocked =
+			bIsRootBodyModifier ? bAllowRootBodyModifierSimulation : IsBringUpGroupUnlocked(BringUpGroupIndex);
+		const bool bBodyModifierActivatedThisTick =
+			(!bIsRootBodyModifier && bSimulationHandoffCompletedThisTick) ||
+			(bAllowRootBodyModifierSimulation && !bLastAppliedPresentationRootSimulationEnabled);
 		EPhysicsMovementType BodyModifierMovementType = EPhysicsMovementType::Kinematic;
 		float BodyModifierPhysicsBlendWeight = 0.0f;
 		bool bUpdateKinematicFromSimulation = false;
@@ -1601,12 +1859,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				EffectiveSettings.bForceZeroActions,
 				bSimulationHandoffSettled,
 				bBringUpGroupUnlocked,
-				BoneName == RootBoneName);
+				bIsRootBodyModifier,
+				bAllowRootBodyModifierSimulation);
 		ResolveBodyModifierRuntimeMode(
 			EffectiveSettings.bForceZeroActions,
 			bSimulationHandoffSettled,
 			bBringUpGroupUnlocked,
-			BoneName == RootBoneName,
+			bIsRootBodyModifier,
+			bAllowRootBodyModifierSimulation,
 			BodyModifierMovementType,
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
@@ -1618,11 +1878,23 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUpdateKinematicFromSimulation,
 			true,
 			false);
+
+		if (ShouldResetBodyModifierToCachedBoneTransform(
+				EffectiveSettings.bForceZeroActions,
+				bBodyModifierActivatedThisTick,
+				bBringUpGroupUnlocked,
+				bIsRootBodyModifier,
+				bAllowRootBodyModifierSimulation) &&
+			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
+		{
+			PendingBodyModifierCachedResetNames.Add(ModifierName);
+		}
 	}
 
 	LastAppliedStabilizationSettings = EffectiveSettings;
 	bLastAppliedSimulationHandoffSettled = bSimulationHandoffSettled;
 	LastAppliedControlAuthorityAlpha = CalculateCurrentControlAuthorityAlpha(EffectiveSettings);
+	bLastAppliedPresentationRootSimulationEnabled = false;
 }
 
 bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError)
@@ -1681,6 +1953,11 @@ float UPhysAnimComponent::CalculateCurrentControlAuthorityAlpha(const FPhysAnimS
 
 float UPhysAnimComponent::CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
+	if (ShouldSuspendPolicyInfluenceDuringPresentationPerturbation(IsPresentationPerturbationOverrideActive()))
+	{
+		return 0.0f;
+	}
+
 	if (!AreAllBringUpGroupsUnlocked())
 	{
 		return 0.0f;
@@ -1699,6 +1976,14 @@ float UPhysAnimComponent::CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimSt
 		true,
 		ElapsedSincePolicyRampStartSeconds,
 		EffectiveSettings.StartupRampSeconds);
+}
+
+bool UPhysAnimComponent::IsPresentationPerturbationOverrideActive() const
+{
+	const UWorld* const World = GetWorld();
+	return World &&
+		PresentationPerturbationOverrideEndTimeSeconds >= 0.0 &&
+		World->GetTimeSeconds() < PresentationPerturbationOverrideEndTimeSeconds;
 }
 
 void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Context)
@@ -2062,7 +2347,11 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 	PendingBodyModifierCachedResetNames.Reset();
 }
 
-void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
+void UPhysAnimComponent::ApplyControlTargets(
+	float PolicyStepDeltaTime,
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	bool bApplyNewPolicyStepThisTick,
+	FString& OutError)
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	if (!PhysicsControl)
@@ -2071,7 +2360,6 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 		return;
 	}
 
-	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 	const bool bPolicyInfluenceActive = PolicyInfluenceAlpha > KINDA_SMALL_NUMBER;
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
@@ -2094,6 +2382,13 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 		return;
 	}
 
+	if (!bApplyNewPolicyStepThisTick)
+	{
+		LastControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
+		LastControlTargetDiagnostics.bFirstPolicyEnabledFrame = false;
+		return;
+	}
+
 	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame)
 	{
 		PreviousControlTargetRotations.Reset();
@@ -2106,7 +2401,8 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 		return;
 	}
 
-	const float MaxAngularStepDegrees = FMath::Max(0.0f, EffectiveSettings.MaxAngularStepDegreesPerSecond) * DeltaTime;
+	const float MaxAngularStepDegrees =
+		FMath::Max(0.0f, EffectiveSettings.MaxAngularStepDegreesPerSecond) * PolicyStepDeltaTime;
 	const bool bUseSkeletalAnimationTargetRepresentation =
 		ShouldUseSkeletalAnimationTargetRepresentation(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
@@ -2115,7 +2411,7 @@ void UPhysAnimComponent::ApplyControlTargets(float DeltaTime, FString& OutError)
 		ResolvePolicyTargetWriteDeltaTime(
 			bUseSkeletalAnimationTargetRepresentation,
 			ControlTargetDiagnostics.bFirstPolicyEnabledFrame,
-			DeltaTime);
+			PolicyStepDeltaTime);
 
 	if (ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(
 		bUseSkeletalAnimationTargetRepresentation,
@@ -2329,16 +2625,70 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 	}
 
 	const_cast<UPhysAnimComponent*>(this)->LastRuntimeDiagnosticsLogTimeSeconds = CurrentTimeSeconds;
+	const bool bStressTestEnabled = PhysAnimComponentInternal::CVarPaStabilizationStressTest.GetValueOnGameThread() > 0;
+	const bool bStressTestActive = bStressTestEnabled && StabilizationStressTestStartTimeSeconds >= 0.0;
+	const float StressTestMultiplier = ResolveStabilizationStressTestMultiplier();
+	const float PolicyControlIntervalSeconds = ResolvePolicyControlIntervalSeconds(EffectiveSettings.PolicyControlRateHz);
+	const float StressTestElapsedSeconds = bStressTestActive
+		? static_cast<float>(FMath::Max(CurrentTimeSeconds - StabilizationStressTestStartTimeSeconds, 0.0))
+		: 0.0f;
+	float StressSpineLocalDeltaCm = 0.0f;
+	float StressHeadLocalDeltaCm = 0.0f;
+	float StressFootLocalDeltaCm = 0.0f;
+	if (bStressTestActive)
+	{
+		if (const AActor* const OwnerActor = GetOwner())
+		{
+			const FVector ActorLocation = OwnerActor->GetActorLocation();
+			if (const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get())
+			{
+				StressSpineLocalDeltaCm = FVector::Dist(
+					SkeletalMesh->GetBoneLocation(TEXT("spine_01")) - ActorLocation,
+					StabilizationStressTestBaselineSpineLocalOffset);
+				StressHeadLocalDeltaCm = FVector::Dist(
+					SkeletalMesh->GetBoneLocation(TEXT("head")) - ActorLocation,
+					StabilizationStressTestBaselineHeadLocalOffset);
+				StressFootLocalDeltaCm = FMath::Max(
+					FVector::Dist(
+						SkeletalMesh->GetBoneLocation(TEXT("foot_l")) - ActorLocation,
+						StabilizationStressTestBaselineLeftFootLocalOffset),
+					FVector::Dist(
+						SkeletalMesh->GetBoneLocation(TEXT("foot_r")) - ActorLocation,
+						StabilizationStressTestBaselineRightFootLocalOffset));
+			}
+		}
+	}
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
-		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s written=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
+		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s written=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
 		SimulationHandoffAlpha,
 		FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
 		GetBringUpGroupCount(),
 		CalculateCurrentControlAuthorityAlpha(EffectiveSettings),
 		CalculateBringUpGroupControlAuthorityAlpha(HighestUnlockedBringUpGroupIndex, EffectiveSettings),
 		CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings),
+		EffectiveSettings.PolicyControlRateHz,
+		PolicyControlIntervalSeconds * 1000.0f,
+		LastPolicyElapsedSteps > 0 ? TEXT("true") : TEXT("false"),
+		LastPolicyElapsedSteps,
+		PolicyControlTicksSkipped,
+		PolicyUpdateAccumulatorSeconds * 1000.0f,
+		IsPresentationPerturbationOverrideActive() ? TEXT("true") : TEXT("false"),
+		bStressTestEnabled ? TEXT("true") : TEXT("false"),
+		bStressTestActive ? TEXT("true") : TEXT("false"),
+		PhysAnimComponentInternal::CVarPaStabilizationStressTestProfile.GetValueOnGameThread(),
+		PhysAnimComponentInternal::CVarPaStabilizationStressTestSweepMode.GetValueOnGameThread(),
+		StressTestMultiplier,
+		StressTestElapsedSeconds,
+		*StabilizationStressTestFirstAngularSpikeBoneName.ToString(),
+		StabilizationStressTestFirstAngularSpikeMultiplier,
+		*StabilizationStressTestFirstLinearSpikeBoneName.ToString(),
+		StabilizationStressTestFirstLinearSpikeMultiplier,
+		StabilizationStressTestFirstInstabilityMultiplier,
+		StressSpineLocalDeltaCm,
+		StressHeadLocalDeltaCm,
+		StressFootLocalDeltaCm,
 		IsMovementSmokeModeEnabled() ? TEXT("true") : TEXT("false"),
 		*LastMovementSmokePhaseName.ToString(),
 		LastMovementSmokeLocalIntent.X,
@@ -2398,6 +2748,11 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	BringUpGroupControlRampStartTimeSeconds.Init(-1.0, GetBringUpGroupCount());
 	PendingBodyModifierCachedResetNames.Reset();
 	LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
+	PolicyUpdateAccumulatorSeconds = -1.0f;
+	LastPolicyElapsedSteps = 0;
+	PolicyControlTicksExecuted = 0;
+	PolicyControlTicksSkipped = 0;
+	LastPolicyControlUpdateTimeSeconds = -1.0;
 	LastMovementSmokeLocalIntent = FVector::ZeroVector;
 	LastMovementSmokeWorldIntent = FVector::ZeroVector;
 	LastMovementSmokeOwnerVelocityCmPerSecond = FVector::ZeroVector;
@@ -2405,6 +2760,23 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	LastMovementSmokePhaseName = NAME_None;
 	bMovementSmokeScriptStarted = false;
 	bMovementSmokeCompletionLogged = false;
+	PresentationPerturbationOverrideEndTimeSeconds = -1.0;
+	bLastAppliedPresentationRootSimulationEnabled = false;
+	StabilizationStressTestStartTimeSeconds = -1.0;
+	bStabilizationStressTestCompletionLogged = false;
+	StabilizationStressTestFirstAngularSpikeTimeSeconds = -1.0;
+	StabilizationStressTestFirstLinearSpikeTimeSeconds = -1.0;
+	StabilizationStressTestFirstInstabilitySignTimeSeconds = -1.0;
+	StabilizationStressTestFirstAngularSpikeMultiplier = 1.0f;
+	StabilizationStressTestFirstLinearSpikeMultiplier = 1.0f;
+	StabilizationStressTestFirstInstabilityMultiplier = 1.0f;
+	StabilizationStressTestFirstAngularSpikeBoneName = NAME_None;
+	StabilizationStressTestFirstLinearSpikeBoneName = NAME_None;
+	StabilizationStressTestBaselineActorLocation = FVector::ZeroVector;
+	StabilizationStressTestBaselineSpineLocalOffset = FVector::ZeroVector;
+	StabilizationStressTestBaselineHeadLocalOffset = FVector::ZeroVector;
+	StabilizationStressTestBaselineLeftFootLocalOffset = FVector::ZeroVector;
+	StabilizationStressTestBaselineRightFootLocalOffset = FVector::ZeroVector;
 	PolicyBlendStartControlTargetRotations.Reset();
 	bPolicyTargetsAppliedLastFrame = false;
 	LastAppliedStabilizationSettings = {};
@@ -2412,6 +2784,29 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 
 void UPhysAnimComponent::FailStop(const FString& Reason)
 {
+	if (PhysAnimComponentInternal::CVarPaStabilizationStressTest.GetValueOnGameThread() > 0 &&
+		StabilizationStressTestStartTimeSeconds >= 0.0)
+	{
+		const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : StabilizationStressTestStartTimeSeconds;
+		const double ElapsedSinceStartSeconds = CurrentTimeSeconds - StabilizationStressTestStartTimeSeconds;
+		const double CascadeSeconds =
+			(StabilizationStressTestFirstInstabilitySignTimeSeconds >= 0.0)
+				? (CurrentTimeSeconds - StabilizationStressTestFirstInstabilitySignTimeSeconds)
+				: -1.0;
+		UE_LOG(
+			LogPhysAnimBridge,
+			Error,
+			TEXT("[PhysAnim] Stabilization stress-test collapse: multiplier=%.2f elapsed=%.2fs firstAngularSpike=%s:%.2f firstLinearSpike=%s:%.2f firstInstability=%.2f onsetToCollapse=%.2fs"),
+			ResolveStabilizationStressTestMultiplier(),
+			ElapsedSinceStartSeconds,
+			*StabilizationStressTestFirstAngularSpikeBoneName.ToString(),
+			StabilizationStressTestFirstAngularSpikeMultiplier,
+			*StabilizationStressTestFirstLinearSpikeBoneName.ToString(),
+			StabilizationStressTestFirstLinearSpikeMultiplier,
+			StabilizationStressTestFirstInstabilityMultiplier,
+			CascadeSeconds);
+	}
+
 	LogBridgeStateSnapshot(TEXT("FailStop"));
 	UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: %s"), *Reason);
 	DeactivateRuntimePhysicsControl(TEXT("FailStop"));
@@ -2438,11 +2833,12 @@ void UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
 	bool bSimulationHandoffSettled,
 	bool bBringUpGroupUnlocked,
 	bool bIsRootBodyModifier,
+	bool bAllowRootBodyModifierSimulation,
 	EPhysicsMovementType& OutMovementType,
 	float& OutPhysicsBlendWeight,
 	bool& bOutUpdateKinematicFromSimulation)
 {
-	if (bForceZeroActions || !bSimulationHandoffSettled || !bBringUpGroupUnlocked || bIsRootBodyModifier)
+	if (bForceZeroActions || !bSimulationHandoffSettled || !bBringUpGroupUnlocked || (bIsRootBodyModifier && !bAllowRootBodyModifierSimulation))
 	{
 		OutMovementType = EPhysicsMovementType::Kinematic;
 		OutPhysicsBlendWeight = 0.0f;
@@ -2459,9 +2855,10 @@ ECollisionEnabled::Type UPhysAnimComponent::ResolveBodyModifierCollisionType(
 	bool bForceZeroActions,
 	bool bSimulationHandoffSettled,
 	bool bBringUpGroupUnlocked,
-	bool bIsRootBodyModifier)
+	bool bIsRootBodyModifier,
+	bool bAllowRootBodyModifierSimulation)
 {
-	if (bForceZeroActions || !bSimulationHandoffSettled || !bBringUpGroupUnlocked || bIsRootBodyModifier)
+	if (bForceZeroActions || !bSimulationHandoffSettled || !bBringUpGroupUnlocked || (bIsRootBodyModifier && !bAllowRootBodyModifierSimulation))
 	{
 		return ECollisionEnabled::NoCollision;
 	}
@@ -2471,11 +2868,15 @@ ECollisionEnabled::Type UPhysAnimComponent::ResolveBodyModifierCollisionType(
 
 bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 	bool bForceZeroActions,
-	bool bSimulationHandoffCompletedThisTick,
+	bool bBodyModifierActivatedThisTick,
 	bool bBringUpGroupUnlocked,
-	bool bIsRootBodyModifier)
+	bool bIsRootBodyModifier,
+	bool bAllowRootBodyModifierSimulation)
 {
-	return !bForceZeroActions && bSimulationHandoffCompletedThisTick && bBringUpGroupUnlocked && !bIsRootBodyModifier;
+	return !bForceZeroActions &&
+		bBodyModifierActivatedThisTick &&
+		bBringUpGroupUnlocked &&
+		(!bIsRootBodyModifier || bAllowRootBodyModifierSimulation);
 }
 
 int32 UPhysAnimComponent::ResolveBringUpGroupIndex(FName BoneName)
@@ -2606,6 +3007,43 @@ float UPhysAnimComponent::ResolvePolicyTargetWriteDeltaTime(
 	return (bUseSkeletalAnimationTargetRepresentation && bFirstPolicyEnabledFrame) ? 0.0f : DeltaTime;
 }
 
+float UPhysAnimComponent::ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz)
+{
+	const float ClampedRateHz = FMath::Max(PolicyControlRateHz, 1.0f);
+	return 1.0f / ClampedRateHz;
+}
+
+bool UPhysAnimComponent::AdvancePolicyControlAccumulator(
+	float DeltaTimeSeconds,
+	float PolicyControlIntervalSeconds,
+	float& InOutAccumulatorSeconds,
+	int32& OutElapsedSteps)
+{
+	OutElapsedSteps = 0;
+
+	if (PolicyControlIntervalSeconds <= UE_SMALL_NUMBER)
+	{
+		InOutAccumulatorSeconds = 0.0f;
+		OutElapsedSteps = 1;
+		return true;
+	}
+
+	if (InOutAccumulatorSeconds < 0.0f)
+	{
+		InOutAccumulatorSeconds = PolicyControlIntervalSeconds;
+	}
+
+	InOutAccumulatorSeconds += FMath::Max(DeltaTimeSeconds, 0.0f);
+	OutElapsedSteps = FMath::FloorToInt(InOutAccumulatorSeconds / PolicyControlIntervalSeconds);
+	if (OutElapsedSteps <= 0)
+	{
+		return false;
+	}
+
+	InOutAccumulatorSeconds = FMath::Fmod(InOutAccumulatorSeconds, PolicyControlIntervalSeconds);
+	return true;
+}
+
 FQuat UPhysAnimComponent::BlendPolicyTargetRotation(
 	const FQuat& BaselineRotation,
 	const FQuat& PolicyTargetRotation,
@@ -2647,6 +3085,112 @@ float UPhysAnimComponent::CalculateControlAuthorityAlpha(
 	}
 
 	return FMath::Clamp(ElapsedSinceHandoffSettledSeconds / RampDurationSeconds, 0.0f, 1.0f);
+}
+
+float UPhysAnimComponent::CalculateStabilizationStressTestMultiplier(
+	int32 ProfileMode,
+	float ElapsedSeconds,
+	float RampDurationSeconds,
+	float TargetMultiplier,
+	float HoldSeconds,
+	float RecoveryRampSeconds)
+{
+	const float ClampedTargetMultiplier = FMath::Clamp(TargetMultiplier, 0.0f, 1.0f);
+	if (ElapsedSeconds <= 0.0f)
+	{
+		return 1.0f;
+	}
+
+	if (ProfileMode == 1)
+	{
+		const float ClampedRampDurationSeconds = FMath::Max(RampDurationSeconds, 0.0f);
+		const float ClampedHoldSeconds = FMath::Max(HoldSeconds, 0.0f);
+		const float ClampedRecoveryRampSeconds = FMath::Max(RecoveryRampSeconds, 0.0f);
+
+		if (ClampedRampDurationSeconds <= UE_SMALL_NUMBER)
+		{
+			if (ElapsedSeconds < ClampedHoldSeconds)
+			{
+				return ClampedTargetMultiplier;
+			}
+
+			if (ClampedRecoveryRampSeconds <= UE_SMALL_NUMBER)
+			{
+				return 1.0f;
+			}
+
+			const float RecoveryAlpha =
+				FMath::Clamp((ElapsedSeconds - ClampedHoldSeconds) / ClampedRecoveryRampSeconds, 0.0f, 1.0f);
+			return FMath::Lerp(ClampedTargetMultiplier, 1.0f, RecoveryAlpha);
+		}
+
+		if (ElapsedSeconds <= ClampedRampDurationSeconds)
+		{
+			const float RampAlpha = FMath::Clamp(ElapsedSeconds / ClampedRampDurationSeconds, 0.0f, 1.0f);
+			return FMath::Lerp(1.0f, ClampedTargetMultiplier, RampAlpha);
+		}
+
+		const float HoldEndSeconds = ClampedRampDurationSeconds + ClampedHoldSeconds;
+		if (ElapsedSeconds <= HoldEndSeconds)
+		{
+			return ClampedTargetMultiplier;
+		}
+
+		if (ClampedRecoveryRampSeconds <= UE_SMALL_NUMBER)
+		{
+			return 1.0f;
+		}
+
+		const float RecoveryAlpha =
+			FMath::Clamp((ElapsedSeconds - HoldEndSeconds) / ClampedRecoveryRampSeconds, 0.0f, 1.0f);
+		return FMath::Lerp(ClampedTargetMultiplier, 1.0f, RecoveryAlpha);
+	}
+
+	if (RampDurationSeconds <= UE_SMALL_NUMBER)
+	{
+		return ClampedTargetMultiplier;
+	}
+
+	return FMath::Clamp(1.0f - ((1.0f - ClampedTargetMultiplier) * (ElapsedSeconds / RampDurationSeconds)), ClampedTargetMultiplier, 1.0f);
+}
+
+void UPhysAnimComponent::ApplyPresentationPerturbationStabilizationOverride(
+	bool bOverrideActive,
+	FPhysAnimStabilizationSettings& InOutSettings)
+{
+	if (!bOverrideActive)
+	{
+		return;
+	}
+
+	InOutSettings.AngularStrengthMultiplier *= PhysAnimComponentInternal::PresentationPerturbationStrengthRelaxationMultiplier;
+	InOutSettings.AngularDampingRatioMultiplier *= PhysAnimComponentInternal::PresentationPerturbationDampingRatioRelaxationMultiplier;
+	InOutSettings.AngularExtraDampingMultiplier *= PhysAnimComponentInternal::PresentationPerturbationExtraDampingRelaxationMultiplier;
+}
+
+void UPhysAnimComponent::ApplyStabilizationStressTestRamp(
+	float Multiplier,
+	int32 SweepMode,
+	FPhysAnimStabilizationSettings& InOutSettings)
+{
+	const float ClampedMultiplier = FMath::Clamp(Multiplier, 0.0f, 1.0f);
+	switch (SweepMode)
+	{
+	case 1:
+		InOutSettings.AngularStrengthMultiplier *= ClampedMultiplier;
+		break;
+	case 2:
+		InOutSettings.AngularDampingRatioMultiplier *= ClampedMultiplier;
+		break;
+	case 3:
+		InOutSettings.AngularExtraDampingMultiplier *= ClampedMultiplier;
+		break;
+	default:
+		InOutSettings.AngularStrengthMultiplier *= ClampedMultiplier;
+		InOutSettings.AngularDampingRatioMultiplier *= ClampedMultiplier;
+		InOutSettings.AngularExtraDampingMultiplier *= ClampedMultiplier;
+		break;
+	}
 }
 
 bool UPhysAnimComponent::ShouldPreserveGameplayShellDuringBridgeActive(
@@ -2831,6 +3375,13 @@ float UPhysAnimComponent::CalculatePolicyInfluenceAlpha(
 	}
 
 	return FMath::Clamp(ElapsedSinceAllBringUpGroupsUnlockedSeconds / RampDurationSeconds, 0.0f, 1.0f);
+}
+
+bool UPhysAnimComponent::ShouldSuspendPolicyInfluenceDuringPresentationPerturbation(
+	bool bPresentationPerturbationOverrideActive)
+{
+	(void)bPresentationPerturbationOverrideActive;
+	return false;
 }
 
 EPhysAnimRuntimeState UPhysAnimComponent::ResolveInitialPoseSearchSuccessState(bool bForceZeroActions)

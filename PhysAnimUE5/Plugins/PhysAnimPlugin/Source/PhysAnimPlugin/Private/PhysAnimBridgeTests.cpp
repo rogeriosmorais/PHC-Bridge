@@ -7,6 +7,9 @@
 
 #include "HAL/IConsoleManager.h"
 #include "Misc/AutomationTest.h"
+#include "PhysicsEngine/ConstraintInstance.h"
+#include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysicsEngine/PhysicsConstraintTemplate.h"
 #include "PhysicsControlActor.h"
 #include "Tests/AutomationCommon.h"
 
@@ -302,12 +305,103 @@ namespace
 		"PhysAnim.Component.StabilizationDefaults",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-	bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
-	{
-		FPhysAnimStabilizationSettings Settings;
-		TestFalse(TEXT("Force-zero actions defaults to disabled"), Settings.bForceZeroActions);
-		return true;
-	}
+bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
+{
+	FPhysAnimStabilizationSettings Settings;
+	FPhysAnimStabilizationSettings OverrideSettings = Settings;
+	TestFalse(TEXT("Force-zero actions defaults to disabled"), Settings.bForceZeroActions);
+	TestEqual(TEXT("Policy control rate defaults to the ProtoMotions-trained cadence"), Settings.PolicyControlRateHz, 30.0f);
+	TestTrue(
+		TEXT("Policy control interval resolves from the configured rate"),
+		FMath::IsNearlyEqual(
+			UPhysAnimComponent::ResolvePolicyControlIntervalSeconds(Settings.PolicyControlRateHz),
+			1.0f / 30.0f,
+			KINDA_SMALL_NUMBER));
+	float PolicyAccumulatorSeconds = -1.0f;
+	int32 ElapsedPolicySteps = 0;
+	TestTrue(
+		TEXT("Policy cadence primes the first update immediately after activation"),
+		UPhysAnimComponent::AdvancePolicyControlAccumulator(
+			1.0f / 60.0f,
+			UPhysAnimComponent::ResolvePolicyControlIntervalSeconds(Settings.PolicyControlRateHz),
+			PolicyAccumulatorSeconds,
+			ElapsedPolicySteps));
+	TestEqual(TEXT("Primed cadence emits one policy step"), ElapsedPolicySteps, 1);
+	TestTrue(
+		TEXT("Short render gaps can hold the previous policy target"),
+		!UPhysAnimComponent::AdvancePolicyControlAccumulator(
+			0.010f,
+			UPhysAnimComponent::ResolvePolicyControlIntervalSeconds(Settings.PolicyControlRateHz),
+			PolicyAccumulatorSeconds,
+			ElapsedPolicySteps));
+	TestEqual(TEXT("Held cadence reports zero elapsed policy steps"), ElapsedPolicySteps, 0);
+	TestTrue(
+		TEXT("Longer frame gaps coalesce multiple policy intervals"),
+		UPhysAnimComponent::AdvancePolicyControlAccumulator(
+			0.080f,
+			UPhysAnimComponent::ResolvePolicyControlIntervalSeconds(Settings.PolicyControlRateHz),
+			PolicyAccumulatorSeconds,
+			ElapsedPolicySteps));
+	TestTrue(TEXT("Coalesced cadence reports more than one elapsed policy step"), ElapsedPolicySteps > 1);
+	UPhysAnimComponent::ApplyPresentationPerturbationStabilizationOverride(false, OverrideSettings);
+	TestEqual(
+		TEXT("Inactive presentation perturbation override leaves angular strength unchanged"),
+		OverrideSettings.AngularStrengthMultiplier,
+		Settings.AngularStrengthMultiplier);
+	UPhysAnimComponent::ApplyPresentationPerturbationStabilizationOverride(true, OverrideSettings);
+	TestTrue(
+		TEXT("Presentation perturbation override relaxes angular strength"),
+		OverrideSettings.AngularStrengthMultiplier < Settings.AngularStrengthMultiplier);
+	TestTrue(
+		TEXT("Presentation perturbation override relaxes angular damping ratio"),
+		OverrideSettings.AngularDampingRatioMultiplier < Settings.AngularDampingRatioMultiplier);
+	TestTrue(
+		TEXT("Presentation perturbation override relaxes extra damping"),
+		OverrideSettings.AngularExtraDampingMultiplier < Settings.AngularExtraDampingMultiplier);
+	TestEqual(
+		TEXT("Stress-test multiplier starts fully enabled"),
+		UPhysAnimComponent::CalculateStabilizationStressTestMultiplier(0, 0.0f, 45.0f, 0.0f, 0.0f, 0.0f),
+		1.0f);
+	TestEqual(
+		TEXT("Stress-test multiplier halves at the midpoint"),
+		UPhysAnimComponent::CalculateStabilizationStressTestMultiplier(0, 22.5f, 45.0f, 0.0f, 0.0f, 0.0f),
+		0.5f);
+	TestEqual(
+		TEXT("Stress-test multiplier clamps to zero after the ramp"),
+		UPhysAnimComponent::CalculateStabilizationStressTestMultiplier(0, 60.0f, 45.0f, 0.0f, 0.0f, 0.0f),
+		0.0f);
+	TestEqual(
+		TEXT("Recovery profile reaches the target floor at the end of the down ramp"),
+		UPhysAnimComponent::CalculateStabilizationStressTestMultiplier(1, 10.0f, 10.0f, 0.4f, 3.0f, 5.0f),
+		0.4f);
+	TestEqual(
+		TEXT("Recovery profile holds the floor during the hold window"),
+		UPhysAnimComponent::CalculateStabilizationStressTestMultiplier(1, 12.0f, 10.0f, 0.4f, 3.0f, 5.0f),
+		0.4f);
+	TestEqual(
+		TEXT("Recovery profile ramps back to full strength"),
+		UPhysAnimComponent::CalculateStabilizationStressTestMultiplier(1, 18.0f, 10.0f, 0.4f, 3.0f, 5.0f),
+		1.0f);
+	FPhysAnimStabilizationSettings StressRampSettings = Settings;
+	UPhysAnimComponent::ApplyStabilizationStressTestRamp(0.5f, 0, StressRampSettings);
+	TestEqual(
+		TEXT("Stress-test ramp scales angular strength uniformly"),
+		StressRampSettings.AngularStrengthMultiplier,
+		Settings.AngularStrengthMultiplier * 0.5f);
+	TestEqual(
+		TEXT("Stress-test ramp scales damping ratio uniformly"),
+		StressRampSettings.AngularDampingRatioMultiplier,
+		Settings.AngularDampingRatioMultiplier * 0.5f);
+	TestEqual(
+		TEXT("Stress-test ramp scales extra damping uniformly"),
+		StressRampSettings.AngularExtraDampingMultiplier,
+		Settings.AngularExtraDampingMultiplier * 0.5f);
+	FPhysAnimStabilizationSettings StrengthOnlySettings = Settings;
+	UPhysAnimComponent::ApplyStabilizationStressTestRamp(0.5f, 1, StrengthOnlySettings);
+	TestEqual(TEXT("Strength-only sweep leaves damping ratio unchanged"), StrengthOnlySettings.AngularDampingRatioMultiplier, Settings.AngularDampingRatioMultiplier);
+	TestEqual(TEXT("Strength-only sweep leaves extra damping unchanged"), StrengthOnlySettings.AngularExtraDampingMultiplier, Settings.AngularExtraDampingMultiplier);
+	return true;
+}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimRotationLimitTest,
@@ -685,6 +779,7 @@ namespace
 			true,
 			true,
 			false,
+			false,
 			MovementType,
 			PhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
@@ -693,6 +788,7 @@ namespace
 		TestFalse(TEXT("Force-zero mode disables update kinematic from simulation"), bUpdateKinematicFromSimulation);
 
 		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			false,
 			false,
 			false,
 			false,
@@ -709,6 +805,7 @@ namespace
 			true,
 			true,
 			true,
+			false,
 			MovementType,
 			PhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
@@ -720,6 +817,7 @@ namespace
 			false,
 			true,
 			true,
+			false,
 			false,
 			MovementType,
 			PhysicsBlendWeight,
@@ -733,11 +831,24 @@ namespace
 			true,
 			false,
 			false,
+			false,
 			MovementType,
 			PhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
 		TestEqual(TEXT("Locked bring-up group keeps non-root body modifiers kinematic"), MovementType, EPhysicsMovementType::Kinematic);
 		TestEqual(TEXT("Locked bring-up group keeps non-root body modifiers at zero blend"), PhysicsBlendWeight, 0.0f);
+
+		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			false,
+			true,
+			true,
+			true,
+			true,
+			MovementType,
+			PhysicsBlendWeight,
+			bUpdateKinematicFromSimulation);
+		TestEqual(TEXT("Presentation perturbation can temporarily simulate the root body modifier"), MovementType, EPhysicsMovementType::Simulated);
+		TestEqual(TEXT("Presentation perturbation enables full blend on the root body modifier"), PhysicsBlendWeight, 1.0f);
 		return true;
 	}
 
@@ -750,24 +861,28 @@ namespace
 	{
 		TestEqual(
 			TEXT("Force-zero mode keeps body modifier collision disabled"),
-			UPhysAnimComponent::ResolveBodyModifierCollisionType(true, true, true, false),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(true, true, true, false, false),
 			ECollisionEnabled::NoCollision);
 		TestEqual(
 			TEXT("Settling phase keeps non-root body modifier collision disabled"),
-			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, false, false, false),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, false, false, false, false),
 			ECollisionEnabled::NoCollision);
 		TestEqual(
 			TEXT("Completed handoff still keeps root body modifier collision disabled"),
-			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, true, true),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, true, true, false),
 			ECollisionEnabled::NoCollision);
 		TestEqual(
 			TEXT("Completed handoff enables non-root body modifier collision"),
-			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, true, false),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, true, false, false),
 			ECollisionEnabled::QueryAndPhysics);
 		TestEqual(
 			TEXT("Locked bring-up group keeps non-root body modifier collision disabled"),
-			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, false, false),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, false, false, false),
 			ECollisionEnabled::NoCollision);
+		TestEqual(
+			TEXT("Presentation perturbation enables root body modifier collision"),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, true, true, true),
+			ECollisionEnabled::QueryAndPhysics);
 		return true;
 	}
 
@@ -780,19 +895,22 @@ namespace
 	{
 		TestFalse(
 			TEXT("Force-zero mode does not reset body modifiers to cached transforms"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(true, true, true, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(true, true, true, false, false));
 		TestFalse(
 			TEXT("Non-settling ticks do not reset body modifiers to cached transforms"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, false, true, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, false, true, false, false));
 		TestFalse(
 			TEXT("Root body modifier does not reset on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, true, true));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, true, true, false));
 		TestTrue(
 			TEXT("Non-root body modifier resets on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, true, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, true, false, false));
 		TestFalse(
 			TEXT("Locked bring-up group does not reset on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, false, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, false, false, false));
+		TestTrue(
+			TEXT("Presentation perturbation resets the root body modifier when it becomes simulated"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, true, true, true));
 		return true;
 	}
 
@@ -961,8 +1079,16 @@ namespace
 			UPhysAnimComparisonSubsystem::ResolveMirroredWorldInput(FVector::ZeroVector, FVector(0.0f, 1.0f, 0.0f)),
 			FVector(0.0f, 1.0f, 0.0f));
 		TestTrue(
-			TEXT("G2 presentation now starts with the perturbation phase"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(0.5f) == TEXT("PerturbationPush"));
+			TEXT("G2 presentation now starts with the locomotion-coupled perturbation phase"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(0.5f) == TEXT("WalkPerturbation"));
+		TestEqual(
+			TEXT("G2 perturbation phase uses forward walking intent"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationLocalIntent(0.5f),
+			FVector(1.0f, 0.0f, 0.0f));
+		TestEqual(
+			TEXT("G2 perturbation phase uses walk-scale input"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationInputScale(0.5f),
+			0.32f);
 		TestFalse(
 			TEXT("G2 perturbation does not fire before the lead-in ends"),
 			UPhysAnimComparisonSubsystem::ShouldApplyPresentationPerturbation(0.5f));
@@ -972,23 +1098,39 @@ namespace
 		TestEqual(
 			TEXT("G2 perturbation pusher starts from the actor's left side"),
 			UPhysAnimComparisonSubsystem::ResolvePresentationPusherStartOffsetCm(),
-			FVector(0.0f, -145.0f, 82.0f));
+			FVector(52.0f, -86.0f, 54.0f));
 		TestEqual(
 			TEXT("G2 perturbation pusher uses the frozen half extent"),
 			UPhysAnimComparisonSubsystem::ResolvePresentationPusherHalfExtentCm(),
-			FVector(18.0f, 44.0f, 78.0f));
+			FVector(18.0f, 24.0f, 48.0f));
 		TestEqual(
 			TEXT("G2 perturbation pusher sweeps a fixed travel distance"),
 			UPhysAnimComparisonSubsystem::ResolvePresentationPusherTravelDistanceCm(),
-			240.0f);
+			118.0f);
 		TestEqual(
 			TEXT("G2 perturbation pusher sweeps over the frozen contact window"),
 			UPhysAnimComparisonSubsystem::ResolvePresentationPusherTravelSeconds(),
-			0.50f);
+			1.1f);
 		TestEqual(
-			TEXT("G2 perturbation applies a sustained body-level push to the pelvis physics body"),
-			UPhysAnimComparisonSubsystem::ResolvePresentationBodyPushForce(),
-			FVector(0.0f, 350000.0f, 0.0f));
+			TEXT("G2 perturbation does not apply a shell-level shove"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationShellPushForce(),
+			FVector::ZeroVector);
+		TestEqual(
+			TEXT("G2 perturbation applies the frozen stabilization relaxation window"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationStabilizationOverrideSeconds(),
+			0.45f);
+		TestEqual(
+			TEXT("G2 perturbation relaxes angular strength by the frozen movement-safe multiplier"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationStrengthRelaxationMultiplier(),
+			0.72f);
+		TestEqual(
+			TEXT("G2 perturbation relaxes damping ratio by the frozen movement-safe multiplier"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationDampingRatioRelaxationMultiplier(),
+			0.78f);
+		TestEqual(
+			TEXT("G2 perturbation relaxes extra damping by the frozen movement-safe multiplier"),
+			UPhysAnimComparisonSubsystem::ResolvePresentationExtraDampingRelaxationMultiplier(),
+			0.74f);
 		TestTrue(
 			TEXT("G2 presentation reaches idle ready after the perturbation intro"),
 			UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(4.5f) == TEXT("IdleReady"));
@@ -1027,7 +1169,7 @@ namespace
 		TestEqual(
 			TEXT("G2 perturbation camera offset is the closer framing"),
 			UPhysAnimComparisonSubsystem::ResolvePresentationCameraOffsetCm(true),
-			FVector(220.0f, 0.0f, 155.0f));
+			FVector(235.0f, 0.0f, 138.0f));
 		TestEqual(
 			TEXT("G2 locomotion camera offset is the wider framing"),
 			UPhysAnimComparisonSubsystem::ResolvePresentationCameraOffsetCm(false),
@@ -1043,6 +1185,11 @@ namespace
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPolicyInfluenceRampGateTest,
 		"PhysAnim.Component.PolicyInfluenceRampGate",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPresentationPerturbationPolicySuspensionTest,
+		"PhysAnim.Component.PresentationPerturbationPolicySuspension",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -1107,6 +1254,17 @@ namespace
 		TestTrue(
 			TEXT("Policy influence can start after final-group control settles"),
 			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, true, true));
+		return true;
+	}
+
+	bool FPhysAnimPresentationPerturbationPolicySuspensionTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("Presentation perturbation override does not suspend policy influence in the default runtime path"),
+			UPhysAnimComponent::ShouldSuspendPolicyInfluenceDuringPresentationPerturbation(true));
+		TestFalse(
+			TEXT("Policy influence remains available when no presentation perturbation override is active"),
+			UPhysAnimComponent::ShouldSuspendPolicyInfluenceDuringPresentationPerturbation(false));
 		return true;
 	}
 
@@ -1300,6 +1458,11 @@ namespace
 		"PhysAnim.Component.Stage1InitializerRuntimeRefs",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMannyConstraintInventoryTest,
+		"PhysAnim.Component.MannyConstraintInventory",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 	bool FPhysAnimStage1InitializerRuntimeRefsTest::RunTest(const FString& Parameters)
 	{
 		AActor* const Owner = NewObject<AActor>();
@@ -1339,6 +1502,121 @@ namespace
 			TestTrue(TEXT("Runtime prep applies body actor override"), PelvisModifier->Actor.Get() == BodyOverride);
 		}
 
+		return true;
+	}
+
+	bool FPhysAnimMannyConstraintInventoryTest::RunTest(const FString& Parameters)
+	{
+		UPhysicsAsset* const PhysicsAsset =
+			LoadObject<UPhysicsAsset>(nullptr, TEXT("/Game/Characters/Mannequins/Rigs/PA_Mannequin.PA_Mannequin"));
+		TestNotNull(TEXT("Expected Manny physics asset should load"), PhysicsAsset);
+		if (!PhysicsAsset)
+		{
+			return false;
+		}
+
+		UPhysAnimStage1InitializerComponent* const Initializer =
+			NewObject<UPhysAnimStage1InitializerComponent>();
+		TestNotNull(TEXT("Stage 1 initializer should exist for constraint inventory"), Initializer);
+		if (!Initializer)
+		{
+			return false;
+		}
+
+		auto ConstraintMotionToString = [](EAngularConstraintMotion Motion) -> const TCHAR*
+		{
+			switch (Motion)
+			{
+			case ACM_Free:
+				return TEXT("Free");
+			case ACM_Limited:
+				return TEXT("Limited");
+			case ACM_Locked:
+				return TEXT("Locked");
+			default:
+				return TEXT("Unknown");
+			}
+		};
+
+		const TSet<FName> ExpectedMissingDirectConstraintChildren =
+		{
+			TEXT("neck_01"),
+			TEXT("head"),
+			TEXT("clavicle_l"),
+			TEXT("clavicle_r")
+		};
+
+		int32 NumConstraintPairsFound = 0;
+		TSet<FName> MissingDirectConstraintChildren;
+		for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+		{
+			const FInitialPhysicsControl* const InitialControl =
+				Initializer->InitialControls.Find(PhysAnimBridge::MakeControlName(BoneName));
+			TestNotNull(
+				*FString::Printf(TEXT("Stage 1 initializer should contain control for %s"), *BoneName.ToString()),
+				InitialControl);
+			if (!InitialControl)
+			{
+				continue;
+			}
+
+			const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(
+				InitialControl->ChildBoneName,
+				InitialControl->ParentBoneName);
+			if (ConstraintIndex == INDEX_NONE)
+			{
+				MissingDirectConstraintChildren.Add(InitialControl->ChildBoneName);
+				AddInfo(FString::Printf(
+					TEXT("[PhysAnimLimitAudit] child=%s parent=%s directConstraint=missing"),
+					*InitialControl->ChildBoneName.ToString(),
+					*InitialControl->ParentBoneName.ToString()));
+				continue;
+			}
+
+			UPhysicsConstraintTemplate* const ConstraintTemplate = PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex)
+				? PhysicsAsset->ConstraintSetup[ConstraintIndex]
+				: nullptr;
+			FConstraintInstance* const ConstraintInstance = ConstraintTemplate
+				? &ConstraintTemplate->DefaultInstance
+				: nullptr;
+			TestNotNull(
+				*FString::Printf(
+					TEXT("Constraint instance should exist child=%s parent=%s"),
+					*InitialControl->ChildBoneName.ToString(),
+					*InitialControl->ParentBoneName.ToString()),
+				ConstraintInstance);
+			if (!ConstraintInstance)
+			{
+				continue;
+			}
+
+			++NumConstraintPairsFound;
+			AddInfo(FString::Printf(
+				TEXT("[PhysAnimLimitAudit] child=%s parent=%s twist=%s/%.1f swing1=%s/%.1f swing2=%s/%.1f"),
+				*InitialControl->ChildBoneName.ToString(),
+				*InitialControl->ParentBoneName.ToString(),
+				ConstraintMotionToString(ConstraintInstance->GetAngularTwistMotion()),
+				ConstraintInstance->GetAngularTwistLimit(),
+				ConstraintMotionToString(ConstraintInstance->GetAngularSwing1Motion()),
+				ConstraintInstance->GetAngularSwing1Limit(),
+				ConstraintMotionToString(ConstraintInstance->GetAngularSwing2Motion()),
+				ConstraintInstance->GetAngularSwing2Limit()));
+		}
+
+		TestEqual(
+			TEXT("Manny direct-constraint gaps stay limited to the known aggregate bones"),
+			MissingDirectConstraintChildren.Num(),
+			ExpectedMissingDirectConstraintChildren.Num());
+		for (const FName BoneName : ExpectedMissingDirectConstraintChildren)
+		{
+			TestTrue(
+				*FString::Printf(TEXT("Expected missing direct constraint child %s is present"), *BoneName.ToString()),
+				MissingDirectConstraintChildren.Contains(BoneName));
+		}
+		TestEqual(
+			TEXT("Remaining controlled Manny bones expose direct constraint entries"),
+			NumConstraintPairsFound,
+			PhysAnimBridge::GetControlledBoneNames().Num() - ExpectedMissingDirectConstraintChildren.Num());
 		return true;
 	}
 

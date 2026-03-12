@@ -38,6 +38,9 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float StartupRampSeconds = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "1.0"))
+	float PolicyControlRateHz = 30.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float MaxAngularStepDegreesPerSecond = 180.0f;
 
@@ -81,6 +84,7 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(ActionClampAbs, Other.ActionClampAbs) &&
 			FMath::IsNearlyEqual(ActionSmoothingAlpha, Other.ActionSmoothingAlpha) &&
 			FMath::IsNearlyEqual(StartupRampSeconds, Other.StartupRampSeconds) &&
+			FMath::IsNearlyEqual(PolicyControlRateHz, Other.PolicyControlRateHz) &&
 			FMath::IsNearlyEqual(MaxAngularStepDegreesPerSecond, Other.MaxAngularStepDegreesPerSecond) &&
 			FMath::IsNearlyEqual(AngularStrengthMultiplier, Other.AngularStrengthMultiplier) &&
 			FMath::IsNearlyEqual(AngularDampingRatioMultiplier, Other.AngularDampingRatioMultiplier) &&
@@ -189,12 +193,19 @@ private:
 	bool CheckRuntimeInstability(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
 	void LogBodyModifierTelemetrySnapshot(const TCHAR* Context) const;
 	void ResetPendingBodyModifiersToCachedTargets();
-	void ApplyControlTargets(float DeltaTime, FString& OutError);
+	void ApplyControlTargets(
+		float PolicyStepDeltaTime,
+		const FPhysAnimStabilizationSettings& EffectiveSettings,
+		bool bApplyNewPolicyStepThisTick,
+		FString& OutError);
 	bool IsMovementSmokeModeEnabled() const;
 	void ApplyMovementSmokeInput(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void MaybeLogRuntimeDiagnostics(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	void ResetStabilizationRuntimeState();
 	void FailStop(const FString& Reason);
+	void UpdateStabilizationStressTestState(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void TrackStabilizationStressTestObservations();
+	float ResolveStabilizationStressTestMultiplier() const;
 	float CalculateSimulationHandoffAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	float CalculateCurrentControlAuthorityAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	float CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
@@ -253,6 +264,11 @@ private:
 	TArray<double> BringUpGroupControlRampStartTimeSeconds;
 	TArray<FName> PendingBodyModifierCachedResetNames;
 	double LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
+	float PolicyUpdateAccumulatorSeconds = -1.0f;
+	int32 LastPolicyElapsedSteps = 0;
+	int32 PolicyControlTicksExecuted = 0;
+	int32 PolicyControlTicksSkipped = 0;
+	double LastPolicyControlUpdateTimeSeconds = -1.0;
 	FVector LastMovementSmokeLocalIntent = FVector::ZeroVector;
 	FVector LastMovementSmokeWorldIntent = FVector::ZeroVector;
 	FVector LastMovementSmokeOwnerVelocityCmPerSecond = FVector::ZeroVector;
@@ -261,6 +277,22 @@ private:
 	bool bMovementSmokeScriptStarted = false;
 	bool bMovementSmokeCompletionLogged = false;
 	double PresentationPerturbationOverrideEndTimeSeconds = -1.0;
+	bool bLastAppliedPresentationRootSimulationEnabled = false;
+	double StabilizationStressTestStartTimeSeconds = -1.0;
+	bool bStabilizationStressTestCompletionLogged = false;
+	double StabilizationStressTestFirstAngularSpikeTimeSeconds = -1.0;
+	double StabilizationStressTestFirstLinearSpikeTimeSeconds = -1.0;
+	double StabilizationStressTestFirstInstabilitySignTimeSeconds = -1.0;
+	float StabilizationStressTestFirstAngularSpikeMultiplier = 1.0f;
+	float StabilizationStressTestFirstLinearSpikeMultiplier = 1.0f;
+	float StabilizationStressTestFirstInstabilityMultiplier = 1.0f;
+	FName StabilizationStressTestFirstAngularSpikeBoneName = NAME_None;
+	FName StabilizationStressTestFirstLinearSpikeBoneName = NAME_None;
+	FVector StabilizationStressTestBaselineActorLocation = FVector::ZeroVector;
+	FVector StabilizationStressTestBaselineSpineLocalOffset = FVector::ZeroVector;
+	FVector StabilizationStressTestBaselineHeadLocalOffset = FVector::ZeroVector;
+	FVector StabilizationStressTestBaselineLeftFootLocalOffset = FVector::ZeroVector;
+	FVector StabilizationStressTestBaselineRightFootLocalOffset = FVector::ZeroVector;
 	FName OriginalMeshCollisionProfileName = NAME_None;
 	ECollisionEnabled::Type OriginalMeshCollisionEnabled = ECollisionEnabled::NoCollision;
 	TEnumAsByte<ECollisionResponse> OriginalMeshPawnResponse = ECollisionResponse::ECR_Block;
@@ -304,6 +336,7 @@ public:
 		bool bSimulationHandoffSettled,
 		bool bBringUpGroupUnlocked,
 		bool bIsRootBodyModifier,
+		bool bAllowRootBodyModifierSimulation,
 		EPhysicsMovementType& OutMovementType,
 		float& OutPhysicsBlendWeight,
 		bool& bOutUpdateKinematicFromSimulation);
@@ -311,12 +344,14 @@ public:
 		bool bForceZeroActions,
 		bool bSimulationHandoffSettled,
 		bool bBringUpGroupUnlocked,
-		bool bIsRootBodyModifier);
+		bool bIsRootBodyModifier,
+		bool bAllowRootBodyModifierSimulation);
 	static bool ShouldResetBodyModifierToCachedBoneTransform(
 		bool bForceZeroActions,
-		bool bSimulationHandoffCompletedThisTick,
+		bool bBodyModifierActivatedThisTick,
 		bool bBringUpGroupUnlocked,
-		bool bIsRootBodyModifier);
+		bool bIsRootBodyModifier,
+		bool bAllowRootBodyModifierSimulation);
 	static int32 ResolveBringUpGroupIndex(FName BoneName);
 	static int32 GetBringUpGroupCount();
 	static bool ShouldDelayBringUpGroupControlRamp(int32 GroupIndex, int32 NumBringUpGroups);
@@ -341,6 +376,12 @@ public:
 		bool bUseSkeletalAnimationTargetRepresentation,
 		bool bFirstPolicyEnabledFrame,
 		float DeltaTime);
+	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);
+	static bool AdvancePolicyControlAccumulator(
+		float DeltaTimeSeconds,
+		float PolicyControlIntervalSeconds,
+		float& InOutAccumulatorSeconds,
+		int32& OutElapsedSteps);
 	static FQuat BlendPolicyTargetRotation(const FQuat& BaselineRotation, const FQuat& PolicyTargetRotation, float PolicyAlpha);
 	static float CalculateControlTargetDeltaDegrees(const FQuat& PreviousRotation, const FQuat& TargetRotation);
 	static float CalculateControlAuthorityAlpha(
@@ -350,6 +391,17 @@ public:
 		float RampDurationSeconds);
 	static void ApplyPresentationPerturbationStabilizationOverride(
 		bool bOverrideActive,
+		FPhysAnimStabilizationSettings& InOutSettings);
+	static float CalculateStabilizationStressTestMultiplier(
+		int32 ProfileMode,
+		float ElapsedSeconds,
+		float RampDurationSeconds,
+		float TargetMultiplier,
+		float HoldSeconds,
+		float RecoveryRampSeconds);
+	static void ApplyStabilizationStressTestRamp(
+		float Multiplier,
+		int32 SweepMode,
 		FPhysAnimStabilizationSettings& InOutSettings);
 	static void ResolveRuntimeInstabilityRootFrame(
 		bool bPreserveGameplayShell,
@@ -368,6 +420,7 @@ public:
 	static FName ResolveMovementSmokePhaseName(float ElapsedSeconds);
 	static float GetMovementSmokeDurationSeconds();
 	static float GetMovementSmokeTotalDurationSeconds(int32 NumLoops);
+	static bool ShouldSuspendPolicyInfluenceDuringPresentationPerturbation(bool bPresentationPerturbationOverrideActive);
 	static float CalculatePolicyInfluenceAlpha(
 		bool bForceZeroActions,
 		bool bAllBringUpGroupsUnlocked,

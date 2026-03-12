@@ -20,7 +20,7 @@ It must compare one locked sequence that tests the Stage 1 thesis:
 
 The default G2 comparison sequence is:
 
-1. scripted physical perturbation / push
+1. scripted locomotion-coupled perturbation / push
 2. relaxed idle / ready stance
 3. walk forward
 4. jog or short run
@@ -50,8 +50,9 @@ Preferred trigger path:
 - enter `BridgeActive`
 - run `PhysAnim.G2.StartPresentation`
 - compare both actors through the same scripted sequence and fixed camera
-- the first phase is now a short scripted contact push with visible pusher boxes
-- the physics-driven actor receives a sustained gameplay-shell shove during that contact window
+- the first phase is now a short scripted walking perturbation with visible pusher boxes
+- the `Physics-Driven` actor receives the physical contact disturbance
+- the `Kinematic` actor stays on the same scripted locomotion path without receiving that contact
 - the presentation camera uses a closer perturbation framing first, then returns to the wider locomotion framing
 
 Fallback trigger path:

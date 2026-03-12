@@ -3,6 +3,7 @@ param(
     [string]$EngineRoot = $(if ($env:UE5_PATH) { $env:UE5_PATH } else { "E:\UE_5.7\Engine" }),
     [string]$ProjectPath = "F:\NewEngine\PhysAnimUE5\PhysAnimUE5.uproject",
     [string]$TestName = "PhysAnim.PIE.Smoke",
+    [string]$PreExecCmds = "",
     [switch]$UseEditorExe
 )
 
@@ -20,9 +21,34 @@ if (-not (Test-Path $ProjectPath)) {
     throw "Project file not found at '$ProjectPath'."
 }
 
+function Split-ExecCommands {
+    param(
+        [string]$CommandText
+    )
+
+    if ([string]::IsNullOrWhiteSpace($CommandText)) {
+        return @()
+    }
+
+    return @(
+        $CommandText `
+            -split "[;\r\n]+" |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+}
+
+$execCmdParts = @()
+if (-not [string]::IsNullOrWhiteSpace($PreExecCmds)) {
+    $execCmdParts += Split-ExecCommands -CommandText $PreExecCmds
+}
+$execCmdParts += ('Automation RunTests {0}' -f $TestName)
+$execCmdParts += 'Quit'
+$execCmds = [string]::Join(', ', $execCmdParts)
+
 $arguments = @(
     $ProjectPath,
-    ('-ExecCmds=Automation RunTests {0}; Quit' -f $TestName),
+    ('-ExecCmds={0}' -f $execCmds),
     '-TestExit=Automation Test Queue Empty',
     '-Unattended',
     '-NoSound',
@@ -30,6 +56,7 @@ $arguments = @(
 )
 
 Write-Host "Running $TestName with $editorPath"
+Write-Host "ExecCmds: $execCmds"
 & $editorPath @arguments
 $exitCode = $LASTEXITCODE
 

@@ -88,13 +88,21 @@ The goal is not perfect realism. The goal is whether the physics-driven version 
 - contact response
 - overall non-robotic feel
 
-The scripted presentation now begins with a fixed physical perturbation. This is intentional:
+The scripted presentation now begins with a fixed locomotion-coupled perturbation. This is intentional:
 
-- the `Physics-Driven` actor should visibly react and rebalance
-- the `Kinematic` actor should mostly ignore the shove
-- the perturbation is now delivered as a short scripted contact push, not a one-frame tap
-- the contact push includes a sustained gameplay-shell shove on the `Physics-Driven` actor during the contact window
+- both actors begin the same short scripted walk
+- only the `Physics-Driven` actor receives the physical contact disturbance
+- the `Kinematic` actor stays on the same scripted locomotion path without that extra contact
+- the perturbation is delivered as a short scripted contact push, not a one-frame tap
+- the earlier gameplay-shell shove was removed because it produced obvious sideways sliding without a convincing body response
 - the perturbation phase uses a closer camera framing before the sequence returns to the standard comparison shot
+
+Current orchestrator note:
+
+- this locomotion-coupled path is the best stable perturbation format so far
+- it produces measurable divergence without fail-stop
+- the perturbation window now uses a real movement-safe stabilization override plus a lower-body, lead-leg-biased contact profile
+- but the visible difference is still under evaluation and may remain too subtle for a clean G2 win
 
 ## Evaluation Rubric
 

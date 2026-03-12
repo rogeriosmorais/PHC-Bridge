@@ -527,10 +527,14 @@ PhysAnim.G2.StartPresentation
      - `Kinematic`
   6. confirm the camera is now fixed/tracking automatically and your own mouse look is no longer driving the comparison
   7. compare them through the same scripted sequence, with the same camera framing
-     - the scripted presentation now begins with a fixed scripted contact push
-     - the `Physics-Driven` actor now gets a sustained shell-level shove during that contact window
+     - the scripted presentation now begins with a short walking perturbation
+     - both actors begin the same scripted walk
+     - only the `Physics-Driven` actor receives the extra contact push
+     - the shell-level shove was removed because it only produced sideways sliding
+     - the current perturbation path is a locomotion-coupled lower-body contact push on the `Physics-Driven` actor
+     - that perturbation window now also applies a real temporary stabilization relaxation, not just a label or log flag
      - the camera starts closer for that perturbation moment, then returns to the wider locomotion framing
-     - the important question in that first moment is whether the `Physics-Driven` actor reacts and rebalances while the `Kinematic` actor mostly does not
+     - the important question in that first moment is whether the `Physics-Driven` actor shows a readable body response or recovery difference while the `Kinematic` actor mostly stays on the scripted path
   8. if the scripted presentation harness is unavailable, fall back to:
 
 ```text
@@ -544,6 +548,47 @@ PhysAnim.G2.StartSideBySide
      - balance recovery
      - contact response
      - overall non-robotic feel
+  10. if you need to measure the idle stabilization margin directly before tuning perturbation behavior, use:
+
+```text
+pa.StabilizationStressTest 1
+pa.StabilizationStressTestRampSeconds 45
+```
+
+     then let the character stand idle in `BridgeActive` and watch the runtime diagnostics for:
+     - `stressTest[enabled=true active=true multiplier=...]`
+     - any later `Fail-stop`
+     - `firstAngSpike=...`
+     - `firstLinSpike=...`
+     - `firstInstability=...`
+     - `localSpine=... localHead=... localFoot=...`
+     if you need the extended question set:
+
+```text
+pa.StabilizationStressTestProfile 1
+pa.StabilizationStressTestTargetMultiplier 0.4
+pa.StabilizationStressTestHoldSeconds 3
+pa.StabilizationStressTestRecoveryRampSeconds 5
+```
+
+     and for single-parameter sweeps:
+
+```text
+pa.StabilizationStressTestSweepMode 1
+```
+
+     where:
+     - `0` = all angular multipliers
+     - `1` = strength only
+     - `2` = damping ratio only
+     - `3` = extra damping only
+     the current measured takeaway is:
+     - idle is robust even at `multiplier=0.00`
+     - movement changes the answer materially and makes the lower body much more sensitive
+     and one important current limitation is:
+     - the original standing external-push G2 perturbation is no longer the preferred path
+     - the current perturbation is the locomotion-coupled variant because the standing push proved either too subtle or too unstable
+     - the locomotion-coupled path is stable, but the visible difference may still be subtle even after the lower-body targeting and temporary gain relaxation were corrected
 - `What good looks like`:
   - both actors stay readable in the same view
   - the `Physics-Driven` actor looks more grounded, weighty, or physically believable than the `Kinematic` actor
