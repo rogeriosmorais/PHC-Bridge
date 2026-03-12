@@ -767,10 +767,23 @@ This gives us the highest-value correction with the least ambiguity.
       - build passes
       - `PhysAnim.Component` passes
       - `PhysAnim.PIE.MovementSmoke` passes
-    - current read:
+  - current read:
       - this is a keepable observation-contract correction
       - broader training/runtime alignment is still worth continuing
       - the next useful pass should continue targeting observation/representation seams, not return to already-falsified lower-limb write-smoothing branches
+  - terrain input alignment result:
+    - re-checked official UE docs/source plus local ProtoMotions terrain code before changing runtime behavior
+    - active checkpoint uses `terrain: true` with a `256`-sample terrain channel
+    - the bridge was still emitting `BuildZeroTerrain(...)`
+    - implemented a Proto-compatible `16 x 16` yaw-rotated terrain sampler against static world geometry and packed `root_world_z - sampled_ground_height`
+    - verification:
+      - build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+    - current read:
+      - this is a keepable contract fix
+      - broader training/runtime alignment is still worth continuing
+      - this corrects a real checkpoint input seam but does not, by itself, claim a final locomotion breakthrough
 
 ## Working Hypothesis
 

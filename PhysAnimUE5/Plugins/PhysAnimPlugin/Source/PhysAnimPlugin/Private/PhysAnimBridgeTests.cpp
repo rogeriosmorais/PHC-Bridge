@@ -200,6 +200,49 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTerrainSampleOffsetsTest,
+		"PhysAnim.Bridge.TerrainSampleOffsets",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTerrainSampleOffsetsTest::RunTest(const FString& Parameters)
+	{
+		const TArray<FVector2D>& Offsets = GetTerrainSampleOffsets();
+		TestEqual(TEXT("Terrain sample offset count"), Offsets.Num(), TerrainSize);
+		TestEqual(TEXT("First sample X"), static_cast<float>(Offsets[0].X), -TerrainSampleWidth);
+		TestEqual(TEXT("First sample Y"), static_cast<float>(Offsets[0].Y), -TerrainSampleWidth);
+		TestEqual(TEXT("Last sample X"), static_cast<float>(Offsets.Last().X), TerrainSampleWidth);
+		TestEqual(TEXT("Last sample Y"), static_cast<float>(Offsets.Last().Y), TerrainSampleWidth);
+		const double TerrainStep = (2.0 * static_cast<double>(TerrainSampleWidth)) / static_cast<double>(TerrainSamplesPerAxis - 1);
+		TestTrue(
+			TEXT("Second-row sample advances along Y first, matching Proto meshgrid flattening"),
+			Offsets[1].Equals(FVector2D(-TerrainSampleWidth, -TerrainSampleWidth + TerrainStep), KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Row-major terrain flattening advances X only after a full Y row"),
+			Offsets[TerrainSamplesPerAxis].Equals(FVector2D(-TerrainSampleWidth + TerrainStep, -TerrainSampleWidth), KINDA_SMALL_NUMBER));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTerrainObservationPackingTest,
+		"PhysAnim.Bridge.TerrainObservationPacking",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTerrainObservationPackingTest::RunTest(const FString& Parameters)
+	{
+		TArray<float> GroundHeights;
+		GroundHeights.Init(10.0f, TerrainSize);
+		GroundHeights[0] = 7.5f;
+
+		TArray<float> Terrain;
+		FString Error;
+		TestTrue(TEXT("Terrain observation packing should succeed"), BuildTerrainObservation(12.0f, GroundHeights, Terrain, Error));
+		TestEqual(TEXT("Terrain observation size"), Terrain.Num(), TerrainSize);
+		TestEqual(TEXT("Terrain root-height delta uses per-sample ground height"), Terrain[0], 4.5f);
+		TestEqual(TEXT("Flat terrain sample uses root-minus-ground height"), Terrain[1], 2.0f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimActionCollapseTest,
 		"PhysAnim.Bridge.ActionCollapse",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

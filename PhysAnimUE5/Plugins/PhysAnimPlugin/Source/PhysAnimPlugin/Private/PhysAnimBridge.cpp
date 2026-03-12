@@ -143,6 +143,32 @@ namespace PhysAnimBridge
 
 			return FutureSample.BodyTransforms[BodyIndex];
 		}
+
+		const TArray<FVector2D>& MakeTerrainSampleOffsets()
+		{
+			static const TArray<FVector2D> Offsets = []
+			{
+				TArray<FVector2D> Result;
+				Result.Reserve(TerrainSize);
+
+				for (int32 XIndex = 0; XIndex < TerrainSamplesPerAxis; ++XIndex)
+				{
+					const float AlphaX = static_cast<float>(XIndex) / static_cast<float>(TerrainSamplesPerAxis - 1);
+					const float LocalX = FMath::Lerp(-TerrainSampleWidth, TerrainSampleWidth, AlphaX);
+
+					for (int32 YIndex = 0; YIndex < TerrainSamplesPerAxis; ++YIndex)
+					{
+						const float AlphaY = static_cast<float>(YIndex) / static_cast<float>(TerrainSamplesPerAxis - 1);
+						const float LocalY = FMath::Lerp(-TerrainSampleWidth, TerrainSampleWidth, AlphaY);
+						Result.Emplace(LocalX, LocalY);
+					}
+				}
+
+				return Result;
+			}();
+
+			return Offsets;
+		}
 	}
 
 	const TArray<FName>& GetControlledBoneNames()
@@ -508,6 +534,35 @@ namespace PhysAnimBridge
 				OutMimicTargetPoses.Num(),
 				MimicTargetPosesSize);
 			return false;
+		}
+
+		return true;
+	}
+
+	const TArray<FVector2D>& GetTerrainSampleOffsets()
+	{
+		return MakeTerrainSampleOffsets();
+	}
+
+	bool BuildTerrainObservation(
+		float RootHeight,
+		const TArray<float>& SampleGroundHeights,
+		TArray<float>& OutTerrain,
+		FString& OutError)
+	{
+		if (SampleGroundHeights.Num() != TerrainSize)
+		{
+			OutError = FString::Printf(
+				TEXT("Expected %d terrain ground-height samples but found %d."),
+				TerrainSize,
+				SampleGroundHeights.Num());
+			return false;
+		}
+
+		OutTerrain.SetNumUninitialized(TerrainSize);
+		for (int32 SampleIndex = 0; SampleIndex < TerrainSize; ++SampleIndex)
+		{
+			OutTerrain[SampleIndex] = RootHeight - SampleGroundHeights[SampleIndex];
 		}
 
 		return true;

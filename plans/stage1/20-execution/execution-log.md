@@ -835,3 +835,27 @@ Whenever new setup or gate evidence arrives:
   - objective target-frame contract improvement
   - movement smoke stayed stable and completed successfully
   - locomotion remains mixed enough that this should be treated as another correct alignment step, not the final lower-limb fix
+
+## 2026-03-12 - Terrain input alignment
+
+- Direction check:
+  - still worth continuing in the broader training/runtime alignment direction
+  - not worth reopening falsified lower-limb-only heuristic branches
+- New plan:
+  - [terrain-input-alignment-plan.md](/F:/NewEngine/plans/stage1/40-design/terrain-input-alignment-plan.md)
+- Sources re-checked before coding:
+  - UE PhysicsControl and CharacterMovement docs/source
+  - ProtoMotions terrain config and local `terrain.py` / `terrain_utils.py` / `terrain_obs.py`
+- Implemented:
+  - added Proto-compatible `16 x 16` terrain sample offsets in bridge code
+  - replaced zero terrain packing with a real yaw-rotated terrain sampler against static world geometry
+  - terrain tensor now packs `root_world_z - sampled_ground_height` instead of all zeros
+- Verification:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
+- Result:
+  - keepable
+  - objective terrain-channel contract fix
+  - component tests and deterministic movement smoke both stayed green
+  - this should be treated as another correct runtime-alignment step, not a guaranteed locomotion breakthrough by itself

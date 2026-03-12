@@ -276,6 +276,13 @@ private:
 	void LogBodyModifierTelemetrySnapshot(const TCHAR* Context) const;
 	void ResetPendingBodyModifiersToCachedTargets();
 	float ResolveSelfObservationGroundHeight(const TArray<FPhysAnimBodySample>& CurrentBodySamples) const;
+	bool BuildTerrainObservation(const TArray<FPhysAnimBodySample>& CurrentBodySamples, TArray<float>& OutTerrain, FString& OutError) const;
+	bool SampleTerrainGroundHeights(
+		const FVector& RootLocation,
+		const FQuat& RootRotation,
+		float FallbackGroundHeight,
+		TArray<float>& OutGroundHeights,
+		FString& OutError) const;
 	void ApplyControlTargets(
 		float PolicyStepDeltaTime,
 		const FPhysAnimStabilizationSettings& EffectiveSettings,

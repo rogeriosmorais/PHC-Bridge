@@ -568,3 +568,19 @@ The next meaningful ledger updates should come from:
 - Current working assumption:
   - `mimic_target_poses` should use data-origin-aligned future targets plus a similarly normalized current reference
   - the current Stage 1 XY offset is a proxy derived from the selected current animation root, not a full replacement for Proto's respawn system
+
+## 2026-03-12 - Terrain observation contract
+
+- Previous assumption:
+  - feeding a zeroed terrain tensor was close enough on the flat Stage 1 map
+- Status:
+  - falsified
+- Evidence:
+  - active ProtoMotions checkpoint has `terrain: true`
+  - active checkpoint expects `terrain_obs_num_samples = 256`
+  - local ProtoMotions terrain code builds a yaw-rotated `16 x 16` height grid and encodes `root_height - sampled_ground_height`
+  - the UE bridge was still emitting `BuildZeroTerrain(...)`
+  - replacing the zero tensor with a real static-world terrain sampler kept component tests and deterministic movement smoke green
+- Current working assumption:
+  - Stage 1 should emit a real terrain tensor, even on flat ground
+  - the next observation/representation passes should assume terrain input is now part of the live runtime contract

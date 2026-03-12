@@ -5,6 +5,7 @@
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimationAsset.h"
+#include "CollisionQueryParams.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/CollisionProfile.h"
@@ -53,6 +54,8 @@ namespace PhysAnimComponentInternal
 	constexpr float PresentationPerturbationStrengthRelaxationMultiplier = 0.72f;
 	constexpr float PresentationPerturbationDampingRatioRelaxationMultiplier = 0.78f;
 	constexpr float PresentationPerturbationExtraDampingRelaxationMultiplier = 0.74f;
+	constexpr float TerrainTraceStartAboveRootCm = 200.0f;
+	constexpr float TerrainTraceEndBelowRootCm = 300.0f;
 
 	TAutoConsoleVariable<float> CVarPhysAnimActionScale(
 		TEXT("physanim.ActionScale"),
@@ -731,7 +734,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			return;
 		}
 
-		PhysAnimBridge::BuildZeroTerrain(TerrainBuffer);
+		if (!BuildTerrainObservation(CurrentBodySamples, TerrainBuffer, TickError))
+		{
+			FailStop(TickError);
+			return;
+		}
 
 		if (!RunInference(TickError))
 		{
@@ -1620,6 +1627,95 @@ float UPhysAnimComponent::ResolveSelfObservationGroundHeight(const TArray<FPhysA
 		CurrentBodySamples[0].Position.Z,
 		RootWorldLocation.Z,
 		GroundWorldZ);
+}
+
+bool UPhysAnimComponent::BuildTerrainObservation(
+	const TArray<FPhysAnimBodySample>& CurrentBodySamples,
+	TArray<float>& OutTerrain,
+	FString& OutError) const
+{
+	if (!CurrentBodySamples.IsValidIndex(0))
+	{
+		OutError = TEXT("Cannot build terrain observation without a root body sample.");
+		return false;
+	}
+
+	const FPhysAnimBodySample& RootSample = CurrentBodySamples[0];
+	const float GroundHeight = ResolveSelfObservationGroundHeight(CurrentBodySamples);
+
+	TArray<float> SampleGroundHeights;
+	if (!SampleTerrainGroundHeights(
+		RootSample.Position,
+		RootSample.Rotation,
+		GroundHeight,
+		SampleGroundHeights,
+		OutError))
+	{
+		return false;
+	}
+
+	return PhysAnimBridge::BuildTerrainObservation(
+		RootSample.Position.Z,
+		SampleGroundHeights,
+		OutTerrain,
+		OutError);
+}
+
+bool UPhysAnimComponent::SampleTerrainGroundHeights(
+	const FVector& RootLocation,
+	const FQuat& RootRotation,
+	float FallbackGroundHeight,
+	TArray<float>& OutGroundHeights,
+	FString& OutError) const
+{
+	UWorld* const World = GetWorld();
+	if (!World)
+	{
+		OutError = TEXT("Cannot sample terrain observation without a valid world.");
+		return false;
+	}
+
+	const TArray<FVector2D>& TerrainSampleOffsets = PhysAnimBridge::GetTerrainSampleOffsets();
+	if (TerrainSampleOffsets.Num() != PhysAnimBridge::TerrainSize)
+	{
+		OutError = FString::Printf(
+			TEXT("Expected %d terrain sample offsets but found %d."),
+			PhysAnimBridge::TerrainSize,
+			TerrainSampleOffsets.Num());
+		return false;
+	}
+
+	OutGroundHeights.SetNumUninitialized(TerrainSampleOffsets.Num());
+
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PhysAnimTerrainObservation), false);
+	if (const AActor* const Owner = GetOwner())
+	{
+		QueryParams.AddIgnoredActor(Owner);
+	}
+
+	const FCollisionObjectQueryParams ObjectQueryParams(FCollisionObjectQueryParams::InitType::AllStaticObjects);
+	const FQuat RootYawRotation = FRotator(0.0f, RootRotation.Rotator().Yaw, 0.0f).Quaternion();
+
+	for (int32 SampleIndex = 0; SampleIndex < TerrainSampleOffsets.Num(); ++SampleIndex)
+	{
+		const FVector LocalOffset(TerrainSampleOffsets[SampleIndex].X, TerrainSampleOffsets[SampleIndex].Y, 0.0f);
+		const FVector SampleLocation = RootLocation + RootYawRotation.RotateVector(LocalOffset);
+		const FVector TraceStart(SampleLocation.X, SampleLocation.Y, RootLocation.Z + PhysAnimComponentInternal::TerrainTraceStartAboveRootCm);
+		const FVector TraceEnd(SampleLocation.X, SampleLocation.Y, RootLocation.Z - PhysAnimComponentInternal::TerrainTraceEndBelowRootCm);
+
+		FHitResult HitResult;
+		if (World->LineTraceSingleByObjectType(HitResult, TraceStart, TraceEnd, ObjectQueryParams, QueryParams)
+			&& HitResult.IsValidBlockingHit())
+		{
+			OutGroundHeights[SampleIndex] = HitResult.ImpactPoint.Z;
+		}
+		else
+		{
+			OutGroundHeights[SampleIndex] = FallbackGroundHeight;
+		}
+	}
+
+	return true;
 }
 
 bool UPhysAnimComponent::SampleFuturePoses(

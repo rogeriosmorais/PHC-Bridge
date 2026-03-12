@@ -125,6 +125,8 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API inline constexpr int32 SelfObsSize = 358;
 	PHYSANIMPLUGIN_API inline constexpr int32 MimicTargetPosesSize = 6495;
 	PHYSANIMPLUGIN_API inline constexpr int32 TerrainSize = 256;
+	PHYSANIMPLUGIN_API inline constexpr int32 TerrainSamplesPerAxis = 16;
+	PHYSANIMPLUGIN_API inline constexpr float TerrainSampleWidth = 1.0f;
 	PHYSANIMPLUGIN_API inline constexpr int32 NumFutureSteps = 15;
 	PHYSANIMPLUGIN_API inline constexpr float FutureStepSeconds = 1.0f / 30.0f;
 
@@ -167,6 +169,12 @@ namespace PhysAnimBridge
 		TArray<float>& OutMimicTargetPoses,
 		FString& OutError);
 
+	PHYSANIMPLUGIN_API const TArray<FVector2D>& GetTerrainSampleOffsets();
+	PHYSANIMPLUGIN_API bool BuildTerrainObservation(
+		float RootHeight,
+		const TArray<float>& SampleGroundHeights,
+		TArray<float>& OutTerrain,
+		FString& OutError);
 	PHYSANIMPLUGIN_API void BuildZeroTerrain(TArray<float>& OutTerrain);
 
 	PHYSANIMPLUGIN_API bool ConditionModelActions(
