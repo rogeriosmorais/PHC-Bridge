@@ -252,3 +252,21 @@ Whenever new setup or gate evidence arrives:
     - implication:
       - current UE action-range semantics are narrower and less transparent than training
       - next alignment work should define deliberate Stage 1 operating limits and then move to mass-distribution auditing, not blindly widen constraints
+  - March 12, 2026 mass-distribution audit note:
+    - `PhysAnim.Component.MannyMassInventory` now records the current Manny per-body mass distribution from the physics asset path
+    - the explicit family-level comparison is now saved in:
+      - `plans/stage1/40-design/smpl-to-manny-mass-table.md`
+    - current high-confidence mismatch:
+      - Manny is torso-heavy and upper-body-heavy relative to the ProtoMotions SMPL training asset
+      - Manny is leg-light relative to the ProtoMotions SMPL training asset
+      - `spine_01` is effectively massless in the current inventory path, so torso mass is concentrated higher in the chain than training
+    - implication:
+      - the next alignment pass should define a family-level Stage 1 mass-adjustment policy together with operating limits
+      - mass alignment should be judged primarily against movement and perturbation behavior, not just idle
+  - March 12, 2026 operating-limit policy note:
+    - the first explicit Stage 1 operating-limit policy is now saved in:
+      - `plans/stage1/40-design/stage1-operating-limit-policy.md`
+    - frozen decision:
+      - do not broaden Manny hard limits blindly
+      - keep current Manny constraints as the Stage 1 hard safety envelope
+      - move next to family-level mass adjustment before any broad limit retuning

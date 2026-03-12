@@ -174,6 +174,23 @@ Only the orchestrator updates status.
     - current orchestrator read:
       - cadence alignment is now green enough to continue
       - limit/range mismatch remains a real `yellow` alignment risk until explicit Stage 1 operating limits are chosen
+  - March 12, 2026 mass-distribution inventory note:
+    - the first Manny mass inventory is now explicit and repeatable through `PhysAnim.Component.MannyMassInventory`
+    - the family-level comparison sheet is now saved in:
+      - `plans/stage1/40-design/smpl-to-manny-mass-table.md`
+    - current alignment risk:
+      - Manny is currently torso-heavy and upper-body-heavy relative to the ProtoMotions SMPL asset
+      - Manny is currently leg-light relative to the ProtoMotions SMPL asset
+      - `spine_01` is effectively massless in the current Manny audit path, so torso mass sits higher in the chain than the training body
+    - current orchestrator read:
+      - the mass mismatch is now concrete enough to justify a family-level mass policy
+      - that work should still be validated mainly against movement and perturbation, because idle already tolerates large stabilization relaxation
+  - March 12, 2026 operating-limit policy note:
+    - the first explicit Stage 1 operating-limit policy is now saved in:
+      - `plans/stage1/40-design/stage1-operating-limit-policy.md`
+    - current orchestrator read:
+      - hard-limit edits are now deliberately deferred
+      - the next alignment pass should change family-level mass distribution before changing broad Manny constraint ranges
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

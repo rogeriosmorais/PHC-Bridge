@@ -10,7 +10,10 @@
 #include "PhysicsEngine/ConstraintInstance.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "PhysicsEngine/PhysicsConstraintTemplate.h"
+#include "PhysicsEngine/SkeletalBodySetup.h"
 #include "PhysicsControlActor.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "Tests/AutomationCommon.h"
 
 #if WITH_EDITOR
@@ -1617,6 +1620,83 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Remaining controlled Manny bones expose direct constraint entries"),
 			NumConstraintPairsFound,
 			PhysAnimBridge::GetControlledBoneNames().Num() - ExpectedMissingDirectConstraintChildren.Num());
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMannyMassInventoryTest,
+		"PhysAnim.Component.MannyMassInventory",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimMannyMassInventoryTest::RunTest(const FString& Parameters)
+	{
+		UPhysicsAsset* const PhysicsAsset =
+			LoadObject<UPhysicsAsset>(nullptr, TEXT("/Game/Characters/Mannequins/Rigs/PA_Mannequin.PA_Mannequin"));
+		TestNotNull(TEXT("Expected Manny physics asset should load"), PhysicsAsset);
+		if (!PhysicsAsset)
+		{
+			return false;
+		}
+
+		USkeletalMesh* const MannyMesh =
+			LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"));
+		TestNotNull(TEXT("Expected Manny skeletal mesh should load"), MannyMesh);
+		if (!MannyMesh)
+		{
+			return false;
+		}
+
+		USkeletalMeshComponent* const MannyMeshComponent = NewObject<USkeletalMeshComponent>();
+		TestNotNull(TEXT("Transient Manny mesh component should exist"), MannyMeshComponent);
+		if (!MannyMeshComponent)
+		{
+			return false;
+		}
+
+		MannyMeshComponent->SetSkeletalMeshAsset(MannyMesh);
+		MannyMeshComponent->SetPhysicsAsset(PhysicsAsset, false);
+		MannyMeshComponent->SetWorldScale3D(FVector::OneVector);
+
+		float TotalMassKg = 0.0f;
+		for (const USkeletalBodySetup* const BodySetup : PhysicsAsset->SkeletalBodySetups)
+		{
+			if (!BodySetup)
+			{
+				continue;
+			}
+
+			const float BodyMassKg = BodySetup->CalculateMass(MannyMeshComponent);
+			TotalMassKg += BodyMassKg;
+		}
+
+		TestTrue(TEXT("Total Manny physics-asset mass should be positive"), TotalMassKg > 0.0f);
+		AddInfo(FString::Printf(TEXT("[PhysAnimMassAudit] totalMassKg=%.3f"), TotalMassKg));
+
+		int32 LoggedBodyCount = 0;
+		for (const USkeletalBodySetup* const BodySetup : PhysicsAsset->SkeletalBodySetups)
+		{
+			if (!BodySetup)
+			{
+				continue;
+			}
+
+			const float BodyMassKg = BodySetup->CalculateMass(MannyMeshComponent);
+			const float BodyVolume = BodySetup->GetScaledVolume(FVector::OneVector);
+			const float BodyMassScale = BodySetup->DefaultInstance.MassScale;
+			const float BodyMassPercent = TotalMassKg > 0.0f ? (BodyMassKg / TotalMassKg) * 100.0f : 0.0f;
+			const FString BoneNameString = BodySetup->BoneName.ToString();
+
+			AddInfo(FString::Printf(
+				TEXT("[PhysAnimMassAudit] bone=%s massKg=%.3f percent=%.2f volumeUU=%.3f massScale=%.3f"),
+				*BoneNameString,
+				BodyMassKg,
+				BodyMassPercent,
+				BodyVolume,
+				BodyMassScale));
+			++LoggedBodyCount;
+		}
+
+		TestEqual(TEXT("Every Manny body setup should be logged in the mass inventory"), LoggedBodyCount, PhysicsAsset->SkeletalBodySetups.Num());
 		return true;
 	}
 

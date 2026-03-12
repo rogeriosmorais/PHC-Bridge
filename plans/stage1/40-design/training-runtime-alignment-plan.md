@@ -451,8 +451,14 @@ This gives us the highest-value correction with the least ambiguity.
     - `clavicle_l`
     - `clavicle_r`
   - current Manny lower-body, mid-spine, upper-spine, shoulder, and elbow limits are much tighter than the broad SMPL training ranges
+- completed next audit:
+  - first family-level SMPL-vs-Manny mass comparison in [smpl-to-manny-mass-table.md](/F:/NewEngine/plans/stage1/40-design/smpl-to-manny-mass-table.md)
+- current findings:
+  - Manny is currently torso-heavy and upper-body-heavy relative to the ProtoMotions SMPL asset
+  - Manny is currently leg-light relative to the ProtoMotions SMPL asset
+  - `spine_01` is effectively massless in the current Manny inventory (`~0.005 kg` in the audit path), so the torso mass is concentrated higher in the chain than the training asset
 - next alignment task:
-  - convert the audit into a deliberate Stage 1 operating-limit policy, then move to mass-distribution inventory instead of blindly widening constraints
+  - define an explicit Stage 1 operating-limit policy and a family-level mass-adjustment policy before any PD-family retuning
 
 ## Working Hypothesis
 
