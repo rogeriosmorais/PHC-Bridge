@@ -453,3 +453,25 @@ Whenever new setup or gate evidence arrives:
       - target composition mode is now confirmed as a real lower-limb mismatch surface
       - distal-only composition switching is promising, but not yet a clean final baseline
       - the next pass should test whether the explicit-only composition policy must expand to the full knee/ankle/toe chain or whether locomotion-transition handling is the remaining problem
+  - March 12, 2026 full lower-limb locomotion composition note:
+    - re-checked:
+      - official UE PhysicsControl docs
+      - local UE 5.7 PhysicsControl source
+      - ProtoMotions local control mapping code and online docs
+    - implemented the next narrow representation experiment:
+      - above `50 cm/s`, `calf_*`, `foot_*`, and `ball_*` all force `bUseSkeletalAnimation = false`
+      - the rest of the body stays on the current policy-active skeletal-target composition path
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - no locomotion-start discontinuity
+      - movement completion remains green
+      - forward and backward remain mixed rather than clearly improving
+      - one forward sample worsens materially, with `ball_l` peaking around `10104 deg/s`
+      - late backward still contains large distal spikes, including `ball_r` around `9176 deg/s`
+    - current runtime read:
+      - whole-chain explicit-only switching is not a clean new baseline
+      - the remaining mismatch is likely locomotion transition handling or more proximal lower-limb composition, not more distal-set widening alone

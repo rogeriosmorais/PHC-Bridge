@@ -3730,8 +3730,10 @@ bool UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionCompositionPo
 
 bool UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(FName BoneName)
 {
-	return BoneName == TEXT("foot_l") ||
+	return BoneName == TEXT("calf_l") ||
+		BoneName == TEXT("foot_l") ||
 		BoneName == TEXT("ball_l") ||
+		BoneName == TEXT("calf_r") ||
 		BoneName == TEXT("foot_r") ||
 		BoneName == TEXT("ball_r");
 }

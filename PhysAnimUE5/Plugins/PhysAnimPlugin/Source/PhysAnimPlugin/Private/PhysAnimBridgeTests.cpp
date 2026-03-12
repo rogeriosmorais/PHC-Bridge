@@ -977,14 +977,17 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Enabled distal locomotion composition policy with sufficient speed applies"),
 			UPhysAnimComponent::ShouldApplyTrainingAlignedDistalLocomotionCompositionPolicy(true, 600.0f, 50.0f));
 		TestTrue(
+			TEXT("Calves enter explicit-only locomotion composition mode in the chain follow-up"),
+			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("calf_l")));
+		TestTrue(
 			TEXT("Feet enter explicit-only locomotion composition mode"),
 			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("foot_l")));
 		TestTrue(
 			TEXT("Toes enter explicit-only locomotion composition mode"),
 			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("ball_r")));
 		TestFalse(
-			TEXT("Calves do not enter explicit-only locomotion composition mode in the first pass"),
-			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("calf_l")));
+			TEXT("Thighs remain on the non-distal locomotion composition path"),
+			UPhysAnimComponent::ShouldForceExplicitOnlyDistalLocomotionTargetMode(TEXT("thigh_l")));
 		return true;
 	}
 

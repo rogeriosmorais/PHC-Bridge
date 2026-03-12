@@ -319,6 +319,18 @@ Only the orchestrator updates status.
       - target composition mode is a real part of the remaining lower-limb mismatch
       - distal-only composition switching is not yet sufficient for a final baseline
       - the next lower-limb pass should test whether explicit-only composition needs to expand to the full knee/ankle/toe chain or whether locomotion-transition handling is the deeper remaining issue
+  - March 12, 2026 full lower-limb locomotion composition follow-up:
+    - widened the same locomotion-time explicit-only target mode to `calf_*`, `foot_*`, and `ball_*`
+    - current evidence:
+      - deterministic movement smoke still passes with no fail-stop
+      - no locomotion-start discontinuity appears
+      - forward and backward remain mixed
+      - one forward sample worsens materially with a `ball_l` angular spike around `10104 deg/s`
+      - late backward still shows large distal spikes, including `ball_r` around `9176 deg/s`
+    - implication:
+      - lower-limb composition mode remains a real mismatch surface
+      - but simply widening explicit-only switching to the full knee/ankle/toe chain is not a clean baseline
+      - the next lower-limb pass should target locomotion transition handling or more proximal lower-limb composition, not more distal-set widening by itself
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

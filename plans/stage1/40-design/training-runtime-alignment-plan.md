@@ -533,6 +533,21 @@ This gives us the highest-value correction with the least ambiguity.
       - composition mode is a real lower-limb mismatch surface
       - distal-only composition switching is not yet a clean final baseline
       - the next pass should test whether the explicit-only composition policy needs to expand to the full knee/ankle/toe chain or whether locomotion-transition handling is the real remaining problem
+  - full lower-limb locomotion composition result:
+    - widened the same locomotion-time explicit-only target mode to:
+      - `calf_*`
+      - `foot_*`
+      - `ball_*`
+    - deterministic movement smoke stays green with no fail-stop
+    - measured result:
+      - no locomotion-start discontinuity
+      - forward and backward remain mixed
+      - one forward sample becomes materially worse, with `ball_l` peaking around `10104 deg/s`
+      - late backward still shows large distal spikes, including `ball_r` around `9176 deg/s`
+    - current read:
+      - representation mode is still a valid mismatch surface
+      - but simple whole-chain explicit-only switching is not a clean new baseline
+      - the next pass should move to locomotion transition handling or a more proximal lower-limb composition experiment rather than more distal-set widening
 
 ## Working Hypothesis
 
