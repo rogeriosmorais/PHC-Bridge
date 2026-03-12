@@ -1705,6 +1705,19 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Skeletal first-policy frame still zeros target angular velocity delta time for non-distal bones"),
 			UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(TEXT("spine_01"), true, true, false, 0.25f),
 			0.0f);
+		TestTrue(
+			TEXT("Locomotion-time lower-limb response policy activates only when locomotion mode is active"),
+			UPhysAnimComponent::ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(true, 1.0f, true));
+		TestFalse(
+			TEXT("Locomotion-time lower-limb response policy stays off outside locomotion"),
+			UPhysAnimComponent::ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(true, 1.0f, false));
+		TestTrue(
+			TEXT("Calves get extra damping in the locomotion-time lower-limb response profile"),
+			UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(TEXT("calf_l"), 1.0f) > 1.0f);
+		TestEqual(
+			TEXT("Spine stays neutral in the locomotion-time lower-limb response profile"),
+			UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(TEXT("spine_01"), 1.0f),
+			1.0f);
 		return true;
 	}
 

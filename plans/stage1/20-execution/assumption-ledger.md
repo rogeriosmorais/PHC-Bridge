@@ -394,6 +394,20 @@ Only the orchestrator updates status.
       - broad lower-limb angular-velocity suppression is not a clean new baseline
       - the code should stay on the narrower distal-only suppression baseline
       - the next lower-limb pass should move to per-bone target-write smoothing or another proximal locomotion transition seam
+  - March 12, 2026 locomotion-time proximal response-fit follow-up:
+    - runtime experiment:
+      - kept the current distal locomotion baseline unchanged
+      - added a proximal lower-limb response profile only for `thigh_*` / `calf_*`
+      - damping ratio scale `1.20`
+      - extra damping scale `1.35`
+    - measured result:
+      - deterministic movement smoke still passes with no fail-stop
+      - forward remains mixed
+      - backward stays difficult but does not reopen the old high-spike regime
+      - strafe and late idle improve materially relative to the distal-only suppression baseline
+    - implication:
+      - locomotion-time proximal response fitting is a keepable improvement on top of the current distal baseline
+      - the next likely useful experiment is a more selective per-bone proximal profile, not another broad target-semantics change
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

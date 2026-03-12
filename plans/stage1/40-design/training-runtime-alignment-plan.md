@@ -608,6 +608,20 @@ This gives us the highest-value correction with the least ambiguity.
       - broad lower-limb explicit target angular-velocity suppression is not a clean new baseline
       - the runtime code should stay on the narrower distal-only suppression baseline
       - the next pass should target per-bone target-write smoothing or another proximal locomotion transition seam
+  - locomotion-time proximal lower-limb response-fit result:
+    - re-checked official UE PhysicsControl docs/source and ProtoMotions control code before changing runtime behavior
+    - implemented a locomotion-time proximal response profile only for `thigh_*` / `calf_*`
+    - first-pass scales:
+      - damping ratio scale `1.20`
+      - extra damping scale `1.35`
+    - deterministic movement smoke stays green with no fail-stop
+    - measured result:
+      - forward remains mixed
+      - backward stays difficult but does not reopen the old high-spike regime
+      - strafe and late idle improve materially relative to the distal-only suppression baseline
+    - current read:
+      - this is a keepable improvement on top of the distal-only suppression baseline
+      - the next pass should stay in locomotion-time response fitting, most likely with a more selective per-bone proximal profile rather than another target-semantics experiment
 
 ## Working Hypothesis
 

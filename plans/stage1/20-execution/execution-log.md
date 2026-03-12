@@ -565,3 +565,25 @@ Whenever new setup or gate evidence arrives:
       - broad lower-limb explicit target angular-velocity suppression is not a clean new baseline
       - the code has been restored to the narrower distal-only suppression baseline
       - the next pass should target per-bone target-write smoothing or another proximal locomotion transition seam
+  - March 12, 2026 locomotion-time proximal lower-limb response-fit note:
+    - re-checked:
+      - official UE PhysicsControl docs
+      - local UE 5.7 PhysicsControl source
+      - ProtoMotions docs and local control-mapping code
+    - implemented one narrow locomotion-time response experiment:
+      - kept the current distal locomotion baseline unchanged
+      - added a proximal lower-limb response profile only for `thigh_*` / `calf_*`
+      - damping ratio scale `1.20`
+      - extra damping scale `1.35`
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - forward remains mixed
+      - backward stays difficult but does not reopen the old high-spike regime
+      - strafe and late idle improve materially relative to the distal-only suppression baseline
+    - current runtime read:
+      - this is a keepable improvement on top of the current distal locomotion baseline
+      - the next pass should stay in locomotion-time response fitting, most likely with a more selective per-bone proximal profile

@@ -90,6 +90,14 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.TrainingAlignedControlFamilyProfileBlend"),
 		-1.0f,
 		TEXT("Override for the Stage 1 training-aligned control family profile blend. Negative values keep the component default."));
+	TAutoConsoleVariable<int32> CVarPhysAnimApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(
+		TEXT("physanim.ApplyTrainingAlignedLocomotionLowerLimbResponsePolicy"),
+		-1,
+		TEXT("Override for the Stage 1 locomotion-time proximal lower-limb response policy. -1 keeps the component default, 0 disables, 1 enables."));
+	TAutoConsoleVariable<float> CVarPhysAnimTrainingAlignedLocomotionLowerLimbResponsePolicyBlend(
+		TEXT("physanim.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend"),
+		-1.0f,
+		TEXT("Override for the Stage 1 locomotion-time proximal lower-limb response policy blend. Negative values keep the component default."));
 	TAutoConsoleVariable<int32> CVarPhysAnimApplyTrainingAlignedToeLimitPolicy(
 		TEXT("physanim.ApplyTrainingAlignedToeLimitPolicy"),
 		-1,
@@ -1679,6 +1687,14 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimTrainingAlignedControlFamilyProfileBlend,
 			EffectiveSettings.TrainingAlignedControlFamilyProfileBlend);
+	EffectiveSettings.bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy =
+		PhysAnimComponentInternal::ResolveBoolOverride(
+			PhysAnimComponentInternal::CVarPhysAnimApplyTrainingAlignedLocomotionLowerLimbResponsePolicy,
+			EffectiveSettings.bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy);
+	EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimTrainingAlignedLocomotionLowerLimbResponsePolicyBlend,
+			EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend);
 	EffectiveSettings.bApplyTrainingAlignedToeLimitPolicy =
 		PhysAnimComponentInternal::ResolveBoolOverride(
 			PhysAnimComponentInternal::CVarPhysAnimApplyTrainingAlignedToeLimitPolicy,
@@ -2362,13 +2378,31 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					BoneName,
 					EffectiveSettings.TrainingAlignedControlFamilyProfileBlend)
 				: 1.0f;
+		const bool bApplyTrainingAlignedLocomotionLowerLimbResponseProfile =
+			ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(
+				EffectiveSettings.bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy,
+				EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend,
+				bDistalLocomotionCompositionModeActive);
+		const float LocomotionLowerLimbDampingRatioScale =
+			bApplyTrainingAlignedLocomotionLowerLimbResponseProfile
+				? ResolveTrainingAlignedLocomotionLowerLimbDampingRatioScaleForBone(
+					BoneName,
+					EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend)
+				: 1.0f;
+		const float LocomotionLowerLimbExtraDampingScale =
+			bApplyTrainingAlignedLocomotionLowerLimbResponseProfile
+				? ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(
+					BoneName,
+					EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend)
+				: 1.0f;
 
 		FPhysicsControlMultiplier ControlMultiplier;
 		ControlMultiplier.AngularStrengthMultiplier =
 			EffectiveSettings.AngularStrengthMultiplier * FamilyStrengthScale * ControlAuthorityAlpha;
-		ControlMultiplier.AngularDampingRatioMultiplier = EffectiveSettings.AngularDampingRatioMultiplier;
+		ControlMultiplier.AngularDampingRatioMultiplier =
+			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale;
 		ControlMultiplier.AngularExtraDampingMultiplier =
-			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale;
+			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale;
 
 		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
 		if (bDistalLocomotionCompositionModeActive &&
@@ -3899,6 +3933,23 @@ float UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(FNam
 	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);
 }
 
+float UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbDampingRatioScaleForBone(FName BoneName, float BlendAlpha)
+{
+	const float ClampedBlendAlpha = FMath::Clamp(BlendAlpha, 0.0f, 1.0f);
+	float TargetScale = 1.0f;
+
+	if (
+		BoneName == TEXT("thigh_l") ||
+		BoneName == TEXT("calf_l") ||
+		BoneName == TEXT("thigh_r") ||
+		BoneName == TEXT("calf_r"))
+	{
+		TargetScale = 1.20f;
+	}
+
+	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);
+}
+
 float UPhysAnimComponent::ResolveTrainingAlignedControlExtraDampingScaleForBone(FName BoneName, float BlendAlpha)
 {
 	const float ClampedBlendAlpha = FMath::Clamp(BlendAlpha, 0.0f, 1.0f);
@@ -3943,9 +3994,36 @@ float UPhysAnimComponent::ResolveTrainingAlignedControlExtraDampingScaleForBone(
 	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);
 }
 
+float UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(FName BoneName, float BlendAlpha)
+{
+	const float ClampedBlendAlpha = FMath::Clamp(BlendAlpha, 0.0f, 1.0f);
+	float TargetScale = 1.0f;
+
+	if (
+		BoneName == TEXT("thigh_l") ||
+		BoneName == TEXT("calf_l") ||
+		BoneName == TEXT("thigh_r") ||
+		BoneName == TEXT("calf_r"))
+	{
+		TargetScale = 1.35f;
+	}
+
+	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);
+}
+
 bool UPhysAnimComponent::ShouldApplyTrainingAlignedControlFamilyProfile(bool bApplyTrainingAlignedControlFamilyProfile, float BlendAlpha)
 {
 	return bApplyTrainingAlignedControlFamilyProfile && BlendAlpha > UE_SMALL_NUMBER;
+}
+
+bool UPhysAnimComponent::ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(
+	bool bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy,
+	float BlendAlpha,
+	bool bLocomotionModeActive)
+{
+	return bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy &&
+		bLocomotionModeActive &&
+		BlendAlpha > UE_SMALL_NUMBER;
 }
 
 float UPhysAnimComponent::CalculateConstraintMinLimitedAngleDegrees(

@@ -55,6 +55,12 @@ struct FPhysAnimStabilizationSettings
 	float TrainingAlignedControlFamilyProfileBlend = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
+	bool bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float TrainingAlignedLocomotionLowerLimbResponsePolicyBlend = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
 	bool bApplyTrainingAlignedToeLimitPolicy = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
@@ -138,6 +144,8 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(TrainingAlignedMassScaleBlend, Other.TrainingAlignedMassScaleBlend) &&
 			bApplyTrainingAlignedControlFamilyProfile == Other.bApplyTrainingAlignedControlFamilyProfile &&
 			FMath::IsNearlyEqual(TrainingAlignedControlFamilyProfileBlend, Other.TrainingAlignedControlFamilyProfileBlend) &&
+			bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy == Other.bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy &&
+			FMath::IsNearlyEqual(TrainingAlignedLocomotionLowerLimbResponsePolicyBlend, Other.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend) &&
 			bApplyTrainingAlignedToeLimitPolicy == Other.bApplyTrainingAlignedToeLimitPolicy &&
 			FMath::IsNearlyEqual(TrainingAlignedToeLimitPolicyBlend, Other.TrainingAlignedToeLimitPolicyBlend) &&
 			bApplyTrainingAlignedLowerLimbTargetRangePolicy == Other.bApplyTrainingAlignedLowerLimbTargetRangePolicy &&
@@ -483,8 +491,11 @@ public:
 		float& InOutTimeBelowExitSeconds);
 	static bool ShouldForceExplicitOnlyDistalLocomotionTargetMode(FName BoneName);
 	static float ResolveTrainingAlignedControlStrengthScaleForBone(FName BoneName, float BlendAlpha);
+	static float ResolveTrainingAlignedLocomotionLowerLimbDampingRatioScaleForBone(FName BoneName, float BlendAlpha);
+	static float ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(FName BoneName, float BlendAlpha);
 	static float ResolveTrainingAlignedControlExtraDampingScaleForBone(FName BoneName, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedControlFamilyProfile(bool bApplyTrainingAlignedControlFamilyProfile, float BlendAlpha);
+	static bool ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(bool bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy, float BlendAlpha, bool bLocomotionModeActive);
 	static float CalculateConstraintMinLimitedAngleDegrees(
 		EAngularConstraintMotion TwistMotion,
 		float TwistLimit,
