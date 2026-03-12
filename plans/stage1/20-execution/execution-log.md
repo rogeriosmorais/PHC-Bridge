@@ -325,3 +325,15 @@ Whenever new setup or gate evidence arrives:
     - current runtime read:
       - the committed toe-family reassignment remains the best measured toe-focused fit so far
       - the next pass should stop retuning isolated toe gains and instead inspect a different mismatch surface
+  - March 12, 2026 toe-constraint authoring audit note:
+    - added `PhysAnim.Component.MannyToeConstraintAuthoring`
+    - current audit result:
+      - `ball_l <- foot_l` and `ball_r <- foot_r` both exist as direct Manny constraints
+      - left/right toe motions and limit angles match exactly
+      - left/right reference frames are symmetric by magnitude
+      - toe axes are normalized and non-degenerate
+      - angular rotation offsets are zero on both sides
+    - current runtime read:
+      - there is no gross sign that the manually created `ball_*` constraints were authored incorrectly
+      - the more plausible remaining issue is that the toe constraints are permissive and sensitive, not malformed
+      - the next lower-limb pass should inspect toe operating-limit policy or another non-gain mismatch surface, not keep assuming bad manual authoring

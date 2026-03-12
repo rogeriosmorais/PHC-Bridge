@@ -478,6 +478,12 @@ This gives us the highest-value correction with the least ambiguity.
   - then fit the remaining lower-limb outlier locally:
     - first `ball_*` family reassignment to the locomotion leg baseline
     - then toe-specific extra-damping fitting if toe angular peaks remain the dominant offender
+  - toe local fitting result:
+    - the toe-family reassignment is the best measured toe-focused runtime fit so far
+    - isolated toe-only gain changes were worse
+  - authoring audit result:
+    - the manually created toe constraints are structurally sane and left/right symmetric
+  - next pass should move to toe operating-limit policy or another non-gain lower-limb mismatch surface
 
 ## Working Hypothesis
 

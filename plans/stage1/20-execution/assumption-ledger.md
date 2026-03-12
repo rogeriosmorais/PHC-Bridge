@@ -224,6 +224,16 @@ Only the orchestrator updates status.
     - implication:
       - the remaining lower-limb mismatch is probably not solved by simple isolated `ball_*` gain retuning
       - the next alignment pass should move away from toe-only tuning and inspect a different lower-limb mismatch surface
+  - March 12, 2026 toe-constraint authoring audit note:
+    - the manual `ball_*` constraints now have a dedicated structural audit
+    - current evidence:
+      - direct constraints exist on both sides
+      - left/right limits match
+      - left/right frames are symmetric
+      - toe axes are normalized and non-degenerate
+    - implication:
+      - the current problem does not look like a gross manual toe-constraint creation mistake
+      - the next pass should focus on permissive toe operating limits or another lower-limb mismatch surface instead of basic authoring correctness
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

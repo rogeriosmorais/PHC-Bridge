@@ -1728,6 +1728,124 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMannyToeConstraintAuthoringTest,
+		"PhysAnim.Component.MannyToeConstraintAuthoring",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimMannyToeConstraintAuthoringTest::RunTest(const FString& Parameters)
+	{
+		UPhysicsAsset* const PhysicsAsset =
+			LoadObject<UPhysicsAsset>(nullptr, TEXT("/Game/Characters/Mannequins/Rigs/PA_Mannequin.PA_Mannequin"));
+		TestNotNull(TEXT("Expected Manny physics asset should load"), PhysicsAsset);
+		if (!PhysicsAsset)
+		{
+			return false;
+		}
+
+		auto GetConstraint = [PhysicsAsset](FName ChildBoneName, FName ParentBoneName) -> FConstraintInstance*
+		{
+			const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(ChildBoneName, ParentBoneName);
+			if (ConstraintIndex == INDEX_NONE || !PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex))
+			{
+				return nullptr;
+			}
+
+			UPhysicsConstraintTemplate* const ConstraintTemplate = PhysicsAsset->ConstraintSetup[ConstraintIndex];
+			return ConstraintTemplate ? &ConstraintTemplate->DefaultInstance : nullptr;
+		};
+
+		FConstraintInstance* const LeftToeConstraint = GetConstraint(TEXT("ball_l"), TEXT("foot_l"));
+		FConstraintInstance* const RightToeConstraint = GetConstraint(TEXT("ball_r"), TEXT("foot_r"));
+		TestNotNull(TEXT("Left toe direct Manny constraint should exist"), LeftToeConstraint);
+		TestNotNull(TEXT("Right toe direct Manny constraint should exist"), RightToeConstraint);
+		if (!LeftToeConstraint || !RightToeConstraint)
+		{
+			return false;
+		}
+
+		auto MotionToString = [](EAngularConstraintMotion Motion) -> const TCHAR*
+		{
+			switch (Motion)
+			{
+			case ACM_Free:
+				return TEXT("Free");
+			case ACM_Limited:
+				return TEXT("Limited");
+			case ACM_Locked:
+				return TEXT("Locked");
+			default:
+				return TEXT("Unknown");
+			}
+		};
+
+		auto AbsVector = [](const FVector& Value) -> FVector
+		{
+			return FVector(FMath::Abs(Value.X), FMath::Abs(Value.Y), FMath::Abs(Value.Z));
+		};
+
+		auto LogConstraint = [this, MotionToString](const TCHAR* Label, const FConstraintInstance* Constraint)
+		{
+			this->AddInfo(FString::Printf(
+				TEXT("[PhysAnimToeAudit] side=%s twist=%s/%.1f swing1=%s/%.1f swing2=%s/%.1f pos1=(%.2f,%.2f,%.2f) pos2=(%.2f,%.2f,%.2f) pri1=(%.3f,%.3f,%.3f) sec1=(%.3f,%.3f,%.3f) pri2=(%.3f,%.3f,%.3f) sec2=(%.3f,%.3f,%.3f) rotOffset=(%.2f,%.2f,%.2f)"),
+				Label,
+				MotionToString(Constraint->GetAngularTwistMotion()),
+				Constraint->GetAngularTwistLimit(),
+				MotionToString(Constraint->GetAngularSwing1Motion()),
+				Constraint->GetAngularSwing1Limit(),
+				MotionToString(Constraint->GetAngularSwing2Motion()),
+				Constraint->GetAngularSwing2Limit(),
+				Constraint->Pos1.X, Constraint->Pos1.Y, Constraint->Pos1.Z,
+				Constraint->Pos2.X, Constraint->Pos2.Y, Constraint->Pos2.Z,
+				Constraint->PriAxis1.X, Constraint->PriAxis1.Y, Constraint->PriAxis1.Z,
+				Constraint->SecAxis1.X, Constraint->SecAxis1.Y, Constraint->SecAxis1.Z,
+				Constraint->PriAxis2.X, Constraint->PriAxis2.Y, Constraint->PriAxis2.Z,
+				Constraint->SecAxis2.X, Constraint->SecAxis2.Y, Constraint->SecAxis2.Z,
+				Constraint->AngularRotationOffset.Roll,
+				Constraint->AngularRotationOffset.Pitch,
+				Constraint->AngularRotationOffset.Yaw));
+		};
+
+		LogConstraint(TEXT("left"), LeftToeConstraint);
+		LogConstraint(TEXT("right"), RightToeConstraint);
+
+		TestEqual(TEXT("Left/right toe twist motion matches"), LeftToeConstraint->GetAngularTwistMotion(), RightToeConstraint->GetAngularTwistMotion());
+		TestEqual(TEXT("Left/right toe swing1 motion matches"), LeftToeConstraint->GetAngularSwing1Motion(), RightToeConstraint->GetAngularSwing1Motion());
+		TestEqual(TEXT("Left/right toe swing2 motion matches"), LeftToeConstraint->GetAngularSwing2Motion(), RightToeConstraint->GetAngularSwing2Motion());
+		TestEqual(TEXT("Left/right toe twist limit matches"), LeftToeConstraint->GetAngularTwistLimit(), RightToeConstraint->GetAngularTwistLimit());
+		TestEqual(TEXT("Left/right toe swing1 limit matches"), LeftToeConstraint->GetAngularSwing1Limit(), RightToeConstraint->GetAngularSwing1Limit());
+		TestEqual(TEXT("Left/right toe swing2 limit matches"), LeftToeConstraint->GetAngularSwing2Limit(), RightToeConstraint->GetAngularSwing2Limit());
+
+		constexpr float SymmetryTolerance = 0.05f;
+		constexpr float AxisTolerance = 0.01f;
+		TestTrue(TEXT("Toe Pos1 magnitudes stay symmetric"), AbsVector(LeftToeConstraint->Pos1).Equals(AbsVector(RightToeConstraint->Pos1), SymmetryTolerance));
+		TestTrue(TEXT("Toe Pos2 magnitudes stay symmetric"), AbsVector(LeftToeConstraint->Pos2).Equals(AbsVector(RightToeConstraint->Pos2), SymmetryTolerance));
+		TestTrue(TEXT("Toe PriAxis1 magnitudes stay symmetric"), AbsVector(LeftToeConstraint->PriAxis1).Equals(AbsVector(RightToeConstraint->PriAxis1), SymmetryTolerance));
+		TestTrue(TEXT("Toe SecAxis1 magnitudes stay symmetric"), AbsVector(LeftToeConstraint->SecAxis1).Equals(AbsVector(RightToeConstraint->SecAxis1), SymmetryTolerance));
+		TestTrue(TEXT("Toe PriAxis2 magnitudes stay symmetric"), AbsVector(LeftToeConstraint->PriAxis2).Equals(AbsVector(RightToeConstraint->PriAxis2), SymmetryTolerance));
+		TestTrue(TEXT("Toe SecAxis2 magnitudes stay symmetric"), AbsVector(LeftToeConstraint->SecAxis2).Equals(AbsVector(RightToeConstraint->SecAxis2), SymmetryTolerance));
+
+		TestTrue(TEXT("Toe PriAxis1 is normalized enough"), FMath::IsNearlyEqual(LeftToeConstraint->PriAxis1.Size(), 1.0f, AxisTolerance));
+		TestTrue(TEXT("Toe SecAxis1 is normalized enough"), FMath::IsNearlyEqual(LeftToeConstraint->SecAxis1.Size(), 1.0f, AxisTolerance));
+		TestTrue(TEXT("Toe PriAxis2 is normalized enough"), FMath::IsNearlyEqual(LeftToeConstraint->PriAxis2.Size(), 1.0f, AxisTolerance));
+		TestTrue(TEXT("Toe SecAxis2 is normalized enough"), FMath::IsNearlyEqual(LeftToeConstraint->SecAxis2.Size(), 1.0f, AxisTolerance));
+		TestTrue(TEXT("Left toe primary/secondary axes are not degenerate"), FMath::Abs(FVector::DotProduct(LeftToeConstraint->PriAxis1, LeftToeConstraint->SecAxis1)) < 0.1f);
+		TestTrue(TEXT("Right toe primary/secondary axes are not degenerate"), FMath::Abs(FVector::DotProduct(RightToeConstraint->PriAxis1, RightToeConstraint->SecAxis1)) < 0.1f);
+
+		TestTrue(
+			TEXT("Toe angular rotation offset magnitudes stay symmetric"),
+			AbsVector(FVector(
+				LeftToeConstraint->AngularRotationOffset.Roll,
+				LeftToeConstraint->AngularRotationOffset.Pitch,
+				LeftToeConstraint->AngularRotationOffset.Yaw)).Equals(
+					AbsVector(FVector(
+						RightToeConstraint->AngularRotationOffset.Roll,
+						RightToeConstraint->AngularRotationOffset.Pitch,
+						RightToeConstraint->AngularRotationOffset.Yaw)),
+					0.5f));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimMannyMassInventoryTest,
 		"PhysAnim.Component.MannyMassInventory",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
