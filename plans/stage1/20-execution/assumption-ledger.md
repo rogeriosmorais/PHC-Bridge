@@ -484,3 +484,11 @@ The next meaningful ledger updates should come from:
 - confirming the PHC observation/action contract from the frozen local ProtoMotions sources
 - capturing Manny bridge smoke-test evidence for `MV-G1-03`
 - defining the exact evidence required to call `UPhysicsControlComponent` viable for Stage 1
+
+## Stage 1 Runtime Alignment Notes
+
+- March 12, 2026:
+  - the broader training/runtime alignment direction remains worthwhile
+  - lower-limb contact-exclusion alignment was tested and did not become the new dominant lever
+  - ProtoMotions-style lower-limb excludes mostly already overlap Manny's current runtime setup
+  - the remaining locomotion problem still looks more like lower-limb target semantics / distal coupling than missing contact disables

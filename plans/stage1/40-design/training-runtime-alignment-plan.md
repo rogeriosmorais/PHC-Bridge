@@ -663,6 +663,18 @@ This gives us the highest-value correction with the least ambiguity.
       - lower-limb target-step smoothing was worth testing, but it is not the next baseline
       - runtime code should stay on the shared proximal-response + distal angular-velocity suppression baseline
       - the next pass should move to another locomotion-time representation seam, not more lower-limb step-cap tuning
+  - lower-limb contact-exclusion alignment result:
+    - re-checked official UE PhysicsControl docs, local UE 5.7 PhysicsAsset/PhysicsControl source, and ProtoMotions MJCF contact excludes before changing runtime behavior
+    - mapped ProtoMotions' lower-limb contact-exclude table onto Manny runtime bodies and tested a reversible transient-physics-asset clone during `BridgeActive`
+    - deterministic movement smoke stayed green with no fail-stop
+    - measured result:
+      - Manny already overlapped most of the relevant lower-limb excludes
+      - the runtime clone only added `2 / 6` new disabled pairs
+      - locomotion stayed stable but did not produce a clean new win on the remaining lower-limb outliers
+    - current read:
+      - lower-limb contact semantics were worth auditing
+      - they are not the dominant remaining locomotion seam
+      - runtime code should stay on the shared proximal-response + distal angular-velocity suppression baseline
 
 ## Working Hypothesis
 

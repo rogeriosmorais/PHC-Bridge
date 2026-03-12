@@ -642,3 +642,33 @@ Whenever new setup or gate evidence arrives:
       - lower-limb target-step smoothing was worth testing, but it is not the dominant remaining seam
       - runtime code has been restored to the shared proximal-response baseline
       - the next pass should move to another locomotion-time representation seam instead of more step-cap tuning
+  - March 12, 2026 lower-limb contact-exclusion alignment note:
+    - re-checked:
+      - official UE PhysicsControl docs
+      - local UE 5.7 PhysicsControl and PhysicsAsset source
+      - ProtoMotions docs, local config, and `smpl_humanoid.xml`
+    - ProtoMotions lower-limb contact-exclude pairs were mapped to Manny runtime bodies as:
+      - `calf_r <-> ball_r`
+      - `calf_r <-> foot_l`
+      - `calf_r <-> ball_l`
+      - `calf_l <-> ball_l`
+      - `calf_l <-> foot_r`
+      - `calf_l <-> ball_r`
+    - tested a reversible runtime-only experiment:
+      - duplicated Manny's physics asset transiently during `BridgeActive`
+      - applied the mapped lower-limb collision disable pairs
+      - restored the authored asset on teardown
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - Manny already had most of the relevant lower-limb pair disables
+      - the runtime clone only added `2 / 6` new disabled pairs
+      - movement smoke stayed stable but did not show a clean locomotion win
+      - forward and backward still retained meaningful lower-limb outliers
+    - current runtime read:
+      - broader training/runtime alignment is still worth continuing
+      - lower-limb contact exclusions were worth auditing, but they are not the dominant remaining seam
+      - runtime code has been restored to the shared proximal-response + distal angular-velocity suppression baseline
