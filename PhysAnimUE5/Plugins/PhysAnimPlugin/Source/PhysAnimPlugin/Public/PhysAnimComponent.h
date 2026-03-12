@@ -47,6 +47,12 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float TrainingAlignedMassScaleBlend = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
+	bool bApplyTrainingAlignedControlFamilyProfile = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float TrainingAlignedControlFamilyProfileBlend = 0.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float MaxAngularStepDegreesPerSecond = 180.0f;
 
@@ -93,6 +99,8 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(PolicyControlRateHz, Other.PolicyControlRateHz) &&
 			bApplyTrainingAlignedMassScales == Other.bApplyTrainingAlignedMassScales &&
 			FMath::IsNearlyEqual(TrainingAlignedMassScaleBlend, Other.TrainingAlignedMassScaleBlend) &&
+			bApplyTrainingAlignedControlFamilyProfile == Other.bApplyTrainingAlignedControlFamilyProfile &&
+			FMath::IsNearlyEqual(TrainingAlignedControlFamilyProfileBlend, Other.TrainingAlignedControlFamilyProfileBlend) &&
 			FMath::IsNearlyEqual(MaxAngularStepDegreesPerSecond, Other.MaxAngularStepDegreesPerSecond) &&
 			FMath::IsNearlyEqual(AngularStrengthMultiplier, Other.AngularStrengthMultiplier) &&
 			FMath::IsNearlyEqual(AngularDampingRatioMultiplier, Other.AngularDampingRatioMultiplier) &&
@@ -391,6 +399,9 @@ public:
 	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);
 	static float ResolveTrainingAlignedMassScaleForBone(FName BoneName, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedMassScales(bool bApplyTrainingAlignedMassScales, float BlendAlpha);
+	static float ResolveTrainingAlignedControlStrengthScaleForBone(FName BoneName, float BlendAlpha);
+	static float ResolveTrainingAlignedControlExtraDampingScaleForBone(FName BoneName, float BlendAlpha);
+	static bool ShouldApplyTrainingAlignedControlFamilyProfile(bool bApplyTrainingAlignedControlFamilyProfile, float BlendAlpha);
 	static bool AdvancePolicyControlAccumulator(
 		float DeltaTimeSeconds,
 		float PolicyControlIntervalSeconds,

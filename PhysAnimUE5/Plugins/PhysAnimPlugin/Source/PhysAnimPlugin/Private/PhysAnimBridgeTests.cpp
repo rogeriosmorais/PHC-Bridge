@@ -797,6 +797,53 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTrainingAlignedControlFamilyProfileTest,
+		"PhysAnim.Component.TrainingAlignedControlFamilyProfile",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTrainingAlignedControlFamilyProfileTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimStabilizationSettings Settings;
+		TestFalse(TEXT("Training-aligned control family profile is neutral by default"), Settings.bApplyTrainingAlignedControlFamilyProfile);
+		TestEqual(TEXT("Training-aligned control family profile defaults to zero blend"), Settings.TrainingAlignedControlFamilyProfileBlend, 0.0f);
+
+		TestEqual(
+			TEXT("Torso family uses the strongest training-aligned control scale"),
+			UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("spine_02"), 1.0f),
+			1.25f);
+		TestEqual(
+			TEXT("Leg family keeps the baseline strength scale"),
+			UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("calf_l"), 1.0f),
+			1.0f);
+		TestEqual(
+			TEXT("Moderate family uses the SMPL-informed mid-tier strength scale"),
+			UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("upperarm_r"), 1.0f),
+			0.625f);
+		TestEqual(
+			TEXT("Hand family uses the weakest training-aligned strength scale"),
+			UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("hand_l"), 1.0f),
+			0.375f);
+		TestEqual(
+			TEXT("Control family blend interpolates from neutral to target"),
+			UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("spine_01"), 0.5f),
+			1.125f);
+		TestEqual(
+			TEXT("Extra damping family scale follows the same training hierarchy"),
+			UPhysAnimComponent::ResolveTrainingAlignedControlExtraDampingScaleForBone(TEXT("hand_r"), 1.0f),
+			0.375f);
+		TestTrue(
+			TEXT("Control family profile disabled state returns false"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedControlFamilyProfile(false, 1.0f));
+		TestTrue(
+			TEXT("Zero blend disables control family profile application"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedControlFamilyProfile(true, 0.0f));
+		TestTrue(
+			TEXT("Enabled control family profile with positive blend applies"),
+			UPhysAnimComponent::ShouldApplyTrainingAlignedControlFamilyProfile(true, 0.5f));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimCurrentPoseTargetOrientationTest,
 		"PhysAnim.Component.CurrentPoseTargetOrientation",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

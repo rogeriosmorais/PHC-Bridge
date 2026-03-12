@@ -80,6 +80,14 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.TrainingAlignedMassScaleBlend"),
 		-1.0f,
 		TEXT("Override for the Stage 1 training-aligned Manny family mass policy blend. Negative values keep the component default."));
+	TAutoConsoleVariable<int32> CVarPhysAnimApplyTrainingAlignedControlFamilyProfile(
+		TEXT("physanim.ApplyTrainingAlignedControlFamilyProfile"),
+		-1,
+		TEXT("Override for the Stage 1 training-aligned control family profile. -1 keeps the component default, 0 disables, 1 enables."));
+	TAutoConsoleVariable<float> CVarPhysAnimTrainingAlignedControlFamilyProfileBlend(
+		TEXT("physanim.TrainingAlignedControlFamilyProfileBlend"),
+		-1.0f,
+		TEXT("Override for the Stage 1 training-aligned control family profile blend. Negative values keep the component default."));
 	TAutoConsoleVariable<float> CVarPhysAnimMaxAngularStepDegPerSec(
 		TEXT("physanim.MaxAngularStepDegPerSec"),
 		-1.0f,
@@ -205,7 +213,7 @@ namespace PhysAnimComponentInternal
 	FString BuildStabilizationSummary(const FPhysAnimStabilizationSettings& Settings)
 	{
 		return FString::Printf(
-			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f MassPolicy=%s MassBlend=%.2f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
+			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f MassPolicy=%s MassBlend=%.2f FamilyPd=%s FamilyPdBlend=%.2f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
 			Settings.bForceZeroActions ? TEXT("true") : TEXT("false"),
 			Settings.ActionScale,
 			Settings.ActionClampAbs,
@@ -214,6 +222,8 @@ namespace PhysAnimComponentInternal
 			Settings.PolicyControlRateHz,
 			Settings.bApplyTrainingAlignedMassScales ? TEXT("true") : TEXT("false"),
 			Settings.TrainingAlignedMassScaleBlend,
+			Settings.bApplyTrainingAlignedControlFamilyProfile ? TEXT("true") : TEXT("false"),
+			Settings.TrainingAlignedControlFamilyProfileBlend,
 			Settings.MaxAngularStepDegreesPerSecond,
 			Settings.AngularStrengthMultiplier,
 			Settings.AngularDampingRatioMultiplier,
@@ -1493,6 +1503,14 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimTrainingAlignedMassScaleBlend,
 			EffectiveSettings.TrainingAlignedMassScaleBlend);
+	EffectiveSettings.bApplyTrainingAlignedControlFamilyProfile =
+		PhysAnimComponentInternal::ResolveBoolOverride(
+			PhysAnimComponentInternal::CVarPhysAnimApplyTrainingAlignedControlFamilyProfile,
+			EffectiveSettings.bApplyTrainingAlignedControlFamilyProfile);
+	EffectiveSettings.TrainingAlignedControlFamilyProfileBlend =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimTrainingAlignedControlFamilyProfileBlend,
+			EffectiveSettings.TrainingAlignedControlFamilyProfileBlend);
 	EffectiveSettings.MaxAngularStepDegreesPerSecond =
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimMaxAngularStepDegPerSec,
@@ -1922,11 +1940,29 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const bool bBringUpGroupUnlocked = IsBringUpGroupUnlocked(BringUpGroupIndex);
 		const float ControlAuthorityAlpha =
 			CalculateBringUpGroupControlAuthorityAlpha(BringUpGroupIndex, EffectiveSettings);
+		const bool bApplyTrainingAlignedControlProfile =
+			ShouldApplyTrainingAlignedControlFamilyProfile(
+				EffectiveSettings.bApplyTrainingAlignedControlFamilyProfile,
+				EffectiveSettings.TrainingAlignedControlFamilyProfileBlend);
+		const float FamilyStrengthScale =
+			bApplyTrainingAlignedControlProfile
+				? ResolveTrainingAlignedControlStrengthScaleForBone(
+					BoneName,
+					EffectiveSettings.TrainingAlignedControlFamilyProfileBlend)
+				: 1.0f;
+		const float FamilyExtraDampingScale =
+			bApplyTrainingAlignedControlProfile
+				? ResolveTrainingAlignedControlExtraDampingScaleForBone(
+					BoneName,
+					EffectiveSettings.TrainingAlignedControlFamilyProfileBlend)
+				: 1.0f;
 
 		FPhysicsControlMultiplier ControlMultiplier;
-		ControlMultiplier.AngularStrengthMultiplier = EffectiveSettings.AngularStrengthMultiplier * ControlAuthorityAlpha;
+		ControlMultiplier.AngularStrengthMultiplier =
+			EffectiveSettings.AngularStrengthMultiplier * FamilyStrengthScale * ControlAuthorityAlpha;
 		ControlMultiplier.AngularDampingRatioMultiplier = EffectiveSettings.AngularDampingRatioMultiplier;
-		ControlMultiplier.AngularExtraDampingMultiplier = EffectiveSettings.AngularExtraDampingMultiplier;
+		ControlMultiplier.AngularExtraDampingMultiplier =
+			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale;
 
 		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
 		PhysicsControl->SetControlMultiplier(
@@ -3179,6 +3215,99 @@ float UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(FName BoneName,
 bool UPhysAnimComponent::ShouldApplyTrainingAlignedMassScales(bool bApplyTrainingAlignedMassScales, float BlendAlpha)
 {
 	return bApplyTrainingAlignedMassScales && BlendAlpha > UE_SMALL_NUMBER;
+}
+
+float UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(FName BoneName, float BlendAlpha)
+{
+	const float ClampedBlendAlpha = FMath::Clamp(BlendAlpha, 0.0f, 1.0f);
+	float TargetScale = 1.0f;
+
+	if (
+		BoneName == TEXT("spine_01") ||
+		BoneName == TEXT("spine_02") ||
+		BoneName == TEXT("spine_03"))
+	{
+		TargetScale = 1.25f;
+	}
+	else if (
+		BoneName == TEXT("thigh_l") ||
+		BoneName == TEXT("calf_l") ||
+		BoneName == TEXT("foot_l") ||
+		BoneName == TEXT("thigh_r") ||
+		BoneName == TEXT("calf_r") ||
+		BoneName == TEXT("foot_r"))
+	{
+		TargetScale = 1.0f;
+	}
+	else if (
+		BoneName == TEXT("ball_l") ||
+		BoneName == TEXT("ball_r") ||
+		BoneName == TEXT("neck_01") ||
+		BoneName == TEXT("head") ||
+		BoneName == TEXT("upperarm_l") ||
+		BoneName == TEXT("lowerarm_l") ||
+		BoneName == TEXT("upperarm_r") ||
+		BoneName == TEXT("lowerarm_r"))
+	{
+		TargetScale = 0.625f;
+	}
+	else if (
+		BoneName == TEXT("hand_l") ||
+		BoneName == TEXT("hand_r"))
+	{
+		TargetScale = 0.375f;
+	}
+
+	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);
+}
+
+float UPhysAnimComponent::ResolveTrainingAlignedControlExtraDampingScaleForBone(FName BoneName, float BlendAlpha)
+{
+	const float ClampedBlendAlpha = FMath::Clamp(BlendAlpha, 0.0f, 1.0f);
+	float TargetScale = 1.0f;
+
+	if (
+		BoneName == TEXT("spine_01") ||
+		BoneName == TEXT("spine_02") ||
+		BoneName == TEXT("spine_03"))
+	{
+		TargetScale = 1.25f;
+	}
+	else if (
+		BoneName == TEXT("thigh_l") ||
+		BoneName == TEXT("calf_l") ||
+		BoneName == TEXT("foot_l") ||
+		BoneName == TEXT("thigh_r") ||
+		BoneName == TEXT("calf_r") ||
+		BoneName == TEXT("foot_r"))
+	{
+		TargetScale = 1.0f;
+	}
+	else if (
+		BoneName == TEXT("ball_l") ||
+		BoneName == TEXT("ball_r") ||
+		BoneName == TEXT("neck_01") ||
+		BoneName == TEXT("head") ||
+		BoneName == TEXT("upperarm_l") ||
+		BoneName == TEXT("lowerarm_l") ||
+		BoneName == TEXT("upperarm_r") ||
+		BoneName == TEXT("lowerarm_r"))
+	{
+		TargetScale = 0.625f;
+	}
+	else if (
+		BoneName == TEXT("hand_l") ||
+		BoneName == TEXT("hand_r"))
+	{
+		TargetScale = 0.375f;
+	}
+
+	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);
+}
+
+bool UPhysAnimComponent::ShouldApplyTrainingAlignedControlFamilyProfile(bool bApplyTrainingAlignedControlFamilyProfile, float BlendAlpha)
+{
+	return bApplyTrainingAlignedControlFamilyProfile && BlendAlpha > UE_SMALL_NUMBER;
 }
 
 bool UPhysAnimComponent::AdvancePolicyControlAccumulator(
