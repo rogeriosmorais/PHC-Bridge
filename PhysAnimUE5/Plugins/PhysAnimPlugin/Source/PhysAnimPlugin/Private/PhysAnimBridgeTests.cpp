@@ -110,17 +110,41 @@ namespace
 	{
 		const FVector SmplUp(0.0, 1.0, 0.0);
 		const FVector UeUp = SmplVectorToUe(SmplUp);
-		TestTrue(TEXT("SMPL Y-up becomes UE Z-up"), UeUp.Equals(FVector(0.0, 0.0, 1.0), KINDA_SMALL_NUMBER));
+		TestTrue(TEXT("SMPL local authoring Y-up becomes UE Z-up"), UeUp.Equals(FVector(0.0, 0.0, 1.0), KINDA_SMALL_NUMBER));
 		TestTrue(
-			TEXT("Identity SMPL local rotation stays identity after UE basis conversion"),
+			TEXT("Identity SMPL local rotation stays identity after UE local basis conversion"),
 			SmplQuaternionToUe(FQuat::Identity).Equals(FQuat::Identity, KINDA_SMALL_NUMBER));
 		TestTrue(
-			TEXT("Identity UE local rotation stays identity after SMPL basis conversion"),
+			TEXT("Identity UE local rotation stays identity after SMPL local basis conversion"),
 			UeQuaternionToSmpl(FQuat::Identity).Equals(FQuat::Identity, KINDA_SMALL_NUMBER));
 
 		const FQuat SmplRotation = ExpMapToQuaternion(FVector(0.2, -0.1, 0.3));
 		const FQuat RoundTrip = UeQuaternionToSmpl(SmplQuaternionToUe(SmplRotation));
 		TestTrue(TEXT("Quaternion roundtrip should stay close"), RoundTrip.Equals(SmplRotation, 1.0e-3f));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimRuntimeWorldFrameConversionTest,
+		"PhysAnim.Bridge.RuntimeWorldFrameConversion",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimRuntimeWorldFrameConversionTest::RunTest(const FString& Parameters)
+	{
+		TestTrue(
+			TEXT("UE runtime world up stays Proto runtime up"),
+			UeWorldVectorToProtoRuntime(FVector::UpVector).Equals(FVector::UpVector, KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("UE runtime world forward stays Proto runtime forward"),
+			UeWorldVectorToProtoRuntime(FVector::ForwardVector).Equals(FVector::ForwardVector, KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Identity UE runtime world rotation stays identity in Proto runtime"),
+			UeWorldQuaternionToProtoRuntime(FQuat::Identity).Equals(FQuat::Identity, KINDA_SMALL_NUMBER));
+
+		const FQuat UeYaw = FQuat(FVector::UpVector, FMath::DegreesToRadians(25.0));
+		TestTrue(
+			TEXT("UE runtime world yaw is preserved in Proto runtime"),
+			UeWorldQuaternionToProtoRuntime(UeYaw).Equals(UeYaw, 1.0e-4f));
 		return true;
 	}
 

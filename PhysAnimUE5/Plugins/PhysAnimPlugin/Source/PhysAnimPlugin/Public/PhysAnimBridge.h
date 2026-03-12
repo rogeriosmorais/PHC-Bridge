@@ -147,6 +147,8 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API FVector UeVectorToSmpl(const FVector& UeVector);
 	PHYSANIMPLUGIN_API FQuat SmplQuaternionToUe(const FQuat& SmplQuaternion);
 	PHYSANIMPLUGIN_API FQuat UeQuaternionToSmpl(const FQuat& UeQuaternion);
+	PHYSANIMPLUGIN_API FVector UeWorldVectorToProtoRuntime(const FVector& UeVector);
+	PHYSANIMPLUGIN_API FQuat UeWorldQuaternionToProtoRuntime(const FQuat& UeQuaternion);
 	PHYSANIMPLUGIN_API FQuat ExpMapToQuaternion(const FVector& ExpMap);
 	PHYSANIMPLUGIN_API FQuat CalculateHeadingInverseSmpl(const FQuat& SmplRootRotation);
 	PHYSANIMPLUGIN_API void QuaternionToTanNorm(const FQuat& Rotation, float OutTanNorm[6]);

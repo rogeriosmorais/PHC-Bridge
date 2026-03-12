@@ -275,6 +275,16 @@ namespace PhysAnimBridge
 		return MakeQuaternionFromBasis(SmplRotatedXAxis, SmplRotatedZAxis);
 	}
 
+	FVector UeWorldVectorToProtoRuntime(const FVector& UeVector)
+	{
+		return UeVector;
+	}
+
+	FQuat UeWorldQuaternionToProtoRuntime(const FQuat& UeQuaternion)
+	{
+		return UeQuaternion.GetNormalized();
+	}
+
 	FQuat ExpMapToQuaternion(const FVector& ExpMap)
 	{
 		const double AngleRadians = ExpMap.Length();

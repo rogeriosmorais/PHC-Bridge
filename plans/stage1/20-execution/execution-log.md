@@ -740,3 +740,26 @@ Whenever new setup or gate evidence arrives:
       - broader training/runtime alignment is still worth continuing
       - lower-limb heuristic tuning is no longer the only plausible next lever
       - this root-height correction is a keepable contract fix, even if it is not yet the full locomotion-time answer
+## 2026-03-12 - Proto runtime world-frame alignment
+
+- Direction check:
+  - still worth continuing in the broader training/runtime alignment direction
+  - not worth returning to falsified lower-limb write smoothing or more isolated multiplier reshuffling
+- Sources re-checked before coding:
+  - UE PhysicsControl docs and local UE 5.7 PhysicsControl source
+  - ProtoMotions docs/config plus local `humanoid_utils.py`, `mimic_utils.py`, `robot_state.py`, and Isaac Gym simulator setup
+- New plan:
+  - [runtime-world-frame-alignment-plan.md](/F:/NewEngine/plans/stage1/40-design/runtime-world-frame-alignment-plan.md)
+- Implemented:
+  - split Proto runtime world-frame conversion from the old SMPL local-joint authoring conversion
+  - left local action rotation conversion on the existing `SmplQuaternionToUe` / `UeQuaternionToSmpl` helpers
+  - moved world-space observation/future-target packing onto dedicated Proto-runtime-world helpers:
+    - current experiment uses identity-frame world conversion for position, world rotation, and world velocity
+- Verification:
+  - `Build.bat PhysAnimUE5Editor ...`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
+  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
+- Result:
+  - keepable
+  - the bridge stayed stable and movement smoke completed successfully
+  - lower-limb outliers still exist, so this corrects a contract seam but does not finish locomotion-time lower-limb alignment

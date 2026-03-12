@@ -1563,11 +1563,11 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 		const FTransform BoneWorldTransform = SkeletalMesh->GetBoneTransform(BoneName, RTS_World);
 
 		FPhysAnimBodySample BodySample;
-		BodySample.Position = PhysAnimBridge::UeVectorToSmpl(BoneWorldTransform.GetLocation());
-		BodySample.Rotation = PhysAnimBridge::UeQuaternionToSmpl(BoneWorldTransform.GetRotation());
+		BodySample.Position = PhysAnimBridge::UeWorldVectorToProtoRuntime(BoneWorldTransform.GetLocation());
+		BodySample.Rotation = PhysAnimBridge::UeWorldQuaternionToProtoRuntime(BoneWorldTransform.GetRotation());
 		USkeletalMeshComponent* const MutableMesh = const_cast<USkeletalMeshComponent*>(SkeletalMesh);
-		BodySample.LinearVelocity = PhysAnimBridge::UeVectorToSmpl(MutableMesh->GetPhysicsLinearVelocity(BoneName));
-		BodySample.AngularVelocity = PhysAnimBridge::UeVectorToSmpl(MutableMesh->GetPhysicsAngularVelocityInRadians(BoneName));
+		BodySample.LinearVelocity = PhysAnimBridge::UeWorldVectorToProtoRuntime(MutableMesh->GetPhysicsLinearVelocity(BoneName));
+		BodySample.AngularVelocity = PhysAnimBridge::UeWorldVectorToProtoRuntime(MutableMesh->GetPhysicsAngularVelocityInRadians(BoneName));
 		OutBodySamples.Add(BodySample);
 	}
 
@@ -1653,8 +1653,8 @@ bool UPhysAnimComponent::SampleFuturePoses(
 			const FTransform WorldTransform =
 				UPoseSearchAssetSamplerLibrary::GetTransformByName(SampledPose, BoneName, EPoseSearchAssetSamplerSpace::World);
 			FutureSample.BodyTransforms.Add(FTransform(
-				PhysAnimBridge::UeQuaternionToSmpl(WorldTransform.GetRotation()),
-				PhysAnimBridge::UeVectorToSmpl(WorldTransform.GetLocation()),
+				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(WorldTransform.GetRotation()),
+				PhysAnimBridge::UeWorldVectorToProtoRuntime(WorldTransform.GetLocation()),
 				WorldTransform.GetScale3D()));
 		}
 

@@ -515,3 +515,16 @@ The next meaningful ledger updates should come from:
   - implication:
     - it is still worth continuing in the broader training/runtime alignment direction
     - it is increasingly worth prioritizing clear observation/representation contract fixes over additional lower-limb heuristic retuning
+## 2026-03-12 - Proto runtime world-frame contract
+
+- Previous assumption:
+  - the old SMPL local-joint frame remap was also appropriate for Proto runtime world-space observations and future-target world transforms
+- Status:
+  - falsified
+- Evidence:
+  - ProtoMotions runtime world is `z-up`
+  - local Proto simulator/common-state conversion reorders quaternions and bodies but does not perform a world-axis remap
+  - UE movement smoke stayed stable after splitting runtime world conversion from local action conversion
+- Current working assumption:
+  - world-space observation/future-target data should use a dedicated Proto-runtime-world conversion path
+  - local action/joint rotation conversion should remain on the existing SMPL authoring-frame helpers unless separately disproven

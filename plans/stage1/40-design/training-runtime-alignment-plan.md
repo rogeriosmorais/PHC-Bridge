@@ -27,6 +27,20 @@ The most recent useful alignment pass was a UE-side PhysicsControl cache-prewarm
 
 That pass eliminated the startup PhysicsControl warning burst without regressing movement smoke, which makes it a keepable quality improvement. It did **not** change the deeper locomotion-time lower-limb representation problem, so the next passes should return to that seam rather than keep mining startup-order tweaks.
 
+Most recent keepable representation-alignment pass:
+- split Proto runtime world-frame conversion from SMPL local-joint authoring conversion
+- keep local action rotations on the existing SMPL-basis helpers
+- move `self_obs` and `mimic_target_poses` world-space positions, world rotations, and world velocities onto a dedicated Proto-runtime-world helper path
+
+Why this is a keep:
+- ProtoMotions runtime world is clearly `z-up`
+- local Proto simulator/common-state conversion reorders bodies and quaternions, but does not perform a world-axis remap
+- the fresh UE movement smoke stayed stable and completed cleanly after the split
+
+Why this is not yet the final locomotion fix:
+- lower-limb outliers still exist under forward/backward/strafe
+- so the pass corrected a real contract seam, but did not eliminate the deeper locomotion-time lower-limb representation problem
+
 Most recent falsified locomotion-time seam:
 - family-weighted lower-limb target-write smoothing
 
