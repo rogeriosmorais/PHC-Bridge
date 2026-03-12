@@ -243,6 +243,7 @@ private:
 	bool ActivateRuntimePhysicsControl(FString& OutError);
 	void DeactivateRuntimePhysicsControl(const TCHAR* Context);
 	bool ActivateBridgeFromReadyState(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* ActivationContext, FString& OutError);
+	bool PrewarmPhysicsControlActivationPose();
 	void EnterReadyForActivation(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* Context, bool bLogDeferredStartupSuccess);
 	void ActivateBridgePhysicsState(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ApplyTrainingAlignedMassScales(const FPhysAnimStabilizationSettings& EffectiveSettings);
@@ -484,6 +485,7 @@ public:
 		bool bDistalLocomotionCompositionModeActive,
 		float DeltaTime);
 	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);
+	static bool ShouldPrewarmPhysicsControlActivationPose(bool bHasSkeletalMeshComponent, bool bHasLeaderPoseComponent);
 	static float ResolveTrainingAlignedMassScaleForBone(FName BoneName, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedMassScales(bool bApplyTrainingAlignedMassScales, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedToeLimitPolicy(bool bApplyTrainingAlignedToeLimitPolicy, float BlendAlpha);

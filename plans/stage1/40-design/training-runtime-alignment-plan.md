@@ -11,6 +11,22 @@ This plan is specifically about four alignment surfaces:
 3. Timestep and control cadence
 4. Joint limits
 
+## Current Direction Check
+
+As of March 12, 2026, it is still worth continuing in the broader training/runtime alignment direction.
+
+What is no longer worth treating as the primary path:
+- lower-limb contact-exclusion alignment
+- lower-limb target-step caps
+- more isolated thigh/calf multiplier reshuffling
+- generic startup warning cleanup as a substitute for locomotion-time target-semantics work
+
+The most recent useful alignment pass was a UE-side PhysicsControl cache-prewarm fix:
+- one-shot skeletal pose prewarm before the first activation-time `UpdateTargetCaches(0.0f)`
+- removal of the unused per-tick `GetCachedBoneTransforms(...)` call
+
+That pass eliminated the startup PhysicsControl warning burst without regressing movement smoke, which makes it a keepable quality improvement. It did **not** change the deeper locomotion-time lower-limb representation problem, so the next passes should return to that seam rather than keep mining startup-order tweaks.
+
 ## Non-Goals
 
 - Do not change the locked Stage 1 architecture in [ENGINEERING_PLAN.md](/F:/NewEngine/ENGINEERING_PLAN.md).

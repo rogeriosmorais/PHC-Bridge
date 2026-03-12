@@ -492,3 +492,12 @@ The next meaningful ledger updates should come from:
   - lower-limb contact-exclusion alignment was tested and did not become the new dominant lever
   - ProtoMotions-style lower-limb excludes mostly already overlap Manny's current runtime setup
   - the remaining locomotion problem still looks more like lower-limb target semantics / distal coupling than missing contact disables
+- March 12, 2026:
+  - PhysicsControl startup cache warmup/order was a real UE-side seam
+  - the bridge now explicitly prewarms the skeletal pose before the first manual activation-time cache update
+  - the unused per-tick `GetCachedBoneTransforms(...)` call was removed
+  - fresh deterministic movement smoke dropped startup PhysicsControl warning counts from `130 / 42` to `0 / 0`
+  - implication:
+    - it is still worth continuing in the broader training/runtime alignment direction
+    - but this pass reinforces that the remaining locomotion issue is not generic startup cache invalidity
+    - the next useful pass should return to locomotion-time lower-limb target semantics / representation, not more startup warning cleanup

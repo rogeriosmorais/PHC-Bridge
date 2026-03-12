@@ -1706,6 +1706,15 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(TEXT("spine_01"), true, true, false, 0.25f),
 			0.0f);
 		TestTrue(
+			TEXT("Activation pose prewarm runs for a normal skeletal mesh"),
+			UPhysAnimComponent::ShouldPrewarmPhysicsControlActivationPose(true, false));
+		TestFalse(
+			TEXT("Activation pose prewarm skips when no skeletal mesh is resolved"),
+			UPhysAnimComponent::ShouldPrewarmPhysicsControlActivationPose(false, false));
+		TestFalse(
+			TEXT("Activation pose prewarm skips follower meshes that rely on a leader pose"),
+			UPhysAnimComponent::ShouldPrewarmPhysicsControlActivationPose(true, true));
+		TestTrue(
 			TEXT("Locomotion-time lower-limb response policy activates only when locomotion mode is active"),
 			UPhysAnimComponent::ShouldApplyTrainingAlignedLocomotionLowerLimbResponsePolicy(true, 1.0f, true));
 		TestFalse(

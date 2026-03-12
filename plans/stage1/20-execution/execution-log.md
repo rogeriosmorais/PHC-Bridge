@@ -672,3 +672,25 @@ Whenever new setup or gate evidence arrives:
       - broader training/runtime alignment is still worth continuing
       - lower-limb contact exclusions were worth auditing, but they are not the dominant remaining seam
       - runtime code has been restored to the shared proximal-response + distal angular-velocity suppression baseline
+  - March 12, 2026 PhysicsControl cache-prewarm note:
+    - re-checked:
+      - official UE PhysicsControl docs
+      - local UE 5.7 PhysicsControl source
+      - local UE 5.7 skeletal mesh animation update path
+      - ProtoMotions docs/code to confirm this seam is UE-side only
+    - implemented one narrow startup-ordering pass:
+      - added a one-shot skeletal pose prewarm before the first activation-time `PhysicsControl->UpdateTargetCaches(0.0f)`
+      - skipped prewarm for leader-pose follower meshes
+      - removed the unused per-tick `GetCachedBoneTransforms(...)` call
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - startup PhysicsControl warning burst dropped from `130` `Failed to find bone data` warnings and `42` `GetCachedBoneTransforms` warnings to `0 / 0` in the fresh movement-smoke log
+      - locomotion baseline remained stable
+    - current runtime read:
+      - PhysicsControl cache warmup/order was a real UE-side seam
+      - this is a keepable startup-quality improvement
+      - the broader training/runtime alignment direction remains worthwhile, but this pass does not change the remaining locomotion-time lower-limb target-semantics problem

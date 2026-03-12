@@ -653,7 +653,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	}
 
 	PhysicsControl->UpdateTargetCaches(DeltaTime);
-	PhysicsControl->GetCachedBoneTransforms(SkeletalMesh, PhysAnimBridge::GetControlledBoneNames());
 
 	const float PolicyControlIntervalSeconds = ResolvePolicyControlIntervalSeconds(EffectiveSettings.PolicyControlRateHz);
 	int32 ElapsedPolicySteps = 0;
@@ -1092,6 +1091,7 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 		MovementSmokeStartLocation = OwnerActor->GetActorLocation();
 	}
 	SimulationHandoffAlpha = CalculateSimulationHandoffAlpha(EffectiveSettings);
+	PrewarmPhysicsControlActivationPose();
 	PhysicsControl->UpdateTargetCaches(0.0f);
 	if (!SeedControlTargetsFromCurrentPose(0.0f, OutError))
 	{
@@ -1103,6 +1103,22 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 	LogActivationSummary(EffectiveSettings, ActivationContext, true, true, SimulationHandoffAlpha);
 
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Bridge physics activation[%s] complete."), ActivationContext);
+	return true;
+}
+
+bool UPhysAnimComponent::PrewarmPhysicsControlActivationPose()
+{
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!ShouldPrewarmPhysicsControlActivationPose(
+		SkeletalMesh != nullptr,
+		SkeletalMesh && SkeletalMesh->LeaderPoseComponent.IsValid()))
+	{
+		return false;
+	}
+
+	SkeletalMesh->TickAnimation(0.0f, false);
+	SkeletalMesh->RefreshBoneTransforms();
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Prewarmed skeletal pose for PhysicsControl activation cache."));
 	return true;
 }
 
@@ -3736,6 +3752,13 @@ float UPhysAnimComponent::ResolvePolicyControlIntervalSeconds(float PolicyContro
 {
 	const float ClampedRateHz = FMath::Max(PolicyControlRateHz, 1.0f);
 	return 1.0f / ClampedRateHz;
+}
+
+bool UPhysAnimComponent::ShouldPrewarmPhysicsControlActivationPose(
+	bool bHasSkeletalMeshComponent,
+	bool bHasLeaderPoseComponent)
+{
+	return bHasSkeletalMeshComponent && !bHasLeaderPoseComponent;
 }
 
 float UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(FName BoneName, float BlendAlpha)
