@@ -234,6 +234,14 @@ Only the orchestrator updates status.
     - implication:
       - the current problem does not look like a gross manual toe-constraint creation mistake
       - the next pass should focus on permissive toe operating limits or another lower-limb mismatch surface instead of basic authoring correctness
+  - March 12, 2026 toe operating-limit policy note:
+    - the first runtime toe operating-limit sweep is complete
+    - current evidence:
+      - a full toe-limit blend is too aggressive
+      - a `0.50` toe-limit blend is the first measured operating-limit setting that improves both peak body linear and peak body angular movement spikes versus the committed toe-family baseline
+    - implication:
+      - the toe limit mismatch is real
+      - the next baseline should keep the toe operating-limit policy enabled at `0.50` and then be judged in the normal regression suite
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

@@ -483,7 +483,10 @@ This gives us the highest-value correction with the least ambiguity.
     - isolated toe-only gain changes were worse
   - authoring audit result:
     - the manually created toe constraints are structurally sane and left/right symmetric
-  - next pass should move to toe operating-limit policy or another non-gain lower-limb mismatch surface
+  - toe operating-limit result:
+    - a full toe-limit blend is too aggressive
+    - a `0.50` toe-limit blend is the first measured toe-limit baseline candidate
+  - next pass should keep the `0.50` toe-limit baseline and then decide whether the next mismatch surface is a broader lower-limb operating-limit policy or something above the toe chain
 
 ## Working Hypothesis
 

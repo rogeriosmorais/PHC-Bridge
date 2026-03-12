@@ -23,6 +23,8 @@
 #include "PhysicsControlActor.h"
 #include "PhysicsControlComponent.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysicsEngine/ConstraintInstance.h"
+#include "PhysicsEngine/PhysicsConstraintTemplate.h"
 #include "PhysicsEngine/SkeletalBodySetup.h"
 #include "PoseSearch/PoseSearchAssetSamplerLibrary.h"
 #include "PoseSearch/PoseSearchDatabase.h"
@@ -88,6 +90,14 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.TrainingAlignedControlFamilyProfileBlend"),
 		-1.0f,
 		TEXT("Override for the Stage 1 training-aligned control family profile blend. Negative values keep the component default."));
+	TAutoConsoleVariable<int32> CVarPhysAnimApplyTrainingAlignedToeLimitPolicy(
+		TEXT("physanim.ApplyTrainingAlignedToeLimitPolicy"),
+		-1,
+		TEXT("Override for the Stage 1 training-aligned toe operating-limit policy. -1 keeps the component default, 0 disables, 1 enables."));
+	TAutoConsoleVariable<float> CVarPhysAnimTrainingAlignedToeLimitPolicyBlend(
+		TEXT("physanim.TrainingAlignedToeLimitPolicyBlend"),
+		0.5f,
+		TEXT("Override for the Stage 1 training-aligned toe operating-limit policy blend. Negative values keep the component default."));
 	TAutoConsoleVariable<float> CVarPhysAnimMaxAngularStepDegPerSec(
 		TEXT("physanim.MaxAngularStepDegPerSec"),
 		-1.0f,
@@ -213,7 +223,7 @@ namespace PhysAnimComponentInternal
 	FString BuildStabilizationSummary(const FPhysAnimStabilizationSettings& Settings)
 	{
 		return FString::Printf(
-			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f MassPolicy=%s MassBlend=%.2f FamilyPd=%s FamilyPdBlend=%.2f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
+			TEXT("Zero=%s Scale=%.3f Clamp=%.3f Smooth=%.3f Ramp=%.3f PolicyHz=%.1f MassPolicy=%s MassBlend=%.2f FamilyPd=%s FamilyPdBlend=%.2f ToePolicy=%s ToeBlend=%.2f StepDegPerSec=%.1f GainMul=%.3f DampMul=%.3f ExtraDampMul=%.3f SkeletalTargets=%s InstabilityStop=%s HeightCm=%.1f LinCmPerSec=%.1f AngDegPerSec=%.1f Grace=%.2f"),
 			Settings.bForceZeroActions ? TEXT("true") : TEXT("false"),
 			Settings.ActionScale,
 			Settings.ActionClampAbs,
@@ -224,6 +234,8 @@ namespace PhysAnimComponentInternal
 			Settings.TrainingAlignedMassScaleBlend,
 			Settings.bApplyTrainingAlignedControlFamilyProfile ? TEXT("true") : TEXT("false"),
 			Settings.TrainingAlignedControlFamilyProfileBlend,
+			Settings.bApplyTrainingAlignedToeLimitPolicy ? TEXT("true") : TEXT("false"),
+			Settings.TrainingAlignedToeLimitPolicyBlend,
 			Settings.MaxAngularStepDegreesPerSecond,
 			Settings.AngularStrengthMultiplier,
 			Settings.AngularDampingRatioMultiplier,
@@ -1511,6 +1523,14 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimTrainingAlignedControlFamilyProfileBlend,
 			EffectiveSettings.TrainingAlignedControlFamilyProfileBlend);
+	EffectiveSettings.bApplyTrainingAlignedToeLimitPolicy =
+		PhysAnimComponentInternal::ResolveBoolOverride(
+			PhysAnimComponentInternal::CVarPhysAnimApplyTrainingAlignedToeLimitPolicy,
+			EffectiveSettings.bApplyTrainingAlignedToeLimitPolicy);
+	EffectiveSettings.TrainingAlignedToeLimitPolicyBlend =
+		PhysAnimComponentInternal::ResolveFloatOverride(
+			PhysAnimComponentInternal::CVarPhysAnimTrainingAlignedToeLimitPolicyBlend,
+			EffectiveSettings.TrainingAlignedToeLimitPolicyBlend);
 	EffectiveSettings.MaxAngularStepDegreesPerSecond =
 		PhysAnimComponentInternal::ResolveFloatOverride(
 			PhysAnimComponentInternal::CVarPhysAnimMaxAngularStepDegPerSec,
@@ -1723,6 +1743,7 @@ void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilization
 	SkeletalMesh->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
 	SkeletalMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	ApplyTrainingAlignedToeLimitPolicy(EffectiveSettings);
 	SkeletalMesh->RecreatePhysicsState();
 	SkeletalMesh->SetEnablePhysicsBlending(true);
 	SkeletalMesh->WakeAllRigidBodies();
@@ -1867,6 +1888,160 @@ void UPhysAnimComponent::ResetTrainingAlignedMassScales()
 	bHasSavedBodyMassScales = false;
 }
 
+void UPhysAnimComponent::ApplyTrainingAlignedToeLimitPolicy(const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		return;
+	}
+
+	UPhysicsAsset* const PhysicsAsset = SkeletalMesh->GetPhysicsAsset();
+	if (!PhysicsAsset)
+	{
+		return;
+	}
+
+	if (!ShouldApplyTrainingAlignedToeLimitPolicy(
+		EffectiveSettings.bApplyTrainingAlignedToeLimitPolicy,
+		EffectiveSettings.TrainingAlignedToeLimitPolicyBlend))
+	{
+		return;
+	}
+
+	struct FToeConstraintTarget
+	{
+		FName ChildBoneName;
+		FName ParentBoneName;
+	};
+
+	const TArray<FToeConstraintTarget> ToeConstraints =
+	{
+		{ TEXT("ball_l"), TEXT("foot_l") },
+		{ TEXT("ball_r"), TEXT("foot_r") }
+	};
+
+	if (!bHasSavedToeConstraintLimits)
+	{
+		OriginalToeTwistMotions.Reset();
+		OriginalToeSwing1Motions.Reset();
+		OriginalToeSwing2Motions.Reset();
+		OriginalToeTwistLimits.Reset();
+		OriginalToeSwing1Limits.Reset();
+		OriginalToeSwing2Limits.Reset();
+	}
+
+	int32 NumAdjustedToeConstraints = 0;
+	const float ClampedBlendAlpha = FMath::Clamp(EffectiveSettings.TrainingAlignedToeLimitPolicyBlend, 0.0f, 1.0f);
+	for (const FToeConstraintTarget& ToeConstraint : ToeConstraints)
+	{
+		const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(ToeConstraint.ChildBoneName, ToeConstraint.ParentBoneName);
+		if (ConstraintIndex == INDEX_NONE || !PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex))
+		{
+			continue;
+		}
+
+		UPhysicsConstraintTemplate* const ConstraintTemplate = PhysicsAsset->ConstraintSetup[ConstraintIndex];
+		FConstraintInstance* const ConstraintInstance = ConstraintTemplate ? &ConstraintTemplate->DefaultInstance : nullptr;
+		if (!ConstraintInstance)
+		{
+			continue;
+		}
+
+		if (!bHasSavedToeConstraintLimits)
+		{
+			OriginalToeTwistMotions.Add(ToeConstraint.ChildBoneName, static_cast<uint8>(ConstraintInstance->GetAngularTwistMotion()));
+			OriginalToeSwing1Motions.Add(ToeConstraint.ChildBoneName, static_cast<uint8>(ConstraintInstance->GetAngularSwing1Motion()));
+			OriginalToeSwing2Motions.Add(ToeConstraint.ChildBoneName, static_cast<uint8>(ConstraintInstance->GetAngularSwing2Motion()));
+			OriginalToeTwistLimits.Add(ToeConstraint.ChildBoneName, ConstraintInstance->GetAngularTwistLimit());
+			OriginalToeSwing1Limits.Add(ToeConstraint.ChildBoneName, ConstraintInstance->GetAngularSwing1Limit());
+			OriginalToeSwing2Limits.Add(ToeConstraint.ChildBoneName, ConstraintInstance->GetAngularSwing2Limit());
+		}
+
+		const float TargetTwistLimitDegrees = FMath::Lerp(ConstraintInstance->GetAngularTwistLimit(), 20.0f, ClampedBlendAlpha);
+		const float TargetSwing1LimitDegrees = FMath::Lerp(ConstraintInstance->GetAngularSwing1Limit(), 20.0f, ClampedBlendAlpha);
+		const float TargetSwing2LimitDegrees = FMath::Lerp(ConstraintInstance->GetAngularSwing2Limit(), 20.0f, ClampedBlendAlpha);
+
+		ConstraintInstance->SetAngularTwistLimit(ACM_Limited, TargetTwistLimitDegrees);
+		ConstraintInstance->SetAngularSwing1Limit(ACM_Limited, TargetSwing1LimitDegrees);
+		ConstraintInstance->SetAngularSwing2Limit(ACM_Limited, TargetSwing2LimitDegrees);
+		++NumAdjustedToeConstraints;
+	}
+
+	bHasSavedToeConstraintLimits = OriginalToeTwistMotions.Num() > 0;
+	if (NumAdjustedToeConstraints > 0)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Applied training-aligned toe operating limits: constraints=%d blend=%.2f"),
+			NumAdjustedToeConstraints,
+			EffectiveSettings.TrainingAlignedToeLimitPolicyBlend);
+	}
+}
+
+void UPhysAnimComponent::ResetTrainingAlignedToeLimitPolicy()
+{
+	if (!bHasSavedToeConstraintLimits)
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	UPhysicsAsset* const PhysicsAsset = SkeletalMesh ? SkeletalMesh->GetPhysicsAsset() : nullptr;
+	if (!PhysicsAsset)
+	{
+		OriginalToeTwistMotions.Reset();
+		OriginalToeSwing1Motions.Reset();
+		OriginalToeSwing2Motions.Reset();
+		OriginalToeTwistLimits.Reset();
+		OriginalToeSwing1Limits.Reset();
+		OriginalToeSwing2Limits.Reset();
+		bHasSavedToeConstraintLimits = false;
+		return;
+	}
+
+	for (const TPair<FName, uint8>& Pair : OriginalToeTwistMotions)
+	{
+		const FName ChildBoneName = Pair.Key;
+		const FName ParentBoneName = ChildBoneName == TEXT("ball_l") ? TEXT("foot_l") : TEXT("foot_r");
+		const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(ChildBoneName, ParentBoneName);
+		if (ConstraintIndex == INDEX_NONE || !PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex))
+		{
+			continue;
+		}
+
+		UPhysicsConstraintTemplate* const ConstraintTemplate = PhysicsAsset->ConstraintSetup[ConstraintIndex];
+		FConstraintInstance* const ConstraintInstance = ConstraintTemplate ? &ConstraintTemplate->DefaultInstance : nullptr;
+		if (!ConstraintInstance)
+		{
+			continue;
+		}
+
+		const uint8* const Swing1Motion = OriginalToeSwing1Motions.Find(ChildBoneName);
+		const uint8* const Swing2Motion = OriginalToeSwing2Motions.Find(ChildBoneName);
+		const float* const TwistLimit = OriginalToeTwistLimits.Find(ChildBoneName);
+		const float* const Swing1Limit = OriginalToeSwing1Limits.Find(ChildBoneName);
+		const float* const Swing2Limit = OriginalToeSwing2Limits.Find(ChildBoneName);
+		if (!Swing1Motion || !Swing2Motion || !TwistLimit || !Swing1Limit || !Swing2Limit)
+		{
+			continue;
+		}
+
+		ConstraintInstance->SetAngularTwistLimit(static_cast<EAngularConstraintMotion>(Pair.Value), *TwistLimit);
+		ConstraintInstance->SetAngularSwing1Limit(static_cast<EAngularConstraintMotion>(*Swing1Motion), *Swing1Limit);
+		ConstraintInstance->SetAngularSwing2Limit(static_cast<EAngularConstraintMotion>(*Swing2Motion), *Swing2Limit);
+	}
+
+	OriginalToeTwistMotions.Reset();
+	OriginalToeSwing1Motions.Reset();
+	OriginalToeSwing2Motions.Reset();
+	OriginalToeTwistLimits.Reset();
+	OriginalToeSwing1Limits.Reset();
+	OriginalToeSwing2Limits.Reset();
+	bHasSavedToeConstraintLimits = false;
+}
+
 void UPhysAnimComponent::ResetBridgePhysicsState()
 {
 	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
@@ -1879,6 +2054,7 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 	}
 
 	ResetTrainingAlignedMassScales();
+	ResetTrainingAlignedToeLimitPolicy();
 	SkeletalMesh->SetEnablePhysicsBlending(false);
 	if (bHasSavedMeshCollisionState)
 	{
@@ -3215,6 +3391,11 @@ float UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(FName BoneName,
 bool UPhysAnimComponent::ShouldApplyTrainingAlignedMassScales(bool bApplyTrainingAlignedMassScales, float BlendAlpha)
 {
 	return bApplyTrainingAlignedMassScales && BlendAlpha > UE_SMALL_NUMBER;
+}
+
+bool UPhysAnimComponent::ShouldApplyTrainingAlignedToeLimitPolicy(bool bApplyTrainingAlignedToeLimitPolicy, float BlendAlpha)
+{
+	return bApplyTrainingAlignedToeLimitPolicy && BlendAlpha > UE_SMALL_NUMBER;
 }
 
 float UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(FName BoneName, float BlendAlpha)

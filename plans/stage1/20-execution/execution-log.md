@@ -337,3 +337,19 @@ Whenever new setup or gate evidence arrives:
       - there is no gross sign that the manually created `ball_*` constraints were authored incorrectly
       - the more plausible remaining issue is that the toe constraints are permissive and sensitive, not malformed
       - the next lower-limb pass should inspect toe operating-limit policy or another non-gain mismatch surface, not keep assuming bad manual authoring
+  - March 12, 2026 toe operating-limit policy note:
+    - added a temporary runtime toe operating-limit policy for:
+      - `ball_l <- foot_l`
+      - `ball_r <- foot_r`
+    - measured sweep:
+      - `blend=1.00`:
+        - lower peak lower-leg linear speed
+        - worse toe angular spike
+        - worse root linear peak
+      - `blend=0.50`:
+        - lower peak body linear speed than the committed toe-family baseline
+        - lower peak body angular speed than the committed toe-family baseline
+        - slightly higher root linear peak than the committed toe-family baseline, but much better than `blend=1.00`
+    - frozen baseline candidate:
+      - keep `bApplyTrainingAlignedToeLimitPolicy = true`
+      - keep `TrainingAlignedToeLimitPolicyBlend = 0.50`

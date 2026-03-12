@@ -852,6 +852,29 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTrainingAlignedToeLimitPolicyTest,
+		"PhysAnim.Component.TrainingAlignedToeLimitPolicy",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTrainingAlignedToeLimitPolicyTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimStabilizationSettings Settings;
+		TestTrue(TEXT("Training-aligned toe limit policy is enabled by default"), Settings.bApplyTrainingAlignedToeLimitPolicy);
+		TestEqual(TEXT("Training-aligned toe limit policy defaults to the first fitted blend"), Settings.TrainingAlignedToeLimitPolicyBlend, 0.5f);
+
+		TestTrue(
+			TEXT("Toe limit policy disabled state returns false"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedToeLimitPolicy(false, 1.0f));
+		TestTrue(
+			TEXT("Zero blend disables toe limit policy application"),
+			!UPhysAnimComponent::ShouldApplyTrainingAlignedToeLimitPolicy(true, 0.0f));
+		TestTrue(
+			TEXT("Enabled toe limit policy with positive blend applies"),
+			UPhysAnimComponent::ShouldApplyTrainingAlignedToeLimitPolicy(true, 1.0f));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimCurrentPoseTargetOrientationTest,
 		"PhysAnim.Component.CurrentPoseTargetOrientation",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

@@ -53,6 +53,12 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float TrainingAlignedControlFamilyProfileBlend = 0.5f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
+	bool bApplyTrainingAlignedToeLimitPolicy = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float TrainingAlignedToeLimitPolicyBlend = 0.5f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float MaxAngularStepDegreesPerSecond = 180.0f;
 
@@ -101,6 +107,8 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(TrainingAlignedMassScaleBlend, Other.TrainingAlignedMassScaleBlend) &&
 			bApplyTrainingAlignedControlFamilyProfile == Other.bApplyTrainingAlignedControlFamilyProfile &&
 			FMath::IsNearlyEqual(TrainingAlignedControlFamilyProfileBlend, Other.TrainingAlignedControlFamilyProfileBlend) &&
+			bApplyTrainingAlignedToeLimitPolicy == Other.bApplyTrainingAlignedToeLimitPolicy &&
+			FMath::IsNearlyEqual(TrainingAlignedToeLimitPolicyBlend, Other.TrainingAlignedToeLimitPolicyBlend) &&
 			FMath::IsNearlyEqual(MaxAngularStepDegreesPerSecond, Other.MaxAngularStepDegreesPerSecond) &&
 			FMath::IsNearlyEqual(AngularStrengthMultiplier, Other.AngularStrengthMultiplier) &&
 			FMath::IsNearlyEqual(AngularDampingRatioMultiplier, Other.AngularDampingRatioMultiplier) &&
@@ -190,6 +198,8 @@ private:
 	void ActivateBridgePhysicsState(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ApplyTrainingAlignedMassScales(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResetTrainingAlignedMassScales();
+	void ApplyTrainingAlignedToeLimitPolicy(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void ResetTrainingAlignedToeLimitPolicy();
 	void ResetBridgePhysicsState();
 	bool SeedControlTargetsFromCurrentPose(float DeltaTime, FString& OutError);
 	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings);
@@ -313,6 +323,13 @@ private:
 	FVector StabilizationStressTestBaselineRightFootLocalOffset = FVector::ZeroVector;
 	TMap<FName, float> OriginalBodyMassScales;
 	bool bHasSavedBodyMassScales = false;
+	TMap<FName, uint8> OriginalToeTwistMotions;
+	TMap<FName, uint8> OriginalToeSwing1Motions;
+	TMap<FName, uint8> OriginalToeSwing2Motions;
+	TMap<FName, float> OriginalToeTwistLimits;
+	TMap<FName, float> OriginalToeSwing1Limits;
+	TMap<FName, float> OriginalToeSwing2Limits;
+	bool bHasSavedToeConstraintLimits = false;
 	FName OriginalMeshCollisionProfileName = NAME_None;
 	ECollisionEnabled::Type OriginalMeshCollisionEnabled = ECollisionEnabled::NoCollision;
 	TEnumAsByte<ECollisionResponse> OriginalMeshPawnResponse = ECollisionResponse::ECR_Block;
@@ -399,6 +416,7 @@ public:
 	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);
 	static float ResolveTrainingAlignedMassScaleForBone(FName BoneName, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedMassScales(bool bApplyTrainingAlignedMassScales, float BlendAlpha);
+	static bool ShouldApplyTrainingAlignedToeLimitPolicy(bool bApplyTrainingAlignedToeLimitPolicy, float BlendAlpha);
 	static float ResolveTrainingAlignedControlStrengthScaleForBone(FName BoneName, float BlendAlpha);
 	static float ResolveTrainingAlignedControlExtraDampingScaleForBone(FName BoneName, float BlendAlpha);
 	static bool ShouldApplyTrainingAlignedControlFamilyProfile(bool bApplyTrainingAlignedControlFamilyProfile, float BlendAlpha);
