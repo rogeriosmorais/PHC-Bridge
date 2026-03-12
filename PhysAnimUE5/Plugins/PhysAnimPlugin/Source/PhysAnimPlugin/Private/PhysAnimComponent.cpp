@@ -3233,15 +3233,15 @@ float UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(FNam
 		BoneName == TEXT("thigh_l") ||
 		BoneName == TEXT("calf_l") ||
 		BoneName == TEXT("foot_l") ||
+		BoneName == TEXT("ball_l") ||
 		BoneName == TEXT("thigh_r") ||
 		BoneName == TEXT("calf_r") ||
-		BoneName == TEXT("foot_r"))
+		BoneName == TEXT("foot_r") ||
+		BoneName == TEXT("ball_r"))
 	{
 		TargetScale = 1.0f;
 	}
 	else if (
-		BoneName == TEXT("ball_l") ||
-		BoneName == TEXT("ball_r") ||
 		BoneName == TEXT("neck_01") ||
 		BoneName == TEXT("head") ||
 		BoneName == TEXT("upperarm_l") ||
@@ -3277,15 +3277,15 @@ float UPhysAnimComponent::ResolveTrainingAlignedControlExtraDampingScaleForBone(
 		BoneName == TEXT("thigh_l") ||
 		BoneName == TEXT("calf_l") ||
 		BoneName == TEXT("foot_l") ||
+		BoneName == TEXT("ball_l") ||
 		BoneName == TEXT("thigh_r") ||
 		BoneName == TEXT("calf_r") ||
-		BoneName == TEXT("foot_r"))
+		BoneName == TEXT("foot_r") ||
+		BoneName == TEXT("ball_r"))
 	{
 		TargetScale = 1.0f;
 	}
 	else if (
-		BoneName == TEXT("ball_l") ||
-		BoneName == TEXT("ball_r") ||
 		BoneName == TEXT("neck_01") ||
 		BoneName == TEXT("head") ||
 		BoneName == TEXT("upperarm_l") ||

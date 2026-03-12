@@ -475,7 +475,9 @@ This gives us the highest-value correction with the least ambiguity.
   - `PhysAnim.PIE.G2Presentation` passes
 - next alignment task:
   - keep the current family mass policy and `0.50` control-family blend as the Stage 1 baseline
-  - then decide whether the next pass should fit family response more finely or move to perturbation/presentation validation
+  - then fit the remaining lower-limb outlier locally:
+    - first `ball_*` family reassignment to the locomotion leg baseline
+    - then toe-specific extra-damping fitting if toe angular peaks remain the dominant offender
 
 ## Working Hypothesis
 

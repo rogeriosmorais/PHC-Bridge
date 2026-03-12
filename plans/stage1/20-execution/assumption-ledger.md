@@ -207,6 +207,15 @@ Only the orchestrator updates status.
       - `blend=1.00` is still stable, but it does not outperform `0.50`
     - implication:
       - Stage 1 should keep the training-aligned control-family profile enabled at `0.50` unless a later targeted fit disproves it
+  - March 12, 2026 toe-family refinement note:
+    - moving `ball_*` onto the locomotion-leg family baseline is safe and mildly beneficial
+    - current evidence:
+      - toe angular peaks improve slightly
+      - root linear peaks improve
+      - peak calf linear spikes do not improve
+    - implication:
+      - the remaining fit problem is now more local than family-wide
+      - next fit should target toe-specific damping response before changing broader lower-limb families again
 - `Phase 0 critical assumptions`:
   - `A-01`
   - `A-02`

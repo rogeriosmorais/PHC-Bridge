@@ -301,3 +301,15 @@ Whenever new setup or gate evidence arrives:
     - frozen baseline:
       - keep `bApplyTrainingAlignedControlFamilyProfile = true`
       - keep `TrainingAlignedControlFamilyProfileBlend = 0.50`
+  - March 12, 2026 toe-family refinement note:
+    - `ball_l` and `ball_r` remain the most frequent peak angular offenders during deterministic movement
+    - first targeted fit:
+      - move `ball_*` out of the weaker mid-tier family and onto the locomotion leg family baseline
+    - measured result versus the previous `0.50` default profile:
+      - still no fail-stop
+      - lower root linear peak during movement
+      - slightly lower toe angular peak
+      - slight increase in peak lower-leg linear spike
+    - current runtime read:
+      - this is a modest improvement, not a decisive fix
+      - the next fit should be more targeted, likely toe-specific extra damping rather than another broad family reassignment

@@ -816,6 +816,10 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("calf_l"), 1.0f),
 			1.0f);
 		TestEqual(
+			TEXT("Toe family now stays on the locomotion-leg baseline strength scale"),
+			UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("ball_l"), 1.0f),
+			1.0f);
+		TestEqual(
 			TEXT("Moderate family uses the SMPL-informed mid-tier strength scale"),
 			UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("upperarm_r"), 1.0f),
 			0.625f);
@@ -828,7 +832,11 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("spine_01"), 0.5f),
 			1.125f);
 		TestEqual(
-			TEXT("Extra damping family scale follows the same training hierarchy"),
+			TEXT("Distal toes now keep baseline extra damping with the locomotion leg family"),
+			UPhysAnimComponent::ResolveTrainingAlignedControlExtraDampingScaleForBone(TEXT("ball_r"), 1.0f),
+			1.0f);
+		TestEqual(
+			TEXT("Upper-limb extra damping still follows the mid-tier training hierarchy"),
 			UPhysAnimComponent::ResolveTrainingAlignedControlExtraDampingScaleForBone(TEXT("hand_r"), 1.0f),
 			0.375f);
 		TestTrue(
