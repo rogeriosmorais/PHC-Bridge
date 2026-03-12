@@ -693,9 +693,25 @@ This gives us the highest-value correction with the least ambiguity.
       - the runtime clone only added `2 / 6` new disabled pairs
       - locomotion stayed stable but did not produce a clean new win on the remaining lower-limb outliers
     - current read:
-      - lower-limb contact semantics were worth auditing
-      - they are not the dominant remaining locomotion seam
-      - runtime code should stay on the shared proximal-response + distal angular-velocity suppression baseline
+  - lower-limb contact semantics were worth auditing
+  - they are not the dominant remaining locomotion seam
+  - runtime code should stay on the shared proximal-response + distal angular-velocity suppression baseline
+  - self-observation root-height alignment result:
+    - re-checked official UE `CharacterMovement` / PhysicsControl docs, local UE 5.7 source, and ProtoMotions `max_coords` observation code
+    - ProtoMotions' runtime self observation remains a `z-up` max-coordinates path with terrain-relative root height
+    - the current UE bridge packing order already matches that structure closely, but the caller-level `ground_height = 0.0f` assumption was still wrong
+    - implemented a narrow keep:
+      - resolve walkable floor world `Z` from `CharacterMovement->CurrentFloor`
+      - synthesize the existing `BuildSelfObservation(...)` ground-height argument so the root-height scalar becomes `root_world_z - ground_world_z`
+      - leave all other observation channels unchanged in this pass
+    - verification:
+      - build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+    - current read:
+      - this is a keepable observation-contract correction
+      - broader training/runtime alignment is still worth continuing
+      - the next useful pass should continue targeting observation/representation seams, not return to already-falsified lower-limb write-smoothing branches
 
 ## Working Hypothesis
 

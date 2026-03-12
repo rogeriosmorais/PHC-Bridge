@@ -700,7 +700,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			return;
 		}
 
-		if (!PhysAnimBridge::BuildSelfObservation(CurrentBodySamples, 0.0f, SelfObservationBuffer, TickError))
+		if (!PhysAnimBridge::BuildSelfObservation(
+			CurrentBodySamples,
+			ResolveSelfObservationGroundHeight(CurrentBodySamples),
+			SelfObservationBuffer,
+			TickError))
 		{
 			FailStop(TickError);
 			return;
@@ -1568,6 +1572,39 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 	}
 
 	return true;
+}
+
+float UPhysAnimComponent::ResolveSelfObservationGroundHeight(const TArray<FPhysAnimBodySample>& CurrentBodySamples) const
+{
+	if (!CurrentBodySamples.IsValidIndex(0))
+	{
+		return 0.0f;
+	}
+
+	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	const ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
+	const UCharacterMovementComponent* const CharacterMovement = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr;
+	const UCapsuleComponent* const CapsuleComponent = CharacterOwner ? CharacterOwner->GetCapsuleComponent() : nullptr;
+	if (!SkeletalMesh || !CharacterMovement || !CapsuleComponent)
+	{
+		return 0.0f;
+	}
+
+	const FVector RootWorldLocation = SkeletalMesh->GetBoneLocation(PhysAnimBridge::GetRootBoneName());
+	const FFindFloorResult& CurrentFloor = CharacterMovement->CurrentFloor;
+	const float GroundWorldZ = ResolveObservationGroundWorldZFromFloor(
+		CurrentFloor.IsWalkableFloor(),
+		CurrentFloor.HitResult.IsValidBlockingHit(),
+		CurrentFloor.HitResult.ImpactPoint.Z,
+		CapsuleComponent->GetComponentLocation().Z,
+		CapsuleComponent->GetScaledCapsuleHalfHeight(),
+		CurrentFloor.GetDistanceToFloor(),
+		0.0f);
+
+	return ResolveSelfObservationSyntheticGroundHeight(
+		CurrentBodySamples[0].Position.Z,
+		RootWorldLocation.Z,
+		GroundWorldZ);
 }
 
 bool UPhysAnimComponent::SampleFuturePoses(
@@ -3746,6 +3783,37 @@ float UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(
 		bUseSkeletalAnimationTargetRepresentation,
 		bFirstPolicyEnabledFrame,
 		DeltaTime);
+}
+
+float UPhysAnimComponent::ResolveObservationGroundWorldZFromFloor(
+	bool bHasWalkableFloor,
+	bool bHasBlockingFloorHit,
+	float FloorImpactPointZ,
+	float CapsuleCenterZ,
+	float CapsuleHalfHeight,
+	float FloorDistance,
+	float FallbackGroundWorldZ)
+{
+	if (!bHasWalkableFloor)
+	{
+		return FallbackGroundWorldZ;
+	}
+
+	if (bHasBlockingFloorHit)
+	{
+		return FloorImpactPointZ;
+	}
+
+	return CapsuleCenterZ - CapsuleHalfHeight - FMath::Max(FloorDistance, 0.0f);
+}
+
+float UPhysAnimComponent::ResolveSelfObservationSyntheticGroundHeight(
+	float ObservationFrameRootZ,
+	float RootWorldZ,
+	float GroundWorldZ)
+{
+	const float DesiredRootHeight = RootWorldZ - GroundWorldZ;
+	return ObservationFrameRootZ - DesiredRootHeight;
 }
 
 float UPhysAnimComponent::ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz)

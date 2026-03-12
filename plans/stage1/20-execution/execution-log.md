@@ -715,3 +715,28 @@ Whenever new setup or gate evidence arrives:
       - lower-limb write smoothing was worth falsifying
       - runtime code has been restored to the previous safe baseline
       - the broader alignment direction is still worthwhile, but the next pass should move to another locomotion-time representation seam
+  - March 12, 2026 self-observation root-height alignment note:
+    - re-checked:
+      - official UE `CharacterMovement` and PhysicsControl docs
+      - local UE 5.7 `CharacterMovement` and PhysicsControl source
+      - ProtoMotions pretrained config and `max_coords` observation code
+    - key finding:
+      - ProtoMotions' runtime self observation is structurally close to the current UE bridge `358`-float packing
+      - but ProtoMotions' runtime convention is `z-up`, and the bridge caller was still passing `ground_height = 0.0f` every frame
+      - that made the self-observation root-height scalar a clear contract violation even before reopening broader world-frame conversion questions
+    - implemented one narrow keep:
+      - resolve walkable floor world `Z` from `CharacterMovement->CurrentFloor`
+      - synthesize the existing `BuildSelfObservation(...)` ground-height argument so the emitted root-height scalar matches `root_world_z - ground_world_z`
+      - leave all other observation channels unchanged in this pass
+    - verification:
+      - UE build passes
+      - `PhysAnim.Component` passes
+      - `PhysAnim.PIE.MovementSmoke` passes
+      - no fail-stop
+    - measured runtime result:
+      - the new helper coverage passes
+      - movement smoke still completes cleanly with the corrected root-height path live
+    - current runtime read:
+      - broader training/runtime alignment is still worth continuing
+      - lower-limb heuristic tuning is no longer the only plausible next lever
+      - this root-height correction is a keepable contract fix, even if it is not yet the full locomotion-time answer

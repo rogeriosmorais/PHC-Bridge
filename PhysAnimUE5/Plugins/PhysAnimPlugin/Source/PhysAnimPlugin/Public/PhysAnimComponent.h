@@ -271,6 +271,7 @@ private:
 	bool CheckRuntimeInstability(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
 	void LogBodyModifierTelemetrySnapshot(const TCHAR* Context) const;
 	void ResetPendingBodyModifiersToCachedTargets();
+	float ResolveSelfObservationGroundHeight(const TArray<FPhysAnimBodySample>& CurrentBodySamples) const;
 	void ApplyControlTargets(
 		float PolicyStepDeltaTime,
 		const FPhysAnimStabilizationSettings& EffectiveSettings,
@@ -484,6 +485,18 @@ public:
 		bool bFirstPolicyEnabledFrame,
 		bool bDistalLocomotionCompositionModeActive,
 		float DeltaTime);
+	static float ResolveObservationGroundWorldZFromFloor(
+		bool bHasWalkableFloor,
+		bool bHasBlockingFloorHit,
+		float FloorImpactPointZ,
+		float CapsuleCenterZ,
+		float CapsuleHalfHeight,
+		float FloorDistance,
+		float FallbackGroundWorldZ);
+	static float ResolveSelfObservationSyntheticGroundHeight(
+		float ObservationFrameRootZ,
+		float RootWorldZ,
+		float GroundWorldZ);
 	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);
 	static bool ShouldPrewarmPhysicsControlActivationPose(bool bHasSkeletalMeshComponent, bool bHasLeaderPoseComponent);
 	static float ResolveTrainingAlignedMassScaleForBone(FName BoneName, float BlendAlpha);

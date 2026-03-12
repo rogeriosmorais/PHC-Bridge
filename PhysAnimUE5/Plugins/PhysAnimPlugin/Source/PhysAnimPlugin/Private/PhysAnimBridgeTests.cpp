@@ -407,6 +407,56 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 }
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimSelfObservationGroundHeightTest,
+		"PhysAnim.Component.SelfObservationGroundHeight",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimSelfObservationGroundHeightTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(
+			TEXT("Walkable floor prefers the blocking-hit impact point"),
+			UPhysAnimComponent::ResolveObservationGroundWorldZFromFloor(
+				true,
+				true,
+				125.0f,
+				200.0f,
+				88.0f,
+				6.0f,
+				0.0f),
+			125.0f);
+		TestEqual(
+			TEXT("Walkable floor falls back to capsule floor distance when no blocking hit is available"),
+			UPhysAnimComponent::ResolveObservationGroundWorldZFromFloor(
+				true,
+				false,
+				0.0f,
+				200.0f,
+				88.0f,
+				12.0f,
+				0.0f),
+			100.0f);
+		TestEqual(
+			TEXT("Missing walkable floor falls back to the provided default"),
+			UPhysAnimComponent::ResolveObservationGroundWorldZFromFloor(
+				false,
+				false,
+				0.0f,
+				200.0f,
+				88.0f,
+				12.0f,
+				15.0f),
+			15.0f);
+		TestEqual(
+			TEXT("Synthetic observation-space ground height reproduces the desired world-space root height"),
+			UPhysAnimComponent::ResolveSelfObservationSyntheticGroundHeight(
+				250.0f,
+				180.0f,
+				100.0f),
+			170.0f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimRotationLimitTest,
 		"PhysAnim.Component.RotationLimit",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

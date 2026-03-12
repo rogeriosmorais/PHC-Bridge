@@ -508,3 +508,10 @@ The next meaningful ledger updates should come from:
   - implication:
     - it is still worth continuing in the broader training/runtime alignment direction
     - it is not worth continuing the lower-limb write-smoothing sub-direction as the primary next lever
+- March 12, 2026:
+  - the bridge self-observation structure matches ProtoMotions `max_coords` much more closely than the recent lower-limb heuristic branches suggested
+  - the caller-level `ground_height = 0.0f` assumption was still a real contract violation relative to ProtoMotions' terrain-relative root-height observation
+  - the bridge now resolves a real walkable-floor world `Z` and feeds a corrected synthetic ground-height value into the existing self-observation packer
+  - implication:
+    - it is still worth continuing in the broader training/runtime alignment direction
+    - it is increasingly worth prioritizing clear observation/representation contract fixes over additional lower-limb heuristic retuning
