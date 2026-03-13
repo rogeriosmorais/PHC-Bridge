@@ -2101,41 +2101,64 @@ bool UPhysAnimComponent::ValidateModelDescriptorContract(FString& OutError)
 
 void UPhysAnimComponent::CacheRestPoses(UAnimSequence* TPoseAnim)
 {
-	CachedSmplObservationRestRotations.Reset();
+	CachedSmplObservationRestComponentRotations.Reset();
 
+	const USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	if (!TPoseAnim)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] CacheRestPoses called without a valid TPose AnimSequence."), *GetName());
 		return;
 	}
 
-	const USkeletalMeshComponent* Mesh = MeshComponent.Get();
 	if (!Mesh || !Mesh->GetSkeletalMeshAsset())
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] CacheRestPoses could not access skeletal mesh asset."), *GetName());
 		return;
 	}
 
 	const FReferenceSkeleton& RefSkeleton = Mesh->GetSkeletalMeshAsset()->GetRefSkeleton();
 	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
 
-	CachedSmplObservationRestRotations.Reserve(BoneNames.Num());
+	const int32 NumSkeletonBones = RefSkeleton.GetNum();
+	const TArray<FTransform>& RefLocalPose = RefSkeleton.GetRefBonePose();
+
+	TArray<FTransform> SampledLocalPose = RefLocalPose;
+
+	const FAnimExtractContext ExtractionContext(0.0f, true);
+
+	for (int32 BoneIndex = 0; BoneIndex < NumSkeletonBones; ++BoneIndex)
+	{
+		FTransform LocalBoneTransform = RefLocalPose[BoneIndex];
+		TPoseAnim->GetBoneTransform(LocalBoneTransform, FSkeletonPoseBoneIndex(BoneIndex), ExtractionContext, false);
+		SampledLocalPose[BoneIndex] = LocalBoneTransform;
+	}
+
+	TArray<FQuat> ComponentRotations;
+	ComponentRotations.SetNum(NumSkeletonBones);
+
+	for (int32 BoneIndex = 0; BoneIndex < NumSkeletonBones; ++BoneIndex)
+	{
+		const int32 ParentIndex = RefSkeleton.GetParentIndex(BoneIndex);
+		const FQuat LocalRotation = SampledLocalPose[BoneIndex].GetRotation().GetNormalized();
+
+		ComponentRotations[BoneIndex] = ParentIndex == INDEX_NONE
+			? LocalRotation
+			: (ComponentRotations[ParentIndex] * LocalRotation).GetNormalized();
+	}
+
+	CachedSmplObservationRestComponentRotations.Reserve(BoneNames.Num());
 
 	for (const FName& BoneName : BoneNames)
 	{
 		const int32 BoneIndex = RefSkeleton.FindBoneIndex(BoneName);
-		if (BoneIndex != INDEX_NONE)
-		{
-			// Try to extract the transform from Frame 0 of the TPose reference animation
-			FTransform BoneTransform = FTransform::Identity;
-			FAnimExtractContext ExtractionContext(0.0, true);
-			TPoseAnim->GetBoneTransform(BoneTransform, FSkeletonPoseBoneIndex(BoneIndex), ExtractionContext, false);
-			CachedSmplObservationRestRotations.Add(BoneTransform.GetRotation());
-		}
-		else
+		if (BoneIndex == INDEX_NONE)
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] Could not find bone '%s' for rest pose caching."), *GetName(), *BoneName.ToString());
-			CachedSmplObservationRestRotations.Add(FQuat::Identity);
+			CachedSmplObservationRestComponentRotations.Add(FQuat::Identity);
+			continue;
 		}
+
+		CachedSmplObservationRestComponentRotations.Add(ComponentRotations[BoneIndex]);
 	}
 }
 
@@ -2152,6 +2175,8 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 	OutBodySamples.Reserve(PhysAnimBridge::NumSmplBodies);
 
 	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
+	const FQuat MeshWorldRotation = SkeletalMesh->GetComponentQuat();
+
 	for (int32 i = 0; i < BoneNames.Num(); ++i)
 	{
 		const FName& BoneName = BoneNames[i];
@@ -2166,15 +2191,22 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 		const FVector BoneLinearVelocity = MutableMesh->GetPhysicsLinearVelocity(BoneName);
 		const FVector BoneAngularVelocity = MutableMesh->GetPhysicsAngularVelocityInRadians(BoneName);
 
-		FQuat WorldRotation = BoneWorldTransform.GetRotation();
-		if (CachedSmplObservationRestRotations.IsValidIndex(i))
+		const FQuat CurrentComponentRotation =
+			(MeshWorldRotation.Inverse() * BoneWorldTransform.GetRotation()).GetNormalized();
+
+		FQuat CorrectedComponentRotation = CurrentComponentRotation;
+		if (CachedSmplObservationRestComponentRotations.IsValidIndex(i))
 		{
-			WorldRotation = WorldRotation * CachedSmplObservationRestRotations[i].Inverse();
+			CorrectedComponentRotation =
+				(CurrentComponentRotation * CachedSmplObservationRestComponentRotations[i].Inverse()).GetNormalized();
 		}
+
+		const FQuat CorrectedWorldRotation =
+			(MeshWorldRotation * CorrectedComponentRotation).GetNormalized();
 
 		OutBodySamples.Add(FPhysAnimBodySample(
 			PhysAnimBridge::UeWorldVectorToProtoRuntime(BoneWorldTransform.GetLocation()),
-			PhysAnimBridge::UeWorldQuaternionToProtoRuntime(WorldRotation),
+			PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CorrectedWorldRotation),
 			PhysAnimBridge::UeWorldVectorToProtoRuntime(BoneLinearVelocity),
 			PhysAnimBridge::UeWorldVectorToProtoRuntime(BoneAngularVelocity)));
 	}
@@ -2358,14 +2390,15 @@ bool UPhysAnimComponent::SampleFuturePoses(
 			const FTransform WorldTransform =
 				UPoseSearchAssetSamplerLibrary::GetTransformByName(SampledPose, BoneName, EPoseSearchAssetSamplerSpace::World);
 
-			FQuat WorldRotation = WorldTransform.GetRotation();
-			if (CachedSmplObservationRestRotations.IsValidIndex(i))
+			FQuat CorrectedRotation = WorldTransform.GetRotation().GetNormalized();
+			if (CachedSmplObservationRestComponentRotations.IsValidIndex(i))
 			{
-				WorldRotation = WorldRotation * CachedSmplObservationRestRotations[i].Inverse();
+				CorrectedRotation =
+					(CorrectedRotation * CachedSmplObservationRestComponentRotations[i].Inverse()).GetNormalized();
 			}
 
 			FutureSample.BodyTransforms.Add(FTransform(
-				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(WorldRotation),
+				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CorrectedRotation),
 				PhysAnimBridge::UeWorldVectorToProtoRuntime(WorldTransform.GetLocation()),
 				WorldTransform.GetScale3D()));
 		}

@@ -361,7 +361,7 @@ private:
 	TSharedPtr<UE::NNE::IModelInstanceGPU> ModelInstanceGPU;
 	TSharedPtr<UE::NNE::IModelInstanceCPU> ModelInstanceCPU;
 
-	TArray<FQuat> CachedSmplObservationRestRotations;
+	TArray<FQuat> CachedSmplObservationRestComponentRotations;
 
 	TObjectPtr<UNNEModelData> LoadedModelData = nullptr;
 	TObjectPtr<UPoseSearchDatabase> LoadedPoseSearchDatabase = nullptr;
