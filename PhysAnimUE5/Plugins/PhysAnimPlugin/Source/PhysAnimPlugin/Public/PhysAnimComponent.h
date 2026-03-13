@@ -13,6 +13,7 @@
 #include "PhysAnimComponent.generated.h"
 
 class UAnimInstance;
+class UAnimSequence;
 class UCapsuleComponent;
 class UCharacterMovementComponent;
 class UPhysicsControlComponent;
@@ -235,6 +236,14 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "PhysAnim")
 	TSoftObjectPtr<UNNEModelData> ModelDataAsset;
 
+	/** A 1-frame animation of the character in a perfect T-Pose, used to extract base bone alignments. */
+	UPROPERTY(EditDefaultsOnly, Category = "PhysAnim | Policy")
+	TObjectPtr<UAnimSequence> TPoseReference;
+
+	/** Number of threads the ONNX CPU backend is permitted to use for inference. */
+	UPROPERTY(EditDefaultsOnly, Category = "PhysAnim | Policy", meta = (ClampMin = "1"))
+	int32 InferenceThreads = 2;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
 	FPhysAnimStabilizationSettings StabilizationSettings;
 
@@ -335,6 +344,8 @@ private:
 	float CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	bool IsPresentationPerturbationOverrideActive() const;
 
+	void CacheRestPoses(UAnimSequence* TPoseAnim);
+
 	UE::NNE::IModelInstanceRunSync* GetModelInstanceRunSync() const;
 	TConstArrayView<UE::NNE::FTensorDesc> GetInputTensorDescs() const;
 	TConstArrayView<UE::NNE::FTensorDesc> GetOutputTensorDescs() const;
@@ -349,6 +360,8 @@ private:
 	TSharedPtr<UE::NNE::IModelCPU> ModelCPU;
 	TSharedPtr<UE::NNE::IModelInstanceGPU> ModelInstanceGPU;
 	TSharedPtr<UE::NNE::IModelInstanceCPU> ModelInstanceCPU;
+
+	TArray<FQuat> CachedSmplObservationRestRotations;
 
 	TObjectPtr<UNNEModelData> LoadedModelData = nullptr;
 	TObjectPtr<UPoseSearchDatabase> LoadedPoseSearchDatabase = nullptr;

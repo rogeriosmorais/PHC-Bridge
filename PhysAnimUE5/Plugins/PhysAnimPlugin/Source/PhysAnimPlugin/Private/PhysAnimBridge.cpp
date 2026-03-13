@@ -291,6 +291,18 @@ namespace PhysAnimBridge
 		return FVector(UeVector.Y, UeVector.Z, UeVector.X);
 	}
 
+	FVector UeVectorToIsaacGym(const FVector& UeVector)
+	{
+		// UE is Z-up, X-forward, Y-right (Left-Handed)
+		// Isaac Gym is Z-up, X-forward, Y-left (Right-Handed)
+		return FVector(UeVector.X, -UeVector.Y, UeVector.Z);
+	}
+
+	FVector IsaacGymVectorToUe(const FVector& IsaacVector)
+	{
+		return FVector(IsaacVector.X, -IsaacVector.Y, IsaacVector.Z);
+	}
+
 	FQuat SmplQuaternionToUe(const FQuat& SmplQuaternion)
 	{
 		const FVector UeXAxisInSmpl = UeVectorToSmpl(FVector::ForwardVector);
@@ -309,14 +321,23 @@ namespace PhysAnimBridge
 		return MakeQuaternionFromBasis(SmplRotatedXAxis, SmplRotatedZAxis);
 	}
 
+	FQuat UeQuaternionToIsaacGym(const FQuat& UeQuaternion)
+	{
+		const FVector IsaacXAxisInUe = IsaacGymVectorToUe(FVector::ForwardVector);
+		const FVector IsaacZAxisInUe = IsaacGymVectorToUe(FVector::UpVector);
+		const FVector IsaacRotatedXAxis = UeVectorToIsaacGym(UeQuaternion.RotateVector(IsaacXAxisInUe));
+		const FVector IsaacRotatedZAxis = UeVectorToIsaacGym(UeQuaternion.RotateVector(IsaacZAxisInUe));
+		return MakeQuaternionFromBasis(IsaacRotatedXAxis, IsaacRotatedZAxis);
+	}
+
 	FVector UeWorldVectorToProtoRuntime(const FVector& UeVector)
 	{
-		return UeVector;
+		return UeVectorToIsaacGym(UeVector);
 	}
 
 	FQuat UeWorldQuaternionToProtoRuntime(const FQuat& UeQuaternion)
 	{
-		return UeQuaternion.GetNormalized();
+		return UeQuaternionToIsaacGym(UeQuaternion);
 	}
 
 	FQuat ExpMapToQuaternion(const FVector& ExpMap)

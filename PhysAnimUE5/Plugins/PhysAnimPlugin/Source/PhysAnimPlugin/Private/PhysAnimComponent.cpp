@@ -5,6 +5,7 @@
 #include "PhysAnimStage1InitializerComponent.h"
 
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimSequence.h"
 #include "Animation/AnimationAsset.h"
 #include "CollisionQueryParams.h"
 #include "Components/CapsuleComponent.h"
@@ -232,14 +233,14 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.DistalLocomotionCompositionPolicyEnterHoldSeconds"),
 		-1.0f,
 		TEXT("Override for the Stage 1 distal locomotion target composition enter-hold in seconds. Negative values keep the component default."));
-	TAutoConsoleVariable<float> CVarPhysAnimDistalLocomotionCompositionPolicyExitHoldSeconds(
-		TEXT("physanim.DistalLocomotionCompositionPolicyExitHoldSeconds"),
-		-1.0f,
-		TEXT("Override for the Stage 1 distal locomotion target composition exit-hold in seconds. Negative values keep the component default."));
 	TAutoConsoleVariable<float> CVarPhysAnimDistalLocomotionCompositionPolicyIntentGraceSeconds(
 		TEXT("physanim.DistalLocomotionCompositionPolicyIntentGraceSeconds"),
 		-1.0f,
 		TEXT("Override for the Stage 1 distal locomotion target composition movement-intent grace in seconds. Negative values keep the component default."));
+	TAutoConsoleVariable<float> CVarPhysAnimDistalLocomotionCompositionPolicyExitHoldSeconds(
+		TEXT("physanim.DistalLocomotionCompositionPolicyExitHoldSeconds"),
+		-1.0f,
+		TEXT("Override for the Stage 1 distal locomotion target composition exit-hold in seconds. Negative values keep the component default."));
 	TAutoConsoleVariable<float> CVarPhysAnimMaxAngularStepDegPerSec(
 		TEXT("physanim.MaxAngularStepDegPerSec"),
 		-1.0f,
@@ -1992,7 +1993,6 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 		OutError = FString::Printf(TEXT("Failed to load model asset '%s'."), *ModelDataAsset.ToSoftObjectPath().ToString());
 		return false;
 	}
-
 	RuntimeGPU = UE::NNE::GetRuntime<INNERuntimeGPU>(PhysAnimComponentInternal::PreferredGpuRuntime);
 	if (RuntimeGPU.IsValid() && RuntimeGPU->CanCreateModelGPU(LoadedModelData) == UE::NNE::EResultStatus::Ok)
 	{
@@ -2004,7 +2004,17 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 		if (ModelInstanceGPU.IsValid())
 		{
 			ActiveRuntimeName = PhysAnimComponentInternal::PreferredGpuRuntime;
-			return ValidateModelDescriptorContract(OutError);
+			if (!ValidateModelDescriptorContract(OutError))
+			{
+				return false;
+			}
+			if (!TPoseReference)
+			{
+				OutError = TEXT("PhysAnimComponent requires a valid TPoseReference animation to align bone axes. Please assign a 1-frame T-Pose AnimSequence.");
+				return false;
+			}
+			CacheRestPoses(TPoseReference);
+			return true;
 		}
 	}
 
@@ -2019,7 +2029,17 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 		if (ModelInstanceCPU.IsValid())
 		{
 			ActiveRuntimeName = PhysAnimComponentInternal::FallbackCpuRuntime;
-			return ValidateModelDescriptorContract(OutError);
+			if (!ValidateModelDescriptorContract(OutError))
+			{
+				return false;
+			}
+			if (!TPoseReference)
+			{
+				OutError = TEXT("PhysAnimComponent requires a valid TPoseReference animation to align bone axes. Please assign a 1-frame T-Pose AnimSequence.");
+				return false;
+			}
+			CacheRestPoses(TPoseReference);
+			return true;
 		}
 	}
 
@@ -2079,6 +2099,46 @@ bool UPhysAnimComponent::ValidateModelDescriptorContract(FString& OutError)
 	return true;
 }
 
+void UPhysAnimComponent::CacheRestPoses(UAnimSequence* TPoseAnim)
+{
+	CachedSmplObservationRestRotations.Reset();
+
+	if (!TPoseAnim)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] CacheRestPoses called without a valid TPose AnimSequence."), *GetName());
+		return;
+	}
+
+	const USkeletalMeshComponent* Mesh = MeshComponent.Get();
+	if (!Mesh || !Mesh->GetSkeletalMeshAsset())
+	{
+		return;
+	}
+
+	const FReferenceSkeleton& RefSkeleton = Mesh->GetSkeletalMeshAsset()->GetRefSkeleton();
+	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
+
+	CachedSmplObservationRestRotations.Reserve(BoneNames.Num());
+
+	for (const FName& BoneName : BoneNames)
+	{
+		const int32 BoneIndex = RefSkeleton.FindBoneIndex(BoneName);
+		if (BoneIndex != INDEX_NONE)
+		{
+			// Try to extract the transform from Frame 0 of the TPose reference animation
+			FTransform BoneTransform = FTransform::Identity;
+			FAnimExtractContext ExtractionContext(0.0, true);
+			TPoseAnim->GetBoneTransform(BoneTransform, FSkeletonPoseBoneIndex(BoneIndex), ExtractionContext, false);
+			CachedSmplObservationRestRotations.Add(BoneTransform.GetRotation());
+		}
+		else
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] Could not find bone '%s' for rest pose caching."), *GetName(), *BoneName.ToString());
+			CachedSmplObservationRestRotations.Add(FQuat::Identity);
+		}
+	}
+}
+
 bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& OutBodySamples, FString& OutError) const
 {
 	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
@@ -2091,8 +2151,10 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 	OutBodySamples.Reset();
 	OutBodySamples.Reserve(PhysAnimBridge::NumSmplBodies);
 
-	for (const FName BoneName : PhysAnimBridge::GetSmplObservationBoneNames())
+	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
+	for (int32 i = 0; i < BoneNames.Num(); ++i)
 	{
+		const FName& BoneName = BoneNames[i];
 		if (SkeletalMesh->GetBoneIndex(BoneName) == INDEX_NONE)
 		{
 			OutError = FString::Printf(TEXT("Missing observation bone '%s' on the skeletal mesh."), *BoneName.ToString());
@@ -2100,14 +2162,21 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 		}
 
 		const FTransform BoneWorldTransform = SkeletalMesh->GetBoneTransform(BoneName, RTS_World);
-
-		FPhysAnimBodySample BodySample;
-		BodySample.Position = PhysAnimBridge::UeWorldVectorToProtoRuntime(BoneWorldTransform.GetLocation());
-		BodySample.Rotation = PhysAnimBridge::UeWorldQuaternionToProtoRuntime(BoneWorldTransform.GetRotation());
 		USkeletalMeshComponent* const MutableMesh = const_cast<USkeletalMeshComponent*>(SkeletalMesh);
-		BodySample.LinearVelocity = PhysAnimBridge::UeWorldVectorToProtoRuntime(MutableMesh->GetPhysicsLinearVelocity(BoneName));
-		BodySample.AngularVelocity = PhysAnimBridge::UeWorldVectorToProtoRuntime(MutableMesh->GetPhysicsAngularVelocityInRadians(BoneName));
-		OutBodySamples.Add(BodySample);
+		const FVector BoneLinearVelocity = MutableMesh->GetPhysicsLinearVelocity(BoneName);
+		const FVector BoneAngularVelocity = MutableMesh->GetPhysicsAngularVelocityInRadians(BoneName);
+
+		FQuat WorldRotation = BoneWorldTransform.GetRotation();
+		if (CachedSmplObservationRestRotations.IsValidIndex(i))
+		{
+			WorldRotation = WorldRotation * CachedSmplObservationRestRotations[i].Inverse();
+		}
+
+		OutBodySamples.Add(FPhysAnimBodySample(
+			PhysAnimBridge::UeWorldVectorToProtoRuntime(BoneWorldTransform.GetLocation()),
+			PhysAnimBridge::UeWorldQuaternionToProtoRuntime(WorldRotation),
+			PhysAnimBridge::UeWorldVectorToProtoRuntime(BoneLinearVelocity),
+			PhysAnimBridge::UeWorldVectorToProtoRuntime(BoneAngularVelocity)));
 	}
 
 	return true;
@@ -2263,6 +2332,8 @@ bool UPhysAnimComponent::SampleFuturePoses(
 	OutFutureSamples.Reset();
 	OutFutureSamples.Reserve(FutureOffsets.Num());
 
+	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
+
 	for (const float FutureOffset : FutureOffsets)
 	{
 		FPoseSearchAssetSamplerInput SamplerInput;
@@ -2281,12 +2352,20 @@ bool UPhysAnimComponent::SampleFuturePoses(
 			AnimationLength);
 		FutureSample.BodyTransforms.Reserve(PhysAnimBridge::NumSmplBodies);
 
-		for (const FName BoneName : PhysAnimBridge::GetSmplObservationBoneNames())
+		for (int32 i = 0; i < BoneNames.Num(); ++i)
 		{
+			const FName& BoneName = BoneNames[i];
 			const FTransform WorldTransform =
 				UPoseSearchAssetSamplerLibrary::GetTransformByName(SampledPose, BoneName, EPoseSearchAssetSamplerSpace::World);
+
+			FQuat WorldRotation = WorldTransform.GetRotation();
+			if (CachedSmplObservationRestRotations.IsValidIndex(i))
+			{
+				WorldRotation = WorldRotation * CachedSmplObservationRestRotations[i].Inverse();
+			}
+
 			FutureSample.BodyTransforms.Add(FTransform(
-				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(WorldTransform.GetRotation()),
+				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(WorldRotation),
 				PhysAnimBridge::UeWorldVectorToProtoRuntime(WorldTransform.GetLocation()),
 				WorldTransform.GetScale3D()));
 		}
