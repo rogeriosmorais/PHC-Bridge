@@ -26,9 +26,10 @@ Assume repo root is inferred automatically.
 
 ```powershell
 & "$UE5_PATH\Build\BatchFiles\RunUAT.bat" BuildPlugin `
-  -Plugin="PhysAnimUE5\Plugins\PhysAnimPlugin\PhysAnimPlugin.uplugin" `
-  -TargetPlatforms=Win64 `
-  -Rocket
+   -Plugin="$PWD\PhysAnimUE5\Plugins\PhysAnimPlugin\PhysAnimPlugin.uplugin" `
+   -Package="$PWD\_build\PhysAnimPlugin" `
+   -TargetPlatforms=Win64 `
+   -Rocket
 ```
 
 ## Project Build
