@@ -1152,6 +1152,91 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	UpdateStabilizationStressTestState(StabilizationSettings);
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	ApplyMovementSmokeInput(EffectiveSettings);
+	if (RuntimeState == EPhysAnimRuntimeState::BridgeActive && bStartupMovementLockActive)
+	{
+		if (!EffectiveSettings.bLockCharacterMovementUntilStartupReady)
+		{
+			ReleaseStartupMovementLock(true);
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Released startup movement lock because startup movement locking is disabled."));
+		}
+		else
+		{
+			const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+			if (!EffectiveSettings.bDelayMovementUnlockUntilPolicySettled)
+			{
+				if (PolicyInfluenceAlpha > KINDA_SMALL_NUMBER)
+				{
+					if (EffectiveSettings.bRestoreCharacterMovementAfterStartupReady)
+					{
+						ReleaseStartupMovementLock(true);
+						UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Released startup movement lock after bridge became ready for policy-driven motion."));
+					}
+					else
+					{
+						ReleaseStartupMovementLock(false);
+						UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Policy became ready, but retaining CharacterMovement lock for diagnostic isolation."));
+					}
+				}
+			}
+			else if (PolicyInfluenceAlpha >= EffectiveSettings.PolicySettleMinInfluenceAlpha)
+			{
+				float PolicySettleShellOffsetCm = 0.0f;
+				float PolicySettleRootLinearSpeedCmPerSecond = 0.0f;
+				float PolicySettleRootAngularSpeedDegPerSecond = 0.0f;
+				if (UpdatePolicySettleWindow(EffectiveSettings, PolicySettleShellOffsetCm, PolicySettleRootLinearSpeedCmPerSecond, PolicySettleRootAngularSpeedDegPerSecond))
+				{
+					if (EffectiveSettings.bRestoreCharacterMovementAfterStartupReady)
+					{
+						ReleaseStartupMovementLock(true);
+						UE_LOG(
+							LogPhysAnimBridge,
+							Log,
+							TEXT("[PhysAnim] Released startup movement lock after policy settled: influenceAlpha=%.2f shellOffsetCm=%.1f rootLinearCmPerSec=%.1f rootAngularDegPerSec=%.1f settledFor=%.2f."),
+							PolicyInfluenceAlpha,
+							PolicySettleShellOffsetCm,
+							PolicySettleRootLinearSpeedCmPerSecond,
+							PolicySettleRootAngularSpeedDegPerSecond,
+							PolicySettleWindowAccumulatedSeconds);
+					}
+					else
+					{
+						ReleaseStartupMovementLock(false);
+						UE_LOG(
+							LogPhysAnimBridge,
+							Log,
+							TEXT("[PhysAnim] Policy settled, but retaining CharacterMovement lock for diagnostic isolation: influenceAlpha=%.2f shellOffsetCm=%.1f rootLinearCmPerSec=%.1f rootAngularDegPerSec=%.1f settledFor=%.2f."),
+							PolicyInfluenceAlpha,
+							PolicySettleShellOffsetCm,
+							PolicySettleRootLinearSpeedCmPerSecond,
+							PolicySettleRootAngularSpeedDegPerSecond,
+							PolicySettleWindowAccumulatedSeconds);
+					}
+				}
+				else
+				{
+					const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+					if (LastPolicySettleGateLogTimeSeconds < 0.0 || (CurrentTimeSeconds - LastPolicySettleGateLogTimeSeconds) >= 0.5)
+					{
+						UE_LOG(
+							LogPhysAnimBridge,
+							Log,
+							TEXT("[PhysAnim] Delaying movement unlock until policy settles: influenceAlpha=%.2f shellOffsetCm=%.1f rootLinearCmPerSec=%.1f rootAngularDegPerSec=%.1f quietAccum=%.2f/%.2f."),
+							PolicyInfluenceAlpha,
+							PolicySettleShellOffsetCm,
+							PolicySettleRootLinearSpeedCmPerSecond,
+							PolicySettleRootAngularSpeedDegPerSecond,
+							PolicySettleWindowAccumulatedSeconds,
+							EffectiveSettings.PolicySettleRequiredSeconds);
+						LastPolicySettleGateLogTimeSeconds = CurrentTimeSeconds;
+					}
+				}
+			}
+			else
+			{
+				ResetPolicySettleWindowState();
+			}
+		}
+	}
 	TRACE_COUNTER_SET(COUNTER_PhysAnim_RuntimeState, static_cast<int64>(RuntimeState));
 	FString TickError;
 	FPoseSearchBlueprintResult SearchResult;
@@ -1184,6 +1269,34 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		LastValidPoseSearchResult = SearchResult;
 		ConsecutiveInvalidPoseSearchFrames = 0;
+
+		if (EffectiveSettings.bLockCharacterMovementUntilStartupReady)
+		{
+			float StartupQuietLinearSpeedCmPerSecond = 0.0f;
+			float StartupQuietAngularSpeedDegPerSecond = 0.0f;
+			if (!UpdateStartupQuietWindow(DeltaTime, EffectiveSettings, StartupQuietLinearSpeedCmPerSecond, StartupQuietAngularSpeedDegPerSecond))
+			{
+				const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+				if (LastStartupQuietGateLogTimeSeconds < 0.0 || (CurrentTimeSeconds - LastStartupQuietGateLogTimeSeconds) >= 0.5)
+				{
+					UE_LOG(
+						LogPhysAnimBridge,
+						Log,
+						TEXT("[PhysAnim] Startup quiet-window gate holding bridge activation: linearCmPerSec=%.1f angularDegPerSec=%.1f accumulated=%.2fs required=%.2fs"),
+						StartupQuietLinearSpeedCmPerSecond,
+						StartupQuietAngularSpeedDegPerSecond,
+						StartupQuietWindowAccumulatedSeconds,
+						EffectiveSettings.StartupQuietRequiredSeconds);
+					LastStartupQuietGateLogTimeSeconds = CurrentTimeSeconds;
+				}
+
+				FinalizeTraceFrame();
+				return;
+			}
+
+			ReleaseStartupMovementLock(true);
+		}
+
 		if (ResolveInitialPoseSearchSuccessState(EffectiveSettings.bForceZeroActions) == EPhysAnimRuntimeState::ReadyForActivation)
 		{
 			EnterReadyForActivation(EffectiveSettings, TEXT("StartupReadyForActivation"), true);
@@ -1196,6 +1309,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		{
 			FailStopWithTrace(TickError);
 			return;
+		}
+		if (EffectiveSettings.bLockCharacterMovementUntilStartupReady)
+		{
+			ApplyStartupMovementLock();
 		}
 		UE_LOG(
 			LogPhysAnimBridge,
@@ -1574,6 +1691,14 @@ bool UPhysAnimComponent::StartBridge()
 		return false;
 	}
 
+	const FPhysAnimStabilizationSettings EffectiveStartupSettings = ResolveEffectiveStabilizationSettings();
+	if (EffectiveStartupSettings.bLockCharacterMovementUntilStartupReady)
+	{
+		ApplyStartupMovementLock();
+	}
+	ResetStartupQuietWindowState();
+	ResetPolicySettleWindowState();
+
 	bStartupReported = true;
 	SetComponentTickEnabled(true);
 	TransitionRuntimeState(EPhysAnimRuntimeState::RuntimeReady);
@@ -1617,6 +1742,7 @@ bool UPhysAnimComponent::ValidatePhysicsControlAuthoring(FString& OutError) cons
 
 void UPhysAnimComponent::StopBridge()
 {
+	ReleaseStartupMovementLock(true);
 	DeactivateRuntimePhysicsControl(TEXT("StopBridge"));
 	ResetBridgePhysicsState();
 	TransitionRuntimeState(EPhysAnimRuntimeState::Uninitialized);
@@ -3763,9 +3889,296 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 		Context);
 }
 
+
+void UPhysAnimComponent::ApplyStartupMovementLock()
+{
+	ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
+	UCharacterMovementComponent* const CharacterMovement = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr;
+	if (!CharacterMovement)
+	{
+		bStartupMovementLockActive = false;
+		return;
+	}
+
+	if (!bHasSavedStartupMovementLockState)
+	{
+		StartupMovementLockOriginalMode = CharacterMovement->MovementMode;
+		StartupMovementLockOriginalCustomMovementMode = CharacterMovement->CustomMovementMode;
+		bStartupMovementLockOriginalTickEnabled = CharacterMovement->IsComponentTickEnabled();
+		bHasSavedStartupMovementLockState = true;
+	}
+
+	CharacterMovement->StopMovementImmediately();
+	CharacterMovement->DisableMovement();
+	CharacterMovement->SetComponentTickEnabled(false);
+	bStartupMovementLockActive = true;
+}
+
+void UPhysAnimComponent::ReleaseStartupMovementLock(bool bRestoreCharacterMovement)
+{
+	if (!bStartupMovementLockActive && !bHasSavedStartupMovementLockState)
+	{
+		return;
+	}
+
+	ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
+	UCharacterMovementComponent* const CharacterMovement = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr;
+	if (CharacterMovement && bHasSavedStartupMovementLockState && bRestoreCharacterMovement)
+	{
+		CharacterMovement->SetComponentTickEnabled(bStartupMovementLockOriginalTickEnabled);
+		CharacterMovement->SetMovementMode(static_cast<EMovementMode>(StartupMovementLockOriginalMode), StartupMovementLockOriginalCustomMovementMode);
+		bHasSavedStartupMovementLockState = false;
+	}
+
+	bStartupMovementLockActive = false;
+	if (bRestoreCharacterMovement)
+	{
+		bHasSavedStartupMovementLockState = false;
+	}
+}
+
+void UPhysAnimComponent::ResetStartupQuietWindowState()
+{
+	StartupQuietWindowAccumulatedSeconds = 0.0;
+	bHasLastStartupQuietActorRotation = false;
+	LastStartupQuietActorRotation = FRotator::ZeroRotator;
+	LastStartupQuietGateLogTimeSeconds = -1.0;
+}
+
+void UPhysAnimComponent::ResetPolicySettleWindowState()
+{
+	PolicySettleWindowAccumulatedSeconds = 0.0;
+	LastPolicySettleGateLogTimeSeconds = -1.0;
+}
+
+bool UPhysAnimComponent::UpdateStartupQuietWindow(
+	float DeltaTime,
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	float& OutLinearSpeedCmPerSecond,
+	float& OutAngularSpeedDegPerSecond)
+{
+	OutLinearSpeedCmPerSecond = 0.0f;
+	OutAngularSpeedDegPerSecond = 0.0f;
+
+	if (!EffectiveSettings.bLockCharacterMovementUntilStartupReady)
+	{
+		return true;
+	}
+
+	if (EffectiveSettings.StartupQuietRequiredSeconds <= 0.0f)
+	{
+		return true;
+	}
+
+	AActor* const OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return true;
+	}
+
+	OutLinearSpeedCmPerSecond = OwnerActor->GetVelocity().Size();
+
+	const FRotator CurrentActorRotation = OwnerActor->GetActorRotation();
+	if (bHasLastStartupQuietActorRotation && DeltaTime > SMALL_NUMBER)
+	{
+		const FRotator DeltaRotation = (CurrentActorRotation - LastStartupQuietActorRotation).GetNormalized();
+		OutAngularSpeedDegPerSecond =
+			FMath::Max3(
+				FMath::Abs(DeltaRotation.Roll),
+				FMath::Abs(DeltaRotation.Pitch),
+				FMath::Abs(DeltaRotation.Yaw)) / DeltaTime;
+	}
+
+	LastStartupQuietActorRotation = CurrentActorRotation;
+	bHasLastStartupQuietActorRotation = true;
+
+	const bool bWithinQuietWindow =
+		OutLinearSpeedCmPerSecond <= EffectiveSettings.StartupQuietLinearSpeedThresholdCmPerSecond &&
+		OutAngularSpeedDegPerSecond <= EffectiveSettings.StartupQuietAngularSpeedThresholdDegPerSec;
+
+	if (bWithinQuietWindow)
+	{
+		StartupQuietWindowAccumulatedSeconds += DeltaTime;
+	}
+	else
+	{
+		StartupQuietWindowAccumulatedSeconds = 0.0;
+	}
+
+	return StartupQuietWindowAccumulatedSeconds >= EffectiveSettings.StartupQuietRequiredSeconds;
+}
+
+bool UPhysAnimComponent::UpdatePolicySettleWindow(
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	float& OutShellOffsetCm,
+	float& OutRootLinearSpeedCmPerSecond,
+	float& OutRootAngularSpeedDegPerSecond)
+{
+	OutShellOffsetCm = 0.0f;
+	OutRootLinearSpeedCmPerSecond = LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond;
+	OutRootAngularSpeedDegPerSecond = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
+
+	if (!EffectiveSettings.bLockCharacterMovementUntilStartupReady || !EffectiveSettings.bDelayMovementUnlockUntilPolicySettled)
+	{
+		return true;
+	}
+
+	if (EffectiveSettings.PolicySettleRequiredSeconds <= 0.0f)
+	{
+		return true;
+	}
+
+	AActor* const OwnerActor = GetOwner();
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (OwnerActor && SkeletalMesh)
+	{
+		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		const FVector OwnerLocationCm = OwnerActor->GetActorLocation();
+		const FVector RootLocationCm = SkeletalMesh->GetBoneLocation(RootBoneName, EBoneSpaces::WorldSpace);
+		if (!bHasShellCouplingReferenceRootLocalOffset)
+		{
+			ShellCouplingReferenceRootLocalOffsetCm = RootLocationCm - OwnerLocationCm;
+			bHasShellCouplingReferenceRootLocalOffset = true;
+		}
+		OutShellOffsetCm = ResolveShellCouplingPlanarOffsetDeltaCm(
+			OwnerLocationCm,
+			RootLocationCm,
+			ShellCouplingReferenceRootLocalOffsetCm);
+	}
+
+	const bool bWithinQuietWindow =
+		OutShellOffsetCm <= EffectiveSettings.PolicySettleMaxShellOffsetCm &&
+		OutRootLinearSpeedCmPerSecond <= EffectiveSettings.PolicySettleMaxRootLinearSpeedCmPerSecond &&
+		OutRootAngularSpeedDegPerSecond <= EffectiveSettings.PolicySettleMaxRootAngularSpeedDegPerSec;
+
+	const UWorld* const World = GetWorld();
+	const float DeltaSeconds = World ? World->GetDeltaSeconds() : 0.0f;
+	if (bWithinQuietWindow)
+	{
+		PolicySettleWindowAccumulatedSeconds += DeltaSeconds;
+	}
+	else
+	{
+		PolicySettleWindowAccumulatedSeconds = 0.0;
+	}
+
+	return PolicySettleWindowAccumulatedSeconds >= EffectiveSettings.PolicySettleRequiredSeconds;
+}
+
+bool UPhysAnimComponent::HandlePrePolicyShellRecovery(const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	if (!EffectiveSettings.bEnablePrePolicyShellRecovery)
+	{
+		return false;
+	}
+
+	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive)
+	{
+		return false;
+	}
+
+	if (PolicyInfluenceRampStartTimeSeconds >= 0.0 || CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) > KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	AActor* const OwnerActor = GetOwner();
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
+	if (!OwnerActor || !SkeletalMesh || !PhysicsControl)
+	{
+		return false;
+	}
+
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	if (SkeletalMesh->GetBoneIndex(RootBoneName) == INDEX_NONE)
+	{
+		return false;
+	}
+
+	const FVector OwnerLocationCm = OwnerActor->GetActorLocation();
+	const FVector RootLocationCm = SkeletalMesh->GetBoneLocation(RootBoneName, EBoneSpaces::WorldSpace);
+
+	if (!bHasShellCouplingReferenceRootLocalOffset)
+	{
+		ShellCouplingReferenceRootLocalOffsetCm = RootLocationCm - OwnerLocationCm;
+		bHasShellCouplingReferenceRootLocalOffset = true;
+	}
+
+	const float ShellPlanarOffsetDeltaCm = ResolveShellCouplingPlanarOffsetDeltaCm(
+		OwnerLocationCm,
+		RootLocationCm,
+		ShellCouplingReferenceRootLocalOffsetCm);
+	const float RootAngularSpeedDegPerSecond = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
+
+	if (ShellPlanarOffsetDeltaCm < EffectiveSettings.PrePolicyShellRecoveryOffsetThresholdCm &&
+		RootAngularSpeedDegPerSecond < EffectiveSettings.PrePolicyShellRecoveryRootAngularSpeedThresholdDegPerSec)
+	{
+		return false;
+	}
+
+	FString RecoveryError;
+	const bool bSeeded = SeedControlTargetsFromCurrentPose(0.0f, RecoveryError);
+
+	TArray<FName> ModifierNamesToReset;
+	ModifierNamesToReset.Reserve(PhysAnimBridge::GetRequiredBodyModifierBoneNames().Num());
+	for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+	{
+		if (BoneName == RootBoneName)
+		{
+			continue;
+		}
+
+		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
+		if (!IsBringUpGroupUnlocked(BringUpGroupIndex))
+		{
+			continue;
+		}
+
+		const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+		if (PhysicsControl->GetBodyModifierExists(ModifierName))
+		{
+			ModifierNamesToReset.Add(ModifierName);
+		}
+	}
+
+	if (!ModifierNamesToReset.IsEmpty())
+	{
+		PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(
+			ModifierNamesToReset,
+			EResetToCachedTargetBehavior::ResetDuringUpdateControls,
+			true,
+			false);
+	}
+
+	BringUpGroupStableAccumulatedSeconds = 0.0f;
+
+	const double CurrentRecoveryTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (LastPrePolicyShellRecoveryLogTimeSeconds < 0.0 || (CurrentRecoveryTimeSeconds - LastPrePolicyShellRecoveryLogTimeSeconds) >= 0.5)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnim] Pre-policy shell recovery triggered: shellOffsetCm=%.1f rootAngDegPerSec=%.1f seeded=%s modifiersReset=%d error=%s"),
+			ShellPlanarOffsetDeltaCm,
+			RootAngularSpeedDegPerSecond,
+			bSeeded ? TEXT("true") : TEXT("false"),
+			ModifierNamesToReset.Num(),
+			RecoveryError.IsEmpty() ? TEXT("None") : *RecoveryError);
+		LastPrePolicyShellRecoveryLogTimeSeconds = CurrentRecoveryTimeSeconds;
+	}
+
+	return true;
+}
+
 void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
 	if (EffectiveSettings.bForceZeroActions || !IsBringUpGroupUnlocked(0))
+	{
+		return;
+	}
+
+	if (HandlePrePolicyShellRecovery(EffectiveSettings))
 	{
 		return;
 	}
@@ -3825,6 +4238,15 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 				Log,
 				TEXT("[PhysAnim] Stabilization policy influence ramp enabled after final-group control settle."));
 		}
+		return;
+	}
+
+	const int32 MaxConfiguredAutoUnlockGroup =
+		EffectiveSettings.MaxAutoUnlockBringUpGroup >= 0
+			? FMath::Min(EffectiveSettings.MaxAutoUnlockBringUpGroup, GetBringUpGroupCount() - 1)
+			: (GetBringUpGroupCount() - 1);
+	if (HighestUnlockedBringUpGroupIndex >= MaxConfiguredAutoUnlockGroup)
+	{
 		return;
 	}
 

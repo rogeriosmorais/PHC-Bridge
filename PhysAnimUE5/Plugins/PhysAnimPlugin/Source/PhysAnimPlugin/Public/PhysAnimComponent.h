@@ -137,6 +137,51 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float InstabilityGracePeriodSeconds = 0.25f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "-1", ClampMax = "4"))
+	int32 MaxAutoUnlockBringUpGroup = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
+	bool bEnablePrePolicyShellRecovery = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
+	float PrePolicyShellRecoveryOffsetThresholdCm = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
+	float PrePolicyShellRecoveryRootAngularSpeedThresholdDegPerSec = 120.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
+	bool bLockCharacterMovementUntilStartupReady = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady", ClampMin = "0.0"))
+	float StartupQuietLinearSpeedThresholdCmPerSecond = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady", ClampMin = "0.0"))
+	float StartupQuietAngularSpeedThresholdDegPerSec = 30.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady", ClampMin = "0.0"))
+	float StartupQuietRequiredSeconds = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady"))
+	bool bDelayMovementUnlockUntilPolicySettled = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady"))
+	bool bRestoreCharacterMovementAfterStartupReady = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && bDelayMovementUnlockUntilPolicySettled", ClampMin = "0.0", ClampMax = "1.0"))
+	float PolicySettleMinInfluenceAlpha = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && bDelayMovementUnlockUntilPolicySettled", ClampMin = "0.0"))
+	float PolicySettleMaxShellOffsetCm = 2.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && bDelayMovementUnlockUntilPolicySettled", ClampMin = "0.0"))
+	float PolicySettleMaxRootLinearSpeedCmPerSecond = 40.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && bDelayMovementUnlockUntilPolicySettled", ClampMin = "0.0"))
+	float PolicySettleMaxRootAngularSpeedDegPerSec = 120.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && bDelayMovementUnlockUntilPolicySettled", ClampMin = "0.0"))
+	float PolicySettleRequiredSeconds = 0.15f;
+
 	bool operator==(const FPhysAnimStabilizationSettings& Other) const
 	{
 		return bForceZeroActions == Other.bForceZeroActions &&
@@ -175,7 +220,22 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(MaxRootHeightDeltaCm, Other.MaxRootHeightDeltaCm) &&
 			FMath::IsNearlyEqual(MaxRootLinearSpeedCmPerSecond, Other.MaxRootLinearSpeedCmPerSecond) &&
 			FMath::IsNearlyEqual(MaxRootAngularSpeedDegPerSecond, Other.MaxRootAngularSpeedDegPerSecond) &&
-			FMath::IsNearlyEqual(InstabilityGracePeriodSeconds, Other.InstabilityGracePeriodSeconds);
+			FMath::IsNearlyEqual(InstabilityGracePeriodSeconds, Other.InstabilityGracePeriodSeconds) &&
+			MaxAutoUnlockBringUpGroup == Other.MaxAutoUnlockBringUpGroup &&
+			bEnablePrePolicyShellRecovery == Other.bEnablePrePolicyShellRecovery &&
+			FMath::IsNearlyEqual(PrePolicyShellRecoveryOffsetThresholdCm, Other.PrePolicyShellRecoveryOffsetThresholdCm) &&
+			FMath::IsNearlyEqual(PrePolicyShellRecoveryRootAngularSpeedThresholdDegPerSec, Other.PrePolicyShellRecoveryRootAngularSpeedThresholdDegPerSec) &&
+			bLockCharacterMovementUntilStartupReady == Other.bLockCharacterMovementUntilStartupReady &&
+			FMath::IsNearlyEqual(StartupQuietLinearSpeedThresholdCmPerSecond, Other.StartupQuietLinearSpeedThresholdCmPerSecond) &&
+			FMath::IsNearlyEqual(StartupQuietAngularSpeedThresholdDegPerSec, Other.StartupQuietAngularSpeedThresholdDegPerSec) &&
+			FMath::IsNearlyEqual(StartupQuietRequiredSeconds, Other.StartupQuietRequiredSeconds) &&
+			bDelayMovementUnlockUntilPolicySettled == Other.bDelayMovementUnlockUntilPolicySettled &&
+			bRestoreCharacterMovementAfterStartupReady == Other.bRestoreCharacterMovementAfterStartupReady &&
+			FMath::IsNearlyEqual(PolicySettleMinInfluenceAlpha, Other.PolicySettleMinInfluenceAlpha) &&
+			FMath::IsNearlyEqual(PolicySettleMaxShellOffsetCm, Other.PolicySettleMaxShellOffsetCm) &&
+			FMath::IsNearlyEqual(PolicySettleMaxRootLinearSpeedCmPerSecond, Other.PolicySettleMaxRootLinearSpeedCmPerSecond) &&
+			FMath::IsNearlyEqual(PolicySettleMaxRootAngularSpeedDegPerSec, Other.PolicySettleMaxRootAngularSpeedDegPerSec) &&
+			FMath::IsNearlyEqual(PolicySettleRequiredSeconds, Other.PolicySettleRequiredSeconds);
 	}
 
 	bool operator!=(const FPhysAnimStabilizationSettings& Other) const
@@ -328,6 +388,13 @@ private:
 	bool IsMovementSmokeModeEnabled() const;
 	void ApplyMovementSmokeInput(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void MaybeLogRuntimeDiagnostics(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
+	bool HandlePrePolicyShellRecovery(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void ApplyStartupMovementLock();
+	void ReleaseStartupMovementLock(bool bRestoreCharacterMovement = true);
+	void ResetStartupQuietWindowState();
+	bool UpdateStartupQuietWindow(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, float& OutLinearSpeedCmPerSecond, float& OutAngularSpeedDegPerSecond);
+	void ResetPolicySettleWindowState();
+	bool UpdatePolicySettleWindow(const FPhysAnimStabilizationSettings& EffectiveSettings, float& OutShellOffsetCm, float& OutRootLinearSpeedCmPerSecond, float& OutRootAngularSpeedDegPerSecond);
 	void ResetStabilizationRuntimeState();
 	void FailStop(const FString& Reason);
 	void StartBridgeTraceSession();
@@ -390,6 +457,18 @@ private:
 	int32 ConsecutiveInvalidPoseSearchFrames = 0;
 	bool bStartupReported = false;
 	bool bPendingStartupRestPoseCapture = false;
+	bool bHasSavedStartupMovementLockState = false;
+	bool bStartupMovementLockActive = false;
+	bool bStartupMovementLockOriginalTickEnabled = false;
+	uint8 StartupMovementLockOriginalMode = 0;
+	uint8 StartupMovementLockOriginalCustomMovementMode = 0;
+	double StartupQuietWindowAccumulatedSeconds = 0.0;
+	bool bHasLastStartupQuietActorRotation = false;
+	FRotator LastStartupQuietActorRotation = FRotator::ZeroRotator;
+	double LastStartupQuietGateLogTimeSeconds = -1.0;
+	double PolicySettleWindowAccumulatedSeconds = 0.0;
+	double LastPolicySettleGateLogTimeSeconds = -1.0;
+	double LastPrePolicyShellRecoveryLogTimeSeconds = -1.0;
 	bool bHasSavedStartupAnimationState = false;
 	uint8 SavedStartupAnimationMode = 0;
 	TSubclassOf<UAnimInstance> SavedStartupAnimClass;
