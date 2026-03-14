@@ -2124,7 +2124,7 @@ void UPhysAnimComponent::CacheRestPoses(UAnimSequence* TPoseAnim)
 
 	TArray<FTransform> SampledLocalPose = RefLocalPose;
 
-	const FAnimExtractContext ExtractionContext(0.0f, true);
+	const FAnimExtractContext ExtractionContext(0.0, true);
 
 	for (int32 BoneIndex = 0; BoneIndex < NumSkeletonBones; ++BoneIndex)
 	{
