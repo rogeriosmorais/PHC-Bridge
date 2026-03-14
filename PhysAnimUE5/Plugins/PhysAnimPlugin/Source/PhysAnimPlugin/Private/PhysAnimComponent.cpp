@@ -2273,7 +2273,34 @@ void UPhysAnimComponent::CacheRestPoses(UAnimSequence* TPoseAnim)
 	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
 	CachedSmplObservationRestComponentTransforms.Reserve(BoneNames.Num());
 
-	const FTransform MeshComponentTransform = Mesh->GetComponentTransform();
+	const int32 NumSkeletonBones = RefSkeleton.GetNum();
+	const TArray<FTransform>& RefLocalPose = RefSkeleton.GetRefBonePose();
+
+	TArray<FTransform> SampledLocalPose = RefLocalPose;
+
+	const FAnimExtractContext ExtractionContext(0.0, true);
+
+	for (int32 BoneIndex = 0; BoneIndex < NumSkeletonBones; ++BoneIndex)
+	{
+		FTransform LocalBoneTransform = RefLocalPose[BoneIndex];
+		TPoseAnim->GetBoneTransform(LocalBoneTransform, FSkeletonPoseBoneIndex(BoneIndex), ExtractionContext, false);
+		SampledLocalPose[BoneIndex] = LocalBoneTransform;
+	}
+
+	TArray<FQuat> ComponentRotations;
+	ComponentRotations.SetNum(NumSkeletonBones);
+
+	for (int32 BoneIndex = 0; BoneIndex < NumSkeletonBones; ++BoneIndex)
+	{
+		const int32 ParentIndex = RefSkeleton.GetParentIndex(BoneIndex);
+		const FQuat LocalRotation = SampledLocalPose[BoneIndex].GetRotation().GetNormalized();
+
+		ComponentRotations[BoneIndex] = ParentIndex == INDEX_NONE
+			? LocalRotation
+			: (ComponentRotations[ParentIndex] * LocalRotation).GetNormalized();
+	}
+
+	CachedSmplObservationRestComponentRotations.Reserve(BoneNames.Num());
 
 	for (const FName& BoneName : BoneNames)
 	{
