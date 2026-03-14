@@ -241,6 +241,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "PhysAnim | Policy")
 	TObjectPtr<UAnimSequence> TPoseReference;
 
+	UPROPERTY(EditAnywhere, Category = "PhysAnim | Debug")
+	bool bRunStartupTPoseIdentityCheck = false;
+
 	/** Number of threads the ONNX CPU backend is permitted to use for inference. */
 	UPROPERTY(EditDefaultsOnly, Category = "PhysAnim | Policy", meta = (ClampMin = "1"))
 	int32 InferenceThreads = 2;
@@ -350,6 +353,7 @@ private:
 	bool FinalizeStartupTPoseCaptureAndStartBridge(FString& OutError);
 	void SaveStartupAnimationState(USkeletalMeshComponent* SkeletalMesh);
 	void RestoreStartupAnimationState(USkeletalMeshComponent* SkeletalMesh);
+	void LogTPoseIdentityCheck() const;
 
 	UE::NNE::IModelInstanceRunSync* GetModelInstanceRunSync() const;
 	TConstArrayView<UE::NNE::FTensorDesc> GetInputTensorDescs() const;

@@ -696,6 +696,14 @@ namespace
 		SkeletalMesh->RefreshBoneTransforms();
 		SkeletalMesh->UpdateComponentToWorld();
 	}
+
+	float QuaternionAngularErrorDegrees(const FQuat& InQuat)
+	{
+		const FQuat NormalizedQuat = InQuat.GetNormalized();
+		const float SafeW = FMath::Clamp(FMath::Abs(NormalizedQuat.W), 0.0f, 1.0f);
+		const float AngleRadians = 2.0f * FMath::Acos(SafeW);
+		return FMath::RadiansToDegrees(AngleRadians);
+	}
 }
 
 void UPhysAnimComponent::BeginPlay()
@@ -757,6 +765,11 @@ bool UPhysAnimComponent::FinalizeStartupTPoseCaptureAndStartBridge(FString& OutE
 		return false;
 	}
 
+	if (bRunStartupTPoseIdentityCheck)
+	{
+		LogTPoseIdentityCheck();
+	}
+
 	RestoreStartupAnimationState(SkeletalMesh);
 	return StartBridge();
 }
@@ -809,6 +822,87 @@ void UPhysAnimComponent::RestoreStartupAnimationState(USkeletalMeshComponent* Sk
 	bHasSavedStartupAnimationState = false;
 	SavedStartupAnimClass = nullptr;
 	SavedStartupAnimationAsset = nullptr;
+}
+
+void UPhysAnimComponent::LogTPoseIdentityCheck() const
+{
+	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] TPose identity check skipped: skeletal mesh component was not resolved."));
+		return;
+	}
+
+	if (CachedSmplObservationRestComponentTransforms.IsEmpty())
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] TPose identity check skipped: cached rest transforms are empty."));
+		return;
+	}
+
+	static const TSet<FName> DebugBones =
+	{
+		TEXT("clavicle_l"),
+		TEXT("upperarm_l"),
+		TEXT("lowerarm_l"),
+		TEXT("hand_l"),
+		TEXT("clavicle_r"),
+		TEXT("upperarm_r"),
+		TEXT("lowerarm_r"),
+		TEXT("hand_r")
+	};
+
+	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
+	const FTransform MeshComponentTransform = SkeletalMesh->GetComponentTransform();
+
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] === TPose identity check start ==="));
+
+	for (int32 BoneIndex = 0; BoneIndex < BoneNames.Num(); ++BoneIndex)
+	{
+		const FName& BoneName = BoneNames[BoneIndex];
+		if (!DebugBones.Contains(BoneName))
+		{
+			continue;
+		}
+
+		if (SkeletalMesh->GetBoneIndex(BoneName) == INDEX_NONE)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] TPose identity bone=%s skipped: missing on skeletal mesh."), *BoneName.ToString());
+			continue;
+		}
+
+		const FTransform BoneWorldTransform = SkeletalMesh->GetBoneTransform(BoneName, RTS_World);
+		FTransform CurrentComponentTransform = BoneWorldTransform.GetRelativeTransform(MeshComponentTransform);
+		CurrentComponentTransform.NormalizeRotation();
+
+		const FTransform& RestComponentTransform = CachedSmplObservationRestComponentTransforms[BoneIndex];
+
+		const FQuat QuaternionDelta =
+			(CurrentComponentTransform.GetRotation().GetNormalized() *
+			 RestComponentTransform.GetRotation().Inverse()).GetNormalized();
+
+		const FMatrix CurrentComponentMatrix = CurrentComponentTransform.ToMatrixNoScale();
+		const FMatrix RestComponentMatrix = RestComponentTransform.ToMatrixNoScale();
+		const FMatrix MatrixDelta = CurrentComponentMatrix * RestComponentMatrix.InverseFast();
+		const FQuat MatrixDeltaQuat = FQuat(MatrixDelta).GetNormalized();
+
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnim] TPose identity bone=%s quat_err_deg=%.3f matrix_err_deg=%.3f current_q=(%.5f, %.5f, %.5f, %.5f) rest_q=(%.5f, %.5f, %.5f, %.5f)"),
+			*BoneName.ToString(),
+			QuaternionAngularErrorDegrees(QuaternionDelta),
+			QuaternionAngularErrorDegrees(MatrixDeltaQuat),
+			CurrentComponentTransform.GetRotation().X,
+			CurrentComponentTransform.GetRotation().Y,
+			CurrentComponentTransform.GetRotation().Z,
+			CurrentComponentTransform.GetRotation().W,
+			RestComponentTransform.GetRotation().X,
+			RestComponentTransform.GetRotation().Y,
+			RestComponentTransform.GetRotation().Z,
+			RestComponentTransform.GetRotation().W);
+	}
+
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] === TPose identity check end ==="));
 }
 
 void UPhysAnimComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -2326,8 +2420,8 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 		FQuat CorrectedComponentRotation = CurrentComponentTransform.GetRotation().GetNormalized();
 		if (CachedSmplObservationRestComponentTransforms.IsValidIndex(i))
 		{
-			const FMatrix CurrentComponentMatrix = CurrentComponentTransform.ToMatrixWithScale();
-			const FMatrix RestComponentMatrix = CachedSmplObservationRestComponentTransforms[i].ToMatrixWithScale();
+			const FMatrix CurrentComponentMatrix = CurrentComponentTransform.ToMatrixNoScale();
+			const FMatrix RestComponentMatrix = CachedSmplObservationRestComponentTransforms[i].ToMatrixNoScale();
 			const FMatrix CorrectedComponentMatrix = CurrentComponentMatrix * RestComponentMatrix.InverseFast();
 			CorrectedComponentRotation = FQuat(CorrectedComponentMatrix).GetNormalized();
 		}
@@ -2527,8 +2621,8 @@ bool UPhysAnimComponent::SampleFuturePoses(
 			FQuat CorrectedRotation = CorrectedTransform.GetRotation().GetNormalized();
 			if (CachedSmplObservationRestComponentTransforms.IsValidIndex(i))
 			{
-				const FMatrix SampledComponentMatrix = CorrectedTransform.ToMatrixWithScale();
-				const FMatrix RestComponentMatrix = CachedSmplObservationRestComponentTransforms[i].ToMatrixWithScale();
+				const FMatrix SampledComponentMatrix = CorrectedTransform.ToMatrixNoScale();
+				const FMatrix RestComponentMatrix = CachedSmplObservationRestComponentTransforms[i].ToMatrixNoScale();
 				const FMatrix CorrectedComponentMatrix = SampledComponentMatrix * RestComponentMatrix.InverseFast();
 				CorrectedRotation = FQuat(CorrectedComponentMatrix).GetNormalized();
 			}
