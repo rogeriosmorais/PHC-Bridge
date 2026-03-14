@@ -36,7 +36,7 @@ Assume repo root is inferred automatically.
 
 ```powershell
 & "$UE5_PATH\Build\BatchFiles\Build.bat" PhysAnimUE5Editor Win64 Development `
-  -Project="PhysAnimUE5\PhysAnimUE5.uproject" `
+  -Project="$PWD\PhysAnimUE5\PhysAnimUE5.uproject" `
   -Progress -NoHotReloadFromIDE
 ```
 
