@@ -13,6 +13,7 @@
 #include "PhysAnimComponent.generated.h"
 
 class UAnimInstance;
+class UAnimationAsset;
 class UAnimSequence;
 class UCapsuleComponent;
 class UCharacterMovementComponent;
@@ -345,6 +346,10 @@ private:
 	bool IsPresentationPerturbationOverrideActive() const;
 
 	void CacheRestPoses(UAnimSequence* TPoseAnim);
+	bool BeginStartupTPoseCapture(FString& OutError);
+	bool FinalizeStartupTPoseCaptureAndStartBridge(FString& OutError);
+	void SaveStartupAnimationState(USkeletalMeshComponent* SkeletalMesh);
+	void RestoreStartupAnimationState(USkeletalMeshComponent* SkeletalMesh);
 
 	UE::NNE::IModelInstanceRunSync* GetModelInstanceRunSync() const;
 	TConstArrayView<UE::NNE::FTensorDesc> GetInputTensorDescs() const;
@@ -361,7 +366,7 @@ private:
 	TSharedPtr<UE::NNE::IModelInstanceGPU> ModelInstanceGPU;
 	TSharedPtr<UE::NNE::IModelInstanceCPU> ModelInstanceCPU;
 
-	TArray<FQuat> CachedSmplObservationRestComponentRotations;
+	TArray<FTransform> CachedSmplObservationRestComponentTransforms;
 
 	TObjectPtr<UNNEModelData> LoadedModelData = nullptr;
 	TObjectPtr<UPoseSearchDatabase> LoadedPoseSearchDatabase = nullptr;
@@ -380,6 +385,11 @@ private:
 	FPoseSearchBlueprintResult LastValidPoseSearchResult;
 	int32 ConsecutiveInvalidPoseSearchFrames = 0;
 	bool bStartupReported = false;
+	bool bPendingStartupRestPoseCapture = false;
+	bool bHasSavedStartupAnimationState = false;
+	uint8 SavedStartupAnimationMode = 0;
+	TSubclassOf<UAnimInstance> SavedStartupAnimClass;
+	TObjectPtr<UAnimationAsset> SavedStartupAnimationAsset = nullptr;
 	FString ActiveRuntimeName;
 	FPhysAnimStabilizationSettings LastAppliedStabilizationSettings;
 	FPhysAnimActionDiagnostics LastActionDiagnostics;

@@ -7,6 +7,7 @@
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimationAsset.h"
+#include "Animation/AnimSingleNodeInstance.h"
 #include "CollisionQueryParams.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -678,10 +679,136 @@ bool UPhysAnimComponent::EvaluateRuntimeInstability(
 		OutError);
 }
 
+namespace
+{
+	void ForceTPoseReferenceOntoMesh(USkeletalMeshComponent* const SkeletalMesh, UAnimSequence* const TPoseReference)
+	{
+		if (!SkeletalMesh || !TPoseReference)
+		{
+			return;
+		}
+
+		SkeletalMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		SkeletalMesh->SetAnimation(TPoseReference);
+		SkeletalMesh->PlayAnimation(TPoseReference, false);
+		SkeletalMesh->SetPosition(0.0f, false);
+		SkeletalMesh->TickAnimation(0.0f, false);
+		SkeletalMesh->RefreshBoneTransforms();
+		SkeletalMesh->UpdateComponentToWorld();
+	}
+}
+
 void UPhysAnimComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	StartBridge();
+
+	FString Error;
+	if (!BeginStartupTPoseCapture(Error))
+	{
+		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked before live T-pose capture: %s"), *Error);
+		SetComponentTickEnabled(false);
+		TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+		UpdateBridgeStatusIndicator(5.0f);
+	}
+}
+
+bool UPhysAnimComponent::BeginStartupTPoseCapture(FString& OutError)
+{
+	if (!TPoseReference)
+	{
+		OutError = TEXT("PhysAnimComponent requires a valid TPoseReference animation to align bone axes. Please assign a 1-frame T-Pose AnimSequence.");
+		return false;
+	}
+
+	if (!ResolveRuntimeContext(OutError))
+	{
+		return false;
+	}
+
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		OutError = TEXT("Skeletal mesh component was not resolved for live T-pose capture.");
+		return false;
+	}
+
+	SaveStartupAnimationState(SkeletalMesh);
+	ForceTPoseReferenceOntoMesh(SkeletalMesh, TPoseReference);
+	bPendingStartupRestPoseCapture = true;
+	SetComponentTickEnabled(true);
+	PrimaryComponentTick.SetTickFunctionEnable(true);
+	return true;
+}
+
+bool UPhysAnimComponent::FinalizeStartupTPoseCaptureAndStartBridge(FString& OutError)
+{
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		OutError = TEXT("Skeletal mesh component was not resolved while finalizing live T-pose capture.");
+		return false;
+	}
+
+	ForceTPoseReferenceOntoMesh(SkeletalMesh, TPoseReference);
+	CacheRestPoses(TPoseReference);
+	if (CachedSmplObservationRestComponentTransforms.IsEmpty())
+	{
+		OutError = TEXT("Live T-pose capture did not populate any cached rest transforms.");
+		return false;
+	}
+
+	RestoreStartupAnimationState(SkeletalMesh);
+	return StartBridge();
+}
+
+void UPhysAnimComponent::SaveStartupAnimationState(USkeletalMeshComponent* SkeletalMesh)
+{
+	if (!SkeletalMesh)
+	{
+		bHasSavedStartupAnimationState = false;
+		return;
+	}
+
+	SavedStartupAnimationMode = static_cast<uint8>(SkeletalMesh->GetAnimationMode());
+	SavedStartupAnimClass = SkeletalMesh->GetAnimClass();
+	SavedStartupAnimationAsset = nullptr;
+	if (static_cast<EAnimationMode::Type>(SavedStartupAnimationMode) == EAnimationMode::AnimationSingleNode)
+	{
+		if (UAnimSingleNodeInstance* SingleNodeInstance = SkeletalMesh->GetSingleNodeInstance())
+		{
+			SavedStartupAnimationAsset = SingleNodeInstance->GetCurrentAsset();
+		}
+	}
+	bHasSavedStartupAnimationState = true;
+}
+
+void UPhysAnimComponent::RestoreStartupAnimationState(USkeletalMeshComponent* SkeletalMesh)
+{
+	if (!SkeletalMesh || !bHasSavedStartupAnimationState)
+	{
+		return;
+	}
+
+	const EAnimationMode::Type SavedMode = static_cast<EAnimationMode::Type>(SavedStartupAnimationMode);
+	SkeletalMesh->SetAnimationMode(SavedMode);
+
+	if (SavedMode == EAnimationMode::AnimationBlueprint)
+	{
+		SkeletalMesh->SetAnimInstanceClass(SavedStartupAnimClass.Get());
+	}
+	else if (SavedMode == EAnimationMode::AnimationSingleNode && SavedStartupAnimationAsset)
+	{
+		SkeletalMesh->SetAnimation(SavedStartupAnimationAsset);
+		SkeletalMesh->PlayAnimation(SavedStartupAnimationAsset, false);
+	}
+
+	SkeletalMesh->TickAnimation(0.0f, false);
+	SkeletalMesh->RefreshBoneTransforms();
+	SkeletalMesh->UpdateComponentToWorld();
+
+	bHasSavedStartupAnimationState = false;
+	SavedStartupAnimClass = nullptr;
+	SavedStartupAnimationAsset = nullptr;
 }
 
 void UPhysAnimComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -851,6 +978,20 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	UpdateBridgeStatusIndicator(0.25f);
+
+	if (bPendingStartupRestPoseCapture)
+	{
+		bPendingStartupRestPoseCapture = false;
+		FString StartupError;
+		if (!FinalizeStartupTPoseCaptureAndStartBridge(StartupError))
+		{
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked after live T-pose capture: %s"), *StartupError);
+			TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+			UpdateBridgeStatusIndicator(5.0f);
+			SetComponentTickEnabled(false);
+		}
+		return;
+	}
 
 	if (RuntimeState != EPhysAnimRuntimeState::WaitingForPoseSearch &&
 		RuntimeState != EPhysAnimRuntimeState::ReadyForActivation &&
@@ -1299,6 +1440,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 bool UPhysAnimComponent::StartBridge()
 {
+	if (bPendingStartupRestPoseCapture)
+	{
+		return true;
+	}
+
 	if (RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
 		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
 		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation)
@@ -2013,7 +2159,11 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 				OutError = TEXT("PhysAnimComponent requires a valid TPoseReference animation to align bone axes. Please assign a 1-frame T-Pose AnimSequence.");
 				return false;
 			}
-			CacheRestPoses(TPoseReference);
+			if (CachedSmplObservationRestComponentTransforms.IsEmpty())
+			{
+				OutError = TEXT("Live T-pose capture did not populate cached rest transforms before model initialization.");
+				return false;
+			}
 			return true;
 		}
 	}
@@ -2038,7 +2188,11 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 				OutError = TEXT("PhysAnimComponent requires a valid TPoseReference animation to align bone axes. Please assign a 1-frame T-Pose AnimSequence.");
 				return false;
 			}
-			CacheRestPoses(TPoseReference);
+			if (CachedSmplObservationRestComponentTransforms.IsEmpty())
+			{
+				OutError = TEXT("Live T-pose capture did not populate cached rest transforms before model initialization.");
+				return false;
+			}
 			return true;
 		}
 	}
@@ -2101,7 +2255,7 @@ bool UPhysAnimComponent::ValidateModelDescriptorContract(FString& OutError)
 
 void UPhysAnimComponent::CacheRestPoses(UAnimSequence* TPoseAnim)
 {
-	CachedSmplObservationRestComponentRotations.Reset();
+	CachedSmplObservationRestComponentTransforms.Reset();
 
 	const USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	if (!TPoseAnim)
@@ -2116,49 +2270,24 @@ void UPhysAnimComponent::CacheRestPoses(UAnimSequence* TPoseAnim)
 		return;
 	}
 
-	const FReferenceSkeleton& RefSkeleton = Mesh->GetSkeletalMeshAsset()->GetRefSkeleton();
 	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
+	CachedSmplObservationRestComponentTransforms.Reserve(BoneNames.Num());
 
-	const int32 NumSkeletonBones = RefSkeleton.GetNum();
-	const TArray<FTransform>& RefLocalPose = RefSkeleton.GetRefBonePose();
-
-	TArray<FTransform> SampledLocalPose = RefLocalPose;
-
-	const FAnimExtractContext ExtractionContext(0.0f, true);
-
-	for (int32 BoneIndex = 0; BoneIndex < NumSkeletonBones; ++BoneIndex)
-	{
-		FTransform LocalBoneTransform = RefLocalPose[BoneIndex];
-		TPoseAnim->GetBoneTransform(LocalBoneTransform, FSkeletonPoseBoneIndex(BoneIndex), ExtractionContext, false);
-		SampledLocalPose[BoneIndex] = LocalBoneTransform;
-	}
-
-	TArray<FQuat> ComponentRotations;
-	ComponentRotations.SetNum(NumSkeletonBones);
-
-	for (int32 BoneIndex = 0; BoneIndex < NumSkeletonBones; ++BoneIndex)
-	{
-		const int32 ParentIndex = RefSkeleton.GetParentIndex(BoneIndex);
-		const FQuat LocalRotation = SampledLocalPose[BoneIndex].GetRotation().GetNormalized();
-
-		ComponentRotations[BoneIndex] = ParentIndex == INDEX_NONE
-			? LocalRotation
-			: (ComponentRotations[ParentIndex] * LocalRotation).GetNormalized();
-	}
-
-	CachedSmplObservationRestComponentRotations.Reserve(BoneNames.Num());
+	const FTransform MeshComponentTransform = Mesh->GetComponentTransform();
 
 	for (const FName& BoneName : BoneNames)
 	{
-		const int32 BoneIndex = RefSkeleton.FindBoneIndex(BoneName);
-		if (BoneIndex == INDEX_NONE)
+		if (Mesh->GetBoneIndex(BoneName) == INDEX_NONE)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] Could not find bone '%s' for rest pose caching."), *GetName(), *BoneName.ToString());
-			CachedSmplObservationRestComponentRotations.Add(FQuat::Identity);
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] Could not find bone '%s' for live rest pose caching."), *GetName(), *BoneName.ToString());
+			CachedSmplObservationRestComponentTransforms.Add(FTransform::Identity);
 			continue;
 		}
 
-		CachedSmplObservationRestComponentRotations.Add(ComponentRotations[BoneIndex]);
+		FTransform BoneWorldTransform = Mesh->GetBoneTransform(BoneName, RTS_World);
+		FTransform BoneComponentTransform = BoneWorldTransform.GetRelativeTransform(MeshComponentTransform);
+		BoneComponentTransform.NormalizeRotation();
+		CachedSmplObservationRestComponentTransforms.Add(BoneComponentTransform);
 	}
 }
 
@@ -2191,14 +2320,16 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 		const FVector BoneLinearVelocity = MutableMesh->GetPhysicsLinearVelocity(BoneName);
 		const FVector BoneAngularVelocity = MutableMesh->GetPhysicsAngularVelocityInRadians(BoneName);
 
-		const FQuat CurrentComponentRotation =
-			(MeshWorldRotation.Inverse() * BoneWorldTransform.GetRotation()).GetNormalized();
+		FTransform CurrentComponentTransform = BoneWorldTransform.GetRelativeTransform(SkeletalMesh->GetComponentTransform());
+		CurrentComponentTransform.NormalizeRotation();
 
-		FQuat CorrectedComponentRotation = CurrentComponentRotation;
-		if (CachedSmplObservationRestComponentRotations.IsValidIndex(i))
+		FQuat CorrectedComponentRotation = CurrentComponentTransform.GetRotation().GetNormalized();
+		if (CachedSmplObservationRestComponentTransforms.IsValidIndex(i))
 		{
-			CorrectedComponentRotation =
-				(CurrentComponentRotation * CachedSmplObservationRestComponentRotations[i].Inverse()).GetNormalized();
+			const FMatrix CurrentComponentMatrix = CurrentComponentTransform.ToMatrixWithScale();
+			const FMatrix RestComponentMatrix = CachedSmplObservationRestComponentTransforms[i].ToMatrixWithScale();
+			const FMatrix CorrectedComponentMatrix = CurrentComponentMatrix * RestComponentMatrix.InverseFast();
+			CorrectedComponentRotation = FQuat(CorrectedComponentMatrix).GetNormalized();
 		}
 
 		const FQuat CorrectedWorldRotation =
@@ -2390,11 +2521,16 @@ bool UPhysAnimComponent::SampleFuturePoses(
 			const FTransform WorldTransform =
 				UPoseSearchAssetSamplerLibrary::GetTransformByName(SampledPose, BoneName, EPoseSearchAssetSamplerSpace::World);
 
-			FQuat CorrectedRotation = WorldTransform.GetRotation().GetNormalized();
-			if (CachedSmplObservationRestComponentRotations.IsValidIndex(i))
+			FTransform CorrectedTransform = WorldTransform;
+			CorrectedTransform.NormalizeRotation();
+
+			FQuat CorrectedRotation = CorrectedTransform.GetRotation().GetNormalized();
+			if (CachedSmplObservationRestComponentTransforms.IsValidIndex(i))
 			{
-				CorrectedRotation =
-					(CorrectedRotation * CachedSmplObservationRestComponentRotations[i].Inverse()).GetNormalized();
+				const FMatrix SampledComponentMatrix = CorrectedTransform.ToMatrixWithScale();
+				const FMatrix RestComponentMatrix = CachedSmplObservationRestComponentTransforms[i].ToMatrixWithScale();
+				const FMatrix CorrectedComponentMatrix = SampledComponentMatrix * RestComponentMatrix.InverseFast();
+				CorrectedRotation = FQuat(CorrectedComponentMatrix).GetNormalized();
 			}
 
 			FutureSample.BodyTransforms.Add(FTransform(
