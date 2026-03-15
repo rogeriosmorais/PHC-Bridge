@@ -358,6 +358,7 @@ enum class EPhysAnimRuntimeState : uint8
 	ReadyForActivation,
 	BridgeActive,
 	FailStopped,
+	BalancePerturbationMode,
 };
 
 UENUM(BlueprintType)
@@ -366,6 +367,50 @@ enum class EPhysAnimBridgeTraceOutputMode : uint8
 	Off = 0,
 	MetadataAndEvents = 1,
 	Full = 2,
+};
+
+UENUM(BlueprintType)
+enum class EPhysAnimPerturbationDirection : uint8
+{
+	Forward,
+	Backward,
+	Left,
+	Right
+};
+
+UENUM(BlueprintType)
+enum class EPhysAnimPerturbationMagnitude : uint8
+{
+	Small,
+	Medium,
+	Large
+};
+
+USTRUCT(BlueprintType)
+struct FPhysAnimBalanceScenario
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString Name;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EPhysAnimPerturbationDirection Direction = EPhysAnimPerturbationDirection::Forward;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	EPhysAnimPerturbationMagnitude Magnitude = EPhysAnimPerturbationMagnitude::Small;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float TriggerDelaySeconds = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float RecoveryTimeoutSeconds = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float CooldownSeconds = 1.0f;
+
+	bool bTriggered = false;
+	bool bCompleted = false;
 };
 
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
@@ -402,6 +447,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	void ClearPresentationPerturbationOverride();
+
+	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
+	void StartBalancePerturbationMode();
+
+	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
+	void StopBalancePerturbationMode();
 
 protected:
 	UPROPERTY(EditAnywhere, Category = "PhysAnim")
@@ -546,6 +597,9 @@ private:
 	float CalculateCurrentControlAuthorityAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	float CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	bool IsPresentationPerturbationOverrideActive() const;
+	void UpdateBalancePerturbation(float DeltaTime);
+	void ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude);
+	void FinalizeBalanceScenario(bool bSuccess, const FString& Reason);
 
 	void CacheRestPoses(UAnimSequence* TPoseAnim);
 	bool BeginStartupTPoseCapture(FString& OutError);
@@ -705,6 +759,19 @@ private:
 	bool bOriginalCharacterMovementTickEnabled = false;
 	uint8 OriginalCharacterMovementMode = 0;
 	uint8 OriginalCharacterCustomMovementMode = 0;
+	
+	TArray<FPhysAnimBalanceScenario> BalanceScenarios;
+	int32 ActiveBalanceScenarioIndex = INDEX_NONE;
+	double BalanceScenarioStartTimeSeconds = -1.0;
+	double LastBalanceScenarioImpactTimeSeconds = -1.0;
+	FVector BalanceScenarioImpactPelvisLinearVelPre = FVector::ZeroVector;
+	FVector BalanceScenarioImpactPelvisLinearVelPost = FVector::ZeroVector;
+	float BalanceScenarioPeakPelvisVel = 0.0f;
+	float BalanceScenarioPeakPelvisTilt = 0.0f;
+	FVector BalanceScenarioStartActorLocation = FVector::ZeroVector;
+	FQuat BalanceScenarioStartPelvisRotation = FQuat::Identity;
+	bool bBalanceScenarioAwaitingStableWindow = false;
+	double BalanceScenarioStableWindowStartTimeSeconds = -1.0;
 
 public:
 	static bool BuildConditionedActions(

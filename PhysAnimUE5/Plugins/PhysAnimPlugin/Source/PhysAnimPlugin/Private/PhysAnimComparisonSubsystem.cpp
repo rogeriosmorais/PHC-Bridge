@@ -13,10 +13,12 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "PhysicsControlComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Math/RotationMatrix.h"
+#include "Engine/OverlapResult.h"
 
 namespace
 {
@@ -305,7 +307,7 @@ FVector UPhysAnimComparisonSubsystem::ResolvePresentationLocalIntent(float Elaps
 {
 	if (ElapsedSeconds < PresentationPerturbationDurationSeconds)
 	{
-		return FVector(1.0f, 0.0f, 0.0f);
+		return FVector::ZeroVector; // Changed from Walk to Idle
 	}
 
 	ElapsedSeconds -= PresentationPerturbationDurationSeconds;
@@ -347,7 +349,7 @@ float UPhysAnimComparisonSubsystem::ResolvePresentationInputScale(float ElapsedS
 {
 	if (ElapsedSeconds < PresentationPerturbationDurationSeconds)
 	{
-		return 0.32f;
+		return 0.0f; // Changed from 0.32 to 0.0
 	}
 
 	ElapsedSeconds -= PresentationPerturbationDurationSeconds;
@@ -389,7 +391,7 @@ FName UPhysAnimComparisonSubsystem::ResolvePresentationPhaseName(float ElapsedSe
 {
 	if (ElapsedSeconds < PresentationPerturbationDurationSeconds)
 	{
-		return TEXT("WalkPerturbation");
+		return TEXT("IdlePerturbation"); // Was WalkPerturbation
 	}
 
 	ElapsedSeconds -= PresentationPerturbationDurationSeconds;
@@ -446,17 +448,17 @@ FVector UPhysAnimComparisonSubsystem::ResolvePresentationCameraOffsetCm(bool bPe
 
 FVector UPhysAnimComparisonSubsystem::ResolvePresentationPusherHalfExtentCm()
 {
-	return FVector(18.0f, 24.0f, 48.0f);
+	return FVector(60.0f, 24.0f, 48.0f); // Widened X for a bigger hit zone
 }
 
 FVector UPhysAnimComparisonSubsystem::ResolvePresentationPusherStartOffsetCm()
 {
-	return FVector(52.0f, -86.0f, 54.0f);
+	return FVector(0.0f, -120.0f, 54.0f); // Start dead-center in X, further out in Y
 }
 
 float UPhysAnimComparisonSubsystem::ResolvePresentationPusherTravelDistanceCm()
 {
-	return 118.0f;
+	return 250.0f; // Increased from 118 for visibility
 }
 
 float UPhysAnimComparisonSubsystem::ResolvePresentationPusherTravelSeconds()
@@ -510,6 +512,8 @@ bool UPhysAnimComparisonSubsystem::ConfigureSourcePhysicsCharacter(ACharacter& C
 		SourceOriginalMeshWorldDynamicResponse = Mesh->GetCollisionResponseToChannel(ECC_WorldDynamic);
 		Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics); // Required for simulation
+		Mesh->SetSimulatePhysics(true);
 	}
 
 	if (UPhysAnimComponent* const PhysAnim = Character.FindComponentByClass<UPhysAnimComponent>())
@@ -673,10 +677,9 @@ bool UPhysAnimComparisonSubsystem::CreatePresentationPushers(FString& OutError)
 		PusherBox->SetBoxExtent(HalfExtent);
 		PusherBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		PusherBox->SetCollisionObjectType(ECC_WorldDynamic);
-		PusherBox->SetCollisionResponseToAllChannels(ECR_Ignore);
-		PusherBox->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
+		PusherBox->SetCollisionResponseToAllChannels(ECR_Block); // Changed from Ignore to Block
 		PusherBox->SetGenerateOverlapEvents(false);
-		PusherBox->SetHiddenInGame(true);
+		PusherBox->SetHiddenInGame(false);
 		PusherBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		PusherBox->RegisterComponent();
 		PusherActor->SetActorHiddenInGame(true);
@@ -888,6 +891,16 @@ void UPhysAnimComparisonSubsystem::UpdatePerturbationPushers(
 		? FMath::Clamp(PushElapsedSeconds / ResolvePresentationPusherTravelSeconds(), 0.0f, 1.0f)
 		: 1.0f;
 
+	auto AuditCollision = [](UPrimitiveComponent* Comp, const TCHAR* Name)
+	{
+		if (!Comp) return;
+		const ECollisionEnabled::Type Enabled = Comp->GetCollisionEnabled();
+		const ECollisionResponse Response = Comp->GetCollisionResponseToChannel(ECC_WorldDynamic);
+		const FName Profile = Comp->GetCollisionProfileName();
+		UE_LOG(LogTemp, Log, TEXT("[PhysAnimG2] Audit %s: enabled=%d response_to_worlddynamic=%d profile=%s"), 
+			Name, (int)Enabled, (int)Response, *Profile.ToString());
+	};
+
 	const FVector LocalStartOffset = ResolvePresentationPusherStartOffsetCm();
 	const FVector LocalTravelOffset(0.0f, ResolvePresentationPusherTravelDistanceCm() * PushAlpha, 0.0f);
 	const FVector WorldOffset = ComparisonAnchorRotation.RotateVector(LocalStartOffset + LocalTravelOffset);
@@ -905,7 +918,66 @@ void UPhysAnimComparisonSubsystem::UpdatePerturbationPushers(
 		PusherActor->SetActorHiddenInGame(false);
 		PusherBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		const FVector TargetLocation = AnchorLocation + WorldOffset;
-		PusherActor->SetActorLocationAndRotation(TargetLocation, ComparisonAnchorRotation, true, nullptr, ETeleportType::TeleportPhysics);
+		// Disable sweep (false) so the box penetrates the character and hits the simulated mesh bones
+		PusherActor->SetActorLocationAndRotation(TargetLocation, ComparisonAnchorRotation, false, nullptr);
+
+		// AUDIT: Check for overlaps manually and log them
+		TArray<FOverlapResult> Overlaps;
+		FComponentQueryParams Params;
+		Params.AddIgnoredActor(PusherActor);
+		// Ignore the capsule so we can 'see' the mesh bones behind it
+		if (SourceCharacter.GetCapsuleComponent()) Params.AddIgnoredComponent(SourceCharacter.GetCapsuleComponent());
+		if (KinematicCharacter.GetCapsuleComponent()) Params.AddIgnoredComponent(KinematicCharacter.GetCapsuleComponent());
+
+		if (GetWorld()->ComponentOverlapMulti(Overlaps, PusherBox, TargetLocation, ComparisonAnchorRotation.Quaternion(), Params))
+		{
+			// REJECTED for Balance Testing: Use pa.StartBalanceMode for authoritative testing.
+			// This legacy path uses capsule/move-component impulses which are invalid for pure balance verification.
+			/*
+			const FVector ShoveDirection = ComparisonAnchorRotation.RotateVector(FVector(0.0f, 1.0f, 0.0f));
+			const float CapsuleShoveMagnitude = 12000.0f; 
+			const float BoneShoveMagnitude = 4000.0f;
+
+			bool bKickedCapsule = false;
+
+			for (const FOverlapResult& Overlap : Overlaps)
+			{
+				UPrimitiveComponent* OverlapComponent = Overlap.Component.Get();
+				if (!OverlapComponent) continue;
+
+				// Apply a direct impulse if it's the mesh
+				if (OverlapComponent->IsSimulatingPhysics() || OverlapComponent->GetName().Contains(TEXT("Mesh")))
+				{
+					FName HitBoneName = NAME_None;
+					if (USkeletalMeshComponent* const Mesh = Cast<USkeletalMeshComponent>(OverlapComponent))
+					{
+						HitBoneName = Mesh->GetBoneName(Overlap.ItemIndex);
+					}
+
+					// 1. Kick the whole character via its movement component (this moves the waist/root)
+					if (!bKickedCapsule && Overlap.GetActor())
+					{
+						if (ACharacter* Char = Cast<ACharacter>(Overlap.GetActor()))
+						{
+							if (UCharacterMovementComponent* MoveComp = Char->GetCharacterMovement())
+							{
+								// Using bVelocityChange = true for an unmistakable mass-independent kick
+								MoveComp->AddImpulse(ShoveDirection * (CapsuleShoveMagnitude / 100.0f), true);
+								bKickedCapsule = true;
+							}
+						}
+					}
+
+					// 2. Shake the specific bone for visual stumble, only if it's simulating
+					if (OverlapComponent->IsSimulatingPhysics())
+					{
+						OverlapComponent->AddImpulse(ShoveDirection * BoneShoveMagnitude, HitBoneName);
+					}
+				}
+			}
+			*/
+		}
+
 		DrawDebugBox(
 			GetWorld(),
 			TargetLocation,
@@ -913,9 +985,9 @@ void UPhysAnimComparisonSubsystem::UpdatePerturbationPushers(
 			ComparisonAnchorRotation.Quaternion(),
 			bIsSourcePusher ? FColor::Orange : FColor::Cyan,
 			false,
-			0.05f,
+			1.5f, // Increased from 0.05
 			0,
-			2.0f);
+			4.0f); // Increased from 2.0
 	};
 
 	MovePusher(SourcePerturbationBaselineLocation, true, SourcePerturbationPusherActor, SourcePerturbationPusherBox);

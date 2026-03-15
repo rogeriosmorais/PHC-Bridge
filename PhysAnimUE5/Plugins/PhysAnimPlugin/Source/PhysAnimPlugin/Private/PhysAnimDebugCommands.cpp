@@ -170,6 +170,26 @@ namespace
 			FilterLower.IsEmpty() ? TEXT("<all>") : *FilterLower);
 	}
 
+	static void StartBalanceModeCommand(const TArray<FString>& Args, UWorld* InWorld)
+	{
+		UWorld* World = nullptr;
+		if (!ResolveWorldFromConsole(InWorld, World)) return;
+
+		int32 Matched = 0;
+		ForEachMatchingPhysAnimComponent(World, ParseOptionalFilter(Args, 0), [](UPhysAnimComponent& C) { C.StartBalancePerturbationMode(); }, Matched);
+		UE_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StartBalanceMode matched=%d"), Matched);
+	}
+
+	static void StopBalanceModeCommand(const TArray<FString>& Args, UWorld* InWorld)
+	{
+		UWorld* World = nullptr;
+		if (!ResolveWorldFromConsole(InWorld, World)) return;
+
+		int32 Matched = 0;
+		ForEachMatchingPhysAnimComponent(World, ParseOptionalFilter(Args, 0), [](UPhysAnimComponent& C) { C.StopBalancePerturbationMode(); }, Matched);
+		UE_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StopBalanceMode matched=%d"), Matched);
+	}
+
 	static FAutoConsoleCommandWithWorldAndArgs GApplyPresentationPerturbationCommand(
 		TEXT("pa.ApplyPresentationPerturbation"),
 		TEXT("Applies the existing component-side presentation perturbation override. Optional args: [durationSeconds] [ownerFilter]. Defaults to the same 4.0s presentation window used by the comparison subsystem."),
@@ -179,4 +199,14 @@ namespace
 		TEXT("pa.ClearPresentationPerturbation"),
 		TEXT("Clears the component-side presentation perturbation override. Optional args: [ownerFilter]."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ClearPresentationPerturbationCommand));
+
+	static FAutoConsoleCommandWithWorldAndArgs GStartBalanceModeCommand(
+		TEXT("pa.StartBalanceMode"),
+		TEXT("Starts the dedicated Balance Perturbation Mode scenarios. Optional args: [ownerFilter]."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StartBalanceModeCommand));
+
+	static FAutoConsoleCommandWithWorldAndArgs GStopBalanceModeCommand(
+		TEXT("pa.StopBalanceMode"),
+		TEXT("Stops the Balance Perturbation Mode. Optional args: [ownerFilter]."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StopBalanceModeCommand));
 }
