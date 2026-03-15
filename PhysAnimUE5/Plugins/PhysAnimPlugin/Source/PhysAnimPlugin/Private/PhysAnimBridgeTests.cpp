@@ -629,10 +629,21 @@ namespace
 	{
 		TestTrue(
 			TEXT("UE runtime world up stays Proto runtime up"),
-			UeWorldVectorToProtoRuntime(FVector::UpVector).Equals(FVector::UpVector, KINDA_SMALL_NUMBER));
+			UeWorldRotationVectorToProtoRuntime(FVector::UpVector).Equals(FVector::UpVector, KINDA_SMALL_NUMBER));
 		TestTrue(
 			TEXT("UE runtime world forward stays Proto runtime forward"),
-			UeWorldVectorToProtoRuntime(FVector::ForwardVector).Equals(FVector::ForwardVector, KINDA_SMALL_NUMBER));
+			UeWorldRotationVectorToProtoRuntime(FVector::ForwardVector).Equals(FVector::ForwardVector, KINDA_SMALL_NUMBER));
+		
+		const FVector SamplePos(100.0f, 0.0f, 0.0f);
+		TestTrue(
+			TEXT("UE runtime world position is scaled to meters (100cm -> 1m)"),
+			UeWorldPositionToProtoRuntime(SamplePos).Equals(FVector(1.0f, 0.0f, 0.0f), KINDA_SMALL_NUMBER));
+
+		const FVector SampleVel(0.0f, 200.0f, 0.0f);
+		TestTrue(
+			TEXT("UE runtime world velocity is scaled and swizzled (200cm/s -> -2m/s)"),
+			UeWorldVelocityToProtoRuntime(SampleVel).Equals(FVector(0.0f, -2.0f, 0.0f), KINDA_SMALL_NUMBER));
+
 		TestTrue(
 			TEXT("Identity UE runtime world rotation stays identity in Proto runtime"),
 			UeWorldQuaternionToProtoRuntime(FQuat::Identity).Equals(FQuat::Identity, KINDA_SMALL_NUMBER));

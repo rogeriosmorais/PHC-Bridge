@@ -2639,10 +2639,10 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 			(MeshWorldRotation * CorrectedComponentRotation).GetNormalized();
 
 		OutBodySamples.Add(FPhysAnimBodySample(
-			PhysAnimBridge::UeWorldVectorToProtoRuntime(BoneWorldTransform.GetLocation()),
+			PhysAnimBridge::UeWorldPositionToProtoRuntime(BoneWorldTransform.GetLocation()),
 			PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CorrectedWorldRotation),
-			PhysAnimBridge::UeWorldVectorToProtoRuntime(BoneLinearVelocity),
-			PhysAnimBridge::UeWorldVectorToProtoRuntime(BoneAngularVelocity)));
+			PhysAnimBridge::UeWorldVelocityToProtoRuntime(BoneLinearVelocity),
+			PhysAnimBridge::UeWorldRotationVectorToProtoRuntime(BoneAngularVelocity)));
 	}
 
 	return true;
@@ -2759,7 +2759,7 @@ bool UPhysAnimComponent::SampleTerrainGroundHeights(
 		if (World->LineTraceSingleByObjectType(HitResult, TraceStart, TraceEnd, ObjectQueryParams, QueryParams)
 			&& HitResult.IsValidBlockingHit())
 		{
-			OutGroundHeights[SampleIndex] = HitResult.ImpactPoint.Z;
+			OutGroundHeights[SampleIndex] = HitResult.ImpactPoint.Z * PhysAnimBridge::CmToMeters;
 		}
 		else
 		{
@@ -2838,7 +2838,7 @@ bool UPhysAnimComponent::SampleFuturePoses(
 
 			FutureSample.BodyTransforms.Add(FTransform(
 				PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CorrectedRotation),
-				PhysAnimBridge::UeWorldVectorToProtoRuntime(WorldTransform.GetLocation()),
+				PhysAnimBridge::UeWorldPositionToProtoRuntime(WorldTransform.GetLocation()),
 				WorldTransform.GetScale3D()));
 		}
 
@@ -2889,8 +2889,8 @@ bool UPhysAnimComponent::ResolveMimicTargetReferenceDataOffset(
 		UPoseSearchAssetSamplerLibrary::GetTransformByName(DataPose, PhysAnimBridge::GetRootBoneName(), EPoseSearchAssetSamplerSpace::World);
 
 	OutDataOffsetXY = ResolveMimicTargetReferenceDataOffsetXY(
-		PhysAnimBridge::UeWorldVectorToProtoRuntime(WorldRootTransform.GetLocation()),
-		PhysAnimBridge::UeWorldVectorToProtoRuntime(DataRootTransform.GetLocation()));
+		PhysAnimBridge::UeWorldPositionToProtoRuntime(WorldRootTransform.GetLocation()),
+		PhysAnimBridge::UeWorldPositionToProtoRuntime(DataRootTransform.GetLocation()));
 	return true;
 }
 
@@ -6225,7 +6225,7 @@ float UPhysAnimComponent::ResolveSelfObservationSyntheticGroundHeight(
 	float RootWorldZ,
 	float GroundWorldZ)
 {
-	const float DesiredRootHeight = RootWorldZ - GroundWorldZ;
+	const float DesiredRootHeight = (RootWorldZ - GroundWorldZ) * PhysAnimBridge::CmToMeters;
 	return ObservationFrameRootZ - DesiredRootHeight;
 }
 

@@ -330,7 +330,17 @@ namespace PhysAnimBridge
 		return MakeQuaternionFromBasis(IsaacRotatedXAxis, IsaacRotatedZAxis);
 	}
 
-	FVector UeWorldVectorToProtoRuntime(const FVector& UeVector)
+	FVector UeWorldPositionToProtoRuntime(const FVector& UeVector)
+	{
+		return UeVectorToIsaacGym(UeVector) * CmToMeters;
+	}
+	
+	FVector UeWorldVelocityToProtoRuntime(const FVector& UeVector)
+	{
+		return UeVectorToIsaacGym(UeVector) * CmToMeters;
+	}
+	
+	FVector UeWorldRotationVectorToProtoRuntime(const FVector& UeVector)
 	{
 		return UeVectorToIsaacGym(UeVector);
 	}
@@ -394,14 +404,14 @@ namespace PhysAnimBridge
 		const FPhysAnimBodySample& RootSample = BodySamples[0];
 		const FQuat HeadingInverse = CalculateHeadingInverseSmpl(RootSample.Rotation);
 
-		OutSelfObservation.Add(static_cast<float>((RootSample.Position.Z - GroundHeight) * CmToMeters));
+		OutSelfObservation.Add(static_cast<float>(RootSample.Position.Z - GroundHeight));
 
 		for (int32 BodyIndex = 1; BodyIndex < BodySamples.Num(); ++BodyIndex)
 		{
 			const FVector LocalPosition = HeadingInverse.RotateVector(BodySamples[BodyIndex].Position - RootSample.Position);
-			OutSelfObservation.Add(static_cast<float>(LocalPosition.X * CmToMeters));
-			OutSelfObservation.Add(static_cast<float>(LocalPosition.Y * CmToMeters));
-			OutSelfObservation.Add(static_cast<float>(LocalPosition.Z * CmToMeters));
+			OutSelfObservation.Add(static_cast<float>(LocalPosition.X));
+			OutSelfObservation.Add(static_cast<float>(LocalPosition.Y));
+			OutSelfObservation.Add(static_cast<float>(LocalPosition.Z));
 		}
 
 		for (const FPhysAnimBodySample& BodySample : BodySamples)
@@ -412,9 +422,9 @@ namespace PhysAnimBridge
 		for (const FPhysAnimBodySample& BodySample : BodySamples)
 		{
 			const FVector LocalVelocity = HeadingInverse.RotateVector(BodySample.LinearVelocity);
-			OutSelfObservation.Add(static_cast<float>(LocalVelocity.X * CmToMeters));
-			OutSelfObservation.Add(static_cast<float>(LocalVelocity.Y * CmToMeters));
-			OutSelfObservation.Add(static_cast<float>(LocalVelocity.Z * CmToMeters));
+			OutSelfObservation.Add(static_cast<float>(LocalVelocity.X));
+			OutSelfObservation.Add(static_cast<float>(LocalVelocity.Y));
+			OutSelfObservation.Add(static_cast<float>(LocalVelocity.Z));
 		}
 
 		for (const FPhysAnimBodySample& BodySample : BodySamples)
@@ -496,9 +506,9 @@ namespace PhysAnimBridge
 				}
 
 				const FVector RelativeBodyPosition = HeadingInverse.RotateVector(TargetBody.GetLocation() - ReferencePosition);
-				OutMimicTargetPoses.Add(static_cast<float>(RelativeBodyPosition.X * CmToMeters));
-				OutMimicTargetPoses.Add(static_cast<float>(RelativeBodyPosition.Y * CmToMeters));
-				OutMimicTargetPoses.Add(static_cast<float>(RelativeBodyPosition.Z * CmToMeters));
+				OutMimicTargetPoses.Add(static_cast<float>(RelativeBodyPosition.X));
+				OutMimicTargetPoses.Add(static_cast<float>(RelativeBodyPosition.Y));
+				OutMimicTargetPoses.Add(static_cast<float>(RelativeBodyPosition.Z));
 			}
 
 			for (int32 BodyIndex = 0; BodyIndex < NumSmplBodies; ++BodyIndex)
@@ -510,9 +520,9 @@ namespace PhysAnimBridge
 				}
 
 				const FVector RootRelativeBodyPosition = HeadingInverse.RotateVector(TargetBody.GetLocation() - ReferenceRootPosition);
-				OutMimicTargetPoses.Add(static_cast<float>(RootRelativeBodyPosition.X * CmToMeters));
-				OutMimicTargetPoses.Add(static_cast<float>(RootRelativeBodyPosition.Y * CmToMeters));
-				OutMimicTargetPoses.Add(static_cast<float>(RootRelativeBodyPosition.Z * CmToMeters));
+				OutMimicTargetPoses.Add(static_cast<float>(RootRelativeBodyPosition.X));
+				OutMimicTargetPoses.Add(static_cast<float>(RootRelativeBodyPosition.Y));
+				OutMimicTargetPoses.Add(static_cast<float>(RootRelativeBodyPosition.Z));
 			}
 
 			for (int32 BodyIndex = 0; BodyIndex < NumSmplBodies; ++BodyIndex)
@@ -583,7 +593,7 @@ namespace PhysAnimBridge
 		OutTerrain.SetNumUninitialized(TerrainSize);
 		for (int32 SampleIndex = 0; SampleIndex < TerrainSize; ++SampleIndex)
 		{
-			OutTerrain[SampleIndex] = (RootHeight - SampleGroundHeights[SampleIndex]) * CmToMeters;
+			OutTerrain[SampleIndex] = RootHeight - SampleGroundHeights[SampleIndex];
 		}
 
 		return true;
