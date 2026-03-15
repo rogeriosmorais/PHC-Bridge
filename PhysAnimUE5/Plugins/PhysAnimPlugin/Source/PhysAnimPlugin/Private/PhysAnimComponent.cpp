@@ -3089,6 +3089,18 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		ResolveStabilizationStressTestMultiplier(),
 		PhysAnimComponentInternal::CVarPaStabilizationStressTestSweepMode.GetValueOnGameThread(),
 		EffectiveSettings);
+
+	// Bridge-owned locomotion currently samples future MM poses, but the live current pose still comes
+	// from the cached post-AnimBP pose. If CharacterMovement stays suppressed after startup, the AnimBP
+	// locomotion graph never leaves idle, so the bridge ends up sliding the shell under an idle body.
+	// Restore CharacterMovement as soon as policy influence comes online so the live pose cache can track
+	// the same locomotion state that MM is already selecting.
+	if (EffectiveSettings.bLockCharacterMovementUntilStartupReady && !EffectiveSettings.bUseSkeletalAnimationTargets)
+	{
+		EffectiveSettings.bRestoreCharacterMovementAfterStartupReady = true;
+		EffectiveSettings.bDelayMovementUnlockUntilPolicySettled = false;
+	}
+
 	return EffectiveSettings;
 }
 

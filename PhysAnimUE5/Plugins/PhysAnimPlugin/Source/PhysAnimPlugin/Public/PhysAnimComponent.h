@@ -203,10 +203,10 @@ struct FPhysAnimStabilizationSettings
 	float StartupQuietRequiredSeconds = 0.15f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady"))
-	bool bDelayMovementUnlockUntilPolicySettled = true;
+	bool bDelayMovementUnlockUntilPolicySettled = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady"))
-	bool bRestoreCharacterMovementAfterStartupReady = false;
+	bool bRestoreCharacterMovementAfterStartupReady = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady"))
 	bool bEnableBridgeOwnedMovementWhileCharacterMovementLocked = true;
