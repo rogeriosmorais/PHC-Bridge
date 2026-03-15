@@ -1068,3 +1068,216 @@ Whenever new setup or gate evidence arrives:
   - `self_obs` remains the right area to investigate
   - but replacing non-sim body velocities with transform-delta velocities is not the correct next baseline
   - the next useful pass should target another `self_obs` representation seam, not this mixed velocity policy
+
+## 2026-03-14 — PhysAnim bridge stabilization and locomotion follow-up
+
+### Summary
+This stretch of work focused on:
+1. cleaning up temporary T-pose / identity-check scaffolding,
+2. stabilizing bridge startup into a reliable idle baseline,
+3. isolating locomotion ownership away from `CharacterMovement`,
+4. starting bridge-owned trajectory / motion-matching integration,
+5. confirming that flat-ground walking is still not visually correct.
+
+Current status:
+- **Idle baseline is stable enough to keep as a repo baseline.**
+- **Walking / locomotion is not solved yet.**
+- The current bridge-owned locomotion experiments can select non-idle clips in logs, but the character still visually slides / fails to show a convincing walk cycle.
+- Ramp / floor handling is explicitly deferred until flat-ground walk playback is correct.
+
+---
+
+### Earlier issue: T-pose / startup validation
+We first fixed the T-pose-related build / merge fallout and validated startup identity checks.
+That work confirmed the bridge could start from the expected rest pose, but the extra logging and proof scaffolding were temporary.
+
+Follow-up decision:
+- remove proof-only logging and temporary test scaffolding,
+- keep a single optional debug flag so identity checks can be re-enabled later if needed.
+
+---
+
+### Cleanup pass
+A cleanup pass removed most temporary validation spam and kept only optional debug hooks.
+
+Goal:
+- make logs usable again,
+- avoid permanent maintenance cost from one-off instrumentation,
+- preserve the ability to turn identity validation back on when needed.
+
+---
+
+### Startup instability / shell recovery investigation
+A first-run issue appeared where the legs were being dragged behind the character.
+Logs showed repeated pre-policy shell recovery warnings and large shell/root mismatches during startup.
+
+Observed symptoms:
+- repeated `Pre-policy shell recovery triggered` warnings,
+- large shell offset and root angular velocity spikes,
+- startup instability before policy fully settled.
+
+Interpretation:
+- there was a handoff / authority problem during the transition from bridge activation to full policy ownership,
+- preserving gameplay shell state while partially enabling bridge control created a fragile startup window.
+
+---
+
+### Temporary movement lock experiment
+To prevent the startup bug from being triggered by early WASD input, movement was temporarily locked during bridge startup.
+
+What was tried:
+- disable / neutralize `CharacterMovement` during the bridge activation window,
+- only release movement after bridge state and policy influence had settled.
+
+Outcome:
+- this was useful as a diagnostic isolation tool,
+- it helped prove that early player input was interacting badly with startup,
+- but it was **not** an acceptable final design, because later variants either:
+  - never restored movement correctly, or
+  - restored movement while reintroducing sliding / shell mismatch.
+
+Conclusion:
+- startup lock is useful as a debugging tool,
+- but locomotion needs a proper owner, not a longer lock.
+
+---
+
+### Stable idle baseline
+A good idle-only baseline was reached.
+
+Characteristics of this baseline:
+- bridge activates cleanly,
+- body bring-up completes,
+- policy influence ramps in,
+- idle pose looks visually stable,
+- no obvious instability is visible while standing still.
+
+Important caveat:
+- “stable idle” does **not** mean locomotion is solved.
+- It only means the bridge can own the body at rest without immediately exploding or drifting apart.
+
+Decision:
+- keep this as the repo’s stable baseline for idle.
+
+---
+
+### CharacterMovement vs bridge-owned locomotion
+We then evaluated whether locomotion should remain under `CharacterMovement` or move into the bridge.
+
+Conclusion reached:
+- `CharacterMovement` should **not** be the locomotion authority during `BridgeActive`.
+- The bridge should own locomotion in this mode.
+- The capsule / actor transform should remain as the gameplay shell, but movement should be deterministic and bridge-driven.
+
+Reasoning:
+- mixed authority causes handoff problems,
+- `MOVE_Walking` introduces hidden heuristics and corrections,
+- Stage 1 needs deterministic control cadence and sample-and-hold behavior,
+- motion matching needs a coherent trajectory source that matches what the bridge is actually doing.
+
+---
+
+### First bridge-owned locomotion pass
+A bridge-owned movement driver was added experimentally.
+
+Intent:
+- keep `CharacterMovement` disabled or in `MOVE_None`,
+- ingest movement intent directly from player input,
+- translate / rotate the shell from bridge code,
+- avoid handing locomotion back to `MOVE_Walking`.
+
+Observed result:
+- the character could rotate and sometimes translate,
+- but motion matching often kept choosing `MM_Idle`,
+- even when logs showed substantial input intent,
+- visual result was sliding rather than convincing walking.
+
+This established that:
+- shell movement alone is not enough,
+- locomotion clip selection depends on feeding Motion Matching the right trajectory.
+
+---
+
+### Trajectory integration work
+Next step was to replace the legacy / guessed MotionMatch usage with the proper UE 5.7 trajectory-driven path.
+
+Several attempts were made:
+- bridge-owned trajectory generation,
+- feeding that trajectory into PoseSearch,
+- replacing guessed signatures with engine-source-guided integration,
+- using the public UE 5.7-style source reference to avoid guessing APIs.
+
+There were multiple compile failures during this phase:
+- missing variables / state members,
+- incorrect function signatures,
+- deprecated trajectory types,
+- incorrect `MotionMatch` call shape,
+- one linker issue involving chooser-related symbols.
+
+These were part of the trajectory integration iteration, not regressions in the stable idle baseline.
+
+---
+
+### Flat-ground-first decision
+At this point, locomotion and floor following were both imperfect:
+- the character slid in idle,
+- sometimes selected walk clips only briefly,
+- and could float instead of descending ramps properly.
+
+Decision:
+- **stop worrying about ramps / floor handling for now**,
+- make walking animation playback work correctly on a flat plane first,
+- revisit slope / floor projection only after flat-ground walking is visually correct.
+
+This is the current working direction.
+
+---
+
+### Latest observed state
+The latest tests show:
+
+Good:
+- bridge startup is stable,
+- some bridge predictor searches now select walk clips such as:
+  - `MF_Unarmed_Walk_Fwd_Left`
+  - `MF_Unarmed_Walk_Left`
+  - `MF_Unarmed_Walk_Bwd_Left`
+  - `MF_Unarmed_Walk_Bwd_Right`
+
+Bad:
+- despite occasional non-idle clip selection in logs, the character still does **not** present a convincing visible walk,
+- sliding remains the dominant visible result,
+- on ramps, the shell can float rather than descend naturally,
+- visual animation and shell motion are still not coherently coupled.
+
+Interpretation:
+- trajectory / predictor integration is partially working,
+- but clip selection persistence, playback continuity, or pose-to-motion coupling is still wrong,
+- the system is not yet sustaining a walk state strongly enough to produce visible locomotion.
+
+---
+
+### Practical conclusion
+Repository baseline:
+- keep the current stable idle build as the baseline.
+
+Active problem now:
+- fix flat-ground walk playback first.
+
+Do **not** treat these as solved yet:
+- ramp descent,
+- floor snapping,
+- slope-following,
+- full gameplay shell locomotion fidelity.
+
+Those come after:
+1. stable non-idle clip selection,
+2. persistent walk playback,
+3. reduced idle sliding on flat ground.
+
+### Notes
+Known important reference points from this work:
+- commit `0443724` was identified as a bad merge point during earlier recovery work,
+- temporary T-pose proof logging has already been treated as non-final scaffolding,
+- startup movement lock was diagnostic, not final architecture,
+- bridge-owned deterministic locomotion remains the intended direction.
