@@ -5005,10 +5005,14 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 			OwnerActor->GetVelocity(),
 			LastRuntimeInstabilityDiagnostics.RawRootLinearVelocityCmPerSecondVector);
 	}
+	const PhysAnimComponentInternal::FFloatBufferSummary SelfObsSummary = PhysAnimComponentInternal::SummarizeFloatBuffer(SelfObservationBuffer);
+	const PhysAnimComponentInternal::FFloatBufferSummary MimicSummary = PhysAnimComponentInternal::SummarizeFloatBuffer(MimicTargetPosesBuffer);
+	const PhysAnimComponentInternal::FFloatBufferSummary TerrainBufferSummary = PhysAnimComponentInternal::SummarizeFloatBuffer(TerrainBuffer);
+
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
-		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] shell[offsetDeltaCm=%.1f velDeltaCmPerSec=%.1f velAlign=%.2f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s written=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
+		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] shell[offsetDeltaCm=%.1f velDeltaCmPerSec=%.1f velAlign=%.2f] obs[selfMeanAbs=%.3f mimicMeanAbs=%.3f terrainMeanAbs=%.3f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s written=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
 		SimulationHandoffAlpha,
 		FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
 		GetBringUpGroupCount(),
@@ -5046,6 +5050,9 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 		ShellPlanarOffsetDeltaCm,
 		ShellPlanarVelocityDeltaCmPerSecond,
 		ShellPlanarVelocityAlignment,
+		SelfObsSummary.MeanAbs,
+		MimicSummary.MeanAbs,
+		TerrainBufferSummary.MeanAbs,
 		LastActionDiagnostics.RawMin,
 		LastActionDiagnostics.RawMax,
 		LastActionDiagnostics.RawMeanAbs,

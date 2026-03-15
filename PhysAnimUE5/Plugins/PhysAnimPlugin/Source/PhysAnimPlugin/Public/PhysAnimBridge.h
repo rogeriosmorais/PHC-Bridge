@@ -129,6 +129,7 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API inline constexpr float TerrainSampleWidth = 1.0f;
 	PHYSANIMPLUGIN_API inline constexpr int32 NumFutureSteps = 15;
 	PHYSANIMPLUGIN_API inline constexpr float FutureStepSeconds = 1.0f / 30.0f;
+	PHYSANIMPLUGIN_API inline constexpr float CmToMeters = 0.01f;
 
 	PHYSANIMPLUGIN_API const TArray<FName>& GetControlledBoneNames();
 	PHYSANIMPLUGIN_API const TArray<FName>& GetRequiredBodyModifierBoneNames();
