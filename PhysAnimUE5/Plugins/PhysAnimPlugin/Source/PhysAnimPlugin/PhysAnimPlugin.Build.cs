@@ -15,7 +15,8 @@ public class PhysAnimPlugin : ModuleRules
                 "NNE",
                 "PhysicsCore",
                 "PhysicsControl",
-                "PoseSearch"
+                "PoseSearch",
+                "Chooser"
             });
 
         if (Target.bBuildEditor)

@@ -37,6 +37,9 @@
 #include "PoseSearch/PoseSearchDatabase.h"
 #include "PoseSearch/PoseSearchLibrary.h"
 #include "PoseSearch/PoseSearchSchema.h"
+#include "PoseSearch/PoseSearchContext.h"
+#include "PoseSearch/AnimNode_PoseSearchHistoryCollector.h"
+#include "Math/Interval.h"
 #include "PhysicsEngine/BodyInstance.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
@@ -1071,6 +1074,7 @@ void UPhysAnimComponent::EmitBridgeTraceEvent(
 void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	LastBridgePoseSearchDeltaTimeSeconds = DeltaTime;
 	UpdateBridgeStatusIndicator(0.25f);
 
 	if (bPendingStartupRestPoseCapture)
@@ -1237,6 +1241,12 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			}
 		}
 	}
+
+	if (RuntimeState == EPhysAnimRuntimeState::BridgeActive && !bStartupMovementLockActive)
+	{
+		ApplyBridgeOwnedMovementDrive(DeltaTime, EffectiveSettings);
+	}
+
 	TRACE_COUNTER_SET(COUNTER_PhysAnim_RuntimeState, static_cast<int64>(RuntimeState));
 	FString TickError;
 	FPoseSearchBlueprintResult SearchResult;
@@ -2323,6 +2333,18 @@ bool UPhysAnimComponent::QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchRe
 		return false;
 	}
 
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	if (ShouldUseBridgeOwnedMovementDrive(EffectiveSettings))
+	{
+		FString TrajectoryError;
+		if (QueryPoseSearchWithBridgeTrajectory(OutSearchResult, TrajectoryError))
+		{
+			return true;
+		}
+
+		OutError = FString::Printf(TEXT("Bridge trajectory query failed: %s"), *TrajectoryError);
+	}
+
 	TArray<UObject*> AssetsToSearch;
 	AssetsToSearch.Add(LoadedPoseSearchDatabase);
 
@@ -2344,13 +2366,15 @@ bool UPhysAnimComponent::QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchRe
 
 	if (OutSearchResult.SelectedAnim == nullptr)
 	{
-		OutError = TEXT("UPoseSearchLibrary::MotionMatch returned no selected animation.");
+		if (OutError.IsEmpty())
+		{
+			OutError = TEXT("UPoseSearchLibrary::MotionMatch returned no selected animation.");
+		}
 		return false;
 	}
 
 	return true;
 }
-
 bool UPhysAnimComponent::InitializeModel(FString& OutError)
 {
 	LoadedModelData = ModelDataAsset.LoadSynchronous();
@@ -4976,6 +5000,328 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 		LastRuntimeInstabilityDiagnostics.MaxBodyHeightDeltaCm);
 }
 
+
+bool UPhysAnimComponent::ShouldUseBridgeOwnedMovementDrive(const FPhysAnimStabilizationSettings& EffectiveSettings) const
+{
+	if (!EffectiveSettings.bLockCharacterMovementUntilStartupReady ||
+		EffectiveSettings.bRestoreCharacterMovementAfterStartupReady ||
+		!EffectiveSettings.bEnableBridgeOwnedMovementWhileCharacterMovementLocked ||
+		RuntimeState != EPhysAnimRuntimeState::BridgeActive ||
+		bStartupMovementLockActive)
+	{
+		return false;
+	}
+
+	const ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
+	const UCharacterMovementComponent* const CharacterMovement = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr;
+	return CharacterMovement && !CharacterMovement->IsComponentTickEnabled() && CharacterMovement->MovementMode == MOVE_None;
+}
+
+void UPhysAnimComponent::ApplyBridgeOwnedMovementDrive(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	if (!ShouldUseBridgeOwnedMovementDrive(EffectiveSettings))
+	{
+		BridgeOwnedMovementPlanarVelocityCmPerSecond = FVector::ZeroVector;
+		BridgeOwnedMovementLastWorldIntent = FVector::ZeroVector;
+		return;
+	}
+
+	ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
+	APawn* const OwnerPawn = Cast<APawn>(GetOwner());
+	UCapsuleComponent* const CapsuleComponent = CharacterOwner ? CharacterOwner->GetCapsuleComponent() : nullptr;
+	if (!CharacterOwner || !OwnerPawn || !CapsuleComponent)
+	{
+		BridgeOwnedMovementPlanarVelocityCmPerSecond = FVector::ZeroVector;
+		BridgeOwnedMovementLastWorldIntent = FVector::ZeroVector;
+		return;
+	}
+
+	FVector PendingWorldInput = OwnerPawn->ConsumeMovementInputVector();
+	PendingWorldInput.Z = 0.0f;
+	const FVector WorldIntent = PendingWorldInput.GetClampedToMaxSize(1.0f);
+	BridgeOwnedMovementLastWorldIntent = WorldIntent;
+	const FVector DesiredVelocity = WorldIntent * FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementMaxPlanarSpeedCmPerSecond);
+
+	const float BlendRate = DesiredVelocity.IsNearlyZero()
+		? FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementDecelerationCmPerSecondSq)
+		: FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementAccelerationCmPerSecondSq);
+	BridgeOwnedMovementPlanarVelocityCmPerSecond = FMath::VInterpConstantTo(
+		BridgeOwnedMovementPlanarVelocityCmPerSecond,
+		DesiredVelocity,
+		DeltaTime,
+		BlendRate);
+	BridgeOwnedMovementPlanarVelocityCmPerSecond.Z = 0.0f;
+
+	if (EffectiveSettings.bBridgeOwnedMovementUseControllerYaw)
+	{
+		if (const AController* const Controller = CharacterOwner->GetController())
+		{
+			FRotator TargetRotation = Controller->GetControlRotation();
+			TargetRotation.Pitch = 0.0f;
+			TargetRotation.Roll = 0.0f;
+			const FRotator NewRotation = FMath::RInterpTo(
+				CharacterOwner->GetActorRotation(),
+				TargetRotation,
+				DeltaTime,
+				FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementRotationInterpSpeed));
+			CharacterOwner->SetActorRotation(NewRotation);
+		}
+	}
+
+	const FVector MoveDelta = BridgeOwnedMovementPlanarVelocityCmPerSecond * DeltaTime;
+	if (!MoveDelta.IsNearlyZero())
+	{
+		FHitResult Hit;
+		CapsuleComponent->MoveComponent(MoveDelta, CapsuleComponent->GetComponentQuat(), true, &Hit, MOVECOMP_NoFlags, ETeleportType::None);
+		if (Hit.IsValidBlockingHit())
+		{
+			const FVector RemainingDelta = MoveDelta * FMath::Clamp(1.0f - Hit.Time, 0.0f, 1.0f);
+			const FVector SlideDelta = FVector::VectorPlaneProject(RemainingDelta, Hit.Normal);
+			if (!SlideDelta.IsNearlyZero())
+			{
+				FHitResult SlideHit;
+				CapsuleComponent->MoveComponent(SlideDelta, CapsuleComponent->GetComponentQuat(), true, &SlideHit, MOVECOMP_NoFlags, ETeleportType::None);
+			}
+		}
+	}
+
+	const UWorld* const World = GetWorld();
+	const double CurrentTimeSeconds = World ? World->GetTimeSeconds() : 0.0;
+	if (!WorldIntent.IsNearlyZero())
+	{
+		if (LastBridgeOwnedMovementLogTimeSeconds < 0.0 || (CurrentTimeSeconds - LastBridgeOwnedMovementLogTimeSeconds) >= 1.0)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Log,
+				TEXT("[PhysAnim] Bridge-owned movement driver applying input: intent=(%.2f,%.2f) speedCmPerSec=%.1f"),
+				WorldIntent.X,
+				WorldIntent.Y,
+				BridgeOwnedMovementPlanarVelocityCmPerSecond.Size2D());
+			LastBridgeOwnedMovementLogTimeSeconds = CurrentTimeSeconds;
+		}
+	}
+	else if (LastBridgeOwnedMovementNoInputLogTimeSeconds < 0.0 || (CurrentTimeSeconds - LastBridgeOwnedMovementNoInputLogTimeSeconds) >= 2.0)
+	{
+		UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnim] Bridge-owned movement driver idle with CharacterMovement suppressed."));
+		LastBridgeOwnedMovementNoInputLogTimeSeconds = CurrentTimeSeconds;
+	}
+}
+
+bool UPhysAnimComponent::QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError)
+{
+	OutSearchResult = FPoseSearchBlueprintResult();
+	OutError.Reset();
+
+	UAnimInstance* const LocalAnimInstance = AnimInstance.Get();
+	if (!LocalAnimInstance)
+	{
+		OutError = TEXT("AnimInstance was not resolved.");
+		return false;
+	}
+
+	if (!LoadedPoseSearchDatabase)
+	{
+		OutError = TEXT("PoseSearch database was not loaded.");
+		return false;
+	}
+
+	const FAnimNode_PoseSearchHistoryCollector_Base* const PoseHistoryNode =
+		UPoseSearchLibrary::FindPoseHistoryNode(PhysAnimComponentInternal::PoseHistoryName, LocalAnimInstance);
+	if (!PoseHistoryNode)
+	{
+		OutError = TEXT("PoseHistory_Stage1 was not found on the live AnimInstance.");
+		return false;
+	}
+
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	UpdateBridgePoseSearchTrajectory(FMath::Max(0.0001f, LastBridgePoseSearchDeltaTimeSeconds), EffectiveSettings);
+
+	FAnimNode_PoseSearchHistoryCollector_Base* const MutablePoseHistoryNode = const_cast<FAnimNode_PoseSearchHistoryCollector_Base*>(PoseHistoryNode);
+	MutablePoseHistoryNode->GetPoseHistory().SetTrajectory(BridgePoseSearchTrajectory, 1.0f);
+
+	FPoseSearchContinuingProperties ContinuingProperties;
+	if (LastValidPoseSearchResult.SelectedAnim != nullptr)
+	{
+		ContinuingProperties.InitFrom(LastValidPoseSearchResult, EPoseSearchInterruptMode::DoNotInterrupt);
+	}
+
+	TArray<const UObject*, TInlineAllocator<1>> AssetsToSearch;
+	AssetsToSearch.Add(LoadedPoseSearchDatabase);
+
+	FChooserEvaluationContext ChooserContext;
+	ChooserContext.AddObjectParam(LocalAnimInstance);
+
+	UE::PoseSearch::FSearchContext SearchContext(0.0f, FFloatInterval(0.0f, 0.0f), FPoseSearchEvent());
+	SearchContext.AddRole(UE::PoseSearch::DefaultRole, &ChooserContext, &MutablePoseHistoryNode->GetPoseHistory());
+
+	UE::PoseSearch::FSearchResults_Single SearchResults;
+	UPoseSearchLibrary::MotionMatch(SearchContext, AssetsToSearch, ContinuingProperties, SearchResults);
+
+	const UE::PoseSearch::FSearchResult SearchResult = SearchResults.GetBestResult();
+	if (!SearchResult.IsValid())
+	{
+		OutError = TEXT("SearchContext MotionMatch returned no valid result.");
+		return false;
+	}
+
+	OutSearchResult.InitFrom(SearchResult, 1.0f);
+
+	const UWorld* const World = GetWorld();
+	const double CurrentTimeSeconds = World ? World->GetTimeSeconds() : 0.0;
+	if (LastBridgePoseSearchTrajectoryLogTimeSeconds < 0.0 || (CurrentTimeSeconds - LastBridgePoseSearchTrajectoryLogTimeSeconds) >= 1.0)
+	{
+		const FRotator ActorRotation = GetOwner() ? GetOwner()->GetActorRotation() : FRotator::ZeroRotator;
+		const FVector WorldIntent = BridgeOwnedMovementLastWorldIntent;
+		const FVector LocalIntent = ActorRotation.UnrotateVector(WorldIntent);
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Bridge predictor search selected '%s' from locomotion intent: local=(%.2f,%.2f) world=(%.2f,%.2f) speedCmPerSec=%.1f"),
+			OutSearchResult.SelectedAnim ? *OutSearchResult.SelectedAnim->GetName() : TEXT("None"),
+			LocalIntent.X,
+			LocalIntent.Y,
+			WorldIntent.X,
+			WorldIntent.Y,
+			BridgeOwnedMovementPlanarVelocityCmPerSecond.Size2D());
+		LastBridgePoseSearchTrajectoryLogTimeSeconds = CurrentTimeSeconds;
+	}
+
+	return true;
+}
+
+void UPhysAnimComponent::GetGravity(FVector& OutGravityAccel)
+{
+	const UWorld* const World = GetWorld();
+	OutGravityAccel = FVector(0.0f, 0.0f, World ? World->GetGravityZ() : -980.0f);
+}
+
+void UPhysAnimComponent::GetCurrentState(FVector& OutPosition, FQuat& OutFacing, FVector& OutVelocity)
+{
+	if (const AActor* const OwnerActor = GetOwner())
+	{
+		OutPosition = OwnerActor->GetActorLocation();
+		OutFacing = OwnerActor->GetActorQuat();
+	}
+	else
+	{
+		OutPosition = FVector::ZeroVector;
+		OutFacing = FQuat::Identity;
+	}
+
+	OutVelocity = BridgeOwnedMovementPlanarVelocityCmPerSecond;
+	OutVelocity.Z = 0.0f;
+}
+
+void UPhysAnimComponent::GetVelocity(FVector& OutVelocity)
+{
+	OutVelocity = BridgeOwnedMovementPlanarVelocityCmPerSecond;
+	OutVelocity.Z = 0.0f;
+}
+
+void UPhysAnimComponent::Predict(FTransformTrajectory& InOutTrajectory, int32 NumPredictionSamples, float SecondsPerPredictionSample, int32 NumHistorySamples)
+{
+	AActor* const OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+
+	FVector SimulatedPosition = OwnerActor->GetActorLocation();
+	FQuat SimulatedFacing = OwnerActor->GetActorQuat();
+
+	FVector SimulatedVelocity = BridgeOwnedMovementPlanarVelocityCmPerSecond;
+	SimulatedVelocity.Z = 0.0f;
+
+	FVector WorldIntent = BridgeOwnedMovementLastWorldIntent;
+	WorldIntent.Z = 0.0f;
+	const float IntentMagnitude = FMath::Clamp(WorldIntent.Size2D(), 0.0f, 1.0f);
+	const FVector DesiredVelocity = WorldIntent.IsNearlyZero()
+		? FVector::ZeroVector
+		: (WorldIntent.GetSafeNormal2D() * (EffectiveSettings.BridgeOwnedMovementMaxPlanarSpeedCmPerSecond * IntentMagnitude));
+
+	float DesiredYawDegrees = SimulatedFacing.Rotator().Yaw;
+	if (EffectiveSettings.bBridgeOwnedMovementUseControllerYaw)
+	{
+		if (const APawn* const OwnerPawn = Cast<APawn>(OwnerActor))
+		{
+			if (const AController* const Controller = OwnerPawn->GetController())
+			{
+				DesiredYawDegrees = Controller->GetControlRotation().Yaw;
+			}
+		}
+	}
+	else if (!DesiredVelocity.IsNearlyZero())
+	{
+		DesiredYawDegrees = DesiredVelocity.Rotation().Yaw;
+	}
+	else if (SimulatedVelocity.SizeSquared2D() > KINDA_SMALL_NUMBER)
+	{
+		DesiredYawDegrees = SimulatedVelocity.Rotation().Yaw;
+	}
+
+	const FQuat DesiredFacing = FQuat(FRotator(0.0f, DesiredYawDegrees, 0.0f));
+
+	const float SafePredictionDt = FMath::Max(SecondsPerPredictionSample, KINDA_SMALL_NUMBER);
+	const float RotationAlphaPerStep = FMath::Clamp(
+		SafePredictionDt * FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementRotationInterpSpeed),
+		0.0f,
+		1.0f);
+
+	for (int32 PredictionIndex = 1; PredictionIndex <= NumPredictionSamples; ++PredictionIndex)
+	{
+		const float VelocityBlendRate = DesiredVelocity.IsNearlyZero()
+			? FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementDecelerationCmPerSecondSq)
+			: FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementAccelerationCmPerSecondSq);
+
+		SimulatedVelocity = FMath::VInterpConstantTo(
+			SimulatedVelocity,
+			DesiredVelocity,
+			SafePredictionDt,
+			VelocityBlendRate);
+		SimulatedVelocity.Z = 0.0f;
+
+		SimulatedPosition += SimulatedVelocity * SafePredictionDt;
+		SimulatedFacing = FQuat::Slerp(SimulatedFacing, DesiredFacing, RotationAlphaPerStep).GetNormalized();
+
+		const int32 SampleIndex = NumHistorySamples + PredictionIndex;
+		if (!InOutTrajectory.Samples.IsValidIndex(SampleIndex))
+		{
+			break;
+		}
+
+		FTransformTrajectorySample& Sample = InOutTrajectory.Samples[SampleIndex];
+		Sample.Position = SimulatedPosition;
+		Sample.Facing = SimulatedFacing;
+	}
+}
+
+void UPhysAnimComponent::UpdateBridgePoseSearchTrajectory(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	(void)EffectiveSettings;
+
+	TScriptInterface<IPoseSearchTrajectoryPredictorInterface> PredictorInterface;
+	PredictorInterface.SetObject(this);
+	PredictorInterface.SetInterface(static_cast<IPoseSearchTrajectoryPredictorInterface*>(this));
+
+	FTransformTrajectory GeneratedTrajectory;
+	UPoseSearchTrajectoryLibrary::PoseSearchGenerateTransformTrajectoryWithPredictor(
+		PredictorInterface,
+		FMath::Max(0.0001f, DeltaTime),
+		BridgePoseSearchTrajectory,
+		BridgePoseSearchDesiredControllerYawLastUpdate,
+		GeneratedTrajectory,
+		0.04f,
+		10,
+		0.20f,
+		8);
+
+	BridgePoseSearchTrajectory = GeneratedTrajectory;
+	bBridgePoseSearchTrajectoryInitialized = true;
+}
+
 void UPhysAnimComponent::ResetStabilizationRuntimeState()
 {
 	ConditionedActionBuffer.Reset();
@@ -5009,6 +5355,13 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	LastMovementSmokeLocalIntent = FVector::ZeroVector;
 	LastMovementSmokeWorldIntent = FVector::ZeroVector;
 	LastMovementSmokeOwnerVelocityCmPerSecond = FVector::ZeroVector;
+	BridgeOwnedMovementLastWorldIntent = FVector::ZeroVector;
+	BridgeOwnedMovementPlanarVelocityCmPerSecond = FVector::ZeroVector;
+	BridgePoseSearchTrajectory = FTransformTrajectory();
+	BridgePoseSearchDesiredControllerYawLastUpdate = 0.0f;
+	LastBridgePoseSearchDeltaTimeSeconds = 1.0f / 30.0f;
+	LastBridgePoseSearchTrajectoryLogTimeSeconds = -1.0;
+	bBridgePoseSearchTrajectoryInitialized = false;
 	MovementSmokeStartLocation = FVector::ZeroVector;
 	ShellCouplingReferenceRootLocalOffsetCm = FVector::ZeroVector;
 	LastMovementSmokePhaseName = NAME_None;
