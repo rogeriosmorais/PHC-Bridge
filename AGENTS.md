@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Read this first.
+This is a WINDOWS MACHINE. Do NOT run linux commands like grep, findstr, etc. Use PowerShell syntax instead.
 
 ## Project
 
