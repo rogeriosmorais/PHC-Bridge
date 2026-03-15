@@ -78,6 +78,27 @@ namespace PhysAnimComponentInternal
 	constexpr float TerrainTraceStartAboveRootCm = 200.0f;
 	constexpr float TerrainTraceEndBelowRootCm = 300.0f;
 
+	float ResolveLoopingAnimationTime(const float AnimationTime, const float PlayLength, const bool bLoop)
+	{
+		if (PlayLength <= UE_SMALL_NUMBER)
+		{
+			return 0.0f;
+		}
+
+		if (!bLoop)
+		{
+			return FMath::Clamp(AnimationTime, 0.0f, PlayLength);
+		}
+
+		float WrappedTime = FMath::Fmod(AnimationTime, PlayLength);
+		if (WrappedTime < 0.0f)
+		{
+			WrappedTime += PlayLength;
+		}
+
+		return WrappedTime;
+	}
+
 	struct FFloatBufferSummary
 	{
 		float Mean = 0.0f;
@@ -1438,6 +1459,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			SearchResult = LastValidPoseSearchResult;
 		}
 
+		BridgePoseSearchDisplayedResult = SearchResult;
+
 		TArray<FPhysAnimBodySample> CurrentBodySamples;
 		const double BodySampleStartSeconds = FPlatformTime::Seconds();
 		if (!GatherCurrentBodySamples(CurrentBodySamples, TickError))
@@ -1578,6 +1601,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
+	if (!bRunPolicyUpdateThisTick && BridgePoseSearchDisplayedResult.SelectedAnim != nullptr)
+	{
+		AdvanceBridgePoseSearchResultTime(BridgePoseSearchDisplayedResult, DeltaTime);
+	}
+
 	ApplyRuntimeControlTuning(EffectiveSettings);
 	if (!PendingBodyModifierCachedResetNames.IsEmpty())
 	{
@@ -1619,6 +1647,16 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		FailStopWithTrace(TickError);
 		return;
+	}
+
+	if (ShouldDriveDirectBridgePoseSearchControlTargets(EffectiveSettings) &&
+		BridgePoseSearchDisplayedResult.SelectedAnim != nullptr)
+	{
+		if (!ApplyBridgePoseSearchDirectControlTargets(BridgePoseSearchDisplayedResult, DeltaTime, TickError))
+		{
+			FailStopWithTrace(TickError);
+			return;
+		}
 	}
 
 	const double UpdateControlsStartSeconds = FPlatformTime::Seconds();
@@ -5108,6 +5146,283 @@ void UPhysAnimComponent::ApplyBridgeOwnedMovementDrive(float DeltaTime, const FP
 	}
 }
 
+bool UPhysAnimComponent::IsBridgePoseSearchIdleResult(const FPoseSearchBlueprintResult& SearchResult)
+{
+	if (SearchResult.SelectedAnim == nullptr)
+	{
+		return false;
+	}
+
+	const FString AssetName = SearchResult.SelectedAnim->GetName().ToLower();
+	return AssetName.Contains(TEXT("mm_idle")) ||
+		AssetName == TEXT("idle") ||
+		AssetName.EndsWith(TEXT("_idle")) ||
+		AssetName.Contains(TEXT("idle"));
+}
+
+void UPhysAnimComponent::ResolveBridgePoseSearchQueryVelocity(
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	FVector& OutQueryVelocity,
+	float* OutIntentMagnitude) const
+{
+	FVector WorldIntent = BridgeOwnedMovementLastWorldIntent;
+	WorldIntent.Z = 0.0f;
+
+	const float IntentMagnitude = FMath::Clamp(WorldIntent.Size2D(), 0.0f, 1.0f);
+	if (OutIntentMagnitude)
+	{
+		*OutIntentMagnitude = IntentMagnitude;
+	}
+
+	FVector QueryDirection = FVector::ZeroVector;
+	if (!WorldIntent.IsNearlyZero())
+	{
+		QueryDirection = WorldIntent.GetSafeNormal2D();
+	}
+	else if (BridgeOwnedMovementPlanarVelocityCmPerSecond.SizeSquared2D() > KINDA_SMALL_NUMBER)
+	{
+		QueryDirection = BridgeOwnedMovementPlanarVelocityCmPerSecond.GetSafeNormal2D();
+	}
+
+	float QuerySpeedCmPerSecond = BridgeOwnedMovementPlanarVelocityCmPerSecond.Size2D();
+	if (EffectiveSettings.bBridgePoseSearchUseStabilizedWalkQuerySpeed &&
+		IntentMagnitude >= EffectiveSettings.BridgePoseSearchWalkIntentThreshold &&
+		!QueryDirection.IsNearlyZero())
+	{
+		const float MaxQuerySpeedCmPerSecond =
+			FMath::Max(EffectiveSettings.BridgeOwnedMovementMaxPlanarSpeedCmPerSecond, EffectiveSettings.BridgePoseSearchStabilizedWalkSpeedCmPerSecond);
+		QuerySpeedCmPerSecond = FMath::Clamp(EffectiveSettings.BridgePoseSearchStabilizedWalkSpeedCmPerSecond, 0.0f, MaxQuerySpeedCmPerSecond);
+	}
+
+	OutQueryVelocity = QueryDirection.IsNearlyZero() ? FVector::ZeroVector : (QueryDirection * QuerySpeedCmPerSecond);
+	OutQueryVelocity.Z = 0.0f;
+}
+
+bool UPhysAnimComponent::ShouldDriveDirectBridgePoseSearchControlTargets(const FPhysAnimStabilizationSettings& EffectiveSettings) const
+{
+	return RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+		EffectiveSettings.bBridgePoseSearchDriveDirectControlTargetsForTesting &&
+		ShouldUseBridgeOwnedMovementDrive(EffectiveSettings);
+}
+
+bool UPhysAnimComponent::ApplyBridgePoseSearchDirectControlTargets(
+	const FPoseSearchBlueprintResult& SearchResult,
+	float DeltaTimeSeconds,
+	FString& OutError)
+{
+	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	const UAnimInstance* const LocalAnimInstance = AnimInstance.Get();
+	AActor* const OwnerActor = GetOwner();
+	if (!PhysicsControl || !SkeletalMesh || !LocalAnimInstance || !OwnerActor)
+	{
+		OutError = TEXT("Bridge direct control-target drive requires the owner, skeletal mesh, anim instance, and Physics Control component.");
+		return false;
+	}
+
+	const UAnimationAsset* const AnimationAsset = Cast<UAnimationAsset>(SearchResult.SelectedAnim);
+	if (!AnimationAsset)
+	{
+		OutError = TEXT("Bridge direct control-target drive requires PoseSearch to return a UAnimationAsset.");
+		return false;
+	}
+
+	const float PlayLength = AnimationAsset->GetPlayLength();
+	const float AnimationTime = PhysAnimComponentInternal::ResolveLoopingAnimationTime(
+		SearchResult.SelectedTime,
+		PlayLength,
+		SearchResult.bLoop);
+
+	FPoseSearchAssetSamplerInput SamplerInput;
+	SamplerInput.Animation = AnimationAsset;
+	SamplerInput.AnimationTime = AnimationTime;
+	SamplerInput.bMirrored = SearchResult.bIsMirrored;
+	SamplerInput.BlendParameters = SearchResult.BlendParameters;
+	SamplerInput.RootTransformOrigin = SkeletalMesh->GetComponentTransform();
+
+	FPoseSearchAssetSamplerPose SampledPose = UPoseSearchAssetSamplerLibrary::SamplePose(LocalAnimInstance, SamplerInput);
+
+	auto FindInitialControl = [OwnerActor](const FName ControlName) -> const FInitialPhysicsControl*
+	{
+		if (const UPhysAnimStage1InitializerComponent* const Stage1Initializer = OwnerActor->FindComponentByClass<UPhysAnimStage1InitializerComponent>())
+		{
+			return Stage1Initializer->InitialControls.Find(ControlName);
+		}
+
+		if (const UPhysicsControlInitializerComponent* const Initializer = OwnerActor->FindComponentByClass<UPhysicsControlInitializerComponent>())
+		{
+			return Initializer->InitialControls.Find(ControlName);
+		}
+
+		return nullptr;
+	};
+
+	PhysicsControl->SetControlsInSetUseSkeletalAnimation(TEXT("All"), false, 0.0f, 0.0f);
+	const float TargetDeltaTimeSeconds = FMath::Max(0.0f, DeltaTimeSeconds);
+
+	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+	{
+		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+		if (!PhysicsControl->GetControlExists(ControlName))
+		{
+			OutError = FString::Printf(TEXT("Missing required control '%s' during direct bridge pose drive."), *ControlName.ToString());
+			return false;
+		}
+
+		const FInitialPhysicsControl* const InitialControl = FindInitialControl(ControlName);
+		if (!InitialControl)
+		{
+			OutError = FString::Printf(TEXT("Missing authored control definition for '%s' during direct bridge pose drive."), *ControlName.ToString());
+			return false;
+		}
+
+		const FTransform ParentWorldTransform =
+			UPoseSearchAssetSamplerLibrary::GetTransformByName(SampledPose, InitialControl->ParentBoneName, EPoseSearchAssetSamplerSpace::World);
+		const FTransform ChildWorldTransform =
+			UPoseSearchAssetSamplerLibrary::GetTransformByName(SampledPose, InitialControl->ChildBoneName, EPoseSearchAssetSamplerSpace::World);
+
+		const FQuat TargetOrientation = BuildCurrentPoseControlTargetOrientation(
+			ParentWorldTransform.GetRotation().GetNormalized(),
+			ChildWorldTransform.GetRotation().GetNormalized());
+
+		PhysicsControl->SetControlTargetOrientation(
+			ControlName,
+			TargetOrientation.Rotator(),
+			TargetDeltaTimeSeconds,
+			true,
+			false,
+			true,
+			false);
+	}
+
+	return true;
+}
+
+void UPhysAnimComponent::AdvanceBridgePoseSearchResultTime(FPoseSearchBlueprintResult& InOutSearchResult, float DeltaTimeSeconds) const
+{
+	if (InOutSearchResult.SelectedAnim == nullptr || DeltaTimeSeconds <= 0.0f)
+	{
+		return;
+	}
+
+	const UAnimationAsset* const AnimationAsset = Cast<UAnimationAsset>(InOutSearchResult.SelectedAnim);
+	if (AnimationAsset == nullptr)
+	{
+		return;
+	}
+
+	const float PlayLength = AnimationAsset->GetPlayLength();
+	if (PlayLength <= UE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float PlayRate = FMath::Max(InOutSearchResult.WantedPlayRate, 0.01f);
+	const float AdvancedTime = InOutSearchResult.SelectedTime + (DeltaTimeSeconds * PlayRate);
+	InOutSearchResult.SelectedTime = InOutSearchResult.bLoop
+		? FMath::Fmod(AdvancedTime, PlayLength)
+		: FMath::Clamp(AdvancedTime, 0.0f, PlayLength);
+	InOutSearchResult.bIsContinuingPoseSearch = true;
+}
+
+bool UPhysAnimComponent::ShouldContinueBridgePoseSearchWalkSelection(
+	const FVector& QueryVelocity,
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	double CurrentTimeSeconds) const
+{
+	if (!bHasBridgePoseSearchLatchedWalkResult ||
+		CurrentTimeSeconds > BridgePoseSearchWalkLatchExpireTimeSeconds)
+	{
+		return false;
+	}
+
+	const float QuerySpeedCmPerSecond = QueryVelocity.Size2D();
+	if (QuerySpeedCmPerSecond < EffectiveSettings.BridgePoseSearchIdlePredictedSpeedCutoffCmPerSecond)
+	{
+		return false;
+	}
+
+	if (FMath::Abs(QuerySpeedCmPerSecond - BridgePoseSearchLatchedQuerySpeedCmPerSecond) >
+		EffectiveSettings.BridgePoseSearchContinuationMaxSpeedDeltaCmPerSecond)
+	{
+		return false;
+	}
+
+	const FVector QueryDirection = QuerySpeedCmPerSecond > UE_SMALL_NUMBER
+		? QueryVelocity.GetSafeNormal2D()
+		: FVector::ZeroVector;
+	if (!QueryDirection.IsNearlyZero() && !BridgePoseSearchLatchedQueryDirection.IsNearlyZero())
+	{
+		const float ClampedDot = FMath::Clamp(FVector::DotProduct(QueryDirection, BridgePoseSearchLatchedQueryDirection), -1.0f, 1.0f);
+		const float DirectionDeltaDegrees = FMath::RadiansToDegrees(FMath::Acos(ClampedDot));
+		if (DirectionDeltaDegrees > EffectiveSettings.BridgePoseSearchContinuationMaxDirectionDeltaDegrees)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void UPhysAnimComponent::ApplyBridgePoseSearchSelectionPolicy(
+	FPoseSearchBlueprintResult& InOutSearchResult,
+	float QueryDeltaTimeSeconds,
+	const FVector& QueryVelocity,
+	const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	const UWorld* const World = GetWorld();
+	const double CurrentTimeSeconds = World ? World->GetTimeSeconds() : 0.0;
+	const float QuerySpeedCmPerSecond = QueryVelocity.Size2D();
+	const float IntentMagnitude = FMath::Clamp(BridgeOwnedMovementLastWorldIntent.Size2D(), 0.0f, 1.0f);
+	const bool bWalkIntentActive = IntentMagnitude >= EffectiveSettings.BridgePoseSearchWalkIntentThreshold;
+	const bool bCandidateIdle = IsBridgePoseSearchIdleResult(InOutSearchResult);
+	const bool bCandidateLocomotion = InOutSearchResult.SelectedAnim != nullptr && !bCandidateIdle;
+	const bool bShouldContinueWalk =
+		ShouldContinueBridgePoseSearchWalkSelection(QueryVelocity, EffectiveSettings, CurrentTimeSeconds);
+
+	if (bShouldContinueWalk)
+	{
+		const bool bSelectedDifferentAnimation =
+			InOutSearchResult.SelectedAnim != nullptr &&
+			BridgePoseSearchLatchedWalkResult.SelectedAnim != nullptr &&
+			InOutSearchResult.SelectedAnim != BridgePoseSearchLatchedWalkResult.SelectedAnim;
+
+		if (bCandidateIdle || bSelectedDifferentAnimation)
+		{
+			InOutSearchResult = BridgePoseSearchLatchedWalkResult;
+			AdvanceBridgePoseSearchResultTime(InOutSearchResult, QueryDeltaTimeSeconds);
+		}
+	}
+	else if (bCandidateIdle && bWalkIntentActive &&
+		QuerySpeedCmPerSecond >= EffectiveSettings.BridgePoseSearchIdlePredictedSpeedCutoffCmPerSecond &&
+		bHasBridgePoseSearchLatchedWalkResult)
+	{
+		InOutSearchResult = BridgePoseSearchLatchedWalkResult;
+		AdvanceBridgePoseSearchResultTime(InOutSearchResult, QueryDeltaTimeSeconds);
+	}
+
+	if (InOutSearchResult.SelectedAnim != nullptr && !IsBridgePoseSearchIdleResult(InOutSearchResult) &&
+		QuerySpeedCmPerSecond >= EffectiveSettings.BridgePoseSearchIdlePredictedSpeedCutoffCmPerSecond)
+	{
+		BridgePoseSearchLatchedWalkResult = InOutSearchResult;
+		BridgePoseSearchLatchedQueryDirection = QuerySpeedCmPerSecond > UE_SMALL_NUMBER
+			? QueryVelocity.GetSafeNormal2D()
+			: FVector::ZeroVector;
+		BridgePoseSearchLatchedQuerySpeedCmPerSecond = QuerySpeedCmPerSecond;
+		BridgePoseSearchWalkLatchExpireTimeSeconds =
+			CurrentTimeSeconds + FMath::Max(0.0f, EffectiveSettings.BridgePoseSearchWalkContinuationSeconds);
+		bHasBridgePoseSearchLatchedWalkResult = true;
+	}
+	else if (QuerySpeedCmPerSecond < EffectiveSettings.BridgePoseSearchIdlePredictedSpeedCutoffCmPerSecond)
+	{
+		BridgePoseSearchLatchedWalkResult = FPoseSearchBlueprintResult();
+		BridgePoseSearchLatchedQueryDirection = FVector::ZeroVector;
+		BridgePoseSearchLatchedQuerySpeedCmPerSecond = 0.0f;
+		BridgePoseSearchWalkLatchExpireTimeSeconds = -1.0;
+		bHasBridgePoseSearchLatchedWalkResult = false;
+	}
+}
+
 bool UPhysAnimComponent::QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError)
 {
 	OutSearchResult = FPoseSearchBlueprintResult();
@@ -5136,6 +5451,10 @@ bool UPhysAnimComponent::QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprin
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	UpdateBridgePoseSearchTrajectory(FMath::Max(0.0001f, LastBridgePoseSearchDeltaTimeSeconds), EffectiveSettings);
+
+	FVector QueryVelocity = FVector::ZeroVector;
+	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, QueryVelocity);
+	BridgePoseSearchQueryVelocityCmPerSecond = QueryVelocity;
 
 	FAnimNode_PoseSearchHistoryCollector_Base* const MutablePoseHistoryNode = const_cast<FAnimNode_PoseSearchHistoryCollector_Base*>(PoseHistoryNode);
 	MutablePoseHistoryNode->GetPoseHistory().SetTrajectory(BridgePoseSearchTrajectory, 1.0f);
@@ -5166,6 +5485,11 @@ bool UPhysAnimComponent::QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprin
 	}
 
 	OutSearchResult.InitFrom(SearchResult, 1.0f);
+	ApplyBridgePoseSearchSelectionPolicy(
+		OutSearchResult,
+		FMath::Max(0.0001f, LastBridgePoseSearchDeltaTimeSeconds),
+		QueryVelocity,
+		EffectiveSettings);
 
 	const UWorld* const World = GetWorld();
 	const double CurrentTimeSeconds = World ? World->GetTimeSeconds() : 0.0;
@@ -5177,13 +5501,14 @@ bool UPhysAnimComponent::QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprin
 		UE_LOG(
 			LogPhysAnimBridge,
 			Log,
-			TEXT("[PhysAnim] Bridge predictor search selected '%s' from locomotion intent: local=(%.2f,%.2f) world=(%.2f,%.2f) speedCmPerSec=%.1f"),
+			TEXT("[PhysAnim] Bridge predictor search selected '%s' from locomotion intent: local=(%.2f,%.2f) world=(%.2f,%.2f) actualSpeedCmPerSec=%.1f querySpeedCmPerSec=%.1f"),
 			OutSearchResult.SelectedAnim ? *OutSearchResult.SelectedAnim->GetName() : TEXT("None"),
 			LocalIntent.X,
 			LocalIntent.Y,
 			WorldIntent.X,
 			WorldIntent.Y,
-			BridgeOwnedMovementPlanarVelocityCmPerSecond.Size2D());
+			BridgeOwnedMovementPlanarVelocityCmPerSecond.Size2D(),
+			BridgePoseSearchQueryVelocityCmPerSecond.Size2D());
 		LastBridgePoseSearchTrajectoryLogTimeSeconds = CurrentTimeSeconds;
 	}
 
@@ -5209,13 +5534,17 @@ void UPhysAnimComponent::GetCurrentState(FVector& OutPosition, FQuat& OutFacing,
 		OutFacing = FQuat::Identity;
 	}
 
-	OutVelocity = BridgeOwnedMovementPlanarVelocityCmPerSecond;
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, OutVelocity);
+	BridgePoseSearchQueryVelocityCmPerSecond = OutVelocity;
 	OutVelocity.Z = 0.0f;
 }
 
 void UPhysAnimComponent::GetVelocity(FVector& OutVelocity)
 {
-	OutVelocity = BridgeOwnedMovementPlanarVelocityCmPerSecond;
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, OutVelocity);
+	BridgePoseSearchQueryVelocityCmPerSecond = OutVelocity;
 	OutVelocity.Z = 0.0f;
 }
 
@@ -5232,15 +5561,15 @@ void UPhysAnimComponent::Predict(FTransformTrajectory& InOutTrajectory, int32 Nu
 	FVector SimulatedPosition = OwnerActor->GetActorLocation();
 	FQuat SimulatedFacing = OwnerActor->GetActorQuat();
 
-	FVector SimulatedVelocity = BridgeOwnedMovementPlanarVelocityCmPerSecond;
+	float IntentMagnitude = 0.0f;
+	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, BridgePoseSearchQueryVelocityCmPerSecond, &IntentMagnitude);
+
+	FVector SimulatedVelocity = BridgePoseSearchQueryVelocityCmPerSecond;
 	SimulatedVelocity.Z = 0.0f;
 
 	FVector WorldIntent = BridgeOwnedMovementLastWorldIntent;
 	WorldIntent.Z = 0.0f;
-	const float IntentMagnitude = FMath::Clamp(WorldIntent.Size2D(), 0.0f, 1.0f);
-	const FVector DesiredVelocity = WorldIntent.IsNearlyZero()
-		? FVector::ZeroVector
-		: (WorldIntent.GetSafeNormal2D() * (EffectiveSettings.BridgeOwnedMovementMaxPlanarSpeedCmPerSecond * IntentMagnitude));
+	const FVector DesiredVelocity = BridgePoseSearchQueryVelocityCmPerSecond;
 
 	float DesiredYawDegrees = SimulatedFacing.Rotator().Yaw;
 	if (EffectiveSettings.bBridgeOwnedMovementUseControllerYaw)
@@ -5272,15 +5601,27 @@ void UPhysAnimComponent::Predict(FTransformTrajectory& InOutTrajectory, int32 Nu
 
 	for (int32 PredictionIndex = 1; PredictionIndex <= NumPredictionSamples; ++PredictionIndex)
 	{
-		const float VelocityBlendRate = DesiredVelocity.IsNearlyZero()
-			? FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementDecelerationCmPerSecondSq)
-			: FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementAccelerationCmPerSecondSq);
+		const bool bUseCleanWalkQuerySpeed =
+			EffectiveSettings.bBridgePoseSearchUseStabilizedWalkQuerySpeed &&
+			IntentMagnitude >= EffectiveSettings.BridgePoseSearchWalkIntentThreshold &&
+			!DesiredVelocity.IsNearlyZero();
 
-		SimulatedVelocity = FMath::VInterpConstantTo(
-			SimulatedVelocity,
-			DesiredVelocity,
-			SafePredictionDt,
-			VelocityBlendRate);
+		if (bUseCleanWalkQuerySpeed)
+		{
+			SimulatedVelocity = DesiredVelocity;
+		}
+		else
+		{
+			const float VelocityBlendRate = DesiredVelocity.IsNearlyZero()
+				? FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementDecelerationCmPerSecondSq)
+				: FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementAccelerationCmPerSecondSq);
+
+			SimulatedVelocity = FMath::VInterpConstantTo(
+				SimulatedVelocity,
+				DesiredVelocity,
+				SafePredictionDt,
+				VelocityBlendRate);
+		}
 		SimulatedVelocity.Z = 0.0f;
 
 		SimulatedPosition += SimulatedVelocity * SafePredictionDt;
@@ -5300,7 +5641,7 @@ void UPhysAnimComponent::Predict(FTransformTrajectory& InOutTrajectory, int32 Nu
 
 void UPhysAnimComponent::UpdateBridgePoseSearchTrajectory(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
-	(void)EffectiveSettings;
+	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, BridgePoseSearchQueryVelocityCmPerSecond);
 
 	TScriptInterface<IPoseSearchTrajectoryPredictorInterface> PredictorInterface;
 	PredictorInterface.SetObject(this);
@@ -5359,8 +5700,15 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	BridgeOwnedMovementPlanarVelocityCmPerSecond = FVector::ZeroVector;
 	BridgePoseSearchTrajectory = FTransformTrajectory();
 	BridgePoseSearchDesiredControllerYawLastUpdate = 0.0f;
+	BridgePoseSearchQueryVelocityCmPerSecond = FVector::ZeroVector;
 	LastBridgePoseSearchDeltaTimeSeconds = 1.0f / 30.0f;
 	LastBridgePoseSearchTrajectoryLogTimeSeconds = -1.0;
+	BridgePoseSearchLatchedWalkResult = FPoseSearchBlueprintResult();
+	BridgePoseSearchDisplayedResult = FPoseSearchBlueprintResult();
+	BridgePoseSearchLatchedQueryDirection = FVector::ZeroVector;
+	BridgePoseSearchLatchedQuerySpeedCmPerSecond = 0.0f;
+	BridgePoseSearchWalkLatchExpireTimeSeconds = -1.0;
+	bHasBridgePoseSearchLatchedWalkResult = false;
 	bBridgePoseSearchTrajectoryInitialized = false;
 	MovementSmokeStartLocation = FVector::ZeroVector;
 	ShellCouplingReferenceRootLocalOffsetCm = FVector::ZeroVector;

@@ -188,6 +188,30 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady && bEnableBridgeOwnedMovementWhileCharacterMovementLocked", ClampMin = "0.0"))
 	float BridgeOwnedMovementRotationInterpSpeed = 8.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady && bEnableBridgeOwnedMovementWhileCharacterMovementLocked"))
+	bool bBridgePoseSearchUseStabilizedWalkQuerySpeed = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady && bEnableBridgeOwnedMovementWhileCharacterMovementLocked", ClampMin = "0.0", ClampMax = "1.0"))
+	float BridgePoseSearchWalkIntentThreshold = 0.35f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady && bEnableBridgeOwnedMovementWhileCharacterMovementLocked", ClampMin = "0.0"))
+	float BridgePoseSearchStabilizedWalkSpeedCmPerSecond = 160.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady && bEnableBridgeOwnedMovementWhileCharacterMovementLocked", ClampMin = "0.0"))
+	float BridgePoseSearchIdlePredictedSpeedCutoffCmPerSecond = 70.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady && bEnableBridgeOwnedMovementWhileCharacterMovementLocked", ClampMin = "0.0"))
+	float BridgePoseSearchWalkContinuationSeconds = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady && bEnableBridgeOwnedMovementWhileCharacterMovementLocked", ClampMin = "0.0", ClampMax = "180.0"))
+	float BridgePoseSearchContinuationMaxDirectionDeltaDegrees = 45.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady && bEnableBridgeOwnedMovementWhileCharacterMovementLocked", ClampMin = "0.0"))
+	float BridgePoseSearchContinuationMaxSpeedDeltaCmPerSecond = 90.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady && bEnableBridgeOwnedMovementWhileCharacterMovementLocked"))
+	bool bBridgePoseSearchDriveDirectControlTargetsForTesting = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && bDelayMovementUnlockUntilPolicySettled", ClampMin = "0.0", ClampMax = "1.0"))
 	float PolicySettleMinInfluenceAlpha = 1.0f;
 
@@ -258,6 +282,14 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(BridgeOwnedMovementDecelerationCmPerSecondSq, Other.BridgeOwnedMovementDecelerationCmPerSecondSq) &&
 			bBridgeOwnedMovementUseControllerYaw == Other.bBridgeOwnedMovementUseControllerYaw &&
 			FMath::IsNearlyEqual(BridgeOwnedMovementRotationInterpSpeed, Other.BridgeOwnedMovementRotationInterpSpeed) &&
+			bBridgePoseSearchUseStabilizedWalkQuerySpeed == Other.bBridgePoseSearchUseStabilizedWalkQuerySpeed &&
+			FMath::IsNearlyEqual(BridgePoseSearchWalkIntentThreshold, Other.BridgePoseSearchWalkIntentThreshold) &&
+			FMath::IsNearlyEqual(BridgePoseSearchStabilizedWalkSpeedCmPerSecond, Other.BridgePoseSearchStabilizedWalkSpeedCmPerSecond) &&
+			FMath::IsNearlyEqual(BridgePoseSearchIdlePredictedSpeedCutoffCmPerSecond, Other.BridgePoseSearchIdlePredictedSpeedCutoffCmPerSecond) &&
+			FMath::IsNearlyEqual(BridgePoseSearchWalkContinuationSeconds, Other.BridgePoseSearchWalkContinuationSeconds) &&
+			FMath::IsNearlyEqual(BridgePoseSearchContinuationMaxDirectionDeltaDegrees, Other.BridgePoseSearchContinuationMaxDirectionDeltaDegrees) &&
+			FMath::IsNearlyEqual(BridgePoseSearchContinuationMaxSpeedDeltaCmPerSecond, Other.BridgePoseSearchContinuationMaxSpeedDeltaCmPerSecond) &&
+			bBridgePoseSearchDriveDirectControlTargetsForTesting == Other.bBridgePoseSearchDriveDirectControlTargetsForTesting &&
 			FMath::IsNearlyEqual(PolicySettleMinInfluenceAlpha, Other.PolicySettleMinInfluenceAlpha) &&
 			FMath::IsNearlyEqual(PolicySettleMaxShellOffsetCm, Other.PolicySettleMaxShellOffsetCm) &&
 			FMath::IsNearlyEqual(PolicySettleMaxRootLinearSpeedCmPerSecond, Other.PolicySettleMaxRootLinearSpeedCmPerSecond) &&
@@ -431,6 +463,23 @@ private:
 	void ApplyBridgeOwnedMovementDrive(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	bool QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	void UpdateBridgePoseSearchTrajectory(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void ResolveBridgePoseSearchQueryVelocity(const FPhysAnimStabilizationSettings& EffectiveSettings, FVector& OutQueryVelocity, float* OutIntentMagnitude = nullptr) const;
+	void ApplyBridgePoseSearchSelectionPolicy(
+		FPoseSearchBlueprintResult& InOutSearchResult,
+		float QueryDeltaTimeSeconds,
+		const FVector& QueryVelocity,
+		const FPhysAnimStabilizationSettings& EffectiveSettings);
+	bool ShouldDriveDirectBridgePoseSearchControlTargets(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
+	bool ApplyBridgePoseSearchDirectControlTargets(
+		const FPoseSearchBlueprintResult& SearchResult,
+		float DeltaTimeSeconds,
+		FString& OutError);
+	void AdvanceBridgePoseSearchResultTime(FPoseSearchBlueprintResult& InOutSearchResult, float DeltaTimeSeconds) const;
+	bool ShouldContinueBridgePoseSearchWalkSelection(
+		const FVector& QueryVelocity,
+		const FPhysAnimStabilizationSettings& EffectiveSettings,
+		double CurrentTimeSeconds) const;
+	static bool IsBridgePoseSearchIdleResult(const FPoseSearchBlueprintResult& SearchResult);
 	void ResetStabilizationRuntimeState();
 	void FailStop(const FString& Reason);
 	void StartBridgeTraceSession();
@@ -506,12 +555,19 @@ private:
 	double LastPolicySettleGateLogTimeSeconds = -1.0;
 	FVector BridgeOwnedMovementPlanarVelocityCmPerSecond = FVector::ZeroVector;
 	FVector BridgeOwnedMovementLastWorldIntent = FVector::ZeroVector;
+	FVector BridgePoseSearchQueryVelocityCmPerSecond = FVector::ZeroVector;
 	double LastBridgeOwnedMovementLogTimeSeconds = -1.0;
 	double LastBridgeOwnedMovementNoInputLogTimeSeconds = -1.0;
 	FTransformTrajectory BridgePoseSearchTrajectory;
 	float BridgePoseSearchDesiredControllerYawLastUpdate = 0.0f;
 	float LastBridgePoseSearchDeltaTimeSeconds = 1.0f / 30.0f;
 	double LastBridgePoseSearchTrajectoryLogTimeSeconds = -1.0;
+	FPoseSearchBlueprintResult BridgePoseSearchLatchedWalkResult;
+	FPoseSearchBlueprintResult BridgePoseSearchDisplayedResult;
+	FVector BridgePoseSearchLatchedQueryDirection = FVector::ZeroVector;
+	float BridgePoseSearchLatchedQuerySpeedCmPerSecond = 0.0f;
+	double BridgePoseSearchWalkLatchExpireTimeSeconds = -1.0;
+	bool bHasBridgePoseSearchLatchedWalkResult = false;
 	bool bBridgePoseSearchTrajectoryInitialized = false;
 	double LastPrePolicyShellRecoveryLogTimeSeconds = -1.0;
 	bool bHasSavedStartupAnimationState = false;
