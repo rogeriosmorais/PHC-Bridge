@@ -2105,7 +2105,7 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 			UE_LOG(
 				LogPhysAnimBridge,
 				Log,
-				TEXT("[PhysAnimBalance] [%d/%d %s] QUIET_GATE: authorityReady=%s reason=%s policyAlpha=%.2f/%.2f speed=%.1f/%.1f tilt=%.1f/%.1f idlePose=%s locomotionState=%s quiet=%.2f/%.2fs"),
+				TEXT("[PhysAnimBalance] [%d/%d %s] QUIET_GATE: bridgeReady=%s reason=%s policyAlpha=%.2f/%.2f speed=%.1f/%.1f tilt=%.1f/%.1f idlePose=%s locomotionState=%s quiet=%.2f/%.2fs"),
 				ActiveBalanceScenarioIndex + 1,
 				BalanceScenarios.Num(),
 				*Scenario.Name,
@@ -4661,11 +4661,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		{
 			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) > 0.0f)
 			{
+				const FString ViolationReason = FString::Printf(TEXT("pelvisResetViolation:%s"), *BoneName.ToString());
 				UE_LOG(
 					LogPhysAnimBridge,
 					Error,
-					TEXT("[PhysAnimBalance] CONFIGURATION ERROR: Cached-target reset for '%s' requested after policy influence has begun. This violates the isolated settle phase."),
+					TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Cached-target reset for '%s' requested after policy influence has begun. Failing and stopping mode."),
 					*BoneName.ToString());
+				FinalizeBalanceScenario(false, ViolationReason);
+				StopBalancePerturbationMode();
 			}
 			else
 			{
@@ -4813,11 +4816,14 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 		{
 			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && CalculateCurrentPolicyInfluenceAlpha(ResolveEffectiveStabilizationSettings()) > 0.0f)
 			{
+				const FString ViolationReason = FString::Printf(TEXT("bodyPromotionViolation:%s"), *BoneName.ToString());
 				UE_LOG(
 					LogPhysAnimBridge,
 					Error,
-					TEXT("[PhysAnimBalance] CONFIGURATION ERROR: Body promotion for '%s' requested after policy influence has begun. This violates the isolated settle phase."),
+					TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Body promotion for '%s' requested after policy influence has begun. Failing and stopping mode."),
 					*BoneName.ToString());
+				FinalizeBalanceScenario(false, ViolationReason);
+				StopBalancePerturbationMode();
 			}
 			else
 			{
