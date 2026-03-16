@@ -4614,22 +4614,38 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			if (bRampJustStarted)
 			{
 				const FTransform BoneTransform = MeshComponent->GetBoneTransform(MeshComponent->GetBoneIndex(BoneName));
-				// Note: In a simulated frame, GetBoneTransform usually returns the physical pose which has been synced back.
-				// We want to know if this pose is already diverging from a "stable" state or if the control being 
-				// enabled with even 0 strength causes a change.
 				
 				UE_LOG(
 					LogPhysAnimBridge,
 					Log,
-					TEXT("[PhysAnimBalance] FINAL RAMP ENABLE DIAG: bone=%s alpha=%.4f easing=%.4f strength=%.2f loc=(%.1f, %.1f, %.1f) rot=(%.2f, %.2f, %.2f, %.2f)"),
+					TEXT("[PhysAnimBalance] FINAL RAMP ENABLE DIAG: bone=%s alpha=%.4f easing=%.4f strength=%.2f useSkelAnim=%s loc=(%.1f, %.1f, %.1f) rot=(%.2f, %.2f, %.2f, %.2f)"),
 					*BoneName.ToString(),
 					ControlAuthorityAlpha,
 					HandoverEasing,
 					ControlMultiplier.AngularStrengthMultiplier,
+					bUseSkeletalAnimationTargetRepresentation ? TEXT("true") : TEXT("false"),
 					BoneTransform.GetLocation().X, BoneTransform.GetLocation().Y, BoneTransform.GetLocation().Z,
 					BoneTransform.GetRotation().X, BoneTransform.GetRotation().Y, BoneTransform.GetRotation().Z, BoneTransform.GetRotation().W);
 			}
 		}
+	}
+
+	// After the control loop, if the ramp just started, log the AFTER state.
+	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
+	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
+	if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && 
+		BringUpGroupControlRampStartTimeSeconds.IsValidIndex(FinalGroupIndex) && 
+		BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] == WorldTime &&
+		WorldTime >= 0.0)
+	{
+		const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnimBalance] STATE FLIP - AFTER FINAL RAMP: time=%.4f policyAlpha=%.4f useSkelAnim=%s"),
+			WorldTime,
+			PolicyAlpha,
+			bUseSkeletalAnimationTargetRepresentation ? TEXT("true") : TEXT("false"));
 	}
 
 	PhysicsControl->SetBodyModifiersInSetMovementType(TEXT("All"), EPhysicsMovementType::Kinematic);
@@ -5270,8 +5286,20 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 				ShouldDelayBringUpGroupControlRamp(FinalGroupIndex, GetBringUpGroupCount()),
 				true))
 		{
-			BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] =
-				GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+			const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+			const float CurrentAngularVelocity = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
+			
+			UE_LOG(
+				LogPhysAnimBridge,
+				Log,
+				TEXT("[PhysAnimBalance] STATE FLIP - BEFORE FINAL RAMP: time=%.4f handoffAlpha=%.4f unlockedGroup=%d distalComposition=%s rootAngVel=%.2f"),
+				WorldTime,
+				SimulationHandoffAlpha,
+				HighestUnlockedBringUpGroupIndex,
+				bDistalLocomotionCompositionModeActive ? TEXT("On") : TEXT("Off"),
+				CurrentAngularVelocity);
+
+			BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] = WorldTime;
 			BringUpGroupStableAccumulatedSeconds = 0.0f;
 			
 			const float AngularVelocity = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
