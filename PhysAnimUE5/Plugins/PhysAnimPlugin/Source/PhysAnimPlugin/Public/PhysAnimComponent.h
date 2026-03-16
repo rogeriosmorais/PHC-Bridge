@@ -391,22 +391,22 @@ struct FPhysAnimBalanceScenario
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance")
 	FString Name;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance")
 	EPhysAnimPerturbationDirection Direction = EPhysAnimPerturbationDirection::Forward;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance")
 	EPhysAnimPerturbationMagnitude Magnitude = EPhysAnimPerturbationMagnitude::Small;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance")
 	float TriggerDelaySeconds = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance")
 	float RecoveryTimeoutSeconds = 3.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance")
 	float CooldownSeconds = 1.0f;
 
 	bool bTriggered = false;
@@ -769,6 +769,7 @@ private:
 	float BalanceScenarioPeakPelvisVel = 0.0f;
 	float BalanceScenarioPeakPelvisTilt = 0.0f;
 	FVector BalanceScenarioStartActorLocation = FVector::ZeroVector;
+	FVector BalanceScenarioStartPelvisLocation = FVector::ZeroVector;
 	FQuat BalanceScenarioStartPelvisRotation = FQuat::Identity;
 	bool bBalanceScenarioAwaitingStableWindow = false;
 	double BalanceScenarioStableWindowStartTimeSeconds = -1.0;
@@ -811,6 +812,7 @@ public:
 		const FVector& OwnerVelocityCmPerSecond,
 		const FVector& RootVelocityCmPerSecond);
 	static void ResolveBodyModifierRuntimeMode(
+		EPhysAnimRuntimeState RuntimeState,
 		bool bForceZeroActions,
 		bool bSimulationHandoffSettled,
 		bool bBringUpGroupUnlocked,
@@ -820,12 +822,14 @@ public:
 		float& OutPhysicsBlendWeight,
 		bool& bOutUpdateKinematicFromSimulation);
 	static ECollisionEnabled::Type ResolveBodyModifierCollisionType(
+		EPhysAnimRuntimeState RuntimeState,
 		bool bForceZeroActions,
 		bool bSimulationHandoffSettled,
 		bool bBringUpGroupUnlocked,
 		bool bIsRootBodyModifier,
 		bool bAllowRootBodyModifierSimulation);
 	static bool ShouldResetBodyModifierToCachedBoneTransform(
+		EPhysAnimRuntimeState RuntimeState,
 		bool bForceZeroActions,
 		bool bBodyModifierActivatedThisTick,
 		bool bBringUpGroupUnlocked,

@@ -1786,6 +1786,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		bool bUpdateKinematicFromSimulation = true;
 
 		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			EPhysAnimRuntimeState::BridgeActive,
 			true,
 			true,
 			true,
@@ -1799,6 +1800,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("Force-zero mode disables update kinematic from simulation"), bUpdateKinematicFromSimulation);
 
 		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			EPhysAnimRuntimeState::BridgeActive,
 			false,
 			false,
 			false,
@@ -1812,6 +1814,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("Settling phase disables update kinematic from simulation"), bUpdateKinematicFromSimulation);
 
 		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			EPhysAnimRuntimeState::BridgeActive,
 			false,
 			true,
 			true,
@@ -1825,6 +1828,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("Completed handoff keeps root update kinematic from simulation disabled"), bUpdateKinematicFromSimulation);
 
 		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			EPhysAnimRuntimeState::BridgeActive,
 			false,
 			true,
 			true,
@@ -1838,6 +1842,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("Completed handoff keeps simulated body modifiers from writing back to kinematic"), bUpdateKinematicFromSimulation);
 
 		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			EPhysAnimRuntimeState::BridgeActive,
 			false,
 			true,
 			false,
@@ -1850,6 +1855,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("Locked bring-up group keeps non-root body modifiers at zero blend"), PhysicsBlendWeight, 0.0f);
 
 		UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
+			EPhysAnimRuntimeState::BridgeActive,
 			false,
 			true,
 			true,
@@ -1872,27 +1878,27 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	{
 		TestEqual(
 			TEXT("Force-zero mode keeps body modifier collision disabled"),
-			UPhysAnimComponent::ResolveBodyModifierCollisionType(true, true, true, false, false),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(EPhysAnimRuntimeState::BridgeActive, true, true, true, false, false),
 			ECollisionEnabled::NoCollision);
 		TestEqual(
 			TEXT("Settling phase keeps non-root body modifier collision disabled"),
-			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, false, false, false, false),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(EPhysAnimRuntimeState::BridgeActive, false, false, false, false, false),
 			ECollisionEnabled::NoCollision);
 		TestEqual(
 			TEXT("Completed handoff still keeps root body modifier collision disabled"),
-			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, true, true, false),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, false),
 			ECollisionEnabled::NoCollision);
 		TestEqual(
 			TEXT("Completed handoff enables non-root body modifier collision"),
-			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, true, false, false),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(EPhysAnimRuntimeState::BridgeActive, false, true, true, false, false),
 			ECollisionEnabled::QueryAndPhysics);
 		TestEqual(
 			TEXT("Locked bring-up group keeps non-root body modifier collision disabled"),
-			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, false, false, false),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(EPhysAnimRuntimeState::BridgeActive, false, true, false, false, false),
 			ECollisionEnabled::NoCollision);
 		TestEqual(
 			TEXT("Presentation perturbation enables root body modifier collision"),
-			UPhysAnimComponent::ResolveBodyModifierCollisionType(false, true, true, true, true),
+			UPhysAnimComponent::ResolveBodyModifierCollisionType(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, true),
 			ECollisionEnabled::QueryAndPhysics);
 		return true;
 	}
@@ -1906,22 +1912,22 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	{
 		TestFalse(
 			TEXT("Force-zero mode does not reset body modifiers to cached transforms"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(true, true, true, false, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, true, true, true, false, false));
 		TestFalse(
 			TEXT("Non-settling ticks do not reset body modifiers to cached transforms"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, false, true, false, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, false, true, false, false));
 		TestFalse(
 			TEXT("Root body modifier does not reset on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, true, true, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, false));
 		TestTrue(
 			TEXT("Non-root body modifier resets on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, true, false, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, false, false));
 		TestFalse(
 			TEXT("Locked bring-up group does not reset on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, false, false, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, false, false, false));
 		TestTrue(
 			TEXT("Presentation perturbation resets the root body modifier when it becomes simulated"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(false, true, true, true, true));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, true));
 		return true;
 	}
 
@@ -3119,6 +3125,11 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		return true;
 	}
 
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPieBalanceModeTest,
+		"PhysAnim.PIE.BalanceMode",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 	bool FPhysAnimPieMovementTraceSmokeTest::RunTest(const FString& Parameters)
 	{
 		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
@@ -3264,6 +3275,81 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 				AddError(FString::Printf(
 					TEXT("%s PIE did not stop within %.1f seconds."),
 					PhysAnimPieG2PresentationPrefix,
+					PhysAnimPieSmokeStopTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStopTimeoutSeconds));
+
+		return true;
+	}
+	bool FPhysAnimPieBalanceModeTest::RunTest(const FString& Parameters)
+	{
+		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
+		{
+			AddError(FString::Printf(TEXT("%s Failed to open map '%s'."), TEXT("[PhysAnimPieBalance]"), *PhysAnimPieSmokeMap));
+			return false;
+		}
+
+		AddCommand(new FEditorAutomationLogCommand(FString::Printf(
+			TEXT("[PhysAnimPieBalance] PIE balance mode opening '%s'."),
+			*PhysAnimPieSmokeMap)));
+		AddCommand(new FStartPIECommand(false));
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor != nullptr && IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("[PhysAnimPieBalance] PIE did not start within %.1f seconds."),
+					PhysAnimPieSmokeStartTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStartTimeoutSeconds));
+		
+		// The scenarios themselves handle the timing. 
+		// There are 13 scenarios (1 no-push + 4 dirs * 3 mags).
+		// Each scenario needs some time to settle and recover.
+		// Let's wait for a generous amount of time or until it stops.
+		AddCommand(new FWaitLatentCommand(1.0f));
+		AddCommand(new FExecPieConsoleCommand(TEXT("pa.StartBalanceMode")));
+		
+		// Wait for scenarios to complete. 
+		// We'll wait up to 120 seconds or until the component is no longer in balance mode.
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				if (!GEditor || !IsValid(GEditor->PlayWorld)) return true;
+				for (TObjectIterator<UPhysAnimComponent> It; It; ++It)
+				{
+					if (IsValid(*It) && It->GetWorld() == GEditor->PlayWorld)
+					{
+						if (It->GetRuntimeState() == EPhysAnimRuntimeState::BalancePerturbationMode)
+						{
+							return false;
+						}
+					}
+				}
+				return true;
+			},
+			[this]() -> bool
+			{
+				AddError(TEXT("[PhysAnimPieBalance] Scenarios did not complete within timeout."));
+				return true;
+			},
+			120.0f));
+
+		AddCommand(new FEndPlayMapCommand());
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor == nullptr || !IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("[PhysAnimPieBalance] PIE did not stop within %.1f seconds."),
 					PhysAnimPieSmokeStopTimeoutSeconds));
 				return true;
 			},
