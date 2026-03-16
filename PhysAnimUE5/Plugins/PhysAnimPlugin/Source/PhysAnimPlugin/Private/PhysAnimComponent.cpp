@@ -1129,6 +1129,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	if (RuntimeState != EPhysAnimRuntimeState::WaitingForPoseSearch &&
 		RuntimeState != EPhysAnimRuntimeState::ReadyForActivation &&
 		RuntimeState != EPhysAnimRuntimeState::BridgeActive &&
+		RuntimeState != EPhysAnimRuntimeState::PreBalanceTransition &&
+		RuntimeState != EPhysAnimRuntimeState::PreBalanceSettle &&
 		RuntimeState != EPhysAnimRuntimeState::BalancePerturbationMode)
 	{
 		return;
@@ -1436,8 +1438,16 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	}
 
 	TrackStabilizationStressTestObservations();
-	AdvanceBringUpState(DeltaTime, EffectiveSettings);
+	const bool bFreezeBringUpForPreBalance =
+		RuntimeState == EPhysAnimRuntimeState::PreBalanceTransition ||
+		RuntimeState == EPhysAnimRuntimeState::PreBalanceSettle;
+	if (!bFreezeBringUpForPreBalance)
+	{
+		AdvanceBringUpState(DeltaTime, EffectiveSettings);
+	}
 
+	// Pre-balance transition/settle must evaluate after runtime control tuning so the
+	// same-frame pelvis/root simulation handoff is visible immediately.
 	if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
 	{
 		UpdateBalancePerturbation(DeltaTime);
@@ -1639,6 +1649,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	if (!PendingBodyModifierCachedResetNames.IsEmpty())
 	{
 		ResetPendingBodyModifiersToCachedTargets();
+	}
+
+	if (RuntimeState == EPhysAnimRuntimeState::PreBalanceTransition || RuntimeState == EPhysAnimRuntimeState::PreBalanceSettle)
+	{
+		UpdatePreBalanceTransition(DeltaTime, EffectiveSettings);
 	}
 
 	// Re-check queued balance-mode entry after tuning/reset drain so pelvis/root simulation
@@ -1868,7 +1883,16 @@ void UPhysAnimComponent::ClearPresentationPerturbationOverride()
 
 bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
-	if (RuntimeState != EPhysAnimRuntimeState::BalancePerturbationMode)
+	const bool bPreBalanceOwnsRootSimulation =
+		RuntimeState == EPhysAnimRuntimeState::PreBalanceTransition ||
+		RuntimeState == EPhysAnimRuntimeState::PreBalanceSettle;
+	const bool bBalanceModeOwnsRootSimulation = RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode;
+	const bool bBridgeActivePreEntryRootSimulationRequest =
+		RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+		bPendingBalanceModeStartRequest &&
+		bPendingBalancePreEntryRootSimulationRequest;
+
+	if (!bBalanceModeOwnsRootSimulation && !bBridgeActivePreEntryRootSimulationRequest && !bPreBalanceOwnsRootSimulation)
 	{
 		return false;
 	}
@@ -1884,12 +1908,13 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 		return false;
 	}
 
-	// We permit simulation even before policy influence reaches the ready threshold, 
-	// provided bring-up is complete. This allows the root to get its mandatory initial reset 
-	// while PolicyAlpha is still 0.0, avoiding design violations.
-	const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+		const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+	if (PolicyAlpha < BalanceReadyPolicyInfluenceThreshold)
+	{
+		return false;
+	}
 
-	// We even block simulation if there are pending resets to prevent the root from releasing 
+	// We block simulation if there are pending resets to prevent the root from releasing 
 	// while other limbs are still snapping to targets.
 	if (!PendingBodyModifierCachedResetNames.IsEmpty())
 	{
@@ -2504,6 +2529,7 @@ bool UPhysAnimComponent::EvaluateBalanceModeEntryPrerequisites(const FPhysAnimSt
 void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 {
 	bPendingBalanceModeStartRequest = true;
+	bPendingBalancePreEntryRootSimulationRequest = false;
 	LastPendingBalanceStartProbeLogTimeSeconds = -1.0;
 	LastPendingBalanceStartProbeReason.Reset();
 	PendingBalanceModeStartReason = Reason;
@@ -2511,8 +2537,9 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 	UE_LOG(
 		LogPhysAnimBridge,
 		Warning,
-		TEXT("[PhysAnimBalance] Entry blocked: %s. Queued automatic start when BridgeActive becomes balance-ready."),
-		*Reason);
+		TEXT("[PhysAnimBalance] Entry blocked: %s. Queued automatic start when BridgeActive becomes balance-ready%s."),
+		*Reason,
+		bPendingBalancePreEntryRootSimulationRequest ? TEXT(" and pre-entry pelvis/root sim handoff completes") : TEXT(""));
 }
 
 void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
@@ -2523,14 +2550,16 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	}
 
 	FString ReadyReason;
-	if (!EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, ReadyReason))
+	FString ReadyReasonIgnorePelvis;
+	if (!EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, ReadyReasonIgnorePelvis, true))
 	{
-		LogPendingBalanceStartProbe(EffectiveSettings, ReadyReason);
+		LogPendingBalanceStartProbe(EffectiveSettings, ReadyReasonIgnorePelvis);
 		return;
 	}
 
 	const FString PreviousReason = PendingBalanceModeStartReason;
 	bPendingBalanceModeStartRequest = false;
+	bPendingBalancePreEntryRootSimulationRequest = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
 	LastPendingBalanceStartProbeLogTimeSeconds = -1.0;
@@ -2539,10 +2568,10 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	UE_LOG(
 		LogPhysAnimBridge,
 		Warning,
-		TEXT("[PhysAnimBalance] Pending start satisfied after %s. Entering Balance Perturbation Mode automatically."),
+		TEXT("[PhysAnimBalance] Pending start satisfied after %s. Beginning PreBalanceTransition before entering Balance Perturbation Mode."),
 		PreviousReason.IsEmpty() ? TEXT("unknownBlocker") : *PreviousReason);
 
-	StartBalancePerturbationMode();
+	BeginPreBalanceTransition(EffectiveSettings);
 }
 
 
@@ -2569,7 +2598,7 @@ void UPhysAnimComponent::UpdatePelvisSimulationDebugState(const FPhysAnimStabili
 		UE_LOG(
 			LogPhysAnimBridge,
 			Warning,
-			TEXT("[PhysAnimBalance] PELVIS_SIM_PROBE[%s]: runtime=%d pelvisBodyValid=%s pelvisBodySimulating=%s lastAppliedRootSim=%s allowRootSimInBalance=%s allBringUpUnlocked=%s finalRamp=%s policyAlpha=%.2f pendingResets=%d pendingRootReset=%s queuePending=%s queueReason=%s"),
+			TEXT("[PhysAnimBalance] PELVIS_SIM_PROBE[%s]: runtime=%d pelvisBodyValid=%s pelvisBodySimulating=%s lastAppliedRootSim=%s allowRootSimInBalance=%s allBringUpUnlocked=%s finalRamp=%s policyAlpha=%.2f pendingResets=%d pendingRootReset=%s queuePending=%s queuePreEntryRootSim=%s queueReason=%s"),
 			Context ? Context : TEXT("Unknown"),
 			static_cast<int32>(RuntimeState),
 			bPelvisBodyValid ? TEXT("true") : TEXT("false"),
@@ -2582,6 +2611,7 @@ void UPhysAnimComponent::UpdatePelvisSimulationDebugState(const FPhysAnimStabili
 			PendingBodyModifierCachedResetNames.Num(),
 			bPendingRootReset ? TEXT("true") : TEXT("false"),
 			bPendingBalanceModeStartRequest ? TEXT("true") : TEXT("false"),
+			bPendingBalancePreEntryRootSimulationRequest ? TEXT("true") : TEXT("false"),
 			PendingBalanceModeStartReason.IsEmpty() ? TEXT("none") : *PendingBalanceModeStartReason);
 	}
 
@@ -2614,20 +2644,16 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 {
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	UpdatePelvisSimulationDebugState(EffectiveSettings, TEXT("StartBalancePerturbationMode-Entry"));
-	const bool bIgnorePelvisSimulationRequirement = false;
 	FString EntryReason;
-	if (!EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, EntryReason, bIgnorePelvisSimulationRequirement))
+	if (!EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, EntryReason, true))
 	{
 		if (EntryReason == TEXT("bringUpIncomplete") ||
 			EntryReason == TEXT("finalGroupRampInactive") ||
 			EntryReason == TEXT("policyInfluenceBelowThreshold") ||
-			EntryReason == TEXT("deferredResetsPending"))
+			EntryReason == TEXT("deferredResetsPending") ||
+			EntryReason == TEXT("pelvisBodyNotSimulating"))
 		{
 			QueueBalanceModeStartRequest(EntryReason);
-		}
-		else if (EntryReason == TEXT("pelvisBodyNotSimulating"))
-		{
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] Entry failed: pelvisBodyNotSimulating. Balance mode must begin from an already-simulating pelvis/root state. BridgeActive is not auto-promoting pelvis/root simulation for this path."));
 		}
 		else if (EntryReason == TEXT("pelvisResetRequiredAtEntry"))
 		{
@@ -2640,6 +2666,11 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 		return;
 	}
 
+	BeginPreBalanceTransition(EffectiveSettings);
+}
+
+void UPhysAnimComponent::EnterBalanceScenarioRuntime()
+{
 	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 	UWorld* const World = GetWorld();
@@ -2649,8 +2680,10 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	}
 
 	bPendingBalanceModeStartRequest = false;
+	bPendingBalancePreEntryRootSimulationRequest = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
+	ResetPreBalanceTransitionState();
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalancePerturbationMode);
 	ApplyStartupMovementLock();
@@ -2758,6 +2791,166 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 		BalanceShellContaminationDisplacementCm,
 		BalanceFallHeightThresholdCm,
 		bHasBalanceIdlePoseSearchResult ? TEXT("true") : TEXT("false"));
+}
+
+void UPhysAnimComponent::BeginPreBalanceTransition(const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	bPendingBalanceModeStartRequest = false;
+	bPendingBalancePreEntryRootSimulationRequest = true;
+	PendingBalanceModeStartReason = TEXT("preBalanceTransition");
+	PendingBalanceModeRequestTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
+	PreBalanceTransitionStartTimeSeconds = PendingBalanceModeRequestTimeSeconds;
+	PreBalanceSettleAccumulatedSeconds = 0.0;
+	LastPreBalanceTransitionLogTimeSeconds = -1.0;
+	LastPreBalanceTransitionBlockReason.Reset();
+	ApplyStartupMovementLock();
+	ResetBridgeLocomotionAuthorityState();
+	TransitionRuntimeState(EPhysAnimRuntimeState::PreBalanceTransition);
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Entered PreBalanceTransition. Waiting for pelvis/root sim handoff and post-handoff settle before Balance Perturbation Mode."));
+	UpdatePelvisSimulationDebugState(EffectiveSettings, TEXT("BeginPreBalanceTransition"));
+}
+
+void UPhysAnimComponent::ResetPreBalanceTransitionState()
+{
+	PreBalanceTransitionStartTimeSeconds = -1.0;
+	PreBalanceSettleAccumulatedSeconds = 0.0;
+	LastPreBalanceTransitionLogTimeSeconds = -1.0;
+	LastPreBalanceTransitionBlockReason.Reset();
+	bPendingBalancePreEntryRootSimulationRequest = false;
+}
+
+bool UPhysAnimComponent::IsPreBalanceTransitionStable(const FPhysAnimStabilizationSettings& EffectiveSettings, FString* OutReason) const
+{
+	auto SetReason = [&](const TCHAR* Reason) -> bool
+	{
+		if (OutReason)
+		{
+			*OutReason = Reason;
+		}
+		return false;
+	};
+
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	AActor* const OwnerActor = GetOwner();
+	if (!Mesh || !OwnerActor)
+	{
+		return SetReason(TEXT("missingContext"));
+	}
+	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
+	if (!PelvisBody)
+	{
+		return SetReason(TEXT("pelvisBodyMissing"));
+	}
+	if (!PelvisBody->IsInstanceSimulatingPhysics())
+	{
+		return SetReason(TEXT("pelvisBodyNotSimulating"));
+	}
+	if (!AreAllBringUpGroupsUnlocked())
+	{
+		return SetReason(TEXT("bringUpIncomplete"));
+	}
+	if (!IsBringUpGroupControlRampActive(GetBringUpGroupCount() - 1))
+	{
+		return SetReason(TEXT("finalGroupRampInactive"));
+	}
+	if (!PendingBodyModifierCachedResetNames.IsEmpty())
+	{
+		return SetReason(TEXT("deferredResetsPending"));
+	}
+	const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+	if (PolicyAlpha < BalanceReadyPolicyInfluenceThreshold)
+	{
+		return SetReason(TEXT("policyInfluenceBelowThreshold"));
+	}
+	const FVector PelvisLinearVelocity = PelvisBody->GetUnrealWorldVelocity() * 100.0f;
+	const FVector PelvisAngularVelocity = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
+	const float LinearSpeed = PelvisLinearVelocity.Size();
+	const float AngularSpeed = PelvisAngularVelocity.Size();
+	const FQuat PelvisRotation = PelvisBody->GetUnrealWorldTransform().GetRotation();
+	const float TiltDeg = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(PelvisRotation.GetUpVector(), FVector::UpVector), -1.0f, 1.0f)));
+	const FVector OwnerLocationCm = OwnerActor->GetActorLocation() * 100.0f;
+	const FVector RootLocationCm = PelvisBody->GetUnrealWorldTransform().GetLocation() * 100.0f;
+	const float ShellOffsetCm = ResolveShellCouplingPlanarOffsetDeltaCm(OwnerLocationCm, RootLocationCm, bHasShellCouplingReferenceRootLocalOffset ? ShellCouplingReferenceRootLocalOffsetCm : FVector::ZeroVector);
+	if (LinearSpeed > BalanceQuietLinearSpeedThresholdCmPerSec)
+	{
+		return SetReason(TEXT("rootLinearTooHigh"));
+	}
+	if (AngularSpeed > BalanceQuietTiltThresholdDeg * 2.0f)
+	{
+		return SetReason(TEXT("rootAngularTooHigh"));
+	}
+	if (TiltDeg > BalanceQuietTiltThresholdDeg)
+	{
+		return SetReason(TEXT("tiltTooHigh"));
+	}
+	if (ShellOffsetCm > BalanceShellContaminationDisplacementCm)
+	{
+		return SetReason(TEXT("shellOffsetTooHigh"));
+	}
+	if (OutReason)
+	{
+		*OutReason = TEXT("stable");
+	}
+	return true;
+}
+
+void UPhysAnimComponent::UpdatePreBalanceTransition(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	if (RuntimeState != EPhysAnimRuntimeState::PreBalanceTransition && RuntimeState != EPhysAnimRuntimeState::PreBalanceSettle)
+	{
+		return;
+	}
+	FString StableReason;
+	const bool bStable = IsPreBalanceTransitionStable(EffectiveSettings, &StableReason);
+	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	const bool bShouldLogStatus =
+		WorldTime >= 0.0 &&
+		(LastPreBalanceTransitionLogTimeSeconds < 0.0 ||
+		 (WorldTime - LastPreBalanceTransitionLogTimeSeconds) >= 0.5 ||
+		 LastPreBalanceTransitionBlockReason != StableReason);
+	if (bShouldLogStatus)
+	{
+		LastPreBalanceTransitionLogTimeSeconds = WorldTime;
+		LastPreBalanceTransitionBlockReason = StableReason;
+		const TCHAR* PhaseName = RuntimeState == EPhysAnimRuntimeState::PreBalanceTransition ? TEXT("TRANSITION") : TEXT("SETTLE");
+		const TCHAR* StableText = bStable ? TEXT("true") : TEXT("false");
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimBalance] PRE_BALANCE_%s: stable=%s reason=%s settle=%.2f/%.2f"),
+			PhaseName,
+			StableText,
+			*StableReason,
+			PreBalanceSettleAccumulatedSeconds,
+			BalancePreEntrySettleRequiredSeconds);
+	}
+	if (!bStable)
+	{
+		PreBalanceSettleAccumulatedSeconds = 0.0;
+		if (RuntimeState == EPhysAnimRuntimeState::PreBalanceSettle)
+		{
+			TransitionRuntimeState(EPhysAnimRuntimeState::PreBalanceTransition);
+		}
+		if (PreBalanceTransitionStartTimeSeconds >= 0.0 && (WorldTime - PreBalanceTransitionStartTimeSeconds) > BalancePreEntryTransitionTimeoutSeconds)
+		{
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PreBalanceTransition timed out waiting for a stable post-handoff state. Returning to BridgeActive. LastReason=%s"), *StableReason);
+			ResetPreBalanceTransitionState();
+			TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
+		}
+		return;
+	}
+	if (RuntimeState == EPhysAnimRuntimeState::PreBalanceTransition)
+	{
+		TransitionRuntimeState(EPhysAnimRuntimeState::PreBalanceSettle);
+		PreBalanceSettleAccumulatedSeconds = 0.0;
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PreBalanceTransition complete. Entering PreBalanceSettle."));
+	}
+	PreBalanceSettleAccumulatedSeconds += DeltaTime;
+	if (PreBalanceSettleAccumulatedSeconds >= BalancePreEntrySettleRequiredSeconds)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PreBalanceSettle complete. Entering Balance Perturbation Mode."));
+		EnterBalanceScenarioRuntime();
+	}
 }
 
 void UPhysAnimComponent::StopBalancePerturbationMode()
@@ -8368,6 +8561,10 @@ const TCHAR* UPhysAnimComponent::GetRuntimeStateName(EPhysAnimRuntimeState State
 		return TEXT("ReadyForActivation");
 	case EPhysAnimRuntimeState::BridgeActive:
 		return TEXT("BridgeActive");
+	case EPhysAnimRuntimeState::PreBalanceTransition:
+		return TEXT("PreBalanceTransition");
+	case EPhysAnimRuntimeState::PreBalanceSettle:
+		return TEXT("PreBalanceSettle");
 	case EPhysAnimRuntimeState::BalancePerturbationMode:
 		return TEXT("BalancePerturbationMode");
 	case EPhysAnimRuntimeState::FailStopped:
