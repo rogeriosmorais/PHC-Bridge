@@ -2616,6 +2616,7 @@ bool UPhysAnimComponent::IsBridgeActiveBalancePreEntryStable(FString& OutReason)
 void UPhysAnimComponent::ResetBridgeActiveBalancePreEntry()
 {
 	bBridgeActiveBalancePreEntryActive = false;
+	bBridgeActiveBalancePreEntrySucceeded = false;
 	BridgeActiveBalancePreEntryStableAccumulatedSeconds = 0.0;
 	LastBridgeActiveBalancePreEntryLogTimeSeconds = -1.0;
 	LastBridgeActiveBalancePreEntryReason.Reset();
@@ -2636,6 +2637,14 @@ void UPhysAnimComponent::UpdateBridgeActiveBalancePreEntry(float DeltaTime, cons
 		return;
 	}
 
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	AActor* const OwnerActor = GetOwner();
+	if (!Mesh || !OwnerActor)
+	{
+		ResetBridgeActiveBalancePreEntry();
+		return;
+	}
+
 	if (PendingBalanceModeStartReason != TEXT("pelvisBodyNotSimulating") && !bBridgeActiveBalancePreEntryActive)
 	{
 		return;
@@ -2644,21 +2653,123 @@ void UPhysAnimComponent::UpdateBridgeActiveBalancePreEntry(float DeltaTime, cons
 	if (!bBridgeActiveBalancePreEntryActive)
 	{
 		bBridgeActiveBalancePreEntryActive = true;
+		bBridgeActiveBalancePreEntrySucceeded = false;
 		BridgeActiveBalancePreEntryStableAccumulatedSeconds = 0.0;
 		LastBridgeActiveBalancePreEntryLogTimeSeconds = -1.0;
 		LastBridgeActiveBalancePreEntryReason.Reset();
+		
+		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(RootBoneName);
+		bLastRootSimulating = PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : false;
+		bLastPendingResetsEmpty = PendingBodyModifierCachedResetNames.IsEmpty();
+
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] BridgeActive pre-entry settle started. Staying in BridgeActive until pelvis/root sim is valid and stable before entering Balance Perturbation Mode."));
 	}
 
+	// Unified Measurements for Quiet Gate
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	const FVector PelvisLinearVelocity = Mesh->GetPhysicsLinearVelocity(RootBoneName);
+	const FVector PelvisAngularVelocityDegPerSec = Mesh->GetPhysicsAngularVelocityInDegrees(RootBoneName);
+	const FTransform PelvisTransform = Mesh->GetBoneTransform(Mesh->GetBoneIndex(RootBoneName));
+	
+	const float RootSpeed = PelvisLinearVelocity.Size();
+	const float RootAngularSpeed = PelvisAngularVelocityDegPerSec.Size();
+	const float RootTilt = FMath::RadiansToDegrees(OwnerActor->GetActorQuat().AngularDistance(PelvisTransform.GetRotation()));
+	const float ShellMetric = BridgeShellState.AcceptedPlanarVelocityCmPerSecond.Size2D();
+
+	// State flip and pending reset checks
+	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(RootBoneName);
+	const bool bRootSimulating = PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : false;
+	const bool bSimFlipped = bRootSimulating != bLastRootSimulating;
+	const bool bPendingResetsEmpty = PendingBodyModifierCachedResetNames.IsEmpty();
+	const bool bPendingResetsChanged = bPendingResetsEmpty != bLastPendingResetsEmpty;
+
+	// Fail-stop precursors
+	const bool bFailStopPrecursor = 
+		RootSpeed > EffectiveSettings.MaxRootLinearSpeedCmPerSecond ||
+		RootAngularSpeed > EffectiveSettings.MaxRootAngularSpeedDegPerSecond;
+
 	FString StableReason;
-	const bool bStable = IsBridgeActiveBalancePreEntryStable(StableReason);
-	BridgeActiveBalancePreEntryStableAccumulatedSeconds = bStable ? (BridgeActiveBalancePreEntryStableAccumulatedSeconds + DeltaTime) : 0.0;
+	bool bStable = true;
+
+	if (bSimFlipped)
+	{
+		bStable = false;
+		StableReason = TEXT("pelvisSimFlip");
+	}
+	else if (bPendingResetsChanged)
+	{
+		bStable = false;
+		StableReason = TEXT("pendingResetsChanged");
+	}
+	else if (bFailStopPrecursor)
+	{
+		bStable = false;
+		StableReason = TEXT("failStopPrecursor");
+	}
+	else if (RootSpeed > BalanceQuietLinearSpeedThresholdCmPerSec)
+	{
+		bStable = false;
+		StableReason = TEXT("rootLinearTooHigh");
+	}
+	else if (RootAngularSpeed > BalanceQuietTiltThresholdDeg * 2.0f)
+	{
+		bStable = false;
+		StableReason = TEXT("rootAngularTooHigh");
+	}
+	else if (RootTilt > BalanceQuietTiltThresholdDeg)
+	{
+		bStable = false;
+		StableReason = TEXT("rootTiltTooHigh");
+	}
+	else if (ShellMetric > BalanceQuietLinearSpeedThresholdCmPerSec)
+	{
+		bStable = false;
+		StableReason = TEXT("shellCorrectionTooHigh");
+	}
+	else if (LastValidPoseSearchResult.SelectedAnim != nullptr && !IsBridgePoseSearchIdleResult(LastValidPoseSearchResult))
+	{
+		bStable = false;
+		StableReason = TEXT("idlePoseInactive");
+	}
+	else if (BridgeLocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle)
+	{
+		bStable = false;
+		StableReason = TEXT("locomotionStateActive");
+	}
+
+	bLastRootSimulating = bRootSimulating;
+	bLastPendingResetsEmpty = bPendingResetsEmpty;
+
+	if (bStable)
+	{
+		StableReason = TEXT("ready");
+		BridgeActiveBalancePreEntryStableAccumulatedSeconds += DeltaTime;
+		if (BridgeActiveBalancePreEntryStableAccumulatedSeconds >= BalanceBridgeActivePreEntrySettleSeconds)
+		{
+			bBridgeActiveBalancePreEntrySucceeded = true;
+		}
+	}
+	else
+	{
+		BridgeActiveBalancePreEntryStableAccumulatedSeconds = 0.0;
+		bBridgeActiveBalancePreEntrySucceeded = false;
+	}
 
 	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
 	const bool bShouldLog = WorldTime >= 0.0 && (LastBridgeActiveBalancePreEntryLogTimeSeconds < 0.0 || WorldTime - LastBridgeActiveBalancePreEntryLogTimeSeconds >= 0.5 || LastBridgeActiveBalancePreEntryReason != StableReason);
 	if (bShouldLog)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] BRIDGEACTIVE_PRE_ENTRY: stable=%s reason=%s settle=%.2f/%.2f"), bStable ? TEXT("true") : TEXT("false"), *StableReason, BridgeActiveBalancePreEntryStableAccumulatedSeconds, BalanceBridgeActivePreEntrySettleSeconds);
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] BRIDGEACTIVE_PRE_ENTRY: stable=%s reason=%s succeeded=%s settle=%.2f/%.2f rootLin=%.1f rootAng=%.1f tilt=%.1f shell=%.1f"), 
+			bStable ? TEXT("true") : TEXT("false"), 
+			*StableReason, 
+			bBridgeActiveBalancePreEntrySucceeded ? TEXT("true") : TEXT("false"),
+			BridgeActiveBalancePreEntryStableAccumulatedSeconds, 
+			BalanceBridgeActivePreEntrySettleSeconds,
+			RootSpeed,
+			RootAngularSpeed,
+			RootTilt,
+			ShellMetric);
 		LastBridgeActiveBalancePreEntryLogTimeSeconds = WorldTime;
 		LastBridgeActiveBalancePreEntryReason = StableReason;
 	}
@@ -2684,22 +2795,36 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	}
 
 	FString ReadyReason;
-	if (EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, ReadyReason))
+	const bool bEntryPrereqsMet = EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, ReadyReason);
+	const bool bPreEntrySettleComplete = !bBridgeActiveBalancePreEntryActive || bBridgeActiveBalancePreEntrySucceeded;
+
+	if (bEntryPrereqsMet && bPreEntrySettleComplete)
 	{
 		const FString PreviousReason = PendingBalanceModeStartReason;
-		bPendingBalanceModeStartRequest = false;
-		PendingBalanceModeStartReason.Reset();
-		PendingBalanceModeRequestTimeSeconds = -1.0;
-		ResetBridgeActiveBalancePreEntry();
-
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("[PhysAnimBalance] Pending start satisfied after %s. Entering Balance Perturbation Mode automatically from already-stable BridgeActive runtime."),
-			PreviousReason.IsEmpty() ? TEXT("unknownBlocker") : *PreviousReason);
+		
+		// Promotion Log: Detailed success
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PROMOTION SUCCESS: Entering Balance Perturbation Mode. PreviousBlocker=%s StableHold=%.2fs RootSpeed=%.1f RootAng=%.1f Shell=%.1f"),
+			PreviousReason.IsEmpty() ? TEXT("None") : *PreviousReason,
+			static_cast<float>(BridgeActiveBalancePreEntryStableAccumulatedSeconds),
+			LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
+			LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond,
+			BridgeShellState.AcceptedPlanarVelocityCmPerSecond.Size2D());
 
 		StartBalancePerturbationMode();
 		return;
+	}
+
+	// Promotion Denied Log
+	if (bPendingBalanceModeStartRequest)
+	{
+		const FString FailurePredicate = !bEntryPrereqsMet ? ReadyReason : TEXT("preEntrySettleIncomplete");
+		const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
+		if (WorldTime >= 0.0 && (LastBridgeActiveBalancePreEntryLogTimeSeconds < 0.0 || WorldTime - LastBridgeActiveBalancePreEntryLogTimeSeconds >= 1.0 || LastBridgeActiveBalancePreEntryReason != FailurePredicate))
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PROMOTION DENIED: %s"), *FailurePredicate);
+			LastBridgeActiveBalancePreEntryLogTimeSeconds = WorldTime;
+			LastBridgeActiveBalancePreEntryReason = FailurePredicate;
+		}
 	}
 
 	FString BridgeActiveReason;
@@ -2709,6 +2834,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		if (!bBridgeActiveBalancePreEntryActive)
 		{
 			bBridgeActiveBalancePreEntryActive = true;
+			bBridgeActiveBalancePreEntrySucceeded = false;
 			BridgeActiveBalancePreEntryStableAccumulatedSeconds = 0.0;
 			LastBridgeActiveBalancePreEntryLogTimeSeconds = -1.0;
 			LastBridgeActiveBalancePreEntryReason.Reset();

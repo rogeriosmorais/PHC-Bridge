@@ -845,6 +845,9 @@ private:
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
 	bool bBridgeActiveBalancePreEntryActive = false;
+	bool bBridgeActiveBalancePreEntrySucceeded = false;
+	bool bLastRootSimulating = false;
+	bool bLastPendingResetsEmpty = true;
 	double BridgeActiveBalancePreEntryStableAccumulatedSeconds = 0.0;
 	double LastBridgeActiveBalancePreEntryLogTimeSeconds = -1.0;
 	FString LastBridgeActiveBalancePreEntryReason;
