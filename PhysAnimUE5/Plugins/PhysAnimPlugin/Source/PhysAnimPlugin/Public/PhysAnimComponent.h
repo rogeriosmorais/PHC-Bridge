@@ -636,12 +636,14 @@ private:
 	void UpdateBalancePerturbation(float DeltaTime);
 	void ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude);
 	void FinalizeBalanceScenario(bool bSuccess, const FString& Reason);
+	bool ShouldAllowBalanceSimulation(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	bool IsBalancePerturbationRuntimeReady(
 		const FPhysAnimStabilizationSettings& EffectiveSettings,
 		float* OutPolicyInfluenceAlpha = nullptr,
 		FString* OutFailureReason = nullptr) const;
 	bool IsBalanceScenarioQuietEnough(
 		const FVector& PelvisLinearVelocity,
+		const FVector& PelvisAngularVelocityDegPerSec,
 		float TiltDeg,
 		bool bIdlePoseActive,
 		bool bNoLocomotionStateActive) const;

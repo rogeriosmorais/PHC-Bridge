@@ -1862,6 +1862,32 @@ void UPhysAnimComponent::ClearPresentationPerturbationOverride()
 	PresentationPerturbationOverrideEndTimeSeconds = -1.0;
 }
 
+bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizationSettings& EffectiveSettings) const
+{
+	if (RuntimeState != EPhysAnimRuntimeState::BalancePerturbationMode)
+	{
+		return false;
+	}
+
+	if (!AreAllBringUpGroupsUnlocked())
+	{
+		return false;
+	}
+
+	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
+	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
+	{
+		return false;
+	}
+
+	if (CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) < BalanceReadyPolicyInfluenceThreshold)
+	{
+		return false;
+	}
+
+	return true;
+}
+
 bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 	const FPhysAnimStabilizationSettings& EffectiveSettings,
 	float* OutPolicyInfluenceAlpha,
@@ -1882,25 +1908,14 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 		*OutPolicyInfluenceAlpha = PolicyInfluenceAlpha;
 	}
 
-	if (!AreAllBringUpGroupsUnlocked())
+	if (!ShouldAllowBalanceSimulation(EffectiveSettings))
 	{
-		return SetFailure(TEXT("bringUpIncomplete"));
-	}
-
-	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
-	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
-	{
-		return SetFailure(TEXT("finalGroupRampInactive"));
+		return SetFailure(TEXT("logicNotReady"));
 	}
 
 	if (!PendingBodyModifierCachedResetNames.IsEmpty())
 	{
 		return SetFailure(TEXT("deferredResetsPending"));
-	}
-
-	if (PolicyInfluenceAlpha < BalanceReadyPolicyInfluenceThreshold)
-	{
-		return SetFailure(TEXT("policyInfluenceInactive"));
 	}
 
 	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
@@ -1925,11 +1940,13 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 
 bool UPhysAnimComponent::IsBalanceScenarioQuietEnough(
 	const FVector& PelvisLinearVelocity,
+	const FVector& PelvisAngularVelocityDegPerSec,
 	float TiltDeg,
 	bool bIdlePoseActive,
 	bool bNoLocomotionStateActive) const
 {
 	return PelvisLinearVelocity.Size() <= BalanceQuietLinearSpeedThresholdCmPerSec &&
+		PelvisAngularVelocityDegPerSec.Size() <= BalanceQuietTiltThresholdDeg * 2.0f && // Use tilt threshold as proxy for angular speed
 		TiltDeg <= BalanceQuietTiltThresholdDeg &&
 		bIdlePoseActive &&
 		bNoLocomotionStateActive;
@@ -2030,6 +2047,7 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 	const bool bQuietEnough = bRuntimeReady &&
 		IsBalanceScenarioQuietEnough(
 			PelvisLinearVelocity,
+			PelvisAngularVelocityDegPerSec,
 			TiltDeg,
 			bIdlePoseActive,
 			bNoLocomotionStateActive);
@@ -2077,8 +2095,9 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 
 		if (BalanceScenarioQuietWindowAccumulatedSeconds >= BalanceQuietWindowRequiredSeconds)
 		{
+			// Transition to READY without resetting the scenario timer.
+			// This ensures the handover ramp finished during the quiet window and stays at 1.0 during the test.
 			bBalanceScenarioAwaitingStableWindow = false;
-			BalanceScenarioStartTimeSeconds = WorldTime;
 			BalanceScenarioStableWindowStartTimeSeconds = WorldTime;
 			BalanceScenarioRecoveryStableAccumulatedSeconds = 0.0;
 			LastBalanceScenarioImpactTimeSeconds = -1.0;
@@ -4537,6 +4556,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	PhysicsControl->SetBodyModifiersInSetCollisionType(TEXT("All"), ECollisionEnabled::NoCollision);
 	PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
 
+	const bool bAllowRootBodyModifierSimulationInBalanceMode = ShouldAllowBalanceSimulation(EffectiveSettings);
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
@@ -4548,9 +4568,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
 		const bool bIsRootBodyModifier = BoneName == RootBoneName;
-		
-		// In Balance Mode, we only simulate the root after the character has stabilized and is ready for perturbation.
-		const bool bAllowRootBodyModifierSimulation = (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && !bBalanceScenarioAwaitingStableWindow);
+
+		// In Balance Mode, we break the root into simulation as soon as the bridge is logically ready 
+		// (bring-up complete, policy authority high enough). This allows the quiet window to run 
+		// under legitimate physical simulation as required by the design.
+		const bool bAllowRootBodyModifierSimulation = bIsRootBodyModifier && bAllowRootBodyModifierSimulationInBalanceMode;
 		
 		if (bIsRootBodyModifier && bAllowRootBodyModifierSimulation)
 		{
