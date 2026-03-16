@@ -1640,6 +1640,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		ResetPendingBodyModifiersToCachedTargets();
 	}
+
+	// Re-check queued balance-mode entry after tuning/reset drain so pelvis/root simulation
+	// state changes made this frame can satisfy the queued request immediately.
+	TryStartPendingBalanceModeRequest(EffectiveSettings);
 	if (bRunPolicyUpdateThisTick)
 	{
 		const double ActionConditionStartSeconds = FPlatformTime::Seconds();
@@ -2437,41 +2441,141 @@ void UPhysAnimComponent::FinalizeBalanceScenario(bool bSuccess, const FString& R
 	}
 }
 
-void UPhysAnimComponent::StartBalancePerturbationMode()
+bool UPhysAnimComponent::EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const
 {
 	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive)
 	{
-		return;
+		OutReason = TEXT("runtimeNotBridgeActive");
+		return false;
 	}
 
 	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	if (!Mesh)
 	{
-		return;
+		OutReason = TEXT("meshMissing");
+		return false;
 	}
 
 	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
 	if (!PelvisBody)
 	{
-		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] Entry failed: pelvisBodyMissing."));
-		return;
+		OutReason = TEXT("pelvisBodyMissing");
+		return false;
+	}
+
+	if (!AreAllBringUpGroupsUnlocked())
+	{
+		OutReason = TEXT("bringUpIncomplete");
+		return false;
+	}
+
+	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
+	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
+	{
+		OutReason = TEXT("finalGroupRampInactive");
+		return false;
 	}
 
 	if (!PendingBodyModifierCachedResetNames.IsEmpty())
 	{
-		const FName PelvisModifierName = PhysAnimBridge::GetRootBoneName();
-		if (PendingBodyModifierCachedResetNames.Contains(PelvisModifierName))
-		{
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] Entry failed: pelvisResetRequiredAtEntry. Pelvis must be stable and promote-drained before balance mode."));
-			return;
-		}
+		OutReason = PendingBodyModifierCachedResetNames.Contains(PhysAnimBridge::GetRootBoneName())
+			? TEXT("pelvisResetRequiredAtEntry")
+			: TEXT("deferredResetsPending");
+		return false;
 	}
 
-	UWorld* const World = GetWorld();
-	if (!World)
+	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+	if (PolicyInfluenceAlpha < BalanceReadyPolicyInfluenceThreshold)
+	{
+		OutReason = TEXT("policyInfluenceBelowThreshold");
+		return false;
+	}
+
+	if (!PelvisBody->IsInstanceSimulatingPhysics())
+	{
+		OutReason = TEXT("pelvisBodyNotSimulating");
+		return false;
+	}
+
+	OutReason = TEXT("ready");
+	return true;
+}
+
+void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
+{
+	bPendingBalanceModeStartRequest = true;
+	PendingBalanceModeStartReason = Reason;
+	PendingBalanceModeRequestTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimBalance] Entry blocked: %s. Queued automatic start when BridgeActive becomes balance-ready."),
+		*Reason);
+}
+
+void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	if (!bPendingBalanceModeStartRequest || RuntimeState != EPhysAnimRuntimeState::BridgeActive)
 	{
 		return;
 	}
+
+	FString ReadyReason;
+	if (!EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, ReadyReason))
+	{
+		return;
+	}
+
+	const FString PreviousReason = PendingBalanceModeStartReason;
+	bPendingBalanceModeStartRequest = false;
+	PendingBalanceModeStartReason.Reset();
+	PendingBalanceModeRequestTimeSeconds = -1.0;
+
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimBalance] Pending start satisfied after %s. Entering Balance Perturbation Mode automatically."),
+		PreviousReason.IsEmpty() ? TEXT("unknownBlocker") : *PreviousReason);
+
+	StartBalancePerturbationMode();
+}
+
+void UPhysAnimComponent::StartBalancePerturbationMode()
+{
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	FString EntryReason;
+	if (!EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, EntryReason))
+	{
+		if (EntryReason == TEXT("bringUpIncomplete") ||
+			EntryReason == TEXT("finalGroupRampInactive") ||
+			EntryReason == TEXT("policyInfluenceBelowThreshold") ||
+			EntryReason == TEXT("deferredResetsPending") ||
+			EntryReason == TEXT("pelvisBodyNotSimulating"))
+		{
+			QueueBalanceModeStartRequest(EntryReason);
+		}
+		else if (EntryReason == TEXT("pelvisResetRequiredAtEntry"))
+		{
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] Entry failed: pelvisResetRequiredAtEntry. Pelvis must be stable and promote-drained before balance mode."));
+		}
+		else if (EntryReason == TEXT("pelvisBodyMissing"))
+		{
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] Entry failed: pelvisBodyMissing."));
+		}
+		return;
+	}
+
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+	UWorld* const World = GetWorld();
+	if (!Mesh || !PelvisBody || !World)
+	{
+		return;
+	}
+
+	bPendingBalanceModeStartRequest = false;
+	PendingBalanceModeStartReason.Reset();
+	PendingBalanceModeRequestTimeSeconds = -1.0;
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalancePerturbationMode);
 	ApplyStartupMovementLock();

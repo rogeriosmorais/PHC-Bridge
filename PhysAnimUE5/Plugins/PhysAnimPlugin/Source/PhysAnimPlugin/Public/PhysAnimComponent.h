@@ -648,6 +648,9 @@ private:
 		bool bIdlePoseActive,
 		bool bNoLocomotionStateActive) const;
 	void ResetBalanceScenarioQuietGate(const FString& Reason);
+	bool EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
+	void QueueBalanceModeStartRequest(const FString& Reason);
+	void TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings);
 
 	void CacheRestPoses(UAnimSequence* TPoseAnim);
 	bool BeginStartupTPoseCapture(FString& OutError);
@@ -831,6 +834,9 @@ private:
 	float BalanceScenarioPeakActorDisplacementCm = 0.0f;
 	FPoseSearchBlueprintResult BalanceIdlePoseSearchResult;
 	bool bHasBalanceIdlePoseSearchResult = false;
+	bool bPendingBalanceModeStartRequest = false;
+	FString PendingBalanceModeStartReason;
+	double PendingBalanceModeRequestTimeSeconds = -1.0;
 
 public:
 	static bool BuildConditionedActions(
