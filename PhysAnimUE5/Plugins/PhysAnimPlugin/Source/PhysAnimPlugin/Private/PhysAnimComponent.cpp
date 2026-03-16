@@ -4841,22 +4841,34 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			true,
 			false);
 
+		// Instrumentation for the first frame after root sim turns on
 		if (bIsRootBodyModifier && bBodyModifierActivatedThisTick)
 		{
-			USkeletalMeshComponent* const Mesh = GetMeshComponent();
-			FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
-			FTransform PelvisBodyTransformPost = PelvisBody ? PelvisBody->GetUnrealWorldTransform() : FTransform::Identity;
-			FVector PelvisLinVelPost = PelvisBody ? PelvisBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
-			FVector PelvisAngVelPost = PelvisBody ? FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians()) : FVector::ZeroVector;
+			const TArray<FName> InstrumentBones = { RootBoneNameInternal, "thigh_l", "thigh_r", "spine_01" };
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SIM_FLIP_INSTRUMENTATION (First Frame): policyWrote=%d resetApplied=%d"), 
+				(int32)(LastControlTargetDiagnostics.NumPolicyTargetsWritten > 0), (int32)bPelvisResetAppliedThisTick);
 			
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SIM_FLIP_INSTRUMENTATION:"));
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("  PreWorldPos: %s"), *PelvisTransformPre.GetLocation().ToString());
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("  PostBodyPos: %s"), *PelvisBodyTransformPost.GetLocation().ToString());
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("  PostVel: lin=%.1f ang=%.1f"), PelvisLinVelPost.Size(), PelvisAngVelPost.Size());
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("  APIs: SetBodyModifierMovementType=%d"), (int32)BodyModifierMovementType);
+			USkeletalMeshComponent* const Mesh = GetMeshComponent();
+			if (Mesh)
+			{
+				for (const FName& IBone : InstrumentBones)
+				{
+					FBodyInstance* BI = Mesh->GetBodyInstance(IBone);
+					if (!BI) continue;
+					
+					FVector LinVel = BI->GetUnrealWorldVelocity();
+					FVector AngVel = FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians());
+					
+					FName CName = PhysAnimBridge::MakeControlName(IBone);
+					FQuat CurRot = Mesh->GetBoneQuaternion(IBone, EBoneSpaces::WorldSpace);
+					FQuat TarRot = PreviousControlTargetRotations.Contains(CName) ? PreviousControlTargetRotations[CName] : CurRot;
+					float Delta = FMath::RadiansToDegrees(CurRot.AngularDistance(TarRot));
+					
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("  %s: linVel=%.1f angVel=%.1f rotDelta=%.1f simulating=%d"), 
+						*IBone.ToString(), LinVel.Size(), AngVel.Size(), Delta, (int32)BI->IsInstanceSimulatingPhysics());
+				}
+			}
 		}
-
-		// Post-apply log removed for experiment
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 
@@ -7278,7 +7290,13 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 		// EXPERIMENT: DO NOT schedule/apply pelvis cached-target reset if we are in transition handoff
 		if (InTransitionPhase == EBalanceReadyTransitionPhase::Handoff)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] EXPERIMENT: Pelvis reset SUPPRESSED during Handoff flip frame."));
+			static double LastLogTimeSuppressed = -1.0;
+			const double CurrentTime = FPlatformTime::Seconds();
+			if (CurrentTime - LastLogTimeSuppressed > 2.0)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] EXPERIMENT: Pelvis reset SUPPRESSED during Handoff flip frame."));
+				LastLogTimeSuppressed = CurrentTime;
+			}
 			return false;
 		}
 
