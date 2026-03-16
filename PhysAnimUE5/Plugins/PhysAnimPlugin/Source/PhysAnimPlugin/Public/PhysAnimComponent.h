@@ -463,6 +463,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
 	float BalanceQuietWindowRequiredSeconds = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float BalanceReadyPolicyInfluenceThreshold = 0.95f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
 	float BalanceResponseVelocityThresholdCmPerSec = 5.0f;
 
@@ -633,6 +636,16 @@ private:
 	void UpdateBalancePerturbation(float DeltaTime);
 	void ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude);
 	void FinalizeBalanceScenario(bool bSuccess, const FString& Reason);
+	bool IsBalancePerturbationRuntimeReady(
+		const FPhysAnimStabilizationSettings& EffectiveSettings,
+		float* OutPolicyInfluenceAlpha = nullptr,
+		FString* OutFailureReason = nullptr) const;
+	bool IsBalanceScenarioQuietEnough(
+		const FVector& PelvisLinearVelocity,
+		float TiltDeg,
+		bool bIdlePoseActive,
+		bool bNoLocomotionStateActive) const;
+	void ResetBalanceScenarioQuietGate(const FString& Reason);
 
 	void CacheRestPoses(UAnimSequence* TPoseAnim);
 	bool BeginStartupTPoseCapture(FString& OutError);
