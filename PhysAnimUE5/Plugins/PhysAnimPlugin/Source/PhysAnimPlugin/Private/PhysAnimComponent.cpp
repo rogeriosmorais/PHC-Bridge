@@ -1109,6 +1109,8 @@ void UPhysAnimComponent::EmitBridgeTraceEvent(
 void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	bPelvisResetAppliedThisTick = false;
 	LastBridgePoseSearchDeltaTimeSeconds = DeltaTime;
 	UpdateBridgeStatusIndicator(0.25f);
 
@@ -5732,6 +5734,16 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		EResetToCachedTargetBehavior::ResetDuringUpdateControls,
 		true,
 		false);
+
+	const FName RootModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+	for (const FName ModifierName : ModifierNamesToReset)
+	{
+		if (ModifierName == RootModifierName)
+		{
+			bPelvisResetAppliedThisTick = true;
+			break;
+		}
+	}
 
 	TArray<FString> BoneNamesToReset;
 	for (const FName ModifierName : ModifierNamesToReset)

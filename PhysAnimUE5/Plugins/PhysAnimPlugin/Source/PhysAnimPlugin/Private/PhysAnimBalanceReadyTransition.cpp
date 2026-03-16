@@ -18,6 +18,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	TotalTransitionTimeSeconds = 0.0f;
 	LastLogTimeSeconds = -1.0;
 	Diagnostics = {};
+	bLatchedPelvisResetApplied = false;
 	
 	if (Owner)
 	{
@@ -68,20 +69,34 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		FBodyInstance* PelvisBody = Owner->GetMeshComponent() ? Owner->GetMeshComponent()->GetBodyInstance(RootBoneName) : nullptr;
 		const bool bIsSimulating = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
 		
-		if (bIsSimulating && !bLastRootSimulating)
+		if (Owner->bPelvisResetAppliedThisTick)
 		{
-			Diagnostics.bSimFlipped = true;
-			CaptureFlipDiagnostics(Owner);
-			SetPhase(EBalanceReadyTransitionPhase::PostHandoffSettle);
+			bLatchedPelvisResetApplied = true;
+			Diagnostics.bResetApplied = true;
 		}
-		else if (PhaseTimeSeconds > 2.0f) // Timeout
+
+		if (bIsSimulating && bLatchedPelvisResetApplied)
+		{
+			// Basic sanity threshold check (must be below these to even begin settling)
+			const float MaxSanitySpeed = 100.0f; // 100 cm/s
+			const float MaxSanityAngSpeed = 180.0f; // 180 deg/s
+			
+			if (Diagnostics.RootSpeed < MaxSanitySpeed && Diagnostics.RootAngularSpeed < MaxSanityAngSpeed)
+			{
+				Diagnostics.bSimFlipped = true;
+				CaptureFlipDiagnostics(Owner);
+				SetPhase(EBalanceReadyTransitionPhase::PostHandoffSettle);
+			}
+		}
+
+		if (PhaseTimeSeconds > 2.0f) // Timeout
 		{
 			Diagnostics.FailureReason = TEXT("handoff_timeout");
 			SetPhase(EBalanceReadyTransitionPhase::Failed);
 		}
-		else
+		else if (!bIsSimulating || !bLatchedPelvisResetApplied)
 		{
-			// Capture pre-flip velocities
+			// Capture pre-flip velocities while waiting
 			if (PelvisBody)
 			{
 				Diagnostics.PelvisLinearVelPre = PelvisBody->GetUnrealWorldVelocity();

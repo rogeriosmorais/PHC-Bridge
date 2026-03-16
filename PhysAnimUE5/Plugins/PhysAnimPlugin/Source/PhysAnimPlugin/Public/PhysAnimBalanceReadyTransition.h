@@ -78,6 +78,7 @@ private:
 
 	bool bLastRootSimulating = false;
 	bool bLastPendingResetsEmpty = true;
+	bool bLatchedPelvisResetApplied = false;
 
 	FBalanceReadyTransitionDiagnostics Diagnostics;
 	double LastLogTimeSeconds = -1.0;

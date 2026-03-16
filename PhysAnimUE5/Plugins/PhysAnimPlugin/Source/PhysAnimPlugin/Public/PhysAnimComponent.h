@@ -850,6 +850,7 @@ private:
 	bool bPendingBalanceModeStartRequest = false;
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
+	bool bPelvisResetAppliedThisTick = false;
 
 public:
 	static bool BuildConditionedActions(
