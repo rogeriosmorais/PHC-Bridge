@@ -1891,25 +1891,7 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 		bPhase1Override = true;
 	}
 
-	static double LastLogTime = -1.0;
-	const double CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-	if (CurrentTime - LastLogTime > 0.5)
-	{
-		if (bPhase1Override)
-		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Decision Breakdown (ShouldAllowBalanceSimulation=1): state=%d transActive=%d phase=%d bringUp=%d ramp=%d resetsEmpty=%d allowSim=1 (phase1 override)"),
-				(int32)RuntimeState, (int32)bTransitionActive, (int32)BalanceReadyTransition.GetPhase(), 
-				(int32)bBringUpUnlocked, (int32)bFinalRampActive, (int32)bResetsEmpty);
-			LastLogTime = CurrentTime;
-		}
-		else if (!bResult)
-		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Decision Breakdown (ShouldAllowBalanceSimulation=0): state=%d transActive=%d phase=%d bringUp=%d ramp=%d policy=%.2f (thresh=%.2f) resetsEmpty=%d"),
-				(int32)RuntimeState, (int32)bTransitionActive, (int32)BalanceReadyTransition.GetPhase(), 
-				(int32)bBringUpUnlocked, (int32)bFinalRampActive, PolicyAlpha, BalanceReadyPolicyInfluenceThreshold, (int32)bResetsEmpty);
-			LastLogTime = CurrentTime;
-		}
-	}
+	// Decision breakdown log removed for experiment
 
 	return bResult;
 }
@@ -4848,18 +4830,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
 
-		if (bIsRootBodyModifier)
-		{
-			static double LastConfigLogTime = -1.0;
-			const double CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-			if (CurrentTime - LastConfigLogTime > 0.5)
-			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Root Modifier Config: allowSim=%d movement=%d weight=%.1f updKin=%d lastSim=%d"),
-					bAllowRootBodyModifierSimulation, (int32)BodyModifierMovementType, BodyModifierPhysicsBlendWeight, 
-					(int32)bUpdateKinematicFromSimulation, (int32)bLastAppliedPresentationRootSimulationEnabled);
-				LastConfigLogTime = CurrentTime;
-			}
-		}
+		// Config log removed for experiment
 
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
@@ -4885,19 +4856,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("  APIs: SetBodyModifierMovementType=%d"), (int32)BodyModifierMovementType);
 		}
 
-		if (bIsRootBodyModifier)
-		{
-			static double LastPostLogTime = -1.0;
-			const double CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-			if (CurrentTime - LastPostLogTime > 0.5)
-			{
-				USkeletalMeshComponent* const Mesh = GetMeshComponent();
-				FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Root Physics Post-Apply: MeshBodyValid=%d IsSimulating=%d"),
-					PelvisBody != nullptr, PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : 0);
-				LastPostLogTime = CurrentTime;
-			}
-		}
+		// Post-apply log removed for experiment
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 

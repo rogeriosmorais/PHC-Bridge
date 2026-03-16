@@ -1,7 +1,10 @@
 #include "PhysAnimBalanceReadyTransition.h"
 #include "PhysAnimComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
 
@@ -80,7 +83,32 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		if (bSimJustStarted)
 		{
 			QuietHandoffCount = 2;
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SIM_FLIP_QUIET_HANDOFF: policyOff=1 shellOff=1 moveOff=1"));
+		}
+
+		// EXPERIMENT: Force restrictive posture during handoff
+		ACharacter* CharacterOwner = Cast<ACharacter>(Owner->GetOwner());
+		if (CharacterOwner)
+		{
+			if (UCharacterMovementComponent* MoveComp = CharacterOwner->GetCharacterMovement())
+			{
+				MoveComp->SetMovementMode(MOVE_None);
+				MoveComp->SetComponentTickEnabled(false);
+			}
+			if (UCapsuleComponent* CapsuleComp = CharacterOwner->GetCapsuleComponent())
+			{
+				CapsuleComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			}
+
+			static double LastPostureLogTime = -1.0;
+			if (CurrentTime - LastPostureLogTime > 1.0)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Posture (Phase 1): charMoveTick=%d mode=%d capsuleColl=%d rootBodySim=%d"),
+					(int32)CharacterOwner->GetCharacterMovement()->IsComponentTickEnabled(),
+					(int32)CharacterOwner->GetCharacterMovement()->MovementMode,
+					(int32)CharacterOwner->GetCapsuleComponent()->GetCollisionEnabled(),
+					(int32)bIsSimulating);
+				LastPostureLogTime = CurrentTime;
+			}
 		}
 
 		if (QuietHandoffCount > 0)
