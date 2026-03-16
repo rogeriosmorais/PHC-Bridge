@@ -4561,9 +4561,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
 	if (bRootSimFlipFrame)
 	{
-		HipQuarantineTicksRemaining = 0;
+		HipQuarantineTicksRemaining = 2;
 	}
-	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0;
+	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0 && !BalanceReadyTransition.IsActive();
 	bool bHipQuarantineReleasedThisFrame = false;
 	if (!PhysicsControl)
 	{
@@ -4696,6 +4696,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				: 1.0f;
 
 		FPhysicsControlMultiplier ControlMultiplier;
+		const float TransitionProximalAlpha = BalanceReadyTransition.IsActive()
+			? BalanceReadyTransition.GetProximalControlSoftAlpha(BoneName)
+			: 1.0f;
+		const float TransitionExtraDamping = BalanceReadyTransition.IsActive()
+			? BalanceReadyTransition.GetTransitionExtraDampingMultiplier()
+			: 1.0f;
 		float HandoverEasing = 1.0f;
 		if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
 		{
@@ -4707,11 +4713,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		ControlMultiplier.AngularStrengthMultiplier =
-			EffectiveSettings.AngularStrengthMultiplier * FamilyStrengthScale * ControlAuthorityAlpha * HandoverEasing;
+			EffectiveSettings.AngularStrengthMultiplier * FamilyStrengthScale * ControlAuthorityAlpha * HandoverEasing * TransitionProximalAlpha;
 		ControlMultiplier.AngularDampingRatioMultiplier =
-			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale;
+			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale * TransitionExtraDamping;
 		ControlMultiplier.AngularExtraDampingMultiplier =
-			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale;
+			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale * TransitionExtraDamping;
 
 		if (bHipQuarantineActiveThisFrame && (BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
@@ -4844,6 +4850,22 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierMovementType,
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
+
+		if (BalanceReadyTransition.IsActive() && BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName))
+		{
+			BodyModifierMovementType = EPhysicsMovementType::Kinematic;
+			BodyModifierPhysicsBlendWeight = 0.0f;
+			bUpdateKinematicFromSimulation = false;
+		}
+
+		if (bIsRootBodyModifier && BalanceReadyTransition.IsActive())
+		{
+			const float RootSoftAlpha = BalanceReadyTransition.GetRootBodyModifierSoftSimAlpha();
+			if (BodyModifierMovementType == EPhysicsMovementType::Simulated)
+			{
+				BodyModifierPhysicsBlendWeight *= RootSoftAlpha;
+			}
+		}
 
 		// Config log removed for experiment
 

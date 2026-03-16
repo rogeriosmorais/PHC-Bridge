@@ -67,6 +67,11 @@ public:
 	bool ShouldSuppressResets() const;
 	bool ShouldSuppressMoveSmoke() const;
 
+	float GetRootBodyModifierSoftSimAlpha() const;
+	float GetProximalControlSoftAlpha(FName BoneName) const;
+	bool ShouldKeepBoneKinematic(FName BoneName) const;
+	float GetTransitionExtraDampingMultiplier() const;
+
 private:
 	void SetPhase(EBalanceReadyTransitionPhase NewPhase);
 	bool EvaluateReadiness(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
