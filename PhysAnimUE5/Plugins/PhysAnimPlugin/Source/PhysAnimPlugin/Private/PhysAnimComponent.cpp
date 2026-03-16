@@ -1917,18 +1917,18 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 
 	if (RuntimeState != EPhysAnimRuntimeState::BalancePerturbationMode)
 	{
-		return SetFailure(TEXT("bridgeNotReady"));
+		return SetFailure(TEXT("invalidRuntimeState"));
 	}
 
 	if (!AreAllBringUpGroupsUnlocked())
 	{
-		return SetFailure(TEXT("bridgeNotReady"));
+		return SetFailure(TEXT("bringUpIncomplete"));
 	}
 
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
 	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
 	{
-		return SetFailure(TEXT("bridgeNotReady"));
+		return SetFailure(TEXT("finalGroupRampInactive"));
 	}
 
 	if (PolicyInfluenceAlpha < BalanceReadyPolicyInfluenceThreshold)
@@ -5246,12 +5246,30 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 			BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] =
 				GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 			BringUpGroupStableAccumulatedSeconds = 0.0f;
+			
+			const float AngularVelocity = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
 			UE_LOG(
 				LogPhysAnimBridge,
 				Log,
-				TEXT("[PhysAnim] Stabilization final-group control ramp enabled for group %d/%d [hand_l, hand_r]."),
+				TEXT("[PhysAnim] Stabilization final-group control ramp enabled for group %d/%d [hand_l, hand_r]. PelvisAngularVelocity=%.2f deg/s. PendingResets=%d"),
 				FinalGroupIndex + 1,
-				GetBringUpGroupCount());
+				GetBringUpGroupCount(),
+				AngularVelocity,
+				PendingBodyModifierCachedResetNames.Num());
+
+			// Violation class: If the act of enabling the final ramp causes a massive root spike, 
+			// it means our bridge setup itself is explosive.
+			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && AngularVelocity > EffectiveSettings.MaxRootAngularSpeedDegPerSecond)
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Ramp enable caused large root angular spike (%.2f > %.2f). reason=rampEnableRootSpike"),
+					AngularVelocity,
+					EffectiveSettings.MaxRootAngularSpeedDegPerSecond);
+				FinalizeBalanceScenario(false, TEXT("rampEnableRootSpike"));
+				StopBalancePerturbationMode();
+			}
 		}
 		else if (PolicyInfluenceRampStartTimeSeconds < 0.0 &&
 			ShouldStartPolicyInfluenceRamp(

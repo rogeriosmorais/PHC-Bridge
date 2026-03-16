@@ -1944,6 +1944,37 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceModeContractTest,
+		"PhysAnim.Component.BalanceModeContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceModeContractTest::RunTest(const FString& Parameters)
+	{
+		// 1. In BalancePerturbationMode, pelvis/root cached-target reset is always forbidden
+		TestFalse(
+			TEXT("Balance Mode forbids pelvis reset at zero alpha"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, true, true, 0.0f));
+		TestFalse(
+			TEXT("Balance Mode forbids pelvis reset at high alpha"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, true, true, 1.0f));
+
+		// 2. In BridgeActive presentation perturbation, root reset behavior is preserved
+		TestTrue(
+			TEXT("BridgeActive allows root reset for presentation perturbation"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, true, 0.0f));
+
+		// 3. Balance Mode allows limb resets ONLY before policy begins
+		TestTrue(
+			TEXT("Balance Mode allows limb reset before policy alpha > 0"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.0f));
+		TestFalse(
+			TEXT("Balance Mode forbids limb reset once policy alpha > 0"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.01f));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimBringUpGroupMappingTest,
 		"PhysAnim.Component.BringUpGroupMapping",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
