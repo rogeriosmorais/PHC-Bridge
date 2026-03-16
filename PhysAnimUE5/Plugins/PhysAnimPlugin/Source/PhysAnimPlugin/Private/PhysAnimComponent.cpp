@@ -1885,6 +1885,13 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 		return false;
 	}
 
+	// We even block simulation if there are pending resets to prevent the root from releasing 
+	// while other limbs are still snapping to targets.
+	if (!PendingBodyModifierCachedResetNames.IsEmpty())
+	{
+		return false;
+	}
+
 	return true;
 }
 
@@ -1908,9 +1915,25 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 		*OutPolicyInfluenceAlpha = PolicyInfluenceAlpha;
 	}
 
-	if (!ShouldAllowBalanceSimulation(EffectiveSettings))
+	if (RuntimeState != EPhysAnimRuntimeState::BalancePerturbationMode)
 	{
-		return SetFailure(TEXT("logicNotReady"));
+		return SetFailure(TEXT("invalidRuntimeState"));
+	}
+
+	if (!AreAllBringUpGroupsUnlocked())
+	{
+		return SetFailure(TEXT("bringUpIncomplete"));
+	}
+
+	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
+	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
+	{
+		return SetFailure(TEXT("finalGroupRampInactive"));
+	}
+
+	if (PolicyInfluenceAlpha < BalanceReadyPolicyInfluenceThreshold)
+	{
+		return SetFailure(TEXT("policyInfluenceBelowThreshold"));
 	}
 
 	if (!PendingBodyModifierCachedResetNames.IsEmpty())
@@ -2065,6 +2088,14 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 
 	if (bBalanceScenarioAwaitingStableWindow)
 	{
+		// Treat any new deferred cached-target reset scheduled after simulated settle has begun as a settle reset event.
+		// This forces the quiet accumulation to restart so bridge setup pops don't contaminate the baseline.
+		if (!PendingBodyModifierCachedResetNames.IsEmpty() && BalanceScenarioQuietWindowAccumulatedSeconds > 0.0)
+		{
+			ResetBalanceScenarioQuietGate(TEXT("promotionDuringSettle"));
+			return;
+		}
+
 		BalanceScenarioQuietWindowAccumulatedSeconds = bQuietEnough
 			? (BalanceScenarioQuietWindowAccumulatedSeconds + DeltaTime)
 			: 0.0;
