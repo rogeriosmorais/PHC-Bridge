@@ -1880,10 +1880,10 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 		return false;
 	}
 
-	if (CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) < BalanceReadyPolicyInfluenceThreshold)
-	{
-		return false;
-	}
+	// We permit simulation even before policy influence reaches the ready threshold, 
+	// provided bring-up is complete. This allows the root to get its mandatory initial reset 
+	// while PolicyAlpha is still 0.0, avoiding design violations.
+	const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 
 	// We even block simulation if there are pending resets to prevent the root from releasing 
 	// while other limbs are still snapping to targets.
@@ -4645,6 +4645,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			true,
 			false);
 
+		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+
 		if (bIsRootBodyModifier)
 		{
 			bLastAppliedPresentationRootSimulationEnabled = bAllowRootBodyModifierSimulation;
@@ -4656,17 +4658,18 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bBodyModifierActivatedThisTick,
 				bBringUpGroupUnlocked,
 				bIsRootBodyModifier,
-				bAllowRootBodyModifierSimulation) &&
+				bAllowRootBodyModifierSimulation,
+				CurrentPolicyAlpha) &&
 			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
-			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) > 0.0f)
+			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && CurrentPolicyAlpha > 0.0f)
 			{
 				const FString ViolationReason = FString::Printf(TEXT("pelvisResetViolation:%s"), *BoneName.ToString());
 				UE_LOG(
 					LogPhysAnimBridge,
 					Error,
-					TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Cached-target reset for '%s' requested after policy influence has begun. Failing and stopping mode."),
-					*BoneName.ToString());
+					TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Cached-target reset for '%s' requested after policy influence has begun (Alpha=%.2f). Failing and stopping mode."),
+					*BoneName.ToString(), CurrentPolicyAlpha);
 				FinalizeBalanceScenario(false, ViolationReason);
 				StopBalancePerturbationMode();
 			}
@@ -6953,15 +6956,22 @@ ECollisionEnabled::Type UPhysAnimComponent::ResolveBodyModifierCollisionType(
 }
 
 bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
-	EPhysAnimRuntimeState CurrentRuntimeState,
+	EPhysAnimRuntimeState RuntimeState,
 	bool bForceZeroActions,
 	bool bBodyModifierActivatedThisTick,
 	bool bBringUpGroupUnlocked,
 	bool bIsRootBodyModifier,
-	bool bAllowRootBodyModifierSimulation)
+	bool bAllowRootBodyModifierSimulation,
+	float PolicyAlpha)
 {
 	if (bForceZeroActions)
 	{
+		return false;
+	}
+
+	if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && PolicyAlpha > 0.0f)
+	{
+		// Hard design constraint: No resets allowed once the neural policy has begun influencing the body.
 		return false;
 	}
 

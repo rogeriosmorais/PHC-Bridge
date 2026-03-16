@@ -892,7 +892,8 @@ public:
 		bool bBodyModifierActivatedThisTick,
 		bool bBringUpGroupUnlocked,
 		bool bIsRootBodyModifier,
-		bool bAllowRootBodyModifierSimulation);
+		bool bAllowRootBodyModifierSimulation,
+		float PolicyAlpha);
 	static int32 ResolveBringUpGroupIndex(FName BoneName);
 	static int32 GetBringUpGroupCount();
 	static bool ShouldDelayBringUpGroupControlRamp(int32 GroupIndex, int32 NumBringUpGroups);

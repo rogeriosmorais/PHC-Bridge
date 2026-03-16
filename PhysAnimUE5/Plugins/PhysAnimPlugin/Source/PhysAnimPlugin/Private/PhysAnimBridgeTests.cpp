@@ -1912,22 +1912,22 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	{
 		TestFalse(
 			TEXT("Force-zero mode does not reset body modifiers to cached transforms"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, true, true, true, false, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, true, true, true, false, false, 0.0f));
 		TestFalse(
 			TEXT("Non-settling ticks do not reset body modifiers to cached transforms"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, false, true, false, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, false, true, false, false, 0.0f));
 		TestFalse(
 			TEXT("Root body modifier does not reset on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, false, 0.0f));
 		TestTrue(
 			TEXT("Non-root body modifier resets on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, false, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, false, false, 0.0f));
 		TestFalse(
 			TEXT("Locked bring-up group does not reset on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, false, false, false));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, false, false, false, 0.0f));
 		TestTrue(
 			TEXT("Presentation perturbation resets the root body modifier when it becomes simulated"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, true));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, true, 0.0f));
 		return true;
 	}
 
