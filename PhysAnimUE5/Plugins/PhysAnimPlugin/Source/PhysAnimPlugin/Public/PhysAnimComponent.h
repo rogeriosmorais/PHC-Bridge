@@ -357,8 +357,6 @@ enum class EPhysAnimRuntimeState : uint8
 	WaitingForPoseSearch,
 	ReadyForActivation,
 	BridgeActive,
-	PreBalanceTransition,
-	PreBalanceSettle,
 	FailStopped,
 	BalancePerturbationMode,
 };
@@ -469,10 +467,7 @@ public:
 	float BalanceReadyPolicyInfluenceThreshold = 0.95f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
-	float BalancePreEntrySettleRequiredSeconds = 0.5f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
-	float BalancePreEntryTransitionTimeoutSeconds = 2.0f;
+	float BalanceBridgeActivePreEntrySettleSeconds = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
 	float BalanceResponseVelocityThresholdCmPerSec = 5.0f;
@@ -656,16 +651,13 @@ private:
 		bool bIdlePoseActive,
 		bool bNoLocomotionStateActive) const;
 	void ResetBalanceScenarioQuietGate(const FString& Reason);
-	bool EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason, bool bIgnorePelvisSimulationRequirement = false) const;
+	bool EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
+	bool EvaluateBalanceBridgeActivePreEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
+	bool IsBridgeActiveBalancePreEntryStable(FString& OutReason) const;
+	void ResetBridgeActiveBalancePreEntry();
+	void UpdateBridgeActiveBalancePreEntry(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void QueueBalanceModeStartRequest(const FString& Reason);
 	void TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings);
-	void BeginPreBalanceTransition(const FPhysAnimStabilizationSettings& EffectiveSettings);
-	void UpdatePreBalanceTransition(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
-	bool IsPreBalanceTransitionStable(const FPhysAnimStabilizationSettings& EffectiveSettings, FString* OutReason = nullptr) const;
-	void ResetPreBalanceTransitionState();
-	void EnterBalanceScenarioRuntime();
-	void UpdatePelvisSimulationDebugState(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* Context);
-	void LogPendingBalanceStartProbe(const FPhysAnimStabilizationSettings& EffectiveSettings, const FString& BlockReason);
 
 	void CacheRestPoses(UAnimSequence* TPoseAnim);
 	bool BeginStartupTPoseCapture(FString& OutError);
@@ -850,17 +842,12 @@ private:
 	FPoseSearchBlueprintResult BalanceIdlePoseSearchResult;
 	bool bHasBalanceIdlePoseSearchResult = false;
 	bool bPendingBalanceModeStartRequest = false;
-	bool bPendingBalancePreEntryRootSimulationRequest = false;
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
-	bool bLastObservedPelvisBodySimulating = false;
-	bool bHasLastObservedPelvisBodySimulating = false;
-	double LastPendingBalanceStartProbeLogTimeSeconds = -1.0;
-	FString LastPendingBalanceStartProbeReason;
-		double PreBalanceTransitionStartTimeSeconds = -1.0;
-		float PreBalanceSettleAccumulatedSeconds = 0.0f;
-		double LastPreBalanceTransitionLogTimeSeconds = -1.0;
-		FString LastPreBalanceTransitionBlockReason;
+	bool bBridgeActiveBalancePreEntryActive = false;
+	double BridgeActiveBalancePreEntryStableAccumulatedSeconds = 0.0;
+	double LastBridgeActiveBalancePreEntryLogTimeSeconds = -1.0;
+	FString LastBridgeActiveBalancePreEntryReason;
 
 public:
 	static bool BuildConditionedActions(
