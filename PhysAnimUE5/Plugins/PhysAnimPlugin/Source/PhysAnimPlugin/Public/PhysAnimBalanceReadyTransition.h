@@ -65,6 +65,7 @@ public:
 	bool ShouldSuppressShell() const;
 	bool ShouldSuppressPerturbations() const;
 	bool ShouldSuppressResets() const;
+	bool ShouldSuppressMoveSmoke() const;
 
 private:
 	void SetPhase(EBalanceReadyTransitionPhase NewPhase);
@@ -81,6 +82,7 @@ private:
 	bool bLastPendingResetsEmpty = true;
 	bool bLatchedPelvisResetApplied = false;
 
+	int32 QuietHandoffCount = 0;
 	FBalanceReadyTransitionDiagnostics Diagnostics;
 	double LastLogTimeSeconds = -1.0;
 };

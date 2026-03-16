@@ -6048,7 +6048,9 @@ void UPhysAnimComponent::ApplyMovementSmokeInput(const FPhysAnimStabilizationSet
 	LastMovementSmokeWorldIntent = FVector::ZeroVector;
 	LastMovementSmokePhaseName = NAME_None;
 
-	if (!IsMovementSmokeModeEnabled() || RuntimeState != EPhysAnimRuntimeState::BridgeActive)
+	if (!IsMovementSmokeModeEnabled() || 
+		RuntimeState != EPhysAnimRuntimeState::BridgeActive ||
+		BalanceReadyTransition.ShouldSuppressMoveSmoke())
 	{
 		return;
 	}

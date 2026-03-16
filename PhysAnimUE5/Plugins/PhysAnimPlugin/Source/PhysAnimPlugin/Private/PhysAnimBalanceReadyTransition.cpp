@@ -19,6 +19,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	LastLogTimeSeconds = -1.0;
 	Diagnostics = {};
 	bLatchedPelvisResetApplied = false;
+	QuietHandoffCount = 0;
 	
 	if (Owner)
 	{
@@ -73,6 +74,19 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			bLatchedPelvisResetApplied = true;
 			Diagnostics.bResetApplied = true;
+		}
+
+		const bool bSimJustStarted = bIsSimulating && !bLastRootSimulating;
+		if (bSimJustStarted)
+		{
+			QuietHandoffCount = 2;
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SIM_FLIP_QUIET_HANDOFF: policyOff=1 shellOff=1 moveOff=1"));
+		}
+
+		if (QuietHandoffCount > 0)
+		{
+			QuietHandoffCount--;
+			return;
 		}
 
 		if (bIsSimulating && bLatchedPelvisResetApplied)
@@ -311,3 +325,4 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const { return Phas
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const { return Phase == EBalanceReadyTransitionPhase::Handoff; }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive(); }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return Phase == EBalanceReadyTransitionPhase::Handoff; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const { return Phase == EBalanceReadyTransitionPhase::Handoff; }
