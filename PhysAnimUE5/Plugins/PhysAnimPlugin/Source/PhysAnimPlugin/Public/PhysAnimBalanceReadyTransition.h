@@ -57,6 +57,7 @@ public:
 	bool HasFailed() const { return Phase == EBalanceReadyTransitionPhase::Failed; }
 	bool IsComplete() const { return Phase == EBalanceReadyTransitionPhase::Succeeded || Phase == EBalanceReadyTransitionPhase::Failed; }
 
+	EBalanceReadyTransitionPhase GetPhase() const { return Phase; }
 	const FString& GetBlockReason() const { return Diagnostics.BlockReason; }
 	const FString& GetFailureReason() const { return Diagnostics.FailureReason; }
 

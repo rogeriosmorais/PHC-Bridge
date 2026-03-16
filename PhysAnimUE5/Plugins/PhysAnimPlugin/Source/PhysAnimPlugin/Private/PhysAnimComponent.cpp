@@ -1869,36 +1869,28 @@ void UPhysAnimComponent::ClearPresentationPerturbationOverride()
 bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
 	const bool bBalanceMode = RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode;
-	const bool bBridgeActivePreEntry = RuntimeState == EPhysAnimRuntimeState::BridgeActive && BalanceReadyTransition.IsActive();
-	if (!bBalanceMode && !bBridgeActivePreEntry)
-	{
-		return false;
-	}
-
-	if (!AreAllBringUpGroupsUnlocked())
-	{
-		return false;
-	}
-
+	const bool bTransitionActive = BalanceReadyTransition.IsActive();
+	const bool bBridgeActivePreEntry = RuntimeState == EPhysAnimRuntimeState::BridgeActive && bTransitionActive;
+	
+	const bool bBringUpUnlocked = AreAllBringUpGroupsUnlocked();
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
-	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
-	{
-		return false;
-	}
-
-	// We permit simulation even before policy influence reaches the ready threshold, 
-	// provided bring-up is complete. This allows the root to get its mandatory initial reset 
-	// while PolicyAlpha is still 0.0, avoiding design violations.
+	const bool bFinalRampActive = IsBringUpGroupControlRampActive(FinalGroupIndex);
 	const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+	const bool bResetsEmpty = PendingBodyModifierCachedResetNames.IsEmpty();
 
-	// We even block simulation if there are pending resets to prevent the root from releasing 
-	// while other limbs are still snapping to targets.
-	if (!PendingBodyModifierCachedResetNames.IsEmpty())
+	const bool bResult = (bBalanceMode || bBridgeActivePreEntry) && bBringUpUnlocked && bFinalRampActive && bResetsEmpty;
+
+	static double LastLogTime = -1.0;
+	const double CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (!bResult && (CurrentTime - LastLogTime > 0.5))
 	{
-		return false;
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Decision Breakdown (ShouldAllowBalanceSimulation=false): state=%d transActive=%d phase=%d bringUp=%d ramp=%d policy=%.2f (thresh=%.2f) resetsEmpty=%d"),
+			(int32)RuntimeState, (int32)bTransitionActive, (int32)BalanceReadyTransition.GetPhase(), 
+			(int32)bBringUpUnlocked, (int32)bFinalRampActive, PolicyAlpha, BalanceReadyPolicyInfluenceThreshold, (int32)bResetsEmpty);
+		LastLogTime = CurrentTime;
 	}
 
-	return true;
+	return bResult;
 }
 
 bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
