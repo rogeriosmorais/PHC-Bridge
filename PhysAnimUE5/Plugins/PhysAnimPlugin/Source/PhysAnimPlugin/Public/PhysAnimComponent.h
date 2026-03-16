@@ -12,6 +12,7 @@
 #include "PoseSearch/PoseSearchTrajectoryPredictor.h"
 #include "Animation/TrajectoryTypes.h"
 #include "PhysAnimBridge.h"
+#include "PhysAnimBalanceReadyTransition.h"
 
 #include "PhysAnimComponent.generated.h"
 
@@ -417,6 +418,7 @@ UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
 class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPoseSearchTrajectoryPredictorInterface
 {
 	GENERATED_BODY()
+	friend class FPhysAnimBalanceReadyTransition;
 
 public:
 	UPhysAnimComponent();
@@ -429,6 +431,12 @@ public:
 	virtual void GetGravity(FVector& OutGravityAccel) override;
 	virtual void GetCurrentState(FVector& OutPosition, FQuat& OutFacing, FVector& OutVelocity) override;
 	virtual void GetVelocity(FVector& OutVelocity) override;
+
+	bool IsIdlePoseActive() const;
+	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
+	FVector GetAcceptedShellPlanarVelocity() const { return BridgeShellState.AcceptedPlanarVelocityCmPerSecond; }
+	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
+	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
 
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	bool StartBridge();
@@ -653,9 +661,6 @@ private:
 	void ResetBalanceScenarioQuietGate(const FString& Reason);
 	bool EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
 	bool EvaluateBalanceBridgeActivePreEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
-	bool IsBridgeActiveBalancePreEntryStable(FString& OutReason) const;
-	void ResetBridgeActiveBalancePreEntry();
-	void UpdateBridgeActiveBalancePreEntry(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void QueueBalanceModeStartRequest(const FString& Reason);
 	void TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings);
 
@@ -841,16 +846,10 @@ private:
 	float BalanceScenarioPeakActorDisplacementCm = 0.0f;
 	FPoseSearchBlueprintResult BalanceIdlePoseSearchResult;
 	bool bHasBalanceIdlePoseSearchResult = false;
+	FPhysAnimBalanceReadyTransition BalanceReadyTransition;
 	bool bPendingBalanceModeStartRequest = false;
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
-	bool bBridgeActiveBalancePreEntryActive = false;
-	bool bBridgeActiveBalancePreEntrySucceeded = false;
-	bool bLastRootSimulating = false;
-	bool bLastPendingResetsEmpty = true;
-	double BridgeActiveBalancePreEntryStableAccumulatedSeconds = 0.0;
-	double LastBridgeActiveBalancePreEntryLogTimeSeconds = -1.0;
-	FString LastBridgeActiveBalancePreEntryReason;
 
 public:
 	static bool BuildConditionedActions(

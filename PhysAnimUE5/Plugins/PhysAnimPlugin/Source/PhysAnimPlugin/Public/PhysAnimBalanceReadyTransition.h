@@ -1,0 +1,84 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "PhysAnimBridge.h"
+
+enum class EBalanceReadyTransitionPhase : uint8
+{
+	Inactive,
+	Handoff,
+	PostHandoffSettle,
+	RestoreControls,
+	FinalSettle,
+	Succeeded,
+	Failed
+};
+
+struct FBalanceReadyTransitionDiagnostics
+{
+	FString BlockReason;
+	FString FailureReason;
+	float RootSpeed = 0.0f;
+	float RootAngularSpeed = 0.0f;
+	float RootTilt = 0.0f;
+	float ShellMetric = 0.0f;
+	bool bSimFlipped = false;
+	FTransform PelvisTransformDelta;
+	FVector PelvisLinearVelPre = FVector::ZeroVector;
+	FVector PelvisLinearVelPost = FVector::ZeroVector;
+	FVector PelvisAngularVelPre = FVector::ZeroVector;
+	FVector PelvisAngularVelPost = FVector::ZeroVector;
+	
+	bool bShellContributed = false;
+	bool bPolicyWroteTargets = false;
+	bool bResetScheduled = false;
+	bool bResetApplied = false;
+	bool bResetDrained = false;
+
+	float MaxLinVelPelvis = 0.0f;
+	float MaxAngVelPelvis = 0.0f;
+	float MaxLinVelThighs = 0.0f;
+	float MaxAngVelThighs = 0.0f;
+	float MaxLinVelSpine = 0.0f;
+	float MaxAngVelSpine = 0.0f;
+	float MaxLinVelFeet = 0.0f;
+	float MaxAngVelFeet = 0.0f;
+};
+
+class FPhysAnimBalanceReadyTransition
+{
+public:
+	void Start(const FString& InRequestReason, class UPhysAnimComponent* Owner);
+	void Cancel();
+	void Tick(float DeltaTime, class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);
+
+	bool IsActive() const { return Phase != EBalanceReadyTransitionPhase::Inactive && !IsComplete(); }
+	bool HasSucceeded() const { return Phase == EBalanceReadyTransitionPhase::Succeeded; }
+	bool HasFailed() const { return Phase == EBalanceReadyTransitionPhase::Failed; }
+	bool IsComplete() const { return Phase == EBalanceReadyTransitionPhase::Succeeded || Phase == EBalanceReadyTransitionPhase::Failed; }
+
+	const FString& GetBlockReason() const { return Diagnostics.BlockReason; }
+	const FString& GetFailureReason() const { return Diagnostics.FailureReason; }
+
+	bool ShouldSuppressPolicy() const;
+	bool ShouldSuppressShell() const;
+	bool ShouldSuppressPerturbations() const;
+	bool ShouldSuppressResets() const;
+
+private:
+	void SetPhase(EBalanceReadyTransitionPhase NewPhase);
+	bool EvaluateReadiness(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
+	void CaptureFlipDiagnostics(class UPhysAnimComponent* Owner);
+
+	EBalanceReadyTransitionPhase Phase = EBalanceReadyTransitionPhase::Inactive;
+	FString RequestReason;
+	float StableHoldAccumulatedSeconds = 0.0f;
+	float PhaseTimeSeconds = 0.0f;
+	float TotalTransitionTimeSeconds = 0.0f;
+
+	bool bLastRootSimulating = false;
+	bool bLastPendingResetsEmpty = true;
+
+	FBalanceReadyTransitionDiagnostics Diagnostics;
+	double LastLogTimeSeconds = -1.0;
+};
