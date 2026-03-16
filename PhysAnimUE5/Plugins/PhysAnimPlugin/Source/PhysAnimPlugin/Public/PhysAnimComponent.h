@@ -907,13 +907,14 @@ public:
 		bool bIsRootBodyModifier,
 		bool bAllowRootBodyModifierSimulation);
 	static bool ShouldResetBodyModifierToCachedBoneTransform(
-		EPhysAnimRuntimeState RuntimeState,
+		EPhysAnimRuntimeState InRuntimeState,
 		bool bForceZeroActions,
 		bool bBodyModifierActivatedThisTick,
 		bool bBringUpGroupUnlocked,
 		bool bIsRootBodyModifier,
 		bool bAllowRootBodyModifierSimulation,
-		float PolicyAlpha);
+		float PolicyAlpha,
+		EBalanceReadyTransitionPhase InTransitionPhase = EBalanceReadyTransitionPhase::Inactive);
 	static int32 ResolveBringUpGroupIndex(FName BoneName);
 	static int32 GetBringUpGroupCount();
 	static bool ShouldDelayBringUpGroupControlRamp(int32 GroupIndex, int32 NumBringUpGroups);

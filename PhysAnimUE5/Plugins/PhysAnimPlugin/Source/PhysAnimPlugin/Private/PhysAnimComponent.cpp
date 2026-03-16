@@ -4800,8 +4800,16 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			continue;
 		}
 
+		const FName RootBoneNameInternal = PhysAnimBridge::GetRootBoneName();
+		const bool bIsRootBodyModifier = BoneName == RootBoneNameInternal;
+		FTransform PelvisTransformPre = FTransform::Identity;
+		if (bIsRootBodyModifier)
+		{
+			USkeletalMeshComponent* const Mesh = GetMeshComponent();
+			PelvisTransformPre = Mesh ? Mesh->GetBoneTransform(Mesh->GetBoneIndex(RootBoneNameInternal)) : FTransform::Identity;
+		}
+
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
-		const bool bIsRootBodyModifier = BoneName == RootBoneName;
 
 		// In Balance Mode, we break the root into simulation as soon as the bridge is logically ready 
 		// (bring-up complete, policy authority high enough). This allows the quiet window to run 
@@ -4862,6 +4870,21 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			true,
 			false);
 
+		if (bIsRootBodyModifier && bBodyModifierActivatedThisTick)
+		{
+			USkeletalMeshComponent* const Mesh = GetMeshComponent();
+			FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+			FTransform PelvisBodyTransformPost = PelvisBody ? PelvisBody->GetUnrealWorldTransform() : FTransform::Identity;
+			FVector PelvisLinVelPost = PelvisBody ? PelvisBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
+			FVector PelvisAngVelPost = PelvisBody ? FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians()) : FVector::ZeroVector;
+			
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SIM_FLIP_INSTRUMENTATION:"));
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("  PreWorldPos: %s"), *PelvisTransformPre.GetLocation().ToString());
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("  PostBodyPos: %s"), *PelvisBodyTransformPost.GetLocation().ToString());
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("  PostVel: lin=%.1f ang=%.1f"), PelvisLinVelPost.Size(), PelvisAngVelPost.Size());
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("  APIs: SetBodyModifierMovementType=%d"), (int32)BodyModifierMovementType);
+		}
+
 		if (bIsRootBodyModifier)
 		{
 			static double LastPostLogTime = -1.0;
@@ -4890,7 +4913,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bBringUpGroupUnlocked,
 				bIsRootBodyModifier,
 				bAllowRootBodyModifierSimulation,
-				CurrentPolicyAlpha) &&
+				CurrentPolicyAlpha,
+				BalanceReadyTransition.GetPhase()) &&
 			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
 			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
@@ -7261,20 +7285,21 @@ ECollisionEnabled::Type UPhysAnimComponent::ResolveBodyModifierCollisionType(
 }
 
 bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
-	EPhysAnimRuntimeState RuntimeState,
+	EPhysAnimRuntimeState InRuntimeState,
 	bool bForceZeroActions,
 	bool bBodyModifierActivatedThisTick,
 	bool bBringUpGroupUnlocked,
 	bool bIsRootBodyModifier,
 	bool bAllowRootBodyModifierSimulation,
-	float PolicyAlpha)
+	float PolicyAlpha,
+	EBalanceReadyTransitionPhase InTransitionPhase)
 {
 	if (bForceZeroActions)
 	{
 		return false;
 	}
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
+	if (InRuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
 	{
 		if (bIsRootBodyModifier)
 		{
@@ -7291,6 +7316,13 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 
 	if (bIsRootBodyModifier)
 	{
+		// EXPERIMENT: DO NOT schedule/apply pelvis cached-target reset if we are in transition handoff
+		if (InTransitionPhase == EBalanceReadyTransitionPhase::Handoff)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] EXPERIMENT: Pelvis reset SUPPRESSED during Handoff flip frame."));
+			return false;
+		}
+
 		// We allow exactly one reset for the root when it transitions to simulation to ensure 
 		// its physical state is precisely aligned with the visual kinematic state before it begins moving.
 		return bBodyModifierActivatedThisTick && bAllowRootBodyModifierSimulation;

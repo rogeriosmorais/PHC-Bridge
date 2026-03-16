@@ -99,7 +99,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			{
 				Diagnostics.bSimFlipped = true;
 				CaptureFlipDiagnostics(Owner);
-				SetPhase(EBalanceReadyTransitionPhase::PostHandoffSettle);
+				// EXPERIMENT: DO NOT advance to later transition phases
+				// SetPhase(EBalanceReadyTransitionPhase::PostHandoffSettle);
 			}
 		}
 
