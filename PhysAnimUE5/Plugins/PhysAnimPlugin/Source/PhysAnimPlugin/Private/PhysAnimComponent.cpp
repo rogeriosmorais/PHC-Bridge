@@ -4556,6 +4556,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		ShouldUseSkeletalAnimationTargetRepresentation(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
 			bPolicyInfluenceActive);
+
+	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
+	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
 	if (!PhysicsControl)
 	{
 		return;
@@ -4704,6 +4707,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		ControlMultiplier.AngularExtraDampingMultiplier =
 			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale;
 
+		if (bRootSimFlipFrame && (BoneName == "thigh_l" || BoneName == "thigh_r"))
+		{
+			// EXPERIMENT: Suppress drive on flip frame
+			ControlMultiplier.AngularStrengthMultiplier = 0.0f;
+		}
+
 		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
 		if (bDistalLocomotionCompositionModeActive &&
 			ShouldForceExplicitOnlyDistalLocomotionTargetMode(BoneName))
@@ -4772,7 +4781,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	PhysicsControl->SetBodyModifiersInSetCollisionType(TEXT("All"), ECollisionEnabled::NoCollision);
 	PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
 
-	const bool bAllowRootBodyModifierSimulationInBalanceMode = ShouldAllowBalanceSimulation(EffectiveSettings);
+	// Use the pre-calculated value from the top of the function
+	const bool bAllowRootBodyModifierSimulationInBalanceMode = bAllowRootSim;
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
@@ -5861,6 +5871,12 @@ void UPhysAnimComponent::ApplyControlTargets(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
 			bPolicyInfluenceActive);
 	UPhysicsAsset* const PhysicsAsset = MeshComponent.IsValid() ? MeshComponent->GetPhysicsAsset() : nullptr;
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+
+	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
+	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
+	float ThighLDeltaPre = 0.0f;
+	float ThighRDeltaPre = 0.0f;
 	const float OwnerPlanarSpeedCmPerSec = [this]() -> float
 	{
 		const AActor* const OwnerActor = GetOwner();
@@ -5945,9 +5961,27 @@ void UPhysAnimComponent::ApplyControlTargets(
 		const float TargetDeltaDegrees = PreviousRotation
 			? CalculateControlTargetDeltaDegrees(*PreviousRotation, BlendedPolicyRotation)
 			: 0.0f;
-		const FQuat LimitedRotation = PreviousRotation
+		FQuat LimitedRotation = PreviousRotation
 			? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
 			: BlendedPolicyRotation;
+
+		if (bRootSimFlipFrame && (Pair.Key == "thigh_l" || Pair.Key == "thigh_r") && Mesh)
+		{
+			FBodyInstance* BI = Mesh->GetBodyInstance(Pair.Key);
+			if (BI)
+			{
+				FQuat CurPhysRot = BI->GetUnrealWorldTransform().GetRotation();
+				FQuat CurSkelRot = Mesh->GetBoneQuaternion(Pair.Key, EBoneSpaces::WorldSpace);
+				FQuat DeltaPre = CurSkelRot.Inverse() * CurPhysRot;
+				float Deg = FMath::RadiansToDegrees(DeltaPre.GetAngle());
+				
+				if (Pair.Key == "thigh_l") ThighLDeltaPre = Deg;
+				else ThighRDeltaPre = Deg;
+				
+				// EXPERIMENT: Reseed target to current physical posture
+				LimitedRotation = DeltaPre;
+			}
+		}
 
 		++ControlTargetDiagnostics.NumPolicyTargetsWritten;
 		ControlTargetDiagnostics.MeanTargetDeltaDegrees += TargetDeltaDegrees;
@@ -6029,6 +6063,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 			ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
 			ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
 			ControlTargetDiagnostics.MeanLowerLimbLimitOccupancy);
+	}
+
+	if (bRootSimFlipFrame)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] THIGH_RESEED_ON_SIM_FLIP: leftDeltaPre=%.2f rightDeltaPre=%.2f"), ThighLDeltaPre, ThighRDeltaPre);
 	}
 }
 
