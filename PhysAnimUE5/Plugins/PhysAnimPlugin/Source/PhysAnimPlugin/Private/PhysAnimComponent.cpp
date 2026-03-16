@@ -4826,6 +4826,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierMovementType,
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
+
+		if (bIsRootBodyModifier)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Root Modifier Config: allowSim=%d movement=%d weight=%.1f updKin=%d lastSim=%d"),
+				bAllowRootBodyModifierSimulation, (int32)BodyModifierMovementType, BodyModifierPhysicsBlendWeight, 
+				(int32)bUpdateKinematicFromSimulation, (int32)bLastAppliedPresentationRootSimulationEnabled);
+		}
+
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
 		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
@@ -4834,6 +4842,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUpdateKinematicFromSimulation,
 			true,
 			false);
+
+		if (bIsRootBodyModifier)
+		{
+			USkeletalMeshComponent* const Mesh = GetMeshComponent();
+			FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Root Physics Post-Apply: MeshBodyValid=%d IsSimulating=%d"),
+				PelvisBody != nullptr, PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : 0);
+		}
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 
