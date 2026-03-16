@@ -788,6 +788,9 @@ private:
 	bool bHasShellCouplingReferenceRootLocalOffset = false;
 	double PresentationPerturbationOverrideEndTimeSeconds = -1.0;
 	bool bLastAppliedPresentationRootSimulationEnabled = false;
+	int32 HipQuarantineTicksRemaining = 0;
+	float LastHipQuarantineLeftPreDeltaDegrees = 0.0f;
+	float LastHipQuarantineRightPreDeltaDegrees = 0.0f;
 	double StabilizationStressTestStartTimeSeconds = -1.0;
 	bool bStabilizationStressTestCompletionLogged = false;
 	double StabilizationStressTestFirstAngularSpikeTimeSeconds = -1.0;

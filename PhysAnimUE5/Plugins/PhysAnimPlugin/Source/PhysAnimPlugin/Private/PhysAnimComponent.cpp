@@ -4559,6 +4559,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
 	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
+	if (bRootSimFlipFrame)
+	{
+		HipQuarantineTicksRemaining = 2;
+	}
+	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0;
+	bool bHipQuarantineReleasedThisFrame = false;
 	if (!PhysicsControl)
 	{
 		return;
@@ -4707,9 +4713,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		ControlMultiplier.AngularExtraDampingMultiplier =
 			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale;
 
-		if (bRootSimFlipFrame && (BoneName == "thigh_l" || BoneName == "thigh_r"))
+		if (bHipQuarantineActiveThisFrame && (BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
-			// EXPERIMENT: Suppress drive on flip frame
 			ControlMultiplier.AngularStrengthMultiplier = 0.0f;
 		}
 
@@ -4931,6 +4936,23 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				PendingBodyModifierCachedResetNames.Add(ModifierName);
 			}
 		}
+	}
+
+	if (bHipQuarantineActiveThisFrame)
+	{
+		if (HipQuarantineTicksRemaining > 0)
+		{
+			--HipQuarantineTicksRemaining;
+			bHipQuarantineReleasedThisFrame = (HipQuarantineTicksRemaining == 0);
+		}
+
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimBalance] HIP_QUARANTINE: leftPreDelta=%.1f rightPreDelta=%.1f released=%d"),
+			LastHipQuarantineLeftPreDeltaDegrees,
+			LastHipQuarantineRightPreDeltaDegrees,
+			bHipQuarantineReleasedThisFrame ? 1 : 0);
 	}
 
 	LastAppliedStabilizationSettings = EffectiveSettings;
@@ -5875,6 +5897,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
 	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
+	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0;
 	float ThighLDeltaPre = 0.0f;
 	float ThighRDeltaPre = 0.0f;
 	const float OwnerPlanarSpeedCmPerSec = [this]() -> float
@@ -5965,20 +5988,27 @@ void UPhysAnimComponent::ApplyControlTargets(
 			? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
 			: BlendedPolicyRotation;
 
-		if (bRootSimFlipFrame && (Pair.Key == "thigh_l" || Pair.Key == "thigh_r") && Mesh)
+		if (bHipQuarantineActiveThisFrame && (Pair.Key == "thigh_l" || Pair.Key == "thigh_r") && Mesh)
 		{
 			FBodyInstance* BI = Mesh->GetBodyInstance(Pair.Key);
 			if (BI)
 			{
-				FQuat CurPhysRot = BI->GetUnrealWorldTransform().GetRotation();
-				FQuat CurSkelRot = Mesh->GetBoneQuaternion(Pair.Key, EBoneSpaces::WorldSpace);
-				FQuat DeltaPre = CurSkelRot.Inverse() * CurPhysRot;
-				float Deg = FMath::RadiansToDegrees(DeltaPre.GetAngle());
-				
-				if (Pair.Key == "thigh_l") ThighLDeltaPre = Deg;
-				else ThighRDeltaPre = Deg;
-				
-				// EXPERIMENT: Reseed target to current physical posture
+				const FQuat CurPhysRot = BI->GetUnrealWorldTransform().GetRotation();
+				const FQuat CurSkelRot = Mesh->GetBoneQuaternion(Pair.Key, EBoneSpaces::WorldSpace);
+				const FQuat DeltaPre = CurSkelRot.Inverse() * CurPhysRot;
+				const float Deg = FMath::RadiansToDegrees(DeltaPre.GetAngle());
+
+				if (Pair.Key == "thigh_l")
+				{
+					ThighLDeltaPre = Deg;
+					LastHipQuarantineLeftPreDeltaDegrees = Deg;
+				}
+				else
+				{
+					ThighRDeltaPre = Deg;
+					LastHipQuarantineRightPreDeltaDegrees = Deg;
+				}
+
 				LimitedRotation = DeltaPre;
 			}
 		}
