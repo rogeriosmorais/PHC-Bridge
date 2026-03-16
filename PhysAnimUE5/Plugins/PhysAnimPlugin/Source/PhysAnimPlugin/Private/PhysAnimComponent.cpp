@@ -4821,9 +4821,15 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bIsRootBodyModifier)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Root Modifier Config: allowSim=%d movement=%d weight=%.1f updKin=%d lastSim=%d"),
-				bAllowRootBodyModifierSimulation, (int32)BodyModifierMovementType, BodyModifierPhysicsBlendWeight, 
-				(int32)bUpdateKinematicFromSimulation, (int32)bLastAppliedPresentationRootSimulationEnabled);
+			static double LastConfigLogTime = -1.0;
+			const double CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+			if (CurrentTime - LastConfigLogTime > 0.5)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Root Modifier Config: allowSim=%d movement=%d weight=%.1f updKin=%d lastSim=%d"),
+					bAllowRootBodyModifierSimulation, (int32)BodyModifierMovementType, BodyModifierPhysicsBlendWeight, 
+					(int32)bUpdateKinematicFromSimulation, (int32)bLastAppliedPresentationRootSimulationEnabled);
+				LastConfigLogTime = CurrentTime;
+			}
 		}
 
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
@@ -4837,10 +4843,16 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bIsRootBodyModifier)
 		{
-			USkeletalMeshComponent* const Mesh = GetMeshComponent();
-			FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Root Physics Post-Apply: MeshBodyValid=%d IsSimulating=%d"),
-				PelvisBody != nullptr, PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : 0);
+			static double LastPostLogTime = -1.0;
+			const double CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+			if (CurrentTime - LastPostLogTime > 0.5)
+			{
+				USkeletalMeshComponent* const Mesh = GetMeshComponent();
+				FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Root Physics Post-Apply: MeshBodyValid=%d IsSimulating=%d"),
+					PelvisBody != nullptr, PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : 0);
+				LastPostLogTime = CurrentTime;
+			}
 		}
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
