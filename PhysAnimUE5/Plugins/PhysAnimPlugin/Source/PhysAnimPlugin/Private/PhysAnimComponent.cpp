@@ -1917,18 +1917,18 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 
 	if (RuntimeState != EPhysAnimRuntimeState::BalancePerturbationMode)
 	{
-		return SetFailure(TEXT("invalidRuntimeState"));
+		return SetFailure(TEXT("bridgeNotReady"));
 	}
 
 	if (!AreAllBringUpGroupsUnlocked())
 	{
-		return SetFailure(TEXT("bringUpIncomplete"));
+		return SetFailure(TEXT("bridgeNotReady"));
 	}
 
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
 	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
 	{
-		return SetFailure(TEXT("finalGroupRampInactive"));
+		return SetFailure(TEXT("bridgeNotReady"));
 	}
 
 	if (PolicyInfluenceAlpha < BalanceReadyPolicyInfluenceThreshold)
@@ -1944,18 +1944,18 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	if (!Mesh)
 	{
-		return SetFailure(TEXT("meshMissing"));
+		return SetFailure(TEXT("pelvisBodyMissing"));
 	}
 
 	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
 	if (!PelvisBody)
 	{
-		return SetFailure(TEXT("pelvisMissing"));
+		return SetFailure(TEXT("pelvisBodyMissing"));
 	}
 
 	if (!PelvisBody->IsInstanceSimulatingPhysics())
 	{
-		return SetFailure(TEXT("pelvisNotSimulating"));
+		return SetFailure(TEXT("pelvisBodyNotSimulating"));
 	}
 
 	return true;
@@ -2444,6 +2444,29 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 		return;
 	}
 
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	if (!Mesh)
+	{
+		return;
+	}
+
+	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
+	if (!PelvisBody)
+	{
+		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] Entry failed: pelvisBodyMissing."));
+		return;
+	}
+
+	if (!PendingBodyModifierCachedResetNames.IsEmpty())
+	{
+		const FName PelvisModifierName = PhysAnimBridge::GetRootBoneName();
+		if (PendingBodyModifierCachedResetNames.Contains(PelvisModifierName))
+		{
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] Entry failed: pelvisResetRequiredAtEntry. Pelvis must be stable and promote-drained before balance mode."));
+			return;
+		}
+	}
+
 	UWorld* const World = GetWorld();
 	if (!World)
 	{
@@ -2520,9 +2543,9 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	{
 		BalanceScenarioStartActorLocation = OwnerActor->GetActorLocation();
 	}
-	if (USkeletalMeshComponent* const Mesh = MeshComponent.Get())
+	if (Mesh)
 	{
-		if (FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
+		if (PelvisBody)
 		{
 			const FTransform PelvisTransform = PelvisBody->GetUnrealWorldTransform();
 			BalanceScenarioStartPelvisLocation = PelvisTransform.GetLocation();
@@ -4662,16 +4685,33 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				CurrentPolicyAlpha) &&
 			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
-			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && CurrentPolicyAlpha > 0.0f)
+			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
 			{
-				const FString ViolationReason = FString::Printf(TEXT("pelvisResetViolation:%s"), *BoneName.ToString());
-				UE_LOG(
-					LogPhysAnimBridge,
-					Error,
-					TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Cached-target reset for '%s' requested after policy influence has begun (Alpha=%.2f). Failing and stopping mode."),
-					*BoneName.ToString(), CurrentPolicyAlpha);
-				FinalizeBalanceScenario(false, ViolationReason);
-				StopBalancePerturbationMode();
+				if (bIsRootBodyModifier)
+				{
+					UE_LOG(
+						LogPhysAnimBridge,
+						Error,
+						TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Cached-target reset for pelvis/root '%s' requested in Balance Mode. Failing and stopping mode. reason=pelvisResetRequestedDuringBalance"),
+						*BoneName.ToString());
+					FinalizeBalanceScenario(false, TEXT("pelvisResetRequestedDuringBalance"));
+					StopBalancePerturbationMode();
+				}
+				else if (CurrentPolicyAlpha > 0.0f)
+				{
+					const FString ViolationReason = FString::Printf(TEXT("bodyResetViolation:%s"), *BoneName.ToString());
+					UE_LOG(
+						LogPhysAnimBridge,
+						Error,
+						TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Cached-target reset for '%s' requested after policy influence has begun (Alpha=%.2f). Failing and stopping mode."),
+						*BoneName.ToString(), CurrentPolicyAlpha);
+					FinalizeBalanceScenario(false, ViolationReason);
+					StopBalancePerturbationMode();
+				}
+				else
+				{
+					PendingBodyModifierCachedResetNames.Add(ModifierName);
+				}
 			}
 			else
 			{
@@ -6969,10 +7009,19 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 		return false;
 	}
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && PolicyAlpha > 0.0f)
+	if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
 	{
-		// Hard design constraint: No resets allowed once the neural policy has begun influencing the body.
-		return false;
+		if (bIsRootBodyModifier)
+		{
+			// Hard design constraint: No pelvis/root resets allowed at all in Balance Perturbation Mode.
+			return false;
+		}
+
+		if (PolicyAlpha > 0.0f)
+		{
+			// Hard design constraint: No limb resets allowed once the neural policy has begun influencing the body.
+			return false;
+		}
 	}
 
 	if (bIsRootBodyModifier)

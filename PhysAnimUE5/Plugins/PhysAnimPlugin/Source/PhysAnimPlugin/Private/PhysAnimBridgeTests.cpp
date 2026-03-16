@@ -1926,8 +1926,20 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Locked bring-up group does not reset on settle tick"),
 			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, false, false, false, 0.0f));
 		TestTrue(
-			TEXT("Presentation perturbation resets the root body modifier when it becomes simulated"),
+			TEXT("Presentation perturbation resets the root body modifier when it becomes simulated in BridgeActive"),
 			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, true, 0.0f));
+
+		// Balance Mode Contract
+		TestFalse(
+			TEXT("Balance Mode forbids pelvis/root reset regardless of alpha"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, true, true, 0.0f));
+		TestFalse(
+			TEXT("Balance Mode forbids limb resets once policy begins"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.1f));
+		TestTrue(
+			TEXT("Balance Mode allows limb resets before policy begins"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.0f));
+
 		return true;
 	}
 
