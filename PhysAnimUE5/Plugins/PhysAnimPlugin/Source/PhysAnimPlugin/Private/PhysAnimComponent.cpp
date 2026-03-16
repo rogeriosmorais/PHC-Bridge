@@ -1863,142 +1863,117 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 		return;
 	}
 
-	// Diagnostics and logging are handled within the state machine below
+	UWorld* const World = GetWorld();
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	AActor* const OwnerActor = GetOwner();
+	if (!World || !Mesh || !OwnerActor)
+	{
+		return;
+	}
 
 	FPhysAnimBalanceScenario& Scenario = BalanceScenarios[ActiveBalanceScenarioIndex];
-	const double WorldTime = GetWorld()->GetTimeSeconds();
-	const double Elapsed = WorldTime - BalanceScenarioStartTimeSeconds;
-
-	USkeletalMeshComponent* Mesh = MeshComponent.Get();
+	const double WorldTime = World->GetTimeSeconds();
+	const double Elapsed = BalanceScenarioStartTimeSeconds >= 0.0 ? (WorldTime - BalanceScenarioStartTimeSeconds) : 0.0;
 	const FName PelvisName = PhysAnimBridge::GetRootBoneName();
-	const FVector PelvisVel = Mesh ? Mesh->GetPhysicsLinearVelocity(PelvisName) : FVector::ZeroVector;
-	const float PelvisSpeed = PelvisVel.Size();
-	
-	const FQuat PelvisRot = Mesh ? Mesh->GetBoneTransform(Mesh->GetBoneIndex(PelvisName)).GetRotation() : FQuat::Identity;
-	const float TiltDeg = FMath::RadiansToDegrees(BalanceScenarioStartPelvisRotation.AngularDistance(PelvisRot));
+	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PelvisName);
+	const FTransform PelvisTransform = PelvisBody
+		? PelvisBody->GetUnrealWorldTransform()
+		: Mesh->GetBoneTransform(Mesh->GetBoneIndex(PelvisName));
+	const FVector PelvisLinearVelocity = PelvisBody
+		? PelvisBody->GetUnrealWorldVelocity()
+		: Mesh->GetPhysicsLinearVelocity(PelvisName);
+	const FVector PelvisAngularVelocityDegPerSec = PelvisBody
+		? FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians())
+		: Mesh->GetPhysicsAngularVelocityInDegrees(PelvisName);
+	const float PelvisSpeed = PelvisLinearVelocity.Size();
+	const float PelvisAngularSpeed = PelvisAngularVelocityDegPerSec.Size();
+	const float TiltDeg = FMath::RadiansToDegrees(BalanceScenarioStartPelvisRotation.AngularDistance(PelvisTransform.GetRotation()));
 
 	if (Elapsed > PhysAnimComponentInternal::BalanceModeTotalTimeoutSeconds)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Global timeout reached (%.1fs). Stopping mode."), Elapsed);
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimBalance] Scenario watchdog timeout reached (%.1fs). Stopping mode."),
+			Elapsed);
 		StopBalancePerturbationMode();
 		return;
 	}
 
 	if (bBalanceScenarioAwaitingStableWindow)
 	{
-		const bool bFullyUnlocked = AreAllBringUpGroupsUnlocked();
-		if (!bFullyUnlocked)
+		if (!AreAllBringUpGroupsUnlocked())
 		{
-			const double CurrentTime = GetWorld()->GetTimeSeconds();
-			if (BalanceScenarioStableWindowStartTimeSeconds < 0.0 || (CurrentTime - BalanceScenarioStableWindowStartTimeSeconds) >= 2.0)
+			if (LastBalanceStabilizationLogTimeSeconds < 0.0 || (WorldTime - LastBalanceStabilizationLogTimeSeconds) >= 1.0)
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] [%d/%d %s] STABILIZING: Waiting for bring-up (%d/5)..."), 
-					ActiveBalanceScenarioIndex + 1, BalanceScenarios.Num(), *Scenario.Name, HighestUnlockedBringUpGroupIndex + 1);
-				BalanceScenarioStableWindowStartTimeSeconds = CurrentTime;
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] [%d/%d %s] STABILIZING: waiting for bring-up (%d/%d unlocked)."),
+					ActiveBalanceScenarioIndex + 1,
+					BalanceScenarios.Num(),
+					*Scenario.Name,
+					FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
+					GetBringUpGroupCount());
+				LastBalanceStabilizationLogTimeSeconds = WorldTime;
 			}
 			return;
 		}
 
-		if (PelvisSpeed < 10.0f && TiltDeg < 10.0f)
+		const bool bIdlePoseActive =
+			LastValidPoseSearchResult.SelectedAnim == nullptr ||
+			IsBridgePoseSearchIdleResult(LastValidPoseSearchResult);
+		const bool bNoLocomotionStateActive = BridgeLocomotionAuthorityState == EBridgeLocomotionAuthorityState::Idle;
+		const bool bQuietEnough =
+			PelvisSpeed <= BalanceQuietLinearSpeedThresholdCmPerSec &&
+			TiltDeg <= BalanceQuietTiltThresholdDeg &&
+			bIdlePoseActive &&
+			bNoLocomotionStateActive;
+		BalanceScenarioQuietWindowAccumulatedSeconds = bQuietEnough
+			? (BalanceScenarioQuietWindowAccumulatedSeconds + DeltaTime)
+			: 0.0;
+
+		if (LastBalanceStabilizationLogTimeSeconds < 0.0 || (WorldTime - LastBalanceStabilizationLogTimeSeconds) >= 1.0)
 		{
-			if (BalanceScenarioStableWindowStartTimeSeconds < 0.0)
-			{
-				BalanceScenarioStableWindowStartTimeSeconds = WorldTime;
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Character stabilized. Starting 1.0s quiet window..."));
-			}
-			else if ((WorldTime - BalanceScenarioStableWindowStartTimeSeconds) >= 1.0)
-			{
-				bBalanceScenarioAwaitingStableWindow = false;
-				BalanceScenarioStartTimeSeconds = WorldTime; 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] [%d/%d %s] READY: Triggering in %.1fs..."), 
-					ActiveBalanceScenarioIndex + 1, BalanceScenarios.Num(), *Scenario.Name, Scenario.TriggerDelaySeconds);
-
-				// DIAGNOSTIC CORE: Log state when root simulation is about to be enabled
-				if (Mesh)
-				{
-					const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-					const FTransform BoneTransform = Mesh->GetBoneTransform(Mesh->GetBoneIndex(RootBoneName));
-					FBodyInstance* RootBody = Mesh->GetBodyInstance(RootBoneName);
-					const FTransform BodyTransform = RootBody ? RootBody->GetUnrealWorldTransform() : FTransform::Identity;
-					const FVector LinVel = RootBody ? RootBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
-					const float Mass = RootBody ? RootBody->GetBodyMass() : 0.0f;
-
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DIAGNOSTICS: Root simulation enabling. bonePos=%s bodyPos=%s bodyVel=%s mass=%.2f"),
-						*BoneTransform.GetLocation().ToString(), *BodyTransform.GetLocation().ToString(), *LinVel.ToString(), Mass);
-					
-					// Force synchronize and zero velocity to prevent kinematic inheritance explosion
-					if (RootBody)
-					{
-						// MASS DIAGNOSTICS & NORMALIZATION: Fix solver stability
-						if (Mesh)
-						{
-							float TotalMass = 0.0f;
-							for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
-							{
-								if (FBodyInstance* BI = Mesh->GetBodyInstance(BoneName))
-								{
-									const float BM = BI->GetBodyMass();
-									TotalMass += BM;
-									// Solver stability: No body should be lighter than 1kg if it's controlled
-									if (BM < 1.0f) 
-									{
-										BI->SetMassOverride(1.5f, true);
-										UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DIAGNOSTICS: Fixed low-mass bone %s (%.3fkg -> 1.50kg)"), *BoneName.ToString(), BM);
-									}
-								}
-							}
-							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DIAGNOSTICS: Total character mass (pre-pelvis-fix) = %.2fkg"), TotalMass);
-						}
-
-						// MASS OVERRIDE: Pelvis must be substantial to anchor the solver
-						RootBody->SetMassOverride(25.0f, true);
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DIAGNOSTICS: Overrode pelvis mass to 25.00"));
-
-						// DAMPING: Absorb handover shock
-						RootBody->LinearDamping = 10.0f;
-						RootBody->AngularDamping = 10.0f;
-						RootBody->UpdateDampingProperties();
-						
-						RootBody->SetBodyTransform(BoneTransform, ETeleportType::TeleportPhysics);
-						
-						// VELOCITY PURGE: Zero out ALL bones to eliminate inherited kinetic noise character-wide
-						for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
-						{
-							if (FBodyInstance* BI = Mesh->GetBodyInstance(BoneName))
-							{
-								BI->SetLinearVelocity(FVector::ZeroVector, false);
-								BI->SetAngularVelocityInRadians(FVector::ZeroVector, false);
-							}
-						}
-						
-						// CONTROL SEEDING: Wipeout control error energy
-						FString SeedError;
-						if (SeedControlTargetsFromCurrentPose(0.0f, SeedError))
-						{
-							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DIAGNOSTICS: Seeded control targets from physics to eliminate snap energy."));
-						}
-						
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DIAGNOSTICS: Transition complete. Character velocity purged."));
-					}
-
-					// Log some child bones
-					for (const FName ChildName : { FName(TEXT("foot_l")), FName(TEXT("foot_r")), FName(TEXT("thigh_l")), FName(TEXT("thigh_r")) })
-					{
-						const FTransform ChildBone = Mesh->GetBoneTransform(Mesh->GetBoneIndex(ChildName));
-						UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] DIAGNOSTICS: Bone %s pos=%s"), *ChildName.ToString(), *ChildBone.GetLocation().ToString());
-					}
-				}
-			}
+			UE_LOG(
+				LogPhysAnimBridge,
+				Log,
+				TEXT("[PhysAnimBalance] [%d/%d %s] QUIET_GATE: speed=%.1f/%.1f tilt=%.1f/%.1f idlePose=%s locomotionState=%s quiet=%.2f/%.2fs"),
+				ActiveBalanceScenarioIndex + 1,
+				BalanceScenarios.Num(),
+				*Scenario.Name,
+				PelvisSpeed,
+				BalanceQuietLinearSpeedThresholdCmPerSec,
+				TiltDeg,
+				BalanceQuietTiltThresholdDeg,
+				bIdlePoseActive ? TEXT("true") : TEXT("false"),
+				bNoLocomotionStateActive ? TEXT("idle") : TEXT("active"),
+				BalanceScenarioQuietWindowAccumulatedSeconds,
+				BalanceQuietWindowRequiredSeconds);
+			LastBalanceStabilizationLogTimeSeconds = WorldTime;
 		}
-		else
+
+		if (BalanceScenarioQuietWindowAccumulatedSeconds >= BalanceQuietWindowRequiredSeconds)
 		{
-			const double CurrentTime = GetWorld()->GetTimeSeconds();
-			if (BalanceScenarioStableWindowStartTimeSeconds < 0.0 || (CurrentTime - BalanceScenarioStableWindowStartTimeSeconds) >= 2.0)
-			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] [%d/%d %s] STABILIZING: Waiting for quiet pose (speed=%.1f/10.0 tilt=%.1f/10.0)..."), 
-					ActiveBalanceScenarioIndex + 1, BalanceScenarios.Num(), *Scenario.Name, PelvisSpeed, TiltDeg);
-				BalanceScenarioStableWindowStartTimeSeconds = CurrentTime;
-			}
+			bBalanceScenarioAwaitingStableWindow = false;
+			BalanceScenarioStartTimeSeconds = WorldTime;
+			BalanceScenarioStableWindowStartTimeSeconds = WorldTime;
+			BalanceScenarioRecoveryStableAccumulatedSeconds = 0.0;
+			LastBalanceScenarioImpactTimeSeconds = -1.0;
+			BalanceScenarioPeakPelvisVel = 0.0f;
+			BalanceScenarioPeakPelvisTilt = 0.0f;
+			BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
+			BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
+			BalanceScenarioPeakActorDisplacementCm = 0.0f;
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimBalance] [%d/%d %s] READY: quietWindow=%.2fs triggerDelay=%.2fs."),
+				ActiveBalanceScenarioIndex + 1,
+				BalanceScenarios.Num(),
+				*Scenario.Name,
+				BalanceScenarioQuietWindowAccumulatedSeconds,
+				Scenario.TriggerDelaySeconds);
 		}
 		return;
 	}
@@ -2007,45 +1982,86 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 	{
 		if (Elapsed >= Scenario.TriggerDelaySeconds)
 		{
+			BalanceScenarioStartActorLocation = OwnerActor->GetActorLocation();
+			BalanceScenarioStartPelvisLocation = PelvisTransform.GetLocation();
+			BalanceScenarioStartPelvisRotation = PelvisTransform.GetRotation();
+			BalanceScenarioImpactPelvisLinearVelPre = PelvisLinearVelocity;
+			BalanceScenarioImpactPelvisLinearVelPost = PelvisLinearVelocity;
+			BalanceScenarioImpactPelvisAngularVelPre = PelvisAngularVelocityDegPerSec;
+			BalanceScenarioImpactPelvisAngularVelPost = PelvisAngularVelocityDegPerSec;
+			LastBalanceScenarioImpactTimeSeconds = WorldTime;
+			BalanceScenarioRecoveryStableAccumulatedSeconds = 0.0;
+			BalanceScenarioPeakPelvisVel = PelvisSpeed;
+			BalanceScenarioPeakPelvisTilt = 0.0f;
+			BalanceScenarioPeakPelvisAngularSpeed = PelvisAngularSpeed;
+			BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
+			BalanceScenarioPeakActorDisplacementCm = 0.0f;
+
 			if (!Scenario.Name.Contains(TEXT("NoPush")))
 			{
 				ApplyPelvisImpulse(Scenario.Direction, Scenario.Magnitude);
 			}
 			else
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] [%d/%d %s] TRIGGER: skipped (NoPush)."), 
-					ActiveBalanceScenarioIndex + 1, BalanceScenarios.Num(), *Scenario.Name);
-				LastBalanceScenarioImpactTimeSeconds = WorldTime; // For duration calc
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] [%d/%d %s] TRIGGER: skipped (NoPush baseline)."),
+					ActiveBalanceScenarioIndex + 1,
+					BalanceScenarios.Num(),
+					*Scenario.Name);
 			}
+
 			Scenario.bTriggered = true;
-			BalanceScenarioPeakPelvisVel = 0.0f;
-			BalanceScenarioPeakPelvisTilt = 0.0f;
 		}
 		return;
 	}
 
+	if (LastBalanceScenarioImpactTimeSeconds < 0.0)
+	{
+		LastBalanceScenarioImpactTimeSeconds = WorldTime;
+	}
+
+	const double RecoveryElapsedSeconds = WorldTime - LastBalanceScenarioImpactTimeSeconds;
+	const float PelvisDisplacementCm = FVector::Dist(PelvisTransform.GetLocation(), BalanceScenarioStartPelvisLocation);
+	const float ActorDisplacementCm = FVector::Dist2D(OwnerActor->GetActorLocation(), BalanceScenarioStartActorLocation);
+	const float HeightErrorCm = FMath::Abs(PelvisTransform.GetLocation().Z - BalanceScenarioStartPelvisLocation.Z);
 	BalanceScenarioPeakPelvisVel = FMath::Max(BalanceScenarioPeakPelvisVel, PelvisSpeed);
 	BalanceScenarioPeakPelvisTilt = FMath::Max(BalanceScenarioPeakPelvisTilt, TiltDeg);
+	BalanceScenarioPeakPelvisAngularSpeed = FMath::Max(BalanceScenarioPeakPelvisAngularSpeed, PelvisAngularSpeed);
+	BalanceScenarioPeakPelvisDisplacementCm = FMath::Max(BalanceScenarioPeakPelvisDisplacementCm, PelvisDisplacementCm);
+	BalanceScenarioPeakActorDisplacementCm = FMath::Max(BalanceScenarioPeakActorDisplacementCm, ActorDisplacementCm);
 
-	const FVector PelvisLoc = Mesh ? Mesh->GetBoneLocation(PelvisName) : FVector::ZeroVector;
-	const float FallThresholdZ = BalanceScenarioStartPelvisLocation.Z - 40.0f; // More realistic floor relative to start
-	if (PelvisLoc.Z < FallThresholdZ)
+	const bool bLocomotionEntryDetected =
+		LastValidPoseSearchResult.SelectedAnim != nullptr &&
+		!IsBridgePoseSearchIdleResult(LastValidPoseSearchResult);
+	if (bLocomotionEntryDetected)
+	{
+		FinalizeBalanceScenario(false, TEXT("LOCOMOTION_ENTRY"));
+		return;
+	}
+
+	if (PelvisTransform.GetLocation().Z < (BalanceScenarioStartPelvisLocation.Z - BalanceFallHeightThresholdCm))
 	{
 		FinalizeBalanceScenario(false, TEXT("FALL"));
 		return;
 	}
 
-	if (Elapsed >= (Scenario.TriggerDelaySeconds + 0.5f))
+	const bool bRecoveredNow =
+		PelvisSpeed <= BalanceRecoveryVelocityThresholdCmPerSec &&
+		TiltDeg <= BalanceRecoveryTiltThresholdDeg &&
+		HeightErrorCm <= BalanceRecoveryHeightToleranceCm;
+	BalanceScenarioRecoveryStableAccumulatedSeconds = bRecoveredNow
+		? (BalanceScenarioRecoveryStableAccumulatedSeconds + DeltaTime)
+		: 0.0;
+
+	if (BalanceScenarioRecoveryStableAccumulatedSeconds >= BalanceRecoveryStableHoldSeconds)
 	{
-		if (PelvisSpeed < PhysAnimComponentInternal::BalanceRecoveryVelocityThresholdCmPerSec && 
-			TiltDeg < PhysAnimComponentInternal::BalanceRecoveryTiltThresholdDeg)
-		{
-			FinalizeBalanceScenario(true, TEXT("RECOVERED"));
-			return;
-		}
+		FinalizeBalanceScenario(true, TEXT("RECOVERED"));
+		return;
 	}
 
-	if (Elapsed >= (Scenario.TriggerDelaySeconds + Scenario.RecoveryTimeoutSeconds))
+	if (RecoveryElapsedSeconds >= Scenario.RecoveryTimeoutSeconds)
 	{
 		FinalizeBalanceScenario(false, TEXT("TIMEOUT"));
 	}
@@ -2053,77 +2069,174 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 
 void UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude)
 {
-	USkeletalMeshComponent* Mesh = MeshComponent.Get();
-	if (!Mesh) return;
+	UWorld* const World = GetWorld();
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	if (!World || !Mesh)
+	{
+		return;
+	}
 
-	const FName PelvisName = TEXT("pelvis");
-	FBodyInstance* PelvisBody = Mesh->GetBodyInstance(PelvisName);
+	const FName PelvisName = PhysAnimBridge::GetRootBoneName();
+	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PelvisName);
 	if (!PelvisBody || !PelvisBody->IsInstanceSimulatingPhysics())
 	{
-		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] FAILED: Pelvis body not found or not simulating."));
+		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] FAILED: pelvis body not found or not simulating."));
 		return;
 	}
 
 	FVector ShoveDirection = FVector::ZeroVector;
 	switch (Direction)
 	{
-		case EPhysAnimPerturbationDirection::Forward:  ShoveDirection = GetOwner()->GetActorForwardVector(); break;
-		case EPhysAnimPerturbationDirection::Backward: ShoveDirection = -GetOwner()->GetActorForwardVector(); break;
-		case EPhysAnimPerturbationDirection::Left:     ShoveDirection = -GetOwner()->GetActorRightVector(); break;
-		case EPhysAnimPerturbationDirection::Right:    ShoveDirection = GetOwner()->GetActorRightVector(); break;
+	case EPhysAnimPerturbationDirection::Forward:
+		ShoveDirection = FVector(1.0f, 0.0f, 0.0f);
+		break;
+	case EPhysAnimPerturbationDirection::Backward:
+		ShoveDirection = FVector(-1.0f, 0.0f, 0.0f);
+		break;
+	case EPhysAnimPerturbationDirection::Left:
+		ShoveDirection = FVector(0.0f, -1.0f, 0.0f);
+		break;
+	case EPhysAnimPerturbationDirection::Right:
+		ShoveDirection = FVector(0.0f, 1.0f, 0.0f);
+		break;
 	}
 
-	float TargetDeltaVHandled = 0.0f;
+	float TargetDeltaVCmPerSec = 0.0f;
 	switch (Magnitude)
 	{
-		case EPhysAnimPerturbationMagnitude::Small:  TargetDeltaVHandled = PhysAnimComponentInternal::BalanceTargetDeltaVSmall; break;
-		case EPhysAnimPerturbationMagnitude::Medium: TargetDeltaVHandled = PhysAnimComponentInternal::BalanceTargetDeltaVMedium; break;
-		case EPhysAnimPerturbationMagnitude::Large:  TargetDeltaVHandled = PhysAnimComponentInternal::BalanceTargetDeltaVLarge; break;
+	case EPhysAnimPerturbationMagnitude::Small:
+		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVSmall;
+		break;
+	case EPhysAnimPerturbationMagnitude::Medium:
+		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVMedium;
+		break;
+	case EPhysAnimPerturbationMagnitude::Large:
+		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVLarge;
+		break;
 	}
 
-	const float PelvisMassHandled = PelvisBody->GetBodyMass();
-	const float ImpulseValue = PelvisMassHandled * TargetDeltaVHandled;
+	const float PelvisMassKg = PelvisBody->GetBodyMass();
+	const float ImpulseMagnitude = PelvisMassKg * TargetDeltaVCmPerSec;
+	const FVector ImpulseVector = ShoveDirection * ImpulseMagnitude;
 
-	BalanceScenarioImpactPelvisLinearVelPre = Mesh->GetPhysicsLinearVelocity(PelvisName);
-	PelvisBody->AddImpulse(ShoveDirection * ImpulseValue, false);
-	BalanceScenarioImpactPelvisLinearVelPost = Mesh->GetPhysicsLinearVelocity(PelvisName);
-	LastBalanceScenarioImpactTimeSeconds = GetWorld()->GetTimeSeconds();
+	BalanceScenarioImpactPelvisLinearVelPre = PelvisBody->GetUnrealWorldVelocity();
+	BalanceScenarioImpactPelvisAngularVelPre = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
+	PelvisBody->AddImpulse(ImpulseVector, false);
+	BalanceScenarioImpactPelvisLinearVelPost = PelvisBody->GetUnrealWorldVelocity();
+	BalanceScenarioImpactPelvisAngularVelPost = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
+	LastBalanceScenarioImpactTimeSeconds = World->GetTimeSeconds();
 
 	const float MeasuredDeltaV = (BalanceScenarioImpactPelvisLinearVelPost - BalanceScenarioImpactPelvisLinearVelPre).Size();
-	const bool bValidResponse = MeasuredDeltaV >= PhysAnimComponentInternal::BalanceResponseVelocityThresholdCmPerSec;
+	const bool bValidResponse = MeasuredDeltaV >= BalanceResponseVelocityThresholdCmPerSec;
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRIGGER: direction=%d magnitude=%d mass=%.1f targetDv=%.1f impulse=%.1f measuredDv=%.1f valid=%s"),
-		(int)Direction, (int)Magnitude, PelvisMassHandled, TargetDeltaVHandled, ImpulseValue, MeasuredDeltaV, bValidResponse ? TEXT("true") : TEXT("false"));
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimBalance] TRIGGER: scenario=%s impulse=(%.1f,%.1f,%.1f) mass=%.2fkg targetDv=%.1f preLin=(%.1f,%.1f,%.1f) postLin=(%.1f,%.1f,%.1f) preAng=(%.1f,%.1f,%.1f) postAng=(%.1f,%.1f,%.1f) measuredDv=%.1f valid=%s"),
+		BalanceScenarios.IsValidIndex(ActiveBalanceScenarioIndex) ? *BalanceScenarios[ActiveBalanceScenarioIndex].Name : TEXT("Unknown"),
+		ImpulseVector.X,
+		ImpulseVector.Y,
+		ImpulseVector.Z,
+		PelvisMassKg,
+		TargetDeltaVCmPerSec,
+		BalanceScenarioImpactPelvisLinearVelPre.X,
+		BalanceScenarioImpactPelvisLinearVelPre.Y,
+		BalanceScenarioImpactPelvisLinearVelPre.Z,
+		BalanceScenarioImpactPelvisLinearVelPost.X,
+		BalanceScenarioImpactPelvisLinearVelPost.Y,
+		BalanceScenarioImpactPelvisLinearVelPost.Z,
+		BalanceScenarioImpactPelvisAngularVelPre.X,
+		BalanceScenarioImpactPelvisAngularVelPre.Y,
+		BalanceScenarioImpactPelvisAngularVelPre.Z,
+		BalanceScenarioImpactPelvisAngularVelPost.X,
+		BalanceScenarioImpactPelvisAngularVelPost.Y,
+		BalanceScenarioImpactPelvisAngularVelPost.Z,
+		MeasuredDeltaV,
+		bValidResponse ? TEXT("true") : TEXT("false"));
 }
 
 void UPhysAnimComponent::FinalizeBalanceScenario(bool bSuccess, const FString& Reason)
 {
-	if (!BalanceScenarios.IsValidIndex(ActiveBalanceScenarioIndex)) return;
+	if (!BalanceScenarios.IsValidIndex(ActiveBalanceScenarioIndex))
+	{
+		return;
+	}
 
 	FPhysAnimBalanceScenario& Scenario = BalanceScenarios[ActiveBalanceScenarioIndex];
 	Scenario.bCompleted = true;
 
-	const double Duration = GetWorld()->GetTimeSeconds() - LastBalanceScenarioImpactTimeSeconds;
-	const FVector ActorDelta = GetOwner()->GetActorLocation() - BalanceScenarioStartActorLocation;
-	const float ActorDisplacement = ActorDelta.Size();
-	const bool bContaminated = ActorDisplacement > PhysAnimComponentInternal::BalanceShellContaminationDisplacementCm;
+	UWorld* const World = GetWorld();
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	AActor* const OwnerActor = GetOwner();
+	const FName PelvisName = PhysAnimBridge::GetRootBoneName();
+	FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PelvisName) : nullptr;
+	const FTransform PelvisTransform = PelvisBody
+		? PelvisBody->GetUnrealWorldTransform()
+		: (Mesh ? Mesh->GetBoneTransform(Mesh->GetBoneIndex(PelvisName)) : FTransform::Identity);
 
+	const double Duration = (World && LastBalanceScenarioImpactTimeSeconds >= 0.0)
+		? (World->GetTimeSeconds() - LastBalanceScenarioImpactTimeSeconds)
+		: 0.0;
 	const float MeasuredDeltaV = (BalanceScenarioImpactPelvisLinearVelPost - BalanceScenarioImpactPelvisLinearVelPre).Size();
 	const bool bNoPushScenario = Scenario.Name.Contains(TEXT("NoPush"));
-	const bool bInvalidPerturbation = !bNoPushScenario && MeasuredDeltaV < PhysAnimComponentInternal::BalanceResponseVelocityThresholdCmPerSec;
+	const bool bInvalidPerturbation = !bNoPushScenario && MeasuredDeltaV < BalanceResponseVelocityThresholdCmPerSec;
+	const bool bContaminated = BalanceScenarioPeakActorDisplacementCm > BalanceShellContaminationDisplacementCm;
+	const float FinalHeightErrorCm = FMath::Abs(PelvisTransform.GetLocation().Z - BalanceScenarioStartPelvisLocation.Z);
 
 	FString FinalStatus = bSuccess ? TEXT("PASSED") : TEXT("FAILED");
-	if (bInvalidPerturbation) FinalStatus = TEXT("INVALID");
-	else if (bContaminated) FinalStatus = TEXT("CONTAMINATED");
+	if (bInvalidPerturbation)
+	{
+		FinalStatus = TEXT("INVALID");
+	}
+	else if (bContaminated)
+	{
+		FinalStatus = TEXT("CONTAMINATED");
+	}
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] [%d/%d %s] RESULT: %s recoveryTime=%.2fs peakPelvisVel=%.1f peakTilt=%.1f actorDisp=%.1f reason=%s"),
-		ActiveBalanceScenarioIndex + 1, BalanceScenarios.Num(), *Scenario.Name, *FinalStatus, Duration, BalanceScenarioPeakPelvisVel, BalanceScenarioPeakPelvisTilt, ActorDisplacement, *Reason);
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimBalance] [%d/%d %s] RESULT: %s recoveryTime=%.2fs measuredDv=%.1f peakPelvisVel=%.1f peakPelvisAng=%.1f peakTilt=%.1f peakPelvisDisp=%.1f peakActorDisp=%.1f finalHeightErr=%.1f thresholds[response=%.1f recoveryVel=%.1f recoveryTilt=%.1f recoveryHeight=%.1f contam=%.1f] reason=%s"),
+		ActiveBalanceScenarioIndex + 1,
+		BalanceScenarios.Num(),
+		*Scenario.Name,
+		*FinalStatus,
+		Duration,
+		MeasuredDeltaV,
+		BalanceScenarioPeakPelvisVel,
+		BalanceScenarioPeakPelvisAngularSpeed,
+		BalanceScenarioPeakPelvisTilt,
+		BalanceScenarioPeakPelvisDisplacementCm,
+		BalanceScenarioPeakActorDisplacementCm,
+		FinalHeightErrorCm,
+		BalanceResponseVelocityThresholdCmPerSec,
+		BalanceRecoveryVelocityThresholdCmPerSec,
+		BalanceRecoveryTiltThresholdDeg,
+		BalanceRecoveryHeightToleranceCm,
+		BalanceShellContaminationDisplacementCm,
+		*Reason);
 
-	ActiveBalanceScenarioIndex++;
+	++ActiveBalanceScenarioIndex;
 	if (ActiveBalanceScenarioIndex < BalanceScenarios.Num())
 	{
-		BalanceScenarioStartTimeSeconds = GetWorld()->GetTimeSeconds();
+		BalanceScenarioStartTimeSeconds = World ? World->GetTimeSeconds() : 0.0;
 		bBalanceScenarioAwaitingStableWindow = true;
+		BalanceScenarioStableWindowStartTimeSeconds = BalanceScenarioStartTimeSeconds;
+		BalanceScenarioQuietWindowAccumulatedSeconds = 0.0;
+		BalanceScenarioRecoveryStableAccumulatedSeconds = 0.0;
+		LastBalanceStabilizationLogTimeSeconds = -1.0;
+		LastBalanceScenarioImpactTimeSeconds = -1.0;
+		BalanceScenarioPeakPelvisVel = 0.0f;
+		BalanceScenarioPeakPelvisTilt = 0.0f;
+		BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
+		BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
+		BalanceScenarioPeakActorDisplacementCm = 0.0f;
+		if (OwnerActor)
+		{
+			BalanceScenarioStartActorLocation = OwnerActor->GetActorLocation();
+		}
+		BalanceScenarioStartPelvisLocation = PelvisTransform.GetLocation();
+		BalanceScenarioStartPelvisRotation = PelvisTransform.GetRotation();
 	}
 	else
 	{
@@ -2134,49 +2247,122 @@ void UPhysAnimComponent::FinalizeBalanceScenario(bool bSuccess, const FString& R
 
 void UPhysAnimComponent::StartBalancePerturbationMode()
 {
-	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive) return;
+	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive)
+	{
+		return;
+	}
+
+	UWorld* const World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalancePerturbationMode);
 	ApplyStartupMovementLock();
+	ResetBridgeLocomotionAuthorityState();
+	BridgePoseSearchLatchedWalkResult = FPoseSearchBlueprintResult();
+	BridgePoseSearchLatchedQueryDirection = FVector::ZeroVector;
+	BridgePoseSearchLatchedQuerySpeedCmPerSecond = 0.0f;
+	BridgePoseSearchWalkLatchExpireTimeSeconds = -1.0;
+	bHasBridgePoseSearchLatchedWalkResult = false;
+
+	BalanceIdlePoseSearchResult = FPoseSearchBlueprintResult();
+	bHasBalanceIdlePoseSearchResult =
+		LastValidPoseSearchResult.SelectedAnim != nullptr &&
+		IsBridgePoseSearchIdleResult(LastValidPoseSearchResult);
+	if (bHasBalanceIdlePoseSearchResult)
+	{
+		BalanceIdlePoseSearchResult = LastValidPoseSearchResult;
+	}
 
 	BalanceScenarios.Empty();
-	BalanceScenarios.Add({ TEXT("IdleHold_NoPush"), EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small, 1.0f });
+	BalanceScenarios.Add({ TEXT("IdleHold_NoPush"), EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small, 0.5f, BalanceRecoveryTimeoutSeconds, 0.0f });
 
-	const TArray<EPhysAnimPerturbationDirection> Dirs = { EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationDirection::Backward, EPhysAnimPerturbationDirection::Left, EPhysAnimPerturbationDirection::Right };
-	const TArray<EPhysAnimPerturbationMagnitude> Mags = { EPhysAnimPerturbationMagnitude::Small, EPhysAnimPerturbationMagnitude::Medium, EPhysAnimPerturbationMagnitude::Large };
-	const TArray<FString> DirNames = { TEXT("Forward"), TEXT("Backward"), TEXT("Left"), TEXT("Right") };
-	const TArray<FString> MagNames = { TEXT("Small"), TEXT("Medium"), TEXT("Large") };
+	const TArray<EPhysAnimPerturbationDirection> Directions = {
+		EPhysAnimPerturbationDirection::Forward,
+		EPhysAnimPerturbationDirection::Backward,
+		EPhysAnimPerturbationDirection::Left,
+		EPhysAnimPerturbationDirection::Right };
+	const TArray<EPhysAnimPerturbationMagnitude> Magnitudes = {
+		EPhysAnimPerturbationMagnitude::Small,
+		EPhysAnimPerturbationMagnitude::Medium,
+		EPhysAnimPerturbationMagnitude::Large };
+	const TArray<FString> DirectionNames = { TEXT("Forward"), TEXT("Backward"), TEXT("Left"), TEXT("Right") };
+	const TArray<FString> MagnitudeNames = { TEXT("Small"), TEXT("Medium"), TEXT("Large") };
 
-	for (int32 d = 0; d < Dirs.Num(); ++d)
+	for (int32 DirectionIndex = 0; DirectionIndex < Directions.Num(); ++DirectionIndex)
 	{
-		for (int32 m = 0; m < Mags.Num(); ++m)
+		for (int32 MagnitudeIndex = 0; MagnitudeIndex < Magnitudes.Num(); ++MagnitudeIndex)
 		{
-			FPhysAnimBalanceScenario S;
-			S.Name = FString::Printf(TEXT("IdleHold_PelvisImpulse_%s_%s"), *DirNames[d], *MagNames[m]);
-			S.Direction = Dirs[d];
-			S.Magnitude = Mags[m];
-			S.TriggerDelaySeconds = PhysAnimComponentInternal::BalanceRecoveryStableHoldSeconds;
-			BalanceScenarios.Add(S);
+			FPhysAnimBalanceScenario Scenario;
+			Scenario.Name = FString::Printf(
+				TEXT("IdleHold_PelvisImpulse_%s_%s"),
+				*DirectionNames[DirectionIndex],
+				*MagnitudeNames[MagnitudeIndex]);
+			Scenario.Direction = Directions[DirectionIndex];
+			Scenario.Magnitude = Magnitudes[MagnitudeIndex];
+			Scenario.TriggerDelaySeconds = 0.5f;
+			Scenario.RecoveryTimeoutSeconds = BalanceRecoveryTimeoutSeconds;
+			Scenario.CooldownSeconds = 0.0f;
+			BalanceScenarios.Add(Scenario);
 		}
 	}
 
 	RuntimeInstabilityState = {};
 	LastRuntimeInstabilityDiagnostics = {};
 	ActiveBalanceScenarioIndex = 0;
-	BalanceScenarioStartTimeSeconds = GetWorld()->GetTimeSeconds();
-	bBalanceScenarioAwaitingStableWindow = true;
-	BalanceScenarioStableWindowStartTimeSeconds = -1.0; // Reset to avoid immediate success
+	BalanceScenarioStartTimeSeconds = World->GetTimeSeconds();
+	BalanceScenarioStableWindowStartTimeSeconds = BalanceScenarioStartTimeSeconds;
+	BalanceScenarioQuietWindowAccumulatedSeconds = 0.0;
+	BalanceScenarioRecoveryStableAccumulatedSeconds = 0.0;
+	LastBalanceStabilizationLogTimeSeconds = -1.0;
+	LastBalanceScenarioImpactTimeSeconds = -1.0;
 	BalanceScenarioPeakPelvisVel = 0.0f;
 	BalanceScenarioPeakPelvisTilt = 0.0f;
-	BalanceScenarioStartActorLocation = GetOwner()->GetActorLocation();
-	BalanceScenarioStartPelvisLocation = (MeshComponent.IsValid()) 
-		? MeshComponent->GetBoneLocation(PhysAnimBridge::GetRootBoneName())
-		: FVector::ZeroVector;
-	BalanceScenarioStartPelvisRotation = (MeshComponent.IsValid()) 
-		? MeshComponent->GetBoneTransform(MeshComponent->GetBoneIndex(PhysAnimBridge::GetRootBoneName())).GetRotation()
-		: FQuat::Identity;
-	
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Balance Perturbation Mode started. %d scenarios queued."), BalanceScenarios.Num());
+	BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
+	BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
+	BalanceScenarioPeakActorDisplacementCm = 0.0f;
+	bBalanceScenarioAwaitingStableWindow = true;
+	if (AActor* const OwnerActor = GetOwner())
+	{
+		BalanceScenarioStartActorLocation = OwnerActor->GetActorLocation();
+	}
+	if (USkeletalMeshComponent* const Mesh = MeshComponent.Get())
+	{
+		if (FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
+		{
+			const FTransform PelvisTransform = PelvisBody->GetUnrealWorldTransform();
+			BalanceScenarioStartPelvisLocation = PelvisTransform.GetLocation();
+			BalanceScenarioStartPelvisRotation = PelvisTransform.GetRotation();
+		}
+		else
+		{
+			BalanceScenarioStartPelvisLocation = Mesh->GetBoneLocation(PhysAnimBridge::GetRootBoneName());
+			BalanceScenarioStartPelvisRotation = Mesh->GetBoneTransform(Mesh->GetBoneIndex(PhysAnimBridge::GetRootBoneName())).GetRotation();
+		}
+	}
+	else
+	{
+		BalanceScenarioStartPelvisLocation = FVector::ZeroVector;
+		BalanceScenarioStartPelvisRotation = FQuat::Identity;
+	}
+
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimBalance] Balance Perturbation Mode started. scenarios=%d quietWindow=%.2fs triggerDelay=0.50s thresholds[response=%.1f recoveryVel=%.1f recoveryTilt=%.1f recoveryHeight=%.1f stableHold=%.2fs timeout=%.2fs contam=%.1f fall=%.1f] idlePoseCached=%s"),
+		BalanceScenarios.Num(),
+		BalanceQuietWindowRequiredSeconds,
+		BalanceResponseVelocityThresholdCmPerSec,
+		BalanceRecoveryVelocityThresholdCmPerSec,
+		BalanceRecoveryTiltThresholdDeg,
+		BalanceRecoveryHeightToleranceCm,
+		BalanceRecoveryStableHoldSeconds,
+		BalanceRecoveryTimeoutSeconds,
+		BalanceShellContaminationDisplacementCm,
+		BalanceFallHeightThresholdCm,
+		bHasBalanceIdlePoseSearchResult ? TEXT("true") : TEXT("false"));
 }
 
 void UPhysAnimComponent::StopBalancePerturbationMode()
@@ -2186,6 +2372,27 @@ void UPhysAnimComponent::StopBalancePerturbationMode()
 		TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
 		ReleaseStartupMovementLock(true);
 	}
+
+	BalanceScenarios.Empty();
+	ActiveBalanceScenarioIndex = INDEX_NONE;
+	BalanceScenarioStartTimeSeconds = -1.0;
+	BalanceScenarioStableWindowStartTimeSeconds = -1.0;
+	BalanceScenarioQuietWindowAccumulatedSeconds = 0.0;
+	BalanceScenarioRecoveryStableAccumulatedSeconds = 0.0;
+	LastBalanceStabilizationLogTimeSeconds = -1.0;
+	LastBalanceScenarioImpactTimeSeconds = -1.0;
+	BalanceScenarioImpactPelvisLinearVelPre = FVector::ZeroVector;
+	BalanceScenarioImpactPelvisLinearVelPost = FVector::ZeroVector;
+	BalanceScenarioImpactPelvisAngularVelPre = FVector::ZeroVector;
+	BalanceScenarioImpactPelvisAngularVelPost = FVector::ZeroVector;
+	BalanceScenarioPeakPelvisVel = 0.0f;
+	BalanceScenarioPeakPelvisTilt = 0.0f;
+	BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
+	BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
+	BalanceScenarioPeakActorDisplacementCm = 0.0f;
+	bBalanceScenarioAwaitingStableWindow = false;
+	BalanceIdlePoseSearchResult = FPoseSearchBlueprintResult();
+	bHasBalanceIdlePoseSearchResult = false;
 }
 
 void UPhysAnimComponent::UpdateStabilizationStressTestState(const FPhysAnimStabilizationSettings& EffectiveSettings)
@@ -2741,13 +2948,42 @@ bool UPhysAnimComponent::QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchRe
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
 	{
-		// Force idle by assuming first result in database is idle or just using a neutral query
+		if (bHasBalanceIdlePoseSearchResult && BalanceIdlePoseSearchResult.SelectedAnim != nullptr)
+		{
+			OutSearchResult = BalanceIdlePoseSearchResult;
+			AdvanceBridgePoseSearchResultTime(OutSearchResult, FMath::Max(LastBridgePoseSearchDeltaTimeSeconds, 1.0f / 60.0f));
+			BalanceIdlePoseSearchResult = OutSearchResult;
+			return true;
+		}
+
 		TArray<UObject*> AssetsToSearch;
 		AssetsToSearch.Add(LoadedPoseSearchDatabase);
 		FPoseSearchContinuingProperties ContinuingProperties;
 		FPoseSearchFutureProperties FutureProperties;
-		UPoseSearchLibrary::MotionMatch(LocalAnimInstance, AssetsToSearch, PhysAnimComponentInternal::PoseHistoryName, ContinuingProperties, FutureProperties, OutSearchResult);
-		return OutSearchResult.SelectedAnim != nullptr;
+		UPoseSearchLibrary::MotionMatch(
+			LocalAnimInstance,
+			AssetsToSearch,
+			PhysAnimComponentInternal::PoseHistoryName,
+			ContinuingProperties,
+			FutureProperties,
+			OutSearchResult);
+		if (OutSearchResult.SelectedAnim == nullptr)
+		{
+			OutError = TEXT("Balance mode requires a valid idle PoseSearch result.");
+			return false;
+		}
+
+		if (!IsBridgePoseSearchIdleResult(OutSearchResult))
+		{
+			OutError = FString::Printf(
+				TEXT("Balance mode rejected non-idle PoseSearch result: %s"),
+				*GetNameSafe(OutSearchResult.SelectedAnim));
+			return false;
+		}
+
+		BalanceIdlePoseSearchResult = OutSearchResult;
+		bHasBalanceIdlePoseSearchResult = true;
+		return true;
 	}
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
@@ -6454,8 +6690,8 @@ void UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
 	float& OutPhysicsBlendWeight,
 	bool& bOutUpdateKinematicFromSimulation)
 {
-	// In Balance Perturbation Mode, we ALWAYS want the root (pelvis) to simulate so it can fall and be shoved.
-	const bool bModeAllowsRootSimulation = bAllowRootBodyModifierSimulation || (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode);
+	// Balance mode should honor the per-scenario root-simulation gate so the quiet-window and pre-impact settle phases are real.
+	const bool bModeAllowsRootSimulation = bAllowRootBodyModifierSimulation;
 
 	if (bForceZeroActions || !bSimulationHandoffSettled || !bBringUpGroupUnlocked || (bIsRootBodyModifier && !bModeAllowsRootSimulation))
 	{
@@ -6478,8 +6714,8 @@ ECollisionEnabled::Type UPhysAnimComponent::ResolveBodyModifierCollisionType(
 	bool bIsRootBodyModifier,
 	bool bAllowRootBodyModifierSimulation)
 {
-	// In Balance Perturbation Mode, we ALWAYS want the root (pelvis) to simulate.
-	const bool bModeAllowsRootSimulation = bAllowRootBodyModifierSimulation || (CurrentRuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode);
+	// Balance mode should honor the per-scenario root-simulation gate so collision/simulation stay aligned.
+	const bool bModeAllowsRootSimulation = bAllowRootBodyModifierSimulation;
 
 	if (bForceZeroActions || !bSimulationHandoffSettled || !bBringUpGroupUnlocked || (bIsRootBodyModifier && !bModeAllowsRootSimulation))
 	{

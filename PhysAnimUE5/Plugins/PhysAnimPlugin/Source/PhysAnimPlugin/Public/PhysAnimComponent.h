@@ -454,6 +454,39 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	void StopBalancePerturbationMode();
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
+	float BalanceQuietLinearSpeedThresholdCmPerSec = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
+	float BalanceQuietTiltThresholdDeg = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
+	float BalanceQuietWindowRequiredSeconds = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
+	float BalanceResponseVelocityThresholdCmPerSec = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
+	float BalanceRecoveryVelocityThresholdCmPerSec = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
+	float BalanceRecoveryTiltThresholdDeg = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
+	float BalanceRecoveryHeightToleranceCm = 15.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
+	float BalanceRecoveryStableHoldSeconds = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
+	float BalanceRecoveryTimeoutSeconds = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
+	float BalanceShellContaminationDisplacementCm = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
+	float BalanceFallHeightThresholdCm = 40.0f;
+
 protected:
 	UPROPERTY(EditAnywhere, Category = "PhysAnim")
 	TSoftObjectPtr<UNNEModelData> ModelDataAsset;
@@ -773,6 +806,16 @@ private:
 	FQuat BalanceScenarioStartPelvisRotation = FQuat::Identity;
 	bool bBalanceScenarioAwaitingStableWindow = false;
 	double BalanceScenarioStableWindowStartTimeSeconds = -1.0;
+	double BalanceScenarioQuietWindowAccumulatedSeconds = 0.0;
+	double BalanceScenarioRecoveryStableAccumulatedSeconds = 0.0;
+	double LastBalanceStabilizationLogTimeSeconds = -1.0;
+	FVector BalanceScenarioImpactPelvisAngularVelPre = FVector::ZeroVector;
+	FVector BalanceScenarioImpactPelvisAngularVelPost = FVector::ZeroVector;
+	float BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
+	float BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
+	float BalanceScenarioPeakActorDisplacementCm = 0.0f;
+	FPoseSearchBlueprintResult BalanceIdlePoseSearchResult;
+	bool bHasBalanceIdlePoseSearchResult = false;
 
 public:
 	static bool BuildConditionedActions(
