@@ -4561,7 +4561,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
 	if (bRootSimFlipFrame)
 	{
-		HipQuarantineTicksRemaining = 2;
+		HipQuarantineTicksRemaining = 0;
 	}
 	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0;
 	bool bHipQuarantineReleasedThisFrame = false;

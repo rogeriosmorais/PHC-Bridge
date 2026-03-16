@@ -50,16 +50,21 @@ void FPhysAnimBalanceReadyTransition::Cancel()
 	}
 }
 
+
 void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings)
 {
-	if (!IsActive())
+	if (!IsActive() || !Owner)
 	{
 		return;
 	}
 
+	constexpr float PostHandoffSettleSeconds = 0.20f;
+	constexpr float RestoreControlsSettleSeconds = 0.20f;
+	constexpr float FinalSettleSeconds = 0.35f;
+
 	PhaseTimeSeconds += DeltaTime;
 	TotalTransitionTimeSeconds += DeltaTime;
-	
+
 	const double CurrentTime = Owner->GetWorld() ? Owner->GetWorld()->GetTimeSeconds() : 0.0;
 	const bool bShouldLog = LastLogTimeSeconds < 0.0 || (CurrentTime - LastLogTimeSeconds) >= 0.5;
 
@@ -67,93 +72,47 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	const bool bReadyThisFrame = EvaluateReadiness(Owner, Settings, BlockReason);
 	Diagnostics.BlockReason = BlockReason;
 
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	FBodyInstance* PelvisBody = Owner->GetMeshComponent() ? Owner->GetMeshComponent()->GetBodyInstance(RootBoneName) : nullptr;
+	const bool bIsSimulating = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
+
+	if (Owner->bPelvisResetAppliedThisTick)
+	{
+		bLatchedPelvisResetApplied = true;
+		Diagnostics.bResetApplied = true;
+	}
+
 	if (Phase == EBalanceReadyTransitionPhase::Handoff)
 	{
-		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-		FBodyInstance* PelvisBody = Owner->GetMeshComponent() ? Owner->GetMeshComponent()->GetBodyInstance(RootBoneName) : nullptr;
-		const bool bIsSimulating = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
-		
-		if (Owner->bPelvisResetAppliedThisTick)
-		{
-			bLatchedPelvisResetApplied = true;
-			Diagnostics.bResetApplied = true;
-		}
-
 		const bool bSimJustStarted = bIsSimulating && !bLastRootSimulating;
 		if (bSimJustStarted)
 		{
-			QuietHandoffCount = 2;
+			CaptureFlipDiagnostics(Owner);
+			Diagnostics.bSimFlipped = true;
+			SetPhase(EBalanceReadyTransitionPhase::PostHandoffSettle);
 		}
-
-		// EXPERIMENT: Force restrictive posture during handoff
-		ACharacter* CharacterOwner = Cast<ACharacter>(Owner->GetOwner());
-		if (CharacterOwner)
-		{
-			if (UCharacterMovementComponent* MoveComp = CharacterOwner->GetCharacterMovement())
-			{
-				MoveComp->SetMovementMode(MOVE_None);
-				MoveComp->SetComponentTickEnabled(false);
-			}
-			if (UCapsuleComponent* CapsuleComp = CharacterOwner->GetCapsuleComponent())
-			{
-				CapsuleComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-			}
-
-			static double LastPostureLogTime = -1.0;
-			if (CurrentTime - LastPostureLogTime > 1.0)
-			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Posture (Phase 1): charMoveTick=%d mode=%d capsuleColl=%d rootBodySim=%d"),
-					(int32)CharacterOwner->GetCharacterMovement()->IsComponentTickEnabled(),
-					(int32)CharacterOwner->GetCharacterMovement()->MovementMode,
-					(int32)CharacterOwner->GetCapsuleComponent()->GetCollisionEnabled(),
-					(int32)bIsSimulating);
-				LastPostureLogTime = CurrentTime;
-			}
-		}
-
-		if (QuietHandoffCount > 0)
-		{
-			QuietHandoffCount--;
-			return;
-		}
-
-		if (bIsSimulating && bLatchedPelvisResetApplied)
-		{
-			// Basic sanity threshold check (must be below these to even begin settling)
-			const float MaxSanitySpeed = 100.0f; // 100 cm/s
-			const float MaxSanityAngSpeed = 180.0f; // 180 deg/s
-			
-			if (Diagnostics.RootSpeed < MaxSanitySpeed && Diagnostics.RootAngularSpeed < MaxSanityAngSpeed)
-			{
-				Diagnostics.bSimFlipped = true;
-				CaptureFlipDiagnostics(Owner);
-				// EXPERIMENT: DO NOT advance to later transition phases
-				// SetPhase(EBalanceReadyTransitionPhase::PostHandoffSettle);
-			}
-		}
-
-		if (PhaseTimeSeconds > 2.0f) // Timeout
+		else if (PhaseTimeSeconds > 1.0f)
 		{
 			Diagnostics.FailureReason = TEXT("handoff_timeout");
 			SetPhase(EBalanceReadyTransitionPhase::Failed);
-		}
-		else if (!bIsSimulating || !bLatchedPelvisResetApplied)
-		{
-			// Capture pre-flip velocities while waiting
-			if (PelvisBody)
-			{
-				Diagnostics.PelvisLinearVelPre = PelvisBody->GetUnrealWorldVelocity();
-				Diagnostics.PelvisAngularVelPre = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
-			}
 		}
 	}
 	else if (Phase == EBalanceReadyTransitionPhase::PostHandoffSettle)
 	{
 		if (bReadyThisFrame)
 		{
-			SetPhase(EBalanceReadyTransitionPhase::RestoreControls);
+			StableHoldAccumulatedSeconds += DeltaTime;
+			if (StableHoldAccumulatedSeconds >= PostHandoffSettleSeconds)
+			{
+				SetPhase(EBalanceReadyTransitionPhase::RestoreControls);
+			}
 		}
-		else if (PhaseTimeSeconds > 2.0f)
+		else
+		{
+			StableHoldAccumulatedSeconds = 0.0f;
+		}
+
+		if (PhaseTimeSeconds > 2.0f)
 		{
 			Diagnostics.FailureReason = TEXT("post_handoff_settle_timeout");
 			SetPhase(EBalanceReadyTransitionPhase::Failed);
@@ -161,13 +120,20 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	}
 	else if (Phase == EBalanceReadyTransitionPhase::RestoreControls)
 	{
-		// In a real implementation this would progressively re-enable systems.
-		// For now, we transition once stable.
 		if (bReadyThisFrame)
 		{
-			SetPhase(EBalanceReadyTransitionPhase::FinalSettle);
+			StableHoldAccumulatedSeconds += DeltaTime;
+			if (StableHoldAccumulatedSeconds >= RestoreControlsSettleSeconds)
+			{
+				SetPhase(EBalanceReadyTransitionPhase::FinalSettle);
+			}
 		}
-		else if (PhaseTimeSeconds > 2.0f)
+		else
+		{
+			StableHoldAccumulatedSeconds = 0.0f;
+		}
+
+		if (PhaseTimeSeconds > 2.0f)
 		{
 			Diagnostics.FailureReason = TEXT("restore_controls_timeout");
 			SetPhase(EBalanceReadyTransitionPhase::Failed);
@@ -178,7 +144,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		if (bReadyThisFrame)
 		{
 			StableHoldAccumulatedSeconds += DeltaTime;
-			if (StableHoldAccumulatedSeconds >= Owner->BalanceBridgeActivePreEntrySettleSeconds)
+			if (StableHoldAccumulatedSeconds >= FinalSettleSeconds)
 			{
 				SetPhase(EBalanceReadyTransitionPhase::Succeeded);
 			}
@@ -188,7 +154,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			StableHoldAccumulatedSeconds = 0.0f;
 		}
 
-		if (PhaseTimeSeconds > 5.0f)
+		if (PhaseTimeSeconds > 3.0f)
 		{
 			Diagnostics.FailureReason = TEXT("final_settle_timeout");
 			SetPhase(EBalanceReadyTransitionPhase::Failed);
@@ -197,15 +163,21 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 	if (bShouldLog && IsActive())
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Transition Progress: phase=%d time=%.2f ready=%s reason=%s"), 
-			static_cast<int32>(Phase), PhaseTimeSeconds, bReadyThisFrame ? TEXT("true") : TEXT("false"), *BlockReason);
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimBalance] Transition Progress: phase=%d time=%.2f ready=%s reason=%s rootLin=%.1f rootAng=%.1f shell=%.1f"),
+			static_cast<int32>(Phase),
+			PhaseTimeSeconds,
+			bReadyThisFrame ? TEXT("true") : TEXT("false"),
+			*BlockReason,
+			Diagnostics.RootSpeed,
+			Diagnostics.RootAngularSpeed,
+			Diagnostics.ShellMetric);
 		LastLogTimeSeconds = CurrentTime;
 	}
 
-	// Update latches for next frame
-	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-	FBodyInstance* PelvisBody = Owner->GetMeshComponent() ? Owner->GetMeshComponent()->GetBodyInstance(RootBoneName) : nullptr;
-	bLastRootSimulating = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
+	bLastRootSimulating = bIsSimulating;
 	bLastPendingResetsEmpty = Owner->GetPendingBodyModifierCachedResetNames().IsEmpty();
 }
 
@@ -350,8 +322,8 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("  MaxLinVel: Pelvis=%.1f Thighs=%.1f Spine=%.1f Feet=%.1f"), Diagnostics.MaxLinVelPelvis, Diagnostics.MaxLinVelThighs, Diagnostics.MaxLinVelSpine, Diagnostics.MaxLinVelFeet);
 }
 
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const { return Phase == EBalanceReadyTransitionPhase::Handoff; }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const { return Phase == EBalanceReadyTransitionPhase::Handoff; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle || Phase == EBalanceReadyTransitionPhase::RestoreControls; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle; }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive(); }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return Phase == EBalanceReadyTransitionPhase::Handoff; }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const { return Phase == EBalanceReadyTransitionPhase::Handoff; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return IsActive(); }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle; }
