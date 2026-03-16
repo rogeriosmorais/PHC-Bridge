@@ -201,6 +201,16 @@ namespace PhysAnimBridge
 		return *FString::Printf(TEXT("PAMod_%s"), *BoneName.ToString());
 	}
 
+	FName GetBoneNameFromBodyModifierName(const FName ModifierName)
+	{
+		FString Name = ModifierName.ToString();
+		if (Name.StartsWith(TEXT("PAMod_")))
+		{
+			return *Name.RightChop(6);
+		}
+		return ModifierName;
+	}
+
 	bool BuildInputTensorIndexMap(
 		const TArray<UE::NNE::FTensorDesc>& InputTensorDescs,
 		FPhysAnimTensorIndexMap& OutIndexMap,

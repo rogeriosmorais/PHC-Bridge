@@ -4659,7 +4659,18 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bAllowRootBodyModifierSimulation) &&
 			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
-			PendingBodyModifierCachedResetNames.Add(ModifierName);
+			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) > 0.0f)
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnimBalance] CONFIGURATION ERROR: Cached-target reset for '%s' requested after policy influence has begun. This violates the isolated settle phase."),
+					*BoneName.ToString());
+			}
+			else
+			{
+				PendingBodyModifierCachedResetNames.Add(ModifierName);
+			}
 		}
 	}
 
@@ -4800,7 +4811,18 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 		const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
 		if (!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
-			PendingBodyModifierCachedResetNames.Add(ModifierName);
+			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && CalculateCurrentPolicyInfluenceAlpha(ResolveEffectiveStabilizationSettings()) > 0.0f)
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnimBalance] CONFIGURATION ERROR: Body promotion for '%s' requested after policy influence has begun. This violates the isolated settle phase."),
+					*BoneName.ToString());
+			}
+			else
+			{
+				PendingBodyModifierCachedResetNames.Add(ModifierName);
+			}
 		}
 	}
 
@@ -5458,11 +5480,18 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		true,
 		false);
 
+	TArray<FString> BoneNamesToReset;
+	for (const FName ModifierName : ModifierNamesToReset)
+	{
+		BoneNamesToReset.Add(PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName).ToString());
+	}
+
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
-		TEXT("[PhysAnim] Scheduled deferred cached-target reset for %d promoted body modifiers."),
-		ModifierNamesToReset.Num());
+		TEXT("[PhysAnim] Scheduled deferred cached-target reset for %d promoted body modifiers: [%s]"),
+		ModifierNamesToReset.Num(),
+		*FString::Join(BoneNamesToReset, TEXT(", ")));
 	PendingBodyModifierCachedResetNames.Reset();
 }
 
