@@ -4603,6 +4603,33 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bBringUpGroupUnlocked && !EffectiveSettings.bForceZeroActions,
 			true,
 			false);
+
+		// Deep diagnostics for Balance Mode Final Ramp Enable
+		if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && BringUpGroupIndex == (GetBringUpGroupCount() - 1))
+		{
+			const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
+			const bool bRampJustStarted = (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(BringUpGroupIndex) && 
+										  BringUpGroupControlRampStartTimeSeconds[BringUpGroupIndex] == WorldTime);
+			
+			if (bRampJustStarted)
+			{
+				const FTransform BoneTransform = MeshComponent->GetBoneTransform(MeshComponent->GetBoneIndex(BoneName));
+				// Note: In a simulated frame, GetBoneTransform usually returns the physical pose which has been synced back.
+				// We want to know if this pose is already diverging from a "stable" state or if the control being 
+				// enabled with even 0 strength causes a change.
+				
+				UE_LOG(
+					LogPhysAnimBridge,
+					Log,
+					TEXT("[PhysAnimBalance] FINAL RAMP ENABLE DIAG: bone=%s alpha=%.4f easing=%.4f strength=%.2f loc=(%.1f, %.1f, %.1f) rot=(%.2f, %.2f, %.2f, %.2f)"),
+					*BoneName.ToString(),
+					ControlAuthorityAlpha,
+					HandoverEasing,
+					ControlMultiplier.AngularStrengthMultiplier,
+					BoneTransform.GetLocation().X, BoneTransform.GetLocation().Y, BoneTransform.GetLocation().Z,
+					BoneTransform.GetRotation().X, BoneTransform.GetRotation().Y, BoneTransform.GetRotation().Z, BoneTransform.GetRotation().W);
+			}
+		}
 	}
 
 	PhysicsControl->SetBodyModifiersInSetMovementType(TEXT("All"), EPhysicsMovementType::Kinematic);
