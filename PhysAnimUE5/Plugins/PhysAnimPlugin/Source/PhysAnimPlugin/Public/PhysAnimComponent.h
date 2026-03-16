@@ -648,9 +648,11 @@ private:
 		bool bIdlePoseActive,
 		bool bNoLocomotionStateActive) const;
 	void ResetBalanceScenarioQuietGate(const FString& Reason);
-	bool EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
+	bool EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason, bool bIgnorePelvisSimulationRequirement = false) const;
 	void QueueBalanceModeStartRequest(const FString& Reason);
 	void TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void UpdatePelvisSimulationDebugState(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* Context);
+	void LogPendingBalanceStartProbe(const FPhysAnimStabilizationSettings& EffectiveSettings, const FString& BlockReason);
 
 	void CacheRestPoses(UAnimSequence* TPoseAnim);
 	bool BeginStartupTPoseCapture(FString& OutError);
@@ -837,6 +839,10 @@ private:
 	bool bPendingBalanceModeStartRequest = false;
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
+	bool bLastObservedPelvisBodySimulating = false;
+	bool bHasLastObservedPelvisBodySimulating = false;
+	double LastPendingBalanceStartProbeLogTimeSeconds = -1.0;
+	FString LastPendingBalanceStartProbeReason;
 
 public:
 	static bool BuildConditionedActions(

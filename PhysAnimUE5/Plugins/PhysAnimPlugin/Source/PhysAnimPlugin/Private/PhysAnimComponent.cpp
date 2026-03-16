@@ -2441,7 +2441,7 @@ void UPhysAnimComponent::FinalizeBalanceScenario(bool bSuccess, const FString& R
 	}
 }
 
-bool UPhysAnimComponent::EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const
+bool UPhysAnimComponent::EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason, bool bIgnorePelvisSimulationRequirement) const
 {
 	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive)
 	{
@@ -2491,7 +2491,7 @@ bool UPhysAnimComponent::EvaluateBalanceModeEntryPrerequisites(const FPhysAnimSt
 		return false;
 	}
 
-	if (!PelvisBody->IsInstanceSimulatingPhysics())
+	if (!bIgnorePelvisSimulationRequirement && !PelvisBody->IsInstanceSimulatingPhysics())
 	{
 		OutReason = TEXT("pelvisBodyNotSimulating");
 		return false;
@@ -2504,6 +2504,8 @@ bool UPhysAnimComponent::EvaluateBalanceModeEntryPrerequisites(const FPhysAnimSt
 void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 {
 	bPendingBalanceModeStartRequest = true;
+	LastPendingBalanceStartProbeLogTimeSeconds = -1.0;
+	LastPendingBalanceStartProbeReason.Reset();
 	PendingBalanceModeStartReason = Reason;
 	PendingBalanceModeRequestTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
 	UE_LOG(
@@ -2523,6 +2525,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	FString ReadyReason;
 	if (!EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, ReadyReason))
 	{
+		LogPendingBalanceStartProbe(EffectiveSettings, ReadyReason);
 		return;
 	}
 
@@ -2530,6 +2533,8 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	bPendingBalanceModeStartRequest = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
+	LastPendingBalanceStartProbeLogTimeSeconds = -1.0;
+	LastPendingBalanceStartProbeReason.Reset();
 
 	UE_LOG(
 		LogPhysAnimBridge,
@@ -2540,19 +2545,89 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	StartBalancePerturbationMode();
 }
 
+
+void UPhysAnimComponent::UpdatePelvisSimulationDebugState(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* Context)
+{
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+	const bool bPelvisBodyValid = PelvisBody != nullptr;
+	const bool bPelvisSimulating = bPelvisBodyValid && PelvisBody->IsInstanceSimulatingPhysics();
+	const bool bAllowRootBodyModifierSimulationInBalanceMode = ShouldAllowBalanceSimulation(EffectiveSettings);
+	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
+	const bool bFinalRampActive = IsBringUpGroupControlRampActive(FinalGroupIndex);
+	const bool bAllBringUpUnlocked = AreAllBringUpGroupsUnlocked();
+	const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+	const bool bPendingRootReset = PendingBodyModifierCachedResetNames.Contains(PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName())) || PendingBodyModifierCachedResetNames.Contains(PhysAnimBridge::GetRootBoneName());
+	const bool bShouldLog =
+		!bHasLastObservedPelvisBodySimulating ||
+		(bLastObservedPelvisBodySimulating != bPelvisSimulating) ||
+		(RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode) ||
+		bPendingBalanceModeStartRequest;
+
+	if (bShouldLog)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimBalance] PELVIS_SIM_PROBE[%s]: runtime=%d pelvisBodyValid=%s pelvisBodySimulating=%s lastAppliedRootSim=%s allowRootSimInBalance=%s allBringUpUnlocked=%s finalRamp=%s policyAlpha=%.2f pendingResets=%d pendingRootReset=%s queuePending=%s queueReason=%s"),
+			Context ? Context : TEXT("Unknown"),
+			static_cast<int32>(RuntimeState),
+			bPelvisBodyValid ? TEXT("true") : TEXT("false"),
+			bPelvisSimulating ? TEXT("true") : TEXT("false"),
+			bLastAppliedPresentationRootSimulationEnabled ? TEXT("true") : TEXT("false"),
+			bAllowRootBodyModifierSimulationInBalanceMode ? TEXT("true") : TEXT("false"),
+			bAllBringUpUnlocked ? TEXT("true") : TEXT("false"),
+			bFinalRampActive ? TEXT("true") : TEXT("false"),
+			PolicyAlpha,
+			PendingBodyModifierCachedResetNames.Num(),
+			bPendingRootReset ? TEXT("true") : TEXT("false"),
+			bPendingBalanceModeStartRequest ? TEXT("true") : TEXT("false"),
+			PendingBalanceModeStartReason.IsEmpty() ? TEXT("none") : *PendingBalanceModeStartReason);
+	}
+
+	bLastObservedPelvisBodySimulating = bPelvisSimulating;
+	bHasLastObservedPelvisBodySimulating = true;
+}
+
+void UPhysAnimComponent::LogPendingBalanceStartProbe(const FPhysAnimStabilizationSettings& EffectiveSettings, const FString& BlockReason)
+{
+	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
+	if (WorldTime >= 0.0 &&
+		LastPendingBalanceStartProbeLogTimeSeconds >= 0.0 &&
+		(WorldTime - LastPendingBalanceStartProbeLogTimeSeconds) < 1.0 &&
+		LastPendingBalanceStartProbeReason == BlockReason)
+	{
+		return;
+	}
+
+	LastPendingBalanceStartProbeLogTimeSeconds = WorldTime;
+	LastPendingBalanceStartProbeReason = BlockReason;
+	UpdatePelvisSimulationDebugState(EffectiveSettings, TEXT("PendingBalanceStart"));
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimBalance] Pending start still blocked: %s"),
+		*BlockReason);
+}
+
 void UPhysAnimComponent::StartBalancePerturbationMode()
 {
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	UpdatePelvisSimulationDebugState(EffectiveSettings, TEXT("StartBalancePerturbationMode-Entry"));
+	const bool bIgnorePelvisSimulationRequirement = false;
 	FString EntryReason;
-	if (!EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, EntryReason))
+	if (!EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, EntryReason, bIgnorePelvisSimulationRequirement))
 	{
 		if (EntryReason == TEXT("bringUpIncomplete") ||
 			EntryReason == TEXT("finalGroupRampInactive") ||
 			EntryReason == TEXT("policyInfluenceBelowThreshold") ||
-			EntryReason == TEXT("deferredResetsPending") ||
-			EntryReason == TEXT("pelvisBodyNotSimulating"))
+			EntryReason == TEXT("deferredResetsPending"))
 		{
 			QueueBalanceModeStartRequest(EntryReason);
+		}
+		else if (EntryReason == TEXT("pelvisBodyNotSimulating"))
+		{
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] Entry failed: pelvisBodyNotSimulating. Balance mode must begin from an already-simulating pelvis/root state. BridgeActive is not auto-promoting pelvis/root simulation for this path."));
 		}
 		else if (EntryReason == TEXT("pelvisResetRequiredAtEntry"))
 		{
@@ -4532,6 +4607,7 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 
 void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
+	UpdatePelvisSimulationDebugState(EffectiveSettings, TEXT("ApplyRuntimeControlTuning-Begin"));
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	const bool bSimulationHandoffSettled = SimulationHandoffAlpha >= (1.0f - KINDA_SMALL_NUMBER);
 	const bool bSimulationHandoffCompletedThisTick = bSimulationHandoffSettled && !bLastAppliedSimulationHandoffSettled;
@@ -4819,6 +4895,22 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bIsRootBodyModifier)
 		{
+			if (bLastAppliedPresentationRootSimulationEnabled != bAllowRootBodyModifierSimulation)
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] ROOT_SIM_STATE_CHANGE: runtime=%d old=%s new=%s allowInBalance=%s allBringUpUnlocked=%s finalRamp=%s policyAlpha=%.2f pendingResets=%d"),
+					static_cast<int32>(RuntimeState),
+					bLastAppliedPresentationRootSimulationEnabled ? TEXT("true") : TEXT("false"),
+					bAllowRootBodyModifierSimulation ? TEXT("true") : TEXT("false"),
+					bAllowRootBodyModifierSimulationInBalanceMode ? TEXT("true") : TEXT("false"),
+					AreAllBringUpGroupsUnlocked() ? TEXT("true") : TEXT("false"),
+					IsBringUpGroupControlRampActive(GetBringUpGroupCount() - 1) ? TEXT("true") : TEXT("false"),
+					CurrentPolicyAlpha,
+					PendingBodyModifierCachedResetNames.Num());
+			}
+
 			bLastAppliedPresentationRootSimulationEnabled = bAllowRootBodyModifierSimulation;
 		}
 
@@ -4866,6 +4958,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 	}
+
+	UpdatePelvisSimulationDebugState(EffectiveSettings, TEXT("ApplyRuntimeControlTuning-End"));
 
 	LastAppliedStabilizationSettings = EffectiveSettings;
 	bLastAppliedSimulationHandoffSettled = bSimulationHandoffSettled;
