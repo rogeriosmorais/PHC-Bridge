@@ -1671,6 +1671,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		UpdateRootEnablePhase(DeltaTime, EffectiveSettings);
 	}
+	else if (RuntimeState == EPhysAnimRuntimeState::RootWeightRamp)
+	{
+		UpdateRootWeightRamp(DeltaTime, EffectiveSettings);
+	}
 
 	if (bRunPolicyUpdateThisTick)
 	{
@@ -1747,7 +1751,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		EmitBridgeTraceEvent(TEXT("simulation_handoff_complete"), TEXT("Simulation handoff completed and bridge-owned physics is fully active."));
 	}
 
-	const bool bIsPreEntryOrEnableActive = bBridgeActiveBalancePreEntryActive || RuntimeState == EPhysAnimRuntimeState::RootEnablePhase;
+	const bool bIsPreEntryOrEnableActive = bBridgeActiveBalancePreEntryActive || 
+		RuntimeState == EPhysAnimRuntimeState::RootEnablePhase ||
+		RuntimeState == EPhysAnimRuntimeState::RootWeightRamp;
 	if (bIsPreEntryOrEnableActive)
 	{
 		if (SkeletalMesh)
@@ -1968,6 +1974,7 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 {
 	const bool bBalanceMode = RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode;
 	const bool bRootEnablePhase = RuntimeState == EPhysAnimRuntimeState::RootEnablePhase;
+	const bool bRootWeightRamp = RuntimeState == EPhysAnimRuntimeState::RootWeightRamp;
 	const bool bBridgeActivePreEntry = RuntimeState == EPhysAnimRuntimeState::BridgeActive && (bBridgeActiveBalancePreEntryActive || BalanceReadyTransition.IsActive());
 	
 	if (bBridgeActivePreEntry)
@@ -1976,7 +1983,7 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 		return false;
 	}
 
-	if (!bBalanceMode && !bRootEnablePhase)
+	if (!bBalanceMode && !bRootEnablePhase && !bRootWeightRamp)
 	{
 		return false;
 	}
@@ -2788,36 +2795,90 @@ void UPhysAnimComponent::UpdateBridgeActiveBalancePreEntry(float DeltaTime, cons
 
 void UPhysAnimComponent::UpdateRootEnablePhase(float DeltaTime, const FPhysAnimStabilizationSettings& Settings)
 {
+	if (RootEnablePhaseFrameCounter == 0)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_ENTER: requestedRootSim=1 appliedRootWeight=0.00"));
+	}
 	RootEnablePhaseFrameCounter++;
 
 	FString StableReason;
 	const bool bStable = IsBridgeActiveBalancePreEntryStable(StableReason, true);
+	RootEnablePhaseStableAccumulatedSeconds = bStable ? (RootEnablePhaseStableAccumulatedSeconds + DeltaTime) : 0.0;
 
-	if (bStable)
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+	const bool bPelvisSim = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
+	
+	// RootEnablePhase stays at weight 0.00
+	RootEnablePhaseWeightRamp = 0.0f;
+
+	const bool bAdvanceAllowed = bStable && bPelvisSim && RootEnablePhaseStableAccumulatedSeconds >= 0.5f;
+
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_STATUS: tick=%d pelvisSim=%d rootBodyValid=%d simReq=1 weight=0.00 rootLin=%.1f rootAng=%.1f settle=%.2f advance=%d block=%s"),
+		RootEnablePhaseFrameCounter, bPelvisSim ? 1 : 0, PelvisBody ? 1 : 0,
+		PelvisBody ? PelvisBody->GetUnrealWorldVelocity().Size() : 0.0f,
+		PelvisBody ? FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians().Size()) : 0.0f,
+		RootEnablePhaseStableAccumulatedSeconds, bAdvanceAllowed ? 1 : 0, *StableReason);
+
+	if (RootEnablePhaseFrameCounter > 200 && !bPelvisSim)
 	{
-		RootEnablePhaseStableAccumulatedSeconds += DeltaTime;
-	}
-	else
-	{
-		RootEnablePhaseStableAccumulatedSeconds = 0.0f;
+		static double LastBlockedLogTime = -1.0;
+		double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		if (WorldTime - LastBlockedLogTime > 1.0)
+		{
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] ROOT_ENABLE_BLOCKED: pelvis did not enter simulation. Body=%s Valid=%d"),
+				*PhysAnimBridge::GetRootBoneName().ToString(), PelvisBody ? 1 : 0);
+			LastBlockedLogTime = WorldTime;
+		}
 	}
 
-	const float RootEnableStableSettleSeconds = 0.5f;
-
-	if (RootEnablePhaseStableAccumulatedSeconds >= RootEnableStableSettleSeconds)
+	if (bAdvanceAllowed)
 	{
-		// 0.00 -> 0.02 -> 0.05 ramp
-		RootEnablePhaseWeightRamp = FMath::Min(RootEnablePhaseWeightRamp + DeltaTime * 0.1f, 0.05f);
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE settled. Transitioning to ROOT_WEIGHT_RAMP."));
+		RootWeightRampStableAccumulatedSeconds = 0.0;
+		RootWeightRampProgress = 0;
+		TransitionRuntimeState(EPhysAnimRuntimeState::RootWeightRamp);
 	}
-	else
-	{
-		RootEnablePhaseWeightRamp = 0.0f;
-	}
+}
 
-	if (RootEnablePhaseWeightRamp >= 0.05f && RootEnablePhaseStableAccumulatedSeconds >= 1.0f)
+void UPhysAnimComponent::UpdateRootWeightRamp(float DeltaTime, const FPhysAnimStabilizationSettings& Settings)
+{
+	const float TargetWeights[] = { 0.00f, 0.01f, 0.02f, 0.05f };
+	if (RootWeightRampProgress >= 4)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE complete and stable. Entering Balance Perturbation Mode."));
 		StartBalancePerturbationMode();
+		return;
+	}
+
+	const float CurrentTargetWeight = TargetWeights[RootWeightRampProgress];
+	RootEnablePhaseWeightRamp = CurrentTargetWeight;
+
+	FString StableReason;
+	const bool bStable = IsBridgeActiveBalancePreEntryStable(StableReason, true);
+	RootWeightRampStableAccumulatedSeconds = bStable ? (RootWeightRampStableAccumulatedSeconds + DeltaTime) : 0.0;
+
+	const float RequiredSettleSeconds = 0.5f;
+
+	static double LastStepLogTime = -1.0;
+	double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (WorldTime - LastStepLogTime > 0.5)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_WEIGHT_STEP: progress=%d requested=%.3f applied=%.3f stable=%d settle=%.2f"),
+			RootWeightRampProgress, CurrentTargetWeight, RootEnablePhaseWeightRamp, bStable ? 1 : 0, RootWeightRampStableAccumulatedSeconds);
+		LastStepLogTime = WorldTime;
+	}
+
+	if (bStable && RootWeightRampStableAccumulatedSeconds >= RequiredSettleSeconds)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_WEIGHT_STEP %d complete (weight=%.3f)"), RootWeightRampProgress, CurrentTargetWeight);
+		RootWeightRampProgress++;
+		RootWeightRampStableAccumulatedSeconds = 0.0;
+		
+		if (RootWeightRampProgress >= 4)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_WEIGHT_RAMP complete. Entering Balance Perturbation Mode."));
+			StartBalancePerturbationMode();
+		}
 	}
 }
 
@@ -5066,7 +5127,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				false);
 		}
 
-		const bool bIsPreEntryOrEnableActive = bBridgeActiveBalancePreEntryActive || RuntimeState == EPhysAnimRuntimeState::RootEnablePhase;
+		const bool bIsPreEntryOrEnableActive = bBridgeActiveBalancePreEntryActive || 
+		RuntimeState == EPhysAnimRuntimeState::RootEnablePhase ||
+		RuntimeState == EPhysAnimRuntimeState::RootWeightRamp;
 		if (bIsPreEntryOrEnableActive)
 		{
 			const bool bIsPostureHoldBone = 
@@ -5113,7 +5176,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		// Deep diagnostics for Balance Mode Final Ramp Enable
 		if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode && BringUpGroupIndex == (GetBringUpGroupCount() - 1))
 		{
-			const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
+			const double WorldTime = GetWorld() ? (GetWorld()->GetTimeSeconds() - BalanceScenarioStartTimeSeconds) : 0.0;
 			const bool bRampJustStarted = (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(BringUpGroupIndex) && 
 										  BringUpGroupControlRampStartTimeSeconds[BringUpGroupIndex] == WorldTime);
 			
@@ -5254,6 +5317,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		if (bIsRootBodyModifier)
 		{
 			const bool bIsRootEnableActive = RuntimeState == EPhysAnimRuntimeState::RootEnablePhase;
+			const bool bIsRootWeightRampActive = RuntimeState == EPhysAnimRuntimeState::RootWeightRamp;
+
 			if (bBridgeActiveBalancePreEntryActive)
 			{
 				AppliedPreEntryWeight = 0.0f;
@@ -5265,7 +5330,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 			else if (bIsRootEnableActive)
 			{
-				AppliedPreEntryWeight = RootEnablePhaseWeightRamp;
+				AppliedPreEntryWeight = 0.0f; // Force 0.00 during settlement
 				
 				// Initial lock for RootEnablePhase (first 10 frames or until stable)
 				if (RootEnablePhaseFrameCounter <= 10 || RootEnablePhaseStableAccumulatedSeconds < 0.1f)
@@ -5277,11 +5342,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 						RootBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
 					}
 				}
-
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_LOCK: simRequested=%d pelvisSim=%d appliedRootWeight=%.3f stable=%.2f"),
-					bAllowRootBodyModifierSimulation ? 1 : 0, 
-					(RootBody && RootBody->IsInstanceSimulatingPhysics()) ? 1 : 0,
-					AppliedPreEntryWeight, RootEnablePhaseStableAccumulatedSeconds);
+			}
+			else if (bIsRootWeightRampActive)
+			{
+				AppliedPreEntryWeight = RootEnablePhaseWeightRamp;
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] ROOT_WEIGHT_STEP: weight=%.4f"), AppliedPreEntryWeight);
 			}
 		}
 		BodyModifierPhysicsBlendWeight = AppliedPreEntryWeight;
@@ -5296,6 +5361,16 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
 			PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
 			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, bUpdateKinematicFromSimulation, true, false);
+
+			if (RootBody)
+			{
+				const FVector PostFlipLinVel = RootBody->GetUnrealWorldVelocity();
+				const FVector PostFlipAngVelDeg = FMath::RadiansToDegrees(RootBody->GetUnrealWorldAngularVelocityInRadians());
+				const bool bTransformChanged = (RootBody->GetUnrealWorldTransform().GetLocation() - PreFlipTrans.GetLocation()).Size() > 0.001f;
+
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_FLIP_FRAME: preLin=%.1f postLin=%.1f preAng=%.1f postAng=%.1f changed=%d"),
+					PreFlipLinVel.Size(), PostFlipLinVel.Size(), PreFlipAngVelDeg.Size(), PostFlipAngVelDeg.Size(), bTransformChanged ? 1 : 0);
+			}
 
 			const FTransform PostFlipTrans = RootBody ? RootBody->GetUnrealWorldTransform() : FTransform::Identity;
 			const FVector PostFlipLinVel = RootBody ? RootBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
@@ -6263,7 +6338,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
 
-	const bool bIsPreEntryOrEnableActive = bBridgeActiveBalancePreEntryActive || RuntimeState == EPhysAnimRuntimeState::RootEnablePhase;
+	const bool bIsPreEntryOrEnableActive = bBridgeActiveBalancePreEntryActive || 
+		RuntimeState == EPhysAnimRuntimeState::RootEnablePhase ||
+		RuntimeState == EPhysAnimRuntimeState::RootWeightRamp;
 	if (bIsPreEntryOrEnableActive)
 	{
 		USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
@@ -8842,6 +8919,8 @@ const TCHAR* UPhysAnimComponent::GetRuntimeStateName(EPhysAnimRuntimeState State
 		return TEXT("BalancePerturbationMode");
 	case EPhysAnimRuntimeState::RootEnablePhase:
 		return TEXT("RootEnablePhase");
+	case EPhysAnimRuntimeState::RootWeightRamp:
+		return TEXT("RootWeightRamp");
 	case EPhysAnimRuntimeState::FailStopped:
 		return TEXT("FailStopped");
 	default:

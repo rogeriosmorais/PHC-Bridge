@@ -361,6 +361,7 @@ enum class EPhysAnimRuntimeState : uint8
 	FailStopped,
 	BalancePerturbationMode,
 	RootEnablePhase,
+	RootWeightRamp,
 };
 
 UENUM(BlueprintType)
@@ -665,6 +666,7 @@ private:
 	bool EvaluateBalanceBridgeActivePreEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
 	bool IsBridgeActiveBalancePreEntryStable(FString& OutReason, bool bExpectSim = true) const;
 	void UpdateRootEnablePhase(float DeltaTime, const FPhysAnimStabilizationSettings& Settings);
+	void UpdateRootWeightRamp(float DeltaTime, const FPhysAnimStabilizationSettings& Settings);
 	void ResetBridgeActiveBalancePreEntry();
 	void UpdateBridgeActiveBalancePreEntry(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void QueueBalanceModeStartRequest(const FString& Reason);
@@ -866,6 +868,8 @@ private:
 	double RootEnablePhaseStableAccumulatedSeconds = 0.0;
 	int32 RootEnablePhaseFrameCounter = 0;
 	float RootEnablePhaseWeightRamp = 0.0f;
+	double RootWeightRampStableAccumulatedSeconds = 0.0;
+	int32 RootWeightRampProgress = 0;
 
 public:
 	static bool BuildConditionedActions(
