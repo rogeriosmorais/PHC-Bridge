@@ -1982,13 +1982,13 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 
 	if (bBridgeActivePreEntry)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_RETURN: reason=bridgeActivePreEntry (0)"));
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_RETURN: reason=bridgeActivePreEntry result=0"));
 		return false;
 	}
 
 	if (!bBalanceMode && !bRootEnablePhase && !bRootWeightRamp)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_RETURN: reason=invalidState (0)"));
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_RETURN: reason=invalidState result=0 state=%s"), GetRuntimeStateName(RuntimeState));
 		return false;
 	}
 
@@ -1996,18 +1996,21 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 
 	if (bRootEnablePhase || bRootWeightRamp)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_RETURN: reason=enablePhase (1)"));
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_RETURN: reason=enablePhase result=1"));
 		return true;
 	}
 
 	if (!AreAllBringUpGroupsUnlocked())
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_RETURN: reason=bringUpLocked result=0"));
 		return false;
 	}
 
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
-	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
+	const bool bRampActive = IsBringUpGroupControlRampActive(FinalGroupIndex);
+	if (!bRampActive)
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_RETURN: reason=finalRampInactive result=0"));
 		return false;
 	}
 
