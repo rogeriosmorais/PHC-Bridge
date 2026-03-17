@@ -2675,6 +2675,7 @@ void UPhysAnimComponent::UpdateBridgeActiveBalancePreEntry(float DeltaTime, cons
 	const bool bStable = IsBridgeActiveBalancePreEntryStable(StableReason);
 	BridgeActiveBalancePreEntryStableAccumulatedSeconds = bStable ? (BridgeActiveBalancePreEntryStableAccumulatedSeconds + DeltaTime) : 0.0;
 
+	/*
 	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
 	const bool bShouldLog = WorldTime >= 0.0 && (LastBridgeActiveBalancePreEntryLogTimeSeconds < 0.0 || WorldTime - LastBridgeActiveBalancePreEntryLogTimeSeconds >= 0.5 || LastBridgeActiveBalancePreEntryReason != StableReason);
 	if (bShouldLog)
@@ -2683,6 +2684,7 @@ void UPhysAnimComponent::UpdateBridgeActiveBalancePreEntry(float DeltaTime, cons
 		LastBridgeActiveBalancePreEntryLogTimeSeconds = WorldTime;
 		LastBridgeActiveBalancePreEntryReason = StableReason;
 	}
+	*/
 }
 
 void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
@@ -2750,11 +2752,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	}
 
 	// For any root-sim or late-entry blocker, route through the quiet handoff instead of doing a hot flip.
-	if (PendingBalanceModeStartReason == TEXT("pelvisBodyNotSimulating") ||
-		ReadyReason == TEXT("pelvisBodyNotSimulating") ||
-		ReadyReason == TEXT("policyInfluenceBelowThreshold") ||
-		ReadyReason == TEXT("deferredResetsPending") ||
-		ReadyReason == TEXT("pelvisResetRequiredAtEntry"))
+	if (ReadyReason == TEXT("pelvisBodyNotSimulating"))
 	{
 		BalanceReadyTransition.Start(PendingBalanceModeStartReason.IsEmpty() ? ReadyReason : PendingBalanceModeStartReason, this);
 	}
