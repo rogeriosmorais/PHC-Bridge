@@ -1988,6 +1988,11 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 		return false;
 	}
 
+	if (bRootEnablePhase || bRootWeightRamp)
+	{
+		return true;
+	}
+
 	if (!AreAllBringUpGroupsUnlocked())
 	{
 		return false;
@@ -2795,9 +2800,13 @@ void UPhysAnimComponent::UpdateBridgeActiveBalancePreEntry(float DeltaTime, cons
 
 void UPhysAnimComponent::UpdateRootEnablePhase(float DeltaTime, const FPhysAnimStabilizationSettings& Settings)
 {
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+	const bool bPelvisSimBefore = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
+
 	if (RootEnablePhaseFrameCounter == 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_ENTER: requestedRootSim=1 appliedRootWeight=0.00"));
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_ENTER: requestedRootSim=1 pelvisSimBefore=%d rootWeight=0.00"), bPelvisSimBefore ? 1 : 0);
 	}
 	RootEnablePhaseFrameCounter++;
 
@@ -2805,22 +2814,20 @@ void UPhysAnimComponent::UpdateRootEnablePhase(float DeltaTime, const FPhysAnimS
 	const bool bStable = IsBridgeActiveBalancePreEntryStable(StableReason, true);
 	RootEnablePhaseStableAccumulatedSeconds = bStable ? (RootEnablePhaseStableAccumulatedSeconds + DeltaTime) : 0.0;
 
-	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
-	FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
-	const bool bPelvisSim = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
+	const bool bPelvisSimNow = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
 	
 	// RootEnablePhase stays at weight 0.00
 	RootEnablePhaseWeightRamp = 0.0f;
 
-	const bool bAdvanceAllowed = bStable && bPelvisSim && RootEnablePhaseStableAccumulatedSeconds >= 0.5f;
+	const bool bAdvanceAllowed = bStable && bPelvisSimNow && RootEnablePhaseStableAccumulatedSeconds >= 0.5f;
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_STATUS: tick=%d pelvisSim=%d rootBodyValid=%d simReq=1 weight=0.00 rootLin=%.1f rootAng=%.1f settle=%.2f advance=%d block=%s"),
-		RootEnablePhaseFrameCounter, bPelvisSim ? 1 : 0, PelvisBody ? 1 : 0,
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_STATUS: simReq=1 pelvisSim=%d rootWeight=0.00 rootLin=%.1f rootAng=%.1f stableTime=%.2f/0.5 advance=%d blockReason=%s"),
+		bPelvisSimNow ? 1 : 0,
 		PelvisBody ? PelvisBody->GetUnrealWorldVelocity().Size() : 0.0f,
 		PelvisBody ? FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians().Size()) : 0.0f,
 		RootEnablePhaseStableAccumulatedSeconds, bAdvanceAllowed ? 1 : 0, *StableReason);
 
-	if (RootEnablePhaseFrameCounter > 200 && !bPelvisSim)
+	if (RootEnablePhaseFrameCounter > 60 && !bPelvisSimNow)
 	{
 		static double LastBlockedLogTime = -1.0;
 		double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
@@ -7778,10 +7785,11 @@ void UPhysAnimComponent::ResolveBodyModifierRuntimeMode(
 	float& OutPhysicsBlendWeight,
 	bool& bOutUpdateKinematicFromSimulation)
 {
-	// Balance mode should honor the per-scenario root-simulation gate so the quiet-window and pre-impact settle phases are real.
 	const bool bModeAllowsRootSimulation = bAllowRootBodyModifierSimulation;
+	const bool bIsRootInEnablePhase = bIsRootBodyModifier && (RuntimeState == EPhysAnimRuntimeState::RootEnablePhase || RuntimeState == EPhysAnimRuntimeState::RootWeightRamp);
+	const bool bHandoffCheckRequired = !bIsRootInEnablePhase;
 
-	if (bForceZeroActions || !bSimulationHandoffSettled || !bBringUpGroupUnlocked || (bIsRootBodyModifier && !bModeAllowsRootSimulation))
+	if (bForceZeroActions || (bHandoffCheckRequired && !bSimulationHandoffSettled) || !bBringUpGroupUnlocked || (bIsRootBodyModifier && !bModeAllowsRootSimulation))
 	{
 		OutMovementType = EPhysicsMovementType::Kinematic;
 		OutPhysicsBlendWeight = 0.0f;
@@ -7802,10 +7810,11 @@ ECollisionEnabled::Type UPhysAnimComponent::ResolveBodyModifierCollisionType(
 	bool bIsRootBodyModifier,
 	bool bAllowRootBodyModifierSimulation)
 {
-	// Balance mode should honor the per-scenario root-simulation gate so collision/simulation stay aligned.
 	const bool bModeAllowsRootSimulation = bAllowRootBodyModifierSimulation;
+	const bool bIsRootInEnablePhase = bIsRootBodyModifier && (CurrentRuntimeState == EPhysAnimRuntimeState::RootEnablePhase || CurrentRuntimeState == EPhysAnimRuntimeState::RootWeightRamp);
+	const bool bHandoffCheckRequired = !bIsRootInEnablePhase;
 
-	if (bForceZeroActions || !bSimulationHandoffSettled || !bBringUpGroupUnlocked || (bIsRootBodyModifier && !bModeAllowsRootSimulation))
+	if (bForceZeroActions || (bHandoffCheckRequired && !bSimulationHandoffSettled) || !bBringUpGroupUnlocked || (bIsRootBodyModifier && !bModeAllowsRootSimulation))
 	{
 		return ECollisionEnabled::NoCollision;
 	}
