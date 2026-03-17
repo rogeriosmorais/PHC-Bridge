@@ -5127,14 +5127,54 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 		BodyModifierPhysicsBlendWeight = AppliedPreEntryWeight;
 
-		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
-		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
-		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
-		PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(
-			ModifierName,
-			bUpdateKinematicFromSimulation,
-			true,
-			false);
+		if (bIsRootBodyModifier && bBodyModifierActivatedThisTick)
+		{
+			USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+			FBodyInstance* const RootBody = SkeletalMesh ? SkeletalMesh->GetBodyInstance(BoneName) : nullptr;
+			
+			const FTransform PreFlipTrans = RootBody ? RootBody->GetUnrealWorldTransform() : FTransform::Identity;
+			const FVector PreFlipLinVel = RootBody ? RootBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
+			const FVector PreFlipAngVelDeg = RootBody ? FMath::RadiansToDegrees(RootBody->GetUnrealWorldAngularVelocityInRadians()) : FVector::ZeroVector;
+
+			PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
+			PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
+			PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
+			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, bUpdateKinematicFromSimulation, true, false);
+
+			const FTransform PostFlipTrans = RootBody ? RootBody->GetUnrealWorldTransform() : FTransform::Identity;
+			const FVector PostFlipLinVel = RootBody ? RootBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
+			const FVector PostFlipAngVelDeg = RootBody ? FMath::RadiansToDegrees(RootBody->GetUnrealWorldAngularVelocityInRadians()) : FVector::ZeroVector;
+
+			if (RootBody)
+			{
+				RootBody->SetLinearVelocity(FVector::ZeroVector, false);
+				RootBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
+			}
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_FLIP_DETAILS: moveType=%d weight=%.2f updateKin=%d resetTouched=%d"),
+				(int32)BodyModifierMovementType, BodyModifierPhysicsBlendWeight, (int32)bUpdateKinematicFromSimulation, bPelvisResetAppliedThisTick ? 1 : 0);
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_FLIP_TRANSFORM: preLoc=(%.1f,%.1f,%.1f) postLoc=(%.1f,%.1f,%.1f) preRot=(%.2f,%.2f,%.2f,%.2f) postRot=(%.2f,%.2f,%.2f,%.2f)"),
+				PreFlipTrans.GetLocation().X, PreFlipTrans.GetLocation().Y, PreFlipTrans.GetLocation().Z,
+				PostFlipTrans.GetLocation().X, PostFlipTrans.GetLocation().Y, PostFlipTrans.GetLocation().Z,
+				PreFlipTrans.GetRotation().X, PreFlipTrans.GetRotation().Y, PreFlipTrans.GetRotation().Z, PreFlipTrans.GetRotation().W,
+				PostFlipTrans.GetRotation().X, PostFlipTrans.GetRotation().Y, PostFlipTrans.GetRotation().Z, PostFlipTrans.GetRotation().W);
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_FLIP_FRAME: zeroed=1 preLin=(%.1f,%.1f,%.1f) preAng=(%.1f,%.1f,%.1f) postLin=(%.1f,%.1f,%.1f) postAng=(%.1f,%.1f,%.1f)"),
+				PreFlipLinVel.X, PreFlipLinVel.Y, PreFlipLinVel.Z,
+				PreFlipAngVelDeg.X, PreFlipAngVelDeg.Y, PreFlipAngVelDeg.Z,
+				PostFlipLinVel.X, PostFlipLinVel.Y, PostFlipLinVel.Z,
+				PostFlipAngVelDeg.X, PostFlipAngVelDeg.Y, PostFlipAngVelDeg.Z);
+		}
+		else
+		{
+			PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
+			PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
+			PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
+			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(
+				ModifierName,
+				bUpdateKinematicFromSimulation,
+				true,
+				false);
+		}
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 
