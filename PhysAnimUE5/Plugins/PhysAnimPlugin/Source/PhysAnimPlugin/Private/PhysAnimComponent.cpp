@@ -1977,21 +1977,26 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 	const bool bRootWeightRamp = RuntimeState == EPhysAnimRuntimeState::RootWeightRamp;
 	const bool bBridgeActivePreEntry = RuntimeState == EPhysAnimRuntimeState::BridgeActive && (bBridgeActiveBalancePreEntryActive || BalanceReadyTransition.IsActive());
 	
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_INPUT: state=%s preEntryActive=%d transitionActive=%d"), 
+		GetRuntimeStateName(RuntimeState), bBridgeActiveBalancePreEntryActive ? 1 : 0, BalanceReadyTransition.IsActive() ? 1 : 0);
+
 	if (bBridgeActivePreEntry)
 	{
-		// Force root-lock-0 during pre-entry: no simulation permitted yet.
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_RETURN: reason=bridgeActivePreEntry (0)"));
 		return false;
 	}
 
 	if (!bBalanceMode && !bRootEnablePhase && !bRootWeightRamp)
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_RETURN: reason=invalidState (0)"));
 		return false;
 	}
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ShouldAllowBalanceSimulation checking: state=%s"), GetRuntimeStateName(RuntimeState));
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_PROCEED: state=%s"), GetRuntimeStateName(RuntimeState));
 
 	if (bRootEnablePhase || bRootWeightRamp)
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SABS_RETURN: reason=enablePhase (1)"));
 		return true;
 	}
 
@@ -2792,7 +2797,13 @@ void UPhysAnimComponent::UpdateBridgeActiveBalancePreEntry(float DeltaTime, cons
 	if (bStable && BridgeActiveBalancePreEntryStableAccumulatedSeconds >= 0.5f)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Pre-entry stability reached. Transitioning to ROOT_ENABLE phase."));
+		
+		const bool bOldPreEntryActive = bBridgeActiveBalancePreEntryActive;
 		ResetBridgeActiveBalancePreEntry();
+		
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_SET_FLAG: old=%d new=%d flag=bBridgeActiveBalancePreEntryActive"), 
+			bOldPreEntryActive ? 1 : 0, bBridgeActiveBalancePreEntryActive ? 1 : 0);
+
 		RootEnablePhaseStableAccumulatedSeconds = 0.0;
 		RootEnablePhaseFrameCounter = 0;
 		RootEnablePhaseWeightRamp = 0.0f;
@@ -5256,6 +5267,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
 		const bool bIsRootBodyModifier = BoneName == RootBoneName;
 
+		if (bIsRootBodyModifier)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_MODIFIER_INPUT: bone=pelvis state=%s preEntryActive=%d allowSimBase=%d"),
+				GetRuntimeStateName(RuntimeState), bBridgeActiveBalancePreEntryActive ? 1 : 0, bAllowRootBodyModifierSimulationInBalanceMode ? 1 : 0);
+		}
+
 		// In Balance Mode, we break the root into simulation as soon as the bridge is logically ready 
 		// (bring-up complete, policy authority high enough). This allows the quiet window to run 
 		// under legitimate physical simulation as required by the design.
@@ -5263,8 +5280,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		
 		if (bIsRootBodyModifier)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_MODIFIER_LOOP: bone=%s allowSim=%d state=%s"), 
-				*BoneName.ToString(), bAllowRootBodyModifierSimulation ? 1 : 0, GetRuntimeStateName(RuntimeState));
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_MODIFIER_RESULT: bone=pelvis allowSim=%d"), 
+				bAllowRootBodyModifierSimulation ? 1 : 0);
 		}
 		{
 			// Resetting bLastAppliedPresentationRootSimulationEnabled happens at the END of the loop
