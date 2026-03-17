@@ -1299,9 +1299,14 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		if (bBridgeActiveBalancePreEntryActive)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_SHELL: off=%.1f vel=%.1f"),
-				bSuppressShell ? 1.0f : 0.0f,
-				BridgeShellState.PendingPlanarVelocityCmPerSecond.Size());
+			static double LastPreEntryShellLogTime = -1.0;
+			if (BalanceScenarioStartTimeSeconds - LastPreEntryShellLogTime > 2.0)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_SHELL: off=%.1f vel=%.1f (Throttled)"),
+					bSuppressShell ? 1.0f : 0.0f,
+					BridgeShellState.PendingPlanarVelocityCmPerSecond.Size());
+				LastPreEntryShellLogTime = BalanceScenarioStartTimeSeconds;
+			}
 		}
 	}
 
@@ -1790,10 +1795,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				}
 			}
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] %s_DISTAL_ANGULAR: footPre=%.1f footPost=%.1f ballPre=%.1f ballPost=%.1f applied=1"),
-				(RuntimeState == EPhysAnimRuntimeState::RootEnablePhase ? TEXT("ROOT_ENABLE") : TEXT("PRE_ENTRY")),
-				MaxFootAngPre, MaxFootAngPost, MaxBallAngPre, MaxBallAngPost);
-
 			// Proximal chain clamp experiment
 			float PelvisPre = 0.0f, PelvisPost = 0.0f;
 			float ThighLPre = 0.0f, ThighLPost = 0.0f;
@@ -1811,14 +1812,32 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				}
 			};
 
-			ClampBoneAngVel(PhysAnimBridge::GetRootBoneName(), 45.0f, PelvisPre, PelvisPost);
-			ClampBoneAngVel(TEXT("thigh_l"), 60.0f, ThighLPre, ThighLPost);
-			ClampBoneAngVel(TEXT("thigh_r"), 60.0f, ThighRPre, ThighRPost);
-			ClampBoneAngVel(TEXT("spine_01"), 90.0f, SpinePre, SpinePost);
+			static double LastAngularClampLogTime = -1.0;
+			const double WorldTime_Log = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+			if (WorldTime_Log - LastAngularClampLogTime > 2.0)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] %s_DISTAL_ANGULAR: footPre=%.1f footPost=%.1f ballPre=%.1f ballPost=%.1f (Throttled)"),
+					(RuntimeState == EPhysAnimRuntimeState::RootEnablePhase ? TEXT("ROOT_ENABLE") : TEXT("PRE_ENTRY")),
+					MaxFootAngPre, MaxFootAngPost, MaxBallAngPre, MaxBallAngPost);
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] %s_PROXIMAL_ANGULAR: pelvisPre=%.1f pelvisPost=%.1f thighLPre=%.1f thighLPost=%.1f thighRPre=%.1f thighRPost=%.1f spinePre=%.1f spinePost=%.1f"),
-				(RuntimeState == EPhysAnimRuntimeState::RootEnablePhase ? TEXT("ROOT_ENABLE") : TEXT("PRE_ENTRY")),
-				PelvisPre, PelvisPost, ThighLPre, ThighLPost, ThighRPre, ThighRPost, SpinePre, SpinePost);
+				ClampBoneAngVel(PhysAnimBridge::GetRootBoneName(), 45.0f, PelvisPre, PelvisPost);
+				ClampBoneAngVel(TEXT("thigh_l"), 60.0f, ThighLPre, ThighLPost);
+				ClampBoneAngVel(TEXT("thigh_r"), 60.0f, ThighRPre, ThighRPost);
+				ClampBoneAngVel(TEXT("spine_01"), 90.0f, SpinePre, SpinePost);
+
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] %s_PROXIMAL_ANGULAR: pelvisPre=%.1f pelvisPost=%.1f thighLPre=%.1f thighLPost=%.1f thighRPre=%.1f thighRPost=%.1f spinePre=%.1f spinePost=%.1f (Throttled)"),
+					(RuntimeState == EPhysAnimRuntimeState::RootEnablePhase ? TEXT("ROOT_ENABLE") : TEXT("PRE_ENTRY")),
+					PelvisPre, PelvisPost, ThighLPre, ThighLPost, ThighRPre, ThighRPost, SpinePre, SpinePost);
+				
+				LastAngularClampLogTime = WorldTime_Log;
+			}
+			else
+			{
+				ClampBoneAngVel(PhysAnimBridge::GetRootBoneName(), 45.0f, PelvisPre, PelvisPost);
+				ClampBoneAngVel(TEXT("thigh_l"), 60.0f, ThighLPre, ThighLPost);
+				ClampBoneAngVel(TEXT("thigh_r"), 60.0f, ThighRPre, ThighRPost);
+				ClampBoneAngVel(TEXT("spine_01"), 90.0f, SpinePre, SpinePost);
+			}
 		}
 	}
 
@@ -2827,31 +2846,40 @@ void UPhysAnimComponent::UpdateRootEnablePhase(float DeltaTime, const FPhysAnimS
 	const bool bAdvanceAllowed = bStable && bPelvisSimNow && RootEnablePhaseStableAccumulatedSeconds >= 0.5f;
 
 	static double LastStatusLogTime = -1.0;
+	static bool LastSimState = false;
 	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-	if (WorldTime - LastStatusLogTime > 0.25)
+	if (WorldTime - LastStatusLogTime > 0.5 || bPelvisSimNow != LastSimState)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_STATUS: frame=%d simAllowed=%d pelvisSim=%d rootWeight=0.00 rootLin=%.1f rootAng=%.1f stableTime=%.2f/0.5 advance=%d blockReason=%s"),
 			RootEnablePhaseFrameCounter, bSimAllowed ? 1 : 0, bPelvisSimNow ? 1 : 0,
 			PelvisBody ? PelvisBody->GetUnrealWorldVelocity().Size() : 0.0f,
 			PelvisBody ? FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians().Size()) : 0.0f,
 			RootEnablePhaseStableAccumulatedSeconds, bAdvanceAllowed ? 1 : 0, *StableReason);
+
+		if (bPelvisSimNow != LastSimState)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_VERIFY: rootBodyValid=%d rootBodySim=%d pelvisSimNow=%d completionAllowed=%d"),
+				PelvisBody ? 1 : 0, bPelvisSimNow ? 1 : 0, bPelvisSimNow ? 1 : 0, bAdvanceAllowed ? 1 : 0);
+		}
+		
 		LastStatusLogTime = WorldTime;
+		LastSimState = bPelvisSimNow;
 	}
 
 	if (RootEnablePhaseFrameCounter > 120 && !bPelvisSimNow)
 	{
 		static double LastBlockedLogTime = -1.0;
-		if (WorldTime - LastBlockedLogTime > 1.0)
+		if (WorldTime - LastBlockedLogTime > 2.0)
 		{
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] ROOT_ENABLE_FAIL: pelvis sim timeout (2s). Body=%s Valid=%d simAllowed=%d"),
-				*PhysAnimBridge::GetRootBoneName().ToString(), PelvisBody ? 1 : 0, bSimAllowed ? 1 : 0);
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] ROOT_ENABLE_FAIL: pelvis sim timeout (120 frames). Body=%s Valid=%d simAllowed=%d stable=%d reason=%s"),
+				*PhysAnimBridge::GetRootBoneName().ToString(), PelvisBody ? 1 : 0, bSimAllowed ? 1 : 0, bStable ? 1 : 0, *StableReason);
 			LastBlockedLogTime = WorldTime;
 		}
 	}
 
 	if (bAdvanceAllowed)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE settled. Transitioning to ROOT_WEIGHT_RAMP."));
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_COMPLETE: frame=%d stableSeconds=%.2f. Transitioning to ROOT_WEIGHT_RAMP."), RootEnablePhaseFrameCounter, RootEnablePhaseStableAccumulatedSeconds);
 		RootWeightRampStableAccumulatedSeconds = 0.0;
 		RootWeightRampProgress = 0;
 		TransitionRuntimeState(EPhysAnimRuntimeState::RootWeightRamp);
@@ -2969,8 +2997,18 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	// as that old system creates circular sim-request dependencies.
 	if (ReadyReason == TEXT("pelvisBodyNotSimulating"))
 	{
-		// Don't start old transition. Let UpdateBridgeActiveBalancePreEntry handle it.
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Routing balance entry through new RootEnablePhase pipeline. Waiting for pre-entry stability..."));
+		// Don't start old transition. Let UpdateBridgeActiveBalancePreEntry handle it.	
+		if (PendingBalanceModeStartReason == TEXT("pelvisBodyNotSimulating") && !bBridgeActiveBalancePreEntryActive)
+		{
+			static double LastRoutingLogTime = -1.0;
+			const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+			if (WorldTime - LastRoutingLogTime > 2.0)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Routing balance entry through new RootEnablePhase pipeline. Waiting for pre-entry stability... (Throttled)"));
+				LastRoutingLogTime = WorldTime;
+			}
+			// UpdateBridgeActiveBalancePreEntry(DeltaTime, EffectiveSettings); // DeltaTime is not available here, this call needs to be in UpdateBridgeActive
+		}
 	}
 }
 
@@ -5337,7 +5375,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 			else if (bIsRootEnableActive)
 			{
-				AppliedPreEntryWeight = 0.0f; // Force 0.00 during settlement
+				AppliedPreEntryWeight = 0.001f; // Use minimal weight during settlement to ensure sim path is active
 				
 				// Initial lock for RootEnablePhase (first 10 frames or until stable)
 				if (RootEnablePhaseFrameCounter <= 10 || RootEnablePhaseStableAccumulatedSeconds < 0.1f)
@@ -5365,13 +5403,19 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bIsRootBodyModifier)
 		{
-			static double LastRequestLogTime = -1.0;
-			const double WorldTime_Request = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-			if (bBodyModifierActivatedThisTick || (WorldTime_Request - LastRequestLogTime > 0.5))
+			static EPhysicsMovementType LastLogMoveType = EPhysicsMovementType::Static;
+			static float LastLogWeight = -1.0f;
+			static bool LastLogAllowSim = false;
+
+			const bool bValuesChanged = (BodyModifierMovementType != LastLogMoveType) || (FMath::Abs(BodyModifierPhysicsBlendWeight - LastLogWeight) > 0.001f);
+			
+			if (bBodyModifierActivatedThisTick || bValuesChanged)
 			{
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_REQUEST: moveType=%d weight=%.3f activate=%d name=%s"), 
 					(int32)BodyModifierMovementType, BodyModifierPhysicsBlendWeight, bBodyModifierActivatedThisTick ? 1 : 0, *BoneName.ToString());
-				LastRequestLogTime = WorldTime_Request;
+				
+				LastLogMoveType = BodyModifierMovementType;
+				LastLogWeight = BodyModifierPhysicsBlendWeight;
 			}
 
 			// Capture pre-flip state for logging
@@ -5385,14 +5429,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
 			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, bUpdateKinematicFromSimulation, true, false);
 
-			const bool bActualSim = RootBody && RootBody->IsInstanceSimulatingPhysics();
-			static bool bLastActualSim = false;
-			if (bActualSim != bLastActualSim)
-			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_VERIFY: simStateChanged=%d nowSimulating=%d"), 1, bActualSim ? 1 : 0);
-				bLastActualSim = bActualSim;
-			}
-
 			if (RootBody && bBodyModifierActivatedThisTick)
 			{
 				const FVector PostFlipLinVel = RootBody->GetUnrealWorldVelocity();
@@ -5401,18 +5437,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_FLIP_FRAME: preLin=%.1f postLin=%.1f preAng=%.1f postAng=%.1f changed=%d"),
 					PreFlipLinearVel.Size(), PostFlipLinVel.Size(), PreFlipAngularVelDeg.Size(), PostFlipAngVelDeg.Size(), bTransformChanged ? 1 : 0);
-			}
 
-			if (RootBody && bBodyModifierActivatedThisTick)
-			{
 				RootBody->SetLinearVelocity(FVector::ZeroVector, false);
 				RootBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
 
 				const FTransform PostFlipTrans = RootBody->GetUnrealWorldTransform();
-				const FVector PostFlipLinVel = RootBody->GetUnrealWorldVelocity();
-				const FVector PostFlipAngVelDeg = FMath::RadiansToDegrees(RootBody->GetUnrealWorldAngularVelocityInRadians());
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_FLIP_DETAILS: moveType=%d weight=%.2f updateKin=%d resetTouched=%d"),
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_FLIP_DETAILS: moveType=%d weight=%.3f updateKin=%d resetTouched=%d"),
 					(int32)BodyModifierMovementType, BodyModifierPhysicsBlendWeight, (int32)bUpdateKinematicFromSimulation, bPelvisResetWasPending ? 1 : 0);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_FLIP_TRANSFORM: preLoc=(%.1f,%.1f,%.1f) postLoc=(%.1f,%.1f,%.1f) preRot=(%.2f,%.2f,%.2f,%.2f) postRot=(%.2f,%.2f,%.2f,%.2f)"),
 					PreFlipTransform.GetLocation().X, PreFlipTransform.GetLocation().Y, PreFlipTransform.GetLocation().Z,
