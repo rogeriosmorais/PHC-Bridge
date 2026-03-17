@@ -2720,12 +2720,14 @@ bool UPhysAnimComponent::IsBridgeActiveBalancePreEntryStable(FString& OutReason,
 	const float RootSpeed = PelvisLinearVelocity.Size();
 	if (RootSpeed > BalanceQuietLinearSpeedThresholdCmPerSec)
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_BLOCK: reason=rootLinearTooHigh value=%.3f threshold=%.3f"), RootSpeed, BalanceQuietLinearSpeedThresholdCmPerSec);
 		OutReason = TEXT("rootLinearTooHigh");
 		return false;
 	}
 
 	if (PelvisAngularVelocityDegPerSec.Size() > BalanceQuietTiltThresholdDeg * 2.0f)
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_BLOCK: reason=rootAngularTooHigh value=%.3f threshold=%.3f"), PelvisAngularVelocityDegPerSec.Size(), BalanceQuietTiltThresholdDeg * 2.0f);
 		OutReason = TEXT("rootAngularTooHigh");
 		return false;
 	}
@@ -2735,12 +2737,14 @@ bool UPhysAnimComponent::IsBridgeActiveBalancePreEntryStable(FString& OutReason,
 		IsBridgePoseSearchIdleResult(LastValidPoseSearchResult);
 	if (!bIdlePoseActive)
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_BLOCK: reason=idlePoseInactive"));
 		OutReason = TEXT("idlePoseInactive");
 		return false;
 	}
 
 	if (BridgeLocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle)
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_BLOCK: reason=locomotionStateActive state=%d"), (int32)BridgeLocomotionAuthorityState);
 		OutReason = TEXT("locomotionStateActive");
 		return false;
 	}
@@ -2748,10 +2752,12 @@ bool UPhysAnimComponent::IsBridgeActiveBalancePreEntryStable(FString& OutReason,
 	const float ShellDelta = BridgeShellState.AcceptedPlanarVelocityCmPerSecond.Size2D();
 	if (ShellDelta > BalanceQuietLinearSpeedThresholdCmPerSec)
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_BLOCK: reason=shellCorrectionTooHigh value=%.3f threshold=%.3f"), ShellDelta, BalanceQuietLinearSpeedThresholdCmPerSec);
 		OutReason = TEXT("shellCorrectionTooHigh");
 		return false;
 	}
 
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_STABLE_CHECK: state=STABLE reason=ready"));
 	OutReason = TEXT("ready");
 	return true;
 }
@@ -2979,10 +2985,14 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		return;
 	}
 
-	// For any root-sim or late-entry blocker, route through the quiet handoff instead of doing a hot flip.
+	// For any root-sim or late-entry blocker, route through the new phase-based 
+	// RootEnablePhase instead of doing a hot flip.
+	// We no longer trigger BalanceReadyTransition here for pelvisBodyNotSimulating, 
+	// as that old system creates circular sim-request dependencies.
 	if (ReadyReason == TEXT("pelvisBodyNotSimulating"))
 	{
-		BalanceReadyTransition.Start(PendingBalanceModeStartReason.IsEmpty() ? ReadyReason : PendingBalanceModeStartReason, this);
+		// Don't start old transition. Let UpdateBridgeActiveBalancePreEntry handle it.
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Routing balance entry through new RootEnablePhase pipeline. Waiting for pre-entry stability..."));
 	}
 }
 
