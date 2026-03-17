@@ -2795,6 +2795,7 @@ void UPhysAnimComponent::UpdateBridgeActiveBalancePreEntry(float DeltaTime, cons
 		RootEnablePhaseFrameCounter = 0;
 		RootEnablePhaseWeightRamp = 0.0f;
 		TransitionRuntimeState(EPhysAnimRuntimeState::RootEnablePhase);
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_ENTER: entered=1"));
 	}
 }
 
@@ -2806,22 +2807,27 @@ void UPhysAnimComponent::UpdateRootEnablePhase(float DeltaTime, const FPhysAnimS
 
 	if (RootEnablePhaseFrameCounter == 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_ENTER: requestedRootSim=1 pelvisSimBefore=%d rootWeight=0.00"), bPelvisSimBefore ? 1 : 0);
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_START_TICK: requestedRootSim=1 pelvisSimBefore=%d rootWeight=0.00"), bPelvisSimNow ? 1 : 0);
 	}
 	RootEnablePhaseFrameCounter++;
+
+	const bool bSimAllowed = ShouldAllowBalanceSimulation(Settings);
+	if (!bSimAllowed)
+	{
+		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] ROOT_ENABLE_BUG: RootEnablePhase active but root sim not allowed by ShouldAllowBalanceSimulation"));
+	}
 
 	FString StableReason;
 	const bool bStable = IsBridgeActiveBalancePreEntryStable(StableReason, true);
 	RootEnablePhaseStableAccumulatedSeconds = bStable ? (RootEnablePhaseStableAccumulatedSeconds + DeltaTime) : 0.0;
-
-	const bool bPelvisSimNow = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
 	
 	// RootEnablePhase stays at weight 0.00
 	RootEnablePhaseWeightRamp = 0.0f;
 
 	const bool bAdvanceAllowed = bStable && bPelvisSimNow && RootEnablePhaseStableAccumulatedSeconds >= 0.5f;
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_STATUS: simReq=1 pelvisSim=%d rootWeight=0.00 rootLin=%.1f rootAng=%.1f stableTime=%.2f/0.5 advance=%d blockReason=%s"),
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_STATUS: simReq=%d pelvisSim=%d rootWeight=0.00 rootLin=%.1f rootAng=%.1f stableTime=%.2f/0.5 advance=%d blockReason=%s"),
+		bSimAllowed ? 1 : 0,
 		bPelvisSimNow ? 1 : 0,
 		PelvisBody ? PelvisBody->GetUnrealWorldVelocity().Size() : 0.0f,
 		PelvisBody ? FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians().Size()) : 0.0f,
@@ -2833,8 +2839,8 @@ void UPhysAnimComponent::UpdateRootEnablePhase(float DeltaTime, const FPhysAnimS
 		double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 		if (WorldTime - LastBlockedLogTime > 1.0)
 		{
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] ROOT_ENABLE_BLOCKED: pelvis did not enter simulation. Body=%s Valid=%d"),
-				*PhysAnimBridge::GetRootBoneName().ToString(), PelvisBody ? 1 : 0);
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] ROOT_ENABLE_BLOCKED: pelvis did not enter simulation. Body=%s Valid=%d simAllowed=%d"),
+				*PhysAnimBridge::GetRootBoneName().ToString(), PelvisBody ? 1 : 0, bSimAllowed ? 1 : 0);
 			LastBlockedLogTime = WorldTime;
 		}
 	}
