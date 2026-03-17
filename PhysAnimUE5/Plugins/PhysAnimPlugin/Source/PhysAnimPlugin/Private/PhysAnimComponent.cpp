@@ -2803,7 +2803,7 @@ void UPhysAnimComponent::UpdateRootEnablePhase(float DeltaTime, const FPhysAnimS
 {
 	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
-	const bool bPelvisSimBefore = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
+	const bool bPelvisSimNow = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
 
 	if (RootEnablePhaseFrameCounter == 0)
 	{
