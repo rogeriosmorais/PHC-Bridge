@@ -2,7 +2,7 @@ import os
 import glob
 import pyperclip
 
-def extract_physa_to_clipboard(folder_path):
+def extract_physa_to_clipboard(folder_path=r"F:\NewEngine\PhysAnimUE5\Saved\Logs"):
     # 1. Busca todos os arquivos .log na pasta
     # Você pode mudar a extensão para '*' se os arquivos não tiverem extensão fixa
     files = glob.glob(os.path.join(folder_path, "*.log"))
@@ -31,6 +31,7 @@ def extract_physa_to_clipboard(folder_path):
         content_to_copy = "\n".join(extracted_lines)
         pyperclip.copy(content_to_copy)
         print(f"Sucesso! {len(extracted_lines)} linhas copiadas para o clipboard.")
+        return content_to_copy
     else:
         print("Nenhuma linha com 'PhysA' foi encontrada.")
 
