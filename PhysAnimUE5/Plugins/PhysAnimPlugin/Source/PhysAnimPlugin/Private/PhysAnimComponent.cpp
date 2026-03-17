@@ -4946,6 +4946,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 				PhysicsControl->SetControlUseSkeletalAnimation(ControlName, false, 0.0f, 0.0f, true, false);
 			}
+
+			const bool bIsDistalBone = 
+				BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_l") || BoneName == TEXT("ball_r");
+			
+			if (bIsDistalBone)
+			{
+				ControlMultiplier.AngularExtraDampingMultiplier *= 2.0f;
+			}
 		}
 
 		bool bControlActive = bBringUpGroupUnlocked && !EffectiveSettings.bForceZeroActions;
@@ -6356,50 +6364,38 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (bBridgeActiveBalancePreEntryActive)
 	{
-		float MaxFootLin = 0.0f;
 		float MaxFootAng = 0.0f;
-		float MaxCalfLin = 0.0f;
-		float MaxCalfAng = 0.0f;
+		float MaxBallAng = 0.0f;
 
 		USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
 		if (SkeletalMesh)
 		{
-			static const TArray<FName> FootBones = { TEXT("foot_l"), TEXT("ball_l"), TEXT("foot_r"), TEXT("ball_r") };
-			static const TArray<FName> CalfBones = { TEXT("calf_l"), TEXT("calf_r") };
+			static const TArray<FName> FootBones = { TEXT("foot_l"), TEXT("foot_r") };
+			static const TArray<FName> BallBones = { TEXT("ball_l"), TEXT("ball_r") };
 
 			for (const FName& BoneName : FootBones)
 			{
 				if (FBodyInstance* const BI = SkeletalMesh->GetBodyInstance(BoneName))
 				{
-					const FVector LinVel = BI->GetUnrealWorldVelocity();
 					const FVector AngVelRad = BI->GetUnrealWorldAngularVelocityInRadians();
-					
-					MaxFootLin = FMath::Max(MaxFootLin, LinVel.Size());
 					MaxFootAng = FMath::Max(MaxFootAng, FMath::RadiansToDegrees(AngVelRad.Size()));
-
-					BI->SetLinearVelocity(LinVel.GetClampedToMaxSize(2.0f), false);
-					BI->SetAngularVelocityInRadians(FVector::ZeroVector, false);
+					BI->SetAngularVelocityInRadians(AngVelRad.GetClampedToMaxSize(FMath::DegreesToRadians(60.0f)), false);
 				}
 			}
 
-			for (const FName& BoneName : CalfBones)
+			for (const FName& BoneName : BallBones)
 			{
 				if (FBodyInstance* const BI = SkeletalMesh->GetBodyInstance(BoneName))
 				{
-					const FVector LinVel = BI->GetUnrealWorldVelocity();
 					const FVector AngVelRad = BI->GetUnrealWorldAngularVelocityInRadians();
-					
-					MaxCalfLin = FMath::Max(MaxCalfLin, LinVel.Size());
-					MaxCalfAng = FMath::Max(MaxCalfAng, FMath::RadiansToDegrees(AngVelRad.Size()));
-
-					BI->SetLinearVelocity(LinVel.GetClampedToMaxSize(5.0f), false);
-					BI->SetAngularVelocityInRadians(AngVelRad.GetClampedToMaxSize(FMath::DegreesToRadians(20.0f)), false);
+					MaxBallAng = FMath::Max(MaxBallAng, FMath::RadiansToDegrees(AngVelRad.Size()));
+					BI->SetAngularVelocityInRadians(AngVelRad.GetClampedToMaxSize(FMath::DegreesToRadians(30.0f)), false);
 				}
 			}
 		}
 
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_SUPPORT_FINAL: maxFootLin=%.1f maxFootAng=%.1f maxCalfLin=%.1f maxCalfAng=%.1f"),
-			MaxFootLin, MaxFootAng, MaxCalfLin, MaxCalfAng);
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_DISTAL_ANGULAR: footMax=%.1f ballMax=%.1f"),
+			MaxFootAng, MaxBallAng);
 	}
 }
 
