@@ -360,6 +360,7 @@ enum class EPhysAnimRuntimeState : uint8
 	BridgeActive,
 	FailStopped,
 	BalancePerturbationMode,
+	RootEnablePhase,
 };
 
 UENUM(BlueprintType)
@@ -662,7 +663,8 @@ private:
 	void ResetBalanceScenarioQuietGate(const FString& Reason);
 	bool EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
 	bool EvaluateBalanceBridgeActivePreEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
-	bool IsBridgeActiveBalancePreEntryStable(FString& OutReason) const;
+	bool IsBridgeActiveBalancePreEntryStable(FString& OutReason, bool bExpectSim = true) const;
+	void UpdateRootEnablePhase(float DeltaTime, const FPhysAnimStabilizationSettings& Settings);
 	void ResetBridgeActiveBalancePreEntry();
 	void UpdateBridgeActiveBalancePreEntry(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void QueueBalanceModeStartRequest(const FString& Reason);
@@ -861,6 +863,9 @@ private:
 	FString LastBridgeActiveBalancePreEntryReason;
 	FPhysAnimBalanceQuietHandoff BalanceReadyTransition;
 	bool bPelvisResetAppliedThisTick = false;
+	double RootEnablePhaseStableAccumulatedSeconds = 0.0;
+	int32 RootEnablePhaseFrameCounter = 0;
+	float RootEnablePhaseWeightRamp = 0.0f;
 
 public:
 	static bool BuildConditionedActions(
