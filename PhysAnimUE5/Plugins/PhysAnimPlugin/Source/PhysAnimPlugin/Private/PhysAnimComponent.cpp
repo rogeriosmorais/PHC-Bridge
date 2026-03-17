@@ -6038,6 +6038,13 @@ void UPhysAnimComponent::ApplyControlTargets(
 	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
 
+	const bool bBridgeActivePreEntryStable = BridgeActiveBalancePreEntryStableAccumulatedSeconds >= 0.25f;
+	if (BalanceReadyTransition.IsActive() && !bBridgeActivePreEntryStable)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_POLICY: suppressed=1 wroteTargets=0"));
+		bPolicyTargetsAppliedLastFrame = false;
+		return;
+	}
 
 	if (EffectiveSettings.bForceZeroActions)
 	{
@@ -6232,6 +6239,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	LastControlTargetDiagnostics = ControlTargetDiagnostics;
 	bPolicyTargetsAppliedLastFrame = bPolicyInfluenceActive;
+
+	if (bBridgeActiveBalancePreEntryActive)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_POLICY: suppressed=0 wroteTargets=%d"), ControlTargetDiagnostics.NumPolicyTargetsWritten);
+	}
 
 	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame)
 	{
