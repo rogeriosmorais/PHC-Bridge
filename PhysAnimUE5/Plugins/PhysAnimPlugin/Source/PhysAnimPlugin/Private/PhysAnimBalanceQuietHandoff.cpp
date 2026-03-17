@@ -1,247 +1,108 @@
 #include "PhysAnimBalanceQuietHandoff.h"
+
 #include "PhysAnimComponent.h"
 #include "PhysAnimBridge.h"
-#include "PhysicsEngine/BodyInstance.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "GameFramework/Character.h"
-#include "GameFramework/CharacterMovementComponent.h"
-#include "Components/CapsuleComponent.h"
+#include "PhysicsEngine/BodyInstance.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBalanceQuietHandoff, Log, All);
-
-namespace PhysAnimBalanceQuietHandoffInternal
+void FPhysAnimBalanceQuietHandoff::Start(const FString& InReason, UPhysAnimComponent* /*Owner*/)
 {
-	static constexpr float QuietRootLinearThresholdCmPerSec = 80.0f;
-	static constexpr float QuietRootAngularThresholdDegPerSec = 120.0f;
-	static constexpr float QuietShellVelocityThresholdCmPerSec = 50.0f;
-	static constexpr float QuietShellOffsetThresholdCm = 8.0f;
-	static constexpr float QuietRequiredSeconds = 0.20f;
-	static constexpr float MaxQuietWaitSeconds = 1.25f;
-	static constexpr float RestorePolicyRampSeconds = 0.20f;
-}
-
-void FPhysAnimBalanceQuietHandoff::Start(const FString& InReason, UPhysAnimComponent* InOwner)
-{
-	Cancel();
+	Phase = EPhase::RequestSim;
+	bActive = true;
+	bSucceeded = false;
+	bFailed = false;
 	StartReason = InReason;
-	SetPhase(EPhase::SuspendExternalSystems, InOwner, TEXT("start"));
+	FailureReason.Reset();
+	ElapsedSeconds = 0.0;
+	StableSeconds = 0.0;
+	UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] BalanceReadyTransition started. reason=%s"), *StartReason);
 }
 
 void FPhysAnimBalanceQuietHandoff::Cancel()
 {
 	Phase = EPhase::Inactive;
+	bActive = false;
+	bSucceeded = false;
+	bFailed = false;
 	StartReason.Reset();
-	PhaseStartTimeSeconds = -1.0;
-	LastProgressLogTimeSeconds = -1.0;
-	QuietAccumulatedSeconds = 0.0;
-	bSystemsSuspended = false;
-	bRootFlipRequested = false;
-	bPolicyRestoreStarted = false;
+	FailureReason.Reset();
+	ElapsedSeconds = 0.0;
+	StableSeconds = 0.0;
 }
 
-bool FPhysAnimBalanceQuietHandoff::IsActive() const
+void FPhysAnimBalanceQuietHandoff::Fail(const FString& Reason)
 {
-	return Phase != EPhase::Inactive && Phase != EPhase::Succeeded && Phase != EPhase::Failed;
+	Phase = EPhase::Failed;
+	bFailed = true;
+	bSucceeded = false;
+	FailureReason = Reason;
+	UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] Transition FAILED: %s"), *FailureReason);
 }
 
-bool FPhysAnimBalanceQuietHandoff::HasSucceeded() const
+void FPhysAnimBalanceQuietHandoff::Tick(float DeltaTime, UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& /*EffectiveSettings*/)
 {
-	return Phase == EPhase::Succeeded;
-}
-
-bool FPhysAnimBalanceQuietHandoff::HasFailed() const
-{
-	return Phase == EPhase::Failed;
-}
-
-FPhysAnimBalanceQuietHandoff::EPhase FPhysAnimBalanceQuietHandoff::GetPhase() const
-{
-	return Phase;
-}
-
-const FString& FPhysAnimBalanceQuietHandoff::GetStartReason() const
-{
-	return StartReason;
-}
-
-void FPhysAnimBalanceQuietHandoff::SetPhase(EPhase NewPhase, UPhysAnimComponent* Owner, const TCHAR* Context)
-{
-	if (Phase == NewPhase)
+	if (!bActive || bSucceeded || bFailed || !Owner)
 	{
 		return;
 	}
 
-	const int32 OldValue = static_cast<int32>(Phase);
-	const int32 NewValue = static_cast<int32>(NewPhase);
-	Phase = NewPhase;
-	PhaseStartTimeSeconds = Owner && Owner->GetWorld() ? Owner->GetWorld()->GetTimeSeconds() : -1.0;
-	LastProgressLogTimeSeconds = -1.0;
-	QuietAccumulatedSeconds = 0.0;
+	ElapsedSeconds += DeltaTime;
 
-	UE_LOG(LogPhysAnimBridge, Warning,
-		TEXT("[PhysAnimBalance] QuietHandoff Phase Change: %d -> %d (%s)"),
-		OldValue,
-		NewValue,
-		Context);
-}
-
-void FPhysAnimBalanceQuietHandoff::Tick(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, UPhysAnimComponent* Owner)
-{
-	if (!Owner || !IsActive())
+	USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
+	if (!Mesh)
 	{
+		Fail(TEXT("missingMesh"));
 		return;
 	}
 
-	switch (Phase)
+	FBodyInstance* const RootBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
+	if (!RootBody)
 	{
-	case EPhase::SuspendExternalSystems:
-		if (TickSuspendExternalSystems(Owner))
-		{
-			SetPhase(EPhase::FlipRootSimulation, Owner, TEXT("systems_suspended"));
-		}
-		break;
-
-	case EPhase::FlipRootSimulation:
-		if (TickFlipRootSimulation(Owner))
-		{
-			SetPhase(EPhase::WaitForQuiet, Owner, TEXT("root_flip_done"));
-		}
-		break;
-
-	case EPhase::WaitForQuiet:
-		if (TickWaitForQuiet(DeltaTime, EffectiveSettings, Owner))
-		{
-			SetPhase(EPhase::RestorePolicy, Owner, TEXT("quiet_window_passed"));
-		}
-		break;
-
-	case EPhase::RestorePolicy:
-		if (TickRestorePolicy(DeltaTime, Owner))
-		{
-			SetPhase(EPhase::Succeeded, Owner, TEXT("restore_complete"));
-		}
-		break;
-
-	default:
-		break;
-	}
-}
-
-bool FPhysAnimBalanceQuietHandoff::TickSuspendExternalSystems(UPhysAnimComponent* Owner)
-{
-	if (bSystemsSuspended)
-	{
-		return true;
+		Fail(TEXT("missingRootBody"));
+		return;
 	}
 
-	// These helpers are expected to be added on UPhysAnimComponent.
-	Owner->SetBalanceTransitionPolicySuppressed(true);
-	Owner->SetBalanceTransitionShellSuppressed(true);
-	Owner->SetBalanceTransitionMovementSuppressed(true);
-	Owner->SetBalanceTransitionTargetWritesSuppressed(true);
-	Owner->SetBalanceTransitionCachedResetsSuppressed(true);
-
-	bSystemsSuspended = true;
-	UE_LOG(LogPhysAnimBridge, Warning,
-		TEXT("[PhysAnimBalance] QuietHandoff: external systems suspended before root sim flip."));
-	return true;
-}
-
-bool FPhysAnimBalanceQuietHandoff::TickFlipRootSimulation(UPhysAnimComponent* Owner)
-{
-	if (bRootFlipRequested)
+	if (Phase == EPhase::RequestSim)
 	{
-		return true;
+		Phase = EPhase::WaitForSettle;
+		UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] Transition Phase Change: 0 -> 1"));
 	}
 
-	Owner->SetBalanceTransitionRootSimulationRequested(true);
-	Owner->ForceBalanceTransitionRootBodyDynamic();
-	Owner->ZeroBalanceTransitionRootVelocities();
-	bRootFlipRequested = true;
+	const bool bRootSim = RootBody->IsInstanceSimulatingPhysics();
+	const float RootLinear = RootBody->GetUnrealWorldVelocity().Size();
+	const float RootAngular = FMath::RadiansToDegrees(RootBody->GetUnrealWorldAngularVelocityInRadians()).Size();
 
-	UE_LOG(LogPhysAnimBridge, Warning,
-		TEXT("[PhysAnimBalance] QuietHandoff: requested root sim flip with policy/shell suspended."));
-	return true;
-}
-
-bool FPhysAnimBalanceQuietHandoff::TickWaitForQuiet(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, UPhysAnimComponent* Owner)
-{
-	const double WorldTime = Owner->GetWorld() ? Owner->GetWorld()->GetTimeSeconds() : -1.0;
-	const double Elapsed = (PhaseStartTimeSeconds >= 0.0 && WorldTime >= 0.0) ? (WorldTime - PhaseStartTimeSeconds) : 0.0;
-
-	const float RootLinear = Owner->GetBalanceTransitionRootLinearSpeedCmPerSec();
-	const float RootAngular = Owner->GetBalanceTransitionRootAngularSpeedDegPerSec();
-	const float ShellOffset = Owner->GetBalanceTransitionShellOffsetDeltaCm();
-	const float ShellVelocity = Owner->GetBalanceTransitionShellVelocityDeltaCmPerSec();
-
-	const bool bQuietNow =
-		RootLinear <= PhysAnimBalanceQuietHandoffInternal::QuietRootLinearThresholdCmPerSec &&
-		RootAngular <= PhysAnimBalanceQuietHandoffInternal::QuietRootAngularThresholdDegPerSec &&
-		ShellOffset <= PhysAnimBalanceQuietHandoffInternal::QuietShellOffsetThresholdCm &&
-		ShellVelocity <= PhysAnimBalanceQuietHandoffInternal::QuietShellVelocityThresholdCmPerSec;
-
-	if (bQuietNow)
+	if (!bRootSim)
 	{
-		QuietAccumulatedSeconds += DeltaTime;
+		StableSeconds = 0.0;
+		if (ElapsedSeconds >= 2.0)
+		{
+			Fail(TEXT("handoff_timeout"));
+		}
+		return;
+	}
+
+	constexpr float QuietLinearThreshold = 60.0f;
+	constexpr float QuietAngularThreshold = 120.0f;
+	constexpr float QuietSettleSeconds = 0.20f;
+
+	if (RootLinear <= QuietLinearThreshold && RootAngular <= QuietAngularThreshold)
+	{
+		StableSeconds += DeltaTime;
+		if (StableSeconds >= QuietSettleSeconds)
+		{
+			Phase = EPhase::Succeeded;
+			bSucceeded = true;
+			bFailed = false;
+			UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] Transition SUCCEEDED: rootLin=%.1f rootAng=%.1f"), RootLinear, RootAngular);
+		}
 	}
 	else
 	{
-		QuietAccumulatedSeconds = 0.0;
+		StableSeconds = 0.0;
+		if (ElapsedSeconds >= 2.0)
+		{
+			Fail(TEXT("handoff_timeout"));
+		}
 	}
-
-	if (WorldTime >= 0.0 && (LastProgressLogTimeSeconds < 0.0 || WorldTime - LastProgressLogTimeSeconds >= 0.25))
-	{
-		LastProgressLogTimeSeconds = WorldTime;
-		UE_LOG(LogPhysAnimBridge, Warning,
-			TEXT("[PhysAnimBalance] QuietHandoff: quiet=%d settle=%.2f/%.2f rootLin=%.1f rootAng=%.1f shellOff=%.1f shellVel=%.1f"),
-			bQuietNow ? 1 : 0,
-			QuietAccumulatedSeconds,
-			PhysAnimBalanceQuietHandoffInternal::QuietRequiredSeconds,
-			RootLinear,
-			RootAngular,
-			ShellOffset,
-			ShellVelocity);
-	}
-
-	if (QuietAccumulatedSeconds >= PhysAnimBalanceQuietHandoffInternal::QuietRequiredSeconds)
-	{
-		return true;
-	}
-
-	if (Elapsed >= PhysAnimBalanceQuietHandoffInternal::MaxQuietWaitSeconds)
-	{
-		UE_LOG(LogPhysAnimBridge, Warning,
-			TEXT("[PhysAnimBalance] QuietHandoff FAILED: timeout rootLin=%.1f rootAng=%.1f shellOff=%.1f shellVel=%.1f"),
-			RootLinear,
-			RootAngular,
-			ShellOffset,
-			ShellVelocity);
-		SetPhase(EPhase::Failed, Owner, TEXT("quiet_timeout"));
-	}
-
-	return false;
-}
-
-bool FPhysAnimBalanceQuietHandoff::TickRestorePolicy(float DeltaTime, UPhysAnimComponent* Owner)
-{
-	if (!bPolicyRestoreStarted)
-	{
-		bPolicyRestoreStarted = true;
-		Owner->SetBalanceTransitionTargetWritesSuppressed(false);
-		Owner->BeginBalanceTransitionPolicyRestore(PhysAnimBalanceQuietHandoffInternal::RestorePolicyRampSeconds);
-		UE_LOG(LogPhysAnimBridge, Warning,
-			TEXT("[PhysAnimBalance] QuietHandoff: restoring policy after quiet window."));
-	}
-
-	if (!Owner->IsBalanceTransitionPolicyRestoreComplete())
-	{
-		return false;
-	}
-
-	Owner->SetBalanceTransitionPolicySuppressed(false);
-	Owner->SetBalanceTransitionShellSuppressed(false);
-	Owner->SetBalanceTransitionMovementSuppressed(false);
-	Owner->SetBalanceTransitionCachedResetsSuppressed(false);
-	Owner->SetBalanceTransitionRootSimulationRequested(false);
-	return true;
 }

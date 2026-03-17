@@ -73,7 +73,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		FBodyInstance* PelvisBody = Owner->GetMeshComponent() ? Owner->GetMeshComponent()->GetBodyInstance(RootBoneName) : nullptr;
 		const bool bIsSimulating = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
 		
-		if (Owner->bPelvisResetAppliedThisTick)
+		if (Owner->WasPelvisResetAppliedThisTick())
 		{
 			bLatchedPelvisResetApplied = true;
 			Diagnostics.bResetApplied = true;
@@ -309,9 +309,9 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 	Diagnostics.PelvisLinearVelPost = Mesh->GetPhysicsLinearVelocity(RootBoneName);
 	Diagnostics.PelvisAngularVelPost = Mesh->GetPhysicsAngularVelocityInDegrees(RootBoneName);
 	
-	Diagnostics.bShellContributed = Owner->BridgeShellState.AcceptedPlanarVelocityCmPerSecond.Size2D() > 0.1f;
-	Diagnostics.bPolicyWroteTargets = Owner->bPolicyTargetsAppliedLastFrame;
-	Diagnostics.bResetScheduled = !Owner->PendingBodyModifierCachedResetNames.IsEmpty();
+	Diagnostics.bShellContributed = Owner->GetAcceptedShellPlanarVelocity().Size2D() > 0.1f;
+	Diagnostics.bPolicyWroteTargets = Owner->WasPolicyTargetAppliedLastFrame();
+	Diagnostics.bResetScheduled = !Owner->GetPendingBodyModifierCachedResetNames().IsEmpty();
 
 	// Bone velocities
 	auto GetMaxVel = [&](const TArray<FName>& Bones, float& MaxLin, float& MaxAng) {
@@ -335,180 +335,8 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("  MaxLinVel: Pelvis=%.1f Thighs=%.1f Spine=%.1f Feet=%.1f"), Diagnostics.MaxLinVelPelvis, Diagnostics.MaxLinVelThighs, Diagnostics.MaxLinVelSpine, Diagnostics.MaxLinVelFeet);
 }
 
-
-static bool PhysAnimIsTransitionProximalBone(FName BoneName)
-{
-	return BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
-		BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03") ||
-		BoneName == TEXT("clavicle_l") || BoneName == TEXT("clavicle_r") ||
-		BoneName == TEXT("upperarm_l") || BoneName == TEXT("upperarm_r") ||
-		BoneName == TEXT("lowerarm_l") || BoneName == TEXT("lowerarm_r");
-}
-
-static bool PhysAnimIsTransitionHeldThighBone(FName BoneName)
-{
-	return BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r");
-}
-
-static bool PhysAnimIsTransitionSupportAnchorBone(FName BoneName)
-{
-	return BoneName == TEXT("calf_l") || BoneName == TEXT("foot_l") || BoneName == TEXT("ball_l") ||
-		BoneName == TEXT("calf_r") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_r");
-}
-
-static float PhysAnimResolveStagedThighControlAlpha(EBalanceReadyTransitionPhase Phase, float PhaseTimeSeconds, FName BoneName)
-{
-	if (PhysAnimIsTransitionSupportAnchorBone(BoneName))
-	{
-		switch (Phase)
-		{
-		case EBalanceReadyTransitionPhase::Handoff:
-		case EBalanceReadyTransitionPhase::PostHandoffSettle:
-			return 0.0f;
-
-		case EBalanceReadyTransitionPhase::RestoreControls:
-			return FMath::Clamp((PhaseTimeSeconds - 0.45f) / 0.35f, 0.0f, 1.0f);
-
-		case EBalanceReadyTransitionPhase::FinalSettle:
-		case EBalanceReadyTransitionPhase::Succeeded:
-			return 1.0f;
-
-		default:
-			return 1.0f;
-		}
-	}
-
-	if (!PhysAnimIsTransitionHeldThighBone(BoneName))
-	{
-		return 1.0f;
-	}
-
-	switch (Phase)
-	{
-	case EBalanceReadyTransitionPhase::Handoff:
-	case EBalanceReadyTransitionPhase::PostHandoffSettle:
-		return 0.0f;
-
-	case EBalanceReadyTransitionPhase::RestoreControls:
-		if (BoneName == TEXT("thigh_l"))
-		{
-			return FMath::Clamp((PhaseTimeSeconds - 0.10f) / 0.30f, 0.0f, 1.0f);
-		}
-		return FMath::Clamp((PhaseTimeSeconds - 0.30f) / 0.30f, 0.0f, 1.0f);
-
-	case EBalanceReadyTransitionPhase::FinalSettle:
-	case EBalanceReadyTransitionPhase::Succeeded:
-		return 1.0f;
-
-	default:
-		return 1.0f;
-	}
-}
-
-float FPhysAnimBalanceReadyTransition::GetRootBodyModifierSoftSimAlpha() const
-{
-	switch (Phase)
-	{
-	case EBalanceReadyTransitionPhase::Handoff:
-		return FMath::Clamp(0.05f + (PhaseTimeSeconds / 0.25f) * 0.10f, 0.05f, 0.15f);
-	case EBalanceReadyTransitionPhase::PostHandoffSettle:
-		return 0.15f;
-	case EBalanceReadyTransitionPhase::RestoreControls:
-		return FMath::Clamp(0.15f + (PhaseTimeSeconds / 0.45f) * 0.85f, 0.15f, 1.0f);
-	case EBalanceReadyTransitionPhase::FinalSettle:
-	case EBalanceReadyTransitionPhase::Succeeded:
-		return 1.0f;
-	default:
-		return 0.0f;
-	}
-}
-
-float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneName) const
-{
-	if (PhysAnimIsTransitionHeldThighBone(BoneName))
-	{
-		return PhysAnimResolveStagedThighControlAlpha(Phase, PhaseTimeSeconds, BoneName);
-	}
-
-	if (!PhysAnimIsTransitionProximalBone(BoneName))
-	{
-		return 1.0f;
-	}
-
-	switch (Phase)
-	{
-	case EBalanceReadyTransitionPhase::Handoff:
-		return 0.0f;
-	case EBalanceReadyTransitionPhase::PostHandoffSettle:
-		return 0.0f;
-	case EBalanceReadyTransitionPhase::RestoreControls:
-		return FMath::Clamp(PhaseTimeSeconds / 0.35f, 0.0f, 1.0f);
-	case EBalanceReadyTransitionPhase::FinalSettle:
-	case EBalanceReadyTransitionPhase::Succeeded:
-		return 1.0f;
-	default:
-		return 1.0f;
-	}
-}
-
-bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) const
-{
-	if (PhysAnimIsTransitionSupportAnchorBone(BoneName))
-	{
-		switch (Phase)
-		{
-		case EBalanceReadyTransitionPhase::Handoff:
-		case EBalanceReadyTransitionPhase::PostHandoffSettle:
-			return true;
-
-		case EBalanceReadyTransitionPhase::RestoreControls:
-			return PhaseTimeSeconds < 0.45f;
-
-		default:
-			return false;
-		}
-	}
-
-	if (!PhysAnimIsTransitionHeldThighBone(BoneName))
-	{
-		return false;
-	}
-
-	switch (Phase)
-	{
-	case EBalanceReadyTransitionPhase::Handoff:
-	case EBalanceReadyTransitionPhase::PostHandoffSettle:
-		return true;
-
-	case EBalanceReadyTransitionPhase::RestoreControls:
-		if (BoneName == TEXT("thigh_l"))
-		{
-			return PhaseTimeSeconds < 0.10f;
-		}
-		return PhaseTimeSeconds < 0.30f;
-
-	default:
-		return false;
-	}
-}
-
-float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier() const
-{
-	switch (Phase)
-	{
-	case EBalanceReadyTransitionPhase::Handoff:
-		return 4.0f;
-	case EBalanceReadyTransitionPhase::PostHandoffSettle:
-		return 3.0f;
-	case EBalanceReadyTransitionPhase::RestoreControls:
-		return 2.0f;
-	default:
-		return 1.0f;
-	}
-}
-
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle || Phase == EBalanceReadyTransitionPhase::RestoreControls; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle; }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle; }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive(); }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle || Phase == EBalanceReadyTransitionPhase::RestoreControls; }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle || Phase == EBalanceReadyTransitionPhase::RestoreControls; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle; }

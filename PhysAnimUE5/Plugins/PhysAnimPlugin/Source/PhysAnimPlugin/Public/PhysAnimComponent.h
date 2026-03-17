@@ -12,7 +12,7 @@
 #include "PoseSearch/PoseSearchTrajectoryPredictor.h"
 #include "Animation/TrajectoryTypes.h"
 #include "PhysAnimBridge.h"
-#include "PhysAnimBalanceReadyTransition.h"
+#include "PhysAnimBalanceQuietHandoff.h"
 
 #include "PhysAnimComponent.generated.h"
 
@@ -418,7 +418,6 @@ UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
 class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPoseSearchTrajectoryPredictorInterface
 {
 	GENERATED_BODY()
-	friend class FPhysAnimBalanceReadyTransition;
 
 public:
 	UPhysAnimComponent();
@@ -432,12 +431,6 @@ public:
 	virtual void GetCurrentState(FVector& OutPosition, FQuat& OutFacing, FVector& OutVelocity) override;
 	virtual void GetVelocity(FVector& OutVelocity) override;
 
-	bool IsIdlePoseActive() const;
-	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
-	FVector GetAcceptedShellPlanarVelocity() const { return BridgeShellState.AcceptedPlanarVelocityCmPerSecond; }
-	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
-	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
-
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	bool StartBridge();
 
@@ -446,6 +439,14 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
+
+	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
+	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
+	FVector GetAcceptedShellPlanarVelocity() const { return BridgeShellState.AcceptedPlanarVelocityCmPerSecond; }
+	bool WasPolicyTargetAppliedLastFrame() const { return bPolicyTargetsAppliedLastFrame; }
+	bool WasPelvisResetAppliedThisTick() const { return bPelvisResetAppliedThisTick; }
+	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
+	bool IsIdlePoseActive() const { return LastValidPoseSearchResult.SelectedAnim == nullptr || IsBridgePoseSearchIdleResult(LastValidPoseSearchResult); }
 
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	bool IsReadyForScriptedPresentation() const;
@@ -661,6 +662,9 @@ private:
 	void ResetBalanceScenarioQuietGate(const FString& Reason);
 	bool EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
 	bool EvaluateBalanceBridgeActivePreEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
+	bool IsBridgeActiveBalancePreEntryStable(FString& OutReason) const;
+	void ResetBridgeActiveBalancePreEntry();
+	void UpdateBridgeActiveBalancePreEntry(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void QueueBalanceModeStartRequest(const FString& Reason);
 	void TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings);
 
@@ -788,9 +792,6 @@ private:
 	bool bHasShellCouplingReferenceRootLocalOffset = false;
 	double PresentationPerturbationOverrideEndTimeSeconds = -1.0;
 	bool bLastAppliedPresentationRootSimulationEnabled = false;
-	int32 HipQuarantineTicksRemaining = 0;
-	float LastHipQuarantineLeftPreDeltaDegrees = 0.0f;
-	float LastHipQuarantineRightPreDeltaDegrees = 0.0f;
 	double StabilizationStressTestStartTimeSeconds = -1.0;
 	bool bStabilizationStressTestCompletionLogged = false;
 	double StabilizationStressTestFirstAngularSpikeTimeSeconds = -1.0;
@@ -849,10 +850,14 @@ private:
 	float BalanceScenarioPeakActorDisplacementCm = 0.0f;
 	FPoseSearchBlueprintResult BalanceIdlePoseSearchResult;
 	bool bHasBalanceIdlePoseSearchResult = false;
-	FPhysAnimBalanceReadyTransition BalanceReadyTransition;
 	bool bPendingBalanceModeStartRequest = false;
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
+	bool bBridgeActiveBalancePreEntryActive = false;
+	double BridgeActiveBalancePreEntryStableAccumulatedSeconds = 0.0;
+	double LastBridgeActiveBalancePreEntryLogTimeSeconds = -1.0;
+	FString LastBridgeActiveBalancePreEntryReason;
+	FPhysAnimBalanceQuietHandoff BalanceReadyTransition;
 	bool bPelvisResetAppliedThisTick = false;
 
 public:
@@ -910,14 +915,13 @@ public:
 		bool bIsRootBodyModifier,
 		bool bAllowRootBodyModifierSimulation);
 	static bool ShouldResetBodyModifierToCachedBoneTransform(
-		EPhysAnimRuntimeState InRuntimeState,
+		EPhysAnimRuntimeState RuntimeState,
 		bool bForceZeroActions,
 		bool bBodyModifierActivatedThisTick,
 		bool bBringUpGroupUnlocked,
 		bool bIsRootBodyModifier,
 		bool bAllowRootBodyModifierSimulation,
-		float PolicyAlpha,
-		EBalanceReadyTransitionPhase InTransitionPhase = EBalanceReadyTransitionPhase::Inactive);
+		float PolicyAlpha);
 	static int32 ResolveBringUpGroupIndex(FName BoneName);
 	static int32 GetBringUpGroupCount();
 	static bool ShouldDelayBringUpGroupControlRamp(int32 GroupIndex, int32 NumBringUpGroups);

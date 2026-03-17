@@ -1,4 +1,5 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimBalanceQuietHandoff.h"
 
 #include "PhysAnimBridge.h"
 #include "PhysAnimBridgeTrace.h"
@@ -1109,8 +1110,6 @@ void UPhysAnimComponent::EmitBridgeTraceEvent(
 void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	bPelvisResetAppliedThisTick = false;
 	LastBridgePoseSearchDeltaTimeSeconds = DeltaTime;
 	UpdateBridgeStatusIndicator(0.25f);
 
@@ -1193,7 +1192,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	UpdateStabilizationStressTestState(StabilizationSettings);
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	ApplyMovementSmokeInput(EffectiveSettings);
+	bPelvisResetAppliedThisTick = false;
+	if (!BalanceReadyTransition.IsActive() || !BalanceReadyTransition.ShouldSuppressMoveSmoke())
+	{
+		ApplyMovementSmokeInput(EffectiveSettings);
+	}
 	if ((RuntimeState == EPhysAnimRuntimeState::BridgeActive || RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode) && bStartupMovementLockActive)
 	{
 		// In Balance Mode, we always want the CharacterMovement to be locked (MOVE_None)
@@ -1288,7 +1291,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	if (RuntimeState == EPhysAnimRuntimeState::BridgeActive)
 	{
 		CaptureBridgeIntent(EffectiveSettings);
-		if (!bStartupMovementLockActive)
+		if ((!BalanceReadyTransition.IsActive() || !BalanceReadyTransition.ShouldSuppressShell()) && !bStartupMovementLockActive)
 		{
 			ApplyBridgeOwnedMovementDrive(DeltaTime, EffectiveSettings);
 		}
@@ -1419,11 +1422,15 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	const float PolicyControlIntervalSeconds = ResolvePolicyControlIntervalSeconds(EffectiveSettings.PolicyControlRateHz);
 	int32 ElapsedPolicySteps = 0;
-	const bool bRunPolicyUpdateThisTick = AdvancePolicyControlAccumulator(
+	bool bRunPolicyUpdateThisTick = AdvancePolicyControlAccumulator(
 		DeltaTime,
 		PolicyControlIntervalSeconds,
 		PolicyUpdateAccumulatorSeconds,
 		ElapsedPolicySteps);
+	if (bRunPolicyUpdateThisTick && BalanceReadyTransition.IsActive() && BalanceReadyTransition.ShouldSuppressPolicy())
+	{
+		bRunPolicyUpdateThisTick = false;
+	}
 	LastPolicyElapsedSteps = ElapsedPolicySteps;
 
 	// State advancement must happen before tuning and control writes to avoid one-tick phase lags.
@@ -1439,7 +1446,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	TrackStabilizationStressTestObservations();
 	AdvanceBringUpState(DeltaTime, EffectiveSettings);
-	BalanceReadyTransition.Tick(DeltaTime, this, EffectiveSettings);
+	if (BalanceReadyTransition.IsActive())
+	{
+		BalanceReadyTransition.Tick(DeltaTime, this, EffectiveSettings);
+	}
 	TryStartPendingBalanceModeRequest(EffectiveSettings);
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
@@ -1644,6 +1654,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		ResetPendingBodyModifiersToCachedTargets();
 	}
+	UpdateBridgeActiveBalancePreEntry(DeltaTime, EffectiveSettings);
 	if (bRunPolicyUpdateThisTick)
 	{
 		const double ActionConditionStartSeconds = FPlatformTime::Seconds();
@@ -1869,31 +1880,36 @@ void UPhysAnimComponent::ClearPresentationPerturbationOverride()
 bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
 	const bool bBalanceMode = RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode;
-	const bool bTransitionActive = BalanceReadyTransition.IsActive();
-	const bool bBridgeActivePreEntry = RuntimeState == EPhysAnimRuntimeState::BridgeActive && bTransitionActive;
-	const bool bIsPhase1 = bTransitionActive && BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::Handoff;
-	
-	const bool bBringUpUnlocked = AreAllBringUpGroupsUnlocked();
-	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
-	const bool bFinalRampActive = IsBringUpGroupControlRampActive(FinalGroupIndex);
-	const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
-	const bool bResetsEmpty = PendingBodyModifierCachedResetNames.IsEmpty();
-
-	// Standard requirements
-	const bool bBasicReady = (bBalanceMode || bBridgeActivePreEntry) && bBringUpUnlocked && bFinalRampActive;
-	bool bResult = bBasicReady && bResetsEmpty;
-
-	// Phase 1 Override: Break circular dependency where sim waits for reset, but reset needs sim to drain
-	bool bPhase1Override = false;
-	if (!bResult && bIsPhase1 && bBasicReady)
+	const bool bBridgeActivePreEntry = RuntimeState == EPhysAnimRuntimeState::BridgeActive && (bBridgeActiveBalancePreEntryActive || BalanceReadyTransition.IsActive());
+	if (!bBalanceMode && !bBridgeActivePreEntry)
 	{
-		bResult = true;
-		bPhase1Override = true;
+		return false;
 	}
 
-	// Decision breakdown log removed for experiment
+	if (!AreAllBringUpGroupsUnlocked())
+	{
+		return false;
+	}
 
-	return bResult;
+	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
+	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
+	{
+		return false;
+	}
+
+	// We permit simulation even before policy influence reaches the ready threshold, 
+	// provided bring-up is complete. This allows the root to get its mandatory initial reset 
+	// while PolicyAlpha is still 0.0, avoiding design violations.
+	const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+
+	// We even block simulation if there are pending resets to prevent the root from releasing 
+	// while other limbs are still snapping to targets.
+	if (!PendingBodyModifierCachedResetNames.IsEmpty())
+	{
+		return false;
+	}
+
+	return true;
 }
 
 bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
@@ -2498,7 +2514,168 @@ bool UPhysAnimComponent::EvaluateBalanceModeEntryPrerequisites(const FPhysAnimSt
 	return true;
 }
 
+bool UPhysAnimComponent::EvaluateBalanceBridgeActivePreEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const
+{
+	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive)
+	{
+		OutReason = TEXT("runtimeNotBridgeActive");
+		return false;
+	}
 
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	if (!Mesh)
+	{
+		OutReason = TEXT("meshMissing");
+		return false;
+	}
+
+	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
+	if (!PelvisBody)
+	{
+		OutReason = TEXT("pelvisBodyMissing");
+		return false;
+	}
+
+	if (!AreAllBringUpGroupsUnlocked())
+	{
+		OutReason = TEXT("bringUpIncomplete");
+		return false;
+	}
+
+	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
+	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
+	{
+		OutReason = TEXT("finalGroupRampInactive");
+		return false;
+	}
+
+	if (!PendingBodyModifierCachedResetNames.IsEmpty())
+	{
+		OutReason = PendingBodyModifierCachedResetNames.Contains(PhysAnimBridge::GetRootBoneName())
+			? TEXT("pelvisResetRequiredAtEntry")
+			: TEXT("deferredResetsPending");
+		return false;
+	}
+
+	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+	if (PolicyInfluenceAlpha < BalanceReadyPolicyInfluenceThreshold)
+	{
+		OutReason = TEXT("policyInfluenceBelowThreshold");
+		return false;
+	}
+
+	OutReason = TEXT("ready");
+	return true;
+}
+
+bool UPhysAnimComponent::IsBridgeActiveBalancePreEntryStable(FString& OutReason) const
+{
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	AActor* const OwnerActor = GetOwner();
+	if (!Mesh || !OwnerActor)
+	{
+		OutReason = TEXT("bridgeObjectsMissing");
+		return false;
+	}
+
+	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
+	if (!PelvisBody || !PelvisBody->IsInstanceSimulatingPhysics())
+	{
+		OutReason = TEXT("pelvisBodyNotSimulating");
+		return false;
+	}
+
+	const FVector PelvisLinearVelocity = PelvisBody->GetUnrealWorldVelocity();
+	const FVector PelvisAngularVelocityDegPerSec = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
+	const float RootSpeed = PelvisLinearVelocity.Size();
+	if (RootSpeed > BalanceQuietLinearSpeedThresholdCmPerSec)
+	{
+		OutReason = TEXT("rootLinearTooHigh");
+		return false;
+	}
+
+	if (PelvisAngularVelocityDegPerSec.Size() > BalanceQuietTiltThresholdDeg * 2.0f)
+	{
+		OutReason = TEXT("rootAngularTooHigh");
+		return false;
+	}
+
+	const bool bIdlePoseActive =
+		LastValidPoseSearchResult.SelectedAnim == nullptr ||
+		IsBridgePoseSearchIdleResult(LastValidPoseSearchResult);
+	if (!bIdlePoseActive)
+	{
+		OutReason = TEXT("idlePoseInactive");
+		return false;
+	}
+
+	if (BridgeLocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle)
+	{
+		OutReason = TEXT("locomotionStateActive");
+		return false;
+	}
+
+	const float ShellDelta = BridgeShellState.AcceptedPlanarVelocityCmPerSecond.Size2D();
+	if (ShellDelta > BalanceQuietLinearSpeedThresholdCmPerSec)
+	{
+		OutReason = TEXT("shellCorrectionTooHigh");
+		return false;
+	}
+
+	OutReason = TEXT("ready");
+	return true;
+}
+
+void UPhysAnimComponent::ResetBridgeActiveBalancePreEntry()
+{
+	bBridgeActiveBalancePreEntryActive = false;
+	BridgeActiveBalancePreEntryStableAccumulatedSeconds = 0.0;
+	LastBridgeActiveBalancePreEntryLogTimeSeconds = -1.0;
+	LastBridgeActiveBalancePreEntryReason.Reset();
+}
+
+void UPhysAnimComponent::UpdateBridgeActiveBalancePreEntry(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	if (!bPendingBalanceModeStartRequest || RuntimeState != EPhysAnimRuntimeState::BridgeActive)
+	{
+		ResetBridgeActiveBalancePreEntry();
+		return;
+	}
+
+	FString PreReqReason;
+	if (!EvaluateBalanceBridgeActivePreEntryPrerequisites(EffectiveSettings, PreReqReason))
+	{
+		ResetBridgeActiveBalancePreEntry();
+		return;
+	}
+
+	if (PendingBalanceModeStartReason != TEXT("pelvisBodyNotSimulating") && !bBridgeActiveBalancePreEntryActive)
+	{
+		return;
+	}
+
+	if (!bBridgeActiveBalancePreEntryActive)
+	{
+		bBridgeActiveBalancePreEntryActive = true;
+		BridgeActiveBalancePreEntryStableAccumulatedSeconds = 0.0;
+		LastBridgeActiveBalancePreEntryLogTimeSeconds = -1.0;
+		LastBridgeActiveBalancePreEntryReason.Reset();
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] BridgeActive pre-entry settle started. Staying in BridgeActive until pelvis/root sim is valid and stable before entering Balance Perturbation Mode."));
+	}
+
+	FString StableReason;
+	const bool bStable = IsBridgeActiveBalancePreEntryStable(StableReason);
+	BridgeActiveBalancePreEntryStableAccumulatedSeconds = bStable ? (BridgeActiveBalancePreEntryStableAccumulatedSeconds + DeltaTime) : 0.0;
+
+	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
+	const bool bShouldLog = WorldTime >= 0.0 && (LastBridgeActiveBalancePreEntryLogTimeSeconds < 0.0 || WorldTime - LastBridgeActiveBalancePreEntryLogTimeSeconds >= 0.5 || LastBridgeActiveBalancePreEntryReason != StableReason);
+	if (bShouldLog)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] BRIDGEACTIVE_PRE_ENTRY: stable=%s reason=%s settle=%.2f/%.2f"), bStable ? TEXT("true") : TEXT("false"), *StableReason, BridgeActiveBalancePreEntryStableAccumulatedSeconds, BalanceBridgeActivePreEntrySettleSeconds);
+		LastBridgeActiveBalancePreEntryLogTimeSeconds = WorldTime;
+		LastBridgeActiveBalancePreEntryReason = StableReason;
+	}
+}
 
 void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 {
@@ -2508,7 +2685,7 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 	UE_LOG(
 		LogPhysAnimBridge,
 		Warning,
-		TEXT("[PhysAnimBalance] Entry blocked: %s. Queued automatic start request."),
+		TEXT("[PhysAnimBalance] Entry blocked: %s. Queued automatic start when BridgeActive becomes balance-ready and any required pre-entry settle completes."),
 		*Reason);
 }
 
@@ -2516,42 +2693,64 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 {
 	if (!bPendingBalanceModeStartRequest || RuntimeState != EPhysAnimRuntimeState::BridgeActive)
 	{
-		BalanceReadyTransition.Cancel();
+		if (BalanceReadyTransition.IsActive())
+		{
+			BalanceReadyTransition.Cancel();
+		}
 		return;
 	}
 
-	if (!BalanceReadyTransition.IsActive())
+	if (BalanceReadyTransition.IsActive())
 	{
-		FString Reason;
-		const bool bReady = EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, Reason);
-		if (bReady || Reason == TEXT("pelvisBodyNotSimulating"))
+		if (BalanceReadyTransition.HasSucceeded())
 		{
-			BalanceReadyTransition.Start(Reason, this);
+			const FString PreviousReason = PendingBalanceModeStartReason;
+			bPendingBalanceModeStartRequest = false;
+			PendingBalanceModeStartReason.Reset();
+			PendingBalanceModeRequestTimeSeconds = -1.0;
+			ResetBridgeActiveBalancePreEntry();
+			BalanceReadyTransition.Cancel();
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Pending start satisfied after %s. Entering Balance Perturbation Mode after quiet handoff."),
+				PreviousReason.IsEmpty() ? TEXT("unknownBlocker") : *PreviousReason);
+			StartBalancePerturbationMode();
+			return;
 		}
-		else
+
+		if (BalanceReadyTransition.HasFailed())
 		{
-			// Log denial only if not already logging via transition or if state changed
-			static FString LastDenialReason;
-			if (Reason != LastDenialReason)
-			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PROMOTION DENIED: %s"), *Reason);
-				LastDenialReason = Reason;
-			}
+			QueueBalanceModeStartRequest(BalanceReadyTransition.GetFailureReason().IsEmpty() ? TEXT("quietHandoffFailed") : BalanceReadyTransition.GetFailureReason());
+			BalanceReadyTransition.Cancel();
 		}
+		return;
 	}
 
-	if (BalanceReadyTransition.HasSucceeded())
+	FString ReadyReason;
+	if (EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, ReadyReason))
 	{
-		StartBalancePerturbationMode();
-	}
-	else if (BalanceReadyTransition.HasFailed())
-	{
+		const FString PreviousReason = PendingBalanceModeStartReason;
 		bPendingBalanceModeStartRequest = false;
-		BalanceReadyTransition.Cancel();
+		PendingBalanceModeStartReason.Reset();
+		PendingBalanceModeRequestTimeSeconds = -1.0;
+		ResetBridgeActiveBalancePreEntry();
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Pending start satisfied after %s. Entering Balance Perturbation Mode automatically from already-stable BridgeActive runtime."),
+			PreviousReason.IsEmpty() ? TEXT("unknownBlocker") : *PreviousReason);
+
+		StartBalancePerturbationMode();
+		return;
+	}
+
+	// For any root-sim or late-entry blocker, route through the quiet handoff instead of doing a hot flip.
+	if (PendingBalanceModeStartReason == TEXT("pelvisBodyNotSimulating") ||
+		ReadyReason == TEXT("pelvisBodyNotSimulating") ||
+		ReadyReason == TEXT("policyInfluenceBelowThreshold") ||
+		ReadyReason == TEXT("deferredResetsPending") ||
+		ReadyReason == TEXT("pelvisResetRequiredAtEntry"))
+	{
+		BalanceReadyTransition.Start(PendingBalanceModeStartReason.IsEmpty() ? ReadyReason : PendingBalanceModeStartReason, this);
 	}
 }
-
-// Obsolete pre-entry settle functions removed in favor of BalanceReadyTransition controller.
 
 void UPhysAnimComponent::StartBalancePerturbationMode()
 {
@@ -2566,7 +2765,10 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 			EntryReason == TEXT("pelvisBodyNotSimulating"))
 		{
 			QueueBalanceModeStartRequest(EntryReason);
-			BalanceReadyTransition.Cancel();
+			if (EntryReason != TEXT("pelvisBodyNotSimulating"))
+			{
+				ResetBridgeActiveBalancePreEntry();
+			}
 		}
 		else if (EntryReason == TEXT("pelvisResetRequiredAtEntry"))
 		{
@@ -2590,6 +2792,7 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	bPendingBalanceModeStartRequest = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
+	ResetBridgeActiveBalancePreEntry();
 	BalanceReadyTransition.Cancel();
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalancePerturbationMode);
@@ -4556,15 +4759,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		ShouldUseSkeletalAnimationTargetRepresentation(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
 			bPolicyInfluenceActive);
-
-	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
-	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
-	if (bRootSimFlipFrame)
-	{
-		HipQuarantineTicksRemaining = 2;
-	}
-	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0 && !BalanceReadyTransition.IsActive();
-	bool bHipQuarantineReleasedThisFrame = false;
 	if (!PhysicsControl)
 	{
 		return;
@@ -4696,12 +4890,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				: 1.0f;
 
 		FPhysicsControlMultiplier ControlMultiplier;
-		const float TransitionProximalAlpha = BalanceReadyTransition.IsActive()
-			? BalanceReadyTransition.GetProximalControlSoftAlpha(BoneName)
-			: 1.0f;
-		const float TransitionExtraDamping = BalanceReadyTransition.IsActive()
-			? BalanceReadyTransition.GetTransitionExtraDampingMultiplier()
-			: 1.0f;
 		float HandoverEasing = 1.0f;
 		if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
 		{
@@ -4713,16 +4901,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		ControlMultiplier.AngularStrengthMultiplier =
-			EffectiveSettings.AngularStrengthMultiplier * FamilyStrengthScale * ControlAuthorityAlpha * HandoverEasing * TransitionProximalAlpha;
+			EffectiveSettings.AngularStrengthMultiplier * FamilyStrengthScale * ControlAuthorityAlpha * HandoverEasing;
 		ControlMultiplier.AngularDampingRatioMultiplier =
-			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale * TransitionExtraDamping;
+			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale;
 		ControlMultiplier.AngularExtraDampingMultiplier =
-			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale * TransitionExtraDamping;
-
-		if (bHipQuarantineActiveThisFrame && (BoneName == "thigh_l" || BoneName == "thigh_r"))
-		{
-			ControlMultiplier.AngularStrengthMultiplier = 0.0f;
-		}
+			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale;
 
 		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
 		if (bDistalLocomotionCompositionModeActive &&
@@ -4792,8 +4975,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	PhysicsControl->SetBodyModifiersInSetCollisionType(TEXT("All"), ECollisionEnabled::NoCollision);
 	PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
 
-	// Use the pre-calculated value from the top of the function
-	const bool bAllowRootBodyModifierSimulationInBalanceMode = bAllowRootSim;
+	const bool bAllowRootBodyModifierSimulationInBalanceMode = ShouldAllowBalanceSimulation(EffectiveSettings);
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
@@ -4803,16 +4985,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			continue;
 		}
 
-		const FName RootBoneNameInternal = PhysAnimBridge::GetRootBoneName();
-		const bool bIsRootBodyModifier = BoneName == RootBoneNameInternal;
-		FTransform PelvisTransformPre = FTransform::Identity;
-		if (bIsRootBodyModifier)
-		{
-			USkeletalMeshComponent* const Mesh = GetMeshComponent();
-			PelvisTransformPre = Mesh ? Mesh->GetBoneTransform(Mesh->GetBoneIndex(RootBoneNameInternal)) : FTransform::Identity;
-		}
-
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
+		const bool bIsRootBodyModifier = BoneName == RootBoneName;
 
 		// In Balance Mode, we break the root into simulation as soon as the bridge is logically ready 
 		// (bring-up complete, policy authority high enough). This allows the quiet window to run 
@@ -4850,25 +5024,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierMovementType,
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
-
-		if (BalanceReadyTransition.IsActive() && BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName))
-		{
-			BodyModifierMovementType = EPhysicsMovementType::Kinematic;
-			BodyModifierPhysicsBlendWeight = 0.0f;
-			bUpdateKinematicFromSimulation = false;
-		}
-
-		if (bIsRootBodyModifier && BalanceReadyTransition.IsActive())
-		{
-			const float RootSoftAlpha = BalanceReadyTransition.GetRootBodyModifierSoftSimAlpha();
-			if (BodyModifierMovementType == EPhysicsMovementType::Simulated)
-			{
-				BodyModifierPhysicsBlendWeight *= RootSoftAlpha;
-			}
-		}
-
-		// Config log removed for experiment
-
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
 		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
@@ -4877,35 +5032,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUpdateKinematicFromSimulation,
 			true,
 			false);
-
-		// Instrumentation for the first frame after root sim turns on
-		if (bIsRootBodyModifier && bBodyModifierActivatedThisTick)
-		{
-			const TArray<FName> InstrumentBones = { RootBoneNameInternal, "thigh_l", "thigh_r", "spine_01" };
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SIM_FLIP_INSTRUMENTATION (First Frame): policyWrote=%d resetApplied=%d"), 
-				(int32)(LastControlTargetDiagnostics.NumPolicyTargetsWritten > 0), (int32)bPelvisResetAppliedThisTick);
-			
-			USkeletalMeshComponent* const Mesh = GetMeshComponent();
-			if (Mesh)
-			{
-				for (const FName& IBone : InstrumentBones)
-				{
-					FBodyInstance* BI = Mesh->GetBodyInstance(IBone);
-					if (!BI) continue;
-					
-					FVector LinVel = BI->GetUnrealWorldVelocity();
-					FVector AngVel = FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians());
-					
-					FName CName = PhysAnimBridge::MakeControlName(IBone);
-					FQuat CurRot = Mesh->GetBoneQuaternion(IBone, EBoneSpaces::WorldSpace);
-					FQuat TarRot = PreviousControlTargetRotations.Contains(CName) ? PreviousControlTargetRotations[CName] : CurRot;
-					float Delta = FMath::RadiansToDegrees(CurRot.AngularDistance(TarRot));
-					
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("  %s: linVel=%.1f angVel=%.1f rotDelta=%.1f simulating=%d"), 
-						*IBone.ToString(), LinVel.Size(), AngVel.Size(), Delta, (int32)BI->IsInstanceSimulatingPhysics());
-				}
-			}
-		}
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 
@@ -4921,8 +5047,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bBringUpGroupUnlocked,
 				bIsRootBodyModifier,
 				bAllowRootBodyModifierSimulation,
-				CurrentPolicyAlpha,
-				BalanceReadyTransition.GetPhase()) &&
+				CurrentPolicyAlpha) &&
 			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
 			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
@@ -4958,23 +5083,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				PendingBodyModifierCachedResetNames.Add(ModifierName);
 			}
 		}
-	}
-
-	if (bHipQuarantineActiveThisFrame)
-	{
-		if (HipQuarantineTicksRemaining > 0)
-		{
-			--HipQuarantineTicksRemaining;
-			bHipQuarantineReleasedThisFrame = (HipQuarantineTicksRemaining == 0);
-		}
-
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("[PhysAnimBalance] HIP_QUARANTINE: leftPreDelta=%.1f rightPreDelta=%.1f released=%d"),
-			LastHipQuarantineLeftPreDeltaDegrees,
-			LastHipQuarantineRightPreDeltaDegrees,
-			bHipQuarantineReleasedThisFrame ? 1 : 0);
 	}
 
 	LastAppliedStabilizationSettings = EffectiveSettings;
@@ -5789,7 +5897,7 @@ void UPhysAnimComponent::LogBodyModifierTelemetrySnapshot(const TCHAR* Context) 
 void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
-	if (!PhysicsControl || PendingBodyModifierCachedResetNames.IsEmpty() || BalanceReadyTransition.ShouldSuppressResets())
+	if (!PhysicsControl || PendingBodyModifierCachedResetNames.IsEmpty())
 	{
 		return;
 	}
@@ -5798,15 +5906,6 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 	ModifierNamesToReset.Reserve(PendingBodyModifierCachedResetNames.Num());
 	for (const FName ModifierName : PendingBodyModifierCachedResetNames)
 	{
-		if (BalanceReadyTransition.ShouldSuppressResets())
-		{
-			const FName RootModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
-			if (ModifierName != RootModifierName)
-			{
-				continue;
-			}
-		}
-
 		if (PhysicsControl->GetBodyModifierExists(ModifierName))
 		{
 			ModifierNamesToReset.Add(ModifierName);
@@ -5825,15 +5924,8 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		true,
 		false);
 
-	const FName RootModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
-	for (const FName ModifierName : ModifierNamesToReset)
-	{
-		if (ModifierName == RootModifierName)
-		{
-			bPelvisResetAppliedThisTick = true;
-			break;
-		}
-	}
+	const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+	bPelvisResetAppliedThisTick = ModifierNamesToReset.Contains(PelvisModifierName);
 
 	TArray<FString> BoneNamesToReset;
 	for (const FName ModifierName : ModifierNamesToReset)
@@ -5866,7 +5958,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 	}
 
 	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
-	const bool bPolicyInfluenceActive = PolicyInfluenceAlpha > KINDA_SMALL_NUMBER && !BalanceReadyTransition.ShouldSuppressPolicy();
+	const bool bPolicyInfluenceActive = PolicyInfluenceAlpha > KINDA_SMALL_NUMBER;
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
 	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
@@ -5915,13 +6007,6 @@ void UPhysAnimComponent::ApplyControlTargets(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
 			bPolicyInfluenceActive);
 	UPhysicsAsset* const PhysicsAsset = MeshComponent.IsValid() ? MeshComponent->GetPhysicsAsset() : nullptr;
-	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
-
-	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
-	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
-	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0;
-	float ThighLDeltaPre = 0.0f;
-	float ThighRDeltaPre = 0.0f;
 	const float OwnerPlanarSpeedCmPerSec = [this]() -> float
 	{
 		const AActor* const OwnerActor = GetOwner();
@@ -6006,34 +6091,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 		const float TargetDeltaDegrees = PreviousRotation
 			? CalculateControlTargetDeltaDegrees(*PreviousRotation, BlendedPolicyRotation)
 			: 0.0f;
-		FQuat LimitedRotation = PreviousRotation
+		const FQuat LimitedRotation = PreviousRotation
 			? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
 			: BlendedPolicyRotation;
-
-		if (bHipQuarantineActiveThisFrame && (Pair.Key == "thigh_l" || Pair.Key == "thigh_r") && Mesh)
-		{
-			FBodyInstance* BI = Mesh->GetBodyInstance(Pair.Key);
-			if (BI)
-			{
-				const FQuat CurPhysRot = BI->GetUnrealWorldTransform().GetRotation();
-				const FQuat CurSkelRot = Mesh->GetBoneQuaternion(Pair.Key, EBoneSpaces::WorldSpace);
-				const FQuat DeltaPre = CurSkelRot.Inverse() * CurPhysRot;
-				const float Deg = FMath::RadiansToDegrees(DeltaPre.GetAngle());
-
-				if (Pair.Key == "thigh_l")
-				{
-					ThighLDeltaPre = Deg;
-					LastHipQuarantineLeftPreDeltaDegrees = Deg;
-				}
-				else
-				{
-					ThighRDeltaPre = Deg;
-					LastHipQuarantineRightPreDeltaDegrees = Deg;
-				}
-
-				LimitedRotation = DeltaPre;
-			}
-		}
 
 		++ControlTargetDiagnostics.NumPolicyTargetsWritten;
 		ControlTargetDiagnostics.MeanTargetDeltaDegrees += TargetDeltaDegrees;
@@ -6116,11 +6176,6 @@ void UPhysAnimComponent::ApplyControlTargets(
 			ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
 			ControlTargetDiagnostics.MeanLowerLimbLimitOccupancy);
 	}
-
-	if (bRootSimFlipFrame)
-	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] THIGH_RESEED_ON_SIM_FLIP: leftDeltaPre=%.2f rightDeltaPre=%.2f"), ThighLDeltaPre, ThighRDeltaPre);
-	}
 }
 
 bool UPhysAnimComponent::IsMovementSmokeModeEnabled() const
@@ -6134,9 +6189,7 @@ void UPhysAnimComponent::ApplyMovementSmokeInput(const FPhysAnimStabilizationSet
 	LastMovementSmokeWorldIntent = FVector::ZeroVector;
 	LastMovementSmokePhaseName = NAME_None;
 
-	if (!IsMovementSmokeModeEnabled() || 
-		RuntimeState != EPhysAnimRuntimeState::BridgeActive ||
-		BalanceReadyTransition.ShouldSuppressMoveSmoke())
+	if (!IsMovementSmokeModeEnabled() || RuntimeState != EPhysAnimRuntimeState::BridgeActive)
 	{
 		return;
 	}
@@ -6389,7 +6442,6 @@ bool UPhysAnimComponent::ShouldUseBridgeOwnedMovementDrive(const FPhysAnimStabil
 		EffectiveSettings.bRestoreCharacterMovementAfterStartupReady ||
 		!EffectiveSettings.bEnableBridgeOwnedMovementWhileCharacterMovementLocked ||
 		RuntimeState != EPhysAnimRuntimeState::BridgeActive ||
-		BalanceReadyTransition.ShouldSuppressShell() ||
 		bStartupMovementLockActive)
 	{
 		return false;
@@ -6706,11 +6758,6 @@ bool UPhysAnimComponent::IsBridgePoseSearchIdleResult(const FPoseSearchBlueprint
 		AssetName == TEXT("idle") ||
 		AssetName.EndsWith(TEXT("_idle")) ||
 		AssetName.Contains(TEXT("idle"));
-}
-
-bool UPhysAnimComponent::IsIdlePoseActive() const
-{
-	return LastValidPoseSearchResult.SelectedAnim == nullptr || IsBridgePoseSearchIdleResult(LastValidPoseSearchResult);
 }
 
 void UPhysAnimComponent::ResolveBridgePoseSearchQueryVelocity(
@@ -7246,6 +7293,12 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	bHasSavedBodyMassScales = false;
 	PolicyBlendStartControlTargetRotations.Reset();
 	bPolicyTargetsAppliedLastFrame = false;
+	bPelvisResetAppliedThisTick = false;
+	bPendingBalanceModeStartRequest = false;
+	PendingBalanceModeStartReason.Reset();
+	PendingBalanceModeRequestTimeSeconds = -1.0;
+	ResetBridgeActiveBalancePreEntry();
+	BalanceReadyTransition.Cancel();
 	LastAppliedStabilizationSettings = {};
 }
 
@@ -7347,21 +7400,20 @@ ECollisionEnabled::Type UPhysAnimComponent::ResolveBodyModifierCollisionType(
 }
 
 bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
-	EPhysAnimRuntimeState InRuntimeState,
+	EPhysAnimRuntimeState RuntimeState,
 	bool bForceZeroActions,
 	bool bBodyModifierActivatedThisTick,
 	bool bBringUpGroupUnlocked,
 	bool bIsRootBodyModifier,
 	bool bAllowRootBodyModifierSimulation,
-	float PolicyAlpha,
-	EBalanceReadyTransitionPhase InTransitionPhase)
+	float PolicyAlpha)
 {
 	if (bForceZeroActions)
 	{
 		return false;
 	}
 
-	if (InRuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
+	if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
 	{
 		if (bIsRootBodyModifier)
 		{
@@ -7378,19 +7430,6 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 
 	if (bIsRootBodyModifier)
 	{
-		// EXPERIMENT: DO NOT schedule/apply pelvis cached-target reset if we are in transition handoff
-		if (InTransitionPhase == EBalanceReadyTransitionPhase::Handoff)
-		{
-			static double LastLogTimeSuppressed = -1.0;
-			const double CurrentTime = FPlatformTime::Seconds();
-			if (CurrentTime - LastLogTimeSuppressed > 2.0)
-			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] EXPERIMENT: Pelvis reset SUPPRESSED during Handoff flip frame."));
-				LastLogTimeSuppressed = CurrentTime;
-			}
-			return false;
-		}
-
 		// We allow exactly one reset for the root when it transitions to simulation to ensure 
 		// its physical state is precisely aligned with the visual kinematic state before it begins moving.
 		return bBodyModifierActivatedThisTick && bAllowRootBodyModifierSimulation;
