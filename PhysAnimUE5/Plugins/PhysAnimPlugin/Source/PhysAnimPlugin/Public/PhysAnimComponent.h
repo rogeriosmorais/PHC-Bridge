@@ -568,7 +568,7 @@ private:
 	void UpdateBridgeLocomotionAuthorityState(const FVector& QueryVelocity, const FPhysAnimStabilizationSettings& EffectiveSettings, double CurrentTimeSeconds);
 	bool IsBridgeLocomotionQueryActive() const;
 	bool IsBridgeLocomotionEntryRequested(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
-	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings, bool bIsActivationPrepass = false);
 	void LogActivationSummary(
 		const FPhysAnimStabilizationSettings& EffectiveSettings,
 		const TCHAR* Context,
