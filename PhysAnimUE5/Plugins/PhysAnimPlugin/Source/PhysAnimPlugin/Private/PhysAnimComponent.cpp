@@ -4935,15 +4935,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		if (bBridgeActiveBalancePreEntryActive)
 		{
 			const bool bIsPostureHoldBone = 
-				BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03") ||
-				BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") || BoneName == TEXT("calf_l") || BoneName == TEXT("calf_r") ||
-				BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_l") || BoneName == TEXT("ball_r");
+				BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03") || BoneName == TEXT("neck_01");
 
 			if (bIsPostureHoldBone)
 			{
-				ControlMultiplier.AngularStrengthMultiplier = EffectiveSettings.AngularStrengthMultiplier * 0.20f;
-				ControlMultiplier.AngularDampingRatioMultiplier = EffectiveSettings.AngularDampingRatioMultiplier * 1.75f;
-				ControlMultiplier.AngularExtraDampingMultiplier = EffectiveSettings.AngularExtraDampingMultiplier * 1.75f;
+				ControlMultiplier.AngularStrengthMultiplier = EffectiveSettings.AngularStrengthMultiplier * 0.10f;
+				ControlMultiplier.AngularDampingRatioMultiplier = EffectiveSettings.AngularDampingRatioMultiplier * 2.0f;
+				ControlMultiplier.AngularExtraDampingMultiplier = EffectiveSettings.AngularExtraDampingMultiplier * 2.0f;
 			}
 		}
 
@@ -4951,9 +4949,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		if (bBridgeActiveBalancePreEntryActive)
 		{
 			const bool bIsPostureHoldBone = 
-				BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03") ||
-				BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") || BoneName == TEXT("calf_l") || BoneName == TEXT("calf_r") ||
-				BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_l") || BoneName == TEXT("ball_r");
+				BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03") || BoneName == TEXT("neck_01");
 			
 			if (bIsPostureHoldBone)
 			{
@@ -6071,10 +6067,27 @@ void UPhysAnimComponent::ApplyControlTargets(
 	if (bBridgeActiveBalancePreEntryActive)
 	{
 		FString SeedError;
-		SeedControlTargetsFromCurrentPose(PolicyStepDeltaTime, SeedError);
+		TMap<FName, FQuat> CurrentPoseTargetOrientations;
+		if (GatherCurrentPoseControlTargetOrientations(CurrentPoseTargetOrientations, SeedError))
+		{
+			int32 WroteTargets = 0;
+			for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+			{
+				const bool bIsPostureHoldBone = 
+					BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03") || BoneName == TEXT("neck_01");
 
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_POSTURE_HOLD: active=1 strengthScale=0.20 dampingScale=1.75 wroteTargets=%d"),
-			PhysAnimBridge::GetControlledBoneNames().Num());
+				if (bIsPostureHoldBone)
+				{
+					const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+					if (const FQuat* TargetRotation = CurrentPoseTargetOrientations.Find(ControlName))
+					{
+						PhysicsControl->SetControlTargetOrientation(ControlName, TargetRotation->Rotator(), PolicyStepDeltaTime, true, false, true, false);
+						WroteTargets++;
+					}
+				}
+			}
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_POSTURE_HOLD: active=1 bodies=spine_only wroteTargets=%d"), WroteTargets);
+		}
 
 		bPolicyTargetsAppliedLastFrame = false;
 		return;
