@@ -4934,26 +4934,37 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bBridgeActiveBalancePreEntryActive)
 		{
-			const bool bIsFoot = BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_l") || BoneName == TEXT("ball_r");
-			const bool bIsLeg = BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") || BoneName == TEXT("calf_l") || BoneName == TEXT("calf_r");
-			
-			if (bIsFoot)
+			const bool bIsPostureHoldBone = 
+				BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03") ||
+				BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") || BoneName == TEXT("calf_l") || BoneName == TEXT("calf_r") ||
+				BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_l") || BoneName == TEXT("ball_r");
+
+			if (bIsPostureHoldBone)
 			{
-				ControlMultiplier.AngularStrengthMultiplier *= 0.5f; // Lower strength to avoid fight
-				ControlMultiplier.AngularDampingRatioMultiplier *= 4.0f;
-				ControlMultiplier.AngularExtraDampingMultiplier += 20.0f;
+				ControlMultiplier.AngularStrengthMultiplier = EffectiveSettings.AngularStrengthMultiplier * 0.20f;
+				ControlMultiplier.AngularDampingRatioMultiplier = EffectiveSettings.AngularDampingRatioMultiplier * 1.75f;
+				ControlMultiplier.AngularExtraDampingMultiplier = EffectiveSettings.AngularExtraDampingMultiplier * 1.75f;
 			}
-			else if (bIsLeg)
+		}
+
+		bool bControlActive = bBringUpGroupUnlocked && !EffectiveSettings.bForceZeroActions;
+		if (bBridgeActiveBalancePreEntryActive)
+		{
+			const bool bIsPostureHoldBone = 
+				BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03") ||
+				BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") || BoneName == TEXT("calf_l") || BoneName == TEXT("calf_r") ||
+				BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_l") || BoneName == TEXT("ball_r");
+			
+			if (bIsPostureHoldBone)
 			{
-				ControlMultiplier.AngularDampingRatioMultiplier *= 2.0f;
-				ControlMultiplier.AngularExtraDampingMultiplier += 10.0f;
+				bControlActive = true;
 			}
 		}
 
 		PhysicsControl->SetControlMultiplier(
 			ControlName,
 			ControlMultiplier,
-			bBringUpGroupUnlocked && !EffectiveSettings.bForceZeroActions,
+			bControlActive,
 			true,
 			false);
 
@@ -6057,10 +6068,14 @@ void UPhysAnimComponent::ApplyControlTargets(
 	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
 
-	const bool bBridgeActivePreEntryStable = BridgeActiveBalancePreEntryStableAccumulatedSeconds >= 0.25f;
-	if (BalanceReadyTransition.IsActive() && !bBridgeActivePreEntryStable)
+	if (bBridgeActiveBalancePreEntryActive)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_POLICY: suppressed=1 wroteTargets=0"));
+		FString SeedError;
+		SeedControlTargetsFromCurrentPose(PolicyStepDeltaTime, SeedError);
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_POSTURE_HOLD: active=1 strengthScale=0.20 dampingScale=1.75 wroteTargets=%d"),
+			PhysAnimBridge::GetControlledBoneNames().Num());
+
 		bPolicyTargetsAppliedLastFrame = false;
 		return;
 	}
