@@ -1291,9 +1291,17 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	if (RuntimeState == EPhysAnimRuntimeState::BridgeActive)
 	{
 		CaptureBridgeIntent(EffectiveSettings);
-		if ((!BalanceReadyTransition.IsActive() || !BalanceReadyTransition.ShouldSuppressShell()) && !bStartupMovementLockActive)
+		const bool bSuppressShell = BalanceReadyTransition.IsActive() && BalanceReadyTransition.ShouldSuppressShell();
+		if (!bSuppressShell && !bStartupMovementLockActive)
 		{
 			ApplyBridgeOwnedMovementDrive(DeltaTime, EffectiveSettings);
+		}
+
+		if (bBridgeActiveBalancePreEntryActive)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_SHELL: off=%.1f vel=%.1f"),
+				bSuppressShell ? 1.0f : 0.0f,
+				BridgeShellState.PendingPlanarVelocityCmPerSecond.Size());
 		}
 	}
 
@@ -5074,9 +5082,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
+		float AppliedPreEntryWeight = BodyModifierPhysicsBlendWeight;
 		if (bIsRootBodyModifier && bBridgeActiveBalancePreEntryActive)
 		{
-			BodyModifierPhysicsBlendWeight = FMath::Min(BodyModifierPhysicsBlendWeight, 0.25f);
+			AppliedPreEntryWeight = FMath::Min(AppliedPreEntryWeight, 0.25f);
+			
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_ROOT_WEIGHT: requested=%.2f applied=%.2f settleStable=%d"),
+				BodyModifierPhysicsBlendWeight, AppliedPreEntryWeight, 
+				(BridgeActiveBalancePreEntryStableAccumulatedSeconds >= 0.25f) ? 1 : 0);
 
 			if (BridgeActiveBalancePreEntryStableAccumulatedSeconds >= 0.25f && !bRootPreEntryResetApplied)
 			{
@@ -5085,6 +5098,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bPelvisResetAppliedThisTick = true;
 			}
 		}
+		BodyModifierPhysicsBlendWeight = AppliedPreEntryWeight;
 
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
