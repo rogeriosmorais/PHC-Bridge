@@ -793,6 +793,7 @@ private:
 	double PresentationPerturbationOverrideEndTimeSeconds = -1.0;
 	bool bLastAppliedPresentationRootSimulationEnabled = false;
 	int32 SoftRootTickCounter = -1;
+	bool bRootPreEntryResetApplied = false;
 	double StabilizationStressTestStartTimeSeconds = -1.0;
 	bool bStabilizationStressTestCompletionLogged = false;
 	double StabilizationStressTestFirstAngularSpikeTimeSeconds = -1.0;

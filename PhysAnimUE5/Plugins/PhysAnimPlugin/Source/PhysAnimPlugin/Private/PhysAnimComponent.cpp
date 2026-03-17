@@ -4754,7 +4754,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	const bool bSimulationHandoffSettled = SimulationHandoffAlpha >= (1.0f - KINDA_SMALL_NUMBER);
 	const bool bSimulationHandoffCompletedThisTick = bSimulationHandoffSettled && !bLastAppliedSimulationHandoffSettled;
 
-	if (SoftRootTickCounter >= 0 && SoftRootTickCounter <= 6)
+	if (SoftRootTickCounter >= 0 && SoftRootTickCounter <= 12)
 	{
 		SoftRootTickCounter++;
 	}
@@ -5004,14 +5004,15 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			// Resetting bLastAppliedPresentationRootSimulationEnabled happens at the END of the loop
 		}
 
-		const bool bBodyModifierActivatedThisTick =
-			(!bIsRootBodyModifier && bSimulationHandoffCompletedThisTick) ||
-			(bIsRootBodyModifier && bAllowRootBodyModifierSimulation && !bLastAppliedPresentationRootSimulationEnabled);
-
 		if (bIsRootBodyModifier && bAllowRootBodyModifierSimulation && !bLastAppliedPresentationRootSimulationEnabled)
 		{
 			SoftRootTickCounter = 0;
+			bRootPreEntryResetApplied = false;
 		}
+
+		const bool bBodyModifierActivatedThisTick =
+			(!bIsRootBodyModifier && bSimulationHandoffCompletedThisTick) ||
+			(bIsRootBodyModifier && bAllowRootBodyModifierSimulation && !bLastAppliedPresentationRootSimulationEnabled);
 
 		const bool bBringUpGroupUnlocked =
 			bIsRootBodyModifier ? bAllowRootBodyModifierSimulation : IsBringUpGroupUnlocked(BringUpGroupIndex);
@@ -5040,46 +5041,48 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bIsRootBodyModifier && SoftRootTickCounter >= 0)
 		{
-			if (SoftRootTickCounter <= 5)
+			if (SoftRootTickCounter <= 11)
 			{
-				if (SoftRootTickCounter == 0) { BodyModifierPhysicsBlendWeight = 0.00f; }
-				else if (SoftRootTickCounter == 1) { BodyModifierPhysicsBlendWeight = 0.05f; }
-				else if (SoftRootTickCounter <= 3) { BodyModifierPhysicsBlendWeight = 0.10f; }
-				else if (SoftRootTickCounter <= 5) { BodyModifierPhysicsBlendWeight = 0.20f; }
+				if (SoftRootTickCounter <= 1) { BodyModifierPhysicsBlendWeight = 0.00f; }
+				else if (SoftRootTickCounter <= 3) { BodyModifierPhysicsBlendWeight = 0.03f; }
+				else if (SoftRootTickCounter <= 5) { BodyModifierPhysicsBlendWeight = 0.06f; }
+				else if (SoftRootTickCounter <= 7) { BodyModifierPhysicsBlendWeight = 0.10f; }
+				else if (SoftRootTickCounter <= 9) { BodyModifierPhysicsBlendWeight = 0.15f; }
+				else if (SoftRootTickCounter <= 11) { BodyModifierPhysicsBlendWeight = 0.20f; }
 
 				USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
 				FBodyInstance* const RootBody = SkeletalMesh ? SkeletalMesh->GetBodyInstance(BoneName) : nullptr;
 				if (RootBody)
 				{
 					const FVector LinVel = RootBody->GetUnrealWorldVelocity();
-					const FVector AngVelRad = RootBody->GetUnrealWorldAngularVelocityInRadians();
-					const float AngVelDegSize = FMath::RadiansToDegrees(AngVelRad.Size());
-
-					RootBody->SetLinearVelocity(LinVel.GetClampedToMaxSize(30.0f), false);
+					RootBody->SetLinearVelocity(LinVel.GetClampedToMaxSize(15.0f), false);
 					RootBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
-
-					if (SoftRootTickCounter == 0)
-					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SOFT_ROOT_WINDOW: tick=0/6 weight=%.2f rootLin=%.1f rootAng=%.1f"),
-							BodyModifierPhysicsBlendWeight, LinVel.Size(), AngVelDegSize);
-					}
 				}
 			}
-			else if (SoftRootTickCounter == 6)
+			else if (SoftRootTickCounter == 12)
 			{
-				PendingBodyModifierCachedResetNames.AddUnique(ModifierName);
-				bPelvisResetAppliedThisTick = true;
-
 				USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
 				FBodyInstance* const RootBody = SkeletalMesh ? SkeletalMesh->GetBodyInstance(BoneName) : nullptr;
 				const FVector LinVel = RootBody ? RootBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
 				const FVector AngVelRad = RootBody ? RootBody->GetUnrealWorldAngularVelocityInRadians() : FVector::ZeroVector;
 				const float AngVelDegSize = FMath::RadiansToDegrees(AngVelRad.Size());
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SOFT_ROOT_WINDOW: tick=6/6 weight=%.2f rootLin=%.1f rootAng=%.1f"),
-					BodyModifierPhysicsBlendWeight, LinVel.Size(), AngVelDegSize);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SOFT_ROOT_WINDOW_END: rootLin=%.1f rootAng=%.1f weight=%.2f"),
+					LinVel.Size(), AngVelDegSize, BodyModifierPhysicsBlendWeight);
 
 				SoftRootTickCounter = -1;
+			}
+		}
+
+		if (bIsRootBodyModifier && bBridgeActiveBalancePreEntryActive)
+		{
+			BodyModifierPhysicsBlendWeight = FMath::Min(BodyModifierPhysicsBlendWeight, 0.25f);
+
+			if (BridgeActiveBalancePreEntryStableAccumulatedSeconds >= 0.25f && !bRootPreEntryResetApplied)
+			{
+				PendingBodyModifierCachedResetNames.AddUnique(ModifierName);
+				bRootPreEntryResetApplied = true;
+				bPelvisResetAppliedThisTick = true;
 			}
 		}
 
@@ -7335,6 +7338,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	PresentationPerturbationOverrideEndTimeSeconds = -1.0;
 	bLastAppliedPresentationRootSimulationEnabled = false;
 	SoftRootTickCounter = -1;
+	bRootPreEntryResetApplied = false;
 	StabilizationStressTestStartTimeSeconds = -1.0;
 	bStabilizationStressTestCompletionLogged = false;
 	StabilizationStressTestFirstAngularSpikeTimeSeconds = -1.0;
