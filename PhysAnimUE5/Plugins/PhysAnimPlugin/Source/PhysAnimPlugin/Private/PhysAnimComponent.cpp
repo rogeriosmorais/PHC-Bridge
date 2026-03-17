@@ -1737,6 +1737,47 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		LogActivationSummary(EffectiveSettings, TEXT("SimulationHandoffComplete"), true, true, SimulationHandoffAlpha);
 		EmitBridgeTraceEvent(TEXT("simulation_handoff_complete"), TEXT("Simulation handoff completed and bridge-owned physics is fully active."));
 	}
+	if (bBridgeActiveBalancePreEntryActive)
+	{
+		if (SkeletalMesh)
+		{
+			float MaxFootAngPre = 0.0f;
+			float MaxFootAngPost = 0.0f;
+			float MaxBallAngPre = 0.0f;
+			float MaxBallAngPost = 0.0f;
+
+			static const TArray<FName> FootBones = { TEXT("foot_l"), TEXT("foot_r") };
+			static const TArray<FName> BallBones = { TEXT("ball_l"), TEXT("ball_r") };
+
+			for (const FName& BoneName : FootBones)
+			{
+				if (FBodyInstance* const BI = SkeletalMesh->GetBodyInstance(BoneName))
+				{
+					const FVector AngVelRadPre = BI->GetUnrealWorldAngularVelocityInRadians();
+					MaxFootAngPre = FMath::Max(MaxFootAngPre, FMath::RadiansToDegrees(AngVelRadPre.Size()));
+					BI->SetAngularVelocityInRadians(AngVelRadPre.GetClampedToMaxSize(FMath::DegreesToRadians(60.0f)), false);
+					const FVector AngVelRadPost = BI->GetUnrealWorldAngularVelocityInRadians();
+					MaxFootAngPost = FMath::Max(MaxFootAngPost, FMath::RadiansToDegrees(AngVelRadPost.Size()));
+				}
+			}
+
+			for (const FName& BoneName : BallBones)
+			{
+				if (FBodyInstance* const BI = SkeletalMesh->GetBodyInstance(BoneName))
+				{
+					const FVector AngVelRadPre = BI->GetUnrealWorldAngularVelocityInRadians();
+					MaxBallAngPre = FMath::Max(MaxBallAngPre, FMath::RadiansToDegrees(AngVelRadPre.Size()));
+					BI->SetAngularVelocityInRadians(AngVelRadPre.GetClampedToMaxSize(FMath::DegreesToRadians(30.0f)), false);
+					const FVector AngVelRadPost = BI->GetUnrealWorldAngularVelocityInRadians();
+					MaxBallAngPost = FMath::Max(MaxBallAngPost, FMath::RadiansToDegrees(AngVelRadPost.Size()));
+				}
+			}
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_DISTAL_ANGULAR: footPre=%.1f footPost=%.1f ballPre=%.1f ballPost=%.1f applied=1"),
+				MaxFootAngPre, MaxFootAngPost, MaxBallAngPre, MaxBallAngPost);
+		}
+	}
+
 	MaybeLogRuntimeDiagnostics(EffectiveSettings);
 	FinalizeTraceFrame();
 }
@@ -6139,33 +6180,6 @@ void UPhysAnimComponent::ApplyControlTargets(
 				}
 			}
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_POSTURE_PROFILE: active=1 bodies=spine_only wroteTargets=%d linVelMul=0 angVelMul=0 extraLinDamp=10.0 extraAngDamp=10.0"), WroteTargets);
-
-			float MaxFootAng = 0.0f;
-			float MaxBallAng = 0.0f;
-			static const TArray<FName> FootBones = { TEXT("foot_l"), TEXT("foot_r") };
-			static const TArray<FName> BallBones = { TEXT("ball_l"), TEXT("ball_r") };
-
-			for (const FName& BoneName : FootBones)
-			{
-				if (FBodyInstance* const BI = SkeletalMesh->GetBodyInstance(BoneName))
-				{
-					const FVector AngVelRad = BI->GetUnrealWorldAngularVelocityInRadians();
-					MaxFootAng = FMath::Max(MaxFootAng, FMath::RadiansToDegrees(AngVelRad.Size()));
-					BI->SetAngularVelocityInRadians(AngVelRad.GetClampedToMaxSize(FMath::DegreesToRadians(60.0f)), false);
-				}
-			}
-
-			for (const FName& BoneName : BallBones)
-			{
-				if (FBodyInstance* const BI = SkeletalMesh->GetBodyInstance(BoneName))
-				{
-					const FVector AngVelRad = BI->GetUnrealWorldAngularVelocityInRadians();
-					MaxBallAng = FMath::Max(MaxBallAng, FMath::RadiansToDegrees(AngVelRad.Size()));
-					BI->SetAngularVelocityInRadians(AngVelRad.GetClampedToMaxSize(FMath::DegreesToRadians(30.0f)), false);
-				}
-			}
-
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_DISTAL_ANGULAR: footMax=%.1f ballMax=%.1f applied=1"), MaxFootAng, MaxBallAng);
 		}
 
 		bPolicyTargetsAppliedLastFrame = false;
