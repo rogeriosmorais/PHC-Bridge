@@ -4931,6 +4931,25 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				true,
 				false);
 		}
+
+		if (bBridgeActiveBalancePreEntryActive)
+		{
+			const bool bIsFoot = BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_l") || BoneName == TEXT("ball_r");
+			const bool bIsLeg = BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") || BoneName == TEXT("calf_l") || BoneName == TEXT("calf_r");
+			
+			if (bIsFoot)
+			{
+				ControlMultiplier.AngularStrengthMultiplier *= 0.5f; // Lower strength to avoid fight
+				ControlMultiplier.AngularDampingRatioMultiplier *= 4.0f;
+				ControlMultiplier.AngularExtraDampingMultiplier += 20.0f;
+			}
+			else if (bIsLeg)
+			{
+				ControlMultiplier.AngularDampingRatioMultiplier *= 2.0f;
+				ControlMultiplier.AngularExtraDampingMultiplier += 10.0f;
+			}
+		}
+
 		PhysicsControl->SetControlMultiplier(
 			ControlName,
 			ControlMultiplier,
@@ -4987,6 +5006,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	PhysicsControl->SetBodyModifiersInSetCollisionType(TEXT("All"), ECollisionEnabled::NoCollision);
 	PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
 
+	float MaxFootLin = 0.0f;
+	float MaxFootAng = 0.0f;
+	float FootLZ = 0.0f;
+	float FootRZ = 0.0f;
+	float RootH = 0.0f;
+
 	const bool bAllowRootBodyModifierSimulationInBalanceMode = ShouldAllowBalanceSimulation(EffectiveSettings);
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
@@ -4995,6 +5020,45 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		if (!PhysicsControl->GetBodyModifierExists(ModifierName))
 		{
 			continue;
+		}
+
+		if (bBridgeActiveBalancePreEntryActive)
+		{
+			const bool bIsFoot = BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_l") || BoneName == TEXT("ball_r");
+			if (bIsFoot || BoneName == RootBoneName)
+			{
+				USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+				FBodyInstance* const BI = SkeletalMesh ? SkeletalMesh->GetBodyInstance(BoneName) : nullptr;
+				if (BI)
+				{
+					if (BoneName == RootBoneName)
+					{
+						RootH = BI->GetUnrealWorldTransform().GetLocation().Z;
+					}
+					else if (BoneName == TEXT("foot_l"))
+					{
+						FootLZ = BI->GetUnrealWorldTransform().GetLocation().Z;
+					}
+					else if (BoneName == TEXT("foot_r"))
+					{
+						FootRZ = BI->GetUnrealWorldTransform().GetLocation().Z;
+					}
+
+					if (bIsFoot)
+					{
+						const FVector LinVel = BI->GetUnrealWorldVelocity();
+						const FVector AngVelRad = BI->GetUnrealWorldAngularVelocityInRadians();
+						const float LinSize = LinVel.Size();
+						const float AngDegSize = FMath::RadiansToDegrees(AngVelRad.Size());
+
+						MaxFootLin = FMath::Max(MaxFootLin, LinSize);
+						MaxFootAng = FMath::Max(MaxFootAng, AngDegSize);
+
+						BI->SetLinearVelocity(LinVel.GetClampedToMaxSize(10.0f), false);
+						BI->SetAngularVelocityInRadians(AngVelRad.GetClampedToMaxSize(FMath::DegreesToRadians(45.0f)), false);
+					}
+				}
+			}
 		}
 
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
@@ -5158,6 +5222,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				PendingBodyModifierCachedResetNames.Add(ModifierName);
 			}
 		}
+	}
+
+	if (bBridgeActiveBalancePreEntryActive)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_SUPPORT: rootH=%.1f footLz=%.1f footRz=%.1f maxFootLin=%.1f maxFootAng=%.1f"),
+			RootH, FootLZ, FootRZ, MaxFootLin, MaxFootAng);
 	}
 
 	LastAppliedStabilizationSettings = EffectiveSettings;
