@@ -792,6 +792,7 @@ private:
 	bool bHasShellCouplingReferenceRootLocalOffset = false;
 	double PresentationPerturbationOverrideEndTimeSeconds = -1.0;
 	bool bLastAppliedPresentationRootSimulationEnabled = false;
+	int32 SoftRootTickCounter = -1;
 	double StabilizationStressTestStartTimeSeconds = -1.0;
 	bool bStabilizationStressTestCompletionLogged = false;
 	double StabilizationStressTestFirstAngularSpikeTimeSeconds = -1.0;

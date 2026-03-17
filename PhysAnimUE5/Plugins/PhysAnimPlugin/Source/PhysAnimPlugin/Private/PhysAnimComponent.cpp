@@ -4753,6 +4753,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	const bool bSimulationHandoffSettled = SimulationHandoffAlpha >= (1.0f - KINDA_SMALL_NUMBER);
 	const bool bSimulationHandoffCompletedThisTick = bSimulationHandoffSettled && !bLastAppliedSimulationHandoffSettled;
+
+	if (SoftRootTickCounter >= 0 && SoftRootTickCounter <= 6)
+	{
+		SoftRootTickCounter++;
+	}
+
 	const bool bPresentationPerturbationOverrideActive = IsPresentationPerturbationOverrideActive();
 	const bool bPolicyInfluenceActive = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings) > KINDA_SMALL_NUMBER;
 	const bool bUseSkeletalAnimationTargetRepresentation =
@@ -4998,11 +5004,18 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			// Resetting bLastAppliedPresentationRootSimulationEnabled happens at the END of the loop
 		}
 
-		const bool bBringUpGroupUnlocked =
-			bIsRootBodyModifier ? bAllowRootBodyModifierSimulation : IsBringUpGroupUnlocked(BringUpGroupIndex);
 		const bool bBodyModifierActivatedThisTick =
 			(!bIsRootBodyModifier && bSimulationHandoffCompletedThisTick) ||
 			(bIsRootBodyModifier && bAllowRootBodyModifierSimulation && !bLastAppliedPresentationRootSimulationEnabled);
+
+		if (bIsRootBodyModifier && bAllowRootBodyModifierSimulation && !bLastAppliedPresentationRootSimulationEnabled)
+		{
+			SoftRootTickCounter = 0;
+		}
+
+		const bool bBringUpGroupUnlocked =
+			bIsRootBodyModifier ? bAllowRootBodyModifierSimulation : IsBringUpGroupUnlocked(BringUpGroupIndex);
+
 		EPhysicsMovementType BodyModifierMovementType = EPhysicsMovementType::Kinematic;
 		float BodyModifierPhysicsBlendWeight = 0.0f;
 		bool bUpdateKinematicFromSimulation = false;
@@ -5024,6 +5037,52 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierMovementType,
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
+
+		if (bIsRootBodyModifier && SoftRootTickCounter >= 0)
+		{
+			if (SoftRootTickCounter <= 5)
+			{
+				if (SoftRootTickCounter == 0) { BodyModifierPhysicsBlendWeight = 0.00f; }
+				else if (SoftRootTickCounter == 1) { BodyModifierPhysicsBlendWeight = 0.05f; }
+				else if (SoftRootTickCounter <= 3) { BodyModifierPhysicsBlendWeight = 0.10f; }
+				else if (SoftRootTickCounter <= 5) { BodyModifierPhysicsBlendWeight = 0.20f; }
+
+				USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+				FBodyInstance* const RootBody = SkeletalMesh ? SkeletalMesh->GetBodyInstance(BoneName) : nullptr;
+				if (RootBody)
+				{
+					const FVector LinVel = RootBody->GetUnrealWorldVelocity();
+					const FVector AngVelRad = RootBody->GetUnrealWorldAngularVelocityInRadians();
+					const float AngVelDegSize = FMath::RadiansToDegrees(AngVelRad.Size());
+
+					RootBody->SetLinearVelocity(LinVel.GetClampedToMaxSize(30.0f), false);
+					RootBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
+
+					if (SoftRootTickCounter == 0)
+					{
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SOFT_ROOT_WINDOW: tick=0/6 weight=%.2f rootLin=%.1f rootAng=%.1f"),
+							BodyModifierPhysicsBlendWeight, LinVel.Size(), AngVelDegSize);
+					}
+				}
+			}
+			else if (SoftRootTickCounter == 6)
+			{
+				PendingBodyModifierCachedResetNames.AddUnique(ModifierName);
+				bPelvisResetAppliedThisTick = true;
+
+				USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+				FBodyInstance* const RootBody = SkeletalMesh ? SkeletalMesh->GetBodyInstance(BoneName) : nullptr;
+				const FVector LinVel = RootBody ? RootBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
+				const FVector AngVelRad = RootBody ? RootBody->GetUnrealWorldAngularVelocityInRadians() : FVector::ZeroVector;
+				const float AngVelDegSize = FMath::RadiansToDegrees(AngVelRad.Size());
+
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SOFT_ROOT_WINDOW: tick=6/6 weight=%.2f rootLin=%.1f rootAng=%.1f"),
+					BodyModifierPhysicsBlendWeight, LinVel.Size(), AngVelDegSize);
+
+				SoftRootTickCounter = -1;
+			}
+		}
+
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
 		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
@@ -5048,6 +5107,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bIsRootBodyModifier,
 				bAllowRootBodyModifierSimulation,
 				CurrentPolicyAlpha) &&
+			SoftRootTickCounter < 0 &&
 			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
 			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
@@ -7274,6 +7334,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	bHasShellCouplingReferenceRootLocalOffset = false;
 	PresentationPerturbationOverrideEndTimeSeconds = -1.0;
 	bLastAppliedPresentationRootSimulationEnabled = false;
+	SoftRootTickCounter = -1;
 	StabilizationStressTestStartTimeSeconds = -1.0;
 	bStabilizationStressTestCompletionLogged = false;
 	StabilizationStressTestFirstAngularSpikeTimeSeconds = -1.0;
