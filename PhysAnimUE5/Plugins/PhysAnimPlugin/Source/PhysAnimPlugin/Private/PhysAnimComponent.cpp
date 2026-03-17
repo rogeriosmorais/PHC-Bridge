@@ -4939,9 +4939,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 			if (bIsPostureHoldBone)
 			{
-				ControlMultiplier.AngularStrengthMultiplier = EffectiveSettings.AngularStrengthMultiplier * 0.10f;
+				ControlMultiplier.AngularStrengthMultiplier = EffectiveSettings.AngularStrengthMultiplier * 0.08f;
 				ControlMultiplier.AngularDampingRatioMultiplier = EffectiveSettings.AngularDampingRatioMultiplier * 2.0f;
-				ControlMultiplier.AngularExtraDampingMultiplier = EffectiveSettings.AngularExtraDampingMultiplier * 2.0f;
+				ControlMultiplier.AngularExtraDampingMultiplier = EffectiveSettings.AngularExtraDampingMultiplier * 10.0f;
+				ControlMultiplier.LinearExtraDampingMultiplier = FVector(10.0f);
+
+				PhysicsControl->SetControlUseSkeletalAnimation(ControlName, false, 0.0f, 0.0f, true, false);
 			}
 		}
 
@@ -6086,7 +6089,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 					}
 				}
 			}
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_POSTURE_HOLD: active=1 bodies=spine_only wroteTargets=%d"), WroteTargets);
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PRE_ENTRY_POSTURE_PROFILE: active=1 bodies=spine_only wroteTargets=%d linVelMul=0 angVelMul=0 extraLinDamp=10.0 extraAngDamp=10.0"), WroteTargets);
 		}
 
 		bPolicyTargetsAppliedLastFrame = false;
