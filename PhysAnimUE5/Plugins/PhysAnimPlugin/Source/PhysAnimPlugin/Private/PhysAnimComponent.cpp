@@ -1988,6 +1988,8 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 		return false;
 	}
 
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ShouldAllowBalanceSimulation checking: state=%s"), GetRuntimeStateName(RuntimeState));
+
 	if (bRootEnablePhase || bRootWeightRamp)
 	{
 		return true;
@@ -2801,9 +2803,13 @@ void UPhysAnimComponent::UpdateBridgeActiveBalancePreEntry(float DeltaTime, cons
 
 void UPhysAnimComponent::UpdateRootEnablePhase(float DeltaTime, const FPhysAnimStabilizationSettings& Settings)
 {
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_TICK: entered=1"));
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_ENTER_STEP: step=1"));
+
 	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 	const bool bPelvisSimNow = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_ENTER_STEP: step=2 pelvisSim=%d"), bPelvisSimNow ? 1 : 0);
 
 	if (RootEnablePhaseFrameCounter == 0)
 	{
@@ -5255,7 +5261,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		// under legitimate physical simulation as required by the design.
 		const bool bAllowRootBodyModifierSimulation = bIsRootBodyModifier && bAllowRootBodyModifierSimulationInBalanceMode;
 		
-		if (bIsRootBodyModifier && bAllowRootBodyModifierSimulation)
+		if (bIsRootBodyModifier)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_MODIFIER_LOOP: bone=%s allowSim=%d state=%s"), 
+				*BoneName.ToString(), bAllowRootBodyModifierSimulation ? 1 : 0, GetRuntimeStateName(RuntimeState));
+		}
 		{
 			// Resetting bLastAppliedPresentationRootSimulationEnabled happens at the END of the loop
 		}
@@ -5370,10 +5380,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			const FVector PreFlipLinVel = RootBody ? RootBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
 			const FVector PreFlipAngVelDeg = RootBody ? FMath::RadiansToDegrees(RootBody->GetUnrealWorldAngularVelocityInRadians()) : FVector::ZeroVector;
 
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_REQUEST_BEFORE: moveType=%d weight=%.3f"), (int32)BodyModifierMovementType, BodyModifierPhysicsBlendWeight);
+
 			PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
 			PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
 			PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
 			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, bUpdateKinematicFromSimulation, true, false);
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ROOT_ENABLE_REQUEST_AFTER"));
 
 			if (RootBody)
 			{
