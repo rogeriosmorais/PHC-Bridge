@@ -2493,9 +2493,12 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 
 void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
-	if (!bPendingBalanceModeStartRequest || RuntimeState != EPhysAnimRuntimeState::BridgeActive)
+	if (!bPendingBalanceModeStartRequest || (RuntimeState != EPhysAnimRuntimeState::BridgeActive && RuntimeState != EPhysAnimRuntimeState::BalancePerturbationMode))
 	{
-		BalanceReadyTransition.Cancel();
+		if (BalanceReadyTransition.IsActive())
+		{
+			BalanceReadyTransition.Cancel();
+		}
 		return;
 	}
 
@@ -2545,15 +2548,12 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 		return;
 	}
 
-	// Queue gates passed. Try transition.
+	// Queue gates passed. Mark request pending so TryStartPendingBalanceModeRequest tick takes ownership.
+	QueueBalanceModeStartRequest(TEXT("manual_trigger"));
+	
 	if (!BalanceReadyTransition.IsActive())
 	{
 		BalanceReadyTransition.Start(TEXT("manual_trigger"), this);
-		if (!BalanceReadyTransition.HasActuallyStarted())
-		{
-			// Rejected by preflight
-			return;
-		}
 	}
 }
 
