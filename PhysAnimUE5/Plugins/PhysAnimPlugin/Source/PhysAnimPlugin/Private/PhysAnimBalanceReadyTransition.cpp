@@ -105,6 +105,8 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 		}
 	}
 
+	EBalanceReadyEntryClassification Classification = EBalanceReadyEntryClassification::Preflight_HardFailure;
+
 	// Section 11: Ownership Rules for Preconditions
 	// pelvisBodyNotSimulating and distalBodySimulating are TRANSITION-OWNED.
 	// They must not be permanent rejections.
