@@ -276,10 +276,10 @@ struct FPhysAnimStabilizationSettings
 	float BalanceEntryMinPolicyAlpha = 0.9f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0"))
-	int32 BalanceEntryMaxSimCount = 5;
+	int32 BalanceEntryMaxSimCount = 30;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0"))
-	int32 BalanceEntryMaxDistalSimCount = 0;
+	int32 BalanceEntryMaxDistalSimCount = 30;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase1PrepareDuration = 0.10f;
