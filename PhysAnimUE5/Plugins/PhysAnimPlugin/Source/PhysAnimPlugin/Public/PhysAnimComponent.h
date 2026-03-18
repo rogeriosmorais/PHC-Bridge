@@ -305,6 +305,9 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase1MaxEntryTargetDeltaDeg = 15.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1LateValidateRequiredSeconds = 0.15f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0"))
 	int32 BalancePhase1MaxAutomaticRetries = 3;
 
@@ -455,6 +458,7 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(BalancePhase1QuietShellOffsetDelta, Other.BalancePhase1QuietShellOffsetDelta) &&
 			FMath::IsNearlyEqual(BalancePhase1QuietShellVelocityDelta, Other.BalancePhase1QuietShellVelocityDelta) &&
 			FMath::IsNearlyEqual(BalancePhase1MaxEntryTargetDeltaDeg, Other.BalancePhase1MaxEntryTargetDeltaDeg) &&
+			FMath::IsNearlyEqual(BalancePhase1LateValidateRequiredSeconds, Other.BalancePhase1LateValidateRequiredSeconds) &&
 			BalancePhase1MaxAutomaticRetries == Other.BalancePhase1MaxAutomaticRetries &&
 			FMath::IsNearlyEqual(BalancePhase1RetryCooldownSeconds, Other.BalancePhase1RetryCooldownSeconds) &&
 			FMath::IsNearlyEqual(BalancePhase1HipQuarantineDurationSeconds, Other.BalancePhase1HipQuarantineDurationSeconds) &&

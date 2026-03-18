@@ -319,6 +319,39 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration && QuietWindowAccumulatedSeconds <= 0.0f)
 		{
+			const float PolicyInfluenceAlpha = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
+			if (PolicyInfluenceAlpha >= Owner->BalanceReadyPolicyInfluenceThreshold)
+			{
+				if (CaptureCertifiedHandoff(Owner, Settings))
+				{
+					LateValidationAccumulatedSeconds = 0.0f;
+					Diagnostics.Phase1LateValidateAccumulatedSeconds = 0.0f;
+					Diagnostics.Phase1LateValidateGateSource = TEXT("phase1_late_validate_start");
+					Diagnostics.Phase1LateValidateGateReason = TEXT("phase1_late_validate_timeout_entry");
+					UE_LOG(
+						LogPhysAnimBridge,
+						Log,
+						TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_STARTED topology=%s upperBodyOwnership=%s simCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d quietProofDuration=%.2f requiredSeconds=%.2f"),
+						*CertifiedHandoff.TopologyClass,
+						BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
+						CertifiedHandoff.SimCount,
+						CertifiedHandoff.UpperBodySimCount,
+						CertifiedHandoff.bPolicySuppressed ? 1 : 0,
+						CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
+						CertifiedHandoff.QuietProofDurationSeconds,
+						Settings.BalancePhase1LateValidateRequiredSeconds);
+					SetPhase(EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate, Owner);
+					return;
+				}
+
+				const FString Phase2BlockReason = TEXT("phase1_late_validate_baseline_capture_failed");
+				Diagnostics.FailureReason = Phase2BlockReason;
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
+				MarkSafePhase2Denied(Phase2BlockReason);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
+				return;
+			}
+
 			const FString& TerminalQuietBlockReason = !QuietBlockReason.IsEmpty() ? QuietBlockReason : LastQuietBlockReason;
 			const FString TimeoutReason = TerminalQuietBlockReason.IsEmpty()
 				? TEXT("phase1_quiet_timeout_unknown")

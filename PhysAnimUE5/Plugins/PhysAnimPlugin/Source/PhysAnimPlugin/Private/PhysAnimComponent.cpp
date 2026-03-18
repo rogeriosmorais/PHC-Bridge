@@ -1871,7 +1871,10 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 	const bool bBalanceMode = RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode;
 	const bool bTransitionActive = BalanceReadyTransition.IsActive();
 	const bool bBridgeActivePreEntry = RuntimeState == EPhysAnimRuntimeState::BridgeActive && bTransitionActive;
-	const bool bIsPhase1 = bTransitionActive && BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare;
+	const bool bIsPhase1 =
+		bTransitionActive &&
+		(BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+			BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate);
 	
 	const bool bBringUpUnlocked = AreAllBringUpGroupsUnlocked();
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
@@ -6052,8 +6055,15 @@ void UPhysAnimComponent::ApplyControlTargets(
 			? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
 			: BlendedPolicyRotation;
 
-		// Posture hold logic (Section 9.1 / 9.2) - extends to Phase 2 guard window
-		if (BalanceReadyTransition.IsActive() && bSuppressPolicyForThisBone)
+		// Posture hold logic (Section 9.1 / 9.2).
+		// Phase 1 prepare and late validation both keep their held bones authoritative; root-on
+		// is the first phase that is allowed to release the hold.
+		const bool bApplyPhase1HoldPoseThisFrame =
+			BalanceReadyTransition.IsActive() &&
+			bSuppressPolicyForThisBone &&
+			(BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+				BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate);
+		if (bApplyPhase1HoldPoseThisFrame)
 		{
 			if (const FQuat* HoldRot = BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key))
 			{
@@ -7443,7 +7453,8 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 	}
 
 	// EXPERIMENT: DO NOT schedule/apply proximal cached-target reset if we are in transition handoff
-	if (InTransitionPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
+	if (InTransitionPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+		InTransitionPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 	{
 		const FString BoneStr = BoneName.ToString().ToLower();
 		if (bIsRootBodyModifier ||
