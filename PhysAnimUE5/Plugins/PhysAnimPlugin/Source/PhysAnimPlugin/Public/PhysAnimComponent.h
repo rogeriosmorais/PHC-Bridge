@@ -269,8 +269,47 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && bDelayMovementUnlockUntilPolicySettled", ClampMin = "0.0"))
 	float PolicySettleMaxRootAngularSpeedDegPerSec = 120.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && bDelayMovementUnlockUntilPolicySettled", ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && bDelayMovementUnlockUntilPolicySettled", ClampMin = "0.0"))
 	float PolicySettleRequiredSeconds = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0"))
+	int32 BalancePreflightMaxSimCount = 5;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0"))
+	int32 BalancePreflightMaxDistalSimCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float BalancePreflightLowPolicyAlphaThreshold = 0.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float BalancePreflightHighPolicyAlphaThreshold = 0.9f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePreparePhaseDurationSeconds = 0.10f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePrepareMaxLinearBaselineCmPerSec = 25.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePrepareMaxAngularBaselineDegPerSec = 45.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalanceSettleMaxRootLinearSpeedCmPerSecond = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalanceSettleMaxRootAngularSpeedDegPerSec = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalanceSettlePhaseDurationSeconds = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase2RootOnDurationSeconds = 0.10f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase2MaxLinearSpikeCmPerSec = 150.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase2MaxAngularSpikeDegPerSec = 180.0f;
 
 	bool operator==(const FPhysAnimStabilizationSettings& Other) const
 	{
@@ -341,7 +380,20 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(PolicySettleMaxShellOffsetCm, Other.PolicySettleMaxShellOffsetCm) &&
 			FMath::IsNearlyEqual(PolicySettleMaxRootLinearSpeedCmPerSecond, Other.PolicySettleMaxRootLinearSpeedCmPerSecond) &&
 			FMath::IsNearlyEqual(PolicySettleMaxRootAngularSpeedDegPerSec, Other.PolicySettleMaxRootAngularSpeedDegPerSec) &&
-			FMath::IsNearlyEqual(PolicySettleRequiredSeconds, Other.PolicySettleRequiredSeconds);
+			FMath::IsNearlyEqual(PolicySettleRequiredSeconds, Other.PolicySettleRequiredSeconds) &&
+			BalancePreflightMaxSimCount == Other.BalancePreflightMaxSimCount &&
+			BalancePreflightMaxDistalSimCount == Other.BalancePreflightMaxDistalSimCount &&
+			FMath::IsNearlyEqual(BalancePreflightLowPolicyAlphaThreshold, Other.BalancePreflightLowPolicyAlphaThreshold) &&
+			FMath::IsNearlyEqual(BalancePreflightHighPolicyAlphaThreshold, Other.BalancePreflightHighPolicyAlphaThreshold) &&
+			FMath::IsNearlyEqual(BalancePreparePhaseDurationSeconds, Other.BalancePreparePhaseDurationSeconds) &&
+			FMath::IsNearlyEqual(BalancePrepareMaxLinearBaselineCmPerSec, Other.BalancePrepareMaxLinearBaselineCmPerSec) &&
+			FMath::IsNearlyEqual(BalancePrepareMaxAngularBaselineDegPerSec, Other.BalancePrepareMaxAngularBaselineDegPerSec) &&
+			FMath::IsNearlyEqual(BalanceSettleMaxRootLinearSpeedCmPerSecond, Other.BalanceSettleMaxRootLinearSpeedCmPerSecond) &&
+			FMath::IsNearlyEqual(BalanceSettleMaxRootAngularSpeedDegPerSec, Other.BalanceSettleMaxRootAngularSpeedDegPerSec) &&
+			FMath::IsNearlyEqual(BalanceSettlePhaseDurationSeconds, Other.BalanceSettlePhaseDurationSeconds) &&
+			FMath::IsNearlyEqual(BalancePhase2RootOnDurationSeconds, Other.BalancePhase2RootOnDurationSeconds) &&
+			FMath::IsNearlyEqual(BalancePhase2MaxLinearSpikeCmPerSec, Other.BalancePhase2MaxLinearSpikeCmPerSec) &&
+			FMath::IsNearlyEqual(BalancePhase2MaxAngularSpikeDegPerSec, Other.BalancePhase2MaxAngularSpikeDegPerSec);
 	}
 
 	bool operator!=(const FPhysAnimStabilizationSettings& Other) const

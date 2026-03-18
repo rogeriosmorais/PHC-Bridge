@@ -107,6 +107,11 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 
 	EBalanceReadyEntryClassification Classification = EBalanceReadyEntryClassification::Preflight_HardFailure;
 
+	const int32 simCountThreshold = Settings.BalancePreflightMaxSimCount;
+	const int32 distalSimThreshold = Settings.BalancePreflightMaxDistalSimCount;
+	const float lowPolicyThreshold = Settings.BalancePreflightLowPolicyAlphaThreshold;
+	const float highPolicyThreshold = Settings.BalancePreflightHighPolicyAlphaThreshold;
+
 	// Section 11: Ownership Rules for Preconditions
 	// pelvisBodyNotSimulating and distalBodySimulating are TRANSITION-OWNED.
 	// They must not be permanent rejections.
@@ -119,11 +124,10 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 	}
 
 	// Policy Influence check (Section 20 Appendix vs Section 11)
-	// If policy is too high, we might want to wait for a ramp down, but BridgeActive doesn't do that.
-	// We'll treat it as a QueueBlock if it's extremely unstable, but per Section 11,
-	// we should probably just accept and let Phase 1 suppress it.
+	// If policy is too high, we might want to wait for a ramp down (QueueBlock), 
+	// but per Section 11, we should probably just accept and let Phase 1 suppress it.
 	
-	const bool bPolicyCompatible = (PolicyAlpha < 0.1f) || (PolicyAlpha > 0.9f); // Allow either startup or fully-brought-up baseline
+	const bool bPolicyCompatible = (PolicyAlpha < lowPolicyThreshold) || (PolicyAlpha > highPolicyThreshold); // Allow either startup or fully-brought-up baseline
 	if (!bPolicyCompatible)
 	{
 		Classification = EBalanceReadyEntryClassification::Preflight_QueueBlock;
@@ -171,7 +175,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	{
 		// Phase 1: Prepares topology.
 		// Section 12 requirements: distal kinematic, capture baselines.
-		if (PhaseTimeSeconds > 0.10f) 
+		if (PhaseTimeSeconds > Settings.BalancePreparePhaseDurationSeconds) 
 		{
 			if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
 			{
@@ -180,8 +184,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				Diagnostics.BaselineRootAngVel = Mesh->GetPhysicsAngularVelocityInDegrees(RootBoneName).Size();
 				
 				// Section 12 Exit Criteria check (Invariants)
-				const float MaxBaselineLin = 25.0f;
-				const float MaxBaselineAng = 45.0f;
+				// Baseline movement limits must be satisfied before root-on
+				const float MaxBaselineLin = Settings.BalancePrepareMaxLinearBaselineCmPerSec;
+				const float MaxBaselineAng = Settings.BalancePrepareMaxAngularBaselineDegPerSec;
 				if (Diagnostics.BaselineRootLinVel > MaxBaselineLin || Diagnostics.BaselineRootAngVel > MaxBaselineAng)
 				{
 					UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE1_REJECTED baseline_movement_too_high lin=%.1f ang=%.1f"), 
@@ -200,8 +205,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	{
 		// Phase 2: Post root-on settle check.
 		// Section 13: Transition flipped sim in SetPhase. Now check for spikes.
-		const float SpikeLinThreshold = 150.0f; 
-		const float SpikeAngThreshold = 180.0f;
+		const float SpikeLinThreshold = Settings.BalancePhase2MaxLinearSpikeCmPerSec; 
+		const float SpikeAngThreshold = Settings.BalancePhase2MaxAngularSpikeDegPerSec;
 
 		if (Diagnostics.RootSpeed > SpikeLinThreshold || Diagnostics.RootAngularSpeed > SpikeAngThreshold)
 		{
@@ -212,7 +217,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		}
 
 		// Mode remains in Phase 2 for a fixed short window before checking settle convergence in Phase 3
-		if (PhaseTimeSeconds > 0.1f)
+		if (PhaseTimeSeconds > Settings.BalancePhase2RootOnDurationSeconds)
 		{
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Phase3_Settle, Owner);
 		}
@@ -223,7 +228,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		if (bReadyThisFrame)
 		{
 			StableHoldAccumulatedSeconds += DeltaTime;
-			if (StableHoldAccumulatedSeconds >= 0.25f) // Required settle success duration
+			if (StableHoldAccumulatedSeconds >= Settings.BalanceSettlePhaseDurationSeconds) // Required settle success duration
 			{
 				SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
 			}
@@ -366,13 +371,13 @@ bool FPhysAnimBalanceReadyTransition::EvaluateReadiness(UPhysAnimComponent* Owne
 		return false;
 	}
 
-	if (Diagnostics.RootSpeed > 5.0f)
+	if (Diagnostics.RootSpeed > Settings.BalanceSettleMaxRootLinearSpeedCmPerSecond)
 	{
 		OutReason = TEXT("root_linear_above_settle");
 		return false;
 	}
 
-	if (Diagnostics.RootAngularSpeed > 1.0f)
+	if (Diagnostics.RootAngularSpeed > Settings.BalanceSettleMaxRootAngularSpeedDegPerSec)
 	{
 		OutReason = TEXT("root_angular_above_settle");
 		return false;
