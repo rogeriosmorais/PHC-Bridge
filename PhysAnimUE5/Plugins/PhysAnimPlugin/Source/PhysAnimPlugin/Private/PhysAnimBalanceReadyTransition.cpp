@@ -243,7 +243,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		if (bQuietThisFrame)
 		{
 			const float PolicyInfluenceAlpha = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
-			if (PolicyInfluenceAlpha < 1.0f - KINDA_SMALL_NUMBER)
+			if (PolicyInfluenceAlpha < Owner->BalanceReadyPolicyInfluenceThreshold)
 			{
 				bQuietThisFrame = false;
 				QuietBlockReason = TEXT("policy_ramp_not_settled");
@@ -319,67 +319,195 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration && QuietWindowAccumulatedSeconds <= 0.0f)
 		{
-			const FPhysAnimControlTargetDiagnostics& CurrentTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
-			const bool bCurrentTargetDiscontinuity =
-				CurrentTargetDiagnostics.MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
-				CurrentTargetDiagnostics.MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg;
-			FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
-			const bool bCurrentSnapshotValid = BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot);
-			const bool bUpperBodyInstability = bCurrentSnapshotValid &&
-				(CertifiedHandoff.UpperBodySimCount > 0 ||
-					CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
-					CurrentSnapshot.UpperBodySimCount > 0 ||
-					CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount);
-			const bool bSimCoverageRegressed = bCurrentSnapshotValid &&
-				(CurrentSnapshot.SimCount < CertifiedHandoff.SimCount ||
-					CurrentSnapshot.ProximalSimCount < CertifiedHandoff.ProximalSimCount ||
-					CurrentSnapshot.DistalSimCount < CertifiedHandoff.DistalSimCount);
-			const FString TimeoutReason = bCurrentSnapshotValid
-				? ClassifyLateValidationFailureReason(bUpperBodyInstability, bSimCoverageRegressed, bCurrentTargetDiscontinuity)
-				: TEXT("phase1_late_validate_handoff_invalidated");
+			const FString& TerminalQuietBlockReason = !QuietBlockReason.IsEmpty() ? QuietBlockReason : LastQuietBlockReason;
+			const FString TimeoutReason = TerminalQuietBlockReason.IsEmpty()
+				? TEXT("phase1_quiet_timeout_unknown")
+				: TEXT("phase1_quiet_timeout_") + TerminalQuietBlockReason;
 			Diagnostics.FailureReason = TimeoutReason;
-			if (bCurrentTargetDiscontinuity)
-			{
-				Diagnostics.Phase1TargetDiscontinuityGateInput = CurrentTargetDiagnostics;
-				Diagnostics.Phase1TargetDiscontinuityGateSource = TEXT("timeout_live_quiet_window_gate");
-				Diagnostics.Phase1TargetDiscontinuityGateReason = TimeoutReason;
-				Diagnostics.Phase1TargetDiscontinuityAccumulatedSeconds = TargetDiscontinuityAccumulatedSeconds;
-			}
-			else
-			{
-				Diagnostics.Phase1TargetDiscontinuityGateInput = {};
-				Diagnostics.Phase1TargetDiscontinuityGateSource.Reset();
-				Diagnostics.Phase1TargetDiscontinuityGateReason.Reset();
-				Diagnostics.Phase1TargetDiscontinuityAccumulatedSeconds = 0.0f;
-			}
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnimBalance] PHASE1_QUIET_TIMEOUT lateValidationReason=%s upperBodyOwnership=%s upperBodySimPre=%d upperBodySimCur=%d simCountPre=%d simCountCur=%d proximalSimPre=%d proximalSimCur=%d distalSimPre=%d distalSimCur=%d quietBlockReason=%s lastQuietBlockReason=%s gateMaxTargetDelta=%.1f gateMeanTargetDelta=%.1f gateMaxTargetDeltaBone=%s gateThreshold=%.1f accumulatedSeconds=%.2f liveMaxTargetDelta=%.1f liveMeanTargetDelta=%.1f liveMaxTargetDeltaBone=%s phaseTime=%.2f"),
-				*TimeoutReason,
-				BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
-				CertifiedHandoff.UpperBodySimCount,
-				bCurrentSnapshotValid ? CurrentSnapshot.UpperBodySimCount : -1,
-				CertifiedHandoff.SimCount,
-				bCurrentSnapshotValid ? CurrentSnapshot.SimCount : -1,
-				CertifiedHandoff.ProximalSimCount,
-				bCurrentSnapshotValid ? CurrentSnapshot.ProximalSimCount : -1,
-				CertifiedHandoff.DistalSimCount,
-				bCurrentSnapshotValid ? CurrentSnapshot.DistalSimCount : -1,
-				*QuietBlockReason,
-				*LastQuietBlockReason,
-				CurrentTargetDiagnostics.MaxTargetDeltaDegrees,
-				CurrentTargetDiagnostics.MeanTargetDeltaDegrees,
-				*CurrentTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
-				Settings.BalancePhase1MaxEntryTargetDeltaDeg,
-				TargetDiscontinuityAccumulatedSeconds,
-				Diagnostics.Phase1TargetDiscontinuityGateInput.MaxTargetDeltaDegrees,
-				Diagnostics.Phase1TargetDiscontinuityGateInput.MeanTargetDeltaDegrees,
-				*Diagnostics.Phase1TargetDiscontinuityGateInput.MaxTargetDeltaBoneName.ToString(),
-				PhaseTimeSeconds);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *TimeoutReason);
 			MarkSafePhase2Denied(TimeoutReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *TimeoutReason);
+			return;
+		}
+		return;
+	}
+
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
+	{
+		bool bLateValidationThisFrame = true;
+		FString LateValidateBlockReason;
+		const float PolicyInfluenceAlpha = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
+
+		if (Owner->IsInstabilityPrecursorActive())
+		{
+			bLateValidationThisFrame = false;
+			LateValidateBlockReason = TEXT("instability_precursor");
+		}
+		else if (!Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
+		{
+			bLateValidationThisFrame = false;
+			LateValidateBlockReason = TEXT("pending_resets");
+		}
+		else if (PolicyInfluenceAlpha <= KINDA_SMALL_NUMBER)
+		{
+			bLateValidationThisFrame = false;
+			LateValidateBlockReason = TEXT("policy_influence_inactive");
+		}
+		else if (Diagnostics.RootSpeed > Settings.BalancePhase1QuietRootLinearSpeed || Diagnostics.RootAngularSpeed > Settings.BalancePhase1QuietRootAngularSpeed)
+		{
+			bLateValidationThisFrame = false;
+			LateValidateBlockReason = TEXT("motion_above_limit");
+		}
+		else if (Owner->GetCurrentShellPlanarOffsetDeltaCm() > Settings.BalancePhase1QuietShellOffsetDelta ||
+			Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond() > Settings.BalancePhase1QuietShellVelocityDelta)
+		{
+			bLateValidationThisFrame = false;
+			LateValidateBlockReason = TEXT("shell_contamination");
+		}
+		else
+		{
+			TArray<FName> SimulatingBones;
+			Owner->GetSimulatingBodies(SimulatingBones);
+			if (SimulatingBones.Num() == 0)
+			{
+				bLateValidationThisFrame = false;
+				LateValidateBlockReason = TEXT("sim_coverage_regressed");
+			}
+			else
+			{
+				for (const FName BoneName : SimulatingBones)
+				{
+					if (BalanceTransitionSets::IsTransitionCritical(BoneName))
+					{
+						bLateValidationThisFrame = false;
+						LateValidateBlockReason = TEXT("topology_mismatch_simulating_critical");
+						break;
+					}
+				}
+			}
+		}
+
+		FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
+		const bool bCurrentSnapshotValid = BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot);
+		const bool bUpperBodyInstability = bCurrentSnapshotValid &&
+			(CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
+				CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount);
+		const bool bSimCoverageRegressed = bCurrentSnapshotValid &&
+			(CurrentSnapshot.SimCount < CertifiedHandoff.SimCount ||
+				CurrentSnapshot.ProximalSimCount < CertifiedHandoff.ProximalSimCount ||
+				CurrentSnapshot.DistalSimCount < CertifiedHandoff.DistalSimCount);
+		const bool bCurrentTargetDiscontinuity =
+			Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
+			Owner->GetLastControlTargetDiagnostics().MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg;
+
+		if (bLateValidationThisFrame && bCurrentSnapshotValid)
+		{
+			if (bUpperBodyInstability || bSimCoverageRegressed || bCurrentTargetDiscontinuity)
+			{
+				bLateValidationThisFrame = false;
+				LateValidateBlockReason = ClassifyLateValidationFailureReason(bUpperBodyInstability, bSimCoverageRegressed, bCurrentTargetDiscontinuity);
+			}
+		}
+		else if (bLateValidationThisFrame && !bCurrentSnapshotValid)
+		{
+			bLateValidationThisFrame = false;
+			LateValidateBlockReason = TEXT("phase1_late_validate_handoff_invalidated");
+		}
+
+		if (bLateValidationThisFrame)
+		{
+			LateValidationAccumulatedSeconds += DeltaTime;
+			Diagnostics.Phase1LateValidateGateSource = TEXT("live_late_validate_gate");
+			Diagnostics.Phase1LateValidateGateReason = TEXT("ready");
+			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
+			if (LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds)
+			{
+				bHasLateValidationProof = true;
+				if (CaptureCertifiedHandoff(Owner, Settings))
+				{
+					UE_LOG(
+						LogPhysAnimBridge,
+						Log,
+						TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_SUCCESS topology=%s upperBodyOwnership=%s simCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d lateValidateDuration=%.2f quietProofDuration=%.2f"),
+						*CertifiedHandoff.TopologyClass,
+						BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
+						CertifiedHandoff.SimCount,
+						CertifiedHandoff.UpperBodySimCount,
+						CertifiedHandoff.bPolicySuppressed ? 1 : 0,
+						CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
+						CertifiedHandoff.LateValidationSustainDurationSeconds,
+						CertifiedHandoff.QuietProofDurationSeconds);
+					UE_LOG(
+						LogPhysAnimBridge,
+						Log,
+						TEXT("[PhysAnimBalance] PHASE1_READY_FOR_ROOT_ON topology=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f lateValidateDuration=%.2f"),
+						*CertifiedHandoff.TopologyClass,
+						BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
+						CertifiedHandoff.SimCount,
+						CertifiedHandoff.ProximalSimCount,
+						CertifiedHandoff.DistalSimCount,
+						CertifiedHandoff.UpperBodySimCount,
+						CertifiedHandoff.bPolicySuppressed ? 1 : 0,
+						CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
+						CertifiedHandoff.MaxTargetDeltaDegrees,
+						CertifiedHandoff.MeanTargetDeltaDegrees,
+						CertifiedHandoff.QuietProofDurationSeconds,
+						CertifiedHandoff.LateValidationSustainDurationSeconds);
+					SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_RootOn, Owner);
+					return;
+				}
+
+				LateValidateBlockReason = TEXT("phase2_handoff_capture_failed");
+				Diagnostics.FailureReason = LateValidateBlockReason;
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *LateValidateBlockReason);
+				MarkSafePhase2Denied(LateValidateBlockReason);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *LateValidateBlockReason);
+				return;
+			}
+		}
+		else
+		{
+			if (!LateValidateBlockReason.IsEmpty())
+			{
+				LastLateValidateBlockReason = LateValidateBlockReason;
+			}
+			else
+			{
+				LastLateValidateBlockReason.Reset();
+			}
+
+			if (LateValidateBlockReason != TEXT("policy_influence_inactive"))
+			{
+				LateValidationAccumulatedSeconds = 0.0f;
+				QuietWindowAccumulatedSeconds = 0.0f;
+				Diagnostics.Phase1LateValidateGateReason = LateValidateBlockReason;
+				Diagnostics.Phase1LateValidateGateSource = TEXT("live_late_validate_gate");
+				Diagnostics.Phase1LateValidateAccumulatedSeconds = 0.0f;
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s lateValidateSeconds=%.2f quietProofSeconds=%.2f policyAlpha=%.2f"),
+					*LateValidateBlockReason,
+					LateValidationAccumulatedSeconds,
+					QuietWindowAccumulatedSeconds,
+					PolicyInfluenceAlpha);
+				ResetCertifiedHandoffState();
+				SetPhase(EBalanceReadyTransitionPhase::BRT_Phase1_Prepare, Owner);
+				return;
+			}
+
+			Diagnostics.Phase1LateValidateGateReason = LateValidateBlockReason;
+			Diagnostics.Phase1LateValidateGateSource = TEXT("live_late_validate_gate");
+			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
+		}
+
+		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration + Settings.BalancePhase1LateValidateRequiredSeconds &&
+			LateValidationAccumulatedSeconds <= 0.0f)
+		{
+			const FString TimeoutReason = LateValidateBlockReason.IsEmpty()
+				? TEXT("phase1_late_validate_timeout_unknown")
+				: TEXT("phase1_late_validate_timeout_") + LateValidateBlockReason;
+			Diagnostics.FailureReason = TimeoutReason;
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *TimeoutReason);
+			MarkSafePhase2Denied(TimeoutReason);
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *TimeoutReason);
 			return;
 		}
 		return;
@@ -704,7 +832,12 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (!ShouldSuppressPolicy() || !ShouldSuppressResets() || !ShouldSuppressShell() || !ShouldSuppressMoveSmoke())
+	if (ShouldSuppressPolicy())
+	{
+		OutReason = TEXT("phase2_policy_suppression_still_active");
+		return false;
+	}
+	if (!ShouldSuppressResets() || !ShouldSuppressShell() || !ShouldSuppressMoveSmoke())
 	{
 		OutReason = TEXT("phase2_same_frame_conflicting_authority");
 		return false;
@@ -725,9 +858,9 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (!ShouldSuppressPolicy())
+	if (!bHasLateValidationProof || !bHasCertifiedHandoff || !CertifiedHandoff.bLateValidationCompleted)
 	{
-		OutReason = TEXT("phase2_policy_suppression_not_active");
+		OutReason = TEXT("phase2_late_validate_not_completed");
 		return false;
 	}
 
@@ -744,7 +877,8 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;
 	}
-	if (CurrentSnapshot.UpperBodySimCount > 0)
+	if (CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
+		CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount)
 	{
 		OutReason = TEXT("phase2_upper_body_instability");
 		return false;
@@ -778,6 +912,12 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		ControlTargetDiagnostics.MeanTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg)
 	{
 		OutReason = TEXT("phase2_target_discontinuity_too_high");
+		return false;
+	}
+
+	if (CurrentSnapshot.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER < CertifiedHandoff.LateValidationSustainDurationSeconds)
+	{
+		OutReason = TEXT("phase2_late_validate_not_completed");
 		return false;
 	}
 
@@ -845,6 +985,8 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
 	OutSnapshot.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
 	OutSnapshot.QuietProofDurationSeconds = QuietWindowAccumulatedSeconds;
+	OutSnapshot.LateValidationSustainDurationSeconds = LateValidationAccumulatedSeconds;
+	OutSnapshot.bLateValidationCompleted = bHasLateValidationProof;
 	return true;
 }
 
@@ -856,7 +998,7 @@ bool FPhysAnimBalanceReadyTransition::CaptureCertifiedHandoff(UPhysAnimComponent
 		return false;
 	}
 
-	if (!CurrentSnapshot.bPolicySuppressed || !CurrentSnapshot.bControlAuthoritySettled)
+	if (!CurrentSnapshot.bControlAuthoritySettled)
 	{
 		return false;
 	}
@@ -887,9 +1029,14 @@ bool FPhysAnimBalanceReadyTransition::ValidateCertifiedHandoff(UPhysAnimComponen
 		return false;
 	}
 
-	if (CertifiedHandoff.UpperBodySimCount > 0 ||
-		CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
-		CurrentSnapshot.UpperBodySimCount > 0 ||
+	if (!CertifiedHandoff.bLateValidationCompleted ||
+		CertifiedHandoff.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase1LateValidateRequiredSeconds)
+	{
+		OutReason = TEXT("phase2_late_validate_not_completed");
+		return false;
+	}
+
+	if (CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
 		CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount)
 	{
 		OutReason = TEXT("phase2_upper_body_instability");
@@ -933,6 +1080,13 @@ bool FPhysAnimBalanceReadyTransition::ValidateCertifiedHandoff(UPhysAnimComponen
 	if (CurrentSnapshot.QuietProofDurationSeconds + KINDA_SMALL_NUMBER < CertifiedHandoff.QuietProofDurationSeconds)
 	{
 		OutReason = TEXT("phase2_handoff_invalidated");
+		return false;
+	}
+
+	if (!CurrentSnapshot.bLateValidationCompleted ||
+		CurrentSnapshot.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER < CertifiedHandoff.LateValidationSustainDurationSeconds)
+	{
+		OutReason = TEXT("phase2_late_validate_not_completed");
 		return false;
 	}
 
@@ -983,7 +1137,7 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	Diagnostics.PelvisLinearVelPost = Mesh->GetPhysicsLinearVelocity(RootBoneName);
 	Diagnostics.PelvisAngularVelPost = Mesh->GetPhysicsAngularVelocityInDegrees(RootBoneName);
-	Diagnostics.bPolicyWroteTargets = Owner->WasPolicyTargetAppliedLastFrame();
+	Diagnostics.bPolicyWroteTargets = Owner->GetLastControlTargetDiagnostics().NumPolicyTargetsWritten > 0;
 	Diagnostics.bResetScheduled = !Owner->GetPendingBodyModifierCachedResetNames().IsEmpty();
 	Diagnostics.BaselineShellOffset = Owner->GetCurrentShellPlanarOffsetDeltaCm();
 	Diagnostics.BaselineShellVel = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
@@ -1031,7 +1185,7 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const
 {
-	return IsActive() && (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn);
+	return IsActive() && InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare;
 }
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicyWrites(FName BoneName) const
@@ -1041,7 +1195,9 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicyWrites(FName BoneName)
 		return false;
 	}
 
-	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
 		return true;
 	}
@@ -1049,10 +1205,10 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicyWrites(FName BoneName)
 	return false;
 }
 
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive(); }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
 
 float FPhysAnimBalanceReadyTransition::GetRootBodyModifierSoftSimAlpha() const { return 1.0f; }
 float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneName) const { return BalanceTransitionSets::IsProximal(BoneName) ? 1.0f : 1.0f; }
@@ -1066,8 +1222,14 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
-		// Late validation keeps a single explicit upper-body ownership mode: anchor the upper-body
-		// chain and apex while the quiet window proves the handoff is stable.
+		return BalanceTransitionSets::IsTransitionCritical(BoneName) ||
+			BalanceTransitionSets::IsUpperLimbDistal(BoneName) ||
+			BalanceTransitionSets::IsUpperBodyApex(BoneName);
+	}
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
+	{
+		// Late validation narrows ownership further and keeps the full upper-body chain in the
+		// explicit kinematic hold while policy influence is allowed to settle.
 		return BalanceTransitionSets::IsTransitionCritical(BoneName) ||
 			BalanceTransitionSets::IsLateValidationUpperBodyOwnershipBone(BoneName);
 	}
@@ -1090,7 +1252,9 @@ float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(const
 		return 1.0f;
 	}
 
-	const bool bInBootstrap = InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
+	const bool bInBootstrap = InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
 	return bInBootstrap ? Settings.BalanceBootstrapExtraDampingMultiplier : Settings.BalanceActiveExtraDampingMultiplier;
 }
 
