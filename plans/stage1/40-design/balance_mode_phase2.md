@@ -145,6 +145,14 @@ Phase 2 may begin only if all of these are already true:
 17. upper-body ownership mode matches the certified handoff payload
 18. upper-body linear/angular stability remains within the late-validation envelope at entry
 
+Interpretation rule:
+
+- successful late validation is not, by itself, permission to root-on
+- if the documented late-validation topology is upper-only, Phase 2 must either:
+  - deny safely before root-on, or
+  - satisfy an additional explicit root-on-readiness proof that is documented separately
+- upper-only late validation is therefore a valid safe-denial-capable Phase 1 success state, not automatically a root-on-ready state
+
 Phase 2 must not be entered “optimistically.”
 
 If these conditions are not true, the runtime must remain in Phase 1 or fail.
@@ -166,6 +174,7 @@ Required denial reasons include:
 - `phase2_control_authority_not_settled`
 - `phase2_late_validate_not_completed`
 - `phase2_upper_body_unstable`
+- `phase2_upper_only_handoff_not_root_on_ready`
 
 Interpretation rule:
 

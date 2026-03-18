@@ -359,11 +359,13 @@ Phase 1 may advance from late validation to Phase 2 only if:
 - sim coverage remains within the documented late-validation topology envelope
 - no new target-discontinuity or topology-regression blocker appeared during sustain
 - late-validation sustain duration completed continuously
+- the resulting handoff topology is explicitly declared Phase-2-root-on-ready by the contract, or Phase 2 must deny safely without attempting root-on
 
 Interpretation rule:
 
 - a conservative upper-only late-validation topology is valid if and only if the Phase 1 stabilization spec declares it as the documented handoff mode
 - Phase 2 must validate against that documented topology rather than against an implicit requirement that proximal/distal simulation remain non-zero
+- a valid upper-only late-validation topology may still be a safe-denial state rather than a root-on-ready state
 
 ### Handoff invalidation rule
 
