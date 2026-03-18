@@ -14,25 +14,24 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` stabilization passes completed for the current smoke target
-- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime are confirmed locally; Gate G1 is explicitly `pass`; the selected Phase 1 runtime model is the pretrained `motion_tracker/smpl` checkpoint; the full UE startup path succeeds through `NNERuntimeORTDml`; the one-character bridge now completes a `65` second passive idle PIE smoke window without catastrophic post-startup instability, drift, collapse, or delayed fail-stop; deterministic movement smoke and longer locomotion soak are both green; preserved-gameplay-shell manual `WASD` also works in `BridgeActive`; the next active Phase 1 task is G2 comparison packaging, not more blind stabilization
-- `Last planning milestone`: the frozen policy-phase stabilization plan converged on March 11, 2026 after continuity fixes, representation-switch cleanup, and the corrected SMPL->UE quaternion basis conversion removed the remaining live-policy blow-up; the passive idle validation window then extended from `30s` to `65s` and stayed green; movement-stability then passed through deterministic smoke, longer locomotion soak, and gameplay-shell-relative fail-stop evaluation; on March 12, 2026 the first training/runtime alignment pass then locked policy updates to the pretrained ProtoMotions control cadence (`30 Hz`) while leaving Chaos/PhysicsControl on their existing per-tick update path; the follow-up direct Manny constraint inventory is now frozen in [smpl-to-manny-limit-table.md](/F:/NewEngine/plans/stage1/40-design/smpl-to-manny-limit-table.md); the next frozen alignment milestone is operating-limit and mass-distribution policy, not ad hoc mass/gain copying
+- `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` still in progress, but the practical focus has shifted from generic stabilization to explicit balance-entry contract work, comparison packaging, and transition diagnosis
+- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime remain confirmed locally; Gate G1 remains `pass`; the selected Phase 1 runtime model remains the pretrained `motion_tracker/smpl` checkpoint; the full UE startup path still succeeds through `NNERuntimeORTDml`; the one-character bridge still has a stable idle baseline and stable movement-smoke baseline for the current smoke scope; preserved-gameplay-shell manual `WASD` still works in `BridgeActive`; however, the current active engineering problem is no longer blind startup stabilization or raw locomotion survivability, but rather truthful and deterministic entry into Balance Perturbation Mode
+- `Last planning milestone`: the runtime/design milestone has moved from “make balance mode roughly work” to “make the balance transition truthful, phase-owned, and diagnosable”; a dedicated entry-transition state machine now exists, Phase 1 stabilization has been recognized as a distinct design problem, and the latest runtime evidence shows that the dominant failure is no longer the old invalid-entry loop but a repeatable Phase 2 root-on spike after apparently clean Phase 1 readiness
 
 ## Active Tasks
 
 | Task ID | Owner | Status | Frozen Inputs | Writable Paths | Waiting On |
 |---|---|---|---|---|---|
-| P0-01 | Orchestrator | completed | planning bundle as of commit `0a9bf13` | `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none |
-| S1-P0-U1 | User | completed | `plans/stage1/10-specs/environment-spec.md`, `plans/stage1/60-user/user-interventions.md`, `plans/stage1/60-user/user-return-template.md` | external tool/runtime setup and license acceptance | none |
-| S1-P0-U2 | User | completed | `plans/stage1/50-content/ue-project-scaffold.md`, `plans/stage1/60-user/user-interventions.md`, `plans/stage1/60-user/user-return-template.md` | UE editor setup | none |
-| S1-P0-A1 | AI | completed | `plans/stage1/40-tasks/task-packet-s1-p0-a1.md` plus frozen Phase 0 inputs | `plans/stage1/20-execution/phase0-execution-package.md`, `plans/stage1/10-specs/bridge-spec.md`, `plans/stage1/10-specs/retargeting-spec.md`, `plans/stage1/20-execution/assumption-ledger.md`, `plans/stage1/20-execution/execution-log.md` | none |
-| S1-P0-A2 | AI + User | completed | `plans/stage1/20-execution/phase0-execution-package.md`, `plans/stage1/60-user/manual-verification.md`, `plans/stage1/10-specs/acceptance-thresholds.md`, `plans/stage1/30-evidence/g1-evidence.md` | `plans/stage1/30-evidence/g1-evidence.md`, `plans/stage1/20-execution/assumption-ledger.md`, `plans/stage1/20-execution/execution-log.md` | none |
-| S1-P1-A1 | AI | completed | `plans/stage1/40-tasks/task-packet-s1-p1-a1.md`, `plans/stage1/20-execution/phase1-implementation-package.md`, `plans/stage1/10-specs/onnx-export-spec.md`, `plans/stage1/10-specs/ue-bridge-implementation-spec.md` | `Training/scripts/export_onnx.py`, `Training/physanim/export_onnx.py`, `Training/tests/test_onnx_export.py`, `plans/stage1/20-execution/phase1-implementation-package.md`, `plans/stage1/10-specs/dependency-lock.md`, `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none |
-| S1-P1-A2 | AI | in_progress | accepted `S1-P1-A1` handoff, `phase1-implementation-package.md`, `manual-verification.md`, `acceptance-thresholds.md`, `phase1-ue-bridge-bringup-runbook.md` | `plans/stage1/40-tasks/task-packet-s1-p1-a2.md`, `plans/stage1/60-user/manual-verification.md`, `plans/stage1/10-specs/acceptance-thresholds.md`, `plans/stage1/30-evidence/g2-evaluation.md`, `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none; current work is G2 comparison packaging and user-side judgment setup |
+| P0-01 | Orchestrator | completed | planning bundle as initially frozen | `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none |
+| S1-P0-U1 | User | completed | environment and setup specs | external tool/runtime setup and license acceptance | none |
+| S1-P0-U2 | User | completed | scaffold and user setup docs | UE editor setup | none |
+| S1-P0-A1 | AI | completed | frozen Phase 0 inputs | Phase 0 package + spec paths | none |
+| S1-P0-A2 | AI + User | completed | Phase 0 execution package + G1 evidence paths | evidence + log paths | none |
+| S1-P1-A1 | AI | completed | Phase 1 implementation package, ONNX/export specs, UE bridge implementation spec | ONNX export/runtime bridge paths | none |
+| S1-P1-A2 | AI | in_progress | accepted `S1-P1-A1` handoff, Phase 1 implementation package, manual verification, acceptance thresholds, bring-up runbook, newer balance design docs | `plans/stage1/40-design/*.md`, `plans/stage1/30-evidence/g2-evaluation.md`, `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none; active work now includes balance entry/transition design, comparison packaging, and transition-failure diagnosis |
 
 ## Frozen Inputs For Phase 0 Preparation
 
-- `Freeze point`: commit `0a9bf13`
 - `Frozen docs`:
   - `AGENTS.md`
   - `ENGINEERING_PLAN.md`
@@ -56,9 +55,10 @@ Use it to track:
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-P1-A2 | runnable now; runtime stability and first movement milestones are green, so the next safe task is G2 side-by-side packaging and evidence capture |
-| 2 | G2 evidence capture | runnable once the frozen comparison sequence and live side-by-side harness are accepted |
-| 3 | S1-P2-A1 | not runnable until G2 is explicitly passed |
+| 1 | S1-P1-A2 | runnable now; runtime is stable enough for design-led transition work, G2 packaging, and balance transition validation |
+| 2 | Balance transition validation | runnable now; the repo now has enough entry/transition instrumentation to validate explicit Phase 1 / Phase 2 contracts |
+| 3 | G2 evidence capture | runnable once the frozen comparison sequence and presentation path are accepted for the current runtime baseline |
+| 4 | S1-P2-A1 | not runnable until G2 is explicitly passed |
 
 ## Waiting On User
 
@@ -68,58 +68,46 @@ Use it to track:
 
 ## Latest Phase 0 Evidence Progress
 
-- the selected local `motion_tracker/smpl` checkpoint contract is now written down in `bridge-spec.md`
-- G1 Criterion 2 now has concrete evidence in `g1-evidence.md` and scores `pass`
-- the motion-source review in `g1-evidence.md` now scores `pass`
-- the UE scaffold is now verified more concretely: `PhysAnimUE5.uproject` lists `PoseSearch` and `PhysicsControl`, Manny content exists under `Content/Characters/Mannequins`, editor logs show `NNERuntimeORT` runtime availability, and PIE launched successfully
-- March 10, 2026 IsaacLab debug work identified one real launch hazard and several compatibility mismatches in the local ProtoMotions path: overlay/capture hooks could crash Vulkan startup, `h5py` had to be imported before Isaac Lab app launch on this setup, the local Isaac Lab package requires `Se2KeyboardCfg`, and the installed MoviePy package uses the new root-level `ImageSequenceClip` export instead of `moviepy.editor`
-- the current visual eval path now renders and records locally with those compatibility fixes in place; noisy RTX sensor DLL errors still appear in the console, but they are not currently blocking `MV-G1-01`
-- user evidence now confirms `F:\NewEngine\Training\ProtoMotions\output\renderings\phase0_eval_visual-2026-03-10-10-15-07.mp4` was saved successfully for `MV-G1-01`
-- user evidence now also confirms a `pass` verdict for `MV-G1-01`
-- `MV-G1-02` is now frozen to `/Game/ThirdPerson/Lvl_ThirdPerson` plus the plugin runtime harness command `PhysAnim.MVG102.Start`
-- Visual Studio Build Tools 2022 with MSVC v143 and Windows SDK `22621` were installed on March 10, 2026, and Unreal built `PhysAnimPlugin` successfully on this machine
-- the UE `MV-G1-02` harness was debugged through missing visible motion, a Live Coding linker failure, and one Live Coding class-reload crash; a normal closed-editor rebuild then succeeded and user evidence on March 10, 2026 confirmed visible left-elbow movement in the frozen test path
-- later March 10, 2026 discussion narrowed `MV-G1-02` to an explicitly stationary proof; movement-induced shoulder artifacts were judged out of scope for this checkpoint and deferred to later integrated UE checks
-- the user explicitly accepted screenshot-only evidence for `MV-G1-02`, so that checkpoint now scores `pass`
-- `MV-G1-03` is now frozen to `/Game/ThirdPerson/Lvl_ThirdPerson` plus the dedicated mapped-joint smoke harness command `PhysAnim.MVG103.Start`, using the explicit validation case `isolated left elbow flexion`
-- the user later confirmed `MV-G1-03` completed; the Manny smoke-test mapping check is now accepted as `pass`, with no remaining open blocker at the isolated left-elbow smoke-harness stage
-- later March 10, 2026 Phase 1 bring-up work reached the UE model-loading gate and confirmed the next blocker is not Unreal wiring but missing export output: `F:\NewEngine\Training\output\phc_policy.onnx` does not exist, `Training\scripts\export_onnx.py` does not exist, the ONNX validation test is still a skip-if-placeholder, and no accepted ONNX export handoff exists yet
-- the selected pretrained checkpoint still exists at `F:\NewEngine\Training\ProtoMotions\data\pretrained_models\motion_tracker\smpl\last.ckpt`, so the missing ONNX file is an orchestration/process gap rather than a missing model-source artifact
-- user evidence on March 10, 2026 now confirms the frozen `120 Hz` synchronous-substep configuration (`Tick Physics Async = false`, `Substepping = true`, `Max Substep Delta Time = 0.008333`, `Max Substeps = 4`) stayed controllable without jitter or wobble dominating the run
-- Gate G1 now passes; Phase 0 evidence capture is complete and Phase 1 is unblocked
-- `Training\scripts\export_onnx.py` now exists and exports the selected pretrained `motion_tracker/smpl` actor path through the locked three-input Stage 1 contract
-- `Training\tests\test_onnx_export.py` now validates the real input/output names and numeric parity requirement instead of skipping behind a placeholder contract
-- March 10, 2026 worker validation exported `F:\NewEngine\Training\output\phc_policy.onnx` with accepted opset `17` and `onnxruntime 1.24.3` parity max abs diff `1.64e-7`
-- the exported ONNX was copied to `F:\NewEngine\PhysAnimUE5\Content\NNEModels\phc_policy.onnx`, so the next runtime step is UE import / NNE model-creation validation rather than more offline export work
-- user evidence on March 10, 2026 now confirms the startup-success line:
+- the selected local `motion_tracker/smpl` checkpoint contract remains written down in `bridge-spec.md`
+- G1 Criterion 2 remains `pass`
+- the motion-source review remains `pass`
+- the UE scaffold remains concretely verified:
+  - `PhysAnimUE5.uproject` lists `PoseSearch` and `PhysicsControl`
+  - Manny content exists under `Content/Characters/Mannequins`
+  - editor logs show `NNERuntimeORT` runtime availability
+  - PIE launched successfully
+- the current visual eval path still renders and records locally with the earlier compatibility fixes in place
+- user evidence previously confirmed successful save and `pass` verdicts for the frozen `MV-G1-*` checks
+- Visual Studio Build Tools 2022 with MSVC v143 and Windows SDK `22621` remain installed and usable
+- the UE startup-success path remains proven:
   - `[PhysAnim] Startup success. Runtime=NNERuntimeORTDml Model=/Game/NNEModels/phc_policy.phc_policy`
-- the active Phase 1 blocker has changed:
-  - model loading is proven
-  - the current failure mode is uncontrolled post-startup flight / spinning
-  - the next required planning artifact is a stabilization/tuning package, not a G2 comparison handoff
-  - the current implementation now includes objective instability monitoring on the root body, so the next stabilization loop can use fail-stop metrics and runtime diagnostics instead of relying only on visual judgment
+- Gate G1 remains `pass`
+- Phase 0 evidence capture remains complete
+- Phase 1 remains unblocked
 
 ## Accepted Handoffs
 
 | Task ID | Artifact | Accepted? | Notes |
 |---|---|---|---|
 | S1-PLAN-01 | Stage 1 planning bundle | yes | foundational planning artifacts in place |
-| S1-PLAN-02 | `bridge-spec.md` | yes | planning-level contract defined and now updated with the selected local runtime contract |
-| S1-PLAN-03 | `retargeting-spec.md` | yes | planning-level mapping defined, awaits runtime validation |
+| S1-PLAN-02 | `bridge-spec.md` | yes | planning-level contract defined and updated with selected local runtime contract |
+| S1-PLAN-03 | `retargeting-spec.md` | yes | planning-level mapping defined; runtime validation work followed |
 | S1-PLAN-04 | `test-strategy.md` | yes | verification split defined |
 | S1-PLAN-05 | environment / pretrained / scaffold / threshold bundle | yes | execution-planning gaps materially reduced |
-| S1-PLAN-06 | task packets / lock sheets / user return path | yes | re-entry into Phase 0 is now operationally defined |
-| S1-PLAN-07 | retrieval / export / comparison lock bundle | yes | remaining Phase 0-1 planning gaps materially reduced |
-| S1-P0-A1 | Phase 0 machine-specific execution package | yes | Windows-native Isaac Sim / Isaac Lab path is frozen and Phase 0 can advance without more setup replanning |
-| S1-P1-A1 | single-character implementation package freeze + ONNX export path | yes | startup now succeeds through `NNERuntimeORTDml`, so export/import discovery is no longer on the critical path |
+| S1-PLAN-06 | task packets / lock sheets / user return path | yes | re-entry into Phase 0 operationally defined |
+| S1-PLAN-07 | retrieval / export / comparison lock bundle | yes | Phase 0-1 planning gaps materially reduced |
+| S1-P0-A1 | Phase 0 machine-specific execution package | yes | Windows-native Isaac Sim / Isaac Lab path frozen |
+| S1-P1-A1 | single-character implementation package freeze + ONNX export path | yes | startup now succeeds through `NNERuntimeORTDml`; export/import discovery no longer critical path |
 
 ## Blocked / Deferred
 
 | Task ID | Status | Reason |
 |---|---|---|
-| G2 | readying | runtime stability blockers are cleared for the current scope; remaining work is fair comparison packaging and user judgment |
+| G2 | readying | baseline runtime is stable enough, but comparison packaging still needs to reflect the current locomotion/balance state honestly |
 | S1-P2-A1 | blocked | depends on G2 pass |
 | S1-P2-A2 | blocked | depends on Phase 2 result |
+| Ramp / slope locomotion fidelity | deferred | flat-ground locomotion playback and truthful balance transition remain higher priority |
+| Broad perturbation tuning by guesswork | deferred | explicit transition design and objective phase diagnostics are now preferred over ad hoc tuning |
 
 ## Ledger Sync Note
 
@@ -128,1156 +116,279 @@ Whenever new setup or gate evidence arrives:
 1. update `assumption-ledger.md`
 2. update this execution log
 3. only then issue or advance worker tasks
-- March 11, 2026:
-  - normal manual runtime now preserves capsule collision and `CharacterMovement` during `BridgeActive` through `physanim.AllowCharacterMovementInBridgeActive = 1`
-  - the deterministic movement smoke harness remains valid, but gameplay-shell preservation is no longer smoke-only
-  - manual/runtime visibility now also includes an always-visible on-screen bridge state indicator controlled by `physanim.ShowBridgeStatusIndicator`
-  - movement-triggered fail-stop false positives were traced to world-space root instability checks after gameplay-shell preservation
-  - fix: when the gameplay shell is preserved, runtime instability now evaluates root/body translation relative to the owning actor shell instead of the original world-space activation frame
-  - verification: `run-pie-movement-smoke.ps1` now completes without `BridgeActive -> FailStopped`
-  - first movement-stability milestone is now treated as `pass`
-  - next validation pass is a longer deterministic locomotion soak over repeated scripted movement cycles plus short manual real-`WASD` confirmation
-  - the longer deterministic locomotion soak is now also green
-  - manual real-`WASD` in `BridgeActive` now works with preserved `CharacterMovement`
-  - a live side-by-side G2 harness now exists through `PhysAnim.G2.StartSideBySide` / `PhysAnim.G2.StopSideBySide`
-  - the preferred G2 format is now one PIE session with a `Physics-Driven` Manny and a spawned `Kinematic` Manny, not two separate recordings unless the live harness is unavailable
-  - a scripted G2 presentation harness now exists through `PhysAnim.G2.StartPresentation`
-    - it freezes player move/look input
-    - it drives both actors through the same short sequence
-    - it uses a fixed tracking comparison camera
-  - manual side-by-side remains available as a weaker fallback through `PhysAnim.G2.StartSideBySide`
-  - a later March 11, 2026 startup-stability pass found one remaining early lower-body edge case in manual runtime:
-    - staged bring-up was promoting thighs first, calves second, and feet/balls third
-    - that created a mixed simulated/kinematic lower-limb chain during startup
-    - the failing log showed the first bad spike in `calf_r` and `ball_r` before policy influence mattered
-  - fix:
-    - staged bring-up now unlocks calves, feet, and balls together as one lower-leg group
-    - the arm chain still remains separate from the final hand-only group
-  - verification after that lower-leg staging fix:
-    - `PhysAnim.Component` passed
-    - `run-pie-smoke.ps1` passed
-    - the fresh smoke log no longer shows the old early `calf_r/ball_r` blow-up at group `2/5`
-    - startup, policy activation, and the rest of the smoke window stayed bounded without `Fail-stop`
-  - a CVar-driven stabilization stress-test now exists in the live bridge runtime:
-    - `pa.StabilizationStressTest 1`
-    - `pa.StabilizationStressTestRampSeconds 45`
-    - it linearly ramps the three angular stabilization multipliers from `1.0 -> 0.0` after the bridge is fully settled
-    - the current runtime diagnostics now log `stressTest[enabled active multiplier elapsed]`
-    - the harness now also supports:
-      - recovery profile (`pa.StabilizationStressTestProfile 1`)
-      - target floor / hold / ramp-up controls
-      - per-parameter sweep mode
-      - first spike / first instability markers
-      - local pose drift metrics for spine, head, and feet
-  - first stress-test result:
-    - `PhysAnim.PIE.Smoke` stayed stable through the full idle ramp down to `multiplier=0.00`
-    - no `Fail-stop` occurred during that run
-    - conclusion: the current G2 perturbation problem is not simply “stabilization still too strong to relax”
-  - extended stress-test matrix results:
-    - idle answers are now concrete enough to answer the full question sheet:
-      - lower body remains the first weak link
-      - idle never collapses, even at `multiplier=0.00`
-      - recovery succeeds
-      - damping ratio is the most critical single lever
-    - movement materially changes those answers:
-      - first instability in the uniform movement sweep now appears around `multiplier=0.44`
-      - first angular spike shifts to `ball_r`
-      - first linear spike shifts to `foot_l`
-      - local foot drift grows into the `80-90 cm` range by the end of the movement sweeps
-      - the `ActionScale 0.0` proxy is not enough to claim “PD alone is safe” under locomotion
-  - perturbation debugging resumed after the stress matrix:
-    - shell-level shove was removed because it only produced sideways actor sliding
-    - the presentation harness now uses body-level contact push plus a temporary full low-gain perturbation override
-    - latest automated G2 evidence shows:
-      - no actor-shell slide (`actorDelta = 0.0 cm`)
-      - modest articulated response (`localHead ~= 2.3 cm`, `localFoot ~= 3.0-4.5 cm`)
-    - conclusion:
-      - the remaining perturbation readability problem is not “insufficient stabilization relaxation”
-      - it is now most likely rooted in the kinematic root / gameplay-shell anchoring and how contact couples into the articulated chain
-  - follow-up perturbation experiments then tested the opposite extreme:
-    - temporarily allowing the root body modifier to simulate during the G2 perturbation window
-    - keeping the contact push body-only
-    - trying:
-      - low gains
-      - normal gains
-      - gentler pusher parameters
-      - shorter root-unlock windows
-      - temporary policy suspension during the shove
-  - all of those root-unlock variants failed in the same direction:
-    - the perturbation became clearly visible
-    - but the bridge immediately crossed fail-stop thresholds
-    - the shortest / gentlest root-unlock runs still failed in about `0.25-0.35s`
-  - current conclusion:
-    - the standing external-push perturbation is now well-explored under the current Stage 1 bridge contract
-    - root-kine path is too subtle
-    - root-sim path is unstable
-    - the next perturbation attempt should change scenario, not just retune the same idle push again
-  - perturbation work then pivoted to that next scenario:
-    - the G2 presentation now starts with a locomotion-coupled perturbation instead of a standing shove
-    - both actors begin the same short scripted walk
-    - only the `Physics-Driven` actor receives the extra contact disturbance
-    - the kinematic comparison actor stays on the same scripted locomotion path without that extra contact
-    - the presentation shell-shove path remains disabled
-  - latest locomotion-coupled perturbation result:
-    - the presentation stays stable with no `Fail-stop`
-    - the perturbation now produces measurable divergence during the walk instead of the old standing twitch-only result
-    - current limitation: the difference is still likely subtle to the eye, so this improves the G2 setup but does not yet guarantee a clear `pass`
-  - a follow-up March 12, 2026 refinement pass then fixed one real implementation gap in that locomotion-coupled path:
-    - the presentation perturbation stabilization override had accidentally been left as a no-op (`1.0 / 1.0 / 1.0`)
-    - it now applies real movement-safe angular relaxation during the perturbation window
-    - current frozen override multipliers:
-      - strength `0.72`
-      - damping ratio `0.78`
-      - extra damping `0.74`
-  - the same pass also tightened the perturbation profile toward the lower body:
-    - slower initial perturbation walk
-    - lower / narrower pusher volume
-    - lead-leg-biased pusher placement
-  - result after those refinements:
-    - automated G2 presentation still stays stable with no `Fail-stop`
-    - but the measured source-vs-kinematic local gap remains modest
-    - current best reading is that the locomotion-coupled scenario is now correctly implemented and safer, but still presentation-limited rather than obviously persuasive
-  - March 12, 2026 alignment follow-up:
-    - `PhysAnim.Component.MannyConstraintInventory` now audits every Stage 1 bridge control against the Manny physics asset
-    - `17 / 21` bridge controls have direct Manny constraint pairs
-    - the four missing direct Manny pairs are:
-      - `neck_01 <- spine_03`
-      - `head <- neck_01`
-      - `clavicle_l <- spine_03`
-      - `clavicle_r <- spine_03`
-    - the explicit SMPL-vs-Manny inventory is now recorded in:
-      - `plans/stage1/40-design/smpl-to-manny-limit-table.md`
-    - current high-confidence mismatch:
-      - Manny lower-body joints, mid/upper spine, shoulders, and elbows are materially tighter than the broad SMPL training-side target ranges
-    - implication:
-      - current UE action-range semantics are narrower and less transparent than training
-      - next alignment work should define deliberate Stage 1 operating limits and then move to mass-distribution auditing, not blindly widen constraints
-  - March 12, 2026 mass-distribution audit note:
-    - `PhysAnim.Component.MannyMassInventory` now records the current Manny per-body mass distribution from the physics asset path
-    - the explicit family-level comparison is now saved in:
-      - `plans/stage1/40-design/smpl-to-manny-mass-table.md`
-    - current high-confidence mismatch:
-      - Manny is torso-heavy and upper-body-heavy relative to the ProtoMotions SMPL training asset
-      - Manny is leg-light relative to the ProtoMotions SMPL training asset
-      - `spine_01` is effectively massless in the current inventory path, so torso mass is concentrated higher in the chain than training
-    - implication:
-      - the next alignment pass should define a family-level Stage 1 mass-adjustment policy together with operating limits
-      - mass alignment should be judged primarily against movement and perturbation behavior, not just idle
-  - March 12, 2026 operating-limit policy note:
-    - the first explicit Stage 1 operating-limit policy is now saved in:
-      - `plans/stage1/40-design/stage1-operating-limit-policy.md`
-    - frozen decision:
-      - do not broaden Manny hard limits blindly
-      - keep current Manny constraints as the Stage 1 hard safety envelope
-      - move next to family-level mass adjustment before any broad limit retuning
-  - March 12, 2026 family mass-policy implementation note:
-    - the first family-level Manny mass-adjustment policy is now implemented in the live bridge runtime
-    - current policy:
-      - pelvis scaled down
-      - full leg chains scaled up
-      - spine, neck/head, and shoulder/arm/hand families scaled down
-    - the bridge now applies those training-aligned family mass scales on bridge activation and restores original body mass scales on bridge teardown
-    - verification:
-      - `PhysAnim.Component` passed
-      - `PhysAnim.PIE.Smoke` passed
-      - `PhysAnim.PIE.MovementSmoke` passed
-      - `PhysAnim.PIE.G2Presentation` passed
-    - current runtime read:
-      - the mass-alignment pass is mechanically correct and regression-safe for the current smoke scope
-      - the next alignment decision is whether to keep this family policy as the Stage 1 baseline and move to PD-family response fitting
-  - March 12, 2026 PD-family fitting note:
-    - the first training-aligned control-family response fit is now enabled as the Stage 1 baseline
-    - first measured movement-smoke sweep:
-      - `blend=0.00`
-      - `blend=0.25`
-      - `blend=0.50`
-      - `blend=1.00`
-    - current measured result:
-      - all four blends passed `PhysAnim.PIE.MovementSmoke`
-      - `blend=0.50` produced the best nonzero movement fit in the first sweep:
-        - lower forward peak body linear speed than `0.00`, `0.25`, and `1.00`
-        - lower forward peak body angular speed than `0.00`, `0.25`, and `1.00`
-      - `blend=0.25` introduced a worse late angular outlier than the other tested blends
-    - frozen baseline:
-      - keep `bApplyTrainingAlignedControlFamilyProfile = true`
-      - keep `TrainingAlignedControlFamilyProfileBlend = 0.50`
-  - March 12, 2026 toe-family refinement note:
-    - `ball_l` and `ball_r` remain the most frequent peak angular offenders during deterministic movement
-    - first targeted fit:
-      - move `ball_*` out of the weaker mid-tier family and onto the locomotion leg family baseline
-    - measured result versus the previous `0.50` default profile:
-      - still no fail-stop
-      - lower root linear peak during movement
-      - slightly lower toe angular peak
-      - slight increase in peak lower-leg linear spike
-    - current runtime read:
-      - this is a modest improvement, not a decisive fix
-      - the next fit should be more targeted, likely toe-specific extra damping rather than another broad family reassignment
-  - March 12, 2026 toe-local follow-up note:
-    - tested toe-specific follow-ups after the toe-family reassignment:
-      - raise `ball_*` extra damping above the leg baseline
-      - raise `ball_*` strength slightly above the leg baseline
-    - measured result:
-      - both variants remained stable
-      - both variants were worse than the committed toe-family mapping baseline
-      - toe-only extra damping increased both root and toe peaks
-      - toe-only strength increase was the worst result, with a large backward toe angular spike
-    - current runtime read:
-      - the committed toe-family reassignment remains the best measured toe-focused fit so far
-      - the next pass should stop retuning isolated toe gains and instead inspect a different mismatch surface
-  - March 12, 2026 toe-constraint authoring audit note:
-    - added `PhysAnim.Component.MannyToeConstraintAuthoring`
-    - current audit result:
-      - `ball_l <- foot_l` and `ball_r <- foot_r` both exist as direct Manny constraints
-      - left/right toe motions and limit angles match exactly
-      - left/right reference frames are symmetric by magnitude
-      - toe axes are normalized and non-degenerate
-      - angular rotation offsets are zero on both sides
-    - current runtime read:
-      - there is no gross sign that the manually created `ball_*` constraints were authored incorrectly
-      - the more plausible remaining issue is that the toe constraints are permissive and sensitive, not malformed
-      - the next lower-limb pass should inspect toe operating-limit policy or another non-gain mismatch surface, not keep assuming bad manual authoring
-  - March 12, 2026 toe operating-limit policy note:
-    - added a temporary runtime toe operating-limit policy for:
-      - `ball_l <- foot_l`
-      - `ball_r <- foot_r`
-    - measured sweep:
-      - `blend=1.00`:
-        - lower peak lower-leg linear speed
-        - worse toe angular spike
-        - worse root linear peak
-      - `blend=0.50`:
-        - lower peak body linear speed than the committed toe-family baseline
-        - lower peak body angular speed than the committed toe-family baseline
-        - slightly higher root linear peak than the committed toe-family baseline, but much better than `blend=1.00`
-    - frozen baseline candidate:
-      - keep `bApplyTrainingAlignedToeLimitPolicy = true`
-      - keep `TrainingAlignedToeLimitPolicyBlend = 0.50`
-  - March 12, 2026 ankle-constraint authoring audit plan:
-    - next lower-limb pass moves one level up the chain:
-      - `foot_l <- calf_l`
-      - `foot_r <- calf_r`
-    - reason:
-      - after the verified `0.50` toe-limit baseline, deterministic movement still peaks at `calf_l(sim)` for body linear speed and `ball_l(sim)` for body angular speed
-    - immediate goal:
-      - prove whether the direct Manny ankle constraints are malformed or merely sensitive before making any broader lower-limb operating-limit change
-  - March 12, 2026 ankle-constraint authoring audit result:
-    - added `PhysAnim.Component.MannyAnkleConstraintAuthoring`
-    - current audit result:
-      - `foot_l <- calf_l` and `foot_r <- calf_r` both exist as direct Manny constraints
-      - left/right ankle motions and limit angles match exactly
-      - left/right reference frames are symmetric by magnitude
-      - ankle axes are normalized and non-degenerate
-      - angular rotation offsets are zero on both sides
-    - current runtime read:
-      - there is no gross sign that the ankle chain was authored incorrectly
-      - the next lower-limb mismatch surface is no longer manual ankle authoring
-      - the next pass should inspect lower-limb target-range / limit-occupancy behavior under movement
-  - March 12, 2026 lower-limb limit-occupancy instrumentation result:
-    - runtime diagnostics now log:
-      - `lowerLimbLimitOccupancy=<bone>:<ratio>x proxy=<deg>`
-    - measured result:
-      - first policy-enabled frame starts at `0.00x`
-      - once movement begins, `calf_l` / `calf_r` repeatedly climb above `1.0x`
-      - common measured range is about `1.7x - 2.6x`
-      - the proxy is consistently `5.0deg`, matching Manny's tightest direct calf/knee limited axis
-    - current runtime read:
-      - the remaining lower-limb mismatch is target-range / limit-occupancy, not malformed toe or ankle authoring
-      - the next pass should test a temporary lower-limb target-range policy, starting with `calf_*`
-  - March 12, 2026 lower-limb target-range policy note:
-    - reviewed ProtoMotions lower-limb action mapping again:
-      - the relevant SMPL lower-limb path is the `3-DoF` symmetric `1.2x` expansion
-      - not the `1-DoF` extend-past-limit path
-    - implemented the first runtime target-range policy on the knee/ankle chain:
-      - `calf_*` target scale `0.50`
-      - `foot_*` target scale `0.75`
-      - `ball_*` unchanged in this pass
-    - measured result in deterministic movement smoke:
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-      - lower-limb occupancy falls materially from the old `~1.7x - 2.6x` common range to roughly `~0.7x - 1.2x` for most active samples
-      - first forward movement samples now sit near `~0.95x - 1.03x`
-    - current runtime read:
-      - lower-limb target-range mismatch is confirmed as real
-      - this knee/ankle-chain target-range policy is the new baseline candidate
-      - remaining distal foot/toe spikes mean the next pass should inspect lower-limb representation / distal coupling, not more authoring tweaks
-  - March 12, 2026 distal lower-limb target-range note:
-    - extended the same training-aligned lower-limb target-range policy into the distal chain:
-      - `calf_* = 0.50`
-      - `foot_* = 0.50`
-      - `ball_* = 0.35`
-    - deterministic movement smoke stayed green:
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - first forward movement spikes improve materially versus the previous knee/ankle-only baseline
-      - but later backward/strafe phases still produce large `ball_*` angular spikes
-      - some bursts shift the peak angular offender up the chain instead of removing the distal problem
-    - current runtime read:
-      - scalar distal range shaping helps, but does not finish the lower-limb problem
-      - the next pass should inspect explicit distal target representation under locomotion
-  - March 12, 2026 movement-only distal representation note:
-    - implemented the first locomotion-time distal representation policy:
-      - activates above `50 cm/s` planar owner speed
-      - `foot_*` locomotion representation scale `0.75`
-      - `ball_*` locomotion representation scale `0.50`
-    - deterministic movement smoke stayed green:
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - early forward movement spikes improve somewhat relative to the distal-range baseline
-      - backward and strafe phases still produce large distal `ball_*` spikes
-    - current runtime read:
-      - this locomotion-time distal attenuation is not a clean new baseline
-      - the next pass should move to more structural distal target construction under locomotion, not another scalar attenuation
-  - March 12, 2026 distal locomotion target-composition note:
-    - reviewed the next lower-limb mismatch surface against:
-      - official `UPhysicsControlComponent` / `FPhysicsControlData` docs
-      - local UE 5.7 PhysicsControl source showing explicit targets are applied in the space of the skeletal target transform
-      - ProtoMotions code confirming PD targets are authored in simulator joint space
-    - first runtime experiment:
-      - above `50 cm/s`, force `foot_*` and `ball_*` controls into explicit-only target mode
-      - leave the rest of the body on the current policy-active skeletal-target composition path
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - backward distal spikes improve materially versus the locomotion-time attenuation baseline
-      - strafe remains mixed, with some peaks shifting up into `foot_*`, `calf_*`, or `thigh_*`
-    - current runtime read:
-      - target composition mode is now confirmed as a real lower-limb mismatch surface
-      - distal-only composition switching is promising, but not yet a clean final baseline
-      - the next pass should test whether the explicit-only composition policy must expand to the full knee/ankle/toe chain or whether locomotion-transition handling is the remaining problem
-  - March 12, 2026 full lower-limb locomotion composition note:
-    - re-checked:
-      - official UE PhysicsControl docs
-      - local UE 5.7 PhysicsControl source
-      - ProtoMotions local control mapping code and online docs
-    - implemented the next narrow representation experiment:
-      - above `50 cm/s`, `calf_*`, `foot_*`, and `ball_*` all force `bUseSkeletalAnimation = false`
-      - the rest of the body stays on the current policy-active skeletal-target composition path
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - no locomotion-start discontinuity
-      - movement completion remains green
-      - forward and backward remain mixed rather than clearly improving
-      - one forward sample worsens materially, with `ball_l` peaking around `10104 deg/s`
-      - late backward still contains large distal spikes, including `ball_r` around `9176 deg/s`
-    - current runtime read:
-      - whole-chain explicit-only switching is not a clean new baseline
-      - the remaining mismatch is likely locomotion transition handling or more proximal lower-limb composition, not more distal-set widening alone
-  - March 12, 2026 lower-limb composition transition-policy note:
-    - re-checked:
-      - official `UPhysicsControlComponent` and `SetControlsUseSkeletalAnimation` docs
-      - local UE 5.7 PhysicsControl source confirming the runtime mode switch is binary
-      - ProtoMotions simulator/control mapping code confirming there is no equivalent locomotion-time representation flip in training
-    - implemented the next transition-handling experiment:
-      - reverted the explicit-only affected set back to `foot_*` and `ball_*`
-      - added locomotion-speed hysteresis and dwell:
-        - enter `50 cm/s`
-        - exit `100 cm/s`
-        - enter hold `0.20 s`
-        - exit hold `0.20 s`
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - no locomotion-start discontinuity
-      - forward and backward peaks are materially lower than the failed full-chain composition pass
-      - remaining spikes often migrate proximally into `thigh_*` or other non-distal bodies
-    - current runtime read:
-      - abrupt representation switching was part of the locomotion mismatch
-      - this stateful transition policy is the best measured locomotion-composition baseline so far
-      - the next pass should inspect more proximal lower-limb composition or target-velocity handling, not widen the distal explicit-only set again
-  - March 12, 2026 proximal lower-limb composition note:
-    - re-checked:
-      - official UE PhysicsControl docs
-      - local UE 5.7 PhysicsControl source
-      - ProtoMotions simulator/control mapping code
-    - implemented one narrow structural experiment:
-      - kept the current locomotion-speed hysteresis+dwell baseline
-      - added `thigh_*` to the explicit-only locomotion composition set
-      - kept `calf_*` on the composed path
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - the pass regressed materially versus the transition-policy baseline
-      - forward samples rose into repeated `ball_r` spikes around `~6177 - 7009 deg/s`
-      - backward samples rose into repeated `foot_r` / `ball_r` spikes around `~8700 - 11979 deg/s`
-      - repeated `calf_r` linear spikes also rose into the `~2200 - 3080 cm/s` range
-    - current runtime read:
-      - adding `thigh_*` to the explicit-only locomotion composition set is not the right new baseline
-      - the code has been restored to the last safe transition-policy baseline
-      - the next pass should target another locomotion-time mismatch surface, most likely lower-limb target write timing or another policy-side transition seam
-  - March 12, 2026 distal explicit target-velocity note:
-    - re-checked:
-      - official `UPhysicsControlComponent`, `SetControlsUseSkeletalAnimation`, and `UpdateControls` docs
-      - local UE 5.7 PhysicsControl source showing `SetControlTargetOrientation(...)` synthesizes explicit target angular velocity from orientation deltas unless `AngularVelocityDeltaTime == 0`
-      - ProtoMotions simulator PD-target path showing torque from target position and current velocity, without an equivalent explicit target angular velocity term
-    - implemented one narrow locomotion-time experiment:
-      - kept the committed `foot_*` / `ball_*` hysteresis+dwell baseline
-      - zeroed only the explicit target angular-velocity delta time for those distal controls while the mode is active
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - first forward distal spikes drop materially into the low-thousands range
-      - lower-limb occupancy stays mostly around `~0.9x - 1.1x`
-      - some later peaks still migrate proximally into `calf_*`, `thigh_*`, and occasional `foot_*`
-    - current runtime read:
-      - synthesized explicit target angular velocity was a real locomotion-time mismatch surface
-      - this is a keepable improvement to the current distal locomotion baseline
-      - the next pass should inspect per-bone write smoothing or another proximal lower-limb seam, not re-open whole-chain explicit-only switching
-  - March 12, 2026 lower-limb composed target-velocity note:
-    - re-checked:
-      - official UE PhysicsControl docs
-      - local UE 5.7 source confirming explicit target angular velocity is added even when skeletal-animation targets are used
-      - ProtoMotions PD-target path confirming there is no directly equivalent explicit target angular-velocity term
-    - implemented one narrow locomotion-time experiment:
-      - kept the committed `foot_*` / `ball_*` hysteresis+dwell baseline
-      - widened angular-velocity suppression to `thigh_*`, `calf_*`, `foot_*`, and `ball_*`
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - forward is mixed, with some distal improvement but continued large proximal spikes
-      - backward regresses, with large `ball_*` spikes still present
-      - late idle/strafe also show new `ball_*` outliers
-    - current runtime read:
-      - broad lower-limb explicit target angular-velocity suppression is not a clean new baseline
-      - the code has been restored to the narrower distal-only suppression baseline
-      - the next pass should target per-bone target-write smoothing or another proximal locomotion transition seam
-  - March 12, 2026 locomotion-time proximal lower-limb response-fit note:
-    - re-checked:
-      - official UE PhysicsControl docs
-      - local UE 5.7 PhysicsControl source
-      - ProtoMotions docs and local control-mapping code
-    - implemented one narrow locomotion-time response experiment:
-      - kept the current distal locomotion baseline unchanged
-      - added a proximal lower-limb response profile only for `thigh_*` / `calf_*`
-      - damping ratio scale `1.20`
-      - extra damping scale `1.35`
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - forward remains mixed
-      - backward stays difficult but does not reopen the old high-spike regime
-      - strafe and late idle improve materially relative to the distal-only suppression baseline
-    - current runtime read:
-      - this is a keepable improvement on top of the current distal locomotion baseline
-      - the next pass should stay in locomotion-time response fitting, most likely with a more selective per-bone proximal profile
-  - March 12, 2026 locomotion-time thigh de-intensification note:
-    - re-used:
-      - official UE PhysicsControl docs
-      - local UE 5.7 PhysicsControl source
-      - ProtoMotions docs and local control code
-    - implemented one narrow selective-response experiment:
-      - `thigh_*` reduced to damping ratio `1.05`, extra damping `1.10`
-      - `calf_*` stayed at damping ratio `1.20`, extra damping `1.35`
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - some strafe samples improve
-      - forward does not materially beat the shared proximal-response baseline
-      - backward and late idle re-open larger outliers than the shared baseline
-    - current runtime read:
-      - thigh de-intensification is not a clean new baseline
-      - runtime code has been restored to the shared proximal-response profile
-  - March 12, 2026 corrected locomotion shell-coupling audit note:
-    - the first shell/body drift read turned out to be invalid:
-      - shell telemetry was accidentally derived from an already shell-relative root diagnostic
-      - that double-counted shell/body separation and made the drift look much worse than it was
-    - after fixing the reference-frame bug and rerunning deterministic movement smoke:
-      - shell planar offset delta is modest, commonly around `~10 - 16 cm` at peak
-      - shell/root planar velocity mismatch is modest, commonly around `~2 - 36 cm/s`
-      - shell/root planar velocity alignment stays near `1.00` during active movement
-      - no fail-stop appears in the corrected movement smoke
-    - current runtime read:
-      - the shell-coupling audit was worth doing because it ruled out the wrong pivot
-      - gameplay-shell coupling is not the dominant remaining locomotion blocker
-      - the next useful work should stay on lower-limb locomotion-time representation / response
-  - March 12, 2026 lower-limb target-step policy note:
-    - re-checked:
-      - official UE PhysicsControl docs
-      - local UE 5.7 PhysicsControl source
-      - ProtoMotions docs and local control code
-    - implemented one narrow locomotion-time experiment:
-      - tightened the per-step target envelope only for `thigh_*`, `calf_*`, `foot_*`, and `ball_*`
-      - added target-step occupancy diagnostics to make the pass falsifiable
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - the pass is not a clean win
-      - forward regresses materially, including `foot_l` around `~4029 deg/s`
-      - backward still shows large lower-limb outliers, including `thigh_l` around `~2942 deg/s`
-      - target-step occupancy stays only moderate, usually around `~0.25x - 0.79x`
-    - current runtime read:
-      - lower-limb target-step smoothing was worth testing, but it is not the dominant remaining seam
-      - runtime code has been restored to the shared proximal-response baseline
-      - the next pass should move to another locomotion-time representation seam instead of more step-cap tuning
-  - March 12, 2026 lower-limb contact-exclusion alignment note:
-    - re-checked:
-      - official UE PhysicsControl docs
-      - local UE 5.7 PhysicsControl and PhysicsAsset source
-      - ProtoMotions docs, local config, and `smpl_humanoid.xml`
-    - ProtoMotions lower-limb contact-exclude pairs were mapped to Manny runtime bodies as:
-      - `calf_r <-> ball_r`
-      - `calf_r <-> foot_l`
-      - `calf_r <-> ball_l`
-      - `calf_l <-> ball_l`
-      - `calf_l <-> foot_r`
-      - `calf_l <-> ball_r`
-    - tested a reversible runtime-only experiment:
-      - duplicated Manny's physics asset transiently during `BridgeActive`
-      - applied the mapped lower-limb collision disable pairs
-      - restored the authored asset on teardown
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - Manny already had most of the relevant lower-limb pair disables
-      - the runtime clone only added `2 / 6` new disabled pairs
-      - movement smoke stayed stable but did not show a clean locomotion win
-      - forward and backward still retained meaningful lower-limb outliers
-    - current runtime read:
-      - broader training/runtime alignment is still worth continuing
-      - lower-limb contact exclusions were worth auditing, but they are not the dominant remaining seam
-      - runtime code has been restored to the shared proximal-response + distal angular-velocity suppression baseline
-  - March 12, 2026 PhysicsControl cache-prewarm note:
-    - re-checked:
-      - official UE PhysicsControl docs
-      - local UE 5.7 PhysicsControl source
-      - local UE 5.7 skeletal mesh animation update path
-      - ProtoMotions docs/code to confirm this seam is UE-side only
-    - implemented one narrow startup-ordering pass:
-      - added a one-shot skeletal pose prewarm before the first activation-time `PhysicsControl->UpdateTargetCaches(0.0f)`
-      - skipped prewarm for leader-pose follower meshes
-      - removed the unused per-tick `GetCachedBoneTransforms(...)` call
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - startup PhysicsControl warning burst dropped from `130` `Failed to find bone data` warnings and `42` `GetCachedBoneTransforms` warnings to `0 / 0` in the fresh movement-smoke log
-      - locomotion baseline remained stable
-    - current runtime read:
-      - PhysicsControl cache warmup/order was a real UE-side seam
-      - this is a keepable startup-quality improvement
-      - the broader training/runtime alignment direction remains worthwhile, but this pass does not change the remaining locomotion-time lower-limb target-semantics problem
-  - March 12, 2026 lower-limb target-write smoothing note:
-    - re-checked:
-      - official UE PhysicsControl docs
-      - local UE 5.7 PhysicsControl source
-      - ProtoMotions config/docs and local control path
-    - implemented one narrow locomotion-time experiment:
-      - family-weighted lower-limb target-write smoothing for `thigh_*`, `calf_*`, `foot_*`, and `ball_*`
-      - only while the locomotion-time distal composition mode was active
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - forward and backward stayed stable
-      - but strafe regressed materially, with new large upper/lower chain outliers
-      - the pass was not a clean new baseline
-    - current runtime read:
-      - lower-limb write smoothing was worth falsifying
-      - runtime code has been restored to the previous safe baseline
-      - the broader alignment direction is still worthwhile, but the next pass should move to another locomotion-time representation seam
-  - March 12, 2026 self-observation root-height alignment note:
-    - re-checked:
-      - official UE `CharacterMovement` and PhysicsControl docs
-      - local UE 5.7 `CharacterMovement` and PhysicsControl source
-      - ProtoMotions pretrained config and `max_coords` observation code
-    - key finding:
-      - ProtoMotions' runtime self observation is structurally close to the current UE bridge `358`-float packing
-      - but ProtoMotions' runtime convention is `z-up`, and the bridge caller was still passing `ground_height = 0.0f` every frame
-      - that made the self-observation root-height scalar a clear contract violation even before reopening broader world-frame conversion questions
-    - implemented one narrow keep:
-      - resolve walkable floor world `Z` from `CharacterMovement->CurrentFloor`
-      - synthesize the existing `BuildSelfObservation(...)` ground-height argument so the emitted root-height scalar matches `root_world_z - ground_world_z`
-      - leave all other observation channels unchanged in this pass
-    - verification:
-      - UE build passes
-      - `PhysAnim.Component` passes
-      - `PhysAnim.PIE.MovementSmoke` passes
-      - no fail-stop
-    - measured runtime result:
-      - the new helper coverage passes
-      - movement smoke still completes cleanly with the corrected root-height path live
-    - current runtime read:
-      - broader training/runtime alignment is still worth continuing
-      - lower-limb heuristic tuning is no longer the only plausible next lever
-      - this root-height correction is a keepable contract fix, even if it is not yet the full locomotion-time answer
-## 2026-03-12 - Proto runtime world-frame alignment
 
-- Direction check:
-  - still worth continuing in the broader training/runtime alignment direction
-  - not worth returning to falsified lower-limb write smoothing or more isolated multiplier reshuffling
-- Sources re-checked before coding:
-  - UE PhysicsControl docs and local UE 5.7 PhysicsControl source
-  - ProtoMotions docs/config plus local `humanoid_utils.py`, `mimic_utils.py`, `robot_state.py`, and Isaac Gym simulator setup
-- New plan:
-  - [runtime-world-frame-alignment-plan.md](/F:/NewEngine/plans/stage1/40-design/runtime-world-frame-alignment-plan.md)
-- Implemented:
-  - split Proto runtime world-frame conversion from the old SMPL local-joint authoring conversion
-  - left local action rotation conversion on the existing `SmplQuaternionToUe` / `UeQuaternionToSmpl` helpers
-  - moved world-space observation/future-target packing onto dedicated Proto-runtime-world helpers:
-    - current experiment uses identity-frame world conversion for position, world rotation, and world velocity
-- Verification:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
-- Result:
-  - keepable
-  - the bridge stayed stable and movement smoke completed successfully
-  - lower-limb outliers still exist, so this corrects a contract seam but does not finish locomotion-time lower-limb alignment
-## 2026-03-12 - Future target time-channel alignment
+---
 
-- Direction check:
-  - still worth continuing in the broader training/runtime alignment direction
-  - not worth reopening falsified lower-limb write smoothing or more multiplier reshuffling
-- New plan:
-  - [future-target-time-alignment-plan.md](/F:/NewEngine/plans/stage1/40-design/future-target-time-alignment-plan.md)
-- Sources re-checked before coding:
-  - UE PoseSearch asset sampler docs and local PoseSearch sampler source
-  - ProtoMotions config and local `mimic_obs.py` / `mimic_utils.py`
-- Implemented:
-  - added a pure helper for the effective clamped future time delta
-  - `SampleFuturePoses(...)` now writes `FutureTimeSeconds = ClampedSampleTime - CurrentSelectedTime`
-  - this replaces the old nominal-offset write only for the `with_time` channel semantics
-- Verification:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
-- Result:
-  - keepable
-  - objective Proto target-contract fix
-  - movement smoke remained stable and completed successfully
-  - not a dramatic locomotion improvement by itself
-## 2026-03-12 - Mimic target current-reference ground alignment
+## 2026-03-11 — Gameplay-shell preservation and movement-stability milestone
 
-- Direction check:
-  - still worth continuing in the broader training/runtime alignment direction
-  - not worth reopening already falsified lower-limb write-smoothing or multiplier-shuffling branches
-- New plan:
-  - [mimic-target-current-reference-ground-plan.md](/F:/NewEngine/plans/stage1/40-design/mimic-target-current-reference-ground-plan.md)
-- Sources re-checked before coding:
-  - UE `CharacterMovement` docs and local floor-state usage
-  - UE PoseSearch sampler docs/source
-  - ProtoMotions config and local `mimic_obs.py`
-- Implemented:
-  - add a pure helper that copies `CurrentBodySamples` and subtracts the current walkable-floor `world Z` from every copied body-sample `Position.Z`
-  - use that terrain-relative copy only when calling `BuildMimicTargetPoses(...)`
-  - leave `self_obs`, future pose sampling, and local action conversion unchanged
-- Verification:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
-- Result:
-  - keepable
-  - objective current-reference contract fix
-  - component tests and movement smoke both stayed green, with MovementSmoke completing successfully
-  - this does not by itself claim a large locomotion breakthrough
-## 2026-03-12 - Mimic target data-origin alignment
+- normal manual runtime now preserves capsule collision and `CharacterMovement` during `BridgeActive`
+- the deterministic movement smoke harness remained valid, and gameplay-shell preservation became more than a smoke-only path
+- an always-visible on-screen bridge state indicator was added for easier runtime inspection
+- movement-triggered fail-stop false positives were traced to world-space root instability checks after gameplay-shell preservation
+- fix:
+  - when the gameplay shell is preserved, runtime instability now evaluates root/body translation relative to the owning actor shell instead of the original world-space activation frame
+- verification:
+  - movement smoke completed without `BridgeActive -> FailStopped`
+- result:
+  - first movement-stability milestone was treated as `pass`
+  - longer deterministic locomotion soak also went green
+  - manual real-`WASD` in `BridgeActive` also worked
 
-- Direction check:
-  - still worth continuing in the broader training/runtime alignment direction
-  - not worth reopening falsified lower-limb write smoothing, step-cap tuning, or multiplier reshuffling branches
-- New plan:
-  - [mimic-target-data-origin-alignment-plan.md](/F:/NewEngine/plans/stage1/40-design/mimic-target-data-origin-alignment-plan.md)
-- Sources re-checked before coding:
-  - UE PoseSearch sampler docs and local PoseSearch sampler source
-  - UE `CharacterMovement` docs
-  - ProtoMotions config and local `mimic_obs.py` / `mimic_utils.py` / `env.py`
-- Implemented:
-  - `mimic_target_poses` future targets now sample with `RootTransformOrigin = Identity`
-  - the bridge derives a Stage 1 proxy for Proto's `respawn_offset_relative_to_data` by sampling the selected current pose root once with the live mesh origin and once with identity origin
-  - that XY offset is subtracted from the current body reference samples
-  - the previously-correct terrain-relative `Z` normalization remains active
-- Verification:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
-- Result:
-  - keepable
-  - objective target-frame contract improvement
-  - movement smoke stayed stable and completed successfully
-  - locomotion remains mixed enough that this should be treated as another correct alignment step, not the final lower-limb fix
+## 2026-03-11 — G2 comparison harnesses and perturbation exploration
 
-## 2026-03-12 - Terrain input alignment
+- a live side-by-side G2 harness was added through a pair of start/stop commands
+- the preferred G2 format became one PIE session with:
+  - one `Physics-Driven` Manny
+  - one spawned `Kinematic` Manny
+- a scripted G2 presentation harness was also added:
+  - freezes player move/look input
+  - drives both actors through the same short sequence
+  - uses a fixed comparison camera
+- perturbation work continued through multiple scenario variants:
+  - shell-level shove
+  - body-level contact push
+  - low-gain perturbation override
+  - temporary root-unlock variants
+  - policy-suspension variants
+- result:
+  - shell-level shove was rejected because it mostly produced sideways actor sliding
+  - body-level perturbation gave modest articulated response without obvious shell slide
+  - root-unlock variants made the perturbation visible but quickly crossed fail-stop thresholds
+- practical conclusion:
+  - the standing external-push perturbation path was well explored under the current Stage 1 contract
+  - root-kine perturbation was too subtle
+  - root-sim perturbation was unstable
+  - the next useful perturbation attempt should change scenario, not keep retuning the same standing shove
 
-- Direction check:
-  - still worth continuing in the broader training/runtime alignment direction
-  - not worth reopening falsified lower-limb-only heuristic branches
-- New plan:
-  - [terrain-input-alignment-plan.md](/F:/NewEngine/plans/stage1/40-design/terrain-input-alignment-plan.md)
-- Sources re-checked before coding:
-  - UE PhysicsControl and CharacterMovement docs/source
-  - ProtoMotions terrain config and local `terrain.py` / `terrain_utils.py` / `terrain_obs.py`
-- Implemented:
-  - added Proto-compatible `16 x 16` terrain sample offsets in bridge code
-  - replaced zero terrain packing with a real yaw-rotated terrain sampler against static world geometry
-  - terrain tensor now packs `root_world_z - sampled_ground_height` instead of all zeros
-- Verification:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
-- Result:
-  - keepable
-  - objective terrain-channel contract fix
-  - component tests and deterministic movement smoke both stayed green
-  - this should be treated as another correct runtime-alignment step, not a guaranteed locomotion breakthrough by itself
+## 2026-03-11 to 2026-03-12 — Locomotion-coupled perturbation pivot
 
-## 2026-03-12 - Locomotion trace input summaries
+- perturbation work pivoted to a locomotion-coupled scenario:
+  - both actors begin the same scripted walk
+  - only the `Physics-Driven` actor receives the extra disturbance
+  - the kinematic actor remains on the same scripted locomotion path without the extra contact
+- result:
+  - the presentation remained stable with no fail-stop
+  - measurable divergence during the walk appeared
+  - the difference was still likely subtle to the eye
+- later refinement:
+  - the perturbation stabilization override had accidentally been left as a no-op
+  - it was corrected to apply real movement-safe angular relaxation during the perturbation window
+  - the profile was also pushed lower in the body and made more locomotion-focused
+- result:
+  - implementation correctness improved
+  - the scenario remained stable
+  - but it still did not guarantee an obviously persuasive G2 `pass`
 
-- Direction check:
-  - still worth continuing in the broader training/runtime alignment direction
-  - not worth making the next locomotion change from downstream lower-limb spikes alone
-- New plan:
-  - [locomotion-trace-summary-plan.md](/F:/NewEngine/plans/stage1/40-design/locomotion-trace-summary-plan.md)
-- Sources re-checked before coding:
-  - UE PhysicsControl and CharacterMovement docs/source
-  - local bridge trace writer and runtime packing paths
-  - ProtoMotions `humanoid_obs.py`, `mimic_obs.py`, `terrain_obs.py`, and active checkpoint config
-- Implemented:
-  - extended bridge trace frames with input-side summaries for:
-    - `self_obs` root height and mean abs
-    - `mimic_target_poses` mean abs and min/max clamped future-time channel
-    - `terrain` mean/min/max/center sample
-    - movement smoke phase name
-    - distal locomotion composition mode flag
-  - added trace regression coverage for the expanded CSV schema
-- Verification:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Bridge`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
-- Result:
-  - keepable
-  - no locomotion baseline regression
-  - the next runtime alignment decision can now be made from trace evidence instead of only from downstream instability symptoms
+## 2026-03-12 — Training/runtime alignment pass
 
-## 2026-03-12 - Policy-step trace alignment
+A very large alignment pass focused on reducing mismatch between ProtoMotions training semantics and the live Unreal runtime.
 
-- Direction check:
-  - still worth continuing in the broader training/runtime alignment direction
-  - not worth making another locomotion-time heuristic change before the trace artifact itself matches the intended policy-step semantics
-- New plan:
-  - [policy-step-trace-alignment-plan.md](/F:/NewEngine/plans/stage1/40-design/policy-step-trace-alignment-plan.md)
-- Sources re-checked before coding:
-  - UE PhysicsControl and CharacterMovement docs/source
-  - local bridge trace write path
-  - ProtoMotions config and observation packing paths
-- Evidence that triggered this pass:
-  - the first movement trace contained `4341` blank-phase rows and only a minority of rows carried valid packed-input summaries
-  - this came from writing `frames.csv` on non-policy ticks even though the new summaries were only populated on policy-update ticks
-- Implemented:
-  - trace frame rows now emit only on sampled policy steps during `BridgeActive`
-  - movement trace smoke automation now verifies:
-    - a new trace session folder was written
-    - trace start/stop events exist
-    - the CSV contains the packed-input summary columns
-    - all data rows are policy-step rows
-    - no blank movement phases remain
-  - trace startup now logs the resolved session folder path
-- Verification:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Bridge`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.Component`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementTraceSmoke`
-  - `scripts/run-pie-smoke.ps1 -TestName PhysAnim.PIE.MovementSmoke`
-- Result:
-  - keepable
-  - latest movement trace dropped to `1495` rows with `0` blank phases and `0` non-policy rows
-  - the trace artifact is now much more usable for picking the next locomotion-time alignment pass
-## 2026-03-12 - Distal composition ablation
+Major work items included:
 
-- Used the cleaned policy-step movement trace as the decision surface for the next lower-limb pass.
-- Tested disabling the training-aligned distal locomotion composition policy by default.
-- Verification stayed green:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `PhysAnim.Component`
-  - `PhysAnim.PIE.MovementSmoke`
-  - `PhysAnim.PIE.MovementTraceSmoke`
-- Result: not a keep.
-  - The new trace removed all `distal_locomotion_composition_mode_active=true` rows.
-  - But locomotion got materially worse anyway:
-    - `Forward` max angular speed rose from `8107` to `9273 deg/s`
-    - `StrafeRight` rose from `9353` to `10038 deg/s`
-    - `Backward` rose from `5431` to `5810 deg/s`
-    - `Idle_03` and `Complete` also regressed
-- Conclusion: the explicit-only distal composition policy is still needed in the current baseline, even though active windows remain correlated with the worst outliers.
-- Runtime code was restored to the previous safe baseline after the experiment.
-## 2026-03-12 - Unreal Insights bridge instrumentation
+- Manny constraint inventory and explicit SMPL-vs-Manny limit documentation
+- family-level Manny mass audit and family-level mass-adjustment runtime policy
+- training-aligned control-family response fitting
+- toe-family refinement and toe/ankle authoring audits
+- lower-limb limit-occupancy instrumentation
+- lower-limb target-range policy for the knee/ankle/toe chain
+- locomotion-time distal representation experiments
+- distal explicit-only composition experiments
+- locomotion-time composition hysteresis / dwell / intent latching / intent grace
+- distal explicit target-angular-velocity suppression
+- proximal lower-limb locomotion-time response fitting
+- shell-coupling telemetry correction
+- lower-limb target-step policy experiments
+- lower-limb contact-exclusion alignment experiments
+- PhysicsControl cache prewarm
+- lower-limb target-write smoothing experiments
+- self-observation root-height alignment
+- Proto runtime world-frame alignment
+- future target time-channel alignment
+- mimic-target current-reference ground alignment
+- mimic-target data-origin alignment
+- terrain input alignment
+- locomotion trace input summaries
+- policy-step trace alignment
+- Unreal Insights instrumentation in the bridge runtime
 
-- Added first-class Unreal trace instrumentation directly in the bridge runtime.
-- Added CPU profiler scopes around:
-  - PoseSearch query
-  - future pose sampling
-  - observation packing
-  - `RunSync`
-  - control writes
-- Added trace counters for:
-  - bridge timing slices
-  - max body angular speed
-  - max lower-limb occupancy
-  - number of written policy targets
-  - runtime state
-  - fail-stop count
-- Added a `TRACE_BOOKMARK` on fail-stop so Timing Insights can line the shutdown up against engine timing.
-- Verification passed:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `PhysAnim.Component`
-  - `PhysAnim.PIE.MovementSmoke`
-  - `PhysAnim.PIE.MovementTraceSmoke`
-## 2026-03-12 - Distal composition intent latch
+Practical conclusion from this whole pass:
 
-- Re-evaluated the next lower-limb seam after the cleaned policy-step trace and the failed distal-composition ablation.
-- New hypothesis:
-  - the explicit-only distal composition mode is still needed
-  - but its speed-only exit logic is too eager during live locomotion
-- Added an intent-aware latch:
-  - once distal composition mode is active, it now stays active while there is live movement intent
-  - movement intent is resolved from pending input, last input, or current movement acceleration
-- Added a component test that locks the low-speed-dip-with-intent case.
-- Verification passed:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `PhysAnim.Component`
-  - `PhysAnim.PIE.MovementSmoke`
-  - `PhysAnim.PIE.MovementTraceSmoke`
-- Result:
-  - keepable improvement
-  - within-phase deactivation count did not drop yet
-  - but movement-trace maxima improved materially:
-    - `Forward` max angular speed: `8304 -> 5749 deg/s`
-    - `StrafeLeft`: `5111 -> 3782 deg/s`
-    - `StrafeRight`: `7772 -> 5489 deg/s`
-    - `Backward`: roughly flat on max, but p95 improved `3838 -> 2948 deg/s`
-    - late `Complete` phase dropped strongly `5182 -> 1607 deg/s`
-- Current read:
-  - the exit path was part of the problem
-  - the intent-aware latch is worth keeping
-  - but another transition seam still remains because the same mid-phase off transitions still occur
-## 2026-03-12 - Distal composition intent grace
+- several objective contract seams were corrected and are worth keeping
+- many falsifiable locomotion heuristics were tested and either kept or reverted
+- the bridge became better instrumented and better aligned with training-side semantics
+- locomotion improved in bounded ways, but the work did **not** produce a final “walking solved” verdict
+- the repo ended this stretch with a stronger runtime baseline and far better diagnostics, not with locomotion fully solved
 
-- Tested a short recent-intent grace window on top of the committed intent-aware latch.
-- Runtime change:
-  - distal composition mode now stays active for `0.20s` after live movement intent goes quiet
-  - live intent is still resolved from pending input, last input, or current movement acceleration
-- Also fixed the movement-trace regression test to parse `frames.csv` with UE's CSV parser instead of a raw comma split, which had become stale against the current trace schema.
-- Verification passed:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `PhysAnim.Component`
-  - `PhysAnim.PIE.MovementSmoke`
-  - `PhysAnim.PIE.MovementTraceSmoke`
-- Result:
-  - keepable improvement
-  - within-phase deactivation count dropped from `6 -> 4`
-  - phase maxima changed as follows:
-    - `Forward`: `5749 -> 5112 deg/s`
-    - `StrafeLeft`: `3782 -> 3595 deg/s`
-    - `StrafeRight`: `5489 -> 5088 deg/s`
-    - `Backward`: `4606 -> 5422 deg/s`
-    - `Complete`: `1607 -> 1276 deg/s`
-  - p95 angular speed improved in `Backward` and `Complete`, while `Forward` / `Strafe*` stayed mixed but acceptable
-- Current read:
-  - recent-intent grace is worth keeping
-  - the dominant remaining issue is now the last few within-phase dropouts, not broad locomotion instability
-## 2026-03-12 - Distal composition intent enter bypass
+## 2026-03-14 — Flat-ground-first locomotion decision
 
-- Re-checked the remaining false rows after the grace-window pass and found that they clustered at the start of each active locomotion phase.
-- Hypothesis:
-  - the remaining seam was the normal `0.20s` enter hold delaying distal composition activation after locomotion intent was already live
-- Implemented experiment:
-  - added an intent-aware enter hold override with an effective `0.00s` hold while live movement intent was active
-- Verification stayed green:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `PhysAnim.Component`
-  - `PhysAnim.PIE.MovementTraceSmoke`
-- Result:
-  - not a keep
-  - the mode became too eager:
-    - `Forward` false rows dropped `6 -> 1`
-    - `StrafeLeft` `8 -> 1`
-    - `StrafeRight` `7 -> 1`
-    - `Backward` `8 -> 1`
-  - but active locomotion maxima regressed badly:
-    - `Forward`: `5112 -> 8988 deg/s`
-    - `StrafeLeft`: `3595 -> 6048 deg/s`
-    - `StrafeRight`: `5088 -> 7850 deg/s`
-    - `Backward`: `5422 -> 8388 deg/s`
-    - `Complete`: `1276 -> 2314 deg/s`
-- Runtime code was restored to the grace-window baseline after the experiment.
-- Current read:
-  - the remaining issue is not just delayed activation
-  - forcing early activation is too blunt
-  - the next pass should move to a narrower transition/representation seam, not more composition-mode enter/exit tuning
-## 2026-03-12 - Self-observation velocity alignment
+This stretch focused on:
 
-- Re-checked ProtoMotions `self_obs` and UE body-velocity APIs, then tested a mixed observation-velocity policy:
-  - simulating observation bones kept physics-body velocities
-  - non-simulating observation bones switched to transform-delta-derived velocities
-- Verification stayed green:
-  - `Build.bat PhysAnimUE5Editor ...`
-  - `PhysAnim.Component`
-  - `PhysAnim.PIE.MovementTraceSmoke`
-- Result:
-  - not a keep
-  - movement remained stable, but active locomotion got worse broadly versus the current grace-window baseline
-  - trace comparison versus the grace baseline `20260312-223242` showed:
-    - `Forward` max angular speed: `5112 -> 8454 deg/s`
-    - `StrafeLeft`: `3595 -> 4339 deg/s`
-    - `StrafeRight`: `5088 -> 7963 deg/s`
-    - `Backward`: `5422 -> 6044 deg/s`
-    - `Complete`: `1276 -> 5388 deg/s`
-  - `self_observation_mean_abs` did not materially improve in active locomotion phases
-- Runtime code was restored to the grace-window baseline after the experiment.
-- Current read:
-  - `self_obs` remains the right area to investigate
-  - but replacing non-sim body velocities with transform-delta velocities is not the correct next baseline
-  - the next useful pass should target another `self_obs` representation seam, not this mixed velocity policy
-
-## 2026-03-14 — PhysAnim bridge stabilization and locomotion follow-up
-
-### Summary
-This stretch of work focused on:
 1. cleaning up temporary T-pose / identity-check scaffolding,
-2. stabilizing bridge startup into a reliable idle baseline,
+2. stabilizing startup into a reliable idle baseline,
 3. isolating locomotion ownership away from `CharacterMovement`,
 4. starting bridge-owned trajectory / motion-matching integration,
-5. confirming that flat-ground walking is still not visually correct.
+5. deciding to defer ramps / floor behavior until flat-ground walk playback is correct.
 
-Current status:
-- **Idle baseline is stable enough to keep as a repo baseline.**
-- **Walking / locomotion is not solved yet.**
-- The current bridge-owned locomotion experiments can select non-idle clips in logs, but the character still visually slides / fails to show a convincing walk cycle.
-- Ramp / floor handling is explicitly deferred until flat-ground walk playback is correct.
+Important outcomes:
 
----
+- a good idle-only baseline was reached and kept
+- bridge-owned deterministic locomotion was accepted as the intended direction
+- shell movement alone was shown to be insufficient
+- trajectory/motion-matching integration began in earnest
+- flat-ground-first was adopted as the next priority:
+  - stop worrying about ramps and floor handling
+  - make visible walking animation playback work correctly on a flat plane first
 
-### Earlier issue: T-pose / startup validation
-We first fixed the T-pose-related build / merge fallout and validated startup identity checks.
-That work confirmed the bridge could start from the expected rest pose, but the extra logging and proof scaffolding were temporary.
+Current practical read from that period:
 
-Follow-up decision:
-- remove proof-only logging and temporary test scaffolding,
-- keep a single optional debug flag so identity checks can be re-enabled later if needed.
+- startup is stable
+- some non-idle clips can be selected in logs
+- but the character still does not present a convincing visible walk
+- sliding remains the dominant visible result
+- ramps / floor-following stay deferred until flat-ground walking is correct
 
----
+## 2026-03-15 — Balance Perturbation Mode design and first implementation push
 
-### Cleanup pass
-A cleanup pass removed most temporary validation spam and kept only optional debug hooks.
+- the explicit Balance Perturbation Mode design was added
+- the first runtime implementation pass for that mode followed
+- balance mode was no longer treated as an improvised side path; it became a named diagnostic mode with:
+  - dedicated purpose
+  - perturbation method
+  - contamination rules
+  - pass/fail framing
+- early runtime behavior was still unstable, but this was the point where the work stopped being “just another tuning branch” and became a first-class subsystem
 
-Goal:
-- make logs usable again,
-- avoid permanent maintenance cost from one-off instrumentation,
-- preserve the ability to turn identity validation back on when needed.
+## 2026-03-16 — Hardening the old balance-ready path
 
----
+This block of work focused on making balance entry less fragile before the later full transition-spec refactor.
 
-### Startup instability / shell recovery investigation
-A first-run issue appeared where the legs were being dragged behind the character.
-Logs showed repeated pre-policy shell recovery warnings and large shell/root mismatches during startup.
+Key changes included:
 
-Observed symptoms:
-- repeated `Pre-policy shell recovery triggered` warnings,
-- large shell offset and root angular velocity spikes,
-- startup instability before policy fully settled.
+- startup fly-away behavior on balance startup was reduced
+- logical simulation permission was decoupled from physical-state verification to avoid deadlocks
+- readiness reasons became more granular
+- promotion-during-settle detection was strengthened
+- promotions after policy start were prohibited
+- late-reset violations were turned into explicit state-machine issues
+- pelvis resets in Balance Mode were banned
+- entry preflight checks were introduced
+- a dedicated controller was extracted for pelvis/root handoff
+- a weak damped posture-hold layer was added during Balance Mode pre-entry
+- promotion / readiness / diagnostics were consolidated and made more explicit
 
-Interpretation:
-- there was a handoff / authority problem during the transition from bridge activation to full policy ownership,
-- preserving gameplay shell state while partially enabling bridge control created a fragile startup window.
+Practical outcome:
 
----
+- the old balance-ready path became much better instrumented and less ad hoc
+- but the design still lacked a sufficiently explicit phase-owned entry contract
+- this set the stage for the later full transition-state-machine rewrite
 
-### Temporary movement lock experiment
-To prevent the startup bug from being triggered by early WASD input, movement was temporarily locked during bridge startup.
+## 2026-03-18 — Balance entry transition state machine refactor
 
-What was tried:
-- disable / neutralize `CharacterMovement` during the bridge activation window,
-- only release movement after bridge state and policy influence had settled.
+- the balance mode entry path was refactored into distinct stages with truthful state management
+- the explicit Balance Mode Entry Transition Spec was then implemented in code
+- manual-trigger cancellation race behavior was fixed
+- transition settings and gates were unified
+- defaults were relaxed to avoid unnecessary queue blocking
 
-Outcome:
-- this was useful as a diagnostic isolation tool,
-- it helped prove that early player input was interacting badly with startup,
-- but it was **not** an acceptable final design, because later variants either:
-  - never restored movement correctly, or
-  - restored movement while reintroducing sliding / shell mismatch.
+This was the key architectural shift:
 
-Conclusion:
-- startup lock is useful as a debugging tool,
-- but locomotion needs a proper owner, not a longer lock.
+- balance entry stopped being a loose mix of readiness checks and ad hoc promotion
+- it became an explicit multi-phase transition with:
+  - queueing
+  - preflight
+  - Phase 1 prepare
+  - Phase 2 root-on
+  - Phase 3 settle
+  - failure/recovery handling
 
----
+## 2026-03-18 — New observed balance failure mode
 
-### Stable idle baseline
-A good idle-only baseline was reached.
+Latest runtime diagnosis changed the main read of the problem.
 
-Characteristics of this baseline:
-- bridge activates cleanly,
-- body bring-up completes,
-- policy influence ramps in,
-- idle pose looks visually stable,
-- no obvious instability is visible while standing still.
+Old dominant failure pattern:
+- invalid entry / pre-entry rejection loops
+- balance requests unable to progress meaningfully
 
-Important caveat:
-- “stable idle” does **not** mean locomotion is solved.
-- It only means the bridge can own the body at rest without immediately exploding or drifting apart.
+New dominant failure pattern:
+- requests can queue and begin transition
+- Phase 1 can now sometimes reach a quiet-looking pre-root-on state
+- the deterministic failure now appears at Phase 2 root-on as a repeatable spike
 
-Decision:
-- keep this as the repo’s stable baseline for idle.
+Observed behavior in the latest logs:
 
----
+- requests queue normally under bring-up gating
+- transition invocation now occurs from a meaningful queued path
+- Phase 1 can capture a hold reference and declare readiness for root-on
+- immediately after root-on, Phase 2 aborts with a repeatable spike
+- failed attempts then tend to recycle unless recovery/retry policy is made stricter
 
-### CharacterMovement vs bridge-owned locomotion
-We then evaluated whether locomotion should remain under `CharacterMovement` or move into the bridge.
+Current interpretation:
 
-Conclusion reached:
-- `CharacterMovement` should **not** be the locomotion authority during `BridgeActive`.
-- The bridge should own locomotion in this mode.
-- The capsule / actor transform should remain as the gameplay shell, but movement should be deterministic and bridge-driven.
+- the main problem is no longer “Phase 1 never starts” or “entry is permanently invalid”
+- the main problem is now “root-on itself is not yet a safe, deterministic choreography”
+- this is progress, because the failure is narrower and more truthful than the old blended failure modes
 
-Reasoning:
-- mixed authority causes handoff problems,
-- `MOVE_Walking` introduces hidden heuristics and corrections,
-- Stage 1 needs deterministic control cadence and sample-and-hold behavior,
-- motion matching needs a coherent trajectory source that matches what the bridge is actually doing.
+## 2026-03-18 — New design-doc direction from the latest failures
 
----
+The design work responded to the new runtime evidence by splitting the transition problem into more explicit documents.
 
-### First bridge-owned locomotion pass
-A bridge-owned movement driver was added experimentally.
+New design state:
 
-Intent:
-- keep `CharacterMovement` disabled or in `MOVE_None`,
-- ingest movement intent directly from player input,
-- translate / rotate the shell from bridge code,
-- avoid handing locomotion back to `MOVE_Walking`.
+- the entry-transition spec now acts as the overall contract/state-machine document
+- Phase 1 stabilization has been recognized as a distinct implementation-design problem
+- a dedicated Phase 1 stabilization spec was drafted to define:
+  - transition-critical sets
+  - target topology
+  - posture-hold rules
+  - quiet-window proof
+  - failure classes
+  - retry conditions
+- the latest logs then showed that Phase 2 also needs its own narrow design doc
+- a dedicated Phase 2 root-on spec was drafted to define:
+  - exact frame ordering for root-on
+  - authority suppression during the flip
+  - post-root-on guard window
+  - root-on spike thresholds
+  - recovery and retry rules
 
-Observed result:
-- the character could rotate and sometimes translate,
-- but motion matching often kept choosing `MM_Idle`,
-- even when logs showed substantial input intent,
-- visual result was sliding rather than convincing walking.
+Practical meaning:
 
-This established that:
-- shell movement alone is not enough,
-- locomotion clip selection depends on feeding Motion Matching the right trajectory.
+- balance work is now design-led instead of guess-led
+- the repo is no longer just chasing runtime symptoms
+- it is converging on a layered contract:
+  - overall entry/transition contract
+  - explicit Phase 1 stabilization contract
+  - explicit Phase 2 root-on contract
 
----
+## Current practical conclusion
 
-### Trajectory integration work
-Next step was to replace the legacy / guessed MotionMatch usage with the proper UE 5.7 trajectory-driven path.
-
-Several attempts were made:
-- bridge-owned trajectory generation,
-- feeding that trajectory into PoseSearch,
-- replacing guessed signatures with engine-source-guided integration,
-- using the public UE 5.7-style source reference to avoid guessing APIs.
-
-There were multiple compile failures during this phase:
-- missing variables / state members,
-- incorrect function signatures,
-- deprecated trajectory types,
-- incorrect `MotionMatch` call shape,
-- one linker issue involving chooser-related symbols.
-
-These were part of the trajectory integration iteration, not regressions in the stable idle baseline.
-
----
-
-### Flat-ground-first decision
-At this point, locomotion and floor following were both imperfect:
-- the character slid in idle,
-- sometimes selected walk clips only briefly,
-- and could float instead of descending ramps properly.
-
-Decision:
-- **stop worrying about ramps / floor handling for now**,
-- make walking animation playback work correctly on a flat plane first,
-- revisit slope / floor projection only after flat-ground walking is visually correct.
-
-This is the current working direction.
-
----
-
-### Latest observed state
-The latest tests show:
-
-Good:
-- bridge startup is stable,
-- some bridge predictor searches now select walk clips such as:
-  - `MF_Unarmed_Walk_Fwd_Left`
-  - `MF_Unarmed_Walk_Left`
-  - `MF_Unarmed_Walk_Bwd_Left`
-  - `MF_Unarmed_Walk_Bwd_Right`
-
-Bad:
-- despite occasional non-idle clip selection in logs, the character still does **not** present a convincing visible walk,
-- sliding remains the dominant visible result,
-- on ramps, the shell can float rather than descend naturally,
-- visual animation and shell motion are still not coherently coupled.
-
-Interpretation:
-- trajectory / predictor integration is partially working,
-- but clip selection persistence, playback continuity, or pose-to-motion coupling is still wrong,
-- the system is not yet sustaining a walk state strongly enough to produce visible locomotion.
-
----
-
-### Practical conclusion
 Repository baseline:
-- keep the current stable idle build as the baseline.
 
-Active problem now:
-- fix flat-ground walk playback first.
+- keep the current stable idle and movement-smoke runtime baseline
+- keep the truthful phased balance-transition direction
+- do not claim Balance Perturbation Mode is solved yet
+
+Active engineering problem:
+
+1. make Phase 1 converge by owned topology/authority shaping, not incidental drift
+2. make Phase 2 root-on deterministic and spike-safe
+3. prevent meaningless retry loops after root-on failure
+4. keep G2 and comparison packaging honest to the current runtime state
 
 Do **not** treat these as solved yet:
-- ramp descent,
-- floor snapping,
-- slope-following,
-- full gameplay shell locomotion fidelity.
 
-Those come after:
-1. stable non-idle clip selection,
-2. persistent walk playback,
-3. reduced idle sliding on flat ground.
+- flat-ground walk playback quality
+- slope / ramp-following locomotion fidelity
+- persuasive G2 comparison presentation
+- full balance-mode activation success
+- root-on stability under the new transition contract
 
-### Notes
+## Notes
+
 Known important reference points from this work:
-- commit `0443724` was identified as a bad merge point during earlier recovery work,
-- temporary T-pose proof logging has already been treated as non-final scaffolding,
-- startup movement lock was diagnostic, not final architecture,
-- bridge-owned deterministic locomotion remains the intended direction.
+
+- temporary proof-only logging and earlier identity-check scaffolding were intentionally non-final
+- startup movement lock was diagnostic, not final architecture
+- bridge-owned locomotion remains the intended direction for `BridgeActive`
+- the current runtime/design shift is from broad stabilization effort toward explicit phase-owned balance transition design
+- the latest honest failure point is a repeatable Phase 2 root-on spike, not the older invalid-entry rejection loop
