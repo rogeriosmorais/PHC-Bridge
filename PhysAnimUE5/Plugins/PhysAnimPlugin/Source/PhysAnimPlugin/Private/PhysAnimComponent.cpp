@@ -7446,7 +7446,15 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 	if (InTransitionPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
 		const FString BoneStr = BoneName.ToString().ToLower();
-		if (bIsRootBodyModifier || BoneStr.Contains(TEXT("spine")) || BoneStr.Contains(TEXT("thigh")))
+		if (bIsRootBodyModifier ||
+			BoneStr.Contains(TEXT("spine")) ||
+			BoneStr.Contains(TEXT("thigh")) ||
+			BoneStr.Contains(TEXT("clavicle")) ||
+			BoneStr.Contains(TEXT("upperarm")) ||
+			BoneStr.Contains(TEXT("lowerarm")) ||
+			BoneStr.Contains(TEXT("hand")) ||
+			BoneStr.Contains(TEXT("neck")) ||
+			BoneStr.Contains(TEXT("head")))
 		{
 			return false;
 		}

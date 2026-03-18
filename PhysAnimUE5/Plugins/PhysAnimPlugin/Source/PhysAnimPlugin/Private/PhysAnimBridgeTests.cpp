@@ -2005,6 +2005,12 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		TestTrue(
 			TEXT("Balance Mode allows limb resets before policy begins"),
 			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.0f));
+		TestFalse(
+			TEXT("Balance Mode forbids upper-arm resets during Phase 1 quiet handoff"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("upperarm_r"), EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.0f));
+		TestFalse(
+			TEXT("Balance Mode forbids hand resets during Phase 1 quiet handoff"),
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("hand_r"), EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.0f));
 
 		return true;
 	}
