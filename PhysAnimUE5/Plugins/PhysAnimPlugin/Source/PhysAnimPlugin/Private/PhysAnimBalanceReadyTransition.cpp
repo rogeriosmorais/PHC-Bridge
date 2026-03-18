@@ -30,8 +30,11 @@ namespace BalanceTransitionSets
 	}
 	static bool IsLateValidationUpperBodyOwnershipBone(FName BoneName)
 	{
-		// Late validation keeps the apex anchored but leaves the upper limbs free to preserve sim coverage.
-		return IsUpperBodyApex(BoneName);
+		// Late validation keeps the apex and shoulder chain anchored so the first policy ramp
+		// does not inject a cold-start instability into the upper arms.
+		return IsUpperBodyApex(BoneName) ||
+			BoneName == "clavicle_l" || BoneName == "clavicle_r" ||
+			BoneName == "upperarm_l" || BoneName == "upperarm_r";
 	}
 	static bool IsTransitionCritical(FName BoneName) { return IsRoot(BoneName) || IsProximal(BoneName) || IsDistalLowerLimb(BoneName); }
 	static bool IsExpectedPhase2Topology(int32 SimCountPre, int32 SimCountPost, int32 DistalSimCountPre, int32 DistalSimCountPost)
