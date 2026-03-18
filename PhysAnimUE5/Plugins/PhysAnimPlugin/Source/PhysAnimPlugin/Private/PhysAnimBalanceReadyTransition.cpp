@@ -1300,11 +1300,21 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const
 {
+	if (bSafePhase2Denied)
+	{
+		return true;
+	}
+
 	return IsActive() && InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare;
 }
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicyWrites(FName BoneName) const
 {
+	if (bSafePhase2Denied)
+	{
+		return true;
+	}
+
 	if (!IsActive())
 	{
 		return false;
@@ -1320,16 +1330,40 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicyWrites(FName BoneName)
 	return false;
 }
 
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive(); }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const
+{
+	return bSafePhase2Denied ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
+}
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive() || bSafePhase2Denied; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const
+{
+	return bSafePhase2Denied ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
+}
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const
+{
+	return bSafePhase2Denied ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
+}
 
 float FPhysAnimBalanceReadyTransition::GetRootBodyModifierSoftSimAlpha() const { return 1.0f; }
 float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneName) const { return BalanceTransitionSets::IsProximal(BoneName) ? 1.0f : 1.0f; }
 
 bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) const
 {
+	if (bSafePhase2Denied)
+	{
+		return BalanceTransitionSets::IsTransitionCritical(BoneName) ||
+			BalanceTransitionSets::IsLateValidationUpperBodyOwnershipBone(BoneName);
+	}
+
 	if (!IsActive() && InternalPhase != EBalanceReadyTransitionPhase::BRT_Failed)
 	{
 		return false;
@@ -1362,7 +1396,7 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 
 float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(const FPhysAnimStabilizationSettings& Settings) const
 {
-	if (!IsActive())
+	if (!IsActive() && !bSafePhase2Denied)
 	{
 		return 1.0f;
 	}

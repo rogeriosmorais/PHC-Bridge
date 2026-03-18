@@ -4889,7 +4889,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		bool bBringUpGroupUnlocked =
 			bIsRootBodyModifier ? bAllowRootBodyModifierSimulation : IsBringUpGroupUnlocked(BringUpGroupIndex);
 
-		if (BalanceReadyTransition.IsActive() && BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName))
+		if ((BalanceReadyTransition.IsActive() || BalanceReadyTransition.HasSafePhase2Denial()) &&
+			BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName))
 		{
 			bBringUpGroupUnlocked = false;
 		}
