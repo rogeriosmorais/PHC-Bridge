@@ -24,6 +24,11 @@ The goal is to eliminate improvisation around:
 - what constitutes a retryable block vs a hard failure
 - which logs are authoritative
 
+This document also establishes the **entry-phase contract boundary**:
+
+- this spec defines the state machine, ownership rules, gating, recovery, and phase success/failure semantics
+- `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md` defines the concrete stabilization recipe for Phase 1
+
 ## 2. Relationship to Existing Design
 
 This spec is intended to **refine and operationalize** the existing design, not replace it.
@@ -45,6 +50,26 @@ Recommended wording to add:
 > Before Balance Perturbation Mode becomes active, the runtime may execute a bounded entry transition whose sole purpose is to establish a valid simulation configuration for the root/pelvis and eliminate startup transients. The mode is not considered active until that transition completes successfully.
 
 This is a clarification, not a contradiction.
+
+### 2.2 Relationship to the Phase 1 stabilization spec
+
+This document deliberately does **not** try to encode the entire Phase 1 implementation recipe inline.
+
+The companion document:
+
+- `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
+
+defines:
+
+- authoritative Phase 1 bone sets
+- authoritative Phase 1 target topology
+- Phase 1 authority suppression rules
+- posture-preservation behavior
+- quiet-window metrics and hold rules
+- Phase 1 failure classes
+- Phase 1 recovery and retry rules
+
+If there is ambiguity about how Phase 1 is supposed to converge, the Phase 1 stabilization spec is authoritative.
 
 ## 3. Core Problem This Spec Solves
 
@@ -75,6 +100,9 @@ This spec does **not** redesign:
 - walking / locomotion mode
 - floor / slope / terrain behavior outside the standing-balance entry path
 
+It also does not duplicate the detailed, bone-by-bone stabilization recipe for Phase 1.  
+That material belongs in the dedicated Phase 1 stabilization spec.
+
 ## 5. Terminology
 
 ### 5.1 Balance request
@@ -96,6 +124,13 @@ A bounded temporary procedure whose job is to move the runtime from BridgeActive
 At minimum: calves, feet, balls.  
 These are the most spike-prone bodies and require special handling during entry.
 
+### 5.7 Transition-critical set
+The subset of bodies whose topology, target continuity, and policy suppression directly determine whether root-on is safe.
+
+The exact composition of this set, for Phase 1 purposes, is defined in:
+
+- `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
+
 ## 6. Required High-Level Behavior
 
 When `pa.StartBalanceMode` is invoked:
@@ -105,6 +140,13 @@ When `pa.StartBalanceMode` is invoked:
 - the runtime must never repeatedly reject forever without a convergence path
 - the runtime must never enter a transition that is structurally impossible to satisfy
 - the runtime must never keep policy driving the same frame that root/pelvis simulation flips on unless that exact flip is explicitly designed and validated
+
+Additionally:
+
+- Phase 1 must not be treated as a passive wait state
+- Phase 1 must create a real convergence path toward root-on
+- a clean Phase 1 is not sufficient if Phase 2 root-on still produces a deterministic spike
+- if Phase 1 can only “sometimes” converge through unowned retries or incidental runtime drift, the design is not yet valid
 
 ## 7. Authoritative Runtime States
 
@@ -212,10 +254,14 @@ Required actions:
 - freeze new balance promotion attempts
 - disable perturbation application
 - disable or zero policy target writing into bodies affected by transition
-- force distal bodies into the intended transition topology
+- force the transition-critical topology required for safe root-on
 - preserve current gross posture without introducing new target discontinuities
 - optionally quarantine hip/thigh influence if required by implementation
 - capture baseline metrics
+
+The detailed implementation contract for these actions is defined in:
+
+- `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
 
 ### Policy rule
 
@@ -232,6 +278,17 @@ If distal bodies are known spike sources, Phase 1 must explicitly move them to t
 - either forced kinematic
 - or explicitly controlled under bounded reset rules
 
+### Phase 1 compliance rule
+
+Phase 1 is compliant only if it reaches readiness through the owned topology-and-authority shaping procedure defined by the Phase 1 stabilization spec.
+
+It is not compliant if readiness is reached through:
+
+- incidental drift
+- unowned retries
+- repeated recovery loops with no new convergence evidence
+- topology states that still violate the Phase 1 target contract
+
 ### Exit criteria from Phase 1
 
 Phase 1 may advance only if:
@@ -240,6 +297,8 @@ Phase 1 may advance only if:
 - policy influence to transition-critical bodies is disabled
 - baseline root linear/angular speeds are below pre-root-on limits
 - no fail-stop precursor is active
+- no pending cached reset remains
+- no transition-local hazard remains active
 
 ## 13. Phase 2: Root On
 
@@ -268,6 +327,31 @@ Immediately after root-on, record:
 - sim count
 - max body linear speed
 - max body angular speed
+
+### Phase 2 abort rule
+
+A Phase 2 root-on spike is a first-class transition failure.
+
+If root-on causes a spike above named abort thresholds, the runtime must:
+
+- abort the transition
+- classify the failure as `phase2_root_on_spike` or a more specific reason
+- recover to coherent `BridgeActive`
+- forbid immediate automatic re-entry unless recovery produced a materially different, provably retryable state
+
+### Phase 2 retry prohibition
+
+A Phase 2 failure must not immediately recycle into Phase 1 just because the request is still pending.
+
+Automatic retry after Phase 2 failure is allowed only if all are true:
+
+- recovery completed and restored coherent `BridgeActive`
+- the previous failure class is marked retryable
+- recovery changed something material about topology, authority, or thresholds
+- a fresh BridgeActive quiet proof occurred after recovery
+- retry budget is not exceeded
+
+If these conditions are not met, the request must be cleared or remain blocked pending explicit user action.
 
 ## 14. Phase 3: Settle
 
@@ -323,6 +407,30 @@ Retry is allowed only if recovery changes something that could plausibly make th
 
 If the failure reason is structural and unchanged, do not retry automatically forever.
 
+### Recovery coherence rule
+
+Recovery is not complete unless the runtime has returned to a **single coherent BridgeActive state**.
+
+A recovered state is not coherent if any of the following remain true:
+
+- pelvis/root simulation topology is still transition-shaped
+- transition-local policy suppression remains half-applied
+- transition-local pending resets remain armed
+- the previous fail-stop precursor state is still active
+- the system is effectively still in a post-root-on topology while claiming BridgeActive
+
+### Retry evidence rule
+
+Automatic retry requires **new evidence**, not just a repeated tick.
+
+Minimum evidence must include:
+
+- completed recovery
+- materially changed state or cleared hazard
+- fresh quiet proof in BridgeActive after recovery
+
+Without that evidence, preserving the queued request is not meaningful.
+
 ## 17. Logging Contract
 
 Logs must be sparse, objective, and phase-authoritative.
@@ -359,6 +467,17 @@ Use stable reason strings, such as:
 - `phase3_timeout`
 - `phase3_fail_stop_precursor`
 
+### Additional logging requirement for retry loops
+
+If a transition attempt is retried automatically, the logs must show:
+
+- why retry is allowed
+- what changed since the last failure
+- whether BridgeActive quiet proof was re-established
+- remaining retry budget
+
+This is required so repeated attempts are distinguishable from an accidental infinite loop.
+
 ## 18. Observability Requirements
 
 The runtime must make it possible to answer these questions from logs:
@@ -370,6 +489,7 @@ The runtime must make it possible to answer these questions from logs:
 5. Did pelvis/root actually start simulating?
 6. Did a spike happen before or after root-on?
 7. Why did the transition fail or succeed?
+8. Why was an automatic retry allowed or denied?
 
 ## 19. Invariants
 
@@ -380,6 +500,7 @@ These must always hold:
 - Balance mode cannot be marked active while pelvis/root is kinematic
 - Policy influence cannot remain fully active across root-on unless explicitly validated by design
 - A failed transition must restore a coherent BridgeActive state
+- A Phase 2 root-on spike must not silently feed an immediate retry loop from a contaminated post-failure state
 
 ## 20. Recommended Threshold Structure
 
@@ -392,6 +513,9 @@ Recommended categories:
 - root-on abort thresholds
 - settle success thresholds
 - fail-stop thresholds
+- retry eligibility thresholds
+- retry cooldown thresholds
+- retry budget limits
 
 ## 21. Test Matrix
 
@@ -404,15 +528,19 @@ Minimum required tests:
 - induced spike at root-on -> transition aborts cleanly -> returns to BridgeActive
 - missing root modifier/control -> no infinite retry loop -> stable failure
 - failed transition followed by corrected conditions -> second attempt can succeed
+- Phase 2 root-on spike followed by unchanged recovery state -> no immediate automatic retry
+- Phase 2 root-on spike followed by materially different recovery and fresh quiet proof -> retry may occur if within budget
 
 ## 22. Implementation Guidance
 
 - Separate queue gates from preflight gates
 - Transition-owned conditions must not be used as preflight rejection reasons
 - Make topology shaping explicit in Phase 1
+- Implement Phase 1 according to the dedicated Phase 1 stabilization spec
 - Disable conflicting authority at root-on
 - Avoid combining root flip, target reset, policy write, posture rewrite, and shell correction in one uncontrolled frame
-- Any automatic retry loop must have an owner, a reason, and a convergence condition
+- Any automatic retry loop must have an owner, a reason, a convergence condition, and a retry budget
+- Treat repeated Phase 2 root-on spikes as evidence of a design defect, not as something to brute-force through retries
 
 ## 23. Proposed Design Decision for Current Runtime
 
@@ -422,16 +550,20 @@ The most coherent design is:
 2. Start transition from BridgeActive while pelvis is still kinematic
 3. In Phase 1:
    - suppress policy influence to transition-critical set
-   - force distal bodies into the desired topology
+   - force the transition-critical topology required by the Phase 1 stabilization spec
    - preserve posture without repeated spam
+   - prove readiness through a real quiet-window hold
 4. In Phase 2:
    - enable pelvis/root simulation
    - no same-frame policy drive into the transition-critical set
+   - abort cleanly if root-on spike thresholds are exceeded
 5. In Phase 3:
    - require bounded settle success
 6. Only then activate balance mode
 
 This treats `pelvisBodyNotSimulating` as the reason for transition, not as a reason to reject forever.
+
+It also treats repeated `phase2_root_on_spike` failures as a transition-design problem, not as a reason for indefinite automatic retries.
 
 ## 24. Contradictions Check Against Existing Design
 
@@ -443,6 +575,12 @@ The one change I do recommend in that existing doc is to explicitly state:
 
 - Balance Perturbation Mode requires a bounded entry transition and is only active after transition success.
 
+I also do not see a contradiction with the new Phase 1 stabilization spec.  
+The documents are complementary:
+
+- this doc defines the entry contract
+- the Phase 1 stabilization spec defines the Phase 1 convergence mechanism
+
 ## 25. Acceptance Criteria
 
 This spec is satisfied only when:
@@ -451,6 +589,7 @@ This spec is satisfied only when:
 - `pelvisBodyNotSimulating` is no longer an eternal rejection
 - transition ownership is explicit
 - root-on spikes are attributable and bounded
+- repeated Phase 2 spike failures do not automatically recycle forever without new convergence evidence
 - balance mode becomes active only after real root simulation validity
 - logs are compact and decisive
 
@@ -458,7 +597,11 @@ This spec is satisfied only when:
 
 Recommended path in repo:
 
-- `plans/stage1/40-design/balance-mode-entry-transition-spec.md`
+- `plans/stage1/40-design/balance_mode_entry_transition_spec.md`
+
+Companion document:
+
+- `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
 
 Alternative:
 
