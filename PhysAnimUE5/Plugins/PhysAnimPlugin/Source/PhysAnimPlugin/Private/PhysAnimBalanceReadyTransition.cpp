@@ -287,7 +287,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			if (QuietWindowAccumulatedSeconds >= Settings.PolicySettleRequiredSeconds)
 			{
 				FString CaptureReason;
-				if (CaptureCertifiedHandoff(Owner, Settings, CaptureReason))
+				if (CaptureLateValidationBaseline(Owner, Settings, CaptureReason))
 				{
 					LateValidationAccumulatedSeconds = 0.0f;
 					Diagnostics.Phase1LateValidateAccumulatedSeconds = 0.0f;
@@ -356,7 +356,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			if (PolicyInfluenceAlpha >= Owner->BalanceReadyPolicyInfluenceThreshold)
 			{
 				FString CaptureReason;
-				if (CaptureCertifiedHandoff(Owner, Settings, CaptureReason))
+				if (CaptureLateValidationBaseline(Owner, Settings, CaptureReason))
 				{
 					LateValidationAccumulatedSeconds = 0.0f;
 					Diagnostics.Phase1LateValidateAccumulatedSeconds = 0.0f;
@@ -1086,6 +1086,21 @@ bool FPhysAnimBalanceReadyTransition::CaptureCertifiedHandoff(UPhysAnimComponent
 
 	if (!ValidateLateValidationHandoffSnapshot(CurrentSnapshot, Settings, OutReason))
 	{
+		return false;
+	}
+
+	CertifiedHandoff = CurrentSnapshot;
+	bHasCertifiedHandoff = true;
+	OutReason.Reset();
+	return true;
+}
+
+bool FPhysAnimBalanceReadyTransition::CaptureLateValidationBaseline(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
+{
+	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot))
+	{
+		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;
 	}
 
