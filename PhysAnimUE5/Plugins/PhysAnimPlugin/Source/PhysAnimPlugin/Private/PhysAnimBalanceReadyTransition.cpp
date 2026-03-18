@@ -23,6 +23,16 @@ namespace BalanceTransitionSets
 			DistalSimCountPost == 0 &&
 			((SimCountPre == 0 && SimCountPost == 1) || (SimCountPre == 1 && SimCountPost == 1));
 	}
+
+	static FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount)
+	{
+		return FString::Printf(
+			TEXT("root=%s proximal=%s distal=%s upper=%s"),
+			bRootSimulating ? TEXT("sim") : TEXT("kin"),
+			ProximalSimCount > 0 ? TEXT("sim") : TEXT("kin"),
+			DistalSimCount > 0 ? TEXT("sim") : TEXT("kin"),
+			UpperSimCount > 0 ? TEXT("sim") : TEXT("kin"));
+	}
 }
 
 void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhysAnimComponent* Owner)
@@ -167,11 +177,36 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				FString Phase2BlockReason;
 				if (ValidatePhase2EntryPreconditions(Owner, Settings, Phase2BlockReason))
 				{
-					SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_RootOn, Owner);
+					if (CaptureCertifiedHandoff(Owner, Settings))
+					{
+						UE_LOG(
+							LogPhysAnimBridge,
+							Log,
+							TEXT("[PhysAnimBalance] PHASE1_READY_FOR_ROOT_ON topology=%s simCount=%d proximalSimCount=%d distalSimCount=%d policySuppressed=%d controlAuthoritySettled=%d maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f"),
+							*CertifiedHandoff.TopologyClass,
+							CertifiedHandoff.SimCount,
+							CertifiedHandoff.ProximalSimCount,
+							CertifiedHandoff.DistalSimCount,
+							CertifiedHandoff.bPolicySuppressed ? 1 : 0,
+							CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
+							CertifiedHandoff.MaxTargetDeltaDegrees,
+							CertifiedHandoff.MeanTargetDeltaDegrees,
+							CertifiedHandoff.QuietProofDurationSeconds);
+						SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_RootOn, Owner);
+						return;
+					}
+
+					Phase2BlockReason = TEXT("phase2_handoff_capture_failed");
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
+					QuietWindowAccumulatedSeconds = 0.0f;
+					ResetCertifiedHandoffState();
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
 					return;
 				}
 
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
 				QuietWindowAccumulatedSeconds = 0.0f;
+				ResetCertifiedHandoffState();
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
 			}
 		}
@@ -297,6 +332,20 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		return;
 	}
 
+	if (NewPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn && Owner)
+	{
+		const FPhysAnimStabilizationSettings EffectiveSettings = Owner->ResolveEffectiveStabilizationSettings();
+		FString DenyReason;
+		if (!ValidateCertifiedHandoff(Owner, EffectiveSettings, DenyReason))
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *DenyReason);
+			QuietWindowAccumulatedSeconds = 0.0f;
+			ResetCertifiedHandoffState();
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *DenyReason);
+			return;
+		}
+	}
+
 	InternalPhase = NewPhase;
 	PhaseTimeSeconds = 0.0f;
 	StableHoldAccumulatedSeconds = 0.0f;
@@ -315,21 +364,33 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				Owner->GetSimulatingBodies(SimulatingBones);
 				Diagnostics.SimCountPre = SimulatingBones.Num();
 				Diagnostics.DistalSimCountPre = 0;
+				int32 ProximalSimCountPre = 0;
 				for (const FName BoneName : SimulatingBones)
 				{
 					if (BalanceTransitionSets::IsDistalLowerLimb(BoneName))
 					{
 						Diagnostics.DistalSimCountPre++;
 					}
+					else if (BalanceTransitionSets::IsProximal(BoneName))
+					{
+						ProximalSimCountPre++;
+					}
 				}
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ENTRY rootPreLin=%.1f rootPreAng=%.1f shellOffsetDelta=%.1f shellVelocityDelta=%.1f simCountPre=%d distalSimPre=%d policySuppressed=1 resetScheduled=%d"),
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ENTRY topology=%s rootPreLin=%.1f rootPreAng=%.1f shellOffsetDelta=%.1f shellVelocityDelta=%.1f simCountPre=%d proximalSimPre=%d distalSimPre=%d policySuppressed=%d controlAuthoritySettled=%d maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f resetScheduled=%d"),
+					CertifiedHandoff.TopologyClass.IsEmpty() ? TEXT("unknown") : *CertifiedHandoff.TopologyClass,
 					Diagnostics.BaselineRootLinVel,
 					Diagnostics.BaselineRootAngVel,
 					Diagnostics.BaselineShellOffset,
 					Diagnostics.BaselineShellVel,
 					Diagnostics.SimCountPre,
+					ProximalSimCountPre,
 					Diagnostics.DistalSimCountPre,
+					CertifiedHandoff.bPolicySuppressed ? 1 : 0,
+					CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
+					CertifiedHandoff.MaxTargetDeltaDegrees,
+					CertifiedHandoff.MeanTargetDeltaDegrees,
+					CertifiedHandoff.QuietProofDurationSeconds,
 					Diagnostics.bResetScheduled ? 1 : 0);
 
 				PelvisBody->SetInstanceSimulatePhysics(true);
@@ -375,6 +436,13 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RECOVERY_COMPLETE"));
 			}
 		}
+	}
+
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Inactive ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
+	{
+		ResetCertifiedHandoffState();
 	}
 }
 
@@ -486,6 +554,19 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
+	if (!ShouldSuppressPolicy())
+	{
+		OutReason = TEXT("phase2_policy_suppression_not_active");
+		return false;
+	}
+
+	const float ControlAuthorityAlpha = Owner->CalculateCurrentControlAuthorityAlpha(Settings);
+	if (ControlAuthorityAlpha < 1.0f - KINDA_SMALL_NUMBER)
+	{
+		OutReason = TEXT("phase2_control_authority_not_settled");
+		return false;
+	}
+
 	const float ShellOffset = Owner->GetCurrentShellPlanarOffsetDeltaCm();
 	const float ShellVel = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 	if (Diagnostics.RootSpeed > Settings.BalancePhase2EntryMaxRootLinearSpeed)
@@ -509,6 +590,158 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
+	const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
+	if (ControlTargetDiagnostics.MaxTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg ||
+		ControlTargetDiagnostics.MeanTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg)
+	{
+		OutReason = TEXT("phase2_target_discontinuity_too_high");
+		return false;
+	}
+
+	OutReason = TEXT("ready");
+	return true;
+}
+
+bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings, FPhysAnimCertifiedHandoffSnapshot& OutSnapshot) const
+{
+	OutSnapshot = {};
+
+	USkeletalMeshComponent* Mesh = Owner ? Owner->GetMeshComponent() : nullptr;
+	if (!Owner || !Mesh || !Owner->GetOwner())
+	{
+		return false;
+	}
+
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	FBodyInstance* PelvisBody = Mesh->GetBodyInstance(RootBoneName);
+	if (!PelvisBody)
+	{
+		return false;
+	}
+
+	TArray<FName> SimulatingBones;
+	Owner->GetSimulatingBodies(SimulatingBones);
+	TSet<FName> SimulatingBoneSet(SimulatingBones);
+	int32 ProximalSimCount = 0;
+	int32 DistalSimCount = 0;
+	int32 UpperSimCount = 0;
+	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+	{
+		if (!SimulatingBoneSet.Contains(BoneName))
+		{
+			continue;
+		}
+
+		if (BalanceTransitionSets::IsProximal(BoneName))
+		{
+			ProximalSimCount++;
+		}
+		else if (BalanceTransitionSets::IsDistalLowerLimb(BoneName))
+		{
+			DistalSimCount++;
+		}
+		else if (BalanceTransitionSets::IsUpperBody(BoneName))
+		{
+			UpperSimCount++;
+		}
+	}
+
+	const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
+	OutSnapshot.TopologyClass = BalanceTransitionSets::BuildCertifiedHandoffTopologyClass(
+		PelvisBody->IsInstanceSimulatingPhysics(),
+		ProximalSimCount,
+		DistalSimCount,
+		UpperSimCount);
+	OutSnapshot.SimCount = SimulatingBones.Num();
+	OutSnapshot.ProximalSimCount = ProximalSimCount;
+	OutSnapshot.DistalSimCount = DistalSimCount;
+	OutSnapshot.bPolicySuppressed = ShouldSuppressPolicy();
+	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
+	OutSnapshot.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
+	OutSnapshot.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
+	OutSnapshot.QuietProofDurationSeconds = QuietWindowAccumulatedSeconds;
+	return true;
+}
+
+bool FPhysAnimBalanceReadyTransition::CaptureCertifiedHandoff(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings)
+{
+	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot))
+	{
+		return false;
+	}
+
+	if (!CurrentSnapshot.bPolicySuppressed || !CurrentSnapshot.bControlAuthoritySettled)
+	{
+		return false;
+	}
+
+	CertifiedHandoff = CurrentSnapshot;
+	bHasCertifiedHandoff = true;
+	return true;
+}
+
+bool FPhysAnimBalanceReadyTransition::ValidateCertifiedHandoff(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings, FString& OutReason) const
+{
+	if (!bHasCertifiedHandoff)
+	{
+		OutReason = TEXT("phase2_missing_handoff_payload");
+		return false;
+	}
+
+	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot))
+	{
+		OutReason = TEXT("phase2_handoff_invalidated");
+		return false;
+	}
+
+	if (CurrentSnapshot.TopologyClass != CertifiedHandoff.TopologyClass)
+	{
+		OutReason = TEXT("phase2_handoff_invalidated");
+		return false;
+	}
+
+	if (CurrentSnapshot.SimCount != CertifiedHandoff.SimCount ||
+		CurrentSnapshot.ProximalSimCount != CertifiedHandoff.ProximalSimCount ||
+		CurrentSnapshot.DistalSimCount != CertifiedHandoff.DistalSimCount)
+	{
+		OutReason = TEXT("phase2_sim_coverage_regressed");
+		return false;
+	}
+
+	if (CurrentSnapshot.bPolicySuppressed != CertifiedHandoff.bPolicySuppressed)
+	{
+		OutReason = TEXT("phase2_policy_suppression_regressed");
+		return false;
+	}
+
+	if (CurrentSnapshot.bControlAuthoritySettled != CertifiedHandoff.bControlAuthoritySettled)
+	{
+		OutReason = TEXT("phase2_control_authority_not_settled");
+		return false;
+	}
+
+	if (CurrentSnapshot.MaxTargetDeltaDegrees > CertifiedHandoff.MaxTargetDeltaDegrees + KINDA_SMALL_NUMBER ||
+		CurrentSnapshot.MeanTargetDeltaDegrees > CertifiedHandoff.MeanTargetDeltaDegrees + KINDA_SMALL_NUMBER)
+	{
+		OutReason = TEXT("phase2_target_discontinuity_too_high");
+		return false;
+	}
+
+	if (CertifiedHandoff.MaxTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg ||
+		CertifiedHandoff.MeanTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg)
+	{
+		OutReason = TEXT("phase2_target_discontinuity_too_high");
+		return false;
+	}
+
+	if (CurrentSnapshot.QuietProofDurationSeconds + KINDA_SMALL_NUMBER < CertifiedHandoff.QuietProofDurationSeconds)
+	{
+		OutReason = TEXT("phase2_handoff_invalidated");
+		return false;
+	}
+
 	OutReason = TEXT("ready");
 	return true;
 }
@@ -516,6 +749,13 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 {
 	Diagnostics = {};
+	ResetCertifiedHandoffState();
+}
+
+void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
+{
+	bHasCertifiedHandoff = false;
+	CertifiedHandoff = {};
 }
 
 void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent* Owner)

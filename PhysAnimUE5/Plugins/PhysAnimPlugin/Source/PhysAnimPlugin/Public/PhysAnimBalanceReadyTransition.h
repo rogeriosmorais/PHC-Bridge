@@ -20,6 +20,19 @@ enum class EBalanceReadyEntryClassification : uint8
 	Preflight_HardFailure
 };
 
+struct FPhysAnimCertifiedHandoffSnapshot
+{
+	FString TopologyClass;
+	int32 SimCount = 0;
+	int32 ProximalSimCount = 0;
+	int32 DistalSimCount = 0;
+	bool bPolicySuppressed = false;
+	bool bControlAuthoritySettled = false;
+	float MaxTargetDeltaDegrees = 0.0f;
+	float MeanTargetDeltaDegrees = 0.0f;
+	float QuietProofDurationSeconds = 0.0f;
+};
+
 struct FBalanceReadyTransitionDiagnostics
 {
 	FString BlockReason;
@@ -108,7 +121,12 @@ private:
 	void SetPhase(EBalanceReadyTransitionPhase NewPhase, class UPhysAnimComponent* Owner = nullptr);
 	bool EvaluateReadiness(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidatePhase2EntryPreconditions(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
+	bool BuildCertifiedHandoffSnapshot(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FPhysAnimCertifiedHandoffSnapshot& OutSnapshot) const;
+	bool CaptureCertifiedHandoff(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);
+	bool ValidateCertifiedHandoff(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason) const;
+	static FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount);
 	void ResetTransitionLocalState();
+	void ResetCertifiedHandoffState();
 	void CaptureFlipDiagnostics(class UPhysAnimComponent* Owner);
 
 	EBalanceReadyTransitionPhase InternalPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
@@ -128,6 +146,8 @@ private:
 	int32 Phase2RetryCount = 0;
 	float RetryCooldownTimerSeconds = 0.0f;
 	TMap<FName, FQuat> EntryHoldRotations;
+	bool bHasCertifiedHandoff = false;
+	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
 
 	FBalanceReadyTransitionDiagnostics Diagnostics;
 	double LastLogTimeSeconds = -1.0;

@@ -327,6 +327,9 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase2EntryMaxShellVelocityDelta = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase2EntryMaxTargetDeltaDeg = 15.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase2GuardWindowDuration = 0.10f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
@@ -459,6 +462,7 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxRootAngularSpeed, Other.BalancePhase2EntryMaxRootAngularSpeed) &&
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxShellOffsetDelta, Other.BalancePhase2EntryMaxShellOffsetDelta) &&
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxShellVelocityDelta, Other.BalancePhase2EntryMaxShellVelocityDelta) &&
+			FMath::IsNearlyEqual(BalancePhase2EntryMaxTargetDeltaDeg, Other.BalancePhase2EntryMaxTargetDeltaDeg) &&
 			FMath::IsNearlyEqual(BalancePhase2GuardWindowDuration, Other.BalancePhase2GuardWindowDuration) &&
 			FMath::IsNearlyEqual(BalancePhase2AbortRootLinearSpeed, Other.BalancePhase2AbortRootLinearSpeed) &&
 			FMath::IsNearlyEqual(BalancePhase2AbortRootAngularSpeed, Other.BalancePhase2AbortRootAngularSpeed) &&
@@ -571,6 +575,7 @@ public:
 	float GetCurrentShellPlanarVelocityDeltaCmPerSecond() const;
 	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
+	const FPhysAnimControlTargetDiagnostics& GetLastControlTargetDiagnostics() const { return LastControlTargetDiagnostics; }
 	bool WasPelvisResetAppliedThisTick() const { return bPelvisResetAppliedThisTick; }
 	bool WasPolicyTargetAppliedLastFrame() const { return bPolicyTargetsAppliedLastFrame; }
 	bool WasPelvisSimulatingLastFrame() const { return bLastAppliedPresentationRootSimulationEnabled; }

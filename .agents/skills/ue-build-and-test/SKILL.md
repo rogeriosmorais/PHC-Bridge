@@ -1,5 +1,5 @@
 ---
-name: UE Build And Test
+name: ue-build-and-test
 description: Build the plugin or project and run the smallest relevant automated tests
 ---
 
