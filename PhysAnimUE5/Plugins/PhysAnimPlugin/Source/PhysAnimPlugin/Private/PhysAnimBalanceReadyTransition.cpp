@@ -103,7 +103,7 @@ static bool ValidateLateValidationHandoffSnapshot(
 
 	if (Snapshot.ProximalSimCount <= 0 && Snapshot.DistalSimCount <= 0)
 	{
-		OutReason = TEXT("phase2_sim_coverage_insufficient");
+		OutReason = TEXT("phase2_upper_only_handoff_not_root_on_ready");
 		return false;
 	}
 
