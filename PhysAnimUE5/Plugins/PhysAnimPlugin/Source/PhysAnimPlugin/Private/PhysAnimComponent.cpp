@@ -5964,6 +5964,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 			bUseSkeletalAnimationTargetRepresentation,
 			ControlTargetDiagnostics.bFirstPolicyEnabledFrame,
 			PolicyStepDeltaTime);
+	const bool bRebaseControlTargetHistoryThisFrame =
+		ControlTargetDiagnostics.bFirstPolicyEnabledFrame ||
+		ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(
+			bUseSkeletalAnimationTargetRepresentation,
+			ControlTargetDiagnostics.bFirstPolicyEnabledFrame);
 
 	if (ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(
 		bUseSkeletalAnimationTargetRepresentation,
@@ -5994,16 +5999,14 @@ void UPhysAnimComponent::ApplyControlTargets(
 			OutError = FString::Printf(TEXT("Missing required control '%s' during target write."), *ControlName.ToString());
 			return;
 		}
-		if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame)
+		if (bRebaseControlTargetHistoryThisFrame)
 		{
-			if (!PreviousControlTargetRotations.Contains(ControlName))
-			{
-				PreviousControlTargetRotations.Add(ControlName, Pair.Value);
-			}
-			if (!PolicyBlendStartControlTargetRotations.Contains(ControlName))
-			{
-				PolicyBlendStartControlTargetRotations.Add(ControlName, Pair.Value);
-			}
+			const FQuat* const HoldRotation = BalanceReadyTransition.IsActive()
+				? BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key)
+				: nullptr;
+			const FQuat& HistoryBasisRotation = HoldRotation ? *HoldRotation : Pair.Value;
+			PreviousControlTargetRotations.Add(ControlName, HistoryBasisRotation);
+			PolicyBlendStartControlTargetRotations.Add(ControlName, HistoryBasisRotation);
 		}
 		const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
 		const FQuat* const BlendStartRotation = PolicyBlendStartControlTargetRotations.Find(ControlName);
