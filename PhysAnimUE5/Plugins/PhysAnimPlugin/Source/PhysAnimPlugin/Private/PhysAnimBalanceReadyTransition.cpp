@@ -352,7 +352,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				return;
 			}
 
-			const FString& TerminalQuietBlockReason = !QuietBlockReason.IsEmpty() ? QuietBlockReason : LastQuietBlockReason;
+			const FString& TerminalQuietBlockReason = !LastLateValidateBlockReason.IsEmpty()
+				? LastLateValidateBlockReason
+				: (!QuietBlockReason.IsEmpty() ? QuietBlockReason : LastQuietBlockReason);
 			const FString TimeoutReason = TerminalQuietBlockReason.IsEmpty()
 				? TEXT("phase1_quiet_timeout_unknown")
 				: TEXT("phase1_quiet_timeout_") + TerminalQuietBlockReason;
