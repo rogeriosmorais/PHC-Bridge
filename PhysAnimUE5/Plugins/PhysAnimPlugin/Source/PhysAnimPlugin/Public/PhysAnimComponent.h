@@ -642,6 +642,7 @@ private:
 	bool IsBringUpGroupControlRampActive(int32 GroupIndex) const;
 	bool IsBoneInUnlockedBringUpGroup(FName BoneName) const;
 	float CalculateBringUpGroupControlAuthorityAlpha(int32 GroupIndex, const FPhysAnimStabilizationSettings& EffectiveSettings) const;
+	void GetSimulatingBodies(TArray<FName>& OutBones) const;
 	bool GatherRuntimeInstabilityBodySamples(TArray<FPhysAnimBodyInstabilitySample>& OutSamples) const;
 	bool CheckRuntimeInstability(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
 	void LogBodyModifierTelemetrySnapshot(const TCHAR* Context) const;

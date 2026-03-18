@@ -4534,6 +4534,25 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 	}
 }
 
+void UPhysAnimComponent::GetSimulatingBodies(TArray<FName>& OutBones) const
+{
+	OutBones.Reset();
+	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		return;
+	}
+
+	for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+	{
+		const FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName);
+		if (BodyInstance && BodyInstance->IsInstanceSimulatingPhysics())
+		{
+			OutBones.Add(BoneName);
+		}
+	}
+}
+
 void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
