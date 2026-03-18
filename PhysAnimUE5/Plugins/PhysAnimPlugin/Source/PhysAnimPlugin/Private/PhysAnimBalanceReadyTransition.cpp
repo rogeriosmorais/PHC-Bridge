@@ -30,7 +30,8 @@ namespace BalanceTransitionSets
 	}
 	static bool IsLateValidationUpperBodyOwnershipBone(FName BoneName)
 	{
-		return IsUpperBody(BoneName);
+		// Late validation keeps the apex anchored but leaves the upper limbs free to preserve sim coverage.
+		return IsUpperBodyApex(BoneName);
 	}
 	static bool IsTransitionCritical(FName BoneName) { return IsRoot(BoneName) || IsProximal(BoneName) || IsDistalLowerLimb(BoneName); }
 	static bool IsExpectedPhase2Topology(int32 SimCountPre, int32 SimCountPost, int32 DistalSimCountPre, int32 DistalSimCountPost)
@@ -1263,8 +1264,8 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 	{
-		// Late validation narrows ownership further and keeps the full upper-body chain in the
-		// explicit kinematic hold while policy influence is allowed to settle.
+		// Late validation keeps the critical chain and apex anchored, but lets the upper limbs stay simulated
+		// so the sustain proof covers a broader non-root body set once policy influence begins.
 		return BalanceTransitionSets::IsTransitionCritical(BoneName) ||
 			BalanceTransitionSets::IsLateValidationUpperBodyOwnershipBone(BoneName);
 	}
