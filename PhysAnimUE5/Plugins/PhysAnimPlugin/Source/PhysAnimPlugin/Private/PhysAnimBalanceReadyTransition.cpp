@@ -488,6 +488,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		if (bLateValidationThisFrame)
 		{
 			LateValidationAccumulatedSeconds += DeltaTime;
+			// Carry the quiet-proof timer through late validation so the certified handoff
+			// reflects a real sustain window under initial policy influence.
+			QuietWindowAccumulatedSeconds += DeltaTime;
 			Diagnostics.Phase1LateValidateGateSource = TEXT("live_late_validate_gate");
 			Diagnostics.Phase1LateValidateGateReason = TEXT("ready");
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
