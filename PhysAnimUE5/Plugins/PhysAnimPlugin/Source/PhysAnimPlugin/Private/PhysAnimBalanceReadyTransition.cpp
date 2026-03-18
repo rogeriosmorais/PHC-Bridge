@@ -101,9 +101,16 @@ static bool ValidateLateValidationHandoffSnapshot(
 		return false;
 	}
 
+	return true;
+}
+
+static bool ValidateRootOnReadinessSnapshot(
+	const FPhysAnimCertifiedHandoffSnapshot& Snapshot,
+	FString& OutReason)
+{
 	if (Snapshot.ProximalSimCount <= 0 && Snapshot.DistalSimCount <= 0)
 	{
-		OutReason = TEXT("phase2_upper_only_handoff_not_root_on_ready");
+		OutReason = TEXT("phase2_root_on_readiness_not_proven");
 		return false;
 	}
 
@@ -964,6 +971,12 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 	FString HandoffReadinessReason;
 	if (!ValidateLateValidationHandoffSnapshot(CertifiedHandoff, Settings, HandoffReadinessReason) ||
 		!ValidateLateValidationHandoffSnapshot(CurrentSnapshot, Settings, HandoffReadinessReason))
+	{
+		OutReason = HandoffReadinessReason;
+		return false;
+	}
+
+	if (!ValidateRootOnReadinessSnapshot(CurrentSnapshot, HandoffReadinessReason))
 	{
 		OutReason = HandoffReadinessReason;
 		return false;
