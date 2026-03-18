@@ -22,23 +22,9 @@ Preferred order for Unreal path:
 Do not require a manual `PHC_BRIDGE_ROOT` variable.
 Assume repo root is inferred automatically.
 
-## Plugin Build
+## Build
 
-```powershell
-& "$UE5_PATH\Build\BatchFiles\RunUAT.bat" BuildPlugin `
-   -Plugin="$PWD\PhysAnimUE5\Plugins\PhysAnimPlugin\PhysAnimPlugin.uplugin" `
-   -Package="$PWD\_build\PhysAnimPlugin" `
-   -TargetPlatforms=Win64 `
-   -Rocket
-```
-
-## Project Build
-
-```powershell
-& "$UE5_PATH\Build\BatchFiles\Build.bat" PhysAnimUE5Editor Win64 Development `
-  -Project="$PWD\PhysAnimUE5\PhysAnimUE5.uproject" `
-  -Progress -NoHotReloadFromIDE
-```
+./scripts/build.ps1
 
 ## Python-Side Tests
 
