@@ -5888,12 +5888,18 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return;
 	}
 
-	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
-	const bool bPolicyInfluenceActive = PolicyInfluenceAlpha > KINDA_SMALL_NUMBER && !BalanceReadyTransition.ShouldSuppressPolicy();
+	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+	const bool bPolicyInfluenceActive = PolicyInfluenceRampStartTimeSeconds >= 0.0 && !BalanceReadyTransition.ShouldSuppressPolicy();
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
 	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
 
+	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame && PolicyInfluenceRampStartTimeSeconds >= 0.0)
+	{
+		PolicyInfluenceRampStartTimeSeconds = CurrentTimeSeconds;
+	}
+
+	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 
 	if (EffectiveSettings.bForceZeroActions)
 	{
