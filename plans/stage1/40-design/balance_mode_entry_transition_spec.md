@@ -159,6 +159,7 @@ Minimum state set:
 - `BalanceStartQueued`
 - `BalanceTransition_Preflight`
 - `BalanceTransition_Phase1_Prepare`
+- `BalanceTransition_Phase1_LateValidate`
 - `BalanceTransition_Phase2_RootOn`
 - `BalanceTransition_Phase3_Settle`
 - `BalancePerturbationActive`
@@ -280,8 +281,30 @@ Minimum certified handoff fields:
 - control-authority settled state
 - bounded target continuity summary for the transition-critical set
 - quiet-proof duration actually achieved
+- late-validation sustain duration achieved under initial policy influence
+- upper-body stability classification at handoff
 
 If the runtime cannot report these fields coherently, it is not ready for Phase 2.
+
+### Phase 1 late-validation rule
+
+Phase 1 readiness must be split into two proofs:
+
+- `Phase1QuietProof`
+- `Phase1LateValidateProof`
+
+`Phase1QuietProof` demonstrates that the shaped pre-root-on topology is quiet before policy influence resumes.
+`Phase1LateValidateProof` demonstrates that the same handoff remains stable during a bounded initial-policy-influence sustain window.
+
+Phase 2 must not consume a handoff certified only by the first proof.
+
+Late validation must explicitly prove all of the following:
+
+- certified topology still holds after policy influence begins
+- upper-body ownership and anchoring policy remain in the documented configuration
+- sim coverage does not collapse materially from the certified handoff payload
+- target continuity remains within the named Phase 2 entry envelope
+- no late cached-target reset or topology flip reappears
 
 ### Policy rule
 
@@ -318,7 +341,7 @@ It is not compliant if readiness is reached through:
 
 ### Exit criteria from Phase 1
 
-Phase 1 may advance only if:
+Phase 1 may advance to late validation only if:
 
 - configured body topology matches the intended transition topology
 - policy influence to transition-critical bodies is disabled
@@ -328,6 +351,14 @@ Phase 1 may advance only if:
 - no fail-stop precursor is active
 - no pending cached reset remains
 - no transition-local hazard remains active
+
+Phase 1 may advance from late validation to Phase 2 only if:
+
+- the certified handoff payload still matches the runtime state after bounded initial policy influence
+- upper-body stability remains within the late-validation sustain envelope
+- sim coverage remains above the named late-validation minimums
+- no new target-discontinuity or topology-regression blocker appeared during sustain
+- late-validation sustain duration completed continuously
 
 ### Handoff invalidation rule
 
@@ -345,6 +376,7 @@ Examples of invalidating regressions:
 - policy suppression is no longer active
 - target continuity exceeds the named entry bounds
 - a cached reset or topology flip becomes pending
+- upper-body anchoring/stability policy no longer matches the certified handoff topology
 
 ## 13. Phase 2: Root On
 
@@ -509,6 +541,7 @@ Keep one-shot logs for:
 - preflight reject + reason
 - transition phase changes
 - Phase 1 topology/config summary
+- Phase 1 late-validation start / reset / success
 - root-on summary
 - settle success or failure
 - final mode activation
@@ -529,6 +562,9 @@ Use stable reason strings, such as:
 - `preflight_missing_root_modifier`
 - `preflight_invalid_source_state`
 - `phase1_topology_not_achieved`
+- `phase1_late_validate_sim_coverage_regressed`
+- `phase1_late_validate_upper_body_unstable`
+- `phase1_late_validate_target_discontinuity`
 - `phase2_root_on_spike`
 - `phase3_timeout`
 - `phase3_fail_stop_precursor`
@@ -620,7 +656,9 @@ The most coherent design is:
    - suppress policy influence to transition-critical set
    - force the transition-critical topology required by the Phase 1 stabilization spec
    - preserve posture without repeated spam
-   - prove readiness through a real quiet-window hold and emit a certified handoff state
+   - prove readiness through a real quiet-window hold
+   - run a bounded late-validation sustain under initial policy influence
+   - emit a certified handoff state only after both proofs succeed
 4. In Phase 2:
    - validate that the certified handoff state is still true
    - deny entry safely if the handoff proof has regressed

@@ -125,6 +125,14 @@ These bodies are the most likely to produce explosive propagation or target disc
 
 These bodies are not allowed to destabilize Phase 1, but they are not the primary source of root-on safety.
 
+They are, however, the primary source of the currently observed late-validation failures.
+
+Interpretation rule:
+
+- upper-body bones are non-critical for the initial quiet proof
+- upper-body bones are critical for the late-validation sustain proof
+- Phase 1 must therefore define explicit ownership for them instead of treating them as implementation leftovers
+
 ---
 
 ## 6. Phase 1 Target Topology
@@ -148,8 +156,12 @@ It is not valid to silently depend on a different runtime shape.
 - `calf_l`, `calf_r`, `foot_l`, `foot_r`, `ball_l`, `ball_r` = **kinematic**
 
 ### Upper-body non-critical set
-- may remain in their BridgeActive configuration
-- but any member of this set that is simulating and causing material instability must be forced kinematic by Phase 1 recovery logic
+- may not be left as an undocumented residual topology
+- must use one explicit late-validation ownership mode:
+  - `UpperBodyAnchored`
+  - `UpperBodyPartialSim`
+- whichever mode is selected must be emitted in the certified handoff payload
+- any member of this set that is simulating and causing material instability must be forced into the documented late-validation ownership mode before late validation may begin
 
 ## 6.2 Rationale
 
@@ -336,9 +348,19 @@ If exceeded:
 
 ## 10. Quiet-Window Contract
 
-The quiet window is the core proof that Phase 1 succeeded.
+The quiet window is the first proof that Phase 1 succeeded.
 
 It must not be vague.
+
+The quiet window alone is not sufficient for Phase 2 entry.
+
+Phase 1 requires two proofs:
+
+- `QuietWindow`
+- `LateValidationSustain`
+
+The quiet window proves pre-policy-influence stability.
+The late-validation sustain proves that the certified handoff survives bounded initial policy influence without upper-body flare, sim-coverage collapse, or renewed target discontinuity.
 
 ## 10.1 Metrics used
 
@@ -394,6 +416,29 @@ If any quiet condition becomes false:
 
 No partial carryover is allowed.
 
+## 10.5 Late-validation sustain contract
+
+Late validation begins only after the quiet window completes.
+
+During late validation:
+
+- the runtime may re-enable only the documented initial-policy-influence slice
+- upper-body ownership mode must remain unchanged
+- no new cached-target reset may be scheduled
+- no hidden hold-reference reseed may occur
+
+Late validation succeeds only if all remain true continuously:
+
+- `simCount` stays above `Phase1LateValidateMinSimCount`
+- upper-body topology/ownership matches the certified handoff payload
+- max target delta stays below `Phase1LateValidateMaxTargetDeltaDeg`
+- mean target delta stays below `Phase1LateValidateMeanTargetDeltaDeg`
+- max upper-body angular speed stays below `Phase1LateValidateMaxUpperBodyAngularSpeedDegPerSec`
+- max upper-body linear speed stays below `Phase1LateValidateMaxUpperBodyLinearSpeedCmPerSec`
+- no late reset, hold re-lock, or topology flip occurs
+
+If any of these conditions become false, late validation resets or fails by class rather than silently collapsing into a generic Phase 2 denial reason.
+
 ---
 
 ## 11. Root Reset Rule
@@ -432,7 +477,7 @@ That makes Phase 1 prove the post-quarantine configuration is stable.
 
 ## 13. Phase 1 Exit Criteria
 
-Phase 1 may advance to Phase 2 only when all of these are true:
+Phase 1 may emit a provisional certified handoff only when all of these are true:
 
 1. required topology is correct
 2. policy suppression for transition-critical set is active
@@ -447,6 +492,16 @@ Phase 1 may advance to Phase 2 only when all of these are true:
 11. fail-stop precursor is inactive
 12. no transition-local hazard flag is active
 
+After that provisional handoff is emitted, Phase 1 must complete late validation before Phase 2 may begin.
+
+Late-validation success requires at minimum:
+
+- sustain duration `Phase1LateValidateRequiredSeconds` completed
+- `simCount` and upper-body coverage remain within certified bounds
+- upper-body motion remains below the named late-validation maxima
+- target continuity remains within the named late-validation envelope
+- no late reset / re-lock / topology flip occurred
+
 On success, Phase 1 must emit a **certified handoff payload** containing at minimum:
 
 - handoff topology classification
@@ -458,6 +513,8 @@ On success, Phase 1 must emit a **certified handoff payload** containing at mini
 - max target delta
 - mean target delta
 - quiet proof duration
+- late-validation sustain duration
+- upper-body ownership mode and upper-body stability summary
 
 Phase 2 must consume this payload rather than infer readiness from timing alone.
 
@@ -492,6 +549,8 @@ These may retry automatically **only** if recovery changes the state and the sys
 - `phase1_pending_reset_not_discharged`
 - `phase1_quiet_window_interrupted_by_contamination`
 - `phase1_quarantine_not_settled`
+- `phase1_late_validate_sim_coverage_regressed`
+- `phase1_late_validate_upper_body_unstable`
 
 ## 14.2 Non-retryable failure classes
 
@@ -500,6 +559,7 @@ These must clear the pending request or require explicit user action:
 - `phase1_root_reset_requested`
 - `phase1_policy_write_leak_to_transition_set`
 - `phase1_repeated_target_discontinuity`
+- `phase1_late_validate_hidden_reset_or_relock`
 - `phase1_no_convergence_path`
 - `phase1_missing_required_modifier_or_control`
 
@@ -663,15 +723,18 @@ The recommended default implementation is:
    - freeze locomotion / shell assistance
    - force root, proximal, and distal transition sets kinematic
    - capture one entry hold reference from current skeletal pose
+   - select and log one explicit upper-body ownership mode for late validation
 
 2. During Phase 1:
    - hold the transition set near the entry reference
    - allow no cached resets
    - allow no pelvis/root reset
    - accumulate quiet window only after topology, suppression, control-authority settle, and target continuity are already correct
+   - after quiet success, run a bounded late-validation sustain under initial policy influence
+   - fail explicitly if upper-body flare or sim-coverage regression appears during sustain
 
 3. On success:
-   - emit a certified handoff payload
+   - emit a certified handoff payload only after late validation succeeds
    - advance to Phase 2 root-on only while that payload remains valid
 
 4. On failure:

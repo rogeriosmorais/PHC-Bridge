@@ -141,6 +141,9 @@ Phase 2 may begin only if all of these are already true:
 13. control-authority settled state matches the certified handoff payload
 14. max target delta is below `Phase2EntryMaxTargetDeltaDeg`
 15. mean target delta is below `Phase2EntryMeanTargetDeltaDeg`
+16. late-validation sustain duration from Phase 1 completed successfully
+17. upper-body ownership mode matches the certified handoff payload
+18. upper-body linear/angular stability remains within the late-validation envelope at entry
 
 Phase 2 must not be entered “optimistically.”
 
@@ -161,6 +164,8 @@ Required denial reasons include:
 - `phase2_sim_coverage_regressed`
 - `phase2_target_discontinuity_too_high`
 - `phase2_control_authority_not_settled`
+- `phase2_late_validate_not_completed`
+- `phase2_upper_body_unstable`
 
 Denial is a safe no-root-on outcome.  
 It is not a root-on failure and must not be logged as one.
@@ -183,6 +188,8 @@ Required rule:
 
 Default recommended rule:
 - suppress all policy target writes during the root-on frame and through the post-root-on guard window
+
+Policy influence may have been partially restored during Phase 1 late validation, but Phase 2 must treat that as a proof input, not as permission to continue uncontrolled writes through root-on.
 
 ## 7.2 Control target authority
 
@@ -302,6 +309,9 @@ Phase 2 must not change everything at once.
 The topology described below is valid only if it matches the certified Phase 1 handoff contract.
 
 If implementation instead depends on preserved non-root simulation coverage, this section must be revised explicitly rather than bypassed in code.
+
+Current runtime evidence indicates that preserved non-root coverage and upper-body ownership are part of the real handoff contract.
+Therefore Phase 2 must not assume that a quiet pre-root-on state is sufficient unless the late-validation sustain already proved those conditions.
 
 ## 9.1 Root set
 - `pelvis` = simulated
@@ -586,6 +596,12 @@ Minimum required tests:
 - verify `PHASE2_DENIED phase2_handoff_invalidated`
 - verify no root-on attempt occurs
 
+### Test 1c: Denied root-on due to missing late-validation sustain
+- Phase 1 quiet window succeeds
+- late-validation sustain does not complete or regresses
+- verify `PHASE2_DENIED phase2_late_validate_not_completed`
+- verify no root-on attempt occurs
+
 ### Test 2: Same-frame policy leak
 - intentionally enable policy write on root-on frame
 - verify `phase2_policy_write_leak`
@@ -626,7 +642,8 @@ The recommended default implementation is:
 
 1. Enter Phase 2 only after full Phase 1 quiet proof
 2. Require a valid certified handoff payload at the moment Phase 2 begins
-3. Deny Phase 2 safely if sim coverage, suppression state, or target continuity regressed
+3. Require completed Phase 1 late-validation sustain, not just pre-policy quietness
+4. Deny Phase 2 safely if sim coverage, suppression state, target continuity, or upper-body stability regressed
 4. Freeze policy writes, resets, locomotion, and shell assistance
 5. Flip only `pelvis` to simulated
 6. Keep proximal and distal transition-critical sets kinematic through the guard window
