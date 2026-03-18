@@ -56,6 +56,8 @@ struct FBalanceReadyTransitionDiagnostics
 	float BaselineRootAngVel = 0.0f;
 	float BaselineShellOffset = 0.0f;
 	float BaselineShellVel = 0.0f;
+	float PeakMaxBodyLinearSpeed = 0.0f;
+	float PeakMaxBodyAngularSpeed = 0.0f;
 };
 
 class FPhysAnimBalanceReadyTransition
@@ -108,6 +110,8 @@ private:
 	float QuietWindowAccumulatedSeconds = 0.0f;
 	float HipQuarantineTimerSeconds = 0.0f;
 	int32 RetryCount = 0;
+	int32 Phase2RetryCount = 0;
+	float RetryCooldownTimerSeconds = 0.0f;
 	TMap<FName, FQuat> EntryHoldRotations;
 
 	FBalanceReadyTransitionDiagnostics Diagnostics;

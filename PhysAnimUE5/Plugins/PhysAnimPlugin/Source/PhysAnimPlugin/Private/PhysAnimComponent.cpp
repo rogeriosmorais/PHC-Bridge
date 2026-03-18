@@ -4534,6 +4534,11 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 	}
 }
 
+bool UPhysAnimComponent::IsInstabilityPrecursorActive() const
+{
+	return RuntimeInstabilityState.UnstableAccumulatedSeconds > 0.0f;
+}
+
 void UPhysAnimComponent::GetSimulatingBodies(TArray<FName>& OutBones) const
 {
 	OutBones.Reset();
@@ -5928,11 +5933,8 @@ void UPhysAnimComponent::ApplyControlTargets(
 			}
 		}
 
-		// Disable 'posture forcing' for bodies held kinematic during transition
-		if (BalanceReadyTransition.IsActive() && BalanceReadyTransition.ShouldKeepBoneKinematic(Pair.Key))
-		{
-			continue;
-		}
+		// Disable 'posture forcing' for bodies held kinematic during transition - REMOVED
+		// We want to write the hold-pose targets even for kinematic-blended bodies if the phase requires it
 
 		const FName ControlName = PhysAnimBridge::MakeControlName(Pair.Key);
 		if (!PhysicsControl->GetControlExists(ControlName))
@@ -5991,8 +5993,8 @@ void UPhysAnimComponent::ApplyControlTargets(
 			? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
 			: BlendedPolicyRotation;
 
-		// Posture hold logic (Section 9.1)
-		if (bPhase1Active && bSuppressPolicyForThisBone)
+		// Posture hold logic (Section 9.1 / 9.2) - extends to Phase 2 guard window
+		if (BalanceReadyTransition.IsActive() && bSuppressPolicyForThisBone)
 		{
 			if (const FQuat* HoldRot = BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key))
 			{

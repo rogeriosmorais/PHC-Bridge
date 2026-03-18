@@ -181,6 +181,11 @@ void FPhysAnimBalanceReadyTransition::Cancel()
 
 void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings)
 {
+	if (RetryCooldownTimerSeconds > 0.0f)
+	{
+		RetryCooldownTimerSeconds = FMath::Max(0.0f, RetryCooldownTimerSeconds - DeltaTime);
+	}
+
 	if (!IsActive() || !Owner)
 	{
 		return;
@@ -210,15 +215,29 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		bool bQuietThisFrame = true;
 		FString QuietBlockReason;
 
-		if (HipQuarantineTimerSeconds > 0.0f)
+		if (HipQuarantineTimerSeconds > 0.0f || RetryCooldownTimerSeconds > 0.0f)
 		{
 			bQuietThisFrame = false;
-			QuietBlockReason = TEXT("quarantine_active");
+			QuietBlockReason = RetryCooldownTimerSeconds > 0.0f ? TEXT("retry_cooldown") : TEXT("quarantine_active");
 		}
 		else
 		{
+			// Section 10.3/13: check precursor and pending resets
+			const bool bPendingResets = !Owner->GetPendingBodyModifierCachedResetNames().IsEmpty();
+			const bool bPrecursorActive = Owner->IsInstabilityPrecursorActive();
+
+			if (bPrecursorActive)
+			{
+				bQuietThisFrame = false;
+				QuietBlockReason = TEXT("instability_precursor");
+			}
+			else if (bPendingResets)
+			{
+				bQuietThisFrame = false;
+				QuietBlockReason = TEXT("pending_resets");
+			}
 			// Check motion thresholds
-			if (Diagnostics.RootSpeed > Settings.BalancePhase1QuietRootLinearSpeed || 
+			else if (Diagnostics.RootSpeed > Settings.BalancePhase1QuietRootLinearSpeed || 
 				Diagnostics.RootAngularSpeed > Settings.BalancePhase1QuietRootAngularSpeed)
 			{
 				bQuietThisFrame = false;
@@ -281,25 +300,83 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 			return;
 		}
+
+		// Section 9.3: Bounded target continuity check on first entry frame
+		if (PhaseTimeSeconds < dt * 1.5f) // approx first frame
+		{
+			if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
+			{
+				for (auto& Pair : EntryHoldRotations)
+				{
+					if (BalanceTransitionSets::IsTransitionCritical(Pair.Key))
+					{
+						const FQuat CurrentPose = Mesh->GetBoneQuaternion(Pair.Key, EBoneSpaces::WorldSpace);
+						const float Delta = FMath::RadiansToDegrees(Pair.Value.AngularDistance(CurrentPose));
+						if (Delta > Settings.BalancePhase1MaxEntryTargetDeltaDeg)
+						{
+							UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE1_REJECTED repeated_target_discontinuity bone=%s delta=%.1f"), *Pair.Key.ToString(), Delta);
+							Diagnostics.FailureReason = TEXT("phase1_repeated_target_discontinuity");
+							SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
+							return;
+						}
+					}
+				}
+			}
+		}
 	}
 	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
-		// Phase 2: Post root-on settle check.
-		// Section 13: Transition flipped sim in SetPhase. Now check for spikes.
-		const float SpikeLinThreshold = Settings.BalancePhase2MaxRootLinearSpike; 
-		const float SpikeAngThreshold = Settings.BalancePhase2MaxRootAngularSpike;
+		// Phase 2: Post root-on settle guard window (Section 8.5/10)
+		
+		// Section 11: Spike detection and tracking
+		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.MaxLinVelPelvis);
+		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.MaxLinVelThighs);
+		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.MaxLinVelSpine);
+		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.MaxLinVelFeet);
 
-		if (Diagnostics.RootSpeed > SpikeLinThreshold || Diagnostics.RootAngularSpeed > SpikeAngThreshold)
+		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelPelvis);
+		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelThighs);
+		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelSpine);
+		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelFeet);
+
+		// Section 11: Abort Condition Checks
+		FString AbortReason;
+		if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed) AbortReason = TEXT("root_linear_spike");
+		else if (Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed) AbortReason = TEXT("root_angular_spike");
+		else if (Diagnostics.PeakMaxBodyLinearSpeed > Settings.BalancePhase2AbortMaxBodyLinearSpeed) AbortReason = TEXT("body_linear_spike");
+		else if (Diagnostics.PeakMaxBodyAngularSpeed > Settings.BalancePhase2AbortMaxBodyAngularSpeed) AbortReason = TEXT("body_angular_spike");
+		else if (Diagnostics.BaselineShellOffset > Settings.BalancePhase2AbortShellOffsetDelta) AbortReason = TEXT("shell_offset_spike");
+		else if (Diagnostics.BaselineShellVel > Settings.BalancePhase2AbortShellVelocityDelta) AbortReason = TEXT("shell_velocity_spike");
+		else if (!Owner->WasPelvisSimulatingLastFrame()) AbortReason = TEXT("root_sim_dropped");
+		else if (!Owner->GetPendingBodyModifierCachedResetNames().IsEmpty()) AbortReason = TEXT("reset_violation");
+		else if (Owner->IsInstabilityPrecursorActive()) AbortReason = TEXT("fail_stop_precursor");
+
+		if (!AbortReason.IsEmpty())
 		{
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ABORT_SPIKE lin=%.1f ang=%.1f"), Diagnostics.RootSpeed, Diagnostics.RootAngularSpeed);
-			Diagnostics.FailureReason = TEXT("phase2_root_on_spike");
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ABORT_SPIKE reason=%s lin=%.1f ang=%.1f peakBodyLin=%.1f"), 
+				*AbortReason, Diagnostics.RootSpeed, Diagnostics.RootAngularSpeed, Diagnostics.PeakMaxBodyLinearSpeed);
+			Diagnostics.FailureReason = TEXT("phase2_") + AbortReason;
+			
+			// Section 16/495: Retry logic for Phase 2 spiky/dropped failures
+			const bool bIsRetryable = AbortReason.Contains(TEXT("spike")) || AbortReason.Contains(TEXT("dropped"));
+			if (bIsRetryable && Phase2RetryCount < Settings.BalancePhase2MaxAutomaticRetries)
+			{
+				Phase2RetryCount++;
+				RetryCooldownTimerSeconds = Settings.BalancePhase2RetryCooldownSeconds;
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RETRY_SCHEDULED attempt=%d/%d cooldown=%.1f"), 
+					Phase2RetryCount, Settings.BalancePhase2MaxAutomaticRetries, RetryCooldownTimerSeconds);
+				SetPhase(EBalanceReadyTransitionPhase::BRT_Phase1_Prepare, Owner);
+				return;
+			}
+
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 			return;
 		}
 
-		// Mode remains in Phase 2 for a fixed short window before checking settle convergence in Phase 3
-		if (PhaseTimeSeconds > Settings.BalancePhase2RootOnDwellDuration)
+		// Success Condition: Guard window duration reached (Section 10.1)
+		if (PhaseTimeSeconds > Settings.BalancePhase2GuardWindowDuration)
 		{
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_READY_FOR_PHASE3"));
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Phase3_Settle, Owner);
 		}
 	}
@@ -352,26 +429,26 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 
 		if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 		{
-			// Phase 2: Turns pelvis/root sim ON (Section 13)
+			// Section 8.3: Execute Root-On
 			if (Owner)
 			{
 				if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
 				{
 					if (FBodyInstance* PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
 					{
-						if (!PelvisBody->IsInstanceSimulatingPhysics())
-						{
-							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON"));
-							
-							// Capture pre-flip diagnostics
-							Diagnostics.PelvisLinearVelPre = PelvisBody->GetUnrealWorldVelocity();
-							Diagnostics.PelvisAngularVelPre = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
+						// Section 8.1/17: Snapshot and Log
+						Diagnostics.BaselineRootLinVel = PelvisBody->GetUnrealWorldVelocity().Size();
+						Diagnostics.BaselineRootAngVel = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians()).Size();
+						Diagnostics.PeakMaxBodyLinearSpeed = 0.0f;
+						Diagnostics.PeakMaxBodyAngularSpeed = 0.0f;
 
-							PelvisBody->SetInstanceSimulatePhysics(true);
-							Diagnostics.bSimFlipped = true;
-							
-							CaptureFlipDiagnostics(Owner);
-						}
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON preLin=%.1f preAng=%.1f"), 
+							Diagnostics.BaselineRootLinVel, Diagnostics.BaselineRootAngVel);
+
+						PelvisBody->SetInstanceSimulatePhysics(true);
+						Diagnostics.bSimFlipped = true;
+						
+						CaptureFlipDiagnostics(Owner);
 					}
 				}
 			}
@@ -380,26 +457,31 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded)
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_SUCCESS."));
+			Phase2RetryCount = 0;
 		}
 		else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
 		{
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_FAILED reason=%s"), *Diagnostics.FailureReason);
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ABORT reason=%s"), *Diagnostics.FailureReason);
 			
-			// Section 16: Recovery Contract (Restore coherent BridgeActive state)
+			// Section 15: Recovery Contract (Restore coherent BridgeActive state)
 			if (Owner)
 			{
 				USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
 				if (Mesh)
 				{
-					int32 SimCount = 0;
-					for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+					// If we flipped pelvis sim on, flip it back (Section 15/470)
+					if (Diagnostics.bSimFlipped)
 					{
-						if (FBodyInstance* BI = Mesh->GetBodyInstance(BoneName))
+						if (FBodyInstance* PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
 						{
-							if (BI->IsInstanceSimulatingPhysics()) SimCount++;
+							PelvisBody->SetInstanceSimulatePhysics(false);
+							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RECOVERY_BEGIN disabled_pelvis_simulation"));
 						}
 					}
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_RECOVERY simCount=%d policySuppressed=1"), SimCount);
+
+					// Recovery Cleanup
+
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RECOVERY_COMPLETE"));
 				}
 			}
 		}
@@ -531,16 +613,16 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const 
 { 
 	// Global suppression if entire transition-critical set is suppressed
-	return IsActive() && (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare); 
+	return IsActive() && (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn); 
 }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicyWrites(FName BoneName) const
 {
 	if (!IsActive()) return false;
 	
-	// Section 7.1: Suppress writes to transition-critical set during Phase 1
-	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
+	// During Phase 1 and Phase 2 (Guard Window), we suppress policy writes to hold the entry pose
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
-		return BalanceTransitionSets::IsTransitionCritical(BoneName);
+		return true; // Everything holds entry pose during guard window
 	}
 	
 	return false;
