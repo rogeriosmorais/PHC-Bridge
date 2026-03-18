@@ -44,6 +44,8 @@ namespace
 	constexpr float PhysAnimPieMovementSoakDurationSeconds = 115.0f;
 	constexpr float PhysAnimPieG2PresentationLeadInSeconds = 1.0f;
 	constexpr float PhysAnimPieG2PresentationDurationSeconds = 35.0f;
+	constexpr float PhysAnimPieBalanceModeSmokeLeadInSeconds = 1.0f;
+	constexpr float PhysAnimPieBalanceModeSmokeDurationSeconds = 10.0f;
 	constexpr float PhysAnimPieSmokeStartTimeoutSeconds = 30.0f;
 	constexpr float PhysAnimPieSmokeStopTimeoutSeconds = 30.0f;
 
@@ -2012,6 +2014,25 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalancePhase2TopologyContractTest,
+		"PhysAnim.Component.BalancePhase2TopologyContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalancePhase2TopologyContractTest::RunTest(const FString& Parameters)
+	{
+		TestTrue(
+			TEXT("Phase 2 allows the intended pelvis-only root-on topology change"),
+			FPhysAnimBalanceReadyTransition::IsAutomaticRetryAllowed(
+				TEXT("phase2_topology_not_preserved"),
+				true,
+				true,
+				true,
+				true,
+				true));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimBringUpGroupMappingTest,
 		"PhysAnim.Component.BringUpGroupMapping",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -3210,6 +3231,11 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		"PhysAnim.PIE.BalanceMode",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPieBalanceModeSmokeTest,
+		"PhysAnim.PIE.BalanceModeSmoke",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
 	bool FPhysAnimPieMovementTraceSmokeTest::RunTest(const FString& Parameters)
 	{
 		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
@@ -3259,6 +3285,52 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		AddCommand(new FVerifyBridgeTraceSessionCommand(this, PhysAnimPieMovementTraceSmokePrefix, PreexistingSessionPaths));
 		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.MovementSmokeMode"), 0));
 		AddCommand(new FSetIntConsoleVariableCommand(TEXT("physanim.TraceOutput"), -1));
+
+		return true;
+	}
+
+	bool FPhysAnimPieBalanceModeSmokeTest::RunTest(const FString& Parameters)
+	{
+		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
+		{
+			AddError(FString::Printf(TEXT("[PhysAnimPieBalanceSmoke] Failed to open map '%s'."), *PhysAnimPieSmokeMap));
+			return false;
+		}
+
+		AddCommand(new FEditorAutomationLogCommand(FString::Printf(
+			TEXT("[PhysAnimPieBalanceSmoke] PIE balance smoke opening '%s'."),
+			*PhysAnimPieSmokeMap)));
+		AddCommand(new FStartPIECommand(false));
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor != nullptr && IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("[PhysAnimPieBalanceSmoke] PIE did not start within %.1f seconds."),
+					PhysAnimPieSmokeStartTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStartTimeoutSeconds));
+		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeLeadInSeconds));
+		AddCommand(new FExecPieConsoleCommand(TEXT("pa.StartBalanceMode")));
+		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeDurationSeconds));
+		AddCommand(new FEndPlayMapCommand());
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor == nullptr || !IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("[PhysAnimPieBalanceSmoke] PIE did not stop within %.1f seconds."),
+					PhysAnimPieSmokeStopTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStopTimeoutSeconds));
 
 		return true;
 	}

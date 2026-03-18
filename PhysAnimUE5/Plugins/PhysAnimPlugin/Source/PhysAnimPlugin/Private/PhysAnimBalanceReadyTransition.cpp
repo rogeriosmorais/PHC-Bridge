@@ -10,7 +10,19 @@ namespace BalanceTransitionSets
 	static bool IsRoot(FName BoneName) { return BoneName == "pelvis"; }
 	static bool IsProximal(FName BoneName) { return BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"; }
 	static bool IsDistalLowerLimb(FName BoneName) { return BoneName == "calf_l" || BoneName == "calf_r" || BoneName == "foot_l" || BoneName == "foot_r" || BoneName == "ball_l" || BoneName == "ball_r"; }
+	static bool IsUpperBody(FName BoneName)
+	{
+		return BoneName == "clavicle_l" || BoneName == "upperarm_l" || BoneName == "lowerarm_l" || BoneName == "hand_l" ||
+			BoneName == "clavicle_r" || BoneName == "upperarm_r" || BoneName == "lowerarm_r" || BoneName == "hand_r" ||
+			BoneName == "neck_01" || BoneName == "head";
+	}
 	static bool IsTransitionCritical(FName BoneName) { return IsRoot(BoneName) || IsProximal(BoneName) || IsDistalLowerLimb(BoneName); }
+	static bool IsExpectedPhase2Topology(int32 SimCountPre, int32 SimCountPost, int32 DistalSimCountPre, int32 DistalSimCountPost)
+	{
+		return DistalSimCountPre == 0 &&
+			DistalSimCountPost == 0 &&
+			((SimCountPre == 0 && SimCountPost == 1) || (SimCountPre == 1 && SimCountPost == 1));
+	}
 }
 
 void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhysAnimComponent* Owner)
@@ -198,7 +210,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			AbortReason = TEXT("phase2_reset_violation");
 		}
-		else if (Diagnostics.bShellContributed)
+		else if (Diagnostics.bShellContributed &&
+			(Diagnostics.BaselineShellOffset > Settings.BalancePhase2AbortShellOffsetDelta ||
+			 Diagnostics.BaselineShellVel > Settings.BalancePhase2AbortShellVelocityDelta))
 		{
 			AbortReason = TEXT("phase2_shell_correction_material");
 		}
@@ -210,7 +224,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			AbortReason = TEXT("phase2_fail_stop_precursor");
 		}
-		else if (Diagnostics.SimCountPost != Diagnostics.SimCountPre || Diagnostics.DistalSimCountPost != Diagnostics.DistalSimCountPre)
+		else if (!BalanceTransitionSets::IsExpectedPhase2Topology(
+			Diagnostics.SimCountPre,
+			Diagnostics.SimCountPost,
+			Diagnostics.DistalSimCountPre,
+			Diagnostics.DistalSimCountPost))
 		{
 			AbortReason = TEXT("phase2_topology_not_preserved");
 		}
@@ -544,6 +562,12 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 	GetMaxVel({ TEXT("thigh_l"), TEXT("thigh_r") }, Diagnostics.MaxLinVelThighs, Diagnostics.MaxAngVelThighs);
 	GetMaxVel({ TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") }, Diagnostics.MaxLinVelSpine, Diagnostics.MaxAngVelSpine);
 	GetMaxVel({ TEXT("foot_l"), TEXT("foot_r"), TEXT("ball_l"), TEXT("ball_r"), TEXT("calf_l"), TEXT("calf_r") }, Diagnostics.MaxLinVelFeet, Diagnostics.MaxAngVelFeet);
+
+	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+	{
+		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Mesh->GetPhysicsLinearVelocity(BoneName).Size());
+		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Mesh->GetPhysicsAngularVelocityInDegrees(BoneName).Size());
+	}
 }
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const
@@ -583,15 +607,15 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
-		return BalanceTransitionSets::IsTransitionCritical(BoneName);
+		return BalanceTransitionSets::IsTransitionCritical(BoneName) || BalanceTransitionSets::IsUpperBody(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
-		return BalanceTransitionSets::IsProximal(BoneName) || BalanceTransitionSets::IsDistalLowerLimb(BoneName);
+		return BalanceTransitionSets::IsProximal(BoneName) || BalanceTransitionSets::IsDistalLowerLimb(BoneName) || BalanceTransitionSets::IsUpperBody(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
 	{
-		return BalanceTransitionSets::IsTransitionCritical(BoneName);
+		return BalanceTransitionSets::IsTransitionCritical(BoneName) || BalanceTransitionSets::IsUpperBody(BoneName);
 	}
 
 	return false;
