@@ -2438,25 +2438,11 @@ void UPhysAnimComponent::FinalizeBalanceScenario(bool bSuccess, const FString& R
 	}
 }
 
-bool UPhysAnimComponent::EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const
+bool UPhysAnimComponent::EvaluateBalanceModeQueueGates(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const
 {
 	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive)
 	{
 		OutReason = TEXT("runtimeNotBridgeActive");
-		return false;
-	}
-
-	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
-	if (!Mesh)
-	{
-		OutReason = TEXT("meshMissing");
-		return false;
-	}
-
-	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
-	if (!PelvisBody)
-	{
-		OutReason = TEXT("pelvisBodyMissing");
 		return false;
 	}
 
@@ -2473,28 +2459,19 @@ bool UPhysAnimComponent::EvaluateBalanceModeEntryPrerequisites(const FPhysAnimSt
 		return false;
 	}
 
-	if (!PendingBodyModifierCachedResetNames.IsEmpty())
-	{
-		OutReason = PendingBodyModifierCachedResetNames.Contains(PhysAnimBridge::GetRootBoneName())
-			? TEXT("pelvisResetRequiredAtEntry")
-			: TEXT("deferredResetsPending");
-		return false;
-	}
-
-	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
-	if (PolicyInfluenceAlpha < BalanceReadyPolicyInfluenceThreshold)
+	const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+	if (PolicyAlpha < BalanceReadyPolicyInfluenceThreshold)
 	{
 		OutReason = TEXT("policyInfluenceBelowThreshold");
 		return false;
 	}
 
-	if (!PelvisBody->IsInstanceSimulatingPhysics())
+	if (!PendingBodyModifierCachedResetNames.IsEmpty())
 	{
-		OutReason = TEXT("pelvisBodyNotSimulating");
+		OutReason = TEXT("deferredResetsPending");
 		return false;
 	}
 
-	OutReason = TEXT("ready");
 	return true;
 }
 
@@ -2528,33 +2505,23 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 
 	if (!BalanceReadyTransition.IsActive())
 	{
-		FString Reason;
-		const bool bReady = EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, Reason);
-		if (bReady || Reason == TEXT("pelvisBodyNotSimulating"))
+		FString GateReason;
+		if (EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
 		{
-			BalanceReadyTransition.Start(Reason, this);
+			// Queue gates passed. Hand off to transition preflight.
+			BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
+			
 			if (!BalanceReadyTransition.HasActuallyStarted())
 			{
-				// Transition was rejected at the gate as invalid_entry_state.
-				// Clear the request so we don't loop/spam.
+				// Hard preflight failure (invalid source state etc.)
 				bPendingBalanceModeStartRequest = false;
-			}
-		}
-		else
-		{
-			// Log denial only if not already logging via transition or if state changed
-			static FString LastDenialReason;
-			if (Reason != LastDenialReason)
-			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PROMOTION DENIED: %s"), *Reason);
-				LastDenialReason = Reason;
 			}
 		}
 	}
 
 	if (BalanceReadyTransition.HasSucceeded())
 	{
-		StartBalancePerturbationMode();
+		CompleteBalanceModeEntry();
 	}
 	else if (BalanceReadyTransition.HasFailed())
 	{
@@ -2568,39 +2535,34 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 void UPhysAnimComponent::StartBalancePerturbationMode()
 {
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	FString EntryReason;
-	if (!EvaluateBalanceModeEntryPrerequisites(EffectiveSettings, EntryReason))
+	
+	if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
 	{
-		if (EntryReason == TEXT("bringUpIncomplete") ||
-			EntryReason == TEXT("finalGroupRampInactive") ||
-			EntryReason == TEXT("policyInfluenceBelowThreshold") ||
-			EntryReason == TEXT("deferredResetsPending") ||
-			EntryReason == TEXT("pelvisBodyNotSimulating"))
-		{
-			if (EntryReason == TEXT("pelvisBodyNotSimulating"))
-			{
-				const EBalanceReadyEntryClassification Classification = BalanceReadyTransition.ClassifyEntryState(this, EffectiveSettings);
-				if (Classification == EBalanceReadyEntryClassification::InvalidEntryState)
-				{
-					UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_REJECTED_NO_RETRY reason=invalid_entry_state"));
-					return;
-				}
-			}
-
-			QueueBalanceModeStartRequest(EntryReason);
-			BalanceReadyTransition.Cancel();
-		}
-		else if (EntryReason == TEXT("pelvisResetRequiredAtEntry"))
-		{
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] Entry failed: pelvisResetRequiredAtEntry. Pelvis must be stable and promote-drained before balance mode."));
-		}
-		else if (EntryReason == TEXT("pelvisBodyMissing"))
-		{
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] Entry failed: pelvisBodyMissing."));
-		}
 		return;
 	}
 
+	FString GateReason;
+	if (!EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
+	{
+		QueueBalanceModeStartRequest(GateReason);
+		BalanceReadyTransition.Cancel();
+		return;
+	}
+
+	// Queue gates passed. Try transition.
+	if (!BalanceReadyTransition.IsActive())
+	{
+		BalanceReadyTransition.Start(TEXT("manual_trigger"), this);
+		if (!BalanceReadyTransition.HasActuallyStarted())
+		{
+			// Rejected by preflight
+			return;
+		}
+	}
+}
+
+void UPhysAnimComponent::CompleteBalanceModeEntry()
+{
 	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 	UWorld* const World = GetWorld();
@@ -2684,26 +2646,12 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	{
 		BalanceScenarioStartActorLocation = OwnerActor->GetActorLocation();
 	}
-	if (Mesh)
-	{
-		if (PelvisBody)
-		{
-			const FTransform PelvisTransform = PelvisBody->GetUnrealWorldTransform();
-			BalanceScenarioStartPelvisLocation = PelvisTransform.GetLocation();
-			BalanceScenarioStartPelvisRotation = PelvisTransform.GetRotation();
-		}
-		else
-		{
-			BalanceScenarioStartPelvisLocation = Mesh->GetBoneLocation(PhysAnimBridge::GetRootBoneName());
-			BalanceScenarioStartPelvisRotation = Mesh->GetBoneTransform(Mesh->GetBoneIndex(PhysAnimBridge::GetRootBoneName())).GetRotation();
-		}
-	}
-	else
-	{
-		BalanceScenarioStartPelvisLocation = FVector::ZeroVector;
-		BalanceScenarioStartPelvisRotation = FQuat::Identity;
-	}
+	
+	const FTransform PelvisTransform = PelvisBody->GetUnrealWorldTransform();
+	BalanceScenarioStartPelvisLocation = PelvisTransform.GetLocation();
+	BalanceScenarioStartPelvisRotation = PelvisTransform.GetRotation();
 
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	UE_LOG(
 		LogPhysAnimBridge,
 		Warning,

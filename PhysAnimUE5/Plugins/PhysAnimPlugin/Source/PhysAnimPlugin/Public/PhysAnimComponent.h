@@ -661,7 +661,8 @@ private:
 		bool bIdlePoseActive,
 		bool bNoLocomotionStateActive) const;
 	void ResetBalanceScenarioQuietGate(const FString& Reason);
-	bool EvaluateBalanceModeEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
+	void CompleteBalanceModeEntry();
+	bool EvaluateBalanceModeQueueGates(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
 	bool EvaluateBalanceBridgeActivePreEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
 	void QueueBalanceModeStartRequest(const FString& Reason);
 	void TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings);

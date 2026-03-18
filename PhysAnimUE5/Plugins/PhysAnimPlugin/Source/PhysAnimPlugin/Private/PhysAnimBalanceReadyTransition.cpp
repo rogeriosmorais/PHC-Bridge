@@ -15,7 +15,22 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 		return;
 	}
 
-	// TRANSITION_ENTRY_CLASSIFICATION and Hard Entry Gate
+	// Gather initial state for logging
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	bool bPelvisSimulating = false;
+	if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
+	{
+		if (FBodyInstance* PelvisBody = Mesh->GetBodyInstance(RootBoneName))
+		{
+			bPelvisSimulating = PelvisBody->IsInstanceSimulatingPhysics();
+		}
+	}
+
+	// Authoritative log
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_INVOCATION sourceState=%d reason=%s pelvisSimOn=%d ownsRootOn=%d"), 
+		static_cast<int32>(InternalPhase), *InRequestReason, bPelvisSimulating ? 1 : 0, bPelvisSimulating ? 0 : 1);
+
+	// TRANSITION_ENTRY_CLASSIFICATION and Hard Entry Gate (Preflight)
 	const EBalanceReadyEntryClassification Classification = ClassifyEntryState(Owner, Owner->ResolveEffectiveStabilizationSettings());
 	if (Classification == EBalanceReadyEntryClassification::InvalidEntryState)
 	{
@@ -32,14 +47,8 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	bLatchedPelvisResetApplied = false;
 	QuietHandoffCount = 0;
 
-	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-	if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
-	{
-		if (FBodyInstance* PelvisBody = Mesh->GetBodyInstance(RootBoneName))
-		{
-			bLastRootSimulating = PelvisBody->IsInstanceSimulatingPhysics();
-		}
-	}
+	// In Phase 1, bLastRootSimulating will capture whether it WAS simulating before transition logic starts manipulating it.
+	bLastRootSimulating = bPelvisSimulating;
 	bLastPendingResetsEmpty = Owner->GetPendingBodyModifierCachedResetNames().IsEmpty();
 
 	SetPhase(EBalanceReadyTransitionPhase::BRT_Handoff, Owner);
@@ -152,54 +161,13 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Handoff)
 	{
-		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-		FBodyInstance* PelvisBody = Owner->GetMeshComponent() ? Owner->GetMeshComponent()->GetBodyInstance(RootBoneName) : nullptr;
-		const bool bIsSimulating = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
-		
-		if (Owner->WasPelvisResetAppliedThisTick())
+		// Phase 1: Prepares topology.
+		// Topology (distal kinematic) is handled by ShouldKeepBoneKinematic returning true for distal bones.
+		// We wait briefly to ensure PhysAnimComponent has applied these changes before flipping root simulation.
+		if (PhaseTimeSeconds > 0.033f) // ~2 frames at 60Hz
 		{
-			bLatchedPelvisResetApplied = true;
-			Diagnostics.bResetApplied = true;
-		}
-
-		const bool bSimJustStarted = bIsSimulating && !bLastRootSimulating;
-		
-		if (bSimJustStarted)
-		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_PHASE1_ROOT_ON rootLinVel=%.1f rootAngVel=%.1f"), 
-				PelvisBody->GetUnrealWorldVelocity().Size(), 
-				FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians()).Size());
-
-			// Spike check immediately on flip
-			const float RootSpeed = PelvisBody->GetUnrealWorldVelocity().Size();
-			const float RootAngSpeed = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians()).Size();
-			const float SpikeLinThreshold = 150.0f; // Threshold for initial flip spike
-			const float SpikeAngThreshold = 180.0f;
-
-			if (RootSpeed > SpikeLinThreshold || RootAngSpeed > SpikeAngThreshold)
-			{
-				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_ABORT_SPIKE lin=%.1f ang=%.1f"), RootSpeed, RootAngSpeed);
-				Diagnostics.FailureReason = TEXT("initial_sim_spike");
-			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
-				return;
-			}
-
-			Diagnostics.bSimFlipped = true;
-			CaptureFlipDiagnostics(Owner);
-			SetPhase(EBalanceReadyTransitionPhase::BRT_PostHandoffSettle);
+			SetPhase(EBalanceReadyTransitionPhase::BRT_PostHandoffSettle, Owner);
 			return;
-		}
-
-		if (PhaseTimeSeconds > 2.0f) // Timeout
-		{
-			Diagnostics.FailureReason = TEXT("handoff_timeout");
-			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
-		}
-		else if (PelvisBody && (!bIsSimulating || !bLatchedPelvisResetApplied))
-		{
-			// Capture pre-flip velocities while waiting
-			Diagnostics.PelvisLinearVelPre = PelvisBody->GetUnrealWorldVelocity();
-			Diagnostics.PelvisAngularVelPre = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
 		}
 	}
 	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_PostHandoffSettle)
@@ -266,6 +234,31 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		InternalPhase = NewPhase;
 		PhaseTimeSeconds = 0.0f;
 		StableHoldAccumulatedSeconds = 0.0f;
+
+		if (InternalPhase == EBalanceReadyTransitionPhase::BRT_PostHandoffSettle)
+		{
+			// Phase 2: Turns pelvis/root sim ON
+			if (Owner)
+			{
+				if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
+				{
+					if (FBodyInstance* PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
+					{
+						if (!PelvisBody->IsInstanceSimulatingPhysics())
+						{
+							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_PHASE2_ROOT_ON"));
+							
+							// Capture pre-flip diagnostics
+							Diagnostics.PelvisLinearVelPre = PelvisBody->GetUnrealWorldVelocity();
+							Diagnostics.PelvisAngularVelPre = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
+
+							PelvisBody->SetInstanceSimulatePhysics(true);
+							Diagnostics.bSimFlipped = true;
+						}
+					}
+				}
+			}
+		}
 
 		if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded)
 		{
