@@ -2505,11 +2505,17 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 	bPendingBalanceModeStartRequest = true;
 	PendingBalanceModeStartReason = Reason;
 	PendingBalanceModeRequestTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
-	UE_LOG(
-		LogPhysAnimBridge,
-		Warning,
-		TEXT("[PhysAnimBalance] Entry blocked: %s. Queued automatic start request."),
-		*Reason);
+	
+	static FString LastReason;
+	if (Reason != LastReason)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimBalance] Entry blocked: %s. Queued automatic start request."),
+			*Reason);
+		LastReason = Reason;
+	}
 }
 
 void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
@@ -4561,7 +4567,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
 	if (bRootSimFlipFrame)
 	{
-		HipQuarantineTicksRemaining = 2;
+		HipQuarantineTicksRemaining = 10;
 	}
 	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0;
 	bool bHipQuarantineReleasedThisFrame = false;
@@ -4818,8 +4824,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			// Resetting bLastAppliedPresentationRootSimulationEnabled happens at the END of the loop
 		}
 
-		const bool bBringUpGroupUnlocked =
+		bool bBringUpGroupUnlocked =
 			bIsRootBodyModifier ? bAllowRootBodyModifierSimulation : IsBringUpGroupUnlocked(BringUpGroupIndex);
+
+		if (BalanceReadyTransition.IsActive() && BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName))
+		{
+			bBringUpGroupUnlocked = false;
+		}
 		const bool bBodyModifierActivatedThisTick =
 			(!bIsRootBodyModifier && bSimulationHandoffCompletedThisTick) ||
 			(bIsRootBodyModifier && bAllowRootBodyModifierSimulation && !bLastAppliedPresentationRootSimulationEnabled);
@@ -4856,35 +4867,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			true,
 			false);
 
-		// Instrumentation for the first frame after root sim turns on
-		if (bIsRootBodyModifier && bBodyModifierActivatedThisTick)
-		{
-			const TArray<FName> InstrumentBones = { RootBoneNameInternal, "thigh_l", "thigh_r", "spine_01" };
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SIM_FLIP_INSTRUMENTATION (First Frame): policyWrote=%d resetApplied=%d"), 
-				(int32)(LastControlTargetDiagnostics.NumPolicyTargetsWritten > 0), (int32)bPelvisResetAppliedThisTick);
-			
-			USkeletalMeshComponent* const Mesh = GetMeshComponent();
-			if (Mesh)
-			{
-				for (const FName& IBone : InstrumentBones)
-				{
-					FBodyInstance* BI = Mesh->GetBodyInstance(IBone);
-					if (!BI) continue;
-					
-					FVector LinVel = BI->GetUnrealWorldVelocity();
-					FVector AngVel = FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians());
-					
-					FName CName = PhysAnimBridge::MakeControlName(IBone);
-					FQuat CurRot = Mesh->GetBoneQuaternion(IBone, EBoneSpaces::WorldSpace);
-					FQuat TarRot = PreviousControlTargetRotations.Contains(CName) ? PreviousControlTargetRotations[CName] : CurRot;
-					float Delta = FMath::RadiansToDegrees(CurRot.AngularDistance(TarRot));
-					
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("  %s: linVel=%.1f angVel=%.1f rotDelta=%.1f simulating=%d"), 
-						*IBone.ToString(), LinVel.Size(), AngVel.Size(), Delta, (int32)BI->IsInstanceSimulatingPhysics());
-				}
-			}
-		}
-
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 
 		if (bIsRootBodyModifier)
@@ -4893,6 +4875,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		if (ShouldResetBodyModifierToCachedBoneTransform(
+				BoneName,
 				RuntimeState,
 				EffectiveSettings.bForceZeroActions,
 				bBodyModifierActivatedThisTick,
@@ -4946,13 +4929,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bHipQuarantineReleasedThisFrame = (HipQuarantineTicksRemaining == 0);
 		}
 
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("[PhysAnimBalance] HIP_QUARANTINE: leftPreDelta=%.1f rightPreDelta=%.1f released=%d"),
-			LastHipQuarantineLeftPreDeltaDegrees,
-			LastHipQuarantineRightPreDeltaDegrees,
-			bHipQuarantineReleasedThisFrame ? 1 : 0);
+		if (bHipQuarantineReleasedThisFrame)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimBalance] HIP_QUARANTINE_RELEASED"));
+		}
 	}
 
 	LastAppliedStabilizationSettings = EffectiveSettings;
@@ -5927,6 +5910,12 @@ void UPhysAnimComponent::ApplyControlTargets(
 	for (const TPair<FName, FQuat>& Pair : ControlRotations)
 	{
 		if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
+		{
+			continue;
+		}
+
+		// Disable 'posture forcing' for bodies held kinematic during transition
+		if (BalanceReadyTransition.IsActive() && BalanceReadyTransition.ShouldKeepBoneKinematic(Pair.Key))
 		{
 			continue;
 		}
@@ -7339,6 +7328,7 @@ ECollisionEnabled::Type UPhysAnimComponent::ResolveBodyModifierCollisionType(
 }
 
 bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
+	FName BoneName,
 	EPhysAnimRuntimeState InRuntimeState,
 	bool bForceZeroActions,
 	bool bBodyModifierActivatedThisTick,
@@ -7368,21 +7358,18 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 		}
 	}
 
-	if (bIsRootBodyModifier)
+	// EXPERIMENT: DO NOT schedule/apply proximal cached-target reset if we are in transition handoff
+	if (InTransitionPhase == EBalanceReadyTransitionPhase::Handoff)
 	{
-		// EXPERIMENT: DO NOT schedule/apply pelvis cached-target reset if we are in transition handoff
-		if (InTransitionPhase == EBalanceReadyTransitionPhase::Handoff)
+		const FString BoneStr = BoneName.ToString().ToLower();
+		if (bIsRootBodyModifier || BoneStr.Contains(TEXT("spine")) || BoneStr.Contains(TEXT("thigh")))
 		{
-			static double LastLogTimeSuppressed = -1.0;
-			const double CurrentTime = FPlatformTime::Seconds();
-			if (CurrentTime - LastLogTimeSuppressed > 2.0)
-			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] EXPERIMENT: Pelvis reset SUPPRESSED during Handoff flip frame."));
-				LastLogTimeSuppressed = CurrentTime;
-			}
 			return false;
 		}
+	}
 
+	if (bIsRootBodyModifier)
+	{
 		// We allow exactly one reset for the root when it transitions to simulation to ensure 
 		// its physical state is precisely aligned with the visual kinematic state before it begins moving.
 		return bBodyModifierActivatedThisTick && bAllowRootBodyModifierSimulation;

@@ -38,7 +38,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	}
 
 	SetPhase(EBalanceReadyTransitionPhase::Handoff);
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] BalanceReadyTransition started. reason=%s"), *RequestReason);
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_START reason=%s"), *RequestReason);
 }
 
 void FPhysAnimBalanceReadyTransition::Cancel()
@@ -80,37 +80,27 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		}
 
 		const bool bSimJustStarted = bIsSimulating && !bLastRootSimulating;
+		
 		if (bSimJustStarted)
 		{
-			QuietHandoffCount = 2;
-		}
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_PHASE1_ROOT_ON rootLinVel=%.1f rootAngVel=%.1f"), 
+				PelvisBody->GetUnrealWorldVelocity().Size(), 
+				FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians()).Size());
 
-		// Preserve the existing gameplay shell during handoff; do not drop capsule/cmove here.
-		ACharacter* CharacterOwner = Cast<ACharacter>(Owner->GetOwner());
-		if (CharacterOwner)
-		{
-			static double LastPostureLogTime = -1.0;
-			if (CurrentTime - LastPostureLogTime > 1.0)
+			// Spike check immediately on flip
+			const float RootSpeed = PelvisBody->GetUnrealWorldVelocity().Size();
+			const float RootAngSpeed = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians()).Size();
+			const float SpikeLinThreshold = 150.0f; // Threshold for initial flip spike
+			const float SpikeAngThreshold = 180.0f;
+
+			if (RootSpeed > SpikeLinThreshold || RootAngSpeed > SpikeAngThreshold)
 			{
-				const UCharacterMovementComponent* MoveComp = CharacterOwner->GetCharacterMovement();
-				const UCapsuleComponent* CapsuleComp = CharacterOwner->GetCapsuleComponent();
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Posture (Phase 1): preserved charMoveTick=%d mode=%d capsuleColl=%d rootBodySim=%d"),
-					MoveComp ? (int32)MoveComp->IsComponentTickEnabled() : -1,
-					MoveComp ? (int32)MoveComp->MovementMode : -1,
-					CapsuleComp ? (int32)CapsuleComp->GetCollisionEnabled() : -1,
-					(int32)bIsSimulating);
-				LastPostureLogTime = CurrentTime;
+				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_ABORT_SPIKE lin=%.1f ang=%.1f"), RootSpeed, RootAngSpeed);
+				Diagnostics.FailureReason = TEXT("initial_sim_spike");
+				SetPhase(EBalanceReadyTransitionPhase::Failed);
+				return;
 			}
-		}
 
-		if (QuietHandoffCount > 0)
-		{
-			QuietHandoffCount--;
-			return;
-		}
-
-		if (bSimJustStarted)
-		{
 			Diagnostics.bSimFlipped = true;
 			CaptureFlipDiagnostics(Owner);
 			SetPhase(EBalanceReadyTransitionPhase::PostHandoffSettle);
@@ -122,20 +112,18 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.FailureReason = TEXT("handoff_timeout");
 			SetPhase(EBalanceReadyTransitionPhase::Failed);
 		}
-		else if (!bIsSimulating || !bLatchedPelvisResetApplied)
+		else if (PelvisBody && (!bIsSimulating || !bLatchedPelvisResetApplied))
 		{
 			// Capture pre-flip velocities while waiting
-			if (PelvisBody)
-			{
-				Diagnostics.PelvisLinearVelPre = PelvisBody->GetUnrealWorldVelocity();
-				Diagnostics.PelvisAngularVelPre = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
-			}
+			Diagnostics.PelvisLinearVelPre = PelvisBody->GetUnrealWorldVelocity();
+			Diagnostics.PelvisAngularVelPre = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
 		}
 	}
 	else if (Phase == EBalanceReadyTransitionPhase::PostHandoffSettle)
 	{
 		if (bReadyThisFrame)
 		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_PHASE2_PROXIMAL_STABLE rootLinVel=%.1f"), Diagnostics.RootSpeed);
 			SetPhase(EBalanceReadyTransitionPhase::RestoreControls);
 		}
 		else if (PhaseTimeSeconds > 3.0f)
@@ -146,24 +134,16 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	}
 	else if (Phase == EBalanceReadyTransitionPhase::RestoreControls)
 	{
-		// In a real implementation this would progressively re-enable systems.
-		// For now, we transition once stable.
-		if (bReadyThisFrame)
-		{
-			SetPhase(EBalanceReadyTransitionPhase::FinalSettle);
-		}
-		else if (PhaseTimeSeconds > 2.0f)
-		{
-			Diagnostics.FailureReason = TEXT("restore_controls_timeout");
-			SetPhase(EBalanceReadyTransitionPhase::Failed);
-		}
+		// Phase 3: Enable distal bodies
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_PHASE3_DISTAL_ENABLE"));
+		SetPhase(EBalanceReadyTransitionPhase::FinalSettle);
 	}
 	else if (Phase == EBalanceReadyTransitionPhase::FinalSettle)
 	{
 		if (bReadyThisFrame)
 		{
 			StableHoldAccumulatedSeconds += DeltaTime;
-			if (StableHoldAccumulatedSeconds >= Owner->BalanceBridgeActivePreEntrySettleSeconds)
+			if (StableHoldAccumulatedSeconds >= Owner->BalanceQuietWindowRequiredSeconds)
 			{
 				SetPhase(EBalanceReadyTransitionPhase::Succeeded);
 			}
@@ -205,11 +185,11 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 
 		if (Phase == EBalanceReadyTransitionPhase::Succeeded)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Transition SUCCESS latched."));
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION SUCCESS."));
 		}
 		else if (Phase == EBalanceReadyTransitionPhase::Failed)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Transition FAILED: %s"), *Diagnostics.FailureReason);
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION FAILED: %s"), *Diagnostics.FailureReason);
 		}
 	}
 }
@@ -335,8 +315,41 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("  MaxLinVel: Pelvis=%.1f Thighs=%.1f Spine=%.1f Feet=%.1f"), Diagnostics.MaxLinVelPelvis, Diagnostics.MaxLinVelThighs, Diagnostics.MaxLinVelSpine, Diagnostics.MaxLinVelFeet);
 }
 
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const { return IsActive(); } // Hold policy zero during entire transition
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle; }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive(); }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return Phase == EBalanceReadyTransitionPhase::Handoff; } // Only suppress reset on flip frame
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const { return Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle; }
+
+float FPhysAnimBalanceReadyTransition::GetRootBodyModifierSoftSimAlpha() const { return 1.0f; }
+float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneName) const { return 1.0f; }
+
+bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) const
+{
+	if (!IsActive()) return false;
+
+	// Phase 1 (Handoff) and Phase 2 (PostHandoffSettle): Pelvis, Spine, Thighs simulate. Rest are kinematic.
+	if (Phase == EBalanceReadyTransitionPhase::Handoff || 
+		Phase == EBalanceReadyTransitionPhase::PostHandoffSettle)
+	{
+		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		const FString BoneStr = BoneName.ToString().ToLower();
+
+		if (BoneName == RootBoneName || 
+			BoneStr.Contains(TEXT("spine")) || 
+			BoneStr.Contains(TEXT("thigh")))
+		{
+			return false; // Allowed to simulate
+		}
+		return true; // Keep kinematic
+	}
+
+	return false; // Phase 3 (DistalEnable) onwards: All allowed
+}
+
+float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier() const
+{
+	if (!IsActive()) return 1.0f;
+	// Increase damping during instability window
+	return (Phase == EBalanceReadyTransitionPhase::Handoff || Phase == EBalanceReadyTransitionPhase::PostHandoffSettle) ? 2.0f : 1.0f;
+}

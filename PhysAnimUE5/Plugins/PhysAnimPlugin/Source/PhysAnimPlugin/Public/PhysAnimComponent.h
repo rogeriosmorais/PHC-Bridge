@@ -912,6 +912,7 @@ public:
 		bool bIsRootBodyModifier,
 		bool bAllowRootBodyModifierSimulation);
 	static bool ShouldResetBodyModifierToCachedBoneTransform(
+		FName BoneName,
 		EPhysAnimRuntimeState InRuntimeState,
 		bool bForceZeroActions,
 		bool bBodyModifierActivatedThisTick,

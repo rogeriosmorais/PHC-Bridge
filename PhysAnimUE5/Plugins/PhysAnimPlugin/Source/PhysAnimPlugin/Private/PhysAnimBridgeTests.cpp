@@ -1912,33 +1912,33 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	{
 		TestFalse(
 			TEXT("Force-zero mode does not reset body modifiers to cached transforms"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, true, true, true, false, false, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BridgeActive, true, true, true, false, false, 0.0f));
 		TestFalse(
 			TEXT("Non-settling ticks do not reset body modifiers to cached transforms"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, false, true, false, false, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BridgeActive, false, false, true, false, false, 0.0f));
 		TestFalse(
 			TEXT("Root body modifier does not reset on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, false, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BridgeActive, false, true, true, true, false, 0.0f));
 		TestTrue(
 			TEXT("Non-root body modifier resets on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, false, false, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BridgeActive, false, true, true, false, false, 0.0f));
 		TestFalse(
 			TEXT("Locked bring-up group does not reset on settle tick"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, false, false, false, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BridgeActive, false, true, false, false, false, 0.0f));
 		TestTrue(
 			TEXT("Presentation perturbation resets the root body modifier when it becomes simulated in BridgeActive"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, true, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BridgeActive, false, true, true, true, true, 0.0f));
 
 		// Balance Mode Contract
 		TestFalse(
 			TEXT("Balance Mode forbids pelvis/root reset regardless of alpha"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, true, true, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, true, true, 0.0f));
 		TestFalse(
 			TEXT("Balance Mode forbids limb resets once policy begins"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.1f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.1f));
 		TestTrue(
 			TEXT("Balance Mode allows limb resets before policy begins"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.0f));
 
 		return true;
 	}
@@ -1953,23 +1953,23 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		// 1. In BalancePerturbationMode, pelvis/root cached-target reset is always forbidden
 		TestFalse(
 			TEXT("Balance Mode forbids pelvis reset at zero alpha"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, true, true, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, true, true, 0.0f));
 		TestFalse(
 			TEXT("Balance Mode forbids pelvis reset at high alpha"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, true, true, 1.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, true, true, 1.0f));
 
 		// 2. In BridgeActive presentation perturbation, root reset behavior is preserved
 		TestTrue(
 			TEXT("BridgeActive allows root reset for presentation perturbation"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, true, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BridgeActive, false, true, true, true, true, 0.0f));
 
 		// 3. Balance Mode allows limb resets ONLY before policy begins
 		TestTrue(
 			TEXT("Balance Mode allows limb reset before policy alpha > 0"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.0f));
 		TestFalse(
 			TEXT("Balance Mode forbids limb reset once policy alpha > 0"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.01f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalancePerturbationMode, false, true, true, false, false, 0.01f));
 
 		return true;
 	}
