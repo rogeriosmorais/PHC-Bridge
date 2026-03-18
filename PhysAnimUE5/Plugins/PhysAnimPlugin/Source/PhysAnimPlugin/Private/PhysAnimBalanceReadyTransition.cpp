@@ -355,15 +355,15 @@ bool FPhysAnimBalanceReadyTransition::EvaluateReadiness(UPhysAnimComponent* Owne
 		return false;
 	}
 
-	if (Diagnostics.RootSpeed > Owner->BalanceQuietLinearSpeedThresholdCmPerSec)
+	if (Diagnostics.RootSpeed > 5.0f)
 	{
-		OutReason = TEXT("root_linear_high");
+		OutReason = TEXT("root_linear_above_settle");
 		return false;
 	}
 
-	if (Diagnostics.RootAngularSpeed > Owner->BalanceQuietTiltThresholdDeg * 2.0f)
+	if (Diagnostics.RootAngularSpeed > 1.0f)
 	{
-		OutReason = TEXT("root_angular_high");
+		OutReason = TEXT("root_angular_above_settle");
 		return false;
 	}
 
@@ -424,10 +424,11 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 	GetMaxVel({TEXT("foot_l"), TEXT("foot_r")}, Diagnostics.MaxLinVelFeet, Diagnostics.MaxAngVelFeet);
 
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SIM FLIP DIAGNOSTICS:"));
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("  Root Pre: lin=%.1f ang=%.1f"), Diagnostics.PelvisLinearVelPre.Size(), Diagnostics.PelvisLinearVelPost.Size());
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("  Root Pre: lin=%.1f ang=%.1f"), Diagnostics.PelvisLinearVelPre.Size(), Diagnostics.PelvisAngularVelPre.Size());
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("  Root Post: lin=%.1f ang=%.1f"), Diagnostics.PelvisLinearVelPost.Size(), Diagnostics.PelvisAngularVelPost.Size());
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("  Systems: shell=%d policy=%d resetScheduled=%d"), Diagnostics.bShellContributed, Diagnostics.bPolicyWroteTargets, Diagnostics.bResetScheduled);
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("  MaxLinVel: Pelvis=%.1f Thighs=%.1f Spine=%.1f Feet=%.1f"), Diagnostics.MaxLinVelPelvis, Diagnostics.MaxLinVelThighs, Diagnostics.MaxLinVelSpine, Diagnostics.MaxLinVelFeet);
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("  MaxAngVel: Pelvis=%.1f Thighs=%.1f Spine=%.1f Feet=%.1f"), Diagnostics.MaxAngVelPelvis, Diagnostics.MaxAngVelThighs, Diagnostics.MaxAngVelSpine, Diagnostics.MaxAngVelFeet);
 }
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const 
