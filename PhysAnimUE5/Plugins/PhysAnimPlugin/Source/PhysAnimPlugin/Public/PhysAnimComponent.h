@@ -291,6 +291,30 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase1MaxRootAngularBaseline = 45.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1QuietRootLinearSpeed = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1QuietRootAngularSpeed = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1QuietShellOffsetDelta = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1QuietShellVelocityDelta = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1MaxEntryTargetDeltaDeg = 15.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0"))
+	int32 BalancePhase1MaxAutomaticRetries = 3;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1RetryCooldownSeconds = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1HipQuarantineDurationSeconds = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase2MaxRootLinearSpike = 150.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
@@ -393,6 +417,14 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(BalancePhase1PrepareDuration, Other.BalancePhase1PrepareDuration) &&
 			FMath::IsNearlyEqual(BalancePhase1MaxRootLinearBaseline, Other.BalancePhase1MaxRootLinearBaseline) &&
 			FMath::IsNearlyEqual(BalancePhase1MaxRootAngularBaseline, Other.BalancePhase1MaxRootAngularBaseline) &&
+			FMath::IsNearlyEqual(BalancePhase1QuietRootLinearSpeed, Other.BalancePhase1QuietRootLinearSpeed) &&
+			FMath::IsNearlyEqual(BalancePhase1QuietRootAngularSpeed, Other.BalancePhase1QuietRootAngularSpeed) &&
+			FMath::IsNearlyEqual(BalancePhase1QuietShellOffsetDelta, Other.BalancePhase1QuietShellOffsetDelta) &&
+			FMath::IsNearlyEqual(BalancePhase1QuietShellVelocityDelta, Other.BalancePhase1QuietShellVelocityDelta) &&
+			FMath::IsNearlyEqual(BalancePhase1MaxEntryTargetDeltaDeg, Other.BalancePhase1MaxEntryTargetDeltaDeg) &&
+			BalancePhase1MaxAutomaticRetries == Other.BalancePhase1MaxAutomaticRetries &&
+			FMath::IsNearlyEqual(BalancePhase1RetryCooldownSeconds, Other.BalancePhase1RetryCooldownSeconds) &&
+			FMath::IsNearlyEqual(BalancePhase1HipQuarantineDurationSeconds, Other.BalancePhase1HipQuarantineDurationSeconds) &&
 			FMath::IsNearlyEqual(BalancePhase2MaxRootLinearSpike, Other.BalancePhase2MaxRootLinearSpike) &&
 			FMath::IsNearlyEqual(BalancePhase2MaxRootAngularSpike, Other.BalancePhase2MaxRootAngularSpike) &&
 			FMath::IsNearlyEqual(BalancePhase2RootOnDwellDuration, Other.BalancePhase2RootOnDwellDuration) &&

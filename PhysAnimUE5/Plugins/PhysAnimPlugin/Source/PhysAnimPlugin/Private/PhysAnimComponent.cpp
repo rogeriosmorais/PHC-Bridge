@@ -5848,7 +5848,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return;
 	}
 
-	if (!bPolicyInfluenceActive)
+	const bool bPhase1Active = (BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare);
+
+	if (!bPolicyInfluenceActive && !bPhase1Active)
 	{
 		PolicyBlendStartControlTargetRotations.Reset();
 		LastControlTargetDiagnostics = ControlTargetDiagnostics;
@@ -5915,9 +5917,15 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	for (const TPair<FName, FQuat>& Pair : ControlRotations)
 	{
+		const bool bSuppressPolicyForThisBone = BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key);
+		
 		if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
 		{
-			continue;
+			// If we are in Phase 1 AND policy is suppressed for this bone, we still want to apply the hold pose
+			if (!bPhase1Active || !bSuppressPolicyForThisBone)
+			{
+				continue;
+			}
 		}
 
 		// Disable 'posture forcing' for bodies held kinematic during transition
@@ -5982,6 +5990,15 @@ void UPhysAnimComponent::ApplyControlTargets(
 		FQuat LimitedRotation = PreviousRotation
 			? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
 			: BlendedPolicyRotation;
+
+		// Posture hold logic (Section 9.1)
+		if (bPhase1Active && bSuppressPolicyForThisBone)
+		{
+			if (const FQuat* HoldRot = BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key))
+			{
+				LimitedRotation = *HoldRot;
+			}
+		}
 
 		if (bHipQuarantineActiveThisFrame && (Pair.Key == "thigh_l" || Pair.Key == "thigh_r") && Mesh)
 		{

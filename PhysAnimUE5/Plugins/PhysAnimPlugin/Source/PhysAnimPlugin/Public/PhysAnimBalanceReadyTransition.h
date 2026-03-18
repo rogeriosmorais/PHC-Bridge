@@ -74,6 +74,7 @@ public:
 	EBalanceReadyTransitionPhase GetPhase() const { return InternalPhase; }
 	const FString& GetBlockReason() const { return Diagnostics.BlockReason; }
 	const FString& GetFailureReason() const { return Diagnostics.FailureReason; }
+	const TMap<FName, FQuat>& GetEntryHoldRotations() const { return EntryHoldRotations; }
 
 	bool ShouldSuppressPolicy() const;
 	bool ShouldSuppressShell() const;
@@ -84,6 +85,7 @@ public:
 	float GetRootBodyModifierSoftSimAlpha() const;
 	float GetProximalControlSoftAlpha(FName BoneName) const;
 	bool ShouldKeepBoneKinematic(FName BoneName) const;
+	bool ShouldSuppressPolicyWrites(FName BoneName) const;
 	float GetTransitionExtraDampingMultiplier(const struct FPhysAnimStabilizationSettings& Settings) const;
 	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
 
@@ -103,6 +105,11 @@ private:
 	bool bLatchedPelvisResetApplied = false;
 
 	int32 QuietHandoffCount = 0;
+	float QuietWindowAccumulatedSeconds = 0.0f;
+	float HipQuarantineTimerSeconds = 0.0f;
+	int32 RetryCount = 0;
+	TMap<FName, FQuat> EntryHoldRotations;
+
 	FBalanceReadyTransitionDiagnostics Diagnostics;
 	double LastLogTimeSeconds = -1.0;
 };

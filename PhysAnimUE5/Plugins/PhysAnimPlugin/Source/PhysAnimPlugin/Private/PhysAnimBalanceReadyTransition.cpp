@@ -8,6 +8,14 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
 
+namespace BalanceTransitionSets
+{
+	static bool IsRoot(FName BoneName) { return BoneName == "pelvis"; }
+	static bool IsProximal(FName BoneName) { return BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"; }
+	static bool IsDistalLowerLimb(FName BoneName) { return BoneName == "calf_l" || BoneName == "calf_r" || BoneName == "foot_l" || BoneName == "foot_r" || BoneName == "ball_l" || BoneName == "ball_r"; }
+	static bool IsTransitionCritical(FName BoneName) { return IsRoot(BoneName) || IsProximal(BoneName) || IsDistalLowerLimb(BoneName); }
+}
+
 void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhysAnimComponent* Owner)
 {
 	if (IsActive() || !Owner)
@@ -45,12 +53,28 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 
 	RequestReason = InRequestReason;
 	StableHoldAccumulatedSeconds = 0.0f;
+	QuietWindowAccumulatedSeconds = 0.0f;
 	PhaseTimeSeconds = 0.0f;
 	TotalTransitionTimeSeconds = 0.0f;
 	LastLogTimeSeconds = -1.0;
 	Diagnostics = {};
 	bLatchedPelvisResetApplied = false;
 	QuietHandoffCount = 0;
+	HipQuarantineTimerSeconds = 0.0f;
+	EntryHoldRotations.Empty();
+
+	// Section 8.6: Capture entry hold-reference from current skeletal pose
+	if (Owner)
+	{
+		if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
+		{
+			for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+			{
+				EntryHoldRotations.Add(BoneName, Mesh->GetBoneQuaternion(BoneName, EBoneSpaces::WorldSpace));
+			}
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_ENTRY hold_reference_captured request=%s"), *InRequestReason);
+		}
+	}
 
 	// In Phase 1, bLastRootSimulating will capture whether it WAS simulating 
 	bLastRootSimulating = bPelvisSimulating;
@@ -174,31 +198,87 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
-		// Phase 1: Prepares topology.
-		// Section 12 requirements: distal kinematic, capture baselines.
-		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration) 
+		// Phase 1: Prepares topology and verifies stability (Section 10/11)
+		// 1. Update quarantine logic (Section 12)
+		const float dt = DeltaTime;
+		if (HipQuarantineTimerSeconds > 0.0f)
 		{
-			if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
+			HipQuarantineTimerSeconds = FMath::Max(0.0f, HipQuarantineTimerSeconds - dt);
+		}
+
+		// 2. Aggregate quiet window metrics (Section 10.3)
+		bool bQuietThisFrame = true;
+		FString QuietBlockReason;
+
+		if (HipQuarantineTimerSeconds > 0.0f)
+		{
+			bQuietThisFrame = false;
+			QuietBlockReason = TEXT("quarantine_active");
+		}
+		else
+		{
+			// Check motion thresholds
+			if (Diagnostics.RootSpeed > Settings.BalancePhase1QuietRootLinearSpeed || 
+				Diagnostics.RootAngularSpeed > Settings.BalancePhase1QuietRootAngularSpeed)
 			{
-				const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-				Diagnostics.BaselineRootLinVel = Mesh->GetPhysicsLinearVelocity(RootBoneName).Size();
-				Diagnostics.BaselineRootAngVel = Mesh->GetPhysicsAngularVelocityInDegrees(RootBoneName).Size();
-				
-				// Section 12 Exit Criteria check (Invariants)
-				// Baseline movement limits must be satisfied before root-on
-				const float MaxBaselineLin = Settings.BalancePhase1MaxRootLinearBaseline;
-				const float MaxBaselineAng = Settings.BalancePhase1MaxRootAngularBaseline;
-				if (Diagnostics.BaselineRootLinVel > MaxBaselineLin || Diagnostics.BaselineRootAngVel > MaxBaselineAng)
+				bQuietThisFrame = false;
+				QuietBlockReason = TEXT("motion_above_limit");
+			}
+			// Check shell contamination
+			else if (Diagnostics.BaselineShellOffset > Settings.BalancePhase1QuietShellOffsetDelta ||
+					 Diagnostics.BaselineShellVel > Settings.BalancePhase1QuietShellVelocityDelta)
+			{
+				bQuietThisFrame = false;
+				QuietBlockReason = TEXT("shell_contamination");
+			}
+			// Check topology correctness (all transition critical bodies must be kinematic)
+			else 
+			{
+				TArray<FName> SimulatingBones;
+				Owner->GetSimulatingBodies(SimulatingBones);
+				for (const FName BoneName : SimulatingBones)
 				{
-					UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE1_REJECTED baseline_movement_too_high lin=%.1f ang=%.1f"), 
-						Diagnostics.BaselineRootLinVel, Diagnostics.BaselineRootAngVel);
-					Diagnostics.FailureReason = TEXT("phase1_baseline_movement_too_high");
-					SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
-					return;
+					if (BalanceTransitionSets::IsTransitionCritical(BoneName))
+					{
+						bQuietThisFrame = false;
+						QuietBlockReason = TEXT("topology_mismatch_simulating_critical");
+						break;
+					}
 				}
 			}
+		}
 
-			SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_RootOn, Owner);
+		if (bQuietThisFrame)
+		{
+			const float PreviousQuiet = QuietWindowAccumulatedSeconds;
+			QuietWindowAccumulatedSeconds += dt;
+			if (PreviousQuiet <= 0.0f && QuietWindowAccumulatedSeconds > 0.0f)
+			{
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_STARTED"));
+			}
+
+			// Success Condition: Quiet hold met (Section 10.4)
+			if (QuietWindowAccumulatedSeconds >= Settings.PolicySettleRequiredSeconds) 
+			{
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_READY_FOR_ROOT_ON"));
+				SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_RootOn, Owner);
+				return;
+			}
+		}
+		else
+		{
+			if (QuietWindowAccumulatedSeconds > 0.0f)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *QuietBlockReason);
+			}
+			QuietWindowAccumulatedSeconds = 0.0f;
+		}
+
+		// Timeout check (Section 16: Retry logic)
+		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration && QuietWindowAccumulatedSeconds <= 0.0f)
+		{
+			Diagnostics.FailureReason = TEXT("phase1_quiet_timeout_") + QuietBlockReason;
+			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 			return;
 		}
 	}
@@ -450,8 +530,20 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const 
 { 
-	// Freeze policy during entire bootstrap until stable settle confirmed (Section 12, 13)
-	return (IsActive() && (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)) || InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed; 
+	// Global suppression if entire transition-critical set is suppressed
+	return IsActive() && (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare); 
+}
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicyWrites(FName BoneName) const
+{
+	if (!IsActive()) return false;
+	
+	// Section 7.1: Suppress writes to transition-critical set during Phase 1
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
+	{
+		return BalanceTransitionSets::IsTransitionCritical(BoneName);
+	}
+	
+	return false;
 }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive(); }
@@ -465,35 +557,23 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 {
 	if (!IsActive() && InternalPhase != EBalanceReadyTransitionPhase::BRT_Failed) return false;
 	
+	// Phase 1: All transition critical bodies are forced kinematic (Section 6)
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
+	{
+		return BalanceTransitionSets::IsTransitionCritical(BoneName);
+	}
+
+	// Phase 2: Root (pelvis) flips to sim in SetPhase, but proximal and distal remain kinematic for isolation
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+	{
+		// Proximal and Distal must stay kinematic until root-on dwell is complete
+		return BalanceTransitionSets::IsProximal(BoneName) || BalanceTransitionSets::IsDistalLowerLimb(BoneName);
+	}
+
 	// On failure, we keep distal bodies kinematic to restore safety
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
 	{
-		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-		const FString BoneStr = BoneName.ToString().ToLower();
-
-		if (BoneName == RootBoneName || 
-			BoneStr.Contains(TEXT("spine")) || 
-			BoneStr.Contains(TEXT("thigh")))
-		{
-			return false; // Allowed to simulate (or controlled safe mode)
-		}
-		return true; // Force kinematic
-	}
-
-	// Phase 1 (Prepare) and Phase 2 (RootOn): Pelvis, Spine, Thighs simulate. Rest are kinematic.
-	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || 
-		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
-	{
-		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-		const FString BoneStr = BoneName.ToString().ToLower();
-
-		if (BoneName == RootBoneName || 
-			BoneStr.Contains(TEXT("spine")) || 
-			BoneStr.Contains(TEXT("thigh")))
-		{
-			return false; // Allowed to simulate
-		}
-		return true; // Keep kinematic
+		return BalanceTransitionSets::IsDistalLowerLimb(BoneName);
 	}
 
 	return false; // Phase 3 (DistalEnable) onwards: All allowed
