@@ -138,6 +138,7 @@ private:
 	float PhaseTimeSeconds = 0.0f;
 	float TotalTransitionTimeSeconds = 0.0f;
 	float TargetDiscontinuityAccumulatedSeconds = 0.0f;
+	FString LastQuietBlockReason;
 
 	bool bLastRootSimulating = false;
 	bool bLastPendingResetsEmpty = true;
