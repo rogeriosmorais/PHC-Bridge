@@ -24,6 +24,7 @@ struct FBalanceReadyTransitionDiagnostics
 {
 	FString BlockReason;
 	FString FailureReason;
+	FString LastRetryDecision;
 	float RootSpeed = 0.0f;
 	float RootAngularSpeed = 0.0f;
 	float RootTilt = 0.0f;
@@ -56,6 +57,10 @@ struct FBalanceReadyTransitionDiagnostics
 	float BaselineRootAngVel = 0.0f;
 	float BaselineShellOffset = 0.0f;
 	float BaselineShellVel = 0.0f;
+	int32 SimCountPre = 0;
+	int32 SimCountPost = 0;
+	int32 DistalSimCountPre = 0;
+	int32 DistalSimCountPost = 0;
 	float PeakMaxBodyLinearSpeed = 0.0f;
 	float PeakMaxBodyAngularSpeed = 0.0f;
 };
@@ -90,10 +95,20 @@ public:
 	bool ShouldSuppressPolicyWrites(FName BoneName) const;
 	float GetTransitionExtraDampingMultiplier(const struct FPhysAnimStabilizationSettings& Settings) const;
 	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
+	static bool IsFailureClassRetryable(const FString& FailureReason);
+	static bool IsAutomaticRetryAllowed(
+		const FString& FailureReason,
+		bool bRecoveryCompleted,
+		bool bRecoveryChangedMaterialState,
+		bool bFreshQuietProofOccurred,
+		bool bCooldownElapsed,
+		bool bRetryBudgetAvailable);
 
 private:
 	void SetPhase(EBalanceReadyTransitionPhase NewPhase, class UPhysAnimComponent* Owner = nullptr);
 	bool EvaluateReadiness(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
+	bool ValidatePhase2EntryPreconditions(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
+	void ResetTransitionLocalState();
 	void CaptureFlipDiagnostics(class UPhysAnimComponent* Owner);
 
 	EBalanceReadyTransitionPhase InternalPhase = EBalanceReadyTransitionPhase::BRT_Inactive;

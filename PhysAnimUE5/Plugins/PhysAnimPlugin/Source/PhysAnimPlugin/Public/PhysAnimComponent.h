@@ -567,6 +567,8 @@ public:
 	bool IsIdlePoseActive() const;
 	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
 	FVector GetAcceptedShellPlanarVelocity() const { return BridgeShellState.AcceptedPlanarVelocityCmPerSecond; }
+	float GetCurrentShellPlanarOffsetDeltaCm() const;
+	float GetCurrentShellPlanarVelocityDeltaCmPerSecond() const;
 	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
 	bool WasPelvisResetAppliedThisTick() const { return bPelvisResetAppliedThisTick; }

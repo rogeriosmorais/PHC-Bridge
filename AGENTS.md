@@ -43,9 +43,7 @@ When working in this repo:
 - make file edits directly instead of pasting code into chat
 - do not include large code snippets or diffs unless explicitly requested
 - after edits, reply with:
-  - files changed
-  - one-sentence summary of each change
-  - exact verification command
+  - one-sentence summary of all changes
 - keep responses short
 
 ## What To Read

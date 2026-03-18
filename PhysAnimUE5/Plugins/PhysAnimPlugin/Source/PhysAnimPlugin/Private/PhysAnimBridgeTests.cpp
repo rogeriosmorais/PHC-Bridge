@@ -1975,6 +1975,43 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalancePhase2RetryContractTest,
+		"PhysAnim.Component.BalancePhase2RetryContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalancePhase2RetryContractTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("Phase 2 root-on spike is not retryable"),
+			FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(TEXT("phase2_root_on_spike")));
+		TestFalse(
+			TEXT("Phase 2 policy leak is not retryable"),
+			FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(TEXT("phase2_policy_write_leak")));
+		TestTrue(
+			TEXT("Phase 2 topology preservation failure is retryable"),
+			FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(TEXT("phase2_topology_not_preserved")));
+		TestFalse(
+			TEXT("Retry is denied without a material recovery change and fresh quiet proof"),
+			FPhysAnimBalanceReadyTransition::IsAutomaticRetryAllowed(
+				TEXT("phase2_topology_not_preserved"),
+				true,
+				false,
+				false,
+				true,
+				true));
+		TestTrue(
+			TEXT("Retry is allowed only when all retry prerequisites are satisfied"),
+			FPhysAnimBalanceReadyTransition::IsAutomaticRetryAllowed(
+				TEXT("phase2_topology_not_preserved"),
+				true,
+				true,
+				true,
+				true,
+				true));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimBringUpGroupMappingTest,
 		"PhysAnim.Component.BringUpGroupMapping",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

@@ -2498,6 +2498,43 @@ bool UPhysAnimComponent::EvaluateBalanceModeQueueGates(const FPhysAnimStabilizat
 	return true;
 }
 
+float UPhysAnimComponent::GetCurrentShellPlanarOffsetDeltaCm() const
+{
+	const AActor* const OwnerActor = GetOwner();
+	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!OwnerActor || !SkeletalMesh)
+	{
+		return 0.0f;
+	}
+
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	const FVector OwnerLocation = OwnerActor->GetActorLocation();
+	const FVector RootLocation = SkeletalMesh->GetBoneLocation(RootBoneName, EBoneSpaces::WorldSpace);
+	FVector ReferenceRootLocalOffset = ShellCouplingReferenceRootLocalOffsetCm;
+	if (!bHasShellCouplingReferenceRootLocalOffset)
+	{
+		ReferenceRootLocalOffset = RootLocation - OwnerLocation;
+	}
+
+	return ResolveShellCouplingPlanarOffsetDeltaCm(
+		OwnerLocation,
+		RootLocation,
+		ReferenceRootLocalOffset);
+}
+
+float UPhysAnimComponent::GetCurrentShellPlanarVelocityDeltaCmPerSecond() const
+{
+	const AActor* const OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return 0.0f;
+	}
+
+	return ResolveShellCouplingPlanarVelocityDeltaCmPerSecond(
+		OwnerActor->GetVelocity(),
+		LastRuntimeInstabilityDiagnostics.RawRootLinearVelocityCmPerSecondVector);
+}
+
 
 
 void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
