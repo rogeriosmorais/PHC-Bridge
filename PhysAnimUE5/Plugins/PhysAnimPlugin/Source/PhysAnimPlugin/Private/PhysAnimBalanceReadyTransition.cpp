@@ -15,6 +15,14 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 		return;
 	}
 
+	// TRANSITION_ENTRY_CLASSIFICATION and Hard Entry Gate
+	const EBalanceReadyEntryClassification Classification = ClassifyEntryState(Owner, Owner->ResolveEffectiveStabilizationSettings());
+	if (Classification == EBalanceReadyEntryClassification::InvalidEntryState)
+	{
+		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_REJECTED_NO_RETRY reason=invalid_entry_state"));
+		return; // Direct return to Idle, no recovery phase
+	}
+
 	RequestReason = InRequestReason;
 	StableHoldAccumulatedSeconds = 0.0f;
 	PhaseTimeSeconds = 0.0f;
@@ -34,15 +42,21 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	}
 	bLastPendingResetsEmpty = Owner->GetPendingBodyModifierCachedResetNames().IsEmpty();
 
-	const double CurrentTime = Owner->GetWorld() ? Owner->GetWorld()->GetTimeSeconds() : 0.0;
+	SetPhase(EBalanceReadyTransitionPhase::BRT_Handoff, Owner);
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_START reason=%s"), *RequestReason);
+}
 
-	// Hard Preflight Gate
+EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryState(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings) const
+{
+	if (!Owner) return EBalanceReadyEntryClassification::InvalidEntryState;
+
 	int32 TotalSim = 0;
 	int32 DistalSim = 0;
 	float RootLin = 0.0f;
 	float RootAng = 0.0f;
-	float PolicyAlpha = Owner->CalculateCurrentPolicyInfluenceAlpha(Owner->ResolveEffectiveStabilizationSettings());
+	float PolicyAlpha = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
 
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
 	{
 		for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
@@ -52,7 +66,6 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 				if (BI->IsInstanceSimulatingPhysics())
 				{
 					TotalSim++;
-					// distal for preflight means anything we haven't allowed yet in Phase 1
 					const FString BoneStr = BoneName.ToString().ToLower();
 					if (BoneName != RootBoneName && 
 						!BoneStr.Contains(TEXT("spine")) && 
@@ -70,23 +83,45 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 		}
 	}
 
-	Diagnostics.PreflightSimCount = TotalSim;
-	Diagnostics.PreflightDistalSimCount = DistalSim;
-	Diagnostics.PreflightPolicyAlpha = PolicyAlpha;
-
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_PREFLIGHT simCount=%d distalSim=%d policyAlpha=%.2f rootLin=%.1f rootAng=%.1f"), 
-		TotalSim, DistalSim, PolicyAlpha, RootLin, RootAng);
-
-	if (DistalSim > 0 || RootLin > 15.0f || RootAng > 25.0f || PolicyAlpha > 0.0f || TotalSim > 12)
+	bool bPelvisSimulating = false;
+	if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
 	{
-		Diagnostics.FailureReason = TEXT("preflight_gate_rejected");
-		SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
-		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_ABORT_PREFLIGHT reason=%s"), *Diagnostics.FailureReason);
-		return;
+		if (FBodyInstance* PelvisBody = Mesh->GetBodyInstance(RootBoneName))
+		{
+			bPelvisSimulating = PelvisBody->IsInstanceSimulatingPhysics();
+		}
 	}
 
-	SetPhase(EBalanceReadyTransitionPhase::BRT_Handoff, Owner);
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_START reason=%s"), *RequestReason);
+	EBalanceReadyEntryClassification Classification = EBalanceReadyEntryClassification::InvalidEntryState;
+
+	// Hard Gate Thresholds:
+	// simCount <= 5
+	// distalSim == 0
+	// policyAlpha <= 0.05
+	// rootAng <= 25.0
+	// rootLin <= 15.0
+	const bool bStateClean = (TotalSim <= 5) && (DistalSim == 0) && (PolicyAlpha <= 0.05f) && (RootLin <= 15.0f) && (RootAng <= 25.0f);
+
+	if (bPelvisSimulating)
+	{
+		// If pelvis is simulating, we allow start if state is within bounds (though it's usually already started)
+		// but since we are classifying for a potential start call:
+		Classification = bStateClean ? EBalanceReadyEntryClassification::ReadyToStart : EBalanceReadyEntryClassification::InvalidEntryState;
+	}
+	else
+	{
+		// Kinematic root. 
+		// If state is clean, it's a retryable wait.
+		Classification = bStateClean ? EBalanceReadyEntryClassification::RetryableWait : EBalanceReadyEntryClassification::InvalidEntryState;
+	}
+
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_ENTRY_CLASSIFICATION state=%s simCount=%d distalSim=%d policyAlpha=%.2f classification=%s"), 
+		bPelvisSimulating ? TEXT("simulating") : TEXT("kinematic"),
+		TotalSim, DistalSim, PolicyAlpha,
+		(Classification == EBalanceReadyEntryClassification::InvalidEntryState) ? TEXT("invalid_entry_state") : 
+		(Classification == EBalanceReadyEntryClassification::ReadyToStart ? TEXT("ready_to_start") : TEXT("retryable_wait")));
+
+	return Classification;
 }
 
 void FPhysAnimBalanceReadyTransition::Cancel()

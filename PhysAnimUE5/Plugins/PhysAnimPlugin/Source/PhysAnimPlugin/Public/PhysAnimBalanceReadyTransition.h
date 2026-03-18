@@ -14,6 +14,13 @@ enum class EBalanceReadyTransitionPhase : uint8
 	BRT_Failed
 };
 
+enum class EBalanceReadyEntryClassification : uint8
+{
+	ReadyToStart,
+	RetryableWait,
+	InvalidEntryState
+};
+
 struct FBalanceReadyTransitionDiagnostics
 {
 	FString BlockReason;
@@ -60,6 +67,7 @@ public:
 	bool HasSucceeded() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded; }
 	bool HasFailed() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed; }
 	bool IsComplete() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded || InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed; }
+	bool HasActuallyStarted() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive; }
 
 	EBalanceReadyTransitionPhase GetPhase() const { return InternalPhase; }
 	const FString& GetBlockReason() const { return Diagnostics.BlockReason; }
@@ -75,6 +83,7 @@ public:
 	float GetProximalControlSoftAlpha(FName BoneName) const;
 	bool ShouldKeepBoneKinematic(FName BoneName) const;
 	float GetTransitionExtraDampingMultiplier() const;
+	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
 
 private:
 	void SetPhase(EBalanceReadyTransitionPhase NewPhase, class UPhysAnimComponent* Owner = nullptr);

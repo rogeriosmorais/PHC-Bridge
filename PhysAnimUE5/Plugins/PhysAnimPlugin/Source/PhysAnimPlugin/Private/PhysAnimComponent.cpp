@@ -2533,6 +2533,12 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		if (bReady || Reason == TEXT("pelvisBodyNotSimulating"))
 		{
 			BalanceReadyTransition.Start(Reason, this);
+			if (!BalanceReadyTransition.HasActuallyStarted())
+			{
+				// Transition was rejected at the gate as invalid_entry_state.
+				// Clear the request so we don't loop/spam.
+				bPendingBalanceModeStartRequest = false;
+			}
 		}
 		else
 		{
@@ -2571,6 +2577,16 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 			EntryReason == TEXT("deferredResetsPending") ||
 			EntryReason == TEXT("pelvisBodyNotSimulating"))
 		{
+			if (EntryReason == TEXT("pelvisBodyNotSimulating"))
+			{
+				const EBalanceReadyEntryClassification Classification = BalanceReadyTransition.ClassifyEntryState(this, EffectiveSettings);
+				if (Classification == EBalanceReadyEntryClassification::InvalidEntryState)
+				{
+					UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_REJECTED_NO_RETRY reason=invalid_entry_state"));
+					return;
+				}
+			}
+
 			QueueBalanceModeStartRequest(EntryReason);
 			BalanceReadyTransition.Cancel();
 		}
