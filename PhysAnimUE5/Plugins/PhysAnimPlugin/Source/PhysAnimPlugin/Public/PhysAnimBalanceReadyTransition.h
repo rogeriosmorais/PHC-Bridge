@@ -137,6 +137,7 @@ private:
 	float StableHoldAccumulatedSeconds = 0.0f;
 	float PhaseTimeSeconds = 0.0f;
 	float TotalTransitionTimeSeconds = 0.0f;
+	float TargetDiscontinuityAccumulatedSeconds = 0.0f;
 
 	bool bLastRootSimulating = false;
 	bool bLastPendingResetsEmpty = true;
