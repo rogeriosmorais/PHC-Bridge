@@ -38,6 +38,8 @@ struct FBalanceReadyTransitionDiagnostics
 	FString BlockReason;
 	FString FailureReason;
 	FString LastRetryDecision;
+	FString Phase1TargetDiscontinuityGateSource;
+	FString Phase1TargetDiscontinuityGateReason;
 	float RootSpeed = 0.0f;
 	float RootAngularSpeed = 0.0f;
 	float RootTilt = 0.0f;
@@ -70,6 +72,8 @@ struct FBalanceReadyTransitionDiagnostics
 	float BaselineRootAngVel = 0.0f;
 	float BaselineShellOffset = 0.0f;
 	float BaselineShellVel = 0.0f;
+	FPhysAnimControlTargetDiagnostics Phase1TargetDiscontinuityGateInput;
+	float Phase1TargetDiscontinuityAccumulatedSeconds = 0.0f;
 	int32 SimCountPre = 0;
 	int32 SimCountPost = 0;
 	int32 DistalSimCountPre = 0;

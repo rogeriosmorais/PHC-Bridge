@@ -163,6 +163,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			bQuietThisFrame = false;
 			QuietBlockReason = TEXT("target_discontinuity");
+			Diagnostics.Phase1TargetDiscontinuityGateInput = Owner->GetLastControlTargetDiagnostics();
+			Diagnostics.Phase1TargetDiscontinuityGateSource = TEXT("live_quiet_window_gate");
+			Diagnostics.Phase1TargetDiscontinuityGateReason = QuietBlockReason;
+			Diagnostics.Phase1TargetDiscontinuityAccumulatedSeconds = TargetDiscontinuityAccumulatedSeconds;
 		}
 		else
 		{
@@ -240,10 +244,18 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			if (QuietBlockReason == TEXT("target_discontinuity"))
 			{
 				TargetDiscontinuityAccumulatedSeconds += DeltaTime;
+				Diagnostics.Phase1TargetDiscontinuityGateInput = Owner->GetLastControlTargetDiagnostics();
+				Diagnostics.Phase1TargetDiscontinuityGateSource = TEXT("live_quiet_window_gate");
+				Diagnostics.Phase1TargetDiscontinuityGateReason = QuietBlockReason;
+				Diagnostics.Phase1TargetDiscontinuityAccumulatedSeconds = TargetDiscontinuityAccumulatedSeconds;
 			}
 			else
 			{
 				TargetDiscontinuityAccumulatedSeconds = 0.0f;
+				Diagnostics.Phase1TargetDiscontinuityGateInput = {};
+				Diagnostics.Phase1TargetDiscontinuityGateSource.Reset();
+				Diagnostics.Phase1TargetDiscontinuityGateReason.Reset();
+				Diagnostics.Phase1TargetDiscontinuityAccumulatedSeconds = 0.0f;
 			}
 
 			QuietWindowAccumulatedSeconds = 0.0f;
@@ -262,6 +274,26 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			{
 				const FString TimeoutReason = TEXT("phase1_quiet_timeout_target_discontinuity");
 				Diagnostics.FailureReason = TimeoutReason;
+				Diagnostics.Phase1TargetDiscontinuityGateInput = CurrentTargetDiagnostics;
+				Diagnostics.Phase1TargetDiscontinuityGateSource = TEXT("timeout_live_quiet_window_gate");
+				Diagnostics.Phase1TargetDiscontinuityGateReason = TimeoutReason;
+				Diagnostics.Phase1TargetDiscontinuityAccumulatedSeconds = TargetDiscontinuityAccumulatedSeconds;
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] PHASE1_QUIET_TIMEOUT_TARGET_DISCONTINUITY source=%s quietBlockReason=%s lastQuietBlockReason=%s gateMaxTargetDelta=%.1f gateMeanTargetDelta=%.1f gateMaxTargetDeltaBone=%s gateThreshold=%.1f accumulatedSeconds=%.2f liveMaxTargetDelta=%.1f liveMeanTargetDelta=%.1f liveMaxTargetDeltaBone=%s phaseTime=%.2f"),
+					*Diagnostics.Phase1TargetDiscontinuityGateSource,
+					*QuietBlockReason,
+					*LastQuietBlockReason,
+					CurrentTargetDiagnostics.MaxTargetDeltaDegrees,
+					CurrentTargetDiagnostics.MeanTargetDeltaDegrees,
+					*CurrentTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
+					Settings.BalancePhase1MaxEntryTargetDeltaDeg,
+					TargetDiscontinuityAccumulatedSeconds,
+					Diagnostics.Phase1TargetDiscontinuityGateInput.MaxTargetDeltaDegrees,
+					Diagnostics.Phase1TargetDiscontinuityGateInput.MeanTargetDeltaDegrees,
+					*Diagnostics.Phase1TargetDiscontinuityGateInput.MaxTargetDeltaBoneName.ToString(),
+					PhaseTimeSeconds);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *TimeoutReason);
 				MarkSafePhase2Denied(TimeoutReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *TimeoutReason);
