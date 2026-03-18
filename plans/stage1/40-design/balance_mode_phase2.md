@@ -27,6 +27,7 @@ Its goal is to remove ambiguity around:
 - whether cached-target resets are allowed on the root-on frame
 - how long the post-root-on guard window lasts
 - what counts as a root-on spike
+- what conditions are strong enough to deny Phase 2 before root-on
 - what recovery must do after `phase2_root_on_spike`
 - when retry is allowed and when it is prohibited
 
@@ -135,10 +136,34 @@ Phase 2 may begin only if all of these are already true:
 8. root angular speed is below `Phase2EntryMaxRootAngularSpeedDegPerSec`
 9. shell offset delta is below `Phase2EntryMaxShellOffsetDeltaCm`
 10. shell velocity delta is below `Phase2EntryMaxShellVelocityDeltaCmPerSec`
+11. certified Phase 1 handoff payload is present and still valid
+12. `simCount`, `proximalSimCount`, and `distalSimCount` match the intended handoff topology
+13. control-authority settled state matches the certified handoff payload
+14. max target delta is below `Phase2EntryMaxTargetDeltaDeg`
+15. mean target delta is below `Phase2EntryMeanTargetDeltaDeg`
 
 Phase 2 must not be entered “optimistically.”
 
 If these conditions are not true, the runtime must remain in Phase 1 or fail.
+
+### 6.1 Entry denial path
+
+Phase 2 must have an explicit denial path before any root-on attempt occurs.
+
+If a required Phase 2 entry precondition is false, the runtime must emit:
+
+- `PHASE2_DENIED <reason>`
+
+Required denial reasons include:
+
+- `phase2_missing_handoff_payload`
+- `phase2_handoff_invalidated`
+- `phase2_sim_coverage_regressed`
+- `phase2_target_discontinuity_too_high`
+- `phase2_control_authority_not_settled`
+
+Denial is a safe no-root-on outcome.  
+It is not a root-on failure and must not be logged as one.
 
 ---
 
@@ -216,9 +241,12 @@ Record once:
 - shell offset delta before flip
 - shell velocity delta before flip
 - sim count before flip
+- proximal sim count before flip
 - distal sim count before flip
 - max body linear speed before flip
 - max body angular speed before flip
+- max target delta before flip
+- mean target delta before flip
 - policy suppression state
 - reset-pending state
 
@@ -270,6 +298,10 @@ During this guard window:
 ## 9. Topology Rules During Phase 2
 
 Phase 2 must not change everything at once.
+
+The topology described below is valid only if it matches the certified Phase 1 handoff contract.
+
+If implementation instead depends on preserved non-root simulation coverage, this section must be revised explicitly rather than bypassed in code.
 
 ## 9.1 Root set
 - `pelvis` = simulated
@@ -497,9 +529,12 @@ Recommended root-on summary fields:
 - shellOffsetDelta
 - shellVelocityDelta
 - simCountPre
+- proximalSimCountPre
 - simCountPost
 - distalSimPre
 - distalSimPost
+- maxTargetDeltaPre
+- meanTargetDeltaPre
 - policySuppressed
 - resetScheduled
 
@@ -521,6 +556,8 @@ Minimum named thresholds:
 - `Phase2EntryMaxRootAngularSpeedDegPerSec`
 - `Phase2EntryMaxShellOffsetDeltaCm`
 - `Phase2EntryMaxShellVelocityDeltaCmPerSec`
+- `Phase2EntryMaxTargetDeltaDeg`
+- `Phase2EntryMeanTargetDeltaDeg`
 - `Phase2GuardWindowSeconds`
 - `Phase2AbortRootLinearSpeedCmPerSec`
 - `Phase2AbortRootAngularSpeedDegPerSec`
@@ -543,6 +580,12 @@ Minimum required tests:
 - guard window completes
 - Phase 3 begins
 
+### Test 1b: Denied root-on due to invalidated handoff
+- Phase 1 succeeds
+- certified handoff payload regresses before Phase 2
+- verify `PHASE2_DENIED phase2_handoff_invalidated`
+- verify no root-on attempt occurs
+
 ### Test 2: Same-frame policy leak
 - intentionally enable policy write on root-on frame
 - verify `phase2_policy_write_leak`
@@ -559,6 +602,11 @@ Minimum required tests:
 - reproduce deterministic post-root-on velocity spike
 - verify `phase2_root_on_spike`
 - verify coherent recovery to BridgeActive
+
+### Test 5b: Target discontinuity denial
+- hold root motion quiet but inject excessive target delta before root-on
+- verify `PHASE2_DENIED phase2_target_discontinuity_too_high`
+- verify no root-on attempt occurs
 
 ### Test 6: Bad retry loop prevention
 - fail Phase 2 with unchanged setup
@@ -577,13 +625,15 @@ Minimum required tests:
 The recommended default implementation is:
 
 1. Enter Phase 2 only after full Phase 1 quiet proof
-2. Freeze policy writes, resets, locomotion, and shell assistance
-3. Flip only `pelvis` to simulated
-4. Keep proximal and distal transition-critical sets kinematic through the guard window
-5. Forbid resets and policy writes for the entire guard window
-6. Abort immediately on threshold breach
-7. Recover fully to BridgeActive
-8. Deny automatic retry after repeated unchanged root-on spikes
+2. Require a valid certified handoff payload at the moment Phase 2 begins
+3. Deny Phase 2 safely if sim coverage, suppression state, or target continuity regressed
+4. Freeze policy writes, resets, locomotion, and shell assistance
+5. Flip only `pelvis` to simulated
+6. Keep proximal and distal transition-critical sets kinematic through the guard window
+7. Forbid resets and policy writes for the entire guard window
+8. Abort immediately on threshold breach
+9. Recover fully to BridgeActive
+10. Deny automatic retry after repeated unchanged root-on spikes
 
 This is intentionally conservative.
 

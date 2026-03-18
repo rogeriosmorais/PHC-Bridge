@@ -129,7 +129,12 @@ These bodies are not allowed to destabilize Phase 1, but they are not the primar
 
 ## 6. Phase 1 Target Topology
 
-Phase 1 must converge to exactly this topology before Phase 2 may begin.
+Phase 1 must converge to an explicitly named handoff topology before Phase 2 may begin.
+
+This document assumes the conservative default handoff topology below.
+
+If implementation chooses a different handoff topology, that change must be documented explicitly here and in the entry-transition and Phase 2 specs.  
+It is not valid to silently depend on a different runtime shape.
 
 ## 6.1 Required movement types
 
@@ -162,6 +167,15 @@ The default safe shape is:
 This is intentionally conservative.
 
 If later testing proves a less restrictive topology is stable, the design can be revised explicitly. That change must be documented, not improvised.
+
+### 6.3 Handoff-topology consistency rule
+
+Phase 1 must not certify readiness under one topology description while runtime logic depends on another.
+
+Not allowed:
+
+- a spec that claims lower-body kinematic quiet while implementation depends on preserved lower-body simulation coverage
+- a “ready” signal with no explicit statement of `simCount`, `proximalSimCount`, and `distalSimCount`
 
 ---
 
@@ -340,6 +354,8 @@ The Phase 1 quiet window must be measured from:
 Optional additional metrics:
 - max body angular speed
 - max body linear speed
+- max target delta
+- mean target delta
 
 ## 10.2 Frame of measurement
 
@@ -360,6 +376,8 @@ Phase 1 is quiet only if all are true continuously:
 - root angular speed <= `Phase1QuietRootAngularSpeedDegPerSec`
 - shell offset delta <= `Phase1QuietShellOffsetDeltaCm`
 - shell velocity delta <= `Phase1QuietShellVelocityDeltaCmPerSec`
+- max target delta <= `Phase1QuietMaxTargetDeltaDeg`
+- mean target delta <= `Phase1QuietMeanTargetDeltaDeg`
 - no fail-stop precursor active
 - no pending cached reset
 - no topology flip pending
@@ -418,14 +436,42 @@ Phase 1 may advance to Phase 2 only when all of these are true:
 
 1. required topology is correct
 2. policy suppression for transition-critical set is active
-3. no cached resets are pending
-4. no quarantine release is pending
-5. root linear speed is below quiet threshold
-6. root angular speed is below quiet threshold
-7. shell offset / velocity contamination is below quiet threshold
-8. quiet-window hold duration has completed
-9. fail-stop precursor is inactive
-10. no transition-local hazard flag is active
+3. control-authority state for the transition-critical set is settled
+4. target continuity is within named exit bounds
+5. no cached resets are pending
+6. no quarantine release is pending
+7. root linear speed is below quiet threshold
+8. root angular speed is below quiet threshold
+9. shell offset / velocity contamination is below quiet threshold
+10. quiet-window hold duration has completed
+11. fail-stop precursor is inactive
+12. no transition-local hazard flag is active
+
+On success, Phase 1 must emit a **certified handoff payload** containing at minimum:
+
+- handoff topology classification
+- `simCount`
+- `proximalSimCount`
+- `distalSimCount`
+- policy suppression state
+- control-authority settled state
+- max target delta
+- mean target delta
+- quiet proof duration
+
+Phase 2 must consume this payload rather than infer readiness from timing alone.
+
+### Exit invalidation rule
+
+Phase 1 success is revoked if the certified handoff payload becomes false before Phase 2 begins.
+
+If any of the following regress, the runtime must invalidate readiness and log the reason:
+
+- topology no longer matches the certified handoff topology
+- sim coverage no longer matches the certified counts
+- policy suppression no longer holds
+- target continuity exceeds the certified bounds
+- a reset, release, or topology flip becomes pending
 
 Not allowed:
 - advancing on time alone
@@ -527,12 +573,16 @@ Required one-shot logs:
 
 Recommended summary fields:
 - simCount
+- proximalSimCount
 - distalSimCount
 - rootLinear
 - rootAngular
 - shellOffsetDelta
 - shellVelocityDelta
 - policySuppressed
+- controlAuthoritySettled
+- maxTargetDelta
+- meanTargetDelta
 - pendingResets
 - quarantineActive
 - topologyValid
@@ -553,6 +603,8 @@ Minimum named thresholds:
 - `Phase1QuietShellVelocityDeltaCmPerSec`
 - `Phase1QuietRequiredSeconds`
 - `Phase1MaxEntryTargetDeltaDeg`
+- `Phase1QuietMaxTargetDeltaDeg`
+- `Phase1QuietMeanTargetDeltaDeg`
 - `Phase1MaxAutomaticRetries`
 - `Phase1RetryCooldownSeconds`
 - `Phase1HipQuarantineDurationSeconds` or equivalent tick-based named control
@@ -573,6 +625,11 @@ Minimum required tests for this spec:
 - Phase 1 explicitly forces distal kinematic topology
 - quiet window does not start until distal sim count is zero
 - transition succeeds
+
+### Test 2b: Handoff payload regression
+- Phase 1 reaches certified readiness
+- sim coverage or target continuity regresses before Phase 2
+- readiness is invalidated and Phase 2 does not begin
 
 ### Test 3: Policy leakage bug
 - intentionally allow policy writes to thighs during Phase 1
@@ -611,10 +668,11 @@ The recommended default implementation is:
    - hold the transition set near the entry reference
    - allow no cached resets
    - allow no pelvis/root reset
-   - accumulate quiet window only after topology and suppression are already correct
+   - accumulate quiet window only after topology, suppression, control-authority settle, and target continuity are already correct
 
 3. On success:
-   - advance to Phase 2 root-on
+   - emit a certified handoff payload
+   - advance to Phase 2 root-on only while that payload remains valid
 
 4. On failure:
    - classify failure

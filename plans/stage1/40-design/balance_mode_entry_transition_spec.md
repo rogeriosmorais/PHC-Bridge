@@ -28,6 +28,7 @@ This document also establishes the **entry-phase contract boundary**:
 
 - this spec defines the state machine, ownership rules, gating, recovery, and phase success/failure semantics
 - `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md` defines the concrete stabilization recipe for Phase 1
+- `plans/stage1/40-design/balance_mode_phase2.md` defines the root-on execution contract, denial path, and immediate guard-window rules
 
 ## 2. Relationship to Existing Design
 
@@ -263,6 +264,25 @@ The detailed implementation contract for these actions is defined in:
 
 - `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
 
+### Phase 1 output contract
+
+Phase 1 does not merely produce a boolean “ready” signal.
+
+It must produce a **certified handoff state** consumed by Phase 2.
+
+Minimum certified handoff fields:
+
+- topology classification for root, proximal, distal, and upper-body sets
+- `simCount`
+- `proximalSimCount`
+- `distalSimCount`
+- policy suppression state for the transition-critical set
+- control-authority settled state
+- bounded target continuity summary for the transition-critical set
+- quiet-proof duration actually achieved
+
+If the runtime cannot report these fields coherently, it is not ready for Phase 2.
+
 ### Policy rule
 
 During Phase 1 and root-on, policy may continue evaluating for diagnostics, but it must **not** drive the transitioning body set unless explicitly designed and validated.
@@ -277,6 +297,13 @@ If distal bodies are known spike sources, Phase 1 must explicitly move them to t
 
 - either forced kinematic
 - or explicitly controlled under bounded reset rules
+
+The transition design must choose one intended pre-root-on topology and document it explicitly.
+
+Not allowed:
+
+- describing Phase 1 as a pure kinematic freeze while runtime logic depends on preserved non-root sim coverage
+- allowing multiple incompatible handoff topologies without explicit classification
 
 ### Phase 1 compliance rule
 
@@ -295,14 +322,35 @@ Phase 1 may advance only if:
 
 - configured body topology matches the intended transition topology
 - policy influence to transition-critical bodies is disabled
+- certified handoff fields are populated and internally consistent
+- target continuity for the transition-critical set is within named entry bounds
 - baseline root linear/angular speeds are below pre-root-on limits
 - no fail-stop precursor is active
 - no pending cached reset remains
 - no transition-local hazard remains active
 
+### Handoff invalidation rule
+
+Phase 1 readiness is revocable.
+
+If any certified handoff field regresses after Phase 1 success but before or during Phase 2 entry, the runtime must:
+
+- invalidate the previous readiness proof
+- log the reason for invalidation
+- deny Phase 2 entry or return to Phase 1, depending on ownership
+
+Examples of invalidating regressions:
+
+- sim coverage collapses below the certified handoff state
+- policy suppression is no longer active
+- target continuity exceeds the named entry bounds
+- a cached reset or topology flip becomes pending
+
 ## 13. Phase 2: Root On
 
 Phase 2 is the frame or short interval where pelvis/root simulation is enabled.
+
+Phase 2 may begin only from a still-valid certified Phase 1 handoff state.
 
 Requirements:
 
@@ -311,6 +359,21 @@ Requirements:
 - no conflicting system may re-disable it in the same phase
 - no shell-assist correction may inject velocity
 - no target reset may produce a discontinuity on the same frame unless explicitly validated
+- Phase 1 handoff certification must still be valid at the moment Phase 2 begins
+
+### Phase 2 denial rule
+
+Phase 2 must have an explicit safe denial path.
+
+If entry preconditions are not satisfied at the moment of Phase 2 entry, the runtime must not “try anyway.”
+
+Allowed outcomes:
+
+- `PHASE2_DENIED <reason>` and return to Phase 1 / queued recovery path
+- definitive transition failure if the condition is structural or non-retryable
+
+Denial is a valid safe outcome.  
+It is not equivalent to a root-on attempt.
 
 ### Hard rule about same-frame policy writes
 
@@ -325,8 +388,11 @@ Immediately after root-on, record:
 - shell offset delta
 - shell velocity delta
 - sim count
+- proximal sim count
+- distal sim count
 - max body linear speed
 - max body angular speed
+- target continuity summary before and after root-on
 
 ### Phase 2 abort rule
 
@@ -525,6 +591,8 @@ Minimum required tests:
 - request before policy threshold -> queues -> threshold reached -> success
 - request while pelvis sim false -> queues -> transition-owned root-on -> success
 - request with many distal bodies simulating -> Phase 1 reshapes topology -> success
+- request reaches Phase 2 with invalidated handoff state -> Phase 2 denied safely -> no root-on attempt
+- request reaches Phase 2 with excessive target discontinuity -> Phase 2 denied or failed explicitly before root-on
 - induced spike at root-on -> transition aborts cleanly -> returns to BridgeActive
 - missing root modifier/control -> no infinite retry loop -> stable failure
 - failed transition followed by corrected conditions -> second attempt can succeed
@@ -552,8 +620,10 @@ The most coherent design is:
    - suppress policy influence to transition-critical set
    - force the transition-critical topology required by the Phase 1 stabilization spec
    - preserve posture without repeated spam
-   - prove readiness through a real quiet-window hold
+   - prove readiness through a real quiet-window hold and emit a certified handoff state
 4. In Phase 2:
+   - validate that the certified handoff state is still true
+   - deny entry safely if the handoff proof has regressed
    - enable pelvis/root simulation
    - no same-frame policy drive into the transition-critical set
    - abort cleanly if root-on spike thresholds are exceeded
