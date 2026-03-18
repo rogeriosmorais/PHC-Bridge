@@ -158,8 +158,18 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			bQuietThisFrame = false;
 			QuietBlockReason = TEXT("shell_contamination");
 		}
-		else if (Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
-			Owner->GetLastControlTargetDiagnostics().MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg)
+		else
+		{
+			TArray<FName> SimulatingBones;
+			Owner->GetSimulatingBodies(SimulatingBones);
+			if (SimulatingBones.Num() == 0)
+			{
+				bQuietThisFrame = false;
+				QuietBlockReason = TEXT("sim_coverage_regressed");
+			}
+		}
+		if (bQuietThisFrame && (Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
+			Owner->GetLastControlTargetDiagnostics().MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg))
 		{
 			bQuietThisFrame = false;
 			QuietBlockReason = TEXT("target_discontinuity");
@@ -168,7 +178,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.Phase1TargetDiscontinuityGateReason = QuietBlockReason;
 			Diagnostics.Phase1TargetDiscontinuityAccumulatedSeconds = TargetDiscontinuityAccumulatedSeconds;
 		}
-		else
+		else if (bQuietThisFrame)
 		{
 			TArray<FName> SimulatingBones;
 			Owner->GetSimulatingBodies(SimulatingBones);
