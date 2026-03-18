@@ -63,6 +63,8 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	QuietHandoffCount = 0;
 	HipQuarantineTimerSeconds = 0.0f;
 	EntryHoldRotations.Empty();
+	bSafePhase2Denied = false;
+	SafePhase2DenialReason.Reset();
 
 	if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
 	{
@@ -197,17 +199,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					}
 
 					Phase2BlockReason = TEXT("phase2_handoff_capture_failed");
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
-					QuietWindowAccumulatedSeconds = 0.0f;
-					ResetCertifiedHandoffState();
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
-					return;
 				}
 
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
-				QuietWindowAccumulatedSeconds = 0.0f;
-				ResetCertifiedHandoffState();
+				MarkSafePhase2Denied(Phase2BlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
+				return;
 			}
 		}
 		else
@@ -339,8 +336,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		if (!ValidateCertifiedHandoff(Owner, EffectiveSettings, DenyReason))
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *DenyReason);
-			QuietWindowAccumulatedSeconds = 0.0f;
-			ResetCertifiedHandoffState();
+			MarkSafePhase2Denied(DenyReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *DenyReason);
 			return;
 		}
@@ -440,7 +436,8 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Inactive ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded ||
-		InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed ||
+		bSafePhase2Denied)
 	{
 		ResetCertifiedHandoffState();
 	}
@@ -744,6 +741,22 @@ bool FPhysAnimBalanceReadyTransition::ValidateCertifiedHandoff(UPhysAnimComponen
 
 	OutReason = TEXT("ready");
 	return true;
+}
+
+void FPhysAnimBalanceReadyTransition::MarkSafePhase2Denied(const FString& Reason)
+{
+	bSafePhase2Denied = true;
+	SafePhase2DenialReason = Reason;
+	PhaseTimeSeconds = 0.0f;
+	StableHoldAccumulatedSeconds = 0.0f;
+	QuietWindowAccumulatedSeconds = 0.0f;
+	TotalTransitionTimeSeconds = 0.0f;
+	bLatchedPelvisResetApplied = false;
+	QuietHandoffCount = 0;
+	HipQuarantineTimerSeconds = 0.0f;
+	EntryHoldRotations.Empty();
+	ResetTransitionLocalState();
+	InternalPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
 }
 
 void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()

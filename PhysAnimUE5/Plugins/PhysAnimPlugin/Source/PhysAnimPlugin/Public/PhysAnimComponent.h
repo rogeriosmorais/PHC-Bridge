@@ -579,6 +579,10 @@ public:
 	bool WasPelvisResetAppliedThisTick() const { return bPelvisResetAppliedThisTick; }
 	bool WasPolicyTargetAppliedLastFrame() const { return bPolicyTargetsAppliedLastFrame; }
 	bool WasPelvisSimulatingLastFrame() const { return bLastAppliedPresentationRootSimulationEnabled; }
+	bool HasBalanceReadyTransitionFailed() const { return BalanceReadyTransition.HasFailed(); }
+	bool HasSafePhase2Denial() const { return BalanceReadyTransition.HasSafePhase2Denial(); }
+	const FString& GetBalanceReadyTransitionFailureReason() const { return BalanceReadyTransition.GetFailureReason(); }
+	const FString& GetSafePhase2DenialReason() const { return BalanceReadyTransition.GetSafePhase2DenialReason(); }
 
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	bool StartBridge();

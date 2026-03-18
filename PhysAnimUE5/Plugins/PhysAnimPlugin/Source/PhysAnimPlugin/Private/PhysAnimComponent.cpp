@@ -2568,6 +2568,12 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		return;
 	}
 
+	if (BalanceReadyTransition.HasSafePhase2Denial())
+	{
+		bPendingBalanceModeStartRequest = false;
+		return;
+	}
+
 	if (!BalanceReadyTransition.IsActive())
 	{
 		FString GateReason;

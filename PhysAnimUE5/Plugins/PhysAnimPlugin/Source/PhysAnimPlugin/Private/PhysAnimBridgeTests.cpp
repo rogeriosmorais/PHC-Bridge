@@ -69,6 +69,70 @@ namespace
 		return true;
 	}
 
+	class FValidateBalanceModeSmokeOutcomeCommand final : public IAutomationLatentCommand
+	{
+	public:
+		explicit FValidateBalanceModeSmokeOutcomeCommand(FAutomationTestBase* InTest)
+			: Test(InTest)
+		{
+		}
+
+		virtual bool Update() override
+		{
+			UWorld* const PlayWorld = GEditor ? GEditor->PlayWorld : nullptr;
+			if (!PlayWorld)
+			{
+				Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] PIE world was not available for outcome validation."));
+				return true;
+			}
+
+			UPhysAnimComponent* FoundComponent = nullptr;
+			for (TObjectIterator<UPhysAnimComponent> It; It; ++It)
+			{
+				if (It->GetWorld() == PlayWorld)
+				{
+					FoundComponent = *It;
+					break;
+				}
+			}
+
+			if (!FoundComponent)
+			{
+				Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] No PhysAnim component was found in the PIE world."));
+				return true;
+			}
+
+			const EPhysAnimRuntimeState RuntimeState = FoundComponent->GetRuntimeState();
+			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
+			{
+				return true;
+			}
+
+			if (RuntimeState == EPhysAnimRuntimeState::FailStopped || FoundComponent->HasBalanceReadyTransitionFailed())
+			{
+				Test->AddError(FString::Printf(
+					TEXT("[PhysAnimPieBalanceSmoke] Unsafe failure path observed. state=%s denial=%s fail=%s"),
+					UPhysAnimComponent::GetRuntimeStateName(RuntimeState),
+					*FoundComponent->GetSafePhase2DenialReason(),
+					*FoundComponent->GetBalanceReadyTransitionFailureReason()));
+				return true;
+			}
+
+			if (FoundComponent->HasSafePhase2Denial())
+			{
+				return true;
+			}
+
+			Test->AddError(FString::Printf(
+				TEXT("[PhysAnimPieBalanceSmoke] Expected active balance mode or safe denial, but found state=%s."),
+				UPhysAnimComponent::GetRuntimeStateName(RuntimeState)));
+			return true;
+		}
+
+	private:
+		FAutomationTestBase* Test = nullptr;
+	};
+
 	FString GetBridgeTraceRootPathForTests()
 	{
 		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("PhysAnim"), TEXT("Traces"));
@@ -3317,6 +3381,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeLeadInSeconds));
 		AddCommand(new FExecPieConsoleCommand(TEXT("pa.StartBalanceMode")));
 		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeDurationSeconds));
+		AddCommand(new FValidateBalanceModeSmokeOutcomeCommand(this));
 		AddCommand(new FEndPlayMapCommand());
 		AddCommand(new FUntilCommand(
 			[]() -> bool

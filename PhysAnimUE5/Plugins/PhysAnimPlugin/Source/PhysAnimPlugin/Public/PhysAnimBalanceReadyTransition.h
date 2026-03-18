@@ -88,8 +88,10 @@ public:
 	bool IsActive() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive && !IsComplete(); }
 	bool HasSucceeded() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded; }
 	bool HasFailed() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed; }
-	bool IsComplete() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded || InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed; }
+	bool IsComplete() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded || InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed || bSafePhase2Denied; }
 	bool HasActuallyStarted() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive; }
+	bool HasSafePhase2Denial() const { return bSafePhase2Denied; }
+	const FString& GetSafePhase2DenialReason() const { return SafePhase2DenialReason; }
 
 	EBalanceReadyTransitionPhase GetPhase() const { return InternalPhase; }
 	const FString& GetBlockReason() const { return Diagnostics.BlockReason; }
@@ -127,6 +129,7 @@ private:
 	static FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount);
 	void ResetTransitionLocalState();
 	void ResetCertifiedHandoffState();
+	void MarkSafePhase2Denied(const FString& Reason);
 	void CaptureFlipDiagnostics(class UPhysAnimComponent* Owner);
 
 	EBalanceReadyTransitionPhase InternalPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
@@ -148,6 +151,8 @@ private:
 	TMap<FName, FQuat> EntryHoldRotations;
 	bool bHasCertifiedHandoff = false;
 	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
+	bool bSafePhase2Denied = false;
+	FString SafePhase2DenialReason;
 
 	FBalanceReadyTransitionDiagnostics Diagnostics;
 	double LastLogTimeSeconds = -1.0;
