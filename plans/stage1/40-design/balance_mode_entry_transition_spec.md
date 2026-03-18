@@ -302,7 +302,7 @@ Late validation must explicitly prove all of the following:
 
 - certified topology still holds after policy influence begins
 - upper-body ownership and anchoring policy remain in the documented configuration
-- sim coverage does not collapse materially from the certified handoff payload
+- sim coverage does not collapse materially away from the documented certified handoff topology
 - target continuity remains within the named Phase 2 entry envelope
 - no late cached-target reset or topology flip reappears
 
@@ -356,9 +356,14 @@ Phase 1 may advance from late validation to Phase 2 only if:
 
 - the certified handoff payload still matches the runtime state after bounded initial policy influence
 - upper-body stability remains within the late-validation sustain envelope
-- sim coverage remains above the named late-validation minimums
+- sim coverage remains within the documented late-validation topology envelope
 - no new target-discontinuity or topology-regression blocker appeared during sustain
 - late-validation sustain duration completed continuously
+
+Interpretation rule:
+
+- a conservative upper-only late-validation topology is valid if and only if the Phase 1 stabilization spec declares it as the documented handoff mode
+- Phase 2 must validate against that documented topology rather than against an implicit requirement that proximal/distal simulation remain non-zero
 
 ### Handoff invalidation rule
 

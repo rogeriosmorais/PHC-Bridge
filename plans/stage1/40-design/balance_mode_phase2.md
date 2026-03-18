@@ -137,7 +137,7 @@ Phase 2 may begin only if all of these are already true:
 9. shell offset delta is below `Phase2EntryMaxShellOffsetDeltaCm`
 10. shell velocity delta is below `Phase2EntryMaxShellVelocityDeltaCmPerSec`
 11. certified Phase 1 handoff payload is present and still valid
-12. `simCount`, `proximalSimCount`, and `distalSimCount` match the intended handoff topology
+12. `simCount`, `proximalSimCount`, and `distalSimCount` match the intended handoff topology, including the conservative upper-only late-validation topology if that is the documented Phase 1 handoff mode
 13. control-authority settled state matches the certified handoff payload
 14. max target delta is below `Phase2EntryMaxTargetDeltaDeg`
 15. mean target delta is below `Phase2EntryMeanTargetDeltaDeg`
@@ -166,6 +166,11 @@ Required denial reasons include:
 - `phase2_control_authority_not_settled`
 - `phase2_late_validate_not_completed`
 - `phase2_upper_body_unstable`
+
+Interpretation rule:
+
+- `phase2_sim_coverage_regressed` means the runtime regressed away from the documented certified handoff topology
+- it must not be emitted merely because proximal/distal simulation counts are zero in the conservative upper-only late-validation topology
 
 Denial is a safe no-root-on outcome.  
 It is not a root-on failure and must not be logged as one.

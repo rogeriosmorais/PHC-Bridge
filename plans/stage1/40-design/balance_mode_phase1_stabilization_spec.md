@@ -429,8 +429,9 @@ During late validation:
 
 Late validation succeeds only if all remain true continuously:
 
-- `simCount` stays above `Phase1LateValidateMinSimCount`
+- the conservative lower-body kinematic topology remains intact
 - upper-body topology/ownership matches the certified handoff payload
+- `simCount` remains within the documented late-validation ownership envelope
 - max target delta stays below `Phase1LateValidateMaxTargetDeltaDeg`
 - mean target delta stays below `Phase1LateValidateMeanTargetDeltaDeg`
 - max upper-body angular speed stays below `Phase1LateValidateMaxUpperBodyAngularSpeedDegPerSec`
@@ -497,7 +498,8 @@ After that provisional handoff is emitted, Phase 1 must complete late validation
 Late-validation success requires at minimum:
 
 - sustain duration `Phase1LateValidateRequiredSeconds` completed
-- `simCount` and upper-body coverage remain within certified bounds
+- the conservative lower-body kinematic topology remains intact
+- `simCount` and upper-body coverage remain within certified bounds for the chosen upper-body ownership mode
 - upper-body motion remains below the named late-validation maxima
 - target continuity remains within the named late-validation envelope
 - no late reset / re-lock / topology flip occurred
@@ -515,6 +517,12 @@ On success, Phase 1 must emit a **certified handoff payload** containing at mini
 - quiet proof duration
 - late-validation sustain duration
 - upper-body ownership mode and upper-body stability summary
+
+Interpretation rule:
+
+- `proximalSimCount` and `distalSimCount` are emitted for observability and topology auditing
+- under the conservative default handoff topology they are allowed to remain zero during late validation and at Phase 2 entry
+- conservative late validation is explicitly allowed to be upper-only simulation if that matches the documented ownership mode
 
 Phase 2 must consume this payload rather than infer readiness from timing alone.
 
