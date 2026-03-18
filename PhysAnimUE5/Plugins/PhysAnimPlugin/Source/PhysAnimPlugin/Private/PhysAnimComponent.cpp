@@ -1871,7 +1871,7 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 	const bool bBalanceMode = RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode;
 	const bool bTransitionActive = BalanceReadyTransition.IsActive();
 	const bool bBridgeActivePreEntry = RuntimeState == EPhysAnimRuntimeState::BridgeActive && bTransitionActive;
-	const bool bIsPhase1 = bTransitionActive && BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Handoff;
+	const bool bIsPhase1 = bTransitionActive && BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare;
 	
 	const bool bBringUpUnlocked = AreAllBringUpGroupsUnlocked();
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
@@ -2442,33 +2442,33 @@ bool UPhysAnimComponent::EvaluateBalanceModeQueueGates(const FPhysAnimStabilizat
 {
 	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive)
 	{
-		OutReason = TEXT("runtimeNotBridgeActive");
+		OutReason = TEXT("command_context_invalid");
 		return false;
 	}
 
 	if (!AreAllBringUpGroupsUnlocked())
 	{
-		OutReason = TEXT("bringUpIncomplete");
+		OutReason = TEXT("queue_bring_up_incomplete");
 		return false;
 	}
 
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
 	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
 	{
-		OutReason = TEXT("finalGroupRampInactive");
+		OutReason = TEXT("queue_final_group_ramp_inactive");
 		return false;
 	}
 
 	const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 	if (PolicyAlpha < BalanceReadyPolicyInfluenceThreshold)
 	{
-		OutReason = TEXT("policyInfluenceBelowThreshold");
+		OutReason = TEXT("queue_policy_influence_below_threshold");
 		return false;
 	}
 
 	if (!PendingBodyModifierCachedResetNames.IsEmpty())
 	{
-		OutReason = TEXT("deferredResetsPending");
+		OutReason = TEXT("queue_deferred_resets_pending");
 		return false;
 	}
 
@@ -2486,11 +2486,7 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 	static FString LastQueuedReason;
 	if (Reason != LastQueuedReason)
 	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnimBalance] Queued automatic start request: %s"),
-			*Reason);
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Request status: balance_start_queued. reason=%s"), *Reason);
 		LastQueuedReason = Reason;
 	}
 }
@@ -7326,7 +7322,7 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 	}
 
 	// EXPERIMENT: DO NOT schedule/apply proximal cached-target reset if we are in transition handoff
-	if (InTransitionPhase == EBalanceReadyTransitionPhase::BRT_Handoff)
+	if (InTransitionPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
 		const FString BoneStr = BoneName.ToString().ToLower();
 		if (bIsRootBodyModifier || BoneStr.Contains(TEXT("spine")) || BoneStr.Contains(TEXT("thigh")))

@@ -15,7 +15,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 		return;
 	}
 
-	// Gather initial state for logging
+	// Gather initial state for logging (Section 18)
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	bool bPelvisSimulating = false;
 	if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
@@ -26,16 +26,21 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 		}
 	}
 
-	// Authoritative log
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_INVOCATION sourceState=%d reason=%s pelvisSimOn=%d ownsRootOn=%d"), 
+	// Authoritative Invocation Log (Section 17)
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_INVOCATION sourcePhase=%d reason=%s pelvisSimOn=%d ownsRootOn=%d"), 
 		static_cast<int32>(InternalPhase), *InRequestReason, bPelvisSimulating ? 1 : 0, bPelvisSimulating ? 0 : 1);
 
-	// TRANSITION_ENTRY_CLASSIFICATION and Hard Entry Gate (Preflight)
+	// TRANSITION_ENTRY_CLASSIFICATION and Preflight Gate (Section 10)
 	const EBalanceReadyEntryClassification Classification = ClassifyEntryState(Owner, Owner->ResolveEffectiveStabilizationSettings());
-	if (Classification == EBalanceReadyEntryClassification::InvalidEntryState)
+	if (Classification == EBalanceReadyEntryClassification::Preflight_HardFailure)
 	{
-		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_REJECTED_NO_RETRY reason=invalid_entry_state"));
-		return; // Direct return to Idle, no recovery phase
+		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_REJECTED reason=preflight_hard_failure"));
+		return; 
+	}
+	else if (Classification == EBalanceReadyEntryClassification::Preflight_QueueBlock)
+	{
+		// Should have been handled by component queue gates, but providing safety here
+		return;
 	}
 
 	RequestReason = InRequestReason;
@@ -47,17 +52,16 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	bLatchedPelvisResetApplied = false;
 	QuietHandoffCount = 0;
 
-	// In Phase 1, bLastRootSimulating will capture whether it WAS simulating before transition logic starts manipulating it.
+	// In Phase 1, bLastRootSimulating will capture whether it WAS simulating 
 	bLastRootSimulating = bPelvisSimulating;
 	bLastPendingResetsEmpty = Owner->GetPendingBodyModifierCachedResetNames().IsEmpty();
 
-	SetPhase(EBalanceReadyTransitionPhase::BRT_Handoff, Owner);
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_START reason=%s"), *RequestReason);
+	SetPhase(EBalanceReadyTransitionPhase::BRT_Phase1_Prepare, Owner);
 }
 
 EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryState(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings) const
 {
-	if (!Owner) return EBalanceReadyEntryClassification::InvalidEntryState;
+	if (!Owner) return EBalanceReadyEntryClassification::Preflight_HardFailure;
 
 	int32 TotalSim = 0;
 	int32 DistalSim = 0;
@@ -101,34 +105,27 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 		}
 	}
 
-	EBalanceReadyEntryClassification Classification = EBalanceReadyEntryClassification::InvalidEntryState;
+	EBalanceReadyEntryClassification Classification = EBalanceReadyEntryClassification::Preflight_HardFailure;
 
-	// Hard Gate Thresholds:
-	// simCount <= 5
-	// distalSim == 0
-	// policyAlpha <= 0.05
-	// rootAng <= 25.0
-	// rootLin <= 15.0
-	const bool bStateClean = (TotalSim <= 5) && (DistalSim == 0) && (PolicyAlpha <= 0.05f) && (RootLin <= 15.0f) && (RootAng <= 25.0f);
+	// Preflight accept thresholds (Section 20)
+	// simCount <= 5, distalSim == 0, policyAlpha < 0.1
+	const bool bStateClean = (TotalSim <= 5) && (DistalSim == 0) && (PolicyAlpha < 0.1f);
 
 	if (bPelvisSimulating)
 	{
-		// If pelvis is simulating, we allow start if state is within bounds (though it's usually already started)
-		// but since we are classifying for a potential start call:
-		Classification = bStateClean ? EBalanceReadyEntryClassification::ReadyToStart : EBalanceReadyEntryClassification::InvalidEntryState;
+		// Currently simulating. If state is clean, we can begin transition.
+		Classification = bStateClean ? EBalanceReadyEntryClassification::Preflight_Accept : EBalanceReadyEntryClassification::Preflight_HardFailure;
 	}
 	else
 	{
-		// Kinematic root. 
-		// If state is clean, it's a retryable wait.
-		Classification = bStateClean ? EBalanceReadyEntryClassification::RetryableWait : EBalanceReadyEntryClassification::InvalidEntryState;
+		// Kinematic root. Transition will OWN the root-on activation (Section 11).
+		// If other parts of the world are clean, we accept.
+		Classification = bStateClean ? EBalanceReadyEntryClassification::Preflight_Accept : EBalanceReadyEntryClassification::Preflight_HardFailure;
 	}
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_ENTRY_CLASSIFICATION state=%s simCount=%d distalSim=%d policyAlpha=%.2f classification=%s"), 
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_ENTRY_CLASSIFICATION state=%s simCount=%d distalSim=%d policyAlpha=%.2f classification=%d"), 
 		bPelvisSimulating ? TEXT("simulating") : TEXT("kinematic"),
-		TotalSim, DistalSim, PolicyAlpha,
-		(Classification == EBalanceReadyEntryClassification::InvalidEntryState) ? TEXT("invalid_entry_state") : 
-		(Classification == EBalanceReadyEntryClassification::ReadyToStart ? TEXT("ready_to_start") : TEXT("retryable_wait")));
+		TotalSim, DistalSim, PolicyAlpha, static_cast<int32>(Classification));
 
 	return Classification;
 }
@@ -144,7 +141,7 @@ void FPhysAnimBalanceReadyTransition::Cancel()
 
 void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings)
 {
-	if (!IsActive())
+	if (!IsActive() || !Owner)
 	{
 		return;
 	}
@@ -159,44 +156,65 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	const bool bReadyThisFrame = EvaluateReadiness(Owner, Settings, BlockReason);
 	Diagnostics.BlockReason = BlockReason;
 
-	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Handoff)
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
 		// Phase 1: Prepares topology.
-		// Topology (distal kinematic) is handled by ShouldKeepBoneKinematic returning true for distal bones.
-		// We wait briefly to ensure PhysAnimComponent has applied these changes before flipping root simulation.
-		if (PhaseTimeSeconds > 0.033f) // ~2 frames at 60Hz
+		// Section 12 requirements: distal kinematic, capture baselines.
+		if (PhaseTimeSeconds > 0.10f) 
 		{
-			SetPhase(EBalanceReadyTransitionPhase::BRT_PostHandoffSettle, Owner);
+			if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
+			{
+				const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+				Diagnostics.BaselineRootLinVel = Mesh->GetPhysicsLinearVelocity(RootBoneName).Size();
+				Diagnostics.BaselineRootAngVel = Mesh->GetPhysicsAngularVelocityInDegrees(RootBoneName).Size();
+				
+				// Section 12 Exit Criteria check (Invariants)
+				const float MaxBaselineLin = 25.0f;
+				const float MaxBaselineAng = 45.0f;
+				if (Diagnostics.BaselineRootLinVel > MaxBaselineLin || Diagnostics.BaselineRootAngVel > MaxBaselineAng)
+				{
+					UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE1_REJECTED baseline_movement_too_high lin=%.1f ang=%.1f"), 
+						Diagnostics.BaselineRootLinVel, Diagnostics.BaselineRootAngVel);
+					Diagnostics.FailureReason = TEXT("phase1_baseline_movement_too_high");
+					SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
+					return;
+				}
+			}
+
+			SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_RootOn, Owner);
 			return;
 		}
 	}
-	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_PostHandoffSettle)
+	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
-		if (bReadyThisFrame)
+		// Phase 2: Post root-on settle check.
+		// Section 13: Transition flipped sim in SetPhase. Now check for spikes.
+		const float SpikeLinThreshold = 150.0f; 
+		const float SpikeAngThreshold = 180.0f;
+
+		if (Diagnostics.RootSpeed > SpikeLinThreshold || Diagnostics.RootAngularSpeed > SpikeAngThreshold)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_PHASE2_PROXIMAL_STABLE rootLinVel=%.1f"), Diagnostics.RootSpeed);
-			SetPhase(EBalanceReadyTransitionPhase::BRT_RestoreControls);
-		}
-		else if (PhaseTimeSeconds > 3.0f)
-		{
-			Diagnostics.FailureReason = TEXT("post_handoff_settle_timeout");
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ABORT_SPIKE lin=%.1f ang=%.1f"), Diagnostics.RootSpeed, Diagnostics.RootAngularSpeed);
+			Diagnostics.FailureReason = TEXT("phase2_root_on_spike");
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
+			return;
+		}
+
+		// Mode remains in Phase 2 for a fixed short window before checking settle convergence in Phase 3
+		if (PhaseTimeSeconds > 0.1f)
+		{
+			SetPhase(EBalanceReadyTransitionPhase::BRT_Phase3_Settle, Owner);
 		}
 	}
-	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_RestoreControls)
+	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		// Phase 3: Enable distal bodies
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_PHASE3_DISTAL_ENABLE"));
-		SetPhase(EBalanceReadyTransitionPhase::BRT_FinalSettle);
-	}
-		if (InternalPhase == EBalanceReadyTransitionPhase::BRT_FinalSettle)
-	{
+		// Phase 3: Bounded settle duration (Section 14).
 		if (bReadyThisFrame)
 		{
 			StableHoldAccumulatedSeconds += DeltaTime;
-			if (StableHoldAccumulatedSeconds >= Owner->BalanceQuietWindowRequiredSeconds)
+			if (StableHoldAccumulatedSeconds >= 0.25f) // Required settle success duration
 			{
-				SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded);
+				SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
 			}
 		}
 		else
@@ -204,10 +222,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			StableHoldAccumulatedSeconds = 0.0f;
 		}
 
-		if (PhaseTimeSeconds > 5.0f)
+		if (PhaseTimeSeconds > 2.0f)
 		{
-			Diagnostics.FailureReason = TEXT("final_settle_timeout");
-			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed);
+			Diagnostics.FailureReason = TEXT("phase3_settle_timeout");
+			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 		}
 	}
 
@@ -235,9 +253,9 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		PhaseTimeSeconds = 0.0f;
 		StableHoldAccumulatedSeconds = 0.0f;
 
-		if (InternalPhase == EBalanceReadyTransitionPhase::BRT_PostHandoffSettle)
+		if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 		{
-			// Phase 2: Turns pelvis/root sim ON
+			// Phase 2: Turns pelvis/root sim ON (Section 13)
 			if (Owner)
 			{
 				if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
@@ -246,7 +264,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					{
 						if (!PelvisBody->IsInstanceSimulatingPhysics())
 						{
-							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_PHASE2_ROOT_ON"));
+							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON"));
 							
 							// Capture pre-flip diagnostics
 							Diagnostics.PelvisLinearVelPre = PelvisBody->GetUnrealWorldVelocity();
@@ -254,6 +272,8 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 
 							PelvisBody->SetInstanceSimulatePhysics(true);
 							Diagnostics.bSimFlipped = true;
+							
+							CaptureFlipDiagnostics(Owner);
 						}
 					}
 				}
@@ -262,36 +282,29 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 
 		if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION SUCCESS."));
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_SUCCESS."));
 		}
 		else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION FAILED: %s"), *Diagnostics.FailureReason);
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_FAILED reason=%s"), *Diagnostics.FailureReason);
 			
-			// TRANSITION_RECOVERY
-			int32 TotalSim = 0;
-			bool bDistalForcedKinematic = false;
+			// Section 16: Recovery Contract (Restore coherent BridgeActive state)
 			if (Owner)
 			{
 				USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
 				if (Mesh)
 				{
+					int32 SimCount = 0;
 					for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
 					{
 						if (FBodyInstance* BI = Mesh->GetBodyInstance(BoneName))
 						{
-							if (BI->IsInstanceSimulatingPhysics())
-							{
-								TotalSim++;
-							}
+							if (BI->IsInstanceSimulatingPhysics()) SimCount++;
 						}
 					}
-					bDistalForcedKinematic = true; 
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_RECOVERY simCount=%d policySuppressed=1"), SimCount);
 				}
 			}
-
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_RECOVERY simCount=%d policyDisabled=1 distalForcedKinematic=%d"), 
-				TotalSim, bDistalForcedKinematic ? 1 : 0);
 		}
 	}
 }
@@ -419,14 +432,13 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const 
 { 
-	// Freeze policy during entire bootstrap until stable settle confirmed (moving to phase 3)
-	// Also keep suppressed if we failed to avoid spikes during abort recovery
-	return (IsActive() && (InternalPhase == EBalanceReadyTransitionPhase::BRT_Handoff || InternalPhase == EBalanceReadyTransitionPhase::BRT_PostHandoffSettle)) || InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed; 
+	// Freeze policy during entire bootstrap until stable settle confirmed (Section 12, 13)
+	return (IsActive() && (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)) || InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed; 
 }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Handoff || InternalPhase == EBalanceReadyTransitionPhase::BRT_PostHandoffSettle; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive(); }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Handoff; } // Only suppress reset on flip frame
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Handoff || InternalPhase == EBalanceReadyTransitionPhase::BRT_PostHandoffSettle; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare; } 
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn; }
 
 float FPhysAnimBalanceReadyTransition::GetRootBodyModifierSoftSimAlpha() const { return 1.0f; }
 float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneName) const { return 1.0f; }
@@ -450,9 +462,9 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 		return true; // Force kinematic
 	}
 
-	// Phase 1 (Handoff) and Phase 2 (PostHandoffSettle): Pelvis, Spine, Thighs simulate. Rest are kinematic.
-	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Handoff || 
-		InternalPhase == EBalanceReadyTransitionPhase::BRT_PostHandoffSettle)
+	// Phase 1 (Prepare) and Phase 2 (RootOn): Pelvis, Spine, Thighs simulate. Rest are kinematic.
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || 
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
 		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 		const FString BoneStr = BoneName.ToString().ToLower();
@@ -473,5 +485,5 @@ float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier() con
 {
 	if (!IsActive()) return 1.0f;
 	// Increase damping during instability window
-	return (InternalPhase == EBalanceReadyTransitionPhase::BRT_Handoff || InternalPhase == EBalanceReadyTransitionPhase::BRT_PostHandoffSettle) ? 2.0f : 1.0f;
+	return (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn) ? 2.0f : 1.0f;
 }

@@ -6,19 +6,18 @@
 enum class EBalanceReadyTransitionPhase : uint8
 {
 	BRT_Inactive,
-	BRT_Handoff,
-	BRT_PostHandoffSettle,
-	BRT_RestoreControls,
-	BRT_FinalSettle,
+	BRT_Phase1_Prepare,
+	BRT_Phase2_RootOn,
+	BRT_Phase3_Settle,
 	BRT_Succeeded,
 	BRT_Failed
 };
 
 enum class EBalanceReadyEntryClassification : uint8
 {
-	ReadyToStart,
-	RetryableWait,
-	InvalidEntryState
+	Preflight_Accept,
+	Preflight_QueueBlock,
+	Preflight_HardFailure
 };
 
 struct FBalanceReadyTransitionDiagnostics
@@ -51,9 +50,12 @@ struct FBalanceReadyTransitionDiagnostics
 	float MaxLinVelFeet = 0.0f;
 	float MaxAngVelFeet = 0.0f;
 
-	int32 PreflightSimCount = 0;
-	int32 PreflightDistalSimCount = 0;
 	float PreflightPolicyAlpha = 0.0f;
+	
+	float BaselineRootLinVel = 0.0f;
+	float BaselineRootAngVel = 0.0f;
+	float BaselineShellOffset = 0.0f;
+	float BaselineShellVel = 0.0f;
 };
 
 class FPhysAnimBalanceReadyTransition
