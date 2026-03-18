@@ -1,0 +1,608 @@
+# Balance Mode Phase 2 Root-On Spec
+
+Status: Draft implementation spec  
+Scope: Stage 1 runtime behavior for `BalanceTransition_Phase2_RootOn` and the immediate post-root-on guard window  
+Audience: runtime, controls, debugging, validation, and transition work for PhysAnim bridge
+
+## 1. Purpose
+
+This document defines the **exact root-on choreography** for Phase 2 of the Balance Mode entry transition.
+
+It exists because the entry-transition spec already defines:
+
+- that pelvis/root simulation must become true
+- that same-frame policy drive is dangerous
+- that root-on spikes must abort the transition
+- that recovery must return to coherent `BridgeActive`
+
+But it does **not** define, with enough precision, how the root-on flip should be executed frame-by-frame.
+
+This document closes that gap.
+
+Its goal is to remove ambiguity around:
+
+- the exact order of operations for root-on
+- which body sets may change on the root-on frame
+- whether policy writes are allowed on the root-on frame
+- whether cached-target resets are allowed on the root-on frame
+- how long the post-root-on guard window lasts
+- what counts as a root-on spike
+- what recovery must do after `phase2_root_on_spike`
+- when retry is allowed and when it is prohibited
+
+---
+
+## 2. Relationship to Existing Docs
+
+This document refines and operationalizes:
+
+- `plans/stage1/40-design/balance_mode_entry_transition_spec.md`
+- `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
+- `plans/stage1/40-design/balance-perturbation-mode-design.md`
+
+Interpretation rule:
+
+- the entry-transition spec defines the state machine and high-level transition contract
+- the Phase 1 stabilization spec defines how the pre-root-on state becomes quiet and safe
+- this document defines how the runtime executes the **actual root-on flip** and the immediate post-flip guard window
+
+This document does not replace those docs.
+
+---
+
+## 3. Core Design Goal
+
+Phase 2 must convert the runtime from a **quiet, transition-safe pre-root-on state** into a **real pelvis/root-simulating state** without introducing an uncontrolled spike.
+
+Phase 2 is successful only if:
+
+- pelvis/root simulation becomes true
+- no conflicting authority interferes on the root-on frame
+- no same-frame discontinuity is injected by target writes, resets, or shell correction
+- the immediate post-root-on window remains within named spike thresholds
+
+Phase 2 is not a broad settle phase.  
+It is a short, tightly controlled **state-flip and guard-window phase**.
+
+---
+
+## 4. Non-Goals
+
+Phase 2 does not:
+
+- establish full Balance Perturbation Mode behavior
+- schedule perturbations
+- validate recovery from pushes
+- test locomotion
+- replace Phase 3 bounded settle logic
+
+Phase 2 only governs:
+
+- the root-on flip
+- the immediate authority constraints around that flip
+- the short guard window after the flip
+- abort classification and recovery if the flip is unstable
+
+---
+
+## 5. Authoritative Bone Sets
+
+The same authoritative sets from the Phase 1 stabilization spec apply.
+
+## 5.1 Root set
+- `pelvis`
+
+## 5.2 Proximal transition-critical set
+- `spine_01`
+- `spine_02`
+- `spine_03`
+- `thigh_l`
+- `thigh_r`
+
+## 5.3 Distal spike-prone lower-limb set
+- `calf_l`
+- `calf_r`
+- `foot_l`
+- `foot_r`
+- `ball_l`
+- `ball_r`
+
+## 5.4 Upper-body non-critical set
+- `clavicle_l`
+- `upperarm_l`
+- `lowerarm_l`
+- `hand_l`
+- `clavicle_r`
+- `upperarm_r`
+- `lowerarm_r`
+- `hand_r`
+- `neck_01`
+- `head`
+
+---
+
+## 6. Required Phase 2 Entry Preconditions
+
+Phase 2 may begin only if all of these are already true:
+
+1. Phase 1 succeeded under the Phase 1 stabilization spec
+2. transition-critical topology matches the Phase 1 target topology
+3. policy suppression for the transition-critical set is active
+4. no cached-target reset is pending
+5. no quarantine release is pending
+6. no fail-stop precursor is active
+7. root linear speed is below `Phase2EntryMaxRootLinearSpeedCmPerSec`
+8. root angular speed is below `Phase2EntryMaxRootAngularSpeedDegPerSec`
+9. shell offset delta is below `Phase2EntryMaxShellOffsetDeltaCm`
+10. shell velocity delta is below `Phase2EntryMaxShellVelocityDeltaCmPerSec`
+
+Phase 2 must not be entered “optimistically.”
+
+If these conditions are not true, the runtime must remain in Phase 1 or fail.
+
+---
+
+## 7. Phase 2 Authority Matrix
+
+Phase 2 must use a stricter authority model than BridgeActive.
+
+## 7.1 Policy authority
+
+Policy inference may continue for diagnostics, but policy must not drive the transition-critical set on the root-on frame.
+
+Required rule:
+
+- policy writes to `pelvis` = forbidden
+- policy writes to proximal transition-critical set = forbidden
+- policy writes to distal spike-prone lower-limb set = forbidden
+
+Default recommended rule:
+- suppress all policy target writes during the root-on frame and through the post-root-on guard window
+
+## 7.2 Control target authority
+
+Control targets may exist, but they may not inject a new discontinuity on the root-on frame.
+
+Allowed:
+- preserve the hold/reference state already established by Phase 1
+- hold previously frozen targets unchanged
+
+Forbidden:
+- recomputing fresh policy-driven targets on the root-on frame
+- reseeding control targets from a different reference on the root-on frame
+- enabling a control family and changing its reference in the same uncontrolled step
+
+## 7.3 Body modifier authority
+
+Body modifiers are the authoritative owners of the root-on topology flip.
+
+The runtime must not rely on incidental simulation propagation.  
+The pelvis/root body must be explicitly transitioned by the transition logic.
+
+## 7.4 Cached reset authority
+
+Cached-target resets are forbidden on the root-on frame and during the post-root-on guard window.
+
+This includes:
+- root reset
+- proximal reset
+- distal reset
+- automatic deferred reset discharge
+
+If a reset is still needed, Phase 2 must not begin.
+
+## 7.5 Shell / CharacterMovement authority
+
+During Phase 2:
+- CharacterMovement must not inject corrective motion
+- shell/world correction must not inject corrective displacement or velocity
+- capsule/shell movement is observed as contamination, not used as a stabilizer
+
+If shell correction occurs materially during Phase 2, the transition must abort.
+
+---
+
+## 8. Phase 2 Frame Sequence
+
+The runtime must execute Phase 2 in this order.
+
+## 8.1 Phase 2 entry snapshot
+
+Record once:
+
+- root sim state before flip
+- root linear velocity before flip
+- root angular velocity before flip
+- shell offset delta before flip
+- shell velocity delta before flip
+- sim count before flip
+- distal sim count before flip
+- max body linear speed before flip
+- max body angular speed before flip
+- policy suppression state
+- reset-pending state
+
+## 8.2 Freeze transition hazards
+
+Before root-on occurs, the runtime must ensure all are true on the entry frame:
+
+- policy writes suppressed
+- cached resets suppressed
+- locomotion entry suppressed
+- shell assistance suppressed
+- CharacterMovement correction suppressed
+
+## 8.3 Execute root-on
+
+Root-on means:
+
+- pelvis/root body modifier is switched to simulated
+- pelvis/root collision state is switched to the intended simulated state
+- pelvis/root simulation validity is re-read and confirmed
+
+This must be an explicit transition-owned action.
+
+## 8.4 Validate immediate root-on result
+
+Immediately after the flip, confirm:
+
+- pelvis/root body exists
+- pelvis/root reports simulating
+- no same-frame system turned it back off
+- transition-critical suppression is still active
+- no reset was scheduled during the flip
+
+If any check fails, abort Phase 2 immediately.
+
+## 8.5 Start post-root-on guard window
+
+Once root-on succeeds technically, Phase 2 enters a bounded guard window.
+
+During this guard window:
+- no policy write may be re-enabled for the transition-critical set
+- no cached reset may be discharged
+- no topology expansion may occur
+- no new posture reseed may occur
+- no shell correction may materially assist the body
+
+---
+
+## 9. Topology Rules During Phase 2
+
+Phase 2 must not change everything at once.
+
+## 9.1 Root set
+- `pelvis` = simulated
+
+## 9.2 Proximal transition-critical set
+Default required state during the root-on frame and guard window:
+- `spine_01`, `spine_02`, `spine_03`, `thigh_l`, `thigh_r` = kinematic
+
+This is intentionally conservative.
+
+The design assumption is:
+- root-on should first prove pelvis/root can enter simulation safely
+- additional proximal simulation expansion belongs later, only if explicitly designed and validated
+
+## 9.3 Distal spike-prone lower-limb set
+During the root-on frame and guard window:
+- `calf_l`, `calf_r`, `foot_l`, `foot_r`, `ball_l`, `ball_r` = kinematic
+
+Phase 2 must not allow distal re-simulation during the guard window.
+
+## 9.4 Upper-body non-critical set
+Upper-body topology may remain unchanged from the Phase 1 exit state, provided it does not introduce material root contamination.
+
+If upper-body simulation materially contributes to root-on spike behavior, the design must be revised explicitly.
+
+---
+
+## 10. Post-Root-On Guard Window
+
+The post-root-on guard window exists to catch deterministic spikes that appear immediately after the flip.
+
+## 10.1 Duration
+
+The runtime must define a named duration:
+
+- `Phase2GuardWindowSeconds`
+
+This window begins immediately after technical root-on success.
+
+## 10.2 Rules during the guard window
+
+The following remain forbidden during the guard window:
+
+- policy target writes to the transition-critical set
+- cached-target resets
+- transition-topology expansion
+- locomotion entry
+- shell/world corrective assistance
+- CharacterMovement corrective assistance
+- root reseed from a new pose reference
+
+## 10.3 Metrics tracked during the guard window
+
+At minimum:
+
+- peak root linear speed
+- peak root angular speed
+- peak shell offset delta
+- peak shell velocity delta
+- peak max body linear speed
+- peak max body angular speed
+- sim count
+- distal sim count
+- whether root simulation stayed true
+
+Optional:
+- proximal-set max velocity summary
+- distal-set max velocity summary
+
+---
+
+## 11. Root-On Spike Definition
+
+A Phase 2 spike is not a vague visual impression.
+
+It must be defined using named thresholds.
+
+A `phase2_root_on_spike` occurs if any of these exceed their abort threshold during the root-on frame or guard window:
+
+- root linear speed > `Phase2AbortRootLinearSpeedCmPerSec`
+- root angular speed > `Phase2AbortRootAngularSpeedDegPerSec`
+- shell offset delta > `Phase2AbortShellOffsetDeltaCm`
+- shell velocity delta > `Phase2AbortShellVelocityDeltaCmPerSec`
+- max body linear speed > `Phase2AbortMaxBodyLinearSpeedCmPerSec`
+- max body angular speed > `Phase2AbortMaxBodyAngularSpeedDegPerSec`
+
+Additional hard abort reasons:
+
+- root simulation drops unexpectedly
+- cached reset occurs
+- policy write leak to transition-critical set occurs
+- topology expands unexpectedly
+- fail-stop precursor becomes active
+
+---
+
+## 12. Root-On Success Criteria
+
+Phase 2 succeeds only if all are true for the full guard window:
+
+1. pelvis/root remains simulating
+2. no abort threshold is exceeded
+3. no shell/material contamination occurs
+4. no policy write leak occurs
+5. no reset occurs
+6. no unexpected topology expansion occurs
+
+Only then may the runtime advance to Phase 3.
+
+---
+
+## 13. Forbidden Root-On Patterns
+
+The runtime must not do any of the following in one uncontrolled frame:
+
+- root flip + new policy write
+- root flip + cached reset
+- root flip + posture reseed
+- root flip + topology expansion of distal bodies
+- root flip + shell correction
+- root flip + locomotion entry
+
+If any implementation depends on one of these combined patterns to succeed, the design is not yet valid and must be rewritten explicitly.
+
+---
+
+## 14. Failure Classification
+
+Phase 2 failure must be classified.
+
+## 14.1 Retryable failure classes
+
+These may retry automatically only if recovery changes something material and the retry rules are satisfied:
+
+- `phase2_root_not_confirmed`
+- `phase2_topology_not_preserved`
+- `phase2_guard_window_interrupted_by_transient_contamination`
+
+## 14.2 Non-retryable failure classes
+
+These should block automatic retry until code/design changes or explicit user action:
+
+- `phase2_policy_write_leak`
+- `phase2_reset_violation`
+- `phase2_same_frame_conflicting_authority`
+- `phase2_no_convergence_path`
+
+## 14.3 Abort-level failure classes
+
+These are immediate transition failures:
+
+- `phase2_root_on_spike`
+- `phase2_root_simulation_dropped`
+- `phase2_shell_correction_material`
+- `phase2_fail_stop_precursor`
+
+---
+
+## 15. Recovery Contract After Phase 2 Failure
+
+Recovery must return the runtime to a coherent `BridgeActive` state.
+
+Required recovery actions:
+
+- disable pelvis/root simulation if Phase 2 enabled it
+- restore the intended BridgeActive topology
+- clear transition-local suppressions
+- clear transition-local guard window state
+- clear transition-local snapshots and spike counters
+- clear transition-local hazard flags
+- ensure no cached reset remains armed from the failed attempt
+- ensure the runtime is not left in a half-root-on state
+
+Not allowed:
+- remaining in a partially simulated post-root-on topology while claiming recovery
+- leaving pelvis sim on and simply looping back into Phase 1
+- preserving a pending request when no new convergence evidence exists
+
+---
+
+## 16. Automatic Retry Rule
+
+A failed Phase 2 attempt must not immediately recycle into another attempt merely because a request is still pending.
+
+Automatic retry is permitted only if all are true:
+
+1. previous failure class is marked retryable
+2. recovery completed and restored coherent `BridgeActive`
+3. recovery changed something material about the state or the convergence path
+4. a fresh BridgeActive quiet proof occurred after recovery
+5. retry cooldown elapsed
+6. retry budget not exceeded
+
+Recommended controls:
+
+- `Phase2MaxAutomaticRetries`
+- `Phase2RetryCooldownSeconds`
+
+Repeated `phase2_root_on_spike` failures with unchanged setup must not be brute-forced through retries.  
+That pattern is evidence of a root-on design defect.
+
+---
+
+## 17. Logging Contract
+
+Phase 2 logs must be sparse, one-shot, and phase-authoritative.
+
+Required logs:
+
+- `PHASE2_ENTRY`
+- `PHASE2_ROOT_ON`
+- `PHASE2_GUARD_WINDOW_STARTED`
+- `PHASE2_GUARD_WINDOW_ABORTED`
+- `PHASE2_READY_FOR_PHASE3`
+- `PHASE2_ABORT <reason>`
+- `PHASE2_RECOVERY_BEGIN`
+- `PHASE2_RECOVERY_COMPLETE`
+
+Recommended root-on summary fields:
+
+- rootPreLin
+- rootPreAng
+- rootPostLin
+- rootPostAng
+- shellOffsetDelta
+- shellVelocityDelta
+- simCountPre
+- simCountPost
+- distalSimPre
+- distalSimPost
+- policySuppressed
+- resetScheduled
+
+Required retry-loop logs:
+- why retry is allowed or denied
+- what changed since the prior failure
+- whether fresh BridgeActive quiet proof was re-established
+- remaining retry budget
+
+---
+
+## 18. Required Threshold Names
+
+Do not bury these as unnamed constants.
+
+Minimum named thresholds:
+
+- `Phase2EntryMaxRootLinearSpeedCmPerSec`
+- `Phase2EntryMaxRootAngularSpeedDegPerSec`
+- `Phase2EntryMaxShellOffsetDeltaCm`
+- `Phase2EntryMaxShellVelocityDeltaCmPerSec`
+- `Phase2GuardWindowSeconds`
+- `Phase2AbortRootLinearSpeedCmPerSec`
+- `Phase2AbortRootAngularSpeedDegPerSec`
+- `Phase2AbortShellOffsetDeltaCm`
+- `Phase2AbortShellVelocityDeltaCmPerSec`
+- `Phase2AbortMaxBodyLinearSpeedCmPerSec`
+- `Phase2AbortMaxBodyAngularSpeedDegPerSec`
+- `Phase2MaxAutomaticRetries`
+- `Phase2RetryCooldownSeconds`
+
+---
+
+## 19. Acceptance Tests
+
+Minimum required tests:
+
+### Test 1: Clean root-on
+- Phase 1 succeeds
+- root-on occurs
+- guard window completes
+- Phase 3 begins
+
+### Test 2: Same-frame policy leak
+- intentionally enable policy write on root-on frame
+- verify `phase2_policy_write_leak`
+
+### Test 3: Reset violation
+- intentionally discharge a cached reset on root-on frame
+- verify `phase2_reset_violation`
+
+### Test 4: Distal re-sim propagation
+- allow distal bodies to re-enter simulation during guard window
+- verify `phase2_topology_not_preserved` or spike abort
+
+### Test 5: Root-on spike
+- reproduce deterministic post-root-on velocity spike
+- verify `phase2_root_on_spike`
+- verify coherent recovery to BridgeActive
+
+### Test 6: Bad retry loop prevention
+- fail Phase 2 with unchanged setup
+- verify immediate automatic retry is denied
+
+### Test 7: Legitimate retry
+- fail Phase 2 for a retryable reason
+- recovery changes material state
+- fresh BridgeActive quiet proof occurs
+- retry allowed within budget
+
+---
+
+## 20. Recommended Default Design Decision
+
+The recommended default implementation is:
+
+1. Enter Phase 2 only after full Phase 1 quiet proof
+2. Freeze policy writes, resets, locomotion, and shell assistance
+3. Flip only `pelvis` to simulated
+4. Keep proximal and distal transition-critical sets kinematic through the guard window
+5. Forbid resets and policy writes for the entire guard window
+6. Abort immediately on threshold breach
+7. Recover fully to BridgeActive
+8. Deny automatic retry after repeated unchanged root-on spikes
+
+This is intentionally conservative.
+
+It is better to prove a narrow, stable root-on design first than to combine multiple topology and authority changes in one fragile step.
+
+---
+
+## 21. Final Design Summary
+
+Phase 2 is not just “turn pelvis sim on.”
+
+It is a tightly controlled root-on flip with:
+
+- explicit preconditions
+- explicit authority suppression
+- explicit topology restrictions
+- explicit guard-window rules
+- explicit spike thresholds
+- explicit recovery rules
+- explicit retry prohibitions
+
+The runtime should be considered non-compliant with the Balance Mode entry contract if Phase 2 can only succeed through repeated retries, hidden same-frame writes, or uncontrolled post-root-on propagation.
