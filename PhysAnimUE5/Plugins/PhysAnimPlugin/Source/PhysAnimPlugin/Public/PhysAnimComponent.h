@@ -920,7 +920,7 @@ public:
 		bool bIsRootBodyModifier,
 		bool bAllowRootBodyModifierSimulation,
 		float PolicyAlpha,
-		EBalanceReadyTransitionPhase InTransitionPhase = EBalanceReadyTransitionPhase::Inactive);
+		EBalanceReadyTransitionPhase InTransitionPhase = EBalanceReadyTransitionPhase::BRT_Inactive);
 	static int32 ResolveBringUpGroupIndex(FName BoneName);
 	static int32 GetBringUpGroupCount();
 	static bool ShouldDelayBringUpGroupControlRamp(int32 GroupIndex, int32 NumBringUpGroups);

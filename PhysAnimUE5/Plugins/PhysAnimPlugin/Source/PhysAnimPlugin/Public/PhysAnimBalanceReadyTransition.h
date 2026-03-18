@@ -5,13 +5,13 @@
 
 enum class EBalanceReadyTransitionPhase : uint8
 {
-	Inactive,
-	Handoff,
-	PostHandoffSettle,
-	RestoreControls,
-	FinalSettle,
-	Succeeded,
-	Failed
+	BRT_Inactive,
+	BRT_Handoff,
+	BRT_PostHandoffSettle,
+	BRT_RestoreControls,
+	BRT_FinalSettle,
+	BRT_Succeeded,
+	BRT_Failed
 };
 
 struct FBalanceReadyTransitionDiagnostics
@@ -43,6 +43,10 @@ struct FBalanceReadyTransitionDiagnostics
 	float MaxAngVelSpine = 0.0f;
 	float MaxLinVelFeet = 0.0f;
 	float MaxAngVelFeet = 0.0f;
+
+	int32 PreflightSimCount = 0;
+	int32 PreflightDistalSimCount = 0;
+	float PreflightPolicyAlpha = 0.0f;
 };
 
 class FPhysAnimBalanceReadyTransition
@@ -52,12 +56,12 @@ public:
 	void Cancel();
 	void Tick(float DeltaTime, class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);
 
-	bool IsActive() const { return Phase != EBalanceReadyTransitionPhase::Inactive && !IsComplete(); }
-	bool HasSucceeded() const { return Phase == EBalanceReadyTransitionPhase::Succeeded; }
-	bool HasFailed() const { return Phase == EBalanceReadyTransitionPhase::Failed; }
-	bool IsComplete() const { return Phase == EBalanceReadyTransitionPhase::Succeeded || Phase == EBalanceReadyTransitionPhase::Failed; }
+	bool IsActive() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive && !IsComplete(); }
+	bool HasSucceeded() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded; }
+	bool HasFailed() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed; }
+	bool IsComplete() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded || InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed; }
 
-	EBalanceReadyTransitionPhase GetPhase() const { return Phase; }
+	EBalanceReadyTransitionPhase GetPhase() const { return InternalPhase; }
 	const FString& GetBlockReason() const { return Diagnostics.BlockReason; }
 	const FString& GetFailureReason() const { return Diagnostics.FailureReason; }
 
@@ -73,11 +77,11 @@ public:
 	float GetTransitionExtraDampingMultiplier() const;
 
 private:
-	void SetPhase(EBalanceReadyTransitionPhase NewPhase);
+	void SetPhase(EBalanceReadyTransitionPhase NewPhase, class UPhysAnimComponent* Owner = nullptr);
 	bool EvaluateReadiness(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	void CaptureFlipDiagnostics(class UPhysAnimComponent* Owner);
 
-	EBalanceReadyTransitionPhase Phase = EBalanceReadyTransitionPhase::Inactive;
+	EBalanceReadyTransitionPhase InternalPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
 	FString RequestReason;
 	float StableHoldAccumulatedSeconds = 0.0f;
 	float PhaseTimeSeconds = 0.0f;

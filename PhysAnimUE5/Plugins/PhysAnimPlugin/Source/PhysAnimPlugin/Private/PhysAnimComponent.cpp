@@ -1871,7 +1871,7 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 	const bool bBalanceMode = RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode;
 	const bool bTransitionActive = BalanceReadyTransition.IsActive();
 	const bool bBridgeActivePreEntry = RuntimeState == EPhysAnimRuntimeState::BridgeActive && bTransitionActive;
-	const bool bIsPhase1 = bTransitionActive && BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::Handoff;
+	const bool bIsPhase1 = bTransitionActive && BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Handoff;
 	
 	const bool bBringUpUnlocked = AreAllBringUpGroupsUnlocked();
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
@@ -2506,15 +2506,15 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 	PendingBalanceModeStartReason = Reason;
 	PendingBalanceModeRequestTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
 	
-	static FString LastReason;
-	if (Reason != LastReason)
+	static FString LastQueuedReason;
+	if (Reason != LastQueuedReason)
 	{
 		UE_LOG(
 			LogPhysAnimBridge,
-			Warning,
-			TEXT("[PhysAnimBalance] Entry blocked: %s. Queued automatic start request."),
+			Log,
+			TEXT("[PhysAnimBalance] Queued automatic start request: %s"),
 			*Reason);
-		LastReason = Reason;
+		LastQueuedReason = Reason;
 	}
 }
 
@@ -2552,8 +2552,8 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	}
 	else if (BalanceReadyTransition.HasFailed())
 	{
+		// Force sticky block until manual reset or explicit new request (not automatic)
 		bPendingBalanceModeStartRequest = false;
-		BalanceReadyTransition.Cancel();
 	}
 }
 
@@ -4817,7 +4817,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		// In Balance Mode, we break the root into simulation as soon as the bridge is logically ready 
 		// (bring-up complete, policy authority high enough). This allows the quiet window to run 
 		// under legitimate physical simulation as required by the design.
-		const bool bAllowRootBodyModifierSimulation = bIsRootBodyModifier && bAllowRootBodyModifierSimulationInBalanceMode;
+		const bool bAllowRootBodyModifierSimulation = bIsRootBodyModifier && bAllowRootBodyModifierSimulationInBalanceMode && !BalanceReadyTransition.HasFailed();
 		
 		if (bIsRootBodyModifier && bAllowRootBodyModifierSimulation)
 		{
@@ -4923,7 +4923,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 	if (bHipQuarantineActiveThisFrame)
 	{
-		if (HipQuarantineTicksRemaining > 0)
+		if (HipQuarantineTicksRemaining > 0 && !BalanceReadyTransition.HasFailed())
 		{
 			--HipQuarantineTicksRemaining;
 			bHipQuarantineReleasedThisFrame = (HipQuarantineTicksRemaining == 0);
@@ -4931,10 +4931,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bHipQuarantineReleasedThisFrame)
 		{
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnimBalance] HIP_QUARANTINE_RELEASED"));
+			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode || (BalanceReadyTransition.IsComplete() && BalanceReadyTransition.HasSucceeded()))
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] HIP_QUARANTINE_RELEASED"));
+			}
 		}
 	}
 
@@ -7359,7 +7362,7 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 	}
 
 	// EXPERIMENT: DO NOT schedule/apply proximal cached-target reset if we are in transition handoff
-	if (InTransitionPhase == EBalanceReadyTransitionPhase::Handoff)
+	if (InTransitionPhase == EBalanceReadyTransitionPhase::BRT_Handoff)
 	{
 		const FString BoneStr = BoneName.ToString().ToLower();
 		if (bIsRootBodyModifier || BoneStr.Contains(TEXT("spine")) || BoneStr.Contains(TEXT("thigh")))
