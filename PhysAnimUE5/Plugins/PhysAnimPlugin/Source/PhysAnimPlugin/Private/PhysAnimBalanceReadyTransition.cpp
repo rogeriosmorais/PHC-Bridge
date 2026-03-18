@@ -84,6 +84,32 @@ FString FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(boo
 	return TEXT("phase1_late_validate_unknown");
 }
 
+static bool ValidateLateValidationHandoffSnapshot(
+	const FPhysAnimCertifiedHandoffSnapshot& Snapshot,
+	const FPhysAnimStabilizationSettings& Settings,
+	FString& OutReason)
+{
+	if (!Snapshot.bControlAuthoritySettled)
+	{
+		OutReason = TEXT("phase2_control_authority_not_settled");
+		return false;
+	}
+
+	if (Snapshot.QuietProofDurationSeconds + KINDA_SMALL_NUMBER < Settings.PolicySettleRequiredSeconds)
+	{
+		OutReason = TEXT("phase2_quiet_proof_not_completed");
+		return false;
+	}
+
+	if (Snapshot.ProximalSimCount <= 0 && Snapshot.DistalSimCount <= 0)
+	{
+		OutReason = TEXT("phase2_sim_coverage_insufficient");
+		return false;
+	}
+
+	return true;
+}
+
 void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhysAnimComponent* Owner)
 {
 	if (IsActive() || !Owner)
@@ -260,7 +286,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			QuietWindowAccumulatedSeconds += DeltaTime;
 			if (QuietWindowAccumulatedSeconds >= Settings.PolicySettleRequiredSeconds)
 			{
-				if (CaptureCertifiedHandoff(Owner, Settings))
+				FString CaptureReason;
+				if (CaptureCertifiedHandoff(Owner, Settings, CaptureReason))
 				{
 					LateValidationAccumulatedSeconds = 0.0f;
 					Diagnostics.Phase1LateValidateAccumulatedSeconds = 0.0f;
@@ -282,7 +309,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					return;
 				}
 
-				const FString Phase2BlockReason = TEXT("phase1_late_validate_baseline_capture_failed");
+				const FString Phase2BlockReason = CaptureReason.IsEmpty()
+					? TEXT("phase1_late_validate_baseline_capture_failed")
+					: CaptureReason;
 				Diagnostics.FailureReason = Phase2BlockReason;
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
 				MarkSafePhase2Denied(Phase2BlockReason);
@@ -326,7 +355,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			const float PolicyInfluenceAlpha = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
 			if (PolicyInfluenceAlpha >= Owner->BalanceReadyPolicyInfluenceThreshold)
 			{
-				if (CaptureCertifiedHandoff(Owner, Settings))
+				FString CaptureReason;
+				if (CaptureCertifiedHandoff(Owner, Settings, CaptureReason))
 				{
 					LateValidationAccumulatedSeconds = 0.0f;
 					Diagnostics.Phase1LateValidateAccumulatedSeconds = 0.0f;
@@ -348,7 +378,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					return;
 				}
 
-				const FString Phase2BlockReason = TEXT("phase1_late_validate_baseline_capture_failed");
+				const FString Phase2BlockReason = CaptureReason.IsEmpty()
+					? TEXT("phase1_late_validate_baseline_capture_failed")
+					: CaptureReason;
 				Diagnostics.FailureReason = Phase2BlockReason;
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
 				MarkSafePhase2Denied(Phase2BlockReason);
@@ -462,7 +494,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			if (LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds)
 			{
 				bHasLateValidationProof = true;
-				if (CaptureCertifiedHandoff(Owner, Settings))
+				FString CaptureReason;
+				if (CaptureCertifiedHandoff(Owner, Settings, CaptureReason))
 				{
 					UE_LOG(
 						LogPhysAnimBridge,
@@ -496,7 +529,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					return;
 				}
 
-				LateValidateBlockReason = TEXT("phase2_handoff_capture_failed");
+				LateValidateBlockReason = CaptureReason.IsEmpty()
+					? TEXT("phase2_handoff_capture_failed")
+					: CaptureReason;
 				Diagnostics.FailureReason = LateValidateBlockReason;
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *LateValidateBlockReason);
 				MarkSafePhase2Denied(LateValidateBlockReason);
@@ -665,7 +700,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	{
 		const FPhysAnimStabilizationSettings EffectiveSettings = Owner->ResolveEffectiveStabilizationSettings();
 		FString DenyReason;
-		if (!ValidateCertifiedHandoff(Owner, EffectiveSettings, DenyReason))
+		if (!ValidatePhase2EntryPreconditions(Owner, EffectiveSettings, DenyReason))
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *DenyReason);
 			MarkSafePhase2Denied(DenyReason);
@@ -923,6 +958,14 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
+	FString HandoffReadinessReason;
+	if (!ValidateLateValidationHandoffSnapshot(CertifiedHandoff, Settings, HandoffReadinessReason) ||
+		!ValidateLateValidationHandoffSnapshot(CurrentSnapshot, Settings, HandoffReadinessReason))
+	{
+		OutReason = HandoffReadinessReason;
+		return false;
+	}
+
 	const float ShellOffset = Owner->GetCurrentShellPlanarOffsetDeltaCm();
 	const float ShellVel = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 	if (Diagnostics.RootSpeed > Settings.BalancePhase2EntryMaxRootLinearSpeed)
@@ -1029,21 +1072,23 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	return true;
 }
 
-bool FPhysAnimBalanceReadyTransition::CaptureCertifiedHandoff(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings)
+bool FPhysAnimBalanceReadyTransition::CaptureCertifiedHandoff(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
 {
 	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
 	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot))
 	{
+		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;
 	}
 
-	if (!CurrentSnapshot.bControlAuthoritySettled)
+	if (!ValidateLateValidationHandoffSnapshot(CurrentSnapshot, Settings, OutReason))
 	{
 		return false;
 	}
 
 	CertifiedHandoff = CurrentSnapshot;
 	bHasCertifiedHandoff = true;
+	OutReason.Reset();
 	return true;
 }
 
