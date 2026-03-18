@@ -37,5 +37,5 @@ def extract_physa_to_clipboard(folder_path=r"F:\NewEngine\PhysAnimUE5\Saved\Logs
 
 # Exemplo de uso:
 # Use '.' para a pasta atual ou o caminho completo como 'C:/Logs/'
-caminho_da_pasta = r"F:\NewEngine\PhysAnimUE5\Saved\Logs" 
-extract_physa_to_clipboard(caminho_da_pasta)
+caminho_da_pasta = r"F:\NewEngine\PhysAnimUE5\Saved\Logs"
+print(extract_physa_to_clipboard(caminho_da_pasta))

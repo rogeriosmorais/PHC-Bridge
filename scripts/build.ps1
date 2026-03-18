@@ -1,7 +1,8 @@
 param (
     [switch]$Full,  # Perform full plugin packaging (Slow)
     [switch]$Run,   # Launch the Editor on success
-    [switch]$Clean  # Wipe Binaries/Intermediate before building
+    [switch]$Clean,  # Wipe Binaries/Intermediate before building
+    [string]$Test    # Optional Unreal automation test name to run after a successful build
 )
 
 # 1. Environment Setup
@@ -16,6 +17,7 @@ $PluginDir = "$ProjectDir\Plugins\PhysAnimPlugin"
 $PluginFile = "$PluginDir\PhysAnimPlugin.uplugin"
 $PackageDir = "$PWD\_build\PhysAnimPlugin"
 $EditorExe = "$env:UE5_PATH\Binaries\Win64\UnrealEditor.exe"
+$EditorCmdExe = "$env:UE5_PATH\Binaries\Win64\UnrealEditor-Cmd.exe"
 
 $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
@@ -77,7 +79,20 @@ if ($Full) {
     }
 }
 
-# 6. Summary & Launch
+# 6. Optional Automation Test Run
+if ($Test) {
+    Write-Host "[3] Running Automation Test: $Test" -ForegroundColor Green
+    & "$EditorCmdExe" "$ProjectFile" `
+        -ExecCmds="Automation RunTests $Test; Quit" `
+        -NullRHI -NoSound -Unattended -Log
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "!!! AUTOMATION TEST FAILED !!!" -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
+}
+
+# 7. Summary & Launch
 $Stopwatch.Stop()
 $Time = $Stopwatch.Elapsed.ToString('mm\:ss')
 
