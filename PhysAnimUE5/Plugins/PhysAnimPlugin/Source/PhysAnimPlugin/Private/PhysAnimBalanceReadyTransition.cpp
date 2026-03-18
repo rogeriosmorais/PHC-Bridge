@@ -232,6 +232,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			{
 				LastQuietBlockReason = QuietBlockReason;
 			}
+			else
+			{
+				// Do not carry a stale blocker forward once the live frame is quiet again.
+				LastQuietBlockReason.Reset();
+			}
 			if (QuietBlockReason == TEXT("target_discontinuity"))
 			{
 				TargetDiscontinuityAccumulatedSeconds += DeltaTime;
