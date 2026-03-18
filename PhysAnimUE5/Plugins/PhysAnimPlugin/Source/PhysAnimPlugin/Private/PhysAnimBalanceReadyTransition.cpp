@@ -10,6 +10,15 @@ namespace BalanceTransitionSets
 	static bool IsRoot(FName BoneName) { return BoneName == "pelvis"; }
 	static bool IsProximal(FName BoneName) { return BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"; }
 	static bool IsDistalLowerLimb(FName BoneName) { return BoneName == "calf_l" || BoneName == "calf_r" || BoneName == "foot_l" || BoneName == "foot_r" || BoneName == "ball_l" || BoneName == "ball_r"; }
+	static bool IsUpperLimbDistal(FName BoneName)
+	{
+		return BoneName == "lowerarm_l" || BoneName == "hand_l" ||
+			BoneName == "lowerarm_r" || BoneName == "hand_r";
+	}
+	static bool IsUpperBodyApex(FName BoneName)
+	{
+		return BoneName == "neck_01" || BoneName == "head";
+	}
 	static bool IsUpperLimbChain(FName BoneName)
 	{
 		return BoneName == "clavicle_l" || BoneName == "upperarm_l" || BoneName == "lowerarm_l" || BoneName == "hand_l" ||
@@ -968,9 +977,11 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
-		// Keep the arm chains anchored during the quiet window so the transition
-		// retains stable non-root coverage without letting the arms flail freely.
-		return BalanceTransitionSets::IsTransitionCritical(BoneName) || BalanceTransitionSets::IsUpperLimbChain(BoneName);
+		// Keep the distal arm segments and head/neck anchored during the quiet window so the
+		// transition retains stable non-root coverage without freezing the full upper body.
+		return BalanceTransitionSets::IsTransitionCritical(BoneName) ||
+			BalanceTransitionSets::IsUpperLimbDistal(BoneName) ||
+			BalanceTransitionSets::IsUpperBodyApex(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
