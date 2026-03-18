@@ -5065,6 +5065,11 @@ float UPhysAnimComponent::CalculateCurrentControlAuthorityAlpha(const FPhysAnimS
 
 float UPhysAnimComponent::CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
+	if (BalanceReadyTransition.HasSafePhase2Denial())
+	{
+		return 0.0f;
+	}
+
 	if (ShouldSuspendPolicyInfluenceDuringPresentationPerturbation(IsPresentationPerturbationOverrideActive()))
 	{
 		return 0.0f;
@@ -5571,7 +5576,8 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 				EffectiveSettings.bForceZeroActions,
 				true,
 				IsBringUpGroupControlRampActive(FinalGroupIndex),
-				true))
+				true) &&
+			!BalanceReadyTransition.HasSafePhase2Denial())
 		{
 			PolicyInfluenceRampStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 			BringUpGroupStableAccumulatedSeconds = 0.0f;
