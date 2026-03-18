@@ -241,7 +241,13 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration && QuietWindowAccumulatedSeconds <= 0.0f)
 		{
+			const FPhysAnimControlTargetDiagnostics& CurrentTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
+			const bool bCurrentTargetDiscontinuity =
+				CurrentTargetDiagnostics.MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
+				CurrentTargetDiagnostics.MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg;
+
 			if (QuietBlockReason == TEXT("target_discontinuity") &&
+				bCurrentTargetDiscontinuity &&
 				TargetDiscontinuityAccumulatedSeconds >= Settings.BalancePhase1PrepareDuration - KINDA_SMALL_NUMBER)
 			{
 				const FString TimeoutReason = TEXT("phase1_quiet_timeout_target_discontinuity");
@@ -252,10 +258,16 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				return;
 			}
 
-			Diagnostics.FailureReason = QuietBlockReason.IsEmpty()
+			const FString TimeoutReason = QuietBlockReason == TEXT("target_discontinuity")
 				? TEXT("phase1_quiet_timeout_unknown")
-				: TEXT("phase1_quiet_timeout_") + QuietBlockReason;
-			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
+				: (QuietBlockReason.IsEmpty()
+					? TEXT("phase1_quiet_timeout_unknown")
+					: TEXT("phase1_quiet_timeout_") + QuietBlockReason);
+			Diagnostics.FailureReason = TimeoutReason;
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *TimeoutReason);
+			MarkSafePhase2Denied(TimeoutReason);
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *TimeoutReason);
+			return;
 		}
 		return;
 	}
