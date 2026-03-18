@@ -3104,6 +3104,7 @@ bool UPhysAnimComponent::SeedControlTargetsFromCurrentPose(float DeltaTime, FStr
 	}
 
 	PreviousControlTargetRotations.Reset();
+	PolicyBlendStartControlTargetRotations.Reset();
 
 	for (const TPair<FName, FQuat>& Pair : CurrentPoseTargetOrientations)
 	{
@@ -3113,7 +3114,8 @@ bool UPhysAnimComponent::SeedControlTargetsFromCurrentPose(float DeltaTime, FStr
 			return false;
 		}
 
-		PreviousControlTargetRotations.Add(Pair.Key, FQuat::Identity);
+		PreviousControlTargetRotations.Add(Pair.Key, Pair.Value);
+		PolicyBlendStartControlTargetRotations.Add(Pair.Key, Pair.Value);
 		PhysicsControl->SetControlTargetOrientation(
 			Pair.Key,
 			Pair.Value.Rotator(),
@@ -5914,15 +5916,10 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (!bApplyNewPolicyStepThisTick)
 	{
-		LastControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
-		LastControlTargetDiagnostics.bFirstPolicyEnabledFrame = false;
+		ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
+		ControlTargetDiagnostics.bFirstPolicyEnabledFrame = false;
+		LastControlTargetDiagnostics = ControlTargetDiagnostics;
 		return;
-	}
-
-	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame)
-	{
-		PreviousControlTargetRotations.Reset();
-		PolicyBlendStartControlTargetRotations.Reset();
 	}
 
 	TMap<FName, FQuat> ControlRotations;
@@ -5991,15 +5988,19 @@ void UPhysAnimComponent::ApplyControlTargets(
 			OutError = FString::Printf(TEXT("Missing required control '%s' during target write."), *ControlName.ToString());
 			return;
 		}
-		const FQuat IdentityRotation = FQuat::Identity;
-		const FQuat* const PreviousRotation =
-			ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? &IdentityRotation : PreviousControlTargetRotations.Find(ControlName);
-		const FQuat* const BlendStartRotation =
-			ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? &IdentityRotation : PolicyBlendStartControlTargetRotations.Find(ControlName);
 		if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame)
 		{
-			PolicyBlendStartControlTargetRotations.Add(ControlName, IdentityRotation);
+			if (!PreviousControlTargetRotations.Contains(ControlName))
+			{
+				PreviousControlTargetRotations.Add(ControlName, Pair.Value);
+			}
+			if (!PolicyBlendStartControlTargetRotations.Contains(ControlName))
+			{
+				PolicyBlendStartControlTargetRotations.Add(ControlName, Pair.Value);
+			}
 		}
+		const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
+		const FQuat* const BlendStartRotation = PolicyBlendStartControlTargetRotations.Find(ControlName);
 		const bool bApplyTrainingAlignedLowerLimbTargetRangePolicy =
 			ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
 				EffectiveSettings.bApplyTrainingAlignedLowerLimbTargetRangePolicy,

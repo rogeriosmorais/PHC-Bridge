@@ -156,6 +156,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			bQuietThisFrame = false;
 			QuietBlockReason = TEXT("shell_contamination");
 		}
+		else if (Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
+			Owner->GetLastControlTargetDiagnostics().MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg)
+		{
+			bQuietThisFrame = false;
+			QuietBlockReason = TEXT("target_discontinuity");
+		}
 		else
 		{
 			TArray<FName> SimulatingBones;
@@ -168,6 +174,16 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					QuietBlockReason = TEXT("topology_mismatch_simulating_critical");
 					break;
 				}
+			}
+		}
+
+		if (bQuietThisFrame)
+		{
+			const float PolicyInfluenceAlpha = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
+			if (PolicyInfluenceAlpha < 1.0f - KINDA_SMALL_NUMBER)
+			{
+				bQuietThisFrame = false;
+				QuietBlockReason = TEXT("policy_ramp_not_settled");
 			}
 		}
 
@@ -214,6 +230,15 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration && QuietWindowAccumulatedSeconds <= 0.0f)
 		{
+			if (QuietBlockReason == TEXT("target_discontinuity"))
+			{
+				Diagnostics.FailureReason = TEXT("phase1_quiet_timeout_target_discontinuity");
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Diagnostics.FailureReason);
+				MarkSafePhase2Denied(Diagnostics.FailureReason);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Diagnostics.FailureReason);
+				return;
+			}
+
 			Diagnostics.FailureReason = TEXT("phase1_quiet_timeout_") + QuietBlockReason;
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 		}
