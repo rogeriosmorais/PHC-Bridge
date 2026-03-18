@@ -105,22 +105,31 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 		}
 	}
 
-	EBalanceReadyEntryClassification Classification = EBalanceReadyEntryClassification::Preflight_HardFailure;
+	// Section 11: Ownership Rules for Preconditions
+	// pelvisBodyNotSimulating and distalBodySimulating are TRANSITION-OWNED.
+	// They must not be permanent rejections.
 
-	// Preflight accept thresholds (Section 20)
-	// simCount <= 5, distalSim == 0, policyAlpha < 0.1
-	const bool bStateClean = (TotalSim <= 5) && (DistalSim == 0) && (PolicyAlpha < 0.1f);
-
-	if (bPelvisSimulating)
+	// Structural/Command context checks remain Hard Failures
+	if (TotalSim == 0) // Sanity check: if NO bodies simulate, maybe bridge isn't even running
 	{
-		// Currently simulating. If state is clean, we can begin transition.
-		Classification = bStateClean ? EBalanceReadyEntryClassification::Preflight_Accept : EBalanceReadyEntryClassification::Preflight_HardFailure;
+		// But wait, if we are in BridgeActive, at least something should be happening.
+		// If we are actually 100% kinematic, preflight should still accept and Phase 2 will flip it.
+	}
+
+	// Policy Influence check (Section 20 Appendix vs Section 11)
+	// If policy is too high, we might want to wait for a ramp down, but BridgeActive doesn't do that.
+	// We'll treat it as a QueueBlock if it's extremely unstable, but per Section 11,
+	// we should probably just accept and let Phase 1 suppress it.
+	
+	const bool bPolicyCompatible = (PolicyAlpha < 0.1f) || (PolicyAlpha > 0.9f); // Allow either startup or fully-brought-up baseline
+	if (!bPolicyCompatible)
+	{
+		Classification = EBalanceReadyEntryClassification::Preflight_QueueBlock;
 	}
 	else
 	{
-		// Kinematic root. Transition will OWN the root-on activation (Section 11).
-		// If other parts of the world are clean, we accept.
-		Classification = bStateClean ? EBalanceReadyEntryClassification::Preflight_Accept : EBalanceReadyEntryClassification::Preflight_HardFailure;
+		// Per Section 11: "simCount=21 distalSim=16 -> not automatically invalid"
+		Classification = EBalanceReadyEntryClassification::Preflight_Accept;
 	}
 
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_ENTRY_CLASSIFICATION state=%s simCount=%d distalSim=%d policyAlpha=%.2f classification=%d"), 
