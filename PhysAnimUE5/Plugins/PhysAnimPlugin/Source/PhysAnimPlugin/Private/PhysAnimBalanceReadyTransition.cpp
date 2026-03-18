@@ -28,12 +28,28 @@ namespace BalanceTransitionSets
 	{
 		return IsUpperLimbChain(BoneName) || BoneName == "neck_01" || BoneName == "head";
 	}
+	static bool IsLateValidationUpperBodyOwnershipBone(FName BoneName)
+	{
+		return IsUpperBody(BoneName);
+	}
 	static bool IsTransitionCritical(FName BoneName) { return IsRoot(BoneName) || IsProximal(BoneName) || IsDistalLowerLimb(BoneName); }
 	static bool IsExpectedPhase2Topology(int32 SimCountPre, int32 SimCountPost, int32 DistalSimCountPre, int32 DistalSimCountPost)
 	{
 		return DistalSimCountPre == 0 &&
 			DistalSimCountPost == 0 &&
 			((SimCountPre == 0 && SimCountPost == 1) || (SimCountPre == 1 && SimCountPost == 1));
+	}
+
+	static const TCHAR* GetUpperBodyOwnershipModeName(EBalanceReadyUpperBodyOwnershipMode Mode)
+	{
+		switch (Mode)
+		{
+		case EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold:
+			return TEXT("late_validation_kinematic_hold");
+		case EBalanceReadyUpperBodyOwnershipMode::None:
+		default:
+			return TEXT("none");
+		}
 	}
 
 	static FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount)
@@ -45,6 +61,23 @@ namespace BalanceTransitionSets
 			DistalSimCount > 0 ? TEXT("sim") : TEXT("kin"),
 			UpperSimCount > 0 ? TEXT("sim") : TEXT("kin"));
 	}
+}
+
+FString FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(bool bUpperBodyInstability, bool bSimCoverageRegressed, bool bTargetDiscontinuity)
+{
+	if (bUpperBodyInstability)
+	{
+		return TEXT("phase1_late_validate_upper_body_instability");
+	}
+	if (bSimCoverageRegressed)
+	{
+		return TEXT("phase1_late_validate_sim_coverage_regressed");
+	}
+	if (bTargetDiscontinuity)
+	{
+		return TEXT("phase1_late_validate_target_discontinuity");
+	}
+	return TEXT("phase1_late_validate_unknown");
 }
 
 void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhysAnimComponent* Owner)
@@ -76,6 +109,8 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	bLatchedPelvisResetApplied = false;
 	QuietHandoffCount = 0;
 	HipQuarantineTimerSeconds = 0.0f;
+	LateValidationAccumulatedSeconds = 0.0f;
+	LastLateValidateBlockReason.Reset();
 	EntryHoldRotations.Empty();
 	bSafePhase2Denied = false;
 	SafePhase2DenialReason.Reset();
@@ -221,31 +256,30 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			QuietWindowAccumulatedSeconds += DeltaTime;
 			if (QuietWindowAccumulatedSeconds >= Settings.PolicySettleRequiredSeconds)
 			{
-				FString Phase2BlockReason;
-				if (ValidatePhase2EntryPreconditions(Owner, Settings, Phase2BlockReason))
+				if (CaptureCertifiedHandoff(Owner, Settings))
 				{
-					if (CaptureCertifiedHandoff(Owner, Settings))
-					{
-						UE_LOG(
-							LogPhysAnimBridge,
-							Log,
-							TEXT("[PhysAnimBalance] PHASE1_READY_FOR_ROOT_ON topology=%s simCount=%d proximalSimCount=%d distalSimCount=%d policySuppressed=%d controlAuthoritySettled=%d maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f"),
-							*CertifiedHandoff.TopologyClass,
-							CertifiedHandoff.SimCount,
-							CertifiedHandoff.ProximalSimCount,
-							CertifiedHandoff.DistalSimCount,
-							CertifiedHandoff.bPolicySuppressed ? 1 : 0,
-							CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
-							CertifiedHandoff.MaxTargetDeltaDegrees,
-							CertifiedHandoff.MeanTargetDeltaDegrees,
-							CertifiedHandoff.QuietProofDurationSeconds);
-						SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_RootOn, Owner);
-						return;
-					}
-
-					Phase2BlockReason = TEXT("phase2_handoff_capture_failed");
+					LateValidationAccumulatedSeconds = 0.0f;
+					Diagnostics.Phase1LateValidateAccumulatedSeconds = 0.0f;
+					Diagnostics.Phase1LateValidateGateSource = TEXT("phase1_late_validate_start");
+					Diagnostics.Phase1LateValidateGateReason.Reset();
+					UE_LOG(
+						LogPhysAnimBridge,
+						Log,
+						TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_STARTED topology=%s upperBodyOwnership=%s simCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d quietProofDuration=%.2f requiredSeconds=%.2f"),
+						*CertifiedHandoff.TopologyClass,
+						BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
+						CertifiedHandoff.SimCount,
+						CertifiedHandoff.UpperBodySimCount,
+						CertifiedHandoff.bPolicySuppressed ? 1 : 0,
+						CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
+						CertifiedHandoff.QuietProofDurationSeconds,
+						Settings.BalancePhase1LateValidateRequiredSeconds);
+					SetPhase(EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate, Owner);
+					return;
 				}
 
+				const FString Phase2BlockReason = TEXT("phase1_late_validate_baseline_capture_failed");
+				Diagnostics.FailureReason = Phase2BlockReason;
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
 				MarkSafePhase2Denied(Phase2BlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
@@ -289,44 +323,60 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			const bool bCurrentTargetDiscontinuity =
 				CurrentTargetDiagnostics.MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
 				CurrentTargetDiagnostics.MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg;
-
-			if (QuietBlockReason == TEXT("target_discontinuity") &&
-				bCurrentTargetDiscontinuity &&
-				TargetDiscontinuityAccumulatedSeconds >= Settings.BalancePhase1PrepareDuration - KINDA_SMALL_NUMBER)
+			FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
+			const bool bCurrentSnapshotValid = BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot);
+			const bool bUpperBodyInstability = bCurrentSnapshotValid &&
+				(CertifiedHandoff.UpperBodySimCount > 0 ||
+					CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
+					CurrentSnapshot.UpperBodySimCount > 0 ||
+					CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount);
+			const bool bSimCoverageRegressed = bCurrentSnapshotValid &&
+				(CurrentSnapshot.SimCount < CertifiedHandoff.SimCount ||
+					CurrentSnapshot.ProximalSimCount < CertifiedHandoff.ProximalSimCount ||
+					CurrentSnapshot.DistalSimCount < CertifiedHandoff.DistalSimCount);
+			const FString TimeoutReason = bCurrentSnapshotValid
+				? ClassifyLateValidationFailureReason(bUpperBodyInstability, bSimCoverageRegressed, bCurrentTargetDiscontinuity)
+				: TEXT("phase1_late_validate_handoff_invalidated");
+			Diagnostics.FailureReason = TimeoutReason;
+			if (bCurrentTargetDiscontinuity)
 			{
-				const FString TimeoutReason = TEXT("phase1_quiet_timeout_target_discontinuity");
-				Diagnostics.FailureReason = TimeoutReason;
 				Diagnostics.Phase1TargetDiscontinuityGateInput = CurrentTargetDiagnostics;
 				Diagnostics.Phase1TargetDiscontinuityGateSource = TEXT("timeout_live_quiet_window_gate");
 				Diagnostics.Phase1TargetDiscontinuityGateReason = TimeoutReason;
 				Diagnostics.Phase1TargetDiscontinuityAccumulatedSeconds = TargetDiscontinuityAccumulatedSeconds;
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
-					TEXT("[PhysAnimBalance] PHASE1_QUIET_TIMEOUT_TARGET_DISCONTINUITY source=%s quietBlockReason=%s lastQuietBlockReason=%s gateMaxTargetDelta=%.1f gateMeanTargetDelta=%.1f gateMaxTargetDeltaBone=%s gateThreshold=%.1f accumulatedSeconds=%.2f liveMaxTargetDelta=%.1f liveMeanTargetDelta=%.1f liveMaxTargetDeltaBone=%s phaseTime=%.2f"),
-					*Diagnostics.Phase1TargetDiscontinuityGateSource,
-					*QuietBlockReason,
-					*LastQuietBlockReason,
-					CurrentTargetDiagnostics.MaxTargetDeltaDegrees,
-					CurrentTargetDiagnostics.MeanTargetDeltaDegrees,
-					*CurrentTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
-					Settings.BalancePhase1MaxEntryTargetDeltaDeg,
-					TargetDiscontinuityAccumulatedSeconds,
-					Diagnostics.Phase1TargetDiscontinuityGateInput.MaxTargetDeltaDegrees,
-					Diagnostics.Phase1TargetDiscontinuityGateInput.MeanTargetDeltaDegrees,
-					*Diagnostics.Phase1TargetDiscontinuityGateInput.MaxTargetDeltaBoneName.ToString(),
-					PhaseTimeSeconds);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *TimeoutReason);
-				MarkSafePhase2Denied(TimeoutReason);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *TimeoutReason);
-				return;
 			}
-
-			const FString& TerminalQuietBlockReason = !QuietBlockReason.IsEmpty() ? QuietBlockReason : LastQuietBlockReason;
-			const FString TimeoutReason = TerminalQuietBlockReason.IsEmpty()
-				? TEXT("phase1_quiet_timeout_unknown")
-				: TEXT("phase1_quiet_timeout_") + TerminalQuietBlockReason;
-			Diagnostics.FailureReason = TimeoutReason;
+			else
+			{
+				Diagnostics.Phase1TargetDiscontinuityGateInput = {};
+				Diagnostics.Phase1TargetDiscontinuityGateSource.Reset();
+				Diagnostics.Phase1TargetDiscontinuityGateReason.Reset();
+				Diagnostics.Phase1TargetDiscontinuityAccumulatedSeconds = 0.0f;
+			}
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimBalance] PHASE1_QUIET_TIMEOUT lateValidationReason=%s upperBodyOwnership=%s upperBodySimPre=%d upperBodySimCur=%d simCountPre=%d simCountCur=%d proximalSimPre=%d proximalSimCur=%d distalSimPre=%d distalSimCur=%d quietBlockReason=%s lastQuietBlockReason=%s gateMaxTargetDelta=%.1f gateMeanTargetDelta=%.1f gateMaxTargetDeltaBone=%s gateThreshold=%.1f accumulatedSeconds=%.2f liveMaxTargetDelta=%.1f liveMeanTargetDelta=%.1f liveMaxTargetDeltaBone=%s phaseTime=%.2f"),
+				*TimeoutReason,
+				BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
+				CertifiedHandoff.UpperBodySimCount,
+				bCurrentSnapshotValid ? CurrentSnapshot.UpperBodySimCount : -1,
+				CertifiedHandoff.SimCount,
+				bCurrentSnapshotValid ? CurrentSnapshot.SimCount : -1,
+				CertifiedHandoff.ProximalSimCount,
+				bCurrentSnapshotValid ? CurrentSnapshot.ProximalSimCount : -1,
+				CertifiedHandoff.DistalSimCount,
+				bCurrentSnapshotValid ? CurrentSnapshot.DistalSimCount : -1,
+				*QuietBlockReason,
+				*LastQuietBlockReason,
+				CurrentTargetDiagnostics.MaxTargetDeltaDegrees,
+				CurrentTargetDiagnostics.MeanTargetDeltaDegrees,
+				*CurrentTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
+				Settings.BalancePhase1MaxEntryTargetDeltaDeg,
+				TargetDiscontinuityAccumulatedSeconds,
+				Diagnostics.Phase1TargetDiscontinuityGateInput.MaxTargetDeltaDegrees,
+				Diagnostics.Phase1TargetDiscontinuityGateInput.MeanTargetDeltaDegrees,
+				*Diagnostics.Phase1TargetDiscontinuityGateInput.MaxTargetDeltaBoneName.ToString(),
+				PhaseTimeSeconds);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *TimeoutReason);
 			MarkSafePhase2Denied(TimeoutReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *TimeoutReason);
@@ -477,6 +527,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				Owner->GetSimulatingBodies(SimulatingBones);
 				Diagnostics.SimCountPre = SimulatingBones.Num();
 				Diagnostics.DistalSimCountPre = 0;
+				Diagnostics.UpperBodySimCountPre = 0;
 				int32 ProximalSimCountPre = 0;
 				for (const FName BoneName : SimulatingBones)
 				{
@@ -488,10 +539,15 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					{
 						ProximalSimCountPre++;
 					}
+					else if (BalanceTransitionSets::IsUpperBody(BoneName))
+					{
+						Diagnostics.UpperBodySimCountPre++;
+					}
 				}
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ENTRY topology=%s rootPreLin=%.1f rootPreAng=%.1f shellOffsetDelta=%.1f shellVelocityDelta=%.1f simCountPre=%d proximalSimPre=%d distalSimPre=%d policySuppressed=%d controlAuthoritySettled=%d maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f resetScheduled=%d"),
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ENTRY topology=%s upperBodyOwnership=%s rootPreLin=%.1f rootPreAng=%.1f shellOffsetDelta=%.1f shellVelocityDelta=%.1f simCountPre=%d proximalSimPre=%d distalSimPre=%d upperBodySimPre=%d policySuppressed=%d controlAuthoritySettled=%d maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f resetScheduled=%d"),
 					CertifiedHandoff.TopologyClass.IsEmpty() ? TEXT("unknown") : *CertifiedHandoff.TopologyClass,
+					BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
 					Diagnostics.BaselineRootLinVel,
 					Diagnostics.BaselineRootAngVel,
 					Diagnostics.BaselineShellOffset,
@@ -499,6 +555,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					Diagnostics.SimCountPre,
 					ProximalSimCountPre,
 					Diagnostics.DistalSimCountPre,
+					Diagnostics.UpperBodySimCountPre,
 					CertifiedHandoff.bPolicySuppressed ? 1 : 0,
 					CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
 					CertifiedHandoff.MaxTargetDeltaDegrees,
@@ -681,6 +738,18 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
+	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot))
+	{
+		OutReason = TEXT("phase2_handoff_invalidated");
+		return false;
+	}
+	if (CurrentSnapshot.UpperBodySimCount > 0)
+	{
+		OutReason = TEXT("phase2_upper_body_instability");
+		return false;
+	}
+
 	const float ShellOffset = Owner->GetCurrentShellPlanarOffsetDeltaCm();
 	const float ShellVel = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 	if (Diagnostics.RootSpeed > Settings.BalancePhase2EntryMaxRootLinearSpeed)
@@ -769,6 +838,8 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.SimCount = SimulatingBones.Num();
 	OutSnapshot.ProximalSimCount = ProximalSimCount;
 	OutSnapshot.DistalSimCount = DistalSimCount;
+	OutSnapshot.UpperBodySimCount = UpperSimCount;
+	OutSnapshot.UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
 	OutSnapshot.bPolicySuppressed = ShouldSuppressPolicy();
 	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
 	OutSnapshot.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
@@ -813,6 +884,15 @@ bool FPhysAnimBalanceReadyTransition::ValidateCertifiedHandoff(UPhysAnimComponen
 	if (CurrentSnapshot.TopologyClass != CertifiedHandoff.TopologyClass)
 	{
 		OutReason = TEXT("phase2_handoff_invalidated");
+		return false;
+	}
+
+	if (CertifiedHandoff.UpperBodySimCount > 0 ||
+		CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
+		CurrentSnapshot.UpperBodySimCount > 0 ||
+		CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount)
+	{
+		OutReason = TEXT("phase2_upper_body_instability");
 		return false;
 	}
 
@@ -879,6 +959,9 @@ void FPhysAnimBalanceReadyTransition::MarkSafePhase2Denied(const FString& Reason
 void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 {
 	Diagnostics = {};
+	LateValidationAccumulatedSeconds = 0.0f;
+	LastLateValidateBlockReason.Reset();
+	bHasLateValidationProof = false;
 	ResetCertifiedHandoffState();
 }
 
@@ -886,6 +969,7 @@ void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
 {
 	bHasCertifiedHandoff = false;
 	CertifiedHandoff = {};
+	bHasLateValidationProof = false;
 }
 
 void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent* Owner)
@@ -909,11 +993,16 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 	Owner->GetSimulatingBodies(SimulatingBones);
 	Diagnostics.SimCountPost = SimulatingBones.Num();
 	Diagnostics.DistalSimCountPost = 0;
+	Diagnostics.UpperBodySimCountPost = 0;
 	for (const FName BoneName : SimulatingBones)
 	{
 		if (BalanceTransitionSets::IsDistalLowerLimb(BoneName))
 		{
 			Diagnostics.DistalSimCountPost++;
+		}
+		else if (BalanceTransitionSets::IsUpperBody(BoneName))
+		{
+			Diagnostics.UpperBodySimCountPost++;
 		}
 	}
 
@@ -977,11 +1066,10 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
-		// Keep the distal arm segments and head/neck anchored during the quiet window so the
-		// transition retains stable non-root coverage without freezing the full upper body.
+		// Late validation keeps a single explicit upper-body ownership mode: anchor the upper-body
+		// chain and apex while the quiet window proves the handoff is stable.
 		return BalanceTransitionSets::IsTransitionCritical(BoneName) ||
-			BalanceTransitionSets::IsUpperLimbDistal(BoneName) ||
-			BalanceTransitionSets::IsUpperBodyApex(BoneName);
+			BalanceTransitionSets::IsLateValidationUpperBodyOwnershipBone(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{

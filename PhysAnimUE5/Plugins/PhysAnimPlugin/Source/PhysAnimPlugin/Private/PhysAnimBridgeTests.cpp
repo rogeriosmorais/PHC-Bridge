@@ -2103,6 +2103,32 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceLateValidationFailureTaxonomyTest,
+		"PhysAnim.Component.BalanceLateValidationFailureTaxonomy",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceLateValidationFailureTaxonomyTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(
+			TEXT("Upper-body late-validation failures are classified explicitly"),
+			FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(true, false, false),
+			FString(TEXT("phase1_late_validate_upper_body_instability")));
+		TestEqual(
+			TEXT("Sim-coverage late-validation failures are classified explicitly"),
+			FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(false, true, false),
+			FString(TEXT("phase1_late_validate_sim_coverage_regressed")));
+		TestEqual(
+			TEXT("Target discontinuity remains a distinct late-validation reason"),
+			FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(false, false, true),
+			FString(TEXT("phase1_late_validate_target_discontinuity")));
+		TestEqual(
+			TEXT("Late-validation failure taxonomy has a truthful unknown fallback"),
+			FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(false, false, false),
+			FString(TEXT("phase1_late_validate_unknown")));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimBringUpGroupMappingTest,
 		"PhysAnim.Component.BringUpGroupMapping",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

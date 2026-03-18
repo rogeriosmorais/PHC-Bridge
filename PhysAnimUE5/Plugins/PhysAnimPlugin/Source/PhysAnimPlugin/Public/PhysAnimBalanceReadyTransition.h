@@ -7,6 +7,7 @@ enum class EBalanceReadyTransitionPhase : uint8
 {
 	BRT_Inactive,
 	BRT_Phase1_Prepare,
+	BRT_Phase1_LateValidate,
 	BRT_Phase2_RootOn,
 	BRT_Phase3_Settle,
 	BRT_Succeeded,
@@ -20,17 +21,27 @@ enum class EBalanceReadyEntryClassification : uint8
 	Preflight_HardFailure
 };
 
+enum class EBalanceReadyUpperBodyOwnershipMode : uint8
+{
+	None,
+	LateValidationKinematicHold
+};
+
 struct FPhysAnimCertifiedHandoffSnapshot
 {
 	FString TopologyClass;
 	int32 SimCount = 0;
 	int32 ProximalSimCount = 0;
 	int32 DistalSimCount = 0;
+	int32 UpperBodySimCount = 0;
+	EBalanceReadyUpperBodyOwnershipMode UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::None;
 	bool bPolicySuppressed = false;
 	bool bControlAuthoritySettled = false;
 	float MaxTargetDeltaDegrees = 0.0f;
 	float MeanTargetDeltaDegrees = 0.0f;
 	float QuietProofDurationSeconds = 0.0f;
+	float LateValidationSustainDurationSeconds = 0.0f;
+	bool bLateValidationCompleted = false;
 };
 
 struct FBalanceReadyTransitionDiagnostics
@@ -40,6 +51,8 @@ struct FBalanceReadyTransitionDiagnostics
 	FString LastRetryDecision;
 	FString Phase1TargetDiscontinuityGateSource;
 	FString Phase1TargetDiscontinuityGateReason;
+	FString Phase1LateValidateGateSource;
+	FString Phase1LateValidateGateReason;
 	float RootSpeed = 0.0f;
 	float RootAngularSpeed = 0.0f;
 	float RootTilt = 0.0f;
@@ -74,10 +87,13 @@ struct FBalanceReadyTransitionDiagnostics
 	float BaselineShellVel = 0.0f;
 	FPhysAnimControlTargetDiagnostics Phase1TargetDiscontinuityGateInput;
 	float Phase1TargetDiscontinuityAccumulatedSeconds = 0.0f;
+	float Phase1LateValidateAccumulatedSeconds = 0.0f;
 	int32 SimCountPre = 0;
 	int32 SimCountPost = 0;
 	int32 DistalSimCountPre = 0;
 	int32 DistalSimCountPost = 0;
+	int32 UpperBodySimCountPre = 0;
+	int32 UpperBodySimCountPost = 0;
 	float PeakMaxBodyLinearSpeed = 0.0f;
 	float PeakMaxBodyAngularSpeed = 0.0f;
 };
@@ -114,6 +130,7 @@ public:
 	bool ShouldSuppressPolicyWrites(FName BoneName) const;
 	float GetTransitionExtraDampingMultiplier(const struct FPhysAnimStabilizationSettings& Settings) const;
 	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
+	static FString ClassifyLateValidationFailureReason(bool bUpperBodyInstability, bool bSimCoverageRegressed, bool bTargetDiscontinuity);
 	static bool IsFailureClassRetryable(const FString& FailureReason);
 	static bool IsAutomaticRetryAllowed(
 		const FString& FailureReason,
@@ -150,12 +167,15 @@ private:
 
 	int32 QuietHandoffCount = 0;
 	float QuietWindowAccumulatedSeconds = 0.0f;
+	float LateValidationAccumulatedSeconds = 0.0f;
 	float HipQuarantineTimerSeconds = 0.0f;
+	FString LastLateValidateBlockReason;
 	int32 RetryCount = 0;
 	int32 Phase2RetryCount = 0;
 	float RetryCooldownTimerSeconds = 0.0f;
 	TMap<FName, FQuat> EntryHoldRotations;
 	bool bHasCertifiedHandoff = false;
+	bool bHasLateValidationProof = false;
 	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
 	bool bSafePhase2Denied = false;
 	FString SafePhase2DenialReason;
