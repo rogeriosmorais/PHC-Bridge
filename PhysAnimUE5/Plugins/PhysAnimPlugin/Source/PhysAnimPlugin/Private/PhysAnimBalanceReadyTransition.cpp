@@ -107,10 +107,10 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 
 	EBalanceReadyEntryClassification Classification = EBalanceReadyEntryClassification::Preflight_HardFailure;
 
-	const int32 simCountThreshold = Settings.BalancePreflightMaxSimCount;
-	const int32 distalSimThreshold = Settings.BalancePreflightMaxDistalSimCount;
-	const float lowPolicyThreshold = Settings.BalancePreflightLowPolicyAlphaThreshold;
-	const float highPolicyThreshold = Settings.BalancePreflightHighPolicyAlphaThreshold;
+	// Unified Entry Gates (Section 10/11)
+	const int32 simCountThreshold = Settings.BalanceEntryMaxSimCount;
+	const int32 distalSimThreshold = Settings.BalanceEntryMaxDistalSimCount;
+	const float minPolicyThreshold = Settings.BalanceEntryMinPolicyAlpha;
 
 	// Section 11: Ownership Rules for Preconditions
 	// pelvisBodyNotSimulating and distalBodySimulating are TRANSITION-OWNED.
@@ -127,8 +127,9 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 	// If policy is too high, we might want to wait for a ramp down (QueueBlock), 
 	// but per Section 11, we should probably just accept and let Phase 1 suppress it.
 	
-	const bool bPolicyCompatible = (PolicyAlpha < lowPolicyThreshold) || (PolicyAlpha > highPolicyThreshold); // Allow either startup or fully-brought-up baseline
-	if (!bPolicyCompatible)
+	// Policy Influence check (Unified with queue gate)
+	// If policy is too low, we wait/block.
+	if (PolicyAlpha < minPolicyThreshold)
 	{
 		Classification = EBalanceReadyEntryClassification::Preflight_QueueBlock;
 	}
@@ -175,7 +176,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	{
 		// Phase 1: Prepares topology.
 		// Section 12 requirements: distal kinematic, capture baselines.
-		if (PhaseTimeSeconds > Settings.BalancePreparePhaseDurationSeconds) 
+		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration) 
 		{
 			if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
 			{
@@ -185,8 +186,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				
 				// Section 12 Exit Criteria check (Invariants)
 				// Baseline movement limits must be satisfied before root-on
-				const float MaxBaselineLin = Settings.BalancePrepareMaxLinearBaselineCmPerSec;
-				const float MaxBaselineAng = Settings.BalancePrepareMaxAngularBaselineDegPerSec;
+				const float MaxBaselineLin = Settings.BalancePhase1MaxRootLinearBaseline;
+				const float MaxBaselineAng = Settings.BalancePhase1MaxRootAngularBaseline;
 				if (Diagnostics.BaselineRootLinVel > MaxBaselineLin || Diagnostics.BaselineRootAngVel > MaxBaselineAng)
 				{
 					UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE1_REJECTED baseline_movement_too_high lin=%.1f ang=%.1f"), 
@@ -205,8 +206,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	{
 		// Phase 2: Post root-on settle check.
 		// Section 13: Transition flipped sim in SetPhase. Now check for spikes.
-		const float SpikeLinThreshold = Settings.BalancePhase2MaxLinearSpikeCmPerSec; 
-		const float SpikeAngThreshold = Settings.BalancePhase2MaxAngularSpikeDegPerSec;
+		const float SpikeLinThreshold = Settings.BalancePhase2MaxRootLinearSpike; 
+		const float SpikeAngThreshold = Settings.BalancePhase2MaxRootAngularSpike;
 
 		if (Diagnostics.RootSpeed > SpikeLinThreshold || Diagnostics.RootAngularSpeed > SpikeAngThreshold)
 		{
@@ -217,7 +218,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		}
 
 		// Mode remains in Phase 2 for a fixed short window before checking settle convergence in Phase 3
-		if (PhaseTimeSeconds > Settings.BalancePhase2RootOnDurationSeconds)
+		if (PhaseTimeSeconds > Settings.BalancePhase2RootOnDwellDuration)
 		{
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Phase3_Settle, Owner);
 		}
@@ -228,7 +229,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		if (bReadyThisFrame)
 		{
 			StableHoldAccumulatedSeconds += DeltaTime;
-			if (StableHoldAccumulatedSeconds >= Settings.BalanceSettlePhaseDurationSeconds) // Required settle success duration
+			if (StableHoldAccumulatedSeconds >= Settings.BalancePhase3RequiredStableHoldDuration) // Required settle success duration
 			{
 				SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
 			}
@@ -238,7 +239,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			StableHoldAccumulatedSeconds = 0.0f;
 		}
 
-		if (PhaseTimeSeconds > 2.0f)
+		if (PhaseTimeSeconds > Settings.BalancePhase3TimeoutDuration)
 		{
 			Diagnostics.FailureReason = TEXT("phase3_settle_timeout");
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
@@ -371,13 +372,13 @@ bool FPhysAnimBalanceReadyTransition::EvaluateReadiness(UPhysAnimComponent* Owne
 		return false;
 	}
 
-	if (Diagnostics.RootSpeed > Settings.BalanceSettleMaxRootLinearSpeedCmPerSecond)
+	if (Diagnostics.RootSpeed > Settings.BalanceSettleMaxRootLinearSpeed)
 	{
 		OutReason = TEXT("root_linear_above_settle");
 		return false;
 	}
 
-	if (Diagnostics.RootAngularSpeed > Settings.BalanceSettleMaxRootAngularSpeedDegPerSec)
+	if (Diagnostics.RootAngularSpeed > Settings.BalanceSettleMaxRootAngularSpeed)
 	{
 		OutReason = TEXT("root_angular_above_settle");
 		return false;
@@ -498,9 +499,10 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 	return false; // Phase 3 (DistalEnable) onwards: All allowed
 }
 
-float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier() const
+float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(const FPhysAnimStabilizationSettings& Settings) const
 {
 	if (!IsActive()) return 1.0f;
 	// Increase damping during instability window
-	return (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn) ? 2.0f : 1.0f;
+	const bool bInBootstrap = (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn);
+	return bInBootstrap ? Settings.BalanceBootstrapExtraDampingMultiplier : Settings.BalanceActiveExtraDampingMultiplier;
 }

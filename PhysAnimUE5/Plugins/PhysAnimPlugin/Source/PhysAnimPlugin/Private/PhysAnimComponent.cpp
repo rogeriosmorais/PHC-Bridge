@@ -2460,9 +2460,32 @@ bool UPhysAnimComponent::EvaluateBalanceModeQueueGates(const FPhysAnimStabilizat
 	}
 
 	const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
-	if (PolicyAlpha < BalanceReadyPolicyInfluenceThreshold)
+	if (PolicyAlpha < EffectiveSettings.BalanceEntryMinPolicyAlpha)
 	{
 		OutReason = TEXT("queue_policy_influence_below_threshold");
+		return false;
+	}
+
+	// Unified sim-count gates (Section 10/20)
+	TArray<FName> SimulatingBones;
+	GetSimulatingBodies(SimulatingBones);
+	const int32 TotalSim = SimulatingBones.Num();
+	
+	if (TotalSim > EffectiveSettings.BalanceEntryMaxSimCount)
+	{
+		OutReason = TEXT("queue_sim_count_too_high");
+		return false;
+	}
+
+	int32 DistalSim = 0;
+	for (const FName& Bone : SimulatingBones)
+	{
+		if (ResolveBringUpGroupIndex(Bone) > 0) DistalSim++;
+	}
+
+	if (DistalSim > EffectiveSettings.BalanceEntryMaxDistalSimCount)
+	{
+		OutReason = TEXT("queue_distal_sim_too_high");
 		return false;
 	}
 
@@ -4677,7 +4700,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		ControlMultiplier.AngularDampingRatioMultiplier =
 			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale;
 		ControlMultiplier.AngularExtraDampingMultiplier =
-			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale;
+			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale * 
+			BalanceReadyTransition.GetTransitionExtraDampingMultiplier(EffectiveSettings);
 
 		if (bHipQuarantineActiveThisFrame && (BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
