@@ -1161,7 +1161,10 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					CertifiedHandoff.QuietProofDurationSeconds,
 					Diagnostics.bResetScheduled ? 1 : 0);
 
-				PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
+				PelvisBody->SetBodyTransform(
+					Mesh->GetBoneTransform(Mesh->GetBoneIndex(PhysAnimBridge::GetRootBoneName())),
+					ETeleportType::TeleportPhysics,
+					true);
 				PelvisBody->SetInstanceSimulatePhysics(true);
 				Diagnostics.bSimFlipped = true;
 				// Phase 2 must preserve the pre-root-on shell proof reference through the
