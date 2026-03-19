@@ -5014,19 +5014,17 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
-		static double LastRootBodyModLogSeconds = -1.0;
-		const double NowSeconds = FPlatformTime::Seconds();
 		const bool bRootBodyModLogStateChanged =
 			bAllowRootBodyModifierSimulation != bLastAppliedPresentationRootSimulationEnabled ||
 			bTransitionOwnsRootOnThisTick ||
 			bTransitionKeepsBoneKinematic ||
 			bBringUpGroupUnlocked ||
 			bBodyModifierActivatedThisTick;
-		if (bIsRootBodyModifier && (bRootBodyModLogStateChanged || LastRootBodyModLogSeconds < 0.0 || NowSeconds - LastRootBodyModLogSeconds >= 1.0))
+		if (bIsRootBodyModifier && bRootBodyModLogStateChanged)
 		{
 			UE_LOG(
 				LogPhysAnimBridge,
-				Warning,
+				Verbose,
 				TEXT("[PhysAnimBalance] PELVIS_BODYMOD tickPhase=%d allowRootSim=%d transitionOwnsRootOn=%d transitionKeepKinematic=%d bringUpUnlocked=%d simHandoffSettled=%d movementType=%d collisionType=%d updateKinematicFromSimulation=%d bodyActivatedThisTick=%d lastAppliedRootSim=%d pendingResets=%d"),
 				static_cast<int32>(BalanceReadyTransition.GetPhase()),
 				bAllowRootBodyModifierSimulation ? 1 : 0,
@@ -5040,7 +5038,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bBodyModifierActivatedThisTick ? 1 : 0,
 				bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
 				PendingBodyModifierCachedResetNames.Num());
-			LastRootBodyModLogSeconds = NowSeconds;
 		}
 
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
@@ -5770,7 +5767,11 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 		EffectiveSettings.MaxAutoUnlockBringUpGroup >= 0
 			? FMath::Min(EffectiveSettings.MaxAutoUnlockBringUpGroup, GetBringUpGroupCount() - 1)
 			: (GetBringUpGroupCount() - 1);
-	if (HighestUnlockedBringUpGroupIndex >= MaxConfiguredAutoUnlockGroup)
+	const bool bLateValidateActive = BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate;
+	const int32 PhaseAwareMaxAutoUnlockGroup = bLateValidateActive
+		? FMath::Min(MaxConfiguredAutoUnlockGroup, 1)
+		: MaxConfiguredAutoUnlockGroup;
+	if (HighestUnlockedBringUpGroupIndex >= PhaseAwareMaxAutoUnlockGroup)
 	{
 		return;
 	}
@@ -7746,7 +7747,7 @@ int32 UPhysAnimComponent::GetBringUpGroupCount()
 
 bool UPhysAnimComponent::ShouldDelayBringUpGroupControlRamp(int32 GroupIndex, int32 NumBringUpGroups)
 {
-	return NumBringUpGroups > 0 && GroupIndex == (NumBringUpGroups - 1);
+	return NumBringUpGroups >= 5 && GroupIndex >= (NumBringUpGroups - 3);
 }
 
 bool UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(
