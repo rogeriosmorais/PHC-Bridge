@@ -174,6 +174,7 @@ public:
 	bool ShouldSuppressPerturbations() const;
 	bool ShouldSuppressResets() const;
 	bool ShouldSuppressMoveSmoke() const;
+	bool IsPhase2RootAuthorityQuarantined() const { return bPhase2RootAuthorityQuarantined; }
 
 	float GetRootBodyModifierSoftSimAlpha() const;
 	float GetProximalControlSoftAlpha(FName BoneName) const;
@@ -234,6 +235,7 @@ private:
 	int32 Phase2RetryCount = 0;
 	float RetryCooldownTimerSeconds = 0.0f;
 	int32 Phase2GuardTickCount = 0;
+	bool bPhase2RootAuthorityQuarantined = false;
 	TMap<FName, FQuat> EntryHoldRotations;
 	bool bHasCertifiedHandoff = false;
 	bool bHasLateValidationProof = false;
