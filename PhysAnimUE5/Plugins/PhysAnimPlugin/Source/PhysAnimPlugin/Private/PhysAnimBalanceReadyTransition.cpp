@@ -274,7 +274,6 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	LateValidationAccumulatedSeconds = 0.0f;
 	LastLateValidateBlockReason.Reset();
 	EntryHoldRotations.Empty();
-	bSafePhase2Denied = false;
 	SafePhase2DenialReason.Reset();
 
 	if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
@@ -430,7 +429,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					? TEXT("phase1_late_validate_baseline_capture_failed")
 					: CaptureReason;
 				Diagnostics.FailureReason = Phase2BlockReason;
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *Phase2BlockReason);
 				Owner->ReleaseTransitionOwnedShellLock();
 				MarkSafePhase2Denied(Phase2BlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
@@ -500,7 +499,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					? TEXT("phase1_late_validate_baseline_capture_failed")
 					: CaptureReason;
 				Diagnostics.FailureReason = Phase2BlockReason;
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *Phase2BlockReason);
 				Owner->ReleaseTransitionOwnedShellLock();
 				MarkSafePhase2Denied(Phase2BlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
@@ -514,7 +513,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				? TEXT("phase1_quiet_timeout_unknown")
 				: TEXT("phase1_quiet_timeout_") + TerminalQuietBlockReason;
 			Diagnostics.FailureReason = TimeoutReason;
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *TimeoutReason);
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
 			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(TimeoutReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *TimeoutReason);
@@ -772,7 +771,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					{
 						const FString DenialReason = TEXT("phase2_upper_only_handoff_safe_denied");
 						Diagnostics.FailureReason = DenialReason;
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *DenialReason);
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *DenialReason);
 						Owner->ReleaseTransitionOwnedShellLock();
 						MarkSafePhase2Denied(DenialReason);
 						return;
@@ -842,7 +841,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					ReturnToPhase1Prepare(Owner, LateValidateBlockReason, TEXT("PHASE1_LATE_VALIDATE_RETURN_TO_PREPARE"));
 					return;
 				}
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *LateValidateBlockReason);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *LateValidateBlockReason);
 				Owner->ReleaseTransitionOwnedShellLock();
 				MarkSafePhase2Denied(LateValidateBlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *LateValidateBlockReason);
@@ -926,7 +925,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				? TEXT("phase1_late_validate_timeout_unknown")
 				: TEXT("phase1_late_validate_timeout_") + LateValidateBlockReason;
 			Diagnostics.FailureReason = TimeoutReason;
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *TimeoutReason);
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
 			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(TimeoutReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *TimeoutReason);
@@ -1198,7 +1197,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			}
 
 			const EBalanceReadyConditionOwner FailureOwner = ClassifyConditionOwner(DenyReason);
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED reason=%s owner=%d"), *DenyReason, static_cast<int32>(FailureOwner));
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED reason=%s owner=%d"), *DenyReason, static_cast<int32>(FailureOwner));
 			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(DenyReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *DenyReason);
@@ -1398,7 +1397,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Inactive ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed ||
-		bSafePhase2Denied)
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied)
 	{
 		ResetCertifiedHandoffState();
 	}
@@ -1862,7 +1861,6 @@ bool FPhysAnimBalanceReadyTransition::ValidateCertifiedHandoff(UPhysAnimComponen
 
 void FPhysAnimBalanceReadyTransition::MarkSafePhase2Denied(const FString& Reason)
 {
-	bSafePhase2Denied = true;
 	SafePhase2DenialReason = Reason;
 	PhaseTimeSeconds = 0.0f;
 	StableHoldAccumulatedSeconds = 0.0f;
@@ -1874,7 +1872,7 @@ void FPhysAnimBalanceReadyTransition::MarkSafePhase2Denied(const FString& Reason
 	RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 	EntryHoldRotations.Empty();
 	ResetTransitionLocalState();
-	InternalPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
+	InternalPhase = EBalanceReadyTransitionPhase::BRT_SafeDenied;
 }
 
 void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
@@ -1967,7 +1965,7 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const
 {
-	if (bSafePhase2Denied)
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied)
 	{
 		return true;
 	}
@@ -1980,7 +1978,7 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicyWrites(FName BoneName) const
 {
-	if (bSafePhase2Denied)
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied)
 	{
 		return true;
 	}
@@ -2002,22 +2000,22 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicyWrites(FName BoneName)
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const
 {
-	return bSafePhase2Denied ||
+	return InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
 }
-bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive() || bSafePhase2Denied; }
+bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive() || HasSafeDenied(); }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const
 {
-	return bSafePhase2Denied ||
+	return InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
 }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const
 {
-	return bSafePhase2Denied ||
+	return InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
@@ -2051,7 +2049,7 @@ float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneNam
 
 bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) const
 {
-	if (bSafePhase2Denied)
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied)
 	{
 		return BalanceTransitionSets::IsTransitionCritical(BoneName) ||
 			BalanceTransitionSets::IsLateValidationUpperBodyOwnershipBone(BoneName);
@@ -2100,7 +2098,7 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 
 float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(const FPhysAnimStabilizationSettings& Settings) const
 {
-	if (!IsActive() && !bSafePhase2Denied)
+	if (!IsActive() && InternalPhase != EBalanceReadyTransitionPhase::BRT_SafeDenied)
 	{
 		return 1.0f;
 	}

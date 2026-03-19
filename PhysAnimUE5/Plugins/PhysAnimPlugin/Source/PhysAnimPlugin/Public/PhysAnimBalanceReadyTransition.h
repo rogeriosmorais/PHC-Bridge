@@ -11,7 +11,8 @@ enum class EBalanceReadyTransitionPhase : uint8
 	BRT_Phase2_RootOn,
 	BRT_Phase3_Settle,
 	BRT_Succeeded,
-	BRT_Failed
+	BRT_Failed,
+	BRT_SafeDenied
 };
 
 enum class EBalanceReadyEntryClassification : uint8
@@ -175,9 +176,10 @@ public:
 	bool IsActive() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive && !IsComplete(); }
 	bool HasSucceeded() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded; }
 	bool HasFailed() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed; }
-	bool IsComplete() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded || InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed || bSafePhase2Denied; }
+	bool HasSafeDenied() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied; }
+	bool IsComplete() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded || InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed || InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied; }
 	bool HasActuallyStarted() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive; }
-	bool HasSafePhase2Denial() const { return bSafePhase2Denied; }
+	bool HasSafePhase2Denial() const { return HasSafeDenied(); }
 	const FString& GetSafePhase2DenialReason() const { return SafePhase2DenialReason; }
 
 	EBalanceReadyTransitionPhase GetPhase() const { return InternalPhase; }
@@ -262,7 +264,6 @@ private:
 	bool bHasLateValidationProof = false;
 	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
 	FPhysAnimLateValidationResult CertifiedLateValidationResult;
-	bool bSafePhase2Denied = false;
 	FString SafePhase2DenialReason;
 
 	FBalanceReadyTransitionDiagnostics Diagnostics;
