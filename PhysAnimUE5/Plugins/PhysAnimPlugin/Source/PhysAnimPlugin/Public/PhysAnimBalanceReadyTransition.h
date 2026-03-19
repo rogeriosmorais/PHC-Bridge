@@ -30,9 +30,14 @@ enum class EBalanceReadyUpperBodyOwnershipMode : uint8
 enum class EBalanceReadyRootOnReadinessClassification : uint8
 {
 	NotReady,
-	Ready,
-	UpperOnlyLateValidationSafeDenied,
 	RootCoupledReady
+};
+
+enum class EBalanceLateValidationOutcome : uint8
+{
+	Outcome_Pending,
+	Outcome_AcceptRootOn,
+	Outcome_SafeDenyUpperOnly
 };
 
 enum class EBalanceReadyConditionOwner : uint8
@@ -90,6 +95,7 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	float MeanTargetDeltaDegrees = 0.0f;
 	float QuietProofDurationSeconds = 0.0f;
 	float LateValidationSustainDurationSeconds = 0.0f;
+	EBalanceLateValidationOutcome LateValidationOutcome = EBalanceLateValidationOutcome::Outcome_Pending;
 	bool bLateValidationCompleted = false;
 };
 

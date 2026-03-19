@@ -137,15 +137,25 @@ namespace BalanceTransitionSets
 	{
 		switch (Classification)
 		{
-		case EBalanceReadyRootOnReadinessClassification::Ready:
-			return TEXT("ready");
-		case EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied:
-			return TEXT("upper_only_late_validation_safe_denied");
 		case EBalanceReadyRootOnReadinessClassification::RootCoupledReady:
 			return TEXT("root_coupled_ready");
 		case EBalanceReadyRootOnReadinessClassification::NotReady:
 		default:
 			return TEXT("not_ready");
+		}
+	}
+
+	static const TCHAR* GetLateValidationOutcomeName(EBalanceLateValidationOutcome Outcome)
+	{
+		switch (Outcome)
+		{
+		case EBalanceLateValidationOutcome::Outcome_AcceptRootOn:
+			return TEXT("accept_root_on");
+		case EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly:
+			return TEXT("safe_deny_upper_only");
+		case EBalanceLateValidationOutcome::Outcome_Pending:
+		default:
+			return TEXT("pending");
 		}
 	}
 
@@ -236,6 +246,32 @@ static bool ValidateRootOnReadinessSnapshot(
 	if (!Snapshot.bRootOnReadinessProven)
 	{
 		OutReason = TEXT("phase2_root_on_readiness_not_proven");
+		return false;
+	}
+
+	return true;
+}
+
+static bool ValidateLateValidationBaselineSnapshot(
+	const FPhysAnimCertifiedHandoffSnapshot& Snapshot,
+	const FPhysAnimStabilizationSettings& Settings,
+	FString& OutReason)
+{
+	// A valid baseline for late validation must already be 'certified' as either 
+	// Outcome_AcceptRootOn (proximal+upper) or Outcome_SafeDenyUpperOnly (upper body only).
+	// Outcome_Pending indicates a transient/partially-shaping topology which is too loose for a stable baseline.
+
+	if (Snapshot.LateValidationOutcome == EBalanceLateValidationOutcome::Outcome_Pending)
+	{
+		OutReason = Snapshot.ProximalSimCount > 0
+			? TEXT("phase1_late_validate_baseline_topology_mismatch_proximal_incomplete")
+			: TEXT("phase1_late_validate_baseline_topology_mismatch_upper_incomplete");
+		return false;
+	}
+
+	if (!Snapshot.bControlAuthoritySettled)
+	{
+		OutReason = TEXT("phase1_late_validate_baseline_control_authority_not_settled");
 		return false;
 	}
 
@@ -672,30 +708,41 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Owner->GetSimulatingBodies(SimulatingBones);
 			float CurrentFrameWorstLinearSpeed = 0.0f;
 			float CurrentFrameWorstAngularSpeed = 0.0f;
-			for (const FName BoneName : SimulatingBones)
+			int32 ProximalSimCount = 0;
+			int32 DistalSimCount = 0;
+			int32 UpperSimCount = 0;
+			for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
 			{
-				if (LiveMesh && (BalanceTransitionSets::IsProximal(BoneName) || BalanceTransitionSets::IsUpperBody(BoneName)))
+				if (SimulatingBones.Contains(BoneName))
 				{
-					const FVector BoneLinearVelocity = LiveMesh->GetPhysicsLinearVelocity(BoneName);
-					const FVector BoneAngularVelocityDegPerSec = LiveMesh->GetPhysicsAngularVelocityInDegrees(BoneName);
-					const float LinearSpeed = BoneLinearVelocity.Size();
-					const float AngularSpeed = BoneAngularVelocityDegPerSec.Size();
-					CurrentFrameWorstLinearSpeed = FMath::Max(CurrentFrameWorstLinearSpeed, LinearSpeed);
-					CurrentFrameWorstAngularSpeed = FMath::Max(CurrentFrameWorstAngularSpeed, AngularSpeed);
-					if (LinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed &&
-						LinearSpeed > Diagnostics.Phase1LateValidateWorstLinearSpeed)
+					if (BalanceTransitionSets::IsProximal(BoneName)) ProximalSimCount++;
+					else if (BalanceTransitionSets::IsDistalLowerLimb(BoneName)) DistalSimCount++;
+					else if (BalanceTransitionSets::IsUpperBody(BoneName)) UpperSimCount++;
+
+					if (LiveMesh && (BalanceTransitionSets::IsProximal(BoneName) || BalanceTransitionSets::IsUpperBody(BoneName)))
 					{
-						Diagnostics.Phase1LateValidateWorstLinearSpeed = LinearSpeed;
-						Diagnostics.Phase1LateValidateWorstLinearSpeedBone = BoneName;
-					}
-					if (AngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed &&
-						AngularSpeed > Diagnostics.Phase1LateValidateWorstAngularSpeed)
-					{
-						Diagnostics.Phase1LateValidateWorstAngularSpeed = AngularSpeed;
-						Diagnostics.Phase1LateValidateWorstAngularSpeedBone = BoneName;
+						const FVector BoneLinearVelocity = LiveMesh->GetPhysicsLinearVelocity(BoneName);
+						const FVector BoneAngularVelocityDegPerSec = LiveMesh->GetPhysicsAngularVelocityInDegrees(BoneName);
+						const float LinearSpeed = BoneLinearVelocity.Size();
+						const float AngularSpeed = BoneAngularVelocityDegPerSec.Size();
+						CurrentFrameWorstLinearSpeed = FMath::Max(CurrentFrameWorstLinearSpeed, LinearSpeed);
+						CurrentFrameWorstAngularSpeed = FMath::Max(CurrentFrameWorstAngularSpeed, AngularSpeed);
+						if (LinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed &&
+							LinearSpeed > Diagnostics.Phase1LateValidateWorstLinearSpeed)
+						{
+							Diagnostics.Phase1LateValidateWorstLinearSpeed = LinearSpeed;
+							Diagnostics.Phase1LateValidateWorstLinearSpeedBone = BoneName;
+						}
+						if (AngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed &&
+							AngularSpeed > Diagnostics.Phase1LateValidateWorstAngularSpeed)
+						{
+							Diagnostics.Phase1LateValidateWorstAngularSpeed = AngularSpeed;
+							Diagnostics.Phase1LateValidateWorstAngularSpeedBone = BoneName;
+						}
 					}
 				}
 			}
+
 			const bool bLateValidationMotionViolatesThreshold =
 				CurrentFrameWorstLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
 				CurrentFrameWorstAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed;
@@ -707,68 +754,75 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			{
 				Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds = 0.0f;
 			}
-		}
 
-		if (bLateValidationThisFrame)
-		{
+			const bool bIsRootCoupledTopology = BalanceTransitionSets::IsRootCoupledReadyHandoff(ProximalSimCount, DistalSimCount, UpperSimCount, false);
+			const bool bIsUpperOnlyTopology = BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(ProximalSimCount, DistalSimCount, UpperSimCount, false);
+
 			LateValidationAccumulatedSeconds += DeltaTime;
-			RootOnReadinessShellHoldAccumulatedSeconds += DeltaTime;
-			const float CurrentShellOffsetCm = Owner->GetCurrentShellPlanarOffsetDeltaCm();
-			const float CurrentShellVelocityDeltaCmPerSecond = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
-			if (!bHasRootOnReadinessShellProofBaseline)
+			if (bIsRootCoupledTopology || (!bIsRootCoupledTopology && !bIsUpperOnlyTopology))
 			{
-				RootOnReadinessShellProofStartOffsetCm = CurrentShellOffsetCm;
-				RootOnReadinessShellProofStartVelocityCmPerSecond = CurrentShellVelocityDeltaCmPerSecond;
-				bHasRootOnReadinessShellProofBaseline = true;
-			}
-			const float ShellOffsetGrowthCm = FMath::Max(0.0f, CurrentShellOffsetCm - RootOnReadinessShellProofStartOffsetCm);
-			const float ShellVelocityGrowthCmPerSecond = FMath::Max(0.0f, CurrentShellVelocityDeltaCmPerSecond - RootOnReadinessShellProofStartVelocityCmPerSecond);
-			const bool bShellProofThisFrame =
-				CurrentShellOffsetCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm &&
-				CurrentShellVelocityDeltaCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond &&
-				ShellOffsetGrowthCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm &&
-				ShellVelocityGrowthCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond &&
-				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle;
-			if (bShellProofThisFrame)
-			{
-				RootOnReadinessShellProofAccumulatedSeconds += DeltaTime;
+				RootOnReadinessShellHoldAccumulatedSeconds += DeltaTime;
+				const float CurrentShellOffsetCm = Owner->GetCurrentShellPlanarOffsetDeltaCm();
+				const float CurrentShellVelocityDeltaCmPerSecond = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+				if (!bHasRootOnReadinessShellProofBaseline)
+				{
+					RootOnReadinessShellProofStartOffsetCm = CurrentShellOffsetCm;
+					RootOnReadinessShellProofStartVelocityCmPerSecond = CurrentShellVelocityDeltaCmPerSecond;
+					bHasRootOnReadinessShellProofBaseline = true;
+				}
+				const float ShellOffsetGrowthCm = FMath::Max(0.0f, CurrentShellOffsetCm - RootOnReadinessShellProofStartOffsetCm);
+				const float ShellVelocityGrowthCmPerSecond = FMath::Max(0.0f, CurrentShellVelocityDeltaCmPerSecond - RootOnReadinessShellProofStartVelocityCmPerSecond);
+				const bool bShellProofThisFrame =
+					CurrentShellOffsetCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm &&
+					CurrentShellVelocityDeltaCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond &&
+					ShellOffsetGrowthCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm &&
+					ShellVelocityGrowthCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond &&
+					Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle;
+				if (bShellProofThisFrame)
+				{
+					RootOnReadinessShellProofAccumulatedSeconds += DeltaTime;
+				}
+				else
+				{
+					RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
+					RootOnReadinessShellProofStartOffsetCm = CurrentShellOffsetCm;
+					RootOnReadinessShellProofStartVelocityCmPerSecond = CurrentShellVelocityDeltaCmPerSecond;
+				}
 			}
 			else
 			{
+				// Upper-only Safe-Deny path does not participate in shell-hold/proof
+				RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 				RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
-				RootOnReadinessShellProofStartOffsetCm = CurrentShellOffsetCm;
-				RootOnReadinessShellProofStartVelocityCmPerSecond = CurrentShellVelocityDeltaCmPerSecond;
+				bHasRootOnReadinessShellProofBaseline = false;
 			}
+
 			// Carry the quiet-proof timer through late validation so the certified handoff
 			// reflects a real sustain window under initial policy influence.
 			QuietWindowAccumulatedSeconds += DeltaTime;
+
 			Diagnostics.Phase1LateValidateGateSource = TEXT("live_late_validate_gate");
-			Diagnostics.Phase1LateValidateGateReason = RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration
+			Diagnostics.Phase1LateValidateGateReason = bIsRootCoupledTopology && CurrentSnapshot.bRootOnReadinessShellHoldSatisfied
 				? TEXT("ready")
-				: TEXT("phase1_late_validate_shell_hold_capped_by_window");
-			Diagnostics.Phase1RootOnReadinessGateReason = CurrentSnapshot.bRootOnReadinessShellHoldSatisfied
+				: bIsUpperOnlyTopology && LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds
+					? TEXT("upper_only_safe_deny")
+					: TEXT("phase1_late_validate_shell_hold_pending");
+
+			Diagnostics.Phase1RootOnReadinessGateReason = bIsRootCoupledTopology && CurrentSnapshot.bRootOnReadinessProven
 				? TEXT("ready")
-				: CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
-					? TEXT("phase1_root_on_readiness_upper_only_late_validation_safe_denied")
-				: CurrentSnapshot.bRootOnReadinessUpperOnlyShellHoldCappedByWindow
-					? TEXT("phase1_root_on_readiness_upper_only_shell_hold_capped_by_window")
+				: bIsUpperOnlyTopology 
+					? TEXT("phase1_root_on_readiness_upper_only_safe_deny_pending")
 					: TEXT("phase1_root_on_readiness_shell_hold_pending");
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
+
 			const bool bCanCompleteAsRootCoupledReady =
-				CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady &&
+				bIsRootCoupledTopology &&
 				CurrentSnapshot.bRootOnReadinessShellHoldSatisfied &&
 				CurrentSnapshot.bRootOnReadinessProven;
 			const bool bCanCompleteAsUpperOnlySafeDeny =
-				CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied &&
+				bIsUpperOnlyTopology &&
 				LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds;
-			const bool bRootCoupledTopologyReachedWithoutShellProof =
-				LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds &&
-				BalanceTransitionSets::IsRootCoupledReadyHandoff(
-					CurrentSnapshot.ProximalSimCount,
-					CurrentSnapshot.DistalSimCount,
-					CurrentSnapshot.UpperBodySimCount,
-					false) &&
-				!CurrentSnapshot.bPreRootOnShellSafetyProofSatisfied;
+
 			if (bCanCompleteAsRootCoupledReady || bCanCompleteAsUpperOnlySafeDeny)
 			{
 				if (!bCanCompleteAsRootCoupledReady &&
@@ -801,7 +855,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				FString CaptureReason;
 				if (CaptureCertifiedHandoff(Owner, Settings, CaptureReason))
 				{
-					if (CertifiedHandoff.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied)
+					if (CertifiedHandoff.LateValidationOutcome == EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly)
 					{
 						const FString DenialReason = TEXT("phase2_upper_only_handoff_safe_denied");
 						Diagnostics.FailureReason = DenialReason;
@@ -817,8 +871,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 							: Diagnostics.Phase1RootOnReadinessGateReason;
 					Diagnostics.Phase1RootOnReadinessGateReason = RootOnReadinessGateReason;
 
-					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] EMIT_READY_HANDOFF classification=%s"), 
-						BalanceTransitionSets::GetRootOnReadinessClassificationName(CertifiedHandoff.RootOnReadinessClassification));
+					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] EMIT_READY_HANDOFF classification=%s outcome=%s"), 
+						BalanceTransitionSets::GetRootOnReadinessClassificationName(CertifiedHandoff.RootOnReadinessClassification),
+						BalanceTransitionSets::GetLateValidationOutcomeName(CertifiedHandoff.LateValidationOutcome));
 					UE_LOG(
 						LogPhysAnimBridge,
 						Log,
@@ -879,11 +934,6 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				MarkSafePhase2Denied(LateValidateBlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *LateValidateBlockReason);
 				return;
-			}
-			if (bRootCoupledTopologyReachedWithoutShellProof)
-			{
-				Diagnostics.Phase1RootOnReadinessGateReason = TEXT("phase2_pre_root_on_shell_correction_safety_proof_pending");
-				Diagnostics.Phase1LateValidateGateReason = TEXT("phase2_pre_root_on_shell_correction_safety_proof_pending");
 			}
 		}
 		else
@@ -1574,7 +1624,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied)
+	if (CurrentSnapshot.LateValidationOutcome == EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly)
 	{
 		OutReason = TEXT("phase2_upper_only_handoff_safe_denied");
 		return false;
@@ -1789,14 +1839,18 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 			UpperSimCount,
 			PelvisBody->IsInstanceSimulatingPhysics())
 			? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+			: EBalanceReadyRootOnReadinessClassification::NotReady;
+
+	OutSnapshot.LateValidationOutcome = 
+		(OutSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
+			? EBalanceLateValidationOutcome::Outcome_AcceptRootOn
 			: (BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(
 					ProximalSimCount,
 					DistalSimCount,
 					UpperSimCount,
-					PelvisBody->IsInstanceSimulatingPhysics()) &&
-				OutSnapshot.bLateValidationCompleted
-				? EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
-				: EBalanceReadyRootOnReadinessClassification::NotReady);
+					PelvisBody->IsInstanceSimulatingPhysics())
+				? EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly
+				: EBalanceLateValidationOutcome::Outcome_Pending);
 	OutSnapshot.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
 	OutSnapshot.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
 	OutSnapshot.QuietProofDurationSeconds = QuietWindowAccumulatedSeconds;
