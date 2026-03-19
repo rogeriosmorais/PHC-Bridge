@@ -555,6 +555,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				: TEXT("phase1_late_validate_shell_hold_capped_by_window");
 			Diagnostics.Phase1RootOnReadinessGateReason = CurrentSnapshot.bRootOnReadinessShellHoldSatisfied
 				? TEXT("ready")
+				: CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
+					? TEXT("phase1_root_on_readiness_upper_only_late_validation_safe_denied")
 				: CurrentSnapshot.bRootOnReadinessUpperOnlyShellHoldCappedByWindow
 					? TEXT("phase1_root_on_readiness_upper_only_shell_hold_capped_by_window")
 					: TEXT("phase1_root_on_readiness_shell_hold_pending");
