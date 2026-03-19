@@ -281,6 +281,11 @@ Any condition that is expected to become true later must name the system respons
 - `postRootOnShellAuthorityPreserved` = transition-owned shell-lock maintenance through guard window
 - `shell/capsule authority handed to BalanceActiveShellAuthority` = Phase 3 settle / ownership-handoff logic
 
+Ownership constraint:
+
+- during balance entry transition, only `BalanceReadyTransition` Phase 2 / guard-window logic may enable pelvis simulation
+- the general component bring-up/runtime-mode pipeline may shape non-root topology during Phase 1, but it must not compete for pelvis/root simulation enablement
+
 ### 11.1 Shell / capsule ownership classes
 
 Balance entry must treat shell/capsule ownership as an explicit domain.
