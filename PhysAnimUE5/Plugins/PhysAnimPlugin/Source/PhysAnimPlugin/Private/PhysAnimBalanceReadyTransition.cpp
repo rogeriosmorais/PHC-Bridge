@@ -1098,7 +1098,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (CurrentSnapshot.bRootOnReadinessProven)
+	if (!CurrentSnapshot.bRootOnReadinessProven)
 	{
 		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
 		return false;
@@ -1465,7 +1465,10 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const
 		return true;
 	}
 
-	return IsActive() && InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare;
+	return IsActive() &&
+		(InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+		 InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
+		 InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn);
 }
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicyWrites(FName BoneName) const
