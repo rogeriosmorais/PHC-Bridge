@@ -423,9 +423,11 @@ For the first permitted root-on-success path, the contract is:
 - certified handoff topology = `RootCoupledReadyHandoff`
 - pre-root-on readiness classification = `root_coupled_ready`
 - `PreRootOnShellSafetyProof` = true at the moment Phase 2 begins
+- `shellAuthorityMode = TransitionOwnedShellLocked`
 - distal set remains kinematic
 - proximal set remains simulated
 - upper-body ownership remains unchanged from late validation through the Phase 2 guard window
+- shell reference is re-anchored once before the proof window and not reseeded before Phase 3
 
 ### Phase 2 denial rule
 
@@ -696,6 +698,7 @@ The most coherent design is:
 4. In Phase 2:
    - validate that the certified handoff state is still true
    - deny entry safely if the handoff proof has regressed
+   - require transition-owned shell lock before root-on
    - enable pelvis/root simulation
    - no same-frame policy drive into the transition-critical set
    - abort cleanly if root-on spike thresholds are exceeded

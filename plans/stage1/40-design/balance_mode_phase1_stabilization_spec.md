@@ -291,6 +291,26 @@ During Phase 1:
 
 If shell motion is unavoidable, it is allowed only as observed contamination and must reset the quiet window.
 
+For `RootCoupledReadyHandoff`, Phase 1 late validation must additionally define shell authority explicitly.
+
+Two modes are allowed:
+
+- `GameplayShellObservedOnly`
+- `TransitionOwnedShellLocked`
+
+Interpretation rule:
+
+- `GameplayShellObservedOnly` may certify a safe-denial handoff only
+- `TransitionOwnedShellLocked` is required if Phase 1 intends to hand Phase 2 a truthfully root-on-ready state
+
+If `TransitionOwnedShellLocked` is selected, Phase 1 must:
+
+- suppress CharacterMovement corrective motion before the shell proof window begins
+- suppress capsule/gameplay shell correction before the shell proof window begins
+- re-anchor the shell reference exactly once to the current root state before the shell proof window begins
+- hold that shell reference unchanged through the late-validation shell proof window
+- emit whether transition-owned shell lock remained uncontaminated for the full proof window
+
 ---
 
 ## 8. Phase 1 Entry Actions
@@ -553,6 +573,9 @@ Minimum additional handoff fields:
 - shell planar offset trend over the late-validation window
 - shell planar velocity trend over the late-validation window
 - whether any shell/capsule corrective owner was active during the late-validation window
+- shell authority mode used during the late-validation shell proof window
+- whether the shell reference was re-anchored before the proof window
+- whether any shell-reference reseed occurred after the proof window began
 
 Interpretation rule:
 
@@ -796,6 +819,7 @@ The recommended default implementation is:
    - allow no pelvis/root reset
    - accumulate quiet window only after topology, suppression, control-authority settle, and target continuity are already correct
    - after quiet success, run a bounded late-validation sustain under initial policy influence
+   - if the goal is true Phase 2 success, transfer shell authority into `TransitionOwnedShellLocked` before the shell proof window
    - fail explicitly if upper-body flare or sim-coverage regression appears during sustain
 
 3. On success:

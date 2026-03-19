@@ -301,6 +301,71 @@ If `RootCoupledReadyHandoff` is present but `PreRootOnShellSafetyProof` is false
 
 - `phase2_pre_root_on_shell_correction_safety_not_proven`
 
+### 6.2.2 Shell authority contract required to make the proof pass
+
+The current runtime evidence shows that `PreRootOnShellSafetyProof` will remain false if normal gameplay shell ownership is left active up to the root-on boundary.
+
+Therefore the design must define an explicit shell-authority mode for the proof window.
+
+This document defines two modes:
+
+- `GameplayShellObservedOnly`
+- `TransitionOwnedShellLocked`
+
+Interpretation rule:
+
+- `GameplayShellObservedOnly` is compatible with safe denial
+- `TransitionOwnedShellLocked` is the required mode for the first permitted true root-on-success path
+
+#### `GameplayShellObservedOnly`
+
+Behavior:
+
+- existing capsule / CharacterMovement / gameplay shell ownership may remain active
+- shell metrics are observed only
+- any corrective owner activity forces `PreRootOnShellSafetyProof = false`
+
+This mode is valid for:
+
+- `UpperOnlySafeDenyHandoff`
+- `RootCoupledReadyHandoff` safe denial
+
+This mode is not sufficient for:
+
+- true Phase 2 root-on success
+
+#### `TransitionOwnedShellLocked`
+
+Behavior:
+
+- before the shell proof window begins, transition logic takes ownership of the actor/capsule shell state required for root-on
+- CharacterMovement corrective motion is disabled
+- capsule-driven planar correction is disabled
+- bridge/gameplay movement drive is disabled
+- the shell reference used by the proof window is re-anchored once to the current pelvis/root state
+- after that re-anchor, the shell reference must remain unchanged through the proof window, root-on frame, and Phase 2 guard window
+
+Required invariants while `TransitionOwnedShellLocked` is active:
+
+1. no CharacterMovement movement mode transition that can inject planar correction
+2. no capsule relocation or sweep-based correction owned by gameplay movement
+3. no bridge-owned shell translation assist
+4. no shell-reference reseed after the proof window starts
+5. no root-on-frame shell snap
+
+Required logging fields:
+
+- `shellAuthorityMode`
+- `shellReferenceReanchored`
+- `characterMovementSuppressed`
+- `capsuleCorrectionSuppressed`
+- `bridgeShellDriveSuppressed`
+
+If any invariant is violated while this mode is active:
+
+- `PreRootOnShellSafetyProof` becomes false
+- Phase 2 must deny or abort by class rather than continue optimistically
+
 ### 6.3 Root-on-readiness proof for `RootCoupledReadyHandoff`
 
 `RootCoupledReadyHandoff` is root-on-ready only if all of the following are true continuously for a named proof window before `SetPhase(BRT_Phase2_RootOn)`:
@@ -318,6 +383,8 @@ If `RootCoupledReadyHandoff` is present but `PreRootOnShellSafetyProof` is false
 11. the proximal set remains bounded under initial policy influence with no same-window flare large enough to predict immediate root-on contamination
 12. no body in the proximal or upper-body sets exceeds the named pre-root-on maximum linear or angular speed thresholds
 13. `PreRootOnShellSafetyProof` is true for the same handoff window and remains true at the moment Phase 2 begins
+14. `shellAuthorityMode = TransitionOwnedShellLocked`
+15. the shell reference was re-anchored exactly once before the proof window and not reseeded afterward
 
 The proof must emit, at minimum:
 
@@ -332,6 +399,7 @@ The proof must emit, at minimum:
 - proof-window duration actually achieved
 - shell-safety proof duration actually achieved
 - shell offset and velocity deltas at proof completion
+- shell authority mode at proof completion
 
 If any required field is absent or unstable, Phase 2 must deny safely.
 
@@ -397,6 +465,12 @@ During Phase 2:
 
 If shell correction occurs materially during Phase 2, the transition must abort.
 
+For the first permitted true root-on-success path:
+
+- the runtime must enter `TransitionOwnedShellLocked` before the shell proof window begins
+- that mode must remain active through the full Phase 2 guard window
+- returning shell authority to gameplay systems is deferred to Phase 3 or later
+
 ---
 
 ## 8. Phase 2 Frame Sequence
@@ -431,6 +505,8 @@ Before root-on occurs, the runtime must ensure all are true on the entry frame:
 - locomotion entry suppressed
 - shell assistance suppressed
 - CharacterMovement correction suppressed
+- `TransitionOwnedShellLocked` already active
+- shell reference already re-anchored to current root
 
 ## 8.3 Execute root-on
 
@@ -441,6 +517,10 @@ Root-on means:
 - pelvis/root simulation validity is re-read and confirmed
 
 This must be an explicit transition-owned action.
+
+Hard rule:
+
+- root-on must not be the same frame that shell authority transfers from gameplay to transition ownership
 
 ## 8.4 Validate immediate root-on result
 
@@ -502,6 +582,17 @@ Phase 2 must not allow distal re-simulation during the guard window.
 Upper-body topology may remain unchanged from the Phase 1 exit state, provided it does not introduce material root contamination.
 
 If upper-body simulation materially contributes to root-on spike behavior, the design must be revised explicitly.
+
+## 9.5 Shell topology / authority state
+
+The first permitted true root-on-success path requires:
+
+- handoff topology = `RootCoupledReadyHandoff`
+- shell authority mode = `TransitionOwnedShellLocked`
+- gameplay shell authority = suppressed
+- shell reference = re-anchored once before proof, then held fixed through guard window
+
+This is the first non-upper-only handoff topology plus shell-ownership topology that may truthfully permit Phase 2.
 
 ---
 
@@ -821,14 +912,15 @@ The recommended default implementation is:
 1. Enter Phase 2 only after full Phase 1 quiet proof
 2. Require a valid certified handoff payload at the moment Phase 2 begins
 3. Require completed Phase 1 late-validation sustain, not just pre-policy quietness
-4. Deny Phase 2 safely if sim coverage, suppression state, target continuity, or upper-body stability regressed
-4. Freeze policy writes, resets, locomotion, and shell assistance
-5. Flip only `pelvis` to simulated
-6. Keep proximal and distal transition-critical sets kinematic through the guard window
-7. Forbid resets and policy writes for the entire guard window
-8. Abort immediately on threshold breach
-9. Recover fully to BridgeActive
-10. Deny automatic retry after repeated unchanged root-on spikes
+4. Require `TransitionOwnedShellLocked` and a passing `PreRootOnShellSafetyProof`
+5. Deny Phase 2 safely if sim coverage, suppression state, target continuity, upper-body stability, or shell authority proof regressed
+6. Freeze policy writes, resets, locomotion, and shell assistance
+7. Flip only `pelvis` to simulated
+8. Keep proximal set simulated and distal set kinematic through the guard window
+9. Forbid resets, shell reseeds, and policy writes for the entire guard window
+10. Abort immediately on threshold breach
+11. Recover fully to BridgeActive
+12. Deny automatic retry after repeated unchanged root-on spikes
 
 This is intentionally conservative.
 
