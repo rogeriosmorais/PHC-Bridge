@@ -1634,9 +1634,26 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.ProximalSimCount = ProximalSimCount;
 	OutSnapshot.DistalSimCount = DistalSimCount;
 	OutSnapshot.UpperBodySimCount = UpperSimCount;
+	const EBalanceReadyRootOnReadinessClassification RootOnReadinessClassification =
+		BalanceTransitionSets::IsRootCoupledReadyHandoff(
+			ProximalSimCount,
+			DistalSimCount,
+			UpperSimCount,
+			PelvisBody->IsInstanceSimulatingPhysics())
+			? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+			: (BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(
+					ProximalSimCount,
+					DistalSimCount,
+					UpperSimCount,
+					PelvisBody->IsInstanceSimulatingPhysics())
+				? EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
+				: EBalanceReadyRootOnReadinessClassification::NotReady);
+
 	OutSnapshot.UpperBodyOwnershipMode = bHasCertifiedHandoff
 		? CertifiedHandoff.UpperBodyOwnershipMode
-		: ((UpperSimCount == 0) ? EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold : EBalanceReadyUpperBodyOwnershipMode::None);
+		: ((RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::NotReady)
+			? EBalanceReadyUpperBodyOwnershipMode::None
+			: EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold);
 	OutSnapshot.bPolicySuppressed = ShouldSuppressPolicy();
 	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
 	const int32 FinalBringUpGroupIndex = Owner->GetBringUpGroupCount() - 1;
@@ -1714,20 +1731,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 			UpperSimCount,
 			PelvisBody->IsInstanceSimulatingPhysics());
 
-	OutResult.RootOnReadinessClassification =
-		BalanceTransitionSets::IsRootCoupledReadyHandoff(
-			ProximalSimCount,
-			DistalSimCount,
-			UpperSimCount,
-			PelvisBody->IsInstanceSimulatingPhysics())
-			? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
-			: (BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(
-					ProximalSimCount,
-					DistalSimCount,
-					UpperSimCount,
-					PelvisBody->IsInstanceSimulatingPhysics())
-				? EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
-				: EBalanceReadyRootOnReadinessClassification::NotReady);
+	OutResult.RootOnReadinessClassification = RootOnReadinessClassification;
 
 	OutResult.Outcome = 
 		(OutResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
@@ -2106,7 +2110,8 @@ EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOw
 		return EBalanceReadyConditionOwner::Phase1PolicyRouting;
 	}
 	if (Reason.StartsWith(TEXT("phase1_pending_reset")) ||
-		Reason == TEXT("phase2_reset_violation"))
+		Reason == TEXT("phase2_reset_violation") ||
+		Reason == TEXT("phase3_reset_pending"))
 	{
 		return EBalanceReadyConditionOwner::Phase1ResetSuppression;
 	}
@@ -2116,7 +2121,8 @@ EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOw
 	{
 		return EBalanceReadyConditionOwner::ShellAuthorityTransfer;
 	}
-	if (Reason == TEXT("phase2_shell_correction_material"))
+	if (Reason == TEXT("phase2_shell_correction_material") ||
+		Reason == TEXT("phase3_material_shell_correction"))
 	{
 		return EBalanceReadyConditionOwner::ShellAuthorityMaintenance;
 	}
@@ -2150,7 +2156,8 @@ EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOw
 		return EBalanceReadyConditionOwner::Phase1PolicyRouting;
 	}
 	if (Reason == TEXT("phase1_pending_reset_not_discharged") ||
-		Reason == TEXT("phase2_reset_violation"))
+		Reason == TEXT("phase2_reset_violation") ||
+		Reason == TEXT("phase3_reset_pending"))
 	{
 		return EBalanceReadyConditionOwner::Phase1ResetSuppression;
 	}
@@ -2158,7 +2165,8 @@ EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOw
 	{
 		return EBalanceReadyConditionOwner::ShellAuthorityTransfer;
 	}
-	if (Reason == TEXT("phase2_shell_correction_material"))
+	if (Reason == TEXT("phase2_shell_correction_material") ||
+		Reason == TEXT("phase3_material_shell_correction"))
 	{
 		return EBalanceReadyConditionOwner::ShellAuthorityMaintenance;
 	}
@@ -2168,7 +2176,8 @@ EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOw
 	{
 		return EBalanceReadyConditionOwner::Phase2RootOnExecution;
 	}
-	if (Reason == TEXT("phase2_topology_not_preserved"))
+	if (Reason == TEXT("phase2_topology_not_preserved") ||
+		Reason == TEXT("phase3_topology_regressed"))
 	{
 		return EBalanceReadyConditionOwner::Phase2TopologyEnforcement;
 	}
@@ -2301,6 +2310,21 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	if (Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle)
 	{
 		OutReason = TEXT("phase3_startup_or_gameplay_authority_reclaimed");
+		return false;
+	}
+
+	// Section 17.3 - no reset pending
+	if (!Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
+	{
+		OutReason = TEXT("phase3_reset_pending");
+		return false;
+	}
+
+	// Section 17.3 - no material shell correction
+	if (Owner->GetCurrentShellPlanarOffsetDeltaCm() > Settings.BalancePhase2AbortShellOffsetDelta ||
+		Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond() > Settings.BalancePhase2AbortShellVelocityDelta)
+	{
+		OutReason = TEXT("phase3_material_shell_correction");
 		return false;
 	}
 
