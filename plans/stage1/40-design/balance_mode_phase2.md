@@ -303,6 +303,11 @@ If `RootCoupledReadyHandoff` is present but `PreRootOnShellSafetyProof` is false
 
 - `phase2_pre_root_on_shell_correction_safety_not_proven`
 
+Owner rule:
+
+- making this proof become true is owned by Phase 1 topology shaping plus balance-entry shell-authority transfer plus transition-owned shell-lock maintenance
+- if those owners are not active or cannot materially change the inputs, Phase 2 must deny rather than wait implicitly
+
 ### 6.2.2 Shell authority contract required to make the proof pass
 
 The current runtime evidence shows that `PreRootOnShellSafetyProof` will remain false if normal gameplay shell ownership is left active up to the root-on boundary.
@@ -367,6 +372,10 @@ If any invariant is violated while this mode is active:
 
 - `PreRootOnShellSafetyProof` becomes false
 - Phase 2 must deny or abort by class rather than continue optimistically
+
+Owner rule:
+
+- maintaining `TransitionOwnedShellLocked` invariants through proof, root-on, and guard window is owned by the transition-owned shell-lock maintenance logic, not by observation-only diagnostics
 
 ### 6.2.3 Startup/gameplay authority override requirement
 
@@ -598,6 +607,11 @@ Upper-body topology may remain unchanged from the Phase 1 exit state, provided i
 
 If upper-body simulation materially contributes to root-on spike behavior, the design must be revised explicitly.
 
+Owner rule:
+
+- until revised, upper-body topology/ownership is owned by the Phase 1 upper-body ownership controller and is expected to remain unchanged during Phase 2
+- if upper-body contribution is expected to change as part of convergence, the owner must be Phase 1 topology/ownership shaping, not Phase 2 guard-window improvisation
+
 ## 9.5 Shell topology / authority state
 
 The first permitted true root-on-success path requires:
@@ -727,6 +741,14 @@ These may retry automatically only if recovery changes something material and th
 - `phase2_topology_not_preserved`
 - `phase2_guard_window_interrupted_by_transient_contamination`
 
+Owner rule for retryable classes:
+
+- `phase2_root_not_confirmed` change owner = Phase 2 root-on body-modifier flip / confirmation logic
+- `phase2_topology_not_preserved` change owner = Phase 2 body-modifier/runtime-mode enforcement, with Phase 1 topology shaping as the fallback owner if recovery must reshape before another attempt
+- `phase2_guard_window_interrupted_by_transient_contamination` change owner = transition-owned shell-lock maintenance / guard-window authority suppression
+
+If no owner can describe what changed materially before retry, the failure is not retryable in practice.
+
 ## 14.2 Non-retryable failure classes
 
 These should block automatic retry until code/design changes or explicit user action:
@@ -762,6 +784,13 @@ Required recovery actions:
 - ensure no cached reset remains armed from the failed attempt
 - ensure the runtime is not left in a half-root-on state
 - release transition-owned shell lock only as part of coherent recovery
+
+Owner map for recovery:
+
+- restoring BridgeActive topology = BridgeActive body-modifier/runtime-mode restoration logic
+- clearing transition-local suppressions and guard-window state = transition controller recovery logic
+- clearing stale reset state = reset suppression / recovery logic
+- handing shell/capsule authority back coherently = shell-authority transfer lifecycle
 
 Not allowed:
 - remaining in a partially simulated post-root-on topology while claiming recovery

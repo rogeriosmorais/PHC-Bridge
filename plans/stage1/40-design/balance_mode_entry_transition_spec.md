@@ -256,11 +256,30 @@ If a condition is Transition-owned, preflight must not reject because it is curr
 
 Specifically:
 
-- `finalGroupRampInactive` -> External-owned. Valid queue blocker.
-- `policyInfluenceBelowThreshold` -> External-owned. Valid queue blocker.
+- `finalGroupRampInactive` -> External-owned by the BridgeActive bring-up controller (`AdvanceBringUpState` / final-group control-ramp logic). Valid queue blocker.
+- `policyInfluenceBelowThreshold` -> External-owned by the BridgeActive policy-influence ramp controller (`CalculateCurrentPolicyInfluenceAlpha` lifecycle after final-group settle). Valid queue blocker.
 - `pelvisBodyNotSimulating` -> **Transition-owned. Must not be a permanent preflight rejection.**
-- `simCount=21 distalSim=16` -> not automatically invalid; if the transition needs a different topology, Phase 1 must create it.
-- `shell/capsule authority still owned by gameplay systems` -> must have an explicit owner; it cannot remain an ownerless blocker
+- `simCount=21 distalSim=16` -> not automatically invalid; if the transition needs a different topology, Phase 1 body-modifier topology shaping owns changing it.
+- `shell/capsule authority still owned by gameplay systems` -> Transition-owned once the success path commits to `TransitionOwnedShellLocked`; startup movement lock may seed suppression, but the dedicated balance-entry shell-lock lifecycle owns the actual transfer
+
+### 11.2 Owner map for changing conditions
+
+Any condition that is expected to become true later must name the system responsible for making it true.
+
+- `finalGroupRampActive` owner = BridgeActive bring-up controller
+- `policyInfluenceAtThreshold` owner = BridgeActive policy-influence ramp controller
+- `transitionTopologyAchieved` owner = Phase 1 body-modifier topology shaping
+- `policySuppressionAppliedToTransitionSet` owner = Phase 1 transition policy-routing logic
+- `pendingCachedResetsDischargedOrPrevented` owner = Phase 1 reset suppression / transition reset policy
+- `upperBodyOwnershipModeStabilized` owner = Phase 1 upper-body ownership controller
+- `TransitionOwnedShellLocked` active = balance-entry shell-authority transfer lifecycle
+- `shellReferenceReanchoredBeforeProof` = balance-entry shell-authority transfer lifecycle
+- `startupUnlockSuppressedDuringEntry` = startup movement-lock / balance-entry shell-lock arbitration logic
+- `PreRootOnShellSafetyProof` inputs become valid = combination of Phase 1 topology shaping, shell-authority transfer, and startup/gameplay suppression logic
+- `pelvisBodySimulating` at root-on = Phase 2 root-on body-modifier flip
+- `postRootOnTopologyPreserved` = Phase 2 body-modifier/runtime-mode enforcement
+- `postRootOnShellAuthorityPreserved` = transition-owned shell-lock maintenance through guard window
+- `shell/capsule authority handed to BalanceActiveShellAuthority` = Phase 3 settle / ownership-handoff logic
 
 ### 11.1 Shell / capsule ownership classes
 
@@ -429,6 +448,18 @@ Examples of invalidating regressions:
 - target continuity exceeds the named entry bounds
 - a cached reset or topology flip becomes pending
 - upper-body anchoring/stability policy no longer matches the certified handoff topology
+
+### 12.1 Handoff invalidation owner map
+
+When a certified handoff regresses, the next action must be owned by the subsystem that can actually change the regressed condition.
+
+- `sim coverage collapses below certified handoff` -> owner = Phase 1 body-modifier topology shaping; return to Phase 1, not queue-only denial
+- `policy suppression no longer active` -> owner = Phase 1 transition policy-routing logic; return to Phase 1 unless the source runtime exited BridgeActive
+- `target continuity exceeds named bounds` -> owner = Phase 1 hold-reference / control-target continuity logic; return to Phase 1
+- `cached reset becomes pending` -> owner = Phase 1 reset suppression / recovery logic; return to Phase 1 or recovery
+- `upper-body ownership/stability regresses` -> owner = Phase 1 upper-body ownership controller; return to Phase 1
+- `shell lock released or reseeded` -> owner = balance-entry shell-authority transfer lifecycle; deny Phase 2 and return to Phase 1 only if that lifecycle can re-establish proof
+- `startup/gameplay ownership reclaims shell lock` -> owner = startup-vs-balance shell ownership arbitration logic; deny Phase 2 and route through recovery if arbitration is not immediately restorable
 
 ## 13. Phase 2: Root On
 

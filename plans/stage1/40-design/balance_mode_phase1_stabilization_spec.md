@@ -317,6 +317,13 @@ If `TransitionOwnedShellLocked` is selected, Phase 1 must:
 - hold that shell reference unchanged through the late-validation shell proof window
 - emit whether transition-owned shell lock remained uncontaminated for the full proof window
 
+Owner rule:
+
+- CharacterMovement suppression owner = balance-entry shell-authority transfer lifecycle
+- capsule/gameplay shell-correction suppression owner = balance-entry shell-authority transfer lifecycle
+- shell-reference re-anchor owner = balance-entry shell-authority transfer lifecycle
+- shell-reference hold owner = transition-owned shell-lock maintenance
+
 ### 7.6 Startup lock and balance-entry shell lock must be distinct
 
 Startup movement lock may seed suppression, but once Phase 1 transfers into `TransitionOwnedShellLocked`, startup-ready codepaths must no longer own release of CharacterMovement/capsule authority.
@@ -635,6 +642,15 @@ If any of the following regress, the runtime must invalidate readiness and log t
 - a reset, release, or topology flip becomes pending
 - shell lock is released or reseeded
 - startup movement unlock fires after shell lock transfer
+
+Owner map for these regressions:
+
+- topology regression -> Phase 1 body-modifier topology shaping owns re-establishing it
+- policy-suppression regression -> Phase 1 transition policy-routing owns re-establishing it
+- target-continuity regression -> Phase 1 hold-reference / target continuity logic owns re-establishing it
+- reset or topology-flip pending -> Phase 1 reset suppression / recovery logic owns clearing it
+- shell lock released or reseeded -> balance-entry shell-authority transfer lifecycle owns re-establishing it
+- startup movement unlock fires after shell lock transfer -> startup-vs-balance shell ownership arbitration owns preventing recurrence
 
 Not allowed:
 - advancing on time alone
