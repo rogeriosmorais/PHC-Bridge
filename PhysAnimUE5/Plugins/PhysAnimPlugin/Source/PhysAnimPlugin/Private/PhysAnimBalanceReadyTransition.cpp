@@ -533,7 +533,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			// reflects a real sustain window under initial policy influence.
 			QuietWindowAccumulatedSeconds += DeltaTime;
 			Diagnostics.Phase1LateValidateGateSource = TEXT("live_late_validate_gate");
-			Diagnostics.Phase1LateValidateGateReason = TEXT("ready");
+			Diagnostics.Phase1LateValidateGateReason = RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration
+				? TEXT("ready")
+				: TEXT("phase1_late_validate_shell_hold_capped_by_window");
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
 			if (LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds)
 			{
