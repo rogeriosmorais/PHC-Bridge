@@ -47,7 +47,7 @@ namespace
 	constexpr float PhysAnimPieG2PresentationLeadInSeconds = 1.0f;
 	constexpr float PhysAnimPieG2PresentationDurationSeconds = 35.0f;
 	constexpr float PhysAnimPieBalanceModeSmokeLeadInSeconds = 1.0f;
-	constexpr float PhysAnimPieBalanceModeSmokeDurationSeconds = 10.0f;
+	constexpr float PhysAnimPieBalanceModeSmokeDurationSeconds = 35.0f;
 	constexpr float PhysAnimPieSmokeStartTimeoutSeconds = 30.0f;
 	constexpr float PhysAnimPieSmokeStopTimeoutSeconds = 30.0f;
 
