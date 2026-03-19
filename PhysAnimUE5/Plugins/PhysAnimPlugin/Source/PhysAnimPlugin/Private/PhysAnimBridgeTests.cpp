@@ -47,7 +47,7 @@ namespace
 	constexpr float PhysAnimPieG2PresentationLeadInSeconds = 1.0f;
 	constexpr float PhysAnimPieG2PresentationDurationSeconds = 35.0f;
 	constexpr float PhysAnimPieBalanceModeSmokeLeadInSeconds = 1.0f;
-	constexpr float PhysAnimPieBalanceModeSmokeDurationSeconds = 35.0f;
+	constexpr float PhysAnimPieBalanceModeSmokeDurationSeconds = 15.0f;
 	constexpr float PhysAnimPieSmokeStartTimeoutSeconds = 30.0f;
 	constexpr float PhysAnimPieSmokeStopTimeoutSeconds = 30.0f;
 
@@ -701,7 +701,7 @@ namespace
 		TestTrue(
 			TEXT("UE runtime world forward stays Proto runtime forward"),
 			UeWorldRotationVectorToProtoRuntime(FVector::ForwardVector).Equals(FVector::ForwardVector, KINDA_SMALL_NUMBER));
-		
+
 		const FVector SamplePos(100.0f, 0.0f, 0.0f);
 		TestTrue(
 			TEXT("UE runtime world position is scaled to meters (100cm -> 1m)"),
@@ -3689,15 +3689,15 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 				return true;
 			},
 			PhysAnimPieSmokeStartTimeoutSeconds));
-		
-		// The scenarios themselves handle the timing. 
+
+		// The scenarios themselves handle the timing.
 		// There are 13 scenarios (1 no-push + 4 dirs * 3 mags).
 		// Each scenario needs some time to settle and recover.
 		// Let's wait for a generous amount of time or until it stops.
 		AddCommand(new FWaitLatentCommand(1.0f));
 		AddCommand(new FExecPieConsoleCommand(TEXT("pa.StartBalanceMode")));
-		
-		// Wait for scenarios to complete. 
+
+		// Wait for scenarios to complete.
 		// We'll wait up to 120 seconds or until the component is no longer in balance mode.
 		AddCommand(new FUntilCommand(
 			[]() -> bool
