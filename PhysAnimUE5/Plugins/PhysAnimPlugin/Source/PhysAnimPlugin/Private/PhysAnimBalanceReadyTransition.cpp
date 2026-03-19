@@ -1630,7 +1630,9 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.ProximalSimCount = ProximalSimCount;
 	OutSnapshot.DistalSimCount = DistalSimCount;
 	OutSnapshot.UpperBodySimCount = UpperSimCount;
-	OutSnapshot.UpperBodyOwnershipMode = (UpperSimCount == 0) ? EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold : EBalanceReadyUpperBodyOwnershipMode::None;
+	OutSnapshot.UpperBodyOwnershipMode = bHasCertifiedHandoff
+		? CertifiedHandoff.UpperBodyOwnershipMode
+		: ((UpperSimCount == 0) ? EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold : EBalanceReadyUpperBodyOwnershipMode::None);
 	OutSnapshot.bPolicySuppressed = ShouldSuppressPolicy();
 	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
 	const int32 FinalBringUpGroupIndex = Owner->GetBringUpGroupCount() - 1;
