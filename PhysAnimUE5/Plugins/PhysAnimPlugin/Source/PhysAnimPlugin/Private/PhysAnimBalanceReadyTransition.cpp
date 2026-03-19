@@ -113,12 +113,12 @@ namespace BalanceTransitionSets
 
 	static bool IsUpperOnlySafeDenyHandoff(int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount, bool bRootSimulating)
 	{
-		return false;
+		return !bRootSimulating && ProximalSimCount == 0 && DistalSimCount == 0 && UpperSimCount > 0;
 	}
 
 	static bool IsRootCoupledReadyHandoff(int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount, bool bRootSimulating)
 	{
-		return !bRootSimulating && ProximalSimCount == 5 && DistalSimCount == 0 && UpperSimCount == 0;
+		return !bRootSimulating && ProximalSimCount == 5 && DistalSimCount == 0 && UpperSimCount >= 4;
 	}
 
 	static const TCHAR* GetUpperBodyOwnershipModeName(EBalanceReadyUpperBodyOwnershipMode Mode)
@@ -351,11 +351,6 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 	if (!Owner || !Owner->GetMeshComponent() || !Owner->GetOwner())
 	{
 		return EBalanceReadyEntryClassification::Preflight_HardFailure;
-	}
-
-	if (!Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
-	{
-		return EBalanceReadyEntryClassification::Preflight_QueueBlock;
 	}
 
 	if (Owner->CalculateCurrentPolicyInfluenceAlpha(Settings) < Settings.BalanceEntryMinPolicyAlpha)
@@ -1744,11 +1739,16 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.bRootOnReadinessFinalBringUpControlSettled &&
 		OutSnapshot.bRootOnReadinessPolicyInfluenceSettled &&
 		OutSnapshot.bPreRootOnShellSafetyProofSatisfied &&
-		BalanceTransitionSets::IsRootCoupledReadyHandoff(
+		(BalanceTransitionSets::IsRootCoupledReadyHandoff(
 			ProximalSimCount,
 			DistalSimCount,
 			UpperSimCount,
-			PelvisBody->IsInstanceSimulatingPhysics() );
+			PelvisBody->IsInstanceSimulatingPhysics()) ||
+		BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(
+			ProximalSimCount,
+			DistalSimCount,
+			UpperSimCount,
+			PelvisBody->IsInstanceSimulatingPhysics()));
 	OutSnapshot.RootOnReadinessClassification =
 		OutSnapshot.bRootOnReadinessProven
 			? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
@@ -2099,16 +2099,16 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 	{
-		// Late validation keeps the critical chain and apex anchored, but lets the upper limbs stay simulated
-		// so the sustain proof covers the proximal root-coupled handoff before pelvis root-on.
+		// Late validation keeps the root and lower body kinematic while preserving the full upper-body
+		// ownership mode expected by the certified handoff snapshot.
 		return BalanceTransitionSets::IsRoot(BoneName) ||
 			BalanceTransitionSets::IsDistalLowerLimb(BoneName) ||
-			BalanceTransitionSets::IsLateValidationUpperBodyOwnershipBone(BoneName);
+			BalanceTransitionSets::IsUpperBody(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
 		return BalanceTransitionSets::IsDistalLowerLimb(BoneName) ||
-			BalanceTransitionSets::IsLateValidationUpperBodyOwnershipBone(BoneName);
+			BalanceTransitionSets::IsUpperBody(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
 	{

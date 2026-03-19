@@ -2496,12 +2496,6 @@ bool UPhysAnimComponent::EvaluateBalanceModeQueueGates(const FPhysAnimStabilizat
 		return false;
 	}
 
-	if (!PendingBodyModifierCachedResetNames.IsEmpty())
-	{
-		OutReason = TEXT("queue_deferred_resets_pending");
-		return false;
-	}
-
 	return true;
 }
 
@@ -2646,8 +2640,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 			
 			if (!BalanceReadyTransition.HasActuallyStarted())
 			{
-				// Hard preflight failure (invalid source state etc.)
-				bPendingBalanceModeStartRequest = false;
+				// Keep the request pending so the transition can retry once the runtime is ready.
 			}
 		}
 	}
