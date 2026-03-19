@@ -139,10 +139,13 @@ static bool ValidateRootOnReadinessSnapshot(
 
 	if (!Snapshot.bRootOnReadinessShellHoldSatisfied)
 	{
-		OutReason = Snapshot.bLateValidationCompleted &&
-			Snapshot.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase1LateValidateRequiredSeconds
-			? TEXT("phase2_root_on_readiness_shell_hold_capped_by_late_validate_window")
-			: TEXT("phase2_root_on_readiness_shell_hold_not_completed");
+		OutReason = Snapshot.RootOnReadinessClassification ==
+			EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
+			? TEXT("phase2_root_on_readiness_upper_only_late_validation_safe_denied")
+			: Snapshot.bLateValidationCompleted &&
+				Snapshot.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase1LateValidateRequiredSeconds
+				? TEXT("phase2_root_on_readiness_shell_hold_capped_by_late_validate_window")
+				: TEXT("phase2_root_on_readiness_shell_hold_not_completed");
 		return false;
 	}
 
