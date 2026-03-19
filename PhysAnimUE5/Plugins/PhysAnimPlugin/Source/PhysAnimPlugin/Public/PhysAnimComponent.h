@@ -276,7 +276,7 @@ struct FPhysAnimStabilizationSettings
 	float PolicySettleMaxRootAngularSpeedDegPerSec = 120.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && bDelayMovementUnlockUntilPolicySettled", ClampMin = "0.0"))
-	float PolicySettleRequiredSeconds = 0.15f;
+	float PolicySettleRequiredSeconds = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float BalanceEntryMinPolicyAlpha = 0.9f;

@@ -244,6 +244,19 @@ A preflight condition that is expected to change **must have an owner**.
 
 If the code checks a condition but no system changes it, the design is invalid.
 
+### 11.1 Quiet-window ownership
+
+The quiet window used by Phase 1 is owned by `BalanceQuietProofAccumulator`.
+
+That owner is responsible for:
+
+- starting accumulation when Phase 1 quiet conditions first become true
+- resetting accumulation when any quiet condition becomes false
+- invalidating the proof when contamination, locomotion entry, or fail-stop occurs
+- reporting the actual accumulated duration to Phase 1 and Phase 2 gating
+
+If the design expects the quiet window to become true but no accumulator owns it, the transition contract is incomplete.
+
 ## 11. Ownership Rules for Preconditions
 
 Every transition precondition must be categorized as one of:
@@ -362,6 +375,10 @@ Phase 1 readiness must be split into two proofs:
 
 `Phase1QuietProof` demonstrates that the shaped pre-root-on topology is quiet before policy influence resumes.
 `Phase1LateValidateProof` demonstrates that the same handoff remains stable during a bounded initial-policy-influence sustain window.
+
+The quiet proof window must use the documented minimum:
+
+- `BalanceModeQuietRequiredSeconds = 1.0`
 
 Phase 2 must not consume a handoff certified only by the first proof.
 

@@ -11,6 +11,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
 namespace BalanceTransitionSets
 {
 	static constexpr float Phase2TopologySettleGraceSeconds = 1.0f / 30.0f;
+	static constexpr float Phase2AuthorityRampSeconds = 0.10f;
 	static bool IsRoot(FName BoneName) { return BoneName == "pelvis"; }
 	static bool IsProximal(FName BoneName) { return BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"; }
 	static bool IsDistalLowerLimb(FName BoneName) { return BoneName == "calf_l" || BoneName == "calf_r" || BoneName == "foot_l" || BoneName == "foot_r" || BoneName == "ball_l" || BoneName == "ball_r"; }
@@ -847,6 +848,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		CaptureFlipDiagnostics(Owner);
 		const bool bPelvisRequestedSim = Owner->WasPelvisSimulatingLastFrame();
 		const bool bPelvisActualSim = Owner->IsPelvisSimulatingNow();
+		const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
 
 		if (Phase2GuardTickCount <= 2)
 		{
@@ -874,27 +876,51 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelFeet);
 
 		FString AbortReason;
+		FString AbortDetail;
 		if (Diagnostics.bPolicyWroteTargets)
 		{
 			AbortReason = TEXT("phase2_policy_write_leak");
+			AbortDetail = FString::Printf(
+				TEXT("policyWrites=%d firstPolicyFrame=%d maxTargetDeltaBone=%s maxTargetDelta=%.1f maxRawOffsetBone=%s maxRawOffset=%.1f"),
+				ControlTargetDiagnostics.NumPolicyTargetsWritten,
+				ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? 1 : 0,
+				*ControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
+				ControlTargetDiagnostics.MaxTargetDeltaDegrees,
+				*ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
+				ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees);
 		}
 		else if (Diagnostics.bResetScheduled || !Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
 		{
 			AbortReason = TEXT("phase2_reset_violation");
+			AbortDetail = FString::Printf(
+				TEXT("resetScheduled=%d pendingResets=%d"),
+				Diagnostics.bResetScheduled ? 1 : 0,
+				Owner->GetPendingBodyModifierCachedResetNames().Num());
 		}
 		else if (Diagnostics.bShellContributed &&
 			(Diagnostics.BaselineShellOffset > Settings.BalancePhase2AbortShellOffsetDelta ||
 			 Diagnostics.BaselineShellVel > Settings.BalancePhase2AbortShellVelocityDelta))
 		{
 			AbortReason = TEXT("phase2_shell_correction_material");
+			AbortDetail = FString::Printf(
+				TEXT("shellOffsetDelta=%.1f/%.1f shellVelocityDelta=%.1f/%.1f"),
+				Diagnostics.BaselineShellOffset,
+				Settings.BalancePhase2AbortShellOffsetDelta,
+				Diagnostics.BaselineShellVel,
+				Settings.BalancePhase2AbortShellVelocityDelta);
 		}
 		else if (!bPelvisActualSim)
 		{
 			AbortReason = TEXT("phase2_root_simulation_dropped");
+			AbortDetail = FString::Printf(
+				TEXT("requestedRootSim=%d actualRootSim=%d"),
+				bPelvisRequestedSim ? 1 : 0,
+				bPelvisActualSim ? 1 : 0);
 		}
 		else if (Owner->IsInstabilityPrecursorActive())
 		{
 			AbortReason = TEXT("phase2_fail_stop_precursor");
+			AbortDetail = TEXT("instabilityPrecursor=1");
 		}
 		else if (PhaseTimeSeconds > BalanceTransitionSets::Phase2TopologySettleGraceSeconds &&
 			!BalanceTransitionSets::IsExpectedPhase2Topology(
@@ -904,6 +930,14 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.DistalSimCountPost))
 		{
 			AbortReason = TEXT("phase2_topology_not_preserved");
+			AbortDetail = FString::Printf(
+				TEXT("simCountPre=%d simCountPost=%d distalSimPre=%d distalSimPost=%d upperBodySimPre=%d upperBodySimPost=%d"),
+				Diagnostics.SimCountPre,
+				Diagnostics.SimCountPost,
+				Diagnostics.DistalSimCountPre,
+				Diagnostics.DistalSimCountPost,
+				Diagnostics.UpperBodySimCountPre,
+				Diagnostics.UpperBodySimCountPost);
 		}
 		else if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed ||
 			Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed ||
@@ -913,6 +947,30 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.PeakMaxBodyAngularSpeed > Settings.BalancePhase2AbortMaxBodyAngularSpeed)
 		{
 			AbortReason = TEXT("phase2_root_on_spike");
+			if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed)
+			{
+				AbortDetail = FString::Printf(TEXT("rootLinearSpeed=%.1f/%.1f"), Diagnostics.RootSpeed, Settings.BalancePhase2AbortRootLinearSpeed);
+			}
+			else if (Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed)
+			{
+				AbortDetail = FString::Printf(TEXT("rootAngularSpeed=%.1f/%.1f"), Diagnostics.RootAngularSpeed, Settings.BalancePhase2AbortRootAngularSpeed);
+			}
+			else if (Diagnostics.BaselineShellOffset > Settings.BalancePhase2AbortShellOffsetDelta)
+			{
+				AbortDetail = FString::Printf(TEXT("shellOffsetDelta=%.1f/%.1f"), Diagnostics.BaselineShellOffset, Settings.BalancePhase2AbortShellOffsetDelta);
+			}
+			else if (Diagnostics.BaselineShellVel > Settings.BalancePhase2AbortShellVelocityDelta)
+			{
+				AbortDetail = FString::Printf(TEXT("shellVelocityDelta=%.1f/%.1f"), Diagnostics.BaselineShellVel, Settings.BalancePhase2AbortShellVelocityDelta);
+			}
+			else if (Diagnostics.PeakMaxBodyLinearSpeed > Settings.BalancePhase2AbortMaxBodyLinearSpeed)
+			{
+				AbortDetail = FString::Printf(TEXT("maxBodyLinearSpeed=%.1f/%.1f"), Diagnostics.PeakMaxBodyLinearSpeed, Settings.BalancePhase2AbortMaxBodyLinearSpeed);
+			}
+			else
+			{
+				AbortDetail = FString::Printf(TEXT("maxBodyAngularSpeed=%.1f/%.1f"), Diagnostics.PeakMaxBodyAngularSpeed, Settings.BalancePhase2AbortMaxBodyAngularSpeed);
+			}
 		}
 
 		if (!AbortReason.IsEmpty())
@@ -926,7 +984,50 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				false,
 				true,
 				Phase2RetryCount < Settings.BalancePhase2MaxAutomaticRetries) ? TEXT("allowed") : TEXT("denied");
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_ABORTED reason=%s owner=%d"), *Diagnostics.FailureReason, static_cast<int32>(FailureOwner));
+			UE_LOG(
+				LogPhysAnimBridge,
+				Error,
+				TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_ABORTED reason=%s owner=%d detail=%s rootLinear=%.1f/%.1f rootAngular=%.1f/%.1f shellOffsetDelta=%.1f/%.1f shellVelocityDelta=%.1f/%.1f maxBodyLinear=%.1f/%.1f maxBodyAngular=%.1f/%.1f pelvisLin=%.1f pelvisAng=%.1f thighsLin=%.1f thighsAng=%.1f spineLin=%.1f spineAng=%.1f feetLin=%.1f feetAng=%.1f simCountPre=%d simCountPost=%d upperBodySimPre=%d upperBodySimPost=%d shellLocked=%d shellReanchored=%d shellReseeded=%d policyActive=%d firstPolicyFrame=%d policyWrites=%d maxTargetDeltaBone=%s maxTargetDelta=%.1f maxRawOffsetBone=%s maxRawOffset=%.1f lowerLimbLimitBone=%s lowerLimbLimit=%.2f lowerLimbLimitProxy=%.1f"),
+				*Diagnostics.FailureReason,
+				static_cast<int32>(FailureOwner),
+				*AbortDetail,
+				Diagnostics.RootSpeed,
+				Settings.BalancePhase2AbortRootLinearSpeed,
+				Diagnostics.RootAngularSpeed,
+				Settings.BalancePhase2AbortRootAngularSpeed,
+				Diagnostics.BaselineShellOffset,
+				Settings.BalancePhase2AbortShellOffsetDelta,
+				Diagnostics.BaselineShellVel,
+				Settings.BalancePhase2AbortShellVelocityDelta,
+				Diagnostics.PeakMaxBodyLinearSpeed,
+				Settings.BalancePhase2AbortMaxBodyLinearSpeed,
+				Diagnostics.PeakMaxBodyAngularSpeed,
+				Settings.BalancePhase2AbortMaxBodyAngularSpeed,
+				Diagnostics.MaxLinVelPelvis,
+				Diagnostics.MaxAngVelPelvis,
+				Diagnostics.MaxLinVelThighs,
+				Diagnostics.MaxAngVelThighs,
+				Diagnostics.MaxLinVelSpine,
+				Diagnostics.MaxAngVelSpine,
+				Diagnostics.MaxLinVelFeet,
+				Diagnostics.MaxAngVelFeet,
+				Diagnostics.SimCountPre,
+				Diagnostics.SimCountPost,
+				Diagnostics.UpperBodySimCountPre,
+				Diagnostics.UpperBodySimCountPost,
+				CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+				CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+				CertifiedHandoff.bTransitionShellReferenceReseededAfterLock ? 1 : 0,
+				ControlTargetDiagnostics.bPolicyInfluenceActive ? 1 : 0,
+				ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? 1 : 0,
+				ControlTargetDiagnostics.NumPolicyTargetsWritten,
+				*ControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
+				ControlTargetDiagnostics.MaxTargetDeltaDegrees,
+				*ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
+				ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees,
+				*ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
+				ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
+				ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RETRY_DECISION failure=%s owner=%d decision=%s changedState=0 freshQuietProof=0 remainingRetryBudget=%d"),
 				*Diagnostics.FailureReason, static_cast<int32>(FailureOwner), *Diagnostics.LastRetryDecision, FMath::Max(Settings.BalancePhase2MaxAutomaticRetries - Phase2RetryCount, 0));
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
@@ -1765,8 +1866,31 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressMoveSmoke() const
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
 }
 
-float FPhysAnimBalanceReadyTransition::GetRootBodyModifierSoftSimAlpha() const { return 1.0f; }
-float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneName) const { return BalanceTransitionSets::IsProximal(BoneName) ? 1.0f : 1.0f; }
+float FPhysAnimBalanceReadyTransition::GetRootBodyModifierSoftSimAlpha() const
+{
+	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+	{
+		return 1.0f;
+	}
+
+	return FMath::Clamp(
+		PhaseTimeSeconds / BalanceTransitionSets::Phase2AuthorityRampSeconds,
+		0.0f,
+		1.0f);
+}
+
+float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneName) const
+{
+	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase2_RootOn || !BalanceTransitionSets::IsProximal(BoneName))
+	{
+		return 1.0f;
+	}
+
+	return FMath::Clamp(
+		PhaseTimeSeconds / BalanceTransitionSets::Phase2AuthorityRampSeconds,
+		0.0f,
+		1.0f);
+}
 
 bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) const
 {
@@ -1797,7 +1921,8 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
-		return BalanceTransitionSets::IsDistalLowerLimb(BoneName) || BalanceTransitionSets::IsUpperBody(BoneName);
+		return BalanceTransitionSets::IsDistalLowerLimb(BoneName) ||
+			BalanceTransitionSets::IsLateValidationUpperBodyOwnershipBone(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
 	{

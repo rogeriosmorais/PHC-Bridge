@@ -228,6 +228,11 @@ That owner is responsible for:
 
 If the design expects a quiet window to “become true” but no accumulator owns it, the design is invalid.
 
+For the balance-entry transition path, that same ownership rule applies to Phase 1 quiet proof:
+
+- `Phase1QuietProof` is owned by `BalanceQuietProofAccumulator`
+- `BalanceModeQuietRequiredSeconds = 1.0`
+
 ### 6.2 Minimum quiet window
 
 Default target:

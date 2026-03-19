@@ -2635,6 +2635,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		if (EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
 		{
 			// Queue gates passed. Hand off to transition preflight.
+			ActivateTransitionOwnedShellLock();
 			BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
 			
 			if (!BalanceReadyTransition.HasActuallyStarted())
@@ -2680,6 +2681,7 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	
 	if (!BalanceReadyTransition.IsActive())
 	{
+		ActivateTransitionOwnedShellLock();
 		BalanceReadyTransition.Start(TEXT("manual_trigger"), this);
 	}
 }
@@ -4835,6 +4837,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		ControlMultiplier.AngularStrengthMultiplier =
 			EffectiveSettings.AngularStrengthMultiplier * FamilyStrengthScale * ControlAuthorityAlpha * HandoverEasing;
+		ControlMultiplier.AngularStrengthMultiplier *= BalanceReadyTransition.GetProximalControlSoftAlpha(BoneName);
 		ControlMultiplier.AngularDampingRatioMultiplier =
 			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale;
 		ControlMultiplier.AngularExtraDampingMultiplier =
@@ -4972,7 +4975,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		EPhysicsMovementType BodyModifierMovementType = EPhysicsMovementType::Kinematic;
 		float BodyModifierPhysicsBlendWeight = 0.0f;
 		bool bUpdateKinematicFromSimulation = false;
-		const ECollisionEnabled::Type BodyModifierCollisionType =
+		ECollisionEnabled::Type BodyModifierCollisionType =
 			ResolveBodyModifierCollisionType(
 				RuntimeState,
 				EffectiveSettings.bForceZeroActions,
@@ -4990,6 +4993,15 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierMovementType,
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
+		if (bIsRootBodyModifier)
+		{
+			const float RootSoftSimAlpha = BalanceReadyTransition.GetRootBodyModifierSoftSimAlpha();
+			BodyModifierPhysicsBlendWeight *= RootSoftSimAlpha;
+			if (bPhase2RootOnGuardWindow && RootSoftSimAlpha < 1.0f)
+			{
+				BodyModifierCollisionType = ECollisionEnabled::NoCollision;
+			}
+		}
 
 		if (bIsRootBodyModifier)
 		{
