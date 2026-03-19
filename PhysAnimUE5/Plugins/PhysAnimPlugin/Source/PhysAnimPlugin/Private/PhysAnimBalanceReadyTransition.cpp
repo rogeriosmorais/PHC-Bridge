@@ -677,15 +677,34 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				{
 					const FVector BoneLinearVelocity = LiveMesh->GetPhysicsLinearVelocity(BoneName);
 					const FVector BoneAngularVelocityDegPerSec = LiveMesh->GetPhysicsAngularVelocityInDegrees(BoneName);
-					if (BoneLinearVelocity.Size() > Settings.BalancePhase1QuietRootLinearSpeed ||
-						BoneAngularVelocityDegPerSec.Size() > Settings.BalancePhase1QuietRootAngularSpeed)
+					const float LinearSpeed = BoneLinearVelocity.Size();
+					const float AngularSpeed = BoneAngularVelocityDegPerSec.Size();
+					if (LinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed &&
+						LinearSpeed > Diagnostics.Phase1LateValidateWorstLinearSpeed)
 					{
-						bLateValidationThisFrame = false;
-						LateValidateBlockReason = TEXT("live_proximal_upper_body_velocity_instability");
-						break;
+						Diagnostics.Phase1LateValidateWorstLinearSpeed = LinearSpeed;
+						Diagnostics.Phase1LateValidateWorstLinearSpeedBone = BoneName;
+					}
+					if (AngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed &&
+						AngularSpeed > Diagnostics.Phase1LateValidateWorstAngularSpeed)
+					{
+						Diagnostics.Phase1LateValidateWorstAngularSpeed = AngularSpeed;
+						Diagnostics.Phase1LateValidateWorstAngularSpeedBone = BoneName;
 					}
 				}
 			}
+		}
+
+		const bool bLateValidationMotionViolatesThreshold =
+			Diagnostics.Phase1LateValidateWorstLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
+			Diagnostics.Phase1LateValidateWorstAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed;
+		if (bLateValidationMotionViolatesThreshold)
+		{
+			Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds += DeltaTime;
+		}
+		else
+		{
+			Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds = 0.0f;
 		}
 
 		if (bLateValidationThisFrame)
@@ -867,6 +886,31 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				LastLateValidateBlockReason.Reset();
 			}
 
+			if (LateValidateBlockReason == TEXT("live_proximal_upper_body_velocity_instability"))
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_BODY_MOTION_RESET worstLinearBone=%s worstLinear=%.2f linearThreshold=%.2f worstAngularBone=%s worstAngular=%.2f angularThreshold=%.2f accumulatedViolation=%.2f grace=%.2f"),
+					*Diagnostics.Phase1LateValidateWorstLinearSpeedBone.ToString(),
+					Diagnostics.Phase1LateValidateWorstLinearSpeed,
+					Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed,
+					*Diagnostics.Phase1LateValidateWorstAngularSpeedBone.ToString(),
+					Diagnostics.Phase1LateValidateWorstAngularSpeed,
+					Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed,
+					Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds,
+					Settings.BalancePhase1LateValidateBodyMotionGraceDuration);
+			}
+
+			if (LateValidateBlockReason == TEXT("live_proximal_upper_body_velocity_instability") &&
+				Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds < Settings.BalancePhase1LateValidateBodyMotionGraceDuration)
+			{
+				Diagnostics.Phase1LateValidateGateReason = LateValidateBlockReason;
+				Diagnostics.Phase1LateValidateGateSource = TEXT("live_late_validate_gate");
+				Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
+				return;
+			}
+
 			if (LateValidateBlockReason != TEXT("policy_influence_inactive"))
 			{
 				LateValidationAccumulatedSeconds = 0.0f;
@@ -874,6 +918,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				Diagnostics.Phase1LateValidateGateReason = LateValidateBlockReason;
 				Diagnostics.Phase1LateValidateGateSource = TEXT("live_late_validate_gate");
 				Diagnostics.Phase1LateValidateAccumulatedSeconds = 0.0f;
+				Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds = 0.0f;
+				Diagnostics.Phase1LateValidateWorstLinearSpeed = 0.0f;
+				Diagnostics.Phase1LateValidateWorstAngularSpeed = 0.0f;
+				Diagnostics.Phase1LateValidateWorstLinearSpeedBone = NAME_None;
+				Diagnostics.Phase1LateValidateWorstAngularSpeedBone = NAME_None;
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s lateValidateSeconds=%.2f quietProofSeconds=%.2f policyAlpha=%.2f"),
 					*LateValidateBlockReason,
 					LateValidationAccumulatedSeconds,
@@ -1864,6 +1913,11 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	bHasRootOnReadinessShellProofBaseline = false;
 	LastLateValidateBlockReason.Reset();
 	bHasLateValidationProof = false;
+	Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds = 0.0f;
+	Diagnostics.Phase1LateValidateWorstLinearSpeedBone = NAME_None;
+	Diagnostics.Phase1LateValidateWorstAngularSpeedBone = NAME_None;
+	Diagnostics.Phase1LateValidateWorstLinearSpeed = 0.0f;
+	Diagnostics.Phase1LateValidateWorstAngularSpeed = 0.0f;
 	ResetCertifiedHandoffState();
 }
 

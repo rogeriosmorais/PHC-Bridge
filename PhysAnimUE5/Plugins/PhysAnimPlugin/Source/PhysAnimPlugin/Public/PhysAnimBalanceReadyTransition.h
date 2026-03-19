@@ -139,6 +139,11 @@ struct FBalanceReadyTransitionDiagnostics
 	FPhysAnimControlTargetDiagnostics Phase1TargetDiscontinuityGateInput;
 	float Phase1TargetDiscontinuityAccumulatedSeconds = 0.0f;
 	float Phase1LateValidateAccumulatedSeconds = 0.0f;
+	float Phase1LateValidateBodyMotionViolationAccumulatedSeconds = 0.0f;
+	FName Phase1LateValidateWorstLinearSpeedBone = NAME_None;
+	FName Phase1LateValidateWorstAngularSpeedBone = NAME_None;
+	float Phase1LateValidateWorstLinearSpeed = 0.0f;
+	float Phase1LateValidateWorstAngularSpeed = 0.0f;
 	int32 SimCountPre = 0;
 	int32 SimCountPost = 0;
 	int32 DistalSimCountPre = 0;
