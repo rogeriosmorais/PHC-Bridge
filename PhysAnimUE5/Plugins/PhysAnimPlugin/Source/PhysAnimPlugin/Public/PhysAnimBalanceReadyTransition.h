@@ -38,6 +38,7 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	bool bPolicySuppressed = false;
 	bool bControlAuthoritySettled = false;
 	bool bRootOnReadinessShellHoldSatisfied = false;
+	bool bRootOnReadinessUpperOnlyShellHoldCappedByWindow = false;
 	bool bRootOnReadinessFinalBringUpControlSettled = false;
 	bool bRootOnReadinessPolicyInfluenceSettled = false;
 	bool bRootOnReadinessProven = false;

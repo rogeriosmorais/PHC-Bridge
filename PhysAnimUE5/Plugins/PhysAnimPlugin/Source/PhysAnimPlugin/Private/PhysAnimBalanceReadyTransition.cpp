@@ -536,9 +536,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.Phase1LateValidateGateReason = RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration
 				? TEXT("ready")
 				: TEXT("phase1_late_validate_shell_hold_capped_by_window");
-			Diagnostics.Phase1RootOnReadinessGateReason = RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration
+			Diagnostics.Phase1RootOnReadinessGateReason = CurrentSnapshot.bRootOnReadinessShellHoldSatisfied
 				? TEXT("ready")
-				: CurrentSnapshot.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold
+				: CurrentSnapshot.bRootOnReadinessUpperOnlyShellHoldCappedByWindow
 					? TEXT("phase1_root_on_readiness_upper_only_shell_hold_capped_by_window")
 					: TEXT("phase1_root_on_readiness_shell_hold_pending");
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
@@ -1185,6 +1185,10 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
 	OutSnapshot.bRootOnReadinessShellHoldSatisfied =
 		OutSnapshot.RootOnReadinessShellHoldDurationSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration;
+	OutSnapshot.bRootOnReadinessUpperOnlyShellHoldCappedByWindow =
+		OutSnapshot.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold &&
+		OutSnapshot.bLateValidationCompleted &&
+		!OutSnapshot.bRootOnReadinessShellHoldSatisfied;
 	OutSnapshot.bRootOnReadinessFinalBringUpControlSettled =
 		OutSnapshot.FinalBringUpGroupControlAuthorityAlpha >= 1.0f - KINDA_SMALL_NUMBER;
 	OutSnapshot.bRootOnReadinessPolicyInfluenceSettled =
