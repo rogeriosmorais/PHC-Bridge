@@ -667,6 +667,28 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		if (bLateValidationThisFrame)
 		{
+			USkeletalMeshComponent* LiveMesh = Owner->GetMeshComponent();
+			TArray<FName> SimulatingBones;
+			Owner->GetSimulatingBodies(SimulatingBones);
+			for (const FName BoneName : SimulatingBones)
+			{
+				if (LiveMesh && (BalanceTransitionSets::IsProximal(BoneName) || BalanceTransitionSets::IsUpperBody(BoneName)))
+				{
+					const FVector BoneLinearVelocity = LiveMesh->GetPhysicsLinearVelocity(BoneName);
+					const FVector BoneAngularVelocityDegPerSec = LiveMesh->GetPhysicsAngularVelocityInDegrees(BoneName);
+					if (BoneLinearVelocity.Size() > Settings.BalancePhase1QuietRootLinearSpeed ||
+						BoneAngularVelocityDegPerSec.Size() > Settings.BalancePhase1QuietRootAngularSpeed)
+					{
+						bLateValidationThisFrame = false;
+						LateValidateBlockReason = TEXT("live_proximal_upper_body_velocity_instability");
+						break;
+					}
+				}
+			}
+		}
+
+		if (bLateValidationThisFrame)
+		{
 			LateValidationAccumulatedSeconds += DeltaTime;
 			RootOnReadinessShellHoldAccumulatedSeconds += DeltaTime;
 			const float CurrentShellOffsetCm = Owner->GetCurrentShellPlanarOffsetDeltaCm();

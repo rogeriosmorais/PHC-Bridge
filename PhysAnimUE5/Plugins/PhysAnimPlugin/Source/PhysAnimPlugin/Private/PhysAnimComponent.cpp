@@ -4959,8 +4959,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const bool bAllowRootBodyModifierSimulation =
 			bIsRootBodyModifier &&
 			(bAllowRootBodyModifierSimulationInBalanceMode || bTransitionOwnsRootOnThisTick) &&
-			!BalanceReadyTransition.HasFailed() &&
-			!bPhase2RootAuthorityQuarantined;
+			!BalanceReadyTransition.HasFailed();
 		
 		if (bIsRootBodyModifier && bAllowRootBodyModifierSimulation)
 		{
