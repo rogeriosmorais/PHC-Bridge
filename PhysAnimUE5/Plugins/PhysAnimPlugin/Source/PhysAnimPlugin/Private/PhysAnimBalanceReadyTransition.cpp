@@ -1887,6 +1887,11 @@ bool FPhysAnimBalanceReadyTransition::CaptureLateValidationBaseline(UPhysAnimCom
 		return false;
 	}
 
+	if (!ValidateLateValidationBaselineSnapshot(CurrentSnapshot, Settings, OutReason))
+	{
+		return false;
+	}
+
 	CertifiedHandoff = CurrentSnapshot;
 	bHasCertifiedHandoff = true;
 	OutReason.Reset();
