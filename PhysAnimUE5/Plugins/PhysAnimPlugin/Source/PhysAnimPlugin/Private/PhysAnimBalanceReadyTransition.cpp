@@ -397,16 +397,6 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		if (bQuietThisFrame)
 		{
-			const float PolicyInfluenceAlpha = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
-			if (PolicyInfluenceAlpha < Owner->BalanceReadyPolicyInfluenceThreshold)
-			{
-				bQuietThisFrame = false;
-				QuietBlockReason = TEXT("policy_ramp_not_settled");
-			}
-		}
-
-		if (bQuietThisFrame)
-		{
 			TargetDiscontinuityAccumulatedSeconds = 0.0f;
 			QuietWindowAccumulatedSeconds += DeltaTime;
 			if (QuietWindowAccumulatedSeconds >= Settings.PolicySettleRequiredSeconds)
