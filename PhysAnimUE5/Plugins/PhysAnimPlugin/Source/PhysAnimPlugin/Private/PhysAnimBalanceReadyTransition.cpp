@@ -1058,7 +1058,8 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 
 				PelvisBody->SetInstanceSimulatePhysics(true);
 				Diagnostics.bSimFlipped = true;
-				Owner->ReanchorShellCouplingReferenceToCurrentRoot();
+				// Phase 2 must preserve the pre-root-on shell proof reference through the
+				// root-on frame and guard window; reseeding here would invalidate that proof.
 				CaptureFlipDiagnostics(Owner);
 				if (!PelvisBody->IsInstanceSimulatingPhysics())
 				{

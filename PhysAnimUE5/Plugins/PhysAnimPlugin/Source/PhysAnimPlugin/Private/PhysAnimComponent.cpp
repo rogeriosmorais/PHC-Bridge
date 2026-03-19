@@ -1880,33 +1880,21 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 {
 	const bool bBalanceMode = RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode;
 	const bool bTransitionActive = BalanceReadyTransition.IsActive();
-	const bool bBridgeActivePreEntry = RuntimeState == EPhysAnimRuntimeState::BridgeActive && bTransitionActive;
-	const bool bIsPhase1 =
-		bTransitionActive &&
-		(BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
-			BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate);
 	
 	const bool bBringUpUnlocked = AreAllBringUpGroupsUnlocked();
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
 	const bool bFinalRampActive = IsBringUpGroupControlRampActive(FinalGroupIndex);
-	const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 	const bool bResetsEmpty = PendingBodyModifierCachedResetNames.IsEmpty();
 
-	// Standard requirements
-	const bool bBasicReady = (bBalanceMode || bBridgeActivePreEntry) && bBringUpUnlocked && bFinalRampActive;
-	bool bResult = bBasicReady && bResetsEmpty;
-
-	// Phase 1 Override: Break circular dependency where sim waits for reset, but reset needs sim to drain
-	bool bPhase1Override = false;
-	if (!bResult && bIsPhase1 && bBasicReady)
+	// Balance entry transition owns pelvis simulation enablement. The component/runtime
+	// pipeline must not independently promote the root while Phase 1/2 are shaping and
+	// validating the handoff, otherwise two owners can race the same state flip.
+	if (bTransitionActive)
 	{
-		bResult = true;
-		bPhase1Override = true;
+		return false;
 	}
 
-	// Decision breakdown log removed for experiment
-
-	return bResult;
+	return bBalanceMode && bBringUpUnlocked && bFinalRampActive && bResetsEmpty;
 }
 
 bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
@@ -4948,9 +4936,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
 
-		// In Balance Mode, we break the root into simulation as soon as the bridge is logically ready 
-		// (bring-up complete, policy authority high enough). This allows the quiet window to run 
-		// under legitimate physical simulation as required by the design.
+		// During entry transition the component path keeps the root body modifier kinematic.
+		// Actual pelvis/root simulation enablement is owned exclusively by BalanceReadyTransition
+		// Phase 2 so the transition has a single source of truth for the root-on flip.
 		const bool bAllowRootBodyModifierSimulation = bIsRootBodyModifier && bAllowRootBodyModifierSimulationInBalanceMode && !BalanceReadyTransition.HasFailed();
 		
 		if (bIsRootBodyModifier && bAllowRootBodyModifierSimulation)
