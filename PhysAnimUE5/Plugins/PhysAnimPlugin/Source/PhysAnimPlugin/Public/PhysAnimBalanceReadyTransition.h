@@ -48,6 +48,7 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	float RootOnReadinessPolicyInfluenceRequiredSeconds = 0.0f;
 	float RootOnReadinessShellHoldDurationSeconds = 0.0f;
 	float RootOnReadinessShellHoldRequiredSeconds = 0.0f;
+	bool bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
 	float MaxTargetDeltaDegrees = 0.0f;
 	float MeanTargetDeltaDegrees = 0.0f;
 	float QuietProofDurationSeconds = 0.0f;

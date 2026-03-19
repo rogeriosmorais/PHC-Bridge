@@ -5915,6 +5915,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame && PolicyInfluenceRampStartTimeSeconds >= 0.0)
 	{
 		PolicyInfluenceRampStartTimeSeconds = CurrentTimeSeconds;
+		bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = true;
 	}
 
 	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
@@ -7336,6 +7337,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	bHasSavedBodyMassScales = false;
 	PolicyBlendStartControlTargetRotations.Reset();
 	bPolicyTargetsAppliedLastFrame = false;
+	bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
 	LastAppliedStabilizationSettings = {};
 }
 

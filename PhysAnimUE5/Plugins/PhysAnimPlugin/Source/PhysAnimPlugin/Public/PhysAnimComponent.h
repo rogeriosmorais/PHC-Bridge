@@ -586,6 +586,7 @@ public:
 	const FPhysAnimControlTargetDiagnostics& GetLastControlTargetDiagnostics() const { return LastControlTargetDiagnostics; }
 	bool WasPelvisResetAppliedThisTick() const { return bPelvisResetAppliedThisTick; }
 	bool WasPolicyTargetAppliedLastFrame() const { return bPolicyTargetsAppliedLastFrame; }
+	bool WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame() const { return bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame; }
 	bool WasPelvisSimulatingLastFrame() const { return bLastAppliedPresentationRootSimulationEnabled; }
 	bool HasBalanceReadyTransitionFailed() const { return BalanceReadyTransition.HasFailed(); }
 	bool HasSafePhase2Denial() const { return BalanceReadyTransition.HasSafePhase2Denial(); }
@@ -913,6 +914,7 @@ private:
 	TMap<FName, FQuat> PreviousControlTargetRotations;
 	TMap<FName, FQuat> PolicyBlendStartControlTargetRotations;
 	bool bPolicyTargetsAppliedLastFrame = false;
+	bool bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
 	float SimulationHandoffAlpha = 0.0f;
 	bool bLastAppliedSimulationHandoffSettled = false;
 	float LastAppliedControlAuthorityAlpha = -1.0f;
