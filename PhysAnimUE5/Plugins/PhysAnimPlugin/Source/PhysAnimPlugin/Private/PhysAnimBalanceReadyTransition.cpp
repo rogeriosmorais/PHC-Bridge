@@ -877,11 +877,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
 		}
 
-		const float RequiredLateValidateWindowSeconds = FMath::Max3(
-			Settings.BalancePhase1LateValidateRequiredSeconds,
-			Settings.BalancePhase2RequiredShellHoldDuration,
-			Settings.BalancePhase2PreRootOnShellProofRequiredSeconds);
-		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration + RequiredLateValidateWindowSeconds &&
+		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration + Settings.BalancePhase1LateValidateRequiredSeconds &&
 			LateValidationAccumulatedSeconds <= 0.0f)
 		{
 			const FString TimeoutReason = LateValidateBlockReason.IsEmpty()
