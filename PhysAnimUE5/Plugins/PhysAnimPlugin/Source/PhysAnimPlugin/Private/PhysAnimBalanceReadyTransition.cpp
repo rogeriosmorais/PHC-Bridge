@@ -1082,8 +1082,11 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
 	OutSnapshot.bPolicySuppressed = ShouldSuppressPolicy();
 	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
+	const int32 FinalBringUpGroupIndex = Owner->GetBringUpGroupCount() - 1;
 	OutSnapshot.bRootOnReadinessProven = OutSnapshot.bControlAuthoritySettled &&
-		(OutSnapshot.ProximalSimCount > 0 || OutSnapshot.DistalSimCount > 0);
+		bHasLateValidationProof &&
+		Owner->AreAllBringUpGroupsUnlocked() &&
+		Owner->IsBringUpGroupControlRampActive(FinalBringUpGroupIndex);
 	OutSnapshot.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
 	OutSnapshot.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
 	OutSnapshot.QuietProofDurationSeconds = QuietWindowAccumulatedSeconds;
