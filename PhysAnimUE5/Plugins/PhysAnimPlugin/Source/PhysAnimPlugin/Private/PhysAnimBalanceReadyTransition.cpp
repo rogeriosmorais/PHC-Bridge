@@ -141,7 +141,7 @@ static bool ValidateRootOnReadinessSnapshot(
 	{
 		OutReason = Snapshot.RootOnReadinessClassification ==
 			EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
-			? TEXT("phase2_root_on_readiness_upper_only_late_validation_safe_denied")
+			? TEXT("phase2_upper_only_handoff_not_root_on_ready")
 			: Snapshot.bLateValidationCompleted &&
 				Snapshot.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase1LateValidateRequiredSeconds
 				? TEXT("phase2_root_on_readiness_shell_hold_capped_by_late_validate_window")
