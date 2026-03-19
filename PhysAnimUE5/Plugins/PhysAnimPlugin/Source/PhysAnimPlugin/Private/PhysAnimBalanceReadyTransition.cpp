@@ -545,7 +545,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					UE_LOG(
 						LogPhysAnimBridge,
 						Log,
-					TEXT("[PhysAnimBalance] PHASE1_READY_FOR_ROOT_ON topology=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d finalBringUpControlAlpha=%.2f policyInfluenceAlpha=%.2f policyInfluenceRequired=%.2f shellHoldReady=%d bringUpReady=%d policyInfluenceReady=%d rootOnReady=%d shellHoldDuration=%.2f shellHoldRequired=%.2f maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f lateValidateDuration=%.2f"),
+					TEXT("[PhysAnimBalance] PHASE1_READY_FOR_ROOT_ON topology=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d finalBringUpControlAlpha=%.2f policyInfluenceAlpha=%.2f policyInfluenceRequired=%.2f policyInfluenceDuration=%.2f policyInfluenceRequiredSeconds=%.2f shellHoldReady=%d bringUpReady=%d policyInfluenceReady=%d rootOnReady=%d shellHoldDuration=%.2f shellHoldRequired=%.2f maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f lateValidateDuration=%.2f"),
 					*CertifiedHandoff.TopologyClass,
 					BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
 					CertifiedHandoff.SimCount,
@@ -557,6 +557,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					CertifiedHandoff.FinalBringUpGroupControlAuthorityAlpha,
 					CertifiedHandoff.PolicyInfluenceAlphaAtCapture,
 					CertifiedHandoff.RootOnReadinessPolicyInfluenceRequiredAlpha,
+					CertifiedHandoff.RootOnReadinessPolicyInfluenceDurationSeconds,
+					CertifiedHandoff.RootOnReadinessPolicyInfluenceRequiredSeconds,
 					CertifiedHandoff.bRootOnReadinessShellHoldSatisfied ? 1 : 0,
 					CertifiedHandoff.bRootOnReadinessFinalBringUpControlSettled ? 1 : 0,
 					CertifiedHandoff.bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
@@ -790,7 +792,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					}
 				}
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ENTRY topology=%s upperBodyOwnership=%s rootPreLin=%.1f rootPreAng=%.1f shellOffsetDelta=%.1f shellVelocityDelta=%.1f simCountPre=%d proximalSimPre=%d distalSimPre=%d upperBodySimPre=%d policySuppressed=%d controlAuthoritySettled=%d finalBringUpControlAlpha=%.2f policyInfluenceAlpha=%.2f policyInfluenceRequired=%.2f shellHoldReady=%d bringUpReady=%d policyInfluenceReady=%d rootOnReady=%d shellHoldDuration=%.2f shellHoldRequired=%.2f maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f resetScheduled=%d"),
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ENTRY topology=%s upperBodyOwnership=%s rootPreLin=%.1f rootPreAng=%.1f shellOffsetDelta=%.1f shellVelocityDelta=%.1f simCountPre=%d proximalSimPre=%d distalSimPre=%d upperBodySimPre=%d policySuppressed=%d controlAuthoritySettled=%d finalBringUpControlAlpha=%.2f policyInfluenceAlpha=%.2f policyInfluenceRequired=%.2f policyInfluenceDuration=%.2f policyInfluenceRequiredSeconds=%.2f shellHoldReady=%d bringUpReady=%d policyInfluenceReady=%d rootOnReady=%d shellHoldDuration=%.2f shellHoldRequired=%.2f maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f resetScheduled=%d"),
 					CertifiedHandoff.TopologyClass.IsEmpty() ? TEXT("unknown") : *CertifiedHandoff.TopologyClass,
 					BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
 					Diagnostics.BaselineRootLinVel,
@@ -806,6 +808,8 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					CertifiedHandoff.FinalBringUpGroupControlAuthorityAlpha,
 					CertifiedHandoff.PolicyInfluenceAlphaAtCapture,
 					CertifiedHandoff.RootOnReadinessPolicyInfluenceRequiredAlpha,
+					CertifiedHandoff.RootOnReadinessPolicyInfluenceDurationSeconds,
+					CertifiedHandoff.RootOnReadinessPolicyInfluenceRequiredSeconds,
 					CertifiedHandoff.bRootOnReadinessShellHoldSatisfied ? 1 : 0,
 					CertifiedHandoff.bRootOnReadinessFinalBringUpControlSettled ? 1 : 0,
 					CertifiedHandoff.bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
@@ -1126,6 +1130,10 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	const int32 FinalBringUpGroupIndex = Owner->GetBringUpGroupCount() - 1;
 	OutSnapshot.FinalBringUpGroupControlAuthorityAlpha = Owner->CalculateBringUpGroupControlAuthorityAlpha(FinalBringUpGroupIndex, Settings);
 	OutSnapshot.RootOnReadinessPolicyInfluenceRequiredAlpha = Owner->BalanceReadyPolicyInfluenceThreshold;
+	OutSnapshot.RootOnReadinessPolicyInfluenceDurationSeconds =
+		OutSnapshot.PolicyInfluenceAlphaAtCapture * FMath::Max(Settings.StartupRampSeconds, 0.0f);
+	OutSnapshot.RootOnReadinessPolicyInfluenceRequiredSeconds =
+		FMath::Max(Settings.StartupRampSeconds, UE_SMALL_NUMBER) * Owner->BalanceReadyPolicyInfluenceThreshold;
 	OutSnapshot.RootOnReadinessShellHoldDurationSeconds = RootOnReadinessShellHoldAccumulatedSeconds;
 	OutSnapshot.RootOnReadinessShellHoldRequiredSeconds = Settings.BalancePhase2RequiredShellHoldDuration;
 	OutSnapshot.bRootOnReadinessShellHoldSatisfied =
@@ -1133,7 +1141,8 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bRootOnReadinessFinalBringUpControlSettled =
 		OutSnapshot.FinalBringUpGroupControlAuthorityAlpha >= 1.0f - KINDA_SMALL_NUMBER;
 	OutSnapshot.bRootOnReadinessPolicyInfluenceSettled =
-		OutSnapshot.PolicyInfluenceAlphaAtCapture >= Owner->BalanceReadyPolicyInfluenceThreshold;
+		OutSnapshot.RootOnReadinessPolicyInfluenceDurationSeconds + KINDA_SMALL_NUMBER >=
+		OutSnapshot.RootOnReadinessPolicyInfluenceRequiredSeconds;
 	OutSnapshot.bRootOnReadinessProven =
 		OutSnapshot.bRootOnReadinessShellHoldSatisfied &&
 		OutSnapshot.bRootOnReadinessFinalBringUpControlSettled &&
