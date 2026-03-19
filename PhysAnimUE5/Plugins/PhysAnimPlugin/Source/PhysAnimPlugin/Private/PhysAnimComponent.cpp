@@ -5767,10 +5767,10 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 		EffectiveSettings.MaxAutoUnlockBringUpGroup >= 0
 			? FMath::Min(EffectiveSettings.MaxAutoUnlockBringUpGroup, GetBringUpGroupCount() - 1)
 			: (GetBringUpGroupCount() - 1);
-	const bool bLateValidateActive = BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate;
-	const int32 PhaseAwareMaxAutoUnlockGroup = bLateValidateActive
-		? FMath::Min(MaxConfiguredAutoUnlockGroup, 1)
-		: MaxConfiguredAutoUnlockGroup;
+	const int32 PhaseAwareMaxAutoUnlockGroup =
+		BalanceReadyTransition.GetPhase() != EBalanceReadyTransitionPhase::BRT_Succeeded
+			? FMath::Min(MaxConfiguredAutoUnlockGroup, 1)
+			: MaxConfiguredAutoUnlockGroup;
 	if (HighestUnlockedBringUpGroupIndex >= PhaseAwareMaxAutoUnlockGroup)
 	{
 		return;
