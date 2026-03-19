@@ -60,6 +60,12 @@ This means Phase 1 is not merely a waiting period.
 
 It is an **active topology-and-authority shaping phase**.
 
+For the first true root-on-success path, this also means:
+
+- shaping toward `RootCoupledReadyHandoff`, not merely the conservative upper-only fallback
+- transferring shell/capsule authority away from gameplay systems
+- proving that the root-coupled handoff remains stable under that owned shell lock
+
 ---
 
 ## 4. Non-Goals
@@ -311,6 +317,10 @@ If `TransitionOwnedShellLocked` is selected, Phase 1 must:
 - hold that shell reference unchanged through the late-validation shell proof window
 - emit whether transition-owned shell lock remained uncontaminated for the full proof window
 
+### 7.6 Startup lock and balance-entry shell lock must be distinct
+
+Startup movement lock may seed suppression, but once Phase 1 transfers into `TransitionOwnedShellLocked`, startup-ready codepaths must no longer own release of CharacterMovement/capsule authority.
+
 ---
 
 ## 8. Phase 1 Entry Actions
@@ -340,9 +350,11 @@ Capture:
 - suppress policy writes to the transition-critical set
 - suppress any bridge-owned movement drive
 - suppress locomotion entry
+- suppress gameplay shell/capsule corrective ownership once the success path commits to `RootCoupledReadyHandoff`
 
 ## 8.5 Force target topology
-- force root, proximal, and distal transition sets to the Phase 1 kinematic topology
+- for safe denial: force root, proximal, and distal transition sets to the conservative kinematic topology
+- for the true success path: force root kinematic, proximal simulated, distal kinematic
 
 ## 8.6 Seed posture-hold reference
 The implementation must capture a **single Phase 1 hold pose** at entry.
@@ -489,7 +501,7 @@ During late validation:
 
 Late validation succeeds only if all remain true continuously:
 
-- the conservative lower-body kinematic topology remains intact
+- the documented handoff topology remains intact
 - upper-body topology/ownership matches the certified handoff payload
 - `simCount` remains within the documented late-validation ownership envelope
 - max target delta stays below `Phase1LateValidateMaxTargetDeltaDeg`
@@ -497,6 +509,8 @@ Late validation succeeds only if all remain true continuously:
 - max upper-body angular speed stays below `Phase1LateValidateMaxUpperBodyAngularSpeedDegPerSec`
 - max upper-body linear speed stays below `Phase1LateValidateMaxUpperBodyLinearSpeedCmPerSec`
 - no late reset, hold re-lock, or topology flip occurs
+- transition-owned shell lock remains active and uncontaminated
+- startup-ready unlock logic does not reclaim shell/capsule ownership
 
 If any of these conditions become false, late validation resets or fails by class rather than silently collapsing into a generic Phase 2 denial reason.
 
@@ -576,6 +590,7 @@ Minimum additional handoff fields:
 - shell authority mode used during the late-validation shell proof window
 - whether the shell reference was re-anchored before the proof window
 - whether any shell-reference reseed occurred after the proof window began
+- whether startup/gameplay ownership attempted to reclaim shell lock during late validation
 
 Interpretation rule:
 
@@ -603,6 +618,7 @@ Interpretation rule:
 - under `RootCoupledReadyHandoff`, `proximalSimCount` must remain non-zero and match the documented proximal ownership mode through late validation and at Phase 2 entry
 - conservative late validation is explicitly allowed to be upper-only simulation if that matches the documented ownership mode
 - root-on-capable late validation must be explicitly classified as `RootCoupledReadyHandoff`; timing alone is not sufficient
+- root-on-capable late validation must also prove that startup/gameplay shell ownership has been displaced by transition-owned shell lock
 
 Phase 2 must consume this payload rather than infer readiness from timing alone.
 
@@ -617,6 +633,8 @@ If any of the following regress, the runtime must invalidate readiness and log t
 - policy suppression no longer holds
 - target continuity exceeds the certified bounds
 - a reset, release, or topology flip becomes pending
+- shell lock is released or reseeded
+- startup movement unlock fires after shell lock transfer
 
 Not allowed:
 - advancing on time alone
@@ -712,6 +730,7 @@ Required one-shot logs:
 - `PHASE1_TOPOLOGY_TARGET`
 - `PHASE1_POLICY_SUPPRESSION`
 - `PHASE1_HOLD_REFERENCE_CAPTURED`
+- `PHASE1_SHELL_LOCK_TRANSFERRED`
 - `PHASE1_QUIET_WINDOW_STARTED`
 - `PHASE1_QUIET_WINDOW_RESET`
 - `PHASE1_READY_FOR_ROOT_ON`
@@ -734,6 +753,10 @@ Recommended summary fields:
 - pendingResets
 - quarantineActive
 - topologyValid
+- shellAuthorityMode
+- shellReferenceReanchored
+- shellReferenceReseeded
+- startupUnlockSuppressed
 
 Do not spam per-frame logs unless a metric changes materially or a throttle interval elapses.
 
@@ -769,6 +792,12 @@ Minimum required tests for this spec:
 - quiet window accumulates
 - Phase 2 begins
 
+### Test 1b: True success-path topology
+- request arrives
+- Phase 1 converges to `RootCoupledReadyHandoff`
+- proximal remains simulated and distal remains kinematic
+- shell lock transfers to transition ownership
+
 ### Test 2: Distal bodies initially simulating
 - Phase 1 explicitly forces distal kinematic topology
 - quiet window does not start until distal sim count is zero
@@ -791,6 +820,10 @@ Minimum required tests for this spec:
 - inject shell/world corrective motion
 - verify quiet window resets and does not falsely succeed
 
+### Test 5b: Startup unlock interference
+- allow startup-ready unlock condition to become true during late validation
+- verify CharacterMovement/capsule ownership does not return to gameplay
+
 ### Test 6: Recovery / retry
 - first attempt fails due to retryable topology issue
 - recovery restores BridgeActive coherently
@@ -809,7 +842,7 @@ The recommended default implementation is:
 1. On Phase 1 entry:
    - globally suppress policy target writes
    - freeze locomotion / shell assistance
-   - force root, proximal, and distal transition sets kinematic
+   - choose explicitly between safe-denial shaping and true success-path shaping
    - capture one entry hold reference from current skeletal pose
    - select and log one explicit upper-body ownership mode for late validation
 
@@ -820,6 +853,7 @@ The recommended default implementation is:
    - accumulate quiet window only after topology, suppression, control-authority settle, and target continuity are already correct
    - after quiet success, run a bounded late-validation sustain under initial policy influence
    - if the goal is true Phase 2 success, transfer shell authority into `TransitionOwnedShellLocked` before the shell proof window
+   - if the goal is true Phase 2 success, late validation must be rooted in `RootCoupledReadyHandoff`, not the upper-only fallback
    - fail explicitly if upper-body flare or sim-coverage regression appears during sustain
 
 3. On success:

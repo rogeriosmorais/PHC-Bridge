@@ -37,6 +37,12 @@ This spec also defines the contract boundary between:
 
 Those states are no longer equivalent by default.
 
+True root-on success also requires an explicit end-to-end shell/capsule ownership contract:
+
+- who owns shell/capsule authority before Phase 2
+- who owns it during root-on and Phase 3 settle
+- when that ownership may be transferred again
+
 ## 2. Relationship to Existing Design
 
 This spec is intended to **refine and operationalize** the existing design, not replace it.
@@ -254,6 +260,17 @@ Specifically:
 - `policyInfluenceBelowThreshold` -> External-owned. Valid queue blocker.
 - `pelvisBodyNotSimulating` -> **Transition-owned. Must not be a permanent preflight rejection.**
 - `simCount=21 distalSim=16` -> not automatically invalid; if the transition needs a different topology, Phase 1 must create it.
+- `shell/capsule authority still owned by gameplay systems` -> must have an explicit owner; it cannot remain an ownerless blocker
+
+### 11.1 Shell / capsule ownership classes
+
+Balance entry must treat shell/capsule ownership as an explicit domain.
+
+Minimum ownership classes:
+
+- `GameplayShellAuthority`
+- `TransitionOwnedShellLocked`
+- `BalanceActiveShellAuthority`
 
 ## 12. Phase 1: Prepare
 
@@ -277,6 +294,12 @@ If that proof is absent, the runtime must remain in a Phase 1 safe-denial-capabl
 - optionally quarantine hip/thigh influence if required by implementation
 - capture baseline metrics
 
+For the first true root-on-success path, Phase 1 must also:
+
+- intentionally converge to `RootCoupledReadyHandoff`
+- transfer shell/capsule authority from `GameplayShellAuthority` to `TransitionOwnedShellLocked`
+- keep that authority stable through the shell proof window
+
 The detailed implementation contract for these actions is defined in:
 
 - `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
@@ -299,6 +322,10 @@ Minimum certified handoff fields:
 - quiet-proof duration actually achieved
 - late-validation sustain duration achieved under initial policy influence
 - upper-body stability classification at handoff
+- shell authority mode at handoff
+- whether shell reference was re-anchored before the proof window
+- whether shell reference was reseeded after lock
+- whether gameplay CharacterMovement/capsule ownership remained suppressed
 
 If the runtime cannot report these fields coherently, it is not ready for Phase 2.
 
@@ -428,6 +455,7 @@ For the first permitted root-on-success path, the contract is:
 - proximal set remains simulated
 - upper-body ownership remains unchanged from late validation through the Phase 2 guard window
 - shell reference is re-anchored once before the proof window and not reseeded before Phase 3
+- startup/gameplay unlock paths must not regain shell/capsule ownership before Phase 3 success
 
 ### Phase 2 denial rule
 
@@ -500,6 +528,9 @@ Success conditions must hold continuously for a minimum settle duration:
 - no fail-stop precursor active
 - no transition abort reason active
 - required body topology preserved
+- transition/balance runtime still owns shell/capsule authority
+- no shell-reference reseed occurs
+- gameplay CharacterMovement/capsule correction does not reactivate
 
 Failure conditions:
 
@@ -510,6 +541,11 @@ Failure conditions:
 - broad-body explosion / large uncontrolled sim propagation
 - fail-stop precursor
 - timeout without convergence
+- gameplay shell/capsule ownership returns before settle success
+
+### 14.1 Phase 3 ownership-handoff contract
+
+Phase 3 must explicitly hand shell/capsule ownership from `TransitionOwnedShellLocked` into `BalanceActiveShellAuthority`.
 
 ## 15. Activation Contract
 
@@ -522,6 +558,7 @@ Activation must perform:
 - enable perturbation scheduler
 - enable active-mode diagnostics
 - leave startup/transition logs behind
+- declare the active-mode shell authority owner explicitly
 
 The mode is **not active** during queueing, preflight, Phase 1, or Phase 2.
 
@@ -552,6 +589,7 @@ A recovered state is not coherent if any of the following remain true:
 - transition-local pending resets remain armed
 - the previous fail-stop precursor state is still active
 - the system is effectively still in a post-root-on topology while claiming BridgeActive
+- transition-owned shell lock remains active while claiming normal gameplay shell ownership
 
 ### Retry evidence rule
 
@@ -582,6 +620,9 @@ Keep one-shot logs for:
 - settle success or failure
 - final mode activation
 - transition cleanup summary
+- shell-authority transfer begin / success / failure
+- shell-reference re-anchor
+- shell-reference reseed after lock
 
 Remove or throttle per-frame spam for:
 
@@ -628,6 +669,10 @@ The runtime must make it possible to answer these questions from logs:
 6. Did a spike happen before or after root-on?
 7. Why did the transition fail or succeed?
 8. Why was an automatic retry allowed or denied?
+9. Who owned shell/capsule authority at each phase boundary?
+10. Did startup unlock logic interfere with balance entry?
+11. Was shell reference re-anchored exactly once and then held?
+12. Did Phase 3 finish with a coherent active-mode owner?
 
 ## 19. Invariants
 
@@ -639,6 +684,8 @@ These must always hold:
 - Policy influence cannot remain fully active across root-on unless explicitly validated by design
 - A failed transition must restore a coherent BridgeActive state
 - A Phase 2 root-on spike must not silently feed an immediate retry loop from a contaminated post-failure state
+- startup readiness must not release shell/capsule ownership while balance entry still requires transition-owned shell lock
+- root-on success is incomplete until post-root-on shell authority is coherent in Phase 3 / active mode
 
 ## 20. Recommended Threshold Structure
 
@@ -665,6 +712,10 @@ Minimum required tests:
 - request with many distal bodies simulating -> Phase 1 reshapes topology -> success
 - request reaches Phase 2 with invalidated handoff state -> Phase 2 denied safely -> no root-on attempt
 - request reaches Phase 2 with excessive target discontinuity -> Phase 2 denied or failed explicitly before root-on
+- request follows the true success path -> `RootCoupledReadyHandoff` reached -> shell lock active -> root-on succeeds -> Phase 3 settle succeeds
+- startup-ready unlock condition fires during balance entry -> shell ownership does not return to gameplay
+- shell reference re-anchor occurs twice after lock -> Phase 2 denied safely
+- root-on succeeds technically but gameplay shell ownership returns during Phase 3 -> settle fails explicitly
 - induced spike at root-on -> transition aborts cleanly -> returns to BridgeActive
 - missing root modifier/control -> no infinite retry loop -> stable failure
 - failed transition followed by corrected conditions -> second attempt can succeed
@@ -678,6 +729,8 @@ Minimum required tests:
 - Make topology shaping explicit in Phase 1
 - Implement Phase 1 according to the dedicated Phase 1 stabilization spec
 - Disable conflicting authority at root-on
+- treat startup movement lock and balance-entry shell lock as separate lifecycles
+- move shell/capsule ownership with explicit transition-owned functions, not incidental startup codepaths
 - Avoid combining root flip, target reset, policy write, posture rewrite, and shell correction in one uncontrolled frame
 - Any automatic retry loop must have an owner, a reason, a convergence condition, and a retry budget
 - Treat repeated Phase 2 root-on spikes as evidence of a design defect, not as something to brute-force through retries
@@ -694,6 +747,7 @@ The most coherent design is:
    - preserve posture without repeated spam
    - prove readiness through a real quiet-window hold
    - run a bounded late-validation sustain under initial policy influence
+   - transfer shell/capsule ownership into `TransitionOwnedShellLocked`
    - emit a certified handoff state only after both proofs succeed
 4. In Phase 2:
    - validate that the certified handoff state is still true
@@ -704,6 +758,7 @@ The most coherent design is:
    - abort cleanly if root-on spike thresholds are exceeded
 5. In Phase 3:
    - require bounded settle success
+   - hand shell/capsule ownership into the documented active-mode owner
 6. Only then activate balance mode
 
 This treats `pelvisBodyNotSimulating` as the reason for transition, not as a reason to reject forever.

@@ -65,6 +65,8 @@ Phase 2 is successful only if:
 Phase 2 is not a broad settle phase.  
 It is a short, tightly controlled **state-flip and guard-window phase**.
 
+True root-on success still requires a coherent post-root-on owner.
+
 ---
 
 ## 4. Non-Goals
@@ -366,6 +368,10 @@ If any invariant is violated while this mode is active:
 - `PreRootOnShellSafetyProof` becomes false
 - Phase 2 must deny or abort by class rather than continue optimistically
 
+### 6.2.3 Startup/gameplay authority override requirement
+
+Once Phase 1 has entered `TransitionOwnedShellLocked`, startup/gameplay unlock logic is no longer allowed to restore CharacterMovement or capsule ownership independently.
+
 ### 6.3 Root-on-readiness proof for `RootCoupledReadyHandoff`
 
 `RootCoupledReadyHandoff` is root-on-ready only if all of the following are true continuously for a named proof window before `SetPhase(BRT_Phase2_RootOn)`:
@@ -471,6 +477,14 @@ For the first permitted true root-on-success path:
 - that mode must remain active through the full Phase 2 guard window
 - returning shell authority to gameplay systems is deferred to Phase 3 or later
 
+### 7.6 Post-root-on owner is part of the Phase 2 design
+
+Required owner sequence:
+
+1. `GameplayShellAuthority`
+2. `TransitionOwnedShellLocked`
+3. `BalanceActiveShellAuthority`
+
 ---
 
 ## 8. Phase 2 Frame Sequence
@@ -544,6 +558,7 @@ During this guard window:
 - no topology expansion may occur
 - no new posture reseed may occur
 - no shell correction may materially assist the body
+- no startup/gameplay unlock path may restore CharacterMovement/capsule authority
 
 ---
 
@@ -593,6 +608,10 @@ The first permitted true root-on-success path requires:
 - shell reference = re-anchored once before proof, then held fixed through guard window
 
 This is the first non-upper-only handoff topology plus shell-ownership topology that may truthfully permit Phase 2.
+
+## 9.6 Success-path topology is not optional
+
+If the runtime reaches Phase 2 from `root=kin proximal=kin distal=kin upper=sim`, it is still on the safe-denial path, not the true success path.
 
 ---
 
@@ -675,6 +694,7 @@ Phase 2 succeeds only if all are true for the full guard window:
 4. no policy write leak occurs
 5. no reset occurs
 6. no unexpected topology expansion occurs
+7. transition-owned shell lock remains coherent for the full guard window
 
 Only then may the runtime advance to Phase 3.
 
@@ -741,6 +761,7 @@ Required recovery actions:
 - clear transition-local hazard flags
 - ensure no cached reset remains armed from the failed attempt
 - ensure the runtime is not left in a half-root-on state
+- release transition-owned shell lock only as part of coherent recovery
 
 Not allowed:
 - remaining in a partially simulated post-root-on topology while claiming recovery
@@ -853,6 +874,13 @@ Minimum required tests:
 - guard window completes
 - Phase 3 begins
 
+### Test 1d: Full success-path ownership continuity
+- Phase 1 reaches `RootCoupledReadyHandoff`
+- `TransitionOwnedShellLocked` becomes active
+- startup/gameplay unlock paths do not fire independently
+- root-on occurs
+- guard window completes with shell lock still intact
+
 ### Test 1b: Denied root-on due to invalidated handoff
 - Phase 1 succeeds
 - certified handoff payload regresses before Phase 2
@@ -903,6 +931,11 @@ Minimum required tests:
 - fresh BridgeActive quiet proof occurs
 - retry allowed within budget
 
+### Test 8: Post-root-on ownership regression
+- root-on succeeds technically
+- gameplay CharacterMovement/capsule ownership returns during guard window or early settle
+- verify explicit abort/failure classification
+
 ---
 
 ## 20. Recommended Default Design Decision
@@ -919,8 +952,9 @@ The recommended default implementation is:
 8. Keep proximal set simulated and distal set kinematic through the guard window
 9. Forbid resets, shell reseeds, and policy writes for the entire guard window
 10. Abort immediately on threshold breach
-11. Recover fully to BridgeActive
-12. Deny automatic retry after repeated unchanged root-on spikes
+11. Hand off to Phase 3 with transition-owned shell lock still active
+12. Recover fully to BridgeActive if Phase 2 fails
+13. Deny automatic retry after repeated unchanged root-on spikes
 
 This is intentionally conservative.
 
