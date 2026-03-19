@@ -109,12 +109,6 @@ static bool ValidateRootOnReadinessSnapshot(
 	const FPhysAnimStabilizationSettings& Settings,
 	FString& OutReason)
 {
-	if (!Snapshot.bRootOnReadinessShellHoldSatisfied)
-	{
-		OutReason = TEXT("phase2_root_on_readiness_shell_hold_not_completed");
-		return false;
-	}
-
 	if (!Snapshot.bRootOnReadinessFinalBringUpControlSettled)
 	{
 		OutReason = TEXT("phase2_final_bringup_control_not_settled");
@@ -124,6 +118,12 @@ static bool ValidateRootOnReadinessSnapshot(
 	if (!Snapshot.bRootOnReadinessPolicyInfluenceSettled)
 	{
 		OutReason = TEXT("phase2_root_on_readiness_policy_influence_not_settled");
+		return false;
+	}
+
+	if (!Snapshot.bRootOnReadinessShellHoldSatisfied)
+	{
+		OutReason = TEXT("phase2_root_on_readiness_shell_hold_not_completed");
 		return false;
 	}
 
