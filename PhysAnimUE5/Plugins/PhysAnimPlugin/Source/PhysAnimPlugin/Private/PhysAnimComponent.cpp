@@ -5914,8 +5914,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame && PolicyInfluenceRampStartTimeSeconds >= 0.0)
 	{
-		// Preserve the original ramp start so readiness accounting keeps the full settled window.
-		bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
+		// Preserve the original ramp start so readiness accounting keeps the full settled window,
+		// but remember that the first policy-enabled frame was explicitly re-based for readiness.
+		bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = true;
 	}
 
 	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);

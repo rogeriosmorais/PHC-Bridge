@@ -496,16 +496,24 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			(CurrentSnapshot.SimCount < CertifiedHandoff.SimCount ||
 				CurrentSnapshot.ProximalSimCount < CertifiedHandoff.ProximalSimCount ||
 				CurrentSnapshot.DistalSimCount < CertifiedHandoff.DistalSimCount);
+		const bool bFirstPolicyEnabledFrame = Owner->GetLastControlTargetDiagnostics().bFirstPolicyEnabledFrame;
+		const bool bPolicyInfluenceRampReanchored = Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
 		const bool bCurrentTargetDiscontinuity =
 			Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
 			Owner->GetLastControlTargetDiagnostics().MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg;
+		// The first policy-enabled frame re-bases the target history; do not treat that expected
+		// transition spike as a late-validation failure.
+		const bool bLateValidateTargetDiscontinuity =
+			bCurrentTargetDiscontinuity &&
+			!bFirstPolicyEnabledFrame &&
+			!bPolicyInfluenceRampReanchored;
 
 		if (bLateValidationThisFrame && bCurrentSnapshotValid)
 		{
-			if (bUpperBodyInstability || bSimCoverageRegressed || bCurrentTargetDiscontinuity)
+			if (bUpperBodyInstability || bSimCoverageRegressed || bLateValidateTargetDiscontinuity)
 			{
 				bLateValidationThisFrame = false;
-				LateValidateBlockReason = ClassifyLateValidationFailureReason(bUpperBodyInstability, bSimCoverageRegressed, bCurrentTargetDiscontinuity);
+				LateValidateBlockReason = ClassifyLateValidationFailureReason(bUpperBodyInstability, bSimCoverageRegressed, bLateValidateTargetDiscontinuity);
 			}
 		}
 		else if (bLateValidationThisFrame && !bCurrentSnapshotValid)
