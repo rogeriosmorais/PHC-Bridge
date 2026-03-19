@@ -97,6 +97,10 @@ This owner is responsible for:
 - invalidating runs if forbidden owners become active
 - handing authority back only on explicit mode exit
 
+Authoritative shell/capsule ownership chain:
+
+- `GameplayShellAuthority -> TransitionOwnedShellLocked -> BalanceModeRuntimeOwner`
+
 ## 7. Quiet proof requirement
 
 A perturbation may fire only when active-mode quiet proof is valid.
@@ -117,7 +121,7 @@ This owner is responsible for:
 - reporting actual accumulated duration
 - exposing validity to the perturbation scheduler
 
-Default named requirement:
+Shared quiet-duration constant used by both transition and active mode:
 
 - `BalanceModeQuietRequiredSeconds = 1.0`
 

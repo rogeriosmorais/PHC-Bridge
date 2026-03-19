@@ -192,6 +192,10 @@ Interpretation rule:
 - `GameplayShellObservedOnly` is compatible with safe denial
 - `TransitionOwnedShellLocked` is required for the first true root-on success path
 
+Authoritative shell/capsule ownership chain during Phase 1:
+
+- `GameplayShellAuthority -> TransitionOwnedShellLocked`
+
 ## 8. Phase 1 entry actions
 
 On Phase 1 entry, perform exactly once:
@@ -251,7 +255,7 @@ Phase 1 is quiet only if all remain true continuously:
 
 ### 10.2 Quiet duration
 
-Required minimum:
+Phase 1 uses the shared quiet-duration constant:
 
 - `BalanceModeQuietRequiredSeconds = 1.0`
 

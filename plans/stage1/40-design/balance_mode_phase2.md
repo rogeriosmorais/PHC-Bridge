@@ -243,6 +243,10 @@ The required shell authority mode is:
 
 That shell-lock mode must remain active through the full Phase 2 guard window.
 
+Authoritative shell/capsule ownership chain during Phase 2:
+
+- `GameplayShellAuthority -> TransitionOwnedShellLocked`
+
 ## 10. Root-on frame sequence
 
 Phase 2 must execute in this order.

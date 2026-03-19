@@ -122,7 +122,15 @@ Every transition condition must be one of:
 
 If a condition is transition-owned, preflight must not reject forever merely because that condition is currently false.
 
-## 9. Owner map
+## 9. Canonical shell/capsule authority chain
+
+The authoritative shell/capsule ownership chain for balance entry and active mode is:
+
+- `GameplayShellAuthority -> TransitionOwnedShellLocked -> BalanceModeRuntimeOwner`
+
+This chain must be preserved across Phase 1, Phase 2, Phase 3, and active mode.
+
+## 10. Owner map
 
 Minimum owner map:
 
@@ -141,7 +149,7 @@ Minimum owner map:
 - `postRootOnShellAuthorityPreserved` = Phase 2 and Phase 3 shell-lock maintenance
 - active-mode ownership handoff = Phase 3 settle logic
 
-## 10. Phase 1 boundary
+## 11. Phase 1 boundary
 
 Phase 1 exists to make root-on safe.
 
@@ -152,7 +160,7 @@ That contract is defined in:
 
 This document only defines that Phase 1 must emit a certified handoff payload before Phase 2 may begin.
 
-## 11. Certified handoff payload
+## 12. Certified handoff payload
 
 Phase 1 must emit a certified handoff payload containing at minimum:
 
@@ -175,7 +183,7 @@ Phase 1 must emit a certified handoff payload containing at minimum:
 
 Phase 2 must consume this payload rather than infer readiness from time alone.
 
-## 12. Valid handoff classifications
+## 13. Valid handoff classifications
 
 The documented handoff classes are:
 
@@ -187,7 +195,7 @@ Interpretation rule:
 - `UpperOnlySafeDenyHandoff` is valid for safe denial
 - `RootCoupledReadyHandoff` is the first topology class that may truthfully permit root-on
 
-## 13. Handoff invalidation
+## 14. Handoff invalidation
 
 Phase 1 readiness is revocable.
 
@@ -207,7 +215,7 @@ Invalidating regressions include:
 - shell lock is released or reseeded
 - gameplay shell/capsule authority returns
 
-## 14. Phase 2 boundary
+## 15. Phase 2 boundary
 
 Phase 2 governs root-on and the immediate guard window.
 
@@ -217,7 +225,7 @@ The exact Phase 2 procedure is defined in:
 
 This document only defines that Phase 2 may begin only from a still-valid certified handoff and that Phase 2 may deny safely before root-on.
 
-## 15. Safe denial rule
+## 16. Safe denial rule
 
 The transition pipeline must support a safe denial path.
 
@@ -227,7 +235,7 @@ Denial is valid.
 
 A denial is not a root-on failure.
 
-## 16. Phase 3 boundary
+## 17. Phase 3 boundary
 
 Phase 3 is the bounded settle window after root-on.
 
@@ -241,7 +249,59 @@ Phase 3 must prove:
 
 Only after Phase 3 success may the runtime activate balance mode.
 
-## 17. Activation contract
+### 17.1 Phase 3 required topology
+
+During `BalanceTransition_Phase3_Settle`, the required topology is:
+
+- `pelvis` = simulated
+- proximal set = simulated
+- distal set = kinematic
+- upper-body ownership mode = unchanged from the certified Phase 1 handoff and preserved through Phase 2
+
+### 17.2 Phase 3 shell authority owner
+
+During Phase 3, the required shell authority owner remains:
+
+- `TransitionOwnedShellLocked`
+
+Phase 3 may not hand shell/capsule authority back to gameplay ownership.
+
+### 17.3 Phase 3 settle completion proof
+
+Required proof object:
+
+- `Phase3SettleProof`
+
+Phase 3 succeeds only if all required settle conditions remain true continuously for:
+
+- `Phase3SettleRequiredSeconds`
+
+Minimum Phase 3 settle conditions:
+
+- root sim state preserved
+- post-root-on topology preserved
+- shell lock preserved
+- no shell reference reseed
+- no startup/gameplay ownership reclaim
+- no reset pending
+- no topology flip pending
+- no locomotion entry
+- no material shell correction
+- no guard-window or settle-window abort threshold exceeded
+
+### 17.4 Phase 3 failure classes
+
+Minimum Phase 3 failures:
+
+- `phase3_topology_regressed`
+- `phase3_shell_lock_lost`
+- `phase3_shell_reference_reseeded`
+- `phase3_startup_or_gameplay_authority_reclaimed`
+- `phase3_material_shell_correction`
+- `phase3_post_root_on_instability`
+- `phase3_no_convergence_path`
+
+## 18. Activation contract
 
 Activation must do all of the following:
 
@@ -252,9 +312,16 @@ Activation must do all of the following:
 - hand off authority to the active-mode owner
 - stop transition-only behavior
 
+Active mode is valid only after all of the following are true:
+
+- certified `RootCoupledReadyHandoff` was achieved
+- Phase 2 root-on succeeded
+- Phase 3 settle succeeded
+- shell/capsule authority was handed off to `BalanceModeRuntimeOwner`
+
 The mode is not active before this point.
 
-## 18. Recovery contract
+## 19. Recovery contract
 
 When transition fails, recovery must:
 
@@ -270,7 +337,7 @@ When transition fails, recovery must:
 
 Recovery is incomplete unless the runtime is coherent again.
 
-## 19. Automatic retry rule
+## 20. Automatic retry rule
 
 Automatic retry is permitted only if all are true:
 
@@ -284,7 +351,7 @@ Automatic retry is permitted only if all are true:
 
 If these are not true, the runtime must not automatically loop.
 
-## 20. Logging contract
+## 21. Logging contract
 
 Required one-shot logs:
 
@@ -307,7 +374,7 @@ Required retry-loop logs:
 - whether fresh quiet proof was re-established
 - remaining retry budget
 
-## 21. Invariants
+## 22. Invariants
 
 These must always hold:
 
@@ -318,7 +385,7 @@ These must always hold:
 - repeated Phase 2 spikes must not brute-force through retries without new evidence
 - shell/capsule authority must be owned explicitly at each phase boundary
 
-## 22. Acceptance criteria
+## 23. Acceptance criteria
 
 This spec is satisfied only when:
 
