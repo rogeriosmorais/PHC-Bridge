@@ -36,11 +36,7 @@ namespace BalanceTransitionSets
 	}
 	static bool IsLateValidationUpperBodyOwnershipBone(FName BoneName)
 	{
-		// Late validation keeps the apex and shoulder chain anchored so the first policy ramp
-		// does not inject a cold-start instability into the upper arms.
-		return IsUpperBodyApex(BoneName) ||
-			BoneName == "clavicle_l" || BoneName == "clavicle_r" ||
-			BoneName == "upperarm_l" || BoneName == "upperarm_r";
+		return IsUpperBody(BoneName);
 	}
 	static bool IsTransitionCritical(FName BoneName) { return IsRoot(BoneName) || IsProximal(BoneName) || IsDistalLowerLimb(BoneName); }
 	static bool IsPrepareCriticalKinematic(FName BoneName) { return IsRoot(BoneName) || IsDistalLowerLimb(BoneName); }
@@ -112,12 +108,12 @@ namespace BalanceTransitionSets
 
 	static bool IsUpperOnlySafeDenyHandoff(int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount, bool bRootSimulating)
 	{
-		return !bRootSimulating && ProximalSimCount == 0 && DistalSimCount == 0 && UpperSimCount > 0;
+		return false;
 	}
 
 	static bool IsRootCoupledReadyHandoff(int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount, bool bRootSimulating)
 	{
-		return !bRootSimulating && ProximalSimCount == 5 && DistalSimCount == 0 && UpperSimCount >= 4;
+		return !bRootSimulating && ProximalSimCount == 5 && DistalSimCount == 0 && UpperSimCount == 0;
 	}
 
 	static const TCHAR* GetUpperBodyOwnershipModeName(EBalanceReadyUpperBodyOwnershipMode Mode)
