@@ -473,8 +473,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				? LastLateValidateBlockReason
 				: (!QuietBlockReason.IsEmpty() ? QuietBlockReason : LastQuietBlockReason);
 			const FString TimeoutReason = TerminalQuietBlockReason.IsEmpty()
-				? TEXT("phase1_quiet_timeout_unknown")
-				: TEXT("phase1_quiet_timeout_") + TerminalQuietBlockReason;
+				? TEXT("phase1_no_convergence_path")
+				: TEXT("phase1_no_convergence_path_") + TerminalQuietBlockReason;
 			Diagnostics.FailureReason = TimeoutReason;
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
 			Owner->ReleaseTransitionOwnedShellLock();
@@ -881,8 +881,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			LateValidationAccumulatedSeconds <= 0.0f)
 		{
 			const FString TimeoutReason = LateValidateBlockReason.IsEmpty()
-				? TEXT("phase1_late_validate_timeout_unknown")
-				: TEXT("phase1_late_validate_timeout_") + LateValidateBlockReason;
+				? TEXT("phase1_no_convergence_path")
+				: TEXT("phase1_no_convergence_path_") + LateValidateBlockReason;
 			Diagnostics.FailureReason = TimeoutReason;
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
 			Owner->ReleaseTransitionOwnedShellLock();
@@ -1123,7 +1123,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		if (PhaseTimeSeconds > Settings.BalancePhase3TimeoutDuration)
 		{
-			Diagnostics.FailureReason = TEXT("phase3_settle_timeout");
+			Diagnostics.FailureReason = TEXT("phase3_no_convergence_path");
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 		}
 	}
@@ -2102,8 +2102,7 @@ EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOw
 		return EBalanceReadyConditionOwner::Phase1UpperBodyOwnership;
 	}
 	if (Reason.StartsWith(TEXT("phase1_late_validate_target_discontinuity")) ||
-		Reason.StartsWith(TEXT("phase1_quiet_timeout_target_discontinuity")) ||
-		Reason.StartsWith(TEXT("phase1_late_validate_timeout_target_discontinuity")) ||
+		Reason.StartsWith(TEXT("phase1_no_convergence_path_target_discontinuity")) ||
 		Reason == TEXT("phase2_target_discontinuity_too_high") ||
 		Reason == TEXT("phase2_policy_suppression_regressed"))
 	{
@@ -2180,6 +2179,11 @@ EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOw
 		Reason == TEXT("phase3_topology_regressed"))
 	{
 		return EBalanceReadyConditionOwner::Phase2TopologyEnforcement;
+	}
+	if (Reason.StartsWith(TEXT("phase1_no_convergence_path")) ||
+		Reason == TEXT("phase3_no_convergence_path"))
+	{
+		return EBalanceReadyConditionOwner::TransitionRecovery;
 	}
 
 	return EBalanceReadyConditionOwner::None;
