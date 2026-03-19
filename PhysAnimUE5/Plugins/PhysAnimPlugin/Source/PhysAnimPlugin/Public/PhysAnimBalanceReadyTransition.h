@@ -58,6 +58,13 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	float RootOnReadinessPolicyInfluenceRequiredSeconds = 0.0f;
 	float RootOnReadinessShellHoldDurationSeconds = 0.0f;
 	float RootOnReadinessShellHoldRequiredSeconds = 0.0f;
+	float RootOnReadinessShellProofDurationSeconds = 0.0f;
+	float ShellOffsetDeltaAtCaptureCm = 0.0f;
+	float ShellVelocityDeltaAtCaptureCmPerSecond = 0.0f;
+	float ShellOffsetGrowthCm = 0.0f;
+	float ShellVelocityGrowthCmPerSecond = 0.0f;
+	bool bShellCorrectionOwnerActive = false;
+	bool bPreRootOnShellSafetyProofSatisfied = false;
 	bool bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
 	float MaxTargetDeltaDegrees = 0.0f;
 	float MeanTargetDeltaDegrees = 0.0f;
@@ -76,6 +83,7 @@ struct FBalanceReadyTransitionDiagnostics
 	FString Phase1LateValidateGateSource;
 	FString Phase1LateValidateGateReason;
 	FString Phase1RootOnReadinessGateReason;
+	FString Phase2ShellProofGateReason;
 	float RootSpeed = 0.0f;
 	float RootAngularSpeed = 0.0f;
 	float RootTilt = 0.0f;
@@ -193,6 +201,10 @@ private:
 	float QuietWindowAccumulatedSeconds = 0.0f;
 	float LateValidationAccumulatedSeconds = 0.0f;
 	float RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
+	float RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
+	float RootOnReadinessShellProofStartOffsetCm = 0.0f;
+	float RootOnReadinessShellProofStartVelocityCmPerSecond = 0.0f;
+	bool bHasRootOnReadinessShellProofBaseline = false;
 	float HipQuarantineTimerSeconds = 0.0f;
 	FString LastLateValidateBlockReason;
 	int32 RetryCount = 0;

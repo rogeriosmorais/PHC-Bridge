@@ -336,6 +336,21 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase2RequiredShellHoldDuration = 0.25f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase2PreRootOnShellProofRequiredSeconds = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase2GuardWindowDuration = 0.10f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
@@ -471,6 +486,11 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxShellVelocityDelta, Other.BalancePhase2EntryMaxShellVelocityDelta) &&
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxTargetDeltaDeg, Other.BalancePhase2EntryMaxTargetDeltaDeg) &&
 			FMath::IsNearlyEqual(BalancePhase2RequiredShellHoldDuration, Other.BalancePhase2RequiredShellHoldDuration) &&
+			FMath::IsNearlyEqual(BalancePhase2PreRootOnShellProofRequiredSeconds, Other.BalancePhase2PreRootOnShellProofRequiredSeconds) &&
+			FMath::IsNearlyEqual(BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm, Other.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm) &&
+			FMath::IsNearlyEqual(BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond, Other.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond) &&
+			FMath::IsNearlyEqual(BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm, Other.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm) &&
+			FMath::IsNearlyEqual(BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond, Other.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond) &&
 			FMath::IsNearlyEqual(BalancePhase2GuardWindowDuration, Other.BalancePhase2GuardWindowDuration) &&
 			FMath::IsNearlyEqual(BalancePhase2AbortRootLinearSpeed, Other.BalancePhase2AbortRootLinearSpeed) &&
 			FMath::IsNearlyEqual(BalancePhase2AbortRootAngularSpeed, Other.BalancePhase2AbortRootAngularSpeed) &&

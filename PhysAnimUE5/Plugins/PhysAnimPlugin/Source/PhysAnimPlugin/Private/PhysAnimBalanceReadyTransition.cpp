@@ -1,6 +1,9 @@
 #include "PhysAnimBalanceReadyTransition.h"
 #include "PhysAnimComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
@@ -172,6 +175,38 @@ static bool ValidateRootOnReadinessSnapshot(
 	return true;
 }
 
+static bool ValidatePreRootOnShellSafetyProofSnapshot(
+	const FPhysAnimCertifiedHandoffSnapshot& Snapshot,
+	const FPhysAnimStabilizationSettings& Settings,
+	FString& OutReason)
+{
+	if (Snapshot.RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		return false;
+	}
+
+	if (Snapshot.RootOnReadinessShellProofDurationSeconds + KINDA_SMALL_NUMBER <
+		Settings.BalancePhase2PreRootOnShellProofRequiredSeconds)
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		return false;
+	}
+
+	if (Snapshot.ShellOffsetDeltaAtCaptureCm > Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm ||
+		Snapshot.ShellVelocityDeltaAtCaptureCmPerSecond > Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond ||
+		Snapshot.ShellOffsetGrowthCm > Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm ||
+		Snapshot.ShellVelocityGrowthCmPerSecond > Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond ||
+		Snapshot.bShellCorrectionOwnerActive ||
+		!Snapshot.bPreRootOnShellSafetyProofSatisfied)
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		return false;
+	}
+
+	return true;
+}
+
 void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhysAnimComponent* Owner)
 {
 	if (IsActive() || !Owner)
@@ -194,6 +229,10 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	QuietWindowAccumulatedSeconds = 0.0f;
 	TargetDiscontinuityAccumulatedSeconds = 0.0f;
 	RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
+	RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
+	RootOnReadinessShellProofStartOffsetCm = 0.0f;
+	RootOnReadinessShellProofStartVelocityCmPerSecond = 0.0f;
+	bHasRootOnReadinessShellProofBaseline = false;
 	PhaseTimeSeconds = 0.0f;
 	TotalTransitionTimeSeconds = 0.0f;
 	LastLogTimeSeconds = -1.0;
@@ -560,6 +599,32 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			LateValidationAccumulatedSeconds += DeltaTime;
 			RootOnReadinessShellHoldAccumulatedSeconds += DeltaTime;
+			const float CurrentShellOffsetCm = Owner->GetCurrentShellPlanarOffsetDeltaCm();
+			const float CurrentShellVelocityDeltaCmPerSecond = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+			if (!bHasRootOnReadinessShellProofBaseline)
+			{
+				RootOnReadinessShellProofStartOffsetCm = CurrentShellOffsetCm;
+				RootOnReadinessShellProofStartVelocityCmPerSecond = CurrentShellVelocityDeltaCmPerSecond;
+				bHasRootOnReadinessShellProofBaseline = true;
+			}
+			const float ShellOffsetGrowthCm = FMath::Max(0.0f, CurrentShellOffsetCm - RootOnReadinessShellProofStartOffsetCm);
+			const float ShellVelocityGrowthCmPerSecond = FMath::Max(0.0f, CurrentShellVelocityDeltaCmPerSecond - RootOnReadinessShellProofStartVelocityCmPerSecond);
+			const bool bShellProofThisFrame =
+				CurrentShellOffsetCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm &&
+				CurrentShellVelocityDeltaCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond &&
+				ShellOffsetGrowthCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm &&
+				ShellVelocityGrowthCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond &&
+				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle;
+			if (bShellProofThisFrame)
+			{
+				RootOnReadinessShellProofAccumulatedSeconds += DeltaTime;
+			}
+			else
+			{
+				RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
+				RootOnReadinessShellProofStartOffsetCm = CurrentShellOffsetCm;
+				RootOnReadinessShellProofStartVelocityCmPerSecond = CurrentShellVelocityDeltaCmPerSecond;
+			}
 			// Carry the quiet-proof timer through late validation so the certified handoff
 			// reflects a real sustain window under initial policy influence.
 			QuietWindowAccumulatedSeconds += DeltaTime;
@@ -581,6 +646,14 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			const bool bCanCompleteAsUpperOnlySafeDeny =
 				CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied &&
 				LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds;
+			const bool bRootCoupledTopologyReachedWithoutShellProof =
+				LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds &&
+				BalanceTransitionSets::IsRootCoupledReadyHandoff(
+					CurrentSnapshot.ProximalSimCount,
+					CurrentSnapshot.DistalSimCount,
+					CurrentSnapshot.UpperBodySimCount,
+					false) &&
+				!CurrentSnapshot.bPreRootOnShellSafetyProofSatisfied;
 			if (bCanCompleteAsRootCoupledReady || bCanCompleteAsUpperOnlySafeDeny)
 			{
 				if (!bCanCompleteAsRootCoupledReady &&
@@ -675,10 +748,21 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *LateValidateBlockReason);
 				return;
 			}
+			if (bRootCoupledTopologyReachedWithoutShellProof)
+			{
+				LateValidateBlockReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+				Diagnostics.FailureReason = LateValidateBlockReason;
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *LateValidateBlockReason);
+				MarkSafePhase2Denied(LateValidateBlockReason);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *LateValidateBlockReason);
+				return;
+			}
 		}
 		else
 		{
 			RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
+			RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
+			bHasRootOnReadinessShellProofBaseline = false;
 			if (!LateValidateBlockReason.IsEmpty())
 			{
 				LastLateValidateBlockReason = LateValidateBlockReason;
@@ -1118,15 +1202,15 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
+	if (!CurrentSnapshot.bRootOnReadinessProven)
 	{
 		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
 		return false;
 	}
 
-	if (!CurrentSnapshot.bRootOnReadinessProven)
+	if (!ValidatePreRootOnShellSafetyProofSnapshot(CurrentSnapshot, Settings, HandoffReadinessReason))
 	{
-		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		OutReason = HandoffReadinessReason;
 		return false;
 	}
 
@@ -1238,6 +1322,29 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		FMath::Max(Settings.StartupRampSeconds, UE_SMALL_NUMBER) * Owner->BalanceReadyPolicyInfluenceThreshold;
 	OutSnapshot.RootOnReadinessShellHoldDurationSeconds = RootOnReadinessShellHoldAccumulatedSeconds;
 	OutSnapshot.RootOnReadinessShellHoldRequiredSeconds = Settings.BalancePhase2RequiredShellHoldDuration;
+	OutSnapshot.RootOnReadinessShellProofDurationSeconds = RootOnReadinessShellProofAccumulatedSeconds;
+	OutSnapshot.ShellOffsetDeltaAtCaptureCm = Owner->GetCurrentShellPlanarOffsetDeltaCm();
+	OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+	OutSnapshot.ShellOffsetGrowthCm = bHasRootOnReadinessShellProofBaseline
+		? FMath::Max(0.0f, OutSnapshot.ShellOffsetDeltaAtCaptureCm - RootOnReadinessShellProofStartOffsetCm)
+		: 0.0f;
+	OutSnapshot.ShellVelocityGrowthCmPerSecond = bHasRootOnReadinessShellProofBaseline
+		? FMath::Max(0.0f, OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond - RootOnReadinessShellProofStartVelocityCmPerSecond)
+		: 0.0f;
+	bool bShellCorrectionOwnerActive = Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle;
+	if (const ACharacter* const CharacterOwner = Cast<ACharacter>(Owner->GetOwner()))
+	{
+		if (const UCharacterMovementComponent* const CharacterMovement = CharacterOwner->GetCharacterMovement())
+		{
+			bShellCorrectionOwnerActive |= CharacterMovement->IsComponentTickEnabled() ||
+				CharacterMovement->MovementMode != MOVE_None;
+		}
+		if (const UCapsuleComponent* const CapsuleComponent = CharacterOwner->GetCapsuleComponent())
+		{
+			bShellCorrectionOwnerActive |= CapsuleComponent->GetCollisionEnabled() != ECollisionEnabled::NoCollision;
+		}
+	}
+	OutSnapshot.bShellCorrectionOwnerActive = bShellCorrectionOwnerActive;
 	OutSnapshot.bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame =
 		Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
 	OutSnapshot.bLateValidationCompleted = bHasLateValidationProof;
@@ -1252,10 +1359,19 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bRootOnReadinessPolicyInfluenceSettled =
 		OutSnapshot.RootOnReadinessPolicyInfluenceDurationSeconds + KINDA_SMALL_NUMBER >=
 		OutSnapshot.RootOnReadinessPolicyInfluenceRequiredSeconds;
+	OutSnapshot.bPreRootOnShellSafetyProofSatisfied =
+		OutSnapshot.RootOnReadinessShellProofDurationSeconds + KINDA_SMALL_NUMBER >=
+			Settings.BalancePhase2PreRootOnShellProofRequiredSeconds &&
+		OutSnapshot.ShellOffsetDeltaAtCaptureCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm &&
+		OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond &&
+		OutSnapshot.ShellOffsetGrowthCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm &&
+		OutSnapshot.ShellVelocityGrowthCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond &&
+		!OutSnapshot.bShellCorrectionOwnerActive;
 	OutSnapshot.bRootOnReadinessProven =
 		OutSnapshot.bRootOnReadinessShellHoldSatisfied &&
 		OutSnapshot.bRootOnReadinessFinalBringUpControlSettled &&
 		OutSnapshot.bRootOnReadinessPolicyInfluenceSettled &&
+		OutSnapshot.bPreRootOnShellSafetyProofSatisfied &&
 		BalanceTransitionSets::IsRootCoupledReadyHandoff(
 			ProximalSimCount,
 			DistalSimCount,
@@ -1423,6 +1539,10 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	Diagnostics = {};
 	LateValidationAccumulatedSeconds = 0.0f;
 	RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
+	RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
+	RootOnReadinessShellProofStartOffsetCm = 0.0f;
+	RootOnReadinessShellProofStartVelocityCmPerSecond = 0.0f;
+	bHasRootOnReadinessShellProofBaseline = false;
 	LastLateValidateBlockReason.Reset();
 	bHasLateValidationProof = false;
 	ResetCertifiedHandoffState();
@@ -1434,6 +1554,10 @@ void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
 	CertifiedHandoff = {};
 	bHasLateValidationProof = false;
 	RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
+	RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
+	RootOnReadinessShellProofStartOffsetCm = 0.0f;
+	RootOnReadinessShellProofStartVelocityCmPerSecond = 0.0f;
+	bHasRootOnReadinessShellProofBaseline = false;
 }
 
 void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent* Owner)
