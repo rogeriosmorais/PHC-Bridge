@@ -44,6 +44,7 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	float FinalBringUpGroupControlAuthorityAlpha = 0.0f;
 	float PolicyInfluenceAlphaAtCapture = 0.0f;
 	float RootOnReadinessShellHoldDurationSeconds = 0.0f;
+	float RootOnReadinessShellHoldRequiredSeconds = 0.0f;
 	float MaxTargetDeltaDegrees = 0.0f;
 	float MeanTargetDeltaDegrees = 0.0f;
 	float QuietProofDurationSeconds = 0.0f;
