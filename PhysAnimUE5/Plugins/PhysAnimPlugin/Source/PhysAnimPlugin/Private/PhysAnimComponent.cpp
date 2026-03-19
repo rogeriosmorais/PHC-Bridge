@@ -1880,8 +1880,9 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 {
 	const bool bBalanceMode = RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode;
 	const bool bTransitionActive = BalanceReadyTransition.IsActive();
-	
-	const bool bBringUpUnlocked = AreAllBringUpGroupsUnlocked();
+	const bool bPhase1LateValidateOrLater =
+		!bTransitionActive ||
+		BalanceReadyTransition.GetPhase() >= EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate;
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
 	const bool bFinalRampActive = IsBringUpGroupControlRampActive(FinalGroupIndex);
 	const bool bResetsEmpty = PendingBodyModifierCachedResetNames.IsEmpty();
@@ -1891,10 +1892,15 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 	// validating the handoff, otherwise two owners can race the same state flip.
 	if (bTransitionActive)
 	{
-		return false;
+		const EBalanceReadyTransitionPhase Phase = BalanceReadyTransition.GetPhase();
+		if (Phase != EBalanceReadyTransitionPhase::BRT_Phase2_RootOn &&
+			Phase != EBalanceReadyTransitionPhase::BRT_Succeeded)
+		{
+			return false;
+		}
 	}
 
-	return bBalanceMode && bBringUpUnlocked && bFinalRampActive && bResetsEmpty;
+	return bBalanceMode && bPhase1LateValidateOrLater && bFinalRampActive && bResetsEmpty;
 }
 
 bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
@@ -1922,13 +1928,13 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 		return SetFailure(TEXT("invalidRuntimeState"));
 	}
 
-	if (!AreAllBringUpGroupsUnlocked())
+	const int32 CoreFinalBringUpGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
+	if (HighestUnlockedBringUpGroupIndex < CoreFinalBringUpGroupIndex)
 	{
 		return SetFailure(TEXT("bringUpIncomplete"));
 	}
 
-	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
-	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
+	if (!IsBringUpGroupControlRampActive(CoreFinalBringUpGroupIndex))
 	{
 		return SetFailure(TEXT("finalGroupRampInactive"));
 	}
@@ -2447,14 +2453,14 @@ bool UPhysAnimComponent::EvaluateBalanceModeQueueGates(const FPhysAnimStabilizat
 		return false;
 	}
 
-	if (!AreAllBringUpGroupsUnlocked())
+	const int32 CoreFinalBringUpGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
+	if (HighestUnlockedBringUpGroupIndex < CoreFinalBringUpGroupIndex)
 	{
 		OutReason = TEXT("queue_bring_up_incomplete");
 		return false;
 	}
 
-	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
-	if (!IsBringUpGroupControlRampActive(FinalGroupIndex))
+	if (!IsBringUpGroupControlRampActive(CoreFinalBringUpGroupIndex))
 	{
 		OutReason = TEXT("queue_final_group_ramp_inactive");
 		return false;
@@ -5195,11 +5201,6 @@ float UPhysAnimComponent::CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimSt
 		return 0.0f;
 	}
 
-	if (!AreAllBringUpGroupsUnlocked())
-	{
-		return 0.0f;
-	}
-
 	if (PolicyInfluenceRampStartTimeSeconds < 0.0)
 	{
 		return 0.0f;
@@ -5702,15 +5703,15 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 		return;
 	}
 
-	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
-	if (AreAllBringUpGroupsUnlocked())
+	const int32 CoreFinalGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
+	if (HighestUnlockedBringUpGroupIndex >= CoreFinalGroupIndex)
 	{
-		if (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(FinalGroupIndex) &&
-			BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] < 0.0 &&
+		if (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(CoreFinalGroupIndex) &&
+			BringUpGroupControlRampStartTimeSeconds[CoreFinalGroupIndex] < 0.0 &&
 			ShouldStartBringUpGroupControlRamp(
 				EffectiveSettings.bForceZeroActions,
 				true,
-				ShouldDelayBringUpGroupControlRamp(FinalGroupIndex, GetBringUpGroupCount()),
+				ShouldDelayBringUpGroupControlRamp(CoreFinalGroupIndex, GetBringUpGroupCount()),
 				true))
 		{
 			const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
@@ -5726,7 +5727,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 				bDistalLocomotionCompositionModeActive ? TEXT("On") : TEXT("Off"),
 				CurrentAngularVelocity);
 
-			BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] = WorldTime;
+			BringUpGroupControlRampStartTimeSeconds[CoreFinalGroupIndex] = WorldTime;
 			BringUpGroupStableAccumulatedSeconds = 0.0f;
 			
 			const float AngularVelocity = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
@@ -5734,7 +5735,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 				LogPhysAnimBridge,
 				Log,
 				TEXT("[PhysAnim] Stabilization final-group control ramp enabled for group %d/%d [hand_l, hand_r]. PelvisAngularVelocity=%.2f deg/s. PendingResets=%d"),
-				FinalGroupIndex + 1,
+				CoreFinalGroupIndex + 1,
 				GetBringUpGroupCount(),
 				AngularVelocity,
 				PendingBodyModifierCachedResetNames.Num());
@@ -5757,7 +5758,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 			ShouldStartPolicyInfluenceRamp(
 				EffectiveSettings.bForceZeroActions,
 				true,
-				IsBringUpGroupControlRampActive(FinalGroupIndex),
+				IsBringUpGroupControlRampActive(CoreFinalGroupIndex),
 				true) &&
 			!BalanceReadyTransition.HasSafePhase2Denial())
 		{
