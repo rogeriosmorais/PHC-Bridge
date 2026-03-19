@@ -292,6 +292,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 		return;
 	}
 
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Preflight begin."));
 	const EBalanceReadyEntryClassification Classification = ClassifyEntryState(Owner, Owner->ResolveEffectiveStabilizationSettings());
 	if (Classification != EBalanceReadyEntryClassification::Preflight_Accept)
 	{
@@ -299,8 +300,14 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 		{
 			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_REJECTED reason=preflight_hard_failure"));
 		}
+		else
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_REJECTED reason=preflight_queue_block"));
+		}
 		return;
 	}
+
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] TRANSITION_ACCEPT reason=preflight_accept"));
 
 	RequestReason = InRequestReason;
 	StableHoldAccumulatedSeconds = 0.0f;
@@ -804,6 +811,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 								? TEXT("ready")
 							: Diagnostics.Phase1RootOnReadinessGateReason;
 					Diagnostics.Phase1RootOnReadinessGateReason = RootOnReadinessGateReason;
+
+					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] EMIT_READY_HANDOFF classification=%s"), 
+						BalanceTransitionSets::GetRootOnReadinessClassificationName(CertifiedHandoff.RootOnReadinessClassification));
 					UE_LOG(
 						LogPhysAnimBridge,
 						Log,
@@ -1227,7 +1237,13 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		Owner->ReleaseTransitionOwnedShellLock();
 	}
 
+	if (NewPhase != EBalanceReadyTransitionPhase::BRT_Inactive && InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive)
+	{
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE_COMMIT commit=%d"), static_cast<int32>(InternalPhase));
+	}
+
 	InternalPhase = NewPhase;
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE_ENTRY phase=%d"), static_cast<int32>(InternalPhase));
 	PhaseTimeSeconds = 0.0f;
 	StableHoldAccumulatedSeconds = 0.0f;
 	TargetDiscontinuityAccumulatedSeconds = 0.0f;
@@ -1237,6 +1253,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn && Owner)
 	{
+		Owner->CommitTransitionOwnedShellDrop();
 		if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
 		{
 			if (FBodyInstance* PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))

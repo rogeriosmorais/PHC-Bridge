@@ -541,7 +541,14 @@ enum class EPhysAnimRuntimeState : uint8
 	ReadyForActivation,
 	BridgeActive,
 	FailStopped,
-	BalancePerturbationMode,
+	BalanceStartQueued,
+	BalanceTransition_Preflight,
+	BalanceTransition_Phase1_Prepare,
+	BalanceTransition_Phase1_LateValidate,
+	BalanceTransition_Phase2_RootOn,
+	BalanceTransition_Phase3_Settle,
+	BalancePerturbationActive,
+	BalanceTransitionFailed
 };
 
 UENUM(BlueprintType)
@@ -807,6 +814,7 @@ private:
 	void ApplyStartupMovementLock();
 	void ReleaseStartupMovementLock(bool bRestoreCharacterMovement = true);
 	void ApplyTransitionOwnedShellLock();
+	void CommitTransitionOwnedShellDrop();
 	void MaintainTransitionOwnedShellLock();
 	void ReleaseTransitionOwnedShellLockInternal(bool bRestoreCharacterMovement);
 	void ResetStartupQuietWindowState();
