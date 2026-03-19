@@ -139,12 +139,6 @@ static bool ValidateLateValidationHandoffSnapshot(
 		return false;
 	}
 
-	if (Snapshot.QuietProofDurationSeconds + KINDA_SMALL_NUMBER < Settings.PolicySettleRequiredSeconds)
-	{
-		OutReason = TEXT("phase2_quiet_proof_not_completed");
-		return false;
-	}
-
 	return true;
 }
 
