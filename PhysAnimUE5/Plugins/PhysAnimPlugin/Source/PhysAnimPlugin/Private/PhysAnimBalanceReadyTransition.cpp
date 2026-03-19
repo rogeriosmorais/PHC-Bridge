@@ -1086,10 +1086,9 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
 	const int32 FinalBringUpGroupIndex = Owner->GetBringUpGroupCount() - 1;
 	OutSnapshot.FinalBringUpGroupControlAuthorityAlpha = Owner->CalculateBringUpGroupControlAuthorityAlpha(FinalBringUpGroupIndex, Settings);
-	OutSnapshot.bRootOnReadinessProven = OutSnapshot.bControlAuthoritySettled &&
-		bHasLateValidationProof &&
-		Owner->AreAllBringUpGroupsUnlocked() &&
-		Owner->IsBringUpGroupControlRampActive(FinalBringUpGroupIndex);
+	// Upper-only late validation is a valid safe-denial state, but it is not root-on-ready.
+	// Keep the explicit root-on proof false until a separate readiness condition exists.
+	OutSnapshot.bRootOnReadinessProven = false;
 	OutSnapshot.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
 	OutSnapshot.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
 	OutSnapshot.QuietProofDurationSeconds = QuietWindowAccumulatedSeconds;
