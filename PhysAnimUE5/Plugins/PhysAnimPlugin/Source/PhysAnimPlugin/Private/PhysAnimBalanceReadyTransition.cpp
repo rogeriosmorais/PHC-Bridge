@@ -537,6 +537,18 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
 			if (LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds)
 			{
+				if (RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2RequiredShellHoldDuration)
+				{
+					UE_LOG(
+						LogPhysAnimBridge,
+						Warning,
+						TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_SHELL_HOLD_CAPPED_BY_WINDOW lateValidateDuration=%.2f requiredLateValidateSeconds=%.2f shellHoldDuration=%.2f shellHoldRequired=%.2f"),
+						LateValidationAccumulatedSeconds,
+						Settings.BalancePhase1LateValidateRequiredSeconds,
+						RootOnReadinessShellHoldAccumulatedSeconds,
+						Settings.BalancePhase2RequiredShellHoldDuration);
+				}
+
 				bHasLateValidationProof = true;
 				FString CaptureReason;
 				if (CaptureCertifiedHandoff(Owner, Settings, CaptureReason))
