@@ -1739,26 +1739,24 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.bRootOnReadinessFinalBringUpControlSettled &&
 		OutSnapshot.bRootOnReadinessPolicyInfluenceSettled &&
 		OutSnapshot.bPreRootOnShellSafetyProofSatisfied &&
-		(BalanceTransitionSets::IsRootCoupledReadyHandoff(
+		BalanceTransitionSets::IsRootCoupledReadyHandoff(
 			ProximalSimCount,
 			DistalSimCount,
 			UpperSimCount,
-			PelvisBody->IsInstanceSimulatingPhysics()) ||
-		BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(
-			ProximalSimCount,
-			DistalSimCount,
-			UpperSimCount,
-			PelvisBody->IsInstanceSimulatingPhysics()));
+			PelvisBody->IsInstanceSimulatingPhysics());
 	OutSnapshot.RootOnReadinessClassification =
-		OutSnapshot.bRootOnReadinessProven
+		BalanceTransitionSets::IsRootCoupledReadyHandoff(
+			ProximalSimCount,
+			DistalSimCount,
+			UpperSimCount,
+			PelvisBody->IsInstanceSimulatingPhysics())
 			? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
 			: (BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(
 					ProximalSimCount,
 					DistalSimCount,
 					UpperSimCount,
 					PelvisBody->IsInstanceSimulatingPhysics()) &&
-				OutSnapshot.bLateValidationCompleted &&
-				!OutSnapshot.bRootOnReadinessShellHoldSatisfied
+				OutSnapshot.bLateValidationCompleted
 				? EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
 				: EBalanceReadyRootOnReadinessClassification::NotReady);
 	OutSnapshot.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
