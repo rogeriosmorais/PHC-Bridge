@@ -4948,6 +4948,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bPhase2RootOnGuardWindow &&
 			!bTransitionKeepsBoneKinematic &&
 			!BalanceReadyTransition.HasFailed();
+		const bool bPhase2RootAuthorityQuarantined =
+			bIsRootBodyModifier &&
+			bPhase2RootOnGuardWindow &&
+			BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
 
 		// During entry transition the component path keeps the root body modifier kinematic
 		// until the transition explicitly enters Phase 2 root-on. Once Phase 2 owns the guard
@@ -4955,7 +4959,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const bool bAllowRootBodyModifierSimulation =
 			bIsRootBodyModifier &&
 			(bAllowRootBodyModifierSimulationInBalanceMode || bTransitionOwnsRootOnThisTick) &&
-			!BalanceReadyTransition.HasFailed();
+			!BalanceReadyTransition.HasFailed() &&
+			!bPhase2RootAuthorityQuarantined;
 		
 		if (bIsRootBodyModifier && bAllowRootBodyModifierSimulation)
 		{
@@ -4993,6 +4998,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierMovementType,
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
+		if (bPhase2RootAuthorityQuarantined)
+		{
+			BodyModifierMovementType = EPhysicsMovementType::Kinematic;
+			BodyModifierPhysicsBlendWeight = 0.0f;
+			BodyModifierCollisionType = ECollisionEnabled::NoCollision;
+			bUpdateKinematicFromSimulation = false;
+		}
 		if (bIsRootBodyModifier)
 		{
 			const float RootSoftSimAlpha = BalanceReadyTransition.GetRootBodyModifierSoftSimAlpha();

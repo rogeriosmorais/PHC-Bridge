@@ -889,6 +889,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
 		++Phase2GuardTickCount;
+		if (Phase2GuardTickCount > 1)
+		{
+			bPhase2RootAuthorityQuarantined = false;
+		}
 		CaptureFlipDiagnostics(Owner);
 		const bool bPelvisRequestedSim = Owner->WasPelvisSimulatingLastFrame();
 		const bool bPelvisActualSim = Owner->IsPelvisSimulatingNow();
@@ -1158,6 +1162,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	TargetDiscontinuityAccumulatedSeconds = 0.0f;
 	LastQuietBlockReason.Reset();
 	Phase2GuardTickCount = 0;
+	bPhase2RootAuthorityQuarantined = false;
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn && Owner)
 	{
@@ -1237,6 +1242,28 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					return;
 				}
 
+				const FVector PelvisLocation = Mesh->GetBoneTransform(Mesh->GetBoneIndex(PhysAnimBridge::GetRootBoneName())).GetLocation();
+				const auto LogLinkError = [&](const TCHAR* Label, FName BoneName)
+				{
+					const FVector BoneLocation = Mesh->GetBoneTransform(Mesh->GetBoneIndex(BoneName)).GetLocation();
+					const float ErrorCm = FVector::Dist(PelvisLocation, BoneLocation);
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_PRE link=%s errorCm=%.2f threshold=%.2f"),
+						Label,
+						ErrorCm,
+						BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm);
+					return ErrorCm;
+				};
+				const float PelvisThighLErrorCm = LogLinkError(TEXT("pelvis_thigh_l"), TEXT("thigh_l"));
+				const float PelvisThighRErrorCm = LogLinkError(TEXT("pelvis_thigh_r"), TEXT("thigh_r"));
+				const float PelvisSpine01ErrorCm = LogLinkError(TEXT("pelvis_spine_01"), TEXT("spine_01"));
+				if (PelvisThighLErrorCm > BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm ||
+					PelvisThighRErrorCm > BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm ||
+					PelvisSpine01ErrorCm > BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm)
+				{
+					Diagnostics.FailureReason = TEXT("phase2_constraint_error_too_high");
+					SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
+					return;
+				}
 				PelvisBody->SetBodyTransform(
 					BalanceTransitionSets::BuildWarmStartPelvisTransform(Mesh, SimulatingBones),
 					ETeleportType::TeleportPhysics,
@@ -1246,6 +1273,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				PelvisBody->SetInstanceSimulatePhysics(true);
 				PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
 				PelvisBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
+				bPhase2RootAuthorityQuarantined = true;
 				Diagnostics.bSimFlipped = true;
 				// Phase 2 must preserve the pre-root-on shell proof reference through the
 				// root-on frame and guard window; reseeding here would invalidate that proof.
@@ -1262,8 +1290,14 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					Diagnostics.PelvisAngularVelPost.Size(),
 					Diagnostics.SimCountPost,
 					Diagnostics.DistalSimCountPost);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_CONSTRAINT_ERROR_POST pelvisProximalError=%.2f threshold=%.2f"),
-					BalanceTransitionSets::ComputePelvisProximalConstraintErrorCm(Mesh, SimulatingBones, LiveChainCenterCm),
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_POST link=pelvis_thigh_l errorCm=%.2f threshold=%.2f"),
+					FVector::Dist(PelvisLocation, Mesh->GetBoneTransform(Mesh->GetBoneIndex(TEXT("thigh_l"))).GetLocation()),
+					BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_POST link=pelvis_thigh_r errorCm=%.2f threshold=%.2f"),
+					FVector::Dist(PelvisLocation, Mesh->GetBoneTransform(Mesh->GetBoneIndex(TEXT("thigh_r"))).GetLocation()),
+					BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_POST link=pelvis_spine_01 errorCm=%.2f threshold=%.2f"),
+					FVector::Dist(PelvisLocation, Mesh->GetBoneTransform(Mesh->GetBoneIndex(TEXT("spine_01"))).GetLocation()),
 					BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm);
 				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_STARTED duration=%.2f"), Owner->ResolveEffectiveStabilizationSettings().BalancePhase2GuardWindowDuration);
 			}
