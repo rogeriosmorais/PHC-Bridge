@@ -35,6 +35,22 @@ enum class EBalanceReadyRootOnReadinessClassification : uint8
 	RootCoupledReady
 };
 
+enum class EBalanceReadyConditionOwner : uint8
+{
+	None,
+	ExternalBridgeBringUp,
+	ExternalPolicyRamp,
+	Phase1TopologyShaping,
+	Phase1PolicyRouting,
+	Phase1UpperBodyOwnership,
+	Phase1ResetSuppression,
+	ShellAuthorityTransfer,
+	ShellAuthorityMaintenance,
+	Phase2RootOnExecution,
+	Phase2TopologyEnforcement,
+	TransitionRecovery
+};
+
 struct FPhysAnimCertifiedHandoffSnapshot
 {
 	FString TopologyClass;
@@ -167,6 +183,8 @@ public:
 	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
 	static FString ClassifyLateValidationFailureReason(bool bUpperBodyInstability, bool bSimCoverageRegressed, bool bTargetDiscontinuity);
 	static bool IsFailureClassRetryable(const FString& FailureReason);
+	static EBalanceReadyConditionOwner ClassifyConditionOwner(const FString& Reason);
+	static bool IsPhase1OwnedCondition(const FString& Reason);
 	static bool IsAutomaticRetryAllowed(
 		const FString& FailureReason,
 		bool bRecoveryCompleted,
@@ -184,6 +202,7 @@ private:
 	bool CaptureCertifiedHandoff(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidateCertifiedHandoff(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason) const;
 	static FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount);
+	void ReturnToPhase1Prepare(class UPhysAnimComponent* Owner, const FString& Reason, const TCHAR* EventName);
 	void ResetTransitionLocalState();
 	void ResetCertifiedHandoffState();
 	void MarkSafePhase2Denied(const FString& Reason);

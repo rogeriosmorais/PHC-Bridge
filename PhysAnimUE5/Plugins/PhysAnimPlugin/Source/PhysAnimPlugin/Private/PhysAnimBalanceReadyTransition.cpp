@@ -768,6 +768,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					? TEXT("phase2_handoff_capture_failed")
 					: CaptureReason;
 				Diagnostics.FailureReason = LateValidateBlockReason;
+				if (IsPhase1OwnedCondition(LateValidateBlockReason))
+				{
+					ReturnToPhase1Prepare(Owner, LateValidateBlockReason, TEXT("PHASE1_LATE_VALIDATE_RETURN_TO_PREPARE"));
+					return;
+				}
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *LateValidateBlockReason);
 				Owner->ReleaseTransitionOwnedShellLock();
 				MarkSafePhase2Denied(LateValidateBlockReason);
@@ -894,6 +899,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		if (!AbortReason.IsEmpty())
 		{
 			Diagnostics.FailureReason = AbortReason;
+			const EBalanceReadyConditionOwner FailureOwner = ClassifyConditionOwner(Diagnostics.FailureReason);
 			Diagnostics.LastRetryDecision = IsAutomaticRetryAllowed(
 				Diagnostics.FailureReason,
 				true,
@@ -901,9 +907,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				false,
 				true,
 				Phase2RetryCount < Settings.BalancePhase2MaxAutomaticRetries) ? TEXT("allowed") : TEXT("denied");
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_ABORTED reason=%s"), *Diagnostics.FailureReason);
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RETRY_DECISION failure=%s decision=%s changedState=0 freshQuietProof=0 remainingRetryBudget=%d"),
-				*Diagnostics.FailureReason, *Diagnostics.LastRetryDecision, FMath::Max(Settings.BalancePhase2MaxAutomaticRetries - Phase2RetryCount, 0));
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_ABORTED reason=%s owner=%d"), *Diagnostics.FailureReason, static_cast<int32>(FailureOwner));
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RETRY_DECISION failure=%s owner=%d decision=%s changedState=0 freshQuietProof=0 remainingRetryBudget=%d"),
+				*Diagnostics.FailureReason, static_cast<int32>(FailureOwner), *Diagnostics.LastRetryDecision, FMath::Max(Settings.BalancePhase2MaxAutomaticRetries - Phase2RetryCount, 0));
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 			return;
 		}
@@ -959,7 +965,14 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		FString DenyReason;
 		if (!ValidatePhase2EntryPreconditions(Owner, EffectiveSettings, DenyReason))
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *DenyReason);
+			if (IsPhase1OwnedCondition(DenyReason))
+			{
+				ReturnToPhase1Prepare(Owner, DenyReason, TEXT("PHASE2_ENTRY_RETURN_TO_PHASE1"));
+				return;
+			}
+
+			const EBalanceReadyConditionOwner FailureOwner = ClassifyConditionOwner(DenyReason);
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED reason=%s owner=%d"), *DenyReason, static_cast<int32>(FailureOwner));
 			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(DenyReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *DenyReason);
@@ -1793,6 +1806,115 @@ bool FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(const FString& Fai
 		FailureReason == TEXT("phase2_guard_window_interrupted_by_transient_contamination");
 }
 
+EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(const FString& Reason)
+{
+	if (Reason.StartsWith(TEXT("queue_final_group_ramp")))
+	{
+		return EBalanceReadyConditionOwner::ExternalBridgeBringUp;
+	}
+	if (Reason.StartsWith(TEXT("queue_policy_influence")))
+	{
+		return EBalanceReadyConditionOwner::ExternalPolicyRamp;
+	}
+	if (Reason.StartsWith(TEXT("phase1_late_validate_sim_coverage")) ||
+		Reason.StartsWith(TEXT("phase1_topology")) ||
+		Reason.StartsWith(TEXT("phase2_sim_coverage")) ||
+		Reason == TEXT("phase2_handoff_invalidated"))
+	{
+		return EBalanceReadyConditionOwner::Phase1TopologyShaping;
+	}
+	if (Reason.StartsWith(TEXT("phase1_late_validate_upper_body")) ||
+		Reason == TEXT("phase2_upper_body_instability"))
+	{
+		return EBalanceReadyConditionOwner::Phase1UpperBodyOwnership;
+	}
+	if (Reason.StartsWith(TEXT("phase1_late_validate_target_discontinuity")) ||
+		Reason.StartsWith(TEXT("phase1_quiet_timeout_target_discontinuity")) ||
+		Reason.StartsWith(TEXT("phase1_late_validate_timeout_target_discontinuity")) ||
+		Reason == TEXT("phase2_target_discontinuity_too_high") ||
+		Reason == TEXT("phase2_policy_suppression_regressed"))
+	{
+		return EBalanceReadyConditionOwner::Phase1PolicyRouting;
+	}
+	if (Reason.StartsWith(TEXT("phase1_pending_reset")) ||
+		Reason == TEXT("phase2_reset_violation"))
+	{
+		return EBalanceReadyConditionOwner::Phase1ResetSuppression;
+	}
+	if (Reason.StartsWith(TEXT("phase2_pre_root_on_shell")) ||
+		Reason.StartsWith(TEXT("phase2_root_on_readiness")) ||
+		Reason == TEXT("phase2_upper_only_handoff_not_root_on_ready"))
+	{
+		return EBalanceReadyConditionOwner::ShellAuthorityTransfer;
+	}
+	if (Reason == TEXT("phase2_shell_correction_material"))
+	{
+		return EBalanceReadyConditionOwner::ShellAuthorityMaintenance;
+	}
+	if (Reason == TEXT("queue_final_group_ramp_inactive"))
+	{
+		return EBalanceReadyConditionOwner::ExternalBridgeBringUp;
+	}
+	if (Reason == TEXT("queue_policy_influence_below_threshold"))
+	{
+		return EBalanceReadyConditionOwner::ExternalPolicyRamp;
+	}
+	if (Reason == TEXT("phase1_topology_not_achieved") ||
+		Reason == TEXT("phase2_sim_coverage_regressed") ||
+		Reason == TEXT("phase2_handoff_invalidated"))
+	{
+		return EBalanceReadyConditionOwner::Phase1TopologyShaping;
+	}
+	if (Reason == TEXT("phase2_policy_suppression_regressed"))
+	{
+		return EBalanceReadyConditionOwner::Phase1PolicyRouting;
+	}
+	if (Reason == TEXT("phase2_upper_body_instability"))
+	{
+		return EBalanceReadyConditionOwner::Phase1UpperBodyOwnership;
+	}
+	if (Reason == TEXT("phase2_target_discontinuity_too_high") ||
+		Reason == TEXT("phase1_late_validate_target_discontinuity"))
+	{
+		return EBalanceReadyConditionOwner::Phase1PolicyRouting;
+	}
+	if (Reason == TEXT("phase1_pending_reset_not_discharged") ||
+		Reason == TEXT("phase2_reset_violation"))
+	{
+		return EBalanceReadyConditionOwner::Phase1ResetSuppression;
+	}
+	if (Reason == TEXT("phase2_pre_root_on_shell_correction_safety_not_proven"))
+	{
+		return EBalanceReadyConditionOwner::ShellAuthorityTransfer;
+	}
+	if (Reason == TEXT("phase2_shell_correction_material"))
+	{
+		return EBalanceReadyConditionOwner::ShellAuthorityMaintenance;
+	}
+	if (Reason == TEXT("phase2_root_not_confirmed") ||
+		Reason == TEXT("phase2_root_simulation_dropped") ||
+		Reason == TEXT("phase2_root_on_spike"))
+	{
+		return EBalanceReadyConditionOwner::Phase2RootOnExecution;
+	}
+	if (Reason == TEXT("phase2_topology_not_preserved"))
+	{
+		return EBalanceReadyConditionOwner::Phase2TopologyEnforcement;
+	}
+
+	return EBalanceReadyConditionOwner::None;
+}
+
+bool FPhysAnimBalanceReadyTransition::IsPhase1OwnedCondition(const FString& Reason)
+{
+	const EBalanceReadyConditionOwner Owner = ClassifyConditionOwner(Reason);
+	return Owner == EBalanceReadyConditionOwner::Phase1TopologyShaping ||
+		Owner == EBalanceReadyConditionOwner::Phase1PolicyRouting ||
+		Owner == EBalanceReadyConditionOwner::Phase1UpperBodyOwnership ||
+		Owner == EBalanceReadyConditionOwner::Phase1ResetSuppression ||
+		Owner == EBalanceReadyConditionOwner::ShellAuthorityTransfer;
+}
+
 bool FPhysAnimBalanceReadyTransition::IsAutomaticRetryAllowed(
 	const FString& FailureReason,
 	bool bRecoveryCompleted,
@@ -1807,4 +1929,23 @@ bool FPhysAnimBalanceReadyTransition::IsAutomaticRetryAllowed(
 		bFreshQuietProofOccurred &&
 		bCooldownElapsed &&
 		bRetryBudgetAvailable;
+}
+
+void FPhysAnimBalanceReadyTransition::ReturnToPhase1Prepare(UPhysAnimComponent* Owner, const FString& Reason, const TCHAR* EventName)
+{
+	const EBalanceReadyConditionOwner FailureOwner = ClassifyConditionOwner(Reason);
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] %s reason=%s owner=%d"), EventName, *Reason, static_cast<int32>(FailureOwner));
+	if (Owner)
+	{
+		Owner->ReleaseTransitionOwnedShellLock();
+	}
+	ResetTransitionLocalState();
+	InternalPhase = EBalanceReadyTransitionPhase::BRT_Phase1_Prepare;
+	PhaseTimeSeconds = 0.0f;
+	StableHoldAccumulatedSeconds = 0.0f;
+	TargetDiscontinuityAccumulatedSeconds = 0.0f;
+	QuietWindowAccumulatedSeconds = 0.0f;
+	LateValidationAccumulatedSeconds = 0.0f;
+	LastQuietBlockReason.Reset();
+	Diagnostics.FailureReason.Reset();
 }
