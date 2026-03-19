@@ -63,6 +63,12 @@ enum class EBridgeLocomotionAuthorityState : uint8
 	Locomoting
 };
 
+enum class EBalanceTransitionShellAuthorityMode : uint8
+{
+	GameplayShellObservedOnly,
+	TransitionOwnedShellLocked
+};
+
 USTRUCT(BlueprintType)
 struct FPhysAnimStabilizationSettings
 {
@@ -602,6 +608,12 @@ public:
 	float GetCurrentShellPlanarOffsetDeltaCm() const;
 	float GetCurrentShellPlanarVelocityDeltaCmPerSecond() const;
 	void ReanchorShellCouplingReferenceToCurrentRoot();
+	void ActivateTransitionOwnedShellLock();
+	void ReleaseTransitionOwnedShellLock();
+	EBalanceTransitionShellAuthorityMode GetBalanceTransitionShellAuthorityMode() const { return BalanceTransitionShellAuthorityMode; }
+	bool IsTransitionOwnedShellLocked() const { return BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked; }
+	bool WasTransitionShellReferenceReanchored() const { return bTransitionOwnedShellReferenceReanchored; }
+	bool WasTransitionShellReferenceReseededAfterLock() const { return bTransitionOwnedShellReferenceReseededAfterLock; }
 	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
 	const FPhysAnimControlTargetDiagnostics& GetLastControlTargetDiagnostics() const { return LastControlTargetDiagnostics; }
@@ -780,6 +792,8 @@ private:
 	bool HandlePrePolicyShellRecovery(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ApplyStartupMovementLock();
 	void ReleaseStartupMovementLock(bool bRestoreCharacterMovement = true);
+	void ApplyTransitionOwnedShellLock();
+	void ReleaseTransitionOwnedShellLockInternal(bool bRestoreCharacterMovement);
 	void ResetStartupQuietWindowState();
 	bool UpdateStartupQuietWindow(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, float& OutLinearSpeedCmPerSecond, float& OutAngularSpeedDegPerSecond);
 	void ResetPolicySettleWindowState();
@@ -962,6 +976,9 @@ private:
 	FVector LastMovementSmokeOwnerVelocityCmPerSecond = FVector::ZeroVector;
 	FVector MovementSmokeStartLocation = FVector::ZeroVector;
 	FVector ShellCouplingReferenceRootLocalOffsetCm = FVector::ZeroVector;
+	EBalanceTransitionShellAuthorityMode BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::GameplayShellObservedOnly;
+	bool bTransitionOwnedShellReferenceReanchored = false;
+	bool bTransitionOwnedShellReferenceReseededAfterLock = false;
 	FName LastMovementSmokePhaseName = NAME_None;
 	bool bMovementSmokeScriptStarted = false;
 	bool bMovementSmokeCompletionLogged = false;

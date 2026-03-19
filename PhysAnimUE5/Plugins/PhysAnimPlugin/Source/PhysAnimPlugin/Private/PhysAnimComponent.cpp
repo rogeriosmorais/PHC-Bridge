@@ -2551,6 +2551,45 @@ void UPhysAnimComponent::ReanchorShellCouplingReferenceToCurrentRoot()
 	ShellCouplingReferenceRootLocalOffsetCm =
 		SkeletalMesh->GetBoneLocation(RootBoneName, EBoneSpaces::WorldSpace) - OwnerActor->GetActorLocation();
 	bHasShellCouplingReferenceRootLocalOffset = true;
+	if (IsTransitionOwnedShellLocked())
+	{
+		if (bTransitionOwnedShellReferenceReanchored)
+		{
+			bTransitionOwnedShellReferenceReseededAfterLock = true;
+		}
+		else
+		{
+			bTransitionOwnedShellReferenceReanchored = true;
+		}
+	}
+}
+
+void UPhysAnimComponent::ActivateTransitionOwnedShellLock()
+{
+	if (IsTransitionOwnedShellLocked())
+	{
+		return;
+	}
+
+	BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked;
+	bTransitionOwnedShellReferenceReanchored = false;
+	bTransitionOwnedShellReferenceReseededAfterLock = false;
+	ApplyTransitionOwnedShellLock();
+	ResetBridgeLocomotionAuthorityState();
+	ReanchorShellCouplingReferenceToCurrentRoot();
+}
+
+void UPhysAnimComponent::ReleaseTransitionOwnedShellLock()
+{
+	if (!IsTransitionOwnedShellLocked())
+	{
+		return;
+	}
+
+	ReleaseTransitionOwnedShellLockInternal(RuntimeState != EPhysAnimRuntimeState::BalancePerturbationMode);
+	BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::GameplayShellObservedOnly;
+	bTransitionOwnedShellReferenceReanchored = false;
+	bTransitionOwnedShellReferenceReseededAfterLock = false;
 }
 
 
@@ -5268,6 +5307,17 @@ void UPhysAnimComponent::ReleaseStartupMovementLock(bool bRestoreCharacterMoveme
 	}
 }
 
+void UPhysAnimComponent::ApplyTransitionOwnedShellLock()
+{
+	ApplyStartupMovementLock();
+	bStartupMovementLockActive = true;
+}
+
+void UPhysAnimComponent::ReleaseTransitionOwnedShellLockInternal(bool bRestoreCharacterMovement)
+{
+	ReleaseStartupMovementLock(bRestoreCharacterMovement);
+}
+
 void UPhysAnimComponent::ResetStartupQuietWindowState()
 {
 	StartupQuietWindowAccumulatedSeconds = 0.0;
@@ -6497,6 +6547,7 @@ bool UPhysAnimComponent::ShouldUseBridgeOwnedMovementDrive(const FPhysAnimStabil
 		!EffectiveSettings.bEnableBridgeOwnedMovementWhileCharacterMovementLocked ||
 		RuntimeState != EPhysAnimRuntimeState::BridgeActive ||
 		BalanceReadyTransition.ShouldSuppressShell() ||
+		IsTransitionOwnedShellLocked() ||
 		bStartupMovementLockActive)
 	{
 		return false;

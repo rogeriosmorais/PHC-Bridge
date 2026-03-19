@@ -38,6 +38,7 @@ enum class EBalanceReadyRootOnReadinessClassification : uint8
 struct FPhysAnimCertifiedHandoffSnapshot
 {
 	FString TopologyClass;
+	FString ShellAuthorityMode;
 	int32 SimCount = 0;
 	int32 ProximalSimCount = 0;
 	int32 DistalSimCount = 0;
@@ -65,6 +66,9 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	float ShellVelocityGrowthCmPerSecond = 0.0f;
 	bool bShellCorrectionOwnerActive = false;
 	bool bPreRootOnShellSafetyProofSatisfied = false;
+	bool bTransitionOwnedShellLocked = false;
+	bool bTransitionShellReferenceReanchored = false;
+	bool bTransitionShellReferenceReseededAfterLock = false;
 	bool bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
 	float MaxTargetDeltaDegrees = 0.0f;
 	float MeanTargetDeltaDegrees = 0.0f;

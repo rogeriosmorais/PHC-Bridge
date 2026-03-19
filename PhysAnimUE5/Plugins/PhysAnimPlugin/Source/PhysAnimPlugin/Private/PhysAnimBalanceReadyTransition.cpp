@@ -85,6 +85,18 @@ namespace BalanceTransitionSets
 		}
 	}
 
+	static const TCHAR* GetShellAuthorityModeName(EBalanceTransitionShellAuthorityMode Mode)
+	{
+		switch (Mode)
+		{
+		case EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked:
+			return TEXT("transition_owned_shell_locked");
+		case EBalanceTransitionShellAuthorityMode::GameplayShellObservedOnly:
+		default:
+			return TEXT("gameplay_shell_observed_only");
+		}
+	}
+
 	static FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount)
 	{
 		return FString::Printf(
@@ -181,6 +193,14 @@ static bool ValidatePreRootOnShellSafetyProofSnapshot(
 	FString& OutReason)
 {
 	if (Snapshot.RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		return false;
+	}
+
+	if (!Snapshot.bTransitionOwnedShellLocked ||
+		!Snapshot.bTransitionShellReferenceReanchored ||
+		Snapshot.bTransitionShellReferenceReseededAfterLock)
 	{
 		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
 		return false;
@@ -416,6 +436,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					: CaptureReason;
 				Diagnostics.FailureReason = Phase2BlockReason;
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
+				Owner->ReleaseTransitionOwnedShellLock();
 				MarkSafePhase2Denied(Phase2BlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
 				return;
@@ -485,6 +506,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					: CaptureReason;
 				Diagnostics.FailureReason = Phase2BlockReason;
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *Phase2BlockReason);
+				Owner->ReleaseTransitionOwnedShellLock();
 				MarkSafePhase2Denied(Phase2BlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
 				return;
@@ -498,6 +520,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				: TEXT("phase1_quiet_timeout_") + TerminalQuietBlockReason;
 			Diagnostics.FailureReason = TimeoutReason;
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *TimeoutReason);
+			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(TimeoutReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *TimeoutReason);
 			return;
@@ -744,6 +767,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					: CaptureReason;
 				Diagnostics.FailureReason = LateValidateBlockReason;
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *LateValidateBlockReason);
+				Owner->ReleaseTransitionOwnedShellLock();
 				MarkSafePhase2Denied(LateValidateBlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *LateValidateBlockReason);
 				return;
@@ -753,6 +777,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				LateValidateBlockReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
 				Diagnostics.FailureReason = LateValidateBlockReason;
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *LateValidateBlockReason);
+				Owner->ReleaseTransitionOwnedShellLock();
 				MarkSafePhase2Denied(LateValidateBlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *LateValidateBlockReason);
 				return;
@@ -802,6 +827,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				: TEXT("phase1_late_validate_timeout_") + LateValidateBlockReason;
 			Diagnostics.FailureReason = TimeoutReason;
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *TimeoutReason);
+			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(TimeoutReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *TimeoutReason);
 			return;
@@ -918,6 +944,13 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		return;
 	}
 
+	if (Owner &&
+		NewPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate &&
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
+	{
+		Owner->ActivateTransitionOwnedShellLock();
+	}
+
 	if (NewPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn && Owner)
 	{
 		const FPhysAnimStabilizationSettings EffectiveSettings = Owner->ResolveEffectiveStabilizationSettings();
@@ -925,10 +958,19 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		if (!ValidatePhase2EntryPreconditions(Owner, EffectiveSettings, DenyReason))
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *DenyReason);
+			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(DenyReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *DenyReason);
 			return;
 		}
+	}
+
+	if (Owner &&
+		NewPhase != EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate &&
+		NewPhase != EBalanceReadyTransitionPhase::BRT_Phase2_RootOn &&
+		InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive)
+	{
+		Owner->ReleaseTransitionOwnedShellLock();
 	}
 
 	InternalPhase = NewPhase;
@@ -1161,6 +1203,11 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		OutReason = TEXT("phase2_locomotion_active");
 		return false;
 	}
+	if (!Owner->IsTransitionOwnedShellLocked())
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		return false;
+	}
 
 	if (!bHasLateValidationProof || !bHasCertifiedHandoff || !CertifiedHandoff.bLateValidationCompleted)
 	{
@@ -1301,6 +1348,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 
 	const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
 	OutSnapshot.PolicyInfluenceAlphaAtCapture = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
+	OutSnapshot.ShellAuthorityMode = BalanceTransitionSets::GetShellAuthorityModeName(Owner->GetBalanceTransitionShellAuthorityMode());
 	OutSnapshot.TopologyClass = BalanceTransitionSets::BuildCertifiedHandoffTopologyClass(
 		PelvisBody->IsInstanceSimulatingPhysics(),
 		ProximalSimCount,
@@ -1347,6 +1395,9 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bShellCorrectionOwnerActive = bShellCorrectionOwnerActive;
 	OutSnapshot.bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame =
 		Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
+	OutSnapshot.bTransitionOwnedShellLocked = Owner->IsTransitionOwnedShellLocked();
+	OutSnapshot.bTransitionShellReferenceReanchored = Owner->WasTransitionShellReferenceReanchored();
+	OutSnapshot.bTransitionShellReferenceReseededAfterLock = Owner->WasTransitionShellReferenceReseededAfterLock();
 	OutSnapshot.bLateValidationCompleted = bHasLateValidationProof;
 	OutSnapshot.bRootOnReadinessShellHoldSatisfied =
 		OutSnapshot.RootOnReadinessShellHoldDurationSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration;
@@ -1366,7 +1417,10 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond &&
 		OutSnapshot.ShellOffsetGrowthCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm &&
 		OutSnapshot.ShellVelocityGrowthCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond &&
-		!OutSnapshot.bShellCorrectionOwnerActive;
+		!OutSnapshot.bShellCorrectionOwnerActive &&
+		OutSnapshot.bTransitionOwnedShellLocked &&
+		OutSnapshot.bTransitionShellReferenceReanchored &&
+		!OutSnapshot.bTransitionShellReferenceReseededAfterLock;
 	OutSnapshot.bRootOnReadinessProven =
 		OutSnapshot.bRootOnReadinessShellHoldSatisfied &&
 		OutSnapshot.bRootOnReadinessFinalBringUpControlSettled &&
