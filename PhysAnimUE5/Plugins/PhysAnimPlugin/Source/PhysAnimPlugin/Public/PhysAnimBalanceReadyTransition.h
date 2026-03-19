@@ -31,7 +31,8 @@ enum class EBalanceReadyRootOnReadinessClassification : uint8
 {
 	NotReady,
 	Ready,
-	UpperOnlyLateValidationSafeDenied
+	UpperOnlyLateValidationSafeDenied,
+	RootCoupledReady
 };
 
 struct FPhysAnimCertifiedHandoffSnapshot

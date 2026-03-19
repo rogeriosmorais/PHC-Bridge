@@ -581,6 +581,7 @@ public:
 	FVector GetAcceptedShellPlanarVelocity() const { return BridgeShellState.AcceptedPlanarVelocityCmPerSecond; }
 	float GetCurrentShellPlanarOffsetDeltaCm() const;
 	float GetCurrentShellPlanarVelocityDeltaCmPerSecond() const;
+	void ReanchorShellCouplingReferenceToCurrentRoot();
 	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
 	const FPhysAnimControlTargetDiagnostics& GetLastControlTargetDiagnostics() const { return LastControlTargetDiagnostics; }

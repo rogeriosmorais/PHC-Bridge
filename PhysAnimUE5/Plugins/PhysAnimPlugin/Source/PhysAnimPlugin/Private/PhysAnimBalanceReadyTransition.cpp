@@ -41,7 +41,17 @@ namespace BalanceTransitionSets
 	{
 		return DistalSimCountPre == 0 &&
 			DistalSimCountPost == 0 &&
-			((SimCountPre == 0 && SimCountPost == 1) || (SimCountPre == 1 && SimCountPost == 1));
+			(SimCountPost == SimCountPre || SimCountPost == SimCountPre + 1);
+	}
+
+	static bool IsUpperOnlySafeDenyHandoff(int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount, bool bRootSimulating)
+	{
+		return !bRootSimulating && ProximalSimCount == 0 && DistalSimCount == 0 && UpperSimCount > 0;
+	}
+
+	static bool IsRootCoupledReadyHandoff(int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount, bool bRootSimulating)
+	{
+		return !bRootSimulating && ProximalSimCount == 5 && DistalSimCount == 0 && UpperSimCount >= 4;
 	}
 
 	static const TCHAR* GetUpperBodyOwnershipModeName(EBalanceReadyUpperBodyOwnershipMode Mode)
@@ -64,6 +74,8 @@ namespace BalanceTransitionSets
 			return TEXT("ready");
 		case EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied:
 			return TEXT("upper_only_late_validation_safe_denied");
+		case EBalanceReadyRootOnReadinessClassification::RootCoupledReady:
+			return TEXT("root_coupled_ready");
 		case EBalanceReadyRootOnReadinessClassification::NotReady:
 		default:
 			return TEXT("not_ready");
@@ -142,6 +154,8 @@ static bool ValidateRootOnReadinessSnapshot(
 		OutReason = Snapshot.RootOnReadinessClassification ==
 			EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
 			? TEXT("phase2_upper_only_handoff_not_root_on_ready")
+			: Snapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+				? TEXT("phase2_root_on_readiness_shell_hold_not_completed")
 			: Snapshot.bLateValidationCompleted &&
 				Snapshot.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase1LateValidateRequiredSeconds
 				? TEXT("phase2_root_on_readiness_shell_hold_capped_by_late_validate_window")
@@ -497,7 +511,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			{
 				for (const FName BoneName : SimulatingBones)
 				{
-					if (BalanceTransitionSets::IsTransitionCritical(BoneName))
+					if (BalanceTransitionSets::IsRoot(BoneName) || BalanceTransitionSets::IsDistalLowerLimb(BoneName))
 					{
 						bLateValidationThisFrame = false;
 						LateValidateBlockReason = TEXT("topology_mismatch_simulating_critical");
@@ -561,9 +575,16 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					? TEXT("phase1_root_on_readiness_upper_only_shell_hold_capped_by_window")
 					: TEXT("phase1_root_on_readiness_shell_hold_pending");
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
-			if (LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds)
+			const bool bCanCompleteAsRootCoupledReady =
+				CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady &&
+				CurrentSnapshot.bRootOnReadinessShellHoldSatisfied;
+			const bool bCanCompleteAsUpperOnlySafeDeny =
+				CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied &&
+				LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds;
+			if (bCanCompleteAsRootCoupledReady || bCanCompleteAsUpperOnlySafeDeny)
 			{
-				if (RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2RequiredShellHoldDuration)
+				if (!bCanCompleteAsRootCoupledReady &&
+					RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2RequiredShellHoldDuration)
 				{
 					UE_LOG(
 						LogPhysAnimBridge,
@@ -575,7 +596,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						Settings.BalancePhase1LateValidateRequiredSeconds);
 				}
 
-				if (RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2RequiredShellHoldDuration)
+				if (!bCanCompleteAsRootCoupledReady &&
+					RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2RequiredShellHoldDuration)
 				{
 					UE_LOG(
 						LogPhysAnimBridge,
@@ -594,6 +616,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					const FString RootOnReadinessGateReason =
 						CertifiedHandoff.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
 							? TEXT("phase1_root_on_readiness_upper_only_late_validation_safe_denied")
+							: CertifiedHandoff.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+								? TEXT("ready")
 							: Diagnostics.Phase1RootOnReadinessGateReason;
 					Diagnostics.Phase1RootOnReadinessGateReason = RootOnReadinessGateReason;
 					UE_LOG(
@@ -893,6 +917,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 
 				PelvisBody->SetInstanceSimulatePhysics(true);
 				Diagnostics.bSimFlipped = true;
+				Owner->ReanchorShellCouplingReferenceToCurrentRoot();
 				CaptureFlipDiagnostics(Owner);
 				if (!PelvisBody->IsInstanceSimulatingPhysics())
 				{
@@ -1093,6 +1118,12 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
+	if (CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		return false;
+	}
+
 	if (!CurrentSnapshot.bRootOnReadinessProven)
 	{
 		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
@@ -1224,11 +1255,20 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bRootOnReadinessProven =
 		OutSnapshot.bRootOnReadinessShellHoldSatisfied &&
 		OutSnapshot.bRootOnReadinessFinalBringUpControlSettled &&
-		OutSnapshot.bRootOnReadinessPolicyInfluenceSettled;
+		OutSnapshot.bRootOnReadinessPolicyInfluenceSettled &&
+		BalanceTransitionSets::IsRootCoupledReadyHandoff(
+			ProximalSimCount,
+			DistalSimCount,
+			UpperSimCount,
+			PelvisBody->IsInstanceSimulatingPhysics() );
 	OutSnapshot.RootOnReadinessClassification =
 		OutSnapshot.bRootOnReadinessProven
-			? EBalanceReadyRootOnReadinessClassification::Ready
-			: (OutSnapshot.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold &&
+			? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+			: (BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(
+					ProximalSimCount,
+					DistalSimCount,
+					UpperSimCount,
+					PelvisBody->IsInstanceSimulatingPhysics()) &&
 				OutSnapshot.bLateValidationCompleted &&
 				!OutSnapshot.bRootOnReadinessShellHoldSatisfied
 				? EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
@@ -1536,13 +1576,14 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 	{
 		// Late validation keeps the critical chain and apex anchored, but lets the upper limbs stay simulated
-		// so the sustain proof covers a broader non-root body set once policy influence begins.
-		return BalanceTransitionSets::IsTransitionCritical(BoneName) ||
+		// so the sustain proof covers the proximal root-coupled handoff before pelvis root-on.
+		return BalanceTransitionSets::IsRoot(BoneName) ||
+			BalanceTransitionSets::IsDistalLowerLimb(BoneName) ||
 			BalanceTransitionSets::IsLateValidationUpperBodyOwnershipBone(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
-		return BalanceTransitionSets::IsProximal(BoneName) || BalanceTransitionSets::IsDistalLowerLimb(BoneName) || BalanceTransitionSets::IsUpperBody(BoneName);
+		return BalanceTransitionSets::IsDistalLowerLimb(BoneName) || BalanceTransitionSets::IsUpperBody(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
 	{

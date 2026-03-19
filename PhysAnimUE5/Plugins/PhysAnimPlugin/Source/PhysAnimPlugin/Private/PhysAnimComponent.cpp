@@ -2538,6 +2538,21 @@ float UPhysAnimComponent::GetCurrentShellPlanarVelocityDeltaCmPerSecond() const
 		LastRuntimeInstabilityDiagnostics.RawRootLinearVelocityCmPerSecondVector);
 }
 
+void UPhysAnimComponent::ReanchorShellCouplingReferenceToCurrentRoot()
+{
+	const AActor* const OwnerActor = GetOwner();
+	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!OwnerActor || !SkeletalMesh)
+	{
+		return;
+	}
+
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	ShellCouplingReferenceRootLocalOffsetCm =
+		SkeletalMesh->GetBoneLocation(RootBoneName, EBoneSpaces::WorldSpace) - OwnerActor->GetActorLocation();
+	bHasShellCouplingReferenceRootLocalOffset = true;
+}
+
 
 
 void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
