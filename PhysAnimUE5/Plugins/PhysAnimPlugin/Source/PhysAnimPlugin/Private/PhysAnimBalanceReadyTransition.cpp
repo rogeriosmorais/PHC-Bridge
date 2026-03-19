@@ -1098,6 +1098,12 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
+	if (CurrentSnapshot.bRootOnReadinessProven)
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		return false;
+	}
+
 	const float ShellOffset = Owner->GetCurrentShellPlanarOffsetDeltaCm();
 	const float ShellVel = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 	if (Diagnostics.RootSpeed > Settings.BalancePhase2EntryMaxRootLinearSpeed)
