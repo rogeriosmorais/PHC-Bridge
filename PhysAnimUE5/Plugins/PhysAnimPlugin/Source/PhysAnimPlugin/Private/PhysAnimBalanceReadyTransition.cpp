@@ -1198,6 +1198,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.RootOnReadinessShellHoldRequiredSeconds = Settings.BalancePhase2RequiredShellHoldDuration;
 	OutSnapshot.bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame =
 		Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
+	OutSnapshot.bLateValidationCompleted = bHasLateValidationProof;
 	OutSnapshot.bRootOnReadinessShellHoldSatisfied =
 		OutSnapshot.RootOnReadinessShellHoldDurationSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration;
 	OutSnapshot.bRootOnReadinessUpperOnlyShellHoldCappedByWindow =
@@ -1225,7 +1226,6 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
 	OutSnapshot.QuietProofDurationSeconds = QuietWindowAccumulatedSeconds;
 	OutSnapshot.LateValidationSustainDurationSeconds = LateValidationAccumulatedSeconds;
-	OutSnapshot.bLateValidationCompleted = bHasLateValidationProof;
 	return true;
 }
 
