@@ -30,7 +30,8 @@ enum class EBalanceReadyUpperBodyOwnershipMode : uint8
 enum class EBalanceReadyRootOnReadinessClassification : uint8
 {
 	NotReady,
-	RootCoupledReady
+	RootCoupledReady,
+	UpperOnlySafeDeny
 };
 
 enum class EBalanceLateValidationOutcome : uint8
@@ -56,6 +57,23 @@ enum class EBalanceReadyConditionOwner : uint8
 	TransitionRecovery
 };
 
+struct FPhysAnimLateValidationResult
+{
+	EBalanceLateValidationOutcome Outcome = EBalanceLateValidationOutcome::Outcome_Pending;
+	EBalanceReadyRootOnReadinessClassification RootOnReadinessClassification = EBalanceReadyRootOnReadinessClassification::NotReady;
+	bool bRootOnReadinessProven = false;
+	bool bLateValidationCompleted = false;
+	bool bRootOnReadinessShellHoldSatisfied = false;
+	bool bRootOnReadinessUpperOnlyShellHoldCappedByWindow = false;
+	bool bRootOnReadinessFinalBringUpControlSettled = false;
+	bool bRootOnReadinessPolicyInfluenceSettled = false;
+	bool bPreRootOnShellSafetyProofSatisfied = false;
+	float MaxTargetDeltaDegrees = 0.0f;
+	float MeanTargetDeltaDegrees = 0.0f;
+	float QuietProofDurationSeconds = 0.0f;
+	float LateValidationSustainDurationSeconds = 0.0f;
+};
+
 struct FPhysAnimCertifiedHandoffSnapshot
 {
 	FString TopologyClass;
@@ -67,12 +85,6 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	EBalanceReadyUpperBodyOwnershipMode UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::None;
 	bool bPolicySuppressed = false;
 	bool bControlAuthoritySettled = false;
-	bool bRootOnReadinessShellHoldSatisfied = false;
-	bool bRootOnReadinessUpperOnlyShellHoldCappedByWindow = false;
-	bool bRootOnReadinessFinalBringUpControlSettled = false;
-	bool bRootOnReadinessPolicyInfluenceSettled = false;
-	bool bRootOnReadinessProven = false;
-	EBalanceReadyRootOnReadinessClassification RootOnReadinessClassification = EBalanceReadyRootOnReadinessClassification::NotReady;
 	float FinalBringUpGroupControlAuthorityAlpha = 0.0f;
 	float PolicyInfluenceAlphaAtCapture = 0.0f;
 	float RootOnReadinessPolicyInfluenceRequiredAlpha = 0.0f;
@@ -86,17 +98,10 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	float ShellOffsetGrowthCm = 0.0f;
 	float ShellVelocityGrowthCmPerSecond = 0.0f;
 	bool bShellCorrectionOwnerActive = false;
-	bool bPreRootOnShellSafetyProofSatisfied = false;
 	bool bTransitionOwnedShellLocked = false;
 	bool bTransitionShellReferenceReanchored = false;
 	bool bTransitionShellReferenceReseededAfterLock = false;
 	bool bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
-	float MaxTargetDeltaDegrees = 0.0f;
-	float MeanTargetDeltaDegrees = 0.0f;
-	float QuietProofDurationSeconds = 0.0f;
-	float LateValidationSustainDurationSeconds = 0.0f;
-	EBalanceLateValidationOutcome LateValidationOutcome = EBalanceLateValidationOutcome::Outcome_Pending;
-	bool bLateValidationCompleted = false;
 };
 
 struct FBalanceReadyTransitionDiagnostics
@@ -210,10 +215,14 @@ private:
 	bool EvaluateReadiness(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidatePhase2EntryPreconditions(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidatePhase3Continuity(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
-	bool BuildCertifiedHandoffSnapshot(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FPhysAnimCertifiedHandoffSnapshot& OutSnapshot) const;
+	bool BuildCertifiedHandoffSnapshot(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FPhysAnimCertifiedHandoffSnapshot& OutSnapshot, FPhysAnimLateValidationResult& OutResult) const;
 	bool CaptureLateValidationBaseline(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool CaptureCertifiedHandoff(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidateCertifiedHandoff(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason) const;
+	bool ValidateLateValidationHandoffSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason) const;
+	bool ValidateRootOnReadinessSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason) const;
+	bool ValidatePreRootOnShellSafetyProofSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason) const;
+	static bool ValidateLateValidationBaselineSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	static FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount);
 	void ReturnToPhase1Prepare(class UPhysAnimComponent* Owner, const FString& Reason, const TCHAR* EventName);
 	void ResetTransitionLocalState();
@@ -252,6 +261,7 @@ private:
 	bool bHasCertifiedHandoff = false;
 	bool bHasLateValidationProof = false;
 	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
+	FPhysAnimLateValidationResult CertifiedLateValidationResult;
 	bool bSafePhase2Denied = false;
 	FString SafePhase2DenialReason;
 

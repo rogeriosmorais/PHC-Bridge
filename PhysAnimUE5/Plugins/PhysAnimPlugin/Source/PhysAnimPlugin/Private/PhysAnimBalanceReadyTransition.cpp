@@ -139,6 +139,8 @@ namespace BalanceTransitionSets
 		{
 		case EBalanceReadyRootOnReadinessClassification::RootCoupledReady:
 			return TEXT("root_coupled_ready");
+		case EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny:
+			return TEXT("upper_only_safe_deny");
 		case EBalanceReadyRootOnReadinessClassification::NotReady:
 		default:
 			return TEXT("not_ready");
@@ -199,61 +201,10 @@ FString FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(boo
 	return TEXT("phase1_late_validate_unknown");
 }
 
-static bool ValidateLateValidationHandoffSnapshot(
+
+bool FPhysAnimBalanceReadyTransition::ValidateLateValidationBaselineSnapshot(
 	const FPhysAnimCertifiedHandoffSnapshot& Snapshot,
-	const FPhysAnimStabilizationSettings& Settings,
-	FString& OutReason)
-{
-	if (!Snapshot.bControlAuthoritySettled)
-	{
-		OutReason = TEXT("phase2_control_authority_not_settled");
-		return false;
-	}
-
-	return true;
-}
-
-static bool ValidateRootOnReadinessSnapshot(
-	const FPhysAnimCertifiedHandoffSnapshot& Snapshot,
-	const FPhysAnimStabilizationSettings& Settings,
-	FString& OutReason)
-{
-	if (!Snapshot.bRootOnReadinessFinalBringUpControlSettled)
-	{
-		OutReason = TEXT("phase2_final_bringup_control_not_settled");
-		return false;
-	}
-
-	if (!Snapshot.bRootOnReadinessPolicyInfluenceSettled)
-	{
-		OutReason = Snapshot.PolicyInfluenceAlphaAtCapture <= KINDA_SMALL_NUMBER
-			? TEXT("phase2_root_on_readiness_policy_influence_not_started")
-			: TEXT("phase2_root_on_readiness_policy_influence_below_threshold");
-		return false;
-	}
-
-	if (!Snapshot.bRootOnReadinessShellHoldSatisfied)
-	{
-		OutReason = Snapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
-				? TEXT("phase2_root_on_readiness_shell_hold_not_completed")
-			: Snapshot.bLateValidationCompleted &&
-				Snapshot.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase1LateValidateRequiredSeconds
-				? TEXT("phase2_root_on_readiness_shell_hold_capped_by_late_validate_window")
-				: TEXT("phase2_root_on_readiness_shell_hold_not_completed");
-		return false;
-	}
-
-	if (!Snapshot.bRootOnReadinessProven)
-	{
-		OutReason = TEXT("phase2_root_on_readiness_not_proven");
-		return false;
-	}
-
-	return true;
-}
-
-static bool ValidateLateValidationBaselineSnapshot(
-	const FPhysAnimCertifiedHandoffSnapshot& Snapshot,
+	const FPhysAnimLateValidationResult& Result,
 	const FPhysAnimStabilizationSettings& Settings,
 	FString& OutReason)
 {
@@ -261,7 +212,7 @@ static bool ValidateLateValidationBaselineSnapshot(
 	// Outcome_AcceptRootOn (proximal+upper) or Outcome_SafeDenyUpperOnly (upper body only).
 	// Outcome_Pending indicates a transient/partially-shaping topology which is too loose for a stable baseline.
 
-	if (Snapshot.LateValidationOutcome == EBalanceLateValidationOutcome::Outcome_Pending)
+	if (Result.Outcome == EBalanceLateValidationOutcome::Outcome_Pending)
 	{
 		OutReason = Snapshot.ProximalSimCount > 0
 			? TEXT("phase1_late_validate_baseline_topology_mismatch_proximal_incomplete")
@@ -278,45 +229,6 @@ static bool ValidateLateValidationBaselineSnapshot(
 	return true;
 }
 
-static bool ValidatePreRootOnShellSafetyProofSnapshot(
-	const FPhysAnimCertifiedHandoffSnapshot& Snapshot,
-	const FPhysAnimStabilizationSettings& Settings,
-	FString& OutReason)
-{
-	if (Snapshot.RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
-	{
-		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
-		return false;
-	}
-
-	if (!Snapshot.bTransitionOwnedShellLocked ||
-		!Snapshot.bTransitionShellReferenceReanchored ||
-		Snapshot.bTransitionShellReferenceReseededAfterLock)
-	{
-		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
-		return false;
-	}
-
-	if (Snapshot.RootOnReadinessShellProofDurationSeconds + KINDA_SMALL_NUMBER <
-		Settings.BalancePhase2PreRootOnShellProofRequiredSeconds)
-	{
-		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
-		return false;
-	}
-
-	if (Snapshot.ShellOffsetDeltaAtCaptureCm > Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm ||
-		Snapshot.ShellVelocityDeltaAtCaptureCmPerSecond > Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond ||
-		Snapshot.ShellOffsetGrowthCm > Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm ||
-		Snapshot.ShellVelocityGrowthCmPerSecond > Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond ||
-		Snapshot.bShellCorrectionOwnerActive ||
-		!Snapshot.bPreRootOnShellSafetyProofSatisfied)
-	{
-		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
-		return false;
-	}
-
-	return true;
-}
 
 void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhysAnimComponent* Owner)
 {
@@ -508,7 +420,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						CertifiedHandoff.UpperBodySimCount,
 						CertifiedHandoff.bPolicySuppressed ? 1 : 0,
 						CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
-						CertifiedHandoff.QuietProofDurationSeconds,
+						CertifiedLateValidationResult.QuietProofDurationSeconds,
 						Settings.BalancePhase1LateValidateRequiredSeconds);
 					SetPhase(EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate, Owner);
 					return;
@@ -578,7 +490,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						CertifiedHandoff.UpperBodySimCount,
 						CertifiedHandoff.bPolicySuppressed ? 1 : 0,
 						CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
-						CertifiedHandoff.QuietProofDurationSeconds,
+						CertifiedLateValidationResult.QuietProofDurationSeconds,
 						Settings.BalancePhase1LateValidateRequiredSeconds);
 					SetPhase(EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate, Owner);
 					return;
@@ -667,7 +579,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		}
 
 		FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
-		const bool bCurrentSnapshotValid = BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot);
+		FPhysAnimLateValidationResult CurrentResult;
+		const bool bCurrentSnapshotValid = BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult);
 		const bool bUpperBodyInstability = bCurrentSnapshotValid &&
 			(CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
 				CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount);
@@ -802,13 +715,13 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			QuietWindowAccumulatedSeconds += DeltaTime;
 
 			Diagnostics.Phase1LateValidateGateSource = TEXT("live_late_validate_gate");
-			Diagnostics.Phase1LateValidateGateReason = bIsRootCoupledTopology && CurrentSnapshot.bRootOnReadinessShellHoldSatisfied
+			Diagnostics.Phase1LateValidateGateReason = bIsRootCoupledTopology && CurrentResult.bRootOnReadinessShellHoldSatisfied
 				? TEXT("ready")
 				: bIsUpperOnlyTopology && LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds
 					? TEXT("upper_only_safe_deny")
 					: TEXT("phase1_late_validate_shell_hold_pending");
 
-			Diagnostics.Phase1RootOnReadinessGateReason = bIsRootCoupledTopology && CurrentSnapshot.bRootOnReadinessProven
+			Diagnostics.Phase1RootOnReadinessGateReason = bIsRootCoupledTopology && CurrentResult.bRootOnReadinessProven
 				? TEXT("ready")
 				: bIsUpperOnlyTopology 
 					? TEXT("phase1_root_on_readiness_upper_only_safe_deny_pending")
@@ -817,8 +730,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 			const bool bCanCompleteAsRootCoupledReady =
 				bIsRootCoupledTopology &&
-				CurrentSnapshot.bRootOnReadinessShellHoldSatisfied &&
-				CurrentSnapshot.bRootOnReadinessProven;
+				CurrentResult.bRootOnReadinessShellHoldSatisfied &&
+				CurrentResult.bRootOnReadinessProven;
 			const bool bCanCompleteAsUpperOnlySafeDeny =
 				bIsUpperOnlyTopology &&
 				LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds;
@@ -855,7 +768,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				FString CaptureReason;
 				if (CaptureCertifiedHandoff(Owner, Settings, CaptureReason))
 				{
-					if (CertifiedHandoff.LateValidationOutcome == EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly)
+					if (CertifiedLateValidationResult.Outcome == EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly)
 					{
 						const FString DenialReason = TEXT("phase2_upper_only_handoff_safe_denied");
 						Diagnostics.FailureReason = DenialReason;
@@ -866,14 +779,14 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					}
 
 					const FString RootOnReadinessGateReason =
-						CertifiedHandoff.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+						CertifiedLateValidationResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
 								? TEXT("ready")
 							: Diagnostics.Phase1RootOnReadinessGateReason;
 					Diagnostics.Phase1RootOnReadinessGateReason = RootOnReadinessGateReason;
 
 					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] EMIT_READY_HANDOFF classification=%s outcome=%s"), 
-						BalanceTransitionSets::GetRootOnReadinessClassificationName(CertifiedHandoff.RootOnReadinessClassification),
-						BalanceTransitionSets::GetLateValidationOutcomeName(CertifiedHandoff.LateValidationOutcome));
+						BalanceTransitionSets::GetRootOnReadinessClassificationName(CertifiedLateValidationResult.RootOnReadinessClassification),
+						BalanceTransitionSets::GetLateValidationOutcomeName(CertifiedLateValidationResult.Outcome));
 					UE_LOG(
 						LogPhysAnimBridge,
 						Log,
@@ -884,8 +797,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						CertifiedHandoff.UpperBodySimCount,
 						CertifiedHandoff.bPolicySuppressed ? 1 : 0,
 						CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
-						CertifiedHandoff.LateValidationSustainDurationSeconds,
-						CertifiedHandoff.QuietProofDurationSeconds);
+						CertifiedLateValidationResult.LateValidationSustainDurationSeconds,
+						CertifiedLateValidationResult.QuietProofDurationSeconds);
 					UE_LOG(
 						LogPhysAnimBridge,
 						Log,
@@ -904,18 +817,18 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					CertifiedHandoff.RootOnReadinessPolicyInfluenceDurationSeconds,
 					CertifiedHandoff.RootOnReadinessPolicyInfluenceRequiredSeconds,
 					CertifiedHandoff.bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame ? 1 : 0,
-					CertifiedHandoff.bRootOnReadinessShellHoldSatisfied ? 1 : 0,
-					CertifiedHandoff.bRootOnReadinessFinalBringUpControlSettled ? 1 : 0,
-					CertifiedHandoff.bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
-					CertifiedHandoff.bRootOnReadinessProven ? 1 : 0,
-						BalanceTransitionSets::GetRootOnReadinessClassificationName(CertifiedHandoff.RootOnReadinessClassification),
+					CertifiedLateValidationResult.bRootOnReadinessShellHoldSatisfied ? 1 : 0,
+					CertifiedLateValidationResult.bRootOnReadinessFinalBringUpControlSettled ? 1 : 0,
+					CertifiedLateValidationResult.bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
+					CertifiedLateValidationResult.bRootOnReadinessProven ? 1 : 0,
+						BalanceTransitionSets::GetRootOnReadinessClassificationName(CertifiedLateValidationResult.RootOnReadinessClassification),
 						*RootOnReadinessGateReason,
 						CertifiedHandoff.RootOnReadinessShellHoldDurationSeconds,
 						CertifiedHandoff.RootOnReadinessShellHoldRequiredSeconds,
-						CertifiedHandoff.MaxTargetDeltaDegrees,
-						CertifiedHandoff.MeanTargetDeltaDegrees,
-						CertifiedHandoff.QuietProofDurationSeconds,
-						CertifiedHandoff.LateValidationSustainDurationSeconds);
+						CertifiedLateValidationResult.MaxTargetDeltaDegrees,
+						CertifiedLateValidationResult.MeanTargetDeltaDegrees,
+						CertifiedLateValidationResult.QuietProofDurationSeconds,
+						CertifiedLateValidationResult.LateValidationSustainDurationSeconds);
 					SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_RootOn, Owner);
 					return;
 				}
@@ -1368,15 +1281,15 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					CertifiedHandoff.RootOnReadinessPolicyInfluenceDurationSeconds,
 					CertifiedHandoff.RootOnReadinessPolicyInfluenceRequiredSeconds,
 					CertifiedHandoff.bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame ? 1 : 0,
-					CertifiedHandoff.bRootOnReadinessShellHoldSatisfied ? 1 : 0,
-					CertifiedHandoff.bRootOnReadinessFinalBringUpControlSettled ? 1 : 0,
-					CertifiedHandoff.bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
-					CertifiedHandoff.bRootOnReadinessProven ? 1 : 0,
+					CertifiedLateValidationResult.bRootOnReadinessShellHoldSatisfied ? 1 : 0,
+					CertifiedLateValidationResult.bRootOnReadinessFinalBringUpControlSettled ? 1 : 0,
+					CertifiedLateValidationResult.bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
+					CertifiedLateValidationResult.bRootOnReadinessProven ? 1 : 0,
 					CertifiedHandoff.RootOnReadinessShellHoldDurationSeconds,
 					CertifiedHandoff.RootOnReadinessShellHoldRequiredSeconds,
-					CertifiedHandoff.MaxTargetDeltaDegrees,
-					CertifiedHandoff.MeanTargetDeltaDegrees,
-					CertifiedHandoff.QuietProofDurationSeconds,
+					CertifiedLateValidationResult.MaxTargetDeltaDegrees,
+					CertifiedLateValidationResult.MeanTargetDeltaDegrees,
+					CertifiedLateValidationResult.QuietProofDurationSeconds,
 					Diagnostics.bResetScheduled ? 1 : 0);
 
 				FVector LiveChainCenterCm = FVector::ZeroVector;
@@ -1604,13 +1517,13 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (!bHasLateValidationProof || !bHasCertifiedHandoff || !CertifiedHandoff.bLateValidationCompleted)
+	if (!bHasLateValidationProof || !bHasCertifiedHandoff || !CertifiedLateValidationResult.bLateValidationCompleted)
 	{
 		OutReason = TEXT("phase2_late_validate_not_completed");
 		return false;
 	}
 
-	if (CertifiedHandoff.LateValidationOutcome == EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly)
+	if (CertifiedLateValidationResult.Outcome == EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly)
 	{
 		OutReason = TEXT("phase1_upper_only_handoff_safe_denied");
 		return false;
@@ -1624,7 +1537,8 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 	}
 
 	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
-	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot))
+	FPhysAnimLateValidationResult CurrentResult;
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult))
 	{
 		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;
@@ -1638,26 +1552,26 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 	}
 
 	FString HandoffReadinessReason;
-	if (!ValidateLateValidationHandoffSnapshot(CertifiedHandoff, Settings, HandoffReadinessReason) ||
-		!ValidateLateValidationHandoffSnapshot(CurrentSnapshot, Settings, HandoffReadinessReason))
+	if (!ValidateLateValidationHandoffSnapshot(CertifiedHandoff, CertifiedLateValidationResult, Settings, HandoffReadinessReason) ||
+		!ValidateLateValidationHandoffSnapshot(CurrentSnapshot, CurrentResult, Settings, HandoffReadinessReason))
 	{
 		OutReason = HandoffReadinessReason;
 		return false;
 	}
 
-	if (!ValidateRootOnReadinessSnapshot(CurrentSnapshot, Settings, HandoffReadinessReason))
+	if (!ValidateRootOnReadinessSnapshot(CurrentSnapshot, CurrentResult, Settings, HandoffReadinessReason))
 	{
 		OutReason = HandoffReadinessReason;
 		return false;
 	}
 
-	if (!CurrentSnapshot.bRootOnReadinessProven)
+	if (!CurrentResult.bRootOnReadinessProven)
 	{
 		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
 		return false;
 	}
 
-	if (!ValidatePreRootOnShellSafetyProofSnapshot(CurrentSnapshot, Settings, HandoffReadinessReason))
+	if (!ValidatePreRootOnShellSafetyProofSnapshot(CurrentSnapshot, CurrentResult, Settings, HandoffReadinessReason))
 	{
 		OutReason = HandoffReadinessReason;
 		return false;
@@ -1694,7 +1608,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (CurrentSnapshot.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER < CertifiedHandoff.LateValidationSustainDurationSeconds)
+	if (CurrentResult.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER < CertifiedLateValidationResult.LateValidationSustainDurationSeconds)
 	{
 		OutReason = TEXT("phase2_late_validate_not_completed");
 		return false;
@@ -1704,18 +1618,16 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 	return true;
 }
 
-bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings, FPhysAnimCertifiedHandoffSnapshot& OutSnapshot) const
+bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings, FPhysAnimCertifiedHandoffSnapshot& OutSnapshot, FPhysAnimLateValidationResult& OutResult) const
 {
-	OutSnapshot = {};
-
-	USkeletalMeshComponent* Mesh = Owner ? Owner->GetMeshComponent() : nullptr;
-	if (!Owner || !Mesh || !Owner->GetOwner())
+	if (!Owner)
 	{
 		return false;
 	}
 
+	USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-	FBodyInstance* PelvisBody = Mesh->GetBodyInstance(RootBoneName);
+	FBodyInstance* PelvisBody = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
 	if (!PelvisBody)
 	{
 		return false;
@@ -1781,6 +1693,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.ShellVelocityGrowthCmPerSecond = bHasRootOnReadinessShellProofBaseline
 		? FMath::Max(0.0f, OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond - RootOnReadinessShellProofStartVelocityCmPerSecond)
 		: 0.0f;
+
 	bool bShellCorrectionOwnerActive = Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle;
 	if (const ACharacter* const CharacterOwner = Cast<ACharacter>(Owner->GetOwner()))
 	{
@@ -1800,19 +1713,21 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bTransitionOwnedShellLocked = Owner->IsTransitionOwnedShellLocked();
 	OutSnapshot.bTransitionShellReferenceReanchored = Owner->WasTransitionShellReferenceReanchored();
 	OutSnapshot.bTransitionShellReferenceReseededAfterLock = Owner->WasTransitionShellReferenceReseededAfterLock();
-	OutSnapshot.bLateValidationCompleted = bHasLateValidationProof;
-	OutSnapshot.bRootOnReadinessShellHoldSatisfied =
+
+	// Populate Logical Result
+	OutResult.bLateValidationCompleted = bHasLateValidationProof;
+	OutResult.bRootOnReadinessShellHoldSatisfied =
 		OutSnapshot.RootOnReadinessShellHoldDurationSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration;
-	OutSnapshot.bRootOnReadinessUpperOnlyShellHoldCappedByWindow =
+	OutResult.bRootOnReadinessUpperOnlyShellHoldCappedByWindow =
 		OutSnapshot.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold &&
-		OutSnapshot.bLateValidationCompleted &&
-		!OutSnapshot.bRootOnReadinessShellHoldSatisfied;
-	OutSnapshot.bRootOnReadinessFinalBringUpControlSettled =
+		OutResult.bLateValidationCompleted &&
+		!OutResult.bRootOnReadinessShellHoldSatisfied;
+	OutResult.bRootOnReadinessFinalBringUpControlSettled =
 		OutSnapshot.FinalBringUpGroupControlAuthorityAlpha >= 1.0f - KINDA_SMALL_NUMBER;
-	OutSnapshot.bRootOnReadinessPolicyInfluenceSettled =
+	OutResult.bRootOnReadinessPolicyInfluenceSettled =
 		OutSnapshot.RootOnReadinessPolicyInfluenceDurationSeconds + KINDA_SMALL_NUMBER >=
 		OutSnapshot.RootOnReadinessPolicyInfluenceRequiredSeconds;
-	OutSnapshot.bPreRootOnShellSafetyProofSatisfied =
+	OutResult.bPreRootOnShellSafetyProofSatisfied =
 		OutSnapshot.RootOnReadinessShellProofDurationSeconds + KINDA_SMALL_NUMBER >=
 			Settings.BalancePhase2PreRootOnShellProofRequiredSeconds &&
 		OutSnapshot.ShellOffsetDeltaAtCaptureCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm &&
@@ -1823,57 +1738,65 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.bTransitionOwnedShellLocked &&
 		OutSnapshot.bTransitionShellReferenceReanchored &&
 		!OutSnapshot.bTransitionShellReferenceReseededAfterLock;
-	OutSnapshot.bRootOnReadinessProven =
-		OutSnapshot.bRootOnReadinessShellHoldSatisfied &&
-		OutSnapshot.bRootOnReadinessFinalBringUpControlSettled &&
-		OutSnapshot.bRootOnReadinessPolicyInfluenceSettled &&
-		OutSnapshot.bPreRootOnShellSafetyProofSatisfied &&
+
+	OutResult.bRootOnReadinessProven =
+		OutResult.bRootOnReadinessShellHoldSatisfied &&
+		OutResult.bRootOnReadinessFinalBringUpControlSettled &&
+		OutResult.bRootOnReadinessPolicyInfluenceSettled &&
+		OutResult.bPreRootOnShellSafetyProofSatisfied &&
 		BalanceTransitionSets::IsRootCoupledReadyHandoff(
 			ProximalSimCount,
 			DistalSimCount,
 			UpperSimCount,
 			PelvisBody->IsInstanceSimulatingPhysics());
-	OutSnapshot.RootOnReadinessClassification =
+
+	OutResult.RootOnReadinessClassification =
 		BalanceTransitionSets::IsRootCoupledReadyHandoff(
 			ProximalSimCount,
 			DistalSimCount,
 			UpperSimCount,
 			PelvisBody->IsInstanceSimulatingPhysics())
 			? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
-			: EBalanceReadyRootOnReadinessClassification::NotReady;
-
-	OutSnapshot.LateValidationOutcome = 
-		(OutSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
-			? EBalanceLateValidationOutcome::Outcome_AcceptRootOn
 			: (BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(
 					ProximalSimCount,
 					DistalSimCount,
 					UpperSimCount,
 					PelvisBody->IsInstanceSimulatingPhysics())
+				? EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
+				: EBalanceReadyRootOnReadinessClassification::NotReady);
+
+	OutResult.Outcome = 
+		(OutResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
+			? EBalanceLateValidationOutcome::Outcome_AcceptRootOn
+			: (OutResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
 				? EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly
 				: EBalanceLateValidationOutcome::Outcome_Pending);
-	OutSnapshot.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
-	OutSnapshot.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
-	OutSnapshot.QuietProofDurationSeconds = QuietWindowAccumulatedSeconds;
-	OutSnapshot.LateValidationSustainDurationSeconds = LateValidationAccumulatedSeconds;
+
+	OutResult.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
+	OutResult.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
+	OutResult.QuietProofDurationSeconds = QuietWindowAccumulatedSeconds;
+	OutResult.LateValidationSustainDurationSeconds = LateValidationAccumulatedSeconds;
+
 	return true;
 }
 
 bool FPhysAnimBalanceReadyTransition::CaptureCertifiedHandoff(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
 {
 	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
-	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot))
+	FPhysAnimLateValidationResult CurrentResult;
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult))
 	{
 		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;
 	}
 
-	if (!ValidateLateValidationHandoffSnapshot(CurrentSnapshot, Settings, OutReason))
+	if (!ValidateLateValidationHandoffSnapshot(CurrentSnapshot, CurrentResult, Settings, OutReason))
 	{
 		return false;
 	}
 
 	CertifiedHandoff = CurrentSnapshot;
+	CertifiedLateValidationResult = CurrentResult;
 	bHasCertifiedHandoff = true;
 	OutReason.Reset();
 	return true;
@@ -1882,18 +1805,20 @@ bool FPhysAnimBalanceReadyTransition::CaptureCertifiedHandoff(UPhysAnimComponent
 bool FPhysAnimBalanceReadyTransition::CaptureLateValidationBaseline(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
 {
 	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
-	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot))
+	FPhysAnimLateValidationResult CurrentResult;
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult))
 	{
 		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;
 	}
 
-	if (!ValidateLateValidationBaselineSnapshot(CurrentSnapshot, Settings, OutReason))
+	if (!ValidateLateValidationBaselineSnapshot(CurrentSnapshot, CurrentResult, Settings, OutReason))
 	{
 		return false;
 	}
 
 	CertifiedHandoff = CurrentSnapshot;
+	CertifiedLateValidationResult = CurrentResult;
 	bHasCertifiedHandoff = true;
 	OutReason.Reset();
 	return true;
@@ -1908,7 +1833,8 @@ bool FPhysAnimBalanceReadyTransition::ValidateCertifiedHandoff(UPhysAnimComponen
 	}
 
 	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
-	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot))
+	FPhysAnimLateValidationResult CurrentResult;
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult))
 	{
 		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;
@@ -1920,70 +1846,19 @@ bool FPhysAnimBalanceReadyTransition::ValidateCertifiedHandoff(UPhysAnimComponen
 		return false;
 	}
 
-	if (!CertifiedHandoff.bLateValidationCompleted ||
-		CertifiedHandoff.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase1LateValidateRequiredSeconds)
+	if (!ValidateLateValidationHandoffSnapshot(CurrentSnapshot, CurrentResult, Settings, OutReason))
 	{
-		OutReason = TEXT("phase2_late_validate_not_completed");
 		return false;
 	}
 
-	if (CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
-		CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount)
+	if (!ValidateRootOnReadinessSnapshot(CurrentSnapshot, CurrentResult, Settings, OutReason))
 	{
-		OutReason = TEXT("phase2_upper_body_instability");
 		return false;
 	}
 
-	if (CurrentSnapshot.SimCount != CertifiedHandoff.SimCount ||
-		CurrentSnapshot.ProximalSimCount != CertifiedHandoff.ProximalSimCount ||
-		CurrentSnapshot.DistalSimCount != CertifiedHandoff.DistalSimCount)
-	{
-		OutReason = TEXT("phase2_sim_coverage_regressed");
-		return false;
-	}
-
-	if (CurrentSnapshot.bPolicySuppressed != CertifiedHandoff.bPolicySuppressed)
-	{
-		OutReason = TEXT("phase2_policy_suppression_regressed");
-		return false;
-	}
-
-	if (CurrentSnapshot.bControlAuthoritySettled != CertifiedHandoff.bControlAuthoritySettled)
-	{
-		OutReason = TEXT("phase2_control_authority_not_settled");
-		return false;
-	}
-
-	if (CurrentSnapshot.MaxTargetDeltaDegrees > CertifiedHandoff.MaxTargetDeltaDegrees + KINDA_SMALL_NUMBER ||
-		CurrentSnapshot.MeanTargetDeltaDegrees > CertifiedHandoff.MeanTargetDeltaDegrees + KINDA_SMALL_NUMBER)
-	{
-		OutReason = TEXT("phase2_target_discontinuity_too_high");
-		return false;
-	}
-
-	if (CertifiedHandoff.MaxTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg ||
-		CertifiedHandoff.MeanTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg)
-	{
-		OutReason = TEXT("phase2_target_discontinuity_too_high");
-		return false;
-	}
-
-	if (CurrentSnapshot.QuietProofDurationSeconds + KINDA_SMALL_NUMBER < CertifiedHandoff.QuietProofDurationSeconds)
-	{
-		OutReason = TEXT("phase2_handoff_invalidated");
-		return false;
-	}
-
-	if (!CurrentSnapshot.bLateValidationCompleted ||
-		CurrentSnapshot.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER < CertifiedHandoff.LateValidationSustainDurationSeconds)
-	{
-		OutReason = TEXT("phase2_late_validate_not_completed");
-		return false;
-	}
-
-	OutReason = TEXT("ready");
 	return true;
 }
+
 
 void FPhysAnimBalanceReadyTransition::MarkSafePhase2Denied(const FString& Reason)
 {
@@ -2472,6 +2347,128 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	if (Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle)
 	{
 		OutReason = TEXT("phase3_startup_or_gameplay_authority_reclaimed");
+		return false;
+	}
+
+	return true;
+}
+bool FPhysAnimBalanceReadyTransition::ValidateLateValidationHandoffSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const FPhysAnimStabilizationSettings& Settings, FString& OutReason) const
+{
+	if (!Result.bLateValidationCompleted)
+	{
+		OutReason = TEXT("phase2_late_validate_not_completed");
+		return false;
+	}
+
+	if (!Snapshot.bControlAuthoritySettled)
+	{
+		OutReason = TEXT("phase2_control_authority_not_settled");
+		return false;
+	}
+
+	if (Result.Outcome == EBalanceLateValidationOutcome::Outcome_Pending)
+	{
+		OutReason = TEXT("phase2_late_validate_outcome_pending");
+		return false;
+	}
+
+	if (Result.MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg)
+	{
+		OutReason = TEXT("phase2_target_discontinuity_too_high");
+		return false;
+	}
+
+	if (Result.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase1LateValidateRequiredSeconds)
+	{
+		OutReason = TEXT("phase2_late_validate_not_sustained");
+		return false;
+	}
+
+	return true;
+}
+
+bool FPhysAnimBalanceReadyTransition::ValidateRootOnReadinessSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const FPhysAnimStabilizationSettings& Settings, FString& OutReason) const
+{
+	if (!Result.bRootOnReadinessShellHoldSatisfied)
+	{
+		OutReason = Result.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+				? TEXT("phase2_root_on_readiness_shell_hold_not_completed")
+			: Result.bLateValidationCompleted &&
+				Result.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase1LateValidateRequiredSeconds
+				? TEXT("phase2_root_on_readiness_shell_hold_capped_by_late_validate_window")
+				: TEXT("phase2_root_on_readiness_shell_hold_not_completed");
+		return false;
+	}
+
+	if (!Result.bRootOnReadinessFinalBringUpControlSettled)
+	{
+		OutReason = TEXT("phase2_root_on_readiness_final_bring_up_control_not_settled");
+		return false;
+	}
+
+	if (!Result.bRootOnReadinessPolicyInfluenceSettled)
+	{
+		OutReason = Snapshot.PolicyInfluenceAlphaAtCapture <= KINDA_SMALL_NUMBER
+			? TEXT("phase2_root_on_readiness_policy_influence_not_started")
+			: TEXT("phase2_root_on_readiness_policy_influence_below_threshold");
+		return false;
+	}
+
+	if (!Result.bPreRootOnShellSafetyProofSatisfied)
+	{
+		OutReason = TEXT("phase2_root_on_readiness_shell_proof_not_satisfied");
+		return false;
+	}
+
+	if (Result.RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
+	{
+		OutReason = TEXT("phase2_root_on_readiness_topology_not_certified");
+		return false;
+	}
+
+	if (!Result.bRootOnReadinessProven)
+	{
+		OutReason = TEXT("phase2_root_on_readiness_not_proven");
+		return false;
+	}
+
+	return true;
+}
+
+bool FPhysAnimBalanceReadyTransition::ValidatePreRootOnShellSafetyProofSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const FPhysAnimStabilizationSettings& Settings, FString& OutReason) const
+{
+	if (Result.RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		return false;
+	}
+
+	if (!Snapshot.bTransitionOwnedShellLocked ||
+		!Snapshot.bTransitionShellReferenceReanchored ||
+		Snapshot.bTransitionShellReferenceReseededAfterLock)
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		return false;
+	}
+
+	if (Snapshot.ShellOffsetDeltaAtCaptureCm > Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm ||
+		Snapshot.ShellVelocityDeltaAtCaptureCmPerSecond > Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond ||
+		Snapshot.ShellOffsetGrowthCm > Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm ||
+		Snapshot.ShellVelocityGrowthCmPerSecond > Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond)
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		return false;
+	}
+
+	if (Snapshot.bShellCorrectionOwnerActive)
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		return false;
+	}
+
+	if (Snapshot.RootOnReadinessShellProofDurationSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2PreRootOnShellProofRequiredSeconds)
+	{
+		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
 		return false;
 	}
 
