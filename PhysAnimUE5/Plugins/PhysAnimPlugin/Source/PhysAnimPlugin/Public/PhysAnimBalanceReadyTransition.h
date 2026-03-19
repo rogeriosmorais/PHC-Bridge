@@ -65,6 +65,7 @@ struct FBalanceReadyTransitionDiagnostics
 	FString Phase1TargetDiscontinuityGateReason;
 	FString Phase1LateValidateGateSource;
 	FString Phase1LateValidateGateReason;
+	FString Phase1RootOnReadinessGateReason;
 	float RootSpeed = 0.0f;
 	float RootAngularSpeed = 0.0f;
 	float RootTilt = 0.0f;
