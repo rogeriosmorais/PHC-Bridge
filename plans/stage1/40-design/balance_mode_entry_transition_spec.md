@@ -162,6 +162,9 @@ Additionally:
 - a clean Phase 1 is not sufficient if Phase 2 root-on still produces a deterministic spike
 - if Phase 1 can only “sometimes” converge through unowned retries or incidental runtime drift, the design is not yet valid
 - Phase 1 late-validation minimum success must not be treated as a Phase 2 handoff point unless the additional pre-root-on safety proof is already true
+- Phase 2 root-on must be a warm start from the live physics-consistent neighboring chain, not a pelvis pose snap from animation alone
+- Phase 2 must validate pelvis-to-proximal constraint error before enabling simulation
+- Phase 2 must zero and then reseed velocities around the sim flip, not rely on pose seeding alone
 
 ## 7. Authoritative Runtime States
 

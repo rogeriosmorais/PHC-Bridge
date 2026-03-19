@@ -59,7 +59,7 @@ Phase 2 is successful only if:
 
 - pelvis/root simulation becomes true
 - no conflicting authority interferes on the root-on frame
-- no same-frame discontinuity is injected by target writes, resets, or shell correction
+- no same-frame discontinuity is injected by target writes, resets, shell correction, or an unseeded root-on pose
 - the immediate post-root-on window remains within named spike thresholds
 
 Phase 2 is not a broad settle phase.  
@@ -198,6 +198,22 @@ Minimum contract:
 - the proof must be part of Phase 2 entry validation, not a later Phase 2 guard-window discovery
 - if the proof is absent, false, or unknown, Phase 2 must deny safely before root-on
 
+### 6.3 Root-on warm start contract
+
+The root-on activation must be treated as a warm start, not a blind flip.
+
+Required behavior:
+
+- do not seed pelvis from the animation/root-bone pose alone
+- seed pelvis from the live physics-consistent pose of the neighboring simulated chain whenever available
+- validate pelvis-to-thigh and pelvis-to-spine constraint error before enabling root simulation
+- abort before `SetInstanceSimulatePhysics(true)` if the measured pelvis-to-proximal constraint error exceeds the documented threshold
+- zero both linear and angular velocity as part of the root-on activation
+- explicitly clear or reseed velocities after the sim flip as well, not only before it
+- log pre-flip and post-flip constraint error for pelvis-thigh and pelvis-spine links
+
+The goal is to make root-on a controlled warm start from the live simulated chain, not a pose-only snap.
+
 Not allowed:
 
 - permitting `BRT_Phase2_RootOn` based only on shell-hold duration, policy settle, and bring-up control settle
@@ -258,6 +274,20 @@ No partial carryover is allowed.
 9. no locomotion authority activation occurs
 10. no shell/capsule corrective movement owner is active
 11. no posture reseed, cached reset, or topology expansion becomes pending
+
+### 6.2.2 Constraint-error diagnostic gate
+
+Before `SetInstanceSimulatePhysics(true)`, the runtime must measure the pelvis-to-proximal chain constraint error.
+
+Minimum diagnostic gate:
+
+- measure pelvis-to-thigh constraint error
+- measure pelvis-to-spine constraint error
+- compare both against a documented entry threshold
+- abort Phase 2 entry if either error is above threshold
+
+This diagnostic gate is separate from the shell-correction safety proof.
+It is intended to catch obvious root-on mismatches before the flip occurs.
 
 Interpretation rule:
 
