@@ -5003,7 +5003,15 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
-		if (bIsRootBodyModifier)
+		static double LastRootBodyModLogSeconds = -1.0;
+		const double NowSeconds = FPlatformTime::Seconds();
+		const bool bRootBodyModLogStateChanged =
+			bAllowRootBodyModifierSimulation != bLastAppliedPresentationRootSimulationEnabled ||
+			bTransitionOwnsRootOnThisTick ||
+			bTransitionKeepsBoneKinematic ||
+			bBringUpGroupUnlocked ||
+			bBodyModifierActivatedThisTick;
+		if (bIsRootBodyModifier && (bRootBodyModLogStateChanged || LastRootBodyModLogSeconds < 0.0 || NowSeconds - LastRootBodyModLogSeconds >= 1.0))
 		{
 			UE_LOG(
 				LogPhysAnimBridge,
@@ -5021,6 +5029,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bBodyModifierActivatedThisTick ? 1 : 0,
 				bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
 				PendingBodyModifierCachedResetNames.Num());
+			LastRootBodyModLogSeconds = NowSeconds;
 		}
 
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
