@@ -1032,12 +1032,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (ShouldSuppressPolicy())
-	{
-		OutReason = TEXT("phase2_policy_suppression_still_active");
-		return false;
-	}
-	if (!ShouldSuppressResets() || !ShouldSuppressShell() || !ShouldSuppressMoveSmoke())
+	if (!ShouldSuppressPolicy() || !ShouldSuppressResets() || !ShouldSuppressShell() || !ShouldSuppressMoveSmoke())
 	{
 		OutReason = TEXT("phase2_same_frame_conflicting_authority");
 		return false;
