@@ -229,7 +229,7 @@ private:
 	void ReturnToPhase1Prepare(class UPhysAnimComponent* Owner, const FString& Reason, const TCHAR* EventName);
 	void ResetTransitionLocalState();
 	void ResetCertifiedHandoffState();
-	void MarkSafePhase2Denied(const FString& Reason);
+	void MarkSafePhase2Denied(class UPhysAnimComponent* Owner, const FString& Reason);
 	void CaptureFlipDiagnostics(class UPhysAnimComponent* Owner);
 
 	EBalanceReadyTransitionPhase InternalPhase = EBalanceReadyTransitionPhase::BRT_Inactive;

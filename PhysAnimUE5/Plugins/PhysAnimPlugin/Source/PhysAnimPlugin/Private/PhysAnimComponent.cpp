@@ -2659,11 +2659,6 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		return;
 	}
 
-	if (BalanceReadyTransition.HasSafePhase2Denial())
-	{
-		bPendingBalanceModeStartRequest = false;
-		return;
-	}
 
 	if (!BalanceReadyTransition.IsActive())
 	{
@@ -2684,7 +2679,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		}
 	}
 
-	if (BalanceReadyTransition.HasSucceeded())
+	if (BalanceReadyTransition.HasSucceeded() || BalanceReadyTransition.HasSafePhase2Denial())
 	{
 		CompleteBalanceModeEntry();
 	}
@@ -2737,7 +2732,10 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	bPendingBalanceModeStartRequest = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
-	BalanceReadyTransition.Cancel();
+	if (!BalanceReadyTransition.HasSafePhase2Denial())
+	{
+		BalanceReadyTransition.Cancel();
+	}
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalancePerturbationActive);
 	ApplyStartupMovementLock();

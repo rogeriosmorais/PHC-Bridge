@@ -431,7 +431,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				Diagnostics.FailureReason = Phase2BlockReason;
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *Phase2BlockReason);
 				Owner->ReleaseTransitionOwnedShellLock();
-				MarkSafePhase2Denied(Phase2BlockReason);
+				MarkSafePhase2Denied(Owner, Phase2BlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
 				return;
 			}
@@ -478,7 +478,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.FailureReason = TimeoutReason;
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
 			Owner->ReleaseTransitionOwnedShellLock();
-			MarkSafePhase2Denied(TimeoutReason);
+			MarkSafePhase2Denied(Owner, TimeoutReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *TimeoutReason);
 			return;
 		}
@@ -736,7 +736,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						Diagnostics.FailureReason = DenialReason;
 						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *DenialReason);
 						Owner->ReleaseTransitionOwnedShellLock();
-						MarkSafePhase2Denied(DenialReason);
+						MarkSafePhase2Denied(Owner, DenialReason);
 						return;
 					}
 
@@ -806,7 +806,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				}
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *LateValidateBlockReason);
 				Owner->ReleaseTransitionOwnedShellLock();
-				MarkSafePhase2Denied(LateValidateBlockReason);
+				MarkSafePhase2Denied(Owner, LateValidateBlockReason);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *LateValidateBlockReason);
 				return;
 			}
@@ -886,7 +886,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.FailureReason = TimeoutReason;
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
 			Owner->ReleaseTransitionOwnedShellLock();
-			MarkSafePhase2Denied(TimeoutReason);
+			MarkSafePhase2Denied(Owner, TimeoutReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *TimeoutReason);
 			return;
 		}
@@ -1158,7 +1158,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			const EBalanceReadyConditionOwner FailureOwner = ClassifyConditionOwner(DenyReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED reason=%s owner=%d"), *DenyReason, static_cast<int32>(FailureOwner));
 			Owner->ReleaseTransitionOwnedShellLock();
-			MarkSafePhase2Denied(DenyReason);
+			MarkSafePhase2Denied(Owner, DenyReason);
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *DenyReason);
 			return;
 		}
@@ -1331,6 +1331,10 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_SUCCESS."));
 		Phase2RetryCount = 0;
+	}
+	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_SAFE_DENIED final_outcome. reason=%s"), *Diagnostics.FailureReason);
 	}
 	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
 	{
@@ -1820,20 +1824,11 @@ bool FPhysAnimBalanceReadyTransition::ValidateCertifiedHandoff(UPhysAnimComponen
 }
 
 
-void FPhysAnimBalanceReadyTransition::MarkSafePhase2Denied(const FString& Reason)
+void FPhysAnimBalanceReadyTransition::MarkSafePhase2Denied(class UPhysAnimComponent* Owner, const FString& Reason)
 {
 	SafePhase2DenialReason = Reason;
-	PhaseTimeSeconds = 0.0f;
-	StableHoldAccumulatedSeconds = 0.0f;
-	QuietWindowAccumulatedSeconds = 0.0f;
-	TotalTransitionTimeSeconds = 0.0f;
-	bLatchedPelvisResetApplied = false;
-	QuietHandoffCount = 0;
-	HipQuarantineTimerSeconds = 0.0f;
-	RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
-	EntryHoldRotations.Empty();
-	ResetTransitionLocalState();
-	InternalPhase = EBalanceReadyTransitionPhase::BRT_SafeDenied;
+	Diagnostics.FailureReason = Reason;
+	SetPhase(EBalanceReadyTransitionPhase::BRT_SafeDenied, Owner);
 }
 
 void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
