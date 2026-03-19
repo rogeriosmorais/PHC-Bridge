@@ -5230,6 +5230,14 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 		return;
 	}
 
+	const bool bStableRuntimeWindowUnlock = Context && FCString::Strcmp(Context, TEXT("StableRuntimeWindow")) == 0;
+	if (bStableRuntimeWindowUnlock &&
+		BalanceReadyTransition.GetPhase() != EBalanceReadyTransitionPhase::BRT_Succeeded &&
+		GroupIndex >= 2)
+	{
+		return;
+	}
+
 	if (!BringUpGroupActivationTimeSeconds.IsValidIndex(GroupIndex))
 	{
 		BringUpGroupActivationTimeSeconds.Init(-1.0, GetBringUpGroupCount());
