@@ -586,6 +586,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				FString CaptureReason;
 				if (CaptureCertifiedHandoff(Owner, Settings, CaptureReason))
 				{
+					const FString RootOnReadinessGateReason =
+						CertifiedHandoff.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
+							? TEXT("phase1_root_on_readiness_upper_only_late_validation_safe_denied")
+							: Diagnostics.Phase1RootOnReadinessGateReason;
+					Diagnostics.Phase1RootOnReadinessGateReason = RootOnReadinessGateReason;
 					UE_LOG(
 						LogPhysAnimBridge,
 						Log,
@@ -618,10 +623,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					CertifiedHandoff.bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame ? 1 : 0,
 					CertifiedHandoff.bRootOnReadinessShellHoldSatisfied ? 1 : 0,
 					CertifiedHandoff.bRootOnReadinessFinalBringUpControlSettled ? 1 : 0,
-						CertifiedHandoff.bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
-						CertifiedHandoff.bRootOnReadinessProven ? 1 : 0,
+					CertifiedHandoff.bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
+					CertifiedHandoff.bRootOnReadinessProven ? 1 : 0,
 						BalanceTransitionSets::GetRootOnReadinessClassificationName(CertifiedHandoff.RootOnReadinessClassification),
-						*Diagnostics.Phase1RootOnReadinessGateReason,
+						*RootOnReadinessGateReason,
 						CertifiedHandoff.RootOnReadinessShellHoldDurationSeconds,
 						CertifiedHandoff.RootOnReadinessShellHoldRequiredSeconds,
 						CertifiedHandoff.MaxTargetDeltaDegrees,
