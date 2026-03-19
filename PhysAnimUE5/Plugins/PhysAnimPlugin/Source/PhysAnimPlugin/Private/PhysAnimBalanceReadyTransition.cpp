@@ -12,6 +12,7 @@ namespace BalanceTransitionSets
 {
 	static constexpr float Phase2TopologySettleGraceSeconds = 1.0f / 30.0f;
 	static constexpr float Phase2AuthorityRampSeconds = 0.10f;
+	static constexpr float Phase2MaxPelvisProximalConstraintErrorCm = 15.0f;
 	static bool IsRoot(FName BoneName) { return BoneName == "pelvis"; }
 	static bool IsProximal(FName BoneName) { return BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"; }
 	static bool IsDistalLowerLimb(FName BoneName) { return BoneName == "calf_l" || BoneName == "calf_r" || BoneName == "foot_l" || BoneName == "foot_r" || BoneName == "ball_l" || BoneName == "ball_r"; }
@@ -48,6 +49,65 @@ namespace BalanceTransitionSets
 		return DistalSimCountPre == 0 &&
 			DistalSimCountPost == 0 &&
 			(SimCountPost == SimCountPre || SimCountPost == SimCountPre + 1);
+	}
+
+	static float ComputePelvisProximalConstraintErrorCm(
+		const USkeletalMeshComponent* Mesh,
+		const TArray<FName>& SimulatingBones,
+		FVector& OutLiveChainCenterCm)
+	{
+		OutLiveChainCenterCm = FVector::ZeroVector;
+		if (!Mesh)
+		{
+			return 0.0f;
+		}
+
+		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		const FTransform PelvisTransform = Mesh->GetBoneTransform(Mesh->GetBoneIndex(RootBoneName));
+
+		FVector Sum = FVector::ZeroVector;
+		int32 Count = 0;
+		for (const FName BoneName : SimulatingBones)
+		{
+			if (!IsProximal(BoneName) && !IsUpperBody(BoneName))
+			{
+				continue;
+			}
+
+			Sum += Mesh->GetBoneTransform(Mesh->GetBoneIndex(BoneName)).GetLocation();
+			++Count;
+		}
+
+		if (Count > 0)
+		{
+			OutLiveChainCenterCm = Sum / static_cast<float>(Count);
+		}
+		else
+		{
+			OutLiveChainCenterCm = PelvisTransform.GetLocation();
+		}
+
+		return FVector::Dist(PelvisTransform.GetLocation(), OutLiveChainCenterCm);
+	}
+
+	static FTransform BuildWarmStartPelvisTransform(
+		const USkeletalMeshComponent* Mesh,
+		const TArray<FName>& SimulatingBones)
+	{
+		if (!Mesh)
+		{
+			return FTransform::Identity;
+		}
+
+		FVector LiveChainCenterCm = FVector::ZeroVector;
+		const float ErrorCm = ComputePelvisProximalConstraintErrorCm(Mesh, SimulatingBones, LiveChainCenterCm);
+		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		FTransform PelvisTransform = Mesh->GetBoneTransform(Mesh->GetBoneIndex(RootBoneName));
+		if (ErrorCm > KINDA_SMALL_NUMBER)
+		{
+			PelvisTransform.SetLocation(LiveChainCenterCm);
+		}
+		return PelvisTransform;
 	}
 
 	static bool IsUpperOnlySafeDenyHandoff(int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount, bool bRootSimulating)
@@ -1161,11 +1221,31 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					CertifiedHandoff.QuietProofDurationSeconds,
 					Diagnostics.bResetScheduled ? 1 : 0);
 
+				FVector LiveChainCenterCm = FVector::ZeroVector;
+				const float PelvisProximalConstraintErrorCm =
+					BalanceTransitionSets::ComputePelvisProximalConstraintErrorCm(Mesh, SimulatingBones, LiveChainCenterCm);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_CONSTRAINT_ERROR_PRE pelvisProximalError=%.2f liveChainCenter=(%.1f,%.1f,%.1f) threshold=%.2f"),
+					PelvisProximalConstraintErrorCm,
+					LiveChainCenterCm.X,
+					LiveChainCenterCm.Y,
+					LiveChainCenterCm.Z,
+					BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm);
+				if (PelvisProximalConstraintErrorCm > BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm)
+				{
+					Diagnostics.FailureReason = TEXT("phase2_constraint_error_too_high");
+					SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
+					return;
+				}
+
 				PelvisBody->SetBodyTransform(
-					Mesh->GetBoneTransform(Mesh->GetBoneIndex(PhysAnimBridge::GetRootBoneName())),
+					BalanceTransitionSets::BuildWarmStartPelvisTransform(Mesh, SimulatingBones),
 					ETeleportType::TeleportPhysics,
 					true);
+				PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
+				PelvisBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
 				PelvisBody->SetInstanceSimulatePhysics(true);
+				PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
+				PelvisBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
 				Diagnostics.bSimFlipped = true;
 				// Phase 2 must preserve the pre-root-on shell proof reference through the
 				// root-on frame and guard window; reseeding here would invalidate that proof.
@@ -1182,6 +1262,9 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					Diagnostics.PelvisAngularVelPost.Size(),
 					Diagnostics.SimCountPost,
 					Diagnostics.DistalSimCountPost);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_CONSTRAINT_ERROR_POST pelvisProximalError=%.2f threshold=%.2f"),
+					BalanceTransitionSets::ComputePelvisProximalConstraintErrorCm(Mesh, SimulatingBones, LiveChainCenterCm),
+					BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm);
 				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_STARTED duration=%.2f"), Owner->ResolveEffectiveStabilizationSettings().BalancePhase2GuardWindowDuration);
 			}
 		}
