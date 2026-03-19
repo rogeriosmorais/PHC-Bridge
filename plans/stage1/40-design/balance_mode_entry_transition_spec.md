@@ -30,6 +30,13 @@ This document also establishes the **entry-phase contract boundary**:
 - `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md` defines the concrete stabilization recipe for Phase 1
 - `plans/stage1/40-design/balance_mode_phase2.md` defines the root-on execution contract, denial path, and immediate guard-window rules
 
+This spec also defines the contract boundary between:
+
+- a valid Phase 1 late-validation success state
+- a valid Phase 2 entry state
+
+Those states are no longer equivalent by default.
+
 ## 2. Relationship to Existing Design
 
 This spec is intended to **refine and operationalize** the existing design, not replace it.
@@ -148,6 +155,7 @@ Additionally:
 - Phase 1 must create a real convergence path toward root-on
 - a clean Phase 1 is not sufficient if Phase 2 root-on still produces a deterministic spike
 - if Phase 1 can only “sometimes” converge through unowned retries or incidental runtime drift, the design is not yet valid
+- Phase 1 late-validation minimum success must not be treated as a Phase 2 handoff point unless the additional pre-root-on safety proof is already true
 
 ## 7. Authoritative Runtime States
 
@@ -258,6 +266,14 @@ Required actions:
 - disable or zero policy target writing into bodies affected by transition
 - force the transition-critical topology required for safe root-on
 - preserve current gross posture without introducing new target discontinuities
+
+Critical clarification:
+
+- meeting the late-validation minimum quiet/sustain window is a Phase 1 success condition
+- it is not, by itself, permission to enter Phase 2
+- Phase 2 entry additionally requires an explicit pre-root-on shell-correction safety proof
+
+If that proof is absent, the runtime must remain in a Phase 1 safe-denial-capable state or deny explicitly without attempting root-on.
 - optionally quarantine hip/thigh influence if required by implementation
 - capture baseline metrics
 

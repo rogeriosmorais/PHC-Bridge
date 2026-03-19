@@ -148,10 +148,13 @@ Phase 2 may begin only if all of these are already true:
 Interpretation rule:
 
 - successful late validation is not, by itself, permission to root-on
+- successful late validation minimum is not, by itself, permission to root-on
 - if the documented late-validation topology is upper-only, Phase 2 must either:
   - deny safely before root-on, or
   - satisfy an additional explicit root-on-readiness proof that is documented separately
 - upper-only late validation is therefore a valid safe-denial-capable Phase 1 success state, not automatically a root-on-ready state
+- Phase 2 entry must also require an explicit pre-root-on shell-correction safety proof
+- a readiness proof that cannot rule out immediate `phase2_shell_correction_material` is incomplete and must not permit `BRT_Phase2_RootOn`
 
 Phase 2 must not be entered “optimistically.”
 
@@ -175,6 +178,7 @@ Required denial reasons include:
 - `phase2_late_validate_not_completed`
 - `phase2_upper_body_unstable`
 - `phase2_upper_only_handoff_not_root_on_ready`
+- `phase2_pre_root_on_shell_correction_safety_not_proven`
 
 Interpretation rule:
 
@@ -183,6 +187,26 @@ Interpretation rule:
 
 Denial is a safe no-root-on outcome.  
 It is not a root-on failure and must not be logged as one.
+
+### 6.2 Pre-root-on shell-correction safety proof
+
+Before Phase 2 may begin, the runtime must have an explicit proof that the root-on attempt is not expected to immediately fail on shell correction.
+
+Minimum contract:
+
+- the proof must be evaluated before `SetPhase(BRT_Phase2_RootOn)`
+- the proof must be part of Phase 2 entry validation, not a later Phase 2 guard-window discovery
+- if the proof is absent, false, or unknown, Phase 2 must deny safely before root-on
+
+Not allowed:
+
+- permitting `BRT_Phase2_RootOn` based only on shell-hold duration, policy settle, and bring-up control settle
+- discovering that root-on was unsafe only after root-on has already begun when that risk could have been classified as missing proof at entry
+
+Interpretation rule:
+
+- `phase2_shell_correction_material` remains a valid post-entry abort reason if a root-on attempt still fails despite the best available proof
+- but if the current design cannot produce a truthful pre-root-on shell-correction safety proof, the runtime must deny with `phase2_pre_root_on_shell_correction_safety_not_proven` instead of attempting root-on
 
 ---
 
