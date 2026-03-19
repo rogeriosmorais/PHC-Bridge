@@ -1,101 +1,58 @@
 # Balance Mode Phase 1 Stabilization Spec
 
-Status: Draft implementation spec  
-Scope: Stage 1 runtime stabilization behavior for `BalanceTransition_Phase1_Prepare`  
+Status: Authoritative implementation spec
+Scope: Stage 1 runtime stabilization behavior for `BalanceTransition_Phase1_Prepare` and `BalanceTransition_Phase1_LateValidate`
 Audience: runtime, controls, debugging, validation, and transition work for PhysAnim bridge
 
 ## 1. Purpose
 
-This document defines the **concrete stabilization recipe** for Phase 1 of the Balance Mode entry transition.
+This document defines the concrete stabilization recipe for Phase 1 of the Balance Mode entry transition.
 
-It exists because the entry-transition spec already defines:
+It is authoritative for:
 
-- state names
-- ownership rules
-- queueing behavior
-- phase boundaries
-- success / failure categories
+- body sets
+- target topology
+- policy suppression
+- hold-reference behavior
+- quiet proof
+- late-validation sustain
+- shell-lock requirements for the true success path
+- failure classes
+- recovery and retry rules
 
-But it does **not** define, with enough precision, how Phase 1 is supposed to actually converge in code.
+## 2. Relationship to other docs
 
-This document closes that gap.
-
-Its goal is to remove ambiguity around:
-
-- which bodies are transition-critical
-- which bodies are kinematic vs simulated during Phase 1
-- which systems are allowed to write authority during Phase 1
-- what “preserve posture” means in practice
-- which resets are allowed or forbidden
-- how the quiet window is measured
-- what constitutes a retryable vs non-retryable Phase 1 failure
-
----
-
-## 2. Relationship to Existing Docs
-
-This document refines and operationalizes:
+This document works with:
 
 - `plans/stage1/40-design/balance_mode_entry_transition_spec.md`
-- `plans/stage1/40-design/balance-perturbation-mode-design.md`
-
-It does not replace them.
+- `plans/stage1/40-design/balance_mode_phase2.md`
 
 Interpretation rule:
 
-- the entry-transition spec defines **what Phase 1 must achieve**
-- this document defines **how Phase 1 is allowed to achieve it**
+- the entry spec defines the state machine and overall transition contract
+- this document defines exactly how Phase 1 is allowed to converge
+- the Phase 2 spec defines root-on and the guard-window contract
 
-If this document conflicts with implementation experiments, this document should be treated as the intended contract unless explicitly revised.
+## 3. Core goal
 
----
+Phase 1 must transform the runtime from normal `BridgeActive` into a quiet, transition-safe pre-root-on state.
 
-## 3. Core Design Goal
+Phase 1 is successful only if it creates a state from which Phase 2 can either:
 
-Phase 1 must transform the runtime from a normal `BridgeActive` standing state into a **quiet, transition-safe pre-root-on state**.
+- deny safely
+- or truthfully attempt root-on
 
-Phase 1 is successful only if it creates a state where enabling pelvis/root simulation in Phase 2 is no longer expected to create an uncontrolled spike.
+Phase 1 is not a passive wait state.
 
-This means Phase 1 is not merely a waiting period.
+It is an active topology-and-authority shaping phase.
 
-It is an **active topology-and-authority shaping phase**.
+## 4. Authoritative body sets
 
-For the first true root-on-success path, this also means:
-
-- shaping toward `RootCoupledReadyHandoff`, not merely the conservative upper-only fallback
-- transferring shell/capsule authority away from gameplay systems
-- proving that the root-coupled handoff remains stable under that owned shell lock
-
----
-
-## 4. Non-Goals
-
-Phase 1 does not:
-
-- activate Balance Perturbation Mode
-- apply perturbations
-- validate recovery performance
-- test locomotion
-- prove shell/world isolation for the full active mode
-- solve ramp / slope / travel behavior
-
-Phase 1 only prepares a safe entry into root-enabled standing-balance diagnostics.
-
----
-
-## 5. Authoritative Bone Sets
-
-The implementation must stop using vague categories such as “some distal bodies” or “transition-critical-ish set”.
-
-The following sets are authoritative.
-
-## 5.1 Root set
+### 4.1 Root set
 
 - `pelvis`
 
-This is the root-on target in Phase 2.
-
-## 5.2 Proximal transition-critical set
+### 4.2 Proximal transition-critical set
 
 - `spine_01`
 - `spine_02`
@@ -103,9 +60,7 @@ This is the root-on target in Phase 2.
 - `thigh_l`
 - `thigh_r`
 
-These bodies are the highest-risk coupling set around the pelvis/root transition.
-
-## 5.3 Distal spike-prone lower-limb set
+### 4.3 Distal spike-prone lower-limb set
 
 - `calf_l`
 - `calf_r`
@@ -114,9 +69,7 @@ These bodies are the highest-risk coupling set around the pelvis/root transition
 - `ball_l`
 - `ball_r`
 
-These bodies are the most likely to produce explosive propagation or target discontinuity during root-on.
-
-## 5.4 Upper-body non-critical set for Phase 1
+### 4.4 Upper-body set
 
 - `clavicle_l`
 - `upperarm_l`
@@ -129,482 +82,225 @@ These bodies are the most likely to produce explosive propagation or target disc
 - `neck_01`
 - `head`
 
-These bodies are not allowed to destabilize Phase 1, but they are not the primary source of root-on safety.
+## 5. Valid handoff topologies
 
-They are, however, the primary source of the currently observed late-validation failures.
+Phase 1 must converge to one explicitly named handoff topology.
 
-Interpretation rule:
+### 5.1 `UpperOnlySafeDenyHandoff`
 
-- upper-body bones are non-critical for the initial quiet proof
-- upper-body bones are critical for the late-validation sustain proof
-- Phase 1 must therefore define explicit ownership for them instead of treating them as implementation leftovers
+Required movement types:
 
----
+- `pelvis` = kinematic
+- proximal set = kinematic
+- distal set = kinematic
+- upper body = one explicit documented ownership mode
 
-## 6. Phase 1 Target Topology
+This topology is valid for safe denial.
+It is not root-on-ready.
 
-Phase 1 must converge to an explicitly named handoff topology before Phase 2 may begin.
+### 5.2 `RootCoupledReadyHandoff`
 
-This document defines two valid handoff topologies:
+Required movement types:
 
-- `UpperOnlySafeDenyHandoff`
-- `RootCoupledReadyHandoff`
+- `pelvis` = kinematic
+- proximal set = simulated
+- distal set = kinematic
+- upper body = one explicit documented ownership mode that remains unchanged through root-on
 
-If implementation chooses a different handoff topology, that change must be documented explicitly here and in the entry-transition and Phase 2 specs.  
-It is not valid to silently depend on a different runtime shape.
+Recommended initial ownership numbers for the first success path:
 
-## 6.1 `UpperOnlySafeDenyHandoff` movement types
+- `simCount = 9`
+- `proximalSimCount = 5`
+- `distalSimCount = 0`
+- `upperBodySimCount = 4`
 
-### Root set
-- `pelvis` = **kinematic**
+This is the first topology class that may truthfully permit Phase 2 root-on.
 
-### Proximal transition-critical set
-- `spine_01`, `spine_02`, `spine_03`, `thigh_l`, `thigh_r` = **kinematic**
+## 6. Topology consistency rule
 
-### Distal spike-prone lower-limb set
-- `calf_l`, `calf_r`, `foot_l`, `foot_r`, `ball_l`, `ball_r` = **kinematic**
-
-### Upper-body non-critical set
-- may not be left as an undocumented residual topology
-- must use one explicit late-validation ownership mode:
-  - `UpperBodyAnchored`
-  - `UpperBodyPartialSim`
-- whichever mode is selected must be emitted in the certified handoff payload
-- any member of this set that is simulating and causing material instability must be forced into the documented late-validation ownership mode before late validation may begin
-
-## 6.2 Rationale
-
-Phase 2 is root-on.
-
-Therefore Phase 1 must remove as many same-frame and near-root coupling surprises as possible.
-
-The default safe shape is:
-
-- pelvis off
-- pelvis-adjacent bodies kinematic
-- distal lower-limb spike sources kinematic
-- no lower-body sim propagation active
-
-This is intentionally conservative.
-
-If later testing proves a less restrictive topology is stable, the design can be revised explicitly. That change must be documented, not improvised.
-
-This topology is valid for:
-
-- Phase 1 success
-- safe denial of Phase 2
-
-This topology is not, by itself, root-on-ready.
-
-## 6.2 `RootCoupledReadyHandoff` movement types
-
-This is the recommended first topology that is allowed to permit Phase 2 root-on.
-
-### Root set
-- `pelvis` = **kinematic**
-
-### Proximal transition-critical set
-- `spine_01`, `spine_02`, `spine_03`, `thigh_l`, `thigh_r` = **simulated**
-
-### Distal spike-prone lower-limb set
-- `calf_l`, `calf_r`, `foot_l`, `foot_r`, `ball_l`, `ball_r` = **kinematic**
-
-### Upper-body non-critical set
-- must use one explicit ownership mode that remains unchanged through root-on
-- recommended initial mode:
-  - `UpperBodyPartialSim_ArmsOnly`
-- if that mode is used, the certified handoff payload must report:
-  - `upperBodySimCount=4`
-  - `simCount=9`
-  - `proximalSimCount=5`
-  - `distalSimCount=0`
-
-Rationale:
-
-- only the pelvis flips on the Phase 2 root-on frame
-- pelvis-adjacent coupling is already present and observed during late validation
-- distal spike-prone bodies remain kinematic
-- Phase 2 does not need to combine root-on with proximal topology expansion
-
-### 6.3 Handoff-topology consistency rule
-
-Phase 1 must not certify readiness under one topology description while runtime logic depends on another.
+Phase 1 must not certify readiness under one topology description while implementation depends on another.
 
 Not allowed:
 
-- a spec that claims lower-body kinematic quiet while implementation depends on preserved lower-body simulation coverage
-- a “ready” signal with no explicit statement of `simCount`, `proximalSimCount`, and `distalSimCount`
+- claiming lower-body kinematic quiet while depending on preserved lower-body sim coverage
+- emitting “ready” with no coherent topology counts
+- relying on incidental runtime drift
 
----
+## 7. Authority matrix
 
-## 7. Authority Matrix for Phase 1
+### 7.1 Policy authority
 
-Phase 1 must enforce a strict ownership model.
+During Phase 1:
 
-## 7.1 Policy authority
+- policy inference may continue for diagnostics
+- policy writes to `pelvis` are suppressed
+- policy writes to the proximal set are suppressed
+- policy writes to the distal set are suppressed
 
-Policy inference may continue for diagnostics, but policy may **not** drive the transition-critical set.
+Default recommended behavior:
 
-Required rule:
+- suppress policy writes globally during Phase 1 unless a narrower routing contract is already proven
 
-- policy influence to `pelvis` = 0
-- policy influence to proximal transition-critical set = 0
-- policy influence to distal spike-prone lower-limb set = 0
+### 7.2 Control target authority
 
-Upper-body policy writes may continue only if they do not create measurable root contamination.  
-Default implementation should suppress policy target writes globally during Phase 1 unless there is a strong reason not to.
-
-## 7.2 Control target authority
-
-Control targets may be used only as a posture-preservation mechanism.
-
-They may not introduce a new target discontinuity.
+Control targets may be used only to preserve posture without creating a new discontinuity.
 
 Allowed:
+
 - hold current pose
-- maintain bounded current-pose-relative target orientation
-- freeze target deltas on entry
+- maintain bounded hold offsets relative to the entry reference
 
 Not allowed:
-- recomputing aggressive fresh targets from a moving reference every frame
-- re-enabling target drives on the same frame as a topology flip without a documented reason
 
-## 7.3 Body modifier authority
+- retargeting to live locomotion animation
+- aggressive fresh targets from a moving reference
+- same-frame re-enable plus reference change
+
+### 7.3 Body modifier authority
 
 Body modifiers are the authoritative owners of Phase 1 topology shaping.
 
-Phase 1 must explicitly force the required Phase 1 movement types rather than waiting for incidental bring-up logic to drift there.
+Phase 1 must explicitly force the documented topology.
+It must not passively hope that startup bring-up drifts there.
 
-## 7.4 Cached reset authority
+### 7.4 Cached reset authority
 
-Phase 1 must treat cached-target resets as hazardous.
+Phase 1 treats cached-target resets as hazardous.
 
 Allowed:
-- at most one bounded, explicit, transition-owned reset event for non-root bodies **before** the quiet window begins
+
+- at most one bounded explicit non-root reset before quiet accumulation begins, if documented and transition-owned
 
 Forbidden:
-- pelvis/root cached reset in Phase 1
-- repeated resets every tick
-- any reset after the quiet window has started accumulating
-- any automatic reset whose owner is unclear
 
-## 7.5 Shell / CharacterMovement authority
+- pelvis/root cached reset
+- repeated resets
+- any reset after quiet accumulation starts
+- undocumented reset discharge
 
-During Phase 1:
-- CharacterMovement must not provide corrective locomotion assistance
-- shell/world translation must not be used to manufacture quietness
-- capsule / shell contamination is measured, not used as a stabilizer
+### 7.5 Shell / CharacterMovement authority
 
-If shell motion is unavoidable, it is allowed only as observed contamination and must reset the quiet window.
+Phase 1 must not use shell or movement correction as a hidden stabilizer.
 
-For `RootCoupledReadyHandoff`, Phase 1 late validation must additionally define shell authority explicitly.
-
-Two modes are allowed:
+Allowed shell authority modes:
 
 - `GameplayShellObservedOnly`
 - `TransitionOwnedShellLocked`
 
 Interpretation rule:
 
-- `GameplayShellObservedOnly` may certify a safe-denial handoff only
-- `TransitionOwnedShellLocked` is required if Phase 1 intends to hand Phase 2 a truthfully root-on-ready state
+- `GameplayShellObservedOnly` is compatible with safe denial
+- `TransitionOwnedShellLocked` is required for the first true root-on success path
 
-If `TransitionOwnedShellLocked` is selected, Phase 1 must:
+## 8. Phase 1 entry actions
 
-- suppress CharacterMovement corrective motion before the shell proof window begins
-- suppress capsule/gameplay shell correction before the shell proof window begins
-- re-anchor the shell reference exactly once to the current root state before the shell proof window begins
-- hold that shell reference unchanged through the late-validation shell proof window
-- emit whether transition-owned shell lock remained uncontaminated for the full proof window
+On Phase 1 entry, perform exactly once:
 
-Owner rule:
+1. freeze further balance-start attempts
+2. disable perturbation scheduling
+3. snapshot baseline metrics
+4. apply transition-owned suppression
+5. force the target topology
+6. capture a single hold reference
+7. clear transition-local timers and hazard state
 
-- CharacterMovement suppression owner = balance-entry shell-authority transfer lifecycle
-- capsule/gameplay shell-correction suppression owner = balance-entry shell-authority transfer lifecycle
-- shell-reference re-anchor owner = balance-entry shell-authority transfer lifecycle
-- shell-reference hold owner = transition-owned shell-lock maintenance
+## 9. Hold-reference contract
 
-### 7.6 Startup lock and balance-entry shell lock must be distinct
+Phase 1 posture preservation uses a single authoritative hold reference.
 
-Startup movement lock may seed suppression, but once Phase 1 transfers into `TransitionOwnedShellLocked`, startup-ready codepaths must no longer own release of CharacterMovement/capsule authority.
+Default rule:
 
----
+- capture the current skeletal pose once on Phase 1 entry
+- use that as the hold reference for kinematic bodies in the transition set
 
-## 8. Phase 1 Entry Actions
+Not allowed:
 
-On entry into Phase 1, the runtime must perform these actions exactly once.
+- continuously reseeding the hold pose
+- chasing live animation
+- moving-reference hold logic during Phase 1
 
-## 8.1 Freeze further balance-start attempts
-- reject or defer any additional promotion attempts
-- do not nest transitions
+## 10. Quiet proof
 
-## 8.2 Disable perturbation scheduling
-- no scenario trigger logic may run
+Phase 1 requires an explicit quiet proof.
 
-## 8.3 Snapshot entry baseline
-Capture:
-- current runtime state
-- current body sim topology
-- policy influence alpha
-- root linear velocity
-- root angular velocity
-- shell offset delta
-- shell velocity delta
-- number of simulating bodies
-- number of distal sim bodies
+Required proof object:
 
-## 8.4 Apply transition-owned suppression
-- suppress policy writes to the transition-critical set
-- suppress any bridge-owned movement drive
-- suppress locomotion entry
-- suppress gameplay shell/capsule corrective ownership once the success path commits to `RootCoupledReadyHandoff`
+- `Phase1QuietProof`
 
-## 8.5 Force target topology
-- for safe denial: force root, proximal, and distal transition sets to the conservative kinematic topology
-- for the true success path: force root kinematic, proximal simulated, distal kinematic
+Required owner:
 
-## 8.6 Seed posture-hold reference
-The implementation must capture a **single Phase 1 hold pose** at entry.
+- `BalanceQuietProofAccumulator`
 
-This pose is the authoritative reference for posture preservation during Phase 1.
+### 10.1 Quiet conditions
 
-It must be one of:
-- the current physical pose if the body is already near quiet
-- otherwise the current skeletal pose
+Phase 1 is quiet only if all remain true continuously:
 
-The implementation must choose one rule and log which rule it used.
-
-Default recommended rule:
-- sample the current skeletal pose once on Phase 1 entry and use that as the hold reference for all kinematic bodies in the transition set
-
-## 8.7 Clear transition-hazard timers
-- clear fail-stop precursor accumulation used for the prior attempt
-- clear transition-local retry counters
-- clear quiet-window accumulator
-- clear settle-window accumulator
-- clear any “first policy frame” or “just promoted” flags that could create one-frame target discontinuities
-
----
-
-## 9. Posture Preservation Contract
-
-The phrase “preserve gross posture” must be made operational.
-
-Phase 1 posture preservation means:
-
-- keep the transition-critical set visually close to the entry pose
-- do not inject new target deltas larger than necessary
-- prefer pose hold over pose correction
-
-## 9.1 Required method
-
-For every body in the transition-critical set, the implementation must use a **hold-to-entry-reference** strategy.
-
-That means:
-- capture an entry reference once
-- continue writing either zero offset or bounded hold offsets relative to that same reference
-- do not chase live animation changes during Phase 1
-
-## 9.2 Forbidden methods
-
-Do not during Phase 1:
-- continuously retarget to live locomotion animation
-- continuously reseed from a moving physics pose
-- combine skeletal retargeting, cached reset, and topology shaping in the same uncontrolled loop
-
-## 9.3 Bounded target continuity rule
-
-On the first frame of Phase 1, target discontinuity for any transition-critical control must be bounded.
-
-Recommended design invariant:
-- no target delta above a named `Phase1MaxEntryTargetDeltaDeg` threshold
-
-If exceeded:
-- Phase 1 must not start the quiet window
-- the transition must move into recovery classification, not pretend to be stable
-
----
-
-## 10. Quiet-Window Contract
-
-The quiet window is the first proof that Phase 1 succeeded.
-
-It must not be vague.
-
-The quiet window alone is not sufficient for Phase 2 entry.
-
-Phase 1 requires two proofs:
-
-- `QuietWindow`
-- `LateValidationSustain`
-
-The quiet window proves pre-policy-influence stability.
-The late-validation sustain proves that the certified handoff survives bounded initial policy influence without upper-body flare, sim-coverage collapse, or renewed target discontinuity.
-
-## 10.1 Metrics used
-
-The Phase 1 quiet window must be measured from:
-
-- root linear speed
-- root angular speed
-- shell offset delta
-- shell velocity delta
-- transition-topology correctness
-- fail-stop precursor state
-
-Optional additional metrics:
-- max body angular speed
-- max body linear speed
-- max target delta
-- mean target delta
-
-## 10.2 Frame of measurement
-
-Root and body motion must be measured in the same runtime frame used by instability checks.  
-Shell contamination must be measured relative to the actor/capsule reference used by existing shell diagnostics.
-
-The implementation must not mix incompatible frames silently.
-
-## 10.3 Required quiet conditions
-
-Phase 1 is quiet only if all are true continuously:
-
-- root set topology correct
-- proximal transition-critical set topology correct
-- distal spike-prone set topology correct
-- policy suppression to transition-critical set active
-- root linear speed <= `Phase1QuietRootLinearSpeedCmPerSec`
-- root angular speed <= `Phase1QuietRootAngularSpeedDegPerSec`
-- shell offset delta <= `Phase1QuietShellOffsetDeltaCm`
-- shell velocity delta <= `Phase1QuietShellVelocityDeltaCmPerSec`
-- max target delta <= `Phase1QuietMaxTargetDeltaDeg`
-- mean target delta <= `Phase1QuietMeanTargetDeltaDeg`
-- no fail-stop precursor active
+- target topology correct
+- policy suppression active
+- control-authority settled
+- root linear speed below threshold
+- root angular speed below threshold
+- shell offset delta below threshold
+- shell velocity delta below threshold
+- max target delta below threshold
+- mean target delta below threshold
+- no fail-stop precursor
 - no pending cached reset
 - no topology flip pending
-- no quarantine-release event pending
+- no quarantine release pending
 
-## 10.4 Quiet hold duration
+### 10.2 Quiet duration
 
-The quiet window must accumulate continuously for at least:
+Required minimum:
 
-- `Phase1QuietRequiredSeconds`
+- `BalanceModeQuietRequiredSeconds = 1.0`
 
-If any quiet condition becomes false:
-- the accumulator resets to zero
+The accumulator resets to zero whenever any quiet condition becomes false.
 
-No partial carryover is allowed.
+No carryover is allowed.
 
-## 10.5 Late-validation sustain contract
+## 11. Late-validation sustain
 
-Late validation begins only after the quiet window completes.
+Quiet proof alone is not enough.
 
-During late validation:
+After quiet proof succeeds, Phase 1 must complete late validation.
 
-- the runtime may re-enable only the documented initial-policy-influence slice
-- upper-body ownership mode must remain unchanged
-- no new cached-target reset may be scheduled
-- no hidden hold-reference reseed may occur
+Required proof object:
 
-Late validation succeeds only if all remain true continuously:
+- `Phase1LateValidateProof`
 
-- the documented handoff topology remains intact
-- upper-body topology/ownership matches the certified handoff payload
-- `simCount` remains within the documented late-validation ownership envelope
-- max target delta stays below `Phase1LateValidateMaxTargetDeltaDeg`
-- mean target delta stays below `Phase1LateValidateMeanTargetDeltaDeg`
-- max upper-body angular speed stays below `Phase1LateValidateMaxUpperBodyAngularSpeedDegPerSec`
-- max upper-body linear speed stays below `Phase1LateValidateMaxUpperBodyLinearSpeedCmPerSec`
-- no late reset, hold re-lock, or topology flip occurs
-- transition-owned shell lock remains active and uncontaminated
-- startup-ready unlock logic does not reclaim shell/capsule ownership
+Late validation succeeds only if all remain true continuously for the named sustain duration:
 
-If any of these conditions become false, late validation resets or fails by class rather than silently collapsing into a generic Phase 2 denial reason.
+- documented handoff topology remains intact
+- upper-body ownership mode remains unchanged
+- sim coverage remains within the documented envelope
+- target continuity remains within late-validation bounds
+- no cached reset becomes pending
+- no topology flip becomes pending
+- no hold-reference reseed occurs
+- if on the true success path, transition-owned shell lock remains coherent
+- startup/gameplay ownership does not reclaim shell/capsule authority
 
----
+## 12. Shell-lock requirement for the true success path
 
-## 11. Root Reset Rule
+If Phase 1 intends to produce `RootCoupledReadyHandoff`, it must:
 
-This must be explicit because it is a major source of implementation churn.
+- transfer shell authority into `TransitionOwnedShellLocked`
+- suppress CharacterMovement corrective motion before the proof window
+- suppress capsule/gameplay shell correction before the proof window
+- re-anchor the shell reference exactly once before the proof window
+- hold that shell reference unchanged through late validation
 
-### Hard rule
-Pelvis/root cached reset is **forbidden** in Phase 1.
+Phase 1 must emit whether:
 
-Reason:
-- Phase 1 exists to establish a quiet pre-root-on baseline
-- a root reset is itself a discontinuity and invalidates that baseline
+- shell lock was transferred
+- shell reference was re-anchored
+- shell reference was reseeded after lock
+- startup/gameplay ownership tried to reclaim shell authority
 
-If the runtime cannot reach Phase 1 quietness without a pelvis/root reset, the transition design is not yet valid and must fail explicitly.
+## 13. Phase 1 success payload
 
----
-
-## 12. Quarantine Rule for Hip / Thigh Controls
-
-The implementation may use a temporary quarantine on the thigh controls if needed to avoid same-frame coupling spikes.
-
-If used, the rule must be:
-
-- quarantine may start on Phase 1 entry
-- quarantine applies only to `thigh_l` and `thigh_r`
-- quarantine duration must be bounded and named
-- quiet-window accumulation may not begin until quarantine is fully settled
-- quarantine release must itself not occur on the same frame as Phase 2 root-on
-
-Default recommendation:
-- if quarantine is needed, release it before the quiet window starts, not during root-on
-
-That makes Phase 1 prove the post-quarantine configuration is stable.
-
----
-
-## 13. Phase 1 Exit Criteria
-
-Phase 1 may emit a provisional certified handoff only when all of these are true:
-
-1. required topology is correct
-2. policy suppression for transition-critical set is active
-3. control-authority state for the transition-critical set is settled
-4. target continuity is within named exit bounds
-5. no cached resets are pending
-6. no quarantine release is pending
-7. root linear speed is below quiet threshold
-8. root angular speed is below quiet threshold
-9. shell offset / velocity contamination is below quiet threshold
-10. quiet-window hold duration has completed
-11. fail-stop precursor is inactive
-12. no transition-local hazard flag is active
-
-After that provisional handoff is emitted, Phase 1 must complete late validation before Phase 2 may begin.
-
-Late-validation success requires at minimum:
-
-- sustain duration `Phase1LateValidateRequiredSeconds` completed
-- the conservative lower-body kinematic topology remains intact
-- `simCount` and upper-body coverage remain within certified bounds for the chosen upper-body ownership mode
-- upper-body motion remains below the named late-validation maxima
-- target continuity remains within the named late-validation envelope
-- no late reset / re-lock / topology flip occurred
-
-If the handoff topology is `RootCoupledReadyHandoff`, Phase 1 must also emit the inputs required for `PreRootOnShellSafetyProof`.
-
-Minimum additional handoff fields:
-
-- shell planar offset delta at handoff
-- shell planar velocity delta at handoff
-- shell planar offset trend over the late-validation window
-- shell planar velocity trend over the late-validation window
-- whether any shell/capsule corrective owner was active during the late-validation window
-- shell authority mode used during the late-validation shell proof window
-- whether the shell reference was re-anchored before the proof window
-- whether any shell-reference reseed occurred after the proof window began
-- whether startup/gameplay ownership attempted to reclaim shell lock during late validation
-
-Interpretation rule:
-
-- Phase 1 does not itself prove shell safety for Phase 2
-- it must, however, emit coherent shell-state evidence so Phase 2 can truthfully evaluate `PreRootOnShellSafetyProof`
-
-On success, Phase 1 must emit a **certified handoff payload** containing at minimum:
+Phase 1 success requires emission of the certified handoff payload containing at minimum:
 
 - handoff topology classification
 - `simCount`
@@ -616,56 +312,54 @@ On success, Phase 1 must emit a **certified handoff payload** containing at mini
 - mean target delta
 - quiet proof duration
 - late-validation sustain duration
-- upper-body ownership mode and upper-body stability summary
+- upper-body ownership mode
+- upper-body stability summary
+- shell authority mode
+- whether shell lock was coherent
+- whether shell reference was re-anchored
+- whether shell reference was reseeded
+- whether startup/gameplay ownership remained suppressed
+
+## 14. Exit criteria
+
+Phase 1 may exit successfully only if all are true:
+
+- documented target topology achieved
+- policy suppression holds
+- control-authority settled
+- target continuity within named bounds
+- no reset pending
+- no topology flip pending
+- no quarantine release pending
+- quiet proof completed
+- late validation completed
+- no fail-stop precursor active
+- no transition-local hazard active
 
 Interpretation rule:
 
-- `proximalSimCount` and `distalSimCount` are emitted for observability and topology auditing
-- under `UpperOnlySafeDenyHandoff`, `proximalSimCount=0` and `distalSimCount=0` are allowed during late validation and at Phase 2 entry
-- under `RootCoupledReadyHandoff`, `proximalSimCount` must remain non-zero and match the documented proximal ownership mode through late validation and at Phase 2 entry
-- conservative late validation is explicitly allowed to be upper-only simulation if that matches the documented ownership mode
-- root-on-capable late validation must be explicitly classified as `RootCoupledReadyHandoff`; timing alone is not sufficient
-- root-on-capable late validation must also prove that startup/gameplay shell ownership has been displaced by transition-owned shell lock
+- `UpperOnlySafeDenyHandoff` may exit as a valid Phase 1 success state for safe denial
+- `RootCoupledReadyHandoff` may exit as a valid Phase 1 success state for Phase 2 consideration
 
-Phase 2 must consume this payload rather than infer readiness from timing alone.
+## 15. Handoff invalidation
 
-### Exit invalidation rule
+If the certified handoff regresses after Phase 1 success but before or during Phase 2 entry, the runtime must invalidate readiness.
 
-Phase 1 success is revoked if the certified handoff payload becomes false before Phase 2 begins.
+Regression examples:
 
-If any of the following regress, the runtime must invalidate readiness and log the reason:
+- topology mismatch
+- sim coverage mismatch
+- policy suppression regression
+- target continuity regression
+- reset pending
+- topology flip pending
+- shell lock released
+- shell reference reseeded
+- startup/gameplay ownership returns
 
-- topology no longer matches the certified handoff topology
-- sim coverage no longer matches the certified counts
-- policy suppression no longer holds
-- target continuity exceeds the certified bounds
-- a reset, release, or topology flip becomes pending
-- shell lock is released or reseeded
-- startup movement unlock fires after shell lock transfer
+## 16. Failure classification
 
-Owner map for these regressions:
-
-- topology regression -> Phase 1 body-modifier topology shaping owns re-establishing it
-- policy-suppression regression -> Phase 1 transition policy-routing owns re-establishing it
-- target-continuity regression -> Phase 1 hold-reference / target continuity logic owns re-establishing it
-- reset or topology-flip pending -> Phase 1 reset suppression / recovery logic owns clearing it
-- shell lock released or reseeded -> balance-entry shell-authority transfer lifecycle owns re-establishing it
-- startup movement unlock fires after shell lock transfer -> startup-vs-balance shell ownership arbitration owns preventing recurrence
-
-Not allowed:
-- advancing on time alone
-- advancing because “things seem calmer”
-- advancing while any structural hazard remains unresolved
-
----
-
-## 14. Phase 1 Failure Classification
-
-Phase 1 failure must be classified, not lumped together.
-
-## 14.1 Retryable failure classes
-
-These may retry automatically **only** if recovery changes the state and the system can prove a convergence path exists:
+### 16.1 Retryable failures
 
 - `phase1_topology_not_achieved`
 - `phase1_pending_reset_not_discharged`
@@ -674,9 +368,7 @@ These may retry automatically **only** if recovery changes the state and the sys
 - `phase1_late_validate_sim_coverage_regressed`
 - `phase1_late_validate_upper_body_unstable`
 
-## 14.2 Non-retryable failure classes
-
-These must clear the pending request or require explicit user action:
+### 16.2 Non-retryable failures
 
 - `phase1_root_reset_requested`
 - `phase1_policy_write_leak_to_transition_set`
@@ -685,60 +377,39 @@ These must clear the pending request or require explicit user action:
 - `phase1_no_convergence_path`
 - `phase1_missing_required_modifier_or_control`
 
-## 14.3 Abort-level failure classes
-
-These should fail the transition immediately and return to BridgeActive or fail-stop:
+### 16.3 Abort-level failures
 
 - `phase1_baseline_movement_too_high`
 - `phase1_fail_stop_precursor`
 - `phase1_simulation_explosion`
 - `phase1_shell_correction_material`
 
----
+## 17. Recovery
 
-## 15. Recovery Contract After Phase 1 Failure
-
-Recovery must restore a coherent `BridgeActive` state, not a half-transitioned zombie state.
-
-Required recovery actions:
+After Phase 1 failure, recovery must:
 
 - stop Phase 1 timers
-- clear transition-local suppressions
-- clear transition-local quarantine state
-- restore normal BridgeActive topology
-- clear pending transition-local hold pose references
-- clear transition-local hazard flags
-- restore policy write routing appropriate for BridgeActive
-- leave the system in one explicit state only: `BridgeActive` or `BalanceTransitionFailed`
+- clear transition-local suppression
+- clear quarantine state
+- restore normal `BridgeActive` topology
+- clear hold-reference state
+- clear hazard flags
+- restore BridgeActive policy routing
+- return to one coherent state only:
+  - `BridgeActive`
+  - or `BalanceTransitionFailed`
 
-Not allowed:
-- remaining partially transitioned while claiming recovery
-- retrying from a fail-stop precursor without a fresh quiet proof
-- reusing contaminated baseline metrics
+## 18. Automatic retry
 
----
+Automatic retry is allowed only if all are true:
 
-## 16. Automatic Retry Rule
+- failure class is retryable
+- recovery made a real topology or authority change
+- runtime returned to coherent `BridgeActive`
+- fresh BridgeActive quiet proof occurred
+- retry budget not exceeded
 
-Automatic retry is permitted only if all are true:
-
-1. previous failure class is retryable
-2. recovery made a real topology or authority change
-3. runtime returned to coherent `BridgeActive`
-4. a fresh quiet-window proof in BridgeActive has occurred
-5. retry budget not exceeded
-
-Recommended controls:
-- `Phase1MaxAutomaticRetries`
-- `Phase1RetryCooldownSeconds`
-
-If these conditions are not met, the request must remain failed or require a fresh manual trigger.
-
----
-
-## 17. Logging Contract
-
-Phase 1 logs must be compact and decisive.
+## 19. Logging contract
 
 Required one-shot logs:
 
@@ -749,154 +420,33 @@ Required one-shot logs:
 - `PHASE1_SHELL_LOCK_TRANSFERRED`
 - `PHASE1_QUIET_WINDOW_STARTED`
 - `PHASE1_QUIET_WINDOW_RESET`
-- `PHASE1_READY_FOR_ROOT_ON`
+- `PHASE1_LATE_VALIDATE_STARTED`
+- `PHASE1_LATE_VALIDATE_RESET`
+- `PHASE1_READY_FOR_PHASE2`
 - `PHASE1_REJECTED <reason>`
 - `PHASE1_RECOVERY_BEGIN`
 - `PHASE1_RECOVERY_COMPLETE`
 
-Recommended summary fields:
-- simCount
-- proximalSimCount
-- distalSimCount
-- rootLinear
-- rootAngular
-- shellOffsetDelta
-- shellVelocityDelta
-- policySuppressed
-- controlAuthoritySettled
-- maxTargetDelta
-- meanTargetDelta
-- pendingResets
-- quarantineActive
-- topologyValid
-- shellAuthorityMode
-- shellReferenceReanchored
-- shellReferenceReseeded
-- startupUnlockSuppressed
-
-Do not spam per-frame logs unless a metric changes materially or a throttle interval elapses.
-
----
-
-## 18. Required Threshold Names
-
-Do not bury these as unnamed constants.
+## 20. Required threshold names
 
 Minimum named thresholds:
 
+- `BalanceModeQuietRequiredSeconds`
 - `Phase1QuietRootLinearSpeedCmPerSec`
 - `Phase1QuietRootAngularSpeedDegPerSec`
 - `Phase1QuietShellOffsetDeltaCm`
 - `Phase1QuietShellVelocityDeltaCmPerSec`
-- `Phase1QuietRequiredSeconds`
 - `Phase1MaxEntryTargetDeltaDeg`
 - `Phase1QuietMaxTargetDeltaDeg`
 - `Phase1QuietMeanTargetDeltaDeg`
+- `Phase1LateValidateRequiredSeconds`
+- `Phase1LateValidateMaxTargetDeltaDeg`
+- `Phase1LateValidateMeanTargetDeltaDeg`
+- `Phase1LateValidateMaxUpperBodyAngularSpeedDegPerSec`
+- `Phase1LateValidateMaxUpperBodyLinearSpeedCmPerSec`
 - `Phase1MaxAutomaticRetries`
 - `Phase1RetryCooldownSeconds`
-- `Phase1HipQuarantineDurationSeconds` or equivalent tick-based named control
 
----
+## 21. Acceptance criteria
 
-## 19. Acceptance Tests
-
-Minimum required tests for this spec:
-
-### Test 1: Normal stable BridgeActive entry
-- request arrives
-- Phase 1 topology achieved
-- quiet window accumulates
-- Phase 2 begins
-
-### Test 1b: True success-path topology
-- request arrives
-- Phase 1 converges to `RootCoupledReadyHandoff`
-- proximal remains simulated and distal remains kinematic
-- shell lock transfers to transition ownership
-
-### Test 2: Distal bodies initially simulating
-- Phase 1 explicitly forces distal kinematic topology
-- quiet window does not start until distal sim count is zero
-- transition succeeds
-
-### Test 2b: Handoff payload regression
-- Phase 1 reaches certified readiness
-- sim coverage or target continuity regresses before Phase 2
-- readiness is invalidated and Phase 2 does not begin
-
-### Test 3: Policy leakage bug
-- intentionally allow policy writes to thighs during Phase 1
-- verify Phase 1 fails as `phase1_policy_write_leak_to_transition_set`
-
-### Test 4: Root reset bug
-- intentionally schedule pelvis reset during Phase 1
-- verify hard failure as `phase1_root_reset_requested`
-
-### Test 5: Shell contamination
-- inject shell/world corrective motion
-- verify quiet window resets and does not falsely succeed
-
-### Test 5b: Startup unlock interference
-- allow startup-ready unlock condition to become true during late validation
-- verify CharacterMovement/capsule ownership does not return to gameplay
-
-### Test 6: Recovery / retry
-- first attempt fails due to retryable topology issue
-- recovery restores BridgeActive coherently
-- second attempt succeeds after fresh quiet proof
-
-### Test 7: No-convergence structural failure
-- remove required modifier/control
-- verify no infinite retry loop occurs
-
----
-
-## 20. Recommended Default Design Decision
-
-The recommended default implementation is:
-
-1. On Phase 1 entry:
-   - globally suppress policy target writes
-   - freeze locomotion / shell assistance
-   - choose explicitly between safe-denial shaping and true success-path shaping
-   - capture one entry hold reference from current skeletal pose
-   - select and log one explicit upper-body ownership mode for late validation
-
-2. During Phase 1:
-   - hold the transition set near the entry reference
-   - allow no cached resets
-   - allow no pelvis/root reset
-   - accumulate quiet window only after topology, suppression, control-authority settle, and target continuity are already correct
-   - after quiet success, run a bounded late-validation sustain under initial policy influence
-   - if the goal is true Phase 2 success, transfer shell authority into `TransitionOwnedShellLocked` before the shell proof window
-   - if the goal is true Phase 2 success, late validation must be rooted in `RootCoupledReadyHandoff`, not the upper-only fallback
-   - fail explicitly if upper-body flare or sim-coverage regression appears during sustain
-
-3. On success:
-   - emit a certified handoff payload only after late validation succeeds
-   - advance to Phase 2 root-on only while that payload remains valid
-
-4. On failure:
-   - classify failure
-   - recover to coherent BridgeActive
-   - retry only if convergence is plausible and explicitly budgeted
-
-This is the most conservative and least ambiguous version of Phase 1.
-
----
-
-## 21. Final Design Summary
-
-Phase 1 is not a vague pre-root-on waiting room.
-
-It is a strict transition-owned stabilization phase with:
-
-- explicit body sets
-- explicit topology
-- explicit authority suppression
-- explicit posture-hold behavior
-- explicit quiet-window proof
-- explicit failure classes
-- explicit recovery and retry rules
-
-The runtime should be considered non-compliant with the Balance Mode entry contract if Phase 1 can only “sometimes” converge through trial-and-error tweaks rather than through this defined mechanism.
+This spec is satisfied only when Phase 1 reaches readiness through the documented topology-and-authority shaping path, not through incidental drift or brute-force retry loops.

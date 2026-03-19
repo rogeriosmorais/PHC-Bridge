@@ -2,84 +2,100 @@
 
 ## Purpose
 
-This document is the **Stage 1 index and control document**.
+This document is the Stage 1 index and control document.
 
-It owns the Stage 1 planning structure, execution model, and artifact map.
+It defines the frozen document hierarchy, the active execution focus, and the rule for which document wins when two documents overlap.
 
-It is **not** the most detailed source for every execution lock. The detailed, phase-specific truth lives in the planning bundle under `plans/stage1/`.
+## Stage 1 Document Hierarchy
 
-Use it for:
+Stage 1 uses a strict document hierarchy.
 
-- sequencing Stage 1 work
-- delegating AI agent tasks
-- defining the output artifact for each task
-- identifying when the human user must intervene
-- writing ELI5 manual verification instructions for anything that cannot be automated
+Authority order:
 
-Do not use `AGENTS.md` as a rolling status or next-steps document.
-Do not expect this file to duplicate every detailed lock from the planning bundle.
+1. `plans/stage1/10-specs/*`
+2. `STAGE1_PLAN.md`
+3. `plans/stage1/40-design/*`
+
+Interpretation rules:
+
+- if a `40-design` document conflicts with a `10-specs` document, the `10-specs` document wins
+- if `STAGE1_PLAN.md` conflicts with a `10-specs` document, the `10-specs` document wins
+- `40-design` may explain or sequence implementation work, but it may not introduce a runtime contract that is absent from `10-specs`
+- balance-mode entry rules are contract rules, so they must exist in `10-specs`, not only in `40-design`
 
 ## Current Execution Focus
 
-Phase 1 bridge implementation and stabilization are active. Gate G1 has passed.
+Phase 1 bridge implementation and stabilization remain active.
 
-Current priorities:
+Current focus:
 
-1. freeze the exact G2 comparison sequence at the clip/action level
-2. capture live side-by-side G2 evidence (physics-driven vs. kinematic playback)
-3. package the evidence for user G2 judgment
+1. freeze the balance-mode entry contract
+2. align normal bridge bring-up and balance-mode late validation
+3. make the PIE balance smoke pass with either:
+   - active balance mode, or
+   - a safe denial
+4. eliminate the invalid end state where the smoke finishes in plain `BridgeActive`
+
+## Frozen Balance-Mode Rule
+
+Stage 1 now treats balance entry as a separate contract from normal bridge startup.
+
+Normal bridge startup is allowed to use staged non-root bring-up.
+
+Balance-mode late validation is not allowed to reuse the normal bring-up topology as its validation topology.
+
+Late validation must operate on a frozen balance-entry topology defined in:
+
+- `plans/stage1/10-specs/balance-mode-entry-spec.md`
+
+## Required Smoke Outcome
+
+The `PhysAnim.PIE.BalanceModeSmoke` test is successful only if the run ends as one of:
+
+- `BalanceActive`
+- explicit safe denial
+
+The test is a failure if the run ends in:
+
+- `BridgeActive`
 
 ## Planning Bundle Freeze
 
-> **The planning bundle under `plans/stage1/` is frozen as of March 11, 2026.**
+The planning bundle under `plans/stage1/` remains frozen except for contract corrections required to align code and design.
 
-Only these 3 files are living documents during active execution:
+Only these categories may change during the current stabilization loop:
 
-| Living Document | Purpose |
-|---|---|
-| [Execution Log](/F:/NewEngine/plans/stage1/20-execution/execution-log.md) | Active task state board |
-| [Assumption Ledger](/F:/NewEngine/plans/stage1/20-execution/assumption-ledger.md) | Risk tracking and assumption status |
-| [G2 Evaluation](/F:/NewEngine/plans/stage1/30-evidence/g2-evaluation.md) | Gate G2 evidence and verdict |
-
-Everything else is frozen reference material. Update a frozen doc only if a code change directly invalidates a contract it defines, and do so in the same commit as the code change.
-
-For the full freeze policy, see [plans/stage1/README.md](/F:/NewEngine/plans/stage1/README.md).
+- `10-specs` documents that define the balance-mode entry contract
+- `40-design` documents that must be rewritten to match that contract
+- execution/evidence documents that record the result
 
 ## Planning Bundle Index
 
-Frozen reference — use for lookups, not as living documents:
+### Contract documents
 
-| Category | Documents |
-|---|---|
-| Control | [Orchestration](/F:/NewEngine/plans/stage1/00-control/orchestration.md), [Delegation Spec](/F:/NewEngine/plans/stage1/00-control/delegation-spec.md), [Handoff Format](/F:/NewEngine/plans/stage1/00-control/handoff-format.md) |
-| Specs | [Bridge](/F:/NewEngine/plans/stage1/10-specs/bridge-spec.md), [UE Bridge Impl](/F:/NewEngine/plans/stage1/10-specs/ue-bridge-implementation-spec.md), [Retargeting](/F:/NewEngine/plans/stage1/10-specs/retargeting-spec.md), [Environment](/F:/NewEngine/plans/stage1/10-specs/environment-spec.md), [ONNX Export](/F:/NewEngine/plans/stage1/10-specs/onnx-export-spec.md), [Test Strategy](/F:/NewEngine/plans/stage1/10-specs/test-strategy.md), [Thresholds](/F:/NewEngine/plans/stage1/10-specs/acceptance-thresholds.md), [Deps](/F:/NewEngine/plans/stage1/10-specs/dependency-lock.md) |
-| Execution | [Phase 0 Package](/F:/NewEngine/plans/stage1/20-execution/phase0-execution-package.md), [Phase 1 Package](/F:/NewEngine/plans/stage1/20-execution/phase1-implementation-package.md), [Policy Stabilization](/F:/NewEngine/plans/stage1/20-execution/phase1-policy-stabilization-plan.md), [Bridge Bring-Up](/F:/NewEngine/plans/stage1/20-execution/phase1-ue-bridge-bringup-runbook.md), [Phase 2 Package](/F:/NewEngine/plans/stage1/20-execution/phase2-demo-package.md), [S1-P1-A1 Handoff](/F:/NewEngine/plans/stage1/20-execution/s1-p1-a1-handoff.md) |
-| Evidence | [G1 Evidence](/F:/NewEngine/plans/stage1/30-evidence/g1-evidence.md), [G3 Evaluation](/F:/NewEngine/plans/stage1/30-evidence/g3-evaluation.md) |
-| Tasks | [Task Graph](/F:/NewEngine/plans/stage1/40-tasks/task-graph.md), [S1-P0-A1](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p0-a1.md), [S1-P0-A2](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p0-a2.md), [S1-P1-A1](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p1-a1.md), [S1-P1-A2](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p1-a2.md), [S1-P2-A1](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p2-a1.md), [S1-P2-A2](/F:/NewEngine/plans/stage1/40-tasks/task-packet-s1-p2-a2.md) |
-| Content | [Motion Set](/F:/NewEngine/plans/stage1/50-content/motion-set.md), [Source Map](/F:/NewEngine/plans/stage1/50-content/motion-source-map.md), [Source Lock](/F:/NewEngine/plans/stage1/50-content/motion-source-lock-table.md), [Comparison Sequence](/F:/NewEngine/plans/stage1/50-content/comparison-sequence-lock.md), [Model Selection](/F:/NewEngine/plans/stage1/50-content/pretrained-model-selection.md), [Checkpoint Retrieval](/F:/NewEngine/plans/stage1/50-content/pretrained-checkpoint-retrieval.md), [UE Scaffold](/F:/NewEngine/plans/stage1/50-content/ue-project-scaffold.md) |
-| User | [Interventions](/F:/NewEngine/plans/stage1/60-user/user-interventions.md), [Return Template](/F:/NewEngine/plans/stage1/60-user/user-return-template.md), [Runbook](/F:/NewEngine/plans/stage1/60-user/user-runbook.md), [UE Setup](/F:/NewEngine/plans/stage1/60-user/eli5-ue-project-setup.md), [Manual Verification](/F:/NewEngine/plans/stage1/60-user/manual-verification.md) |
+- `plans/stage1/10-specs/bridge-spec.md`
+- `plans/stage1/10-specs/ue-bridge-implementation-spec.md`
+- `plans/stage1/10-specs/balance-mode-entry-spec.md`
 
-## Current Bridge Status
+### Derived design documents
 
-The bridge is stabilized with:
+- `plans/stage1/40-design/balance-mode-design.md`
+- `plans/stage1/40-design/balance-mode-smoke-design.md`
 
-- deferred activation via `ReadyForActivation`
-- per-body instability telemetry and fail-stops
-- kinematic root/pelvis strategy
-- 5-group staged non-root bring-up
-- per-group control-authority ramps
-- corrected SMPL→UE quaternion basis conversion
-- policy-phase skeletal-animation target switching with offset reset
+## Balance-Mode Alignment Rule
 
-The 10-second PIE smoke window passes without catastrophic instability.
+All balance-mode design text in the repo must align to these statements:
 
-## User Intervention Rules
+- late validation uses a dedicated balance-entry topology
+- late validation does not inherit upper-body simulation ownership from normal bring-up
+- `upperBodySimCount` for late validation must reflect the late-validation topology, not the transient normal bring-up topology
+- the smoke must not terminate while balance entry is still unresolved inside plain `BridgeActive`
 
-The user must intervene for:
+## Acceptance Rule For Documentation
 
-- external tool/dependency installation
-- license and dataset acceptance
-- UE5 editor-only workflows
-- visual quality judgment (G2, G3)
+The design is considered documented only when all of the following are true:
 
-The user does not need to intervene for code changes, doc updates, or task reshaping within the locked architecture.
+- the balance-mode entry contract is explicit in `10-specs`
+- `STAGE1_PLAN.md` points to that contract
+- `40-design` repeats the same contract without divergence
+- no remaining design text describes late validation as a continuation of normal bring-up simulation ownership
