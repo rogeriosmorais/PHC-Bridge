@@ -224,10 +224,7 @@ static bool ValidateRootOnReadinessSnapshot(
 
 	if (!Snapshot.bRootOnReadinessShellHoldSatisfied)
 	{
-		OutReason = Snapshot.RootOnReadinessClassification ==
-			EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
-			? TEXT("phase2_upper_only_handoff_not_root_on_ready")
-			: Snapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+		OutReason = Snapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
 				? TEXT("phase2_root_on_readiness_shell_hold_not_completed")
 			: Snapshot.bLateValidationCompleted &&
 				Snapshot.LateValidationSustainDurationSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase1LateValidateRequiredSeconds
@@ -804,10 +801,18 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				FString CaptureReason;
 				if (CaptureCertifiedHandoff(Owner, Settings, CaptureReason))
 				{
+					if (CertifiedHandoff.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied)
+					{
+						const FString DenialReason = TEXT("phase2_upper_only_handoff_safe_denied");
+						Diagnostics.FailureReason = DenialReason;
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *DenialReason);
+						Owner->ReleaseTransitionOwnedShellLock();
+						MarkSafePhase2Denied(DenialReason);
+						return;
+					}
+
 					const FString RootOnReadinessGateReason =
-						CertifiedHandoff.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
-							? TEXT("phase1_root_on_readiness_upper_only_late_validation_safe_denied")
-							: CertifiedHandoff.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+						CertifiedHandoff.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
 								? TEXT("ready")
 							: Diagnostics.Phase1RootOnReadinessGateReason;
 					Diagnostics.Phase1RootOnReadinessGateReason = RootOnReadinessGateReason;
@@ -1173,11 +1178,20 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
+		FString Phase3Violation;
+		if (!ValidatePhase3Continuity(Owner, Settings, Phase3Violation))
+		{
+			Diagnostics.FailureReason = Phase3Violation;
+			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
+			return;
+		}
+
 		if (bReadyThisFrame)
 		{
 			StableHoldAccumulatedSeconds += DeltaTime;
 			if (StableHoldAccumulatedSeconds >= Settings.BalancePhase3RequiredStableHoldDuration)
 			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Phase 3 settle success. Ready for perturbation. duration=%.2f"), StableHoldAccumulatedSeconds);
 				SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
 			}
 		}
@@ -1232,6 +1246,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	if (Owner &&
 		NewPhase != EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate &&
 		NewPhase != EBalanceReadyTransitionPhase::BRT_Phase2_RootOn &&
+		NewPhase != EBalanceReadyTransitionPhase::BRT_Phase3_Settle &&
 		InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive)
 	{
 		Owner->ReleaseTransitionOwnedShellLock();
@@ -1558,6 +1573,12 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;
 	}
+
+	if (CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied)
+	{
+		OutReason = TEXT("phase2_upper_only_handoff_safe_denied");
+		return false;
+	}
 	if (CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
 		CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount)
 	{
@@ -1688,7 +1709,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.ProximalSimCount = ProximalSimCount;
 	OutSnapshot.DistalSimCount = DistalSimCount;
 	OutSnapshot.UpperBodySimCount = UpperSimCount;
-	OutSnapshot.UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
+	OutSnapshot.UpperBodyOwnershipMode = (UpperSimCount == 0) ? EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold : EBalanceReadyUpperBodyOwnershipMode::None;
 	OutSnapshot.bPolicySuppressed = ShouldSuppressPolicy();
 	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
 	const int32 FinalBringUpGroupIndex = Owner->GetBringUpGroupCount() - 1;
@@ -2116,9 +2137,18 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 	{
 		// Late validation keeps the root and lower body kinematic while preserving the full upper-body
 		// ownership mode expected by the certified handoff snapshot.
-		return BalanceTransitionSets::IsRoot(BoneName) ||
-			BalanceTransitionSets::IsDistalLowerLimb(BoneName) ||
-			BalanceTransitionSets::IsUpperBody(BoneName);
+		if (BalanceTransitionSets::IsRoot(BoneName) ||
+			BalanceTransitionSets::IsDistalLowerLimb(BoneName))
+		{
+			return true;
+		}
+
+		if (CertifiedHandoff.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold)
+		{
+			return BalanceTransitionSets::IsUpperBody(BoneName);
+		}
+
+		return false;
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
@@ -2300,4 +2330,90 @@ void FPhysAnimBalanceReadyTransition::ReturnToPhase1Prepare(UPhysAnimComponent* 
 	LateValidationAccumulatedSeconds = 0.0f;
 	LastQuietBlockReason.Reset();
 	Diagnostics.FailureReason.Reset();
+}
+
+bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason)
+{
+	if (!Owner || !Owner->GetMeshComponent())
+	{
+		OutReason = TEXT("phase3_context_invalid");
+		return false;
+	}
+
+	USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	FBodyInstance* PelvisBody = Mesh->GetBodyInstance(RootBoneName);
+
+	if (!PelvisBody || !PelvisBody->IsInstanceSimulatingPhysics())
+	{
+		OutReason = TEXT("phase3_root_simulation_dropped");
+		return false;
+	}
+
+	const FVector PelvisLinearVelocity = PelvisBody->GetUnrealWorldVelocity();
+	const FVector PelvisAngularVelocityDegPerSec = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
+
+	// Section 17.4 - Root simulation spike (instability)
+	if (PelvisLinearVelocity.Size() > Settings.MaxRootLinearSpeedCmPerSecond * 2.5f ||
+		PelvisAngularVelocityDegPerSec.Size() > Settings.MaxRootAngularSpeedDegPerSecond * 2.5f)
+	{
+		OutReason = TEXT("phase3_post_root_on_instability");
+		return false;
+	}
+
+	// Section 17.3 - post-root-on topology preserved
+	TArray<FName> SimulatingBones;
+	Owner->GetSimulatingBodies(SimulatingBones);
+	TSet<FName> SimulatingBoneSet(SimulatingBones);
+	int32 ProximalSimCount = 0;
+	int32 DistalSimCount = 0;
+	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+	{
+		if (!SimulatingBoneSet.Contains(BoneName))
+		{
+			continue;
+		}
+
+		if (BalanceTransitionSets::IsProximal(BoneName))
+		{
+			ProximalSimCount++;
+		}
+		else if (BalanceTransitionSets::IsDistalLowerLimb(BoneName))
+		{
+			DistalSimCount++;
+		}
+	}
+
+	if (!BalanceTransitionSets::IsExpectedPhase2Topology(
+			CertifiedHandoff.SimCount,
+			SimulatingBones.Num(),
+			CertifiedHandoff.DistalSimCount,
+			DistalSimCount))
+	{
+		OutReason = TEXT("phase3_topology_regressed");
+		return false;
+	}
+
+	// Section 17.3 - shell lock preserved
+	if (!Owner->IsTransitionOwnedShellLocked())
+	{
+		OutReason = TEXT("phase3_shell_lock_lost");
+		return false;
+	}
+
+	// Section 17.3 - no shell reference reseed
+	if (Owner->WasTransitionShellReferenceReseededAfterLock())
+	{
+		OutReason = TEXT("phase3_shell_reference_reseeded");
+		return false;
+	}
+
+	// Section 17.3 - no startup/gameplay ownership reclaim (CharacterMovement active)
+	if (Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle)
+	{
+		OutReason = TEXT("phase3_startup_or_gameplay_authority_reclaimed");
+		return false;
+	}
+
+	return true;
 }
