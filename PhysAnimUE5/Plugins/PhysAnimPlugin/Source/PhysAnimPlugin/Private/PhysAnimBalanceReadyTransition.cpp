@@ -106,11 +106,18 @@ static bool ValidateLateValidationHandoffSnapshot(
 
 static bool ValidateRootOnReadinessSnapshot(
 	const FPhysAnimCertifiedHandoffSnapshot& Snapshot,
+	const FPhysAnimStabilizationSettings& Settings,
 	FString& OutReason)
 {
 	if (!Snapshot.bRootOnReadinessProven)
 	{
 		OutReason = TEXT("phase2_root_on_readiness_not_proven");
+		return false;
+	}
+
+	if (Snapshot.RootOnReadinessShellHoldDurationSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2RequiredShellHoldDuration)
+	{
+		OutReason = TEXT("phase2_root_on_readiness_shell_hold_not_completed");
 		return false;
 	}
 
@@ -144,6 +151,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	StableHoldAccumulatedSeconds = 0.0f;
 	QuietWindowAccumulatedSeconds = 0.0f;
 	TargetDiscontinuityAccumulatedSeconds = 0.0f;
+	RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 	PhaseTimeSeconds = 0.0f;
 	TotalTransitionTimeSeconds = 0.0f;
 	LastLogTimeSeconds = -1.0;
@@ -501,6 +509,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		if (bLateValidationThisFrame)
 		{
 			LateValidationAccumulatedSeconds += DeltaTime;
+			RootOnReadinessShellHoldAccumulatedSeconds += DeltaTime;
 			// Carry the quiet-proof timer through late validation so the certified handoff
 			// reflects a real sustain window under initial policy influence.
 			QuietWindowAccumulatedSeconds += DeltaTime;
@@ -560,6 +569,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		}
 		else
 		{
+			RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 			if (!LateValidateBlockReason.IsEmpty())
 			{
 				LastLateValidateBlockReason = LateValidateBlockReason;
@@ -988,7 +998,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (!ValidateRootOnReadinessSnapshot(CurrentSnapshot, HandoffReadinessReason))
+	if (!ValidateRootOnReadinessSnapshot(CurrentSnapshot, Settings, HandoffReadinessReason))
 	{
 		OutReason = HandoffReadinessReason;
 		return false;
@@ -1094,10 +1104,10 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
 	const int32 FinalBringUpGroupIndex = Owner->GetBringUpGroupCount() - 1;
 	OutSnapshot.FinalBringUpGroupControlAuthorityAlpha = Owner->CalculateBringUpGroupControlAuthorityAlpha(FinalBringUpGroupIndex, Settings);
-	OutSnapshot.RootOnReadinessShellHoldDurationSeconds = 0.0f;
-	// Upper-only late validation is a valid safe-denial state, but it is not root-on-ready.
-	// Keep the explicit root-on proof false until a separate readiness condition exists.
-	OutSnapshot.bRootOnReadinessProven = false;
+	OutSnapshot.RootOnReadinessShellHoldDurationSeconds = RootOnReadinessShellHoldAccumulatedSeconds;
+	OutSnapshot.bRootOnReadinessProven =
+		RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration &&
+		OutSnapshot.FinalBringUpGroupControlAuthorityAlpha >= 1.0f - KINDA_SMALL_NUMBER;
 	OutSnapshot.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
 	OutSnapshot.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
 	OutSnapshot.QuietProofDurationSeconds = QuietWindowAccumulatedSeconds;
@@ -1238,6 +1248,7 @@ void FPhysAnimBalanceReadyTransition::MarkSafePhase2Denied(const FString& Reason
 	bLatchedPelvisResetApplied = false;
 	QuietHandoffCount = 0;
 	HipQuarantineTimerSeconds = 0.0f;
+	RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 	EntryHoldRotations.Empty();
 	ResetTransitionLocalState();
 	InternalPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
@@ -1247,6 +1258,7 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 {
 	Diagnostics = {};
 	LateValidationAccumulatedSeconds = 0.0f;
+	RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 	LastLateValidateBlockReason.Reset();
 	bHasLateValidationProof = false;
 	ResetCertifiedHandoffState();
@@ -1257,6 +1269,7 @@ void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
 	bHasCertifiedHandoff = false;
 	CertifiedHandoff = {};
 	bHasLateValidationProof = false;
+	RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 }
 
 void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent* Owner)

@@ -172,6 +172,7 @@ private:
 	int32 QuietHandoffCount = 0;
 	float QuietWindowAccumulatedSeconds = 0.0f;
 	float LateValidationAccumulatedSeconds = 0.0f;
+	float RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 	float HipQuarantineTimerSeconds = 0.0f;
 	FString LastLateValidateBlockReason;
 	int32 RetryCount = 0;

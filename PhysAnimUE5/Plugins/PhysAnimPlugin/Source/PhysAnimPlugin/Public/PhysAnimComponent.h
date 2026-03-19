@@ -333,6 +333,9 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase2EntryMaxTargetDeltaDeg = 15.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase2RequiredShellHoldDuration = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase2GuardWindowDuration = 0.10f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
@@ -467,6 +470,7 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxShellOffsetDelta, Other.BalancePhase2EntryMaxShellOffsetDelta) &&
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxShellVelocityDelta, Other.BalancePhase2EntryMaxShellVelocityDelta) &&
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxTargetDeltaDeg, Other.BalancePhase2EntryMaxTargetDeltaDeg) &&
+			FMath::IsNearlyEqual(BalancePhase2RequiredShellHoldDuration, Other.BalancePhase2RequiredShellHoldDuration) &&
 			FMath::IsNearlyEqual(BalancePhase2GuardWindowDuration, Other.BalancePhase2GuardWindowDuration) &&
 			FMath::IsNearlyEqual(BalancePhase2AbortRootLinearSpeed, Other.BalancePhase2AbortRootLinearSpeed) &&
 			FMath::IsNearlyEqual(BalancePhase2AbortRootAngularSpeed, Other.BalancePhase2AbortRootAngularSpeed) &&
