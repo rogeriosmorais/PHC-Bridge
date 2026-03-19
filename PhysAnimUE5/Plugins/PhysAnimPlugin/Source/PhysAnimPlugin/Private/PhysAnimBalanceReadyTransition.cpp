@@ -538,7 +538,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				: TEXT("phase1_late_validate_shell_hold_capped_by_window");
 			Diagnostics.Phase1RootOnReadinessGateReason = RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration
 				? TEXT("ready")
-				: TEXT("phase1_root_on_readiness_shell_hold_pending");
+				: CurrentSnapshot.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold
+					? TEXT("phase1_root_on_readiness_upper_only_shell_hold_capped_by_window")
+					: TEXT("phase1_root_on_readiness_shell_hold_pending");
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
 			if (LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds)
 			{
