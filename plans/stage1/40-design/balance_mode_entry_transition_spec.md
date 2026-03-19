@@ -422,6 +422,7 @@ For the first permitted root-on-success path, the contract is:
 
 - certified handoff topology = `RootCoupledReadyHandoff`
 - pre-root-on readiness classification = `root_coupled_ready`
+- `PreRootOnShellSafetyProof` = true at the moment Phase 2 begins
 - distal set remains kinematic
 - proximal set remains simulated
 - upper-body ownership remains unchanged from late validation through the Phase 2 guard window

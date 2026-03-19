@@ -206,6 +206,101 @@ Interpretation rule:
 - `phase2_shell_correction_material` remains a valid post-entry abort reason if a root-on attempt still fails despite the best available proof
 - but if the current design cannot produce a truthful pre-root-on shell-correction safety proof, the runtime must deny with `phase2_pre_root_on_shell_correction_safety_not_proven` instead of attempting root-on
 
+### 6.2.1 `PreRootOnShellSafetyProof`
+
+The required proof is named `PreRootOnShellSafetyProof`.
+
+Its purpose is narrow:
+
+- prove that root-on is not expected to create an immediate pelvis-to-capsule planar separation large enough to trigger deterministic shell correction failure during the Phase 2 guard window
+
+This proof is required for any handoff topology that intends to permit actual root-on.
+
+#### Inputs
+
+The proof must be evaluated from the same actor/capsule and pelvis-root reference frame used by the existing shell diagnostics.
+
+Minimum proof inputs:
+
+- current shell planar offset delta
+- current shell planar velocity delta
+- shell planar offset delta trend over the proof window
+- shell planar velocity delta trend over the proof window
+- root planar linear speed
+- root angular speed
+- certified handoff topology class
+- certified proximal/distal/upper-body sim counts
+
+#### Required proof window
+
+The proof must hold continuously for a named duration before Phase 2 begins:
+
+- `Phase2PreRootOnShellProofRequiredSeconds`
+
+No partial carryover is allowed.
+
+#### Pass conditions
+
+`PreRootOnShellSafetyProof` is true only if all of the following remain true continuously for the full proof window:
+
+1. certified handoff topology = `RootCoupledReadyHandoff`
+2. `distalSimCount = 0`
+3. shell planar offset delta <= `Phase2PreRootOnShellProofMaxOffsetDeltaCm`
+4. shell planar velocity delta <= `Phase2PreRootOnShellProofMaxVelocityDeltaCmPerSec`
+5. shell planar offset delta trend is non-growing within a named tolerance:
+   `Phase2PreRootOnShellProofMaxOffsetGrowthCm`
+6. shell planar velocity delta trend is non-growing within a named tolerance:
+   `Phase2PreRootOnShellProofMaxVelocityGrowthCmPerSec`
+7. root linear speed <= `Phase2EntryMaxRootLinearSpeedCmPerSec`
+8. root angular speed <= `Phase2EntryMaxRootAngularSpeedDegPerSec`
+9. no locomotion authority activation occurs
+10. no shell/capsule corrective movement owner is active
+11. no posture reseed, cached reset, or topology expansion becomes pending
+
+Interpretation rule:
+
+- “safe enough” does not mean shell offset must be exactly zero
+- it means shell offset is already small, not growing, and not coupled to an active corrective owner immediately before root-on
+
+#### Fail conditions
+
+The proof is false if any of the following are observed:
+
+- shell planar offset delta above `Phase2PreRootOnShellProofMaxOffsetDeltaCm`
+- shell planar velocity delta above `Phase2PreRootOnShellProofMaxVelocityDeltaCmPerSec`
+- positive shell offset growth above `Phase2PreRootOnShellProofMaxOffsetGrowthCm`
+- positive shell velocity growth above `Phase2PreRootOnShellProofMaxVelocityGrowthCmPerSec`
+- locomotion authority not idle
+- shell/capsule corrective owner active or unknown
+- handoff topology, sim coverage, or authority changes during the proof window
+
+#### Logging contract
+
+When the proof is evaluated, Phase 2 entry logging must make it possible to answer:
+
+- whether the proof was evaluated
+- how long the proof window actually held
+- current shell offset and velocity deltas
+- whether shell trends were growing, flat, or shrinking
+- whether a shell/capsule corrective owner was active
+
+Recommended fields:
+
+- `shellProofReady`
+- `shellProofDuration`
+- `shellProofRequiredSeconds`
+- `shellOffsetDelta`
+- `shellVelocityDelta`
+- `shellOffsetGrowth`
+- `shellVelocityGrowth`
+- `shellCorrectionOwnerActive`
+
+#### Denial rule
+
+If `RootCoupledReadyHandoff` is present but `PreRootOnShellSafetyProof` is false or unknown, Phase 2 must deny with:
+
+- `phase2_pre_root_on_shell_correction_safety_not_proven`
+
 ### 6.3 Root-on-readiness proof for `RootCoupledReadyHandoff`
 
 `RootCoupledReadyHandoff` is root-on-ready only if all of the following are true continuously for a named proof window before `SetPhase(BRT_Phase2_RootOn)`:
@@ -222,6 +317,7 @@ Interpretation rule:
 10. max and mean target deltas remain below the named Phase 2 entry thresholds
 11. the proximal set remains bounded under initial policy influence with no same-window flare large enough to predict immediate root-on contamination
 12. no body in the proximal or upper-body sets exceeds the named pre-root-on maximum linear or angular speed thresholds
+13. `PreRootOnShellSafetyProof` is true for the same handoff window and remains true at the moment Phase 2 begins
 
 The proof must emit, at minimum:
 
@@ -234,6 +330,8 @@ The proof must emit, at minimum:
 - `distalSimCount`
 - `upperBodySimCount`
 - proof-window duration actually achieved
+- shell-safety proof duration actually achieved
+- shell offset and velocity deltas at proof completion
 
 If any required field is absent or unstable, Phase 2 must deny safely.
 
@@ -630,6 +728,11 @@ Do not bury these as unnamed constants.
 
 Minimum named thresholds:
 
+- `Phase2PreRootOnShellProofRequiredSeconds`
+- `Phase2PreRootOnShellProofMaxOffsetDeltaCm`
+- `Phase2PreRootOnShellProofMaxVelocityDeltaCmPerSec`
+- `Phase2PreRootOnShellProofMaxOffsetGrowthCm`
+- `Phase2PreRootOnShellProofMaxVelocityGrowthCmPerSec`
 - `Phase2EntryMaxRootLinearSpeedCmPerSec`
 - `Phase2EntryMaxRootAngularSpeedDegPerSec`
 - `Phase2EntryMaxShellOffsetDeltaCm`
@@ -654,6 +757,7 @@ Minimum required tests:
 
 ### Test 1: Clean root-on
 - Phase 1 succeeds
+- `PreRootOnShellSafetyProof` succeeds
 - root-on occurs
 - guard window completes
 - Phase 3 begins
@@ -690,6 +794,12 @@ Minimum required tests:
 ### Test 5b: Target discontinuity denial
 - hold root motion quiet but inject excessive target delta before root-on
 - verify `PHASE2_DENIED phase2_target_discontinuity_too_high`
+- verify no root-on attempt occurs
+
+### Test 5c: Shell-safety proof denial
+- reach `RootCoupledReadyHandoff`
+- leave shell offset or shell growth above the proof threshold
+- verify `PHASE2_DENIED phase2_pre_root_on_shell_correction_safety_not_proven`
 - verify no root-on attempt occurs
 
 ### Test 6: Bad retry loop prevention

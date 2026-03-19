@@ -544,6 +544,21 @@ Late-validation success requires at minimum:
 - target continuity remains within the named late-validation envelope
 - no late reset / re-lock / topology flip occurred
 
+If the handoff topology is `RootCoupledReadyHandoff`, Phase 1 must also emit the inputs required for `PreRootOnShellSafetyProof`.
+
+Minimum additional handoff fields:
+
+- shell planar offset delta at handoff
+- shell planar velocity delta at handoff
+- shell planar offset trend over the late-validation window
+- shell planar velocity trend over the late-validation window
+- whether any shell/capsule corrective owner was active during the late-validation window
+
+Interpretation rule:
+
+- Phase 1 does not itself prove shell safety for Phase 2
+- it must, however, emit coherent shell-state evidence so Phase 2 can truthfully evaluate `PreRootOnShellSafetyProof`
+
 On success, Phase 1 must emit a **certified handoff payload** containing at minimum:
 
 - handoff topology classification
