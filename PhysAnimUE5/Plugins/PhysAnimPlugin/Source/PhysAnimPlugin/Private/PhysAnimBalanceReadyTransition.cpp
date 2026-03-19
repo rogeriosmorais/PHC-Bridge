@@ -843,7 +843,26 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
+		++Phase2GuardTickCount;
 		CaptureFlipDiagnostics(Owner);
+		const bool bPelvisRequestedSim = Owner->WasPelvisSimulatingLastFrame();
+		const bool bPelvisActualSim = Owner->IsPelvisSimulatingNow();
+
+		if (Phase2GuardTickCount <= 2)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimBalance] PHASE2_GUARD_TICK tick=%d requestedRootSim=%d actualRootSim=%d resetScheduled=%d simCountPost=%d distalSimPost=%d shellOffsetDelta=%.1f shellVelocityDelta=%.1f"),
+				Phase2GuardTickCount,
+				bPelvisRequestedSim ? 1 : 0,
+				bPelvisActualSim ? 1 : 0,
+				Diagnostics.bResetScheduled ? 1 : 0,
+				Diagnostics.SimCountPost,
+				Diagnostics.DistalSimCountPost,
+				Diagnostics.BaselineShellOffset,
+				Diagnostics.BaselineShellVel);
+		}
 
 		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.MaxLinVelPelvis);
 		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.MaxLinVelThighs);
@@ -869,7 +888,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			AbortReason = TEXT("phase2_shell_correction_material");
 		}
-		else if (!Owner->WasPelvisSimulatingLastFrame())
+		else if (!bPelvisActualSim)
 		{
 			AbortReason = TEXT("phase2_root_simulation_dropped");
 		}
@@ -993,6 +1012,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	StableHoldAccumulatedSeconds = 0.0f;
 	TargetDiscontinuityAccumulatedSeconds = 0.0f;
 	LastQuietBlockReason.Reset();
+	Phase2GuardTickCount = 0;
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn && Owner)
 	{

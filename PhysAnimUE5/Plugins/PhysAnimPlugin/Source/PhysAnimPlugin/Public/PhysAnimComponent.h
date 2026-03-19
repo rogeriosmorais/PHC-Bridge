@@ -622,6 +622,7 @@ public:
 	bool WasPolicyTargetAppliedLastFrame() const { return bPolicyTargetsAppliedLastFrame; }
 	bool WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame() const { return bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame; }
 	bool WasPelvisSimulatingLastFrame() const { return bLastAppliedPresentationRootSimulationEnabled; }
+	bool IsPelvisSimulatingNow() const;
 	bool HasBalanceReadyTransitionFailed() const { return BalanceReadyTransition.HasFailed(); }
 	bool HasSafePhase2Denial() const { return BalanceReadyTransition.HasSafePhase2Denial(); }
 	const FString& GetBalanceReadyTransitionFailureReason() const { return BalanceReadyTransition.GetFailureReason(); }

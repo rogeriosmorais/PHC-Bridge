@@ -233,6 +233,7 @@ private:
 	int32 RetryCount = 0;
 	int32 Phase2RetryCount = 0;
 	float RetryCooldownTimerSeconds = 0.0f;
+	int32 Phase2GuardTickCount = 0;
 	TMap<FName, FQuat> EntryHoldRotations;
 	bool bHasCertifiedHandoff = false;
 	bool bHasLateValidationProof = false;

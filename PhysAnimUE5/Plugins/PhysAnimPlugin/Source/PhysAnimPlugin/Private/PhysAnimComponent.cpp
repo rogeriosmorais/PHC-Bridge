@@ -4935,11 +4935,24 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
+		const bool bPhase2RootOnGuardWindow =
+			BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
+		const bool bTransitionKeepsBoneKinematic =
+			(BalanceReadyTransition.IsActive() || BalanceReadyTransition.HasSafePhase2Denial()) &&
+			BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName);
+		const bool bTransitionOwnsRootOnThisTick =
+			bIsRootBodyModifier &&
+			bPhase2RootOnGuardWindow &&
+			!bTransitionKeepsBoneKinematic &&
+			!BalanceReadyTransition.HasFailed();
 
-		// During entry transition the component path keeps the root body modifier kinematic.
-		// Actual pelvis/root simulation enablement is owned exclusively by BalanceReadyTransition
-		// Phase 2 so the transition has a single source of truth for the root-on flip.
-		const bool bAllowRootBodyModifierSimulation = bIsRootBodyModifier && bAllowRootBodyModifierSimulationInBalanceMode && !BalanceReadyTransition.HasFailed();
+		// During entry transition the component path keeps the root body modifier kinematic
+		// until the transition explicitly enters Phase 2 root-on. Once Phase 2 owns the guard
+		// window, later per-tick bring-up resolution must not demote the pelvis back off.
+		const bool bAllowRootBodyModifierSimulation =
+			bIsRootBodyModifier &&
+			(bAllowRootBodyModifierSimulationInBalanceMode || bTransitionOwnsRootOnThisTick) &&
+			!BalanceReadyTransition.HasFailed();
 		
 		if (bIsRootBodyModifier && bAllowRootBodyModifierSimulation)
 		{
@@ -4949,8 +4962,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		bool bBringUpGroupUnlocked =
 			bIsRootBodyModifier ? bAllowRootBodyModifierSimulation : IsBringUpGroupUnlocked(BringUpGroupIndex);
 
-		if ((BalanceReadyTransition.IsActive() || BalanceReadyTransition.HasSafePhase2Denial()) &&
-			BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName))
+		if (bTransitionKeepsBoneKinematic)
 		{
 			bBringUpGroupUnlocked = false;
 		}
@@ -4979,7 +4991,25 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
 
-		// Config log removed for experiment
+		if (bIsRootBodyModifier)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimBalance] PELVIS_BODYMOD tickPhase=%d allowRootSim=%d transitionOwnsRootOn=%d transitionKeepKinematic=%d bringUpUnlocked=%d simHandoffSettled=%d movementType=%d collisionType=%d updateKinematicFromSimulation=%d bodyActivatedThisTick=%d lastAppliedRootSim=%d pendingResets=%d"),
+				static_cast<int32>(BalanceReadyTransition.GetPhase()),
+				bAllowRootBodyModifierSimulation ? 1 : 0,
+				bTransitionOwnsRootOnThisTick ? 1 : 0,
+				bTransitionKeepsBoneKinematic ? 1 : 0,
+				bBringUpGroupUnlocked ? 1 : 0,
+				bSimulationHandoffSettled ? 1 : 0,
+				static_cast<int32>(BodyModifierMovementType),
+				static_cast<int32>(BodyModifierCollisionType),
+				bUpdateKinematicFromSimulation ? 1 : 0,
+				bBodyModifierActivatedThisTick ? 1 : 0,
+				bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
+				PendingBodyModifierCachedResetNames.Num());
+		}
 
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
@@ -7494,6 +7524,18 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 	ResetStabilizationRuntimeState();
 }
 
+bool UPhysAnimComponent::IsPelvisSimulatingNow() const
+{
+	const USkeletalMeshComponent* const Mesh = GetMeshComponent();
+	if (!Mesh)
+	{
+		return false;
+	}
+
+	const FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
+	return PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
+}
+
 bool UPhysAnimComponent::IsInitialPoseSearchWaitTimedOut(double ElapsedSeconds, double TimeoutSeconds)
 {
 	return TimeoutSeconds > 0.0 && ElapsedSeconds >= TimeoutSeconds;
@@ -7604,6 +7646,13 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 
 	if (bIsRootBodyModifier)
 	{
+		if (InTransitionPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+		{
+			// Phase 2 guard-window ownership requires the pelvis/root to come on without any
+			// follow-up cached reset request on the same tick.
+			return false;
+		}
+
 		// We allow exactly one reset for the root when it transitions to simulation to ensure 
 		// its physical state is precisely aligned with the visual kinematic state before it begins moving.
 		return bBodyModifierActivatedThisTick && bAllowRootBodyModifierSimulation;
