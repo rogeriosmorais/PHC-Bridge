@@ -114,6 +114,12 @@ static bool ValidateRootOnReadinessSnapshot(
 		return false;
 	}
 
+	if (Snapshot.FinalBringUpGroupControlAuthorityAlpha + KINDA_SMALL_NUMBER < 1.0f)
+	{
+		OutReason = TEXT("phase2_final_bringup_control_not_settled");
+		return false;
+	}
+
 	return true;
 }
 
