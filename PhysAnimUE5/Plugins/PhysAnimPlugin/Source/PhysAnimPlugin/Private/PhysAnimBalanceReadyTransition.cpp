@@ -107,6 +107,7 @@ static bool ValidateLateValidationHandoffSnapshot(
 static bool ValidateRootOnReadinessSnapshot(
 	const FPhysAnimCertifiedHandoffSnapshot& Snapshot,
 	const FPhysAnimStabilizationSettings& Settings,
+	float BalanceReadyPolicyInfluenceThreshold,
 	FString& OutReason)
 {
 	if (!Snapshot.bRootOnReadinessProven)
@@ -124,6 +125,12 @@ static bool ValidateRootOnReadinessSnapshot(
 	if (Snapshot.FinalBringUpGroupControlAuthorityAlpha + KINDA_SMALL_NUMBER < 1.0f)
 	{
 		OutReason = TEXT("phase2_final_bringup_control_not_settled");
+		return false;
+	}
+
+	if (Snapshot.PolicyInfluenceAlphaAtCapture + KINDA_SMALL_NUMBER < BalanceReadyPolicyInfluenceThreshold)
+	{
+		OutReason = TEXT("phase2_root_on_readiness_policy_influence_inactive");
 		return false;
 	}
 
@@ -998,7 +1005,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (!ValidateRootOnReadinessSnapshot(CurrentSnapshot, Settings, HandoffReadinessReason))
+	if (!ValidateRootOnReadinessSnapshot(CurrentSnapshot, Settings, Owner->BalanceReadyPolicyInfluenceThreshold, HandoffReadinessReason))
 	{
 		OutReason = HandoffReadinessReason;
 		return false;
@@ -1090,6 +1097,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	}
 
 	const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
+	OutSnapshot.PolicyInfluenceAlphaAtCapture = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
 	OutSnapshot.TopologyClass = BalanceTransitionSets::BuildCertifiedHandoffTopologyClass(
 		PelvisBody->IsInstanceSimulatingPhysics(),
 		ProximalSimCount,
@@ -1107,7 +1115,8 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.RootOnReadinessShellHoldDurationSeconds = RootOnReadinessShellHoldAccumulatedSeconds;
 	OutSnapshot.bRootOnReadinessProven =
 		RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration &&
-		OutSnapshot.FinalBringUpGroupControlAuthorityAlpha >= 1.0f - KINDA_SMALL_NUMBER;
+		OutSnapshot.FinalBringUpGroupControlAuthorityAlpha >= 1.0f - KINDA_SMALL_NUMBER &&
+		OutSnapshot.PolicyInfluenceAlphaAtCapture >= Owner->BalanceReadyPolicyInfluenceThreshold;
 	OutSnapshot.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
 	OutSnapshot.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
 	OutSnapshot.QuietProofDurationSeconds = QuietWindowAccumulatedSeconds;
