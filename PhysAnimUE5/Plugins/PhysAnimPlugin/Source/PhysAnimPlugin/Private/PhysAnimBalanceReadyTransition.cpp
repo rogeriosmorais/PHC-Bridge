@@ -522,16 +522,17 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					UE_LOG(
 						LogPhysAnimBridge,
 						Log,
-						TEXT("[PhysAnimBalance] PHASE1_READY_FOR_ROOT_ON topology=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d rootOnReady=%d maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f lateValidateDuration=%.2f"),
+					TEXT("[PhysAnimBalance] PHASE1_READY_FOR_ROOT_ON topology=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d finalBringUpControlAlpha=%.2f rootOnReady=%d maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f lateValidateDuration=%.2f"),
 						*CertifiedHandoff.TopologyClass,
 						BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
 						CertifiedHandoff.SimCount,
 						CertifiedHandoff.ProximalSimCount,
 						CertifiedHandoff.DistalSimCount,
-						CertifiedHandoff.UpperBodySimCount,
-						CertifiedHandoff.bPolicySuppressed ? 1 : 0,
-						CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
-						CertifiedHandoff.bRootOnReadinessProven ? 1 : 0,
+					CertifiedHandoff.UpperBodySimCount,
+					CertifiedHandoff.bPolicySuppressed ? 1 : 0,
+					CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
+					CertifiedHandoff.FinalBringUpGroupControlAuthorityAlpha,
+					CertifiedHandoff.bRootOnReadinessProven ? 1 : 0,
 						CertifiedHandoff.MaxTargetDeltaDegrees,
 						CertifiedHandoff.MeanTargetDeltaDegrees,
 						CertifiedHandoff.QuietProofDurationSeconds,
@@ -758,7 +759,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					}
 				}
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ENTRY topology=%s upperBodyOwnership=%s rootPreLin=%.1f rootPreAng=%.1f shellOffsetDelta=%.1f shellVelocityDelta=%.1f simCountPre=%d proximalSimPre=%d distalSimPre=%d upperBodySimPre=%d policySuppressed=%d controlAuthoritySettled=%d rootOnReady=%d maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f resetScheduled=%d"),
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ENTRY topology=%s upperBodyOwnership=%s rootPreLin=%.1f rootPreAng=%.1f shellOffsetDelta=%.1f shellVelocityDelta=%.1f simCountPre=%d proximalSimPre=%d distalSimPre=%d upperBodySimPre=%d policySuppressed=%d controlAuthoritySettled=%d finalBringUpControlAlpha=%.2f rootOnReady=%d maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f resetScheduled=%d"),
 					CertifiedHandoff.TopologyClass.IsEmpty() ? TEXT("unknown") : *CertifiedHandoff.TopologyClass,
 					BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
 					Diagnostics.BaselineRootLinVel,
@@ -771,6 +772,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					Diagnostics.UpperBodySimCountPre,
 					CertifiedHandoff.bPolicySuppressed ? 1 : 0,
 					CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
+					CertifiedHandoff.FinalBringUpGroupControlAuthorityAlpha,
 					CertifiedHandoff.bRootOnReadinessProven ? 1 : 0,
 					CertifiedHandoff.MaxTargetDeltaDegrees,
 					CertifiedHandoff.MeanTargetDeltaDegrees,
@@ -1083,6 +1085,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bPolicySuppressed = ShouldSuppressPolicy();
 	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
 	const int32 FinalBringUpGroupIndex = Owner->GetBringUpGroupCount() - 1;
+	OutSnapshot.FinalBringUpGroupControlAuthorityAlpha = Owner->CalculateBringUpGroupControlAuthorityAlpha(FinalBringUpGroupIndex, Settings);
 	OutSnapshot.bRootOnReadinessProven = OutSnapshot.bControlAuthoritySettled &&
 		bHasLateValidationProof &&
 		Owner->AreAllBringUpGroupsUnlocked() &&
