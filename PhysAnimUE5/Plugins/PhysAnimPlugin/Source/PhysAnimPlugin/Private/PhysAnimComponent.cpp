@@ -2679,9 +2679,21 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		}
 	}
 
-	if (BalanceReadyTransition.HasSucceeded() || BalanceReadyTransition.HasSafePhase2Denial())
+	if (BalanceReadyTransition.HasSucceeded())
 	{
 		CompleteBalanceModeEntry();
+	}
+	else if (BalanceReadyTransition.HasSafePhase2Denial())
+	{
+		const FString DenialReason = BalanceReadyTransition.GetSafePhase2DenialReason();
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Entry safe-denied during Phase 2 root-on validation. Clearing pending request. reason=%s"), *DenialReason);
+		bPendingBalanceModeStartRequest = false;
+		PendingBalanceModeStartReason.Reset();
+		PendingBalanceModeRequestTimeSeconds = -1.0;
+		if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationActive)
+		{
+			StopBalancePerturbationMode();
+		}
 	}
 	else if (BalanceReadyTransition.HasFailed())
 	{
@@ -2732,10 +2744,7 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	bPendingBalanceModeStartRequest = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
-	if (!BalanceReadyTransition.HasSafePhase2Denial())
-	{
-		BalanceReadyTransition.Cancel();
-	}
+	BalanceReadyTransition.Cancel();
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalancePerturbationActive);
 	ApplyStartupMovementLock();
