@@ -4,6 +4,7 @@
 #include "PhysAnimBridgeTrace.h"
 #include "PhysAnimComparisonSubsystem.h"
 #include "PhysAnimComponent.h"
+#include "PhysAnimBalanceQuietHandoff.h"
 #include "PhysAnimStage1InitializerComponent.h"
 
 #include "HAL/FileManager.h"
@@ -19,6 +20,7 @@
 #include "PhysicsControlActor.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
+#include "UObject/UObjectGlobals.h"
 #include "Tests/AutomationCommon.h"
 
 #if WITH_EDITOR
@@ -2057,6 +2059,15 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Phase 2 root-on spike is not retryable"),
 			FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(TEXT("phase2_root_on_spike")));
 		TestFalse(
+			TEXT("Phase 2 root-on spike cannot be automatically retried without new quiet proof"),
+			FPhysAnimBalanceReadyTransition::IsAutomaticRetryAllowed(
+				TEXT("phase2_root_on_spike"),
+				true,
+				true,
+				true,
+				true,
+				true));
+		TestFalse(
 			TEXT("Phase 2 policy leak is not retryable"),
 			FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(TEXT("phase2_policy_write_leak")));
 		TestTrue(
@@ -2110,6 +2121,14 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	bool FPhysAnimBalanceLateValidationFailureTaxonomyTest::RunTest(const FString& Parameters)
 	{
 		TestEqual(
+			TEXT("Topology late-validation failures are classified explicitly"),
+			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("topology_mismatch_simulating_critical")),
+			EBalanceReadyConditionOwner::Phase1TopologyShaping);
+		TestEqual(
+			TEXT("Late-validation handoff invalidation is classified as topology shaping"),
+			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase1_late_validate_handoff_invalidated")),
+			EBalanceReadyConditionOwner::Phase1TopologyShaping);
+		TestEqual(
 			TEXT("Upper-body late-validation failures are classified explicitly"),
 			FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(true, false, false),
 			FString(TEXT("phase1_late_validate_upper_body_instability")));
@@ -2125,6 +2144,68 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Late-validation failure taxonomy has a truthful unknown fallback"),
 			FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(false, false, false),
 			FString(TEXT("phase1_late_validate_unknown")));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceQuietHandoffSuppressionTest,
+		"PhysAnim.Component.BalanceQuietHandoffSuppression",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceQuietHandoffSuppressionTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimBalanceQuietHandoff QuietHandoff;
+		QuietHandoff.Start(TEXT("test_start"), nullptr);
+		TestTrue(TEXT("Quiet handoff suppresses policy while active"), QuietHandoff.ShouldSuppressPolicy());
+		TestTrue(TEXT("Quiet handoff suppresses shell while active"), QuietHandoff.ShouldSuppressShell());
+		TestTrue(TEXT("Quiet handoff suppresses move smoke while active"), QuietHandoff.ShouldSuppressMoveSmoke());
+		QuietHandoff.Cancel();
+		TestFalse(TEXT("Quiet handoff no longer suppresses policy after cancel"), QuietHandoff.ShouldSuppressPolicy());
+		TestFalse(TEXT("Quiet handoff no longer suppresses shell after cancel"), QuietHandoff.ShouldSuppressShell());
+		TestFalse(TEXT("Quiet handoff no longer suppresses move smoke after cancel"), QuietHandoff.ShouldSuppressMoveSmoke());
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceShellLockOwnershipTest,
+		"PhysAnim.Component.BalanceShellLockOwnership",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceShellLockOwnershipTest::RunTest(const FString& Parameters)
+	{
+		UPhysAnimComponent* Component = NewObject<UPhysAnimComponent>(GetTransientPackage());
+		TestNotNull(TEXT("Transient component can be constructed"), Component);
+		if (!Component)
+		{
+			return false;
+		}
+
+		TestFalse(TEXT("Shell lock starts released"), Component->IsTransitionOwnedShellLocked());
+		Component->ActivateTransitionOwnedShellLock();
+		TestTrue(TEXT("Shell lock becomes transition-owned when activated"), Component->IsTransitionOwnedShellLocked());
+		Component->ReleaseTransitionOwnedShellLock();
+		TestFalse(TEXT("Shell lock returns to gameplay-observed mode when released"), Component->IsTransitionOwnedShellLocked());
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceLocomotionIdleOwnershipTest,
+		"PhysAnim.Component.BalanceLocomotionIdleOwnership",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceLocomotionIdleOwnershipTest::RunTest(const FString& Parameters)
+	{
+		UPhysAnimComponent* Component = NewObject<UPhysAnimComponent>(GetTransientPackage());
+		TestNotNull(TEXT("Transient component can be constructed"), Component);
+		if (!Component)
+		{
+			return false;
+		}
+
+		TestEqual(
+			TEXT("Locomotion authority is idle by default on a fresh balance component"),
+			Component->GetLocomotionAuthorityState(),
+			EBridgeLocomotionAuthorityState::Idle);
 		return true;
 	}
 
@@ -3328,6 +3409,11 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPieBalanceQuietWindowTest,
+		"PhysAnim.PIE.BalanceQuietWindow",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPieBalanceModeSmokeTest,
 		"PhysAnim.PIE.BalanceModeSmoke",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -3424,6 +3510,53 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			{
 				AddError(FString::Printf(
 					TEXT("[PhysAnimPieBalanceSmoke] PIE did not stop within %.1f seconds."),
+					PhysAnimPieSmokeStopTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStopTimeoutSeconds));
+
+		return true;
+	}
+
+	bool FPhysAnimPieBalanceQuietWindowTest::RunTest(const FString& Parameters)
+	{
+		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
+		{
+			AddError(FString::Printf(TEXT("[PhysAnimPieBalanceQuietWindow] Failed to open map '%s'."), *PhysAnimPieSmokeMap));
+			return false;
+		}
+
+		AddCommand(new FEditorAutomationLogCommand(FString::Printf(
+			TEXT("[PhysAnimPieBalanceQuietWindow] PIE balance quiet-window test opening '%s'."),
+			*PhysAnimPieSmokeMap)));
+		AddCommand(new FStartPIECommand(false));
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor != nullptr && IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("[PhysAnimPieBalanceQuietWindow] PIE did not start within %.1f seconds."),
+					PhysAnimPieSmokeStartTimeoutSeconds));
+				return true;
+			},
+			PhysAnimPieSmokeStartTimeoutSeconds));
+		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeLeadInSeconds));
+		AddCommand(new FExecPieConsoleCommand(TEXT("pa.StartBalanceMode")));
+		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeDurationSeconds));
+		AddCommand(new FValidateBalanceModeSmokeOutcomeCommand(this));
+		AddCommand(new FEndPlayMapCommand());
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				return GEditor == nullptr || !IsValid(GEditor->PlayWorld);
+			},
+			[this]() -> bool
+			{
+				AddError(FString::Printf(
+					TEXT("[PhysAnimPieBalanceQuietWindow] PIE did not stop within %.1f seconds."),
 					PhysAnimPieSmokeStopTimeoutSeconds));
 				return true;
 			},

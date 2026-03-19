@@ -15,7 +15,7 @@ void FPhysAnimBalanceQuietHandoff::Start(const FString& InReason, UPhysAnimCompo
 	FailureReason.Reset();
 	ElapsedSeconds = 0.0;
 	StableSeconds = 0.0;
-	UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] BalanceReadyTransition started. reason=%s"), *StartReason);
+	UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] BalanceQuietHandoff started. reason=%s"), *StartReason);
 }
 
 void FPhysAnimBalanceQuietHandoff::Cancel()
