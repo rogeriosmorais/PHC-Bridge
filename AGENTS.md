@@ -49,7 +49,6 @@ When working in this repo:
 ## What To Read
 
 Use `AGENTS.md` for project rules.
-Use `.agents/skills/*` for specialized instructions and reference material.
 
 ## Constraint To Remember
 
