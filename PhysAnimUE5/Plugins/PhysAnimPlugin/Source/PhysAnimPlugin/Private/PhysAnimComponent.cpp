@@ -4637,6 +4637,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		return;
 	}
 
+	if (BalanceReadyTransition.HasSafePhase2Denial())
+	{
+		LastAppliedStabilizationSettings = EffectiveSettings;
+		bLastAppliedSimulationHandoffSettled = bSimulationHandoffSettled;
+		LastAppliedControlAuthorityAlpha = CalculateCurrentControlAuthorityAlpha(EffectiveSettings);
+		return;
+	}
+
 	const float OwnerPlanarSpeedCmPerSec = [this]() -> float
 	{
 		const AActor* const OwnerActor = GetOwner();
