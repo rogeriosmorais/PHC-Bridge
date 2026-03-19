@@ -37,6 +37,9 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	EBalanceReadyUpperBodyOwnershipMode UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::None;
 	bool bPolicySuppressed = false;
 	bool bControlAuthoritySettled = false;
+	bool bRootOnReadinessShellHoldSatisfied = false;
+	bool bRootOnReadinessFinalBringUpControlSettled = false;
+	bool bRootOnReadinessPolicyInfluenceSettled = false;
 	bool bRootOnReadinessProven = false;
 	float FinalBringUpGroupControlAuthorityAlpha = 0.0f;
 	float PolicyInfluenceAlphaAtCapture = 0.0f;
