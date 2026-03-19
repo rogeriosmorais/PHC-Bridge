@@ -36,7 +36,12 @@ namespace BalanceTransitionSets
 	}
 	static bool IsLateValidationUpperBodyOwnershipBone(FName BoneName)
 	{
-		return IsUpperBody(BoneName);
+		return BoneName == "neck_01" ||
+			BoneName == "head" ||
+			BoneName == "clavicle_l" ||
+			BoneName == "clavicle_r" ||
+			BoneName == "upperarm_l" ||
+			BoneName == "upperarm_r";
 	}
 	static bool IsTransitionCritical(FName BoneName) { return IsRoot(BoneName) || IsProximal(BoneName) || IsDistalLowerLimb(BoneName); }
 	static bool IsPrepareCriticalKinematic(FName BoneName) { return IsRoot(BoneName) || IsDistalLowerLimb(BoneName); }
