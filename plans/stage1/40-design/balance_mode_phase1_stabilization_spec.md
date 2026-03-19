@@ -139,12 +139,15 @@ Interpretation rule:
 
 Phase 1 must converge to an explicitly named handoff topology before Phase 2 may begin.
 
-This document assumes the conservative default handoff topology below.
+This document defines two valid handoff topologies:
+
+- `UpperOnlySafeDenyHandoff`
+- `RootCoupledReadyHandoff`
 
 If implementation chooses a different handoff topology, that change must be documented explicitly here and in the entry-transition and Phase 2 specs.  
 It is not valid to silently depend on a different runtime shape.
 
-## 6.1 Required movement types
+## 6.1 `UpperOnlySafeDenyHandoff` movement types
 
 ### Root set
 - `pelvis` = **kinematic**
@@ -179,6 +182,43 @@ The default safe shape is:
 This is intentionally conservative.
 
 If later testing proves a less restrictive topology is stable, the design can be revised explicitly. That change must be documented, not improvised.
+
+This topology is valid for:
+
+- Phase 1 success
+- safe denial of Phase 2
+
+This topology is not, by itself, root-on-ready.
+
+## 6.2 `RootCoupledReadyHandoff` movement types
+
+This is the recommended first topology that is allowed to permit Phase 2 root-on.
+
+### Root set
+- `pelvis` = **kinematic**
+
+### Proximal transition-critical set
+- `spine_01`, `spine_02`, `spine_03`, `thigh_l`, `thigh_r` = **simulated**
+
+### Distal spike-prone lower-limb set
+- `calf_l`, `calf_r`, `foot_l`, `foot_r`, `ball_l`, `ball_r` = **kinematic**
+
+### Upper-body non-critical set
+- must use one explicit ownership mode that remains unchanged through root-on
+- recommended initial mode:
+  - `UpperBodyPartialSim_ArmsOnly`
+- if that mode is used, the certified handoff payload must report:
+  - `upperBodySimCount=4`
+  - `simCount=9`
+  - `proximalSimCount=5`
+  - `distalSimCount=0`
+
+Rationale:
+
+- only the pelvis flips on the Phase 2 root-on frame
+- pelvis-adjacent coupling is already present and observed during late validation
+- distal spike-prone bodies remain kinematic
+- Phase 2 does not need to combine root-on with proximal topology expansion
 
 ### 6.3 Handoff-topology consistency rule
 
@@ -521,8 +561,10 @@ On success, Phase 1 must emit a **certified handoff payload** containing at mini
 Interpretation rule:
 
 - `proximalSimCount` and `distalSimCount` are emitted for observability and topology auditing
-- under the conservative default handoff topology they are allowed to remain zero during late validation and at Phase 2 entry
+- under `UpperOnlySafeDenyHandoff`, `proximalSimCount=0` and `distalSimCount=0` are allowed during late validation and at Phase 2 entry
+- under `RootCoupledReadyHandoff`, `proximalSimCount` must remain non-zero and match the documented proximal ownership mode through late validation and at Phase 2 entry
 - conservative late validation is explicitly allowed to be upper-only simulation if that matches the documented ownership mode
+- root-on-capable late validation must be explicitly classified as `RootCoupledReadyHandoff`; timing alone is not sufficient
 
 Phase 2 must consume this payload rather than infer readiness from timing alone.
 

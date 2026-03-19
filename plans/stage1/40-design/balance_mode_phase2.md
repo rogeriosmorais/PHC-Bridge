@@ -149,10 +149,8 @@ Interpretation rule:
 
 - successful late validation is not, by itself, permission to root-on
 - successful late validation minimum is not, by itself, permission to root-on
-- if the documented late-validation topology is upper-only, Phase 2 must either:
-  - deny safely before root-on, or
-  - satisfy an additional explicit root-on-readiness proof that is documented separately
-- upper-only late validation is therefore a valid safe-denial-capable Phase 1 success state, not automatically a root-on-ready state
+- `UpperOnlySafeDenyHandoff` is a valid safe-denial-capable Phase 1 success state, not a root-on-ready state
+- `RootCoupledReadyHandoff` is the first documented topology class that may permit Phase 2 root-on
 - Phase 2 entry must also require an explicit pre-root-on shell-correction safety proof
 - a readiness proof that cannot rule out immediate `phase2_shell_correction_material` is incomplete and must not permit `BRT_Phase2_RootOn`
 
@@ -207,6 +205,37 @@ Interpretation rule:
 
 - `phase2_shell_correction_material` remains a valid post-entry abort reason if a root-on attempt still fails despite the best available proof
 - but if the current design cannot produce a truthful pre-root-on shell-correction safety proof, the runtime must deny with `phase2_pre_root_on_shell_correction_safety_not_proven` instead of attempting root-on
+
+### 6.3 Root-on-readiness proof for `RootCoupledReadyHandoff`
+
+`RootCoupledReadyHandoff` is root-on-ready only if all of the following are true continuously for a named proof window before `SetPhase(BRT_Phase2_RootOn)`:
+
+1. handoff topology classification = `RootCoupledReadyHandoff`
+2. `pelvis=kinematic`, proximal set = simulated, distal set = kinematic
+3. `proximalSimCount=5`
+4. `distalSimCount=0`
+5. `upperBodyOwnership` matches the documented late-validation ownership mode and does not change during the proof window
+6. policy suppression for `pelvis`, proximal, and distal sets remains active
+7. no cached reset, hold-reference reseed, or quarantine release is pending
+8. root linear and angular speeds remain below the named Phase 2 entry thresholds
+9. shell offset delta and shell velocity delta remain below the named Phase 2 entry thresholds
+10. max and mean target deltas remain below the named Phase 2 entry thresholds
+11. the proximal set remains bounded under initial policy influence with no same-window flare large enough to predict immediate root-on contamination
+12. no body in the proximal or upper-body sets exceeds the named pre-root-on maximum linear or angular speed thresholds
+
+The proof must emit, at minimum:
+
+- `rootOnReady=1`
+- `rootOnReadinessClassification=root_coupled_ready`
+- `rootOnReadinessGateReason=none`
+- the certified topology classification
+- `simCount`
+- `proximalSimCount`
+- `distalSimCount`
+- `upperBodySimCount`
+- proof-window duration actually achieved
+
+If any required field is absent or unstable, Phase 2 must deny safely.
 
 ---
 
@@ -355,14 +384,15 @@ Therefore Phase 2 must not assume that a quiet pre-root-on state is sufficient u
 - `pelvis` = simulated
 
 ## 9.2 Proximal transition-critical set
-Default required state during the root-on frame and guard window:
-- `spine_01`, `spine_02`, `spine_03`, `thigh_l`, `thigh_r` = kinematic
+Required state during the root-on frame and guard window depends on the certified handoff topology:
 
-This is intentionally conservative.
+- if the certified handoff is `UpperOnlySafeDenyHandoff`, Phase 2 must deny before root-on
+- if the certified handoff is `RootCoupledReadyHandoff`, `spine_01`, `spine_02`, `spine_03`, `thigh_l`, `thigh_r` remain simulated through the root-on frame and guard window
 
-The design assumption is:
-- root-on should first prove pelvis/root can enter simulation safely
-- additional proximal simulation expansion belongs later, only if explicitly designed and validated
+Hard rule:
+
+- Phase 2 must not combine root-on with a proximal topology flip
+- the proximal state on the root-on frame must match the certified handoff payload consumed at Phase 2 entry
 
 ## 9.3 Distal spike-prone lower-limb set
 During the root-on frame and guard window:

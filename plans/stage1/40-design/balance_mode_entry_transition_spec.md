@@ -379,9 +379,11 @@ Phase 1 may advance from late validation to Phase 2 only if:
 
 Interpretation rule:
 
-- a conservative upper-only late-validation topology is valid if and only if the Phase 1 stabilization spec declares it as the documented handoff mode
-- Phase 2 must validate against that documented topology rather than against an implicit requirement that proximal/distal simulation remain non-zero
-- a valid upper-only late-validation topology may still be a safe-denial state rather than a root-on-ready state
+- `UpperOnlySafeDenyHandoff` is valid if and only if the Phase 1 stabilization spec declares it as the documented handoff mode
+- `RootCoupledReadyHandoff` is valid if and only if the Phase 1 stabilization spec declares it as the documented handoff mode
+- Phase 2 must validate against the documented topology class rather than against an implicit requirement that proximal/distal simulation remain non-zero
+- `UpperOnlySafeDenyHandoff` is a safe-denial state
+- `RootCoupledReadyHandoff` may be a root-on-ready state only if the explicit root-on-readiness proof is also true
 
 ### Handoff invalidation rule
 
@@ -415,6 +417,14 @@ Requirements:
 - no shell-assist correction may inject velocity
 - no target reset may produce a discontinuity on the same frame unless explicitly validated
 - Phase 1 handoff certification must still be valid at the moment Phase 2 begins
+
+For the first permitted root-on-success path, the contract is:
+
+- certified handoff topology = `RootCoupledReadyHandoff`
+- pre-root-on readiness classification = `root_coupled_ready`
+- distal set remains kinematic
+- proximal set remains simulated
+- upper-body ownership remains unchanged from late validation through the Phase 2 guard window
 
 ### Phase 2 denial rule
 
