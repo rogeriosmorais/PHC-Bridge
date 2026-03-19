@@ -544,6 +544,18 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					UE_LOG(
 						LogPhysAnimBridge,
 						Warning,
+						TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_MINIMUM_MET shellHoldDuration=%.2f shellHoldRequired=%.2f lateValidateDuration=%.2f requiredLateValidateSeconds=%.2f"),
+						RootOnReadinessShellHoldAccumulatedSeconds,
+						Settings.BalancePhase2RequiredShellHoldDuration,
+						LateValidationAccumulatedSeconds,
+						Settings.BalancePhase1LateValidateRequiredSeconds);
+				}
+
+				if (RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2RequiredShellHoldDuration)
+				{
+					UE_LOG(
+						LogPhysAnimBridge,
+						Warning,
 						TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_SHELL_HOLD_CAPPED_BY_WINDOW lateValidateDuration=%.2f requiredLateValidateSeconds=%.2f shellHoldDuration=%.2f shellHoldRequired=%.2f"),
 						LateValidationAccumulatedSeconds,
 						Settings.BalancePhase1LateValidateRequiredSeconds,
