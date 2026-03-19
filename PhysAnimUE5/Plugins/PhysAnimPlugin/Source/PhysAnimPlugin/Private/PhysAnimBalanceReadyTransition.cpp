@@ -1610,6 +1610,12 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
+	if (CertifiedHandoff.LateValidationOutcome == EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly)
+	{
+		OutReason = TEXT("phase1_upper_only_handoff_safe_denied");
+		return false;
+	}
+
 	const float ControlAuthorityAlpha = Owner->CalculateCurrentControlAuthorityAlpha(Settings);
 	if (ControlAuthorityAlpha < 1.0f - KINDA_SMALL_NUMBER)
 	{
@@ -1624,11 +1630,6 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (CurrentSnapshot.LateValidationOutcome == EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly)
-	{
-		OutReason = TEXT("phase2_upper_only_handoff_safe_denied");
-		return false;
-	}
 	if (CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
 		CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount)
 	{
