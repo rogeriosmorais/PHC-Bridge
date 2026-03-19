@@ -37,6 +37,7 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	EBalanceReadyUpperBodyOwnershipMode UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::None;
 	bool bPolicySuppressed = false;
 	bool bControlAuthoritySettled = false;
+	bool bRootOnReadinessProven = false;
 	float MaxTargetDeltaDegrees = 0.0f;
 	float MeanTargetDeltaDegrees = 0.0f;
 	float QuietProofDurationSeconds = 0.0f;
