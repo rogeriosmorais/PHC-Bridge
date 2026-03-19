@@ -671,6 +671,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			USkeletalMeshComponent* LiveMesh = Owner->GetMeshComponent();
 			TArray<FName> SimulatingBones;
 			Owner->GetSimulatingBodies(SimulatingBones);
+			float CurrentFrameWorstLinearSpeed = 0.0f;
+			float CurrentFrameWorstAngularSpeed = 0.0f;
 			for (const FName BoneName : SimulatingBones)
 			{
 				if (LiveMesh && (BalanceTransitionSets::IsProximal(BoneName) || BalanceTransitionSets::IsUpperBody(BoneName)))
@@ -679,6 +681,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					const FVector BoneAngularVelocityDegPerSec = LiveMesh->GetPhysicsAngularVelocityInDegrees(BoneName);
 					const float LinearSpeed = BoneLinearVelocity.Size();
 					const float AngularSpeed = BoneAngularVelocityDegPerSec.Size();
+					CurrentFrameWorstLinearSpeed = FMath::Max(CurrentFrameWorstLinearSpeed, LinearSpeed);
+					CurrentFrameWorstAngularSpeed = FMath::Max(CurrentFrameWorstAngularSpeed, AngularSpeed);
 					if (LinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed &&
 						LinearSpeed > Diagnostics.Phase1LateValidateWorstLinearSpeed)
 					{
@@ -693,18 +697,17 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					}
 				}
 			}
-		}
-
-		const bool bLateValidationMotionViolatesThreshold =
-			Diagnostics.Phase1LateValidateWorstLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
-			Diagnostics.Phase1LateValidateWorstAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed;
-		if (bLateValidationMotionViolatesThreshold)
-		{
-			Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds += DeltaTime;
-		}
-		else
-		{
-			Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds = 0.0f;
+			const bool bLateValidationMotionViolatesThreshold =
+				CurrentFrameWorstLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
+				CurrentFrameWorstAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed;
+			if (bLateValidationMotionViolatesThreshold)
+			{
+				Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds += DeltaTime;
+			}
+			else
+			{
+				Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds = 0.0f;
+			}
 		}
 
 		if (bLateValidationThisFrame)
@@ -754,7 +757,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
 			const bool bCanCompleteAsRootCoupledReady =
 				CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady &&
-				CurrentSnapshot.bRootOnReadinessShellHoldSatisfied;
+				CurrentSnapshot.bRootOnReadinessShellHoldSatisfied &&
+				CurrentSnapshot.bRootOnReadinessProven;
 			const bool bCanCompleteAsUpperOnlySafeDeny =
 				CurrentSnapshot.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied &&
 				LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds;
