@@ -56,6 +56,20 @@ namespace BalanceTransitionSets
 		}
 	}
 
+	static const TCHAR* GetRootOnReadinessClassificationName(EBalanceReadyRootOnReadinessClassification Classification)
+	{
+		switch (Classification)
+		{
+		case EBalanceReadyRootOnReadinessClassification::Ready:
+			return TEXT("ready");
+		case EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied:
+			return TEXT("upper_only_late_validation_safe_denied");
+		case EBalanceReadyRootOnReadinessClassification::NotReady:
+		default:
+			return TEXT("not_ready");
+		}
+	}
+
 	static FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount)
 	{
 		return FString::Printf(
@@ -587,9 +601,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					UE_LOG(
 						LogPhysAnimBridge,
 						Log,
-					TEXT("[PhysAnimBalance] PHASE1_READY_FOR_ROOT_ON topology=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d finalBringUpControlAlpha=%.2f policyInfluenceAlpha=%.2f policyInfluenceRequired=%.2f policyInfluenceDuration=%.2f policyInfluenceRequiredSeconds=%.2f policyInfluenceRampReanchored=%d shellHoldReady=%d bringUpReady=%d policyInfluenceReady=%d rootOnReady=%d rootOnReadinessGateReason=%s shellHoldDuration=%.2f shellHoldRequired=%.2f maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f lateValidateDuration=%.2f"),
-					*CertifiedHandoff.TopologyClass,
-					BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
+					TEXT("[PhysAnimBalance] PHASE1_READY_FOR_ROOT_ON topology=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d finalBringUpControlAlpha=%.2f policyInfluenceAlpha=%.2f policyInfluenceRequired=%.2f policyInfluenceDuration=%.2f policyInfluenceRequiredSeconds=%.2f policyInfluenceRampReanchored=%d shellHoldReady=%d bringUpReady=%d policyInfluenceReady=%d rootOnReady=%d rootOnReadinessClassification=%s rootOnReadinessGateReason=%s shellHoldDuration=%.2f shellHoldRequired=%.2f maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f lateValidateDuration=%.2f"),
+						*CertifiedHandoff.TopologyClass,
+						BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
 					CertifiedHandoff.SimCount,
 					CertifiedHandoff.ProximalSimCount,
 					CertifiedHandoff.DistalSimCount,
@@ -604,11 +618,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					CertifiedHandoff.bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame ? 1 : 0,
 					CertifiedHandoff.bRootOnReadinessShellHoldSatisfied ? 1 : 0,
 					CertifiedHandoff.bRootOnReadinessFinalBringUpControlSettled ? 1 : 0,
-					CertifiedHandoff.bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
-					CertifiedHandoff.bRootOnReadinessProven ? 1 : 0,
-					*Diagnostics.Phase1RootOnReadinessGateReason,
-					CertifiedHandoff.RootOnReadinessShellHoldDurationSeconds,
-					CertifiedHandoff.RootOnReadinessShellHoldRequiredSeconds,
+						CertifiedHandoff.bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
+						CertifiedHandoff.bRootOnReadinessProven ? 1 : 0,
+						BalanceTransitionSets::GetRootOnReadinessClassificationName(CertifiedHandoff.RootOnReadinessClassification),
+						*Diagnostics.Phase1RootOnReadinessGateReason,
+						CertifiedHandoff.RootOnReadinessShellHoldDurationSeconds,
+						CertifiedHandoff.RootOnReadinessShellHoldRequiredSeconds,
 						CertifiedHandoff.MaxTargetDeltaDegrees,
 						CertifiedHandoff.MeanTargetDeltaDegrees,
 						CertifiedHandoff.QuietProofDurationSeconds,
@@ -1198,6 +1213,14 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.bRootOnReadinessShellHoldSatisfied &&
 		OutSnapshot.bRootOnReadinessFinalBringUpControlSettled &&
 		OutSnapshot.bRootOnReadinessPolicyInfluenceSettled;
+	OutSnapshot.RootOnReadinessClassification =
+		OutSnapshot.bRootOnReadinessProven
+			? EBalanceReadyRootOnReadinessClassification::Ready
+			: (OutSnapshot.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold &&
+				OutSnapshot.bLateValidationCompleted &&
+				!OutSnapshot.bRootOnReadinessShellHoldSatisfied
+				? EBalanceReadyRootOnReadinessClassification::UpperOnlyLateValidationSafeDenied
+				: EBalanceReadyRootOnReadinessClassification::NotReady);
 	OutSnapshot.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
 	OutSnapshot.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
 	OutSnapshot.QuietProofDurationSeconds = QuietWindowAccumulatedSeconds;

@@ -27,6 +27,13 @@ enum class EBalanceReadyUpperBodyOwnershipMode : uint8
 	LateValidationKinematicHold
 };
 
+enum class EBalanceReadyRootOnReadinessClassification : uint8
+{
+	NotReady,
+	Ready,
+	UpperOnlyLateValidationSafeDenied
+};
+
 struct FPhysAnimCertifiedHandoffSnapshot
 {
 	FString TopologyClass;
@@ -42,6 +49,7 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	bool bRootOnReadinessFinalBringUpControlSettled = false;
 	bool bRootOnReadinessPolicyInfluenceSettled = false;
 	bool bRootOnReadinessProven = false;
+	EBalanceReadyRootOnReadinessClassification RootOnReadinessClassification = EBalanceReadyRootOnReadinessClassification::NotReady;
 	float FinalBringUpGroupControlAuthorityAlpha = 0.0f;
 	float PolicyInfluenceAlphaAtCapture = 0.0f;
 	float RootOnReadinessPolicyInfluenceRequiredAlpha = 0.0f;
