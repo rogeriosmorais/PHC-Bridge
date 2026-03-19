@@ -1196,9 +1196,17 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	ApplyMovementSmokeInput(EffectiveSettings);
 	if ((RuntimeState == EPhysAnimRuntimeState::BridgeActive || RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode) && bStartupMovementLockActive)
 	{
+		const bool bBalanceOwnsShellLock =
+			IsTransitionOwnedShellLocked() ||
+			BalanceReadyTransition.IsActive() ||
+			bPendingBalanceModeStartRequest;
+		if (bBalanceOwnsShellLock)
+		{
+			ResetPolicySettleWindowState();
+		}
 		// In Balance Mode, we always want the CharacterMovement to be locked (MOVE_None)
 		// to ensure the capsule doesn't move and we can measure drift/contamination accurately.
-		if (RuntimeState != EPhysAnimRuntimeState::BalancePerturbationMode)
+		if (RuntimeState != EPhysAnimRuntimeState::BalancePerturbationMode && !bBalanceOwnsShellLock)
 		{
 			if (!EffectiveSettings.bLockCharacterMovementUntilStartupReady)
 			{
@@ -1439,8 +1447,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	TrackStabilizationStressTestObservations();
 	AdvanceBringUpState(DeltaTime, EffectiveSettings);
+	MaintainTransitionOwnedShellLock();
 	BalanceReadyTransition.Tick(DeltaTime, this, EffectiveSettings);
 	TryStartPendingBalanceModeRequest(EffectiveSettings);
+	MaintainTransitionOwnedShellLock();
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationMode)
 	{
@@ -5310,7 +5320,50 @@ void UPhysAnimComponent::ReleaseStartupMovementLock(bool bRestoreCharacterMoveme
 void UPhysAnimComponent::ApplyTransitionOwnedShellLock()
 {
 	ApplyStartupMovementLock();
+	if (ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner()))
+	{
+		if (UCapsuleComponent* const CapsuleComponent = CharacterOwner->GetCapsuleComponent())
+		{
+			if (!bHasSavedCapsuleCollisionState)
+			{
+				OriginalCapsuleCollisionEnabled = CapsuleComponent->GetCollisionEnabled();
+				bHasSavedCapsuleCollisionState = true;
+			}
+
+			CapsuleComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+	}
 	bStartupMovementLockActive = true;
+}
+
+void UPhysAnimComponent::MaintainTransitionOwnedShellLock()
+{
+	if (!IsTransitionOwnedShellLocked())
+	{
+		return;
+	}
+
+	AActor* const OwnerActor = GetOwner();
+	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!OwnerActor || !SkeletalMesh || !bHasShellCouplingReferenceRootLocalOffset)
+	{
+		return;
+	}
+
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	const FVector RootLocation = SkeletalMesh->GetBoneLocation(RootBoneName, EBoneSpaces::WorldSpace);
+	const FVector OwnerLocation = OwnerActor->GetActorLocation();
+	const FVector DesiredLocation(
+		RootLocation.X - ShellCouplingReferenceRootLocalOffsetCm.X,
+		RootLocation.Y - ShellCouplingReferenceRootLocalOffsetCm.Y,
+		OwnerLocation.Z);
+	const FVector PlanarDelta = DesiredLocation - OwnerLocation;
+	if (PlanarDelta.SizeSquared2D() <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	OwnerActor->SetActorLocation(DesiredLocation, false, nullptr, ETeleportType::TeleportPhysics);
 }
 
 void UPhysAnimComponent::ReleaseTransitionOwnedShellLockInternal(bool bRestoreCharacterMovement)
@@ -6749,6 +6802,12 @@ void UPhysAnimComponent::UpdateBridgeLocomotionAuthorityState(
 	const FPhysAnimStabilizationSettings& EffectiveSettings,
 	double CurrentTimeSeconds)
 {
+	if (IsTransitionOwnedShellLocked() || BalanceReadyTransition.ShouldSuppressShell() || bPendingBalanceModeStartRequest)
+	{
+		ResetBridgeLocomotionAuthorityState();
+		return;
+	}
+
 	const float PredictedSpeedCmPerSecond = QueryVelocity.Size2D();
 	const float AcceptedSpeedCmPerSecond = BridgeTrajectoryState.AcceptedVelocityCmPerSecond.Size2D();
 	const bool bEntryRequested =

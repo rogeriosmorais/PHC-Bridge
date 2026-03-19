@@ -10,6 +10,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
 
 namespace BalanceTransitionSets
 {
+	static constexpr float Phase2TopologySettleGraceSeconds = 1.0f / 30.0f;
 	static bool IsRoot(FName BoneName) { return BoneName == "pelvis"; }
 	static bool IsProximal(FName BoneName) { return BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"; }
 	static bool IsDistalLowerLimb(FName BoneName) { return BoneName == "calf_l" || BoneName == "calf_r" || BoneName == "foot_l" || BoneName == "foot_r" || BoneName == "ball_l" || BoneName == "ball_r"; }
@@ -40,6 +41,7 @@ namespace BalanceTransitionSets
 			BoneName == "upperarm_l" || BoneName == "upperarm_r";
 	}
 	static bool IsTransitionCritical(FName BoneName) { return IsRoot(BoneName) || IsProximal(BoneName) || IsDistalLowerLimb(BoneName); }
+	static bool IsPrepareCriticalKinematic(FName BoneName) { return IsRoot(BoneName) || IsDistalLowerLimb(BoneName); }
 	static bool IsExpectedPhase2Topology(int32 SimCountPre, int32 SimCountPost, int32 DistalSimCountPre, int32 DistalSimCountPost)
 	{
 		return DistalSimCountPre == 0 &&
@@ -383,7 +385,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Owner->GetSimulatingBodies(SimulatingBones);
 			for (const FName BoneName : SimulatingBones)
 			{
-				if (BalanceTransitionSets::IsTransitionCritical(BoneName))
+				if (BalanceTransitionSets::IsPrepareCriticalKinematic(BoneName))
 				{
 					bQuietThisFrame = false;
 					QuietBlockReason = TEXT("topology_mismatch_simulating_critical");
@@ -774,13 +776,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			}
 			if (bRootCoupledTopologyReachedWithoutShellProof)
 			{
-				LateValidateBlockReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
-				Diagnostics.FailureReason = LateValidateBlockReason;
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_DENIED %s"), *LateValidateBlockReason);
-				Owner->ReleaseTransitionOwnedShellLock();
-				MarkSafePhase2Denied(LateValidateBlockReason);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *LateValidateBlockReason);
-				return;
+				Diagnostics.Phase1RootOnReadinessGateReason = TEXT("phase2_pre_root_on_shell_correction_safety_proof_pending");
+				Diagnostics.Phase1LateValidateGateReason = TEXT("phase2_pre_root_on_shell_correction_safety_proof_pending");
 			}
 		}
 		else
@@ -819,7 +816,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
 		}
 
-		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration + Settings.BalancePhase1LateValidateRequiredSeconds &&
+		const float RequiredLateValidateWindowSeconds = FMath::Max3(
+			Settings.BalancePhase1LateValidateRequiredSeconds,
+			Settings.BalancePhase2RequiredShellHoldDuration,
+			Settings.BalancePhase2PreRootOnShellProofRequiredSeconds);
+		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration + RequiredLateValidateWindowSeconds &&
 			LateValidationAccumulatedSeconds <= 0.0f)
 		{
 			const FString TimeoutReason = LateValidateBlockReason.IsEmpty()
@@ -871,7 +872,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			AbortReason = TEXT("phase2_fail_stop_precursor");
 		}
-		else if (!BalanceTransitionSets::IsExpectedPhase2Topology(
+		else if (PhaseTimeSeconds > BalanceTransitionSets::Phase2TopologySettleGraceSeconds &&
+			!BalanceTransitionSets::IsExpectedPhase2Topology(
 			Diagnostics.SimCountPre,
 			Diagnostics.SimCountPost,
 			Diagnostics.DistalSimCountPre,
@@ -1747,7 +1749,7 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
-		return BalanceTransitionSets::IsTransitionCritical(BoneName) ||
+		return BalanceTransitionSets::IsPrepareCriticalKinematic(BoneName) ||
 			BalanceTransitionSets::IsUpperLimbDistal(BoneName) ||
 			BalanceTransitionSets::IsUpperBodyApex(BoneName);
 	}

@@ -612,6 +612,7 @@ public:
 	void ReleaseTransitionOwnedShellLock();
 	EBalanceTransitionShellAuthorityMode GetBalanceTransitionShellAuthorityMode() const { return BalanceTransitionShellAuthorityMode; }
 	bool IsTransitionOwnedShellLocked() const { return BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked; }
+	bool IsStartupMovementLockActive() const { return bStartupMovementLockActive; }
 	bool WasTransitionShellReferenceReanchored() const { return bTransitionOwnedShellReferenceReanchored; }
 	bool WasTransitionShellReferenceReseededAfterLock() const { return bTransitionOwnedShellReferenceReseededAfterLock; }
 	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
@@ -793,6 +794,7 @@ private:
 	void ApplyStartupMovementLock();
 	void ReleaseStartupMovementLock(bool bRestoreCharacterMovement = true);
 	void ApplyTransitionOwnedShellLock();
+	void MaintainTransitionOwnedShellLock();
 	void ReleaseTransitionOwnedShellLockInternal(bool bRestoreCharacterMovement);
 	void ResetStartupQuietWindowState();
 	bool UpdateStartupQuietWindow(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, float& OutLinearSpeedCmPerSecond, float& OutAngularSpeedDegPerSecond);
