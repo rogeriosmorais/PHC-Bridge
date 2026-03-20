@@ -2666,7 +2666,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	{
 		if (BalanceReadyTransition.IsActive())
 		{
-			BalanceReadyTransition.Cancel();
+			BalanceReadyTransition.Cancel(this);
 		}
 		return;
 	}
@@ -2761,8 +2761,7 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	bPendingBalanceModeStartRequest = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
-	bStartupBringUpFrozenByBalanceEntry = false;
-	BalanceReadyTransition.Cancel();
+	BalanceReadyTransition.Cancel(this);
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Recovery);
 	ApplyStartupMovementLock();

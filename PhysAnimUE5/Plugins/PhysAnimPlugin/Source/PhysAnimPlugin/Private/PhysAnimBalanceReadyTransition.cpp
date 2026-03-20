@@ -322,12 +322,12 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 	return EBalanceReadyEntryClassification::Preflight_Accept;
 }
 
-void FPhysAnimBalanceReadyTransition::Cancel()
+void FPhysAnimBalanceReadyTransition::Cancel(UPhysAnimComponent* Owner)
 {
 	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] BalanceReadyTransition cancelled. phase=%d"), static_cast<int32>(InternalPhase));
-		SetPhase(EBalanceReadyTransitionPhase::BRT_Inactive);
+		SetPhase(EBalanceReadyTransitionPhase::BRT_Inactive, Owner);
 	}
 }
 

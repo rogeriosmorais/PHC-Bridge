@@ -2384,7 +2384,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Bring-up control ramp can start before balance entry freezes startup"), UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(false, true, false, true));
 		TestTrue(TEXT("Policy influence ramp can start before balance entry freezes startup"), UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, true, true));
 
-		Component->QueueBalanceModeStartRequest(TEXT("queued_request_only"));
+		Component->StartBalancePerturbationMode();
 		TestFalse(TEXT("Queued balance request does not freeze startup bring-up"), Component->IsStartupBringUpFrozenByBalanceEntry());
 
 		Component->SetStartupBringUpFrozenByBalanceEntry(true);

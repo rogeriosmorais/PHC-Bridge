@@ -197,7 +197,7 @@ class FPhysAnimBalanceReadyTransition
 {
 public:
 	void Start(const FString& InRequestReason, class UPhysAnimComponent* Owner);
-	void Cancel();
+	void Cancel(class UPhysAnimComponent* Owner);
 	void Tick(float DeltaTime, class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);
 
 	bool IsActive() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive && !IsComplete(); }
