@@ -1196,9 +1196,16 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	ApplyMovementSmokeInput(EffectiveSettings);
 	if ((RuntimeState == EPhysAnimRuntimeState::BridgeActive || RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery) && bStartupMovementLockActive)
 	{
+		const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+		const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+		const bool bPhase1RootOn = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
+		const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
 		const bool bBalanceOwnsShellLock =
 			IsTransitionOwnedShellLocked() ||
-			IsBalanceEntryState(RuntimeState) ||
+			bPhase1Prepare ||
+			bPhase1LateValidate ||
+			bPhase1RootOn ||
+			bPhase1Settle ||
 			bPendingBalanceModeStartRequest;
 		if (bBalanceOwnsShellLock)
 		{
@@ -1207,7 +1214,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		// In Balance Mode, we always want the CharacterMovement to be locked (MOVE_None)
 		// to ensure the capsule doesn't move and we can measure drift/contamination accurately.
 		if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery && 
-		!IsBalanceEntryState(RuntimeState) &&
+		!bPhase1Prepare &&
+		!bPhase1LateValidate &&
+		!bPhase1RootOn &&
+		!bPhase1Settle &&
 		!bBalanceOwnsShellLock)
 		{
 			if (!EffectiveSettings.bLockCharacterMovementUntilStartupReady)
@@ -2658,16 +2668,17 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		return;
 	}
 
-	if (BalanceReadyTransition.HasActuallyStarted())
-	{
-		return;
-	}
-
 	if (RuntimeState == EPhysAnimRuntimeState::FailStopped || RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
 	{
 		bPendingBalanceModeStartRequest = false;
 		return;
 	}
+
+	if (BalanceReadyTransition.HasActuallyStarted())
+	{
+		return;
+	}
+
 	FString GateReason;
 	if (EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
 	{
@@ -4968,7 +4979,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const bool bPhase2RootOnGuardWindow =
 			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
 		const bool bTransitionKeepsBoneKinematic =
-			(IsBalanceEntryState(RuntimeState) || RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny) &&
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+				RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny) &&
 			BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName);
 		const bool bTransitionOwnsRootOnThisTick =
 			bIsRootBodyModifier &&
@@ -5256,7 +5271,10 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 
 	const bool bStableRuntimeWindowUnlock = Context && FCString::Strcmp(Context, TEXT("StableRuntimeWindow")) == 0;
 	if (bStableRuntimeWindowUnlock &&
-		IsBalanceEntryState(RuntimeState) &&
+		(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
 		GroupIndex >= 2)
 	{
 		return;
@@ -6492,10 +6510,14 @@ void UPhysAnimComponent::ApplyMovementSmokeInput(const FPhysAnimStabilizationSet
 	LastMovementSmokeLocalIntent = FVector::ZeroVector;
 	LastMovementSmokeWorldIntent = FVector::ZeroVector;
 	LastMovementSmokePhaseName = NAME_None;
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+	const bool bPhase1RootOn = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
+	const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
 
 	if (!IsMovementSmokeModeEnabled() || 
-		(RuntimeState != EPhysAnimRuntimeState::BridgeActive && !IsBalanceEntryState(RuntimeState)) ||
-		(IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressMoveSmoke()))
+		(RuntimeState != EPhysAnimRuntimeState::BridgeActive && !bPhase1Prepare && !bPhase1LateValidate && !bPhase1RootOn && !bPhase1Settle) ||
+		((bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle) && BalanceReadyTransition.ShouldSuppressMoveSmoke()))
 	{
 		return;
 	}
@@ -6744,11 +6766,15 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 
 bool UPhysAnimComponent::ShouldUseBridgeOwnedMovementDrive(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+	const bool bPhase1RootOn = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
+	const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
 	if (!EffectiveSettings.bLockCharacterMovementUntilStartupReady ||
 		EffectiveSettings.bRestoreCharacterMovementAfterStartupReady ||
 		!EffectiveSettings.bEnableBridgeOwnedMovementWhileCharacterMovementLocked ||
-		(RuntimeState != EPhysAnimRuntimeState::BridgeActive && !IsBalanceEntryState(RuntimeState)) ||
-		(IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressShell()) ||
+		(RuntimeState != EPhysAnimRuntimeState::BridgeActive && !bPhase1Prepare && !bPhase1LateValidate && !bPhase1RootOn && !bPhase1Settle) ||
+		((bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle) && BalanceReadyTransition.ShouldSuppressShell()) ||
 		IsTransitionOwnedShellLocked() ||
 		bStartupMovementLockActive)
 	{
@@ -6951,7 +6977,13 @@ void UPhysAnimComponent::UpdateBridgeLocomotionAuthorityState(
 	const FPhysAnimStabilizationSettings& EffectiveSettings,
 	double CurrentTimeSeconds)
 {
-	if (IsTransitionOwnedShellLocked() || (IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressShell()) || bPendingBalanceModeStartRequest)
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+	const bool bPhase1RootOn = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
+	const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+	if (IsTransitionOwnedShellLocked() ||
+		((bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle) && BalanceReadyTransition.ShouldSuppressShell()) ||
+		bPendingBalanceModeStartRequest)
 	{
 		ResetBridgeLocomotionAuthorityState();
 		return;
