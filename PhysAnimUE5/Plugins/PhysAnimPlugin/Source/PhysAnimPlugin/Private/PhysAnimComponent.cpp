@@ -2723,7 +2723,7 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	FString GateReason;
 	if (!EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
 	{
-		QueueBalanceModeStartRequest(GateReason);
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] StartBalancePerturbationMode blocked by queue gates: %s"), *GateReason);
 		return;
 	}
 

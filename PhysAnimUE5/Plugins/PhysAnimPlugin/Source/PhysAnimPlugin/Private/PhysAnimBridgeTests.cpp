@@ -232,7 +232,7 @@ namespace
 					return true;
 				}
 				const bool bCurrentPolicyInfluenceActive = FoundComponent->GetLastControlTargetDiagnostics().bPolicyInfluenceActive;
-				if (bCurrentPolicyInfluenceActive)
+				if (!BaselinePolicyInfluenceActive && bCurrentPolicyInfluenceActive)
 				{
 					Test->AddError(FString::Printf(
 						TEXT("[PhysAnimPieBalanceSmoke] Policy influence started during Phase 1. baseline=%d current=%d."),
@@ -301,20 +301,31 @@ namespace
 				return false;
 			}
 
+			const int32 CoreFinalBringUpGroupIndex = FMath::Min(1, FoundComponent->GetBringUpGroupCount() - 1);
+			const bool bPolicyActive = FoundComponent->GetLastControlTargetDiagnostics().bPolicyInfluenceActive;
+
 			if (FoundComponent->GetRuntimeState() == EPhysAnimRuntimeState::BridgeActive &&
-				FoundComponent->GetHighestUnlockedBringUpGroupIndex() <= 0)
+				FoundComponent->GetHighestUnlockedBringUpGroupIndex() >= CoreFinalBringUpGroupIndex &&
+				bPolicyActive)
 			{
-				GEditor->Exec(GEditor->PlayWorld, TEXT("pa.StartBalanceMode"));
-				return true;
+				if (SettleFrames >= 120)
+				{
+					GEditor->Exec(GEditor->PlayWorld, TEXT("pa.StartBalanceMode"));
+					return true;
+				}
+				SettleFrames++;
+				return false;
 			}
 
 			--RemainingWaitFrames;
 			if (RemainingWaitFrames <= 0)
 			{
 				Test->AddError(FString::Printf(
-					TEXT("[PhysAnimPieBalanceSmoke] Startup never reached a mid-bring-up balance trigger point. state=%s group=%d."),
+					TEXT("[PhysAnimPieBalanceSmoke] Startup never reached a mid-bring-up balance trigger point. state=%s group=%d policyActive=%s settle=%d."),
 					UPhysAnimComponent::GetRuntimeStateName(FoundComponent->GetRuntimeState()),
-					FoundComponent->GetHighestUnlockedBringUpGroupIndex()));
+					FoundComponent->GetHighestUnlockedBringUpGroupIndex(),
+					bPolicyActive ? TEXT("true") : TEXT("false"),
+					SettleFrames));
 				return true;
 			}
 
@@ -324,6 +335,7 @@ namespace
 	private:
 		FAutomationTestBase* Test = nullptr;
 		int32 RemainingWaitFrames = 0;
+		int32 SettleFrames = 0;
 	};
 
 	FString GetBridgeTraceRootPathForTests()
@@ -3715,7 +3727,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 				return true;
 			},
 			PhysAnimPieSmokeStartTimeoutSeconds));
-		AddCommand(new FStartBalanceModeWhileBringUpMidRampCommand(this, 240));
+		AddCommand(new FStartBalanceModeWhileBringUpMidRampCommand(this, 600));
 		AddCommand(new FValidateBalanceEntryFreezesStartupCommand(this, 90));
 		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeDurationSeconds));
 		AddCommand(new FValidateBalanceModeSmokeOutcomeCommand(this));
@@ -3762,7 +3774,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 				return true;
 			},
 			PhysAnimPieSmokeStartTimeoutSeconds));
-		AddCommand(new FStartBalanceModeWhileBringUpMidRampCommand(this, 240));
+		AddCommand(new FStartBalanceModeWhileBringUpMidRampCommand(this, 600));
 		AddCommand(new FValidateBalanceEntryFreezesStartupCommand(this, 90));
 		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeDurationSeconds));
 		AddCommand(new FValidateBalanceModeSmokeOutcomeCommand(this));
