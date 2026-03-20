@@ -2734,7 +2734,6 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	if (!EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
 	{
 		QueueBalanceModeStartRequest(GateReason);
-		SetStartupBringUpFrozenByBalanceEntry(true);
 		return;
 	}
 
