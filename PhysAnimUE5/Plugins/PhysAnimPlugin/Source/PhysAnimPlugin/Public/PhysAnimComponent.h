@@ -651,6 +651,7 @@ public:
 	int32 GetHighestUnlockedBringUpGroupIndex() const { return HighestUnlockedBringUpGroupIndex; }
 	bool WasPelvisSimulatingLastFrame() const { return bLastAppliedPresentationRootSimulationEnabled; }
 	bool IsPelvisSimulatingNow() const;
+	bool TryGetPublicBalanceEntryRuntimeState(EPhysAnimRuntimeState& OutState) const;
 	bool HasBalanceReadyTransitionFailed() const { return BalanceReadyTransition.HasFailed(); }
 	bool HasSafePhase2Denial() const { return BalanceReadyTransition.HasSafePhase2Denial(); }
 	const FString& GetBalanceReadyTransitionFailureReason() const { return BalanceReadyTransition.GetFailureReason(); }

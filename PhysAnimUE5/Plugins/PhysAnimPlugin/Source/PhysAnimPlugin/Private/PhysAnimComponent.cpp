@@ -1127,13 +1127,12 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 		return;
 	}
+	EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
+	const bool bInPublicBalanceEntryState = TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
 	if (RuntimeState != EPhysAnimRuntimeState::WaitingForPoseSearch &&
 		RuntimeState != EPhysAnimRuntimeState::ReadyForActivation &&
 		RuntimeState != EPhysAnimRuntimeState::BridgeActive &&
-		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_Prepare &&
-		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_LateValidate &&
-		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn &&
-		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_Settle &&
+		!bInPublicBalanceEntryState &&
 		RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery)
 	{
 		return;
@@ -1201,7 +1200,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		const bool bBalanceOwnsShellLock =
 			IsTransitionOwnedShellLocked() ||
-			IsBalanceEntryState(RuntimeState) ||
+			bInPublicBalanceEntryState ||
 			bPendingBalanceModeStartRequest;
 		if (bBalanceOwnsShellLock)
 		{
@@ -1210,10 +1209,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		// In Balance Mode, we always want the CharacterMovement to be locked (MOVE_None)
 		// to ensure the capsule doesn't move and we can measure drift/contamination accurately.
 		if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery && 
-		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_Prepare && 
-		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_LateValidate &&
-		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn &&
-		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_Settle &&
+		!bInPublicBalanceEntryState &&
 		!bBalanceOwnsShellLock)
 		{
 			if (!EffectiveSettings.bLockCharacterMovementUntilStartupReady)
@@ -1461,19 +1457,21 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	// Authoritative state sync (Section 4)
 	if (BalanceReadyTransition.IsActive())
 	{
-		switch (BalanceReadyTransition.GetPhase())
+		switch (RuntimeState)
 		{
-		case EBalanceReadyTransitionPhase::BRT_Phase1_Prepare:
+		case EPhysAnimRuntimeState::BalanceEntry_Prepare:
 			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceEntry_Prepare);
 			break;
-		case EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate:
+		case EPhysAnimRuntimeState::BalanceEntry_LateValidate:
 			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceEntry_LateValidate);
 			break;
-		case EBalanceReadyTransitionPhase::BRT_Phase2_RootOn:
+		case EPhysAnimRuntimeState::BalanceEntry_RootOn:
 			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceEntry_RootOn);
 			break;
-		case EBalanceReadyTransitionPhase::BRT_Phase3_Settle:
+		case EPhysAnimRuntimeState::BalanceEntry_Settle:
 			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceEntry_Settle);
+			break;
+		default:
 			break;
 		}
 	}
@@ -1481,10 +1479,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		TransitionRuntimeState(EPhysAnimRuntimeState::BalanceSafeDeny);
 	}
-	else if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
-		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
-		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
-		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+	else if (bInPublicBalanceEntryState)
 	{
 		// Transition ended naturally without failing or staying active (should have called Complete or Cancel)
 		if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery)
@@ -2017,6 +2012,22 @@ bool UPhysAnimComponent::IsBalanceEntryState(EPhysAnimRuntimeState State)
 			State == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
 			State == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 			State == EPhysAnimRuntimeState::BalanceEntry_Settle);
+}
+
+bool UPhysAnimComponent::TryGetPublicBalanceEntryRuntimeState(EPhysAnimRuntimeState& OutState) const
+{
+	switch (RuntimeState)
+	{
+	case EPhysAnimRuntimeState::BalanceEntry_Prepare:
+	case EPhysAnimRuntimeState::BalanceEntry_LateValidate:
+	case EPhysAnimRuntimeState::BalanceEntry_RootOn:
+	case EPhysAnimRuntimeState::BalanceEntry_Settle:
+		OutState = RuntimeState;
+		return true;
+	default:
+		OutState = RuntimeState;
+		return false;
+	}
 }
 
 bool UPhysAnimComponent::IsBalanceActiveState(EPhysAnimRuntimeState State)
@@ -2659,10 +2670,12 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 
 void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
+	EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
+	const bool bInPublicBalanceEntryState = TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
 	if (!bPendingBalanceModeStartRequest || !(
 		RuntimeState == EPhysAnimRuntimeState::BridgeActive || 
 		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
-		IsBalanceEntryState(RuntimeState)))
+		bInPublicBalanceEntryState))
 	{
 		if (BalanceReadyTransition.IsActive())
 		{
@@ -4753,6 +4766,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		return;
 	}
 
+	EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
+	const bool bInPublicBalanceEntryState = TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
 	if (BalanceReadyTransition.HasSafePhase2Denial())
 	{
 		LastAppliedStabilizationSettings = EffectiveSettings;
@@ -5001,9 +5016,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
 		const bool bPhase2RootOnGuardWindow =
-			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
+			PublicBalanceEntryState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
 		const bool bTransitionKeepsBoneKinematic =
-			(IsBalanceEntryState(RuntimeState) || BalanceReadyTransition.HasSafePhase2Denial()) &&
+			(bInPublicBalanceEntryState || BalanceReadyTransition.HasSafePhase2Denial()) &&
 			BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName);
 		const bool bTransitionOwnsRootOnThisTick =
 			bIsRootBodyModifier &&
@@ -5281,6 +5296,8 @@ bool UPhysAnimComponent::IsPresentationPerturbationOverrideActive() const
 
 void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Context)
 {
+	EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
+	const bool bInPublicBalanceEntryState = TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
 	if (bStartupBringUpFrozenByBalanceEntry ||
 		GroupIndex < 0 ||
 		GroupIndex >= GetBringUpGroupCount() ||
@@ -5291,7 +5308,7 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 
 	const bool bStableRuntimeWindowUnlock = Context && FCString::Strcmp(Context, TEXT("StableRuntimeWindow")) == 0;
 	if (bStableRuntimeWindowUnlock &&
-		IsBalanceEntryState(RuntimeState) &&
+		bInPublicBalanceEntryState &&
 		GroupIndex >= 2)
 	{
 		return;
@@ -6112,7 +6129,9 @@ void UPhysAnimComponent::LogBodyModifierTelemetrySnapshot(const TCHAR* Context) 
 void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
-	if (!PhysicsControl || PendingBodyModifierCachedResetNames.IsEmpty() || (IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressResets()))
+	EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
+	const bool bInPublicBalanceEntryState = TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
+	if (!PhysicsControl || PendingBodyModifierCachedResetNames.IsEmpty() || (bInPublicBalanceEntryState && BalanceReadyTransition.ShouldSuppressResets()))
 	{
 		return;
 	}
@@ -6121,7 +6140,7 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 	ModifierNamesToReset.Reserve(PendingBodyModifierCachedResetNames.Num());
 	for (const FName ModifierName : PendingBodyModifierCachedResetNames)
 	{
-		if (IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressResets())
+		if (bInPublicBalanceEntryState && BalanceReadyTransition.ShouldSuppressResets())
 		{
 			const FName RootModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
 			if (ModifierName != RootModifierName)
@@ -6189,7 +6208,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 	}
 
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
-	const bool bPolicyInfluenceActive = PolicyInfluenceRampStartTimeSeconds >= 0.0 && (!IsBalanceEntryState(RuntimeState) || !BalanceReadyTransition.ShouldSuppressPolicy());
+	EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
+	const bool bInPublicBalanceEntryState = TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
+	const bool bPolicyInfluenceActive = PolicyInfluenceRampStartTimeSeconds >= 0.0 && (!bInPublicBalanceEntryState || !BalanceReadyTransition.ShouldSuppressPolicy());
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
 	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
@@ -6212,7 +6233,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return;
 	}
 
-	const bool bPhase1Active = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare);
+	const bool bPhase1Active = (PublicBalanceEntryState == EPhysAnimRuntimeState::BalanceEntry_Prepare);
 
 	if (!bPolicyInfluenceActive && !bPhase1Active)
 	{
@@ -6281,7 +6302,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	for (const TPair<FName, FQuat>& Pair : ControlRotations)
 	{
-		const bool bSuppressPolicyForThisBone = IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key);
+		const bool bSuppressPolicyForThisBone = bInPublicBalanceEntryState && BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key);
 		
 		if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
 		{
@@ -6303,7 +6324,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		}
 		if (bRebaseControlTargetHistoryThisFrame)
 		{
-			const FQuat* const HoldRotation = IsBalanceEntryState(RuntimeState)
+			const FQuat* const HoldRotation = bInPublicBalanceEntryState
 				? BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key)
 				: nullptr;
 			const FQuat& HistoryBasisRotation = HoldRotation ? *HoldRotation : Pair.Value;
@@ -6358,12 +6379,12 @@ void UPhysAnimComponent::ApplyControlTargets(
 		// Phase 1 prepare and late validation both keep their held bones authoritative; root-on
 		// is the first phase that is allowed to release the hold.
 		const bool bApplyPhase1HoldPoseThisFrame =
-			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
-				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate) &&
+			(PublicBalanceEntryState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+				PublicBalanceEntryState == EPhysAnimRuntimeState::BalanceEntry_LateValidate) &&
 			bSuppressPolicyForThisBone;
 		if (bApplyPhase1HoldPoseThisFrame)
 		{
-			if (IsBalanceEntryState(RuntimeState))
+			if (bInPublicBalanceEntryState)
 			{
 				if (const FQuat* HoldRot = BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key))
 				{
@@ -6510,9 +6531,11 @@ void UPhysAnimComponent::ApplyMovementSmokeInput(const FPhysAnimStabilizationSet
 	LastMovementSmokeWorldIntent = FVector::ZeroVector;
 	LastMovementSmokePhaseName = NAME_None;
 
+	EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
+	const bool bInPublicBalanceEntryState = TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
 	if (!IsMovementSmokeModeEnabled() || 
-		(RuntimeState != EPhysAnimRuntimeState::BridgeActive && !IsBalanceEntryState(RuntimeState)) ||
-		(IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressMoveSmoke()))
+		(RuntimeState != EPhysAnimRuntimeState::BridgeActive && !bInPublicBalanceEntryState) ||
+		(bInPublicBalanceEntryState && BalanceReadyTransition.ShouldSuppressMoveSmoke()))
 	{
 		return;
 	}
@@ -6761,11 +6784,13 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 
 bool UPhysAnimComponent::ShouldUseBridgeOwnedMovementDrive(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
+	EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
+	const bool bInPublicBalanceEntryState = TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
 	if (!EffectiveSettings.bLockCharacterMovementUntilStartupReady ||
 		EffectiveSettings.bRestoreCharacterMovementAfterStartupReady ||
 		!EffectiveSettings.bEnableBridgeOwnedMovementWhileCharacterMovementLocked ||
-		(RuntimeState != EPhysAnimRuntimeState::BridgeActive && !IsBalanceEntryState(RuntimeState)) ||
-		(IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressShell()) ||
+		(RuntimeState != EPhysAnimRuntimeState::BridgeActive && !bInPublicBalanceEntryState) ||
+		(bInPublicBalanceEntryState && BalanceReadyTransition.ShouldSuppressShell()) ||
 		IsTransitionOwnedShellLocked() ||
 		bStartupMovementLockActive)
 	{
@@ -6968,7 +6993,9 @@ void UPhysAnimComponent::UpdateBridgeLocomotionAuthorityState(
 	const FPhysAnimStabilizationSettings& EffectiveSettings,
 	double CurrentTimeSeconds)
 {
-	if (IsTransitionOwnedShellLocked() || (IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressShell()) || bPendingBalanceModeStartRequest)
+	EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
+	const bool bInPublicBalanceEntryState = TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
+	if (IsTransitionOwnedShellLocked() || (bInPublicBalanceEntryState && BalanceReadyTransition.ShouldSuppressShell()) || bPendingBalanceModeStartRequest)
 	{
 		ResetBridgeLocomotionAuthorityState();
 		return;
