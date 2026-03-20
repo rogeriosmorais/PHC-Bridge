@@ -2761,6 +2761,7 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	bPendingBalanceModeStartRequest = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
+	bStartupBringUpFrozenByBalanceEntry = false;
 	BalanceReadyTransition.Cancel();
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Recovery);

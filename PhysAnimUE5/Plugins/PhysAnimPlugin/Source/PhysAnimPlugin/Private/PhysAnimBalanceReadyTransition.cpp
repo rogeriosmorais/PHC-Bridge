@@ -260,6 +260,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	}
 
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] TRANSITION_ACCEPT reason=preflight_accept"));
+	Owner->SetStartupBringUpFrozenByBalanceEntry(true);
 
 	RequestReason = InRequestReason;
 	StableHoldAccumulatedSeconds = 0.0f;
@@ -1181,21 +1182,22 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		Owner->ReleaseTransitionOwnedShellLock();
 	}
 
+	if (Owner &&
+		InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive &&
+		(NewPhase == EBalanceReadyTransitionPhase::BRT_Succeeded ||
+			NewPhase == EBalanceReadyTransitionPhase::BRT_Failed ||
+			NewPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied ||
+			NewPhase == EBalanceReadyTransitionPhase::BRT_Inactive))
+	{
+		Owner->SetStartupBringUpFrozenByBalanceEntry(false);
+	}
+
 	if (NewPhase != EBalanceReadyTransitionPhase::BRT_Inactive && InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive)
 	{
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE_COMMIT commit=%d"), static_cast<int32>(InternalPhase));
 	}
 
 	InternalPhase = NewPhase;
-	if (Owner)
-	{
-		const bool bPhase1OwnsStartup =
-			InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
-			InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
-			InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
-			InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle;
-		Owner->SetStartupBringUpFrozenByBalanceEntry(bPhase1OwnsStartup);
-	}
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE_ENTRY phase=%d"), static_cast<int32>(InternalPhase));
 	PhaseTimeSeconds = 0.0f;
 	StableHoldAccumulatedSeconds = 0.0f;
