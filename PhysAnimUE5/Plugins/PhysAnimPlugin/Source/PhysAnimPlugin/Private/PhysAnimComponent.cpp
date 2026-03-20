@@ -2679,23 +2679,16 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		return;
 	}
 
-	FString GateReason;
-	if (EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
+	(void)EffectiveSettings;
+
+	// The pending request owns the start attempt; keep BridgeActive public state until Start accepts.
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Pending balance request entering transition start attempt."));
+	BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
+	if (BalanceReadyTransition.HasActuallyStarted())
 	{
-		// Queue gates passed. Hand off to transition preflight.
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Queue gate satisfied. Entering preflight."));
-		ActivateTransitionOwnedShellLock();
-		BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
-		if (BalanceReadyTransition.HasActuallyStarted())
-		{
-			bPendingBalanceModeStartRequest = false;
-			PendingBalanceModeStartReason.Reset();
-			PendingBalanceModeRequestTimeSeconds = -1.0;
-		}
-		else
-		{
-			// Keep the request pending so the transition can retry once the runtime is ready.
-		}
+		bPendingBalanceModeStartRequest = false;
+		PendingBalanceModeStartReason.Reset();
+		PendingBalanceModeRequestTimeSeconds = -1.0;
 	}
 }
 
