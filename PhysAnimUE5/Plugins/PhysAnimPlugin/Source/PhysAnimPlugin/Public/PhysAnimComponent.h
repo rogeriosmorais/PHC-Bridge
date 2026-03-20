@@ -888,7 +888,7 @@ private:
 	void CompleteBalanceModeEntry();
 	bool EvaluateBalanceModeQueueGates(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
 	bool EvaluateBalanceBridgeActivePreEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
-	void QueueBalanceModeStartRequest(const FString& Reason, bool bFreezeStartupBringUp = false);
+	void QueueBalanceModeStartRequest(const FString& Reason);
 	void TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	bool IsInstabilityPrecursorActive() const;
 

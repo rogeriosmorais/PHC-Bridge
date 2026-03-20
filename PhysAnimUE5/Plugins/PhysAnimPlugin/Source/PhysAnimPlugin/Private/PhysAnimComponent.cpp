@@ -2642,7 +2642,7 @@ void UPhysAnimComponent::ReleaseTransitionOwnedShellLock()
 
 
 
-void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason, bool bFreezeStartupBringUp)
+void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 {
 	bPendingBalanceModeStartRequest = true;
 	PendingBalanceModeStartReason = Reason;
@@ -2655,25 +2655,18 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason, boo
 		LastQueuedReason = Reason;
 	}
 
-	if (bFreezeStartupBringUp)
-	{
-		SetStartupBringUpFrozenByBalanceEntry(true);
-	}
-
-	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceEntry_Prepare);
 }
 
 void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
 	if (!bPendingBalanceModeStartRequest || (RuntimeState != EPhysAnimRuntimeState::BridgeActive && RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery))
 	{
-	if (BalanceReadyTransition.IsActive())
-	{
-		BalanceReadyTransition.Cancel();
+		if (BalanceReadyTransition.IsActive())
+		{
+			BalanceReadyTransition.Cancel();
+		}
+		return;
 	}
-	SetStartupBringUpFrozenByBalanceEntry(false);
-	return;
-}
 
 	if (BalanceReadyTransition.HasFailed())
 	{
@@ -2689,7 +2682,8 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		{
 			// Queue gates passed. Hand off to transition preflight.
 			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Queue gate satisfied. Entering preflight."));
-			QueueBalanceModeStartRequest(PendingBalanceModeStartReason, true);
+			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceEntry_Prepare);
+			QueueBalanceModeStartRequest(PendingBalanceModeStartReason);
 			ActivateTransitionOwnedShellLock();
 			BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
 			if (!BalanceReadyTransition.HasActuallyStarted())
@@ -2742,10 +2736,11 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	}
 
 	// Queue gates passed. Mark request pending so TryStartPendingBalanceModeRequest tick takes ownership.
-	QueueBalanceModeStartRequest(TEXT("manual_trigger"), true);
+	QueueBalanceModeStartRequest(TEXT("manual_trigger"));
 	
 	if (!BalanceReadyTransition.IsActive())
 	{
+		TransitionRuntimeState(EPhysAnimRuntimeState::BalanceEntry_Prepare);
 		ActivateTransitionOwnedShellLock();
 		BalanceReadyTransition.Start(TEXT("manual_trigger"), this);
 	}
@@ -2763,7 +2758,6 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 
 	bPendingBalanceModeStartRequest = false;
 	PendingBalanceModeStartReason.Reset();
-	SetStartupBringUpFrozenByBalanceEntry(false);
 	PendingBalanceModeRequestTimeSeconds = -1.0;
 	BalanceReadyTransition.Cancel();
 

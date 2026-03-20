@@ -1187,6 +1187,15 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	}
 
 	InternalPhase = NewPhase;
+	if (Owner)
+	{
+		const bool bPhase1OwnsStartup =
+			InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+			InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
+			InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
+			InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle;
+		Owner->SetStartupBringUpFrozenByBalanceEntry(bPhase1OwnsStartup);
+	}
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE_ENTRY phase=%d"), static_cast<int32>(InternalPhase));
 	PhaseTimeSeconds = 0.0f;
 	StableHoldAccumulatedSeconds = 0.0f;
