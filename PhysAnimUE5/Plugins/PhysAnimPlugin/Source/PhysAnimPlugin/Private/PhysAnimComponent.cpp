@@ -1910,7 +1910,8 @@ void UPhysAnimComponent::ClearPresentationPerturbationOverride()
 
 bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
-	return IsBalanceEntryState(RuntimeState) ||
+	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
 		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery;
 }
 
@@ -2648,14 +2649,21 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 
 void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
-	if (!bPendingBalanceModeStartRequest || !(
-		RuntimeState == EPhysAnimRuntimeState::BridgeActive || 
-		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
-		IsBalanceEntryState(RuntimeState)))
+	if (!bPendingBalanceModeStartRequest)
 	{
-		if (IsTransitionOwnedShellLocked())
+		return;
+	}
+
+	if (BalanceReadyTransition.HasActuallyStarted())
+	{
+		return;
+	}
+
+	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive)
+	{
+		if (RuntimeState == EPhysAnimRuntimeState::FailStopped || RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
 		{
-			BalanceReadyTransition.Cancel(this);
+			bPendingBalanceModeStartRequest = false;
 		}
 		return;
 	}
@@ -2665,32 +2673,17 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		bPendingBalanceModeStartRequest = false;
 		return;
 	}
-
-
-	if (RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
-		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
-		IsBalanceEntryState(RuntimeState))
+	FString GateReason;
+	if (EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
 	{
-		FString GateReason;
-		if (EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
+		// Queue gates passed. Hand off to transition preflight.
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Queue gate satisfied. Entering preflight."));
+		QueueBalanceModeStartRequest(PendingBalanceModeStartReason);
+		ActivateTransitionOwnedShellLock();
+		BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
+		if (!BalanceReadyTransition.HasActuallyStarted())
 		{
-			// Queue gates passed. Hand off to transition preflight.
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Queue gate satisfied. Entering preflight."));
-			QueueBalanceModeStartRequest(PendingBalanceModeStartReason);
-			ActivateTransitionOwnedShellLock();
-			BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
-			if (!BalanceReadyTransition.HasActuallyStarted())
-			{
-				// Keep the request pending so the transition can retry once the runtime is ready.
-			}
-		}
-	}
-
-	if (IsBalanceEntryState(RuntimeState) && !BalanceReadyTransition.HasActuallyStarted())
-	{
-		if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery)
-		{
-			TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
+			// Keep the request pending so the transition can retry once the runtime is ready.
 		}
 	}
 }
@@ -6161,7 +6154,14 @@ void UPhysAnimComponent::ApplyControlTargets(
 	}
 
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
-	const bool bPolicyInfluenceActive = PolicyInfluenceRampStartTimeSeconds >= 0.0 && (!IsBalanceEntryState(RuntimeState) || !BalanceReadyTransition.ShouldSuppressPolicy());
+	const bool bPolicyInfluenceActive =
+		PolicyInfluenceRampStartTimeSeconds >= 0.0 &&
+		(
+			RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
+			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+			!BalanceReadyTransition.ShouldSuppressPolicy());
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
 	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
@@ -6184,7 +6184,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return;
 	}
 
-	const bool bPhase1Active = IsBalanceEntryState(RuntimeState);
+	const bool bPhase1Active = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
 
 	if (!bPolicyInfluenceActive && !bPhase1Active)
 	{
