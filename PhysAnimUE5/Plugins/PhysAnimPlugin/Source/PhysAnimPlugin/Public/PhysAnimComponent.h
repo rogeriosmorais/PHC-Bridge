@@ -549,9 +549,11 @@ enum class EPhysAnimRuntimeState : uint8
 	ReadyForActivation,
 	BridgeActive,
 	FailStopped,
-	BalancePending,
-	BalanceTransition_LateValidate,
-	BalanceTransition_Active,
+	BalanceEntry_Prepare,
+	BalanceEntry_LateValidate,
+	BalanceEntry_RootOn,
+	BalanceEntry_Settle,
+	BalanceActive_Recovery,
 	BalanceSafeDeny
 };
 
@@ -634,7 +636,7 @@ public:
 	void ActivateTransitionOwnedShellLock();
 	void ReleaseTransitionOwnedShellLock();
 	EBalanceTransitionShellAuthorityMode GetBalanceTransitionShellAuthorityMode() const { return BalanceTransitionShellAuthorityMode; }
-	bool IsTransitionOwnedShellLocked() const { return BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked; }
+	bool IsTransitionOwnedShellLocked() const;
 	bool IsStartupMovementLockActive() const { return bStartupMovementLockActive; }
 	bool WasTransitionShellReferenceReanchored() const { return bTransitionOwnedShellReferenceReanchored; }
 	bool WasTransitionShellReferenceReseededAfterLock() const { return bTransitionOwnedShellReferenceReseededAfterLock; }
@@ -1141,8 +1143,7 @@ public:
 		bool bBringUpGroupUnlocked,
 		bool bIsRootBodyModifier,
 		bool bAllowRootBodyModifierSimulation,
-		float PolicyAlpha,
-		EBalanceReadyTransitionPhase InTransitionPhase = EBalanceReadyTransitionPhase::BRT_Inactive);
+		float PolicyAlpha);
 	static int32 ResolveBringUpGroupIndex(FName BoneName);
 	static int32 GetBringUpGroupCount();
 	static bool ShouldDelayBringUpGroupControlRamp(int32 GroupIndex, int32 NumBringUpGroups);

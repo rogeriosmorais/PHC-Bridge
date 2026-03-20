@@ -105,6 +105,18 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	bool bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
 };
 
+struct FPhysAnimPhase1TopologySnapshot
+{
+	bool bRootSimulating = false;
+	int32 ProximalSimCount = 0;
+	int32 DistalSimCount = 0;
+	int32 UpperBodySimCount = 0;
+	int32 TotalSimCount = 0;
+	EBalanceReadyUpperBodyOwnershipMode UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::None;
+	bool bPolicySuppressed = false;
+	bool bResetsSuppressed = false;
+};
+
 struct FBalanceReadyTransitionDiagnostics
 {
 	FString BlockReason;
@@ -227,6 +239,7 @@ private:
 	static bool ValidateLateValidationBaselineSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	static FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount);
 	void ReturnToPhase1Prepare(class UPhysAnimComponent* Owner, const FString& Reason, const TCHAR* EventName);
+	void CapturePhase1TopologyRecord(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);
 	void ResetTransitionLocalState();
 	void ResetCertifiedHandoffState();
 	void MarkSafePhase2Denied(class UPhysAnimComponent* Owner, const FString& Reason);
@@ -265,6 +278,8 @@ private:
 	bool bLateValidationProofPassed = false;
 	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
 	FPhysAnimLateValidationResult CertifiedLateValidationResult;
+	FPhysAnimPhase1TopologySnapshot Phase1TopologyRecord;
+	bool bHasPhase1TopologyRecord = false;
 	FString SafePhase2DenialReason;
 
 	FBalanceReadyTransitionDiagnostics Diagnostics;

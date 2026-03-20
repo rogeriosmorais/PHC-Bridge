@@ -301,6 +301,8 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	}
 	bLastPendingResetsEmpty = Owner->GetPendingBodyModifierCachedResetNames().IsEmpty();
 
+	CapturePhase1TopologyRecord(Owner, Owner->ResolveEffectiveStabilizationSettings());
+
 	SetPhase(EBalanceReadyTransitionPhase::BRT_Phase1_Prepare, Owner);
 }
 
@@ -390,16 +392,18 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		}
 		else if (bQuietThisFrame)
 		{
-			TArray<FName> SimulatingBones;
-			Owner->GetSimulatingBodies(SimulatingBones);
-			for (const FName BoneName : SimulatingBones)
+			if (BalanceTransitionSets::IsRootCoupledReadyHandoff(Phase1TopologyRecord.ProximalSimCount, Phase1TopologyRecord.DistalSimCount, Phase1TopologyRecord.UpperBodySimCount, Phase1TopologyRecord.bRootSimulating))
 			{
-				if (BalanceTransitionSets::IsPrepareCriticalKinematic(BoneName))
-				{
-					bQuietThisFrame = false;
-					QuietBlockReason = TEXT("topology_mismatch_simulating_critical");
-					break;
-				}
+				// Valid topology for balance entry.
+			}
+			else if (BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(Phase1TopologyRecord.ProximalSimCount, Phase1TopologyRecord.DistalSimCount, Phase1TopologyRecord.UpperBodySimCount, Phase1TopologyRecord.bRootSimulating))
+			{
+				// Valid topology for safe-deny.
+			}
+			else
+			{
+				bQuietThisFrame = false;
+				QuietBlockReason = TEXT("topology_mismatch_simulating_critical");
 			}
 		}
 
@@ -526,23 +530,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		}
 		else
 		{
-			TArray<FName> SimulatingBones;
-			Owner->GetSimulatingBodies(SimulatingBones);
-			if (SimulatingBones.Num() == 0)
-			{
-				bLateValidationThisFrame = false;
-				LateValidateBlockReason = TEXT("sim_coverage_regressed");
-			}
 			else
 			{
-				for (const FName BoneName : SimulatingBones)
+				if (Phase1TopologyRecord.bRootSimulating || Phase1TopologyRecord.DistalSimCount > 0)
 				{
-					if (BalanceTransitionSets::IsRoot(BoneName) || BalanceTransitionSets::IsDistalLowerLimb(BoneName))
-					{
-						bLateValidationThisFrame = false;
-						LateValidateBlockReason = TEXT("topology_mismatch_simulating_critical");
-						break;
-					}
+					bLateValidationThisFrame = false;
+					LateValidateBlockReason = TEXT("topology_mismatch_simulating_critical");
 				}
 			}
 		}
@@ -557,12 +550,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		bLateValidationProofPassed = bExpectedUpperBodyRelease;
 
 		const bool bUpperBodyInstability = bCurrentSnapshotValid &&
-			(CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
-				(!bExpectedUpperBodyRelease && CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount));
+			(CurrentSnapshot.UpperBodyOwnershipMode != Phase1TopologyRecord.UpperBodyOwnershipMode ||
+				(!bExpectedUpperBodyRelease && CurrentSnapshot.UpperBodySimCount != Phase1TopologyRecord.UpperBodySimCount));
 		const bool bSimCoverageRegressed = bCurrentSnapshotValid &&
-			(CurrentSnapshot.SimCount < CertifiedHandoff.SimCount ||
-				CurrentSnapshot.ProximalSimCount < CertifiedHandoff.ProximalSimCount ||
-				CurrentSnapshot.DistalSimCount < CertifiedHandoff.DistalSimCount);
+			(CurrentSnapshot.SimCount < Phase1TopologyRecord.TotalSimCount ||
+				CurrentSnapshot.ProximalSimCount < Phase1TopologyRecord.ProximalSimCount ||
+				CurrentSnapshot.DistalSimCount < Phase1TopologyRecord.DistalSimCount);
 		const bool bFirstPolicyEnabledFrame = Owner->GetLastControlTargetDiagnostics().bFirstPolicyEnabledFrame;
 		const bool bPolicyInfluenceRampReanchored = Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
 		const bool bCurrentTargetDiscontinuity =
@@ -1608,29 +1601,51 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	}
 
 	TArray<FName> SimulatingBones;
-	Owner->GetSimulatingBodies(SimulatingBones);
-	TSet<FName> SimulatingBoneSet(SimulatingBones);
 	int32 ProximalSimCount = 0;
 	int32 DistalSimCount = 0;
 	int32 UpperSimCount = 0;
-	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
-	{
-		if (!SimulatingBoneSet.Contains(BoneName))
-		{
-			continue;
-		}
+	bool bRootSimulating = false;
 
-		if (BalanceTransitionSets::IsProximal(BoneName))
+	if (bHasPhase1TopologyRecord)
+	{
+		ProximalSimCount = Phase1TopologyRecord.ProximalSimCount;
+		DistalSimCount = Phase1TopologyRecord.DistalSimCount;
+		UpperSimCount = Phase1TopologyRecord.UpperBodySimCount;
+		bRootSimulating = Phase1TopologyRecord.bRootSimulating;
+		SimulatingBones.SetNum(Phase1TopologyRecord.TotalSimCount); // Dummy fill for count
+	}
+	else
+	{
+		USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
+		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		FBodyInstance* PelvisBody = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
+		if (!PelvisBody)
 		{
-			ProximalSimCount++;
+			return false;
 		}
-		else if (BalanceTransitionSets::IsDistalLowerLimb(BoneName))
+		bRootSimulating = PelvisBody->IsInstanceSimulatingPhysics();
+
+		Owner->GetSimulatingBodies(SimulatingBones);
+		TSet<FName> SimulatingBoneSet(SimulatingBones);
+		for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
 		{
-			DistalSimCount++;
-		}
-		else if (BalanceTransitionSets::IsUpperBody(BoneName))
-		{
-			UpperSimCount++;
+			if (!SimulatingBoneSet.Contains(BoneName))
+			{
+				continue;
+			}
+
+			if (BalanceTransitionSets::IsProximal(BoneName))
+			{
+				ProximalSimCount++;
+			}
+			else if (BalanceTransitionSets::IsDistalLowerLimb(BoneName))
+			{
+				DistalSimCount++;
+			}
+			else if (BalanceTransitionSets::IsUpperBody(BoneName))
+			{
+				UpperSimCount++;
+			}
 		}
 	}
 
@@ -1638,7 +1653,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.PolicyInfluenceAlphaAtCapture = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
 	OutSnapshot.ShellAuthorityMode = BalanceTransitionSets::GetShellAuthorityModeName(Owner->GetBalanceTransitionShellAuthorityMode());
 	OutSnapshot.TopologyClass = BalanceTransitionSets::BuildCertifiedHandoffTopologyClass(
-		PelvisBody->IsInstanceSimulatingPhysics(),
+		bRootSimulating,
 		ProximalSimCount,
 		DistalSimCount,
 		UpperSimCount);
@@ -1651,7 +1666,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 			ProximalSimCount,
 			DistalSimCount,
 			UpperSimCount,
-			PelvisBody->IsInstanceSimulatingPhysics())
+			bRootSimulating)
 			? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
 			: (BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(
 					ProximalSimCount,
@@ -1865,6 +1880,8 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	Diagnostics.Phase1LateValidateWorstAngularSpeed = 0.0f;
 	bLateValidationProofPassed = false;
 	ResetCertifiedHandoffState();
+	Phase1TopologyRecord = {};
+	bHasPhase1TopologyRecord = false;
 }
 
 void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
@@ -1877,6 +1894,89 @@ void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
 	RootOnReadinessShellProofStartOffsetCm = 0.0f;
 	RootOnReadinessShellProofStartVelocityCmPerSecond = 0.0f;
 	bHasRootOnReadinessShellProofBaseline = false;
+}
+
+void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings)
+{
+	if (!Owner)
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	FBodyInstance* PelvisBody = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
+	if (!PelvisBody)
+	{
+		return;
+	}
+
+	TArray<FName> SimulatingBones;
+	Owner->GetSimulatingBodies(SimulatingBones);
+	TSet<FName> SimulatingBoneSet(SimulatingBones);
+	int32 ProximalSimCount = 0;
+	int32 DistalSimCount = 0;
+	int32 UpperSimCount = 0;
+	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+	{
+		if (!SimulatingBoneSet.Contains(BoneName))
+		{
+			continue;
+		}
+
+		if (BalanceTransitionSets::IsProximal(BoneName))
+		{
+			ProximalSimCount++;
+		}
+		else if (BalanceTransitionSets::IsDistalLowerLimb(BoneName))
+		{
+			DistalSimCount++;
+		}
+		else if (BalanceTransitionSets::IsUpperBody(BoneName))
+		{
+			UpperSimCount++;
+		}
+	}
+
+	Phase1TopologyRecord.bRootSimulating = PelvisBody->IsInstanceSimulatingPhysics();
+	Phase1TopologyRecord.ProximalSimCount = ProximalSimCount;
+	Phase1TopologyRecord.DistalSimCount = DistalSimCount;
+	Phase1TopologyRecord.UpperBodySimCount = UpperSimCount;
+	Phase1TopologyRecord.TotalSimCount = SimulatingBones.Num();
+
+	const EBalanceReadyRootOnReadinessClassification RootOnReadinessClassification =
+		BalanceTransitionSets::IsRootCoupledReadyHandoff(
+			ProximalSimCount,
+			DistalSimCount,
+			UpperSimCount,
+			Phase1TopologyRecord.bRootSimulating)
+		? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+		: (BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(
+			ProximalSimCount,
+			DistalSimCount,
+			UpperSimCount,
+			Phase1TopologyRecord.bRootSimulating)
+			? EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
+			: EBalanceReadyRootOnReadinessClassification::NotReady);
+
+	Phase1TopologyRecord.UpperBodyOwnershipMode = (RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::NotReady)
+		? EBalanceReadyUpperBodyOwnershipMode::None
+		: EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
+
+	// In Phase 1, policy and resets are expected to be suppressed.
+	Phase1TopologyRecord.bPolicySuppressed = true;
+	Phase1TopologyRecord.bResetsSuppressed = true;
+	bHasPhase1TopologyRecord = true;
+
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_TOPOLOGY_SNAPSHOT topology=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d resetsSuppressed=%d"),
+		*BalanceTransitionSets::BuildCertifiedHandoffTopologyClass(Phase1TopologyRecord.bRootSimulating, ProximalSimCount, DistalSimCount, UpperSimCount),
+		BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode),
+		Phase1TopologyRecord.TotalSimCount,
+		Phase1TopologyRecord.ProximalSimCount,
+		Phase1TopologyRecord.DistalSimCount,
+		Phase1TopologyRecord.UpperBodySimCount,
+		Phase1TopologyRecord.bPolicySuppressed ? 1 : 0,
+		Phase1TopologyRecord.bResetsSuppressed ? 1 : 0);
 }
 
 void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent* Owner)
@@ -1943,6 +2043,11 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const
 		return true;
 	}
 
+	if (bHasPhase1TopologyRecord && (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate))
+	{
+		return Phase1TopologyRecord.bPolicySuppressed;
+	}
+
 	return IsActive() &&
 		(InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
 		 InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
@@ -1981,6 +2086,11 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressShell() const
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { return IsActive() || HasSafeDenied(); }
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const
 {
+	if (bHasPhase1TopologyRecord && (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate))
+	{
+		return Phase1TopologyRecord.bResetsSuppressed;
+	}
+
 	return InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
