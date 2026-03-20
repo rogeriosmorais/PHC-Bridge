@@ -530,13 +530,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		}
 		else
 		{
-			else
+			if (Phase1TopologyRecord.bRootSimulating || Phase1TopologyRecord.DistalSimCount > 0)
 			{
-				if (Phase1TopologyRecord.bRootSimulating || Phase1TopologyRecord.DistalSimCount > 0)
-				{
-					bLateValidationThisFrame = false;
-					LateValidateBlockReason = TEXT("topology_mismatch_simulating_critical");
-				}
+				bLateValidationThisFrame = false;
+				LateValidateBlockReason = TEXT("topology_mismatch_simulating_critical");
 			}
 		}
 
@@ -1616,13 +1613,6 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	}
 	else
 	{
-		USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
-		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-		FBodyInstance* PelvisBody = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
-		if (!PelvisBody)
-		{
-			return false;
-		}
 		bRootSimulating = PelvisBody->IsInstanceSimulatingPhysics();
 
 		Owner->GetSimulatingBodies(SimulatingBones);
