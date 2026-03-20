@@ -1086,6 +1086,7 @@ private:
 	bool bHasBalanceIdlePoseSearchResult = false;
 	FPhysAnimBalanceReadyTransition BalanceReadyTransition;
 	bool bPendingBalanceModeStartRequest = false;
+	bool bPendingBalanceModeStartAttemptIssued = false;
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
 	bool bPelvisResetAppliedThisTick = false;
