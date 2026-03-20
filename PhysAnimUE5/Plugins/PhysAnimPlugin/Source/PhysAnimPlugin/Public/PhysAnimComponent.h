@@ -646,6 +646,9 @@ public:
 	bool WasPelvisResetAppliedThisTick() const { return bPelvisResetAppliedThisTick; }
 	bool WasPolicyTargetAppliedLastFrame() const { return bPolicyTargetsAppliedLastFrame; }
 	bool WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame() const { return bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame; }
+	bool IsStartupBringUpFrozenByBalanceEntry() const { return bStartupBringUpFrozenByBalanceEntry; }
+	void SetStartupBringUpFrozenByBalanceEntry(bool bFrozen) { bStartupBringUpFrozenByBalanceEntry = bFrozen; }
+	int32 GetHighestUnlockedBringUpGroupIndex() const { return HighestUnlockedBringUpGroupIndex; }
 	bool WasPelvisSimulatingLastFrame() const { return bLastAppliedPresentationRootSimulationEnabled; }
 	bool IsPelvisSimulatingNow() const;
 	bool HasBalanceReadyTransitionFailed() const { return BalanceReadyTransition.HasFailed(); }
@@ -982,6 +985,7 @@ private:
 	TMap<FName, FQuat> PolicyBlendStartControlTargetRotations;
 	bool bPolicyTargetsAppliedLastFrame = false;
 	bool bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
+	bool bStartupBringUpFrozenByBalanceEntry = false;
 	float SimulationHandoffAlpha = 0.0f;
 	bool bLastAppliedSimulationHandoffSettled = false;
 	float LastAppliedControlAuthorityAlpha = -1.0f;
@@ -1154,12 +1158,14 @@ public:
 		bool bForceZeroActions,
 		bool bBringUpGroupUnlocked,
 		bool bDelayBringUpGroupControlRamp,
-		bool bPostUnlockSettleComplete);
+		bool bPostUnlockSettleComplete,
+		bool bStartupBringUpFrozenByBalanceEntry = false);
 	static bool ShouldStartPolicyInfluenceRamp(
 		bool bForceZeroActions,
 		bool bAllBringUpGroupsUnlocked,
 		bool bFinalBringUpGroupControlRampActive,
-		bool bPostFinalGroupControlSettleComplete);
+		bool bPostFinalGroupControlSettleComplete,
+		bool bStartupBringUpFrozenByBalanceEntry = false);
 	static bool ShouldApplyPolicyTargetToBone(FName BoneName, bool bPolicyInfluenceActive);
 	static bool ShouldUseSkeletalAnimationTargetRepresentation(
 		bool bConfiguredUseSkeletalAnimationTargets,

@@ -139,6 +139,180 @@ namespace
 		FAutomationTestBase* Test = nullptr;
 	};
 
+	class FValidateBalanceEntryFreezesStartupCommand final : public IAutomationLatentCommand
+	{
+	public:
+		explicit FValidateBalanceEntryFreezesStartupCommand(
+			FAutomationTestBase* InTest,
+			int32 InObserveFrames)
+			: Test(InTest)
+			, RemainingObservationFrames(InObserveFrames)
+		{
+		}
+
+		virtual bool Update() override
+		{
+			UWorld* const PlayWorld = GEditor ? GEditor->PlayWorld : nullptr;
+			if (!PlayWorld)
+			{
+				Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] PIE world was not available for startup-freeze validation."));
+				return true;
+			}
+
+			UPhysAnimComponent* FoundComponent = nullptr;
+			for (TObjectIterator<UPhysAnimComponent> It; It; ++It)
+			{
+				if (It->GetWorld() == PlayWorld)
+				{
+					FoundComponent = *It;
+					break;
+				}
+			}
+
+			if (!FoundComponent)
+			{
+				Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] No PhysAnim component was found in the PIE world for startup-freeze validation."));
+				return true;
+			}
+
+			if (!bBaselineCaptured)
+			{
+				BaselineRuntimeState = FoundComponent->GetRuntimeState();
+				BaselineHighestUnlockedBringUpGroupIndex = FoundComponent->GetHighestUnlockedBringUpGroupIndex();
+				BaselinePolicyInfluenceActive = FoundComponent->GetLastControlTargetDiagnostics().bPolicyInfluenceActive;
+				bBaselineCaptured = true;
+				if (!FoundComponent->IsStartupBringUpFrozenByBalanceEntry())
+				{
+					Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] Balance entry did not freeze startup bring-up at acceptance."));
+					return true;
+				}
+
+				if (BaselineRuntimeState != EPhysAnimRuntimeState::BalanceEntry_Prepare &&
+					BaselineRuntimeState != EPhysAnimRuntimeState::BalanceEntry_LateValidate)
+				{
+					Test->AddError(FString::Printf(
+						TEXT("[PhysAnimPieBalanceSmoke] Expected balance entry runtime state at freeze capture, found %s."),
+						UPhysAnimComponent::GetRuntimeStateName(BaselineRuntimeState)));
+					return true;
+				}
+
+				return false;
+			}
+
+			const EPhysAnimRuntimeState CurrentRuntimeState = FoundComponent->GetRuntimeState();
+			if (!FoundComponent->IsStartupBringUpFrozenByBalanceEntry())
+			{
+				Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] Startup bring-up freeze was lost during Phase 1."));
+				return true;
+			}
+
+			if (FoundComponent->GetHighestUnlockedBringUpGroupIndex() != BaselineHighestUnlockedBringUpGroupIndex)
+			{
+				Test->AddError(FString::Printf(
+					TEXT("[PhysAnimPieBalanceSmoke] Bring-up group index advanced during Phase 1. baseline=%d current=%d."),
+					BaselineHighestUnlockedBringUpGroupIndex,
+					FoundComponent->GetHighestUnlockedBringUpGroupIndex()));
+				return true;
+			}
+
+			if (CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate)
+			{
+				const bool bCurrentPolicyInfluenceActive = FoundComponent->GetLastControlTargetDiagnostics().bPolicyInfluenceActive;
+				if (bCurrentPolicyInfluenceActive)
+				{
+					Test->AddError(FString::Printf(
+						TEXT("[PhysAnimPieBalanceSmoke] Policy influence started during Phase 1. baseline=%d current=%d."),
+						BaselinePolicyInfluenceActive ? 1 : 0,
+						bCurrentPolicyInfluenceActive ? 1 : 0));
+					return true;
+				}
+			}
+
+			--RemainingObservationFrames;
+			if (RemainingObservationFrames <= 0)
+			{
+				return true;
+			}
+
+			return false;
+		}
+
+	private:
+		FAutomationTestBase* Test = nullptr;
+		int32 RemainingObservationFrames = 0;
+		bool bBaselineCaptured = false;
+		EPhysAnimRuntimeState BaselineRuntimeState = EPhysAnimRuntimeState::Uninitialized;
+		int32 BaselineHighestUnlockedBringUpGroupIndex = INDEX_NONE;
+		bool BaselinePolicyInfluenceActive = false;
+	};
+
+	class FStartBalanceModeWhileBringUpMidRampCommand final : public IAutomationLatentCommand
+	{
+	public:
+		explicit FStartBalanceModeWhileBringUpMidRampCommand(
+			FAutomationTestBase* InTest,
+			int32 InMaxWaitFrames)
+			: Test(InTest)
+			, RemainingWaitFrames(InMaxWaitFrames)
+		{
+		}
+
+		virtual bool Update() override
+		{
+			UWorld* const PlayWorld = GEditor ? GEditor->PlayWorld : nullptr;
+			if (!PlayWorld)
+			{
+				Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] PIE world was not available when waiting to start balance mode."));
+				return true;
+			}
+
+			UPhysAnimComponent* FoundComponent = nullptr;
+			for (TObjectIterator<UPhysAnimComponent> It; It; ++It)
+			{
+				if (It->GetWorld() == PlayWorld)
+				{
+					FoundComponent = *It;
+					break;
+				}
+			}
+
+			if (!FoundComponent)
+			{
+				--RemainingWaitFrames;
+				if (RemainingWaitFrames <= 0)
+				{
+					Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] No PhysAnim component was found before balance mode trigger."));
+					return true;
+				}
+				return false;
+			}
+
+			if (FoundComponent->GetRuntimeState() == EPhysAnimRuntimeState::BridgeActive &&
+				FoundComponent->GetHighestUnlockedBringUpGroupIndex() <= 0)
+			{
+				GEditor->Exec(GEditor->PlayWorld, TEXT("pa.StartBalanceMode"));
+				return true;
+			}
+
+			--RemainingWaitFrames;
+			if (RemainingWaitFrames <= 0)
+			{
+				Test->AddError(FString::Printf(
+					TEXT("[PhysAnimPieBalanceSmoke] Startup never reached a mid-bring-up balance trigger point. state=%s group=%d."),
+					UPhysAnimComponent::GetRuntimeStateName(FoundComponent->GetRuntimeState()),
+					FoundComponent->GetHighestUnlockedBringUpGroupIndex()));
+				return true;
+			}
+
+			return false;
+		}
+
+	private:
+		FAutomationTestBase* Test = nullptr;
+		int32 RemainingWaitFrames = 0;
+	};
+
 	FString GetBridgeTraceRootPathForTests()
 	{
 		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("PhysAnim"), TEXT("Traces"));
@@ -2193,6 +2367,31 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceEntryStartupFreezeGateTest,
+		"PhysAnim.Component.BalanceEntryStartupFreezeGate",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceEntryStartupFreezeGateTest::RunTest(const FString& Parameters)
+	{
+		UPhysAnimComponent* Component = NewObject<UPhysAnimComponent>(GetTransientPackage());
+		TestNotNull(TEXT("Transient component can be constructed"), Component);
+		if (!Component)
+		{
+			return false;
+		}
+
+		TestFalse(TEXT("Startup bring-up is not frozen before balance entry"), Component->IsStartupBringUpFrozenByBalanceEntry());
+		TestTrue(TEXT("Bring-up control ramp can start before balance entry freezes startup"), UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(false, true, false, true));
+		TestTrue(TEXT("Policy influence ramp can start before balance entry freezes startup"), UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, true, true));
+
+		Component->SetStartupBringUpFrozenByBalanceEntry(true);
+		TestTrue(TEXT("Startup bring-up freeze flag can be owned by balance entry"), Component->IsStartupBringUpFrozenByBalanceEntry());
+		TestFalse(TEXT("Frozen startup blocks bring-up group control ramp start"), UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(false, true, false, true, true));
+		TestFalse(TEXT("Frozen startup blocks policy influence ramp start"), UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, true, true, true));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimBalanceLocomotionIdleOwnershipTest,
 		"PhysAnim.Component.BalanceLocomotionIdleOwnership",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -3500,8 +3699,8 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 				return true;
 			},
 			PhysAnimPieSmokeStartTimeoutSeconds));
-		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeLeadInSeconds));
-		AddCommand(new FExecPieConsoleCommand(TEXT("pa.StartBalanceMode")));
+		AddCommand(new FStartBalanceModeWhileBringUpMidRampCommand(this, 240));
+		AddCommand(new FValidateBalanceEntryFreezesStartupCommand(this, 90));
 		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeDurationSeconds));
 		AddCommand(new FValidateBalanceModeSmokeOutcomeCommand(this));
 		AddCommand(new FEndPlayMapCommand());
@@ -3547,8 +3746,8 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 				return true;
 			},
 			PhysAnimPieSmokeStartTimeoutSeconds));
-		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeLeadInSeconds));
-		AddCommand(new FExecPieConsoleCommand(TEXT("pa.StartBalanceMode")));
+		AddCommand(new FStartBalanceModeWhileBringUpMidRampCommand(this, 240));
+		AddCommand(new FValidateBalanceEntryFreezesStartupCommand(this, 90));
 		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeDurationSeconds));
 		AddCommand(new FValidateBalanceModeSmokeOutcomeCommand(this));
 		AddCommand(new FEndPlayMapCommand());
