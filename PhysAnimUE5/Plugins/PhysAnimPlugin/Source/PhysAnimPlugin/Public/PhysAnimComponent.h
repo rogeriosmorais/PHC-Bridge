@@ -878,6 +878,9 @@ private:
 		float TiltDeg,
 		bool bIdlePoseActive,
 		bool bNoLocomotionStateActive) const;
+
+	static bool IsBalanceEntryState(EPhysAnimRuntimeState State);
+	static bool IsBalanceActiveState(EPhysAnimRuntimeState State);
 	void ResetBalanceScenarioQuietGate(const FString& Reason);
 	void CompleteBalanceModeEntry();
 	bool EvaluateBalanceModeQueueGates(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;

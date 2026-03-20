@@ -28,6 +28,12 @@ enum class EBalanceReadyUpperBodyOwnershipMode : uint8
 	LateValidationKinematicHold
 };
 
+enum class EBalanceReadyGroupOwnershipMode : uint8
+{
+	Kinematic,
+	Simulating
+};
+
 enum class EBalanceReadyRootOnReadinessClassification : uint8
 {
 	NotReady,
@@ -107,12 +113,17 @@ struct FPhysAnimCertifiedHandoffSnapshot
 
 struct FPhysAnimPhase1TopologySnapshot
 {
-	bool bRootSimulating = false;
+	EBalanceReadyGroupOwnershipMode RootOwnershipMode = EBalanceReadyGroupOwnershipMode::Kinematic;
+	EBalanceReadyGroupOwnershipMode ProximalOwnershipMode = EBalanceReadyGroupOwnershipMode::Kinematic;
+	EBalanceReadyGroupOwnershipMode DistalOwnershipMode = EBalanceReadyGroupOwnershipMode::Kinematic;
+	EBalanceReadyUpperBodyOwnershipMode UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::None;
+
 	int32 ProximalSimCount = 0;
 	int32 DistalSimCount = 0;
 	int32 UpperBodySimCount = 0;
 	int32 TotalSimCount = 0;
-	EBalanceReadyUpperBodyOwnershipMode UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::None;
+
+	bool bRootSimulating = false;
 	bool bPolicySuppressed = false;
 	bool bResetsSuppressed = false;
 };
@@ -229,7 +240,7 @@ private:
 	bool EvaluateReadiness(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidatePhase2EntryPreconditions(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidatePhase3Continuity(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
-	bool BuildCertifiedHandoffSnapshot(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FPhysAnimCertifiedHandoffSnapshot& OutSnapshot, FPhysAnimLateValidationResult& OutResult) const;
+	bool BuildCertifiedHandoffSnapshot(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FPhysAnimCertifiedHandoffSnapshot& OutSnapshot, FPhysAnimLateValidationResult& OutResult, bool bUseFrozenTopology = true) const;
 	bool CaptureLateValidationBaseline(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool CaptureCertifiedHandoff(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidateCertifiedHandoff(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason) const;
