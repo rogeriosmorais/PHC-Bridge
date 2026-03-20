@@ -2703,11 +2703,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	// The pending request owns the start attempt; keep BridgeActive public state until Start accepts.
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Pending balance request entering transition start attempt."));
 	BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
-	bPendingBalanceModeStartAttemptIssued = true;
-	if (BalanceReadyTransition.HasActuallyStarted())
-	{
-		ClearPendingBalanceModeStartRequestState();
-	}
+	ClearPendingBalanceModeStartRequestState();
 }
 
 // Obsolete pre-entry settle functions removed in favor of BalanceReadyTransition controller.
