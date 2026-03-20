@@ -36,6 +36,8 @@ Interpretation:
 5. Use TDD when practical.
 6. Treat Manny/Quinn as the default runtime skeleton unless changed explicitly.
 7. Keep commits small and atomic.
+8. Build with .\scripts\build.ps1
+9. Read the logs with "python .\scripts\read_logs.py"
 
 ## Response Style
 
