@@ -6185,14 +6185,20 @@ void UPhysAnimComponent::ApplyControlTargets(
 	}
 
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+	const bool bPhase1RootOn = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
+	const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+	const bool bPhase1HoldState = bPhase1Prepare || bPhase1LateValidate;
 	const bool bPolicyInfluenceActive =
 		PolicyInfluenceRampStartTimeSeconds >= 0.0 &&
 		(
 			RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
 			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
-			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
-			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
-			!BalanceReadyTransition.ShouldSuppressPolicy());
+			bPhase1RootOn ||
+			bPhase1Settle ||
+			(bPhase1Prepare ? !BalanceReadyTransition.ShouldSuppressPolicy() : false) ||
+			(bPhase1LateValidate ? !BalanceReadyTransition.ShouldSuppressPolicy() : false));
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
 	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
@@ -6215,13 +6221,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return;
 	}
 
-	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
-	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
-	const bool bPhase1RootOn = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
-	const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
-	const bool bPhase1Active = bPhase1Prepare || bPhase1LateValidate;
-
-	if (!bPolicyInfluenceActive && !bPhase1Active)
+	if (!bPolicyInfluenceActive && !bPhase1HoldState)
 	{
 		PolicyBlendStartControlTargetRotations.Reset();
 		LastControlTargetDiagnostics = ControlTargetDiagnostics;
@@ -6288,14 +6288,14 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	for (const TPair<FName, FQuat>& Pair : ControlRotations)
 	{
-	const bool bSuppressPolicyForThisBone =
-		(bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle) &&
-		BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key);
+		const bool bWriteHeldTargetForSuppressedBone =
+			(bPhase1Prepare && BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key)) ||
+			(bPhase1LateValidate && BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key));
 		
 		if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
 		{
-			// If we are in Phase 1 AND policy is suppressed for this bone, we still want to apply the hold pose
-			if (!bPhase1Active || !bSuppressPolicyForThisBone)
+			// Prepare/LateValidate still publish held targets for bones whose policy writes remain suppressed.
+			if (!bWriteHeldTargetForSuppressedBone)
 			{
 				continue;
 			}
@@ -6312,7 +6312,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		}
 		if (bRebaseControlTargetHistoryThisFrame)
 		{
-			const FQuat* const HoldRotation = (bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle)
+			const FQuat* const HoldRotation = bWriteHeldTargetForSuppressedBone
 				? BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key)
 				: nullptr;
 			const FQuat& HistoryBasisRotation = HoldRotation ? *HoldRotation : Pair.Value;
@@ -6366,17 +6366,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 		// Posture hold logic (Section 9.1 / 9.2).
 		// Phase 1 prepare and late validation both keep their held bones authoritative; root-on
 		// is the first phase that is allowed to release the hold.
-		const bool bApplyPhase1HoldPoseThisFrame =
-			(bPhase1Prepare || bPhase1LateValidate) &&
-			bSuppressPolicyForThisBone;
-		if (bApplyPhase1HoldPoseThisFrame)
+		if (bWriteHeldTargetForSuppressedBone)
 		{
-			if (bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle)
+			if (const FQuat* HoldRot = BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key))
 			{
-				if (const FQuat* HoldRot = BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key))
-				{
-					LimitedRotation = *HoldRot;
-				}
+				LimitedRotation = *HoldRot;
 			}
 		}
 
