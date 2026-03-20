@@ -1666,7 +1666,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.ProximalOwnershipMode == EBalanceReadyGroupOwnershipMode::Simulating ? ProximalSimCount : 0,
 		OutSnapshot.DistalOwnershipMode == EBalanceReadyGroupOwnershipMode::Simulating ? DistalSimCount : 0,
 		UpperSimCount);
-	OutSnapshot.SimCount = SimulatingBones.Num();
+	OutSnapshot.SimCount = (bHasPhase1TopologyRecord && bUseFrozenTopology) ? Phase1TopologyRecord.TotalSimCount : SimulatingBones.Num();
 	OutSnapshot.ProximalSimCount = ProximalSimCount;
 	OutSnapshot.DistalSimCount = DistalSimCount;
 	OutSnapshot.UpperBodySimCount = UpperSimCount;
@@ -1768,11 +1768,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutResult.bRootOnReadinessFinalBringUpControlSettled &&
 		OutResult.bRootOnReadinessPolicyInfluenceSettled &&
 		OutResult.bPreRootOnShellSafetyProofSatisfied &&
-		BalanceTransitionSets::IsRootCoupledReadyHandoff(
-			ProximalSimCount,
-			DistalSimCount,
-			UpperSimCount,
-			PelvisBody->IsInstanceSimulatingPhysics());
+		(RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady);
 
 	OutResult.RootOnReadinessClassification = RootOnReadinessClassification;
 

@@ -2665,15 +2665,18 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason, boo
 
 void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
-	if (!bPendingBalanceModeStartRequest || (RuntimeState != EPhysAnimRuntimeState::BridgeActive && RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery))
+	if (!bPendingBalanceModeStartRequest || !(
+		RuntimeState == EPhysAnimRuntimeState::BridgeActive || 
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
+		IsBalanceEntryState(RuntimeState)))
 	{
-	if (BalanceReadyTransition.IsActive())
-	{
-		BalanceReadyTransition.Cancel();
+		if (BalanceReadyTransition.IsActive())
+		{
+			BalanceReadyTransition.Cancel();
+		}
+		SetStartupBringUpFrozenByBalanceEntry(false);
+		return;
 	}
-	SetStartupBringUpFrozenByBalanceEntry(false);
-	return;
-}
 
 	if (BalanceReadyTransition.HasFailed())
 	{
@@ -2736,7 +2739,7 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	FString GateReason;
 	if (!EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
 	{
-		QueueBalanceModeStartRequest(GateReason);
+		QueueBalanceModeStartRequest(GateReason, true);
 		BalanceReadyTransition.Cancel();
 		return;
 	}
