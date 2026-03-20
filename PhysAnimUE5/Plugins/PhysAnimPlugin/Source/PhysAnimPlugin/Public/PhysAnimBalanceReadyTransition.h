@@ -262,6 +262,7 @@ private:
 	TMap<FName, FQuat> EntryHoldRotations;
 	bool bHasCertifiedHandoff = false;
 	bool bHasLateValidationProof = false;
+	bool bLateValidationProofPassed = false;
 	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
 	FPhysAnimLateValidationResult CertifiedLateValidationResult;
 	FString SafePhase2DenialReason;

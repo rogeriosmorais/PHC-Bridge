@@ -214,10 +214,17 @@ bool FPhysAnimBalanceReadyTransition::ValidateLateValidationBaselineSnapshot(
 
 	if (Result.Outcome == EBalanceLateValidationOutcome::Outcome_Pending)
 	{
-		OutReason = Snapshot.ProximalSimCount > 0
-			? TEXT("phase1_late_validate_baseline_topology_mismatch_proximal_incomplete")
-			: TEXT("phase1_late_validate_baseline_topology_mismatch_upper_incomplete");
-		return false;
+		if (Snapshot.ProximalSimCount >= 5 && Snapshot.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold)
+		{
+			// Valid baseline: upper body is being held kinematic during late validate, and will release after proof passes.
+		}
+		else
+		{
+			OutReason = Snapshot.ProximalSimCount > 0
+				? TEXT("phase1_late_validate_baseline_topology_mismatch_proximal_incomplete")
+				: TEXT("phase1_late_validate_baseline_topology_mismatch_upper_incomplete");
+			return false;
+		}
 	}
 
 	if (!Snapshot.bControlAuthoritySettled)
@@ -543,9 +550,15 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
 		FPhysAnimLateValidationResult CurrentResult;
 		const bool bCurrentSnapshotValid = BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult);
+		const bool bExpectedUpperBodyRelease = CertifiedHandoff.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold &&
+			LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds &&
+			RootOnReadinessShellHoldAccumulatedSeconds >= Settings.BalancePhase2RequiredShellHoldDuration;
+
+		bLateValidationProofPassed = bExpectedUpperBodyRelease;
+
 		const bool bUpperBodyInstability = bCurrentSnapshotValid &&
 			(CurrentSnapshot.UpperBodyOwnershipMode != CertifiedHandoff.UpperBodyOwnershipMode ||
-				CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount);
+				(!bExpectedUpperBodyRelease && CurrentSnapshot.UpperBodySimCount != CertifiedHandoff.UpperBodySimCount));
 		const bool bSimCoverageRegressed = bCurrentSnapshotValid &&
 			(CurrentSnapshot.SimCount < CertifiedHandoff.SimCount ||
 				CurrentSnapshot.ProximalSimCount < CertifiedHandoff.ProximalSimCount ||
@@ -1851,6 +1864,7 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	Diagnostics.Phase1LateValidateWorstAngularSpeedBone = NAME_None;
 	Diagnostics.Phase1LateValidateWorstLinearSpeed = 0.0f;
 	Diagnostics.Phase1LateValidateWorstAngularSpeed = 0.0f;
+	bLateValidationProofPassed = false;
 	ResetCertifiedHandoffState();
 }
 
@@ -2023,8 +2037,7 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
 		return BalanceTransitionSets::IsPrepareCriticalKinematic(BoneName) ||
-			BalanceTransitionSets::IsUpperLimbDistal(BoneName) ||
-			BalanceTransitionSets::IsUpperBodyApex(BoneName);
+			BalanceTransitionSets::IsUpperBody(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 	{
@@ -2038,7 +2051,10 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 
 		if (CertifiedHandoff.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold)
 		{
-			return BalanceTransitionSets::IsUpperBody(BoneName);
+			if (!bLateValidationProofPassed)
+			{
+				return BalanceTransitionSets::IsUpperBody(BoneName);
+			}
 		}
 
 		return false;
@@ -2317,7 +2333,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 		return false;
 	}
 
-	// Section 17.3 - no reset pending
+	// Section 17.3 - no reset pending / no topology flip pending
 	if (!Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
 	{
 		OutReason = TEXT("phase3_reset_pending");
