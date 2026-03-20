@@ -507,12 +507,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			bLateValidationThisFrame = false;
 			LateValidateBlockReason = TEXT("instability_precursor");
 		}
-		else if (!Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
+		else if (!Phase1TopologyRecord.bResetsSuppressed && !Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
 		{
 			bLateValidationThisFrame = false;
 			LateValidateBlockReason = TEXT("pending_resets");
 		}
-		else if (PolicyInfluenceAlpha <= KINDA_SMALL_NUMBER)
+		else if (!Phase1TopologyRecord.bPolicySuppressed && PolicyInfluenceAlpha <= KINDA_SMALL_NUMBER)
 		{
 			bLateValidationThisFrame = false;
 			LateValidateBlockReason = TEXT("policy_influence_inactive");
@@ -552,12 +552,13 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		bLateValidationProofPassed = bExpectedUpperBodyRelease;
 
 		const bool bUpperBodyInstability = bCurrentSnapshotValid && bLiveSnapshotValid &&
-			(CurrentSnapshot.UpperBodyOwnershipMode != Phase1TopologyRecord.UpperBodyOwnershipMode ||
+			(LiveSnapshot.UpperBodyOwnershipMode != Phase1TopologyRecord.UpperBodyOwnershipMode ||
 				(!bExpectedUpperBodyRelease && LiveSnapshot.UpperBodySimCount != Phase1TopologyRecord.UpperBodySimCount));
 		const bool bSimCoverageRegressed = bCurrentSnapshotValid && bLiveSnapshotValid &&
 			(LiveSnapshot.SimCount < Phase1TopologyRecord.TotalSimCount ||
-				LiveSnapshot.ProximalSimCount < Phase1TopologyRecord.ProximalSimCount ||
-				LiveSnapshot.DistalSimCount < Phase1TopologyRecord.DistalSimCount);
+				LiveSnapshot.RootOwnershipMode != Phase1TopologyRecord.RootOwnershipMode ||
+				LiveSnapshot.ProximalOwnershipMode != Phase1TopologyRecord.ProximalOwnershipMode ||
+				LiveSnapshot.DistalOwnershipMode != Phase1TopologyRecord.DistalOwnershipMode);
 		const bool bFirstPolicyEnabledFrame = Owner->GetLastControlTargetDiagnostics().bFirstPolicyEnabledFrame;
 		const bool bPolicyInfluenceRampReanchored = Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
 		const bool bCurrentTargetDiscontinuity =
@@ -1641,23 +1642,35 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		DistalSimCount = Phase1TopologyRecord.DistalSimCount;
 		UpperSimCount = Phase1TopologyRecord.UpperBodySimCount;
 		bRootSimulating = Phase1TopologyRecord.bRootSimulating;
-		// Note: we keep the live SimulatingBones for the total count to allow for regression checks 
-		// if we wanted to be more granular outside this function.
+
+		OutSnapshot.RootOwnershipMode = Phase1TopologyRecord.RootOwnershipMode;
+		OutSnapshot.ProximalOwnershipMode = Phase1TopologyRecord.ProximalOwnershipMode;
+		OutSnapshot.DistalOwnershipMode = Phase1TopologyRecord.DistalOwnershipMode;
+		OutSnapshot.UpperBodyOwnershipMode = Phase1TopologyRecord.UpperBodyOwnershipMode;
+		OutSnapshot.bPolicySuppressed = Phase1TopologyRecord.bPolicySuppressed;
+		OutSnapshot.bResetsSuppressed = Phase1TopologyRecord.bResetsSuppressed;
+	}
+	else
+	{
+		OutSnapshot.RootOwnershipMode = bRootSimulating ? EBalanceReadyGroupOwnershipMode::Simulating : EBalanceReadyGroupOwnershipMode::Kinematic;
+		OutSnapshot.ProximalOwnershipMode = ProximalSimCount > 0 ? EBalanceReadyGroupOwnershipMode::Simulating : EBalanceReadyGroupOwnershipMode::Kinematic;
+		OutSnapshot.DistalOwnershipMode = DistalSimCount > 0 ? EBalanceReadyGroupOwnershipMode::Simulating : EBalanceReadyGroupOwnershipMode::Kinematic;
+		// UpperBodyOwnershipMode is handled below as it depends on classification.
 	}
 
 	const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
 	OutSnapshot.PolicyInfluenceAlphaAtCapture = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
 	OutSnapshot.ShellAuthorityMode = BalanceTransitionSets::GetShellAuthorityModeName(Owner->GetBalanceTransitionShellAuthorityMode());
 	OutSnapshot.TopologyClass = BalanceTransitionSets::BuildCertifiedHandoffTopologyClass(
-		bRootSimulating,
-		ProximalSimCount,
-		DistalSimCount,
+		OutSnapshot.RootOwnershipMode == EBalanceReadyGroupOwnershipMode::Simulating,
+		OutSnapshot.ProximalOwnershipMode == EBalanceReadyGroupOwnershipMode::Simulating ? ProximalSimCount : 0,
+		OutSnapshot.DistalOwnershipMode == EBalanceReadyGroupOwnershipMode::Simulating ? DistalSimCount : 0,
 		UpperSimCount);
 	OutSnapshot.SimCount = SimulatingBones.Num();
 	OutSnapshot.ProximalSimCount = ProximalSimCount;
 	OutSnapshot.DistalSimCount = DistalSimCount;
 	OutSnapshot.UpperBodySimCount = UpperSimCount;
-	const EBalanceReadyRootOnReadinessClassification RootOnReadinessClassification = bHasPhase1TopologyRecord
+	const EBalanceReadyRootOnReadinessClassification RootOnReadinessClassification = bHasPhase1TopologyRecord && bUseFrozenTopology
 		? (BalanceTransitionSets::IsRootCoupledReadyHandoff(Phase1TopologyRecord.ProximalSimCount, Phase1TopologyRecord.DistalSimCount, Phase1TopologyRecord.UpperBodySimCount, Phase1TopologyRecord.bRootSimulating)
 			? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
 			: (BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(Phase1TopologyRecord.ProximalSimCount, Phase1TopologyRecord.DistalSimCount, Phase1TopologyRecord.UpperBodySimCount, Phase1TopologyRecord.bRootSimulating)
@@ -1673,18 +1686,18 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 					ProximalSimCount,
 					DistalSimCount,
 					UpperSimCount,
-					PelvisBody->IsInstanceSimulatingPhysics())
+					bRootSimulating)
 				? EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
 				: EBalanceReadyRootOnReadinessClassification::NotReady));
 
-	OutSnapshot.UpperBodyOwnershipMode = bHasPhase1TopologyRecord
-		? Phase1TopologyRecord.UpperBodyOwnershipMode
-		: (bHasCertifiedHandoff
-			? CertifiedHandoff.UpperBodyOwnershipMode
-			: ((RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::NotReady)
-				? EBalanceReadyUpperBodyOwnershipMode::None
-				: EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold));
-	OutSnapshot.bPolicySuppressed = ShouldSuppressPolicy();
+	if (!(bHasPhase1TopologyRecord && bUseFrozenTopology))
+	{
+		OutSnapshot.UpperBodyOwnershipMode = (RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::NotReady)
+			? EBalanceReadyUpperBodyOwnershipMode::None
+			: EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
+		OutSnapshot.bPolicySuppressed = ShouldSuppressPolicy();
+		OutSnapshot.bResetsSuppressed = ShouldSuppressResets();
+	}
 	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
 	const int32 FinalBringUpGroupIndex = Owner->GetBringUpGroupCount() - 1;
 	OutSnapshot.FinalBringUpGroupControlAuthorityAlpha = Owner->CalculateBringUpGroupControlAuthorityAlpha(FinalBringUpGroupIndex, Settings);

@@ -89,8 +89,12 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	int32 ProximalSimCount = 0;
 	int32 DistalSimCount = 0;
 	int32 UpperBodySimCount = 0;
+	EBalanceReadyGroupOwnershipMode RootOwnershipMode = EBalanceReadyGroupOwnershipMode::Kinematic;
+	EBalanceReadyGroupOwnershipMode ProximalOwnershipMode = EBalanceReadyGroupOwnershipMode::Kinematic;
+	EBalanceReadyGroupOwnershipMode DistalOwnershipMode = EBalanceReadyGroupOwnershipMode::Kinematic;
 	EBalanceReadyUpperBodyOwnershipMode UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::None;
 	bool bPolicySuppressed = false;
+	bool bResetsSuppressed = false;
 	bool bControlAuthoritySettled = false;
 	float FinalBringUpGroupControlAuthorityAlpha = 0.0f;
 	float PolicyInfluenceAlphaAtCapture = 0.0f;
