@@ -2733,8 +2733,8 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	FString GateReason;
 	if (!EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
 	{
-		QueueBalanceModeStartRequest(GateReason, true);
-		BalanceReadyTransition.Cancel();
+		QueueBalanceModeStartRequest(GateReason);
+		SetStartupBringUpFrozenByBalanceEntry(true);
 		return;
 	}
 
