@@ -1469,9 +1469,13 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			{
 				// Completion path already published recovery.
 			}
-			else if (IsBalanceEntryState(RuntimeState))
+			else if (RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
 			{
-				TransitionRuntimeState(MappedRuntimeState);
+				// Safe deny remains published until the mode is explicitly reset.
+			}
+			else if (RuntimeState != EPhysAnimRuntimeState::BalanceSafeDeny)
+			{
+				TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
 			}
 		}
 		else
@@ -2659,15 +2663,6 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		return;
 	}
 
-	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive)
-	{
-		if (RuntimeState == EPhysAnimRuntimeState::FailStopped || RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
-		{
-			bPendingBalanceModeStartRequest = false;
-		}
-		return;
-	}
-
 	if (RuntimeState == EPhysAnimRuntimeState::FailStopped || RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
 	{
 		bPendingBalanceModeStartRequest = false;
@@ -2678,10 +2673,15 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	{
 		// Queue gates passed. Hand off to transition preflight.
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Queue gate satisfied. Entering preflight."));
-		QueueBalanceModeStartRequest(PendingBalanceModeStartReason);
 		ActivateTransitionOwnedShellLock();
 		BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
-		if (!BalanceReadyTransition.HasActuallyStarted())
+		if (BalanceReadyTransition.HasActuallyStarted())
+		{
+			bPendingBalanceModeStartRequest = false;
+			PendingBalanceModeStartReason.Reset();
+			PendingBalanceModeRequestTimeSeconds = -1.0;
+		}
+		else
 		{
 			// Keep the request pending so the transition can retry once the runtime is ready.
 		}
@@ -6077,7 +6077,13 @@ void UPhysAnimComponent::LogBodyModifierTelemetrySnapshot(const TCHAR* Context) 
 void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
-	if (!PhysicsControl || PendingBodyModifierCachedResetNames.IsEmpty() || (IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressResets()))
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+	const bool bPhase1RootOn = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
+	const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+	if (!PhysicsControl ||
+		PendingBodyModifierCachedResetNames.IsEmpty() ||
+		((bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle) && BalanceReadyTransition.ShouldSuppressResets()))
 	{
 		return;
 	}
@@ -6086,7 +6092,7 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 	ModifierNamesToReset.Reserve(PendingBodyModifierCachedResetNames.Num());
 	for (const FName ModifierName : PendingBodyModifierCachedResetNames)
 	{
-		if (IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressResets())
+		if ((bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle) && BalanceReadyTransition.ShouldSuppressResets())
 		{
 			const FName RootModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
 			if (ModifierName != RootModifierName)
@@ -6184,7 +6190,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return;
 	}
 
-	const bool bPhase1Active = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+	const bool bPhase1RootOn = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
+	const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+	const bool bPhase1Active = bPhase1Prepare || bPhase1LateValidate;
 
 	if (!bPolicyInfluenceActive && !bPhase1Active)
 	{
@@ -6253,7 +6263,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	for (const TPair<FName, FQuat>& Pair : ControlRotations)
 	{
-	const bool bSuppressPolicyForThisBone = IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key);
+	const bool bSuppressPolicyForThisBone =
+		(bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle) &&
+		BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key);
 		
 		if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
 		{
@@ -6275,7 +6287,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		}
 		if (bRebaseControlTargetHistoryThisFrame)
 		{
-			const FQuat* const HoldRotation = IsBalanceEntryState(RuntimeState)
+			const FQuat* const HoldRotation = (bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle)
 				? BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key)
 				: nullptr;
 			const FQuat& HistoryBasisRotation = HoldRotation ? *HoldRotation : Pair.Value;
@@ -6330,12 +6342,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 		// Phase 1 prepare and late validation both keep their held bones authoritative; root-on
 		// is the first phase that is allowed to release the hold.
 		const bool bApplyPhase1HoldPoseThisFrame =
-			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
-				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate) &&
+			(bPhase1Prepare || bPhase1LateValidate) &&
 			bSuppressPolicyForThisBone;
 		if (bApplyPhase1HoldPoseThisFrame)
 		{
-			if (IsBalanceEntryState(RuntimeState))
+			if (bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle)
 			{
 				if (const FQuat* HoldRot = BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key))
 				{
