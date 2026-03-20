@@ -884,6 +884,7 @@ private:
 		bool bNoLocomotionStateActive) const;
 
 	static bool IsBalanceEntryState(EPhysAnimRuntimeState State);
+	EPhysAnimRuntimeState GetPublicBalanceEntryRuntimeState() const;
 	static bool IsBalanceActiveState(EPhysAnimRuntimeState State);
 	void ResetBalanceScenarioQuietGate(const FString& Reason);
 	void CompleteBalanceModeEntry();
