@@ -6225,7 +6225,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return;
 	}
 
-	if (!bApplyNewPolicyStepThisTick)
+	if (!bApplyNewPolicyStepThisTick && !bApplyPhase1HoldPoseThisFrame)
 	{
 		ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 		ControlTargetDiagnostics.bFirstPolicyEnabledFrame = false;
@@ -6286,6 +6286,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 	{
 		const bool bSuppressPolicyForThisBone = bApplyPhase1HoldPoseThisFrame &&
 			BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key);
+
+		if (!bApplyNewPolicyStepThisTick && !bSuppressPolicyForThisBone)
+		{
+			continue;
+		}
 		
 		if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
 		{
