@@ -261,6 +261,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] TRANSITION_ACCEPT reason=preflight_accept"));
 	Owner->SetStartupBringUpFrozenByBalanceEntry(true);
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] BALANCE_ENTRY_FREEZE state=on reason=transition_accept"));
 
 	RequestReason = InRequestReason;
 	StableHoldAccumulatedSeconds = 0.0f;
@@ -1190,6 +1191,11 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			NewPhase == EBalanceReadyTransitionPhase::BRT_Inactive))
 	{
 		Owner->SetStartupBringUpFrozenByBalanceEntry(false);
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnimBalance] BALANCE_ENTRY_FREEZE state=off reason=transition_terminal_exit phase=%d"),
+			static_cast<int32>(NewPhase));
 	}
 
 	if (NewPhase != EBalanceReadyTransitionPhase::BRT_Inactive && InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive)
