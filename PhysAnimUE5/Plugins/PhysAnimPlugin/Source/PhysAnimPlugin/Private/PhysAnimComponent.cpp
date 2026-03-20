@@ -2661,34 +2661,51 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 
 }
 
+namespace
+{
+	TMap<const UPhysAnimComponent*, bool> GPendingBalanceModeStartAttemptIssued;
+}
+
 void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
 	if (!bPendingBalanceModeStartRequest)
 	{
+		GPendingBalanceModeStartAttemptIssued.Remove(this);
 		return;
 	}
 
 	if (RuntimeState == EPhysAnimRuntimeState::FailStopped || RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
 	{
 		bPendingBalanceModeStartRequest = false;
+		GPendingBalanceModeStartAttemptIssued.Remove(this);
 		return;
 	}
 
-	if (BalanceReadyTransition.HasActuallyStarted())
-	{
-		return;
-	}
-
-	(void)EffectiveSettings;
-
-	// The pending request owns the start attempt; keep BridgeActive public state until Start accepts.
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Pending balance request entering transition start attempt."));
-	BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
 	if (BalanceReadyTransition.HasActuallyStarted())
 	{
 		bPendingBalanceModeStartRequest = false;
 		PendingBalanceModeStartReason.Reset();
 		PendingBalanceModeRequestTimeSeconds = -1.0;
+		GPendingBalanceModeStartAttemptIssued.Remove(this);
+		return;
+	}
+
+	(void)EffectiveSettings;
+	if (GPendingBalanceModeStartAttemptIssued.Contains(this))
+	{
+		return;
+	}
+
+	// The pending request owns the start attempt; keep BridgeActive public state until Start accepts.
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Pending balance request entering transition start attempt."));
+	BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
+	GPendingBalanceModeStartAttemptIssued.Add(this, true);
+	if (BalanceReadyTransition.HasActuallyStarted())
+	{
+		bPendingBalanceModeStartRequest = false;
+		PendingBalanceModeStartReason.Reset();
+		PendingBalanceModeRequestTimeSeconds = -1.0;
+		GPendingBalanceModeStartAttemptIssued.Remove(this);
 	}
 }
 
@@ -2696,25 +2713,14 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 
 void UPhysAnimComponent::StartBalancePerturbationMode()
 {
-	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
 	{
 		return;
 	}
 
-	FString GateReason;
-	if (!EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
-	{
-		QueueBalanceModeStartRequest(GateReason);
-		return;
-	}
-
 	// Queue gates passed. Mark request pending so TryStartPendingBalanceModeRequest tick takes ownership.
+	GPendingBalanceModeStartAttemptIssued.Remove(this);
 	QueueBalanceModeStartRequest(TEXT("manual_trigger"));
-
-	ActivateTransitionOwnedShellLock();
-	BalanceReadyTransition.Start(TEXT("manual_trigger"), this);
 }
 
 void UPhysAnimComponent::CompleteBalanceModeEntry()
