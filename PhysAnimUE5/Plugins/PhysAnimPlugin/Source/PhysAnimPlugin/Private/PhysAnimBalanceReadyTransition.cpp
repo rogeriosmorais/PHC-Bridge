@@ -407,7 +407,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			TargetDiscontinuityAccumulatedSeconds = 0.0f;
 			QuietWindowAccumulatedSeconds += DeltaTime;
-			if (QuietWindowAccumulatedSeconds >= Settings.PolicySettleRequiredSeconds)
+			if (QuietWindowAccumulatedSeconds >= Settings.BalancePhase1QuietRequiredSeconds)
 			{
 				FString CaptureReason;
 				if (CaptureLateValidationBaseline(Owner, Settings, CaptureReason))
@@ -474,7 +474,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			QuietWindowAccumulatedSeconds = 0.0f;
 		}
 
-		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration && QuietWindowAccumulatedSeconds <= 0.0f)
+		if (TotalTransitionTimeSeconds > Settings.BalancePhase1TimeoutDuration)
 		{
 			const FString& TerminalQuietBlockReason = !LastLateValidateBlockReason.IsEmpty()
 				? LastLateValidateBlockReason
@@ -890,8 +890,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
 		}
 
-		if (PhaseTimeSeconds > Settings.BalancePhase1PrepareDuration + Settings.BalancePhase1LateValidateRequiredSeconds &&
-			LateValidationAccumulatedSeconds <= 0.0f)
+		if (TotalTransitionTimeSeconds > Settings.BalancePhase1TimeoutDuration)
 		{
 			const FString TimeoutReason = LateValidateBlockReason.IsEmpty()
 				? TEXT("phase1_no_convergence_path")

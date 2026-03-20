@@ -278,6 +278,12 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && bDelayMovementUnlockUntilPolicySettled", ClampMin = "0.0"))
 	float PolicySettleRequiredSeconds = 1.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1QuietRequiredSeconds = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1TimeoutDuration = 2.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float BalanceEntryMinPolicyAlpha = 0.9f;
 
@@ -480,6 +486,8 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(PolicySettleMaxRootLinearSpeedCmPerSecond, Other.PolicySettleMaxRootLinearSpeedCmPerSecond) &&
 			FMath::IsNearlyEqual(PolicySettleMaxRootAngularSpeedDegPerSec, Other.PolicySettleMaxRootAngularSpeedDegPerSec) &&
 			FMath::IsNearlyEqual(PolicySettleRequiredSeconds, Other.PolicySettleRequiredSeconds) &&
+			FMath::IsNearlyEqual(BalancePhase1QuietRequiredSeconds, Other.BalancePhase1QuietRequiredSeconds) &&
+			FMath::IsNearlyEqual(BalancePhase1TimeoutDuration, Other.BalancePhase1TimeoutDuration) &&
 			BalanceEntryMaxSimCount == Other.BalanceEntryMaxSimCount &&
 			BalanceEntryMaxDistalSimCount == Other.BalanceEntryMaxDistalSimCount &&
 			FMath::IsNearlyEqual(BalanceEntryMinPolicyAlpha, Other.BalanceEntryMinPolicyAlpha) &&
