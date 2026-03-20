@@ -2664,6 +2664,14 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 
 void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
+	auto ClearPendingBalanceModeStartRequestState = [this]()
+	{
+		bPendingBalanceModeStartRequest = false;
+		bPendingBalanceModeStartAttemptIssued = false;
+		PendingBalanceModeStartReason.Reset();
+		PendingBalanceModeRequestTimeSeconds = -1.0;
+	};
+
 	if (!bPendingBalanceModeStartRequest)
 	{
 		bPendingBalanceModeStartAttemptIssued = false;
@@ -2672,17 +2680,17 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 
 	if (RuntimeState == EPhysAnimRuntimeState::FailStopped || RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
 	{
-		bPendingBalanceModeStartRequest = false;
-		bPendingBalanceModeStartAttemptIssued = false;
+		if (BalanceReadyTransition.HasActuallyStarted())
+		{
+			BalanceReadyTransition.Cancel(this);
+		}
+		ClearPendingBalanceModeStartRequestState();
 		return;
 	}
 
 	if (BalanceReadyTransition.HasActuallyStarted())
 	{
-		bPendingBalanceModeStartRequest = false;
-		bPendingBalanceModeStartAttemptIssued = false;
-		PendingBalanceModeStartReason.Reset();
-		PendingBalanceModeRequestTimeSeconds = -1.0;
+		ClearPendingBalanceModeStartRequestState();
 		return;
 	}
 
@@ -2698,10 +2706,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	bPendingBalanceModeStartAttemptIssued = true;
 	if (BalanceReadyTransition.HasActuallyStarted())
 	{
-		bPendingBalanceModeStartRequest = false;
-		bPendingBalanceModeStartAttemptIssued = false;
-		PendingBalanceModeStartReason.Reset();
-		PendingBalanceModeRequestTimeSeconds = -1.0;
+		ClearPendingBalanceModeStartRequestState();
 	}
 }
 
