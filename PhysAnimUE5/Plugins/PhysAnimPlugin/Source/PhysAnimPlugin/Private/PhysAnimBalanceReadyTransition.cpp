@@ -2059,10 +2059,10 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 
 		return false;
 	}
-	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn || 
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		return BalanceTransitionSets::IsDistalLowerLimb(BoneName) ||
-			BalanceTransitionSets::IsUpperBody(BoneName);
+		return BalanceTransitionSets::IsDistalLowerLimb(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
 	{
