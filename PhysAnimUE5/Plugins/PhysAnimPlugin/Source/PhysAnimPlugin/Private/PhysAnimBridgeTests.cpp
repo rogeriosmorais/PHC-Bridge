@@ -179,17 +179,10 @@ namespace
 				BaselineHighestUnlockedBringUpGroupIndex = FoundComponent->GetHighestUnlockedBringUpGroupIndex();
 				BaselinePolicyInfluenceActive = FoundComponent->GetLastControlTargetDiagnostics().bPolicyInfluenceActive;
 				bBaselineCaptured = true;
-				if (!FoundComponent->IsStartupBringUpFrozenByBalanceEntry())
-				{
-					Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] Balance entry did not freeze startup bring-up at acceptance."));
-					return true;
-				}
-
-				EPhysAnimRuntimeState BaselinePublicBalanceEntryState = BaselineRuntimeState;
-				if (!FoundComponent->TryGetPublicBalanceEntryRuntimeState(BaselinePublicBalanceEntryState))
+				if (BaselineRuntimeState != EPhysAnimRuntimeState::BridgeActive)
 				{
 					Test->AddError(FString::Printf(
-						TEXT("[PhysAnimPieBalanceSmoke] Expected balance entry runtime state at freeze capture, found %s."),
+						TEXT("[PhysAnimPieBalanceSmoke] Expected BridgeActive before accepted balance start, found %s."),
 						UPhysAnimComponent::GetRuntimeStateName(BaselineRuntimeState)));
 					return true;
 				}
@@ -214,8 +207,30 @@ namespace
 			}
 
 			EPhysAnimRuntimeState CurrentPublicBalanceEntryState = CurrentRuntimeState;
-			if (FoundComponent->TryGetPublicBalanceEntryRuntimeState(CurrentPublicBalanceEntryState))
+			const bool bInPublicBalanceEntryState = FoundComponent->TryGetPublicBalanceEntryRuntimeState(CurrentPublicBalanceEntryState);
+			const bool bCurrentIsPublicBalanceEntryState =
+				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+			if (bCurrentIsPublicBalanceEntryState && !bInPublicBalanceEntryState)
 			{
+				Test->AddError(FString::Printf(
+					TEXT("[PhysAnimPieBalanceSmoke] Expected public balance entry state after accepted transition start, found %s."),
+					UPhysAnimComponent::GetRuntimeStateName(CurrentRuntimeState)));
+				return true;
+			}
+
+			if (bInPublicBalanceEntryState)
+			{
+				if (CurrentPublicBalanceEntryState != CurrentRuntimeState)
+				{
+					Test->AddError(FString::Printf(
+						TEXT("[PhysAnimPieBalanceSmoke] Public balance entry state mismatch. public=%s runtime=%s."),
+						UPhysAnimComponent::GetRuntimeStateName(CurrentPublicBalanceEntryState),
+						UPhysAnimComponent::GetRuntimeStateName(CurrentRuntimeState)));
+					return true;
+				}
 				const bool bCurrentPolicyInfluenceActive = FoundComponent->GetLastControlTargetDiagnostics().bPolicyInfluenceActive;
 				if (bCurrentPolicyInfluenceActive)
 				{
