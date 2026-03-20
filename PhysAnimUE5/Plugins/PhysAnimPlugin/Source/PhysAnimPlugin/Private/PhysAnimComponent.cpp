@@ -2642,7 +2642,7 @@ void UPhysAnimComponent::ReleaseTransitionOwnedShellLock()
 
 
 
-void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
+void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason, bool bFreezeStartupBringUp)
 {
 	bPendingBalanceModeStartRequest = true;
 	PendingBalanceModeStartReason = Reason;
@@ -2653,6 +2653,11 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Request status: balance_start_queued. reason=%s"), *Reason);
 		LastQueuedReason = Reason;
+	}
+
+	if (bFreezeStartupBringUp)
+	{
+		SetStartupBringUpFrozenByBalanceEntry(true);
 	}
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceEntry_Prepare);
@@ -2684,15 +2689,9 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		{
 			// Queue gates passed. Hand off to transition preflight.
 			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Queue gate satisfied. Entering preflight."));
-			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceEntry_Prepare);
-			
+			QueueBalanceModeStartRequest(PendingBalanceModeStartReason, true);
 			ActivateTransitionOwnedShellLock();
 			BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
-			if (BalanceReadyTransition.HasActuallyStarted())
-			{
-				SetStartupBringUpFrozenByBalanceEntry(true);
-			}
-			
 			if (!BalanceReadyTransition.HasActuallyStarted())
 			{
 				// Keep the request pending so the transition can retry once the runtime is ready.
@@ -2743,16 +2742,12 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	}
 
 	// Queue gates passed. Mark request pending so TryStartPendingBalanceModeRequest tick takes ownership.
-	QueueBalanceModeStartRequest(TEXT("manual_trigger"));
+	QueueBalanceModeStartRequest(TEXT("manual_trigger"), true);
 	
 	if (!BalanceReadyTransition.IsActive())
 	{
 		ActivateTransitionOwnedShellLock();
 		BalanceReadyTransition.Start(TEXT("manual_trigger"), this);
-		if (BalanceReadyTransition.HasActuallyStarted())
-		{
-			SetStartupBringUpFrozenByBalanceEntry(true);
-		}
 	}
 }
 
