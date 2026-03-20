@@ -105,11 +105,9 @@ namespace
 			}
 
 			const EPhysAnimRuntimeState RuntimeState = FoundComponent->GetRuntimeState();
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
-				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
-				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
-				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
-				RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+			EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
+			const bool bInPublicBalanceEntryState = FoundComponent->TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
+			if (bInPublicBalanceEntryState || RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
 			{
 				return true;
 			}
@@ -187,8 +185,8 @@ namespace
 					return true;
 				}
 
-				if (BaselineRuntimeState != EPhysAnimRuntimeState::BalanceEntry_Prepare &&
-					BaselineRuntimeState != EPhysAnimRuntimeState::BalanceEntry_LateValidate)
+				EPhysAnimRuntimeState BaselinePublicBalanceEntryState = BaselineRuntimeState;
+				if (!FoundComponent->TryGetPublicBalanceEntryRuntimeState(BaselinePublicBalanceEntryState))
 				{
 					Test->AddError(FString::Printf(
 						TEXT("[PhysAnimPieBalanceSmoke] Expected balance entry runtime state at freeze capture, found %s."),
@@ -215,8 +213,8 @@ namespace
 				return true;
 			}
 
-			if (CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
-				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate)
+			EPhysAnimRuntimeState CurrentPublicBalanceEntryState = CurrentRuntimeState;
+			if (FoundComponent->TryGetPublicBalanceEntryRuntimeState(CurrentPublicBalanceEntryState))
 			{
 				const bool bCurrentPolicyInfluenceActive = FoundComponent->GetLastControlTargetDiagnostics().bPolicyInfluenceActive;
 				if (bCurrentPolicyInfluenceActive)
