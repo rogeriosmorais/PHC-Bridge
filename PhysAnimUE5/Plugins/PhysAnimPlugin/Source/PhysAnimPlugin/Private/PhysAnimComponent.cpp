@@ -2662,12 +2662,13 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 {
 	if (!bPendingBalanceModeStartRequest || (RuntimeState != EPhysAnimRuntimeState::BridgeActive && RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery))
 	{
-		if (BalanceReadyTransition.IsActive())
-		{
-			BalanceReadyTransition.Cancel();
-		}
-		return;
+	if (BalanceReadyTransition.IsActive())
+	{
+		BalanceReadyTransition.Cancel();
 	}
+	SetStartupBringUpFrozenByBalanceEntry(false);
+	return;
+}
 
 	if (BalanceReadyTransition.HasFailed())
 	{
@@ -2687,6 +2688,10 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 			
 			ActivateTransitionOwnedShellLock();
 			BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
+			if (BalanceReadyTransition.HasActuallyStarted())
+			{
+				SetStartupBringUpFrozenByBalanceEntry(true);
+			}
 			
 			if (!BalanceReadyTransition.HasActuallyStarted())
 			{
@@ -2744,6 +2749,10 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	{
 		ActivateTransitionOwnedShellLock();
 		BalanceReadyTransition.Start(TEXT("manual_trigger"), this);
+		if (BalanceReadyTransition.HasActuallyStarted())
+		{
+			SetStartupBringUpFrozenByBalanceEntry(true);
+		}
 	}
 }
 
@@ -2759,6 +2768,7 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 
 	bPendingBalanceModeStartRequest = false;
 	PendingBalanceModeStartReason.Reset();
+	SetStartupBringUpFrozenByBalanceEntry(false);
 	PendingBalanceModeRequestTimeSeconds = -1.0;
 	BalanceReadyTransition.Cancel();
 
@@ -5280,7 +5290,10 @@ bool UPhysAnimComponent::IsPresentationPerturbationOverrideActive() const
 
 void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Context)
 {
-	if (GroupIndex < 0 || GroupIndex >= GetBringUpGroupCount() || GroupIndex <= HighestUnlockedBringUpGroupIndex)
+	if (bStartupBringUpFrozenByBalanceEntry ||
+		GroupIndex < 0 ||
+		GroupIndex >= GetBringUpGroupCount() ||
+		GroupIndex <= HighestUnlockedBringUpGroupIndex)
 	{
 		return;
 	}
@@ -5309,7 +5322,8 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 		false,
 		true,
 		bDelayControlRamp,
-		false);
+		false,
+		bStartupBringUpFrozenByBalanceEntry);
 	BringUpGroupControlRampStartTimeSeconds[GroupIndex] =
 		bStartControlRampImmediately ? ActivationTimeSeconds : -1.0;
 	HighestUnlockedBringUpGroupIndex = GroupIndex;
@@ -5764,7 +5778,7 @@ bool UPhysAnimComponent::HandlePrePolicyShellRecovery(const FPhysAnimStabilizati
 
 void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
-	if (EffectiveSettings.bForceZeroActions || !IsBringUpGroupUnlocked(0))
+	if (EffectiveSettings.bForceZeroActions || !IsBringUpGroupUnlocked(0) || bStartupBringUpFrozenByBalanceEntry)
 	{
 		return;
 	}
@@ -5809,7 +5823,8 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 				EffectiveSettings.bForceZeroActions,
 				true,
 				ShouldDelayBringUpGroupControlRamp(CoreFinalGroupIndex, GetBringUpGroupCount()),
-				true))
+				true,
+				bStartupBringUpFrozenByBalanceEntry))
 		{
 			const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 			const float CurrentAngularVelocity = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
@@ -5856,7 +5871,8 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 				EffectiveSettings.bForceZeroActions,
 				true,
 				IsBringUpGroupControlRampActive(CoreFinalGroupIndex),
-				true) &&
+				true,
+				bStartupBringUpFrozenByBalanceEntry) &&
 			RuntimeState != EPhysAnimRuntimeState::BalanceSafeDeny)
 		{
 			PolicyInfluenceRampStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
@@ -7568,6 +7584,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	BridgeStartTimeSeconds = 0.0;
 	SimulationHandoffCompletedTimeSeconds = -1.0;
 	PolicyInfluenceRampStartTimeSeconds = -1.0;
+	bStartupBringUpFrozenByBalanceEntry = false;
 	HighestUnlockedBringUpGroupIndex = INDEX_NONE;
 	BringUpGroupStableAccumulatedSeconds = 0.0f;
 	BringUpGroupActivationTimeSeconds.Init(-1.0, GetBringUpGroupCount());
@@ -7861,9 +7878,10 @@ bool UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(
 	bool bForceZeroActions,
 	bool bBringUpGroupUnlocked,
 	bool bDelayBringUpGroupControlRamp,
-	bool bPostUnlockSettleComplete)
+	bool bPostUnlockSettleComplete,
+	bool bStartupBringUpFrozenByBalanceEntry)
 {
-	if (bForceZeroActions || !bBringUpGroupUnlocked)
+	if (bStartupBringUpFrozenByBalanceEntry || bForceZeroActions || !bBringUpGroupUnlocked)
 	{
 		return false;
 	}
@@ -7875,9 +7893,13 @@ bool UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(
 	bool bForceZeroActions,
 	bool bAllBringUpGroupsUnlocked,
 	bool bFinalBringUpGroupControlRampActive,
-	bool bPostFinalGroupControlSettleComplete)
+	bool bPostFinalGroupControlSettleComplete,
+	bool bStartupBringUpFrozenByBalanceEntry)
 {
-	if (bForceZeroActions || !bAllBringUpGroupsUnlocked || !bFinalBringUpGroupControlRampActive)
+	if (bStartupBringUpFrozenByBalanceEntry ||
+		bForceZeroActions ||
+		!bAllBringUpGroupsUnlocked ||
+		!bFinalBringUpGroupControlRampActive)
 	{
 		return false;
 	}
