@@ -541,14 +541,10 @@ enum class EPhysAnimRuntimeState : uint8
 	ReadyForActivation,
 	BridgeActive,
 	FailStopped,
-	BalanceStartQueued,
-	BalanceTransition_Preflight,
-	BalanceTransition_Phase1_Prepare,
-	BalanceTransition_Phase1_LateValidate,
-	BalanceTransition_Phase2_RootOn,
-	BalanceTransition_Phase3_Settle,
-	BalancePerturbationActive,
-	BalanceTransitionFailed
+	BalancePending,
+	BalanceTransition_LateValidate,
+	BalanceTransition_Active,
+	BalanceSafeDeny
 };
 
 UENUM(BlueprintType)

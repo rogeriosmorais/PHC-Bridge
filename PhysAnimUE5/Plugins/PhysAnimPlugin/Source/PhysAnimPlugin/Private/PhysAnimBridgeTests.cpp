@@ -105,9 +105,9 @@ namespace
 			}
 
 			const EPhysAnimRuntimeState RuntimeState = FoundComponent->GetRuntimeState();
-			if (RuntimeState == EPhysAnimRuntimeState::BalancePerturbationActive ||
-				RuntimeState == EPhysAnimRuntimeState::BalanceStartQueued ||
-				(RuntimeState >= EPhysAnimRuntimeState::BalanceTransition_Preflight && RuntimeState <= EPhysAnimRuntimeState::BalanceTransition_Phase3_Settle))
+			if (RuntimeState == EPhysAnimRuntimeState::BalanceTransition_Active ||
+				RuntimeState == EPhysAnimRuntimeState::BalancePending ||
+				RuntimeState == EPhysAnimRuntimeState::BalanceTransition_LateValidate)
 			{
 				return true;
 			}
@@ -2002,19 +2002,19 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		// Balance Mode Contract
 		TestFalse(
 			TEXT("Balance Mode forbids pelvis/root reset regardless of alpha"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BalancePerturbationActive, false, true, true, true, true, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BalanceTransition_Active, false, true, true, true, true, 0.0f));
 		TestFalse(
 			TEXT("Balance Mode forbids limb resets once policy begins"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalancePerturbationActive, false, true, true, false, false, 0.1f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalanceTransition_Active, false, true, true, false, false, 0.1f));
 		TestTrue(
 			TEXT("Balance Mode allows limb resets before policy begins"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalancePerturbationActive, false, true, true, false, false, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalanceTransition_Active, false, true, true, false, false, 0.0f));
 		TestFalse(
 			TEXT("Balance Mode forbids upper-arm resets during Phase 1 quiet handoff"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("upperarm_r"), EPhysAnimRuntimeState::BalancePerturbationActive, false, true, true, false, false, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("upperarm_r"), EPhysAnimRuntimeState::BalanceTransition_Active, false, true, true, false, false, 0.0f));
 		TestFalse(
 			TEXT("Balance Mode forbids hand resets during Phase 1 quiet handoff"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("hand_r"), EPhysAnimRuntimeState::BalancePerturbationActive, false, true, true, false, false, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("hand_r"), EPhysAnimRuntimeState::BalanceTransition_Active, false, true, true, false, false, 0.0f));
 
 		return true;
 	}
@@ -2029,10 +2029,10 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		// 1. In BalancePerturbationMode, pelvis/root cached-target reset is always forbidden
 		TestFalse(
 			TEXT("Balance Mode forbids pelvis reset at zero alpha"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BalancePerturbationActive, false, true, true, true, true, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BalanceTransition_Active, false, true, true, true, true, 0.0f));
 		TestFalse(
 			TEXT("Balance Mode forbids pelvis reset at high alpha"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BalancePerturbationActive, false, true, true, true, true, 1.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("pelvis"), EPhysAnimRuntimeState::BalanceTransition_Active, false, true, true, true, true, 1.0f));
 
 		// 2. In BridgeActive presentation perturbation, root reset behavior is preserved
 		TestTrue(
@@ -2042,10 +2042,10 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		// 3. Balance Mode allows limb resets ONLY before policy begins
 		TestTrue(
 			TEXT("Balance Mode allows limb reset before policy alpha > 0"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalancePerturbationActive, false, true, true, false, false, 0.0f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalanceTransition_Active, false, true, true, false, false, 0.0f));
 		TestFalse(
 			TEXT("Balance Mode forbids limb reset once policy alpha > 0"),
-			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalancePerturbationActive, false, true, true, false, false, 0.01f));
+			UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(TEXT("thigh_l"), EPhysAnimRuntimeState::BalanceTransition_Active, false, true, true, false, false, 0.01f));
 
 		return true;
 	}
@@ -3709,7 +3709,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 				{
 					if (IsValid(*It) && It->GetWorld() == GEditor->PlayWorld)
 					{
-						if (It->GetRuntimeState() == EPhysAnimRuntimeState::BalancePerturbationActive)
+						if (It->GetRuntimeState() == EPhysAnimRuntimeState::BalanceTransition_Active)
 						{
 							return false;
 						}
