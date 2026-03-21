@@ -4710,6 +4710,8 @@ void UPhysAnimComponent::GetSimulatingBodies(TArray<FName>& OutBones) const
 void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
+	const bool bPhase1Prepare = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare);
+	const bool bPhase1LateValidate = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate);
 	const bool bSimulationHandoffSettled = SimulationHandoffAlpha >= (1.0f - KINDA_SMALL_NUMBER);
 	const bool bSimulationHandoffCompletedThisTick = bSimulationHandoffSettled && !bLastAppliedSimulationHandoffSettled;
 	const bool bPresentationPerturbationOverrideActive = IsPresentationPerturbationOverrideActive();
@@ -4828,9 +4830,23 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
 	{
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
-		const bool bBringUpGroupUnlocked = IsBringUpGroupUnlocked(BringUpGroupIndex);
-		const float ControlAuthorityAlpha =
+		bool bBringUpGroupUnlocked = IsBringUpGroupUnlocked(BringUpGroupIndex);
+		float ControlAuthorityAlpha =
 			CalculateBringUpGroupControlAuthorityAlpha(BringUpGroupIndex, EffectiveSettings);
+
+		if (bPhase1Prepare || bPhase1LateValidate)
+		{
+			if (BringUpGroupIndex == 0 || BringUpGroupIndex == 1)
+			{
+				bBringUpGroupUnlocked = true;
+				ControlAuthorityAlpha = 1.0f;
+			}
+			else
+			{
+				bBringUpGroupUnlocked = false;
+				ControlAuthorityAlpha = 0.0f;
+			}
+		}
 		const bool bApplyTrainingAlignedControlProfile =
 			ShouldApplyTrainingAlignedControlFamilyProfile(
 				EffectiveSettings.bApplyTrainingAlignedControlFamilyProfile,
@@ -5042,6 +5058,32 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierMovementType,
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
+
+		if (bPhase1Prepare || bPhase1LateValidate)
+		{
+			// Enforce 11-body Phase 1 topology (root=kin, proximal=sim, distal=sim, upper=kin)
+			if (bIsRootBodyModifier)
+			{
+				BodyModifierMovementType = EPhysicsMovementType::Kinematic;
+				BodyModifierCollisionType = ECollisionEnabled::NoCollision;
+				BodyModifierPhysicsBlendWeight = 0.0f;
+			}
+			else if (BringUpGroupIndex == 0 || BringUpGroupIndex == 1)
+			{
+				// Group 0 = Proximal (thighs + spine), Group 1 = Distal (calves + feet + balls)
+				BodyModifierMovementType = EPhysicsMovementType::Simulated;
+				BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
+				BodyModifierPhysicsBlendWeight = 1.0f;
+			}
+			else
+			{
+				// Upper body (Groups 2, 3, 4)
+				BodyModifierMovementType = EPhysicsMovementType::Kinematic;
+				BodyModifierCollisionType = ECollisionEnabled::NoCollision;
+				BodyModifierPhysicsBlendWeight = 0.0f;
+			}
+			bUpdateKinematicFromSimulation = false;
+		}
 		if (bPhase2RootAuthorityQuarantined)
 		{
 			BodyModifierMovementType = EPhysicsMovementType::Kinematic;
@@ -6118,6 +6160,17 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 			const FName RootModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
 			if (ModifierName != RootModifierName)
 			{
+				continue;
+			}
+		}
+
+		if (bPhase1Prepare || bPhase1LateValidate)
+		{
+			const FName BoneName = PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName);
+			const int32 GroupIndex = ResolveBringUpGroupIndex(BoneName);
+			if (GroupIndex == 0 || GroupIndex == 1)
+			{
+				// Do not process deferred resets for critical Phase 1 sim bodies in transition.
 				continue;
 			}
 		}

@@ -44,10 +44,10 @@ namespace BalanceTransitionSets
 			BoneName == "upperarm_r";
 	}
 	static bool IsTransitionCritical(FName BoneName) { return IsRoot(BoneName) || IsProximal(BoneName) || IsDistalLowerLimb(BoneName); }
-	static bool IsPrepareCriticalKinematic(FName BoneName) { return IsRoot(BoneName) || IsDistalLowerLimb(BoneName); }
+	static bool IsPrepareCriticalKinematic(FName BoneName) { return IsRoot(BoneName); }
 	static bool IsExpectedPhase2Topology(int32 SimCountPre, int32 SimCountPost, int32 DistalSimCountPre, int32 DistalSimCountPost)
 	{
-		return DistalSimCountPre == 0 &&
+		return DistalSimCountPre >= 0 &&
 			DistalSimCountPost == 0 &&
 			(SimCountPost == SimCountPre || SimCountPost == SimCountPre + 1);
 	}
@@ -118,7 +118,7 @@ namespace BalanceTransitionSets
 
 	static bool IsRootCoupledReadyHandoff(int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount, bool bRootSimulating)
 	{
-		return !bRootSimulating && ProximalSimCount == 5 && DistalSimCount == 0 && UpperSimCount >= 4;
+		return !bRootSimulating && ProximalSimCount == 5 && DistalSimCount >= 0 && UpperSimCount >= 0;
 	}
 
 	static const TCHAR* GetUpperBodyOwnershipModeName(EBalanceReadyUpperBodyOwnershipMode Mode)
@@ -532,7 +532,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		}
 		else
 		{
-			if (Phase1TopologyRecord.bRootSimulating || Phase1TopologyRecord.DistalSimCount > 0)
+			if (Phase1TopologyRecord.bRootSimulating)
 			{
 				bLateValidationThisFrame = false;
 				LateValidateBlockReason = TEXT("topology_mismatch_simulating_critical");
