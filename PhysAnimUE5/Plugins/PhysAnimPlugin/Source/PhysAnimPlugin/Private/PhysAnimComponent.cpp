@@ -6330,7 +6330,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(
 		bUseSkeletalAnimationTargetRepresentation,
-		ControlTargetDiagnostics.bFirstPolicyEnabledFrame))
+		ControlTargetDiagnostics.bFirstPolicyEnabledFrame) && !bApplyPhase1HoldPoseThisFrame)
 	{
 		PhysicsControl->SetControlTargetOrientationsInSet(TEXT("All"), FRotator::ZeroRotator, 0.0f, true, false);
 	}
@@ -6338,21 +6338,21 @@ void UPhysAnimComponent::ApplyControlTargets(
 	if (bApplyPhase1HoldPoseThisFrame)
 	{
 		const bool bIsPhase1EntryState = bPhase1Prepare || bPhase1LateValidate;
-		auto IsPhase1SimulatedBone = [](const FName BoneName)
+		auto IsPhase1KinematicAllowlistedBone = [](const FName BoneName)
 		{
-			return BoneName == "thigh_l" || BoneName == "thigh_r" ||
-				BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" ||
-				BoneName == "calf_l" || BoneName == "foot_l" || BoneName == "ball_l" ||
-				BoneName == "calf_r" || BoneName == "foot_r" || BoneName == "ball_r";
+			return BoneName == "pelvis" ||
+				BoneName == "neck_01" || BoneName == "head" ||
+				BoneName == "clavicle_l" || BoneName == "upperarm_l" || BoneName == "lowerarm_l" || BoneName == "hand_l" ||
+				BoneName == "clavicle_r" || BoneName == "upperarm_r" || BoneName == "lowerarm_r" || BoneName == "hand_r";
 		};
 
 		for (const TPair<FName, FQuat>& HoldPair : BalanceReadyTransition.GetEntryHoldRotations())
 		{
 			const FName BoneName = HoldPair.Key;
 
-			// Phase 1 Ownership: Only publish held targets for kinematic hold-eligible bones.
-			// Simulated bodies (Lower-limb and Spine) receive no target writes during Prepare/LateValidate.
-			if (bIsPhase1EntryState && IsPhase1SimulatedBone(BoneName))
+			// Phase 1 Ownership: Enforce strict positive allowlist for kinematic bones.
+			// Only intended hold-eligible kinematic bones receive held targets during Prepare/LateValidate.
+			if (bIsPhase1EntryState && !IsPhase1KinematicAllowlistedBone(BoneName))
 			{
 				continue;
 			}
@@ -6394,13 +6394,12 @@ void UPhysAnimComponent::ApplyControlTargets(
 	{
 		// Phase 1 Transition Rule: No normal policy writes during Prepare/LateValidate.
 		// Only explicit held-pose targets may be published for kinematic bones in these states.
-		if (bPhase1Prepare || bPhase1LateValidate)
-		{
-			return;
-		}
+		const bool bIsPhase1PolicyLoopSuppressed = bPhase1Prepare || bPhase1LateValidate;
 
-		for (const TPair<FName, FQuat>& Pair : ControlRotations)
+		if (!bIsPhase1PolicyLoopSuppressed)
 		{
+			for (const TPair<FName, FQuat>& Pair : ControlRotations)
+			{
 			if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
 			{
 				continue;
@@ -6538,6 +6537,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 				false,
 				true,
 				false);
+			}
 		}
 	}
 
