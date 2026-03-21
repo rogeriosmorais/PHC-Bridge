@@ -381,6 +381,45 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				bQuietThisFrame = false;
 				QuietBlockReason = TEXT("sim_coverage_regressed");
 			}
+			else if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
+			{
+				float CurrentFrameWorstLinearSpeed = 0.0f;
+				float CurrentFrameWorstAngularSpeed = 0.0f;
+				FName LinearBone = NAME_None;
+				FName AngularBone = NAME_None;
+
+				for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+				{
+					if (SimulatingBones.Contains(BoneName))
+					{
+						const float LinSpeed = Mesh->GetPhysicsLinearVelocity(BoneName).Size();
+						const float AngSpeed = Mesh->GetPhysicsAngularVelocityInDegrees(BoneName).Size();
+						
+						if (LinSpeed > CurrentFrameWorstLinearSpeed)
+						{
+							CurrentFrameWorstLinearSpeed = LinSpeed;
+							LinearBone = BoneName;
+						}
+						if (AngSpeed > CurrentFrameWorstAngularSpeed)
+						{
+							CurrentFrameWorstAngularSpeed = AngSpeed;
+							AngularBone = BoneName;
+						}
+					}
+				}
+
+				if (CurrentFrameWorstLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
+					CurrentFrameWorstAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed)
+				{
+					bQuietThisFrame = false;
+					QuietBlockReason = TEXT("body_motion_instability");
+					
+					Diagnostics.Phase1LateValidateWorstLinearSpeed = CurrentFrameWorstLinearSpeed;
+					Diagnostics.Phase1LateValidateWorstLinearSpeedBone = LinearBone;
+					Diagnostics.Phase1LateValidateWorstAngularSpeed = CurrentFrameWorstAngularSpeed;
+					Diagnostics.Phase1LateValidateWorstAngularSpeedBone = AngularBone;
+				}
+			}
 		}
 		if (bQuietThisFrame && (Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
 			Owner->GetLastControlTargetDiagnostics().MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg))
