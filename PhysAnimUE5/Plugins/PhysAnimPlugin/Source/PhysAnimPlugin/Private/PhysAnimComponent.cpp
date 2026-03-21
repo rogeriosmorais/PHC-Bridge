@@ -6337,13 +6337,22 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (bApplyPhase1HoldPoseThisFrame)
 	{
+		const bool bIsPhase1EntryState = bPhase1Prepare || bPhase1LateValidate;
+		auto IsPhase1SimulatedBone = [](const FName BoneName)
+		{
+			return BoneName == "thigh_l" || BoneName == "thigh_r" ||
+				BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" ||
+				BoneName == "calf_l" || BoneName == "foot_l" || BoneName == "ball_l" ||
+				BoneName == "calf_r" || BoneName == "foot_r" || BoneName == "ball_r";
+		};
+
 		for (const TPair<FName, FQuat>& HoldPair : BalanceReadyTransition.GetEntryHoldRotations())
 		{
 			const FName BoneName = HoldPair.Key;
 
-			// Phase 1 Ownership: Only publish held targets for kinematic bones (Root/Upper-body).
-			// Simulated bodies (Lower-limb) get no target writes during Prepare/LateValidate.
-			if (PhysAnimComponentInternal::IsLowerLimbControlBone(BoneName))
+			// Phase 1 Ownership: Only publish held targets for kinematic hold-eligible bones.
+			// Simulated bodies (Lower-limb and Spine) receive no target writes during Prepare/LateValidate.
+			if (bIsPhase1EntryState && IsPhase1SimulatedBone(BoneName))
 			{
 				continue;
 			}
@@ -6383,23 +6392,15 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (bApplyNewPolicyStepThisTick)
 	{
+		// Phase 1 Transition Rule: No normal policy writes during Prepare/LateValidate.
+		// Only explicit held-pose targets may be published for kinematic bones in these states.
+		if (bPhase1Prepare || bPhase1LateValidate)
+		{
+			return;
+		}
+
 		for (const TPair<FName, FQuat>& Pair : ControlRotations)
 		{
-			// Phase 1 Ownership: Suppress normal policy writes for simulated Phase 1 bones (Lower-limb)
-			// during the frozen entry-topology phases (Prepare/LateValidate).
-			if ((bPhase1Prepare || bPhase1LateValidate) && PhysAnimComponentInternal::IsLowerLimbControlBone(Pair.Key))
-			{
-				continue;
-			}
-
-			const bool bIsHeldBone = bApplyPhase1HoldPoseThisFrame && BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key);
-
-			// Skip bones already handled by the explicit hold path in Prepare/LateValidate.
-			if (bIsHeldBone)
-			{
-				continue;
-			}
-
 			if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
 			{
 				continue;
