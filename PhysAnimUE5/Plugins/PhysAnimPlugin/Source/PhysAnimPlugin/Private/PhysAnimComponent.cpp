@@ -1792,8 +1792,32 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		SafePhase1ConvergenceSnapshot.RootLinearSpeed = LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond;
 		SafePhase1ConvergenceSnapshot.RootAngularSpeed = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
 		
-		const FVector RootUp = GetMeshComponent()->GetBoneQuaternion(PhysAnimBridge::GetRootBoneName()).GetAxisZ();
-		SafePhase1ConvergenceSnapshot.RootTilt = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(RootUp, FVector::UpVector), -1.0f, 1.0f)));
+		FString TiltSource;
+		const float ResolvedTilt = ResolvePhase1Uprightness(GetMeshComponent(), GetOwner(), PhysAnimBridge::GetRootBoneName(), TiltSource);
+		SafePhase1ConvergenceSnapshot.RootTilt = ResolvedTilt;
+
+		if (!bPhase1TiltDiagnosticEmitted)
+		{
+			bPhase1TiltDiagnosticEmitted = true;
+			const FQuat MeshRootQuat = GetMeshComponent() ? GetMeshComponent()->GetBoneQuaternion(PhysAnimBridge::GetRootBoneName()) : FQuat::Identity;
+			const FVector MeshRootX = MeshRootQuat.GetAxisX();
+			const FVector MeshRootY = MeshRootQuat.GetAxisY();
+			const FVector MeshRootZ = MeshRootQuat.GetAxisZ();
+			const FVector ActorUp = GetOwner() ? GetOwner()->GetActorUpVector() : FVector::UpVector;
+			const FVector MeshCompUp = GetMeshComponent() ? GetMeshComponent()->GetUpVector() : FVector::UpVector;
+			const FRotator LocalMeshRot = GetMeshComponent() ? GetMeshComponent()->GetRelativeRotation() : FRotator::ZeroRotator;
+
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Phase 1 Tilt Diagnostic: rootTiltDeg=%.2f tiltSource=%s pelvisBodyValid=%s pelvisSimulating=%s MeshX=(%.2f,%.2f,%.2f) MeshY=(%.2f,%.2f,%.2f) MeshZ=(%.2f,%.2f,%.2f) actorUp=(%.2f,%.2f,%.2f) meshCompUp=(%.2f,%.2f,%.2f) localMeshRot=(%.2f,%.2f,%.2f)"),
+				ResolvedTilt, *TiltSource,
+				(GetMeshComponent() && GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName())) ? TEXT("true") : TEXT("false"),
+				IsPelvisSimulatingNow() ? TEXT("true") : TEXT("false"),
+				MeshRootX.X, MeshRootX.Y, MeshRootX.Z,
+				MeshRootY.X, MeshRootY.Y, MeshRootY.Z,
+				MeshRootZ.X, MeshRootZ.Y, MeshRootZ.Z,
+				ActorUp.X, ActorUp.Y, ActorUp.Z,
+				MeshCompUp.X, MeshCompUp.Y, MeshCompUp.Z,
+				LocalMeshRot.Pitch, LocalMeshRot.Yaw, LocalMeshRot.Roll);
+		}
 		
 		SafePhase1ConvergenceSnapshot.ShellPlanarOffset = GetCurrentShellPlanarOffsetDeltaCm();
 		SafePhase1ConvergenceSnapshot.ShellPlanarVelocity = GetCurrentShellPlanarVelocityDeltaCmPerSecond();
@@ -1804,6 +1828,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		SafePhase1ConvergenceSnapshot.MeanTargetDeltaDegrees = LastControlTargetDiagnostics.MeanTargetDeltaDegrees;
 
 		BalanceReadyTransition.PushConvergenceSnapshot(SafePhase1ConvergenceSnapshot);
+	}
+	else
+	{
+		bPhase1TiltDiagnosticEmitted = false;
 	}
 
 	FinalizeTraceFrame();
@@ -8104,6 +8132,59 @@ float UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(
 		bUseSkeletalAnimationTargetRepresentation,
 		bFirstPolicyEnabledFrame,
 		DeltaTime);
+}
+
+float UPhysAnimComponent::ResolvePhase1Uprightness(
+	USkeletalMeshComponent* SkeletalMesh,
+	AActor* Owner,
+	const FName& PelvisBoneName,
+	FString& OutSourceName)
+{
+	if (!SkeletalMesh)
+	{
+		OutSourceName = TEXT("actor_up_no_mesh");
+		return Owner ? FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Owner->GetActorUpVector(), FVector::UpVector), -1.0f, 1.0f))) : 0.0f;
+	}
+
+	// 1. Authoritative Phase 1 reference: Pelvis BodyInstance world transform
+	if (const FBodyInstance* const PelvisBody = SkeletalMesh->GetBodyInstance(PelvisBoneName))
+	{
+		const FTransform PelvisTransform = PelvisBody->GetUnrealWorldTransform();
+		
+		// Robustly find the axis most aligned with World Up
+		const FVector AxisX = PelvisTransform.GetUnitAxis(EAxis::X);
+		const FVector AxisY = PelvisTransform.GetUnitAxis(EAxis::Y);
+		const FVector AxisZ = PelvisTransform.GetUnitAxis(EAxis::Z);
+		
+		const float DotX = FMath::Abs(FVector::DotProduct(AxisX, FVector::UpVector));
+		const float DotY = FMath::Abs(FVector::DotProduct(AxisY, FVector::UpVector));
+		const float DotZ = FMath::Abs(FVector::DotProduct(AxisZ, FVector::UpVector));
+		
+		FVector PelvisUp = AxisZ;
+		if (DotX > DotY && DotX > DotZ) PelvisUp = AxisX;
+		else if (DotY > DotX && DotY > DotZ) PelvisUp = AxisY;
+
+		OutSourceName = TEXT("pelvis_body");
+		return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(PelvisUp, FVector::UpVector), -1.0f, 1.0f)));
+	}
+
+	// 2. Fallback: Mesh Root bone world transform
+	const FQuat MeshRootQuat = SkeletalMesh->GetBoneQuaternion(PhysAnimBridge::GetRootBoneName());
+	
+	const FVector AxisX = MeshRootQuat.GetAxisX();
+	const FVector AxisY = MeshRootQuat.GetAxisY();
+	const FVector AxisZ = MeshRootQuat.GetAxisZ();
+	
+	const float DotX = FMath::Abs(FVector::DotProduct(AxisX, FVector::UpVector));
+	const float DotY = FMath::Abs(FVector::DotProduct(AxisY, FVector::UpVector));
+	const float DotZ = FMath::Abs(FVector::DotProduct(AxisZ, FVector::UpVector));
+	
+	FVector MeshRootUp = AxisZ;
+	if (DotX > DotY && DotX > DotZ) MeshRootUp = AxisX;
+	else if (DotY > DotX && DotY > DotZ) MeshRootUp = AxisY;
+
+	OutSourceName = TEXT("mesh_root_world");
+	return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(MeshRootUp, FVector::UpVector), -1.0f, 1.0f)));
 }
 
 float UPhysAnimComponent::ResolveObservationGroundWorldZFromFloor(

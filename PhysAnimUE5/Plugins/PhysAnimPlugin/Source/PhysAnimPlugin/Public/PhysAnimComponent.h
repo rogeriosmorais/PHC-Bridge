@@ -1086,6 +1086,7 @@ private:
 	bool bPendingBalanceModeStartAttemptIssued = false;
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
+	bool bPhase1TiltDiagnosticEmitted = false;
 	bool bPelvisResetAppliedThisTick = false;
 	float BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
 	float BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
@@ -1311,6 +1312,13 @@ public:
 	static bool ShouldDeactivateBridgeToSafeMode(EPhysAnimRuntimeState State, bool bForceZeroActions);
 	static bool RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState State);
 	static const TCHAR* GetRuntimeStateName(EPhysAnimRuntimeState State);
+
+	static float ResolvePhase1Uprightness(
+		class USkeletalMeshComponent* SkeletalMesh,
+		class AActor* Owner,
+		const FName& PelvisBoneName,
+		FString& OutSourceName);
+
 
 private:
 	void UpdateBridgeStatusIndicator(float DisplayDurationSeconds) const;
