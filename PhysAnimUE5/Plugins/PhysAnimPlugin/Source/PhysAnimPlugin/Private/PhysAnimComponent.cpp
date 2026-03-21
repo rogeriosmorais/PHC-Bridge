@@ -6340,6 +6340,14 @@ void UPhysAnimComponent::ApplyControlTargets(
 		for (const TPair<FName, FQuat>& HoldPair : BalanceReadyTransition.GetEntryHoldRotations())
 		{
 			const FName BoneName = HoldPair.Key;
+
+			// Phase 1 Ownership: Only publish held targets for kinematic bones (Root/Upper-body).
+			// Simulated bodies (Lower-limb) get no target writes during Prepare/LateValidate.
+			if (PhysAnimComponentInternal::IsLowerLimbControlBone(BoneName))
+			{
+				continue;
+			}
+
 			const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
 			if (!PhysicsControl->GetControlExists(ControlName))
 			{
@@ -6377,6 +6385,13 @@ void UPhysAnimComponent::ApplyControlTargets(
 	{
 		for (const TPair<FName, FQuat>& Pair : ControlRotations)
 		{
+			// Phase 1 Ownership: Suppress normal policy writes for simulated Phase 1 bones (Lower-limb)
+			// during the frozen entry-topology phases (Prepare/LateValidate).
+			if ((bPhase1Prepare || bPhase1LateValidate) && PhysAnimComponentInternal::IsLowerLimbControlBone(Pair.Key))
+			{
+				continue;
+			}
+
 			const bool bIsHeldBone = bApplyPhase1HoldPoseThisFrame && BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key);
 
 			// Skip bones already handled by the explicit hold path in Prepare/LateValidate.
