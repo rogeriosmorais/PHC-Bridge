@@ -132,6 +132,27 @@ struct FPhysAnimPhase1TopologySnapshot
 	bool bResetsSuppressed = false;
 };
 
+struct FPhase1AcceptedConvergenceSnapshot
+{
+	int64 FrameIndex = -1;
+	double WorldTimeSeconds = 0.0;
+	float MaxBodyLinearSpeed = 0.0f;
+	float MaxBodyAngularSpeed = 0.0f;
+	float RootLinearSpeed = 0.0f;
+	float RootAngularSpeed = 0.0f;
+	float RootTilt = 0.0f;
+	float ShellPlanarOffset = 0.0f;
+	float ShellPlanarVelocity = 0.0f;
+	bool bIsInstabilityPrecursorActive = false;
+	bool bHasPendingResets = false;
+	float MaxTargetDeltaDegrees = 0.0f;
+	float MeanTargetDeltaDegrees = 0.0f;
+	bool bIsPelvisSimulating = false;
+
+
+	bool IsValid() const { return FrameIndex >= 0; }
+};
+
 struct FBalanceReadyTransitionDiagnostics
 {
 	FString BlockReason;
@@ -200,12 +221,19 @@ public:
 	void Cancel(class UPhysAnimComponent* Owner);
 	void Tick(float DeltaTime, class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);
 
+	void PushConvergenceSnapshot(const FPhase1AcceptedConvergenceSnapshot& Snapshot) { CachedConvergenceSnapshot = Snapshot; }
+
 	bool IsActive() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive && !IsComplete(); }
 	bool HasSucceeded() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded; }
 	bool HasFailed() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed; }
 	bool HasSafeDenied() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied; }
 	bool IsComplete() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded || InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed || InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied; }
-	bool HasActuallyStarted() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive; }
+
+	/** Returns true if the transition has been started and is either running or has completed. */
+	bool HasAnyInternalPhase() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive; }
+
+	/** Returns true if the transition is currently executing logic (not inactive and not complete). */
+	bool HasActuallyStarted() const { return IsActive(); }
 	bool HasSafePhase2Denial() const { return HasSafeDenied(); }
 	const FString& GetSafePhase2DenialReason() const { return SafePhase2DenialReason; }
 
@@ -296,6 +324,8 @@ private:
 	FPhysAnimPhase1TopologySnapshot Phase1TopologyRecord;
 	bool bHasPhase1TopologyRecord = false;
 	FString SafePhase2DenialReason;
+
+	FPhase1AcceptedConvergenceSnapshot CachedConvergenceSnapshot;
 
 	FBalanceReadyTransitionDiagnostics Diagnostics;
 	double LastLogTimeSeconds = -1.0;

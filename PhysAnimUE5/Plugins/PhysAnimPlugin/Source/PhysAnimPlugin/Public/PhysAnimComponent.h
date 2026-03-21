@@ -1079,17 +1079,19 @@ private:
 	double LastBalanceStabilizationLogTimeSeconds = -1.0;
 	FVector BalanceScenarioImpactPelvisAngularVelPre = FVector::ZeroVector;
 	FVector BalanceScenarioImpactPelvisAngularVelPost = FVector::ZeroVector;
-	float BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
-	float BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
-	float BalanceScenarioPeakActorDisplacementCm = 0.0f;
-	FPoseSearchBlueprintResult BalanceIdlePoseSearchResult;
-	bool bHasBalanceIdlePoseSearchResult = false;
+
 	FPhysAnimBalanceReadyTransition BalanceReadyTransition;
+	FPhase1AcceptedConvergenceSnapshot SafePhase1ConvergenceSnapshot;
 	bool bPendingBalanceModeStartRequest = false;
 	bool bPendingBalanceModeStartAttemptIssued = false;
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
 	bool bPelvisResetAppliedThisTick = false;
+	float BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
+	float BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
+	float BalanceScenarioPeakActorDisplacementCm = 0.0f;
+	FPoseSearchBlueprintResult BalanceIdlePoseSearchResult;
+	bool bHasBalanceIdlePoseSearchResult = false;
 
 public:
 	static bool BuildConditionedActions(

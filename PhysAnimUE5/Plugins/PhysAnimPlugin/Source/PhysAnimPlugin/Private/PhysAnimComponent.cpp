@@ -1781,6 +1781,31 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		EmitBridgeTraceEvent(TEXT("simulation_handoff_complete"), TEXT("Simulation handoff completed and bridge-owned physics is fully active."));
 	}
 	MaybeLogRuntimeDiagnostics(EffectiveSettings);
+
+	// Populate and push Phase 1 convergence snapshot for authoritative gating in next frame's transition controller tick
+	if (BalanceReadyTransition.IsActive())
+	{
+		SafePhase1ConvergenceSnapshot.FrameIndex = GFrameCounter;
+		SafePhase1ConvergenceSnapshot.WorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		SafePhase1ConvergenceSnapshot.MaxBodyLinearSpeed = LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond;
+		SafePhase1ConvergenceSnapshot.MaxBodyAngularSpeed = LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond;
+		SafePhase1ConvergenceSnapshot.RootLinearSpeed = LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond;
+		SafePhase1ConvergenceSnapshot.RootAngularSpeed = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
+		
+		const FVector RootUp = GetMeshComponent()->GetBoneQuaternion(PhysAnimBridge::GetRootBoneName()).GetAxisZ();
+		SafePhase1ConvergenceSnapshot.RootTilt = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(RootUp, FVector::UpVector), -1.0f, 1.0f)));
+		
+		SafePhase1ConvergenceSnapshot.ShellPlanarOffset = GetCurrentShellPlanarOffsetDeltaCm();
+		SafePhase1ConvergenceSnapshot.ShellPlanarVelocity = GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+		SafePhase1ConvergenceSnapshot.bIsInstabilityPrecursorActive = IsInstabilityPrecursorActive();
+		SafePhase1ConvergenceSnapshot.bIsPelvisSimulating = IsPelvisSimulatingNow();
+		SafePhase1ConvergenceSnapshot.bHasPendingResets = PendingBodyModifierCachedResetNames.Num() > 0;
+		SafePhase1ConvergenceSnapshot.MaxTargetDeltaDegrees = LastControlTargetDiagnostics.MaxTargetDeltaDegrees;
+		SafePhase1ConvergenceSnapshot.MeanTargetDeltaDegrees = LastControlTargetDiagnostics.MeanTargetDeltaDegrees;
+
+		BalanceReadyTransition.PushConvergenceSnapshot(SafePhase1ConvergenceSnapshot);
+	}
+
 	FinalizeTraceFrame();
 }
 
@@ -2684,7 +2709,8 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 		return;
 	}
 
-	if (RuntimeState == EPhysAnimRuntimeState::FailStopped || RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
+	if (RuntimeState == EPhysAnimRuntimeState::FailStopped || 
+		(RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny && PendingBalanceModeStartReason != TEXT("manual_trigger")))
 	{
 		if (BalanceReadyTransition.HasActuallyStarted())
 		{

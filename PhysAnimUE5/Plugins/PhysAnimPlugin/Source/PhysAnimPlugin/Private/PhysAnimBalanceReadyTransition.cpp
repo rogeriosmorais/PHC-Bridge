@@ -351,12 +351,17 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		bool bQuietThisFrame = true;
 		FString QuietBlockReason;
 
-		if (Owner->IsInstabilityPrecursorActive())
+		if (!bReadyThisFrame)
+		{
+			bQuietThisFrame = false;
+			QuietBlockReason = BlockReason;
+		}
+		else if (CachedConvergenceSnapshot.bIsInstabilityPrecursorActive)
 		{
 			bQuietThisFrame = false;
 			QuietBlockReason = TEXT("instability_precursor");
 		}
-		else if (!Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
+		else if (CachedConvergenceSnapshot.bHasPendingResets)
 		{
 			bQuietThisFrame = false;
 			QuietBlockReason = TEXT("pending_resets");
@@ -366,68 +371,31 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			bQuietThisFrame = false;
 			QuietBlockReason = TEXT("motion_above_limit");
 		}
-		else if (Owner->GetCurrentShellPlanarOffsetDeltaCm() > Settings.BalancePhase1QuietShellOffsetDelta ||
-			Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond() > Settings.BalancePhase1QuietShellVelocityDelta)
+		else if (CachedConvergenceSnapshot.ShellPlanarOffset > Settings.BalancePhase1QuietShellOffsetDelta ||
+			CachedConvergenceSnapshot.ShellPlanarVelocity > Settings.BalancePhase1QuietShellVelocityDelta)
 		{
 			bQuietThisFrame = false;
 			QuietBlockReason = TEXT("shell_contamination");
 		}
-		else
+		else if (CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
+			CachedConvergenceSnapshot.MaxBodyAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed)
 		{
-			TArray<FName> SimulatingBones;
-			Owner->GetSimulatingBodies(SimulatingBones);
-			if (SimulatingBones.Num() == 0)
-			{
-				bQuietThisFrame = false;
-				QuietBlockReason = TEXT("sim_coverage_regressed");
-			}
-			else if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
-			{
-				float CurrentFrameWorstLinearSpeed = 0.0f;
-				float CurrentFrameWorstAngularSpeed = 0.0f;
-				FName LinearBone = NAME_None;
-				FName AngularBone = NAME_None;
+			bQuietThisFrame = false;
+			QuietBlockReason = TEXT("body_motion_instability");
 
-				for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
-				{
-					if (SimulatingBones.Contains(BoneName))
-					{
-						const float LinSpeed = Mesh->GetPhysicsLinearVelocity(BoneName).Size();
-						const float AngSpeed = Mesh->GetPhysicsAngularVelocityInDegrees(BoneName).Size();
-						
-						if (LinSpeed > CurrentFrameWorstLinearSpeed)
-						{
-							CurrentFrameWorstLinearSpeed = LinSpeed;
-							LinearBone = BoneName;
-						}
-						if (AngSpeed > CurrentFrameWorstAngularSpeed)
-						{
-							CurrentFrameWorstAngularSpeed = AngSpeed;
-							AngularBone = BoneName;
-						}
-					}
-				}
-
-				if (CurrentFrameWorstLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
-					CurrentFrameWorstAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed)
-				{
-					bQuietThisFrame = false;
-					QuietBlockReason = TEXT("body_motion_instability");
-					
-					Diagnostics.Phase1LateValidateWorstLinearSpeed = CurrentFrameWorstLinearSpeed;
-					Diagnostics.Phase1LateValidateWorstLinearSpeedBone = LinearBone;
-					Diagnostics.Phase1LateValidateWorstAngularSpeed = CurrentFrameWorstAngularSpeed;
-					Diagnostics.Phase1LateValidateWorstAngularSpeedBone = AngularBone;
-				}
-			}
+			Diagnostics.Phase1LateValidateWorstLinearSpeed = CachedConvergenceSnapshot.MaxBodyLinearSpeed;
+			Diagnostics.Phase1LateValidateWorstAngularSpeed = CachedConvergenceSnapshot.MaxBodyAngularSpeed;
+			// Note: Snapshot doesn't track which bone was worst, but we record the speeds for diagnostics.
 		}
-		if (bQuietThisFrame && (Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
-			Owner->GetLastControlTargetDiagnostics().MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg))
+
+		if (bQuietThisFrame && (CachedConvergenceSnapshot.MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
+			CachedConvergenceSnapshot.MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg))
 		{
 			bQuietThisFrame = false;
 			QuietBlockReason = TEXT("target_discontinuity");
-			Diagnostics.Phase1TargetDiscontinuityGateInput = Owner->GetLastControlTargetDiagnostics();
-			Diagnostics.Phase1TargetDiscontinuityGateSource = TEXT("live_quiet_window_gate");
+			Diagnostics.Phase1TargetDiscontinuityGateInput.MaxTargetDeltaDegrees = CachedConvergenceSnapshot.MaxTargetDeltaDegrees;
+			Diagnostics.Phase1TargetDiscontinuityGateInput.MeanTargetDeltaDegrees = CachedConvergenceSnapshot.MeanTargetDeltaDegrees;
+			Diagnostics.Phase1TargetDiscontinuityGateSource = TEXT("snapshot_quiet_window_gate");
 			Diagnostics.Phase1TargetDiscontinuityGateReason = QuietBlockReason;
 			Diagnostics.Phase1TargetDiscontinuityAccumulatedSeconds = TargetDiscontinuityAccumulatedSeconds;
 		}
@@ -502,8 +470,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			if (QuietBlockReason == TEXT("target_discontinuity"))
 			{
 				TargetDiscontinuityAccumulatedSeconds += DeltaTime;
-				Diagnostics.Phase1TargetDiscontinuityGateInput = Owner->GetLastControlTargetDiagnostics();
-				Diagnostics.Phase1TargetDiscontinuityGateSource = TEXT("live_quiet_window_gate");
+				Diagnostics.Phase1TargetDiscontinuityGateInput.MaxTargetDeltaDegrees = CachedConvergenceSnapshot.MaxTargetDeltaDegrees;
+				Diagnostics.Phase1TargetDiscontinuityGateInput.MeanTargetDeltaDegrees = CachedConvergenceSnapshot.MeanTargetDeltaDegrees;
+				Diagnostics.Phase1TargetDiscontinuityGateSource = TEXT("snapshot_quiet_window_gate");
 				Diagnostics.Phase1TargetDiscontinuityGateReason = QuietBlockReason;
 				Diagnostics.Phase1TargetDiscontinuityAccumulatedSeconds = TargetDiscontinuityAccumulatedSeconds;
 			}
@@ -543,12 +512,17 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		FString LateValidateBlockReason;
 		const float PolicyInfluenceAlpha = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
 
-		if (Owner->IsInstabilityPrecursorActive())
+		if (!bReadyThisFrame)
+		{
+			bLateValidationThisFrame = false;
+			LateValidateBlockReason = BlockReason;
+		}
+		else if (CachedConvergenceSnapshot.bIsInstabilityPrecursorActive)
 		{
 			bLateValidationThisFrame = false;
 			LateValidateBlockReason = TEXT("instability_precursor");
 		}
-		else if (!Phase1TopologyRecord.bResetsSuppressed && !Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
+		else if (!Phase1TopologyRecord.bResetsSuppressed && CachedConvergenceSnapshot.bHasPendingResets)
 		{
 			bLateValidationThisFrame = false;
 			LateValidateBlockReason = TEXT("pending_resets");
@@ -563,8 +537,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			bLateValidationThisFrame = false;
 			LateValidateBlockReason = TEXT("motion_above_limit");
 		}
-		else if (Owner->GetCurrentShellPlanarOffsetDeltaCm() > Settings.BalancePhase1QuietShellOffsetDelta ||
-			Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond() > Settings.BalancePhase1QuietShellVelocityDelta)
+		else if (CachedConvergenceSnapshot.ShellPlanarOffset > Settings.BalancePhase1QuietShellOffsetDelta ||
+			CachedConvergenceSnapshot.ShellPlanarVelocity > Settings.BalancePhase1QuietShellVelocityDelta)
 		{
 			bLateValidationThisFrame = false;
 			LateValidateBlockReason = TEXT("shell_contamination");
@@ -603,8 +577,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		const bool bFirstPolicyEnabledFrame = Owner->GetLastControlTargetDiagnostics().bFirstPolicyEnabledFrame;
 		const bool bPolicyInfluenceRampReanchored = Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
 		const bool bCurrentTargetDiscontinuity =
-			Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
-			Owner->GetLastControlTargetDiagnostics().MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg;
+			CachedConvergenceSnapshot.MaxTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg ||
+			CachedConvergenceSnapshot.MeanTargetDeltaDegrees > Settings.BalancePhase1MaxEntryTargetDeltaDeg;
 		// The first policy-enabled frame re-bases the target history; do not treat that expected
 		// transition spike as a late-validation failure.
 		const bool bLateValidateTargetDiscontinuity =
@@ -628,45 +602,26 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		if (bLateValidationThisFrame)
 		{
-			USkeletalMeshComponent* LiveMesh = Owner->GetMeshComponent();
-			TArray<FName> SimulatingBones;
-			Owner->GetSimulatingBodies(SimulatingBones);
-			float CurrentFrameWorstLinearSpeed = 0.0f;
-			float CurrentFrameWorstAngularSpeed = 0.0f;
-			int32 ProximalSimCount = 0;
-			int32 DistalSimCount = 0;
-			int32 UpperSimCount = 0;
-			for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+			const float CurrentFrameWorstLinearSpeed = CachedConvergenceSnapshot.MaxBodyLinearSpeed;
+			const float CurrentFrameWorstAngularSpeed = CachedConvergenceSnapshot.MaxBodyAngularSpeed;
+			
+			// Diagnostics for worst speed across time.
+			if (CurrentFrameWorstLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed &&
+				CurrentFrameWorstLinearSpeed > Diagnostics.Phase1LateValidateWorstLinearSpeed)
 			{
-				if (SimulatingBones.Contains(BoneName))
-				{
-					if (BalanceTransitionSets::IsProximal(BoneName)) ProximalSimCount++;
-					else if (BalanceTransitionSets::IsDistalLowerLimb(BoneName)) DistalSimCount++;
-					else if (BalanceTransitionSets::IsUpperBody(BoneName)) UpperSimCount++;
-
-					if (LiveMesh && (BalanceTransitionSets::IsProximal(BoneName) || BalanceTransitionSets::IsUpperBody(BoneName)))
-					{
-						const FVector BoneLinearVelocity = LiveMesh->GetPhysicsLinearVelocity(BoneName);
-						const FVector BoneAngularVelocityDegPerSec = LiveMesh->GetPhysicsAngularVelocityInDegrees(BoneName);
-						const float LinearSpeed = BoneLinearVelocity.Size();
-						const float AngularSpeed = BoneAngularVelocityDegPerSec.Size();
-						CurrentFrameWorstLinearSpeed = FMath::Max(CurrentFrameWorstLinearSpeed, LinearSpeed);
-						CurrentFrameWorstAngularSpeed = FMath::Max(CurrentFrameWorstAngularSpeed, AngularSpeed);
-						if (LinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed &&
-							LinearSpeed > Diagnostics.Phase1LateValidateWorstLinearSpeed)
-						{
-							Diagnostics.Phase1LateValidateWorstLinearSpeed = LinearSpeed;
-							Diagnostics.Phase1LateValidateWorstLinearSpeedBone = BoneName;
-						}
-						if (AngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed &&
-							AngularSpeed > Diagnostics.Phase1LateValidateWorstAngularSpeed)
-						{
-							Diagnostics.Phase1LateValidateWorstAngularSpeed = AngularSpeed;
-							Diagnostics.Phase1LateValidateWorstAngularSpeedBone = BoneName;
-						}
-					}
-				}
+				Diagnostics.Phase1LateValidateWorstLinearSpeed = CurrentFrameWorstLinearSpeed;
+				Diagnostics.Phase1LateValidateWorstLinearSpeedBone = NAME_None; // Snapshot doesn't track bone
 			}
+			if (CurrentFrameWorstAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed &&
+				CurrentFrameWorstAngularSpeed > Diagnostics.Phase1LateValidateWorstAngularSpeed)
+			{
+				Diagnostics.Phase1LateValidateWorstAngularSpeed = CurrentFrameWorstAngularSpeed;
+				Diagnostics.Phase1LateValidateWorstAngularSpeedBone = NAME_None; // Snapshot doesn't track bone
+			}
+
+			int32 ProximalSimCount = CurrentSnapshot.ProximalSimCount;
+			int32 DistalSimCount = CurrentSnapshot.DistalSimCount;
+			int32 UpperSimCount = CurrentSnapshot.UpperBodySimCount;
 
 			const bool bLateValidationMotionViolatesThreshold =
 				CurrentFrameWorstLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
@@ -687,8 +642,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			if (bIsRootCoupledTopology || (!bIsRootCoupledTopology && !bIsUpperOnlyTopology))
 			{
 				RootOnReadinessShellHoldAccumulatedSeconds += DeltaTime;
-				const float CurrentShellOffsetCm = Owner->GetCurrentShellPlanarOffsetDeltaCm();
-				const float CurrentShellVelocityDeltaCmPerSecond = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+				const float CurrentShellOffsetCm = CachedConvergenceSnapshot.ShellPlanarOffset;
+				const float CurrentShellVelocityDeltaCmPerSecond = CachedConvergenceSnapshot.ShellPlanarVelocity;
 				if (!bHasRootOnReadinessShellProofBaseline)
 				{
 					RootOnReadinessShellProofStartOffsetCm = CurrentShellOffsetCm;
@@ -1440,30 +1395,27 @@ bool FPhysAnimBalanceReadyTransition::EvaluateReadiness(UPhysAnimComponent* Owne
 		return false;
 	}
 
-	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-	FBodyInstance* PelvisBody = Mesh->GetBodyInstance(RootBoneName);
-	if (!PelvisBody)
+	if (!CachedConvergenceSnapshot.IsValid())
 	{
-		OutReason = TEXT("pelvis_missing");
+		OutReason = TEXT("no_authoritative_snapshot");
 		return false;
 	}
 
-	const FVector PelvisLinearVelocity = Mesh->GetPhysicsLinearVelocity(RootBoneName);
-	const FVector PelvisAngularVelocityDegPerSec = Mesh->GetPhysicsAngularVelocityInDegrees(RootBoneName);
-	const FTransform PelvisTransform = Mesh->GetBoneTransform(Mesh->GetBoneIndex(RootBoneName));
+	Diagnostics.RootSpeed = CachedConvergenceSnapshot.RootLinearSpeed;
+	Diagnostics.RootAngularSpeed = CachedConvergenceSnapshot.RootAngularSpeed;
+	Diagnostics.RootTilt = CachedConvergenceSnapshot.RootTilt;
+	Diagnostics.ShellMetric = CachedConvergenceSnapshot.ShellPlanarVelocity;
 
-	Diagnostics.RootSpeed = PelvisLinearVelocity.Size();
-	Diagnostics.RootAngularSpeed = PelvisAngularVelocityDegPerSec.Size();
-	Diagnostics.RootTilt = FMath::RadiansToDegrees(OwnerActor->GetActorQuat().AngularDistance(PelvisTransform.GetRotation()));
-	Diagnostics.ShellMetric = Owner->GetAcceptedShellPlanarVelocity().Size2D();
-
-	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase1_Prepare && !PelvisBody->IsInstanceSimulatingPhysics())
+	// Note: InternalPhase check against BRT_Phase1_Prepare is preserved because 
+	// Phase 1 Prepare specifically allows non-simulating pelvis and pending resets 
+	// while waiting for the quiet window. LateValidate and beyond require convergence.
+	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase1_Prepare && !CachedConvergenceSnapshot.bIsPelvisSimulating)
 	{
 		OutReason = TEXT("pelvis_not_simulating");
 		return false;
 	}
 
-	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase1_Prepare && !Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
+	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase1_Prepare && CachedConvergenceSnapshot.bHasPendingResets)
 	{
 		OutReason = TEXT("pending_resets");
 		return false;
@@ -1474,12 +1426,13 @@ bool FPhysAnimBalanceReadyTransition::EvaluateReadiness(UPhysAnimComponent* Owne
 		OutReason = TEXT("fail_stop_precursor");
 		return false;
 	}
-	if (Diagnostics.RootSpeed > Settings.BalanceSettleMaxRootLinearSpeed)
+
+	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase1_Prepare && Diagnostics.RootSpeed > Settings.BalanceSettleMaxRootLinearSpeed)
 	{
 		OutReason = TEXT("root_linear_above_settle");
 		return false;
 	}
-	if (Diagnostics.RootAngularSpeed > Settings.BalanceSettleMaxRootAngularSpeed)
+	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase1_Prepare && Diagnostics.RootAngularSpeed > Settings.BalanceSettleMaxRootAngularSpeed)
 	{
 		OutReason = TEXT("root_angular_above_settle");
 		return false;
@@ -1522,12 +1475,12 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		OutReason = TEXT("phase2_same_frame_conflicting_authority");
 		return false;
 	}
-	if (!Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
+	if (CachedConvergenceSnapshot.bHasPendingResets)
 	{
 		OutReason = TEXT("phase2_reset_pending");
 		return false;
 	}
-	if (Owner->IsInstabilityPrecursorActive())
+	if (CachedConvergenceSnapshot.bIsInstabilityPrecursorActive)
 	{
 		OutReason = TEXT("phase2_fail_stop_precursor");
 		return false;
@@ -1564,7 +1517,8 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 
 	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
 	FPhysAnimLateValidationResult CurrentResult;
-	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult))
+	// UsefrozenTopology = true ensures we use the accepted Phase 1 snapshot for classification.
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult, true))
 	{
 		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;
@@ -1603,8 +1557,8 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	const float ShellOffset = Owner->GetCurrentShellPlanarOffsetDeltaCm();
-	const float ShellVel = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+	const float ShellOffset = CachedConvergenceSnapshot.ShellPlanarOffset;
+	const float ShellVel = CachedConvergenceSnapshot.ShellPlanarVelocity;
 	if (Diagnostics.RootSpeed > Settings.BalancePhase2EntryMaxRootLinearSpeed)
 	{
 		OutReason = TEXT("phase2_entry_root_linear_too_high");
@@ -1765,8 +1719,8 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.RootOnReadinessShellHoldDurationSeconds = RootOnReadinessShellHoldAccumulatedSeconds;
 	OutSnapshot.RootOnReadinessShellHoldRequiredSeconds = Settings.BalancePhase2RequiredShellHoldDuration;
 	OutSnapshot.RootOnReadinessShellProofDurationSeconds = RootOnReadinessShellProofAccumulatedSeconds;
-	OutSnapshot.ShellOffsetDeltaAtCaptureCm = Owner->GetCurrentShellPlanarOffsetDeltaCm();
-	OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+	OutSnapshot.ShellOffsetDeltaAtCaptureCm = CachedConvergenceSnapshot.IsValid() ? CachedConvergenceSnapshot.ShellPlanarOffset : Owner->GetCurrentShellPlanarOffsetDeltaCm();
+	OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond = CachedConvergenceSnapshot.IsValid() ? CachedConvergenceSnapshot.ShellPlanarVelocity : Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 	OutSnapshot.ShellOffsetGrowthCm = bHasRootOnReadinessShellProofBaseline
 		? FMath::Max(0.0f, OutSnapshot.ShellOffsetDeltaAtCaptureCm - RootOnReadinessShellProofStartOffsetCm)
 		: 0.0f;
