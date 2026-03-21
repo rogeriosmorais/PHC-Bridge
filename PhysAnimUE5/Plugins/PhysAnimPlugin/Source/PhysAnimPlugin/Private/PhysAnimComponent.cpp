@@ -6193,8 +6193,8 @@ void UPhysAnimComponent::ApplyControlTargets(
 			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
 			bPhase1RootOn ||
 			bPhase1Settle ||
-			(bPhase1Prepare ? !BalanceReadyTransition.ShouldSuppressPolicy() : false) ||
-			(bPhase1LateValidate ? !BalanceReadyTransition.ShouldSuppressPolicy() : false));
+			bPhase1Prepare ||
+			bPhase1LateValidate);
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
 	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
@@ -6282,185 +6282,194 @@ void UPhysAnimComponent::ApplyControlTargets(
 		PhysicsControl->SetControlTargetOrientationsInSet(TEXT("All"), FRotator::ZeroRotator, 0.0f, true, false);
 	}
 
-	for (const TPair<FName, FQuat>& Pair : ControlRotations)
+	if (bApplyPhase1HoldPoseThisFrame)
 	{
-		const bool bSuppressPolicyForThisBone = bApplyPhase1HoldPoseThisFrame &&
-			BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key);
-
-		if (!bApplyNewPolicyStepThisTick && !bSuppressPolicyForThisBone)
+		for (const TPair<FName, FQuat>& HoldPair : BalanceReadyTransition.GetEntryHoldRotations())
 		{
-			continue;
-		}
-		
-		if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
-		{
-			// Prepare/LateValidate still publish held targets for bones whose policy writes remain suppressed.
-			if (bApplyPhase1HoldPoseThisFrame)
-			{
-				if (!bSuppressPolicyForThisBone)
-				{
-					continue;
-				}
-			}
-			else
+			const FName BoneName = HoldPair.Key;
+			const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+			if (!PhysicsControl->GetControlExists(ControlName))
 			{
 				continue;
 			}
-		}
 
-		// Disable 'posture forcing' for bodies held kinematic during transition - REMOVED
-		// We want to write the hold-pose targets even for kinematic-blended bodies if the phase requires it
-
-		const FName ControlName = PhysAnimBridge::MakeControlName(Pair.Key);
-		if (!PhysicsControl->GetControlExists(ControlName))
-		{
-			OutError = FString::Printf(TEXT("Missing required control '%s' during target write."), *ControlName.ToString());
-			return;
-		}
-
-		if (bRebaseControlTargetHistoryThisFrame)
-		{
-			const FQuat* HoldRotation = nullptr;
-			if (bApplyPhase1HoldPoseThisFrame && bSuppressPolicyForThisBone)
+			const FQuat HoldRot = HoldPair.Value;
+			const FQuat* PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
+			if (PreviousRotation)
 			{
-				HoldRotation = BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key);
-			}
-
-			const FQuat& HistoryBasisRotation = HoldRotation ? *HoldRotation : Pair.Value;
-			PreviousControlTargetRotations.Add(ControlName, HistoryBasisRotation);
-			PolicyBlendStartControlTargetRotations.Add(ControlName, HistoryBasisRotation);
-		}
-
-		const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
-		const FQuat* const BlendStartRotation = PolicyBlendStartControlTargetRotations.Find(ControlName);
-		const bool bApplyTrainingAlignedLowerLimbTargetRangePolicy =
-			ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
-				EffectiveSettings.bApplyTrainingAlignedLowerLimbTargetRangePolicy,
-				EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend);
-		const float LowerLimbTargetRangeScale = bApplyTrainingAlignedLowerLimbTargetRangePolicy
-			? ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(
-				Pair.Key,
-				EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend)
-			: 1.0f;
-		const bool bApplyTrainingAlignedDistalLocomotionTargetPolicy =
-			ShouldApplyTrainingAlignedDistalLocomotionTargetPolicy(
-				EffectiveSettings.bApplyTrainingAlignedDistalLocomotionTargetPolicy,
-				EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend,
-				OwnerPlanarSpeedCmPerSec,
-				EffectiveSettings.DistalLocomotionTargetPolicyActivationSpeedCmPerSec);
-		const float DistalLocomotionTargetScale = bApplyTrainingAlignedDistalLocomotionTargetPolicy
-			? ResolveTrainingAlignedDistalLocomotionTargetScaleForBone(
-				Pair.Key,
-				EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend)
-			: 1.0f;
-		const float RawPolicyOffsetDegrees = BlendStartRotation
-			? CalculateControlTargetDeltaDegrees(*BlendStartRotation, Pair.Value)
-			: 0.0f;
-		const FQuat RangeAlignedPolicyRotation = BlendStartRotation
-			? BlendPolicyTargetRotation(*BlendStartRotation, Pair.Value, LowerLimbTargetRangeScale)
-			: Pair.Value;
-		const FQuat DistalLocomotionAlignedPolicyRotation = BlendStartRotation
-			? BlendPolicyTargetRotation(*BlendStartRotation, RangeAlignedPolicyRotation, DistalLocomotionTargetScale)
-			: RangeAlignedPolicyRotation;
-		const float RangeAlignedPolicyOffsetDegrees = BlendStartRotation
-			? CalculateControlTargetDeltaDegrees(*BlendStartRotation, DistalLocomotionAlignedPolicyRotation)
-			: 0.0f;
-		const FQuat BlendedPolicyRotation = BlendStartRotation
-			? BlendPolicyTargetRotation(*BlendStartRotation, DistalLocomotionAlignedPolicyRotation, PolicyInfluenceAlpha)
-			: DistalLocomotionAlignedPolicyRotation;
-		const float TargetDeltaDegrees = PreviousRotation
-			? CalculateControlTargetDeltaDegrees(*PreviousRotation, BlendedPolicyRotation)
-			: 0.0f;
-		FQuat LimitedRotation = PreviousRotation
-			? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
-			: BlendedPolicyRotation;
-
-		// Posture hold logic (Section 9.1 / 9.2).
-		// Phase 1 prepare and late validation both keep their held bones authoritative; root-on
-		// is the first phase that is allowed to release the hold.
-		if (bApplyPhase1HoldPoseThisFrame && bSuppressPolicyForThisBone)
-		{
-			if (const FQuat* HoldRot = BalanceReadyTransition.GetEntryHoldRotations().Find(Pair.Key))
-			{
-				LimitedRotation = *HoldRot;
-			}
-		}
-
-		if (bHipQuarantineActiveThisFrame && (Pair.Key == "thigh_l" || Pair.Key == "thigh_r") && Mesh)
-		{
-			FBodyInstance* BI = Mesh->GetBodyInstance(Pair.Key);
-			if (BI)
-			{
-				const FQuat CurPhysRot = BI->GetUnrealWorldTransform().GetRotation();
-				const FQuat CurSkelRot = Mesh->GetBoneQuaternion(Pair.Key, EBoneSpaces::WorldSpace);
-				const FQuat DeltaPre = CurSkelRot.Inverse() * CurPhysRot;
-				const float Deg = FMath::RadiansToDegrees(DeltaPre.GetAngle());
-
-				if (Pair.Key == "thigh_l")
+				const float Delta = CalculateControlTargetDeltaDegrees(*PreviousRotation, HoldRot);
+				if (Delta > ControlTargetDiagnostics.MaxTargetDeltaDegrees)
 				{
-					ThighLDeltaPre = Deg;
-					LastHipQuarantineLeftPreDeltaDegrees = Deg;
+					ControlTargetDiagnostics.MaxTargetDeltaDegrees = Delta;
+					ControlTargetDiagnostics.MaxTargetDeltaBoneName = BoneName;
 				}
-				else
-				{
-					ThighRDeltaPre = Deg;
-					LastHipQuarantineRightPreDeltaDegrees = Deg;
-				}
-
-				LimitedRotation = DeltaPre;
+				ControlTargetDiagnostics.MeanTargetDeltaDegrees += Delta;
 			}
-		}
 
-		++ControlTargetDiagnostics.NumPolicyTargetsWritten;
-		ControlTargetDiagnostics.MeanTargetDeltaDegrees += TargetDeltaDegrees;
-		ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees += RawPolicyOffsetDegrees;
-		if (TargetDeltaDegrees > ControlTargetDiagnostics.MaxTargetDeltaDegrees)
-		{
-			ControlTargetDiagnostics.MaxTargetDeltaDegrees = TargetDeltaDegrees;
-			ControlTargetDiagnostics.MaxTargetDeltaBoneName = Pair.Key;
+			PhysicsControl->SetControlTargetOrientation(
+				ControlName,
+				HoldRot.Rotator(),
+				0.0f,
+				true,
+				false,
+				true,
+				false);
+
+			PreviousControlTargetRotations.Add(ControlName, HoldRot);
+			++ControlTargetDiagnostics.NumPolicyTargetsWritten;
 		}
-		if (RawPolicyOffsetDegrees > ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees)
+	}
+
+	if (bApplyNewPolicyStepThisTick)
+	{
+		for (const TPair<FName, FQuat>& Pair : ControlRotations)
 		{
-			ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees = RawPolicyOffsetDegrees;
-			ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName = Pair.Key;
-		}
-		const float LowerLimbLimitProxyDegrees =
-			PhysAnimComponentInternal::ResolveLowerLimbConstraintLimitProxyDegrees(PhysicsAsset, Pair.Key);
-		if (LowerLimbLimitProxyDegrees > UE_SMALL_NUMBER)
-		{
-			const float LowerLimbLimitOccupancy = RangeAlignedPolicyOffsetDegrees / LowerLimbLimitProxyDegrees;
-			++ControlTargetDiagnostics.NumLowerLimbTargetsConsidered;
-			ControlTargetDiagnostics.MeanLowerLimbLimitOccupancy += LowerLimbLimitOccupancy;
-			if (LowerLimbLimitOccupancy > ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy)
+			const bool bIsHeldBone = bApplyPhase1HoldPoseThisFrame && BalanceReadyTransition.ShouldSuppressPolicyWrites(Pair.Key);
+
+			// Skip bones already handled by the explicit hold path in Prepare/LateValidate.
+			if (bIsHeldBone)
 			{
-				ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy = LowerLimbLimitOccupancy;
-				ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName = Pair.Key;
-				ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees = LowerLimbLimitProxyDegrees;
+				continue;
 			}
+
+			if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
+			{
+				continue;
+			}
+
+			const FName ControlName = PhysAnimBridge::MakeControlName(Pair.Key);
+			if (!PhysicsControl->GetControlExists(ControlName))
+			{
+				OutError = FString::Printf(TEXT("Missing required control '%s' during target write."), *ControlName.ToString());
+				return;
+			}
+
+			if (bRebaseControlTargetHistoryThisFrame)
+			{
+				PreviousControlTargetRotations.Add(ControlName, Pair.Value);
+				PolicyBlendStartControlTargetRotations.Add(ControlName, Pair.Value);
+			}
+
+			const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
+			const FQuat* const BlendStartRotation = PolicyBlendStartControlTargetRotations.Find(ControlName);
+			const bool bApplyTrainingAlignedLowerLimbTargetRangePolicy =
+				ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
+					EffectiveSettings.bApplyTrainingAlignedLowerLimbTargetRangePolicy,
+					EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend);
+			const float LowerLimbTargetRangeScale = bApplyTrainingAlignedLowerLimbTargetRangePolicy
+				? ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(
+					Pair.Key,
+					EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend)
+				: 1.0f;
+			const bool bApplyTrainingAlignedDistalLocomotionTargetPolicy =
+				ShouldApplyTrainingAlignedDistalLocomotionTargetPolicy(
+					EffectiveSettings.bApplyTrainingAlignedDistalLocomotionTargetPolicy,
+					EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend,
+					OwnerPlanarSpeedCmPerSec,
+					EffectiveSettings.DistalLocomotionTargetPolicyActivationSpeedCmPerSec);
+			const float DistalLocomotionTargetScale = bApplyTrainingAlignedDistalLocomotionTargetPolicy
+				? ResolveTrainingAlignedDistalLocomotionTargetScaleForBone(
+					Pair.Key,
+					EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend)
+				: 1.0f;
+			const float RawPolicyOffsetDegrees = BlendStartRotation
+				? CalculateControlTargetDeltaDegrees(*BlendStartRotation, Pair.Value)
+				: 0.0f;
+			const FQuat RangeAlignedPolicyRotation = BlendStartRotation
+				? BlendPolicyTargetRotation(*BlendStartRotation, Pair.Value, LowerLimbTargetRangeScale)
+				: Pair.Value;
+			const FQuat DistalLocomotionAlignedPolicyRotation = BlendStartRotation
+				? BlendPolicyTargetRotation(*BlendStartRotation, RangeAlignedPolicyRotation, DistalLocomotionTargetScale)
+				: RangeAlignedPolicyRotation;
+			const float RangeAlignedPolicyOffsetDegrees = BlendStartRotation
+				? CalculateControlTargetDeltaDegrees(*BlendStartRotation, DistalLocomotionAlignedPolicyRotation)
+				: 0.0f;
+			const FQuat BlendedPolicyRotation = BlendStartRotation
+				? BlendPolicyTargetRotation(*BlendStartRotation, DistalLocomotionAlignedPolicyRotation, PolicyInfluenceAlpha)
+				: DistalLocomotionAlignedPolicyRotation;
+			const float TargetDeltaDegrees = PreviousRotation
+				? CalculateControlTargetDeltaDegrees(*PreviousRotation, BlendedPolicyRotation)
+				: 0.0f;
+			FQuat LimitedRotation = PreviousRotation
+				? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
+				: BlendedPolicyRotation;
+
+			if (bHipQuarantineActiveThisFrame && (Pair.Key == "thigh_l" || Pair.Key == "thigh_r") && Mesh)
+			{
+				FBodyInstance* BI = Mesh->GetBodyInstance(Pair.Key);
+				if (BI)
+				{
+					const FQuat CurPhysRot = BI->GetUnrealWorldTransform().GetRotation();
+					const FQuat CurSkelRot = Mesh->GetBoneQuaternion(Pair.Key, EBoneSpaces::WorldSpace);
+					const FQuat DeltaPre = CurSkelRot.Inverse() * CurPhysRot;
+					const float Deg = FMath::RadiansToDegrees(DeltaPre.GetAngle());
+
+					if (Pair.Key == "thigh_l")
+					{
+						ThighLDeltaPre = Deg;
+						LastHipQuarantineLeftPreDeltaDegrees = Deg;
+					}
+					else
+					{
+						ThighRDeltaPre = Deg;
+						LastHipQuarantineRightPreDeltaDegrees = Deg;
+					}
+
+					LimitedRotation = DeltaPre;
+				}
+			}
+
+			++ControlTargetDiagnostics.NumPolicyTargetsWritten;
+			ControlTargetDiagnostics.MeanTargetDeltaDegrees += TargetDeltaDegrees;
+			ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees += RawPolicyOffsetDegrees;
+			if (TargetDeltaDegrees > ControlTargetDiagnostics.MaxTargetDeltaDegrees)
+			{
+				ControlTargetDiagnostics.MaxTargetDeltaDegrees = TargetDeltaDegrees;
+				ControlTargetDiagnostics.MaxTargetDeltaBoneName = Pair.Key;
+			}
+			if (RawPolicyOffsetDegrees > ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees)
+			{
+				ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees = RawPolicyOffsetDegrees;
+				ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName = Pair.Key;
+			}
+			const float LowerLimbLimitProxyDegrees =
+				PhysAnimComponentInternal::ResolveLowerLimbConstraintLimitProxyDegrees(PhysicsAsset, Pair.Key);
+			if (LowerLimbLimitProxyDegrees > UE_SMALL_NUMBER)
+			{
+				const float LowerLimbLimitOccupancy = RangeAlignedPolicyOffsetDegrees / LowerLimbLimitProxyDegrees;
+				++ControlTargetDiagnostics.NumLowerLimbTargetsConsidered;
+				ControlTargetDiagnostics.MeanLowerLimbLimitOccupancy += LowerLimbLimitOccupancy;
+				if (LowerLimbLimitOccupancy > ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy)
+				{
+					ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy = LowerLimbLimitOccupancy;
+					ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName = Pair.Key;
+					ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees = LowerLimbLimitProxyDegrees;
+				}
+			}
+
+			if (bRootSimFlipFrame)
+			{
+				continue;
+			}
+
+			PreviousControlTargetRotations.Add(ControlName, LimitedRotation);
+			const float TargetAngularVelocityDeltaTime =
+				ResolvePolicyTargetAngularVelocityDeltaTime(
+					Pair.Key,
+					bUseSkeletalAnimationTargetRepresentation,
+					ControlTargetDiagnostics.bFirstPolicyEnabledFrame,
+					bDistalLocomotionCompositionModeActive,
+					TargetWriteDeltaTime);
+
+			PhysicsControl->SetControlTargetOrientation(
+				ControlName,
+				LimitedRotation.Rotator(),
+				TargetAngularVelocityDeltaTime,
+				true,
+				false,
+				true,
+				false);
 		}
-
-		if (bRootSimFlipFrame)
-		{
-			continue;
-		}
-
-		PreviousControlTargetRotations.Add(ControlName, LimitedRotation);
-		const float TargetAngularVelocityDeltaTime =
-			ResolvePolicyTargetAngularVelocityDeltaTime(
-				Pair.Key,
-				bUseSkeletalAnimationTargetRepresentation,
-				ControlTargetDiagnostics.bFirstPolicyEnabledFrame,
-				bDistalLocomotionCompositionModeActive,
-				TargetWriteDeltaTime);
-
-		PhysicsControl->SetControlTargetOrientation(
-			ControlName,
-			LimitedRotation.Rotator(),
-			TargetAngularVelocityDeltaTime,
-			true,
-			false,
-			true,
-			false);
 	}
 
 	if (ControlTargetDiagnostics.NumPolicyTargetsWritten > 0)
