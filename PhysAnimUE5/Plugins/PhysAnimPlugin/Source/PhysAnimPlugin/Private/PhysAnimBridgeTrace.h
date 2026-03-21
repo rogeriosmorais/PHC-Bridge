@@ -60,6 +60,7 @@ struct FPhysAnimBridgeTraceFrame
 	bool bPolicyInfluenceActive = false;
 	bool bFirstPolicyEnabledFrame = false;
 	int32 NumPolicyTargetsWritten = 0;
+	int32 NumHoldTargetsWritten = 0;
 
 	float ResolveContextMs = 0.0f;
 	float PoseSearchQueryMs = 0.0f;

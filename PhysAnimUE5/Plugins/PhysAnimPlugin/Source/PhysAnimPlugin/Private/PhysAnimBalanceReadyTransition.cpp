@@ -1996,11 +1996,11 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 		? EBalanceReadyUpperBodyOwnershipMode::None
 		: EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
 
-	// Capture live suppression state from the owner.
-	// Since Phase 1 intends to suppress policy and resets, we capture the actual state of these flags
-	// from the component's current influence and pending reset state.
-	Phase1TopologyRecord.bPolicySuppressed = (Owner->CalculateCurrentPolicyInfluenceAlpha(Settings) <= KINDA_SMALL_NUMBER);
-	Phase1TopologyRecord.bResetsSuppressed = !Owner->GetPendingBodyModifierCachedResetNames().IsEmpty();
+	// Capture authoritative suppression state for Phase 1.
+	// Since Phase 1 always suppresses policy and resets (using held poses), we set these
+	// flags to true to reflect the active Phase 1 contract.
+	Phase1TopologyRecord.bPolicySuppressed = true;
+	Phase1TopologyRecord.bResetsSuppressed = true;
 	bHasPhase1TopologyRecord = true;
 
 	auto GetModeName = [](EBalanceReadyGroupOwnershipMode Mode)
