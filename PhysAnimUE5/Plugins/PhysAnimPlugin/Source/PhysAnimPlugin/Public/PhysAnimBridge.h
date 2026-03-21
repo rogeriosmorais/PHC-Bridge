@@ -50,8 +50,9 @@ struct FPhysAnimControlTargetDiagnostics
 {
 	bool bPolicyInfluenceActive = false;
 	bool bFirstPolicyEnabledFrame = false;
-	int32 NumPolicyTargetsWritten = 0;
-	int32 NumHoldTargetsWritten = 0;
+	int32 NumNormalPolicyTargetsWritten = 0;
+	int32 NumHeldTargetsWritten = 0;
+	int32 NumTotalTargetsWritten = 0;
 	FName MaxTargetDeltaBoneName = NAME_None;
 	float MaxTargetDeltaDegrees = 0.0f;
 	float MeanTargetDeltaDegrees = 0.0f;

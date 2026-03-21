@@ -947,7 +947,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			AbortReason = TEXT("phase2_policy_write_leak");
 			AbortDetail = FString::Printf(
 				TEXT("policyWrites=%d firstPolicyFrame=%d maxTargetDeltaBone=%s maxTargetDelta=%.1f maxRawOffsetBone=%s maxRawOffset=%.1f"),
-				ControlTargetDiagnostics.NumPolicyTargetsWritten,
+				ControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
 				ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? 1 : 0,
 				*ControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
 				ControlTargetDiagnostics.MaxTargetDeltaDegrees,
@@ -1085,7 +1085,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				CertifiedHandoff.bTransitionShellReferenceReseededAfterLock ? 1 : 0,
 				ControlTargetDiagnostics.bPolicyInfluenceActive ? 1 : 0,
 				ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? 1 : 0,
-				ControlTargetDiagnostics.NumPolicyTargetsWritten,
+				ControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
 				*ControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
 				ControlTargetDiagnostics.MaxTargetDeltaDegrees,
 				*ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
@@ -2033,7 +2033,7 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	Diagnostics.PelvisLinearVelPost = Mesh->GetPhysicsLinearVelocity(RootBoneName);
 	Diagnostics.PelvisAngularVelPost = Mesh->GetPhysicsAngularVelocityInDegrees(RootBoneName);
-	Diagnostics.bPolicyWroteTargets = Owner->GetLastControlTargetDiagnostics().NumPolicyTargetsWritten > 0;
+	Diagnostics.bPolicyWroteTargets = Owner->GetLastControlTargetDiagnostics().NumNormalPolicyTargetsWritten > 0;
 	Diagnostics.bResetScheduled = !Owner->GetPendingBodyModifierCachedResetNames().IsEmpty();
 	Diagnostics.BaselineShellOffset = Owner->GetCurrentShellPlanarOffsetDeltaCm();
 	Diagnostics.BaselineShellVel = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
