@@ -422,6 +422,13 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			QuietWindowAccumulatedSeconds += DeltaTime;
 			if (QuietWindowAccumulatedSeconds >= Settings.BalancePhase1QuietRequiredSeconds)
 			{
+				if (!CachedConvergenceSnapshot.bIsPelvisSimulating)
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_BLOCKED reason=pelvis_not_simulating"));
+					QuietWindowAccumulatedSeconds = 0.0f; // fresh qualifying quiet window required
+					return;
+				}
+
 				FString CaptureReason;
 				if (CaptureLateValidationBaseline(Owner, Settings, CaptureReason))
 				{
