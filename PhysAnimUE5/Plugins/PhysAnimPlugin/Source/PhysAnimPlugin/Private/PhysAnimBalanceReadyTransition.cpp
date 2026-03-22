@@ -357,19 +357,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		if (bIsBodyMotionUnstable) { ConsecutiveBodyMotionInstabilityTicks++; }
 		else { ConsecutiveBodyMotionInstabilityTicks = 0; }
 
-		if (bIsPelvisNotSimulating) { ConsecutivePelvisNotSimulatingTicks++; }
-		else { ConsecutivePelvisNotSimulatingTicks = 0; }
-
 		const bool bEscalateBodyInstability = ConsecutiveBodyMotionInstabilityTicks >= Settings.BalancePhase1PrepareMaxBlockedTicks;
-		const bool bEscalatePelvisNotSimulating = ConsecutivePelvisNotSimulatingTicks >= Settings.BalancePhase1PrepareMaxBlockedTicks;
-		const bool bEscalateDualFailure = (ConsecutiveBodyMotionInstabilityTicks > 0 && ConsecutivePelvisNotSimulatingTicks > 0);
 
-		if (bEscalateBodyInstability || bEscalatePelvisNotSimulating || bEscalateDualFailure)
+		if (bEscalateBodyInstability)
 		{
-			FString TerminalReason;
-			if (bEscalateDualFailure) { TerminalReason = TEXT("persistent_body_motion_instability_and_pelvis_not_simulating"); }
-			else if (bEscalateBodyInstability) { TerminalReason = TEXT("persistent_body_motion_instability"); }
-			else { TerminalReason = TEXT("persistent_pelvis_not_simulating"); }
+			const FString TerminalReason = TEXT("persistent_body_motion_instability");
 
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PREPARE_TERMINAL reason=%s"), *TerminalReason);
 
@@ -468,16 +460,6 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			QuietWindowAccumulatedSeconds += DeltaTime;
 			if (QuietWindowAccumulatedSeconds >= Settings.BalancePhase1QuietRequiredSeconds)
 			{
-				if (!CachedConvergenceSnapshot.bIsPelvisSimulating)
-				{
-					if (ConsecutivePelvisNotSimulatingTicks == 1 || (ConsecutivePelvisNotSimulatingTicks % Settings.BalancePhase1PrepareMaxBlockedTicks) == 0)
-					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_BLOCKED reason=pelvis_not_simulating"));
-					}
-					QuietWindowAccumulatedSeconds = 0.0f; // fresh qualifying quiet window required
-					return;
-				}
-
 				FString CaptureReason;
 				if (CaptureLateValidationBaseline(Owner, Settings, CaptureReason))
 				{
@@ -1463,13 +1445,8 @@ bool FPhysAnimBalanceReadyTransition::EvaluateReadiness(UPhysAnimComponent* Owne
 	Diagnostics.ShellMetric = CachedConvergenceSnapshot.ShellPlanarVelocity;
 
 	// Note: InternalPhase check against BRT_Phase1_Prepare is preserved because 
-	// Phase 1 Prepare specifically allows non-simulating pelvis and pending resets 
-	// while waiting for the quiet window. LateValidate and beyond require convergence.
-	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase1_Prepare && !CachedConvergenceSnapshot.bIsPelvisSimulating)
-	{
-		OutReason = TEXT("pelvis_not_simulating");
-		return false;
-	}
+	// Phase 1 Prepare specifically allows pending resets while waiting for the quiet window. 
+	// LateValidate and beyond require convergence.
 
 	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase1_Prepare && CachedConvergenceSnapshot.bHasPendingResets)
 	{
