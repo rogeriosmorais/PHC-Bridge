@@ -546,6 +546,24 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 	{
+		const bool bIsBodyMotionUnstable = CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
+			CachedConvergenceSnapshot.MaxBodyAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed;
+
+		if (bIsBodyMotionUnstable)
+		{
+			const FString FailureReason = TEXT("phase1_no_convergence_path_body_motion_instability");
+			Diagnostics.FailureReason = FailureReason;
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s maxSimBodyLinearSpeed=%.2f maxSimBodyAngularSpeed=%.2f worstLinearBone=%s worstAngularBone=%s"), 
+				*FailureReason,
+				CachedConvergenceSnapshot.MaxBodyLinearSpeed,
+				CachedConvergenceSnapshot.MaxBodyAngularSpeed,
+				*CachedConvergenceSnapshot.MaxBodyLinearSpeedBone.ToString(),
+				*CachedConvergenceSnapshot.MaxBodyAngularSpeedBone.ToString());
+			Owner->ReleaseTransitionOwnedShellLock();
+			MarkSafePhase2Denied(Owner, FailureReason);
+			return;
+		}
+
 		bool bLateValidationThisFrame = true;
 		FString LateValidateBlockReason;
 		const float PolicyInfluenceAlpha = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
