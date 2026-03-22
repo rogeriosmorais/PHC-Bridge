@@ -414,8 +414,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			bQuietThisFrame = false;
 			QuietBlockReason = TEXT("shell_contamination");
 		}
-		else if (CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
-			CachedConvergenceSnapshot.MaxBodyAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed)
+		else if (CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneLinearSpeed ||
+			CachedConvergenceSnapshot.MaxBodyAngularSpeed > Settings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneAngularSpeed)
 		{
 			bQuietThisFrame = false;
 			QuietBlockReason = TEXT("body_motion_instability");
@@ -459,6 +459,23 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			QuietWindowAccumulatedSeconds += DeltaTime;
 			if (QuietWindowAccumulatedSeconds >= Settings.BalancePhase1QuietRequiredSeconds)
 			{
+				// Pre-LateValidate stability-margin gate
+				const bool bHasInsufficientStabilityMargin =
+					CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneLinearSpeed ||
+					CachedConvergenceSnapshot.MaxBodyAngularSpeed > Settings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneAngularSpeed;
+
+				if (bHasInsufficientStabilityMargin)
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_BLOCKED reason=insufficient_stability_margin maxSimBodyLinearSpeed=%.2f maxSimBodyAngularSpeed=%.2f worstLinearBone=%s worstAngularBone=%s"),
+						CachedConvergenceSnapshot.MaxBodyLinearSpeed,
+						CachedConvergenceSnapshot.MaxBodyAngularSpeed,
+						*CachedConvergenceSnapshot.MaxBodyLinearSpeedBone.ToString(),
+						*CachedConvergenceSnapshot.MaxBodyAngularSpeedBone.ToString());
+
+					QuietWindowAccumulatedSeconds = 0.0f;
+					return;
+				}
+
 				FString CaptureReason;
 				if (CaptureLateValidationBaseline(Owner, Settings, CaptureReason))
 				{

@@ -324,7 +324,13 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed = 350.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1LateValidateAdmissionMaxSimulatedBoneLinearSpeed = 300.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed = 2200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1LateValidateAdmissionMaxSimulatedBoneAngularSpeed = 1800.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase1LateValidateBodyMotionGraceDuration = 0.10f;
@@ -504,7 +510,9 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(BalancePhase1MaxEntryTargetDeltaDeg, Other.BalancePhase1MaxEntryTargetDeltaDeg) &&
 			FMath::IsNearlyEqual(BalancePhase1LateValidateRequiredSeconds, Other.BalancePhase1LateValidateRequiredSeconds) &&
 			FMath::IsNearlyEqual(BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed, Other.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed) &&
+			FMath::IsNearlyEqual(BalancePhase1LateValidateAdmissionMaxSimulatedBoneLinearSpeed, Other.BalancePhase1LateValidateAdmissionMaxSimulatedBoneLinearSpeed) &&
 			FMath::IsNearlyEqual(BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed, Other.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed) &&
+			FMath::IsNearlyEqual(BalancePhase1LateValidateAdmissionMaxSimulatedBoneAngularSpeed, Other.BalancePhase1LateValidateAdmissionMaxSimulatedBoneAngularSpeed) &&
 			FMath::IsNearlyEqual(BalancePhase1LateValidateBodyMotionGraceDuration, Other.BalancePhase1LateValidateBodyMotionGraceDuration) &&
 			BalancePhase1MaxAutomaticRetries == Other.BalancePhase1MaxAutomaticRetries &&
 			BalancePhase1PrepareMaxBlockedTicks == Other.BalancePhase1PrepareMaxBlockedTicks &&
