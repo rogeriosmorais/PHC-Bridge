@@ -1,465 +1,333 @@
-# GPU-Native Animation Engine - Engineering Plan (v8 - Final)
+# GPU-Native Animation Engine - Engineering Plan (v9)
 
 ## 1. Objective
 
-Build a real-time demo in **Unreal Engine 5** where **physics simulation is the animation system**, in two stages:
+Build a real-time Unreal Engine demo where physics simulation is the animation system, in two stages:
 
-- **Stage 1 (Proof of Quality):** Prove physics-driven locomotion looks fundamentally better than kinematic animation, using almost entirely UE5 built-in systems. **~6 weeks, minimal bridge code expected to stay in the low hundreds of lines.**
-- **Stage 2 (GPU Migration):** Move physics from CPU to GPU compute shaders, proving idle GPU resources should be used for animation. **~7 additional weeks.**
+- **Stage 1 (Proof of Quality):** prove physics-driven motion looks fundamentally better than kinematic animation, using mostly UE5 built-in systems plus a minimal PHC bridge.
+- **Stage 2 (GPU Migration):** move the articulated-body simulation from CPU to GPU compute once Stage 1 proves the animation thesis.
 
-**Hardware:** Intel i7-14700 + RTX 4070 SUPER.
+Hardware target:
 
-### Why Two Stages
+- Intel i7-14700
+- RTX 4070 SUPER
 
-1. **Animation quality** (does physics-driven motion look better?) - risky, tested cheaply in Stage 1.
-2. **GPU utilization** (should the GPU run this?) - only worth pursuing if Stage 1 succeeds.
+## 2. Why the project is split into two stages
+
+The project is answering two different questions:
+
+1. does physics-driven animation look better than kinematic animation?
+2. if yes, is that simulation worth migrating to the GPU?
+
+Stage 1 exists to answer the first question cheaply and rigorously. Stage 2 is only justified if Stage 1 succeeds.
 
 ---
 
-## 2. Stage 1 Architecture (All UE5 Built-In)
+## 3. Stage 1 architecture
 
 ```text
-Unreal Engine 5.7.3 (current local plan; 5.5+ in principle)
-
 UE5 PoseSearch (CPU)
-  -> target joint angles/velocities from mocap database
-PHC Policy via NNE (GPU, ~0.4ms)         <- CUSTOM (low hundreds)
-  -> desired joint orientations; the selected Stage 1 checkpoint uses fixed gains rather than a learned stiffness head
-UPhysicsControlComponent (CPU)           <- BUILT-IN
-  -> SetControlTargetOrientation() per bone
-  -> SetControlAngularData() for strength/damping
-  -> Spring/damper motor drives each joint
-Chaos Physics (CPU)                      <- BUILT-IN
-  -> Articulated ragdoll simulation
-  -> Gravity, ground contact, friction, inter-character collision
-UPhysicalAnimationComponent (CPU)        <- BUILT-IN
-  -> Physics <-> animation blend weights
-  -> Smooth transitions (e.g., knockdown -> recovery)
-Chaos Flesh + ML Deformer (CPU+GPU)      <- BUILT-IN
-  -> Volumetric flesh deformation (visual bonus)
-UE5 Renderer (Nanite/Lumen)              <- BUILT-IN
+  -> locomotion reference pose / target context
+PHC policy via NNE (GPU)
+  -> desired joint-relative orientation targets
+UPhysicsControlComponent (CPU)
+  -> control target orientations + angular gains
+Chaos Physics (CPU)
+  -> articulated rigid-body simulation
+UPhysicalAnimationComponent (optional / selective)
+  -> visual blending / authoring support where needed
+UE5 rendering + standard gameplay systems
 ```
 
-### The Only Custom Code (minimal bridge code, low hundreds of lines)
+### Stage 1 custom code remains intentionally small
 
-A C++ plugin (`PhysAnimPlugin`) that each frame:
+The custom Stage 1 bridge should stay concentrated in `UPhysAnimComponent` and related plugin code.
 
-1. **Gathers body state** from the Physics Asset (~131 floats: joint orientations, angular velocities, center-of-mass, ground contacts).
-2. **Retargets** UE5 skeleton state -> SMPL observation vector (static joint mapping table, ~50 lines).
-3. **Runs PHC inference** via UE5 NNE (ONNX Runtime GPU) - for the selected Stage 1 checkpoint, outputs `69` action floats that map to desired joint-relative orientation targets.
-4. **Retargets** SMPL output -> UE5 bone targets (inverse mapping).
-5. **Writes results** to the `UPhysicsControlComponent` via `SetControlTargetOrientation()` and fixed/authored `SetControlAngularData()` gains.
+The custom bridge is responsible for:
 
-That's it. PD control, collision, contact, blend transitions, flesh deformation, rendering - all built-in UE5.
+1. gathering runtime body state
+2. packing model observations
+3. running PHC inference through NNE
+4. unpacking actions into target orientations
+5. writing those targets into the runtime control layer
+6. managing the runtime state machine and balance-entry state machine
 
-### Stage 1 Bridge Spec (must be resolved in Phase 0)
-
-The key feasibility question is the `PoseSearch -> PHC` bridge. Before implementation starts, Phase 0 must lock the exact observation/action contract from the chosen ProtoMotions/PHC config:
-
-- Observation fields required by the PHC model
-- Pose and velocity representation expected by the model
-- Reference-pose and coordinate-frame assumptions
-- Output representation and how it maps back to UE5 control targets
-
-The deliverable is a short bridge spec that removes guesswork from the Stage 1 plugin.
-
-### Skeleton Retargeting (SMPL <-> UE5)
-
-PHC is trained on the SMPL skeleton (24 joints). The UE5 character uses the UE5 mannequin skeleton (Manny/Quinn, ~70 bones). The plugin needs a static mapping between them:
-
-| SMPL Joint | UE5 Bone | Notes |
-|---|---|---|
-| Pelvis | pelvis | Root - position + orientation |
-| L_Hip / R_Hip | thigh_l / thigh_r | |
-| L_Knee / R_Knee | calf_l / calf_r | |
-| L_Ankle / R_Ankle | foot_l / foot_r | |
-| Spine1-3 | spine_01-03 | May need interpolation |
-| L_Shoulder / R_Shoulder | upperarm_l / upperarm_r | |
-| L_Elbow / R_Elbow | lowerarm_l / lowerarm_r | |
-| L_Wrist / R_Wrist | hand_l / hand_r | |
-| Head / Neck | head / neck_01 | |
-
-Coordinate-system conversion and handedness handling are resolved once in the mapping. The UE5 skeleton has more bones than SMPL (fingers, twist bones, etc.) - unmapped bones retain their animated pose from PoseSearch.
-
-### Physics Substep Configuration
-
-Articulated bodies driven by PD controllers need 120-240 Hz physics to be stable. Chaos Physics supports this via two independent mechanisms:
-
-**Option A: Synchronous Substepping** (simpler, recommended for Stage 1)
-- Enable `Substepping` in Project Settings -> Engine -> Physics
-- Set `Max Substep Delta Time` = 0.004167s (240 Hz) or 0.008333s (120 Hz)
-- Set `Max Substeps` = 4-8
-- At 60 FPS render, each frame runs 2-4 physics substeps
-- PHC inference runs once per render frame; torque targets are held constant across substeps
-
-**Option B: Async Physics** (more robust, if Option A is unstable)
-- Enable `Tick Physics Async` in Project Settings
-- Set `Async Fixed Time Step Size` = 0.004167s (240 Hz)
-- Physics runs on a separate thread at a fixed rate, decoupled from rendering
-- Game thread and physics thread communicate via input/output buffers
-- Caveat: `Substepping` and `Tick Physics Async` are mutually exclusive
-
-**If Chaos substeps are insufficient (instability persists):**
-- Increase `Velocity Iterations` and `Position Iterations` in the Physics Asset constraints
-- Reduce `Max Depenetration Velocity` to prevent explosive corrections
-- Enable CCD (Continuous Collision Detection) on fast-moving limbs
-- As a last resort for Stage 2: the custom XPBD compute shader solver runs at whatever tick rate we choose (we control the timestep)
-
-### Character Model
-
-**Stage 1: UE5 Manny/Quinn** (built-in mannequin)
-- Available via Fab plugin or Third Person template
-- Same skeleton as MetaHumans (standard UE5 skeleton)
-- Simpler mesh (~15K verts) - ideal for prototyping
-- Already has a Physics Asset configured
-- Can be swapped for MetaHuman or custom model later without changing any code (same skeleton)
-
-**Stage 2: Optionally upgrade to MetaHuman** for visual fidelity, or keep Manny/Quinn for faster iteration.
+The bridge is not supposed to replace Chaos, Physics Control, or general engine physics infrastructure.
 
 ---
 
-## 3. Stage 2 Architecture (GPU Migration)
+## 4. Stage 1 architecture direction: transitional now, balance-first later
 
-```text
-Same as Stage 1, except:
+### 4.1 Current practical architecture
 
-  Chaos Physics (CPU)           -> Custom XPBD compute shaders (GPU)
-  UPhysicsControlComponent      -> Joint torques applied in compute shader
-  Chaos Flesh + ML Deformer     -> Custom XPBD tet-mesh (GPU)
-```
+Right now the project still has two sequential runtime chains:
 
-Stage 2 replaces CPU-based Chaos systems with custom GPU compute shaders to demonstrate scalability beyond 2 characters.
+1. **normal bridge startup / stabilization bring-up**
+2. **balance-entry conversion**
 
----
+This is acceptable during Stage 1 stabilization because it isolates bridge bootstrapping from balance-entry contract debugging.
 
-## 4. Technology Stack
+### 4.2 Long-term architecture target
 
-| Component | Stage 1 | Stage 2 |
-|---|---|---|
-| **Joint motor control** | UPhysicsControlComponent | Custom XPBD compute shaders |
-| **Skeletal physics** | Chaos Physics (CPU) | Custom XPBD (GPU) |
-| **Collision** | Chaos Physics (CPU) | Custom spatial hash + PGS (GPU) |
-| **Blend transitions** | UPhysicalAnimationComponent | Custom state logic |
-| **Flesh deformation** | Chaos Flesh + ML Deformer | Custom XPBD tet-mesh (GPU) |
-| **RL policy inference** | NNE + ONNX Runtime (GPU) | Same |
-| **Motion matching** | PoseSearch | Same |
-| **Content authoring** | Chaos Flesh Dataflow | Same -> export to compute format |
-| **Rendering/Camera/Input/Audio/UI** | UE5 built-in | Same |
+The final target is **always-on balance**.
 
----
+That means balance should eventually become the normal runtime condition, not a special mode layered on top of a separate long-lived `BridgeActive` world.
 
-## 5. RL Training (offline, independent of UE5)
+The likely long-term shape is:
 
-### Training Backend
+- balance startup
+- balance settle
+- balance active
+- balance recovery
+- safe deny / fallback
 
-| Backend | Status | Speedup | When to Use |
-|---|---|---|---|
-| **IsaacLab** | Best fit for the local pretrained motion-tracker path | Baseline Stage 1 eval path | Stage 1 pretrained evaluation and likely first fine-tuning path |
-| **Isaac Gym** | Stable, proven with PHC | Baseline fallback | Use if IsaacLab setup or runtime becomes impractical locally |
-| **NVIDIA Newton** (via Isaac Lab) | Beta (Sept 2025), open-source, Linux Foundation | 70x for humanoid sims (MuJoCo-Warp) | Stage 2 or if later training speed becomes the main bottleneck |
+The current split should therefore be treated as a transitional scaffold, not the final architecture.
 
-Newton is built on NVIDIA Warp + OpenUSD, co-developed with Google DeepMind and Disney Research. ProtoMotions already supports multiple simulator backends (Isaac Gym, Isaac Sim, Isaac Lab), so switching simulator backends is a config change, not a rewrite. Newton's differentiable physics could also enable gradient-based fine-tuning of the sim-to-sim gap.
+### 4.3 Practical rule for Stage 1
 
-### Pretrained-First Strategy
+Do not rewrite into a single balance-first architecture yet.
 
-Stage 1 should not assume training from scratch on day one.
+First get the current balance-entry path contract-correct and physically credible enough to prove or falsify the Stage 1 thesis.
 
-The first attempt should use an available pretrained ProtoMotions-compatible policy for fast feasibility testing. The current Stage 1 execution path uses the repo-bundled pretrained **motion_tracker SMPL humanoid** model, which is:
-
-- pretrained for the **SMPL humanoid (no fingers)**
-- intended to track target poses in simulation
-- trained in **IsaacLab**
-- materially simpler at runtime than the richer MaskedMimic path
-
-This makes it a better Stage 1 deployment candidate for locomotion-only proof of quality, though not a guarantee of clean transfer to UE/Chaos.
-
-So the Stage 1 order is:
-
-1. try pretrained policy for feasibility
-2. fine-tune if the pretrained result is promising but not sufficient
-3. train from scratch only if pretrained and fine-tuned paths are inadequate
-
-### Data Sources
-
-| Source | Format | Use | Notes |
-|---|---|---|---|
-| **AMASS dataset** | SMPL (native) | Locomotion training for PHC | 40+ hours, 300+ subjects, free for research. No conversion needed |
-| **HumanML3D** | Motion-language dataset derived from AMASS + HumanAct12 | Optional broader reference context for pretrained motion coverage | Broad actions such as daily activities, sports, acrobatics, and dance |
-
-### Training Stages
-
-| Stage | What | Starting Point | Est. Time (4070S) |
-|---|---|---|---|
-| 0. Pretrained feasibility eval | Evaluate available pretrained policy on representative motions | Pretrained ProtoMotions-compatible checkpoint | ~0.5-2 hours plus setup |
-| 1. Fine-tune on Stage 1 locomotion set | Adapt pretrained model to the project's locomotion subset | Pretrained checkpoint | ~2-4 hours |
-| 2. Optional further locomotion adaptation | Improve weak locomotion transitions if needed | Locomotion-adapted weights | 2-4 hours |
-| 3. Impact response | External force perturbation curriculum | Fine-tuned locomotion tracker | 4-8 hours |
-| 4. Muscle stiffness head (Stage 2 only) | Extend output for XPBD flesh | Trained policy | 2-4 hours |
-| 5. MaskedMimic upgrade (Stage 2 only) | Multi-skill composition from partial cues | Trained PHC as foundation | 8-16 hours |
-
-**Total Stage 1 after setup: ~10-20 GPU-hours** if fine-tuning is sufficient, or more if training from scratch becomes necessary.
-**Total with Stage 2 upgrades: ~24-40 GPU-hours** (with Newton, potentially 2-4x faster).
-
-### Sim-to-Sim Transfer
-
-- Stage 1: IsaacLab first -> Chaos Physics, with Isaac Gym as the fallback comparison path
-- The `UPhysicsControlComponent`'s spring/damper drives must be calibrated against the chosen training simulator's controller behavior. Tuning strength/damping values is the main calibration work.
-- If using Newton later: Newton's MuJoCo-Warp physics may be closer to Chaos Physics than Isaac Gym's, potentially reducing the sim-to-sim gap.
-- **Fallback:** Hand-tuned PD controller via the Physics Control Component with fixed gains. No RL needed - less capable but functional.
-
-### Stage 1 Motion Set (locked planning scope)
-
-Stage 1 should not leave the target motions undefined. Use this motion scope:
-
-- **Locomotion core**
-  - idle / stand
-  - walk forward
-  - jog / run forward
-  - start / stop transitions
-  - left and right turns / pivots
-  - side-step / strafe left and right
-  - short recovery / rebalance motions
-- **Out of scope for Stage 1**
-  - combat clips and combat fine-tuning
-  - grappling
-  - weapon use
-  - acrobatics-heavy motion
-  - long cinematic combos
-
-### Policy Evolution Path
-
-The RL policy upgrades naturally across stages without architectural changes:
-
-```text
-Stage 1:  PHC (full-body tracking)
-            | "Track this exact locomotion pose from PoseSearch"
-            | Input: full target pose -> Output: PD-oriented joint targets
-            |
-Stage 2:  MaskedMimic (built on PHC)
-            | "Left hand here, head facing there, figure out the rest"
-            | Input: partial targets + text style -> Output: joint orientations
-            | Enables: combat combos from sparse keyframes, text-driven style
-            |          ("aggressive", "cautious"), object interaction
-```
-
-Both policy families still fit the same high-level `PoseSearch -> policy -> Physics Control` bridge slot, so the UE5 plugin architecture does not need to change when the ONNX model changes. The currently selected Stage 1 checkpoint uses joint-target outputs with fixed gains; later variants may add stiffness or richer conditioning without changing that outer chain. MaskedMimic is available in ProtoMotions v2.3+ with a pre-trained SMPL model.
-
-**License note:** MaskedMimic's paper is CC BY-NC-SA 4.0 (non-commercial). For commercial use, PHC (check repo license) or a custom-trained policy would be needed.
+Then collapse the architecture later if Stage 1 succeeds.
 
 ---
 
-## 6. Content Pipeline
+## 5. Stage 1 bridge problem statement
 
-| Asset | Tool | Custom Work? |
-|---|---|---|
-| Character mesh | Blender -> FBX -> UE5 | No. Standard import |
-| Physics Asset (joints, limits, masses) | UE5 Physics Asset editor | No. In-editor setup |
-| Physics Control Component config | Per-bone strength/damping in editor | No. In-editor setup |
-| Physical Animation profiles | UE5 Physics Asset editor | No. In-editor setup |
-| Chaos Flesh (muscles, tet-mesh) | Chaos Flesh Dataflow in-editor | No. In-editor setup |
-| ML Deformer | Train on Chaos Flesh data in-editor | No. In-editor workflow |
-| Mocap (locomotion) | AMASS dataset -> PoseSearch | No. Direct import |
-| Mocap (training) | AMASS locomotion | No for Stage 1 default path |
-| PHC policy | ProtoMotions -> ONNX -> NNE asset | Yes. Offline export |
+The bridge problem has two different layers and they must stay separate.
 
----
+### 5.1 Contract correctness
 
-## 7. Development Phases
+The bridge is contract-correct when:
 
-### Stage 1: Prove Animation Quality
+- request / acceptance behavior is correct
+- runtime states are explicit and truthful
+- accepted Phase 1 topology is explicit and preserved
+- normal policy writes and hold-path writes are separated correctly
+- convergence checks use authoritative post-update telemetry
+- freeze lifetime covers the full Phase 1 attempt
+- terminal outcomes are specific and truthful
 
-Note: the workflow docs in `.agents/workflows/` are planned procedures for these phases. During pre-Phase 0 they are scaffolding, not guaranteed-runnable commands.
+### 5.2 Physical viability
 
-#### Phase 0: Feasibility (Weeks 1-2)
+The bridge is physically viable when:
 
-**Goal:** Validate that PHC + Chaos Physics produces non-robotic motion before committing.
+- the accepted frozen Phase 1 setup remains dynamically quiet enough to survive Prepare and LateValidate
+- contact behavior does not immediately destabilize the sim set
+- tuning / target writes do not inject unacceptable energy
+- the accepted setup has enough stability margin to continue into later balance phases
 
-| Task | Deliverable |
-|---|---|
-| Set up ProtoMotions + IsaacLab; evaluate the selected pretrained policy on the Stage 1 locomotion core | Visual: pretrained policy produces promising motion |
-| Lock the exact PHC observation/action contract from the chosen ProtoMotions config | Bridge spec: observation fields, pose/velocity representation, reference-pose handling, output mapping assumptions |
-| Create UE5 5.7.3 project; Manny with Physics Asset + Physics Control Component | Articulated ragdoll with motor-driven joints |
-| Test: drive Physics Control Component targets from C++ each frame | Confirm programmatic joint control works |
-| Test: NNE + ONNX Runtime with dummy model | Confirm inference runs in UE5 |
-| Test: physics substep stability at 120 Hz and 240 Hz with substepping enabled | Confirm articulated body is stable under PD control |
-| Prototype: SMPL <-> UE5 joint mapping (static table, test with hardcoded poses) | Confirm retargeting produces correct poses |
-| End-to-end bridge smoke test: feed minimal SMPL/PHC-style output through mapping into Manny under Chaos | Confirm integrated transfer path works without obvious mapping failure or instability |
+A Phase 1 attempt can be contract-correct and still physically non-viable.
 
-**Gate G1:** Pretrained or fine-tuned policy output looks alive in the training simulator AND the PHC observation/action contract is locked AND Physics Control Component responds to programmatic targets AND a minimal SMPL/PHC output can drive Manny in Chaos without obvious mapping failure or instability AND substep rate is stable. If any fails, stop.
-
-#### Phase 1: One Physics-Driven Character (Weeks 3-4)
-
-| Task | Deliverable |
-|---|---|
-| Write `PhysAnimPlugin`: PoseSearch -> NNE inference -> Physics Control Component targets | Core plugin bridge (low hundreds of lines) |
-| Export PHC policy to ONNX -> import as NNE asset | Policy runs in UE5 |
-| Set up PoseSearch with locomotion clips for the locked comparison sequence | Motion matching provides target poses |
-| Tune Physics Control Component strength/damping to approximate the chosen training simulator dynamics | Reduce sim-to-sim gap |
-| Set up Chaos Flesh + ML Deformer on character (optional visual bonus) | Flesh deformation |
-| **Gate G2:** Side-by-side - physics-driven vs kinematic PoseSearch | Must look noticeably more natural |
-
-#### Phase 2: Demo Packaging (Weeks 5-6)
-
-| Task | Deliverable |
-|---|---|
-| Package the locomotion showcase cleanly | Clear proof-of-quality demo |
-| Optional duplication of the same pipeline for presentation only | Stronger visual evidence if needed |
-| Camera (Spring Arm orbital), basic HUD | Clear presentation |
-| **Gate G3:** Show to observers - "Does this look robotic?" | Subjective but critical |
-
-**Stage 1 deliverable:** Working UE5 locomotion proof-of-quality demo with custom bridge code kept to the low hundreds of lines.
+That is exactly where the project currently is.
 
 ---
 
-### Stage 2: GPU Migration + Policy Upgrade (conditional - only if Stage 1 succeeds)
+## 6. Current Stage 1 conclusion
 
-#### Phase 3: GPU Solver Foundation + MaskedMimic (Weeks 7-9)
+The project is no longer mainly blocked by ambiguous state-machine behavior.
 
-| Task | Deliverable |
-|---|---|
-| Export tet-mesh + muscle data from Chaos Flesh Dataflow -> binary format | GPU-ready asset |
-| Implement XPBD articulation solver in HLSL compute shaders | GPU-driven skeleton |
-| Implement `UPhysAnimMeshComponent` (compute output -> UE5 renderer) | Custom mesh component |
-| Benchmark: GPU XPBD vs Chaos CPU for same character | Measured ms comparison |
-| Replace Chaos Physics with GPU solver for one character | GPU-driven character matches CPU quality |
-| Train MaskedMimic policy in ProtoMotions (on Newton if available) | Multi-skill policy ONNX |
-| Swap PHC ONNX -> MaskedMimic ONNX in plugin (no code change) | Richer motion repertoire |
+The current central hypothesis is now:
 
-#### Phase 4: GPU Collision + Scalability (Weeks 10-12)
+> Is the accepted Phase 1 frozen setup physically viable under the current control, tuning, and contact conditions?
 
-| Task | Deliverable |
-|---|---|
-| Spatial hash + PGS contact solver in compute shaders | GPU collision |
-| Two characters on GPU solver | Both fighters GPU-driven |
-| Add muscle stiffness output (Stage 4+5 training) | GPU flesh deformation |
-| Surface skinning compute shader (tet -> surface mesh) | Volumetric flesh on GPU |
-| Scalability test: 10-20 GPU-driven characters | Demonstrate GPU advantage |
-| Test MaskedMimic partial-target control (sparse keyframes for combos) | Designer-friendly combat authoring |
+That hypothesis is not yet proven.
 
-#### Phase 5: Polish + Demo (Week 13)
+Current logs indicate that the accepted Phase 1 setup can be contract-correct and still fail very quickly due to sim-body instability.
 
-| Task | Deliverable |
-|---|---|
-| Performance profiling + optimization | Stable 60 FPS |
-| Side-by-side benchmark: CPU vs GPU at 2/10/20 characters | Quantified GPU advantage |
-| Audio polish, final packaging | Distributable `.exe` |
-| **Gate G4:** GPU solver matches CPU quality AND scales better | Thesis proven |
+This is progress, not regression, because the project can now distinguish architectural mistakes from physical viability failure.
 
 ---
 
-## 8. Performance Budget
+## 7. Stage 1 runtime contract summary
 
-### Stage 1 (CPU physics - comfortable headroom)
+Stage 1 must preserve these high-level rules:
 
-| System | Budget | Where |
-|---|---|---|
-| UE5 rendering | ~8.0 ms | GPU |
-| Chaos Physics (2 articulated bodies) | ~1.0 ms | CPU |
-| PHC inference (2 chars via NNE) | ~0.4 ms | GPU |
-| Physics Control Component | ~0.1 ms | CPU |
-| Chaos Flesh + ML Deformer | ~0.5 ms | CPU + GPU |
-| PoseSearch + game logic | ~0.5 ms | CPU |
-| **Total** | **~10.5 ms** | Well under 16.67 ms |
+- normal bridge startup may use staged non-root bring-up
+- balance entry is a separate runtime contract layered on top of a running bridge
+- balance entry must leave plain `BridgeActive`
+- Phase 1 uses a dedicated accepted topology snapshot
+- Prepare and LateValidate are hold-only from the control-write side
+- convergence and admission checks use cached post-update telemetry
+- safe denial is an explicit valid terminal outcome
+- the balance smoke must never silently end in plain `BridgeActive`
 
-### Stage 2 (GPU physics - full GPU utilization)
-
-| System | Budget | Where |
-|---|---|---|
-| UE5 rendering | ~8.0 ms | GPU |
-| XPBD compute shaders | ~4.0 ms | GPU |
-| PHC inference (NNE) | ~0.4 ms | GPU |
-| Collision + contact (compute) | ~1.5 ms | GPU |
-| Surface skinning (compute) | ~0.3 ms | GPU |
-| PoseSearch + game logic | ~0.5 ms | CPU (parallel) |
-| **Headroom** | ~1.97 ms | |
-| **Total** | **~16.67 ms** | 60 FPS, GPU-bound |
+The detailed contract is frozen in the Stage 1 spec files under `plans/stage1/10-specs/`.
 
 ---
 
-## 9. Risk Register
+## 8. Current accepted Phase 1 topology
 
-| Risk | Stage | Likelihood | Impact | Mitigation |
-|---|---|---|---|---|
-| Physics-driven motion doesn't look better | 1 | Medium | **Fatal** | Gate G1 tests in the selected training simulator at Week 2 |
-| Sim-to-sim gap (training simulator -> Chaos Physics) | 1 | High | High | Physics Control Component tuning must be calibrated against the chosen training simulator |
-| Physics Control Component (experimental) is too limited or buggy | 1 | Medium | Medium | Fallback: use raw `AddTorqueInRadians()` on Physics Asset bones (~100 more lines) |
-| Chaos Physics substeps insufficient for stability | 1 | Medium | High | Try sync substepping first (120-240 Hz), then async fixed timestep. Increase solver iterations. Ultimate fallback: Stage 2's custom XPBD runs at any rate |
-| SMPL <-> UE5 skeleton mapping produces wrong rotations | 1 | Medium | Medium | Phase 0 tests with hardcoded poses. Coordinate conversion and handedness handling must be verified explicitly |
-| NNE/ONNX Runtime too slow or incompatible | 1 | Low | Medium | Model is tiny (~1M params). Reassess export path, model size, or Stage 1 viability rather than adding a new inference stack |
-| Pretrained motion tracker still fails important locomotion transitions | 1 | Medium | High | Gate G1 tests multiple locomotion motions. Fallback: locomotion fine-tune on AMASS |
-| Chaos Flesh too experimental | 1 | Medium | Low | It's a visual bonus; skip it in Stage 1 if problematic |
-| GPU XPBD doesn't match CPU Chaos quality | 2 | Medium | Medium | Stage 1 provides ground truth for comparison |
-| UE5 RDG compute dispatch complexity | 2 | Medium | Medium | Bypass RDG with raw compute if needed |
+Under the current design the accepted Phase 1 topology is:
 
----
+- root: kinematic
+- proximal set: simulated
+- distal set: simulated
+- upper body: kinematic
 
-## 10. Decision Gates
+This means the current design does **not** require pelvis/root simulation as an entry condition.
 
-| Gate | When | Question | If No |
-|---|---|---|---|
-| **G1** | Week 2 | Does PHC look alive? Is the bridge spec locked? Does Manny respond correctly to minimal PHC-style output in Chaos? | Stop. Total loss: 2 weeks |
-| **G2** | Week 4 | Does physics-driven motion look noticeably better than kinematic? | Stop. Thesis disproven |
-| **G3** | Week 6 | Is the demo compelling enough to justify GPU work? | Ship Stage 1 as-is |
-| **G4** | Week 9 | Does GPU XPBD match CPU solver quality? | Keep Stage 1 CPU version |
+It does require:
+
+- valid root/pelvis-side body source
+- valid uprightness source
+- correct ownership snapshot
+- sufficient dynamic stability margin
 
 ---
 
-## 11. Dependencies
+## 9. Current unresolved Stage 1 risk
 
-| Dependency | Purpose | License | Stage |
-|---|---|---|---|
-| **Unreal Engine 5.7.3** | Rendering, Chaos Physics, PoseSearch, NNE, Physics Control Component, Physical Animation Component, Chaos Flesh, ML Deformer | Epic EULA | 1+2 |
-| **ProtoMotions** | RL training framework | Apache 2.0 | 1+2 |
-| **PHC** | Motion tracking policy (Stage 1) | Check repo | 1 |
-| **MaskedMimic** | Multi-skill composition policy (Stage 2) | CC BY-NC-SA 4.0 (non-commercial) | 2 |
-| **IsaacLab / Isaac Gym** | Training simulation (Stage 1 pretrained-first path) | Free for research | 1 |
-| **NVIDIA Newton** | Training simulation (Stage 2 option, 70x faster) | Open source, Linux Foundation | 2 |
-| **AMASS dataset** | Locomotion mocap (SMPL format) | Free for research | 1+2 |
-| **Mixamo** | Fighting mocap (FBX) | Free | 1+2 |
+The main unresolved risk is not “can the state machine transition.”
 
-> No TensorRT. No fTetWild. No Vulkan SDK. No custom Python pipeline for UE5 asset authoring. No custom physics math in Stage 1.
+The main unresolved risk is:
+
+- whether the accepted Phase 1 frozen setup is dynamically stable enough to survive LateValidate
+
+Likely contributors include:
+
+- floor contact impulses at the distal chain
+- tuning / gain choices
+- hold-set scope
+- admission thresholds that are still too weak
+- the topology itself being physically too aggressive under current conditions
 
 ---
 
-## 12. Project Structure
+## 10. What not to revisit casually
 
-```text
-NewEngine/
-|-- DESIGN.md
-|-- RESEARCH.md
-|-- ENGINEERING_PLAN.md
-|
-|-- Training/                              # Offline RL training
-|   |-- ProtoMotions/                      # Cloned repo
-|   |-- configs/                           # PHC fine-tuning configs
-|   |-- data/
-|   |   |-- amass/                         # AMASS locomotion data (SMPL)
-|   |   `-- mixamo_fight/                  # Mixamo fighting clips (AMASS-converted)
-|   |-- scripts/
-|   |   `-- mixamo_to_amass.py             # Retargeting script
-|   `-- output/                            # Trained ONNX models
-|
-`-- PhysAnimUE5/                           # UE5 project
-    |-- PhysAnimUE5.uproject
-    |-- Content/
-    |   |-- Characters/                    # FBX skeletal meshes
-    |   |-- PhysicsAssets/                 # Articulated ragdoll configs
-    |   |-- ChaosFlesh/                    # Flesh simulation assets
-    |   |-- PoseSearch/                    # Motion matching databases
-    |   |-- MLDeformer/                    # Trained deformer assets
-    |   |-- NNEModels/                     # PHC ONNX policies
-    |   `-- Maps/                          # Arena level
-    `-- Plugins/
-        `-- PhysAnimPlugin/
-            |-- PhysAnimPlugin.uplugin
-            `-- Source/
-                |-- PhysAnimComponent.h/cpp      # NNE inference + Physics Control bridge
-                |-- PhysAnimMeshComponent.h/cpp  # Stage 2 custom GPU mesh component
-                |-- XPBDSolver.h/cpp             # Stage 2 compute shader dispatch
-                |-- CollisionSystem.h/cpp        # Stage 2 spatial hash + PGS
-                `-- Shaders/
-                    |-- XPBDSolve.usf
-                    |-- SpatialHash.usf
-                    |-- ContactSolve.usf
-                    `-- SurfaceSkin.usf
-```
+The following areas are now provisionally settled and should not be reopened without new evidence:
+
+- hold-path vs normal policy-write separation
+- freeze lifetime contract
+- authoritative root-tilt source correction
+- post-update convergence snapshot timing
+- pelvis simulation as a required gate under `root=kin`
+
+The remaining work should focus on physical viability, not rebreaking solved contract behavior.
+
+---
+
+## 11. Stage 1 document authority
+
+Stage 1 uses a strict hierarchy:
+
+1. `plans/stage1/10-specs/*`
+2. `STAGE1_PLAN.md`
+3. `plans/stage1/40-design/*`
+
+`10-specs` defines the authoritative runtime contract.
+
+`STAGE1_PLAN.md` defines execution focus and interpretation rules.
+
+`40-design` may explain implementation sequencing, but it may not introduce a runtime contract absent from `10-specs`.
+
+---
+
+## 12. Development phases
+
+### Phase 0: feasibility
+
+Goals:
+
+- lock the PHC observation/action contract
+- prove the bridge can write usable targets into UE
+- verify SMPL <-> UE mapping is sane
+- verify Chaos + Physics Control can be driven stably enough for Stage 1 experiments
+
+### Phase 1: one-actor bridge runtime
+
+Goals:
+
+- make the bridge runtime alive and measurable
+- make the balance-entry state machine explicit
+- make the balance smoke end in either active balance or safe deny
+- eliminate ambiguous outcomes
+
+### Phase 2: physical viability pass
+
+Goals:
+
+- test whether the accepted Phase 1 setup is viable
+- tighten admission / deny logic around real body-motion margins
+- revise contact assumptions, tuning, or topology only if logs prove the current setup is non-viable
+
+### Phase 3: Stage 1 presentation
+
+Goals:
+
+- produce a convincing proof-of-quality demo
+- compare the physics-driven path against kinematic motion clearly enough to justify or reject Stage 2
+
+---
+
+## 13. Decision gates
+
+### G1 — early feasibility
+
+Stop if:
+
+- the bridge contract cannot be locked cleanly
+- target writes cannot drive the runtime meaningfully
+- the mapping is obviously wrong
+- articulated-body control is obviously unusable
+
+### G2 — contract-correct balance entry
+
+Do not call Stage 1 “working” until:
+
+- request / accept path is explicit
+- topology is explicit
+- suppression contract is correct
+- convergence snapshot is authoritative
+- freeze lifetime is correct
+- terminal outcomes are specific and truthful
+
+### G3 — physical viability
+
+Do not call Phase 1 viable until:
+
+- Prepare → LateValidate admission uses a real stability margin
+- LateValidate survives without immediate body-motion deny
+- the accepted sim set does not explode as soon as the frozen setup is tested
+
+### G4 — Stage 1 thesis
+
+Proceed to Stage 2 only if the final physics-driven result is convincingly better than the kinematic baseline.
+
+---
+
+## 14. Performance budget
+
+Stage 1 still targets a comfortable 60 FPS budget on the listed hardware.
+
+The existing budget assumptions remain directionally valid, but the more important Stage 1 question remains animation quality and balance viability, not final micro-optimization.
+
+---
+
+## 15. Risk register update
+
+### Previously dominant risks
+
+- balance entry hidden inside ambiguous `BridgeActive`
+- no dedicated topology source of truth
+- hold/path semantics blurred with policy writes
+- stale telemetry driving admission
+- freeze released at the wrong time
+
+Those are now substantially reduced.
+
+### Currently dominant risk
+
+- the accepted frozen Phase 1 setup may simply not be viable under present contact/tuning conditions
+
+This is the main engineering question now.
+
+---
+
+## 16. Long-term note
+
+If Stage 1 succeeds, the project should gradually collapse toward a single balance-first runtime instead of preserving a permanent split between generic bridge runtime and balance runtime.
+
+For now, finish the current path just enough to prove or falsify the balance thesis.
