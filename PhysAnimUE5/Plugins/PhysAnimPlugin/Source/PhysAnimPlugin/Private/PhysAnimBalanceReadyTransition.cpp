@@ -266,6 +266,8 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	RequestReason = InRequestReason;
 	StableHoldAccumulatedSeconds = 0.0f;
 	QuietWindowAccumulatedSeconds = 0.0f;
+	ConsecutivePelvisNotSimulatingTicks = 0;
+	ConsecutiveBodyMotionInstabilityTicks = 0;
 	TargetDiscontinuityAccumulatedSeconds = 0.0f;
 	RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 	RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
@@ -348,14 +350,45 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
-		if (CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
-			CachedConvergenceSnapshot.MaxBodyAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed)
+		const bool bIsBodyMotionUnstable = CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
+			CachedConvergenceSnapshot.MaxBodyAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed;
+		const bool bIsPelvisNotSimulating = !CachedConvergenceSnapshot.bIsPelvisSimulating;
+
+		if (bIsBodyMotionUnstable) { ConsecutiveBodyMotionInstabilityTicks++; }
+		else { ConsecutiveBodyMotionInstabilityTicks = 0; }
+
+		if (bIsPelvisNotSimulating) { ConsecutivePelvisNotSimulatingTicks++; }
+		else { ConsecutivePelvisNotSimulatingTicks = 0; }
+
+		const bool bEscalateBodyInstability = ConsecutiveBodyMotionInstabilityTicks >= Settings.BalancePhase1PrepareMaxBlockedTicks;
+		const bool bEscalatePelvisNotSimulating = ConsecutivePelvisNotSimulatingTicks >= Settings.BalancePhase1PrepareMaxBlockedTicks;
+		const bool bEscalateDualFailure = (ConsecutiveBodyMotionInstabilityTicks > 0 && ConsecutivePelvisNotSimulatingTicks > 0);
+
+		if (bEscalateBodyInstability || bEscalatePelvisNotSimulating || bEscalateDualFailure)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PREPARE_BLOCKED reason=body_motion_instability maxSimBodyLinearSpeed=%.2f maxSimBodyAngularSpeed=%.2f worstLinearBone=%s worstAngularBone=%s"),
-				CachedConvergenceSnapshot.MaxBodyLinearSpeed,
-				CachedConvergenceSnapshot.MaxBodyAngularSpeed,
-				*CachedConvergenceSnapshot.MaxBodyLinearSpeedBone.ToString(),
-				*CachedConvergenceSnapshot.MaxBodyAngularSpeedBone.ToString());
+			FString TerminalReason;
+			if (bEscalateDualFailure) { TerminalReason = TEXT("persistent_body_motion_instability_and_pelvis_not_simulating"); }
+			else if (bEscalateBodyInstability) { TerminalReason = TEXT("persistent_body_motion_instability"); }
+			else { TerminalReason = TEXT("persistent_pelvis_not_simulating"); }
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PREPARE_TERMINAL reason=%s"), *TerminalReason);
+
+			const FString SafeDenyReason = TEXT("phase1_prepare_terminal_") + TerminalReason;
+			Owner->ReleaseTransitionOwnedShellLock();
+			MarkSafePhase2Denied(Owner, SafeDenyReason);
+			return;
+		}
+
+		if (bIsBodyMotionUnstable)
+		{
+			if (ConsecutiveBodyMotionInstabilityTicks == 1)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PREPARE_BLOCKED reason=body_motion_instability maxSimBodyLinearSpeed=%.2f maxSimBodyAngularSpeed=%.2f worstLinearBone=%s worstAngularBone=%s"),
+					CachedConvergenceSnapshot.MaxBodyLinearSpeed,
+					CachedConvergenceSnapshot.MaxBodyAngularSpeed,
+					*CachedConvergenceSnapshot.MaxBodyLinearSpeedBone.ToString(),
+					*CachedConvergenceSnapshot.MaxBodyAngularSpeedBone.ToString());
+			}
 
 			QuietWindowAccumulatedSeconds = 0.0f;
 			return;
@@ -437,7 +470,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			{
 				if (!CachedConvergenceSnapshot.bIsPelvisSimulating)
 				{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_BLOCKED reason=pelvis_not_simulating"));
+					if (ConsecutivePelvisNotSimulatingTicks == 1 || (ConsecutivePelvisNotSimulatingTicks % Settings.BalancePhase1PrepareMaxBlockedTicks) == 0)
+					{
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_BLOCKED reason=pelvis_not_simulating"));
+					}
 					QuietWindowAccumulatedSeconds = 0.0f; // fresh qualifying quiet window required
 					return;
 				}
@@ -1907,6 +1943,8 @@ void FPhysAnimBalanceReadyTransition::MarkSafePhase2Denied(class UPhysAnimCompon
 void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 {
 	Diagnostics = {};
+	ConsecutivePelvisNotSimulatingTicks = 0;
+	ConsecutiveBodyMotionInstabilityTicks = 0;
 	LateValidationAccumulatedSeconds = 0.0f;
 	RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 	RootOnReadinessShellProofAccumulatedSeconds = 0.0f;

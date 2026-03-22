@@ -304,6 +304,8 @@ private:
 
 	int32 QuietHandoffCount = 0;
 	float QuietWindowAccumulatedSeconds = 0.0f;
+	int32 ConsecutivePelvisNotSimulatingTicks = 0;
+	int32 ConsecutiveBodyMotionInstabilityTicks = 0;
 	float LateValidationAccumulatedSeconds = 0.0f;
 	float RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 	float RootOnReadinessShellProofAccumulatedSeconds = 0.0f;

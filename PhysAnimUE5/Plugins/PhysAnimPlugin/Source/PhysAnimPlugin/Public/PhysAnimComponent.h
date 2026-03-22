@@ -332,6 +332,9 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0"))
 	int32 BalancePhase1MaxAutomaticRetries = 3;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "1"))
+	int32 BalancePhase1PrepareMaxBlockedTicks = 10;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase1RetryCooldownSeconds = 1.0f;
 
@@ -504,6 +507,7 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed, Other.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed) &&
 			FMath::IsNearlyEqual(BalancePhase1LateValidateBodyMotionGraceDuration, Other.BalancePhase1LateValidateBodyMotionGraceDuration) &&
 			BalancePhase1MaxAutomaticRetries == Other.BalancePhase1MaxAutomaticRetries &&
+			BalancePhase1PrepareMaxBlockedTicks == Other.BalancePhase1PrepareMaxBlockedTicks &&
 			FMath::IsNearlyEqual(BalancePhase1RetryCooldownSeconds, Other.BalancePhase1RetryCooldownSeconds) &&
 			FMath::IsNearlyEqual(BalancePhase1HipQuarantineDurationSeconds, Other.BalancePhase1HipQuarantineDurationSeconds) &&
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxRootLinearSpeed, Other.BalancePhase2EntryMaxRootLinearSpeed) &&
