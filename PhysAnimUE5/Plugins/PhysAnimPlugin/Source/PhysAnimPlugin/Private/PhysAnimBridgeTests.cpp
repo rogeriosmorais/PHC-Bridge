@@ -191,9 +191,25 @@ namespace
 			}
 
 			const EPhysAnimRuntimeState CurrentRuntimeState = FoundComponent->GetRuntimeState();
+			EPhysAnimRuntimeState CurrentPublicBalanceEntryState = CurrentRuntimeState;
+			const bool bInPublicBalanceEntryState = FoundComponent->TryGetPublicBalanceEntryRuntimeState(CurrentPublicBalanceEntryState);
+			const bool bCurrentIsPublicBalanceEntryState =
+				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+
 			if (!FoundComponent->IsStartupBringUpFrozenByBalanceEntry())
 			{
-				Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] Startup bring-up freeze was lost during Phase 1."));
+				if (bCurrentIsPublicBalanceEntryState)
+				{
+					Test->AddError(FString::Printf(
+						TEXT("[PhysAnimPieBalanceSmoke] Startup bring-up freeze was lost during %s."),
+						UPhysAnimComponent::GetRuntimeStateName(CurrentRuntimeState)));
+					return true;
+				}
+
+				// If we left the public balance entry states, we're done observing.
 				return true;
 			}
 
@@ -206,13 +222,6 @@ namespace
 				return true;
 			}
 
-			EPhysAnimRuntimeState CurrentPublicBalanceEntryState = CurrentRuntimeState;
-			const bool bInPublicBalanceEntryState = FoundComponent->TryGetPublicBalanceEntryRuntimeState(CurrentPublicBalanceEntryState);
-			const bool bCurrentIsPublicBalanceEntryState =
-				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
-				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
-				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
-				CurrentRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
 			if (bCurrentIsPublicBalanceEntryState && !bInPublicBalanceEntryState)
 			{
 				Test->AddError(FString::Printf(

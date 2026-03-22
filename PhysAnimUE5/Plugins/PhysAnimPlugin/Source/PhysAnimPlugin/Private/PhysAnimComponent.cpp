@@ -7750,7 +7750,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	BridgeStartTimeSeconds = 0.0;
 	SimulationHandoffCompletedTimeSeconds = -1.0;
 	PolicyInfluenceRampStartTimeSeconds = -1.0;
-	bStartupBringUpFrozenByBalanceEntry = false;
+	SetStartupBringUpFrozenByBalanceEntry(false, TEXT("reset_stabilization_runtime"));
 	HighestUnlockedBringUpGroupIndex = INDEX_NONE;
 	BringUpGroupStableAccumulatedSeconds = 0.0f;
 	BringUpGroupActivationTimeSeconds.Init(-1.0, GetBringUpGroupCount());
@@ -9131,6 +9131,26 @@ const TCHAR* UPhysAnimComponent::GetRuntimeStateName(EPhysAnimRuntimeState State
 		return TEXT("FailStopped");
 	default:
 		return TEXT("Unknown");
+	}
+}
+
+void UPhysAnimComponent::SetStartupBringUpFrozenByBalanceEntry(bool bFrozen, const FString& InReason)
+{
+	if (bStartupBringUpFrozenByBalanceEntry == bFrozen)
+	{
+		return;
+	}
+
+	bStartupBringUpFrozenByBalanceEntry = bFrozen;
+
+	if (!bFrozen)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("PHASE1_FREEZE_RELEASE reason=%s phase=%s"),
+			*InReason,
+			GetRuntimeStateName(RuntimeState));
 	}
 }
 

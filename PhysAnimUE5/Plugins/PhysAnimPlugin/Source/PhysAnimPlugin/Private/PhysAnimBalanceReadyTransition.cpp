@@ -1240,12 +1240,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			NewPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied ||
 			NewPhase == EBalanceReadyTransitionPhase::BRT_Inactive))
 	{
-		Owner->SetStartupBringUpFrozenByBalanceEntry(false);
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnimBalance] BALANCE_ENTRY_FREEZE state=off reason=transition_terminal_exit phase=%d"),
-			static_cast<int32>(NewPhase));
+		Owner->SetStartupBringUpFrozenByBalanceEntry(false, TEXT("transition_terminal_exit"));
 	}
 
 	if (NewPhase != EBalanceReadyTransitionPhase::BRT_Inactive && InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive)

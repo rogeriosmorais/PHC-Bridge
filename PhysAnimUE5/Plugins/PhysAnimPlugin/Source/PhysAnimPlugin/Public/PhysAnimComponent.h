@@ -651,7 +651,7 @@ public:
 	bool WasPolicyTargetAppliedLastFrame() const { return bPolicyTargetsAppliedLastFrame; }
 	bool WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame() const { return bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame; }
 	bool IsStartupBringUpFrozenByBalanceEntry() const { return bStartupBringUpFrozenByBalanceEntry; }
-	void SetStartupBringUpFrozenByBalanceEntry(bool bFrozen) { bStartupBringUpFrozenByBalanceEntry = bFrozen; }
+	void SetStartupBringUpFrozenByBalanceEntry(bool bFrozen, const FString& InReason = TEXT("unknown"));
 	int32 GetHighestUnlockedBringUpGroupIndex() const { return HighestUnlockedBringUpGroupIndex; }
 	bool WasPelvisSimulatingLastFrame() const { return bLastAppliedPresentationRootSimulationEnabled; }
 	bool IsPelvisSimulatingNow() const;
