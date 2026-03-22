@@ -148,6 +148,8 @@ struct FPhase1AcceptedConvergenceSnapshot
 	float MaxTargetDeltaDegrees = 0.0f;
 	float MeanTargetDeltaDegrees = 0.0f;
 	bool bIsPelvisSimulating = false;
+	FName MaxBodyLinearSpeedBone = NAME_None;
+	FName MaxBodyAngularSpeedBone = NAME_None;
 
 
 	bool IsValid() const { return FrameIndex >= 0; }

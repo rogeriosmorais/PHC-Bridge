@@ -348,6 +348,19 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
+		if (CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
+			CachedConvergenceSnapshot.MaxBodyAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PREPARE_BLOCKED reason=body_motion_instability maxSimBodyLinearSpeed=%.2f maxSimBodyAngularSpeed=%.2f worstLinearBone=%s worstAngularBone=%s"),
+				CachedConvergenceSnapshot.MaxBodyLinearSpeed,
+				CachedConvergenceSnapshot.MaxBodyAngularSpeed,
+				*CachedConvergenceSnapshot.MaxBodyLinearSpeedBone.ToString(),
+				*CachedConvergenceSnapshot.MaxBodyAngularSpeedBone.ToString());
+
+			QuietWindowAccumulatedSeconds = 0.0f;
+			return;
+		}
+
 		bool bQuietThisFrame = true;
 		FString QuietBlockReason;
 

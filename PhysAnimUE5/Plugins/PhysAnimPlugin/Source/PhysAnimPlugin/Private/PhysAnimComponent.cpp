@@ -1789,6 +1789,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		SafePhase1ConvergenceSnapshot.WorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 		SafePhase1ConvergenceSnapshot.MaxBodyLinearSpeed = LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond;
 		SafePhase1ConvergenceSnapshot.MaxBodyAngularSpeed = LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond;
+		SafePhase1ConvergenceSnapshot.MaxBodyLinearSpeedBone = LastRuntimeInstabilityDiagnostics.MaxLinearSpeedBoneName;
+		SafePhase1ConvergenceSnapshot.MaxBodyAngularSpeedBone = LastRuntimeInstabilityDiagnostics.MaxAngularSpeedBoneName;
 		SafePhase1ConvergenceSnapshot.RootLinearSpeed = LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond;
 		SafePhase1ConvergenceSnapshot.RootAngularSpeed = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
 		
