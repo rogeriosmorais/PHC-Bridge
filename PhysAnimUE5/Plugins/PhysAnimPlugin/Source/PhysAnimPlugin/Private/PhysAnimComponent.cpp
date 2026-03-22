@@ -9143,7 +9143,15 @@ void UPhysAnimComponent::SetStartupBringUpFrozenByBalanceEntry(bool bFrozen, con
 
 	bStartupBringUpFrozenByBalanceEntry = bFrozen;
 
-	if (!bFrozen)
+	if (bFrozen)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("PHASE1_FREEZE_ACQUIRE reason=%s"),
+			*InReason);
+	}
+	else
 	{
 		UE_LOG(
 			LogPhysAnimBridge,

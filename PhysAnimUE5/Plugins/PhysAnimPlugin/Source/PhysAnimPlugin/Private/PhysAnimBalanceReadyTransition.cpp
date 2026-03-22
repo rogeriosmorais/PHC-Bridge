@@ -260,8 +260,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	}
 
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] TRANSITION_ACCEPT reason=preflight_accept"));
-	Owner->SetStartupBringUpFrozenByBalanceEntry(true);
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] BALANCE_ENTRY_FREEZE state=on reason=transition_accept"));
+	Owner->SetStartupBringUpFrozenByBalanceEntry(true, TEXT("transition_accept"));
 
 	RequestReason = InRequestReason;
 	StableHoldAccumulatedSeconds = 0.0f;
@@ -1240,7 +1239,25 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			NewPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied ||
 			NewPhase == EBalanceReadyTransitionPhase::BRT_Inactive))
 	{
-		Owner->SetStartupBringUpFrozenByBalanceEntry(false, TEXT("transition_terminal_exit"));
+		FString TerminalReason = TEXT("transition_terminal_exit");
+		if (NewPhase == EBalanceReadyTransitionPhase::BRT_Succeeded)
+		{
+			TerminalReason = TEXT("transition_success");
+		}
+		else if (NewPhase == EBalanceReadyTransitionPhase::BRT_Failed)
+		{
+			TerminalReason = TEXT("transition_failed") + (Diagnostics.FailureReason.IsEmpty() ? TEXT("") : TEXT("_") + Diagnostics.FailureReason);
+		}
+		else if (NewPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied)
+		{
+			TerminalReason = TEXT("transition_safe_denied") + (Diagnostics.FailureReason.IsEmpty() ? TEXT("") : TEXT("_") + Diagnostics.FailureReason);
+		}
+		else if (NewPhase == EBalanceReadyTransitionPhase::BRT_Inactive)
+		{
+			TerminalReason = TEXT("transition_inactive");
+		}
+		
+		Owner->SetStartupBringUpFrozenByBalanceEntry(false, TerminalReason);
 	}
 
 	if (NewPhase != EBalanceReadyTransitionPhase::BRT_Inactive && InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive)
