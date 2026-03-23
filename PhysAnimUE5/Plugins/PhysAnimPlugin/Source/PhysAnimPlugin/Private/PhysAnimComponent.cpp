@@ -26,6 +26,7 @@
 #include "NNEStatus.h"
 #include "PhysicsControlActor.h"
 #include "PhysicsControlComponent.h"
+#include "PhysicsControlRecord.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "PhysicsEngine/ConstraintInstance.h"
 #include "PhysicsEngine/PhysicsConstraintTemplate.h"
@@ -1112,6 +1113,15 @@ void UPhysAnimComponent::EmitBridgeTraceEvent(
 	BridgeTraceWriter->AppendEvent(Event);
 }
 
+struct FPhysAnimPhysicsControlAccessor : public UPhysicsControlComponent
+{
+public:
+	static const FPhysicsBodyModifierRecord* GetModifierRecord(const UPhysicsControlComponent* ControlComp, const FName Name)
+	{
+		return ((const FPhysAnimPhysicsControlAccessor*)ControlComp)->FindBodyModifierRecord(Name);
+	}
+};
+
 void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -1131,9 +1141,12 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
 			const bool bCurrentIntendedKinematic = IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, Settings);
 			EPhysicsMovementType CurrentModifierMovementType = EPhysicsMovementType::Simulated;
-			if (const EPhysicsMovementType* Prev = PreviousDistalBoneIntendedOwnership.Find(BoneName))
+			if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
 			{
-				CurrentModifierMovementType = *Prev;
+				if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, BoneName))
+				{
+					CurrentModifierMovementType = Record->BodyModifier.ModifierData.MovementType;
+				}
 			}
 			
 			bool bRawSimulating = false;
@@ -1152,7 +1165,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				UE_LOG(
 					LogPhysAnimBridge,
 					Error,
-					TEXT("[PhysAnim] DISTAL_EXPERIMENT_POSTSTEP_STATE (OWNERSHIP VIOLATION): bone=%s STUCK SIMULATING! intent=%d mod=%d prevRuntimeState=%s prevPhase=%d reason=%s"),
+					TEXT("[PhysAnim] DISTAL_EXPERIMENT_NEXTFRAME_STATE (OWNERSHIP VIOLATION): bone=%s STUCK SIMULATING! intent=%d mod=%d prevRuntimeState=%s prevPhase=%d reason=%s"),
 					*BoneName.ToString(), 1, (int32)CurrentModifierMovementType, GetRuntimeStateName(Check.RuntimeState), Check.TransitionPhase, *Check.CallSiteReason);
 			}
 			else
@@ -1160,7 +1173,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				UE_LOG(
 					LogPhysAnimBridge,
 					Log,
-					TEXT("[PhysAnim] DISTAL_EXPERIMENT_POSTSTEP_STATE: bone=%s OK (intent=%d mod=%d rawSim=%d) prevRuntimeState=%s prevPhase=%d reason=%s"),
+					TEXT("[PhysAnim] DISTAL_EXPERIMENT_NEXTFRAME_STATE: bone=%s OK (intent=%d mod=%d rawSim=%d) prevRuntimeState=%s prevPhase=%d reason=%s"),
 					*BoneName.ToString(), bCurrentIntendedKinematic ? 1 : 0, (int32)CurrentModifierMovementType, bRawSimulating ? 1 : 0,
 					GetRuntimeStateName(Check.RuntimeState), Check.TransitionPhase, *Check.CallSiteReason);
 			}
