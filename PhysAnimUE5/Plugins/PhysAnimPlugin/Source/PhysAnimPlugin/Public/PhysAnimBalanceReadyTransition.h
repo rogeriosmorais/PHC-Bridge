@@ -340,6 +340,11 @@ public:
 	bool IsPhase2RootAuthorityQuarantined() const { return bPhase2RootAuthorityQuarantined; }
 
 	bool IsDistalKinematicAccepted() const { return Phase1TopologyRecord.DistalOwnershipMode == EBalanceReadyGroupOwnershipMode::Kinematic; }
+	bool IsUpperBodyKinematicHoldActive() const
+	{
+		return bHasPhase1TopologyRecord &&
+			Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
+	}
 
 	static bool IsProximal(FName BoneName);
 	float GetRootBodyModifierSoftSimAlpha() const;

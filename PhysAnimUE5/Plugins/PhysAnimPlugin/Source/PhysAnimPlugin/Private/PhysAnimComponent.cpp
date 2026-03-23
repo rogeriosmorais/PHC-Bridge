@@ -5416,18 +5416,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bAllowRootBodyModifierSimulation,
 				CurrentPolicyAlpha);
 
-		if (BalanceTransitionSets::IsUpperBody(BoneName) && (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate))
-		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TUNING_SHOULD_RESET bone=%s state=%s result=%d"), *BoneName.ToString(), GetRuntimeStateName(RuntimeState), bShouldResetThisBone ? 1 : 0);
-		}
-
 		if (bShouldResetThisBone &&
 			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
-			if (BalanceTransitionSets::IsUpperBody(BoneName))
-			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] INSIDE_RESET_IF bone=%s shouldResetValue=%d"), *BoneName.ToString(), bShouldResetThisBone ? 1 : 0);
-			}
 			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
 			{
 				if (bIsRootBodyModifier)
@@ -5453,19 +5444,29 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				}
 				else
 				{
-					PendingBodyModifierCachedResetNames.Add(ModifierName);
-					if (BalanceTransitionSets::IsUpperBody(PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName)))
+					if (BalanceTransitionSets::IsUpperBody(BoneName) && 
+						(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate) &&
+						BalanceReadyTransition.IsUpperBodyKinematicHoldActive())
 					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] UPPER_BODY_RESET_RE_ADDED bone=%s runtimeState=%s source=recovery"), *PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName).ToString(), GetRuntimeStateName(RuntimeState));
+						UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=recovery"), *BoneName.ToString());
+					}
+					else
+					{
+						PendingBodyModifierCachedResetNames.Add(ModifierName);
 					}
 				}
 			}
 			else
 			{
-				PendingBodyModifierCachedResetNames.Add(ModifierName);
-				if (BalanceTransitionSets::IsUpperBody(BoneName))
+				if (BalanceTransitionSets::IsUpperBody(BoneName) && 
+					(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate) &&
+					BalanceReadyTransition.IsUpperBodyKinematicHoldActive())
 				{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] UPPER_BODY_RESET_RE_ADDED bone=%s runtimeState=%s source=applyTuning"), *BoneName.ToString(), GetRuntimeStateName(RuntimeState));
+					UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=applyTuning"), *BoneName.ToString());
+				}
+				else
+				{
+					PendingBodyModifierCachedResetNames.Add(ModifierName);
 				}
 			}
 		}
@@ -5655,10 +5656,15 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 			}
 			else
 			{
-				PendingBodyModifierCachedResetNames.Add(ModifierName);
-				if (BalanceTransitionSets::IsUpperBody(BoneName))
+				if (BalanceTransitionSets::IsUpperBody(BoneName) && 
+					(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate) &&
+					BalanceReadyTransition.IsUpperBodyKinematicHoldActive())
 				{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] UPPER_BODY_RESET_RE_ADDED bone=%s runtimeState=%s source=unlockGroup"), *BoneName.ToString(), GetRuntimeStateName(RuntimeState));
+					UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=unlockGroup"), *BoneName.ToString());
+				}
+				else
+				{
+					PendingBodyModifierCachedResetNames.Add(ModifierName);
 				}
 			}
 		}
@@ -8235,16 +8241,14 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 {
 	auto LogReturn = [&](bool bResult)
 	{
-		if (BalanceTransitionSets::IsUpperBody(BoneName) && (InRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || InRuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate))
-		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SHOULD_RESET_RESULT bone=%s state=%s forceZero=%d result=%d"), *BoneName.ToString(), GetRuntimeStateName(InRuntimeState), bForceZeroActions ? 1 : 0, bResult ? 1 : 0);
-		}
+		// Removed temporary debugging logs.
 		return bResult;
 	};
 
+	// Guard to prevent upper-body reset re-adds.
 	if (BalanceTransitionSets::IsUpperBody(BoneName) && (InRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || InRuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate))
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SHOULD_RESET_CHECK bone=%s state=%s forceZero=%d activated=%d groupUnlocked=%d"), *BoneName.ToString(), GetRuntimeStateName(InRuntimeState), bForceZeroActions ? 1 : 0, bBodyModifierActivatedThisTick ? 1 : 0, bBringUpGroupUnlocked ? 1 : 0);
+		return LogReturn(false);
 	}
 	if (bForceZeroActions)
 	{
