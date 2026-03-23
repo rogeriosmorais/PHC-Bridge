@@ -5140,7 +5140,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUseSkeletalAnimationTargetRepresentation ? TEXT("true") : TEXT("false"));
 	}
 
-	if ((bPhase1Prepare || bPhase1LateValidate) && BalanceReadyTransition.IsDistalKinematicAccepted())
+	if ((bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BridgeActive) && BalanceReadyTransition.IsDistalKinematicAccepted())
 	{
 		static bool bLoggedAuthoritativeWrite = false;
 		if (!bLoggedAuthoritativeWrite)
@@ -5301,7 +5301,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
-		if ((bPhase1Prepare || bPhase1LateValidate) &&
+		if ((bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BridgeActive) &&
 			(BoneName == TEXT("calf_r") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_r") ||
 			 BoneName == TEXT("calf_l") || BoneName == TEXT("foot_l") || BoneName == TEXT("ball_l")) &&
 			BalanceReadyTransition.IsDistalKinematicAccepted() &&
@@ -5314,9 +5314,20 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUpdateKinematicFromSimulation = false;
 			
 			// Telemetry when this safety override catches a conflicting re-promotion attempt
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_MODIFIER_SYNC_CORRECTED bone=%s phase=%s previousModifier=Simulated correctedModifier=Kinematic reason=AcceptedPhase1Topology"), 
-				*BoneName.ToString(), 
-				bPhase1Prepare ? TEXT("BalanceEntry_Prepare") : TEXT("BalanceEntry_LateValidate"));
+			if (!BalanceReadyTransition.LoggedSuppressedDistalBones.Contains(BoneName))
+			{
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("DISTAL_SYNC_REPROMOTION_SUPPRESSED bone=%s phase=%s reason=PerBone_BodyModSync blockedBy=DistalOwnershipRule"), 
+					*BoneName.ToString(), 
+					GetRuntimeStateName(RuntimeState));
+				BalanceReadyTransition.LoggedSuppressedDistalBones.Add(BoneName);
+			}
+
+			if (bPhase1Prepare || bPhase1LateValidate)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_MODIFIER_SYNC_CORRECTED bone=%s phase=%s previousModifier=Simulated correctedModifier=Kinematic reason=AcceptedPhase1Topology"), 
+					*BoneName.ToString(), 
+					bPhase1Prepare ? TEXT("BalanceEntry_Prepare") : TEXT("BalanceEntry_LateValidate"));
+			}
 		}
 
 		const bool bRootBodyModLogStateChanged =

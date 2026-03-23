@@ -234,6 +234,7 @@ public:
 	TMap<FName, int32> DistalBoneMismatchTicks;
 	TMap<FName, int32> DistalBoneConsecutiveMismatchTicks;
 	TMap<FName, int32> DistalBonePersistentTicks;
+	TSet<FName> LoggedSuppressedDistalBones;
 	int32 DistalMismatchesTransientCount = 0;
 	int32 DistalMismatchesPersistentCount = 0;
 	int32 DistalMismatchesPendingCount = 0;

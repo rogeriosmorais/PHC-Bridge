@@ -2066,6 +2066,7 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	ResetCertifiedHandoffState();
 	Phase1TopologyRecord = {};
 	bHasPhase1TopologyRecord = false;
+	LoggedSuppressedDistalBones.Empty();
 }
 
 void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
