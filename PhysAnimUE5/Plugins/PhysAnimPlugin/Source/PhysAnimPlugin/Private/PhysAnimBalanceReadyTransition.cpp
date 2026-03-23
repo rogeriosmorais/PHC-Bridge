@@ -795,9 +795,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			}
 			else
 			{
-				// Fallback to mode mismatch check if not in the specific kinematic hold contract
-				bUpperBodyInstability = (LiveSnapshot.UpperBodyOwnershipMode != Phase1TopologyRecord.UpperBodyOwnershipMode ||
-					LiveSnapshot.UpperBodySimCount != Phase1TopologyRecord.UpperBodySimCount);
+				// Fallback removed: detailed observed-violation gate above is now authoritative.
 			}
 		}
 
