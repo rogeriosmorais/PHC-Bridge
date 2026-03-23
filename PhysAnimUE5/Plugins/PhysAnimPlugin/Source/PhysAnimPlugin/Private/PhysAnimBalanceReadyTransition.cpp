@@ -1216,6 +1216,54 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		if (TotalTransitionTimeSeconds > Settings.BalancePhase1TimeoutDuration)
 		{
+			const bool bQuietProofSatisfied = QuietWindowAccumulatedSeconds >= Settings.BalancePhase1QuietRequiredSeconds;
+			const bool bExpectedReleaseSatisfied = bExpectedUpperBodyRelease;
+			const bool bUpperBodyHoldSatisfied = !bUpperBodyInstability;
+			const bool bSimCoverageSatisfied = !bSimCoverageRegressed;
+			const bool bTargetContinuitySatisfied = !bLateValidateTargetDiscontinuity;
+			const bool bBodyMotionThresholdsSatisfied = !bIsBodyMotionUnstable;
+			const bool bRootValiditySatisfied = !Phase1TopologyRecord.bRootSimulating;
+
+			const bool bRootOnReadinessShellHoldSatisfied = CurrentResult.bRootOnReadinessShellHoldSatisfied;
+			const bool bRootOnReadinessFinalBringUpControlSettled = CurrentResult.bRootOnReadinessFinalBringUpControlSettled;
+			const bool bRootOnReadinessPolicyInfluenceSettled = CurrentResult.bRootOnReadinessPolicyInfluenceSettled;
+			const bool bPreRootOnShellSafetyProofSatisfied = CurrentResult.bPreRootOnShellSafetyProofSatisfied;
+			const bool bRootOnReadinessProven = CurrentResult.bRootOnReadinessProven;
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_CONVERGENCE_REPORT upperBodyHold=%d simCoverage=%d targetContinuity=%d quietProof=%d bodyMotion=%d rootValidity=%d expectedRelease=%d readyProven=%d shellHold=%d bringUp=%d policyInfl=%d shellSafety=%d lateValidateSeconds=%.2f/%.2f shellHoldSeconds=%.2f/%.2f quietProofSeconds=%.2f/%.2f shellProofSeconds=%.2f/%.2f"),
+				bUpperBodyHoldSatisfied ? 1 : 0,
+				bSimCoverageSatisfied ? 1 : 0,
+				bTargetContinuitySatisfied ? 1 : 0,
+				bQuietProofSatisfied ? 1 : 0,
+				bBodyMotionThresholdsSatisfied ? 1 : 0,
+				bRootValiditySatisfied ? 1 : 0,
+				bExpectedReleaseSatisfied ? 1 : 0,
+				bRootOnReadinessProven ? 1 : 0,
+				bRootOnReadinessShellHoldSatisfied ? 1 : 0,
+				bRootOnReadinessFinalBringUpControlSettled ? 1 : 0,
+				bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
+				bPreRootOnShellSafetyProofSatisfied ? 1 : 0,
+				LateValidationAccumulatedSeconds, Settings.BalancePhase1LateValidateRequiredSeconds,
+				RootOnReadinessShellHoldAccumulatedSeconds, Settings.BalancePhase2RequiredShellHoldDuration,
+				QuietWindowAccumulatedSeconds, Settings.BalancePhase1QuietRequiredSeconds,
+				RootOnReadinessShellProofAccumulatedSeconds, Settings.BalancePhase2PreRootOnShellProofRequiredSeconds);
+
+			FString PrimaryReason = TEXT("unknown");
+			if (!bRootValiditySatisfied) PrimaryReason = TEXT("root_topology_mismatch");
+			else if (!bSimCoverageSatisfied) PrimaryReason = TEXT("sim_coverage_regressed");
+			else if (!bUpperBodyHoldSatisfied) PrimaryReason = TEXT("upper_body_instability");
+			else if (!bBodyMotionThresholdsSatisfied) PrimaryReason = TEXT("body_motion_thresholds_exceeded");
+			else if (!bTargetContinuitySatisfied) PrimaryReason = TEXT("target_discontinuity");
+			else if (!bQuietProofSatisfied) PrimaryReason = TEXT("quiet_proof_unsatisfied");
+			else if (!bExpectedReleaseSatisfied) PrimaryReason = TEXT("expected_release_never_reached");
+			else if (!bRootOnReadinessShellHoldSatisfied) PrimaryReason = TEXT("shell_hold_unsatisfied");
+			else if (!bRootOnReadinessFinalBringUpControlSettled) PrimaryReason = TEXT("bringup_not_settled");
+			else if (!bRootOnReadinessPolicyInfluenceSettled) PrimaryReason = TEXT("policy_influence_not_settled");
+			else if (!bPreRootOnShellSafetyProofSatisfied) PrimaryReason = TEXT("shell_safety_proof_unsatisfied");
+			else if (!bRootOnReadinessProven) PrimaryReason = TEXT("ready_proof_failed");
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_NONCONVERGENCE primary=%s"), *PrimaryReason);
+
 			const FString TimeoutReason = LateValidateBlockReason.IsEmpty()
 				? TEXT("phase1_no_convergence_path")
 				: TEXT("phase1_no_convergence_path_") + LateValidateBlockReason;
