@@ -928,6 +928,8 @@ private:
 	void RestoreStartupAnimationState(USkeletalMeshComponent* SkeletalMesh);
 	void LogTPoseIdentityCheck() const;
 
+	void ReconcilePhase1DistalModifierRecords(const FPhysAnimStabilizationSettings& EffectiveSettings);
+
 	UE::NNE::IModelInstanceRunSync* GetModelInstanceRunSync() const;
 	TConstArrayView<UE::NNE::FTensorDesc> GetInputTensorDescs() const;
 	TConstArrayView<UE::NNE::FTensorDesc> GetOutputTensorDescs() const;

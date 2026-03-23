@@ -1271,7 +1271,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				EPhysicsMovementType ModifierOwnership = EPhysicsMovementType::Simulated;
 				if (UPhysicsControlComponent* PhysicsControl = Owner->PhysicsControlComponent.Get())
 				{
-					if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, DistalBoneName))
+					const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(DistalBoneName);
+					if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName))
 					{
 						ModifierOwnership = Record->BodyModifier.ModifierData.MovementType;
 					}

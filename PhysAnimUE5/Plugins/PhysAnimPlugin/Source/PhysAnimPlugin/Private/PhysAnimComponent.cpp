@@ -1142,7 +1142,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			EPhysicsMovementType CurrentModifierMovementType = EPhysicsMovementType::Simulated;
 			if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
 			{
-				if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, BoneName))
+				const FName CheckModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+				if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, CheckModifierName))
 				{
 					CurrentModifierMovementType = Record->BodyModifier.ModifierData.MovementType;
 				}
@@ -1829,7 +1830,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			if (SkeletalMesh && PhysicsControl)
 			{
 				const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-				if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, BoneName))
+				if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName))
 				{
 					const EPhysicsMovementType ModifierType = Record->BodyModifier.ModifierData.MovementType;
 					FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName);
@@ -9732,7 +9733,58 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 		ApplyRuntimeControlTuning(ResolveEffectiveStabilizationSettings());
 	}
 
+	if (NewState == EPhysAnimRuntimeState::BalanceEntry_Prepare)
+	{
+		ReconcilePhase1DistalModifierRecords(ResolveEffectiveStabilizationSettings());
+	}
+
 	UpdateBridgeStatusIndicator(60.0f);
+}
+
+void UPhysAnimComponent::ReconcilePhase1DistalModifierRecords(const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	if (!PhysicsControl || !Mesh)
+	{
+		return;
+	}
+
+	const FName DistalBones[] = { TEXT("calf_l"), TEXT("calf_r"), TEXT("foot_l"), TEXT("foot_r"), TEXT("ball_l"), TEXT("ball_r") };
+	for (const FName BoneName : DistalBones)
+	{
+		if (BalanceReadyTransition.IsDistalKinematicAccepted())
+		{
+			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+			EPhysicsMovementType ModifierMovementType = EPhysicsMovementType::Simulated;
+			
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName))
+			{
+				ModifierMovementType = Record->BodyModifier.ModifierData.MovementType;
+			}
+
+			const FBodyInstance* BodyInst = Mesh->GetBodyInstance(BoneName);
+			const bool bRawSimulating = BodyInst && BodyInst->IsValidBodyInstance() ? BodyInst->IsInstanceSimulatingPhysics() : false;
+
+			if (ModifierMovementType != EPhysicsMovementType::Kinematic)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("PHASE1_DISTAL_RECORD_REPAIRED bone=%s prevModifier=%s rawBody=%s"),
+					*BoneName.ToString(),
+					GetPhysicsMovementTypeName(ModifierMovementType),
+					bRawSimulating ? TEXT("Simulated") : TEXT("Kinematic"));
+				
+				PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic);
+				TrackDistalModifierWrite(BoneName, EPhysicsMovementType::Kinematic, false, TEXT("ReconcilePhase1DistalModifierRecords"));
+			}
+			else
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("PHASE1_DISTAL_RECORD_ENTRY_STATE bone=%s modifier=%s rawBody=%s"),
+					*BoneName.ToString(),
+					GetPhysicsMovementTypeName(ModifierMovementType),
+					bRawSimulating ? TEXT("Simulated") : TEXT("Kinematic"));
+			}
+		}
+	}
 }
 
 UE::NNE::IModelInstanceRunSync* UPhysAnimComponent::GetModelInstanceRunSync() const
