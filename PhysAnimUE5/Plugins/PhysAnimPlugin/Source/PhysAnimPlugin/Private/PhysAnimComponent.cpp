@@ -5562,7 +5562,11 @@ bool UPhysAnimComponent::IsPresentationPerturbationOverrideActive() const
 
 void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Context)
 {
-	if (bStartupBringUpFrozenByBalanceEntry ||
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+	const bool bFrozen = bStartupBringUpFrozenByBalanceEntry && !bPhase1Prepare && !bPhase1LateValidate;
+
+	if (bFrozen ||
 		GroupIndex < 0 ||
 		GroupIndex >= GetBringUpGroupCount() ||
 		GroupIndex <= HighestUnlockedBringUpGroupIndex)
@@ -5570,16 +5574,7 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 		return;
 	}
 
-	const bool bStableRuntimeWindowUnlock = Context && FCString::Strcmp(Context, TEXT("StableRuntimeWindow")) == 0;
-	if (bStableRuntimeWindowUnlock &&
-		(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
-			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
-			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
-			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
-		GroupIndex >= 2)
-	{
-		return;
-	}
+	// No blocking for indices >= 2 during LateValidate/Prepare if we want distal bring-up
 
 	if (!BringUpGroupActivationTimeSeconds.IsValidIndex(GroupIndex))
 	{
@@ -5588,6 +5583,10 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 	if (!BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex))
 	{
 		BringUpGroupControlRampStartTimeSeconds.Init(-1.0, GetBringUpGroupCount());
+	}
+	if (!BringUpGroupAlphaActiveLogged.IsValidIndex(GroupIndex))
+	{
+		BringUpGroupAlphaActiveLogged.Init(false, GetBringUpGroupCount());
 	}
 
 	const double ActivationTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
@@ -6053,7 +6052,11 @@ bool UPhysAnimComponent::HandlePrePolicyShellRecovery(const FPhysAnimStabilizati
 
 void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
-	if (EffectiveSettings.bForceZeroActions || !IsBringUpGroupUnlocked(0) || bStartupBringUpFrozenByBalanceEntry)
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+	const bool bFrozen = bStartupBringUpFrozenByBalanceEntry && !bPhase1Prepare && !bPhase1LateValidate;
+
+	if (EffectiveSettings.bForceZeroActions || !IsBringUpGroupUnlocked(0) || bFrozen)
 	{
 		return;
 	}
@@ -6114,6 +6117,8 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 				bDistalLocomotionCompositionModeActive ? TEXT("On") : TEXT("Off"),
 				CurrentAngularVelocity);
 
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_RAMP_ARMED group=%d"), CoreFinalGroupIndex);
+
 			BringUpGroupControlRampStartTimeSeconds[CoreFinalGroupIndex] = WorldTime;
 			BringUpGroupStableAccumulatedSeconds = 0.0f;
 			
@@ -6140,8 +6145,11 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 				FinalizeBalanceScenario(false, TEXT("rampEnableRootSpike"));
 				StopBalancePerturbationMode();
 			}
+
+			return;
 		}
-		else if (PolicyInfluenceRampStartTimeSeconds < 0.0 &&
+		
+		if (PolicyInfluenceRampStartTimeSeconds < 0.0 &&
 			ShouldStartPolicyInfluenceRamp(
 				EffectiveSettings.bForceZeroActions,
 				true,
@@ -6156,8 +6164,8 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 				LogPhysAnimBridge,
 				Log,
 				TEXT("[PhysAnim] Stabilization policy influence ramp enabled after final-group control settle."));
+			return;
 		}
-		return;
 	}
 
 	const int32 MaxConfiguredAutoUnlockGroup =
@@ -6165,15 +6173,26 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 			? FMath::Min(EffectiveSettings.MaxAutoUnlockBringUpGroup, GetBringUpGroupCount() - 1)
 			: (GetBringUpGroupCount() - 1);
 	const int32 PhaseAwareMaxAutoUnlockGroup =
-		RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery
-			? FMath::Min(MaxConfiguredAutoUnlockGroup, 1)
-			: MaxConfiguredAutoUnlockGroup;
-	if (HighestUnlockedBringUpGroupIndex >= PhaseAwareMaxAutoUnlockGroup)
+		(RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
+         RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate)
+			? MaxConfiguredAutoUnlockGroup
+			: FMath::Min(MaxConfiguredAutoUnlockGroup, 1);
+	if (HighestUnlockedBringUpGroupIndex < PhaseAwareMaxAutoUnlockGroup)
 	{
+		UnlockBringUpGroup(HighestUnlockedBringUpGroupIndex + 1, TEXT("StableRuntimeWindow"));
 		return;
 	}
 
-	UnlockBringUpGroup(HighestUnlockedBringUpGroupIndex + 1, TEXT("StableRuntimeWindow"));
+	// Start delayed ramps for ANY unlocked groups if they are still pending
+	if (IsBringUpGroupUnlocked(HighestUnlockedBringUpGroupIndex) && !IsBringUpGroupControlRampActive(HighestUnlockedBringUpGroupIndex))
+	{
+		const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+		BringUpGroupControlRampStartTimeSeconds[HighestUnlockedBringUpGroupIndex] = WorldTime;
+		BringUpGroupStableAccumulatedSeconds = 0.0f;
+
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_RAMP_ARMED group=%d"), HighestUnlockedBringUpGroupIndex);
+		return;
+	}
 }
 
 bool UPhysAnimComponent::AreAllBringUpGroupsUnlocked() const
@@ -6212,11 +6231,19 @@ float UPhysAnimComponent::CalculateBringUpGroupControlAuthorityAlpha(
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 	const float ElapsedSinceGroupControlRampStartSeconds = static_cast<float>(
 		FMath::Max(CurrentTimeSeconds - BringUpGroupControlRampStartTimeSeconds[GroupIndex], 0.0));
-	return CalculateControlAuthorityAlpha(
+	const float Alpha = CalculateControlAuthorityAlpha(
 		EffectiveSettings.bForceZeroActions,
 		true,
 		ElapsedSinceGroupControlRampStartSeconds,
 		EffectiveSettings.StartupRampSeconds);
+
+	if (Alpha > 0.0f && BringUpGroupAlphaActiveLogged.IsValidIndex(GroupIndex) && BringUpGroupAlphaActiveLogged[GroupIndex] == 0)
+	{
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_ALPHA_ACTIVE group=%d alpha=%.4f"), GroupIndex, Alpha);
+		BringUpGroupAlphaActiveLogged[GroupIndex] = 1;
+	}
+
+	return Alpha;
 }
 
 bool UPhysAnimComponent::CheckRuntimeInstability(

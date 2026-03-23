@@ -1024,6 +1024,8 @@ private:
 	float BringUpGroupStableAccumulatedSeconds = 0.0f;
 	TArray<double> BringUpGroupActivationTimeSeconds;
 	TArray<double> BringUpGroupControlRampStartTimeSeconds;
+	mutable TArray<uint8> BringUpGroupAlphaActiveLogged;
+	mutable bool bShellCorrectionStateLogged = false;
 	TArray<FName> PendingBodyModifierCachedResetNames;
 	double LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
 	float PolicyUpdateAccumulatorSeconds = -1.0f;

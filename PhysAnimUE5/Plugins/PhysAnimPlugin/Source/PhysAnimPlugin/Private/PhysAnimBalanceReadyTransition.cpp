@@ -2231,6 +2231,21 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutResult.bRootOnReadinessPolicyInfluenceSettled =
 		OutSnapshot.RootOnReadinessPolicyInfluenceDurationSeconds + KINDA_SMALL_NUMBER >=
 		OutSnapshot.RootOnReadinessPolicyInfluenceRequiredSeconds;
+	const float SignificantShellOffsetThresholdCm = 0.1f;
+	const float SignificantShellVelocityThresholdCmPerSecond = 1.0f;
+	const bool bShellCorrectionActivelyAffecting = OutSnapshot.bShellCorrectionOwnerActive && 
+		(OutSnapshot.ShellOffsetDeltaAtCaptureCm > SignificantShellOffsetThresholdCm || 
+		 OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond > SignificantShellVelocityThresholdCmPerSecond);
+
+	if (Owner->bShellCorrectionStateLogged == false)
+	{
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_SHELL_CORRECTION_STATE active=%d influencingMetrics=%d staleLatch=%d"),
+			OutSnapshot.bShellCorrectionOwnerActive ? 1 : 0,
+			bShellCorrectionActivelyAffecting ? 1 : 0,
+			(OutSnapshot.bShellCorrectionOwnerActive && !bShellCorrectionActivelyAffecting) ? 1 : 0);
+		Owner->bShellCorrectionStateLogged = true;
+	}
+
 	OutResult.bPreRootOnShellSafetyProofSatisfied =
 		OutSnapshot.RootOnReadinessShellProofDurationSeconds + KINDA_SMALL_NUMBER >=
 			Settings.BalancePhase2PreRootOnShellProofRequiredSeconds &&
@@ -2238,7 +2253,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond &&
 		OutSnapshot.ShellOffsetGrowthCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm &&
 		OutSnapshot.ShellVelocityGrowthCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond &&
-		!OutSnapshot.bShellCorrectionOwnerActive &&
+		!bShellCorrectionActivelyAffecting &&
 		OutSnapshot.bTransitionOwnedShellLocked &&
 		OutSnapshot.bTransitionShellReferenceReanchored &&
 		!OutSnapshot.bTransitionShellReferenceReseededAfterLock;
