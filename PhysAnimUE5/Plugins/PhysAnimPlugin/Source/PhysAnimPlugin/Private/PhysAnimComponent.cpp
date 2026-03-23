@@ -1149,13 +1149,20 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			}
 			
 			bool bCurrentRawSimulating = false;
+			FVector LinearVelocity = FVector::ZeroVector;
+			FVector AngularVelocity = FVector::ZeroVector;
 			if (USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get())
 			{
 				if (FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName))
 				{
 					bCurrentRawSimulating = BodyInstance->IsInstanceSimulatingPhysics();
+					LinearVelocity = BodyInstance->GetUnrealWorldVelocity();
+					AngularVelocity = FMath::RadiansToDegrees(BodyInstance->GetUnrealWorldAngularVelocityInRadians());
 				}
 			}
+
+			const float TargetDelta = LastControlTargetDiagnostics.MaxTargetDeltaDegrees;
+			const bool bHasPendingReset = PendingBodyModifierCachedResetNames.Contains(BoneName);
 
 
 			FString Classification = TEXT("fully_aligned");
@@ -1208,13 +1215,17 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				UE_LOG(
 					LogPhysAnimBridge,
 					Warning,
-					TEXT("[PhysAnim] DISTAL_EXPERIMENT_NEXTFRAME_STATE: bone=%s intent=%s modifier=%s rawSimulate=%s classification=%s writeReason=%s"),
+					TEXT("[PhysAnim] DISTAL_EXPERIMENT_NEXTFRAME_STATE: bone=%s intent=%s modifier=%s rawSimulate=%s classification=%s writeReason=%s targetDelta=%.2f linVel=%.1f angVel=%.1f pendingReset=%d"),
 					*BoneName.ToString(),
 					GetPhysicsMovementTypeName(Check.IntendedOwnership),
 					GetPhysicsMovementTypeName(CurrentModifierMovementType),
 					bCurrentRawSimulating ? TEXT("Simulating") : TEXT("Kinematic"),
 					*Classification,
-					*Check.CallSiteReason);
+					*Check.CallSiteReason,
+					TargetDelta,
+					LinearVelocity.Size(),
+					AngularVelocity.Size(),
+					bHasPendingReset ? 1 : 0);
 				
 				LastDistalClassification.Add(BoneName, Classification);
 			}
@@ -9314,6 +9325,21 @@ void UPhysAnimComponent::TrackDistalBoneOwnershipChange(FName BoneName, EPhysics
 		{
 			if (bRawSimulating)
 			{
+				static TSet<FName> LoggedBones;
+				if (BoneName == TEXT("calf_r") && !LoggedBones.Contains(BoneName))
+				{
+					UE_LOG(
+						LogPhysAnimBridge,
+						Warning,
+						TEXT("[PhysAnim] CALF_R_DISTAL_GATE_FORENSIC: shouldKeepKinematic=%d rawSimulating=%d runtimeState=%s phase=%d reason=%s"),
+						bShouldKeepKinematic ? 1 : 0,
+						bRawSimulating ? 1 : 0,
+						GetRuntimeStateName(RuntimeState),
+						(int32)BalanceReadyTransition.GetPhase(),
+						*CallSiteReason);
+					LoggedBones.Add(BoneName);
+				}
+
 				UE_LOG(
 					LogPhysAnimBridge,
 					Warning,

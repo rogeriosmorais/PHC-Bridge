@@ -1,4 +1,16 @@
 #include "PhysAnimBalanceReadyTransition.h"
+#include "PhysicsControlComponent.h"
+#include "PhysicsControlRecord.h"
+
+struct FPhysAnimPhysicsControlAccessor : public UPhysicsControlComponent
+{
+public:
+	static const FPhysicsBodyModifierRecord* GetModifierRecord(const UPhysicsControlComponent* ControlComp, const FName Name)
+	{
+		return ((const FPhysAnimPhysicsControlAccessor*)ControlComp)->FindBodyModifierRecord(Name);
+	}
+};
+
 #include "PhysAnimComponent.h"
 #include "PhysicsControlComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -1243,6 +1255,66 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			const FString SecondaryReason = UnsatisfiedGates.Num() > 1 ? UnsatisfiedGates[1] : TEXT("none");
 
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_NONCONVERGENCE primary=%s secondary=%s"), *PrimaryReason, *SecondaryReason);
+
+			// DISTAL_FORENSIC_REPORT
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_CONVERGENCE_FORENSIC_REPORT_START"));
+			for (const FName DistalBoneName : PhysAnimBridge::GetControlledBoneNames())
+			{
+				if (!BalanceTransitionSets::IsDistalLowerLimb(DistalBoneName))
+				{
+					continue;
+				}
+
+				const bool bShouldBeKinematic = ShouldKeepBoneKinematic(DistalBoneName, Settings);
+				const EPhysicsMovementType ExpectedOwnership = bShouldBeKinematic ? EPhysicsMovementType::Kinematic : EPhysicsMovementType::Simulated;
+				
+				EPhysicsMovementType ModifierOwnership = EPhysicsMovementType::Simulated;
+				if (UPhysicsControlComponent* PhysicsControl = Owner->PhysicsControlComponent.Get())
+				{
+					if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, DistalBoneName))
+					{
+						ModifierOwnership = Record->BodyModifier.ModifierData.MovementType;
+					}
+				}
+
+				bool bRawSimulating = false;
+				FVector LinVel = FVector::ZeroVector;
+				FVector AngVel = FVector::ZeroVector;
+				if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
+				{
+					if (FBodyInstance* BI = Mesh->GetBodyInstance(DistalBoneName))
+					{
+						bRawSimulating = BI->IsInstanceSimulatingPhysics();
+						LinVel = BI->GetUnrealWorldVelocity();
+						AngVel = FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians());
+					}
+				}
+
+				const bool bHasPendingReset = Owner->GetPendingBodyModifierCachedResetNames().Contains(DistalBoneName);
+				const int32 PersistentTicks = DistalBonePersistentTicks.Contains(DistalBoneName) ? DistalBonePersistentTicks[DistalBoneName] : 0;
+				const int32 ConsecutiveTicks = DistalBoneConsecutiveMismatchTicks.Contains(DistalBoneName) ? DistalBoneConsecutiveMismatchTicks[DistalBoneName] : 0;
+				const bool bContributedToFailure = PersistentTicks > 0 || ConsecutiveTicks > 0;
+
+				float BoneMaxTargetDelta = 0.0f;
+				if (Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaBoneName == DistalBoneName)
+				{
+					BoneMaxTargetDelta = Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees;
+				}
+
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_BONE_FORENSIC: bone=%s expected=%d modifier=%d rawSim=%d linVel=%.1f angVel=%.1f targetDelta=%.2f pendingReset=%d persistentTicks=%d consecutiveTicks=%d contributed=%d"),
+					*DistalBoneName.ToString(),
+					static_cast<int32>(ExpectedOwnership),
+					static_cast<int32>(ModifierOwnership),
+					bRawSimulating ? 1 : 0,
+					LinVel.Size(),
+					AngVel.Size(),
+					BoneMaxTargetDelta,
+					bHasPendingReset ? 1 : 0,
+					PersistentTicks,
+					ConsecutiveTicks,
+					bContributedToFailure ? 1 : 0);
+			}
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_CONVERGENCE_FORENSIC_REPORT_END"));
 
 			const FString TimeoutReason = LateValidateBlockReason.IsEmpty()
 				? TEXT("phase1_no_convergence_path")
