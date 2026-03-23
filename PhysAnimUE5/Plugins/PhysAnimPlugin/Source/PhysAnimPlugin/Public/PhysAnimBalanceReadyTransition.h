@@ -235,6 +235,8 @@ public:
 	TMap<FName, int32> DistalBoneConsecutiveMismatchTicks;
 	TMap<FName, int32> DistalBonePersistentTicks;
 	TSet<FName> LoggedSuppressedDistalBones;
+	TSet<FName> LoggedProximalPromotions;
+	TSet<FName> LoggedProximalStates;
 	int32 DistalMismatchesTransientCount = 0;
 	int32 DistalMismatchesPersistentCount = 0;
 	int32 DistalMismatchesPendingCount = 0;
@@ -261,6 +263,7 @@ public:
 
 	bool IsDistalKinematicAccepted() const { return Phase1TopologyRecord.DistalOwnershipMode == EBalanceReadyGroupOwnershipMode::Kinematic; }
 
+	static bool IsProximal(FName BoneName);
 	float GetRootBodyModifierSoftSimAlpha() const;
 	float GetProximalControlSoftAlpha(FName BoneName) const;
 	bool ShouldKeepBoneKinematic(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;

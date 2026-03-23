@@ -347,6 +347,42 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		return;
 	}
 
+	// Authoritative proximal promotion during Phase 1 to solve one-frame lag/capture issues.
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
+	{
+		USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
+		if (Mesh)
+		{
+			static const FName ProximalBones[] = { TEXT("thigh_l"), TEXT("thigh_r"), TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") };
+			for (const FName BoneName : ProximalBones)
+			{
+				if (!ShouldKeepBoneKinematic(BoneName, Settings))
+				{
+					FBodyInstance* const BodyInst = Mesh->GetBodyInstance(BoneName);
+					const bool bRawSimulating = BodyInst && BodyInst->IsValidBodyInstance() ? BodyInst->IsInstanceSimulatingPhysics() : false;
+
+					if (!bRawSimulating)
+					{
+						if (BodyInst)
+						{
+							BodyInst->SetInstanceSimulatePhysics(true, true);
+							if (!LoggedProximalPromotions.Contains(BoneName))
+							{
+								UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PROXIMAL_RAW_SIM_PROMOTION bone=%s previousRaw=Kin newIntended=Sim"), *BoneName.ToString());
+								LoggedProximalPromotions.Add(BoneName);
+							}
+						}
+					}
+					else if (LoggedProximalPromotions.Contains(BoneName) && !LoggedProximalStates.Contains(BoneName))
+					{
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PROXIMAL_RAW_SIM_STATE bone=%s raw=Sim"), *BoneName.ToString());
+						LoggedProximalStates.Add(BoneName);
+					}
+				}
+			}
+		}
+	}
+
 	PhaseTimeSeconds += DeltaTime;
 	TotalTransitionTimeSeconds += DeltaTime;
 
@@ -1368,6 +1404,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	}
 }
 
+bool FPhysAnimBalanceReadyTransition::IsProximal(FName BoneName)
+{
+	return BalanceTransitionSets::IsProximal(BoneName);
+}
+
 void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewPhase, UPhysAnimComponent* Owner)
 {
 	if (InternalPhase == NewPhase)
@@ -2178,6 +2219,8 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	Phase1TopologyRecord = {};
 	bHasPhase1TopologyRecord = false;
 	LoggedSuppressedDistalBones.Empty();
+	LoggedProximalPromotions.Empty();
+	LoggedProximalStates.Empty();
 }
 
 void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
