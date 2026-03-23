@@ -1246,21 +1246,73 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				QuietWindowAccumulatedSeconds, Settings.BalancePhase1QuietRequiredSeconds,
 				RootOnReadinessShellProofAccumulatedSeconds, Settings.BalancePhase2PreRootOnShellProofRequiredSeconds);
 
-			FString PrimaryReason = TEXT("unknown");
-			if (!bRootValiditySatisfied) PrimaryReason = TEXT("root_topology_mismatch");
-			else if (!bSimCoverageSatisfied) PrimaryReason = TEXT("sim_coverage_regressed");
-			else if (!bUpperBodyHoldSatisfied) PrimaryReason = TEXT("upper_body_instability");
-			else if (!bBodyMotionThresholdsSatisfied) PrimaryReason = TEXT("body_motion_thresholds_exceeded");
-			else if (!bTargetContinuitySatisfied) PrimaryReason = TEXT("target_discontinuity");
-			else if (!bQuietProofSatisfied) PrimaryReason = TEXT("quiet_proof_unsatisfied");
-			else if (!bExpectedReleaseSatisfied) PrimaryReason = TEXT("expected_release_never_reached");
-			else if (!bRootOnReadinessShellHoldSatisfied) PrimaryReason = TEXT("shell_hold_unsatisfied");
-			else if (!bRootOnReadinessFinalBringUpControlSettled) PrimaryReason = TEXT("bringup_not_settled");
-			else if (!bRootOnReadinessPolicyInfluenceSettled) PrimaryReason = TEXT("policy_influence_not_settled");
-			else if (!bPreRootOnShellSafetyProofSatisfied) PrimaryReason = TEXT("shell_safety_proof_unsatisfied");
-			else if (!bRootOnReadinessProven) PrimaryReason = TEXT("ready_proof_failed");
+			if (!bRootOnReadinessFinalBringUpControlSettled)
+			{
+				const int32 FinalGroupIndex = Owner->GetBringUpGroupCount() - 1;
+				const float FinalAlpha = CurrentSnapshot.FinalBringUpGroupControlAuthorityAlpha;
+				const float Threshold = 1.0f - KINDA_SMALL_NUMBER;
+				const float SettleTime = Owner->BringUpGroupStableAccumulatedSeconds;
+				const float RequiredSettleTime = FMath::Max(Settings.StartupRampSeconds, 0.25f);
+				const bool bSettleTimerRunning = SettleTime > 0.0f;
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_NONCONVERGENCE primary=%s"), *PrimaryReason);
+				FString Cause = TEXT("unknown");
+				if (FinalAlpha < Threshold) Cause = TEXT("alpha_below_threshold");
+				else if (!bSettleTimerRunning) Cause = TEXT("settle_timer_not_started");
+				else if (SettleTime < RequiredSettleTime) Cause = TEXT("settle_timer_running");
+
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_FAILURE_DETAILS group=%d alpha=%.4f threshold=%.4f settleTime=%.2f/%.2f settleTimerRunning=%d"),
+					FinalGroupIndex, FinalAlpha, Threshold, SettleTime, RequiredSettleTime, bSettleTimerRunning ? 1 : 0);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_NOT_SETTLED cause=%s"), *Cause);
+			}
+
+			if (!bPreRootOnShellSafetyProofSatisfied)
+			{
+				const float ProofSeconds = RootOnReadinessShellProofAccumulatedSeconds;
+				const float RequiredProofSeconds = Settings.BalancePhase2PreRootOnShellProofRequiredSeconds;
+				const float OffsetCm = CurrentSnapshot.ShellOffsetDeltaAtCaptureCm;
+				const float MaxOffsetCm = Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm;
+				const float VelocityCmPerSec = CurrentSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond;
+				const float MaxVelocityCmPerSec = Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond;
+				const float OffsetGrowthCm = CurrentSnapshot.ShellOffsetGrowthCm;
+				const float MaxOffsetGrowthCm = Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm;
+				const float VelocityGrowthCmPerSec = CurrentSnapshot.ShellVelocityGrowthCmPerSecond;
+				const float MaxVelocityGrowthCmPerSec = Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond;
+
+				FString Cause = TEXT("unknown");
+				if (ProofSeconds + KINDA_SMALL_NUMBER < RequiredProofSeconds) Cause = TEXT("proof_duration_unsatisfied");
+				else if (OffsetCm > MaxOffsetCm) Cause = TEXT("offset_above_limit");
+				else if (VelocityCmPerSec > MaxVelocityCmPerSec) Cause = TEXT("velocity_above_limit");
+				else if (OffsetGrowthCm > MaxOffsetGrowthCm) Cause = TEXT("offset_growth_above_limit");
+				else if (VelocityGrowthCmPerSec > MaxVelocityGrowthCmPerSec) Cause = TEXT("velocity_growth_above_limit");
+				else if (CurrentSnapshot.bShellCorrectionOwnerActive) Cause = TEXT("shell_correction_active");
+				else if (!CurrentSnapshot.bTransitionOwnedShellLocked) Cause = TEXT("shell_not_locked");
+				else if (!CurrentSnapshot.bTransitionShellReferenceReanchored) Cause = TEXT("shell_not_reanchored");
+				else if (CurrentSnapshot.bTransitionShellReferenceReseededAfterLock) Cause = TEXT("shell_reseeded_after_lock");
+
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_FAILURE_DETAILS proofDuration=%.2f/%.2f offset=%.2f/%.2f velocity=%.2f/%.2f offsetGrowth=%.2f/%.2f velocityGrowth=%.2f/%.2f shellCorrectionActive=%d locked=%d reanchored=%d reseeded=%d"),
+					ProofSeconds, RequiredProofSeconds, OffsetCm, MaxOffsetCm, VelocityCmPerSec, MaxVelocityCmPerSec, OffsetGrowthCm, MaxOffsetGrowthCm, VelocityGrowthCmPerSec, MaxVelocityGrowthCmPerSec,
+					CurrentSnapshot.bShellCorrectionOwnerActive ? 1 : 0, CurrentSnapshot.bTransitionOwnedShellLocked ? 1 : 0, CurrentSnapshot.bTransitionShellReferenceReanchored ? 1 : 0, CurrentSnapshot.bTransitionShellReferenceReseededAfterLock ? 1 : 0);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_UNSATISFIED cause=%s"), *Cause);
+			}
+
+			TArray<FString> UnsatisfiedGates;
+			if (!bRootValiditySatisfied) UnsatisfiedGates.Add(TEXT("root_topology_mismatch"));
+			if (!bSimCoverageSatisfied) UnsatisfiedGates.Add(TEXT("sim_coverage_regressed"));
+			if (!bUpperBodyHoldSatisfied) UnsatisfiedGates.Add(TEXT("upper_body_instability"));
+			if (!bBodyMotionThresholdsSatisfied) UnsatisfiedGates.Add(TEXT("body_motion_thresholds_exceeded"));
+			if (!bTargetContinuitySatisfied) UnsatisfiedGates.Add(TEXT("target_discontinuity"));
+			if (!bQuietProofSatisfied) UnsatisfiedGates.Add(TEXT("quiet_proof_unsatisfied"));
+			if (!bExpectedReleaseSatisfied) UnsatisfiedGates.Add(TEXT("expected_release_never_reached"));
+			if (!bRootOnReadinessShellHoldSatisfied) UnsatisfiedGates.Add(TEXT("shell_hold_unsatisfied"));
+			if (!bRootOnReadinessFinalBringUpControlSettled) UnsatisfiedGates.Add(TEXT("bringup_not_settled"));
+			if (!bRootOnReadinessPolicyInfluenceSettled) UnsatisfiedGates.Add(TEXT("policy_influence_not_settled"));
+			if (!bPreRootOnShellSafetyProofSatisfied) UnsatisfiedGates.Add(TEXT("shell_safety_proof_unsatisfied"));
+			if (!bRootOnReadinessProven) UnsatisfiedGates.Add(TEXT("ready_proof_failed"));
+
+			const FString PrimaryReason = UnsatisfiedGates.Num() > 0 ? UnsatisfiedGates[0] : TEXT("unknown");
+			const FString SecondaryReason = UnsatisfiedGates.Num() > 1 ? UnsatisfiedGates[1] : TEXT("none");
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_NONCONVERGENCE primary=%s secondary=%s"), *PrimaryReason, *SecondaryReason);
 
 			const FString TimeoutReason = LateValidateBlockReason.IsEmpty()
 				? TEXT("phase1_no_convergence_path")
