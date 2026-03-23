@@ -14,38 +14,7 @@ namespace BalanceTransitionSets
 	static constexpr float Phase2TopologySettleGraceSeconds = 1.0f / 30.0f;
 	static constexpr float Phase2AuthorityRampSeconds = 0.10f;
 	static constexpr float Phase2MaxPelvisProximalConstraintErrorCm = 15.0f;
-	static bool IsRoot(FName BoneName) { return BoneName == "pelvis"; }
-	static bool IsProximal(FName BoneName) { return BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"; }
-	static bool IsDistalLowerLimb(FName BoneName) { return BoneName == "calf_l" || BoneName == "calf_r" || BoneName == "foot_l" || BoneName == "foot_r" || BoneName == "ball_l" || BoneName == "ball_r"; }
-	static bool IsUpperLimbDistal(FName BoneName)
-	{
-		return BoneName == "lowerarm_l" || BoneName == "hand_l" ||
-			BoneName == "lowerarm_r" || BoneName == "hand_r";
-	}
-	static bool IsUpperBodyApex(FName BoneName)
-	{
-		return BoneName == "neck_01" || BoneName == "head";
-	}
-	static bool IsUpperLimbChain(FName BoneName)
-	{
-		return BoneName == "clavicle_l" || BoneName == "upperarm_l" || BoneName == "lowerarm_l" || BoneName == "hand_l" ||
-			BoneName == "clavicle_r" || BoneName == "upperarm_r" || BoneName == "lowerarm_r" || BoneName == "hand_r";
-	}
-	static bool IsUpperBody(FName BoneName)
-	{
-		return IsUpperLimbChain(BoneName) || BoneName == "neck_01" || BoneName == "head";
-	}
-	static bool IsLateValidationUpperBodyOwnershipBone(FName BoneName)
-	{
-		return BoneName == "neck_01" ||
-			BoneName == "head" ||
-			BoneName == "clavicle_l" ||
-			BoneName == "clavicle_r" ||
-			BoneName == "upperarm_l" ||
-			BoneName == "upperarm_r";
-	}
-	static bool IsTransitionCritical(FName BoneName) { return IsRoot(BoneName) || IsProximal(BoneName) || IsDistalLowerLimb(BoneName); }
-	static bool IsPrepareCriticalKinematic(FName BoneName) { return IsRoot(BoneName); }
+
 	static bool IsExpectedPhase2Topology(int32 SimCountPre, int32 SimCountPost, int32 DistalSimCountPre, int32 DistalSimCountPost)
 	{
 		return DistalSimCountPre >= 0 &&
@@ -120,46 +89,6 @@ namespace BalanceTransitionSets
 	static bool IsRootCoupledReadyHandoff(int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount, bool bRootSimulating)
 	{
 		return !bRootSimulating && ProximalSimCount == 5 && DistalSimCount >= 0 && UpperSimCount >= 0;
-	}
-
-	static const TCHAR* GetUpperBodyOwnershipModeName(EBalanceReadyUpperBodyOwnershipMode Mode)
-	{
-		switch (Mode)
-		{
-		case EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold:
-			return TEXT("late_validation_kinematic_hold");
-		case EBalanceReadyUpperBodyOwnershipMode::None:
-		default:
-			return TEXT("none");
-		}
-	}
-
-	static const TCHAR* GetRootOnReadinessClassificationName(EBalanceReadyRootOnReadinessClassification Classification)
-	{
-		switch (Classification)
-		{
-		case EBalanceReadyRootOnReadinessClassification::RootCoupledReady:
-			return TEXT("root_coupled_ready");
-		case EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny:
-			return TEXT("upper_only_safe_deny");
-		case EBalanceReadyRootOnReadinessClassification::NotReady:
-		default:
-			return TEXT("not_ready");
-		}
-	}
-
-	static const TCHAR* GetLateValidationOutcomeName(EBalanceLateValidationOutcome Outcome)
-	{
-		switch (Outcome)
-		{
-		case EBalanceLateValidationOutcome::Outcome_AcceptRootOn:
-			return TEXT("accept_root_on");
-		case EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly:
-			return TEXT("safe_deny_upper_only");
-		case EBalanceLateValidationOutcome::Outcome_Pending:
-		default:
-			return TEXT("pending");
-		}
 	}
 
 	static const TCHAR* GetShellAuthorityModeName(EBalanceTransitionShellAuthorityMode Mode)
@@ -561,6 +490,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
 						CertifiedLateValidationResult.QuietProofDurationSeconds,
 						Settings.BalancePhase1LateValidateRequiredSeconds);
+					Owner->ConsumeUpperBodyPendingResets();
 					SetPhase(EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate, Owner);
 					return;
 				}

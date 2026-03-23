@@ -5406,7 +5406,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bLastAppliedPresentationRootSimulationEnabled = bAllowRootBodyModifierSimulation;
 		}
 
-		if (ShouldResetBodyModifierToCachedBoneTransform(
+		const bool bShouldResetThisBone = ShouldResetBodyModifierToCachedBoneTransform(
 				BoneName,
 				RuntimeState,
 				EffectiveSettings.bForceZeroActions,
@@ -5414,9 +5414,20 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bBringUpGroupUnlocked,
 				bIsRootBodyModifier,
 				bAllowRootBodyModifierSimulation,
-				CurrentPolicyAlpha) &&
+				CurrentPolicyAlpha);
+
+		if (BalanceTransitionSets::IsUpperBody(BoneName) && (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate))
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TUNING_SHOULD_RESET bone=%s state=%s result=%d"), *BoneName.ToString(), GetRuntimeStateName(RuntimeState), bShouldResetThisBone ? 1 : 0);
+		}
+
+		if (bShouldResetThisBone &&
 			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
+			if (BalanceTransitionSets::IsUpperBody(BoneName))
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] INSIDE_RESET_IF bone=%s shouldResetValue=%d"), *BoneName.ToString(), bShouldResetThisBone ? 1 : 0);
+			}
 			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
 			{
 				if (bIsRootBodyModifier)
@@ -5443,11 +5454,19 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				else
 				{
 					PendingBodyModifierCachedResetNames.Add(ModifierName);
+					if (BalanceTransitionSets::IsUpperBody(PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName)))
+					{
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] UPPER_BODY_RESET_RE_ADDED bone=%s runtimeState=%s source=recovery"), *PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName).ToString(), GetRuntimeStateName(RuntimeState));
+					}
 				}
 			}
 			else
 			{
 				PendingBodyModifierCachedResetNames.Add(ModifierName);
+				if (BalanceTransitionSets::IsUpperBody(BoneName))
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] UPPER_BODY_RESET_RE_ADDED bone=%s runtimeState=%s source=applyTuning"), *BoneName.ToString(), GetRuntimeStateName(RuntimeState));
+				}
 			}
 		}
 	}
@@ -5637,6 +5656,10 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 			else
 			{
 				PendingBodyModifierCachedResetNames.Add(ModifierName);
+				if (BalanceTransitionSets::IsUpperBody(BoneName))
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] UPPER_BODY_RESET_RE_ADDED bone=%s runtimeState=%s source=unlockGroup"), *BoneName.ToString(), GetRuntimeStateName(RuntimeState));
+				}
 			}
 		}
 	}
@@ -6521,6 +6544,36 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		ModifierNamesToReset.Num(),
 		*FString::Join(BoneNamesToReset, TEXT(", ")));
 	PendingBodyModifierCachedResetNames.Reset();
+}
+
+void UPhysAnimComponent::ConsumeUpperBodyPendingResets()
+{
+	if (PendingBodyModifierCachedResetNames.IsEmpty())
+	{
+		return;
+	}
+
+	TArray<FName> UpperBodyResetsToClear;
+	for (int32 i = PendingBodyModifierCachedResetNames.Num() - 1; i >= 0; --i)
+	{
+		FName ModifierName = PendingBodyModifierCachedResetNames[i];
+		FName BoneName = PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName);
+		if (BalanceTransitionSets::IsUpperBody(BoneName))
+		{
+			UpperBodyResetsToClear.Add(BoneName);
+			PendingBodyModifierCachedResetNames.RemoveAt(i);
+		}
+	}
+
+	if (UpperBodyResetsToClear.Num() > 0)
+	{
+		TArray<FString> BoneNames;
+		for (FName BoneName : UpperBodyResetsToClear)
+		{
+			BoneNames.Add(BoneName.ToString());
+		}
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_PENDING_RESETS_CLEARED bones=[%s]"), *FString::Join(BoneNames, TEXT(", ")));
+	}
 }
 
 void UPhysAnimComponent::ApplyControlTargets(
@@ -8180,9 +8233,22 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 	bool bAllowRootBodyModifierSimulation,
 	float PolicyAlpha)
 {
+	auto LogReturn = [&](bool bResult)
+	{
+		if (BalanceTransitionSets::IsUpperBody(BoneName) && (InRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || InRuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate))
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SHOULD_RESET_RESULT bone=%s state=%s forceZero=%d result=%d"), *BoneName.ToString(), GetRuntimeStateName(InRuntimeState), bForceZeroActions ? 1 : 0, bResult ? 1 : 0);
+		}
+		return bResult;
+	};
+
+	if (BalanceTransitionSets::IsUpperBody(BoneName) && (InRuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || InRuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate))
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SHOULD_RESET_CHECK bone=%s state=%s forceZero=%d activated=%d groupUnlocked=%d"), *BoneName.ToString(), GetRuntimeStateName(InRuntimeState), bForceZeroActions ? 1 : 0, bBodyModifierActivatedThisTick ? 1 : 0, bBringUpGroupUnlocked ? 1 : 0);
+	}
 	if (bForceZeroActions)
 	{
-		return false;
+		return LogReturn(false);
 	}
 
 	if (InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
@@ -8190,13 +8256,13 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 		if (bIsRootBodyModifier)
 		{
 			// Hard design constraint: No pelvis/root resets allowed at all in Balance Perturbation Mode.
-			return false;
+			return LogReturn(false);
 		}
 
 		if (PolicyAlpha > 0.0f)
 		{
 			// Hard design constraint: No limb resets allowed once the neural policy has begun influencing the body.
-			return false;
+			return LogReturn(false);
 		}
 	}
 
@@ -8215,7 +8281,7 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 			BoneStr.Contains(TEXT("neck")) ||
 			BoneStr.Contains(TEXT("head")))
 		{
-			return false;
+			return LogReturn(false);
 		}
 	}
 
@@ -8225,15 +8291,15 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 		{
 			// Phase 2 guard-window ownership requires the pelvis/root to come on without any
 			// follow-up cached reset request on the same tick.
-			return false;
+			return LogReturn(false);
 		}
 
 		// We allow exactly one reset for the root when it transitions to simulation to ensure 
 		// its physical state is precisely aligned with the visual kinematic state before it begins moving.
-		return bBodyModifierActivatedThisTick && bAllowRootBodyModifierSimulation;
+		return LogReturn(bBodyModifierActivatedThisTick && bAllowRootBodyModifierSimulation);
 	}
 
-	return bBodyModifierActivatedThisTick && bBringUpGroupUnlocked;
+	return LogReturn(bBodyModifierActivatedThisTick && bBringUpGroupUnlocked);
 }
 
 int32 UPhysAnimComponent::ResolveBringUpGroupIndex(FName BoneName)

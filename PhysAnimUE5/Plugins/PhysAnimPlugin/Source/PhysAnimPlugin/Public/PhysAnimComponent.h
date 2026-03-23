@@ -667,6 +667,7 @@ public:
 	bool WasTransitionShellReferenceReanchored() const { return bTransitionOwnedShellReferenceReanchored; }
 	bool WasTransitionShellReferenceReseededAfterLock() const { return bTransitionOwnedShellReferenceReseededAfterLock; }
 	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
+	void ConsumeUpperBodyPendingResets();
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
 	const FPhysAnimControlTargetDiagnostics& GetLastControlTargetDiagnostics() const { return LastControlTargetDiagnostics; }
 	bool WasPelvisResetAppliedThisTick() const { return bPelvisResetAppliedThisTick; }
