@@ -62,60 +62,19 @@ Important rule:
 - `neck_01`
 - `head`
 
-## 4. Accepted Phase 1 topology
+## 4. Phase 1 Truth Model Alignment
 
-Under the current accepted design:
-
-- `pelvis = kinematic`
-- proximal set = simulated
-- distal set = kinematic
-- upper body = kinematic
-
-Expected frozen counts at Phase 1 entry:
-
-- `simCount = 5`
-- `proximalSimCount = 5`
-- `distalSimCount = 0`
-- `upperBodySimCount = 0`
+Phase 1 behavior is governed by the authoritative [Phase 1 / LateValidate Truth Model](./phase1-late-validate-truth-model.md).
 
 Important rules:
 
-- `pelvisSimulating=false` is not, by itself, a deny condition under this topology
-- the frozen Phase 1 topology record is the authoritative contract for Prepare and LateValidate
-- live readiness reclassification must not silently rewrite the frozen Phase 1 ownership contract while the same attempt is still in Phase 1
-
-## 5. Frozen topology capture contract
-
-When Phase 1 is accepted, the runtime must capture one authoritative topology record.
-
-That record must include at minimum:
-
-- root / proximal / distal / upper ownership expectations
-- frozen sim-count expectations
-- upper-body ownership mode
-- whether the accepted topology expects LateValidate upper-body hold
-
-### Required upper-body capture rule
-
-At Phase 1 entry, upper-body ownership must be frozen according to the Phase 1 contract, not according to a live readiness classification that happens to be true on that tick.
-
-Current required behavior:
-
-- if Phase 1 requires upper-body LateValidate hold, the frozen topology record must store:
-  - `upperBodyOwnership = LateValidationKinematicHold`
-
-It must not freeze `upperBodyOwnership = None` merely because the live classification looked root-coupled-ready at capture time.
-
-## 6. Ownership model
-
-Phase 1 ownership evaluation must keep these sources separate:
-
-1. intended ownership
-2. PhysicsControl modifier-record ownership
-3. raw body sim state
-4. frozen Phase 1 topology expectation
-
-These are not interchangeable.
+- `pelvisSimulating=false` is not, by itself, a deny condition under the current topology.
+- The frozen Phase 1 topology record is the authoritative contract for Prepare and LateValidate.
+- **Accepted Phase 1 Topology**: Root=Kinematic, Proximal=Simulated, Distal=Kinematic, UpperBody=Kinematic.
+- **Expected Sim Counts**: `proximalSimCount = 5`, `distalSimCount = 0`, `upperBodySimCount = 0`, `totalSimCount = 5`.
+- **Upper-Body Hold**: Must use `LateValidationKinematicHold` frozen from the Phase 1 contract.
+- Live readiness reclassification must not silently rewrite the frozen Phase 1 ownership contract while the same attempt is still in Phase 1.
+- Ownership evaluation must keep intended/modifier/raw/frozen sources separate as defined in the truth model.
 
 ### Timing rule
 
@@ -188,6 +147,17 @@ Required object:
 The accumulator resets whenever any quiet condition becomes false.
 
 No carryover is allowed.
+ 
+## 11.1 Pending-Reset Handling
+
+Pending cached-target resets represent unapplied discontinuities that can invalidate the quiet proof.
+
+Required behavior:
+
+- admit to LateValidate only when `PendingBodyModifierCachedResetNames` is empty
+- during `LateValidationKinematicHold`, any reset name appearing in the pending list for an upper-body bone is a contract terminal violation
+- explicitly drain or apply mandatory resets before attempting the Phase 1 quiet proof
+
 
 ## 12. LateValidate
 
@@ -206,6 +176,15 @@ LateValidate may deny for at least these named reasons:
 - `phase1_late_validate_upper_body_instability`
 - `phase1_late_validate_sim_coverage_regressed`
 - body-motion instability or other equivalent physical-viability reasons
+
+### Required LateValidate Gates
+
+The transition to Phase 2 requires specific proof from these operational gates:
+
+1. **[bringUp]**: Final stabilization group control alpha must be >= 1.0 (settled).
+2. **[shellSafety]**: Multi-vector proof of shell stability (offset, velocity, growth) and authority lock/reanchor.
+3. **[expectedRelease]**: Satisfactory sustain duration for both LateValidate and ShellHold clocks.
+4. **[readyProven]**: Final aggregate signal combining all the above plus `RootCoupledReady` classification.
 
 ### Current resolved issue
 
@@ -232,11 +211,11 @@ But sim-coverage checks must also explicitly compare:
 
 Those two must not be conflated.
 
-### Current leading blocker
+### Last confirmed blocker
 
-The current first meaningful remaining Phase 1 failure is:
+The last confirmed first meaningful remaining Phase 1 failure is:
 
-- `phase1_late_validate_sim_coverage_regressed`
+- `phase1_late_validate_sim_coverage_regressed` (specifically `spine_01` and `thigh` promotion issues)
 
 This means the docs now require explicit visibility into:
 
