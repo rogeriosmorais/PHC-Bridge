@@ -22,16 +22,15 @@ This file is the feature-level overview only.
 
 The normative runtime contracts live in:
 
-- `plans/stage1/10-specs/balance-mode-entry-spec.md`
+- `plans/stage1/10-specs/ue-bridge-implementation-spec.md`
 - `plans/stage1/40-design/balance_mode_entry_transition_spec.md`
 - `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
-- `plans/stage1/40-design/balance_mode_phase2.md`
 
 Interpretation rule:
 
 - this file defines what the feature is for
-- the `10-specs` documents define the authoritative contract
-- the `40-design` documents describe how that contract is carried through implementation and validation
+- the specs define the authoritative contract
+- the design files describe how that contract is carried through implementation and validation
 
 ## 3. Activation rule
 
@@ -47,7 +46,9 @@ That means:
 
 ## 4. Current design reality
 
-The balance-entry pipeline is now good enough to separate two different questions:
+The project has moved past several false blockers.
+
+The current entry pipeline is now good enough to separate three questions:
 
 ### A. Is the runtime contract correct?
 This includes:
@@ -55,16 +56,55 @@ This includes:
 - explicit ownership transitions
 - explicit freeze lifetime
 - explicit write-routing behavior
+- correct frozen topology capture
 
 ### B. Is the accepted setup physically viable?
 This includes:
 - whether the accepted Phase 1 setup can remain dynamically quiet
 - whether contact and tuning destabilize the sim set
 - whether the current topology has enough stability margin
+- whether live sim coverage matches the frozen expected sim set
 
-This design file must not blur those questions.
+### C. Is the active balance behavior itself good once entry succeeds?
+This includes:
+- perturbation delivery
+- measurable recovery
+- repeatable metrics
+- no hidden locomotion assist
 
-## 5. Active-mode requirement
+This file must not blur those questions.
+
+## 5. Current accepted entry shape
+
+The current accepted Phase 1 design now assumes:
+
+- root = kinematic
+- proximal = simulated
+- distal = kinematic
+- upper = kinematic during LateValidate hold
+
+That is a deliberate pre-root-on staging topology, not a final active-mode topology.
+
+## 6. Current resolved contract problems
+
+These are now treated as resolved or largely-resolved contract issues, not the main open problem:
+
+- same-frame overclaiming of ownership violations
+- BridgeActive distal re-promotion thrash
+- premature release of upper-body LateValidate hold due to wrong frozen ownership capture
+- dependence on broad `"All"` movement-type writes for topology-critical Phase 1 bones
+
+## 7. Current leading open problem
+
+The current leading blocker is no longer raw ownership confusion.
+
+It is now:
+
+- whether the accepted Phase 1 setup preserves the required live sim coverage during LateValidate
+
+This is why `sim_coverage_regressed` is currently more important than the earlier contract bugs.
+
+## 8. Active-mode requirement
 
 When active:
 
@@ -75,7 +115,7 @@ When active:
 - no shell/world translation as a recovery mechanism
 - perturbation only when active quiet proof is valid
 
-## 6. Perturbation method
+## 9. Perturbation method
 
 Canonical initial method:
 
@@ -84,7 +124,7 @@ Canonical initial method:
 - space: world space
 - directions: `+X`, `-X`, `+Y`, `-Y`
 
-## 7. Trustworthiness rule
+## 10. Trustworthiness rule
 
 The framework is trustworthy only if it can demonstrate all of the following:
 
@@ -95,13 +135,13 @@ The framework is trustworthy only if it can demonstrate all of the following:
 - recovery metrics are stable and repeatable
 - if control authority is intentionally weakened, recovery worsens
 
-## 8. Summary
+## 11. Summary
 
 Balance Perturbation Mode is a standing-balance diagnostic mode.
 
 Its entry pipeline is now best understood as:
 
-- a solved-or-improving contract problem in some areas
-- and an open physical-viability experiment in others
+- a much cleaner and more explicit contract than before
+- but still an open physical-viability experiment in Phase 1
 
 That distinction must remain explicit in all future design and implementation work.

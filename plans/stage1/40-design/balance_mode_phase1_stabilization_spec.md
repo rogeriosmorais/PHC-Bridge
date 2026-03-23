@@ -10,26 +10,25 @@ This document defines the concrete stabilization recipe for Phase 1.
 It is authoritative for:
 
 - body sets
-- target topology
-- policy suppression
+- frozen topology capture
+- ownership and movement-type intent
+- write-routing and suppression
 - hold-reference behavior
 - quiet proof
-- late-validation sustain
+- LateValidate sustain
 - failure classes
 - recovery and retry rules
 
 ## 2. Current interpretation
 
-Phase 1 is no longer mainly a “can the runtime represent the state machine?” problem.
+Phase 1 is now best understood as two things at once:
 
-The current leading question is:
+- a contract-validation stage
+- a physical-viability test for the accepted pre-root-on setup
 
-> is the accepted Phase 1 frozen setup physically viable under current control, tuning, and contact conditions?
+Important rule:
 
-This document therefore distinguishes:
-
-- Phase 1 contract success
-- Phase 1 physical viability
+- a Phase 1 attempt may be fully contract-correct and still fail because the accepted setup is physically non-viable under current control, tuning, contact, or state-application behavior
 
 ## 3. Authoritative body sets
 
@@ -65,28 +64,108 @@ This document therefore distinguishes:
 
 ## 4. Accepted Phase 1 topology
 
-Under the current design:
+Under the current accepted design:
 
 - `pelvis = kinematic`
 - proximal set = simulated
-- distal set = simulated
+- distal set = kinematic
 - upper body = kinematic
 
-Important rule:
+Expected frozen counts at Phase 1 entry:
 
-- `pelvisSimulating=false` is not, by itself, a Phase 1 deny condition under this topology
-- Phase 1 topology intent and raw body sim state are not guaranteed to be frame-synchronous inside the same component tick. Telemetry must evaluate ownership violations on the subsequent frame (post-physics step) to allow PhysicsControl modifiers to propagate to Chaos.
+- `simCount = 5`
+- `proximalSimCount = 5`
+- `distalSimCount = 0`
+- `upperBodySimCount = 0`
 
-## 5. Write-routing contract
+Important rules:
+
+- `pelvisSimulating=false` is not, by itself, a deny condition under this topology
+- the frozen Phase 1 topology record is the authoritative contract for Prepare and LateValidate
+- live readiness reclassification must not silently rewrite the frozen Phase 1 ownership contract while the same attempt is still in Phase 1
+
+## 5. Frozen topology capture contract
+
+When Phase 1 is accepted, the runtime must capture one authoritative topology record.
+
+That record must include at minimum:
+
+- root / proximal / distal / upper ownership expectations
+- frozen sim-count expectations
+- upper-body ownership mode
+- whether the accepted topology expects LateValidate upper-body hold
+
+### Required upper-body capture rule
+
+At Phase 1 entry, upper-body ownership must be frozen according to the Phase 1 contract, not according to a live readiness classification that happens to be true on that tick.
+
+Current required behavior:
+
+- if Phase 1 requires upper-body LateValidate hold, the frozen topology record must store:
+  - `upperBodyOwnership = LateValidationKinematicHold`
+
+It must not freeze `upperBodyOwnership = None` merely because the live classification looked root-coupled-ready at capture time.
+
+## 6. Ownership model
+
+Phase 1 ownership evaluation must keep these sources separate:
+
+1. intended ownership
+2. PhysicsControl modifier-record ownership
+3. raw body sim state
+4. frozen Phase 1 topology expectation
+
+These are not interchangeable.
+
+### Timing rule
+
+Phase 1 topology intent and raw body sim state are not guaranteed to be frame-synchronous inside the same component tick.
+
+So:
+
+- same-frame raw state is provisional
+- next-frame confirmation is required for ownership-violation diagnostics
+- a same-frame mismatch is not, by itself, proof of a persistent ownership failure
+
+## 7. Write-routing contract
 
 During Prepare and LateValidate:
 
 - normal policy writes to the accepted Phase 1 set are suppressed
-- only the explicit allowed hold path may write to the allowed kinematic bones
-- simulated Phase 1 bones must receive no held writes
-- diagnostics must distinguish normal / held / total writes
+- only the explicit allowed hold path may write to kinematic Phase 1 bones
+- simulated Phase 1 bones must not receive held-path target writes
+- diagnostics must distinguish `normal`, `held`, and `total` writes
 
-## 6. Hold-reference contract
+### Current required kinematic-hold targets
+
+The allowed held path currently exists for the kinematic Phase 1 bones:
+
+- root
+- distal set
+- upper-body set
+
+The proximal set is the accepted simulated set and must not receive held-path target writes.
+
+## 8. Authoritative Phase 1 movement-type writes
+
+Broad PhysicsControl set writes are not authoritative enough for topology-critical Phase 1 ownership.
+
+Current required implementation rule:
+
+- topology-critical Phase 1 bones must be driven by explicit per-bone authoritative writes
+- the runtime must not rely on `SetBodyModifiersInSetMovementType("All", ...)` as the source of truth for distal Phase 1 ownership
+
+## 9. BridgeActive suppression contract
+
+The runtime must not allow `BridgeActive` bring-up logic to poison Phase 1 by re-promoting accepted distal kinematic bones back to simulated before the transition even starts.
+
+Current required behavior:
+
+- `PerBone_BodyModSync` re-promotion of accepted distal kinematic bones must be suppressed while the active ownership rule says they must stay kinematic
+
+This is a contract rule now, not just a debugging convenience.
+
+## 10. Hold-reference contract
 
 Phase 1 posture preservation uses a single authoritative hold reference.
 
@@ -96,9 +175,11 @@ Default rule:
 - do not continuously reseed it
 - do not chase live locomotion animation
 
-## 7. Quiet proof
+If a reset path uses cached targets, that behavior must remain consistent with the frozen Phase 1 topology contract.
 
-Phase 1 requires an explicit quiet proof.
+## 11. Quiet proof
+
+Phase 1 requires an explicit quiet proof object.
 
 Required object:
 
@@ -108,56 +189,107 @@ The accumulator resets whenever any quiet condition becomes false.
 
 No carryover is allowed.
 
-## 8. LateValidate
+## 12. LateValidate
 
-LateValidate exists to prove the accepted setup remains valid under stricter sustained conditions.
+LateValidate exists to prove that the accepted setup remains valid under stricter sustained conditions.
 
-Important rule:
-LateValidate should not start if a required admission precondition is already known false on that tick.
+Important rules:
 
-## 9. Convergence source
+- LateValidate must not start if a required admission precondition is already known false on that tick
+- LateValidate upper-body hold must persist for the full LateValidate sustain window if the frozen topology says upper body is under `LateValidationKinematicHold`
+- LateValidate must use the frozen Phase 1 topology as the source of truth for ownership expectations
 
-Prepare and LateValidate gating must use the authoritative post-update convergence snapshot.
+### Current LateValidate contract checks
+
+LateValidate may deny for at least these named reasons:
+
+- `phase1_late_validate_upper_body_instability`
+- `phase1_late_validate_sim_coverage_regressed`
+- body-motion instability or other equivalent physical-viability reasons
+
+### Current resolved issue
+
+`phase1_late_validate_upper_body_instability` caused by prematurely freezing `upperBodyOwnership=None` is now treated as a resolved contract bug, not the current leading blocker.
+
+## 13. Convergence and sim-coverage source
+
+Prepare and LateValidate gating must use an authoritative post-update convergence snapshot.
 
 That snapshot is the source of truth for:
 
-- authoritative root tilt
 - root validity
+- authoritative root tilt
 - target continuity
 - max sim-body linear speed
 - max sim-body angular speed
 - worst-body identifiers
 - shell/reference deltas used by entry gating
 
-## 10. Failure classification
+But sim-coverage checks must also explicitly compare:
+
+- frozen expected sim coverage
+- live observed sim coverage
+
+Those two must not be conflated.
+
+### Current leading blocker
+
+The current first meaningful remaining Phase 1 failure is:
+
+- `phase1_late_validate_sim_coverage_regressed`
+
+This means the docs now require explicit visibility into:
+
+- expected proximal sim count
+- observed proximal sim count
+- expected total sim count
+- observed total sim count
+- per-bone intended / modifier / raw / counted-as-simulating state for the expected proximal set
+
+## 14. Failure classification
 
 ### Contract-level failures
+
 Examples:
+
 - topology mismatch
+- wrong frozen ownership capture
 - suppression regression
 - illegal write leak
 - freeze-lifetime violation
 - stale or wrong convergence source
+- ownership-source mismatch caused by using the wrong source of truth
 
 ### Physical-level failures
+
 Examples:
+
 - accepted sim set dynamically unstable
-- insufficient stability margin to enter LateValidate
+- insufficient stability margin to enter or survive LateValidate
 - entry quietness collapses under contact/tuning behavior
 - body-motion instability after a contract-correct admission
+- sim-coverage regression after a contract-correct topology freeze
 
-These classes must stay distinct.
+These classes must stay distinct in logs and docs.
 
-## 11. Recovery
+## 15. Recovery
 
 After Phase 1 failure, recovery must:
 
 - stop Phase 1 timers
 - clear transition-local suppression
-- restore normal `BridgeActive` topology
+- restore coherent `BridgeActive` topology
 - clear hold-reference state
+- clear transition-local ownership latches that belong only to the failed attempt
 - return to coherent `BridgeActive`, `BalanceTransitionFailed`, or `SafeDenied`
 
-## 12. Acceptance criteria
+## 16. Acceptance criteria
 
-This spec is satisfied only when Phase 1 reaches readiness through the documented topology and write-routing contract, and the docs explicitly allow the possibility that the accepted setup is still physically non-viable.
+This spec is satisfied only when all of the following are true:
+
+- Phase 1 freezes the correct topology and upper-body ownership mode
+- Prepare and LateValidate respect that frozen topology for the full attempt
+- distal ownership is not re-promoted during BridgeActive or Phase 1 when the accepted rule says distal = kinematic
+- topology-critical bones are driven by authoritative per-bone movement-type writes
+- ownership telemetry is next-frame-confirmed and keeps intended / modifier / raw state distinct
+- the docs explicitly allow the possibility that the accepted setup is still physically non-viable after the contract is correct
