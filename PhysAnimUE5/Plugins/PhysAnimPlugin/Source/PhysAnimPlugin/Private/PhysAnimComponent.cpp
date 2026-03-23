@@ -4373,10 +4373,12 @@ void UPhysAnimComponent::LogBridgeStateSnapshot(const TCHAR* Context) const
 	UE_LOG(
 		LogPhysAnimBridge,
 		Log,
-		TEXT("[PhysAnim] Snapshot[%s] state=%s bridgeOwnsPhysics=%s liveControls=%d liveBodyModifiers=%d forceZero=%s controlsDesiredEnabled=%s meshProfile=%s meshCollision=%s meshPawnResponse=%s capsuleCollision=%s charMoveTick=%s movementMode=%s rootBodyValid=%s rootBodySim=%s rootLinCmPerSec=(%.1f,%.1f,%.1f) rootAngDegPerSec=(%.1f,%.1f,%.1f)"),
+		TEXT("[PhysAnim] Snapshot[%s] state=%s bridgeOwnsPhysics=%s skeletalSim=%d skeletalBlend=%d liveControls=%d liveBodyModifiers=%d forceZero=%s controlsDesiredEnabled=%s meshProfile=%s meshCollision=%s meshPawnResponse=%s capsuleCollision=%s charMoveTick=%s movementMode=%s rootBodyValid=%s rootBodySim=%s rootLinCmPerSec=(%.1f,%.1f,%.1f) rootAngDegPerSec=(%.1f,%.1f,%.1f)"),
 		Context,
 		GetRuntimeStateName(RuntimeState),
 		RuntimeStateOwnsBridgePhysics(RuntimeState) ? TEXT("true") : TEXT("false"),
+		SkeletalMesh && SkeletalMesh->IsSimulatingPhysics() ? 1 : 0,
+		0, // Removed skeletalBlend due to missing getter
 		PhysicsControl ? PhysicsControl->GetAllControlNames().Num() : 0,
 		PhysicsControl ? PhysicsControl->GetAllBodyModifierNames().Num() : 0,
 		EffectiveSettings.bForceZeroActions ? TEXT("true") : TEXT("false"),
@@ -4510,6 +4512,7 @@ void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilization
 	SkeletalMesh->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
 	SkeletalMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	SkeletalMesh->SetSimulatePhysics(true);
 	ApplyTrainingAlignedToeLimitPolicy(EffectiveSettings);
 	SkeletalMesh->RecreatePhysicsState();
 	SkeletalMesh->SetEnablePhysicsBlending(true);
@@ -4822,6 +4825,7 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 
 	ResetTrainingAlignedMassScales();
 	ResetTrainingAlignedToeLimitPolicy();
+	SkeletalMesh->SetSimulatePhysics(false);
 	SkeletalMesh->SetEnablePhysicsBlending(false);
 	if (bHasSavedMeshCollisionState)
 	{
@@ -5158,6 +5162,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		// We use bUpdateBody=true to ensure the engine state is updated immediately.
 		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 		{
+			// Skip proximal bones (Group 0) during Phase 1 if they are NOT explicitly kept kinematic.
+			// This prevents frame-internal thrash where we set it to Kinematic then Simulated immediately after.
+			if ((bPhase1Prepare || bPhase1LateValidate) && ResolveBringUpGroupIndex(BoneName) == 0 && !BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, EffectiveSettings))
+			{
+				continue;
+			}
+
 			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
 			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic, false, true);
 		}
@@ -5361,7 +5372,22 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUpdateKinematicFromSimulation,
 			false,
 			false);
-		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, false);
+		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, (bPhase1Prepare || bPhase1LateValidate));
+
+		if (bPhase1Prepare || bPhase1LateValidate)
+		{
+			if (BoneName == TEXT("spine_01") || BoneName == TEXT("calf_r"))
+			{
+				const USkeletalMeshComponent* const Mesh = GetMeshComponent();
+				const FBodyInstance* const TargetBody = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
+				const bool bRawSimulating = TargetBody ? TargetBody->IsInstanceSimulatingPhysics() : false;
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_MODIFIER_SYNC bone=%s movement=%s updateBody=1 rawSim=%d"),
+					*BoneName.ToString(),
+					UPhysAnimComponent::GetPhysicsMovementTypeName(BodyModifierMovementType),
+					bRawSimulating ? 1 : 0);
+			}
+		}
+
 		TrackDistalBoneOwnershipChange(BoneName, BodyModifierMovementType, TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, false, false);
 		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, false, false);

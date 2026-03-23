@@ -1,5 +1,6 @@
 #include "PhysAnimBalanceReadyTransition.h"
 #include "PhysAnimComponent.h"
+#include "PhysicsControlComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
@@ -591,6 +592,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTER_LATE_VALIDATE elapsed=%.4f"), PhaseTimeSeconds);
 		const bool bIsBodyMotionUnstable = CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
 			CachedConvergenceSnapshot.MaxBodyAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed;
 
@@ -707,6 +709,40 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				LiveSnapshot.RootOwnershipMode != Phase1TopologyRecord.RootOwnershipMode ||
 				LiveSnapshot.ProximalOwnershipMode != Phase1TopologyRecord.ProximalOwnershipMode ||
 				LiveSnapshot.DistalOwnershipMode != Phase1TopologyRecord.DistalOwnershipMode);
+
+		if (bSimCoverageRegressed)
+		{
+			static int32 SimDumpCount = 0;
+			if (SimDumpCount < 10)
+			{
+				SimDumpCount++;
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("--- PHASE 1 SIM-COVERAGE FORENSIC DUMP (%d) ---"), SimDumpCount);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("Counts: FrozenTotal=%d LiveTotal=%d FrozenProximal=%d LiveProximal=%d"),
+					Phase1TopologyRecord.TotalSimCount, LiveSnapshot.SimCount,
+					Phase1TopologyRecord.ProximalSimCount, LiveSnapshot.ProximalSimCount);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("Ownership: FrozenProximal=%d LiveProximal=%d | FrozenDistal=%d LiveDistal=%d"),
+					static_cast<int32>(Phase1TopologyRecord.ProximalOwnershipMode), static_cast<int32>(LiveSnapshot.ProximalOwnershipMode),
+					static_cast<int32>(Phase1TopologyRecord.DistalOwnershipMode), static_cast<int32>(LiveSnapshot.DistalOwnershipMode));
+
+				const USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
+				for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+				{
+					if (!BalanceTransitionSets::IsProximal(BoneName))
+					{
+						continue;
+					}
+					const bool bIntendedSim = !ShouldKeepBoneKinematic(BoneName, Settings);
+					const FBodyInstance* Body = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
+					const bool bRawSim = Body && Body->IsInstanceSimulatingPhysics();
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("Bone: %s | FrozenExpect=Sim | Intended=%s | RawBody=%s"),
+						*BoneName.ToString(),
+						bIntendedSim ? TEXT("Sim") : TEXT("Kin"),
+						bRawSim ? TEXT("Sim") : TEXT("Kin"));
+				}
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("--- END FORENSIC DUMP ---"));
+			}
+		}
+
 		const bool bFirstPolicyEnabledFrame = Owner->GetLastControlTargetDiagnostics().bFirstPolicyEnabledFrame;
 		const bool bPolicyInfluenceRampReanchored = Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
 
@@ -723,6 +759,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			{
 				bLateValidationThisFrame = false;
 				LateValidateBlockReason = ClassifyLateValidationFailureReason(bUpperBodyInstability, bSimCoverageRegressed, bLateValidateTargetDiscontinuity);
+
+				if (bSimCoverageRegressed)
+				{
+					// Forensic logic moved up
+				}
 
 				if (bUpperBodyInstability)
 				{
@@ -1844,6 +1885,11 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	bool bRootSimulating = false;
 
 	Owner->GetSimulatingBodies(SimulatingBones);
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] GET_SIMULATING_BODIES count=%d"), SimulatingBones.Num());
+	for (const FName BoneName : SimulatingBones)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance]   simulating_bone=%s"), *BoneName.ToString());
+	}
 	TSet<FName> SimulatingBoneSet(SimulatingBones);
 	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
 	{
