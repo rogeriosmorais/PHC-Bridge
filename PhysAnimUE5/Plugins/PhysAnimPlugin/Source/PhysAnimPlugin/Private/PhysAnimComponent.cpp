@@ -5131,7 +5131,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bPhase1Prepare || bPhase1LateValidate)
 		{
-			// Enforce 11-body Phase 1 topology (root=kin, proximal=sim, distal=sim, upper=kin)
+			// Enforce Phase 1 topology (root=kin, proximal=sim, distal=sim/kin based on experiment, upper=kin)
 			if (bIsRootBodyModifier || bTransitionKeepsBoneKinematic)
 			{
 				BodyModifierMovementType = EPhysicsMovementType::Kinematic;
@@ -6154,7 +6154,13 @@ bool UPhysAnimComponent::GatherRuntimeInstabilityBodySamples(TArray<FPhysAnimBod
 		Sample.Location = BodyInstance->GetUnrealWorldTransform().GetLocation();
 		Sample.LinearVelocity = BodyInstance->GetUnrealWorldVelocity();
 		Sample.AngularVelocity = FMath::RadiansToDegrees(BodyInstance->GetUnrealWorldAngularVelocityInRadians());
-		Sample.bIsSimulatingPhysics = BodyInstance->IsInstanceSimulatingPhysics();
+
+		bool bIsSimulating = BodyInstance->IsInstanceSimulatingPhysics();
+		if (BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, ResolveEffectiveStabilizationSettings()))
+		{
+			bIsSimulating = false;
+		}
+		Sample.bIsSimulatingPhysics = bIsSimulating;
 	}
 
 	return true;
@@ -6406,12 +6412,21 @@ void UPhysAnimComponent::ApplyControlTargets(
 	if (bApplyPhase1HoldPoseThisFrame)
 	{
 		const bool bIsPhase1EntryState = bPhase1Prepare || bPhase1LateValidate;
-		auto IsPhase1KinematicAllowlistedBone = [](const FName BoneName)
+		auto IsPhase1KinematicAllowlistedBone = [&EffectiveSettings](const FName BoneName)
 		{
-			return BoneName == "pelvis" ||
+			bool bIsAllowlisted = BoneName == "pelvis" ||
 				BoneName == "neck_01" || BoneName == "head" ||
 				BoneName == "clavicle_l" || BoneName == "upperarm_l" || BoneName == "lowerarm_l" || BoneName == "hand_l" ||
 				BoneName == "clavicle_r" || BoneName == "upperarm_r" || BoneName == "lowerarm_r" || BoneName == "hand_r";
+			
+			if (EffectiveSettings.bPhase1DistalKinematicExperiment &&
+				(BoneName == "calf_l" || BoneName == "calf_r" ||
+				 BoneName == "foot_l" || BoneName == "foot_r" ||
+				 BoneName == "ball_l" || BoneName == "ball_r"))
+			{
+				bIsAllowlisted = true;
+			}
+			return bIsAllowlisted;
 		};
 
 		for (const TPair<FName, FQuat>& HoldPair : BalanceReadyTransition.GetEntryHoldRotations())

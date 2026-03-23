@@ -348,6 +348,29 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
+		if (!bHasLoggedDistalExperimentState && Settings.bPhase1DistalKinematicExperiment)
+		{
+			bHasLoggedDistalExperimentState = true;
+			USkeletalMeshComponent* const Mesh = Owner ? Owner->GetMeshComponent() : nullptr;
+			if (Mesh)
+			{
+				const FName DistalBones[] = { TEXT("calf_r"), TEXT("foot_r"), TEXT("ball_r") };
+				for (const FName BoneName : DistalBones)
+				{
+					const bool bIntendedKinematic = ShouldKeepBoneKinematic(BoneName, Settings);
+					const FBodyInstance* BodyInst = Mesh->GetBodyInstance(BoneName);
+					const bool bActualSimulating = BodyInst && BodyInst->IsValidBodyInstance() ? BodyInst->IsInstanceSimulatingPhysics() : false;
+					const bool bStateMismatch = bIntendedKinematic == bActualSimulating;
+	
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_EXPERIMENT_STATE bone=%s intendedSim=%d actualSim=%d changedByLaterSubsystem=%d"),
+						*BoneName.ToString(),
+						!bIntendedKinematic,
+						bActualSimulating,
+						bStateMismatch);
+				}
+			}
+		}
+
 		const bool bIsBodyMotionUnstable = CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
 			CachedConvergenceSnapshot.MaxBodyAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed;
 		const bool bIsPelvisNotSimulating = !CachedConvergenceSnapshot.bIsPelvisSimulating;
@@ -2002,6 +2025,7 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	RootOnReadinessShellProofStartOffsetCm = 0.0f;
 	RootOnReadinessShellProofStartVelocityCmPerSecond = 0.0f;
 	bHasRootOnReadinessShellProofBaseline = false;
+	bHasLoggedDistalExperimentState = false;
 	LastLateValidateBlockReason.Reset();
 	bHasLateValidationProof = false;
 	Diagnostics.Phase1LateValidateBodyMotionViolationAccumulatedSeconds = 0.0f;

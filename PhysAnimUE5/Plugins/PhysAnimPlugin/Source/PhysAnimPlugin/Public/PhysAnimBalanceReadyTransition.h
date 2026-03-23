@@ -327,6 +327,7 @@ private:
 	FPhysAnimLateValidationResult CertifiedLateValidationResult;
 	FPhysAnimPhase1TopologySnapshot Phase1TopologyRecord;
 	bool bHasPhase1TopologyRecord = false;
+	bool bHasLoggedDistalExperimentState = false;
 	FString SafePhase2DenialReason;
 
 	FPhase1AcceptedConvergenceSnapshot CachedConvergenceSnapshot;
