@@ -575,6 +575,34 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				CachedConvergenceSnapshot.MaxBodyAngularSpeed,
 				*CachedConvergenceSnapshot.MaxBodyLinearSpeedBone.ToString(),
 				*CachedConvergenceSnapshot.MaxBodyAngularSpeedBone.ToString());
+
+			// Instrumentation: Distal chain failure forensics
+			USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
+			if (Mesh)
+			{
+				const FName TargetBones[] = { TEXT("calf_r"), TEXT("foot_r"), TEXT("ball_r") };
+				const FPhysAnimControlTargetDiagnostics& CtrlDiag = Owner->GetLastControlTargetDiagnostics();
+				
+				for (const FName BoneName : TargetBones)
+				{
+					const FVector LinVel = Mesh->GetPhysicsLinearVelocity(BoneName);
+					const FVector AngVel = Mesh->GetPhysicsAngularVelocityInDegrees(BoneName);
+					const FVector Loc = Mesh->GetBoneLocation(BoneName, EBoneSpaces::WorldSpace);
+
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_FAILURE_FORENSICS bone=%s lin=%.1f ang=%.1f locZ=%.1f"),
+						*BoneName.ToString(),
+						LinVel.Size(),
+						AngVel.Size(),
+						Loc.Z);
+				}
+
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_FAILURE_SUMMARY maxTargetDelta=%.1f(%s) maxLimitOccupancy=%.2f(%s)"),
+					CtrlDiag.MaxTargetDeltaDegrees,
+					*CtrlDiag.MaxTargetDeltaBoneName.ToString(),
+					CtrlDiag.MaxLowerLimbLimitOccupancy,
+					*CtrlDiag.MaxLowerLimbLimitOccupancyBoneName.ToString());
+			}
+
 			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(Owner, FailureReason);
 			return;
@@ -2248,7 +2276,7 @@ float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneNam
 		1.0f);
 }
 
-bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) const
+bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName, const FPhysAnimStabilizationSettings& Settings) const
 {
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied)
 	{
@@ -2263,8 +2291,10 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName) co
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
 	{
+		const bool bDistalKin = Settings.bPhase1DistalKinematicExperiment && BalanceTransitionSets::IsDistalLowerLimb(BoneName);
 		return BalanceTransitionSets::IsPrepareCriticalKinematic(BoneName) ||
-			BalanceTransitionSets::IsUpperBody(BoneName);
+			BalanceTransitionSets::IsUpperBody(BoneName) ||
+			bDistalKin;
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 	{
@@ -2699,3 +2729,4 @@ bool FPhysAnimBalanceReadyTransition::ValidatePreRootOnShellSafetyProofSnapshot(
 
 	return true;
 }
+

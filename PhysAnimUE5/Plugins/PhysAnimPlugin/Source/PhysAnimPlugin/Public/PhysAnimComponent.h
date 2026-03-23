@@ -424,6 +424,8 @@ struct FPhysAnimStabilizationSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalanceSettleMaxRootAngularSpeed = 1.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|Experimental")
+	bool bPhase1DistalKinematicExperiment = false;
 
 	bool operator==(const FPhysAnimStabilizationSettings& Other) const
 	{
@@ -543,7 +545,8 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(BalanceBootstrapExtraDampingMultiplier, Other.BalanceBootstrapExtraDampingMultiplier) &&
 			FMath::IsNearlyEqual(BalanceActiveExtraDampingMultiplier, Other.BalanceActiveExtraDampingMultiplier) &&
 			FMath::IsNearlyEqual(BalanceSettleMaxRootLinearSpeed, Other.BalanceSettleMaxRootLinearSpeed) &&
-			FMath::IsNearlyEqual(BalanceSettleMaxRootAngularSpeed, Other.BalanceSettleMaxRootAngularSpeed);
+			FMath::IsNearlyEqual(BalanceSettleMaxRootAngularSpeed, Other.BalanceSettleMaxRootAngularSpeed) &&
+			bPhase1DistalKinematicExperiment == Other.bPhase1DistalKinematicExperiment;
 	}
 
 	bool operator!=(const FPhysAnimStabilizationSettings& Other) const
@@ -1338,3 +1341,6 @@ private:
 	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
 	double InitialPoseSearchWaitStartTimeSeconds = 0.0;
 };
+
+
+

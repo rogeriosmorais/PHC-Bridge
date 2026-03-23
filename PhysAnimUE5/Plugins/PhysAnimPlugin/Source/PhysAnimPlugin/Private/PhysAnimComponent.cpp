@@ -5065,7 +5065,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
 				RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny) &&
-			BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName);
+			BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, EffectiveSettings);
 		const bool bTransitionOwnsRootOnThisTick =
 			bIsRootBodyModifier &&
 			bPhase2RootOnGuardWindow &&

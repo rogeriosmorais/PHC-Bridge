@@ -253,7 +253,7 @@ public:
 
 	float GetRootBodyModifierSoftSimAlpha() const;
 	float GetProximalControlSoftAlpha(FName BoneName) const;
-	bool ShouldKeepBoneKinematic(FName BoneName) const;
+	bool ShouldKeepBoneKinematic(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;
 	bool ShouldSuppressPolicyWrites(FName BoneName) const;
 	float GetTransitionExtraDampingMultiplier(const struct FPhysAnimStabilizationSettings& Settings) const;
 	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
