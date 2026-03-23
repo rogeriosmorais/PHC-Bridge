@@ -737,9 +737,70 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		bLateValidationProofPassed = bExpectedUpperBodyRelease;
 
-		const bool bUpperBodyInstability = bCurrentSnapshotValid && bLiveSnapshotValid && !bExpectedUpperBodyRelease &&
-			(LiveSnapshot.UpperBodyOwnershipMode != Phase1TopologyRecord.UpperBodyOwnershipMode ||
-				LiveSnapshot.UpperBodySimCount != Phase1TopologyRecord.UpperBodySimCount);
+		bool bUpperBodyInstability = false;
+		if (bCurrentSnapshotValid && bLiveSnapshotValid && !bExpectedUpperBodyRelease)
+		{
+			if (Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold)
+			{
+				USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
+				if (Mesh)
+				{
+					const TArray<FName>& PendingResets = Owner->GetPendingBodyModifierCachedResetNames();
+					for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+					{
+						if (!BalanceTransitionSets::IsUpperBody(BoneName)) { continue; }
+
+						const FBodyInstance* BodyInst = Mesh->GetBodyInstance(BoneName);
+						if (!BodyInst || !BodyInst->IsValidBodyInstance()) { continue; }
+
+						const bool bRawSim = BodyInst->IsInstanceSimulatingPhysics();
+						const float LinVel = BodyInst->GetUnrealWorldVelocity().Size();
+						const float AngVel = FMath::RadiansToDegrees(BodyInst->GetUnrealWorldAngularVelocityInRadians().Size());
+
+						float TargetDeltaDeg = 0.0f;
+						const FQuat* HoldRot = EntryHoldRotations.Find(BoneName);
+						if (HoldRot)
+						{
+							TargetDeltaDeg = FMath::RadiansToDegrees(HoldRot->AngularDistance(Mesh->GetBoneQuaternion(BoneName, EBoneSpaces::WorldSpace)));
+						}
+
+						const bool bHasPendingReset = PendingResets.Contains(PhysAnimBridge::MakeBodyModifierName(BoneName));
+
+						const bool bRawSimViolation = bRawSim;
+						const bool bTargetDeltaViolation = TargetDeltaDeg > 0.1f;
+						const bool bMotionViolation = LinVel > 1.0f || AngVel > 10.0f;
+						const bool bPendingResetViolation = bHasPendingReset;
+
+						if (bRawSimViolation || bTargetDeltaViolation || bMotionViolation || bPendingResetViolation)
+						{
+							bUpperBodyInstability = true;
+
+							static FName LastReportedBone = NAME_None;
+							if (LastReportedBone != BoneName)
+							{
+								LastReportedBone = BoneName;
+								FString Reason;
+								if (bRawSimViolation) Reason += TEXT("raw_sim_violation ");
+								if (bTargetDeltaViolation) Reason += TEXT("target_delta_violation ");
+								if (bMotionViolation) Reason += TEXT("motion_violation ");
+								if (bPendingResetViolation) Reason += TEXT("pending_reset_violation ");
+
+								UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_GATE bone=%s reason=%s targetDelta=%.2f linVel=%.2f angVel=%.2f"),
+									*BoneName.ToString(), *Reason.TrimEnd(), TargetDeltaDeg, LinVel, AngVel);
+							}
+							break;
+						}
+					}
+				}
+			}
+			else
+			{
+				// Fallback to mode mismatch check if not in the specific kinematic hold contract
+				bUpperBodyInstability = (LiveSnapshot.UpperBodyOwnershipMode != Phase1TopologyRecord.UpperBodyOwnershipMode ||
+					LiveSnapshot.UpperBodySimCount != Phase1TopologyRecord.UpperBodySimCount);
+			}
+		}
+
 		const bool bSimCoverageRegressed = bCurrentSnapshotValid && bLiveSnapshotValid &&
 			(LiveSnapshot.SimCount < Phase1TopologyRecord.TotalSimCount ||
 				LiveSnapshot.RootOwnershipMode != Phase1TopologyRecord.RootOwnershipMode ||
