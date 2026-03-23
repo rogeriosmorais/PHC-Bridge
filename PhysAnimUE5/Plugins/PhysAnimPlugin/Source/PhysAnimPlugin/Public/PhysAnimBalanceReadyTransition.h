@@ -258,6 +258,8 @@ public:
 	bool ShouldSuppressMoveSmoke() const;
 	bool IsPhase2RootAuthorityQuarantined() const { return bPhase2RootAuthorityQuarantined; }
 
+	bool IsDistalKinematicAccepted() const { return Phase1TopologyRecord.DistalOwnershipMode == EBalanceReadyGroupOwnershipMode::Kinematic; }
+
 	float GetRootBodyModifierSoftSimAlpha() const;
 	float GetProximalControlSoftAlpha(FName BoneName) const;
 	bool ShouldKeepBoneKinematic(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;

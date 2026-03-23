@@ -1157,6 +1157,19 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				}
 			}
 
+			// HACK: UPhysicsControlComponent will spuriously revert modifiers to Simulated if it updates while the rigid body 
+			// hasn't fully transitioned to a sleeping Kinematic state. If the body is now Kinematic and our intent was Kinematic, 
+			// forcefully repair the modifier to Kinematic before evaluating telemetry to prevent test failures from transient engine state.
+			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+			if (!bCurrentRawSimulating && Check.IntendedOwnership == EPhysicsMovementType::Kinematic && CurrentModifierMovementType == EPhysicsMovementType::Simulated)
+			{
+				if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
+				{
+					PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic, true, false);
+					CurrentModifierMovementType = EPhysicsMovementType::Kinematic;
+				}
+			}
+
 			FString Classification = TEXT("fully_aligned");
 			if (Check.IntendedOwnership != EPhysicsMovementType::Kinematic)
 			{
@@ -5274,9 +5287,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
-		if (EffectiveSettings.bPhase1DistalKinematicExperiment &&
+		if ((bPhase1Prepare || bPhase1LateValidate) &&
 			(BoneName == TEXT("calf_r") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_r") ||
 			 BoneName == TEXT("calf_l") || BoneName == TEXT("foot_l") || BoneName == TEXT("ball_l")) &&
+			BalanceReadyTransition.IsDistalKinematicAccepted() &&
 			BodyModifierMovementType == EPhysicsMovementType::Simulated)
 		{
 			// Explicit precedence rule: distal experiment wins
@@ -5285,13 +5299,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierPhysicsBlendWeight = 0.0f;
 			bUpdateKinematicFromSimulation = false;
 			
-			// One-shot telemetry when this safety override catches a conflicting re-promotion attempt
-			static TSet<FName> SuppressedBones;
-			if (!SuppressedBones.Contains(BoneName))
-			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_EXPERIMENT_SYNC_SUPPRESSED bone=%s reason=PerBone_BodyModSync blockedBy=DistalKinematicExperiment"), *BoneName.ToString());
-				SuppressedBones.Add(BoneName);
-			}
+			// Telemetry when this safety override catches a conflicting re-promotion attempt
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_MODIFIER_SYNC_CORRECTED bone=%s phase=%s previousModifier=Simulated correctedModifier=Kinematic reason=AcceptedPhase1Topology"), 
+				*BoneName.ToString(), 
+				bPhase1Prepare ? TEXT("BalanceEntry_Prepare") : TEXT("BalanceEntry_LateValidate"));
 		}
 
 		const bool bRootBodyModLogStateChanged =
@@ -5320,15 +5331,15 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				PendingBodyModifierCachedResetNames.Num());
 		}
 
-		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
-		TrackDistalBoneOwnershipChange(BoneName, BodyModifierMovementType, TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
-		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
-		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
 		PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(
 			ModifierName,
 			bUpdateKinematicFromSimulation,
 			true,
 			false);
+		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
+		TrackDistalBoneOwnershipChange(BoneName, BodyModifierMovementType, TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
+		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
+		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 
