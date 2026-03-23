@@ -33,8 +33,8 @@ These gates define the transition from Phase 1 (`Prepare`/`LateValidate`) to Pha
 
 ### [bringUp] - Control Authority Settlement
 - **Condition**: `FinalBringUpGroupControlAuthorityAlpha >= 1.0` (with `KINDA_SMALL_NUMBER` epsilon).
-- **Source**: `UPhysAnimComponent::CalculateBringUpGroupControlAuthorityAlpha`.
-- **Logic**: All bring-up groups (including the final stabilization group) must be fully unlocked.
+- **Source**: `UPhysAnimComponent::CalculateBringUpGroupControlAuthorityAlpha` (reads `HighestUnlockedBringUpGroupIndex` and `MaxAutoUnlockBringUpGroup`).
+- **Logic**: All bring-up groups (including the final stabilization group) must be fully unlocked. This ensures no hidden "movement smoke" or transition-shaping forces are active during proof.
 
 ### [shellSafety] - Pre-Root-On Proof
 - **Condition**: A multi-vector proof that the shell is stable and authority is correctly transitioned.
@@ -45,21 +45,21 @@ These gates define the transition from Phase 1 (`Prepare`/`LateValidate`) to Pha
   - `ShellVelocityGrowth <= BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond`
   - **Not Actively Affecting**: `!bShellCorrectionActivelyAffecting` (metrics must be below significant thresholds: 0.1cm / 1.0cm/s).
   - **Lock/Anchor**: Shell must be `Locked` by the transition and `Reanchored` to the current state.
-- **Source**: `FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot`.
+- **Source**: `FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot` (aggregating metrics from `FPhase1AcceptedConvergenceSnapshot` and `UPhysAnimComponent`).
+- **Logic**: This gate proves that the shell authority transfer is not just logically correct but physically stable. Stale `shellCorrectionActive` states (owner active but metric below threshold) are logged but do not block the proof. Active metrics block the proof.
 
 ### [expectedRelease] - Upper-Body Release Readiness
 - **Condition**: Both the LateValidate clock and the ShellHold clock must satisfy their required durations.
   - `LateValidationAccumulatedSeconds >= BalancePhase1LateValidateRequiredSeconds`
   - `RootOnReadinessShellHoldAccumulatedSeconds >= BalancePhase2RequiredShellHoldDuration`
-- **Logic**: This gate allows the upper body to transition from `LateValidationKinematicHold` to `None` (Normal ownership).
+- **Source**: `FPhysAnimBalanceReadyTransition::Tick` (comparing `LateValidationAccumulatedSeconds` and `RootOnReadinessShellHoldAccumulatedSeconds` against settings).
+- **Logic**: This gate allows the upper body to transition from `LateValidationKinematicHold` to `None` (Normal ownership). It is the primary protection against "release instability" where the upper body sim-set collapses immediately upon RootOn.
 
 ### [readyProven] - Aggregate Readiness
-- **Condition**: All primary readiness signals must be `True`.
-  - `bRootOnReadinessShellHoldSatisfied`
-  - `bRootOnReadinessFinalBringUpControlSettled` ([bringUp])
-  - `bRootOnReadinessPolicyInfluenceSettled`
-  - `bPreRootOnShellSafetyProofSatisfied` ([shellSafety])
-  - **Classification**: Must be `RootCoupledReady` (proximal simulation count == 5).
+- **Source**: `FPhysAnimBalanceReadyTransition::ValidateRootOnReadinessSnapshot` (aggregating the results of `bringUp`, `shellSafety`, and `expectedRelease`).
+- **Logic**: All primary readiness signals must be `True`. This is the final "go/no-go" signal for Phase 2 entry.
+  - Classification must be `RootCoupledReady` (proximal simulation count == 5).
+  - Classification `UpperOnlySafeDeny` (proximal simulation count == 0) results in a safe denial instead of Phase 2 entry.
 
 ## 4. Operational Transition Rules
 
@@ -71,14 +71,16 @@ These gates define the transition from Phase 1 (`Prepare`/`LateValidate`) to Pha
 - **Latched**: Frozen topology, upper-body hold mode (must be frozen from Phase 1 contract, not live readiness).
 - **Recomputed live**: Root validity, target continuity, max sim-body speeds, shell/reference deltas.
 
-### Pending-Reset Leakage
-- **Global Block**: `bHasPendingResets` blocks admission to `LateValidate`.
-- **Upper-Body Violation**: During `LateValidationKinematicHold`, any pending reset on an upper-body bone is a terminal instability violation.
-- **Stale State**: Resets must be drained/applied before the quiet window can advance.
-
 ### Stale Latched State (Shell)
 - **Informational**: `bShellCorrectionOwnerActive` without significant metric influence is logged as a "stale latch" but does not block the safety proof.
 - **Blocking**: Only *active* influence (`bShellCorrectionActivelyAffecting`) blocks the `shellSafety` proof.
+- **Source**: `FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot`.
+
+### Pending-Reset Leakage
+- **Global Block**: `bHasPendingResets` blocks admission to `LateValidate`.
+- **Upper-Body Violation**: During `LateValidationKinematicHold`, any pending reset on an upper-body bone is a terminal instability violation.
+- **Stale State**: Resets must be drained/applied before the quiet window can advance. This prevents "latent discontinuities" from passing the quiet window gate only to explode during LateValidate.
+- **Source**: `UPhysAnimComponent::GetPendingBodyModifierCachedResetNames`.
 
 ## 5. Failure Classification
 
@@ -95,10 +97,17 @@ The contract was upheld, but the physical world was too unstable to satisfy the 
 - Entry quietness collapses under contact/tuning.
 - Body-motion instability after contract-correct admission.
 
+### Stale-State / Reset-Leak Failure
+The contract logic is correct, but the system state contains "latent" or "stale" data that invalidates the proof.
+- Pending body-modifier resets leaked into LateValidate.
+- Stale shell-correction flags held after metric quietness.
+- Unapplied target caches from a previous attempt.
+
 ### Telemetry-Only Observation
 Findings that inform debugging but do not independently trigger resets.
 - Individual bone drift below the cumulative gate threshold.
 - Sub-threshold target discontinuity.
+- `Proxy` bone promotion confirmed by next-frame check.
 
 ## 6. Current Empirically Proven Findings
 
@@ -111,4 +120,5 @@ Findings that inform debugging but do not independently trigger resets.
 
 - **Blunder**: `phase1_late_validate_upper_body_instability`
 - **Context**: Convergence failures in `LateValidationKinematicHold`.
-- **Confirmed Producer**: `ClassifyLateValidationFailureReason` had a parallel stale path; now consolidated to observed-violation gate.
+- **Confirmed Producer**: `ClassifyLateValidationFailureReason` had a parallel stale path; now consolidated to the authoritative observed-violation gate.
+- **Note**: This section identifies the last confirmed blocker as of the latest smoke test and is expected to change frequently as the investigation progresses.

@@ -147,6 +147,17 @@ Required object:
 The accumulator resets whenever any quiet condition becomes false.
 
 No carryover is allowed.
+ 
+## 11.1 Pending-Reset Handling
+
+Pending cached-target resets represent unapplied discontinuities that can invalidate the quiet proof.
+
+Required behavior:
+
+- admit to LateValidate only when `PendingBodyModifierCachedResetNames` is empty
+- during `LateValidationKinematicHold`, any reset name appearing in the pending list for an upper-body bone is a contract terminal violation
+- explicitly drain or apply mandatory resets before attempting the Phase 1 quiet proof
+
 
 ## 12. LateValidate
 
