@@ -14,9 +14,9 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` still in progress, but the practical focus has shifted from generic stabilization to explicit balance-entry contract work, comparison packaging, and transition diagnosis
-- `Overall status`: UE install, project scaffold, ProtoMotions checkout, pretrained checkpoint, Python `3.11` environment, and the Isaac Sim / Isaac Lab runtime remain confirmed locally; Gate G1 remains `pass`; the selected Phase 1 runtime model remains the pretrained `motion_tracker/smpl` checkpoint; the full UE startup path still succeeds through `NNERuntimeORTDml`; the one-character bridge still has a stable idle baseline and stable movement-smoke baseline for the current smoke scope; preserved-gameplay-shell manual `WASD` still works in `BridgeActive`; however, the current active engineering problem is no longer blind startup stabilization or raw locomotion survivability, but rather truthful and deterministic entry into Balance Perturbation Mode
-- `Last planning milestone`: the runtime/design milestone has moved from “make balance mode roughly work” to “make the balance transition truthful, phase-owned, and diagnosable”; a dedicated entry-transition state machine now exists, Phase 1 stabilization has been recognized as a distinct design problem, and the latest runtime evidence shows that the dominant failure is no longer the old invalid-entry loop but a repeatable Phase 2 root-on spike after apparently clean Phase 1 readiness
+- `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` in progress. The focus has pivoted to the "Distal Kinematic Experiment" and hardening Phase 1 admission.
+- `Overall status`: UE startup is stable. The current engineering constraint is enforcing truthful "distal=kin" topology and preventing ownership thrash between global and per-bone modifier writes.
+- `Last planning milestone`: The transition from ad-hoc stabilization to "Distal Kinematic Authoritative Control" and hardened Phase 1 admission gates.
 
 ## Active Tasks
 
@@ -28,7 +28,8 @@ Use it to track:
 | S1-P0-A1 | AI | completed | frozen Phase 0 inputs | Phase 0 package + spec paths | none |
 | S1-P0-A2 | AI + User | completed | Phase 0 execution package + G1 evidence paths | evidence + log paths | none |
 | S1-P1-A1 | AI | completed | Phase 1 implementation package, ONNX/export specs, UE bridge implementation spec | ONNX export/runtime bridge paths | none |
-| S1-P1-A2 | AI | in_progress | accepted `S1-P1-A1` handoff, Phase 1 implementation package, manual verification, acceptance thresholds, bring-up runbook, newer balance design docs | `plans/stage1/40-design/*.md`, `plans/stage1/30-evidence/g2-evaluation.md`, `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none; active work now includes balance entry/transition design, comparison packaging, and transition-failure diagnosis |
+| S1-P1-A2 | AI | completed | accepted `S1-P1-A1` handoff, Phase 1 implementation package, manual verification, acceptance thresholds, bring-up runbook, newer balance design docs | `plans/stage1/40-design/*.md`, `plans/stage1/30-evidence/g2-evaluation.md`, `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none |
+| S1-P1-A3 | AI | in_progress | Distal Kinematic experiment success, read-only telemetry, authoritative modifier writes | `plans/stage1/20-execution/execution-log.md` | none |
 
 ## Frozen Inputs For Phase 0 Preparation
 
@@ -360,35 +361,70 @@ Practical meaning:
   - explicit Phase 1 stabilization contract
   - explicit Phase 2 root-on contract
 
+---
+
+## 2026-03-19 — Phase 2 Root-On Hardening (Shell Safety)
+
+- Implemented the "Shell Safety Proof" requirement: Phase 2 root-on is now denied if the owning actor shell cannot be proven stable/safe in the pre-root-on window.
+- Refined Phase 2 authority gating and readiness classification to distinguish between different classes of root-on denial.
+- Fixed late validation snapshot ordering to ensure authoritative state capture before the root-on transition.
+- Separated diagnostics for late validation and root-on readiness, providing clearer reasons for admission failures.
+
+## 2026-03-20 — Phase 1 Policy Diagnostic Separation
+
+- Refactored policy diagnostics to strictly separate Phase 1 held-pose activity from normal policy target writes.
+- Renamed and split the `NumPolicyTargetsWritten` counter into categories (normal, held, total) to verify that normal policy writes are correctly suppressed during `Prepare` and `LateValidate`.
+- Validated through smoke tests that `policyActive` remains false and `written=0` during Phase 1, with only `holdWritten` targets active.
+- Refactored balance entry logic to consolidate `UPhysAnimComponent` as the sole authority for phase-owned state transitions.
+- Gated `BalanceEntry_LateValidate` on sim-body quietness to avoid entering validation from a jittery startup state.
+
+## 2026-03-21 — Root Tilt calculation fix
+
+- Corrected `RootTilt` calculation in `UPhysAnimComponent::TickComponent`.
+- Switched from mesh root bone quaternion to a more reliable source to avoid false positives in Phase 1 tilt-high errors.
+
+## 2026-03-22 — Phase 1 Hardening (Diagnostics and Guards)
+
+- Restricted Phase 1 body-motion diagnostics to only consider simulated bodies, preventing kinematic upper-body hold bones from contaminating stability metrics.
+- Added a body-motion-instability gate to the `Prepare` phase to prevent repeated `LateValidate` retries from unstable states.
+- Added a dynamic-stability margin gate before `LateValidate` to reduce immediate safe-denies and improve startup success.
+- Refined the Phase 1 startup freeze lifetime to ensure precise acquisition upon acceptance and release only upon terminal outcomes.
+
+## 2026-03-22 — Simplified Phase 1 Admission (Pelvis-Gate Removal)
+
+- Removed `pelvis_not_simulating` as a terminal prerequisite for Phase 1 entry.
+- Corrected the admission logic to allow the root/pelvis to remain kinematic during the `Prepare` phase, aligning with the accepted topology contract.
+- Implemented `Prepare` blocking escalation to terminate non-viable entry attempts early, reducing log spam from persistent blocking conditions.
+
+## 2026-03-23 — Distal Kinematic Authoritative Control Milestone
+
+- **Milestone: Distal Kinematic Experiment.** Pivoted to enforcing `distal=kin` as the authoritative Phase 1 topology.
+- Eliminated ownership thrash between global `SetAllKinematic` and per-bone modifier syncs in `BridgeActive`.
+- Fixed a bug where `PhysicsControl` modifiers were being overwritten to `Simulated` for distal bones despite raw body state being `Kinematic`.
+- Ensured distal bones stop flipping ownership through explicit per-bone authoritative modifier writes and stricter topology enforcement.
+
+## 2026-03-23 — Read-Only Telemetry and State Maintenance Refinement
+
+- Refined `TickComponent` telemetry to be strictly read-only, moving all state mutation and repair to the authoritative control path.
+- Investigated and resolved stale modifier records that were keeping bones in a `Simulated` state even after raw body state became `Kinematic`.
+- Validated that distal tracked bones stop oscillating ownership and reach a coherent stable state at balance entry.
+
 ## Current practical conclusion
 
 Repository baseline:
-
-- keep the current stable idle and movement-smoke runtime baseline
-- keep the truthful phased balance-transition direction
-- do not claim Balance Perturbation Mode is solved yet
+- Keep the current stable idle and movement-smoke runtime baseline.
+- Keep the truthful phased balance-transition direction.
+- Enforce the "Distal Kinematic" topology as the source of truth for Phase 1.
 
 Active engineering problem:
-
-1. make Phase 1 converge by owned topology/authority shaping, not incidental drift
-2. make Phase 2 root-on deterministic and spike-safe
-3. prevent meaningless retry loops after root-on failure
-4. keep G2 and comparison packaging honest to the current runtime state
-
-Do **not** treat these as solved yet:
-
-- flat-ground walk playback quality
-- slope / ramp-following locomotion fidelity
-- persuasive G2 comparison presentation
-- full balance-mode activation success
-- root-on stability under the new transition contract
+1. Ensure the Distal Kinematic experiment is fully verified through smoke tests and diagnostic logs.
+2. Maintain read-only telemetry to avoid state mutation during classification.
+3. Validate Phase 1 entry with the new stability gates and failure budget.
 
 ## Notes
 
 Known important reference points from this work:
-
-- temporary proof-only logging and earlier identity-check scaffolding were intentionally non-final
-- startup movement lock was diagnostic, not final architecture
-- bridge-owned locomotion remains the intended direction for `BridgeActive`
-- the current runtime/design shift is from broad stabilization effort toward explicit phase-owned balance transition design
-- the latest honest failure point is a repeatable Phase 2 root-on spike, not the older invalid-entry rejection loop
+- The shift from broad stabilization to explicit phase-owned balance transition design is complete.
+- The latest engineering focus is on "truthful" topology enforcement and avoiding ownership thrash.
+- Bridge-owned locomotion remains the intended direction for `BridgeActive`.
+- The current honest failure point is a repeatable Phase 2 root-on spike, not the older invalid-entry rejection loop.
