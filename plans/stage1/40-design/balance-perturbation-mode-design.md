@@ -95,11 +95,13 @@ These are now treated as resolved or largely-resolved contract issues, not the m
 - premature release of upper-body LateValidate hold due to wrong frozen ownership capture
 - dependence on broad `"All"` movement-type writes for topology-critical Phase 1 bones
 
-## 7. Last Confirmed Problem
+## 7. Investigation Surface (Temporary)
 
-The last confirmed major blocker is:
+This section reflects the current investigation focus. These details are temporary and expected to change frequently; they do not form part of the timeless design contract.
 
+### Last Confirmed Failure Mode
 - `phase1_late_validate_upper_body_instability`
+
 
 This is why convergence failure during LateValidate is currently more important than the earlier contract bugs.
 

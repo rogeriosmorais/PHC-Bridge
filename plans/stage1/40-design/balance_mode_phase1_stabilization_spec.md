@@ -211,11 +211,13 @@ But sim-coverage checks must also explicitly compare:
 
 Those two must not be conflated.
 
-### Last confirmed blocker
+## 13.1 Investigation Surface (Temporary)
 
-The last confirmed first meaningful remaining Phase 1 failure is:
+This section reflects the current investigation focus. These details are temporary and expected to change as convergence issues are resolved; they do not form part of the permanent design contract.
 
+### Last Confirmed Failure Mode
 - `phase1_late_validate_sim_coverage_regressed` (specifically `spine_01` and `thigh` promotion issues)
+
 
 This means the docs now require explicit visibility into:
 
