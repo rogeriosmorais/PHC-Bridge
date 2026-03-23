@@ -1122,6 +1122,7 @@ private:
 
 	void TrackDistalBoneOwnershipChange(FName BoneName, EPhysicsMovementType NewOwnership, const FString& CallSiteReason);
 	TMap<FName, EPhysicsMovementType> PreviousDistalBoneIntendedOwnership;
+	TMap<FName, FString> LastDistalClassification;
 	TMap<FName, FPhysAnimPendingDistalOwnershipCheck> PendingDistalOwnershipChecks;
 
 public:

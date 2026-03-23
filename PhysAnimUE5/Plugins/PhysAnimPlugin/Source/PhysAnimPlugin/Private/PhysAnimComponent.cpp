@@ -1183,16 +1183,23 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				BalanceReadyTransition.DistalBoneMismatchTicks.FindOrAdd(BoneName)++;
 			}
 
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnim] DISTAL_EXPERIMENT_NEXTFRAME_STATE: bone=%s intent=%s modifier=%s rawSimulate=%s classification=%s writeReason=%s"),
-				*BoneName.ToString(),
-				GetPhysicsMovementTypeName(Check.IntendedOwnership),
-				GetPhysicsMovementTypeName(CurrentModifierMovementType),
-				bCurrentRawSimulating ? TEXT("Simulating") : TEXT("Kinematic"),
-				*Classification,
-				*Check.CallSiteReason);
+			const bool bClassificationChanged = !LastDistalClassification.Contains(BoneName) || LastDistalClassification[BoneName] != Classification;
+
+			if (bClassificationChanged)
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnim] DISTAL_EXPERIMENT_NEXTFRAME_STATE: bone=%s intent=%s modifier=%s rawSimulate=%s classification=%s writeReason=%s"),
+					*BoneName.ToString(),
+					GetPhysicsMovementTypeName(Check.IntendedOwnership),
+					GetPhysicsMovementTypeName(CurrentModifierMovementType),
+					bCurrentRawSimulating ? TEXT("Simulating") : TEXT("Kinematic"),
+					*Classification,
+					*Check.CallSiteReason);
+				
+				LastDistalClassification.Add(BoneName, Classification);
+			}
 		}
 	}
 

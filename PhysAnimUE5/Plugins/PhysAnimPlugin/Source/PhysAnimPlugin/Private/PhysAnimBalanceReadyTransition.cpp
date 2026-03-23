@@ -287,6 +287,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	DistalBoneMismatchTicks.Empty();
 	DistalMismatchesTransientCount = 0;
 	DistalMismatchesPersistentCount = 0;
+	Owner->LastDistalClassification.Empty();
 	SafePhase2DenialReason.Reset();
 
 	if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
