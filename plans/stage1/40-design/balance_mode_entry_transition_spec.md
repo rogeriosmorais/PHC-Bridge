@@ -67,15 +67,15 @@ Every transition condition must be one of:
 
 If a condition is transition-owned, preflight must not reject forever merely because that condition is currently false.
 
-## 6. Phase 1 interpretation
+## 6. Phase 1 Truth Model Alignment
 
-Phase 1 exists to produce a valid pre-root-on state.
+Phase 1 behavior is governed by the authoritative [Phase 1 / LateValidate Truth Model](file:///f:/NewEngine-AgentB/plans/stage1/40-design/phase1-late-validate-truth-model.md).
 
 Current important rules:
 
-- a Phase 1 attempt may be contract-correct and still physically non-viable
-- the frozen Phase 1 topology record is the contract source of truth once the attempt is accepted
-- live readiness reclassification must not silently rewrite that frozen record during the same attempt
+- A Phase 1 attempt may be contract-correct and still physically non-viable.
+- The frozen Phase 1 topology record is the contract source of truth once the attempt is accepted.
+- Live readiness reclassification must not silently rewrite that frozen record during the same attempt.
 
 ## 7. Certified handoff concept
 
@@ -110,13 +110,13 @@ The entry pipeline has moved through several contract-cleanup steps that are now
 
 These are no longer optional implementation details. They are part of the real transition contract.
 
-## 10. Current leading blocker
+## 10. Current Leading Open Blocker
 
 The current first meaningful remaining blocker after those contract fixes is:
 
-- `phase1_late_validate_sim_coverage_regressed`
+- `phase1_late_validate_upper_body_instability`
 
-So the entry-transition design must now explicitly allow that the accepted topology can be correct while the live sim-coverage evidence still regresses during LateValidate.
+The entry-transition design must now explicitly allow that the accepted topology can be correct while the physical-viability proof (convergence) still fails during LateValidate.
 
 ## 11. Logging contract
 

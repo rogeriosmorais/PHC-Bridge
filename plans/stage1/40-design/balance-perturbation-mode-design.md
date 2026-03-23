@@ -23,6 +23,7 @@ This file is the feature-level overview only.
 The normative runtime contracts live in:
 
 - `plans/stage1/10-specs/ue-bridge-implementation-spec.md`
+- `plans/stage1/40-design/phase1-late-validate-truth-model.md`
 - `plans/stage1/40-design/balance_mode_entry_transition_spec.md`
 - `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
 
@@ -94,15 +95,15 @@ These are now treated as resolved or largely-resolved contract issues, not the m
 - premature release of upper-body LateValidate hold due to wrong frozen ownership capture
 - dependence on broad `"All"` movement-type writes for topology-critical Phase 1 bones
 
-## 7. Current leading open problem
+## 7. Current Leading Open Problem
 
 The current leading blocker is no longer raw ownership confusion.
 
 It is now:
 
-- whether the accepted Phase 1 setup preserves the required live sim coverage during LateValidate
+- `phase1_late_validate_upper_body_instability`
 
-This is why `sim_coverage_regressed` is currently more important than the earlier contract bugs.
+This is why convergence failure during LateValidate is currently more important than the earlier contract bugs.
 
 ## 8. Active-mode requirement
 

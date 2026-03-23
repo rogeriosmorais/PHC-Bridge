@@ -62,60 +62,16 @@ Important rule:
 - `neck_01`
 - `head`
 
-## 4. Accepted Phase 1 topology
+## 4. Phase 1 Truth Model Alignment
 
-Under the current accepted design:
-
-- `pelvis = kinematic`
-- proximal set = simulated
-- distal set = kinematic
-- upper body = kinematic
-
-Expected frozen counts at Phase 1 entry:
-
-- `simCount = 5`
-- `proximalSimCount = 5`
-- `distalSimCount = 0`
-- `upperBodySimCount = 0`
+Phase 1 behavior is governed by the authoritative [Phase 1 / LateValidate Truth Model](file:///f:/NewEngine-AgentB/plans/stage1/40-design/phase1-late-validate-truth-model.md).
 
 Important rules:
 
-- `pelvisSimulating=false` is not, by itself, a deny condition under this topology
-- the frozen Phase 1 topology record is the authoritative contract for Prepare and LateValidate
-- live readiness reclassification must not silently rewrite the frozen Phase 1 ownership contract while the same attempt is still in Phase 1
-
-## 5. Frozen topology capture contract
-
-When Phase 1 is accepted, the runtime must capture one authoritative topology record.
-
-That record must include at minimum:
-
-- root / proximal / distal / upper ownership expectations
-- frozen sim-count expectations
-- upper-body ownership mode
-- whether the accepted topology expects LateValidate upper-body hold
-
-### Required upper-body capture rule
-
-At Phase 1 entry, upper-body ownership must be frozen according to the Phase 1 contract, not according to a live readiness classification that happens to be true on that tick.
-
-Current required behavior:
-
-- if Phase 1 requires upper-body LateValidate hold, the frozen topology record must store:
-  - `upperBodyOwnership = LateValidationKinematicHold`
-
-It must not freeze `upperBodyOwnership = None` merely because the live classification looked root-coupled-ready at capture time.
-
-## 6. Ownership model
-
-Phase 1 ownership evaluation must keep these sources separate:
-
-1. intended ownership
-2. PhysicsControl modifier-record ownership
-3. raw body sim state
-4. frozen Phase 1 topology expectation
-
-These are not interchangeable.
+- `pelvisSimulating=false` is not, by itself, a deny condition under the current topology.
+- The frozen Phase 1 topology record is the authoritative contract for Prepare and LateValidate.
+- Live readiness reclassification must not silently rewrite the frozen Phase 1 ownership contract while the same attempt is still in Phase 1.
+- Ownership evaluation must keep intended/modifier/raw/frozen sources separate as defined in the truth model.
 
 ### Timing rule
 
