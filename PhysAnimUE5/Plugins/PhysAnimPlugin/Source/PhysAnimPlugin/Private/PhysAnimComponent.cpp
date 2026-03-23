@@ -1158,8 +1158,13 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			}
 
 			FString Classification = TEXT("fully_aligned");
-			if (CurrentModifierMovementType == EPhysicsMovementType::Kinematic && !bCurrentRawSimulating)
+			if (Check.IntendedOwnership != EPhysicsMovementType::Kinematic)
 			{
+				Classification = TEXT("not_a_kinematic_experiment_case");
+			}
+			else if (CurrentModifierMovementType == EPhysicsMovementType::Kinematic && !bCurrentRawSimulating)
+			{
+				BalanceReadyTransition.DistalBoneConsecutiveMismatchTicks.Remove(BoneName);
 				if (Check.bRawBodySimulatingAtWrite)
 				{
 					Classification = TEXT("transient_match_after_delay");
@@ -1170,17 +1175,29 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 					Classification = TEXT("fully_aligned");
 				}
 			}
-			else if (CurrentModifierMovementType == EPhysicsMovementType::Simulated)
+			else
 			{
-				Classification = TEXT("modifier_not_yet_kinematic");
-				BalanceReadyTransition.DistalMismatchesPersistentCount++;
-				BalanceReadyTransition.DistalBoneMismatchTicks.FindOrAdd(BoneName)++;
-			}
-			else if (bCurrentRawSimulating)
-			{
-				Classification = TEXT("persistent_raw_simulation");
-				BalanceReadyTransition.DistalMismatchesPersistentCount++;
-				BalanceReadyTransition.DistalBoneMismatchTicks.FindOrAdd(BoneName)++;
+				const int32 MismatchTicks = ++BalanceReadyTransition.DistalBoneConsecutiveMismatchTicks.FindOrAdd(BoneName);
+				constexpr int32 PersistenceThreshold = 2;
+
+				if (MismatchTicks < PersistenceThreshold)
+				{
+					Classification = TEXT("modifier_not_yet_kinematic_pending");
+					BalanceReadyTransition.DistalMismatchesPendingCount++;
+				}
+				else
+				{
+					if (CurrentModifierMovementType == EPhysicsMovementType::Simulated)
+					{
+						Classification = TEXT("persistent_modifier_not_yet_kinematic");
+					}
+					else
+					{
+						Classification = TEXT("persistent_raw_simulation");
+					}
+					BalanceReadyTransition.DistalMismatchesPersistentCount++;
+					BalanceReadyTransition.DistalBonePersistentTicks.FindOrAdd(BoneName)++;
+				}
 			}
 
 			const bool bClassificationChanged = !LastDistalClassification.Contains(BoneName) || LastDistalClassification[BoneName] != Classification;

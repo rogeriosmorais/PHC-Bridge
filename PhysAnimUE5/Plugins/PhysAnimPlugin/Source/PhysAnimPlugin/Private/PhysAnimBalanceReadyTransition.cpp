@@ -285,8 +285,11 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	LastLateValidateBlockReason.Reset();
 	EntryHoldRotations.Empty();
 	DistalBoneMismatchTicks.Empty();
+	DistalBoneConsecutiveMismatchTicks.Empty();
+	DistalBonePersistentTicks.Empty();
 	DistalMismatchesTransientCount = 0;
 	DistalMismatchesPersistentCount = 0;
+	DistalMismatchesPendingCount = 0;
 	Owner->LastDistalClassification.Empty();
 	SafePhase2DenialReason.Reset();
 
@@ -1332,7 +1335,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		
 		FName LongestMismatchBone = NAME_None;
 		int32 MaxMismatchTicks = 0;
-		for (auto& Pair : DistalBoneMismatchTicks)
+		for (auto& Pair : DistalBonePersistentTicks)
 		{
 			if (Pair.Value > MaxMismatchTicks)
 			{
@@ -1344,9 +1347,10 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		UE_LOG(
 			LogPhysAnimBridge,
 			Log,
-			TEXT("[PhysAnimBalance] DISTAL_PHASE1_SUMMARY: transient=%d persistent=%d worstBone=%s worstTicks=%d totalPhase1Time=%.2f"),
+			TEXT("[PhysAnimBalance] DISTAL_PHASE1_SUMMARY: transient=%d persistent=%d pending=%d worstBone=%s worstTicks=%d totalPhase1Time=%.2f"),
 			DistalMismatchesTransientCount,
 			DistalMismatchesPersistentCount,
+			DistalMismatchesPendingCount,
 			*LongestMismatchBone.ToString(),
 			MaxMismatchTicks,
 			PhaseTimeSeconds);
