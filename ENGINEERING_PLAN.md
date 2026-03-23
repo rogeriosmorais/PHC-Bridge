@@ -2,332 +2,219 @@
 
 ## 1. Objective
 
-Build a real-time Unreal Engine demo where physics simulation is the animation system, in two stages:
+Build a real-time demo in **Unreal Engine 5** where **physics simulation is the animation system**, in two stages:
 
-- **Stage 1 (Proof of Quality):** prove physics-driven motion looks fundamentally better than kinematic animation, using mostly UE5 built-in systems plus a minimal PHC bridge.
-- **Stage 2 (GPU Migration):** move the articulated-body simulation from CPU to GPU compute once Stage 1 proves the animation thesis.
+- **Stage 1 (Proof of Quality):** Prove physics-driven locomotion looks fundamentally better than kinematic animation, using mostly UE5 built-in systems plus a small bridge.
+- **Stage 2 (GPU Migration):** Move physics from CPU to GPU compute shaders once Stage 1 proves the visual and control thesis.
 
-Hardware target:
+**Hardware:** Intel i7-14700 + RTX 4070 SUPER.
 
-- Intel i7-14700
-- RTX 4070 SUPER
+### Why Two Stages
 
-## 2. Why the project is split into two stages
+1. **Animation quality** — does physics-driven motion look better?
+2. **GPU utilization** — is GPU execution worth the added complexity?
 
-The project is answering two different questions:
-
-1. does physics-driven animation look better than kinematic animation?
-2. if yes, is that simulation worth migrating to the GPU?
-
-Stage 1 exists to answer the first question cheaply and rigorously. Stage 2 is only justified if Stage 1 succeeds.
+Do not pursue Stage 2 unless Stage 1 succeeds.
 
 ---
 
-## 3. Stage 1 architecture
+## 2. Stage 1 Architecture (all UE5 built-in, small custom bridge)
 
 ```text
+Unreal Engine 5.7.x
+
 UE5 PoseSearch (CPU)
-  -> locomotion reference pose / target context
-PHC policy via NNE (GPU)
-  -> desired joint-relative orientation targets
-UPhysicsControlComponent (CPU)
-  -> control target orientations + angular gains
+  -> target motion context / reference pose
+PHC / ProtoMotions policy via NNE (GPU)
+  -> desired joint-relative action output
+UPhysicsControlComponent (CPU, Experimental)
+  -> orientation and angular control targets
 Chaos Physics (CPU)
-  -> articulated rigid-body simulation
-UPhysicalAnimationComponent (optional / selective)
-  -> visual blending / authoring support where needed
-UE5 rendering + standard gameplay systems
+  -> articulated body simulation, contact, friction, collision
+Optional UPhysicalAnimationComponent / visual blending
+  -> visual transition support only where explicitly allowed
+UE5 Renderer
 ```
 
-### Stage 1 custom code remains intentionally small
+### Important Stage 1 reality
 
-The custom Stage 1 bridge should stay concentrated in `UPhysAnimComponent` and related plugin code.
+Stage 1 is **not** “turn on physics and get stable humanoid balance for free.”
 
-The custom bridge is responsible for:
+It is a **hybrid articulated control problem** built on:
 
-1. gathering runtime body state
-2. packing model observations
-3. running PHC inference through NNE
-4. unpacking actions into target orientations
-5. writing those targets into the runtime control layer
-6. managing the runtime state machine and balance-entry state machine
+- Chaos articulated bodies
+- Physics Control targets
+- contact-rich foot interactions
+- mixed kinematic/simulated ownership
+- staged authority transfer
+- model inference + retargeting
 
-The bridge is not supposed to replace Chaos, Physics Control, or general engine physics infrastructure.
+UE provides the pieces, but not a complete stable humanoid-balance stack. The docs and implementation must therefore treat balance entry as a strict contract and a physical-viability experiment, not as a trivial engine feature.
 
----
+### Engine-grounded constraints
 
-## 4. Stage 1 architecture direction: transitional now, balance-first later
+These points must be treated as part of the Stage 1 design basis:
 
-### 4.1 Current practical architecture
+- `UPhysicsControlComponent` is **Experimental** in UE.
+- Physics **sub-stepping materially affects** ragdoll and complex articulated stability.
+- `Kinematic` vs `Simulated` is a real ownership boundary, not a cosmetic tuning choice.
+- Constraint damping and body damping are not universal “make it stable” knobs; they act in different ways and do not replace a correct ownership/control design.
 
-Right now the project still has two sequential runtime chains:
+### The only custom bridge code
 
-1. **normal bridge startup / stabilization bring-up**
-2. **balance-entry conversion**
+A small C++ plugin (`PhysAnimPlugin`) that each frame:
 
-This is acceptable during Stage 1 stabilization because it isolates bridge bootstrapping from balance-entry contract debugging.
+1. gathers authoritative body state
+2. packs the observation tensors expected by the selected policy
+3. runs NNE inference
+4. unpacks the model action output
+5. writes the resulting control targets into the UE runtime path
 
-### 4.2 Long-term architecture target
-
-The final target is **always-on balance**.
-
-That means balance should eventually become the normal runtime condition, not a special mode layered on top of a separate long-lived `BridgeActive` world.
-
-The likely long-term shape is:
-
-- balance startup
-- balance settle
-- balance active
-- balance recovery
-- safe deny / fallback
-
-The current split should therefore be treated as a transitional scaffold, not the final architecture.
-
-### 4.3 Practical rule for Stage 1
-
-Do not rewrite into a single balance-first architecture yet.
-
-First get the current balance-entry path contract-correct and physically credible enough to prove or falsify the Stage 1 thesis.
-
-Then collapse the architecture later if Stage 1 succeeds.
+The plugin also owns the balance-entry runtime contract and its transition diagnostics.
 
 ---
 
-## 5. Stage 1 bridge problem statement
+## 3. Stage 1 bridge problem statement
 
-The bridge problem has two different layers and they must stay separate.
+The bridge has two separate questions:
 
-### 5.1 Contract correctness
+### A. Contract correctness
+Can Unreal reproduce the exact runtime ownership, write-routing, and convergence contract that the selected Stage 1 path requires?
 
-The bridge is contract-correct when:
+### B. Physical viability
+Even if the contract is correct, is the accepted Phase 1 frozen setup physically viable under current:
 
-- request / acceptance behavior is correct
-- runtime states are explicit and truthful
-- accepted Phase 1 topology is explicit and preserved
-- normal policy writes and hold-path writes are separated correctly
-- convergence checks use authoritative post-update telemetry
-- freeze lifetime covers the full Phase 1 attempt
-- terminal outcomes are specific and truthful
+- control tuning
+- contact behavior
+- sub-step regime
+- topology ownership
+- hold/reference behavior
 
-### 5.2 Physical viability
-
-The bridge is physically viable when:
-
-- the accepted frozen Phase 1 setup remains dynamically quiet enough to survive Prepare and LateValidate
-- contact behavior does not immediately destabilize the sim set
-- tuning / target writes do not inject unacceptable energy
-- the accepted setup has enough stability margin to continue into later balance phases
-
-A Phase 1 attempt can be contract-correct and still physically non-viable.
-
-That is exactly where the project currently is.
+These questions must stay separate in both code and docs.
 
 ---
 
-## 6. Current Stage 1 conclusion
+## 4. Current Stage 1 balance-entry interpretation
 
-The project is no longer mainly blocked by ambiguous state-machine behavior.
+The long-term goal is **always-on balance**.
 
-The current central hypothesis is now:
+That means the current architecture should be treated as **transitional**:
 
-> Is the accepted Phase 1 frozen setup physically viable under the current control, tuning, and contact conditions?
+- normal bridge startup / bring-up gets the runtime alive
+- balance entry converts that live runtime into a frozen Phase 1 contract
 
-That hypothesis is not yet proven.
+This is acceptable for now, but not the final architecture.
 
-Current logs indicate that the accepted Phase 1 setup can be contract-correct and still fail very quickly due to sim-body instability.
+Long-term target:
 
-This is progress, not regression, because the project can now distinguish architectural mistakes from physical viability failure.
+```text
+balance startup
+-> balance settle
+-> balance active
+-> balance recovery / safe deny
+```
 
----
+Not:
 
-## 7. Stage 1 runtime contract summary
-
-Stage 1 must preserve these high-level rules:
-
-- normal bridge startup may use staged non-root bring-up
-- balance entry is a separate runtime contract layered on top of a running bridge
-- balance entry must leave plain `BridgeActive`
-- Phase 1 uses a dedicated accepted topology snapshot
-- Prepare and LateValidate are hold-only from the control-write side
-- convergence and admission checks use cached post-update telemetry
-- safe denial is an explicit valid terminal outcome
-- the balance smoke must never silently end in plain `BridgeActive`
-
-The detailed contract is frozen in the Stage 1 spec files under `plans/stage1/10-specs/`.
+```text
+generic bridge runtime
+-> special balance mode layered on later
+```
 
 ---
 
-## 8. Current accepted Phase 1 topology
+## 5. Current Stage 1 Phase 1 contract summary
 
-Under the current design the accepted Phase 1 topology is:
+Under the current design, the accepted Phase 1 topology is:
 
-- root: kinematic
-- proximal set: simulated
-- distal set: simulated
-- upper body: kinematic
+- `root = kinematic`
+- `proximal = simulated`
+- `distal = simulated`
+- `upper = kinematic`
 
-This means the current design does **not** require pelvis/root simulation as an entry condition.
+This means:
 
-It does require:
+- pelvis/root may remain kinematic in Phase 1
+- `pelvisSimulating=false` is not, by itself, a Phase 1 failure
+- normal policy writes must be suppressed over the accepted Phase 1 set
+- only the explicit hold path may publish to allowed kinematic bones
+- Prepare / LateValidate decisions must use a **post-update authoritative convergence snapshot**
+- freeze lifetime must cover the **full Phase 1 attempt**
 
-- valid root/pelvis-side body source
-- valid uprightness source
-- correct ownership snapshot
-- sufficient dynamic stability margin
-
----
-
-## 9. Current unresolved Stage 1 risk
-
-The main unresolved risk is not “can the state machine transition.”
-
-The main unresolved risk is:
-
-- whether the accepted Phase 1 frozen setup is dynamically stable enough to survive LateValidate
-
-Likely contributors include:
-
-- floor contact impulses at the distal chain
-- tuning / gain choices
-- hold-set scope
-- admission thresholds that are still too weak
-- the topology itself being physically too aggressive under current conditions
+The current unsolved question is no longer primarily state-machine ambiguity. It is whether this accepted frozen Phase 1 setup is physically viable.
 
 ---
 
-## 10. What not to revisit casually
+## 6. Development guidance
 
-The following areas are now provisionally settled and should not be reopened without new evidence:
+### Phase 0 / Phase 1 rules
 
-- hold-path vs normal policy-write separation
-- freeze lifetime contract
-- authoritative root-tilt source correction
-- post-update convergence snapshot timing
-- pelvis simulation as a required gate under `root=kin`
+Before any further large refactor, preserve the following distinction:
 
-The remaining work should focus on physical viability, not rebreaking solved contract behavior.
+- **solved / mostly solved:** queueing, explicit acceptance, hold-vs-policy separation, freeze lifetime, root tilt source correction, post-update convergence snapshot timing
+- **unsolved:** physical viability of the accepted Phase 1 setup
 
----
+Do not re-open solved contract areas casually.
 
-## 11. Stage 1 document authority
+### Evidence quality rule
 
-Stage 1 uses a strict hierarchy:
+A “successful-looking” run is not enough. Stage 1 evidence must state:
 
-1. `plans/stage1/10-specs/*`
-2. `STAGE1_PLAN.md`
-3. `plans/stage1/40-design/*`
-
-`10-specs` defines the authoritative runtime contract.
-
-`STAGE1_PLAN.md` defines execution focus and interpretation rules.
-
-`40-design` may explain implementation sequencing, but it may not introduce a runtime contract absent from `10-specs`.
+- sub-step regime used
+- topology at each entry phase
+- whether policy writes were suppressed
+- whether hold-only writes remained
+- which body set produced the worst motion
+- whether failure was contract-level or physical-level
 
 ---
 
-## 12. Development phases
+## 7. Key risks
 
-### Phase 0: feasibility
-
-Goals:
-
-- lock the PHC observation/action contract
-- prove the bridge can write usable targets into UE
-- verify SMPL <-> UE mapping is sane
-- verify Chaos + Physics Control can be driven stably enough for Stage 1 experiments
-
-### Phase 1: one-actor bridge runtime
-
-Goals:
-
-- make the bridge runtime alive and measurable
-- make the balance-entry state machine explicit
-- make the balance smoke end in either active balance or safe deny
-- eliminate ambiguous outcomes
-
-### Phase 2: physical viability pass
-
-Goals:
-
-- test whether the accepted Phase 1 setup is viable
-- tighten admission / deny logic around real body-motion margins
-- revise contact assumptions, tuning, or topology only if logs prove the current setup is non-viable
-
-### Phase 3: Stage 1 presentation
-
-Goals:
-
-- produce a convincing proof-of-quality demo
-- compare the physics-driven path against kinematic motion clearly enough to justify or reject Stage 2
+| Risk | Likelihood | Impact | Notes |
+|---|---:|---:|---|
+| Sim-to-sim gap (training simulator -> Chaos) | High | High | Likely permanent tuning burden |
+| Phase 1 contract correct but physically non-viable | High | High | Current leading hypothesis |
+| Foot/contact instability dominates distal chain | High | High | Likely major factor in entry failure |
+| Physics Control limitations / Experimental behavior | Medium | Medium | Must not be treated as a black-box stable motor system |
+| Over-constrained kinematic hold set destabilizes sim set | Medium | High | Needs evidence-driven review |
+| Weak admission margin allows LateValidate to start too early | Medium | Medium | Should be treated separately from deny thresholds |
 
 ---
 
-## 13. Decision gates
+## 8. Acceptance view for Stage 1
 
-### G1 — early feasibility
+Stage 1 balance entry is only truly “working” when all are true in the same run:
 
-Stop if:
-
-- the bridge contract cannot be locked cleanly
-- target writes cannot drive the runtime meaningfully
-- the mapping is obviously wrong
-- articulated-body control is obviously unusable
-
-### G2 — contract-correct balance entry
-
-Do not call Stage 1 “working” until:
-
-- request / accept path is explicit
-- topology is explicit
-- suppression contract is correct
-- convergence snapshot is authoritative
+- request / preflight / entry state machine are correct
+- accepted topology is correct
+- suppression and hold-only semantics are correct
 - freeze lifetime is correct
-- terminal outcomes are specific and truthful
+- post-update convergence snapshot is correct
+- Prepare -> LateValidate admission requires real stability margin
+- LateValidate survives long enough to show the accepted setup is physically viable
+- the runtime can either activate or deny safely with truthful reasons
 
-### G3 — physical viability
-
-Do not call Phase 1 viable until:
-
-- Prepare → LateValidate admission uses a real stability margin
-- LateValidate survives without immediate body-motion deny
-- the accepted sim set does not explode as soon as the frozen setup is tested
-
-### G4 — Stage 1 thesis
-
-Proceed to Stage 2 only if the final physics-driven result is convincingly better than the kinematic baseline.
+Until then, Stage 1 remains an active balance-entry investigation rather than a solved runtime.
 
 ---
 
-## 14. Performance budget
+## 9. Project structure
 
-Stage 1 still targets a comfortable 60 FPS budget on the listed hardware.
-
-The existing budget assumptions remain directionally valid, but the more important Stage 1 question remains animation quality and balance viability, not final micro-optimization.
-
----
-
-## 15. Risk register update
-
-### Previously dominant risks
-
-- balance entry hidden inside ambiguous `BridgeActive`
-- no dedicated topology source of truth
-- hold/path semantics blurred with policy writes
-- stale telemetry driving admission
-- freeze released at the wrong time
-
-Those are now substantially reduced.
-
-### Currently dominant risk
-
-- the accepted frozen Phase 1 setup may simply not be viable under present contact/tuning conditions
-
-This is the main engineering question now.
-
----
-
-## 16. Long-term note
-
-If Stage 1 succeeds, the project should gradually collapse toward a single balance-first runtime instead of preserving a permanent split between generic bridge runtime and balance runtime.
-
-For now, finish the current path just enough to prove or falsify the balance thesis.
+```text
+NewEngine/
+|-- ENGINEERING_PLAN.md
+|-- STAGE1_PLAN.md
+|-- plans/stage1/10-specs/
+|   |-- bridge-spec.md
+|   |-- ue-bridge-implementation-spec.md
+|   `-- balance-mode-entry-spec.md
+|-- plans/stage1/40-design/
+|   |-- balance-perturbation-mode-design.md
+|   |-- balance_mode_entry_transition_spec.md
+|   |-- balance_mode_phase1_stabilization_spec.md
+|   |-- balance_mode_phase2.md
+|   `-- ankle-constraint-authoring-audit-plan.md
+`-- PhysAnimUE5/
+    `-- Plugins/PhysAnimPlugin/
+```

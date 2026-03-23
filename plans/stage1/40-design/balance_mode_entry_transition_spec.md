@@ -1,12 +1,11 @@
 # Balance Mode Entry / Transition Spec
 
-Status: Authoritative implementation spec
+Status: Authoritative implementation design  
 Scope: Stage 1 runtime entry path into Balance Perturbation Mode
-Audience: runtime, controls, debugging, and validation work for PhysAnim bridge
 
 ## 1. Purpose
 
-This document specifies the entry and transition contract for Balance Perturbation Mode.
+This document specifies the entry and transition design for Balance Perturbation Mode.
 
 It defines:
 
@@ -19,33 +18,18 @@ It defines:
 - failure and recovery
 - activation boundary
 
-This document is authoritative for how the runtime gets from `BridgeActive` into active Balance Perturbation Mode.
+It also reflects the current state of the investigation:
+many earlier problems were contract problems; the remaining leading issue is the physical viability of the accepted Phase 1 setup.
 
-The companion documents are:
-
-- `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
-- `plans/stage1/40-design/balance_mode_phase2.md`
-
-## 2. Feature relationship
-
-The feature-level purpose of balance mode is defined in:
-
-- `plans/stage1/40-design/balance-perturbation-mode-design.md`
-
-This document defines the runtime contract for entering that feature.
-
-## 3. Core rule
+## 2. Core rule
 
 Balance Perturbation Mode is not active until the transition succeeds.
 
-A queued request is not active mode.
-Phase 1 is not active mode.
+A queued request is not active mode.  
+Phase 1 is not active mode.  
 Phase 2 is not active mode.
-Phase 3 is not active mode.
 
-The runtime may claim active balance mode only after transition success and explicit activation.
-
-## 4. Required runtime states
+## 3. Required runtime states
 
 Minimum authoritative state set:
 
@@ -55,64 +39,23 @@ Minimum authoritative state set:
 - `BalanceTransition_Phase1_Prepare`
 - `BalanceTransition_Phase1_LateValidate`
 - `BalanceTransition_Phase2_RootOn`
-- `BalanceTransition_Phase3_Settle`
 - `BalancePerturbationActive`
 - `BalanceTransitionFailed`
+- `SafeDenied`
 
-## 5. Request handling contract
+## 4. Queueing rules
 
-A balance request may result in exactly one of these outcomes:
-
-1. accepted and queued
-2. rejected as invalid context
-3. transition begins
-4. transition fails and returns to `BridgeActive`
-5. transition succeeds and mode becomes active
-
-Not allowed:
-
-- silent drop
-- endless queue/reject oscillation
-- implicit transition without authoritative state change
-- claiming success while pelvis/root is still kinematic
-
-## 6. Queueing rules
-
-A request must be queued, not rejected, when the runtime is in valid bridge context but temporarily not eligible.
+A balance request must be queued, not rejected, when the runtime is in a valid bridge context but temporarily not eligible.
 
 Queue-worthy blockers include:
 
-- final-group control ramp inactive
+- control ramp incomplete
 - policy influence below required threshold
 - startup handoff incomplete
-- control-authority ramp incomplete
 
 These are temporary blockers, not failures.
 
-A queued request remains pending until one of these occurs:
-
-- transition starts
-- runtime exits `BridgeActive`
-- request is cancelled
-- a hard invalidation occurs
-
-Only one queued balance request may exist at once.
-
-## 7. Preflight contract
-
-Preflight begins only after queue gates are satisfied.
-
-Preflight must answer:
-
-- is the source runtime state valid
-- are required controls and modifiers present
-- is the runtime in a topology that can converge
-- is there a valid owned path to Phase 1 and Phase 2
-- is the handoff path coherent
-
-Preflight is a single evaluation step, not a passive polling loop.
-
-## 8. Ownership rule
+## 5. Ownership rule
 
 Every transition condition must be one of:
 
@@ -122,276 +65,74 @@ Every transition condition must be one of:
 
 If a condition is transition-owned, preflight must not reject forever merely because that condition is currently false.
 
-## 9. Canonical shell/capsule authority chain
+## 6. Phase 1 interpretation
 
-The authoritative shell/capsule ownership chain for balance entry and active mode is:
+Phase 1 exists to produce a valid pre-root-on state.
 
-- `GameplayShellAuthority -> TransitionOwnedShellLocked -> BalanceModeRuntimeOwner`
+Current important rule:
 
-This chain must be preserved across Phase 1, Phase 2, Phase 3, and active mode.
+- a Phase 1 attempt may be contract-correct and still physically non-viable
 
-## 10. Owner map
+This document therefore treats Phase 1 output as both:
 
-Minimum owner map:
+- a contract product
+- and a viability test result
 
-- `finalGroupRampActive` owner = BridgeActive bring-up controller
-- `policyInfluenceAtThreshold` owner = BridgeActive policy influence ramp controller
-- `transitionTopologyAchieved` owner = Phase 1 body-modifier topology shaping
-- `policySuppressionAppliedToTransitionSet` owner = Phase 1 transition policy-routing logic
-- `pendingCachedResetsDischargedOrPrevented` owner = Phase 1 reset suppression logic
-- `upperBodyOwnershipModeStabilized` owner = Phase 1 upper-body ownership controller
-- `TransitionOwnedShellLocked` active = balance-entry shell-authority transfer lifecycle
-- `shellReferenceReanchoredBeforeProof` = balance-entry shell-authority transfer lifecycle
-- `startupUnlockSuppressedDuringEntry` = startup/gameplay shell-lock arbitration logic
-- `PreRootOnShellSafetyProof` inputs become valid = Phase 1 topology shaping plus shell-authority transfer and shell-lock maintenance
-- `pelvisBodySimulating` = Phase 2 root-on body-modifier flip
-- `postRootOnTopologyPreserved` = Phase 2 body-modifier/runtime-mode enforcement
-- `postRootOnShellAuthorityPreserved` = Phase 2 and Phase 3 shell-lock maintenance
-- active-mode ownership handoff = Phase 3 settle logic
+## 7. Certified handoff concept
 
-## 11. Phase 1 boundary
+Phase 1 should emit a certified handoff payload only when the contract conditions are satisfied.
 
-Phase 1 exists to make root-on safe.
+That payload must not imply more than the runtime has actually proven.
 
-This document does not define the exact Phase 1 shaping procedure.
-That contract is defined in:
+In particular:
+a clean topology + suppression + quiet proof does not automatically prove dynamic viability unless the accepted setup has survived the required admission and validation margins.
 
-- `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
+## 8. Safe denial rule
 
-This document only defines that Phase 1 must emit a certified handoff payload before Phase 2 may begin.
+The pipeline must support explicit safe denial.
 
-## 12. Certified handoff payload
+Safe denial is valid when:
 
-Phase 1 must emit a certified handoff payload containing at minimum:
+- entry contract is satisfied enough to make a truthful decision
+- but the mode cannot proceed safely
 
-- handoff topology classification
-- `simCount`
-- `proximalSimCount`
-- `distalSimCount`
-- policy suppression state
-- control-authority settled state
-- max target delta
-- mean target delta
-- quiet proof duration
-- late-validation sustain duration
-- upper-body ownership mode
-- upper-body stability summary
-- shell authority mode
-- whether shell reference was re-anchored
-- whether shell reference was reseeded after lock
-- whether startup/gameplay ownership stayed suppressed
-
-Phase 2 must consume this payload rather than infer readiness from time alone.
-
-## 13. Valid handoff classifications
-
-The documented handoff classes are:
-
-- `UpperOnlySafeDenyHandoff`
-- `RootCoupledReadyHandoff`
-
-Interpretation rule:
-
-- `UpperOnlySafeDenyHandoff` is valid for safe denial
-- `RootCoupledReadyHandoff` is the first topology class that may truthfully permit root-on
-
-## 14. Handoff invalidation
-
-Phase 1 readiness is revocable.
-
-If any certified handoff field regresses before or during Phase 2 entry, the runtime must:
-
-- invalidate readiness
-- log the invalidation reason
-- deny Phase 2 or return to Phase 1 depending on ownership
-
-Invalidating regressions include:
-
-- topology no longer matches certified topology
-- sim coverage regresses
-- policy suppression no longer holds
-- target continuity exceeds certified bounds
-- cached reset or topology flip becomes pending
-- shell lock is released or reseeded
-- gameplay shell/capsule authority returns
-
-## 15. Phase 2 boundary
-
-Phase 2 governs root-on and the immediate guard window.
-
-The exact Phase 2 procedure is defined in:
-
-- `plans/stage1/40-design/balance_mode_phase2.md`
-
-This document only defines that Phase 2 may begin only from a still-valid certified handoff and that Phase 2 may deny safely before root-on.
-
-## 16. Safe denial rule
-
-The transition pipeline must support a safe denial path.
-
-If the runtime reaches a valid Phase 1 success state that is not root-on-ready, or if the root-on proof is absent or invalid, the runtime must deny safely rather than attempt root-on.
-
-Denial is valid.
-
-A denial is not a root-on failure.
-
-## 17. Phase 3 boundary
-
-Phase 3 is the bounded settle window after root-on.
-
-Phase 3 must prove:
-
-- pelvis/root remains simulating
-- topology remains preserved
-- shell authority remains coherent
-- no abort threshold is exceeded
-- active-mode ownership handoff is coherent
-
-Only after Phase 3 success may the runtime activate balance mode.
-
-### 17.1 Phase 3 required topology
-
-During `BalanceTransition_Phase3_Settle`, the required topology is:
-
-- `pelvis` = simulated
-- proximal set = simulated
-- distal set = kinematic
-- upper-body ownership mode = unchanged from the certified Phase 1 handoff and preserved through Phase 2
-
-### 17.2 Phase 3 shell authority owner
-
-During Phase 3, the required shell authority owner remains:
-
-- `TransitionOwnedShellLocked`
-
-Phase 3 may not hand shell/capsule authority back to gameplay ownership.
-
-### 17.3 Phase 3 settle completion proof
-
-Required proof object:
-
-- `Phase3SettleProof`
-
-Phase 3 succeeds only if all required settle conditions remain true continuously for:
-
-- `Phase3SettleRequiredSeconds`
-
-Minimum Phase 3 settle conditions:
-
-- root sim state preserved
-- post-root-on topology preserved
-- shell lock preserved
-- no shell reference reseed
-- no startup/gameplay ownership reclaim
-- no reset pending
-- no topology flip pending
-- no locomotion entry
-- no material shell correction
-- no guard-window or settle-window abort threshold exceeded
-
-### 17.4 Phase 3 failure classes
-
-Minimum Phase 3 failures:
-
-- `phase3_topology_regressed`
-- `phase3_shell_lock_lost`
-- `phase3_shell_reference_reseeded`
-- `phase3_startup_or_gameplay_authority_reclaimed`
-- `phase3_material_shell_correction`
-- `phase3_post_root_on_instability`
-- `phase3_no_convergence_path`
-
-## 18. Activation contract
-
-Activation must do all of the following:
-
-- explicit authoritative state change to `BalancePerturbationActive`
-- explicit “mode active” log
-- enable perturbation scheduler
-- enable active-mode diagnostics
-- hand off authority to the active-mode owner
-- stop transition-only behavior
-
-Active mode is valid only after all of the following are true:
-
-- certified `RootCoupledReadyHandoff` was achieved
-- Phase 2 root-on succeeded
-- Phase 3 settle succeeded
-- shell/capsule authority was handed off to `BalanceModeRuntimeOwner`
-
-The mode is not active before this point.
-
-## 19. Recovery contract
+## 9. Recovery contract
 
 When transition fails, recovery must:
 
-- stop perturbation scheduling
-- clear transition-local suppression
-- clear transition-local timers
-- clear transition-local cached reset state
-- restore intended `BridgeActive` topology
-- clear transient hazard flags
+- stop transition-only behaviors
+- clear transition-local timers and suppression
+- restore coherent `BridgeActive`
 - return to one coherent state only:
   - `BridgeActive`
-  - or `BalanceTransitionFailed`
+  - `BalanceTransitionFailed`
+  - or `SafeDenied`
 
-Recovery is incomplete unless the runtime is coherent again.
+## 10. Logging contract
 
-## 20. Automatic retry rule
+Required one-shot logs include:
 
-Automatic retry is permitted only if all are true:
-
-- failure class is retryable
-- recovery completed
-- recovery restored coherent `BridgeActive`
-- something material changed
-- fresh quiet proof occurred after recovery
-- retry cooldown elapsed
-- retry budget is not exceeded
-
-If these are not true, the runtime must not automatically loop.
-
-## 21. Logging contract
-
-Required one-shot logs:
-
-- request queued + reason
-- queue gate satisfied
+- request queued
+- queue gates satisfied
 - preflight begin
-- preflight reject + reason
-- transition phase changes
-- Phase 1 handoff summary
+- preflight reject / accept
+- phase changes
+- Phase 1 summary
 - Phase 2 deny / root-on summary
-- Phase 3 settle success or failure
 - activation
-- transition cleanup summary
-- shell-authority transfer begin / success / failure
+- cleanup summary
 
-Required retry-loop logs:
+The logs must make it possible to tell whether failure was:
 
-- why retry is allowed or denied
-- what changed
-- whether fresh quiet proof was re-established
-- remaining retry budget
+- a contract failure
+- or a physical-viability failure
 
-## 22. Invariants
+## 11. Invariants
 
 These must always hold:
 
 - queued requests must have a real future satisfaction path
 - transition-owned conditions must not be treated as permanent rejection reasons
-- balance mode cannot be marked active while pelvis/root is kinematic
+- active mode cannot be claimed before real transition success
 - failed transition must restore coherent `BridgeActive`
-- repeated Phase 2 spikes must not brute-force through retries without new evidence
-- shell/capsule authority must be owned explicitly at each phase boundary
-
-## 23. Acceptance criteria
-
-This spec is satisfied only when:
-
-- queued requests converge
-- requests do not loop forever
-- transition ownership is explicit
-- safe denial works
-- active mode is entered only after real transition success
-- logs are compact and decisive
+- retries must not brute-force through unchanged physical failure
