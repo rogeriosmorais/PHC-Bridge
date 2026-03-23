@@ -23,9 +23,9 @@ This file is the feature-level overview only.
 The normative runtime contracts live in:
 
 - `plans/stage1/10-specs/ue-bridge-implementation-spec.md`
-- `plans/stage1/40-design/phase1-late-validate-truth-model.md`
-- `plans/stage1/40-design/balance_mode_entry_transition_spec.md`
-- `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
+- `./phase1-late-validate-truth-model.md`
+- `./balance_mode_entry_transition_spec.md`
+- `./balance_mode_phase1_stabilization_spec.md`
 
 Interpretation rule:
 
@@ -95,11 +95,9 @@ These are now treated as resolved or largely-resolved contract issues, not the m
 - premature release of upper-body LateValidate hold due to wrong frozen ownership capture
 - dependence on broad `"All"` movement-type writes for topology-critical Phase 1 bones
 
-## 7. Current Leading Open Problem
+## 7. Last Confirmed Problem
 
-The current leading blocker is no longer raw ownership confusion.
-
-It is now:
+The last confirmed major blocker is:
 
 - `phase1_late_validate_upper_body_instability`
 

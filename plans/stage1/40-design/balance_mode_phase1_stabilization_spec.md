@@ -64,12 +64,15 @@ Important rule:
 
 ## 4. Phase 1 Truth Model Alignment
 
-Phase 1 behavior is governed by the authoritative [Phase 1 / LateValidate Truth Model](file:///f:/NewEngine-AgentB/plans/stage1/40-design/phase1-late-validate-truth-model.md).
+Phase 1 behavior is governed by the authoritative [Phase 1 / LateValidate Truth Model](./phase1-late-validate-truth-model.md).
 
 Important rules:
 
 - `pelvisSimulating=false` is not, by itself, a deny condition under the current topology.
 - The frozen Phase 1 topology record is the authoritative contract for Prepare and LateValidate.
+- **Accepted Phase 1 Topology**: Root=Kinematic, Proximal=Simulated, Distal=Kinematic, UpperBody=Kinematic.
+- **Expected Sim Counts**: `proximalSimCount = 5`, `distalSimCount = 0`, `upperBodySimCount = 0`, `totalSimCount = 5`.
+- **Upper-Body Hold**: Must use `LateValidationKinematicHold` frozen from the Phase 1 contract.
 - Live readiness reclassification must not silently rewrite the frozen Phase 1 ownership contract while the same attempt is still in Phase 1.
 - Ownership evaluation must keep intended/modifier/raw/frozen sources separate as defined in the truth model.
 
@@ -163,6 +166,15 @@ LateValidate may deny for at least these named reasons:
 - `phase1_late_validate_sim_coverage_regressed`
 - body-motion instability or other equivalent physical-viability reasons
 
+### Required LateValidate Gates
+
+The transition to Phase 2 requires specific proof from these operational gates:
+
+1. **[bringUp]**: Final stabilization group control alpha must be >= 1.0 (settled).
+2. **[shellSafety]**: Multi-vector proof of shell stability (offset, velocity, growth) and authority lock/reanchor.
+3. **[expectedRelease]**: Satisfactory sustain duration for both LateValidate and ShellHold clocks.
+4. **[readyProven]**: Final aggregate signal combining all the above plus `RootCoupledReady` classification.
+
 ### Current resolved issue
 
 `phase1_late_validate_upper_body_instability` caused by prematurely freezing `upperBodyOwnership=None` is now treated as a resolved contract bug, not the current leading blocker.
@@ -188,11 +200,11 @@ But sim-coverage checks must also explicitly compare:
 
 Those two must not be conflated.
 
-### Current leading blocker
+### Last confirmed blocker
 
-The current first meaningful remaining Phase 1 failure is:
+The last confirmed first meaningful remaining Phase 1 failure is:
 
-- `phase1_late_validate_sim_coverage_regressed`
+- `phase1_late_validate_sim_coverage_regressed` (specifically `spine_01` and `thigh` promotion issues)
 
 This means the docs now require explicit visibility into:
 

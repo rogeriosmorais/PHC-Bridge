@@ -17,11 +17,11 @@ Balance entry is a distinct runtime contract layered on top of a running bridge.
 
 The current leading question is no longer whether the runtime can represent entry at all.
 
-The current leading question is whether the accepted Phase 1 frozen setup is physically viable once the contract is enforced correctly.
+The last confirmed major blocker is whether the accepted Phase 1 frozen setup is physically viable once the contract is enforced correctly. This focuses on `phase1_late_validate_upper_body_instability` as the primary gate.
 
 ## Phase 1 Truth Model Alignment
 
-Phase 1 behavior is governed by the authoritative [Phase 1 / LateValidate Truth Model](file:///f:/NewEngine-AgentB/plans/stage1/40-design/phase1-late-validate-truth-model.md).
+Phase 1 behavior is governed by the authoritative [Phase 1 / LateValidate Truth Model](../40-design/phase1-late-validate-truth-model.md).
 
 The accepted Phase 1 topology is:
 

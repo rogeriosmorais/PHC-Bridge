@@ -69,7 +69,7 @@ If a condition is transition-owned, preflight must not reject forever merely bec
 
 ## 6. Phase 1 Truth Model Alignment
 
-Phase 1 behavior is governed by the authoritative [Phase 1 / LateValidate Truth Model](file:///f:/NewEngine-AgentB/plans/stage1/40-design/phase1-late-validate-truth-model.md).
+Phase 1 behavior is governed by the authoritative [Phase 1 / LateValidate Truth Model](./phase1-late-validate-truth-model.md).
 
 Current important rules:
 
@@ -110,13 +110,13 @@ The entry pipeline has moved through several contract-cleanup steps that are now
 
 These are no longer optional implementation details. They are part of the real transition contract.
 
-## 10. Current Leading Open Blocker
+## 10. Last Confirmed Blocker
 
 The current first meaningful remaining blocker after those contract fixes is:
 
 - `phase1_late_validate_upper_body_instability`
 
-The entry-transition design must now explicitly allow that the accepted topology can be correct while the physical-viability proof (convergence) still fails during LateValidate.
+The entry-transition design must now explicitly allow that the accepted topology can be correct while the physical-viability proof (convergence) still fails during LateValidate. This is now driven by the consolidated observed-violation gate for upper-body bones.
 
 ## 11. Logging contract
 
