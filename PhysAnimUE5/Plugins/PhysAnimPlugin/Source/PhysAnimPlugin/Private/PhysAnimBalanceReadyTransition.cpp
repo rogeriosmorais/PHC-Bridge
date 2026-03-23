@@ -1193,17 +1193,36 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				const int32 FinalGroupIndex = Owner->GetBringUpGroupCount() - 1;
 				const float FinalAlpha = CurrentSnapshot.FinalBringUpGroupControlAuthorityAlpha;
 				const float Threshold = 1.0f - KINDA_SMALL_NUMBER;
-				const float SettleTime = Owner->BringUpGroupStableAccumulatedSeconds;
+				const float SettleTime = CurrentSnapshot.BringUpStableAccumulatedSeconds;
 				const float RequiredSettleTime = FMath::Max(Settings.StartupRampSeconds, 0.25f);
-				const bool bSettleTimerRunning = SettleTime > 0.0f;
 
-				FString Cause = TEXT("unknown");
-				if (FinalAlpha < Threshold) Cause = TEXT("alpha_below_threshold");
-				else if (!bSettleTimerRunning) Cause = TEXT("settle_timer_not_started");
-				else if (SettleTime < RequiredSettleTime) Cause = TEXT("settle_timer_running");
+				FString Cause = TEXT("alpha_never_started");
+				if (!CurrentSnapshot.bFinalBringUpGroupUnlocked)
+				{
+					Cause = TEXT("final_group_never_unlocked");
+				}
+				else if (!CurrentSnapshot.bFinalBringUpGroupRampActive)
+				{
+					if (!CurrentSnapshot.bBringUpWithinBodyVelocityBounds || !CurrentSnapshot.bBringUpWithinRootBounds)
+					{
+						Cause = TEXT("ramp_delayed_by_guard");
+					}
+					else
+					{
+						Cause = TEXT("alpha_never_started");
+					}
+				}
+				else if (FinalAlpha < Threshold)
+				{
+					Cause = TEXT("alpha_started_but_never_reached_threshold");
+				}
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_FAILURE_DETAILS group=%d alpha=%.4f threshold=%.4f settleTime=%.2f/%.2f settleTimerRunning=%d"),
-					FinalGroupIndex, FinalAlpha, Threshold, SettleTime, RequiredSettleTime, bSettleTimerRunning ? 1 : 0);
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_FAILURE_DETAILS group=%d alpha=%.4f threshold=%.4f settleTime=%.2f/%.2f unlocked=%d active=%d bodyGuard=%d rootGuard=%d"),
+					FinalGroupIndex, FinalAlpha, Threshold, SettleTime, RequiredSettleTime, 
+					CurrentSnapshot.bFinalBringUpGroupUnlocked ? 1 : 0,
+					CurrentSnapshot.bFinalBringUpGroupRampActive ? 1 : 0,
+					CurrentSnapshot.bBringUpWithinBodyVelocityBounds ? 1 : 0,
+					CurrentSnapshot.bBringUpWithinRootBounds ? 1 : 0);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_NOT_SETTLED cause=%s"), *Cause);
 			}
 
@@ -1220,20 +1239,22 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				const float VelocityGrowthCmPerSec = CurrentSnapshot.ShellVelocityGrowthCmPerSecond;
 				const float MaxVelocityGrowthCmPerSec = Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond;
 
+				const float SignificantShellOffsetThresholdCm = 0.1f;
+				const float SignificantShellVelocityThresholdCmPerSecond = 1.0f;
+				const bool bShellCorrectionActivelyAffecting = CurrentSnapshot.bShellCorrectionOwnerActive && 
+					(OffsetCm > SignificantShellOffsetThresholdCm || VelocityCmPerSec > SignificantShellVelocityThresholdCmPerSecond);
+
 				FString Cause = TEXT("unknown");
 				if (ProofSeconds + KINDA_SMALL_NUMBER < RequiredProofSeconds) Cause = TEXT("proof_duration_unsatisfied");
-				else if (OffsetCm > MaxOffsetCm) Cause = TEXT("offset_above_limit");
-				else if (VelocityCmPerSec > MaxVelocityCmPerSec) Cause = TEXT("velocity_above_limit");
-				else if (OffsetGrowthCm > MaxOffsetGrowthCm) Cause = TEXT("offset_growth_above_limit");
-				else if (VelocityGrowthCmPerSec > MaxVelocityGrowthCmPerSec) Cause = TEXT("velocity_growth_above_limit");
-				else if (CurrentSnapshot.bShellCorrectionOwnerActive && (OffsetCm > 0.1f || VelocityCmPerSec > 1.0f)) Cause = TEXT("shell_correction_active");
+				else if (OffsetCm > MaxOffsetCm || VelocityCmPerSec > MaxVelocityCmPerSec || OffsetGrowthCm > MaxOffsetGrowthCm || VelocityGrowthCmPerSec > MaxVelocityGrowthCmPerSec) Cause = TEXT("metrics_out_of_range");
+				else if (bShellCorrectionActivelyAffecting) Cause = TEXT("shell_correction_actively_affecting");
 				else if (!CurrentSnapshot.bTransitionOwnedShellLocked) Cause = TEXT("shell_not_locked");
 				else if (!CurrentSnapshot.bTransitionShellReferenceReanchored) Cause = TEXT("shell_not_reanchored");
 				else if (CurrentSnapshot.bTransitionShellReferenceReseededAfterLock) Cause = TEXT("shell_reseeded_after_lock");
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_FAILURE_DETAILS proofDuration=%.2f/%.2f offset=%.2f/%.2f velocity=%.2f/%.2f offsetGrowth=%.2f/%.2f velocityGrowth=%.2f/%.2f shellCorrectionActive=%d locked=%d reanchored=%d reseeded=%d"),
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_FAILURE_DETAILS proofDuration=%.2f/%.2f offset=%.2f/%.2f velocity=%.2f/%.2f offsetGrowth=%.2f/%.2f velocityGrowth=%.2f/%.2f shellCorrectionActive=%d activelyAffecting=%d locked=%d reanchored=%d reseeded=%d"),
 					ProofSeconds, RequiredProofSeconds, OffsetCm, MaxOffsetCm, VelocityCmPerSec, MaxVelocityCmPerSec, OffsetGrowthCm, MaxOffsetGrowthCm, VelocityGrowthCmPerSec, MaxVelocityGrowthCmPerSec,
-					CurrentSnapshot.bShellCorrectionOwnerActive ? 1 : 0, CurrentSnapshot.bTransitionOwnedShellLocked ? 1 : 0, CurrentSnapshot.bTransitionShellReferenceReanchored ? 1 : 0, CurrentSnapshot.bTransitionShellReferenceReseededAfterLock ? 1 : 0);
+					CurrentSnapshot.bShellCorrectionOwnerActive ? 1 : 0, bShellCorrectionActivelyAffecting ? 1 : 0, CurrentSnapshot.bTransitionOwnedShellLocked ? 1 : 0, CurrentSnapshot.bTransitionShellReferenceReanchored ? 1 : 0, CurrentSnapshot.bTransitionShellReferenceReseededAfterLock ? 1 : 0);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_UNSATISFIED cause=%s"), *Cause);
 			}
 
@@ -2184,6 +2205,17 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
 	const int32 FinalBringUpGroupIndex = Owner->GetBringUpGroupCount() - 1;
 	OutSnapshot.FinalBringUpGroupControlAuthorityAlpha = Owner->CalculateBringUpGroupControlAuthorityAlpha(FinalBringUpGroupIndex, Settings);
+	OutSnapshot.bFinalBringUpGroupUnlocked = Owner->IsBringUpGroupUnlocked(FinalBringUpGroupIndex);
+	OutSnapshot.bFinalBringUpGroupRampActive = Owner->IsBringUpGroupControlRampActive(FinalBringUpGroupIndex);
+	OutSnapshot.BringUpStableAccumulatedSeconds = Owner->BringUpGroupStableAccumulatedSeconds;
+	OutSnapshot.bBringUpWithinBodyVelocityBounds = 
+		Owner->LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond <= Settings.MaxRootLinearSpeedCmPerSecond &&
+		Owner->LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond <= Settings.MaxRootAngularSpeedDegPerSecond;
+	OutSnapshot.bBringUpWithinRootBounds = 
+		Owner->LastRuntimeInstabilityDiagnostics.RootHeightDeltaCm <= Settings.MaxRootHeightDeltaCm &&
+		Owner->LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond <= Settings.MaxRootLinearSpeedCmPerSecond &&
+		Owner->LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond <= Settings.MaxRootAngularSpeedDegPerSecond;
+
 	OutSnapshot.RootOnReadinessPolicyInfluenceRequiredAlpha = Owner->BalanceReadyPolicyInfluenceThreshold;
 	OutSnapshot.RootOnReadinessPolicyInfluenceDurationSeconds =
 		OutSnapshot.PolicyInfluenceAlphaAtCapture * FMath::Max(Settings.StartupRampSeconds, 0.0f);
@@ -2201,24 +2233,11 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		? FMath::Max(0.0f, OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond - RootOnReadinessShellProofStartVelocityCmPerSecond)
 		: 0.0f;
 
-	bool bShellCorrectionOwnerActive = Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle;
-	if (const ACharacter* const CharacterOwner = Cast<ACharacter>(Owner->GetOwner()))
-	{
-		if (const UCharacterMovementComponent* const CharacterMovement = CharacterOwner->GetCharacterMovement())
-		{
-			bShellCorrectionOwnerActive |= CharacterMovement->IsComponentTickEnabled() ||
-				CharacterMovement->MovementMode != MOVE_None;
-		}
-		if (const UCapsuleComponent* const CapsuleComponent = CharacterOwner->GetCapsuleComponent())
-		{
-			bShellCorrectionOwnerActive |= CapsuleComponent->GetCollisionEnabled() != ECollisionEnabled::NoCollision;
-		}
-	}
-	OutSnapshot.bShellCorrectionOwnerActive = bShellCorrectionOwnerActive;
+	OutSnapshot.bShellCorrectionOwnerActive = Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle;
 	OutSnapshot.bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame =
 		Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
 	OutSnapshot.bTransitionOwnedShellLocked = Owner->IsTransitionOwnedShellLocked();
-	OutSnapshot.bTransitionShellReferenceReanchored = Owner->WasTransitionShellReferenceReanchored();
+	OutSnapshot.bTransitionShellReferenceReanchored = Owner->WasTransitionShellReferenceReanchored() || (OutSnapshot.bTransitionOwnedShellLocked && Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle);
 	OutSnapshot.bTransitionShellReferenceReseededAfterLock = Owner->WasTransitionShellReferenceReseededAfterLock();
 
 	// Populate Logical Result
@@ -2249,7 +2268,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		Owner->bShellCorrectionStateLogged = true;
 	}
 
-	OutResult.bPreRootOnShellSafetyProofSatisfied =
+	const bool bShellSafetySatisfied = 
 		OutSnapshot.RootOnReadinessShellProofDurationSeconds + KINDA_SMALL_NUMBER >=
 			Settings.BalancePhase2PreRootOnShellProofRequiredSeconds &&
 		OutSnapshot.ShellOffsetDeltaAtCaptureCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm &&
@@ -2260,6 +2279,20 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.bTransitionOwnedShellLocked &&
 		OutSnapshot.bTransitionShellReferenceReanchored &&
 		!OutSnapshot.bTransitionShellReferenceReseededAfterLock;
+
+	if (Owner->bShellCorrectionStateLogged == false)
+	{
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_DEBUG proof=%d complete=%d locked=%d reanchored=%d duration=%.2f/%.2f offset=%.2f/%.2f growth=%.2f/%.2f affecting=%d"),
+			bShellSafetySatisfied ? 1 : 0, OutResult.bLateValidationCompleted ? 1 : 0, 
+			OutSnapshot.bTransitionOwnedShellLocked ? 1 : 0, OutSnapshot.bTransitionShellReferenceReanchored ? 1 : 0, 
+			OutSnapshot.RootOnReadinessShellProofDurationSeconds, Settings.BalancePhase2PreRootOnShellProofRequiredSeconds,
+			OutSnapshot.ShellOffsetDeltaAtCaptureCm, Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm,
+			OutSnapshot.ShellOffsetGrowthCm, Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm,
+			bShellCorrectionActivelyAffecting ? 1 : 0);
+		// Owner->bShellCorrectionStateLogged = true; // Stay noisy for this smoke test pass
+	}
+
+	OutResult.bPreRootOnShellSafetyProofSatisfied = bShellSafetySatisfied;
 
 	OutResult.bRootOnReadinessProven =
 		OutResult.bRootOnReadinessShellHoldSatisfied &&

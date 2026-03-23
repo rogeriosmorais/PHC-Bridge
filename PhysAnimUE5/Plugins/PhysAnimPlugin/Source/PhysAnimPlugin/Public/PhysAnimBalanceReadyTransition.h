@@ -174,6 +174,11 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	bool bPolicySuppressed = false;
 	bool bResetsSuppressed = false;
 	bool bControlAuthoritySettled = false;
+	bool bFinalBringUpGroupUnlocked = false;
+	bool bFinalBringUpGroupRampActive = false;
+	bool bBringUpWithinBodyVelocityBounds = false;
+	bool bBringUpWithinRootBounds = false;
+	float BringUpStableAccumulatedSeconds = 0.0f;
 	float FinalBringUpGroupControlAuthorityAlpha = 0.0f;
 	float PolicyInfluenceAlphaAtCapture = 0.0f;
 	float RootOnReadinessPolicyInfluenceRequiredAlpha = 0.0f;

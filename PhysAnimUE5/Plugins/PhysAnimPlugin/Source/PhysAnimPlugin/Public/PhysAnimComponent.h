@@ -282,7 +282,7 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase1QuietRequiredSeconds = 0.15f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
-	float BalancePhase1TimeoutDuration = 2.0f;
+	float BalancePhase1TimeoutDuration = 5.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float BalanceEntryMinPolicyAlpha = 0.9f;

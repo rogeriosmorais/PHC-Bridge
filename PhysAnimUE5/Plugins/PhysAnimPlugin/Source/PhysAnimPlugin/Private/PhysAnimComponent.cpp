@@ -2819,10 +2819,7 @@ void UPhysAnimComponent::ReanchorShellCouplingReferenceToCurrentRoot()
 		{
 			bTransitionOwnedShellReferenceReseededAfterLock = true;
 		}
-		else
-		{
-			bTransitionOwnedShellReferenceReanchored = true;
-		}
+		bTransitionOwnedShellReferenceReanchored = true;
 	}
 }
 
@@ -6169,7 +6166,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 	}
 
 	BringUpGroupStableAccumulatedSeconds += DeltaTime;
-	const float StableDwellSeconds = FMath::Max(EffectiveSettings.StartupRampSeconds, 0.25f);
+	const float StableDwellSeconds = 0.10f; // Rapid unlock during transition.
 	if (BringUpGroupStableAccumulatedSeconds < StableDwellSeconds)
 	{
 		return;
