@@ -231,6 +231,10 @@ public:
 	bool HasSafeDenied() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied; }
 	bool IsComplete() const { return InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded || InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed || InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied; }
 
+	TMap<FName, int32> DistalBoneMismatchTicks;
+	int32 DistalMismatchesTransientCount = 0;
+	int32 DistalMismatchesPersistentCount = 0;
+
 	/** Returns true if the transition has been started and is either running or has completed. */
 	bool HasAnyInternalPhase() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive; }
 

@@ -1139,7 +1139,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			
 			const FName BoneName = It.Key();
 			const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
-			const bool bCurrentIntendedKinematic = IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, Settings);
 			EPhysicsMovementType CurrentModifierMovementType = EPhysicsMovementType::Simulated;
 			if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
 			{
@@ -1149,34 +1148,51 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				}
 			}
 			
-			bool bRawSimulating = false;
+			bool bCurrentRawSimulating = false;
 			if (USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get())
 			{
 				if (FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName))
 				{
-					bRawSimulating = BodyInstance->IsInstanceSimulatingPhysics();
+					bCurrentRawSimulating = BodyInstance->IsInstanceSimulatingPhysics();
 				}
 			}
 
-			if (bCurrentIntendedKinematic && 
-				CurrentModifierMovementType == EPhysicsMovementType::Kinematic && 
-				bRawSimulating)
+			FString Classification = TEXT("fully_aligned");
+			if (CurrentModifierMovementType == EPhysicsMovementType::Kinematic && !bCurrentRawSimulating)
 			{
-				UE_LOG(
-					LogPhysAnimBridge,
-					Error,
-					TEXT("[PhysAnim] DISTAL_EXPERIMENT_NEXTFRAME_STATE (OWNERSHIP VIOLATION): bone=%s STUCK SIMULATING! intent=%d mod=%d prevRuntimeState=%s prevPhase=%d reason=%s"),
-					*BoneName.ToString(), 1, (int32)CurrentModifierMovementType, GetRuntimeStateName(Check.RuntimeState), Check.TransitionPhase, *Check.CallSiteReason);
+				if (Check.bRawBodySimulatingAtWrite)
+				{
+					Classification = TEXT("transient_match_after_delay");
+					BalanceReadyTransition.DistalMismatchesTransientCount++;
+				}
+				else
+				{
+					Classification = TEXT("fully_aligned");
+				}
 			}
-			else
+			else if (CurrentModifierMovementType == EPhysicsMovementType::Simulated)
 			{
-				UE_LOG(
-					LogPhysAnimBridge,
-					Log,
-					TEXT("[PhysAnim] DISTAL_EXPERIMENT_NEXTFRAME_STATE: bone=%s OK (intent=%d mod=%d rawSim=%d) prevRuntimeState=%s prevPhase=%d reason=%s"),
-					*BoneName.ToString(), bCurrentIntendedKinematic ? 1 : 0, (int32)CurrentModifierMovementType, bRawSimulating ? 1 : 0,
-					GetRuntimeStateName(Check.RuntimeState), Check.TransitionPhase, *Check.CallSiteReason);
+				Classification = TEXT("modifier_not_yet_kinematic");
+				BalanceReadyTransition.DistalMismatchesPersistentCount++;
+				BalanceReadyTransition.DistalBoneMismatchTicks.FindOrAdd(BoneName)++;
 			}
+			else if (bCurrentRawSimulating)
+			{
+				Classification = TEXT("persistent_raw_simulation");
+				BalanceReadyTransition.DistalMismatchesPersistentCount++;
+				BalanceReadyTransition.DistalBoneMismatchTicks.FindOrAdd(BoneName)++;
+			}
+
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnim] DISTAL_EXPERIMENT_NEXTFRAME_STATE: bone=%s intent=%s modifier=%s rawSimulate=%s classification=%s writeReason=%s"),
+				*BoneName.ToString(),
+				GetPhysicsMovementTypeName(Check.IntendedOwnership),
+				GetPhysicsMovementTypeName(CurrentModifierMovementType),
+				bCurrentRawSimulating ? TEXT("Simulating") : TEXT("Kinematic"),
+				*Classification,
+				*Check.CallSiteReason);
 		}
 	}
 
@@ -9010,6 +9026,21 @@ FColor UPhysAnimComponent::ResolveBridgeStatusIndicatorColor(EPhysAnimRuntimeSta
 	return FColor(160, 160, 160);
 }
 
+const TCHAR* UPhysAnimComponent::GetPhysicsMovementTypeName(EPhysicsMovementType MovementType)
+{
+	switch (MovementType)
+	{
+	case EPhysicsMovementType::Static:
+		return TEXT("Static");
+	case EPhysicsMovementType::Kinematic:
+		return TEXT("Kinematic");
+	case EPhysicsMovementType::Simulated:
+		return TEXT("Simulated");
+	default:
+		return TEXT("Unknown");
+	}
+}
+
 void UPhysAnimComponent::TrackDistalBoneOwnershipChange(FName BoneName, EPhysicsMovementType NewOwnership, const FString& CallSiteReason)
 {
 	if (BoneName != TEXT("calf_r") && BoneName != TEXT("foot_r") && BoneName != TEXT("ball_r"))
@@ -9040,11 +9071,11 @@ void UPhysAnimComponent::TrackDistalBoneOwnershipChange(FName BoneName, EPhysics
 		UE_LOG(
 			LogPhysAnimBridge,
 			Warning,
-			TEXT("[PhysAnim] DISTAL_OWNERSHIP_CHANGE: bone=%s prevIntended=%d newIntended=%d rawSimulating=%d runtimeState=%s phase=%d reason=%s"),
+			TEXT("[PhysAnim] DISTAL_OWNERSHIP_CHANGE: bone=%s prevIntended=%s newIntended=%s rawSimulate=%s runtimeState=%s phase=%d reason=%s"),
 			*BoneName.ToString(),
-			bHadPrevious ? (int32)PreviousOwnership : -1,
-			(int32)NewOwnership,
-			bRawSimulating ? 1 : 0,
+			bHadPrevious ? GetPhysicsMovementTypeName(PreviousOwnership) : TEXT("None"),
+			GetPhysicsMovementTypeName(NewOwnership),
+			bRawSimulating ? TEXT("Simulating") : TEXT("Kinematic"),
 			GetRuntimeStateName(RuntimeState),
 			(int32)BalanceReadyTransition.GetPhase(),
 			*CallSiteReason);
@@ -9084,7 +9115,7 @@ void UPhysAnimComponent::TrackDistalBoneOwnershipChange(FName BoneName, EPhysics
 			PendingCheck.bActive = true;
 			PendingCheck.IntendedOwnership = EPhysicsMovementType::Kinematic;
 			PendingCheck.ModifierMovementType = NewOwnership;
-			PendingCheck.bRawBodySimulating = bRawSimulating;
+			PendingCheck.bRawBodySimulatingAtWrite = bRawSimulating;
 			PendingCheck.RuntimeState = RuntimeState;
 			PendingCheck.TransitionPhase = static_cast<int32>(BalanceReadyTransition.GetPhase());
 			PendingCheck.CallSiteReason = CallSiteReason;

@@ -629,7 +629,7 @@ struct FPhysAnimPendingDistalOwnershipCheck
 	bool bActive = false;
 	EPhysicsMovementType IntendedOwnership = EPhysicsMovementType::Simulated;
 	EPhysicsMovementType ModifierMovementType = EPhysicsMovementType::Simulated;
-	bool bRawBodySimulating = false;
+	bool bRawBodySimulatingAtWrite = false;
 	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
 	int32 TransitionPhase = 0;
 	FString CallSiteReason;
@@ -1342,6 +1342,7 @@ public:
 	static bool ShouldDeactivateBridgeToSafeMode(EPhysAnimRuntimeState State, bool bForceZeroActions);
 	static bool RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState State);
 	static const TCHAR* GetRuntimeStateName(EPhysAnimRuntimeState State);
+	static const TCHAR* GetPhysicsMovementTypeName(EPhysicsMovementType MovementType);
 
 	static float ResolvePhase1Uprightness(
 		class USkeletalMeshComponent* SkeletalMesh,

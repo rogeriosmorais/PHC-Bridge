@@ -284,6 +284,9 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	LateValidationAccumulatedSeconds = 0.0f;
 	LastLateValidateBlockReason.Reset();
 	EntryHoldRotations.Empty();
+	DistalBoneMismatchTicks.Empty();
+	DistalMismatchesTransientCount = 0;
+	DistalMismatchesPersistentCount = 0;
 	SafePhase2DenialReason.Reset();
 
 	if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
@@ -362,10 +365,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					const bool bActualSimulating = BodyInst && BodyInst->IsValidBodyInstance() ? BodyInst->IsInstanceSimulatingPhysics() : false;
 					const bool bStateMismatch = bIntendedKinematic == bActualSimulating;
 	
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_EXPERIMENT_STATE bone=%s intendedSim=%d actualSim=%d changedByLaterSubsystem=%d"),
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_EXPERIMENT_STATE bone=%s intended=%s actual=%s changedByLaterSubsystem=%d"),
 						*BoneName.ToString(),
-						!bIntendedKinematic,
-						bActualSimulating,
+						UPhysAnimComponent::GetPhysicsMovementTypeName(bIntendedKinematic ? EPhysicsMovementType::Kinematic : EPhysicsMovementType::Simulated),
+						bActualSimulating ? TEXT("Simulating") : TEXT("Kinematic"),
 						bStateMismatch);
 				}
 			}
@@ -1325,6 +1328,27 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		}
 		
 		Owner->SetStartupBringUpFrozenByBalanceEntry(false, TerminalReason);
+		
+		FName LongestMismatchBone = NAME_None;
+		int32 MaxMismatchTicks = 0;
+		for (auto& Pair : DistalBoneMismatchTicks)
+		{
+			if (Pair.Value > MaxMismatchTicks)
+			{
+				MaxMismatchTicks = Pair.Value;
+				LongestMismatchBone = Pair.Key;
+			}
+		}
+
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnimBalance] DISTAL_PHASE1_SUMMARY: transient=%d persistent=%d worstBone=%s worstTicks=%d totalPhase1Time=%.2f"),
+			DistalMismatchesTransientCount,
+			DistalMismatchesPersistentCount,
+			*LongestMismatchBone.ToString(),
+			MaxMismatchTicks,
+			PhaseTimeSeconds);
 	}
 
 	if (NewPhase != EBalanceReadyTransitionPhase::BRT_Inactive && InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive)
