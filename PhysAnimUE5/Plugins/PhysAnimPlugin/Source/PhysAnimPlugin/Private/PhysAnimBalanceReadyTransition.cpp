@@ -1284,7 +1284,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				else if (VelocityCmPerSec > MaxVelocityCmPerSec) Cause = TEXT("velocity_above_limit");
 				else if (OffsetGrowthCm > MaxOffsetGrowthCm) Cause = TEXT("offset_growth_above_limit");
 				else if (VelocityGrowthCmPerSec > MaxVelocityGrowthCmPerSec) Cause = TEXT("velocity_growth_above_limit");
-				else if (CurrentSnapshot.bShellCorrectionOwnerActive) Cause = TEXT("shell_correction_active");
+				else if (CurrentSnapshot.bShellCorrectionOwnerActive && (OffsetCm > 0.1f || VelocityCmPerSec > 1.0f)) Cause = TEXT("shell_correction_active");
 				else if (!CurrentSnapshot.bTransitionOwnedShellLocked) Cause = TEXT("shell_not_locked");
 				else if (!CurrentSnapshot.bTransitionShellReferenceReanchored) Cause = TEXT("shell_not_reanchored");
 				else if (CurrentSnapshot.bTransitionShellReferenceReseededAfterLock) Cause = TEXT("shell_reseeded_after_lock");

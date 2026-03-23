@@ -5011,10 +5011,17 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bPhase1Prepare || bPhase1LateValidate)
 		{
+			const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
 			if (BringUpGroupIndex == 0 || BringUpGroupIndex == 1)
 			{
 				bBringUpGroupUnlocked = true;
 				ControlAuthorityAlpha = 1.0f;
+			}
+			else if (bPhase1LateValidate && BringUpGroupIndex == FinalGroupIndex)
+			{
+				// Allow final bring-up group to ramp during LateValidate
+				bBringUpGroupUnlocked = IsBringUpGroupUnlocked(BringUpGroupIndex);
+				ControlAuthorityAlpha = CalculateBringUpGroupControlAuthorityAlpha(BringUpGroupIndex, EffectiveSettings);
 			}
 			else
 			{
