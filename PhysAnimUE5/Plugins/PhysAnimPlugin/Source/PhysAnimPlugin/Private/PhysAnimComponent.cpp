@@ -5140,13 +5140,39 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUseSkeletalAnimationTargetRepresentation ? TEXT("true") : TEXT("false"));
 	}
 
-	PhysicsControl->SetBodyModifiersInSetMovementType(TEXT("All"), EPhysicsMovementType::Kinematic);
+	if ((bPhase1Prepare || bPhase1LateValidate) && BalanceReadyTransition.IsDistalKinematicAccepted())
+	{
+		static bool bLoggedAuthoritativeWrite = false;
+		if (!bLoggedAuthoritativeWrite)
+		{
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_AUTHORITATIVE_PER_BONE_WRITE active=1 broadSetWriteBypassedForCriticalBones=1"));
+			bLoggedAuthoritativeWrite = true;
+		}
+
+		// Broad sets for non-movement records are still fine
+		PhysicsControl->SetBodyModifiersInSetPhysicsBlendWeight(TEXT("All"), 0.0f);
+		PhysicsControl->SetBodyModifiersInSetCollisionType(TEXT("All"), ECollisionEnabled::NoCollision);
+		PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
+
+		// But for movement type, we perform explicit per-bone writes to ensure the modifier record updates reliably.
+		// We use bUpdateBody=true to ensure the engine state is updated immediately.
+		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+		{
+			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic, false, true);
+		}
+	}
+	else
+	{
+		PhysicsControl->SetBodyModifiersInSetMovementType(TEXT("All"), EPhysicsMovementType::Kinematic);
+		PhysicsControl->SetBodyModifiersInSetPhysicsBlendWeight(TEXT("All"), 0.0f);
+		PhysicsControl->SetBodyModifiersInSetCollisionType(TEXT("All"), ECollisionEnabled::NoCollision);
+		PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
+	}
+
 	TrackDistalBoneOwnershipChange(TEXT("calf_r"), EPhysicsMovementType::Kinematic, TEXT("ApplyRuntimeControlTuning_SetAllKinematic"));
 	TrackDistalBoneOwnershipChange(TEXT("foot_r"), EPhysicsMovementType::Kinematic, TEXT("ApplyRuntimeControlTuning_SetAllKinematic"));
 	TrackDistalBoneOwnershipChange(TEXT("ball_r"), EPhysicsMovementType::Kinematic, TEXT("ApplyRuntimeControlTuning_SetAllKinematic"));
-	PhysicsControl->SetBodyModifiersInSetPhysicsBlendWeight(TEXT("All"), 0.0f);
-	PhysicsControl->SetBodyModifiersInSetCollisionType(TEXT("All"), ECollisionEnabled::NoCollision);
-	PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
 
 	// Use the pre-calculated value from the top of the function
 	const bool bAllowRootBodyModifierSimulationInBalanceMode = bAllowRootSim;
@@ -5322,12 +5348,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(
 			ModifierName,
 			bUpdateKinematicFromSimulation,
-			true,
+			false,
 			false);
-		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
+		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, false);
 		TrackDistalBoneOwnershipChange(BoneName, BodyModifierMovementType, TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
-		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
-		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
+		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, false, false);
+		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, false, false);
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 
