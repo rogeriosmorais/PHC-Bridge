@@ -390,6 +390,10 @@ namespace PhysAnimComponentInternal
 		TEXT("pa.StabilizationStressTestLinearSpikeThresholdCmPerSec"),
 		100.0f,
 		TEXT("Linear velocity threshold used to mark the first stress-test per-bone spike."));
+	TAutoConsoleVariable<int32> CVarPhysAnimPhase1DistalKinematicExperiment(
+		TEXT("physanim.Phase1DistalKinematicExperiment"),
+		-1,
+		TEXT("Override for Phase 1 distal-chain kinematic experiment. -1 keeps the component default, 0 disables (distal=sim), 1 enables (distal=kin)."));
 
 	float ResolveFloatOverride(const TAutoConsoleVariable<float>& CVar, float DefaultValue)
 	{
@@ -4223,6 +4227,10 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveBoolOverride(
 			PhysAnimComponentInternal::CVarPhysAnimEnableInstabilityFailStop,
 			EffectiveSettings.bEnableInstabilityFailStop);
+	EffectiveSettings.bPhase1DistalKinematicExperiment =
+		PhysAnimComponentInternal::ResolveBoolOverride(
+			PhysAnimComponentInternal::CVarPhysAnimPhase1DistalKinematicExperiment,
+			EffectiveSettings.bPhase1DistalKinematicExperiment);
 	ApplyPresentationPerturbationStabilizationOverride(IsPresentationPerturbationOverrideActive(), EffectiveSettings);
 	ApplyStabilizationStressTestRamp(
 		ResolveStabilizationStressTestMultiplier(),
@@ -5124,7 +5132,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		if (bPhase1Prepare || bPhase1LateValidate)
 		{
 			// Enforce 11-body Phase 1 topology (root=kin, proximal=sim, distal=sim, upper=kin)
-			if (bIsRootBodyModifier)
+			if (bIsRootBodyModifier || bTransitionKeepsBoneKinematic)
 			{
 				BodyModifierMovementType = EPhysicsMovementType::Kinematic;
 				BodyModifierCollisionType = ECollisionEnabled::NoCollision;
@@ -9182,6 +9190,12 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 		FString(),
 		PreviousStateName,
 		NewStateName);
+
+	if (IsBalanceEntryState(NewState))
+	{
+		ApplyRuntimeControlTuning(ResolveEffectiveStabilizationSettings());
+	}
+
 	UpdateBridgeStatusIndicator(60.0f);
 }
 

@@ -304,9 +304,8 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	}
 	bLastPendingResetsEmpty = Owner->GetPendingBodyModifierCachedResetNames().IsEmpty();
 
-	CapturePhase1TopologyRecord(Owner, Owner->ResolveEffectiveStabilizationSettings());
-
 	SetPhase(EBalanceReadyTransitionPhase::BRT_Phase1_Prepare, Owner);
+	CapturePhase1TopologyRecord(Owner, Owner->ResolveEffectiveStabilizationSettings());
 }
 
 EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryState(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings) const
@@ -2043,15 +2042,13 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 		return;
 	}
 
-	TArray<FName> SimulatingBones;
-	Owner->GetSimulatingBodies(SimulatingBones);
-	TSet<FName> SimulatingBoneSet(SimulatingBones);
 	int32 ProximalSimCount = 0;
 	int32 DistalSimCount = 0;
 	int32 UpperSimCount = 0;
+	int32 TotalSimCount = 0;
 	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
 	{
-		if (!SimulatingBoneSet.Contains(BoneName))
+		if (ShouldKeepBoneKinematic(BoneName, Settings))
 		{
 			continue;
 		}
@@ -2068,13 +2065,14 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 		{
 			UpperSimCount++;
 		}
+		TotalSimCount++;
 	}
 
-	Phase1TopologyRecord.bRootSimulating = PelvisBody->IsInstanceSimulatingPhysics();
+	Phase1TopologyRecord.bRootSimulating = !ShouldKeepBoneKinematic(RootBoneName, Settings);
 	Phase1TopologyRecord.ProximalSimCount = ProximalSimCount;
 	Phase1TopologyRecord.DistalSimCount = DistalSimCount;
 	Phase1TopologyRecord.UpperBodySimCount = UpperSimCount;
-	Phase1TopologyRecord.TotalSimCount = SimulatingBones.Num();
+	Phase1TopologyRecord.TotalSimCount = TotalSimCount;
 
 	Phase1TopologyRecord.RootOwnershipMode = Phase1TopologyRecord.bRootSimulating ? EBalanceReadyGroupOwnershipMode::Simulating : EBalanceReadyGroupOwnershipMode::Kinematic;
 	Phase1TopologyRecord.ProximalOwnershipMode = ProximalSimCount > 0 ? EBalanceReadyGroupOwnershipMode::Simulating : EBalanceReadyGroupOwnershipMode::Kinematic;
@@ -2298,10 +2296,8 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName, co
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 	{
-		// Late validation keeps the root and lower body kinematic while preserving the full upper-body
-		// ownership mode expected by the certified handoff snapshot.
-		if (BalanceTransitionSets::IsRoot(BoneName) ||
-			BalanceTransitionSets::IsDistalLowerLimb(BoneName))
+		const bool bDistalKin = Settings.bPhase1DistalKinematicExperiment && BalanceTransitionSets::IsDistalLowerLimb(BoneName);
+		if (BalanceTransitionSets::IsRoot(BoneName) || bDistalKin)
 		{
 			return true;
 		}

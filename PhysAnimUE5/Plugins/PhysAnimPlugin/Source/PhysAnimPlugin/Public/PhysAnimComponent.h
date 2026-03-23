@@ -425,7 +425,7 @@ struct FPhysAnimStabilizationSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalanceSettleMaxRootAngularSpeed = 1.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|Experimental")
-	bool bPhase1DistalKinematicExperiment = false;
+	bool bPhase1DistalKinematicExperiment = true;
 
 	bool operator==(const FPhysAnimStabilizationSettings& Other) const
 	{
