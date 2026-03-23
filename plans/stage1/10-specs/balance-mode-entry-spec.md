@@ -32,6 +32,7 @@ Interpretation rules:
 
 - the root side may remain kinematic during Phase 1
 - `pelvisSimulating=false` is not, by itself, a Phase 1 deny condition
+- Phase 1 topology intent and raw body sim state are not guaranteed to be frame-synchronous inside the same component tick; violations must be tracked post-physics step
 - topology changes are ownership changes, not mere tuning changes
 
 ## Phase 1 write-routing contract

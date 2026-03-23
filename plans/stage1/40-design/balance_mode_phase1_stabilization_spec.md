@@ -75,6 +75,7 @@ Under the current design:
 Important rule:
 
 - `pelvisSimulating=false` is not, by itself, a Phase 1 deny condition under this topology
+- Phase 1 topology intent and raw body sim state are not guaranteed to be frame-synchronous inside the same component tick. Telemetry must evaluate ownership violations on the subsequent frame (post-physics step) to allow PhysicsControl modifiers to propagate to Chaos.
 
 ## 5. Write-routing contract
 

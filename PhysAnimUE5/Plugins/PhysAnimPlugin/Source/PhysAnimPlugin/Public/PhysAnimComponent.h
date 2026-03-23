@@ -624,6 +624,17 @@ struct FPhysAnimBalanceScenario
 	bool bCompleted = false;
 };
 
+struct FPhysAnimPendingDistalOwnershipCheck
+{
+	bool bActive = false;
+	EPhysicsMovementType IntendedOwnership = EPhysicsMovementType::Simulated;
+	EPhysicsMovementType ModifierMovementType = EPhysicsMovementType::Simulated;
+	bool bRawBodySimulating = false;
+	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
+	int32 TransitionPhase = 0;
+	FString CallSiteReason;
+};
+
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
 class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPoseSearchTrajectoryPredictorInterface
 {
@@ -1108,6 +1119,10 @@ private:
 	float BalanceScenarioPeakActorDisplacementCm = 0.0f;
 	FPoseSearchBlueprintResult BalanceIdlePoseSearchResult;
 	bool bHasBalanceIdlePoseSearchResult = false;
+
+	void TrackDistalBoneOwnershipChange(FName BoneName, EPhysicsMovementType NewOwnership, const FString& CallSiteReason);
+	TMap<FName, EPhysicsMovementType> PreviousDistalBoneIntendedOwnership;
+	TMap<FName, FPhysAnimPendingDistalOwnershipCheck> PendingDistalOwnershipChecks;
 
 public:
 	static bool BuildConditionedActions(

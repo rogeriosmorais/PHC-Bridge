@@ -1120,6 +1120,53 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	LastBridgePoseSearchDeltaTimeSeconds = DeltaTime;
 	UpdateBridgeStatusIndicator(0.25f);
 
+	for (auto It = PendingDistalOwnershipChecks.CreateIterator(); It; ++It)
+	{
+		FPhysAnimPendingDistalOwnershipCheck& Check = It.Value();
+		if (Check.bActive)
+		{
+			Check.bActive = false;
+			
+			const FName BoneName = It.Key();
+			const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
+			const bool bCurrentIntendedKinematic = IsBalanceEntryState(RuntimeState) && BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, Settings);
+			EPhysicsMovementType CurrentModifierMovementType = EPhysicsMovementType::Simulated;
+			if (const EPhysicsMovementType* Prev = PreviousDistalBoneIntendedOwnership.Find(BoneName))
+			{
+				CurrentModifierMovementType = *Prev;
+			}
+			
+			bool bRawSimulating = false;
+			if (USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get())
+			{
+				if (FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName))
+				{
+					bRawSimulating = BodyInstance->IsInstanceSimulatingPhysics();
+				}
+			}
+
+			if (bCurrentIntendedKinematic && 
+				CurrentModifierMovementType == EPhysicsMovementType::Kinematic && 
+				bRawSimulating)
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] DISTAL_EXPERIMENT_POSTSTEP_STATE (OWNERSHIP VIOLATION): bone=%s STUCK SIMULATING! intent=%d mod=%d prevRuntimeState=%s prevPhase=%d reason=%s"),
+					*BoneName.ToString(), 1, (int32)CurrentModifierMovementType, GetRuntimeStateName(Check.RuntimeState), Check.TransitionPhase, *Check.CallSiteReason);
+			}
+			else
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Log,
+					TEXT("[PhysAnim] DISTAL_EXPERIMENT_POSTSTEP_STATE: bone=%s OK (intent=%d mod=%d rawSim=%d) prevRuntimeState=%s prevPhase=%d reason=%s"),
+					*BoneName.ToString(), bCurrentIntendedKinematic ? 1 : 0, (int32)CurrentModifierMovementType, bRawSimulating ? 1 : 0,
+					GetRuntimeStateName(Check.RuntimeState), Check.TransitionPhase, *Check.CallSiteReason);
+			}
+		}
+	}
+
 	if (bPendingStartupRestPoseCapture)
 	{
 		bPendingStartupRestPoseCapture = false;
@@ -5040,6 +5087,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	}
 
 	PhysicsControl->SetBodyModifiersInSetMovementType(TEXT("All"), EPhysicsMovementType::Kinematic);
+	TrackDistalBoneOwnershipChange(TEXT("calf_r"), EPhysicsMovementType::Kinematic, TEXT("ApplyRuntimeControlTuning_SetAllKinematic"));
+	TrackDistalBoneOwnershipChange(TEXT("foot_r"), EPhysicsMovementType::Kinematic, TEXT("ApplyRuntimeControlTuning_SetAllKinematic"));
+	TrackDistalBoneOwnershipChange(TEXT("ball_r"), EPhysicsMovementType::Kinematic, TEXT("ApplyRuntimeControlTuning_SetAllKinematic"));
 	PhysicsControl->SetBodyModifiersInSetPhysicsBlendWeight(TEXT("All"), 0.0f);
 	PhysicsControl->SetBodyModifiersInSetCollisionType(TEXT("All"), ECollisionEnabled::NoCollision);
 	PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
@@ -5198,6 +5248,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, true, false);
+		TrackDistalBoneOwnershipChange(BoneName, BodyModifierMovementType, TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, true, false);
 		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, true, false);
 		PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(
@@ -6268,6 +6319,15 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		EResetToCachedTargetBehavior::ResetDuringUpdateControls,
 		true,
 		false);
+
+	for (const FName ModifierName : ModifierNamesToReset)
+	{
+		const FName BoneName = PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName);
+		if (const EPhysicsMovementType* PrevOwnership = PreviousDistalBoneIntendedOwnership.Find(BoneName))
+		{
+			TrackDistalBoneOwnershipChange(BoneName, *PrevOwnership, TEXT("ResetPendingBodyModifiersToCachedTargets"));
+		}
+	}
 
 	const FName RootModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
 	for (const FName ModifierName : ModifierNamesToReset)
@@ -8935,6 +8995,88 @@ FColor UPhysAnimComponent::ResolveBridgeStatusIndicatorColor(EPhysAnimRuntimeSta
 	}
 
 	return FColor(160, 160, 160);
+}
+
+void UPhysAnimComponent::TrackDistalBoneOwnershipChange(FName BoneName, EPhysicsMovementType NewOwnership, const FString& CallSiteReason)
+{
+	if (BoneName != TEXT("calf_r") && BoneName != TEXT("foot_r") && BoneName != TEXT("ball_r"))
+	{
+		return;
+	}
+
+	EPhysicsMovementType PreviousOwnership = EPhysicsMovementType::Simulated; 
+	bool bHadPrevious = false;
+	if (const EPhysicsMovementType* Prev = PreviousDistalBoneIntendedOwnership.Find(BoneName))
+	{
+		PreviousOwnership = *Prev;
+		bHadPrevious = true;
+	}
+
+	if (!bHadPrevious || PreviousOwnership != NewOwnership)
+	{
+		USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+		bool bRawSimulating = false;
+		if (SkeletalMesh)
+		{
+			if (FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName))
+			{
+				bRawSimulating = BodyInstance->IsInstanceSimulatingPhysics();
+			}
+		}
+
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnim] DISTAL_OWNERSHIP_CHANGE: bone=%s prevIntended=%d newIntended=%d rawSimulating=%d runtimeState=%s phase=%d reason=%s"),
+			*BoneName.ToString(),
+			bHadPrevious ? (int32)PreviousOwnership : -1,
+			(int32)NewOwnership,
+			bRawSimulating ? 1 : 0,
+			GetRuntimeStateName(RuntimeState),
+			(int32)BalanceReadyTransition.GetPhase(),
+			*CallSiteReason);
+
+		PreviousDistalBoneIntendedOwnership.Add(BoneName, NewOwnership);
+	}
+
+	// Note: Phase 1 topology intent and raw body sim state are not guaranteed to
+	// be frame-synchronous inside the same component tick. We evaluate ownership
+	// violations on the subsequent frame in TickComponent.
+	if (IsBalanceEntryState(RuntimeState) || RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
+	{
+		const bool bShouldKeepKinematic = BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, ResolveEffectiveStabilizationSettings());
+		
+		USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+		bool bRawSimulating = false;
+		if (SkeletalMesh)
+		{
+			if (FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName))
+			{
+				bRawSimulating = BodyInstance->IsInstanceSimulatingPhysics();
+			}
+		}
+
+		if (bShouldKeepKinematic)
+		{
+			if (bRawSimulating)
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnim] DISTAL_EXPERIMENT_PENDING_OWNERSHIP_MISMATCH: bone=%s ShouldKeepBoneKinematic=true but raw BodyInstance is SIMULATING! reason=%s"),
+					*BoneName.ToString(), *CallSiteReason);
+			}
+
+			FPhysAnimPendingDistalOwnershipCheck& PendingCheck = PendingDistalOwnershipChecks.FindOrAdd(BoneName);
+			PendingCheck.bActive = true;
+			PendingCheck.IntendedOwnership = EPhysicsMovementType::Kinematic;
+			PendingCheck.ModifierMovementType = NewOwnership;
+			PendingCheck.bRawBodySimulating = bRawSimulating;
+			PendingCheck.RuntimeState = RuntimeState;
+			PendingCheck.TransitionPhase = static_cast<int32>(BalanceReadyTransition.GetPhase());
+			PendingCheck.CallSiteReason = CallSiteReason;
+		}
+	}
 }
 
 void UPhysAnimComponent::UpdateBridgeStatusIndicator(float DisplayDurationSeconds) const

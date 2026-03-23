@@ -115,6 +115,8 @@ Under the current accepted Phase 1 design, the implementation must treat the int
 
 Implementation must not silently change ownership semantics under the guise of runtime tuning or diagnostics work.
 
+Phase 1 topology intent and raw body sim state are not guaranteed to be frame-synchronous inside the same component tick. Telemetry/diagnostics must evaluate ownership violations on the subsequent frame to allow PhysicsControl modifiers to propagate to Chaos.
+
 If implementation changes ownership semantics, the `10-specs` docs must change in the same commit.
 
 ## Required pelvis/root rule
