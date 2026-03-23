@@ -1820,6 +1820,38 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		ResetPendingBodyModifiersToCachedTargets();
 	}
+
+	// Forensic distal stale-record check (Task: Fix stale modifier record)
+	if (BalanceReadyTransition.IsDistalKinematicAccepted())
+	{
+		for (const FName BoneName : {TEXT("calf_l"), TEXT("calf_r"), TEXT("foot_l"), TEXT("foot_r"), TEXT("ball_l"), TEXT("ball_r")})
+		{
+			if (SkeletalMesh && PhysicsControl)
+			{
+				const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+				if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, BoneName))
+				{
+					const EPhysicsMovementType ModifierType = Record->BodyModifier.ModifierData.MovementType;
+					FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName);
+					const bool bRawSimulating = BodyInstance ? BodyInstance->IsInstanceSimulatingPhysics() : false;
+					
+					if (ModifierType == EPhysicsMovementType::Simulated && !bRawSimulating)
+					{
+						static TMap<FName, bool> LoggedStaleOnce;
+						if (!LoggedStaleOnce.Contains(BoneName))
+						{
+							UE_LOG(LogPhysAnimBridge, Warning, TEXT("DISTAL_MODIFIER_RECORD_STALE bone=%s intended=Kinematic rawBody=Kinematic modifier=Simulated runtimeState=%s phase=%d"),
+								*BoneName.ToString(),
+								GetRuntimeStateName(RuntimeState),
+								(int32)BalanceReadyTransition.GetPhase());
+							LoggedStaleOnce.Add(BoneName, true);
+						}
+					}
+				}
+			}
+		}
+	}
+
 	if (bRunPolicyUpdateThisTick)
 	{
 		const double ActionConditionStartSeconds = FPlatformTime::Seconds();
@@ -5188,6 +5220,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 
 			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+			TrackDistalModifierWrite(BoneName, EPhysicsMovementType::Kinematic, true, TEXT("ApplyRuntimeControlTuning_AuthoritativeDistalKin"));
 			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic, false, true);
 		}
 	}
@@ -5390,6 +5423,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUpdateKinematicFromSimulation,
 			false,
 			false);
+		TrackDistalModifierWrite(BoneName, BodyModifierMovementType, (bPhase1Prepare || bPhase1LateValidate), TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, (bPhase1Prepare || bPhase1LateValidate));
 
 		if (bPhase1Prepare || bPhase1LateValidate)
@@ -5425,7 +5459,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bBringUpGroupUnlocked,
 				bIsRootBodyModifier,
 				bAllowRootBodyModifierSimulation,
-				CurrentPolicyAlpha);
+				CurrentPolicyAlpha,
+				BalanceReadyTransition.IsDistalKinematicAccepted());
 
 		if (bShouldResetThisBone &&
 			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
@@ -6503,6 +6538,15 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		if (bPhase1Prepare || bPhase1LateValidate)
 		{
 			const FName BoneName = PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName);
+			
+			// Guard to prevent accepted distal-kinematic bones from being reset to simulated (Task: Fix stale modifier record)
+			if (BalanceReadyTransition.IsDistalKinematicAccepted() &&
+				(BoneName == TEXT("calf_l") || BoneName == TEXT("foot_l") || BoneName == TEXT("ball_l") ||
+				 BoneName == TEXT("calf_r") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_r")))
+			{
+				continue;
+			}
+
 			const int32 GroupIndex = ResolveBringUpGroupIndex(BoneName);
 			if (GroupIndex == 0 || GroupIndex == 1)
 			{
@@ -6514,6 +6558,8 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		if (PhysicsControl->GetBodyModifierExists(ModifierName))
 		{
 			ModifierNamesToReset.Add(ModifierName);
+			const FName BoneName = PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName);
+			TrackDistalModifierWrite(BoneName, EPhysicsMovementType::Simulated, false, TEXT("ResetPendingBodyModifiersToCachedTargets_PreReset"));
 		}
 	}
 
@@ -6528,6 +6574,15 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		EResetToCachedTargetBehavior::ResetDuringUpdateControls,
 		true,
 		false);
+
+	for (const FName ModifierName : ModifierNamesToReset)
+	{
+		const FName BoneName = PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName);
+		if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, BoneName))
+		{
+			TrackDistalModifierWrite(BoneName, Record->BodyModifier.ModifierData.MovementType, false, TEXT("ResetPendingBodyModifiersToCachedTargets_PostReset"));
+		}
+	}
 
 	for (const FName ModifierName : ModifierNamesToReset)
 	{
@@ -8248,7 +8303,8 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 	bool bBringUpGroupUnlocked,
 	bool bIsRootBodyModifier,
 	bool bAllowRootBodyModifierSimulation,
-	float PolicyAlpha)
+	float PolicyAlpha,
+	bool bIsDistalKinematicAccepted)
 {
 	auto LogReturn = [&](bool bResult)
 	{
@@ -8261,6 +8317,15 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 	{
 		return LogReturn(false);
 	}
+
+	// Guard to prevent accepted distal-kinematic bones from being reset to simulated (Task: Fix stale modifier record)
+	if (bIsDistalKinematicAccepted &&
+		(BoneName == TEXT("calf_l") || BoneName == TEXT("foot_l") || BoneName == TEXT("ball_l") ||
+		 BoneName == TEXT("calf_r") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_r")))
+	{
+		return LogReturn(false);
+	}
+
 	if (bForceZeroActions)
 	{
 		return LogReturn(false);
@@ -9259,6 +9324,40 @@ const TCHAR* UPhysAnimComponent::GetPhysicsMovementTypeName(EPhysicsMovementType
 		return TEXT("Simulated");
 	default:
 		return TEXT("Unknown");
+	}
+}
+
+void UPhysAnimComponent::TrackDistalModifierWrite(FName BoneName, EPhysicsMovementType NewMovementType, bool bUpdateBody, const FString& CallSiteReason)
+{
+	if (BoneName != TEXT("calf_r") && BoneName != TEXT("foot_r") && BoneName != TEXT("ball_r") &&
+		BoneName != TEXT("calf_l") && BoneName != TEXT("foot_l") && BoneName != TEXT("ball_l"))
+	{
+		return;
+	}
+
+	EPhysicsMovementType PreviousMovementType = EPhysicsMovementType::Simulated; 
+	bool bHadPrevious = false;
+	if (const EPhysicsMovementType* Prev = PreviousDistalBoneModifierOwnership.Find(BoneName))
+	{
+		PreviousMovementType = *Prev;
+		bHadPrevious = true;
+	}
+
+	if (!bHadPrevious || PreviousMovementType != NewMovementType)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] DISTAL_MODIFIER_WRITE: bone=%s prevModifier=%s newModifier=%s bUpdateBody=%d runtimeState=%s phase=%d reason=%s"),
+			*BoneName.ToString(),
+			bHadPrevious ? GetPhysicsMovementTypeName(PreviousMovementType) : TEXT("None"),
+			GetPhysicsMovementTypeName(NewMovementType),
+			bUpdateBody ? 1 : 0,
+			GetRuntimeStateName(RuntimeState),
+			(int32)BalanceReadyTransition.GetPhase(),
+			*CallSiteReason);
+
+		PreviousDistalBoneModifierOwnership.Add(BoneName, NewMovementType);
 	}
 }
 

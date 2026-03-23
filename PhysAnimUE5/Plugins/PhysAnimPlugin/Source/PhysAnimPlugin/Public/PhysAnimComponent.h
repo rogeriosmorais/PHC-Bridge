@@ -1124,7 +1124,9 @@ private:
 	bool bHasBalanceIdlePoseSearchResult = false;
 
 	void TrackDistalBoneOwnershipChange(FName BoneName, EPhysicsMovementType NewOwnership, const FString& CallSiteReason);
+	void TrackDistalModifierWrite(FName BoneName, EPhysicsMovementType NewMovementType, bool bUpdateBody, const FString& CallSiteReason);
 	TMap<FName, EPhysicsMovementType> PreviousDistalBoneIntendedOwnership;
+	TMap<FName, EPhysicsMovementType> PreviousDistalBoneModifierOwnership;
 	TMap<FName, FString> LastDistalClassification;
 	TMap<FName, FPhysAnimPendingDistalOwnershipCheck> PendingDistalOwnershipChecks;
 
@@ -1190,7 +1192,8 @@ public:
 		bool bBringUpGroupUnlocked,
 		bool bIsRootBodyModifier,
 		bool bAllowRootBodyModifierSimulation,
-		float PolicyAlpha);
+		float PolicyAlpha,
+		bool bIsDistalKinematicAccepted);
 	static int32 ResolveBringUpGroupIndex(FName BoneName);
 	static int32 GetBringUpGroupCount();
 	static bool ShouldDelayBringUpGroupControlRamp(int32 GroupIndex, int32 NumBringUpGroups);
