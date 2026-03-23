@@ -2197,24 +2197,8 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 	Phase1TopologyRecord.ProximalOwnershipMode = ProximalSimCount > 0 ? EBalanceReadyGroupOwnershipMode::Simulating : EBalanceReadyGroupOwnershipMode::Kinematic;
 	Phase1TopologyRecord.DistalOwnershipMode = DistalSimCount > 0 ? EBalanceReadyGroupOwnershipMode::Simulating : EBalanceReadyGroupOwnershipMode::Kinematic;
 
-	const EBalanceReadyRootOnReadinessClassification RootOnReadinessClassification =
-		BalanceTransitionSets::IsRootCoupledReadyHandoff(
-			ProximalSimCount,
-			DistalSimCount,
-			UpperSimCount,
-			Phase1TopologyRecord.bRootSimulating)
-		? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
-		: (BalanceTransitionSets::IsUpperOnlySafeDenyHandoff(
-			ProximalSimCount,
-			DistalSimCount,
-			UpperSimCount,
-			Phase1TopologyRecord.bRootSimulating)
-			? EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
-			: EBalanceReadyRootOnReadinessClassification::NotReady);
-
-	Phase1TopologyRecord.UpperBodyOwnershipMode = (RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::NotReady)
-		? EBalanceReadyUpperBodyOwnershipMode::None
-		: EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
+	Phase1TopologyRecord.UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_OWNERSHIP_FROZEN mode=LateValidationKinematicHold source=Phase1Contract"));
 
 	// Capture authoritative suppression state for Phase 1.
 	// Since Phase 1 always suppresses policy and resets (using held poses), we set these
