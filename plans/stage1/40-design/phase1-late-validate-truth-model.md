@@ -79,8 +79,28 @@ These gates define the transition from Phase 1 (`Prepare`/`LateValidate`) to Pha
 ### Pending-Reset Leakage
 - **Global Block**: `bHasPendingResets` blocks admission to `LateValidate`.
 - **Upper-Body Violation**: During `LateValidationKinematicHold`, any pending reset on an upper-body bone is a terminal instability violation.
-- **Stale State**: Resets must be drained/applied before the quiet window can advance. This prevents "latent discontinuities" from passing the quiet window gate only to explode during LateValidate.
+- **Stale State**: Resets must be drained/applied before the quiet window can advance. This prevents "latent discontinuities" from passing the quiet window.
 - **Source**: `UPhysAnimComponent::GetPendingBodyModifierCachedResetNames`.
+
+### Modifier-Record / Raw-Body Desync
+- **Hazard**: A state where the intended ownership, modifier record, and physical body state disagree.
+- **Proven Pattern**:
+  - `Intended Ownership` = `Kinematic` (correct)
+  - `Body Modifier Record` = `Simulated` (incorrect/stale)
+  - `Raw Body State` = `Kinematic` (correct, but potentially coincidental)
+- **Interpretation**: This is a **Stale-State / Truth-Source Mismatch**, not a physical instability. If the modifier record says "Simulated" but the body is not moving, the gate must not treat it as a "success" for kinematic bones.
+
+### Convergence Gate State Dependencies
+Gates must rely on specific truth sources according to the risk of the check:
+
+| Gate / Check | Truth Source(s) | Requirement |
+| :--- | :--- | :--- |
+| **Topology (Freeze)** | Frozen Topology only | Absolute authority; ignore live readiness. |
+| **Ownership (Distal)** | Modifier Record + Raw Body | **Confirmation required**. Do not fail on stale record alone; do not pass on raw-body coincidence alone. |
+| **Stability (Proximal)** | Raw Body + Convergence Snapshot | Physical reality only. |
+| **Root Tilt / Target Delta** | Convergence Snapshot | Post-update processed values only. |
+| **Shell Safety Proof** | UPhysAnimComponent Metrics | Authoritative telemetry source. |
+
 
 ## 5. Failure Classification
 
@@ -116,9 +136,12 @@ Findings that inform debugging but do not independently trigger resets.
 - **Distal suppression**: `BridgeActive` distal re-promotion must be explicitly suppressed to prevent ownership thrash.
 - **Confirmation timing**: Same-frame ownership mismatch is not sufficient evidence of failure.
 
-## 7. Last Confirmed Blocker
+## 7. Investigation Surface (Temporary)
 
-- **Blunder**: `phase1_late_validate_upper_body_instability`
+This section identifies the last confirmed failure modes as of the latest smoke tests. These are investigation-facing details and are expected to change frequently; they do not form part of the timeless design contract.
+
+### Last Confirmed Failure Mode
+- **Identifier**: `phase1_late_validate_upper_body_instability`
 - **Context**: Convergence failures in `LateValidationKinematicHold`.
 - **Confirmed Producer**: `ClassifyLateValidationFailureReason` had a parallel stale path; now consolidated to the authoritative observed-violation gate.
-- **Note**: This section identifies the last confirmed blocker as of the latest smoke test and is expected to change frequently as the investigation progresses.
+

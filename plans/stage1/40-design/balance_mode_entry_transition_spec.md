@@ -110,11 +110,13 @@ The entry pipeline has moved through several contract-cleanup steps that are now
 
 These are no longer optional implementation details. They are part of the real transition contract.
 
-## 10. Last Confirmed Blocker
+## 10. Investigation Surface (Temporary)
 
-The current first meaningful remaining blocker after those contract fixes is:
+This section reflects the current investigation focus. These details are temporary and expected to change as convergence issues are resolved; they do not form part of the permanent design contract.
 
+### Last Confirmed Failure Mode
 - `phase1_late_validate_upper_body_instability`
+
 
 The entry-transition design must now explicitly allow that the accepted topology can be correct while the physical-viability proof (convergence) still fails during LateValidate. This is now driven by the consolidated observed-violation gate for upper-body bones.
 
