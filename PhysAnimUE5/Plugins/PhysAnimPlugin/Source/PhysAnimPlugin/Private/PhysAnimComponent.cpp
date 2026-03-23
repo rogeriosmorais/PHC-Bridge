@@ -5274,6 +5274,26 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
+		if (EffectiveSettings.bPhase1DistalKinematicExperiment &&
+			(BoneName == TEXT("calf_r") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_r") ||
+			 BoneName == TEXT("calf_l") || BoneName == TEXT("foot_l") || BoneName == TEXT("ball_l")) &&
+			BodyModifierMovementType == EPhysicsMovementType::Simulated)
+		{
+			// Explicit precedence rule: distal experiment wins
+			BodyModifierMovementType = EPhysicsMovementType::Kinematic;
+			BodyModifierCollisionType = ECollisionEnabled::NoCollision;
+			BodyModifierPhysicsBlendWeight = 0.0f;
+			bUpdateKinematicFromSimulation = false;
+			
+			// One-shot telemetry when this safety override catches a conflicting re-promotion attempt
+			static TSet<FName> SuppressedBones;
+			if (!SuppressedBones.Contains(BoneName))
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_EXPERIMENT_SYNC_SUPPRESSED bone=%s reason=PerBone_BodyModSync blockedBy=DistalKinematicExperiment"), *BoneName.ToString());
+				SuppressedBones.Add(BoneName);
+			}
+		}
+
 		const bool bRootBodyModLogStateChanged =
 			bAllowRootBodyModifierSimulation != bLastAppliedPresentationRootSimulationEnabled ||
 			bTransitionOwnsRootOnThisTick ||
