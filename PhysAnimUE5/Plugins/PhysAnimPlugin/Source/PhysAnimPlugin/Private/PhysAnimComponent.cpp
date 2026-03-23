@@ -1157,18 +1157,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				}
 			}
 
-			// HACK: UPhysicsControlComponent will spuriously revert modifiers to Simulated if it updates while the rigid body 
-			// hasn't fully transitioned to a sleeping Kinematic state. If the body is now Kinematic and our intent was Kinematic, 
-			// forcefully repair the modifier to Kinematic before evaluating telemetry to prevent test failures from transient engine state.
-			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-			if (!bCurrentRawSimulating && Check.IntendedOwnership == EPhysicsMovementType::Kinematic && CurrentModifierMovementType == EPhysicsMovementType::Simulated)
-			{
-				if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
-				{
-					PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic, true, false);
-					CurrentModifierMovementType = EPhysicsMovementType::Kinematic;
-				}
-			}
 
 			FString Classification = TEXT("fully_aligned");
 			if (Check.IntendedOwnership != EPhysicsMovementType::Kinematic)
