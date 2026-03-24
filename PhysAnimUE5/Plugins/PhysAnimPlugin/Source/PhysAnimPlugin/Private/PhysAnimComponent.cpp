@@ -2027,6 +2027,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			bSkipUpdateControls = true;
 			SkipReason = TEXT("first_post_quarantine_rooton_frame");
 		}
+		else if (BalanceEntryRootOnFrameCount == 4 && bPelvisSimAfterTuning && TotalSimAfterTuning >= 1)
+		{
+			bSkipUpdateControls = true;
+			SkipReason = TEXT("rooton_tick4_probe");
+		}
 
 		bool bCurrentPelvisSim = false;
 		int32 CurrentTotalSim = 0;
@@ -2061,6 +2066,48 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			}
 		}
 
+		if (BalanceEntryRootOnFrameCount == 4)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_PRE_COLLAPSE_AUDIT frame=%llu tick=%d rootRawSim=%d pelvisRawSim=%d mod=%s simCount=%d pendingResetsEmpty=%d owner=%s actor=%s component=%s"),
+				GFrameCounter,
+				BalanceEntryRootOnFrameCount,
+				bCurrentPelvisSim ? 1 : 0,
+				bCurrentPelvisSim ? 1 : 0,
+				GetPhysicsMovementTypeName(CurrentPelvisModifierType),
+				CurrentTotalSim,
+				PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
+				*GetOwner()->GetName(),
+				*GetOwner()->GetName(),
+				*GetName());
+
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				if (USkeletalMeshComponent* const Mesh = MeshComponent.Get())
+				{
+					if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+					{
+						EPhysicsMovementType ModifierType = EPhysicsMovementType::Static;
+						if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+						{
+							const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+							if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, ModifierName))
+							{
+								ModifierType = Record->BodyModifier.ModifierData.MovementType;
+							}
+						}
+
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_REQUIRED_BONE_SUMMARY bone=%s rawSim=%d mod=%s linSpeed=%.1f angSpeed=%.1f counted=%d"),
+							*BoneName.ToString(),
+							BI->IsInstanceSimulatingPhysics() ? 1 : 0,
+							GetPhysicsMovementTypeName(ModifierType),
+							BI->GetUnrealWorldVelocity().Size(),
+							FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size(),
+							BI->IsInstanceSimulatingPhysics() ? 1 : 0);
+					}
+				}
+			}
+		}
+
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_PRE_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
 			GFrameCounter,
 			bCurrentPelvisSim ? 1 : 0,
@@ -2079,6 +2126,54 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	else
 	{
 		PhysicsControl->UpdateControls(DeltaTime);
+	}
+
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount == 4 && !bSkipUpdateControls)
+	{
+		bool bCurrentPelvisSim = false;
+		int32 CurrentTotalSim = 0;
+		EPhysicsMovementType CurrentPelvisModifierType = EPhysicsMovementType::Kinematic;
+
+		if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+		{
+			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
+			{
+				CurrentPelvisModifierType = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
+		if (USkeletalMeshComponent* const Mesh = MeshComponent.Get())
+		{
+			const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+			if (FBodyInstance* const RootBI = Mesh->GetBodyInstance(RootBoneName))
+			{
+				bCurrentPelvisSim = RootBI->IsInstanceSimulatingPhysics();
+			}
+
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				{
+					if (BI->IsInstanceSimulatingPhysics())
+					{
+						CurrentTotalSim++;
+					}
+				}
+			}
+		}
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_POST_COLLAPSE_AUDIT frame=%llu tick=%d rootRawSim=%d pelvisRawSim=%d mod=%s simCount=%d pendingResetsEmpty=%d owner=%s actor=%s component=%s"),
+			GFrameCounter,
+			BalanceEntryRootOnFrameCount,
+			bCurrentPelvisSim ? 1 : 0,
+			bCurrentPelvisSim ? 1 : 0,
+			GetPhysicsMovementTypeName(CurrentPelvisModifierType),
+			CurrentTotalSim,
+			PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
+			*GetOwner()->GetName(),
+			*GetOwner()->GetName(),
+			*GetName());
 	}
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
