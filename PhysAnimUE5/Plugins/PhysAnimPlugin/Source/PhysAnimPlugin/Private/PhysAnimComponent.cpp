@@ -5395,16 +5395,30 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
-		// Phase 2 Root Promotion Audit (One-Shot)
+		// Phase 2 Root Promotion Audit (One-Shot per Frame)
 		if (bIsRootBodyModifier && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 		{
 			static int32 LastLoggedRootOnFrame = -1;
 			const int32 CurrentFrame = static_cast<int32>(GFrameNumber);
-			if (LastLoggedRootOnFrame != CurrentFrame)
+			
+			// DROP CULPRIT: Trace if the pelvis was simulating but we are about to write it as kinematic
+			if (bLastAppliedPresentationRootSimulationEnabled && BodyModifierMovementType == EPhysicsMovementType::Kinematic)
 			{
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d handoffAlpha=%.3f handoffSettled=%d movementType=%d blendWeight=%.2f collType=%d"), 
-					CurrentFrame, *BoneName.ToString(), bAllowRootBodyModifierSimulation ? 1 : 0, bTransitionOwnsRootOnThisTick ? 1 : 0, 
-					SimulationHandoffAlpha, bSimulationHandoffSettled ? 1 : 0,
+				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ROOT_DROP_CULPRIT frame=%d bone=%s previousSim=1 requestedSim=%d quarantined=%d keepsKin=%d source=ApplyRuntimeControlTuning"),
+					CurrentFrame, *BoneName.ToString(), 
+					bAllowRootBodyModifierSimulation ? 1 : 0, 
+					bPhase2RootAuthorityQuarantined ? 1 : 0,
+					bTransitionKeepsBoneKinematic ? 1 : 0);
+			}
+
+			if (LastLoggedRootOnFrame != CurrentFrame || GVerbosePhase2Forensics != 0)
+			{
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning"), 
+					CurrentFrame, *BoneName.ToString(), 
+					bAllowRootBodyModifierSimulation ? 1 : 0, 
+					bTransitionOwnsRootOnThisTick ? 1 : 0, 
+					bPhase2RootAuthorityQuarantined ? 1 : 0,
+					bTransitionKeepsBoneKinematic ? 1 : 0,
 					static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType));
 				LastLoggedRootOnFrame = CurrentFrame;
 			}
@@ -6660,6 +6674,7 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
 	const bool bPhase1RootOn = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
 	const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+	const FName RootModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
 	if (!PhysicsControl ||
 		PendingBodyModifierCachedResetNames.IsEmpty() ||
 		((bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle) && BalanceReadyTransition.ShouldSuppressResets()))
@@ -6673,7 +6688,6 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 	{
 		if ((bPhase1Prepare || bPhase1LateValidate || bPhase1RootOn || bPhase1Settle) && BalanceReadyTransition.ShouldSuppressResets())
 		{
-			const FName RootModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
 			if (ModifierName != RootModifierName)
 			{
 				continue;
@@ -6714,6 +6728,12 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		return;
 	}
 
+	if (ModifierNamesToReset.Contains(RootModifierName) && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+	{
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_WRITE_AUDIT frame=%d bone=%s movementType=1 source=ResetPendingBodyModifiersToCachedTargets"),
+			static_cast<int32>(GFrameNumber), *PhysAnimBridge::GetRootBoneName().ToString());
+	}
+
 	PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(
 		ModifierNamesToReset,
 		EResetToCachedTargetBehavior::ResetDuringUpdateControls,
@@ -6738,7 +6758,6 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		}
 	}
 
-	const FName RootModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
 	for (const FName ModifierName : ModifierNamesToReset)
 	{
 		if (ModifierName == RootModifierName)

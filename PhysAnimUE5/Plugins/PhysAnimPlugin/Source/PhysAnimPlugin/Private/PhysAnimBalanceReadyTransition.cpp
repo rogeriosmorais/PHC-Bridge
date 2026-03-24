@@ -1885,6 +1885,8 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
 				PelvisBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
 				PelvisBody->SetInstanceSimulatePhysics(true);
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s movementType=1 source=SetPhase_BRT_Phase2_RootOn"), 
+					static_cast<int32>(GFrameNumber), *PhysAnimBridge::GetRootBoneName().ToString());
 				PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
 				PelvisBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
 				bPhase2RootAuthorityQuarantined = true;
@@ -2373,7 +2375,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		}
 	}
 
-	if (Owner->bShellCorrectionStateLogged == false)
+	if (Owner->bShellCorrectionStateLogged == false || GVerbosePhase1Forensics != 0)
 	{
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_SHELL_CORRECTION_STATE active=%d influencingMetrics=%d staleLatch=%d"),
 			OutSnapshot.bShellCorrectionOwnerActive ? 1 : 0,
@@ -2394,7 +2396,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.bTransitionShellReferenceReanchored &&
 		!OutSnapshot.bTransitionShellReferenceReseededAfterLock;
 
-	if (Owner->bShellCorrectionStateLogged == false)
+	if (Owner->bShellCorrectionStateLogged == false || GVerbosePhase1Forensics != 0)
 	{
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_DEBUG proof=%d complete=%d locked=%d reanchored=%d duration=%.2f/%.2f offset=%.2f/%.2f growth=%.2f/%.2f affecting=%d"),
 			bShellSafetySatisfied ? 1 : 0, OutResult.bLateValidationCompleted ? 1 : 0, 
@@ -2403,7 +2405,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 			OutSnapshot.ShellOffsetDeltaAtCaptureCm, Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm,
 			OutSnapshot.ShellOffsetGrowthCm, Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm,
 			bShellCorrectionActivelyAffecting ? 1 : 0);
-		// Owner->bShellCorrectionStateLogged = true; // Stay noisy for this smoke test pass
+		Owner->bShellCorrectionStateLogged = true;
 	}
 
 	OutResult.bPreRootOnShellSafetyProofSatisfied = bShellSafetySatisfied;
