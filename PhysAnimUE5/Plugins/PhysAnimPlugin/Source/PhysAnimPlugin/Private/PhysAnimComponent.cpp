@@ -2019,6 +2019,14 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			bSkipUpdateControls = true;
 			SkipReason = TEXT("delayed_root_release_promotion_frame");
 		}
+		else if (BalanceEntryRootOnFrameCount == 3 && 
+				 bPelvisSimAfterTuning && 
+				 !BalanceReadyTransition.IsPhase2RootAuthorityQuarantined() && 
+				 TotalSimAfterTuning >= 1)
+		{
+			bSkipUpdateControls = true;
+			SkipReason = TEXT("first_post_quarantine_rooton_frame");
+		}
 
 		bool bCurrentPelvisSim = false;
 		int32 CurrentTotalSim = 0;
