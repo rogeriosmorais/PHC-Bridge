@@ -358,6 +358,7 @@ public:
 	const FString& GetSafePhase2DenialReason() const { return SafePhase2DenialReason; }
 
 	EBalanceReadyTransitionPhase GetPhase() const { return InternalPhase; }
+	int32 GetPhase2GuardTickCount() const { return Phase2GuardTickCount; }
 	const FString& GetBlockReason() const { return Diagnostics.BlockReason; }
 	const FString& GetFailureReason() const { return Diagnostics.FailureReason; }
 	const TMap<FName, FQuat>& GetEntryHoldRotations() const { return EntryHoldRotations; }

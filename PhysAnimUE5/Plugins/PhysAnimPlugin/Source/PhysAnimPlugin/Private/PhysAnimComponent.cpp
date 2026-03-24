@@ -1605,6 +1605,45 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	TrackStabilizationStressTestObservations();
 	AdvanceBringUpState(DeltaTime, EffectiveSettings);
 	MaintainTransitionOwnedShellLock();
+	
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceReadyTransition.GetPhase2GuardTickCount() == 0)
+	{
+		static const FName AuditBones[] = { PhysAnimBridge::GetRootBoneName(), TEXT("thigh_l"), TEXT("thigh_r"), TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") };
+		for (const FName& BoneName : AuditBones)
+		{
+			if (SkeletalMesh && PhysicsControl)
+			{
+				if (FBodyInstance* BI = SkeletalMesh->GetBodyInstance(BoneName))
+				{
+					const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+					const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+					EPhysicsMovementType ModifierType = EPhysicsMovementType::Static;
+					if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName))
+					{
+						ModifierType = Record->BodyModifier.ModifierData.MovementType;
+					}
+					
+					float BoneMaxTargetDelta = 0.0f;
+					if (LastControlTargetDiagnostics.MaxTargetDeltaBoneName == BoneName)
+					{
+						BoneMaxTargetDelta = LastControlTargetDiagnostics.MaxTargetDeltaDegrees;
+					}
+
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_PRE_GUARD_BODY_SPIKE_AUDIT bone=%s rawSim=%d mod=%d linVel=%.1f angVel=%.1f alpha=%.2f targetDelta=%.2f actor=%s component=%s"),
+						*BoneName.ToString(),
+						BI->IsInstanceSimulatingPhysics() ? 1 : 0,
+						static_cast<int32>(ModifierType),
+						BI->GetUnrealWorldVelocity().Size(),
+						FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size(),
+						CalculateBringUpGroupControlAuthorityAlpha(ResolveBringUpGroupIndex(BoneName), EffectiveSettings),
+						BoneMaxTargetDelta,
+						*GetOwner()->GetName(),
+						*GetName());
+				}
+			}
+		}
+	}
+
 	BalanceReadyTransition.Tick(DeltaTime, this, EffectiveSettings);
 
 	// Authoritative state sync (Section 4)
@@ -7395,10 +7434,44 @@ void UPhysAnimComponent::ApplyControlTargets(
 			bPolicyTargetsAppliedLastFrame = true;
 			for (const TPair<FName, FQuat>& Pair : ControlRotations)
 			{
-			if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
-			{
-				continue;
-			}
+				if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && 
+					BalanceReadyTransition.GetPhase2GuardTickCount() == 1)
+				{
+					static const TSet<FName> ProximalSet = { PhysAnimBridge::GetRootBoneName(), TEXT("thigh_l"), TEXT("thigh_r"), TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") };
+					if (ProximalSet.Contains(Pair.Key))
+					{
+						bool bPelvisSimNow = false;
+						int32 TotalSimNow = 0;
+						if (Mesh)
+						{
+							if (FBodyInstance* const RootBI = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
+							{
+								bPelvisSimNow = RootBI->IsInstanceSimulatingPhysics();
+							}
+							for (const FName& SimBone : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+							{
+								if (FBodyInstance* const BI = Mesh->GetBodyInstance(SimBone))
+								{
+									if (BI->IsInstanceSimulatingPhysics())
+									{
+										TotalSimNow++;
+									}
+								}
+							}
+						}
+
+						if (bPelvisSimNow && TotalSimNow >= 6)
+						{
+							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_ENTRY_PROXIMAL_POLICY_SUPPRESSED bone=%s frame=%llu actor=%s component=%s"), *Pair.Key.ToString(), GFrameCounter, *GetOwner()->GetName(), *GetName());
+							continue;
+						}
+					}
+				}
+
+				if (!ShouldApplyPolicyTargetToBone(Pair.Key, bPolicyInfluenceActive))
+				{
+					continue;
+				}
 
 			const FName ControlName = PhysAnimBridge::MakeControlName(Pair.Key);
 			if (!PhysicsControl->GetControlExists(ControlName))
