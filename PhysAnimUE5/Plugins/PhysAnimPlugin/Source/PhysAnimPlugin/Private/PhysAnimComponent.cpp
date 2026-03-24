@@ -5796,6 +5796,44 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
+		// PHASE2 PROXIMAL SET PRESERVATION:
+		// These five bones must remain simulated during RootOn to match Phase 1 topology.
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+			(BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
+			 BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03")))
+		{
+			BodyModifierMovementType = EPhysicsMovementType::Simulated;
+			BodyModifierPhysicsBlendWeight = 1.0f;
+			BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
+			bUpdateKinematicFromSimulation = false;
+
+			// Force raw simulation to ensure Chaos doesn't drop them
+			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+			{
+				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				{
+					BI->SetInstanceSimulatePhysics(true, true);
+				}
+			}
+
+			// Narrow confirmation log
+			{
+				const USkeletalMeshComponent* const Mesh = GetMeshComponent();
+				const FBodyInstance* const BI = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
+				const int32 RawSim = (BI && BI->IsInstanceSimulatingPhysics()) ? 1 : 0;
+
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_SET_PRESERVED frame=%d tick=%d bone=%s modifierMovementType=%d rawSim=%d owner=%d actor=%s component=%s"),
+					static_cast<int32>(CurrentFrameNumber),
+					static_cast<int32>(BalanceEntryRootOnFrameCount),
+					*BoneName.ToString(),
+					static_cast<int32>(BodyModifierMovementType),
+					RawSim,
+					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+					*GetOwner()->GetName(),
+					*GetName());
+			}
+		}
+
 		// PHASE2 ROOT PERSISTENCE GUARD:
 		// If we are in Phase 2 root-on and the root was already simulating last tick, 
 		// or we are in the quarantine window, do not let per-bone resolution drop it back to kinematic.
