@@ -21,6 +21,8 @@ public:
 
 DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
 
+extern int32 GStrictPhase1Certification;
+
 namespace BalanceTransitionSets
 {
 	static constexpr float Phase2TopologySettleGraceSeconds = 1.0f / 30.0f;
@@ -550,8 +552,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			QuietWindowAccumulatedSeconds = 0.0f;
 		}
 
-		if (TotalTransitionTimeSeconds > Settings.BalancePhase1TimeoutDuration)
+		if (TotalTransitionTimeSeconds > (GStrictPhase1Certification != 0 ? 2.0f : Settings.BalancePhase1TimeoutDuration))
 		{
+			if (TotalTransitionTimeSeconds > 2.0f + KINDA_SMALL_NUMBER)
+			{
+				Audit.bUsedTimeoutExtension = true;
+			}
 			const FString& TerminalQuietBlockReason = !LastLateValidateBlockReason.IsEmpty()
 				? LastLateValidateBlockReason
 				: (!QuietBlockReason.IsEmpty() ? QuietBlockReason : LastQuietBlockReason);
@@ -1154,8 +1160,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
 		}
 
-		if (TotalTransitionTimeSeconds > Settings.BalancePhase1TimeoutDuration)
+		if (TotalTransitionTimeSeconds > (GStrictPhase1Certification != 0 ? 2.0f : Settings.BalancePhase1TimeoutDuration))
 		{
+			if (TotalTransitionTimeSeconds > 2.0f + KINDA_SMALL_NUMBER)
+			{
+				Audit.bUsedTimeoutExtension = true;
+			}
 			const bool bQuietProofSatisfied = QuietWindowAccumulatedSeconds >= Settings.BalancePhase1QuietRequiredSeconds;
 			const bool bExpectedReleaseSatisfied = bExpectedUpperBodyRelease;
 			const bool bUpperBodyHoldSatisfied = !bUpperBodyInstability;
@@ -1876,6 +1886,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied)
 	{
 		ResetCertifiedHandoffState();
+		Audit.Reset();
 	}
 }
 
@@ -2237,7 +2248,25 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame =
 		Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
 	OutSnapshot.bTransitionOwnedShellLocked = Owner->IsTransitionOwnedShellLocked();
-	OutSnapshot.bTransitionShellReferenceReanchored = Owner->WasTransitionShellReferenceReanchored() || (OutSnapshot.bTransitionOwnedShellLocked && Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle);
+	OutSnapshot.bTransitionOwnedShellLocked = Owner->IsTransitionOwnedShellLocked();
+	
+	const bool bShellLockedAndIdle = OutSnapshot.bTransitionOwnedShellLocked && Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle;
+	const bool bExplicitReanchored = Owner->WasTransitionShellReferenceReanchored();
+	
+	if (bShellLockedAndIdle && !bExplicitReanchored)
+	{
+		Audit.bUsedReanchorShortcut = true;
+	}
+
+	if (GStrictPhase1Certification != 0)
+	{
+		OutSnapshot.bTransitionShellReferenceReanchored = bExplicitReanchored;
+	}
+	else
+	{
+		OutSnapshot.bTransitionShellReferenceReanchored = bExplicitReanchored || bShellLockedAndIdle;
+	}
+
 	OutSnapshot.bTransitionShellReferenceReseededAfterLock = Owner->WasTransitionShellReferenceReseededAfterLock();
 
 	// Populate Logical Result
@@ -2255,9 +2284,29 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.RootOnReadinessPolicyInfluenceRequiredSeconds;
 	const float SignificantShellOffsetThresholdCm = 0.1f;
 	const float SignificantShellVelocityThresholdCmPerSecond = 1.0f;
-	const bool bShellCorrectionActivelyAffecting = OutSnapshot.bShellCorrectionOwnerActive && 
-		(OutSnapshot.ShellOffsetDeltaAtCaptureCm > SignificantShellOffsetThresholdCm || 
-		 OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond > SignificantShellVelocityThresholdCmPerSecond);
+	
+	bool bShellCorrectionActivelyAffecting = false;
+	if (GStrictPhase1Certification != 0)
+	{
+		bShellCorrectionActivelyAffecting = OutSnapshot.bShellCorrectionOwnerActive && 
+			(OutSnapshot.ShellOffsetDeltaAtCaptureCm > UE_SMALL_NUMBER || 
+			 OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond > UE_SMALL_NUMBER);
+	}
+	else
+	{
+		bShellCorrectionActivelyAffecting = OutSnapshot.bShellCorrectionOwnerActive && 
+			(OutSnapshot.ShellOffsetDeltaAtCaptureCm > SignificantShellOffsetThresholdCm || 
+			 OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond > SignificantShellVelocityThresholdCmPerSecond);
+		
+		if (OutSnapshot.bShellCorrectionOwnerActive && !bShellCorrectionActivelyAffecting)
+		{
+			if (OutSnapshot.ShellOffsetDeltaAtCaptureCm > UE_SMALL_NUMBER || 
+				OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond > UE_SMALL_NUMBER)
+			{
+				Audit.bUsedShellOwnershipNarrowing = true;
+			}
+		}
+	}
 
 	if (Owner->bShellCorrectionStateLogged == false)
 	{
@@ -2309,6 +2358,64 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 			: (OutResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
 				? EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly
 				: EBalanceLateValidationOutcome::Outcome_Pending);
+
+	if (OutResult.Outcome == EBalanceLateValidationOutcome::Outcome_AcceptRootOn)
+	{
+		Audit.bUsedRelaxedCertification = Audit.bUsedTimeoutExtension || Audit.bUsedDwellShortcut || Audit.bUsedReanchorShortcut || Audit.bUsedShellOwnershipNarrowing;
+		Audit.Topology = OutSnapshot.TopologyClass;
+		Audit.ProximalSimCount = OutSnapshot.ProximalSimCount;
+		Audit.DistalSimCount = OutSnapshot.DistalSimCount;
+		Audit.UpperBodySimCount = OutSnapshot.UpperBodySimCount;
+		Audit.bShellReanchored = OutSnapshot.bTransitionShellReferenceReanchored;
+		Audit.bShellLocked = OutSnapshot.bTransitionOwnedShellLocked;
+		Audit.ShellOffset = OutSnapshot.ShellOffsetDeltaAtCaptureCm;
+		Audit.ShellVelocity = OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond;
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_CERTIFICATION_AUDIT STRICT_AUDIT_V1 usedRelaxedCertification=%d usedTimeoutExtension=%d usedDwellShortcut=%d usedReanchorShortcut=%d usedShellOwnershipNarrowing=%d topology=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d shellReanchored=%d shellLocked=%d shellOffset=%.2f shellVelocity=%.2f"),
+			Audit.bUsedRelaxedCertification ? 1 : 0,
+			Audit.bUsedTimeoutExtension ? 1 : 0,
+			Audit.bUsedDwellShortcut ? 1 : 0,
+			Audit.bUsedReanchorShortcut ? 1 : 0,
+			Audit.bUsedShellOwnershipNarrowing ? 1 : 0,
+			*Audit.Topology,
+			OutSnapshot.SimCount,
+			Audit.ProximalSimCount,
+			Audit.DistalSimCount,
+			Audit.UpperBodySimCount,
+			Audit.bShellReanchored ? 1 : 0,
+			Audit.bShellLocked ? 1 : 0,
+			Audit.ShellOffset,
+			Audit.ShellVelocity);
+	}
+	else
+	{
+		Audit.bUsedRelaxedCertification = Audit.bUsedTimeoutExtension || Audit.bUsedDwellShortcut || Audit.bUsedReanchorShortcut || Audit.bUsedShellOwnershipNarrowing;
+		Audit.Topology = OutSnapshot.TopologyClass;
+		Audit.ProximalSimCount = OutSnapshot.ProximalSimCount;
+		Audit.DistalSimCount = OutSnapshot.DistalSimCount;
+		Audit.UpperBodySimCount = OutSnapshot.UpperBodySimCount;
+		Audit.bShellReanchored = OutSnapshot.bTransitionShellReferenceReanchored;
+		Audit.bShellLocked = OutSnapshot.bTransitionOwnedShellLocked;
+		Audit.ShellOffset = OutSnapshot.ShellOffsetDeltaAtCaptureCm;
+		Audit.ShellVelocity = OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond;
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_FAILED_CERTIFICATION_AUDIT STRICT_AUDIT_V1 usedRelaxedCertification=%d usedTimeoutExtension=%d usedDwellShortcut=%d usedReanchorShortcut=%d usedShellOwnershipNarrowing=%d topology=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d shellReanchored=%d shellLocked=%d shellOffset=%.2f shellVelocity=%.2f result=%d"),
+			Audit.bUsedRelaxedCertification ? 1 : 0,
+			Audit.bUsedTimeoutExtension ? 1 : 0,
+			Audit.bUsedDwellShortcut ? 1 : 0,
+			Audit.bUsedReanchorShortcut ? 1 : 0,
+			Audit.bUsedShellOwnershipNarrowing ? 1 : 0,
+			*Audit.Topology,
+			OutSnapshot.SimCount,
+			Audit.ProximalSimCount,
+			Audit.DistalSimCount,
+			Audit.UpperBodySimCount,
+			Audit.bShellReanchored ? 1 : 0,
+			Audit.bShellLocked ? 1 : 0,
+			Audit.ShellOffset,
+			Audit.ShellVelocity,
+			(int32)OutResult.Outcome);
+	}
 
 	OutResult.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
 	OutResult.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;

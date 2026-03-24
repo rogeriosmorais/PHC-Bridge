@@ -159,6 +159,29 @@ struct FPhysAnimLateValidationResult
 	float LateValidationSustainDurationSeconds = 0.0f;
 };
 
+struct FPhase1CertificationAudit
+{
+	bool bUsedRelaxedCertification = false;
+	bool bUsedTimeoutExtension = false;
+	bool bUsedDwellShortcut = false;
+	bool bUsedReanchorShortcut = false;
+	bool bUsedShellOwnershipNarrowing = false;
+
+	FString Topology;
+	int32 ProximalSimCount = 0;
+	int32 DistalSimCount = 0;
+	int32 UpperBodySimCount = 0;
+	bool bShellReanchored = false;
+	bool bShellLocked = false;
+	float ShellOffset = 0.0f;
+	float ShellVelocity = 0.0f;
+
+	void Reset()
+	{
+		*this = FPhase1CertificationAudit();
+	}
+};
+
 struct FPhysAnimCertifiedHandoffSnapshot
 {
 	FString TopologyClass;
@@ -323,6 +346,8 @@ public:
 	int32 DistalMismatchesTransientCount = 0;
 	int32 DistalMismatchesPersistentCount = 0;
 	int32 DistalMismatchesPendingCount = 0;
+
+	mutable FPhase1CertificationAudit Audit;
 
 	/** Returns true if the transition has been started and is either running or has completed. */
 	bool HasAnyInternalPhase() const { return InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive; }

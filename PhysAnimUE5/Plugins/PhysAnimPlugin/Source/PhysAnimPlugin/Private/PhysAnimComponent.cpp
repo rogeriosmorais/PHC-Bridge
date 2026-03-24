@@ -59,6 +59,13 @@ TRACE_DECLARE_INT_COUNTER(COUNTER_PhysAnim_NumTotalTargetsWritten, TEXT("PhysAni
 TRACE_DECLARE_INT_COUNTER(COUNTER_PhysAnim_RuntimeState, TEXT("PhysAnim/Runtime State"));
 TRACE_DECLARE_INT_COUNTER(COUNTER_PhysAnim_FailStopCount, TEXT("PhysAnim/FailStop Count"));
 
+int32 GStrictPhase1Certification = 1;
+static FAutoConsoleVariableRef CVarStrictPhase1Certification(
+	TEXT("p.PhysAnim.StrictPhase1Certification"),
+	GStrictPhase1Certification,
+	TEXT("If 1, Phase 1 certification restores original, more stringent constraints (timeout, dwell, shell reanchor, and ownership rules) to verify genuine convergence."),
+	ECVF_Cheat);
+
 namespace PhysAnimComponentInternal
 {
 	const FName PoseHistoryName(TEXT("PoseHistory_Stage1"));
@@ -754,6 +761,8 @@ namespace
 void UPhysAnimComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] GStrictPhase1Certification = %d"), GStrictPhase1Certification);
 
 	FString Error;
 	if (!BeginStartupTPoseCapture(Error))
@@ -2797,7 +2806,9 @@ float UPhysAnimComponent::GetCurrentShellPlanarVelocityDeltaCmPerSecond() const
 
 bool UPhysAnimComponent::IsTransitionOwnedShellLocked() const
 {
-	return IsBalanceEntryState(RuntimeState) || RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery;
+	return (BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked) ||
+		IsBalanceEntryState(RuntimeState) || 
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery;
 }
 
 void UPhysAnimComponent::ReanchorShellCouplingReferenceToCurrentRoot()
@@ -6166,10 +6177,21 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 	}
 
 	BringUpGroupStableAccumulatedSeconds += DeltaTime;
-	const float StableDwellSeconds = 0.10f; // Rapid unlock during transition.
+	float StableDwellSeconds = 0.10f; // Rapid unlock during transition.
+	
+	if (GStrictPhase1Certification != 0)
+	{
+		StableDwellSeconds = 0.25f;
+	}
+
 	if (BringUpGroupStableAccumulatedSeconds < StableDwellSeconds)
 	{
 		return;
+	}
+
+	if (BringUpGroupStableAccumulatedSeconds < 0.25f - KINDA_SMALL_NUMBER)
+	{
+		BalanceReadyTransition.Audit.bUsedDwellShortcut = true;
 	}
 
 	const int32 CoreFinalGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
@@ -6272,6 +6294,18 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_RAMP_ARMED group=%d"), HighestUnlockedBringUpGroupIndex);
 		return;
+	}
+
+	if (HighestUnlockedBringUpGroupIndex == 4)
+	{
+		if (BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked)
+		{
+			if (!bTransitionOwnedShellReferenceReanchored)
+			{
+				ReanchorShellCouplingReferenceToCurrentRoot();
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Phase 1 reanchored shell reference at final bring-up group unlock."));
+			}
+		}
 	}
 }
 
