@@ -5007,6 +5007,29 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			EffectiveSettings.bUseSkeletalAnimationTargets,
 			bPolicyInfluenceActive);
 
+	static uint64 LastFrameNumber = 0;
+	static TMap<UPhysAnimComponent*, int32> CallCounts;
+	const uint64 CurrentFrameNumber = GFrameNumber;
+	if (LastFrameNumber != CurrentFrameNumber)
+	{
+		CallCounts.Empty();
+		LastFrameNumber = CurrentFrameNumber;
+	}
+	int32& CallIndexRef = CallCounts.FindOrAdd(this);
+	CallIndexRef++;
+	const int32 CurrentCallIndex = CallIndexRef;
+
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+	{
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_TUNING_CALL_AUDIT frame=%d callIndex=%d runtimeState=%s owner=%d actor=%s component=%s"),
+			static_cast<int32>(CurrentFrameNumber),
+			CurrentCallIndex,
+			GetRuntimeStateName(RuntimeState),
+			static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+			*GetOwner()->GetName(),
+			*GetName());
+	}
+
 	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
 	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
 	if (bRootSimFlipFrame)
@@ -5530,24 +5553,26 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 			if (RawReadbackValue != -1)
 			{
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning rawReadback=%d"), 
-					CurrentFrame, *BoneName.ToString(), 
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning rawReadback=%d callIndex=%d"), 
+					static_cast<int32>(CurrentFrameNumber), *BoneName.ToString(), 
 					bAllowRootBodyModifierSimulation ? 1 : 0, 
 					bTransitionOwnsRootOnThisTick ? 1 : 0, 
 					bPhase2RootAuthorityQuarantined ? 1 : 0,
 					bTransitionKeepsBoneKinematic ? 1 : 0,
 					static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType),
-					RawReadbackValue);
+					RawReadbackValue,
+					CurrentCallIndex);
 			}
 			else
 			{
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning"), 
-					CurrentFrame, *BoneName.ToString(), 
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning callIndex=%d"), 
+					static_cast<int32>(CurrentFrameNumber), *BoneName.ToString(), 
 					bAllowRootBodyModifierSimulation ? 1 : 0, 
 					bTransitionOwnsRootOnThisTick ? 1 : 0, 
 					bPhase2RootAuthorityQuarantined ? 1 : 0,
 					bTransitionKeepsBoneKinematic ? 1 : 0,
-					static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType));
+					static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType),
+					CurrentCallIndex);
 			}
 		}
 
@@ -10134,7 +10159,12 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 
 	if (IsBalanceEntryState(NewState))
 	{
-		ApplyRuntimeControlTuning(ResolveEffectiveStabilizationSettings());
+		// Phase 2 states (RootOn/Settle) will receive their tuning via the normal per-tick path in TickComponent.
+		// Phase 1 states (Prepare/LateValidate) still require the eager publishing here.
+		if (NewState != EPhysAnimRuntimeState::BalanceEntry_RootOn && NewState != EPhysAnimRuntimeState::BalanceEntry_Settle)
+		{
+			ApplyRuntimeControlTuning(ResolveEffectiveStabilizationSettings());
+		}
 	}
 
 	if (NewState == EPhysAnimRuntimeState::BalanceEntry_Prepare)
