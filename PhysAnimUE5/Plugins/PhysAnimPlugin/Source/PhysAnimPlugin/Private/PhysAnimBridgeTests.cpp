@@ -2423,7 +2423,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 
 		TestFalse(TEXT("Startup bring-up is not frozen before balance entry"), Component->IsStartupBringUpFrozenByBalanceEntry());
 		TestTrue(TEXT("Bring-up control ramp can start before balance entry freezes startup"), UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(false, true, false, true));
-		TestTrue(TEXT("Policy influence ramp can start before balance entry freezes startup"), UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, true, true));
+		TestTrue(TEXT("Policy influence ramp can start before balance entry freezes startup"), UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(EPhysAnimRuntimeState::BridgeActive, false, true, true, true));
 
 		Component->StartBalancePerturbationMode();
 		TestFalse(TEXT("Queued balance request does not freeze startup bring-up"), Component->IsStartupBringUpFrozenByBalanceEntry());
@@ -2431,7 +2431,7 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 		Component->SetStartupBringUpFrozenByBalanceEntry(true);
 		TestTrue(TEXT("Startup bring-up freeze flag can be owned by balance entry"), Component->IsStartupBringUpFrozenByBalanceEntry());
 		TestFalse(TEXT("Frozen startup blocks bring-up group control ramp start"), UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(false, true, false, true, true));
-		TestFalse(TEXT("Frozen startup blocks policy influence ramp start"), UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, true, true, true));
+		TestFalse(TEXT("Frozen startup blocks policy influence ramp start"), UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(EPhysAnimRuntimeState::BridgeActive, false, true, true, true, true));
 		return true;
 	}
 
@@ -2783,19 +2783,19 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	{
 		TestFalse(
 			TEXT("Force-zero mode blocks policy influence ramp start"),
-			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(true, true, true, true));
+			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(EPhysAnimRuntimeState::BridgeActive, true, true, true, true));
 		TestFalse(
 			TEXT("Policy influence waits until all bring-up groups are unlocked"),
-			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, false, true, true));
+			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(EPhysAnimRuntimeState::BridgeActive, false, false, true, true));
 		TestFalse(
 			TEXT("Policy influence waits until final-group control ramp is active"),
-			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, false, true));
+			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(EPhysAnimRuntimeState::BridgeActive, false, true, false, true));
 		TestFalse(
 			TEXT("Policy influence waits for a post-final-group-control settle window"),
-			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, true, false));
+			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(EPhysAnimRuntimeState::BridgeActive, false, true, true, false));
 		TestTrue(
 			TEXT("Policy influence can start after final-group control settles"),
-			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(false, true, true, true));
+			UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(EPhysAnimRuntimeState::BridgeActive, false, true, true, true));
 		return true;
 	}
 

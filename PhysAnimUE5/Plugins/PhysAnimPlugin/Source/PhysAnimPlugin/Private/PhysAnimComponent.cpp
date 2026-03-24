@@ -5819,7 +5819,7 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
 	const bool bFrozen = bStartupBringUpFrozenByBalanceEntry && !bPhase1Prepare && !bPhase1LateValidate;
 
-	if (bFrozen ||
+	if (bPhase1Prepare || bPhase1LateValidate || bFrozen ||
 		GroupIndex < 0 ||
 		GroupIndex >= GetBringUpGroupCount() ||
 		GroupIndex <= HighestUnlockedBringUpGroupIndex)
@@ -6351,6 +6351,11 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
 	const bool bFrozen = bStartupBringUpFrozenByBalanceEntry && !bPhase1Prepare && !bPhase1LateValidate;
 
+	if (bPhase1Prepare || bPhase1LateValidate)
+	{
+		return;
+	}
+
 	if (EffectiveSettings.bForceZeroActions || !IsBringUpGroupUnlocked(0) || bFrozen)
 	{
 		return;
@@ -6457,6 +6462,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 		
 		if (PolicyInfluenceRampStartTimeSeconds < 0.0 &&
 			ShouldStartPolicyInfluenceRamp(
+				RuntimeState,
 				EffectiveSettings.bForceZeroActions,
 				true,
 				IsBringUpGroupControlRampActive(CoreFinalGroupIndex),
@@ -6479,8 +6485,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 			? FMath::Min(EffectiveSettings.MaxAutoUnlockBringUpGroup, GetBringUpGroupCount() - 1)
 			: (GetBringUpGroupCount() - 1);
 	const int32 PhaseAwareMaxAutoUnlockGroup =
-		(RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
-         RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate)
+		(RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
 			? MaxConfiguredAutoUnlockGroup
 			: FMath::Min(MaxConfiguredAutoUnlockGroup, 1);
 	if (HighestUnlockedBringUpGroupIndex < PhaseAwareMaxAutoUnlockGroup)
@@ -6500,7 +6505,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 		return;
 	}
 
-	if (HighestUnlockedBringUpGroupIndex == 4)
+	if (IsBringUpGroupUnlocked(GetBringUpGroupCount() - 1))
 	{
 		if (BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked)
 		{
@@ -6519,13 +6524,34 @@ bool UPhysAnimComponent::AreAllBringUpGroupsUnlocked() const
 
 bool UPhysAnimComponent::IsBringUpGroupUnlocked(int32 GroupIndex) const
 {
-	return GroupIndex >= 0 && GroupIndex <= HighestUnlockedBringUpGroupIndex;
+	if (GroupIndex < 0) return false;
+
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+
+	if ((bPhase1Prepare || bPhase1LateValidate) && GroupIndex > HighestUnlockedBringUpGroupIndex)
+	{
+		// During fixed-baseline Phase 1, we pretend higher groups are unlocked 
+		// to satisfy transition settlement while and ApplyRuntimeControlTuning keeps them kinematic.
+		return true;
+	}
+
+	return GroupIndex <= HighestUnlockedBringUpGroupIndex;
 }
 
 bool UPhysAnimComponent::IsBringUpGroupControlRampActive(int32 GroupIndex) const
 {
-	return GroupIndex >= 0 &&
-		BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex) &&
+	if (GroupIndex < 0) return false;
+
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+
+	if ((bPhase1Prepare || bPhase1LateValidate) && GroupIndex > HighestUnlockedBringUpGroupIndex)
+	{
+		return IsBringUpGroupControlRampActive(HighestUnlockedBringUpGroupIndex);
+	}
+
+	return BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex) &&
 		BringUpGroupControlRampStartTimeSeconds[GroupIndex] >= 0.0;
 }
 
@@ -6538,6 +6564,14 @@ float UPhysAnimComponent::CalculateBringUpGroupControlAuthorityAlpha(
 	int32 GroupIndex,
 	const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+
+	if ((bPhase1Prepare || bPhase1LateValidate) && GroupIndex > HighestUnlockedBringUpGroupIndex)
+	{
+		return CalculateBringUpGroupControlAuthorityAlpha(HighestUnlockedBringUpGroupIndex, EffectiveSettings);
+	}
+
 	if (!IsBringUpGroupUnlocked(GroupIndex) ||
 		!BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex) ||
 		BringUpGroupControlRampStartTimeSeconds[GroupIndex] < 0.0)
@@ -8709,12 +8743,23 @@ bool UPhysAnimComponent::ShouldStartBringUpGroupControlRamp(
 }
 
 bool UPhysAnimComponent::ShouldStartPolicyInfluenceRamp(
+	EPhysAnimRuntimeState RuntimeState,
 	bool bForceZeroActions,
 	bool bAllBringUpGroupsUnlocked,
 	bool bFinalBringUpGroupControlRampActive,
 	bool bPostFinalGroupControlSettleComplete,
 	bool bStartupBringUpFrozenByBalanceEntry)
 {
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+
+	if ((bPhase1Prepare || bPhase1LateValidate))
+	{
+		// During fixed-baseline Phase 1, we allow the policy ramp to start 
+		// if the baseline is ready, even if overall bring-up is frozen and "absolute" all groups aren't unlocked.
+		return bFinalBringUpGroupControlRampActive && bPostFinalGroupControlSettleComplete;
+	}
+
 	if (bStartupBringUpFrozenByBalanceEntry ||
 		bForceZeroActions ||
 		!bAllBringUpGroupsUnlocked ||

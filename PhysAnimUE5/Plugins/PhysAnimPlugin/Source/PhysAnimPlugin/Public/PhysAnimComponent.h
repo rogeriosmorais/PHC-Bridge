@@ -1206,6 +1206,7 @@ public:
 		bool bPostUnlockSettleComplete,
 		bool bStartupBringUpFrozenByBalanceEntry = false);
 	static bool ShouldStartPolicyInfluenceRamp(
+		EPhysAnimRuntimeState RuntimeState,
 		bool bForceZeroActions,
 		bool bAllBringUpGroupsUnlocked,
 		bool bFinalBringUpGroupControlRampActive,
