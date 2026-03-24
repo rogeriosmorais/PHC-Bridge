@@ -1639,6 +1639,41 @@ extern int32 GVerbosePhase2Forensics;
 		if (!AbortReason.IsEmpty())
 		{
 			Diagnostics.FailureReason = AbortReason;
+
+			FString FailureType = TEXT("unknown");
+			if (AbortReason == TEXT("phase2_root_on_spike")) FailureType = TEXT("root_motion_spike");
+			else if (AbortReason == TEXT("phase2_root_simulation_dropped")) FailureType = TEXT("support/contact_failure");
+			else if (AbortReason == TEXT("phase2_policy_write_leak")) FailureType = TEXT("policy_offset_violation");
+			else if (AbortReason == TEXT("phase2_reset_violation")) FailureType = TEXT("stale_cached_target");
+			else if (AbortReason == TEXT("phase2_shell_correction_material")) FailureType = TEXT("shell_correction_influence");
+			else if (AbortReason == TEXT("phase2_topology_not_preserved")) FailureType = TEXT("topology_mismatch");
+			else if (AbortReason == TEXT("phase2_fail_stop_precursor")) FailureType = TEXT("root_motion_spike");
+
+			float MeasuredValue = 0.0f;
+			float ThresholdValue = 0.0f;
+			FName OffendingBoneValue = NAME_None;
+
+			if (AbortReason == TEXT("phase2_root_on_spike"))
+			{
+				if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed) { MeasuredValue = Diagnostics.RootSpeed; ThresholdValue = Settings.BalancePhase2AbortRootLinearSpeed; }
+				else if (Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed) { MeasuredValue = Diagnostics.RootAngularSpeed; ThresholdValue = Settings.BalancePhase2AbortRootAngularSpeed; }
+				else if (Diagnostics.PeakMaxBodyLinearSpeed > Settings.BalancePhase2AbortMaxBodyLinearSpeed) { MeasuredValue = Diagnostics.PeakMaxBodyLinearSpeed; ThresholdValue = Settings.BalancePhase2AbortMaxBodyLinearSpeed; }
+				else { MeasuredValue = Diagnostics.PeakMaxBodyAngularSpeed; ThresholdValue = Settings.BalancePhase2AbortMaxBodyAngularSpeed; }
+			}
+			else if (AbortReason == TEXT("phase2_policy_write_leak"))
+			{
+				MeasuredValue = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
+				ThresholdValue = Settings.BalancePhase2EntryMaxTargetDeltaDeg;
+				OffendingBoneValue = ControlTargetDiagnostics.MaxTargetDeltaBoneName;
+			}
+			else if (AbortReason == TEXT("phase2_shell_correction_material"))
+			{
+				MeasuredValue = Diagnostics.BaselineShellOffset;
+				ThresholdValue = Settings.BalancePhase2AbortShellOffsetDelta;
+			}
+
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f actor=%s component=%s"),
+				*AbortReason, *FailureType, *OffendingBoneValue.ToString(), MeasuredValue, ThresholdValue, *Owner->GetOwner()->GetName(), *Owner->GetName());
 			const EBalanceReadyConditionOwner FailureOwner = ClassifyConditionOwner(Diagnostics.FailureReason);
 			Diagnostics.LastRetryDecision = IsAutomaticRetryAllowed(
 				Diagnostics.FailureReason,
@@ -1805,6 +1840,17 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		Diagnostics.BaselineShellOffset = CachedConvergenceSnapshot.ShellPlanarOffset;
 		Diagnostics.BaselineShellVel = CachedConvergenceSnapshot.ShellPlanarVelocity;
 
+		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		EPhysicsMovementType PelvisModifierMovementType = EPhysicsMovementType::Static;
+		if (UPhysicsControlComponent* PhysicsControl = Owner->PhysicsControlComponent.Get())
+		{
+			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(RootBoneName);
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName))
+			{
+				PelvisModifierMovementType = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
 		UE_LOG(
 			LogPhysAnimBridge,
 			Warning,
@@ -1822,6 +1868,32 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			Audit.bUsedRelaxedCertification ? 0 : 1,
 			static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
 			*Owner->GetOwner()->GetName(), *Owner->GetName());
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_BODY_STATE runtimeState=%s rootRawSim=%d rootModifier=%s pelvisRawSim=%d pelvisModifier=%s bridgeOwnership=%s skeletalMeshSimBlend=%.2f rootLinVel=%.2f rootAngVel=%.2f pelvisLinVel=%.2f pelvisAngVel=%.2f"),
+			UPhysAnimComponent::GetRuntimeStateName(Owner->GetRuntimeState()),
+			bPelvisActualSim ? 1 : 0,
+			UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
+			bPelvisActualSim ? 1 : 0,
+			UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
+			BalanceTransitionSets::GetShellAuthorityModeName((EBalanceTransitionShellAuthorityMode)Owner->GetBalanceTransitionShellAuthorityMode()),
+			Owner->CalculateCurrentControlAuthorityAlpha(Owner->ResolveEffectiveStabilizationSettings()),
+			Diagnostics.BaselineRootLinVel,
+			Diagnostics.BaselineRootAngVel,
+			Diagnostics.BaselineRootLinVel,
+			Diagnostics.BaselineRootAngVel);
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_CONTACT_AND_SUPPORT_STATE shellCorrectionState=%d pendingResets=%d safetyLatch=%d"),
+			Owner->bShellCorrectionStateLogged ? 1 : 0,
+			Owner->GetPendingBodyModifierCachedResetNames().Num(),
+			bPhase2RootAuthorityQuarantined ? 1 : 0);
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_POLICY_AND_AUTHORITY_STATE controlAlpha=%.2f policyAlpha=%.2f policySuppressed=%d freezeActive=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f"),
+			Owner->CalculateCurrentControlAuthorityAlpha(EffectiveSettings),
+			Owner->CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings),
+			ShouldSuppressPolicy() ? 1 : 0,
+			Owner->IsStartupBringUpFrozenByBalanceEntry() ? 1 : 0,
+			*Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaBoneName.ToString(),
+			Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees);
 	}
 
 	if (Owner &&
