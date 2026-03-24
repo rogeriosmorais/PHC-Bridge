@@ -451,6 +451,9 @@ private:
 	bool bHasLateValidationProof = false;
 	bool bLateValidationProofPassed = false;
 	bool bLoggedLateValidateEntry = false;
+	bool bLoggedPhase1UpperBodyAudit = false;
+	bool bLoggedPhase2EntryAudit = false;
+	bool bLoggedPhase2FirstFailureAudit = false;
 	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
 
 

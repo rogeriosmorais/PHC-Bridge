@@ -231,6 +231,9 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	LateValidationAccumulatedSeconds = 0.0f;
 	LastLateValidateBlockReason.Reset();
 	bLoggedLateValidateEntry = false;
+	bLoggedPhase1UpperBodyAudit = false;
+	bLoggedPhase2EntryAudit = false;
+	bLoggedPhase2FirstFailureAudit = false;
 	EntryHoldRotations.Empty();
 	DistalBoneMismatchTicks.Empty();
 	DistalBoneConsecutiveMismatchTicks.Empty();
@@ -709,131 +712,154 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
 				if (Mesh)
 				{
-					// Forensic Audit: PHASE1_PRE_UPPER_BODY_GATE_AUDIT
-					static int32 LastAuditFrame = -1;
-					if (LastAuditFrame != GFrameCounter && InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
-					{
-						LastAuditFrame = GFrameCounter;
-
-						const FName AuditBones[] = { 
-							TEXT("neck_01"), TEXT("head"), 
-							TEXT("clavicle_l"), TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"),
-							TEXT("clavicle_r"), TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r") 
-						};
-
 						float MaxAuditTargetDelta = 0.0f;
 						FName MaxAuditTargetDeltaBone = NAME_None;
 
-						for (const FName AuditBone : AuditBones)
+						if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 						{
-							const FBodyInstance* AuditBody = Mesh->GetBodyInstance(AuditBone);
-							if (!AuditBody || !AuditBody->IsValidBodyInstance()) { continue; }
+							const bool bFirstLateValidateFrame = !bLoggedPhase1UpperBodyAudit;
+
+							const FName AuditBones[] = { 
+								TEXT("neck_01"), TEXT("head"), 
+								TEXT("clavicle_l"), TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"),
+								TEXT("clavicle_r"), TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r") 
+							};
+
+							for (const FName AuditBone : AuditBones)
+							{
+								const FBodyInstance* AuditBody = Mesh->GetBodyInstance(AuditBone);
+								if (!AuditBody || !AuditBody->IsValidBodyInstance()) { continue; }
+
+								float TargetDeltaDeg = 0.0f;
+								const FQuat* HoldRot = EntryHoldRotations.Find(AuditBone);
+								if (HoldRot)
+								{
+									TargetDeltaDeg = FMath::RadiansToDegrees(HoldRot->AngularDistance(Mesh->GetBoneQuaternion(AuditBone, EBoneSpaces::WorldSpace)));
+								}
+
+								if (TargetDeltaDeg > MaxAuditTargetDelta)
+								{
+									MaxAuditTargetDelta = TargetDeltaDeg;
+									MaxAuditTargetDeltaBone = AuditBone;
+								}
+
+								if (bFirstLateValidateFrame)
+								{
+									const FPhysicsBodyModifierRecord* ModifierRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PhysAnimBridge::MakeBodyModifierName(AuditBone));
+									const EPhysicsMovementType ModifierType = ModifierRecord ? ModifierRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Simulated;
+									const bool bHeldTargetWritten = HoldRot != nullptr;
+									const float LinVel = AuditBody->GetUnrealWorldVelocity().Size();
+									const float AngVel = FMath::RadiansToDegrees(AuditBody->GetUnrealWorldAngularVelocityInRadians().Size());
+									const bool bPendingReset = Owner->GetPendingBodyModifierCachedResetNames().Contains(PhysAnimBridge::MakeBodyModifierName(AuditBone));
+									const bool bInAllowlist = BalanceTransitionSets::IsUpperBody(AuditBone);
+
+									UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PRE_UPPER_BODY_GATE_AUDIT bone=%s rawSim=%d modifier=%s heldWritten=%d targetDelta=%.2f linVel=%.2f angVel=%.2f pendingReset=%d holdActive=%d allowlist=%d"),
+										*AuditBone.ToString(), AuditBody->IsInstanceSimulatingPhysics() ? 1 : 0, 
+										UPhysAnimComponent::GetPhysicsMovementTypeName(ModifierType),
+										bHeldTargetWritten ? 1 : 0, TargetDeltaDeg, LinVel, AngVel, bPendingReset ? 1 : 0,
+										Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold ? 1 : 0,
+										bInAllowlist ? 1 : 0);
+								}
+							}
+
+							if (bFirstLateValidateFrame)
+							{
+								UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
+									BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode),
+									Phase1TopologyRecord.UpperBodySimCount,
+									Phase1TopologyRecord.bPolicySuppressed ? 1 : 0,
+									Owner->CalculateCurrentPolicyInfluenceAlpha(Settings),
+									CertifiedLateValidationResult.QuietProofDurationSeconds,
+									Settings.BalancePhase1LateValidateRequiredSeconds,
+									Owner->GetPendingBodyModifierCachedResetNames().Num(),
+									*MaxAuditTargetDeltaBone.ToString(),
+									MaxAuditTargetDelta,
+									(LateValidationAccumulatedSeconds <= DeltaTime + KINDA_SMALL_NUMBER) ? 1 : 0);
+								bLoggedPhase1UpperBodyAudit = true;
+							}
+						}
+
+						const TArray<FName>& PendingResets = Owner->GetPendingBodyModifierCachedResetNames();
+						for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+						{
+							if (!BalanceTransitionSets::IsUpperBody(BoneName)) { continue; }
+
+							const FBodyInstance* BodyInst = Mesh->GetBodyInstance(BoneName);
+							if (!BodyInst || !BodyInst->IsValidBodyInstance()) { continue; }
+
+							const bool bRawSim = BodyInst->IsInstanceSimulatingPhysics();
+							const float LinVel = BodyInst->GetUnrealWorldVelocity().Size();
+							const float AngVel = FMath::RadiansToDegrees(BodyInst->GetUnrealWorldAngularVelocityInRadians().Size());
 
 							float TargetDeltaDeg = 0.0f;
-							const FQuat* HoldRot = EntryHoldRotations.Find(AuditBone);
+							const FQuat* HoldRot = EntryHoldRotations.Find(BoneName);
 							if (HoldRot)
 							{
-								TargetDeltaDeg = FMath::RadiansToDegrees(HoldRot->AngularDistance(Mesh->GetBoneQuaternion(AuditBone, EBoneSpaces::WorldSpace)));
+								TargetDeltaDeg = FMath::RadiansToDegrees(HoldRot->AngularDistance(Mesh->GetBoneQuaternion(BoneName, EBoneSpaces::WorldSpace)));
 							}
 
-							if (TargetDeltaDeg > MaxAuditTargetDelta)
+							const bool bHasPendingReset = PendingResets.Contains(PhysAnimBridge::MakeBodyModifierName(BoneName));
+
+							const bool bRawSimViolation = bRawSim;
+							const bool bTargetDeltaViolation = TargetDeltaDeg > 0.1f;
+							const bool bMotionViolation = LinVel > 1.0f || AngVel > 10.0f;
+							const bool bPendingResetViolation = bHasPendingReset;
+
+							bool bSuppressedByProbe = false;
+							if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate &&
+								Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold &&
+								bTargetDeltaViolation && !bRawSimViolation && !bMotionViolation && !bPendingResetViolation &&
+								LinVel == 0.0f && AngVel == 0.0f)
 							{
-								MaxAuditTargetDelta = TargetDeltaDeg;
-								MaxAuditTargetDeltaBone = AuditBone;
+								static int32 LastSuppressedFrame = -1;
+								const int32 CurrentFrame = GFrameCounter;
+								if (LastSuppressedFrame != CurrentFrame)
+								{
+									LastSuppressedFrame = CurrentFrame;
+									UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_TARGETDELTA_SUPPRESSED frame=%d bone=%s reason=late_validate_rebase_probe"),
+										CurrentFrame, *BoneName.ToString());
+								}
+								bSuppressedByProbe = true;
 							}
 
-							const FPhysicsBodyModifierRecord* ModifierRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PhysAnimBridge::MakeBodyModifierName(AuditBone));
-							const EPhysicsMovementType ModifierType = ModifierRecord ? ModifierRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Simulated;
-							const bool bHeldTargetWritten = HoldRot != nullptr;
-							const float LinVel = AuditBody->GetUnrealWorldVelocity().Size();
-							const float AngVel = FMath::RadiansToDegrees(AuditBody->GetUnrealWorldAngularVelocityInRadians().Size());
-							const bool bPendingReset = Owner->GetPendingBodyModifierCachedResetNames().Contains(PhysAnimBridge::MakeBodyModifierName(AuditBone));
-							const bool bInAllowlist = BalanceTransitionSets::IsUpperBody(AuditBone);
-
-							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PRE_UPPER_BODY_GATE_AUDIT bone=%s rawSim=%d modifier=%s heldWritten=%d targetDelta=%.2f linVel=%.2f angVel=%.2f pendingReset=%d holdActive=%d allowlist=%d"),
-								*AuditBone.ToString(), AuditBody->IsInstanceSimulatingPhysics() ? 1 : 0, 
-								UPhysAnimComponent::GetPhysicsMovementTypeName(ModifierType),
-								bHeldTargetWritten ? 1 : 0, TargetDeltaDeg, LinVel, AngVel, bPendingReset ? 1 : 0,
-								Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold ? 1 : 0,
-								bInAllowlist ? 1 : 0);
-						}
-
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
-							BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode),
-							Phase1TopologyRecord.UpperBodySimCount,
-							Phase1TopologyRecord.bPolicySuppressed ? 1 : 0,
-							Owner->CalculateCurrentPolicyInfluenceAlpha(Settings),
-							CertifiedLateValidationResult.QuietProofDurationSeconds,
-							Settings.BalancePhase1LateValidateRequiredSeconds,
-							Owner->GetPendingBodyModifierCachedResetNames().Num(),
-							*MaxAuditTargetDeltaBone.ToString(),
-							MaxAuditTargetDelta,
-							(LateValidationAccumulatedSeconds <= DeltaTime + KINDA_SMALL_NUMBER) ? 1 : 0);
-					}
-
-					const TArray<FName>& PendingResets = Owner->GetPendingBodyModifierCachedResetNames();
-					for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
-					{
-						if (!BalanceTransitionSets::IsUpperBody(BoneName)) { continue; }
-
-						const FBodyInstance* BodyInst = Mesh->GetBodyInstance(BoneName);
-						if (!BodyInst || !BodyInst->IsValidBodyInstance()) { continue; }
-
-						const bool bRawSim = BodyInst->IsInstanceSimulatingPhysics();
-						const float LinVel = BodyInst->GetUnrealWorldVelocity().Size();
-						const float AngVel = FMath::RadiansToDegrees(BodyInst->GetUnrealWorldAngularVelocityInRadians().Size());
-
-						float TargetDeltaDeg = 0.0f;
-						const FQuat* HoldRot = EntryHoldRotations.Find(BoneName);
-						if (HoldRot)
-						{
-							TargetDeltaDeg = FMath::RadiansToDegrees(HoldRot->AngularDistance(Mesh->GetBoneQuaternion(BoneName, EBoneSpaces::WorldSpace)));
-						}
-
-						const bool bHasPendingReset = PendingResets.Contains(PhysAnimBridge::MakeBodyModifierName(BoneName));
-
-						const bool bRawSimViolation = bRawSim;
-						const bool bTargetDeltaViolation = TargetDeltaDeg > 0.1f;
-						const bool bMotionViolation = LinVel > 1.0f || AngVel > 10.0f;
-						const bool bPendingResetViolation = bHasPendingReset;
-
-						bool bSuppressedByProbe = false;
-						if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate &&
-							Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold &&
-							bTargetDeltaViolation && !bRawSimViolation && !bMotionViolation && !bPendingResetViolation &&
-							LinVel == 0.0f && AngVel == 0.0f)
-						{
-							static int32 LastSuppressedFrame = -1;
-							const int32 CurrentFrame = GFrameCounter;
-							if (LastSuppressedFrame != CurrentFrame)
+							if ((bRawSimViolation || bTargetDeltaViolation || bMotionViolation || bPendingResetViolation) && !bSuppressedByProbe)
 							{
-								LastSuppressedFrame = CurrentFrame;
-								UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_TARGETDELTA_SUPPRESSED frame=%d bone=%s reason=late_validate_rebase_probe"),
-									CurrentFrame, *BoneName.ToString());
+								bUpperBodyInstability = true;
+
+								static FName LastReportedBone = NAME_None;
+								static int32 LastSummaryFrame = -1;
+								if (LastReportedBone != BoneName)
+								{
+									LastReportedBone = BoneName;
+
+									if (LastSummaryFrame != GFrameCounter)
+									{
+										LastSummaryFrame = GFrameCounter;
+										UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY (FAILURE_PENDING) upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
+											BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode),
+											Phase1TopologyRecord.UpperBodySimCount,
+											Phase1TopologyRecord.bPolicySuppressed ? 1 : 0,
+											Owner->CalculateCurrentPolicyInfluenceAlpha(Settings),
+											CertifiedLateValidationResult.QuietProofDurationSeconds,
+											Settings.BalancePhase1LateValidateRequiredSeconds,
+											Owner->GetPendingBodyModifierCachedResetNames().Num(),
+											*MaxAuditTargetDeltaBone.ToString(),
+											MaxAuditTargetDelta,
+											0);
+									}
+
+									FString Reason;
+									if (bRawSimViolation) Reason += TEXT("raw_sim_violation ");
+									if (bTargetDeltaViolation) Reason += TEXT("target_delta_violation ");
+									if (bMotionViolation) Reason += TEXT("motion_violation ");
+									if (bPendingResetViolation) Reason += TEXT("pending_reset_violation ");
+
+									UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_GATE bone=%s reason=%s targetDelta=%.2f linVel=%.2f angVel=%.2f"),
+										*BoneName.ToString(), *Reason.TrimEnd(), TargetDeltaDeg, LinVel, AngVel);
+								}
+								break;
 							}
-							bSuppressedByProbe = true;
 						}
-
-						if ((bRawSimViolation || bTargetDeltaViolation || bMotionViolation || bPendingResetViolation) && !bSuppressedByProbe)
-						{
-							bUpperBodyInstability = true;
-
-							static FName LastReportedBone = NAME_None;
-							if (LastReportedBone != BoneName)
-							{
-								LastReportedBone = BoneName;
-								FString Reason;
-								if (bRawSimViolation) Reason += TEXT("raw_sim_violation ");
-								if (bTargetDeltaViolation) Reason += TEXT("target_delta_violation ");
-								if (bMotionViolation) Reason += TEXT("motion_violation ");
-								if (bPendingResetViolation) Reason += TEXT("pending_reset_violation ");
-
-								UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_GATE bone=%s reason=%s targetDelta=%.2f linVel=%.2f angVel=%.2f"),
-									*BoneName.ToString(), *Reason.TrimEnd(), TargetDeltaDeg, LinVel, AngVel);
-							}
-							break;
-						}
-					}
 				}
 			}
 			else
@@ -1480,19 +1506,20 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		const bool bPelvisActualSim = Owner->IsPelvisSimulatingNow();
 		const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
 
+		EPhysicsMovementType PelvisModifierMovementType = EPhysicsMovementType::Static;
+		if (UPhysicsControlComponent* PhysicsControl = Owner->PhysicsControlComponent.Get())
+		{
+			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName))
+			{
+				PelvisModifierMovementType = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
 		if (Phase2GuardTickCount <= 2)
 		{
 			if (Phase2GuardTickCount == 1)
 			{
-				EPhysicsMovementType PelvisModifierMovementType = EPhysicsMovementType::Static;
-				if (UPhysicsControlComponent* PhysicsControl = Owner->PhysicsControlComponent.Get())
-				{
-					const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
-					if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName))
-					{
-						PelvisModifierMovementType = Record->BodyModifier.ModifierData.MovementType;
-					}
-				}
 
 extern int32 GVerbosePhase2Forensics;
 
@@ -1672,8 +1699,24 @@ extern int32 GVerbosePhase2Forensics;
 				ThresholdValue = Settings.BalancePhase2AbortShellOffsetDelta;
 			}
 
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f actor=%s component=%s"),
-				*AbortReason, *FailureType, *OffendingBoneValue.ToString(), MeasuredValue, ThresholdValue, *Owner->GetOwner()->GetName(), *Owner->GetName());
+			if (!bLoggedPhase2FirstFailureAudit)
+			{
+				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f state=%s rootRawSim=%d pelvisRawSim=%d pelvisModType=%s simCountPost=%d upperBodySimPost=%d policyAlpha=%.2f controlAlpha=%.2f shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+					*AbortReason, *FailureType, *OffendingBoneValue.ToString(), MeasuredValue, ThresholdValue, 
+					UPhysAnimComponent::GetRuntimeStateName(Owner->GetRuntimeState()),
+					bPelvisActualSim ? 1 : 0,
+					bPelvisActualSim ? 1 : 0,
+					UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
+					Diagnostics.SimCountPost,
+					Diagnostics.UpperBodySimCountPost,
+					Owner->CalculateCurrentPolicyInfluenceAlpha(Settings),
+					Owner->CalculateCurrentControlAuthorityAlpha(Settings),
+					CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+					CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
+					*Owner->GetOwner()->GetName(), *Owner->GetName());
+				bLoggedPhase2FirstFailureAudit = true;
+			}
 			const EBalanceReadyConditionOwner FailureOwner = ClassifyConditionOwner(Diagnostics.FailureReason);
 			Diagnostics.LastRetryDecision = IsAutomaticRetryAllowed(
 				Diagnostics.FailureReason,
@@ -1851,49 +1894,41 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			}
 		}
 
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("[PhysAnimBalance] PHASE2_ENTRY_AUDIT topology=%s shellLocked=%d shellReanchored=%d shellReseeded=%d rootSimRequested=%d rootSimActual=%d preSim=%d postSim=%d shellOffset=%.2f shellVel=%.2f strict=%d owner=%d actor=%s component=%s"),
-			*CertifiedHandoff.TopologyClass,
-			CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
-			CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
-			CertifiedHandoff.bTransitionShellReferenceReseededAfterLock ? 1 : 0,
-			bPelvisRequestedSim ? 1 : 0,
-			bPelvisActualSim ? 1 : 0,
-			Diagnostics.SimCountPre,
-			Diagnostics.SimCountPost,
-			Diagnostics.BaselineShellOffset,
-			Diagnostics.BaselineShellVel,
-			Audit.bUsedRelaxedCertification ? 0 : 1,
-			static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
-			*Owner->GetOwner()->GetName(), *Owner->GetName());
+		if (!bLoggedPhase2EntryAudit)
+		{
+			USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
+			const FVector RootLinVel = Mesh ? Mesh->GetPhysicsLinearVelocity(RootBoneName) : FVector::ZeroVector;
+			const FVector RootAngVel = Mesh ? Mesh->GetPhysicsAngularVelocityInDegrees(RootBoneName) : FVector::ZeroVector;
 
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_BODY_STATE runtimeState=%s rootRawSim=%d rootModifier=%s pelvisRawSim=%d pelvisModifier=%s bridgeOwnership=%s skeletalMeshSimBlend=%.2f rootLinVel=%.2f rootAngVel=%.2f pelvisLinVel=%.2f pelvisAngVel=%.2f"),
-			UPhysAnimComponent::GetRuntimeStateName(Owner->GetRuntimeState()),
-			bPelvisActualSim ? 1 : 0,
-			UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
-			bPelvisActualSim ? 1 : 0,
-			UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
-			BalanceTransitionSets::GetShellAuthorityModeName((EBalanceTransitionShellAuthorityMode)Owner->GetBalanceTransitionShellAuthorityMode()),
-			Owner->CalculateCurrentControlAuthorityAlpha(Owner->ResolveEffectiveStabilizationSettings()),
-			Diagnostics.BaselineRootLinVel,
-			Diagnostics.BaselineRootAngVel,
-			Diagnostics.BaselineRootLinVel,
-			Diagnostics.BaselineRootAngVel);
-
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_CONTACT_AND_SUPPORT_STATE shellCorrectionState=%d pendingResets=%d safetyLatch=%d"),
-			Owner->bShellCorrectionStateLogged ? 1 : 0,
-			Owner->GetPendingBodyModifierCachedResetNames().Num(),
-			bPhase2RootAuthorityQuarantined ? 1 : 0);
-
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_POLICY_AND_AUTHORITY_STATE controlAlpha=%.2f policyAlpha=%.2f policySuppressed=%d freezeActive=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f"),
-			Owner->CalculateCurrentControlAuthorityAlpha(EffectiveSettings),
-			Owner->CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings),
-			ShouldSuppressPolicy() ? 1 : 0,
-			Owner->IsStartupBringUpFrozenByBalanceEntry() ? 1 : 0,
-			*Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaBoneName.ToString(),
-			Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees);
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimBalance] PHASE2_ENTRY_AUDIT topology=%s owner=%d actor=%s component=%s state=%s rootRawSim=%d rootModType=%s pelvisRawSim=%d pelvisModType=%s simCount=%d upperBodySimCount=%d policyAlpha=%.2f controlAlpha=%.2f groupControlAlpha=%.2f policySuppressed=%d shellLocked=%d shellReanchored=%d pendingResets=%d safetyLatch=%d rootLinVel=%.2f rootAngVel=%.2f pelvisLinVel=%.2f pelvisAngVel=%.2f"),
+				*CertifiedHandoff.TopologyClass,
+				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
+				*Owner->GetOwner()->GetName(),
+				*Owner->GetName(),
+				UPhysAnimComponent::GetRuntimeStateName(Owner->GetRuntimeState()),
+				bPelvisActualSim ? 1 : 0,
+				UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
+				bPelvisActualSim ? 1 : 0,
+				UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
+				CertifiedHandoff.SimCount,
+				CertifiedHandoff.UpperBodySimCount,
+				Owner->CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings),
+				Owner->CalculateCurrentControlAuthorityAlpha(EffectiveSettings),
+				Owner->CalculateBringUpGroupControlAuthorityAlpha(0, EffectiveSettings),
+				ShouldSuppressPolicy() ? 1 : 0,
+				CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+				CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+				Owner->GetPendingBodyModifierCachedResetNames().Num(),
+				bPhase2RootAuthorityQuarantined ? 1 : 0,
+				RootLinVel.Size(),
+				RootAngVel.Size(),
+				RootLinVel.Size(),
+				RootAngVel.Size());
+			bLoggedPhase2EntryAudit = true;
+		}
 	}
 
 	if (Owner &&
