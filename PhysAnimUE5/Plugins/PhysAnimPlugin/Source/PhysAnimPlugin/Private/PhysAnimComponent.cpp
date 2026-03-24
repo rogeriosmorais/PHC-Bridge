@@ -5251,6 +5251,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				continue;
 			}
 
+			// NARROW GUARD: Do not drop the root during the Phase 2 guard window here.
+			// Per-bone resolution (Phase 2 persistence guard) later in the function handles the final write.
+			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BoneName == PhysAnimBridge::GetRootBoneName())
+			{
+				continue;
+			}
+
 			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
 			TrackDistalModifierWrite(BoneName, EPhysicsMovementType::Kinematic, true, TEXT("ApplyRuntimeControlTuning_AuthoritativeDistalKin"));
 			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic, false, true);
@@ -5378,7 +5385,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 			bUpdateKinematicFromSimulation = false;
 		}
-		if (bPhase2RootAuthorityQuarantined)
+		if (bPhase2RootAuthorityQuarantined && !bTransitionOwnsRootOnThisTick && !bLastAppliedPresentationRootSimulationEnabled)
 		{
 			BodyModifierMovementType = EPhysicsMovementType::Kinematic;
 			BodyModifierPhysicsBlendWeight = 0.0f;
@@ -5388,30 +5395,51 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		if (bIsRootBodyModifier)
 		{
 			const float RootSoftSimAlpha = BalanceReadyTransition.GetRootBodyModifierSoftSimAlpha();
-			BodyModifierPhysicsBlendWeight *= RootSoftSimAlpha;
-			if (bPhase2RootOnGuardWindow && RootSoftSimAlpha < 1.0f)
+
+			// NARROW GUARD: During the Phase 2 guard window, if the transition owns the root-on commitment,
+			// or we are still in the quarantine window, we skip the soft-sim/collision suppression 
+			// to ensure stable simulation bring-up.
+			if (!bTransitionOwnsRootOnThisTick && !BalanceReadyTransition.IsPhase2RootAuthorityQuarantined())
 			{
-				BodyModifierCollisionType = ECollisionEnabled::NoCollision;
+				BodyModifierPhysicsBlendWeight *= RootSoftSimAlpha;
+				if (bPhase2RootOnGuardWindow && RootSoftSimAlpha < 1.0f)
+				{
+					BodyModifierCollisionType = ECollisionEnabled::NoCollision;
+				}
 			}
 		}
 
 		// PHASE2 ROOT PERSISTENCE GUARD:
 		// If we are in Phase 2 root-on and the root was already simulating last tick, 
-		// do not let per-bone resolution drop it back to kinematic until the guard window completes.
-		if (bIsRootBodyModifier && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && bLastAppliedPresentationRootSimulationEnabled)
+		// or we are in the quarantine window, do not let per-bone resolution drop it back to kinematic.
+		if (bIsRootBodyModifier && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && 
+			(bLastAppliedPresentationRootSimulationEnabled || BalanceReadyTransition.IsPhase2RootAuthorityQuarantined()))
 		{
 			if (BodyModifierMovementType == EPhysicsMovementType::Kinematic)
 			{
 				BodyModifierMovementType = EPhysicsMovementType::Simulated;
 				BodyModifierPhysicsBlendWeight = 1.0f;
 				BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
-				
-				static int32 LastLoggedPersistenceFrame = -1;
-				if (LastLoggedPersistenceFrame != static_cast<int32>(GFrameNumber))
-				{
-					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_PERSISTENCE_OK tick=1 rawSim=1"));
-					LastLoggedPersistenceFrame = static_cast<int32>(GFrameNumber);
-				}
+				bUpdateKinematicFromSimulation = false;
+			}
+
+			static int32 LastLoggedPersistenceFrame = -1;
+			if (LastLoggedPersistenceFrame != static_cast<int32>(GFrameNumber))
+			{
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_PERSISTENCE_OK tick=1 rawSim=1"));
+				LastLoggedPersistenceFrame = static_cast<int32>(GFrameNumber);
+			}
+		}
+
+		// DOUBLE-TICK AUTHORITY GUARD:
+		// If the transition phase is RootOn, we DO NOT allow kinematic demotion of the root for any reason.
+		if (bIsRootBodyModifier && BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+		{
+			BodyModifierMovementType = EPhysicsMovementType::Simulated;
+			BodyModifierPhysicsBlendWeight = FMath::Max(BodyModifierPhysicsBlendWeight, 0.01f);
+			if (BodyModifierCollisionType == ECollisionEnabled::NoCollision)
+			{
+				BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
 			}
 		}
 
@@ -5534,6 +5562,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		TrackDistalBoneOwnershipChange(BoneName, BodyModifierMovementType, TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
+		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, (bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn));
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, false, false);
 		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, false, false);
 
