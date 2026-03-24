@@ -5395,6 +5395,26 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
+		// PHASE2 ROOT PERSISTENCE GUARD:
+		// If we are in Phase 2 root-on and the root was already simulating last tick, 
+		// do not let per-bone resolution drop it back to kinematic until the guard window completes.
+		if (bIsRootBodyModifier && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && bLastAppliedPresentationRootSimulationEnabled)
+		{
+			if (BodyModifierMovementType == EPhysicsMovementType::Kinematic)
+			{
+				BodyModifierMovementType = EPhysicsMovementType::Simulated;
+				BodyModifierPhysicsBlendWeight = 1.0f;
+				BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
+				
+				static int32 LastLoggedPersistenceFrame = -1;
+				if (LastLoggedPersistenceFrame != static_cast<int32>(GFrameNumber))
+				{
+					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_PERSISTENCE_OK tick=1 rawSim=1"));
+					LastLoggedPersistenceFrame = static_cast<int32>(GFrameNumber);
+				}
+			}
+		}
+
 		// Phase 2 Root Promotion Audit (One-Shot per Frame)
 		if (bIsRootBodyModifier && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 		{
@@ -5439,7 +5459,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			// Telemetry when this safety override catches a conflicting re-promotion attempt
 			if (!BalanceReadyTransition.LoggedSuppressedDistalBones.Contains(BoneName))
 			{
-				if (GVerbosePhase2Forensics != 0 || RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
+				if (GVerbosePhase2Forensics != 0)
 				{
 					UE_LOG(LogPhysAnimBridge, Log, TEXT("DISTAL_SYNC_REPROMOTION_SUPPRESSED bone=%s phase=%s reason=PerBone_BodyModSync blockedBy=DistalOwnershipRule"), 
 						*BoneName.ToString(), 
@@ -5567,7 +5587,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 						(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate) &&
 						BalanceReadyTransition.IsUpperBodyKinematicHoldActive())
 					{
-						UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=recovery"), *BoneName.ToString());
+						if (GVerbosePhase1Forensics != 0)
+						{
+							UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=recovery"), *BoneName.ToString());
+						}
 					}
 					else
 					{
@@ -5581,7 +5604,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate) &&
 					BalanceReadyTransition.IsUpperBodyKinematicHoldActive())
 				{
-					UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=applyTuning"), *BoneName.ToString());
+					if (GVerbosePhase1Forensics != 0)
+					{
+						UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=applyTuning"), *BoneName.ToString());
+					}
 				}
 				else
 				{
@@ -7383,85 +7409,88 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 	const PhysAnimComponentInternal::FFloatBufferSummary MimicSummary = PhysAnimComponentInternal::SummarizeFloatBuffer(MimicTargetPosesBuffer);
 	const PhysAnimComponentInternal::FFloatBufferSummary TerrainBufferSummary = PhysAnimComponentInternal::SummarizeFloatBuffer(TerrainBuffer);
 
-	UE_LOG(
-		LogPhysAnimBridge,
-		Log,
-		TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] shell[offsetDeltaCm=%.1f velDeltaCmPerSec=%.1f velAlign=%.2f] obs[selfMeanAbs=%.3f mimicMeanAbs=%.3f terrainMeanAbs=%.3f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s normal=%d held=%d total=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
-		SimulationHandoffAlpha,
-		FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
-		GetBringUpGroupCount(),
-		CalculateCurrentControlAuthorityAlpha(EffectiveSettings),
-		CalculateBringUpGroupControlAuthorityAlpha(HighestUnlockedBringUpGroupIndex, EffectiveSettings),
-		CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings),
-		EffectiveSettings.PolicyControlRateHz,
-		PolicyControlIntervalSeconds * 1000.0f,
-		LastPolicyElapsedSteps > 0 ? TEXT("true") : TEXT("false"),
-		LastPolicyElapsedSteps,
-		PolicyControlTicksSkipped,
-		PolicyUpdateAccumulatorSeconds * 1000.0f,
-		IsPresentationPerturbationOverrideActive() ? TEXT("true") : TEXT("false"),
-		bStressTestEnabled ? TEXT("true") : TEXT("false"),
-		bStressTestActive ? TEXT("true") : TEXT("false"),
-		PhysAnimComponentInternal::CVarPaStabilizationStressTestProfile.GetValueOnGameThread(),
-		PhysAnimComponentInternal::CVarPaStabilizationStressTestSweepMode.GetValueOnGameThread(),
-		StressTestMultiplier,
-		StressTestElapsedSeconds,
-		*StabilizationStressTestFirstAngularSpikeBoneName.ToString(),
-		StabilizationStressTestFirstAngularSpikeMultiplier,
-		*StabilizationStressTestFirstLinearSpikeBoneName.ToString(),
-		StabilizationStressTestFirstLinearSpikeMultiplier,
-		StabilizationStressTestFirstInstabilityMultiplier,
-		StressSpineLocalDeltaCm,
-		StressHeadLocalDeltaCm,
-		StressFootLocalDeltaCm,
-		IsMovementSmokeModeEnabled() ? TEXT("true") : TEXT("false"),
-		*LastMovementSmokePhaseName.ToString(),
-		LastMovementSmokeLocalIntent.X,
-		LastMovementSmokeLocalIntent.Y,
-		LastMovementSmokeWorldIntent.X,
-		LastMovementSmokeWorldIntent.Y,
-		LastMovementSmokeOwnerVelocityCmPerSecond.Size2D(),
-		ShellPlanarOffsetDeltaCm,
-		ShellPlanarVelocityDeltaCmPerSecond,
-		ShellPlanarVelocityAlignment,
-		SelfObsSummary.MeanAbs,
-		MimicSummary.MeanAbs,
-		TerrainBufferSummary.MeanAbs,
-		LastActionDiagnostics.RawMin,
-		LastActionDiagnostics.RawMax,
-		LastActionDiagnostics.RawMeanAbs,
-		LastActionDiagnostics.ConditionedMeanAbs,
-		LastActionDiagnostics.NumClampedActionFloats,
-		LastControlTargetDiagnostics.bPolicyInfluenceActive ? TEXT("true") : TEXT("false"),
-		LastControlTargetDiagnostics.bFirstPolicyEnabledFrame ? TEXT("true") : TEXT("false"),
-		LastControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
-		LastControlTargetDiagnostics.NumHeldTargetsWritten,
-		LastControlTargetDiagnostics.NumTotalTargetsWritten,
-		*LastControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
-		LastControlTargetDiagnostics.MaxTargetDeltaDegrees,
-		LastControlTargetDiagnostics.MeanTargetDeltaDegrees,
-		*LastControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
-		LastControlTargetDiagnostics.MaxRawPolicyOffsetDegrees,
-		LastControlTargetDiagnostics.MeanRawPolicyOffsetDegrees,
-		*LastControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
-		LastControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
-		LastControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
-		LastControlTargetDiagnostics.MeanLowerLimbLimitOccupancy,
-		LastRuntimeInstabilityDiagnostics.RootHeightDeltaCm,
-		LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
-		LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond,
-		LastRuntimeInstabilityDiagnostics.UnstableAccumulatedSeconds,
-		LastRuntimeInstabilityDiagnostics.NumBodiesConsidered,
-		LastRuntimeInstabilityDiagnostics.NumSimulatingBodies,
-		*LastRuntimeInstabilityDiagnostics.MaxLinearSpeedBoneName.ToString(),
-		LastRuntimeInstabilityDiagnostics.bMaxLinearSpeedBoneSimulatingPhysics ? TEXT("sim") : TEXT("kin"),
-		LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond,
-		*LastRuntimeInstabilityDiagnostics.MaxAngularSpeedBoneName.ToString(),
-		LastRuntimeInstabilityDiagnostics.bMaxAngularSpeedBoneSimulatingPhysics ? TEXT("sim") : TEXT("kin"),
-		LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond,
-		*LastRuntimeInstabilityDiagnostics.MaxHeightDeltaBoneName.ToString(),
-		LastRuntimeInstabilityDiagnostics.bMaxHeightDeltaBoneSimulatingPhysics ? TEXT("sim") : TEXT("kin"),
-		LastRuntimeInstabilityDiagnostics.MaxBodyHeightDeltaCm);
+	if (GVerbosePhase2Forensics != 0)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] shell[offsetDeltaCm=%.1f velDeltaCmPerSec=%.1f velAlign=%.2f] obs[selfMeanAbs=%.3f mimicMeanAbs=%.3f terrainMeanAbs=%.3f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s normal=%d held=%d total=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
+			SimulationHandoffAlpha,
+			FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
+			GetBringUpGroupCount(),
+			CalculateCurrentControlAuthorityAlpha(EffectiveSettings),
+			CalculateBringUpGroupControlAuthorityAlpha(HighestUnlockedBringUpGroupIndex, EffectiveSettings),
+			CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings),
+			EffectiveSettings.PolicyControlRateHz,
+			PolicyControlIntervalSeconds * 1000.0f,
+			LastPolicyElapsedSteps > 0 ? TEXT("true") : TEXT("false"),
+			LastPolicyElapsedSteps,
+			PolicyControlTicksSkipped,
+			PolicyUpdateAccumulatorSeconds * 1000.0f,
+			IsPresentationPerturbationOverrideActive() ? TEXT("true") : TEXT("false"),
+			bStressTestEnabled ? TEXT("true") : TEXT("false"),
+			bStressTestActive ? TEXT("true") : TEXT("false"),
+			PhysAnimComponentInternal::CVarPaStabilizationStressTestProfile.GetValueOnGameThread(),
+			PhysAnimComponentInternal::CVarPaStabilizationStressTestSweepMode.GetValueOnGameThread(),
+			StressTestMultiplier,
+			StressTestElapsedSeconds,
+			*StabilizationStressTestFirstAngularSpikeBoneName.ToString(),
+			StabilizationStressTestFirstAngularSpikeMultiplier,
+			*StabilizationStressTestFirstLinearSpikeBoneName.ToString(),
+			StabilizationStressTestFirstLinearSpikeMultiplier,
+			StabilizationStressTestFirstInstabilityMultiplier,
+			StressSpineLocalDeltaCm,
+			StressHeadLocalDeltaCm,
+			StressFootLocalDeltaCm,
+			IsMovementSmokeModeEnabled() ? TEXT("true") : TEXT("false"),
+			*LastMovementSmokePhaseName.ToString(),
+			LastMovementSmokeLocalIntent.X,
+			LastMovementSmokeLocalIntent.Y,
+			LastMovementSmokeWorldIntent.X,
+			LastMovementSmokeWorldIntent.Y,
+			LastMovementSmokeOwnerVelocityCmPerSecond.Size2D(),
+			ShellPlanarOffsetDeltaCm,
+			ShellPlanarVelocityDeltaCmPerSecond,
+			ShellPlanarVelocityAlignment,
+			SelfObsSummary.MeanAbs,
+			MimicSummary.MeanAbs,
+			TerrainBufferSummary.MeanAbs,
+			LastActionDiagnostics.RawMin,
+			LastActionDiagnostics.RawMax,
+			LastActionDiagnostics.RawMeanAbs,
+			LastActionDiagnostics.ConditionedMeanAbs,
+			LastActionDiagnostics.NumClampedActionFloats,
+			LastControlTargetDiagnostics.bPolicyInfluenceActive ? TEXT("true") : TEXT("false"),
+			LastControlTargetDiagnostics.bFirstPolicyEnabledFrame ? TEXT("true") : TEXT("false"),
+			LastControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
+			LastControlTargetDiagnostics.NumHeldTargetsWritten,
+			LastControlTargetDiagnostics.NumTotalTargetsWritten,
+			*LastControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
+			LastControlTargetDiagnostics.MaxTargetDeltaDegrees,
+			LastControlTargetDiagnostics.MeanTargetDeltaDegrees,
+			*LastControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
+			LastControlTargetDiagnostics.MaxRawPolicyOffsetDegrees,
+			LastControlTargetDiagnostics.MeanRawPolicyOffsetDegrees,
+			*LastControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
+			LastControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
+			LastControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
+			LastControlTargetDiagnostics.MeanLowerLimbLimitOccupancy,
+			LastRuntimeInstabilityDiagnostics.RootHeightDeltaCm,
+			LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
+			LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond,
+			LastRuntimeInstabilityDiagnostics.UnstableAccumulatedSeconds,
+			LastRuntimeInstabilityDiagnostics.NumBodiesConsidered,
+			LastRuntimeInstabilityDiagnostics.NumSimulatingBodies,
+			*LastRuntimeInstabilityDiagnostics.MaxLinearSpeedBoneName.ToString(),
+			LastRuntimeInstabilityDiagnostics.bMaxLinearSpeedBoneSimulatingPhysics ? TEXT("sim") : TEXT("kin"),
+			LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond,
+			*LastRuntimeInstabilityDiagnostics.MaxAngularSpeedBoneName.ToString(),
+			LastRuntimeInstabilityDiagnostics.bMaxAngularSpeedBoneSimulatingPhysics ? TEXT("sim") : TEXT("kin"),
+			LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond,
+			*LastRuntimeInstabilityDiagnostics.MaxHeightDeltaBoneName.ToString(),
+			LastRuntimeInstabilityDiagnostics.bMaxHeightDeltaBoneSimulatingPhysics ? TEXT("sim") : TEXT("kin"),
+			LastRuntimeInstabilityDiagnostics.MaxBodyHeightDeltaCm);
+	}
 }
 
 

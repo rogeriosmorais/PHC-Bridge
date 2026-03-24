@@ -582,7 +582,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	{
 		if (!bLoggedLateValidateEntry)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTER_LATE_VALIDATE elapsed=%.4f"), PhaseTimeSeconds);
+			if (GVerbosePhase1Forensics != 0)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTER_LATE_VALIDATE elapsed=%.4f"), PhaseTimeSeconds);
+			}
 			bLoggedLateValidateEntry = true;
 		}
 		const bool bIsBodyMotionUnstable = CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
