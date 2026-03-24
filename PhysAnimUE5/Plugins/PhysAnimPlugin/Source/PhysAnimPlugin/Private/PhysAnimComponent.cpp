@@ -7308,6 +7308,13 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return;
 	}
 
+	USkeletalMeshComponent* const Mesh = GetMeshComponent();
+	const FBodyInstance* const PelvisBodyScope = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+	const bool bSuppressNormalPolicyOnRootReleaseFrame =
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+		BalanceEntryRootOnFrameCount == 2 &&
+		PelvisBodyScope && PelvisBodyScope->IsInstanceSimulatingPhysics();
+
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
 	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
@@ -7371,8 +7378,8 @@ void UPhysAnimComponent::ApplyControlTargets(
 		ShouldUseSkeletalAnimationTargetRepresentation(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
 			bPolicyInfluenceActive);
-	UPhysicsAsset* const PhysicsAsset = MeshComponent.IsValid() ? MeshComponent->GetPhysicsAsset() : nullptr;
-	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	UPhysicsAsset* const PhysicsAsset = Mesh ? Mesh->GetPhysicsAsset() : nullptr;
+
 
 	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
 	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
@@ -7478,7 +7485,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 		// Only explicit held-pose targets may be published for kinematic bones in these states.
 		const bool bIsPhase1PolicyLoopSuppressed = bPhase1Prepare || bPhase1LateValidate;
 
-		if (!bIsPhase1PolicyLoopSuppressed)
+		bool bPolicyTargetsAppliedThisTick = true;
+
+		if (!bIsPhase1PolicyLoopSuppressed && !bSuppressNormalPolicyOnRootReleaseFrame)
 		{
 			bPolicyTargetsAppliedLastFrame = true;
 			for (const TPair<FName, FQuat>& Pair : ControlRotations)
@@ -7686,8 +7695,29 @@ void UPhysAnimComponent::ApplyControlTargets(
 			ControlTargetDiagnostics.NumHeldTargetsWritten,
 			ControlTargetDiagnostics.NumTotalTargetsWritten);
 	}
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+	{
+		const FBodyInstance* const PelvisBodyProbe = GetMeshComponent() ? GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+		const int32 RootRawSim = (PelvisBodyProbe && PelvisBodyProbe->IsInstanceSimulatingPhysics()) ? 1 : 0;
+		const bool bSuppressActive =
+			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+			BalanceEntryRootOnFrameCount == 2 &&
+			RootRawSim == 1;
 
-	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame)
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_POLICY_RELEASE_DELAY_PROBE frame=%d tick=%d suppressed=%d normalWrites=%d heldWrites=%d rootRawSim=%d simCount=%d owner=%d actor=%s component=%s"),
+			static_cast<int32>(GFrameNumber),
+			static_cast<int32>(BalanceEntryRootOnFrameCount),
+			bSuppressActive ? 1 : 0,
+			ControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
+			ControlTargetDiagnostics.NumHeldTargetsWritten,
+			RootRawSim,
+			LastRuntimeInstabilityDiagnostics.NumSimulatingBodies,
+			static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+			*GetOwner()->GetName(),
+			*GetName());
+	}
+
+	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame && !bSuppressNormalPolicyOnRootReleaseFrame)
 	{
 		UE_LOG(
 			LogPhysAnimBridge,
