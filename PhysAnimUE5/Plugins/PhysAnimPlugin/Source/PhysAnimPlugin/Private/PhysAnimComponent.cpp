@@ -5773,13 +5773,17 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				}
 			}
 
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_POST_SYNC_COVERAGE_AUDIT frame=%d bone=%s actualSim=%d totalSimCount=%d"), 
-				CurrentFrame, *RootBoneName.ToString(), bActualSimulating ? 1 : 0, SimulatingCount);
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_POST_SYNC_COVERAGE_AUDIT frame=%d bone=%s actualSim=%d totalSimCount=%d owner=%d actor=%s component=%s"), 
+				CurrentFrame, *RootBoneName.ToString(), bActualSimulating ? 1 : 0, SimulatingCount,
+				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+				*GetOwner()->GetName(), *GetName());
 			if (bActualSimulating)
 			{
 				// Emit once more if pelvis was actualSim=1 there
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_POST_SYNC_COVERAGE_AUDIT frame=%d bone=%s actualSim=1 (Repeat)"), 
-					CurrentFrame, *RootBoneName.ToString());
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_POST_SYNC_COVERAGE_AUDIT frame=%d bone=%s actualSim=1 (Repeat) owner=%d actor=%s component=%s"), 
+					CurrentFrame, *RootBoneName.ToString(),
+					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+					*GetOwner()->GetName(), *GetName());
 			}
 			LastLoggedPostSyncFrame = CurrentFrame;
 		}
@@ -5965,7 +5969,7 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 						const bool bQuarantined = BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
 						const bool bKeepsKin = BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, ResolveEffectiveStabilizationSettings());
 
-						UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=UnlockBringUpGroup"),
+						UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=UnlockBringUpGroup owner=%d actor=%s component=%s"),
 							static_cast<int32>(GFrameNumber), *BoneName.ToString(),
 							bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
 							0, // transOwns=0
@@ -5973,7 +5977,9 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 							bKeepsKin ? 1 : 0,
 							0, // movementType=0
 							0.00f, // blendWeight=0.00
-							0); // collType=0
+							0, // collType=0
+							static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+							*GetOwner()->GetName(), *GetName());
 					}
 					PendingBodyModifierCachedResetNames.Add(ModifierName);
 				}

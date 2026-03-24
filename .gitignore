@@ -55,3 +55,4 @@ Thumbs.db
 .DS_Store
 desktop.ini
 scripts/local.paths.ps1
+mcp_memory.json
