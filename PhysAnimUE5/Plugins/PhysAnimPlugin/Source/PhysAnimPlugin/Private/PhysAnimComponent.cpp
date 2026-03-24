@@ -5462,9 +5462,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		// Phase 2 Root Promotion Audit (One-Shot per Frame)
-		if (bIsRootBodyModifier && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+		const bool bIsRootTraceTargetState = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+		if (bIsRootBodyModifier && bIsRootTraceTargetState)
 		{
-			static int32 LastLoggedRootOnFrame = -1;
 			const int32 CurrentFrame = static_cast<int32>(GFrameNumber);
 			
 			// DROP CULPRIT: Trace if the pelvis was simulating but we are about to write it as kinematic
@@ -5477,17 +5477,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					bTransitionKeepsBoneKinematic ? 1 : 0);
 			}
 
-			if (LastLoggedRootOnFrame != CurrentFrame || GVerbosePhase2Forensics != 0)
-			{
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning"), 
-					CurrentFrame, *BoneName.ToString(), 
-					bAllowRootBodyModifierSimulation ? 1 : 0, 
-					bTransitionOwnsRootOnThisTick ? 1 : 0, 
-					bPhase2RootAuthorityQuarantined ? 1 : 0,
-					bTransitionKeepsBoneKinematic ? 1 : 0,
-					static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType));
-				LastLoggedRootOnFrame = CurrentFrame;
-			}
+			// Instrument every pelvis write in target states
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning"), 
+				CurrentFrame, *BoneName.ToString(), 
+				bAllowRootBodyModifierSimulation ? 1 : 0, 
+				bTransitionOwnsRootOnThisTick ? 1 : 0, 
+				bPhase2RootAuthorityQuarantined ? 1 : 0,
+				bTransitionKeepsBoneKinematic ? 1 : 0,
+				static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType));
 		}
 
 		if ((bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BridgeActive) &&
@@ -5714,6 +5711,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_POST_SYNC_COVERAGE_AUDIT frame=%d bone=%s actualSim=%d totalSimCount=%d"), 
 				CurrentFrame, *RootBoneName.ToString(), bActualSimulating ? 1 : 0, SimulatingCount);
+			if (bActualSimulating)
+			{
+				// Emit once more if pelvis was actualSim=1 there
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_POST_SYNC_COVERAGE_AUDIT frame=%d bone=%s actualSim=1 (Repeat)"), 
+					CurrentFrame, *RootBoneName.ToString());
+			}
 			LastLoggedPostSyncFrame = CurrentFrame;
 		}
 	}

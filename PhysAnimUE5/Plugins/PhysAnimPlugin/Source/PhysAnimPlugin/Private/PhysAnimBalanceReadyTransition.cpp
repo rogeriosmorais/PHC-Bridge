@@ -1403,6 +1403,27 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		if (Phase2GuardTickCount <= 2)
 		{
+			if (Phase2GuardTickCount == 1)
+			{
+				EPhysicsMovementType PelvisModifierMovementType = EPhysicsMovementType::Static;
+				if (UPhysicsControlComponent* PhysicsControl = Owner->PhysicsControlComponent.Get())
+				{
+					const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+					if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName))
+					{
+						PelvisModifierMovementType = Record->BodyModifier.ModifierData.MovementType;
+					}
+				}
+
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRE_GUARD_PELVIS_STATE tick=%d rawSim=%d modMoveType=%d shellLocked=%d quarantined=%d state=%d"),
+					Phase2GuardTickCount,
+					bPelvisActualSim ? 1 : 0,
+					static_cast<int32>(PelvisModifierMovementType),
+					Owner->IsTransitionOwnedShellLocked() ? 1 : 0,
+					bPhase2RootAuthorityQuarantined ? 1 : 0,
+					static_cast<int32>(Owner->GetRuntimeState()));
+			}
+
 			UE_LOG(
 				LogPhysAnimBridge,
 				Warning,
