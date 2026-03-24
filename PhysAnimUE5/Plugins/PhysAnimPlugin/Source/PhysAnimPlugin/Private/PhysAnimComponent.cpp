@@ -5216,6 +5216,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
 	{
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+		{
+			BalanceEntryRootOnFrameCount++;
+		}
+
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_TUNING_CALL_AUDIT frame=%d callIndex=%d runtimeState=%s owner=%d actor=%s component=%s"),
 			static_cast<int32>(CurrentFrameNumber),
 			CurrentCallIndex,
@@ -5734,6 +5739,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					bTransitionKeepsBoneKinematic ? 1 : 0);
 			}
 
+			const bool bIsFirstRootOnFrame = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount == 1);
+
 			// Instrument every pelvis write in target states
 			int32 RawReadbackValue = -1;
 			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
@@ -5741,12 +5748,54 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				bTransitionOwnsRootOnThisTick &&
 				!bTransitionKeepsBoneKinematic)
 			{
-				BodyModifierMovementType = EPhysicsMovementType::Simulated;
-				if (FBodyInstance* PelvisBody = GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
+				if (bIsFirstRootOnFrame)
 				{
-					PelvisBody->SetInstanceSimulatePhysics(true, true);
-					RawReadbackValue = PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0;
+					// NARROW PROBE: One-frame delay for root release. 
+					// Keep kinematic on frame 1.
+					BodyModifierMovementType = EPhysicsMovementType::Kinematic;
 				}
+				else
+				{
+					BodyModifierMovementType = EPhysicsMovementType::Simulated;
+					if (FBodyInstance* PelvisBody = GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
+					{
+						PelvisBody->SetInstanceSimulatePhysics(true, true);
+						RawReadbackValue = PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0;
+					}
+				}
+			}
+
+			// Calculate TotalSimCount for the probe
+			int32 TotalSimCount = 0;
+			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+			{
+				for (const FName& SimBone : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+				{
+					if (const FBodyInstance* const BI = Mesh->GetBodyInstance(SimBone))
+					{
+						if (BI->IsInstanceSimulatingPhysics())
+						{
+							TotalSimCount++;
+						}
+					}
+				}
+			}
+
+			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+			{
+				const FBodyInstance* const PelvisBody = GetMeshComponent() ? GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+				const int32 RootRawSim = (PelvisBody && PelvisBody->IsInstanceSimulatingPhysics()) ? 1 : 0;
+
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_RELEASE_DELAY_PROBE frame=%d tick=%d delayed=%d rootRawSim=%d pelvisModType=%d simCount=%d owner=%d actor=%s component=%s"),
+					static_cast<int32>(CurrentFrameNumber),
+					static_cast<int32>(BalanceEntryRootOnFrameCount),
+					bIsFirstRootOnFrame ? 1 : 0,
+					RootRawSim,
+					static_cast<int32>(BodyModifierMovementType),
+					TotalSimCount,
+					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+					*GetOwner()->GetName(),
+					*GetName());
 			}
 
 			if (RawReadbackValue != -1)
@@ -10391,6 +10440,11 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 
 	if (IsBalanceEntryState(NewState))
 	{
+		if (NewState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+		{
+			BalanceEntryRootOnFrameCount = 0;
+		}
+
 		// Phase 2 states (RootOn/Settle) will receive their tuning via the normal per-tick path in TickComponent.
 		// Phase 1 states (Prepare/LateValidate) still require the eager publishing here.
 		if (NewState != EPhysAnimRuntimeState::BalanceEntry_RootOn && NewState != EPhysAnimRuntimeState::BalanceEntry_Settle)

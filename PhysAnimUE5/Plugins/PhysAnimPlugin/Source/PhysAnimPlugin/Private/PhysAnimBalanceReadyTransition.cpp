@@ -1599,7 +1599,7 @@ extern int32 GVerbosePhase2Forensics;
 				Diagnostics.BaselineShellVel,
 				Settings.BalancePhase2AbortShellVelocityDelta);
 		}
-		else if (!bPelvisActualSim)
+		else if (!bPelvisActualSim && Phase2GuardTickCount > 1)
 		{
 			AbortReason = TEXT("phase2_root_simulation_dropped");
 			AbortDetail = FString::Printf(
