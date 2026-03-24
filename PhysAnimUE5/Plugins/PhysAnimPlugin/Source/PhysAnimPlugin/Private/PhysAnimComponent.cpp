@@ -1841,6 +1841,52 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 
 	ApplyRuntimeControlTuning(EffectiveSettings);
+
+	bool bPelvisSimAfterTuning = false;
+	int32 TotalSimAfterTuning = 0;
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+	{
+		EPhysicsMovementType PelvisModifierType = EPhysicsMovementType::Kinematic;
+		if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+		{
+			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
+			{
+				PelvisModifierType = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
+		if (USkeletalMeshComponent* const Mesh = MeshComponent.Get())
+		{
+			const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+			if (FBodyInstance* const RootBI = Mesh->GetBodyInstance(RootBoneName))
+			{
+				bPelvisSimAfterTuning = RootBI->IsInstanceSimulatingPhysics();
+			}
+
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				{
+					if (BI->IsInstanceSimulatingPhysics())
+					{
+						TotalSimAfterTuning++;
+					}
+				}
+			}
+		}
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_AFTER_TUNING_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
+			GFrameCounter,
+			bPelvisSimAfterTuning ? 1 : 0,
+			TotalSimAfterTuning,
+			GetPhysicsMovementTypeName(PelvisModifierType),
+			PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
+			GetRuntimeStateName(RuntimeState),
+			*GetOwner()->GetName(),
+			*GetName());
+	}
+
 	if (!PendingBodyModifierCachedResetNames.IsEmpty())
 	{
 		ResetPendingBodyModifiersToCachedTargets();
@@ -1919,7 +1965,114 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 
 	const double UpdateControlsStartSeconds = FPlatformTime::Seconds();
-	PhysicsControl->UpdateControls(DeltaTime);
+
+	bool bSkipUpdateControls = false;
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+	{
+		if (bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
+		{
+			bSkipUpdateControls = true;
+		}
+
+		bool bCurrentPelvisSim = false;
+		int32 CurrentTotalSim = 0;
+		EPhysicsMovementType CurrentPelvisModifierType = EPhysicsMovementType::Kinematic;
+		
+		if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+		{
+			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
+			{
+				CurrentPelvisModifierType = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
+		if (USkeletalMeshComponent* const Mesh = MeshComponent.Get())
+		{
+			const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+			if (FBodyInstance* const RootBI = Mesh->GetBodyInstance(RootBoneName))
+			{
+				bCurrentPelvisSim = RootBI->IsInstanceSimulatingPhysics();
+			}
+
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				{
+					if (BI->IsInstanceSimulatingPhysics())
+					{
+						CurrentTotalSim++;
+					}
+				}
+			}
+		}
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_PRE_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
+			GFrameCounter,
+			bCurrentPelvisSim ? 1 : 0,
+			CurrentTotalSim,
+			GetPhysicsMovementTypeName(CurrentPelvisModifierType),
+			PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
+			GetRuntimeStateName(RuntimeState),
+			*GetOwner()->GetName(),
+			*GetName());
+	}
+
+	if (bSkipUpdateControls)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_SKIPPED_ON_ENTRY frame=%llu reason=pelvis_already_simulating_after_tuning"), GFrameCounter);
+	}
+	else
+	{
+		PhysicsControl->UpdateControls(DeltaTime);
+	}
+
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+	{
+		bool bCurrentPelvisSim = false;
+		int32 CurrentTotalSim = 0;
+		EPhysicsMovementType CurrentPelvisModifierType = EPhysicsMovementType::Kinematic;
+		
+		if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+		{
+			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
+			{
+				CurrentPelvisModifierType = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
+		if (USkeletalMeshComponent* const Mesh = MeshComponent.Get())
+		{
+			const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+			if (FBodyInstance* const RootBI = Mesh->GetBodyInstance(RootBoneName))
+			{
+				bCurrentPelvisSim = RootBI->IsInstanceSimulatingPhysics();
+			}
+
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				{
+					if (BI->IsInstanceSimulatingPhysics())
+					{
+						CurrentTotalSim++;
+					}
+				}
+			}
+		}
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_POST_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
+			GFrameCounter,
+			bCurrentPelvisSim ? 1 : 0,
+			CurrentTotalSim,
+			GetPhysicsMovementTypeName(CurrentPelvisModifierType),
+			PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
+			GetRuntimeStateName(RuntimeState),
+			*GetOwner()->GetName(),
+			*GetName());
+	}
+
 	TRACE_COUNTER_SET(COUNTER_PhysAnim_UpdateControlsMs, static_cast<float>(MeasureElapsedMs(UpdateControlsStartSeconds)));
 	if (bWriteTraceFrameThisTick)
 	{
@@ -4595,15 +4748,18 @@ void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilization
 		const bool bQuarantined = BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
 		const bool bKeepsKin = BalanceReadyTransition.ShouldKeepBoneKinematic(RootBoneName, EffectiveSettings);
 
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ActivateBridgePhysicsState"),
-			static_cast<int32>(GFrameNumber), *RootBoneName.ToString(),
-			bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
-			0, // transOwns=0
-			bQuarantined ? 1 : 0,
-			bKeepsKin ? 1 : 0,
-			1, // movementType=1 (Simulated)
-			0.00f, // blendWeight=0.00 (Mesh level sim set, modifiers not yet sync'd)
-			1); // collType=1 (QueryAndPhysics)
+		if (GVerbosePhase2Forensics != 0)
+		{
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ActivateBridgePhysicsState"),
+				static_cast<int32>(GFrameNumber), *RootBoneName.ToString(),
+				bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
+				0, // transOwns=0
+				bQuarantined ? 1 : 0,
+				bKeepsKin ? 1 : 0,
+				1, // movementType=1 (Simulated)
+				0.00f, // blendWeight=0.00 (Mesh level sim set, modifiers not yet sync'd)
+				1); // collType=1 (QueryAndPhysics)
+		}
 	}
 
 	ApplyTrainingAlignedToeLimitPolicy(EffectiveSettings);
@@ -5503,7 +5659,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			static int32 LastLoggedPersistenceFrame = -1;
 			if (LastLoggedPersistenceFrame != static_cast<int32>(GFrameNumber))
 			{
+				if (GVerbosePhase2Forensics != 0)
+			{
 				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_PERSISTENCE_OK tick=1 rawSim=1"));
+			}
 				LastLoggedPersistenceFrame = static_cast<int32>(GFrameNumber);
 			}
 		}

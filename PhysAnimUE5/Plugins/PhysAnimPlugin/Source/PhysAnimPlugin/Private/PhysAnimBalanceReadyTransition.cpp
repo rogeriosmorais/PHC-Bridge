@@ -1415,31 +1415,39 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					}
 				}
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRE_GUARD_PELVIS_STATE tick=%d rawSim=%d modMoveType=%d shellLocked=%d quarantined=%d state=%d owner=%d actor=%s component=%s"),
+extern int32 GVerbosePhase2Forensics;
+
+				if (GVerbosePhase2Forensics != 0)
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRE_GUARD_PELVIS_STATE tick=%d rawSim=%d modMoveType=%d shellLocked=%d quarantined=%d state=%d owner=%d actor=%s component=%s"),
+						Phase2GuardTickCount,
+						bPelvisActualSim ? 1 : 0,
+						static_cast<int32>(PelvisModifierMovementType),
+						Owner->IsTransitionOwnedShellLocked() ? 1 : 0,
+						bPhase2RootAuthorityQuarantined ? 1 : 0,
+						static_cast<int32>(Owner->GetRuntimeState()),
+						static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
+						*Owner->GetOwner()->GetName(), *Owner->GetName());
+				}
+			}
+
+			if (GVerbosePhase2Forensics != 0)
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] PHASE2_GUARD_TICK tick=%d requestedRootSim=%d actualRootSim=%d resetScheduled=%d simCountPost=%d distalSimPost=%d shellOffsetDelta=%.1f shellVelocityDelta=%.1f owner=%d actor=%s component=%s"),
 					Phase2GuardTickCount,
+					bPelvisRequestedSim ? 1 : 0,
 					bPelvisActualSim ? 1 : 0,
-					static_cast<int32>(PelvisModifierMovementType),
-					Owner->IsTransitionOwnedShellLocked() ? 1 : 0,
-					bPhase2RootAuthorityQuarantined ? 1 : 0,
-					static_cast<int32>(Owner->GetRuntimeState()),
+					Diagnostics.bResetScheduled ? 1 : 0,
+					Diagnostics.SimCountPost,
+					Diagnostics.DistalSimCountPost,
+					Diagnostics.BaselineShellOffset,
+					Diagnostics.BaselineShellVel,
 					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
 					*Owner->GetOwner()->GetName(), *Owner->GetName());
 			}
-
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnimBalance] PHASE2_GUARD_TICK tick=%d requestedRootSim=%d actualRootSim=%d resetScheduled=%d simCountPost=%d distalSimPost=%d shellOffsetDelta=%.1f shellVelocityDelta=%.1f owner=%d actor=%s component=%s"),
-				Phase2GuardTickCount,
-				bPelvisRequestedSim ? 1 : 0,
-				bPelvisActualSim ? 1 : 0,
-				Diagnostics.bResetScheduled ? 1 : 0,
-				Diagnostics.SimCountPost,
-				Diagnostics.DistalSimCountPost,
-				Diagnostics.BaselineShellOffset,
-				Diagnostics.BaselineShellVel,
-				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
-				*Owner->GetOwner()->GetName(), *Owner->GetName());
 		}
 
 		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.MaxLinVelPelvis);
