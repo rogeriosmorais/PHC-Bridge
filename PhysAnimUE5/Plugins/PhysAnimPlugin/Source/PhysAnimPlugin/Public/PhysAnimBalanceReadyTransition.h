@@ -449,7 +449,10 @@ private:
 	bool bHasCertifiedHandoff = false;
 	bool bHasLateValidationProof = false;
 	bool bLateValidationProofPassed = false;
+	bool bLoggedLateValidateEntry = false;
 	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
+
+
 	FPhysAnimLateValidationResult CertifiedLateValidationResult;
 	FPhysAnimPhase1TopologySnapshot Phase1TopologyRecord;
 	bool bHasPhase1TopologyRecord = false;

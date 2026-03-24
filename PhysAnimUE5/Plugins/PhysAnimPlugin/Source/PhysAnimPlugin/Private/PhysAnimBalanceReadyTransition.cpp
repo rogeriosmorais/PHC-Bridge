@@ -22,6 +22,8 @@ public:
 DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
 
 extern int32 GStrictPhase1Certification;
+extern int32 GVerbosePhase1Forensics;
+
 
 namespace BalanceTransitionSets
 {
@@ -227,6 +229,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	HipQuarantineTimerSeconds = 0.0f;
 	LateValidationAccumulatedSeconds = 0.0f;
 	LastLateValidateBlockReason.Reset();
+	bLoggedLateValidateEntry = false;
 	EntryHoldRotations.Empty();
 	DistalBoneMismatchTicks.Empty();
 	DistalBoneConsecutiveMismatchTicks.Empty();
@@ -576,7 +579,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTER_LATE_VALIDATE elapsed=%.4f"), PhaseTimeSeconds);
+		if (!bLoggedLateValidateEntry)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTER_LATE_VALIDATE elapsed=%.4f"), PhaseTimeSeconds);
+			bLoggedLateValidateEntry = true;
+		}
 		const bool bIsBodyMotionUnstable = CachedConvergenceSnapshot.MaxBodyLinearSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed ||
 			CachedConvergenceSnapshot.MaxBodyAngularSpeed > Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed;
 
@@ -604,18 +611,23 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					const FVector AngVel = Mesh->GetPhysicsAngularVelocityInDegrees(BoneName);
 					const FVector Loc = Mesh->GetBoneLocation(BoneName, EBoneSpaces::WorldSpace);
 
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_FAILURE_FORENSICS bone=%s lin=%.1f ang=%.1f locZ=%.1f"),
-						*BoneName.ToString(),
-						LinVel.Size(),
-						AngVel.Size(),
-						Loc.Z);
+					if (GVerbosePhase1Forensics != 0)
+					{
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_FAILURE_FORENSICS bone=%s lin=%.1f ang=%.1f locZ=%.1f"),
+							*BoneName.ToString(),
+							LinVel.Size(),
+							AngVel.Size(),
+							Loc.Z);
+					}
 				}
-
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_FAILURE_SUMMARY maxTargetDelta=%.1f(%s) maxLimitOccupancy=%.2f(%s)"),
-					CtrlDiag.MaxTargetDeltaDegrees,
-					*CtrlDiag.MaxTargetDeltaBoneName.ToString(),
-					CtrlDiag.MaxLowerLimbLimitOccupancy,
-					*CtrlDiag.MaxLowerLimbLimitOccupancyBoneName.ToString());
+				if (GVerbosePhase1Forensics != 0)
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_FAILURE_SUMMARY maxTargetDelta=%.1f(%s) maxLimitOccupancy=%.2f(%s)"),
+						CtrlDiag.MaxTargetDeltaDegrees,
+						*CtrlDiag.MaxTargetDeltaBoneName.ToString(),
+						CtrlDiag.MaxLowerLimbLimitOccupancy,
+						*CtrlDiag.MaxLowerLimbLimitOccupancyBoneName.ToString());
+				}
 			}
 
 				Owner->ReleaseTransitionOwnedShellLock();
@@ -849,6 +861,8 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 							const bool bHasPendingReset = PendingResets.Contains(PhysAnimBridge::MakeBodyModifierName(BoneName));
 
+						if (GVerbosePhase1Forensics != 0)
+						{
 							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] UPPER_BODY_FAILURE_FORENSICS bone=%s intended=%s actual=%s targetDelta=%.2f linVel=%.2f angVel=%.2f pendingReset=%d"),
 								*BoneName.ToString(),
 								bIntendedKinematic ? TEXT("Kin") : TEXT("Sim"),
@@ -857,17 +871,21 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 								LinVel.Size(),
 								AngVel.Size(),
 								bHasPendingReset ? 1 : 0);
-
-							if (LinVel.Size() > MaxLinearSpeed) { MaxLinearSpeed = LinVel.Size(); MaxErrorBone = BoneName; }
-							if (AngVel.Size() > MaxAngularSpeed) { MaxAngularSpeed = AngVel.Size(); }
-							if (TargetDeltaDeg > MaxTargetDelta) { MaxTargetDelta = TargetDeltaDeg; }
 						}
 
+						if (LinVel.Size() > MaxLinearSpeed) { MaxLinearSpeed = LinVel.Size(); MaxErrorBone = BoneName; }
+						if (AngVel.Size() > MaxAngularSpeed) { MaxAngularSpeed = AngVel.Size(); }
+						if (TargetDeltaDeg > MaxTargetDelta) { MaxTargetDelta = TargetDeltaDeg; }
+					}
+
+					if (GVerbosePhase1Forensics != 0)
+					{
 						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] UPPER_BODY_FAILURE_SUMMARY worstBone=%s maxLinSpeed=%.2f maxAngSpeed=%.2f maxTargetDelta=%.2f"),
 							*MaxErrorBone.ToString(),
 							MaxLinearSpeed,
 							MaxAngularSpeed,
 							MaxTargetDelta);
+					}
 					}
 				}
 			}
@@ -1551,6 +1569,23 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				*ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
 				ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
 				ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees);
+
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimBalance] PHASE2_EARLY_ABORT_SUMMARY reason=%s strict=%d shellLocked=%d shellReanchored=%d rootRequestedSim=%d rootActualSim=%d preSim=%d postSim=%d shellOffset=%.1f shellVel=%.1f detail=%s"),
+				*Diagnostics.FailureReason,
+				GStrictPhase1Certification != 0 ? 1 : 0,
+				CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+				CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+				bPelvisRequestedSim ? 1 : 0,
+				bPelvisActualSim ? 1 : 0,
+				Diagnostics.SimCountPre,
+				Diagnostics.SimCountPost,
+				Diagnostics.BaselineShellOffset,
+				Diagnostics.BaselineShellVel,
+				*AbortDetail);
+
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RETRY_DECISION failure=%s owner=%d decision=%s changedState=0 freshQuietProof=0 remainingRetryBudget=%d"),
 				*Diagnostics.FailureReason, static_cast<int32>(FailureOwner), *Diagnostics.LastRetryDecision, FMath::Max(Settings.BalancePhase2MaxAutomaticRetries - Phase2RetryCount, 0));
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
@@ -1635,6 +1670,31 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *DenyReason);
 			return;
 		}
+
+		const bool bPelvisRequestedSim = Owner->WasPelvisSimulatingLastFrame();
+		const bool bPelvisActualSim = Owner->IsPelvisSimulatingNow();
+		TArray<FName> SimulatingBones;
+		Owner->GetSimulatingBodies(SimulatingBones);
+		Diagnostics.SimCountPre = SimulatingBones.Num();
+
+		Diagnostics.BaselineShellOffset = CachedConvergenceSnapshot.ShellPlanarOffset;
+		Diagnostics.BaselineShellVel = CachedConvergenceSnapshot.ShellPlanarVelocity;
+
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimBalance] PHASE2_ENTRY_AUDIT topology=%s shellLocked=%d shellReanchored=%d shellReseeded=%d rootSimRequested=%d rootSimActual=%d preSim=%d postSim=%d shellOffset=%.2f shellVel=%.2f strict=%d"),
+			*CertifiedHandoff.TopologyClass,
+			CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+			CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+			CertifiedHandoff.bTransitionShellReferenceReseededAfterLock ? 1 : 0,
+			bPelvisRequestedSim ? 1 : 0,
+			bPelvisActualSim ? 1 : 0,
+			Diagnostics.SimCountPre,
+			Diagnostics.SimCountPost,
+			Diagnostics.BaselineShellOffset,
+			Diagnostics.BaselineShellVel,
+			Audit.bUsedRelaxedCertification ? 0 : 1);
 	}
 
 	if (Owner &&
@@ -2120,10 +2180,9 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	bool bRootSimulating = false;
 
 	Owner->GetSimulatingBodies(SimulatingBones);
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] GET_SIMULATING_BODIES count=%d"), SimulatingBones.Num());
-	for (const FName BoneName : SimulatingBones)
+	if (GVerbosePhase1Forensics != 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance]   simulating_bone=%s"), *BoneName.ToString());
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] GET_SIMULATING_BODIES count=%d"), SimulatingBones.Num());
 	}
 	TSet<FName> SimulatingBoneSet(SimulatingBones);
 	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
@@ -2369,22 +2428,6 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		Audit.bShellLocked = OutSnapshot.bTransitionOwnedShellLocked;
 		Audit.ShellOffset = OutSnapshot.ShellOffsetDeltaAtCaptureCm;
 		Audit.ShellVelocity = OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond;
-
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_CERTIFICATION_AUDIT STRICT_AUDIT_V1 usedRelaxedCertification=%d usedTimeoutExtension=%d usedDwellShortcut=%d usedReanchorShortcut=%d usedShellOwnershipNarrowing=%d topology=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d shellReanchored=%d shellLocked=%d shellOffset=%.2f shellVelocity=%.2f"),
-			Audit.bUsedRelaxedCertification ? 1 : 0,
-			Audit.bUsedTimeoutExtension ? 1 : 0,
-			Audit.bUsedDwellShortcut ? 1 : 0,
-			Audit.bUsedReanchorShortcut ? 1 : 0,
-			Audit.bUsedShellOwnershipNarrowing ? 1 : 0,
-			*Audit.Topology,
-			OutSnapshot.SimCount,
-			Audit.ProximalSimCount,
-			Audit.DistalSimCount,
-			Audit.UpperBodySimCount,
-			Audit.bShellReanchored ? 1 : 0,
-			Audit.bShellLocked ? 1 : 0,
-			Audit.ShellOffset,
-			Audit.ShellVelocity);
 	}
 	else
 	{
@@ -2397,23 +2440,6 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		Audit.bShellLocked = OutSnapshot.bTransitionOwnedShellLocked;
 		Audit.ShellOffset = OutSnapshot.ShellOffsetDeltaAtCaptureCm;
 		Audit.ShellVelocity = OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond;
-
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_FAILED_CERTIFICATION_AUDIT STRICT_AUDIT_V1 usedRelaxedCertification=%d usedTimeoutExtension=%d usedDwellShortcut=%d usedReanchorShortcut=%d usedShellOwnershipNarrowing=%d topology=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d shellReanchored=%d shellLocked=%d shellOffset=%.2f shellVelocity=%.2f result=%d"),
-			Audit.bUsedRelaxedCertification ? 1 : 0,
-			Audit.bUsedTimeoutExtension ? 1 : 0,
-			Audit.bUsedDwellShortcut ? 1 : 0,
-			Audit.bUsedReanchorShortcut ? 1 : 0,
-			Audit.bUsedShellOwnershipNarrowing ? 1 : 0,
-			*Audit.Topology,
-			OutSnapshot.SimCount,
-			Audit.ProximalSimCount,
-			Audit.DistalSimCount,
-			Audit.UpperBodySimCount,
-			Audit.bShellReanchored ? 1 : 0,
-			Audit.bShellLocked ? 1 : 0,
-			Audit.ShellOffset,
-			Audit.ShellVelocity,
-			(int32)OutResult.Outcome);
 	}
 
 	OutResult.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
@@ -2442,8 +2468,26 @@ bool FPhysAnimBalanceReadyTransition::CaptureCertifiedHandoff(UPhysAnimComponent
 	CertifiedHandoff = CurrentSnapshot;
 	CertifiedLateValidationResult = CurrentResult;
 	bHasCertifiedHandoff = true;
+
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_CERTIFICATION_AUDIT STRICT_AUDIT_V1 usedRelaxedCertification=%d usedTimeoutExtension=%d usedDwellShortcut=%d usedReanchorShortcut=%d usedShellOwnershipNarrowing=%d topology=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d shellReanchored=%d shellLocked=%d shellOffset=%.2f shellVelocity=%.2f"),
+		Audit.bUsedRelaxedCertification ? 1 : 0,
+		Audit.bUsedTimeoutExtension ? 1 : 0,
+		Audit.bUsedDwellShortcut ? 1 : 0,
+		Audit.bUsedReanchorShortcut ? 1 : 0,
+		Audit.bUsedShellOwnershipNarrowing ? 1 : 0,
+		*Audit.Topology,
+		CertifiedHandoff.SimCount,
+		Audit.ProximalSimCount,
+		Audit.DistalSimCount,
+		Audit.UpperBodySimCount,
+		Audit.bShellReanchored ? 1 : 0,
+		Audit.bShellLocked ? 1 : 0,
+		Audit.ShellOffset,
+		Audit.ShellVelocity);
+
 	OutReason.Reset();
 	return true;
+
 }
 
 bool FPhysAnimBalanceReadyTransition::CaptureLateValidationBaseline(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)

@@ -66,6 +66,14 @@ static FAutoConsoleVariableRef CVarStrictPhase1Certification(
 	TEXT("If 1, Phase 1 certification restores original, more stringent constraints (timeout, dwell, shell reanchor, and ownership rules) to verify genuine convergence."),
 	ECVF_Cheat);
 
+int32 GVerbosePhase1Forensics = 0;
+static FAutoConsoleVariableRef CVarVerbosePhase1Forensics(
+	TEXT("p.PhysAnim.VerbosePhase1Forensics"),
+	GVerbosePhase1Forensics,
+	TEXT("If 1, enables high-volume per-tick forensics for Phase 1 (modifier syncs, simulating body lists, persistent write traces). Default OFF to keep logs readable."),
+	ECVF_Cheat);
+
+
 namespace PhysAnimComponentInternal
 {
 	const FName PoseHistoryName(TEXT("PoseHistory_Stage1"));
@@ -5403,9 +5411,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 			if (bPhase1Prepare || bPhase1LateValidate)
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_MODIFIER_SYNC_CORRECTED bone=%s phase=%s previousModifier=Simulated correctedModifier=Kinematic reason=AcceptedPhase1Topology"), 
-					*BoneName.ToString(), 
-					bPhase1Prepare ? TEXT("BalanceEntry_Prepare") : TEXT("BalanceEntry_LateValidate"));
+				if (GVerbosePhase1Forensics != 0)
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_MODIFIER_SYNC_CORRECTED bone=%s phase=%s previousModifier=Simulated correctedModifier=Kinematic reason=AcceptedPhase1Topology"), 
+						*BoneName.ToString(), 
+						bPhase1Prepare ? TEXT("BalanceEntry_Prepare") : TEXT("BalanceEntry_LateValidate"));
+				}
 			}
 		}
 
@@ -5447,13 +5458,16 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		{
 			if (BoneName == TEXT("spine_01") || BoneName == TEXT("calf_r"))
 			{
-				const USkeletalMeshComponent* const Mesh = GetMeshComponent();
-				const FBodyInstance* const TargetBody = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
-				const bool bRawSimulating = TargetBody ? TargetBody->IsInstanceSimulatingPhysics() : false;
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_MODIFIER_SYNC bone=%s movement=%s updateBody=1 rawSim=%d"),
-					*BoneName.ToString(),
-					UPhysAnimComponent::GetPhysicsMovementTypeName(BodyModifierMovementType),
-					bRawSimulating ? 1 : 0);
+				if (GVerbosePhase1Forensics != 0)
+				{
+					const USkeletalMeshComponent* const Mesh = GetMeshComponent();
+					const FBodyInstance* const TargetBody = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
+					const bool bRawSimulating = TargetBody ? TargetBody->IsInstanceSimulatingPhysics() : false;
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_MODIFIER_SYNC bone=%s movement=%s updateBody=1 rawSim=%d"),
+						*BoneName.ToString(),
+						UPhysAnimComponent::GetPhysicsMovementTypeName(BodyModifierMovementType),
+						bRawSimulating ? 1 : 0);
+				}
 			}
 		}
 
@@ -9384,17 +9398,20 @@ void UPhysAnimComponent::TrackDistalModifierWrite(FName BoneName, EPhysicsMoveme
 
 	if (!bHadPrevious || PreviousMovementType != NewMovementType)
 	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] DISTAL_MODIFIER_WRITE: bone=%s prevModifier=%s newModifier=%s bUpdateBody=%d runtimeState=%s phase=%d reason=%s"),
-			*BoneName.ToString(),
-			bHadPrevious ? GetPhysicsMovementTypeName(PreviousMovementType) : TEXT("None"),
-			GetPhysicsMovementTypeName(NewMovementType),
-			bUpdateBody ? 1 : 0,
-			GetRuntimeStateName(RuntimeState),
-			(int32)BalanceReadyTransition.GetPhase(),
-			*CallSiteReason);
+		if (GVerbosePhase1Forensics != 0)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Log,
+				TEXT("[PhysAnim] DISTAL_MODIFIER_WRITE: bone=%s prevModifier=%s newModifier=%s bUpdateBody=%d runtimeState=%s phase=%d reason=%s"),
+				*BoneName.ToString(),
+				bHadPrevious ? GetPhysicsMovementTypeName(PreviousMovementType) : TEXT("None"),
+				GetPhysicsMovementTypeName(NewMovementType),
+				bUpdateBody ? 1 : 0,
+				GetRuntimeStateName(RuntimeState),
+				(int32)BalanceReadyTransition.GetPhase(),
+				*CallSiteReason);
+		}
 
 		PreviousDistalBoneModifierOwnership.Add(BoneName, NewMovementType);
 	}
@@ -9427,17 +9444,20 @@ void UPhysAnimComponent::TrackDistalBoneOwnershipChange(FName BoneName, EPhysics
 			}
 		}
 
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("[PhysAnim] DISTAL_OWNERSHIP_CHANGE: bone=%s prevIntended=%s newIntended=%s rawSimulate=%s runtimeState=%s phase=%d reason=%s"),
-			*BoneName.ToString(),
-			bHadPrevious ? GetPhysicsMovementTypeName(PreviousOwnership) : TEXT("None"),
-			GetPhysicsMovementTypeName(NewOwnership),
-			bRawSimulating ? TEXT("Simulating") : TEXT("Kinematic"),
-			GetRuntimeStateName(RuntimeState),
-			(int32)BalanceReadyTransition.GetPhase(),
-			*CallSiteReason);
+		if (GVerbosePhase1Forensics != 0)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnim] DISTAL_OWNERSHIP_CHANGE: bone=%s prevIntended=%s newIntended=%s rawSimulate=%s runtimeState=%s phase=%d reason=%s"),
+				*BoneName.ToString(),
+				bHadPrevious ? GetPhysicsMovementTypeName(PreviousOwnership) : TEXT("None"),
+				GetPhysicsMovementTypeName(NewOwnership),
+				bRawSimulating ? TEXT("Simulated") : TEXT("Kinematic"),
+				GetRuntimeStateName(RuntimeState),
+				(int32)BalanceReadyTransition.GetPhase(),
+				*CallSiteReason);
+		}
 
 		PreviousDistalBoneIntendedOwnership.Add(BoneName, NewOwnership);
 	}
@@ -9806,20 +9826,26 @@ void UPhysAnimComponent::ReconcilePhase1DistalModifierRecords(const FPhysAnimSta
 
 			if (ModifierMovementType != EPhysicsMovementType::Kinematic)
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("PHASE1_DISTAL_RECORD_REPAIRED bone=%s prevModifier=%s rawBody=%s"),
-					*BoneName.ToString(),
-					GetPhysicsMovementTypeName(ModifierMovementType),
-					bRawSimulating ? TEXT("Simulated") : TEXT("Kinematic"));
+				if (GVerbosePhase1Forensics != 0)
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("PHASE1_DISTAL_RECORD_REPAIRED bone=%s prevModifier=%s rawBody=%s"),
+						*BoneName.ToString(),
+						GetPhysicsMovementTypeName(ModifierMovementType),
+						bRawSimulating ? TEXT("Simulated") : TEXT("Kinematic"));
+				}
 				
 				PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic);
 				TrackDistalModifierWrite(BoneName, EPhysicsMovementType::Kinematic, false, TEXT("ReconcilePhase1DistalModifierRecords"));
 			}
 			else
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("PHASE1_DISTAL_RECORD_ENTRY_STATE bone=%s modifier=%s rawBody=%s"),
-					*BoneName.ToString(),
-					GetPhysicsMovementTypeName(ModifierMovementType),
-					bRawSimulating ? TEXT("Simulated") : TEXT("Kinematic"));
+				if (GVerbosePhase1Forensics != 0)
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("PHASE1_DISTAL_RECORD_ENTRY_STATE bone=%s modifier=%s rawBody=%s"),
+						*BoneName.ToString(),
+						GetPhysicsMovementTypeName(ModifierMovementType),
+						bRawSimulating ? TEXT("Simulated") : TEXT("Kinematic"));
+				}
 			}
 		}
 	}
