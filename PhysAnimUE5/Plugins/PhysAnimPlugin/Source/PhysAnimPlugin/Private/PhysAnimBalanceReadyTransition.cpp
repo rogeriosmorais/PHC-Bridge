@@ -1610,8 +1610,8 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	}
 
 	if (Owner &&
-		NewPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate &&
-		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
+		(NewPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || NewPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate) &&
+		InternalPhase != NewPhase)
 	{
 		Owner->ActivateTransitionOwnedShellLock();
 	}
@@ -2250,20 +2250,19 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bTransitionOwnedShellLocked = Owner->IsTransitionOwnedShellLocked();
 	OutSnapshot.bTransitionOwnedShellLocked = Owner->IsTransitionOwnedShellLocked();
 	
-	const bool bShellLockedAndIdle = OutSnapshot.bTransitionOwnedShellLocked && Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle;
 	const bool bExplicitReanchored = Owner->WasTransitionShellReferenceReanchored();
 	
-	if (bShellLockedAndIdle && !bExplicitReanchored)
-	{
-		Audit.bUsedReanchorShortcut = true;
-	}
-
 	if (GStrictPhase1Certification != 0)
 	{
 		OutSnapshot.bTransitionShellReferenceReanchored = bExplicitReanchored;
 	}
 	else
 	{
+		const bool bShellLockedAndIdle = OutSnapshot.bTransitionOwnedShellLocked && Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle;
+		if (bShellLockedAndIdle && !bExplicitReanchored)
+		{
+			Audit.bUsedReanchorShortcut = true;
+		}
 		OutSnapshot.bTransitionShellReferenceReanchored = bExplicitReanchored || bShellLockedAndIdle;
 	}
 

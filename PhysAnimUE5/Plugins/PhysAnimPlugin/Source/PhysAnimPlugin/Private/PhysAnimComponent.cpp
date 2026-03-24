@@ -2811,7 +2811,7 @@ bool UPhysAnimComponent::IsTransitionOwnedShellLocked() const
 		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery;
 }
 
-void UPhysAnimComponent::ReanchorShellCouplingReferenceToCurrentRoot()
+void UPhysAnimComponent::ReanchorShellCouplingReferenceToCurrentRoot(const TCHAR* Source)
 {
 	const AActor* const OwnerActor = GetOwner();
 	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
@@ -2832,6 +2832,12 @@ void UPhysAnimComponent::ReanchorShellCouplingReferenceToCurrentRoot()
 		}
 		bTransitionOwnedShellReferenceReanchored = true;
 	}
+
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_REANCHOR_EVENT source=%s locked=%d reanchored=%d reseeded=%d"),
+		Source ? Source : TEXT("unknown"),
+		IsTransitionOwnedShellLocked() ? 1 : 0,
+		bTransitionOwnedShellReferenceReanchored ? 1 : 0,
+		bTransitionOwnedShellReferenceReseededAfterLock ? 1 : 0);
 }
 
 void UPhysAnimComponent::ActivateTransitionOwnedShellLock()
@@ -2846,7 +2852,7 @@ void UPhysAnimComponent::ActivateTransitionOwnedShellLock()
 	bTransitionOwnedShellReferenceReseededAfterLock = false;
 	ApplyTransitionOwnedShellLock();
 	ResetBridgeLocomotionAuthorityState();
-	ReanchorShellCouplingReferenceToCurrentRoot();
+	ReanchorShellCouplingReferenceToCurrentRoot(TEXT("activate_lock"));
 }
 
 void UPhysAnimComponent::ReleaseTransitionOwnedShellLock()
@@ -2860,6 +2866,8 @@ void UPhysAnimComponent::ReleaseTransitionOwnedShellLock()
 	BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::GameplayShellObservedOnly;
 	bTransitionOwnedShellReferenceReanchored = false;
 	bTransitionOwnedShellReferenceReseededAfterLock = false;
+
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_REANCHOR_EVENT source=release_lock locked=0 reanchored=0 reseeded=0"));
 }
 
 
@@ -6302,8 +6310,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 		{
 			if (!bTransitionOwnedShellReferenceReanchored)
 			{
-				ReanchorShellCouplingReferenceToCurrentRoot();
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Phase 1 reanchored shell reference at final bring-up group unlock."));
+				ReanchorShellCouplingReferenceToCurrentRoot(TEXT("final_bring_up_unlock"));
 			}
 		}
 	}

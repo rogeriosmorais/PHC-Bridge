@@ -658,7 +658,7 @@ public:
 	FVector GetAcceptedShellPlanarVelocity() const { return BridgeShellState.AcceptedPlanarVelocityCmPerSecond; }
 	float GetCurrentShellPlanarOffsetDeltaCm() const;
 	float GetCurrentShellPlanarVelocityDeltaCmPerSecond() const;
-	void ReanchorShellCouplingReferenceToCurrentRoot();
+	void ReanchorShellCouplingReferenceToCurrentRoot(const TCHAR* Source = TEXT("unknown"));
 	void ActivateTransitionOwnedShellLock();
 	void ReleaseTransitionOwnedShellLock();
 	EBalanceTransitionShellAuthorityMode GetBalanceTransitionShellAuthorityMode() const { return BalanceTransitionShellAuthorityMode; }
