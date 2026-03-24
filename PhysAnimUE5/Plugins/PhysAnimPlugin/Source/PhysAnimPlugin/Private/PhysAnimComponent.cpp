@@ -5514,13 +5514,41 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 
 			// Instrument every pelvis write in target states
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning"), 
-				CurrentFrame, *BoneName.ToString(), 
-				bAllowRootBodyModifierSimulation ? 1 : 0, 
-				bTransitionOwnsRootOnThisTick ? 1 : 0, 
-				bPhase2RootAuthorityQuarantined ? 1 : 0,
-				bTransitionKeepsBoneKinematic ? 1 : 0,
-				static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType));
+			int32 RawReadbackValue = -1;
+			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+				bAllowRootBodyModifierSimulation &&
+				bTransitionOwnsRootOnThisTick &&
+				!bTransitionKeepsBoneKinematic)
+			{
+				BodyModifierMovementType = EPhysicsMovementType::Simulated;
+				if (FBodyInstance* PelvisBody = GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
+				{
+					PelvisBody->SetInstanceSimulatePhysics(true, true);
+					RawReadbackValue = PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0;
+				}
+			}
+
+			if (RawReadbackValue != -1)
+			{
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning rawReadback=%d"), 
+					CurrentFrame, *BoneName.ToString(), 
+					bAllowRootBodyModifierSimulation ? 1 : 0, 
+					bTransitionOwnsRootOnThisTick ? 1 : 0, 
+					bPhase2RootAuthorityQuarantined ? 1 : 0,
+					bTransitionKeepsBoneKinematic ? 1 : 0,
+					static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType),
+					RawReadbackValue);
+			}
+			else
+			{
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning"), 
+					CurrentFrame, *BoneName.ToString(), 
+					bAllowRootBodyModifierSimulation ? 1 : 0, 
+					bTransitionOwnsRootOnThisTick ? 1 : 0, 
+					bPhase2RootAuthorityQuarantined ? 1 : 0,
+					bTransitionKeepsBoneKinematic ? 1 : 0,
+					static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType));
+			}
 		}
 
 		if ((bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BridgeActive) &&
