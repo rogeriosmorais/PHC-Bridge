@@ -23,6 +23,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogPhysAnimBridge, Log, All);
 
 extern int32 GStrictPhase1Certification;
 extern int32 GVerbosePhase1Forensics;
+extern int32 GVerbosePhase2Forensics;
 
 
 namespace BalanceTransitionSets
@@ -1004,27 +1005,33 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				if (!bCanCompleteAsRootCoupledReady &&
 					RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2RequiredShellHoldDuration)
 				{
-					UE_LOG(
-						LogPhysAnimBridge,
-						Warning,
-						TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_MINIMUM_MET shellHoldDuration=%.2f shellHoldRequired=%.2f lateValidateDuration=%.2f requiredLateValidateSeconds=%.2f"),
-						RootOnReadinessShellHoldAccumulatedSeconds,
-						Settings.BalancePhase2RequiredShellHoldDuration,
-						LateValidationAccumulatedSeconds,
-						Settings.BalancePhase1LateValidateRequiredSeconds);
+					if (GVerbosePhase1Forensics != 0)
+					{
+						UE_LOG(
+							LogPhysAnimBridge,
+							Warning,
+							TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_MINIMUM_MET shellHoldDuration=%.2f shellHoldRequired=%.2f lateValidateDuration=%.2f requiredLateValidateSeconds=%.2f"),
+							RootOnReadinessShellHoldAccumulatedSeconds,
+							Settings.BalancePhase2RequiredShellHoldDuration,
+							LateValidationAccumulatedSeconds,
+							Settings.BalancePhase1LateValidateRequiredSeconds);
+					}
 				}
 
 				if (!bCanCompleteAsRootCoupledReady &&
 					RootOnReadinessShellHoldAccumulatedSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2RequiredShellHoldDuration)
 				{
-					UE_LOG(
-						LogPhysAnimBridge,
-						Warning,
-						TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_SHELL_HOLD_CAPPED_BY_WINDOW lateValidateDuration=%.2f requiredLateValidateSeconds=%.2f shellHoldDuration=%.2f shellHoldRequired=%.2f"),
-						LateValidationAccumulatedSeconds,
-						Settings.BalancePhase1LateValidateRequiredSeconds,
-						RootOnReadinessShellHoldAccumulatedSeconds,
-						Settings.BalancePhase2RequiredShellHoldDuration);
+					if (GVerbosePhase1Forensics != 0)
+					{
+						UE_LOG(
+							LogPhysAnimBridge,
+							Warning,
+							TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_SHELL_HOLD_CAPPED_BY_WINDOW lateValidateDuration=%.2f requiredLateValidateSeconds=%.2f shellHoldDuration=%.2f shellHoldRequired=%.2f"),
+							LateValidationAccumulatedSeconds,
+							Settings.BalancePhase1LateValidateRequiredSeconds,
+							RootOnReadinessShellHoldAccumulatedSeconds,
+							Settings.BalancePhase2RequiredShellHoldDuration);
+					}
 				}
 
 				bHasLateValidationProof = true;
@@ -2469,25 +2476,27 @@ bool FPhysAnimBalanceReadyTransition::CaptureCertifiedHandoff(UPhysAnimComponent
 	CertifiedLateValidationResult = CurrentResult;
 	bHasCertifiedHandoff = true;
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_CERTIFICATION_AUDIT STRICT_AUDIT_V1 usedRelaxedCertification=%d usedTimeoutExtension=%d usedDwellShortcut=%d usedReanchorShortcut=%d usedShellOwnershipNarrowing=%d topology=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d shellReanchored=%d shellLocked=%d shellOffset=%.2f shellVelocity=%.2f"),
-		Audit.bUsedRelaxedCertification ? 1 : 0,
-		Audit.bUsedTimeoutExtension ? 1 : 0,
-		Audit.bUsedDwellShortcut ? 1 : 0,
-		Audit.bUsedReanchorShortcut ? 1 : 0,
-		Audit.bUsedShellOwnershipNarrowing ? 1 : 0,
-		*Audit.Topology,
-		CertifiedHandoff.SimCount,
-		Audit.ProximalSimCount,
-		Audit.DistalSimCount,
-		Audit.UpperBodySimCount,
-		Audit.bShellReanchored ? 1 : 0,
-		Audit.bShellLocked ? 1 : 0,
-		Audit.ShellOffset,
-		Audit.ShellVelocity);
+	if (GVerbosePhase1Forensics != 0)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_CERTIFICATION_AUDIT STRICT_AUDIT_V1 usedRelaxedCertification=%d usedTimeoutExtension=%d usedDwellShortcut=%d usedReanchorShortcut=%d usedShellOwnershipNarrowing=%d topology=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d shellReanchored=%d shellLocked=%d shellOffset=%.2f shellVelocity=%.2f"),
+			Audit.bUsedRelaxedCertification ? 1 : 0,
+			Audit.bUsedTimeoutExtension ? 1 : 0,
+			Audit.bUsedDwellShortcut ? 1 : 0,
+			Audit.bUsedReanchorShortcut ? 1 : 0,
+			Audit.bUsedShellOwnershipNarrowing ? 1 : 0,
+			*Audit.Topology,
+			CertifiedHandoff.SimCount,
+			Audit.ProximalSimCount,
+			Audit.DistalSimCount,
+			Audit.UpperBodySimCount,
+			Audit.bShellReanchored ? 1 : 0,
+			Audit.bShellLocked ? 1 : 0,
+			Audit.ShellOffset,
+			Audit.ShellVelocity);
+	}
 
 	OutReason.Reset();
 	return true;
-
 }
 
 bool FPhysAnimBalanceReadyTransition::CaptureLateValidationBaseline(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
@@ -2647,7 +2656,10 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 	Phase1TopologyRecord.DistalOwnershipMode = DistalSimCount > 0 ? EBalanceReadyGroupOwnershipMode::Simulating : EBalanceReadyGroupOwnershipMode::Kinematic;
 
 	Phase1TopologyRecord.UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_OWNERSHIP_FROZEN mode=LateValidationKinematicHold source=Phase1Contract"));
+	if (GVerbosePhase1Forensics != 0)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_OWNERSHIP_FROZEN mode=LateValidationKinematicHold source=Phase1Contract"));
+	}
 
 	// Capture authoritative suppression state for Phase 1.
 	// Since Phase 1 always suppresses policy and resets (using held poses), we set these
@@ -2661,18 +2673,21 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 		return Mode == EBalanceReadyGroupOwnershipMode::Simulating ? TEXT("sim") : TEXT("kin");
 	};
 
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_TOPOLOGY_SNAPSHOT topology=root=%s proximal=%s distal=%s upper=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d resetsSuppressed=%d"),
-		GetModeName(Phase1TopologyRecord.RootOwnershipMode),
-		GetModeName(Phase1TopologyRecord.ProximalOwnershipMode),
-		GetModeName(Phase1TopologyRecord.DistalOwnershipMode),
-		UpperSimCount > 0 ? TEXT("sim") : TEXT("kin"),
-		BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode),
-		Phase1TopologyRecord.TotalSimCount,
-		Phase1TopologyRecord.ProximalSimCount,
-		Phase1TopologyRecord.DistalSimCount,
-		Phase1TopologyRecord.UpperBodySimCount,
-		Phase1TopologyRecord.bPolicySuppressed ? 1 : 0,
-		Phase1TopologyRecord.bResetsSuppressed ? 1 : 0);
+	if (GVerbosePhase1Forensics != 0)
+	{
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_TOPOLOGY_SNAPSHOT topology=root=%s proximal=%s distal=%s upper=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d resetsSuppressed=%d"),
+			GetModeName(Phase1TopologyRecord.RootOwnershipMode),
+			GetModeName(Phase1TopologyRecord.ProximalOwnershipMode),
+			GetModeName(Phase1TopologyRecord.DistalOwnershipMode),
+			UpperSimCount > 0 ? TEXT("sim") : TEXT("kin"),
+			BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode),
+			Phase1TopologyRecord.TotalSimCount,
+			Phase1TopologyRecord.ProximalSimCount,
+			Phase1TopologyRecord.DistalSimCount,
+			Phase1TopologyRecord.UpperBodySimCount,
+			Phase1TopologyRecord.bPolicySuppressed ? 1 : 0,
+			Phase1TopologyRecord.bResetsSuppressed ? 1 : 0);
+	}
 }
 
 void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent* Owner)

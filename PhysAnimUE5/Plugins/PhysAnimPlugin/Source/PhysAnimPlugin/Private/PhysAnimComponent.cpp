@@ -73,6 +73,13 @@ static FAutoConsoleVariableRef CVarVerbosePhase1Forensics(
 	TEXT("If 1, enables high-volume per-tick forensics for Phase 1 (modifier syncs, simulating body lists, persistent write traces). Default OFF to keep logs readable."),
 	ECVF_Cheat);
 
+int32 GVerbosePhase2Forensics = 0;
+static FAutoConsoleVariableRef CVarVerbosePhase2Forensics(
+	TEXT("p.PhysAnim.VerbosePhase2Forensics"),
+	GVerbosePhase2Forensics,
+	TEXT("If 1, enables high-volume per-tick forensics for Phase 2 (root sim status, write coverage, shell drop status). Default OFF to keep logs readable."),
+	ECVF_Cheat);
+
 
 namespace PhysAnimComponentInternal
 {
@@ -5219,7 +5226,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUseSkeletalAnimationTargetRepresentation ? TEXT("true") : TEXT("false"));
 	}
 
-	if ((bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BridgeActive) && BalanceReadyTransition.IsDistalKinematicAccepted())
+	if ((bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BridgeActive) && BalanceReadyTransition.IsDistalKinematicAccepted())
 	{
 		static bool bLoggedAuthoritativeWrite = false;
 		if (!bLoggedAuthoritativeWrite)
@@ -5388,6 +5395,21 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
+		// Phase 2 Root Promotion Audit (One-Shot)
+		if (bIsRootBodyModifier && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+		{
+			static int32 LastLoggedRootOnFrame = -1;
+			const int32 CurrentFrame = static_cast<int32>(GFrameNumber);
+			if (LastLoggedRootOnFrame != CurrentFrame)
+			{
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d handoffAlpha=%.3f handoffSettled=%d movementType=%d blendWeight=%.2f collType=%d"), 
+					CurrentFrame, *BoneName.ToString(), bAllowRootBodyModifierSimulation ? 1 : 0, bTransitionOwnsRootOnThisTick ? 1 : 0, 
+					SimulationHandoffAlpha, bSimulationHandoffSettled ? 1 : 0,
+					static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType));
+				LastLoggedRootOnFrame = CurrentFrame;
+			}
+		}
+
 		if ((bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BridgeActive) &&
 			(BoneName == TEXT("calf_r") || BoneName == TEXT("foot_r") || BoneName == TEXT("ball_r") ||
 			 BoneName == TEXT("calf_l") || BoneName == TEXT("foot_l") || BoneName == TEXT("ball_l")) &&
@@ -5403,9 +5425,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			// Telemetry when this safety override catches a conflicting re-promotion attempt
 			if (!BalanceReadyTransition.LoggedSuppressedDistalBones.Contains(BoneName))
 			{
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("DISTAL_SYNC_REPROMOTION_SUPPRESSED bone=%s phase=%s reason=PerBone_BodyModSync blockedBy=DistalOwnershipRule"), 
-					*BoneName.ToString(), 
-					GetRuntimeStateName(RuntimeState));
+				if (GVerbosePhase2Forensics != 0 || RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
+				{
+					UE_LOG(LogPhysAnimBridge, Log, TEXT("DISTAL_SYNC_REPROMOTION_SUPPRESSED bone=%s phase=%s reason=PerBone_BodyModSync blockedBy=DistalOwnershipRule"), 
+						*BoneName.ToString(), 
+						GetRuntimeStateName(RuntimeState));
+				}
 				BalanceReadyTransition.LoggedSuppressedDistalBones.Add(BoneName);
 			}
 
@@ -5428,22 +5453,25 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bBodyModifierActivatedThisTick;
 		if (bIsRootBodyModifier && bRootBodyModLogStateChanged)
 		{
-			UE_LOG(
-				LogPhysAnimBridge,
-				Verbose,
-				TEXT("[PhysAnimBalance] PELVIS_BODYMOD tickPhase=%d allowRootSim=%d transitionOwnsRootOn=%d transitionKeepKinematic=%d bringUpUnlocked=%d simHandoffSettled=%d movementType=%d collisionType=%d updateKinematicFromSimulation=%d bodyActivatedThisTick=%d lastAppliedRootSim=%d pendingResets=%d"),
-				static_cast<int32>(RuntimeState),
-				bAllowRootBodyModifierSimulation ? 1 : 0,
-				bTransitionOwnsRootOnThisTick ? 1 : 0,
-				bTransitionKeepsBoneKinematic ? 1 : 0,
-				bBringUpGroupUnlocked ? 1 : 0,
-				bSimulationHandoffSettled ? 1 : 0,
-				static_cast<int32>(BodyModifierMovementType),
-				static_cast<int32>(BodyModifierCollisionType),
-				bUpdateKinematicFromSimulation ? 1 : 0,
-				bBodyModifierActivatedThisTick ? 1 : 0,
-				bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
-				PendingBodyModifierCachedResetNames.Num());
+			if (GVerbosePhase2Forensics != 0 || RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Verbose,
+					TEXT("[PhysAnimBalance] PELVIS_BODYMOD tickPhase=%d allowRootSim=%d transitionOwnsRootOn=%d transitionKeepKinematic=%d bringUpUnlocked=%d simHandoffSettled=%d movementType=%d collisionType=%d updateKinematicFromSimulation=%d bodyActivatedThisTick=%d lastAppliedRootSim=%d pendingResets=%d"),
+					static_cast<int32>(RuntimeState),
+					bAllowRootBodyModifierSimulation ? 1 : 0,
+					bTransitionOwnsRootOnThisTick ? 1 : 0,
+					bTransitionKeepsBoneKinematic ? 1 : 0,
+					bBringUpGroupUnlocked ? 1 : 0,
+					bSimulationHandoffSettled ? 1 : 0,
+					static_cast<int32>(BodyModifierMovementType),
+					static_cast<int32>(BodyModifierCollisionType),
+					bUpdateKinematicFromSimulation ? 1 : 0,
+					bBodyModifierActivatedThisTick ? 1 : 0,
+					bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
+					PendingBodyModifierCachedResetNames.Num());
+			}
 		}
 
 		PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(
@@ -5451,8 +5479,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUpdateKinematicFromSimulation,
 			false,
 			false);
-		TrackDistalModifierWrite(BoneName, BodyModifierMovementType, (bPhase1Prepare || bPhase1LateValidate), TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
-		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, (bPhase1Prepare || bPhase1LateValidate));
+		TrackDistalModifierWrite(BoneName, BodyModifierMovementType, (bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn), TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
+		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, (bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn));
 
 		if (bPhase1Prepare || bPhase1LateValidate)
 		{
@@ -5566,6 +5594,40 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					Warning,
 					TEXT("[PhysAnimBalance] HIP_QUARANTINE_RELEASED"));
 			}
+		}
+	}
+
+	// Phase 2 Final Simulation Coverage Audit (One-Shot)
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+	{
+		static int32 LastLoggedPostSyncFrame = -1;
+		const int32 CurrentFrame = static_cast<int32>(GFrameNumber);
+		if (LastLoggedPostSyncFrame != CurrentFrame)
+		{
+			bool bActualSimulating = false;
+			int32 SimulatingCount = 0;
+			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+			{
+				if (const FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(RootBoneName))
+				{
+					bActualSimulating = PelvisBody->IsInstanceSimulatingPhysics();
+				}
+				
+				for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+				{
+					if (const FBodyInstance* const Body = Mesh->GetBodyInstance(BoneName))
+					{
+						if (Body->IsInstanceSimulatingPhysics())
+						{
+							SimulatingCount++;
+						}
+					}
+				}
+			}
+
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_POST_SYNC_COVERAGE_AUDIT frame=%d bone=%s actualSim=%d totalSimCount=%d"), 
+				CurrentFrame, *RootBoneName.ToString(), bActualSimulating ? 1 : 0, SimulatingCount);
+			LastLoggedPostSyncFrame = CurrentFrame;
 		}
 	}
 
@@ -5887,6 +5949,36 @@ void UPhysAnimComponent::CommitTransitionOwnedShellDrop()
 		}
 	}
 	
+	// Phase 2 Entry Audit (One-Shot)
+	static int32 LastLoggedShellDropFrame = -1;
+	const int32 CurrentFrame = static_cast<int32>(GFrameNumber);
+	if (LastLoggedShellDropFrame != CurrentFrame)
+	{
+		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(RootBoneName);
+		EPhysicsMovementType RecordMovement = EPhysicsMovementType::Static;
+		if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
+		{
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName))
+			{
+				RecordMovement = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
+		bool bRawSimulating = false;
+		if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+		{
+			if (const FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(RootBoneName))
+			{
+				bRawSimulating = PelvisBody->IsInstanceSimulatingPhysics();
+			}
+		}
+
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_SHELL_DROP_AUDIT frame=%d bone=%s recordMovement=%s actualSim=%d"), 
+			CurrentFrame, *RootBoneName.ToString(), GetPhysicsMovementTypeName(RecordMovement), bRawSimulating ? 1 : 0);
+		LastLoggedShellDropFrame = CurrentFrame;
+	}
+
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Shell explicitly dropped for transition maturation."));
 }
 
