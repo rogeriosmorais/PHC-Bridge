@@ -2006,11 +2006,18 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	const double UpdateControlsStartSeconds = FPlatformTime::Seconds();
 
 	bool bSkipUpdateControls = false;
+	FString SkipReason;
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
 		if (bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
 		{
 			bSkipUpdateControls = true;
+			SkipReason = TEXT("pelvis_already_simulating_after_tuning");
+		}
+		else if (BalanceEntryRootOnFrameCount == 2 && bPelvisSimAfterTuning && TotalSimAfterTuning >= 1)
+		{
+			bSkipUpdateControls = true;
+			SkipReason = TEXT("delayed_root_release_promotion_frame");
 		}
 
 		bool bCurrentPelvisSim = false;
@@ -2059,7 +2066,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	if (bSkipUpdateControls)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_SKIPPED_ON_ENTRY frame=%llu reason=pelvis_already_simulating_after_tuning"), GFrameCounter);
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_SKIPPED_ON_ENTRY frame=%llu reason=%s"), GFrameCounter, *SkipReason);
 	}
 	else
 	{
