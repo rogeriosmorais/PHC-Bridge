@@ -4588,6 +4588,24 @@ void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilization
 	SkeletalMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	SkeletalMesh->SetSimulatePhysics(true);
+
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+	{
+		const bool bQuarantined = BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
+		const bool bKeepsKin = BalanceReadyTransition.ShouldKeepBoneKinematic(RootBoneName, EffectiveSettings);
+
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ActivateBridgePhysicsState"),
+			static_cast<int32>(GFrameNumber), *RootBoneName.ToString(),
+			bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
+			0, // transOwns=0
+			bQuarantined ? 1 : 0,
+			bKeepsKin ? 1 : 0,
+			1, // movementType=1 (Simulated)
+			0.00f, // blendWeight=0.00 (Mesh level sim set, modifiers not yet sync'd)
+			1); // collType=1 (QueryAndPhysics)
+	}
+
 	ApplyTrainingAlignedToeLimitPolicy(EffectiveSettings);
 	SkeletalMesh->RecreatePhysicsState();
 	SkeletalMesh->SetEnablePhysicsBlending(true);
@@ -4901,6 +4919,24 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 	ResetTrainingAlignedMassScales();
 	ResetTrainingAlignedToeLimitPolicy();
 	SkeletalMesh->SetSimulatePhysics(false);
+	
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+	{
+		const bool bQuarantined = BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
+		const bool bKeepsKin = BalanceReadyTransition.ShouldKeepBoneKinematic(RootBoneName, ResolveEffectiveStabilizationSettings());
+
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ResetBridgePhysicsState"),
+			static_cast<int32>(GFrameNumber), *RootBoneName.ToString(),
+			bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
+			0, // transOwns=0
+			bQuarantined ? 1 : 0,
+			bKeepsKin ? 1 : 0,
+			0, // movementType=0 (Kinematic)
+			0.00f, // blendWeight=0.00
+			0); // collType=0 (NoCollision)
+	}
+
 	SkeletalMesh->SetEnablePhysicsBlending(false);
 	if (bHasSavedMeshCollisionState)
 	{
@@ -5896,6 +5932,21 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 				}
 				else
 				{
+					if (BoneName == PhysAnimBridge::GetRootBoneName() && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+					{
+						const bool bQuarantined = BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
+						const bool bKeepsKin = BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, ResolveEffectiveStabilizationSettings());
+
+						UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=UnlockBringUpGroup"),
+							static_cast<int32>(GFrameNumber), *BoneName.ToString(),
+							bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
+							0, // transOwns=0
+							bQuarantined ? 1 : 0,
+							bKeepsKin ? 1 : 0,
+							0, // movementType=0
+							0.00f, // blendWeight=0.00
+							0); // collType=0
+					}
 					PendingBodyModifierCachedResetNames.Add(ModifierName);
 				}
 			}
@@ -6843,8 +6894,19 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 
 	if (ModifierNamesToReset.Contains(RootModifierName) && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_WRITE_AUDIT frame=%d bone=%s movementType=1 source=ResetPendingBodyModifiersToCachedTargets"),
-			static_cast<int32>(GFrameNumber), *PhysAnimBridge::GetRootBoneName().ToString());
+		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		const bool bQuarantined = BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
+		const bool bKeepsKin = BalanceReadyTransition.ShouldKeepBoneKinematic(RootBoneName, ResolveEffectiveStabilizationSettings());
+
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ResetPendingBodyModifiersToCachedTargets"),
+			static_cast<int32>(GFrameNumber), *RootBoneName.ToString(),
+			bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
+			0, // transOwns=0 as this is a cached-target reset, not a policy write
+			bQuarantined ? 1 : 0,
+			bKeepsKin ? 1 : 0,
+			1, // movementType=1 (Simulated)
+			1.00f, // blendWeight=1.00
+			1); // collType=1 (QueryAndPhysics)
 	}
 
 	PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(

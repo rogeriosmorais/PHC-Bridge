@@ -1909,8 +1909,9 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
 				PelvisBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
 				PelvisBody->SetInstanceSimulatePhysics(true);
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s movementType=1 source=SetPhase_BRT_Phase2_RootOn"), 
-					static_cast<int32>(GFrameNumber), *PhysAnimBridge::GetRootBoneName().ToString());
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=1 quarantined=1 keepsKin=0 movementType=1 blendWeight=0.00 collType=1 source=SetPhase_BRT_Phase2_RootOn_Commit"), 
+					static_cast<int32>(GFrameNumber), *PhysAnimBridge::GetRootBoneName().ToString(),
+					bLastRootSimulating ? 1 : 0);
 				PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
 				PelvisBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
 				bPhase2RootAuthorityQuarantined = true;
