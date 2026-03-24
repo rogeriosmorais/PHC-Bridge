@@ -5208,6 +5208,24 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 	}
 
+
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+	{
+		const FName PelvisName = PhysAnimBridge::GetRootBoneName();
+		USkeletalMeshComponent* const Mesh = GetMeshComponent();
+		if (Mesh)
+		{
+			if (const FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PelvisName))
+			{
+				const bool bActualSimulating = PelvisBody->IsInstanceSimulatingPhysics();
+				if (!bActualSimulating)
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PELVIS_SIM_CHECK_FAIL bone=%s pointer=%d [log]"), *PelvisName.ToString(), bActualSimulating ? 1 : 0);
+				}
+			}
+		}
+	}
+
 	// After the control loop, if the ramp just started, log the AFTER state.
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
 	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
@@ -5868,7 +5886,10 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 					(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate) &&
 					BalanceReadyTransition.IsUpperBodyKinematicHoldActive())
 				{
-					UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=unlockGroup"), *BoneName.ToString());
+					if (GVerbosePhase1Forensics != 0)
+					{
+						UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=unlockGroup"), *BoneName.ToString());
+					}
 				}
 				else
 				{
@@ -7149,13 +7170,13 @@ void UPhysAnimComponent::ApplyControlTargets(
 			ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees += RawPolicyOffsetDegrees;
 			if (TargetDeltaDegrees > ControlTargetDiagnostics.MaxTargetDeltaDegrees)
 			{
-				ControlTargetDiagnostics.MaxTargetDeltaDegrees = TargetDeltaDegrees;
-				ControlTargetDiagnostics.MaxTargetDeltaBoneName = Pair.Key;
+					ControlTargetDiagnostics.MaxTargetDeltaDegrees = TargetDeltaDegrees;
+					ControlTargetDiagnostics.MaxTargetDeltaBoneName = Pair.Key;
 			}
 			if (RawPolicyOffsetDegrees > ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees)
 			{
-				ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees = RawPolicyOffsetDegrees;
-				ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName = Pair.Key;
+					ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees = RawPolicyOffsetDegrees;
+					ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName = Pair.Key;
 			}
 			const float LowerLimbLimitProxyDegrees =
 				PhysAnimComponentInternal::ResolveLowerLimbConstraintLimitProxyDegrees(PhysicsAsset, Pair.Key);
@@ -7438,12 +7459,24 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 	const PhysAnimComponentInternal::FFloatBufferSummary MimicSummary = PhysAnimComponentInternal::SummarizeFloatBuffer(MimicTargetPosesBuffer);
 	const PhysAnimComponentInternal::FFloatBufferSummary TerrainBufferSummary = PhysAnimComponentInternal::SummarizeFloatBuffer(TerrainBuffer);
 
+	if (GVerbosePhase1Forensics != 0)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Runtime diagnostics - policyAlpha: %.2f authorityAlpha: %.2f bringUpGroup: %d/%d resets: %d"),
+			CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings),
+			CalculateCurrentControlAuthorityAlpha(EffectiveSettings),
+			HighestUnlockedBringUpGroupIndex + 1,
+			GetBringUpGroupCount(),
+			PendingBodyModifierCachedResetNames.Num());
+	}
 	if (GVerbosePhase2Forensics != 0)
 	{
 		UE_LOG(
 			LogPhysAnimBridge,
 			Log,
-			TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] shell[offsetDeltaCm=%.1f velDeltaCmPerSec=%.1f velAlign=%.2f] obs[selfMeanAbs=%.3f mimicMeanAbs=%.3f terrainMeanAbs=%.3f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s normal=%d held=%d total=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx] root[heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
+			TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] shell[offsetDeltaCm=%.1f velDeltaCmPerSec=%.1f velAlign=%.2f] obs[selfMeanAbs=%.3f mimicMeanAbs=%.3f terrainMeanAbs=%.3f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s normal=%d held=%d total=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawPolicyOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx] root[heightDeltaCm=%.1f linearCmPerSecond=%.1f angularDegPerSecond=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
 			SimulationHandoffAlpha,
 			FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
 			GetBringUpGroupCount(),
