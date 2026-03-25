@@ -240,18 +240,22 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2Continuity(UPhysAnimComponen
 
 	const bool bPelvisActualSim = PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : false;
 
-	// Section 17.5 - Root simulation dropped guard
-	const bool bTick1DelayedRootExemption = (Owner->GetRuntimeState() == EPhysAnimRuntimeState::BalanceEntry_RootOn) &&
-		(Phase2GuardTickCount == 1) &&
+	// Section 17.5 - delayed RootOn application:
+	// tick 1 records the pre_updatecontrols contradiction, then the next guard frame can still
+	// observe rootRawSim=0 before the tick-2 write applies simulation.
+	const bool bPendingDelayedRootApplication = (Owner->GetRuntimeState() == EPhysAnimRuntimeState::BalanceEntry_RootOn) &&
+		(Phase2GuardTickCount <= 2) &&
+		Diagnostics.bPhase2RequestedRootSim &&
 		(!bPelvisActualSim) &&
-		(Diagnostics.SimCountPost == 5);
+		(Diagnostics.SimCountPost == 5) &&
+		(Diagnostics.FirstContradictionSource == TEXT("pre_updatecontrols"));
 
-	if (bTick1DelayedRootExemption)
+	if (bPendingDelayedRootApplication)
 	{
 		return true;
 	}
 
-	if (!bPelvisActualSim && Phase2GuardTickCount > 1)
+	if (!bPelvisActualSim)
 	{
 		OutReason = TEXT("phase2_root_simulation_dropped");
 		return false;

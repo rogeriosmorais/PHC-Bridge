@@ -288,6 +288,7 @@ struct FBalanceReadyTransitionDiagnostics
 	bool bShellContributed = false;
 	bool bShellMaterialGuardSuppressed = false;
 	bool bPolicyWroteTargets = false;
+	bool bPhase2RequestedRootSim = false;
 	bool bResetScheduled = false;
 	bool bResetApplied = false;
 	bool bResetDrained = false;

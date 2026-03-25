@@ -1373,6 +1373,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		Diagnostics.bShellMaterialGuardSuppressed = false;
 		const bool bPelvisRequestedSim = Owner->WasPelvisSimulatingLastFrame();
 		const bool bPelvisActualSim = Owner->IsPelvisSimulatingNow();
+		Diagnostics.bPhase2RequestedRootSim = bPelvisRequestedSim;
 		const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
 
 		EPhysicsMovementType PelvisModifierMovementType = EPhysicsMovementType::Static;
@@ -1406,11 +1407,11 @@ extern int32 GVerbosePhase2Forensics;
 				}
 			}
 
-			if (GVerbosePhase2Forensics != 0)
-			{
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
+		if (GVerbosePhase2Forensics != 0)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
 					TEXT("[PhysAnimBalance] PHASE2_GUARD_TICK tick=%d requestedRootSim=%d actualRootSim=%d resetScheduled=%d simCountPost=%d distalSimPost=%d shellOffsetDelta=%.1f shellVelocityDelta=%.1f owner=%d actor=%s component=%s"),
 					Phase2GuardTickCount,
 					bPelvisRequestedSim ? 1 : 0,
