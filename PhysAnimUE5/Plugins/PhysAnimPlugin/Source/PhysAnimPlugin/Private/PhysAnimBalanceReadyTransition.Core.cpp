@@ -1541,6 +1541,58 @@ extern int32 GVerbosePhase2Forensics;
 
 			if (!bRootOnOneStepExemption && !bRootOnReleaseStepExemption)
 			{
+				FName WorstLinearBone = NAME_None;
+				float WorstLinearSpeed = 0.0f;
+				FName WorstAngularBone = NAME_None;
+				float WorstAngularSpeed = 0.0f;
+
+				if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
+				{
+					for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+					{
+						const float BoneLinearSpeed = Mesh->GetPhysicsLinearVelocity(BoneName).Size();
+						if (BoneLinearSpeed > WorstLinearSpeed)
+						{
+							WorstLinearSpeed = BoneLinearSpeed;
+							WorstLinearBone = BoneName;
+						}
+
+						const float BoneAngularSpeed = Mesh->GetPhysicsAngularVelocityInDegrees(BoneName).Size();
+						if (BoneAngularSpeed > WorstAngularSpeed)
+						{
+							WorstAngularSpeed = BoneAngularSpeed;
+							WorstAngularBone = BoneName;
+						}
+					}
+				}
+
+				const bool bLinearSpike =
+					Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed ||
+					Diagnostics.PeakMaxBodyLinearSpeed > Settings.BalancePhase2AbortMaxBodyLinearSpeed;
+				const bool bAngularSpike =
+					Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed ||
+					Diagnostics.PeakMaxBodyAngularSpeed > Settings.BalancePhase2AbortMaxBodyAngularSpeed;
+				const FName WorstSpikeBone =
+					Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed ||
+					Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed
+						? PhysAnimBridge::GetRootBoneName()
+						: (bLinearSpike && (!bAngularSpike || WorstLinearSpeed >= WorstAngularSpeed) ? WorstLinearBone : WorstAngularBone);
+
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_SPIKE_AUDIT frame=%d rootOnTick=%d maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s worstLinearSpeed=%.2f worstAngularSpeed=%.2f rootRawSim=%d pelvisModifier=%s totalSimCount=%d"),
+					static_cast<int32>(GFrameCounter),
+					Phase2GuardTickCount,
+					Diagnostics.PeakMaxBodyLinearSpeed,
+					Diagnostics.PeakMaxBodyAngularSpeed,
+					*WorstSpikeBone.ToString(),
+					WorstLinearSpeed,
+					WorstAngularSpeed,
+					bPelvisActualSim ? 1 : 0,
+					UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
+					Diagnostics.SimCountPost);
+
 				AbortReason = TEXT("phase2_root_on_spike");
 				if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed)
 				{
