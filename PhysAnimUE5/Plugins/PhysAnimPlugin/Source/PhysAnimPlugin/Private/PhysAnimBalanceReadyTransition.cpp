@@ -773,7 +773,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 								}
 
 								const bool bIsUpperBodyFailureFrame = (bUpperBodyInstability && InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate);
-								const bool bShouldEmitAudit = bFirstLateValidateFrame || bIsUpperBodyFailureFrame;
+								
+								static FName LastFailureBone = NAME_None;
+								bool bIsNewFailure = bIsUpperBodyFailureFrame && (AuditBone != LastFailureBone);
+
+								const bool bShouldEmitAudit = bFirstLateValidateFrame || bIsNewFailure;
 
 								if (bShouldEmitAudit)
 								{
@@ -791,11 +795,19 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 										bHeldTargetWritten ? 1 : 0, TargetDeltaDeg, LinVel, AngVel, bPendingReset ? 1 : 0,
 										Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold ? 1 : 0,
 										bInAllowlist ? 1 : 0);
+									
+									if (bIsNewFailure)
+									{
+										LastFailureBone = AuditBone;
+									}
 								}
 						}
 
 						const bool bIsUpperBodyFailureFrame = (bUpperBodyInstability && InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate);
-						const bool bShouldEmitSummary = bFirstLateValidateFrame || bIsUpperBodyFailureFrame;
+						static int32 LastFailureSummaryFrame = -1;
+						bool bIsNewFailureSummary = bIsUpperBodyFailureFrame && (static_cast<int32>(GFrameCounter) != LastFailureSummaryFrame);
+
+						const bool bShouldEmitSummary = bFirstLateValidateFrame || bIsNewFailureSummary;
 
 						if (bShouldEmitSummary)
 						{
@@ -811,6 +823,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 								MaxAuditTargetDelta,
 								(LateValidationAccumulatedSeconds <= DeltaTime + KINDA_SMALL_NUMBER) ? 1 : 0);
 							bLoggedPhase1UpperBodyAudit = true;
+							if (bIsNewFailureSummary)
+							{
+								LastFailureSummaryFrame = static_cast<int32>(GFrameCounter);
+							}
 						}
 						}
 
@@ -870,7 +886,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 									const bool bIsUpperBodyFailureFrame = (bUpperBodyInstability && InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate);
 									const bool bShouldEmitFailure = bFirstLateValidateFrame || bIsUpperBodyFailureFrame;
 
-									if (bShouldEmitFailure)
+									static int32 LastFailurePendingSummaryFrame = -1;
+									bool bIsNewFailurePending = bIsUpperBodyFailureFrame && (static_cast<int32>(GFrameCounter) != LastFailurePendingSummaryFrame);
+
+									if (bShouldEmitFailure && (bFirstLateValidateFrame || bIsNewFailurePending))
 									{
 										LastSummaryFrame = GFrameCounter;
 										UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY (FAILURE_PENDING) upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
@@ -884,6 +903,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 											*MaxAuditTargetDeltaBone.ToString(),
 											MaxAuditTargetDelta,
 											0);
+										
+										if (bIsNewFailurePending)
+										{
+											LastFailurePendingSummaryFrame = static_cast<int32>(GFrameCounter);
+										}
 									}
 
 									FString Reason;
