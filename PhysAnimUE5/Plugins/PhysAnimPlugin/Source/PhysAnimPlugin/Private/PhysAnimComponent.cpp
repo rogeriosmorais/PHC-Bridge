@@ -1961,7 +1961,13 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		static EPhysAnimRuntimeState LastAuditState = EPhysAnimRuntimeState::Uninitialized;
 		const bool bStateChanged = RuntimeState != LastAuditState;
 		
-		if (bStateChanged || bPelvisRawSimChanged || bTotalSimCountChanged || bPelvisModifierChanged || BalanceEntryRootOnFrameCount == 1)
+		bool bShouldLog = bStateChanged || bPelvisRawSimChanged || bTotalSimCountChanged || bPelvisModifierChanged;
+		if (RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
+		{
+			bShouldLog |= (BalanceEntryRootOnFrameCount == 1);
+		}
+
+		if (bShouldLog)
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_AFTER_TUNING_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
 				GFrameCounter,
@@ -2156,7 +2162,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 						const bool bIsPelvis = (BoneName == PhysAnimBridge::GetRootBoneName());
 						const int32 RawSimBit = BI->IsInstanceSimulatingPhysics() ? 1 : 0;
 
-						if (bIsPelvis || bIsPreservedProximal || RawSimBit == 1)
+						const bool bIsRequiredSummaryBone = bIsPelvis || bIsPreservedProximal;
+
+						if (bIsRequiredSummaryBone)
 						{
 							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_REQUIRED_BONE_SUMMARY bone=%s rawSim=%d modifierName=%s linSpeed=%.1f angSpeed=%.1f counted=%d"),
 								*BoneName.ToString(),
@@ -6380,7 +6388,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 						const FString ModBeforeName = GetPhysicsMovementTypeName(ModBefore);
 						const FString ModAfterName = GetPhysicsMovementTypeName(ModAfter);
 
-						if (ModBefore != EPhysicsMovementType::Simulated || bWriteApplied || ModAfter != EPhysicsMovementType::Simulated)
+						if (ModAfter != EPhysicsMovementType::Simulated || bWriteApplied)
 						{
 							UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_MODIFIER_RECONCILE frame=%d tick=%d bone=%s modifierRecordName=%s modifierBeforeName=%s modifierAfterName=%s writeApplied=%d reconcileStage=final_end_of_ApplyRuntimeControlTuning rawSim=%d owner=%d actor=%s component=%s"),
 								static_cast<int32>(GFrameNumber),
@@ -10450,6 +10458,11 @@ void UPhysAnimComponent::TrackRootOnProximalModifierWrite(FName BoneName, EPhysi
 		{
 			PreviousModifier = Record->BodyModifier.ModifierData.MovementType;
 		}
+	}
+
+	if (WriteReason != TEXT("RootOn_FinalReconcile") && NewModifier == PreviousModifier)
+	{
+		return;
 	}
 
 	UE_LOG(LogPhysAnimBridge, Warning, 
