@@ -142,6 +142,15 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	PhaseTimeSeconds += DeltaTime;
 	TotalTransitionTimeSeconds += DeltaTime;
 
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+	{
+		Phase2GuardTickCount++;
+	}
+	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
+	{
+		Phase3GuardTickCount++;
+	}
+
 	FString BlockReason;
 	const bool bReadyThisFrame = EvaluateReadiness(Owner, Settings, BlockReason);
 	Diagnostics.BlockReason = BlockReason;
@@ -1976,6 +1985,9 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	TargetDiscontinuityAccumulatedSeconds = 0.0f;
 	LastQuietBlockReason.Reset();
 	Phase2GuardTickCount = 0;
+	Phase3GuardTickCount = 0;
+	bPreviousFrameSettleEndRootRawSim = false;
+	bPreviousFrameSettleEndPelvisRawSim = false;
 	bPhase2RootAuthorityQuarantined = false;
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn && Owner)
@@ -2169,6 +2181,10 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	LoggedSuppressedDistalBones.Empty();
 	LoggedProximalPromotions.Empty();
 	LoggedProximalStates.Empty();
+	Phase2GuardTickCount = 0;
+	Phase3GuardTickCount = 0;
+	bPreviousFrameSettleEndRootRawSim = false;
+	bPreviousFrameSettleEndPelvisRawSim = false;
 }
 
 

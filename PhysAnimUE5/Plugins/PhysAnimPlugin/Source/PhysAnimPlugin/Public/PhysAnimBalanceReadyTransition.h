@@ -381,6 +381,12 @@ public:
 	}
 
 	const FBalanceReadyTransitionDiagnostics& GetDiagnostics() const { return Diagnostics; }
+	void UpdateSettleContinuityState(bool bRootSim, bool bPelvisSim)
+	{
+		bPreviousFrameSettleEndRootRawSim = bRootSim;
+		bPreviousFrameSettleEndPelvisRawSim = bPelvisSim;
+	}
+	float GetTotalTransitionTimeSeconds() const { return TotalTransitionTimeSeconds; }
 	static bool IsProximal(FName BoneName);
 	float GetRootBodyModifierSoftSimAlpha() const;
 	float GetProximalControlSoftAlpha(FName BoneName) const;
@@ -450,6 +456,9 @@ private:
 	int32 Phase2RetryCount = 0;
 	float RetryCooldownTimerSeconds = 0.0f;
 	int32 Phase2GuardTickCount = 0;
+	int32 Phase3GuardTickCount = 0;
+	bool bPreviousFrameSettleEndRootRawSim = false;
+	bool bPreviousFrameSettleEndPelvisRawSim = false;
 	bool bPhase2RootAuthorityQuarantined = false;
 	TMap<FName, FQuat> EntryHoldRotations;
 	bool bHasCertifiedHandoff = false;

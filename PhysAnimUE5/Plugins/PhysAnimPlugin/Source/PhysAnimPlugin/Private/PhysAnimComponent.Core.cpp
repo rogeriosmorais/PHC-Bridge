@@ -1543,6 +1543,56 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				GetRuntimeStateName(RuntimeState));
 		}
 	}
+
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+	{
+		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+		FBodyInstance* const RootBI = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
+		const bool bRootRawSim = RootBI && RootBI->IsInstanceSimulatingPhysics();
+		const bool bPelvisRawSim = bRootRawSim;
+
+		int32 TotalSimCount = 0;
+		if (Mesh)
+		{
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				{
+					if (BI->IsInstanceSimulatingPhysics())
+					{
+						TotalSimCount++;
+					}
+				}
+			}
+		}
+
+		EPhysicsMovementType PelvisModType = EPhysicsMovementType::Static;
+		if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+		{
+			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(RootBoneName);
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
+			{
+				PelvisModType = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
+		BalanceReadyTransition.UpdateSettleContinuityState(bRootRawSim, bPelvisRawSim);
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE3_POST_TICK_PRESERVE_STATE rootRawSim=%d pelvisRawSim=%d pelvisModifier=%s totalSimCount=%d totalTransitionTime=%.4f runtimeState=%s actor=%s component=%s"),
+			bRootRawSim ? 1 : 0,
+			bPelvisRawSim ? 1 : 0,
+			GetPhysicsMovementTypeName(PelvisModType),
+			TotalSimCount,
+			BalanceReadyTransition.GetTotalTransitionTimeSeconds(),
+			GetRuntimeStateName(RuntimeState),
+			*GetOwner()->GetName(),
+			*GetName());
+	}
+	else if (RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
+	{
+		BalanceReadyTransition.UpdateSettleContinuityState(false, false);
+	}
 }
 
 
