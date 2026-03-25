@@ -56,10 +56,10 @@ Thumbs.db
 desktop.ini
 scripts/local.paths.ps1
 mcp_memory.json
-@workspace/memory-bank/activeContext.md
-@workspace/memory-bank/productContext.md
-@workspace/memory-bank/progress.md
-@workspace/memory-bank/projectbrief.md
-@workspace/memory-bank/systemPatterns.md
-@workspace/memory-bank/techContext.md
 .clinerules/project-rules.md
+memory-bank/activeContext.md
+memory-bank/productContext.md
+memory-bank/progress.md
+memory-bank/projectbrief.md
+memory-bank/systemPatterns.md
+memory-bank/techContext.md

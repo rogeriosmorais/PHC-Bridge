@@ -6405,54 +6405,54 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	}
 
 	// Phase 2 Final Simulation Coverage Audit (One-Shot)
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
-	{
-		static int32 LastLoggedPostSyncFrame = -1;
-		static bool LastActualSimulating = false;
-		static int32 LastSimulatingCount = -1;
-
-		const int32 CurrentFrame = static_cast<int32>(GFrameNumber);
-		if (LastLoggedPostSyncFrame != CurrentFrame)
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 		{
-			bool bActualSimulating = false;
-			int32 SimulatingCount = 0;
-			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+			if (bIsRealRootOnTick4)
 			{
-				if (const FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(RootBoneName))
+				static uint64 LastLoggedTick4SummaryFrame = 0;
+				if (LastLoggedTick4SummaryFrame != GFrameCounter)
 				{
-					bActualSimulating = PelvisBody->IsInstanceSimulatingPhysics();
-				}
-				
-				for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
-				{
-					if (const FBodyInstance* const Body = Mesh->GetBodyInstance(BoneName))
+					for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 					{
-						if (Body->IsInstanceSimulatingPhysics())
+						if (USkeletalMeshComponent* const Mesh = MeshComponent.Get())
 						{
-							SimulatingCount++;
+							if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+							{
+								EPhysicsMovementType ModifierType = EPhysicsMovementType::Static;
+								if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+								{
+									const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+									if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, ModifierName))
+									{
+										ModifierType = Record->BodyModifier.ModifierData.MovementType;
+									}
+								}
+
+								const bool bIsPreservedProximal = 
+									(BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
+									 BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03"));
+								const bool bIsPelvis = (BoneName == PhysAnimBridge::GetRootBoneName());
+								const int32 RawSimBit = BI->IsInstanceSimulatingPhysics() ? 1 : 0;
+
+								const bool bIsRequiredSummaryBone = bIsPelvis || bIsPreservedProximal;
+
+								if (bIsRequiredSummaryBone)
+								{
+									UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_REQUIRED_BONE_SUMMARY bone=%s rawSim=%d modifierName=%s linSpeed=%.1f angSpeed=%.1f counted=%d"),
+										*BoneName.ToString(),
+										RawSimBit,
+										GetPhysicsMovementTypeName(ModifierType),
+										BI->GetUnrealWorldVelocity().Size(),
+										FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size(),
+										RawSimBit);
+								}
+							}
 						}
 					}
+					LastLoggedTick4SummaryFrame = GFrameCounter;
 				}
 			}
-
-			if (bActualSimulating != LastActualSimulating || SimulatingCount != LastSimulatingCount)
-			{
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_POST_SYNC_COVERAGE_AUDIT frame=%d bone=%s actualSim=%d totalSimCount=%d owner=%d actor=%s component=%s"), 
-					CurrentFrame, *RootBoneName.ToString(), bActualSimulating ? 1 : 0, SimulatingCount,
-					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
-					*GetOwner()->GetName(), *GetName());
-				if (bActualSimulating)
-				{
-					// Emit once more if pelvis was actualSim=1 there
-					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_POST_SYNC_COVERAGE_AUDIT frame=%d bone=%s actualSim=1 (Repeat) owner=%d actor=%s component=%s"), 
-						CurrentFrame, *RootBoneName.ToString(),
-						static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
-						*GetOwner()->GetName(), *GetName());
-				}
-
-				LastActualSimulating = bActualSimulating;
-				LastSimulatingCount = SimulatingCount;
-			}
+		}
 			LastLoggedPostSyncFrame = CurrentFrame;
 		}
 	}
