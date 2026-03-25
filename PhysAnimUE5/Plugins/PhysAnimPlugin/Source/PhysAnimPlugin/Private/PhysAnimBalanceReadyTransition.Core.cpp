@@ -1491,13 +1491,14 @@ extern int32 GVerbosePhase2Forensics;
 					Settings.BalancePhase2AbortShellVelocityDelta);
 			}
 		}
-		else if (!bPelvisActualSim && Phase2GuardTickCount > 1)
+		else if (!ValidatePhase2Continuity(Owner, Settings, AbortReason))
 		{
-			AbortReason = TEXT("phase2_root_simulation_dropped");
 			AbortDetail = FString::Printf(
-				TEXT("requestedRootSim=%d actualRootSim=%d"),
+				TEXT("requestedRootSim=%d actualRootSim=%d Phase2GuardTickCount=%d simCountPost=%d"),
 				bPelvisRequestedSim ? 1 : 0,
-				bPelvisActualSim ? 1 : 0);
+				bPelvisActualSim ? 1 : 0,
+				Phase2GuardTickCount,
+				Diagnostics.SimCountPost);
 		}
 		else if (Owner->IsInstabilityPrecursorActive())
 		{

@@ -410,6 +410,7 @@ private:
 	void SetPhase(EBalanceReadyTransitionPhase NewPhase, class UPhysAnimComponent* Owner = nullptr);
 	bool EvaluateReadiness(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidatePhase2EntryPreconditions(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
+	bool ValidatePhase2Continuity(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidatePhase3Continuity(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool BuildCertifiedHandoffSnapshot(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FPhysAnimCertifiedHandoffSnapshot& OutSnapshot, FPhysAnimLateValidationResult& OutResult, bool bUseFrozenTopology = true) const;
 	bool CaptureLateValidationBaseline(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
