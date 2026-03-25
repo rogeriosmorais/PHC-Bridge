@@ -1128,6 +1128,7 @@ private:
 
 	void TrackDistalBoneOwnershipChange(FName BoneName, EPhysicsMovementType NewOwnership, const FString& CallSiteReason);
 	void TrackDistalModifierWrite(FName BoneName, EPhysicsMovementType NewMovementType, bool bUpdateBody, const FString& CallSiteReason);
+	void TrackRootOnProximalModifierWrite(FName BoneName, EPhysicsMovementType NewModifier, const FString& WriteReason);
 	TMap<FName, EPhysicsMovementType> PreviousDistalBoneIntendedOwnership;
 	TMap<FName, EPhysicsMovementType> PreviousDistalBoneModifierOwnership;
 	TMap<FName, FString> LastDistalClassification;
