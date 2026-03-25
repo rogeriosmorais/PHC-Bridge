@@ -92,6 +92,17 @@ namespace PhysAnimComponentInternal
 	const TCHAR* DefaultModelPath = TEXT("/Game/NNEModels/phc_policy.phc_policy");
 	const TCHAR* PreferredGpuRuntime = TEXT("NNERuntimeORTDml");
 	const TCHAR* FallbackCpuRuntime = TEXT("NNERuntimeORTCpu");
+
+	// Private accessor to read back modifier records from PhysicsControlComponent
+	struct FPhysAnimPhysicsControlAccessor : public UPhysicsControlComponent
+	{
+	public:
+		static const FPhysicsBodyModifierRecord* GetModifierRecord(const UPhysicsControlComponent* ControlComp, const FName Name)
+		{
+			return ((const FPhysAnimPhysicsControlAccessor*)ControlComp)->FindBodyModifierRecord(Name);
+		}
+	};
+
 	constexpr double InitialPoseSearchWaitTimeoutSeconds = 2.0;
 	constexpr int32 NumBringUpGroups = 5;
 	constexpr float MovementSmokeIdleDurationSeconds = 3.0f;
@@ -5816,18 +5827,37 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				}
 			}
 
+			// PHASE 2 PROXIMAL MODIFIER RECONCILE:
+			// Ensure both the intended movement type and the record held by PhysicsControl are Simulated.
+			PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, true);
+
+			const FPhysicsBodyModifierRecord* RecordBefore = PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName);
+			const EPhysicsMovementType ModBefore = RecordBefore ? RecordBefore->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
+
+			bool bReconciled = false;
+			if (ModBefore != EPhysicsMovementType::Simulated)
+			{
+				PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
+				bReconciled = true;
+			}
+
+			const FPhysicsBodyModifierRecord* RecordAfter = PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName);
+			const EPhysicsMovementType ModAfter = RecordAfter ? RecordAfter->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
+
 			// Narrow confirmation log
 			{
 				const USkeletalMeshComponent* const Mesh = GetMeshComponent();
 				const FBodyInstance* const BI = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
 				const int32 RawSim = (BI && BI->IsInstanceSimulatingPhysics()) ? 1 : 0;
 
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_SET_PRESERVED frame=%d tick=%d bone=%s modifierMovementType=%d rawSim=%d owner=%d actor=%s component=%s"),
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_MODIFIER_RECONCILE frame=%d tick=%d bone=%s rawSim=%d modifierBefore=%d modifierAfter=%d reconciled=%d owner=%d actor=%s component=%s"),
 					static_cast<int32>(CurrentFrameNumber),
 					static_cast<int32>(BalanceEntryRootOnFrameCount),
 					*BoneName.ToString(),
-					static_cast<int32>(BodyModifierMovementType),
 					RawSim,
+					static_cast<int32>(ModBefore),
+					static_cast<int32>(ModAfter),
+					bReconciled ? 1 : 0,
 					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
 					*GetOwner()->GetName(),
 					*GetName());
