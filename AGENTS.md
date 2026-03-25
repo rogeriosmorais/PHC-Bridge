@@ -38,7 +38,6 @@ Interpretation:
 7. Keep commits small and atomic.
 8. Build with .\scripts\build.ps1
 9. If you ran any smoke tests, then read the logs with "python .\scripts\read_logs.py". If you didn't, then ignore this step.
-10. If you don't know where some functionality is located in the code, then use the mcp graph to search.
 
 ## Response Style
 
