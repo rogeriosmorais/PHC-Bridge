@@ -1231,6 +1231,43 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	if (bSkipUpdateControls && (bIsTick1Skip || bIsTick2Skip || bIsTick3Skip || (bIsRealRootOnTick4 && EffectiveSkipReason == TEXT("rooton_tick4_collapse_probe"))))
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_SKIPPED_ON_ENTRY frame=%llu reason=%s"), GFrameCounter, *EffectiveSkipReason);
+
+		if (bIsRealRootOnTick4 && EffectiveSkipReason == TEXT("rooton_tick4_collapse_probe"))
+		{
+			const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+			USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+			FBodyInstance* const RootBI = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
+			const int32 PelvisRawSim_Readback = (RootBI && RootBI->IsInstanceSimulatingPhysics()) ? 1 : 0;
+			int32 TotalSimCount_Readback = 0;
+			if (Mesh)
+			{
+				for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+				{
+					if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+					{
+						if (BI->IsInstanceSimulatingPhysics())
+						{
+							TotalSimCount_Readback++;
+						}
+					}
+				}
+			}
+			EPhysicsMovementType PelvisModType_Readback = EPhysicsMovementType::Static;
+			if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+			{
+				const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(RootBoneName);
+				if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
+				{
+					PelvisModType_Readback = Record->BodyModifier.ModifierData.MovementType;
+				}
+			}
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_POST_SKIP_STATE pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s runtimeState=%s"),
+				PelvisRawSim_Readback,
+				TotalSimCount_Readback,
+				GetPhysicsMovementTypeName(PelvisModType_Readback),
+				GetRuntimeStateName(RuntimeState));
+		}
 	}
 	else
 	{
@@ -1458,6 +1495,43 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	}
 
 	FinalizeTraceFrame();
+
+	if (bIsRealRootOnTick4)
+	{
+		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+		FBodyInstance* const RootBI = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
+		const int32 PelvisRawSim_Readback = (RootBI && RootBI->IsInstanceSimulatingPhysics()) ? 1 : 0;
+		int32 TotalSimCount_Readback = 0;
+		if (Mesh)
+		{
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				{
+					if (BI->IsInstanceSimulatingPhysics())
+					{
+						TotalSimCount_Readback++;
+					}
+				}
+			}
+		}
+		EPhysicsMovementType PelvisModType_Readback = EPhysicsMovementType::Static;
+		if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+		{
+			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(RootBoneName);
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
+			{
+				PelvisModType_Readback = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_END_OF_TICK_STATE pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s runtimeState=%s"),
+			PelvisRawSim_Readback,
+			TotalSimCount_Readback,
+			GetPhysicsMovementTypeName(PelvisModType_Readback),
+			GetRuntimeStateName(RuntimeState));
+	}
 }
 
 
