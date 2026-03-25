@@ -98,6 +98,55 @@ Phase 2 executes in this order:
 4. immediately re-read and validate root simulation state
 5. enter guard window if technical RootOn succeeded
 
+## 8.1 RootOn Tick Ownership
+
+This section defines how RootOn ownership is interpreted across ticks `1` through `4`.
+
+Rules that remain explicit for all RootOn ticks:
+
+- normal policy writes into the transition set are forbidden
+- shell material influence on simulated bodies is forbidden
+- `UpdateControls()` may be skipped as a probe, but that probe result does not decide success by itself
+- same-tick end-state validation still decides technical RootOn success or failure
+- preserved proximal bones may temporarily remain `modifier=Kinematic` while `rawSim=1`; that mismatch is diagnostic and tolerated unless the same-tick end state proves topology was not preserved
+
+### RootOn mismatch boundary
+
+Use the following boundary during ticks `1` through `4`:
+
+| Classification | Boundary |
+| :--- | :--- |
+| `Tolerated diagnostic mismatch` | A mismatch may be logged and classified, but it is not the deciding failure source if certified topology intent still matches the same-tick raw end state and no forbidden write / shell influence occurred. |
+| `Retryable transient failure` | RootOn remains blocked or not yet proven on the current tick, but the active attempt may continue because the same-tick evidence is incomplete rather than contradictory. |
+| `Hard terminal failure` | The active RootOn attempt must fail immediately once the same-tick end-state snapshot truthfully shows topology not preserved, root simulation dropped, forbidden policy write, shell material influence, or equivalent guard-window falsification. |
+
+### Tick 1
+
+- RootOn begins from the certified / frozen Phase 1 handoff.
+- Certified topology intent remains the authority for what the runtime is trying to preserve or add.
+- Any probe-time disagreement is not yet sufficient by itself to classify success or failure.
+
+### Tick 2
+
+- RootOn choreography may apply the root simulation change and preserve the certified proximal set.
+- Raw state is observed as applied-state evidence, but transient application lag is still classified rather than collapsed into failure if the end-state proof is not yet complete.
+- Modifier-record state remains secondary evidence about write-routing correctness, not the deciding success source.
+- If the tick ends without admissible proof but without contradiction, the result is retryable transient failure, not terminal failure.
+
+### Tick 3
+
+- RootOn guard interpretation must still forbid normal policy writes and shell material support.
+- If `UpdateControls()` is skipped as a probe on this tick, the skip is still not the deciding event; what matters is whether the same-tick end-state snapshot shows preserved topology, root simulation, and no forbidden influence.
+- Preserved proximal `modifier=Kinematic` plus `rawSim=1` remains a tolerated diagnostic pattern if the certified topology is still realized in raw state.
+- A contradictory same-tick end state on tick 3 is already a hard terminal failure; a merely incomplete proof remains retryable.
+
+### Tick 4
+
+- The authority source is, explicitly: certified / frozen topology intent first, same-tick raw end state second, modifier-record state third.
+- Tick 4 success is decided from whether the certified RootOn outcome is actually present in the same-tick end-state snapshot.
+- Tick 4 can still fail even when `UpdateControls()` was skipped earlier if the end-state snapshot shows root simulation dropped, topology not preserved, policy leak, shell material influence, or other guard-window failure.
+- Modifier-record disagreement at tick 4 must be classified truthfully, but it is not the sole deciding failure source if raw end-state evidence still shows the preserved RootOn topology holding.
+- Tick 4 therefore resolves the boundary directly: diagnostic mismatch is tolerated, incomplete proof is retryable only if the attempt is still within the allowed guard semantics, and contradictory end-state evidence is a hard terminal failure.
 ## 9. RootOn truth model
 
 The authoritative RootOn truth model is defined in `phase2-rooton-truth-model.md`.

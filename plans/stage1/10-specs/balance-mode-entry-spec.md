@@ -41,6 +41,31 @@ Interpretation rules:
 - Phase 1 topology intent and raw body sim state are not guaranteed to be frame-synchronous; violations must be tracked according to the truth-model confirmation rules.
 - Topology changes are ownership changes, not mere tuning changes.
 
+## Authority by phase
+
+| Phase | Authority source order | Tolerated mismatches | Hard-failure mismatches |
+| :--- | :--- | :--- | :--- |
+| `Phase 1` | `topology intent` -> `raw body state` -> `modifier-record state` | Same-frame intent/raw disagreement during ownership application; stale modifier record that has not yet been next-frame confirmed; raw quietness still deciding physical viability while modifier state catches up | Frozen topology contradicted by confirmed post-update state; simulated bones receiving forbidden held writes; kinematic bones treated as success from stale modifier evidence alone |
+| `RootOn` | `topology intent` -> same-tick `raw body end state` -> `modifier-record state` | Probe-time omission such as skipped `UpdateControls()` does not decide success by itself; preserved proximal bones may temporarily show `modifier=Kinematic` with `rawSim=1`; shell state without material shell influence | Certified topology not preserved by same-tick end state; root simulation dropped; policy leak; shell material influence; confirmed same-tick end-state evidence that the preserved set no longer satisfies RootOn |
+| `Settle` | `topology intent` -> post-RootOn `raw body state` -> `modifier-record state` | Short-lived modifier lag while the accepted post-RootOn topology remains physically coherent; diagnostics may record modifier/raw disagreement without using it as the first deciding failure when continuity still holds | Post-RootOn continuity breaks the accepted topology; root simulation drops; instability/spike failure; confirmed preserved-set loss after RootOn |
+
+## Forbidden writes by phase
+
+| Phase | Forbidden writes / influence | Allowed exception |
+| :--- | :--- | :--- |
+| `Phase 1` | normal policy writes into simulated Phase 1 bones; held target writes into simulated bones; cached-reset effects that leak into LateValidate proof | explicit allowed hold path may write only to the allowed kinematic hold set |
+| `RootOn` | normal policy writes into the transition set; shell material influence on simulated bodies; cached resets; topology expansion outside certified RootOn choreography; CharacterMovement correction influence on the simulated transition set | probe-only omission such as skipped `UpdateControls()` is allowed, but it does not relax same-tick end-state success rules |
+| `Settle` | reintroduction of forbidden transition-time policy/shell/reset assistance before post-RootOn continuity is accepted; hidden support that masks instability | only the explicitly released post-RootOn steady-state path may resume after Settle acceptance |
+
+## Mismatch outcome boundary
+
+Use the following boundary for all balance-entry phases:
+
+| Outcome class | Meaning | Typical examples |
+| :--- | :--- | :--- |
+| `Tolerated diagnostic mismatch` | Observable disagreement that is recorded truthfully but is not the deciding failure source because authoritative end-state proof still holds | same-frame intent/raw lag during Phase 1 application; RootOn preserved proximal `modifier=Kinematic` with `rawSim=1`; shell state present without material shell influence |
+| `Retryable transient failure` | The current tick or window is not yet admissible, but the attempt may continue because the contract is not yet falsified and recovery inside the active attempt remains allowed | quiet-window not yet satisfied; LateValidate shell-hold/readiness proof incomplete; temporary application lag where end-state proof is still pending rather than contradicted |
+| `Hard terminal failure` | The current attempt has been falsified and must terminate truthfully rather than continue or be reclassified as generic no-convergence | certified topology contradicted by confirmed end state; root simulation dropped after RootOn decision point; policy leak; shell material influence; persistent instability/spike; preserved set no longer present after RootOn |
 ## Phase 1 write-routing contract
 
 During Prepare and LateValidate:
