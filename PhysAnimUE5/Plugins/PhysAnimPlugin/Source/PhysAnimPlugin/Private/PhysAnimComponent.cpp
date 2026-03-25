@@ -2064,15 +2064,15 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			bSkipUpdateControls = true;
 			SkipReason = TEXT("rooton_tick1_entry_probe");
 		}
-		else if (bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
-		{
-			bSkipUpdateControls = true;
-			SkipReason = TEXT("pelvis_already_simulating_after_tuning");
-		}
 		else if (BalanceEntryRootOnFrameCount == 2 && bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
 		{
 			bSkipUpdateControls = true;
 			SkipReason = TEXT("rooton_tick2_release_success_probe");
+		}
+		else if (bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
+		{
+			bSkipUpdateControls = true;
+			SkipReason = TEXT("pelvis_already_simulating_after_tuning");
 		}
 		else if (BalanceEntryRootOnFrameCount == 3 && 
 				 bPelvisSimAfterTuning && 
@@ -2455,7 +2455,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const bool bPostTrackedValueChanged = bPostPelvisRawSimChanged || bPostTotalSimCountChanged || bPostPelvisModifierChanged;
 		
 		const bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount == 1) || (BalanceEntryRootOnFrameCount == 2) || bPostTrackedValueChanged;
-		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPostTrackedValueChanged) || (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
+		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPostTrackedValueChanged) || 
+			(BalanceEntryRootOnFrameCount == 2 && bSkipUpdateControls && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn) ||
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
 
 		if (bShouldEmitPostAudit && !bSuppressLogOnSkip)
 		{
