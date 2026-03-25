@@ -2466,7 +2466,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 
 					if (ModifierType == EPhysicsMovementType::Kinematic)
 					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_AUTHORITY_OVERRIDE frame=%llu tick=%d bone=%s topologyExpected=Simulated rawSim=1 modifierName=Kinematic countedAsPreserved=1 owner=%d actor=%s component=%s"),
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_RAW_AUTHORITY frame=%llu tick=%d bone=%s topologyExpected=Simulated rawSim=1 countedAsPreserved=1 owner=%d actor=%s component=%s"),
 							GFrameCounter,
 							static_cast<int32>(Owner->BalanceEntryRootOnFrameCount),
 							*BoneName.ToString(),

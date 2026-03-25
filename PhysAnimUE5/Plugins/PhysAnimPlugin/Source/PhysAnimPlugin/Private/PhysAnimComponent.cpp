@@ -1959,14 +1959,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			(!bPelvisRawSimChanged && !bTotalSimCountChanged && !bPelvisModifierChanged);
 
 		static EPhysAnimRuntimeState LastAuditState = EPhysAnimRuntimeState::Uninitialized;
-		const bool bStateChanged = RuntimeState != LastAuditState;
-		
-		bool bShouldLog = bStateChanged || bPelvisRawSimChanged || bTotalSimCountChanged || bPelvisModifierChanged;
-		if (RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
-		{
-			bShouldLog |= (BalanceEntryRootOnFrameCount == 1);
-		}
-
+		bool bShouldLog = bPelvisRawSimChanged || bTotalSimCountChanged || bPelvisModifierChanged;
 		if (bShouldLog)
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_AFTER_TUNING_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
@@ -1982,7 +1975,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			LastPelvisRawSims.FindOrAdd(this) = bPelvisSimAfterTuning;
 			LastTotalSimCounts.FindOrAdd(this) = TotalSimAfterTuning;
 			LastPelvisModifiers.FindOrAdd(this) = PelvisModifierType;
-			LastAuditState = RuntimeState;
 		}
 	}
 
@@ -5768,14 +5760,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	{
 		PhysicsControl->SetBodyModifiersInSetMovementType(TEXT("All"), EPhysicsMovementType::Kinematic);
 		
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
-		{
-			const FName ProximalBones[] = { TEXT("thigh_l"), TEXT("thigh_r"), TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") };
-			for (const FName& BoneName : ProximalBones)
-			{
-				TrackRootOnProximalModifierWrite(BoneName, EPhysicsMovementType::Kinematic, TEXT("RootOn_BroadSetWrite"));
-			}
-		}
 		PhysicsControl->SetBodyModifiersInSetPhysicsBlendWeight(TEXT("All"), 0.0f);
 		PhysicsControl->SetBodyModifiersInSetCollisionType(TEXT("All"), ECollisionEnabled::NoCollision);
 		PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
@@ -6170,10 +6154,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		TrackDistalModifierWrite(BoneName, BodyModifierMovementType, (bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn), TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, (bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn));
 		
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
-		{
-			TrackRootOnProximalModifierWrite(BoneName, BodyModifierMovementType, TEXT("RootOn_PerBone_BodyModSync"));
-		}
 
 		if (bPhase1Prepare || bPhase1LateValidate)
 		{
@@ -6350,64 +6330,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 	}
 
-	// FINAL PROXIMAL RECONCILLATION PASS:
-	// Verify and (if necessary) write the Simulated state for the five preserved bones
-	// before ending ApplyRuntimeControlTuning.
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
-	{
-		const FName ProximalBones[] = { TEXT("thigh_l"), TEXT("thigh_r"), TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") };
-		for (const FName& BoneName : ProximalBones)
-		{
-			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
-			{
-				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
-				{
-					// Only reconcile if the raw body is already simulating (preserved proximal intent)
-					if (BI->IsInstanceSimulatingPhysics())
-					{
-						const FName ModifierRecordName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-						const FPhysicsBodyModifierRecord* RecordBefore = PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierRecordName);
-						const EPhysicsMovementType ModBefore = RecordBefore ? RecordBefore->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
-
-						bool bWriteApplied = false;
-						if (ModBefore != EPhysicsMovementType::Simulated)
-						{
-							PhysicsControl->SetBodyModifierMovementType(ModifierRecordName, EPhysicsMovementType::Simulated, false, true);
-							bWriteApplied = true;
-
-							if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
-							{
-								TrackRootOnProximalModifierWrite(BoneName, EPhysicsMovementType::Simulated, TEXT("RootOn_FinalReconcile"));
-							}
-						}
-
-						const FPhysicsBodyModifierRecord* RecordAfter = PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierRecordName);
-						const EPhysicsMovementType ModAfter = RecordAfter ? RecordAfter->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
-
-						const int32 RawSimBit = BI->IsInstanceSimulatingPhysics() ? 1 : 0;
-						const FString ModBeforeName = GetPhysicsMovementTypeName(ModBefore);
-						const FString ModAfterName = GetPhysicsMovementTypeName(ModAfter);
-
-						if (ModAfter != EPhysicsMovementType::Simulated || bWriteApplied)
-						{
-							UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_MODIFIER_RECONCILE frame=%d tick=%d bone=%s modifierRecordName=%s modifierBeforeName=%s modifierAfterName=%s writeApplied=%d reconcileStage=final_end_of_ApplyRuntimeControlTuning rawSim=%d owner=%d actor=%s component=%s"),
-								static_cast<int32>(GFrameNumber),
-								static_cast<int32>(BalanceEntryRootOnFrameCount),
-								*BoneName.ToString(),
-								*ModifierRecordName.ToString(),
-								*ModBeforeName,
-								*ModAfterName,
-								bWriteApplied ? 1 : 0,
-								RawSimBit,
-								static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
-								*GetOwner()->GetName(),
-								*GetName());
-						}
-					}
-				}
-			}
-		}
-	}
 
 	LastAppliedStabilizationSettings = EffectiveSettings;
 	bLastAppliedSimulationHandoffSettled = bSimulationHandoffSettled;
@@ -7575,10 +7497,6 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, BoneName))
 		{
 			TrackDistalModifierWrite(BoneName, Record->BodyModifier.ModifierData.MovementType, false, TEXT("ResetPendingBodyModifiersToCachedTargets_PostReset"));
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
-			{
-				TrackRootOnProximalModifierWrite(BoneName, EPhysicsMovementType::Simulated, TEXT("ResetPendingBodyModifiersToCachedTargets"));
-			}
 		}
 	}
 
@@ -10439,47 +10357,6 @@ const TCHAR* UPhysAnimComponent::GetPhysicsMovementTypeName(EPhysicsMovementType
 	}
 }
 
-void UPhysAnimComponent::TrackRootOnProximalModifierWrite(FName BoneName, EPhysicsMovementType NewModifier, const FString& WriteReason)
-{
-	if (BoneName != TEXT("thigh_l") && BoneName != TEXT("thigh_r") && 
-		BoneName != TEXT("spine_01") && BoneName != TEXT("spine_02") && BoneName != TEXT("spine_03"))
-	{
-		return;
-	}
-
-	USkeletalMeshComponent* const Mesh = GetMeshComponent();
-	const bool bRawSim = (Mesh && Mesh->GetBodyInstance(BoneName)) ? Mesh->GetBodyInstance(BoneName)->IsInstanceSimulatingPhysics() : false;
-	const FName ModifierRecordName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-	
-	EPhysicsMovementType PreviousModifier = EPhysicsMovementType::Static;
-	if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
-	{
-		if (const FPhysicsBodyModifierRecord* Record = PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, ModifierRecordName))
-		{
-			PreviousModifier = Record->BodyModifier.ModifierData.MovementType;
-		}
-	}
-
-	if (WriteReason != TEXT("RootOn_FinalReconcile") && NewModifier == PreviousModifier)
-	{
-		return;
-	}
-
-	UE_LOG(LogPhysAnimBridge, Warning, 
-		TEXT("[PhysAnim] PROXIMAL_WRITE_TRACE frame=%llu tick=%d bone=%s modifierRecordName=%s previousModifierName=%s newModifierName=%s rawSim=%d runtimeState=%s writeReason=%s owner=%d actor=%s component=%s"),
-		GFrameCounter,
-		static_cast<int32>(BalanceEntryRootOnFrameCount),
-		*BoneName.ToString(),
-		*ModifierRecordName.ToString(),
-		GetPhysicsMovementTypeName(PreviousModifier),
-		GetPhysicsMovementTypeName(NewModifier),
-		bRawSim ? 1 : 0,
-		GetRuntimeStateName(RuntimeState),
-		*WriteReason,
-		static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
-		*GetOwner()->GetName(),
-		*GetName());
-}
 
 void UPhysAnimComponent::TrackDistalModifierWrite(FName BoneName, EPhysicsMovementType NewMovementType, bool bUpdateBody, const FString& CallSiteReason)
 {
