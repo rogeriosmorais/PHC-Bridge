@@ -359,11 +359,16 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					const bool bActualSimulating = BodyInst && BodyInst->IsValidBodyInstance() ? BodyInst->IsInstanceSimulatingPhysics() : false;
 					const bool bStateMismatch = bIntendedKinematic == bActualSimulating;
 	
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_EXPERIMENT_STATE bone=%s intended=%s actual=%s changedByLaterSubsystem=%d"),
-						*BoneName.ToString(),
-						UPhysAnimComponent::GetPhysicsMovementTypeName(bIntendedKinematic ? EPhysicsMovementType::Kinematic : EPhysicsMovementType::Simulated),
-						bActualSimulating ? TEXT("Simulating") : TEXT("Kinematic"),
-						bStateMismatch);
+					const bool bContributedToFirstFailure = (Diagnostics.FailureReason.Contains(TEXT("distal")) || 
+						Diagnostics.FailureReason.Contains(TEXT("topology")));
+					if (bContributedToFirstFailure)
+					{
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_EXPERIMENT_STATE bone=%s intended=%s actual=%s changedByLaterSubsystem=%d"),
+							*BoneName.ToString(),
+							UPhysAnimComponent::GetPhysicsMovementTypeName(bIntendedKinematic ? EPhysicsMovementType::Kinematic : EPhysicsMovementType::Simulated),
+							bActualSimulating ? TEXT("Simulating") : TEXT("Kinematic"),
+							bStateMismatch);
+					}
 				}
 			}
 		}
@@ -715,12 +720,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
 				if (Mesh)
 				{
+						const bool bFirstLateValidateFrame = !bLoggedPhase1UpperBodyAudit;
 						float MaxAuditTargetDelta = 0.0f;
 						FName MaxAuditTargetDeltaBone = NAME_None;
 
 						if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 						{
-							const bool bFirstLateValidateFrame = !bLoggedPhase1UpperBodyAudit;
 
 							const FName AuditBones[] = { 
 								TEXT("neck_01"), TEXT("head"), 
@@ -746,26 +751,30 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 									MaxAuditTargetDeltaBone = AuditBone;
 								}
 
-							if (bFirstLateValidateFrame || bUpperBodyInstability)
-							{
-								const FPhysicsBodyModifierRecord* ModifierRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PhysAnimBridge::MakeBodyModifierName(AuditBone));
-								const EPhysicsMovementType ModifierType = ModifierRecord ? ModifierRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Simulated;
-								const bool bHeldTargetWritten = HoldRot != nullptr;
-								const float LinVel = AuditBody->GetUnrealWorldVelocity().Size();
-								const float AngVel = FMath::RadiansToDegrees(AuditBody->GetUnrealWorldAngularVelocityInRadians().Size());
-								const bool bPendingReset = Owner->GetPendingBodyModifierCachedResetNames().Contains(PhysAnimBridge::MakeBodyModifierName(AuditBone));
-								const bool bInAllowlist = BalanceTransitionSets::IsUpperBody(AuditBone);
+								const bool bIsUpperBodyFailureFrame = (bUpperBodyInstability && InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate);
 
-								UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PRE_UPPER_BODY_GATE_AUDIT bone=%s rawSim=%d modifier=%s heldWritten=%d targetDelta=%.2f linVel=%.2f angVel=%.2f pendingReset=%d holdActive=%d allowlist=%d"),
-									*AuditBone.ToString(), AuditBody->IsInstanceSimulatingPhysics() ? 1 : 0, 
-									UPhysAnimComponent::GetPhysicsMovementTypeName(ModifierType),
-									bHeldTargetWritten ? 1 : 0, TargetDeltaDeg, LinVel, AngVel, bPendingReset ? 1 : 0,
-									Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold ? 1 : 0,
-									bInAllowlist ? 1 : 0);
-							}
+								if (bFirstLateValidateFrame || bIsUpperBodyFailureFrame)
+								{
+									const FPhysicsBodyModifierRecord* ModifierRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PhysAnimBridge::MakeBodyModifierName(AuditBone));
+									const EPhysicsMovementType ModifierType = ModifierRecord ? ModifierRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Simulated;
+									const bool bHeldTargetWritten = HoldRot != nullptr;
+									const float LinVel = AuditBody->GetUnrealWorldVelocity().Size();
+									const float AngVel = FMath::RadiansToDegrees(AuditBody->GetUnrealWorldAngularVelocityInRadians().Size());
+									const bool bPendingReset = Owner->GetPendingBodyModifierCachedResetNames().Contains(PhysAnimBridge::MakeBodyModifierName(AuditBone));
+									const bool bInAllowlist = BalanceTransitionSets::IsUpperBody(AuditBone);
+
+									UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PRE_UPPER_BODY_GATE_AUDIT bone=%s rawSim=%d modifier=%s heldWritten=%d targetDelta=%.2f linVel=%.2f angVel=%.2f pendingReset=%d holdActive=%d allowlist=%d"),
+										*AuditBone.ToString(), AuditBody->IsInstanceSimulatingPhysics() ? 1 : 0, 
+										UPhysAnimComponent::GetPhysicsMovementTypeName(ModifierType),
+										bHeldTargetWritten ? 1 : 0, TargetDeltaDeg, LinVel, AngVel, bPendingReset ? 1 : 0,
+										Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold ? 1 : 0,
+										bInAllowlist ? 1 : 0);
+								}
 						}
 
-						if (bFirstLateValidateFrame || bUpperBodyInstability)
+						const bool bIsUpperBodyFailureFrame = (bUpperBodyInstability && InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate);
+
+						if (bFirstLateValidateFrame || bIsUpperBodyFailureFrame)
 						{
 							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
 								BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode),
@@ -835,7 +844,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 								{
 									LastReportedBone = BoneName;
 
-									if (LastSummaryFrame != GFrameCounter)
+									const bool bIsUpperBodyFailureFrame = (bUpperBodyInstability && InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate);
+
+									if (bFirstLateValidateFrame || bIsUpperBodyFailureFrame)
 									{
 										LastSummaryFrame = GFrameCounter;
 										UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY (FAILURE_PENDING) upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
