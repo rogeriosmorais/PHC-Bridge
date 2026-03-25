@@ -1946,8 +1946,12 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		static EPhysAnimRuntimeState LastAuditState = EPhysAnimRuntimeState::Uninitialized;
 		const bool bStateChanged = (RuntimeState != LastAuditState) || bPelvisRawSimChanged || bTotalSimCountChanged || bPelvisModifierChanged;
 
-		const bool bIsRootOnTickRange = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount <= 5);
-		const bool bShouldLog = bIsRootOnTickRange || bStateChanged || bPelvisRawSimChanged || bTotalSimCountChanged || bPelvisModifierChanged;
+		const bool bIsRootOnTickRange = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount >= 2 && BalanceEntryRootOnFrameCount <= 5);
+		bool bShouldLog = bIsRootOnTickRange || bStateChanged || bPelvisRawSimChanged || bTotalSimCountChanged || bPelvisModifierChanged;
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount == 1)
+		{
+			bShouldLog = bPelvisRawSimChanged || bTotalSimCountChanged;
+		}
 		if (bShouldLog)
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_AFTER_TUNING_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
@@ -2060,10 +2064,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			bSkipUpdateControls = true;
 			SkipReason = TEXT("pelvis_already_simulating_after_tuning");
 		}
-		else if (BalanceEntryRootOnFrameCount == 2 && bPelvisSimAfterTuning && TotalSimAfterTuning >= 1)
+		else if (BalanceEntryRootOnFrameCount == 2 && bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
 		{
 			bSkipUpdateControls = true;
-			SkipReason = TEXT("delayed_root_release_promotion_frame");
+			SkipReason = TEXT("rooton_tick2_release_success_probe");
 		}
 		else if (BalanceEntryRootOnFrameCount == 3 && 
 				 bPelvisSimAfterTuning && 
@@ -2115,7 +2119,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const bool bPrePelvisModifierChanged = !LastPrePelvisModifiers.Contains(this) || LastPrePelvisModifiers[this] != CurrentPelvisModifierType;
 		bPreTrackedValueChanged = bPrePelvisRawSimChanged || bPreTotalSimCountChanged || bPrePelvisModifierChanged;
 
-		const bool bShouldEmitPreAudit = (BalanceEntryRootOnFrameCount >= 2 && BalanceEntryRootOnFrameCount <= 4) || bPreTrackedValueChanged;
+		const bool bShouldEmitPreAudit = (BalanceEntryRootOnFrameCount == 2) || bPreTrackedValueChanged;
 		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPreTrackedValueChanged);
 
 		if (bShouldEmitPreAudit && !bSuppressLogOnSkip)
@@ -2316,15 +2320,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			}
 		}
 
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_PRE_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
-			GFrameCounter,
-			PelvisRawSim,
-			CurTotalSimCount,
-			GetPhysicsMovementTypeName(PelvisModType),
-			PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
-			GetRuntimeStateName(RuntimeState),
-			*GetOwner()->GetName(),
-			*GetName());
 
 		if (PelvisRawSim && CurTotalSimCount >= 6)
 		{
@@ -2453,16 +2448,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const bool bPostPelvisModifierChanged = !LastPostPelvisModifiers.Contains(this) || LastPostPelvisModifiers[this] != PostCurrentPelvisModifierType;
 		const bool bPostTrackedValueChanged = bPostPelvisRawSimChanged || bPostTotalSimCountChanged || bPostPelvisModifierChanged;
 		
-		bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount >= 2 && BalanceEntryRootOnFrameCount <= 4) || bPostTrackedValueChanged;
-		const bool bIsRootOnTick3 = (BalanceEntryRootOnFrameCount == 3);
-		const bool bIsRootOnTick4 = (BalanceEntryRootOnFrameCount == 4);
-		if (bIsRootOnTick3 || bIsRootOnTick4)
-		{
-			// Narrower gate for RootOn tick 3/4: run only if UpdateControls actually ran OR key sim state changed
-			bShouldEmitPostAudit = (!bSkipUpdateControls) || bPostPelvisRawSimChanged || bPostTotalSimCountChanged;
-		}
-
-		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPostTrackedValueChanged && !bIsRootOnTick3 && !bIsRootOnTick4) || (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
+		const bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount == 2) || bPostTrackedValueChanged;
+		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPostTrackedValueChanged) || (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
 
 		if (bShouldEmitPostAudit && !bSuppressLogOnSkip)
 		{
