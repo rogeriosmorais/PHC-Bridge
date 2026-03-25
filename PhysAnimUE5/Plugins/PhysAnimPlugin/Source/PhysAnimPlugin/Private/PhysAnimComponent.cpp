@@ -2188,7 +2188,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
-	if (bSkipUpdateControls)
+	if (bSkipUpdateControls && BalanceEntryRootOnFrameCount <= 4)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_SKIPPED_ON_ENTRY frame=%llu reason=%s"), GFrameCounter, *SkipReason);
 	}
@@ -7627,10 +7627,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	USkeletalMeshComponent* const Mesh = GetMeshComponent();
 	const FBodyInstance* const PelvisBodyScope = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
-	const bool bSuppressNormalPolicyOnRootReleaseFrame =
-		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
-		BalanceEntryRootOnFrameCount == 2 &&
-		PelvisBodyScope && PelvisBodyScope->IsInstanceSimulatingPhysics();
+
 
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
@@ -7714,6 +7711,10 @@ void UPhysAnimComponent::ApplyControlTargets(
 		const FVector OwnerVelocity = OwnerActor->GetVelocity();
 		return FVector(OwnerVelocity.X, OwnerVelocity.Y, 0.0f).Size();
 	}();
+
+	const bool bIsPhase1PolicyLoopSuppressed = bPhase1Prepare || bPhase1LateValidate;
+	bool bSuppressPostShellPolicy = false;
+
 	const float TargetWriteDeltaTime =
 		ResolvePolicyTargetWriteDeltaTime(
 			bUseSkeletalAnimationTargetRepresentation,
@@ -7800,11 +7801,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 	{
 		// Phase 1 Transition Rule: No normal policy writes during Prepare/LateValidate.
 		// Only explicit held-pose targets may be published for kinematic bones in these states.
-		const bool bIsPhase1PolicyLoopSuppressed = bPhase1Prepare || bPhase1LateValidate;
+
 
 		bool bPolicyTargetsAppliedThisTick = true;
 		const int32 RootRawSimPost = (PelvisBodyScope && PelvisBodyScope->IsInstanceSimulatingPhysics()) ? 1 : 0;
-		const bool bSuppressPostShellPolicy =
+		bSuppressPostShellPolicy =
 			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
 			BalanceEntryRootOnFrameCount >= 4 &&
 			RootRawSimPost == 1 &&
@@ -7829,7 +7830,15 @@ void UPhysAnimComponent::ApplyControlTargets(
 			bPolicyTargetsAppliedThisTick = false;
 		}
 
-		if (!bIsPhase1PolicyLoopSuppressed && !bSuppressNormalPolicyOnRootReleaseFrame && !bSuppressPostShellPolicy)
+		bool bNormalWritesBlockedByRootOn = false;
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+		{
+			ControlTargetDiagnostics.NumNormalPolicyTargetsWritten = 0;
+			bPolicyTargetsAppliedThisTick = false;
+			bNormalWritesBlockedByRootOn = !bIsPhase1PolicyLoopSuppressed && !bSuppressPostShellPolicy;
+		}
+
+		if (!bIsPhase1PolicyLoopSuppressed && !bSuppressPostShellPolicy && !bNormalWritesBlockedByRootOn)
 		{
 			bPolicyTargetsAppliedLastFrame = true;
 			for (const TPair<FName, FQuat>& Pair : ControlRotations)
@@ -8041,25 +8050,25 @@ void UPhysAnimComponent::ApplyControlTargets(
 	{
 		const FBodyInstance* const PelvisBodyProbe = GetMeshComponent() ? GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 		const int32 RootRawSim = (PelvisBodyProbe && PelvisBodyProbe->IsInstanceSimulatingPhysics()) ? 1 : 0;
-		const bool bSuppressActive =
-			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
-			BalanceEntryRootOnFrameCount == 2 &&
-			RootRawSim == 1;
+		const bool bNormalWritesBlocked = !bIsPhase1PolicyLoopSuppressed && !bSuppressPostShellPolicy;
 
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_POLICY_RELEASE_DELAY_PROBE frame=%d tick=%d suppressed=%d normalWrites=%d heldWrites=%d rootRawSim=%d simCount=%d owner=%d actor=%s component=%s"),
-			static_cast<int32>(GFrameNumber),
-			static_cast<int32>(BalanceEntryRootOnFrameCount),
-			bSuppressActive ? 1 : 0,
-			ControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
-			ControlTargetDiagnostics.NumHeldTargetsWritten,
-			RootRawSim,
-			LastRuntimeInstabilityDiagnostics.NumSimulatingBodies,
-			static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
-			*GetOwner()->GetName(),
-			*GetName());
+		if (bNormalWritesBlocked)
+		{
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOTON_POLICY_SUPPRESSED frame=%d tick=%d normalWritesBlocked=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
+				static_cast<int32>(GFrameNumber),
+				static_cast<int32>(BalanceEntryRootOnFrameCount),
+				1,
+				ControlTargetDiagnostics.NumHeldTargetsWritten,
+				RootRawSim,
+				LastRuntimeInstabilityDiagnostics.NumSimulatingBodies,
+				PolicyInfluenceAlpha,
+				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+				*GetOwner()->GetName(),
+				*GetName());
+		}
 	}
 
-	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame && !bSuppressNormalPolicyOnRootReleaseFrame)
+	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame && RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
 		UE_LOG(
 			LogPhysAnimBridge,
