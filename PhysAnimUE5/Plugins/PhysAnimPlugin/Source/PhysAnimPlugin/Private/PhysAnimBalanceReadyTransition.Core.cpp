@@ -1606,7 +1606,7 @@ extern int32 GVerbosePhase2Forensics;
 
 			if (!bLoggedPhase2FirstFailureAudit)
 			{
-				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f state=%s rootRawSim=%d pelvisRawSim=%d pelvisModType=%s simCountPost=%d upperBodySimPost=%d policyAlpha=%.2f controlAlpha=%.2f shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f state=%s rootRawSim=%d pelvisRawSim=%d pelvisModType=%s simCountPost=%d upperBodySimPost=%d policyAlpha=%.2f controlAlpha=%.2f shellLocked=%d shellReanchored=%d firstContradictionSource=%s owner=%d actor=%s component=%s"),
 					*AbortReason, *FailureType, *OffendingBoneValue.ToString(), MeasuredValue, ThresholdValue, 
 					UPhysAnimComponent::GetRuntimeStateName(Owner->GetRuntimeState()),
 					bPelvisActualSim ? 1 : 0,
@@ -1618,6 +1618,7 @@ extern int32 GVerbosePhase2Forensics;
 					Owner->CalculateCurrentControlAuthorityAlpha(Settings),
 					CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
 					CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+					*Diagnostics.FirstContradictionSource,
 					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
 					*Owner->GetOwner()->GetName(), *Owner->GetName());
 				bLoggedPhase2FirstFailureAudit = true;

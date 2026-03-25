@@ -1348,6 +1348,77 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	bool bPostCurrentPelvisSim = false;
 	int32 PostCurrentTotalSim = 0;
 	EPhysicsMovementType PostCurrentPelvisModifierType = EPhysicsMovementType::Kinematic;
+	struct FRootStateTransitionSnapshot
+	{
+		bool bPelvisRawSim = false;
+		EPhysicsMovementType PelvisModifier = EPhysicsMovementType::Static;
+		int32 TotalSimCount = 0;
+	};
+	static TMap<UPhysAnimComponent*, FRootStateTransitionSnapshot> LastRootStateTransitionSnapshots;
+	auto ReadRootStateTransitionSnapshot = [this, PhysicsControl, SkeletalMesh]()
+	{
+		FRootStateTransitionSnapshot Snapshot;
+
+		if (UPhysicsControlComponent* const PC = PhysicsControl ? PhysicsControl : PhysicsControlComponent.Get())
+		{
+			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
+			{
+				Snapshot.PelvisModifier = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
+		if (USkeletalMeshComponent* const Mesh = SkeletalMesh ? SkeletalMesh : MeshComponent.Get())
+		{
+			const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+			if (FBodyInstance* const RootBI = Mesh->GetBodyInstance(RootBoneName))
+			{
+				Snapshot.bPelvisRawSim = RootBI->IsInstanceSimulatingPhysics();
+			}
+
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				{
+					if (BI->IsInstanceSimulatingPhysics())
+					{
+						++Snapshot.TotalSimCount;
+					}
+				}
+			}
+		}
+
+		return Snapshot;
+	};
+	auto EmitRootStateTransitionTrace = [&](const TCHAR* Source, const FRootStateTransitionSnapshot& Snapshot)
+	{
+		FRootStateTransitionSnapshot& LastSnapshot = LastRootStateTransitionSnapshots.FindOrAdd(this);
+		const bool bChanged =
+			Snapshot.bPelvisRawSim != LastSnapshot.bPelvisRawSim ||
+			Snapshot.PelvisModifier != LastSnapshot.PelvisModifier ||
+			Snapshot.TotalSimCount != LastSnapshot.TotalSimCount;
+		if (!bChanged)
+		{
+			return;
+		}
+
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_ROOT_STATE_TRANSITION_TRACE frame=%llu rootOnTick=%u source=%s pelvisRawSim=%d pelvisModifier=%s totalSimCount=%d runtimeState=%s"),
+			GFrameCounter,
+			static_cast<uint32>(BalanceEntryRootOnFrameCount),
+			Source,
+			Snapshot.bPelvisRawSim ? 1 : 0,
+			GetPhysicsMovementTypeName(Snapshot.PelvisModifier),
+			Snapshot.TotalSimCount,
+			GetRuntimeStateName(RuntimeState));
+
+		LastSnapshot = Snapshot;
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceReadyTransition.GetDiagnostics().FirstContradictionSource.IsEmpty())
+		{
+			BalanceReadyTransition.GetDiagnostics().FirstContradictionSource = Source;
+		}
+	};
+
+	const bool bIsRootOnTransitionTick = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
@@ -1413,7 +1484,17 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
+	if (bIsRootOnTransitionTick && BalanceEntryRootOnFrameCount == 1)
+	{
+		BalanceReadyTransition.GetDiagnostics().FirstContradictionSource.Reset();
+		LastRootStateTransitionSnapshots.Remove(this);
+	}
+
 	TRACE_COUNTER_SET(COUNTER_PhysAnim_UpdateControlsMs, static_cast<float>(MeasureElapsedMs(UpdateControlsStartSeconds)));
+	if (bIsRootOnTransitionTick)
+	{
+		EmitRootStateTransitionTrace(TEXT("pre_updatecontrols"), ReadRootStateTransitionSnapshot());
+	}
 	if (bWriteTraceFrameThisTick)
 	{
 		TraceFrame.UpdateControlsMs = MeasureElapsedMs(UpdateControlsStartSeconds);
@@ -1438,6 +1519,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	TRACE_COUNTER_SET(COUNTER_PhysAnim_NumNormalPolicyTargetsWritten, LastControlTargetDiagnostics.NumNormalPolicyTargetsWritten);
 	TRACE_COUNTER_SET(COUNTER_PhysAnim_NumHeldTargetsWritten, LastControlTargetDiagnostics.NumHeldTargetsWritten);
 	TRACE_COUNTER_SET(COUNTER_PhysAnim_NumTotalTargetsWritten, LastControlTargetDiagnostics.NumTotalTargetsWritten);
+	if (bIsRootOnTransitionTick)
+	{
+		EmitRootStateTransitionTrace(TEXT("post_updatecontrols"), ReadRootStateTransitionSnapshot());
+	}
 
 	if (bSimulationHandoffCompletedThisTick)
 	{
@@ -1593,6 +1678,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	else if (RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
 		BalanceReadyTransition.UpdateSettleContinuityState(false, false);
+	}
+
+	if (bIsRootOnTransitionTick)
+	{
+		EmitRootStateTransitionTrace(TEXT("end_of_tick"), ReadRootStateTransitionSnapshot());
 	}
 }
 

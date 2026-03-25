@@ -267,6 +267,7 @@ struct FBalanceReadyTransitionDiagnostics
 	FString BlockReason;
 	FString FailureReason;
 	FString LastRetryDecision;
+	FString FirstContradictionSource;
 	FString Phase1TargetDiscontinuityGateSource;
 	FString Phase1TargetDiscontinuityGateReason;
 	FString Phase1LateValidateGateSource;
@@ -381,6 +382,7 @@ public:
 	}
 
 	const FBalanceReadyTransitionDiagnostics& GetDiagnostics() const { return Diagnostics; }
+	FBalanceReadyTransitionDiagnostics& GetDiagnostics() { return Diagnostics; }
 	void UpdateSettleContinuityState(bool bRootSim, bool bPelvisSim)
 	{
 		bPreviousFrameSettleEndRootRawSim = bRootSim;
