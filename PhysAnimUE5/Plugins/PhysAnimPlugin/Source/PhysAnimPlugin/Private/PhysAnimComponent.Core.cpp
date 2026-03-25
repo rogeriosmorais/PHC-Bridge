@@ -961,6 +961,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			bSkipUpdateControls = true;
 			SkipReason = TEXT("rooton_tick2_release_success_probe");
 		}
+		else if (BalanceEntryRootOnFrameCount == 4 && bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
+		{
+			bSkipUpdateControls = true;
+			SkipReason = TEXT("rooton_tick4_collapse_probe");
+		}
 		else if (bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
 		{
 			bSkipUpdateControls = true;
@@ -973,11 +978,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		{
 			bSkipUpdateControls = true;
 			SkipReason = TEXT("first_post_quarantine_rooton_frame");
-		}
-		else if (BalanceEntryRootOnFrameCount == 4 && bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
-		{
-			bSkipUpdateControls = true;
-			SkipReason = TEXT("rooton_tick4_collapse_probe");
 		}
 
 		if (const UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
@@ -1345,7 +1345,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const bool bPostPelvisModifierChanged = !LastPostPelvisModifiers.Contains(this) || LastPostPelvisModifiers[this] != PostCurrentPelvisModifierType;
 		const bool bPostTrackedValueChanged = bPostPelvisRawSimChanged || bPostTotalSimCountChanged || bPostPelvisModifierChanged;
 		
-		const bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount == 1) || (BalanceEntryRootOnFrameCount == 2) || bPostTrackedValueChanged;
+		const bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount == 1) || (BalanceEntryRootOnFrameCount == 2) || (BalanceEntryRootOnFrameCount == 4) || bPostTrackedValueChanged;
 		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPostTrackedValueChanged) ||
 			(BalanceEntryRootOnFrameCount == 2 && bSkipUpdateControls && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn) ||
 			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
