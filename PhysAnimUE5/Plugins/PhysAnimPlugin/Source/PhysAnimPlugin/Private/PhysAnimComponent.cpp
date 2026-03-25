@@ -1248,21 +1248,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 			if (bClassificationChanged)
 			{
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
-					TEXT("[PhysAnim] DISTAL_EXPERIMENT_NEXTFRAME_STATE: bone=%s intent=%s modifier=%s rawSimulate=%s classification=%s writeReason=%s targetDelta=%.2f linVel=%.1f angVel=%.1f pendingReset=%d"),
-					*BoneName.ToString(),
-					GetPhysicsMovementTypeName(Check.IntendedOwnership),
-					GetPhysicsMovementTypeName(CurrentModifierMovementType),
-					bCurrentRawSimulating ? TEXT("Simulating") : TEXT("Kinematic"),
-					*Classification,
-					*Check.CallSiteReason,
-					TargetDelta,
-					LinearVelocity.Size(),
-					AngularVelocity.Size(),
-					bHasPendingReset ? 1 : 0);
-				
 				LastDistalClassification.Add(BoneName, Classification);
 			}
 		}
@@ -1959,7 +1944,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			(!bPelvisRawSimChanged && !bTotalSimCountChanged && !bPelvisModifierChanged);
 
 		static EPhysAnimRuntimeState LastAuditState = EPhysAnimRuntimeState::Uninitialized;
-		bool bShouldLog = (BalanceEntryRootOnFrameCount <= 2 || bPelvisRawSimChanged || bTotalSimCountChanged) && (RuntimeState != EPhysAnimRuntimeState::BalanceEntry_Settle);
+		bool bShouldLog = (BalanceEntryRootOnFrameCount == 2 || bPelvisRawSimChanged || bTotalSimCountChanged) && (!bIsStableRootOnTick1) && (RuntimeState != EPhysAnimRuntimeState::BalanceEntry_Settle);
 		if (bShouldLog)
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_AFTER_TUNING_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
@@ -2126,11 +2111,21 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const bool bPreTotalSimCountChanged = !LastPreTotalSimCounts.Contains(this) || LastPreTotalSimCounts[this] != CurrentTotalSim;
 		const bool bPrePelvisModifierChanged = !LastPrePelvisModifiers.Contains(this) || LastPrePelvisModifiers[this] != CurrentPelvisModifierType;
 		const bool bPreTrackedValueChanged = bPrePelvisRawSimChanged || bPreTotalSimCountChanged || bPrePelvisModifierChanged;
-		const bool bShouldEmitPreAudit = (BalanceEntryRootOnFrameCount == 2 || BalanceEntryRootOnFrameCount == 4 || bPreTrackedValueChanged);
+
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount == 2)
+		{
+			if (bCurrentPelvisSim && CurrentTotalSim >= 6)
+			{
+				bSkipUpdateControls = true;
+				SkipReason = TEXT("rooton_tick2_release_success_probe");
+			}
+		}
+
+		const bool bShouldEmitPreAudit = (BalanceEntryRootOnFrameCount == 2 || bPreTrackedValueChanged);
 
 		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPreTrackedValueChanged) || (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
 
-		if (bSkipUpdateControls && bShouldEmitPreAudit && !bSuppressLogOnSkip)
+		if (bShouldEmitPreAudit && !bSuppressLogOnSkip)
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_PRE_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
 				GFrameCounter,
@@ -2257,7 +2252,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			*GetName());
 	}
 
-	if (bSkipUpdateControls && bIsRealRootOnTick4 && SkipReason == TEXT("rooton_tick4_preserve_probe"))
+	const bool bIsTick2Skip = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount == 2 && SkipReason == TEXT("rooton_tick2_release_success_probe"));
+
+	if (bSkipUpdateControls && (bIsTick2Skip || (bIsRealRootOnTick4 && SkipReason == TEXT("rooton_tick4_preserve_probe"))))
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_SKIPPED_ON_ENTRY frame=%llu reason=%s"), GFrameCounter, *SkipReason);
 	}
@@ -2367,11 +2364,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const bool bPostTotalSimCountChanged = !LastPostTotalSimCounts.Contains(this) || LastPostTotalSimCounts[this] != PostCurrentTotalSim;
 		const bool bPostPelvisModifierChanged = !LastPostPelvisModifiers.Contains(this) || LastPostPelvisModifiers[this] != PostCurrentPelvisModifierType;
 		const bool bPostTrackedValueChanged = bPostPelvisRawSimChanged || bPostTotalSimCountChanged || bPostPelvisModifierChanged;
-		const bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount == 2 || BalanceEntryRootOnFrameCount == 4 || bPostTrackedValueChanged);
+		const bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount == 2 || bPostTrackedValueChanged);
 
 		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPostTrackedValueChanged) || (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
 
-		if (bSkipUpdateControls && bShouldEmitPostAudit && !bSuppressLogOnSkip)
+		if (bShouldEmitPostAudit && !bSuppressLogOnSkip)
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_POST_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
 				GFrameCounter,
@@ -8131,8 +8128,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 		const FBodyInstance* const PelvisBodyProbe = GetMeshComponent() ? GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 		const int32 RootRawSim = (PelvisBodyProbe && PelvisBodyProbe->IsInstanceSimulatingPhysics()) ? 1 : 0;
 		const bool bNormalWritesBlocked = !bIsPhase1PolicyLoopSuppressed && !bSuppressPostShellPolicy;
+		const bool bHasPolicyWrites = (ControlTargetDiagnostics.NumNormalPolicyTargetsWritten > 0);
 
-		if (bApplyNewPolicyStepThisTick && bNormalWritesBlocked)
+		if (bApplyNewPolicyStepThisTick && bNormalWritesBlocked && bHasPolicyWrites)
 		{
 			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOTON_POLICY_SUPPRESSED frame=%d tick=%d normalWritesBlocked=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
 				static_cast<int32>(GFrameNumber),
