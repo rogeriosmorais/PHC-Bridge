@@ -1057,6 +1057,7 @@ private:
 	int32 HipQuarantineTicksRemaining = 0;
 	uint32 BalanceEntryRootOnFrameCount = 0;
 	uint32 BalanceEntrySettleFrameCount = 0;
+	bool bPhase2Tick4AuditArmed = false;
 	float LastHipQuarantineLeftPreDeltaDegrees = 0.0f;
 	float LastHipQuarantineRightPreDeltaDegrees = 0.0f;
 	double StabilizationStressTestStartTimeSeconds = -1.0;
