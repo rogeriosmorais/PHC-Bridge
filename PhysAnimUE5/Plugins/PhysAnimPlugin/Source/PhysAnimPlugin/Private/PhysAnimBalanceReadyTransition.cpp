@@ -1591,13 +1591,32 @@ extern int32 GVerbosePhase2Forensics;
 			(Diagnostics.BaselineShellOffset > Settings.BalancePhase2AbortShellOffsetDelta ||
 			 Diagnostics.BaselineShellVel > Settings.BalancePhase2AbortShellVelocityDelta))
 		{
-			AbortReason = TEXT("phase2_shell_correction_material");
-			AbortDetail = FString::Printf(
-				TEXT("shellOffsetDelta=%.1f/%.1f shellVelocityDelta=%.1f/%.1f"),
-				Diagnostics.BaselineShellOffset,
-				Settings.BalancePhase2AbortShellOffsetDelta,
-				Diagnostics.BaselineShellVel,
-				Settings.BalancePhase2AbortShellVelocityDelta);
+			const bool bSuppressionConditionsMet = bPelvisActualSim && Diagnostics.SimCountPost >= 6;
+			if (bSuppressionConditionsMet)
+			{
+				static int32 LastSuppressionFrame = -1;
+				if (LastSuppressionFrame != GFrameCounter)
+				{
+					LastSuppressionFrame = GFrameCounter;
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SHELL_MATERIAL_GUARD_SUPPRESSED frame=%d tick=%d shellOffsetDelta=%.2f shellVelocityDelta=%.2f rootActualSim=%d simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+						GFrameCounter, Phase2GuardTickCount, Diagnostics.BaselineShellOffset, Diagnostics.BaselineShellVel,
+						bPelvisActualSim ? 1 : 0, Diagnostics.SimCountPost,
+						CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+						CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+						static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase2_shell_correction_material"))),
+						*Owner->GetOwner()->GetName(), *Owner->GetName());
+				}
+			}
+			else
+			{
+				AbortReason = TEXT("phase2_shell_correction_material");
+				AbortDetail = FString::Printf(
+					TEXT("shellOffsetDelta=%.1f/%.1f shellVelocityDelta=%.1f/%.1f"),
+					Diagnostics.BaselineShellOffset,
+					Settings.BalancePhase2AbortShellOffsetDelta,
+					Diagnostics.BaselineShellVel,
+					Settings.BalancePhase2AbortShellVelocityDelta);
+			}
 		}
 		else if (!bPelvisActualSim && Phase2GuardTickCount > 1)
 		{
@@ -1631,8 +1650,8 @@ extern int32 GVerbosePhase2Forensics;
 		}
 		else if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed ||
 			Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed ||
-			Diagnostics.BaselineShellOffset > Settings.BalancePhase2AbortShellOffsetDelta ||
-			Diagnostics.BaselineShellVel > Settings.BalancePhase2AbortShellVelocityDelta ||
+			((Diagnostics.BaselineShellOffset > Settings.BalancePhase2AbortShellOffsetDelta ||
+			  Diagnostics.BaselineShellVel > Settings.BalancePhase2AbortShellVelocityDelta) && !(bPelvisActualSim && Diagnostics.SimCountPost >= 6)) ||
 			Diagnostics.PeakMaxBodyLinearSpeed > Settings.BalancePhase2AbortMaxBodyLinearSpeed ||
 			Diagnostics.PeakMaxBodyAngularSpeed > Settings.BalancePhase2AbortMaxBodyAngularSpeed)
 		{
