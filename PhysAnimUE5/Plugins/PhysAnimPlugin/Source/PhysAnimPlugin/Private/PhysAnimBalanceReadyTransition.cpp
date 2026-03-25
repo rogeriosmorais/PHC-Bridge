@@ -1722,7 +1722,12 @@ extern int32 GVerbosePhase2Forensics;
 												 (Phase2GuardTickCount == 1) &&
 												 (!bPelvisActualSim);
 
-			if (!bRootOnOneStepExemption)
+			const bool bRootOnReleaseStepExemption = (Owner->GetRuntimeState() == EPhysAnimRuntimeState::BalanceEntry_RootOn) &&
+													 (Phase2GuardTickCount == 2) &&
+													 (bPelvisActualSim) &&
+													 (Diagnostics.SimCountPost == 6);
+
+			if (!bRootOnOneStepExemption && !bRootOnReleaseStepExemption)
 			{
 				AbortReason = TEXT("phase2_root_on_spike");
 				if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed)
