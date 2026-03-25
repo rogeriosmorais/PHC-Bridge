@@ -23,27 +23,29 @@ Interpretation rules:
 
 ## Current Execution Focus
 
-Phase 1 bridge implementation and stabilization remain active.
+Phase 1 bridge implementation and stabilization remain active, but the investigation surface has moved.
 
 Current focus:
 
 1. preserve the now-clean balance-entry state machine contract
 2. preserve the accepted Phase 1 write-routing and freeze contracts
 3. distinguish contract failures from physical-viability failures
-4. determine whether the current accepted Phase 1 frozen setup is physically viable
-5. if not, revise topology / admission margin / hold set / tuning using evidence rather than ad hoc workaround changes
+4. preserve a truthful RootOn truth model in Phase 2
+5. determine whether the current RootOn warm-start choreography is both contract-correct and physically viable
+6. if not, revise topology / admission margin / hold set / RootOn choreography / tuning using evidence rather than ad hoc workaround changes
 
-## Current Phase 1 truth
+## Current Stage 1 truth
 
-The current balance-entry investigation has reached this point:
+The Stage 1 balance-entry investigation has reached this point:
 
 - many earlier failures were contract / ownership / telemetry problems
 - those areas are now substantially cleaner
-- the leading remaining failure is that the accepted Phase 1 setup may be dynamically non-viable under current control, tuning, and contact conditions
+- Phase 1 upper-body hold / LateValidate bookkeeping is no longer the dominant active blocker
+- the current active investigation surface is Phase 2 RootOn truthfulness and viability
 
 This is progress, not regression.
 
-The design is now sharp enough to be falsified by runtime.
+The design is now sharp enough to be falsified by runtime at a more specific level.
 
 ## Frozen Balance-Mode Rule
 
@@ -51,7 +53,7 @@ Stage 1 treats balance entry as a separate contract from normal bridge startup.
 
 Normal bridge startup may use staged non-root bring-up.
 
-Balance-mode Prepare and LateValidate must not silently reuse normal bring-up semantics as their source of truth.
+Balance-mode Prepare, LateValidate, and RootOn must not silently reuse normal bring-up semantics as their source of truth.
 
 The authoritative balance-entry contract is defined in:
 
@@ -67,7 +69,8 @@ The `PhysAnim.PIE.BalanceModeSmoke` test is successful only if the run ends as o
 The test is a failure if the run ends in:
 
 - `BridgeActive`
-- unresolved Phase 1 / entry ambiguity
+- unresolved entry ambiguity
+- misleading success caused by hidden same-frame assistance
 
 ## Planning Bundle Freeze
 
@@ -93,6 +96,8 @@ Only these categories may change during the current stabilization loop:
 - `plans/stage1/40-design/balance_mode_entry_transition_spec.md`
 - `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
 - `plans/stage1/40-design/balance_mode_phase2.md`
+- `plans/stage1/40-design/phase1-late-validate-truth-model.md`
+- `plans/stage1/40-design/phase2-rooton-truth-model.md`
 
 ## Documentation acceptance rule
 
@@ -102,7 +107,8 @@ The design is considered documented only when all of the following are true:
 - `STAGE1_PLAN.md` points to that contract
 - `40-design` repeats the same contract without divergence
 - the docs explicitly distinguish contract correctness from physical viability
-- no remaining design text implies that a contract-correct Phase 1 setup is automatically physically viable
+- no remaining design text implies that a contract-correct Phase 1 or Phase 2 setup is automatically physically viable
+- Phase 2 documents explicitly define the RootOn source-of-truth order and shell/policy suppression semantics
 
 ## Long-term architectural direction
 

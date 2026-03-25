@@ -5,16 +5,17 @@ Scope: Stage 1 behavior for `BalanceTransition_Phase2_RootOn` and the immediate 
 
 ## 1. Purpose
 
-This document defines the root-on choreography for Phase 2 of the Balance Mode entry transition.
+This document defines the RootOn choreography for Phase 2 of the Balance Mode entry transition.
 
 It is authoritative for:
 
 - Phase 2 entry preconditions
-- safe denial before root-on
-- warm-start root-on requirements
-- root-on frame order
+- safe denial before RootOn
+- warm-start RootOn requirements
+- RootOn frame order
 - guard-window rules
-- root-on spike classification
+- RootOn spike classification
+- shell/policy suppression semantics
 - recovery and retry rules
 
 ## 2. Relationship to Phase 1
@@ -24,7 +25,7 @@ Phase 2 consumes a still-valid Phase 1 output.
 If Phase 1 is contract-correct but physically non-viable, Phase 2 must not pretend otherwise.
 
 In other words:
-Phase 2 is not allowed to use root-on to “rescue” a Phase 1 setup that never had credible stability margin.
+Phase 2 is not allowed to use RootOn to “rescue” a Phase 1 setup that never had credible stability margin.
 
 ## 3. Core rule
 
@@ -32,7 +33,7 @@ Phase 2 is not “turn pelvis sim on and hope.”
 
 Phase 2 may begin only from a still-valid handoff and only after the explicit readiness proof is satisfied.
 
-If the proof is absent, false, or incoherent, Phase 2 must deny safely before root-on.
+If the proof is absent, false, or incoherent, Phase 2 must deny safely before RootOn.
 
 ## 4. Required entry preconditions
 
@@ -50,13 +51,13 @@ Phase 2 may begin only if all are true:
 
 ## 5. Safe denial path
 
-If any required Phase 2 precondition is false, Phase 2 must deny before any root-on attempt.
+If any required Phase 2 precondition is false, Phase 2 must deny before any RootOn attempt.
 
-Denial is valid and preferable to a dishonest root-on attempt.
+Denial is valid and preferable to a dishonest RootOn attempt.
 
 ## 6. Warm-start contract
 
-Root-on must be executed as a warm start, not a blind flip.
+RootOn must be executed as a warm start, not a blind flip.
 
 Required behavior:
 
@@ -64,30 +65,65 @@ Required behavior:
 - seed from the live physics-consistent state where possible
 - validate root/proximal continuity before enabling root simulation
 - zero and reseed velocities around the sim flip when required
-- abort before root-on if continuity is incoherent
+- abort before RootOn if continuity is incoherent
 
 ## 7. Authority during Phase 2
 
-During Phase 2:
+During Phase 2 guard window:
 
-- policy writes to root/proximal/distal are forbidden
-- the established hold/reference state is preserved
+- policy writes to the transition set are forbidden unless the spec explicitly allows a later release point
 - cached resets are forbidden
-- shell and CharacterMovement correction must remain suppressed
+- topology expansion is forbidden unless explicitly defined by the certified handoff + RootOn choreography
+- shell and CharacterMovement correction influence on simulated bodies is forbidden
+- hold/reference state may persist only where the contract explicitly allows it
 
-## 8. Root-on frame sequence
+### Shell-state versus shell-influence rule
+
+During Phase 2, distinguish:
+
+- shell state (`locked`, `reanchored`, `reseeded`)
+- shell influence on simulated bodies
+
+The shell may remain locked or reanchored without that, by itself, being a violation.
+
+A violation exists only if shell/reference behavior materially influences the simulated transition set during the guard window in a way the contract forbids.
+
+## 8. RootOn frame sequence
 
 Phase 2 executes in this order:
 
 1. capture entry snapshot
 2. freeze hazards
-3. execute root-on
+3. execute RootOn choreography
 4. immediately re-read and validate root simulation state
-5. enter guard window if technical root-on succeeded
+5. enter guard window if technical RootOn succeeded
 
-## 9. Guard window
+## 9. RootOn truth model
 
-The guard window begins immediately after technical root-on success.
+The authoritative RootOn truth model is defined in `phase2-rooton-truth-model.md`.
+
+Minimum required interpretation during RootOn:
+
+- certified topology intent remains the contract source of truth
+- modifier-record ownership is a separate observable
+- raw body sim state is a separate observable
+- same-frame disagreement among those three layers must be classified truthfully rather than collapsed into a single fake success state
+
+## 10. Topology during Phase 2
+
+The required topology must be whatever the current certified handoff / Phase 2 design states explicitly.
+
+Do not change topology implicitly during RootOn under the guise of tuning.
+
+If the design says the proximal Phase 1 sim set is preserved during RootOn, then that preserved set must remain coherent at all three layers:
+
+- intended ownership
+- modifier-record ownership
+- raw body state
+
+## 11. Guard window
+
+The guard window begins immediately after technical RootOn success.
 
 During the guard window, the following remain forbidden:
 
@@ -96,15 +132,9 @@ During the guard window, the following remain forbidden:
 - topology expansion
 - locomotion entry
 - shell assistance
-- shell-reference reseed
+- shell-reference reseed used as support
 
-## 10. Topology during Phase 2
-
-The required topology must be whatever the current certified handoff / Phase 2 design states explicitly.
-
-Do not change topology implicitly during root-on under the guise of tuning.
-
-## 11. Failure classes
+## 12. Failure classes
 
 Examples include:
 
@@ -113,11 +143,13 @@ Examples include:
 - policy leak
 - reset violation
 - same-frame conflicting authority
-- root-on spike
+- RootOn spike
 - root simulation dropped
 - material shell correction
+- topology not preserved
+- modifier/raw disagreement over preserved sim bones
 - no convergence path
 
-## 12. Acceptance criteria
+## 13. Acceptance criteria
 
-This spec is satisfied only when Phase 2 performs a true warm-start root-on from a still-valid handoff, can deny safely before root-on, and does not depend on hidden same-frame assistance or brute-force retry loops.
+This spec is satisfied only when Phase 2 performs a true warm-start RootOn from a still-valid handoff, can deny safely before RootOn, distinguishes shell state from shell influence, and does not depend on hidden same-frame assistance or brute-force retry loops.

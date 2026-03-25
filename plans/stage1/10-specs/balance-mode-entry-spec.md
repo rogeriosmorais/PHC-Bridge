@@ -9,15 +9,19 @@ It exists to separate:
 - normal bridge startup behavior
 - balance-entry state-machine behavior
 - Phase 1 ownership and write-routing behavior
+- Phase 2 RootOn ownership and guard-window behavior
 - the still-open physical-viability question
 
 ## Core interpretation
 
 Balance entry is a distinct runtime contract layered on top of a running bridge.
 
-The current leading question is no longer whether the runtime can represent entry at all.
+The major contract question is no longer whether the runtime can represent entry at all.
 
-The last confirmed major blocker is whether the accepted Phase 1 frozen setup is physically viable once the contract is enforced correctly. This focuses on `phase1_late_validate_upper_body_instability` as the primary gate.
+The current contract surface is now split across:
+
+- Phase 1 accepted topology and LateValidate truthfulness
+- Phase 2 warm-start RootOn truthfulness
 
 ## Phase 1 Truth Model Alignment
 
@@ -71,33 +75,106 @@ That snapshot is the source of truth for:
 - target-delta metrics
 - shell/reference deltas used by gating
 
+## Phase 2 Truth Model Alignment
+
+Phase 2 behavior is governed by the authoritative [Phase 2 / RootOn Truth Model](../40-design/phase2-rooton-truth-model.md).
+
+Phase 2 consumes a still-valid Phase 1 handoff and attempts a warm-start RootOn.
+
+### Required Phase 2 entry interpretation
+
+At the moment RootOn begins:
+
+- the certified Phase 1 handoff remains the topology source of truth
+- Phase 2 may add root simulation only through the explicit RootOn choreography
+- Phase 2 must not silently rewrite the preserved non-root topology under the guise of tuning
+
+### Phase 2 source-of-truth order
+
+During RootOn and its guard window, the following must be treated as distinct observables:
+
+1. frozen / certified topology intent
+2. modifier-record ownership
+3. raw body simulation state
+
+Interpretation rules:
+
+- intended ownership is not proof of applied ownership
+- modifier-record ownership is not proof of raw-body state
+- raw-body state alone is not proof that write-routing and suppression were correct
+- RootOn decisions and failure classification must state which layer failed first
+
+### Phase 2 guard-window contract
+
+During the guard window, all of the following are forbidden unless the spec later says otherwise:
+
+- normal policy writes into the transition set
+- cached resets
+- topology expansion not explicitly defined by the certified handoff + RootOn choreography
+- hidden shell assistance on simulated bodies
+- CharacterMovement correction influence on the simulated transition set
+- shell-reference reseed used as same-frame support
+
+### Shell-state versus shell-influence rule
+
+Phase 2 must distinguish:
+
+- shell state (`locked`, `reanchored`, etc.)
+- shell influence on simulated bodies
+
+A locked or reanchored shell is not, by itself, a violation.
+
+A violation exists only if shell/reference behavior materially influences the simulated transition set during the guard window in a way the contract forbids.
+
+### Preserved-proximal rule
+
+If the certified handoff says the proximal Phase 1 set remains simulated during RootOn, then for those preserved proximal bones:
+
+- intended ownership must remain simulated
+- modifier-record ownership must converge to simulated
+- raw-body state must remain simulated
+
+A disagreement among those three layers is a contract-relevant diagnostic event, not a harmless implementation detail.
+
 ## Contract correctness vs physical viability
 
 ### Contract correctness
 
-Phase 1 is contract-correct when:
+Balance entry is contract-correct when:
 
 - topology is accepted correctly
 - suppression is correct
 - hold-only semantics are correct
 - freeze lifetime is correct
 - convergence timing/source is correct
+- RootOn source-of-truth evaluation is correct
 - terminal reasons are truthful
 
 ### Physical viability
 
-Phase 1 is physically viable only if the accepted setup remains dynamically quiet enough to survive entry under current:
+Balance entry is physically viable only if the accepted setup remains dynamically quiet enough to survive entry under current:
 
 - control tuning
 - contact behavior
 - sub-step regime
 - hold/reference behavior
+- RootOn shell/reference conditions
 
 A run may satisfy contract correctness and still fail physical viability.
 
 ## Required terminal truthfulness
 
-When the accepted Phase 1 setup fails because the sim set is dynamically unstable, the deny/reset path should identify that explicitly rather than collapsing everything to a generic no-convergence label.
+When the accepted setup fails, the deny/reset path should identify that explicitly rather than collapsing everything to a generic no-convergence label.
+
+For RootOn this includes distinguishing:
+
+- policy leak
+- reset violation
+- raw/modifier disagreement
+- root simulation drop
+- shell material influence
+- spike / motion instability
+- topology not preserved
 
 ## Acceptance criteria
 
@@ -107,4 +184,6 @@ This spec is satisfied only when:
 - the write-routing contract is explicit
 - the freeze contract is explicit
 - the convergence snapshot contract is explicit
-- the docs explicitly allow a contract-correct but physically non-viable Phase 1 result
+- the Phase 2 RootOn source-of-truth order is explicit
+- shell state versus shell influence is explicit
+- the docs explicitly allow a contract-correct but physically non-viable Phase 1 or Phase 2 result
