@@ -1946,8 +1946,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		static EPhysAnimRuntimeState LastAuditState = EPhysAnimRuntimeState::Uninitialized;
 		const bool bStateChanged = (RuntimeState != LastAuditState) || bPelvisRawSimChanged || bTotalSimCountChanged || bPelvisModifierChanged;
 
-		const bool bIsRootOnTick2 = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount == 2);
-		const bool bShouldLog = (bStateChanged && (!bIsRootOnTick2 || (bPelvisRawSimChanged || bTotalSimCountChanged))) && (!bIsStableRootOnTick1) && (RuntimeState != EPhysAnimRuntimeState::BalanceEntry_Settle);
+		const bool bIsRootOnTickRange = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount <= 5);
+		const bool bShouldLog = bIsRootOnTickRange || bStateChanged || bPelvisRawSimChanged || bTotalSimCountChanged || bPelvisModifierChanged;
 		if (bShouldLog)
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_AFTER_TUNING_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
@@ -2048,6 +2048,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	bool bSkipUpdateControls = false;
 	FString SkipReason;
+	bool bPreTrackedValueChanged = false;
+	bool bCurrentPelvisSim = false;
+	int32 CurrentTotalSim = 0;
+	EPhysicsMovementType CurrentPelvisModifierType = EPhysicsMovementType::Static;
+
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
 		if (bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
@@ -2071,14 +2076,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		else if (BalanceEntryRootOnFrameCount == 4 && bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
 		{
 			bSkipUpdateControls = true;
-			SkipReason = TEXT("rooton_tick4_preserve_probe");
+			SkipReason = TEXT("rooton_tick4_collapse_probe");
 		}
 
-		bool bCurrentPelvisSim = false;
-		int32 CurrentTotalSim = 0;
-		EPhysicsMovementType CurrentPelvisModifierType = EPhysicsMovementType::Kinematic;
-		
-		if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+		if (const UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
 		{
 			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
 			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
@@ -2087,17 +2088,17 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			}
 		}
 
-		if (USkeletalMeshComponent* const Mesh = MeshComponent.Get())
+		if (const USkeletalMeshComponent* const Mesh = GetMeshComponent())
 		{
 			const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-			if (FBodyInstance* const RootBI = Mesh->GetBodyInstance(RootBoneName))
+			if (const FBodyInstance* const RootBI = Mesh->GetBodyInstance(RootBoneName))
 			{
 				bCurrentPelvisSim = RootBI->IsInstanceSimulatingPhysics();
 			}
 
 			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 			{
-				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				if (const FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
 				{
 					if (BI->IsInstanceSimulatingPhysics())
 					{
@@ -2112,31 +2113,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const bool bPrePelvisRawSimChanged = bLastPelvisRawSim != bCurrentPelvisSim;
 		const bool bPreTotalSimCountChanged = LastTotalSimCount != CurrentTotalSim;
 		const bool bPrePelvisModifierChanged = !LastPrePelvisModifiers.Contains(this) || LastPrePelvisModifiers[this] != CurrentPelvisModifierType;
-		const bool bPreTrackedValueChanged = bPrePelvisRawSimChanged || bPreTotalSimCountChanged || bPrePelvisModifierChanged;
+		bPreTrackedValueChanged = bPrePelvisRawSimChanged || bPreTotalSimCountChanged || bPrePelvisModifierChanged;
 
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
-		{
-			if (BalanceEntryRootOnFrameCount == 2)
-			{
-				if (bCurrentPelvisSim && CurrentTotalSim >= 6)
-				{
-					bSkipUpdateControls = true;
-					SkipReason = TEXT("rooton_tick2_release_success_probe");
-				}
-			}
-			else if (BalanceEntryRootOnFrameCount == 3)
-			{
-				if (bCurrentPelvisSim && CurrentTotalSim >= 6)
-				{
-					bSkipUpdateControls = true;
-					SkipReason = TEXT("rooton_tick3_stability_probe");
-				}
-			}
-		}
-
-		const bool bShouldEmitPreAudit = (BalanceEntryRootOnFrameCount == 3 || bPreTrackedValueChanged);
-
-		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPreTrackedValueChanged) || (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
+		const bool bShouldEmitPreAudit = (BalanceEntryRootOnFrameCount >= 2 && BalanceEntryRootOnFrameCount <= 4) || bPreTrackedValueChanged;
+		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPreTrackedValueChanged);
 
 		if (bShouldEmitPreAudit && !bSuppressLogOnSkip)
 		{
@@ -2155,11 +2135,48 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			LastPrePelvisModifiers.FindOrAdd(this) = CurrentPelvisModifierType;
 		}
 	}
+	else if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+	{
+		// Settle auditing and tracking
+		if (const UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+		{
+			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
+			{
+				CurrentPelvisModifierType = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
+		if (const USkeletalMeshComponent* const Mesh = GetMeshComponent())
+		{
+			const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+			if (const FBodyInstance* const RootBI = Mesh->GetBodyInstance(RootBoneName))
+			{
+				bCurrentPelvisSim = RootBI->IsInstanceSimulatingPhysics();
+			}
+
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				if (const FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				{
+					if (BI->IsInstanceSimulatingPhysics())
+					{
+						CurrentTotalSim++;
+					}
+				}
+			}
+		}
+
+		static TMap<UPhysAnimComponent*, EPhysicsMovementType> LastPrePelvisModifiers;
+		const bool bPrePelvisRawSimChanged = bLastPelvisRawSim != bCurrentPelvisSim;
+		const bool bPreTotalSimCountChanged = LastTotalSimCount != CurrentTotalSim;
+		const bool bPrePelvisModifierChanged = !LastPrePelvisModifiers.Contains(this) || LastPrePelvisModifiers[this] != CurrentPelvisModifierType;
+		bPreTrackedValueChanged = bPrePelvisRawSimChanged || bPreTotalSimCountChanged || bPrePelvisModifierChanged;
+	}
 
 	const bool bIsRealRootOnTick4 = 
 		(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn) && 
-		(BalanceEntryRootOnFrameCount == 4) && 
-		(BalanceReadyTransition.IsActive());
+		(BalanceEntryRootOnFrameCount == 4);
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
@@ -2319,7 +2336,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	const bool bIsTick3Skip = bSkipUpdateControls && !AutoSkipReason.IsEmpty();
 	const FString EffectiveSkipReason = !AutoSkipReason.IsEmpty() ? AutoSkipReason : SkipReason;
 
-	if (bSkipUpdateControls && (bIsTick2Skip || bIsTick3Skip || (bIsRealRootOnTick4 && SkipReason == TEXT("rooton_tick4_preserve_probe"))))
+	if (bSkipUpdateControls && (bIsTick2Skip || bIsTick3Skip || (bIsRealRootOnTick4 && EffectiveSkipReason == TEXT("rooton_tick4_collapse_probe"))))
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_SKIPPED_ON_ENTRY frame=%llu reason=%s"), GFrameCounter, *EffectiveSkipReason);
 	}
@@ -2329,9 +2346,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		if (bIsRealRootOnTick4)
 		{
-			bool bCurrentPelvisSim = false;
-			int32 CurrentTotalSim = 0;
-			EPhysicsMovementType CurrentPelvisModifierType = EPhysicsMovementType::Static;
+			bCurrentPelvisSim = false;
+			CurrentTotalSim = 0;
+			CurrentPelvisModifierType = EPhysicsMovementType::Static;
 
 			if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
 			{
@@ -2362,27 +2379,33 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				}
 			}
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_POST_UPDATECONTROLS_STATE frame=%llu tick=%d pelvisRawSim=%d totalSimCount=%d pelvisModifierName=%s owner=%s actor=%s component=%s"),
-				GFrameCounter,
-				static_cast<int32>(BalanceEntryRootOnFrameCount),
-				bCurrentPelvisSim ? 1 : 0,
-				CurrentTotalSim,
-				GetPhysicsMovementTypeName(CurrentPelvisModifierType),
-				*GetOwner()->GetName(),
-				*GetOwner()->GetName(),
-				*GetName());
+			if (!bSkipUpdateControls || bPreTrackedValueChanged)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_POST_UPDATECONTROLS_STATE frame=%llu tick=%d pelvisRawSim=%d totalSimCount=%d pelvisModifierName=%s owner=%s actor=%s component=%s"),
+					GFrameCounter,
+					static_cast<int32>(BalanceEntryRootOnFrameCount),
+					bCurrentPelvisSim ? 1 : 0,
+					CurrentTotalSim,
+					GetPhysicsMovementTypeName(CurrentPelvisModifierType),
+					*GetOwner()->GetName(),
+					*GetOwner()->GetName(),
+					*GetName());
+			}
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_POST_COLLAPSE_AUDIT frame=%llu tick=%d rootRawSim=%d pelvisRawSim=%d mod=%s simCount=%d pendingResetsEmpty=%d owner=%s actor=%s component=%s"),
-				GFrameCounter,
-				(int32)BalanceEntryRootOnFrameCount,
-				bCurrentPelvisSim ? 1 : 0,
-				bCurrentPelvisSim ? 1 : 0,
-				GetPhysicsMovementTypeName(CurrentPelvisModifierType),
-				CurrentTotalSim,
-				PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
-				*GetOwner()->GetName(),
-				*GetOwner()->GetName(),
-				*GetName());
+			if (!bSkipUpdateControls || bPreTrackedValueChanged)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_POST_COLLAPSE_AUDIT frame=%llu tick=%d rootRawSim=%d pelvisRawSim=%d mod=%s simCount=%d pendingResetsEmpty=%d owner=%s actor=%s component=%s"),
+					GFrameCounter,
+					(int32)BalanceEntryRootOnFrameCount,
+					bCurrentPelvisSim ? 1 : 0,
+					bCurrentPelvisSim ? 1 : 0,
+					GetPhysicsMovementTypeName(CurrentPelvisModifierType),
+					CurrentTotalSim,
+					PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
+					*GetOwner()->GetName(),
+					*GetOwner()->GetName(),
+					*GetName());
+			}
 		}
 	}
 
@@ -2430,15 +2453,16 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const bool bPostPelvisModifierChanged = !LastPostPelvisModifiers.Contains(this) || LastPostPelvisModifiers[this] != PostCurrentPelvisModifierType;
 		const bool bPostTrackedValueChanged = bPostPelvisRawSimChanged || bPostTotalSimCountChanged || bPostPelvisModifierChanged;
 		
-		bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount == 2 || bPostTrackedValueChanged);
+		bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount >= 2 && BalanceEntryRootOnFrameCount <= 4) || bPostTrackedValueChanged;
 		const bool bIsRootOnTick3 = (BalanceEntryRootOnFrameCount == 3);
-		if (bIsRootOnTick3)
+		const bool bIsRootOnTick4 = (BalanceEntryRootOnFrameCount == 4);
+		if (bIsRootOnTick3 || bIsRootOnTick4)
 		{
-			// Narrower gate for RootOn tick 3: run only if UpdateControls actually ran OR key sim state changed
+			// Narrower gate for RootOn tick 3/4: run only if UpdateControls actually ran OR key sim state changed
 			bShouldEmitPostAudit = (!bSkipUpdateControls) || bPostPelvisRawSimChanged || bPostTotalSimCountChanged;
 		}
 
-		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPostTrackedValueChanged && !bIsRootOnTick3) || (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
+		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPostTrackedValueChanged && !bIsRootOnTick3 && !bIsRootOnTick4) || (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
 
 		if (bShouldEmitPostAudit && !bSuppressLogOnSkip)
 		{
@@ -6230,13 +6254,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			static EPhysAnimRuntimeState LastAuditState = EPhysAnimRuntimeState::Uninitialized;
 			const bool bRuntimeStateChanged = (RuntimeState != LastAuditState);
 
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount <= 3)
+			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount <= 4)
 			{
 				const FBodyInstance* const PelvisBody = GetMeshComponent() ? GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 				const int32 RootRawSim = (PelvisBody && PelvisBody->IsInstanceSimulatingPhysics()) ? 1 : 0;
 
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_RELEASE_DELAY_PROBE frame=%d tick=%d delayed=%d rootRawSim=%d pelvisModType=%d simCount=%d owner=%d actor=%s component=%s"),
-					static_cast<int32>(CurrentFrameNumber),
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_RELEASE_DELAY_PROBE frame=%llu tick=%d delayed=%d rootRawSim=%d pelvisModType=%d simCount=%d owner=%d actor=%s component=%s"),
+					GFrameCounter,
 					static_cast<int32>(BalanceEntryRootOnFrameCount),
 					bIsFirstRootOnFrame ? 1 : 0,
 					RootRawSim,
@@ -6262,14 +6286,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				(RawReadbackValue != LastRootRawReadback);
 
 			const bool bIsRootOn = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn);
-			const bool bShouldEmitRootOnAudit = bIsRootOn && (BalanceEntryRootOnFrameCount <= 3 || bStateChanged);
+			const bool bShouldEmitRootOnAudit = bIsRootOn && (BalanceEntryRootOnFrameCount <= 4 || bStateChanged);
 
 			if (bShouldEmitRootOnAudit)
 			{
 				if (RawReadbackValue != -1)
 				{
-					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning rawReadback=%d callIndex=%d"), 
-						static_cast<int32>(CurrentFrameNumber), *BoneName.ToString(), 
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%llu bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning rawReadback=%d callIndex=%d"), 
+					GFrameCounter, *BoneName.ToString(), 
 						bAllowRootBodyModifierSimulation ? 1 : 0, 
 						bTransitionOwnsRootOnThisTick ? 1 : 0, 
 						bPhase2RootAuthorityQuarantined ? 1 : 0,
