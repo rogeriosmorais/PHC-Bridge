@@ -241,21 +241,18 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2Continuity(UPhysAnimComponen
 	const bool bPelvisActualSim = PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : false;
 
 	// Section 17.5 - Root simulation dropped guard
+	const bool bTick1DelayedRootExemption = (Owner->GetRuntimeState() == EPhysAnimRuntimeState::BalanceEntry_RootOn) &&
+		(Phase2GuardTickCount == 1) &&
+		(!bPelvisActualSim) &&
+		(Diagnostics.SimCountPost == 5);
+
+	if (bTick1DelayedRootExemption)
+	{
+		return true;
+	}
+
 	if (!bPelvisActualSim && Phase2GuardTickCount > 1)
 	{
-		// TICK-1 DELAYED-ROOT EXEMPTION:
-		// If we are on the first frame of RootOn, and the root simulation is purposely delayed, 
-		// do not fail even if actualSim is 0 and simCount is exactly 5.
-		const bool bTick1DelayedRootExemption = (Owner->GetRuntimeState() == EPhysAnimRuntimeState::BalanceEntry_RootOn) &&
-			(Phase2GuardTickCount == 1) &&
-			(!bPelvisActualSim) &&
-			(Diagnostics.SimCountPost == 5);
-
-		if (bTick1DelayedRootExemption)
-		{
-			return true;
-		}
-
 		OutReason = TEXT("phase2_root_simulation_dropped");
 		return false;
 	}
