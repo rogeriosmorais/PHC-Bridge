@@ -2059,7 +2059,12 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
-		if (bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
+		if (BalanceEntryRootOnFrameCount == 1 && !bPelvisSimAfterTuning && TotalSimAfterTuning == 5)
+		{
+			bSkipUpdateControls = true;
+			SkipReason = TEXT("rooton_tick1_entry_probe");
+		}
+		else if (bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
 		{
 			bSkipUpdateControls = true;
 			SkipReason = TEXT("pelvis_already_simulating_after_tuning");
@@ -2119,7 +2124,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const bool bPrePelvisModifierChanged = !LastPrePelvisModifiers.Contains(this) || LastPrePelvisModifiers[this] != CurrentPelvisModifierType;
 		bPreTrackedValueChanged = bPrePelvisRawSimChanged || bPreTotalSimCountChanged || bPrePelvisModifierChanged;
 
-		const bool bShouldEmitPreAudit = (BalanceEntryRootOnFrameCount == 2) || bPreTrackedValueChanged;
+		const bool bShouldEmitPreAudit = (BalanceEntryRootOnFrameCount == 1) || (BalanceEntryRootOnFrameCount == 2) || bPreTrackedValueChanged;
 		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPreTrackedValueChanged);
 
 		if (bShouldEmitPreAudit && !bSuppressLogOnSkip)
@@ -2286,6 +2291,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			*GetName());
 	}
 
+	const bool bIsTick1Skip = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount == 1 && SkipReason == TEXT("rooton_tick1_entry_probe"));
 	const bool bIsTick2Skip = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount == 2 && SkipReason == TEXT("rooton_tick2_release_success_probe"));
 
 	FString AutoSkipReason;
@@ -2331,7 +2337,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	const bool bIsTick3Skip = bSkipUpdateControls && !AutoSkipReason.IsEmpty();
 	const FString EffectiveSkipReason = !AutoSkipReason.IsEmpty() ? AutoSkipReason : SkipReason;
 
-	if (bSkipUpdateControls && (bIsTick2Skip || bIsTick3Skip || (bIsRealRootOnTick4 && EffectiveSkipReason == TEXT("rooton_tick4_collapse_probe"))))
+	if (bSkipUpdateControls && (bIsTick1Skip || bIsTick2Skip || bIsTick3Skip || (bIsRealRootOnTick4 && EffectiveSkipReason == TEXT("rooton_tick4_collapse_probe"))))
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_SKIPPED_ON_ENTRY frame=%llu reason=%s"), GFrameCounter, *EffectiveSkipReason);
 	}
@@ -2448,7 +2454,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const bool bPostPelvisModifierChanged = !LastPostPelvisModifiers.Contains(this) || LastPostPelvisModifiers[this] != PostCurrentPelvisModifierType;
 		const bool bPostTrackedValueChanged = bPostPelvisRawSimChanged || bPostTotalSimCountChanged || bPostPelvisModifierChanged;
 		
-		const bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount == 2) || bPostTrackedValueChanged;
+		const bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount == 1) || (BalanceEntryRootOnFrameCount == 2) || bPostTrackedValueChanged;
 		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPostTrackedValueChanged) || (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
 
 		if (bShouldEmitPostAudit && !bSuppressLogOnSkip)
