@@ -964,7 +964,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		else if (BalanceEntryRootOnFrameCount == 4 && bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
 		{
 			bSkipUpdateControls = true;
-			SkipReason = TEXT("rooton_tick4_collapse_probe");
+			SkipReason = TEXT("pelvis_already_simulating_after_tuning");
 		}
 		else if (bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
 		{
@@ -1232,7 +1232,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_SKIPPED_ON_ENTRY frame=%llu reason=%s"), GFrameCounter, *EffectiveSkipReason);
 
-		if (bIsRealRootOnTick4 && EffectiveSkipReason == TEXT("rooton_tick4_collapse_probe"))
+		if (bIsRealRootOnTick4 && EffectiveSkipReason == TEXT("pelvis_already_simulating_after_tuning"))
 		{
 			const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 			USkeletalMeshComponent* const Mesh = MeshComponent.Get();
@@ -1262,10 +1262,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				}
 			}
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_POST_SKIP_STATE pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s runtimeState=%s"),
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_POST_SKIP_STATE pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s"),
 				PelvisRawSim_Readback,
 				TotalSimCount_Readback,
 				GetPhysicsMovementTypeName(PelvisModType_Readback),
+				PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
 				GetRuntimeStateName(RuntimeState));
 		}
 	}
@@ -1526,10 +1527,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			}
 		}
 
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_END_OF_TICK_STATE pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s runtimeState=%s"),
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_END_OF_TICK_STATE pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s"),
 			PelvisRawSim_Readback,
 			TotalSimCount_Readback,
 			GetPhysicsMovementTypeName(PelvisModType_Readback),
+			PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
 			GetRuntimeStateName(RuntimeState));
 	}
 }
