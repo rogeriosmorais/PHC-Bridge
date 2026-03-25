@@ -1931,15 +1931,30 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			}
 		}
 
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_AFTER_TUNING_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
-			GFrameCounter,
-			bPelvisSimAfterTuning ? 1 : 0,
-			TotalSimAfterTuning,
-			GetPhysicsMovementTypeName(PelvisModifierType),
-			PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
-			GetRuntimeStateName(RuntimeState),
-			*GetOwner()->GetName(),
-			*GetName());
+		static TMap<UPhysAnimComponent*, bool> LastPelvisRawSims;
+		static TMap<UPhysAnimComponent*, int32> LastTotalSimCounts;
+		static TMap<UPhysAnimComponent*, EPhysicsMovementType> LastPelvisModifiers;
+
+		const bool bPelvisRawSimChanged = !LastPelvisRawSims.Contains(this) || LastPelvisRawSims[this] != bPelvisSimAfterTuning;
+		const bool bTotalSimCountChanged = !LastTotalSimCounts.Contains(this) || LastTotalSimCounts[this] != TotalSimAfterTuning;
+		const bool bPelvisModifierChanged = !LastPelvisModifiers.Contains(this) || LastPelvisModifiers[this] != PelvisModifierType;
+
+		if (bPelvisRawSimChanged || bTotalSimCountChanged || bPelvisModifierChanged)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_AFTER_TUNING_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
+				GFrameCounter,
+				bPelvisSimAfterTuning ? 1 : 0,
+				TotalSimAfterTuning,
+				GetPhysicsMovementTypeName(PelvisModifierType),
+				PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
+				GetRuntimeStateName(RuntimeState),
+				*GetOwner()->GetName(),
+				*GetName());
+
+			LastPelvisRawSims.FindOrAdd(this) = bPelvisSimAfterTuning;
+			LastTotalSimCounts.FindOrAdd(this) = TotalSimAfterTuning;
+			LastPelvisModifiers.FindOrAdd(this) = PelvisModifierType;
+		}
 	}
 
 	if (!PendingBodyModifierCachedResetNames.IsEmpty())
@@ -2133,15 +2148,31 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			}
 		}
 
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_PRE_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
-			GFrameCounter,
-			bCurrentPelvisSim ? 1 : 0,
-			CurrentTotalSim,
-			GetPhysicsMovementTypeName(CurrentPelvisModifierType),
-			PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
-			GetRuntimeStateName(RuntimeState),
-			*GetOwner()->GetName(),
-			*GetName());
+		static TMap<UPhysAnimComponent*, bool> LastPrePelvisRawSims;
+		static TMap<UPhysAnimComponent*, int32> LastPreTotalSimCounts;
+		static TMap<UPhysAnimComponent*, EPhysicsMovementType> LastPrePelvisModifiers;
+
+		const bool bPrePelvisRawSimChanged = !LastPrePelvisRawSims.Contains(this) || LastPrePelvisRawSims[this] != bCurrentPelvisSim;
+		const bool bPreTotalSimCountChanged = !LastPreTotalSimCounts.Contains(this) || LastPreTotalSimCounts[this] != CurrentTotalSim;
+		const bool bPrePelvisModifierChanged = !LastPrePelvisModifiers.Contains(this) || LastPrePelvisModifiers[this] != CurrentPelvisModifierType;
+		const bool bPreTrackedValueChanged = bPrePelvisRawSimChanged || bPreTotalSimCountChanged || bPrePelvisModifierChanged;
+
+		if (!bSkipUpdateControls || bPreTrackedValueChanged)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_PRE_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
+				GFrameCounter,
+				bCurrentPelvisSim ? 1 : 0,
+				CurrentTotalSim,
+				GetPhysicsMovementTypeName(CurrentPelvisModifierType),
+				PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
+				GetRuntimeStateName(RuntimeState),
+				*GetOwner()->GetName(),
+				*GetName());
+
+			LastPrePelvisRawSims.FindOrAdd(this) = bCurrentPelvisSim;
+			LastPreTotalSimCounts.FindOrAdd(this) = CurrentTotalSim;
+			LastPrePelvisModifiers.FindOrAdd(this) = CurrentPelvisModifierType;
+		}
 	}
 
 	if (bSkipUpdateControls)
@@ -2236,15 +2267,31 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			}
 		}
 
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_POST_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
-			GFrameCounter,
-			bCurrentPelvisSim ? 1 : 0,
-			CurrentTotalSim,
-			GetPhysicsMovementTypeName(CurrentPelvisModifierType),
-			PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
-			GetRuntimeStateName(RuntimeState),
-			*GetOwner()->GetName(),
-			*GetName());
+		static TMap<UPhysAnimComponent*, bool> LastPostPelvisRawSims;
+		static TMap<UPhysAnimComponent*, int32> LastPostTotalSimCounts;
+		static TMap<UPhysAnimComponent*, EPhysicsMovementType> LastPostPelvisModifiers;
+
+		const bool bPostPelvisRawSimChanged = !LastPostPelvisRawSims.Contains(this) || LastPostPelvisRawSims[this] != bCurrentPelvisSim;
+		const bool bPostTotalSimCountChanged = !LastPostTotalSimCounts.Contains(this) || LastPostTotalSimCounts[this] != CurrentTotalSim;
+		const bool bPostPelvisModifierChanged = !LastPostPelvisModifiers.Contains(this) || LastPostPelvisModifiers[this] != CurrentPelvisModifierType;
+		const bool bPostTrackedValueChanged = bPostPelvisRawSimChanged || bPostTotalSimCountChanged || bPostPelvisModifierChanged;
+
+		if (!bSkipUpdateControls || bPostTrackedValueChanged)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_POST_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
+				GFrameCounter,
+				bCurrentPelvisSim ? 1 : 0,
+				CurrentTotalSim,
+				GetPhysicsMovementTypeName(CurrentPelvisModifierType),
+				PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
+				GetRuntimeStateName(RuntimeState),
+				*GetOwner()->GetName(),
+				*GetName());
+
+			LastPostPelvisRawSims.FindOrAdd(this) = bCurrentPelvisSim;
+			LastPostTotalSimCounts.FindOrAdd(this) = CurrentTotalSim;
+			LastPostPelvisModifiers.FindOrAdd(this) = CurrentPelvisModifierType;
+		}
 	}
 
 	TRACE_COUNTER_SET(COUNTER_PhysAnim_UpdateControlsMs, static_cast<float>(MeasureElapsedMs(UpdateControlsStartSeconds)));
@@ -5356,13 +5403,16 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BalanceEntryRootOnFrameCount++;
 		}
 
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_TUNING_CALL_AUDIT frame=%d callIndex=%d runtimeState=%s owner=%d actor=%s component=%s"),
-			static_cast<int32>(CurrentFrameNumber),
-			CurrentCallIndex,
-			GetRuntimeStateName(RuntimeState),
-			static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
-			*GetOwner()->GetName(),
-			*GetName());
+		if (CurrentCallIndex != 1)
+		{
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_TUNING_CALL_AUDIT frame=%d callIndex=%d runtimeState=%s owner=%d actor=%s component=%s"),
+				static_cast<int32>(CurrentFrameNumber),
+				CurrentCallIndex,
+				GetRuntimeStateName(RuntimeState),
+				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+				*GetOwner()->GetName(),
+				*GetName());
+		}
 	}
 
 	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
@@ -5846,39 +5896,57 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 			// PHASE 2 PROXIMAL MODIFIER RECONCILE:
 			// Ensure both the intended movement type and the record held by PhysicsControl are Simulated.
-			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
-
-			const FPhysicsBodyModifierRecord* RecordBefore = PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName);
+			const FName ModifierRecordName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+			const FPhysicsBodyModifierRecord* RecordBefore = PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierRecordName);
 			const EPhysicsMovementType ModBefore = RecordBefore ? RecordBefore->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
 
-			bool bReconciled = false;
-			if (ModBefore != EPhysicsMovementType::Simulated)
+			int32 RetryApplied = 0;
+			PhysicsControl->SetBodyModifierMovementType(ModifierRecordName, EPhysicsMovementType::Simulated, false, true);
+
+			const FPhysicsBodyModifierRecord* RecordAfter = PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierRecordName);
+			EPhysicsMovementType ModAfter = RecordAfter ? RecordAfter->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
+
+			if (ModAfter != EPhysicsMovementType::Simulated)
 			{
-				PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
-				bReconciled = true;
+				PhysicsControl->SetBodyModifierMovementType(ModifierRecordName, EPhysicsMovementType::Simulated, false, true);
+				RetryApplied = 1;
+
+				const FPhysicsBodyModifierRecord* RecordFinal = PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierRecordName);
+				ModAfter = RecordFinal ? RecordFinal->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
 			}
 
-			const FPhysicsBodyModifierRecord* RecordAfter = PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName);
-			const EPhysicsMovementType ModAfter = RecordAfter ? RecordAfter->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
+			const USkeletalMeshComponent* const Mesh = GetMeshComponent();
+			const FBodyInstance* const BI = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
+			const int32 RawSim = (BI && BI->IsInstanceSimulatingPhysics()) ? 1 : 0;
 
-			// Narrow confirmation log
 			const FString ModBeforeName = GetPhysicsMovementTypeName(ModBefore);
 			const FString ModAfterName = GetPhysicsMovementTypeName(ModAfter);
 
-			if (ModBefore != EPhysicsMovementType::Simulated || bReconciled)
+			if (ModAfter != EPhysicsMovementType::Simulated || RetryApplied == 1 || RawSim != 1)
 			{
-				const USkeletalMeshComponent* const Mesh = GetMeshComponent();
-				const FBodyInstance* const BI = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
-				const int32 RawSim = (BI && BI->IsInstanceSimulatingPhysics()) ? 1 : 0;
-
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_MODIFIER_RECONCILE frame=%d tick=%d bone=%s rawSim=%d modifierBeforeName=%s modifierAfterName=%s reconciled=%d owner=%d actor=%s component=%s"),
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_SET_PRESERVED frame=%d tick=%d bone=%s modifierRecordName=%s modifierAfterName=%s rawSim=%d owner=%d actor=%s component=%s"),
 					static_cast<int32>(CurrentFrameNumber),
 					static_cast<int32>(BalanceEntryRootOnFrameCount),
 					*BoneName.ToString(),
+					*ModifierRecordName.ToString(),
+					*ModAfterName,
 					RawSim,
+					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+					*GetOwner()->GetName(),
+					*GetName());
+			}
+
+			if (ModBefore != EPhysicsMovementType::Simulated || RetryApplied == 1 || ModAfter != EPhysicsMovementType::Simulated)
+			{
+				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_MODIFIER_RECONCILE frame=%d tick=%d bone=%s modifierRecordName=%s modifierBeforeName=%s modifierAfterName=%s retryApplied=%d rawSim=%d owner=%d actor=%s component=%s"),
+					static_cast<int32>(CurrentFrameNumber),
+					static_cast<int32>(BalanceEntryRootOnFrameCount),
+					*BoneName.ToString(),
+					*ModifierRecordName.ToString(),
 					*ModBeforeName,
 					*ModAfterName,
-					bReconciled ? 1 : 0,
+					RetryApplied,
+					RawSim,
 					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
 					*GetOwner()->GetName(),
 					*GetName());
@@ -5997,9 +6065,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					*GetName());
 			}
 
-			static EPhysicsMovementType LastRootMovementType = EPhysicsMovementType::Static;
-			static bool LastRootQuarantined = false;
-			static int32 LastRootRawReadback = -2;
+			static TMap<UPhysAnimComponent*, EPhysicsMovementType> LastRootMovementTypes;
+			static TMap<UPhysAnimComponent*, bool> LastRootQuarantinedStates;
+			static TMap<UPhysAnimComponent*, int32> LastRootRawReadbacks;
+
+			const EPhysicsMovementType LastRootMovementType = LastRootMovementTypes.Contains(this) ? LastRootMovementTypes[this] : EPhysicsMovementType::Static;
+			const bool LastRootQuarantined = LastRootQuarantinedStates.Contains(this) ? LastRootQuarantinedStates[this] : false;
+			const int32 LastRootRawReadback = LastRootRawReadbacks.Contains(this) ? LastRootRawReadbacks[this] : -2;
 
 			const bool bStateChanged = (BodyModifierMovementType != LastRootMovementType) ||
 				(bPhase2RootAuthorityQuarantined != LastRootQuarantined) ||
@@ -6031,9 +6103,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 						CurrentCallIndex);
 				}
 
-				LastRootMovementType = BodyModifierMovementType;
-				LastRootQuarantined = bPhase2RootAuthorityQuarantined;
-				LastRootRawReadback = RawReadbackValue;
+				LastRootMovementTypes.FindOrAdd(this) = BodyModifierMovementType;
+				LastRootQuarantinedStates.FindOrAdd(this) = bPhase2RootAuthorityQuarantined;
+				LastRootRawReadbacks.FindOrAdd(this) = RawReadbackValue;
 			}
 		}
 
