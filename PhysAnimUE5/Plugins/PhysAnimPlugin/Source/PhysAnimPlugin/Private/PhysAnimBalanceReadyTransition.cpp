@@ -746,40 +746,40 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 									MaxAuditTargetDeltaBone = AuditBone;
 								}
 
-								if (bFirstLateValidateFrame)
-								{
-									const FPhysicsBodyModifierRecord* ModifierRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PhysAnimBridge::MakeBodyModifierName(AuditBone));
-									const EPhysicsMovementType ModifierType = ModifierRecord ? ModifierRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Simulated;
-									const bool bHeldTargetWritten = HoldRot != nullptr;
-									const float LinVel = AuditBody->GetUnrealWorldVelocity().Size();
-									const float AngVel = FMath::RadiansToDegrees(AuditBody->GetUnrealWorldAngularVelocityInRadians().Size());
-									const bool bPendingReset = Owner->GetPendingBodyModifierCachedResetNames().Contains(PhysAnimBridge::MakeBodyModifierName(AuditBone));
-									const bool bInAllowlist = BalanceTransitionSets::IsUpperBody(AuditBone);
-
-									UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PRE_UPPER_BODY_GATE_AUDIT bone=%s rawSim=%d modifier=%s heldWritten=%d targetDelta=%.2f linVel=%.2f angVel=%.2f pendingReset=%d holdActive=%d allowlist=%d"),
-										*AuditBone.ToString(), AuditBody->IsInstanceSimulatingPhysics() ? 1 : 0, 
-										UPhysAnimComponent::GetPhysicsMovementTypeName(ModifierType),
-										bHeldTargetWritten ? 1 : 0, TargetDeltaDeg, LinVel, AngVel, bPendingReset ? 1 : 0,
-										Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold ? 1 : 0,
-										bInAllowlist ? 1 : 0);
-								}
-							}
-
-							if (bFirstLateValidateFrame)
+							if (bFirstLateValidateFrame || bUpperBodyInstability)
 							{
-								UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
-									BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode),
-									Phase1TopologyRecord.UpperBodySimCount,
-									Phase1TopologyRecord.bPolicySuppressed ? 1 : 0,
-									Owner->CalculateCurrentPolicyInfluenceAlpha(Settings),
-									CertifiedLateValidationResult.QuietProofDurationSeconds,
-									Settings.BalancePhase1LateValidateRequiredSeconds,
-									Owner->GetPendingBodyModifierCachedResetNames().Num(),
-									*MaxAuditTargetDeltaBone.ToString(),
-									MaxAuditTargetDelta,
-									(LateValidationAccumulatedSeconds <= DeltaTime + KINDA_SMALL_NUMBER) ? 1 : 0);
-								bLoggedPhase1UpperBodyAudit = true;
+								const FPhysicsBodyModifierRecord* ModifierRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PhysAnimBridge::MakeBodyModifierName(AuditBone));
+								const EPhysicsMovementType ModifierType = ModifierRecord ? ModifierRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Simulated;
+								const bool bHeldTargetWritten = HoldRot != nullptr;
+								const float LinVel = AuditBody->GetUnrealWorldVelocity().Size();
+								const float AngVel = FMath::RadiansToDegrees(AuditBody->GetUnrealWorldAngularVelocityInRadians().Size());
+								const bool bPendingReset = Owner->GetPendingBodyModifierCachedResetNames().Contains(PhysAnimBridge::MakeBodyModifierName(AuditBone));
+								const bool bInAllowlist = BalanceTransitionSets::IsUpperBody(AuditBone);
+
+								UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PRE_UPPER_BODY_GATE_AUDIT bone=%s rawSim=%d modifier=%s heldWritten=%d targetDelta=%.2f linVel=%.2f angVel=%.2f pendingReset=%d holdActive=%d allowlist=%d"),
+									*AuditBone.ToString(), AuditBody->IsInstanceSimulatingPhysics() ? 1 : 0, 
+									UPhysAnimComponent::GetPhysicsMovementTypeName(ModifierType),
+									bHeldTargetWritten ? 1 : 0, TargetDeltaDeg, LinVel, AngVel, bPendingReset ? 1 : 0,
+									Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold ? 1 : 0,
+									bInAllowlist ? 1 : 0);
 							}
+						}
+
+						if (bFirstLateValidateFrame || bUpperBodyInstability)
+						{
+							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
+								BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode),
+								Phase1TopologyRecord.UpperBodySimCount,
+								Phase1TopologyRecord.bPolicySuppressed ? 1 : 0,
+								Owner->CalculateCurrentPolicyInfluenceAlpha(Settings),
+								CertifiedLateValidationResult.QuietProofDurationSeconds,
+								Settings.BalancePhase1LateValidateRequiredSeconds,
+								Owner->GetPendingBodyModifierCachedResetNames().Num(),
+								*MaxAuditTargetDeltaBone.ToString(),
+								MaxAuditTargetDelta,
+								(LateValidationAccumulatedSeconds <= DeltaTime + KINDA_SMALL_NUMBER) ? 1 : 0);
+							bLoggedPhase1UpperBodyAudit = true;
+						}
 						}
 
 						const TArray<FName>& PendingResets = Owner->GetPendingBodyModifierCachedResetNames();
@@ -1316,6 +1316,23 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			const bool bPreRootOnShellSafetyProofSatisfied = CurrentResult.bPreRootOnShellSafetyProofSatisfied;
 			const bool bRootOnReadinessProven = CurrentResult.bRootOnReadinessProven;
 
+			TArray<FString> UnsatisfiedGates;
+			if (!bRootValiditySatisfied) UnsatisfiedGates.Add(TEXT("root_topology_mismatch"));
+			if (!bSimCoverageSatisfied) UnsatisfiedGates.Add(TEXT("sim_coverage_regressed"));
+			if (!bUpperBodyHoldSatisfied) UnsatisfiedGates.Add(TEXT("upper_body_instability"));
+			if (!bBodyMotionThresholdsSatisfied) UnsatisfiedGates.Add(TEXT("body_motion_thresholds_exceeded"));
+			if (!bTargetContinuitySatisfied) UnsatisfiedGates.Add(TEXT("target_discontinuity"));
+			if (!bQuietProofSatisfied) UnsatisfiedGates.Add(TEXT("quiet_proof_unsatisfied"));
+			if (!bExpectedReleaseSatisfied) UnsatisfiedGates.Add(TEXT("expected_release_never_reached"));
+			if (!bRootOnReadinessShellHoldSatisfied) UnsatisfiedGates.Add(TEXT("shell_hold_unsatisfied"));
+			if (!bRootOnReadinessFinalBringUpControlSettled) UnsatisfiedGates.Add(TEXT("bringup_not_settled"));
+			if (!bRootOnReadinessPolicyInfluenceSettled) UnsatisfiedGates.Add(TEXT("policy_influence_not_settled"));
+			if (!bPreRootOnShellSafetyProofSatisfied) UnsatisfiedGates.Add(TEXT("shell_safety_proof_unsatisfied"));
+			if (!bRootOnReadinessProven) UnsatisfiedGates.Add(TEXT("ready_proof_failed"));
+
+			const FString PrimaryReason = UnsatisfiedGates.Num() > 0 ? UnsatisfiedGates[0] : TEXT("unknown");
+			const FString SecondaryReason = UnsatisfiedGates.Num() > 1 ? UnsatisfiedGates[1] : TEXT("none");
+
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_CONVERGENCE_REPORT upperBodyHold=%d simCoverage=%d targetContinuity=%d quietProof=%d bodyMotion=%d rootValidity=%d expectedRelease=%d readyProven=%d shellHold=%d bringUp=%d policyInfl=%d shellSafety=%d lateValidateSeconds=%.2f/%.2f shellHoldSeconds=%.2f/%.2f quietProofSeconds=%.2f/%.2f shellProofSeconds=%.2f/%.2f"),
 				bUpperBodyHoldSatisfied ? 1 : 0,
 				bSimCoverageSatisfied ? 1 : 0,
@@ -1372,7 +1389,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_NOT_SETTLED cause=%s"), *Cause);
 			}
 
-			if (!bPreRootOnShellSafetyProofSatisfied)
+			if (!bPreRootOnShellSafetyProofSatisfied && PrimaryReason.Equals(TEXT("shell_safety_proof_unsatisfied")))
 			{
 				const float ProofSeconds = RootOnReadinessShellProofAccumulatedSeconds;
 				const float RequiredProofSeconds = Settings.BalancePhase2PreRootOnShellProofRequiredSeconds;
@@ -1404,85 +1421,86 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_UNSATISFIED cause=%s"), *Cause);
 			}
 
-			TArray<FString> UnsatisfiedGates;
-			if (!bRootValiditySatisfied) UnsatisfiedGates.Add(TEXT("root_topology_mismatch"));
-			if (!bSimCoverageSatisfied) UnsatisfiedGates.Add(TEXT("sim_coverage_regressed"));
-			if (!bUpperBodyHoldSatisfied) UnsatisfiedGates.Add(TEXT("upper_body_instability"));
-			if (!bBodyMotionThresholdsSatisfied) UnsatisfiedGates.Add(TEXT("body_motion_thresholds_exceeded"));
-			if (!bTargetContinuitySatisfied) UnsatisfiedGates.Add(TEXT("target_discontinuity"));
-			if (!bQuietProofSatisfied) UnsatisfiedGates.Add(TEXT("quiet_proof_unsatisfied"));
-			if (!bExpectedReleaseSatisfied) UnsatisfiedGates.Add(TEXT("expected_release_never_reached"));
-			if (!bRootOnReadinessShellHoldSatisfied) UnsatisfiedGates.Add(TEXT("shell_hold_unsatisfied"));
-			if (!bRootOnReadinessFinalBringUpControlSettled) UnsatisfiedGates.Add(TEXT("bringup_not_settled"));
-			if (!bRootOnReadinessPolicyInfluenceSettled) UnsatisfiedGates.Add(TEXT("policy_influence_not_settled"));
-			if (!bPreRootOnShellSafetyProofSatisfied) UnsatisfiedGates.Add(TEXT("shell_safety_proof_unsatisfied"));
-			if (!bRootOnReadinessProven) UnsatisfiedGates.Add(TEXT("ready_proof_failed"));
-
-			const FString PrimaryReason = UnsatisfiedGates.Num() > 0 ? UnsatisfiedGates[0] : TEXT("unknown");
-			const FString SecondaryReason = UnsatisfiedGates.Num() > 1 ? UnsatisfiedGates[1] : TEXT("none");
-
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_NONCONVERGENCE primary=%s secondary=%s"), *PrimaryReason, *SecondaryReason);
 
 			// DISTAL_FORENSIC_REPORT
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_CONVERGENCE_FORENSIC_REPORT_START"));
+			bool bAnyDistalContribution = false;
 			for (const FName DistalBoneName : PhysAnimBridge::GetControlledBoneNames())
 			{
-				if (!BalanceTransitionSets::IsDistalLowerLimb(DistalBoneName))
+				if (BalanceTransitionSets::IsDistalLowerLimb(DistalBoneName))
 				{
-					continue;
-				}
-
-				const bool bShouldBeKinematic = ShouldKeepBoneKinematic(DistalBoneName, Settings);
-				const EPhysicsMovementType ExpectedOwnership = bShouldBeKinematic ? EPhysicsMovementType::Kinematic : EPhysicsMovementType::Simulated;
-				
-				EPhysicsMovementType ModifierOwnership = EPhysicsMovementType::Simulated;
-				if (UPhysicsControlComponent* PhysicsControl = Owner->PhysicsControlComponent.Get())
-				{
-					const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(DistalBoneName);
-					if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName))
+					const int32 PersistentTicks = DistalBonePersistentTicks.Contains(DistalBoneName) ? DistalBonePersistentTicks[DistalBoneName] : 0;
+					const int32 ConsecutiveTicks = DistalBoneConsecutiveMismatchTicks.Contains(DistalBoneName) ? DistalBoneConsecutiveMismatchTicks[DistalBoneName] : 0;
+					if (PersistentTicks > 0 || ConsecutiveTicks > 0)
 					{
-						ModifierOwnership = Record->BodyModifier.ModifierData.MovementType;
+						bAnyDistalContribution = true;
+						break;
 					}
 				}
-
-				bool bRawSimulating = false;
-				FVector LinVel = FVector::ZeroVector;
-				FVector AngVel = FVector::ZeroVector;
-				if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
-				{
-					if (FBodyInstance* BI = Mesh->GetBodyInstance(DistalBoneName))
-					{
-						bRawSimulating = BI->IsInstanceSimulatingPhysics();
-						LinVel = BI->GetUnrealWorldVelocity();
-						AngVel = FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians());
-					}
-				}
-
-				const bool bHasPendingReset = Owner->GetPendingBodyModifierCachedResetNames().Contains(DistalBoneName);
-				const int32 PersistentTicks = DistalBonePersistentTicks.Contains(DistalBoneName) ? DistalBonePersistentTicks[DistalBoneName] : 0;
-				const int32 ConsecutiveTicks = DistalBoneConsecutiveMismatchTicks.Contains(DistalBoneName) ? DistalBoneConsecutiveMismatchTicks[DistalBoneName] : 0;
-				const bool bContributedToFailure = PersistentTicks > 0 || ConsecutiveTicks > 0;
-
-				float BoneMaxTargetDelta = 0.0f;
-				if (Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaBoneName == DistalBoneName)
-				{
-					BoneMaxTargetDelta = Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees;
-				}
-
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_BONE_FORENSIC: bone=%s expected=%d modifier=%d rawSim=%d linVel=%.1f angVel=%.1f targetDelta=%.2f pendingReset=%d persistentTicks=%d consecutiveTicks=%d contributed=%d"),
-					*DistalBoneName.ToString(),
-					static_cast<int32>(ExpectedOwnership),
-					static_cast<int32>(ModifierOwnership),
-					bRawSimulating ? 1 : 0,
-					LinVel.Size(),
-					AngVel.Size(),
-					BoneMaxTargetDelta,
-					bHasPendingReset ? 1 : 0,
-					PersistentTicks,
-					ConsecutiveTicks,
-					bContributedToFailure ? 1 : 0);
 			}
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_CONVERGENCE_FORENSIC_REPORT_END"));
+
+			if (bAnyDistalContribution)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_CONVERGENCE_FORENSIC_REPORT_START"));
+				for (const FName DistalBoneName : PhysAnimBridge::GetControlledBoneNames())
+				{
+					if (!BalanceTransitionSets::IsDistalLowerLimb(DistalBoneName))
+					{
+						continue;
+					}
+
+					const bool bShouldBeKinematic = ShouldKeepBoneKinematic(DistalBoneName, Settings);
+					const EPhysicsMovementType ExpectedOwnership = bShouldBeKinematic ? EPhysicsMovementType::Kinematic : EPhysicsMovementType::Simulated;
+					
+					EPhysicsMovementType ModifierOwnership = EPhysicsMovementType::Simulated;
+					if (UPhysicsControlComponent* PhysicsControl = Owner->PhysicsControlComponent.Get())
+					{
+						const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(DistalBoneName);
+						if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName))
+						{
+							ModifierOwnership = Record->BodyModifier.ModifierData.MovementType;
+						}
+					}
+
+					bool bRawSimulating = false;
+					FVector LinVel = FVector::ZeroVector;
+					FVector AngVel = FVector::ZeroVector;
+					if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
+					{
+						if (FBodyInstance* BI = Mesh->GetBodyInstance(DistalBoneName))
+						{
+							bRawSimulating = BI->IsInstanceSimulatingPhysics();
+							LinVel = BI->GetUnrealWorldVelocity();
+							AngVel = FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians());
+						}
+					}
+
+					const bool bHasPendingReset = Owner->GetPendingBodyModifierCachedResetNames().Contains(DistalBoneName);
+					const int32 PersistentTicks = DistalBonePersistentTicks.Contains(DistalBoneName) ? DistalBonePersistentTicks[DistalBoneName] : 0;
+					const int32 ConsecutiveTicks = DistalBoneConsecutiveMismatchTicks.Contains(DistalBoneName) ? DistalBoneConsecutiveMismatchTicks[DistalBoneName] : 0;
+					const bool bContributedToFailure = PersistentTicks > 0 || ConsecutiveTicks > 0;
+
+					float BoneMaxTargetDelta = 0.0f;
+					if (Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaBoneName == DistalBoneName)
+					{
+						BoneMaxTargetDelta = Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees;
+					}
+
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_BONE_FORENSIC: bone=%s expected=%d modifier=%d rawSim=%d linVel=%.1f angVel=%.1f targetDelta=%.2f pendingReset=%d persistentTicks=%d consecutiveTicks=%d contributed=%d"),
+						*DistalBoneName.ToString(),
+						static_cast<int32>(ExpectedOwnership),
+						static_cast<int32>(ModifierOwnership),
+						bRawSimulating ? 1 : 0,
+						LinVel.Size(),
+						AngVel.Size(),
+						BoneMaxTargetDelta,
+						bHasPendingReset ? 1 : 0,
+						PersistentTicks,
+						ConsecutiveTicks,
+						bContributedToFailure ? 1 : 0);
+				}
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_CONVERGENCE_FORENSIC_REPORT_END"));
+			}
 
 			const FString TimeoutReason = LateValidateBlockReason.IsEmpty()
 				? TEXT("phase1_no_convergence_path")
@@ -2737,16 +2755,41 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		Owner->bShellCorrectionStateLogged = true;
 	}
 
+		const bool bBypassReanchor = !OutSnapshot.bShellCorrectionOwnerActive && 
+			!bShellCorrectionActivelyAffecting &&
+			OutSnapshot.ShellOffsetDeltaAtCaptureCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm &&
+			OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond &&
+			OutSnapshot.ShellOffsetGrowthCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm &&
+			OutSnapshot.ShellVelocityGrowthCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond;
+
+		const bool bReanchorSatisfied = OutSnapshot.bTransitionShellReferenceReanchored || bBypassReanchor;
+
+		if (bBypassReanchor && !OutSnapshot.bTransitionShellReferenceReanchored)
+		{
+			if (Owner->bShellCorrectionStateLogged == false)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_REANCHOR_BYPASSED frame=%llu phase=%d shellCorrectionActive=%d activelyAffecting=%d offset=%.2f velocity=%.2f offsetGrowth=%.2f velocityGrowth=%.2f locked=%d reanchored=%d owner=%d actor=%s component=%s"),
+					GFrameCounter, static_cast<int32>(InternalPhase),
+					OutSnapshot.bShellCorrectionOwnerActive ? 1 : 0, bShellCorrectionActivelyAffecting ? 1 : 0,
+					OutSnapshot.ShellOffsetDeltaAtCaptureCm, OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond,
+					OutSnapshot.ShellOffsetGrowthCm, OutSnapshot.ShellVelocityGrowthCmPerSecond,
+					OutSnapshot.bTransitionOwnedShellLocked ? 1 : 0, OutSnapshot.bTransitionShellReferenceReanchored ? 1 : 0,
+					static_cast<int32>(EBalanceReadyConditionOwner::ShellAuthorityTransfer),
+					*Owner->GetOwner()->GetName(), *Owner->GetName());
+				Owner->bShellCorrectionStateLogged = true;
+			}
+		}
+
 	const bool bShellSafetySatisfied = 
-		OutSnapshot.RootOnReadinessShellProofDurationSeconds + KINDA_SMALL_NUMBER >=
-			Settings.BalancePhase2PreRootOnShellProofRequiredSeconds &&
+		(OutSnapshot.RootOnReadinessShellProofDurationSeconds + KINDA_SMALL_NUMBER >=
+			Settings.BalancePhase2PreRootOnShellProofRequiredSeconds || bBypassReanchor) &&
 		OutSnapshot.ShellOffsetDeltaAtCaptureCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm &&
 		OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond &&
 		OutSnapshot.ShellOffsetGrowthCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm &&
 		OutSnapshot.ShellVelocityGrowthCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond &&
 		!bShellCorrectionActivelyAffecting &&
 		OutSnapshot.bTransitionOwnedShellLocked &&
-		OutSnapshot.bTransitionShellReferenceReanchored &&
+		bReanchorSatisfied &&
 		!OutSnapshot.bTransitionShellReferenceReseededAfterLock;
 
 	if (Owner->bShellCorrectionStateLogged == false || GVerbosePhase1Forensics != 0)
@@ -3621,8 +3664,23 @@ bool FPhysAnimBalanceReadyTransition::ValidatePreRootOnShellSafetyProofSnapshot(
 		return false;
 	}
 
+	const float SignificantShellOffsetThresholdCm = 0.1f;
+	const float SignificantShellVelocityThresholdCmPerSecond = 1.0f;
+	const bool bShellCorrectionActivelyAffecting = Snapshot.bShellCorrectionOwnerActive && 
+		(Snapshot.ShellOffsetDeltaAtCaptureCm > SignificantShellOffsetThresholdCm || 
+		 Snapshot.ShellVelocityDeltaAtCaptureCmPerSecond > SignificantShellVelocityThresholdCmPerSecond);
+
+	const bool bBypassReanchor = !Snapshot.bShellCorrectionOwnerActive && 
+		!bShellCorrectionActivelyAffecting &&
+		Snapshot.ShellOffsetDeltaAtCaptureCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm &&
+		Snapshot.ShellVelocityDeltaAtCaptureCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond &&
+		Snapshot.ShellOffsetGrowthCm <= Settings.BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm &&
+		Snapshot.ShellVelocityGrowthCmPerSecond <= Settings.BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond;
+
+	const bool bReanchorSatisfied = Snapshot.bTransitionShellReferenceReanchored || bBypassReanchor;
+
 	if (!Snapshot.bTransitionOwnedShellLocked ||
-		!Snapshot.bTransitionShellReferenceReanchored ||
+		!bReanchorSatisfied ||
 		Snapshot.bTransitionShellReferenceReseededAfterLock)
 	{
 		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
@@ -3638,13 +3696,13 @@ bool FPhysAnimBalanceReadyTransition::ValidatePreRootOnShellSafetyProofSnapshot(
 		return false;
 	}
 
-	if (Snapshot.bShellCorrectionOwnerActive)
+	if (Snapshot.bShellCorrectionOwnerActive && !bBypassReanchor)
 	{
 		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
 		return false;
 	}
 
-	if (Snapshot.RootOnReadinessShellProofDurationSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2PreRootOnShellProofRequiredSeconds)
+	if (Snapshot.RootOnReadinessShellProofDurationSeconds + KINDA_SMALL_NUMBER < Settings.BalancePhase2PreRootOnShellProofRequiredSeconds && !bBypassReanchor)
 	{
 		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
 		return false;
