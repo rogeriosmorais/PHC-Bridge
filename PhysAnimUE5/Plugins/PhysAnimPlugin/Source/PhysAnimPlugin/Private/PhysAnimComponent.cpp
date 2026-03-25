@@ -7634,8 +7634,33 @@ void UPhysAnimComponent::ApplyControlTargets(
 		const bool bIsPhase1PolicyLoopSuppressed = bPhase1Prepare || bPhase1LateValidate;
 
 		bool bPolicyTargetsAppliedThisTick = true;
+		const int32 RootRawSimPost = (PelvisBodyScope && PelvisBodyScope->IsInstanceSimulatingPhysics()) ? 1 : 0;
+		const bool bSuppressPostShellPolicy =
+			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+			BalanceEntryRootOnFrameCount >= 4 &&
+			RootRawSimPost == 1 &&
+			LastRuntimeInstabilityDiagnostics.NumSimulatingBodies >= 6 &&
+			BalanceReadyTransition.GetDiagnostics().bShellMaterialGuardSuppressed;
 
-		if (!bIsPhase1PolicyLoopSuppressed && !bSuppressNormalPolicyOnRootReleaseFrame)
+		if (bSuppressPostShellPolicy)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_POST_SHELL_POLICY_SUPPRESSED frame=%d tick=%d normalWrites=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
+				static_cast<int32>(GFrameNumber),
+				static_cast<int32>(BalanceEntryRootOnFrameCount),
+				0,
+				ControlTargetDiagnostics.NumHeldTargetsWritten,
+				RootRawSimPost,
+				LastRuntimeInstabilityDiagnostics.NumSimulatingBodies,
+				PolicyInfluenceAlpha,
+				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+				*GetOwner()->GetName(),
+				*GetName());
+
+			ControlTargetDiagnostics.NumNormalPolicyTargetsWritten = 0;
+			bPolicyTargetsAppliedThisTick = false;
+		}
+
+		if (!bIsPhase1PolicyLoopSuppressed && !bSuppressNormalPolicyOnRootReleaseFrame && !bSuppressPostShellPolicy)
 		{
 			bPolicyTargetsAppliedLastFrame = true;
 			for (const TPair<FName, FQuat>& Pair : ControlRotations)

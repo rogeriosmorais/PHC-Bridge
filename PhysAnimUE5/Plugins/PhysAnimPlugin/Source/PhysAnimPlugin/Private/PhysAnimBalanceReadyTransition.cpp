@@ -1502,6 +1502,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			bPhase2RootAuthorityQuarantined = false;
 		}
 		CaptureFlipDiagnostics(Owner);
+		Diagnostics.bShellMaterialGuardSuppressed = false;
 		const bool bPelvisRequestedSim = Owner->WasPelvisSimulatingLastFrame();
 		const bool bPelvisActualSim = Owner->IsPelvisSimulatingNow();
 		const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
@@ -1598,7 +1599,8 @@ extern int32 GVerbosePhase2Forensics;
 				if (LastSuppressionFrame != GFrameCounter)
 				{
 					LastSuppressionFrame = GFrameCounter;
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SHELL_MATERIAL_GUARD_SUPPRESSED frame=%d tick=%d shellOffsetDelta=%.2f shellVelocityDelta=%.2f rootActualSim=%d simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+						Diagnostics.bShellMaterialGuardSuppressed = true;
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SHELL_MATERIAL_GUARD_SUPPRESSED frame=%d tick=%d shellOffsetDelta=%.2f shellVelocityDelta=%.2f rootActualSim=%d simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
 						GFrameCounter, Phase2GuardTickCount, Diagnostics.BaselineShellOffset, Diagnostics.BaselineShellVel,
 						bPelvisActualSim ? 1 : 0, Diagnostics.SimCountPost,
 						CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,

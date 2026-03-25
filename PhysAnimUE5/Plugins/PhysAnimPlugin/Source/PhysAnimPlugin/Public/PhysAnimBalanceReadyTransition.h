@@ -284,6 +284,7 @@ struct FBalanceReadyTransitionDiagnostics
 	FVector PelvisAngularVelPost = FVector::ZeroVector;
 	
 	bool bShellContributed = false;
+	bool bShellMaterialGuardSuppressed = false;
 	bool bPolicyWroteTargets = false;
 	bool bResetScheduled = false;
 	bool bResetApplied = false;
@@ -377,6 +378,7 @@ public:
 			Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
 	}
 
+	const FBalanceReadyTransitionDiagnostics& GetDiagnostics() const { return Diagnostics; }
 	static bool IsProximal(FName BoneName);
 	float GetRootBodyModifierSoftSimAlpha() const;
 	float GetProximalControlSoftAlpha(FName BoneName) const;
