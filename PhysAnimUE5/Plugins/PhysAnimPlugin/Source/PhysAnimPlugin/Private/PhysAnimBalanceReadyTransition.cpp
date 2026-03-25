@@ -234,6 +234,9 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	bLoggedPhase1UpperBodyAudit = false;
 	bLoggedPhase2EntryAudit = false;
 	bLoggedPhase2FirstFailureAudit = false;
+	bLoggedPhase3EntryAudit = false;
+	bLoggedPhase3FirstFailureAudit = false;
+	bLoggedPhase2ReadyForPhase3 = false;
 	EntryHoldRotations.Empty();
 	DistalBoneMismatchTicks.Empty();
 	DistalBoneConsecutiveMismatchTicks.Empty();
@@ -1600,13 +1603,16 @@ extern int32 GVerbosePhase2Forensics;
 				{
 					LastSuppressionFrame = GFrameCounter;
 						Diagnostics.bShellMaterialGuardSuppressed = true;
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SHELL_MATERIAL_GUARD_SUPPRESSED frame=%d tick=%d shellOffsetDelta=%.2f shellVelocityDelta=%.2f rootActualSim=%d simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
-						GFrameCounter, Phase2GuardTickCount, Diagnostics.BaselineShellOffset, Diagnostics.BaselineShellVel,
-						bPelvisActualSim ? 1 : 0, Diagnostics.SimCountPost,
-						CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
-						CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
-						static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase2_shell_correction_material"))),
-						*Owner->GetOwner()->GetName(), *Owner->GetName());
+						if (!bLoggedPhase2ReadyForPhase3)
+						{
+							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SHELL_MATERIAL_GUARD_SUPPRESSED frame=%d tick=%d shellOffsetDelta=%.2f shellVelocityDelta=%.2f rootActualSim=%d simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+							GFrameCounter, Phase2GuardTickCount, Diagnostics.BaselineShellOffset, Diagnostics.BaselineShellVel,
+							bPelvisActualSim ? 1 : 0, Diagnostics.SimCountPost,
+							CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+							CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+							static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase2_shell_correction_material"))),
+							*Owner->GetOwner()->GetName(), *Owner->GetName());
+						}
 				}
 			}
 			else
@@ -1819,17 +1825,97 @@ extern int32 GVerbosePhase2Forensics;
 		if (PhaseTimeSeconds > Settings.BalancePhase2GuardWindowDuration)
 		{
 			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_READY_FOR_PHASE3"));
-			SetPhase(EBalanceReadyTransitionPhase::BRT_Phase3_Settle, Owner);
+			bLoggedPhase2ReadyForPhase3 = true;
+			SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3, Owner);
+
+			if (!bLoggedPhase3EntryAudit)
+			{
+				USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
+				FBodyInstance* const RootBI = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+				const bool bRootRawSim = RootBI ? RootBI->IsInstanceSimulatingPhysics() : false;
+				
+				const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+				const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PelvisModifierName);
+				const EPhysicsMovementType PelvisModifierType = PelvisRecord ? PelvisRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
+
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_ENTRY_AUDIT frame=%d tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPre=%d simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+					static_cast<int32>(GFrameCounter),
+					static_cast<int32>(Phase2GuardTickCount),
+					bRootRawSim ? 1 : 0,
+					bRootRawSim ? 1 : 0, // Pelvis is root
+					PelvisModifierType == EPhysicsMovementType::Simulated ? TEXT("Simulated") : (PelvisModifierType == EPhysicsMovementType::Kinematic ? TEXT("Kinematic") : TEXT("Static")),
+					Diagnostics.SimCountPre,
+					Diagnostics.SimCountPost,
+					CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+					CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
+					*Owner->GetOwner()->GetName(),
+					*Owner->GetName());
+				bLoggedPhase3EntryAudit = true;
+			}
 		}
+	}
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3)
+	{
+		SetPhase(EBalanceReadyTransitionPhase::BRT_Phase3_Settle, Owner);
 		return;
 	}
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
+		if (!bLoggedPhase3PreGuardRootState)
+		{
+			USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
+			FBodyInstance* const RootBI = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+			const bool bRootRawSim = RootBI ? RootBI->IsInstanceSimulatingPhysics() : false;
+
+			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+			const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PelvisModifierName);
+			const EPhysicsMovementType PelvisModifierType = PelvisRecord ? PelvisRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_PRE_GUARD_ROOT_STATE frame=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+				static_cast<int32>(GFrameCounter),
+				bRootRawSim ? 1 : 0,
+				bRootRawSim ? 1 : 0,
+				PelvisModifierType == EPhysicsMovementType::Simulated ? TEXT("Simulated") : (PelvisModifierType == EPhysicsMovementType::Kinematic ? TEXT("Kinematic") : TEXT("Static")),
+				Diagnostics.SimCountPost,
+				CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+				CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase3_pre_guard_root_state"))),
+				*Owner->GetOwner()->GetName(),
+				*Owner->GetName());
+			bLoggedPhase3PreGuardRootState = true;
+		}
+
 		FString Phase3Violation;
 		if (!ValidatePhase3Continuity(Owner, Settings, Phase3Violation))
 		{
 			Diagnostics.FailureReason = Phase3Violation;
+			if (!bLoggedPhase3FirstFailureAudit)
+			{
+				USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
+				FBodyInstance* const RootBI = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+				const bool bRootRawSim = RootBI ? RootBI->IsInstanceSimulatingPhysics() : false;
+
+				const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+				const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PelvisModifierName);
+				const EPhysicsMovementType PelvisModifierType = PelvisRecord ? PelvisRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
+
+				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE3_FIRST_FAILURE_AUDIT frame=%d reason=%s tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+					static_cast<int32>(GFrameCounter),
+					*Phase3Violation,
+					static_cast<int32>(Phase2GuardTickCount), // This might be stale if we're in Settle, but at least we have a tick
+					bRootRawSim ? 1 : 0,
+					bRootRawSim ? 1 : 0,
+					PelvisModifierType == EPhysicsMovementType::Simulated ? TEXT("Simulated") : (PelvisModifierType == EPhysicsMovementType::Kinematic ? TEXT("Kinematic") : TEXT("Static")),
+					Diagnostics.SimCountPost,
+					CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+					CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Phase3Violation)),
+					*Owner->GetOwner()->GetName(),
+					*Owner->GetName());
+				bLoggedPhase3FirstFailureAudit = true;
+			}
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 			return;
 		}
@@ -1867,6 +1953,9 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	{
 		return;
 	}
+
+	PreviousPhase = InternalPhase;
+	InternalPhase = NewPhase;
 
 	if (Owner &&
 		(NewPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || NewPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate) &&
@@ -2853,6 +2942,11 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	ResetCertifiedHandoffState();
 	Phase1TopologyRecord = {};
 	bHasPhase1TopologyRecord = false;
+	bLoggedPhase2EntryAudit = false;
+	bLoggedPhase2FirstFailureAudit = false;
+	bLoggedPhase3EntryAudit = false;
+	bLoggedPhase3FirstFailureAudit = false;
+	bLoggedPhase2ReadyForPhase3 = false;
 	LoggedSuppressedDistalBones.Empty();
 	LoggedProximalPromotions.Empty();
 	LoggedProximalStates.Empty();

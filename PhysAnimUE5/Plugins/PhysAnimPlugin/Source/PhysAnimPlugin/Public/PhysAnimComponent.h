@@ -1056,6 +1056,7 @@ private:
 	bool bLastAppliedPresentationRootSimulationEnabled = false;
 	int32 HipQuarantineTicksRemaining = 0;
 	uint32 BalanceEntryRootOnFrameCount = 0;
+	uint32 BalanceEntrySettleFrameCount = 0;
 	float LastHipQuarantineLeftPreDeltaDegrees = 0.0f;
 	float LastHipQuarantineRightPreDeltaDegrees = 0.0f;
 	double StabilizationStressTestStartTimeSeconds = -1.0;

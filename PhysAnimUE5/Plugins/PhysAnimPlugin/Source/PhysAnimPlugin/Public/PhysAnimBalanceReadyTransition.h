@@ -11,6 +11,7 @@ enum class EBalanceReadyTransitionPhase : uint8
 	BRT_Phase1_Prepare,
 	BRT_Phase1_LateValidate,
 	BRT_Phase2_RootOn,
+	BRT_Phase2_ReadyForPhase3,
 	BRT_Phase3_Settle,
 	BRT_Succeeded,
 	BRT_Failed,
@@ -359,6 +360,7 @@ public:
 	const FString& GetSafePhase2DenialReason() const { return SafePhase2DenialReason; }
 
 	EBalanceReadyTransitionPhase GetPhase() const { return InternalPhase; }
+	EBalanceReadyTransitionPhase GetPreviousPhase() const { return PreviousPhase; }
 	int32 GetPhase2GuardTickCount() const { return Phase2GuardTickCount; }
 	const FString& GetBlockReason() const { return Diagnostics.BlockReason; }
 	const FString& GetFailureReason() const { return Diagnostics.FailureReason; }
@@ -420,6 +422,7 @@ private:
 	void CaptureFlipDiagnostics(class UPhysAnimComponent* Owner);
 
 	EBalanceReadyTransitionPhase InternalPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
+	EBalanceReadyTransitionPhase PreviousPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
 	FString RequestReason;
 	float StableHoldAccumulatedSeconds = 0.0f;
 	float PhaseTimeSeconds = 0.0f;
@@ -456,6 +459,10 @@ private:
 	bool bLoggedPhase1UpperBodyAudit = false;
 	bool bLoggedPhase2EntryAudit = false;
 	bool bLoggedPhase2FirstFailureAudit = false;
+	bool bLoggedPhase3EntryAudit = false;
+	bool bLoggedPhase3FirstFailureAudit = false;
+	bool bLoggedPhase3PreGuardRootState = false;
+	bool bLoggedPhase2ReadyForPhase3 = false;
 	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
 
 
