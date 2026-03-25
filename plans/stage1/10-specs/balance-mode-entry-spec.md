@@ -41,6 +41,14 @@ Interpretation rules:
 - Phase 1 topology intent and raw body sim state are not guaranteed to be frame-synchronous; violations must be tracked according to the truth-model confirmation rules.
 - Topology changes are ownership changes, not mere tuning changes.
 
+## Authority by phase
+
+| Phase | Authority source order | Tolerated mismatches | Hard-failure mismatches |
+| :--- | :--- | :--- | :--- |
+| `Phase 1` | `topology intent` -> `raw body state` -> `modifier-record state` | Same-frame intent/raw disagreement during ownership application; stale modifier record that has not yet been next-frame confirmed; raw quietness still deciding physical viability while modifier state catches up | Frozen topology contradicted by confirmed post-update state; simulated bones receiving forbidden held writes; kinematic bones treated as success from stale modifier evidence alone |
+| `RootOn` | `topology intent` -> same-tick `raw body end state` -> `modifier-record state` | Probe-time omission such as skipped `UpdateControls()` does not decide success by itself; preserved proximal bones may temporarily show `modifier=Kinematic` with `rawSim=1`; shell state without material shell influence | Certified topology not preserved by same-tick end state; root simulation dropped; policy leak; shell material influence; confirmed same-tick end-state evidence that the preserved set no longer satisfies RootOn |
+| `Settle` | `topology intent` -> post-RootOn `raw body state` -> `modifier-record state` | Short-lived modifier lag while the accepted post-RootOn topology remains physically coherent; diagnostics may record modifier/raw disagreement without using it as the first deciding failure when continuity still holds | Post-RootOn continuity breaks the accepted topology; root simulation drops; instability/spike failure; confirmed preserved-set loss after RootOn |
+
 ## Phase 1 write-routing contract
 
 During Prepare and LateValidate:
@@ -96,6 +104,8 @@ During RootOn and its guard window, the following must be treated as distinct ob
 1. frozen / certified topology intent
 2. modifier-record ownership
 3. raw body simulation state
+
+For tick-level RootOn pass / fail decisions, same-tick end-state evaluation must still resolve success from the certified topology plus the observed raw end state, even if an intermediate probe path such as `UpdateControls()` is skipped.
 
 Interpretation rules:
 
