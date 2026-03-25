@@ -974,6 +974,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			bSkipUpdateControls = true;
 			SkipReason = TEXT("first_post_quarantine_rooton_frame");
 		}
+		else if (BalanceEntryRootOnFrameCount == 1 && !bPelvisSimAfterTuning && TotalSimAfterTuning == 5)
+		{
+			bSkipUpdateControls = true;
+			SkipReason = TEXT("rooton_tick1_entry_probe");
+		}
 
 		if (const UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
 		{
@@ -1224,7 +1229,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	if (bSkipUpdateControls)
 	{
-		const bool bIsApprovedSkipLog = (bIsTick2Skip || bIsTick3Skip || (bIsRealRootOnTick4 && EffectiveSkipReason == TEXT("rooton_tick4_collapse_probe")));
+		const bool bIsApprovedSkipLog = (bIsTick2Skip || bIsTick3Skip || 
+			(BalanceEntryRootOnFrameCount == 1 && EffectiveSkipReason == TEXT("rooton_tick1_entry_probe")) ||
+			(bIsRealRootOnTick4 && EffectiveSkipReason == TEXT("rooton_tick4_collapse_probe")));
 		if (bIsApprovedSkipLog)
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_SKIPPED_ON_ENTRY frame=%llu reason=%s"), GFrameCounter, *EffectiveSkipReason);
@@ -1385,7 +1392,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		
 		const bool bShouldEmitPostAudit = (BalanceEntryRootOnFrameCount == 1) || (BalanceEntryRootOnFrameCount == 2) || (BalanceEntryRootOnFrameCount == 4) || bPostTrackedValueChanged;
 		const bool bSuppressLogOnSkip = (bSkipUpdateControls && !bPostTrackedValueChanged) ||
-			((BalanceEntryRootOnFrameCount == 2 || BalanceEntryRootOnFrameCount == 4) && bSkipUpdateControls && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn) ||
+			((BalanceEntryRootOnFrameCount == 1 || BalanceEntryRootOnFrameCount == 2 || BalanceEntryRootOnFrameCount == 4) && bSkipUpdateControls && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn) ||
 			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
 
 		if (bShouldEmitPostAudit && !bSuppressLogOnSkip)
