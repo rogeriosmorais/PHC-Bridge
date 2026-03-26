@@ -405,7 +405,7 @@ public:
 	float GetProximalControlSoftAlpha(FName BoneName) const;
 	bool ShouldKeepBoneKinematic(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;
 	bool ShouldSuppressPolicyWrites(FName BoneName) const;
-	float GetTransitionExtraDampingMultiplier(const struct FPhysAnimStabilizationSettings& Settings) const;
+	float GetTransitionExtraDampingMultiplier(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;
 	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
 	static FString ClassifyLateValidationFailureReason(bool bUpperBodyInstability, bool bSimCoverageRegressed, bool bTargetDiscontinuity);
 	static bool IsLateValidationUpperBodyViolation(bool bRawSimViolation, bool bMotionViolation, bool bPendingResetViolation);

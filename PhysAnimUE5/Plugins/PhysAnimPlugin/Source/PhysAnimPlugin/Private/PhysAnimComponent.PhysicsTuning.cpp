@@ -880,7 +880,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale;
 		ControlMultiplier.AngularExtraDampingMultiplier =
 			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale *
-			BalanceReadyTransition.GetTransitionExtraDampingMultiplier(EffectiveSettings);
+			BalanceReadyTransition.GetTransitionExtraDampingMultiplier(BoneName, EffectiveSettings);
 
 		if (bHipQuarantineActiveThisFrame && (BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
@@ -919,8 +919,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				{
 					const float LinSpeed = BodyInst->GetUnrealWorldVelocity().Size();
 					const float AngSpeed = BodyInst->GetUnrealWorldAngularVelocityInRadians().Size();
-					const float ExtraDamping = BalanceReadyTransition.GetTransitionExtraDampingMultiplier(EffectiveSettings);
+					const float ExtraDamping = BalanceReadyTransition.GetTransitionExtraDampingMultiplier(BoneName, EffectiveSettings);
 					
+					if (BalanceEntryRootOnFrameCount == 1 && (BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03"))
+					{
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_SPINE_EFFECTIVE_ROUTING bone=%s softAlpha=%.4f extraDampingMultiplier=%.2f"),
+							*BoneName.ToString(), ControlMultiplier.AngularStrengthMultiplier, ExtraDamping);
+					}
+
 					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_SPINE_STATE source=%s bone=%s rawSim=%d modifier=%s linSpeed=%.2f angSpeed=%.2f controlAlpha=%.4f extraDampingMultiplier=%.2f"),
 						BalanceEntryRootOnFrameCount == 1 ? TEXT("post_tuning_tick1") : TEXT("pre_updatecontrols_tick2"),
 						*BoneName.ToString(),

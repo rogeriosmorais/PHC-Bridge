@@ -103,6 +103,12 @@ float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneNam
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
+		const bool bIsTick1 = PhaseTimeSeconds < 0.05f; // Estimated Tick 1 window
+		if (bIsTick1 && (BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03"))
+		{
+			return 0.0f;
+		}
+
 		return FMath::Clamp(
 			PhaseTimeSeconds / BalanceTransitionSets::Phase2AuthorityRampSeconds,
 			0.0f,
@@ -173,7 +179,7 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName, co
 }
 
 
-float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(const FPhysAnimStabilizationSettings& Settings) const
+float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(FName BoneName, const FPhysAnimStabilizationSettings& Settings) const
 {
 	if (!IsActive() && InternalPhase != EBalanceReadyTransitionPhase::BRT_SafeDenied)
 	{
@@ -189,6 +195,15 @@ float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(const
 		return Settings.BalanceActiveExtraDampingMultiplier;
 	}
 
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+	{
+		const bool bIsTick1 = PhaseTimeSeconds < 0.05f; // Estimated Tick 1 window
+		if (bIsTick1 && (BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03"))
+		{
+			return Settings.BalanceBootstrapExtraDampingMultiplier * 2.0f;
+		}
+	}
+
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
 		return Settings.BalanceBootstrapExtraDampingMultiplier * 2.0f;
@@ -201,20 +216,33 @@ float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(const
 
 void FPhysAnimBalanceReadyTransition::ReconcileKinematicHoldSet(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings)
 {
-	if (!Owner || InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase2_RootOn || Phase2GuardTickCount != 1)
+	if (!Owner || InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase2_RootOn || Phase2GuardTickCount > 2)
 	{
 		return;
 	}
 
-	const FName PreservedSpineBones[] = { TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") };
-	for (const FName BoneName : PreservedSpineBones)
+	const FName PreservedStabilizeBones[] = { PhysAnimBridge::GetRootBoneName(), TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") };
+	USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
+	
+	for (const FName BoneName : PreservedStabilizeBones)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_SPINE_ROUTING bone=%s intendedMovementType=%s softAlpha=%.4f extraDampingMultiplier=%.2f policySuppressed=%d shellCorrectionActive=%d"),
-			*BoneName.ToString(),
-			ShouldKeepBoneKinematic(BoneName, Settings) ? TEXT("Kinematic") : TEXT("Simulated"),
-			GetProximalControlSoftAlpha(BoneName),
-			GetTransitionExtraDampingMultiplier(Settings),
-			ShouldSuppressPolicy() ? 1 : 0,
-			ShouldSuppressShell() ? 0 : 1);
+		const float OverriddenAlpha = GetProximalControlSoftAlpha(BoneName);
+		const float OverriddenDamping = GetTransitionExtraDampingMultiplier(BoneName, Settings);
+
+		// Zero out velocities to prevent the solver jump
+		if (Mesh)
+		{
+			if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+			{
+				BI->SetLinearVelocity(FVector::ZeroVector, false);
+				BI->SetAngularVelocityInRadians(FVector::ZeroVector, false);
+			}
+		}
+
+		if (GVerbosePhase1Forensics != 0)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_BONE_ZERO_VELOCITY bone=%s tick=%d softAlpha=%.4f extraDampingMultiplier=%.2f"),
+				*BoneName.ToString(), Phase2GuardTickCount, OverriddenAlpha, OverriddenDamping);
+		}
 	}
 }
