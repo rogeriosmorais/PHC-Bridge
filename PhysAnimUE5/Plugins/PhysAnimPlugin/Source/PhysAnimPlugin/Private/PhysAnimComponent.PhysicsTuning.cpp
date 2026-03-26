@@ -933,7 +933,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 							*BoneName.ToString(), ControlMultiplier.AngularStrengthMultiplier, ExtraDamping);
 					}
 
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_SPINE_STATE source=%s bone=%s rawSim=%d modifier=%s linSpeed=%.2f angSpeed=%.2f controlAlpha=%.4f extraDampingMultiplier=%.2f"),
+					const TCHAR* StateLogName = (BoneName == "thigh_l" || BoneName == "thigh_r") ? TEXT("PHASE2_PRESERVED_THIGH_STATE") : TEXT("PHASE2_PRESERVED_SPINE_STATE");
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] %s source=%s bone=%s rawSim=%d modifier=%s linSpeed=%.2f angSpeed=%.2f controlAlpha=%.4f extraDampingMultiplier=%.2f"),
+						StateLogName,
 						BalanceEntryRootOnFrameCount == 1 ? TEXT("post_tuning_tick1") : TEXT("pre_updatecontrols_tick2"),
 						*BoneName.ToString(),
 						BodyInst->IsInstanceSimulatingPhysics() ? 1 : 0,

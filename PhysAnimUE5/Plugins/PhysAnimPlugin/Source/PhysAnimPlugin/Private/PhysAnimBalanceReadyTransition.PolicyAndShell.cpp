@@ -244,5 +244,13 @@ void FPhysAnimBalanceReadyTransition::ReconcileKinematicHoldSet(UPhysAnimCompone
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_BONE_ZERO_VELOCITY bone=%s tick=%d softAlpha=%.4f extraDampingMultiplier=%.2f"),
 				*BoneName.ToString(), Phase2GuardTickCount, OverriddenAlpha, OverriddenDamping);
 		}
+
+		if (Phase2GuardTickCount == 1 && (BoneName == "thigh_l" || BoneName == "thigh_r"))
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_THIGH_ROUTING bone=%s softAlpha=%.4f extraDampingMultiplier=%.2f policySuppressed=%d shellCorrectionActive=%d"),
+				*BoneName.ToString(), OverriddenAlpha, OverriddenDamping,
+				ShouldSuppressPolicy() ? 1 : 0,
+				Owner->IsTransitionOwnedShellLocked() ? 1 : 0);
+		}
 	}
 }
