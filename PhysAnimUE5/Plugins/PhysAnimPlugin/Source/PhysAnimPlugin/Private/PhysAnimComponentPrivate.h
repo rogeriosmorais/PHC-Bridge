@@ -91,7 +91,29 @@ namespace PhysAnimComponentInternal
 		{
 			return ((const FPhysAnimPhysicsControlAccessor*)ControlComp)->FindBodyModifierRecord(Name);
 		}
+
+		static FPhysicsBodyModifierRecord* GetMutableModifierRecord(UPhysicsControlComponent* ControlComp, const FName Name)
+		{
+			return ((FPhysAnimPhysicsControlAccessor*)ControlComp)->FindBodyModifierRecord(Name);
+		}
 	};
+
+	inline void ForceBodyModifierRecordState(
+		UPhysicsControlComponent* ControlComp,
+		const FName ModifierName,
+		const EPhysicsMovementType MovementType,
+		const float PhysicsBlendWeight,
+		const ECollisionEnabled::Type CollisionType,
+		const bool bUpdateKinematicFromSimulation)
+	{
+		if (FPhysicsBodyModifierRecord* const Record = FPhysAnimPhysicsControlAccessor::GetMutableModifierRecord(ControlComp, ModifierName))
+		{
+			Record->BodyModifier.ModifierData.MovementType = MovementType;
+			Record->BodyModifier.ModifierData.PhysicsBlendWeight = PhysicsBlendWeight;
+			Record->BodyModifier.ModifierData.CollisionType = CollisionType;
+			Record->BodyModifier.ModifierData.bUpdateKinematicFromSimulation = bUpdateKinematicFromSimulation;
+		}
+	}
 
 	constexpr double InitialPoseSearchWaitTimeoutSeconds = 2.0;
 	constexpr int32 NumBringUpGroups = 5;
@@ -693,6 +715,7 @@ namespace PhysAnimComponentInternal
 }
 
 using PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor;
+using PhysAnimComponentInternal::ForceBodyModifierRecordState;
 
 inline void ForceTPoseReferenceOntoMesh(USkeletalMeshComponent* const SkeletalMesh, UAnimSequence* const TPoseReference)
 {

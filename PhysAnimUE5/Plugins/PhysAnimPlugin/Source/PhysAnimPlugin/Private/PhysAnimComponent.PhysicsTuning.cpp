@@ -905,6 +905,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bIsRootBodyModifier &&
 			bPhase2RootOnGuardWindow &&
 			BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
+		const bool bIsCertifiedRootOnPreservedBone =
+			BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
+			BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03");
 
 		// During entry transition the component path keeps the root body modifier kinematic
 		// until the transition explicitly enters Phase 2 root-on. Once Phase 2 owns the guard
@@ -983,6 +986,19 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierCollisionType = ECollisionEnabled::NoCollision;
 			bUpdateKinematicFromSimulation = false;
 		}
+
+		const bool bRootOnApplicationTick =
+			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+			!bTransitionKeepsBoneKinematic &&
+			(bTransitionOwnsRootOnThisTick || (bIsCertifiedRootOnPreservedBone && bAllowRootBodyModifierSimulation));
+		if (bRootOnApplicationTick && (bIsRootBodyModifier || bIsCertifiedRootOnPreservedBone))
+		{
+			BodyModifierMovementType = EPhysicsMovementType::Simulated;
+			BodyModifierPhysicsBlendWeight = 1.0f;
+			BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
+			bUpdateKinematicFromSimulation = false;
+		}
+
 		if (bIsRootBodyModifier)
 		{
 			const float RootSoftSimAlpha = BalanceReadyTransition.GetRootBodyModifierSoftSimAlpha();
@@ -1154,6 +1170,38 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, (bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn));
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, false, false);
 		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, false, false);
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+			(bIsRootBodyModifier || bIsCertifiedRootOnPreservedBone))
+		{
+			ForceBodyModifierRecordState(
+				PhysicsControl,
+				ModifierName,
+				BodyModifierMovementType,
+				BodyModifierPhysicsBlendWeight,
+				BodyModifierCollisionType,
+				bUpdateKinematicFromSimulation);
+		}
+		if (bIsRootBodyModifier && bRootOnApplicationTick && BodyModifierMovementType == EPhysicsMovementType::Simulated)
+		{
+			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, false, false, false);
+			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
+			ForceBodyModifierRecordState(
+				PhysicsControl,
+				ModifierName,
+				EPhysicsMovementType::Simulated,
+				1.0f,
+				ECollisionEnabled::QueryAndPhysics,
+				false);
+			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+			{
+				if (FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(RootBoneNameInternal))
+				{
+					PelvisBody->SetInstanceSimulatePhysics(true, true);
+					PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
+					PelvisBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
+				}
+			}
+		}
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 

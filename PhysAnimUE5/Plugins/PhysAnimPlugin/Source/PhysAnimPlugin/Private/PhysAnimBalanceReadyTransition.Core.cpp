@@ -1515,94 +1515,82 @@ extern int32 GVerbosePhase2Forensics;
 			Diagnostics.PeakMaxBodyLinearSpeed > Settings.BalancePhase2AbortMaxBodyLinearSpeed ||
 			Diagnostics.PeakMaxBodyAngularSpeed > Settings.BalancePhase2AbortMaxBodyAngularSpeed)
 		{
-			const bool bRootOnOneStepExemption = (Owner->GetRuntimeState() == EPhysAnimRuntimeState::BalanceEntry_RootOn) &&
-				(Phase2GuardTickCount == 1) &&
-				(!bPelvisActualSim);
+			FName WorstLinearBone = NAME_None;
+			float WorstLinearSpeed = 0.0f;
+			FName WorstAngularBone = NAME_None;
+			float WorstAngularSpeed = 0.0f;
 
-			const bool bRootOnReleaseStepExemption = (Owner->GetRuntimeState() == EPhysAnimRuntimeState::BalanceEntry_RootOn) &&
-				(Phase2GuardTickCount == 2) &&
-				(bPelvisActualSim) &&
-				(Diagnostics.SimCountPost == 6);
-
-			if (!bRootOnOneStepExemption && !bRootOnReleaseStepExemption)
+			if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
 			{
-				FName WorstLinearBone = NAME_None;
-				float WorstLinearSpeed = 0.0f;
-				FName WorstAngularBone = NAME_None;
-				float WorstAngularSpeed = 0.0f;
-
-				if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
+				for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
 				{
-					for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+					const float BoneLinearSpeed = Mesh->GetPhysicsLinearVelocity(BoneName).Size();
+					if (BoneLinearSpeed > WorstLinearSpeed)
 					{
-						const float BoneLinearSpeed = Mesh->GetPhysicsLinearVelocity(BoneName).Size();
-						if (BoneLinearSpeed > WorstLinearSpeed)
-						{
-							WorstLinearSpeed = BoneLinearSpeed;
-							WorstLinearBone = BoneName;
-						}
+						WorstLinearSpeed = BoneLinearSpeed;
+						WorstLinearBone = BoneName;
+					}
 
-						const float BoneAngularSpeed = Mesh->GetPhysicsAngularVelocityInDegrees(BoneName).Size();
-						if (BoneAngularSpeed > WorstAngularSpeed)
-						{
-							WorstAngularSpeed = BoneAngularSpeed;
-							WorstAngularBone = BoneName;
-						}
+					const float BoneAngularSpeed = Mesh->GetPhysicsAngularVelocityInDegrees(BoneName).Size();
+					if (BoneAngularSpeed > WorstAngularSpeed)
+					{
+						WorstAngularSpeed = BoneAngularSpeed;
+						WorstAngularBone = BoneName;
 					}
 				}
+			}
 
-				const bool bLinearSpike =
-					Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed ||
-					Diagnostics.PeakMaxBodyLinearSpeed > Settings.BalancePhase2AbortMaxBodyLinearSpeed;
-				const bool bAngularSpike =
-					Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed ||
-					Diagnostics.PeakMaxBodyAngularSpeed > Settings.BalancePhase2AbortMaxBodyAngularSpeed;
-				const FName WorstSpikeBone =
-					Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed ||
-					Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed
-						? PhysAnimBridge::GetRootBoneName()
-						: (bLinearSpike && (!bAngularSpike || WorstLinearSpeed >= WorstAngularSpeed) ? WorstLinearBone : WorstAngularBone);
+			const bool bLinearSpike =
+				Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed ||
+				Diagnostics.PeakMaxBodyLinearSpeed > Settings.BalancePhase2AbortMaxBodyLinearSpeed;
+			const bool bAngularSpike =
+				Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed ||
+				Diagnostics.PeakMaxBodyAngularSpeed > Settings.BalancePhase2AbortMaxBodyAngularSpeed;
+			const FName WorstSpikeBone =
+				Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed ||
+				Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed
+					? PhysAnimBridge::GetRootBoneName()
+					: (bLinearSpike && (!bAngularSpike || WorstLinearSpeed >= WorstAngularSpeed) ? WorstLinearBone : WorstAngularBone);
 
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
-					TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_SPIKE_AUDIT frame=%d rootOnTick=%d maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s worstLinearSpeed=%.2f worstAngularSpeed=%.2f rootRawSim=%d pelvisModifier=%s totalSimCount=%d"),
-					static_cast<int32>(GFrameCounter),
-					Phase2GuardTickCount,
-					Diagnostics.PeakMaxBodyLinearSpeed,
-					Diagnostics.PeakMaxBodyAngularSpeed,
-					*WorstSpikeBone.ToString(),
-					WorstLinearSpeed,
-					WorstAngularSpeed,
-					bPelvisActualSim ? 1 : 0,
-					UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
-					Diagnostics.SimCountPost);
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_SPIKE_AUDIT frame=%d rootOnTick=%d maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s worstLinearSpeed=%.2f worstAngularSpeed=%.2f rootRawSim=%d pelvisModifier=%s totalSimCount=%d"),
+				static_cast<int32>(GFrameCounter),
+				Phase2GuardTickCount,
+				Diagnostics.PeakMaxBodyLinearSpeed,
+				Diagnostics.PeakMaxBodyAngularSpeed,
+				*WorstSpikeBone.ToString(),
+				WorstLinearSpeed,
+				WorstAngularSpeed,
+				bPelvisActualSim ? 1 : 0,
+				UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
+				Diagnostics.SimCountPost);
 
-				AbortReason = TEXT("phase2_root_on_spike");
-				if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed)
-				{
-					AbortDetail = FString::Printf(TEXT("rootLinearSpeed=%.1f/%.1f"), Diagnostics.RootSpeed, Settings.BalancePhase2AbortRootLinearSpeed);
-				}
-				else if (Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed)
-				{
-					AbortDetail = FString::Printf(TEXT("rootAngularSpeed=%.1f/%.1f"), Diagnostics.RootAngularSpeed, Settings.BalancePhase2AbortRootAngularSpeed);
-				}
-				else if (Diagnostics.BaselineShellOffset > Settings.BalancePhase2AbortShellOffsetDelta)
-				{
-					AbortDetail = FString::Printf(TEXT("shellOffsetDelta=%.1f/%.1f"), Diagnostics.BaselineShellOffset, Settings.BalancePhase2AbortShellOffsetDelta);
-				}
-				else if (Diagnostics.BaselineShellVel > Settings.BalancePhase2AbortShellVelocityDelta)
-				{
-					AbortDetail = FString::Printf(TEXT("shellVelocityDelta=%.1f/%.1f"), Diagnostics.BaselineShellVel, Settings.BalancePhase2AbortShellVelocityDelta);
-				}
-				else if (Diagnostics.PeakMaxBodyLinearSpeed > Settings.BalancePhase2AbortMaxBodyLinearSpeed)
-				{
-					AbortDetail = FString::Printf(TEXT("maxBodyLinearSpeed=%.1f/%.1f"), Diagnostics.PeakMaxBodyLinearSpeed, Settings.BalancePhase2AbortMaxBodyLinearSpeed);
-				}
-				else
-				{
-					AbortDetail = FString::Printf(TEXT("maxBodyAngularSpeed=%.1f/%.1f"), Diagnostics.PeakMaxBodyAngularSpeed, Settings.BalancePhase2AbortMaxBodyAngularSpeed);
-				}
+			AbortReason = TEXT("phase2_root_on_spike");
+			if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed)
+			{
+				AbortDetail = FString::Printf(TEXT("rootLinearSpeed=%.1f/%.1f"), Diagnostics.RootSpeed, Settings.BalancePhase2AbortRootLinearSpeed);
+			}
+			else if (Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed)
+			{
+				AbortDetail = FString::Printf(TEXT("rootAngularSpeed=%.1f/%.1f"), Diagnostics.RootAngularSpeed, Settings.BalancePhase2AbortRootAngularSpeed);
+			}
+			else if (Diagnostics.BaselineShellOffset > Settings.BalancePhase2AbortShellOffsetDelta)
+			{
+				AbortDetail = FString::Printf(TEXT("shellOffsetDelta=%.1f/%.1f"), Diagnostics.BaselineShellOffset, Settings.BalancePhase2AbortShellOffsetDelta);
+			}
+			else if (Diagnostics.BaselineShellVel > Settings.BalancePhase2AbortShellVelocityDelta)
+			{
+				AbortDetail = FString::Printf(TEXT("shellVelocityDelta=%.1f/%.1f"), Diagnostics.BaselineShellVel, Settings.BalancePhase2AbortShellVelocityDelta);
+			}
+			else if (Diagnostics.PeakMaxBodyLinearSpeed > Settings.BalancePhase2AbortMaxBodyLinearSpeed)
+			{
+				AbortDetail = FString::Printf(TEXT("maxBodyLinearSpeed=%.1f/%.1f"), Diagnostics.PeakMaxBodyLinearSpeed, Settings.BalancePhase2AbortMaxBodyLinearSpeed);
+			}
+			else
+			{
+				AbortDetail = FString::Printf(TEXT("maxBodyAngularSpeed=%.1f/%.1f"), Diagnostics.PeakMaxBodyAngularSpeed, Settings.BalancePhase2AbortMaxBodyAngularSpeed);
 			}
 		}
 
@@ -2221,12 +2209,64 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 					return;
 				}
+				static const FName RootOnApplicationBones[] =
+				{
+					TEXT("pelvis"),
+					TEXT("thigh_l"),
+					TEXT("thigh_r"),
+					TEXT("spine_01"),
+					TEXT("spine_02"),
+					TEXT("spine_03")
+				};
+				if (UPhysicsControlComponent* const PhysicsControl = Owner->PhysicsControlComponent.Get())
+				{
+					for (const FName BoneName : RootOnApplicationBones)
+					{
+						const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+						PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, false, false, false);
+						PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, 1.0f, false, false);
+						PhysicsControl->SetBodyModifierCollisionType(ModifierName, ECollisionEnabled::QueryAndPhysics, false, false);
+						PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
+						ForceBodyModifierRecordState(
+							PhysicsControl,
+							ModifierName,
+							EPhysicsMovementType::Simulated,
+							1.0f,
+							ECollisionEnabled::QueryAndPhysics,
+							false);
+					}
+				}
+				for (const FName BoneName : RootOnApplicationBones)
+				{
+					if (FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
+					{
+						BodyInstance->SetInstanceSimulatePhysics(true, true);
+					}
+				}
 				PelvisBody->SetBodyTransform(
 					BalanceTransitionSets::BuildWarmStartPelvisTransform(Mesh, SimulatingBones),
 					ETeleportType::TeleportPhysics,
 					true);
 				PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
 				PelvisBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_APPLIED pelvisRawSim=%d pelvisModifierName=%s simCountPre=%d"),
+					PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0,
+					([](UPhysAnimComponent* LocalOwner) -> const TCHAR*
+					{
+						if (UPhysicsControlComponent* const PhysicsControl = LocalOwner->PhysicsControlComponent.Get())
+						{
+							const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+							if (const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, PelvisModifierName))
+							{
+								return UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisRecord->BodyModifier.ModifierData.MovementType);
+							}
+						}
+						return TEXT("Unknown");
+					})(Owner),
+					Diagnostics.SimCountPre);
 
 				bPhase2RootAuthorityQuarantined = true;
 				Diagnostics.bSimFlipped = true;
