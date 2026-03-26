@@ -71,6 +71,55 @@ namespace
 		return true;
 	}
 
+	bool EvaluateBalanceModeSmokeOutcome(
+		const EPhysAnimRuntimeState RuntimeState,
+		const bool bInPublicBalanceEntryState,
+		const EPhysAnimRuntimeState PublicBalanceEntryState,
+		const bool bHasTransitionFailure,
+		const bool bHasSafePhase2Denial,
+		const FString& SafePhase2DenialReason,
+		const FString& BalanceReadyTransitionFailureReason,
+		FString& OutError)
+	{
+		OutError.Reset();
+
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+		{
+			return true;
+		}
+
+		if (bInPublicBalanceEntryState)
+		{
+			OutError = FString::Printf(
+				TEXT("[PhysAnimPieBalanceSmoke] Balance mode did not complete within the smoke window. state=%s."),
+				UPhysAnimComponent::GetRuntimeStateName(PublicBalanceEntryState));
+			return false;
+		}
+
+		if (RuntimeState == EPhysAnimRuntimeState::FailStopped || bHasTransitionFailure)
+		{
+			OutError = FString::Printf(
+				TEXT("[PhysAnimPieBalanceSmoke] Unsafe failure path observed. state=%s denial=%s fail=%s"),
+				UPhysAnimComponent::GetRuntimeStateName(RuntimeState),
+				*SafePhase2DenialReason,
+				*BalanceReadyTransitionFailureReason);
+			return false;
+		}
+
+		if (bHasSafePhase2Denial)
+		{
+			OutError = FString::Printf(
+				TEXT("[PhysAnimPieBalanceSmoke] Balance mode denied entry. reason=%s."),
+				*SafePhase2DenialReason);
+			return false;
+		}
+
+		OutError = FString::Printf(
+			TEXT("[PhysAnimPieBalanceSmoke] Expected active balance mode, but found state=%s."),
+			UPhysAnimComponent::GetRuntimeStateName(RuntimeState));
+		return false;
+	}
+
 	class FValidateBalanceModeSmokeOutcomeCommand final : public IAutomationLatentCommand
 	{
 	public:
@@ -107,37 +156,19 @@ namespace
 			const EPhysAnimRuntimeState RuntimeState = FoundComponent->GetRuntimeState();
 			EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
 			const bool bInPublicBalanceEntryState = FoundComponent->TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+			FString OutcomeError;
+			if (!EvaluateBalanceModeSmokeOutcome(
+				RuntimeState,
+				bInPublicBalanceEntryState,
+				PublicBalanceEntryState,
+				FoundComponent->HasBalanceReadyTransitionFailed(),
+				FoundComponent->HasSafePhase2Denial(),
+				FoundComponent->GetSafePhase2DenialReason(),
+				FoundComponent->GetBalanceReadyTransitionFailureReason(),
+				OutcomeError))
 			{
-				return true;
+				Test->AddError(OutcomeError);
 			}
-
-			if (bInPublicBalanceEntryState)
-			{
-				Test->AddError(FString::Printf(
-					TEXT("[PhysAnimPieBalanceSmoke] Balance mode did not complete within the smoke window. state=%s."),
-					UPhysAnimComponent::GetRuntimeStateName(PublicBalanceEntryState)));
-				return true;
-			}
-
-			if (RuntimeState == EPhysAnimRuntimeState::FailStopped || FoundComponent->HasBalanceReadyTransitionFailed())
-			{
-				Test->AddError(FString::Printf(
-					TEXT("[PhysAnimPieBalanceSmoke] Unsafe failure path observed. state=%s denial=%s fail=%s"),
-					UPhysAnimComponent::GetRuntimeStateName(RuntimeState),
-					*FoundComponent->GetSafePhase2DenialReason(),
-					*FoundComponent->GetBalanceReadyTransitionFailureReason()));
-				return true;
-			}
-
-			if (FoundComponent->HasSafePhase2Denial())
-			{
-				return true;
-			}
-
-			Test->AddError(FString::Printf(
-				TEXT("[PhysAnimPieBalanceSmoke] Expected active balance mode, but found state=%s."),
-				UPhysAnimComponent::GetRuntimeStateName(RuntimeState)));
 			return true;
 		}
 
@@ -2290,6 +2321,60 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Late-validation failure taxonomy has a truthful unknown fallback"),
 			FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(false, false, false),
 			FString(TEXT("phase1_late_validate_unknown")));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceModeSmokeOutcomeContractTest,
+		"PhysAnim.Component.BalanceModeSmokeOutcomeContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceModeSmokeOutcomeContractTest::RunTest(const FString& Parameters)
+	{
+		FString Error;
+		TestTrue(
+			TEXT("Balance smoke passes only when balance mode is active"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BalanceActive_Recovery,
+				false,
+				EPhysAnimRuntimeState::Uninitialized,
+				false,
+				false,
+				FString(),
+				FString(),
+				Error));
+		TestTrue(TEXT("Active balance mode does not emit an error"), Error.IsEmpty());
+
+		TestFalse(
+			TEXT("Balance smoke fails on safe deny"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BalanceSafeDeny,
+				false,
+				EPhysAnimRuntimeState::BalanceSafeDeny,
+				false,
+				true,
+				TEXT("phase2_root_on_spike"),
+				FString(),
+				Error));
+		TestTrue(
+			TEXT("Safe deny failure reports the denial reason"),
+			Error.Contains(TEXT("Balance mode denied entry. reason=phase2_root_on_spike.")));
+
+		TestFalse(
+			TEXT("Balance smoke fails on unsafe failure paths"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::FailStopped,
+				false,
+				EPhysAnimRuntimeState::FailStopped,
+				true,
+				false,
+				FString(),
+				TEXT("phase2_root_on_spike"),
+				Error));
+		TestTrue(
+			TEXT("Unsafe failure reports failure details"),
+			Error.Contains(TEXT("Unsafe failure path observed.")) && Error.Contains(TEXT("phase2_root_on_spike")));
+
 		return true;
 	}
 

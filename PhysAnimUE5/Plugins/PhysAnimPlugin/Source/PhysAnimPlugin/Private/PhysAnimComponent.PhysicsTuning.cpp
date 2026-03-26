@@ -1236,6 +1236,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, false, false);
 		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, false, false);
 
+		if (bIsRootBodyModifier &&
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
+			BodyModifierMovementType == EPhysicsMovementType::Simulated)
+		{
+			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
+		}
+
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 
 		if (bIsRootBodyModifier)
