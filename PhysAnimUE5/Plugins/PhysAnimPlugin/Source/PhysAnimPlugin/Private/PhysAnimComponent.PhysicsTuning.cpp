@@ -862,7 +862,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					BoneName,
 					EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend)
 				: 1.0f;
-
 		FPhysicsControlMultiplier ControlMultiplier;
 		float HandoverEasing = 1.0f;
 		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
@@ -880,7 +879,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		ControlMultiplier.AngularDampingRatioMultiplier =
 			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale;
 		ControlMultiplier.AngularExtraDampingMultiplier =
-			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale * 
+			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale *
 			BalanceReadyTransition.GetTransitionExtraDampingMultiplier(EffectiveSettings);
 
 		if (bHipQuarantineActiveThisFrame && (BoneName == "thigh_l" || BoneName == "thigh_r"))

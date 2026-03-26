@@ -23,6 +23,7 @@ namespace BalanceTransitionSets
 		FVector EvaluatedParentAnchorWorldCm = FVector::ZeroVector;
 		FVector EvaluatedChildAnchorWorldCm = FVector::ZeroVector;
 		float AnchorDistanceCm = 0.0f;
+		float ConstraintAngularErrorDeg = 0.0f;
 		float BodyOriginDistanceCm = 0.0f;
 		bool bConstraintFound = false;
 		bool bParentUsedBodyInstance = false;

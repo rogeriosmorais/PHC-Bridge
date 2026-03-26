@@ -2306,6 +2306,38 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					LiveChainCenterCm.Y,
 					LiveChainCenterCm.Z,
 					BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm);
+				static const TPair<FName, FName> PreservedProximalLinks[] =
+				{
+					TPair<FName, FName>(PhysAnimBridge::GetRootBoneName(), TEXT("thigh_l")),
+					TPair<FName, FName>(PhysAnimBridge::GetRootBoneName(), TEXT("thigh_r")),
+					TPair<FName, FName>(PhysAnimBridge::GetRootBoneName(), TEXT("spine_01")),
+					TPair<FName, FName>(TEXT("spine_01"), TEXT("spine_02")),
+					TPair<FName, FName>(TEXT("spine_02"), TEXT("spine_03"))
+				};
+				for (const TPair<FName, FName>& Link : PreservedProximalLinks)
+				{
+					BalanceTransitionSets::FDirectPelvisLinkForensicRecord LinkRecord;
+					BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, Link.Key, Link.Value, LinkRecord);
+					UE_LOG(
+						LogPhysAnimBridge,
+						Warning,
+						TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_CHAIN_LINK_PRE link=%s_%s errorCm=%.2f bodyOriginDistanceCm=%.2f constraintFound=%d"),
+						*Link.Key.ToString(),
+						*Link.Value.ToString(),
+						LinkRecord.bConstraintFound ? LinkRecord.AnchorDistanceCm : LinkRecord.BodyOriginDistanceCm,
+						LinkRecord.BodyOriginDistanceCm,
+						LinkRecord.bConstraintFound ? 1 : 0);
+					if (LinkRecord.bConstraintFound)
+					{
+						UE_LOG(
+							LogPhysAnimBridge,
+							Warning,
+							TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_CHAIN_ANGULAR_PRE link=%s_%s angularErrorDeg=%.2f"),
+							*Link.Key.ToString(),
+							*Link.Value.ToString(),
+							LinkRecord.ConstraintAngularErrorDeg);
+					}
+				}
 				if (PelvisProximalConstraintErrorCm > BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm)
 				{
 					Diagnostics.FailureReason = TEXT("phase2_constraint_error_too_high");
@@ -2363,17 +2395,17 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					TEXT("spine_02"),
 					TEXT("spine_03")
 				};
+				const bool bDirectPelvisLinksAlreadySatisfied =
+					PelvisThighLErrorCm <= BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm &&
+					PelvisThighRErrorCm <= BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm &&
+					PelvisSpine01ErrorCm <= BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm;
 				FTransform LivePelvisTransform = PelvisBody->GetUnrealWorldTransform();
 				FVector WarmStartLinearVelocity = FVector::ZeroVector;
 				FVector WarmStartAngularVelocityRadians = FVector::ZeroVector;
 				int32 WarmStartVelocitySamples = 0;
 				const UPhysicsAsset* const PhysicsAsset = Mesh->GetPhysicsAsset();
 				FQuat WarmStartPelvisRotation = LivePelvisTransform.GetRotation();
-				FVector4 WarmStartRotationAccumulator = FVector4(
-					WarmStartPelvisRotation.X,
-					WarmStartPelvisRotation.Y,
-					WarmStartPelvisRotation.Z,
-					WarmStartPelvisRotation.W);
+				FVector4 WarmStartRotationAccumulator = FVector4::Zero();
 				int32 WarmStartRotationSamples = 0;
 				for (const FName BoneName : RootOnApplicationBones)
 				{
@@ -2392,7 +2424,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 						}
 					}
 
-					if (!PhysicsAsset)
+					if (!PhysicsAsset || bDirectPelvisLinksAlreadySatisfied)
 					{
 						continue;
 					}
@@ -2454,7 +2486,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 						WarmStartVelocitySamples = 1;
 					}
 				}
-				if (WarmStartRotationSamples > 0)
+				if (!bDirectPelvisLinksAlreadySatisfied && WarmStartRotationSamples > 0)
 				{
 					WarmStartPelvisRotation = FQuat(
 						WarmStartRotationAccumulator.X,
@@ -2463,7 +2495,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 						WarmStartRotationAccumulator.W).GetNormalized();
 					LivePelvisTransform.SetRotation(WarmStartPelvisRotation);
 				}
-				if (PhysicsAsset)
+				if (PhysicsAsset && !bDirectPelvisLinksAlreadySatisfied)
 				{
 					FVector WarmStartPelvisLocation = FVector::ZeroVector;
 					int32 WarmStartPelvisLocationSamples = 0;
@@ -2500,6 +2532,21 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 						LivePelvisTransform.SetLocation(WarmStartPelvisLocation / static_cast<float>(WarmStartPelvisLocationSamples));
 					}
 				}
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WARM_START source=%s pelvisLoc=(%.2f,%.2f,%.2f) pelvisRot=(%.4f,%.4f,%.4f,%.4f) directLinks=(%.2f,%.2f,%.2f)"),
+					bDirectPelvisLinksAlreadySatisfied ? TEXT("live_pelvis_transform") : TEXT("constraint_rebuilt_pelvis_transform"),
+					LivePelvisTransform.GetLocation().X,
+					LivePelvisTransform.GetLocation().Y,
+					LivePelvisTransform.GetLocation().Z,
+					LivePelvisTransform.GetRotation().X,
+					LivePelvisTransform.GetRotation().Y,
+					LivePelvisTransform.GetRotation().Z,
+					LivePelvisTransform.GetRotation().W,
+					PelvisThighLErrorCm,
+					PelvisThighRErrorCm,
+					PelvisSpine01ErrorCm);
 				if (UPhysicsControlComponent* const PhysicsControl = Owner->PhysicsControlComponent.Get())
 				{
 					for (const FName BoneName : RootOnApplicationBones)

@@ -387,30 +387,39 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		if (bLatchedThisTick)
 		{
-			const FName BoneName = TEXT("spine_01");
 			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
 			{
-				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				static const FName SpineBones[] =
 				{
-					EPhysicsMovementType ModifierType = EPhysicsMovementType::Simulated;
-					if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+					TEXT("spine_01"),
+					TEXT("spine_02"),
+					TEXT("spine_03")
+				};
+				for (const FName& BoneName : SpineBones)
+				{
+					if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
 					{
-						const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-						if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, ModifierName))
+						EPhysicsMovementType ModifierType = EPhysicsMovementType::Simulated;
+						if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
 						{
-							ModifierType = Record->BodyModifier.ModifierData.MovementType;
+							const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+							if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, ModifierName))
+							{
+								ModifierType = Record->BodyModifier.ModifierData.MovementType;
+							}
 						}
+
+						float BoneMaxTargetDelta = 0.0f;
+						if (LastControlTargetDiagnostics.MaxTargetDeltaBoneName == BoneName)
+						{
+							BoneMaxTargetDelta = LastControlTargetDiagnostics.MaxTargetDeltaDegrees;
+						}
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_SPINE_TICK2_STATE source=%s bone=%s rawSim=%d modifier=%s linSpeed=%.1f angSpeed=%.1f targetDelta=%.2f pendingReset=%d policySuppressed=%d shellCorrectionActive=%d"),
+							Source, *BoneName.ToString(), BI->IsInstanceSimulatingPhysics() ? 1 : 0, GetPhysicsMovementTypeName(ModifierType),
+							BI->GetUnrealWorldVelocity().Size(), FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size(),
+							BoneMaxTargetDelta, PendingBodyModifierCachedResetNames.Contains(BoneName) ? 1 : 0,
+							BalanceReadyTransition.ShouldSuppressPolicy() ? 1 : 0, IsTransitionOwnedShellLocked() ? 1 : 0);
 					}
-					float BoneMaxTargetDelta = 0.0f;
-					if (LastControlTargetDiagnostics.MaxTargetDeltaBoneName == BoneName)
-					{
-						BoneMaxTargetDelta = LastControlTargetDiagnostics.MaxTargetDeltaDegrees;
-					}
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_SPINE01_TICK2_STATE source=%s rawSim=%d modifier=%s linSpeed=%.1f angSpeed=%.1f targetDelta=%.2f pendingReset=%d policySuppressed=%d shellCorrectionActive=%d"),
-						Source, BI->IsInstanceSimulatingPhysics() ? 1 : 0, GetPhysicsMovementTypeName(ModifierType),
-						BI->GetUnrealWorldVelocity().Size(), FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size(),
-						BoneMaxTargetDelta, PendingBodyModifierCachedResetNames.Contains(BoneName) ? 1 : 0,
-						BalanceReadyTransition.ShouldSuppressPolicy() ? 1 : 0, IsTransitionOwnedShellLocked() ? 1 : 0);
 				}
 			}
 		}

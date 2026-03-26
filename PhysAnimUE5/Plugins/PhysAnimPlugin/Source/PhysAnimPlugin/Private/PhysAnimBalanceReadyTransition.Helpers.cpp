@@ -37,30 +37,63 @@ namespace BalanceTransitionSets
 
 		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 		const FVector PelvisLocation = ResolveBodyOrBoneLocationCm(Mesh, RootBoneName);
-
-		FVector Sum = FVector::ZeroVector;
-		int32 Count = 0;
-		for (const FName BoneName : SimulatingBones)
+		const TSet<FName> SimulatingBoneSet(SimulatingBones);
+		struct FConstraintLink
 		{
-			if (!IsProximal(BoneName) && !IsUpperBody(BoneName))
+			FName ParentBoneName;
+			FName ChildBoneName;
+			bool bRequireParentSimulating = false;
+		};
+		static const FConstraintLink PreservedProximalLinks[] =
+		{
+			{ RootBoneName, TEXT("thigh_l"), false },
+			{ RootBoneName, TEXT("thigh_r"), false },
+			{ RootBoneName, TEXT("spine_01"), false },
+			{ TEXT("spine_01"), TEXT("spine_02"), true },
+			{ TEXT("spine_02"), TEXT("spine_03"), true }
+		};
+
+		float MaxConstraintErrorCm = 0.0f;
+		bool bHasConstraintEvidence = false;
+		FVector WorstLinkParentAnchorWorldCm = PelvisLocation;
+		FVector WorstLinkChildAnchorWorldCm = PelvisLocation;
+
+		for (const FConstraintLink& Link : PreservedProximalLinks)
+		{
+			if (!SimulatingBoneSet.Contains(Link.ChildBoneName))
 			{
 				continue;
 			}
 
-			Sum += ResolveBodyOrBoneLocationCm(Mesh, BoneName);
-			++Count;
+			if (Link.bRequireParentSimulating && !SimulatingBoneSet.Contains(Link.ParentBoneName))
+			{
+				continue;
+			}
+
+			FDirectPelvisLinkForensicRecord LinkRecord;
+			BuildDirectPelvisLinkForensicRecord(Mesh, Link.ParentBoneName, Link.ChildBoneName, LinkRecord);
+			const float LinkErrorCm = LinkRecord.bConstraintFound ? LinkRecord.AnchorDistanceCm : LinkRecord.BodyOriginDistanceCm;
+			if (!bHasConstraintEvidence || LinkErrorCm > MaxConstraintErrorCm)
+			{
+				bHasConstraintEvidence = true;
+				MaxConstraintErrorCm = LinkErrorCm;
+				WorstLinkParentAnchorWorldCm = LinkRecord.bConstraintFound
+					? LinkRecord.EvaluatedParentAnchorWorldCm
+					: ResolveBodyOrBoneLocationCm(Mesh, Link.ParentBoneName);
+				WorstLinkChildAnchorWorldCm = LinkRecord.bConstraintFound
+					? LinkRecord.EvaluatedChildAnchorWorldCm
+					: ResolveBodyOrBoneLocationCm(Mesh, Link.ChildBoneName);
+			}
 		}
 
-		if (Count > 0)
+		if (bHasConstraintEvidence)
 		{
-			OutLiveChainCenterCm = Sum / static_cast<float>(Count);
-		}
-		else
-		{
-			OutLiveChainCenterCm = PelvisLocation;
+			OutLiveChainCenterCm = (WorstLinkParentAnchorWorldCm + WorstLinkChildAnchorWorldCm) * 0.5f;
+			return MaxConstraintErrorCm;
 		}
 
-		return FVector::Dist(PelvisLocation, OutLiveChainCenterCm);
+		OutLiveChainCenterCm = PelvisLocation;
+		return 0.0f;
 	}
 
 	FTransform BuildWarmStartPelvisTransform(
