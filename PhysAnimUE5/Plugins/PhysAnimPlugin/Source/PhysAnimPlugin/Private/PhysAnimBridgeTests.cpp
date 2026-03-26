@@ -2379,6 +2379,47 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceRecoveryReadinessContractTest,
+		"PhysAnim.Component.BalanceRecoveryReadinessContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceRecoveryReadinessContractTest::RunTest(const FString& Parameters)
+	{
+		FString Error;
+		TestFalse(
+			TEXT("Recovery readiness stays strict when pelvis raw simulation is off"),
+			UPhysAnimComponent::EvaluateBalancePerturbationRuntimeReadiness(
+				EPhysAnimRuntimeState::BalanceActive_Recovery,
+				1,
+				2,
+				true,
+				1.0f,
+				0.95f,
+				false,
+				true,
+				false,
+				&Error));
+		TestEqual(TEXT("Recovery readiness reports pelvisBodyNotSimulating"), Error, FString(TEXT("pelvisBodyNotSimulating")));
+
+		TestTrue(
+			TEXT("Recovery readiness passes when pelvis raw simulation is on and no resets are pending"),
+			UPhysAnimComponent::EvaluateBalancePerturbationRuntimeReadiness(
+				EPhysAnimRuntimeState::BalanceActive_Recovery,
+				1,
+				2,
+				true,
+				1.0f,
+				0.95f,
+				false,
+				true,
+				true,
+				&Error));
+		TestTrue(TEXT("Successful recovery readiness does not emit an error"), Error.IsEmpty());
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimBalanceQuietHandoffSuppressionTest,
 		"PhysAnim.Component.BalanceQuietHandoffSuppression",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

@@ -8,11 +8,17 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery;
 }
 
-
-bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
-	const FPhysAnimStabilizationSettings& EffectiveSettings,
-	float* OutPolicyInfluenceAlpha,
-	FString* OutFailureReason) const
+bool UPhysAnimComponent::EvaluateBalancePerturbationRuntimeReadiness(
+	EPhysAnimRuntimeState RuntimeState,
+	int32 HighestUnlockedBringUpGroupIndex,
+	int32 BringUpGroupCount,
+	bool bFinalBringUpRampActive,
+	float PolicyInfluenceAlpha,
+	float PolicyInfluenceThreshold,
+	bool bHasPendingBodyModifierCachedResets,
+	bool bHasPelvisBody,
+	bool bPelvisBodySimulating,
+	FString* OutFailureReason)
 {
 	const auto SetFailure = [&](const TCHAR* Reason) -> bool
 	{
@@ -22,11 +28,9 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 		}
 		return false;
 	};
-
-	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
-	if (OutPolicyInfluenceAlpha)
+	if (OutFailureReason)
 	{
-		*OutPolicyInfluenceAlpha = PolicyInfluenceAlpha;
+		OutFailureReason->Reset();
 	}
 
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery)
@@ -34,45 +38,116 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 		return SetFailure(TEXT("invalidRuntimeState"));
 	}
 
-	const int32 CoreFinalBringUpGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
+	const int32 CoreFinalBringUpGroupIndex = FMath::Min(1, BringUpGroupCount - 1);
 	if (HighestUnlockedBringUpGroupIndex < CoreFinalBringUpGroupIndex)
 	{
 		return SetFailure(TEXT("bringUpIncomplete"));
 	}
 
-	if (!IsBringUpGroupControlRampActive(CoreFinalBringUpGroupIndex))
+	if (!bFinalBringUpRampActive)
 	{
 		return SetFailure(TEXT("finalGroupRampInactive"));
 	}
 
-	if (PolicyInfluenceAlpha < BalanceReadyPolicyInfluenceThreshold)
+	if (PolicyInfluenceAlpha < PolicyInfluenceThreshold)
 	{
 		return SetFailure(TEXT("policyInfluenceBelowThreshold"));
 	}
 
-	if (!PendingBodyModifierCachedResetNames.IsEmpty())
+	if (bHasPendingBodyModifierCachedResets)
 	{
 		return SetFailure(TEXT("deferredResetsPending"));
 	}
 
-	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
-	if (!Mesh)
+	if (!bHasPelvisBody)
 	{
 		return SetFailure(TEXT("pelvisBodyMissing"));
 	}
 
-	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
-	if (!PelvisBody)
-	{
-		return SetFailure(TEXT("pelvisBodyMissing"));
-	}
-
-	if (!PelvisBody->IsInstanceSimulatingPhysics())
+	if (!bPelvisBodySimulating)
 	{
 		return SetFailure(TEXT("pelvisBodyNotSimulating"));
 	}
 
 	return true;
+}
+
+
+bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	float* OutPolicyInfluenceAlpha,
+	FString* OutFailureReason) const
+{
+	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+	if (OutPolicyInfluenceAlpha)
+	{
+		*OutPolicyInfluenceAlpha = PolicyInfluenceAlpha;
+	}
+
+	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+	const int32 CoreFinalBringUpGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
+	const bool bReady = EvaluateBalancePerturbationRuntimeReadiness(
+		RuntimeState,
+		HighestUnlockedBringUpGroupIndex,
+		GetBringUpGroupCount(),
+		IsBringUpGroupControlRampActive(CoreFinalBringUpGroupIndex),
+		PolicyInfluenceAlpha,
+		BalanceReadyPolicyInfluenceThreshold,
+		!PendingBodyModifierCachedResetNames.IsEmpty(),
+		PelvisBody != nullptr,
+		PelvisBody && PelvisBody->IsInstanceSimulatingPhysics(),
+		OutFailureReason);
+	if (!bReady && RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+	{
+		EPhysicsMovementType PelvisModifierMovementType = EPhysicsMovementType::Static;
+		if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
+		{
+			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+			if (const FPhysicsBodyModifierRecord* const Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, PelvisModifierName))
+			{
+				PelvisModifierMovementType = Record->BodyModifier.ModifierData.MovementType;
+			}
+		}
+
+		int32 TotalSimCount = 0;
+		if (Mesh)
+		{
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				if (const FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
+				{
+					if (BodyInstance->IsInstanceSimulatingPhysics())
+					{
+						++TotalSimCount;
+					}
+				}
+			}
+		}
+
+		static TMap<const UPhysAnimComponent*, double> LastRecoveryFailureLogTimes;
+		const double WorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		double& LastRecoveryFailureLogTimeSeconds = LastRecoveryFailureLogTimes.FindOrAdd(this);
+		if (LastRecoveryFailureLogTimeSeconds <= 0.0 || (WorldTimeSeconds - LastRecoveryFailureLogTimeSeconds) >= 0.25)
+		{
+			const TCHAR* const FailureReasonText =
+				(OutFailureReason && !OutFailureReason->IsEmpty()) ? **OutFailureReason : TEXT("unknown");
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimBalance] RECOVERY_READY_FAIL runtimeState=%s reason=%s pelvisRawSim=%d pelvisModifier=%s pendingResets=%d policyAlpha=%.2f simCount=%d"),
+				GetRuntimeStateName(RuntimeState),
+				FailureReasonText,
+				PelvisBody && PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0,
+				GetPhysicsMovementTypeName(PelvisModifierMovementType),
+				PendingBodyModifierCachedResetNames.Num(),
+				PolicyInfluenceAlpha,
+				TotalSimCount);
+			LastRecoveryFailureLogTimeSeconds = WorldTimeSeconds;
+		}
+	}
+
+	return bReady;
 }
 
 
@@ -739,6 +814,61 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	BalanceReadyTransition.Cancel(this);
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Recovery);
+	static const FName RecoveryPreservedBones[] =
+	{
+		TEXT("pelvis"),
+		TEXT("thigh_l"),
+		TEXT("thigh_r"),
+		TEXT("spine_01"),
+		TEXT("spine_02"),
+		TEXT("spine_03")
+	};
+	for (const FName BoneName : RecoveryPreservedBones)
+	{
+		if (FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
+		{
+			BodyInstance->SetInstanceSimulatePhysics(true, true);
+		}
+	}
+	if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
+	{
+		for (const FName BoneName : RecoveryPreservedBones)
+		{
+			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
+			PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, 1.0f, false, false);
+			PhysicsControl->SetBodyModifierCollisionType(ModifierName, ECollisionEnabled::QueryAndPhysics, false, false);
+			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, false, false, false);
+		}
+	}
+	bLastAppliedPresentationRootSimulationEnabled = true;
+	int32 RecoveryTotalSimCount = 0;
+	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+	{
+		if (const FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
+		{
+			if (BodyInstance->IsInstanceSimulatingPhysics())
+			{
+				++RecoveryTotalSimCount;
+			}
+		}
+	}
+	EPhysicsMovementType RecoveryPelvisModifierMovementType = EPhysicsMovementType::Static;
+	if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
+	{
+		const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
+		if (const FPhysicsBodyModifierRecord* const Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, PelvisModifierName))
+		{
+			RecoveryPelvisModifierMovementType = Record->BodyModifier.ModifierData.MovementType;
+		}
+	}
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimBalance] RECOVERY_ENTRY_STATE pelvisRawSim=%d pelvisModifier=%s simCount=%d"),
+		PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0,
+		GetPhysicsMovementTypeName(RecoveryPelvisModifierMovementType),
+		RecoveryTotalSimCount);
 	ApplyStartupMovementLock();
 	ResetBridgeLocomotionAuthorityState();
 	const double CurrentWorldTimeSeconds = World->GetTimeSeconds();

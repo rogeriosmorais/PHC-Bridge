@@ -1005,10 +1005,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03");
 		const bool bIsTransitionOwnedSimSet =
 			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
-			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
+			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery) &&
 			(bIsRootBodyModifier || bIsPreservedTransitionBone);
 
-		// Keep the post-Phase1 certified sim set alive through RootOn and Settle.
+		// Keep the post-Phase1 certified sim set alive through RootOn, Settle, and the recovery handoff.
 		if (bIsTransitionOwnedSimSet)
 		{
 			BodyModifierMovementType = EPhysicsMovementType::Simulated;
@@ -1030,9 +1031,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		// Keep root simulation authoritative throughout RootOn and Settle.
 		if (bIsRootBodyModifier &&
-			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery) &&
 			(bLastAppliedPresentationRootSimulationEnabled ||
 			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
 			 BalanceReadyTransition.IsPhase2RootAuthorityQuarantined()))
 		{
 			if (BodyModifierMovementType == EPhysicsMovementType::Kinematic)
@@ -1237,7 +1241,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, false, false);
 
 		if (bIsRootBodyModifier &&
-			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery) &&
 			BodyModifierMovementType == EPhysicsMovementType::Simulated)
 		{
 			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);

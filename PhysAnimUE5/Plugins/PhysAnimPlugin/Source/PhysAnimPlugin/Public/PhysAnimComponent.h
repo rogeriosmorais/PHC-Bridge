@@ -1151,6 +1151,18 @@ public:
 		const FQuat& TargetRotation,
 		float MaxAngularStepDegrees);
 
+	static bool EvaluateBalancePerturbationRuntimeReadiness(
+		EPhysAnimRuntimeState RuntimeState,
+		int32 HighestUnlockedBringUpGroupIndex,
+		int32 BringUpGroupCount,
+		bool bFinalBringUpRampActive,
+		float PolicyInfluenceAlpha,
+		float PolicyInfluenceThreshold,
+		bool bHasPendingBodyModifierCachedResets,
+		bool bHasPelvisBody,
+		bool bPelvisBodySimulating,
+		FString* OutFailureReason = nullptr);
+
 	static bool EvaluateRuntimeInstability(
 		const FVector& RootLocationCm,
 		const FVector& RootLinearVelocityCmPerSecond,
