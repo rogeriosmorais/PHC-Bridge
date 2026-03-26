@@ -617,7 +617,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	auto TracePreservedTick4 = [&](const TCHAR* Source)
 	{
-		if (RuntimeStateAtTickStart == EPhysAnimRuntimeState::BalanceEntry_RootOn && RootOnTickAtTickStart == 3)
+		if (BalanceReadyTransition.GetPhase2GuardTickCount() == 4)
 		{
 			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
 			{
@@ -637,6 +637,36 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 						}
 
 						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_PRESERVED_SET_LATE_LOOP_STATE source=%s bone=%s rawSim=%d modifier=%d linSpeed=%.1f angSpeed=%.1f"),
+							Source, *BoneName.ToString(), BI->IsInstanceSimulatingPhysics() ? 1 : 0, (int32)ModifierType,
+							BI->GetUnrealWorldVelocity().Size(), FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size());
+					}
+				}
+			}
+		}
+	};
+
+	auto TraceUpperBodyTick4 = [&](const TCHAR* Source)
+	{
+		if (BalanceReadyTransition.GetPhase2GuardTickCount() == 4)
+		{
+			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+			{
+				static const FName UpperBodyBones[] = { TEXT("head"), TEXT("neck_01"), TEXT("clavicle_l"), TEXT("clavicle_r") };
+				for (const FName& BoneName : UpperBodyBones)
+				{
+					if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+					{
+						EPhysicsMovementType ModifierType = EPhysicsMovementType::Static;
+						if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+						{
+							const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+							if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, ModifierName))
+							{
+								ModifierType = Record->BodyModifier.ModifierData.MovementType;
+							}
+						}
+
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPPER_BODY_LATE_LOOP_STATE source=%s bone=%s rawSim=%d modifier=%d linSpeed=%.1f angSpeed=%.1f"),
 							Source, *BoneName.ToString(), BI->IsInstanceSimulatingPhysics() ? 1 : 0, (int32)ModifierType,
 							BI->GetUnrealWorldVelocity().Size(), FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size());
 					}
@@ -1636,6 +1666,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	PhysicsControl->UpdateControls(DeltaTime);
 	TraceSpineTick2(TEXT("post_updatecontrols"));
 	TracePreservedTick4(TEXT("post_updatecontrols_tick4"));
+	TraceUpperBodyTick4(TEXT("post_updatecontrols_tick4"));
 	ApplyPhase1PelvisRootCouplingSolve();
 
 	if (bIsRealRootOnTick4)
@@ -1925,6 +1956,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	FinalizeTraceFrame();
 	TraceSpineTick2(TEXT("end_of_tick"));
 	TracePreservedTick4(TEXT("end_of_tick_tick4"));
+	TraceUpperBodyTick4(TEXT("end_of_tick_tick4"));
 
 	if (bIsRealRootOnTick4)
 	{

@@ -1645,6 +1645,8 @@ extern int32 GVerbosePhase2Forensics;
 			float WorstLinearSpeed = 0.0f;
 			FName WorstAngularBone = NAME_None;
 			float WorstAngularSpeed = 0.0f;
+			FName LateLoopWorstBone = NAME_None;
+			float LateLoopWorstBoneLinearSpeed = -1.0f;
 
 			if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
 			{
@@ -1664,6 +1666,17 @@ extern int32 GVerbosePhase2Forensics;
 						WorstAngularBone = BoneName;
 					}
 				}
+
+				static const FName UpperBodyBones[] = { TEXT("head"), TEXT("neck_01"), TEXT("clavicle_l"), TEXT("clavicle_r") };
+				for (const FName& BoneName : UpperBodyBones)
+				{
+					const float BoneLinearSpeed = Mesh->GetPhysicsLinearVelocity(BoneName).Size();
+					if (BoneLinearSpeed > LateLoopWorstBoneLinearSpeed)
+					{
+						LateLoopWorstBoneLinearSpeed = BoneLinearSpeed;
+						LateLoopWorstBone = BoneName;
+					}
+				}
 			}
 
 			const bool bLinearSpike =
@@ -1678,10 +1691,11 @@ extern int32 GVerbosePhase2Forensics;
 					? PhysAnimBridge::GetRootBoneName()
 					: (bLinearSpike && (!bAngularSpike || WorstLinearSpeed >= WorstAngularSpeed) ? WorstLinearBone : WorstAngularBone);
 
+
 			UE_LOG(
 				LogPhysAnimBridge,
 				Warning,
-				TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_SPIKE_AUDIT frame=%d rootOnTick=%d maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s worstLinearSpeed=%.2f worstAngularSpeed=%.2f rootRawSim=%d pelvisModifier=%s totalSimCount=%d firstContradictionSource=%s"),
+				TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_SPIKE_AUDIT frame=%d rootOnTick=%d maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s worstLinearSpeed=%.2f worstAngularSpeed=%.2f rootRawSim=%d pelvisModifier=%s totalSimCount=%d firstContradictionSource=%s lateLoopWorstBone=%s"),
 				static_cast<int32>(GFrameCounter),
 				Phase2GuardTickCount,
 				Diagnostics.PeakMaxBodyLinearSpeed,
@@ -1692,7 +1706,8 @@ extern int32 GVerbosePhase2Forensics;
 				bPelvisActualSim ? 1 : 0,
 				UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
 				Diagnostics.SimCountPost,
-				*Diagnostics.FirstContradictionSource);
+				*Diagnostics.FirstContradictionSource,
+				*LateLoopWorstBone.ToString());
 
 			AbortReason = TEXT("phase2_root_on_spike");
 			if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed)
