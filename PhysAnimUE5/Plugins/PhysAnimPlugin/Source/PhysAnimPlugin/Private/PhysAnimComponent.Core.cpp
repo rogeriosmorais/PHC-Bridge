@@ -95,6 +95,32 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			? Mesh->GetBoneTransform(PelvisBoneIndex)
 			: PelvisBody->GetUnrealWorldTransform();
 	const UPhysicsAsset* const PhysicsAsset = Mesh->GetPhysicsAsset();
+	FQuat DesiredPelvisRotation = AnimatedPelvisTransform.GetRotation();
+	FString PelvisRotationSource = TEXT("animated_pelvis_rotation");
+	struct FPhase1ConstraintRotationSample
+	{
+		FName ChildBoneName = NAME_None;
+		FQuat CandidateRotation = FQuat::Identity;
+		FQuat ChildConstraintWorldRotation = FQuat::Identity;
+		FQuat ParentConstraintLocalRotation = FQuat::Identity;
+		FVector ChildAnchorWorld = FVector::ZeroVector;
+		bool bValid = false;
+		FString Source;
+	};
+	TArray<FPhase1ConstraintRotationSample> RotationSamples;
+	RotationSamples.Reserve(4);
+	{
+		FPhase1ConstraintRotationSample& LiveSample = RotationSamples.AddDefaulted_GetRef();
+		LiveSample.CandidateRotation = PelvisBody->GetUnrealWorldTransform().GetRotation();
+		LiveSample.Source = TEXT("live_pelvis_rotation");
+		LiveSample.bValid = true;
+	}
+	{
+		FPhase1ConstraintRotationSample& AnimatedSample = RotationSamples.AddDefaulted_GetRef();
+		AnimatedSample.CandidateRotation = AnimatedPelvisTransform.GetRotation();
+		AnimatedSample.Source = TEXT("animated_pelvis_rotation");
+		AnimatedSample.bValid = true;
+	}
 
 	FVector DesiredPelvisLocation = FVector::ZeroVector;
 	int32 DesiredPelvisLocationSamples = 0;
@@ -128,9 +154,18 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			Mesh->GetBodyInstance(ChildBoneName)
 				? Mesh->GetBodyInstance(ChildBoneName)->GetUnrealWorldTransform()
 				: Mesh->GetBoneTransform(ChildBoneIndex);
-		const FVector ChildAnchorWorld = ChildWorldTransform.TransformPosition(ConstraintInstance->Pos1);
-		const FVector PelvisAnchorOffsetWorld = AnimatedPelvisTransform.GetRotation().RotateVector(ConstraintInstance->Pos2);
-		DesiredPelvisLocation += ChildAnchorWorld - PelvisAnchorOffsetWorld;
+		FPhase1ConstraintRotationSample& ConstraintSample = RotationSamples.AddDefaulted_GetRef();
+		ConstraintSample.ChildBoneName = ChildBoneName;
+		ConstraintSample.CandidateRotation =
+			(ChildWorldTransform.GetRotation() *
+			 ConstraintInstance->GetRefFrame(EConstraintFrame::Frame1).GetRotation() *
+			 ConstraintInstance->GetRefFrame(EConstraintFrame::Frame2).GetRotation().Inverse()).GetNormalized();
+		ConstraintSample.ChildConstraintWorldRotation =
+			(ChildWorldTransform.GetRotation() * ConstraintInstance->GetRefFrame(EConstraintFrame::Frame1).GetRotation()).GetNormalized();
+		ConstraintSample.ParentConstraintLocalRotation = ConstraintInstance->GetRefFrame(EConstraintFrame::Frame2).GetRotation();
+		ConstraintSample.ChildAnchorWorld = ChildWorldTransform.TransformPosition(ConstraintInstance->Pos1);
+		ConstraintSample.Source = FString::Printf(TEXT("constraint_%s"), *ChildBoneName.ToString());
+		ConstraintSample.bValid = true;
 		++DesiredPelvisLocationSamples;
 	};
 
@@ -148,9 +183,138 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 		return;
 	}
 
+	const auto EvaluateCandidateRotation = [&](const FQuat& CandidateRotation, float& OutMaxAngularErrorDeg, float& OutMeanAngularErrorDeg)
+	{
+		OutMaxAngularErrorDeg = 0.0f;
+		OutMeanAngularErrorDeg = 0.0f;
+		int32 ValidConstraintCount = 0;
+		for (const FPhase1ConstraintRotationSample& Sample : RotationSamples)
+		{
+			if (!Sample.bValid || Sample.ParentConstraintLocalRotation.Equals(FQuat::Identity) && Sample.ChildConstraintWorldRotation.Equals(FQuat::Identity))
+			{
+				continue;
+			}
+
+			const FQuat ParentConstraintWorldRotation = (CandidateRotation * Sample.ParentConstraintLocalRotation).GetNormalized();
+			const float AngularErrorDeg =
+				FMath::RadiansToDegrees(ParentConstraintWorldRotation.AngularDistance(Sample.ChildConstraintWorldRotation));
+			OutMaxAngularErrorDeg = FMath::Max(OutMaxAngularErrorDeg, AngularErrorDeg);
+			OutMeanAngularErrorDeg += AngularErrorDeg;
+			++ValidConstraintCount;
+		}
+
+		if (ValidConstraintCount > 0)
+		{
+			OutMeanAngularErrorDeg /= static_cast<float>(ValidConstraintCount);
+		}
+	};
+	const auto EvaluateCandidateTiltDeg = [](const FQuat& CandidateRotation)
+	{
+		const FVector AxisX = CandidateRotation.GetAxisX();
+		const FVector AxisY = CandidateRotation.GetAxisY();
+		const FVector AxisZ = CandidateRotation.GetAxisZ();
+
+		const float DotX = FMath::Abs(FVector::DotProduct(AxisX, FVector::UpVector));
+		const float DotY = FMath::Abs(FVector::DotProduct(AxisY, FVector::UpVector));
+		const float DotZ = FMath::Abs(FVector::DotProduct(AxisZ, FVector::UpVector));
+
+		FVector CandidateUp = AxisZ;
+		if (DotX > DotY && DotX > DotZ)
+		{
+			CandidateUp = AxisX;
+		}
+		else if (DotY > DotX && DotY > DotZ)
+		{
+			CandidateUp = AxisY;
+		}
+
+		return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(CandidateUp, FVector::UpVector), -1.0f, 1.0f)));
+	};
+	float BestMaxAngularErrorDeg = TNumericLimits<float>::Max();
+	float BestMeanAngularErrorDeg = TNumericLimits<float>::Max();
+	float BestTiltDeg = TNumericLimits<float>::Max();
+	bool bFoundTiltAdmissibleCandidate = false;
+	for (const FPhase1ConstraintRotationSample& Sample : RotationSamples)
+	{
+		if (!Sample.bValid)
+		{
+			continue;
+		}
+
+		float CandidateMaxAngularErrorDeg = 0.0f;
+		float CandidateMeanAngularErrorDeg = 0.0f;
+		const float CandidateTiltDeg = EvaluateCandidateTiltDeg(Sample.CandidateRotation);
+		EvaluateCandidateRotation(Sample.CandidateRotation, CandidateMaxAngularErrorDeg, CandidateMeanAngularErrorDeg);
+		const bool bCandidateTiltAdmissible = CandidateTiltDeg <= BalanceQuietTiltThresholdDeg + KINDA_SMALL_NUMBER;
+		if (bCandidateTiltAdmissible)
+		{
+			if (!bFoundTiltAdmissibleCandidate ||
+				CandidateMaxAngularErrorDeg + KINDA_SMALL_NUMBER < BestMaxAngularErrorDeg ||
+				(FMath::IsNearlyEqual(CandidateMaxAngularErrorDeg, BestMaxAngularErrorDeg, KINDA_SMALL_NUMBER) &&
+				 CandidateMeanAngularErrorDeg + KINDA_SMALL_NUMBER < BestMeanAngularErrorDeg) ||
+				(FMath::IsNearlyEqual(CandidateMaxAngularErrorDeg, BestMaxAngularErrorDeg, KINDA_SMALL_NUMBER) &&
+				 FMath::IsNearlyEqual(CandidateMeanAngularErrorDeg, BestMeanAngularErrorDeg, KINDA_SMALL_NUMBER) &&
+				 CandidateTiltDeg + KINDA_SMALL_NUMBER < BestTiltDeg))
+			{
+				bFoundTiltAdmissibleCandidate = true;
+				BestMaxAngularErrorDeg = CandidateMaxAngularErrorDeg;
+				BestMeanAngularErrorDeg = CandidateMeanAngularErrorDeg;
+				BestTiltDeg = CandidateTiltDeg;
+				DesiredPelvisRotation = Sample.CandidateRotation;
+				PelvisRotationSource = Sample.Source;
+			}
+		}
+		else if (!bFoundTiltAdmissibleCandidate &&
+			(CandidateTiltDeg + KINDA_SMALL_NUMBER < BestTiltDeg ||
+			 (FMath::IsNearlyEqual(CandidateTiltDeg, BestTiltDeg, KINDA_SMALL_NUMBER) &&
+			  (CandidateMaxAngularErrorDeg + KINDA_SMALL_NUMBER < BestMaxAngularErrorDeg ||
+			   (FMath::IsNearlyEqual(CandidateMaxAngularErrorDeg, BestMaxAngularErrorDeg, KINDA_SMALL_NUMBER) &&
+			    CandidateMeanAngularErrorDeg + KINDA_SMALL_NUMBER < BestMeanAngularErrorDeg)))))
+		{
+			BestTiltDeg = CandidateTiltDeg;
+			BestMaxAngularErrorDeg = CandidateMaxAngularErrorDeg;
+			BestMeanAngularErrorDeg = CandidateMeanAngularErrorDeg;
+			DesiredPelvisRotation = Sample.CandidateRotation;
+			PelvisRotationSource = FString::Printf(TEXT("%s_tilt_fallback"), *Sample.Source);
+		}
+	}
+	DesiredPelvisLocation = FVector::ZeroVector;
+	DesiredPelvisLocationSamples = 0;
+	for (const FPhase1ConstraintRotationSample& Sample : RotationSamples)
+	{
+		if (!Sample.bValid || Sample.ParentConstraintLocalRotation.Equals(FQuat::Identity) && Sample.ChildAnchorWorld.IsNearlyZero())
+		{
+			continue;
+		}
+
+		if (PhysicsAsset)
+		{
+			const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(Sample.ChildBoneName, RootBoneName);
+			if (ConstraintIndex != INDEX_NONE && PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex))
+			{
+				const UPhysicsConstraintTemplate* const ConstraintTemplate = PhysicsAsset->ConstraintSetup[ConstraintIndex];
+				const FConstraintInstance* const ConstraintInstance = ConstraintTemplate ? &ConstraintTemplate->DefaultInstance : nullptr;
+				if (ConstraintInstance)
+				{
+					const FVector PelvisAnchorOffsetWorld = DesiredPelvisRotation.RotateVector(ConstraintInstance->Pos2);
+					DesiredPelvisLocation += Sample.ChildAnchorWorld - PelvisAnchorOffsetWorld;
+					++DesiredPelvisLocationSamples;
+				}
+			}
+		}
+	}
+	if (DesiredPelvisLocationSamples == 0)
+	{
+		if (!bPhase1PelvisCouplingSkipLogged)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING_SKIPPED reason=noResolvedAnchorLocations state=%s"), GetRuntimeStateName(RuntimeState));
+			bPhase1PelvisCouplingSkipLogged = true;
+		}
+		return;
+	}
 	DesiredPelvisLocation /= static_cast<float>(DesiredPelvisLocationSamples);
 	FTransform DesiredPelvisTransform = PelvisBody->GetUnrealWorldTransform();
-	DesiredPelvisTransform.SetRotation(AnimatedPelvisTransform.GetRotation());
+	DesiredPelvisTransform.SetRotation(DesiredPelvisRotation);
 	DesiredPelvisTransform.SetLocation(DesiredPelvisLocation);
 	PelvisBody->SetBodyTransform(DesiredPelvisTransform, ETeleportType::TeleportPhysics, true);
 	bPhase1PelvisCouplingSkipLogged = false;
@@ -165,10 +329,16 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	const float PelvisThighLErrorCm = PelvisThighLRecord.bConstraintFound ? PelvisThighLRecord.AnchorDistanceCm : PelvisThighLRecord.BodyOriginDistanceCm;
 	const float PelvisThighRErrorCm = PelvisThighRRecord.bConstraintFound ? PelvisThighRRecord.AnchorDistanceCm : PelvisThighRRecord.BodyOriginDistanceCm;
 	const float PelvisSpine01ErrorCm = PelvisSpine01Record.bConstraintFound ? PelvisSpine01Record.AnchorDistanceCm : PelvisSpine01Record.BodyOriginDistanceCm;
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING solvedLoc=(%.2f,%.2f,%.2f) pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLBodyOrigin=%.2f pelvisThighRBodyOrigin=%.2f pelvisSpine01BodyOrigin=%.2f state=%s"),
+	FString SolvedTiltSource;
+	const float SolvedTiltDeg = ResolvePhase1Uprightness(Mesh, GetOwner(), RootBoneName, SolvedTiltSource);
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING solvedLoc=(%.2f,%.2f,%.2f) rotationSource=%s solvedTiltDeg=%.2f tiltSource=%s tiltAdmissible=%d pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLBodyOrigin=%.2f pelvisThighRBodyOrigin=%.2f pelvisSpine01BodyOrigin=%.2f state=%s"),
 		SolvedPelvisLocation.X,
 		SolvedPelvisLocation.Y,
 		SolvedPelvisLocation.Z,
+		*PelvisRotationSource,
+		SolvedTiltDeg,
+		*SolvedTiltSource,
+		bFoundTiltAdmissibleCandidate ? 1 : 0,
 		PelvisThighLErrorCm,
 		PelvisThighRErrorCm,
 		PelvisSpine01ErrorCm,

@@ -2405,8 +2405,27 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				int32 WarmStartVelocitySamples = 0;
 				const UPhysicsAsset* const PhysicsAsset = Mesh->GetPhysicsAsset();
 				FQuat WarmStartPelvisRotation = LivePelvisTransform.GetRotation();
-				FVector4 WarmStartRotationAccumulator = FVector4::Zero();
 				int32 WarmStartRotationSamples = 0;
+				struct FDirectRotationCandidate
+				{
+					FQuat Rotation = FQuat::Identity;
+					FString Source;
+				};
+				struct FDirectConstraintSample
+				{
+					FName ChildBoneName = NAME_None;
+					FTransform ChildWorldTransform = FTransform::Identity;
+					FTransform ChildConstraintLocalFrame = FTransform::Identity;
+					FTransform PelvisConstraintLocalFrame = FTransform::Identity;
+					FQuat CandidateRotation = FQuat::Identity;
+					FVector ChildAnchorWorld = FVector::ZeroVector;
+					bool bValid = false;
+				};
+				TArray<FDirectRotationCandidate> RotationCandidates;
+				TArray<FDirectConstraintSample> DirectConstraintSamples;
+				RotationCandidates.Reserve(5);
+				DirectConstraintSamples.Reserve(3);
+				RotationCandidates.Add({ WarmStartPelvisRotation, TEXT("live_pelvis_transform") });
 				for (const FName BoneName : RootOnApplicationBones)
 				{
 					if (BoneName == PhysAnimBridge::GetRootBoneName())
@@ -2424,7 +2443,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 						}
 					}
 
-					if (!PhysicsAsset || bDirectPelvisLinksAlreadySatisfied)
+					if (!PhysicsAsset)
 					{
 						continue;
 					}
@@ -2456,12 +2475,99 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 						CandidateRotation.W *= -1.0f;
 					}
 
-					WarmStartRotationAccumulator += FVector4(
-						CandidateRotation.X,
-						CandidateRotation.Y,
-						CandidateRotation.Z,
-						CandidateRotation.W);
-					++WarmStartRotationSamples;
+					RotationCandidates.Add({
+						CandidateRotation,
+						FString::Printf(TEXT("constraint_%s"), *BoneName.ToString())
+					});
+
+					if (BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") || BoneName == TEXT("spine_01"))
+					{
+						FDirectConstraintSample& Sample = DirectConstraintSamples.AddDefaulted_GetRef();
+						Sample.ChildBoneName = BoneName;
+						Sample.ChildWorldTransform = ChildWorldTransform;
+						Sample.ChildConstraintLocalFrame = ChildConstraintLocalFrame;
+						Sample.PelvisConstraintLocalFrame = PelvisConstraintLocalFrame;
+						Sample.CandidateRotation = CandidateRotation;
+						Sample.ChildAnchorWorld = ChildWorldTransform.TransformPosition(ConstraintInstance->Pos1);
+						Sample.bValid = true;
+					}
+				}
+				TArray<const FDirectConstraintSample*> ValidDirectSamples;
+				ValidDirectSamples.Reserve(DirectConstraintSamples.Num());
+				for (const FDirectConstraintSample& Sample : DirectConstraintSamples)
+				{
+					if (Sample.bValid)
+					{
+						ValidDirectSamples.Add(&Sample);
+					}
+				}
+				for (int32 SampleIndex = 0; SampleIndex < ValidDirectSamples.Num(); ++SampleIndex)
+				{
+					const FDirectConstraintSample& SampleA = *ValidDirectSamples[SampleIndex];
+					for (int32 OtherIndex = SampleIndex + 1; OtherIndex < ValidDirectSamples.Num(); ++OtherIndex)
+					{
+						const FDirectConstraintSample& SampleB = *ValidDirectSamples[OtherIndex];
+						static const float BlendWeights[] = { 0.25f, 0.5f, 0.75f };
+						for (const float BlendWeight : BlendWeights)
+						{
+							FQuat BlendedRotation = FQuat::Slerp(SampleA.CandidateRotation, SampleB.CandidateRotation, BlendWeight).GetNormalized();
+							if ((WarmStartPelvisRotation | BlendedRotation) < 0.0f)
+							{
+								BlendedRotation *= -1.0f;
+							}
+
+							RotationCandidates.Add({
+								BlendedRotation,
+								FString::Printf(TEXT("blend_%s_%s_%.2f"), *SampleA.ChildBoneName.ToString(), *SampleB.ChildBoneName.ToString(), BlendWeight)
+							});
+						}
+					}
+				}
+				if (ValidDirectSamples.Num() >= 3)
+				{
+					FVector4 WeightedRotationSum = FVector4::Zero();
+					const FQuat ReferenceRotation = ValidDirectSamples[0]->CandidateRotation;
+					for (const FDirectConstraintSample* Sample : ValidDirectSamples)
+					{
+						FQuat AlignedRotation = Sample->CandidateRotation;
+						if ((ReferenceRotation | AlignedRotation) < 0.0f)
+						{
+							AlignedRotation *= -1.0f;
+						}
+
+						WeightedRotationSum.X += AlignedRotation.X;
+						WeightedRotationSum.Y += AlignedRotation.Y;
+						WeightedRotationSum.Z += AlignedRotation.Z;
+						WeightedRotationSum.W += AlignedRotation.W;
+					}
+
+					FQuat AveragedRotation(WeightedRotationSum.X, WeightedRotationSum.Y, WeightedRotationSum.Z, WeightedRotationSum.W);
+					if (AveragedRotation.SizeSquared() > KINDA_SMALL_NUMBER)
+					{
+						AveragedRotation.Normalize();
+					}
+					else
+					{
+						AveragedRotation = ReferenceRotation;
+					}
+					if ((WarmStartPelvisRotation | AveragedRotation) < 0.0f)
+					{
+						AveragedRotation *= -1.0f;
+					}
+
+					RotationCandidates.Add({
+						AveragedRotation,
+						TEXT("blend_all_direct")
+					});
+					FQuat LiveAveragedBlend = FQuat::Slerp(WarmStartPelvisRotation, AveragedRotation, 0.5f).GetNormalized();
+					if ((WarmStartPelvisRotation | LiveAveragedBlend) < 0.0f)
+					{
+						LiveAveragedBlend *= -1.0f;
+					}
+					RotationCandidates.Add({
+						LiveAveragedBlend,
+						TEXT("blend_live_all_direct_0.50")
+					});
 				}
 				if (WarmStartVelocitySamples > 0)
 				{
@@ -2486,16 +2592,58 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 						WarmStartVelocitySamples = 1;
 					}
 				}
-				if (!bDirectPelvisLinksAlreadySatisfied && WarmStartRotationSamples > 0)
+				const auto EvaluateCandidateRotation = [&](const FQuat& CandidateRotation, float& OutMaxAngularErrorDeg, float& OutMeanAngularErrorDeg)
 				{
-					WarmStartPelvisRotation = FQuat(
-						WarmStartRotationAccumulator.X,
-						WarmStartRotationAccumulator.Y,
-						WarmStartRotationAccumulator.Z,
-						WarmStartRotationAccumulator.W).GetNormalized();
+					OutMaxAngularErrorDeg = 0.0f;
+					OutMeanAngularErrorDeg = 0.0f;
+					int32 ValidSamples = 0;
+					for (const FDirectConstraintSample& Sample : DirectConstraintSamples)
+					{
+						if (!Sample.bValid)
+						{
+							continue;
+						}
+
+						const FQuat ParentConstraintWorldRotation =
+							(CandidateRotation * Sample.PelvisConstraintLocalFrame.GetRotation()).GetNormalized();
+						const FQuat ChildConstraintWorldRotation =
+							(Sample.ChildWorldTransform.GetRotation() * Sample.ChildConstraintLocalFrame.GetRotation()).GetNormalized();
+						const float AngularErrorDeg =
+							FMath::RadiansToDegrees(ParentConstraintWorldRotation.AngularDistance(ChildConstraintWorldRotation));
+						OutMaxAngularErrorDeg = FMath::Max(OutMaxAngularErrorDeg, AngularErrorDeg);
+						OutMeanAngularErrorDeg += AngularErrorDeg;
+						++ValidSamples;
+					}
+
+					if (ValidSamples > 0)
+					{
+						OutMeanAngularErrorDeg /= static_cast<float>(ValidSamples);
+					}
+				};
+				FString WarmStartRotationSource = TEXT("live_pelvis_transform");
+				if (DirectConstraintSamples.Num() > 0)
+				{
+					float BestMaxAngularErrorDeg = TNumericLimits<float>::Max();
+					float BestMeanAngularErrorDeg = TNumericLimits<float>::Max();
+					for (const FDirectRotationCandidate& Candidate : RotationCandidates)
+					{
+						float CandidateMaxAngularErrorDeg = 0.0f;
+						float CandidateMeanAngularErrorDeg = 0.0f;
+						EvaluateCandidateRotation(Candidate.Rotation, CandidateMaxAngularErrorDeg, CandidateMeanAngularErrorDeg);
+						if (CandidateMaxAngularErrorDeg + KINDA_SMALL_NUMBER < BestMaxAngularErrorDeg ||
+							(FMath::IsNearlyEqual(CandidateMaxAngularErrorDeg, BestMaxAngularErrorDeg, KINDA_SMALL_NUMBER) &&
+							 CandidateMeanAngularErrorDeg + KINDA_SMALL_NUMBER < BestMeanAngularErrorDeg))
+						{
+							BestMaxAngularErrorDeg = CandidateMaxAngularErrorDeg;
+							BestMeanAngularErrorDeg = CandidateMeanAngularErrorDeg;
+							WarmStartPelvisRotation = Candidate.Rotation;
+							WarmStartRotationSource = Candidate.Source;
+						}
+					}
+					WarmStartRotationSamples = DirectConstraintSamples.Num();
 					LivePelvisTransform.SetRotation(WarmStartPelvisRotation);
 				}
-				if (PhysicsAsset && !bDirectPelvisLinksAlreadySatisfied)
+				if (PhysicsAsset)
 				{
 					FVector WarmStartPelvisLocation = FVector::ZeroVector;
 					int32 WarmStartPelvisLocationSamples = 0;
@@ -2536,7 +2684,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					LogPhysAnimBridge,
 					Warning,
 					TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WARM_START source=%s pelvisLoc=(%.2f,%.2f,%.2f) pelvisRot=(%.4f,%.4f,%.4f,%.4f) directLinks=(%.2f,%.2f,%.2f)"),
-					bDirectPelvisLinksAlreadySatisfied ? TEXT("live_pelvis_transform") : TEXT("constraint_rebuilt_pelvis_transform"),
+					*WarmStartRotationSource,
 					LivePelvisTransform.GetLocation().X,
 					LivePelvisTransform.GetLocation().Y,
 					LivePelvisTransform.GetLocation().Z,
