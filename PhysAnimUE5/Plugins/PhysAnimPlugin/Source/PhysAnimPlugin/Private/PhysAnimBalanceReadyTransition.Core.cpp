@@ -2507,7 +2507,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					for (int32 OtherIndex = SampleIndex + 1; OtherIndex < ValidDirectSamples.Num(); ++OtherIndex)
 					{
 						const FDirectConstraintSample& SampleB = *ValidDirectSamples[OtherIndex];
-						static const float BlendWeights[] = { 0.25f, 0.5f, 0.75f };
+						static const float BlendWeights[] = { 0.10f, 0.25f, 0.33f, 0.50f, 0.67f, 0.75f, 0.90f };
 						for (const float BlendWeight : BlendWeights)
 						{
 							FQuat BlendedRotation = FQuat::Slerp(SampleA.CandidateRotation, SampleB.CandidateRotation, BlendWeight).GetNormalized();
@@ -2642,6 +2642,13 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					}
 					WarmStartRotationSamples = DirectConstraintSamples.Num();
 					LivePelvisTransform.SetRotation(WarmStartPelvisRotation);
+					UE_LOG(
+						LogPhysAnimBridge,
+						Warning,
+						TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_ROTATION_SCORE source=%s directMax=%.2f directMean=%.2f"),
+						*WarmStartRotationSource,
+						BestMaxAngularErrorDeg,
+						BestMeanAngularErrorDeg);
 				}
 				if (PhysicsAsset)
 				{
