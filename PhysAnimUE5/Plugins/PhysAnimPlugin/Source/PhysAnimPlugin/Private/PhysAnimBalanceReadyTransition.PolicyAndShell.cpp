@@ -96,15 +96,28 @@ float FPhysAnimBalanceReadyTransition::GetRootBodyModifierSoftSimAlpha() const
 
 float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneName) const
 {
-	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase2_RootOn || !BalanceTransitionSets::IsProximal(BoneName))
+	if (!BalanceTransitionSets::IsProximal(BoneName))
 	{
 		return 1.0f;
 	}
 
-	return FMath::Clamp(
-		PhaseTimeSeconds / BalanceTransitionSets::Phase2AuthorityRampSeconds,
-		0.0f,
-		1.0f);
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+	{
+		return FMath::Clamp(
+			PhaseTimeSeconds / BalanceTransitionSets::Phase2AuthorityRampSeconds,
+			0.0f,
+			1.0f);
+	}
+
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
+	{
+		return FMath::Clamp(
+			PhaseTimeSeconds / 0.25f,
+			0.0f,
+			1.0f);
+	}
+
+	return 1.0f;
 }
 
 
@@ -169,8 +182,19 @@ float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(const
 
 	const bool bInBootstrap = InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
-		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
-	return bInBootstrap ? Settings.BalanceBootstrapExtraDampingMultiplier : Settings.BalanceActiveExtraDampingMultiplier;
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle;
+	if (!bInBootstrap)
+	{
+		return Settings.BalanceActiveExtraDampingMultiplier;
+	}
+
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
+	{
+		return Settings.BalanceBootstrapExtraDampingMultiplier * 2.0f;
+	}
+
+	return Settings.BalanceBootstrapExtraDampingMultiplier;
 }
 
 

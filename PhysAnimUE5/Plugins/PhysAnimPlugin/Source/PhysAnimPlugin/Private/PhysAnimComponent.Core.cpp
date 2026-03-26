@@ -598,7 +598,16 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	// Authoritative state sync (Section 4)
 	{
-		const EBalanceReadyTransitionPhase TransitionPhase = BalanceReadyTransition.GetPhase();
+		EBalanceReadyTransitionPhase TransitionPhase = BalanceReadyTransition.GetPhase();
+		if (TransitionPhase == EBalanceReadyTransitionPhase::BRT_Succeeded)
+		{
+			if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery)
+			{
+				CompleteBalanceModeEntry();
+			}
+			TransitionPhase = BalanceReadyTransition.GetPhase();
+		}
+
 		const EPhysAnimRuntimeState MappedRuntimeState =
 			TransitionPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ? EPhysAnimRuntimeState::BalanceEntry_Prepare :
 			TransitionPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ? EPhysAnimRuntimeState::BalanceEntry_LateValidate :
@@ -1717,10 +1726,19 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
 	{
 		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+		static const FName SettlePreservedBones[] =
+		{
+			TEXT("pelvis"),
+			TEXT("thigh_l"),
+			TEXT("thigh_r"),
+			TEXT("spine_01"),
+			TEXT("spine_02"),
+			TEXT("spine_03")
+		};
 		USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 		FBodyInstance* const RootBI = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
-		const bool bRootRawSim = RootBI && RootBI->IsInstanceSimulatingPhysics();
-		const bool bPelvisRawSim = bRootRawSim;
+		bool bRootRawSim = RootBI && RootBI->IsInstanceSimulatingPhysics();
+		bool bPelvisRawSim = bRootRawSim;
 
 		int32 TotalSimCount = 0;
 		if (Mesh)
@@ -1745,6 +1763,62 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			{
 				PelvisModType = Record->BodyModifier.ModifierData.MovementType;
 			}
+		}
+
+		const bool bSettleModifierMismatch = PelvisModType != EPhysicsMovementType::Simulated;
+		if ((!bRootRawSim || TotalSimCount < 6 || bSettleModifierMismatch) && Mesh)
+		{
+			for (const FName& BoneName : SettlePreservedBones)
+			{
+				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				{
+					BI->SetInstanceSimulatePhysics(true, true);
+				}
+			}
+
+			if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+			{
+				for (const FName& BoneName : SettlePreservedBones)
+				{
+					const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+					PC->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
+					PC->SetBodyModifierPhysicsBlendWeight(ModifierName, 1.0f, false, false);
+					PC->SetBodyModifierCollisionType(ModifierName, ECollisionEnabled::QueryAndPhysics, false, false);
+					PC->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, false, false, false);
+				}
+			}
+
+			bRootRawSim = RootBI && RootBI->IsInstanceSimulatingPhysics();
+			bPelvisRawSim = bRootRawSim;
+			TotalSimCount = 0;
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+				{
+					if (BI->IsInstanceSimulatingPhysics())
+					{
+						TotalSimCount++;
+					}
+				}
+			}
+
+			if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+			{
+				const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(RootBoneName);
+				if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
+				{
+					PelvisModType = Record->BodyModifier.ModifierData.MovementType;
+				}
+			}
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE3_POST_TICK_REASSERT rootRawSim=%d pelvisRawSim=%d pelvisModifier=%s totalSimCount=%d runtimeState=%s actor=%s component=%s"),
+				bRootRawSim ? 1 : 0,
+				bPelvisRawSim ? 1 : 0,
+				GetPhysicsMovementTypeName(PelvisModType),
+				TotalSimCount,
+				GetRuntimeStateName(RuntimeState),
+				*GetOwner()->GetName(),
+				*GetName());
 		}
 
 		BalanceReadyTransition.UpdateSettleContinuityState(bRootRawSim, bPelvisRawSim);

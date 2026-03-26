@@ -1038,11 +1038,16 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
-		// PHASE2 PROXIMAL SET PRESERVATION:
-		// These five bones must remain simulated during RootOn to match Phase 1 topology.
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
-			(BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
-			 BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03")))
+		const bool bIsPreservedTransitionBone =
+			BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
+			BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03");
+		const bool bIsTransitionOwnedSimSet =
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
+			(bIsRootBodyModifier || bIsPreservedTransitionBone);
+
+		// Keep the post-Phase1 certified sim set alive through RootOn and Settle.
+		if (bIsTransitionOwnedSimSet)
 		{
 			BodyModifierMovementType = EPhysicsMovementType::Simulated;
 			BodyModifierPhysicsBlendWeight = 1.0f;
@@ -1061,11 +1066,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		}
 
-		// PHASE2 ROOT PERSISTENCE GUARD:
-		// If we are in Phase 2 root-on and the root was already simulating last tick, 
-		// or we are in the quarantine window, do not let per-bone resolution drop it back to kinematic.
-		if (bIsRootBodyModifier && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && 
-			(bLastAppliedPresentationRootSimulationEnabled || BalanceReadyTransition.IsPhase2RootAuthorityQuarantined()))
+		// Keep root simulation authoritative throughout RootOn and Settle.
+		if (bIsRootBodyModifier &&
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
+			(bLastAppliedPresentationRootSimulationEnabled ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+			 BalanceReadyTransition.IsPhase2RootAuthorityQuarantined()))
 		{
 			if (BodyModifierMovementType == EPhysicsMovementType::Kinematic)
 			{
@@ -1086,16 +1092,18 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
-		// DOUBLE-TICK AUTHORITY GUARD:
-		// If the transition phase is RootOn, we DO NOT allow kinematic demotion of the root for any reason.
-		if (bIsRootBodyModifier && BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+		// Transition-owned root simulation must not be demoted before Settle acceptance.
+		if (bIsRootBodyModifier &&
+			(BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
+			 BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase3_Settle))
 		{
 			BodyModifierMovementType = EPhysicsMovementType::Simulated;
-			BodyModifierPhysicsBlendWeight = FMath::Max(BodyModifierPhysicsBlendWeight, 0.01f);
+			BodyModifierPhysicsBlendWeight = FMath::Max(BodyModifierPhysicsBlendWeight, 1.0f);
 			if (BodyModifierCollisionType == ECollisionEnabled::NoCollision)
 			{
 				BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
 			}
+			bUpdateKinematicFromSimulation = false;
 		}
 
 		// PHASE3 ROOT SETTLE PRESERVE:

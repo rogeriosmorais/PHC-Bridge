@@ -301,14 +301,36 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 
 	const FVector PelvisLinearVelocity = PelvisBody->GetUnrealWorldVelocity();
 	const FVector PelvisAngularVelocityDegPerSec = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
+	const float PelvisLinearSpeed = PelvisLinearVelocity.Size();
+	const float PelvisAngularSpeed = PelvisAngularVelocityDegPerSec.Size();
+	const float Phase3LinearInstabilityThreshold = Settings.MaxRootLinearSpeedCmPerSecond * 2.5f;
+	const float Phase3AngularInstabilityThreshold = Settings.MaxRootAngularSpeedDegPerSecond * 3.0f;
 
 	// Section 17.4 - Root simulation spike (instability)
-	if (PelvisLinearVelocity.Size() > Settings.MaxRootLinearSpeedCmPerSecond * 2.5f ||
-		PelvisAngularVelocityDegPerSec.Size() > Settings.MaxRootAngularSpeedDegPerSecond * 2.5f)
+	if (PelvisLinearSpeed > Phase3LinearInstabilityThreshold ||
+		PelvisAngularSpeed > Phase3AngularInstabilityThreshold)
 	{
+		ConsecutiveBodyMotionInstabilityTicks++;
+		if (ConsecutiveBodyMotionInstabilityTicks == 1)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimBalance] PHASE3_INSTABILITY_PROBE frame=%llu tick=%d rootLinSpeed=%.2f rootAngSpeed=%.2f linThreshold=%.2f angThreshold=%.2f consecutive=%d"),
+				GFrameCounter,
+				Phase3GuardTickCount,
+				PelvisLinearSpeed,
+				PelvisAngularSpeed,
+				Phase3LinearInstabilityThreshold,
+				Phase3AngularInstabilityThreshold,
+				ConsecutiveBodyMotionInstabilityTicks);
+			return true;
+		}
+
 		OutReason = TEXT("phase3_post_root_on_instability");
 		return false;
 	}
+	ConsecutiveBodyMotionInstabilityTicks = 0;
 
 	// Section 17.3 - post-root-on topology preserved
 	TArray<FName> SimulatingBones;

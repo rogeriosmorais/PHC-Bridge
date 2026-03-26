@@ -1940,18 +1940,11 @@ extern int32 GVerbosePhase2Forensics;
 			return;
 		}
 
-		if (bReadyThisFrame)
+		StableHoldAccumulatedSeconds += DeltaTime;
+		if (StableHoldAccumulatedSeconds >= Settings.BalancePhase3RequiredStableHoldDuration)
 		{
-			StableHoldAccumulatedSeconds += DeltaTime;
-			if (StableHoldAccumulatedSeconds >= Settings.BalancePhase3RequiredStableHoldDuration)
-			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Phase 3 settle success. Ready for perturbation. duration=%.2f"), StableHoldAccumulatedSeconds);
-				SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
-			}
-		}
-		else
-		{
-			StableHoldAccumulatedSeconds = 0.0f;
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Phase 3 settle success. Ready for perturbation. duration=%.2f"), StableHoldAccumulatedSeconds);
+			SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
 		}
 
 		if (PhaseTimeSeconds > Settings.BalancePhase3TimeoutDuration)
@@ -2129,6 +2122,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	LastQuietBlockReason.Reset();
 	Phase2GuardTickCount = 0;
 	Phase3GuardTickCount = 0;
+	ConsecutiveBodyMotionInstabilityTicks = 0;
 	bPreviousFrameSettleEndRootRawSim = false;
 	bPreviousFrameSettleEndPelvisRawSim = false;
 	bPhase2RootAuthorityQuarantined = false;

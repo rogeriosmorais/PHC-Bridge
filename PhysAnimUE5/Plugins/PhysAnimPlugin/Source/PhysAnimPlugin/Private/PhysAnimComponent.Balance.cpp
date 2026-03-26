@@ -741,6 +741,27 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Recovery);
 	ApplyStartupMovementLock();
 	ResetBridgeLocomotionAuthorityState();
+	const double CurrentWorldTimeSeconds = World->GetTimeSeconds();
+	const FPhysAnimStabilizationSettings RecoverySettings = ResolveEffectiveStabilizationSettings();
+	const double SettledRampStartTimeSeconds =
+		CurrentWorldTimeSeconds - static_cast<double>(FMath::Max(RecoverySettings.StartupRampSeconds, 0.0f)) - 0.01;
+	HighestUnlockedBringUpGroupIndex = GetBringUpGroupCount() - 1;
+	BringUpGroupStableAccumulatedSeconds = 0.0f;
+	for (int32 GroupIndex = 0; GroupIndex < GetBringUpGroupCount(); ++GroupIndex)
+	{
+		if (BringUpGroupActivationTimeSeconds.IsValidIndex(GroupIndex))
+		{
+			BringUpGroupActivationTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
+		}
+		if (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex))
+		{
+			BringUpGroupControlRampStartTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
+		}
+		if (BringUpGroupAlphaActiveLogged.IsValidIndex(GroupIndex))
+		{
+			BringUpGroupAlphaActiveLogged[GroupIndex] = 1;
+		}
+	}
 	BridgePoseSearchLatchedWalkResult = FPoseSearchBlueprintResult();
 	BridgePoseSearchLatchedQueryDirection = FVector::ZeroVector;
 	BridgePoseSearchLatchedQuerySpeedCmPerSecond = 0.0f;
