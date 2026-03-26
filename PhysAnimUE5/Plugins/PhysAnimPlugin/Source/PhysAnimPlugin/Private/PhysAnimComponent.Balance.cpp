@@ -838,18 +838,8 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	UE_LOG(
 		LogPhysAnimBridge,
 		Warning,
-		TEXT("[PhysAnimBalance] Balance Perturbation Mode started. scenarios=%d quietWindow=%.2fs triggerDelay=0.50s thresholds[policyAlpha=%.2f response=%.1f recoveryVel=%.1f recoveryTilt=%.1f recoveryHeight=%.1f stableHold=%.2fs timeout=%.2fs contam=%.1f fall=%.1f] idlePoseCached=%s"),
+		TEXT("[PhysAnimBalance] Balance mode started. scenarios=%d idlePoseCached=%s"),
 		BalanceScenarios.Num(),
-		BalanceQuietWindowRequiredSeconds,
-		BalanceReadyPolicyInfluenceThreshold,
-		BalanceResponseVelocityThresholdCmPerSec,
-		BalanceRecoveryVelocityThresholdCmPerSec,
-		BalanceRecoveryTiltThresholdDeg,
-		BalanceRecoveryHeightToleranceCm,
-		BalanceRecoveryStableHoldSeconds,
-		BalanceRecoveryTimeoutSeconds,
-		BalanceShellContaminationDisplacementCm,
-		BalanceFallHeightThresholdCm,
 		bHasBalanceIdlePoseSearchResult ? TEXT("true") : TEXT("false"));
 }
 

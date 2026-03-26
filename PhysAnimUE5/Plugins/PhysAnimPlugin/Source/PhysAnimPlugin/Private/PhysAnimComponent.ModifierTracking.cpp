@@ -64,19 +64,6 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 
 	if (ModifierNamesToReset.Contains(RootModifierName) && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
-		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-		const bool bQuarantined = BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
-		const bool bKeepsKin = BalanceReadyTransition.ShouldKeepBoneKinematic(RootBoneName, ResolveEffectiveStabilizationSettings());
-
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ResetPendingBodyModifiersToCachedTargets"),
-			static_cast<int32>(GFrameNumber), *RootBoneName.ToString(),
-			bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
-			0, // transOwns=0 as this is a cached-target reset, not a policy write
-			bQuarantined ? 1 : 0,
-			bKeepsKin ? 1 : 0,
-			1, // movementType=1 (Simulated)
-			1.00f, // blendWeight=1.00
-			1); // collType=1 (QueryAndPhysics)
 	}
 
 	PhysicsControl->ResetBodyModifiersToCachedBoneTransforms(

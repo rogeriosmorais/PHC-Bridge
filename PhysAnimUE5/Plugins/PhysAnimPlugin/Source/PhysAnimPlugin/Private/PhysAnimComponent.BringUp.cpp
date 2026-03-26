@@ -151,23 +151,6 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 				}
 				else
 				{
-					if (BoneName == PhysAnimBridge::GetRootBoneName() && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
-					{
-						const bool bQuarantined = BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
-						const bool bKeepsKin = BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, ResolveEffectiveStabilizationSettings());
-
-						UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=UnlockBringUpGroup owner=%d actor=%s component=%s"),
-							static_cast<int32>(GFrameNumber), *BoneName.ToString(),
-							bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
-							0, // transOwns=0
-							bQuarantined ? 1 : 0,
-							bKeepsKin ? 1 : 0,
-							0, // movementType=0
-							0.00f, // blendWeight=0.00
-							0, // collType=0
-							static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
-							*GetOwner()->GetName(), *GetName());
-					}
 					PendingBodyModifierCachedResetNames.Add(ModifierName);
 				}
 			}

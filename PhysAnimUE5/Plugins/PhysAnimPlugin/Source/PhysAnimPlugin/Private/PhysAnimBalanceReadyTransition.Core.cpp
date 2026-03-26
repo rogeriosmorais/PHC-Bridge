@@ -122,16 +122,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						if (BodyInst)
 						{
 							BodyInst->SetInstanceSimulatePhysics(true, true);
-							if (!LoggedProximalPromotions.Contains(BoneName))
-							{
-								UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PROXIMAL_RAW_SIM_PROMOTION bone=%s previousRaw=Kin newIntended=Sim"), *BoneName.ToString());
-								LoggedProximalPromotions.Add(BoneName);
-							}
+							LoggedProximalPromotions.Add(BoneName);
 						}
 					}
 					else if (LoggedProximalPromotions.Contains(BoneName) && !LoggedProximalStates.Contains(BoneName))
 					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PROXIMAL_RAW_SIM_STATE bone=%s raw=Sim"), *BoneName.ToString());
 						LoggedProximalStates.Add(BoneName);
 					}
 				}
@@ -599,13 +594,6 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 									const bool bPendingReset = Owner->GetPendingBodyModifierCachedResetNames().Contains(PhysAnimBridge::MakeBodyModifierName(AuditBone));
 									const bool bInAllowlist = BalanceTransitionSets::IsUpperBody(AuditBone);
 
-									UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PRE_UPPER_BODY_GATE_AUDIT bone=%s rawSim=%d modifier=%s heldWritten=%d targetDelta=%.2f linVel=%.2f angVel=%.2f pendingReset=%d holdActive=%d allowlist=%d"),
-										*AuditBone.ToString(), AuditBody->IsInstanceSimulatingPhysics() ? 1 : 0, 
-										UPhysAnimComponent::GetPhysicsMovementTypeName(ModifierType),
-										bHeldTargetWritten ? 1 : 0, TargetDeltaDeg, LinVel, AngVel, bPendingReset ? 1 : 0,
-										Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold ? 1 : 0,
-										bInAllowlist ? 1 : 0);
-									
 								}
 						}
 
@@ -2248,7 +2236,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	}
 	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_SUCCESS."));
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Transition succeeded."));
 		Phase2RetryCount = 0;
 	}
 	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied)

@@ -637,6 +637,22 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
+	if (RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+		!bPendingBalanceModeStartRequest &&
+		!BalanceReadyTransition.HasActuallyStarted())
+	{
+		const int32 AutoBalanceTriggerGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
+		if (GetHighestUnlockedBringUpGroupIndex() >= AutoBalanceTriggerGroupIndex &&
+			GetLastControlTargetDiagnostics().bPolicyInfluenceActive)
+		{
+			FString AutoBalanceGateReason;
+			if (EvaluateBalanceModeQueueGates(EffectiveSettings, AutoBalanceGateReason))
+			{
+				QueueBalanceModeStartRequest(TEXT("auto_trigger"));
+			}
+		}
+	}
+
 	TryStartPendingBalanceModeRequest(EffectiveSettings);
 
 
@@ -899,16 +915,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 		if (bShouldLog)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_AFTER_TUNING_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
-				GFrameCounter,
-				bPelvisSimAfterTuning ? 1 : 0,
-				TotalSimAfterTuning,
-				GetPhysicsMovementTypeName(PelvisModifierType),
-				PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
-				GetRuntimeStateName(RuntimeState),
-				*GetOwner()->GetName(),
-				*GetName());
-
 			bLastPelvisRawSim = bPelvisSimAfterTuning;
 			LastTotalSimCount = TotalSimAfterTuning;
 			LastPelvisModifiers.FindOrAdd(this) = PelvisModifierType;
@@ -1075,16 +1081,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		if (bShouldEmitPreAudit && !bSuppressLogOnSkip)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_PRE_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
-				GFrameCounter,
-				bCurrentPelvisSim ? 1 : 0,
-				CurrentTotalSim,
-				GetPhysicsMovementTypeName(CurrentPelvisModifierType),
-				PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
-				GetRuntimeStateName(RuntimeState),
-				*GetOwner()->GetName(),
-				*GetName());
-
 			bLastPelvisRawSim = bCurrentPelvisSim;
 			LastTotalSimCount = CurrentTotalSim;
 			LastPrePelvisModifiers.FindOrAdd(this) = CurrentPelvisModifierType;
@@ -1138,14 +1134,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		if (bIsRealRootOnTick4 && !bPhase2Tick4AuditArmed)
 		{
 			bPhase2Tick4AuditArmed = true;
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_TICK4_AUDIT_ARMED frame=%llu tick=%d runtimeState=%s rootOnTick=%d owner=%s actor=%s component=%s"),
-				GFrameCounter,
-				(int32)BalanceEntryRootOnFrameCount,
-				GetRuntimeStateName(RuntimeState),
-				(int32)BalanceEntryRootOnFrameCount,
-				*GetOwner()->GetName(),
-				*GetOwner()->GetName(),
-				*GetName());
 		}
 
 		if (bIsRealRootOnTick4)
@@ -1494,15 +1482,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			return;
 		}
 
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_ROOT_STATE_TRANSITION_TRACE frame=%llu rootOnTick=%u source=%s pelvisRawSim=%d pelvisModifier=%s totalSimCount=%d runtimeState=%s"),
-			GFrameCounter,
-			static_cast<uint32>(BalanceEntryRootOnFrameCount),
-			Source,
-			Snapshot.bPelvisRawSim ? 1 : 0,
-			GetPhysicsMovementTypeName(Snapshot.PelvisModifier),
-			Snapshot.TotalSimCount,
-			GetRuntimeStateName(RuntimeState));
-
 		LastSnapshot = Snapshot;
 		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceReadyTransition.GetDiagnostics().FirstContradictionSource.IsEmpty())
 		{
@@ -1560,16 +1539,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		if (bShouldEmitPostAudit && !bSuppressLogOnSkip)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_POST_UPDATECONTROLS_AUDIT frame=%llu pelvisRawSim=%d totalSimCount=%d pelvisModifier=%s pendingResetsEmpty=%d runtimeState=%s actor=%s component=%s"),
-				GFrameCounter,
-				bPostCurrentPelvisSim ? 1 : 0,
-				PostCurrentTotalSim,
-				GetPhysicsMovementTypeName(PostCurrentPelvisModifierType),
-				PendingBodyModifierCachedResetNames.IsEmpty() ? 1 : 0,
-				GetRuntimeStateName(RuntimeState),
-				*GetOwner()->GetName(),
-				*GetName());
-
 			LastPostPelvisRawSims.FindOrAdd(this) = bPostCurrentPelvisSim;
 			LastPostTotalSimCounts.FindOrAdd(this) = PostCurrentTotalSim;
 			LastPostPelvisModifiers.FindOrAdd(this) = PostCurrentPelvisModifierType;
@@ -1811,27 +1780,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				}
 			}
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE3_POST_TICK_REASSERT rootRawSim=%d pelvisRawSim=%d pelvisModifier=%s totalSimCount=%d runtimeState=%s actor=%s component=%s"),
-				bRootRawSim ? 1 : 0,
-				bPelvisRawSim ? 1 : 0,
-				GetPhysicsMovementTypeName(PelvisModType),
-				TotalSimCount,
-				GetRuntimeStateName(RuntimeState),
-				*GetOwner()->GetName(),
-				*GetName());
 		}
 
 		BalanceReadyTransition.UpdateSettleContinuityState(bRootRawSim, bPelvisRawSim);
-
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE3_POST_TICK_PRESERVE_STATE rootRawSim=%d pelvisRawSim=%d pelvisModifier=%s totalSimCount=%d totalTransitionTime=%.4f runtimeState=%s actor=%s component=%s"),
-			bRootRawSim ? 1 : 0,
-			bPelvisRawSim ? 1 : 0,
-			GetPhysicsMovementTypeName(PelvisModType),
-			TotalSimCount,
-			BalanceReadyTransition.GetTotalTransitionTimeSeconds(),
-			GetRuntimeStateName(RuntimeState),
-			*GetOwner()->GetName(),
-			*GetName());
 	}
 	else if (RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{

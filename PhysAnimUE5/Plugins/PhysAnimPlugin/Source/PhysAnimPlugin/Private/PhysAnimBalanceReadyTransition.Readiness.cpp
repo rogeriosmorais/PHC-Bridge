@@ -313,17 +313,6 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 		ConsecutiveBodyMotionInstabilityTicks++;
 		if (ConsecutiveBodyMotionInstabilityTicks == 1)
 		{
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnimBalance] PHASE3_INSTABILITY_PROBE frame=%llu tick=%d rootLinSpeed=%.2f rootAngSpeed=%.2f linThreshold=%.2f angThreshold=%.2f consecutive=%d"),
-				GFrameCounter,
-				Phase3GuardTickCount,
-				PelvisLinearSpeed,
-				PelvisAngularSpeed,
-				Phase3LinearInstabilityThreshold,
-				Phase3AngularInstabilityThreshold,
-				ConsecutiveBodyMotionInstabilityTicks);
 			return true;
 		}
 

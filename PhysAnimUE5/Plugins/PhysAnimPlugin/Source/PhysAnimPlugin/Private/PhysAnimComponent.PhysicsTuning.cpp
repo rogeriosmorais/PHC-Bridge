@@ -103,26 +103,7 @@ void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilization
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
-		const bool bQuarantined = BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
-		const bool bKeepsKin = BalanceReadyTransition.ShouldKeepBoneKinematic(RootBoneName, EffectiveSettings);
-
-		static EPhysAnimRuntimeState LastAuditState = EPhysAnimRuntimeState::Uninitialized;
-		const bool bStateChanged = (RuntimeState != LastAuditState);
-
-		if (GVerbosePhase2Forensics != 0 && (BalanceEntryRootOnFrameCount <= 3 || bStateChanged))
-		{
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ActivateBridgePhysicsState"),
-				static_cast<int32>(GFrameNumber), *RootBoneName.ToString(),
-				bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
-				0, // transOwns=0
-				bQuarantined ? 1 : 0,
-				bKeepsKin ? 1 : 0,
-				1, // movementType=1 (Simulated)
-				0.00f, // blendWeight=0.00 (Mesh level sim set, modifiers not yet sync'd)
-				1); // collType=1 (QueryAndPhysics)
-			
-			LastAuditState = RuntimeState;
-		}
+		(void)RootBoneName;
 	}
 
 	ApplyTrainingAlignedToeLimitPolicy(EffectiveSettings);
@@ -447,26 +428,7 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
-		const bool bQuarantined = BalanceReadyTransition.IsPhase2RootAuthorityQuarantined();
-		const bool bKeepsKin = BalanceReadyTransition.ShouldKeepBoneKinematic(RootBoneName, ResolveEffectiveStabilizationSettings());
-
-		static EPhysAnimRuntimeState LastAuditState = EPhysAnimRuntimeState::Uninitialized;
-		const bool bStateChanged = (RuntimeState != LastAuditState);
-
-		if (BalanceEntryRootOnFrameCount <= 3 || bStateChanged)
-		{
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ResetBridgePhysicsState"),
-				static_cast<int32>(GFrameNumber), *RootBoneName.ToString(),
-				bLastAppliedPresentationRootSimulationEnabled ? 1 : 0,
-				0, // transOwns=0
-				bQuarantined ? 1 : 0,
-				bKeepsKin ? 1 : 0,
-				0, // movementType=0 (Kinematic)
-				0.00f, // blendWeight=0.00
-				0); // collType=0 (NoCollision)
-			
-			LastAuditState = RuntimeState;
-		}
+		(void)RootBoneName;
 	}
 
 	SkeletalMesh->SetEnablePhysicsBlending(false);
@@ -1208,25 +1170,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			static EPhysAnimRuntimeState LastAuditState = EPhysAnimRuntimeState::Uninitialized;
 			const bool bRuntimeStateChanged = (RuntimeState != LastAuditState);
 
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceEntryRootOnFrameCount <= 4)
-			{
-				const FBodyInstance* const PelvisBody = GetMeshComponent() ? GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
-				const int32 RootRawSim = (PelvisBody && PelvisBody->IsInstanceSimulatingPhysics()) ? 1 : 0;
-
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_RELEASE_DELAY_PROBE frame=%llu tick=%d delayed=%d rootRawSim=%d pelvisModType=%d simCount=%d owner=%d actor=%s component=%s"),
-					GFrameCounter,
-					static_cast<int32>(BalanceEntryRootOnFrameCount),
-					0,
-					RootRawSim,
-					static_cast<int32>(BodyModifierMovementType),
-					TotalSimCount,
-					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
-					*GetOwner()->GetName(),
-					*GetName());
-
-				LastAuditState = RuntimeState;
-			}
-
 			static TMap<UPhysAnimComponent*, EPhysicsMovementType> LastRootMovementTypes;
 			static TMap<UPhysAnimComponent*, bool> LastRootQuarantinedStates;
 			static TMap<UPhysAnimComponent*, int32> LastRootRawReadbacks;
@@ -1244,30 +1187,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 			if (bShouldEmitRootOnAudit)
 			{
-				if (RawReadbackValue != -1)
-				{
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%llu bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning rawReadback=%d callIndex=%d"), 
-					GFrameCounter, *BoneName.ToString(), 
-						bAllowRootBodyModifierSimulation ? 1 : 0, 
-						bTransitionOwnsRootOnThisTick ? 1 : 0, 
-						bPhase2RootAuthorityQuarantined ? 1 : 0,
-						bTransitionKeepsBoneKinematic ? 1 : 0,
-						static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType),
-						RawReadbackValue,
-						CurrentCallIndex);
-				}
-				else
-				{
-					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WRITE_AUDIT frame=%d bone=%s allowRootSim=%d transOwns=%d quarantined=%d keepsKin=%d movementType=%d blendWeight=%.2f collType=%d source=ApplyRuntimeControlTuning callIndex=%d"), 
-						static_cast<int32>(CurrentFrameNumber), *BoneName.ToString(), 
-						bAllowRootBodyModifierSimulation ? 1 : 0, 
-						bTransitionOwnsRootOnThisTick ? 1 : 0, 
-						bPhase2RootAuthorityQuarantined ? 1 : 0,
-						bTransitionKeepsBoneKinematic ? 1 : 0,
-						static_cast<int32>(BodyModifierMovementType), BodyModifierPhysicsBlendWeight, static_cast<int32>(BodyModifierCollisionType),
-						CurrentCallIndex);
-				}
-
 				LastRootMovementTypes.FindOrAdd(this) = BodyModifierMovementType;
 				LastRootQuarantinedStates.FindOrAdd(this) = bPhase2RootAuthorityQuarantined;
 				LastRootRawReadbacks.FindOrAdd(this) = RawReadbackValue;
