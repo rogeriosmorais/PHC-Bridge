@@ -2195,17 +2195,17 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_PRE link=%s errorCm=%.2f threshold=%.2f"),
 						Label,
 						ErrorCm,
-						BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm);
+						BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm);
 					return ErrorCm;
 				};
 				const float PelvisThighLErrorCm = LogLinkError(TEXT("pelvis_thigh_l"), TEXT("thigh_l"));
 				const float PelvisThighRErrorCm = LogLinkError(TEXT("pelvis_thigh_r"), TEXT("thigh_r"));
 				const float PelvisSpine01ErrorCm = LogLinkError(TEXT("pelvis_spine_01"), TEXT("spine_01"));
-				if (PelvisThighLErrorCm > BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm ||
-					PelvisThighRErrorCm > BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm ||
-					PelvisSpine01ErrorCm > BalanceTransitionSets::Phase2MaxPelvisProximalConstraintErrorCm)
+				if (PelvisThighLErrorCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm ||
+					PelvisThighRErrorCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm ||
+					PelvisSpine01ErrorCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm)
 				{
-					Diagnostics.FailureReason = TEXT("phase2_constraint_error_too_high");
+					Diagnostics.FailureReason = TEXT("phase2_root_on_link_error_too_high");
 					SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 					return;
 				}
@@ -2218,6 +2218,8 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					TEXT("spine_02"),
 					TEXT("spine_03")
 				};
+				const FTransform LivePelvisTransform =
+					Mesh->GetBoneTransform(Mesh->GetBoneIndex(PhysAnimBridge::GetRootBoneName()));
 				if (UPhysicsControlComponent* const PhysicsControl = Owner->PhysicsControlComponent.Get())
 				{
 					for (const FName BoneName : RootOnApplicationBones)
@@ -2240,15 +2242,15 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				{
 					if (FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
 					{
+						if (BoneName == PhysAnimBridge::GetRootBoneName())
+						{
+							BodyInstance->SetBodyTransform(LivePelvisTransform, ETeleportType::TeleportPhysics, true);
+						}
 						BodyInstance->SetInstanceSimulatePhysics(true, true);
+						BodyInstance->SetLinearVelocity(FVector::ZeroVector, false);
+						BodyInstance->SetAngularVelocityInRadians(FVector::ZeroVector, false);
 					}
 				}
-				PelvisBody->SetBodyTransform(
-					BalanceTransitionSets::BuildWarmStartPelvisTransform(Mesh, SimulatingBones),
-					ETeleportType::TeleportPhysics,
-					true);
-				PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
-				PelvisBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
 				UE_LOG(
 					LogPhysAnimBridge,
 					Warning,

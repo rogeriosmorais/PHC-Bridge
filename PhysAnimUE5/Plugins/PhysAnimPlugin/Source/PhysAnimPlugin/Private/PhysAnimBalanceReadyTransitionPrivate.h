@@ -8,6 +8,7 @@ namespace BalanceTransitionSets
 	inline constexpr float Phase2TopologySettleGraceSeconds = 1.0f / 30.0f;
 	inline constexpr float Phase2AuthorityRampSeconds = 0.10f;
 	inline constexpr float Phase2MaxPelvisProximalConstraintErrorCm = 15.0f;
+	inline constexpr float Phase2MaxDirectPelvisLinkErrorCm = 8.0f;
 
 	float ComputePelvisProximalConstraintErrorCm(
 		const USkeletalMeshComponent* Mesh,
