@@ -615,6 +615,36 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		FailStop(Reason);
 	};
 
+	auto TracePreservedTick4 = [&](const TCHAR* Source)
+	{
+		if (RuntimeStateAtTickStart == EPhysAnimRuntimeState::BalanceEntry_RootOn && RootOnTickAtTickStart == 3)
+		{
+			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+			{
+				static const FName PreservedBones[] = { PhysAnimBridge::GetRootBoneName(), TEXT("thigh_l"), TEXT("thigh_r"), TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") };
+				for (const FName& BoneName : PreservedBones)
+				{
+					if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+					{
+						EPhysicsMovementType ModifierType = EPhysicsMovementType::Static;
+						if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+						{
+							const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+							if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, ModifierName))
+							{
+								ModifierType = Record->BodyModifier.ModifierData.MovementType;
+							}
+						}
+
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_PRESERVED_SET_LATE_LOOP_STATE source=%s bone=%s rawSim=%d modifier=%d linSpeed=%.1f angSpeed=%.1f"),
+							Source, *BoneName.ToString(), BI->IsInstanceSimulatingPhysics() ? 1 : 0, (int32)ModifierType,
+							BI->GetUnrealWorldVelocity().Size(), FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size());
+					}
+				}
+			}
+		}
+	};
+
 	auto TraceSpineTick2 = [&](const TCHAR* Source)
 	{
 		static uint64 LastTraceFrame = 0;
@@ -1602,8 +1632,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	}
 
 	TraceSpineTick2(TEXT("pre_updatecontrols"));
+	TracePreservedTick4(TEXT("pre_updatecontrols_tick4"));
 	PhysicsControl->UpdateControls(DeltaTime);
 	TraceSpineTick2(TEXT("post_updatecontrols"));
+	TracePreservedTick4(TEXT("post_updatecontrols_tick4"));
 	ApplyPhase1PelvisRootCouplingSolve();
 
 	if (bIsRealRootOnTick4)
@@ -1794,7 +1826,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	TRACE_COUNTER_SET(COUNTER_PhysAnim_UpdateControlsMs, static_cast<float>(MeasureElapsedMs(UpdateControlsStartSeconds)));
 	if (bIsRootOnTransitionTick)
 	{
-		EmitRootStateTransitionTrace(TEXT("pre_updatecontrols"), ReadRootStateTransitionSnapshot());
+		FString GranularSource = FString::Printf(TEXT("pre_updatecontrols_tick%d"), (int32)BalanceEntryRootOnFrameCount);
+		EmitRootStateTransitionTrace(*GranularSource, ReadRootStateTransitionSnapshot());
 	}
 	if (bWriteTraceFrameThisTick)
 	{
@@ -1822,7 +1855,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	TRACE_COUNTER_SET(COUNTER_PhysAnim_NumTotalTargetsWritten, LastControlTargetDiagnostics.NumTotalTargetsWritten);
 	if (bIsRootOnTransitionTick)
 	{
-		EmitRootStateTransitionTrace(TEXT("post_updatecontrols"), ReadRootStateTransitionSnapshot());
+		FString GranularSource = FString::Printf(TEXT("post_updatecontrols_tick%d"), (int32)BalanceEntryRootOnFrameCount);
+		EmitRootStateTransitionTrace(*GranularSource, ReadRootStateTransitionSnapshot());
 	}
 
 	if (bSimulationHandoffCompletedThisTick)
@@ -1890,6 +1924,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	FinalizeTraceFrame();
 	TraceSpineTick2(TEXT("end_of_tick"));
+	TracePreservedTick4(TEXT("end_of_tick_tick4"));
 
 	if (bIsRealRootOnTick4)
 	{
@@ -1949,7 +1984,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	if (bIsRootOnTransitionTick)
 	{
-		EmitRootStateTransitionTrace(TEXT("end_of_tick"), ReadRootStateTransitionSnapshot());
+		FString GranularSource = FString::Printf(TEXT("end_of_tick_tick%d"), (int32)BalanceEntryRootOnFrameCount);
+		EmitRootStateTransitionTrace(*GranularSource, ReadRootStateTransitionSnapshot());
 	}
 }
 
