@@ -205,4 +205,16 @@ void FPhysAnimBalanceReadyTransition::ReconcileKinematicHoldSet(UPhysAnimCompone
 	{
 		return;
 	}
+
+	const FName PreservedSpineBones[] = { TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") };
+	for (const FName BoneName : PreservedSpineBones)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_SPINE_ROUTING bone=%s intendedMovementType=%s softAlpha=%.4f extraDampingMultiplier=%.2f policySuppressed=%d shellCorrectionActive=%d"),
+			*BoneName.ToString(),
+			ShouldKeepBoneKinematic(BoneName, Settings) ? TEXT("Kinematic") : TEXT("Simulated"),
+			GetProximalControlSoftAlpha(BoneName),
+			GetTransitionExtraDampingMultiplier(Settings),
+			ShouldSuppressPolicy() ? 1 : 0,
+			ShouldSuppressShell() ? 0 : 1);
+	}
 }

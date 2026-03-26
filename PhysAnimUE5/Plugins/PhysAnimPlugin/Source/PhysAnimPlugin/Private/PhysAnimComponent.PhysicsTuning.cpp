@@ -906,6 +906,34 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			true,
 			false);
 
+		// One-shot trace capture for preserved spine
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && (BoneName == "pelvis" || BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03"))
+		{
+			if (BalanceEntryRootOnFrameCount == 1 || BalanceEntryRootOnFrameCount == 2)
+			{
+				const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+				const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName);
+				const FBodyInstance* BodyInst = MeshComponent->GetBodyInstance(BoneName);
+				
+				if (Record && BodyInst)
+				{
+					const float LinSpeed = BodyInst->GetUnrealWorldVelocity().Size();
+					const float AngSpeed = BodyInst->GetUnrealWorldAngularVelocityInRadians().Size();
+					const float ExtraDamping = BalanceReadyTransition.GetTransitionExtraDampingMultiplier(EffectiveSettings);
+					
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_SPINE_STATE source=%s bone=%s rawSim=%d modifier=%s linSpeed=%.2f angSpeed=%.2f controlAlpha=%.4f extraDampingMultiplier=%.2f"),
+						BalanceEntryRootOnFrameCount == 1 ? TEXT("post_tuning_tick1") : TEXT("pre_updatecontrols_tick2"),
+						*BoneName.ToString(),
+						BodyInst->IsInstanceSimulatingPhysics() ? 1 : 0,
+						UPhysAnimComponent::GetPhysicsMovementTypeName(Record->BodyModifier.ModifierData.MovementType),
+						LinSpeed,
+						AngSpeed,
+						ControlMultiplier.AngularStrengthMultiplier,
+						ExtraDamping);
+				}
+			}
+		}
+
 		// Deep diagnostics for Balance Mode Final Ramp Enable
 		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery && BringUpGroupIndex == (GetBringUpGroupCount() - 1))
 		{

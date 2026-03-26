@@ -1328,6 +1328,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	if (!PendingBodyModifierCachedResetNames.IsEmpty())
 	{
 		ResetPendingBodyModifiersToCachedTargets();
+
+
 	}
 
 	// Forensic distal stale-record check (Task: Fix stale modifier record)
@@ -1388,6 +1390,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		EffectiveSettings,
 		bRunPolicyUpdateThisTick,
 		TickError);
+
+
 	if (bWriteTraceFrameThisTick)
 	{
 		TraceFrame.ControlTargetMs = MeasureElapsedMs(ControlTargetStartSeconds);
