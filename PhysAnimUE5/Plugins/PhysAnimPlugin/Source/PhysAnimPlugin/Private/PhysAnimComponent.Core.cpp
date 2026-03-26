@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimBalanceReadyTransitionPrivate.h"
 
 void UPhysAnimComponent::BeginPlay()
 {
@@ -22,6 +23,150 @@ void UPhysAnimComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopBridge();
 	Super::EndPlay(EndPlayReason);
+}
+
+void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
+{
+	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
+	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+	if (!bPhase1Prepare && !bPhase1LateValidate)
+	{
+		bPhase1PelvisCouplingSkipLogged = false;
+		return;
+	}
+
+	USkeletalMeshComponent* const Mesh = GetMeshComponent();
+	if (!Mesh)
+	{
+		if (!bPhase1PelvisCouplingSkipLogged)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING_SKIPPED reason=noMesh state=%s"), GetRuntimeStateName(RuntimeState));
+			bPhase1PelvisCouplingSkipLogged = true;
+		}
+		return;
+	}
+
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(RootBoneName);
+	if (!PelvisBody || !PelvisBody->IsValidBodyInstance())
+	{
+		if (!bPhase1PelvisCouplingSkipLogged)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING_SKIPPED reason=noPelvisBody state=%s"), GetRuntimeStateName(RuntimeState));
+			bPhase1PelvisCouplingSkipLogged = true;
+		}
+		return;
+	}
+
+	if (PelvisBody->IsInstanceSimulatingPhysics())
+	{
+		if (!bPhase1PelvisCouplingSkipLogged)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING_SKIPPED reason=pelvisAlreadySimulating state=%s"), GetRuntimeStateName(RuntimeState));
+			bPhase1PelvisCouplingSkipLogged = true;
+		}
+		return;
+	}
+
+	if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
+	{
+		const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(RootBoneName);
+		if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, PelvisModifierName))
+		{
+			if (Record->BodyModifier.ModifierData.MovementType != EPhysicsMovementType::Kinematic ||
+				!Record->BodyModifier.ModifierData.bUpdateKinematicFromSimulation)
+			{
+				if (!bPhase1PelvisCouplingSkipLogged)
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING_SKIPPED reason=modifierNotPhase1Kinematic state=%s modifier=%s updateFromSim=%d"),
+						GetRuntimeStateName(RuntimeState),
+						GetPhysicsMovementTypeName(Record->BodyModifier.ModifierData.MovementType),
+						Record->BodyModifier.ModifierData.bUpdateKinematicFromSimulation ? 1 : 0);
+					bPhase1PelvisCouplingSkipLogged = true;
+				}
+				return;
+			}
+		}
+	}
+
+	const int32 PelvisBoneIndex = Mesh->GetBoneIndex(RootBoneName);
+	const FTransform AnimatedPelvisTransform =
+		PelvisBoneIndex != INDEX_NONE
+			? Mesh->GetBoneTransform(PelvisBoneIndex)
+			: PelvisBody->GetUnrealWorldTransform();
+	const UPhysicsAsset* const PhysicsAsset = Mesh->GetPhysicsAsset();
+
+	FVector DesiredPelvisLocation = FVector::ZeroVector;
+	int32 DesiredPelvisLocationSamples = 0;
+	const auto AccumulateConstraintAnchoredCandidate = [&](const FName ChildBoneName)
+	{
+		if (!PhysicsAsset)
+		{
+			return;
+		}
+
+		const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(ChildBoneName, RootBoneName);
+		if (ConstraintIndex == INDEX_NONE || !PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex))
+		{
+			return;
+		}
+
+		const UPhysicsConstraintTemplate* const ConstraintTemplate = PhysicsAsset->ConstraintSetup[ConstraintIndex];
+		const FConstraintInstance* const ConstraintInstance = ConstraintTemplate ? &ConstraintTemplate->DefaultInstance : nullptr;
+		if (!ConstraintInstance)
+		{
+			return;
+		}
+
+		const int32 ChildBoneIndex = Mesh->GetBoneIndex(ChildBoneName);
+		if (ChildBoneIndex == INDEX_NONE)
+		{
+			return;
+		}
+
+		const FTransform ChildWorldTransform =
+			Mesh->GetBodyInstance(ChildBoneName)
+				? Mesh->GetBodyInstance(ChildBoneName)->GetUnrealWorldTransform()
+				: Mesh->GetBoneTransform(ChildBoneIndex);
+		const FVector ChildAnchorWorld = ChildWorldTransform.TransformPosition(ConstraintInstance->Pos1);
+		const FVector PelvisAnchorOffsetWorld = AnimatedPelvisTransform.GetRotation().RotateVector(ConstraintInstance->Pos2);
+		DesiredPelvisLocation += ChildAnchorWorld - PelvisAnchorOffsetWorld;
+		++DesiredPelvisLocationSamples;
+	};
+
+	AccumulateConstraintAnchoredCandidate(TEXT("thigh_l"));
+	AccumulateConstraintAnchoredCandidate(TEXT("thigh_r"));
+	AccumulateConstraintAnchoredCandidate(TEXT("spine_01"));
+
+	if (DesiredPelvisLocationSamples == 0)
+	{
+		if (!bPhase1PelvisCouplingSkipLogged)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING_SKIPPED reason=noChildCandidates state=%s"), GetRuntimeStateName(RuntimeState));
+			bPhase1PelvisCouplingSkipLogged = true;
+		}
+		return;
+	}
+
+	DesiredPelvisLocation /= static_cast<float>(DesiredPelvisLocationSamples);
+	FTransform DesiredPelvisTransform = PelvisBody->GetUnrealWorldTransform();
+	DesiredPelvisTransform.SetRotation(AnimatedPelvisTransform.GetRotation());
+	DesiredPelvisTransform.SetLocation(DesiredPelvisLocation);
+	PelvisBody->SetBodyTransform(DesiredPelvisTransform, ETeleportType::TeleportPhysics, true);
+	bPhase1PelvisCouplingSkipLogged = false;
+
+	const FVector SolvedPelvisLocation = BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, RootBoneName);
+	const float PelvisThighLErrorCm = FVector::Dist(SolvedPelvisLocation, BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, TEXT("thigh_l")));
+	const float PelvisThighRErrorCm = FVector::Dist(SolvedPelvisLocation, BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, TEXT("thigh_r")));
+	const float PelvisSpine01ErrorCm = FVector::Dist(SolvedPelvisLocation, BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, TEXT("spine_01")));
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING solvedLoc=(%.2f,%.2f,%.2f) pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f state=%s"),
+		SolvedPelvisLocation.X,
+		SolvedPelvisLocation.Y,
+		SolvedPelvisLocation.Z,
+		PelvisThighLErrorCm,
+		PelvisThighRErrorCm,
+		PelvisSpine01ErrorCm,
+		GetRuntimeStateName(RuntimeState));
 }
 
 EPhysAnimBridgeTraceOutputMode UPhysAnimComponent::ResolveBridgeTraceOutputMode() const
@@ -1197,6 +1342,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	TraceSpineTick2(TEXT("pre_updatecontrols"));
 	PhysicsControl->UpdateControls(DeltaTime);
 	TraceSpineTick2(TEXT("post_updatecontrols"));
+	ApplyPhase1PelvisRootCouplingSolve();
 
 	if (bIsRealRootOnTick4)
 	{

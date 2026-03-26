@@ -1123,6 +1123,7 @@ private:
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
 	bool bPhase1TiltDiagnosticEmitted = false;
+	bool bPhase1PelvisCouplingSkipLogged = false;
 	bool bPelvisResetAppliedThisTick = false;
 	float BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
 	float BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
@@ -1132,6 +1133,7 @@ private:
 
 	void TrackDistalBoneOwnershipChange(FName BoneName, EPhysicsMovementType NewOwnership, const FString& CallSiteReason);
 	void TrackDistalModifierWrite(FName BoneName, EPhysicsMovementType NewMovementType, bool bUpdateBody, const FString& CallSiteReason);
+	void ApplyPhase1PelvisRootCouplingSolve();
 	TMap<FName, EPhysicsMovementType> PreviousDistalBoneIntendedOwnership;
 	TMap<FName, EPhysicsMovementType> PreviousDistalBoneModifierOwnership;
 	TMap<FName, FString> LastDistalClassification;
