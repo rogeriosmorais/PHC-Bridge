@@ -2286,6 +2286,10 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase3_root_simulation_dropped")),
 			EBalanceReadyConditionOwner::Phase2RootOnExecution);
 		TestEqual(
+			TEXT("Phase 3 root modifier mismatches stay classified as RootOn execution failures"),
+			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase3_root_modifier_mismatch")),
+			EBalanceReadyConditionOwner::Phase2RootOnExecution);
+		TestEqual(
 			TEXT("Phase 3 post-RootOn instability stays classified as RootOn execution failure"),
 			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase3_post_root_on_instability")),
 			EBalanceReadyConditionOwner::Phase2RootOnExecution);

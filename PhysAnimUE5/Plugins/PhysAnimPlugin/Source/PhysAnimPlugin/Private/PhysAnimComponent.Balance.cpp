@@ -814,34 +814,6 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	BalanceReadyTransition.Cancel(this);
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Recovery);
-	static const FName RecoveryPreservedBones[] =
-	{
-		TEXT("pelvis"),
-		TEXT("thigh_l"),
-		TEXT("thigh_r"),
-		TEXT("spine_01"),
-		TEXT("spine_02"),
-		TEXT("spine_03")
-	};
-	for (const FName BoneName : RecoveryPreservedBones)
-	{
-		if (FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
-		{
-			BodyInstance->SetInstanceSimulatePhysics(true, true);
-		}
-	}
-	if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
-	{
-		for (const FName BoneName : RecoveryPreservedBones)
-		{
-			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
-			PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, 1.0f, false, false);
-			PhysicsControl->SetBodyModifierCollisionType(ModifierName, ECollisionEnabled::QueryAndPhysics, false, false);
-			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, false, false, false);
-		}
-	}
-	bLastAppliedPresentationRootSimulationEnabled = true;
 	int32 RecoveryTotalSimCount = 0;
 	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{

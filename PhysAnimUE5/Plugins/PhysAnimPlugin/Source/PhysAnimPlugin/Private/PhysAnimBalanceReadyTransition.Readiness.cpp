@@ -283,6 +283,19 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 		return false;
 	}
 
+	if (UPhysicsControlComponent* const PhysicsControl = Owner->PhysicsControlComponent.Get())
+	{
+		const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(RootBoneName);
+		if (const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, PelvisModifierName))
+		{
+			if (PelvisRecord->BodyModifier.ModifierData.MovementType != EPhysicsMovementType::Simulated)
+			{
+				OutReason = TEXT("phase3_root_modifier_mismatch");
+				return false;
+			}
+		}
+	}
+
 	const FVector PelvisLinearVelocity = PelvisBody->GetUnrealWorldVelocity();
 	const FVector PelvisAngularVelocityDegPerSec = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
 	const float PelvisLinearSpeed = PelvisLinearVelocity.Size();
