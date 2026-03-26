@@ -1660,21 +1660,50 @@ extern int32 GVerbosePhase2Forensics;
 
 			if (!bLoggedPhase2FirstFailureAudit)
 			{
-				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f state=%s rootRawSim=%d pelvisRawSim=%d pelvisModType=%s simCountPost=%d upperBodySimPost=%d policyAlpha=%.2f controlAlpha=%.2f shellLocked=%d shellReanchored=%d firstContradictionSource=%s owner=%d actor=%s component=%s"),
-					*AbortReason, *FailureType, *OffendingBoneValue.ToString(), MeasuredValue, ThresholdValue, 
-					UPhysAnimComponent::GetRuntimeStateName(Owner->GetRuntimeState()),
-					bPelvisActualSim ? 1 : 0,
-					bPelvisActualSim ? 1 : 0,
-					UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
-					Diagnostics.SimCountPost,
-					Diagnostics.UpperBodySimCountPost,
-					Owner->CalculateCurrentPolicyInfluenceAlpha(Settings),
-					Owner->CalculateCurrentControlAuthorityAlpha(Settings),
-					CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
-					CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
-					*Diagnostics.FirstContradictionSource,
-					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
-					*Owner->GetOwner()->GetName(), *Owner->GetName());
+				const bool bRetryBudgetAvailable = (Phase2RetryCount < Settings.BalancePhase2MaxAutomaticRetries);
+				const bool bSafeDeniedOutcome = !IsAutomaticRetryAllowed(
+					AbortReason,
+					true,
+					false,
+					false,
+					true,
+					bRetryBudgetAvailable);
+				if (bSafeDeniedOutcome)
+				{
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f state=%s rootRawSim=%d pelvisRawSim=%d pelvisModType=%s simCountPost=%d upperBodySimPost=%d policyAlpha=%.2f controlAlpha=%.2f shellLocked=%d shellReanchored=%d firstContradictionSource=%s owner=%d actor=%s component=%s"),
+						*AbortReason, *FailureType, *OffendingBoneValue.ToString(), MeasuredValue, ThresholdValue,
+						UPhysAnimComponent::GetRuntimeStateName(Owner->GetRuntimeState()),
+						bPelvisActualSim ? 1 : 0,
+						bPelvisActualSim ? 1 : 0,
+						UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
+						Diagnostics.SimCountPost,
+						Diagnostics.UpperBodySimCountPost,
+						Owner->CalculateCurrentPolicyInfluenceAlpha(Settings),
+						Owner->CalculateCurrentControlAuthorityAlpha(Settings),
+						CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+						CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+						*Diagnostics.FirstContradictionSource,
+						static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
+						*Owner->GetOwner()->GetName(), *Owner->GetName());
+				}
+				else
+				{
+					UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f state=%s rootRawSim=%d pelvisRawSim=%d pelvisModType=%s simCountPost=%d upperBodySimPost=%d policyAlpha=%.2f controlAlpha=%.2f shellLocked=%d shellReanchored=%d firstContradictionSource=%s owner=%d actor=%s component=%s"),
+						*AbortReason, *FailureType, *OffendingBoneValue.ToString(), MeasuredValue, ThresholdValue,
+						UPhysAnimComponent::GetRuntimeStateName(Owner->GetRuntimeState()),
+						bPelvisActualSim ? 1 : 0,
+						bPelvisActualSim ? 1 : 0,
+						UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
+						Diagnostics.SimCountPost,
+						Diagnostics.UpperBodySimCountPost,
+						Owner->CalculateCurrentPolicyInfluenceAlpha(Settings),
+						Owner->CalculateCurrentControlAuthorityAlpha(Settings),
+						CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+						CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+						*Diagnostics.FirstContradictionSource,
+						static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
+						*Owner->GetOwner()->GetName(), *Owner->GetName());
+				}
 				bLoggedPhase2FirstFailureAudit = true;
 			}
 			const EBalanceReadyConditionOwner FailureOwner = ClassifyConditionOwner(Diagnostics.FailureReason);
@@ -1685,51 +1714,103 @@ extern int32 GVerbosePhase2Forensics;
 				false,
 				true,
 				Phase2RetryCount < Settings.BalancePhase2MaxAutomaticRetries) ? TEXT("allowed") : TEXT("denied");
-			UE_LOG(
-				LogPhysAnimBridge,
-				Error,
-				TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_ABORTED reason=%s owner=%d detail=%s rootLinear=%.1f/%.1f rootAngular=%.1f/%.1f shellOffsetDelta=%.1f/%.1f shellVelocityDelta=%.1f/%.1f maxBodyLinear=%.1f/%.1f maxBodyAngular=%.1f/%.1f pelvisLin=%.1f pelvisAng=%.1f thighsLin=%.1f thighsAng=%.1f spineLin=%.1f spineAng=%.1f feetLin=%.1f feetAng=%.1f simCountPre=%d simCountPost=%d upperBodySimPre=%d upperBodySimPost=%d shellLocked=%d shellReanchored=%d shellReseeded=%d policyActive=%d firstPolicyFrame=%d policyWrites=%d maxTargetDeltaBone=%s maxTargetDelta=%.1f maxRawOffsetBone=%s maxRawOffset=%.1f lowerLimbLimitBone=%s lowerLimbLimit=%.2f lowerLimbLimitProxy=%.1f actor=%s component=%s"),
-				*Diagnostics.FailureReason,
-				static_cast<int32>(FailureOwner),
-				*AbortDetail,
-				Diagnostics.RootSpeed,
-				Settings.BalancePhase2AbortRootLinearSpeed,
-				Diagnostics.RootAngularSpeed,
-				Settings.BalancePhase2AbortRootAngularSpeed,
-				Diagnostics.BaselineShellOffset,
-				Settings.BalancePhase2AbortShellOffsetDelta,
-				Diagnostics.BaselineShellVel,
-				Settings.BalancePhase2AbortShellVelocityDelta,
-				Diagnostics.PeakMaxBodyLinearSpeed,
-				Settings.BalancePhase2AbortMaxBodyLinearSpeed,
-				Diagnostics.PeakMaxBodyAngularSpeed,
-				Settings.BalancePhase2AbortMaxBodyAngularSpeed,
-				Diagnostics.MaxLinVelPelvis,
-				Diagnostics.MaxAngVelPelvis,
-				Diagnostics.MaxLinVelThighs,
-				Diagnostics.MaxAngVelThighs,
-				Diagnostics.MaxLinVelSpine,
-				Diagnostics.MaxAngVelSpine,
-				Diagnostics.MaxLinVelFeet,
-				Diagnostics.MaxAngVelFeet,
-				Diagnostics.SimCountPre,
-				Diagnostics.SimCountPost,
-				Diagnostics.UpperBodySimCountPre,
-				Diagnostics.UpperBodySimCountPost,
-				CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
-				CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
-				CertifiedHandoff.bTransitionShellReferenceReseededAfterLock ? 1 : 0,
-				ControlTargetDiagnostics.bPolicyInfluenceActive ? 1 : 0,
-				ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? 1 : 0,
-				ControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
-				*ControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
-				ControlTargetDiagnostics.MaxTargetDeltaDegrees,
-				*ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
-				ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees,
-				*ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
-				ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
-				ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
-				*Owner->GetOwner()->GetName(), *Owner->GetName());
+			const bool bSafeDeniedOutcome = (Diagnostics.LastRetryDecision == TEXT("denied"));
+			if (bSafeDeniedOutcome)
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_ABORTED reason=%s owner=%d detail=%s rootLinear=%.1f/%.1f rootAngular=%.1f/%.1f shellOffsetDelta=%.1f/%.1f shellVelocityDelta=%.1f/%.1f maxBodyLinear=%.1f/%.1f maxBodyAngular=%.1f/%.1f pelvisLin=%.1f pelvisAng=%.1f thighsLin=%.1f thighsAng=%.1f spineLin=%.1f spineAng=%.1f feetLin=%.1f feetAng=%.1f simCountPre=%d simCountPost=%d upperBodySimPre=%d upperBodySimPost=%d shellLocked=%d shellReanchored=%d shellReseeded=%d policyActive=%d firstPolicyFrame=%d policyWrites=%d maxTargetDeltaBone=%s maxTargetDelta=%.1f maxRawOffsetBone=%s maxRawOffset=%.1f lowerLimbLimitBone=%s lowerLimbLimit=%.2f lowerLimbLimitProxy=%.1f actor=%s component=%s"),
+					*Diagnostics.FailureReason,
+					static_cast<int32>(FailureOwner),
+					*AbortDetail,
+					Diagnostics.RootSpeed,
+					Settings.BalancePhase2AbortRootLinearSpeed,
+					Diagnostics.RootAngularSpeed,
+					Settings.BalancePhase2AbortRootAngularSpeed,
+					Diagnostics.BaselineShellOffset,
+					Settings.BalancePhase2AbortShellOffsetDelta,
+					Diagnostics.BaselineShellVel,
+					Settings.BalancePhase2AbortShellVelocityDelta,
+					Diagnostics.PeakMaxBodyLinearSpeed,
+					Settings.BalancePhase2AbortMaxBodyLinearSpeed,
+					Diagnostics.PeakMaxBodyAngularSpeed,
+					Settings.BalancePhase2AbortMaxBodyAngularSpeed,
+					Diagnostics.MaxLinVelPelvis,
+					Diagnostics.MaxAngVelPelvis,
+					Diagnostics.MaxLinVelThighs,
+					Diagnostics.MaxAngVelThighs,
+					Diagnostics.MaxLinVelSpine,
+					Diagnostics.MaxAngVelSpine,
+					Diagnostics.MaxLinVelFeet,
+					Diagnostics.MaxAngVelFeet,
+					Diagnostics.SimCountPre,
+					Diagnostics.SimCountPost,
+					Diagnostics.UpperBodySimCountPre,
+					Diagnostics.UpperBodySimCountPost,
+					CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+					CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+					CertifiedHandoff.bTransitionShellReferenceReseededAfterLock ? 1 : 0,
+					ControlTargetDiagnostics.bPolicyInfluenceActive ? 1 : 0,
+					ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? 1 : 0,
+					ControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
+					*ControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
+					ControlTargetDiagnostics.MaxTargetDeltaDegrees,
+					*ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
+					ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees,
+					*ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
+					ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
+					ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
+					*Owner->GetOwner()->GetName(), *Owner->GetName());
+			}
+			else
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_ABORTED reason=%s owner=%d detail=%s rootLinear=%.1f/%.1f rootAngular=%.1f/%.1f shellOffsetDelta=%.1f/%.1f shellVelocityDelta=%.1f/%.1f maxBodyLinear=%.1f/%.1f maxBodyAngular=%.1f/%.1f pelvisLin=%.1f pelvisAng=%.1f thighsLin=%.1f thighsAng=%.1f spineLin=%.1f spineAng=%.1f feetLin=%.1f feetAng=%.1f simCountPre=%d simCountPost=%d upperBodySimPre=%d upperBodySimPost=%d shellLocked=%d shellReanchored=%d shellReseeded=%d policyActive=%d firstPolicyFrame=%d policyWrites=%d maxTargetDeltaBone=%s maxTargetDelta=%.1f maxRawOffsetBone=%s maxRawOffset=%.1f lowerLimbLimitBone=%s lowerLimbLimit=%.2f lowerLimbLimitProxy=%.1f actor=%s component=%s"),
+					*Diagnostics.FailureReason,
+					static_cast<int32>(FailureOwner),
+					*AbortDetail,
+					Diagnostics.RootSpeed,
+					Settings.BalancePhase2AbortRootLinearSpeed,
+					Diagnostics.RootAngularSpeed,
+					Settings.BalancePhase2AbortRootAngularSpeed,
+					Diagnostics.BaselineShellOffset,
+					Settings.BalancePhase2AbortShellOffsetDelta,
+					Diagnostics.BaselineShellVel,
+					Settings.BalancePhase2AbortShellVelocityDelta,
+					Diagnostics.PeakMaxBodyLinearSpeed,
+					Settings.BalancePhase2AbortMaxBodyLinearSpeed,
+					Diagnostics.PeakMaxBodyAngularSpeed,
+					Settings.BalancePhase2AbortMaxBodyAngularSpeed,
+					Diagnostics.MaxLinVelPelvis,
+					Diagnostics.MaxAngVelPelvis,
+					Diagnostics.MaxLinVelThighs,
+					Diagnostics.MaxAngVelThighs,
+					Diagnostics.MaxLinVelSpine,
+					Diagnostics.MaxAngVelSpine,
+					Diagnostics.MaxLinVelFeet,
+					Diagnostics.MaxAngVelFeet,
+					Diagnostics.SimCountPre,
+					Diagnostics.SimCountPost,
+					Diagnostics.UpperBodySimCountPre,
+					Diagnostics.UpperBodySimCountPost,
+					CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
+					CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+					CertifiedHandoff.bTransitionShellReferenceReseededAfterLock ? 1 : 0,
+					ControlTargetDiagnostics.bPolicyInfluenceActive ? 1 : 0,
+					ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? 1 : 0,
+					ControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
+					*ControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
+					ControlTargetDiagnostics.MaxTargetDeltaDegrees,
+					*ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
+					ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees,
+					*ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
+					ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
+					ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
+					*Owner->GetOwner()->GetName(), *Owner->GetName());
+			}
 
 			UE_LOG(
 				LogPhysAnimBridge,
@@ -1751,6 +1832,12 @@ extern int32 GVerbosePhase2Forensics;
 
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RETRY_DECISION failure=%s owner=%d decision=%s changedState=0 freshQuietProof=0 remainingRetryBudget=%d"),
 				*Diagnostics.FailureReason, static_cast<int32>(FailureOwner), *Diagnostics.LastRetryDecision, FMath::Max(Settings.BalancePhase2MaxAutomaticRetries - Phase2RetryCount, 0));
+			if (bSafeDeniedOutcome)
+			{
+				MarkSafePhase2Denied(Owner, Diagnostics.FailureReason);
+				return;
+			}
+
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 			return;
 		}

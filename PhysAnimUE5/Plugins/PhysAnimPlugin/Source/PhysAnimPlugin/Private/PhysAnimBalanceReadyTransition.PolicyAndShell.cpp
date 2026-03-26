@@ -149,13 +149,6 @@ bool FPhysAnimBalanceReadyTransition::ShouldKeepBoneKinematic(FName BoneName, co
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn || 
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		// Force spine chain to be kinematic during the first tick of RootOn to avoid spikes
-		if ((BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03")) && 
-			InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn && Phase2GuardTickCount == 1)
-		{
-			return true;
-		}
-
 		return BalanceTransitionSets::IsDistalLowerLimb(BoneName);
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
@@ -187,31 +180,5 @@ void FPhysAnimBalanceReadyTransition::ReconcileKinematicHoldSet(UPhysAnimCompone
 	if (!Owner || InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase2_RootOn || Phase2GuardTickCount != 1)
 	{
 		return;
-	}
-
-
-	const FName TargetBones[] = { TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") };
-	for (const FName& BoneName : TargetBones)
-	{
-		if (ShouldKeepBoneKinematic(BoneName, Settings))
-		{
-			USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
-			if (FBodyInstance* const BI = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr)
-			{
-				const bool bRawSimBefore = BI->IsInstanceSimulatingPhysics();
-				if (bRawSimBefore)
-				{
-					BI->SetInstanceSimulatePhysics(false, true);
-					const bool bRawSimAfter = BI->IsInstanceSimulatingPhysics();
-
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_SPINE_KINEMATIC_RECONCILE bone=%s frame=%llu rootOnTick=%d rawSimBefore=%d rawSimAfter=%d modifier=Kinematic"),
-						*BoneName.ToString(),
-						GFrameCounter,
-						static_cast<int32>(Phase2GuardTickCount),
-						bRawSimBefore ? 1 : 0,
-						bRawSimAfter ? 1 : 0);
-				}
-			}
-		}
 	}
 }

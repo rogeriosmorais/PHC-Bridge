@@ -988,6 +988,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	bool bSkipUpdateControls = false;
 	FString SkipReason;
+	FString SuppressedSkipReason;
 	bool bPreTrackedValueChanged = false;
 	bool bCurrentPelvisSim = false;
 	int32 CurrentTotalSim = 0;
@@ -997,31 +998,31 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		if (BalanceEntryRootOnFrameCount == 2 && bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
 		{
-			bSkipUpdateControls = true;
-			SkipReason = TEXT("rooton_tick2_release_success_probe");
+			SuppressedSkipReason = TEXT("rooton_tick2_release_success_probe");
 		}
 		else if (BalanceEntryRootOnFrameCount == 4 && bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
 		{
-			bSkipUpdateControls = true;
-			SkipReason = TEXT("rooton_tick4_collapse_probe");
+			SuppressedSkipReason = TEXT("rooton_tick4_collapse_probe");
 		}
 		else if (bPelvisSimAfterTuning && TotalSimAfterTuning >= 6)
 		{
-			bSkipUpdateControls = true;
-			SkipReason = TEXT("pelvis_already_simulating_after_tuning");
+			SuppressedSkipReason = TEXT("pelvis_already_simulating_after_tuning");
 		}
 		else if (BalanceEntryRootOnFrameCount == 3 && 
 				 bPelvisSimAfterTuning && 
 				 !BalanceReadyTransition.IsPhase2RootAuthorityQuarantined() && 
 				 TotalSimAfterTuning >= 1)
 		{
-			bSkipUpdateControls = true;
-			SkipReason = TEXT("first_post_quarantine_rooton_frame");
+			SuppressedSkipReason = TEXT("first_post_quarantine_rooton_frame");
 		}
 		else if (BalanceEntryRootOnFrameCount == 1 && !bPelvisSimAfterTuning && TotalSimAfterTuning == 5)
 		{
-			bSkipUpdateControls = true;
-			SkipReason = TEXT("rooton_tick1_entry_probe");
+			SuppressedSkipReason = TEXT("rooton_tick1_entry_probe");
+		}
+
+		if (!SuppressedSkipReason.IsEmpty())
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_PROBE_SUPPRESSED frame=%llu reason=%s"), GFrameCounter, *SuppressedSkipReason);
 		}
 
 		if (const UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
@@ -1263,8 +1264,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		if (PelvisRawSim && CurTotalSimCount >= 6)
 		{
-			bSkipUpdateControls = true;
 			AutoSkipReason = TEXT("rooton_tick3_stability_probe");
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPDATECONTROLS_PROBE_SUPPRESSED frame=%llu reason=%s"), GFrameCounter, *AutoSkipReason);
 		}
 	}
 
@@ -1323,6 +1324,42 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		TraceSpineTick2(TEXT("pre_updatecontrols"));
 		PhysicsControl->UpdateControls(DeltaTime);
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+		{
+			static const FName RootOnPreservedBones[] =
+			{
+				TEXT("pelvis"),
+				TEXT("thigh_l"),
+				TEXT("thigh_r"),
+				TEXT("spine_01"),
+				TEXT("spine_02"),
+				TEXT("spine_03")
+			};
+
+			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+			{
+				for (const FName BoneName : RootOnPreservedBones)
+				{
+					if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+					{
+						BI->SetInstanceSimulatePhysics(true, true);
+					}
+				}
+			}
+
+			if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
+			{
+				for (const FName BoneName : RootOnPreservedBones)
+				{
+					const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+					PC->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
+					PC->SetBodyModifierPhysicsBlendWeight(ModifierName, 1.0f, false, false);
+					PC->SetBodyModifierCollisionType(ModifierName, ECollisionEnabled::QueryAndPhysics, false, false);
+					PC->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, false, false, false);
+				}
+			}
+		}
 		TraceSpineTick2(TEXT("post_updatecontrols"));
 
 		if (bIsRealRootOnTick4)
