@@ -907,7 +907,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			false);
 
 		// One-shot trace capture for preserved spine
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && (BoneName == "pelvis" || BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03"))
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && (BoneName == "pelvis" || BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
 			if (BalanceEntryRootOnFrameCount == 1 || BalanceEntryRootOnFrameCount == 2)
 			{

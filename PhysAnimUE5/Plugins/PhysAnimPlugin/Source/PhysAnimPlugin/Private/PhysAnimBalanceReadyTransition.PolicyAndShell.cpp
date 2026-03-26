@@ -221,7 +221,7 @@ void FPhysAnimBalanceReadyTransition::ReconcileKinematicHoldSet(UPhysAnimCompone
 		return;
 	}
 
-	const FName PreservedStabilizeBones[] = { PhysAnimBridge::GetRootBoneName(), TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") };
+	const FName PreservedStabilizeBones[] = { PhysAnimBridge::GetRootBoneName(), TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03"), TEXT("thigh_l"), TEXT("thigh_r") };
 	USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
 	
 	for (const FName BoneName : PreservedStabilizeBones)
