@@ -399,6 +399,7 @@ public:
 	float GetTransitionExtraDampingMultiplier(const struct FPhysAnimStabilizationSettings& Settings) const;
 	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
 	static FString ClassifyLateValidationFailureReason(bool bUpperBodyInstability, bool bSimCoverageRegressed, bool bTargetDiscontinuity);
+	static bool IsLateValidationUpperBodyViolation(bool bRawSimViolation, bool bMotionViolation, bool bPendingResetViolation);
 	static bool IsFailureClassRetryable(const FString& FailureReason);
 	static EBalanceReadyConditionOwner ClassifyConditionOwner(const FString& Reason);
 	static bool IsPhase1OwnedCondition(const FString& Reason);

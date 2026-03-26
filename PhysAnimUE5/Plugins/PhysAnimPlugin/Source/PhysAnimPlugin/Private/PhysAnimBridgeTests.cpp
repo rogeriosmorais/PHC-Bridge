@@ -2269,6 +2269,18 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Target discontinuity remains a distinct late-validation reason"),
 			FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(false, false, true),
 			FString(TEXT("phase1_late_validate_target_discontinuity")));
+		TestFalse(
+			TEXT("Pure mesh-pose drift is not an upper-body instability violation"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, false, false));
+		TestTrue(
+			TEXT("Raw upper-body simulation remains an upper-body instability violation"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(true, false, false));
+		TestTrue(
+			TEXT("Upper-body motion remains an upper-body instability violation"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, true, false));
+		TestTrue(
+			TEXT("Upper-body pending resets remain an upper-body instability violation"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, false, true));
 		TestEqual(
 			TEXT("Late-validation failure taxonomy has a truthful unknown fallback"),
 			FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(false, false, false),

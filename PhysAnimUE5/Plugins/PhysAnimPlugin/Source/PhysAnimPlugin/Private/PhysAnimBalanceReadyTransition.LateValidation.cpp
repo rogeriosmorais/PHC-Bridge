@@ -17,6 +17,11 @@ FString FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(boo
 	return TEXT("phase1_late_validate_unknown");
 }
 
+bool FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(bool bRawSimViolation, bool bMotionViolation, bool bPendingResetViolation)
+{
+	return bRawSimViolation || bMotionViolation || bPendingResetViolation;
+}
+
 
 
 bool FPhysAnimBalanceReadyTransition::ValidateLateValidationHandoffSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const FPhysAnimStabilizationSettings& Settings, FString& OutReason) const

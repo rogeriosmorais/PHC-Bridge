@@ -144,4 +144,5 @@ This section identifies the last confirmed failure modes as of the latest smoke 
 - **Identifier**: `phase1_late_validate_upper_body_instability`
 - **Context**: Convergence failures in `LateValidationKinematicHold`.
 - **Confirmed Producer**: `ClassifyLateValidationFailureReason` had a parallel stale path; now consolidated to the authoritative observed-violation gate.
+- **Current Contract**: this reason must reflect only authoritative upper-body failures during kinematic hold: raw simulation, non-trivial motion, or pending-reset leakage. Mesh-pose drift relative to frozen entry-hold quats is forensic-only; target continuity remains owned by convergence/control-target diagnostics.
 
