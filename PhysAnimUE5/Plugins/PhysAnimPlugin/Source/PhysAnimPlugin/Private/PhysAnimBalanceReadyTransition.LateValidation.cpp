@@ -95,7 +95,9 @@ bool FPhysAnimBalanceReadyTransition::ValidateRootOnReadinessSnapshot(const FPhy
 
 	if (Result.RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
 	{
-		OutReason = TEXT("phase2_root_on_readiness_topology_not_certified");
+		OutReason = Result.RootOnReadinessGateReason.IsEmpty()
+			? TEXT("phase2_root_on_readiness_topology_not_certified")
+			: Result.RootOnReadinessGateReason;
 		return false;
 	}
 

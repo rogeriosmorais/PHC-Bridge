@@ -14,6 +14,7 @@ namespace BalanceTransitionSets
 		const USkeletalMeshComponent* Mesh,
 		const TArray<FName>& SimulatingBones,
 		FVector& OutLiveChainCenterCm);
+	FVector ResolveBodyOrBoneLocationCm(const USkeletalMeshComponent* Mesh, FName BoneName);
 
 	FTransform BuildWarmStartPelvisTransform(
 		const USkeletalMeshComponent* Mesh,

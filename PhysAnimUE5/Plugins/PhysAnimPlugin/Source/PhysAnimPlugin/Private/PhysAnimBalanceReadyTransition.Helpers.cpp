@@ -2,6 +2,21 @@
 
 namespace BalanceTransitionSets
 {
+	FVector ResolveBodyOrBoneLocationCm(const USkeletalMeshComponent* Mesh, FName BoneName)
+	{
+		if (!Mesh)
+		{
+			return FVector::ZeroVector;
+		}
+
+		if (const FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
+		{
+			return BodyInstance->GetUnrealWorldTransform().GetLocation();
+		}
+
+		return Mesh->GetBoneTransform(Mesh->GetBoneIndex(BoneName)).GetLocation();
+	}
+
 	bool IsExpectedPhase2Topology(int32 SimCountPre, int32 SimCountPost, int32 DistalSimCountPre, int32 DistalSimCountPost)
 	{
 		return DistalSimCountPre >= 0 &&
@@ -21,7 +36,7 @@ namespace BalanceTransitionSets
 		}
 
 		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-		const FTransform PelvisTransform = Mesh->GetBoneTransform(Mesh->GetBoneIndex(RootBoneName));
+		const FVector PelvisLocation = ResolveBodyOrBoneLocationCm(Mesh, RootBoneName);
 
 		FVector Sum = FVector::ZeroVector;
 		int32 Count = 0;
@@ -32,7 +47,7 @@ namespace BalanceTransitionSets
 				continue;
 			}
 
-			Sum += Mesh->GetBoneTransform(Mesh->GetBoneIndex(BoneName)).GetLocation();
+			Sum += ResolveBodyOrBoneLocationCm(Mesh, BoneName);
 			++Count;
 		}
 
@@ -42,10 +57,10 @@ namespace BalanceTransitionSets
 		}
 		else
 		{
-			OutLiveChainCenterCm = PelvisTransform.GetLocation();
+			OutLiveChainCenterCm = PelvisLocation;
 		}
 
-		return FVector::Dist(PelvisTransform.GetLocation(), OutLiveChainCenterCm);
+		return FVector::Dist(PelvisLocation, OutLiveChainCenterCm);
 	}
 
 	FTransform BuildWarmStartPelvisTransform(
@@ -61,6 +76,7 @@ namespace BalanceTransitionSets
 		const float ErrorCm = ComputePelvisProximalConstraintErrorCm(Mesh, SimulatingBones, LiveChainCenterCm);
 		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 		FTransform PelvisTransform = Mesh->GetBoneTransform(Mesh->GetBoneIndex(RootBoneName));
+		PelvisTransform.SetLocation(ResolveBodyOrBoneLocationCm(Mesh, RootBoneName));
 		if (ErrorCm > KINDA_SMALL_NUMBER)
 		{
 			PelvisTransform.SetLocation(LiveChainCenterCm);

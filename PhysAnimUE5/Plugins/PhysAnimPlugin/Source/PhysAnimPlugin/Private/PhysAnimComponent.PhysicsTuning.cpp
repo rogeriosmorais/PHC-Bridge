@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimBalanceReadyTransitionPrivate.h"
 
 bool UPhysAnimComponent::ActivateRuntimePhysicsControl(FString& OutError)
 {
@@ -869,6 +870,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	// Use the pre-calculated value from the top of the function
 	const bool bAllowRootBodyModifierSimulationInBalanceMode = bAllowRootSim;
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	USkeletalMeshComponent* const MeshComponentPtr = GetMeshComponent();
 	for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
 		const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
@@ -962,6 +964,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				BodyModifierMovementType = EPhysicsMovementType::Kinematic;
 				BodyModifierCollisionType = ECollisionEnabled::NoCollision;
 				BodyModifierPhysicsBlendWeight = 0.0f;
+				bUpdateKinematicFromSimulation = bIsRootBodyModifier;
 			}
 			else if (BringUpGroupIndex == 0 || BringUpGroupIndex == 1)
 			{
@@ -977,14 +980,62 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				BodyModifierCollisionType = ECollisionEnabled::NoCollision;
 				BodyModifierPhysicsBlendWeight = 0.0f;
 			}
-			bUpdateKinematicFromSimulation = false;
+		}
+		if ((bPhase1Prepare || bPhase1LateValidate) &&
+			bIsRootBodyModifier &&
+			BodyModifierMovementType == EPhysicsMovementType::Kinematic &&
+			bUpdateKinematicFromSimulation &&
+			MeshComponentPtr)
+		{
+			if (FBodyInstance* const PelvisBody = MeshComponentPtr->GetBodyInstance(RootBoneNameInternal))
+			{
+				const int32 PelvisBoneIndex = MeshComponentPtr->GetBoneIndex(RootBoneNameInternal);
+				const FTransform AnimatedPelvisTransform =
+					PelvisBoneIndex != INDEX_NONE
+						? MeshComponentPtr->GetBoneTransform(PelvisBoneIndex)
+						: PelvisBody->GetUnrealWorldTransform();
+				FVector DesiredPelvisLocation = FVector::ZeroVector;
+				int32 DesiredPelvisLocationSamples = 0;
+				const auto AccumulatePelvisCandidate = [&](const FName ChildBoneName)
+				{
+					const int32 ChildBoneIndex = MeshComponentPtr->GetBoneIndex(ChildBoneName);
+					if (ChildBoneIndex == INDEX_NONE)
+					{
+						return;
+					}
+
+					const FVector AnimatedChildLocation = MeshComponentPtr->GetBoneTransform(ChildBoneIndex).GetLocation();
+					const FVector AnimatedOffset = AnimatedChildLocation - AnimatedPelvisTransform.GetLocation();
+					const FVector RawChildLocation = BalanceTransitionSets::ResolveBodyOrBoneLocationCm(MeshComponentPtr, ChildBoneName);
+					DesiredPelvisLocation += RawChildLocation - AnimatedOffset;
+					++DesiredPelvisLocationSamples;
+				};
+
+				AccumulatePelvisCandidate(TEXT("thigh_l"));
+				AccumulatePelvisCandidate(TEXT("thigh_r"));
+				AccumulatePelvisCandidate(TEXT("spine_01"));
+				if (DesiredPelvisLocationSamples == 0)
+				{
+					DesiredPelvisLocation = AnimatedPelvisTransform.GetLocation();
+				}
+				else
+				{
+					DesiredPelvisLocation /= static_cast<float>(DesiredPelvisLocationSamples);
+				}
+				FTransform DesiredPelvisTransform = PelvisBody->GetUnrealWorldTransform();
+				DesiredPelvisTransform.SetLocation(DesiredPelvisLocation);
+				PelvisBody->SetBodyTransform(DesiredPelvisTransform, ETeleportType::TeleportPhysics, true);
+			}
 		}
 		if (bPhase2RootAuthorityQuarantined && !bTransitionOwnsRootOnThisTick && !bLastAppliedPresentationRootSimulationEnabled)
 		{
 			BodyModifierMovementType = EPhysicsMovementType::Kinematic;
 			BodyModifierPhysicsBlendWeight = 0.0f;
 			BodyModifierCollisionType = ECollisionEnabled::NoCollision;
-			bUpdateKinematicFromSimulation = false;
+			if (!bIsRootBodyModifier)
+			{
+				bUpdateKinematicFromSimulation = false;
+			}
 		}
 
 		const bool bRootOnApplicationTick =

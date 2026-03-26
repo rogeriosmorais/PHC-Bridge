@@ -197,24 +197,10 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	if (USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent())
+	if (!CurrentSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied)
 	{
-		const FVector PelvisLocation = Mesh->GetBoneTransform(Mesh->GetBoneIndex(PhysAnimBridge::GetRootBoneName())).GetLocation();
-		const auto ComputeDirectLinkErrorCm = [&](const FName BoneName)
-		{
-			return FVector::Dist(PelvisLocation, Mesh->GetBoneTransform(Mesh->GetBoneIndex(BoneName)).GetLocation());
-		};
-
-		const float PelvisThighLErrorCm = ComputeDirectLinkErrorCm(TEXT("thigh_l"));
-		const float PelvisThighRErrorCm = ComputeDirectLinkErrorCm(TEXT("thigh_r"));
-		const float PelvisSpine01ErrorCm = ComputeDirectLinkErrorCm(TEXT("spine_01"));
-		if (PelvisThighLErrorCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm ||
-			PelvisThighRErrorCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm ||
-			PelvisSpine01ErrorCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm)
-		{
-			OutReason = TEXT("phase2_pre_root_on_link_error_too_high");
-			return false;
-		}
+		OutReason = TEXT("phase2_pre_root_on_link_error_too_high");
+		return false;
 	}
 
 	if (ShellOffset > Settings.BalancePhase2EntryMaxShellOffsetDelta)

@@ -928,11 +928,13 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					? TEXT("upper_only_safe_deny")
 					: TEXT("phase1_late_validate_shell_hold_pending");
 
-			Diagnostics.Phase1RootOnReadinessGateReason = bIsRootCoupledTopology && CurrentResult.bRootOnReadinessProven
-				? TEXT("ready")
-				: bIsUpperOnlyTopology 
-					? TEXT("phase1_root_on_readiness_upper_only_safe_deny_pending")
-					: TEXT("phase1_root_on_readiness_shell_hold_pending");
+			Diagnostics.Phase1RootOnReadinessGateReason = CurrentResult.RootOnReadinessGateReason.IsEmpty()
+				? (bIsRootCoupledTopology && CurrentResult.bRootOnReadinessProven
+					? TEXT("ready")
+					: bIsUpperOnlyTopology
+						? TEXT("phase1_root_on_readiness_upper_only_safe_deny_pending")
+						: TEXT("phase1_root_on_readiness_shell_hold_pending"))
+				: CurrentResult.RootOnReadinessGateReason;
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
 
 			const bool bCanCompleteAsRootCoupledReady =
@@ -992,9 +994,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					}
 
 					const FString RootOnReadinessGateReason =
-						CertifiedLateValidationResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+						CertifiedLateValidationResult.RootOnReadinessGateReason.IsEmpty()
+							? (CertifiedLateValidationResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
 								? TEXT("ready")
-							: Diagnostics.Phase1RootOnReadinessGateReason;
+								: Diagnostics.Phase1RootOnReadinessGateReason)
+							: CertifiedLateValidationResult.RootOnReadinessGateReason;
 					Diagnostics.Phase1RootOnReadinessGateReason = RootOnReadinessGateReason;
 
 					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] EMIT_READY_HANDOFF classification=%s outcome=%s"), 
@@ -1160,12 +1164,18 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			if (!bRootOnReadinessFinalBringUpControlSettled) UnsatisfiedGates.Add(TEXT("bringup_not_settled"));
 			if (!bRootOnReadinessPolicyInfluenceSettled) UnsatisfiedGates.Add(TEXT("policy_influence_not_settled"));
 			if (!bPreRootOnShellSafetyProofSatisfied) UnsatisfiedGates.Add(TEXT("shell_safety_proof_unsatisfied"));
-			if (!bRootOnReadinessProven) UnsatisfiedGates.Add(TEXT("ready_proof_failed"));
+			if (!bRootOnReadinessProven)
+			{
+				UnsatisfiedGates.Add(
+					CurrentResult.RootOnReadinessGateReason.IsEmpty()
+						? TEXT("ready_proof_failed")
+						: CurrentResult.RootOnReadinessGateReason);
+			}
 
 			const FString PrimaryReason = UnsatisfiedGates.Num() > 0 ? UnsatisfiedGates[0] : TEXT("unknown");
 			const FString SecondaryReason = UnsatisfiedGates.Num() > 1 ? UnsatisfiedGates[1] : TEXT("none");
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_CONVERGENCE_REPORT upperBodyHold=%d simCoverage=%d targetContinuity=%d quietProof=%d bodyMotion=%d rootValidity=%d expectedRelease=%d readyProven=%d shellHold=%d bringUp=%d policyInfl=%d shellSafety=%d lateValidateSeconds=%.2f/%.2f shellHoldSeconds=%.2f/%.2f quietProofSeconds=%.2f/%.2f shellProofSeconds=%.2f/%.2f"),
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_CONVERGENCE_REPORT upperBodyHold=%d simCoverage=%d targetContinuity=%d quietProof=%d bodyMotion=%d rootValidity=%d expectedRelease=%d readyProven=%d shellHold=%d bringUp=%d policyInfl=%d shellSafety=%d rootOnGate=%s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f lateValidateSeconds=%.2f/%.2f shellHoldSeconds=%.2f/%.2f quietProofSeconds=%.2f/%.2f shellProofSeconds=%.2f/%.2f"),
 				bUpperBodyHoldSatisfied ? 1 : 0,
 				bSimCoverageSatisfied ? 1 : 0,
 				bTargetContinuitySatisfied ? 1 : 0,
@@ -1178,6 +1188,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				bRootOnReadinessFinalBringUpControlSettled ? 1 : 0,
 				bRootOnReadinessPolicyInfluenceSettled ? 1 : 0,
 				bPreRootOnShellSafetyProofSatisfied ? 1 : 0,
+				*CurrentResult.RootOnReadinessGateReason,
+				CurrentResult.PelvisThighLErrorCm,
+				CurrentResult.PelvisThighRErrorCm,
+				CurrentResult.PelvisSpine01ErrorCm,
 				LateValidationAccumulatedSeconds, Settings.BalancePhase1LateValidateRequiredSeconds,
 				RootOnReadinessShellHoldAccumulatedSeconds, Settings.BalancePhase2RequiredShellHoldDuration,
 				QuietWindowAccumulatedSeconds, Settings.BalancePhase1QuietRequiredSeconds,
@@ -1254,6 +1268,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			}
 
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_NONCONVERGENCE primary=%s secondary=%s"), *PrimaryReason, *SecondaryReason);
+			LateValidateBlockReason = PrimaryReason;
 
 			// DISTAL_FORENSIC_REPORT
 			bool bAnyDistalContribution = false;
@@ -2187,10 +2202,10 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					return;
 				}
 
-				const FVector PelvisLocation = Mesh->GetBoneTransform(Mesh->GetBoneIndex(PhysAnimBridge::GetRootBoneName())).GetLocation();
+				const FVector PelvisLocation = BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, PhysAnimBridge::GetRootBoneName());
 				const auto LogLinkError = [&](const TCHAR* Label, FName BoneName)
 				{
-					const FVector BoneLocation = Mesh->GetBoneTransform(Mesh->GetBoneIndex(BoneName)).GetLocation();
+					const FVector BoneLocation = BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, BoneName);
 					const float ErrorCm = FVector::Dist(PelvisLocation, BoneLocation);
 					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_PRE link=%s errorCm=%.2f threshold=%.2f"),
 						Label,

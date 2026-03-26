@@ -147,6 +147,7 @@ struct FPhysAnimLateValidationResult
 {
 	EBalanceLateValidationOutcome Outcome = EBalanceLateValidationOutcome::Outcome_Pending;
 	EBalanceReadyRootOnReadinessClassification RootOnReadinessClassification = EBalanceReadyRootOnReadinessClassification::NotReady;
+	FString RootOnReadinessGateReason;
 	bool bRootOnReadinessProven = false;
 	bool bLateValidationCompleted = false;
 	bool bRootOnReadinessShellHoldSatisfied = false;
@@ -154,6 +155,10 @@ struct FPhysAnimLateValidationResult
 	bool bRootOnReadinessFinalBringUpControlSettled = false;
 	bool bRootOnReadinessPolicyInfluenceSettled = false;
 	bool bPreRootOnShellSafetyProofSatisfied = false;
+	bool bRootOnDirectPelvisLinkGeometrySatisfied = false;
+	float PelvisThighLErrorCm = 0.0f;
+	float PelvisThighRErrorCm = 0.0f;
+	float PelvisSpine01ErrorCm = 0.0f;
 	float MaxTargetDeltaDegrees = 0.0f;
 	float MeanTargetDeltaDegrees = 0.0f;
 	float QuietProofDurationSeconds = 0.0f;
@@ -215,6 +220,10 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	float ShellVelocityDeltaAtCaptureCmPerSecond = 0.0f;
 	float ShellOffsetGrowthCm = 0.0f;
 	float ShellVelocityGrowthCmPerSecond = 0.0f;
+	bool bRootOnDirectPelvisLinkGeometrySatisfied = false;
+	float PelvisThighLErrorCm = 0.0f;
+	float PelvisThighRErrorCm = 0.0f;
+	float PelvisSpine01ErrorCm = 0.0f;
 	bool bShellCorrectionOwnerActive = false;
 	bool bTransitionOwnedShellLocked = false;
 	bool bTransitionShellReferenceReanchored = false;
