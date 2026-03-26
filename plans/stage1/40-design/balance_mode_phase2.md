@@ -183,6 +183,14 @@ During the guard window, the following remain forbidden:
 - shell assistance
 - shell-reference reseed used as support
 
+The guard window ends only when Settle accepts a contiguous ready hold over the accepted post-RootOn topology.
+
+During Settle:
+
+- non-ready frames reset the Settle success hold timer
+- the first truthful post-RootOn instability/spike frame is a hard terminal failure
+- diagnostics may report root/proximal/modifier disagreement, but must not re-enable simulation or rewrite Physics Control state in the same frame to make Settle pass
+
 ## 12. Failure classes
 
 Examples include:

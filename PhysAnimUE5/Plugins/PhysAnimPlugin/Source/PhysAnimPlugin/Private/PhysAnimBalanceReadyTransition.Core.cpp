@@ -1924,11 +1924,18 @@ extern int32 GVerbosePhase2Forensics;
 			return;
 		}
 
-		StableHoldAccumulatedSeconds += DeltaTime;
-		if (StableHoldAccumulatedSeconds >= Settings.BalancePhase3RequiredStableHoldDuration)
+		if (bReadyThisFrame)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Phase 3 settle success. Ready for perturbation. duration=%.2f"), StableHoldAccumulatedSeconds);
-			SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
+			StableHoldAccumulatedSeconds += DeltaTime;
+			if (StableHoldAccumulatedSeconds >= Settings.BalancePhase3RequiredStableHoldDuration)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Phase 3 settle success. Ready for perturbation. duration=%.2f"), StableHoldAccumulatedSeconds);
+				SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
+			}
+		}
+		else
+		{
+			StableHoldAccumulatedSeconds = 0.0f;
 		}
 
 		if (PhaseTimeSeconds > Settings.BalancePhase3TimeoutDuration)

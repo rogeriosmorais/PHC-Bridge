@@ -1068,58 +1068,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUpdateKinematicFromSimulation = false;
 		}
 
-		// PHASE3 ROOT SETTLE PRESERVE:
-		// Stabilize Phase 3 entry by preserving root simulation during the first frame of Settle.
-		if (bIsRootBodyModifier && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle && BalanceEntrySettleFrameCount == 1 &&
-			BalanceReadyTransition.GetPreviousPhase() == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3)
-		{
-			const FPhysicsBodyModifierRecord* const PrevRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName);
-			const EPhysicsMovementType PelvisModifierBefore = PrevRecord ? PrevRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Simulated;
-
-			BodyModifierMovementType = EPhysicsMovementType::Simulated;
-			BodyModifierPhysicsBlendWeight = 1.0f;
-			BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
-			bUpdateKinematicFromSimulation = false;
-
-			int32 RawReadbackBefore = -1;
-			int32 RawReadbackAfter = -1;
-			int32 WriteApplied = 0;
-			int32 RetryApplied = 0;
-
-			USkeletalMeshComponent* const Mesh = GetMeshComponent();
-			if (Mesh)
-			{
-				if (FBodyInstance* PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
-				{
-					RawReadbackBefore = PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0;
-					
-					PelvisBody->SetInstanceSimulatePhysics(true, true);
-					WriteApplied = 1;
-					RawReadbackAfter = PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0;
-
-					if (RawReadbackAfter == 0)
-					{
-						PelvisBody->SetInstanceSimulatePhysics(true, true);
-						RetryApplied = 1;
-						RawReadbackAfter = PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0;
-					}
-				}
-			}
-
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_ROOT_SETTLE_PRESERVE frame=%llu tick=%d writeApplied=%d retryApplied=%d rootRawSimBefore=%d rootRawSimAfter=%d pelvisModifierBeforeName=%s pelvisModifierAfterName=%s owner=%d actor=%s component=%s"),
-				GFrameCounter,
-				static_cast<int32>(BalanceEntrySettleFrameCount),
-				WriteApplied,
-				RetryApplied,
-				RawReadbackBefore,
-				RawReadbackAfter,
-				GetPhysicsMovementTypeName(PelvisModifierBefore),
-				GetPhysicsMovementTypeName(BodyModifierMovementType),
-				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
-				*GetOwner()->GetName(),
-				*GetName());
-		}
-
 		// Phase 2 Root Promotion Audit (One-Shot per Frame)
 		const bool bIsRootTraceTargetState = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
 		if (bIsRootBodyModifier && bIsRootTraceTargetState)

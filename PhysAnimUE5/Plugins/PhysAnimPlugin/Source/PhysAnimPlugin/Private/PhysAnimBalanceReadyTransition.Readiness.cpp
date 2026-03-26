@@ -279,22 +279,6 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 
 	if (!PelvisBody || !PelvisBody->IsInstanceSimulatingPhysics())
 	{
-		const bool bCurrentSettleGuardFrameExemption = (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle) &&
-			(Phase3GuardTickCount == 1) &&
-			(bPreviousFrameSettleEndRootRawSim && bPreviousFrameSettleEndPelvisRawSim);
-
-		if (bCurrentSettleGuardFrameExemption)
-		{
-			if (PelvisBody)
-			{
-				PelvisBody->SetInstanceSimulatePhysics(true, true);
-				if (PelvisBody->IsInstanceSimulatingPhysics())
-				{
-					return true;
-				}
-			}
-		}
-
 		OutReason = TEXT("phase3_root_simulation_dropped");
 		return false;
 	}
@@ -310,16 +294,9 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	if (PelvisLinearSpeed > Phase3LinearInstabilityThreshold ||
 		PelvisAngularSpeed > Phase3AngularInstabilityThreshold)
 	{
-		ConsecutiveBodyMotionInstabilityTicks++;
-		if (ConsecutiveBodyMotionInstabilityTicks == 1)
-		{
-			return true;
-		}
-
 		OutReason = TEXT("phase3_post_root_on_instability");
 		return false;
 	}
-	ConsecutiveBodyMotionInstabilityTicks = 0;
 
 	// Section 17.3 - post-root-on topology preserved
 	TArray<FName> SimulatingBones;

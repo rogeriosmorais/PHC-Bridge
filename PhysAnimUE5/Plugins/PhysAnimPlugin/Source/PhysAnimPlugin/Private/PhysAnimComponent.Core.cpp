@@ -1695,92 +1695,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
 	{
 		const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
-		static const FName SettlePreservedBones[] =
-		{
-			TEXT("pelvis"),
-			TEXT("thigh_l"),
-			TEXT("thigh_r"),
-			TEXT("spine_01"),
-			TEXT("spine_02"),
-			TEXT("spine_03")
-		};
 		USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 		FBodyInstance* const RootBI = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
-		bool bRootRawSim = RootBI && RootBI->IsInstanceSimulatingPhysics();
-		bool bPelvisRawSim = bRootRawSim;
-
-		int32 TotalSimCount = 0;
-		if (Mesh)
-		{
-			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
-			{
-				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
-				{
-					if (BI->IsInstanceSimulatingPhysics())
-					{
-						TotalSimCount++;
-					}
-				}
-			}
-		}
-
-		EPhysicsMovementType PelvisModType = EPhysicsMovementType::Static;
-		if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
-		{
-			const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(RootBoneName);
-			if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
-			{
-				PelvisModType = Record->BodyModifier.ModifierData.MovementType;
-			}
-		}
-
-		const bool bSettleModifierMismatch = PelvisModType != EPhysicsMovementType::Simulated;
-		if ((!bRootRawSim || TotalSimCount < 6 || bSettleModifierMismatch) && Mesh)
-		{
-			for (const FName& BoneName : SettlePreservedBones)
-			{
-				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
-				{
-					BI->SetInstanceSimulatePhysics(true, true);
-				}
-			}
-
-			if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
-			{
-				for (const FName& BoneName : SettlePreservedBones)
-				{
-					const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-					PC->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
-					PC->SetBodyModifierPhysicsBlendWeight(ModifierName, 1.0f, false, false);
-					PC->SetBodyModifierCollisionType(ModifierName, ECollisionEnabled::QueryAndPhysics, false, false);
-					PC->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, false, false, false);
-				}
-			}
-
-			bRootRawSim = RootBI && RootBI->IsInstanceSimulatingPhysics();
-			bPelvisRawSim = bRootRawSim;
-			TotalSimCount = 0;
-			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
-			{
-				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
-				{
-					if (BI->IsInstanceSimulatingPhysics())
-					{
-						TotalSimCount++;
-					}
-				}
-			}
-
-			if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
-			{
-				const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(RootBoneName);
-				if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, PelvisModifierName))
-				{
-					PelvisModType = Record->BodyModifier.ModifierData.MovementType;
-				}
-			}
-
-		}
+		const bool bRootRawSim = RootBI && RootBI->IsInstanceSimulatingPhysics();
+		const bool bPelvisRawSim = bRootRawSim;
 
 		BalanceReadyTransition.UpdateSettleContinuityState(bRootRawSim, bPelvisRawSim);
 	}

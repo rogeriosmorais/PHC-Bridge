@@ -256,7 +256,9 @@ EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOw
 	}
 	if (Reason == TEXT("phase2_root_not_confirmed") ||
 		Reason == TEXT("phase2_root_simulation_dropped") ||
-		Reason == TEXT("phase2_root_on_spike"))
+		Reason == TEXT("phase2_root_on_spike") ||
+		Reason == TEXT("phase3_root_simulation_dropped") ||
+		Reason == TEXT("phase3_post_root_on_instability"))
 	{
 		return EBalanceReadyConditionOwner::Phase2RootOnExecution;
 	}

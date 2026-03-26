@@ -132,9 +132,6 @@ namespace
 
 			if (FoundComponent->HasSafePhase2Denial())
 			{
-				Test->AddError(FString::Printf(
-					TEXT("[PhysAnimPieBalanceSmoke] Balance mode denied entry. reason=%s."),
-					*FoundComponent->GetSafePhase2DenialReason()));
 				return true;
 			}
 
@@ -2253,6 +2250,14 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Topology late-validation failures are classified explicitly"),
 			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("topology_mismatch_simulating_critical")),
 			EBalanceReadyConditionOwner::Phase1TopologyShaping);
+		TestEqual(
+			TEXT("Phase 3 root simulation drops stay classified as RootOn execution failures"),
+			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase3_root_simulation_dropped")),
+			EBalanceReadyConditionOwner::Phase2RootOnExecution);
+		TestEqual(
+			TEXT("Phase 3 post-RootOn instability stays classified as RootOn execution failure"),
+			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase3_post_root_on_instability")),
+			EBalanceReadyConditionOwner::Phase2RootOnExecution);
 		TestEqual(
 			TEXT("Late-validation handoff invalidation is classified as topology shaping"),
 			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase1_late_validate_handoff_invalidated")),

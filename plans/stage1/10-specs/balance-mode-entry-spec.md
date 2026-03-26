@@ -57,6 +57,12 @@ Interpretation rules:
 | `RootOn` | normal policy writes into the transition set; shell material influence on simulated bodies; cached resets; topology expansion outside certified RootOn choreography; CharacterMovement correction influence on the simulated transition set | probe-only omission such as skipped `UpdateControls()` is allowed, but it does not relax same-tick end-state success rules |
 | `Settle` | reintroduction of forbidden transition-time policy/shell/reset assistance before post-RootOn continuity is accepted; hidden support that masks instability | only the explicitly released post-RootOn steady-state path may resume after Settle acceptance |
 
+Settle success requires a contiguous ready hold over the accepted post-RootOn topology.
+
+- non-ready Settle frames reset the success hold timer
+- the first truthful post-RootOn instability/spike frame is terminal
+- Settle diagnostics may observe continuity loss, but must not repair physics/control state in the same frame to turn failure into success
+
 ## Mismatch outcome boundary
 
 Use the following boundary for all balance-entry phases:
