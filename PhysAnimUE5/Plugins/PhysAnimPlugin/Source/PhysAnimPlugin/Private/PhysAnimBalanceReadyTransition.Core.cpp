@@ -145,6 +145,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
 		Phase2GuardTickCount++;
+		ReconcileKinematicHoldSet(Owner, Settings);
 	}
 	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{

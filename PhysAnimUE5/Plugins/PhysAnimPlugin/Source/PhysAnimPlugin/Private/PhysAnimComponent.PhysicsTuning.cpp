@@ -1041,8 +1041,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		// PHASE2 PROXIMAL SET PRESERVATION:
 		// These five bones must remain simulated during RootOn to match Phase 1 topology.
 		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
-			(BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
-			 BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03")))
+			(BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r")))
 		{
 			BodyModifierMovementType = EPhysicsMovementType::Simulated;
 			BodyModifierPhysicsBlendWeight = 1.0f;

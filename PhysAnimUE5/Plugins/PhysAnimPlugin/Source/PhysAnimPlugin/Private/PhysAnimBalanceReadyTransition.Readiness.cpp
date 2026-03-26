@@ -247,7 +247,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2Continuity(UPhysAnimComponen
 		(Phase2GuardTickCount <= 2) &&
 		Diagnostics.bPhase2RequestedRootSim &&
 		(!bPelvisActualSim) &&
-		(Diagnostics.SimCountPost == 5) &&
+		(Diagnostics.SimCountPost == 4) &&
 		(Diagnostics.FirstContradictionSource == TEXT("pre_updatecontrols"));
 
 	if (bPendingDelayedRootApplication)

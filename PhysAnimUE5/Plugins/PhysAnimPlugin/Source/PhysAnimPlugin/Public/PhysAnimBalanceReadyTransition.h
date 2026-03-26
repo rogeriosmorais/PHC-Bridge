@@ -332,6 +332,7 @@ public:
 	void Start(const FString& InRequestReason, class UPhysAnimComponent* Owner);
 	void Cancel(class UPhysAnimComponent* Owner);
 	void Tick(float DeltaTime, class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);
+	void ReconcileKinematicHoldSet(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);
 
 	void PushConvergenceSnapshot(const FPhase1AcceptedConvergenceSnapshot& Snapshot) { CachedConvergenceSnapshot = Snapshot; }
 
