@@ -63,7 +63,6 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] GET_SIMULATING_BODIES count=%d"), SimulatingBones.Num());
 	}
 	TSet<FName> SimulatingBoneSet(SimulatingBones);
-	const bool bIsRootOn = (Owner->GetRuntimeState() == EPhysAnimRuntimeState::BalanceEntry_RootOn);
 
 	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
 	{
@@ -85,41 +84,6 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 				UpperSimCount++;
 			}
 			continue;
-		}
-
-		// Authority Override: if in RootOn, raw sim = 1, and bone is proximal, count as preserved
-		if (bIsRootOn && bIsProximal)
-		{
-			if (FBodyInstance* const BI = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr)
-			{
-				if (BI->IsInstanceSimulatingPhysics())
-				{
-					ProximalSimCount++;
-					SimulatingBoneSet.Add(BoneName);
-
-					// Check if modifier record still says Kinematic to log the override
-					EPhysicsMovementType ModifierType = EPhysicsMovementType::Simulated;
-					if (UPhysicsControlComponent* const PC = Owner->PhysicsControlComponent.Get())
-					{
-						const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-						if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, ModifierName))
-						{
-							ModifierType = Record->BodyModifier.ModifierData.MovementType;
-						}
-					}
-
-					if (ModifierType == EPhysicsMovementType::Kinematic)
-					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_RAW_AUTHORITY frame=%llu tick=%d bone=%s topologyExpected=Simulated rawSim=1 countedAsPreserved=1 owner=%d actor=%s component=%s"),
-							GFrameCounter,
-							static_cast<int32>(Owner->BalanceEntryRootOnFrameCount),
-							*BoneName.ToString(),
-							static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase2_topology_not_preserved"))),
-							*Owner->GetOwner()->GetName(),
-							*Owner->GetName());
-					}
-				}
-			}
 		}
 	}
 

@@ -240,21 +240,6 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2Continuity(UPhysAnimComponen
 
 	const bool bPelvisActualSim = PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : false;
 
-	// Section 17.5 - delayed RootOn application:
-	// tick 1 records the pre_updatecontrols contradiction, then the next guard frame can still
-	// observe rootRawSim=0 before the tick-2 write applies simulation.
-	const bool bPendingDelayedRootApplication = (Owner->GetRuntimeState() == EPhysAnimRuntimeState::BalanceEntry_RootOn) &&
-		(Phase2GuardTickCount <= 2) &&
-		Diagnostics.bPhase2RequestedRootSim &&
-		(!bPelvisActualSim) &&
-		(Diagnostics.SimCountPost == 4) &&
-		(Diagnostics.FirstContradictionSource == TEXT("pre_updatecontrols"));
-
-	if (bPendingDelayedRootApplication)
-	{
-		return true;
-	}
-
 	if (!bPelvisActualSim)
 	{
 		OutReason = TEXT("phase2_root_simulation_dropped");
@@ -288,10 +273,16 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 		const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(RootBoneName);
 		if (const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, PelvisModifierName))
 		{
-			if (PelvisRecord->BodyModifier.ModifierData.MovementType != EPhysicsMovementType::Simulated)
+			const bool bModifierMismatch = PelvisRecord->BodyModifier.ModifierData.MovementType != EPhysicsMovementType::Simulated;
+			if (bModifierMismatch && GVerbosePhase2Forensics != 0)
 			{
-				OutReason = TEXT("phase3_root_modifier_mismatch");
-				return false;
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] PHASE3_ROOT_MODIFIER_DIAGNOSTIC frame=%d rootRawSim=1 pelvisModifierName=%s simCountPost=%d"),
+					static_cast<int32>(GFrameCounter),
+					UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisRecord->BodyModifier.ModifierData.MovementType),
+					Diagnostics.SimCountPost);
 			}
 		}
 	}

@@ -1000,78 +1000,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
-		const bool bIsPreservedTransitionBone =
-			BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
-			BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03");
-		const bool bIsTransitionOwnedSimSet =
-			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
-			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
-			 RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery) &&
-			(bIsRootBodyModifier || bIsPreservedTransitionBone);
-
-		// Keep the post-Phase1 certified sim set alive through RootOn, Settle, and the recovery handoff.
-		if (bIsTransitionOwnedSimSet)
-		{
-			BodyModifierMovementType = EPhysicsMovementType::Simulated;
-			BodyModifierPhysicsBlendWeight = 1.0f;
-			BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
-			bUpdateKinematicFromSimulation = false;
-
-			// Force raw simulation to ensure Chaos doesn't drop them
-			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
-			{
-				if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
-				{
-					BI->SetInstanceSimulatePhysics(true, true);
-				}
-			}
-
-
-		}
-
-		// Keep root simulation authoritative throughout RootOn and Settle.
-		if (bIsRootBodyModifier &&
-			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
-			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
-			 RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery) &&
-			(bLastAppliedPresentationRootSimulationEnabled ||
-			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
-			 RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
-			 BalanceReadyTransition.IsPhase2RootAuthorityQuarantined()))
-		{
-			if (BodyModifierMovementType == EPhysicsMovementType::Kinematic)
-			{
-				BodyModifierMovementType = EPhysicsMovementType::Simulated;
-				BodyModifierPhysicsBlendWeight = 1.0f;
-				BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
-				bUpdateKinematicFromSimulation = false;
-			}
-
-			static int32 LastLoggedPersistenceFrame = -1;
-			if (LastLoggedPersistenceFrame != static_cast<int32>(GFrameNumber))
-			{
-				if (GVerbosePhase2Forensics != 0)
-			{
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOT_PERSISTENCE_OK tick=1 rawSim=1"));
-			}
-				LastLoggedPersistenceFrame = static_cast<int32>(GFrameNumber);
-			}
-		}
-
-		// Transition-owned root simulation must not be demoted before Settle acceptance.
-		if (bIsRootBodyModifier &&
-			(BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
-			 BalanceReadyTransition.GetPhase() == EBalanceReadyTransitionPhase::BRT_Phase3_Settle))
-		{
-			BodyModifierMovementType = EPhysicsMovementType::Simulated;
-			BodyModifierPhysicsBlendWeight = FMath::Max(BodyModifierPhysicsBlendWeight, 1.0f);
-			if (BodyModifierCollisionType == ECollisionEnabled::NoCollision)
-			{
-				BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
-			}
-			bUpdateKinematicFromSimulation = false;
-		}
-
 		// Phase 2 Root Promotion Audit (One-Shot per Frame)
 		const bool bIsRootTraceTargetState = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
 		if (bIsRootBodyModifier && bIsRootTraceTargetState)
@@ -1088,20 +1016,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					bTransitionKeepsBoneKinematic ? 1 : 0);
 			}
 
-			// Instrument every pelvis write in target states
-			int32 RawReadbackValue = -1;
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
-				bAllowRootBodyModifierSimulation &&
-				bTransitionOwnsRootOnThisTick &&
-				!bTransitionKeepsBoneKinematic)
-			{
-				BodyModifierMovementType = EPhysicsMovementType::Simulated;
-				if (FBodyInstance* PelvisBody = GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
-				{
-					PelvisBody->SetInstanceSimulatePhysics(true, true);
-					RawReadbackValue = PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0;
-				}
-			}
+			const int32 RawReadbackValue = -1;
 
 			// Calculate TotalSimCount for the probe
 			int32 TotalSimCount = 0;
@@ -1239,15 +1154,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, (bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn));
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, false, false);
 		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, false, false);
-
-		if (bIsRootBodyModifier &&
-			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
-			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
-			 RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery) &&
-			BodyModifierMovementType == EPhysicsMovementType::Simulated)
-		{
-			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, false, true);
-		}
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
 
