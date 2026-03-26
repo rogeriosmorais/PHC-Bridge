@@ -104,7 +104,7 @@ float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneNam
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
 		const bool bIsTick1 = PhaseTimeSeconds < 0.05f; // Estimated Tick 1 window
-		if (bIsTick1 && (BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03"))
+		if (bIsTick1 && (BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
 			return 0.0f;
 		}
@@ -198,7 +198,7 @@ float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(FName
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
 		const bool bIsTick1 = PhaseTimeSeconds < 0.05f; // Estimated Tick 1 window
-		if (bIsTick1 && (BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03"))
+		if (bIsTick1 && (BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
 			return Settings.BalanceBootstrapExtraDampingMultiplier * 2.0f;
 		}
