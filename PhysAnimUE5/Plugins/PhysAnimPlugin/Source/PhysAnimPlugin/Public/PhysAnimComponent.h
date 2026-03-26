@@ -803,6 +803,8 @@ private:
 	void ActivateBridgePhysicsState(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ApplyTrainingAlignedMassScales(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResetTrainingAlignedMassScales();
+	void ApplyTrainingAlignedSpineLimitPolicy(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void ResetTrainingAlignedSpineLimitPolicy();
 	void ApplyTrainingAlignedToeLimitPolicy(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResetTrainingAlignedToeLimitPolicy();
 	void ResetBridgePhysicsState();
@@ -1086,6 +1088,13 @@ private:
 	TMap<FName, float> OriginalToeSwing1Limits;
 	TMap<FName, float> OriginalToeSwing2Limits;
 	bool bHasSavedToeConstraintLimits = false;
+	TMap<FName, uint8> OriginalSpineTwistMotions;
+	TMap<FName, uint8> OriginalSpineSwing1Motions;
+	TMap<FName, uint8> OriginalSpineSwing2Motions;
+	TMap<FName, float> OriginalSpineTwistLimits;
+	TMap<FName, float> OriginalSpineSwing1Limits;
+	TMap<FName, float> OriginalSpineSwing2Limits;
+	bool bHasSavedSpineConstraintLimits = false;
 	FName OriginalMeshCollisionProfileName = NAME_None;
 	ECollisionEnabled::Type OriginalMeshCollisionEnabled = ECollisionEnabled::NoCollision;
 	TEnumAsByte<ECollisionResponse> OriginalMeshPawnResponse = ECollisionResponse::ECR_Block;

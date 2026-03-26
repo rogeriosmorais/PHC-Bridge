@@ -1,5 +1,136 @@
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
 
+namespace
+{
+	FTransform ResolveForensicBodyOrBoneTransform(
+		const USkeletalMeshComponent* Mesh,
+		const FName BoneName,
+		bool& bOutUsedBodyInstance)
+	{
+		bOutUsedBodyInstance = false;
+		if (!Mesh)
+		{
+			return FTransform::Identity;
+		}
+
+		if (const FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
+		{
+			if (BodyInstance->IsValidBodyInstance())
+			{
+				bOutUsedBodyInstance = true;
+				return BodyInstance->GetUnrealWorldTransform();
+			}
+		}
+
+		const int32 BoneIndex = Mesh->GetBoneIndex(BoneName);
+		return BoneIndex != INDEX_NONE ? Mesh->GetBoneTransform(BoneIndex) : FTransform::Identity;
+	}
+}
+
+bool BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(
+	const USkeletalMeshComponent* Mesh,
+	FName ParentBoneName,
+	FName ChildBoneName,
+	FDirectPelvisLinkForensicRecord& OutRecord)
+{
+	OutRecord = {};
+	OutRecord.ParentBoneName = ParentBoneName;
+	OutRecord.ChildBoneName = ChildBoneName;
+	OutRecord.LinkName = FString::Printf(TEXT("%s_%s"), *ParentBoneName.ToString(), *ChildBoneName.ToString());
+
+	if (!Mesh)
+	{
+		return false;
+	}
+
+	const UPhysicsAsset* const PhysicsAsset = Mesh->GetPhysicsAsset();
+	OutRecord.PhysicsAssetPath = PhysicsAsset ? PhysicsAsset->GetPathName() : TEXT("<none>");
+
+	const FTransform ParentTransform = ResolveForensicBodyOrBoneTransform(Mesh, ParentBoneName, OutRecord.bParentUsedBodyInstance);
+	const FTransform ChildTransform = ResolveForensicBodyOrBoneTransform(Mesh, ChildBoneName, OutRecord.bChildUsedBodyInstance);
+	OutRecord.ParentSpaceLabel = OutRecord.bParentUsedBodyInstance ? TEXT("pelvis_body_local(body_instance)") : TEXT("pelvis_body_local(bone_fallback)");
+	OutRecord.ChildSpaceLabel = OutRecord.bChildUsedBodyInstance ? TEXT("child_body_local(body_instance)") : TEXT("child_body_local(bone_fallback)");
+	OutRecord.BodyOriginDistanceCm = FVector::Dist(
+		ResolveBodyOrBoneLocationCm(Mesh, ParentBoneName),
+		ResolveBodyOrBoneLocationCm(Mesh, ChildBoneName));
+
+	if (!PhysicsAsset)
+	{
+		return false;
+	}
+
+	const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(ChildBoneName, ParentBoneName);
+	if (ConstraintIndex == INDEX_NONE || !PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex))
+	{
+		return false;
+	}
+
+	const UPhysicsConstraintTemplate* const ConstraintTemplate = PhysicsAsset->ConstraintSetup[ConstraintIndex];
+	const FConstraintInstance* const Constraint = ConstraintTemplate ? &ConstraintTemplate->DefaultInstance : nullptr;
+	if (!Constraint)
+	{
+		return false;
+	}
+
+	OutRecord.bConstraintFound = true;
+	OutRecord.AuthoredChildAnchorLocalCm = Constraint->Pos1;
+	OutRecord.AuthoredParentAnchorLocalCm = Constraint->Pos2;
+	OutRecord.EvaluatedChildAnchorWorldCm = ChildTransform.TransformPosition(Constraint->Pos1);
+	OutRecord.EvaluatedParentAnchorWorldCm = ParentTransform.TransformPosition(Constraint->Pos2);
+	OutRecord.AnchorDistanceCm = FVector::Dist(OutRecord.EvaluatedParentAnchorWorldCm, OutRecord.EvaluatedChildAnchorWorldCm);
+	return true;
+}
+
+void BalanceTransitionSets::LogDirectPelvisLinkForensicRecords(
+	const TArray<FDirectPelvisLinkForensicRecord>& Records,
+	const TCHAR* ContextTag,
+	bool bEmitMissingConstraintErrors)
+{
+	for (const FDirectPelvisLinkForensicRecord& Record : Records)
+	{
+		if (!Record.bConstraintFound)
+		{
+			if (bEmitMissingConstraintErrors)
+			{
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnimBalance] %s authored_data_missing link=%s physicsAsset=%s parent=%s child=%s"),
+					ContextTag,
+					*Record.LinkName,
+					*Record.PhysicsAssetPath,
+					*Record.ParentBoneName.ToString(),
+					*Record.ChildBoneName.ToString());
+			}
+			continue;
+		}
+
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimBalance] %s link=%s physicsAsset=%s parentAnchorLocal=(%.2f,%.2f,%.2f) childAnchorLocal=(%.2f,%.2f,%.2f) parentSpace=%s childSpace=%s parentAnchorWorld=(%.2f,%.2f,%.2f) childAnchorWorld=(%.2f,%.2f,%.2f) anchorDistanceCm=%.2f bodyOriginDistanceCm=%.2f"),
+			ContextTag,
+			*Record.LinkName,
+			*Record.PhysicsAssetPath,
+			Record.AuthoredParentAnchorLocalCm.X,
+			Record.AuthoredParentAnchorLocalCm.Y,
+			Record.AuthoredParentAnchorLocalCm.Z,
+			Record.AuthoredChildAnchorLocalCm.X,
+			Record.AuthoredChildAnchorLocalCm.Y,
+			Record.AuthoredChildAnchorLocalCm.Z,
+			*Record.ParentSpaceLabel,
+			*Record.ChildSpaceLabel,
+			Record.EvaluatedParentAnchorWorldCm.X,
+			Record.EvaluatedParentAnchorWorldCm.Y,
+			Record.EvaluatedParentAnchorWorldCm.Z,
+			Record.EvaluatedChildAnchorWorldCm.X,
+			Record.EvaluatedChildAnchorWorldCm.Y,
+			Record.EvaluatedChildAnchorWorldCm.Z,
+			Record.AnchorDistanceCm,
+			Record.BodyOriginDistanceCm);
+	}
+}
+
 bool FPhysAnimBalanceReadyTransition::ValidateLateValidationBaselineSnapshot(
 	const FPhysAnimCertifiedHandoffSnapshot& Snapshot,
 	const FPhysAnimLateValidationResult& Result,
@@ -125,15 +256,23 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.ProximalSimCount = ProximalSimCount;
 	OutSnapshot.DistalSimCount = DistalSimCount;
 	OutSnapshot.UpperBodySimCount = UpperSimCount;
-	const FVector PelvisLocation = BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, RootBoneName);
+	TArray<BalanceTransitionSets::FDirectPelvisLinkForensicRecord> DirectPelvisLinkForensics;
+	DirectPelvisLinkForensics.Reserve(3);
 	const auto ComputeDirectLinkErrorCm = [&](const FName BoneName)
 	{
-		return FVector::Dist(PelvisLocation, BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, BoneName));
+		BalanceTransitionSets::FDirectPelvisLinkForensicRecord ForensicRecord;
+		BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, RootBoneName, BoneName, ForensicRecord);
+		DirectPelvisLinkForensics.Add(ForensicRecord);
+		return ForensicRecord.bConstraintFound ? ForensicRecord.AnchorDistanceCm : ForensicRecord.BodyOriginDistanceCm;
 	};
 	OutSnapshot.PelvisThighLErrorCm = ComputeDirectLinkErrorCm(TEXT("thigh_l"));
 	OutSnapshot.PelvisThighRErrorCm = ComputeDirectLinkErrorCm(TEXT("thigh_r"));
 	OutSnapshot.PelvisSpine01ErrorCm = ComputeDirectLinkErrorCm(TEXT("spine_01"));
 	OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied =
+		DirectPelvisLinkForensics.Num() == 3 &&
+		DirectPelvisLinkForensics[0].bConstraintFound &&
+		DirectPelvisLinkForensics[1].bConstraintFound &&
+		DirectPelvisLinkForensics[2].bConstraintFound &&
 		OutSnapshot.PelvisThighLErrorCm <= BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm &&
 		OutSnapshot.PelvisThighRErrorCm <= BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm &&
 		OutSnapshot.PelvisSpine01ErrorCm <= BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm;
@@ -166,6 +305,23 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 			: (bUpperOnlyTopologyReady
 				? EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
 				: EBalanceReadyRootOnReadinessClassification::NotReady);
+
+	if (bRootCoupledTopologyReady && !OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied && !bLoggedDirectPelvisLinkForensics)
+	{
+		TArray<BalanceTransitionSets::FDirectPelvisLinkForensicRecord> FailingLinkForensics;
+		for (const BalanceTransitionSets::FDirectPelvisLinkForensicRecord& Record : DirectPelvisLinkForensics)
+		{
+			if (!Record.bConstraintFound || Record.AnchorDistanceCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm)
+			{
+				FailingLinkForensics.Add(Record);
+			}
+		}
+		BalanceTransitionSets::LogDirectPelvisLinkForensicRecords(
+			FailingLinkForensics,
+			TEXT("PHASE2_PRE_ROOT_ON_LINK_FORENSIC"),
+			true);
+		bLoggedDirectPelvisLinkForensics = true;
+	}
 
 	if (!(bHasPhase1TopologyRecord && bUseFrozenTopology))
 	{
@@ -395,7 +551,7 @@ bool FPhysAnimBalanceReadyTransition::CaptureCertifiedHandoff(UPhysAnimComponent
 {
 	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
 	FPhysAnimLateValidationResult CurrentResult;
-	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult))
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult, false))
 	{
 		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;
@@ -438,7 +594,7 @@ bool FPhysAnimBalanceReadyTransition::CaptureLateValidationBaseline(UPhysAnimCom
 {
 	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
 	FPhysAnimLateValidationResult CurrentResult;
-	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult))
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult, false))
 	{
 		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;

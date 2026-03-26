@@ -487,6 +487,7 @@ private:
 	bool bLoggedPhase3FirstFailureAudit = false;
 	bool bLoggedPhase3PreGuardRootState = false;
 	bool bLoggedPhase2ReadyForPhase3 = false;
+	mutable bool bLoggedDirectPelvisLinkForensics = false;
 	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
 
 

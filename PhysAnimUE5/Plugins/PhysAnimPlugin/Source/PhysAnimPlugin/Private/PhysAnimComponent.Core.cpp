@@ -156,16 +156,25 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	bPhase1PelvisCouplingSkipLogged = false;
 
 	const FVector SolvedPelvisLocation = BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, RootBoneName);
-	const float PelvisThighLErrorCm = FVector::Dist(SolvedPelvisLocation, BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, TEXT("thigh_l")));
-	const float PelvisThighRErrorCm = FVector::Dist(SolvedPelvisLocation, BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, TEXT("thigh_r")));
-	const float PelvisSpine01ErrorCm = FVector::Dist(SolvedPelvisLocation, BalanceTransitionSets::ResolveBodyOrBoneLocationCm(Mesh, TEXT("spine_01")));
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING solvedLoc=(%.2f,%.2f,%.2f) pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f state=%s"),
+	BalanceTransitionSets::FDirectPelvisLinkForensicRecord PelvisThighLRecord;
+	BalanceTransitionSets::FDirectPelvisLinkForensicRecord PelvisThighRRecord;
+	BalanceTransitionSets::FDirectPelvisLinkForensicRecord PelvisSpine01Record;
+	BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, RootBoneName, TEXT("thigh_l"), PelvisThighLRecord);
+	BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, RootBoneName, TEXT("thigh_r"), PelvisThighRRecord);
+	BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, RootBoneName, TEXT("spine_01"), PelvisSpine01Record);
+	const float PelvisThighLErrorCm = PelvisThighLRecord.bConstraintFound ? PelvisThighLRecord.AnchorDistanceCm : PelvisThighLRecord.BodyOriginDistanceCm;
+	const float PelvisThighRErrorCm = PelvisThighRRecord.bConstraintFound ? PelvisThighRRecord.AnchorDistanceCm : PelvisThighRRecord.BodyOriginDistanceCm;
+	const float PelvisSpine01ErrorCm = PelvisSpine01Record.bConstraintFound ? PelvisSpine01Record.AnchorDistanceCm : PelvisSpine01Record.BodyOriginDistanceCm;
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING solvedLoc=(%.2f,%.2f,%.2f) pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLBodyOrigin=%.2f pelvisThighRBodyOrigin=%.2f pelvisSpine01BodyOrigin=%.2f state=%s"),
 		SolvedPelvisLocation.X,
 		SolvedPelvisLocation.Y,
 		SolvedPelvisLocation.Z,
 		PelvisThighLErrorCm,
 		PelvisThighRErrorCm,
 		PelvisSpine01ErrorCm,
+		PelvisThighLRecord.BodyOriginDistanceCm,
+		PelvisThighRRecord.BodyOriginDistanceCm,
+		PelvisSpine01Record.BodyOriginDistanceCm,
 		GetRuntimeStateName(RuntimeState));
 }
 

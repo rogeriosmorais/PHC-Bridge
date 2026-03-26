@@ -108,6 +108,7 @@ void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilization
 	}
 
 	ApplyTrainingAlignedToeLimitPolicy(EffectiveSettings);
+	ApplyTrainingAlignedSpineLimitPolicy(EffectiveSettings);
 	SkeletalMesh->RecreatePhysicsState();
 	SkeletalMesh->SetEnablePhysicsBlending(true);
 	SkeletalMesh->WakeAllRigidBodies();
@@ -347,6 +348,98 @@ void UPhysAnimComponent::ApplyTrainingAlignedToeLimitPolicy(const FPhysAnimStabi
 	}
 }
 
+void UPhysAnimComponent::ApplyTrainingAlignedSpineLimitPolicy(const FPhysAnimStabilizationSettings& EffectiveSettings)
+{
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		return;
+	}
+
+	UPhysicsAsset* const PhysicsAsset = SkeletalMesh->GetPhysicsAsset();
+	if (!PhysicsAsset)
+	{
+		return;
+	}
+
+	if (!ShouldApplyTrainingAlignedControlFamilyProfile(
+		EffectiveSettings.bApplyTrainingAlignedControlFamilyProfile,
+		EffectiveSettings.TrainingAlignedControlFamilyProfileBlend))
+	{
+		return;
+	}
+
+	struct FSpineConstraintTarget
+	{
+		FName ChildBoneName;
+		FName ParentBoneName;
+	};
+
+	const TArray<FSpineConstraintTarget> SpineConstraints =
+	{
+		{ TEXT("spine_02"), TEXT("spine_01") },
+		{ TEXT("spine_03"), TEXT("spine_02") }
+	};
+
+	if (!bHasSavedSpineConstraintLimits)
+	{
+		OriginalSpineTwistMotions.Reset();
+		OriginalSpineSwing1Motions.Reset();
+		OriginalSpineSwing2Motions.Reset();
+		OriginalSpineTwistLimits.Reset();
+		OriginalSpineSwing1Limits.Reset();
+		OriginalSpineSwing2Limits.Reset();
+	}
+
+	int32 NumAdjustedSpineConstraints = 0;
+	const float ClampedBlendAlpha = FMath::Clamp(EffectiveSettings.TrainingAlignedControlFamilyProfileBlend, 0.0f, 1.0f);
+	for (const FSpineConstraintTarget& SpineConstraint : SpineConstraints)
+	{
+		const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(SpineConstraint.ChildBoneName, SpineConstraint.ParentBoneName);
+		if (ConstraintIndex == INDEX_NONE || !PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex))
+		{
+			continue;
+		}
+
+		UPhysicsConstraintTemplate* const ConstraintTemplate = PhysicsAsset->ConstraintSetup[ConstraintIndex];
+		FConstraintInstance* const ConstraintInstance = ConstraintTemplate ? &ConstraintTemplate->DefaultInstance : nullptr;
+		if (!ConstraintInstance)
+		{
+			continue;
+		}
+
+		if (!bHasSavedSpineConstraintLimits)
+		{
+			OriginalSpineTwistMotions.Add(SpineConstraint.ChildBoneName, static_cast<uint8>(ConstraintInstance->GetAngularTwistMotion()));
+			OriginalSpineSwing1Motions.Add(SpineConstraint.ChildBoneName, static_cast<uint8>(ConstraintInstance->GetAngularSwing1Motion()));
+			OriginalSpineSwing2Motions.Add(SpineConstraint.ChildBoneName, static_cast<uint8>(ConstraintInstance->GetAngularSwing2Motion()));
+			OriginalSpineTwistLimits.Add(SpineConstraint.ChildBoneName, ConstraintInstance->GetAngularTwistLimit());
+			OriginalSpineSwing1Limits.Add(SpineConstraint.ChildBoneName, ConstraintInstance->GetAngularSwing1Limit());
+			OriginalSpineSwing2Limits.Add(SpineConstraint.ChildBoneName, ConstraintInstance->GetAngularSwing2Limit());
+		}
+
+		const float TargetTwistLimitDegrees = FMath::Lerp(ConstraintInstance->GetAngularTwistLimit(), 25.0f, ClampedBlendAlpha);
+		const float TargetSwing1LimitDegrees = FMath::Lerp(ConstraintInstance->GetAngularSwing1Limit(), 25.0f, ClampedBlendAlpha);
+		const float TargetSwing2LimitDegrees = FMath::Lerp(ConstraintInstance->GetAngularSwing2Limit(), 25.0f, ClampedBlendAlpha);
+
+		ConstraintInstance->SetAngularTwistLimit(ACM_Limited, TargetTwistLimitDegrees);
+		ConstraintInstance->SetAngularSwing1Limit(ACM_Limited, TargetSwing1LimitDegrees);
+		ConstraintInstance->SetAngularSwing2Limit(ACM_Limited, TargetSwing2LimitDegrees);
+		++NumAdjustedSpineConstraints;
+	}
+
+	bHasSavedSpineConstraintLimits = OriginalSpineTwistMotions.Num() > 0;
+	if (NumAdjustedSpineConstraints > 0)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Log,
+			TEXT("[PhysAnim] Applied training-aligned spine operating limits: constraints=%d blend=%.2f"),
+			NumAdjustedSpineConstraints,
+			EffectiveSettings.TrainingAlignedControlFamilyProfileBlend);
+	}
+}
+
 
 void UPhysAnimComponent::ResetTrainingAlignedToeLimitPolicy()
 {
@@ -410,6 +503,68 @@ void UPhysAnimComponent::ResetTrainingAlignedToeLimitPolicy()
 	bHasSavedToeConstraintLimits = false;
 }
 
+void UPhysAnimComponent::ResetTrainingAlignedSpineLimitPolicy()
+{
+	if (!bHasSavedSpineConstraintLimits)
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	UPhysicsAsset* const PhysicsAsset = SkeletalMesh ? SkeletalMesh->GetPhysicsAsset() : nullptr;
+	if (!PhysicsAsset)
+	{
+		OriginalSpineTwistMotions.Reset();
+		OriginalSpineSwing1Motions.Reset();
+		OriginalSpineSwing2Motions.Reset();
+		OriginalSpineTwistLimits.Reset();
+		OriginalSpineSwing1Limits.Reset();
+		OriginalSpineSwing2Limits.Reset();
+		bHasSavedSpineConstraintLimits = false;
+		return;
+	}
+
+	for (const TPair<FName, uint8>& Pair : OriginalSpineTwistMotions)
+	{
+		const FName ChildBoneName = Pair.Key;
+		const FName ParentBoneName = ChildBoneName == TEXT("spine_02") ? TEXT("spine_01") : TEXT("spine_02");
+		const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(ChildBoneName, ParentBoneName);
+		if (ConstraintIndex == INDEX_NONE || !PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex))
+		{
+			continue;
+		}
+
+		UPhysicsConstraintTemplate* const ConstraintTemplate = PhysicsAsset->ConstraintSetup[ConstraintIndex];
+		FConstraintInstance* const ConstraintInstance = ConstraintTemplate ? &ConstraintTemplate->DefaultInstance : nullptr;
+		if (!ConstraintInstance)
+		{
+			continue;
+		}
+
+		const uint8* const Swing1Motion = OriginalSpineSwing1Motions.Find(ChildBoneName);
+		const uint8* const Swing2Motion = OriginalSpineSwing2Motions.Find(ChildBoneName);
+		const float* const TwistLimit = OriginalSpineTwistLimits.Find(ChildBoneName);
+		const float* const Swing1Limit = OriginalSpineSwing1Limits.Find(ChildBoneName);
+		const float* const Swing2Limit = OriginalSpineSwing2Limits.Find(ChildBoneName);
+		if (!Swing1Motion || !Swing2Motion || !TwistLimit || !Swing1Limit || !Swing2Limit)
+		{
+			continue;
+		}
+
+		ConstraintInstance->SetAngularTwistLimit(static_cast<EAngularConstraintMotion>(Pair.Value), *TwistLimit);
+		ConstraintInstance->SetAngularSwing1Limit(static_cast<EAngularConstraintMotion>(*Swing1Motion), *Swing1Limit);
+		ConstraintInstance->SetAngularSwing2Limit(static_cast<EAngularConstraintMotion>(*Swing2Motion), *Swing2Limit);
+	}
+
+	OriginalSpineTwistMotions.Reset();
+	OriginalSpineSwing1Motions.Reset();
+	OriginalSpineSwing2Motions.Reset();
+	OriginalSpineTwistLimits.Reset();
+	OriginalSpineSwing1Limits.Reset();
+	OriginalSpineSwing2Limits.Reset();
+	bHasSavedSpineConstraintLimits = false;
+}
+
 
 void UPhysAnimComponent::ResetBridgePhysicsState()
 {
@@ -423,6 +578,7 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 	}
 
 	ResetTrainingAlignedMassScales();
+	ResetTrainingAlignedSpineLimitPolicy();
 	ResetTrainingAlignedToeLimitPolicy();
 	SkeletalMesh->SetSimulatePhysics(false);
 	
@@ -910,6 +1066,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const bool bIsCertifiedRootOnPreservedBone =
 			BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
 			BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03");
+		const bool bIsRootOnUpperSupportBone =
+			BoneName == TEXT("neck_01") || BoneName == TEXT("clavicle_l") || BoneName == TEXT("clavicle_r");
+		const bool bIsRootOnOrSettleSupportFollowWindow =
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
+			bIsRootOnUpperSupportBone;
 
 		// During entry transition the component path keeps the root body modifier kinematic
 		// until the transition explicitly enters Phase 2 root-on. Once Phase 2 owns the guard
@@ -1002,6 +1164,16 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierPhysicsBlendWeight = 1.0f;
 			BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
 			bUpdateKinematicFromSimulation = false;
+		}
+		else if (bIsRootOnOrSettleSupportFollowWindow && bTransitionKeepsBoneKinematic)
+		{
+			// Docs keep the upper body kinematic through RootOn/Settle, but the immediate
+			// spine_03 support bones should follow live simulation instead of behaving like
+			// rigid world anchors on the first dynamic root-on frame.
+			BodyModifierMovementType = EPhysicsMovementType::Kinematic;
+			BodyModifierPhysicsBlendWeight = 0.0f;
+			BodyModifierCollisionType = ECollisionEnabled::NoCollision;
+			bUpdateKinematicFromSimulation = true;
 		}
 
 		if (bIsRootBodyModifier)
@@ -1207,15 +1379,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				1.0f,
 				ECollisionEnabled::QueryAndPhysics,
 				false);
-			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
-			{
-				if (FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(RootBoneNameInternal))
-				{
-					PelvisBody->SetInstanceSimulatePhysics(true, true);
-					PelvisBody->SetLinearVelocity(FVector::ZeroVector, false);
-					PelvisBody->SetAngularVelocityInRadians(FVector::ZeroVector, false);
-				}
-			}
 		}
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
