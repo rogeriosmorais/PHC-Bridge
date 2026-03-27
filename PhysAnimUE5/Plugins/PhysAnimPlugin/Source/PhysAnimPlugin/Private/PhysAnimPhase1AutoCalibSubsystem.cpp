@@ -1,6 +1,6 @@
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
+#include "PhysAnimComponentPrivate.h"
 
-#if !UE_BUILD_SHIPPING
 
 #include "Algo/Sort.h"
 #include "Engine/Engine.h"
@@ -235,6 +235,12 @@ void UPhysAnimPhase1AutoCalibSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
+	if (CurrentStage == EAutoCalibStage::AwaitingReadiness)
+	{
+		TickAwaitingReadiness();
+		return;
+	}
+
 	if (!BeginNextTrial())
 	{
 		StopPhase1AutoCalib(TEXT("begin_trial_failed"));
@@ -278,30 +284,16 @@ bool UPhysAnimPhase1AutoCalibSubsystem::StartPhase1AutoCalib(const FPhase1AutoCa
 		return false;
 	}
 
-	if (!Component || Component->GetRuntimeState() != EPhysAnimRuntimeState::BridgeActive)
-	{
-		OutError = TEXT("Phase1 auto-calibration requires the target component to be in BridgeActive.");
-		LastError = OutError;
-		return false;
-	}
-
-	FPhase1AutoCalibBaselineSnapshot CapturedBaseline;
-	if (!Component->CapturePhase1AutoCalibBaseline(CapturedBaseline, OutError))
-	{
-		LastError = OutError;
-		return false;
-	}
-
-	BaselineSnapshot = CapturedBaseline;
-	if (!RunDeterminismPreflight(*Component, BaselineSnapshot, OutError))
-	{
-		LastError = OutError;
-		return false;
-	}
-
+	Component->StopBalancePerturbationMode();
+	StopPhase1AutoCalib(TEXT("restart"));
 	ActiveRequest = Request;
 	TargetComponent = Component;
-	CurrentStage = EAutoCalibStage::StageA;
+	OriginalBalanceEntryMinPolicyAlpha = Component->StabilizationSettings.BalanceEntryMinPolicyAlpha;
+	Component->StabilizationSettings.BalanceEntryMinPolicyAlpha = 2.0f;
+	
+	CurrentStage = EAutoCalibStage::AwaitingReadiness;
+	CurrentStageStartTimeSeconds = World->GetTimeSeconds();
+	LastReadinessLogTimeSeconds = -1.0;
 	PendingTrials.Reset();
 	StageAResults.Reset();
 	StageBResults.Reset();
@@ -331,11 +323,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::StartPhase1AutoCalib(const FPhase1AutoCa
 	}
 
 	bRunActive = true;
-	if (!BeginNextTrial())
-	{
-		StopPhase1AutoCalib(TEXT("begin_trial_failed"));
-		return false;
-	}
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting component readiness for baseline capture..."));
 
 	return true;
 }
@@ -344,6 +332,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reaso
 {
 	if (UPhysAnimComponent* const Component = TargetComponent.Get())
 	{
+		Component->StabilizationSettings.BalanceEntryMinPolicyAlpha = OriginalBalanceEntryMinPolicyAlpha;
 		Component->ClearPhase1AutoCalibParams();
 
 		FString RestoreError;
@@ -655,6 +644,73 @@ bool UPhysAnimPhase1AutoCalibSubsystem::RunDeterminismPreflight(
 
 	const_cast<UPhysAnimPhase1AutoCalibSubsystem*>(this)->BaselineFingerprint = FingerprintA;
 	return true;
+}
+
+void UPhysAnimPhase1AutoCalibSubsystem::TickAwaitingReadiness()
+{
+	UPhysAnimComponent* const Component = TargetComponent.Get();
+	if (!Component)
+	{
+		StopPhase1AutoCalib(TEXT("target_component_lost"));
+		return;
+	}
+
+	UWorld* const World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const FPhysAnimStabilizationSettings& Settings = Component->GetConfiguredStabilizationSettings();
+	FString QueueReason;
+	const bool bQueueReady = Component->EvaluateBalanceModeQueueGates(Settings, QueueReason);
+
+	FString PreEntryReason;
+	const bool bPreEntryReady = Component->EvaluateBalanceBridgeActivePreEntryPrerequisites(Settings, PreEntryReason);
+
+	if (bQueueReady && bPreEntryReady)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Readiness reached after %.2fs. Capturing baseline."), World->GetTimeSeconds() - CurrentStageStartTimeSeconds);
+		
+		FString Error;
+		if (!Component->CapturePhase1AutoCalibBaseline(BaselineSnapshot, Error))
+		{
+			LastError = Error;
+			StopPhase1AutoCalib(TEXT("baseline_capture_failed"));
+			return;
+		}
+
+		if (!RunDeterminismPreflight(*Component, BaselineSnapshot, Error))
+		{
+			LastError = Error;
+			StopPhase1AutoCalib(TEXT("determinism_preflight_failed"));
+			return;
+		}
+
+		CurrentStage = EAutoCalibStage::StageA;
+		CurrentStageStartTimeSeconds = World->GetTimeSeconds();
+		if (!BeginNextTrial())
+		{
+			StopPhase1AutoCalib(TEXT("begin_trial_failed"));
+		}
+		return;
+	}
+
+	const double Elapsed = World->GetTimeSeconds() - CurrentStageStartTimeSeconds;
+	if (Elapsed >= static_cast<double>(ActiveRequest.ReadinessTimeoutSeconds))
+	{
+		LastError = FString::Printf(TEXT("Timed out awaiting component readiness (%.1fs). lastReason=%s/%s"), 
+			Elapsed, *QueueReason, *PreEntryReason);
+		StopPhase1AutoCalib(TEXT("readiness_timeout"));
+		return;
+	}
+
+	if (LastReadinessLogTimeSeconds < 0.0 || (World->GetTimeSeconds() - LastReadinessLogTimeSeconds) >= 1.0)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting readiness... elapsed=%.1fs queue=%s preEntry=%s"), 
+			Elapsed, *QueueReason, *PreEntryReason);
+		LastReadinessLogTimeSeconds = World->GetTimeSeconds();
+	}
 }
 
 bool UPhysAnimPhase1AutoCalibSubsystem::BeginNextTrial()
@@ -1197,4 +1253,4 @@ FString UPhysAnimPhase1AutoCalibSubsystem::BuildOutputDirectory() const
 			Timestamp));
 }
 
-#endif
+

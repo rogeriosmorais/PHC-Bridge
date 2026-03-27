@@ -679,6 +679,7 @@ struct FPhase1AutoCalibRequest
 	int32 Seed = 1337;
 	int32 MaxTrials = INDEX_NONE;
 	FString OutputSubfolder;
+	float ReadinessTimeoutSeconds = 30.0f;
 };
 
 struct FPhase1AutoCalibParams
