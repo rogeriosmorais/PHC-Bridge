@@ -1694,6 +1694,18 @@ extern int32 GVerbosePhase2Forensics;
 				Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed
 					? PhysAnimBridge::GetRootBoneName()
 					: (bLinearSpike && (!bAngularSpike || WorstLinearSpeed >= WorstAngularSpeed) ? WorstLinearBone : WorstAngularBone);
+			
+			if (Phase2GuardTickCount == 4)
+			{
+				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ROOTON_TICK4_SPIKE_SOURCE source=pre_guard_tick4 worstBone=%s maxLinearSpeed=%.2f maxAngularSpeed=%.2f"),
+					*WorstSpikeBone.ToString(), Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.PeakMaxBodyAngularSpeed);
+
+				if (Diagnostics.FirstContradictionSource.IsEmpty())
+				{
+					Diagnostics.FirstContradictionSource = TEXT("pre_guard_tick4");
+					Diagnostics.LateLoopWorstBone = WorstSpikeBone;
+				}
+			}
 
 
 			UE_LOG(
@@ -1712,7 +1724,7 @@ extern int32 GVerbosePhase2Forensics;
 				Diagnostics.SimCountPost,
 				*Diagnostics.FirstContradictionSource,
 				*Diagnostics.FirstLateLoopSource,
-				*LateLoopWorstBone.ToString());
+				*Diagnostics.LateLoopWorstBone.ToString());
 
 			AbortReason = TEXT("phase2_root_on_spike");
 			if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed)

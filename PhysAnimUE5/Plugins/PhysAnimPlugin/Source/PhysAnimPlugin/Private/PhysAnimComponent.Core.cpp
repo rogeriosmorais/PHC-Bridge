@@ -781,6 +781,41 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	};
 
+	auto TraceRootOnTick4SpikeSource = [&](const TCHAR* Source)
+	{
+		if (RuntimeStateAtTickStart == EPhysAnimRuntimeState::BalanceEntry_RootOn && (Phase2GuardTickCountAtTickStart == 3 || BalanceReadyTransition.GetPhase2GuardTickCount() == 4))
+		{
+			float MaxLinearSpeed = 0.0f;
+			float MaxAngularSpeed = 0.0f;
+			FName WorstBone = NAME_None;
+
+			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+			{
+				for (const FName& BoneName : PhysAnimBridge::GetControlledBoneNames())
+				{
+					const float LinSpeed = Mesh->GetPhysicsLinearVelocity(BoneName).Size();
+					const float AngSpeed = Mesh->GetPhysicsAngularVelocityInDegrees(BoneName).Size();
+
+					if (LinSpeed > MaxLinearSpeed || AngSpeed > MaxAngularSpeed)
+					{
+						MaxLinearSpeed = FMath::Max(MaxLinearSpeed, LinSpeed);
+						MaxAngularSpeed = FMath::Max(MaxAngularSpeed, AngSpeed);
+						WorstBone = BoneName;
+					}
+				}
+			}
+
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ROOTON_TICK4_SPIKE_SOURCE source=%s worstBone=%s maxLinearSpeed=%.2f maxAngularSpeed=%.2f"),
+				Source, WorstBone.IsNone() ? TEXT("none") : *WorstBone.ToString(), MaxLinearSpeed, MaxAngularSpeed);
+
+			if (BalanceReadyTransition.GetDiagnostics().FirstContradictionSource.IsEmpty())
+			{
+				BalanceReadyTransition.GetDiagnostics().FirstContradictionSource = Source;
+				BalanceReadyTransition.GetDiagnostics().LateLoopWorstBone = WorstBone;
+			}
+		}
+	};
+
 	if (!PhysicsControl || !SkeletalMesh || !LocalAnimInstance)
 	{
 		FailStopWithTrace(TEXT("Runtime context became invalid after startup."));
@@ -1843,10 +1878,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 
 		LastSnapshot = Snapshot;
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceReadyTransition.GetDiagnostics().FirstContradictionSource.IsEmpty())
-		{
-			BalanceReadyTransition.GetDiagnostics().FirstContradictionSource = Source;
-		}
 	};
 
 	const bool bIsRootOnTransitionTick = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
@@ -2079,6 +2110,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		FString GranularSource = FString::Printf(TEXT("end_of_tick_tick%d"), (int32)BalanceEntryRootOnFrameCount);
 		EmitRootStateTransitionTrace(*GranularSource, ReadRootStateTransitionSnapshot());
 	}
+	
+	TraceRootOnTick4SpikeSource(TEXT("end_of_tick_tick4"));
 }
 
 

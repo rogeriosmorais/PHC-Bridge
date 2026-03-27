@@ -334,6 +334,7 @@ struct FBalanceReadyTransitionDiagnostics
 	int32 UpperBodySimCountPost = 0;
 	float PeakMaxBodyLinearSpeed = 0.0f;
 	float PeakMaxBodyAngularSpeed = 0.0f;
+	FName LateLoopWorstBone = NAME_None;
 };
 
 class FPhysAnimBalanceReadyTransition
