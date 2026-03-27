@@ -33,11 +33,12 @@ Interpretation:
 2. Keep training and runtime separate.
 3. No TensorRT dependency.
 4. No custom Python pipeline for UE5 asset authoring.
-5. Use TDD when practical.
-6. Treat Manny/Quinn as the default runtime skeleton unless changed explicitly.
-7. Keep commits small and atomic.
-8. Build with .\scripts\build.ps1
-9. If you ran any smoke tests, then read the logs with "python .\scripts\read_logs.py". If you didn't, then ignore this step.
+5. Use TDD by default for all deterministic logic. TDD is optional only for: live runtime/editor/physics behavior, visual/manual quality checks, short exploratory spikes.
+6. Any exploratory spike must convert its deterministic logic into tests before the work is considered complete.
+7. Treat Manny/Quinn as the default runtime skeleton unless changed explicitly.
+8. Keep commits small and atomic.
+9. Build with .\scripts\build.ps1
+10. If you ran any smoke tests, then read the logs with "python .\scripts\read_logs.py". If you didn't, then ignore this step.
 
 ## Response Style
 
