@@ -42,7 +42,10 @@ The Stage 1 balance-entry investigation has reached this point:
 - many earlier failures were contract / ownership / telemetry problems
 - those areas are now substantially cleaner
 - Phase 1 upper-body hold / LateValidate bookkeeping is no longer the dominant active blocker
-- the current active investigation surface is Phase 2 RootOn truthfulness plus Phase 3 Settle continuity
+- the latest truthful smoke outcome is explicit safe denial rather than ambiguous fallback
+- the current active blocker in the latest smoke is Phase 1 RootOn-readiness margin proof:
+  `phase1_root_on_readiness_pelvis_spine_margin_insufficient`
+- Phase 2 RootOn truthfulness plus Phase 3 Settle continuity remain the next investigation surface once Phase 1 can prove that margin cleanly again
 
 This is progress, not regression.
 

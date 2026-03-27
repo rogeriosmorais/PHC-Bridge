@@ -210,6 +210,21 @@ bool FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(const FString& Fai
 
 EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(const FString& Reason)
 {
+	static const FString Phase1NoConvergencePrefix = TEXT("phase1_no_convergence_path_");
+	if (Reason.StartsWith(Phase1NoConvergencePrefix))
+	{
+		const FString UnderlyingReason = Reason.RightChop(Phase1NoConvergencePrefix.Len());
+		if (!UnderlyingReason.IsEmpty())
+		{
+			const EBalanceReadyConditionOwner UnderlyingOwner = ClassifyConditionOwner(UnderlyingReason);
+			if (UnderlyingOwner != EBalanceReadyConditionOwner::None &&
+				UnderlyingOwner != EBalanceReadyConditionOwner::TransitionRecovery)
+			{
+				return UnderlyingOwner;
+			}
+		}
+	}
+
 	if (Reason.StartsWith(TEXT("queue_final_group_ramp")))
 	{
 		return EBalanceReadyConditionOwner::ExternalBridgeBringUp;

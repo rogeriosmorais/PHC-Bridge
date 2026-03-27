@@ -22,6 +22,82 @@ bool FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(bool bR
 	return bRawSimViolation || bMotionViolation || bPendingResetViolation;
 }
 
+FString FPhysAnimBalanceReadyTransition::ResolveRootOnReadinessGateReason(
+	EBalanceReadyRootOnReadinessClassification Classification,
+	bool bDirectPelvisLinkPositionSatisfied,
+	bool bRootOnDirectPelvisLinkAngularSatisfied,
+	bool bDirectPelvisThighMarginsSatisfied,
+	bool bDirectPelvisSpineMarginSatisfied,
+	bool bRootOnReadinessShellHoldSatisfied,
+	bool bRootOnReadinessFinalBringUpControlSettled,
+	bool bRootOnReadinessPolicyInfluenceSettled,
+	bool bPreRootOnShellSafetyProofSatisfied,
+	bool bRootOnReadinessNoCouplingProofSatisfied,
+	bool bTiltLimitedByUprightness,
+	float PolicyInfluenceAlphaAtCapture)
+{
+	if (Classification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady && !bDirectPelvisLinkPositionSatisfied)
+	{
+		return TEXT("phase2_pre_root_on_link_error_too_high");
+	}
+	if (Classification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady &&
+		!bRootOnDirectPelvisLinkAngularSatisfied &&
+		bTiltLimitedByUprightness)
+	{
+		return TEXT("phase1_root_on_readiness_tilt_limited_viability");
+	}
+	if (Classification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady && !bRootOnDirectPelvisLinkAngularSatisfied)
+	{
+		return TEXT("phase1_root_on_readiness_pelvis_angular_incoherent");
+	}
+	if (Classification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady && !bDirectPelvisThighMarginsSatisfied)
+	{
+		return TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient");
+	}
+	if (Classification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady &&
+		!bDirectPelvisSpineMarginSatisfied &&
+		bTiltLimitedByUprightness)
+	{
+		return TEXT("phase1_root_on_readiness_tilt_limited_viability");
+	}
+	if (Classification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady && !bDirectPelvisSpineMarginSatisfied)
+	{
+		return TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient");
+	}
+	if (Classification == EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny)
+	{
+		return TEXT("phase1_root_on_readiness_upper_only_safe_deny_pending");
+	}
+	if (Classification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
+	{
+		if (!bRootOnReadinessShellHoldSatisfied)
+		{
+			return TEXT("phase2_root_on_readiness_shell_hold_not_completed");
+		}
+		if (!bRootOnReadinessFinalBringUpControlSettled)
+		{
+			return TEXT("phase2_root_on_readiness_final_bring_up_control_not_settled");
+		}
+		if (!bRootOnReadinessPolicyInfluenceSettled)
+		{
+			return PolicyInfluenceAlphaAtCapture <= KINDA_SMALL_NUMBER
+				? TEXT("phase2_root_on_readiness_policy_influence_not_started")
+				: TEXT("phase2_root_on_readiness_policy_influence_below_threshold");
+		}
+		if (!bPreRootOnShellSafetyProofSatisfied)
+		{
+			return TEXT("phase2_root_on_readiness_shell_proof_not_satisfied");
+		}
+		if (!bRootOnReadinessNoCouplingProofSatisfied)
+		{
+			return TEXT("phase1_root_on_readiness_requires_pelvis_coupling");
+		}
+		return TEXT("ready");
+	}
+
+	return TEXT("phase1_root_on_readiness_topology_not_ready");
+}
+
 
 
 bool FPhysAnimBalanceReadyTransition::ValidateLateValidationHandoffSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const FPhysAnimStabilizationSettings& Settings, FString& OutReason) const

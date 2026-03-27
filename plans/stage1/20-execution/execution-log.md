@@ -14,9 +14,10 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` in progress. The focus has pivoted to the "Distal Kinematic Experiment" and hardening Phase 1 admission.
-- `Overall status`: UE startup is stable. The current engineering constraint is enforcing truthful "distal=kin" topology and preventing ownership thrash between global and per-bone modifier writes.
-- `Last planning milestone`: The transition from ad-hoc stabilization to "Distal Kinematic Authoritative Control" and hardened Phase 1 admission gates.
+- `Current phase`: Phase 1 / truthful RootOn-readiness investigation.
+- `Overall status`: UE startup is stable and the latest truthful balance smoke reaches explicit safe denial with `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`.
+- `Last planning milestone`: contract and ownership drift are largely cleaned up; the newest Phase 1 solver step keeps the thigh follow-through path truthful by forbidding it from re-breaking recovered spine readiness.
+- `Latest runtime forensics`: the final solver path still runs `spine_interp` and a constrained `worst_thigh_interp_thigh_r`, but the new acceptance guard limits that follow-through to a spine-safe micro-step (`a0.01`) instead of the earlier spine-breaking `a0.05`; the live result now keeps the spine inside readiness at `pelvisSpine01Angular=17.91` while only partially improving the thigh blocker (`pelvisThighLAngular=31.97`, `pelvisThighRAngular=34.19`), which narrows the next work to finding a stronger thigh improvement that preserves the recovered spine margin.
 
 ## Active Tasks
 
@@ -416,10 +417,15 @@ Repository baseline:
 - Keep the truthful phased balance-transition direction.
 - Enforce the "Distal Kinematic" topology as the source of truth for Phase 1.
 
+Current truthful smoke read as of 2026-03-27:
+- `PhysAnim.PIE.BalanceModeSmoke` now reaches explicit safe denial truthfully instead of stalling ambiguously.
+- the latest observed terminal reason is `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`
+- that means the current blocking surface is Phase 1 RootOn-readiness thigh margin proof, not a live Phase 2 RootOn spike in this run
+
 Active engineering problem:
-1. Ensure the Distal Kinematic experiment is fully verified through smoke tests and diagnostic logs.
-2. Maintain read-only telemetry to avoid state mutation during classification.
-3. Validate Phase 1 entry with the new stability gates and failure budget.
+1. keep the truthful safe-deny / terminal-state contract intact
+2. preserve read-only telemetry and phase-correct failure labeling
+3. isolate why the pelvis-thigh readiness margin remains insufficient at LateValidate even after the spine margin has been recovered
 
 ## Notes
 
@@ -427,4 +433,21 @@ Known important reference points from this work:
 - The shift from broad stabilization to explicit phase-owned balance transition design is complete.
 - The latest engineering focus is on "truthful" topology enforcement and avoiding ownership thrash.
 - Bridge-owned locomotion remains the intended direction for `BridgeActive`.
-- The current honest failure point is a repeatable Phase 2 root-on spike, not the older invalid-entry rejection loop.
+- The current honest failure point in the latest smoke is `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`, not the older invalid-entry rejection loop.
+
+## 2026-03-27 — Phase 1 Spine-Safe Worst-Thigh Follow-Through
+
+- Added deterministic TDD coverage for a spine-safe worst-thigh margin-sweep acceptance rule, allowing small preserved-spine trade within recovered Phase 1 readiness while still rejecting candidates that spend too much spine margin.
+- Added a new post-`worst_thigh_interp` local sweep that only accepts candidates improving the current worst thigh while keeping the spine inside readiness.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The new runtime path now lands on `..._spine_interp_a0.10_worst_thigh_interp_thigh_r_a0.01_worst_thigh_margin_sweep_y-0.50_p0.05_r-0.50`.
+- Live Phase 1 metrics improved to `pelvisThighLAngular=31.49`, `pelvisThighRAngular=33.89`, and `pelvisSpine01Angular=17.98`.
+- The truthful blocker remains `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`, which narrows the remaining work to stronger thigh recovery/viability rather than a missing spine-safe thigh follow-through surface.
+
+## 2026-03-27 — Focused Thigh Blend-Sample Search
+
+- Added deterministic TDD coverage for focused-sample relevance so blend candidates that explicitly include the blocked thigh in their source tagging are now eligible for the spine-safe worst-thigh focused-delta pass instead of restricting that pass to the first direct thigh constraint sample.
+- Broadened `worst_thigh_focus_delta` to iterate all thigh-relevant valid constraint samples, including weighted blend candidates, while keeping the existing spine-safe acceptance rule intact.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- Live smoke remained on the same truthful result: `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`, with the winning runtime path still ending at `..._spine_interp_a0.10_worst_thigh_interp_thigh_r_a0.01_worst_thigh_margin_sweep_y-0.50_p0.05_r-0.50` and metrics still at `pelvisThighLAngular=31.49`, `pelvisThighRAngular=33.89`, and `pelvisSpine01Angular=17.98`.
+- This rules out another focused-sample selection gap and narrows the remaining work to deeper thigh candidate generation or genuine Phase 1 physical viability.

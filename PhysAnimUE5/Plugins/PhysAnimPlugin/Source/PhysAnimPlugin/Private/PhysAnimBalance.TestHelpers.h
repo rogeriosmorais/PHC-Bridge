@@ -12,7 +12,6 @@
 
 namespace PhysAnimBalanceTestHelpers
 {
-#if WITH_EDITOR
 	inline bool EvaluateBalanceModeSmokeOutcome(
 		const EPhysAnimRuntimeState RuntimeState,
 		const bool bInPublicBalanceEntryState,
@@ -25,7 +24,8 @@ namespace PhysAnimBalanceTestHelpers
 	{
 		OutError.Reset();
 
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
+			RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
 		{
 			return true;
 		}
@@ -51,7 +51,8 @@ namespace PhysAnimBalanceTestHelpers
 		if (bHasSafePhase2Denial)
 		{
 			OutError = FString::Printf(
-				TEXT("[PhysAnimPieBalanceSmoke] Balance mode denied entry. reason=%s."),
+				TEXT("[PhysAnimPieBalanceSmoke] Balance mode denied entry without publishing BalanceSafeDeny. state=%s reason=%s."),
+				UPhysAnimComponent::GetRuntimeStateName(RuntimeState),
 				*SafePhase2DenialReason);
 			return false;
 		}
@@ -62,6 +63,7 @@ namespace PhysAnimBalanceTestHelpers
 		return false;
 	}
 
+#if WITH_EDITOR
 	class FValidateBalanceModeSmokeOutcomeCommand final : public IAutomationLatentCommand
 	{
 	public:

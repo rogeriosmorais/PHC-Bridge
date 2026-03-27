@@ -279,6 +279,11 @@ namespace BalanceReadinessReasons
 	static const FString TargetDiscontinuityTooHigh = TEXT("target_discontinuity_too_high");
 	static const FString RootSimulationDropped = TEXT("root_simulation_dropped");
 	static const FString TopologyMismatch = TEXT("topology_mismatch");
+	static const FString Phase2FailStopPrecursor = TEXT("phase2_fail_stop_precursor");
+	static const FString Phase2RootSimulationDropped = TEXT("phase2_root_simulation_dropped");
+	static const FString Phase2TopologyNotPreserved = TEXT("phase2_topology_not_preserved");
+	static const FString Phase3RootSimulationDropped = TEXT("phase3_root_simulation_dropped");
+	static const FString Phase3TopologyRegressed = TEXT("phase3_topology_regressed");
 	static const FString Phase3InstabilitySpike = TEXT("phase3_post_root_on_instability");
 }
 
@@ -481,6 +486,19 @@ public:
 		FString& OutReason);
 
 	static bool IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
+	static FString ResolveRootOnReadinessGateReason(
+		EBalanceReadyRootOnReadinessClassification Classification,
+		bool bDirectPelvisLinkPositionSatisfied,
+		bool bRootOnDirectPelvisLinkAngularSatisfied,
+		bool bDirectPelvisThighMarginsSatisfied,
+		bool bDirectPelvisSpineMarginSatisfied,
+		bool bRootOnReadinessShellHoldSatisfied,
+		bool bRootOnReadinessFinalBringUpControlSettled,
+		bool bRootOnReadinessPolicyInfluenceSettled,
+		bool bPreRootOnShellSafetyProofSatisfied,
+		bool bRootOnReadinessNoCouplingProofSatisfied,
+		bool bTiltLimitedByUprightness,
+		float PolicyInfluenceAlphaAtCapture);
 	static FString ClassifyLateValidationFailureReason(bool bUpperBodyInstability, bool bSimCoverageRegressed, bool bTargetDiscontinuity);
 	static bool IsLateValidationUpperBodyViolation(bool bRawSimViolation, bool bMotionViolation, bool bPendingResetViolation);
 	static bool IsFailureClassRetryable(const FString& FailureReason);
