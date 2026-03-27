@@ -234,4 +234,186 @@ bool FPhysAnimBalanceQuietHandoffSuppressionTest::RunTest(const FString& Paramet
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimSmplOrderContractTest,
+	"PhysAnim.Component.SmplOrderContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimSmplOrderContractTest::RunTest(const FString& Parameters)
+{
+	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
+	
+	// Verified SMPL order (DFS traversal) from ProtoMotions smpl.yaml
+	TestEqual(TEXT("SMPL observation count"), BoneNames.Num(), 24);
+	if (BoneNames.Num() >= 24)
+	{
+		TestEqual(TEXT("SMPL 0: Pelvis"), BoneNames[0], TEXT("pelvis"));
+		TestEqual(TEXT("SMPL 1: L_Hip"), BoneNames[1], TEXT("thigh_l"));
+		TestEqual(TEXT("SMPL 2: L_Knee"), BoneNames[2], TEXT("calf_l"));
+		TestEqual(TEXT("SMPL 3: L_Ankle"), BoneNames[3], TEXT("foot_l"));
+		TestEqual(TEXT("SMPL 4: L_Toe"), BoneNames[4], TEXT("ball_l"));
+		TestEqual(TEXT("SMPL 9: Torso"), BoneNames[9], TEXT("spine_01"));
+		TestEqual(TEXT("SMPL 13: Head"), BoneNames[13], TEXT("head"));
+		TestEqual(TEXT("SMPL 17: L_Wrist"), BoneNames[17], TEXT("hand_l"));
+		TestEqual(TEXT("SMPL 18: L_Hand (collapsed)"), BoneNames[18], TEXT("hand_l"));
+	}
+	
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimActionToBoneMappingContractTest,
+	"PhysAnim.Component.ActionToBoneMappingContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimActionToBoneMappingContractTest::RunTest(const FString& Parameters)
+{
+	using namespace PhysAnimBridge;
+
+	TArray<float> Actions;
+	Actions.Init(0.0f, NumActionFloats);
+	
+	// Test ExpMap (1.0, 0, 0) for joint 0 (thigh_l)
+	// ExpMap (PI, 0, 0) because we multiply by PI in ConvertModelActionsToControlRotations
+	Actions[0] = 1.0f; 
+	
+	TMap<FName, FQuat> Rotations;
+	FString Error;
+	TestTrue(TEXT("Convert actions"), ConvertModelActionsToControlRotations(Actions, Rotations, Error));
+	
+	const FQuat* ThighL = Rotations.Find(TEXT("thigh_l"));
+	TestNotNull(TEXT("thigh_l in output"), ThighL);
+	if (ThighL)
+	{
+		// Expected: rotation of PI around X axis in SMPL space
+		const FQuat ExpectedSmpl = FQuat(FVector::ForwardVector, PI);
+		const FQuat ExpectedUe = SmplQuaternionToUe(ExpectedSmpl);
+		TestTrue(TEXT("thigh_l rotation matches ExpMap"), ThighL->Equals(ExpectedUe, 0.001f));
+	}
+	
+	// Test distal hand collapse
+	// hand_l indices: 16 (wrist) and 17 (hand)
+	Actions.Init(0.0f, NumActionFloats);
+	Actions[16 * 3 + 0] = 0.5f; // Wrist X-rot
+	Actions[17 * 3 + 0] = 0.1f; // Hand X-rot
+	TestTrue(TEXT("Convert distal actions"), ConvertModelActionsToControlRotations(Actions, Rotations, Error));
+	
+	const FQuat* HandL = Rotations.Find(TEXT("hand_l"));
+	TestNotNull(TEXT("hand_l in output"), HandL);
+	if (HandL)
+	{
+		const FQuat WristSmpl = FQuat(FVector::ForwardVector, 0.5f * PI);
+		const FQuat HandSmpl = FQuat(FVector::ForwardVector, 0.1f * PI);
+		const FQuat ExpectedUe = SmplQuaternionToUe(WristSmpl * HandSmpl);
+		TestTrue(TEXT("hand_l combined rotation matches distal collapse logic"), HandL->Equals(ExpectedUe, 0.001f));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimSelfObservationContractTest,
+	"PhysAnim.Component.SelfObservationContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimSelfObservationContractTest::RunTest(const FString& Parameters)
+{
+	using namespace PhysAnimBridge;
+	
+	TArray<FPhysAnimBodySample> Samples;
+	Samples.SetNum(NumSmplBodies);
+	for (int32 i = 0; i < NumSmplBodies; ++i)
+	{
+		Samples[i].Position = FVector(0, 0, 100);
+		Samples[i].Rotation = FQuat::Identity;
+	}
+	
+	TArray<float> Obs;
+	FString Error;
+	TestTrue(TEXT("Build self obs"), BuildSelfObservation(Samples, 0.0f, Obs, Error));
+	TestEqual(TEXT("Obs size"), Obs.Num(), SelfObsSize);
+	
+	// Index 0: Root height
+	TestEqual(TEXT("Root height (100cm)"), Obs[0], 100.0f);
+	
+	// Next 23*3: Local body positions (all 0 because they are same as root)
+	for (int32 i = 1; i <= 23 * 3; ++i)
+	{
+		TestEqual(TEXT("Local position element"), Obs[i], 0.0f);
+	}
+	
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimMimicTargetPosesContractTest,
+	"PhysAnim.Component.MimicTargetPosesContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimMimicTargetPosesContractTest::RunTest(const FString& Parameters)
+{
+	using namespace PhysAnimBridge;
+	
+	TArray<FPhysAnimBodySample> CurrentSamples;
+	CurrentSamples.SetNum(NumSmplBodies);
+	for (int32 i = 0; i < NumSmplBodies; ++i)
+	{
+		CurrentSamples[i].Position = FVector::ZeroVector;
+		CurrentSamples[i].Rotation = FQuat::Identity;
+	}
+
+	TArray<FPhysAnimFuturePoseSample> FutureSamples;
+	FutureSamples.SetNum(NumFutureSteps);
+	for (int32 f = 0; f < NumFutureSteps; ++f)
+	{
+		FutureSamples[f].BodyTransforms.SetNum(NumSmplBodies);
+		for (int32 i = 0; i < NumSmplBodies; ++i)
+		{
+			FutureSamples[f].BodyTransforms[i] = FTransform::Identity;
+		}
+		FutureSamples[f].FutureTimeSeconds = (f + 1) * FutureStepSeconds;
+	}
+
+	TArray<float> MimicData;
+	FString Error;
+	TestTrue(TEXT("Build mimic data"), BuildMimicTargetPoses(CurrentSamples, FutureSamples, MimicData, Error));
+	TestEqual(TEXT("Mimic data size"), MimicData.Num(), MimicTargetPosesSize);
+	
+	// Verify first future step root-relative position (expected 0)
+	// Each step has: relative_pos (24*3) + root_relative_pos (24*3) + rel_rot (24*6) + global_rot (24*6) + time (1)
+	// Total per step: 72 + 72 + 144 + 144 + 1 = 433
+	// NumFutureSteps = 15. 15 * 433 = 6495. Correct.
+	
+	TestEqual(TEXT("First step relative pos X"), MimicData[0], 0.0f);
+	TestEqual(TEXT("First step time"), MimicData[432], FutureStepSeconds);
+	
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimTerrainObservationContractTest,
+	"PhysAnim.Component.TerrainObservationContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimTerrainObservationContractTest::RunTest(const FString& Parameters)
+{
+	using namespace PhysAnimBridge;
+	
+	TArray<float> GroundHeights;
+	GroundHeights.Init(10.0f, TerrainSize);
+	
+	TArray<float> TerrainObs;
+	FString Error;
+	TestTrue(TEXT("Build terrain obs"), BuildTerrainObservation(100.0f, GroundHeights, TerrainObs, Error));
+	TestEqual(TEXT("Terrain size"), TerrainObs.Num(), TerrainSize);
+	
+	// Value should be RootHeight - GroundHeight = 90.0
+	for (int32 i = 0; i < TerrainSize; ++i)
+	{
+		TestEqual(TEXT("Terrain height delta"), TerrainObs[i], 90.0f);
+	}
+	
+	return true;
+}
+
 #endif
