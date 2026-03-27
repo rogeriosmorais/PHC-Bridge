@@ -268,6 +268,34 @@ struct FPhysAnimPhase1TopologySnapshot
 	bool bResetsSuppressed = false;
 };
 
+namespace BalanceReadinessReasons
+{
+	static const FString Ready = TEXT("ready");
+	static const FString FailStopPrecursor = TEXT("fail_stop_precursor");
+	static const FString RootTooFarFromGround = TEXT("root_too_far_from_ground");
+	static const FString RootTiltTooHigh = TEXT("root_tilt_too_high");
+	static const FString ShellOffsetTooHigh = TEXT("shell_offset_too_high");
+	static const FString ShellVelocityTooHigh = TEXT("shell_velocity_too_high");
+	static const FString TargetDiscontinuityTooHigh = TEXT("target_discontinuity_too_high");
+	static const FString RootSimulationDropped = TEXT("root_simulation_dropped");
+}
+
+/** 
+ * Stateless bundle of stabilization metrics used for TDD-ready readiness evaluation.
+ */
+struct FPhysAnimStabilizationDomain
+{
+	float RootLinearSpeed = 0.0f;
+	float RootAngularSpeed = 0.0f;
+	float RootGroundDistance = 0.0f;
+	float RootTiltDeg = 0.0f;
+	float ShellPlanarOffsetCm = 0.0f;
+	float ShellPlanarVelocityCmPerSec = 0.0f;
+	float MaxTargetDeltaDegrees = 0.0f;
+	float MeanTargetDeltaDegrees = 0.0f;
+	bool bRootSimulating = false;
+};
+
 struct FPhase1AcceptedConvergenceSnapshot
 {
 	int64 FrameIndex = -1;
@@ -431,6 +459,12 @@ public:
 	bool ShouldSuppressPolicyWrites(FName BoneName) const;
 	float GetTransitionExtraDampingMultiplier(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;
 	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
+	/** Single source of truth for stabilization readiness math. */
+	static bool IsSnapshotReady(
+		const FPhysAnimStabilizationDomain& Domain,
+		const struct FPhysAnimStabilizationSettings& Settings,
+		FString& OutReason);
+
 	static bool IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	static FString ClassifyLateValidationFailureReason(bool bUpperBodyInstability, bool bSimCoverageRegressed, bool bTargetDiscontinuity);
 	static bool IsLateValidationUpperBodyViolation(bool bRawSimViolation, bool bMotionViolation, bool bPendingResetViolation);

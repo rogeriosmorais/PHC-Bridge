@@ -16,21 +16,72 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 }
 
 
+bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizationDomain& Domain, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
+{
+	// 1. Physics Continuity Gate
+	if (!Domain.bRootSimulating)
+	{
+		OutReason = BalanceReadinessReasons::RootSimulationDropped;
+		return false;
+	}
+
+	// 2. Root Stability Gate
+	if (Domain.RootLinearSpeed > Settings.MaxRootLinearSpeedCmPerSecond || 
+		Domain.RootAngularSpeed > Settings.MaxRootAngularSpeedDegPerSecond)
+	{
+		OutReason = BalanceReadinessReasons::FailStopPrecursor;
+		return false;
+	}
+
+	// 3. Ground Distance Gate
+	if (!FMath::IsNearlyZero(Settings.BalanceEntryMaxGroundDistanceCm) && Domain.RootGroundDistance > Settings.BalanceEntryMaxGroundDistanceCm)
+	{
+		OutReason = BalanceReadinessReasons::RootTooFarFromGround;
+		return false;
+	}
+
+	// 4. Uprightness (Tilt) Gate
+	if (Domain.RootTiltDeg > Settings.BalancePhase2EntryMaxRootTiltDeg)
+	{
+		OutReason = BalanceReadinessReasons::RootTiltTooHigh;
+		return false;
+	}
+
+	// 5. Shell Integrity Gate
+	if (Domain.ShellPlanarOffsetCm > Settings.BalancePhase2EntryMaxShellOffsetDelta)
+	{
+		OutReason = BalanceReadinessReasons::ShellOffsetTooHigh;
+		return false;
+	}
+	if (Domain.ShellPlanarVelocityCmPerSec > Settings.BalancePhase2EntryMaxShellVelocityDelta)
+	{
+		OutReason = BalanceReadinessReasons::ShellVelocityTooHigh;
+		return false;
+	}
+
+	// 6. Control Target Continuity Gate
+	if (Domain.MaxTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg ||
+		Domain.MeanTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg)
+	{
+		OutReason = BalanceReadinessReasons::TargetDiscontinuityTooHigh;
+		return false;
+	}
+
+	OutReason = BalanceReadinessReasons::Ready;
+	return true;
+}
+
+
 bool FPhysAnimBalanceReadyTransition::IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
 {
-	if (Snapshot.RootLinearSpeed > Settings.MaxRootLinearSpeedCmPerSecond || Snapshot.RootAngularSpeed > Settings.MaxRootAngularSpeedDegPerSecond)
-	{
-		OutReason = TEXT("fail_stop_precursor");
-		return false;
-	}
-
-	if (!FMath::IsNearlyZero(Settings.BalanceEntryMaxGroundDistanceCm) && Snapshot.RootGroundDistance > Settings.BalanceEntryMaxGroundDistanceCm)
-	{
-		OutReason = TEXT("root_too_far_from_ground");
-		return false;
-	}
-
-	return true;
+	// Legacy helper wrapper for backward compatibility during refactor
+	FPhysAnimStabilizationDomain Domain;
+	Domain.RootLinearSpeed = Snapshot.RootLinearSpeed;
+	Domain.RootAngularSpeed = Snapshot.RootAngularSpeed;
+	Domain.RootGroundDistance = Snapshot.RootGroundDistance;
+	Domain.bRootSimulating = true; // Phase 1 assumes simulation is correctly initialized if we have a snapshot
+	
+	return IsSnapshotReady(Domain, Settings, OutReason);
 }
 
 
@@ -212,46 +263,31 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		return false;
 	}
 
-	const float ShellOffset = CachedConvergenceSnapshot.ShellPlanarOffset;
-	const float ShellVel = CachedConvergenceSnapshot.ShellPlanarVelocity;
-	if (Diagnostics.RootSpeed > Settings.BalancePhase2EntryMaxRootLinearSpeed)
+	FPhysAnimStabilizationDomain Domain;
+	Domain.RootLinearSpeed = Diagnostics.RootSpeed;
+	Domain.RootAngularSpeed = Diagnostics.RootAngularSpeed;
+	Domain.RootGroundDistance = CachedConvergenceSnapshot.RootGroundDistance;
+	Domain.RootTiltDeg = Diagnostics.RootTilt;
+	Domain.ShellPlanarOffsetCm = CachedConvergenceSnapshot.ShellPlanarOffset;
+	Domain.ShellPlanarVelocityCmPerSec = CachedConvergenceSnapshot.ShellPlanarVelocity;
+	
+	const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
+	Domain.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
+	Domain.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
+	
+	USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	FBodyInstance* PelvisBody = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
+	Domain.bRootSimulating = PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : false;
+
+	if (!IsSnapshotReady(Domain, Settings, OutReason))
 	{
-		OutReason = TEXT("phase2_entry_root_linear_too_high");
-		return false;
-	}
-	if (Diagnostics.RootAngularSpeed > Settings.BalancePhase2EntryMaxRootAngularSpeed)
-	{
-		OutReason = TEXT("phase2_entry_root_angular_too_high");
-		return false;
-	}
-	if (Diagnostics.RootTilt > Settings.BalancePhase2EntryMaxRootTiltDeg)
-	{
-		OutReason = TEXT("phase2_entry_root_tilt_too_high");
 		return false;
 	}
 
 	if (!CurrentSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied)
 	{
 		OutReason = TEXT("phase2_pre_root_on_link_error_too_high");
-		return false;
-	}
-
-	if (ShellOffset > Settings.BalancePhase2EntryMaxShellOffsetDelta)
-	{
-		OutReason = TEXT("phase2_entry_shell_offset_too_high");
-		return false;
-	}
-	if (ShellVel > Settings.BalancePhase2EntryMaxShellVelocityDelta)
-	{
-		OutReason = TEXT("phase2_entry_shell_velocity_too_high");
-		return false;
-	}
-
-	const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = Owner->GetLastControlTargetDiagnostics();
-	if (ControlTargetDiagnostics.MaxTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg ||
-		ControlTargetDiagnostics.MeanTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg)
-	{
-		OutReason = TEXT("phase2_target_discontinuity_too_high");
 		return false;
 	}
 
