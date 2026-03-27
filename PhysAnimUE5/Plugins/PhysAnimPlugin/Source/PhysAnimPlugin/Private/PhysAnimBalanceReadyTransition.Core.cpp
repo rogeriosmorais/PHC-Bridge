@@ -1699,7 +1699,7 @@ extern int32 GVerbosePhase2Forensics;
 			UE_LOG(
 				LogPhysAnimBridge,
 				Warning,
-				TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_SPIKE_AUDIT frame=%d rootOnTick=%d maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s worstLinearSpeed=%.2f worstAngularSpeed=%.2f rootRawSim=%d pelvisModifier=%s totalSimCount=%d firstContradictionSource=%s lateLoopWorstBone=%s"),
+				TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_SPIKE_AUDIT frame=%d rootOnTick=%d maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s worstLinearSpeed=%.2f worstAngularSpeed=%.2f rootRawSim=%d pelvisModifier=%s totalSimCount=%d firstContradictionSource=%s firstLateLoopSource=%s lateLoopWorstBone=%s"),
 				static_cast<int32>(GFrameCounter),
 				Phase2GuardTickCount,
 				Diagnostics.PeakMaxBodyLinearSpeed,
@@ -1711,6 +1711,7 @@ extern int32 GVerbosePhase2Forensics;
 				UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
 				Diagnostics.SimCountPost,
 				*Diagnostics.FirstContradictionSource,
+				*Diagnostics.FirstLateLoopSource,
 				*LateLoopWorstBone.ToString());
 
 			AbortReason = TEXT("phase2_root_on_spike");

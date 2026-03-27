@@ -277,6 +277,7 @@ struct FBalanceReadyTransitionDiagnostics
 	FString FailureReason;
 	FString LastRetryDecision;
 	FString FirstContradictionSource;
+	FString FirstLateLoopSource;
 	FString Phase1TargetDiscontinuityGateSource;
 	FString Phase1TargetDiscontinuityGateReason;
 	FString Phase1LateValidateGateSource;

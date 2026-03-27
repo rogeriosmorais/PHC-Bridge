@@ -449,6 +449,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	const EPhysAnimRuntimeState RuntimeStateAtTickStart = RuntimeState;
 	const uint32 RootOnTickAtTickStart = BalanceEntryRootOnFrameCount;
+	const int32 Phase2GuardTickCountAtTickStart = BalanceReadyTransition.GetPhase2GuardTickCount();
 
 	bPelvisResetAppliedThisTick = false;
 	LastBridgePoseSearchDeltaTimeSeconds = DeltaTime;
@@ -617,7 +618,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	auto TracePreservedTick4 = [&](const TCHAR* Source)
 	{
-		if (BalanceReadyTransition.GetPhase2GuardTickCount() == 4)
+		if (Phase2GuardTickCountAtTickStart == 3 || BalanceReadyTransition.GetPhase2GuardTickCount() == 4)
 		{
 			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
 			{
@@ -647,7 +648,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	auto TraceUpperBodyTick4 = [&](const TCHAR* Source)
 	{
-		if (BalanceReadyTransition.GetPhase2GuardTickCount() == 4)
+		if (Phase2GuardTickCountAtTickStart == 3 || BalanceReadyTransition.GetPhase2GuardTickCount() == 4)
 		{
 			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
 			{
@@ -673,6 +674,57 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPPER_BODY_LATE_LOOP_STATE source=%s bone=%s rawSim=%d modifier=%d linSpeed=%.1f angSpeed=%.1f"),
 							Source, *BoneName.ToString(), BI->IsInstanceSimulatingPhysics() ? 1 : 0, (int32)ModifierType,
 							BI->GetUnrealWorldVelocity().Size(), FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size());
+					}
+				}
+			}
+		}
+	};
+
+	auto TraceUpperBodySubsystemTick4 = [&](const TCHAR* Source)
+	{
+		if (Phase2GuardTickCountAtTickStart == 3 || BalanceReadyTransition.GetPhase2GuardTickCount() == 4)
+		{
+			static const FName UpperBodyBones[] = {
+				TEXT("head"), TEXT("neck_01"), TEXT("spine_01"),
+				TEXT("clavicle_l"), TEXT("clavicle_r"),
+				TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"),
+				TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r")
+			};
+
+			float MaxLinearSpeed = 0.0f;
+			float MaxAngularSpeed = 0.0f;
+			FName WorstBone = NAME_None;
+
+			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+			{
+				for (const FName& BoneName : UpperBodyBones)
+				{
+					if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
+					{
+						const float LinSpeed = BI->GetUnrealWorldVelocity().Size();
+						const float AngSpeed = FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size();
+
+						if (LinSpeed > MaxLinearSpeed || AngSpeed > MaxAngularSpeed)
+						{
+							MaxLinearSpeed = FMath::Max(MaxLinearSpeed, LinSpeed);
+							MaxAngularSpeed = FMath::Max(MaxAngularSpeed, AngSpeed);
+							WorstBone = BoneName;
+						}
+					}
+				}
+			}
+
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPPER_BODY_SUBSYSTEM_STATE source=%s maxLinearSpeed=%.2f maxAngularSpeed=%.2f worstBone=%s"),
+				Source, MaxLinearSpeed, MaxAngularSpeed, WorstBone.IsNone() ? TEXT("none") : *WorstBone.ToString());
+
+			if (FCString::Strcmp(Source, TEXT("post_late_loop_tick4")) == 0)
+			{
+				if (BalanceReadyTransition.GetDiagnostics().FirstLateLoopSource.IsEmpty())
+				{
+					// Check if this is a spike (using a generous threshold for forensic capture)
+					if (MaxLinearSpeed > 100.0f || MaxAngularSpeed > 500.0f)
+					{
+						BalanceReadyTransition.GetDiagnostics().FirstLateLoopSource = Source;
 					}
 				}
 			}
@@ -1567,7 +1619,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	const bool bIsRealRootOnTick4 = 
 		(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn) && 
-		(BalanceEntryRootOnFrameCount == 4);
+		(BalanceReadyTransition.GetPhase2GuardTickCount() == 4 || Phase2GuardTickCountAtTickStart == 3);
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
@@ -1671,6 +1723,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	TraceSpineTick2(TEXT("post_updatecontrols"));
 	TracePreservedTick4(TEXT("post_updatecontrols_tick4"));
 	TraceUpperBodyTick4(TEXT("post_updatecontrols_tick4"));
+	TraceUpperBodySubsystemTick4(TEXT("post_updatecontrols_tick4"));
 	ApplyPhase1PelvisRootCouplingSolve();
 
 	if (bIsRealRootOnTick4)
@@ -1957,10 +2010,13 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		bPhase1TiltDiagnosticEmitted = false;
 	}
 
+	TraceUpperBodySubsystemTick4(TEXT("post_late_loop_tick4"));
+
 	FinalizeTraceFrame();
 	TraceSpineTick2(TEXT("end_of_tick"));
 	TracePreservedTick4(TEXT("end_of_tick_tick4"));
 	TraceUpperBodyTick4(TEXT("end_of_tick_tick4"));
+	TraceUpperBodySubsystemTick4(TEXT("end_of_tick_tick4"));
 
 	if (bIsRealRootOnTick4)
 	{
