@@ -11,6 +11,39 @@ namespace
 	using namespace PhysAnimBridge;
 	using namespace PhysAnimBalanceTestHelpers;
 
+#if !UE_BUILD_SHIPPING
+	FPhase1AutoCalibTrialResult MakePhase1AutoCalibTrial(
+		const EPhase1AutoCalibStrategyPreset Preset,
+		const TCHAR* TerminalClass,
+		const TCHAR* TruthfulBlocker,
+		const bool bContractPassed,
+		const float WorstDirectLinkAngularErrorDeg,
+		const float ThighAsymmetryDeg)
+	{
+		static int32 NextTrialId = 0;
+		FPhase1AutoCalibTrialResult Trial;
+		Trial.TrialId = NextTrialId++;
+		Trial.Params.SourcePreset = Preset;
+		Trial.Params.SeedFamilyPreset = Preset;
+		Trial.TerminalClass = TerminalClass;
+		Trial.TruthfulBlocker = TruthfulBlocker;
+		Trial.Score.bContractPassed = bContractPassed;
+		Trial.Score.bReachedRootOn = bContractPassed;
+		Trial.Score.bNoCouplingProofSatisfied = bContractPassed;
+		Trial.Score.WorstDirectLinkAngularErrorDeg = WorstDirectLinkAngularErrorDeg;
+		Trial.Score.MeanTargetDeltaDeg = 2.0f;
+		Trial.Score.MaxTargetDeltaDeg = 4.0f;
+		Trial.Score.ThighAsymmetryDeg = ThighAsymmetryDeg;
+		Trial.Score.PeakRootTiltDeg = 15.0f;
+		Trial.Score.ShellOffsetDeltaCm = 1.0f;
+		Trial.Score.ShellVelocityDeltaCmPerSecond = 2.0f;
+		Trial.Score.PeakRootLinearSpeedCmPerSecond = 25.0f;
+		Trial.Score.PeakRootAngularSpeedDegPerSecond = 35.0f;
+		UPhysAnimComponent::FinalizePhase1AutoCalibScore(Trial.Score);
+		return Trial;
+	}
+#endif
+
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimBalanceModeSmokeOutcomeTest,
 		"PhysAnim.Component.BalanceModeSmokeOutcome",
@@ -610,8 +643,12 @@ namespace
 
 	bool FPhysAnimPhase1AutoCalibStageACandidatesTest::RunTest(const FString& Parameters)
 	{
+		FPhase1AutoCalibRequest FullSearchRequest;
+		FullSearchRequest.Seed = 1337;
+		FullSearchRequest.BudgetMode = EPhase1AutoCalibBudgetMode::FullSearch;
+
 		TArray<FPhase1AutoCalibParams> Candidates;
-		UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(1337, INDEX_NONE, Candidates);
+		UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(FullSearchRequest, Candidates);
 
 		TestEqual(TEXT("Stage A emits the fixed 24 samples for each of 6 presets"), Candidates.Num(), 24 * 6);
 
@@ -630,6 +667,169 @@ namespace
 		}
 
 		TestEqual(TEXT("Stage A covers all six fixed presets"), SeenPresets.Num(), 6);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibSmokeBudgetStageACandidatesTest,
+		"PhysAnim.Component.Phase1AutoCalibSmokeBudgetStageACandidates",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibSmokeBudgetStageACandidatesTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibRequest SmokeRequest;
+		SmokeRequest.Seed = 1337;
+		SmokeRequest.BudgetMode = EPhase1AutoCalibBudgetMode::Smoke;
+
+		TArray<FPhase1AutoCalibParams> CandidatesA;
+		TArray<FPhase1AutoCalibParams> CandidatesB;
+		UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(SmokeRequest, CandidatesA);
+		UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(SmokeRequest, CandidatesB);
+
+		TestEqual(TEXT("Smoke Stage A stays intentionally small"), CandidatesA.Num(), 6);
+		TestEqual(TEXT("Smoke Stage A generation is deterministic"), CandidatesB.Num(), CandidatesA.Num());
+
+		TSet<EPhase1AutoCalibStrategyPreset> SeenPresets;
+		for (int32 Index = 0; Index < CandidatesA.Num(); ++Index)
+		{
+			SeenPresets.Add(CandidatesA[Index].SourcePreset);
+			TestEqual(TEXT("Smoke Stage A remains deterministic candidate-by-candidate"), CandidatesB[Index].SourcePreset, CandidatesA[Index].SourcePreset);
+			TestEqual(TEXT("Smoke Stage A seed families track source presets"), CandidatesA[Index].SeedFamilyPreset, CandidatesA[Index].SourcePreset);
+		}
+
+		TestEqual(TEXT("Smoke Stage A still covers all six fixed presets"), SeenPresets.Num(), 6);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibReportAggregationTest,
+		"PhysAnim.Component.Phase1AutoCalibReportAggregation",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibReportAggregationTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibReport Report;
+		Report.Trials.Add(MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::CurrentDefault,
+			TEXT("timed_out"),
+			TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient"),
+			false,
+			34.0f,
+			2.5f));
+		Report.Trials.Add(MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::SpineBiased,
+			TEXT("timed_out"),
+			TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient"),
+			false,
+			31.0f,
+			2.0f));
+		Report.Trials.Add(MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::SpineBiased,
+			TEXT("timed_out"),
+			TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient"),
+			false,
+			32.0f,
+			1.8f));
+		Report.Trials.Add(MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::BalancedCoupled,
+			TEXT("reached_root_on"),
+			TEXT("ready"),
+			true,
+			17.0f,
+			0.8f));
+
+		UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(Report);
+
+		TestTrue(TEXT("Report picks the contract-passing best candidate"), Report.bHasBestCandidate);
+		TestEqual(TEXT("Best candidate comes from the passing preset"), Report.BestCandidate.Params.SourcePreset, EPhase1AutoCalibStrategyPreset::BalancedCoupled);
+		TestTrue(TEXT("Report picks a near-pass when non-passing trials exist"), Report.bHasBestNearPass);
+		TestEqual(TEXT("Best near-pass comes from the lowest-error failing preset"), Report.BestNearPass.Params.SourcePreset, EPhase1AutoCalibStrategyPreset::SpineBiased);
+		TestEqual(TEXT("Preset summaries are emitted for each preset seen in the trials"), Report.PresetSummaries.Num(), 3);
+
+		const FPhase1AutoCalibPresetSummary* SpineSummary = nullptr;
+		const FPhase1AutoCalibPresetSummary* DefaultSummary = nullptr;
+		for (const FPhase1AutoCalibPresetSummary& Summary : Report.PresetSummaries)
+		{
+			if (Summary.Preset == EPhase1AutoCalibStrategyPreset::SpineBiased)
+			{
+				SpineSummary = &Summary;
+			}
+			else if (Summary.Preset == EPhase1AutoCalibStrategyPreset::CurrentDefault)
+			{
+				DefaultSummary = &Summary;
+			}
+		}
+
+		TestNotNull(TEXT("SpineBiased preset summary exists"), SpineSummary);
+		TestNotNull(TEXT("CurrentDefault preset summary exists"), DefaultSummary);
+		if (SpineSummary)
+		{
+			TestEqual(TEXT("Preset summary tracks trial count"), SpineSummary->TrialCount, 2);
+			TestTrue(TEXT("Preset summary captures its best near-pass"), SpineSummary->bHasBestNearPass);
+			TestEqual(TEXT("Preset summary blocker histogram keeps repeated blocker counts"), SpineSummary->BlockerCounts.Num(), 2);
+			TestTrue(TEXT("Preset summary detects improvement over CurrentDefault worst direct-link error"), SpineSummary->bImprovesWorstDirectLinkVsCurrentDefault);
+			TestTrue(TEXT("Preset summary detects improvement over CurrentDefault thigh asymmetry"), SpineSummary->bImprovesThighAsymmetryVsCurrentDefault);
+		}
+
+		if (DefaultSummary)
+		{
+			TestEqual(TEXT("CurrentDefault baseline improvement stays zero"), DefaultSummary->WorstDirectLinkImprovementVsCurrentDefaultDeg, 0.0f);
+		}
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibStageBCandidateFeedTest,
+		"PhysAnim.Component.Phase1AutoCalibStageBCandidateFeed",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibStageBCandidateFeedTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibRequest FullSearchRequest;
+		FullSearchRequest.BudgetMode = EPhase1AutoCalibBudgetMode::FullSearch;
+
+		TArray<FPhase1AutoCalibTrialResult> StageAResults;
+		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::CurrentDefault, TEXT("timed_out"), TEXT("blocker_default"), false, 35.0f, 3.0f));
+		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::SpineBiased, TEXT("timed_out"), TEXT("blocker_spine"), false, 31.0f, 2.1f));
+		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::WorstThighBiased, TEXT("timed_out"), TEXT("blocker_worst_thigh"), false, 30.5f, 1.9f));
+		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::BalancedCoupled, TEXT("timed_out"), TEXT("blocker_balanced"), false, 29.5f, 1.8f));
+		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh, TEXT("timed_out"), TEXT("blocker_spine_then_thigh"), false, 29.0f, 1.7f));
+		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::RescueOnly, TEXT("timed_out"), TEXT("blocker_rescue"), false, 28.5f, 1.6f));
+
+		TArray<FPhase1AutoCalibParams> StageBCandidates;
+		UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(StageAResults, FullSearchRequest, StageBCandidates);
+
+		TestTrue(TEXT("Stage B emits refinement candidates from the broadened Stage A set"), StageBCandidates.Num() > 0);
+
+		TSet<EPhase1AutoCalibStrategyPreset> SeenPresets;
+		for (const FPhase1AutoCalibParams& Candidate : StageBCandidates)
+		{
+			SeenPresets.Add(Candidate.SourcePreset);
+		}
+
+		TestTrue(TEXT("Stage B receives a broadened Stage A set rather than collapsing to one preset family"), SeenPresets.Num() > 1);
+
+		TArray<FPhase1AutoCalibTrialResult> StageBResults;
+		for (int32 PresetIndex = 0; PresetIndex < 5; ++PresetIndex)
+		{
+			StageBResults.Add(MakePhase1AutoCalibTrial(
+				static_cast<EPhase1AutoCalibStrategyPreset>(PresetIndex),
+				TEXT("timed_out"),
+				TEXT("stage_b_blocker"),
+				false,
+				28.0f + static_cast<float>(PresetIndex),
+				1.0f + 0.1f * static_cast<float>(PresetIndex)));
+		}
+
+		TArray<FPhase1AutoCalibParams> StageCCandidates;
+		UPhysAnimPhase1AutoCalibSubsystem::BuildStageCReproCandidates(StageBResults, FullSearchRequest, StageCCandidates);
+		TSet<EPhase1AutoCalibStrategyPreset> StageCSeenPresets;
+		for (const FPhase1AutoCalibParams& Candidate : StageCCandidates)
+		{
+			StageCSeenPresets.Add(Candidate.SourcePreset);
+		}
+		TestTrue(TEXT("Stage C also receives multiple preset families from the broadened feed"), StageCSeenPresets.Num() > 1);
 		return true;
 	}
 

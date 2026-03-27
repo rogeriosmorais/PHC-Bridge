@@ -673,10 +673,17 @@ enum class EPhase1AutoCalibStrategyPreset : uint8
 	RescueOnly
 };
 
+enum class EPhase1AutoCalibBudgetMode : uint8
+{
+	FullSearch,
+	Smoke
+};
+
 struct FPhase1AutoCalibRequest
 {
 	FString OwnerFilter;
 	int32 Seed = 1337;
+	EPhase1AutoCalibBudgetMode BudgetMode = EPhase1AutoCalibBudgetMode::FullSearch;
 	int32 MaxTrials = INDEX_NONE;
 	FString OutputSubfolder;
 	float ReadinessTimeoutSeconds = 30.0f;
@@ -719,12 +726,36 @@ struct FPhase1AutoCalibTrialResult
 {
 	int32 TrialId = INDEX_NONE;
 	int32 RepetitionIndex = 0;
+	int32 PresetRank = INDEX_NONE;
+	int32 PresetNearPassRank = INDEX_NONE;
 	FString StageName;
 	FPhase1AutoCalibParams Params;
 	FPhase1AutoCalibScore Score;
 	FString TerminalClass;
 	FString TruthfulBlocker;
 	bool bReproducible = false;
+};
+
+struct FPhase1AutoCalibBlockerCount
+{
+	FString TruthfulBlocker;
+	int32 Count = 0;
+};
+
+struct FPhase1AutoCalibPresetSummary
+{
+	EPhase1AutoCalibStrategyPreset Preset = EPhase1AutoCalibStrategyPreset::CurrentDefault;
+	int32 TrialCount = 0;
+	int32 ContractPassedCount = 0;
+	FPhase1AutoCalibTrialResult BestCandidate;
+	FPhase1AutoCalibTrialResult BestNearPass;
+	bool bHasBestCandidate = false;
+	bool bHasBestNearPass = false;
+	float WorstDirectLinkImprovementVsCurrentDefaultDeg = 0.0f;
+	float ThighAsymmetryImprovementVsCurrentDefaultDeg = 0.0f;
+	bool bImprovesWorstDirectLinkVsCurrentDefault = false;
+	bool bImprovesThighAsymmetryVsCurrentDefault = false;
+	TArray<FPhase1AutoCalibBlockerCount> BlockerCounts;
 };
 
 struct FPhase1AutoCalibReport
@@ -735,6 +766,7 @@ struct FPhase1AutoCalibReport
 	FString ParetoJsonPath;
 	TArray<FPhase1AutoCalibTrialResult> Trials;
 	TArray<FPhase1AutoCalibTrialResult> ParetoFrontier;
+	TArray<FPhase1AutoCalibPresetSummary> PresetSummaries;
 	FPhase1AutoCalibTrialResult BestCandidate;
 	FPhase1AutoCalibTrialResult BestNearPass;
 	bool bHasBestCandidate = false;
@@ -868,11 +900,14 @@ struct FPhase1AutoCalibBaselineSnapshot
 };
 #else
 enum class EPhase1AutoCalibStrategyPreset : uint8 { CurrentDefault };
-struct FPhase1AutoCalibRequest { float ReadinessTimeoutSeconds = 0.0f; FString OwnerFilter; int32 Seed = 0; int32 MaxTrials = 0; FString OutputSubfolder; };
+enum class EPhase1AutoCalibBudgetMode : uint8 { FullSearch };
+struct FPhase1AutoCalibRequest { float ReadinessTimeoutSeconds = 0.0f; FString OwnerFilter; int32 Seed = 0; EPhase1AutoCalibBudgetMode BudgetMode = EPhase1AutoCalibBudgetMode::FullSearch; int32 MaxTrials = 0; FString OutputSubfolder; };
 struct FPhase1AutoCalibParams {};
 struct FPhase1AutoCalibScore {};
-struct FPhase1AutoCalibTrialResult { FPhase1AutoCalibParams Params; FPhase1AutoCalibScore Score; FString TerminalClass; FString TruthfulBlocker; };
-struct FPhase1AutoCalibReport { TArray<FPhase1AutoCalibTrialResult> Trials; TArray<FPhase1AutoCalibTrialResult> ParetoFrontier; FPhase1AutoCalibTrialResult BestCandidate; FPhase1AutoCalibTrialResult BestNearPass; bool bHasBestCandidate; bool bHasBestNearPass; };
+struct FPhase1AutoCalibTrialResult { int32 PresetRank = INDEX_NONE; int32 PresetNearPassRank = INDEX_NONE; FPhase1AutoCalibParams Params; FPhase1AutoCalibScore Score; FString TerminalClass; FString TruthfulBlocker; };
+struct FPhase1AutoCalibBlockerCount { FString TruthfulBlocker; int32 Count = 0; };
+struct FPhase1AutoCalibPresetSummary { TArray<FPhase1AutoCalibBlockerCount> BlockerCounts; };
+struct FPhase1AutoCalibReport { TArray<FPhase1AutoCalibTrialResult> Trials; TArray<FPhase1AutoCalibTrialResult> ParetoFrontier; TArray<FPhase1AutoCalibPresetSummary> PresetSummaries; FPhase1AutoCalibTrialResult BestCandidate; FPhase1AutoCalibTrialResult BestNearPass; bool bHasBestCandidate; bool bHasBestNearPass; };
 struct FPhase1AutoCalibLiveMetrics { EPhysAnimRuntimeState RuntimeState; EBalanceReadyTransitionPhase TransitionPhase; float RootLinearSpeedCmPerSecond; float RootAngularSpeedDegPerSecond; float RootTiltDeg; float ShellOffsetDeltaCm; float ShellVelocityDeltaCmPerSecond; float MaxTargetDeltaDeg; float MeanTargetDeltaDeg; };
 struct FPhase1AutoCalibDeterminismFingerprint {};
 struct FPhase1AutoCalibBodyState {};

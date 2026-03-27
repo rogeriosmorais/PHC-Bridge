@@ -15,9 +15,9 @@ Use it to track:
 ## Current State
 
 - `Current phase`: Phase 1 / truthful RootOn-readiness investigation.
-- `Overall status`: UE startup is stable and the latest truthful balance smoke reaches explicit safe denial with `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`.
-- `Last planning milestone`: contract and ownership drift are largely cleaned up; the newest Phase 1 solver step keeps the thigh follow-through path truthful by forbidding it from re-breaking recovered spine readiness.
-- `Latest runtime forensics`: the final solver path still runs `spine_interp` and a constrained `worst_thigh_interp_thigh_r`, but the new acceptance guard limits that follow-through to a spine-safe micro-step (`a0.01`) instead of the earlier spine-breaking `a0.05`; the live result now keeps the spine inside readiness at `pelvisSpine01Angular=17.91` while only partially improving the thigh blocker (`pelvisThighLAngular=31.97`, `pelvisThighRAngular=34.19`), which narrows the next work to finding a stronger thigh improvement that preserves the recovered spine margin.
+- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness now runs bounded smoke-mode search across all six fixed Stage A presets, and the latest truthful smoke/autocalib result identifies `SpineThenWorstThigh` as the best bounded near-pass even though no candidate yet reaches truthful RootOn readiness.
+- `Last planning milestone`: the harness now separates smoke-mode from full-search budgeting, emits preset-aware report artifacts under `test-results/phase1-autocalib/automation_phase1_smoke/`, and surfaces per-preset blocker/improvement evidence instead of a single repeated `CurrentDefault` slice.
+- `Latest runtime forensics`: the latest `PhysAnim.PIE.Phase1AutoCalibSmoke` produced `19` bounded smoke trials with per-preset summaries; `CurrentDefault` still truthfully fails on `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`, while the bounded best near-pass currently comes from `SpineThenWorstThigh` with `phase1_root_on_readiness_pelvis_spine_margin_insufficient`, `worstDirectLinkAngularErrorDeg=32.86`, `thighAsymmetryDeg=4.33`, and `peakRootTiltDeg=21.39`. This narrows the next work to solver search quality and preset-family follow-through rather than harness startup/readiness races.
 
 ## Active Tasks
 

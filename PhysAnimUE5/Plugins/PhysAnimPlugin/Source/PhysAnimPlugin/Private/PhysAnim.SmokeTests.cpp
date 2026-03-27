@@ -97,7 +97,7 @@ namespace
 		FPhase1AutoCalibRequest Request;
 		Request.OwnerFilter = TargetComponent->GetOwner()->GetName();
 		Request.Seed = 1337;
-		Request.MaxTrials = 2;
+		Request.BudgetMode = EPhase1AutoCalibBudgetMode::Smoke;
 		Request.OutputSubfolder = TEXT("automation_phase1_smoke");
 
 		const bool bStarted = AutoCalibSubsystem->StartPhase1AutoCalib(Request, Error);
@@ -132,6 +132,7 @@ namespace
 
 		const FPhase1AutoCalibReport& Report = AutoCalibSubsystem->GetLatestReport();
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke records at least two trials"), Report.Trials.Num() >= 2);
+		Test->TestTrue(TEXT("Phase1 auto-calibration smoke emits preset-aware summaries"), Report.PresetSummaries.Num() > 0);
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes summary.json"), IFileManager::Get().FileExists(*Report.SummaryPath));
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes trials.csv"), IFileManager::Get().FileExists(*Report.TrialsCsvPath));
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes pareto.json"), IFileManager::Get().FileExists(*Report.ParetoJsonPath));

@@ -23,8 +23,28 @@ namespace
 	constexpr int32 StageBRounds = 3;
 	constexpr int32 StageCTopK = 5;
 	constexpr int32 StageCRepetitions = 5;
+	constexpr int32 SmokeStageATrialCount = 6;
+	constexpr int32 SmokeStageBTrialCount = 8;
+	constexpr int32 SmokeStageCTrialCount = 5;
 	constexpr float RestoreFingerprintTolerance = 1.0e-3f;
 	constexpr float ScoreReproTolerance = 1.0e-3f;
+
+	enum class EPhase1AutoCalibBuildStage : uint8
+	{
+		StageA,
+		StageB,
+		StageC
+	};
+
+	constexpr EPhase1AutoCalibStrategyPreset GPhase1AutoCalibPresets[] =
+	{
+		EPhase1AutoCalibStrategyPreset::CurrentDefault,
+		EPhase1AutoCalibStrategyPreset::SpineBiased,
+		EPhase1AutoCalibStrategyPreset::WorstThighBiased,
+		EPhase1AutoCalibStrategyPreset::BalancedCoupled,
+		EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh,
+		EPhase1AutoCalibStrategyPreset::RescueOnly
+	};
 
 	bool MatchesFilter(const UPhysAnimComponent& Component, const FString& FilterLower)
 	{
@@ -209,6 +229,84 @@ namespace
 			OutIndices.Swap(Index, SwapIndex);
 		}
 	}
+
+	int32 ResolveStageTrialLimit(const FPhase1AutoCalibRequest& Request, const EPhase1AutoCalibBuildStage Stage)
+	{
+		if (Request.MaxTrials > 0)
+		{
+			return Request.MaxTrials;
+		}
+
+		if (Request.BudgetMode == EPhase1AutoCalibBudgetMode::Smoke)
+		{
+			switch (Stage)
+			{
+			case EPhase1AutoCalibBuildStage::StageA:
+				return SmokeStageATrialCount;
+			case EPhase1AutoCalibBuildStage::StageB:
+				return SmokeStageBTrialCount;
+			case EPhase1AutoCalibBuildStage::StageC:
+				return SmokeStageCTrialCount;
+			default:
+				break;
+			}
+		}
+
+		return INDEX_NONE;
+	}
+
+	bool IsBetterTrial(const FPhase1AutoCalibTrialResult& A, const FPhase1AutoCalibTrialResult& B)
+	{
+		return UPhysAnimComponent::IsBetterPhase1AutoCalibScore(A.Score, B.Score);
+	}
+
+	FPhase1AutoCalibPresetSummary& FindOrAddPresetSummary(
+		TArray<FPhase1AutoCalibPresetSummary>& Summaries,
+		const EPhase1AutoCalibStrategyPreset Preset)
+	{
+		for (FPhase1AutoCalibPresetSummary& Summary : Summaries)
+		{
+			if (Summary.Preset == Preset)
+			{
+				return Summary;
+			}
+		}
+
+		FPhase1AutoCalibPresetSummary& Summary = Summaries.AddDefaulted_GetRef();
+		Summary.Preset = Preset;
+		return Summary;
+	}
+
+	void AddBlockerCount(TArray<FPhase1AutoCalibBlockerCount>& BlockerCounts, const FString& TruthfulBlocker)
+	{
+		for (FPhase1AutoCalibBlockerCount& Entry : BlockerCounts)
+		{
+			if (Entry.TruthfulBlocker == TruthfulBlocker)
+			{
+				++Entry.Count;
+				return;
+			}
+		}
+
+		FPhase1AutoCalibBlockerCount& Entry = BlockerCounts.AddDefaulted_GetRef();
+		Entry.TruthfulBlocker = TruthfulBlocker;
+		Entry.Count = 1;
+	}
+
+	const FPhase1AutoCalibPresetSummary* FindPresetSummary(
+		const TArray<FPhase1AutoCalibPresetSummary>& Summaries,
+		const EPhase1AutoCalibStrategyPreset Preset)
+	{
+		for (const FPhase1AutoCalibPresetSummary& Summary : Summaries)
+		{
+			if (Summary.Preset == Preset)
+			{
+				return &Summary;
+			}
+		}
+
+		return nullptr;
+	}
 }
 
 bool UPhysAnimPhase1AutoCalibSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const
@@ -298,9 +396,6 @@ bool UPhysAnimPhase1AutoCalibSubsystem::StartPhase1AutoCalib(const FPhase1AutoCa
 	StopPhase1AutoCalib(TEXT("restart"));
 	ActiveRequest = Request;
 	TargetComponent = Component;
-	OriginalBalanceEntryMinPolicyAlpha = Component->StabilizationSettings.BalanceEntryMinPolicyAlpha;
-	Component->StabilizationSettings.BalanceEntryMinPolicyAlpha = 2.0f;
-	
 	CurrentStage = EAutoCalibStage::AwaitingReadiness;
 	CurrentStageStartTimeSeconds = World->GetTimeSeconds();
 	LastReadinessLogTimeSeconds = -1.0;
@@ -317,7 +412,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::StartPhase1AutoCalib(const FPhase1AutoCa
 	LatestReport.ParetoJsonPath = FPaths::Combine(LatestReport.OutputDirectory, TEXT("pareto.json"));
 
 	TArray<FPhase1AutoCalibParams> StageACandidates;
-	BuildStageACandidates(ActiveRequest.Seed, ActiveRequest.MaxTrials, StageACandidates);
+	BuildStageACandidates(ActiveRequest, StageACandidates);
 	for (const FPhase1AutoCalibParams& Params : StageACandidates)
 	{
 		FPendingTrial& Pending = PendingTrials.AddDefaulted_GetRef();
@@ -342,7 +437,6 @@ void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reaso
 {
 	if (UPhysAnimComponent* const Component = TargetComponent.Get())
 	{
-		Component->StabilizationSettings.BalanceEntryMinPolicyAlpha = OriginalBalanceEntryMinPolicyAlpha;
 		Component->ClearPhase1AutoCalibParams();
 
 		FString RestoreError;
@@ -367,23 +461,16 @@ void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reaso
 	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
 }
 
-void UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(int32 Seed, int32 MaxTrials, TArray<FPhase1AutoCalibParams>& OutCandidates)
+void UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates)
 {
 	OutCandidates.Reset();
+	const int32 StageLimit = ResolveStageTrialLimit(Request, EPhase1AutoCalibBuildStage::StageA);
+	FRandomStream RandomStream(Request.Seed);
+	TArray<FPhase1AutoCalibParams> PresetCandidatePools[UE_ARRAY_COUNT(GPhase1AutoCalibPresets)];
 
-	static const EPhase1AutoCalibStrategyPreset Presets[] =
+	for (int32 PresetIndex = 0; PresetIndex < UE_ARRAY_COUNT(GPhase1AutoCalibPresets); ++PresetIndex)
 	{
-		EPhase1AutoCalibStrategyPreset::CurrentDefault,
-		EPhase1AutoCalibStrategyPreset::SpineBiased,
-		EPhase1AutoCalibStrategyPreset::WorstThighBiased,
-		EPhase1AutoCalibStrategyPreset::BalancedCoupled,
-		EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh,
-		EPhase1AutoCalibStrategyPreset::RescueOnly
-	};
-
-	FRandomStream RandomStream(Seed);
-	for (const EPhase1AutoCalibStrategyPreset Preset : Presets)
-	{
+		const EPhase1AutoCalibStrategyPreset Preset = GPhase1AutoCalibPresets[PresetIndex];
 		TArray<int32> SpineStrata;
 		TArray<int32> ThighStrata;
 		TArray<int32> FocusStrata;
@@ -401,11 +488,6 @@ void UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(int32 Seed, int32 
 
 		for (int32 SampleIndex = 0; SampleIndex < StageASamplesPerPreset; ++SampleIndex)
 		{
-			if (MaxTrials > 0 && OutCandidates.Num() >= MaxTrials)
-			{
-				return;
-			}
-
 			FPhase1AutoCalibParams Params;
 			Params.SourcePreset = Preset;
 			Params.SeedFamilyPreset = Preset;
@@ -416,22 +498,36 @@ void UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(int32 Seed, int32 
 			Params.ClampStrengthScale = SampleStratifiedValue(0.50f, 1.50f, ClampStrata[SampleIndex], StageASamplesPerPreset, RandomStream);
 			Params.PelvisPitchBiasDeg = SampleStratifiedValue(-1.0f, 1.0f, PitchStrata[SampleIndex], StageASamplesPerPreset, RandomStream);
 			Params.PelvisRollBiasDeg = SampleStratifiedValue(-1.0f, 1.0f, RollStrata[SampleIndex], StageASamplesPerPreset, RandomStream);
-			OutCandidates.Add(ClampParams(Params));
+			PresetCandidatePools[PresetIndex].Add(ClampParams(Params));
+		}
+	}
+
+	for (int32 SampleIndex = 0; SampleIndex < StageASamplesPerPreset; ++SampleIndex)
+	{
+		for (int32 PresetIndex = 0; PresetIndex < UE_ARRAY_COUNT(GPhase1AutoCalibPresets); ++PresetIndex)
+		{
+			if (StageLimit > 0 && OutCandidates.Num() >= StageLimit)
+			{
+				return;
+			}
+
+			OutCandidates.Add(PresetCandidatePools[PresetIndex][SampleIndex]);
 		}
 	}
 }
 
 void UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(
 	const TArray<FPhase1AutoCalibTrialResult>& StageAResults,
-	int32 MaxTrials,
+	const FPhase1AutoCalibRequest& Request,
 	TArray<FPhase1AutoCalibParams>& OutCandidates)
 {
 	OutCandidates.Reset();
+	const int32 StageLimit = ResolveStageTrialLimit(Request, EPhase1AutoCalibBuildStage::StageB);
 
 	TArray<FPhase1AutoCalibTrialResult> Sorted = StageAResults;
 	Algo::Sort(Sorted, [](const FPhase1AutoCalibTrialResult& A, const FPhase1AutoCalibTrialResult& B)
 	{
-		return UPhysAnimComponent::IsBetterPhase1AutoCalibScore(A.Score, B.Score);
+		return IsBetterTrial(A, B);
 	});
 
 	const int32 CandidateCount = FMath::Min(StageBTopK, Sorted.Num());
@@ -452,7 +548,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(
 
 			const auto AddCandidate = [&](FPhase1AutoCalibParams Params)
 			{
-				if (MaxTrials > 0 && OutCandidates.Num() >= MaxTrials)
+				if (StageLimit > 0 && OutCandidates.Num() >= StageLimit)
 				{
 					return;
 				}
@@ -503,7 +599,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(
 			Params.PelvisRollBiasDeg -= BiasDelta;
 			AddCandidate(Params);
 
-			if (MaxTrials > 0 && OutCandidates.Num() >= MaxTrials)
+			if (StageLimit > 0 && OutCandidates.Num() >= StageLimit)
 			{
 				return;
 			}
@@ -513,15 +609,16 @@ void UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(
 
 void UPhysAnimPhase1AutoCalibSubsystem::BuildStageCReproCandidates(
 	const TArray<FPhase1AutoCalibTrialResult>& StageBResults,
-	int32 MaxTrials,
+	const FPhase1AutoCalibRequest& Request,
 	TArray<FPhase1AutoCalibParams>& OutCandidates)
 {
 	OutCandidates.Reset();
+	const int32 StageLimit = ResolveStageTrialLimit(Request, EPhase1AutoCalibBuildStage::StageC);
 
 	TArray<FPhase1AutoCalibTrialResult> Sorted = StageBResults;
 	Algo::Sort(Sorted, [](const FPhase1AutoCalibTrialResult& A, const FPhase1AutoCalibTrialResult& B)
 	{
-		return UPhysAnimComponent::IsBetterPhase1AutoCalibScore(A.Score, B.Score);
+		return IsBetterTrial(A, B);
 	});
 
 	const int32 CandidateCount = FMath::Min(StageCTopK, Sorted.Num());
@@ -529,7 +626,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::BuildStageCReproCandidates(
 	{
 		for (int32 RepeatIndex = 0; RepeatIndex < StageCRepetitions; ++RepeatIndex)
 		{
-			if (MaxTrials > 0 && OutCandidates.Num() >= MaxTrials)
+			if (StageLimit > 0 && OutCandidates.Num() >= StageLimit)
 			{
 				return;
 			}
@@ -671,21 +768,20 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickAwaitingReadiness()
 		return;
 	}
 
-	// Use a copy of settings with the original alpha threshold for the readiness check,
-	// because the component-side BalanceEntryMinPolicyAlpha is overridden to 2.0f 
-	// specifically to block natural triggers during the awaiting-readiness phase.
-	FPhysAnimStabilizationSettings ReadinessSettings = Component->GetConfiguredStabilizationSettings();
-	ReadinessSettings.BalanceEntryMinPolicyAlpha = OriginalBalanceEntryMinPolicyAlpha;
-
 	FString QueueReason;
+	const FPhysAnimStabilizationSettings ReadinessSettings = Component->GetConfiguredStabilizationSettings();
 	const bool bQueueReady = Component->EvaluateBalanceModeQueueGates(ReadinessSettings, QueueReason);
-
 	FString PreEntryReason;
-	const bool bPreEntryReady = Component->EvaluateBalanceBridgeActivePreEntryPrerequisites(ReadinessSettings, PreEntryReason);
+	(void)Component->EvaluateBalanceBridgeActivePreEntryPrerequisites(ReadinessSettings, PreEntryReason);
 
-	if (bQueueReady && bPreEntryReady)
+	if (bQueueReady)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Readiness reached after %.2fs. Capturing baseline."), World->GetTimeSeconds() - CurrentStageStartTimeSeconds);
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimAutoCalib] Queue-ready baseline reached after %.2fs. Capturing baseline. preEntry=%s"),
+			World->GetTimeSeconds() - CurrentStageStartTimeSeconds,
+			PreEntryReason.IsEmpty() ? TEXT("ready") : *PreEntryReason);
 		
 		FString Error;
 		if (!Component->CapturePhase1AutoCalibBaseline(BaselineSnapshot, Error))
@@ -724,7 +820,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickAwaitingReadiness()
 	{
 		const UEnum* const StateEnum = StaticEnum<EPhysAnimRuntimeState>();
 		const FString StateName = StateEnum ? StateEnum->GetValueAsString(Component->GetRuntimeState()) : TEXT("unknown");
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting readiness... elapsed=%.1fs state=%s queue=%s preEntry=%s"),
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting queue-ready baseline... elapsed=%.1fs state=%s queue=%s preEntry=%s"),
 			Elapsed, *StateName, *QueueReason, *PreEntryReason);
 		LastReadinessLogTimeSeconds = World->GetTimeSeconds();
 	}
@@ -768,12 +864,6 @@ bool UPhysAnimPhase1AutoCalibSubsystem::BeginNextTrial()
 		return false;
 	}
 
-	if (!Component->StartPhase1AutoCalibTrial(Error))
-	{
-		LastError = Error;
-		return false;
-	}
-
 	ActiveTrialStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	bTrialActive = true;
 	return true;
@@ -807,6 +897,22 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 	{
 		FinalizeActiveTrial(true);
 		return;
+	}
+
+	if (Component->GetBalanceReadyTransitionPhase() == EBalanceReadyTransitionPhase::BRT_Inactive)
+	{
+		FString QueueReason;
+		if (!Component->EvaluateBalanceModeQueueGates(Settings, QueueReason))
+		{
+			return;
+		}
+
+		if (!Component->StartPhase1AutoCalibTrial(Error))
+		{
+			LastError = Error;
+			StopPhase1AutoCalib(TEXT("trial_start_failed"));
+			return;
+		}
 	}
 
 	const EBalanceReadyTransitionPhase Phase = Component->GetBalanceReadyTransitionPhase();
@@ -907,7 +1013,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::AdvanceStageOrFinish()
 	if (CurrentStage == EAutoCalibStage::StageA)
 	{
 		TArray<FPhase1AutoCalibParams> StageBCandidates;
-		BuildStageBRefinementCandidates(StageAResults, ActiveRequest.MaxTrials, StageBCandidates);
+		BuildStageBRefinementCandidates(StageAResults, ActiveRequest, StageBCandidates);
 		for (const FPhase1AutoCalibParams& Params : StageBCandidates)
 		{
 			FPendingTrial& Pending = PendingTrials.AddDefaulted_GetRef();
@@ -928,7 +1034,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::AdvanceStageOrFinish()
 		if (CurrentStage == EAutoCalibStage::StageB)
 		{
 			TArray<FPhase1AutoCalibParams> StageCCandidates;
-			BuildStageCReproCandidates(StageBResults, ActiveRequest.MaxTrials, StageCCandidates);
+			BuildStageCReproCandidates(StageBResults, ActiveRequest, StageCCandidates);
 			for (int32 Index = 0; Index < StageCCandidates.Num(); ++Index)
 			{
 				FPendingTrial& Pending = PendingTrials.AddDefaulted_GetRef();
@@ -1068,37 +1174,37 @@ FPhase1AutoCalibTrialResult UPhysAnimPhase1AutoCalibSubsystem::BuildTrialResult(
 	return Result;
 }
 
-void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReport()
+void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibReport& InOutReport, TArray<FPhase1AutoCalibTrialResult>* StageCTrials)
 {
-	Algo::Sort(LatestReport.Trials, [](const FPhase1AutoCalibTrialResult& A, const FPhase1AutoCalibTrialResult& B)
+	if (StageCTrials)
 	{
-		return UPhysAnimComponent::IsBetterPhase1AutoCalibScore(A.Score, B.Score);
-	});
-
-	for (int32 Index = 0; Index + StageCRepetitions <= StageCResults.Num(); Index += StageCRepetitions)
-	{
-		TArray<FPhase1AutoCalibTrialResult> Group;
-		Group.Reserve(StageCRepetitions);
-		for (int32 Offset = 0; Offset < StageCRepetitions; ++Offset)
+		for (int32 Index = 0; Index + StageCRepetitions <= StageCTrials->Num(); Index += StageCRepetitions)
 		{
-			Group.Add(StageCResults[Index + Offset]);
-		}
+			TArray<FPhase1AutoCalibTrialResult> Group;
+			Group.Reserve(StageCRepetitions);
+			for (int32 Offset = 0; Offset < StageCRepetitions; ++Offset)
+			{
+				Group.Add((*StageCTrials)[Index + Offset]);
+			}
 
-		const bool bReproducible = AreTrialResultsReproducible(Group, ScoreReproTolerance);
-		for (int32 Offset = 0; Offset < StageCRepetitions; ++Offset)
-		{
-			StageCResults[Index + Offset].bReproducible = bReproducible;
+			const bool bReproducible = AreTrialResultsReproducible(Group, ScoreReproTolerance);
+			for (int32 Offset = 0; Offset < StageCRepetitions; ++Offset)
+			{
+				(*StageCTrials)[Index + Offset].bReproducible = bReproducible;
+			}
 		}
 	}
 
-	for (FPhase1AutoCalibTrialResult& Trial : LatestReport.Trials)
+	for (FPhase1AutoCalibTrialResult& Trial : InOutReport.Trials)
 	{
-		if (Trial.StageName != TEXT("stage_c"))
+		Trial.PresetRank = INDEX_NONE;
+		Trial.PresetNearPassRank = INDEX_NONE;
+		if (!StageCTrials || Trial.StageName != TEXT("stage_c"))
 		{
 			continue;
 		}
 
-		for (const FPhase1AutoCalibTrialResult& StageCTrial : StageCResults)
+		for (const FPhase1AutoCalibTrialResult& StageCTrial : *StageCTrials)
 		{
 			if (StageCTrial.TrialId == Trial.TrialId)
 			{
@@ -1108,43 +1214,145 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReport()
 		}
 	}
 
-	for (const FPhase1AutoCalibTrialResult& Trial : LatestReport.Trials)
+	Algo::Sort(InOutReport.Trials, [](const FPhase1AutoCalibTrialResult& A, const FPhase1AutoCalibTrialResult& B)
 	{
-		if (!LatestReport.bHasBestNearPass && !Trial.Score.bContractPassed)
+		return IsBetterTrial(A, B);
+	});
+
+	for (int32 TrialIndex = 0; TrialIndex < InOutReport.Trials.Num(); ++TrialIndex)
+	{
+		FPhase1AutoCalibTrialResult& Trial = InOutReport.Trials[TrialIndex];
+		int32 PresetRank = 0;
+		int32 PresetNearPassRank = 0;
+		for (const FPhase1AutoCalibTrialResult& Other : InOutReport.Trials)
 		{
-			LatestReport.BestNearPass = Trial;
-			LatestReport.bHasBestNearPass = true;
+			if (Other.Params.SourcePreset != Trial.Params.SourcePreset)
+			{
+				continue;
+			}
+
+			++PresetRank;
+			if (!Other.Score.bContractPassed)
+			{
+				++PresetNearPassRank;
+			}
+			if (Other.TrialId == Trial.TrialId)
+			{
+				break;
+			}
+		}
+		Trial.PresetRank = PresetRank;
+		Trial.PresetNearPassRank = Trial.Score.bContractPassed ? INDEX_NONE : PresetNearPassRank;
+	}
+
+	InOutReport.PresetSummaries.Reset();
+	InOutReport.ParetoFrontier.Reset();
+	InOutReport.bHasBestCandidate = false;
+	InOutReport.bHasBestNearPass = false;
+
+	for (int32 TrialIndex = 0; TrialIndex < InOutReport.Trials.Num(); ++TrialIndex)
+	{
+		FPhase1AutoCalibTrialResult& Trial = InOutReport.Trials[TrialIndex];
+		FPhase1AutoCalibPresetSummary& Summary = FindOrAddPresetSummary(InOutReport.PresetSummaries, Trial.Params.SourcePreset);
+		++Summary.TrialCount;
+		if (Trial.Score.bContractPassed)
+		{
+			++Summary.ContractPassedCount;
+		}
+		if (Trial.Score.bContractPassed && (!Summary.bHasBestCandidate || IsBetterTrial(Trial, Summary.BestCandidate)))
+		{
+			Summary.BestCandidate = Trial;
+			Summary.bHasBestCandidate = true;
+		}
+		if (!Trial.Score.bContractPassed && (!Summary.bHasBestNearPass || IsBetterTrial(Trial, Summary.BestNearPass)))
+		{
+			Summary.BestNearPass = Trial;
+			Summary.bHasBestNearPass = true;
+		}
+		AddBlockerCount(Summary.BlockerCounts, Trial.TruthfulBlocker);
+		if (!InOutReport.bHasBestNearPass && !Trial.Score.bContractPassed)
+		{
+			InOutReport.BestNearPass = Trial;
+			InOutReport.bHasBestNearPass = true;
 		}
 	}
 
-	for (const FPhase1AutoCalibTrialResult& Trial : LatestReport.Trials)
+	for (const FPhase1AutoCalibTrialResult& Trial : InOutReport.Trials)
 	{
 		if (Trial.Score.bContractPassed && Trial.bReproducible)
 		{
-			LatestReport.BestCandidate = Trial;
-			LatestReport.bHasBestCandidate = true;
+			InOutReport.BestCandidate = Trial;
+			InOutReport.bHasBestCandidate = true;
 			break;
 		}
 	}
 
-	if (!LatestReport.bHasBestCandidate)
+	if (!InOutReport.bHasBestCandidate)
 	{
-		for (const FPhase1AutoCalibTrialResult& Trial : LatestReport.Trials)
+		for (const FPhase1AutoCalibTrialResult& Trial : InOutReport.Trials)
 		{
 			if (Trial.Score.bContractPassed)
 			{
-				LatestReport.BestCandidate = Trial;
-				LatestReport.bHasBestCandidate = true;
+				InOutReport.BestCandidate = Trial;
+				InOutReport.bHasBestCandidate = true;
 				break;
 			}
 		}
 	}
 
-	LatestReport.ParetoFrontier.Reset();
-	for (const FPhase1AutoCalibTrialResult& Candidate : LatestReport.Trials)
+	for (int32 SummaryIndex = 0; SummaryIndex < InOutReport.PresetSummaries.Num(); ++SummaryIndex)
+	{
+		FPhase1AutoCalibPresetSummary& Summary = InOutReport.PresetSummaries[SummaryIndex];
+		Algo::Sort(Summary.BlockerCounts, [](const FPhase1AutoCalibBlockerCount& A, const FPhase1AutoCalibBlockerCount& B)
+		{
+			if (A.Count != B.Count)
+			{
+				return A.Count > B.Count;
+			}
+			return A.TruthfulBlocker < B.TruthfulBlocker;
+		});
+	}
+	Algo::Sort(InOutReport.PresetSummaries, [](const FPhase1AutoCalibPresetSummary& A, const FPhase1AutoCalibPresetSummary& B)
+	{
+		return static_cast<uint8>(A.Preset) < static_cast<uint8>(B.Preset);
+	});
+
+	const FPhase1AutoCalibPresetSummary* const CurrentDefaultSummary = FindPresetSummary(
+		InOutReport.PresetSummaries,
+		EPhase1AutoCalibStrategyPreset::CurrentDefault);
+	const float BaselineWorstDirectLink =
+		(CurrentDefaultSummary && CurrentDefaultSummary->bHasBestNearPass)
+		? CurrentDefaultSummary->BestNearPass.Score.WorstDirectLinkAngularErrorDeg
+		: TNumericLimits<float>::Max();
+	const float BaselineThighAsymmetry =
+		(CurrentDefaultSummary && CurrentDefaultSummary->bHasBestNearPass)
+		? CurrentDefaultSummary->BestNearPass.Score.ThighAsymmetryDeg
+		: TNumericLimits<float>::Max();
+
+	for (FPhase1AutoCalibPresetSummary& Summary : InOutReport.PresetSummaries)
+	{
+		if (!Summary.bHasBestNearPass ||
+			Summary.Preset == EPhase1AutoCalibStrategyPreset::CurrentDefault ||
+			!CurrentDefaultSummary ||
+			!CurrentDefaultSummary->bHasBestNearPass)
+		{
+			continue;
+		}
+
+		Summary.WorstDirectLinkImprovementVsCurrentDefaultDeg =
+			BaselineWorstDirectLink - Summary.BestNearPass.Score.WorstDirectLinkAngularErrorDeg;
+		Summary.ThighAsymmetryImprovementVsCurrentDefaultDeg =
+			BaselineThighAsymmetry - Summary.BestNearPass.Score.ThighAsymmetryDeg;
+		Summary.bImprovesWorstDirectLinkVsCurrentDefault =
+			Summary.WorstDirectLinkImprovementVsCurrentDefaultDeg > ScoreReproTolerance;
+		Summary.bImprovesThighAsymmetryVsCurrentDefault =
+			Summary.ThighAsymmetryImprovementVsCurrentDefaultDeg > ScoreReproTolerance;
+	}
+
+	for (const FPhase1AutoCalibTrialResult& Candidate : InOutReport.Trials)
 	{
 		bool bDominated = false;
-		for (const FPhase1AutoCalibTrialResult& Other : LatestReport.Trials)
+		for (const FPhase1AutoCalibTrialResult& Other : InOutReport.Trials)
 		{
 			if (Candidate.TrialId == Other.TrialId)
 			{
@@ -1160,10 +1368,14 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReport()
 
 		if (!bDominated)
 		{
-			LatestReport.ParetoFrontier.Add(Candidate);
+			InOutReport.ParetoFrontier.Add(Candidate);
 		}
 	}
+}
 
+void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReport()
+{
+	FinalizeReportData(LatestReport, &StageCResults);
 	WriteArtifacts();
 }
 
@@ -1177,14 +1389,16 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 
 	IFileManager::Get().MakeDirectory(*OutputDirectory, true);
 
-	FString Csv = TEXT("trial_id,stage,repetition,terminal_class,truthful_blocker,contract_passed,reproducible,source_preset,seed_family_preset,spine_alpha,worst_thigh_alpha,focused_delta_scale,uprightness_weight_scale,clamp_strength_scale,pelvis_pitch_bias_deg,pelvis_roll_bias_deg,worst_direct_link_angular_error_deg,mean_target_delta_deg,max_target_delta_deg,thigh_asymmetry_deg,peak_root_tilt_deg,shell_offset_delta_cm,shell_velocity_delta_cm_per_second,peak_root_linear_speed_cm_per_second,peak_root_angular_speed_deg_per_second\n");
+	FString Csv = TEXT("trial_id,stage,repetition,preset_rank,preset_near_pass_rank,terminal_class,truthful_blocker,contract_passed,reproducible,source_preset,seed_family_preset,spine_alpha,worst_thigh_alpha,focused_delta_scale,uprightness_weight_scale,clamp_strength_scale,pelvis_pitch_bias_deg,pelvis_roll_bias_deg,worst_direct_link_angular_error_deg,mean_target_delta_deg,max_target_delta_deg,thigh_asymmetry_deg,peak_root_tilt_deg,shell_offset_delta_cm,shell_velocity_delta_cm_per_second,peak_root_linear_speed_cm_per_second,peak_root_angular_speed_deg_per_second\n");
 	for (const FPhase1AutoCalibTrialResult& Trial : LatestReport.Trials)
 	{
 		Csv += FString::Printf(
-			TEXT("%d,%s,%d,%s,%s,%s,%s,%s,%s,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n"),
+			TEXT("%d,%s,%d,%d,%d,%s,%s,%s,%s,%s,%s,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n"),
 			Trial.TrialId,
 			*Trial.StageName,
 			Trial.RepetitionIndex,
+			Trial.PresetRank,
+			Trial.PresetNearPassRank,
 			*Trial.TerminalClass,
 			*Trial.TruthfulBlocker,
 			Trial.Score.bContractPassed ? TEXT("true") : TEXT("false"),
@@ -1213,10 +1427,12 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 	const auto BuildTrialJson = [](const FPhase1AutoCalibTrialResult& Trial) -> FString
 	{
 		return FString::Printf(
-			TEXT("{\"trialId\":%d,\"stage\":\"%s\",\"repetition\":%d,\"terminalClass\":\"%s\",\"truthfulBlocker\":\"%s\",\"contractPassed\":%s,\"reproducible\":%s,\"sourcePreset\":\"%s\",\"seedFamilyPreset\":\"%s\",\"score\":{\"worstDirectLinkAngularErrorDeg\":%.6f,\"meanTargetDeltaDeg\":%.6f,\"maxTargetDeltaDeg\":%.6f,\"thighAsymmetryDeg\":%.6f,\"peakRootTiltDeg\":%.6f,\"shellOffsetDeltaCm\":%.6f,\"shellVelocityDeltaCmPerSecond\":%.6f,\"peakRootLinearSpeedCmPerSecond\":%.6f,\"peakRootAngularSpeedDegPerSecond\":%.6f}}"),
+			TEXT("{\"trialId\":%d,\"stage\":\"%s\",\"repetition\":%d,\"presetRank\":%d,\"presetNearPassRank\":%d,\"terminalClass\":\"%s\",\"truthfulBlocker\":\"%s\",\"contractPassed\":%s,\"reproducible\":%s,\"sourcePreset\":\"%s\",\"seedFamilyPreset\":\"%s\",\"score\":{\"worstDirectLinkAngularErrorDeg\":%.6f,\"meanTargetDeltaDeg\":%.6f,\"maxTargetDeltaDeg\":%.6f,\"thighAsymmetryDeg\":%.6f,\"peakRootTiltDeg\":%.6f,\"shellOffsetDeltaCm\":%.6f,\"shellVelocityDeltaCmPerSecond\":%.6f,\"peakRootLinearSpeedCmPerSecond\":%.6f,\"peakRootAngularSpeedDegPerSecond\":%.6f}}"),
 			Trial.TrialId,
 			*JsonEscape(Trial.StageName),
 			Trial.RepetitionIndex,
+			Trial.PresetRank,
+			Trial.PresetNearPassRank,
 			*JsonEscape(Trial.TerminalClass),
 			*JsonEscape(Trial.TruthfulBlocker),
 			Trial.Score.bContractPassed ? TEXT("true") : TEXT("false"),
@@ -1234,12 +1450,59 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 			Trial.Score.PeakRootAngularSpeedDegPerSecond);
 	};
 
+	const auto BuildBlockerCountJson = [](const FPhase1AutoCalibBlockerCount& Entry) -> FString
+	{
+		return FString::Printf(
+			TEXT("{\"truthfulBlocker\":\"%s\",\"count\":%d}"),
+			*JsonEscape(Entry.TruthfulBlocker),
+			Entry.Count);
+	};
+
+	const auto BuildPresetSummaryJson = [&BuildTrialJson, &BuildBlockerCountJson](const FPhase1AutoCalibPresetSummary& Summary) -> FString
+	{
+		FString BlockersJson = TEXT("[");
+		for (int32 Index = 0; Index < Summary.BlockerCounts.Num(); ++Index)
+		{
+			if (Index > 0)
+			{
+				BlockersJson += TEXT(",");
+			}
+			BlockersJson += BuildBlockerCountJson(Summary.BlockerCounts[Index]);
+		}
+		BlockersJson += TEXT("]");
+
+		return FString::Printf(
+			TEXT("{\"preset\":\"%s\",\"trialCount\":%d,\"contractPassedCount\":%d,\"bestCandidate\":%s,\"bestNearPass\":%s,\"worstDirectLinkImprovementVsCurrentDefaultDeg\":%.6f,\"thighAsymmetryImprovementVsCurrentDefaultDeg\":%.6f,\"improvesWorstDirectLinkVsCurrentDefault\":%s,\"improvesThighAsymmetryVsCurrentDefault\":%s,\"blockerCounts\":%s}"),
+			StrategyPresetToString(Summary.Preset),
+			Summary.TrialCount,
+			Summary.ContractPassedCount,
+			Summary.bHasBestCandidate ? *BuildTrialJson(Summary.BestCandidate) : TEXT("null"),
+			Summary.bHasBestNearPass ? *BuildTrialJson(Summary.BestNearPass) : TEXT("null"),
+			Summary.WorstDirectLinkImprovementVsCurrentDefaultDeg,
+			Summary.ThighAsymmetryImprovementVsCurrentDefaultDeg,
+			Summary.bImprovesWorstDirectLinkVsCurrentDefault ? TEXT("true") : TEXT("false"),
+			Summary.bImprovesThighAsymmetryVsCurrentDefault ? TEXT("true") : TEXT("false"),
+			*BlockersJson);
+	};
+
+	FString PresetSummariesJson = TEXT("[");
+	for (int32 Index = 0; Index < LatestReport.PresetSummaries.Num(); ++Index)
+	{
+		if (Index > 0)
+		{
+			PresetSummariesJson += TEXT(",");
+		}
+		PresetSummariesJson += BuildPresetSummaryJson(LatestReport.PresetSummaries[Index]);
+	}
+	PresetSummariesJson += TEXT("]");
+
 	FString SummaryJson = FString::Printf(
-		TEXT("{\"outputDirectory\":\"%s\",\"trialCount\":%d,\"bestCandidate\":%s,\"bestNearPass\":%s}"),
+		TEXT("{\"outputDirectory\":\"%s\",\"trialCount\":%d,\"bestCandidate\":%s,\"bestNearPass\":%s,\"presetSummaries\":%s}"),
 		*JsonEscape(LatestReport.OutputDirectory),
 		LatestReport.Trials.Num(),
 		LatestReport.bHasBestCandidate ? *BuildTrialJson(LatestReport.BestCandidate) : TEXT("null"),
-		LatestReport.bHasBestNearPass ? *BuildTrialJson(LatestReport.BestNearPass) : TEXT("null"));
+		LatestReport.bHasBestNearPass ? *BuildTrialJson(LatestReport.BestNearPass) : TEXT("null"),
+		*PresetSummariesJson);
 	FFileHelper::SaveStringToFile(SummaryJson, *LatestReport.SummaryPath);
 
 	FString ParetoJson = TEXT("[");
@@ -1278,13 +1541,10 @@ TStatId UPhysAnimPhase1AutoCalibSubsystem::GetStatId() const { RETURN_QUICK_DECL
 void UPhysAnimPhase1AutoCalibSubsystem::Deinitialize() {}
 bool UPhysAnimPhase1AutoCalibSubsystem::StartPhase1AutoCalib(const FPhase1AutoCalibRequest& Request, FString& OutError) { return false; }
 void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reason) {}
-void UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(int32 Seed, int32 MaxTrials, TArray<FPhase1AutoCalibParams>& OutCandidates) {}
-void UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageAResults, int32 MaxTrials, TArray<FPhase1AutoCalibParams>& OutCandidates) {}
-void UPhysAnimPhase1AutoCalibSubsystem::BuildStageCReproCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageBResults, int32 MaxTrials, TArray<FPhase1AutoCalibParams>& OutCandidates) {}
+void UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates) {}
+void UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageAResults, const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates) {}
+void UPhysAnimPhase1AutoCalibSubsystem::BuildStageCReproCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageBResults, const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates) {}
 bool UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(const TArray<FPhase1AutoCalibTrialResult>& Trials, float Epsilon) { return false; }
+void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibReport& InOutReport, TArray<FPhase1AutoCalibTrialResult>* StageCTrials) {}
 
 #endif
-
-
-
-
