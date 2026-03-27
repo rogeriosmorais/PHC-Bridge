@@ -651,7 +651,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		{
 			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
 			{
-				static const FName UpperBodyBones[] = { TEXT("head"), TEXT("neck_01"), TEXT("clavicle_l"), TEXT("clavicle_r") };
+				static const FName UpperBodyBones[] = { 
+					TEXT("head"), TEXT("neck_01"), TEXT("clavicle_l"), TEXT("clavicle_r"),
+					TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"),
+					TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r") 
+				};
 				for (const FName& BoneName : UpperBodyBones)
 				{
 					if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
@@ -667,39 +671,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 						}
 
 						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_UPPER_BODY_LATE_LOOP_STATE source=%s bone=%s rawSim=%d modifier=%d linSpeed=%.1f angSpeed=%.1f"),
-							Source, *BoneName.ToString(), BI->IsInstanceSimulatingPhysics() ? 1 : 0, (int32)ModifierType,
-							BI->GetUnrealWorldVelocity().Size(), FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size());
-					}
-				}
-			}
-		}
-	};
-
-	auto TraceArmTick4 = [&](const TCHAR* Source)
-	{
-		if (BalanceReadyTransition.GetPhase2GuardTickCount() == 4)
-		{
-			if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
-			{
-				static const FName ArmBones[] = { 
-					TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"),
-					TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r") 
-				};
-				for (const FName& BoneName : ArmBones)
-				{
-					if (FBodyInstance* const BI = Mesh->GetBodyInstance(BoneName))
-					{
-						EPhysicsMovementType ModifierType = EPhysicsMovementType::Static;
-						if (UPhysicsControlComponent* const PC = PhysicsControlComponent.Get())
-						{
-							const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-							if (const FPhysicsBodyModifierRecord* Record = FPhysAnimPhysicsControlAccessor::GetModifierRecord(PC, ModifierName))
-							{
-								ModifierType = Record->BodyModifier.ModifierData.MovementType;
-							}
-						}
-
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_ARM_LATE_LOOP_STATE source=%s bone=%s rawSim=%d modifier=%d linSpeed=%.1f angSpeed=%.1f"),
 							Source, *BoneName.ToString(), BI->IsInstanceSimulatingPhysics() ? 1 : 0, (int32)ModifierType,
 							BI->GetUnrealWorldVelocity().Size(), FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians()).Size());
 					}
@@ -1700,7 +1671,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	TraceSpineTick2(TEXT("post_updatecontrols"));
 	TracePreservedTick4(TEXT("post_updatecontrols_tick4"));
 	TraceUpperBodyTick4(TEXT("post_updatecontrols_tick4"));
-	TraceArmTick4(TEXT("post_updatecontrols_tick4"));
 	ApplyPhase1PelvisRootCouplingSolve();
 
 	if (bIsRealRootOnTick4)
@@ -1991,7 +1961,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	TraceSpineTick2(TEXT("end_of_tick"));
 	TracePreservedTick4(TEXT("end_of_tick_tick4"));
 	TraceUpperBodyTick4(TEXT("end_of_tick_tick4"));
-	TraceArmTick4(TEXT("end_of_tick_tick4"));
 
 	if (bIsRealRootOnTick4)
 	{

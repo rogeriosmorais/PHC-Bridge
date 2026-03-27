@@ -1647,8 +1647,6 @@ extern int32 GVerbosePhase2Forensics;
 			float WorstAngularSpeed = 0.0f;
 			FName LateLoopWorstBone = NAME_None;
 			float LateLoopWorstBoneLinearSpeed = -1.0f;
-			FName LateLoopArmWorstBone = NAME_None;
-			float LateLoopArmWorstBoneLinearSpeed = -1.0f;
 
 			if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
 			{
@@ -1669,28 +1667,18 @@ extern int32 GVerbosePhase2Forensics;
 					}
 				}
 
-				static const FName UpperBodyBones[] = { TEXT("head"), TEXT("neck_01"), TEXT("clavicle_l"), TEXT("clavicle_r") };
-				for (const FName& BoneName : UpperBodyBones)
+				static const FName HighForensicBones[] = { 
+					TEXT("head"), TEXT("neck_01"), TEXT("clavicle_l"), TEXT("clavicle_r"),
+					TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"),
+					TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r")
+				};
+				for (const FName& BoneName : HighForensicBones)
 				{
 					const float BoneLinearSpeed = Mesh->GetPhysicsLinearVelocity(BoneName).Size();
 					if (BoneLinearSpeed > LateLoopWorstBoneLinearSpeed)
 					{
 						LateLoopWorstBoneLinearSpeed = BoneLinearSpeed;
 						LateLoopWorstBone = BoneName;
-					}
-				}
-
-				static const FName ArmBones[] = { 
-					TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"),
-					TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r") 
-				};
-				for (const FName& BoneName : ArmBones)
-				{
-					const float BoneLinearSpeed = Mesh->GetPhysicsLinearVelocity(BoneName).Size();
-					if (BoneLinearSpeed > LateLoopArmWorstBoneLinearSpeed)
-					{
-						LateLoopArmWorstBoneLinearSpeed = BoneLinearSpeed;
-						LateLoopArmWorstBone = BoneName;
 					}
 				}
 			}
@@ -1711,7 +1699,7 @@ extern int32 GVerbosePhase2Forensics;
 			UE_LOG(
 				LogPhysAnimBridge,
 				Warning,
-				TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_SPIKE_AUDIT frame=%d rootOnTick=%d maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s worstLinearSpeed=%.2f worstAngularSpeed=%.2f rootRawSim=%d pelvisModifier=%s totalSimCount=%d firstContradictionSource=%s lateLoopWorstBone=%s lateLoopArmWorstBone=%s"),
+				TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_SPIKE_AUDIT frame=%d rootOnTick=%d maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s worstLinearSpeed=%.2f worstAngularSpeed=%.2f rootRawSim=%d pelvisModifier=%s totalSimCount=%d firstContradictionSource=%s lateLoopWorstBone=%s"),
 				static_cast<int32>(GFrameCounter),
 				Phase2GuardTickCount,
 				Diagnostics.PeakMaxBodyLinearSpeed,
@@ -1723,8 +1711,7 @@ extern int32 GVerbosePhase2Forensics;
 				UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisModifierMovementType),
 				Diagnostics.SimCountPost,
 				*Diagnostics.FirstContradictionSource,
-				*LateLoopWorstBone.ToString(),
-				*LateLoopArmWorstBone.ToString());
+				*LateLoopWorstBone.ToString());
 
 			AbortReason = TEXT("phase2_root_on_spike");
 			if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed)
