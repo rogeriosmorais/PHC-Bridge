@@ -338,7 +338,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 			UpperSimCount,
 			bRootSimulating);
 	const EBalanceReadyRootOnReadinessClassification RootOnReadinessClassification =
-		(bRootCoupledTopologyReady && OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied)
+		bRootCoupledTopologyReady
 			? EBalanceReadyRootOnReadinessClassification::RootCoupledReady
 			: (bUpperOnlyTopologyReady
 				? EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
@@ -563,6 +563,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutResult.bPreRootOnShellSafetyProofSatisfied &&
 		OutResult.bRootOnReadinessNoCouplingProofSatisfied &&
 		OutResult.bRootOnDirectPelvisLinkAngularSatisfied &&
+		OutResult.bRootOnDirectPelvisLinkGeometrySatisfied &&
 		bDirectPelvisThighMarginsSatisfied &&
 		bDirectPelvisSpineMarginSatisfied &&
 		(RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady);
@@ -583,7 +584,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.PolicyInfluenceAlphaAtCapture);
 
 	OutResult.Outcome = 
-		(OutResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
+		(OutResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady && OutResult.bRootOnDirectPelvisLinkGeometrySatisfied)
 			? EBalanceLateValidationOutcome::Outcome_AcceptRootOn
 			: (OutResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
 				? EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly

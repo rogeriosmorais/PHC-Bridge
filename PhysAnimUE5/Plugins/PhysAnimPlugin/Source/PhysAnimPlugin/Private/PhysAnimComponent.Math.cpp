@@ -1114,6 +1114,25 @@ bool UPhysAnimComponent::ShouldRunSpineSafeWorstThighFocusedDelta(
 		SpineAngularErrorDeg);
 }
 
+bool UPhysAnimComponent::IsConstraintSampleRelevantToFocusedBone(
+	FName SampleChildBoneName,
+	const FString& SampleSource,
+	FName FocusChildBone)
+{
+	if (FocusChildBone.IsNone())
+	{
+		return false;
+	}
+
+	if (SampleChildBoneName == FocusChildBone)
+	{
+		return true;
+	}
+
+	const FString FocusBoneToken = FocusChildBone.ToString();
+	return !FocusBoneToken.IsEmpty() && SampleSource.Contains(FocusBoneToken, ESearchCase::CaseSensitive);
+}
+
 bool UPhysAnimComponent::ShouldAcceptWorstThighConstraintInterpolationCandidate(
 	float CurrentLeftThighAngularErrorDeg,
 	float CurrentRightThighAngularErrorDeg,

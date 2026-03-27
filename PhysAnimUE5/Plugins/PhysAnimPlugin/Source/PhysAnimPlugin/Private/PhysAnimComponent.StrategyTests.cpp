@@ -399,6 +399,18 @@ namespace
 				31.82f,
 				32.74f,
 				19.55f));
+		TestTrue(
+			TEXT("Focused-bone sample relevance includes weighted blends that name the blocked thigh in source"),
+			UPhysAnimComponent::TestOnlyIsConstraintSampleRelevantToFocusedBone(
+				NAME_None,
+				TEXT("blend_weighted_direct_thigh_l_0.10_thigh_r_0.20_spine_01_0.70"),
+				TEXT("thigh_r")));
+		TestFalse(
+			TEXT("Focused-bone sample relevance excludes blends that do not include the blocked thigh"),
+			UPhysAnimComponent::TestOnlyIsConstraintSampleRelevantToFocusedBone(
+				NAME_None,
+				TEXT("blend_weighted_direct_thigh_l_0.25_spine_01_0.75"),
+				TEXT("thigh_r")));
 		TestFalse(
 			TEXT("Worst-thigh follow-through must not re-break spine readiness after spine interpolation fixed it"),
 			UPhysAnimComponent::TestOnlyShouldAcceptWorstThighConstraintInterpolationCandidate(

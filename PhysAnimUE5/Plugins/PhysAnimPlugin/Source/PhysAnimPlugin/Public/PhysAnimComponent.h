@@ -830,6 +830,16 @@ public:
 			RightThighAngularErrorDeg,
 			SpineAngularErrorDeg);
 	}
+	static bool TestOnlyIsConstraintSampleRelevantToFocusedBone(
+		FName SampleChildBoneName,
+		const FString& SampleSource,
+		FName FocusChildBone)
+	{
+		return IsConstraintSampleRelevantToFocusedBone(
+			SampleChildBoneName,
+			SampleSource,
+			FocusChildBone);
+	}
 	static bool TestOnlyShouldAcceptWorstThighConstraintInterpolationCandidate(
 		float CurrentLeftThighAngularErrorDeg,
 		float CurrentRightThighAngularErrorDeg,
@@ -1606,6 +1616,10 @@ public:
 		float LeftThighAngularErrorDeg,
 		float RightThighAngularErrorDeg,
 		float SpineAngularErrorDeg);
+	static bool IsConstraintSampleRelevantToFocusedBone(
+		FName SampleChildBoneName,
+		const FString& SampleSource,
+		FName FocusChildBone);
 	static bool ShouldAcceptWorstThighConstraintInterpolationCandidate(
 		float CurrentLeftThighAngularErrorDeg,
 		float CurrentRightThighAngularErrorDeg,

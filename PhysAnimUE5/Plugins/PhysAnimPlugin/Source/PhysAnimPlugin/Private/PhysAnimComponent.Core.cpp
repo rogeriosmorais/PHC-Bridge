@@ -1309,57 +1309,61 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			FocusChildBone = TEXT("thigh_l");
 		}
 
-		const FPhase1ConstraintRotationSample* FocusSample = nullptr;
-		for (const FPhase1ConstraintRotationSample& ConstraintSample : ValidConstraintSamples)
-		{
-			if (ConstraintSample.ChildBoneName == FocusChildBone)
-			{
-				FocusSample = &ConstraintSample;
-				break;
-			}
-		}
-		if (!FocusSample)
-		{
-			return BestEvaluation;
-		}
-
 		static const float CorrectionBlendAlphas[] = { 0.10f, 0.05f, 0.02f, 0.01f, 0.005f };
 		FQuat WorkingRotation = SeedEvaluation.Rotation;
+		bool bFoundRelevantFocusSample = false;
 		for (int32 PassIndex = 0; PassIndex < 6; ++PassIndex)
 		{
-			const FQuat DeltaRotation = (FocusSample->CandidateRotation * WorkingRotation.Inverse()).GetNormalized();
 			bool bImprovedThisPass = false;
-			for (const float CorrectionBlendAlpha : CorrectionBlendAlphas)
+			for (const FPhase1ConstraintRotationSample& ConstraintSample : ValidConstraintSamples)
 			{
-				const FQuat CandidateRotation = FQuat::Slerp(
-					WorkingRotation,
-					(DeltaRotation * WorkingRotation).GetNormalized(),
-					CorrectionBlendAlpha).GetNormalized();
-				const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
-					CandidateRotation,
-					FString::Printf(TEXT("%s_%s_%s_p%d_a%.3f"),
-						*BestEvaluation.Source,
-						ContextTag,
-						*FocusChildBone.ToString(),
-						PassIndex,
-						CorrectionBlendAlpha));
-				if (bRequireTiltAdmissible && !CandidateEvaluation.bTiltAdmissible)
+				if (!ConstraintSample.bValid ||
+					!IsConstraintSampleRelevantToFocusedBone(
+						ConstraintSample.ChildBoneName,
+						ConstraintSample.Source,
+						FocusChildBone))
 				{
 					continue;
 				}
-				if (ShouldAcceptSpineSafeWorstThighMarginSweepCandidate(
-						BestEvaluation.LeftThighAngularErrorDeg,
-						BestEvaluation.RightThighAngularErrorDeg,
-						BestEvaluation.SpineAngularErrorDeg,
-						CandidateEvaluation.LeftThighAngularErrorDeg,
-						CandidateEvaluation.RightThighAngularErrorDeg,
-						CandidateEvaluation.SpineAngularErrorDeg) &&
-					IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation))
+
+				bFoundRelevantFocusSample = true;
+				const FQuat DeltaRotation = (ConstraintSample.CandidateRotation * WorkingRotation.Inverse()).GetNormalized();
+				for (const float CorrectionBlendAlpha : CorrectionBlendAlphas)
 				{
-					BestEvaluation = CandidateEvaluation;
-					WorkingRotation = CandidateRotation;
-					bImprovedThisPass = true;
+					const FQuat CandidateRotation = FQuat::Slerp(
+						WorkingRotation,
+						(DeltaRotation * WorkingRotation).GetNormalized(),
+						CorrectionBlendAlpha).GetNormalized();
+					const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+						CandidateRotation,
+						FString::Printf(TEXT("%s_%s_%s_p%d_a%.3f"),
+							*BestEvaluation.Source,
+							ContextTag,
+							*FocusChildBone.ToString(),
+							PassIndex,
+							CorrectionBlendAlpha));
+					if (bRequireTiltAdmissible && !CandidateEvaluation.bTiltAdmissible)
+					{
+						continue;
+					}
+					if (ShouldAcceptSpineSafeWorstThighMarginSweepCandidate(
+							BestEvaluation.LeftThighAngularErrorDeg,
+							BestEvaluation.RightThighAngularErrorDeg,
+							BestEvaluation.SpineAngularErrorDeg,
+							CandidateEvaluation.LeftThighAngularErrorDeg,
+							CandidateEvaluation.RightThighAngularErrorDeg,
+							CandidateEvaluation.SpineAngularErrorDeg) &&
+						IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation))
+					{
+						BestEvaluation = CandidateEvaluation;
+						WorkingRotation = CandidateRotation;
+						bImprovedThisPass = true;
+					}
 				}
+			}
+			if (!bFoundRelevantFocusSample)
+			{
+				return BestEvaluation;
 			}
 			if (!bImprovedThisPass)
 			{
@@ -1854,6 +1858,16 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			BestRotationEvaluation,
 			TEXT("worst_thigh_margin_sweep"),
 			bProtectLiveTilt);
+		if (ShouldRunSpineSafeWorstThighFocusedDelta(
+				BestRotationEvaluation.LeftThighAngularErrorDeg,
+				BestRotationEvaluation.RightThighAngularErrorDeg,
+				BestRotationEvaluation.SpineAngularErrorDeg))
+		{
+			BestRotationEvaluation = RefineBySpineSafeWorstThighFocusedDelta(
+				BestRotationEvaluation,
+				TEXT("worst_thigh_focus_delta"),
+				bProtectLiveTilt);
+		}
 	}
 
 	FPhase1PelvisRotationEvaluation AppliedRotationEvaluation = BestRotationEvaluation;
