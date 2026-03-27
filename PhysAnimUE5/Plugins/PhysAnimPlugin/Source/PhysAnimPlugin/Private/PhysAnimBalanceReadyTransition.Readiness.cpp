@@ -24,7 +24,7 @@ bool FPhysAnimBalanceReadyTransition::IsRootStable(const FPhase1AcceptedConverge
 		return false;
 	}
 
-	if (Snapshot.RootGroundDistance > 15.0f)
+	if (!FMath::IsNearlyZero(Settings.BalanceEntryMaxGroundDistanceCm) && Snapshot.RootGroundDistance > Settings.BalanceEntryMaxGroundDistanceCm)
 	{
 		OutReason = TEXT("root_too_far_from_ground");
 		return false;

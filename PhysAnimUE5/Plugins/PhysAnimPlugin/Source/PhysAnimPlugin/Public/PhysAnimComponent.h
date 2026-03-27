@@ -279,6 +279,9 @@ struct FPhysAnimStabilizationSettings
 	float PolicySettleRequiredSeconds = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalanceEntryMaxGroundDistanceCm = 15.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase1QuietRequiredSeconds = 0.15f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
@@ -550,6 +553,7 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(BalanceActiveExtraDampingMultiplier, Other.BalanceActiveExtraDampingMultiplier) &&
 			FMath::IsNearlyEqual(BalanceSettleMaxRootLinearSpeed, Other.BalanceSettleMaxRootLinearSpeed) &&
 			FMath::IsNearlyEqual(BalanceSettleMaxRootAngularSpeed, Other.BalanceSettleMaxRootAngularSpeed) &&
+			FMath::IsNearlyEqual(BalanceEntryMaxGroundDistanceCm, Other.BalanceEntryMaxGroundDistanceCm) &&
 			bPhase1DistalKinematicExperiment == Other.bPhase1DistalKinematicExperiment;
 	}
 

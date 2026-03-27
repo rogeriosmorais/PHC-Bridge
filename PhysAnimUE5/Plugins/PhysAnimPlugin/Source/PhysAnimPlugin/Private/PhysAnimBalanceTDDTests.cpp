@@ -14,7 +14,7 @@ bool FPhysAnimBalanceReadinessMathTest::RunTest(const FString& Parameters)
 	FPhysAnimStabilizationSettings Settings;
 	Settings.MaxRootLinearSpeedCmPerSecond = 100.0f;
 	Settings.MaxRootAngularSpeedDegPerSecond = 45.0f;
-	// Settings.BalanceEntryMaxGroundDistanceCm = 15.0f; // TODO: Uncomment after header fix
+	Settings.BalanceEntryMaxGroundDistanceCm = 15.0f;
 
 	FString Reason;
 
