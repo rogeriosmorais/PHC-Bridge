@@ -35,10 +35,11 @@ Interpretation:
 4. No custom Python pipeline for UE5 asset authoring.
 5. Use TDD by default for all deterministic logic. TDD is optional only for: live runtime/editor/physics behavior, visual/manual quality checks, short exploratory spikes.
 6. Any exploratory spike must convert its deterministic logic into tests before the work is considered complete.
-7. Treat Manny/Quinn as the default runtime skeleton unless changed explicitly.
-8. Keep commits small and atomic.
-9. Build with .\scripts\build.ps1
-10. If you ran any smoke tests, then read the logs with "python .\scripts\read_logs.py". If you didn't, then ignore this step.
+7. Do not leave permanent fail-by-design or permanent skip-by-design tests in the main suite without an explicit temporary reason and removal plan.
+9. Treat Manny/Quinn as the default runtime skeleton unless changed explicitly.
+9. Keep commits small and atomic.
+10. Build with .\scripts\build.ps1
+11. If you ran any smoke tests, then read the logs with "python .\scripts\read_logs.py". If you didn't, then ignore this step.
 
 ## Response Style
 
