@@ -103,6 +103,8 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 		return;
 	}
 
+	const float PreviousPeakMaxBodyLinearSpeed = Diagnostics.PeakMaxBodyLinearSpeed;
+	const float PreviousPeakMaxBodyAngularSpeed = Diagnostics.PeakMaxBodyAngularSpeed;
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	Diagnostics.PelvisLinearVelPost = Mesh->GetPhysicsLinearVelocity(RootBoneName);
 	Diagnostics.PelvisAngularVelPost = Mesh->GetPhysicsAngularVelocityInDegrees(RootBoneName);
@@ -145,11 +147,56 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 	GetMaxVel({ TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") }, Diagnostics.MaxLinVelSpine, Diagnostics.MaxAngVelSpine);
 	GetMaxVel({ TEXT("foot_l"), TEXT("foot_r"), TEXT("ball_l"), TEXT("ball_r"), TEXT("calf_l"), TEXT("calf_r") }, Diagnostics.MaxLinVelFeet, Diagnostics.MaxAngVelFeet);
 
+	FName CurrentWorstLinearBone = NAME_None;
+	float CurrentWorstLinearSpeed = 0.0f;
+	FName CurrentWorstAngularBone = NAME_None;
+	float CurrentWorstAngularSpeed = 0.0f;
 	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
 	{
-		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Mesh->GetPhysicsLinearVelocity(BoneName).Size());
-		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Mesh->GetPhysicsAngularVelocityInDegrees(BoneName).Size());
+		const float CurrentLinearSpeed = Mesh->GetPhysicsLinearVelocity(BoneName).Size();
+		const float CurrentAngularSpeed = Mesh->GetPhysicsAngularVelocityInDegrees(BoneName).Size();
+		if (CurrentLinearSpeed > CurrentWorstLinearSpeed)
+		{
+			CurrentWorstLinearSpeed = CurrentLinearSpeed;
+			CurrentWorstLinearBone = BoneName;
+		}
+		if (CurrentAngularSpeed > CurrentWorstAngularSpeed)
+		{
+			CurrentWorstAngularSpeed = CurrentAngularSpeed;
+			CurrentWorstAngularBone = BoneName;
+		}
+
+		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, CurrentLinearSpeed);
+		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, CurrentAngularSpeed);
 	}
+
+	const bool bCrossedSpikeThresholdThisCapture =
+		PreviousPeakMaxBodyLinearSpeed <= 100.0f &&
+		PreviousPeakMaxBodyAngularSpeed <= 500.0f &&
+		(Diagnostics.PeakMaxBodyLinearSpeed > 100.0f || Diagnostics.PeakMaxBodyAngularSpeed > 500.0f);
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimBalance] PHASE2_CAPTURE_FLIP_DIAGNOSTICS frame=%d tick=%d crossedSpike=%d prevPeakLinear=%.2f prevPeakAngular=%.2f peakLinear=%.2f peakAngular=%.2f worstLinearBone=%s worstLinearSpeed=%.2f worstAngularBone=%s worstAngularSpeed=%.2f pelvisLinear=%.2f pelvisAngular=%.2f thighsLinear=%.2f thighsAngular=%.2f spineLinear=%.2f spineAngular=%.2f feetLinear=%.2f feetAngular=%.2f"),
+		static_cast<int32>(GFrameCounter),
+		Phase2GuardTickCount,
+		bCrossedSpikeThresholdThisCapture ? 1 : 0,
+		PreviousPeakMaxBodyLinearSpeed,
+		PreviousPeakMaxBodyAngularSpeed,
+		Diagnostics.PeakMaxBodyLinearSpeed,
+		Diagnostics.PeakMaxBodyAngularSpeed,
+		*CurrentWorstLinearBone.ToString(),
+		CurrentWorstLinearSpeed,
+		*CurrentWorstAngularBone.ToString(),
+		CurrentWorstAngularSpeed,
+		Diagnostics.MaxLinVelPelvis,
+		Diagnostics.MaxAngVelPelvis,
+		Diagnostics.MaxLinVelThighs,
+		Diagnostics.MaxAngVelThighs,
+		Diagnostics.MaxLinVelSpine,
+		Diagnostics.MaxAngVelSpine,
+		Diagnostics.MaxLinVelFeet,
+		Diagnostics.MaxAngVelFeet);
 }
 
 
@@ -255,6 +302,7 @@ EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOw
 		return EBalanceReadyConditionOwner::ShellAuthorityMaintenance;
 	}
 	if (Reason == TEXT("phase2_root_not_confirmed") ||
+		Reason == TEXT("phase2_root_on_warm_start_incoherent") ||
 		Reason == TEXT("phase2_root_simulation_dropped") ||
 		Reason == TEXT("phase2_root_on_spike") ||
 		Reason == TEXT("phase3_root_simulation_dropped") ||
