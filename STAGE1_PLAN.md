@@ -31,17 +31,18 @@ Current focus:
 2. preserve the accepted Phase 1 write-routing and freeze contracts
 3. distinguish contract failures from physical-viability failures
 4. preserve a truthful RootOn truth model in Phase 2
-5. determine whether the current RootOn warm-start choreography is both contract-correct and physically viable
-6. if not, revise topology / admission margin / hold set / RootOn choreography / tuning using evidence rather than ad hoc workaround changes
+5. preserve a truthful Settle continuity contract in Phase 3
+6. determine whether the current RootOn warm-start choreography and Settle continuity are both contract-correct and physically viable
+7. if not, revise topology / admission margin / hold set / RootOn choreography / Settle behavior / tuning using evidence rather than ad hoc workaround changes
 
-## Current Stage 1 truth
+## Current Stage 1 Truth
 
 The Stage 1 balance-entry investigation has reached this point:
 
 - many earlier failures were contract / ownership / telemetry problems
 - those areas are now substantially cleaner
 - Phase 1 upper-body hold / LateValidate bookkeeping is no longer the dominant active blocker
-- the current active investigation surface is Phase 2 RootOn truthfulness and viability
+- the current active investigation surface is Phase 2 RootOn truthfulness plus Phase 3 Settle continuity
 
 This is progress, not regression.
 
@@ -53,7 +54,7 @@ Stage 1 treats balance entry as a separate contract from normal bridge startup.
 
 Normal bridge startup may use staged non-root bring-up.
 
-Balance-mode Prepare, LateValidate, and RootOn must not silently reuse normal bring-up semantics as their source of truth.
+Balance-mode Prepare, LateValidate, RootOn, and Settle must not silently reuse normal bring-up semantics as their source of truth.
 
 The authoritative balance-entry contract is defined in:
 
@@ -96,10 +97,11 @@ Only these categories may change during the current stabilization loop:
 - `plans/stage1/40-design/balance_mode_entry_transition_spec.md`
 - `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
 - `plans/stage1/40-design/balance_mode_phase2.md`
+- `plans/stage1/40-design/balance_mode_phase3_settle.md`
 - `plans/stage1/40-design/phase1-late-validate-truth-model.md`
 - `plans/stage1/40-design/phase2-rooton-truth-model.md`
 
-## Documentation acceptance rule
+## Documentation Acceptance Rule
 
 The design is considered documented only when all of the following are true:
 
@@ -107,10 +109,11 @@ The design is considered documented only when all of the following are true:
 - `STAGE1_PLAN.md` points to that contract
 - `40-design` repeats the same contract without divergence
 - the docs explicitly distinguish contract correctness from physical viability
-- no remaining design text implies that a contract-correct Phase 1 or Phase 2 setup is automatically physically viable
-- Phase 2 documents explicitly define the RootOn source-of-truth order and shell/policy suppression semantics
+- no remaining design text implies that a contract-correct Phase 1, Phase 2, or Phase 3 setup is automatically physically viable
+- Phase 2 documents explicitly define the RootOn source-of-truth order and shell / policy suppression semantics
+- Phase 3 documents explicitly define the Settle continuity contract, runtime mapping, timers, and emitted failure taxonomy
 
-## Long-term architectural direction
+## Long-Term Architectural Direction
 
 The long-term target remains always-on balance.
 

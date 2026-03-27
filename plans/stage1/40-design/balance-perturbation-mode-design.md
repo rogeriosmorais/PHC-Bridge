@@ -16,16 +16,18 @@ Its job is to measure true articulated-body recovery after controlled perturbati
 - hidden movement-system correction
 - transition-only shaping that exists only during entry
 
-## 2. Document split
+## 2. Document Split
 
 This file is the feature-level overview only.
 
 The normative runtime contracts live in:
 
 - `plans/stage1/10-specs/ue-bridge-implementation-spec.md`
-- `./phase1-late-validate-truth-model.md`
+- `plans/stage1/10-specs/balance-mode-entry-spec.md`
 - `./balance_mode_entry_transition_spec.md`
-- `./balance_mode_phase1_stabilization_spec.md`
+- `./balance_mode_phase2.md`
+- `./balance_mode_phase3_settle.md`
+- `./phase1-late-validate-truth-model.md`
 
 Interpretation rule:
 
@@ -33,7 +35,7 @@ Interpretation rule:
 - the specs define the authoritative contract
 - the design files describe how that contract is carried through implementation and validation
 
-## 3. Activation rule
+## 3. Activation Rule
 
 Balance Perturbation Mode is active only after the entry transition succeeds.
 
@@ -42,17 +44,19 @@ That means:
 - not while queued
 - not during preflight
 - not during Phase 1
-- not during Phase 2
-- not during settle
+- not during Phase 2 / RootOn
+- not during Phase 3 / Settle
 
-## 4. Current design reality
+## 4. Current Design Reality
 
 The project has moved past several false blockers.
 
 The current entry pipeline is now good enough to separate three questions:
 
 ### A. Is the runtime contract correct?
+
 This includes:
+
 - explicit accept / deny behavior
 - explicit ownership transitions
 - explicit freeze lifetime
@@ -60,14 +64,18 @@ This includes:
 - correct frozen topology capture
 
 ### B. Is the accepted setup physically viable?
+
 This includes:
+
 - whether the accepted Phase 1 setup can remain dynamically quiet
+- whether RootOn can warm-start truthfully
+- whether post-RootOn Settle continuity can hold long enough to activate
 - whether contact and tuning destabilize the sim set
-- whether the current topology has enough stability margin
-- whether live sim coverage matches the frozen expected sim set
 
 ### C. Is the active balance behavior itself good once entry succeeds?
+
 This includes:
+
 - perturbation delivery
 - measurable recovery
 - repeatable metrics
@@ -75,7 +83,7 @@ This includes:
 
 This file must not blur those questions.
 
-## 5. Current accepted entry shape
+## 5. Current Accepted Entry Shape
 
 The current accepted Phase 1 design now assumes:
 
@@ -86,7 +94,7 @@ The current accepted Phase 1 design now assumes:
 
 That is a deliberate pre-root-on staging topology, not a final active-mode topology.
 
-## 6. Current resolved contract problems
+## 6. Current Resolved Contract Problems
 
 These are now treated as resolved or largely-resolved contract issues, not the main open problem:
 
@@ -100,12 +108,17 @@ These are now treated as resolved or largely-resolved contract issues, not the m
 This section reflects the current investigation focus. These details are temporary and expected to change frequently; they do not form part of the timeless design contract.
 
 ### Last Confirmed Failure Mode
+
 - `phase1_late_validate_upper_body_instability`
 
+This is why convergence failure during LateValidate was more important than the earlier contract bugs.
 
-This is why convergence failure during LateValidate is currently more important than the earlier contract bugs.
+The current balance-entry investigation surface has since moved into:
 
-## 8. Active-mode requirement
+- truthful RootOn execution in Phase 2
+- truthful Settle continuity in Phase 3
+
+## 8. Active-Mode Requirement
 
 When active:
 
@@ -116,7 +129,7 @@ When active:
 - no shell/world translation as a recovery mechanism
 - perturbation only when active quiet proof is valid
 
-## 9. Perturbation method
+## 9. Perturbation Method
 
 Canonical initial method:
 
@@ -125,7 +138,7 @@ Canonical initial method:
 - space: world space
 - directions: `+X`, `-X`, `+Y`, `-Y`
 
-## 10. Trustworthiness rule
+## 10. Trustworthiness Rule
 
 The framework is trustworthy only if it can demonstrate all of the following:
 
@@ -143,6 +156,6 @@ Balance Perturbation Mode is a standing-balance diagnostic mode.
 Its entry pipeline is now best understood as:
 
 - a much cleaner and more explicit contract than before
-- but still an open physical-viability experiment in Phase 1
+- a still-open physical-viability experiment in Phase 2 RootOn and Phase 3 Settle
 
 That distinction must remain explicit in all future design and implementation work.

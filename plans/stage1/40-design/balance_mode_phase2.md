@@ -14,28 +14,34 @@ It is authoritative for:
 - warm-start RootOn requirements
 - RootOn frame order
 - guard-window rules
-- RootOn spike classification
-- shell/policy suppression semantics
-- recovery and retry rules
+- RootOn failure and retry semantics
+- the explicit handoff into Phase 3
 
-## 2. Relationship to Phase 1
+## 2. Relationship To Phase 1 And Phase 3
 
 Phase 2 consumes a still-valid Phase 1 output.
 
 If Phase 1 is contract-correct but physically non-viable, Phase 2 must not pretend otherwise.
 
-In other words:
-Phase 2 is not allowed to use RootOn to “rescue” a Phase 1 setup that never had credible stability margin.
+Phase 2 is not allowed to use RootOn to rescue a Phase 1 setup that never had credible stability margin.
 
-## 3. Core rule
+Phase 2 is also not Settle:
 
-Phase 2 is not “turn pelvis sim on and hope.”
+- `RootOn` means Phase 2 only
+- `Settle` means Phase 3 only
+- the Phase 2 success boundary is `BRT_Phase2_ReadyForPhase3`, not activation
+
+Phase 3 continuity rules are defined in [balance_mode_phase3_settle.md](./balance_mode_phase3_settle.md).
+
+## 3. Core Rule
+
+Phase 2 is not "turn pelvis sim on and hope."
 
 Phase 2 may begin only from a still-valid handoff and only after the explicit readiness proof is satisfied.
 
 If the proof is absent, false, or incoherent, Phase 2 must deny safely before RootOn.
 
-## 4. Required entry preconditions
+## 4. Required Entry Preconditions
 
 Phase 2 may begin only if all are true:
 
@@ -49,13 +55,13 @@ Phase 2 may begin only if all are true:
 - no fail-stop precursor is active
 - entry shell / root conditions remain within bounds
 
-## 5. Safe denial path
+## 5. Safe Denial Path
 
 If any required Phase 2 precondition is false, Phase 2 must deny before any RootOn attempt.
 
 Denial is valid and preferable to a dishonest RootOn attempt.
 
-## 6. Warm-start contract
+## 6. Warm-Start Contract
 
 RootOn must be executed as a warm start, not a blind flip.
 
@@ -63,18 +69,30 @@ Required behavior:
 
 - do not seed pelvis from arbitrary animation frame assumptions
 - seed from the live physics-consistent state where possible
-- validate root/proximal continuity before enabling root simulation
+- validate root / proximal continuity before enabling root simulation
 - zero and reseed velocities around the sim flip when required
 - abort before RootOn if continuity is incoherent
 
-## 7. Authority during Phase 2
+## 7. RootOn Truth Model
 
-During Phase 2 guard window:
+The authoritative RootOn truth model is defined in [phase2-rooton-truth-model.md](./phase2-rooton-truth-model.md).
 
-- policy writes to the transition set are forbidden unless the spec explicitly allows a later release point
+Minimum required interpretation during RootOn:
+
+- certified topology intent remains the contract source of truth
+- same-tick raw end state is the deciding proof of technical RootOn success or failure
+- modifier-record ownership is still required routing evidence
+- same-frame disagreement among those layers must be classified truthfully rather than collapsed into a single fake success state
+
+## 8. Authority During Phase 2
+
+During the Phase 2 guard window:
+
+- policy writes to the transition set are forbidden
 - cached resets are forbidden
 - topology expansion is forbidden unless explicitly defined by the certified handoff + RootOn choreography
 - shell and CharacterMovement correction influence on simulated bodies is forbidden
+- move-smoke / locomotion re-entry is forbidden
 - hold/reference state may persist only where the contract explicitly allows it
 
 ### Shell-state versus shell-influence rule
@@ -88,125 +106,49 @@ The shell may remain locked or reanchored without that, by itself, being a viola
 
 A violation exists only if shell/reference behavior materially influences the simulated transition set during the guard window in a way the contract forbids.
 
-## 8. RootOn frame sequence
+## 9. RootOn Frame Sequence
 
 Phase 2 executes in this order:
 
 1. capture entry snapshot
 2. freeze hazards
 3. execute RootOn choreography
-4. immediately re-read and validate root simulation state
-5. enter guard window if technical RootOn succeeded
+4. immediately re-read and validate same-tick root simulation state
+5. enter the guard window if technical RootOn succeeded
+6. hand off to `BRT_Phase2_ReadyForPhase3` once guard-window duration elapses without terminal failure
 
-## 8.1 RootOn Tick Ownership
+Implementation note:
 
-This section defines how RootOn ownership is interpreted across ticks `1` through `4`.
+- current runtime still treats modifier disagreement as routing evidence worth logging, but the deciding proof at RootOn remains the same-tick raw end state rather than modifier state alone
 
-Rules that remain explicit for all RootOn ticks:
+## 10. Failure And Retry Taxonomy
 
-- normal policy writes into the transition set are forbidden
-- shell material influence on simulated bodies is forbidden
-- `UpdateControls()` may be skipped as a probe, but that probe result does not decide success by itself
-- same-tick end-state validation still decides technical RootOn success or failure
-- preserved proximal bones may temporarily remain `modifier=Kinematic` while `rawSim=1`; that mismatch is diagnostic and tolerated unless the same-tick end state proves topology was not preserved
+Use the following current taxonomy:
 
-### RootOn mismatch boundary
+| Failure reason | Meaning | Retry status |
+| :--- | :--- | :--- |
+| `phase2_topology_not_preserved` | RootOn failed to preserve the certified topology after the grace window | retryable only with recovery completion, material state change, fresh quiet proof, cooldown, and retry budget |
+| `phase2_root_on_spike` | RootOn produced a truthful instability / spike failure | not retryable |
+| `phase2_policy_write_leak` | forbidden policy writes occurred during RootOn / guard window | not retryable |
+| `phase2_reset_violation` | forbidden reset state leaked into the active attempt | terminal |
+| `phase2_shell_correction_material` | shell influence became materially active on simulated bodies | terminal |
+| `phase2_root_simulation_dropped` | root simulation was not preserved after RootOn | terminal |
 
-Use the following boundary during ticks `1` through `4`:
+Do not collapse these into one generic no-convergence label.
 
-| Classification | Boundary |
-| :--- | :--- |
-| `Tolerated diagnostic mismatch` | A mismatch may be logged and classified, but it is not the deciding failure source if certified topology intent still matches the same-tick raw end state and no forbidden write / shell influence occurred. |
-| `Retryable transient failure` | RootOn remains blocked or not yet proven on the current tick, but the active attempt may continue because the same-tick evidence is incomplete rather than contradictory. |
-| `Hard terminal failure` | The active RootOn attempt must fail immediately once the same-tick end-state snapshot truthfully shows topology not preserved, root simulation dropped, forbidden policy write, shell material influence, or equivalent guard-window falsification. |
+## 11. Handoff To Phase 3
 
-### Tick 1
+Phase 2 guard-window success is not activation.
 
-- RootOn begins from the certified / frozen Phase 1 handoff.
-- Certified topology intent remains the authority for what the runtime is trying to preserve or add.
-- Any probe-time disagreement is not yet sufficient by itself to classify success or failure.
+The Phase 2 success boundary is:
 
-### Tick 2
+- RootOn succeeded technically
+- guard-window checks remained truthful through `BalancePhase2GuardWindowDuration`
+- runtime enters `BRT_Phase2_ReadyForPhase3`
+- runtime immediately advances to `BRT_Phase3_Settle`
 
-- RootOn choreography may apply the root simulation change and preserve the certified proximal set.
-- Raw state is observed as applied-state evidence, but transient application lag is still classified rather than collapsed into failure if the end-state proof is not yet complete.
-- Modifier-record state remains secondary evidence about write-routing correctness, not the deciding success source.
-- If the tick ends without admissible proof but without contradiction, the result is retryable transient failure, not terminal failure.
+Phase 3 then owns post-RootOn continuity and activation gating.
 
-### Tick 3
+## 12. Acceptance Criteria
 
-- RootOn guard interpretation must still forbid normal policy writes and shell material support.
-- If `UpdateControls()` is skipped as a probe on this tick, the skip is still not the deciding event; what matters is whether the same-tick end-state snapshot shows preserved topology, root simulation, and no forbidden influence.
-- Preserved proximal `modifier=Kinematic` plus `rawSim=1` remains a tolerated diagnostic pattern if the certified topology is still realized in raw state.
-- A contradictory same-tick end state on tick 3 is already a hard terminal failure; a merely incomplete proof remains retryable.
-
-### Tick 4
-
-- The authority source is, explicitly: certified / frozen topology intent first, same-tick raw end state second, modifier-record state third.
-- Tick 4 success is decided from whether the certified RootOn outcome is actually present in the same-tick end-state snapshot.
-- Tick 4 can still fail even when `UpdateControls()` was skipped earlier if the end-state snapshot shows root simulation dropped, topology not preserved, policy leak, shell material influence, or other guard-window failure.
-- Modifier-record disagreement at tick 4 must be classified truthfully, but it is not the sole deciding failure source if raw end-state evidence still shows the preserved RootOn topology holding.
-- Tick 4 therefore resolves the boundary directly: diagnostic mismatch is tolerated, incomplete proof is retryable only if the attempt is still within the allowed guard semantics, and contradictory end-state evidence is a hard terminal failure.
-## 9. RootOn truth model
-
-The authoritative RootOn truth model is defined in `phase2-rooton-truth-model.md`.
-
-Minimum required interpretation during RootOn:
-
-- certified topology intent remains the contract source of truth
-- modifier-record ownership is a separate observable
-- raw body sim state is a separate observable
-- same-frame disagreement among those three layers must be classified truthfully rather than collapsed into a single fake success state
-
-## 10. Topology during Phase 2
-
-The required topology must be whatever the current certified handoff / Phase 2 design states explicitly.
-
-Do not change topology implicitly during RootOn under the guise of tuning.
-
-If the design says the proximal Phase 1 sim set is preserved during RootOn, then that preserved set must remain coherent at all three layers:
-
-- intended ownership
-- modifier-record ownership
-- raw body state
-
-## 11. Guard window
-
-The guard window begins immediately after technical RootOn success.
-
-During the guard window, the following remain forbidden:
-
-- policy writes into the transition set
-- cached resets
-- topology expansion
-- locomotion entry
-- shell assistance
-- shell-reference reseed used as support
-
-The guard window ends only when Settle accepts a contiguous ready hold over the accepted post-RootOn topology.
-
-During Settle:
-
-- non-ready frames reset the Settle success hold timer
-- the first truthful post-RootOn instability/spike frame is a hard terminal failure
-- diagnostics may report root/proximal/modifier disagreement, but must not re-enable simulation or rewrite Physics Control state in the same frame to make Settle pass
-
-## 12. Failure classes
-
-Examples include:
-
-- missing handoff
-- invalidated handoff
-- policy leak
-- reset violation
-- same-frame conflicting authority
-- RootOn spike
-- root simulation dropped
-- material shell correction
-- topology not preserved
-- modifier/raw disagreement over preserved sim bones
-- no convergence path
-
-## 13. Acceptance criteria
-
-This spec is satisfied only when Phase 2 performs a true warm-start RootOn from a still-valid handoff, can deny safely before RootOn, distinguishes shell state from shell influence, and does not depend on hidden same-frame assistance or brute-force retry loops.
+This spec is satisfied only when Phase 2 performs a true warm-start RootOn from a still-valid handoff, can deny safely before RootOn, distinguishes shell state from shell influence, uses the canonical RootOn truth-order, and hands off explicitly into Phase 3 instead of silently treating Settle as late RootOn.
