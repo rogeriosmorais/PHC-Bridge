@@ -331,7 +331,13 @@ bool UPhysAnimPhase1AutoCalibSubsystem::StartPhase1AutoCalib(const FPhase1AutoCa
 	}
 
 	bRunActive = true;
-	return BeginNextTrial();
+	if (!BeginNextTrial())
+	{
+		StopPhase1AutoCalib(TEXT("begin_trial_failed"));
+		return false;
+	}
+
+	return true;
 }
 
 void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reason)
