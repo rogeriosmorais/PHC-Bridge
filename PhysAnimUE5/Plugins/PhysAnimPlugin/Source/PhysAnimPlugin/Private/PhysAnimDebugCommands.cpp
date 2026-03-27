@@ -1,5 +1,7 @@
 #include "PhysAnimComponent.h"
+#if !UE_BUILD_SHIPPING
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
+#endif
 
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -201,6 +203,7 @@ namespace
 		UE_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StopBalanceMode matched=%d"), Matched);
 	}
 
+#if !UE_BUILD_SHIPPING
 	static void RunPhase1AutoCalibCommand(const TArray<FString>& Args, UWorld* InWorld)
 	{
 		UWorld* World = nullptr;
@@ -255,6 +258,7 @@ namespace
 			UE_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StopPhase1AutoCalib completed."));
 		}
 	}
+#endif
 
 	static FAutoConsoleCommandWithWorldAndArgs GApplyPresentationPerturbationCommand(
 		TEXT("pa.ApplyPresentationPerturbation"),
@@ -276,6 +280,7 @@ namespace
 		TEXT("Stops the Balance Perturbation Mode. Optional args: [ownerFilter]."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StopBalanceModeCommand));
 
+#if !UE_BUILD_SHIPPING
 	static FAutoConsoleCommandWithWorldAndArgs GRunPhase1AutoCalibCommand(
 		TEXT("pa.RunPhase1AutoCalib"),
 		TEXT("Runs the Phase 1 transactional auto-calibration harness. Optional args: [ownerFilter] [seed] [maxTrials] [outputSubfolder]."),
@@ -285,4 +290,5 @@ namespace
 		TEXT("pa.StopPhase1AutoCalib"),
 		TEXT("Stops the Phase 1 transactional auto-calibration harness."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StopPhase1AutoCalibCommand));
+#endif
 }

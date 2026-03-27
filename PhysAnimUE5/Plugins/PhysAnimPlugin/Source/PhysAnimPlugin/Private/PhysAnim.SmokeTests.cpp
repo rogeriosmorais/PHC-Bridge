@@ -1,7 +1,9 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimBalanceQuietHandoff.h"
 #include "PhysAnimBalance.TestHelpers.h"
+#if !UE_BUILD_SHIPPING
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
+#endif
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/AutomationTest.h"
@@ -57,6 +59,7 @@ namespace
 		return true;
 	}
 
+#if !UE_BUILD_SHIPPING
 	DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FStartPhase1AutoCalibSmokeCommand, FAutomationTestBase*, Test);
 	bool FStartPhase1AutoCalibSmokeCommand::Update()
 	{
@@ -89,13 +92,13 @@ namespace
 			return true;
 		}
 
+		FString Error;
 		FPhase1AutoCalibRequest Request;
 		Request.OwnerFilter = TargetComponent->GetOwner()->GetName();
 		Request.Seed = 1337;
 		Request.MaxTrials = 2;
 		Request.OutputSubfolder = TEXT("automation_phase1_smoke");
 
-		FString Error;
 		const bool bStarted = AutoCalibSubsystem->StartPhase1AutoCalib(Request, Error);
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke starts successfully"), bStarted);
 		if (!bStarted)
@@ -153,6 +156,7 @@ namespace
 
 		return true;
 	}
+#endif
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPieSmokeTest,

@@ -5,6 +5,7 @@
 
 #include "PhysAnimPhase1AutoCalibSubsystem.generated.h"
 
+#if !UE_BUILD_SHIPPING
 UCLASS()
 class PHYSANIMPLUGIN_API UPhysAnimPhase1AutoCalibSubsystem : public UTickableWorldSubsystem
 {
@@ -75,3 +76,4 @@ private:
 	FPhase1AutoCalibDeterminismFingerprint BaselineFingerprint;
 	int32 NextTrialId = 0;
 };
+#endif
