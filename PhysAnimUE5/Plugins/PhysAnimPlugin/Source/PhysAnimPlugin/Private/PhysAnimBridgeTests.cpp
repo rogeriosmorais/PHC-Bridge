@@ -2298,6 +2298,18 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase1_late_validate_handoff_invalidated")),
 			EBalanceReadyConditionOwner::Phase1TopologyShaping);
 		TestEqual(
+			TEXT("Tilt-limited RootOn viability stays classified as topology shaping"),
+			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase1_root_on_readiness_tilt_limited_viability")),
+			EBalanceReadyConditionOwner::Phase1TopologyShaping);
+		TestEqual(
+			TEXT("Pelvis-spine readiness margin failures stay classified as topology shaping"),
+			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient")),
+			EBalanceReadyConditionOwner::Phase1TopologyShaping);
+		TestEqual(
+			TEXT("Pelvis-thigh readiness margin failures stay classified as topology shaping"),
+			FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient")),
+			EBalanceReadyConditionOwner::Phase1TopologyShaping);
+		TestEqual(
 			TEXT("Upper-body late-validation failures are classified explicitly"),
 			FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(true, false, false),
 			FString(TEXT("phase1_late_validate_upper_body_instability")));

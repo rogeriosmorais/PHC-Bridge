@@ -105,6 +105,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			? Mesh->GetBoneTransform(PelvisBoneIndex)
 			: PelvisBody->GetUnrealWorldTransform();
 	const UPhysicsAsset* const PhysicsAsset = Mesh->GetPhysicsAsset();
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	FQuat DesiredPelvisRotation = AnimatedPelvisTransform.GetRotation();
 	FString PelvisRotationSource = TEXT("animated_pelvis_rotation");
 	struct FPhase1ConstraintRotationSample
@@ -436,8 +437,11 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 		float LeftThighAngularErrorDeg = TNumericLimits<float>::Max();
 		float RightThighAngularErrorDeg = TNumericLimits<float>::Max();
 		float AngularThresholdOverflowDeg = TNumericLimits<float>::Max();
+		float RootOnReadinessMinMarginDeg = -TNumericLimits<float>::Max();
+		float RootOnReadinessTotalDeficitDeg = TNumericLimits<float>::Max();
 		float TiltDeg = TNumericLimits<float>::Max();
 		bool bRootOnAngularReady = false;
+		bool bRootOnReadinessMarginSatisfied = false;
 		bool bTiltAdmissible = false;
 	};
 	const auto BuildRotationEvaluation = [&](const FQuat& CandidateRotation, const FString& Source)
@@ -464,8 +468,21 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			Evaluation.SpineAngularErrorDeg - BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg);
 		Evaluation.AngularThresholdOverflowDeg = FMath::Max3(LeftThighOverflowDeg, RightThighOverflowDeg, SpineOverflowDeg);
 		Evaluation.bRootOnAngularReady = Evaluation.AngularThresholdOverflowDeg <= KINDA_SMALL_NUMBER;
+		const float LeftThighReadinessMarginDeg =
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - Evaluation.LeftThighAngularErrorDeg;
+		const float RightThighReadinessMarginDeg =
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - Evaluation.RightThighAngularErrorDeg;
+		const float SpineReadinessMarginDeg =
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg - Evaluation.SpineAngularErrorDeg;
+		Evaluation.RootOnReadinessMinMarginDeg =
+			FMath::Min3(LeftThighReadinessMarginDeg, RightThighReadinessMarginDeg, SpineReadinessMarginDeg);
+		Evaluation.RootOnReadinessTotalDeficitDeg =
+			FMath::Max(0.0f, -LeftThighReadinessMarginDeg) +
+			FMath::Max(0.0f, -RightThighReadinessMarginDeg) +
+			FMath::Max(0.0f, -SpineReadinessMarginDeg);
+		Evaluation.bRootOnReadinessMarginSatisfied = Evaluation.RootOnReadinessMinMarginDeg >= -KINDA_SMALL_NUMBER;
 		Evaluation.TiltDeg = EvaluateCandidateTiltDeg(Evaluation.Rotation);
-		Evaluation.bTiltAdmissible = Evaluation.TiltDeg <= BalanceQuietTiltThresholdDeg + KINDA_SMALL_NUMBER;
+		Evaluation.bTiltAdmissible = Evaluation.TiltDeg <= EffectiveSettings.BalancePhase2EntryMaxRootTiltDeg + KINDA_SMALL_NUMBER;
 		return Evaluation;
 	};
 	const auto IsBetterRotationEvaluation = [](const FPhase1PelvisRotationEvaluation& Candidate, const FPhase1PelvisRotationEvaluation& CurrentBest)
@@ -476,6 +493,26 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 		}
 		if (FMath::IsNearlyEqual(Candidate.AngularThresholdOverflowDeg, CurrentBest.AngularThresholdOverflowDeg, KINDA_SMALL_NUMBER))
 		{
+			if (Candidate.bRootOnReadinessMarginSatisfied != CurrentBest.bRootOnReadinessMarginSatisfied)
+			{
+				return Candidate.bRootOnReadinessMarginSatisfied;
+			}
+			if (Candidate.RootOnReadinessTotalDeficitDeg + KINDA_SMALL_NUMBER < CurrentBest.RootOnReadinessTotalDeficitDeg)
+			{
+				return true;
+			}
+			if (FMath::IsNearlyEqual(Candidate.RootOnReadinessTotalDeficitDeg, CurrentBest.RootOnReadinessTotalDeficitDeg, KINDA_SMALL_NUMBER) &&
+				Candidate.RootOnReadinessMinMarginDeg > CurrentBest.RootOnReadinessMinMarginDeg + KINDA_SMALL_NUMBER)
+			{
+				return true;
+			}
+			if (FMath::IsNearlyEqual(Candidate.RootOnReadinessTotalDeficitDeg, CurrentBest.RootOnReadinessTotalDeficitDeg, KINDA_SMALL_NUMBER) &&
+				FMath::IsNearlyEqual(Candidate.RootOnReadinessMinMarginDeg, CurrentBest.RootOnReadinessMinMarginDeg, KINDA_SMALL_NUMBER) &&
+				Candidate.bRootOnReadinessMarginSatisfied != CurrentBest.bRootOnReadinessMarginSatisfied)
+			{
+				return Candidate.bRootOnReadinessMarginSatisfied;
+			}
+
 			if (Candidate.bRootOnAngularReady != CurrentBest.bRootOnAngularReady)
 			{
 				return Candidate.bRootOnAngularReady;
@@ -521,6 +558,439 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			}
 		}
 		return false;
+	};
+	const auto RefineByConstraintCorrection = [&](
+		const FPhase1PelvisRotationEvaluation& SeedEvaluation,
+		const TCHAR* ContextTag,
+		const bool bRequireTiltAdmissible)
+	{
+		FPhase1PelvisRotationEvaluation BestEvaluation = SeedEvaluation;
+		if (ValidConstraintSamples.IsEmpty())
+		{
+			return BestEvaluation;
+		}
+
+		static const float CorrectionBlendAlphas[] = { 1.00f, 0.50f, 0.25f };
+		for (const float CorrectionBlendAlpha : CorrectionBlendAlphas)
+		{
+			FQuat WorkingRotation = SeedEvaluation.Rotation;
+			for (int32 PassIndex = 0; PassIndex < 8; ++PassIndex)
+			{
+				FVector4 WeightedDeltaSum = FVector4::Zero();
+				float TotalWeight = 0.0f;
+				for (const FPhase1ConstraintRotationSample& ConstraintSample : ValidConstraintSamples)
+				{
+					const FQuat ParentConstraintWorldRotation =
+						(WorkingRotation * ConstraintSample.ParentConstraintLocalRotation).GetNormalized();
+					FQuat DeltaRotation =
+						(ConstraintSample.ChildConstraintWorldRotation * ParentConstraintWorldRotation.Inverse()).GetNormalized();
+					if ((FQuat::Identity | DeltaRotation) < 0.0f)
+					{
+						DeltaRotation *= -1.0f;
+					}
+
+					const float SampleWeight =
+						(ConstraintSample.ChildBoneName == TEXT("thigh_l") || ConstraintSample.ChildBoneName == TEXT("thigh_r"))
+							? 2.0f
+							: 1.0f;
+					WeightedDeltaSum.X += DeltaRotation.X * SampleWeight;
+					WeightedDeltaSum.Y += DeltaRotation.Y * SampleWeight;
+					WeightedDeltaSum.Z += DeltaRotation.Z * SampleWeight;
+					WeightedDeltaSum.W += DeltaRotation.W * SampleWeight;
+					TotalWeight += SampleWeight;
+				}
+
+				if (TotalWeight <= KINDA_SMALL_NUMBER)
+				{
+					break;
+				}
+
+				FQuat AveragedDelta(
+					WeightedDeltaSum.X / TotalWeight,
+					WeightedDeltaSum.Y / TotalWeight,
+					WeightedDeltaSum.Z / TotalWeight,
+					WeightedDeltaSum.W / TotalWeight);
+				if (AveragedDelta.SizeSquared() <= KINDA_SMALL_NUMBER)
+				{
+					break;
+				}
+
+				AveragedDelta.Normalize();
+				const FQuat AppliedDelta = FQuat::Slerp(FQuat::Identity, AveragedDelta, CorrectionBlendAlpha).GetNormalized();
+				const FQuat CandidateRotation = (AppliedDelta * WorkingRotation).GetNormalized();
+				const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+					CandidateRotation,
+					FString::Printf(TEXT("%s_%s_p%d_a%.2f"),
+						*BestEvaluation.Source,
+						ContextTag,
+						PassIndex,
+						CorrectionBlendAlpha));
+				WorkingRotation = CandidateRotation;
+				if (bRequireTiltAdmissible && !CandidateEvaluation.bTiltAdmissible)
+				{
+					continue;
+				}
+				if (IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation))
+				{
+					BestEvaluation = CandidateEvaluation;
+				}
+			}
+		}
+
+		return BestEvaluation;
+	};
+	const auto RefineByWorstConstraintCorrection = [&](
+		const FPhase1PelvisRotationEvaluation& SeedEvaluation,
+		const TCHAR* ContextTag,
+		const bool bRequireTiltAdmissible)
+	{
+		FPhase1PelvisRotationEvaluation BestEvaluation = SeedEvaluation;
+		if (ValidConstraintSamples.IsEmpty())
+		{
+			return BestEvaluation;
+		}
+
+		static const float CorrectionBlendAlphas[] = { 1.00f, 0.50f, 0.25f, 0.10f, 0.05f, 0.02f, 0.01f, 0.005f };
+		for (const float CorrectionBlendAlpha : CorrectionBlendAlphas)
+		{
+			FQuat WorkingRotation = SeedEvaluation.Rotation;
+			FPhase1PelvisRotationEvaluation WorkingEvaluation = SeedEvaluation;
+			for (int32 PassIndex = 0; PassIndex < 10; ++PassIndex)
+			{
+				FName FocusChildBone = TEXT("thigh_r");
+				float FocusMarginDeg =
+					BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - WorkingEvaluation.RightThighAngularErrorDeg;
+				const float LeftThighMarginDeg =
+					BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - WorkingEvaluation.LeftThighAngularErrorDeg;
+				const float SpineMarginDeg =
+					BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg - WorkingEvaluation.SpineAngularErrorDeg;
+				if (LeftThighMarginDeg + KINDA_SMALL_NUMBER < FocusMarginDeg)
+				{
+					FocusChildBone = TEXT("thigh_l");
+					FocusMarginDeg = LeftThighMarginDeg;
+				}
+				if (SpineMarginDeg + KINDA_SMALL_NUMBER < FocusMarginDeg)
+				{
+					FocusChildBone = TEXT("spine_01");
+				}
+
+				FVector4 WeightedDeltaSum = FVector4::Zero();
+				float TotalWeight = 0.0f;
+				for (const FPhase1ConstraintRotationSample& ConstraintSample : ValidConstraintSamples)
+				{
+					const FQuat ParentConstraintWorldRotation =
+						(WorkingRotation * ConstraintSample.ParentConstraintLocalRotation).GetNormalized();
+					FQuat DeltaRotation =
+						(ConstraintSample.ChildConstraintWorldRotation * ParentConstraintWorldRotation.Inverse()).GetNormalized();
+					if ((FQuat::Identity | DeltaRotation) < 0.0f)
+					{
+						DeltaRotation *= -1.0f;
+					}
+
+					float SampleWeight = 0.5f;
+					if (ConstraintSample.ChildBoneName == FocusChildBone)
+					{
+						SampleWeight = 6.0f;
+					}
+					else if (ConstraintSample.ChildBoneName == TEXT("thigh_l") || ConstraintSample.ChildBoneName == TEXT("thigh_r"))
+					{
+						SampleWeight = 1.5f;
+					}
+
+					WeightedDeltaSum.X += DeltaRotation.X * SampleWeight;
+					WeightedDeltaSum.Y += DeltaRotation.Y * SampleWeight;
+					WeightedDeltaSum.Z += DeltaRotation.Z * SampleWeight;
+					WeightedDeltaSum.W += DeltaRotation.W * SampleWeight;
+					TotalWeight += SampleWeight;
+				}
+
+				if (TotalWeight <= KINDA_SMALL_NUMBER)
+				{
+					break;
+				}
+
+				FQuat AveragedDelta(
+					WeightedDeltaSum.X / TotalWeight,
+					WeightedDeltaSum.Y / TotalWeight,
+					WeightedDeltaSum.Z / TotalWeight,
+					WeightedDeltaSum.W / TotalWeight);
+				if (AveragedDelta.SizeSquared() <= KINDA_SMALL_NUMBER)
+				{
+					break;
+				}
+
+				AveragedDelta.Normalize();
+				const FQuat AppliedDelta = FQuat::Slerp(FQuat::Identity, AveragedDelta, CorrectionBlendAlpha).GetNormalized();
+				const FQuat CandidateRotation = (AppliedDelta * WorkingRotation).GetNormalized();
+				const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+					CandidateRotation,
+					FString::Printf(TEXT("%s_%s_%s_p%d_a%.2f"),
+						*BestEvaluation.Source,
+						ContextTag,
+						*FocusChildBone.ToString(),
+						PassIndex,
+						CorrectionBlendAlpha));
+				WorkingRotation = CandidateRotation;
+				WorkingEvaluation = CandidateEvaluation;
+				if (bRequireTiltAdmissible && !CandidateEvaluation.bTiltAdmissible)
+				{
+					continue;
+				}
+				if (IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation))
+				{
+					BestEvaluation = CandidateEvaluation;
+				}
+			}
+		}
+
+		return BestEvaluation;
+	};
+	const auto RefineByTiltAdmissibleSweep = [&](
+		const FPhase1PelvisRotationEvaluation& SeedEvaluation,
+		const TCHAR* ContextTag)
+	{
+		FPhase1PelvisRotationEvaluation BestEvaluation = SeedEvaluation;
+		if (!SeedEvaluation.bTiltAdmissible)
+		{
+			return BestEvaluation;
+		}
+
+		static const float PitchSweepDegrees[] = { -9.0f, -6.0f, -3.0f, 0.0f, 3.0f, 6.0f, 9.0f };
+		static const float RollSweepDegrees[] = { -9.0f, -6.0f, -3.0f, 0.0f, 3.0f, 6.0f, 9.0f };
+		static const float YawSweepDegrees[] = { -12.0f, -8.0f, -4.0f, 0.0f, 4.0f, 8.0f, 12.0f };
+		for (const float PitchDeg : PitchSweepDegrees)
+		{
+			for (const float RollDeg : RollSweepDegrees)
+			{
+				for (const float YawDeg : YawSweepDegrees)
+				{
+					if (FMath::IsNearlyZero(PitchDeg) && FMath::IsNearlyZero(RollDeg) && FMath::IsNearlyZero(YawDeg))
+					{
+						continue;
+					}
+
+					const FQuat PitchDelta(FVector::RightVector, FMath::DegreesToRadians(PitchDeg));
+					const FQuat RollDelta(FVector::ForwardVector, FMath::DegreesToRadians(RollDeg));
+					const FQuat YawDelta(FVector::UpVector, FMath::DegreesToRadians(YawDeg));
+					const FQuat CandidateRotation =
+						(YawDelta * RollDelta * PitchDelta * SeedEvaluation.Rotation).GetNormalized();
+					const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+						CandidateRotation,
+						FString::Printf(TEXT("%s_%s_y%.1f_p%.1f_r%.1f"),
+							*SeedEvaluation.Source,
+							ContextTag,
+							YawDeg,
+							PitchDeg,
+							RollDeg));
+					if (!CandidateEvaluation.bTiltAdmissible)
+					{
+						continue;
+					}
+					if (IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation))
+					{
+						BestEvaluation = CandidateEvaluation;
+					}
+				}
+			}
+		}
+
+		return BestEvaluation;
+	};
+	const auto RefineByLocalMarginSweep = [&](
+		const FPhase1PelvisRotationEvaluation& SeedEvaluation,
+		const TCHAR* ContextTag,
+		const bool bRequireTiltAdmissible)
+	{
+		FPhase1PelvisRotationEvaluation BestEvaluation = SeedEvaluation;
+		if (bRequireTiltAdmissible && !SeedEvaluation.bTiltAdmissible)
+		{
+			return BestEvaluation;
+		}
+
+		static const float PitchSweepDegrees[] = { -2.0f, -1.0f, -0.5f, -0.25f, 0.0f, 0.25f, 0.5f, 1.0f, 2.0f };
+		static const float RollSweepDegrees[] = { -2.0f, -1.0f, -0.5f, -0.25f, 0.0f, 0.25f, 0.5f, 1.0f, 2.0f };
+		static const float YawSweepDegrees[] = { -2.0f, -1.0f, -0.5f, -0.25f, 0.0f, 0.25f, 0.5f, 1.0f, 2.0f };
+		for (const float PitchDeg : PitchSweepDegrees)
+		{
+			for (const float RollDeg : RollSweepDegrees)
+			{
+				for (const float YawDeg : YawSweepDegrees)
+				{
+					if (FMath::IsNearlyZero(PitchDeg) && FMath::IsNearlyZero(RollDeg) && FMath::IsNearlyZero(YawDeg))
+					{
+						continue;
+					}
+
+					const FQuat PitchDelta(FVector::RightVector, FMath::DegreesToRadians(PitchDeg));
+					const FQuat RollDelta(FVector::ForwardVector, FMath::DegreesToRadians(RollDeg));
+					const FQuat YawDelta(FVector::UpVector, FMath::DegreesToRadians(YawDeg));
+					const FQuat CandidateRotation =
+						(YawDelta * RollDelta * PitchDelta * SeedEvaluation.Rotation).GetNormalized();
+					const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+						CandidateRotation,
+						FString::Printf(TEXT("%s_%s_y%.1f_p%.1f_r%.1f"),
+							*SeedEvaluation.Source,
+							ContextTag,
+							YawDeg,
+							PitchDeg,
+							RollDeg));
+					if (bRequireTiltAdmissible && !CandidateEvaluation.bTiltAdmissible)
+					{
+						continue;
+					}
+					if (IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation))
+					{
+						BestEvaluation = CandidateEvaluation;
+					}
+				}
+			}
+		}
+
+		return BestEvaluation;
+	};
+	const auto RefineByUltraFineMarginSweep = [&](
+		const FPhase1PelvisRotationEvaluation& SeedEvaluation,
+		const TCHAR* ContextTag,
+		const bool bRequireTiltAdmissible)
+	{
+		FPhase1PelvisRotationEvaluation BestEvaluation = SeedEvaluation;
+		if (bRequireTiltAdmissible && !SeedEvaluation.bTiltAdmissible)
+		{
+			return BestEvaluation;
+		}
+
+		static const float PitchSweepDegrees[] = { -0.20f, -0.10f, -0.05f, 0.0f, 0.05f, 0.10f, 0.20f };
+		static const float RollSweepDegrees[] = { -0.20f, -0.10f, -0.05f, 0.0f, 0.05f, 0.10f, 0.20f };
+		static const float YawSweepDegrees[] = { -0.20f, -0.10f, -0.05f, 0.0f, 0.05f, 0.10f, 0.20f };
+		for (const float PitchDeg : PitchSweepDegrees)
+		{
+			for (const float RollDeg : RollSweepDegrees)
+			{
+				for (const float YawDeg : YawSweepDegrees)
+				{
+					if (FMath::IsNearlyZero(PitchDeg) && FMath::IsNearlyZero(RollDeg) && FMath::IsNearlyZero(YawDeg))
+					{
+						continue;
+					}
+
+					const FQuat PitchDelta(FVector::RightVector, FMath::DegreesToRadians(PitchDeg));
+					const FQuat RollDelta(FVector::ForwardVector, FMath::DegreesToRadians(RollDeg));
+					const FQuat YawDelta(FVector::UpVector, FMath::DegreesToRadians(YawDeg));
+					const FQuat CandidateRotation =
+						(YawDelta * RollDelta * PitchDelta * SeedEvaluation.Rotation).GetNormalized();
+					const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+						CandidateRotation,
+						FString::Printf(TEXT("%s_%s_y%.2f_p%.2f_r%.2f"),
+							*SeedEvaluation.Source,
+							ContextTag,
+							YawDeg,
+							PitchDeg,
+							RollDeg));
+					if (bRequireTiltAdmissible && !CandidateEvaluation.bTiltAdmissible)
+					{
+						continue;
+					}
+					if (IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation))
+					{
+						BestEvaluation = CandidateEvaluation;
+					}
+				}
+			}
+		}
+
+		return BestEvaluation;
+	};
+	const auto RefineByFocusedConstraintDelta = [&](
+		const FPhase1PelvisRotationEvaluation& SeedEvaluation,
+		const FName FocusChildBone,
+		const TCHAR* ContextTag,
+		const bool bRequireTiltAdmissible)
+	{
+		FPhase1PelvisRotationEvaluation BestEvaluation = SeedEvaluation;
+		if (bRequireTiltAdmissible && !SeedEvaluation.bTiltAdmissible)
+		{
+			return BestEvaluation;
+		}
+
+		const FPhase1ConstraintRotationSample* FocusSample = nullptr;
+		for (const FPhase1ConstraintRotationSample& ConstraintSample : ValidConstraintSamples)
+		{
+			if (ConstraintSample.ChildBoneName == FocusChildBone)
+			{
+				FocusSample = &ConstraintSample;
+				break;
+			}
+		}
+		if (!FocusSample)
+		{
+			return BestEvaluation;
+		}
+
+		static const float CorrectionBlendAlphas[] = { 1.00f, 0.75f, 0.50f, 0.25f, 0.10f, 0.05f, 0.02f, 0.01f, 0.005f };
+		FPhase1PelvisRotationEvaluation WorkingEvaluation = SeedEvaluation;
+		for (int32 PassIndex = 0; PassIndex < 10; ++PassIndex)
+		{
+			const FQuat ParentConstraintWorldRotation =
+				(WorkingEvaluation.Rotation * FocusSample->ParentConstraintLocalRotation).GetNormalized();
+			FQuat DeltaRotation =
+				(FocusSample->ChildConstraintWorldRotation * ParentConstraintWorldRotation.Inverse()).GetNormalized();
+			if ((FQuat::Identity | DeltaRotation) < 0.0f)
+			{
+				DeltaRotation *= -1.0f;
+			}
+
+			bool bImprovedThisPass = false;
+			for (const float CorrectionBlendAlpha : CorrectionBlendAlphas)
+			{
+				const FQuat AppliedDelta = FQuat::Slerp(FQuat::Identity, DeltaRotation, CorrectionBlendAlpha).GetNormalized();
+				const FQuat CandidateRotation = (AppliedDelta * WorkingEvaluation.Rotation).GetNormalized();
+				const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+					CandidateRotation,
+					FString::Printf(TEXT("%s_%s_%s_p%d_a%.2f"),
+						*BestEvaluation.Source,
+						ContextTag,
+						*FocusChildBone.ToString(),
+						PassIndex,
+						CorrectionBlendAlpha));
+				if (bRequireTiltAdmissible && !CandidateEvaluation.bTiltAdmissible)
+				{
+					continue;
+				}
+				if (IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation))
+				{
+					BestEvaluation = CandidateEvaluation;
+					WorkingEvaluation = CandidateEvaluation;
+					bImprovedThisPass = true;
+				}
+			}
+
+			if (!bImprovedThisPass)
+			{
+				break;
+			}
+		}
+
+		return BestEvaluation;
+	};
+	const auto ResolveWorstReadinessConstraintBone = [](const FPhase1PelvisRotationEvaluation& Evaluation)
+	{
+		FName FocusChildBone = TEXT("thigh_r");
+		float FocusMarginDeg =
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - Evaluation.RightThighAngularErrorDeg;
+		const float LeftThighMarginDeg =
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - Evaluation.LeftThighAngularErrorDeg;
+		const float SpineMarginDeg =
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg - Evaluation.SpineAngularErrorDeg;
+		if (LeftThighMarginDeg + KINDA_SMALL_NUMBER < FocusMarginDeg)
+		{
+			FocusChildBone = TEXT("thigh_l");
+			FocusMarginDeg = LeftThighMarginDeg;
+		}
+		if (SpineMarginDeg + KINDA_SMALL_NUMBER < FocusMarginDeg)
+		{
+			FocusChildBone = TEXT("spine_01");
+		}
+		return FocusChildBone;
 	};
 	const FPhase1PelvisRotationEvaluation LiveRotationEvaluation =
 		BuildRotationEvaluation(RotationSamples[0].CandidateRotation, RotationSamples[0].Source);
@@ -657,9 +1127,160 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	{
 		BestRotationEvaluation = BestTiltAdmissibleRotationEvaluation;
 	}
+	const FPhase1PelvisRotationEvaluation PreTiltProtectionBestRotationEvaluation = BestRotationEvaluation;
+	if (BestRotationEvaluation.MaxAngularErrorDeg < TNumericLimits<float>::Max())
+	{
+		BestRotationEvaluation = RefineByConstraintCorrection(
+			BestRotationEvaluation,
+			TEXT("constraint_correct"),
+			false);
+		BestRotationEvaluation = RefineByWorstConstraintCorrection(
+			BestRotationEvaluation,
+			TEXT("worst_constraint_correct"),
+			false);
+	}
+	if (bHasTiltAdmissibleRotationEvaluation)
+	{
+		BestTiltAdmissibleRotationEvaluation = RefineByConstraintCorrection(
+			BestTiltAdmissibleRotationEvaluation,
+			TEXT("tilt_constraint_correct"),
+			true);
+		BestTiltAdmissibleRotationEvaluation = RefineByWorstConstraintCorrection(
+			BestTiltAdmissibleRotationEvaluation,
+			TEXT("tilt_worst_constraint_correct"),
+			true);
+		BestTiltAdmissibleRotationEvaluation = RefineByTiltAdmissibleSweep(
+			BestTiltAdmissibleRotationEvaluation,
+			TEXT("tilt_sweep"));
+		BestTiltAdmissibleRotationEvaluation = RefineByLocalMarginSweep(
+			BestTiltAdmissibleRotationEvaluation,
+			TEXT("tilt_margin_sweep"),
+			true);
+		BestTiltAdmissibleRotationEvaluation = RefineByFocusedConstraintDelta(
+			BestTiltAdmissibleRotationEvaluation,
+			ResolveWorstReadinessConstraintBone(BestTiltAdmissibleRotationEvaluation),
+			TEXT("tilt_focus_delta"),
+			true);
+		BestTiltAdmissibleRotationEvaluation = RefineByFocusedConstraintDelta(
+			BestTiltAdmissibleRotationEvaluation,
+			ResolveWorstReadinessConstraintBone(BestTiltAdmissibleRotationEvaluation),
+			TEXT("tilt_second_focus_delta"),
+			true);
+		if (BestTiltAdmissibleRotationEvaluation.RightThighAngularErrorDeg >
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg + KINDA_SMALL_NUMBER)
+		{
+			BestTiltAdmissibleRotationEvaluation = RefineByFocusedConstraintDelta(
+				BestTiltAdmissibleRotationEvaluation,
+				TEXT("thigh_r"),
+				TEXT("tilt_right_thigh_delta"),
+				true);
+			BestTiltAdmissibleRotationEvaluation = RefineByLocalMarginSweep(
+				BestTiltAdmissibleRotationEvaluation,
+				TEXT("tilt_right_thigh_margin_sweep"),
+				true);
+		}
+		if (!BestTiltAdmissibleRotationEvaluation.bRootOnReadinessMarginSatisfied)
+		{
+			for (int32 CleanupIteration = 0;
+				CleanupIteration < 2 && !BestTiltAdmissibleRotationEvaluation.bRootOnReadinessMarginSatisfied;
+				++CleanupIteration)
+			{
+				BestTiltAdmissibleRotationEvaluation = RefineByFocusedConstraintDelta(
+					BestTiltAdmissibleRotationEvaluation,
+					ResolveWorstReadinessConstraintBone(BestTiltAdmissibleRotationEvaluation),
+					TEXT("tilt_final_focus_delta"),
+					true);
+				BestTiltAdmissibleRotationEvaluation = RefineByLocalMarginSweep(
+					BestTiltAdmissibleRotationEvaluation,
+					TEXT("tilt_final_margin_sweep"),
+					true);
+			}
+			if (!BestTiltAdmissibleRotationEvaluation.bRootOnReadinessMarginSatisfied &&
+				BestTiltAdmissibleRotationEvaluation.RootOnReadinessTotalDeficitDeg <= 1.0f + KINDA_SMALL_NUMBER)
+			{
+				BestTiltAdmissibleRotationEvaluation = RefineByUltraFineMarginSweep(
+					BestTiltAdmissibleRotationEvaluation,
+					TEXT("tilt_ultrafine_margin_sweep"),
+					true);
+			}
+		}
+		if (bProtectLiveTilt && BestRotationEvaluation.bTiltAdmissible &&
+			IsBetterRotationEvaluation(BestTiltAdmissibleRotationEvaluation, BestRotationEvaluation))
+		{
+			BestRotationEvaluation = BestTiltAdmissibleRotationEvaluation;
+		}
+	}
+	FPhase1PelvisRotationEvaluation BestUnconstrainedRotationEvaluation = PreTiltProtectionBestRotationEvaluation;
+	if (BestUnconstrainedRotationEvaluation.MaxAngularErrorDeg < TNumericLimits<float>::Max())
+	{
+		BestUnconstrainedRotationEvaluation = RefineByConstraintCorrection(
+			BestUnconstrainedRotationEvaluation,
+			TEXT("forensic_constraint_correct"),
+			false);
+		BestUnconstrainedRotationEvaluation = RefineByWorstConstraintCorrection(
+			BestUnconstrainedRotationEvaluation,
+			TEXT("forensic_worst_constraint_correct"),
+			false);
+		BestUnconstrainedRotationEvaluation = RefineByLocalMarginSweep(
+			BestUnconstrainedRotationEvaluation,
+			TEXT("forensic_margin_sweep"),
+			false);
+		BestUnconstrainedRotationEvaluation = RefineByFocusedConstraintDelta(
+			BestUnconstrainedRotationEvaluation,
+			ResolveWorstReadinessConstraintBone(BestUnconstrainedRotationEvaluation),
+			TEXT("forensic_focus_delta"),
+			false);
+		BestUnconstrainedRotationEvaluation = RefineByFocusedConstraintDelta(
+			BestUnconstrainedRotationEvaluation,
+			ResolveWorstReadinessConstraintBone(BestUnconstrainedRotationEvaluation),
+			TEXT("forensic_second_focus_delta"),
+			false);
+		if (BestUnconstrainedRotationEvaluation.RightThighAngularErrorDeg >
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg + KINDA_SMALL_NUMBER)
+		{
+			BestUnconstrainedRotationEvaluation = RefineByFocusedConstraintDelta(
+				BestUnconstrainedRotationEvaluation,
+				TEXT("thigh_r"),
+				TEXT("forensic_right_thigh_delta"),
+				false);
+			BestUnconstrainedRotationEvaluation = RefineByLocalMarginSweep(
+				BestUnconstrainedRotationEvaluation,
+				TEXT("forensic_right_thigh_margin_sweep"),
+				false);
+		}
+		if (!BestUnconstrainedRotationEvaluation.bRootOnReadinessMarginSatisfied)
+		{
+			for (int32 CleanupIteration = 0;
+				CleanupIteration < 2 && !BestUnconstrainedRotationEvaluation.bRootOnReadinessMarginSatisfied;
+				++CleanupIteration)
+			{
+				BestUnconstrainedRotationEvaluation = RefineByFocusedConstraintDelta(
+					BestUnconstrainedRotationEvaluation,
+					ResolveWorstReadinessConstraintBone(BestUnconstrainedRotationEvaluation),
+					TEXT("forensic_final_focus_delta"),
+					false);
+				BestUnconstrainedRotationEvaluation = RefineByLocalMarginSweep(
+					BestUnconstrainedRotationEvaluation,
+					TEXT("forensic_final_margin_sweep"),
+					false);
+			}
+			if (!BestUnconstrainedRotationEvaluation.bRootOnReadinessMarginSatisfied &&
+				BestUnconstrainedRotationEvaluation.RootOnReadinessTotalDeficitDeg <= 1.0f + KINDA_SMALL_NUMBER)
+			{
+				BestUnconstrainedRotationEvaluation = RefineByUltraFineMarginSweep(
+					BestUnconstrainedRotationEvaluation,
+					TEXT("forensic_ultrafine_margin_sweep"),
+					false);
+			}
+		}
+	}
+	if (BestUnconstrainedRotationEvaluation.bTiltAdmissible &&
+		IsBetterRotationEvaluation(BestUnconstrainedRotationEvaluation, BestRotationEvaluation))
+	{
+		BestRotationEvaluation = BestUnconstrainedRotationEvaluation;
+	}
 
 	FPhase1PelvisRotationEvaluation AppliedRotationEvaluation = BestRotationEvaluation;
-	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	const UWorld* const World = GetWorld();
 	const float Phase1PelvisRotationStepDeg =
 		FMath::Max(0.0f, EffectiveSettings.MaxAngularStepDegreesPerSecond) *
@@ -683,7 +1304,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	if (bProtectLiveTilt)
 	{
 		constexpr float Phase1PelvisCouplingTiltMarginDeg = 0.5f;
-		const float TargetMaxTiltDeg = FMath::Max(0.0f, BalanceQuietTiltThresholdDeg - Phase1PelvisCouplingTiltMarginDeg);
+		const float TargetMaxTiltDeg = FMath::Max(0.0f, EffectiveSettings.BalancePhase2EntryMaxRootTiltDeg - Phase1PelvisCouplingTiltMarginDeg);
 		if (LiveRotationEvaluation.TiltDeg <= TargetMaxTiltDeg + KINDA_SMALL_NUMBER &&
 			AppliedRotationEvaluation.TiltDeg > TargetMaxTiltDeg + KINDA_SMALL_NUMBER)
 		{
@@ -773,6 +1394,19 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	const float PelvisSpine01ErrorCm = PelvisSpine01Record.bConstraintFound ? PelvisSpine01Record.AnchorDistanceCm : PelvisSpine01Record.BodyOriginDistanceCm;
 	FString SolvedTiltSource;
 	const float SolvedTiltDeg = ResolvePhase1Uprightness(Mesh, GetOwner(), RootBoneName, SolvedTiltSource);
+	const int32 TiltProtectionForced = (bProtectLiveTilt &&
+		BestUnconstrainedRotationEvaluation.MaxAngularErrorDeg < TNumericLimits<float>::Max() &&
+		!BestUnconstrainedRotationEvaluation.bTiltAdmissible &&
+		bHasTiltAdmissibleRotationEvaluation) ? 1 : 0;
+	LastPhase1PelvisCouplingRotationForensics.bLiveTiltProtected = bProtectLiveTilt;
+	LastPhase1PelvisCouplingRotationForensics.bTiltProtectionForced = TiltProtectionForced != 0;
+	LastPhase1PelvisCouplingRotationForensics.UnconstrainedTiltDeg = BestUnconstrainedRotationEvaluation.TiltDeg;
+	LastPhase1PelvisCouplingRotationForensics.UnconstrainedAngularThresholdOverflowDeg = BestUnconstrainedRotationEvaluation.AngularThresholdOverflowDeg;
+	LastPhase1PelvisCouplingRotationForensics.UnconstrainedLeftThighAngularErrorDeg = BestUnconstrainedRotationEvaluation.LeftThighAngularErrorDeg;
+	LastPhase1PelvisCouplingRotationForensics.UnconstrainedRightThighAngularErrorDeg = BestUnconstrainedRotationEvaluation.RightThighAngularErrorDeg;
+	LastPhase1PelvisCouplingRotationForensics.UnconstrainedSpineAngularErrorDeg = BestUnconstrainedRotationEvaluation.SpineAngularErrorDeg;
+	LastPhase1PelvisCouplingRotationForensics.AppliedTiltDeg = AppliedRotationEvaluation.TiltDeg;
+	LastPhase1PelvisCouplingRotationForensics.AppliedAngularThresholdOverflowDeg = AppliedRotationEvaluation.AngularThresholdOverflowDeg;
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING solvedLoc=(%.2f,%.2f,%.2f) rotationSource=%s solvedTiltDeg=%.2f tiltSource=%s tiltAdmissible=%d rotationScoreMax=%.2f rotationScoreMean=%.2f pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f pelvisThighLBodyOrigin=%.2f pelvisThighRBodyOrigin=%.2f pelvisSpine01BodyOrigin=%.2f state=%s"),
 		SolvedPelvisLocation.X,
 		SolvedPelvisLocation.Y,
@@ -792,6 +1426,34 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 		PelvisThighLRecord.BodyOriginDistanceCm,
 		PelvisThighRRecord.BodyOriginDistanceCm,
 		PelvisSpine01Record.BodyOriginDistanceCm,
+		GetRuntimeStateName(RuntimeState));
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING_ROTATION_FORENSICS liveTiltProtected=%d tiltProtectionForced=%d liveSource=%s liveTiltDeg=%.2f liveOverflowDeg=%.2f liveL=%.2f liveR=%.2f liveSpine=%.2f unconstrainedSource=%s unconstrainedTiltDeg=%.2f unconstrainedOverflowDeg=%.2f unconstrainedL=%.2f unconstrainedR=%.2f unconstrainedSpine=%.2f tiltSource=%s tiltTiltDeg=%.2f tiltOverflowDeg=%.2f tiltL=%.2f tiltR=%.2f tiltSpine=%.2f appliedSource=%s appliedTiltDeg=%.2f appliedOverflowDeg=%.2f appliedL=%.2f appliedR=%.2f appliedSpine=%.2f state=%s"),
+		bProtectLiveTilt ? 1 : 0,
+		TiltProtectionForced,
+		*LiveRotationEvaluation.Source,
+		LiveRotationEvaluation.TiltDeg,
+		LiveRotationEvaluation.AngularThresholdOverflowDeg,
+		LiveRotationEvaluation.LeftThighAngularErrorDeg,
+		LiveRotationEvaluation.RightThighAngularErrorDeg,
+		LiveRotationEvaluation.SpineAngularErrorDeg,
+		*BestUnconstrainedRotationEvaluation.Source,
+		BestUnconstrainedRotationEvaluation.TiltDeg,
+		BestUnconstrainedRotationEvaluation.AngularThresholdOverflowDeg,
+		BestUnconstrainedRotationEvaluation.LeftThighAngularErrorDeg,
+		BestUnconstrainedRotationEvaluation.RightThighAngularErrorDeg,
+		BestUnconstrainedRotationEvaluation.SpineAngularErrorDeg,
+		bHasTiltAdmissibleRotationEvaluation ? *BestTiltAdmissibleRotationEvaluation.Source : TEXT("none"),
+		bHasTiltAdmissibleRotationEvaluation ? BestTiltAdmissibleRotationEvaluation.TiltDeg : 0.0f,
+		bHasTiltAdmissibleRotationEvaluation ? BestTiltAdmissibleRotationEvaluation.AngularThresholdOverflowDeg : 0.0f,
+		bHasTiltAdmissibleRotationEvaluation ? BestTiltAdmissibleRotationEvaluation.LeftThighAngularErrorDeg : 0.0f,
+		bHasTiltAdmissibleRotationEvaluation ? BestTiltAdmissibleRotationEvaluation.RightThighAngularErrorDeg : 0.0f,
+		bHasTiltAdmissibleRotationEvaluation ? BestTiltAdmissibleRotationEvaluation.SpineAngularErrorDeg : 0.0f,
+		*AppliedRotationEvaluation.Source,
+		AppliedRotationEvaluation.TiltDeg,
+		AppliedRotationEvaluation.AngularThresholdOverflowDeg,
+		AppliedRotationEvaluation.LeftThighAngularErrorDeg,
+		AppliedRotationEvaluation.RightThighAngularErrorDeg,
+		AppliedRotationEvaluation.SpineAngularErrorDeg,
 		GetRuntimeStateName(RuntimeState));
 }
 

@@ -289,6 +289,16 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.PelvisThighLAngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg &&
 		OutSnapshot.PelvisThighRAngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg &&
 		OutSnapshot.PelvisSpine01AngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg;
+	const bool bDirectPelvisSpineMarginSatisfied =
+		DirectPelvisLinkForensics.Num() == 3 &&
+		DirectPelvisLinkForensics[2].bConstraintFound &&
+		OutSnapshot.PelvisSpine01AngularErrorDeg <= BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg;
+	const bool bDirectPelvisThighMarginsSatisfied =
+		DirectPelvisLinkForensics.Num() == 3 &&
+		DirectPelvisLinkForensics[0].bConstraintFound &&
+		DirectPelvisLinkForensics[1].bConstraintFound &&
+		OutSnapshot.PelvisThighLAngularErrorDeg <= BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg &&
+		OutSnapshot.PelvisThighRAngularErrorDeg <= BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg;
 	const bool bDirectPelvisLinkPositionSatisfied =
 		DirectPelvisLinkForensics.Num() == 3 &&
 		DirectPelvisLinkForensics[0].bConstraintFound &&
@@ -396,6 +406,15 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.RootOnReadinessNoCouplingPeakBodyLinearSpeed = this->RootOnReadinessNoCouplingPeakBodyLinearSpeed;
 	OutSnapshot.RootOnReadinessNoCouplingPeakBodyAngularSpeed = this->RootOnReadinessNoCouplingPeakBodyAngularSpeed;
 	OutSnapshot.RootOnReadinessNoCouplingWorstBone = this->RootOnReadinessNoCouplingWorstBone;
+	OutSnapshot.bRootOnReadinessTiltLimitedByUprightness =
+		IsPhase1TiltLimitedRootOnViability(Owner->LastPhase1PelvisCouplingRotationForensics, Settings);
+	OutSnapshot.RootOnReadinessUnconstrainedTiltDeg = Owner->LastPhase1PelvisCouplingRotationForensics.UnconstrainedTiltDeg;
+	OutSnapshot.RootOnReadinessUnconstrainedPelvisThighLAngularErrorDeg =
+		Owner->LastPhase1PelvisCouplingRotationForensics.UnconstrainedLeftThighAngularErrorDeg;
+	OutSnapshot.RootOnReadinessUnconstrainedPelvisThighRAngularErrorDeg =
+		Owner->LastPhase1PelvisCouplingRotationForensics.UnconstrainedRightThighAngularErrorDeg;
+	OutSnapshot.RootOnReadinessUnconstrainedPelvisSpine01AngularErrorDeg =
+		Owner->LastPhase1PelvisCouplingRotationForensics.UnconstrainedSpineAngularErrorDeg;
 	OutSnapshot.ShellOffsetDeltaAtCaptureCm = CachedConvergenceSnapshot.IsValid() ? CachedConvergenceSnapshot.ShellPlanarOffset : Owner->GetCurrentShellPlanarOffsetDeltaCm();
 	OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond = CachedConvergenceSnapshot.IsValid() ? CachedConvergenceSnapshot.ShellPlanarVelocity : Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 	OutSnapshot.ShellOffsetGrowthCm = bHasRootOnReadinessShellProofBaseline
@@ -528,22 +547,6 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 
 	OutResult.bPreRootOnShellSafetyProofSatisfied = bShellSafetySatisfied;
 	OutResult.bRootOnReadinessNoCouplingProofSatisfied = OutSnapshot.bRootOnReadinessNoCouplingProofSatisfied;
-
-	const bool bOtherRootOnReadinessGatesSatisfied =
-		OutResult.bRootOnReadinessShellHoldSatisfied &&
-		OutResult.bRootOnReadinessFinalBringUpControlSettled &&
-		OutResult.bRootOnReadinessPolicyInfluenceSettled &&
-		OutResult.bPreRootOnShellSafetyProofSatisfied;
-
-	OutResult.bRootOnReadinessProven =
-		OutResult.bRootOnReadinessShellHoldSatisfied &&
-		OutResult.bRootOnReadinessFinalBringUpControlSettled &&
-		OutResult.bRootOnReadinessPolicyInfluenceSettled &&
-		OutResult.bPreRootOnShellSafetyProofSatisfied &&
-		OutResult.bRootOnReadinessNoCouplingProofSatisfied &&
-		(RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady);
-
-	OutResult.RootOnReadinessClassification = RootOnReadinessClassification;
 	OutResult.bRootOnDirectPelvisLinkGeometrySatisfied = OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied;
 	OutResult.bRootOnDirectPelvisLinkAngularSatisfied = OutSnapshot.bRootOnDirectPelvisLinkAngularSatisfied;
 	OutResult.PelvisThighLErrorCm = OutSnapshot.PelvisThighLErrorCm;
@@ -552,9 +555,47 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutResult.PelvisThighLAngularErrorDeg = OutSnapshot.PelvisThighLAngularErrorDeg;
 	OutResult.PelvisThighRAngularErrorDeg = OutSnapshot.PelvisThighRAngularErrorDeg;
 	OutResult.PelvisSpine01AngularErrorDeg = OutSnapshot.PelvisSpine01AngularErrorDeg;
+
+	OutResult.bRootOnReadinessProven =
+		OutResult.bRootOnReadinessShellHoldSatisfied &&
+		OutResult.bRootOnReadinessFinalBringUpControlSettled &&
+		OutResult.bRootOnReadinessPolicyInfluenceSettled &&
+		OutResult.bPreRootOnShellSafetyProofSatisfied &&
+		OutResult.bRootOnReadinessNoCouplingProofSatisfied &&
+		OutResult.bRootOnDirectPelvisLinkAngularSatisfied &&
+		bDirectPelvisThighMarginsSatisfied &&
+		bDirectPelvisSpineMarginSatisfied &&
+		(RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady);
+
+	OutResult.RootOnReadinessClassification = RootOnReadinessClassification;
 	if (bRootCoupledTopologyReady && !bDirectPelvisLinkPositionSatisfied)
 	{
 		OutResult.RootOnReadinessGateReason = TEXT("phase2_pre_root_on_link_error_too_high");
+	}
+	else if (bRootCoupledTopologyReady &&
+		OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied &&
+		!OutResult.bRootOnDirectPelvisLinkAngularSatisfied &&
+		OutSnapshot.bRootOnReadinessTiltLimitedByUprightness)
+	{
+		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_tilt_limited_viability");
+	}
+	else if (bRootCoupledTopologyReady && !OutResult.bRootOnDirectPelvisLinkAngularSatisfied)
+	{
+		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_pelvis_angular_incoherent");
+	}
+	else if (bRootCoupledTopologyReady && !bDirectPelvisThighMarginsSatisfied)
+	{
+		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient");
+	}
+	else if (bRootCoupledTopologyReady &&
+		!bDirectPelvisSpineMarginSatisfied &&
+		OutSnapshot.bRootOnReadinessTiltLimitedByUprightness)
+	{
+		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_tilt_limited_viability");
+	}
+	else if (bRootCoupledTopologyReady && !bDirectPelvisSpineMarginSatisfied)
+	{
+		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient");
 	}
 	else if (RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny)
 	{
@@ -562,10 +603,32 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	}
 	else if (RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
 	{
-		OutResult.RootOnReadinessGateReason =
-			(bOtherRootOnReadinessGatesSatisfied && !OutResult.bRootOnReadinessNoCouplingProofSatisfied)
-				? TEXT("phase1_root_on_readiness_requires_pelvis_coupling")
-				: TEXT("ready");
+		if (!OutResult.bRootOnReadinessShellHoldSatisfied)
+		{
+			OutResult.RootOnReadinessGateReason = TEXT("phase2_root_on_readiness_shell_hold_not_completed");
+		}
+		else if (!OutResult.bRootOnReadinessFinalBringUpControlSettled)
+		{
+			OutResult.RootOnReadinessGateReason = TEXT("phase2_root_on_readiness_final_bring_up_control_not_settled");
+		}
+		else if (!OutResult.bRootOnReadinessPolicyInfluenceSettled)
+		{
+			OutResult.RootOnReadinessGateReason = OutSnapshot.PolicyInfluenceAlphaAtCapture <= KINDA_SMALL_NUMBER
+				? TEXT("phase2_root_on_readiness_policy_influence_not_started")
+				: TEXT("phase2_root_on_readiness_policy_influence_below_threshold");
+		}
+		else if (!OutResult.bPreRootOnShellSafetyProofSatisfied)
+		{
+			OutResult.RootOnReadinessGateReason = TEXT("phase2_root_on_readiness_shell_proof_not_satisfied");
+		}
+		else if (!OutResult.bRootOnReadinessNoCouplingProofSatisfied)
+		{
+			OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_requires_pelvis_coupling");
+		}
+		else
+		{
+			OutResult.RootOnReadinessGateReason = TEXT("ready");
+		}
 	}
 	else
 	{

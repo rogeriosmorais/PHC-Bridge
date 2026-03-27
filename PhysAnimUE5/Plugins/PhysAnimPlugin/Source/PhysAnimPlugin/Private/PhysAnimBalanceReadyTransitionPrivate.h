@@ -11,6 +11,12 @@ namespace BalanceTransitionSets
 	inline constexpr float Phase2MaxDirectPelvisLinkErrorCm = 8.0f;
 	inline constexpr float Phase2MaxPelvisThighDirectLinkAngularErrorDeg = 35.0f;
 	inline constexpr float Phase2MaxPelvisSpineDirectLinkAngularErrorDeg = 20.0f;
+	inline constexpr float Phase2RequiredPelvisThighDirectLinkAngularMarginDeg = 2.0f;
+	inline constexpr float Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg =
+		Phase2MaxPelvisThighDirectLinkAngularErrorDeg - Phase2RequiredPelvisThighDirectLinkAngularMarginDeg;
+	inline constexpr float Phase2RequiredPelvisSpineDirectLinkAngularMarginDeg = 2.0f;
+	inline constexpr float Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg =
+		Phase2MaxPelvisSpineDirectLinkAngularErrorDeg - Phase2RequiredPelvisSpineDirectLinkAngularMarginDeg;
 
 	struct FDirectPelvisLinkForensicRecord
 	{
@@ -56,4 +62,18 @@ namespace BalanceTransitionSets
 	bool IsRootCoupledReadyHandoff(int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount, bool bRootSimulating);
 	const TCHAR* GetShellAuthorityModeName(EBalanceTransitionShellAuthorityMode Mode);
 	FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount);
+}
+
+inline bool IsPhase1TiltLimitedRootOnViability(
+	const FPhase1PelvisCouplingRotationForensics& Forensics,
+	const FPhysAnimStabilizationSettings& Settings)
+{
+	return Forensics.UnconstrainedLeftThighAngularErrorDeg <=
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg + KINDA_SMALL_NUMBER &&
+		Forensics.UnconstrainedRightThighAngularErrorDeg <=
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg + KINDA_SMALL_NUMBER &&
+		Forensics.UnconstrainedAngularThresholdOverflowDeg <= KINDA_SMALL_NUMBER &&
+		Forensics.UnconstrainedSpineAngularErrorDeg <=
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg + KINDA_SMALL_NUMBER &&
+		Forensics.UnconstrainedTiltDeg > Settings.BalancePhase2EntryMaxRootTiltDeg + KINDA_SMALL_NUMBER;
 }

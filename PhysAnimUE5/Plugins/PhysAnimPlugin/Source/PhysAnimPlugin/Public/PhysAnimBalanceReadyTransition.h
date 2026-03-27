@@ -227,6 +227,11 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	float RootOnReadinessNoCouplingPeakBodyLinearSpeed = 0.0f;
 	float RootOnReadinessNoCouplingPeakBodyAngularSpeed = 0.0f;
 	FName RootOnReadinessNoCouplingWorstBone = NAME_None;
+	bool bRootOnReadinessTiltLimitedByUprightness = false;
+	float RootOnReadinessUnconstrainedTiltDeg = 0.0f;
+	float RootOnReadinessUnconstrainedPelvisThighLAngularErrorDeg = 0.0f;
+	float RootOnReadinessUnconstrainedPelvisThighRAngularErrorDeg = 0.0f;
+	float RootOnReadinessUnconstrainedPelvisSpine01AngularErrorDeg = 0.0f;
 	float ShellOffsetDeltaAtCaptureCm = 0.0f;
 	float ShellVelocityDeltaAtCaptureCmPerSecond = 0.0f;
 	float ShellOffsetGrowthCm = 0.0f;

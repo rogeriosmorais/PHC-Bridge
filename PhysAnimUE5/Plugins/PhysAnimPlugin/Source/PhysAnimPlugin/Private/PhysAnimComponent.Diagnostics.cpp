@@ -142,6 +142,10 @@ FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilization
 		PhysAnimComponentInternal::ResolveBoolOverride(
 			PhysAnimComponentInternal::CVarPhysAnimPhase1DistalKinematicExperiment,
 			EffectiveSettings.bPhase1DistalKinematicExperiment);
+	EffectiveSettings.BalancePhase2EntryMaxRootTiltDeg = FMath::Max3(
+		EffectiveSettings.BalancePhase2EntryMaxRootTiltDeg,
+		BalanceQuietTiltThresholdDeg,
+		25.0f);
 	ApplyPresentationPerturbationStabilizationOverride(IsPresentationPerturbationOverrideActive(), EffectiveSettings);
 	ApplyStabilizationStressTestRamp(
 		ResolveStabilizationStressTestMultiplier(),

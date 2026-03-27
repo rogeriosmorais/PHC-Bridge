@@ -63,7 +63,16 @@ bool FPhysAnimBalanceReadyTransition::EvaluateReadiness(UPhysAnimComponent* Owne
 		OutReason = TEXT("root_angular_above_settle");
 		return false;
 	}
-	if (Diagnostics.RootTilt > Owner->BalanceQuietTiltThresholdDeg)
+	const bool bUsePhase2EntryTiltGate =
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3;
+	const bool bUsePreEntryQuietTiltGate = !bUsePhase2EntryTiltGate && InternalPhase != EBalanceReadyTransitionPhase::BRT_Phase3_Settle;
+	const float MaxAllowedTiltDeg = bUsePhase2EntryTiltGate
+		? Settings.BalancePhase2EntryMaxRootTiltDeg
+		: Owner->BalanceQuietTiltThresholdDeg;
+	if ((bUsePhase2EntryTiltGate || bUsePreEntryQuietTiltGate) && Diagnostics.RootTilt > MaxAllowedTiltDeg)
 	{
 		OutReason = TEXT("tilt_high");
 		return false;
@@ -196,6 +205,11 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 	if (Diagnostics.RootAngularSpeed > Settings.BalancePhase2EntryMaxRootAngularSpeed)
 	{
 		OutReason = TEXT("phase2_entry_root_angular_too_high");
+		return false;
+	}
+	if (Diagnostics.RootTilt > Settings.BalancePhase2EntryMaxRootTiltDeg)
+	{
+		OutReason = TEXT("phase2_entry_root_tilt_too_high");
 		return false;
 	}
 

@@ -150,6 +150,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	bLatchedPelvisResetApplied = false;
 	QuietHandoffCount = 0;
 	HipQuarantineTimerSeconds = 0.0f;
+	Owner->LastPhase1PelvisCouplingRotationForensics = {};
 	LateValidationAccumulatedSeconds = 0.0f;
 	LastLateValidateBlockReason.Reset();
 	bLoggedLateValidateEntry = false;
@@ -894,7 +895,14 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			CurrentResult.bRootOnReadinessFinalBringUpControlSettled &&
 			CurrentResult.bRootOnReadinessPolicyInfluenceSettled &&
 			CurrentResult.bPreRootOnShellSafetyProofSatisfied &&
-			CurrentResult.bRootOnDirectPelvisLinkGeometrySatisfied;
+			CurrentResult.bRootOnDirectPelvisLinkGeometrySatisfied &&
+			CurrentResult.bRootOnDirectPelvisLinkAngularSatisfied &&
+			CurrentResult.PelvisThighLAngularErrorDeg <=
+				BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg + KINDA_SMALL_NUMBER &&
+			CurrentResult.PelvisThighRAngularErrorDeg <=
+				BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg + KINDA_SMALL_NUMBER &&
+			CurrentResult.PelvisSpine01AngularErrorDeg <=
+				BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg + KINDA_SMALL_NUMBER;
 
 		const auto EmitNoCouplingProofLog = [&](const TCHAR* State, const FString& Reason)
 		{
@@ -997,10 +1005,37 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				CurrentResult.bRootOnReadinessPolicyInfluenceSettled &&
 				CurrentResult.bPreRootOnShellSafetyProofSatisfied &&
 				CurrentResult.bRootOnReadinessNoCouplingProofSatisfied &&
+				CurrentResult.bRootOnDirectPelvisLinkAngularSatisfied &&
+				CurrentResult.PelvisThighLAngularErrorDeg <= BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg &&
+				CurrentResult.PelvisThighRAngularErrorDeg <= BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg &&
+				CurrentResult.PelvisSpine01AngularErrorDeg <= BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg &&
 				CurrentResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady;
-			CurrentResult.RootOnReadinessGateReason = bNoCouplingProofSatisfiedThisFrame
-				? TEXT("ready")
-				: TEXT("phase1_root_on_readiness_requires_pelvis_coupling");
+			if (!CurrentResult.bRootOnDirectPelvisLinkAngularSatisfied)
+			{
+				const bool bTiltLimitedViability =
+					IsPhase1TiltLimitedRootOnViability(Owner->LastPhase1PelvisCouplingRotationForensics, Settings);
+				CurrentResult.RootOnReadinessGateReason = bTiltLimitedViability
+					? TEXT("phase1_root_on_readiness_tilt_limited_viability")
+					: TEXT("phase1_root_on_readiness_pelvis_angular_incoherent");
+			}
+			else if (CurrentResult.PelvisThighLAngularErrorDeg > BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg ||
+				CurrentResult.PelvisThighRAngularErrorDeg > BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg)
+			{
+				CurrentResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient");
+			}
+			else if (CurrentResult.PelvisSpine01AngularErrorDeg > BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg)
+			{
+				CurrentResult.RootOnReadinessGateReason =
+					IsPhase1TiltLimitedRootOnViability(Owner->LastPhase1PelvisCouplingRotationForensics, Settings)
+						? TEXT("phase1_root_on_readiness_tilt_limited_viability")
+						: TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient");
+			}
+			else
+			{
+				CurrentResult.RootOnReadinessGateReason = bNoCouplingProofSatisfiedThisFrame
+					? TEXT("ready")
+					: TEXT("phase1_root_on_readiness_requires_pelvis_coupling");
+			}
 			Diagnostics.Phase1RootOnReadinessGateReason = CurrentResult.RootOnReadinessGateReason;
 			EmitNoCouplingProofLog(
 				bNoCouplingProofSatisfiedThisFrame ? TEXT("satisfied") : TEXT("progress"),
@@ -1244,6 +1279,60 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				FString CaptureReason;
 				if (CaptureCertifiedHandoff(Owner, Settings, CaptureReason))
 				{
+					const bool bTiltLimitedViability =
+						(CertifiedLateValidationResult.RootOnReadinessGateReason == TEXT("phase1_root_on_readiness_pelvis_angular_incoherent") ||
+						 CertifiedLateValidationResult.RootOnReadinessGateReason == TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient")) &&
+						IsPhase1TiltLimitedRootOnViability(Owner->LastPhase1PelvisCouplingRotationForensics, Settings);
+					const FString ResolvedRootOnDenialReason = bTiltLimitedViability
+						? TEXT("phase1_root_on_readiness_tilt_limited_viability")
+						: CertifiedLateValidationResult.RootOnReadinessGateReason;
+					if (!CertifiedLateValidationResult.bRootOnReadinessProven &&
+						(ResolvedRootOnDenialReason == TEXT("phase1_root_on_readiness_pelvis_angular_incoherent") ||
+						 ResolvedRootOnDenialReason == TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient") ||
+						 ResolvedRootOnDenialReason == TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient") ||
+						 ResolvedRootOnDenialReason == TEXT("phase1_root_on_readiness_tilt_limited_viability")))
+					{
+						const FString DenialReason = ResolvedRootOnDenialReason;
+						Diagnostics.FailureReason = DenialReason;
+						Diagnostics.Phase1RootOnReadinessGateReason = DenialReason;
+						if (DenialReason == TEXT("phase1_root_on_readiness_tilt_limited_viability"))
+						{
+							UE_LOG(
+								LogPhysAnimBridge,
+								Warning,
+								TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f requiredTiltDeg=%.2f unconstrainedTiltDeg=%.2f unconstrainedPelvisThighLAngular=%.2f unconstrainedPelvisThighRAngular=%.2f unconstrainedPelvisSpine01Angular=%.2f"),
+								*DenialReason,
+								CertifiedLateValidationResult.PelvisThighLErrorCm,
+								CertifiedLateValidationResult.PelvisThighRErrorCm,
+								CertifiedLateValidationResult.PelvisSpine01ErrorCm,
+								CertifiedLateValidationResult.PelvisThighLAngularErrorDeg,
+								CertifiedLateValidationResult.PelvisThighRAngularErrorDeg,
+								CertifiedLateValidationResult.PelvisSpine01AngularErrorDeg,
+								Settings.BalancePhase2EntryMaxRootTiltDeg,
+								CertifiedHandoff.RootOnReadinessUnconstrainedTiltDeg,
+								CertifiedHandoff.RootOnReadinessUnconstrainedPelvisThighLAngularErrorDeg,
+								CertifiedHandoff.RootOnReadinessUnconstrainedPelvisThighRAngularErrorDeg,
+								CertifiedHandoff.RootOnReadinessUnconstrainedPelvisSpine01AngularErrorDeg);
+						}
+						else
+						{
+							UE_LOG(
+								LogPhysAnimBridge,
+								Warning,
+								TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f"),
+								*DenialReason,
+								CertifiedLateValidationResult.PelvisThighLErrorCm,
+								CertifiedLateValidationResult.PelvisThighRErrorCm,
+								CertifiedLateValidationResult.PelvisSpine01ErrorCm,
+								CertifiedLateValidationResult.PelvisThighLAngularErrorDeg,
+								CertifiedLateValidationResult.PelvisThighRAngularErrorDeg,
+								CertifiedLateValidationResult.PelvisSpine01AngularErrorDeg);
+						}
+						Owner->ReleaseTransitionOwnedShellLock();
+						MarkSafePhase2Denied(Owner, DenialReason);
+						return;
+					}
+
 					if (CertifiedLateValidationResult.Outcome == EBalanceLateValidationOutcome::Outcome_SafeDenyUpperOnly)
 					{
 						const FString DenialReason = TEXT("phase2_upper_only_handoff_safe_denied");
@@ -2282,7 +2371,19 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		FString DenyReason;
 		if (!ValidatePhase2EntryPreconditions(Owner, EffectiveSettings, DenyReason))
 		{
-			if (IsPhase1OwnedCondition(DenyReason))
+			if ((DenyReason == TEXT("phase1_root_on_readiness_pelvis_angular_incoherent") ||
+				 DenyReason == TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient") ||
+				 DenyReason == TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient")) &&
+				IsPhase1TiltLimitedRootOnViability(Owner->LastPhase1PelvisCouplingRotationForensics, EffectiveSettings))
+			{
+				DenyReason = TEXT("phase1_root_on_readiness_tilt_limited_viability");
+			}
+			const bool bTerminalPhase1ReadinessBlocker =
+				DenyReason == TEXT("phase1_root_on_readiness_pelvis_angular_incoherent") ||
+				DenyReason == TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient") ||
+				DenyReason == TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient") ||
+				DenyReason == TEXT("phase1_root_on_readiness_tilt_limited_viability");
+			if (IsPhase1OwnedCondition(DenyReason) && !bTerminalPhase1ReadinessBlocker)
 			{
 				ReturnToPhase1Prepare(Owner, DenyReason, TEXT("PHASE2_ENTRY_RETURN_TO_PHASE1"));
 				return;

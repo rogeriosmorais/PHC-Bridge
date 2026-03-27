@@ -354,6 +354,9 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase2EntryMaxRootAngularSpeed = 20.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase2EntryMaxRootTiltDeg = 25.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase2EntryMaxShellOffsetDelta = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
@@ -522,6 +525,7 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(BalancePhase1HipQuarantineDurationSeconds, Other.BalancePhase1HipQuarantineDurationSeconds) &&
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxRootLinearSpeed, Other.BalancePhase2EntryMaxRootLinearSpeed) &&
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxRootAngularSpeed, Other.BalancePhase2EntryMaxRootAngularSpeed) &&
+			FMath::IsNearlyEqual(BalancePhase2EntryMaxRootTiltDeg, Other.BalancePhase2EntryMaxRootTiltDeg) &&
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxShellOffsetDelta, Other.BalancePhase2EntryMaxShellOffsetDelta) &&
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxShellVelocityDelta, Other.BalancePhase2EntryMaxShellVelocityDelta) &&
 			FMath::IsNearlyEqual(BalancePhase2EntryMaxTargetDeltaDeg, Other.BalancePhase2EntryMaxTargetDeltaDeg) &&
@@ -633,6 +637,19 @@ struct FPhysAnimPendingDistalOwnershipCheck
 	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
 	int32 TransitionPhase = 0;
 	FString CallSiteReason;
+};
+
+struct FPhase1PelvisCouplingRotationForensics
+{
+	bool bLiveTiltProtected = false;
+	bool bTiltProtectionForced = false;
+	float UnconstrainedTiltDeg = 0.0f;
+	float UnconstrainedAngularThresholdOverflowDeg = 0.0f;
+	float UnconstrainedLeftThighAngularErrorDeg = 0.0f;
+	float UnconstrainedRightThighAngularErrorDeg = 0.0f;
+	float UnconstrainedSpineAngularErrorDeg = 0.0f;
+	float AppliedTiltDeg = 0.0f;
+	float AppliedAngularThresholdOverflowDeg = 0.0f;
 };
 
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
@@ -1133,6 +1150,7 @@ private:
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
 	bool bPhase1TiltDiagnosticEmitted = false;
 	bool bPhase1PelvisCouplingSkipLogged = false;
+	FPhase1PelvisCouplingRotationForensics LastPhase1PelvisCouplingRotationForensics;
 	bool bPelvisResetAppliedThisTick = false;
 	float BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
 	float BalanceScenarioPeakPelvisDisplacementCm = 0.0f;

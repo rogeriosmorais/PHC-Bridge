@@ -96,17 +96,24 @@ float FPhysAnimBalanceReadyTransition::GetRootBodyModifierSoftSimAlpha() const
 
 float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneName) const
 {
-	if (!BalanceTransitionSets::IsProximal(BoneName))
+	const bool bIsRootOrProximal =
+		BoneName == PhysAnimBridge::GetRootBoneName() ||
+		BalanceTransitionSets::IsProximal(BoneName);
+	if (!bIsRootOrProximal)
 	{
 		return 1.0f;
 	}
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
-		// Keep the certified proximal control path active during RootOn, but soften
-		// the first simulated step so the warm start does not immediately inject a
-		// stronger control impulse than the pre-root-on handoff ever proved.
-		return PhaseTimeSeconds < 0.05f ? 0.5f : 1.0f;
+		// RootOn should warm-start from the accepted live state, not apply a new
+		// proximal control impulse on the same frame that root simulation is added.
+		if (PhaseTimeSeconds < 0.05f)
+		{
+			return 0.0f;
+		}
+
+		return FMath::Clamp((PhaseTimeSeconds - 0.05f) / 0.10f, 0.0f, 1.0f);
 	}
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
@@ -198,7 +205,9 @@ float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(FName
 			 BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" ||
 			 BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
-			return Settings.BalanceBootstrapExtraDampingMultiplier * 4.0f;
+			// Flip-frame RootOn should not inject damping torques into the preserved
+			// proximal set before the new root-sim state has even taken one step.
+			return 0.0f;
 		}
 	}
 
