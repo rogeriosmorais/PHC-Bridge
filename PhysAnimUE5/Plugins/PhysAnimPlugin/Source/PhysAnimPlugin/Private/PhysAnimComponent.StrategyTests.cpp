@@ -650,6 +650,49 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibActionHistorySnapshotRoundTripTest,
+		"PhysAnim.Component.Phase1AutoCalibActionHistorySnapshotRoundTrip",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibActionHistorySnapshotRoundTripTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibBaselineSnapshot Snapshot;
+		const TArray<float> ConditionedActions = { 1.0f, 2.0f, 3.0f };
+		const TArray<float> PreviousConditionedActions = { 4.0f, 5.0f };
+		const TArray<float> ActionOutputs = { 6.0f, 7.0f, 8.0f, 9.0f };
+		const TArray<float> PreviousActionOutputs = { 10.0f, 11.0f, 12.0f };
+
+		UPhysAnimComponent::TestOnlyStorePhase1AutoCalibActionHistory(
+			Snapshot,
+			ConditionedActions,
+			PreviousConditionedActions,
+			ActionOutputs,
+			PreviousActionOutputs);
+
+		TestEqual(TEXT("Snapshot stores conditioned actions"), Snapshot.ConditionedActionBuffer, ConditionedActions);
+		TestEqual(TEXT("Snapshot stores previous conditioned actions"), Snapshot.PreviousConditionedActionBuffer, PreviousConditionedActions);
+		TestEqual(TEXT("Snapshot stores action outputs"), Snapshot.ActionOutputBuffer, ActionOutputs);
+		TestEqual(TEXT("Snapshot stores previous action outputs distinctly"), Snapshot.PreviousActionOutputBuffer, PreviousActionOutputs);
+
+		TArray<float> RestoredConditionedActions = { -1.0f };
+		TArray<float> RestoredPreviousConditionedActions = { -2.0f };
+		TArray<float> RestoredActionOutputs = { -3.0f };
+		TArray<float> RestoredPreviousActionOutputs = { -4.0f };
+		UPhysAnimComponent::TestOnlyRestorePhase1AutoCalibActionHistory(
+			Snapshot,
+			RestoredConditionedActions,
+			RestoredPreviousConditionedActions,
+			RestoredActionOutputs,
+			RestoredPreviousActionOutputs);
+
+		TestEqual(TEXT("Restore round-trips conditioned actions"), RestoredConditionedActions, ConditionedActions);
+		TestEqual(TEXT("Restore round-trips previous conditioned actions"), RestoredPreviousConditionedActions, PreviousConditionedActions);
+		TestEqual(TEXT("Restore round-trips action outputs"), RestoredActionOutputs, ActionOutputs);
+		TestEqual(TEXT("Restore round-trips previous action outputs"), RestoredPreviousActionOutputs, PreviousActionOutputs);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibStageACandidatesTest,
 		"PhysAnim.Component.Phase1AutoCalibStageACandidates",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

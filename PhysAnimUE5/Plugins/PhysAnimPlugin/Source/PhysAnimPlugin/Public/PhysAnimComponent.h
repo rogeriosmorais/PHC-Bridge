@@ -1032,11 +1032,51 @@ public:
 	bool StartPhase1AutoCalibTrial(FString& OutError);
 	static bool IsBetterPhase1AutoCalibScore(const FPhase1AutoCalibScore& Candidate, const FPhase1AutoCalibScore& CurrentBest);
 	static void FinalizePhase1AutoCalibScore(FPhase1AutoCalibScore& InOutScore);
+	static void StorePhase1AutoCalibActionHistory(
+		FPhase1AutoCalibBaselineSnapshot& Snapshot,
+		const TArray<float>& ConditionedActions,
+		const TArray<float>& PreviousConditionedActions,
+		const TArray<float>& ActionOutputs,
+		const TArray<float>& PreviousActionOutputs);
+	static void RestorePhase1AutoCalibActionHistory(
+		const FPhase1AutoCalibBaselineSnapshot& Snapshot,
+		TArray<float>& ConditionedActions,
+		TArray<float>& PreviousConditionedActions,
+		TArray<float>& ActionOutputs,
+		TArray<float>& PreviousActionOutputs);
 #endif
 
 #if WITH_DEV_AUTOMATION_TESTS
 	static bool TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState State) { return IsBalanceEntryState(State); }
 	static bool TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState State) { return IsBalanceActiveState(State); }
+	static void TestOnlyStorePhase1AutoCalibActionHistory(
+		FPhase1AutoCalibBaselineSnapshot& Snapshot,
+		const TArray<float>& ConditionedActions,
+		const TArray<float>& PreviousConditionedActions,
+		const TArray<float>& ActionOutputs,
+		const TArray<float>& PreviousActionOutputs)
+	{
+		StorePhase1AutoCalibActionHistory(
+			Snapshot,
+			ConditionedActions,
+			PreviousConditionedActions,
+			ActionOutputs,
+			PreviousActionOutputs);
+	}
+	static void TestOnlyRestorePhase1AutoCalibActionHistory(
+		const FPhase1AutoCalibBaselineSnapshot& Snapshot,
+		TArray<float>& ConditionedActions,
+		TArray<float>& PreviousConditionedActions,
+		TArray<float>& ActionOutputs,
+		TArray<float>& PreviousActionOutputs)
+	{
+		RestorePhase1AutoCalibActionHistory(
+			Snapshot,
+			ConditionedActions,
+			PreviousConditionedActions,
+			ActionOutputs,
+			PreviousActionOutputs);
+	}
 	static bool TestOnlyShouldRunRootOnReadinessUltraFineMarginSweep(float RootOnReadinessTotalDeficitDeg)
 	{
 		return ShouldRunRootOnReadinessUltraFineMarginSweep(RootOnReadinessTotalDeficitDeg);
@@ -1453,6 +1493,7 @@ private:
 	TArray<float> MimicTargetPosesBuffer;
 	TArray<float> TerrainBuffer;
 	TArray<float> ActionOutputBuffer;
+	TArray<float> PreviousActionOutputBuffer;
 	TArray<float> PreviousConditionedActionBuffer;
 	TArray<float> ConditionedActionBuffer;
 	TArray<UE::NNE::FTensorBindingCPU> InputBindings;

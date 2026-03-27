@@ -30,6 +30,7 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		}
 	}
 
+	const TArray<float> ActionOutputsBeforeRun = ActionOutputBuffer;
 	const double RunSyncStartSeconds = FPlatformTime::Seconds();
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_RunSync);
@@ -50,6 +51,7 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 			return false;
 		}
 	}
+	PreviousActionOutputBuffer = ActionOutputsBeforeRun;
 
 	return true;
 }

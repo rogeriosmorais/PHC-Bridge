@@ -4131,6 +4131,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 {
 	ConditionedActionBuffer.Reset();
 	PreviousConditionedActionBuffer.Reset();
+	PreviousActionOutputBuffer.Reset();
 	PreviousControlTargetRotations.Reset();
 	LastActionDiagnostics = {};
 	LastControlTargetDiagnostics = {};

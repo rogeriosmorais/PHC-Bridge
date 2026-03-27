@@ -23,6 +23,32 @@ namespace
 	}
 }
 
+void UPhysAnimComponent::StorePhase1AutoCalibActionHistory(
+	FPhase1AutoCalibBaselineSnapshot& Snapshot,
+	const TArray<float>& ConditionedActions,
+	const TArray<float>& PreviousConditionedActions,
+	const TArray<float>& ActionOutputs,
+	const TArray<float>& PreviousActionOutputs)
+{
+	Snapshot.ConditionedActionBuffer = ConditionedActions;
+	Snapshot.PreviousConditionedActionBuffer = PreviousConditionedActions;
+	Snapshot.ActionOutputBuffer = ActionOutputs;
+	Snapshot.PreviousActionOutputBuffer = PreviousActionOutputs;
+}
+
+void UPhysAnimComponent::RestorePhase1AutoCalibActionHistory(
+	const FPhase1AutoCalibBaselineSnapshot& Snapshot,
+	TArray<float>& ConditionedActions,
+	TArray<float>& PreviousConditionedActions,
+	TArray<float>& ActionOutputs,
+	TArray<float>& PreviousActionOutputs)
+{
+	ConditionedActions = Snapshot.ConditionedActionBuffer;
+	PreviousConditionedActions = Snapshot.PreviousConditionedActionBuffer;
+	ActionOutputs = Snapshot.ActionOutputBuffer;
+	PreviousActionOutputs = Snapshot.PreviousActionOutputBuffer;
+}
+
 bool UPhysAnimComponent::CapturePhase1AutoCalibBaseline(FPhase1AutoCalibBaselineSnapshot& OutSnapshot, FString& OutError) const
 {
 	OutError.Reset();
@@ -76,13 +102,15 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibBaseline(FPhase1AutoCalibBaseline
 
 	OutSnapshot.PreviousControlTargetRotations = PreviousControlTargetRotations;
 	OutSnapshot.PolicyBlendStartControlTargetRotations = PolicyBlendStartControlTargetRotations;
-	OutSnapshot.ConditionedActionBuffer = ConditionedActionBuffer;
-	OutSnapshot.PreviousConditionedActionBuffer = PreviousConditionedActionBuffer;
 	OutSnapshot.SelfObservationBuffer = SelfObservationBuffer;
 	OutSnapshot.MimicTargetPosesBuffer = MimicTargetPosesBuffer;
 	OutSnapshot.TerrainBuffer = TerrainBuffer;
-	OutSnapshot.ActionOutputBuffer = ActionOutputBuffer;
-	OutSnapshot.PreviousActionOutputBuffer = PreviousConditionedActionBuffer;
+	StorePhase1AutoCalibActionHistory(
+		OutSnapshot,
+		ConditionedActionBuffer,
+		PreviousConditionedActionBuffer,
+		ActionOutputBuffer,
+		PreviousActionOutputBuffer);
 	OutSnapshot.LastValidPoseSearchResult = LastValidPoseSearchResult;
 	OutSnapshot.ConsecutiveInvalidPoseSearchFrames = ConsecutiveInvalidPoseSearchFrames;
 	OutSnapshot.BridgeIntentState = BridgeIntentState;
@@ -247,12 +275,15 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 		}
 	}
 
-	ConditionedActionBuffer = Snapshot.ConditionedActionBuffer;
-	PreviousConditionedActionBuffer = Snapshot.PreviousConditionedActionBuffer;
 	SelfObservationBuffer = Snapshot.SelfObservationBuffer;
 	MimicTargetPosesBuffer = Snapshot.MimicTargetPosesBuffer;
 	TerrainBuffer = Snapshot.TerrainBuffer;
-	ActionOutputBuffer = Snapshot.ActionOutputBuffer;
+	RestorePhase1AutoCalibActionHistory(
+		Snapshot,
+		ConditionedActionBuffer,
+		PreviousConditionedActionBuffer,
+		ActionOutputBuffer,
+		PreviousActionOutputBuffer);
 	LastValidPoseSearchResult = Snapshot.LastValidPoseSearchResult;
 	ConsecutiveInvalidPoseSearchFrames = Snapshot.ConsecutiveInvalidPoseSearchFrames;
 	BridgeIntentState = Snapshot.BridgeIntentState;
