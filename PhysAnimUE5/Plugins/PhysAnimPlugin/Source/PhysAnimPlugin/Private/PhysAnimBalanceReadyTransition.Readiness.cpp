@@ -25,11 +25,22 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 		return false;
 	}
 
-	// 2. Root Stability Gate
-	if (Domain.RootLinearSpeed > Settings.MaxRootLinearSpeedCmPerSecond || 
-		Domain.RootAngularSpeed > Settings.MaxRootAngularSpeedDegPerSecond)
+	// 2. Phase-Aware Root Stability Gate
+	float LinearThreshold = Settings.MaxRootLinearSpeedCmPerSecond;
+	float AngularThreshold = Settings.MaxRootAngularSpeedDegPerSecond;
+	FString InstabilityReason = BalanceReadinessReasons::FailStopPrecursor;
+
+	if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		OutReason = BalanceReadinessReasons::FailStopPrecursor;
+		LinearThreshold *= 2.5f;
+		AngularThreshold *= 3.0f;
+		InstabilityReason = BalanceReadinessReasons::Phase3InstabilitySpike;
+	}
+
+	if (Domain.RootLinearSpeed > LinearThreshold || 
+		Domain.RootAngularSpeed > AngularThreshold)
+	{
+		OutReason = InstabilityReason;
 		return false;
 	}
 
@@ -47,16 +58,19 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 		return false;
 	}
 
-	// 5. Shell Integrity Gate
-	if (Domain.ShellPlanarOffsetCm > Settings.BalancePhase2EntryMaxShellOffsetDelta)
+	// 5. Shell Integrity Gate (Pre-RootOn or Post-RootSettle only)
+	if (Domain.CurrentPhase != EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		OutReason = BalanceReadinessReasons::ShellOffsetTooHigh;
-		return false;
-	}
-	if (Domain.ShellPlanarVelocityCmPerSec > Settings.BalancePhase2EntryMaxShellVelocityDelta)
-	{
-		OutReason = BalanceReadinessReasons::ShellVelocityTooHigh;
-		return false;
+		if (Domain.ShellPlanarOffsetCm > Settings.BalancePhase2EntryMaxShellOffsetDelta)
+		{
+			OutReason = BalanceReadinessReasons::ShellOffsetTooHigh;
+			return false;
+		}
+		if (Domain.ShellPlanarVelocityCmPerSec > Settings.BalancePhase2EntryMaxShellVelocityDelta)
+		{
+			OutReason = BalanceReadinessReasons::ShellVelocityTooHigh;
+			return false;
+		}
 	}
 
 	// 6. Control Target Continuity Gate
@@ -65,6 +79,20 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 	{
 		OutReason = BalanceReadinessReasons::TargetDiscontinuityTooHigh;
 		return false;
+	}
+
+	// 7. Topology Preservation Gate (LateValidate and beyond)
+	if (Domain.CurrentPhase != EBalanceReadyTransitionPhase::BRT_Phase1_Prepare)
+	{
+		if (!BalanceTransitionSets::IsExpectedPhase2Topology(
+				Domain.CertifiedSimCount,
+				Domain.SimCount,
+				Domain.CertifiedDistalSimCount,
+				Domain.DistalSimCount))
+		{
+			OutReason = BalanceReadinessReasons::TopologyMismatch;
+			return false;
+		}
 	}
 
 	OutReason = BalanceReadinessReasons::Ready;
@@ -264,6 +292,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 	}
 
 	FPhysAnimStabilizationDomain Domain;
+	Domain.CurrentPhase = InternalPhase;
 	Domain.RootLinearSpeed = Diagnostics.RootSpeed;
 	Domain.RootAngularSpeed = Diagnostics.RootAngularSpeed;
 	Domain.RootGroundDistance = CachedConvergenceSnapshot.RootGroundDistance;
@@ -275,6 +304,22 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 	Domain.MaxTargetDeltaDegrees = ControlTargetDiagnostics.MaxTargetDeltaDegrees;
 	Domain.MeanTargetDeltaDegrees = ControlTargetDiagnostics.MeanTargetDeltaDegrees;
 	
+	TArray<FName> SimulatingBones;
+	Owner->GetSimulatingBodies(SimulatingBones);
+	TSet<FName> SimulatingBoneSet(SimulatingBones);
+	Domain.SimCount = SimulatingBones.Num();
+	
+	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+	{
+		if (!SimulatingBoneSet.Contains(BoneName)) continue;
+		if (BalanceTransitionSets::IsProximal(BoneName)) Domain.ProximalSimCount++;
+		else if (BalanceTransitionSets::IsDistalLowerLimb(BoneName)) Domain.DistalSimCount++;
+		else Domain.UpperBodySimCount++;
+	}
+
+	Domain.CertifiedSimCount = CertifiedHandoff.SimCount;
+	Domain.CertifiedDistalSimCount = CertifiedHandoff.DistalSimCount;
+
 	USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
 	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
 	FBodyInstance* PelvisBody = Mesh ? Mesh->GetBodyInstance(RootBoneName) : nullptr;
@@ -367,47 +412,31 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	const FVector PelvisAngularVelocityDegPerSec = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
 	const float PelvisLinearSpeed = PelvisLinearVelocity.Size();
 	const float PelvisAngularSpeed = PelvisAngularVelocityDegPerSec.Size();
-	const float Phase3LinearInstabilityThreshold = Settings.MaxRootLinearSpeedCmPerSecond * 2.5f;
-	const float Phase3AngularInstabilityThreshold = Settings.MaxRootAngularSpeedDegPerSecond * 3.0f;
 
-	// Section 17.4 - Root simulation spike (instability)
-	if (PelvisLinearSpeed > Phase3LinearInstabilityThreshold ||
-		PelvisAngularSpeed > Phase3AngularInstabilityThreshold)
-	{
-		OutReason = TEXT("phase3_post_root_on_instability");
-		return false;
-	}
-
-	// Section 17.3 - post-root-on topology preserved
+	FPhysAnimStabilizationDomain Domain;
+	Domain.CurrentPhase = InternalPhase;
+	Domain.RootLinearSpeed = PelvisLinearSpeed;
+	Domain.RootAngularSpeed = PelvisAngularSpeed;
+	Domain.bRootSimulating = true; // Confirmed above
+	
 	TArray<FName> SimulatingBones;
 	Owner->GetSimulatingBodies(SimulatingBones);
 	TSet<FName> SimulatingBoneSet(SimulatingBones);
-	int32 ProximalSimCount = 0;
-	int32 DistalSimCount = 0;
+	Domain.SimCount = SimulatingBones.Num();
+	
 	for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
 	{
-		if (!SimulatingBoneSet.Contains(BoneName))
-		{
-			continue;
-		}
-
-		if (BalanceTransitionSets::IsProximal(BoneName))
-		{
-			ProximalSimCount++;
-		}
-		else if (BalanceTransitionSets::IsDistalLowerLimb(BoneName))
-		{
-			DistalSimCount++;
-		}
+		if (!SimulatingBoneSet.Contains(BoneName)) continue;
+		if (BalanceTransitionSets::IsProximal(BoneName)) Domain.ProximalSimCount++;
+		else if (BalanceTransitionSets::IsDistalLowerLimb(BoneName)) Domain.DistalSimCount++;
+		else Domain.UpperBodySimCount++;
 	}
 
-	if (!BalanceTransitionSets::IsExpectedPhase2Topology(
-			CertifiedHandoff.SimCount,
-			SimulatingBones.Num(),
-			CertifiedHandoff.DistalSimCount,
-			DistalSimCount))
+	Domain.CertifiedSimCount = CertifiedHandoff.SimCount;
+	Domain.CertifiedDistalSimCount = CertifiedHandoff.DistalSimCount;
+
+	if (!IsSnapshotReady(Domain, Settings, OutReason))
 	{
-		OutReason = TEXT("phase3_topology_regressed");
 		return false;
 	}
 

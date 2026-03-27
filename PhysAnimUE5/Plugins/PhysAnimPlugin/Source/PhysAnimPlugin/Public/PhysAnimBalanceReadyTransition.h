@@ -278,6 +278,8 @@ namespace BalanceReadinessReasons
 	static const FString ShellVelocityTooHigh = TEXT("shell_velocity_too_high");
 	static const FString TargetDiscontinuityTooHigh = TEXT("target_discontinuity_too_high");
 	static const FString RootSimulationDropped = TEXT("root_simulation_dropped");
+	static const FString TopologyMismatch = TEXT("topology_mismatch");
+	static const FString Phase3InstabilitySpike = TEXT("phase3_post_root_on_instability");
 }
 
 /** 
@@ -294,6 +296,19 @@ struct FPhysAnimStabilizationDomain
 	float MaxTargetDeltaDegrees = 0.0f;
 	float MeanTargetDeltaDegrees = 0.0f;
 	bool bRootSimulating = false;
+
+	// Topology Metrics
+	int32 SimCount = 0;
+	int32 ProximalSimCount = 0;
+	int32 DistalSimCount = 0;
+	int32 UpperBodySimCount = 0;
+
+	// Baseline Topology (Handoff)
+	int32 CertifiedSimCount = 0;
+	int32 CertifiedDistalSimCount = 0;
+
+	// Contextual Metrics
+	EBalanceReadyTransitionPhase CurrentPhase = EBalanceReadyTransitionPhase::BRT_Phase1_Prepare;
 };
 
 struct FPhase1AcceptedConvergenceSnapshot

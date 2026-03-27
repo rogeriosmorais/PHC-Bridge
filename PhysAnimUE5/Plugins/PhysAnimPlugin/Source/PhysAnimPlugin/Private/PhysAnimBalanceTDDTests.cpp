@@ -140,6 +140,33 @@ bool FPhysAnimBalanceReadinessMathTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("F3 Reason"), ProgressionReason, BalanceReadinessReasons::Ready);
 	}
 
+	// --- 11. Adversarial Coverage: Topology Preservation (Phase 2) ---
+	{
+		FPhysAnimStabilizationDomain D = GetStableDomain();
+		D.CurrentPhase = EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate;
+		D.CertifiedSimCount = 20;
+		D.SimCount = 19; // Missing a bone
+		D.CertifiedDistalSimCount = 4;
+		D.DistalSimCount = 4;
+
+		TestFalse(TEXT("Topology mismatch in Phase 2 must be rejected"), FPhysAnimBalanceReadyTransition::IsSnapshotReady(D, GetDefaultSettings(), Reason));
+		TestEqual(TEXT("Reason should be topology_mismatch"), Reason, BalanceReadinessReasons::TopologyMismatch);
+	}
+
+	// --- 12. Adversarial Coverage: Phase 3 Stability (Relaxed) ---
+	{
+		FPhysAnimStabilizationDomain D = GetStableDomain();
+		D.CurrentPhase = EBalanceReadyTransitionPhase::BRT_Phase3_Settle;
+		D.RootLinearSpeed = 150.0f; // Above base 100.0, but below 2.5x (250.0)
+
+		TestTrue(TEXT("Phase 3 should accept 1.5x speed (relaxed)"), FPhysAnimBalanceReadyTransition::IsSnapshotReady(D, GetDefaultSettings(), Reason));
+		TestEqual(TEXT("Reason should be ready"), Reason, BalanceReadinessReasons::Ready);
+
+		D.RootLinearSpeed = 300.0f; // Above 2.5x threshold
+		TestFalse(TEXT("Phase 3 should reject 3.0x speed spike"), FPhysAnimBalanceReadyTransition::IsSnapshotReady(D, GetDefaultSettings(), Reason));
+		TestEqual(TEXT("Reason should be phase3_post_root_on_instability"), Reason, BalanceReadinessReasons::Phase3InstabilitySpike);
+	}
+
 	return true;
 }
 
