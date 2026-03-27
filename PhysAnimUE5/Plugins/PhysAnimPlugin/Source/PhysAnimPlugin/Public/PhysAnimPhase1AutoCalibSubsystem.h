@@ -5,7 +5,6 @@
 
 #include "PhysAnimPhase1AutoCalibSubsystem.generated.h"
 
-#if !UE_BUILD_SHIPPING
 UCLASS()
 class PHYSANIMPLUGIN_API UPhysAnimPhase1AutoCalibSubsystem : public UTickableWorldSubsystem
 {
@@ -32,6 +31,7 @@ private:
 	enum class EAutoCalibStage : uint8
 	{
 		Inactive,
+		AwaitingReadiness,
 		StageA,
 		StageB,
 		StageC,
@@ -49,6 +49,7 @@ private:
 	bool ResolveTargetComponent(const FString& OwnerFilter, UPhysAnimComponent*& OutComponent, FString& OutError) const;
 	bool RunDeterminismPreflight(UPhysAnimComponent& Component, const FPhase1AutoCalibBaselineSnapshot& Baseline, FString& OutError) const;
 	bool BeginNextTrial();
+	void TickAwaitingReadiness();
 	void TickActiveTrial();
 	void FinalizeActiveTrial(bool bTimedOut);
 	void AdvanceStageOrFinish();
@@ -70,10 +71,14 @@ private:
 	TArray<FPhase1AutoCalibTrialResult> StageCResults;
 	FPendingTrial ActiveTrial;
 	double ActiveTrialStartTimeSeconds = -1.0;
+	double CurrentStageStartTimeSeconds = -1.0;
+	double LastReadinessLogTimeSeconds = -1.0;
 	FPhase1AutoCalibLiveMetrics ActiveTrialPeakMetrics;
 	FString LastError;
 	FPhase1AutoCalibReport LatestReport;
 	FPhase1AutoCalibDeterminismFingerprint BaselineFingerprint;
 	int32 NextTrialId = 0;
+	float OriginalBalanceEntryMinPolicyAlpha = 0.9f;
 };
-#endif
+
+

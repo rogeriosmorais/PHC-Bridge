@@ -1013,7 +1013,13 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 
 void UPhysAnimComponent::StopBalancePerturbationMode()
 {
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+	const bool bIsBalanceTransitionalState =
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny;
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery || bIsBalanceTransitionalState)
 	{
 		TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
 		ReleaseStartupMovementLock(true);

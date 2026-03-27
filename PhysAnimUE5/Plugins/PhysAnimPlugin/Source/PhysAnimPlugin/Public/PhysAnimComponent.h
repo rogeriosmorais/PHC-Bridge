@@ -679,6 +679,7 @@ struct FPhase1AutoCalibRequest
 	int32 Seed = 1337;
 	int32 MaxTrials = INDEX_NONE;
 	FString OutputSubfolder;
+	float ReadinessTimeoutSeconds = 30.0f;
 };
 
 struct FPhase1AutoCalibParams
@@ -865,6 +866,18 @@ struct FPhase1AutoCalibBaselineSnapshot
 	float LastHipQuarantineLeftPreDeltaDegrees = 0.0f;
 	float LastHipQuarantineRightPreDeltaDegrees = 0.0f;
 };
+#else
+enum class EPhase1AutoCalibStrategyPreset : uint8 { CurrentDefault };
+struct FPhase1AutoCalibRequest { float ReadinessTimeoutSeconds = 0.0f; FString OwnerFilter; int32 Seed = 0; int32 MaxTrials = 0; FString OutputSubfolder; };
+struct FPhase1AutoCalibParams {};
+struct FPhase1AutoCalibScore {};
+struct FPhase1AutoCalibTrialResult { FPhase1AutoCalibParams Params; FPhase1AutoCalibScore Score; FString TerminalClass; FString TruthfulBlocker; };
+struct FPhase1AutoCalibReport { TArray<FPhase1AutoCalibTrialResult> Trials; TArray<FPhase1AutoCalibTrialResult> ParetoFrontier; FPhase1AutoCalibTrialResult BestCandidate; FPhase1AutoCalibTrialResult BestNearPass; bool bHasBestCandidate; bool bHasBestNearPass; };
+struct FPhase1AutoCalibLiveMetrics { EPhysAnimRuntimeState RuntimeState; EBalanceReadyTransitionPhase TransitionPhase; float RootLinearSpeedCmPerSecond; float RootAngularSpeedDegPerSecond; float RootTiltDeg; float ShellOffsetDeltaCm; float ShellVelocityDeltaCmPerSecond; float MaxTargetDeltaDeg; float MeanTargetDeltaDeg; };
+struct FPhase1AutoCalibDeterminismFingerprint {};
+struct FPhase1AutoCalibBodyState {};
+struct FPhase1AutoCalibBodyModifierState {};
+struct FPhase1AutoCalibBaselineSnapshot { TArray<FPhase1AutoCalibBodyState> Bodies; };
 #endif
 
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))

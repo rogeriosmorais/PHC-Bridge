@@ -225,6 +225,7 @@ namespace
 		Request.Seed = ParseOptionalInt(Args, 1, 1337);
 		Request.MaxTrials = ParseOptionalInt(Args, 2, INDEX_NONE);
 		Request.OutputSubfolder = Args.IsValidIndex(3) ? Args[3] : FString();
+		Request.ReadinessTimeoutSeconds = ParseOptionalFloat(Args, 4, 30.0f);
 
 		FString Error;
 		if (!AutoCalibSubsystem->StartPhase1AutoCalib(Request, Error))
@@ -236,11 +237,12 @@ namespace
 		UE_LOG(
 			LogTemp,
 			Log,
-			TEXT("[PhysAnim] pa.RunPhase1AutoCalib started filter='%s' seed=%d maxTrials=%d output='%s'"),
+			TEXT("[PhysAnim] pa.RunPhase1AutoCalib started filter='%s' seed=%d maxTrials=%d output='%s' readinessTimeout=%.1fs"),
 			Request.OwnerFilter.IsEmpty() ? TEXT("<all>") : *Request.OwnerFilter,
 			Request.Seed,
 			Request.MaxTrials,
-			Request.OutputSubfolder.IsEmpty() ? TEXT("<timestamp>") : *Request.OutputSubfolder);
+			Request.OutputSubfolder.IsEmpty() ? TEXT("<timestamp>") : *Request.OutputSubfolder,
+			Request.ReadinessTimeoutSeconds);
 	}
 
 	static void StopPhase1AutoCalibCommand(const TArray<FString>& Args, UWorld* InWorld)
@@ -283,7 +285,7 @@ namespace
 #if !UE_BUILD_SHIPPING
 	static FAutoConsoleCommandWithWorldAndArgs GRunPhase1AutoCalibCommand(
 		TEXT("pa.RunPhase1AutoCalib"),
-		TEXT("Runs the Phase 1 transactional auto-calibration harness. Optional args: [ownerFilter] [seed] [maxTrials] [outputSubfolder]."),
+		TEXT("Runs the Phase 1 transactional auto-calibration harness. Optional args: [ownerFilter] [seed] [maxTrials] [outputSubfolder] [readinessTimeout]."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&RunPhase1AutoCalibCommand));
 
 	static FAutoConsoleCommandWithWorldAndArgs GStopPhase1AutoCalibCommand(

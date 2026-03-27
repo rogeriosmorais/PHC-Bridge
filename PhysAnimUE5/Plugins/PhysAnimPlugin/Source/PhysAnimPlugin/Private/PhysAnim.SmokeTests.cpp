@@ -11,6 +11,7 @@
 #include "Tests/AutomationEditorCommon.h"
 #include "UObject/UObjectIterator.h"
 #include "Editor.h"
+#include "EngineUtils.h"
 
 namespace
 {
@@ -77,16 +78,16 @@ namespace
 		}
 
 		UPhysAnimComponent* TargetComponent = nullptr;
-		for (TObjectIterator<UPhysAnimComponent> It; It; ++It)
+		for (FActorIterator It(World); It; ++It)
 		{
-			if (IsValid(*It) && (*It)->GetWorld() == World && (*It)->GetRuntimeState() == EPhysAnimRuntimeState::BridgeActive)
+			if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 			{
-				TargetComponent = *It;
+				TargetComponent = Comp;
 				break;
 			}
 		}
 
-		Test->TestNotNull(TEXT("Phase1 auto-calibration smoke finds a BridgeActive component"), TargetComponent);
+		Test->TestNotNull(TEXT("Phase1 auto-calibration smoke finds a candidate component"), TargetComponent);
 		if (!TargetComponent || !TargetComponent->GetOwner())
 		{
 			return true;
@@ -244,6 +245,46 @@ namespace
 		AddCommand(new FWaitLatentCommand(PhysAnimPieG2PresentationLeadInSeconds));
 		AddCommand(new FExecPieConsoleCommand(TEXT("PhysAnim.G2.StartPresentation")));
 		AddCommand(new FWaitLatentCommand(PhysAnimPieG2PresentationDurationSeconds));
+		AddCommand(new FEndPlayMapCommand());
+		return true;
+	}
+	
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPiePhase1AutoCalibSmokeTest,
+		"PhysAnim.PIE.Phase1AutoCalibSmoke",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPiePhase1AutoCalibSmokeTest::RunTest(const FString& Parameters)
+	{
+		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
+		{
+			AddError(FString::Printf(TEXT("%s Failed to open map '%s'."), PhysAnimPiePhase1AutoCalibSmokePrefix, *PhysAnimPieSmokeMap));
+			return false;
+		}
+
+		AddCommand(new FStartPIECommand(false));
+		AddCommand(new FUntilCommand(
+			[]() -> bool { return GEditor != nullptr && IsValid(GEditor->PlayWorld); },
+			[this]() -> bool { AddError(TEXT("PIE did not start")); return true; },
+			PhysAnimPieSmokeStartTimeoutSeconds));
+		
+		// Wait for BridgeActive to be reach and settle before starting.
+		AddCommand(new FWaitLatentCommand(PhysAnimPiePhase1AutoCalibPostBridgeActiveWaitSeconds));
+		
+		AddCommand(new FStartPhase1AutoCalibSmokeCommand(this));
+		
+		// Wait for completion or timeout.
+		AddCommand(new FUntilCommand(
+			[this]() -> bool 
+			{ 
+				if (!GEditor || !GEditor->PlayWorld) return true;
+				UPhysAnimPhase1AutoCalibSubsystem* Subsystem = GEditor->PlayWorld->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>();
+				return Subsystem && !Subsystem->IsPhase1AutoCalibActive();
+			},
+			[this]() -> bool { AddError(TEXT("Phase1 auto-calibration smoke timed out")); return true; },
+			PhysAnimPiePhase1AutoCalibTimeoutSeconds));
+
+		AddCommand(new FValidatePhase1AutoCalibSmokeArtifactsCommand(this));
 		AddCommand(new FEndPlayMapCommand());
 		return true;
 	}
