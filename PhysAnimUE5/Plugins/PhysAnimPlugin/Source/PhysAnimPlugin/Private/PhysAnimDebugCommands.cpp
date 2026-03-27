@@ -237,9 +237,10 @@ namespace
 		UE_LOG(
 			LogTemp,
 			Log,
-			TEXT("[PhysAnim] pa.RunPhase1AutoCalib started filter='%s' seed=%d maxTrials=%d output='%s' readinessTimeout=%.1fs"),
+			TEXT("[PhysAnim] pa.RunPhase1AutoCalib started filter='%s' seed=%d budgetMode=%s maxTrials=%d output='%s' readinessTimeout=%.1fs"),
 			Request.OwnerFilter.IsEmpty() ? TEXT("<all>") : *Request.OwnerFilter,
 			Request.Seed,
+			Request.BudgetMode == EPhase1AutoCalibBudgetMode::Smoke ? TEXT("smoke") : TEXT("full_search"),
 			Request.MaxTrials,
 			Request.OutputSubfolder.IsEmpty() ? TEXT("<timestamp>") : *Request.OutputSubfolder,
 			Request.ReadinessTimeoutSeconds);
@@ -285,7 +286,7 @@ namespace
 #if !UE_BUILD_SHIPPING
 	static FAutoConsoleCommandWithWorldAndArgs GRunPhase1AutoCalibCommand(
 		TEXT("pa.RunPhase1AutoCalib"),
-		TEXT("Runs the Phase 1 transactional auto-calibration harness. Optional args: [ownerFilter] [seed] [maxTrials] [outputSubfolder] [readinessTimeout]."),
+		TEXT("Runs the Phase 1 transactional auto-calibration harness. Optional args: [ownerFilter] [seed] [maxTrials] [outputSubfolder] [readinessTimeout]. Omitting maxTrials keeps the default full-search budget; automation smoke uses the request-side smoke mode."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&RunPhase1AutoCalibCommand));
 
 	static FAutoConsoleCommandWithWorldAndArgs GStopPhase1AutoCalibCommand(

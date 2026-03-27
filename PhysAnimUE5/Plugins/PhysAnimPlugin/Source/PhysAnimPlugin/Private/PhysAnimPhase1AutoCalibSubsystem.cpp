@@ -102,6 +102,42 @@ namespace
 		}
 	}
 
+	const TCHAR* FrontierClassificationToString(const EPhase1AutoCalibFrontierClassification Classification)
+	{
+		switch (Classification)
+		{
+		case EPhase1AutoCalibFrontierClassification::TruthfulPassFound:
+			return TEXT("truthful_pass_found");
+		case EPhase1AutoCalibFrontierClassification::StillThighBlocked:
+			return TEXT("still_thigh_blocked");
+		case EPhase1AutoCalibFrontierClassification::StillSpineBlocked:
+			return TEXT("still_spine_blocked");
+		case EPhase1AutoCalibFrontierClassification::CoupledSpineThighFlip:
+			return TEXT("coupled_spine_thigh_flip");
+		case EPhase1AutoCalibFrontierClassification::FlatNoMaterialImprovement:
+			return TEXT("flat_no_material_improvement");
+		case EPhase1AutoCalibFrontierClassification::Unknown:
+		default:
+			return TEXT("unknown");
+		}
+	}
+
+	const TCHAR* RecommendedActionToString(const EPhase1AutoCalibRecommendedAction Action)
+	{
+		switch (Action)
+		{
+		case EPhase1AutoCalibRecommendedAction::PromoteBestCandidate:
+			return TEXT("promote_best_candidate");
+		case EPhase1AutoCalibRecommendedAction::AddCoupledTradeControlExpansion:
+			return TEXT("add_coupled_trade_control_expansion");
+		case EPhase1AutoCalibRecommendedAction::InvestigateCandidateGeneration:
+			return TEXT("investigate_candidate_generation");
+		case EPhase1AutoCalibRecommendedAction::None:
+		default:
+			return TEXT("none");
+		}
+	}
+
 	bool IsLaterThanPhase1(const EBalanceReadyTransitionPhase Phase)
 	{
 		return Phase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
@@ -291,6 +327,11 @@ namespace
 		FPhase1AutoCalibBlockerCount& Entry = BlockerCounts.AddDefaulted_GetRef();
 		Entry.TruthfulBlocker = TruthfulBlocker;
 		Entry.Count = 1;
+	}
+
+	const FPhase1AutoCalibBlockerCount* FindDominantBlockerCount(const TArray<FPhase1AutoCalibBlockerCount>& BlockerCounts)
+	{
+		return BlockerCounts.IsEmpty() ? nullptr : &BlockerCounts[0];
 	}
 
 	const FPhase1AutoCalibPresetSummary* FindPresetSummary(
@@ -1247,8 +1288,14 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibRepor
 
 	InOutReport.PresetSummaries.Reset();
 	InOutReport.ParetoFrontier.Reset();
+	InOutReport.OverallBlockerCounts.Reset();
 	InOutReport.bHasBestCandidate = false;
 	InOutReport.bHasBestNearPass = false;
+	InOutReport.bHasReproducibleTruthfulPass = false;
+	InOutReport.FrontierClassification = EPhase1AutoCalibFrontierClassification::Unknown;
+	InOutReport.RecommendedAction = EPhase1AutoCalibRecommendedAction::None;
+	InOutReport.RecommendedExpansionName.Reset();
+	InOutReport.DominantTruthfulBlocker.Reset();
 
 	for (int32 TrialIndex = 0; TrialIndex < InOutReport.Trials.Num(); ++TrialIndex)
 	{
@@ -1258,6 +1305,10 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibRepor
 		if (Trial.Score.bContractPassed)
 		{
 			++Summary.ContractPassedCount;
+			if (Trial.bReproducible)
+			{
+				Summary.bHasReproducibleTruthfulPass = true;
+			}
 		}
 		if (Trial.Score.bContractPassed && (!Summary.bHasBestCandidate || IsBetterTrial(Trial, Summary.BestCandidate)))
 		{
@@ -1275,6 +1326,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibRepor
 			InOutReport.BestNearPass = Trial;
 			InOutReport.bHasBestNearPass = true;
 		}
+		AddBlockerCount(InOutReport.OverallBlockerCounts, Trial.TruthfulBlocker);
 	}
 
 	for (const FPhase1AutoCalibTrialResult& Trial : InOutReport.Trials)
@@ -1283,6 +1335,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibRepor
 		{
 			InOutReport.BestCandidate = Trial;
 			InOutReport.bHasBestCandidate = true;
+			InOutReport.bHasReproducibleTruthfulPass = true;
 			break;
 		}
 	}
@@ -1311,6 +1364,26 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibRepor
 			}
 			return A.TruthfulBlocker < B.TruthfulBlocker;
 		});
+		if (const FPhase1AutoCalibBlockerCount* const DominantBlocker = FindDominantBlockerCount(Summary.BlockerCounts))
+		{
+			Summary.DominantTruthfulBlocker = DominantBlocker->TruthfulBlocker;
+		}
+		else
+		{
+			Summary.DominantTruthfulBlocker.Reset();
+		}
+	}
+	Algo::Sort(InOutReport.OverallBlockerCounts, [](const FPhase1AutoCalibBlockerCount& A, const FPhase1AutoCalibBlockerCount& B)
+	{
+		if (A.Count != B.Count)
+		{
+			return A.Count > B.Count;
+		}
+		return A.TruthfulBlocker < B.TruthfulBlocker;
+	});
+	if (const FPhase1AutoCalibBlockerCount* const DominantBlocker = FindDominantBlockerCount(InOutReport.OverallBlockerCounts))
+	{
+		InOutReport.DominantTruthfulBlocker = DominantBlocker->TruthfulBlocker;
 	}
 	Algo::Sort(InOutReport.PresetSummaries, [](const FPhase1AutoCalibPresetSummary& A, const FPhase1AutoCalibPresetSummary& B)
 	{
@@ -1347,6 +1420,72 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibRepor
 			Summary.WorstDirectLinkImprovementVsCurrentDefaultDeg > ScoreReproTolerance;
 		Summary.bImprovesThighAsymmetryVsCurrentDefault =
 			Summary.ThighAsymmetryImprovementVsCurrentDefaultDeg > ScoreReproTolerance;
+	}
+
+	bool bHasThighBlockedPreset = false;
+	bool bHasSpineBlockedPreset = false;
+	bool bAnyPresetImprovesVsCurrentDefault = false;
+	for (const FPhase1AutoCalibPresetSummary& Summary : InOutReport.PresetSummaries)
+	{
+		if (!Summary.DominantTruthfulBlocker.IsEmpty())
+		{
+			if (Summary.DominantTruthfulBlocker.Contains(TEXT("pelvis_thigh_margin_insufficient")))
+			{
+				bHasThighBlockedPreset = true;
+			}
+			if (Summary.DominantTruthfulBlocker.Contains(TEXT("pelvis_spine_margin_insufficient")))
+			{
+				bHasSpineBlockedPreset = true;
+			}
+		}
+
+		if (Summary.bImprovesWorstDirectLinkVsCurrentDefault || Summary.bImprovesThighAsymmetryVsCurrentDefault)
+		{
+			bAnyPresetImprovesVsCurrentDefault = true;
+		}
+	}
+
+	if (InOutReport.bHasReproducibleTruthfulPass)
+	{
+		InOutReport.FrontierClassification = EPhase1AutoCalibFrontierClassification::TruthfulPassFound;
+		InOutReport.RecommendedAction = EPhase1AutoCalibRecommendedAction::PromoteBestCandidate;
+	}
+	else if (bHasThighBlockedPreset && bHasSpineBlockedPreset && bAnyPresetImprovesVsCurrentDefault)
+	{
+		InOutReport.FrontierClassification = EPhase1AutoCalibFrontierClassification::CoupledSpineThighFlip;
+		InOutReport.RecommendedAction = EPhase1AutoCalibRecommendedAction::AddCoupledTradeControlExpansion;
+		InOutReport.RecommendedExpansionName = TEXT("CoupledTradeControlFamily");
+	}
+	else if (bHasThighBlockedPreset && !bHasSpineBlockedPreset)
+	{
+		InOutReport.FrontierClassification = EPhase1AutoCalibFrontierClassification::StillThighBlocked;
+		if (bAnyPresetImprovesVsCurrentDefault)
+		{
+			InOutReport.RecommendedAction = EPhase1AutoCalibRecommendedAction::AddCoupledTradeControlExpansion;
+			InOutReport.RecommendedExpansionName = TEXT("CoupledTradeControlFamily");
+		}
+		else
+		{
+			InOutReport.RecommendedAction = EPhase1AutoCalibRecommendedAction::InvestigateCandidateGeneration;
+		}
+	}
+	else if (!bHasThighBlockedPreset && bHasSpineBlockedPreset)
+	{
+		InOutReport.FrontierClassification = EPhase1AutoCalibFrontierClassification::StillSpineBlocked;
+		if (bAnyPresetImprovesVsCurrentDefault)
+		{
+			InOutReport.RecommendedAction = EPhase1AutoCalibRecommendedAction::AddCoupledTradeControlExpansion;
+			InOutReport.RecommendedExpansionName = TEXT("CoupledTradeControlFamily");
+		}
+		else
+		{
+			InOutReport.RecommendedAction = EPhase1AutoCalibRecommendedAction::InvestigateCandidateGeneration;
+		}
+	}
+	else
+	{
+		InOutReport.FrontierClassification = EPhase1AutoCalibFrontierClassification::FlatNoMaterialImprovement;
+		InOutReport.RecommendedAction = EPhase1AutoCalibRecommendedAction::InvestigateCandidateGeneration;
 	}
 
 	for (const FPhase1AutoCalibTrialResult& Candidate : InOutReport.Trials)
@@ -1472,10 +1611,12 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 		BlockersJson += TEXT("]");
 
 		return FString::Printf(
-			TEXT("{\"preset\":\"%s\",\"trialCount\":%d,\"contractPassedCount\":%d,\"bestCandidate\":%s,\"bestNearPass\":%s,\"worstDirectLinkImprovementVsCurrentDefaultDeg\":%.6f,\"thighAsymmetryImprovementVsCurrentDefaultDeg\":%.6f,\"improvesWorstDirectLinkVsCurrentDefault\":%s,\"improvesThighAsymmetryVsCurrentDefault\":%s,\"blockerCounts\":%s}"),
+			TEXT("{\"preset\":\"%s\",\"trialCount\":%d,\"contractPassedCount\":%d,\"hasReproducibleTruthfulPass\":%s,\"dominantTruthfulBlocker\":\"%s\",\"bestCandidate\":%s,\"bestNearPass\":%s,\"worstDirectLinkImprovementVsCurrentDefaultDeg\":%.6f,\"thighAsymmetryImprovementVsCurrentDefaultDeg\":%.6f,\"improvesWorstDirectLinkVsCurrentDefault\":%s,\"improvesThighAsymmetryVsCurrentDefault\":%s,\"blockerCounts\":%s}"),
 			StrategyPresetToString(Summary.Preset),
 			Summary.TrialCount,
 			Summary.ContractPassedCount,
+			Summary.bHasReproducibleTruthfulPass ? TEXT("true") : TEXT("false"),
+			*JsonEscape(Summary.DominantTruthfulBlocker),
 			Summary.bHasBestCandidate ? *BuildTrialJson(Summary.BestCandidate) : TEXT("null"),
 			Summary.bHasBestNearPass ? *BuildTrialJson(Summary.BestNearPass) : TEXT("null"),
 			Summary.WorstDirectLinkImprovementVsCurrentDefaultDeg,
@@ -1496,12 +1637,29 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 	}
 	PresetSummariesJson += TEXT("]");
 
+	FString OverallBlockersJson = TEXT("[");
+	for (int32 Index = 0; Index < LatestReport.OverallBlockerCounts.Num(); ++Index)
+	{
+		if (Index > 0)
+		{
+			OverallBlockersJson += TEXT(",");
+		}
+		OverallBlockersJson += BuildBlockerCountJson(LatestReport.OverallBlockerCounts[Index]);
+	}
+	OverallBlockersJson += TEXT("]");
+
 	FString SummaryJson = FString::Printf(
-		TEXT("{\"outputDirectory\":\"%s\",\"trialCount\":%d,\"bestCandidate\":%s,\"bestNearPass\":%s,\"presetSummaries\":%s}"),
+		TEXT("{\"outputDirectory\":\"%s\",\"trialCount\":%d,\"hasReproducibleTruthfulPass\":%s,\"frontierClassification\":\"%s\",\"recommendedAction\":\"%s\",\"recommendedExpansionName\":\"%s\",\"dominantTruthfulBlocker\":\"%s\",\"bestCandidate\":%s,\"bestNearPass\":%s,\"overallBlockerCounts\":%s,\"presetSummaries\":%s}"),
 		*JsonEscape(LatestReport.OutputDirectory),
 		LatestReport.Trials.Num(),
+		LatestReport.bHasReproducibleTruthfulPass ? TEXT("true") : TEXT("false"),
+		FrontierClassificationToString(LatestReport.FrontierClassification),
+		RecommendedActionToString(LatestReport.RecommendedAction),
+		*JsonEscape(LatestReport.RecommendedExpansionName),
+		*JsonEscape(LatestReport.DominantTruthfulBlocker),
 		LatestReport.bHasBestCandidate ? *BuildTrialJson(LatestReport.BestCandidate) : TEXT("null"),
 		LatestReport.bHasBestNearPass ? *BuildTrialJson(LatestReport.BestNearPass) : TEXT("null"),
+		*OverallBlockersJson,
 		*PresetSummariesJson);
 	FFileHelper::SaveStringToFile(SummaryJson, *LatestReport.SummaryPath);
 

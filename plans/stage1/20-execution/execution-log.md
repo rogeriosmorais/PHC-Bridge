@@ -460,3 +460,13 @@ Known important reference points from this work:
 - Added TDD for transition snapshot round-trip, auto-calib score ordering, contract-threshold non-mutation, Stage A candidate coverage, and reproducibility classification.
 - Verified with `.\scripts\build.ps1 -Test PhysAnim.Component` and `.\scripts\build.ps1 -Test PhysAnim.Bridge.BalanceStateless`.
 - Attempted a PIE smoke for the harness, but the live runtime still races existing balance-entry queue gates (`queue_bring_up_incomplete`, then `queue_policy_influence_below_threshold`) before a stable transactional start point is available in that map/runtime path, so the failing smoke was not left in the main suite.
+
+## 2026-03-27 — Phase 1 Full-Search Solver Push
+
+- Promoted the full-search path into the primary runtime contract by keeping `FPhase1AutoCalibRequest` defaulted to `FullSearch` with no implicit `maxTrials` truncation, while leaving smoke mode as the explicit automation path.
+- Extended auto-calibration report aggregation with preset-dominant blocker tracking, overall blocker histograms, reproducible-truthful-pass detection, frontier classification, and recommended next action or expansion naming.
+- Extended `summary.json` to write the new top-level frontier fields plus per-preset reproducibility and dominant-blocker summaries, and updated `pa.RunPhase1AutoCalib` logging/help text to reflect full-search-by-default semantics.
+- Added TDD for the request default, truthful-pass promotion, and coupled thigh-versus-spine frontier classification and recommendation logic.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.Phase1AutoCalibSmoke`, and `python .\scripts\read_logs.py`.
+- The latest smoke artifact at `test-results/phase1-autocalib/automation_phase1_smoke/summary.json` now reports `frontierClassification=still_thigh_blocked`, `recommendedAction=add_coupled_trade_control_expansion`, `recommendedExpansionName=CoupledTradeControlFamily`, and `dominantTruthfulBlocker=phase1_root_on_readiness_pelvis_thigh_margin_insufficient`.
+- The bounded best near-pass remains `SpineThenWorstThigh` with a truthful spine blocker (`phase1_root_on_readiness_pelvis_spine_margin_insufficient`) at `worstDirectLinkAngularErrorDeg=32.86`, while the overall frontier still remains dominated by thigh-blocked failures, which is the current truthful basis for the next coupled trade-control search expansion.

@@ -637,6 +637,19 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibRequestDefaultsTest,
+		"PhysAnim.Component.Phase1AutoCalibRequestDefaults",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibRequestDefaultsTest::RunTest(const FString& Parameters)
+	{
+		const FPhase1AutoCalibRequest Request;
+		TestEqual(TEXT("Phase 1 auto-calibration defaults to full-search mode"), Request.BudgetMode, EPhase1AutoCalibBudgetMode::FullSearch);
+		TestEqual(TEXT("Phase 1 auto-calibration defaults to no explicit trial cap"), Request.MaxTrials, INDEX_NONE);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibStageACandidatesTest,
 		"PhysAnim.Component.Phase1AutoCalibStageACandidates",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -730,18 +743,23 @@ namespace
 			false,
 			32.0f,
 			1.8f));
-		Report.Trials.Add(MakePhase1AutoCalibTrial(
+	Report.Trials.Add(MakePhase1AutoCalibTrial(
 			EPhase1AutoCalibStrategyPreset::BalancedCoupled,
 			TEXT("reached_root_on"),
 			TEXT("ready"),
 			true,
 			17.0f,
 			0.8f));
+	Report.Trials.Last().bReproducible = true;
 
-		UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(Report);
+	UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(Report);
 
 		TestTrue(TEXT("Report picks the contract-passing best candidate"), Report.bHasBestCandidate);
 		TestEqual(TEXT("Best candidate comes from the passing preset"), Report.BestCandidate.Params.SourcePreset, EPhase1AutoCalibStrategyPreset::BalancedCoupled);
+	TestTrue(TEXT("Report marks the reproducible truthful pass when one exists"), Report.bHasReproducibleTruthfulPass);
+	TestEqual(TEXT("Truthful pass classification wins when a passing candidate exists"), Report.FrontierClassification, EPhase1AutoCalibFrontierClassification::TruthfulPassFound);
+	TestEqual(TEXT("Passing frontier recommends promotion"), Report.RecommendedAction, EPhase1AutoCalibRecommendedAction::PromoteBestCandidate);
+	TestEqual(TEXT("Passing frontier does not name a follow-up expansion"), Report.RecommendedExpansionName, FString());
 		TestTrue(TEXT("Report picks a near-pass when non-passing trials exist"), Report.bHasBestNearPass);
 		TestEqual(TEXT("Best near-pass comes from the lowest-error failing preset"), Report.BestNearPass.Params.SourcePreset, EPhase1AutoCalibStrategyPreset::SpineBiased);
 		TestEqual(TEXT("Preset summaries are emitted for each preset seen in the trials"), Report.PresetSummaries.Num(), 3);
@@ -776,6 +794,45 @@ namespace
 			TestEqual(TEXT("CurrentDefault baseline improvement stays zero"), DefaultSummary->WorstDirectLinkImprovementVsCurrentDefaultDeg, 0.0f);
 		}
 
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibFrontierClassificationTest,
+		"PhysAnim.Component.Phase1AutoCalibFrontierClassification",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibFrontierClassificationTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibReport Report;
+		Report.Trials.Add(MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::CurrentDefault,
+			TEXT("timed_out"),
+			TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient"),
+			false,
+			34.0f,
+			1.0f));
+		Report.Trials.Add(MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh,
+			TEXT("timed_out"),
+			TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient"),
+			false,
+			32.0f,
+			3.0f));
+		Report.Trials.Add(MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::RescueOnly,
+			TEXT("timed_out"),
+			TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient"),
+			false,
+			33.5f,
+			1.5f));
+
+		UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(Report);
+
+		TestEqual(TEXT("Mixed thigh/spine blockers with frontier improvement classify as coupled flip"), Report.FrontierClassification, EPhase1AutoCalibFrontierClassification::CoupledSpineThighFlip);
+		TestEqual(TEXT("Coupled flip recommends the bounded coupled trade-control expansion"), Report.RecommendedAction, EPhase1AutoCalibRecommendedAction::AddCoupledTradeControlExpansion);
+		TestEqual(TEXT("Coupled flip names the bounded next expansion"), Report.RecommendedExpansionName, FString(TEXT("CoupledTradeControlFamily")));
+		TestEqual(TEXT("Overall dominant blocker keeps the highest-count truthful blocker"), Report.DominantTruthfulBlocker, FString(TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient")));
 		return true;
 	}
 
