@@ -1,6 +1,9 @@
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
 #include "PhysAnimComponentPrivate.h"
 
+#if !UE_BUILD_SHIPPING
+
+
 
 #include "Algo/Sort.h"
 #include "Engine/Engine.h"
@@ -285,6 +288,13 @@ bool UPhysAnimPhase1AutoCalibSubsystem::StartPhase1AutoCalib(const FPhase1AutoCa
 	}
 
 	Component->StopBalancePerturbationMode();
+	
+	if (Component->GetRuntimeState() == EPhysAnimRuntimeState::Uninitialized)
+	{
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimAutoCalib] Target component is uninitialized, calling StartBridge()..."));
+		Component->StartBridge();
+	}
+
 	StopPhase1AutoCalib(TEXT("restart"));
 	ActiveRequest = Request;
 	TargetComponent = Component;
@@ -661,12 +671,17 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickAwaitingReadiness()
 		return;
 	}
 
-	const FPhysAnimStabilizationSettings& Settings = Component->GetConfiguredStabilizationSettings();
+	// Use a copy of settings with the original alpha threshold for the readiness check,
+	// because the component-side BalanceEntryMinPolicyAlpha is overridden to 2.0f 
+	// specifically to block natural triggers during the awaiting-readiness phase.
+	FPhysAnimStabilizationSettings ReadinessSettings = Component->GetConfiguredStabilizationSettings();
+	ReadinessSettings.BalanceEntryMinPolicyAlpha = OriginalBalanceEntryMinPolicyAlpha;
+
 	FString QueueReason;
-	const bool bQueueReady = Component->EvaluateBalanceModeQueueGates(Settings, QueueReason);
+	const bool bQueueReady = Component->EvaluateBalanceModeQueueGates(ReadinessSettings, QueueReason);
 
 	FString PreEntryReason;
-	const bool bPreEntryReady = Component->EvaluateBalanceBridgeActivePreEntryPrerequisites(Settings, PreEntryReason);
+	const bool bPreEntryReady = Component->EvaluateBalanceBridgeActivePreEntryPrerequisites(ReadinessSettings, PreEntryReason);
 
 	if (bQueueReady && bPreEntryReady)
 	{
@@ -705,10 +720,12 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickAwaitingReadiness()
 		return;
 	}
 
-	if (LastReadinessLogTimeSeconds < 0.0 || (World->GetTimeSeconds() - LastReadinessLogTimeSeconds) >= 1.0)
+	if (World->GetTimeSeconds() - LastReadinessLogTimeSeconds >= 1.0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting readiness... elapsed=%.1fs queue=%s preEntry=%s"), 
-			Elapsed, *QueueReason, *PreEntryReason);
+		const UEnum* const StateEnum = StaticEnum<EPhysAnimRuntimeState>();
+		const FString StateName = StateEnum ? StateEnum->GetValueAsString(Component->GetRuntimeState()) : TEXT("unknown");
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting readiness... elapsed=%.1fs state=%s queue=%s preEntry=%s"),
+			Elapsed, *StateName, *QueueReason, *PreEntryReason);
 		LastReadinessLogTimeSeconds = World->GetTimeSeconds();
 	}
 }
@@ -1252,5 +1269,22 @@ FString UPhysAnimPhase1AutoCalibSubsystem::BuildOutputDirectory() const
 			TEXT("phase1-autocalib"),
 			Timestamp));
 }
+
+#else
+
+bool UPhysAnimPhase1AutoCalibSubsystem::DoesSupportWorldType(const EWorldType::Type WorldType) const { return false; }
+void UPhysAnimPhase1AutoCalibSubsystem::Tick(float DeltaTime) {}
+TStatId UPhysAnimPhase1AutoCalibSubsystem::GetStatId() const { RETURN_QUICK_DECLARE_CYCLE_STAT(UPhysAnimPhase1AutoCalibSubsystem, STATGROUP_Tickables); }
+void UPhysAnimPhase1AutoCalibSubsystem::Deinitialize() {}
+bool UPhysAnimPhase1AutoCalibSubsystem::StartPhase1AutoCalib(const FPhase1AutoCalibRequest& Request, FString& OutError) { return false; }
+void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reason) {}
+void UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(int32 Seed, int32 MaxTrials, TArray<FPhase1AutoCalibParams>& OutCandidates) {}
+void UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageAResults, int32 MaxTrials, TArray<FPhase1AutoCalibParams>& OutCandidates) {}
+void UPhysAnimPhase1AutoCalibSubsystem::BuildStageCReproCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageBResults, int32 MaxTrials, TArray<FPhase1AutoCalibParams>& OutCandidates) {}
+bool UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(const TArray<FPhase1AutoCalibTrialResult>& Trials, float Epsilon) { return false; }
+
+#endif
+
+
 
 
