@@ -155,6 +155,7 @@ struct FPhysAnimLateValidationResult
 	bool bRootOnReadinessFinalBringUpControlSettled = false;
 	bool bRootOnReadinessPolicyInfluenceSettled = false;
 	bool bPreRootOnShellSafetyProofSatisfied = false;
+	bool bRootOnReadinessNoCouplingProofSatisfied = false;
 	bool bRootOnDirectPelvisLinkGeometrySatisfied = false;
 	float PelvisThighLErrorCm = 0.0f;
 	float PelvisThighRErrorCm = 0.0f;
@@ -216,6 +217,12 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	float RootOnReadinessShellHoldDurationSeconds = 0.0f;
 	float RootOnReadinessShellHoldRequiredSeconds = 0.0f;
 	float RootOnReadinessShellProofDurationSeconds = 0.0f;
+	float RootOnReadinessNoCouplingProofDurationSeconds = 0.0f;
+	float RootOnReadinessNoCouplingRequiredSeconds = 0.0f;
+	bool bRootOnReadinessNoCouplingProofSatisfied = false;
+	float RootOnReadinessNoCouplingPeakBodyLinearSpeed = 0.0f;
+	float RootOnReadinessNoCouplingPeakBodyAngularSpeed = 0.0f;
+	FName RootOnReadinessNoCouplingWorstBone = NAME_None;
 	float ShellOffsetDeltaAtCaptureCm = 0.0f;
 	float ShellVelocityDeltaAtCaptureCmPerSecond = 0.0f;
 	float ShellOffsetGrowthCm = 0.0f;
@@ -386,6 +393,7 @@ public:
 	bool ShouldSuppressResets() const;
 	bool ShouldSuppressMoveSmoke() const;
 	bool IsPhase2RootAuthorityQuarantined() const { return bPhase2RootAuthorityQuarantined; }
+	bool ShouldApplyPhase1PelvisRootCouplingSolve() const { return !bPhase1RootOnReadinessNoCouplingProofActive; }
 
 	bool IsDistalKinematicAccepted() const { return Phase1TopologyRecord.DistalOwnershipMode == EBalanceReadyGroupOwnershipMode::Kinematic; }
 	bool IsUpperBodyKinematicHoldActive() const
@@ -439,6 +447,7 @@ private:
 	static FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount);
 	void ReturnToPhase1Prepare(class UPhysAnimComponent* Owner, const FString& Reason, const TCHAR* EventName);
 	void CapturePhase1TopologyRecord(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);
+	void ResetRootOnReadinessNoCouplingProofState();
 	void ResetTransitionLocalState();
 	void ResetCertifiedHandoffState();
 	void MarkSafePhase2Denied(class UPhysAnimComponent* Owner, const FString& Reason);
@@ -467,6 +476,11 @@ private:
 	float RootOnReadinessShellProofStartOffsetCm = 0.0f;
 	float RootOnReadinessShellProofStartVelocityCmPerSecond = 0.0f;
 	bool bHasRootOnReadinessShellProofBaseline = false;
+	bool bPhase1RootOnReadinessNoCouplingProofActive = false;
+	float RootOnReadinessNoCouplingProofAccumulatedSeconds = 0.0f;
+	float RootOnReadinessNoCouplingPeakBodyLinearSpeed = 0.0f;
+	float RootOnReadinessNoCouplingPeakBodyAngularSpeed = 0.0f;
+	FName RootOnReadinessNoCouplingWorstBone = NAME_None;
 	float HipQuarantineTimerSeconds = 0.0f;
 	FString LastLateValidateBlockReason;
 	int32 RetryCount = 0;

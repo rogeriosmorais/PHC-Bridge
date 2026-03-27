@@ -103,7 +103,9 @@ bool FPhysAnimBalanceReadyTransition::ValidateRootOnReadinessSnapshot(const FPhy
 
 	if (!Result.bRootOnReadinessProven)
 	{
-		OutReason = TEXT("phase2_root_on_readiness_not_proven");
+		OutReason = Result.RootOnReadinessGateReason.IsEmpty()
+			? TEXT("phase2_root_on_readiness_not_proven")
+			: Result.RootOnReadinessGateReason;
 		return false;
 	}
 

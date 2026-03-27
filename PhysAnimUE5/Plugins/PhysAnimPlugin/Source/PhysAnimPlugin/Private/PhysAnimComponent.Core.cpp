@@ -35,6 +35,16 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 		return;
 	}
 
+	if (!BalanceReadyTransition.ShouldApplyPhase1PelvisRootCouplingSolve())
+	{
+		if (!bPhase1PelvisCouplingSkipLogged)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PELVIS_COUPLING_SKIPPED reason=noCouplingProof state=%s"), GetRuntimeStateName(RuntimeState));
+			bPhase1PelvisCouplingSkipLogged = true;
+		}
+		return;
+	}
+
 	USkeletalMeshComponent* const Mesh = GetMeshComponent();
 	if (!Mesh)
 	{

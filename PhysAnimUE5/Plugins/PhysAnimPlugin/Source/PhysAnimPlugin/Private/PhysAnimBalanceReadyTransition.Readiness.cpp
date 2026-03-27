@@ -174,7 +174,9 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 
 	if (!CurrentResult.bRootOnReadinessProven)
 	{
-		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
+		OutReason = CurrentResult.RootOnReadinessGateReason.IsEmpty()
+			? TEXT("phase2_root_on_readiness_not_proven")
+			: CurrentResult.RootOnReadinessGateReason;
 		return false;
 	}
 

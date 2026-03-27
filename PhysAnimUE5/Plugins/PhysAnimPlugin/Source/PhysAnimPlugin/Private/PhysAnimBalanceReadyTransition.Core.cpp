@@ -863,6 +863,144 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			!bFirstPolicyEnabledFrame &&
 			!bPolicyInfluenceRampReanchored;
 
+		const bool bLateValidationDurationSatisfied =
+			LateValidationAccumulatedSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase1LateValidateRequiredSeconds;
+		const bool bNoCouplingRootBoundsSatisfied =
+			Diagnostics.RootSpeed <= Settings.BalancePhase2EntryMaxRootLinearSpeed &&
+			Diagnostics.RootAngularSpeed <= Settings.BalancePhase2EntryMaxRootAngularSpeed;
+		const bool bNoCouplingProofGateEligible =
+			bLateValidationThisFrame &&
+			bCurrentSnapshotValid &&
+			bLiveSnapshotValid &&
+			!bUpperBodyInstability &&
+			!bSimCoverageRegressed &&
+			!bLateValidateTargetDiscontinuity &&
+			bLateValidationDurationSatisfied &&
+			bNoCouplingRootBoundsSatisfied &&
+			CurrentResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady &&
+			CurrentResult.bRootOnReadinessShellHoldSatisfied &&
+			CurrentResult.bRootOnReadinessFinalBringUpControlSettled &&
+			CurrentResult.bRootOnReadinessPolicyInfluenceSettled &&
+			CurrentResult.bPreRootOnShellSafetyProofSatisfied &&
+			CurrentResult.bRootOnDirectPelvisLinkGeometrySatisfied;
+
+		const auto EmitNoCouplingProofLog = [&](const TCHAR* State, const FString& Reason)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Log,
+				TEXT("[PhysAnimBalance] PHASE1_ROOT_ON_NO_COUPLING_PROOF state=%s reason=%s duration=%.2f required=%.2f maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f"),
+				State,
+				Reason.IsEmpty() ? TEXT("none") : *Reason,
+				RootOnReadinessNoCouplingProofAccumulatedSeconds,
+				Settings.BalancePhase2RequiredShellHoldDuration,
+				RootOnReadinessNoCouplingPeakBodyLinearSpeed,
+				RootOnReadinessNoCouplingPeakBodyAngularSpeed,
+				*RootOnReadinessNoCouplingWorstBone.ToString(),
+				CurrentResult.PelvisThighLErrorCm,
+				CurrentResult.PelvisThighRErrorCm,
+				CurrentResult.PelvisSpine01ErrorCm);
+		};
+
+		const bool bNoCouplingProofSatisfiedBeforeTick =
+			RootOnReadinessNoCouplingProofAccumulatedSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration;
+		const bool bStartedNoCouplingProofThisFrame =
+			!bNoCouplingProofSatisfiedBeforeTick &&
+			!bPhase1RootOnReadinessNoCouplingProofActive &&
+			bNoCouplingProofGateEligible;
+
+		if (bStartedNoCouplingProofThisFrame)
+		{
+			ResetRootOnReadinessNoCouplingProofState();
+			bPhase1RootOnReadinessNoCouplingProofActive = true;
+			Diagnostics.Phase1RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_requires_pelvis_coupling");
+			EmitNoCouplingProofLog(TEXT("start"), TEXT("phase1_root_on_readiness_requires_pelvis_coupling"));
+		}
+		else if (bPhase1RootOnReadinessNoCouplingProofActive && !bNoCouplingProofGateEligible)
+		{
+			const FString ProofResetReason = !LateValidateBlockReason.IsEmpty()
+				? LateValidateBlockReason
+				: (!bCurrentSnapshotValid || !bLiveSnapshotValid
+					? TEXT("phase1_late_validate_handoff_invalidated")
+					: (!bLateValidationDurationSatisfied
+						? TEXT("late_validate_duration_unsatisfied")
+						: (!bNoCouplingRootBoundsSatisfied
+							? TEXT("root_entry_bounds_regressed")
+							: (CurrentResult.RootOnReadinessClassification != EBalanceReadyRootOnReadinessClassification::RootCoupledReady
+								? (CurrentResult.RootOnReadinessGateReason.IsEmpty()
+									? TEXT("phase1_root_on_readiness_topology_not_ready")
+									: CurrentResult.RootOnReadinessGateReason)
+								: TEXT("phase1_root_on_readiness_requires_pelvis_coupling")))));
+
+			EmitNoCouplingProofLog(TEXT("reset"), ProofResetReason);
+			ResetRootOnReadinessNoCouplingProofState();
+
+			const FString DenialReason = TEXT("phase1_root_on_readiness_requires_pelvis_coupling");
+			Diagnostics.FailureReason = DenialReason;
+			Diagnostics.Phase1RootOnReadinessGateReason = DenialReason;
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *DenialReason);
+			Owner->ReleaseTransitionOwnedShellLock();
+			MarkSafePhase2Denied(Owner, DenialReason);
+			return;
+		}
+
+		if (bPhase1RootOnReadinessNoCouplingProofActive && bNoCouplingProofGateEligible && !bStartedNoCouplingProofThisFrame)
+		{
+			const float LinearThreshold = FMath::Max(Settings.BalancePhase1LateValidateMaxSimulatedBoneLinearSpeed, KINDA_SMALL_NUMBER);
+			const float AngularThreshold = FMath::Max(Settings.BalancePhase1LateValidateMaxSimulatedBoneAngularSpeed, KINDA_SMALL_NUMBER);
+			const float LinearRatio = CachedConvergenceSnapshot.MaxBodyLinearSpeed / LinearThreshold;
+			const float AngularRatio = CachedConvergenceSnapshot.MaxBodyAngularSpeed / AngularThreshold;
+
+			RootOnReadinessNoCouplingProofAccumulatedSeconds += DeltaTime;
+			if (CachedConvergenceSnapshot.MaxBodyLinearSpeed > RootOnReadinessNoCouplingPeakBodyLinearSpeed)
+			{
+				RootOnReadinessNoCouplingPeakBodyLinearSpeed = CachedConvergenceSnapshot.MaxBodyLinearSpeed;
+				if (LinearRatio >= AngularRatio && CachedConvergenceSnapshot.MaxBodyLinearSpeedBone != NAME_None)
+				{
+					RootOnReadinessNoCouplingWorstBone = CachedConvergenceSnapshot.MaxBodyLinearSpeedBone;
+				}
+			}
+			if (CachedConvergenceSnapshot.MaxBodyAngularSpeed > RootOnReadinessNoCouplingPeakBodyAngularSpeed)
+			{
+				RootOnReadinessNoCouplingPeakBodyAngularSpeed = CachedConvergenceSnapshot.MaxBodyAngularSpeed;
+				if (AngularRatio > LinearRatio && CachedConvergenceSnapshot.MaxBodyAngularSpeedBone != NAME_None)
+				{
+					RootOnReadinessNoCouplingWorstBone = CachedConvergenceSnapshot.MaxBodyAngularSpeedBone;
+				}
+			}
+			if (RootOnReadinessNoCouplingWorstBone == NAME_None)
+			{
+				RootOnReadinessNoCouplingWorstBone =
+					AngularRatio > LinearRatio
+						? CachedConvergenceSnapshot.MaxBodyAngularSpeedBone
+						: CachedConvergenceSnapshot.MaxBodyLinearSpeedBone;
+			}
+
+			const bool bNoCouplingProofSatisfiedThisFrame =
+				RootOnReadinessNoCouplingProofAccumulatedSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration;
+			CurrentResult.bRootOnReadinessNoCouplingProofSatisfied = bNoCouplingProofSatisfiedThisFrame;
+			CurrentResult.bRootOnReadinessProven =
+				CurrentResult.bRootOnReadinessShellHoldSatisfied &&
+				CurrentResult.bRootOnReadinessFinalBringUpControlSettled &&
+				CurrentResult.bRootOnReadinessPolicyInfluenceSettled &&
+				CurrentResult.bPreRootOnShellSafetyProofSatisfied &&
+				CurrentResult.bRootOnReadinessNoCouplingProofSatisfied &&
+				CurrentResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady;
+			CurrentResult.RootOnReadinessGateReason = bNoCouplingProofSatisfiedThisFrame
+				? TEXT("ready")
+				: TEXT("phase1_root_on_readiness_requires_pelvis_coupling");
+			Diagnostics.Phase1RootOnReadinessGateReason = CurrentResult.RootOnReadinessGateReason;
+			EmitNoCouplingProofLog(
+				bNoCouplingProofSatisfiedThisFrame ? TEXT("satisfied") : TEXT("progress"),
+				CurrentResult.RootOnReadinessGateReason);
+		}
+		else if (bNoCouplingProofGateEligible && !bNoCouplingProofSatisfiedBeforeTick)
+		{
+			CurrentResult.bRootOnReadinessNoCouplingProofSatisfied = false;
+			CurrentResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_requires_pelvis_coupling");
+			Diagnostics.Phase1RootOnReadinessGateReason = CurrentResult.RootOnReadinessGateReason;
+		}
+
 		if (bLateValidationThisFrame && bCurrentSnapshotValid)
 		{
 			if (bUpperBodyInstability || bSimCoverageRegressed || bLateValidateTargetDiscontinuity)
@@ -2634,6 +2772,7 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	RootOnReadinessShellProofStartOffsetCm = 0.0f;
 	RootOnReadinessShellProofStartVelocityCmPerSecond = 0.0f;
 	bHasRootOnReadinessShellProofBaseline = false;
+	ResetRootOnReadinessNoCouplingProofState();
 	bHasLoggedDistalExperimentState = false;
 	LastLateValidateBlockReason.Reset();
 	bHasLateValidationProof = false;
@@ -2662,6 +2801,16 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 }
 
 
+void FPhysAnimBalanceReadyTransition::ResetRootOnReadinessNoCouplingProofState()
+{
+	bPhase1RootOnReadinessNoCouplingProofActive = false;
+	RootOnReadinessNoCouplingProofAccumulatedSeconds = 0.0f;
+	RootOnReadinessNoCouplingPeakBodyLinearSpeed = 0.0f;
+	RootOnReadinessNoCouplingPeakBodyAngularSpeed = 0.0f;
+	RootOnReadinessNoCouplingWorstBone = NAME_None;
+}
+
+
 void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
 {
 	bHasCertifiedHandoff = false;
@@ -2672,6 +2821,7 @@ void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
 	RootOnReadinessShellProofStartOffsetCm = 0.0f;
 	RootOnReadinessShellProofStartVelocityCmPerSecond = 0.0f;
 	bHasRootOnReadinessShellProofBaseline = false;
+	ResetRootOnReadinessNoCouplingProofState();
 }
 
 

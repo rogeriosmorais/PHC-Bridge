@@ -360,6 +360,13 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.RootOnReadinessShellHoldDurationSeconds = RootOnReadinessShellHoldAccumulatedSeconds;
 	OutSnapshot.RootOnReadinessShellHoldRequiredSeconds = Settings.BalancePhase2RequiredShellHoldDuration;
 	OutSnapshot.RootOnReadinessShellProofDurationSeconds = RootOnReadinessShellProofAccumulatedSeconds;
+	OutSnapshot.RootOnReadinessNoCouplingProofDurationSeconds = this->RootOnReadinessNoCouplingProofAccumulatedSeconds;
+	OutSnapshot.RootOnReadinessNoCouplingRequiredSeconds = Settings.BalancePhase2RequiredShellHoldDuration;
+	OutSnapshot.bRootOnReadinessNoCouplingProofSatisfied =
+		this->RootOnReadinessNoCouplingProofAccumulatedSeconds + KINDA_SMALL_NUMBER >= Settings.BalancePhase2RequiredShellHoldDuration;
+	OutSnapshot.RootOnReadinessNoCouplingPeakBodyLinearSpeed = this->RootOnReadinessNoCouplingPeakBodyLinearSpeed;
+	OutSnapshot.RootOnReadinessNoCouplingPeakBodyAngularSpeed = this->RootOnReadinessNoCouplingPeakBodyAngularSpeed;
+	OutSnapshot.RootOnReadinessNoCouplingWorstBone = this->RootOnReadinessNoCouplingWorstBone;
 	OutSnapshot.ShellOffsetDeltaAtCaptureCm = CachedConvergenceSnapshot.IsValid() ? CachedConvergenceSnapshot.ShellPlanarOffset : Owner->GetCurrentShellPlanarOffsetDeltaCm();
 	OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond = CachedConvergenceSnapshot.IsValid() ? CachedConvergenceSnapshot.ShellPlanarVelocity : Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 	OutSnapshot.ShellOffsetGrowthCm = bHasRootOnReadinessShellProofBaseline
@@ -491,12 +498,20 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	}
 
 	OutResult.bPreRootOnShellSafetyProofSatisfied = bShellSafetySatisfied;
+	OutResult.bRootOnReadinessNoCouplingProofSatisfied = OutSnapshot.bRootOnReadinessNoCouplingProofSatisfied;
+
+	const bool bOtherRootOnReadinessGatesSatisfied =
+		OutResult.bRootOnReadinessShellHoldSatisfied &&
+		OutResult.bRootOnReadinessFinalBringUpControlSettled &&
+		OutResult.bRootOnReadinessPolicyInfluenceSettled &&
+		OutResult.bPreRootOnShellSafetyProofSatisfied;
 
 	OutResult.bRootOnReadinessProven =
 		OutResult.bRootOnReadinessShellHoldSatisfied &&
 		OutResult.bRootOnReadinessFinalBringUpControlSettled &&
 		OutResult.bRootOnReadinessPolicyInfluenceSettled &&
 		OutResult.bPreRootOnShellSafetyProofSatisfied &&
+		OutResult.bRootOnReadinessNoCouplingProofSatisfied &&
 		(RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady);
 
 	OutResult.RootOnReadinessClassification = RootOnReadinessClassification;
@@ -510,7 +525,9 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 			: (RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
 				? TEXT("phase1_root_on_readiness_upper_only_safe_deny_pending")
 				: (RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
-					? TEXT("ready")
+					? (bOtherRootOnReadinessGatesSatisfied && !OutResult.bRootOnReadinessNoCouplingProofSatisfied
+						? TEXT("phase1_root_on_readiness_requires_pelvis_coupling")
+						: TEXT("ready"))
 					: TEXT("phase1_root_on_readiness_topology_not_ready")));
 
 	OutResult.Outcome = 
