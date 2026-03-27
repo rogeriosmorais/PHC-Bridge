@@ -443,3 +443,11 @@ Known important reference points from this work:
 - The new runtime path now lands on `..._spine_interp_a0.10_worst_thigh_interp_thigh_r_a0.01_worst_thigh_margin_sweep_y-0.50_p0.05_r-0.50`.
 - Live Phase 1 metrics improved to `pelvisThighLAngular=31.49`, `pelvisThighRAngular=33.89`, and `pelvisSpine01Angular=17.98`.
 - The truthful blocker remains `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`, which narrows the remaining work to stronger thigh recovery/viability rather than a missing spine-safe thigh follow-through surface.
+
+## 2026-03-27 — Focused Thigh Blend-Sample Search
+
+- Added deterministic TDD coverage for focused-sample relevance so blend candidates that explicitly include the blocked thigh in their source tagging are now eligible for the spine-safe worst-thigh focused-delta pass instead of restricting that pass to the first direct thigh constraint sample.
+- Broadened `worst_thigh_focus_delta` to iterate all thigh-relevant valid constraint samples, including weighted blend candidates, while keeping the existing spine-safe acceptance rule intact.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- Live smoke remained on the same truthful result: `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`, with the winning runtime path still ending at `..._spine_interp_a0.10_worst_thigh_interp_thigh_r_a0.01_worst_thigh_margin_sweep_y-0.50_p0.05_r-0.50` and metrics still at `pelvisThighLAngular=31.49`, `pelvisThighRAngular=33.89`, and `pelvisSpine01Angular=17.98`.
+- This rules out another focused-sample selection gap and narrows the remaining work to deeper thigh candidate generation or genuine Phase 1 physical viability.
