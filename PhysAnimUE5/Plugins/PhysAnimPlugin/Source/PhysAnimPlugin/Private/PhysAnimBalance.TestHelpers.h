@@ -12,7 +12,6 @@
 
 namespace PhysAnimBalanceTestHelpers
 {
-#if WITH_EDITOR
 	inline bool EvaluateBalanceModeSmokeOutcome(
 		const EPhysAnimRuntimeState RuntimeState,
 		const bool bInPublicBalanceEntryState,
@@ -64,6 +63,7 @@ namespace PhysAnimBalanceTestHelpers
 		return false;
 	}
 
+#if WITH_EDITOR
 	class FValidateBalanceModeSmokeOutcomeCommand final : public IAutomationLatentCommand
 	{
 	public:

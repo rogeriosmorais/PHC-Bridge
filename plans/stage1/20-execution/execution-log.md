@@ -419,13 +419,13 @@ Repository baseline:
 
 Current truthful smoke read as of 2026-03-27:
 - `PhysAnim.PIE.BalanceModeSmoke` now reaches explicit safe denial truthfully instead of stalling ambiguously.
-- the latest observed terminal reason is `phase1_root_on_readiness_pelvis_spine_margin_insufficient`
-- that means the current blocking surface is again Phase 1 RootOn-readiness margin proof, not a live Phase 2 RootOn spike in this run
+- the latest observed terminal reason is `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`
+- that means the current blocking surface is Phase 1 RootOn-readiness thigh margin proof, not a live Phase 2 RootOn spike in this run
 
 Active engineering problem:
 1. keep the truthful safe-deny / terminal-state contract intact
 2. preserve read-only telemetry and phase-correct failure labeling
-3. isolate why the pelvis-spine readiness margin remains insufficient at LateValidate even when other gates are satisfied
+3. isolate why the pelvis-thigh readiness margin remains insufficient at LateValidate even after the spine margin has been recovered
 
 ## Notes
 
@@ -433,4 +433,13 @@ Known important reference points from this work:
 - The shift from broad stabilization to explicit phase-owned balance transition design is complete.
 - The latest engineering focus is on "truthful" topology enforcement and avoiding ownership thrash.
 - Bridge-owned locomotion remains the intended direction for `BridgeActive`.
-- The current honest failure point in the latest smoke is `phase1_root_on_readiness_pelvis_spine_margin_insufficient`, not the older invalid-entry rejection loop.
+- The current honest failure point in the latest smoke is `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`, not the older invalid-entry rejection loop.
+
+## 2026-03-27 — Phase 1 Spine-Safe Worst-Thigh Follow-Through
+
+- Added deterministic TDD coverage for a spine-safe worst-thigh margin-sweep acceptance rule, allowing small preserved-spine trade within recovered Phase 1 readiness while still rejecting candidates that spend too much spine margin.
+- Added a new post-`worst_thigh_interp` local sweep that only accepts candidates improving the current worst thigh while keeping the spine inside readiness.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The new runtime path now lands on `..._spine_interp_a0.10_worst_thigh_interp_thigh_r_a0.01_worst_thigh_margin_sweep_y-0.50_p0.05_r-0.50`.
+- Live Phase 1 metrics improved to `pelvisThighLAngular=31.49`, `pelvisThighRAngular=33.89`, and `pelvisSpine01Angular=17.98`.
+- The truthful blocker remains `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`, which narrows the remaining work to stronger thigh recovery/viability rather than a missing spine-safe thigh follow-through surface.

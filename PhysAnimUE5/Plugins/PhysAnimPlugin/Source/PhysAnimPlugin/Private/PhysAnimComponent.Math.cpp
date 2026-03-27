@@ -1103,6 +1103,17 @@ bool UPhysAnimComponent::ShouldRunWorstThighConstraintInterpolationSweep(
 		WorstThighMarginDeg >= -3.0f - KINDA_SMALL_NUMBER;
 }
 
+bool UPhysAnimComponent::ShouldRunSpineSafeWorstThighFocusedDelta(
+	float LeftThighAngularErrorDeg,
+	float RightThighAngularErrorDeg,
+	float SpineAngularErrorDeg)
+{
+	return ShouldRunWorstThighConstraintInterpolationSweep(
+		LeftThighAngularErrorDeg,
+		RightThighAngularErrorDeg,
+		SpineAngularErrorDeg);
+}
+
 bool UPhysAnimComponent::ShouldAcceptWorstThighConstraintInterpolationCandidate(
 	float CurrentLeftThighAngularErrorDeg,
 	float CurrentRightThighAngularErrorDeg,
@@ -1132,6 +1143,46 @@ bool UPhysAnimComponent::ShouldAcceptWorstThighConstraintInterpolationCandidate(
 	const float CurrentWorstThighMarginDeg = FMath::Min(CurrentLeftMarginDeg, CurrentRightMarginDeg);
 	const float CandidateWorstThighMarginDeg = FMath::Min(CandidateLeftMarginDeg, CandidateRightMarginDeg);
 	return CandidateWorstThighMarginDeg > CurrentWorstThighMarginDeg + KINDA_SMALL_NUMBER;
+}
+
+bool UPhysAnimComponent::ShouldAcceptSpineSafeWorstThighMarginSweepCandidate(
+	float CurrentLeftThighAngularErrorDeg,
+	float CurrentRightThighAngularErrorDeg,
+	float CurrentSpineAngularErrorDeg,
+	float CandidateLeftThighAngularErrorDeg,
+	float CandidateRightThighAngularErrorDeg,
+	float CandidateSpineAngularErrorDeg)
+{
+	const float CurrentLeftMarginDeg =
+		BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - CurrentLeftThighAngularErrorDeg;
+	const float CurrentRightMarginDeg =
+		BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - CurrentRightThighAngularErrorDeg;
+	const float CurrentSpineMarginDeg =
+		BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg - CurrentSpineAngularErrorDeg;
+	const float CandidateLeftMarginDeg =
+		BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - CandidateLeftThighAngularErrorDeg;
+	const float CandidateRightMarginDeg =
+		BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - CandidateRightThighAngularErrorDeg;
+	const float CandidateSpineMarginDeg =
+		BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg - CandidateSpineAngularErrorDeg;
+
+	if (CurrentSpineMarginDeg < -KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+	if (CandidateSpineMarginDeg < -KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	const float CurrentWorstThighMarginDeg = FMath::Min(CurrentLeftMarginDeg, CurrentRightMarginDeg);
+	const float CandidateWorstThighMarginDeg = FMath::Min(CandidateLeftMarginDeg, CandidateRightMarginDeg);
+	if (CandidateWorstThighMarginDeg <= CurrentWorstThighMarginDeg + KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	return CandidateSpineMarginDeg + 0.25f >= CurrentSpineMarginDeg;
 }
 
 bool UPhysAnimComponent::ShouldPreferSpineOnlyRootOnReadinessRescueCandidate(

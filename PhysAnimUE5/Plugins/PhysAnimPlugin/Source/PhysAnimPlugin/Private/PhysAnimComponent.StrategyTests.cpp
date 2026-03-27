@@ -381,9 +381,21 @@ namespace
 				32.14f,
 				34.54f,
 				17.59f));
+		TestTrue(
+			TEXT("Spine-safe worst-thigh focused delta stays enabled for the current live thigh near-miss"),
+			UPhysAnimComponent::TestOnlyShouldRunSpineSafeWorstThighFocusedDelta(
+				31.49f,
+				33.89f,
+				17.98f));
 		TestFalse(
 			TEXT("Worst-thigh interpolation sweep stays off while spine is still the blocker"),
 			UPhysAnimComponent::TestOnlyShouldRunWorstThighConstraintInterpolationSweep(
+				31.82f,
+				32.74f,
+				19.55f));
+		TestFalse(
+			TEXT("Spine-safe worst-thigh focused delta stays off while spine is still the blocker"),
+			UPhysAnimComponent::TestOnlyShouldRunSpineSafeWorstThighFocusedDelta(
 				31.82f,
 				32.74f,
 				19.55f));
@@ -405,6 +417,24 @@ namespace
 				31.30f,
 				32.81f,
 				17.80f));
+		TestTrue(
+			TEXT("Spine-safe worst-thigh margin sweep may spend a small amount of recovered spine margin to improve the live thigh blocker"),
+			UPhysAnimComponent::TestOnlyShouldAcceptSpineSafeWorstThighMarginSweepCandidate(
+				31.97f,
+				34.19f,
+				17.91f,
+				32.02f,
+				33.72f,
+				17.98f));
+		TestFalse(
+			TEXT("Spine-safe worst-thigh margin sweep must reject candidates that spend too much recovered spine margin"),
+			UPhysAnimComponent::TestOnlyShouldAcceptSpineSafeWorstThighMarginSweepCandidate(
+				31.97f,
+				34.19f,
+				17.91f,
+				32.02f,
+				33.72f,
+				18.40f));
 		TestTrue(
 			TEXT("Spine-only rescue scoring prefers a candidate that improves the actual spine blocker while keeping thighs ready"),
 			UPhysAnimComponent::TestOnlyShouldPreferSpineOnlyRootOnReadinessRescueCandidate(

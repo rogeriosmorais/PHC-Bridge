@@ -820,6 +820,16 @@ public:
 			RightThighAngularErrorDeg,
 			SpineAngularErrorDeg);
 	}
+	static bool TestOnlyShouldRunSpineSafeWorstThighFocusedDelta(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg)
+	{
+		return ShouldRunSpineSafeWorstThighFocusedDelta(
+			LeftThighAngularErrorDeg,
+			RightThighAngularErrorDeg,
+			SpineAngularErrorDeg);
+	}
 	static bool TestOnlyShouldAcceptWorstThighConstraintInterpolationCandidate(
 		float CurrentLeftThighAngularErrorDeg,
 		float CurrentRightThighAngularErrorDeg,
@@ -829,6 +839,22 @@ public:
 		float CandidateSpineAngularErrorDeg)
 	{
 		return ShouldAcceptWorstThighConstraintInterpolationCandidate(
+			CurrentLeftThighAngularErrorDeg,
+			CurrentRightThighAngularErrorDeg,
+			CurrentSpineAngularErrorDeg,
+			CandidateLeftThighAngularErrorDeg,
+			CandidateRightThighAngularErrorDeg,
+			CandidateSpineAngularErrorDeg);
+	}
+	static bool TestOnlyShouldAcceptSpineSafeWorstThighMarginSweepCandidate(
+		float CurrentLeftThighAngularErrorDeg,
+		float CurrentRightThighAngularErrorDeg,
+		float CurrentSpineAngularErrorDeg,
+		float CandidateLeftThighAngularErrorDeg,
+		float CandidateRightThighAngularErrorDeg,
+		float CandidateSpineAngularErrorDeg)
+	{
+		return ShouldAcceptSpineSafeWorstThighMarginSweepCandidate(
 			CurrentLeftThighAngularErrorDeg,
 			CurrentRightThighAngularErrorDeg,
 			CurrentSpineAngularErrorDeg,
@@ -1576,7 +1602,18 @@ public:
 		float LeftThighAngularErrorDeg,
 		float RightThighAngularErrorDeg,
 		float SpineAngularErrorDeg);
+	static bool ShouldRunSpineSafeWorstThighFocusedDelta(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg);
 	static bool ShouldAcceptWorstThighConstraintInterpolationCandidate(
+		float CurrentLeftThighAngularErrorDeg,
+		float CurrentRightThighAngularErrorDeg,
+		float CurrentSpineAngularErrorDeg,
+		float CandidateLeftThighAngularErrorDeg,
+		float CandidateRightThighAngularErrorDeg,
+		float CandidateSpineAngularErrorDeg);
+	static bool ShouldAcceptSpineSafeWorstThighMarginSweepCandidate(
 		float CurrentLeftThighAngularErrorDeg,
 		float CurrentRightThighAngularErrorDeg,
 		float CurrentSpineAngularErrorDeg,
