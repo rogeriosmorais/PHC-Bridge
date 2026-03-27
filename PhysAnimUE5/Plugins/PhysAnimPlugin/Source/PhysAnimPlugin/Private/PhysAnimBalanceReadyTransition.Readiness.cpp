@@ -16,6 +16,24 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 }
 
 
+bool FPhysAnimBalanceReadyTransition::IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
+{
+	if (Snapshot.RootLinearSpeed > Settings.MaxRootLinearSpeedCmPerSecond || Snapshot.RootAngularSpeed > Settings.MaxRootAngularSpeedDegPerSecond)
+	{
+		OutReason = TEXT("fail_stop_precursor");
+		return false;
+	}
+
+	if (Snapshot.RootGroundDistance > 15.0f)
+	{
+		OutReason = TEXT("root_too_far_from_ground");
+		return false;
+	}
+
+	return true;
+}
+
+
 bool FPhysAnimBalanceReadyTransition::EvaluateReadiness(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
 {
 	USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
@@ -47,9 +65,8 @@ bool FPhysAnimBalanceReadyTransition::EvaluateReadiness(UPhysAnimComponent* Owne
 		return false;
 	}
 
-	if (Diagnostics.RootSpeed > Settings.MaxRootLinearSpeedCmPerSecond || Diagnostics.RootAngularSpeed > Settings.MaxRootAngularSpeedDegPerSecond)
+	if (!IsRootStable(CachedConvergenceSnapshot, Settings, OutReason))
 	{
-		OutReason = TEXT("fail_stop_precursor");
 		return false;
 	}
 
@@ -396,4 +413,3 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 
 	return true;
 }
-

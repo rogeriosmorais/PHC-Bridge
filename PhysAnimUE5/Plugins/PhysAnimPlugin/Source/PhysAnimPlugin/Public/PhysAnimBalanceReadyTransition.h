@@ -279,6 +279,7 @@ struct FPhase1AcceptedConvergenceSnapshot
 	float RootTilt = 0.0f;
 	float ShellPlanarOffset = 0.0f;
 	float ShellPlanarVelocity = 0.0f;
+	float RootGroundDistance = 0.0f;
 	bool bIsInstabilityPrecursorActive = false;
 	bool bHasPendingResets = false;
 	float MaxTargetDeltaDegrees = 0.0f;
@@ -430,6 +431,7 @@ public:
 	bool ShouldSuppressPolicyWrites(FName BoneName) const;
 	float GetTransitionExtraDampingMultiplier(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;
 	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
+	static bool IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	static FString ClassifyLateValidationFailureReason(bool bUpperBodyInstability, bool bSimCoverageRegressed, bool bTargetDiscontinuity);
 	static bool IsLateValidationUpperBodyViolation(bool bRawSimViolation, bool bMotionViolation, bool bPendingResetViolation);
 	static bool IsFailureClassRetryable(const FString& FailureReason);
