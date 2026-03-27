@@ -15,9 +15,9 @@ Use it to track:
 ## Current State
 
 - `Current phase`: Phase 1 / truthful RootOn-readiness investigation.
-- `Overall status`: UE startup is stable and the latest truthful balance smoke reaches explicit safe denial with `phase1_root_on_readiness_pelvis_spine_margin_insufficient`.
-- `Last planning milestone`: contract and ownership drift are largely cleaned up; the active task is distinguishing missing Phase 1 candidate generation from genuine pelvis-spine physical-viability failure.
-- `Latest runtime forensics`: the applied spine-only rescue path is now constrained to preserve thigh readiness, the spine-only rescue sweep uses the spine-rescue comparator, and candidate generation now includes a finer spine-biased direct-blend seed family for the current thigh-safe near-miss class; the live smoke still ends at the same spine near-miss (`pelvisSpine01Angular=19.55`), which narrows the next work to deeper candidate generation / solver viability rather than the previous coarse seed or rescue-acceptance bugs.
+- `Overall status`: UE startup is stable and the latest truthful balance smoke reaches explicit safe denial with `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`.
+- `Last planning milestone`: contract and ownership drift are largely cleaned up; the newest Phase 1 solver step keeps the thigh follow-through path truthful by forbidding it from re-breaking recovered spine readiness.
+- `Latest runtime forensics`: the final solver path still runs `spine_interp` and a constrained `worst_thigh_interp_thigh_r`, but the new acceptance guard limits that follow-through to a spine-safe micro-step (`a0.01`) instead of the earlier spine-breaking `a0.05`; the live result now keeps the spine inside readiness at `pelvisSpine01Angular=17.91` while only partially improving the thigh blocker (`pelvisThighLAngular=31.97`, `pelvisThighRAngular=34.19`), which narrows the next work to finding a stronger thigh improvement that preserves the recovered spine margin.
 
 ## Active Tasks
 

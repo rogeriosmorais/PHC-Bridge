@@ -197,61 +197,67 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 		if (DirectConstraintSamples.Num() >= 3)
 		{
 			constexpr int32 WeightDenominator = 10;
-			const FQuat ReferenceRotation = DirectConstraintSamples[0].CandidateRotation;
-			for (int32 WeightA = 1; WeightA < WeightDenominator - 1; ++WeightA)
+			const auto AddWeightedDirectBlendSamples = [&](const FQuat& ReferenceRotation, const TCHAR* SourceTag)
 			{
-				for (int32 WeightB = 1; WeightB < (WeightDenominator - WeightA); ++WeightB)
+				for (int32 WeightA = 1; WeightA < WeightDenominator - 1; ++WeightA)
 				{
-					const int32 WeightC = WeightDenominator - WeightA - WeightB;
-					if (WeightC <= 0)
+					for (int32 WeightB = 1; WeightB < (WeightDenominator - WeightA); ++WeightB)
 					{
-						continue;
-					}
-
-					FVector4 WeightedRotationSum = FVector4::Zero();
-					const int32 Weights[] = { WeightA, WeightB, WeightC };
-					for (int32 SampleIndex = 0; SampleIndex < 3; ++SampleIndex)
-					{
-						FQuat AlignedRotation = DirectConstraintSamples[SampleIndex].CandidateRotation;
-						if ((ReferenceRotation | AlignedRotation) < 0.0f)
+						const int32 WeightC = WeightDenominator - WeightA - WeightB;
+						if (WeightC <= 0)
 						{
-							AlignedRotation *= -1.0f;
+							continue;
 						}
 
-						const float SampleWeight = static_cast<float>(Weights[SampleIndex]) / static_cast<float>(WeightDenominator);
-						WeightedRotationSum.X += AlignedRotation.X * SampleWeight;
-						WeightedRotationSum.Y += AlignedRotation.Y * SampleWeight;
-						WeightedRotationSum.Z += AlignedRotation.Z * SampleWeight;
-						WeightedRotationSum.W += AlignedRotation.W * SampleWeight;
-					}
+						FVector4 WeightedRotationSum = FVector4::Zero();
+						const int32 Weights[] = { WeightA, WeightB, WeightC };
+						for (int32 SampleIndex = 0; SampleIndex < 3; ++SampleIndex)
+						{
+							FQuat AlignedRotation = DirectConstraintSamples[SampleIndex].CandidateRotation;
+							if ((ReferenceRotation | AlignedRotation) < 0.0f)
+							{
+								AlignedRotation *= -1.0f;
+							}
 
-					FQuat WeightedRotation(WeightedRotationSum.X, WeightedRotationSum.Y, WeightedRotationSum.Z, WeightedRotationSum.W);
-					if (WeightedRotation.SizeSquared() <= KINDA_SMALL_NUMBER)
-					{
-						continue;
-					}
+							const float SampleWeight = static_cast<float>(Weights[SampleIndex]) / static_cast<float>(WeightDenominator);
+							WeightedRotationSum.X += AlignedRotation.X * SampleWeight;
+							WeightedRotationSum.Y += AlignedRotation.Y * SampleWeight;
+							WeightedRotationSum.Z += AlignedRotation.Z * SampleWeight;
+							WeightedRotationSum.W += AlignedRotation.W * SampleWeight;
+						}
 
-					WeightedRotation.Normalize();
-					if ((DesiredPelvisRotation | WeightedRotation) < 0.0f)
-					{
-						WeightedRotation *= -1.0f;
-					}
+						FQuat WeightedRotation(WeightedRotationSum.X, WeightedRotationSum.Y, WeightedRotationSum.Z, WeightedRotationSum.W);
+						if (WeightedRotation.SizeSquared() <= KINDA_SMALL_NUMBER)
+						{
+							continue;
+						}
 
-					FPhase1ConstraintRotationSample& WeightedBlendSample = RotationSamples.AddDefaulted_GetRef();
-					WeightedBlendSample.CandidateRotation = WeightedRotation;
-					WeightedBlendSample.Source = FString::Printf(
-						TEXT("blend_weighted_direct_%s_%.2f_%s_%.2f_%s_%.2f"),
-						*DirectConstraintSamples[0].ChildBoneName.ToString(),
-						static_cast<float>(WeightA) / static_cast<float>(WeightDenominator),
-						*DirectConstraintSamples[1].ChildBoneName.ToString(),
-						static_cast<float>(WeightB) / static_cast<float>(WeightDenominator),
-						*DirectConstraintSamples[2].ChildBoneName.ToString(),
-						static_cast<float>(WeightC) / static_cast<float>(WeightDenominator));
-					WeightedBlendSample.bValid = true;
+						WeightedRotation.Normalize();
+						if ((DesiredPelvisRotation | WeightedRotation) < 0.0f)
+						{
+							WeightedRotation *= -1.0f;
+						}
+
+						FPhase1ConstraintRotationSample& WeightedBlendSample = RotationSamples.AddDefaulted_GetRef();
+						WeightedBlendSample.CandidateRotation = WeightedRotation;
+						WeightedBlendSample.Source = FString::Printf(
+							TEXT("%s_%s_%.2f_%s_%.2f_%s_%.2f"),
+							SourceTag,
+							*DirectConstraintSamples[0].ChildBoneName.ToString(),
+							static_cast<float>(WeightA) / static_cast<float>(WeightDenominator),
+							*DirectConstraintSamples[1].ChildBoneName.ToString(),
+							static_cast<float>(WeightB) / static_cast<float>(WeightDenominator),
+							*DirectConstraintSamples[2].ChildBoneName.ToString(),
+							static_cast<float>(WeightC) / static_cast<float>(WeightDenominator));
+						WeightedBlendSample.bValid = true;
+					}
 				}
-			}
+			};
 
-			auto AddSpineBiasedDirectBlendSamples = [&](const int32 FineWeightDenominator)
+			const FQuat PrimaryReferenceRotation = DirectConstraintSamples[0].CandidateRotation;
+			AddWeightedDirectBlendSamples(PrimaryReferenceRotation, TEXT("blend_weighted_direct"));
+
+			auto AddSpineBiasedDirectBlendSamples = [&](const int32 FineWeightDenominator, const FQuat& ReferenceRotation, const TCHAR* SourceTag)
 			{
 				for (int32 SpineWeight = FineWeightDenominator - 1; SpineWeight >= FineWeightDenominator / 2; --SpineWeight)
 				{
@@ -301,7 +307,8 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 						FPhase1ConstraintRotationSample& WeightedBlendSample = RotationSamples.AddDefaulted_GetRef();
 						WeightedBlendSample.CandidateRotation = WeightedRotation;
 						WeightedBlendSample.Source = FString::Printf(
-							TEXT("blend_spine_bias_%s_%.2f_%s_%.2f_%s_%.2f"),
+							TEXT("%s_%s_%.2f_%s_%.2f_%s_%.2f"),
+							SourceTag,
 							*DirectConstraintSamples[0].ChildBoneName.ToString(),
 							static_cast<float>(LeftWeight) / static_cast<float>(FineWeightDenominator),
 							*DirectConstraintSamples[1].ChildBoneName.ToString(),
@@ -335,15 +342,25 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			{
 				const float ReferenceLeftAngularErrorDeg = 0.0f;
 				const float ReferenceRightAngularErrorDeg =
-					FMath::RadiansToDegrees(ReferenceRotation.AngularDistance(RightConstraintSample->CandidateRotation));
+					FMath::RadiansToDegrees(PrimaryReferenceRotation.AngularDistance(RightConstraintSample->CandidateRotation));
 				const float ReferenceSpineAngularErrorDeg =
-					FMath::RadiansToDegrees(ReferenceRotation.AngularDistance(SpineConstraintSample->CandidateRotation));
+					FMath::RadiansToDegrees(PrimaryReferenceRotation.AngularDistance(SpineConstraintSample->CandidateRotation));
 				if (ShouldRunSpineBiasedDirectConstraintBlendSweep(
 						ReferenceLeftAngularErrorDeg,
 						ReferenceRightAngularErrorDeg,
 						ReferenceSpineAngularErrorDeg))
 				{
-					AddSpineBiasedDirectBlendSamples(20);
+					AddSpineBiasedDirectBlendSamples(20, PrimaryReferenceRotation, TEXT("blend_spine_bias"));
+					if (ShouldRunAlternateReferenceDirectConstraintBlendSweep(
+							ReferenceLeftAngularErrorDeg,
+							ReferenceRightAngularErrorDeg,
+							ReferenceSpineAngularErrorDeg))
+					{
+						AddWeightedDirectBlendSamples(RightConstraintSample->CandidateRotation, TEXT("blend_weighted_direct_alt_ref_thigh_r"));
+						AddWeightedDirectBlendSamples(SpineConstraintSample->CandidateRotation, TEXT("blend_weighted_direct_alt_ref_spine"));
+						AddSpineBiasedDirectBlendSamples(20, RightConstraintSample->CandidateRotation, TEXT("blend_spine_bias_alt_ref_thigh_r"));
+						AddSpineBiasedDirectBlendSamples(20, SpineConstraintSample->CandidateRotation, TEXT("blend_spine_bias_alt_ref_spine"));
+					}
 				}
 			}
 		}
@@ -1083,6 +1100,135 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 
 		return BestEvaluation;
 	};
+	const auto RefineBySpineConstraintInterpolationSweep = [&](
+		const FPhase1PelvisRotationEvaluation& SeedEvaluation,
+		const TCHAR* ContextTag,
+		const bool bRequireTiltAdmissible)
+	{
+		FPhase1PelvisRotationEvaluation BestEvaluation = SeedEvaluation;
+		if (bRequireTiltAdmissible && !SeedEvaluation.bTiltAdmissible)
+		{
+			return BestEvaluation;
+		}
+
+		const FPhase1ConstraintRotationSample* SpineConstraintSample = nullptr;
+		for (const FPhase1ConstraintRotationSample& ConstraintSample : ValidConstraintSamples)
+		{
+			if (ConstraintSample.ChildBoneName == TEXT("spine_01"))
+			{
+				SpineConstraintSample = &ConstraintSample;
+				break;
+			}
+		}
+		if (!SpineConstraintSample)
+		{
+			return BestEvaluation;
+		}
+
+		static const float InterpolationAlphas[] = { 0.02f, 0.05f, 0.08f, 0.10f, 0.15f, 0.20f, 0.25f, 0.33f, 0.50f, 0.67f, 0.80f };
+		for (const float Alpha : InterpolationAlphas)
+		{
+			const FQuat CandidateRotation = FQuat::Slerp(
+				SeedEvaluation.Rotation,
+				SpineConstraintSample->CandidateRotation,
+				Alpha).GetNormalized();
+			const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+				CandidateRotation,
+				FString::Printf(TEXT("%s_%s_a%.2f"),
+					*SeedEvaluation.Source,
+					ContextTag,
+					Alpha));
+			if (bRequireTiltAdmissible && !CandidateEvaluation.bTiltAdmissible)
+			{
+				continue;
+			}
+			if (ShouldPreferSpineOnlyRootOnReadinessRescueCandidate(
+					BestEvaluation.LeftThighAngularErrorDeg,
+					BestEvaluation.RightThighAngularErrorDeg,
+					BestEvaluation.SpineAngularErrorDeg,
+					CandidateEvaluation.LeftThighAngularErrorDeg,
+					CandidateEvaluation.RightThighAngularErrorDeg,
+					CandidateEvaluation.SpineAngularErrorDeg) ||
+				IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation))
+			{
+				BestEvaluation = CandidateEvaluation;
+			}
+		}
+
+		return BestEvaluation;
+	};
+	const auto RefineByWorstThighConstraintInterpolationSweep = [&](
+		const FPhase1PelvisRotationEvaluation& SeedEvaluation,
+		const TCHAR* ContextTag,
+		const bool bRequireTiltAdmissible)
+	{
+		FPhase1PelvisRotationEvaluation BestEvaluation = SeedEvaluation;
+		if (bRequireTiltAdmissible && !SeedEvaluation.bTiltAdmissible)
+		{
+			return BestEvaluation;
+		}
+
+		FName FocusChildBone = TEXT("thigh_r");
+		float FocusMarginDeg =
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - SeedEvaluation.RightThighAngularErrorDeg;
+		const float LeftThighMarginDeg =
+			BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg - SeedEvaluation.LeftThighAngularErrorDeg;
+		if (LeftThighMarginDeg + KINDA_SMALL_NUMBER < FocusMarginDeg)
+		{
+			FocusChildBone = TEXT("thigh_l");
+		}
+		if (FocusChildBone != TEXT("thigh_l") && FocusChildBone != TEXT("thigh_r"))
+		{
+			return BestEvaluation;
+		}
+
+		const FPhase1ConstraintRotationSample* FocusConstraintSample = nullptr;
+		for (const FPhase1ConstraintRotationSample& ConstraintSample : ValidConstraintSamples)
+		{
+			if (ConstraintSample.ChildBoneName == FocusChildBone)
+			{
+				FocusConstraintSample = &ConstraintSample;
+				break;
+			}
+		}
+		if (!FocusConstraintSample)
+		{
+			return BestEvaluation;
+		}
+
+		static const float InterpolationAlphas[] = { 0.01f, 0.02f, 0.03f, 0.05f, 0.08f, 0.10f, 0.15f, 0.20f };
+		for (const float Alpha : InterpolationAlphas)
+		{
+			const FQuat CandidateRotation = FQuat::Slerp(
+				SeedEvaluation.Rotation,
+				FocusConstraintSample->CandidateRotation,
+				Alpha).GetNormalized();
+			const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+				CandidateRotation,
+				FString::Printf(TEXT("%s_%s_%s_a%.2f"),
+					*SeedEvaluation.Source,
+					ContextTag,
+					*FocusChildBone.ToString(),
+					Alpha));
+			if (bRequireTiltAdmissible && !CandidateEvaluation.bTiltAdmissible)
+			{
+				continue;
+			}
+			if (ShouldAcceptWorstThighConstraintInterpolationCandidate(
+					BestEvaluation.LeftThighAngularErrorDeg,
+					BestEvaluation.RightThighAngularErrorDeg,
+					BestEvaluation.SpineAngularErrorDeg,
+					CandidateEvaluation.LeftThighAngularErrorDeg,
+					CandidateEvaluation.RightThighAngularErrorDeg,
+					CandidateEvaluation.SpineAngularErrorDeg) &&
+				IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation))
+			{
+				BestEvaluation = CandidateEvaluation;
+			}
+		}
+
+		return BestEvaluation;
+	};
 	const auto RefineByFocusedConstraintDelta = [&](
 		const FPhase1PelvisRotationEvaluation& SeedEvaluation,
 		const FName FocusChildBone,
@@ -1544,6 +1690,26 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	if (BestUnconstrainedRotationEvaluation.bTiltAdmissible && bAcceptForensicRescueCandidate)
 	{
 		BestRotationEvaluation = BestUnconstrainedRotationEvaluation;
+	}
+	if (ShouldRunSpineConstraintInterpolationSweep(
+			BestRotationEvaluation.LeftThighAngularErrorDeg,
+			BestRotationEvaluation.RightThighAngularErrorDeg,
+			BestRotationEvaluation.SpineAngularErrorDeg))
+	{
+		BestRotationEvaluation = RefineBySpineConstraintInterpolationSweep(
+			BestRotationEvaluation,
+			TEXT("spine_interp"),
+			bProtectLiveTilt);
+	}
+	if (ShouldRunWorstThighConstraintInterpolationSweep(
+			BestRotationEvaluation.LeftThighAngularErrorDeg,
+			BestRotationEvaluation.RightThighAngularErrorDeg,
+			BestRotationEvaluation.SpineAngularErrorDeg))
+	{
+		BestRotationEvaluation = RefineByWorstThighConstraintInterpolationSweep(
+			BestRotationEvaluation,
+			TEXT("worst_thigh_interp"),
+			bProtectLiveTilt);
 	}
 
 	FPhase1PelvisRotationEvaluation AppliedRotationEvaluation = BestRotationEvaluation;

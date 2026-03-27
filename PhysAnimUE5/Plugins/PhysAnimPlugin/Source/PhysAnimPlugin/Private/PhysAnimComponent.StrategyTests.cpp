@@ -364,6 +364,48 @@ namespace
 				32.74f,
 				19.55f));
 		TestTrue(
+			TEXT("Alternate-reference direct blend sweep runs for the same thigh-safe spine near-miss"),
+			UPhysAnimComponent::TestOnlyShouldRunAlternateReferenceDirectConstraintBlendSweep(
+				31.82f,
+				32.74f,
+				19.55f));
+		TestTrue(
+			TEXT("Spine-constraint interpolation sweep runs for the same thigh-safe spine near-miss"),
+			UPhysAnimComponent::TestOnlyShouldRunSpineConstraintInterpolationSweep(
+				31.82f,
+				32.74f,
+				19.55f));
+		TestTrue(
+			TEXT("Worst-thigh interpolation sweep runs once spine is back inside readiness and a thigh remains the blocker"),
+			UPhysAnimComponent::TestOnlyShouldRunWorstThighConstraintInterpolationSweep(
+				32.14f,
+				34.54f,
+				17.59f));
+		TestFalse(
+			TEXT("Worst-thigh interpolation sweep stays off while spine is still the blocker"),
+			UPhysAnimComponent::TestOnlyShouldRunWorstThighConstraintInterpolationSweep(
+				31.82f,
+				32.74f,
+				19.55f));
+		TestFalse(
+			TEXT("Worst-thigh follow-through must not re-break spine readiness after spine interpolation fixed it"),
+			UPhysAnimComponent::TestOnlyShouldAcceptWorstThighConstraintInterpolationCandidate(
+				32.14f,
+				34.54f,
+				17.59f,
+				31.30f,
+				32.81f,
+				19.20f));
+		TestTrue(
+			TEXT("Worst-thigh follow-through may improve the worst thigh when spine readiness stays intact"),
+			UPhysAnimComponent::TestOnlyShouldAcceptWorstThighConstraintInterpolationCandidate(
+				32.14f,
+				34.54f,
+				17.59f,
+				31.30f,
+				32.81f,
+				17.80f));
+		TestTrue(
 			TEXT("Spine-only rescue scoring prefers a candidate that improves the actual spine blocker while keeping thighs ready"),
 			UPhysAnimComponent::TestOnlyShouldPreferSpineOnlyRootOnReadinessRescueCandidate(
 				31.82f,

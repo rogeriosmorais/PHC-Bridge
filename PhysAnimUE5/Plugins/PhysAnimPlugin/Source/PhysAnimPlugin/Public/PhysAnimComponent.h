@@ -790,6 +790,52 @@ public:
 			RightThighAngularErrorDeg,
 			SpineAngularErrorDeg);
 	}
+	static bool TestOnlyShouldRunAlternateReferenceDirectConstraintBlendSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg)
+	{
+		return ShouldRunAlternateReferenceDirectConstraintBlendSweep(
+			LeftThighAngularErrorDeg,
+			RightThighAngularErrorDeg,
+			SpineAngularErrorDeg);
+	}
+	static bool TestOnlyShouldRunSpineConstraintInterpolationSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg)
+	{
+		return ShouldRunSpineConstraintInterpolationSweep(
+			LeftThighAngularErrorDeg,
+			RightThighAngularErrorDeg,
+			SpineAngularErrorDeg);
+	}
+	static bool TestOnlyShouldRunWorstThighConstraintInterpolationSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg)
+	{
+		return ShouldRunWorstThighConstraintInterpolationSweep(
+			LeftThighAngularErrorDeg,
+			RightThighAngularErrorDeg,
+			SpineAngularErrorDeg);
+	}
+	static bool TestOnlyShouldAcceptWorstThighConstraintInterpolationCandidate(
+		float CurrentLeftThighAngularErrorDeg,
+		float CurrentRightThighAngularErrorDeg,
+		float CurrentSpineAngularErrorDeg,
+		float CandidateLeftThighAngularErrorDeg,
+		float CandidateRightThighAngularErrorDeg,
+		float CandidateSpineAngularErrorDeg)
+	{
+		return ShouldAcceptWorstThighConstraintInterpolationCandidate(
+			CurrentLeftThighAngularErrorDeg,
+			CurrentRightThighAngularErrorDeg,
+			CurrentSpineAngularErrorDeg,
+			CandidateLeftThighAngularErrorDeg,
+			CandidateRightThighAngularErrorDeg,
+			CandidateSpineAngularErrorDeg);
+	}
 	static bool TestOnlyShouldPreferSpineOnlyRootOnReadinessRescueCandidate(
 		float CurrentLeftThighAngularErrorDeg,
 		float CurrentRightThighAngularErrorDeg,
@@ -1518,6 +1564,25 @@ public:
 		float LeftThighAngularErrorDeg,
 		float RightThighAngularErrorDeg,
 		float SpineAngularErrorDeg);
+	static bool ShouldRunAlternateReferenceDirectConstraintBlendSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg);
+	static bool ShouldRunSpineConstraintInterpolationSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg);
+	static bool ShouldRunWorstThighConstraintInterpolationSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg);
+	static bool ShouldAcceptWorstThighConstraintInterpolationCandidate(
+		float CurrentLeftThighAngularErrorDeg,
+		float CurrentRightThighAngularErrorDeg,
+		float CurrentSpineAngularErrorDeg,
+		float CandidateLeftThighAngularErrorDeg,
+		float CandidateRightThighAngularErrorDeg,
+		float CandidateSpineAngularErrorDeg);
 	static bool ShouldPreferSpineOnlyRootOnReadinessRescueCandidate(
 		float CurrentLeftThighAngularErrorDeg,
 		float CurrentRightThighAngularErrorDeg,
