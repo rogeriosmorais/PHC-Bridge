@@ -2,11 +2,65 @@
 
 #include "PhysAnimComponent.h"
 #include "PhysAnimComparisonSubsystem.h"
+#include "PhysAnimBalance.TestHelpers.h"
 #include "Misc/AutomationTest.h"
 
 namespace
 {
 	using namespace PhysAnimBridge;
+	using namespace PhysAnimBalanceTestHelpers;
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceModeSmokeOutcomeTest,
+		"PhysAnim.Component.BalanceModeSmokeOutcome",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceModeSmokeOutcomeTest::RunTest(const FString& Parameters)
+	{
+		FString OutcomeError;
+
+		TestTrue(
+			TEXT("Balance recovery remains a passing smoke outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BalanceActive_Recovery,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				OutcomeError));
+		TestTrue(TEXT("Successful recovery outcome emits no error"), OutcomeError.IsEmpty());
+
+		OutcomeError.Reset();
+		TestTrue(
+			TEXT("Explicit safe deny is a passing smoke outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BalanceSafeDeny,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				true,
+				TEXT("phase1_late_validate_sim_coverage_regressed"),
+				TEXT(""),
+				OutcomeError));
+		TestTrue(TEXT("Safe deny pass emits no error"), OutcomeError.IsEmpty());
+
+		OutcomeError.Reset();
+		TestFalse(
+			TEXT("BridgeActive remains a failing smoke outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				OutcomeError));
+		TestTrue(TEXT("BridgeActive failure reports the runtime state"), OutcomeError.Contains(TEXT("BridgeActive")));
+		return true;
+	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimActionConditioningTest,
@@ -118,6 +172,53 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTrainingAlignedMassScaleTest,
+		"PhysAnim.Component.TrainingAlignedMassScale",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTrainingAlignedMassScaleTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(TEXT("Pelvis uses the audited family target scale"), UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(TEXT("pelvis"), 1.0f), 0.815f);
+		TestEqual(TEXT("Leg chain uses the audited family target scale"), UPhysAnimComponent::ResolveTrainingAlignedMassScaleForBone(TEXT("calf_l"), 1.0f), 1.569f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTrainingAlignedControlFamilyProfileTest,
+		"PhysAnim.Component.TrainingAlignedControlFamilyProfile",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTrainingAlignedControlFamilyProfileTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(TEXT("Torso family uses the strongest training-aligned control scale"), UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("spine_02"), 1.0f), 1.25f);
+		TestEqual(TEXT("Hand family uses the weakest training-aligned strength scale"), UPhysAnimComponent::ResolveTrainingAlignedControlStrengthScaleForBone(TEXT("hand_l"), 1.0f), 0.375f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTrainingAlignedToeLimitPolicyTest,
+		"PhysAnim.Component.TrainingAlignedToeLimitPolicy",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTrainingAlignedToeLimitPolicyTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimStabilizationSettings Settings;
+		TestTrue(TEXT("Training-aligned toe limit policy is enabled by default"), Settings.bApplyTrainingAlignedToeLimitPolicy);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTrainingAlignedLowerLimbTargetRangePolicyTest,
+		"PhysAnim.Component.TrainingAlignedLowerLimbTargetRangePolicy",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTrainingAlignedLowerLimbTargetRangePolicyTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(TEXT("Calf chain uses the strongest lower-limb target-range reduction"), UPhysAnimComponent::ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(TEXT("calf_l"), 1.0f), 0.50f);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimRuntimeInstabilityThresholdTest,
 		"PhysAnim.Component.RuntimeInstabilityThreshold",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -157,6 +258,10 @@ namespace
 	{
 		TestFalse(TEXT("Uninitialized does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::Uninitialized));
 		TestTrue(TEXT("BridgeActive owns bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::BridgeActive));
+		TestTrue(TEXT("Balance entry Prepare owns bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::BalanceEntry_Prepare));
+		TestTrue(TEXT("Balance entry RootOn owns bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::BalanceEntry_RootOn));
+		TestFalse(TEXT("BalanceSafeDeny does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::BalanceSafeDeny));
+		TestFalse(TEXT("FailStopped does not own bridge physics"), UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState::FailStopped));
 		return true;
 	}
 
@@ -184,6 +289,133 @@ namespace
 		TestTrue(
 			TEXT("ReadyForActivation activates bridge physics only when zero-action mode is disabled"),
 			UPhysAnimComponent::ShouldActivateBridgeFromSafeMode(EPhysAnimRuntimeState::ReadyForActivation, false));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceStateClassificationTest,
+		"PhysAnim.Component.BalanceStateClassification",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceStateClassificationTest::RunTest(const FString& Parameters)
+	{
+		TestTrue(TEXT("Prepare is a public balance-entry state"), UPhysAnimComponent::TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState::BalanceEntry_Prepare));
+		TestTrue(TEXT("LateValidate is a public balance-entry state"), UPhysAnimComponent::TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState::BalanceEntry_LateValidate));
+		TestTrue(TEXT("RootOn is a public balance-entry state"), UPhysAnimComponent::TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState::BalanceEntry_RootOn));
+		TestTrue(TEXT("Settle is a public balance-entry state"), UPhysAnimComponent::TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState::BalanceEntry_Settle));
+		TestFalse(TEXT("BalanceSafeDeny is terminal, not an entry state"), UPhysAnimComponent::TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState::BalanceSafeDeny));
+		TestFalse(TEXT("BridgeActive is not an entry state"), UPhysAnimComponent::TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState::BridgeActive));
+
+		TestTrue(TEXT("Recovery is the only public active-balance state"), UPhysAnimComponent::TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState::BalanceActive_Recovery));
+		TestFalse(TEXT("BalanceSafeDeny is not active balance"), UPhysAnimComponent::TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState::BalanceSafeDeny));
+		TestFalse(TEXT("Settle is not active balance"), UPhysAnimComponent::TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState::BalanceEntry_Settle));
+		TestTrue(
+			TEXT("Ultra-fine RootOn readiness cleanup still runs for the current 1.55 degree near-miss class"),
+			UPhysAnimComponent::TestOnlyShouldRunRootOnReadinessUltraFineMarginSweep(1.55f));
+		TestFalse(
+			TEXT("Ultra-fine RootOn readiness cleanup stays off for clearly larger deficits"),
+			UPhysAnimComponent::TestOnlyShouldRunRootOnReadinessUltraFineMarginSweep(2.5f));
+		TestFalse(
+			TEXT("Step limiting must not throw away a tilt-admissible ready pelvis candidate"),
+			UPhysAnimComponent::TestOnlyShouldAcceptStepLimitedPhase1PelvisRotation(
+				true,
+				true,
+				true,
+				true,
+				false,
+				false));
+		TestTrue(
+			TEXT("Step limiting can still be used when it preserves readiness"),
+			UPhysAnimComponent::TestOnlyShouldAcceptStepLimitedPhase1PelvisRotation(
+				true,
+				false,
+				false,
+				true,
+				false,
+				false));
+		TestTrue(
+			TEXT("Spine-only rescue sweep runs for the current near-miss pattern"),
+			UPhysAnimComponent::TestOnlyShouldRunSpineOnlyRootOnReadinessRescueSweep(
+				31.82f,
+				32.74f,
+				19.55f));
+		TestFalse(
+			TEXT("Spine-only rescue sweep stays off when a thigh also misses readiness"),
+			UPhysAnimComponent::TestOnlyShouldRunSpineOnlyRootOnReadinessRescueSweep(
+				35.5f,
+				32.74f,
+				19.55f));
+		TestTrue(
+			TEXT("Spine-biased direct blend sweep runs for the current thigh-safe spine near-miss"),
+			UPhysAnimComponent::TestOnlyShouldRunSpineBiasedDirectConstraintBlendSweep(
+				31.82f,
+				32.74f,
+				19.55f));
+		TestFalse(
+			TEXT("Spine-biased direct blend sweep stays off when a thigh already misses readiness"),
+			UPhysAnimComponent::TestOnlyShouldRunSpineBiasedDirectConstraintBlendSweep(
+				33.1f,
+				32.74f,
+				19.55f));
+		TestTrue(
+			TEXT("Spine-focused pair blend sweep runs for the same thigh-safe spine near-miss"),
+			UPhysAnimComponent::TestOnlyShouldRunSpineFocusedPairBlendSweep(
+				31.82f,
+				32.74f,
+				19.55f));
+		TestTrue(
+			TEXT("Spine-only rescue scoring prefers a candidate that improves the actual spine blocker while keeping thighs ready"),
+			UPhysAnimComponent::TestOnlyShouldPreferSpineOnlyRootOnReadinessRescueCandidate(
+				31.82f,
+				32.74f,
+				19.55f,
+				31.95f,
+				32.90f,
+				18.95f));
+		TestFalse(
+			TEXT("Spine-only rescue scoring rejects candidates that fix spine by breaking thigh readiness"),
+			UPhysAnimComponent::TestOnlyShouldPreferSpineOnlyRootOnReadinessRescueCandidate(
+				31.82f,
+				32.74f,
+				19.55f,
+				31.95f,
+				33.30f,
+				18.95f));
+		TestTrue(
+			TEXT("Spine-only rescue acceptance keeps a spine-improving candidate that preserves thigh readiness"),
+			UPhysAnimComponent::TestOnlyShouldAcceptSpineOnlyRootOnReadinessRescueCandidate(
+				31.82f,
+				32.74f,
+				19.55f,
+				31.95f,
+				32.90f,
+				18.95f));
+		TestFalse(
+			TEXT("Spine-only rescue acceptance refuses a candidate that only wins by generic score after breaking thigh readiness"),
+			UPhysAnimComponent::TestOnlyShouldAcceptSpineOnlyRootOnReadinessRescueCandidate(
+				31.82f,
+				32.74f,
+				19.55f,
+				32.66f,
+				34.49f,
+				19.53f));
+		TestTrue(
+			TEXT("Spine-only rescue acceptance still allows a small thigh-margin trade when it preserves readiness and improves the live spine blocker"),
+			UPhysAnimComponent::TestOnlyShouldAcceptSpineOnlyRootOnReadinessRescueCandidate(
+				31.82f,
+				32.74f,
+				19.55f,
+				31.95f,
+				32.90f,
+				19.53f));
+		TestEqual(
+			TEXT("Internal ReadyForPhase3 handoff publishes as Settle, not BridgeActive"),
+			UPhysAnimComponent::MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3),
+			EPhysAnimRuntimeState::BalanceEntry_Settle);
+		TestEqual(
+			TEXT("SafeDenied transition publishes as BalanceSafeDeny"),
+			UPhysAnimComponent::MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase::BRT_SafeDenied),
+			EPhysAnimRuntimeState::BalanceSafeDeny);
 		return true;
 	}
 }

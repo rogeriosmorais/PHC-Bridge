@@ -654,6 +654,12 @@ struct FPhase1PelvisCouplingRotationForensics
 	float UnconstrainedSpineAngularErrorDeg = 0.0f;
 	float AppliedTiltDeg = 0.0f;
 	float AppliedAngularThresholdOverflowDeg = 0.0f;
+	bool bTriggeredTiltSpineRescuePath = false;
+	bool bTriggeredForensicSpineRescuePath = false;
+	float TiltSpineRescueSpineAngularErrorDeg = 0.0f;
+	float ForensicSpineRescueSpineAngularErrorDeg = 0.0f;
+	FString TiltSpineRescueSource;
+	FString ForensicSpineRescueSource;
 };
 
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
@@ -714,6 +720,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
 
+	static EPhysAnimRuntimeState MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase TransitionPhase);
+
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	bool IsReadyForScriptedPresentation() const;
 
@@ -728,6 +736,93 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	void StopBalancePerturbationMode();
+
+#if WITH_DEV_AUTOMATION_TESTS
+	static bool TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState State) { return IsBalanceEntryState(State); }
+	static bool TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState State) { return IsBalanceActiveState(State); }
+	static bool TestOnlyShouldRunRootOnReadinessUltraFineMarginSweep(float RootOnReadinessTotalDeficitDeg)
+	{
+		return ShouldRunRootOnReadinessUltraFineMarginSweep(RootOnReadinessTotalDeficitDeg);
+	}
+	static bool TestOnlyShouldAcceptStepLimitedPhase1PelvisRotation(
+		bool bBestTiltAdmissible,
+		bool bBestRootOnAngularReady,
+		bool bBestRootOnReadinessMarginSatisfied,
+		bool bStepTiltAdmissible,
+		bool bStepRootOnAngularReady,
+		bool bStepRootOnReadinessMarginSatisfied)
+	{
+		return ShouldAcceptStepLimitedPhase1PelvisRotation(
+			bBestTiltAdmissible,
+			bBestRootOnAngularReady,
+			bBestRootOnReadinessMarginSatisfied,
+			bStepTiltAdmissible,
+			bStepRootOnAngularReady,
+			bStepRootOnReadinessMarginSatisfied);
+	}
+	static bool TestOnlyShouldRunSpineOnlyRootOnReadinessRescueSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg)
+	{
+		return ShouldRunSpineOnlyRootOnReadinessRescueSweep(
+			LeftThighAngularErrorDeg,
+			RightThighAngularErrorDeg,
+			SpineAngularErrorDeg);
+	}
+	static bool TestOnlyShouldRunSpineBiasedDirectConstraintBlendSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg)
+	{
+		return ShouldRunSpineBiasedDirectConstraintBlendSweep(
+			LeftThighAngularErrorDeg,
+			RightThighAngularErrorDeg,
+			SpineAngularErrorDeg);
+	}
+	static bool TestOnlyShouldRunSpineFocusedPairBlendSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg)
+	{
+		return ShouldRunSpineFocusedPairBlendSweep(
+			LeftThighAngularErrorDeg,
+			RightThighAngularErrorDeg,
+			SpineAngularErrorDeg);
+	}
+	static bool TestOnlyShouldPreferSpineOnlyRootOnReadinessRescueCandidate(
+		float CurrentLeftThighAngularErrorDeg,
+		float CurrentRightThighAngularErrorDeg,
+		float CurrentSpineAngularErrorDeg,
+		float CandidateLeftThighAngularErrorDeg,
+		float CandidateRightThighAngularErrorDeg,
+		float CandidateSpineAngularErrorDeg)
+	{
+		return ShouldPreferSpineOnlyRootOnReadinessRescueCandidate(
+			CurrentLeftThighAngularErrorDeg,
+			CurrentRightThighAngularErrorDeg,
+			CurrentSpineAngularErrorDeg,
+			CandidateLeftThighAngularErrorDeg,
+			CandidateRightThighAngularErrorDeg,
+			CandidateSpineAngularErrorDeg);
+	}
+	static bool TestOnlyShouldAcceptSpineOnlyRootOnReadinessRescueCandidate(
+		float CurrentLeftThighAngularErrorDeg,
+		float CurrentRightThighAngularErrorDeg,
+		float CurrentSpineAngularErrorDeg,
+		float CandidateLeftThighAngularErrorDeg,
+		float CandidateRightThighAngularErrorDeg,
+		float CandidateSpineAngularErrorDeg)
+	{
+		return ShouldAcceptSpineOnlyRootOnReadinessRescueCandidate(
+			CurrentLeftThighAngularErrorDeg,
+			CurrentRightThighAngularErrorDeg,
+			CurrentSpineAngularErrorDeg,
+			CandidateLeftThighAngularErrorDeg,
+			CandidateRightThighAngularErrorDeg,
+			CandidateSpineAngularErrorDeg);
+	}
+#endif
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
 	float BalanceQuietLinearSpeedThresholdCmPerSec = 10.0f;
@@ -1403,6 +1498,40 @@ public:
 	static bool RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState State);
 	static const TCHAR* GetRuntimeStateName(EPhysAnimRuntimeState State);
 	static const TCHAR* GetPhysicsMovementTypeName(EPhysicsMovementType MovementType);
+	static bool ShouldRunRootOnReadinessUltraFineMarginSweep(float RootOnReadinessTotalDeficitDeg);
+	static bool ShouldAcceptStepLimitedPhase1PelvisRotation(
+		bool bBestTiltAdmissible,
+		bool bBestRootOnAngularReady,
+		bool bBestRootOnReadinessMarginSatisfied,
+		bool bStepTiltAdmissible,
+		bool bStepRootOnAngularReady,
+		bool bStepRootOnReadinessMarginSatisfied);
+	static bool ShouldRunSpineOnlyRootOnReadinessRescueSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg);
+	static bool ShouldRunSpineBiasedDirectConstraintBlendSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg);
+	static bool ShouldRunSpineFocusedPairBlendSweep(
+		float LeftThighAngularErrorDeg,
+		float RightThighAngularErrorDeg,
+		float SpineAngularErrorDeg);
+	static bool ShouldPreferSpineOnlyRootOnReadinessRescueCandidate(
+		float CurrentLeftThighAngularErrorDeg,
+		float CurrentRightThighAngularErrorDeg,
+		float CurrentSpineAngularErrorDeg,
+		float CandidateLeftThighAngularErrorDeg,
+		float CandidateRightThighAngularErrorDeg,
+		float CandidateSpineAngularErrorDeg);
+	static bool ShouldAcceptSpineOnlyRootOnReadinessRescueCandidate(
+		float CurrentLeftThighAngularErrorDeg,
+		float CurrentRightThighAngularErrorDeg,
+		float CurrentSpineAngularErrorDeg,
+		float CandidateLeftThighAngularErrorDeg,
+		float CandidateRightThighAngularErrorDeg,
+		float CandidateSpineAngularErrorDeg);
 
 	static float ResolvePhase1Uprightness(
 		class USkeletalMeshComponent* SkeletalMesh,

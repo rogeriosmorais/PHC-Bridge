@@ -82,7 +82,14 @@ Resolved or substantially improved contract areas:
 
 Current first meaningful balance-entry blocker:
 
-- `phase1_late_validate_sim_coverage_regressed`
+- the latest balance smoke now reaches explicit safe denial with:
+  - `phase1_root_on_readiness_pelvis_spine_margin_insufficient`
+
+Current interpretation of that blocker:
+
+- Phase 1 LateValidate can satisfy many other gates at the same time
+- the remaining failing proof in the latest run is the pelvis-spine RootOn-readiness margin
+- this is now a narrower and more truthful blocker than the older broad sim-coverage confusion
 
 That is now more important than the earlier ownership confusion.
 
@@ -102,7 +109,7 @@ Do not align every surface at once.
 Recommended order now:
 
 1. keep the balance-entry contract docs and implementation synchronized
-2. finish isolating the current LateValidate sim-coverage regression
+2. finish isolating the current pelvis-spine RootOn-readiness margin insufficiency in LateValidate
 3. only then decide whether the next blocker is:
    - a remaining contract bug
    - a PhysicsControl application/state-source issue

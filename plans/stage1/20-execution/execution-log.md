@@ -14,9 +14,10 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 1 / `S1-P1-A1` accepted / `S1-P1-A2` in progress. The focus has pivoted to the "Distal Kinematic Experiment" and hardening Phase 1 admission.
-- `Overall status`: UE startup is stable. The current engineering constraint is enforcing truthful "distal=kin" topology and preventing ownership thrash between global and per-bone modifier writes.
-- `Last planning milestone`: The transition from ad-hoc stabilization to "Distal Kinematic Authoritative Control" and hardened Phase 1 admission gates.
+- `Current phase`: Phase 1 / truthful RootOn-readiness investigation.
+- `Overall status`: UE startup is stable and the latest truthful balance smoke reaches explicit safe denial with `phase1_root_on_readiness_pelvis_spine_margin_insufficient`.
+- `Last planning milestone`: contract and ownership drift are largely cleaned up; the active task is distinguishing missing Phase 1 candidate generation from genuine pelvis-spine physical-viability failure.
+- `Latest runtime forensics`: the applied spine-only rescue path is now constrained to preserve thigh readiness, the spine-only rescue sweep uses the spine-rescue comparator, and candidate generation now includes a finer spine-biased direct-blend seed family for the current thigh-safe near-miss class; the live smoke still ends at the same spine near-miss (`pelvisSpine01Angular=19.55`), which narrows the next work to deeper candidate generation / solver viability rather than the previous coarse seed or rescue-acceptance bugs.
 
 ## Active Tasks
 
@@ -416,10 +417,15 @@ Repository baseline:
 - Keep the truthful phased balance-transition direction.
 - Enforce the "Distal Kinematic" topology as the source of truth for Phase 1.
 
+Current truthful smoke read as of 2026-03-27:
+- `PhysAnim.PIE.BalanceModeSmoke` now reaches explicit safe denial truthfully instead of stalling ambiguously.
+- the latest observed terminal reason is `phase1_root_on_readiness_pelvis_spine_margin_insufficient`
+- that means the current blocking surface is again Phase 1 RootOn-readiness margin proof, not a live Phase 2 RootOn spike in this run
+
 Active engineering problem:
-1. Ensure the Distal Kinematic experiment is fully verified through smoke tests and diagnostic logs.
-2. Maintain read-only telemetry to avoid state mutation during classification.
-3. Validate Phase 1 entry with the new stability gates and failure budget.
+1. keep the truthful safe-deny / terminal-state contract intact
+2. preserve read-only telemetry and phase-correct failure labeling
+3. isolate why the pelvis-spine readiness margin remains insufficient at LateValidate even when other gates are satisfied
 
 ## Notes
 
@@ -427,4 +433,4 @@ Known important reference points from this work:
 - The shift from broad stabilization to explicit phase-owned balance transition design is complete.
 - The latest engineering focus is on "truthful" topology enforcement and avoiding ownership thrash.
 - Bridge-owned locomotion remains the intended direction for `BridgeActive`.
-- The current honest failure point is a repeatable Phase 2 root-on spike, not the older invalid-entry rejection loop.
+- The current honest failure point in the latest smoke is `phase1_root_on_readiness_pelvis_spine_margin_insufficient`, not the older invalid-entry rejection loop.

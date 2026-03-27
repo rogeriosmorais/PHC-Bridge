@@ -510,7 +510,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				: (!QuietBlockReason.IsEmpty() ? QuietBlockReason : LastQuietBlockReason);
 			const FString TimeoutReason = TerminalQuietBlockReason.IsEmpty()
 				? TEXT("phase1_no_convergence_path")
-				: TEXT("phase1_no_convergence_path_") + TerminalQuietBlockReason;
+				: TerminalQuietBlockReason;
 			Diagnostics.FailureReason = TimeoutReason;
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
 			Owner->ReleaseTransitionOwnedShellLock();
@@ -1010,32 +1010,26 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				CurrentResult.PelvisThighRAngularErrorDeg <= BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg &&
 				CurrentResult.PelvisSpine01AngularErrorDeg <= BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg &&
 				CurrentResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady;
-			if (!CurrentResult.bRootOnDirectPelvisLinkAngularSatisfied)
-			{
-				const bool bTiltLimitedViability =
-					IsPhase1TiltLimitedRootOnViability(Owner->LastPhase1PelvisCouplingRotationForensics, Settings);
-				CurrentResult.RootOnReadinessGateReason = bTiltLimitedViability
-					? TEXT("phase1_root_on_readiness_tilt_limited_viability")
-					: TEXT("phase1_root_on_readiness_pelvis_angular_incoherent");
-			}
-			else if (CurrentResult.PelvisThighLAngularErrorDeg > BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg ||
-				CurrentResult.PelvisThighRAngularErrorDeg > BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg)
-			{
-				CurrentResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient");
-			}
-			else if (CurrentResult.PelvisSpine01AngularErrorDeg > BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg)
-			{
-				CurrentResult.RootOnReadinessGateReason =
-					IsPhase1TiltLimitedRootOnViability(Owner->LastPhase1PelvisCouplingRotationForensics, Settings)
-						? TEXT("phase1_root_on_readiness_tilt_limited_viability")
-						: TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient");
-			}
-			else
-			{
-				CurrentResult.RootOnReadinessGateReason = bNoCouplingProofSatisfiedThisFrame
-					? TEXT("ready")
-					: TEXT("phase1_root_on_readiness_requires_pelvis_coupling");
-			}
+			const bool bDirectPelvisThighMarginsSatisfied =
+				CurrentResult.PelvisThighLAngularErrorDeg <= BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg &&
+				CurrentResult.PelvisThighRAngularErrorDeg <= BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg;
+			const bool bDirectPelvisSpineMarginSatisfied =
+				CurrentResult.PelvisSpine01AngularErrorDeg <= BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg;
+			const bool bTiltLimitedViability =
+				IsPhase1TiltLimitedRootOnViability(Owner->LastPhase1PelvisCouplingRotationForensics, Settings);
+			CurrentResult.RootOnReadinessGateReason = ResolveRootOnReadinessGateReason(
+				CurrentResult.RootOnReadinessClassification,
+				CurrentResult.bRootOnDirectPelvisLinkGeometrySatisfied,
+				CurrentResult.bRootOnDirectPelvisLinkAngularSatisfied,
+				bDirectPelvisThighMarginsSatisfied,
+				bDirectPelvisSpineMarginSatisfied,
+				CurrentResult.bRootOnReadinessShellHoldSatisfied,
+				CurrentResult.bRootOnReadinessFinalBringUpControlSettled,
+				CurrentResult.bRootOnReadinessPolicyInfluenceSettled,
+				CurrentResult.bPreRootOnShellSafetyProofSatisfied,
+				CurrentResult.bRootOnReadinessNoCouplingProofSatisfied,
+				bTiltLimitedViability,
+				CurrentResult.bRootOnReadinessPolicyInfluenceSettled ? 1.0f : 0.0f);
 			Diagnostics.Phase1RootOnReadinessGateReason = CurrentResult.RootOnReadinessGateReason;
 			EmitNoCouplingProofLog(
 				bNoCouplingProofSatisfiedThisFrame ? TEXT("satisfied") : TEXT("progress"),
@@ -1701,7 +1695,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 			const FString TimeoutReason = LateValidateBlockReason.IsEmpty()
 				? TEXT("phase1_no_convergence_path")
-				: TEXT("phase1_no_convergence_path_") + LateValidateBlockReason;
+				: LateValidateBlockReason;
 			Diagnostics.FailureReason = TimeoutReason;
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
 			Owner->ReleaseTransitionOwnedShellLock();

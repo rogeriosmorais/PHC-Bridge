@@ -21,7 +21,13 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 	// 1. Physics Continuity Gate
 	if (!Domain.bRootSimulating)
 	{
-		OutReason = BalanceReadinessReasons::RootSimulationDropped;
+		OutReason =
+			Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle
+				? BalanceReadinessReasons::Phase3RootSimulationDropped
+				: ((Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
+					Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3)
+					? BalanceReadinessReasons::Phase2RootSimulationDropped
+					: BalanceReadinessReasons::RootSimulationDropped);
 		return false;
 	}
 
@@ -35,6 +41,11 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 		LinearThreshold *= 2.5f;
 		AngularThreshold *= 3.0f;
 		InstabilityReason = BalanceReadinessReasons::Phase3InstabilitySpike;
+	}
+	else if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
+		Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3)
+	{
+		InstabilityReason = BalanceReadinessReasons::Phase2FailStopPrecursor;
 	}
 
 	if (Domain.RootLinearSpeed > LinearThreshold || 
@@ -90,7 +101,13 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 				Domain.CertifiedDistalSimCount,
 				Domain.DistalSimCount))
 		{
-			OutReason = BalanceReadinessReasons::TopologyMismatch;
+			OutReason =
+				Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle
+					? BalanceReadinessReasons::Phase3TopologyRegressed
+					: ((Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
+						Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3)
+						? BalanceReadinessReasons::Phase2TopologyNotPreserved
+						: BalanceReadinessReasons::TopologyMismatch);
 			return false;
 		}
 	}

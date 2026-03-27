@@ -568,72 +568,19 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		(RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady);
 
 	OutResult.RootOnReadinessClassification = RootOnReadinessClassification;
-	if (bRootCoupledTopologyReady && !bDirectPelvisLinkPositionSatisfied)
-	{
-		OutResult.RootOnReadinessGateReason = TEXT("phase2_pre_root_on_link_error_too_high");
-	}
-	else if (bRootCoupledTopologyReady &&
-		OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied &&
-		!OutResult.bRootOnDirectPelvisLinkAngularSatisfied &&
-		OutSnapshot.bRootOnReadinessTiltLimitedByUprightness)
-	{
-		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_tilt_limited_viability");
-	}
-	else if (bRootCoupledTopologyReady && !OutResult.bRootOnDirectPelvisLinkAngularSatisfied)
-	{
-		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_pelvis_angular_incoherent");
-	}
-	else if (bRootCoupledTopologyReady && !bDirectPelvisThighMarginsSatisfied)
-	{
-		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient");
-	}
-	else if (bRootCoupledTopologyReady &&
-		!bDirectPelvisSpineMarginSatisfied &&
-		OutSnapshot.bRootOnReadinessTiltLimitedByUprightness)
-	{
-		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_tilt_limited_viability");
-	}
-	else if (bRootCoupledTopologyReady && !bDirectPelvisSpineMarginSatisfied)
-	{
-		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient");
-	}
-	else if (RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny)
-	{
-		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_upper_only_safe_deny_pending");
-	}
-	else if (RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
-	{
-		if (!OutResult.bRootOnReadinessShellHoldSatisfied)
-		{
-			OutResult.RootOnReadinessGateReason = TEXT("phase2_root_on_readiness_shell_hold_not_completed");
-		}
-		else if (!OutResult.bRootOnReadinessFinalBringUpControlSettled)
-		{
-			OutResult.RootOnReadinessGateReason = TEXT("phase2_root_on_readiness_final_bring_up_control_not_settled");
-		}
-		else if (!OutResult.bRootOnReadinessPolicyInfluenceSettled)
-		{
-			OutResult.RootOnReadinessGateReason = OutSnapshot.PolicyInfluenceAlphaAtCapture <= KINDA_SMALL_NUMBER
-				? TEXT("phase2_root_on_readiness_policy_influence_not_started")
-				: TEXT("phase2_root_on_readiness_policy_influence_below_threshold");
-		}
-		else if (!OutResult.bPreRootOnShellSafetyProofSatisfied)
-		{
-			OutResult.RootOnReadinessGateReason = TEXT("phase2_root_on_readiness_shell_proof_not_satisfied");
-		}
-		else if (!OutResult.bRootOnReadinessNoCouplingProofSatisfied)
-		{
-			OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_requires_pelvis_coupling");
-		}
-		else
-		{
-			OutResult.RootOnReadinessGateReason = TEXT("ready");
-		}
-	}
-	else
-	{
-		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_topology_not_ready");
-	}
+	OutResult.RootOnReadinessGateReason = ResolveRootOnReadinessGateReason(
+		RootOnReadinessClassification,
+		bDirectPelvisLinkPositionSatisfied,
+		OutResult.bRootOnDirectPelvisLinkAngularSatisfied,
+		bDirectPelvisThighMarginsSatisfied,
+		bDirectPelvisSpineMarginSatisfied,
+		OutResult.bRootOnReadinessShellHoldSatisfied,
+		OutResult.bRootOnReadinessFinalBringUpControlSettled,
+		OutResult.bRootOnReadinessPolicyInfluenceSettled,
+		OutResult.bPreRootOnShellSafetyProofSatisfied,
+		OutResult.bRootOnReadinessNoCouplingProofSatisfied,
+		OutSnapshot.bRootOnReadinessTiltLimitedByUprightness,
+		OutSnapshot.PolicyInfluenceAlphaAtCapture);
 
 	OutResult.Outcome = 
 		(OutResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
