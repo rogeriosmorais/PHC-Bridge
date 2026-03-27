@@ -698,7 +698,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
 	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
-	if (bRootSimFlipFrame)
+	const bool bPhase2RootOnGuardWindow = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
+	if (bRootSimFlipFrame && !bPhase2RootOnGuardWindow)
 	{
 		HipQuarantineTicksRemaining = 10;
 	}
@@ -850,14 +851,21 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				EffectiveSettings.bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy,
 				EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend,
 				bDistalLocomotionCompositionModeActive);
+		const bool bApplyPhase1TransitionLowerLimbResponseProfile =
+			(bPhase1Prepare || bPhase1LateValidate) &&
+			EffectiveSettings.bApplyTrainingAlignedLocomotionLowerLimbResponsePolicy &&
+			EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend > UE_SMALL_NUMBER;
+		const bool bApplySharedLowerLimbResponseProfile =
+			bApplyTrainingAlignedLocomotionLowerLimbResponseProfile ||
+			bApplyPhase1TransitionLowerLimbResponseProfile;
 		const float LocomotionLowerLimbDampingRatioScale =
-			bApplyTrainingAlignedLocomotionLowerLimbResponseProfile
+			bApplySharedLowerLimbResponseProfile
 				? ResolveTrainingAlignedLocomotionLowerLimbDampingRatioScaleForBone(
 					BoneName,
 					EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend)
 				: 1.0f;
 		const float LocomotionLowerLimbExtraDampingScale =
-			bApplyTrainingAlignedLocomotionLowerLimbResponseProfile
+			bApplySharedLowerLimbResponseProfile
 				? ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(
 					BoneName,
 					EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend)
@@ -882,7 +890,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale *
 			BalanceReadyTransition.GetTransitionExtraDampingMultiplier(BoneName, EffectiveSettings);
 
-		if (bHipQuarantineActiveThisFrame && (BoneName == "thigh_l" || BoneName == "thigh_r"))
+		if (bHipQuarantineActiveThisFrame &&
+			!bPhase2RootOnGuardWindow &&
+			(BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
 			ControlMultiplier.AngularStrengthMultiplier = 0.0f;
 		}
@@ -1086,8 +1096,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		const int32 BringUpGroupIndex = ResolveBringUpGroupIndex(BoneName);
-		const bool bPhase2RootOnGuardWindow =
-			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn;
 		const bool bTransitionKeepsBoneKinematic =
 			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
 				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
@@ -1107,12 +1115,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const bool bIsCertifiedRootOnPreservedBone =
 			BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
 			BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03");
-		const bool bIsRootOnUpperSupportBone =
-			BoneName == TEXT("neck_01") || BoneName == TEXT("clavicle_l") || BoneName == TEXT("clavicle_r");
-		const bool bIsRootOnOrSettleSupportFollowWindow =
-			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
-			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
-			bIsRootOnUpperSupportBone;
 
 		// During entry transition the component path keeps the root body modifier kinematic
 		// until the transition explicitly enters Phase 2 root-on. Once Phase 2 owns the guard
@@ -1205,16 +1207,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierPhysicsBlendWeight = 1.0f;
 			BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
 			bUpdateKinematicFromSimulation = false;
-		}
-		else if (bIsRootOnOrSettleSupportFollowWindow && bTransitionKeepsBoneKinematic)
-		{
-			// Docs keep the upper body kinematic through RootOn/Settle, but the immediate
-			// spine_03 support bones should follow live simulation instead of behaving like
-			// rigid world anchors on the first dynamic root-on frame.
-			BodyModifierMovementType = EPhysicsMovementType::Kinematic;
-			BodyModifierPhysicsBlendWeight = 0.0f;
-			BodyModifierCollisionType = ECollisionEnabled::NoCollision;
-			bUpdateKinematicFromSimulation = true;
 		}
 
 		if (bIsRootBodyModifier)

@@ -1,6 +1,11 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 
+namespace
+{
+	constexpr float AutoBalancePreEntryMaxLowerLimbLimitOccupancy = 0.90f;
+}
+
 bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
 	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
@@ -709,6 +714,66 @@ bool UPhysAnimComponent::EvaluateBalanceModeQueueGates(const FPhysAnimStabilizat
 		return false;
 	}
 
+	return true;
+}
+
+
+bool UPhysAnimComponent::EvaluateBalanceBridgeActivePreEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const
+{
+	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive)
+	{
+		OutReason = TEXT("preentry_command_context_invalid");
+		return false;
+	}
+
+	if (!PendingBodyModifierCachedResetNames.IsEmpty())
+	{
+		OutReason = TEXT("preentry_pending_resets");
+		return false;
+	}
+
+	if (!IsIdlePoseActive())
+	{
+		OutReason = TEXT("preentry_idle_pose_inactive");
+		return false;
+	}
+
+	if (BridgeLocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle)
+	{
+		OutReason = TEXT("preentry_locomotion_active");
+		return false;
+	}
+
+	if (LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond > EffectiveSettings.BalancePhase1MaxRootLinearBaseline)
+	{
+		OutReason = TEXT("preentry_root_linear_above_phase1_baseline");
+		return false;
+	}
+
+	if (LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond > EffectiveSettings.BalancePhase1MaxRootAngularBaseline)
+	{
+		OutReason = TEXT("preentry_root_angular_above_phase1_baseline");
+		return false;
+	}
+
+	FString RootTiltSource;
+	const float RootTiltDeg = ResolvePhase1Uprightness(GetMeshComponent(), GetOwner(), PhysAnimBridge::GetRootBoneName(), RootTiltSource);
+	if (RootTiltDeg > BalanceQuietTiltThresholdDeg)
+	{
+		OutReason = TEXT("preentry_tilt_high");
+		return false;
+	}
+
+	const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = GetLastControlTargetDiagnostics();
+	if (ControlTargetDiagnostics.NumLowerLimbTargetsConsidered > 0 &&
+		ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees > UE_SMALL_NUMBER &&
+		ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy > AutoBalancePreEntryMaxLowerLimbLimitOccupancy)
+	{
+		OutReason = TEXT("preentry_lower_limb_limit_occupancy_high");
+		return false;
+	}
+
+	OutReason = TEXT("ready");
 	return true;
 }
 

@@ -221,6 +221,7 @@ EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOw
 	if (Reason.StartsWith(TEXT("phase1_late_validate_sim_coverage")) ||
 		Reason.StartsWith(TEXT("phase1_late_validate_topology")) ||
 		Reason.StartsWith(TEXT("phase1_topology")) ||
+		Reason == TEXT("phase1_root_on_readiness_pelvis_angular_incoherent") ||
 		Reason == TEXT("phase1_root_on_readiness_requires_pelvis_coupling") ||
 		Reason == TEXT("topology_mismatch_simulating_critical") ||
 		Reason == TEXT("phase1_late_validate_handoff_invalidated") ||
@@ -267,6 +268,7 @@ EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOw
 		return EBalanceReadyConditionOwner::ExternalPolicyRamp;
 	}
 	if (Reason == TEXT("phase1_topology_not_achieved") ||
+		Reason == TEXT("phase1_root_on_readiness_pelvis_angular_incoherent") ||
 		Reason == TEXT("phase1_late_validate_handoff_invalidated") ||
 		Reason == TEXT("topology_mismatch_simulating_critical") ||
 		Reason == TEXT("phase2_sim_coverage_regressed") ||

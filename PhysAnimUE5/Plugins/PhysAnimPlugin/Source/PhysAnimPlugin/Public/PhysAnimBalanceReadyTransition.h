@@ -157,9 +157,13 @@ struct FPhysAnimLateValidationResult
 	bool bPreRootOnShellSafetyProofSatisfied = false;
 	bool bRootOnReadinessNoCouplingProofSatisfied = false;
 	bool bRootOnDirectPelvisLinkGeometrySatisfied = false;
+	bool bRootOnDirectPelvisLinkAngularSatisfied = false;
 	float PelvisThighLErrorCm = 0.0f;
 	float PelvisThighRErrorCm = 0.0f;
 	float PelvisSpine01ErrorCm = 0.0f;
+	float PelvisThighLAngularErrorDeg = 0.0f;
+	float PelvisThighRAngularErrorDeg = 0.0f;
+	float PelvisSpine01AngularErrorDeg = 0.0f;
 	float MaxTargetDeltaDegrees = 0.0f;
 	float MeanTargetDeltaDegrees = 0.0f;
 	float QuietProofDurationSeconds = 0.0f;
@@ -228,9 +232,13 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	float ShellOffsetGrowthCm = 0.0f;
 	float ShellVelocityGrowthCmPerSecond = 0.0f;
 	bool bRootOnDirectPelvisLinkGeometrySatisfied = false;
+	bool bRootOnDirectPelvisLinkAngularSatisfied = false;
 	float PelvisThighLErrorCm = 0.0f;
 	float PelvisThighRErrorCm = 0.0f;
 	float PelvisSpine01ErrorCm = 0.0f;
+	float PelvisThighLAngularErrorDeg = 0.0f;
+	float PelvisThighRAngularErrorDeg = 0.0f;
+	float PelvisSpine01AngularErrorDeg = 0.0f;
 	bool bShellCorrectionOwnerActive = false;
 	bool bTransitionOwnedShellLocked = false;
 	bool bTransitionShellReferenceReanchored = false;

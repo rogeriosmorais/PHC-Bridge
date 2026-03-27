@@ -275,7 +275,21 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.PelvisThighLErrorCm = ComputeDirectLinkErrorCm(TEXT("thigh_l"));
 	OutSnapshot.PelvisThighRErrorCm = ComputeDirectLinkErrorCm(TEXT("thigh_r"));
 	OutSnapshot.PelvisSpine01ErrorCm = ComputeDirectLinkErrorCm(TEXT("spine_01"));
-	OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied =
+	OutSnapshot.PelvisThighLAngularErrorDeg =
+		DirectPelvisLinkForensics.Num() > 0 ? DirectPelvisLinkForensics[0].ConstraintAngularErrorDeg : 0.0f;
+	OutSnapshot.PelvisThighRAngularErrorDeg =
+		DirectPelvisLinkForensics.Num() > 1 ? DirectPelvisLinkForensics[1].ConstraintAngularErrorDeg : 0.0f;
+	OutSnapshot.PelvisSpine01AngularErrorDeg =
+		DirectPelvisLinkForensics.Num() > 2 ? DirectPelvisLinkForensics[2].ConstraintAngularErrorDeg : 0.0f;
+	const bool bDirectPelvisLinkAngularSatisfied =
+		DirectPelvisLinkForensics.Num() == 3 &&
+		DirectPelvisLinkForensics[0].bConstraintFound &&
+		DirectPelvisLinkForensics[1].bConstraintFound &&
+		DirectPelvisLinkForensics[2].bConstraintFound &&
+		OutSnapshot.PelvisThighLAngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg &&
+		OutSnapshot.PelvisThighRAngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg &&
+		OutSnapshot.PelvisSpine01AngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg;
+	const bool bDirectPelvisLinkPositionSatisfied =
 		DirectPelvisLinkForensics.Num() == 3 &&
 		DirectPelvisLinkForensics[0].bConstraintFound &&
 		DirectPelvisLinkForensics[1].bConstraintFound &&
@@ -283,6 +297,13 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		OutSnapshot.PelvisThighLErrorCm <= BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm &&
 		OutSnapshot.PelvisThighRErrorCm <= BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm &&
 		OutSnapshot.PelvisSpine01ErrorCm <= BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm;
+	OutSnapshot.bRootOnDirectPelvisLinkAngularSatisfied = bDirectPelvisLinkAngularSatisfied;
+	OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied =
+		DirectPelvisLinkForensics.Num() == 3 &&
+		DirectPelvisLinkForensics[0].bConstraintFound &&
+		DirectPelvisLinkForensics[1].bConstraintFound &&
+		DirectPelvisLinkForensics[2].bConstraintFound &&
+		bDirectPelvisLinkPositionSatisfied;
 
 	const bool bRootCoupledTopologyReady = bHasPhase1TopologyRecord && bUseFrozenTopology
 		? BalanceTransitionSets::IsRootCoupledReadyHandoff(
@@ -313,12 +334,20 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 				? EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
 				: EBalanceReadyRootOnReadinessClassification::NotReady);
 
-	if (bRootCoupledTopologyReady && !OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied && !bLoggedDirectPelvisLinkForensics)
+	if (bRootCoupledTopologyReady &&
+		(!OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied || !OutSnapshot.bRootOnDirectPelvisLinkAngularSatisfied) &&
+		!bLoggedDirectPelvisLinkForensics)
 	{
 		TArray<BalanceTransitionSets::FDirectPelvisLinkForensicRecord> FailingLinkForensics;
 		for (const BalanceTransitionSets::FDirectPelvisLinkForensicRecord& Record : DirectPelvisLinkForensics)
 		{
-			if (!Record.bConstraintFound || Record.AnchorDistanceCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm)
+			const float AngularThresholdDeg =
+				Record.ChildBoneName == TEXT("spine_01")
+					? BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg
+					: BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
+			if (!Record.bConstraintFound ||
+				Record.AnchorDistanceCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm ||
+				Record.ConstraintAngularErrorDeg > AngularThresholdDeg)
 			{
 				FailingLinkForensics.Add(Record);
 			}
@@ -516,19 +545,32 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 
 	OutResult.RootOnReadinessClassification = RootOnReadinessClassification;
 	OutResult.bRootOnDirectPelvisLinkGeometrySatisfied = OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied;
+	OutResult.bRootOnDirectPelvisLinkAngularSatisfied = OutSnapshot.bRootOnDirectPelvisLinkAngularSatisfied;
 	OutResult.PelvisThighLErrorCm = OutSnapshot.PelvisThighLErrorCm;
 	OutResult.PelvisThighRErrorCm = OutSnapshot.PelvisThighRErrorCm;
 	OutResult.PelvisSpine01ErrorCm = OutSnapshot.PelvisSpine01ErrorCm;
-	OutResult.RootOnReadinessGateReason =
-		bRootCoupledTopologyReady && !OutSnapshot.bRootOnDirectPelvisLinkGeometrySatisfied
-			? TEXT("phase2_pre_root_on_link_error_too_high")
-			: (RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny
-				? TEXT("phase1_root_on_readiness_upper_only_safe_deny_pending")
-				: (RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady
-					? (bOtherRootOnReadinessGatesSatisfied && !OutResult.bRootOnReadinessNoCouplingProofSatisfied
-						? TEXT("phase1_root_on_readiness_requires_pelvis_coupling")
-						: TEXT("ready"))
-					: TEXT("phase1_root_on_readiness_topology_not_ready")));
+	OutResult.PelvisThighLAngularErrorDeg = OutSnapshot.PelvisThighLAngularErrorDeg;
+	OutResult.PelvisThighRAngularErrorDeg = OutSnapshot.PelvisThighRAngularErrorDeg;
+	OutResult.PelvisSpine01AngularErrorDeg = OutSnapshot.PelvisSpine01AngularErrorDeg;
+	if (bRootCoupledTopologyReady && !bDirectPelvisLinkPositionSatisfied)
+	{
+		OutResult.RootOnReadinessGateReason = TEXT("phase2_pre_root_on_link_error_too_high");
+	}
+	else if (RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::UpperOnlySafeDeny)
+	{
+		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_upper_only_safe_deny_pending");
+	}
+	else if (RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)
+	{
+		OutResult.RootOnReadinessGateReason =
+			(bOtherRootOnReadinessGatesSatisfied && !OutResult.bRootOnReadinessNoCouplingProofSatisfied)
+				? TEXT("phase1_root_on_readiness_requires_pelvis_coupling")
+				: TEXT("ready");
+	}
+	else
+	{
+		OutResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_topology_not_ready");
+	}
 
 	OutResult.Outcome = 
 		(OutResult.RootOnReadinessClassification == EBalanceReadyRootOnReadinessClassification::RootCoupledReady)

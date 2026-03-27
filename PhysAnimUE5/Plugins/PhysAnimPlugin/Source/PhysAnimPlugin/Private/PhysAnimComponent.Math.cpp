@@ -530,11 +530,15 @@ float UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbDampingRatioS
 
 	if (
 		BoneName == TEXT("thigh_l") ||
+		BoneName == TEXT("thigh_r"))
+	{
+		TargetScale = 1.10f;
+	}
+	else if (
 		BoneName == TEXT("calf_l") ||
-		BoneName == TEXT("thigh_r") ||
 		BoneName == TEXT("calf_r"))
 	{
-		TargetScale = 1.20f;
+		TargetScale = 1.25f;
 	}
 
 	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);
@@ -593,11 +597,15 @@ float UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbExtraDampingS
 
 	if (
 		BoneName == TEXT("thigh_l") ||
+		BoneName == TEXT("thigh_r"))
+	{
+		TargetScale = 1.15f;
+	}
+	else if (
 		BoneName == TEXT("calf_l") ||
-		BoneName == TEXT("thigh_r") ||
 		BoneName == TEXT("calf_r"))
 	{
-		TargetScale = 1.35f;
+		TargetScale = 1.45f;
 	}
 
 	return FMath::Lerp(1.0f, TargetScale, ClampedBlendAlpha);

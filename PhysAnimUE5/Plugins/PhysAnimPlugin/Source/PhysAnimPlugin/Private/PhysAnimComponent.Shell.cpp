@@ -61,7 +61,7 @@ void UPhysAnimComponent::ReanchorShellCouplingReferenceToCurrentRoot(const TCHAR
 	ShellCouplingReferenceRootLocalOffsetCm =
 		SkeletalMesh->GetBoneLocation(RootBoneName, EBoneSpaces::WorldSpace) - OwnerActor->GetActorLocation();
 	bHasShellCouplingReferenceRootLocalOffset = true;
-	if (IsTransitionOwnedShellLocked())
+	if (BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked)
 	{
 		if (bTransitionOwnedShellReferenceReanchored)
 		{
@@ -80,7 +80,7 @@ void UPhysAnimComponent::ReanchorShellCouplingReferenceToCurrentRoot(const TCHAR
 
 void UPhysAnimComponent::ActivateTransitionOwnedShellLock()
 {
-	if (IsTransitionOwnedShellLocked())
+	if (BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked)
 	{
 		return;
 	}
@@ -96,7 +96,7 @@ void UPhysAnimComponent::ActivateTransitionOwnedShellLock()
 
 void UPhysAnimComponent::ReleaseTransitionOwnedShellLock()
 {
-	if (!IsTransitionOwnedShellLocked())
+	if (BalanceTransitionShellAuthorityMode != EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked)
 	{
 		return;
 	}

@@ -2998,6 +2998,22 @@ bool FPhysAnimStabilizationDefaultsTest::RunTest(const FString& Parameters)
 			TEXT("Calves get extra damping in the locomotion-time lower-limb response profile"),
 			UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(TEXT("calf_l"), 1.0f) > 1.0f);
 		TestEqual(
+			TEXT("Thigh damping ratio uses the milder selective lower-limb response fit"),
+			UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbDampingRatioScaleForBone(TEXT("thigh_l"), 1.0f),
+			1.10f);
+		TestEqual(
+			TEXT("Calf damping ratio keeps the stronger selective lower-limb response fit"),
+			UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbDampingRatioScaleForBone(TEXT("calf_l"), 1.0f),
+			1.25f);
+		TestEqual(
+			TEXT("Thigh extra damping uses the milder selective lower-limb response fit"),
+			UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(TEXT("thigh_l"), 1.0f),
+			1.15f);
+		TestEqual(
+			TEXT("Calf extra damping keeps the stronger selective lower-limb response fit"),
+			UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(TEXT("calf_l"), 1.0f),
+			1.45f);
+		TestEqual(
 			TEXT("Spine stays neutral in the locomotion-time lower-limb response profile"),
 			UPhysAnimComponent::ResolveTrainingAlignedLocomotionLowerLimbExtraDampingScaleForBone(TEXT("spine_01"), 1.0f),
 			1.0f);
