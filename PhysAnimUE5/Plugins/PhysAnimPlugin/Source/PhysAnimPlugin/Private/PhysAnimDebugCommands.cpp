@@ -1,4 +1,5 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimPhase1AutoCalibSubsystem.h"
 
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -104,6 +105,16 @@ namespace
 		return Args.IsValidIndex(Index) ? Args[Index].ToLower() : FString();
 	}
 
+	static int32 ParseOptionalInt(const TArray<FString>& Args, int32 Index, int32 DefaultValue)
+	{
+		if (!Args.IsValidIndex(Index))
+		{
+			return DefaultValue;
+		}
+
+		return FCString::Atoi(*Args[Index]);
+	}
+
 	static void ApplyPresentationPerturbationCommand(const TArray<FString>& Args, UWorld* InWorld)
 	{
 		UWorld* World = nullptr;
@@ -190,6 +201,61 @@ namespace
 		UE_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StopBalanceMode matched=%d"), Matched);
 	}
 
+	static void RunPhase1AutoCalibCommand(const TArray<FString>& Args, UWorld* InWorld)
+	{
+		UWorld* World = nullptr;
+		if (!ResolveWorldFromConsole(InWorld, World))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.RunPhase1AutoCalib failed: no active PIE/game world."));
+			return;
+		}
+
+		UPhysAnimPhase1AutoCalibSubsystem* const AutoCalibSubsystem = World->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>();
+		if (!AutoCalibSubsystem)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.RunPhase1AutoCalib failed: subsystem unavailable."));
+			return;
+		}
+
+		FPhase1AutoCalibRequest Request;
+		Request.OwnerFilter = ParseOptionalFilter(Args, 0);
+		Request.Seed = ParseOptionalInt(Args, 1, 1337);
+		Request.MaxTrials = ParseOptionalInt(Args, 2, INDEX_NONE);
+		Request.OutputSubfolder = Args.IsValidIndex(3) ? Args[3] : FString();
+
+		FString Error;
+		if (!AutoCalibSubsystem->StartPhase1AutoCalib(Request, Error))
+		{
+			UE_LOG(LogTemp, Error, TEXT("[PhysAnim] pa.RunPhase1AutoCalib failed: %s"), *Error);
+			return;
+		}
+
+		UE_LOG(
+			LogTemp,
+			Log,
+			TEXT("[PhysAnim] pa.RunPhase1AutoCalib started filter='%s' seed=%d maxTrials=%d output='%s'"),
+			Request.OwnerFilter.IsEmpty() ? TEXT("<all>") : *Request.OwnerFilter,
+			Request.Seed,
+			Request.MaxTrials,
+			Request.OutputSubfolder.IsEmpty() ? TEXT("<timestamp>") : *Request.OutputSubfolder);
+	}
+
+	static void StopPhase1AutoCalibCommand(const TArray<FString>& Args, UWorld* InWorld)
+	{
+		UWorld* World = nullptr;
+		if (!ResolveWorldFromConsole(InWorld, World))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.StopPhase1AutoCalib ignored: no active PIE/game world."));
+			return;
+		}
+
+		if (UPhysAnimPhase1AutoCalibSubsystem* const AutoCalibSubsystem = World->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>())
+		{
+			AutoCalibSubsystem->StopPhase1AutoCalib(TEXT("manual_stop"));
+			UE_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StopPhase1AutoCalib completed."));
+		}
+	}
+
 	static FAutoConsoleCommandWithWorldAndArgs GApplyPresentationPerturbationCommand(
 		TEXT("pa.ApplyPresentationPerturbation"),
 		TEXT("Applies the existing component-side presentation perturbation override. Optional args: [durationSeconds] [ownerFilter]. Defaults to the same 4.0s presentation window used by the comparison subsystem."),
@@ -209,4 +275,14 @@ namespace
 		TEXT("pa.StopBalanceMode"),
 		TEXT("Stops the Balance Perturbation Mode. Optional args: [ownerFilter]."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StopBalanceModeCommand));
+
+	static FAutoConsoleCommandWithWorldAndArgs GRunPhase1AutoCalibCommand(
+		TEXT("pa.RunPhase1AutoCalib"),
+		TEXT("Runs the Phase 1 transactional auto-calibration harness. Optional args: [ownerFilter] [seed] [maxTrials] [outputSubfolder]."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&RunPhase1AutoCalibCommand));
+
+	static FAutoConsoleCommandWithWorldAndArgs GStopPhase1AutoCalibCommand(
+		TEXT("pa.StopPhase1AutoCalib"),
+		TEXT("Stops the Phase 1 transactional auto-calibration harness."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StopPhase1AutoCalibCommand));
 }

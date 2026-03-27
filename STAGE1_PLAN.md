@@ -102,6 +102,7 @@ Only these categories may change during the current stabilization loop:
 - `plans/stage1/40-design/balance_mode_phase2.md`
 - `plans/stage1/40-design/balance_mode_phase3_settle.md`
 - `plans/stage1/40-design/phase1-late-validate-truth-model.md`
+- `plans/stage1/40-design/phase1-transactional-auto-calibration-harness.md`
 - `plans/stage1/40-design/phase2-rooton-truth-model.md`
 
 ## Documentation Acceptance Rule

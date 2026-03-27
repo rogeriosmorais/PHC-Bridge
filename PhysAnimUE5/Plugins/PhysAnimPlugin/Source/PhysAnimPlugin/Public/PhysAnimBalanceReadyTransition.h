@@ -406,6 +406,80 @@ struct FBalanceReadyTransitionDiagnostics
 	FName LateLoopWorstBone = NAME_None;
 };
 
+#if !UE_BUILD_SHIPPING
+struct FPhysAnimBalanceReadyTransitionSnapshot
+{
+	EBalanceReadyTransitionPhase InternalPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
+	EBalanceReadyTransitionPhase PreviousPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
+	FString RequestReason;
+	float StableHoldAccumulatedSeconds = 0.0f;
+	float PhaseTimeSeconds = 0.0f;
+	float TotalTransitionTimeSeconds = 0.0f;
+	float TargetDiscontinuityAccumulatedSeconds = 0.0f;
+	FString LastQuietBlockReason;
+	bool bLastRootSimulating = false;
+	bool bLastPendingResetsEmpty = true;
+	bool bLatchedPelvisResetApplied = false;
+	int32 QuietHandoffCount = 0;
+	float QuietWindowAccumulatedSeconds = 0.0f;
+	int32 ConsecutivePelvisNotSimulatingTicks = 0;
+	int32 ConsecutiveBodyMotionInstabilityTicks = 0;
+	float LateValidationAccumulatedSeconds = 0.0f;
+	float RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
+	float RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
+	float RootOnReadinessShellProofStartOffsetCm = 0.0f;
+	float RootOnReadinessShellProofStartVelocityCmPerSecond = 0.0f;
+	bool bHasRootOnReadinessShellProofBaseline = false;
+	bool bPhase1RootOnReadinessNoCouplingProofActive = false;
+	float RootOnReadinessNoCouplingProofAccumulatedSeconds = 0.0f;
+	float RootOnReadinessNoCouplingPeakBodyLinearSpeed = 0.0f;
+	float RootOnReadinessNoCouplingPeakBodyAngularSpeed = 0.0f;
+	FName RootOnReadinessNoCouplingWorstBone = NAME_None;
+	float HipQuarantineTimerSeconds = 0.0f;
+	FString LastLateValidateBlockReason;
+	int32 RetryCount = 0;
+	int32 Phase2RetryCount = 0;
+	float RetryCooldownTimerSeconds = 0.0f;
+	int32 Phase2GuardTickCount = 0;
+	int32 Phase3GuardTickCount = 0;
+	bool bPreviousFrameSettleEndRootRawSim = false;
+	bool bPreviousFrameSettleEndPelvisRawSim = false;
+	bool bPhase2RootAuthorityQuarantined = false;
+	TMap<FName, FQuat> EntryHoldRotations;
+	bool bHasCertifiedHandoff = false;
+	bool bHasLateValidationProof = false;
+	bool bLateValidationProofPassed = false;
+	bool bLoggedLateValidateEntry = false;
+	bool bLoggedPhase1UpperBodyAudit = false;
+	bool bLoggedPhase2EntryAudit = false;
+	bool bLoggedPhase2FirstFailureAudit = false;
+	bool bLoggedPhase3EntryAudit = false;
+	bool bLoggedPhase3FirstFailureAudit = false;
+	bool bLoggedPhase3PreGuardRootState = false;
+	bool bLoggedPhase2ReadyForPhase3 = false;
+	bool bLoggedDirectPelvisLinkForensics = false;
+	FPhysAnimCertifiedHandoffSnapshot CertifiedHandoff;
+	FPhysAnimLateValidationResult CertifiedLateValidationResult;
+	FPhysAnimPhase1TopologySnapshot Phase1TopologyRecord;
+	bool bHasPhase1TopologyRecord = false;
+	bool bHasLoggedDistalExperimentState = false;
+	FString SafePhase2DenialReason;
+	FPhase1AcceptedConvergenceSnapshot CachedConvergenceSnapshot;
+	FBalanceReadyTransitionDiagnostics Diagnostics;
+	double LastLogTimeSeconds = -1.0;
+	TMap<FName, int32> DistalBoneMismatchTicks;
+	TMap<FName, int32> DistalBoneConsecutiveMismatchTicks;
+	TMap<FName, int32> DistalBonePersistentTicks;
+	TSet<FName> LoggedSuppressedDistalBones;
+	TSet<FName> LoggedProximalPromotions;
+	TSet<FName> LoggedProximalStates;
+	int32 DistalMismatchesTransientCount = 0;
+	int32 DistalMismatchesPersistentCount = 0;
+	int32 DistalMismatchesPendingCount = 0;
+	FPhase1CertificationAudit Audit;
+};
+#endif
+
 class FPhysAnimBalanceReadyTransition
 {
 public:
@@ -511,6 +585,10 @@ public:
 		bool bFreshQuietProofOccurred,
 		bool bCooldownElapsed,
 		bool bRetryBudgetAvailable);
+#if !UE_BUILD_SHIPPING
+	FPhysAnimBalanceReadyTransitionSnapshot ExportSnapshot() const;
+	void ImportSnapshot(const FPhysAnimBalanceReadyTransitionSnapshot& Snapshot);
+#endif
 
 private:
 	void SetPhase(EBalanceReadyTransitionPhase NewPhase, class UPhysAnimComponent* Owner = nullptr);

@@ -2,6 +2,7 @@
 
 #include "PhysAnimComponent.h"
 #include "PhysAnimComparisonSubsystem.h"
+#include "PhysAnimPhase1AutoCalibSubsystem.h"
 #include "PhysAnimBalance.TestHelpers.h"
 #include "Misc/AutomationTest.h"
 
@@ -502,6 +503,175 @@ namespace
 			EPhysAnimRuntimeState::BalanceSafeDeny);
 		return true;
 	}
+
+#if !UE_BUILD_SHIPPING
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibParamsDoNotMutateContractSettingsTest,
+		"PhysAnim.Component.Phase1AutoCalibParamsDoNotMutateContractSettings",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibParamsDoNotMutateContractSettingsTest::RunTest(const FString& Parameters)
+	{
+		UPhysAnimComponent* const Component = NewObject<UPhysAnimComponent>();
+		TestNotNull(TEXT("Transient component exists"), Component);
+		if (!Component)
+		{
+			return false;
+		}
+
+		const FPhysAnimStabilizationSettings Before = Component->GetConfiguredStabilizationSettings();
+
+		FPhase1AutoCalibParams Params;
+		Params.SourcePreset = EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh;
+		Params.SeedFamilyPreset = EPhase1AutoCalibStrategyPreset::RescueOnly;
+		Params.SpineInterpolationAlpha = 0.33f;
+		Params.WorstThighInterpolationAlpha = 0.08f;
+		Params.FocusedDeltaScale = 1.75f;
+		Params.UprightnessWeightScale = 1.20f;
+		Params.ClampStrengthScale = 0.85f;
+		Params.PelvisPitchBiasDeg = 0.4f;
+		Params.PelvisRollBiasDeg = -0.3f;
+		Component->ApplyPhase1AutoCalibParams(Params);
+
+		const FPhysAnimStabilizationSettings After = Component->GetConfiguredStabilizationSettings();
+		TestEqual(TEXT("Prepare duration remains a contract setting"), After.BalancePhase1PrepareDuration, Before.BalancePhase1PrepareDuration);
+		TestEqual(TEXT("LateValidate duration remains a contract setting"), After.BalancePhase1LateValidateRequiredSeconds, Before.BalancePhase1LateValidateRequiredSeconds);
+		TestEqual(TEXT("Quiet root linear speed remains a contract setting"), After.BalancePhase1QuietRootLinearSpeed, Before.BalancePhase1QuietRootLinearSpeed);
+		TestEqual(TEXT("Quiet root angular speed remains a contract setting"), After.BalancePhase1QuietRootAngularSpeed, Before.BalancePhase1QuietRootAngularSpeed);
+		TestEqual(TEXT("Quiet shell offset remains a contract setting"), After.BalancePhase1QuietShellOffsetDelta, Before.BalancePhase1QuietShellOffsetDelta);
+		TestEqual(TEXT("Quiet shell velocity remains a contract setting"), After.BalancePhase1QuietShellVelocityDelta, Before.BalancePhase1QuietShellVelocityDelta);
+		TestEqual(TEXT("Phase 2 tilt gate remains a contract setting"), After.BalancePhase2EntryMaxRootTiltDeg, Before.BalancePhase2EntryMaxRootTiltDeg);
+
+		Component->ClearPhase1AutoCalibParams();
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibScoreOrderingTest,
+		"PhysAnim.Component.Phase1AutoCalibScoreOrdering",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibScoreOrderingTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibScore ContractPassing;
+		ContractPassing.bContractPassed = true;
+		ContractPassing.bReachedRootOn = true;
+		ContractPassing.bNoCouplingProofSatisfied = true;
+		ContractPassing.WorstDirectLinkAngularErrorDeg = 18.0f;
+		ContractPassing.MeanTargetDeltaDeg = 2.0f;
+		ContractPassing.MaxTargetDeltaDeg = 5.0f;
+		ContractPassing.ThighAsymmetryDeg = 1.0f;
+		ContractPassing.PeakRootTiltDeg = 10.0f;
+		ContractPassing.ShellOffsetDeltaCm = 1.0f;
+		ContractPassing.ShellVelocityDeltaCmPerSecond = 2.0f;
+		ContractPassing.PeakRootLinearSpeedCmPerSecond = 20.0f;
+		ContractPassing.PeakRootAngularSpeedDegPerSecond = 30.0f;
+		UPhysAnimComponent::FinalizePhase1AutoCalibScore(ContractPassing);
+
+		FPhase1AutoCalibScore ContractFailing = ContractPassing;
+		ContractFailing.bContractPassed = false;
+		ContractFailing.bReachedRootOn = false;
+		UPhysAnimComponent::FinalizePhase1AutoCalibScore(ContractFailing);
+
+		TestTrue(
+			TEXT("A contract-passing candidate outranks a contract-failing candidate"),
+			UPhysAnimComponent::IsBetterPhase1AutoCalibScore(ContractPassing, ContractFailing));
+		TestFalse(
+			TEXT("A contract-failing candidate cannot outrank a contract-passing candidate"),
+			UPhysAnimComponent::IsBetterPhase1AutoCalibScore(ContractFailing, ContractPassing));
+
+		FPhase1AutoCalibScore LowerWorstAngular = ContractPassing;
+		LowerWorstAngular.WorstDirectLinkAngularErrorDeg = 16.0f;
+		UPhysAnimComponent::FinalizePhase1AutoCalibScore(LowerWorstAngular);
+		TestTrue(
+			TEXT("Among passing candidates, lower worst direct-link angular error wins first"),
+			UPhysAnimComponent::IsBetterPhase1AutoCalibScore(LowerWorstAngular, ContractPassing));
+
+		FPhase1AutoCalibScore LowerMeanTarget = ContractPassing;
+		LowerMeanTarget.MeanTargetDeltaDeg = 1.5f;
+		UPhysAnimComponent::FinalizePhase1AutoCalibScore(LowerMeanTarget);
+		TestTrue(
+			TEXT("Mean target delta breaks ties after worst direct-link angular error"),
+			UPhysAnimComponent::IsBetterPhase1AutoCalibScore(LowerMeanTarget, ContractPassing));
+
+		FPhase1AutoCalibScore TimedOut = ContractPassing;
+		TimedOut.bTimedOut = true;
+		UPhysAnimComponent::FinalizePhase1AutoCalibScore(TimedOut);
+		TestFalse(
+			TEXT("Timed-out candidates cannot outrank a passing non-timeout candidate"),
+			UPhysAnimComponent::IsBetterPhase1AutoCalibScore(TimedOut, ContractPassing));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibStageACandidatesTest,
+		"PhysAnim.Component.Phase1AutoCalibStageACandidates",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibStageACandidatesTest::RunTest(const FString& Parameters)
+	{
+		TArray<FPhase1AutoCalibParams> Candidates;
+		UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(1337, INDEX_NONE, Candidates);
+
+		TestEqual(TEXT("Stage A emits the fixed 24 samples for each of 6 presets"), Candidates.Num(), 24 * 6);
+
+		TSet<EPhase1AutoCalibStrategyPreset> SeenPresets;
+		for (const FPhase1AutoCalibParams& Candidate : Candidates)
+		{
+			SeenPresets.Add(Candidate.SourcePreset);
+			TestEqual(TEXT("Stage A seed family tracks the source preset in v1"), Candidate.SeedFamilyPreset, Candidate.SourcePreset);
+			TestTrue(TEXT("Stage A spine interpolation stays in range"), Candidate.SpineInterpolationAlpha >= 0.01f && Candidate.SpineInterpolationAlpha <= 0.80f);
+			TestTrue(TEXT("Stage A worst-thigh interpolation stays in range"), Candidate.WorstThighInterpolationAlpha >= 0.01f && Candidate.WorstThighInterpolationAlpha <= 0.20f);
+			TestTrue(TEXT("Stage A focused-delta scale stays in range"), Candidate.FocusedDeltaScale >= 0.50f && Candidate.FocusedDeltaScale <= 2.00f);
+			TestTrue(TEXT("Stage A uprightness scale stays in range"), Candidate.UprightnessWeightScale >= 0.50f && Candidate.UprightnessWeightScale <= 1.50f);
+			TestTrue(TEXT("Stage A clamp scale stays in range"), Candidate.ClampStrengthScale >= 0.50f && Candidate.ClampStrengthScale <= 1.50f);
+			TestTrue(TEXT("Stage A pelvis pitch bias stays in range"), Candidate.PelvisPitchBiasDeg >= -1.0f && Candidate.PelvisPitchBiasDeg <= 1.0f);
+			TestTrue(TEXT("Stage A pelvis roll bias stays in range"), Candidate.PelvisRollBiasDeg >= -1.0f && Candidate.PelvisRollBiasDeg <= 1.0f);
+		}
+
+		TestEqual(TEXT("Stage A covers all six fixed presets"), SeenPresets.Num(), 6);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibReproducibilityTest,
+		"PhysAnim.Component.Phase1AutoCalibReproducibility",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibReproducibilityTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibTrialResult TrialA;
+		TrialA.TerminalClass = TEXT("failed");
+		TrialA.TruthfulBlocker = TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient");
+		TrialA.Score.bContractPassed = false;
+		TrialA.Score.WorstDirectLinkAngularErrorDeg = 33.89f;
+		TrialA.Score.MeanTargetDeltaDeg = 2.0f;
+		TrialA.Score.MaxTargetDeltaDeg = 4.0f;
+		TrialA.Score.ThighAsymmetryDeg = 2.4f;
+		TrialA.Score.PeakRootTiltDeg = 17.98f;
+		TrialA.Score.ShellOffsetDeltaCm = 1.0f;
+		TrialA.Score.ShellVelocityDeltaCmPerSecond = 2.0f;
+		TrialA.Score.PeakRootLinearSpeedCmPerSecond = 25.0f;
+		TrialA.Score.PeakRootAngularSpeedDegPerSecond = 35.0f;
+
+		FPhase1AutoCalibTrialResult TrialB = TrialA;
+		TrialB.Score.WorstDirectLinkAngularErrorDeg += 1.0e-4f;
+
+		TArray<FPhase1AutoCalibTrialResult> MatchingTrials;
+		MatchingTrials.Add(TrialA);
+		MatchingTrials.Add(TrialB);
+		TestTrue(
+			TEXT("Reproducibility accepts matching terminal class, blocker, and score breakdown within epsilon"),
+			UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(MatchingTrials));
+
+		TrialB.TruthfulBlocker = TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient");
+		MatchingTrials[1] = TrialB;
+		TestFalse(
+			TEXT("Reproducibility rejects a blocker mismatch"),
+			UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(MatchingTrials));
+		return true;
+	}
+#endif
 }
 
 #endif
