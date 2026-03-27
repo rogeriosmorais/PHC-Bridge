@@ -996,6 +996,135 @@ bool UPhysAnimComponent::ShouldRunRootOnReadinessUltraFineMarginSweep(float Root
 	return RootOnReadinessTotalDeficitDeg <= 2.0f + KINDA_SMALL_NUMBER;
 }
 
+#if !UE_BUILD_SHIPPING
+void UPhysAnimComponent::FinalizePhase1AutoCalibScore(FPhase1AutoCalibScore& InOutScore)
+{
+	const bool bHardRejected =
+		!InOutScore.bContractPassed ||
+		InOutScore.bTimedOut ||
+		InOutScore.bSafeDenied ||
+		!InOutScore.bRestoreDeterministic ||
+		!InOutScore.bReachedRootOn ||
+		!InOutScore.bNoCouplingProofSatisfied;
+
+	const float RejectionPenalty = bHardRejected ? 1000000.0f : 0.0f;
+	InOutScore.StableSortScalar =
+		RejectionPenalty +
+		(InOutScore.WorstDirectLinkAngularErrorDeg * 1000.0f) +
+		(InOutScore.MeanTargetDeltaDeg * 100.0f) +
+		(InOutScore.MaxTargetDeltaDeg * 10.0f) +
+		(InOutScore.ThighAsymmetryDeg * 5.0f) +
+		(InOutScore.PeakRootTiltDeg * 2.0f) +
+		InOutScore.ShellOffsetDeltaCm +
+		(InOutScore.ShellVelocityDeltaCmPerSecond * 0.1f) +
+		(InOutScore.PeakRootLinearSpeedCmPerSecond * 0.01f) +
+		(InOutScore.PeakRootAngularSpeedDegPerSecond * 0.001f);
+}
+
+bool UPhysAnimComponent::IsBetterPhase1AutoCalibScore(const FPhase1AutoCalibScore& Candidate, const FPhase1AutoCalibScore& CurrentBest)
+{
+	const auto IsRejected = [](const FPhase1AutoCalibScore& Score)
+	{
+		return !Score.bContractPassed ||
+			Score.bTimedOut ||
+			Score.bSafeDenied ||
+			!Score.bRestoreDeterministic ||
+			!Score.bReachedRootOn ||
+			!Score.bNoCouplingProofSatisfied;
+	};
+
+	const bool bCandidateRejected = IsRejected(Candidate);
+	const bool bCurrentRejected = IsRejected(CurrentBest);
+	if (bCandidateRejected != bCurrentRejected)
+	{
+		return !bCandidateRejected;
+	}
+
+	const auto Less = [](float A, float B)
+	{
+		return A + KINDA_SMALL_NUMBER < B;
+	};
+	const auto Equal = [](float A, float B)
+	{
+		return FMath::IsNearlyEqual(A, B, KINDA_SMALL_NUMBER);
+	};
+
+	if (Less(Candidate.WorstDirectLinkAngularErrorDeg, CurrentBest.WorstDirectLinkAngularErrorDeg))
+	{
+		return true;
+	}
+	if (!Equal(Candidate.WorstDirectLinkAngularErrorDeg, CurrentBest.WorstDirectLinkAngularErrorDeg))
+	{
+		return false;
+	}
+	if (Less(Candidate.MeanTargetDeltaDeg, CurrentBest.MeanTargetDeltaDeg))
+	{
+		return true;
+	}
+	if (!Equal(Candidate.MeanTargetDeltaDeg, CurrentBest.MeanTargetDeltaDeg))
+	{
+		return false;
+	}
+	if (Less(Candidate.MaxTargetDeltaDeg, CurrentBest.MaxTargetDeltaDeg))
+	{
+		return true;
+	}
+	if (!Equal(Candidate.MaxTargetDeltaDeg, CurrentBest.MaxTargetDeltaDeg))
+	{
+		return false;
+	}
+	if (Less(Candidate.ThighAsymmetryDeg, CurrentBest.ThighAsymmetryDeg))
+	{
+		return true;
+	}
+	if (!Equal(Candidate.ThighAsymmetryDeg, CurrentBest.ThighAsymmetryDeg))
+	{
+		return false;
+	}
+	if (Less(Candidate.PeakRootTiltDeg, CurrentBest.PeakRootTiltDeg))
+	{
+		return true;
+	}
+	if (!Equal(Candidate.PeakRootTiltDeg, CurrentBest.PeakRootTiltDeg))
+	{
+		return false;
+	}
+	if (Less(Candidate.ShellOffsetDeltaCm, CurrentBest.ShellOffsetDeltaCm))
+	{
+		return true;
+	}
+	if (!Equal(Candidate.ShellOffsetDeltaCm, CurrentBest.ShellOffsetDeltaCm))
+	{
+		return false;
+	}
+	if (Less(Candidate.ShellVelocityDeltaCmPerSecond, CurrentBest.ShellVelocityDeltaCmPerSecond))
+	{
+		return true;
+	}
+	if (!Equal(Candidate.ShellVelocityDeltaCmPerSecond, CurrentBest.ShellVelocityDeltaCmPerSecond))
+	{
+		return false;
+	}
+	if (Less(Candidate.PeakRootLinearSpeedCmPerSecond, CurrentBest.PeakRootLinearSpeedCmPerSecond))
+	{
+		return true;
+	}
+	if (!Equal(Candidate.PeakRootLinearSpeedCmPerSecond, CurrentBest.PeakRootLinearSpeedCmPerSecond))
+	{
+		return false;
+	}
+	if (Less(Candidate.PeakRootAngularSpeedDegPerSecond, CurrentBest.PeakRootAngularSpeedDegPerSecond))
+	{
+		return true;
+	}
+	if (!Equal(Candidate.PeakRootAngularSpeedDegPerSecond, CurrentBest.PeakRootAngularSpeedDegPerSecond))
+	{
+		return false;
+	}
+	return Candidate.StableSortScalar + KINDA_SMALL_NUMBER < CurrentBest.StableSortScalar;
+}
+#endif
+
 bool UPhysAnimComponent::ShouldAcceptStepLimitedPhase1PelvisRotation(
 	bool bBestTiltAdmissible,
 	bool bBestRootOnAngularReady,

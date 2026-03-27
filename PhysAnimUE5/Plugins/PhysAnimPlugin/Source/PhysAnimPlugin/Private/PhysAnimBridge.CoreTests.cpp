@@ -464,6 +464,48 @@ namespace
 				true,
 				true,
 				true));
+
+#if !UE_BUILD_SHIPPING
+		FPhysAnimBalanceReadyTransitionSnapshot ImportedSnapshot;
+		ImportedSnapshot.InternalPhase = EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate;
+		ImportedSnapshot.PreviousPhase = EBalanceReadyTransitionPhase::BRT_Phase1_Prepare;
+		ImportedSnapshot.RequestReason = TEXT("phase1_auto_calib_test");
+		ImportedSnapshot.StableHoldAccumulatedSeconds = 0.25f;
+		ImportedSnapshot.PhaseTimeSeconds = 0.50f;
+		ImportedSnapshot.TotalTransitionTimeSeconds = 1.25f;
+		ImportedSnapshot.TargetDiscontinuityAccumulatedSeconds = 0.10f;
+		ImportedSnapshot.LastQuietBlockReason = TEXT("quiet_gate");
+		ImportedSnapshot.bPhase1RootOnReadinessNoCouplingProofActive = true;
+		ImportedSnapshot.RootOnReadinessNoCouplingProofAccumulatedSeconds = 0.15f;
+		ImportedSnapshot.RootOnReadinessNoCouplingPeakBodyLinearSpeed = 44.0f;
+		ImportedSnapshot.RootOnReadinessNoCouplingPeakBodyAngularSpeed = 55.0f;
+		ImportedSnapshot.RootOnReadinessNoCouplingWorstBone = TEXT("spine_01");
+		ImportedSnapshot.CertifiedHandoff.TopologyClass = TEXT("phase1_test_topology");
+		ImportedSnapshot.CertifiedHandoff.PelvisSpine01AngularErrorDeg = 17.91f;
+		ImportedSnapshot.CertifiedLateValidationResult.RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient");
+		ImportedSnapshot.Diagnostics.FailureReason = TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient");
+		ImportedSnapshot.Diagnostics.Phase1RootOnReadinessGateReason = TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient");
+		ImportedSnapshot.SafePhase2DenialReason = TEXT("phase1_safe_deny");
+		ImportedSnapshot.CachedConvergenceSnapshot.FrameIndex = 42;
+		ImportedSnapshot.DistalBoneMismatchTicks.Add(TEXT("foot_l"), 3);
+		ImportedSnapshot.LoggedProximalStates.Add(TEXT("spine_01"));
+		ImportedSnapshot.Audit.bUsedRelaxedCertification = true;
+
+		FPhysAnimBalanceReadyTransition TransitionSnapshotRoundTrip;
+		TransitionSnapshotRoundTrip.ImportSnapshot(ImportedSnapshot);
+		const FPhysAnimBalanceReadyTransitionSnapshot ExportedSnapshot = TransitionSnapshotRoundTrip.ExportSnapshot();
+
+		TestEqual(TEXT("Transition snapshot restores internal phase"), ExportedSnapshot.InternalPhase, ImportedSnapshot.InternalPhase);
+		TestEqual(TEXT("Transition snapshot restores previous phase"), ExportedSnapshot.PreviousPhase, ImportedSnapshot.PreviousPhase);
+		TestEqual(TEXT("Transition snapshot restores request reason"), ExportedSnapshot.RequestReason, ImportedSnapshot.RequestReason);
+		TestEqual(TEXT("Transition snapshot restores no-coupling proof timer"), ExportedSnapshot.RootOnReadinessNoCouplingProofAccumulatedSeconds, ImportedSnapshot.RootOnReadinessNoCouplingProofAccumulatedSeconds);
+		TestEqual(TEXT("Transition snapshot restores certified topology"), ExportedSnapshot.CertifiedHandoff.TopologyClass, ImportedSnapshot.CertifiedHandoff.TopologyClass);
+		TestEqual(TEXT("Transition snapshot restores late-validation reason"), ExportedSnapshot.CertifiedLateValidationResult.RootOnReadinessGateReason, ImportedSnapshot.CertifiedLateValidationResult.RootOnReadinessGateReason);
+		TestEqual(TEXT("Transition snapshot restores diagnostics reason"), ExportedSnapshot.Diagnostics.FailureReason, ImportedSnapshot.Diagnostics.FailureReason);
+		TestEqual(TEXT("Transition snapshot restores cached convergence frame"), ExportedSnapshot.CachedConvergenceSnapshot.FrameIndex, ImportedSnapshot.CachedConvergenceSnapshot.FrameIndex);
+		TestEqual(TEXT("Transition snapshot restores distal mismatch counts"), ExportedSnapshot.DistalBoneMismatchTicks.FindRef(TEXT("foot_l")), 3);
+		TestTrue(TEXT("Transition snapshot restores audit flags"), ExportedSnapshot.Audit.bUsedRelaxedCertification);
+#endif
 		return true;
 	}
 }

@@ -106,6 +106,18 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			: PelvisBody->GetUnrealWorldTransform();
 	const UPhysicsAsset* const PhysicsAsset = Mesh->GetPhysicsAsset();
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	const FPhase1AutoCalibParams* const AutoCalibParams =
+		ActivePhase1AutoCalibParams.IsSet() ? &ActivePhase1AutoCalibParams.GetValue() : nullptr;
+	const float AutoCalibSpineInterpolationAlpha =
+		AutoCalibParams ? FMath::Clamp(AutoCalibParams->SpineInterpolationAlpha, 0.0f, 1.0f) : 0.10f;
+	const float AutoCalibWorstThighInterpolationAlpha =
+		AutoCalibParams ? FMath::Clamp(AutoCalibParams->WorstThighInterpolationAlpha, 0.0f, 1.0f) : 0.05f;
+	const float AutoCalibFocusedDeltaScale =
+		AutoCalibParams ? FMath::Clamp(AutoCalibParams->FocusedDeltaScale, 0.25f, 4.0f) : 1.0f;
+	const float AutoCalibClampStrengthScale =
+		AutoCalibParams ? FMath::Clamp(AutoCalibParams->ClampStrengthScale, 0.25f, 4.0f) : 1.0f;
+	const bool bAutoCalibPreferUprightnessEarly =
+		AutoCalibParams && AutoCalibParams->UprightnessWeightScale > 1.0f + KINDA_SMALL_NUMBER;
 	FQuat DesiredPelvisRotation = AnimatedPelvisTransform.GetRotation();
 	FString PelvisRotationSource = TEXT("animated_pelvis_rotation");
 	struct FPhase1ConstraintRotationSample
@@ -340,6 +352,91 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			}
 			if (LeftConstraintSample && RightConstraintSample && SpineConstraintSample)
 			{
+				const auto AddAutoCalibBiasSeed = [&](const FQuat& SeedRotation, const TCHAR* SourceTag)
+				{
+					if (!AutoCalibParams)
+					{
+						return;
+					}
+
+					if (FMath::IsNearlyZero(AutoCalibParams->PelvisPitchBiasDeg, KINDA_SMALL_NUMBER) &&
+						FMath::IsNearlyZero(AutoCalibParams->PelvisRollBiasDeg, KINDA_SMALL_NUMBER))
+					{
+						return;
+					}
+
+					const FQuat PitchDelta(FVector::RightVector, FMath::DegreesToRadians(AutoCalibParams->PelvisPitchBiasDeg));
+					const FQuat RollDelta(FVector::ForwardVector, FMath::DegreesToRadians(AutoCalibParams->PelvisRollBiasDeg));
+					FPhase1ConstraintRotationSample& BiasSample = RotationSamples.AddDefaulted_GetRef();
+					BiasSample.CandidateRotation = (RollDelta * PitchDelta * SeedRotation).GetNormalized();
+					BiasSample.Source = FString::Printf(TEXT("%s_pitch%.2f_roll%.2f"), SourceTag, AutoCalibParams->PelvisPitchBiasDeg, AutoCalibParams->PelvisRollBiasDeg);
+					BiasSample.bValid = true;
+				};
+				const auto AddAutoCalibPresetSeedFamily = [&](const EPhase1AutoCalibStrategyPreset Preset, const TCHAR* FamilyTag)
+				{
+					const FPhase1ConstraintRotationSample* const WorstThighSample =
+						(FMath::RadiansToDegrees(AnimatedPelvisTransform.GetRotation().AngularDistance(LeftConstraintSample->CandidateRotation)) >=
+						 FMath::RadiansToDegrees(AnimatedPelvisTransform.GetRotation().AngularDistance(RightConstraintSample->CandidateRotation)))
+							? LeftConstraintSample
+							: RightConstraintSample;
+
+					switch (Preset)
+					{
+					case EPhase1AutoCalibStrategyPreset::SpineBiased:
+					{
+						FPhase1ConstraintRotationSample& Sample = RotationSamples.AddDefaulted_GetRef();
+						Sample.CandidateRotation = FQuat::Slerp(AnimatedPelvisTransform.GetRotation(), SpineConstraintSample->CandidateRotation, AutoCalibSpineInterpolationAlpha).GetNormalized();
+						Sample.Source = FString::Printf(TEXT("autocalib_%s_spine_a%.2f"), FamilyTag, AutoCalibSpineInterpolationAlpha);
+						Sample.bValid = true;
+						AddAutoCalibBiasSeed(Sample.CandidateRotation, *Sample.Source);
+						break;
+					}
+					case EPhase1AutoCalibStrategyPreset::WorstThighBiased:
+					{
+						FPhase1ConstraintRotationSample& Sample = RotationSamples.AddDefaulted_GetRef();
+						Sample.CandidateRotation = FQuat::Slerp(AnimatedPelvisTransform.GetRotation(), WorstThighSample->CandidateRotation, AutoCalibWorstThighInterpolationAlpha).GetNormalized();
+						Sample.Source = FString::Printf(TEXT("autocalib_%s_%s_a%.2f"), FamilyTag, *WorstThighSample->ChildBoneName.ToString(), AutoCalibWorstThighInterpolationAlpha);
+						Sample.bValid = true;
+						AddAutoCalibBiasSeed(Sample.CandidateRotation, *Sample.Source);
+						break;
+					}
+					case EPhase1AutoCalibStrategyPreset::BalancedCoupled:
+					{
+						FQuat BalancedRotation = FQuat::Slerp(LeftConstraintSample->CandidateRotation, RightConstraintSample->CandidateRotation, 0.5f).GetNormalized();
+						BalancedRotation = FQuat::Slerp(BalancedRotation, SpineConstraintSample->CandidateRotation, 0.5f).GetNormalized();
+						FPhase1ConstraintRotationSample& Sample = RotationSamples.AddDefaulted_GetRef();
+						Sample.CandidateRotation = BalancedRotation;
+						Sample.Source = FString::Printf(TEXT("autocalib_%s_balanced"), FamilyTag);
+						Sample.bValid = true;
+						AddAutoCalibBiasSeed(Sample.CandidateRotation, *Sample.Source);
+						break;
+					}
+					case EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh:
+					{
+						const FQuat SpineRotation = FQuat::Slerp(AnimatedPelvisTransform.GetRotation(), SpineConstraintSample->CandidateRotation, AutoCalibSpineInterpolationAlpha).GetNormalized();
+						FPhase1ConstraintRotationSample& Sample = RotationSamples.AddDefaulted_GetRef();
+						Sample.CandidateRotation = FQuat::Slerp(SpineRotation, WorstThighSample->CandidateRotation, AutoCalibWorstThighInterpolationAlpha).GetNormalized();
+						Sample.Source = FString::Printf(TEXT("autocalib_%s_spine_then_%s"), FamilyTag, *WorstThighSample->ChildBoneName.ToString());
+						Sample.bValid = true;
+						AddAutoCalibBiasSeed(Sample.CandidateRotation, *Sample.Source);
+						break;
+					}
+					case EPhase1AutoCalibStrategyPreset::RescueOnly:
+						AddAutoCalibBiasSeed(PelvisBody->GetUnrealWorldTransform().GetRotation(), TEXT("autocalib_rescue_live"));
+						AddAutoCalibBiasSeed(AnimatedPelvisTransform.GetRotation(), TEXT("autocalib_rescue_animated"));
+						break;
+					case EPhase1AutoCalibStrategyPreset::CurrentDefault:
+					default:
+						AddAutoCalibBiasSeed(AnimatedPelvisTransform.GetRotation(), TEXT("autocalib_default"));
+						break;
+					}
+				};
+				if (AutoCalibParams)
+				{
+					AddAutoCalibPresetSeedFamily(AutoCalibParams->SourcePreset, TEXT("source"));
+					AddAutoCalibPresetSeedFamily(AutoCalibParams->SeedFamilyPreset, TEXT("seed"));
+				}
+
 				const float ReferenceLeftAngularErrorDeg = 0.0f;
 				const float ReferenceRightAngularErrorDeg =
 					FMath::RadiansToDegrees(PrimaryReferenceRotation.AngularDistance(RightConstraintSample->CandidateRotation));
@@ -619,8 +716,13 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 		Evaluation.bTiltAdmissible = Evaluation.TiltDeg <= EffectiveSettings.BalancePhase2EntryMaxRootTiltDeg + KINDA_SMALL_NUMBER;
 		return Evaluation;
 	};
-	const auto IsBetterRotationEvaluation = [](const FPhase1PelvisRotationEvaluation& Candidate, const FPhase1PelvisRotationEvaluation& CurrentBest)
+	const auto IsBetterRotationEvaluation = [bAutoCalibPreferUprightnessEarly](const FPhase1PelvisRotationEvaluation& Candidate, const FPhase1PelvisRotationEvaluation& CurrentBest)
 	{
+		const auto PreferByTilt = [](const FPhase1PelvisRotationEvaluation& A, const FPhase1PelvisRotationEvaluation& B)
+		{
+			return A.TiltDeg + KINDA_SMALL_NUMBER < B.TiltDeg;
+		};
+
 		if (Candidate.AngularThresholdOverflowDeg + KINDA_SMALL_NUMBER < CurrentBest.AngularThresholdOverflowDeg)
 		{
 			return true;
@@ -658,7 +760,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 				{
 					return Candidate.bTiltAdmissible;
 				}
-				if (Candidate.TiltDeg + KINDA_SMALL_NUMBER < CurrentBest.TiltDeg)
+				if (bAutoCalibPreferUprightnessEarly && PreferByTilt(Candidate, CurrentBest))
 				{
 					return true;
 				}
@@ -669,6 +771,12 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			}
 
 			if (Candidate.MaxThighAngularErrorDeg + KINDA_SMALL_NUMBER < CurrentBest.MaxThighAngularErrorDeg)
+			{
+				return true;
+			}
+			if (!bAutoCalibPreferUprightnessEarly &&
+				FMath::IsNearlyEqual(Candidate.MaxThighAngularErrorDeg, CurrentBest.MaxThighAngularErrorDeg, KINDA_SMALL_NUMBER) &&
+				PreferByTilt(Candidate, CurrentBest))
 			{
 				return true;
 			}
@@ -1154,6 +1262,32 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 				BestEvaluation = CandidateEvaluation;
 			}
 		}
+		if (AutoCalibParams)
+		{
+			const float Alpha = AutoCalibSpineInterpolationAlpha;
+			const FQuat CandidateRotation = FQuat::Slerp(
+				SeedEvaluation.Rotation,
+				SpineConstraintSample->CandidateRotation,
+				Alpha).GetNormalized();
+			const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+				CandidateRotation,
+				FString::Printf(TEXT("%s_%s_autocalib_a%.2f"),
+					*SeedEvaluation.Source,
+					ContextTag,
+					Alpha));
+			if ((!bRequireTiltAdmissible || CandidateEvaluation.bTiltAdmissible) &&
+				(ShouldPreferSpineOnlyRootOnReadinessRescueCandidate(
+						BestEvaluation.LeftThighAngularErrorDeg,
+						BestEvaluation.RightThighAngularErrorDeg,
+						BestEvaluation.SpineAngularErrorDeg,
+						CandidateEvaluation.LeftThighAngularErrorDeg,
+						CandidateEvaluation.RightThighAngularErrorDeg,
+						CandidateEvaluation.SpineAngularErrorDeg) ||
+					IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation)))
+			{
+				BestEvaluation = CandidateEvaluation;
+			}
+		}
 
 		return BestEvaluation;
 	};
@@ -1215,6 +1349,33 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 				continue;
 			}
 			if (ShouldAcceptWorstThighConstraintInterpolationCandidate(
+					BestEvaluation.LeftThighAngularErrorDeg,
+					BestEvaluation.RightThighAngularErrorDeg,
+					BestEvaluation.SpineAngularErrorDeg,
+					CandidateEvaluation.LeftThighAngularErrorDeg,
+					CandidateEvaluation.RightThighAngularErrorDeg,
+					CandidateEvaluation.SpineAngularErrorDeg) &&
+				IsBetterRotationEvaluation(CandidateEvaluation, BestEvaluation))
+			{
+				BestEvaluation = CandidateEvaluation;
+			}
+		}
+		if (AutoCalibParams)
+		{
+			const float Alpha = AutoCalibWorstThighInterpolationAlpha;
+			const FQuat CandidateRotation = FQuat::Slerp(
+				SeedEvaluation.Rotation,
+				FocusConstraintSample->CandidateRotation,
+				Alpha).GetNormalized();
+			const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+				CandidateRotation,
+				FString::Printf(TEXT("%s_%s_%s_autocalib_a%.2f"),
+					*SeedEvaluation.Source,
+					ContextTag,
+					*FocusChildBone.ToString(),
+					Alpha));
+			if ((!bRequireTiltAdmissible || CandidateEvaluation.bTiltAdmissible) &&
+				ShouldAcceptWorstThighConstraintInterpolationCandidate(
 					BestEvaluation.LeftThighAngularErrorDeg,
 					BestEvaluation.RightThighAngularErrorDeg,
 					BestEvaluation.SpineAngularErrorDeg,
@@ -1330,10 +1491,12 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 				const FQuat DeltaRotation = (ConstraintSample.CandidateRotation * WorkingRotation.Inverse()).GetNormalized();
 				for (const float CorrectionBlendAlpha : CorrectionBlendAlphas)
 				{
+					const float ScaledCorrectionBlendAlpha =
+						FMath::Clamp(CorrectionBlendAlpha * AutoCalibFocusedDeltaScale, 0.001f, 1.0f);
 					const FQuat CandidateRotation = FQuat::Slerp(
 						WorkingRotation,
 						(DeltaRotation * WorkingRotation).GetNormalized(),
-						CorrectionBlendAlpha).GetNormalized();
+						ScaledCorrectionBlendAlpha).GetNormalized();
 					const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
 						CandidateRotation,
 						FString::Printf(TEXT("%s_%s_%s_p%d_a%.3f"),
@@ -1341,7 +1504,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 							ContextTag,
 							*FocusChildBone.ToString(),
 							PassIndex,
-							CorrectionBlendAlpha));
+							ScaledCorrectionBlendAlpha));
 					if (bRequireTiltAdmissible && !CandidateEvaluation.bTiltAdmissible)
 					{
 						continue;
@@ -1416,7 +1579,9 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			bool bImprovedThisPass = false;
 			for (const float CorrectionBlendAlpha : CorrectionBlendAlphas)
 			{
-				const FQuat AppliedDelta = FQuat::Slerp(FQuat::Identity, DeltaRotation, CorrectionBlendAlpha).GetNormalized();
+				const float ScaledCorrectionBlendAlpha =
+					FMath::Clamp(CorrectionBlendAlpha * AutoCalibFocusedDeltaScale, 0.001f, 1.0f);
+				const FQuat AppliedDelta = FQuat::Slerp(FQuat::Identity, DeltaRotation, ScaledCorrectionBlendAlpha).GetNormalized();
 				const FQuat CandidateRotation = (AppliedDelta * WorkingEvaluation.Rotation).GetNormalized();
 				const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
 					CandidateRotation,
@@ -1425,7 +1590,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 						ContextTag,
 						*FocusChildBone.ToString(),
 						PassIndex,
-						CorrectionBlendAlpha));
+						ScaledCorrectionBlendAlpha));
 				if (bRequireTiltAdmissible && !CandidateEvaluation.bTiltAdmissible)
 				{
 					continue;
@@ -1874,6 +2039,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	const UWorld* const World = GetWorld();
 	const float Phase1PelvisRotationStepDeg =
 		FMath::Max(0.0f, EffectiveSettings.MaxAngularStepDegreesPerSecond) *
+		AutoCalibClampStrengthScale *
 		static_cast<float>(World ? World->GetDeltaSeconds() : 0.0);
 	if (Phase1PelvisRotationStepDeg > UE_SMALL_NUMBER)
 	{

@@ -662,11 +662,217 @@ struct FPhase1PelvisCouplingRotationForensics
 	FString ForensicSpineRescueSource;
 };
 
+#if !UE_BUILD_SHIPPING
+enum class EPhase1AutoCalibStrategyPreset : uint8
+{
+	CurrentDefault,
+	SpineBiased,
+	WorstThighBiased,
+	BalancedCoupled,
+	SpineThenWorstThigh,
+	RescueOnly
+};
+
+struct FPhase1AutoCalibRequest
+{
+	FString OwnerFilter;
+	int32 Seed = 1337;
+	int32 MaxTrials = INDEX_NONE;
+	FString OutputSubfolder;
+};
+
+struct FPhase1AutoCalibParams
+{
+	EPhase1AutoCalibStrategyPreset SourcePreset = EPhase1AutoCalibStrategyPreset::CurrentDefault;
+	EPhase1AutoCalibStrategyPreset SeedFamilyPreset = EPhase1AutoCalibStrategyPreset::CurrentDefault;
+	float SpineInterpolationAlpha = 0.10f;
+	float WorstThighInterpolationAlpha = 0.05f;
+	float FocusedDeltaScale = 1.0f;
+	float UprightnessWeightScale = 1.0f;
+	float ClampStrengthScale = 1.0f;
+	float PelvisPitchBiasDeg = 0.0f;
+	float PelvisRollBiasDeg = 0.0f;
+};
+
+struct FPhase1AutoCalibScore
+{
+	bool bContractPassed = false;
+	bool bTimedOut = false;
+	bool bSafeDenied = false;
+	bool bRestoreDeterministic = true;
+	bool bReachedRootOn = false;
+	bool bNoCouplingProofSatisfied = false;
+	float WorstDirectLinkAngularErrorDeg = TNumericLimits<float>::Max();
+	float MeanTargetDeltaDeg = TNumericLimits<float>::Max();
+	float MaxTargetDeltaDeg = TNumericLimits<float>::Max();
+	float ThighAsymmetryDeg = TNumericLimits<float>::Max();
+	float PeakRootTiltDeg = TNumericLimits<float>::Max();
+	float ShellOffsetDeltaCm = TNumericLimits<float>::Max();
+	float ShellVelocityDeltaCmPerSecond = TNumericLimits<float>::Max();
+	float PeakRootLinearSpeedCmPerSecond = TNumericLimits<float>::Max();
+	float PeakRootAngularSpeedDegPerSecond = TNumericLimits<float>::Max();
+	float StableSortScalar = TNumericLimits<float>::Max();
+};
+
+struct FPhase1AutoCalibTrialResult
+{
+	int32 TrialId = INDEX_NONE;
+	int32 RepetitionIndex = 0;
+	FString StageName;
+	FPhase1AutoCalibParams Params;
+	FPhase1AutoCalibScore Score;
+	FString TerminalClass;
+	FString TruthfulBlocker;
+	bool bReproducible = false;
+};
+
+struct FPhase1AutoCalibReport
+{
+	FString OutputDirectory;
+	FString SummaryPath;
+	FString TrialsCsvPath;
+	FString ParetoJsonPath;
+	TArray<FPhase1AutoCalibTrialResult> Trials;
+	TArray<FPhase1AutoCalibTrialResult> ParetoFrontier;
+	FPhase1AutoCalibTrialResult BestCandidate;
+	FPhase1AutoCalibTrialResult BestNearPass;
+	bool bHasBestCandidate = false;
+	bool bHasBestNearPass = false;
+};
+
+struct FPhase1AutoCalibLiveMetrics
+{
+	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
+	EBalanceReadyTransitionPhase TransitionPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
+	float RootLinearSpeedCmPerSecond = 0.0f;
+	float RootAngularSpeedDegPerSecond = 0.0f;
+	float RootTiltDeg = 0.0f;
+	float ShellOffsetDeltaCm = 0.0f;
+	float ShellVelocityDeltaCmPerSecond = 0.0f;
+	float MaxTargetDeltaDeg = 0.0f;
+	float MeanTargetDeltaDeg = 0.0f;
+};
+
+struct FPhase1AutoCalibDeterminismFingerprint
+{
+	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
+	EBalanceReadyTransitionPhase TransitionPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
+	FTransform OwnerTransform = FTransform::Identity;
+	FTransform MeshTransform = FTransform::Identity;
+	FTransform RootBodyTransform = FTransform::Identity;
+	FVector RootLinearVelocity = FVector::ZeroVector;
+	FVector RootAngularVelocity = FVector::ZeroVector;
+	float ShellOffsetDeltaCm = 0.0f;
+	float ShellVelocityDeltaCmPerSecond = 0.0f;
+	float MaxTargetDeltaDeg = 0.0f;
+	float MeanTargetDeltaDeg = 0.0f;
+	int32 PendingResetCount = 0;
+};
+
+struct FPhase1AutoCalibBodyState
+{
+	FName BoneName = NAME_None;
+	FTransform WorldTransform = FTransform::Identity;
+	FVector LinearVelocity = FVector::ZeroVector;
+	FVector AngularVelocityRad = FVector::ZeroVector;
+	bool bSimulating = false;
+	bool bSleeping = false;
+};
+
+struct FPhase1AutoCalibBodyModifierState
+{
+	FName ModifierName = NAME_None;
+	EPhysicsMovementType MovementType = EPhysicsMovementType::Static;
+	float PhysicsBlendWeight = 0.0f;
+	ECollisionEnabled::Type CollisionType = ECollisionEnabled::NoCollision;
+	bool bUpdateKinematicFromSimulation = false;
+};
+
+struct FPhase1AutoCalibBaselineSnapshot
+{
+	FTransform OwnerActorTransform = FTransform::Identity;
+	FVector CharacterVelocity = FVector::ZeroVector;
+	FTransform MeshWorldTransform = FTransform::Identity;
+	TArray<FPhase1AutoCalibBodyState> Bodies;
+	TArray<FPhase1AutoCalibBodyModifierState> BodyModifiers;
+	TMap<FName, FQuat> PreviousControlTargetRotations;
+	TMap<FName, FQuat> PolicyBlendStartControlTargetRotations;
+	TArray<float> ConditionedActionBuffer;
+	TArray<float> PreviousConditionedActionBuffer;
+	TArray<float> SelfObservationBuffer;
+	TArray<float> MimicTargetPosesBuffer;
+	TArray<float> TerrainBuffer;
+	TArray<float> ActionOutputBuffer;
+	TArray<float> PreviousActionOutputBuffer;
+	FPoseSearchBlueprintResult LastValidPoseSearchResult;
+	int32 ConsecutiveInvalidPoseSearchFrames = 0;
+	FBridgeIntentState BridgeIntentState;
+	FBridgeTrajectoryState BridgeTrajectoryState;
+	FBridgeShellState BridgeShellState;
+	FPhysAnimRuntimeInstabilityState RuntimeInstabilityState;
+	FPhysAnimRuntimeInstabilityDiagnostics LastRuntimeInstabilityDiagnostics;
+	FPhysAnimActionDiagnostics LastActionDiagnostics;
+	FPhysAnimControlTargetDiagnostics LastControlTargetDiagnostics;
+	FPhysAnimStabilizationSettings LastAppliedStabilizationSettings;
+	FPhysAnimBalanceReadyTransitionSnapshot BalanceTransitionSnapshot;
+	FPhase1AcceptedConvergenceSnapshot SafePhase1ConvergenceSnapshot;
+	FPhase1PelvisCouplingRotationForensics LastPhase1PelvisCouplingRotationForensics;
+	TArray<FName> PendingBodyModifierCachedResetNames;
+	TArray<double> BringUpGroupActivationTimeSeconds;
+	TArray<double> BringUpGroupControlRampStartTimeSeconds;
+	TArray<uint8> BringUpGroupAlphaActiveLogged;
+	TMap<FName, EPhysicsMovementType> PreviousDistalBoneIntendedOwnership;
+	TMap<FName, EPhysicsMovementType> PreviousDistalBoneModifierOwnership;
+	TMap<FName, FString> LastDistalClassification;
+	TMap<FName, FPhysAnimPendingDistalOwnershipCheck> PendingDistalOwnershipChecks;
+	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
+	EBridgeLocomotionAuthorityState BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+	EBalanceTransitionShellAuthorityMode BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::GameplayShellObservedOnly;
+	float SimulationHandoffAlpha = 0.0f;
+	bool bLastAppliedSimulationHandoffSettled = false;
+	float LastAppliedControlAuthorityAlpha = -1.0f;
+	double BridgeStartTimeSeconds = 0.0;
+	double SimulationHandoffCompletedTimeSeconds = -1.0;
+	double PolicyInfluenceRampStartTimeSeconds = -1.0;
+	int32 HighestUnlockedBringUpGroupIndex = INDEX_NONE;
+	float BringUpGroupStableAccumulatedSeconds = 0.0f;
+	double LastRuntimeDiagnosticsLogTimeSeconds = -1.0;
+	float PolicyUpdateAccumulatorSeconds = -1.0f;
+	int32 LastPolicyElapsedSteps = 0;
+	int32 PolicyControlTicksExecuted = 0;
+	int32 PolicyControlTicksSkipped = 0;
+	double LastPolicyControlUpdateTimeSeconds = -1.0;
+	FVector ShellCouplingReferenceRootLocalOffsetCm = FVector::ZeroVector;
+	bool bHasShellCouplingReferenceRootLocalOffset = false;
+	bool bTransitionOwnedShellReferenceReanchored = false;
+	bool bTransitionOwnedShellReferenceReseededAfterLock = false;
+	bool bPolicyTargetsAppliedLastFrame = false;
+	bool bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
+	bool bStartupBringUpFrozenByBalanceEntry = false;
+	bool bPendingBalanceModeStartRequest = false;
+	bool bPendingBalanceModeStartAttemptIssued = false;
+	FString PendingBalanceModeStartReason;
+	double PendingBalanceModeRequestTimeSeconds = -1.0;
+	bool bPhase1TiltDiagnosticEmitted = false;
+	bool bPhase1PelvisCouplingSkipLogged = false;
+	bool bPelvisResetAppliedThisTick = false;
+	int32 HipQuarantineTicksRemaining = 0;
+	uint32 BalanceEntryRootOnFrameCount = 0;
+	uint32 BalanceEntrySettleFrameCount = 0;
+	bool bLastPelvisRawSim = false;
+	int32 LastTotalSimCount = -1;
+	bool bPhase2Tick4AuditArmed = false;
+	float LastHipQuarantineLeftPreDeltaDegrees = 0.0f;
+	float LastHipQuarantineRightPreDeltaDegrees = 0.0f;
+};
+#endif
+
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
 class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPoseSearchTrajectoryPredictorInterface
 {
 	GENERATED_BODY()
 	friend class FPhysAnimBalanceReadyTransition;
+	friend class UPhysAnimPhase1AutoCalibSubsystem;
 
 public:
 	UPhysAnimComponent();
@@ -736,6 +942,21 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	void StopBalancePerturbationMode();
+
+#if !UE_BUILD_SHIPPING
+	const FPhysAnimStabilizationSettings& GetConfiguredStabilizationSettings() const { return StabilizationSettings; }
+	EBalanceReadyTransitionPhase GetBalanceReadyTransitionPhase() const { return BalanceReadyTransition.GetPhase(); }
+	FPhysAnimBalanceReadyTransitionSnapshot ExportBalanceReadyTransitionSnapshot() const { return BalanceReadyTransition.ExportSnapshot(); }
+	bool CapturePhase1AutoCalibBaseline(FPhase1AutoCalibBaselineSnapshot& OutSnapshot, FString& OutError) const;
+	bool RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBaselineSnapshot& Snapshot, FString& OutError);
+	void ApplyPhase1AutoCalibParams(const FPhase1AutoCalibParams& Params);
+	void ClearPhase1AutoCalibParams();
+	bool CapturePhase1AutoCalibLiveMetrics(FPhase1AutoCalibLiveMetrics& OutMetrics, FString& OutError) const;
+	bool CapturePhase1AutoCalibDeterminismFingerprint(FPhase1AutoCalibDeterminismFingerprint& OutFingerprint, FString& OutError) const;
+	bool StartPhase1AutoCalibTrial(FString& OutError);
+	static bool IsBetterPhase1AutoCalibScore(const FPhase1AutoCalibScore& Candidate, const FPhase1AutoCalibScore& CurrentBest);
+	static void FinalizePhase1AutoCalibScore(FPhase1AutoCalibScore& InOutScore);
+#endif
 
 #if WITH_DEV_AUTOMATION_TESTS
 	static bool TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState State) { return IsBalanceEntryState(State); }
@@ -1333,6 +1554,9 @@ private:
 	bool bPhase1PelvisCouplingSkipLogged = false;
 	FPhase1PelvisCouplingRotationForensics LastPhase1PelvisCouplingRotationForensics;
 	bool bPelvisResetAppliedThisTick = false;
+#if !UE_BUILD_SHIPPING
+	TOptional<FPhase1AutoCalibParams> ActivePhase1AutoCalibParams;
+#endif
 	float BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
 	float BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
 	float BalanceScenarioPeakActorDisplacementCm = 0.0f;

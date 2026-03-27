@@ -1,10 +1,15 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimBalanceQuietHandoff.h"
 #include "PhysAnimBalance.TestHelpers.h"
+#if !UE_BUILD_SHIPPING
+#include "PhysAnimPhase1AutoCalibSubsystem.h"
+#endif
+#include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/AutomationTest.h"
 #include "Tests/AutomationCommon.h"
 #include "Tests/AutomationEditorCommon.h"
+#include "UObject/UObjectIterator.h"
 #include "Editor.h"
 
 namespace
@@ -19,6 +24,7 @@ namespace
 	const TCHAR* PhysAnimPieMovementTraceSmokePrefix = TEXT("[PhysAnimPieMovementTraceSmoke]");
 	const TCHAR* PhysAnimPieMovementSoakPrefix = TEXT("[PhysAnimPieMovementSoak]");
 	const TCHAR* PhysAnimPieG2PresentationPrefix = TEXT("[PhysAnimPieG2Presentation]");
+	const TCHAR* PhysAnimPiePhase1AutoCalibSmokePrefix = TEXT("[PhysAnimPiePhase1AutoCalibSmoke]");
 
 	constexpr float PhysAnimPieSmokeStartTimeoutSeconds = 30.0f;
 	constexpr float PhysAnimPieSmokeStopTimeoutSeconds = 30.0f;
@@ -30,6 +36,8 @@ namespace
 	constexpr float PhysAnimPieG2PresentationDurationSeconds = 4.0f;
 	constexpr float PhysAnimPieBalanceModeSmokeLeadInSeconds = 1.0f;
 	constexpr float PhysAnimPieBalanceModeSmokeDurationSeconds = 15.0f;
+	constexpr float PhysAnimPiePhase1AutoCalibPostBridgeActiveWaitSeconds = 5.0f;
+	constexpr float PhysAnimPiePhase1AutoCalibTimeoutSeconds = 90.0f;
 
 	DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FSetIntConsoleVariableCommand, FString, Name, int32, Value);
 	bool FSetIntConsoleVariableCommand::Update()
@@ -50,6 +58,105 @@ namespace
 		}
 		return true;
 	}
+
+#if !UE_BUILD_SHIPPING
+	DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FStartPhase1AutoCalibSmokeCommand, FAutomationTestBase*, Test);
+	bool FStartPhase1AutoCalibSmokeCommand::Update()
+	{
+		if (!Test || !GEditor || !GEditor->PlayWorld)
+		{
+			return true;
+		}
+
+		UWorld* const World = GEditor->PlayWorld;
+		UPhysAnimPhase1AutoCalibSubsystem* const AutoCalibSubsystem = World->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>();
+		Test->TestNotNull(TEXT("Phase1 auto-calibration subsystem exists before start"), AutoCalibSubsystem);
+		if (!AutoCalibSubsystem)
+		{
+			return true;
+		}
+
+		UPhysAnimComponent* TargetComponent = nullptr;
+		for (TObjectIterator<UPhysAnimComponent> It; It; ++It)
+		{
+			if (IsValid(*It) && (*It)->GetWorld() == World && (*It)->GetRuntimeState() == EPhysAnimRuntimeState::BridgeActive)
+			{
+				TargetComponent = *It;
+				break;
+			}
+		}
+
+		Test->TestNotNull(TEXT("Phase1 auto-calibration smoke finds a BridgeActive component"), TargetComponent);
+		if (!TargetComponent || !TargetComponent->GetOwner())
+		{
+			return true;
+		}
+
+		FString Error;
+		FPhase1AutoCalibRequest Request;
+		Request.OwnerFilter = TargetComponent->GetOwner()->GetName();
+		Request.Seed = 1337;
+		Request.MaxTrials = 2;
+		Request.OutputSubfolder = TEXT("automation_phase1_smoke");
+
+		const bool bStarted = AutoCalibSubsystem->StartPhase1AutoCalib(Request, Error);
+		Test->TestTrue(TEXT("Phase1 auto-calibration smoke starts successfully"), bStarted);
+		if (!bStarted)
+		{
+			const FString FailureText = !Error.IsEmpty() ? Error : AutoCalibSubsystem->GetLastError();
+			if (!FailureText.IsEmpty())
+			{
+				Test->AddError(FString::Printf(TEXT("%s Start failed: %s"), PhysAnimPiePhase1AutoCalibSmokePrefix, *FailureText));
+			}
+		}
+		Test->TestTrue(TEXT("Phase1 auto-calibration smoke start reports no error"), Error.IsEmpty());
+		return true;
+	}
+
+	DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FValidatePhase1AutoCalibSmokeArtifactsCommand, FAutomationTestBase*, Test);
+	bool FValidatePhase1AutoCalibSmokeArtifactsCommand::Update()
+	{
+		if (!Test || !GEditor || !GEditor->PlayWorld)
+		{
+			return true;
+		}
+
+		UWorld* const World = GEditor->PlayWorld;
+		UPhysAnimPhase1AutoCalibSubsystem* const AutoCalibSubsystem = World->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>();
+		Test->TestNotNull(TEXT("Phase1 auto-calibration subsystem exists"), AutoCalibSubsystem);
+		if (!AutoCalibSubsystem)
+		{
+			return true;
+		}
+
+		const FPhase1AutoCalibReport& Report = AutoCalibSubsystem->GetLatestReport();
+		Test->TestTrue(TEXT("Phase1 auto-calibration smoke records at least two trials"), Report.Trials.Num() >= 2);
+		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes summary.json"), IFileManager::Get().FileExists(*Report.SummaryPath));
+		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes trials.csv"), IFileManager::Get().FileExists(*Report.TrialsCsvPath));
+		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes pareto.json"), IFileManager::Get().FileExists(*Report.ParetoJsonPath));
+
+		TArray<FPhase1AutoCalibTrialResult> StageCTrials;
+		for (const FPhase1AutoCalibTrialResult& Trial : Report.Trials)
+		{
+			if (Trial.StageName == TEXT("stage_c"))
+			{
+				StageCTrials.Add(Trial);
+			}
+		}
+
+		if (StageCTrials.Num() >= 2)
+		{
+			Test->TestTrue(
+				TEXT("Stage C reruns preserve the same terminal class from the restored baseline"),
+				StageCTrials[0].TerminalClass == StageCTrials[1].TerminalClass);
+			Test->TestTrue(
+				TEXT("Stage C reruns preserve the same truthful blocker from the restored baseline"),
+				StageCTrials[0].TruthfulBlocker == StageCTrials[1].TruthfulBlocker);
+		}
+
+		return true;
+	}
+#endif
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPieSmokeTest,
@@ -140,4 +247,5 @@ namespace
 		AddCommand(new FEndPlayMapCommand());
 		return true;
 	}
+
 }

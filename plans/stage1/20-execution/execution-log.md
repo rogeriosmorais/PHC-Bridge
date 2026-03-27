@@ -451,3 +451,12 @@ Known important reference points from this work:
 - Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
 - Live smoke remained on the same truthful result: `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`, with the winning runtime path still ending at `..._spine_interp_a0.10_worst_thigh_interp_thigh_r_a0.01_worst_thigh_margin_sweep_y-0.50_p0.05_r-0.50` and metrics still at `pelvisThighLAngular=31.49`, `pelvisThighRAngular=33.89`, and `pelvisSpine01Angular=17.98`.
 - This rules out another focused-sample selection gap and narrows the remaining work to deeper thigh candidate generation or genuine Phase 1 physical viability.
+
+## 2026-03-27 — Phase 1 Transactional Auto-Calibration Harness
+
+- Added the design doc [`phase1-transactional-auto-calibration-harness.md`](/f:/NewEngine/plans/stage1/40-design/phase1-transactional-auto-calibration-harness.md) and wired the first dev-only implementation around the existing balance-transition path instead of introducing a second solver.
+- Added debug-only Phase 1 transactional snapshot/export-import surfaces on `UPhysAnimComponent` and `FPhysAnimBalanceReadyTransition`, plus transient solver-override parameters limited to the planned candidate-generation knobs.
+- Implemented `UPhysAnimPhase1AutoCalibSubsystem`, staged candidate generation/refinement/repro passes, deterministic restore preflight, artifact-path setup, and `pa.RunPhase1AutoCalib` / `pa.StopPhase1AutoCalib`.
+- Added TDD for transition snapshot round-trip, auto-calib score ordering, contract-threshold non-mutation, Stage A candidate coverage, and reproducibility classification.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component` and `.\scripts\build.ps1 -Test PhysAnim.Bridge.BalanceStateless`.
+- Attempted a PIE smoke for the harness, but the live runtime still races existing balance-entry queue gates (`queue_bring_up_incomplete`, then `queue_policy_influence_below_threshold`) before a stable transactional start point is available in that map/runtime path, so the failing smoke was not left in the main suite.
