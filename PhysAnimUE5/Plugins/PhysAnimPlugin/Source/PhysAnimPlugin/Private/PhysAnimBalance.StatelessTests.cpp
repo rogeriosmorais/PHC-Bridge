@@ -5,11 +5,11 @@
 #include "Misc/AutomationTest.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FPhysAnimBalanceReadinessMathTest,
-	"PhysAnim.Balance.ReadinessMath",
+	FPhysAnimBalanceStatelessTests,
+	"PhysAnim.Balance.StatelessTests",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FPhysAnimBalanceReadinessMathTest::RunTest(const FString& Parameters)
+bool FPhysAnimBalanceStatelessTests::RunTest(const FString& Parameters)
 {
 	FPhysAnimStabilizationSettings Settings;
 	Settings.MaxRootLinearSpeedCmPerSecond = 100.0f;
