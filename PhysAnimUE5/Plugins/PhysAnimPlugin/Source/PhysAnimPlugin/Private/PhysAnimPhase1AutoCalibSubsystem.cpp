@@ -826,16 +826,16 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickAwaitingReadiness()
 	const FPhysAnimStabilizationSettings ReadinessSettings = Component->GetConfiguredStabilizationSettings();
 	const bool bQueueReady = Component->EvaluateBalanceModeQueueGates(ReadinessSettings, QueueReason);
 	FString PreEntryReason;
-	(void)Component->EvaluateBalanceBridgeActivePreEntryPrerequisites(ReadinessSettings, PreEntryReason);
+	const bool bPreEntryPass = Component->EvaluateBalanceBridgeActivePreEntryPrerequisites(ReadinessSettings, PreEntryReason);
+	const bool bBaselineReady = bQueueReady && bPreEntryPass;
 
-	if (bQueueReady)
+	if (bBaselineReady)
 	{
 		UE_LOG(
 			LogPhysAnimBridge,
 			Warning,
-			TEXT("[PhysAnimAutoCalib] Queue-ready baseline reached after %.2fs. Capturing baseline. preEntry=%s"),
-			World->GetTimeSeconds() - CurrentStageStartTimeSeconds,
-			PreEntryReason.IsEmpty() ? TEXT("ready") : *PreEntryReason);
+			TEXT("[PhysAnimAutoCalib] Queue-ready baseline reached after %.2fs. Capturing baseline. preEntry=ready"),
+			World->GetTimeSeconds() - CurrentStageStartTimeSeconds);
 		
 		FString Error;
 		if (!Component->CapturePhase1AutoCalibBaseline(BaselineSnapshot, Error))
@@ -872,10 +872,11 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickAwaitingReadiness()
 
 	if (World->GetTimeSeconds() - LastReadinessLogTimeSeconds >= 1.0)
 	{
-		const UEnum* const StateEnum = StaticEnum<EPhysAnimRuntimeState>();
-		const FString StateName = StateEnum ? StateEnum->GetValueAsString(Component->GetRuntimeState()) : TEXT("unknown");
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting queue-ready baseline... elapsed=%.1fs state=%s queue=%s preEntry=%s"),
-			Elapsed, *StateName, *QueueReason, *PreEntryReason);
+			World->GetTimeSeconds() - CurrentStageStartTimeSeconds,
+			UPhysAnimComponent::GetRuntimeStateName(Component->GetRuntimeState()),
+			QueueReason.IsEmpty() ? TEXT("ready") : *QueueReason,
+			PreEntryReason.IsEmpty() ? TEXT("ready") : *PreEntryReason);
 		LastReadinessLogTimeSeconds = World->GetTimeSeconds();
 	}
 }
