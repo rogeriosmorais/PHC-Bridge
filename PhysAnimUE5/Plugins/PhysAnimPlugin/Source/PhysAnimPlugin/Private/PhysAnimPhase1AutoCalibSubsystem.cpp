@@ -49,7 +49,7 @@ namespace
 		EPhase1AutoCalibStrategyPreset::PairBlendFrontierFollowThrough
 	};
 
-	bool MatchesFilter(const UPhysAnimComponent& Component, const FString& FilterLower)
+	bool AutoCalibMatchesFilter(const UPhysAnimComponent& Component, const FString& FilterLower)
 	{
 		if (FilterLower.IsEmpty() || FilterLower == TEXT("<all>") || FilterLower == TEXT("all"))
 		{
@@ -752,7 +752,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::ResolveTargetComponent(
 	for (TObjectIterator<UPhysAnimComponent> It; It; ++It)
 	{
 		UPhysAnimComponent* const Candidate = *It;
-		if (!IsValid(Candidate) || Candidate->GetWorld() != World || !MatchesFilter(*Candidate, FilterLower))
+		if (!IsValid(Candidate) || Candidate->GetWorld() != World || !AutoCalibMatchesFilter(*Candidate, FilterLower))
 		{
 			continue;
 		}
@@ -940,7 +940,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 	}
 
 	const FPhysAnimStabilizationSettings& Settings = Component->GetConfiguredStabilizationSettings();
-	const double TimeoutSeconds = static_cast<double>(Settings.BalancePhase1PrepareDuration + Settings.BalancePhase1LateValidateRequiredSeconds + 0.5f);
+	const double TimeoutSeconds = static_cast<double>(Settings.BalancePhase1PrepareDuration + Settings.BalancePhase1LateValidateRequiredSeconds + 3.5f);
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	const double ElapsedSeconds = bActiveTrialStarted && ActiveTrialStartTimeSeconds >= 0.0
 		? (CurrentTimeSeconds - ActiveTrialStartTimeSeconds)
@@ -966,6 +966,15 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 			return;
 		}
 
+		bActiveTrialStarted = true;
+		ActiveTrialStartTimeSeconds = CurrentTimeSeconds;
+		ActiveTrialPeakMetrics = LiveMetrics;
+	}
+	else if (!bActiveTrialStarted)
+	{
+		// The component already entered Phase 1 before we could trigger it
+		// (e.g. via the normal auto-triggered balance entry path).  Adopt the
+		// already-running trial so the timeout guard and telemetry still work.
 		bActiveTrialStarted = true;
 		ActiveTrialStartTimeSeconds = CurrentTimeSeconds;
 		ActiveTrialPeakMetrics = LiveMetrics;

@@ -1368,7 +1368,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					const USkeletalMeshComponent* const Mesh = GetMeshComponent();
 					const FBodyInstance* const TargetBody = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
 					const bool bRawSimulating = TargetBody ? TargetBody->IsInstanceSimulatingPhysics() : false;
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_MODIFIER_SYNC bone=%s movement=%s updateBody=1 rawSim=%d"),
+					UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnimBalance] PHASE1_MODIFIER_SYNC bone=%s movement=%s updateBody=1 rawSim=%d"),
 						*BoneName.ToString(),
 						UPhysAnimComponent::GetPhysicsMovementTypeName(BodyModifierMovementType),
 						bRawSimulating ? 1 : 0);

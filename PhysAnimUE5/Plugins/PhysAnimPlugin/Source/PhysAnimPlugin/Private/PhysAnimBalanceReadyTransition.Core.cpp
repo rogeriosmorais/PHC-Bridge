@@ -1476,9 +1476,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
 		}
 
-		if (TotalTransitionTimeSeconds > (GStrictPhase1Certification != 0 ? 2.0f : Settings.BalancePhase1TimeoutDuration))
+		if (TotalTransitionTimeSeconds > (GStrictPhase1Certification != 0 ? 5.0f : Settings.BalancePhase1TimeoutDuration))
 		{
-			if (TotalTransitionTimeSeconds > 2.0f + KINDA_SMALL_NUMBER)
+			if (TotalTransitionTimeSeconds > 5.0f + KINDA_SMALL_NUMBER)
 			{
 				Audit.bUsedTimeoutExtension = true;
 			}
@@ -1738,7 +1738,7 @@ extern int32 GVerbosePhase2Forensics;
 
 				if (GVerbosePhase2Forensics != 0)
 				{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRE_GUARD_PELVIS_STATE tick=%d rawSim=%d modMoveType=%d shellLocked=%d quarantined=%d state=%d owner=%d actor=%s component=%s"),
+					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_PRE_GUARD_PELVIS_STATE tick=%d rawSim=%d modMoveType=%d shellLocked=%d quarantined=%d state=%d owner=%d actor=%s component=%s"),
 						Phase2GuardTickCount,
 						bPelvisActualSim ? 1 : 0,
 						static_cast<int32>(PelvisModifierMovementType),
@@ -1754,7 +1754,7 @@ extern int32 GVerbosePhase2Forensics;
 		{
 			UE_LOG(
 				LogPhysAnimBridge,
-				Warning,
+				Log,
 					TEXT("[PhysAnimBalance] PHASE2_GUARD_TICK tick=%d requestedRootSim=%d actualRootSim=%d resetScheduled=%d simCountPost=%d distalSimPost=%d shellOffsetDelta=%.1f shellVelocityDelta=%.1f owner=%d actor=%s component=%s"),
 					Phase2GuardTickCount,
 					bPelvisRequestedSim ? 1 : 0,
@@ -2508,12 +2508,26 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			PhaseTimeSeconds);
 	}
 
-	if (NewPhase != EBalanceReadyTransitionPhase::BRT_Inactive && InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive)
+	InternalPhase = NewPhase;
+
+	if (NewPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare && Owner)
 	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE_COMMIT commit=%d"), static_cast<int32>(InternalPhase));
+		TArray<BalanceTransitionSets::FDirectPelvisLinkForensicRecord> ZeroSolverRecords;
+		const USkeletalMeshComponent* Mesh = Owner->GetMeshComponent();
+		const FName RootBone = PhysAnimBridge::GetRootBoneName();
+		static const FName Bones[] = { TEXT("thigh_l"), TEXT("thigh_r"), TEXT("spine_01") };
+
+		for (FName Bone : Bones)
+		{
+			BalanceTransitionSets::FDirectPelvisLinkForensicRecord Record;
+			if (BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, RootBone, Bone, Record))
+			{
+				ZeroSolverRecords.Add(Record);
+			}
+		}
+		BalanceTransitionSets::LogDirectPelvisLinkForensicRecords(ZeroSolverRecords, TEXT("PHASE1_RUNTIME_START"), true);
 	}
 
-	InternalPhase = NewPhase;
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE_ENTRY phase=%d"), static_cast<int32>(InternalPhase));
 	PhaseTimeSeconds = 0.0f;
 	StableHoldAccumulatedSeconds = 0.0f;

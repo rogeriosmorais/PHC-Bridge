@@ -48,6 +48,8 @@ bool BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(
 
 	const FTransform ParentTransform = ResolveForensicBodyOrBoneTransform(Mesh, ParentBoneName, OutRecord.bParentUsedBodyInstance);
 	const FTransform ChildTransform = ResolveForensicBodyOrBoneTransform(Mesh, ChildBoneName, OutRecord.bChildUsedBodyInstance);
+	OutRecord.ParentWorldRotation = ParentTransform.GetRotation();
+	OutRecord.ChildWorldRotation = ChildTransform.GetRotation();
 	OutRecord.ParentSpaceLabel = OutRecord.bParentUsedBodyInstance ? TEXT("pelvis_body_local(body_instance)") : TEXT("pelvis_body_local(bone_fallback)");
 	OutRecord.ChildSpaceLabel = OutRecord.bChildUsedBodyInstance ? TEXT("child_body_local(body_instance)") : TEXT("child_body_local(bone_fallback)");
 	OutRecord.BodyOriginDistanceCm = FVector::Dist(
@@ -75,13 +77,15 @@ bool BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(
 	OutRecord.bConstraintFound = true;
 	OutRecord.AuthoredChildAnchorLocalCm = Constraint->Pos1;
 	OutRecord.AuthoredParentAnchorLocalCm = Constraint->Pos2;
+	OutRecord.AuthoredChildRefFrame = Constraint->GetRefFrame(EConstraintFrame::Frame1).GetRotation();
+	OutRecord.AuthoredParentRefFrame = Constraint->GetRefFrame(EConstraintFrame::Frame2).GetRotation();
 	OutRecord.EvaluatedChildAnchorWorldCm = ChildTransform.TransformPosition(Constraint->Pos1);
 	OutRecord.EvaluatedParentAnchorWorldCm = ParentTransform.TransformPosition(Constraint->Pos2);
 	OutRecord.AnchorDistanceCm = FVector::Dist(OutRecord.EvaluatedParentAnchorWorldCm, OutRecord.EvaluatedChildAnchorWorldCm);
 	const FQuat ChildConstraintWorldRotation =
-		(ChildTransform.GetRotation() * Constraint->GetRefFrame(EConstraintFrame::Frame1).GetRotation()).GetNormalized();
+		(ChildTransform.GetRotation() * OutRecord.AuthoredChildRefFrame).GetNormalized();
 	const FQuat ParentConstraintWorldRotation =
-		(ParentTransform.GetRotation() * Constraint->GetRefFrame(EConstraintFrame::Frame2).GetRotation()).GetNormalized();
+		(ParentTransform.GetRotation() * OutRecord.AuthoredParentRefFrame).GetNormalized();
 	const float ConstraintAngularErrorRadians = ChildConstraintWorldRotation.AngularDistance(ParentConstraintWorldRotation);
 	OutRecord.ConstraintAngularErrorDeg = FMath::RadiansToDegrees(ConstraintAngularErrorRadians);
 	return true;
@@ -114,7 +118,7 @@ void BalanceTransitionSets::LogDirectPelvisLinkForensicRecords(
 		UE_LOG(
 			LogPhysAnimBridge,
 			Warning,
-			TEXT("[PhysAnimBalance] %s link=%s physicsAsset=%s parentAnchorLocal=(%.2f,%.2f,%.2f) childAnchorLocal=(%.2f,%.2f,%.2f) parentSpace=%s childSpace=%s parentAnchorWorld=(%.2f,%.2f,%.2f) childAnchorWorld=(%.2f,%.2f,%.2f) anchorDistanceCm=%.2f angularErrorDeg=%.2f bodyOriginDistanceCm=%.2f"),
+			TEXT("[PhysAnimBalance] %s link=%s physicsAsset=%s parentAnchorLocal=(%.2f,%.2f,%.2f) childAnchorLocal=(%.2f,%.2f,%.2f) parentSpace=%s childSpace=%s parentAnchorWorld=(%.2f,%.2f,%.2f) childAnchorWorld=(%.2f,%.2f,%.2f) anchorDistanceCm=%.2f angularErrorDeg=%.2f parentWorldQuat=%s childWorldQuat=%s parentAuthRefFrame=%s childAuthRefFrame=%s bodyOriginDistanceCm=%.2f"),
 			ContextTag,
 			*Record.LinkName,
 			*Record.PhysicsAssetPath,
@@ -134,6 +138,10 @@ void BalanceTransitionSets::LogDirectPelvisLinkForensicRecords(
 			Record.EvaluatedChildAnchorWorldCm.Z,
 			Record.AnchorDistanceCm,
 			Record.ConstraintAngularErrorDeg,
+			*Record.ParentWorldRotation.ToString(),
+			*Record.ChildWorldRotation.ToString(),
+			*Record.AuthoredParentRefFrame.ToString(),
+			*Record.AuthoredChildRefFrame.ToString(),
 			Record.BodyOriginDistanceCm);
 	}
 }
@@ -198,7 +206,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	Owner->GetSimulatingBodies(SimulatingBones);
 	if (GVerbosePhase1Forensics != 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] GET_SIMULATING_BODIES count=%d"), SimulatingBones.Num());
+		UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnimBalance] GET_SIMULATING_BODIES count=%d"), SimulatingBones.Num());
 	}
 	TSet<FName> SimulatingBoneSet(SimulatingBones);
 
