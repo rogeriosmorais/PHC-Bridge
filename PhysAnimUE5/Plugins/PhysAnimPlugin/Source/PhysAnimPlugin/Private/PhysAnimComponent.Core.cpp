@@ -116,6 +116,12 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	const float AutoCalibClampStrengthScale = SearchConfig.ClampStrengthScale;
 	const bool bAutoCalibPreferUprightnessEarly =
 		SearchConfig.UprightnessWeightScale > 1.0f + KINDA_SMALL_NUMBER;
+	bool bRanSpineBiasedDirectBlend = false;
+	bool bRanPairBlendSeeds = false;
+	bool bRanConstraintInterpolation = false;
+	bool bRanWorstThighInterpolation = false;
+	bool bRanCoupledTradeControl = false;
+	bool bRanPairBlendFrontierFollowThrough = false;
 	FQuat DesiredPelvisRotation = AnimatedPelvisTransform.GetRotation();
 	FString PelvisRotationSource = TEXT("animated_pelvis_rotation");
 	struct FPhase1ConstraintRotationSample
@@ -455,6 +461,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 						ReferenceRightAngularErrorDeg,
 						ReferenceSpineAngularErrorDeg))
 				{
+					bRanSpineBiasedDirectBlend = true;
 					AddSpineBiasedDirectBlendSamples(20, PrimaryReferenceRotation, TEXT("blend_spine_bias"));
 					if (ShouldRunAlternateReferenceDirectConstraintBlendSweep(
 							ReferenceLeftAngularErrorDeg,
@@ -490,6 +497,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	}
 	if (SearchConfig.bEnablePairBlendSeeds)
 	{
+		bRanPairBlendSeeds = true;
 		for (int32 SampleIndex = 0; SampleIndex < ValidSeedSamples.Num(); ++SampleIndex)
 		{
 			const FPhase1ConstraintRotationSample& SampleA = ValidSeedSamples[SampleIndex];
@@ -2020,6 +2028,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			BestRotationEvaluation.RightThighAngularErrorDeg,
 			BestRotationEvaluation.SpineAngularErrorDeg))
 	{
+		bRanConstraintInterpolation = true;
 		BestRotationEvaluation = RefineBySpineConstraintInterpolationSweep(
 			BestRotationEvaluation,
 			TEXT("spine_interp"),
@@ -2031,6 +2040,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 			BestRotationEvaluation.RightThighAngularErrorDeg,
 			BestRotationEvaluation.SpineAngularErrorDeg))
 	{
+		bRanWorstThighInterpolation = true;
 		BestRotationEvaluation = RefineByWorstThighConstraintInterpolationSweep(
 			BestRotationEvaluation,
 			TEXT("worst_thigh_interp"),
@@ -2052,6 +2062,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	}
 	if (SearchConfig.bEnableCoupledTradeControlPass)
 	{
+		bRanCoupledTradeControl = true;
 		FPhase1PelvisRotationEvaluation CoupledTradeEvaluation = BestRotationEvaluation;
 		const FPhase1PelvisRotationEvaluation SpineFrontierEvaluation =
 			RefineBySpineConstraintInterpolationSweep(
@@ -2116,6 +2127,7 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	}
 	if (SearchConfig.bEnablePairBlendFrontierFollowThroughPass)
 	{
+		bRanPairBlendFrontierFollowThrough = true;
 		const FPhase1ConstraintRotationSample* PairFrontierLeftConstraintSample = nullptr;
 		const FPhase1ConstraintRotationSample* PairFrontierRightConstraintSample = nullptr;
 		const FPhase1ConstraintRotationSample* PairFrontierSpineConstraintSample = nullptr;
@@ -2509,6 +2521,13 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	LastPhase1PelvisCouplingRotationForensics.AppliedAngularThresholdOverflowDeg = AppliedRotationEvaluation.AngularThresholdOverflowDeg;
 	LastPhase1PelvisCouplingRotationForensics.bTriggeredTiltSpineRescuePath = bTriggeredTiltSpineRescuePath;
 	LastPhase1PelvisCouplingRotationForensics.bTriggeredForensicSpineRescuePath = bTriggeredForensicSpineRescuePath;
+	LastPhase1PelvisCouplingRotationForensics.bRanSpineBiasedDirectBlend = bRanSpineBiasedDirectBlend;
+	LastPhase1PelvisCouplingRotationForensics.bRanPairBlendSeeds = bRanPairBlendSeeds;
+	LastPhase1PelvisCouplingRotationForensics.bRanConstraintInterpolation = bRanConstraintInterpolation;
+	LastPhase1PelvisCouplingRotationForensics.bRanWorstThighInterpolation = bRanWorstThighInterpolation;
+	LastPhase1PelvisCouplingRotationForensics.bRanFocusedDelta = bHasTiltAdmissibleRotationEvaluation || bTriggeredForensicSpineRescuePath || bRanWorstThighInterpolation;
+	LastPhase1PelvisCouplingRotationForensics.bRanCoupledTradeControl = bRanCoupledTradeControl;
+	LastPhase1PelvisCouplingRotationForensics.bRanPairBlendFrontierFollowThrough = bRanPairBlendFrontierFollowThrough;
 	LastPhase1PelvisCouplingRotationForensics.TiltSpineRescueSpineAngularErrorDeg =
 		bTriggeredTiltSpineRescuePath ? TiltSpineRescueEvaluation.SpineAngularErrorDeg : 0.0f;
 	LastPhase1PelvisCouplingRotationForensics.ForensicSpineRescueSpineAngularErrorDeg =

@@ -970,6 +970,15 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 		ActiveTrialStartTimeSeconds = CurrentTimeSeconds;
 		ActiveTrialPeakMetrics = LiveMetrics;
 	}
+	else if (!bActiveTrialStarted)
+	{
+		// The component already entered Phase 1 before we could trigger it
+		// (e.g. via the normal auto-triggered balance entry path).  Adopt the
+		// already-running trial so the timeout guard and telemetry still work.
+		bActiveTrialStarted = true;
+		ActiveTrialStartTimeSeconds = CurrentTimeSeconds;
+		ActiveTrialPeakMetrics = LiveMetrics;
+	}
 	else if (ShouldAccumulateActiveTrialMetrics(bActiveTrialStarted))
 	{
 		UpdatePeakMetrics(LiveMetrics);

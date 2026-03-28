@@ -198,23 +198,23 @@ void BuildPhase1PelvisCouplingExecutedFamilies(
 {
 	OutFamilies.Reset();
 	AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(EPhase1PelvisCouplingSearchFamily::DirectSeed));
-	if (Config.bEnableSpineBiasedDirectBlendSeeds)
+	if (Forensics.bRanSpineBiasedDirectBlend)
 	{
 		AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(EPhase1PelvisCouplingSearchFamily::SpineBiasedDirectBlend));
 	}
-	if (Config.bEnablePairBlendSeeds)
+	if (Forensics.bRanPairBlendSeeds)
 	{
 		AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(EPhase1PelvisCouplingSearchFamily::PairBlend));
 	}
-	if (Config.bEnableConstraintInterpolationSweep)
+	if (Forensics.bRanConstraintInterpolation)
 	{
 		AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(EPhase1PelvisCouplingSearchFamily::SpineConstraintInterpolation));
 	}
-	if (Config.bEnableWorstThighInterpolationSweep)
+	if (Forensics.bRanWorstThighInterpolation)
 	{
 		AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(EPhase1PelvisCouplingSearchFamily::WorstThighInterpolation));
 	}
-	if (Config.bEnableFocusedDeltaRefinement)
+	if (Forensics.bRanFocusedDelta)
 	{
 		AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(EPhase1PelvisCouplingSearchFamily::FocusedDelta));
 	}
@@ -226,11 +226,11 @@ void BuildPhase1PelvisCouplingExecutedFamilies(
 	{
 		AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(EPhase1PelvisCouplingSearchFamily::ForensicSpineRescue));
 	}
-	if (Config.bEnableCoupledTradeControlPass || WinningSource.Contains(TEXT("coupled_trade")))
+	if (Forensics.bRanCoupledTradeControl)
 	{
 		AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(EPhase1PelvisCouplingSearchFamily::CoupledTradeControl));
 	}
-	if (Config.bEnablePairBlendFrontierFollowThroughPass || WinningSource.Contains(TEXT("pair_frontier")))
+	if (Forensics.bRanPairBlendFrontierFollowThrough)
 	{
 		AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(EPhase1PelvisCouplingSearchFamily::PairBlendFrontierFollowThrough));
 	}

@@ -664,6 +664,14 @@ struct FPhase1PelvisCouplingRotationForensics
 	FString WinningSearchSource;
 	TArray<FString> ExecutedSearchFamilies;
 	bool bCoupledTradeControlWon = false;
+	// Runtime-execution tracking: true only when the pass actually ran (config + runtime predicate both passed).
+	bool bRanSpineBiasedDirectBlend = false;
+	bool bRanPairBlendSeeds = false;
+	bool bRanConstraintInterpolation = false;
+	bool bRanWorstThighInterpolation = false;
+	bool bRanFocusedDelta = false;
+	bool bRanCoupledTradeControl = false;
+	bool bRanPairBlendFrontierFollowThrough = false;
 };
 
 #if !UE_BUILD_SHIPPING
