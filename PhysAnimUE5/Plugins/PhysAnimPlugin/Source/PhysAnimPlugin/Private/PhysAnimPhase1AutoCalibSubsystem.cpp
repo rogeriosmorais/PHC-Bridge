@@ -487,6 +487,8 @@ void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reaso
 	ActiveTrial = FPendingTrial();
 	ActiveTrialStartTimeSeconds = -1.0;
 	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
+	ActiveTrialFirstRootOnTimeSeconds = -1.0;
+	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
 }
 
 void UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates)
@@ -898,6 +900,8 @@ bool UPhysAnimPhase1AutoCalibSubsystem::BeginNextTrial()
 	}
 
 	ActiveTrialStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	ActiveTrialFirstRootOnTimeSeconds = -1.0;
+	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
 	bTrialActive = true;
 	return true;
 }
@@ -949,6 +953,20 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 	}
 
 	const EBalanceReadyTransitionPhase Phase = Component->GetBalanceReadyTransitionPhase();
+	const FPhysAnimBalanceReadyTransitionSnapshot Snapshot = Component->ExportBalanceReadyTransitionSnapshot();
+	const bool bReachedRootOn = IsLaterThanPhase1(Phase);
+	const bool bNoCouplingProofSatisfied =
+		Snapshot.CertifiedLateValidationResult.bRootOnReadinessNoCouplingProofSatisfied ||
+		Snapshot.CertifiedHandoff.bRootOnReadinessNoCouplingProofSatisfied;
+	if (bReachedRootOn && ActiveTrialFirstRootOnTimeSeconds < 0.0)
+	{
+		ActiveTrialFirstRootOnTimeSeconds = ElapsedSeconds;
+	}
+	if (bNoCouplingProofSatisfied && ActiveTrialFirstNoCouplingProofTimeSeconds < 0.0)
+	{
+		ActiveTrialFirstNoCouplingProofTimeSeconds = ElapsedSeconds;
+	}
+
 	if (IsLaterThanPhase1(Phase) || Component->HasBalanceReadyTransitionFailed() || Component->HasSafePhase2Denial())
 	{
 		FinalizeActiveTrial(false);
@@ -1021,6 +1039,8 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeActiveTrial(bool bTimedOut)
 	bTrialActive = false;
 	ActiveTrial = FPendingTrial();
 	ActiveTrialStartTimeSeconds = -1.0;
+	ActiveTrialFirstRootOnTimeSeconds = -1.0;
+	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
 	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
 
 	if (!LastError.IsEmpty())
@@ -1134,6 +1154,11 @@ FPhase1AutoCalibTrialResult UPhysAnimPhase1AutoCalibSubsystem::BuildTrialResult(
 	Result.Score.bNoCouplingProofSatisfied =
 		LateValidation.bRootOnReadinessNoCouplingProofSatisfied ||
 		Handoff.bRootOnReadinessNoCouplingProofSatisfied;
+	Result.TrialTimeoutBudgetSeconds = static_cast<float>(Component->GetConfiguredStabilizationSettings().BalancePhase1PrepareDuration + Component->GetConfiguredStabilizationSettings().BalancePhase1LateValidateRequiredSeconds + 0.5f);
+	Result.TimeToRootOnSeconds = ActiveTrialFirstRootOnTimeSeconds >= 0.0 ? static_cast<float>(ActiveTrialFirstRootOnTimeSeconds) : -1.0f;
+	Result.TimeToNoCouplingProofSeconds = ActiveTrialFirstNoCouplingProofTimeSeconds >= 0.0 ? static_cast<float>(ActiveTrialFirstNoCouplingProofTimeSeconds) : -1.0f;
+	Result.bTimedOutBeforeRootOn = bTimedOut && Result.TimeToRootOnSeconds < 0.0f;
+	Result.bTimedOutBeforeNoCouplingProof = bTimedOut && Result.TimeToNoCouplingProofSeconds < 0.0f;
 
 	const float LeftAngular = FMath::Max(LateValidation.PelvisThighLAngularErrorDeg, Handoff.PelvisThighLAngularErrorDeg);
 	const float RightAngular = FMath::Max(LateValidation.PelvisThighRAngularErrorDeg, Handoff.PelvisThighRAngularErrorDeg);
@@ -1294,6 +1319,8 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibRepor
 	InOutReport.RecommendedAction = EPhase1AutoCalibRecommendedAction::None;
 	InOutReport.RecommendedExpansionName.Reset();
 	InOutReport.DominantTruthfulBlocker.Reset();
+	InOutReport.bAnyTimedOutBeforeRootOn = false;
+	InOutReport.bAnyTimedOutBeforeNoCouplingProof = false;
 
 	for (int32 TrialIndex = 0; TrialIndex < InOutReport.Trials.Num(); ++TrialIndex)
 	{
@@ -1324,6 +1351,8 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibRepor
 			InOutReport.BestNearPass = Trial;
 			InOutReport.bHasBestNearPass = true;
 		}
+		InOutReport.bAnyTimedOutBeforeRootOn |= Trial.bTimedOutBeforeRootOn;
+		InOutReport.bAnyTimedOutBeforeNoCouplingProof |= Trial.bTimedOutBeforeNoCouplingProof;
 		AddBlockerCount(InOutReport.OverallBlockerCounts, Trial.TruthfulBlocker);
 	}
 
@@ -1526,12 +1555,12 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 
 	IFileManager::Get().MakeDirectory(*OutputDirectory, true);
 
-	FString Csv = TEXT("trial_id,stage,repetition,preset_rank,preset_near_pass_rank,terminal_class,truthful_blocker,contract_passed,reproducible,winning_search_family,winning_search_source,executed_search_families,coupled_trade_control_won,source_preset,seed_family_preset,spine_alpha,worst_thigh_alpha,focused_delta_scale,uprightness_weight_scale,clamp_strength_scale,pelvis_pitch_bias_deg,pelvis_roll_bias_deg,worst_direct_link_angular_error_deg,mean_target_delta_deg,max_target_delta_deg,thigh_asymmetry_deg,peak_root_tilt_deg,shell_offset_delta_cm,shell_velocity_delta_cm_per_second,peak_root_linear_speed_cm_per_second,peak_root_angular_speed_deg_per_second\n");
+	FString Csv = TEXT("trial_id,stage,repetition,preset_rank,preset_near_pass_rank,terminal_class,truthful_blocker,contract_passed,reproducible,trial_timeout_budget_seconds,time_to_root_on_seconds,time_to_no_coupling_proof_seconds,timed_out_before_root_on,timed_out_before_no_coupling_proof,winning_search_family,winning_search_source,executed_search_families,coupled_trade_control_won,source_preset,seed_family_preset,spine_alpha,worst_thigh_alpha,focused_delta_scale,uprightness_weight_scale,clamp_strength_scale,pelvis_pitch_bias_deg,pelvis_roll_bias_deg,worst_direct_link_angular_error_deg,mean_target_delta_deg,max_target_delta_deg,thigh_asymmetry_deg,peak_root_tilt_deg,shell_offset_delta_cm,shell_velocity_delta_cm_per_second,peak_root_linear_speed_cm_per_second,peak_root_angular_speed_deg_per_second\n");
 	for (const FPhase1AutoCalibTrialResult& Trial : LatestReport.Trials)
 	{
 		const FString ExecutedFamilies = FString::Join(Trial.ExecutedSearchFamilies, TEXT("|"));
 		Csv += FString::Printf(
-			TEXT("%d,%s,%d,%d,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n"),
+			TEXT("%d,%s,%d,%d,%d,%s,%s,%s,%s,%.6f,%.6f,%.6f,%s,%s,%s,%s,%s,%s,%s,%s,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n"),
 			Trial.TrialId,
 			*Trial.StageName,
 			Trial.RepetitionIndex,
@@ -1541,6 +1570,11 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 			*Trial.TruthfulBlocker,
 			Trial.Score.bContractPassed ? TEXT("true") : TEXT("false"),
 			Trial.bReproducible ? TEXT("true") : TEXT("false"),
+			Trial.TrialTimeoutBudgetSeconds,
+			Trial.TimeToRootOnSeconds,
+			Trial.TimeToNoCouplingProofSeconds,
+			Trial.bTimedOutBeforeRootOn ? TEXT("true") : TEXT("false"),
+			Trial.bTimedOutBeforeNoCouplingProof ? TEXT("true") : TEXT("false"),
 			*Trial.WinningSearchFamily,
 			*Trial.WinningSearchSource,
 			*ExecutedFamilies,
@@ -1579,7 +1613,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 		}
 		ExecutedFamiliesJson += TEXT("]");
 		return FString::Printf(
-			TEXT("{\"trialId\":%d,\"stage\":\"%s\",\"repetition\":%d,\"presetRank\":%d,\"presetNearPassRank\":%d,\"terminalClass\":\"%s\",\"truthfulBlocker\":\"%s\",\"contractPassed\":%s,\"reproducible\":%s,\"winningSearchFamily\":\"%s\",\"winningSearchSource\":\"%s\",\"executedSearchFamilies\":%s,\"coupledTradeControlWon\":%s,\"sourcePreset\":\"%s\",\"seedFamilyPreset\":\"%s\",\"score\":{\"worstDirectLinkAngularErrorDeg\":%.6f,\"meanTargetDeltaDeg\":%.6f,\"maxTargetDeltaDeg\":%.6f,\"thighAsymmetryDeg\":%.6f,\"peakRootTiltDeg\":%.6f,\"shellOffsetDeltaCm\":%.6f,\"shellVelocityDeltaCmPerSecond\":%.6f,\"peakRootLinearSpeedCmPerSecond\":%.6f,\"peakRootAngularSpeedDegPerSecond\":%.6f}}"),
+			TEXT("{\"trialId\":%d,\"stage\":\"%s\",\"repetition\":%d,\"presetRank\":%d,\"presetNearPassRank\":%d,\"terminalClass\":\"%s\",\"truthfulBlocker\":\"%s\",\"contractPassed\":%s,\"reproducible\":%s,\"trialTimeoutBudgetSeconds\":%.6f,\"timeToRootOnSeconds\":%.6f,\"timeToNoCouplingProofSeconds\":%.6f,\"timedOutBeforeRootOn\":%s,\"timedOutBeforeNoCouplingProof\":%s,\"winningSearchFamily\":\"%s\",\"winningSearchSource\":\"%s\",\"executedSearchFamilies\":%s,\"coupledTradeControlWon\":%s,\"sourcePreset\":\"%s\",\"seedFamilyPreset\":\"%s\",\"score\":{\"worstDirectLinkAngularErrorDeg\":%.6f,\"meanTargetDeltaDeg\":%.6f,\"maxTargetDeltaDeg\":%.6f,\"thighAsymmetryDeg\":%.6f,\"peakRootTiltDeg\":%.6f,\"shellOffsetDeltaCm\":%.6f,\"shellVelocityDeltaCmPerSecond\":%.6f,\"peakRootLinearSpeedCmPerSecond\":%.6f,\"peakRootAngularSpeedDegPerSecond\":%.6f}}"),
 			Trial.TrialId,
 			*JsonEscape(Trial.StageName),
 			Trial.RepetitionIndex,
@@ -1589,6 +1623,11 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 			*JsonEscape(Trial.TruthfulBlocker),
 			Trial.Score.bContractPassed ? TEXT("true") : TEXT("false"),
 			Trial.bReproducible ? TEXT("true") : TEXT("false"),
+			Trial.TrialTimeoutBudgetSeconds,
+			Trial.TimeToRootOnSeconds,
+			Trial.TimeToNoCouplingProofSeconds,
+			Trial.bTimedOutBeforeRootOn ? TEXT("true") : TEXT("false"),
+			Trial.bTimedOutBeforeNoCouplingProof ? TEXT("true") : TEXT("false"),
 			*JsonEscape(Trial.WinningSearchFamily),
 			*JsonEscape(Trial.WinningSearchSource),
 			*ExecutedFamiliesJson,
@@ -1666,7 +1705,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 	OverallBlockersJson += TEXT("]");
 
 	FString SummaryJson = FString::Printf(
-		TEXT("{\"outputDirectory\":\"%s\",\"trialCount\":%d,\"hasReproducibleTruthfulPass\":%s,\"frontierClassification\":\"%s\",\"recommendedAction\":\"%s\",\"recommendedExpansionName\":\"%s\",\"dominantTruthfulBlocker\":\"%s\",\"bestCandidate\":%s,\"bestNearPass\":%s,\"overallBlockerCounts\":%s,\"presetSummaries\":%s}"),
+		TEXT("{\"outputDirectory\":\"%s\",\"trialCount\":%d,\"hasReproducibleTruthfulPass\":%s,\"frontierClassification\":\"%s\",\"recommendedAction\":\"%s\",\"recommendedExpansionName\":\"%s\",\"dominantTruthfulBlocker\":\"%s\",\"anyTimedOutBeforeRootOn\":%s,\"anyTimedOutBeforeNoCouplingProof\":%s,\"bestCandidate\":%s,\"bestNearPass\":%s,\"overallBlockerCounts\":%s,\"presetSummaries\":%s}"),
 		*JsonEscape(LatestReport.OutputDirectory),
 		LatestReport.Trials.Num(),
 		LatestReport.bHasReproducibleTruthfulPass ? TEXT("true") : TEXT("false"),
@@ -1674,6 +1713,8 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 		RecommendedActionToString(LatestReport.RecommendedAction),
 		*JsonEscape(LatestReport.RecommendedExpansionName),
 		*JsonEscape(LatestReport.DominantTruthfulBlocker),
+		LatestReport.bAnyTimedOutBeforeRootOn ? TEXT("true") : TEXT("false"),
+		LatestReport.bAnyTimedOutBeforeNoCouplingProof ? TEXT("true") : TEXT("false"),
 		LatestReport.bHasBestCandidate ? *BuildTrialJson(LatestReport.BestCandidate) : TEXT("null"),
 		LatestReport.bHasBestNearPass ? *BuildTrialJson(LatestReport.BestNearPass) : TEXT("null"),
 		*OverallBlockersJson,

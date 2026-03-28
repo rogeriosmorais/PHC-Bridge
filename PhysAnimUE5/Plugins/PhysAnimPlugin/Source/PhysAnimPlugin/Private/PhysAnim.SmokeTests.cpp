@@ -136,6 +136,7 @@ namespace
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes summary.json"), IFileManager::Get().FileExists(*Report.SummaryPath));
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes trials.csv"), IFileManager::Get().FileExists(*Report.TrialsCsvPath));
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes pareto.json"), IFileManager::Get().FileExists(*Report.ParetoJsonPath));
+		Test->TestTrue(TEXT("Phase1 auto-calibration smoke records timeout budget telemetry"), Report.Trials[0].TrialTimeoutBudgetSeconds > 0.0f);
 
 		TArray<FPhase1AutoCalibTrialResult> StageCTrials;
 		for (const FPhase1AutoCalibTrialResult& Trial : Report.Trials)

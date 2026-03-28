@@ -72,6 +72,8 @@ private:
 	TArray<FPhase1AutoCalibTrialResult> StageCResults;
 	FPendingTrial ActiveTrial;
 	double ActiveTrialStartTimeSeconds = -1.0;
+	double ActiveTrialFirstRootOnTimeSeconds = -1.0;
+	double ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
 	double CurrentStageStartTimeSeconds = -1.0;
 	double LastReadinessLogTimeSeconds = -1.0;
 	FPhase1AutoCalibLiveMetrics ActiveTrialPeakMetrics;

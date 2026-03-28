@@ -40,6 +40,11 @@ namespace
 		Trial.Score.ShellVelocityDeltaCmPerSecond = 2.0f;
 		Trial.Score.PeakRootLinearSpeedCmPerSecond = 25.0f;
 		Trial.Score.PeakRootAngularSpeedDegPerSecond = 35.0f;
+		Trial.TrialTimeoutBudgetSeconds = 0.75f;
+		Trial.TimeToRootOnSeconds = bContractPassed ? 0.20f : -1.0f;
+		Trial.TimeToNoCouplingProofSeconds = bContractPassed ? 0.23f : -1.0f;
+		Trial.bTimedOutBeforeRootOn = !bContractPassed;
+		Trial.bTimedOutBeforeNoCouplingProof = !bContractPassed;
 		Trial.WinningSearchFamily = TEXT("direct_seed");
 		Trial.WinningSearchSource = TEXT("animated_pelvis_rotation");
 		Trial.ExecutedSearchFamilies = { TEXT("direct_seed") };
@@ -885,6 +890,8 @@ namespace
 		TestTrue(TEXT("Report picks a near-pass when non-passing trials exist"), Report.bHasBestNearPass);
 		TestEqual(TEXT("Best near-pass comes from the lowest-error failing preset"), Report.BestNearPass.Params.SourcePreset, EPhase1AutoCalibStrategyPreset::SpineBiased);
 		TestEqual(TEXT("Best candidate keeps winning search attribution"), Report.BestCandidate.WinningSearchFamily, FString(TEXT("coupled_trade_control")));
+		TestTrue(TEXT("Report surfaces timeout-before-RootOn telemetry when any failing trial never reached RootOn"), Report.bAnyTimedOutBeforeRootOn);
+		TestTrue(TEXT("Report surfaces timeout-before-proof telemetry when any failing trial never reached proof"), Report.bAnyTimedOutBeforeNoCouplingProof);
 		TestEqual(TEXT("Preset summaries are emitted for each preset seen in the trials"), Report.PresetSummaries.Num(), 3);
 
 		const FPhase1AutoCalibPresetSummary* SpineSummary = nullptr;
@@ -1034,6 +1041,9 @@ namespace
 		TrialA.Score.ShellVelocityDeltaCmPerSecond = 2.0f;
 		TrialA.Score.PeakRootLinearSpeedCmPerSecond = 25.0f;
 		TrialA.Score.PeakRootAngularSpeedDegPerSecond = 35.0f;
+		TrialA.TrialTimeoutBudgetSeconds = 0.75f;
+		TrialA.TimeToRootOnSeconds = 0.20f;
+		TrialA.TimeToNoCouplingProofSeconds = 0.23f;
 
 		FPhase1AutoCalibTrialResult TrialB = TrialA;
 		TrialB.Score.WorstDirectLinkAngularErrorDeg += 1.0e-4f;
