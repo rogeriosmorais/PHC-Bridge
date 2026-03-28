@@ -52,7 +52,8 @@ $arguments = @(
     '-TestExit=Automation Test Queue Empty',
     '-Unattended',
     '-NoSound',
-    '-NoSplash'
+    '-NoSplash',
+    '-nullrhi'
 )
 
 Write-Host "Running $TestName with $editorPath"

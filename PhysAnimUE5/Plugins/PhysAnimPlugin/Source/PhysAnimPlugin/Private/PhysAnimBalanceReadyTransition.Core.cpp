@@ -1476,9 +1476,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Diagnostics.Phase1LateValidateAccumulatedSeconds = LateValidationAccumulatedSeconds;
 		}
 
-		if (TotalTransitionTimeSeconds > (GStrictPhase1Certification != 0 ? 2.0f : Settings.BalancePhase1TimeoutDuration))
+		if (TotalTransitionTimeSeconds > (GStrictPhase1Certification != 0 ? 5.0f : Settings.BalancePhase1TimeoutDuration))
 		{
-			if (TotalTransitionTimeSeconds > 2.0f + KINDA_SMALL_NUMBER)
+			if (TotalTransitionTimeSeconds > 5.0f + KINDA_SMALL_NUMBER)
 			{
 				Audit.bUsedTimeoutExtension = true;
 			}

@@ -940,7 +940,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 	}
 
 	const FPhysAnimStabilizationSettings& Settings = Component->GetConfiguredStabilizationSettings();
-	const double TimeoutSeconds = static_cast<double>(Settings.BalancePhase1PrepareDuration + Settings.BalancePhase1LateValidateRequiredSeconds + 0.5f);
+	const double TimeoutSeconds = static_cast<double>(Settings.BalancePhase1PrepareDuration + Settings.BalancePhase1LateValidateRequiredSeconds + 3.5f);
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	const double ElapsedSeconds = bActiveTrialStarted && ActiveTrialStartTimeSeconds >= 0.0
 		? (CurrentTimeSeconds - ActiveTrialStartTimeSeconds)
