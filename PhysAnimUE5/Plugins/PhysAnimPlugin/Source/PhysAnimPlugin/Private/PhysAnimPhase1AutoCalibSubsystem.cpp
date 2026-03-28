@@ -1,5 +1,6 @@
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimPhase1PelvisCouplingSearch.h"
 
 #if !UE_BUILD_SHIPPING
 
@@ -23,7 +24,7 @@ namespace
 	constexpr int32 StageBRounds = 3;
 	constexpr int32 StageCTopK = 5;
 	constexpr int32 StageCRepetitions = 5;
-	constexpr int32 SmokeStageATrialCount = 6;
+	constexpr int32 SmokeStageATrialCount = 7;
 	constexpr int32 SmokeStageBTrialCount = 8;
 	constexpr int32 SmokeStageCTrialCount = 5;
 	constexpr float RestoreFingerprintTolerance = 1.0e-3f;
@@ -43,7 +44,8 @@ namespace
 		EPhase1AutoCalibStrategyPreset::WorstThighBiased,
 		EPhase1AutoCalibStrategyPreset::BalancedCoupled,
 		EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh,
-		EPhase1AutoCalibStrategyPreset::RescueOnly
+		EPhase1AutoCalibStrategyPreset::RescueOnly,
+		EPhase1AutoCalibStrategyPreset::CoupledTradeControlFamily
 	};
 
 	bool MatchesFilter(const UPhysAnimComponent& Component, const FString& FilterLower)
@@ -84,22 +86,7 @@ namespace
 
 	const TCHAR* StrategyPresetToString(const EPhase1AutoCalibStrategyPreset Preset)
 	{
-		switch (Preset)
-		{
-		case EPhase1AutoCalibStrategyPreset::SpineBiased:
-			return TEXT("SpineBiased");
-		case EPhase1AutoCalibStrategyPreset::WorstThighBiased:
-			return TEXT("WorstThighBiased");
-		case EPhase1AutoCalibStrategyPreset::BalancedCoupled:
-			return TEXT("BalancedCoupled");
-		case EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh:
-			return TEXT("SpineThenWorstThigh");
-		case EPhase1AutoCalibStrategyPreset::RescueOnly:
-			return TEXT("RescueOnly");
-		case EPhase1AutoCalibStrategyPreset::CurrentDefault:
-		default:
-			return TEXT("CurrentDefault");
-		}
+		return Phase1AutoCalibStrategyPresetToString(Preset);
 	}
 
 	const TCHAR* FrontierClassificationToString(const EPhase1AutoCalibFrontierClassification Classification)
@@ -688,7 +675,12 @@ bool UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(const TArray
 	for (int32 Index = 1; Index < Trials.Num(); ++Index)
 	{
 		const FPhase1AutoCalibTrialResult& Candidate = Trials[Index];
-		if (Candidate.TerminalClass != Reference.TerminalClass || Candidate.TruthfulBlocker != Reference.TruthfulBlocker)
+		if (Candidate.TerminalClass != Reference.TerminalClass ||
+			Candidate.TruthfulBlocker != Reference.TruthfulBlocker ||
+			Candidate.WinningSearchFamily != Reference.WinningSearchFamily ||
+			Candidate.WinningSearchSource != Reference.WinningSearchSource ||
+			Candidate.bCoupledTradeControlWon != Reference.bCoupledTradeControlWon ||
+			Candidate.ExecutedSearchFamilies != Reference.ExecutedSearchFamilies)
 		{
 			return false;
 		}
@@ -1130,6 +1122,7 @@ FPhase1AutoCalibTrialResult UPhysAnimPhase1AutoCalibSubsystem::BuildTrialResult(
 	}
 
 	const FPhysAnimBalanceReadyTransitionSnapshot Snapshot = Component->ExportBalanceReadyTransitionSnapshot();
+	const FPhase1PelvisCouplingRotationForensics& Forensics = Component->LastPhase1PelvisCouplingRotationForensics;
 	const bool bFailed = Component->HasBalanceReadyTransitionFailed() || Snapshot.InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed;
 	const bool bSafeDenied = Component->HasSafePhase2Denial() || Snapshot.InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied;
 	const bool bReachedRootOn = IsLaterThanPhase1(Snapshot.InternalPhase);
@@ -1210,6 +1203,11 @@ FPhase1AutoCalibTrialResult UPhysAnimPhase1AutoCalibSubsystem::BuildTrialResult(
 	{
 		Result.TruthfulBlocker = TEXT("phase1_auto_calib_unclassified");
 	}
+
+	Result.WinningSearchFamily = Forensics.WinningSearchFamily;
+	Result.WinningSearchSource = Forensics.WinningSearchSource;
+	Result.ExecutedSearchFamilies = Forensics.ExecutedSearchFamilies;
+	Result.bCoupledTradeControlWon = Forensics.bCoupledTradeControlWon;
 
 	UPhysAnimComponent::FinalizePhase1AutoCalibScore(Result.Score);
 	return Result;
@@ -1528,11 +1526,12 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 
 	IFileManager::Get().MakeDirectory(*OutputDirectory, true);
 
-	FString Csv = TEXT("trial_id,stage,repetition,preset_rank,preset_near_pass_rank,terminal_class,truthful_blocker,contract_passed,reproducible,source_preset,seed_family_preset,spine_alpha,worst_thigh_alpha,focused_delta_scale,uprightness_weight_scale,clamp_strength_scale,pelvis_pitch_bias_deg,pelvis_roll_bias_deg,worst_direct_link_angular_error_deg,mean_target_delta_deg,max_target_delta_deg,thigh_asymmetry_deg,peak_root_tilt_deg,shell_offset_delta_cm,shell_velocity_delta_cm_per_second,peak_root_linear_speed_cm_per_second,peak_root_angular_speed_deg_per_second\n");
+	FString Csv = TEXT("trial_id,stage,repetition,preset_rank,preset_near_pass_rank,terminal_class,truthful_blocker,contract_passed,reproducible,winning_search_family,winning_search_source,executed_search_families,coupled_trade_control_won,source_preset,seed_family_preset,spine_alpha,worst_thigh_alpha,focused_delta_scale,uprightness_weight_scale,clamp_strength_scale,pelvis_pitch_bias_deg,pelvis_roll_bias_deg,worst_direct_link_angular_error_deg,mean_target_delta_deg,max_target_delta_deg,thigh_asymmetry_deg,peak_root_tilt_deg,shell_offset_delta_cm,shell_velocity_delta_cm_per_second,peak_root_linear_speed_cm_per_second,peak_root_angular_speed_deg_per_second\n");
 	for (const FPhase1AutoCalibTrialResult& Trial : LatestReport.Trials)
 	{
+		const FString ExecutedFamilies = FString::Join(Trial.ExecutedSearchFamilies, TEXT("|"));
 		Csv += FString::Printf(
-			TEXT("%d,%s,%d,%d,%d,%s,%s,%s,%s,%s,%s,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n"),
+			TEXT("%d,%s,%d,%d,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n"),
 			Trial.TrialId,
 			*Trial.StageName,
 			Trial.RepetitionIndex,
@@ -1542,6 +1541,10 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 			*Trial.TruthfulBlocker,
 			Trial.Score.bContractPassed ? TEXT("true") : TEXT("false"),
 			Trial.bReproducible ? TEXT("true") : TEXT("false"),
+			*Trial.WinningSearchFamily,
+			*Trial.WinningSearchSource,
+			*ExecutedFamilies,
+			Trial.bCoupledTradeControlWon ? TEXT("true") : TEXT("false"),
 			StrategyPresetToString(Trial.Params.SourcePreset),
 			StrategyPresetToString(Trial.Params.SeedFamilyPreset),
 			Trial.Params.SpineInterpolationAlpha,
@@ -1565,8 +1568,18 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 
 	const auto BuildTrialJson = [](const FPhase1AutoCalibTrialResult& Trial) -> FString
 	{
+		FString ExecutedFamiliesJson = TEXT("[");
+		for (int32 FamilyIndex = 0; FamilyIndex < Trial.ExecutedSearchFamilies.Num(); ++FamilyIndex)
+		{
+			if (FamilyIndex > 0)
+			{
+				ExecutedFamiliesJson += TEXT(",");
+			}
+			ExecutedFamiliesJson += FString::Printf(TEXT("\"%s\""), *JsonEscape(Trial.ExecutedSearchFamilies[FamilyIndex]));
+		}
+		ExecutedFamiliesJson += TEXT("]");
 		return FString::Printf(
-			TEXT("{\"trialId\":%d,\"stage\":\"%s\",\"repetition\":%d,\"presetRank\":%d,\"presetNearPassRank\":%d,\"terminalClass\":\"%s\",\"truthfulBlocker\":\"%s\",\"contractPassed\":%s,\"reproducible\":%s,\"sourcePreset\":\"%s\",\"seedFamilyPreset\":\"%s\",\"score\":{\"worstDirectLinkAngularErrorDeg\":%.6f,\"meanTargetDeltaDeg\":%.6f,\"maxTargetDeltaDeg\":%.6f,\"thighAsymmetryDeg\":%.6f,\"peakRootTiltDeg\":%.6f,\"shellOffsetDeltaCm\":%.6f,\"shellVelocityDeltaCmPerSecond\":%.6f,\"peakRootLinearSpeedCmPerSecond\":%.6f,\"peakRootAngularSpeedDegPerSecond\":%.6f}}"),
+			TEXT("{\"trialId\":%d,\"stage\":\"%s\",\"repetition\":%d,\"presetRank\":%d,\"presetNearPassRank\":%d,\"terminalClass\":\"%s\",\"truthfulBlocker\":\"%s\",\"contractPassed\":%s,\"reproducible\":%s,\"winningSearchFamily\":\"%s\",\"winningSearchSource\":\"%s\",\"executedSearchFamilies\":%s,\"coupledTradeControlWon\":%s,\"sourcePreset\":\"%s\",\"seedFamilyPreset\":\"%s\",\"score\":{\"worstDirectLinkAngularErrorDeg\":%.6f,\"meanTargetDeltaDeg\":%.6f,\"maxTargetDeltaDeg\":%.6f,\"thighAsymmetryDeg\":%.6f,\"peakRootTiltDeg\":%.6f,\"shellOffsetDeltaCm\":%.6f,\"shellVelocityDeltaCmPerSecond\":%.6f,\"peakRootLinearSpeedCmPerSecond\":%.6f,\"peakRootAngularSpeedDegPerSecond\":%.6f}}"),
 			Trial.TrialId,
 			*JsonEscape(Trial.StageName),
 			Trial.RepetitionIndex,
@@ -1576,6 +1589,10 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 			*JsonEscape(Trial.TruthfulBlocker),
 			Trial.Score.bContractPassed ? TEXT("true") : TEXT("false"),
 			Trial.bReproducible ? TEXT("true") : TEXT("false"),
+			*JsonEscape(Trial.WinningSearchFamily),
+			*JsonEscape(Trial.WinningSearchSource),
+			*ExecutedFamiliesJson,
+			Trial.bCoupledTradeControlWon ? TEXT("true") : TEXT("false"),
 			StrategyPresetToString(Trial.Params.SourcePreset),
 			StrategyPresetToString(Trial.Params.SeedFamilyPreset),
 			Trial.Score.WorstDirectLinkAngularErrorDeg,

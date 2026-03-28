@@ -660,6 +660,10 @@ struct FPhase1PelvisCouplingRotationForensics
 	float ForensicSpineRescueSpineAngularErrorDeg = 0.0f;
 	FString TiltSpineRescueSource;
 	FString ForensicSpineRescueSource;
+	FString WinningSearchFamily;
+	FString WinningSearchSource;
+	TArray<FString> ExecutedSearchFamilies;
+	bool bCoupledTradeControlWon = false;
 };
 
 #if !UE_BUILD_SHIPPING
@@ -670,7 +674,8 @@ enum class EPhase1AutoCalibStrategyPreset : uint8
 	WorstThighBiased,
 	BalancedCoupled,
 	SpineThenWorstThigh,
-	RescueOnly
+	RescueOnly,
+	CoupledTradeControlFamily
 };
 
 enum class EPhase1AutoCalibBudgetMode : uint8
@@ -751,6 +756,10 @@ struct FPhase1AutoCalibTrialResult
 	FPhase1AutoCalibScore Score;
 	FString TerminalClass;
 	FString TruthfulBlocker;
+	FString WinningSearchFamily;
+	FString WinningSearchSource;
+	TArray<FString> ExecutedSearchFamilies;
+	bool bCoupledTradeControlWon = false;
 	bool bReproducible = false;
 };
 

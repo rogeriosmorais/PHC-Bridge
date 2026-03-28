@@ -3,6 +3,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComparisonSubsystem.h"
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
+#include "PhysAnimPhase1PelvisCouplingSearch.h"
 #include "PhysAnimBalance.TestHelpers.h"
 #include "Misc/AutomationTest.h"
 
@@ -39,6 +40,9 @@ namespace
 		Trial.Score.ShellVelocityDeltaCmPerSecond = 2.0f;
 		Trial.Score.PeakRootLinearSpeedCmPerSecond = 25.0f;
 		Trial.Score.PeakRootAngularSpeedDegPerSecond = 35.0f;
+		Trial.WinningSearchFamily = TEXT("direct_seed");
+		Trial.WinningSearchSource = TEXT("animated_pelvis_rotation");
+		Trial.ExecutedSearchFamilies = { TEXT("direct_seed") };
 		UPhysAnimComponent::FinalizePhase1AutoCalibScore(Trial.Score);
 		return Trial;
 	}
@@ -539,6 +543,76 @@ namespace
 
 #if !UE_BUILD_SHIPPING
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1PelvisCouplingSearchConfigMappingTest,
+		"PhysAnim.Component.Phase1PelvisCouplingSearchConfigMapping",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1PelvisCouplingSearchConfigMappingTest::RunTest(const FString& Parameters)
+	{
+		const FPhase1PelvisCouplingSearchConfig RuntimeDefaultConfig = BuildPhase1PelvisCouplingSearchConfig(TOptional<FPhase1AutoCalibParams>());
+
+		FPhase1AutoCalibParams DefaultParams;
+		DefaultParams.SourcePreset = EPhase1AutoCalibStrategyPreset::CurrentDefault;
+		DefaultParams.SeedFamilyPreset = EPhase1AutoCalibStrategyPreset::CurrentDefault;
+		const FPhase1PelvisCouplingSearchConfig CurrentDefaultConfig =
+			BuildPhase1PelvisCouplingSearchConfig(TOptional<FPhase1AutoCalibParams>(DefaultParams));
+		TestEqual(TEXT("Runtime default config matches CurrentDefault preset mapping"), RuntimeDefaultConfig.SpineInterpolationAlpha, CurrentDefaultConfig.SpineInterpolationAlpha);
+		TestEqual(TEXT("Runtime default keeps coupled trade disabled"), RuntimeDefaultConfig.bEnableCoupledTradeControlPass, false);
+
+		FPhase1AutoCalibParams RescueParams;
+		RescueParams.SourcePreset = EPhase1AutoCalibStrategyPreset::RescueOnly;
+		RescueParams.SeedFamilyPreset = EPhase1AutoCalibStrategyPreset::RescueOnly;
+		const FPhase1PelvisCouplingSearchConfig RescueConfig =
+			BuildPhase1PelvisCouplingSearchConfig(TOptional<FPhase1AutoCalibParams>(RescueParams));
+		TestFalse(TEXT("RescueOnly disables spine-biased direct-blend seeds"), RescueConfig.bEnableSpineBiasedDirectBlendSeeds);
+		TestFalse(TEXT("RescueOnly disables pair-blend seeds"), RescueConfig.bEnablePairBlendSeeds);
+		TestFalse(TEXT("RescueOnly disables worst-thigh interpolation sweep"), RescueConfig.bEnableWorstThighInterpolationSweep);
+
+		FPhase1AutoCalibParams CoupledParams;
+		CoupledParams.SourcePreset = EPhase1AutoCalibStrategyPreset::CoupledTradeControlFamily;
+		CoupledParams.SeedFamilyPreset = EPhase1AutoCalibStrategyPreset::CoupledTradeControlFamily;
+		const FPhase1PelvisCouplingSearchConfig CoupledConfig =
+			BuildPhase1PelvisCouplingSearchConfig(TOptional<FPhase1AutoCalibParams>(CoupledParams));
+		TestTrue(TEXT("CoupledTradeControlFamily enables the bounded coupled trade pass"), CoupledConfig.bEnableCoupledTradeControlPass);
+		TestEqual(TEXT("CoupledTradeControlFamily reuses SpineThenWorstThigh as its seed family"), CoupledConfig.SeedFamilyPreset, EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1CoupledTradeControlAcceptanceTest,
+		"PhysAnim.Component.Phase1CoupledTradeControlAcceptance",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1CoupledTradeControlAcceptanceTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("Coupled trade control rejects a spine improvement that re-breaks the paired thigh frontier too far"),
+			ShouldAcceptPhase1CoupledTradeControlCandidate(
+				31.40f,
+				33.10f,
+				18.20f,
+				31.35f,
+				33.65f,
+				17.60f,
+				1.25f,
+				1.00f,
+				0.25f));
+		TestTrue(
+			TEXT("Coupled trade control accepts a bounded paired trade when weighted gain beats regression"),
+			ShouldAcceptPhase1CoupledTradeControlCandidate(
+				31.40f,
+				33.10f,
+				18.20f,
+				31.20f,
+				33.28f,
+				17.92f,
+				1.25f,
+				1.00f,
+				0.25f));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibParamsDoNotMutateContractSettingsTest,
 		"PhysAnim.Component.Phase1AutoCalibParamsDoNotMutateContractSettings",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -706,7 +780,7 @@ namespace
 		TArray<FPhase1AutoCalibParams> Candidates;
 		UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(FullSearchRequest, Candidates);
 
-		TestEqual(TEXT("Stage A emits the fixed 24 samples for each of 6 presets"), Candidates.Num(), 24 * 6);
+		TestEqual(TEXT("Stage A emits the fixed 24 samples for each of 7 presets"), Candidates.Num(), 24 * 7);
 
 		TSet<EPhase1AutoCalibStrategyPreset> SeenPresets;
 		for (const FPhase1AutoCalibParams& Candidate : Candidates)
@@ -722,7 +796,7 @@ namespace
 			TestTrue(TEXT("Stage A pelvis roll bias stays in range"), Candidate.PelvisRollBiasDeg >= -1.0f && Candidate.PelvisRollBiasDeg <= 1.0f);
 		}
 
-		TestEqual(TEXT("Stage A covers all six fixed presets"), SeenPresets.Num(), 6);
+		TestEqual(TEXT("Stage A covers all seven fixed presets"), SeenPresets.Num(), 7);
 		return true;
 	}
 
@@ -742,7 +816,7 @@ namespace
 		UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(SmokeRequest, CandidatesA);
 		UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(SmokeRequest, CandidatesB);
 
-		TestEqual(TEXT("Smoke Stage A stays intentionally small"), CandidatesA.Num(), 6);
+		TestEqual(TEXT("Smoke Stage A stays intentionally small"), CandidatesA.Num(), 7);
 		TestEqual(TEXT("Smoke Stage A generation is deterministic"), CandidatesB.Num(), CandidatesA.Num());
 
 		TSet<EPhase1AutoCalibStrategyPreset> SeenPresets;
@@ -753,7 +827,7 @@ namespace
 			TestEqual(TEXT("Smoke Stage A seed families track source presets"), CandidatesA[Index].SeedFamilyPreset, CandidatesA[Index].SourcePreset);
 		}
 
-		TestEqual(TEXT("Smoke Stage A still covers all six fixed presets"), SeenPresets.Num(), 6);
+		TestEqual(TEXT("Smoke Stage A still covers all seven fixed presets"), SeenPresets.Num(), 7);
 		return true;
 	}
 
@@ -794,6 +868,11 @@ namespace
 			17.0f,
 			0.8f));
 	Report.Trials.Last().bReproducible = true;
+	Report.Trials[0].WinningSearchFamily = TEXT("worst_thigh_interpolation");
+	Report.Trials[1].WinningSearchFamily = TEXT("spine_constraint_interpolation");
+	Report.Trials[2].WinningSearchFamily = TEXT("tilt_spine_rescue");
+	Report.Trials[3].WinningSearchFamily = TEXT("coupled_trade_control");
+	Report.Trials[3].bCoupledTradeControlWon = true;
 
 	UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(Report);
 
@@ -805,6 +884,7 @@ namespace
 	TestEqual(TEXT("Passing frontier does not name a follow-up expansion"), Report.RecommendedExpansionName, FString());
 		TestTrue(TEXT("Report picks a near-pass when non-passing trials exist"), Report.bHasBestNearPass);
 		TestEqual(TEXT("Best near-pass comes from the lowest-error failing preset"), Report.BestNearPass.Params.SourcePreset, EPhase1AutoCalibStrategyPreset::SpineBiased);
+		TestEqual(TEXT("Best candidate keeps winning search attribution"), Report.BestCandidate.WinningSearchFamily, FString(TEXT("coupled_trade_control")));
 		TestEqual(TEXT("Preset summaries are emitted for each preset seen in the trials"), Report.PresetSummaries.Num(), 3);
 
 		const FPhase1AutoCalibPresetSummary* SpineSummary = nullptr;
@@ -896,6 +976,7 @@ namespace
 		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::BalancedCoupled, TEXT("timed_out"), TEXT("blocker_balanced"), false, 29.5f, 1.8f));
 		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh, TEXT("timed_out"), TEXT("blocker_spine_then_thigh"), false, 29.0f, 1.7f));
 		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::RescueOnly, TEXT("timed_out"), TEXT("blocker_rescue"), false, 28.5f, 1.6f));
+		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::CoupledTradeControlFamily, TEXT("timed_out"), TEXT("blocker_coupled_trade"), false, 28.0f, 1.5f));
 
 		TArray<FPhase1AutoCalibParams> StageBCandidates;
 		UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(StageAResults, FullSearchRequest, StageBCandidates);
@@ -911,7 +992,7 @@ namespace
 		TestTrue(TEXT("Stage B receives a broadened Stage A set rather than collapsing to one preset family"), SeenPresets.Num() > 1);
 
 		TArray<FPhase1AutoCalibTrialResult> StageBResults;
-		for (int32 PresetIndex = 0; PresetIndex < 5; ++PresetIndex)
+		for (int32 PresetIndex = 0; PresetIndex < 7; ++PresetIndex)
 		{
 			StageBResults.Add(MakePhase1AutoCalibTrial(
 				static_cast<EPhase1AutoCalibStrategyPreset>(PresetIndex),
