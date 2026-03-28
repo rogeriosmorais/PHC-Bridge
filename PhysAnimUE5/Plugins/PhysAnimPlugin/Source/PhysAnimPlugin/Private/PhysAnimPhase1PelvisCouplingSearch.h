@@ -15,7 +15,8 @@ enum class EPhase1PelvisCouplingSearchFamily : uint8
 	FocusedDelta,
 	TiltSpineRescue,
 	ForensicSpineRescue,
-	CoupledTradeControl
+	CoupledTradeControl,
+	PairBlendFrontierFollowThrough
 };
 
 struct FPhase1PelvisCouplingSearchConfig
@@ -42,6 +43,14 @@ struct FPhase1PelvisCouplingSearchConfig
 	float CoupledTradeSpineGainWeight = 1.0f;
 	float CoupledTradeThighGainWeight = 1.0f;
 	float CoupledTradeMaxPairedRegressionDeg = 0.35f;
+	bool bEnablePairBlendFrontierFollowThroughPass = false;
+	bool bEnablePairBlendFrontierInterpolationPass = false;
+	float PairBlendFrontierWeightPerturbationRadius = 0.10f;
+	float PairBlendFrontierPitchDeltaRadiusDeg = 0.25f;
+	float PairBlendFrontierRollDeltaRadiusDeg = 0.25f;
+	float PairBlendFrontierBlockerPriorityGainWeight = 1.50f;
+	float PairBlendFrontierSecondaryGainWeight = 1.00f;
+	float PairBlendFrontierMaxPairedRegressionDeg = 0.25f;
 };
 
 struct FPhase1PelvisCouplingSearchResult
@@ -70,6 +79,17 @@ bool ShouldAcceptPhase1CoupledTradeControlCandidate(
 	float CandidateSpineAngularErrorDeg,
 	float SpineGainWeight,
 	float ThighGainWeight,
+	float MaxPairedRegressionDeg);
+bool ShouldAcceptPhase1PairBlendFrontierCandidate(
+	float CurrentLeftThighAngularErrorDeg,
+	float CurrentRightThighAngularErrorDeg,
+	float CurrentSpineAngularErrorDeg,
+	float CandidateLeftThighAngularErrorDeg,
+	float CandidateRightThighAngularErrorDeg,
+	float CandidateSpineAngularErrorDeg,
+	bool bPrioritizeSpineBlocker,
+	float BlockerPriorityGainWeight,
+	float SecondaryGainWeight,
 	float MaxPairedRegressionDeg);
 
 #endif

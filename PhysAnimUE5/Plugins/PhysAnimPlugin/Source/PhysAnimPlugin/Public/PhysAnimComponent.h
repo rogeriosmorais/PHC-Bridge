@@ -675,7 +675,8 @@ enum class EPhase1AutoCalibStrategyPreset : uint8
 	BalancedCoupled,
 	SpineThenWorstThigh,
 	RescueOnly,
-	CoupledTradeControlFamily
+	CoupledTradeControlFamily,
+	PairBlendFrontierFollowThrough
 };
 
 enum class EPhase1AutoCalibBudgetMode : uint8

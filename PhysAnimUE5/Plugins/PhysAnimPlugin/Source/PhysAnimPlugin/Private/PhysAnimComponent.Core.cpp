@@ -428,6 +428,10 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 						AddAutoCalibBiasSeed(Sample.CandidateRotation, *Sample.Source);
 						break;
 					}
+					case EPhase1AutoCalibStrategyPreset::PairBlendFrontierFollowThrough:
+						AddAutoCalibBiasSeed(PelvisBody->GetUnrealWorldTransform().GetRotation(), TEXT("autocalib_pair_frontier_live"));
+						AddAutoCalibBiasSeed(AnimatedPelvisTransform.GetRotation(), TEXT("autocalib_pair_frontier_animated"));
+						break;
 					case EPhase1AutoCalibStrategyPreset::CurrentDefault:
 					default:
 						AddAutoCalibBiasSeed(AnimatedPelvisTransform.GetRotation(), TEXT("autocalib_default"));
@@ -2108,6 +2112,234 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 				SearchConfig.CoupledTradeMaxPairedRegressionDeg))
 		{
 			BestRotationEvaluation = CoupledTradeEvaluation;
+		}
+	}
+	if (SearchConfig.bEnablePairBlendFrontierFollowThroughPass)
+	{
+		const FPhase1ConstraintRotationSample* PairFrontierLeftConstraintSample = nullptr;
+		const FPhase1ConstraintRotationSample* PairFrontierRightConstraintSample = nullptr;
+		const FPhase1ConstraintRotationSample* PairFrontierSpineConstraintSample = nullptr;
+		for (const FPhase1ConstraintRotationSample& Sample : RotationSamples)
+		{
+			if (!Sample.bValid)
+			{
+				continue;
+			}
+
+			if (Sample.ChildBoneName == TEXT("thigh_l"))
+			{
+				PairFrontierLeftConstraintSample = &Sample;
+			}
+			else if (Sample.ChildBoneName == TEXT("thigh_r"))
+			{
+				PairFrontierRightConstraintSample = &Sample;
+			}
+			else if (Sample.ChildBoneName == TEXT("spine_01"))
+			{
+				PairFrontierSpineConstraintSample = &Sample;
+			}
+		}
+
+		if (PairFrontierLeftConstraintSample && PairFrontierRightConstraintSample && PairFrontierSpineConstraintSample)
+		{
+			const auto TryExtractPairBlendWeight = [](const FString& Source, const TCHAR* Token, float& OutWeight) -> bool
+			{
+				const FString Needle = FString(Token);
+				const int32 TokenStart = Source.Find(Needle, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+				if (TokenStart == INDEX_NONE)
+				{
+					return false;
+				}
+
+				int32 ValueStart = TokenStart + Needle.Len();
+				int32 ValueEnd = ValueStart;
+				while (ValueEnd < Source.Len())
+				{
+					const TCHAR Character = Source[ValueEnd];
+					if ((Character >= TEXT('0') && Character <= TEXT('9')) || Character == TEXT('.') || Character == TEXT('-'))
+					{
+						++ValueEnd;
+						continue;
+					}
+					break;
+				}
+
+				const FString ValueString = Source.Mid(ValueStart, ValueEnd - ValueStart);
+				if (ValueString.IsEmpty())
+				{
+					return false;
+				}
+
+				OutWeight = FCString::Atof(*ValueString);
+				return true;
+			};
+			const auto BuildFrontierWeightedRotation = [&](const float LeftWeight, const float RightWeight, const float SpineWeight) -> FQuat
+			{
+				const FQuat ConstraintRotations[] =
+				{
+					PairFrontierLeftConstraintSample->CandidateRotation,
+					PairFrontierRightConstraintSample->CandidateRotation,
+					PairFrontierSpineConstraintSample->CandidateRotation
+				};
+				const float Weights[] = { LeftWeight, RightWeight, SpineWeight };
+				FVector4 WeightedRotationSum = FVector4::Zero();
+				for (int32 SampleIndex = 0; SampleIndex < UE_ARRAY_COUNT(Weights); ++SampleIndex)
+				{
+					FQuat AlignedRotation = ConstraintRotations[SampleIndex];
+					if ((BestRotationEvaluation.Rotation | AlignedRotation) < 0.0f)
+					{
+						AlignedRotation *= -1.0f;
+					}
+					WeightedRotationSum.X += AlignedRotation.X * Weights[SampleIndex];
+					WeightedRotationSum.Y += AlignedRotation.Y * Weights[SampleIndex];
+					WeightedRotationSum.Z += AlignedRotation.Z * Weights[SampleIndex];
+					WeightedRotationSum.W += AlignedRotation.W * Weights[SampleIndex];
+				}
+
+				FQuat WeightedRotation(WeightedRotationSum.X, WeightedRotationSum.Y, WeightedRotationSum.Z, WeightedRotationSum.W);
+				if (WeightedRotation.SizeSquared() <= KINDA_SMALL_NUMBER)
+				{
+					return BestRotationEvaluation.Rotation;
+				}
+				WeightedRotation.Normalize();
+				if ((BestRotationEvaluation.Rotation | WeightedRotation) < 0.0f)
+				{
+					WeightedRotation *= -1.0f;
+				}
+				return WeightedRotation.GetNormalized();
+			};
+			const auto ShouldAcceptPairFrontierCandidate = [&](const FPhase1PelvisRotationEvaluation& CurrentEvaluation, const FPhase1PelvisRotationEvaluation& CandidateEvaluation) -> bool
+			{
+				const float CurrentWorstThigh = FMath::Max(CurrentEvaluation.LeftThighAngularErrorDeg, CurrentEvaluation.RightThighAngularErrorDeg);
+				const bool bPrioritizeSpineBlocker = CurrentEvaluation.SpineAngularErrorDeg >= CurrentWorstThigh - KINDA_SMALL_NUMBER;
+				return ShouldAcceptPhase1PairBlendFrontierCandidate(
+					CurrentEvaluation.LeftThighAngularErrorDeg,
+					CurrentEvaluation.RightThighAngularErrorDeg,
+					CurrentEvaluation.SpineAngularErrorDeg,
+					CandidateEvaluation.LeftThighAngularErrorDeg,
+					CandidateEvaluation.RightThighAngularErrorDeg,
+					CandidateEvaluation.SpineAngularErrorDeg,
+					bPrioritizeSpineBlocker,
+					SearchConfig.PairBlendFrontierBlockerPriorityGainWeight,
+					SearchConfig.PairBlendFrontierSecondaryGainWeight,
+					SearchConfig.PairBlendFrontierMaxPairedRegressionDeg);
+			};
+
+			FPhase1PelvisRotationEvaluation PairFrontierEvaluation = BestRotationEvaluation;
+			float BaseLeftWeight = 0.10f;
+			float BaseRightWeight = 0.30f;
+			float BaseSpineWeight = 0.60f;
+			const bool bHasExplicitWeights =
+				TryExtractPairBlendWeight(BestRotationEvaluation.Source, TEXT("thigh_l_"), BaseLeftWeight) &&
+				TryExtractPairBlendWeight(BestRotationEvaluation.Source, TEXT("thigh_r_"), BaseRightWeight) &&
+				TryExtractPairBlendWeight(BestRotationEvaluation.Source, TEXT("spine_01_"), BaseSpineWeight);
+			if (!bHasExplicitWeights)
+			{
+				BaseLeftWeight = 0.10f;
+				BaseRightWeight = 0.30f;
+				BaseSpineWeight = 0.60f;
+			}
+
+			const float WeightRadius = FMath::Max(0.0f, SearchConfig.PairBlendFrontierWeightPerturbationRadius);
+			static const float FrontierWeightOffsets[] = { -1.0f, -0.5f, 0.0f, 0.5f, 1.0f };
+			for (const float LeftOffsetScale : FrontierWeightOffsets)
+			{
+				for (const float RightOffsetScale : FrontierWeightOffsets)
+				{
+					const float CandidateLeftWeight = BaseLeftWeight + (LeftOffsetScale * WeightRadius);
+					const float CandidateRightWeight = BaseRightWeight + (RightOffsetScale * WeightRadius);
+					const float CandidateSpineWeight = 1.0f - CandidateLeftWeight - CandidateRightWeight;
+					if (CandidateLeftWeight <= 0.0f || CandidateRightWeight <= 0.0f || CandidateSpineWeight <= 0.0f)
+					{
+						continue;
+					}
+
+					const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+						BuildFrontierWeightedRotation(CandidateLeftWeight, CandidateRightWeight, CandidateSpineWeight),
+						FString::Printf(TEXT("pair_frontier_weight_thigh_l_%.2f_thigh_r_%.2f_spine_01_%.2f"), CandidateLeftWeight, CandidateRightWeight, CandidateSpineWeight));
+					if (bProtectLiveTilt && !CandidateEvaluation.bTiltAdmissible)
+					{
+						continue;
+					}
+					if (ShouldAcceptPairFrontierCandidate(PairFrontierEvaluation, CandidateEvaluation) ||
+						IsBetterRotationEvaluation(CandidateEvaluation, PairFrontierEvaluation))
+					{
+						PairFrontierEvaluation = CandidateEvaluation;
+					}
+				}
+			}
+
+			const float PitchRadiusDeg = FMath::Max(0.0f, SearchConfig.PairBlendFrontierPitchDeltaRadiusDeg);
+			const float RollRadiusDeg = FMath::Max(0.0f, SearchConfig.PairBlendFrontierRollDeltaRadiusDeg);
+			static const float FrontierPitchRollOffsets[] = { -1.0f, -0.5f, 0.0f, 0.5f, 1.0f };
+			for (const float PitchOffsetScale : FrontierPitchRollOffsets)
+			{
+				for (const float RollOffsetScale : FrontierPitchRollOffsets)
+				{
+					const float PitchDeg = PitchOffsetScale * PitchRadiusDeg;
+					const float RollDeg = RollOffsetScale * RollRadiusDeg;
+					if (FMath::IsNearlyZero(PitchDeg) && FMath::IsNearlyZero(RollDeg))
+					{
+						continue;
+					}
+
+					const FQuat PitchDelta(FVector::RightVector, FMath::DegreesToRadians(PitchDeg));
+					const FQuat RollDelta(FVector::ForwardVector, FMath::DegreesToRadians(RollDeg));
+					const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+						(RollDelta * PitchDelta * PairFrontierEvaluation.Rotation).GetNormalized(),
+						FString::Printf(TEXT("pair_frontier_pitch%.2f_roll%.2f"), PitchDeg, RollDeg));
+					if (bProtectLiveTilt && !CandidateEvaluation.bTiltAdmissible)
+					{
+						continue;
+					}
+					if (ShouldAcceptPairFrontierCandidate(PairFrontierEvaluation, CandidateEvaluation) ||
+						IsBetterRotationEvaluation(CandidateEvaluation, PairFrontierEvaluation))
+					{
+						PairFrontierEvaluation = CandidateEvaluation;
+					}
+				}
+			}
+
+			if (SearchConfig.bEnablePairBlendFrontierInterpolationPass)
+			{
+				const FPhase1PelvisRotationEvaluation SpineFrontierEvaluation = RefineBySpineConstraintInterpolationSweep(
+					PairFrontierEvaluation,
+					TEXT("pair_frontier_spine_neighbor"),
+					bProtectLiveTilt);
+				FPhase1PelvisRotationEvaluation ThighFrontierEvaluation = PairFrontierEvaluation;
+				if (ShouldRunWorstThighConstraintInterpolationSweep(
+						PairFrontierEvaluation.LeftThighAngularErrorDeg,
+						PairFrontierEvaluation.RightThighAngularErrorDeg,
+						PairFrontierEvaluation.SpineAngularErrorDeg))
+				{
+					ThighFrontierEvaluation = RefineByWorstThighConstraintInterpolationSweep(
+						PairFrontierEvaluation,
+						TEXT("pair_frontier_thigh_neighbor"),
+						bProtectLiveTilt);
+				}
+
+				static const float PairFrontierBlendWeights[] = { 0.20f, 0.40f, 0.60f, 0.80f };
+				for (const float BlendWeight : PairFrontierBlendWeights)
+				{
+					const FPhase1PelvisRotationEvaluation CandidateEvaluation = BuildRotationEvaluation(
+						FQuat::Slerp(SpineFrontierEvaluation.Rotation, ThighFrontierEvaluation.Rotation, BlendWeight).GetNormalized(),
+						FString::Printf(TEXT("pair_frontier_interp_a%.2f"), BlendWeight));
+					if (bProtectLiveTilt && !CandidateEvaluation.bTiltAdmissible)
+					{
+						continue;
+					}
+					if (ShouldAcceptPairFrontierCandidate(PairFrontierEvaluation, CandidateEvaluation) ||
+						IsBetterRotationEvaluation(CandidateEvaluation, PairFrontierEvaluation))
+					{
+						PairFrontierEvaluation = CandidateEvaluation;
+					}
+				}
+			}
+
+			if (ShouldAcceptPairFrontierCandidate(BestRotationEvaluation, PairFrontierEvaluation))
+			{
+				BestRotationEvaluation = PairFrontierEvaluation;
+			}
 		}
 	}
 

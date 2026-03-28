@@ -580,6 +580,17 @@ namespace
 			BuildPhase1PelvisCouplingSearchConfig(TOptional<FPhase1AutoCalibParams>(CoupledParams));
 		TestTrue(TEXT("CoupledTradeControlFamily enables the bounded coupled trade pass"), CoupledConfig.bEnableCoupledTradeControlPass);
 		TestEqual(TEXT("CoupledTradeControlFamily reuses SpineThenWorstThigh as its seed family"), CoupledConfig.SeedFamilyPreset, EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh);
+
+		FPhase1AutoCalibParams PairFrontierParams;
+		PairFrontierParams.SourcePreset = EPhase1AutoCalibStrategyPreset::PairBlendFrontierFollowThrough;
+		PairFrontierParams.SeedFamilyPreset = EPhase1AutoCalibStrategyPreset::PairBlendFrontierFollowThrough;
+		const FPhase1PelvisCouplingSearchConfig PairFrontierConfig =
+			BuildPhase1PelvisCouplingSearchConfig(TOptional<FPhase1AutoCalibParams>(PairFrontierParams));
+		TestTrue(TEXT("PairBlendFrontierFollowThrough enables the local follow-through pass"), PairFrontierConfig.bEnablePairBlendFrontierFollowThroughPass);
+		TestTrue(TEXT("PairBlendFrontierFollowThrough enables local interpolation"), PairFrontierConfig.bEnablePairBlendFrontierInterpolationPass);
+		TestFalse(TEXT("PairBlendFrontierFollowThrough keeps coupled-trade disabled"), PairFrontierConfig.bEnableCoupledTradeControlPass);
+		TestEqual(TEXT("PairBlendFrontierFollowThrough reuses RescueOnly as its seed family"), PairFrontierConfig.SeedFamilyPreset, EPhase1AutoCalibStrategyPreset::RescueOnly);
+		TestEqual(TEXT("Pair frontier sources classify distinctly from generic pair blends"), ClassifyPhase1PelvisCouplingSearchFamily(TEXT("pair_frontier_weight_thigh_l_0.10_thigh_r_0.30_spine_01_0.60")), EPhase1PelvisCouplingSearchFamily::PairBlendFrontierFollowThrough);
 		return true;
 	}
 
@@ -612,6 +623,58 @@ namespace
 				33.28f,
 				17.92f,
 				1.25f,
+				1.00f,
+				0.25f));
+		TestTrue(
+			TEXT("Pair-blend frontier follow-through accepts a spine-priority improvement with bounded thigh regression"),
+			ShouldAcceptPhase1PairBlendFrontierCandidate(
+				31.40f,
+				33.10f,
+				18.20f,
+				31.50f,
+				33.22f,
+				17.90f,
+				true,
+				1.50f,
+				1.00f,
+				0.25f));
+		TestFalse(
+			TEXT("Pair-blend frontier follow-through rejects a spine-priority candidate that does not improve the blocker"),
+			ShouldAcceptPhase1PairBlendFrontierCandidate(
+				31.40f,
+				33.10f,
+				18.20f,
+				31.10f,
+				32.90f,
+				18.20f,
+				true,
+				1.50f,
+				1.00f,
+				0.25f));
+		TestTrue(
+			TEXT("Pair-blend frontier follow-through accepts a thigh-priority improvement with bounded spine regression"),
+			ShouldAcceptPhase1PairBlendFrontierCandidate(
+				31.40f,
+				33.10f,
+				17.80f,
+				31.30f,
+				32.86f,
+				17.96f,
+				false,
+				1.50f,
+				1.00f,
+				0.25f));
+		TestFalse(
+			TEXT("Pair-blend frontier follow-through rejects candidates that re-break the paired margin beyond the cap"),
+			ShouldAcceptPhase1PairBlendFrontierCandidate(
+				31.40f,
+				33.10f,
+				17.80f,
+				31.30f,
+				32.86f,
+				18.20f,
+				false,
+				1.50f,
 				1.00f,
 				0.25f));
 		return true;
@@ -785,7 +848,7 @@ namespace
 		TArray<FPhase1AutoCalibParams> Candidates;
 		UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(FullSearchRequest, Candidates);
 
-		TestEqual(TEXT("Stage A emits the fixed 24 samples for each of 7 presets"), Candidates.Num(), 24 * 7);
+		TestEqual(TEXT("Stage A emits the fixed 24 samples for each of 8 presets"), Candidates.Num(), 24 * 8);
 
 		TSet<EPhase1AutoCalibStrategyPreset> SeenPresets;
 		for (const FPhase1AutoCalibParams& Candidate : Candidates)
@@ -801,7 +864,7 @@ namespace
 			TestTrue(TEXT("Stage A pelvis roll bias stays in range"), Candidate.PelvisRollBiasDeg >= -1.0f && Candidate.PelvisRollBiasDeg <= 1.0f);
 		}
 
-		TestEqual(TEXT("Stage A covers all seven fixed presets"), SeenPresets.Num(), 7);
+		TestEqual(TEXT("Stage A covers all eight fixed presets"), SeenPresets.Num(), 8);
 		return true;
 	}
 
@@ -821,7 +884,7 @@ namespace
 		UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(SmokeRequest, CandidatesA);
 		UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(SmokeRequest, CandidatesB);
 
-		TestEqual(TEXT("Smoke Stage A stays intentionally small"), CandidatesA.Num(), 7);
+		TestEqual(TEXT("Smoke Stage A stays intentionally small"), CandidatesA.Num(), 8);
 		TestEqual(TEXT("Smoke Stage A generation is deterministic"), CandidatesB.Num(), CandidatesA.Num());
 
 		TSet<EPhase1AutoCalibStrategyPreset> SeenPresets;
@@ -832,7 +895,7 @@ namespace
 			TestEqual(TEXT("Smoke Stage A seed families track source presets"), CandidatesA[Index].SeedFamilyPreset, CandidatesA[Index].SourcePreset);
 		}
 
-		TestEqual(TEXT("Smoke Stage A still covers all seven fixed presets"), SeenPresets.Num(), 7);
+		TestEqual(TEXT("Smoke Stage A still covers all eight fixed presets"), SeenPresets.Num(), 8);
 		return true;
 	}
 
@@ -865,14 +928,14 @@ namespace
 			false,
 			32.0f,
 			1.8f));
-	Report.Trials.Add(MakePhase1AutoCalibTrial(
+		Report.Trials.Add(MakePhase1AutoCalibTrial(
 			EPhase1AutoCalibStrategyPreset::BalancedCoupled,
 			TEXT("reached_root_on"),
 			TEXT("ready"),
 			true,
 			17.0f,
 			0.8f));
-	Report.Trials.Last().bReproducible = true;
+		Report.Trials.Last().bReproducible = true;
 	Report.Trials[0].WinningSearchFamily = TEXT("worst_thigh_interpolation");
 	Report.Trials[1].WinningSearchFamily = TEXT("spine_constraint_interpolation");
 	Report.Trials[2].WinningSearchFamily = TEXT("tilt_spine_rescue");
@@ -984,6 +1047,7 @@ namespace
 		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh, TEXT("timed_out"), TEXT("blocker_spine_then_thigh"), false, 29.0f, 1.7f));
 		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::RescueOnly, TEXT("timed_out"), TEXT("blocker_rescue"), false, 28.5f, 1.6f));
 		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::CoupledTradeControlFamily, TEXT("timed_out"), TEXT("blocker_coupled_trade"), false, 28.0f, 1.5f));
+		StageAResults.Add(MakePhase1AutoCalibTrial(EPhase1AutoCalibStrategyPreset::PairBlendFrontierFollowThrough, TEXT("timed_out"), TEXT("blocker_pair_frontier"), false, 27.8f, 1.4f));
 
 		TArray<FPhase1AutoCalibParams> StageBCandidates;
 		UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(StageAResults, FullSearchRequest, StageBCandidates);
@@ -999,7 +1063,7 @@ namespace
 		TestTrue(TEXT("Stage B receives a broadened Stage A set rather than collapsing to one preset family"), SeenPresets.Num() > 1);
 
 		TArray<FPhase1AutoCalibTrialResult> StageBResults;
-		for (int32 PresetIndex = 0; PresetIndex < 7; ++PresetIndex)
+		for (int32 PresetIndex = 0; PresetIndex < 8; ++PresetIndex)
 		{
 			StageBResults.Add(MakePhase1AutoCalibTrial(
 				static_cast<EPhase1AutoCalibStrategyPreset>(PresetIndex),

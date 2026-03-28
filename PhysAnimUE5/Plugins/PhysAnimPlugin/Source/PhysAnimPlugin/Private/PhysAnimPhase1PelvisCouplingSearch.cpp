@@ -40,6 +40,8 @@ const TCHAR* Phase1AutoCalibStrategyPresetToString(const EPhase1AutoCalibStrateg
 		return TEXT("RescueOnly");
 	case EPhase1AutoCalibStrategyPreset::CoupledTradeControlFamily:
 		return TEXT("CoupledTradeControlFamily");
+	case EPhase1AutoCalibStrategyPreset::PairBlendFrontierFollowThrough:
+		return TEXT("PairBlendFrontierFollowThrough");
 	case EPhase1AutoCalibStrategyPreset::CurrentDefault:
 	default:
 		return TEXT("CurrentDefault");
@@ -68,6 +70,8 @@ const TCHAR* Phase1PelvisCouplingSearchFamilyToString(const EPhase1PelvisCouplin
 		return TEXT("forensic_spine_rescue");
 	case EPhase1PelvisCouplingSearchFamily::CoupledTradeControl:
 		return TEXT("coupled_trade_control");
+	case EPhase1PelvisCouplingSearchFamily::PairBlendFrontierFollowThrough:
+		return TEXT("pair_blend_frontier_follow_through");
 	case EPhase1PelvisCouplingSearchFamily::Unknown:
 	default:
 		return TEXT("unknown");
@@ -105,6 +109,21 @@ FPhase1PelvisCouplingSearchConfig BuildPhase1PelvisCouplingSearchConfig(const TO
 		Config.CoupledTradeThighGainWeight = 1.00f;
 		Config.CoupledTradeMaxPairedRegressionDeg = 0.25f;
 		break;
+	case EPhase1AutoCalibStrategyPreset::PairBlendFrontierFollowThrough:
+		Config.bEnableSpineBiasedDirectBlendSeeds = false;
+		Config.bEnableConstraintInterpolationSweep = false;
+		Config.bEnableWorstThighInterpolationSweep = false;
+		Config.bEnableForensicSearch = false;
+		Config.bEnableCoupledTradeControlPass = false;
+		Config.bEnablePairBlendFrontierFollowThroughPass = true;
+		Config.bEnablePairBlendFrontierInterpolationPass = true;
+		Config.PairBlendFrontierWeightPerturbationRadius = 0.10f;
+		Config.PairBlendFrontierPitchDeltaRadiusDeg = 0.25f;
+		Config.PairBlendFrontierRollDeltaRadiusDeg = 0.25f;
+		Config.PairBlendFrontierBlockerPriorityGainWeight = 1.50f;
+		Config.PairBlendFrontierSecondaryGainWeight = 1.00f;
+		Config.PairBlendFrontierMaxPairedRegressionDeg = 0.25f;
+		break;
 	case EPhase1AutoCalibStrategyPreset::CurrentDefault:
 	case EPhase1AutoCalibStrategyPreset::SpineBiased:
 	case EPhase1AutoCalibStrategyPreset::WorstThighBiased:
@@ -118,12 +137,20 @@ FPhase1PelvisCouplingSearchConfig BuildPhase1PelvisCouplingSearchConfig(const TO
 	{
 		Config.SeedFamilyPreset = EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh;
 	}
+	if (Config.SeedFamilyPreset == EPhase1AutoCalibStrategyPreset::PairBlendFrontierFollowThrough)
+	{
+		Config.SeedFamilyPreset = EPhase1AutoCalibStrategyPreset::RescueOnly;
+	}
 
 	return Config;
 }
 
 EPhase1PelvisCouplingSearchFamily ClassifyPhase1PelvisCouplingSearchFamily(const FString& Source)
 {
+	if (Source.Contains(TEXT("pair_frontier")))
+	{
+		return EPhase1PelvisCouplingSearchFamily::PairBlendFrontierFollowThrough;
+	}
 	if (Source.Contains(TEXT("coupled_trade")))
 	{
 		return EPhase1PelvisCouplingSearchFamily::CoupledTradeControl;
@@ -203,6 +230,10 @@ void BuildPhase1PelvisCouplingExecutedFamilies(
 	{
 		AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(EPhase1PelvisCouplingSearchFamily::CoupledTradeControl));
 	}
+	if (Config.bEnablePairBlendFrontierFollowThroughPass || WinningSource.Contains(TEXT("pair_frontier")))
+	{
+		AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(EPhase1PelvisCouplingSearchFamily::PairBlendFrontierFollowThrough));
+	}
 
 	const EPhase1PelvisCouplingSearchFamily WinningFamily = ClassifyPhase1PelvisCouplingSearchFamily(WinningSource);
 	AddUniqueFamily(OutFamilies, Phase1PelvisCouplingSearchFamilyToString(WinningFamily));
@@ -237,6 +268,49 @@ bool ShouldAcceptPhase1CoupledTradeControlCandidate(
 	const float WeightedRegression =
 		SpineRegressionDeg * SpineGainWeight +
 		ThighRegressionDeg * ThighGainWeight;
+	return WeightedGain > WeightedRegression + KINDA_SMALL_NUMBER;
+}
+
+bool ShouldAcceptPhase1PairBlendFrontierCandidate(
+	const float CurrentLeftThighAngularErrorDeg,
+	const float CurrentRightThighAngularErrorDeg,
+	const float CurrentSpineAngularErrorDeg,
+	const float CandidateLeftThighAngularErrorDeg,
+	const float CandidateRightThighAngularErrorDeg,
+	const float CandidateSpineAngularErrorDeg,
+	const bool bPrioritizeSpineBlocker,
+	const float BlockerPriorityGainWeight,
+	const float SecondaryGainWeight,
+	const float MaxPairedRegressionDeg)
+{
+	const float CurrentWorstThigh = ResolveWorstThighError(CurrentLeftThighAngularErrorDeg, CurrentRightThighAngularErrorDeg);
+	const float CandidateWorstThigh = ResolveWorstThighError(CandidateLeftThighAngularErrorDeg, CandidateRightThighAngularErrorDeg);
+	const float SpineImprovementDeg = CurrentSpineAngularErrorDeg - CandidateSpineAngularErrorDeg;
+	const float ThighImprovementDeg = CurrentWorstThigh - CandidateWorstThigh;
+	const float SpineRegressionDeg = FMath::Max(0.0f, CandidateSpineAngularErrorDeg - CurrentSpineAngularErrorDeg);
+	const float ThighRegressionDeg = FMath::Max(0.0f, CandidateWorstThigh - CurrentWorstThigh);
+
+	if (SpineRegressionDeg > MaxPairedRegressionDeg || ThighRegressionDeg > MaxPairedRegressionDeg)
+	{
+		return false;
+	}
+
+	const float PrimaryImprovementDeg = bPrioritizeSpineBlocker ? SpineImprovementDeg : ThighImprovementDeg;
+	const float PrimaryRegressionDeg = bPrioritizeSpineBlocker ? SpineRegressionDeg : ThighRegressionDeg;
+	const float SecondaryImprovementDeg = bPrioritizeSpineBlocker ? ThighImprovementDeg : SpineImprovementDeg;
+	const float SecondaryRegressionDeg = bPrioritizeSpineBlocker ? ThighRegressionDeg : SpineRegressionDeg;
+
+	if (PrimaryImprovementDeg <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	const float WeightedGain =
+		(FMath::Max(0.0f, PrimaryImprovementDeg) * BlockerPriorityGainWeight) +
+		(FMath::Max(0.0f, SecondaryImprovementDeg) * SecondaryGainWeight);
+	const float WeightedRegression =
+		(PrimaryRegressionDeg * BlockerPriorityGainWeight) +
+		(SecondaryRegressionDeg * SecondaryGainWeight);
 	return WeightedGain > WeightedRegression + KINDA_SMALL_NUMBER;
 }
 

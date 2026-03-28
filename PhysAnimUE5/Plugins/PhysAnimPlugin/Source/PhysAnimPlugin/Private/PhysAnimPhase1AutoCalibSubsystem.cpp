@@ -24,7 +24,7 @@ namespace
 	constexpr int32 StageBRounds = 3;
 	constexpr int32 StageCTopK = 5;
 	constexpr int32 StageCRepetitions = 5;
-	constexpr int32 SmokeStageATrialCount = 7;
+	constexpr int32 SmokeStageATrialCount = 8;
 	constexpr int32 SmokeStageBTrialCount = 8;
 	constexpr int32 SmokeStageCTrialCount = 5;
 	constexpr float RestoreFingerprintTolerance = 1.0e-3f;
@@ -45,7 +45,8 @@ namespace
 		EPhase1AutoCalibStrategyPreset::BalancedCoupled,
 		EPhase1AutoCalibStrategyPreset::SpineThenWorstThigh,
 		EPhase1AutoCalibStrategyPreset::RescueOnly,
-		EPhase1AutoCalibStrategyPreset::CoupledTradeControlFamily
+		EPhase1AutoCalibStrategyPreset::CoupledTradeControlFamily,
+		EPhase1AutoCalibStrategyPreset::PairBlendFrontierFollowThrough
 	};
 
 	bool MatchesFilter(const UPhysAnimComponent& Component, const FString& FilterLower)
