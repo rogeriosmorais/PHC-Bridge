@@ -1738,7 +1738,7 @@ extern int32 GVerbosePhase2Forensics;
 
 				if (GVerbosePhase2Forensics != 0)
 				{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRE_GUARD_PELVIS_STATE tick=%d rawSim=%d modMoveType=%d shellLocked=%d quarantined=%d state=%d owner=%d actor=%s component=%s"),
+					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_PRE_GUARD_PELVIS_STATE tick=%d rawSim=%d modMoveType=%d shellLocked=%d quarantined=%d state=%d owner=%d actor=%s component=%s"),
 						Phase2GuardTickCount,
 						bPelvisActualSim ? 1 : 0,
 						static_cast<int32>(PelvisModifierMovementType),
@@ -1754,7 +1754,7 @@ extern int32 GVerbosePhase2Forensics;
 		{
 			UE_LOG(
 				LogPhysAnimBridge,
-				Warning,
+				Log,
 					TEXT("[PhysAnimBalance] PHASE2_GUARD_TICK tick=%d requestedRootSim=%d actualRootSim=%d resetScheduled=%d simCountPost=%d distalSimPost=%d shellOffsetDelta=%.1f shellVelocityDelta=%.1f owner=%d actor=%s component=%s"),
 					Phase2GuardTickCount,
 					bPelvisRequestedSim ? 1 : 0,

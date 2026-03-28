@@ -206,7 +206,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	Owner->GetSimulatingBodies(SimulatingBones);
 	if (GVerbosePhase1Forensics != 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] GET_SIMULATING_BODIES count=%d"), SimulatingBones.Num());
+		UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnimBalance] GET_SIMULATING_BODIES count=%d"), SimulatingBones.Num());
 	}
 	TSet<FName> SimulatingBoneSet(SimulatingBones);
 
