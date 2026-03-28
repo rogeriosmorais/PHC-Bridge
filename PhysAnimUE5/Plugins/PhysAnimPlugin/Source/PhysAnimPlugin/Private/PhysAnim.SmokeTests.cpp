@@ -131,7 +131,13 @@ namespace
 		}
 
 		const FPhase1AutoCalibReport& Report = AutoCalibSubsystem->GetLatestReport();
-		Test->TestTrue(TEXT("Phase1 auto-calibration smoke records at least two trials"), Report.Trials.Num() >= 2);
+		Test->TestTrue(TEXT("Phase1 auto-calibration recorded at least two trials"), Report.Trials.Num() >= 2);
+		if (Report.Trials.Num() == 0)
+		{
+			Test->AddError(FString::Printf(TEXT("Phase1 auto-calibration failed to capture any trials. Subsystem reached timeout while awaiting readiness. LastReason=%s"), *AutoCalibSubsystem->GetLastError()));
+			return true;
+		}
+
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke emits preset-aware summaries"), Report.PresetSummaries.Num() > 0);
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes summary.json"), IFileManager::Get().FileExists(*Report.SummaryPath));
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes trials.csv"), IFileManager::Get().FileExists(*Report.TrialsCsvPath));
