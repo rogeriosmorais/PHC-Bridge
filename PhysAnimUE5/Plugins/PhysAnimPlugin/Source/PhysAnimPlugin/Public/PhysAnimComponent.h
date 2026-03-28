@@ -1272,7 +1272,7 @@ public:
 	float BalanceQuietLinearSpeedThresholdCmPerSec = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
-	float BalanceQuietTiltThresholdDeg = 10.0f;
+	float BalanceQuietTiltThresholdDeg = 25.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
 	float BalanceQuietWindowRequiredSeconds = 1.0f;

@@ -390,7 +390,7 @@ namespace
 		TestFalse(
 			TEXT("Spine-only rescue sweep stays off when a thigh also misses readiness"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineOnlyRootOnReadinessRescueSweep(
-				35.5f,
+				39.5f,
 				32.74f,
 				19.55f));
 		TestTrue(
@@ -402,7 +402,7 @@ namespace
 		TestFalse(
 			TEXT("Spine-biased direct blend sweep stays off when a thigh already misses readiness"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineBiasedDirectConstraintBlendSweep(
-				33.1f,
+				39.1f,
 				32.74f,
 				19.55f));
 		TestTrue(
@@ -427,13 +427,13 @@ namespace
 			TEXT("Worst-thigh interpolation sweep runs once spine is back inside readiness and a thigh remains the blocker"),
 			UPhysAnimComponent::TestOnlyShouldRunWorstThighConstraintInterpolationSweep(
 				32.14f,
-				34.54f,
+				39.54f,
 				17.59f));
 		TestTrue(
 			TEXT("Spine-safe worst-thigh focused delta stays enabled for the current live thigh near-miss"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineSafeWorstThighFocusedDelta(
 				31.49f,
-				33.89f,
+				38.89f,
 				17.98f));
 		TestFalse(
 			TEXT("Worst-thigh interpolation sweep stays off while spine is still the blocker"),
@@ -511,7 +511,7 @@ namespace
 				32.74f,
 				19.55f,
 				31.95f,
-				33.30f,
+				39.30f,
 				18.95f));
 		TestTrue(
 			TEXT("Spine-only rescue acceptance keeps a spine-improving candidate that preserves thigh readiness"),
@@ -529,7 +529,7 @@ namespace
 				32.74f,
 				19.55f,
 				32.66f,
-				34.49f,
+				39.49f,
 				19.53f));
 		TestTrue(
 			TEXT("Spine-only rescue acceptance still allows a small thigh-margin trade when it preserves readiness and improves the live spine blocker"),
@@ -660,10 +660,10 @@ namespace
 			TEXT("Pair-blend frontier follow-through accepts a thigh-priority improvement with bounded spine regression"),
 			ShouldAcceptPhase1PairBlendFrontierCandidate(
 				31.40f,
-				33.10f,
+				39.10f,
 				17.80f,
 				31.30f,
-				32.86f,
+				38.86f,
 				17.96f,
 				false,
 				1.50f,
@@ -673,10 +673,10 @@ namespace
 			TEXT("Pair-blend frontier follow-through rejects candidates that re-break the paired margin beyond the cap"),
 			ShouldAcceptPhase1PairBlendFrontierCandidate(
 				31.40f,
-				33.10f,
+				39.10f,
 				17.80f,
 				31.30f,
-				32.86f,
+				38.86f,
 				18.20f,
 				false,
 				1.50f,
