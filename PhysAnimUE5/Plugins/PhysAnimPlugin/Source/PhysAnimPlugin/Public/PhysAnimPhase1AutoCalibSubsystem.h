@@ -22,10 +22,13 @@ public:
 	const FPhase1AutoCalibReport& GetLatestReport() const { return LatestReport; }
 	const FString& GetLastError() const { return LastError; }
 
-	static void BuildStageACandidates(int32 Seed, int32 MaxTrials, TArray<FPhase1AutoCalibParams>& OutCandidates);
-	static void BuildStageBRefinementCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageAResults, int32 MaxTrials, TArray<FPhase1AutoCalibParams>& OutCandidates);
-	static void BuildStageCReproCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageBResults, int32 MaxTrials, TArray<FPhase1AutoCalibParams>& OutCandidates);
+	static void BuildStageACandidates(const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates);
+	static void BuildStageBRefinementCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageAResults, const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates);
+	static void BuildStageCReproCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageBResults, const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates);
 	static bool AreTrialResultsReproducible(const TArray<FPhase1AutoCalibTrialResult>& Trials, float Epsilon = 1.0e-3f);
+	static bool IsActiveTrialTimeoutReached(bool bTrialStarted, double TrialStartTimeSeconds, double CurrentTimeSeconds, double TimeoutSeconds);
+	static bool ShouldAccumulateActiveTrialMetrics(bool bTrialStarted);
+	static void FinalizeReportData(FPhase1AutoCalibReport& InOutReport, TArray<FPhase1AutoCalibTrialResult>* StageCTrials = nullptr);
 
 private:
 	enum class EAutoCalibStage : uint8
@@ -61,6 +64,7 @@ private:
 
 	bool bRunActive = false;
 	bool bTrialActive = false;
+	bool bActiveTrialStarted = false;
 	EAutoCalibStage CurrentStage = EAutoCalibStage::Inactive;
 	FPhase1AutoCalibRequest ActiveRequest;
 	TWeakObjectPtr<UPhysAnimComponent> TargetComponent;
@@ -71,6 +75,8 @@ private:
 	TArray<FPhase1AutoCalibTrialResult> StageCResults;
 	FPendingTrial ActiveTrial;
 	double ActiveTrialStartTimeSeconds = -1.0;
+	double ActiveTrialFirstRootOnTimeSeconds = -1.0;
+	double ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
 	double CurrentStageStartTimeSeconds = -1.0;
 	double LastReadinessLogTimeSeconds = -1.0;
 	FPhase1AutoCalibLiveMetrics ActiveTrialPeakMetrics;
@@ -78,7 +84,4 @@ private:
 	FPhase1AutoCalibReport LatestReport;
 	FPhase1AutoCalibDeterminismFingerprint BaselineFingerprint;
 	int32 NextTrialId = 0;
-	float OriginalBalanceEntryMinPolicyAlpha = 0.9f;
 };
-
-

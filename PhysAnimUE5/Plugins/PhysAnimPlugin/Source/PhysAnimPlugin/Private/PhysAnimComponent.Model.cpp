@@ -101,6 +101,7 @@ bool UPhysAnimComponent::ValidateModelDescriptorContract(FString& OutError)
 	MimicTargetPosesBuffer.Init(0.0f, PhysAnimBridge::MimicTargetPosesSize);
 	TerrainBuffer.Init(0.0f, PhysAnimBridge::TerrainSize);
 	ActionOutputBuffer.Init(0.0f, PhysAnimBridge::NumActionFloats);
+	PreviousActionOutputBuffer.Init(0.0f, PhysAnimBridge::NumActionFloats);
 
 	TArray<UE::NNE::FTensorShape> InputShapes;
 	InputShapes.SetNum(InputDescs.Num());

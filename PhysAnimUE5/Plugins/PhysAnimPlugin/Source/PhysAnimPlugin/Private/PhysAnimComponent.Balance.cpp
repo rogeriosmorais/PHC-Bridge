@@ -1025,6 +1025,16 @@ void UPhysAnimComponent::StopBalancePerturbationMode()
 		ReleaseStartupMovementLock(true);
 	}
 
+	if (BalanceReadyTransition.HasAnyInternalPhase())
+	{
+		BalanceReadyTransition.Cancel(this);
+	}
+
+	bPendingBalanceModeStartRequest = false;
+	bPendingBalanceModeStartAttemptIssued = false;
+	PendingBalanceModeStartReason.Reset();
+	PendingBalanceModeRequestTimeSeconds = -1.0;
+
 	BalanceScenarios.Empty();
 	ActiveBalanceScenarioIndex = INDEX_NONE;
 	BalanceScenarioStartTimeSeconds = -1.0;

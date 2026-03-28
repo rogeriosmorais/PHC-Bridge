@@ -15,9 +15,10 @@ Use it to track:
 ## Current State
 
 - `Current phase`: Phase 1 / truthful RootOn-readiness investigation.
-- `Overall status`: UE startup is stable and the latest truthful balance smoke reaches explicit safe denial with `phase1_root_on_readiness_pelvis_thigh_margin_insufficient`.
-- `Last planning milestone`: contract and ownership drift are largely cleaned up; the newest Phase 1 solver step keeps the thigh follow-through path truthful by forbidding it from re-breaking recovered spine readiness.
-- `Latest runtime forensics`: the final solver path still runs `spine_interp` and a constrained `worst_thigh_interp_thigh_r`, but the new acceptance guard limits that follow-through to a spine-safe micro-step (`a0.01`) instead of the earlier spine-breaking `a0.05`; the live result now keeps the spine inside readiness at `pelvisSpine01Angular=17.91` while only partially improving the thigh blocker (`pelvisThighLAngular=31.97`, `pelvisThighRAngular=34.19`), which narrows the next work to finding a stronger thigh improvement that preserves the recovered spine margin.
+- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness now runs bounded smoke-mode search across all seven fixed Stage A presets including `CoupledTradeControlFamily`, and the latest truthful smoke/autocalib result still shows no candidate reaching RootOn readiness even though the runtime now emits winning-search-family attribution and coupled-trade evidence per trial.
+- `Last planning milestone`: the embedded Phase 1 pelvis-coupling search now flows through a shared config/mapping boundary used by both runtime and harness, the harness reports preset-aware and winning-search-family-aware artifacts under `test-results/phase1-autocalib/automation_phase1_smoke/`, and the new bounded `CoupledTradeControlFamily` expansion is active end-to-end without changing the Phase 1 contract.
+- `Latest runtime forensics`: the latest `PhysAnim.PIE.Phase1AutoCalibSmoke` produced `20` bounded smoke trials with per-preset summaries and search-family attribution; the overall frontier is now classified as `coupled_spine_thigh_flip`, the dominant truthful blocker is `phase1_root_on_readiness_pelvis_spine_margin_insufficient`, the bounded best near-pass currently comes from `RescueOnly` with `winningSearchFamily=pair_blend`, `worstDirectLinkAngularErrorDeg=32.26`, `thighAsymmetryDeg=1.97`, and `peakRootTiltDeg=22.89`, and the new `CoupledTradeControlFamily` runs truthfully with `winningSearchFamily=coupled_trade_control` but still fails on `phase1_root_on_readiness_pelvis_thigh_margin_insufficient` (`worstDirectLinkAngularErrorDeg=33.08`, `thighAsymmetryDeg=5.06`, `peakRootTiltDeg=21.63`). This narrows the next work to deeper solver extraction/follow-through and coupled trade refinement rather than harness readiness or missing attribution.
+- `Latest runtime forensics`: the latest `PhysAnim.PIE.Phase1AutoCalibSmoke` still produced `20` bounded smoke trials with per-preset summaries and search-family attribution, and the new timeout telemetry now shows `anyTimedOutBeforeRootOn=true` and `anyTimedOutBeforeNoCouplingProof=true`; in the current smoke budget the best near-pass (`RescueOnly`, `winningSearchFamily=pair_blend`) timed out with `trialTimeoutBudgetSeconds=0.75`, `timeToRootOnSeconds=-1`, and `timeToNoCouplingProofSeconds=-1`, which means the harness is not yet reaching RootOn at all in these failing runs rather than reaching RootOn and then missing proof slightly later. This narrows the next work to real Phase 1 geometry/solver progress first, with timeout extension only to be reconsidered if a future run actually reaches RootOn before timing out.
 
 ## Active Tasks
 
@@ -460,3 +461,38 @@ Known important reference points from this work:
 - Added TDD for transition snapshot round-trip, auto-calib score ordering, contract-threshold non-mutation, Stage A candidate coverage, and reproducibility classification.
 - Verified with `.\scripts\build.ps1 -Test PhysAnim.Component` and `.\scripts\build.ps1 -Test PhysAnim.Bridge.BalanceStateless`.
 - Attempted a PIE smoke for the harness, but the live runtime still races existing balance-entry queue gates (`queue_bring_up_incomplete`, then `queue_policy_influence_below_threshold`) before a stable transactional start point is available in that map/runtime path, so the failing smoke was not left in the main suite.
+
+## 2026-03-27 — Phase 1 Full-Search Solver Push
+
+- Promoted the full-search path into the primary runtime contract by keeping `FPhase1AutoCalibRequest` defaulted to `FullSearch` with no implicit `maxTrials` truncation, while leaving smoke mode as the explicit automation path.
+- Extended auto-calibration report aggregation with preset-dominant blocker tracking, overall blocker histograms, reproducible-truthful-pass detection, frontier classification, and recommended next action or expansion naming.
+- Extended `summary.json` to write the new top-level frontier fields plus per-preset reproducibility and dominant-blocker summaries, and updated `pa.RunPhase1AutoCalib` logging/help text to reflect full-search-by-default semantics.
+- Added TDD for the request default, truthful-pass promotion, and coupled thigh-versus-spine frontier classification and recommendation logic.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.Phase1AutoCalibSmoke`, and `python .\scripts\read_logs.py`.
+- The latest smoke artifact at `test-results/phase1-autocalib/automation_phase1_smoke/summary.json` now reports `frontierClassification=still_thigh_blocked`, `recommendedAction=add_coupled_trade_control_expansion`, `recommendedExpansionName=CoupledTradeControlFamily`, and `dominantTruthfulBlocker=phase1_root_on_readiness_pelvis_thigh_margin_insufficient`.
+- The bounded best near-pass remains `SpineThenWorstThigh` with a truthful spine blocker (`phase1_root_on_readiness_pelvis_spine_margin_insufficient`) at `worstDirectLinkAngularErrorDeg=32.86`, while the overall frontier still remains dominated by thigh-blocked failures, which is the current truthful basis for the next coupled trade-control search expansion.
+
+## 2026-03-27 — Pair-Blend Frontier Follow-Through
+
+- Added a new bounded internal auto-calibration preset, `PairBlendFrontierFollowThrough`, centered on the actual current `RescueOnly` `pair_blend` winner rather than broadening the public parameter surface.
+- Refactored the shared Phase 1 pelvis-coupling search config to carry blocker-aware local follow-through controls for pair-weight perturbation, local pitch and roll deltas, and local blocker-follow interpolation while keeping the runtime contract, timeout, and readiness thresholds unchanged.
+- Added deterministic TDD for preset mapping, blocker-aware frontier admission, search-family attribution, and Stage A coverage with the new preset family.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.Phase1AutoCalibSmoke`, and `python .\scripts\read_logs.py`.
+- The latest smoke artifact at `test-results/phase1-autocalib/automation_phase1_smoke/summary.json` now reports `trialCount=21`, `frontierClassification=coupled_spine_thigh_flip`, `dominantTruthfulBlocker=phase1_root_on_readiness_pelvis_spine_margin_insufficient`, and `anyTimedOutBeforeRootOn=true`.
+- The new `PairBlendFrontierFollowThrough` preset executes and is attributed distinctly (`executedSearchFamilies=direct_seed|pair_blend|focused_delta|pair_blend_frontier_follow_through`), but it does not beat the current frontier: its bounded stage-A near-pass still times out before `RootOn` on the thigh blocker with `worstDirectLinkAngularErrorDeg=33.44`.
+- The truthful bounded winner remains `RescueOnly` with `winningSearchFamily=pair_blend`, a spine blocker (`phase1_root_on_readiness_pelvis_spine_margin_insufficient`), and `worstDirectLinkAngularErrorDeg=32.26`, so the remaining Phase 1 problem is still solver-side geometry progress before `RootOn`, not timeout grace or harness startup drift.
+
+## 2026-03-27 — Active-Trial Timeout Starts On Trial Entry
+
+- Fixed a harness timing bug where `BeginNextTrial()` started the active-trial timeout before the restored component had actually re-entered the balance transition, allowing pre-start queue wait to be misclassified as a solver `timed_out` trial.
+- Added deterministic TDD for the timeout gate so pre-start queue waiting no longer consumes the active trial budget and only started trials can hit the `BalancePhase1PrepareDuration + BalancePhase1LateValidateRequiredSeconds + 0.5s` timeout.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.Phase1AutoCalibSmoke`, and `python .\scripts\read_logs.py`.
+- The current smoke artifact remains truthfully solver-blocked rather than harness-blocked: `trialCount=21`, `frontierClassification=coupled_spine_thigh_flip`, `dominantTruthfulBlocker=phase1_root_on_readiness_pelvis_spine_margin_insufficient`, and the best bounded near-pass is still `RescueOnly` `pair_blend` at `worstDirectLinkAngularErrorDeg=32.26`.
+
+## 2026-03-27 — Active-Trial Peak Metrics Start On Trial Entry
+
+- Fixed a second harness scoring bug where `TickActiveTrial()` was still folding pre-start `BRT_Inactive` live samples into `ActiveTrialPeakMetrics`, which let queue-wait root, shell, and target peaks contaminate trial ranking even when timeout handling was otherwise correct.
+- Changed active-trial metric accumulation so peak root, shell, and target values only start at successful `StartPhase1AutoCalibTrial()` entry; pre-start queue waiting no longer seeds or grows the scored peak metrics.
+- Added deterministic TDD for the metric-accumulation gate alongside the existing timeout-entry regression coverage.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.Phase1AutoCalibSmoke`, and `python .\scripts\read_logs.py`.
+- The truthful solver result did not change: the latest smoke still reports `trialCount=21`, `frontierClassification=coupled_spine_thigh_flip`, `dominantTruthfulBlocker=phase1_root_on_readiness_pelvis_spine_margin_insufficient`, and a best bounded near-pass from `RescueOnly` `pair_blend` at `worstDirectLinkAngularErrorDeg=32.26`, but the reported peak runtime metrics are now post-entry-only rather than polluted by pre-start queue wait.

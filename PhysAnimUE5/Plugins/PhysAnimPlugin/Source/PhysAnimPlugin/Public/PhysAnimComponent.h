@@ -660,6 +660,10 @@ struct FPhase1PelvisCouplingRotationForensics
 	float ForensicSpineRescueSpineAngularErrorDeg = 0.0f;
 	FString TiltSpineRescueSource;
 	FString ForensicSpineRescueSource;
+	FString WinningSearchFamily;
+	FString WinningSearchSource;
+	TArray<FString> ExecutedSearchFamilies;
+	bool bCoupledTradeControlWon = false;
 };
 
 #if !UE_BUILD_SHIPPING
@@ -670,13 +674,40 @@ enum class EPhase1AutoCalibStrategyPreset : uint8
 	WorstThighBiased,
 	BalancedCoupled,
 	SpineThenWorstThigh,
-	RescueOnly
+	RescueOnly,
+	CoupledTradeControlFamily,
+	PairBlendFrontierFollowThrough
+};
+
+enum class EPhase1AutoCalibBudgetMode : uint8
+{
+	FullSearch,
+	Smoke
+};
+
+enum class EPhase1AutoCalibFrontierClassification : uint8
+{
+	Unknown,
+	TruthfulPassFound,
+	StillThighBlocked,
+	StillSpineBlocked,
+	CoupledSpineThighFlip,
+	FlatNoMaterialImprovement
+};
+
+enum class EPhase1AutoCalibRecommendedAction : uint8
+{
+	None,
+	PromoteBestCandidate,
+	AddCoupledTradeControlExpansion,
+	InvestigateCandidateGeneration
 };
 
 struct FPhase1AutoCalibRequest
 {
 	FString OwnerFilter;
 	int32 Seed = 1337;
+	EPhase1AutoCalibBudgetMode BudgetMode = EPhase1AutoCalibBudgetMode::FullSearch;
 	int32 MaxTrials = INDEX_NONE;
 	FString OutputSubfolder;
 	float ReadinessTimeoutSeconds = 30.0f;
@@ -719,12 +750,47 @@ struct FPhase1AutoCalibTrialResult
 {
 	int32 TrialId = INDEX_NONE;
 	int32 RepetitionIndex = 0;
+	int32 PresetRank = INDEX_NONE;
+	int32 PresetNearPassRank = INDEX_NONE;
 	FString StageName;
 	FPhase1AutoCalibParams Params;
 	FPhase1AutoCalibScore Score;
 	FString TerminalClass;
 	FString TruthfulBlocker;
+	float TrialTimeoutBudgetSeconds = 0.0f;
+	float TimeToRootOnSeconds = -1.0f;
+	float TimeToNoCouplingProofSeconds = -1.0f;
+	bool bTimedOutBeforeRootOn = false;
+	bool bTimedOutBeforeNoCouplingProof = false;
+	FString WinningSearchFamily;
+	FString WinningSearchSource;
+	TArray<FString> ExecutedSearchFamilies;
+	bool bCoupledTradeControlWon = false;
 	bool bReproducible = false;
+};
+
+struct FPhase1AutoCalibBlockerCount
+{
+	FString TruthfulBlocker;
+	int32 Count = 0;
+};
+
+struct FPhase1AutoCalibPresetSummary
+{
+	EPhase1AutoCalibStrategyPreset Preset = EPhase1AutoCalibStrategyPreset::CurrentDefault;
+	int32 TrialCount = 0;
+	int32 ContractPassedCount = 0;
+	bool bHasReproducibleTruthfulPass = false;
+	FPhase1AutoCalibTrialResult BestCandidate;
+	FPhase1AutoCalibTrialResult BestNearPass;
+	bool bHasBestCandidate = false;
+	bool bHasBestNearPass = false;
+	FString DominantTruthfulBlocker;
+	float WorstDirectLinkImprovementVsCurrentDefaultDeg = 0.0f;
+	float ThighAsymmetryImprovementVsCurrentDefaultDeg = 0.0f;
+	bool bImprovesWorstDirectLinkVsCurrentDefault = false;
+	bool bImprovesThighAsymmetryVsCurrentDefault = false;
+	TArray<FPhase1AutoCalibBlockerCount> BlockerCounts;
 };
 
 struct FPhase1AutoCalibReport
@@ -735,10 +801,19 @@ struct FPhase1AutoCalibReport
 	FString ParetoJsonPath;
 	TArray<FPhase1AutoCalibTrialResult> Trials;
 	TArray<FPhase1AutoCalibTrialResult> ParetoFrontier;
+	TArray<FPhase1AutoCalibPresetSummary> PresetSummaries;
+	TArray<FPhase1AutoCalibBlockerCount> OverallBlockerCounts;
 	FPhase1AutoCalibTrialResult BestCandidate;
 	FPhase1AutoCalibTrialResult BestNearPass;
 	bool bHasBestCandidate = false;
 	bool bHasBestNearPass = false;
+	bool bHasReproducibleTruthfulPass = false;
+	EPhase1AutoCalibFrontierClassification FrontierClassification = EPhase1AutoCalibFrontierClassification::Unknown;
+	EPhase1AutoCalibRecommendedAction RecommendedAction = EPhase1AutoCalibRecommendedAction::None;
+	FString RecommendedExpansionName;
+	FString DominantTruthfulBlocker;
+	bool bAnyTimedOutBeforeRootOn = false;
+	bool bAnyTimedOutBeforeNoCouplingProof = false;
 };
 
 struct FPhase1AutoCalibLiveMetrics
@@ -868,11 +943,16 @@ struct FPhase1AutoCalibBaselineSnapshot
 };
 #else
 enum class EPhase1AutoCalibStrategyPreset : uint8 { CurrentDefault };
-struct FPhase1AutoCalibRequest { float ReadinessTimeoutSeconds = 0.0f; FString OwnerFilter; int32 Seed = 0; int32 MaxTrials = 0; FString OutputSubfolder; };
+enum class EPhase1AutoCalibBudgetMode : uint8 { FullSearch };
+enum class EPhase1AutoCalibFrontierClassification : uint8 { Unknown };
+enum class EPhase1AutoCalibRecommendedAction : uint8 { None };
+struct FPhase1AutoCalibRequest { float ReadinessTimeoutSeconds = 0.0f; FString OwnerFilter; int32 Seed = 0; EPhase1AutoCalibBudgetMode BudgetMode = EPhase1AutoCalibBudgetMode::FullSearch; int32 MaxTrials = 0; FString OutputSubfolder; };
 struct FPhase1AutoCalibParams {};
 struct FPhase1AutoCalibScore {};
-struct FPhase1AutoCalibTrialResult { FPhase1AutoCalibParams Params; FPhase1AutoCalibScore Score; FString TerminalClass; FString TruthfulBlocker; };
-struct FPhase1AutoCalibReport { TArray<FPhase1AutoCalibTrialResult> Trials; TArray<FPhase1AutoCalibTrialResult> ParetoFrontier; FPhase1AutoCalibTrialResult BestCandidate; FPhase1AutoCalibTrialResult BestNearPass; bool bHasBestCandidate; bool bHasBestNearPass; };
+struct FPhase1AutoCalibTrialResult { int32 PresetRank = INDEX_NONE; int32 PresetNearPassRank = INDEX_NONE; FPhase1AutoCalibParams Params; FPhase1AutoCalibScore Score; FString TerminalClass; FString TruthfulBlocker; float TrialTimeoutBudgetSeconds = 0.0f; float TimeToRootOnSeconds = -1.0f; float TimeToNoCouplingProofSeconds = -1.0f; bool bTimedOutBeforeRootOn = false; bool bTimedOutBeforeNoCouplingProof = false; };
+struct FPhase1AutoCalibBlockerCount { FString TruthfulBlocker; int32 Count = 0; };
+struct FPhase1AutoCalibPresetSummary { bool bHasReproducibleTruthfulPass = false; FString DominantTruthfulBlocker; TArray<FPhase1AutoCalibBlockerCount> BlockerCounts; };
+struct FPhase1AutoCalibReport { TArray<FPhase1AutoCalibTrialResult> Trials; TArray<FPhase1AutoCalibTrialResult> ParetoFrontier; TArray<FPhase1AutoCalibPresetSummary> PresetSummaries; TArray<FPhase1AutoCalibBlockerCount> OverallBlockerCounts; FPhase1AutoCalibTrialResult BestCandidate; FPhase1AutoCalibTrialResult BestNearPass; bool bHasBestCandidate; bool bHasBestNearPass; bool bHasReproducibleTruthfulPass; EPhase1AutoCalibFrontierClassification FrontierClassification = EPhase1AutoCalibFrontierClassification::Unknown; EPhase1AutoCalibRecommendedAction RecommendedAction = EPhase1AutoCalibRecommendedAction::None; FString RecommendedExpansionName; FString DominantTruthfulBlocker; bool bAnyTimedOutBeforeRootOn = false; bool bAnyTimedOutBeforeNoCouplingProof = false; };
 struct FPhase1AutoCalibLiveMetrics { EPhysAnimRuntimeState RuntimeState; EBalanceReadyTransitionPhase TransitionPhase; float RootLinearSpeedCmPerSecond; float RootAngularSpeedDegPerSecond; float RootTiltDeg; float ShellOffsetDeltaCm; float ShellVelocityDeltaCmPerSecond; float MaxTargetDeltaDeg; float MeanTargetDeltaDeg; };
 struct FPhase1AutoCalibDeterminismFingerprint {};
 struct FPhase1AutoCalibBodyState {};
@@ -969,11 +1049,51 @@ public:
 	bool StartPhase1AutoCalibTrial(FString& OutError);
 	static bool IsBetterPhase1AutoCalibScore(const FPhase1AutoCalibScore& Candidate, const FPhase1AutoCalibScore& CurrentBest);
 	static void FinalizePhase1AutoCalibScore(FPhase1AutoCalibScore& InOutScore);
+	static void StorePhase1AutoCalibActionHistory(
+		FPhase1AutoCalibBaselineSnapshot& Snapshot,
+		const TArray<float>& ConditionedActions,
+		const TArray<float>& PreviousConditionedActions,
+		const TArray<float>& ActionOutputs,
+		const TArray<float>& PreviousActionOutputs);
+	static void RestorePhase1AutoCalibActionHistory(
+		const FPhase1AutoCalibBaselineSnapshot& Snapshot,
+		TArray<float>& ConditionedActions,
+		TArray<float>& PreviousConditionedActions,
+		TArray<float>& ActionOutputs,
+		TArray<float>& PreviousActionOutputs);
 #endif
 
 #if WITH_DEV_AUTOMATION_TESTS
 	static bool TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState State) { return IsBalanceEntryState(State); }
 	static bool TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState State) { return IsBalanceActiveState(State); }
+	static void TestOnlyStorePhase1AutoCalibActionHistory(
+		FPhase1AutoCalibBaselineSnapshot& Snapshot,
+		const TArray<float>& ConditionedActions,
+		const TArray<float>& PreviousConditionedActions,
+		const TArray<float>& ActionOutputs,
+		const TArray<float>& PreviousActionOutputs)
+	{
+		StorePhase1AutoCalibActionHistory(
+			Snapshot,
+			ConditionedActions,
+			PreviousConditionedActions,
+			ActionOutputs,
+			PreviousActionOutputs);
+	}
+	static void TestOnlyRestorePhase1AutoCalibActionHistory(
+		const FPhase1AutoCalibBaselineSnapshot& Snapshot,
+		TArray<float>& ConditionedActions,
+		TArray<float>& PreviousConditionedActions,
+		TArray<float>& ActionOutputs,
+		TArray<float>& PreviousActionOutputs)
+	{
+		RestorePhase1AutoCalibActionHistory(
+			Snapshot,
+			ConditionedActions,
+			PreviousConditionedActions,
+			ActionOutputs,
+			PreviousActionOutputs);
+	}
 	static bool TestOnlyShouldRunRootOnReadinessUltraFineMarginSweep(float RootOnReadinessTotalDeficitDeg)
 	{
 		return ShouldRunRootOnReadinessUltraFineMarginSweep(RootOnReadinessTotalDeficitDeg);
@@ -1390,6 +1510,7 @@ private:
 	TArray<float> MimicTargetPosesBuffer;
 	TArray<float> TerrainBuffer;
 	TArray<float> ActionOutputBuffer;
+	TArray<float> PreviousActionOutputBuffer;
 	TArray<float> PreviousConditionedActionBuffer;
 	TArray<float> ConditionedActionBuffer;
 	TArray<UE::NNE::FTensorBindingCPU> InputBindings;
