@@ -814,6 +814,24 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibMetricsStartOnTrialEntryTest,
+		"PhysAnim.Component.Phase1AutoCalibMetricsStartOnTrialEntry",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibMetricsStartOnTrialEntryTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("Pre-start queue wait does not contribute to active trial peak metrics"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldAccumulateActiveTrialMetrics(false));
+
+		TestTrue(
+			TEXT("Only started trials contribute to active trial peak metrics"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldAccumulateActiveTrialMetrics(true));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibActionHistorySnapshotRoundTripTest,
 		"PhysAnim.Component.Phase1AutoCalibActionHistorySnapshotRoundTrip",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

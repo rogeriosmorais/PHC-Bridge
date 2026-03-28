@@ -394,6 +394,11 @@ bool UPhysAnimPhase1AutoCalibSubsystem::IsActiveTrialTimeoutReached(
 		(CurrentTimeSeconds - TrialStartTimeSeconds) >= TimeoutSeconds;
 }
 
+bool UPhysAnimPhase1AutoCalibSubsystem::ShouldAccumulateActiveTrialMetrics(const bool bTrialStarted)
+{
+	return bTrialStarted;
+}
+
 void UPhysAnimPhase1AutoCalibSubsystem::Deinitialize()
 {
 	StopPhase1AutoCalib(TEXT("deinitialize"));
@@ -907,12 +912,6 @@ bool UPhysAnimPhase1AutoCalibSubsystem::BeginNextTrial()
 
 	Component->ApplyPhase1AutoCalibParams(ActiveTrial.Params);
 	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
-	if (!Component->CapturePhase1AutoCalibLiveMetrics(ActiveTrialPeakMetrics, Error))
-	{
-		LastError = Error;
-		return false;
-	}
-
 	ActiveTrialStartTimeSeconds = -1.0;
 	ActiveTrialFirstRootOnTimeSeconds = -1.0;
 	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
@@ -939,8 +938,6 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 		StopPhase1AutoCalib(TEXT("metrics_capture_failed"));
 		return;
 	}
-
-	UpdatePeakMetrics(LiveMetrics);
 
 	const FPhysAnimStabilizationSettings& Settings = Component->GetConfiguredStabilizationSettings();
 	const double TimeoutSeconds = static_cast<double>(Settings.BalancePhase1PrepareDuration + Settings.BalancePhase1LateValidateRequiredSeconds + 0.5f);
@@ -971,6 +968,11 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 
 		bActiveTrialStarted = true;
 		ActiveTrialStartTimeSeconds = CurrentTimeSeconds;
+		ActiveTrialPeakMetrics = LiveMetrics;
+	}
+	else if (ShouldAccumulateActiveTrialMetrics(bActiveTrialStarted))
+	{
+		UpdatePeakMetrics(LiveMetrics);
 	}
 
 	const EBalanceReadyTransitionPhase Phase = Component->GetBalanceReadyTransitionPhase();

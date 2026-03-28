@@ -488,3 +488,11 @@ Known important reference points from this work:
 - Added deterministic TDD for the timeout gate so pre-start queue waiting no longer consumes the active trial budget and only started trials can hit the `BalancePhase1PrepareDuration + BalancePhase1LateValidateRequiredSeconds + 0.5s` timeout.
 - Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.Phase1AutoCalibSmoke`, and `python .\scripts\read_logs.py`.
 - The current smoke artifact remains truthfully solver-blocked rather than harness-blocked: `trialCount=21`, `frontierClassification=coupled_spine_thigh_flip`, `dominantTruthfulBlocker=phase1_root_on_readiness_pelvis_spine_margin_insufficient`, and the best bounded near-pass is still `RescueOnly` `pair_blend` at `worstDirectLinkAngularErrorDeg=32.26`.
+
+## 2026-03-27 — Active-Trial Peak Metrics Start On Trial Entry
+
+- Fixed a second harness scoring bug where `TickActiveTrial()` was still folding pre-start `BRT_Inactive` live samples into `ActiveTrialPeakMetrics`, which let queue-wait root, shell, and target peaks contaminate trial ranking even when timeout handling was otherwise correct.
+- Changed active-trial metric accumulation so peak root, shell, and target values only start at successful `StartPhase1AutoCalibTrial()` entry; pre-start queue waiting no longer seeds or grows the scored peak metrics.
+- Added deterministic TDD for the metric-accumulation gate alongside the existing timeout-entry regression coverage.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.Phase1AutoCalibSmoke`, and `python .\scripts\read_logs.py`.
+- The truthful solver result did not change: the latest smoke still reports `trialCount=21`, `frontierClassification=coupled_spine_thigh_flip`, `dominantTruthfulBlocker=phase1_root_on_readiness_pelvis_spine_margin_insufficient`, and a best bounded near-pass from `RescueOnly` `pair_blend` at `worstDirectLinkAngularErrorDeg=32.26`, but the reported peak runtime metrics are now post-entry-only rather than polluted by pre-start queue wait.
