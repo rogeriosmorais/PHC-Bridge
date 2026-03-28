@@ -481,3 +481,10 @@ Known important reference points from this work:
 - The latest smoke artifact at `test-results/phase1-autocalib/automation_phase1_smoke/summary.json` now reports `trialCount=21`, `frontierClassification=coupled_spine_thigh_flip`, `dominantTruthfulBlocker=phase1_root_on_readiness_pelvis_spine_margin_insufficient`, and `anyTimedOutBeforeRootOn=true`.
 - The new `PairBlendFrontierFollowThrough` preset executes and is attributed distinctly (`executedSearchFamilies=direct_seed|pair_blend|focused_delta|pair_blend_frontier_follow_through`), but it does not beat the current frontier: its bounded stage-A near-pass still times out before `RootOn` on the thigh blocker with `worstDirectLinkAngularErrorDeg=33.44`.
 - The truthful bounded winner remains `RescueOnly` with `winningSearchFamily=pair_blend`, a spine blocker (`phase1_root_on_readiness_pelvis_spine_margin_insufficient`), and `worstDirectLinkAngularErrorDeg=32.26`, so the remaining Phase 1 problem is still solver-side geometry progress before `RootOn`, not timeout grace or harness startup drift.
+
+## 2026-03-27 — Active-Trial Timeout Starts On Trial Entry
+
+- Fixed a harness timing bug where `BeginNextTrial()` started the active-trial timeout before the restored component had actually re-entered the balance transition, allowing pre-start queue wait to be misclassified as a solver `timed_out` trial.
+- Added deterministic TDD for the timeout gate so pre-start queue waiting no longer consumes the active trial budget and only started trials can hit the `BalancePhase1PrepareDuration + BalancePhase1LateValidateRequiredSeconds + 0.5s` timeout.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.Phase1AutoCalibSmoke`, and `python .\scripts\read_logs.py`.
+- The current smoke artifact remains truthfully solver-blocked rather than harness-blocked: `trialCount=21`, `frontierClassification=coupled_spine_thigh_flip`, `dominantTruthfulBlocker=phase1_root_on_readiness_pelvis_spine_margin_insufficient`, and the best bounded near-pass is still `RescueOnly` `pair_blend` at `worstDirectLinkAngularErrorDeg=32.26`.

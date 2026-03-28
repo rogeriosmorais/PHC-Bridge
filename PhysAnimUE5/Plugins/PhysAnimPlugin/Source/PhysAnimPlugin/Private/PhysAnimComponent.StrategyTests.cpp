@@ -792,6 +792,28 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibTimeoutStartsOnTrialEntryTest,
+		"PhysAnim.Component.Phase1AutoCalibTimeoutStartsOnTrialEntry",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibTimeoutStartsOnTrialEntryTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("Pre-start queue wait does not consume the active trial timeout budget"),
+			UPhysAnimPhase1AutoCalibSubsystem::IsActiveTrialTimeoutReached(false, -1.0, 10.0, 0.75));
+
+		TestFalse(
+			TEXT("Started trials below the timeout budget stay active"),
+			UPhysAnimPhase1AutoCalibSubsystem::IsActiveTrialTimeoutReached(true, 10.0, 10.5, 0.75));
+
+		TestTrue(
+			TEXT("Started trials time out once the configured budget has elapsed"),
+			UPhysAnimPhase1AutoCalibSubsystem::IsActiveTrialTimeoutReached(true, 10.0, 10.75, 0.75));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibActionHistorySnapshotRoundTripTest,
 		"PhysAnim.Component.Phase1AutoCalibActionHistorySnapshotRoundTrip",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

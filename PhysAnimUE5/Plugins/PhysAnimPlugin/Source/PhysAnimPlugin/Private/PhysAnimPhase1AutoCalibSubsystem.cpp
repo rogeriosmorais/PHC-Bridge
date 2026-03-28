@@ -382,6 +382,18 @@ TStatId UPhysAnimPhase1AutoCalibSubsystem::GetStatId() const
 	RETURN_QUICK_DECLARE_CYCLE_STAT(UPhysAnimPhase1AutoCalibSubsystem, STATGROUP_Tickables);
 }
 
+bool UPhysAnimPhase1AutoCalibSubsystem::IsActiveTrialTimeoutReached(
+	const bool bTrialStarted,
+	const double TrialStartTimeSeconds,
+	const double CurrentTimeSeconds,
+	const double TimeoutSeconds)
+{
+	return bTrialStarted &&
+		TrialStartTimeSeconds >= 0.0 &&
+		CurrentTimeSeconds >= TrialStartTimeSeconds &&
+		(CurrentTimeSeconds - TrialStartTimeSeconds) >= TimeoutSeconds;
+}
+
 void UPhysAnimPhase1AutoCalibSubsystem::Deinitialize()
 {
 	StopPhase1AutoCalib(TEXT("deinitialize"));
@@ -482,6 +494,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reaso
 
 	bRunActive = false;
 	bTrialActive = false;
+	bActiveTrialStarted = false;
 	CurrentStage = Reason == TEXT("completed") ? EAutoCalibStage::Completed : EAutoCalibStage::Inactive;
 	TargetComponent.Reset();
 	PendingTrials.Reset();
@@ -900,9 +913,10 @@ bool UPhysAnimPhase1AutoCalibSubsystem::BeginNextTrial()
 		return false;
 	}
 
-	ActiveTrialStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	ActiveTrialStartTimeSeconds = -1.0;
 	ActiveTrialFirstRootOnTimeSeconds = -1.0;
 	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
+	bActiveTrialStarted = false;
 	bTrialActive = true;
 	return true;
 }
@@ -930,8 +944,11 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 
 	const FPhysAnimStabilizationSettings& Settings = Component->GetConfiguredStabilizationSettings();
 	const double TimeoutSeconds = static_cast<double>(Settings.BalancePhase1PrepareDuration + Settings.BalancePhase1LateValidateRequiredSeconds + 0.5f);
-	const double ElapsedSeconds = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0) - ActiveTrialStartTimeSeconds;
-	if (ElapsedSeconds >= TimeoutSeconds)
+	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	const double ElapsedSeconds = bActiveTrialStarted && ActiveTrialStartTimeSeconds >= 0.0
+		? (CurrentTimeSeconds - ActiveTrialStartTimeSeconds)
+		: 0.0;
+	if (IsActiveTrialTimeoutReached(bActiveTrialStarted, ActiveTrialStartTimeSeconds, CurrentTimeSeconds, TimeoutSeconds))
 	{
 		FinalizeActiveTrial(true);
 		return;
@@ -951,6 +968,9 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 			StopPhase1AutoCalib(TEXT("trial_start_failed"));
 			return;
 		}
+
+		bActiveTrialStarted = true;
+		ActiveTrialStartTimeSeconds = CurrentTimeSeconds;
 	}
 
 	const EBalanceReadyTransitionPhase Phase = Component->GetBalanceReadyTransitionPhase();
@@ -1038,6 +1058,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeActiveTrial(bool bTimedOut)
 
 	Component->ClearPhase1AutoCalibParams();
 	bTrialActive = false;
+	bActiveTrialStarted = false;
 	ActiveTrial = FPendingTrial();
 	ActiveTrialStartTimeSeconds = -1.0;
 	ActiveTrialFirstRootOnTimeSeconds = -1.0;
