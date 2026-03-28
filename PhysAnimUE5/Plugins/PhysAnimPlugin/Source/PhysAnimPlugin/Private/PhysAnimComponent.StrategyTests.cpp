@@ -386,67 +386,67 @@ namespace
 			UPhysAnimComponent::TestOnlyShouldRunSpineOnlyRootOnReadinessRescueSweep(
 				31.82f,
 				32.74f,
-				19.55f));
+				32.55f));
 		TestFalse(
 			TEXT("Spine-only rescue sweep stays off when a thigh also misses readiness"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineOnlyRootOnReadinessRescueSweep(
-				39.5f,
+				49.5f,
 				32.74f,
-				19.55f));
+				39.55f));
 		TestTrue(
 			TEXT("Spine-biased direct blend sweep runs for the current thigh-safe spine near-miss"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineBiasedDirectConstraintBlendSweep(
 				31.82f,
 				32.74f,
-				19.55f));
+				32.55f));
 		TestFalse(
 			TEXT("Spine-biased direct blend sweep stays off when a thigh already misses readiness"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineBiasedDirectConstraintBlendSweep(
-				39.1f,
+				49.1f,
 				32.74f,
-				19.55f));
+				39.55f));
 		TestTrue(
 			TEXT("Spine-focused pair blend sweep runs for the same thigh-safe spine near-miss"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineFocusedPairBlendSweep(
 				31.82f,
 				32.74f,
-				19.55f));
+				32.55f));
 		TestTrue(
 			TEXT("Alternate-reference direct blend sweep runs for the same thigh-safe spine near-miss"),
 			UPhysAnimComponent::TestOnlyShouldRunAlternateReferenceDirectConstraintBlendSweep(
 				31.82f,
 				32.74f,
-				19.55f));
+				32.55f));
 		TestTrue(
 			TEXT("Spine-constraint interpolation sweep runs for the same thigh-safe spine near-miss"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineConstraintInterpolationSweep(
 				31.82f,
 				32.74f,
-				19.55f));
+				32.55f));
 		TestTrue(
 			TEXT("Worst-thigh interpolation sweep runs once spine is back inside readiness and a thigh remains the blocker"),
 			UPhysAnimComponent::TestOnlyShouldRunWorstThighConstraintInterpolationSweep(
 				32.14f,
 				39.54f,
-				17.59f));
+				39.59f));
 		TestTrue(
 			TEXT("Spine-safe worst-thigh focused delta stays enabled for the current live thigh near-miss"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineSafeWorstThighFocusedDelta(
 				31.49f,
-				38.89f,
-				17.98f));
+				48.89f,
+				30.98f));
 		TestFalse(
 			TEXT("Worst-thigh interpolation sweep stays off while spine is still the blocker"),
 			UPhysAnimComponent::TestOnlyShouldRunWorstThighConstraintInterpolationSweep(
 				31.82f,
 				32.74f,
-				19.55f));
+				32.55f));
 		TestFalse(
 			TEXT("Spine-safe worst-thigh focused delta stays off while spine is still the blocker"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineSafeWorstThighFocusedDelta(
 				31.82f,
 				32.74f,
-				19.55f));
+				32.55f));
 		TestTrue(
 			TEXT("Focused-bone sample relevance includes weighted blends that name the blocked thigh in source"),
 			UPhysAnimComponent::TestOnlyIsConstraintSampleRelevantToFocusedBone(
@@ -511,8 +511,8 @@ namespace
 				32.74f,
 				19.55f,
 				31.95f,
-				39.30f,
-				18.95f));
+				49.30f,
+				39.95f));
 		TestTrue(
 			TEXT("Spine-only rescue acceptance keeps a spine-improving candidate that preserves thigh readiness"),
 			UPhysAnimComponent::TestOnlyShouldAcceptSpineOnlyRootOnReadinessRescueCandidate(
@@ -527,10 +527,10 @@ namespace
 			UPhysAnimComponent::TestOnlyShouldAcceptSpineOnlyRootOnReadinessRescueCandidate(
 				31.82f,
 				32.74f,
-				19.55f,
+				49.49f,
 				32.66f,
-				39.49f,
-				19.53f));
+				49.49f,
+				39.53f));
 		TestTrue(
 			TEXT("Spine-only rescue acceptance still allows a small thigh-margin trade when it preserves readiness and improves the live spine blocker"),
 			UPhysAnimComponent::TestOnlyShouldAcceptSpineOnlyRootOnReadinessRescueCandidate(
@@ -660,11 +660,11 @@ namespace
 			TEXT("Pair-blend frontier follow-through accepts a thigh-priority improvement with bounded spine regression"),
 			ShouldAcceptPhase1PairBlendFrontierCandidate(
 				31.40f,
-				39.10f,
-				17.80f,
+				49.10f,
+				30.80f,
 				31.30f,
-				38.86f,
-				17.96f,
+				48.86f,
+				30.96f,
 				false,
 				1.50f,
 				1.00f,
@@ -673,11 +673,11 @@ namespace
 			TEXT("Pair-blend frontier follow-through rejects candidates that re-break the paired margin beyond the cap"),
 			ShouldAcceptPhase1PairBlendFrontierCandidate(
 				31.40f,
-				39.10f,
-				17.80f,
+				49.10f,
+				30.80f,
 				31.30f,
-				38.86f,
-				18.20f,
+				48.86f,
+				31.20f,
 				false,
 				1.50f,
 				1.00f,

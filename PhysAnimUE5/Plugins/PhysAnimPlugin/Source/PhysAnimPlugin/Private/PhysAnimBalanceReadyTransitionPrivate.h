@@ -9,8 +9,8 @@ namespace BalanceTransitionSets
 	inline constexpr float Phase2AuthorityRampSeconds = 0.25f;
 	inline constexpr float Phase2MaxPelvisProximalConstraintErrorCm = 15.0f;
 	inline constexpr float Phase2MaxDirectPelvisLinkErrorCm = 8.0f;
-	inline constexpr float Phase2MaxPelvisThighDirectLinkAngularErrorDeg = 40.0f;
-	inline constexpr float Phase2MaxPelvisSpineDirectLinkAngularErrorDeg = 20.0f;
+	inline constexpr float Phase2MaxPelvisThighDirectLinkAngularErrorDeg = 45.0f;
+	inline constexpr float Phase2MaxPelvisSpineDirectLinkAngularErrorDeg = 35.0f;
 	inline constexpr float Phase2RequiredPelvisThighDirectLinkAngularMarginDeg = 2.0f;
 	inline constexpr float Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg =
 		Phase2MaxPelvisThighDirectLinkAngularErrorDeg - Phase2RequiredPelvisThighDirectLinkAngularMarginDeg;

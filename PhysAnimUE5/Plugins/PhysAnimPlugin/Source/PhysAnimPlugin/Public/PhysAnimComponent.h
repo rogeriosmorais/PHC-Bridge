@@ -357,7 +357,7 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase2EntryMaxRootAngularSpeed = 20.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
-	float BalancePhase2EntryMaxRootTiltDeg = 25.0f;
+	float BalancePhase2EntryMaxRootTiltDeg = 45.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase2EntryMaxShellOffsetDelta = 2.0f;
@@ -396,10 +396,10 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase2AbortRootAngularSpeed = 50.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
-	float BalancePhase2AbortMaxBodyLinearSpeed = 100.0f;
+	float BalancePhase2AbortMaxBodyLinearSpeed = 1000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
-	float BalancePhase2AbortMaxBodyAngularSpeed = 300.0f;
+	float BalancePhase2AbortMaxBodyAngularSpeed = 4000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase2AbortShellOffsetDelta = 2.0f;
@@ -1272,7 +1272,7 @@ public:
 	float BalanceQuietLinearSpeedThresholdCmPerSec = 10.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
-	float BalanceQuietTiltThresholdDeg = 25.0f;
+	float BalanceQuietTiltThresholdDeg = 45.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Balance", meta = (ClampMin = "0.0"))
 	float BalanceQuietWindowRequiredSeconds = 1.0f;
