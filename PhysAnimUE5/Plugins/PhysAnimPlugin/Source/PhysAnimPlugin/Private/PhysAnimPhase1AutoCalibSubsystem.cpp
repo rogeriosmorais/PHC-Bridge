@@ -49,7 +49,7 @@ namespace
 		EPhase1AutoCalibStrategyPreset::PairBlendFrontierFollowThrough
 	};
 
-	bool MatchesFilter(const UPhysAnimComponent& Component, const FString& FilterLower)
+	bool AutoCalibMatchesFilter(const UPhysAnimComponent& Component, const FString& FilterLower)
 	{
 		if (FilterLower.IsEmpty() || FilterLower == TEXT("<all>") || FilterLower == TEXT("all"))
 		{
@@ -752,7 +752,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::ResolveTargetComponent(
 	for (TObjectIterator<UPhysAnimComponent> It; It; ++It)
 	{
 		UPhysAnimComponent* const Candidate = *It;
-		if (!IsValid(Candidate) || Candidate->GetWorld() != World || !MatchesFilter(*Candidate, FilterLower))
+		if (!IsValid(Candidate) || Candidate->GetWorld() != World || !AutoCalibMatchesFilter(*Candidate, FilterLower))
 		{
 			continue;
 		}

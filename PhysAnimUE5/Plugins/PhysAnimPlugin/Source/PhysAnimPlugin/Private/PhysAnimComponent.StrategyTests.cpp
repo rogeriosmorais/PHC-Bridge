@@ -5,6 +5,11 @@
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
 #include "PhysAnimPhase1PelvisCouplingSearch.h"
 #include "PhysAnimBalance.TestHelpers.h"
+#include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "Engine/SkeletalMesh.h"
+#include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysicsEngine/ConstraintInstance.h"
+#include "PhysicsEngine/PhysicsConstraintTemplate.h"
 #include "Misc/AutomationTest.h"
 
 namespace
@@ -1167,6 +1172,297 @@ namespace
 		return true;
 	}
 #endif
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1ConstraintFrameBaselineAngularErrorTest,
+		"PhysAnim.Component.Phase1ConstraintFrameBaselineAngularError",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1ConstraintFrameBaselineAngularErrorTest::RunTest(const FString& Parameters)
+	{
+		// This diagnostic test checks whether the PhysicsAsset constraint reference frames for the three
+		// Phase 1 critical links (pelvis→thigh_l, pelvis→thigh_r, pelvis→spine_01) carry an intrinsic
+		// angular offset at the reference pose (no rotation applied).
+		//
+		// If the constraint frames already disagree at identity, that disagreement is a permanent
+		// structural floor that no pelvis rotation search can eliminate. The solver can only reduce the
+		// error above that floor.
+		//
+		// Key question answered:
+		//   Is the ~33° thigh error a rotational problem (wrong pelvis orientation)
+		//   or a structural problem (SMPL-to-Manny constraint frame mismatch)?
+
+		struct FLinkDiagnostic
+		{
+			FName ParentBone;
+			FName ChildBone;
+			float ConstraintFrameAngularMismatchDeg = 0.0f;
+			FVector ParentAnchorLocalCm = FVector::ZeroVector;
+			FVector ChildAnchorLocalCm = FVector::ZeroVector;
+			FQuat ParentRefFrameQuat = FQuat::Identity;
+			FQuat ChildRefFrameQuat = FQuat::Identity;
+			bool bConstraintFound = false;
+			float MaxThresholdDeg = 0.0f;
+			float ReadinessThresholdDeg = 0.0f;
+		};
+
+		// Phase 1 critical links and their thresholds
+		const float ThighMaxDeg = BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
+		const float ThighReadinessDeg = BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg;
+		const float SpineMaxDeg = BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg;
+		const float SpineReadinessDeg = BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg;
+
+		TArray<FLinkDiagnostic> Links;
+		{
+			FLinkDiagnostic D;
+			D.ParentBone = TEXT("pelvis");
+			D.ChildBone = TEXT("thigh_l");
+			D.MaxThresholdDeg = ThighMaxDeg;
+			D.ReadinessThresholdDeg = ThighReadinessDeg;
+			Links.Add(D);
+		}
+		{
+			FLinkDiagnostic D;
+			D.ParentBone = TEXT("pelvis");
+			D.ChildBone = TEXT("thigh_r");
+			D.MaxThresholdDeg = ThighMaxDeg;
+			D.ReadinessThresholdDeg = ThighReadinessDeg;
+			Links.Add(D);
+		}
+		{
+			FLinkDiagnostic D;
+			D.ParentBone = TEXT("pelvis");
+			D.ChildBone = TEXT("spine_01");
+			D.MaxThresholdDeg = SpineMaxDeg;
+			D.ReadinessThresholdDeg = SpineReadinessDeg;
+			Links.Add(D);
+		}
+
+		// Try to load the default Manny PhysicsAsset
+		// We use the long-form paths that match the PhysAnim component's expectations
+		const FString MeshPath = TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple");
+		const FString PhysicsAssetPath = TEXT("/Game/Characters/Mannequins/Rigs/PA_Mannequin.PA_Mannequin");
+		
+		USkeletalMesh* SkelMesh = LoadObject<USkeletalMesh>(nullptr, *MeshPath);
+		UPhysicsAsset* PhysicsAsset = SkelMesh ? SkelMesh->GetPhysicsAsset() : nullptr;
+		
+		// Fallback to direct physics asset load if the mesh doesn't have it (this might happen with SKM_Manny vs PA_Mannequin separation)
+		if (!PhysicsAsset)
+		{
+			PhysicsAsset = LoadObject<UPhysicsAsset>(nullptr, *PhysicsAssetPath);
+		}
+
+		if (!PhysicsAsset)
+		{
+			// In editor-only test contexts the asset may not be loadable — report but don't fail
+			AddInfo(FString::Printf(
+				TEXT("DIAGNOSTIC: Could not load PhysicsAsset from '%s'. "
+					 "This test must run in an editor context with Manny content mounted. "
+					 "Constraint frame baseline diagnostic is inconclusive."),
+				*PhysicsAssetPath));
+
+			// Still report the threshold geometry for reference
+			AddInfo(FString::Printf(
+				TEXT("THRESHOLDS: thigh_max=%.1f° thigh_readiness=%.1f° (margin=%.1f°)  spine_max=%.1f° spine_readiness=%.1f° (margin=%.1f°)"),
+				ThighMaxDeg, ThighReadinessDeg, ThighMaxDeg - ThighReadinessDeg,
+				SpineMaxDeg, SpineReadinessDeg, SpineMaxDeg - SpineReadinessDeg));
+			return true;
+		}
+
+		// For each link, extract the constraint reference frames and compute
+		// the intrinsic angular offset when both bodies are at identity orientation
+		for (FLinkDiagnostic& Link : Links)
+		{
+			const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(Link.ChildBone, Link.ParentBone);
+			if (ConstraintIndex == INDEX_NONE || !PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex))
+			{
+				AddWarning(FString::Printf(
+					TEXT("DIAGNOSTIC: No constraint found for %s→%s in PhysicsAsset. "
+						 "Cannot compute baseline angular offset."),
+					*Link.ParentBone.ToString(), *Link.ChildBone.ToString()));
+				continue;
+			}
+
+			const UPhysicsConstraintTemplate* ConstraintTemplate = PhysicsAsset->ConstraintSetup[ConstraintIndex];
+			if (!ConstraintTemplate)
+			{
+				continue;
+			}
+
+			const FConstraintInstance& Constraint = ConstraintTemplate->DefaultInstance;
+			Link.bConstraintFound = true;
+			Link.ParentAnchorLocalCm = Constraint.Pos2;
+			Link.ChildAnchorLocalCm = Constraint.Pos1;
+			Link.ParentRefFrameQuat = Constraint.GetRefFrame(EConstraintFrame::Frame2).GetRotation();
+			Link.ChildRefFrameQuat = Constraint.GetRefFrame(EConstraintFrame::Frame1).GetRotation();
+
+			// The constraint angular error as measured by BuildDirectPelvisLinkForensicRecord is:
+			//   (ChildBodyWorld * ChildRefFrame).AngularDistance(ParentBodyWorld * ParentRefFrame)
+			//
+			// At identity body orientations (reference / bind pose), this reduces to:
+			//   ChildRefFrame.AngularDistance(ParentRefFrame)
+			//
+			// This is the permanent structural floor that no pelvis rotation can eliminate,
+			// because rotating the pelvis rotates BOTH constraint frames together.
+			//
+			// CORRECTION: rotating the pelvis changes ParentBodyWorld but NOT ChildBodyWorld.
+			// So the solver CAN change the error. But the reference-pose baseline tells us
+			// how far apart the frames start and whether the solver needs to cover the gap or
+			// just fine-tune from a mostly-aligned starting point.
+			Link.ConstraintFrameAngularMismatchDeg = FMath::RadiansToDegrees(
+				Link.ChildRefFrameQuat.AngularDistance(Link.ParentRefFrameQuat));
+		}
+
+		// Emit diagnostic report
+		AddInfo(TEXT("============================================================"));
+		AddInfo(TEXT("PHASE 1 CONSTRAINT FRAME BASELINE ANGULAR DIAGNOSTIC"));
+		AddInfo(TEXT("============================================================"));
+		AddInfo(FString::Printf(
+			TEXT("PhysicsAsset: %s"), *PhysicsAsset->GetPathName()));
+
+		for (const FLinkDiagnostic& Link : Links)
+		{
+			if (!Link.bConstraintFound)
+			{
+				continue;
+			}
+
+			const float RemainingBudget = Link.ReadinessThresholdDeg - Link.ConstraintFrameAngularMismatchDeg;
+			const TCHAR* Verdict =
+				Link.ConstraintFrameAngularMismatchDeg <= 1.0f ? TEXT("ALIGNED (rotational problem)")
+				: Link.ConstraintFrameAngularMismatchDeg >= Link.ReadinessThresholdDeg ? TEXT("STRUCTURAL BLOCKER (exceeds readiness threshold at identity)")
+				: TEXT("SIGNIFICANT OFFSET (solver must compensate)");
+
+			AddInfo(FString::Printf(
+				TEXT("LINK: %s -> %s"),
+				*Link.ParentBone.ToString(), *Link.ChildBone.ToString()));
+			AddInfo(FString::Printf(
+				TEXT("  Constraint ref-frame angular mismatch at identity: %.2f°"),
+				Link.ConstraintFrameAngularMismatchDeg));
+			AddInfo(FString::Printf(
+				TEXT("  Readiness threshold: %.1f°   Max threshold: %.1f°"),
+				Link.ReadinessThresholdDeg, Link.MaxThresholdDeg));
+			AddInfo(FString::Printf(
+				TEXT("  Remaining rotational budget for solver: %.2f°"),
+				RemainingBudget));
+			AddInfo(FString::Printf(
+				TEXT("  Parent ref-frame quat: (%.4f, %.4f, %.4f, %.4f)"),
+				Link.ParentRefFrameQuat.X, Link.ParentRefFrameQuat.Y,
+				Link.ParentRefFrameQuat.Z, Link.ParentRefFrameQuat.W));
+			AddInfo(FString::Printf(
+				TEXT("  Child ref-frame quat:  (%.4f, %.4f, %.4f, %.4f)"),
+				Link.ChildRefFrameQuat.X, Link.ChildRefFrameQuat.Y,
+				Link.ChildRefFrameQuat.Z, Link.ChildRefFrameQuat.W));
+			AddInfo(FString::Printf(
+				TEXT("  Parent anchor local: (%.2f, %.2f, %.2f) cm"),
+				Link.ParentAnchorLocalCm.X, Link.ParentAnchorLocalCm.Y, Link.ParentAnchorLocalCm.Z));
+			AddInfo(FString::Printf(
+				TEXT("  Child anchor local:  (%.2f, %.2f, %.2f) cm"),
+				Link.ChildAnchorLocalCm.X, Link.ChildAnchorLocalCm.Y, Link.ChildAnchorLocalCm.Z));
+			AddInfo(FString::Printf(
+				TEXT("  VERDICT: %s"), Verdict));
+			AddInfo(TEXT("------------------------------------------------------------"));
+		}
+
+		AddInfo(TEXT("============================================================"));
+		AddInfo(TEXT("INTERPRETATION GUIDE:"));
+		AddInfo(TEXT("  ALIGNED (<= 1°):"));
+		AddInfo(TEXT("    The constraint frames match at identity. The ~33° runtime"));
+		AddInfo(TEXT("    error is purely from the simulated body orientations."));
+		AddInfo(TEXT("    The pelvis rotation solver CAN theoretically close the gap."));
+		AddInfo(TEXT("  SIGNIFICANT OFFSET (1° - threshold°):"));
+		AddInfo(TEXT("    The constraint frames start misaligned. The solver must"));
+		AddInfo(TEXT("    first cover this structural offset before any useful work."));
+		AddInfo(TEXT("    Consider adjusting constraint frame authoring."));
+		AddInfo(TEXT("  STRUCTURAL BLOCKER (>= threshold°):"));
+		AddInfo(TEXT("    The constraint frames alone exceed the readiness threshold."));
+		AddInfo(TEXT("    No pelvis rotation can satisfy this gate. Fix the constraint"));
+		AddInfo(TEXT("    frame setup in the PhysicsAsset."));
+		AddInfo(TEXT("============================================================"));
+
+		// Verify we found all three constraints
+		int32 FoundCount = 0;
+		for (const FLinkDiagnostic& Link : Links)
+		{
+			if (Link.bConstraintFound)
+			{
+				FoundCount++;
+			}
+		}
+		TestEqual(TEXT("All three Phase 1 critical constraints found"), FoundCount, 3);
+
+		return true;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimPhase1ZeroSolverForensicDumpTest, "PhysAnim.Component.Phase1ZeroSolverForensicDump", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimPhase1ZeroSolverForensicDumpTest::RunTest(const FString& Parameters)
+{
+	// We use the long-form paths that match the PhysAnim component's expectations
+	const FString MeshPath = TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple");
+	USkeletalMesh* SkelMesh = LoadObject<USkeletalMesh>(nullptr, *MeshPath);
+
+	if (!SkelMesh)
+	{
+		AddInfo(TEXT("DUMP: Could not load SkeletalMesh from '/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple'. This test must run in an editor context with Manny content mounted."));
+		return true;
+	}
+
+	AActor* Actor = GEditor->GetEditorWorldContext().World()->SpawnActor<AActor>();
+	USkeletalMeshComponent* MeshComp = NewObject<USkeletalMeshComponent>(Actor);
+	MeshComp->SetSkeletalMesh(SkelMesh);
+	MeshComp->RegisterComponent();
+
+	TArray<FName> Bones = { TEXT("thigh_l"), TEXT("thigh_r"), TEXT("spine_01") };
+	FName RootBone = TEXT("pelvis");
+
+	const auto RunDumpForPose = [&](const TCHAR* PoseName)
+	{
+		AddInfo(TEXT("============================================================"));
+		AddInfo(FString::Printf(TEXT("ZERO-SOLVER FORENSIC DUMP: %s"), PoseName));
+		AddInfo(TEXT("============================================================"));
+
+		TArray<BalanceTransitionSets::FDirectPelvisLinkForensicRecord> Records;
+		for (FName Bone : Bones)
+		{
+			BalanceTransitionSets::FDirectPelvisLinkForensicRecord Record;
+			if (BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(MeshComp, RootBone, Bone, Record))
+			{
+				Records.Add(Record);
+			}
+		}
+
+		BalanceTransitionSets::LogDirectPelvisLinkForensicRecords(Records, PoseName, true);
+
+		for (const auto& Record : Records)
+		{
+			const FQuat ChildConstraintWorldRotation = (Record.ChildWorldRotation * Record.AuthoredChildRefFrame).GetNormalized();
+			const FQuat ParentConstraintWorldRotation = (Record.ParentWorldRotation * Record.AuthoredParentRefFrame).GetNormalized();
+			const float ErrorDeg = FMath::RadiansToDegrees(ChildConstraintWorldRotation.AngularDistance(ParentConstraintWorldRotation));
+
+			AddInfo(FString::Printf(TEXT("LINK: %s"), *Record.LinkName));
+			AddInfo(FString::Printf(TEXT("  AngularError: %.3f deg"), ErrorDeg));
+			AddInfo(FString::Printf(TEXT("  ParentWorldQuat: %s"), *Record.ParentWorldRotation.ToString()));
+			AddInfo(FString::Printf(TEXT("  ChildWorldQuat:  %s"), *Record.ChildWorldRotation.ToString()));
+			AddInfo(FString::Printf(TEXT("  ParentRefFrame:  %s"), *Record.AuthoredParentRefFrame.ToString()));
+			AddInfo(FString::Printf(TEXT("  ChildRefFrame:   %s"), *Record.AuthoredChildRefFrame.ToString()));
+		}
+	};
+
+	// 1. REF POSE
+	MeshComp->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+	MeshComp->SetAnimation(nullptr);
+	MeshComp->RefreshBoneTransforms();
+	RunDumpForPose(TEXT("ImportedRefPose"));
+
+	// 2. T-POSE (if available)
+	// For Manny_Simple, the RefPose is usually a T-Pose. 
+	// If the project has a specific T-Pose asset, we could load it here.
+	// For now, RefPose is the primary baseline.
+
+	Actor->Destroy();
+	return true;
 }
 
 #endif
