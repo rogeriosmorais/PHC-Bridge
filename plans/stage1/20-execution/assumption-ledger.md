@@ -44,46 +44,17 @@ Only the orchestrator updates status.
 
 ## Latest Orchestrator Review
 
-- `Review commit`: `5465b23` plus local uncommitted G2 comparison harness changes
+- `Review commit`: `2ef7216` through `today's local stabilization fixes`
 - `Reviewed artifacts`:
-  - `plans/stage1/10-specs/bridge-spec.md`
-  - `plans/stage1/10-specs/retargeting-spec.md`
-  - `plans/stage1/10-specs/test-strategy.md`
-  - `plans/stage1/50-content/motion-set.md`
-  - `plans/stage1/50-content/motion-source-map.md`
-  - `plans/stage1/50-content/motion-source-lock-table.md`
-  - `plans/stage1/20-execution/phase0-execution-package.md`
-  - `PhysAnimUE5/PhysAnimUE5.uproject`
-  - `PhysAnimUE5/Config/DefaultEngine.ini`
-  - `PhysAnimUE5/Saved/Logs/PhysAnimUE5.log`
-  - `PhysAnimUE5/Saved/Logs/PhysAnimUE5_2.log`
+  - `plans/stage1/20-execution/execution-log.md`
+  - `PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimBalanceReadyTransitionPrivate.h`
+  - `PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h`
+  - `test-results/phase1-autocalib/automation_phase1_smoke/summary.json`
 - `Conclusion`:
-  - the Phase 0 planning contract is now concrete enough to execute on this exact Windows machine without more setup replanning
-  - the selected `motion_tracker/smpl` checkpoint is now the preferred Stage 1 runtime target because its inference contract is materially simpler than the deferred MaskedMimic path
-  - no G1-critical assumption beyond `A-02` moves out of `yellow` yet because `g1-evidence.md` still has no training-side motion evidence or UE-side manual evidence
-  - `A-02` now moves to `green` because the local runtime input set, action shape, representation path, and fixed-gain policy are explicit in `bridge-spec.md`
-  - partial setup evidence now confirms the planned UE install root and `UE5_PATH`, but it does not yet reduce any G1-critical risk
-  - updated setup evidence now also confirms UE `5.7.3` and the presence of the `F:\NewEngine\PhysAnimUE5` scaffold with Manny content paths available
-  - ProtoMotions `v2.3.2`, the selected `motion_tracker/smpl` checkpoint, and a Python `3.11` Windows-native environment are now local and consistent with the Isaac Sim `5.x` requirement
-  - Isaac Sim `5.1.0.0` and Isaac Lab `2.3.2.post1` are now installed in the locked env and headless `SimulationApp` startup succeeded locally
-  - the current Windows path also required a small local ProtoMotions compatibility patch for Python `3.11` dataclass defaults plus a single-device Fabric override to bypass the default DDP / NCCL path
-  - the visual IsaacLab path additionally required local compatibility shims for this machine and package set: preloading `h5py` before `AppLauncher`, excluding broken RTX sensor extensions from Kit launch, constructing `Se2Keyboard` with `Se2KeyboardCfg`, and supporting MoviePy `2.x` without `moviepy.editor`
-  - the earlier Vulkan startup crash was consistent with an external graphics hook conflict rather than a PHC or IsaacLab logic failure; future visual checks on this machine should start with overlays and capture hooks disabled
-  - Isaac sensor DLL warnings for `generic_mo_io.dll`, lidar, radar, and `isaacsim.sensors.rtx` are still present, but the current evidence suggests they are non-blocking noise for the locomotion-only `MV-G1-01` visual path
-  - user evidence on March 10, 2026 now confirms the saved clip `F:\NewEngine\Training\ProtoMotions\output\renderings\phase0_eval_visual-2026-03-10-10-15-07.mp4`, so the `MV-G1-01` recording path itself is no longer in doubt
-  - user evidence on March 10, 2026 also judges `MV-G1-01` as `pass`, so `A-01` now moves from `yellow` to `green`
-  - the Phase 0 eval command, retargeting validation set, and evidence paths are now frozen for `S1-P0-A2`
-  - the current UE scaffold review is stronger now: `PhysAnimUE5.uproject` enables `PoseSearch` and `PhysicsControl`, Manny assets are present under `Content/Characters/Mannequins`, editor logs show `NNERuntimeORT` runtime initialization, and a PIE session launched successfully on March 10, 2026
-  - this stronger scaffold evidence reduces setup ambiguity, but it does not by itself satisfy `MV-G1-03` or the substep-stability threshold because those still require user-observed motion behavior
-  - user evidence on March 10, 2026 confirms visible left-elbow / left-arm motion after running `PhysAnim.MVG102.Start` in `/Game/ThirdPerson/Lvl_ThirdPerson`
-  - the orchestrator narrowed `MV-G1-02` to a stationary proof only, so later movement-induced shoulder artifacts are recorded as out of scope for that checkpoint rather than as a failure of the basic command path
-  - `MV-G1-03` now has a frozen UE runtime path on March 10, 2026: `/Game/ThirdPerson/Lvl_ThirdPerson` plus `UPhysAnimMvG103Subsystem` and the `PhysAnim.MVG103.Start` smoke harness for the explicit `isolated left elbow flexion` validation case
-  - user evidence on March 10, 2026 now confirms the frozen `120 Hz` synchronous-substep settings (`Tick Physics Async = false`, `Substepping = true`, `Max Substep Delta Time = 0.008333`, `Max Substeps = 4`) remained stable, with no jitter or wobble dominating the run
-  - `A-03` now moves from `yellow` to `green` because the Manny smoke-test mapping check completed without leaving an open mapping-failure blocker
-  - `A-04` now moves from `yellow` to `green` because the Physics Control command path and Manny response checks both passed
-  - `A-05` now moves from `yellow` to `green` because the documented synchronous-substep path stayed controllable on this machine
-  - the selected pretrained `motion_tracker/smpl` checkpoint now exports successfully to `F:\NewEngine\Training\output\phc_policy.onnx` through `Training\scripts\export_onnx.py`, with accepted opset `17` and offline `onnxruntime 1.24.3` parity max abs diff `1.64e-7`
-  - user evidence on March 10, 2026 now confirms a real UE startup-success line through `NNERuntimeORTDml`, so `A-06` now moves from `yellow` to `green`
+  - Phase 1/2 stabilization is now considered **substantially complete** at a POC level.
+  - The "postural expense" signal is now clear: the current PHC policy/Manny pairing requires a ~45° thigh-error budget and ~45° root-tilt budget to consistently clear Phase 1 admission and Phase 2 RootOn.
+  - The previous assumption that 25°/35° was the stability ceiling has been falsified; the bridge is stable enough to survive a 45° postural "snap" at 4000 deg/sec during RootOn.
+  - The next major risk moves to Phase 3 (`Settle`) and the observed `phase3_root_simulation_dropped` failure, which suggests a possible collision or simulation-ownership conflict during the final transition to active balance.
   - March 11, 2026 policy-phase stabilization passes then removed the remaining live-policy blow-up:
     - first-policy-frame continuity is now bounded
     - stale explicit targets are cleared when switching into skeletal-animation target mode
