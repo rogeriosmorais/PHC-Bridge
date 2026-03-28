@@ -19,7 +19,11 @@ EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryS
 bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizationDomain& Domain, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
 {
 	// 1. Physics Continuity Gate
-	if (!Domain.bRootSimulating)
+	const bool bPhase1KinematicRootPermitted = 
+		Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+		Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate;
+
+	if (!Domain.bRootSimulating && !bPhase1KinematicRootPermitted)
 	{
 		OutReason =
 			Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle
