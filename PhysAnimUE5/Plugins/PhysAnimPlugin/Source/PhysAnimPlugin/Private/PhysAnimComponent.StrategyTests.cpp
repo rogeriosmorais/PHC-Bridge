@@ -1036,6 +1036,57 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibFurthestProgressedFailureTest,
+		"PhysAnim.Component.Phase1AutoCalibFurthestProgressedFailure",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibFurthestProgressedFailureTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibReport Report;
+
+		FPhase1AutoCalibTrialResult Phase1NearPass = MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::CurrentDefault,
+			TEXT("timed_out"),
+			TEXT("phase1_root_on_readiness_pelvis_angular_incoherent"),
+			false,
+			31.0f,
+			1.0f);
+
+		FPhase1AutoCalibTrialResult Phase3Failure = MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::BalancedCoupled,
+			TEXT("failed"),
+			TEXT("phase3_root_simulation_dropped"),
+			false,
+			44.0f,
+			3.0f);
+		Phase3Failure.Score.bReachedRootOn = true;
+		Phase3Failure.Score.bNoCouplingProofSatisfied = true;
+		Phase3Failure.TimeToRootOnSeconds = 0.20f;
+		Phase3Failure.TimeToNoCouplingProofSeconds = 0.24f;
+		Phase3Failure.bTimedOutBeforeRootOn = false;
+		Phase3Failure.bTimedOutBeforeNoCouplingProof = false;
+		UPhysAnimComponent::FinalizePhase1AutoCalibScore(Phase3Failure.Score);
+
+		Report.Trials.Add(Phase1NearPass);
+		Report.Trials.Add(Phase3Failure);
+
+		UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(Report);
+
+		TestTrue(TEXT("Report still exposes the metric-ordered best near-pass"), Report.bHasBestNearPass);
+		TestEqual(
+			TEXT("Near-pass ordering remains Phase 1 metric-driven"),
+			Report.BestNearPass.TruthfulBlocker,
+			FString(TEXT("phase1_root_on_readiness_pelvis_angular_incoherent")));
+		TestTrue(TEXT("Report exposes the furthest progressed failed trial separately"), Report.bHasFurthestProgressedFailure);
+		TestEqual(
+			TEXT("Furthest progressed failure keeps the later truthful blocker"),
+			Report.FurthestProgressedFailure.TruthfulBlocker,
+			FString(TEXT("phase3_root_simulation_dropped")));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibFrontierClassificationTest,
 		"PhysAnim.Component.Phase1AutoCalibFrontierClassification",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

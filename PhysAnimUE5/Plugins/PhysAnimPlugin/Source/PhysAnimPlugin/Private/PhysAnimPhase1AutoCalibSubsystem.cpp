@@ -284,6 +284,43 @@ namespace
 		return UPhysAnimComponent::IsBetterPhase1AutoCalibScore(A.Score, B.Score);
 	}
 
+	int32 GetFailureProgressRank(const FPhase1AutoCalibTrialResult& Trial)
+	{
+		if (Trial.Score.bContractPassed)
+		{
+			return 4;
+		}
+
+		if (Trial.TruthfulBlocker.StartsWith(TEXT("phase3_")))
+		{
+			return 3;
+		}
+
+		if (Trial.TruthfulBlocker.StartsWith(TEXT("phase2_")) || Trial.Score.bNoCouplingProofSatisfied)
+		{
+			return 2;
+		}
+
+		if (Trial.Score.bReachedRootOn)
+		{
+			return 1;
+		}
+
+		return 0;
+	}
+
+	bool IsMoreProgressedFailure(const FPhase1AutoCalibTrialResult& Candidate, const FPhase1AutoCalibTrialResult& CurrentBest)
+	{
+		const int32 CandidateProgressRank = GetFailureProgressRank(Candidate);
+		const int32 CurrentProgressRank = GetFailureProgressRank(CurrentBest);
+		if (CandidateProgressRank != CurrentProgressRank)
+		{
+			return CandidateProgressRank > CurrentProgressRank;
+		}
+
+		return IsBetterTrial(Candidate, CurrentBest);
+	}
+
 	FPhase1AutoCalibPresetSummary& FindOrAddPresetSummary(
 		TArray<FPhase1AutoCalibPresetSummary>& Summaries,
 		const EPhase1AutoCalibStrategyPreset Preset)
@@ -1348,6 +1385,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibRepor
 	InOutReport.OverallBlockerCounts.Reset();
 	InOutReport.bHasBestCandidate = false;
 	InOutReport.bHasBestNearPass = false;
+	InOutReport.bHasFurthestProgressedFailure = false;
 	InOutReport.bHasReproducibleTruthfulPass = false;
 	InOutReport.FrontierClassification = EPhase1AutoCalibFrontierClassification::Unknown;
 	InOutReport.RecommendedAction = EPhase1AutoCalibRecommendedAction::None;
@@ -1384,6 +1422,12 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibRepor
 		{
 			InOutReport.BestNearPass = Trial;
 			InOutReport.bHasBestNearPass = true;
+		}
+		if (!Trial.Score.bContractPassed &&
+			(!InOutReport.bHasFurthestProgressedFailure || IsMoreProgressedFailure(Trial, InOutReport.FurthestProgressedFailure)))
+		{
+			InOutReport.FurthestProgressedFailure = Trial;
+			InOutReport.bHasFurthestProgressedFailure = true;
 		}
 		InOutReport.bAnyTimedOutBeforeRootOn |= Trial.bTimedOutBeforeRootOn;
 		InOutReport.bAnyTimedOutBeforeNoCouplingProof |= Trial.bTimedOutBeforeNoCouplingProof;
@@ -1739,7 +1783,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 	OverallBlockersJson += TEXT("]");
 
 	FString SummaryJson = FString::Printf(
-		TEXT("{\"outputDirectory\":\"%s\",\"trialCount\":%d,\"hasReproducibleTruthfulPass\":%s,\"frontierClassification\":\"%s\",\"recommendedAction\":\"%s\",\"recommendedExpansionName\":\"%s\",\"dominantTruthfulBlocker\":\"%s\",\"anyTimedOutBeforeRootOn\":%s,\"anyTimedOutBeforeNoCouplingProof\":%s,\"bestCandidate\":%s,\"bestNearPass\":%s,\"overallBlockerCounts\":%s,\"presetSummaries\":%s}"),
+		TEXT("{\"outputDirectory\":\"%s\",\"trialCount\":%d,\"hasReproducibleTruthfulPass\":%s,\"frontierClassification\":\"%s\",\"recommendedAction\":\"%s\",\"recommendedExpansionName\":\"%s\",\"dominantTruthfulBlocker\":\"%s\",\"anyTimedOutBeforeRootOn\":%s,\"anyTimedOutBeforeNoCouplingProof\":%s,\"bestCandidate\":%s,\"bestNearPass\":%s,\"furthestProgressedFailure\":%s,\"overallBlockerCounts\":%s,\"presetSummaries\":%s}"),
 		*JsonEscape(LatestReport.OutputDirectory),
 		LatestReport.Trials.Num(),
 		LatestReport.bHasReproducibleTruthfulPass ? TEXT("true") : TEXT("false"),
@@ -1751,6 +1795,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 		LatestReport.bAnyTimedOutBeforeNoCouplingProof ? TEXT("true") : TEXT("false"),
 		LatestReport.bHasBestCandidate ? *BuildTrialJson(LatestReport.BestCandidate) : TEXT("null"),
 		LatestReport.bHasBestNearPass ? *BuildTrialJson(LatestReport.BestNearPass) : TEXT("null"),
+		LatestReport.bHasFurthestProgressedFailure ? *BuildTrialJson(LatestReport.FurthestProgressedFailure) : TEXT("null"),
 		*OverallBlockersJson,
 		*PresetSummariesJson);
 	FFileHelper::SaveStringToFile(SummaryJson, *LatestReport.SummaryPath);

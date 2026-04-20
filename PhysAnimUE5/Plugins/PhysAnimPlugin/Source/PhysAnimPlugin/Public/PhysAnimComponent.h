@@ -813,8 +813,10 @@ struct FPhase1AutoCalibReport
 	TArray<FPhase1AutoCalibBlockerCount> OverallBlockerCounts;
 	FPhase1AutoCalibTrialResult BestCandidate;
 	FPhase1AutoCalibTrialResult BestNearPass;
+	FPhase1AutoCalibTrialResult FurthestProgressedFailure;
 	bool bHasBestCandidate = false;
 	bool bHasBestNearPass = false;
+	bool bHasFurthestProgressedFailure = false;
 	bool bHasReproducibleTruthfulPass = false;
 	EPhase1AutoCalibFrontierClassification FrontierClassification = EPhase1AutoCalibFrontierClassification::Unknown;
 	EPhase1AutoCalibRecommendedAction RecommendedAction = EPhase1AutoCalibRecommendedAction::None;

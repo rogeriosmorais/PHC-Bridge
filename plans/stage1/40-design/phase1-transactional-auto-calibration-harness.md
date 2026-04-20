@@ -201,7 +201,8 @@ If all candidates fail, the report must still name:
 
 1. the best near-pass
 2. the truthful blocker distribution
-3. the best reproducible failed candidate
+3. the furthest progressed failure when any rejected trial reaches `RootOn` or later before failing
+4. the best reproducible failed candidate
 
 ## Testing requirements
 
