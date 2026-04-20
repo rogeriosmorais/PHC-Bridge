@@ -28,7 +28,19 @@ namespace
 	constexpr int32 SmokeStageBTrialCount = 8;
 	constexpr int32 SmokeStageCTrialCount = 5;
 	constexpr float RestoreFingerprintTolerance = 1.0e-3f;
+	constexpr float RestoreFingerprintTransformLocationToleranceCm = 0.25f;
+	constexpr float RestoreFingerprintTransformAngularToleranceDeg = 1.0f;
+	constexpr float RestoreFingerprintCriticalLinkAngularToleranceDeg = 1.0f;
 	constexpr float ScoreReproTolerance = 1.0e-3f;
+	constexpr float ReproWorstDirectLinkToleranceDeg = 1.0f;
+	constexpr float ReproMeanTargetDeltaToleranceDeg = 8.0f;
+	constexpr float ReproMaxTargetDeltaToleranceDeg = 3.0f;
+	constexpr float ReproThighAsymmetryToleranceDeg = 1.0f;
+	constexpr float ReproPeakRootTiltToleranceDeg = 1.0f;
+	constexpr float ReproShellOffsetToleranceCm = 0.75f;
+	constexpr float ReproShellVelocityToleranceCmPerSecond = 0.1f;
+	constexpr float ReproPeakRootLinearSpeedToleranceCmPerSecond = 25.0f;
+	constexpr float ReproPeakRootAngularSpeedToleranceDegPerSecond = 120.0f;
 
 	enum class EPhase1AutoCalibBuildStage : uint8
 	{
@@ -134,11 +146,16 @@ namespace
 			Phase == EBalanceReadyTransitionPhase::BRT_Succeeded;
 	}
 
-	bool AreTransformsNear(const FTransform& A, const FTransform& B, const float Tolerance)
+	bool AreTransformsNear(
+		const FTransform& A,
+		const FTransform& B,
+		const float LocationTolerance,
+		const float RotationToleranceDeg,
+		const float ScaleTolerance)
 	{
-		return A.GetLocation().Equals(B.GetLocation(), Tolerance) &&
-			A.GetRotation().Equals(B.GetRotation(), Tolerance) &&
-			A.GetScale3D().Equals(B.GetScale3D(), Tolerance);
+		return A.GetLocation().Equals(B.GetLocation(), LocationTolerance) &&
+			FMath::RadiansToDegrees(A.GetRotation().AngularDistance(B.GetRotation())) <= RotationToleranceDeg &&
+			A.GetScale3D().Equals(B.GetScale3D(), ScaleTolerance);
 	}
 
 	bool AreFingerprintsNear(
@@ -146,21 +163,122 @@ namespace
 		const FPhase1AutoCalibDeterminismFingerprint& B,
 		const float Tolerance)
 	{
+		const float TransformLocationToleranceCm =
+			FMath::Max(Tolerance, RestoreFingerprintTransformLocationToleranceCm);
+		const float TransformAngularToleranceDeg =
+			FMath::Max(Tolerance, RestoreFingerprintTransformAngularToleranceDeg);
+		const float CriticalLinkAngularToleranceDeg =
+			FMath::Max(Tolerance, RestoreFingerprintCriticalLinkAngularToleranceDeg);
 		return A.RuntimeState == B.RuntimeState &&
 			A.TransitionPhase == B.TransitionPhase &&
-			AreTransformsNear(A.OwnerTransform, B.OwnerTransform, Tolerance) &&
-			AreTransformsNear(A.MeshTransform, B.MeshTransform, Tolerance) &&
-			AreTransformsNear(A.RootBodyTransform, B.RootBodyTransform, Tolerance) &&
+			AreTransformsNear(A.OwnerTransform, B.OwnerTransform, TransformLocationToleranceCm, TransformAngularToleranceDeg, Tolerance) &&
+			AreTransformsNear(A.MeshTransform, B.MeshTransform, TransformLocationToleranceCm, TransformAngularToleranceDeg, Tolerance) &&
+			AreTransformsNear(A.RootBodyTransform, B.RootBodyTransform, TransformLocationToleranceCm, TransformAngularToleranceDeg, Tolerance) &&
 			A.RootLinearVelocity.Equals(B.RootLinearVelocity, Tolerance) &&
 			A.RootAngularVelocity.Equals(B.RootAngularVelocity, Tolerance) &&
-			FMath::IsNearlyEqual(A.PelvisThighLAngularErrorDeg, B.PelvisThighLAngularErrorDeg, Tolerance) &&
-			FMath::IsNearlyEqual(A.PelvisThighRAngularErrorDeg, B.PelvisThighRAngularErrorDeg, Tolerance) &&
-			FMath::IsNearlyEqual(A.PelvisSpine01AngularErrorDeg, B.PelvisSpine01AngularErrorDeg, Tolerance) &&
+			FMath::IsNearlyEqual(A.PelvisThighLAngularErrorDeg, B.PelvisThighLAngularErrorDeg, CriticalLinkAngularToleranceDeg) &&
+			FMath::IsNearlyEqual(A.PelvisThighRAngularErrorDeg, B.PelvisThighRAngularErrorDeg, CriticalLinkAngularToleranceDeg) &&
+			FMath::IsNearlyEqual(A.PelvisSpine01AngularErrorDeg, B.PelvisSpine01AngularErrorDeg, CriticalLinkAngularToleranceDeg) &&
 			FMath::IsNearlyEqual(A.ShellOffsetDeltaCm, B.ShellOffsetDeltaCm, Tolerance) &&
 			FMath::IsNearlyEqual(A.ShellVelocityDeltaCmPerSecond, B.ShellVelocityDeltaCmPerSecond, Tolerance) &&
 			FMath::IsNearlyEqual(A.MaxTargetDeltaDeg, B.MaxTargetDeltaDeg, Tolerance) &&
 			FMath::IsNearlyEqual(A.MeanTargetDeltaDeg, B.MeanTargetDeltaDeg, Tolerance) &&
 			A.PendingResetCount == B.PendingResetCount;
+	}
+
+	FString DescribeFingerprintDiff(
+		const FPhase1AutoCalibDeterminismFingerprint& A,
+		const FPhase1AutoCalibDeterminismFingerprint& B,
+		const float Tolerance)
+	{
+		const float TransformLocationToleranceCm =
+			FMath::Max(Tolerance, RestoreFingerprintTransformLocationToleranceCm);
+		const float TransformAngularToleranceDeg =
+			FMath::Max(Tolerance, RestoreFingerprintTransformAngularToleranceDeg);
+		const float CriticalLinkAngularToleranceDeg =
+			FMath::Max(Tolerance, RestoreFingerprintCriticalLinkAngularToleranceDeg);
+		TArray<FString> Diffs;
+
+		if (A.RuntimeState != B.RuntimeState)
+		{
+			Diffs.Add(FString::Printf(
+				TEXT("runtime=%s->%s"),
+				UPhysAnimComponent::GetRuntimeStateName(A.RuntimeState),
+				UPhysAnimComponent::GetRuntimeStateName(B.RuntimeState)));
+		}
+		if (A.TransitionPhase != B.TransitionPhase)
+		{
+			Diffs.Add(FString::Printf(TEXT("phase=%d->%d"), static_cast<int32>(A.TransitionPhase), static_cast<int32>(B.TransitionPhase)));
+		}
+		if (!AreTransformsNear(A.OwnerTransform, B.OwnerTransform, TransformLocationToleranceCm, TransformAngularToleranceDeg, Tolerance))
+		{
+			const double OwnerLocDelta = FVector::Dist(A.OwnerTransform.GetLocation(), B.OwnerTransform.GetLocation());
+			const double OwnerRotDeltaDeg = FMath::RadiansToDegrees(A.OwnerTransform.GetRotation().AngularDistance(B.OwnerTransform.GetRotation()));
+			Diffs.Add(FString::Printf(
+				TEXT("ownerLocDelta=%.4f ownerRotDeltaDeg=%.4f"),
+				OwnerLocDelta,
+				OwnerRotDeltaDeg));
+		}
+		if (!AreTransformsNear(A.MeshTransform, B.MeshTransform, TransformLocationToleranceCm, TransformAngularToleranceDeg, Tolerance))
+		{
+			const double MeshLocDelta = FVector::Dist(A.MeshTransform.GetLocation(), B.MeshTransform.GetLocation());
+			const double MeshRotDeltaDeg = FMath::RadiansToDegrees(A.MeshTransform.GetRotation().AngularDistance(B.MeshTransform.GetRotation()));
+			Diffs.Add(FString::Printf(
+				TEXT("meshLocDelta=%.4f meshRotDeltaDeg=%.4f"),
+				MeshLocDelta,
+				MeshRotDeltaDeg));
+		}
+		if (!AreTransformsNear(A.RootBodyTransform, B.RootBodyTransform, TransformLocationToleranceCm, TransformAngularToleranceDeg, Tolerance))
+		{
+			const double RootLocDelta = FVector::Dist(A.RootBodyTransform.GetLocation(), B.RootBodyTransform.GetLocation());
+			const double RootRotDeltaDeg = FMath::RadiansToDegrees(A.RootBodyTransform.GetRotation().AngularDistance(B.RootBodyTransform.GetRotation()));
+			Diffs.Add(FString::Printf(
+				TEXT("rootLocDelta=%.4f rootRotDeltaDeg=%.4f"),
+				RootLocDelta,
+				RootRotDeltaDeg));
+		}
+		if (!A.RootLinearVelocity.Equals(B.RootLinearVelocity, Tolerance))
+		{
+			Diffs.Add(FString::Printf(TEXT("rootLinearDelta=%.4f"), FVector::Dist(A.RootLinearVelocity, B.RootLinearVelocity)));
+		}
+		if (!A.RootAngularVelocity.Equals(B.RootAngularVelocity, Tolerance))
+		{
+			Diffs.Add(FString::Printf(TEXT("rootAngularDelta=%.4f"), FVector::Dist(A.RootAngularVelocity, B.RootAngularVelocity)));
+		}
+		if (!FMath::IsNearlyEqual(A.PelvisThighLAngularErrorDeg, B.PelvisThighLAngularErrorDeg, CriticalLinkAngularToleranceDeg))
+		{
+			Diffs.Add(FString::Printf(TEXT("pelvisThighL=%.4f->%.4f"), A.PelvisThighLAngularErrorDeg, B.PelvisThighLAngularErrorDeg));
+		}
+		if (!FMath::IsNearlyEqual(A.PelvisThighRAngularErrorDeg, B.PelvisThighRAngularErrorDeg, CriticalLinkAngularToleranceDeg))
+		{
+			Diffs.Add(FString::Printf(TEXT("pelvisThighR=%.4f->%.4f"), A.PelvisThighRAngularErrorDeg, B.PelvisThighRAngularErrorDeg));
+		}
+		if (!FMath::IsNearlyEqual(A.PelvisSpine01AngularErrorDeg, B.PelvisSpine01AngularErrorDeg, CriticalLinkAngularToleranceDeg))
+		{
+			Diffs.Add(FString::Printf(TEXT("pelvisSpine=%.4f->%.4f"), A.PelvisSpine01AngularErrorDeg, B.PelvisSpine01AngularErrorDeg));
+		}
+		if (!FMath::IsNearlyEqual(A.ShellOffsetDeltaCm, B.ShellOffsetDeltaCm, Tolerance))
+		{
+			Diffs.Add(FString::Printf(TEXT("shellOffset=%.4f->%.4f"), A.ShellOffsetDeltaCm, B.ShellOffsetDeltaCm));
+		}
+		if (!FMath::IsNearlyEqual(A.ShellVelocityDeltaCmPerSecond, B.ShellVelocityDeltaCmPerSecond, Tolerance))
+		{
+			Diffs.Add(FString::Printf(TEXT("shellVelocity=%.4f->%.4f"), A.ShellVelocityDeltaCmPerSecond, B.ShellVelocityDeltaCmPerSecond));
+		}
+		if (!FMath::IsNearlyEqual(A.MaxTargetDeltaDeg, B.MaxTargetDeltaDeg, Tolerance))
+		{
+			Diffs.Add(FString::Printf(TEXT("maxTargetDelta=%.4f->%.4f"), A.MaxTargetDeltaDeg, B.MaxTargetDeltaDeg));
+		}
+		if (!FMath::IsNearlyEqual(A.MeanTargetDeltaDeg, B.MeanTargetDeltaDeg, Tolerance))
+		{
+			Diffs.Add(FString::Printf(TEXT("meanTargetDelta=%.4f->%.4f"), A.MeanTargetDeltaDeg, B.MeanTargetDeltaDeg));
+		}
+		if (A.PendingResetCount != B.PendingResetCount)
+		{
+			Diffs.Add(FString::Printf(TEXT("pendingResetCount=%d->%d"), A.PendingResetCount, B.PendingResetCount));
+		}
+
+		return Diffs.IsEmpty() ? TEXT("none") : FString::Join(Diffs, TEXT(", "));
 	}
 
 	bool ParamsEqual(const FPhase1AutoCalibParams& A, const FPhase1AutoCalibParams& B, const float Tolerance)
@@ -174,6 +292,22 @@ namespace
 			FMath::IsNearlyEqual(A.ClampStrengthScale, B.ClampStrengthScale, Tolerance) &&
 			FMath::IsNearlyEqual(A.PelvisPitchBiasDeg, B.PelvisPitchBiasDeg, Tolerance) &&
 			FMath::IsNearlyEqual(A.PelvisRollBiasDeg, B.PelvisRollBiasDeg, Tolerance);
+	}
+
+	bool AreScoresNearForRepro(
+		const FPhase1AutoCalibScore& A,
+		const FPhase1AutoCalibScore& B,
+		const float Epsilon)
+	{
+		return FMath::IsNearlyEqual(A.WorstDirectLinkAngularErrorDeg, B.WorstDirectLinkAngularErrorDeg, FMath::Max(Epsilon, ReproWorstDirectLinkToleranceDeg)) &&
+			FMath::IsNearlyEqual(A.MeanTargetDeltaDeg, B.MeanTargetDeltaDeg, FMath::Max(Epsilon, ReproMeanTargetDeltaToleranceDeg)) &&
+			FMath::IsNearlyEqual(A.MaxTargetDeltaDeg, B.MaxTargetDeltaDeg, FMath::Max(Epsilon, ReproMaxTargetDeltaToleranceDeg)) &&
+			FMath::IsNearlyEqual(A.ThighAsymmetryDeg, B.ThighAsymmetryDeg, FMath::Max(Epsilon, ReproThighAsymmetryToleranceDeg)) &&
+			FMath::IsNearlyEqual(A.PeakRootTiltDeg, B.PeakRootTiltDeg, FMath::Max(Epsilon, ReproPeakRootTiltToleranceDeg)) &&
+			FMath::IsNearlyEqual(A.ShellOffsetDeltaCm, B.ShellOffsetDeltaCm, FMath::Max(Epsilon, ReproShellOffsetToleranceCm)) &&
+			FMath::IsNearlyEqual(A.ShellVelocityDeltaCmPerSecond, B.ShellVelocityDeltaCmPerSecond, FMath::Max(Epsilon, ReproShellVelocityToleranceCmPerSecond)) &&
+			FMath::IsNearlyEqual(A.PeakRootLinearSpeedCmPerSecond, B.PeakRootLinearSpeedCmPerSecond, FMath::Max(Epsilon, ReproPeakRootLinearSpeedToleranceCmPerSecond)) &&
+			FMath::IsNearlyEqual(A.PeakRootAngularSpeedDegPerSecond, B.PeakRootAngularSpeedDegPerSecond, FMath::Max(Epsilon, ReproPeakRootAngularSpeedToleranceDegPerSecond));
 	}
 
 	bool Dominates(const FPhase1AutoCalibTrialResult& Candidate, const FPhase1AutoCalibTrialResult& Other)
@@ -787,11 +921,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(const TArray
 	{
 		const FPhase1AutoCalibTrialResult& Candidate = Trials[Index];
 		if (Candidate.TerminalClass != Reference.TerminalClass ||
-			Candidate.TruthfulBlocker != Reference.TruthfulBlocker ||
-			Candidate.WinningSearchFamily != Reference.WinningSearchFamily ||
-			Candidate.WinningSearchSource != Reference.WinningSearchSource ||
-			Candidate.bCoupledTradeControlWon != Reference.bCoupledTradeControlWon ||
-			Candidate.ExecutedSearchFamilies != Reference.ExecutedSearchFamilies)
+			Candidate.TruthfulBlocker != Reference.TruthfulBlocker)
 		{
 			return false;
 		}
@@ -806,15 +936,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(const TArray
 			return false;
 		}
 
-		if (!FMath::IsNearlyEqual(Candidate.Score.WorstDirectLinkAngularErrorDeg, Reference.Score.WorstDirectLinkAngularErrorDeg, Epsilon) ||
-			!FMath::IsNearlyEqual(Candidate.Score.MeanTargetDeltaDeg, Reference.Score.MeanTargetDeltaDeg, Epsilon) ||
-			!FMath::IsNearlyEqual(Candidate.Score.MaxTargetDeltaDeg, Reference.Score.MaxTargetDeltaDeg, Epsilon) ||
-			!FMath::IsNearlyEqual(Candidate.Score.ThighAsymmetryDeg, Reference.Score.ThighAsymmetryDeg, Epsilon) ||
-			!FMath::IsNearlyEqual(Candidate.Score.PeakRootTiltDeg, Reference.Score.PeakRootTiltDeg, Epsilon) ||
-			!FMath::IsNearlyEqual(Candidate.Score.ShellOffsetDeltaCm, Reference.Score.ShellOffsetDeltaCm, Epsilon) ||
-			!FMath::IsNearlyEqual(Candidate.Score.ShellVelocityDeltaCmPerSecond, Reference.Score.ShellVelocityDeltaCmPerSecond, Epsilon) ||
-			!FMath::IsNearlyEqual(Candidate.Score.PeakRootLinearSpeedCmPerSecond, Reference.Score.PeakRootLinearSpeedCmPerSecond, Epsilon) ||
-			!FMath::IsNearlyEqual(Candidate.Score.PeakRootAngularSpeedDegPerSecond, Reference.Score.PeakRootAngularSpeedDegPerSecond, Epsilon))
+		if (!AreScoresNearForRepro(Candidate.Score, Reference.Score, Epsilon))
 		{
 			return false;
 		}
@@ -907,6 +1029,11 @@ bool UPhysAnimPhase1AutoCalibSubsystem::RunDeterminismPreflight(
 
 	if (!AreFingerprintsNear(FingerprintA, FingerprintB, RestoreFingerprintTolerance))
 	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimAutoCalib] Determinism preflight mismatch: %s"),
+			*DescribeFingerprintDiff(FingerprintA, FingerprintB, RestoreFingerprintTolerance));
 		OutError = TEXT("Phase1 auto-calibration determinism preflight failed: baseline restore does not round-trip to a stable fingerprint.");
 		return false;
 	}

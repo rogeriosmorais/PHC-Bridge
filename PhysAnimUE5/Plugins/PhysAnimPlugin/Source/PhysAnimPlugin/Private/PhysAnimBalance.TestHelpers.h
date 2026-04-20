@@ -12,6 +12,12 @@
 
 namespace PhysAnimBalanceTestHelpers
 {
+	inline bool IsTruthfulBalanceSmokeSafeDenyReason(const FString& SafePhase2DenialReason)
+	{
+		return !SafePhase2DenialReason.IsEmpty() &&
+			SafePhase2DenialReason != BalanceReadinessReasons::Phase2FailStopPrecursor;
+	}
+
 	inline bool EvaluateBalanceModeSmokeOutcome(
 		const EPhysAnimRuntimeState RuntimeState,
 		const bool bInPublicBalanceEntryState,
@@ -24,9 +30,27 @@ namespace PhysAnimBalanceTestHelpers
 	{
 		OutError.Reset();
 
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
-			RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
 		{
+			return true;
+		}
+
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
+		{
+			if (!bHasSafePhase2Denial)
+			{
+				OutError = TEXT("[PhysAnimPieBalanceSmoke] BalanceSafeDeny requires a published safe-deny reason.");
+				return false;
+			}
+
+			if (!IsTruthfulBalanceSmokeSafeDenyReason(SafePhase2DenialReason))
+			{
+				OutError = FString::Printf(
+					TEXT("[PhysAnimPieBalanceSmoke] BalanceSafeDeny published a non-truthful safe-deny reason=%s."),
+					*SafePhase2DenialReason);
+				return false;
+			}
+
 			return true;
 		}
 

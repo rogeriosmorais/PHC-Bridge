@@ -623,7 +623,9 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 
 bool UPhysAnimComponent::IsInstabilityPrecursorActive() const
 {
-	return RuntimeInstabilityState.UnstableAccumulatedSeconds > 0.0f;
+	return TestOnlyShouldTreatInstabilityPrecursorAsTransitionBlocker(
+		RuntimeState,
+		RuntimeInstabilityState.UnstableAccumulatedSeconds);
 }
 
 

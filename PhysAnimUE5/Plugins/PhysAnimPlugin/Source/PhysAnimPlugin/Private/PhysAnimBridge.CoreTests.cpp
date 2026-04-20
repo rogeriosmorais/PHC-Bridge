@@ -340,9 +340,9 @@ namespace
 			TEXT("Phase 2 instability fails readiness"),
 			FPhysAnimBalanceReadyTransition::IsSnapshotReady(Phase2Instability, GetDefaultSettings(), Reason));
 		TestEqual(
-			TEXT("Phase 2 instability uses the RootOn-specific precursor reason"),
+			TEXT("Phase 2 instability uses the RootOn-specific spike reason"),
 			Reason,
-			BalanceReadinessReasons::Phase2FailStopPrecursor);
+			BalanceReadinessReasons::Phase2RootOnSpike);
 		FPhysAnimStabilizationDomain Phase3TopologyRegression = GetStableDomain();
 		Phase3TopologyRegression.CurrentPhase = EBalanceReadyTransitionPhase::BRT_Phase3_Settle;
 		Phase3TopologyRegression.CertifiedSimCount = 6;
@@ -392,6 +392,21 @@ namespace
 				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta + 1.0f,
 				GetDefaultSettings().BalancePhase2AbortShellOffsetDelta,
 				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta));
+		TestTrue(
+			TEXT("Phase 3 keeps shell correction classification active while transition-owned shell lock is held"),
+			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
+				true,
+				true));
+		TestTrue(
+			TEXT("Non-idle locomotion also keeps shell correction classification active without the transition-owned shell lock"),
+			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
+				false,
+				false));
+		TestFalse(
+			TEXT("Idle locomotion without the transition-owned shell lock does not treat shell correction as active by itself"),
+			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
+				false,
+				true));
 
 		TestEqual(
 			TEXT("Phase 2 root simulation drop is owned by RootOn execution"),

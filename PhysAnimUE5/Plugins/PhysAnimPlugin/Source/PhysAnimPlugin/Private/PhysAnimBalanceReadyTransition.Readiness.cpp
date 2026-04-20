@@ -49,7 +49,7 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 	else if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
 		Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3)
 	{
-		InstabilityReason = BalanceReadinessReasons::Phase2FailStopPrecursor;
+		InstabilityReason = BalanceReadinessReasons::Phase2RootOnSpike;
 	}
 
 	if (Domain.RootLinearSpeed > LinearThreshold || 
@@ -131,6 +131,15 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(
 	return bShellCorrectionOwnerActive &&
 		(ShellPlanarOffsetCm > MaxAllowedShellOffsetCm ||
 		 ShellPlanarVelocityCmPerSec > MaxAllowedShellVelocityCmPerSec);
+}
+
+
+bool FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
+	bool bTransitionOwnedShellLocked,
+	bool bLocomotionAuthorityIdle)
+{
+	return bTransitionOwnedShellLocked ||
+		!bLocomotionAuthorityIdle;
 }
 
 
@@ -248,7 +257,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 	}
 	if (CachedConvergenceSnapshot.bIsInstabilityPrecursorActive)
 	{
-		OutReason = TEXT("phase2_fail_stop_precursor");
+		OutReason = BalanceReadinessReasons::Phase2RootOnSpike;
 		return false;
 	}
 	if (Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle)
@@ -503,7 +512,9 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	}
 
 	// Section 17.3 - no material shell correction
-	const bool bShellCorrectionOwnerActive = Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle;
+	const bool bShellCorrectionOwnerActive = IsPhase3ShellCorrectionOwnerActive(
+		Owner->IsTransitionOwnedShellLocked(),
+		Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle);
 	if (IsMaterialShellCorrectionActive(
 			bShellCorrectionOwnerActive,
 			Owner->GetCurrentShellPlanarOffsetDeltaCm(),

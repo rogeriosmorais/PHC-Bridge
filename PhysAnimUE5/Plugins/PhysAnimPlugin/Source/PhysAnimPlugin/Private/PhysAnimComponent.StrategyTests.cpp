@@ -99,17 +99,31 @@ namespace
 
 		OutcomeError.Reset();
 		TestTrue(
-			TEXT("Explicit safe deny is a passing smoke outcome"),
+			TEXT("Explicit safe deny is a passing smoke outcome when the reason is truthful"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceSafeDeny,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
 				true,
-				TEXT("phase1_late_validate_sim_coverage_regressed"),
+				TEXT("phase2_root_on_spike"),
 				TEXT(""),
 				OutcomeError));
 		TestTrue(TEXT("Safe deny pass emits no error"), OutcomeError.IsEmpty());
+
+		OutcomeError.Reset();
+		TestFalse(
+			TEXT("Generic fail-stop precursor is not a truthful safe-deny smoke outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BalanceSafeDeny,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				true,
+				TEXT("phase2_fail_stop_precursor"),
+				TEXT(""),
+				OutcomeError));
+		TestTrue(TEXT("Generic safe deny failure reports the non-truthful reason"), OutcomeError.Contains(TEXT("phase2_fail_stop_precursor")));
 
 		OutcomeError.Reset();
 		TestFalse(
@@ -124,6 +138,20 @@ namespace
 				TEXT(""),
 				OutcomeError));
 		TestTrue(TEXT("BridgeActive failure reports the runtime state"), OutcomeError.Contains(TEXT("BridgeActive")));
+
+		OutcomeError.Reset();
+		TestFalse(
+			TEXT("BridgeActive with a published transition failure remains an unsafe smoke outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false,
+				TEXT(""),
+				TEXT("phase3_material_shell_correction"),
+				OutcomeError));
+		TestTrue(TEXT("Published transition failure reports the truthful blocker"), OutcomeError.Contains(TEXT("phase3_material_shell_correction")));
 		return true;
 	}
 
@@ -162,6 +190,45 @@ namespace
 				false,
 				false,
 				true));
+		TestFalse(
+			TEXT("An active Phase1 auto-calibration subsystem suppresses component auto-trigger even if per-component ownership drifted"),
+			UPhysAnimComponent::TestOnlyShouldAttemptAutoTriggeredBalanceStart(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				false,
+				true));
+		TestTrue(
+			TEXT("BridgeActive still treats an instability precursor as a queue blocker"),
+			UPhysAnimComponent::TestOnlyShouldTreatInstabilityPrecursorAsTransitionBlocker(
+				EPhysAnimRuntimeState::BridgeActive,
+				0.01f));
+		TestFalse(
+			TEXT("RootOn uses explicit Phase 2 guard metrics instead of the generic instability precursor"),
+			UPhysAnimComponent::TestOnlyShouldTreatInstabilityPrecursorAsTransitionBlocker(
+				EPhysAnimRuntimeState::BalanceEntry_RootOn,
+				0.01f));
+		TestFalse(
+			TEXT("Settle uses explicit Phase 3 continuity checks instead of the generic instability precursor"),
+			UPhysAnimComponent::TestOnlyShouldTreatInstabilityPrecursorAsTransitionBlocker(
+				EPhysAnimRuntimeState::BalanceEntry_Settle,
+				0.01f));
+		TestTrue(
+			TEXT("Phase 3 shell-maintenance failure requests BridgeActive rebaseline"),
+			UPhysAnimComponent::TestOnlyShouldRebaselineBridgeStateAfterTransitionFailure(
+				TEXT("phase3_material_shell_correction")));
+		TestTrue(
+			TEXT("Phase 3 instability failure requests BridgeActive rebaseline"),
+			UPhysAnimComponent::TestOnlyShouldRebaselineBridgeStateAfterTransitionFailure(
+				TEXT("phase3_post_root_on_instability")));
+		TestFalse(
+			TEXT("Empty failure reason does not request BridgeActive rebaseline"),
+			UPhysAnimComponent::TestOnlyShouldRebaselineBridgeStateAfterTransitionFailure(
+				TEXT("")));
+		TestFalse(
+			TEXT("Phase 1 contract blocker alone does not request BridgeActive rebaseline"),
+			UPhysAnimComponent::TestOnlyShouldRebaselineBridgeStateAfterTransitionFailure(
+				TEXT("phase1_root_on_readiness_pelvis_angular_incoherent")));
 		TestFalse(
 			TEXT("Non-BridgeActive states never auto-trigger balance entry"),
 			UPhysAnimComponent::TestOnlyShouldAttemptAutoTriggeredBalanceStart(
@@ -272,6 +339,8 @@ namespace
 		FPhysAnimStabilizationSettings OverrideSettings = Settings;
 		TestFalse(TEXT("Force-zero actions defaults to disabled"), Settings.bForceZeroActions);
 		TestEqual(TEXT("Policy control rate defaults to the ProtoMotions-trained cadence"), Settings.PolicyControlRateHz, 30.0f);
+		TestEqual(TEXT("Phase 2 RootOn root linear spike budget stays at the documented POC threshold"), Settings.BalancePhase2AbortRootLinearSpeed, 1200.0f);
+		TestEqual(TEXT("Phase 2 RootOn root angular spike budget stays at the documented POC threshold"), Settings.BalancePhase2AbortRootAngularSpeed, 4000.0f);
 		float PolicyAccumulatorSeconds = -1.0f;
 		int32 ElapsedPolicySteps = 0;
 		TestTrue(
@@ -1028,6 +1097,7 @@ namespace
 	bool FPhysAnimPhase1AutoCalibReportAggregationTest::RunTest(const FString& Parameters)
 	{
 		FPhase1AutoCalibReport Report;
+		TArray<FPhase1AutoCalibTrialResult> StageCTrials;
 		Report.Trials.Add(MakePhase1AutoCalibTrial(
 			EPhase1AutoCalibStrategyPreset::CurrentDefault,
 			TEXT("timed_out"),
@@ -1049,28 +1119,59 @@ namespace
 			false,
 			32.0f,
 			1.8f));
-		Report.Trials.Add(MakePhase1AutoCalibTrial(
+		FPhase1AutoCalibTrialResult StageCTruthfulPass = MakePhase1AutoCalibTrial(
 			EPhase1AutoCalibStrategyPreset::BalancedCoupled,
 			TEXT("reached_root_on"),
 			TEXT("ready"),
 			true,
 			17.0f,
-			0.8f));
-		Report.Trials.Last().bReproducible = true;
-	Report.Trials[0].WinningSearchFamily = TEXT("worst_thigh_interpolation");
-	Report.Trials[1].WinningSearchFamily = TEXT("spine_constraint_interpolation");
-	Report.Trials[2].WinningSearchFamily = TEXT("tilt_spine_rescue");
-	Report.Trials[3].WinningSearchFamily = TEXT("coupled_trade_control");
-	Report.Trials[3].bCoupledTradeControlWon = true;
+			0.8f);
+		StageCTruthfulPass.StageName = TEXT("stage_c");
+		StageCTruthfulPass.WinningSearchFamily = TEXT("coupled_trade_control");
+		StageCTruthfulPass.bCoupledTradeControlWon = true;
 
-	UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(Report);
+		const float StageCLinearSpeeds[] = { 84.95f, 103.99f, 106.20f, 107.43f, 102.00f };
+		const float StageCAngularSpeeds[] = { 861.69f, 970.60f, 959.07f, 978.71f, 963.59f };
+		const float StageCWorstDirectLinkDeg[] = { 28.65f, 27.80f, 28.48f, 28.35f, 28.02f };
+		const float StageCMeanTargetDeg[] = { 1886.01f, 1888.05f, 1885.52f, 1890.10f, 1888.92f };
+		const float StageCMaxTargetDeg[] = { 169.00f, 171.63f, 169.34f, 169.68f, 171.74f };
+		const float StageCThighAsymmetryDeg[] = { 1.52f, 1.44f, 1.12f, 0.93f, 1.65f };
+		const float StageCPeakRootTiltDeg[] = { 34.90f, 34.83f, 35.31f, 35.07f, 34.54f };
+		const float StageCShellOffsetCm[] = { 1.62f, 1.91f, 2.14f, 1.81f, 1.72f };
+
+		for (int32 Repetition = 0; Repetition < UE_ARRAY_COUNT(StageCLinearSpeeds); ++Repetition)
+		{
+			FPhase1AutoCalibTrialResult ReplayedTruthfulPass = StageCTruthfulPass;
+			ReplayedTruthfulPass.TrialId += Repetition;
+			ReplayedTruthfulPass.RepetitionIndex = Repetition;
+			ReplayedTruthfulPass.WinningSearchSource = FString::Printf(TEXT("focused_delta_variant_%d"), Repetition);
+			ReplayedTruthfulPass.ExecutedSearchFamilies = { TEXT("direct_seed"), TEXT("focused_delta"), TEXT("pair_blend") };
+			ReplayedTruthfulPass.Score.WorstDirectLinkAngularErrorDeg = StageCWorstDirectLinkDeg[Repetition];
+			ReplayedTruthfulPass.Score.MeanTargetDeltaDeg = StageCMeanTargetDeg[Repetition];
+			ReplayedTruthfulPass.Score.MaxTargetDeltaDeg = StageCMaxTargetDeg[Repetition];
+			ReplayedTruthfulPass.Score.ThighAsymmetryDeg = StageCThighAsymmetryDeg[Repetition];
+			ReplayedTruthfulPass.Score.PeakRootTiltDeg = StageCPeakRootTiltDeg[Repetition];
+			ReplayedTruthfulPass.Score.ShellOffsetDeltaCm = StageCShellOffsetCm[Repetition];
+			ReplayedTruthfulPass.Score.ShellVelocityDeltaCmPerSecond = 0.0f;
+			ReplayedTruthfulPass.Score.PeakRootLinearSpeedCmPerSecond = StageCLinearSpeeds[Repetition];
+			ReplayedTruthfulPass.Score.PeakRootAngularSpeedDegPerSecond = StageCAngularSpeeds[Repetition];
+			UPhysAnimComponent::FinalizePhase1AutoCalibScore(ReplayedTruthfulPass.Score);
+			StageCTrials.Add(ReplayedTruthfulPass);
+			Report.Trials.Add(ReplayedTruthfulPass);
+		}
+
+		Report.Trials[0].WinningSearchFamily = TEXT("worst_thigh_interpolation");
+		Report.Trials[1].WinningSearchFamily = TEXT("spine_constraint_interpolation");
+		Report.Trials[2].WinningSearchFamily = TEXT("tilt_spine_rescue");
+
+		UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(Report, &StageCTrials);
 
 		TestTrue(TEXT("Report picks the contract-passing best candidate"), Report.bHasBestCandidate);
 		TestEqual(TEXT("Best candidate comes from the passing preset"), Report.BestCandidate.Params.SourcePreset, EPhase1AutoCalibStrategyPreset::BalancedCoupled);
-	TestTrue(TEXT("Report marks the reproducible truthful pass when one exists"), Report.bHasReproducibleTruthfulPass);
-	TestEqual(TEXT("Truthful pass classification wins when a passing candidate exists"), Report.FrontierClassification, EPhase1AutoCalibFrontierClassification::TruthfulPassFound);
-	TestEqual(TEXT("Passing frontier recommends promotion"), Report.RecommendedAction, EPhase1AutoCalibRecommendedAction::PromoteBestCandidate);
-	TestEqual(TEXT("Passing frontier does not name a follow-up expansion"), Report.RecommendedExpansionName, FString());
+		TestTrue(TEXT("Report marks the reproducible truthful pass when one exists"), Report.bHasReproducibleTruthfulPass);
+		TestEqual(TEXT("Truthful pass classification wins when a passing candidate exists"), Report.FrontierClassification, EPhase1AutoCalibFrontierClassification::TruthfulPassFound);
+		TestEqual(TEXT("Passing frontier recommends promotion"), Report.RecommendedAction, EPhase1AutoCalibRecommendedAction::PromoteBestCandidate);
+		TestEqual(TEXT("Passing frontier does not name a follow-up expansion"), Report.RecommendedExpansionName, FString());
 		TestTrue(TEXT("Report picks a near-pass when non-passing trials exist"), Report.bHasBestNearPass);
 		TestEqual(TEXT("Best near-pass comes from the lowest-error failing preset"), Report.BestNearPass.Params.SourcePreset, EPhase1AutoCalibStrategyPreset::SpineBiased);
 		TestEqual(TEXT("Best candidate keeps winning search attribution"), Report.BestCandidate.WinningSearchFamily, FString(TEXT("coupled_trade_control")));
@@ -1353,6 +1454,30 @@ namespace
 			TEXT("Reproducibility accepts matching terminal class, blocker, and score breakdown within epsilon"),
 			UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(MatchingTrials));
 
+		TrialB = TrialA;
+		TrialB.WinningSearchSource = TEXT("focused_delta_variant");
+		TrialB.ExecutedSearchFamilies = { TEXT("direct_seed"), TEXT("focused_delta"), TEXT("pair_blend") };
+		TrialB.Score.WorstDirectLinkAngularErrorDeg += 0.8f;
+		TrialB.Score.MeanTargetDeltaDeg += 4.0f;
+		TrialB.Score.MaxTargetDeltaDeg += 1.5f;
+		TrialB.Score.ThighAsymmetryDeg += 0.6f;
+		TrialB.Score.PeakRootTiltDeg += 0.7f;
+		TrialB.Score.ShellOffsetDeltaCm += 0.5f;
+		TrialB.Score.PeakRootLinearSpeedCmPerSecond += 22.0f;
+		TrialB.Score.PeakRootAngularSpeedDegPerSecond += 110.0f;
+		MatchingTrials[1] = TrialB;
+		TestTrue(
+			TEXT("Reproducibility accepts bounded live Stage C metric jitter without requiring identical winning-search attribution"),
+			UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(MatchingTrials));
+
+		TrialB.Score.PeakRootLinearSpeedCmPerSecond += 4.0f;
+		TrialB.Score.PeakRootAngularSpeedDegPerSecond += 15.0f;
+		MatchingTrials[1] = TrialB;
+		TestFalse(
+			TEXT("Reproducibility rejects live Stage C score drift that exceeds the bounded physical tolerance"),
+			UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(MatchingTrials));
+
+		TrialB = TrialA;
 		TrialB.TruthfulBlocker = TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient");
 		MatchingTrials[1] = TrialB;
 		TestFalse(
@@ -1380,6 +1505,26 @@ namespace
 			TEXT("Identical critical-link fingerprints compare equal"),
 			UPhysAnimPhase1AutoCalibSubsystem::AreDeterminismFingerprintsNear(FingerprintA, FingerprintB));
 
+		FingerprintB.RootBodyTransform.SetLocation(FVector(0.20f, 0.0f, 0.0f));
+		FingerprintB.RootBodyTransform.SetRotation(FQuat(FVector::UpVector, FMath::DegreesToRadians(0.5f)));
+		FingerprintB.PelvisSpine01AngularErrorDeg += 0.50f;
+		TestTrue(
+			TEXT("Bounded restore jitter in root pose and critical-link angles stays inside the determinism tolerance"),
+			UPhysAnimPhase1AutoCalibSubsystem::AreDeterminismFingerprintsNear(FingerprintA, FingerprintB));
+
+		FingerprintB = FingerprintA;
+		FingerprintB.RootBodyTransform.SetLocation(FVector(1.0f, 0.0f, 0.0f));
+		TestFalse(
+			TEXT("Large root restore drift fails the determinism fingerprint comparison"),
+			UPhysAnimPhase1AutoCalibSubsystem::AreDeterminismFingerprintsNear(FingerprintA, FingerprintB));
+
+		FingerprintB = FingerprintA;
+		FingerprintB.RootBodyTransform.SetRotation(FQuat(FVector::UpVector, FMath::DegreesToRadians(5.0f)));
+		TestFalse(
+			TEXT("Large root rotation restore drift fails the determinism fingerprint comparison"),
+			UPhysAnimPhase1AutoCalibSubsystem::AreDeterminismFingerprintsNear(FingerprintA, FingerprintB));
+
+		FingerprintB = FingerprintA;
 		FingerprintB.PelvisSpine01AngularErrorDeg += 5.0f;
 		TestFalse(
 			TEXT("Critical-link angular drift fails the determinism fingerprint comparison"),

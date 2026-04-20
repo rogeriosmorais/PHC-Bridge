@@ -1,6 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "PhysAnimPhase1AutoCalibSubsystem.h"
 #include "PhysAnimPhase1PelvisCouplingSearch.h"
 
 void UPhysAnimComponent::BeginPlay()
@@ -2602,6 +2603,26 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 		GetRuntimeStateName(RuntimeState));
 }
 
+namespace
+{
+	bool IsPhase1AutoCalibSubsystemActive(const UActorComponent* Component)
+	{
+#if !UE_BUILD_SHIPPING
+		const UWorld* const World = Component ? Component->GetWorld() : nullptr;
+		if (!World)
+		{
+			return false;
+		}
+
+		const UPhysAnimPhase1AutoCalibSubsystem* const AutoCalibSubsystem =
+			World->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>();
+		return AutoCalibSubsystem && AutoCalibSubsystem->IsPhase1AutoCalibActive();
+#else
+		return false;
+#endif
+	}
+}
+
 EPhysAnimBridgeTraceOutputMode UPhysAnimComponent::ResolveBridgeTraceOutputMode() const
 {
 	const int32 OverrideMode = PhysAnimComponentInternal::CVarPhysAnimTraceOutput.GetValueOnGameThread();
@@ -3108,7 +3129,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				}
 			}
 
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ROOTON_TICK4_SPIKE_SOURCE source=%s worstBone=%s maxLinearSpeed=%.2f maxAngularSpeed=%.2f"),
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOTON_TICK4_SPIKE_SOURCE source=%s worstBone=%s maxLinearSpeed=%.2f maxAngularSpeed=%.2f"),
 				Source, WorstBone.IsNone() ? TEXT("none") : *WorstBone.ToString(), MaxLinearSpeed, MaxAngularSpeed);
 
 			if (BalanceReadyTransition.GetDiagnostics().FirstContradictionSource.IsEmpty())
@@ -3493,7 +3514,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		RuntimeState,
 		bPendingBalanceModeStartRequest,
 		BalanceReadyTransition.HasActuallyStarted(),
-		bPhase1AutoCalibOwnsStartRequests))
+		bPhase1AutoCalibOwnsStartRequests,
+		IsPhase1AutoCalibSubsystemActive(this)))
 	{
 		static TMap<const UPhysAnimComponent*, FString> LastAutoTriggerPreEntryBlockReasonByComponent;
 		const int32 AutoBalanceTriggerGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
@@ -4476,6 +4498,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	LastControlTargetDiagnostics = {};
 	RuntimeInstabilityState = {};
 	LastRuntimeInstabilityDiagnostics = {};
+	ClearPublishedBalanceTransitionFailureReason();
 	SimulationHandoffAlpha = 0.0f;
 	bLastAppliedSimulationHandoffSettled = false;
 	LastAppliedControlAuthorityAlpha = -1.0f;

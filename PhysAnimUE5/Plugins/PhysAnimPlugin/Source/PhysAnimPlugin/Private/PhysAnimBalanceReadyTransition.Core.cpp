@@ -1850,7 +1850,7 @@ extern int32 GVerbosePhase2Forensics;
 		}
 		else if (Owner->IsInstabilityPrecursorActive())
 		{
-			AbortReason = TEXT("phase2_fail_stop_precursor");
+			AbortReason = BalanceReadinessReasons::Phase2RootOnSpike;
 			AbortDetail = TEXT("instabilityPrecursor=1");
 		}
 		else if (PhaseTimeSeconds > BalanceTransitionSets::Phase2TopologySettleGraceSeconds &&
@@ -1953,8 +1953,8 @@ extern int32 GVerbosePhase2Forensics;
 			
 			if (Phase2GuardTickCount == 4)
 			{
-				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ROOTON_TICK4_SPIKE_SOURCE source=pre_guard_tick4 worstBone=%s maxLinearSpeed=%.2f maxAngularSpeed=%.2f"),
-					*WorstSpikeBone.ToString(), Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.PeakMaxBodyAngularSpeed);
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOTON_TICK4_SPIKE_SOURCE source=pre_guard_tick4 worstBone=%s maxLinearSpeed=%.2f maxAngularSpeed=%.2f"),
+						*WorstSpikeBone.ToString(), Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.PeakMaxBodyAngularSpeed);
 
 				if (Diagnostics.FirstContradictionSource.IsEmpty())
 				{
@@ -2021,7 +2021,7 @@ extern int32 GVerbosePhase2Forensics;
 			else if (AbortReason == TEXT("phase2_reset_violation")) FailureType = TEXT("stale_cached_target");
 			else if (AbortReason == TEXT("phase2_shell_correction_material")) FailureType = TEXT("shell_correction_influence");
 			else if (AbortReason == TEXT("phase2_topology_not_preserved")) FailureType = TEXT("topology_mismatch");
-			else if (AbortReason == TEXT("phase2_fail_stop_precursor")) FailureType = TEXT("root_motion_spike");
+			else if (AbortReason == BalanceReadinessReasons::Phase2FailStopPrecursor) FailureType = TEXT("root_motion_spike");
 
 			float MeasuredValue = 0.0f;
 			float ThresholdValue = 0.0f;
@@ -2304,12 +2304,25 @@ extern int32 GVerbosePhase2Forensics;
 				USkeletalMeshComponent* const Mesh = Owner->GetMeshComponent();
 				FBodyInstance* const RootBI = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 				const bool bRootRawSim = RootBI ? RootBI->IsInstanceSimulatingPhysics() : false;
+				const FVector RootLinearVelocity = RootBI ? RootBI->GetUnrealWorldVelocity() : FVector::ZeroVector;
+				const FVector RootAngularVelocityDegPerSecond = RootBI
+					? FMath::RadiansToDegrees(RootBI->GetUnrealWorldAngularVelocityInRadians())
+					: FVector::ZeroVector;
+				const float RootLinearSpeed = RootLinearVelocity.Size();
+				const float RootAngularSpeed = RootAngularVelocityDegPerSecond.Size();
+				const float RootLinearThreshold = Settings.MaxRootLinearSpeedCmPerSecond * 2.5f;
+				const float RootAngularThreshold = Settings.MaxRootAngularSpeedDegPerSecond * 3.0f;
+				const float ShellOffsetDeltaCm = Owner->GetCurrentShellPlanarOffsetDeltaCm();
+				const float ShellVelocityDeltaCmPerSecond = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+				const bool bShellCorrectionOwnerActive = FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
+					Owner->IsTransitionOwnedShellLocked(),
+					Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle);
 
 				const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
 				const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PelvisModifierName);
 				const EPhysicsMovementType PelvisModifierType = PelvisRecord ? PelvisRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
 
-				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE3_FIRST_FAILURE_AUDIT frame=%d reason=%s tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_FIRST_FAILURE_AUDIT frame=%d reason=%s tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d rootLinear=%.2f/%.2f rootAngular=%.2f/%.2f shellOffsetDelta=%.2f/%.2f shellVelocityDelta=%.2f/%.2f shellCorrectionActive=%d owner=%d actor=%s component=%s"),
 					static_cast<int32>(GFrameCounter),
 					*Phase3Violation,
 					static_cast<int32>(Phase2GuardTickCount), // This might be stale if we're in Settle, but at least we have a tick
@@ -2319,6 +2332,15 @@ extern int32 GVerbosePhase2Forensics;
 					Diagnostics.SimCountPost,
 					CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
 					CertifiedHandoff.bTransitionShellReferenceReanchored ? 1 : 0,
+					RootLinearSpeed,
+					RootLinearThreshold,
+					RootAngularSpeed,
+					RootAngularThreshold,
+					ShellOffsetDeltaCm,
+					Settings.BalancePhase2AbortShellOffsetDelta,
+					ShellVelocityDeltaCmPerSecond,
+					Settings.BalancePhase2AbortShellVelocityDelta,
+					bShellCorrectionOwnerActive ? 1 : 0,
 					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Phase3Violation)),
 					*Owner->GetOwner()->GetName(),
 					*Owner->GetName());
@@ -2959,7 +2981,8 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	}
 	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
 	{
-		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ABORT reason=%s"), *Diagnostics.FailureReason);
+		const FString FailureReason = Diagnostics.FailureReason;
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ABORT reason=%s"), *FailureReason);
 		if (Owner)
 		{
 			if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
@@ -2972,6 +2995,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 						PelvisBody->SetInstanceSimulatePhysics(false);
 					}
 				}
+				Owner->RecoverBridgeActiveStateAfterBalanceTransitionFailure(FailureReason);
 				ResetTransitionLocalState();
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RECOVERY_COMPLETE"));
 			}

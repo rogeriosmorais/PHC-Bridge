@@ -13,6 +13,57 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery;
 }
 
+bool UPhysAnimComponent::ShouldRebaselineBridgeStateAfterTransitionFailure(const FString& FailureReason)
+{
+	if (FailureReason.IsEmpty())
+	{
+		return false;
+	}
+
+	switch (FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(FailureReason))
+	{
+	case EBalanceReadyConditionOwner::Phase2RootOnExecution:
+	case EBalanceReadyConditionOwner::Phase2TopologyEnforcement:
+	case EBalanceReadyConditionOwner::ShellAuthorityMaintenance:
+	case EBalanceReadyConditionOwner::TransitionRecovery:
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+void UPhysAnimComponent::PublishBalanceTransitionFailureReason(const FString& FailureReason)
+{
+	LastPublishedBalanceTransitionFailureReason = FailureReason;
+}
+
+void UPhysAnimComponent::ClearPublishedBalanceTransitionFailureReason()
+{
+	LastPublishedBalanceTransitionFailureReason.Reset();
+}
+
+void UPhysAnimComponent::RecoverBridgeActiveStateAfterBalanceTransitionFailure(const FString& FailureReason)
+{
+	PublishBalanceTransitionFailureReason(FailureReason);
+
+	if (!ShouldRebaselineBridgeStateAfterTransitionFailure(FailureReason))
+	{
+		return;
+	}
+
+	RuntimeInstabilityState = {};
+	LastRuntimeInstabilityDiagnostics = {};
+	ResetBridgeLocomotionAuthorityState();
+	ReanchorShellCouplingReferenceToCurrentRoot(TEXT("transition_failure_recovery"));
+
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimBalance] PHASE2_RECOVERY_REBASELINE reason=%s locomotionReset=1 watchdogReset=1 shellReferenceReanchored=1"),
+		*FailureReason);
+}
+
 bool UPhysAnimComponent::EvaluateBalancePerturbationRuntimeReadiness(
 	EPhysAnimRuntimeState RuntimeState,
 	int32 HighestUnlockedBringUpGroupIndex,
@@ -798,12 +849,14 @@ bool UPhysAnimComponent::ShouldAttemptAutoTriggeredBalanceStart(
 	const EPhysAnimRuntimeState RuntimeState,
 	const bool bPendingBalanceModeStartRequest,
 	const bool bTransitionStarted,
-	const bool bPhase1AutoCalibOwnsStartRequests)
+	const bool bPhase1AutoCalibOwnsStartRequests,
+	const bool bPhase1AutoCalibSubsystemActive)
 {
 	return RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
 		!bPendingBalanceModeStartRequest &&
 		!bTransitionStarted &&
-		!bPhase1AutoCalibOwnsStartRequests;
+		!bPhase1AutoCalibOwnsStartRequests &&
+		!bPhase1AutoCalibSubsystemActive;
 }
 
 void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
@@ -847,6 +900,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 
 	// The pending request owns the start attempt; keep BridgeActive public state until Start accepts.
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Pending balance request entering transition start attempt."));
+	ClearPublishedBalanceTransitionFailureReason();
 	BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
 	ClearPendingBalanceModeStartRequestState();
 }
@@ -887,6 +941,7 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	bPendingBalanceModeStartRequest = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
+	ClearPublishedBalanceTransitionFailureReason();
 	BalanceReadyTransition.Cancel(this);
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Recovery);
@@ -1045,6 +1100,7 @@ void UPhysAnimComponent::StopBalancePerturbationMode()
 	bPendingBalanceModeStartAttemptIssued = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
+	ClearPublishedBalanceTransitionFailureReason();
 
 	BalanceScenarios.Empty();
 	ActiveBalanceScenarioIndex = INDEX_NONE;

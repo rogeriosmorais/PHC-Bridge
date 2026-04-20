@@ -279,6 +279,7 @@ namespace BalanceReadinessReasons
 	static const FString TargetDiscontinuityTooHigh = TEXT("target_discontinuity_too_high");
 	static const FString RootSimulationDropped = TEXT("root_simulation_dropped");
 	static const FString TopologyMismatch = TEXT("topology_mismatch");
+	static const FString Phase2RootOnSpike = TEXT("phase2_root_on_spike");
 	static const FString Phase2FailStopPrecursor = TEXT("phase2_fail_stop_precursor");
 	static const FString Phase2RootSimulationDropped = TEXT("phase2_root_simulation_dropped");
 	static const FString Phase2TopologyNotPreserved = TEXT("phase2_topology_not_preserved");
@@ -558,6 +559,9 @@ public:
 		const FPhysAnimStabilizationDomain& Domain,
 		const struct FPhysAnimStabilizationSettings& Settings,
 		FString& OutReason);
+	static bool IsPhase3ShellCorrectionOwnerActive(
+		bool bTransitionOwnedShellLocked,
+		bool bLocomotionAuthorityIdle);
 	static bool IsMaterialShellCorrectionActive(
 		bool bShellCorrectionOwnerActive,
 		float ShellPlanarOffsetCm,

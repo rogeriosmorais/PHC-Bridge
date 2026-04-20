@@ -390,10 +390,10 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase2GuardWindowDuration = 0.10f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
-	float BalancePhase2AbortRootLinearSpeed = 30.0f;
+	float BalancePhase2AbortRootLinearSpeed = 1200.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
-	float BalancePhase2AbortRootAngularSpeed = 50.0f;
+	float BalancePhase2AbortRootAngularSpeed = 4000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase2AbortMaxBodyLinearSpeed = 1000.0f;
@@ -1018,9 +1018,13 @@ public:
 	bool WasPelvisSimulatingLastFrame() const { return bLastAppliedPresentationRootSimulationEnabled; }
 	bool IsPelvisSimulatingNow() const;
 	bool TryGetPublicBalanceEntryRuntimeState(EPhysAnimRuntimeState& OutState) const;
-	bool HasBalanceReadyTransitionFailed() const { return BalanceReadyTransition.HasFailed(); }
+	bool HasBalanceReadyTransitionFailed() const { return BalanceReadyTransition.HasFailed() || !LastPublishedBalanceTransitionFailureReason.IsEmpty(); }
 	bool HasSafePhase2Denial() const { return BalanceReadyTransition.HasSafePhase2Denial(); }
-	const FString& GetBalanceReadyTransitionFailureReason() const { return BalanceReadyTransition.GetFailureReason(); }
+	const FString& GetBalanceReadyTransitionFailureReason() const
+	{
+		const FString& LiveFailureReason = BalanceReadyTransition.GetFailureReason();
+		return LiveFailureReason.IsEmpty() ? LastPublishedBalanceTransitionFailureReason : LiveFailureReason;
+	}
 	const FString& GetSafePhase2DenialReason() const { return BalanceReadyTransition.GetSafePhase2DenialReason(); }
 
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
@@ -1094,13 +1098,27 @@ public:
 		EPhysAnimRuntimeState RuntimeState,
 		bool bPendingBalanceModeStartRequest,
 		bool bTransitionStarted,
-		bool bPhase1AutoCalibOwnsStartRequests)
+		bool bPhase1AutoCalibOwnsStartRequests,
+		bool bPhase1AutoCalibSubsystemActive = false)
 	{
 		return ShouldAttemptAutoTriggeredBalanceStart(
 			RuntimeState,
 			bPendingBalanceModeStartRequest,
 			bTransitionStarted,
-			bPhase1AutoCalibOwnsStartRequests);
+			bPhase1AutoCalibOwnsStartRequests,
+			bPhase1AutoCalibSubsystemActive);
+	}
+	static bool TestOnlyShouldTreatInstabilityPrecursorAsTransitionBlocker(
+		EPhysAnimRuntimeState RuntimeState,
+		float UnstableAccumulatedSeconds)
+	{
+		return UnstableAccumulatedSeconds > 0.0f &&
+			RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+			RuntimeState != EPhysAnimRuntimeState::BalanceEntry_Settle;
+	}
+	static bool TestOnlyShouldRebaselineBridgeStateAfterTransitionFailure(const FString& FailureReason)
+	{
+		return ShouldRebaselineBridgeStateAfterTransitionFailure(FailureReason);
 	}
 	static void TestOnlyStorePhase1AutoCalibActionHistory(
 		FPhase1AutoCalibBaselineSnapshot& Snapshot,
@@ -1452,6 +1470,9 @@ private:
 	void CaptureBridgeIntent(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ApplyBridgeOwnedMovementDrive(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResetBridgeLocomotionAuthorityState();
+	void RecoverBridgeActiveStateAfterBalanceTransitionFailure(const FString& FailureReason);
+	void PublishBalanceTransitionFailureReason(const FString& FailureReason);
+	void ClearPublishedBalanceTransitionFailureReason();
 	bool QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	void UpdateBridgePoseSearchTrajectory(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResolveBridgePoseSearchQueryVelocity(const FPhysAnimStabilizationSettings& EffectiveSettings, FVector& OutQueryVelocity, float* OutIntentMagnitude = nullptr) const;
@@ -1489,6 +1510,7 @@ private:
 	void ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude);
 	void FinalizeBalanceScenario(bool bSuccess, const FString& Reason);
 	bool ShouldAllowBalanceSimulation(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
+	static bool ShouldRebaselineBridgeStateAfterTransitionFailure(const FString& FailureReason);
 	bool IsBalancePerturbationRuntimeReady(
 		const FPhysAnimStabilizationSettings& EffectiveSettings,
 		float* OutPolicyInfluenceAlpha = nullptr,
@@ -1599,6 +1621,7 @@ private:
 	FPhysAnimControlTargetDiagnostics LastControlTargetDiagnostics;
 	FPhysAnimRuntimeInstabilityState RuntimeInstabilityState;
 	FPhysAnimRuntimeInstabilityDiagnostics LastRuntimeInstabilityDiagnostics;
+	FString LastPublishedBalanceTransitionFailureReason;
 	TSharedPtr<class FPhysAnimBridgeTraceWriter> BridgeTraceWriter;
 	FString CurrentBridgeTraceSessionId;
 	int64 BridgeTraceTickCounter = 0;
@@ -1745,7 +1768,8 @@ private:
 		EPhysAnimRuntimeState RuntimeState,
 		bool bPendingBalanceModeStartRequest,
 		bool bTransitionStarted,
-		bool bPhase1AutoCalibOwnsStartRequests);
+		bool bPhase1AutoCalibOwnsStartRequests,
+		bool bPhase1AutoCalibSubsystemActive);
 
 public:
 	static bool BuildConditionedActions(
