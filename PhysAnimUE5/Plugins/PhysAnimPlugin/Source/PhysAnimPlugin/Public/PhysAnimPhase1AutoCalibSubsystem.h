@@ -26,6 +26,10 @@ public:
 	static void BuildStageBRefinementCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageAResults, const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates);
 	static void BuildStageCReproCandidates(const TArray<FPhase1AutoCalibTrialResult>& StageBResults, const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates);
 	static bool AreTrialResultsReproducible(const TArray<FPhase1AutoCalibTrialResult>& Trials, float Epsilon = 1.0e-3f);
+	static bool AreDeterminismFingerprintsNear(
+		const FPhase1AutoCalibDeterminismFingerprint& A,
+		const FPhase1AutoCalibDeterminismFingerprint& B,
+		float Tolerance = 1.0e-3f);
 	static bool IsActiveTrialTimeoutReached(bool bTrialStarted, double TrialStartTimeSeconds, double CurrentTimeSeconds, double TimeoutSeconds);
 	static bool ShouldAccumulateActiveTrialMetrics(bool bTrialStarted);
 	static void FinalizeReportData(FPhase1AutoCalibReport& InOutReport, TArray<FPhase1AutoCalibTrialResult>* StageCTrials = nullptr);

@@ -1258,6 +1258,68 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibSmokeStageBCenterReplayTest,
+		"PhysAnim.Component.Phase1AutoCalibSmokeStageBCenterReplay",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibSmokeStageBCenterReplayTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibRequest SmokeRequest;
+		SmokeRequest.BudgetMode = EPhase1AutoCalibBudgetMode::Smoke;
+
+		FPhase1AutoCalibTrialResult BestPass =
+			MakePhase1AutoCalibTrial(
+				EPhase1AutoCalibStrategyPreset::CurrentDefault,
+				TEXT("reached_root_on"),
+				TEXT("ready"),
+				true,
+				30.5f,
+				1.0f);
+		BestPass.Params.SpineInterpolationAlpha = 0.31f;
+
+		FPhase1AutoCalibTrialResult SecondPass =
+			MakePhase1AutoCalibTrial(
+				EPhase1AutoCalibStrategyPreset::SpineBiased,
+				TEXT("reached_root_on"),
+				TEXT("ready"),
+				true,
+				31.5f,
+				1.2f);
+		SecondPass.Params.SpineInterpolationAlpha = 0.57f;
+
+		TArray<FPhase1AutoCalibTrialResult> StageAResults;
+		StageAResults.Add(BestPass);
+		StageAResults.Add(SecondPass);
+		StageAResults.Add(MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::WorstThighBiased,
+			TEXT("timed_out"),
+			TEXT("phase1_root_on_readiness_pelvis_angular_incoherent"),
+			false,
+			50.0f,
+			2.0f));
+
+		TArray<FPhase1AutoCalibParams> StageBCandidates;
+		UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(StageAResults, SmokeRequest, StageBCandidates);
+
+		TestEqual(TEXT("Smoke Stage B honors the bounded trial budget"), StageBCandidates.Num(), 8);
+		TestEqual(
+			TEXT("Smoke Stage B first replays the best retained Stage A center"),
+			StageBCandidates[0].SourcePreset,
+			EPhase1AutoCalibStrategyPreset::CurrentDefault);
+		TestEqual(
+			TEXT("Smoke Stage B also replays the second retained Stage A center before local sweeps"),
+			StageBCandidates[1].SourcePreset,
+			EPhase1AutoCalibStrategyPreset::SpineBiased);
+		TestTrue(
+			TEXT("Smoke Stage B preserves the exact retained center parameters for the best pass"),
+			FMath::IsNearlyEqual(StageBCandidates[0].SpineInterpolationAlpha, BestPass.Params.SpineInterpolationAlpha));
+		TestTrue(
+			TEXT("Smoke Stage B preserves the exact retained center parameters for the second pass"),
+			FMath::IsNearlyEqual(StageBCandidates[1].SpineInterpolationAlpha, SecondPass.Params.SpineInterpolationAlpha));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibReproducibilityTest,
 		"PhysAnim.Component.Phase1AutoCalibReproducibility",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -1296,6 +1358,32 @@ namespace
 		TestFalse(
 			TEXT("Reproducibility rejects a blocker mismatch"),
 			UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(MatchingTrials));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibDeterminismFingerprintCoverageTest,
+		"PhysAnim.Component.Phase1AutoCalibDeterminismFingerprintCoverage",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibDeterminismFingerprintCoverageTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibDeterminismFingerprint FingerprintA;
+		FingerprintA.RuntimeState = EPhysAnimRuntimeState::BridgeActive;
+		FingerprintA.TransitionPhase = EBalanceReadyTransitionPhase::BRT_Inactive;
+		FingerprintA.PelvisThighLAngularErrorDeg = 22.5f;
+		FingerprintA.PelvisThighRAngularErrorDeg = 21.0f;
+		FingerprintA.PelvisSpine01AngularErrorDeg = 30.0f;
+
+		FPhase1AutoCalibDeterminismFingerprint FingerprintB = FingerprintA;
+		TestTrue(
+			TEXT("Identical critical-link fingerprints compare equal"),
+			UPhysAnimPhase1AutoCalibSubsystem::AreDeterminismFingerprintsNear(FingerprintA, FingerprintB));
+
+		FingerprintB.PelvisSpine01AngularErrorDeg += 5.0f;
+		TestFalse(
+			TEXT("Critical-link angular drift fails the determinism fingerprint comparison"),
+			UPhysAnimPhase1AutoCalibSubsystem::AreDeterminismFingerprintsNear(FingerprintA, FingerprintB));
 		return true;
 	}
 #endif

@@ -1,4 +1,5 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimBalanceReadyTransitionPrivate.h"
 #include "PhysAnimComponentPrivate.h"
 
 #if !UE_BUILD_SHIPPING
@@ -262,10 +263,15 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 		}
 	}
 
+	Mesh->RefreshBoneTransforms();
+
 	PreviousControlTargetRotations = Snapshot.PreviousControlTargetRotations;
 	PolicyBlendStartControlTargetRotations = Snapshot.PolicyBlendStartControlTargetRotations;
 	if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
 	{
+		// Restore-side cache sync keeps the next trial from inheriting stale
+		// control-space pose data from the previous run.
+		PhysicsControl->UpdateTargetCaches(0.0f);
 		for (const TPair<FName, FQuat>& Pair : PreviousControlTargetRotations)
 		{
 			if (PhysicsControl->GetControlExists(Pair.Key))
@@ -273,6 +279,7 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 				PhysicsControl->SetControlTargetOrientation(Pair.Key, Pair.Value.Rotator(), 0.0f, true, false, true, false);
 			}
 		}
+		PhysicsControl->UpdateControls(0.0f);
 	}
 
 	SelfObservationBuffer = Snapshot.SelfObservationBuffer;
@@ -422,6 +429,15 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibDeterminismFingerprint(FPhase1Aut
 	OutFingerprint.RootBodyTransform = RootBody->GetUnrealWorldTransform();
 	OutFingerprint.RootLinearVelocity = RootBody->GetUnrealWorldVelocity();
 	OutFingerprint.RootAngularVelocity = RootBody->GetUnrealWorldAngularVelocityInRadians();
+	BalanceTransitionSets::FDirectPelvisLinkForensicRecord PelvisThighLRecord;
+	BalanceTransitionSets::FDirectPelvisLinkForensicRecord PelvisThighRRecord;
+	BalanceTransitionSets::FDirectPelvisLinkForensicRecord PelvisSpine01Record;
+	BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, PhysAnimBridge::GetRootBoneName(), TEXT("thigh_l"), PelvisThighLRecord);
+	BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, PhysAnimBridge::GetRootBoneName(), TEXT("thigh_r"), PelvisThighRRecord);
+	BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, PhysAnimBridge::GetRootBoneName(), TEXT("spine_01"), PelvisSpine01Record);
+	OutFingerprint.PelvisThighLAngularErrorDeg = PelvisThighLRecord.ConstraintAngularErrorDeg;
+	OutFingerprint.PelvisThighRAngularErrorDeg = PelvisThighRRecord.ConstraintAngularErrorDeg;
+	OutFingerprint.PelvisSpine01AngularErrorDeg = PelvisSpine01Record.ConstraintAngularErrorDeg;
 	OutFingerprint.ShellOffsetDeltaCm = LiveMetrics.ShellOffsetDeltaCm;
 	OutFingerprint.ShellVelocityDeltaCmPerSecond = LiveMetrics.ShellVelocityDeltaCmPerSecond;
 	OutFingerprint.MaxTargetDeltaDeg = LiveMetrics.MaxTargetDeltaDeg;

@@ -848,6 +848,9 @@ struct FPhase1AutoCalibDeterminismFingerprint
 	FTransform RootBodyTransform = FTransform::Identity;
 	FVector RootLinearVelocity = FVector::ZeroVector;
 	FVector RootAngularVelocity = FVector::ZeroVector;
+	float PelvisThighLAngularErrorDeg = 0.0f;
+	float PelvisThighRAngularErrorDeg = 0.0f;
+	float PelvisSpine01AngularErrorDeg = 0.0f;
 	float ShellOffsetDeltaCm = 0.0f;
 	float ShellVelocityDeltaCmPerSecond = 0.0f;
 	float MaxTargetDeltaDeg = 0.0f;

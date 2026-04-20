@@ -153,6 +153,9 @@ namespace
 			AreTransformsNear(A.RootBodyTransform, B.RootBodyTransform, Tolerance) &&
 			A.RootLinearVelocity.Equals(B.RootLinearVelocity, Tolerance) &&
 			A.RootAngularVelocity.Equals(B.RootAngularVelocity, Tolerance) &&
+			FMath::IsNearlyEqual(A.PelvisThighLAngularErrorDeg, B.PelvisThighLAngularErrorDeg, Tolerance) &&
+			FMath::IsNearlyEqual(A.PelvisThighRAngularErrorDeg, B.PelvisThighRAngularErrorDeg, Tolerance) &&
+			FMath::IsNearlyEqual(A.PelvisSpine01AngularErrorDeg, B.PelvisSpine01AngularErrorDeg, Tolerance) &&
 			FMath::IsNearlyEqual(A.ShellOffsetDeltaCm, B.ShellOffsetDeltaCm, Tolerance) &&
 			FMath::IsNearlyEqual(A.ShellVelocityDeltaCmPerSecond, B.ShellVelocityDeltaCmPerSecond, Tolerance) &&
 			FMath::IsNearlyEqual(A.MaxTargetDeltaDeg, B.MaxTargetDeltaDeg, Tolerance) &&
@@ -623,6 +626,27 @@ void UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(
 	static const float ThighDeltas[StageBRounds] = { 0.05f, 0.025f, 0.0125f };
 	static const float ScaleDeltas[StageBRounds] = { 0.25f, 0.125f, 0.0625f };
 	static const float BiasDeltas[StageBRounds] = { 0.25f, 0.125f, 0.0625f };
+	const auto AddCandidate = [&](FPhase1AutoCalibParams Params)
+	{
+		if (StageLimit > 0 && OutCandidates.Num() >= StageLimit)
+		{
+			return false;
+		}
+
+		OutCandidates.Add(ClampParams(Params));
+		return true;
+	};
+
+	// Preserve the retained Stage A centers so bounded smoke budgets can
+	// truthfully re-check any discovered pass before spending the budget on
+	// local perturbations around the current best family.
+	for (int32 CandidateIndex = 0; CandidateIndex < CandidateCount; ++CandidateIndex)
+	{
+		if (!AddCandidate(Sorted[CandidateIndex].Params))
+		{
+			return;
+		}
+	}
 
 	for (int32 CandidateIndex = 0; CandidateIndex < CandidateCount; ++CandidateIndex)
 	{
@@ -634,60 +658,87 @@ void UPhysAnimPhase1AutoCalibSubsystem::BuildStageBRefinementCandidates(
 			const float ScaleDelta = ScaleDeltas[RoundIndex];
 			const float BiasDelta = BiasDeltas[RoundIndex];
 
-			const auto AddCandidate = [&](FPhase1AutoCalibParams Params)
-			{
-				if (StageLimit > 0 && OutCandidates.Num() >= StageLimit)
-				{
-					return;
-				}
-
-				OutCandidates.Add(ClampParams(Params));
-			};
-
 			FPhase1AutoCalibParams Params = Base;
 			Params.SpineInterpolationAlpha += SpineDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.SpineInterpolationAlpha -= SpineDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.WorstThighInterpolationAlpha += ThighDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.WorstThighInterpolationAlpha -= ThighDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.FocusedDeltaScale += ScaleDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.FocusedDeltaScale -= ScaleDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.UprightnessWeightScale += ScaleDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.UprightnessWeightScale -= ScaleDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.ClampStrengthScale += ScaleDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.ClampStrengthScale -= ScaleDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.PelvisPitchBiasDeg += BiasDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.PelvisPitchBiasDeg -= BiasDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.PelvisRollBiasDeg += BiasDelta;
-			AddCandidate(Params);
+			if (!AddCandidate(Params))
+			{
+				return;
+			}
 			Params = Base;
 			Params.PelvisRollBiasDeg -= BiasDelta;
-			AddCandidate(Params);
-
-			if (StageLimit > 0 && OutCandidates.Num() >= StageLimit)
+			if (!AddCandidate(Params))
 			{
 				return;
 			}
@@ -772,6 +823,14 @@ bool UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(const TArray
 	return true;
 }
 
+bool UPhysAnimPhase1AutoCalibSubsystem::AreDeterminismFingerprintsNear(
+	const FPhase1AutoCalibDeterminismFingerprint& A,
+	const FPhase1AutoCalibDeterminismFingerprint& B,
+	const float Tolerance)
+{
+	return AreFingerprintsNear(A, B, Tolerance);
+}
+
 bool UPhysAnimPhase1AutoCalibSubsystem::ResolveTargetComponent(
 	const FString& OwnerFilter,
 	UPhysAnimComponent*& OutComponent,
@@ -828,10 +887,20 @@ bool UPhysAnimPhase1AutoCalibSubsystem::RunDeterminismPreflight(
 
 	FPhase1AutoCalibDeterminismFingerprint FingerprintA;
 	FPhase1AutoCalibDeterminismFingerprint FingerprintB;
-	if (!Component.RestorePhase1AutoCalibBaseline(Baseline, OutError) ||
-		!Component.CapturePhase1AutoCalibDeterminismFingerprint(FingerprintA, OutError) ||
-		!Component.RestorePhase1AutoCalibBaseline(Baseline, OutError) ||
-		!Component.CapturePhase1AutoCalibDeterminismFingerprint(FingerprintB, OutError))
+	if (!Component.RestorePhase1AutoCalibBaseline(Baseline, OutError))
+	{
+		return false;
+	}
+	Component.StopBalancePerturbationMode();
+	Component.SetPhase1AutoCalibOwnsStartRequests(true);
+	if (!Component.CapturePhase1AutoCalibDeterminismFingerprint(FingerprintA, OutError) ||
+		!Component.RestorePhase1AutoCalibBaseline(Baseline, OutError))
+	{
+		return false;
+	}
+	Component.StopBalancePerturbationMode();
+	Component.SetPhase1AutoCalibOwnsStartRequests(true);
+	if (!Component.CapturePhase1AutoCalibDeterminismFingerprint(FingerprintB, OutError))
 	{
 		return false;
 	}
@@ -890,6 +959,11 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickAwaitingReadiness()
 			StopPhase1AutoCalib(TEXT("determinism_preflight_failed"));
 			return;
 		}
+
+		// Keep preflight and the first queued trial on the harness-owned start
+		// path so auto-trigger cannot consume the baseline between them.
+		Component->StopBalancePerturbationMode();
+		Component->SetPhase1AutoCalibOwnsStartRequests(true);
 
 		CurrentStage = EAutoCalibStage::StageA;
 		CurrentStageStartTimeSeconds = World->GetTimeSeconds();
