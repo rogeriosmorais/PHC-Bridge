@@ -3489,9 +3489,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
-	if (RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
-		!bPendingBalanceModeStartRequest &&
-		!BalanceReadyTransition.HasActuallyStarted())
+	if (ShouldAttemptAutoTriggeredBalanceStart(
+		RuntimeState,
+		bPendingBalanceModeStartRequest,
+		BalanceReadyTransition.HasActuallyStarted(),
+		bPhase1AutoCalibOwnsStartRequests))
 	{
 		static TMap<const UPhysAnimComponent*, FString> LastAutoTriggerPreEntryBlockReasonByComponent;
 		const int32 AutoBalanceTriggerGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);

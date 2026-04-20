@@ -376,6 +376,22 @@ namespace
 			TEXT("Phase 3 instability uses the Settle-specific instability reason"),
 			Reason,
 			BalanceReadinessReasons::Phase3InstabilitySpike);
+		TestFalse(
+			TEXT("Idle shell state with large deltas is not material shell correction by itself"),
+			FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(
+				false,
+				0.0f,
+				410.11f,
+				GetDefaultSettings().BalancePhase2AbortShellOffsetDelta,
+				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta));
+		TestTrue(
+			TEXT("Active shell correction owner with threshold breach is material shell correction"),
+			FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(
+				true,
+				0.0f,
+				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta + 1.0f,
+				GetDefaultSettings().BalancePhase2AbortShellOffsetDelta,
+				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta));
 
 		TestEqual(
 			TEXT("Phase 2 root simulation drop is owned by RootOn execution"),

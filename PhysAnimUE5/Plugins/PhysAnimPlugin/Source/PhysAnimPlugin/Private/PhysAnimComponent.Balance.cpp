@@ -794,6 +794,17 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 
 }
 
+bool UPhysAnimComponent::ShouldAttemptAutoTriggeredBalanceStart(
+	const EPhysAnimRuntimeState RuntimeState,
+	const bool bPendingBalanceModeStartRequest,
+	const bool bTransitionStarted,
+	const bool bPhase1AutoCalibOwnsStartRequests)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+		!bPendingBalanceModeStartRequest &&
+		!bTransitionStarted &&
+		!bPhase1AutoCalibOwnsStartRequests;
+}
 
 void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {

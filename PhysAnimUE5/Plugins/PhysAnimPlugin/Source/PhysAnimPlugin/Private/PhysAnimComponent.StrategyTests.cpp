@@ -128,6 +128,51 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimAutoTriggerStartAuthorityTest,
+		"PhysAnim.Component.AutoTriggerStartAuthority",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimAutoTriggerStartAuthorityTest::RunTest(const FString& Parameters)
+	{
+		TestTrue(
+			TEXT("BridgeActive attempts auto-trigger when no other owner is active"),
+			UPhysAnimComponent::TestOnlyShouldAttemptAutoTriggeredBalanceStart(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				false));
+		TestFalse(
+			TEXT("Pending requests suppress a second auto-trigger attempt"),
+			UPhysAnimComponent::TestOnlyShouldAttemptAutoTriggeredBalanceStart(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false,
+				false));
+		TestFalse(
+			TEXT("Started transitions suppress a second auto-trigger attempt"),
+			UPhysAnimComponent::TestOnlyShouldAttemptAutoTriggeredBalanceStart(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				true,
+				false));
+		TestFalse(
+			TEXT("Phase1 auto-calibration owns the start path while it is active"),
+			UPhysAnimComponent::TestOnlyShouldAttemptAutoTriggeredBalanceStart(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				true));
+		TestFalse(
+			TEXT("Non-BridgeActive states never auto-trigger balance entry"),
+			UPhysAnimComponent::TestOnlyShouldAttemptAutoTriggeredBalanceStart(
+				EPhysAnimRuntimeState::RuntimeReady,
+				false,
+				false,
+				false));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimActionConditioningTest,
 		"PhysAnim.Component.ActionConditioning",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -374,6 +419,20 @@ namespace
 		TestTrue(TEXT("Recovery is the only public active-balance state"), UPhysAnimComponent::TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState::BalanceActive_Recovery));
 		TestFalse(TEXT("BalanceSafeDeny is not active balance"), UPhysAnimComponent::TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState::BalanceSafeDeny));
 		TestFalse(TEXT("Settle is not active balance"), UPhysAnimComponent::TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState::BalanceEntry_Settle));
+		TestTrue(
+			TEXT("Settle keeps using authoritative per-bone modifier sync even without the distal kinematic experiment"),
+			UPhysAnimComponent::TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
+				EPhysAnimRuntimeState::BalanceEntry_Settle,
+				false));
+		TestTrue(
+			TEXT("Settle per-bone modifier sync updates live bodies immediately to preserve Phase 3 continuity"),
+			UPhysAnimComponent::TestOnlyShouldUpdateBodyOnPerBoneBodyModifierSync(
+				EPhysAnimRuntimeState::BalanceEntry_Settle));
+		TestFalse(
+			TEXT("BridgeActive without the distal kinematic experiment can still use the broad modifier path"),
+			UPhysAnimComponent::TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
+				EPhysAnimRuntimeState::BridgeActive,
+				false));
 		TestTrue(
 			TEXT("Ultra-fine RootOn readiness cleanup still runs for the current 1.55 degree near-miss class"),
 			UPhysAnimComponent::TestOnlyShouldRunRootOnReadinessUltraFineMarginSweep(1.55f));

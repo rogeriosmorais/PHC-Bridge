@@ -443,4 +443,18 @@ bool UPhysAnimComponent::StartPhase1AutoCalibTrial(FString& OutError)
 	return true;
 }
 
+void UPhysAnimComponent::SetPhase1AutoCalibOwnsStartRequests(const bool bOwned)
+{
+	bPhase1AutoCalibOwnsStartRequests = bOwned;
+	if (bOwned &&
+		bPendingBalanceModeStartRequest &&
+		!bPendingBalanceModeStartAttemptIssued &&
+		PendingBalanceModeStartReason == TEXT("auto_trigger"))
+	{
+		bPendingBalanceModeStartRequest = false;
+		PendingBalanceModeStartReason.Reset();
+		PendingBalanceModeRequestTimeSeconds = -1.0;
+	}
+}
+
 #endif

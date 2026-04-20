@@ -121,6 +121,19 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 }
 
 
+bool FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(
+	bool bShellCorrectionOwnerActive,
+	float ShellPlanarOffsetCm,
+	float ShellPlanarVelocityCmPerSec,
+	float MaxAllowedShellOffsetCm,
+	float MaxAllowedShellVelocityCmPerSec)
+{
+	return bShellCorrectionOwnerActive &&
+		(ShellPlanarOffsetCm > MaxAllowedShellOffsetCm ||
+		 ShellPlanarVelocityCmPerSec > MaxAllowedShellVelocityCmPerSec);
+}
+
+
 bool FPhysAnimBalanceReadyTransition::IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
 {
 	// Legacy helper wrapper for backward compatibility during refactor
@@ -490,8 +503,13 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	}
 
 	// Section 17.3 - no material shell correction
-	if (Owner->GetCurrentShellPlanarOffsetDeltaCm() > Settings.BalancePhase2AbortShellOffsetDelta ||
-		Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond() > Settings.BalancePhase2AbortShellVelocityDelta)
+	const bool bShellCorrectionOwnerActive = Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle;
+	if (IsMaterialShellCorrectionActive(
+			bShellCorrectionOwnerActive,
+			Owner->GetCurrentShellPlanarOffsetDeltaCm(),
+			Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond(),
+			Settings.BalancePhase2AbortShellOffsetDelta,
+			Settings.BalancePhase2AbortShellVelocityDelta))
 	{
 		OutReason = TEXT("phase3_material_shell_correction");
 		return false;

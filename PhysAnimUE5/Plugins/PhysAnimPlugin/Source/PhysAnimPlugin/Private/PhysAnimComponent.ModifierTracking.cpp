@@ -688,6 +688,28 @@ ECollisionEnabled::Type UPhysAnimComponent::ResolveBodyModifierCollisionType(
 }
 
 
+bool UPhysAnimComponent::ShouldUseAuthoritativePerBoneBodyModifierSync(
+	EPhysAnimRuntimeState RuntimeState,
+	bool bDistalKinematicAccepted)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+		(bDistalKinematicAccepted &&
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+			 RuntimeState == EPhysAnimRuntimeState::BridgeActive));
+}
+
+
+bool UPhysAnimComponent::ShouldUpdateBodyOnPerBoneBodyModifierSync(EPhysAnimRuntimeState RuntimeState)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+}
+
+
 bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 	FName BoneName,
 	EPhysAnimRuntimeState InRuntimeState,

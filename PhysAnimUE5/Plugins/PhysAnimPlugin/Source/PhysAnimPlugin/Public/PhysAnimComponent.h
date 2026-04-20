@@ -1057,6 +1057,7 @@ public:
 	bool CapturePhase1AutoCalibLiveMetrics(FPhase1AutoCalibLiveMetrics& OutMetrics, FString& OutError) const;
 	bool CapturePhase1AutoCalibDeterminismFingerprint(FPhase1AutoCalibDeterminismFingerprint& OutFingerprint, FString& OutError) const;
 	bool StartPhase1AutoCalibTrial(FString& OutError);
+	void SetPhase1AutoCalibOwnsStartRequests(bool bOwned);
 	static bool IsBetterPhase1AutoCalibScore(const FPhase1AutoCalibScore& Candidate, const FPhase1AutoCalibScore& CurrentBest);
 	static void FinalizePhase1AutoCalibScore(FPhase1AutoCalibScore& InOutScore);
 	static void StorePhase1AutoCalibActionHistory(
@@ -1076,6 +1077,28 @@ public:
 #if WITH_DEV_AUTOMATION_TESTS
 	static bool TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState State) { return IsBalanceEntryState(State); }
 	static bool TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState State) { return IsBalanceActiveState(State); }
+	static bool TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bDistalKinematicAccepted)
+	{
+		return ShouldUseAuthoritativePerBoneBodyModifierSync(RuntimeState, bDistalKinematicAccepted);
+	}
+	static bool TestOnlyShouldUpdateBodyOnPerBoneBodyModifierSync(EPhysAnimRuntimeState RuntimeState)
+	{
+		return ShouldUpdateBodyOnPerBoneBodyModifierSync(RuntimeState);
+	}
+	static bool TestOnlyShouldAttemptAutoTriggeredBalanceStart(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bPendingBalanceModeStartRequest,
+		bool bTransitionStarted,
+		bool bPhase1AutoCalibOwnsStartRequests)
+	{
+		return ShouldAttemptAutoTriggeredBalanceStart(
+			RuntimeState,
+			bPendingBalanceModeStartRequest,
+			bTransitionStarted,
+			bPhase1AutoCalibOwnsStartRequests);
+	}
 	static void TestOnlyStorePhase1AutoCalibActionHistory(
 		FPhase1AutoCalibBaselineSnapshot& Snapshot,
 		const TArray<float>& ConditionedActions,
@@ -1700,6 +1723,7 @@ private:
 	bool bPelvisResetAppliedThisTick = false;
 #if !UE_BUILD_SHIPPING
 	TOptional<FPhase1AutoCalibParams> ActivePhase1AutoCalibParams;
+	bool bPhase1AutoCalibOwnsStartRequests = false;
 #endif
 	float BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
 	float BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
@@ -1714,6 +1738,11 @@ private:
 	TMap<FName, EPhysicsMovementType> PreviousDistalBoneModifierOwnership;
 	TMap<FName, FString> LastDistalClassification;
 	TMap<FName, FPhysAnimPendingDistalOwnershipCheck> PendingDistalOwnershipChecks;
+	static bool ShouldAttemptAutoTriggeredBalanceStart(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bPendingBalanceModeStartRequest,
+		bool bTransitionStarted,
+		bool bPhase1AutoCalibOwnsStartRequests);
 
 public:
 	static bool BuildConditionedActions(
@@ -1781,6 +1810,10 @@ public:
 		bool bBringUpGroupUnlocked,
 		bool bIsRootBodyModifier,
 		bool bAllowRootBodyModifierSimulation);
+	static bool ShouldUseAuthoritativePerBoneBodyModifierSync(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bDistalKinematicAccepted);
+	static bool ShouldUpdateBodyOnPerBoneBodyModifierSync(EPhysAnimRuntimeState RuntimeState);
 	static bool ShouldResetBodyModifierToCachedBoneTransform(
 		FName BoneName,
 		EPhysAnimRuntimeState InRuntimeState,

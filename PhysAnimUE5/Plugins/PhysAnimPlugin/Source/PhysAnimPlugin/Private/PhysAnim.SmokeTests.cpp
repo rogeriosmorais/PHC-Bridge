@@ -37,8 +37,26 @@ namespace
 	constexpr float PhysAnimPieG2PresentationDurationSeconds = 4.0f;
 	constexpr float PhysAnimPieBalanceModeSmokeLeadInSeconds = 1.0f;
 	constexpr float PhysAnimPieBalanceModeSmokeDurationSeconds = 15.0f;
-	constexpr float PhysAnimPiePhase1AutoCalibPostBridgeActiveWaitSeconds = 5.0f;
+	constexpr float PhysAnimPiePhase1AutoCalibBridgeActiveTimeoutSeconds = 15.0f;
 	constexpr float PhysAnimPiePhase1AutoCalibTimeoutSeconds = 90.0f;
+
+	UPhysAnimComponent* FindFirstPhysAnimComponent(UWorld* World)
+	{
+		if (!World)
+		{
+			return nullptr;
+		}
+
+		for (FActorIterator It(World); It; ++It)
+		{
+			if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+			{
+				return Comp;
+			}
+		}
+
+		return nullptr;
+	}
 
 	DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FSetIntConsoleVariableCommand, FString, Name, int32, Value);
 	bool FSetIntConsoleVariableCommand::Update()
@@ -77,15 +95,7 @@ namespace
 			return true;
 		}
 
-		UPhysAnimComponent* TargetComponent = nullptr;
-		for (FActorIterator It(World); It; ++It)
-		{
-			if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
-			{
-				TargetComponent = Comp;
-				break;
-			}
-		}
+		UPhysAnimComponent* const TargetComponent = FindFirstPhysAnimComponent(World);
 
 		Test->TestNotNull(TEXT("Phase1 auto-calibration smoke finds a candidate component"), TargetComponent);
 		if (!TargetComponent || !TargetComponent->GetOwner())
@@ -276,8 +286,23 @@ namespace
 			[this]() -> bool { AddError(TEXT("PIE did not start")); return true; },
 			PhysAnimPieSmokeStartTimeoutSeconds));
 		
-		// Wait for BridgeActive to be reach and settle before starting.
-		AddCommand(new FWaitLatentCommand(PhysAnimPiePhase1AutoCalibPostBridgeActiveWaitSeconds));
+		AddCommand(new FUntilCommand(
+			[]() -> bool
+			{
+				if (!GEditor || !GEditor->PlayWorld)
+				{
+					return false;
+				}
+
+				if (UPhysAnimComponent* const Component = FindFirstPhysAnimComponent(GEditor->PlayWorld))
+				{
+					return Component->GetRuntimeState() == EPhysAnimRuntimeState::BridgeActive;
+				}
+
+				return false;
+			},
+			[this]() -> bool { AddError(TEXT("Phase1 auto-calibration smoke did not reach BridgeActive")); return true; },
+			PhysAnimPiePhase1AutoCalibBridgeActiveTimeoutSeconds));
 		
 		AddCommand(new FStartPhase1AutoCalibSmokeCommand(this));
 		

@@ -510,6 +510,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::StartPhase1AutoCalib(const FPhase1AutoCa
 		return false;
 	}
 
+	Component->SetPhase1AutoCalibOwnsStartRequests(true);
 	bRunActive = true;
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting component readiness for baseline capture..."));
 
@@ -520,6 +521,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reaso
 {
 	if (UPhysAnimComponent* const Component = TargetComponent.Get())
 	{
+		Component->SetPhase1AutoCalibOwnsStartRequests(false);
 		Component->ClearPhase1AutoCalibParams();
 
 		FString RestoreError;

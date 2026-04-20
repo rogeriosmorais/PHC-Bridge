@@ -1801,8 +1801,12 @@ extern int32 GVerbosePhase2Forensics;
 				Owner->GetPendingBodyModifierCachedResetNames().Num());
 		}
 		else if (Diagnostics.bShellContributed &&
-			(Diagnostics.BaselineShellOffset > Settings.BalancePhase2AbortShellOffsetDelta ||
-			 Diagnostics.BaselineShellVel > Settings.BalancePhase2AbortShellVelocityDelta))
+			IsMaterialShellCorrectionActive(
+				Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle,
+				Diagnostics.BaselineShellOffset,
+				Diagnostics.BaselineShellVel,
+				Settings.BalancePhase2AbortShellOffsetDelta,
+				Settings.BalancePhase2AbortShellVelocityDelta))
 		{
 			const bool bSuppressionConditionsMet = bPelvisActualSim && Diagnostics.SimCountPost >= 6;
 			if (bSuppressionConditionsMet)
@@ -1868,8 +1872,12 @@ extern int32 GVerbosePhase2Forensics;
 		}
 		else if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed ||
 			Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed ||
-			((Diagnostics.BaselineShellOffset > Settings.BalancePhase2AbortShellOffsetDelta ||
-			  Diagnostics.BaselineShellVel > Settings.BalancePhase2AbortShellVelocityDelta) && !(bPelvisActualSim && Diagnostics.SimCountPost >= 6)) ||
+			(IsMaterialShellCorrectionActive(
+				Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle,
+				Diagnostics.BaselineShellOffset,
+				Diagnostics.BaselineShellVel,
+				Settings.BalancePhase2AbortShellOffsetDelta,
+				Settings.BalancePhase2AbortShellVelocityDelta) && !(bPelvisActualSim && Diagnostics.SimCountPost >= 6)) ||
 			Diagnostics.PeakMaxBodyLinearSpeed > Settings.BalancePhase2AbortMaxBodyLinearSpeed ||
 			Diagnostics.PeakMaxBodyAngularSpeed > Settings.BalancePhase2AbortMaxBodyAngularSpeed)
 		{
