@@ -56,6 +56,23 @@ namespace
 		UPhysAnimComponent::FinalizePhase1AutoCalibScore(Trial.Score);
 		return Trial;
 	}
+
+	constexpr float RootOnReadyThighErrorDeg =
+		BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisThighDirectLinkAngularErrorDeg;
+	constexpr float RootOnReadySpineErrorDeg =
+		BalanceTransitionSets::Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg;
+	constexpr float FixtureReadyMarginDeg = 0.25f;
+	constexpr float FixtureNearMissDeg = 0.50f;
+	constexpr float FixtureClearMissDeg = 6.0f;
+
+	constexpr float ThighReadyEdgeDeg = RootOnReadyThighErrorDeg - FixtureReadyMarginDeg;
+	constexpr float ThighReadySafeDeg = RootOnReadyThighErrorDeg - (2.0f * FixtureReadyMarginDeg);
+	constexpr float ThighNearMissDeg = RootOnReadyThighErrorDeg + FixtureNearMissDeg;
+	constexpr float ThighClearMissDeg = RootOnReadyThighErrorDeg + FixtureClearMissDeg;
+	constexpr float SpineReadyEdgeDeg = RootOnReadySpineErrorDeg - FixtureReadyMarginDeg;
+	constexpr float SpineReadySafeDeg = RootOnReadySpineErrorDeg - (2.0f * FixtureReadyMarginDeg);
+	constexpr float SpineNearMissDeg = RootOnReadySpineErrorDeg + FixtureNearMissDeg;
+	constexpr float SpineClearMissDeg = RootOnReadySpineErrorDeg + FixtureClearMissDeg;
 #endif
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -384,69 +401,69 @@ namespace
 		TestTrue(
 			TEXT("Spine-only rescue sweep runs for the current near-miss pattern"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineOnlyRootOnReadinessRescueSweep(
-				31.82f,
-				32.74f,
-				32.55f));
+				ThighReadySafeDeg,
+				ThighReadyEdgeDeg,
+				SpineNearMissDeg));
 		TestFalse(
 			TEXT("Spine-only rescue sweep stays off when a thigh also misses readiness"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineOnlyRootOnReadinessRescueSweep(
-				49.5f,
-				32.74f,
-				39.55f));
+				ThighNearMissDeg,
+				ThighReadyEdgeDeg,
+				SpineNearMissDeg));
 		TestTrue(
 			TEXT("Spine-biased direct blend sweep runs for the current thigh-safe spine near-miss"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineBiasedDirectConstraintBlendSweep(
-				31.82f,
-				32.74f,
-				32.55f));
+				ThighReadySafeDeg,
+				ThighReadyEdgeDeg,
+				SpineNearMissDeg));
 		TestFalse(
 			TEXT("Spine-biased direct blend sweep stays off when a thigh already misses readiness"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineBiasedDirectConstraintBlendSweep(
-				49.1f,
-				32.74f,
-				39.55f));
+				ThighNearMissDeg,
+				ThighReadyEdgeDeg,
+				SpineNearMissDeg));
 		TestTrue(
 			TEXT("Spine-focused pair blend sweep runs for the same thigh-safe spine near-miss"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineFocusedPairBlendSweep(
-				31.82f,
-				32.74f,
-				32.55f));
+				ThighReadySafeDeg,
+				ThighReadyEdgeDeg,
+				SpineNearMissDeg));
 		TestTrue(
 			TEXT("Alternate-reference direct blend sweep runs for the same thigh-safe spine near-miss"),
 			UPhysAnimComponent::TestOnlyShouldRunAlternateReferenceDirectConstraintBlendSweep(
-				31.82f,
-				32.74f,
-				32.55f));
+				ThighReadySafeDeg,
+				ThighReadyEdgeDeg,
+				SpineNearMissDeg));
 		TestTrue(
 			TEXT("Spine-constraint interpolation sweep runs for the same thigh-safe spine near-miss"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineConstraintInterpolationSweep(
-				31.82f,
-				32.74f,
-				32.55f));
+				ThighReadySafeDeg,
+				ThighReadyEdgeDeg,
+				SpineNearMissDeg));
 		TestTrue(
 			TEXT("Worst-thigh interpolation sweep runs once spine is back inside readiness and a thigh remains the blocker"),
 			UPhysAnimComponent::TestOnlyShouldRunWorstThighConstraintInterpolationSweep(
-				32.14f,
-				39.54f,
-				39.59f));
+				ThighReadySafeDeg,
+				ThighNearMissDeg,
+				SpineReadyEdgeDeg));
 		TestTrue(
 			TEXT("Spine-safe worst-thigh focused delta stays enabled for the current live thigh near-miss"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineSafeWorstThighFocusedDelta(
-				31.49f,
-				48.89f,
-				30.98f));
+				ThighReadySafeDeg,
+				ThighNearMissDeg,
+				SpineReadySafeDeg));
 		TestFalse(
 			TEXT("Worst-thigh interpolation sweep stays off while spine is still the blocker"),
 			UPhysAnimComponent::TestOnlyShouldRunWorstThighConstraintInterpolationSweep(
-				31.82f,
-				32.74f,
-				32.55f));
+				ThighReadySafeDeg,
+				ThighReadyEdgeDeg,
+				SpineNearMissDeg));
 		TestFalse(
 			TEXT("Spine-safe worst-thigh focused delta stays off while spine is still the blocker"),
 			UPhysAnimComponent::TestOnlyShouldRunSpineSafeWorstThighFocusedDelta(
-				31.82f,
-				32.74f,
-				32.55f));
+				ThighReadySafeDeg,
+				ThighReadyEdgeDeg,
+				SpineNearMissDeg));
 		TestTrue(
 			TEXT("Focused-bone sample relevance includes weighted blends that name the blocked thigh in source"),
 			UPhysAnimComponent::TestOnlyIsConstraintSampleRelevantToFocusedBone(
@@ -462,21 +479,21 @@ namespace
 		TestFalse(
 			TEXT("Worst-thigh follow-through must not re-break spine readiness after spine interpolation fixed it"),
 			UPhysAnimComponent::TestOnlyShouldAcceptWorstThighConstraintInterpolationCandidate(
-				32.14f,
-				34.54f,
-				17.59f,
-				31.30f,
-				32.81f,
-				19.20f));
+				ThighReadySafeDeg,
+				ThighNearMissDeg,
+				SpineReadySafeDeg,
+				ThighReadyEdgeDeg,
+				RootOnReadyThighErrorDeg,
+				SpineNearMissDeg));
 		TestTrue(
 			TEXT("Worst-thigh follow-through may improve the worst thigh when spine readiness stays intact"),
 			UPhysAnimComponent::TestOnlyShouldAcceptWorstThighConstraintInterpolationCandidate(
-				32.14f,
-				34.54f,
-				17.59f,
-				31.30f,
-				32.81f,
-				17.80f));
+				ThighReadySafeDeg,
+				ThighNearMissDeg,
+				SpineReadySafeDeg,
+				ThighReadyEdgeDeg,
+				RootOnReadyThighErrorDeg,
+				SpineReadyEdgeDeg));
 		TestTrue(
 			TEXT("Spine-safe worst-thigh margin sweep may spend a small amount of recovered spine margin to improve the live thigh blocker"),
 			UPhysAnimComponent::TestOnlyShouldAcceptSpineSafeWorstThighMarginSweepCandidate(
@@ -507,12 +524,12 @@ namespace
 		TestFalse(
 			TEXT("Spine-only rescue scoring rejects candidates that fix spine by breaking thigh readiness"),
 			UPhysAnimComponent::TestOnlyShouldPreferSpineOnlyRootOnReadinessRescueCandidate(
-				31.82f,
-				32.74f,
-				19.55f,
-				31.95f,
-				49.30f,
-				39.95f));
+				ThighReadySafeDeg,
+				ThighReadyEdgeDeg,
+				SpineNearMissDeg,
+				ThighReadyEdgeDeg,
+				ThighClearMissDeg,
+				SpineReadyEdgeDeg));
 		TestTrue(
 			TEXT("Spine-only rescue acceptance keeps a spine-improving candidate that preserves thigh readiness"),
 			UPhysAnimComponent::TestOnlyShouldAcceptSpineOnlyRootOnReadinessRescueCandidate(
