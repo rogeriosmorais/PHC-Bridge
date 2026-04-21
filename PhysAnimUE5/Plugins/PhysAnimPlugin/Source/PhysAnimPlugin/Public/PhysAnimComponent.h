@@ -564,7 +564,7 @@ struct FPhysAnimStabilizationSettings
 	}
 };
 
-UENUM()
+UENUM(BlueprintType)
 enum class EPhysAnimRuntimeState : uint8
 {
 	Uninitialized,
@@ -578,7 +578,8 @@ enum class EPhysAnimRuntimeState : uint8
 	BalanceEntry_RootOn,
 	BalanceEntry_Settle,
 	BalanceActive_Recovery,
-	BalanceSafeDeny
+	BalanceSafeDeny,
+	BalanceActive_Standing
 };
 
 UENUM(BlueprintType)
@@ -1028,12 +1029,19 @@ public:
 	bool WasPelvisSimulatingLastFrame() const { return bLastAppliedPresentationRootSimulationEnabled; }
 	bool IsPelvisSimulatingNow() const;
 	bool TryGetPublicBalanceEntryRuntimeState(EPhysAnimRuntimeState& OutState) const;
-	bool HasBalanceReadyTransitionFailed() const { return BalanceReadyTransition.HasFailed() || !LastPublishedBalanceTransitionFailureReason.IsEmpty(); }
+	bool HasBalanceReadyTransitionFailed() const { return IsActiveBalanceTransitionFailure(BalanceReadyTransition.HasFailed()); }
+	bool HasRecordedBalanceTransitionFailure() const
+	{
+		return !ResolveRecordedBalanceTransitionFailureReason(
+			BalanceReadyTransition.GetFailureReason(),
+			LastPublishedBalanceTransitionFailureReason).IsEmpty();
+	}
 	bool HasSafePhase2Denial() const { return BalanceReadyTransition.HasSafePhase2Denial(); }
 	const FString& GetBalanceReadyTransitionFailureReason() const
 	{
-		const FString& LiveFailureReason = BalanceReadyTransition.GetFailureReason();
-		return LiveFailureReason.IsEmpty() ? LastPublishedBalanceTransitionFailureReason : LiveFailureReason;
+		return ResolveRecordedBalanceTransitionFailureReason(
+			BalanceReadyTransition.GetFailureReason(),
+			LastPublishedBalanceTransitionFailureReason);
 	}
 	const FString& GetSafePhase2DenialReason() const { return BalanceReadyTransition.GetSafePhase2DenialReason(); }
 
@@ -1167,6 +1175,16 @@ public:
 	static bool TestOnlyShouldRebaselineBridgeStateAfterTransitionFailure(const FString& FailureReason)
 	{
 		return ShouldRebaselineBridgeStateAfterTransitionFailure(FailureReason);
+	}
+	static bool TestOnlyIsActiveBalanceTransitionFailure(bool bTransitionHasFailed)
+	{
+		return IsActiveBalanceTransitionFailure(bTransitionHasFailed);
+	}
+	static bool TestOnlyHasRecordedBalanceTransitionFailure(
+		const FString& LiveFailureReason,
+		const FString& PublishedFailureReason)
+	{
+		return !ResolveRecordedBalanceTransitionFailureReason(LiveFailureReason, PublishedFailureReason).IsEmpty();
 	}
 	static void TestOnlyStorePhase1AutoCalibActionHistory(
 		FPhase1AutoCalibBaselineSnapshot& Snapshot,
@@ -1521,6 +1539,13 @@ private:
 	void RecoverBridgeActiveStateAfterBalanceTransitionFailure(const FString& FailureReason);
 	void PublishBalanceTransitionFailureReason(const FString& FailureReason);
 	void ClearPublishedBalanceTransitionFailureReason();
+	static bool IsActiveBalanceTransitionFailure(bool bTransitionHasFailed) { return bTransitionHasFailed; }
+	static const FString& ResolveRecordedBalanceTransitionFailureReason(
+		const FString& LiveFailureReason,
+		const FString& PublishedFailureReason)
+	{
+		return LiveFailureReason.IsEmpty() ? PublishedFailureReason : LiveFailureReason;
+	}
 	bool QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	void UpdateBridgePoseSearchTrajectory(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResolveBridgePoseSearchQueryVelocity(const FPhysAnimStabilizationSettings& EffectiveSettings, FVector& OutQueryVelocity, float* OutIntentMagnitude = nullptr) const;

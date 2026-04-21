@@ -47,6 +47,11 @@ That means:
 - not during Phase 2 / RootOn
 - not during Phase 3 / Settle
 
+Current runtime note:
+
+- Settle success now publishes `BalanceActive_Standing`
+- that state is intentionally separate from any future perturbation-time recovery substate
+
 ## 4. Current Design Reality
 
 The project has moved past several false blockers.

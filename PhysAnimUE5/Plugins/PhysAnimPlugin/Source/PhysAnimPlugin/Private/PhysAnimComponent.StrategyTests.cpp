@@ -85,6 +85,20 @@ namespace
 		FString OutcomeError;
 
 		TestTrue(
+			TEXT("Active standing balance remains a passing smoke outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BalanceActive_Standing,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				OutcomeError));
+		TestTrue(TEXT("Successful active-balance outcome emits no error"), OutcomeError.IsEmpty());
+
+		OutcomeError.Reset();
+		TestTrue(
 			TEXT("Balance recovery remains a passing smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceActive_Recovery,
@@ -95,7 +109,7 @@ namespace
 				TEXT(""),
 				TEXT(""),
 				OutcomeError));
-		TestTrue(TEXT("Successful recovery outcome emits no error"), OutcomeError.IsEmpty());
+		TestTrue(TEXT("Successful recovery outcome still emits no error"), OutcomeError.IsEmpty());
 
 		OutcomeError.Reset();
 		TestTrue(
@@ -173,6 +187,29 @@ namespace
 		FPhysAnimAutoTriggerStartAuthorityTest,
 		"PhysAnim.Component.AutoTriggerStartAuthority",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPublishedTransitionFailureStateTest,
+		"PhysAnim.Component.PublishedTransitionFailureState",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPublishedTransitionFailureStateTest::RunTest(const FString& Parameters)
+	{
+		TestFalse(
+			TEXT("A cached published transition failure reason is not treated as an active live transition failure"),
+			UPhysAnimComponent::TestOnlyIsActiveBalanceTransitionFailure(false));
+		TestTrue(
+			TEXT("A cached published transition failure reason remains queryable for reporting"),
+			UPhysAnimComponent::TestOnlyHasRecordedBalanceTransitionFailure(
+				TEXT(""),
+				TEXT("phase3_material_shell_correction")));
+		TestTrue(
+			TEXT("A live failure reason still counts as recorded failure state"),
+			UPhysAnimComponent::TestOnlyHasRecordedBalanceTransitionFailure(
+				TEXT("phase2_root_on_spike"),
+				TEXT("phase3_material_shell_correction")));
+		return true;
+	}
 
 	bool FPhysAnimAutoTriggerStartAuthorityTest::RunTest(const FString& Parameters)
 	{
@@ -784,9 +821,40 @@ namespace
 		TestFalse(TEXT("BalanceSafeDeny is terminal, not an entry state"), UPhysAnimComponent::TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState::BalanceSafeDeny));
 		TestFalse(TEXT("BridgeActive is not an entry state"), UPhysAnimComponent::TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState::BridgeActive));
 
-		TestTrue(TEXT("Recovery is the only public active-balance state"), UPhysAnimComponent::TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState::BalanceActive_Recovery));
+		TestTrue(TEXT("Standing is a public active-balance state"), UPhysAnimComponent::TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState::BalanceActive_Standing));
+		TestTrue(TEXT("Recovery remains a public active-balance state"), UPhysAnimComponent::TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState::BalanceActive_Recovery));
 		TestFalse(TEXT("BalanceSafeDeny is not active balance"), UPhysAnimComponent::TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState::BalanceSafeDeny));
 		TestFalse(TEXT("Settle is not active balance"), UPhysAnimComponent::TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState::BalanceEntry_Settle));
+		FString PerturbationReadinessReason;
+		TestTrue(
+			TEXT("Standing active balance satisfies perturbation runtime readiness when the active-mode prerequisites hold"),
+			UPhysAnimComponent::EvaluateBalancePerturbationRuntimeReadiness(
+				EPhysAnimRuntimeState::BalanceActive_Standing,
+				1,
+				2,
+				true,
+				1.0f,
+				0.5f,
+				false,
+				true,
+				true,
+				&PerturbationReadinessReason));
+		TestTrue(TEXT("Standing readiness emits no failure reason"), PerturbationReadinessReason.IsEmpty());
+		PerturbationReadinessReason.Reset();
+		TestFalse(
+			TEXT("BridgeActive still fails perturbation runtime readiness before active balance is published"),
+			UPhysAnimComponent::EvaluateBalancePerturbationRuntimeReadiness(
+				EPhysAnimRuntimeState::BridgeActive,
+				1,
+				2,
+				true,
+				1.0f,
+				0.5f,
+				false,
+				true,
+				true,
+				&PerturbationReadinessReason));
+		TestEqual(TEXT("BridgeActive readiness failure stays truthful"), PerturbationReadinessReason, FString(TEXT("invalidRuntimeState")));
 		TestTrue(
 			TEXT("Settle keeps using authoritative per-bone modifier sync even without the distal kinematic experiment"),
 			UPhysAnimComponent::TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
@@ -992,6 +1060,10 @@ namespace
 			TEXT("SafeDenied transition publishes as BalanceSafeDeny"),
 			UPhysAnimComponent::MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase::BRT_SafeDenied),
 			EPhysAnimRuntimeState::BalanceSafeDeny);
+		TestEqual(
+			TEXT("Succeeded transition publishes as active standing balance, not BridgeActive"),
+			UPhysAnimComponent::MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase::BRT_Succeeded),
+			EPhysAnimRuntimeState::BalanceActive_Standing);
 		return true;
 	}
 

@@ -874,7 +874,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				: 1.0f;
 		FPhysicsControlMultiplier ControlMultiplier;
 		float HandoverEasing = 1.0f;
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+		if (IsBalanceActiveState(RuntimeState))
 		{
 			const double TimeSinceTransition = GetWorld() ? (GetWorld()->GetTimeSeconds() - BalanceScenarioStartTimeSeconds) : 0.0;
 			if (TimeSinceTransition < 1.0)
@@ -961,7 +961,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		// Deep diagnostics for Balance Mode Final Ramp Enable
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery && BringUpGroupIndex == (GetBringUpGroupCount() - 1))
+		if (IsBalanceActiveState(RuntimeState) && BringUpGroupIndex == (GetBringUpGroupCount() - 1))
 		{
 			const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
 			const bool bRampJustStarted = (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(BringUpGroupIndex) && 
@@ -1011,7 +1011,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	// After the control loop, if the ramp just started, log the AFTER state.
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
 	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery && 
+	if (IsBalanceActiveState(RuntimeState) &&
 		BringUpGroupControlRampStartTimeSeconds.IsValidIndex(FinalGroupIndex) && 
 		BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] == WorldTime &&
 		WorldTime >= 0.0)
@@ -1444,7 +1444,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		if (bShouldResetThisBone &&
 			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+			if (IsBalanceActiveState(RuntimeState))
 			{
 				if (bIsRootBodyModifier)
 				{
@@ -1513,7 +1513,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bHipQuarantineReleasedThisFrame)
 		{
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+			if (IsBalanceActiveState(RuntimeState))
 			{
 				UE_LOG(
 					LogPhysAnimBridge,

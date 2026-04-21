@@ -175,7 +175,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		PolicyInfluenceRampStartTimeSeconds >= 0.0 &&
 		(
 			RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
-			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
+			IsBalanceActiveState(RuntimeState) ||
 			bPhase1RootOn ||
 			bPhase1Settle);
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
@@ -746,7 +746,7 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 		return LogReturn(false);
 	}
 
-	if (InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+	if (IsBalanceActiveState(InRuntimeState))
 	{
 		if (bIsRootBodyModifier)
 		{

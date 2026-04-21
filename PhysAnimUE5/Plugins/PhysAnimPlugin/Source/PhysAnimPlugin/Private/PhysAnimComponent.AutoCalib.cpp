@@ -193,7 +193,7 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 		BalanceReadyTransition.Cancel(this);
 	}
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+	if (IsBalanceActiveState(RuntimeState))
 	{
 		StopBalancePerturbationMode();
 	}

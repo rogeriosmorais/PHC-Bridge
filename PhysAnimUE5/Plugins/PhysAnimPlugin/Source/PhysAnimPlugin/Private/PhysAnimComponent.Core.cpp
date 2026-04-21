@@ -2765,7 +2765,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		RuntimeState != EPhysAnimRuntimeState::ReadyForActivation &&
 		RuntimeState != EPhysAnimRuntimeState::BridgeActive &&
 		!IsBalanceEntryState(RuntimeState) &&
-		RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery)
+		!IsBalanceActiveState(RuntimeState))
 	{
 		return;
 	}
@@ -2776,7 +2776,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	const bool bCanTraceFrames =
 		BridgeTraceWriter.IsValid() &&
 		BridgeTraceWriter->CanWriteFrames() &&
-		(RuntimeState == EPhysAnimRuntimeState::BridgeActive || RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery);
+		(RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState));
 	const int32 TraceSampleEveryNthFrame = FMath::Max(BridgeTraceSampleEveryNthFrame, 1);
 	const double BridgeTickStartSeconds = FPlatformTime::Seconds();
 	bool bTraceFrameFinalized = false;
@@ -3149,7 +3149,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	UpdateStabilizationStressTestState(StabilizationSettings);
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	ApplyMovementSmokeInput(EffectiveSettings);
-	if ((RuntimeState == EPhysAnimRuntimeState::BridgeActive || RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery) && bStartupMovementLockActive)
+	if ((RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState)) && bStartupMovementLockActive)
 	{
 		const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
 		const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
@@ -3168,7 +3168,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 		// In Balance Mode, we always want the CharacterMovement to be locked (MOVE_None)
 		// to ensure the capsule doesn't move and we can measure drift/contamination accurately.
-		if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery && 
+		if (!IsBalanceActiveState(RuntimeState) &&
 		!bPhase1Prepare &&
 		!bPhase1LateValidate &&
 		!bPhase1RootOn &&
@@ -3479,7 +3479,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		EBalanceReadyTransitionPhase TransitionPhase = BalanceReadyTransition.GetPhase();
 		if (TransitionPhase == EBalanceReadyTransitionPhase::BRT_Succeeded)
 		{
-			if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery)
+			if (!IsBalanceActiveState(RuntimeState))
 			{
 				CompleteBalanceModeEntry();
 			}
@@ -3491,9 +3491,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		if (TransitionPhase == EBalanceReadyTransitionPhase::BRT_Inactive)
 		{
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+			if (IsBalanceActiveState(RuntimeState))
 			{
-				// Completion path already published recovery.
+				// Completion path already published active balance.
 			}
 			else if (RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
 			{
@@ -3618,7 +3618,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+	if (IsBalanceActiveState(RuntimeState))
 	{
 		UpdateBalancePerturbation(DeltaTime);
 	}

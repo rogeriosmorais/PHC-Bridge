@@ -36,6 +36,12 @@ The implementation must expose distinct runtime states or equivalent explicit ba
 - `BalanceActive`
 - `SafeDenied`
 
+Current implementation note:
+
+- active balance is currently published via explicit active sub-states rather than one undifferentiated enum value
+- `BalanceActive_Standing` is the truthful Settle-success publication state
+- `BalanceActive_Recovery` remains available for active-mode recovery semantics instead of being used as the generic success state
+
 Implementation must not leave balance entry represented only as plain `BridgeActive`.
 
 ## Required balance-entry data
@@ -164,6 +170,10 @@ Passing outcomes:
 
 - `BalanceActive`
 - `SafeDenied`
+
+Implementation note:
+
+- the current concrete success state is `BalanceActive_Standing`, which satisfies the `BalanceActive` umbrella requirement
 
 Failing outcomes:
 

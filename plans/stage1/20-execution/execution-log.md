@@ -14,9 +14,9 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 3 / truthful Settle shell-maintenance investigation.
-- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness now truthfully reports reproducible passes, and the live balance-entry path consistently clears Phase 1 admission and Phase 2 RootOn under the relaxed POC thresholds (45° posture, 4000 deg/sec spike abort). The current live blocker remains `phase3_material_shell_correction`, but the immediate `Phase2_ReadyForPhase3` -> `Phase3_Settle` handoff tick is no longer being treated as materially failing when it only shows a velocity-only spike under a preserved explicit shell lock.
-- `Latest runtime forensics`: the latest `PhysAnim.PIE.BalanceModeSmoke` still reaches `BalanceEntry_Settle`, preserves the explicit transition-owned shell lock across `Phase2_ReadyForPhase3`, survives the first Settle validation tick, then emits `PHASE3_FIRST_FAILURE_AUDIT reason=phase3_material_shell_correction` one Settle frame later and ends directly on `TRANSITION_SAFE_DENIED final_outcome. reason=phase3_material_shell_correction`. The latest truthful failure now lands at frame `943` with `shellOffsetDelta=0.00/2.00` and `shellVelocityDelta=79.90/10.00`, rather than failing immediately on the handoff frame due to a velocity-only carryover. The previous post-recovery retry tail into `phase1_prepare_terminal_persistent_body_motion_instability` remains removed, `phase3_shell_lock_lost` remains ruled out as a bookkeeping bug, and the latest `PhysAnim.PIE.Phase1AutoCalibSmoke` frontier remains `truthful_pass_found` with reproducible truthful-pass reporting.
+- `Current phase`: Phase 3 / truthful post-RootOn instability revalidation, with active-balance state publication now split from recovery semantics.
+- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now publishes a truthful active-balance state (`BalanceActive_Standing`) instead of overclaiming the perturbation runtime as recovery-only on entry success. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine does not reach that state yet: it now truthfully safe-denies in `Phase3_Settle` on `phase3_post_root_on_instability` before active balance is published.
+- `Latest runtime forensics`: the latest `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3, but then emits `PHASE3_FIRST_FAILURE_AUDIT reason=phase3_post_root_on_instability` at frame `945` and ends directly on `TRANSITION_SAFE_DENIED final_outcome. reason=phase3_post_root_on_instability`. The current observed breach is materially above the Settle limits (`rootLinear=4961.93/3000.00`, `rootAngular=8151.03/2160.00`, `shellOffsetDelta=0.00/2.00`, `shellVelocityDelta=1899.58/10.00`), so the live frontier is again physical post-RootOn continuity rather than shell-lock bookkeeping or ambiguous state publication.
 
 ## Active Tasks
 
@@ -588,3 +588,14 @@ Known important reference points from this work:
 - Verified that combined linear+angular breaches or sustained angular breaches still correctly trigger safe-denial.
 - Updated `PhysAnimComponent.StrategyTests.cpp` to reflect global shell-velocity suppression behavior and add new angular grace coverage.
 - Confirmed full stabilization: `PhysAnim.PIE.BalanceModeSmoke` now consistently passes Phase 3 and reaches success.
+
+## 2026-04-21 — Active-balance state truthfulness revalidation
+
+- Added an explicit active-balance publication state, `BalanceActive_Standing`, so Settle success no longer overclaims normal active balance as the perturbation runtime's recovery substate.
+- Broadened active-mode gates to use the public active-balance classifier, keeping perturbation readiness, pose search, shell ownership, physics tuning, bridge tracing, and smoke outcome evaluation aligned across both active standing and any later recovery-time active state.
+- Added deterministic TDD coverage for active-standing smoke outcomes, active-state classification, perturbation-runtime readiness, and the `BRT_Succeeded -> BalanceActive_Standing` runtime-state mapping.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, then re-ran `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke` and read the resulting runtime log with `python .\scripts\read_logs.py`.
+- The live smoke on this machine did not reach active balance on the revalidation pass: it truthfully safe-denied on `phase3_post_root_on_instability` at frame `945`, with `rootLinear=4961.93/3000.00`, `rootAngular=8151.03/2160.00`, and `shellVelocityDelta=1899.58/10.00`.
+- Practical meaning:
+  - the runtime-state surface is now truthful when Settle succeeds
+  - the current live blocker is again physical Phase 3 continuity, not active-state naming

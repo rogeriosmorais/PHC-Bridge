@@ -10,7 +10,7 @@ bool UPhysAnimComponent::ShouldAllowBalanceSimulation(const FPhysAnimStabilizati
 {
 	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
-		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery;
+		IsBalanceActiveState(RuntimeState);
 }
 
 bool UPhysAnimComponent::ShouldRebaselineBridgeStateAfterTransitionFailure(const FString& FailureReason)
@@ -91,7 +91,7 @@ bool UPhysAnimComponent::EvaluateBalancePerturbationRuntimeReadiness(
 		OutFailureReason->Reset();
 	}
 
-	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery)
+	if (!IsBalanceActiveState(RuntimeState))
 	{
 		return SetFailure(TEXT("invalidRuntimeState"));
 	}
@@ -156,7 +156,7 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 		PelvisBody != nullptr,
 		PelvisBody && PelvisBody->IsInstanceSimulatingPhysics(),
 		OutFailureReason);
-	if (!bReady && RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+	if (!bReady && IsBalanceActiveState(RuntimeState))
 	{
 		EPhysicsMovementType PelvisModifierMovementType = EPhysicsMovementType::Static;
 		if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
@@ -247,7 +247,8 @@ bool UPhysAnimComponent::TryGetPublicBalanceEntryRuntimeState(EPhysAnimRuntimeSt
 
 bool UPhysAnimComponent::IsBalanceActiveState(EPhysAnimRuntimeState State)
 {
-	return (State == EPhysAnimRuntimeState::BalanceActive_Recovery);
+	return State == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		State == EPhysAnimRuntimeState::BalanceActive_Recovery;
 }
 
 
@@ -967,7 +968,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 void UPhysAnimComponent::StartBalancePerturbationMode()
 {
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+	if (IsBalanceActiveState(RuntimeState))
 	{
 		return;
 	}
@@ -1000,7 +1001,7 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	ClearPublishedBalanceTransitionFailureReason();
 	BalanceReadyTransition.Cancel(this);
 
-	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Recovery);
+	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
 	int32 RecoveryTotalSimCount = 0;
 	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
@@ -1024,7 +1025,7 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	UE_LOG(
 		LogPhysAnimBridge,
 		Warning,
-		TEXT("[PhysAnimBalance] RECOVERY_ENTRY_STATE pelvisRawSim=%d pelvisModifier=%s simCount=%d"),
+		TEXT("[PhysAnimBalance] BALANCE_ACTIVE_ENTRY_STATE pelvisRawSim=%d pelvisModifier=%s simCount=%d"),
 		PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0,
 		GetPhysicsMovementTypeName(RecoveryPelvisModifierMovementType),
 		RecoveryTotalSimCount);
@@ -1142,7 +1143,7 @@ void UPhysAnimComponent::StopBalancePerturbationMode()
 		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
 		RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny;
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery || bIsBalanceTransitionalState)
+	if (IsBalanceActiveState(RuntimeState) || bIsBalanceTransitionalState)
 	{
 		TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
 		ReleaseStartupMovementLock(true);

@@ -30,7 +30,7 @@ namespace PhysAnimBalanceTestHelpers
 	{
 		OutError.Reset();
 
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+		if (UPhysAnimComponent::TestOnlyIsBalanceActiveState(RuntimeState))
 		{
 			return true;
 		}
@@ -129,7 +129,7 @@ namespace PhysAnimBalanceTestHelpers
 				RuntimeState,
 				bInPublicBalanceEntryState,
 				PublicBalanceEntryState,
-				FoundComponent->HasBalanceReadyTransitionFailed(),
+				FoundComponent->HasRecordedBalanceTransitionFailure(),
 				FoundComponent->HasSafePhase2Denial(),
 				FoundComponent->GetSafePhase2DenialReason(),
 				FoundComponent->GetBalanceReadyTransitionFailureReason(),

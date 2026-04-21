@@ -48,7 +48,7 @@ bool UPhysAnimComponent::IsTransitionOwnedShellLocked() const
 {
 	return (BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked) ||
 		IsBalanceEntryState(RuntimeState) || 
-		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery;
+		IsBalanceActiveState(RuntimeState);
 }
 
 
@@ -105,7 +105,7 @@ void UPhysAnimComponent::ReleaseTransitionOwnedShellLock()
 		return;
 	}
 
-	ReleaseTransitionOwnedShellLockInternal(RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery);
+	ReleaseTransitionOwnedShellLockInternal(!IsBalanceActiveState(RuntimeState));
 	BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::GameplayShellObservedOnly;
 	bTransitionOwnedShellReferenceReanchored = false;
 	bTransitionOwnedShellReferenceReseededAfterLock = false;
