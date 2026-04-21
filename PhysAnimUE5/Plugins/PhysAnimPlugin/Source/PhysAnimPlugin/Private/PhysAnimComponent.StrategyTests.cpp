@@ -473,6 +473,62 @@ namespace
 				1800.0f,
 				2100.0f,
 				2160.0f));
+		TestTrue(
+			TEXT("Tick 4 Settle instability grace preserves a zero-offset explicit-lock shell burst that still carries RootOn snap energy"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				4,
+				true,
+				true,
+				4961.93f,
+				3000.0f,
+				8151.01f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				1898.77f,
+				10.0f));
+		TestFalse(
+			TEXT("Tick 5 Settle instability grace does not hide a continued zero-offset shell burst"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				5,
+				true,
+				true,
+				4961.93f,
+				3000.0f,
+				8151.01f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				1898.77f,
+				10.0f));
+		TestFalse(
+			TEXT("Tick 4 Settle instability grace does not hide real shell drift"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				4,
+				true,
+				true,
+				4961.93f,
+				3000.0f,
+				8151.01f,
+				2160.0f,
+				2.25f,
+				2.0f,
+				1898.77f,
+				10.0f));
+		TestFalse(
+			TEXT("Tick 4 Settle instability grace does not apply without an explicit shell lock"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				4,
+				false,
+				true,
+				4961.93f,
+				3000.0f,
+				8151.01f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				1898.77f,
+				10.0f));
 		return true;
 	}
 

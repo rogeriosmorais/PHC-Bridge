@@ -198,6 +198,52 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleAngularGraceActive(
 	return !bLinearBreached && bAngularBreached;
 }
 
+bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+	int32 Phase3TickCount,
+	bool bTransitionOwnedShellLocked,
+	bool bLocomotionAuthorityIdle,
+	float RootLinearSpeed,
+	float LinearThreshold,
+	float RootAngularSpeed,
+	float AngularThreshold,
+	float ShellPlanarOffsetCm,
+	float MaxAllowedShellOffsetCm,
+	float ShellPlanarVelocityCmPerSec,
+	float MaxAllowedShellVelocityCmPerSec)
+{
+	if (IsPhase3EarlySettleAngularGraceActive(
+			Phase3TickCount,
+			RootLinearSpeed,
+			LinearThreshold,
+			RootAngularSpeed,
+			AngularThreshold))
+	{
+		return true;
+	}
+
+	static constexpr int32 Phase3ShellVelocityBurstGraceTickCount = 4;
+	if (Phase3TickCount > Phase3ShellVelocityBurstGraceTickCount ||
+		!bTransitionOwnedShellLocked ||
+		!bLocomotionAuthorityIdle)
+	{
+		return false;
+	}
+
+	const bool bLinearBreached = RootLinearSpeed > LinearThreshold;
+	const bool bAngularBreached = RootAngularSpeed > AngularThreshold;
+	const bool bOffsetBreached = ShellPlanarOffsetCm > MaxAllowedShellOffsetCm;
+	const bool bShellVelocityBreached = ShellPlanarVelocityCmPerSec > MaxAllowedShellVelocityCmPerSec;
+
+	// A zero-offset, explicit-lock Settle burst can still carry residual RootOn snap
+	// energy through the shell-maintenance path for one extra tick after the
+	// angular-only grace expires. Treat that as pre-material unless it persists or
+	// turns into real shell drift.
+	return bLinearBreached &&
+		bAngularBreached &&
+		!bOffsetBreached &&
+		bShellVelocityBreached;
+}
+
 
 bool FPhysAnimBalanceReadyTransition::ShouldRetainExplicitShellLockForPhase(EBalanceReadyTransitionPhase Phase)
 {
@@ -546,17 +592,26 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 
 	if (!IsSnapshotReady(Domain, Settings, OutReason))
 	{
-		// Post-RootOn angular grace: the constraint solver can produce a brief
-		// angular velocity transient from the postural correction snap (same
-		// structural source as the shell velocity transient in the handoff fix).
-		// Suppress angular-only spikes on the first few Settle ticks.
+		const float ShellPlanarOffsetCm = Owner->GetCurrentShellPlanarOffsetDeltaCm();
+		const float ShellPlanarVelocityCmPerSecond = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+
+		// Post-RootOn Settle grace: the shell-maintained handoff can still carry a
+		// bounded velocity burst for a few ticks after RootOn. Treat the early
+		// angular-only case, plus the observed zero-offset combined burst on tick 4,
+		// as pre-material while the explicit shell lock still holds.
 		if (OutReason == BalanceReadinessReasons::Phase3InstabilitySpike &&
-			IsPhase3EarlySettleAngularGraceActive(
+			IsPhase3EarlySettleInstabilityGraceActive(
 				Phase3GuardTickCount,
+				Owner->HasExplicitTransitionOwnedShellLock(),
+				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
 				Domain.RootLinearSpeed,
 				Settings.MaxRootLinearSpeedCmPerSecond * 2.5f,
 				Domain.RootAngularSpeed,
-				Settings.MaxRootAngularSpeedDegPerSecond * 3.0f))
+				Settings.MaxRootAngularSpeedDegPerSecond * 3.0f,
+				ShellPlanarOffsetCm,
+				Settings.BalancePhase2AbortShellOffsetDelta,
+				ShellPlanarVelocityCmPerSecond,
+				Settings.BalancePhase2AbortShellVelocityDelta))
 		{
 			// Not yet material - continue with remaining continuity checks
 		}

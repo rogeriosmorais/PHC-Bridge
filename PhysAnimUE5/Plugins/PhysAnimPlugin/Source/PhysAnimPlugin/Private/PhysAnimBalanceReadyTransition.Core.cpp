@@ -2325,7 +2325,7 @@ extern int32 GVerbosePhase2Forensics;
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_FIRST_FAILURE_AUDIT frame=%d reason=%s tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d rootLinear=%.2f/%.2f rootAngular=%.2f/%.2f shellOffsetDelta=%.2f/%.2f shellVelocityDelta=%.2f/%.2f shellCorrectionActive=%d owner=%d actor=%s component=%s"),
 					static_cast<int32>(GFrameCounter),
 					*Phase3Violation,
-					static_cast<int32>(Phase2GuardTickCount), // This might be stale if we're in Settle, but at least we have a tick
+					static_cast<int32>(Phase3GuardTickCount),
 					bRootRawSim ? 1 : 0,
 					bRootRawSim ? 1 : 0,
 					PelvisModifierType == EPhysicsMovementType::Simulated ? TEXT("Simulated") : (PelvisModifierType == EPhysicsMovementType::Kinematic ? TEXT("Kinematic") : TEXT("Static")),

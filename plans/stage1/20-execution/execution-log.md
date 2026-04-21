@@ -15,8 +15,8 @@ Use it to track:
 ## Current State
 
 - `Current phase`: Phase 3 / truthful post-RootOn instability revalidation, with active-balance state publication now split from recovery semantics.
-- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now publishes a truthful active-balance state (`BalanceActive_Standing`) instead of overclaiming the perturbation runtime as recovery-only on entry success. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine does not reach that state yet: it now truthfully safe-denies in `Phase3_Settle` on `phase3_post_root_on_instability` before active balance is published.
-- `Latest runtime forensics`: the latest `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3, but then emits `PHASE3_FIRST_FAILURE_AUDIT reason=phase3_post_root_on_instability` at frame `945` and ends directly on `TRANSITION_SAFE_DENIED final_outcome. reason=phase3_post_root_on_instability`. The current observed breach is materially above the Settle limits (`rootLinear=4961.93/3000.00`, `rootAngular=8151.03/2160.00`, `shellOffsetDelta=0.00/2.00`, `shellVelocityDelta=1899.58/10.00`), so the live frontier is again physical post-RootOn continuity rather than shell-lock bookkeeping or ambiguous state publication.
+- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now publishes a truthful active-balance state (`BalanceActive_Standing`) instead of overclaiming the perturbation runtime as recovery-only on entry success. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine still does not reach that state yet, but the new Settle grace pass ruled out another false early-Phase-3 failure: the smoke now survives the old frame-`945` handoff burst and only truthfully safe-denies later in `Phase3_Settle` on sustained `phase3_post_root_on_instability`.
+- `Latest runtime forensics`: the latest `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3. After the new tick-4 instability grace, `PHASE3_FIRST_FAILURE_AUDIT` now lands one Settle frame later at frame `946`, with truthful tick logging (`tick=5`) and the same zero-offset instability signature (`rootLinear=4856.71/3000.00`, `rootAngular=7898.95/2160.00`, `shellOffsetDelta=0.00/2.00`, `shellVelocityDelta=3179.60/10.00`). The live frontier remains physical post-RootOn continuity, but the old frame-`945` burst is now ruled out as the deciding failure.
 
 ## Active Tasks
 
@@ -599,3 +599,16 @@ Known important reference points from this work:
 - Practical meaning:
   - the runtime-state surface is now truthful when Settle succeeds
   - the current live blocker is again physical Phase 3 continuity, not active-state naming
+
+## 2026-04-21 — Settle tick-4 burst grace and truthful Phase 3 tick audit
+
+- Added deterministic TDD coverage for the current Settle edge case: a tick-4 zero-offset combined root linear/angular burst with explicit shell lock and shell-velocity spike is still pre-material, but the same burst is not graced on tick `5`, not with shell drift, and not without the explicit lock.
+- Added `IsPhase3EarlySettleInstabilityGraceActive` and used it in `ValidatePhase3Continuity` so the bounded tick-4 handoff burst no longer wins as a fake `phase3_post_root_on_instability` failure.
+- Fixed `PHASE3_FIRST_FAILURE_AUDIT` to log the real `Phase3GuardTickCount` instead of the stale Phase 2 tick.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component.TransitionOwnedShellLockTruthfulness`, `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The truthful frontier moved exactly one Settle frame later:
+  - before this pass, the smoke failed at frame `945` with a stale `tick=0` audit and `rootLinear=4961.93/3000.00`, `rootAngular=8151.01/2160.00`, `shellVelocityDelta=1898.77/10.00`
+  - after this pass, the smoke survives that burst and first fails at frame `946` with truthful `tick=5` logging and `rootLinear=4856.71/3000.00`, `rootAngular=7898.95/2160.00`, `shellVelocityDelta=3179.60/10.00`
+- Practical meaning:
+  - the old frame-`945` Settle burst is now ruled out as another handoff artifact rather than a truthful terminal instability
+  - the remaining blocker is sustained post-RootOn instability beyond the early-Settle grace window

@@ -583,6 +583,18 @@ public:
 		float LinearThreshold,
 		float RootAngularSpeed,
 		float AngularThreshold);
+	static bool IsPhase3EarlySettleInstabilityGraceActive(
+		int32 Phase3TickCount,
+		bool bTransitionOwnedShellLocked,
+		bool bLocomotionAuthorityIdle,
+		float RootLinearSpeed,
+		float LinearThreshold,
+		float RootAngularSpeed,
+		float AngularThreshold,
+		float ShellPlanarOffsetCm,
+		float MaxAllowedShellOffsetCm,
+		float ShellPlanarVelocityCmPerSec,
+		float MaxAllowedShellVelocityCmPerSec);
 
 	static bool IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	static FString ResolveRootOnReadinessGateReason(
