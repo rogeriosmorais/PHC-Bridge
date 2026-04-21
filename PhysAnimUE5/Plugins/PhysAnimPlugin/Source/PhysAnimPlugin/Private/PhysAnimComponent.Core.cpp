@@ -3414,7 +3414,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	TrackStabilizationStressTestObservations();
 	AdvanceBringUpState(DeltaTime, EffectiveSettings);
-	MaintainTransitionOwnedShellLock();
+	MaintainTransitionOwnedShellLock(DeltaTime);
 	
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceReadyTransition.GetPhase2GuardTickCount() == 0)
 	{

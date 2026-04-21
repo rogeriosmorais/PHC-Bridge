@@ -51,6 +51,7 @@ struct FBridgeShellState
 	FVector PendingPlanarVelocityCmPerSecond = FVector::ZeroVector;
 	FVector AcceptedPlanarVelocityCmPerSecond = FVector::ZeroVector;
 	FVector AcceptedWorldDeltaCm = FVector::ZeroVector;
+	FVector AppliedPlanarCorrectionVelocityCmPerSecond = FVector::ZeroVector;
 	FVector LastAcceptedActorLocation = FVector::ZeroVector;
 	bool bInitialized = false;
 	bool bLastMoveBlocked = false;
@@ -1507,7 +1508,7 @@ private:
 	void ReleaseStartupMovementLock(bool bRestoreCharacterMovement = true);
 	void ApplyTransitionOwnedShellLock();
 	void CommitTransitionOwnedShellDrop();
-	void MaintainTransitionOwnedShellLock();
+	void MaintainTransitionOwnedShellLock(float DeltaTime);
 	void ReleaseTransitionOwnedShellLockInternal(bool bRestoreCharacterMovement);
 	void ResetStartupQuietWindowState();
 	bool UpdateStartupQuietWindow(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, float& OutLinearSpeedCmPerSecond, float& OutAngularSpeedDegPerSecond);
@@ -1885,6 +1886,10 @@ public:
 	static float ResolveShellCouplingPlanarVelocityAlignment(
 		const FVector& OwnerVelocityCmPerSecond,
 		const FVector& RootVelocityCmPerSecond);
+	static FVector ResolveEffectiveShellCouplingPlanarVelocityCmPerSecond(
+		const FVector& OwnerVelocityCmPerSecond,
+		const FVector& AppliedShellCorrectionVelocityCmPerSecond,
+		bool bTransitionOwnedShellLocked);
 	static void ResolveBodyModifierRuntimeMode(
 		EPhysAnimRuntimeState RuntimeState,
 		bool bForceZeroActions,

@@ -15,8 +15,8 @@ Use it to track:
 ## Current State
 
 - `Current phase`: Phase 3 / truthful Settle shell-maintenance investigation.
-- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness now truthfully reports reproducible passes, and the live balance-entry path consistently clears Phase 1 admission and Phase 2 RootOn under the relaxed POC thresholds (45° posture, 4000 deg/sec spike abort). The current live blocker remains `phase3_material_shell_correction`, and the new truthfulness baseline also proves that Settle is no longer failing on the intermediate bookkeeping artifact `phase3_shell_lock_lost`.
-- `Latest runtime forensics`: the latest `PhysAnim.PIE.BalanceModeSmoke` reaches `BalanceEntry_Settle`, preserves the explicit transition-owned shell lock across `Phase2_ReadyForPhase3`, emits `PHASE3_FIRST_FAILURE_AUDIT reason=phase3_material_shell_correction`, and ends directly on `TRANSITION_SAFE_DENIED final_outcome. reason=phase3_material_shell_correction`. The previous post-recovery retry tail into `phase1_prepare_terminal_persistent_body_motion_instability` remains removed, and the transient false frontier `phase3_shell_lock_lost` is now ruled out as a handoff bookkeeping bug. The latest `PhysAnim.PIE.Phase1AutoCalibSmoke` frontier remains `truthful_pass_found` with reproducible truthful-pass reporting.
+- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness now truthfully reports reproducible passes, and the live balance-entry path consistently clears Phase 1 admission and Phase 2 RootOn under the relaxed POC thresholds (45° posture, 4000 deg/sec spike abort). The current live blocker remains `phase3_material_shell_correction`, but Settle shell-velocity truthfulness has improved: the first-failure shell-velocity delta is no longer inflated by teleport-maintained shell lock using stale actor velocity alone.
+- `Latest runtime forensics`: the latest `PhysAnim.PIE.BalanceModeSmoke` still reaches `BalanceEntry_Settle`, preserves the explicit transition-owned shell lock across `Phase2_ReadyForPhase3`, emits `PHASE3_FIRST_FAILURE_AUDIT reason=phase3_material_shell_correction`, and ends directly on `TRANSITION_SAFE_DENIED final_outcome. reason=phase3_material_shell_correction`. After the shell-velocity truthfulness fix, the same first-failure frame now reports `shellVelocityDelta=22.22/10.00` instead of the earlier overstated `108.22/10.00`, while raw continuity and shell-lock continuity still hold. The previous post-recovery retry tail into `phase1_prepare_terminal_persistent_body_motion_instability` remains removed, `phase3_shell_lock_lost` remains ruled out as a bookkeeping bug, and the latest `PhysAnim.PIE.Phase1AutoCalibSmoke` frontier remains `truthful_pass_found` with reproducible truthful-pass reporting.
 
 ## Active Tasks
 
@@ -544,3 +544,16 @@ Known important reference points from this work:
 - Practical meaning:
   - `phase3_shell_lock_lost` is now ruled out as a bookkeeping artifact rather than a live physical blocker
   - the remaining Phase 3 blocker is again shell-maintenance materiality under a genuinely preserved Settle shell lock
+
+## 2026-04-21 — Settle shell-velocity truthfulness under explicit lock
+
+- Added deterministic TDD coverage for shell-correction velocity truthfulness so explicit transition-owned shell lock now counts its applied planar correction velocity as real shell movement, while observed-only gameplay shell mode still does not borrow that transition-only correction.
+- Changed Settle shell-velocity diagnostics and failure classification to use effective shell planar velocity under explicit transition-owned lock instead of comparing raw root velocity only against `OwnerActor->GetVelocity()`, which understated teleport-maintained shell motion.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The truthful frontier did not falsely flip to success or to a new reason, but the measured blocker narrowed materially on the same Settle frame:
+  - before this fix, `PHASE3_FIRST_FAILURE_AUDIT` reported `shellVelocityDelta=108.22/10.00`
+  - after this fix, it reports `shellVelocityDelta=22.22/10.00`
+  - terminal outcome remains truthful safe denial on `phase3_material_shell_correction`
+- Practical meaning:
+  - the old Phase 3 shell-velocity surface was overstating the blocker by ignoring transition-owned teleport correction
+  - `phase3_material_shell_correction` remains real, but it is now narrower and better isolated for the next Settle shell-maintenance pass

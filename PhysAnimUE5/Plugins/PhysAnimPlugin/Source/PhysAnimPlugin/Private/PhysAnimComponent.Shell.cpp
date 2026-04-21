@@ -34,8 +34,12 @@ float UPhysAnimComponent::GetCurrentShellPlanarVelocityDeltaCmPerSecond() const
 		return 0.0f;
 	}
 
-	return ResolveShellCouplingPlanarVelocityDeltaCmPerSecond(
+	const FVector EffectiveOwnerVelocityCmPerSecond = ResolveEffectiveShellCouplingPlanarVelocityCmPerSecond(
 		OwnerActor->GetVelocity(),
+		BridgeShellState.AppliedPlanarCorrectionVelocityCmPerSecond,
+		HasExplicitTransitionOwnedShellLock());
+	return ResolveShellCouplingPlanarVelocityDeltaCmPerSecond(
+		EffectiveOwnerVelocityCmPerSecond,
 		LastRuntimeInstabilityDiagnostics.RawRootLinearVelocityCmPerSecondVector);
 }
 
@@ -206,8 +210,10 @@ void UPhysAnimComponent::CommitTransitionOwnedShellDrop()
 }
 
 
-void UPhysAnimComponent::MaintainTransitionOwnedShellLock()
+void UPhysAnimComponent::MaintainTransitionOwnedShellLock(float DeltaTime)
 {
+	BridgeShellState.AppliedPlanarCorrectionVelocityCmPerSecond = FVector::ZeroVector;
+
 	if (!IsTransitionOwnedShellLocked())
 	{
 		return;
@@ -228,6 +234,14 @@ void UPhysAnimComponent::MaintainTransitionOwnedShellLock()
 		RootLocation.Y - ShellCouplingReferenceRootLocalOffsetCm.Y,
 		OwnerLocation.Z);
 	const FVector PlanarDelta = DesiredLocation - OwnerLocation;
+	if (DeltaTime > UE_SMALL_NUMBER)
+	{
+		BridgeShellState.AppliedPlanarCorrectionVelocityCmPerSecond = FVector(
+			PlanarDelta.X / DeltaTime,
+			PlanarDelta.Y / DeltaTime,
+			0.0f);
+	}
+
 	if (PlanarDelta.SizeSquared2D() <= KINDA_SMALL_NUMBER)
 	{
 		return;

@@ -260,6 +260,61 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimShellCorrectionVelocityTruthfulnessTest,
+		"PhysAnim.Component.ShellCorrectionVelocityTruthfulness",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimShellCorrectionVelocityTruthfulnessTest::RunTest(const FString& Parameters)
+	{
+		const FVector OwnerVelocityCmPerSecond = FVector::ZeroVector;
+		const FVector AppliedShellCorrectionVelocityCmPerSecond(108.22f, 0.0f, 50.0f);
+		const FVector RootVelocityCmPerSecond(108.22f, 0.0f, 25.0f);
+
+		const FVector EffectiveLockedVelocityCmPerSecond =
+			UPhysAnimComponent::ResolveEffectiveShellCouplingPlanarVelocityCmPerSecond(
+				OwnerVelocityCmPerSecond,
+				AppliedShellCorrectionVelocityCmPerSecond,
+				true);
+		TestTrue(
+			TEXT("Explicit shell lock counts applied planar correction velocity as shell movement"),
+			EffectiveLockedVelocityCmPerSecond.Equals(FVector(108.22f, 0.0f, 0.0f), KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Applied shell correction velocity clears planar shell delta when it fully matches root planar motion"),
+			FMath::IsNearlyZero(
+				UPhysAnimComponent::ResolveShellCouplingPlanarVelocityDeltaCmPerSecond(
+					EffectiveLockedVelocityCmPerSecond,
+					RootVelocityCmPerSecond),
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Applied shell correction velocity preserves positive planar alignment when it matches root motion"),
+			FMath::IsNearlyEqual(
+				UPhysAnimComponent::ResolveShellCouplingPlanarVelocityAlignment(
+					EffectiveLockedVelocityCmPerSecond,
+					RootVelocityCmPerSecond),
+				1.0f,
+				KINDA_SMALL_NUMBER));
+
+		const FVector EffectiveUnlockedVelocityCmPerSecond =
+			UPhysAnimComponent::ResolveEffectiveShellCouplingPlanarVelocityCmPerSecond(
+				OwnerVelocityCmPerSecond,
+				AppliedShellCorrectionVelocityCmPerSecond,
+				false);
+		TestTrue(
+			TEXT("Observed-only shell mode does not borrow transition-only correction velocity"),
+			EffectiveUnlockedVelocityCmPerSecond.Equals(FVector::ZeroVector, KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Without the explicit lock, the same root planar motion still appears as shell velocity delta"),
+			FMath::IsNearlyEqual(
+				UPhysAnimComponent::ResolveShellCouplingPlanarVelocityDeltaCmPerSecond(
+					EffectiveUnlockedVelocityCmPerSecond,
+					RootVelocityCmPerSecond),
+				108.22f,
+				KINDA_SMALL_NUMBER));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimTransitionOwnedShellLockTruthfulnessTest,
 		"PhysAnim.Component.TransitionOwnedShellLockTruthfulness",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

@@ -457,11 +457,15 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 			OwnerLocation,
 			RootLocation,
 			ShellCouplingReferenceRootLocalOffsetCm);
-		ShellPlanarVelocityDeltaCmPerSecond = ResolveShellCouplingPlanarVelocityDeltaCmPerSecond(
+		const FVector EffectiveOwnerShellVelocityCmPerSecond = ResolveEffectiveShellCouplingPlanarVelocityCmPerSecond(
 			OwnerActor->GetVelocity(),
+			BridgeShellState.AppliedPlanarCorrectionVelocityCmPerSecond,
+			HasExplicitTransitionOwnedShellLock());
+		ShellPlanarVelocityDeltaCmPerSecond = ResolveShellCouplingPlanarVelocityDeltaCmPerSecond(
+			EffectiveOwnerShellVelocityCmPerSecond,
 			LastRuntimeInstabilityDiagnostics.RawRootLinearVelocityCmPerSecondVector);
 		ShellPlanarVelocityAlignment = ResolveShellCouplingPlanarVelocityAlignment(
-			OwnerActor->GetVelocity(),
+			EffectiveOwnerShellVelocityCmPerSecond,
 			LastRuntimeInstabilityDiagnostics.RawRootLinearVelocityCmPerSecondVector);
 	}
 	const PhysAnimComponentInternal::FFloatBufferSummary SelfObsSummary = PhysAnimComponentInternal::SummarizeFloatBuffer(SelfObservationBuffer);

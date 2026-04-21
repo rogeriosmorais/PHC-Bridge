@@ -669,6 +669,22 @@ float UPhysAnimComponent::ResolveShellCouplingPlanarVelocityAlignment(
 }
 
 
+FVector UPhysAnimComponent::ResolveEffectiveShellCouplingPlanarVelocityCmPerSecond(
+	const FVector& OwnerVelocityCmPerSecond,
+	const FVector& AppliedShellCorrectionVelocityCmPerSecond,
+	bool bTransitionOwnedShellLocked)
+{
+	FVector EffectiveVelocity = OwnerVelocityCmPerSecond;
+	if (bTransitionOwnedShellLocked)
+	{
+		EffectiveVelocity += AppliedShellCorrectionVelocityCmPerSecond;
+	}
+
+	EffectiveVelocity.Z = 0.0f;
+	return EffectiveVelocity;
+}
+
+
 float UPhysAnimComponent::CalculateConstraintMinLimitedAngleDegrees(
 	EAngularConstraintMotion TwistMotion,
 	float TwistLimit,
