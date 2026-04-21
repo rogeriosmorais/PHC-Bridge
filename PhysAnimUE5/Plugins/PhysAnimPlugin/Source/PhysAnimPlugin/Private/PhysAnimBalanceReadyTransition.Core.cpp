@@ -2315,7 +2315,7 @@ extern int32 GVerbosePhase2Forensics;
 				const float ShellOffsetDeltaCm = Owner->GetCurrentShellPlanarOffsetDeltaCm();
 				const float ShellVelocityDeltaCmPerSecond = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 				const bool bShellCorrectionOwnerActive = FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
-					Owner->IsTransitionOwnedShellLocked(),
+					Owner->HasExplicitTransitionOwnedShellLock(),
 					Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle);
 
 				const FName PelvisModifierName = PhysAnimBridge::MakeBodyModifierName(PhysAnimBridge::GetRootBoneName());
@@ -2489,10 +2489,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	}
 
 	if (Owner &&
-		NewPhase != EBalanceReadyTransitionPhase::BRT_Phase1_Prepare &&
-		NewPhase != EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate &&
-		NewPhase != EBalanceReadyTransitionPhase::BRT_Phase2_RootOn &&
-		NewPhase != EBalanceReadyTransitionPhase::BRT_Phase3_Settle &&
+		!ShouldRetainExplicitShellLockForPhase(NewPhase) &&
 		PreviousPhase != EBalanceReadyTransitionPhase::BRT_Inactive)
 	{
 		Owner->ReleaseTransitionOwnedShellLock();

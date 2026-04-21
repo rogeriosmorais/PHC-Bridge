@@ -260,6 +260,51 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTransitionOwnedShellLockTruthfulnessTest,
+		"PhysAnim.Component.TransitionOwnedShellLockTruthfulness",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTransitionOwnedShellLockTruthfulnessTest::RunTest(const FString& Parameters)
+	{
+		TestTrue(
+			TEXT("Explicit transition-owned shell lock mode reports held"),
+			UPhysAnimComponent::IsExplicitTransitionOwnedShellLockMode(
+				EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked));
+		TestFalse(
+			TEXT("Observed-only gameplay shell mode does not overclaim an explicit shell lock"),
+			UPhysAnimComponent::IsExplicitTransitionOwnedShellLockMode(
+				EBalanceTransitionShellAuthorityMode::GameplayShellObservedOnly));
+		TestTrue(
+			TEXT("Phase 3 shell correction may be materially active when the explicit shell lock still owns the shell"),
+			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
+				true,
+				true));
+		TestTrue(
+			TEXT("Phase 2 ready-for-Phase 3 handoff retains the explicit shell lock"),
+			FPhysAnimBalanceReadyTransition::ShouldRetainExplicitShellLockForPhase(
+				EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3));
+		TestTrue(
+			TEXT("Phase 3 Settle retains the explicit shell lock"),
+			FPhysAnimBalanceReadyTransition::ShouldRetainExplicitShellLockForPhase(
+				EBalanceReadyTransitionPhase::BRT_Phase3_Settle));
+		TestFalse(
+			TEXT("Safe deny releases the explicit shell lock"),
+			FPhysAnimBalanceReadyTransition::ShouldRetainExplicitShellLockForPhase(
+				EBalanceReadyTransitionPhase::BRT_SafeDenied));
+		TestFalse(
+			TEXT("Phase 3 shell correction is not active when Settle is idle and no explicit shell lock is held"),
+			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
+				false,
+				true));
+		TestTrue(
+			TEXT("Locomotion reclaim still counts as shell correction owner activity without an explicit shell lock"),
+			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
+				false,
+				false));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimBridgeActivePreEntryPrerequisitesTest,
 		"PhysAnim.Component.BridgeActivePreEntryPrerequisites",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

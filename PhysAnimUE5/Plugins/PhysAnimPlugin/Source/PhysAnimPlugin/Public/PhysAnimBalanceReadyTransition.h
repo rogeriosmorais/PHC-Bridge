@@ -562,6 +562,7 @@ public:
 	static bool IsPhase3ShellCorrectionOwnerActive(
 		bool bTransitionOwnedShellLocked,
 		bool bLocomotionAuthorityIdle);
+	static bool ShouldRetainExplicitShellLockForPhase(EBalanceReadyTransitionPhase Phase);
 	static bool IsMaterialShellCorrectionActive(
 		bool bShellCorrectionOwnerActive,
 		float ShellPlanarOffsetCm,

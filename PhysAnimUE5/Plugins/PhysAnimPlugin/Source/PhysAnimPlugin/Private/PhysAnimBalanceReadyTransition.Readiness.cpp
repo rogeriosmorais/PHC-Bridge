@@ -143,6 +143,16 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
 }
 
 
+bool FPhysAnimBalanceReadyTransition::ShouldRetainExplicitShellLockForPhase(EBalanceReadyTransitionPhase Phase)
+{
+	return Phase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
+		Phase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
+		Phase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
+		Phase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3 ||
+		Phase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle;
+}
+
+
 bool FPhysAnimBalanceReadyTransition::IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
 {
 	// Legacy helper wrapper for backward compatibility during refactor
@@ -265,7 +275,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 		OutReason = TEXT("phase2_locomotion_active");
 		return false;
 	}
-	if (!Owner->IsTransitionOwnedShellLocked())
+	if (!Owner->HasExplicitTransitionOwnedShellLock())
 	{
 		OutReason = TEXT("phase2_pre_root_on_shell_correction_safety_not_proven");
 		return false;
@@ -484,7 +494,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	}
 
 	// Section 17.3 - shell lock preserved
-	if (!Owner->IsTransitionOwnedShellLocked())
+	if (!Owner->HasExplicitTransitionOwnedShellLock())
 	{
 		OutReason = TEXT("phase3_shell_lock_lost");
 		return false;
@@ -513,7 +523,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 
 	// Section 17.3 - no material shell correction
 	const bool bShellCorrectionOwnerActive = IsPhase3ShellCorrectionOwnerActive(
-		Owner->IsTransitionOwnedShellLocked(),
+		Owner->HasExplicitTransitionOwnedShellLock(),
 		Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle);
 	if (IsMaterialShellCorrectionActive(
 			bShellCorrectionOwnerActive,

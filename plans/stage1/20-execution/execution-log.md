@@ -15,8 +15,8 @@ Use it to track:
 ## Current State
 
 - `Current phase`: Phase 3 / truthful Settle shell-maintenance investigation.
-- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness now truthfully reports reproducible passes, and the live balance-entry path consistently clears Phase 1 admission and Phase 2 RootOn under the relaxed POC thresholds (45° posture, 4000 deg/sec spike abort). The current live blocker is no longer `phase3_root_simulation_dropped`; the runtime now safe-denies truthfully at `phase3_material_shell_correction`.
-- `Latest runtime forensics`: the latest `PhysAnim.PIE.BalanceModeSmoke` reaches `BalanceEntry_Settle`, emits `PHASE3_FIRST_FAILURE_AUDIT reason=phase3_material_shell_correction`, and now ends directly on `TRANSITION_SAFE_DENIED final_outcome. reason=phase3_material_shell_correction`. The previous post-recovery retry tail into `phase1_prepare_terminal_persistent_body_motion_instability` has been removed as a truthfulness artifact. The latest `PhysAnim.PIE.Phase1AutoCalibSmoke` frontier remains `truthful_pass_found` with reproducible truthful-pass reporting.
+- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness now truthfully reports reproducible passes, and the live balance-entry path consistently clears Phase 1 admission and Phase 2 RootOn under the relaxed POC thresholds (45° posture, 4000 deg/sec spike abort). The current live blocker remains `phase3_material_shell_correction`, and the new truthfulness baseline also proves that Settle is no longer failing on the intermediate bookkeeping artifact `phase3_shell_lock_lost`.
+- `Latest runtime forensics`: the latest `PhysAnim.PIE.BalanceModeSmoke` reaches `BalanceEntry_Settle`, preserves the explicit transition-owned shell lock across `Phase2_ReadyForPhase3`, emits `PHASE3_FIRST_FAILURE_AUDIT reason=phase3_material_shell_correction`, and ends directly on `TRANSITION_SAFE_DENIED final_outcome. reason=phase3_material_shell_correction`. The previous post-recovery retry tail into `phase1_prepare_terminal_persistent_body_motion_instability` remains removed, and the transient false frontier `phase3_shell_lock_lost` is now ruled out as a handoff bookkeeping bug. The latest `PhysAnim.PIE.Phase1AutoCalibSmoke` frontier remains `truthful_pass_found` with reproducible truthful-pass reporting.
 
 ## Active Tasks
 
@@ -531,3 +531,16 @@ Known important reference points from this work:
   - the auto-calibration harness is no longer blocked by restore/repro/report noise
   - the live balance smoke is no longer obscuring the real blocker with a post-recovery retry chain
   - the next engineering slice should target shell-maintenance truth in Settle, not restart-path cleanup
+
+## 2026-04-21 — Explicit Settle shell-lock truthfulness
+
+- Split explicit transition-owned shell-lock bookkeeping from the broader runtime convenience predicate so truth-sensitive Phase 2 / Phase 3 checks no longer overclaim a held lock merely because the runtime is inside a balance-entry state.
+- Added deterministic TDD coverage for explicit shell-lock mode classification, retained-lock phase mapping, and Phase 3 shell-correction owner activity.
+- Fixed the state-machine handoff so `BRT_Phase2_ReadyForPhase3` retains the explicit shell lock instead of releasing it one phase too early before Settle begins.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The intermediate truthful frontier changed exactly as expected during this pass:
+  - before the handoff fix, the runtime truthfully exposed `phase3_shell_lock_lost`
+  - after the handoff fix, the smoke returned to `phase3_material_shell_correction`
+- Practical meaning:
+  - `phase3_shell_lock_lost` is now ruled out as a bookkeeping artifact rather than a live physical blocker
+  - the remaining Phase 3 blocker is again shell-maintenance materiality under a genuinely preserved Settle shell lock

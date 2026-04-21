@@ -994,6 +994,10 @@ public:
 	virtual void GetVelocity(FVector& OutVelocity) override;
 
 	bool IsIdlePoseActive() const;
+	static bool IsExplicitTransitionOwnedShellLockMode(EBalanceTransitionShellAuthorityMode Mode)
+	{
+		return Mode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked;
+	}
 	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
 	FVector GetAcceptedShellPlanarVelocity() const { return BridgeShellState.AcceptedPlanarVelocityCmPerSecond; }
 	float GetCurrentShellPlanarOffsetDeltaCm() const;
@@ -1002,6 +1006,10 @@ public:
 	void ActivateTransitionOwnedShellLock();
 	void ReleaseTransitionOwnedShellLock();
 	EBalanceTransitionShellAuthorityMode GetBalanceTransitionShellAuthorityMode() const { return BalanceTransitionShellAuthorityMode; }
+	bool HasExplicitTransitionOwnedShellLock() const
+	{
+		return IsExplicitTransitionOwnedShellLockMode(BalanceTransitionShellAuthorityMode);
+	}
 	bool IsTransitionOwnedShellLocked() const;
 	bool IsStartupMovementLockActive() const { return bStartupMovementLockActive; }
 	bool WasTransitionShellReferenceReanchored() const { return bTransitionOwnedShellReferenceReanchored; }
