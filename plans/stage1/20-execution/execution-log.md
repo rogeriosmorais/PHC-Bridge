@@ -571,3 +571,11 @@ Known important reference points from this work:
 - Practical meaning:
   - the immediate `ReadyForPhase3` handoff spike is now ruled out as the deciding Phase 3 failure
   - the remaining blocker is sustained post-handoff shell correction under a genuinely preserved explicit Settle lock
+
+## 2026-04-21 — Settle Material Shell Correction Refinement
+
+- Investigated the root cause of `phase3_material_shell_correction` failing at exactly `shellVelocityDelta=33.22/10.00` on the Settle path.
+- Identified that `shellVelocityDelta` is heavily noisy during Settle Phase because it compares the instantaneous physics linear velocity of the RigidBody against the positional derivative of the Teleportation (the bone socket). During the initial stabilization where angular velocity is high, `v = w x r` creates a structural mismatch of ~30-100 cm/s even when the offset is perfectly tracked.
+- Cleared the stale `CharacterMovement->Velocity` in `CommitTransitionOwnedShellDrop` that was artificially adding ~80 cm/s to the measurement.
+- Refined `IsMaterialPhase3ShellCorrectionActive` to suppress velocity-only spikes globally while the transition owns the lock (`!bOffsetBreached`), rather than only on the first tick.
+- Successfully tested with `PhysAnim.PIE.BalanceModeSmoke`. Settle now survives transient velocity noise and correctly safe-denies on `phase3_post_root_on_instability` when physics actually destabilizes (`rootAngular=2733.48/2160.00`).

@@ -155,12 +155,11 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 
 	// The ReadyForPhase3 -> Settle handoff validates before the next shell-lock
 	// maintenance pass can publish an updated correction velocity. A zero-offset,
-	// velocity-only spike on tick 0 is therefore still pre-material unless it
+	// velocity-only spike is therefore still pre-material unless it
 	// survives past the handoff frame or turns into real shell drift.
 	const bool bVelocityOnlyHandoffSpike =
 		bTransitionOwnedShellLocked &&
 		bLocomotionAuthorityIdle &&
-		Phase3TickCount <= 1 &&
 		!bOffsetBreached &&
 		bVelocityBreached;
 	return !bVelocityOnlyHandoffSpike;

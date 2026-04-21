@@ -171,6 +171,7 @@ void UPhysAnimComponent::CommitTransitionOwnedShellDrop()
 		
 		if (UCharacterMovementComponent* const CharacterMovement = CharacterOwner->GetCharacterMovement())
 		{
+			CharacterMovement->Velocity = FVector::ZeroVector;
 			CharacterMovement->SetComponentTickEnabled(false);
 			CharacterMovement->DisableMovement();
 		}
