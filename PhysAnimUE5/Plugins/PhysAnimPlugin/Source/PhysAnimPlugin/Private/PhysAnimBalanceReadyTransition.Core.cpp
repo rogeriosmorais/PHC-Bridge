@@ -2346,6 +2346,11 @@ extern int32 GVerbosePhase2Forensics;
 					*Owner->GetName());
 				bLoggedPhase3FirstFailureAudit = true;
 			}
+			if (!IsFailureClassRetryable(Phase3Violation))
+			{
+				MarkSafePhase2Denied(Owner, Phase3Violation);
+				return;
+			}
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 			return;
 		}
@@ -2367,6 +2372,11 @@ extern int32 GVerbosePhase2Forensics;
 		if (PhaseTimeSeconds > Settings.BalancePhase3TimeoutDuration)
 		{
 			Diagnostics.FailureReason = TEXT("phase3_no_convergence_path");
+			if (!IsFailureClassRetryable(Diagnostics.FailureReason))
+			{
+				MarkSafePhase2Denied(Owner, Diagnostics.FailureReason);
+				return;
+			}
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Failed, Owner);
 		}
 	}

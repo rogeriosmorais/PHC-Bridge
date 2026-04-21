@@ -112,6 +112,20 @@ namespace
 		TestTrue(TEXT("Safe deny pass emits no error"), OutcomeError.IsEmpty());
 
 		OutcomeError.Reset();
+		TestTrue(
+			TEXT("Phase 3 shell maintenance safe deny is a passing truthful smoke outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BalanceSafeDeny,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				true,
+				TEXT("phase3_material_shell_correction"),
+				TEXT(""),
+				OutcomeError));
+		TestTrue(TEXT("Phase 3 safe deny pass emits no error"), OutcomeError.IsEmpty());
+
+		OutcomeError.Reset();
 		TestFalse(
 			TEXT("Generic fail-stop precursor is not a truthful safe-deny smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(

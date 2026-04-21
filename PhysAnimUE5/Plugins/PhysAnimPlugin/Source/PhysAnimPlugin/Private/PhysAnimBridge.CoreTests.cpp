@@ -456,6 +456,9 @@ namespace
 			TEXT("Phase 3 timeout is not retryable"),
 			FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(TEXT("phase3_no_convergence_path")));
 		TestFalse(
+			TEXT("Phase 3 shell maintenance failure is not retryable"),
+			FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(TEXT("phase3_material_shell_correction")));
+		TestFalse(
 			TEXT("Current pelvis-spine readiness blocker is not retryable as a failure class"),
 			FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient")));
 		TestFalse(
@@ -481,6 +484,15 @@ namespace
 			TEXT("Automatic retry is denied for terminal RootOn spike even if gates are satisfied"),
 			FPhysAnimBalanceReadyTransition::IsAutomaticRetryAllowed(
 				TEXT("phase2_root_on_spike"),
+				true,
+				true,
+				true,
+				true,
+				true));
+		TestFalse(
+			TEXT("Automatic retry is denied for Phase 3 shell maintenance failure even if gates are satisfied"),
+			FPhysAnimBalanceReadyTransition::IsAutomaticRetryAllowed(
+				TEXT("phase3_material_shell_correction"),
 				true,
 				true,
 				true,
