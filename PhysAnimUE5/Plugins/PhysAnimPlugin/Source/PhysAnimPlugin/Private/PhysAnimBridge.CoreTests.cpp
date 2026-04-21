@@ -376,6 +376,34 @@ namespace
 			TEXT("Phase 3 instability uses the Settle-specific instability reason"),
 			Reason,
 			BalanceReadinessReasons::Phase3InstabilitySpike);
+		FPhase1AcceptedConvergenceSnapshot Phase3Snapshot;
+		Phase3Snapshot.bIsPelvisSimulating = true;
+		Phase3Snapshot.RootLinearSpeed = 200.0f;
+		Phase3Snapshot.RootAngularSpeed = 100.0f;
+		Phase3Snapshot.RootGroundDistance = 5.0f;
+		TestTrue(
+			TEXT("Phase-aware root stability uses the Settle thresholds instead of silently falling back to Phase 1"),
+			FPhysAnimBalanceReadyTransition::IsRootStable(
+				Phase3Snapshot,
+				EBalanceReadyTransitionPhase::BRT_Phase3_Settle,
+				GetDefaultSettings(),
+				Reason));
+		TestEqual(
+			TEXT("Phase-aware Settle root stability reports ready when only the relaxed Phase 3 thresholds permit it"),
+			Reason,
+			BalanceReadinessReasons::Ready);
+		Phase3Snapshot.bIsPelvisSimulating = false;
+		TestFalse(
+			TEXT("Phase-aware root stability keeps the Settle-specific root simulation drop reason"),
+			FPhysAnimBalanceReadyTransition::IsRootStable(
+				Phase3Snapshot,
+				EBalanceReadyTransitionPhase::BRT_Phase3_Settle,
+				GetDefaultSettings(),
+				Reason));
+		TestEqual(
+			TEXT("Phase-aware root stability does not overclaim a simulated root from a stale snapshot wrapper"),
+			Reason,
+			BalanceReadinessReasons::Phase3RootSimulationDropped);
 		TestFalse(
 			TEXT("Idle shell state with large deltas is not material shell correction by itself"),
 			FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(

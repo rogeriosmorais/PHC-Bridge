@@ -255,14 +255,18 @@ bool FPhysAnimBalanceReadyTransition::ShouldRetainExplicitShellLockForPhase(EBal
 }
 
 
-bool FPhysAnimBalanceReadyTransition::IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const FPhysAnimStabilizationSettings& Settings, FString& OutReason)
+bool FPhysAnimBalanceReadyTransition::IsRootStable(
+	const FPhase1AcceptedConvergenceSnapshot& Snapshot,
+	EBalanceReadyTransitionPhase Phase,
+	const FPhysAnimStabilizationSettings& Settings,
+	FString& OutReason)
 {
-	// Legacy helper wrapper for backward compatibility during refactor
 	FPhysAnimStabilizationDomain Domain;
+	Domain.CurrentPhase = Phase;
 	Domain.RootLinearSpeed = Snapshot.RootLinearSpeed;
 	Domain.RootAngularSpeed = Snapshot.RootAngularSpeed;
 	Domain.RootGroundDistance = Snapshot.RootGroundDistance;
-	Domain.bRootSimulating = true; // Phase 1 assumes simulation is correctly initialized if we have a snapshot
+	Domain.bRootSimulating = Snapshot.bIsPelvisSimulating;
 	
 	return IsSnapshotReady(Domain, Settings, OutReason);
 }
@@ -299,7 +303,7 @@ bool FPhysAnimBalanceReadyTransition::EvaluateReadiness(UPhysAnimComponent* Owne
 		return false;
 	}
 
-	if (!IsRootStable(CachedConvergenceSnapshot, Settings, OutReason))
+	if (!IsRootStable(CachedConvergenceSnapshot, InternalPhase, Settings, OutReason))
 	{
 		return false;
 	}

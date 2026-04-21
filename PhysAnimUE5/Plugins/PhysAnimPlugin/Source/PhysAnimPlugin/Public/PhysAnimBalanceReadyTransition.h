@@ -596,7 +596,11 @@ public:
 		float ShellPlanarVelocityCmPerSec,
 		float MaxAllowedShellVelocityCmPerSec);
 
-	static bool IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
+	static bool IsRootStable(
+		const FPhase1AcceptedConvergenceSnapshot& Snapshot,
+		EBalanceReadyTransitionPhase Phase,
+		const struct FPhysAnimStabilizationSettings& Settings,
+		FString& OutReason);
 	static FString ResolveRootOnReadinessGateReason(
 		EBalanceReadyRootOnReadinessClassification Classification,
 		bool bDirectPelvisLinkPositionSatisfied,

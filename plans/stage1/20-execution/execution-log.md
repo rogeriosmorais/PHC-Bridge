@@ -14,9 +14,9 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 3 / truthful post-RootOn instability revalidation, with active-balance state publication now split from recovery semantics.
-- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now publishes a truthful active-balance state (`BalanceActive_Standing`) instead of overclaiming the perturbation runtime as recovery-only on entry success. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine still does not reach that state yet, but the new Settle grace pass ruled out another false early-Phase-3 failure: the smoke now survives the old frame-`945` handoff burst and only truthfully safe-denies later in `Phase3_Settle` on sustained `phase3_post_root_on_instability`.
-- `Latest runtime forensics`: the latest `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3. After the new tick-4 instability grace, `PHASE3_FIRST_FAILURE_AUDIT` now lands one Settle frame later at frame `946`, with truthful tick logging (`tick=5`) and the same zero-offset instability signature (`rootLinear=4856.71/3000.00`, `rootAngular=7898.95/2160.00`, `shellOffsetDelta=0.00/2.00`, `shellVelocityDelta=3179.60/10.00`). The live frontier remains physical post-RootOn continuity, but the old frame-`945` burst is now ruled out as the deciding failure.
+- `Current phase`: Phase 3 / truthful post-RootOn instability revalidation, with active-balance publication now split from recovery semantics and Settle snapshot gating now phase-aware instead of silently reusing Phase 1 assumptions.
+- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now publishes a truthful active-balance state (`BalanceActive_Standing`) while also evaluating snapshot-based root stability against the real transition phase and real pelvis-sim evidence. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine still does not reach active balance yet, but the remaining blocker is still the truthful Phase 3 continuity failure rather than a hidden stable-hold misclassification.
+- `Latest runtime forensics`: the latest `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3. The new verified run safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=944` with truthful tick logging (`tick=5`) on `phase3_post_root_on_instability`, where `rootLinear=2540.87/3000.00`, `rootAngular=5450.43/2160.00`, `shellOffsetDelta=0.00/2.00`, and `shellVelocityDelta=680.75/10.00`. That keeps the live frontier on physical post-RootOn angular continuity; the deterministic snapshot gate is no longer a competing explanation for missed Settle success.
 
 ## Active Tasks
 
@@ -612,3 +612,20 @@ Known important reference points from this work:
 - Practical meaning:
   - the old frame-`945` Settle burst is now ruled out as another handoff artifact rather than a truthful terminal instability
   - the remaining blocker is sustained post-RootOn instability beyond the early-Settle grace window
+
+## 2026-04-21 — Phase-aware Settle snapshot readiness
+
+- Added deterministic TDD coverage in `PhysAnim.Bridge.BalanceStateless` proving that snapshot-based root-stability evaluation must respect `BRT_Phase3_Settle` thresholds and the snapshot's real pelvis-sim flag instead of silently defaulting to Phase 1 semantics.
+- Changed `FPhysAnimBalanceReadyTransition::IsRootStable` to accept the active transition phase and consume `bIsPelvisSimulating` from the authoritative snapshot, then routed `EvaluateReadiness` through that phase-aware helper.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Bridge.BalanceStateless`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The latest live smoke on this machine still truthfully safe-denied in `Phase3_Settle` rather than reaching active balance:
+  - `PHASE3_FIRST_FAILURE_AUDIT frame=944`
+  - `reason=phase3_post_root_on_instability`
+  - `tick=5`
+  - `rootLinear=2540.87/3000.00`
+  - `rootAngular=5450.43/2160.00`
+  - `shellOffsetDelta=0.00/2.00`
+  - `shellVelocityDelta=680.75/10.00`
+- Practical meaning:
+  - Settle success/hold evaluation no longer has a silent Phase 1 threshold fallback that could undercut truthful balance activation
+  - the live blocker remains post-RootOn physical angular continuity, not snapshot-gate bookkeeping
