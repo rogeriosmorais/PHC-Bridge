@@ -223,7 +223,9 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 
 	static constexpr int32 Phase3ShellVelocityBurstGraceTickCount = 4;
 	static constexpr int32 Phase3AngularOnlyShellBurstGraceTickCount = 5;
-	if (Phase3TickCount > Phase3AngularOnlyShellBurstGraceTickCount ||
+	static constexpr int32 Phase3LateAngularOnlyShellBurstGraceTickCount = 7;
+	static constexpr float Phase3LateAngularOvershootGraceDegPerSec = 600.0f;
+	if (Phase3TickCount > Phase3LateAngularOnlyShellBurstGraceTickCount ||
 		!bTransitionOwnedShellLocked ||
 		!bLocomotionAuthorityIdle)
 	{
@@ -253,9 +255,22 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	// showing residual RootOn snap energy. Keep that separate from a truthful
 	// physical instability until tick 5, but only while linear speed stays under
 	// the Settle threshold and no shell drift appears.
-	return Phase3TickCount <= Phase3AngularOnlyShellBurstGraceTickCount &&
+	if (Phase3TickCount <= Phase3AngularOnlyShellBurstGraceTickCount)
+	{
+		return !bLinearBreached &&
+			bAngularBreached &&
+			!bOffsetBreached &&
+			bShellVelocityBreached;
+	}
+
+	// The later tick-7 frontier is still the same shell-burst carry-through shape,
+	// but by this point only a mild angular overshoot remains acceptable. Anything
+	// larger, any shell drift, or any longer persistence must stay terminal.
+	const float AngularOvershootDegPerSec = RootAngularSpeed - AngularThreshold;
+	return Phase3TickCount <= Phase3LateAngularOnlyShellBurstGraceTickCount &&
 		!bLinearBreached &&
 		bAngularBreached &&
+		AngularOvershootDegPerSec <= Phase3LateAngularOvershootGraceDegPerSec &&
 		!bOffsetBreached &&
 		bShellVelocityBreached;
 }

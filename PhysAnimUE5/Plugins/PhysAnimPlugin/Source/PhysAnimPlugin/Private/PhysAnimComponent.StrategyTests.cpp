@@ -557,6 +557,48 @@ namespace
 				2.0f,
 				8.0f,
 				10.0f));
+		TestTrue(
+			TEXT("Tick 7 Settle grace still suppresses a mild angular-only zero-offset shell burst under explicit lock"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				7,
+				true,
+				true,
+				833.48f,
+				3000.0f,
+				2673.59f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				787.59f,
+				10.0f));
+		TestFalse(
+			TEXT("Tick 8 Settle grace no longer suppresses the same mild angular-only shell burst"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				8,
+				true,
+				true,
+				833.48f,
+				3000.0f,
+				2673.59f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				787.59f,
+				10.0f));
+		TestFalse(
+			TEXT("Tick 7 mild angular-only grace does not apply once the angular overshoot is too large"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				7,
+				true,
+				true,
+				833.48f,
+				3000.0f,
+				2800.01f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				787.59f,
+				10.0f));
 		TestFalse(
 			TEXT("Tick 4 Settle instability grace does not hide real shell drift"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(

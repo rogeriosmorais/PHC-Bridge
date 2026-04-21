@@ -14,9 +14,9 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 3 / truthful post-RootOn instability revalidation, with Settle now explicitly distinguishing the earlier tick-4 combined burst, the later tick-5 angular-only shell-burst frame, and the later still-sustained instability frames.
-- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now publishes a truthful active-balance state (`BalanceActive_Standing`) while also evaluating snapshot-based root stability against the real transition phase and real pelvis-sim evidence. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine still does not reach active balance yet, but the remaining blocker has moved one bounded Settle slice later again rather than collapsing back to an earlier handoff artifact.
-- `Latest runtime forensics`: the latest `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3. The new verified run safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=946` with truthful tick logging (`tick=7`) on `phase3_post_root_on_instability`, where `rootLinear=833.48/3000.00`, `rootAngular=2673.59/2160.00`, `shellOffsetDelta=0.00/2.00`, and `shellVelocityDelta=787.59/10.00`. That rules out the old tick-5 angular-only shell-burst frame as the deciding blocker; the current frontier remains sustained post-RootOn angular continuity under preserved Settle shell lock.
+- `Current phase`: Phase 3 / truthful post-RootOn instability revalidation, with Settle now explicitly distinguishing the earlier tick-4 combined burst, the earlier tick-5 angular-only shell-burst artifact, and the later mild angular carry-through case under preserved shell lock.
+- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now includes a bounded late-Settle grace for the documented mild tick-7 angular shell-burst carry-through. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine still does not reach active balance, and the truthful blocker remains Phase 3 physical continuity; however, the latest revalidation run surfaced a larger earlier tick-5 Settle burst instead of reproducing the earlier tick-7 frontier.
+- `Latest runtime forensics`: the latest verified `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3. The latest run then safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=934` with `tick=5` on `phase3_post_root_on_instability`, where `rootLinear=6629.14/3000.00`, `rootAngular=8428.48/2160.00`, `shellOffsetDelta=0.00/2.00`, and `shellVelocityDelta=1399.12/10.00`. That means the new deterministic late-carry-through grace is in place, but this machine's newest live smoke did not stay on the earlier mild tick-7 frontier and instead exposed a larger earlier Settle burst that remains terminal.
 
 ## Active Tasks
 
@@ -641,3 +641,17 @@ Known important reference points from this work:
 - Practical meaning:
   - the old tick-5 angular-only Settle frame is now ruled out as another bounded RootOn carry-through artifact rather than the deciding failure
   - the remaining blocker is still truthful `phase3_post_root_on_instability`, but it now appears later and at materially lower raw motion than the previous frontier
+
+## 2026-04-21 — Late Settle mild angular carry-through grace
+
+- Added deterministic TDD coverage for the current later Settle edge case: a tick-7 mild angular-only shell burst with zero shell drift, explicit transition-owned shell lock, idle locomotion, and shell-velocity carry-through is still pre-material, while tick `8` or a larger angular overshoot remain terminal.
+- Refined `IsPhase3EarlySettleInstabilityGraceActive` so the old tick-4 combined-burst and tick-5 angular-only rules stay unchanged, but a narrow late-carry-through grace now exists through tick `7` only for mild angular overshoot under preserved shell lock.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component.TransitionOwnedShellLockTruthfulness`, `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The deterministic contract moved forward as intended, but the latest live smoke on this machine did not reproduce the earlier mild tick-7 frontier:
+  - the new deterministic helper now treats the documented tick-7 mild angular shell burst as pre-material
+  - the latest verified smoke instead safe-denied earlier at `PHASE3_FIRST_FAILURE_AUDIT frame=934` with `tick=5`
+  - that run reported `rootLinear=6629.14/3000.00`, `rootAngular=8428.48/2160.00`, `shellOffsetDelta=0.00/2.00`, and `shellVelocityDelta=1399.12/10.00`
+  - terminal outcome remained truthful safe denial on `phase3_post_root_on_instability`
+- Practical meaning:
+  - the balance-mode contract now has explicit deterministic coverage for the later mild angular carry-through case instead of letting it collapse back into the generic instability bucket
+  - the live frontier remains Phase 3 physical continuity, but the first failing Settle frame on this machine is currently runtime-variant rather than locked to the earlier tick-7 repro
