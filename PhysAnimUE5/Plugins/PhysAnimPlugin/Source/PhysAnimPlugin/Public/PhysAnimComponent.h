@@ -942,6 +942,7 @@ struct FPhase1AutoCalibBaselineSnapshot
 	bool bPendingBalanceModeStartAttemptIssued = false;
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
+	int32 RecoveryPreEntryTelemetrySkipFrames = 0;
 	bool bPhase1TiltDiagnosticEmitted = false;
 	bool bPhase1PelvisCouplingSkipLogged = false;
 	bool bPelvisResetAppliedThisTick = false;
@@ -1107,6 +1108,44 @@ public:
 			bTransitionStarted,
 			bPhase1AutoCalibOwnsStartRequests,
 			bPhase1AutoCalibSubsystemActive);
+	}
+	static bool TestOnlyShouldDeferAutoTriggeredBalanceStartForRecoveryTelemetry(int32 RemainingSkipFrames)
+	{
+		return ShouldDeferAutoTriggeredBalanceStartForRecoveryTelemetry(RemainingSkipFrames);
+	}
+	static bool TestOnlyEvaluateBalanceBridgeActivePreEntryPrerequisites(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bHasPendingBodyModifierCachedResets,
+		bool bIdlePoseActive,
+		EBridgeLocomotionAuthorityState LocomotionAuthorityState,
+		float RootLinearSpeedCmPerSecond,
+		float RootAngularSpeedDegPerSecond,
+		float MaxBodyLinearSpeedCmPerSecond,
+		float MaxBodyAngularSpeedDegPerSecond,
+		float RootTiltDeg,
+		float QuietTiltThresholdDeg,
+		int32 NumLowerLimbTargetsConsidered,
+		float MaxLowerLimbLimitProxyDegrees,
+		float MaxLowerLimbLimitOccupancy,
+		const FPhysAnimStabilizationSettings& EffectiveSettings,
+		FString& OutReason)
+	{
+		return EvaluateBalanceBridgeActivePreEntryPrerequisitesFromTelemetry(
+			RuntimeState,
+			bHasPendingBodyModifierCachedResets,
+			bIdlePoseActive,
+			LocomotionAuthorityState,
+			RootLinearSpeedCmPerSecond,
+			RootAngularSpeedDegPerSecond,
+			MaxBodyLinearSpeedCmPerSecond,
+			MaxBodyAngularSpeedDegPerSecond,
+			RootTiltDeg,
+			QuietTiltThresholdDeg,
+			NumLowerLimbTargetsConsidered,
+			MaxLowerLimbLimitProxyDegrees,
+			MaxLowerLimbLimitOccupancy,
+			EffectiveSettings,
+			OutReason);
 	}
 	static bool TestOnlyShouldTreatInstabilityPrecursorAsTransitionBlocker(
 		EPhysAnimRuntimeState RuntimeState,
@@ -1743,6 +1782,7 @@ private:
 	bool bPendingBalanceModeStartAttemptIssued = false;
 	FString PendingBalanceModeStartReason;
 	double PendingBalanceModeRequestTimeSeconds = -1.0;
+	int32 RecoveryPreEntryTelemetrySkipFrames = 0;
 	bool bPhase1TiltDiagnosticEmitted = false;
 	bool bPhase1PelvisCouplingSkipLogged = false;
 	FPhase1PelvisCouplingRotationForensics LastPhase1PelvisCouplingRotationForensics;
@@ -1764,12 +1804,29 @@ private:
 	TMap<FName, EPhysicsMovementType> PreviousDistalBoneModifierOwnership;
 	TMap<FName, FString> LastDistalClassification;
 	TMap<FName, FPhysAnimPendingDistalOwnershipCheck> PendingDistalOwnershipChecks;
+	static bool EvaluateBalanceBridgeActivePreEntryPrerequisitesFromTelemetry(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bHasPendingBodyModifierCachedResets,
+		bool bIdlePoseActive,
+		EBridgeLocomotionAuthorityState LocomotionAuthorityState,
+		float RootLinearSpeedCmPerSecond,
+		float RootAngularSpeedDegPerSecond,
+		float MaxBodyLinearSpeedCmPerSecond,
+		float MaxBodyAngularSpeedDegPerSecond,
+		float RootTiltDeg,
+		float QuietTiltThresholdDeg,
+		int32 NumLowerLimbTargetsConsidered,
+		float MaxLowerLimbLimitProxyDegrees,
+		float MaxLowerLimbLimitOccupancy,
+		const FPhysAnimStabilizationSettings& EffectiveSettings,
+		FString& OutReason);
 	static bool ShouldAttemptAutoTriggeredBalanceStart(
 		EPhysAnimRuntimeState RuntimeState,
 		bool bPendingBalanceModeStartRequest,
 		bool bTransitionStarted,
 		bool bPhase1AutoCalibOwnsStartRequests,
 		bool bPhase1AutoCalibSubsystemActive);
+	static bool ShouldDeferAutoTriggeredBalanceStartForRecoveryTelemetry(int32 RemainingSkipFrames);
 
 public:
 	static bool BuildConditionedActions(

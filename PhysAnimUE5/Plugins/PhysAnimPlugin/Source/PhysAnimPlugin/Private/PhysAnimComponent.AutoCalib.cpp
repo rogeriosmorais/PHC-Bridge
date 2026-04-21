@@ -161,6 +161,7 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibBaseline(FPhase1AutoCalibBaseline
 	OutSnapshot.bPendingBalanceModeStartAttemptIssued = bPendingBalanceModeStartAttemptIssued;
 	OutSnapshot.PendingBalanceModeStartReason = PendingBalanceModeStartReason;
 	OutSnapshot.PendingBalanceModeRequestTimeSeconds = PendingBalanceModeRequestTimeSeconds;
+	OutSnapshot.RecoveryPreEntryTelemetrySkipFrames = RecoveryPreEntryTelemetrySkipFrames;
 	OutSnapshot.bPhase1TiltDiagnosticEmitted = bPhase1TiltDiagnosticEmitted;
 	OutSnapshot.bPhase1PelvisCouplingSkipLogged = bPhase1PelvisCouplingSkipLogged;
 	OutSnapshot.bPelvisResetAppliedThisTick = bPelvisResetAppliedThisTick;
@@ -339,6 +340,7 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 	bPendingBalanceModeStartAttemptIssued = Snapshot.bPendingBalanceModeStartAttemptIssued;
 	PendingBalanceModeStartReason = Snapshot.PendingBalanceModeStartReason;
 	PendingBalanceModeRequestTimeSeconds = Snapshot.PendingBalanceModeRequestTimeSeconds;
+	RecoveryPreEntryTelemetrySkipFrames = Snapshot.RecoveryPreEntryTelemetrySkipFrames;
 	bPhase1TiltDiagnosticEmitted = Snapshot.bPhase1TiltDiagnosticEmitted;
 	bPhase1PelvisCouplingSkipLogged = Snapshot.bPhase1PelvisCouplingSkipLogged;
 	bPelvisResetAppliedThisTick = Snapshot.bPelvisResetAppliedThisTick;

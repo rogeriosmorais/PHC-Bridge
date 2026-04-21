@@ -199,6 +199,12 @@ namespace
 				false,
 				true));
 		TestTrue(
+			TEXT("Recovery telemetry hold defers the first post-rebaseline auto-trigger tick"),
+			UPhysAnimComponent::TestOnlyShouldDeferAutoTriggeredBalanceStartForRecoveryTelemetry(1));
+		TestFalse(
+			TEXT("Recovery telemetry hold clears once a fresh tick has elapsed"),
+			UPhysAnimComponent::TestOnlyShouldDeferAutoTriggeredBalanceStartForRecoveryTelemetry(0));
+		TestTrue(
 			TEXT("BridgeActive still treats an instability precursor as a queue blocker"),
 			UPhysAnimComponent::TestOnlyShouldTreatInstabilityPrecursorAsTransitionBlocker(
 				EPhysAnimRuntimeState::BridgeActive,
@@ -236,6 +242,105 @@ namespace
 				false,
 				false,
 				false));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBridgeActivePreEntryPrerequisitesTest,
+		"PhysAnim.Component.BridgeActivePreEntryPrerequisites",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBridgeActivePreEntryPrerequisitesTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimStabilizationSettings Settings;
+		Settings.BalancePhase1MaxRootLinearBaseline = 100.0f;
+		Settings.BalancePhase1MaxRootAngularBaseline = 50.0f;
+		Settings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneLinearSpeed = 300.0f;
+		Settings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneAngularSpeed = 1800.0f;
+
+		FString Reason;
+		TestTrue(
+			TEXT("Quiet BridgeActive telemetry passes pre-entry prerequisites"),
+			UPhysAnimComponent::TestOnlyEvaluateBalanceBridgeActivePreEntryPrerequisites(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				true,
+				EBridgeLocomotionAuthorityState::Idle,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				45.0f,
+				0,
+				0.0f,
+				0.0f,
+				Settings,
+				Reason));
+		TestEqual(TEXT("Ready pre-entry path reports ready"), Reason, FString(TEXT("ready")));
+
+		Reason.Reset();
+		TestFalse(
+			TEXT("Root baseline reason still wins before body-speed gating"),
+			UPhysAnimComponent::TestOnlyEvaluateBalanceBridgeActivePreEntryPrerequisites(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				true,
+				EBridgeLocomotionAuthorityState::Idle,
+				101.0f,
+				0.0f,
+				301.0f,
+				1801.0f,
+				0.0f,
+				45.0f,
+				0,
+				0.0f,
+				0.0f,
+				Settings,
+				Reason));
+		TestEqual(TEXT("Root baseline block reason is preserved"), Reason, FString(TEXT("preentry_root_linear_above_phase1_baseline")));
+
+		Reason.Reset();
+		TestFalse(
+			TEXT("High simulated-body linear speed blocks pre-entry"),
+			UPhysAnimComponent::TestOnlyEvaluateBalanceBridgeActivePreEntryPrerequisites(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				true,
+				EBridgeLocomotionAuthorityState::Idle,
+				0.0f,
+				0.0f,
+				301.0f,
+				0.0f,
+				0.0f,
+				45.0f,
+				0,
+				0.0f,
+				0.0f,
+				Settings,
+				Reason));
+		TestEqual(TEXT("Linear body-speed block reason is truthful"), Reason, FString(TEXT("preentry_body_linear_above_phase1_admission")));
+
+		Reason.Reset();
+		TestFalse(
+			TEXT("High simulated-body angular speed blocks pre-entry"),
+			UPhysAnimComponent::TestOnlyEvaluateBalanceBridgeActivePreEntryPrerequisites(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				true,
+				EBridgeLocomotionAuthorityState::Idle,
+				0.0f,
+				0.0f,
+				0.0f,
+				1801.0f,
+				0.0f,
+				45.0f,
+				0,
+				0.0f,
+				0.0f,
+				Settings,
+				Reason));
+		TestEqual(TEXT("Angular body-speed block reason is truthful"), Reason, FString(TEXT("preentry_body_angular_above_phase1_admission")));
 		return true;
 	}
 
