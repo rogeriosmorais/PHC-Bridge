@@ -169,6 +169,31 @@ Phase 3 begins only after the runtime crosses the explicit `Phase2_ReadyForPhase
 - the first truthful post-RootOn instability/spike frame is terminal
 - Settle diagnostics may observe continuity loss, but must not repair physics/control state in the same frame to turn failure into success
 
+### Phase 3 required observables and source-of-truth order
+
+During Settle, the following must be treated as distinct observables:
+
+1. certified post-RootOn topology and continuity contract
+2. raw post-RootOn body continuity
+3. modifier-record ownership continuity
+4. shell-maintenance bookkeeping state
+5. shell-correction materiality
+6. locomotion/reset authority state
+
+Interpretation rules:
+
+- certified continuity intent is not proof that continuity still holds
+- raw continuity is the deciding proof for root-simulation loss, topology regression, and post-RootOn instability
+- modifier-record disagreement under preserved raw continuity is routing evidence, not by itself a shell-correction failure
+- shell-maintenance bookkeeping state and shell-correction materiality are separate observables
+
+### Phase 3 first-failure and retry boundary
+
+- `phase3_material_shell_correction` may be emitted only when the certified post-RootOn contract still stands, raw continuity still holds, modifier disagreement is not the deciding failure, shell lock still holds, the shell reference has not been reseeded, and shell correction becomes materially active first
+- if raw continuity still holds and only the root/pelvis modifier record disagrees, that remains a diagnostic mismatch rather than `phase3_material_shell_correction`
+- `phase3_material_shell_correction` is not retryable within the current attempt and should end as truthful safe denial rather than recovery-driven auto-retry
+- `phase3_no_convergence_path` must not overwrite an earlier material shell-correction failure
+
 ### Phase 3 timers
 
 - Phase 2 hands off after `BalancePhase2GuardWindowDuration`

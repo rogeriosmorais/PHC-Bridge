@@ -32,8 +32,9 @@ Current focus:
 3. distinguish contract failures from physical-viability failures
 4. preserve a truthful RootOn truth model in Phase 2
 5. preserve a truthful Settle continuity contract in Phase 3
-6. determine whether the current RootOn warm-start choreography and Settle continuity are both contract-correct and physically viable
-7. if not, revise topology / admission margin / hold set / RootOn choreography / Settle behavior / tuning using evidence rather than ad hoc workaround changes
+6. isolate why shell maintenance becomes materially corrective during Phase 3 Settle after an otherwise truthful RootOn handoff
+7. determine whether the current Settle shell-maintenance failure is a contract-level mismatch, a physical-viability limit, or both
+8. if needed, revise Settle shell behavior / continuity checks / tuning using evidence rather than ad hoc workaround changes
 
 ## Current Stage 1 Truth
 
@@ -43,9 +44,11 @@ The Stage 1 balance-entry investigation has reached this point:
 - those areas are now substantially cleaner
 - Phase 1 upper-body hold / LateValidate bookkeeping is no longer the dominant active blocker
 - the latest truthful smoke outcome is explicit safe denial rather than ambiguous fallback
-- the current active blocker in the latest smoke is Phase 1 RootOn-readiness margin proof:
-  `phase1_root_on_readiness_pelvis_spine_margin_insufficient`
-- Phase 2 RootOn truthfulness plus Phase 3 Settle continuity remain the next investigation surface once Phase 1 can prove that margin cleanly again
+- Phase 1 Prepare / LateValidate now pass truthfully in the latest smoke
+- Phase 2 RootOn now passes truthfully in the latest smoke
+- the current active blocker in the latest smoke is Phase 3 Settle shell-maintenance continuity:
+  `phase3_material_shell_correction`
+- the next engineering slice is Settle shell-maintenance truth, not restart cleanup and not the older Phase 1 readiness-margin frontier
 
 This is progress, not regression.
 
