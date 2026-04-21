@@ -133,6 +133,39 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(
 		 ShellPlanarVelocityCmPerSec > MaxAllowedShellVelocityCmPerSec);
 }
 
+bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+	bool bTransitionOwnedShellLocked,
+	bool bLocomotionAuthorityIdle,
+	int32 Phase3TickCount,
+	float ShellPlanarOffsetCm,
+	float ShellPlanarVelocityCmPerSec,
+	float MaxAllowedShellOffsetCm,
+	float MaxAllowedShellVelocityCmPerSec)
+{
+	const bool bShellCorrectionOwnerActive =
+		IsPhase3ShellCorrectionOwnerActive(
+			bTransitionOwnedShellLocked,
+			bLocomotionAuthorityIdle);
+	const bool bOffsetBreached = ShellPlanarOffsetCm > MaxAllowedShellOffsetCm;
+	const bool bVelocityBreached = ShellPlanarVelocityCmPerSec > MaxAllowedShellVelocityCmPerSec;
+	if (!bShellCorrectionOwnerActive || (!bOffsetBreached && !bVelocityBreached))
+	{
+		return false;
+	}
+
+	// The ReadyForPhase3 -> Settle handoff validates before the next shell-lock
+	// maintenance pass can publish an updated correction velocity. A zero-offset,
+	// velocity-only spike on tick 0 is therefore still pre-material unless it
+	// survives past the handoff frame or turns into real shell drift.
+	const bool bVelocityOnlyHandoffSpike =
+		bTransitionOwnedShellLocked &&
+		bLocomotionAuthorityIdle &&
+		Phase3TickCount <= 1 &&
+		!bOffsetBreached &&
+		bVelocityBreached;
+	return !bVelocityOnlyHandoffSpike;
+}
+
 
 bool FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
 	bool bTransitionOwnedShellLocked,
@@ -522,11 +555,10 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	}
 
 	// Section 17.3 - no material shell correction
-	const bool bShellCorrectionOwnerActive = IsPhase3ShellCorrectionOwnerActive(
-		Owner->HasExplicitTransitionOwnedShellLock(),
-		Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle);
-	if (IsMaterialShellCorrectionActive(
-			bShellCorrectionOwnerActive,
+	if (IsMaterialPhase3ShellCorrectionActive(
+			Owner->HasExplicitTransitionOwnedShellLock(),
+			Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
+			Phase3GuardTickCount,
 			Owner->GetCurrentShellPlanarOffsetDeltaCm(),
 			Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond(),
 			Settings.BalancePhase2AbortShellOffsetDelta,

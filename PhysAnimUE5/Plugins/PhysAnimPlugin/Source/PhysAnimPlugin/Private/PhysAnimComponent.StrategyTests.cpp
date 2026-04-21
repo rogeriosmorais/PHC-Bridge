@@ -356,6 +356,46 @@ namespace
 			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
 				false,
 				false));
+		TestFalse(
+			TEXT("First Settle validation tick ignores a velocity-only shell spike while explicit lock continuity still holds"),
+			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				true,
+				true,
+				1,
+				0.0f,
+				682.36f,
+				2.0f,
+				10.0f));
+		TestTrue(
+			TEXT("Later Settle ticks still classify the same velocity-only shell spike as material"),
+			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				true,
+				true,
+				2,
+				0.0f,
+				682.36f,
+				2.0f,
+				10.0f));
+		TestTrue(
+			TEXT("First Settle tick still classifies positional shell drift as material"),
+			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				true,
+				true,
+				0,
+				2.25f,
+				0.0f,
+				2.0f,
+				10.0f));
+		TestFalse(
+			TEXT("Without explicit lock or locomotion reclaim, shell correction is not owner-active even on the first Settle tick"),
+			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				false,
+				true,
+				0,
+				0.0f,
+				682.36f,
+				2.0f,
+				10.0f));
 		return true;
 	}
 

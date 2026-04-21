@@ -569,6 +569,14 @@ public:
 		float ShellPlanarVelocityCmPerSec,
 		float MaxAllowedShellOffsetCm,
 		float MaxAllowedShellVelocityCmPerSec);
+	static bool IsMaterialPhase3ShellCorrectionActive(
+		bool bTransitionOwnedShellLocked,
+		bool bLocomotionAuthorityIdle,
+		int32 Phase3TickCount,
+		float ShellPlanarOffsetCm,
+		float ShellPlanarVelocityCmPerSec,
+		float MaxAllowedShellOffsetCm,
+		float MaxAllowedShellVelocityCmPerSec);
 
 	static bool IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	static FString ResolveRootOnReadinessGateReason(
