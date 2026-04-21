@@ -501,6 +501,62 @@ namespace
 				2.0f,
 				1898.77f,
 				10.0f));
+		TestTrue(
+			TEXT("Tick 5 Settle grace still suppresses an angular-only zero-offset shell burst under explicit lock"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				5,
+				true,
+				true,
+				2540.87f,
+				3000.0f,
+				5450.43f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				680.75f,
+				10.0f));
+		TestFalse(
+			TEXT("Tick 6 Settle grace no longer suppresses the same angular-only shell burst"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				6,
+				true,
+				true,
+				2540.87f,
+				3000.0f,
+				5450.43f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				680.75f,
+				10.0f));
+		TestFalse(
+			TEXT("Tick 5 angular-only grace does not apply once shell offset drift appears"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				5,
+				true,
+				true,
+				2540.87f,
+				3000.0f,
+				5450.43f,
+				2160.0f,
+				2.25f,
+				2.0f,
+				680.75f,
+				10.0f));
+		TestFalse(
+			TEXT("Tick 5 angular-only grace does not apply without the shell velocity burst"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				5,
+				true,
+				true,
+				2540.87f,
+				3000.0f,
+				5450.43f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				8.0f,
+				10.0f));
 		TestFalse(
 			TEXT("Tick 4 Settle instability grace does not hide real shell drift"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(

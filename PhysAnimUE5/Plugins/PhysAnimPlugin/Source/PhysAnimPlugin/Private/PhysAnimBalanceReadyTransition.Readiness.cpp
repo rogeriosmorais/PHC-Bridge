@@ -222,7 +222,8 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	}
 
 	static constexpr int32 Phase3ShellVelocityBurstGraceTickCount = 4;
-	if (Phase3TickCount > Phase3ShellVelocityBurstGraceTickCount ||
+	static constexpr int32 Phase3AngularOnlyShellBurstGraceTickCount = 5;
+	if (Phase3TickCount > Phase3AngularOnlyShellBurstGraceTickCount ||
 		!bTransitionOwnedShellLocked ||
 		!bLocomotionAuthorityIdle)
 	{
@@ -238,7 +239,22 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	// energy through the shell-maintenance path for one extra tick after the
 	// angular-only grace expires. Treat that as pre-material unless it persists or
 	// turns into real shell drift.
-	return bLinearBreached &&
+	if (Phase3TickCount <= Phase3ShellVelocityBurstGraceTickCount &&
+		bLinearBreached &&
+		bAngularBreached &&
+		!bOffsetBreached &&
+		bShellVelocityBreached)
+	{
+		return true;
+	}
+
+	// The next live blocker is a later angular-only frame with the shell still
+	// perfectly locked in position and only the shell-maintained planar velocity
+	// showing residual RootOn snap energy. Keep that separate from a truthful
+	// physical instability until tick 5, but only while linear speed stays under
+	// the Settle threshold and no shell drift appears.
+	return Phase3TickCount <= Phase3AngularOnlyShellBurstGraceTickCount &&
+		!bLinearBreached &&
 		bAngularBreached &&
 		!bOffsetBreached &&
 		bShellVelocityBreached;
