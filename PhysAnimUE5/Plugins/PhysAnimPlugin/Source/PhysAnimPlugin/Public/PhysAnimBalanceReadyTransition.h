@@ -577,6 +577,12 @@ public:
 		float ShellPlanarVelocityCmPerSec,
 		float MaxAllowedShellOffsetCm,
 		float MaxAllowedShellVelocityCmPerSec);
+	static bool IsPhase3EarlySettleAngularGraceActive(
+		int32 Phase3TickCount,
+		float RootLinearSpeed,
+		float LinearThreshold,
+		float RootAngularSpeed,
+		float AngularThreshold);
 
 	static bool IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	static FString ResolveRootOnReadinessGateReason(

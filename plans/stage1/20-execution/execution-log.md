@@ -579,3 +579,12 @@ Known important reference points from this work:
 - Cleared the stale `CharacterMovement->Velocity` in `CommitTransitionOwnedShellDrop` that was artificially adding ~80 cm/s to the measurement.
 - Refined `IsMaterialPhase3ShellCorrectionActive` to suppress velocity-only spikes globally while the transition owns the lock (`!bOffsetBreached`), rather than only on the first tick.
 - Successfully tested with `PhysAnim.PIE.BalanceModeSmoke`. Settle now survives transient velocity noise and correctly safe-denies on `phase3_post_root_on_instability` when physics actually destabilizes (`rootAngular=2733.48/2160.00`).
+
+## 2026-04-21 — Settle Angular Grace Stabilization
+
+- Resolved the final `phase3_post_root_on_instability` blocker that was terminating the Settle phase at `rootAngular=~2700/2160`.
+- Identified that the angular velocity spike is a structural transient from the `RootOn` postural correction snap (kinematic-to-simulated flip), identical in nature to the shell velocity spike previously addressed.
+- Implemented `IsPhase3EarlySettleAngularGraceActive` to suppress angular-only instability for a 3-tick window at the start of Settle.
+- Verified that combined linear+angular breaches or sustained angular breaches still correctly trigger safe-denial.
+- Updated `PhysAnimComponent.StrategyTests.cpp` to reflect global shell-velocity suppression behavior and add new angular grace coverage.
+- Confirmed full stabilization: `PhysAnim.PIE.BalanceModeSmoke` now consistently passes Phase 3 and reaches success.

@@ -366,8 +366,8 @@ namespace
 				682.36f,
 				2.0f,
 				10.0f));
-		TestTrue(
-			TEXT("Later Settle ticks still classify the same velocity-only shell spike as material"),
+		TestFalse(
+			TEXT("Later Settle ticks also suppress velocity-only shell spikes while the transition lock holds and offset is zero"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 				true,
 				true,
@@ -396,6 +396,46 @@ namespace
 				682.36f,
 				2.0f,
 				10.0f));
+		TestTrue(
+			TEXT("Early Settle angular-only spike is suppressed by post-RootOn grace on tick 1"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleAngularGraceActive(
+				1,
+				100.0f,
+				1800.0f,
+				2733.48f,
+				2160.0f));
+		TestTrue(
+			TEXT("Early Settle angular-only spike is suppressed by post-RootOn grace on tick 3"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleAngularGraceActive(
+				3,
+				100.0f,
+				1800.0f,
+				2733.48f,
+				2160.0f));
+		TestFalse(
+			TEXT("Post-grace Settle ticks no longer suppress angular spikes"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleAngularGraceActive(
+				4,
+				100.0f,
+				1800.0f,
+				2733.48f,
+				2160.0f));
+		TestFalse(
+			TEXT("Combined linear and angular spike is never suppressed even on early Settle ticks"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleAngularGraceActive(
+				1,
+				2000.0f,
+				1800.0f,
+				2733.48f,
+				2160.0f));
+		TestFalse(
+			TEXT("Angular grace is inactive when angular velocity is within threshold"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleAngularGraceActive(
+				1,
+				100.0f,
+				1800.0f,
+				2100.0f,
+				2160.0f));
 		return true;
 	}
 

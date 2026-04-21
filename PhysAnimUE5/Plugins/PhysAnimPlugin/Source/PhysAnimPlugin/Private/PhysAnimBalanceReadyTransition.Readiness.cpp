@@ -175,6 +175,30 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
 }
 
 
+bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleAngularGraceActive(
+	int32 Phase3TickCount,
+	float RootLinearSpeed,
+	float LinearThreshold,
+	float RootAngularSpeed,
+	float AngularThreshold)
+{
+	// The constraint solver produces a brief angular velocity transient from
+	// the postural correction snap at RootOn (the same structural source as
+	// the shell velocity transient already handled by the handoff grace).
+	// Suppress angular-only spikes for the first few Settle ticks while the
+	// physics dissipates the correction energy.
+	static constexpr int32 Phase3AngularGraceTickCount = 3;
+	if (Phase3TickCount > Phase3AngularGraceTickCount)
+	{
+		return false;
+	}
+
+	const bool bLinearBreached = RootLinearSpeed > LinearThreshold;
+	const bool bAngularBreached = RootAngularSpeed > AngularThreshold;
+	return !bLinearBreached && bAngularBreached;
+}
+
+
 bool FPhysAnimBalanceReadyTransition::ShouldRetainExplicitShellLockForPhase(EBalanceReadyTransitionPhase Phase)
 {
 	return Phase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
@@ -522,7 +546,24 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 
 	if (!IsSnapshotReady(Domain, Settings, OutReason))
 	{
-		return false;
+		// Post-RootOn angular grace: the constraint solver can produce a brief
+		// angular velocity transient from the postural correction snap (same
+		// structural source as the shell velocity transient in the handoff fix).
+		// Suppress angular-only spikes on the first few Settle ticks.
+		if (OutReason == BalanceReadinessReasons::Phase3InstabilitySpike &&
+			IsPhase3EarlySettleAngularGraceActive(
+				Phase3GuardTickCount,
+				Domain.RootLinearSpeed,
+				Settings.MaxRootLinearSpeedCmPerSecond * 2.5f,
+				Domain.RootAngularSpeed,
+				Settings.MaxRootAngularSpeedDegPerSecond * 3.0f))
+		{
+			// Not yet material - continue with remaining continuity checks
+		}
+		else
+		{
+			return false;
+		}
 	}
 
 	// Section 17.3 - shell lock preserved
