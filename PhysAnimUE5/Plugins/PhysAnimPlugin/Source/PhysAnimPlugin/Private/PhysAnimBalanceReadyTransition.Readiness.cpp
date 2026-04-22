@@ -94,11 +94,10 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 
 	if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		LinearThreshold *= 4.0f;
-		AngularThreshold *= 15.0f;
+		LinearThreshold *= 2.5f;
+		AngularThreshold *= 3.0f;
 		InstabilityReason = BalanceReadinessReasons::Phase3InstabilitySpike;
 	}
-
 	else if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
 		Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3)
 	{
@@ -214,19 +213,19 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 		return false;
 	}
 
-	// During the Settle phase, if the shell is explicitly locked and the offset is
-	// strictly maintained (no breach), a high shell correction velocity is simply
-	// the lock absorbing residual handoff energy. This is not a material transition failure;
-	// Settle readiness will naturally wait for this velocity to dissipate below
-	// the quiet threshold. If it does not dissipate, root instability thresholds
-	// will correctly catch the failure instead. We only fail here if the offset
-	// is breached (true drift).
-	if (bTransitionOwnedShellLocked && bLocomotionAuthorityIdle && !bOffsetBreached)
-	{
-		return false;
-	}
+	static constexpr int32 Phase3VelocityOnlyHandoffGraceTickCount = 1;
 
-	return true;
+	// The ReadyForPhase3 -> Settle handoff validates before the next shell-lock
+	// maintenance pass can publish an updated correction velocity. A zero-offset,
+	// velocity-only spike is therefore still pre-material unless it
+	// survives past the handoff frame or turns into real shell drift.
+	const bool bVelocityOnlyHandoffSpike =
+		Phase3TickCount <= Phase3VelocityOnlyHandoffGraceTickCount &&
+		bTransitionOwnedShellLocked &&
+		bLocomotionAuthorityIdle &&
+		!bOffsetBreached &&
+		bVelocityBreached;
+	return !bVelocityOnlyHandoffSpike;
 }
 
 
@@ -320,18 +319,16 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		return true;
 	}
 
-	static constexpr int32 Phase3ShellVelocityBurstGraceTickCount = 10;
-	static constexpr int32 Phase3AngularOnlyShellBurstGraceTickCount = 12;
-	static constexpr int32 Phase3BoundedAngularCarryThroughTickCount = 15;
-	static constexpr int32 Phase3RootIsolatedAngularCarryThroughTickCount = 120;
-	static constexpr int32 Phase3LateAngularOnlyShellBurstGraceTickCount = 20;
-
-
+	static constexpr int32 Phase3ShellVelocityBurstGraceTickCount = 4;
+	static constexpr int32 Phase3AngularOnlyShellBurstGraceTickCount = 5;
+	static constexpr int32 Phase3BoundedAngularCarryThroughTickCount = 6;
+	static constexpr int32 Phase3RootIsolatedAngularCarryThroughTickCount = 8;
+	static constexpr int32 Phase3LateAngularOnlyShellBurstGraceTickCount = 7;
 	static constexpr float Phase3BoundedAngularCarryThroughMaxGrowthDegPerSec = 800.0f;
-	static constexpr float Phase3RootIsolatedAngularPeakMultiplier = 5.0f;
-	static constexpr float Phase3RootIsolatedNonRootAngularPeakMultiplier = 5.0f;
-	static constexpr float Phase3RootIsolatedRootVsNonRootAngularRatio = 0.1f;
-	static constexpr float Phase3LateAngularOvershootGraceDegPerSec = 2000.0f;
+	static constexpr float Phase3RootIsolatedAngularPeakMultiplier = 2.0f;
+	static constexpr float Phase3RootIsolatedNonRootAngularPeakMultiplier = 1.10f;
+	static constexpr float Phase3RootIsolatedRootVsNonRootAngularRatio = 1.75f;
+	static constexpr float Phase3LateAngularOvershootGraceDegPerSec = 600.0f;
 	if (Phase3TickCount > Phase3RootIsolatedAngularCarryThroughTickCount ||
 		!bTransitionOwnedShellLocked ||
 		!bLocomotionAuthorityIdle)
@@ -353,19 +350,6 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		ObservedNonRootAngularEnvelope > 0.0f &&
 		CurrentMaxNonRootAngularSpeed <=
 			ObservedNonRootAngularEnvelope * Phase3RootIsolatedNonRootAngularPeakMultiplier;
-
-	if (Phase3TickCount % 10 == 0)
-	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Phase 3 Continuity: tick=%d lin=%.1f/%.1f ang=%.1f/%.1f offset=%.2f/%.2f vel=%.1f/%.1f shellLocked=%d idle=%d"),
-			Phase3TickCount,
-			RootLinearSpeed, LinearThreshold,
-			RootAngularSpeed, AngularThreshold,
-			ShellPlanarOffsetCm, MaxAllowedShellOffsetCm,
-			ShellPlanarVelocityCmPerSec, MaxAllowedShellVelocityCmPerSec,
-			bTransitionOwnedShellLocked ? 1 : 0,
-			bLocomotionAuthorityIdle ? 1 : 0);
-	}
-
 	const float ObservedNonRootFamilyAngularEnvelope = ResolveObservedNonRootAngularFamilyEnvelopeForBone(
 		CurrentMaxNonRootAngularBone,
 		PrePhase3PeakThighFamilyAngularSpeed,
@@ -465,12 +449,17 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		PrePhase3PeakBodyAngularSpeed > AngularThreshold &&
 		RootAngularSpeed <=
 			PrePhase3PeakBodyAngularSpeed * Phase3RootIsolatedAngularPeakMultiplier;
-	const bool bLinearCarryThroughPermitted = !bLinearBreached || (RootLinearSpeed <= PrePhase3PeakBodyLinearSpeed * 2.0f);
-	if (Phase3TickCount <= Phase3RootIsolatedAngularCarryThroughTickCount &&
-		!bOffsetBreached)
+	if (Phase3TickCount > Phase3LateAngularOnlyShellBurstGraceTickCount &&
+		Phase3TickCount <= Phase3RootIsolatedAngularCarryThroughTickCount &&
+		!bLinearBreached &&
+		bAngularBreached &&
+		!bOffsetBreached &&
+		bShellVelocityBreached &&
+		bNonRootAngularStillWithinObservedCarryThroughEnvelope &&
+		bNonRootFamilyStillWithinObservedCarryThroughEnvelope &&
+		bRootAngularStillDominantOverNonRoot &&
+		bRootAngularStillWithinObservedCarryThroughEnvelope)
 	{
-		// In Balance mode, we trust the active policy to settle almost any transient
-		// as long as the character hasn't physically drifted away from the shell.
 		return true;
 	}
 
@@ -911,10 +900,9 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				Owner->HasExplicitTransitionOwnedShellLock(),
 				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
 				Domain.RootLinearSpeed,
-				Settings.MaxRootLinearSpeedCmPerSecond * 4.0f,
+				Settings.MaxRootLinearSpeedCmPerSecond * 2.5f,
 				Domain.RootAngularSpeed,
-				Settings.MaxRootAngularSpeedDegPerSecond * 15.0f,
-
+				Settings.MaxRootAngularSpeedDegPerSecond * 3.0f,
 				ShellPlanarOffsetCm,
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				ShellPlanarVelocityCmPerSecond,

@@ -49,29 +49,12 @@ bool UPhysAnimComponent::CheckRuntimeInstability(
 		LastBalanceScenarioImpactTimeSeconds >= 0.0 &&
 		(GetWorld()->GetTimeSeconds() - LastBalanceScenarioImpactTimeSeconds) < 0.5;
 
-	const bool bIsEarlySettleGrace =
-		(IsBalanceActiveState(RuntimeState) || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
-		GetWorld() &&
-		(GetWorld()->GetTimeSeconds() - BalanceScenarioStartTimeSeconds) < 2.0;
-
-	if (bBalanceScenarioAllowsPostImpactGrace || bIsEarlySettleGrace)
+	if (bBalanceScenarioAllowsPostImpactGrace)
 	{
-		InstabilitySettings.MaxRootLinearSpeedCmPerSecond *= 50.0f;
-		InstabilitySettings.MaxRootAngularSpeedDegPerSecond *= 50.0f;
-		InstabilitySettings.MaxRootHeightDeltaCm *= 5.0f;
-		InstabilitySettings.UnstableGracePeriodSeconds = FMath::Max(InstabilitySettings.UnstableGracePeriodSeconds, 2.0f);
-	}
-	
-	if (LastRuntimeInstabilityDiagnostics.UnstableAccumulatedSeconds > 0.01f)
-	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] INSTABILITY_ACCUMULATING state=%s unstable=%.3fs limit=%.3fs linSpeed=%.1f/%.1f angSpeed=%.1f/%.1f"),
-			GetRuntimeStateName(RuntimeState),
-			LastRuntimeInstabilityDiagnostics.UnstableAccumulatedSeconds,
-			InstabilitySettings.UnstableGracePeriodSeconds,
-			LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
-			InstabilitySettings.MaxRootLinearSpeedCmPerSecond,
-			LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond,
-			InstabilitySettings.MaxRootAngularSpeedDegPerSecond);
+		InstabilitySettings.MaxRootLinearSpeedCmPerSecond *= 15.0f;
+		InstabilitySettings.MaxRootAngularSpeedDegPerSecond *= 15.0f;
+		InstabilitySettings.MaxRootHeightDeltaCm *= 2.0f;
+		InstabilitySettings.UnstableGracePeriodSeconds = FMath::Max(InstabilitySettings.UnstableGracePeriodSeconds, 1.0f);
 	}
 
 	FString InstabilityError;

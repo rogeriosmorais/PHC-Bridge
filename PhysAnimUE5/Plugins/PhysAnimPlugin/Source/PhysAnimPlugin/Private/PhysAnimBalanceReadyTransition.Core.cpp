@@ -1789,7 +1789,19 @@ extern int32 GVerbosePhase2Forensics;
 
 		FString AbortReason;
 		FString AbortDetail;
-		if (Diagnostics.bResetScheduled || !Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
+		if (Diagnostics.bPolicyWroteTargets)
+		{
+			AbortReason = TEXT("phase2_policy_write_leak");
+			AbortDetail = FString::Printf(
+				TEXT("policyWrites=%d firstPolicyFrame=%d maxTargetDeltaBone=%s maxTargetDelta=%.1f maxRawOffsetBone=%s maxRawOffset=%.1f"),
+				ControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
+				ControlTargetDiagnostics.bFirstPolicyEnabledFrame ? 1 : 0,
+				*ControlTargetDiagnostics.MaxTargetDeltaBoneName.ToString(),
+				ControlTargetDiagnostics.MaxTargetDeltaDegrees,
+				*ControlTargetDiagnostics.MaxRawPolicyOffsetBoneName.ToString(),
+				ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees);
+		}
+		else if (Diagnostics.bResetScheduled || !Owner->GetPendingBodyModifierCachedResetNames().IsEmpty())
 		{
 			AbortReason = TEXT("phase2_reset_violation");
 			AbortDetail = FString::Printf(
@@ -2318,9 +2330,8 @@ extern int32 GVerbosePhase2Forensics;
 						Owner->HasExplicitTransitionOwnedShellLock());
 				const float RootLinearSpeed = EffectiveRootLinearVelocity.Size();
 				const float RootAngularSpeed = RootAngularVelocityDegPerSecond.Size();
-				const float RootLinearThreshold = Settings.MaxRootLinearSpeedCmPerSecond * 4.0f;
-				const float RootAngularThreshold = Settings.MaxRootAngularSpeedDegPerSecond * 15.0f;
-
+				const float RootLinearThreshold = Settings.MaxRootLinearSpeedCmPerSecond * 2.5f;
+				const float RootAngularThreshold = Settings.MaxRootAngularSpeedDegPerSecond * 3.0f;
 				const float ShellOffsetDeltaCm = Owner->GetCurrentShellPlanarOffsetDeltaCm();
 				const float ShellVelocityDeltaCmPerSecond = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 				const bool bShellCorrectionOwnerActive = FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(

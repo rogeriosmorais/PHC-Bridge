@@ -341,7 +341,40 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 		bool bPolicyTargetsAppliedThisTick = true;
 		const int32 RootRawSimPost = (PelvisBodyScope && PelvisBodyScope->IsInstanceSimulatingPhysics()) ? 1 : 0;
-		if (!bIsPhase1PolicyLoopSuppressed)
+		bSuppressPostShellPolicy =
+			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+			BalanceEntryRootOnFrameCount >= 4 &&
+			RootRawSimPost == 1 &&
+			LastRuntimeInstabilityDiagnostics.NumSimulatingBodies >= 6 &&
+			BalanceReadyTransition.GetDiagnostics().bShellMaterialGuardSuppressed;
+
+		if (bSuppressPostShellPolicy && bApplyNewPolicyStepThisTick)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_POST_SHELL_POLICY_SUPPRESSED frame=%d tick=%d normalWrites=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
+				static_cast<int32>(GFrameNumber),
+				static_cast<int32>(BalanceEntryRootOnFrameCount),
+				0,
+				ControlTargetDiagnostics.NumHeldTargetsWritten,
+				RootRawSimPost,
+				LastRuntimeInstabilityDiagnostics.NumSimulatingBodies,
+				PolicyInfluenceAlpha,
+				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+				*GetOwner()->GetName(),
+				*GetName());
+
+			ControlTargetDiagnostics.NumNormalPolicyTargetsWritten = 0;
+			bPolicyTargetsAppliedThisTick = false;
+		}
+
+		bool bNormalWritesBlockedByRootOn = false;
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+		{
+			ControlTargetDiagnostics.NumNormalPolicyTargetsWritten = 0;
+			bPolicyTargetsAppliedThisTick = false;
+			bNormalWritesBlockedByRootOn = !bIsPhase1PolicyLoopSuppressed && !bSuppressPostShellPolicy;
+		}
+
+		if (!bIsPhase1PolicyLoopSuppressed && !bSuppressPostShellPolicy && !bNormalWritesBlockedByRootOn)
 		{
 			bPolicyTargetsAppliedLastFrame = true;
 			for (const TPair<FName, FQuat>& Pair : ControlRotations)
@@ -553,7 +586,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 	{
 		const FBodyInstance* const PelvisBodyProbe = GetMeshComponent() ? GetMeshComponent()->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 		const int32 RootRawSim = (PelvisBodyProbe && PelvisBodyProbe->IsInstanceSimulatingPhysics()) ? 1 : 0;
-		const bool bNormalWritesBlocked = !bIsPhase1PolicyLoopSuppressed;
+		const bool bNormalWritesBlocked = !bIsPhase1PolicyLoopSuppressed && !bSuppressPostShellPolicy;
 		const bool bHasPolicyWrites = (ControlTargetDiagnostics.NumNormalPolicyTargetsWritten > 0);
 
 		if (bApplyNewPolicyStepThisTick && bNormalWritesBlocked && bHasPolicyWrites)
