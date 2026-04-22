@@ -568,6 +568,40 @@ namespace
 				848.97f,
 				2752.97f));
 		TestTrue(
+			TEXT("Tick 5 combined shell-burst grace compares shell dominance against planar root speed so vertical carry-through does not overstate the blocker"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				5,
+				true,
+				true,
+				5726.52f,
+				3000.0f,
+				8428.43f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				1399.22f,
+				10.0f,
+				848.97f,
+				2752.95f,
+				2000.0f));
+		TestFalse(
+			TEXT("Tick 5 combined shell-burst grace still rejects the same frame when planar root speed is too large for shell dominance"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				5,
+				true,
+				true,
+				5726.52f,
+				3000.0f,
+				8428.43f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				1399.22f,
+				10.0f,
+				848.97f,
+				2752.95f,
+				3000.0f));
+		TestTrue(
 			TEXT("Tick 5 Settle grace still suppresses an angular-only zero-offset shell burst under explicit lock"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 				5,

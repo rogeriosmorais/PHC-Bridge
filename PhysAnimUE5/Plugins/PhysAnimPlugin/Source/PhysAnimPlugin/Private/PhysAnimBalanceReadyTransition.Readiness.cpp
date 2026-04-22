@@ -233,7 +233,8 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	float ShellPlanarVelocityCmPerSec,
 	float MaxAllowedShellVelocityCmPerSec,
 	float PrePhase3PeakBodyLinearSpeed,
-	float PrePhase3PeakBodyAngularSpeed)
+	float PrePhase3PeakBodyAngularSpeed,
+	float RootPlanarSpeedCmPerSecond)
 {
 	if (IsPhase3EarlySettleAngularGraceActive(
 			Phase3TickCount,
@@ -282,12 +283,15 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	static constexpr int32 Phase3CombinedShellBurstCarryThroughTickCount = 5;
 	static constexpr float Phase3CombinedBurstQuietPhase2AngularMultiplier = 1.5f;
 	static constexpr float Phase3CombinedBurstShellDominanceRatio = 0.5f;
+	const float EffectiveRootPlanarSpeedCmPerSecond =
+		RootPlanarSpeedCmPerSecond >= 0.0f ? RootPlanarSpeedCmPerSecond : RootLinearSpeed;
 	const bool bQuietPhase2Handoff =
 		PrePhase3PeakBodyLinearSpeed <= LinearThreshold &&
 		PrePhase3PeakBodyAngularSpeed <=
 			AngularThreshold * Phase3CombinedBurstQuietPhase2AngularMultiplier;
 	const bool bShellDominatedLinearBurst =
-		ShellPlanarVelocityCmPerSec >= RootLinearSpeed * Phase3CombinedBurstShellDominanceRatio;
+		ShellPlanarVelocityCmPerSec >=
+			EffectiveRootPlanarSpeedCmPerSecond * Phase3CombinedBurstShellDominanceRatio;
 	if (Phase3TickCount <= Phase3CombinedShellBurstCarryThroughTickCount &&
 		bQuietPhase2Handoff &&
 		bLinearBreached &&
@@ -672,6 +676,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 		OwnerActor ? OwnerActor->GetVelocity() : FVector::ZeroVector,
 		Owner->BridgeShellState.AppliedPlanarCorrectionVelocityCmPerSecond,
 		Owner->HasExplicitTransitionOwnedShellLock());
+	const float EffectivePelvisPlanarSpeed = EffectivePelvisLinearVelocity.Size2D();
 	const FVector PelvisAngularVelocityDegPerSec = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
 	const float PelvisLinearSpeed = EffectivePelvisLinearVelocity.Size();
 	const float PelvisAngularSpeed = PelvisAngularVelocityDegPerSec.Size();
@@ -721,7 +726,8 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				ShellPlanarVelocityCmPerSecond,
 				Settings.BalancePhase2AbortShellVelocityDelta,
 				Diagnostics.PeakMaxBodyLinearSpeed,
-				Diagnostics.PeakMaxBodyAngularSpeed))
+				Diagnostics.PeakMaxBodyAngularSpeed,
+				EffectivePelvisPlanarSpeed))
 		{
 			// Not yet material - continue with remaining continuity checks
 		}

@@ -14,9 +14,9 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 3 / truthful post-RootOn instability revalidation, with Settle now explicitly distinguishing shell-carried linear motion, bounded late angular carry-through tied to the observed RootOn peak, and genuinely larger combined post-RootOn bursts.
-- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now includes a narrow tick-6 angular carry-through rule that only applies when Settle stays zero-offset, shell-locked, linear-subthreshold, and close to the already-observed pre-Phase-3 angular peak. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine still does not reach active balance; however, this newest revalidation run did not stay on the older tick-6 angular frontier and instead exposed an earlier larger tick-5 combined burst.
-- `Latest runtime forensics`: the latest verified `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3. The latest run then safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=944` with `tick=5` on `phase3_post_root_on_instability`, where `rootLinear=5726.52/3000.00`, `rootAngular=8428.43/2160.00`, `shellOffsetDelta=0.00/2.00`, and `shellVelocityDelta=1399.22/10.00`. That means the new tick-6 angular carry-through rule is in place deterministically, but this machine's newest live smoke did not reproduce the older tick-6 frontier and instead surfaced an earlier higher-energy combined Settle burst that remains terminal.
+- `Current phase`: Phase 3 / truthful post-RootOn instability revalidation, with Settle now explicitly distinguishing shell-carried linear motion, planar shell-dominance truth for combined bursts, bounded late angular carry-through tied to the observed RootOn peak, and genuinely larger residual angular instability.
+- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now compares combined-burst shell dominance against planar root speed instead of a 3D magnitude inflated by vertical motion. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine still does not reach active balance, but the truthful frontier moved materially later again: the earlier tick-5 combined burst is now ruled out, and the remaining blocker is a later angular-dominant Settle spike under preserved shell lock.
+- `Latest runtime forensics`: the latest verified `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3. The latest run then safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=947` with `tick=8` on `phase3_post_root_on_instability`, where `rootLinear=1112.99/3000.00`, `rootAngular=4977.80/2160.00`, `shellOffsetDelta=0.00/2.00`, and `shellVelocityDelta=690.45/10.00`. That means the earlier tick-5 combined burst was being overstated by a planar-vs-3D shell-dominance mismatch; after correcting that proof, the live blocker on this machine is again a later angular Settle instability.
 
 ## Active Tasks
 
@@ -693,3 +693,15 @@ Known important reference points from this work:
 - Practical meaning:
   - the balance-mode contract now has explicit deterministic coverage for the tick-6 bounded angular carry-through case instead of collapsing that shape into the generic instability bucket
   - the live frontier on this machine is currently runtime-variant again and, on this latest run, the deciding blocker reverted to an earlier larger combined post-RootOn burst
+
+## 2026-04-21 — Tick-5 combined burst planar shell-dominance truthfulness
+
+- Added deterministic TDD for the next combined-burst seam: under explicit transition-owned shell lock, tick-5 shell-dominance proof now compares shell velocity against planar root speed rather than against a 3D root-speed magnitude that can be inflated by unrelated vertical carry-through.
+- Refined `IsPhase3EarlySettleInstabilityGraceActive` so the existing tick-5 combined-burst rule keeps the same quiet-handoff and shell-dominance intent, but uses planar-on-planar evidence when deciding whether shell carry-through is really the dominant source of the observed linear burst.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component.TransitionOwnedShellLockTruthfulness`, `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.Bridge.BalanceStateless`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The truthful frontier moved materially later on this machine:
+  - before this pass, the latest verified smoke safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=944` with `tick=5`, `rootLinear=5726.52/3000.00`, `rootAngular=8428.43/2160.00`, and `shellVelocityDelta=1399.22/10.00`
+  - after this pass, the smoke survives that earlier combined burst and first fails at `PHASE3_FIRST_FAILURE_AUDIT frame=947` with `tick=8`, `rootLinear=1112.99/3000.00`, `rootAngular=4977.80/2160.00`, and `shellVelocityDelta=690.45/10.00`
+- Practical meaning:
+  - the old tick-5 Settle frontier was materially overstating the combined-burst blocker by comparing planar shell telemetry against a vertically inflated 3D root-speed magnitude
+  - the live blocker is now again a later angular-dominant post-RootOn instability, which is a narrower and more truthful next target for balance-mode work
