@@ -20,8 +20,7 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const
 
 	return IsActive() &&
 		(InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
-		 InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
-		 InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn);
+		 InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate);
 }
 
 
@@ -38,8 +37,7 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicyWrites(FName BoneName)
 	}
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
-		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
-		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate)
 	{
 		return true;
 	}
@@ -104,24 +102,10 @@ float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneNam
 		return 1.0f;
 	}
 
-	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
+		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		// RootOn should warm-start from the accepted live state, not apply a new
-		// proximal control impulse on the same frame that root simulation is added.
-		if (PhaseTimeSeconds < 0.05f)
-		{
-			return 0.0f;
-		}
-
-		return FMath::Clamp((PhaseTimeSeconds - 0.05f) / 0.10f, 0.0f, 1.0f);
-	}
-
-	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
-	{
-		return FMath::Clamp(
-			PhaseTimeSeconds / 0.25f,
-			0.0f,
-			1.0f);
+		return 1.0f;
 	}
 
 	return 1.0f;
@@ -199,16 +183,11 @@ float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(FName
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn)
 	{
-		const bool bIsTick1 = PhaseTimeSeconds < 0.05f; // Estimated Tick 1 window
-		if (bIsTick1 &&
-			(BoneName == PhysAnimBridge::GetRootBoneName() ||
-			 BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" ||
-			 BoneName == "thigh_l" || BoneName == "thigh_r"))
+		if (Phase2GuardTickCount <= 5)
 		{
-			// Flip-frame RootOn should not inject damping torques into the preserved
-			// proximal set before the new root-sim state has even taken one step.
-			return 0.0f;
+			return Settings.BalanceBootstrapExtraDampingMultiplier * 5.0f;
 		}
+		return Settings.BalanceBootstrapExtraDampingMultiplier;
 	}
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
