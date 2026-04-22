@@ -602,7 +602,8 @@ public:
 		float MaxAllowedShellVelocityCmPerSec,
 		float PrePhase3PeakBodyLinearSpeed = 0.0f,
 		float PrePhase3PeakBodyAngularSpeed = 0.0f,
-		float RootPlanarSpeedCmPerSecond = -1.0f);
+		float RootPlanarSpeedCmPerSecond = -1.0f,
+		float CurrentMaxNonRootAngularSpeed = 0.0f);
 
 	static bool IsRootStable(
 		const FPhase1AcceptedConvergenceSnapshot& Snapshot,
