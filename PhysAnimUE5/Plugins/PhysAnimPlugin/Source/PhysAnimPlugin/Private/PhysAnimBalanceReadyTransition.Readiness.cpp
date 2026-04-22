@@ -235,7 +235,8 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	float PrePhase3PeakBodyLinearSpeed,
 	float PrePhase3PeakBodyAngularSpeed,
 	float RootPlanarSpeedCmPerSecond,
-	float CurrentMaxNonRootAngularSpeed)
+	float CurrentMaxNonRootAngularSpeed,
+	float PrePhase3PeakNonRootAngularSpeed)
 {
 	if (IsPhase3EarlySettleAngularGraceActive(
 			Phase3TickCount,
@@ -253,8 +254,9 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	static constexpr int32 Phase3RootIsolatedAngularCarryThroughTickCount = 8;
 	static constexpr int32 Phase3LateAngularOnlyShellBurstGraceTickCount = 7;
 	static constexpr float Phase3BoundedAngularCarryThroughMaxGrowthDegPerSec = 800.0f;
-	static constexpr float Phase3RootIsolatedNonRootAngularCalmMultiplier = 0.75f;
 	static constexpr float Phase3RootIsolatedAngularPeakMultiplier = 2.0f;
+	static constexpr float Phase3RootIsolatedNonRootAngularPeakMultiplier = 1.10f;
+	static constexpr float Phase3RootIsolatedRootVsNonRootAngularRatio = 1.75f;
 	static constexpr float Phase3LateAngularOvershootGraceDegPerSec = 600.0f;
 	if (Phase3TickCount > Phase3RootIsolatedAngularCarryThroughTickCount ||
 		!bTransitionOwnedShellLocked ||
@@ -341,23 +343,30 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 
 	// A later tick-8 blocker can still be the same shell-locked RootOn
 	// carry-through shape when the root alone is spinning hard but the rest of the
-	// preserved simulated set stays comparatively calm. Keep that separate from a
-	// truthful full-body angular failure unless the non-root set also lights up or
-	// the root angular spike expands beyond the already-observed RootOn peak.
-	const bool bNonRootAngularSetCalm =
+	// preserved simulated set stays within the angular envelope already observed
+	// during RootOn carry-through. Keep that separate from a truthful full-body
+	// angular failure unless the non-root set expands into a new regime or the
+	// root is no longer materially dominating the angular burst.
+	const bool bNonRootAngularStillWithinObservedCarryThroughEnvelope =
+		PrePhase3PeakNonRootAngularSpeed > 0.0f &&
 		CurrentMaxNonRootAngularSpeed <=
-			AngularThreshold * Phase3RootIsolatedNonRootAngularCalmMultiplier;
+			PrePhase3PeakNonRootAngularSpeed * Phase3RootIsolatedNonRootAngularPeakMultiplier;
 	const bool bRootAngularStillWithinObservedCarryThroughEnvelope =
 		PrePhase3PeakBodyAngularSpeed > AngularThreshold &&
 		RootAngularSpeed <=
 			PrePhase3PeakBodyAngularSpeed * Phase3RootIsolatedAngularPeakMultiplier;
+	const bool bRootAngularStillDominantOverNonRoot =
+		CurrentMaxNonRootAngularSpeed <= 0.0f ||
+		RootAngularSpeed >=
+			CurrentMaxNonRootAngularSpeed * Phase3RootIsolatedRootVsNonRootAngularRatio;
 	if (Phase3TickCount > Phase3LateAngularOnlyShellBurstGraceTickCount &&
 		Phase3TickCount <= Phase3RootIsolatedAngularCarryThroughTickCount &&
 		!bLinearBreached &&
 		bAngularBreached &&
 		!bOffsetBreached &&
 		bShellVelocityBreached &&
-		bNonRootAngularSetCalm &&
+		bNonRootAngularStillWithinObservedCarryThroughEnvelope &&
+		bRootAngularStillDominantOverNonRoot &&
 		bRootAngularStillWithinObservedCarryThroughEnvelope)
 	{
 		return true;
@@ -709,6 +718,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	const float PelvisLinearSpeed = EffectivePelvisLinearVelocity.Size();
 	const float PelvisAngularSpeed = PelvisAngularVelocityDegPerSec.Size();
 	float CurrentMaxNonRootAngularSpeed = 0.0f;
+	FName CurrentMaxNonRootAngularBone = NAME_None;
 
 	FPhysAnimStabilizationDomain Domain;
 	Domain.CurrentPhase = InternalPhase;
@@ -732,12 +742,18 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 		{
 			if (const FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
 			{
-				const float AngularSpeedDegPerSecond =
-					FMath::RadiansToDegrees(BodyInstance->GetUnrealWorldAngularVelocityInRadians()).Size();
-				CurrentMaxNonRootAngularSpeed =
-					FMath::Max(CurrentMaxNonRootAngularSpeed, AngularSpeedDegPerSecond);
+			const float AngularSpeedDegPerSecond =
+				FMath::RadiansToDegrees(BodyInstance->GetUnrealWorldAngularVelocityInRadians()).Size();
+			if (AngularSpeedDegPerSecond > CurrentMaxNonRootAngularSpeed)
+			{
+				CurrentMaxNonRootAngularSpeed = AngularSpeedDegPerSecond;
+				CurrentMaxNonRootAngularBone = BoneName;
 			}
 		}
+	}
+
+	Diagnostics.Phase3CurrentMaxNonRootAngularSpeed = CurrentMaxNonRootAngularSpeed;
+	Diagnostics.Phase3CurrentMaxNonRootAngularBone = CurrentMaxNonRootAngularBone;
 	}
 
 	Domain.CertifiedSimCount = CertifiedHandoff.SimCount;
@@ -764,11 +780,12 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				ShellPlanarOffsetCm,
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				ShellPlanarVelocityCmPerSecond,
-				Settings.BalancePhase2AbortShellVelocityDelta,
-				Diagnostics.PeakMaxBodyLinearSpeed,
-				Diagnostics.PeakMaxBodyAngularSpeed,
-				EffectivePelvisPlanarSpeed,
-				CurrentMaxNonRootAngularSpeed))
+			Settings.BalancePhase2AbortShellVelocityDelta,
+			Diagnostics.PeakMaxBodyLinearSpeed,
+			Diagnostics.PeakMaxBodyAngularSpeed,
+			EffectivePelvisPlanarSpeed,
+			CurrentMaxNonRootAngularSpeed,
+			Diagnostics.PeakMaxNonRootBodyAngularSpeed))
 		{
 			// Not yet material - continue with remaining continuity checks
 		}

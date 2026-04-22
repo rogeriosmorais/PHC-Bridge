@@ -734,6 +734,25 @@ namespace
 				787.59f,
 				10.0f));
 		TestTrue(
+			TEXT("Tick 8 root-isolated angular carry-through grace can use the observed pre-Phase-3 non-root envelope instead of a blind calm cutoff"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				8,
+				true,
+				true,
+				1038.65f,
+				3000.0f,
+				4564.81f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				985.64f,
+				10.0f,
+				848.98f,
+				2752.96f,
+				1038.65f,
+				1800.0f,
+				2546.24f));
+		TestTrue(
 			TEXT("Tick 8 Settle grace preserves a root-isolated angular shell burst when non-root simulated bodies stay comparatively calm"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 				8,
@@ -750,9 +769,10 @@ namespace
 				848.96f,
 				2752.99f,
 				1112.99f,
-				900.0f));
+				900.0f,
+				1275.93f));
 		TestFalse(
-			TEXT("Tick 8 root-isolated angular carry-through grace does not apply when the non-root simulated set is also spinning too fast"),
+			TEXT("Tick 8 root-isolated angular carry-through grace does not apply when the non-root simulated set expands beyond the observed pre-Phase-3 envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 				8,
 				true,
@@ -768,7 +788,27 @@ namespace
 				848.96f,
 				2752.99f,
 				1112.99f,
-				1800.0f));
+				2900.0f,
+				2546.24f));
+		TestFalse(
+			TEXT("Tick 8 root-isolated angular carry-through grace does not apply when the root angular burst no longer materially dominates the non-root set"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				8,
+				true,
+				true,
+				1038.65f,
+				3000.0f,
+				4000.0f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				985.64f,
+				10.0f,
+				848.98f,
+				2752.96f,
+				1038.65f,
+				2400.0f,
+				2546.24f));
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not apply once the root angular spike expands beyond the observed RootOn carry-through envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
@@ -786,7 +826,8 @@ namespace
 				848.96f,
 				2752.99f,
 				1112.99f,
-				900.0f));
+				900.0f,
+				1275.93f));
 		TestFalse(
 			TEXT("Tick 9 root-isolated angular carry-through grace no longer suppresses the same shell burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
@@ -804,7 +845,8 @@ namespace
 				848.96f,
 				2752.99f,
 				1112.99f,
-				900.0f));
+				900.0f,
+				1275.93f));
 		TestFalse(
 			TEXT("Tick 7 mild angular-only grace does not apply once the angular overshoot is too large"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(

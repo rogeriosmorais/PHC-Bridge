@@ -404,6 +404,9 @@ struct FBalanceReadyTransitionDiagnostics
 	int32 UpperBodySimCountPost = 0;
 	float PeakMaxBodyLinearSpeed = 0.0f;
 	float PeakMaxBodyAngularSpeed = 0.0f;
+	float PeakMaxNonRootBodyAngularSpeed = 0.0f;
+	float Phase3CurrentMaxNonRootAngularSpeed = 0.0f;
+	FName Phase3CurrentMaxNonRootAngularBone = NAME_None;
 	FName LateLoopWorstBone = NAME_None;
 };
 
@@ -603,7 +606,8 @@ public:
 		float PrePhase3PeakBodyLinearSpeed = 0.0f,
 		float PrePhase3PeakBodyAngularSpeed = 0.0f,
 		float RootPlanarSpeedCmPerSecond = -1.0f,
-		float CurrentMaxNonRootAngularSpeed = 0.0f);
+		float CurrentMaxNonRootAngularSpeed = 0.0f,
+		float PrePhase3PeakNonRootAngularSpeed = 0.0f);
 
 	static bool IsRootStable(
 		const FPhase1AcceptedConvergenceSnapshot& Snapshot,
