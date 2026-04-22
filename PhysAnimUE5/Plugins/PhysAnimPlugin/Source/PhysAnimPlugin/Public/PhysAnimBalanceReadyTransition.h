@@ -583,6 +583,11 @@ public:
 		float LinearThreshold,
 		float RootAngularSpeed,
 		float AngularThreshold);
+	static FVector ResolvePhase3EffectiveRootLinearVelocityCmPerSecond(
+		const FVector& RootLinearVelocityCmPerSecond,
+		const FVector& OwnerLinearVelocityCmPerSecond,
+		const FVector& AppliedShellCorrectionVelocityCmPerSecond,
+		bool bTransitionOwnedShellLocked);
 	static bool IsPhase3EarlySettleInstabilityGraceActive(
 		int32 Phase3TickCount,
 		bool bTransitionOwnedShellLocked,

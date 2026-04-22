@@ -347,6 +347,24 @@ namespace
 					RootVelocityCmPerSecond),
 				108.22f,
 				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Phase 3 effective root velocity subtracts shell-carried planar motion while preserving vertical velocity under explicit lock"),
+			FPhysAnimBalanceReadyTransition::ResolvePhase3EffectiveRootLinearVelocityCmPerSecond(
+				FVector(160.0f, 70.0f, 35.0f),
+				FVector(40.0f, 10.0f, 90.0f),
+				FVector(20.0f, 30.0f, 0.0f),
+				true).Equals(
+					FVector(100.0f, 30.0f, 35.0f),
+					KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Phase 3 effective root velocity stays in raw world space when no explicit shell lock is held"),
+			FPhysAnimBalanceReadyTransition::ResolvePhase3EffectiveRootLinearVelocityCmPerSecond(
+				FVector(160.0f, 70.0f, 35.0f),
+				FVector(40.0f, 10.0f, 90.0f),
+				FVector(20.0f, 30.0f, 0.0f),
+				false).Equals(
+					FVector(160.0f, 70.0f, 35.0f),
+					KINDA_SMALL_NUMBER));
 
 		return true;
 	}

@@ -14,9 +14,9 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 3 / truthful post-RootOn instability revalidation, with Settle now explicitly distinguishing the earlier tick-4 combined burst, the earlier tick-5 angular-only shell-burst artifact, and the later mild angular carry-through case under preserved shell lock.
-- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now includes a bounded late-Settle grace for the documented mild tick-7 angular shell-burst carry-through. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine still does not reach active balance, and the truthful blocker remains Phase 3 physical continuity; however, the latest revalidation run surfaced a larger earlier tick-5 Settle burst instead of reproducing the earlier tick-7 frontier.
-- `Latest runtime forensics`: the latest verified `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3. The latest run then safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=934` with `tick=5` on `phase3_post_root_on_instability`, where `rootLinear=6629.14/3000.00`, `rootAngular=8428.48/2160.00`, `shellOffsetDelta=0.00/2.00`, and `shellVelocityDelta=1399.12/10.00`. That means the new deterministic late-carry-through grace is in place, but this machine's newest live smoke did not stay on the earlier mild tick-7 frontier and instead exposed a larger earlier Settle burst that remains terminal.
+- `Current phase`: Phase 3 / truthful post-RootOn instability revalidation, with Settle now explicitly distinguishing bounded shell-burst carry-through from materially angular-dominant post-RootOn instability under preserved explicit shell lock.
+- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now measures Settle linear continuity relative to shell-carried planar motion when the transition-owned shell lock still owns the shell. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine still does not reach active balance, but the remaining truthful blocker is now much narrower: Phase 3 angular continuity after shell-carried planar motion has been removed from the linear measurement.
+- `Latest runtime forensics`: the latest verified `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3. The latest run then safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=945` with `tick=6` on `phase3_post_root_on_instability`, where `rootLinear=573.06/3000.00`, `rootAngular=3458.00/2160.00`, `shellOffsetDelta=0.00/2.00`, and `shellVelocityDelta=1446.03/10.00`. That means the old tick-6 linear burst was overstated by shell-carried planar motion; after correcting the measurement, the live Settle blocker on this machine is a still-terminal angular overshoot under preserved shell lock.
 
 ## Active Tasks
 
@@ -667,3 +667,15 @@ Known important reference points from this work:
 - Practical meaning:
   - the old tick-5 combined burst is now ruled out as another shell-locked carry-through artifact rather than the deciding Phase 3 failure
   - the remaining blocker is a later, more severe post-RootOn instability beyond the new evidence-based grace boundary
+
+## 2026-04-21 — Settle shell-relative linear truthfulness
+
+- Added deterministic TDD for the next Settle measurement seam: under explicit transition-owned shell lock, Phase 3 effective root linear velocity now subtracts shell-carried planar motion while preserving vertical velocity, and the same helper stays inert when no explicit lock is held.
+- Added `ResolvePhase3EffectiveRootLinearVelocityCmPerSecond`, used it in `ValidatePhase3Continuity`, and updated `PHASE3_FIRST_FAILURE_AUDIT` to log the same effective linear speed that the Settle validator actually uses.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component.ShellCorrectionVelocityTruthfulness`, `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.Bridge.BalanceStateless`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The truthful frontier stayed on tick `6`, but the blocker shape narrowed materially:
+  - before this pass, the smoke first failed at `PHASE3_FIRST_FAILURE_AUDIT frame=945` with `tick=6`, `rootLinear=5320.63/3000.00`, `rootAngular=13934.15/2160.00`, and `shellVelocityDelta=2220.76/10.00`
+  - after this pass, the smoke still first fails at `PHASE3_FIRST_FAILURE_AUDIT frame=945` with `tick=6`, but now reports `rootLinear=573.06/3000.00`, `rootAngular=3458.00/2160.00`, and `shellVelocityDelta=1446.03/10.00`
+- Practical meaning:
+  - the old tick-6 Settle frontier was materially overstating linear instability by counting shell-carried planar motion as root instability
+  - the remaining truthful blocker is now clearly angular post-RootOn continuity under preserved shell lock, which is a better-isolated next target for truthful balance-mode work

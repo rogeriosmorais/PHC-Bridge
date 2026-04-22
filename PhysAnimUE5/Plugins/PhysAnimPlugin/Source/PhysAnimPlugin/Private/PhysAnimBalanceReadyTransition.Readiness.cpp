@@ -198,6 +198,28 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleAngularGraceActive(
 	return !bLinearBreached && bAngularBreached;
 }
 
+FVector FPhysAnimBalanceReadyTransition::ResolvePhase3EffectiveRootLinearVelocityCmPerSecond(
+	const FVector& RootLinearVelocityCmPerSecond,
+	const FVector& OwnerLinearVelocityCmPerSecond,
+	const FVector& AppliedShellCorrectionVelocityCmPerSecond,
+	bool bTransitionOwnedShellLocked)
+{
+	if (!bTransitionOwnedShellLocked)
+	{
+		return RootLinearVelocityCmPerSecond;
+	}
+
+	const FVector EffectiveShellPlanarVelocityCmPerSecond =
+		UPhysAnimComponent::ResolveEffectiveShellCouplingPlanarVelocityCmPerSecond(
+			OwnerLinearVelocityCmPerSecond,
+			AppliedShellCorrectionVelocityCmPerSecond,
+			true);
+	FVector EffectiveRootVelocityCmPerSecond = RootLinearVelocityCmPerSecond;
+	EffectiveRootVelocityCmPerSecond.X -= EffectiveShellPlanarVelocityCmPerSecond.X;
+	EffectiveRootVelocityCmPerSecond.Y -= EffectiveShellPlanarVelocityCmPerSecond.Y;
+	return EffectiveRootVelocityCmPerSecond;
+}
+
 bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	int32 Phase3TickCount,
 	bool bTransitionOwnedShellLocked,
@@ -623,9 +645,14 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 		}
 	}
 
-	const FVector PelvisLinearVelocity = PelvisBody->GetUnrealWorldVelocity();
+	const AActor* const OwnerActor = Owner->GetOwner();
+	const FVector EffectivePelvisLinearVelocity = ResolvePhase3EffectiveRootLinearVelocityCmPerSecond(
+		PelvisBody->GetUnrealWorldVelocity(),
+		OwnerActor ? OwnerActor->GetVelocity() : FVector::ZeroVector,
+		Owner->BridgeShellState.AppliedPlanarCorrectionVelocityCmPerSecond,
+		Owner->HasExplicitTransitionOwnedShellLock());
 	const FVector PelvisAngularVelocityDegPerSec = FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians());
-	const float PelvisLinearSpeed = PelvisLinearVelocity.Size();
+	const float PelvisLinearSpeed = EffectivePelvisLinearVelocity.Size();
 	const float PelvisAngularSpeed = PelvisAngularVelocityDegPerSec.Size();
 
 	FPhysAnimStabilizationDomain Domain;

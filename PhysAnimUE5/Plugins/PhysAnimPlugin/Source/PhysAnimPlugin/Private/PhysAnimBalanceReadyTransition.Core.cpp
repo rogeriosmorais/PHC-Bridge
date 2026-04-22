@@ -2308,7 +2308,14 @@ extern int32 GVerbosePhase2Forensics;
 				const FVector RootAngularVelocityDegPerSecond = RootBI
 					? FMath::RadiansToDegrees(RootBI->GetUnrealWorldAngularVelocityInRadians())
 					: FVector::ZeroVector;
-				const float RootLinearSpeed = RootLinearVelocity.Size();
+				const AActor* const OwnerActor = Owner->GetOwner();
+				const FVector EffectiveRootLinearVelocity =
+					FPhysAnimBalanceReadyTransition::ResolvePhase3EffectiveRootLinearVelocityCmPerSecond(
+						RootLinearVelocity,
+						OwnerActor ? OwnerActor->GetVelocity() : FVector::ZeroVector,
+						Owner->BridgeShellState.AppliedPlanarCorrectionVelocityCmPerSecond,
+						Owner->HasExplicitTransitionOwnedShellLock());
+				const float RootLinearSpeed = EffectiveRootLinearVelocity.Size();
 				const float RootAngularSpeed = RootAngularVelocityDegPerSecond.Size();
 				const float RootLinearThreshold = Settings.MaxRootLinearSpeedCmPerSecond * 2.5f;
 				const float RootAngularThreshold = Settings.MaxRootAngularSpeedDegPerSecond * 3.0f;
