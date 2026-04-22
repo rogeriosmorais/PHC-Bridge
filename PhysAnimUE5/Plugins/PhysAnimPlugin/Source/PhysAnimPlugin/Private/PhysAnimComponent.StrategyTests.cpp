@@ -751,7 +751,34 @@ namespace
 				2752.96f,
 				1038.65f,
 				1800.0f,
-				2546.24f));
+				2546.24f,
+				TEXT("spine_01"),
+				1275.93f,
+				2546.24f,
+				0.0f));
+		TestFalse(
+			TEXT("Tick 8 root-isolated angular carry-through grace does not let a thigh burst borrow the spine family's larger observed envelope"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				8,
+				true,
+				true,
+				1038.65f,
+				3000.0f,
+				4564.81f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				985.64f,
+				10.0f,
+				848.98f,
+				2752.96f,
+				1038.65f,
+				1500.0f,
+				2546.24f,
+				TEXT("thigh_r"),
+				1275.93f,
+				2546.24f,
+				0.0f));
 		TestTrue(
 			TEXT("Tick 8 Settle grace preserves a root-isolated angular shell burst when non-root simulated bodies stay comparatively calm"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(

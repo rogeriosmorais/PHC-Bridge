@@ -53,8 +53,10 @@ enum class EBalanceLateValidationOutcome : uint8
 
 namespace BalanceTransitionSets
 {
+	inline bool IsThigh(FName BoneName) { return BoneName == "thigh_l" || BoneName == "thigh_r"; }
+	inline bool IsSpine(FName BoneName) { return BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03"; }
 	inline bool IsRoot(FName BoneName) { return BoneName == "pelvis"; }
-	inline bool IsProximal(FName BoneName) { return BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"; }
+	inline bool IsProximal(FName BoneName) { return IsSpine(BoneName) || IsThigh(BoneName); }
 	inline bool IsDistalLowerLimb(FName BoneName) { return BoneName == "calf_l" || BoneName == "calf_r" || BoneName == "foot_l" || BoneName == "foot_r" || BoneName == "ball_l" || BoneName == "ball_r"; }
 	inline bool IsUpperLimbDistal(FName BoneName)
 	{
@@ -405,7 +407,11 @@ struct FBalanceReadyTransitionDiagnostics
 	float PeakMaxBodyLinearSpeed = 0.0f;
 	float PeakMaxBodyAngularSpeed = 0.0f;
 	float PeakMaxNonRootBodyAngularSpeed = 0.0f;
+	float PeakMaxThighBodyAngularSpeed = 0.0f;
+	float PeakMaxSpineBodyAngularSpeed = 0.0f;
+	float PeakMaxFeetBodyAngularSpeed = 0.0f;
 	float Phase3CurrentMaxNonRootAngularSpeed = 0.0f;
+	float Phase3CurrentObservedNonRootAngularEnvelope = 0.0f;
 	FName Phase3CurrentMaxNonRootAngularBone = NAME_None;
 	FName LateLoopWorstBone = NAME_None;
 };
@@ -607,7 +613,11 @@ public:
 		float PrePhase3PeakBodyAngularSpeed = 0.0f,
 		float RootPlanarSpeedCmPerSecond = -1.0f,
 		float CurrentMaxNonRootAngularSpeed = 0.0f,
-		float PrePhase3PeakNonRootAngularSpeed = 0.0f);
+		float PrePhase3PeakNonRootAngularSpeed = 0.0f,
+		FName CurrentMaxNonRootAngularBone = NAME_None,
+		float PrePhase3PeakThighAngularSpeed = 0.0f,
+		float PrePhase3PeakSpineAngularSpeed = 0.0f,
+		float PrePhase3PeakFeetAngularSpeed = 0.0f);
 
 	static bool IsRootStable(
 		const FPhase1AcceptedConvergenceSnapshot& Snapshot,

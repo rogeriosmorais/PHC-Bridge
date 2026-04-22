@@ -1780,6 +1780,9 @@ extern int32 GVerbosePhase2Forensics;
 		Diagnostics.PeakMaxNonRootBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxNonRootBodyAngularSpeed, Diagnostics.MaxAngVelThighs);
 		Diagnostics.PeakMaxNonRootBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxNonRootBodyAngularSpeed, Diagnostics.MaxAngVelSpine);
 		Diagnostics.PeakMaxNonRootBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxNonRootBodyAngularSpeed, Diagnostics.MaxAngVelFeet);
+		Diagnostics.PeakMaxThighBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxThighBodyAngularSpeed, Diagnostics.MaxAngVelThighs);
+		Diagnostics.PeakMaxSpineBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxSpineBodyAngularSpeed, Diagnostics.MaxAngVelSpine);
+		Diagnostics.PeakMaxFeetBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxFeetBodyAngularSpeed, Diagnostics.MaxAngVelFeet);
 
 		FString AbortReason;
 		FString AbortDetail;
@@ -2332,7 +2335,7 @@ extern int32 GVerbosePhase2Forensics;
 				const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PelvisModifierName);
 				const EPhysicsMovementType PelvisModifierType = PelvisRecord ? PelvisRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_FIRST_FAILURE_AUDIT frame=%d reason=%s tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d rootLinear=%.2f/%.2f rootAngular=%.2f/%.2f shellOffsetDelta=%.2f/%.2f shellVelocityDelta=%.2f/%.2f prePhase3PeakNonRootAngular=%.2f currentMaxNonRootAngular=%.2f currentMaxNonRootAngularBone=%s shellCorrectionActive=%d owner=%d actor=%s component=%s"),
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_FIRST_FAILURE_AUDIT frame=%d reason=%s tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d rootLinear=%.2f/%.2f rootAngular=%.2f/%.2f shellOffsetDelta=%.2f/%.2f shellVelocityDelta=%.2f/%.2f prePhase3PeakNonRootAngular=%.2f observedNonRootAngularEnvelope=%.2f currentMaxNonRootAngular=%.2f currentMaxNonRootAngularBone=%s shellCorrectionActive=%d owner=%d actor=%s component=%s"),
 					static_cast<int32>(GFrameCounter),
 					*Phase3Violation,
 					static_cast<int32>(Phase3GuardTickCount),
@@ -2351,6 +2354,7 @@ extern int32 GVerbosePhase2Forensics;
 					ShellVelocityDeltaCmPerSecond,
 					Settings.BalancePhase2AbortShellVelocityDelta,
 					Diagnostics.PeakMaxNonRootBodyAngularSpeed,
+					Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope,
 					Diagnostics.Phase3CurrentMaxNonRootAngularSpeed,
 					*Diagnostics.Phase3CurrentMaxNonRootAngularBone.ToString(),
 					bShellCorrectionOwnerActive ? 1 : 0,
@@ -3054,7 +3058,11 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	Diagnostics.Phase1LateValidateWorstLinearSpeed = 0.0f;
 	Diagnostics.Phase1LateValidateWorstAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxNonRootBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakMaxThighBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakMaxSpineBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakMaxFeetBodyAngularSpeed = 0.0f;
 	Diagnostics.Phase3CurrentMaxNonRootAngularSpeed = 0.0f;
+	Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope = 0.0f;
 	Diagnostics.Phase3CurrentMaxNonRootAngularBone = NAME_None;
 	bLateValidationProofPassed = false;
 	ResetCertifiedHandoffState();
@@ -3097,7 +3105,11 @@ void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
 	RootOnReadinessShellProofStartVelocityCmPerSecond = 0.0f;
 	bHasRootOnReadinessShellProofBaseline = false;
 	Diagnostics.PeakMaxNonRootBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakMaxThighBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakMaxSpineBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakMaxFeetBodyAngularSpeed = 0.0f;
 	Diagnostics.Phase3CurrentMaxNonRootAngularSpeed = 0.0f;
+	Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope = 0.0f;
 	Diagnostics.Phase3CurrentMaxNonRootAngularBone = NAME_None;
 	ResetRootOnReadinessNoCouplingProofState();
 }

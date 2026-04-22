@@ -733,3 +733,17 @@ Known important reference points from this work:
 - Practical meaning:
   - the old tick-8 calmness proof was still too generic because it did not compare the late preserved-set spike against the actual non-root angular envelope already observed before Phase 3
   - the latest live blocker is now explicitly shown to be a real non-root spine blow-up, so the next balance-mode slice should target truthful late-Settle non-root continuity rather than broadening grace again
+
+## 2026-04-21 — Tick-8 family-specific non-root envelope truthfulness
+
+- Added deterministic TDD for the next late-Settle seam: a tick-8 thigh-dominant non-root burst can no longer borrow the larger spine-family Phase 2 envelope just because the generic non-root peak was set by the spine chain.
+- Refined `IsPhase3EarlySettleInstabilityGraceActive`, `ValidatePhase3Continuity`, and the Phase 3 first-failure audit so the late tick-8 carry-through rule resolves the current max non-root bone against its own observed Phase 2 family envelope (`thigh`, `spine`, or distal lower limb) instead of against a mixed non-root bucket.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component.TransitionOwnedShellLockTruthfulness`, `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.Bridge.BalanceStateless`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The deterministic contract moved forward, while the latest live smoke on this machine kept the same truthful frontier:
+  - the new helper now treats the documented tick-8 root-isolated carry-through as pre-material only when the failing non-root family stays inside that family's own observed pre-Phase-3 envelope
+  - the latest verified smoke still safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=947` with `tick=8`
+  - that run reported `rootLinear=1112.99/3000.00`, `rootAngular=4977.81/2160.00`, `shellOffsetDelta=0.00/2.00`, `shellVelocityDelta=690.44/10.00`, `prePhase3PeakNonRootAngular=2546.23`, `observedNonRootAngularEnvelope=2546.23`, `currentMaxNonRootAngular=27761.82`, and `currentMaxNonRootAngularBone=spine_01`
+  - terminal outcome remained truthful safe denial on `phase3_post_root_on_instability`
+- Practical meaning:
+  - the old tick-8 proof could still overclaim continuity by letting one non-root family borrow another family's larger observed Phase 2 peak
+  - the current live blocker is still an actual late spine-family blow-up, so the next balance-mode slice should stay focused on truthful late-Settle physical continuity rather than expanding grace

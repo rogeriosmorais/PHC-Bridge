@@ -1,5 +1,33 @@
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
 
+namespace
+{
+	static float ResolveObservedNonRootAngularEnvelopeForBone(
+		FName BoneName,
+		float GenericObservedPeak,
+		float ThighObservedPeak,
+		float SpineObservedPeak,
+		float FeetObservedPeak)
+	{
+		if (BalanceTransitionSets::IsThigh(BoneName) && ThighObservedPeak > 0.0f)
+		{
+			return ThighObservedPeak;
+		}
+
+		if (BalanceTransitionSets::IsSpine(BoneName) && SpineObservedPeak > 0.0f)
+		{
+			return SpineObservedPeak;
+		}
+
+		if (BalanceTransitionSets::IsDistalLowerLimb(BoneName) && FeetObservedPeak > 0.0f)
+		{
+			return FeetObservedPeak;
+		}
+
+		return GenericObservedPeak;
+	}
+}
+
 EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryState(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings) const
 {
 	if (!Owner || !Owner->GetMeshComponent() || !Owner->GetOwner())
@@ -236,7 +264,11 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	float PrePhase3PeakBodyAngularSpeed,
 	float RootPlanarSpeedCmPerSecond,
 	float CurrentMaxNonRootAngularSpeed,
-	float PrePhase3PeakNonRootAngularSpeed)
+	float PrePhase3PeakNonRootAngularSpeed,
+	FName CurrentMaxNonRootAngularBone,
+	float PrePhase3PeakThighAngularSpeed,
+	float PrePhase3PeakSpineAngularSpeed,
+	float PrePhase3PeakFeetAngularSpeed)
 {
 	if (IsPhase3EarlySettleAngularGraceActive(
 			Phase3TickCount,
@@ -347,10 +379,16 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	// during RootOn carry-through. Keep that separate from a truthful full-body
 	// angular failure unless the non-root set expands into a new regime or the
 	// root is no longer materially dominating the angular burst.
+	const float ObservedNonRootAngularEnvelope = ResolveObservedNonRootAngularEnvelopeForBone(
+		CurrentMaxNonRootAngularBone,
+		PrePhase3PeakNonRootAngularSpeed,
+		PrePhase3PeakThighAngularSpeed,
+		PrePhase3PeakSpineAngularSpeed,
+		PrePhase3PeakFeetAngularSpeed);
 	const bool bNonRootAngularStillWithinObservedCarryThroughEnvelope =
-		PrePhase3PeakNonRootAngularSpeed > 0.0f &&
+		ObservedNonRootAngularEnvelope > 0.0f &&
 		CurrentMaxNonRootAngularSpeed <=
-			PrePhase3PeakNonRootAngularSpeed * Phase3RootIsolatedNonRootAngularPeakMultiplier;
+			ObservedNonRootAngularEnvelope * Phase3RootIsolatedNonRootAngularPeakMultiplier;
 	const bool bRootAngularStillWithinObservedCarryThroughEnvelope =
 		PrePhase3PeakBodyAngularSpeed > AngularThreshold &&
 		RootAngularSpeed <=
@@ -756,6 +794,14 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	Diagnostics.Phase3CurrentMaxNonRootAngularBone = CurrentMaxNonRootAngularBone;
 	}
 
+	const float CurrentObservedNonRootAngularEnvelope = ResolveObservedNonRootAngularEnvelopeForBone(
+		CurrentMaxNonRootAngularBone,
+		Diagnostics.PeakMaxNonRootBodyAngularSpeed,
+		Diagnostics.PeakMaxThighBodyAngularSpeed,
+		Diagnostics.PeakMaxSpineBodyAngularSpeed,
+		Diagnostics.PeakMaxFeetBodyAngularSpeed);
+	Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope = CurrentObservedNonRootAngularEnvelope;
+
 	Domain.CertifiedSimCount = CertifiedHandoff.SimCount;
 	Domain.CertifiedDistalSimCount = CertifiedHandoff.DistalSimCount;
 
@@ -780,12 +826,16 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				ShellPlanarOffsetCm,
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				ShellPlanarVelocityCmPerSecond,
-			Settings.BalancePhase2AbortShellVelocityDelta,
-			Diagnostics.PeakMaxBodyLinearSpeed,
-			Diagnostics.PeakMaxBodyAngularSpeed,
-			EffectivePelvisPlanarSpeed,
-			CurrentMaxNonRootAngularSpeed,
-			Diagnostics.PeakMaxNonRootBodyAngularSpeed))
+				Settings.BalancePhase2AbortShellVelocityDelta,
+				Diagnostics.PeakMaxBodyLinearSpeed,
+				Diagnostics.PeakMaxBodyAngularSpeed,
+				EffectivePelvisPlanarSpeed,
+				CurrentMaxNonRootAngularSpeed,
+				Diagnostics.PeakMaxNonRootBodyAngularSpeed,
+				CurrentMaxNonRootAngularBone,
+				Diagnostics.PeakMaxThighBodyAngularSpeed,
+				Diagnostics.PeakMaxSpineBodyAngularSpeed,
+				Diagnostics.PeakMaxFeetBodyAngularSpeed))
 		{
 			// Not yet material - continue with remaining continuity checks
 		}
