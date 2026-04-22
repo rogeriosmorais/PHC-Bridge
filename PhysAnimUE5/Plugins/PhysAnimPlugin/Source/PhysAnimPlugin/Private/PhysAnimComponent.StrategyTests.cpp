@@ -581,6 +581,22 @@ namespace
 				2.0f,
 				680.75f,
 				10.0f));
+		TestTrue(
+			TEXT("Tick 6 Settle grace preserves an angular-only zero-offset shell burst when it remains close to the already-observed RootOn angular peak"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				6,
+				true,
+				true,
+				573.06f,
+				3000.0f,
+				3458.00f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				1446.03f,
+				10.0f,
+				848.97f,
+				2752.96f));
 		TestFalse(
 			TEXT("Tick 6 Settle grace no longer suppresses the same angular-only shell burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
@@ -595,6 +611,38 @@ namespace
 				2.0f,
 				680.75f,
 				10.0f));
+		TestFalse(
+			TEXT("Tick 6 bounded angular carry-through grace does not apply when the Settle angular spike jumps too far above the pre-Phase-3 peak"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				6,
+				true,
+				true,
+				573.06f,
+				3000.0f,
+				3700.0f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				1446.03f,
+				10.0f,
+				848.97f,
+				2752.96f));
+		TestFalse(
+			TEXT("Tick 6 bounded angular carry-through grace does not apply when Phase 2 never exposed the same angular RootOn peak"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				6,
+				true,
+				true,
+				573.06f,
+				3000.0f,
+				3458.00f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				1446.03f,
+				10.0f,
+				848.97f,
+				2100.0f));
 		TestFalse(
 			TEXT("Tick 5 angular-only grace does not apply once shell offset drift appears"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(

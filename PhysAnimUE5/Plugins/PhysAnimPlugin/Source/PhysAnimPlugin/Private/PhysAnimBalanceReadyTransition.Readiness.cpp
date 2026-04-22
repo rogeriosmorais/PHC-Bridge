@@ -247,7 +247,9 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 
 	static constexpr int32 Phase3ShellVelocityBurstGraceTickCount = 4;
 	static constexpr int32 Phase3AngularOnlyShellBurstGraceTickCount = 5;
+	static constexpr int32 Phase3BoundedAngularCarryThroughTickCount = 6;
 	static constexpr int32 Phase3LateAngularOnlyShellBurstGraceTickCount = 7;
+	static constexpr float Phase3BoundedAngularCarryThroughMaxGrowthDegPerSec = 800.0f;
 	static constexpr float Phase3LateAngularOvershootGraceDegPerSec = 600.0f;
 	if (Phase3TickCount > Phase3LateAngularOnlyShellBurstGraceTickCount ||
 		!bTransitionOwnedShellLocked ||
@@ -308,6 +310,25 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 			bAngularBreached &&
 			!bOffsetBreached &&
 			bShellVelocityBreached;
+	}
+
+	// A later tick-6 angular-only spike is still the same RootOn carry-through
+	// shape when Settle linear speed is already below threshold, the shell is
+	// still perfectly locked, and the angular burst remains close to the
+	// already-observed pre-Phase-3 peak rather than expanding into a new regime.
+	const bool bPrePhase3AngularPeakAlreadyBreached = PrePhase3PeakBodyAngularSpeed > AngularThreshold;
+	const bool bBoundedAngularCarryThrough =
+		RootAngularSpeed <=
+			PrePhase3PeakBodyAngularSpeed + Phase3BoundedAngularCarryThroughMaxGrowthDegPerSec;
+	if (Phase3TickCount <= Phase3BoundedAngularCarryThroughTickCount &&
+		!bLinearBreached &&
+		bAngularBreached &&
+		!bOffsetBreached &&
+		bShellVelocityBreached &&
+		bPrePhase3AngularPeakAlreadyBreached &&
+		bBoundedAngularCarryThrough)
+	{
+		return true;
 	}
 
 	// The later tick-7 frontier is still the same shell-burst carry-through shape,
