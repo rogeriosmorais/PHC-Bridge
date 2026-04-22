@@ -1222,7 +1222,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 		return;
 	}
 
-	if (Component->GetBalanceReadyTransitionPhase() == EBalanceReadyTransitionPhase::BRT_Inactive)
+	if (Component->GetBalanceReadyTransitionPhase() == EBalanceReadyTransitionPhase::BRT_Inactive && !bActiveTrialStarted)
 	{
 		FString QueueReason;
 		if (!Component->EvaluateBalanceModeQueueGates(Settings, QueueReason))
@@ -1291,6 +1291,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 	}
 
 	if (IsStandingHoldBenchmarkSatisfied(ActiveTrialMaxBalanceActiveStandingHoldSeconds) ||
+		IsLaterThanPhase1(Phase) ||
 		Component->HasBalanceReadyTransitionFailed() ||
 		Component->HasSafePhase2Denial())
 	{
