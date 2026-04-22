@@ -692,9 +692,12 @@ void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reaso
 	PendingTrials.Reset();
 	ActiveTrial = FPendingTrial();
 	ActiveTrialStartTimeSeconds = -1.0;
-	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
 	ActiveTrialFirstRootOnTimeSeconds = -1.0;
 	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
+	ActiveTrialFirstBalanceActiveStandingTimeSeconds = -1.0;
+	ActiveTrialStandingHoldStartTimeSeconds = -1.0;
+	ActiveTrialMaxBalanceActiveStandingHoldSeconds = 0.0;
+	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
 }
 
 void UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates)
@@ -1172,10 +1175,13 @@ bool UPhysAnimPhase1AutoCalibSubsystem::BeginNextTrial()
 	}
 
 	Component->ApplyPhase1AutoCalibParams(ActiveTrial.Params);
-	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
 	ActiveTrialStartTimeSeconds = -1.0;
 	ActiveTrialFirstRootOnTimeSeconds = -1.0;
 	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
+	ActiveTrialFirstBalanceActiveStandingTimeSeconds = -1.0;
+	ActiveTrialStandingHoldStartTimeSeconds = -1.0;
+	ActiveTrialMaxBalanceActiveStandingHoldSeconds = 0.0;
+	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
 	bActiveTrialStarted = false;
 	bTrialActive = true;
 	return true;
