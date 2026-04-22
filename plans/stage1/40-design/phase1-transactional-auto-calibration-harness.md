@@ -12,6 +12,7 @@ This first milestone is Phase 1 only:
 
 1. static geometry fit during Prepare and LateValidate
 2. no-coupling proof through the first successful `BRT_Phase2_RootOn` entry tick
+3. benchmark verification that the resulting run reaches `BalanceActive_Standing` and holds it continuously for `3.0` seconds
 
 It does not tune:
 
@@ -19,9 +20,10 @@ It does not tune:
 2. LateValidate proof durations
 3. no-coupling proof durations
 4. deny taxonomy
-5. Phase 2 RootOn behavior
-6. Phase 3 Settle behavior
-7. locomotion
+5. grace-window growth as a substitute for physical progress
+6. Phase 2 RootOn behavior
+7. Phase 3 Settle behavior
+8. locomotion
 
 ## Architectural fit
 
@@ -47,7 +49,7 @@ Every candidate trial must:
 1. start from the exact same captured baseline
 2. apply only transient Phase 1 solver-side overrides
 3. use the normal balance-entry start path
-4. stop at the first `BRT_Phase2_RootOn` tick, `Failed`, `SafeDenied`, or timeout
+4. continue until the run either holds `BalanceActive_Standing` for `3.0` continuous seconds, `Failed`, `SafeDenied`, or times out
 5. restore the same baseline after the trial
 
 The harness must reject candidates that appear calm by violating the existing Phase 1 contract.
@@ -181,19 +183,21 @@ For each of the six discrete presets:
 4. determinism-pass flag
 5. root-on reached flag
 6. no-coupling proof satisfied flag
-7. worst direct-link angular error
-8. mean target delta
-9. max target delta
-10. thigh asymmetry
-11. peak root tilt
-12. shell offset delta
-13. shell velocity delta
-14. peak root linear speed
-15. peak root angular speed
+7. `BalanceActive_Standing` reached flag
+8. `BalanceActive_Standing` hold seconds
+9. worst direct-link angular error
+10. mean target delta
+11. max target delta
+12. thigh asymmetry
+13. peak root tilt
+14. shell offset delta
+15. shell velocity delta
+16. peak root linear speed
+17. peak root angular speed
 
 Ordering rule:
 
-1. reject any candidate that fails contract, safe-denies, times out, misses required proof, or restores non-deterministically
+1. reject any candidate that fails contract, safe-denies, times out, misses required proof, fails to reach `BalanceActive_Standing`, fails to hold that state for `3.0` continuous seconds, or restores non-deterministically
 2. rank survivors by the metric order listed above
 3. use a derived scalar only as a stable tiebreak and export convenience
 
@@ -201,7 +205,7 @@ If all candidates fail, the report must still name:
 
 1. the best near-pass
 2. the truthful blocker distribution
-3. the furthest progressed failure when any rejected trial reaches `RootOn` or later before failing
+3. the furthest progressed failure when any rejected trial reaches `RootOn`, `Settle`, or even `BalanceActive_Standing` before failing the hold benchmark
 4. the best reproducible failed candidate
 
 ## Testing requirements
@@ -231,3 +235,4 @@ This milestone is complete only when:
 4. no contract-failing candidate outranks a contract-passing candidate
 5. all-fail runs still produce truthful output
 6. passing runs report the best `5/5` reproducible candidate, not a one-off winner
+7. no report treats truthful safe-deny or RootOn-only progress as a passing result

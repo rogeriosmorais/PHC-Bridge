@@ -168,16 +168,19 @@ The automation smoke must evaluate the final state using the balance-entry termi
 
 Passing outcomes:
 
-- `BalanceActive`
-- `SafeDenied`
+- `BalanceActive_Standing`
 
 Implementation note:
 
-- the current concrete success state is `BalanceActive_Standing`, which satisfies the `BalanceActive` umbrella requirement
+- `BalanceActive_Standing` is the only current passing smoke outcome
+- `BalanceActive_Recovery` is not a passing entry-smoke state
+- truthful `SafeDenied` remains required telemetry, but it is not a passing smoke outcome
 
 Failing outcomes:
 
 - `BridgeActive`
+- `BalanceActive_Recovery`
+- `SafeDenied`
 - unresolved entry state
 - ambiguous failure state
 
@@ -200,3 +203,4 @@ This implementation spec is satisfied only when:
 - topology-critical writes are authoritative per-bone where required
 - smoke evaluation uses terminal balance outcomes
 - the runtime cannot silently end the smoke in plain `BridgeActive`
+- the runtime cannot count truthful safe deny as a passing smoke result

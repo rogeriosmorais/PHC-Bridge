@@ -51,6 +51,7 @@ Current runtime note:
 
 - Settle success now publishes `BalanceActive_Standing`
 - that state is intentionally separate from any future perturbation-time recovery substate
+- entry is not considered successful until `BalanceActive_Standing` persists continuously for `3.0` seconds
 
 ## 4. Current Design Reality
 
@@ -74,7 +75,8 @@ This includes:
 
 - whether the accepted Phase 1 setup can remain dynamically quiet
 - whether RootOn can warm-start truthfully
-- whether post-RootOn Settle continuity can hold long enough to activate
+- whether post-RootOn Settle continuity can hold long enough to reach `BalanceActive_Standing`
+- whether `BalanceActive_Standing` can then persist for the benchmark hold window
 - whether contact and tuning destabilize the sim set
 
 ### C. Is the active balance behavior itself good once entry succeeds?
@@ -122,6 +124,7 @@ The current balance-entry investigation surface has since moved into:
 
 - truthful RootOn execution in Phase 2
 - truthful Settle continuity in Phase 3
+- real `BalanceActive_Standing` entry and hold, rather than truthful safe-deny or RootOn-only progress
 
 ## 8. Active-Mode Requirement
 
@@ -154,6 +157,12 @@ The framework is trustworthy only if it can demonstrate all of the following:
 - recovery metrics are stable and repeatable
 - if control authority is intentionally weakened, recovery worsens
 
+For entry itself, the framework is trustworthy only if it can also demonstrate:
+
+- entry reaches `BalanceActive_Standing`
+- that state holds continuously for `3.0` seconds
+- safe-deny remains a diagnostic failure outcome, not a passing outcome
+
 ## 11. Summary
 
 Balance Perturbation Mode is a standing-balance diagnostic mode.
@@ -162,5 +171,6 @@ Its entry pipeline is now best understood as:
 
 - a much cleaner and more explicit contract than before
 - a still-open physical-viability experiment in Phase 2 RootOn and Phase 3 Settle
+- an investigation whose only passing benchmark is sustained `BalanceActive_Standing`, not truthful deny classification
 
 That distinction must remain explicit in all future design and implementation work.

@@ -151,7 +151,14 @@ This means:
 
 The investigation has now moved beyond earlier Phase 1 ownership/telemetry problems.
 
-Phase 2 RootOn is now substantially specified and currently passes truthfully in the latest smoke.
+Phase 2 RootOn is now substantially specified and can pass truthfully in isolation, but that is no longer treated as sufficient evidence of success.
+
+The active benchmark is now:
+
+- reach `BalanceActive_Standing`
+- hold that state continuously for `3.0` seconds
+- do not count safe-deny as success
+- do not treat further grace-window broadening as progress unless it moves that benchmark
 
 The active unresolved Phase 3 questions are:
 
@@ -159,7 +166,7 @@ The active unresolved Phase 3 questions are:
 - how to tell whether post-RootOn shell maintenance loss is a contract mismatch, a physical-viability limit, or both
 - how to preserve truthful Settle failure classification without collapsing back into retry noise or generic no-convergence labeling
 
-The current unsolved question is therefore no longer mainly whether the accepted frozen Phase 1 setup is viable or whether RootOn can pass truthfully. It is whether the post-RootOn Settle continuity path can hold without material shell correction under the current runtime contract.
+The current unsolved question is therefore no longer mainly whether the accepted frozen Phase 1 setup is viable or whether RootOn can pass truthfully. It is whether the post-RootOn Settle continuity path can reach real `BalanceActive_Standing` and hold it for the benchmark window without material shell correction under the current runtime contract.
 
 ---
 
@@ -171,6 +178,7 @@ Before any further large refactor, preserve the following distinctions:
 
 - **substantially cleaned up:** queueing, explicit acceptance, hold-vs-policy separation, freeze lifetime, root tilt source correction, post-update convergence snapshot timing, broad-write distrust, explicit modifier-record diagnostics
 - **still open:** Settle shell-maintenance truth, post-RootOn continuity without material correction, and the remaining physical-viability question in Phase 3
+- **not success by itself:** truthful safe-deny, `reached_root_on`, or any other outcome that fails to hold `BalanceActive_Standing` for `3.0` continuous seconds
 
 Do not re-open solved contract areas casually.
 
@@ -195,7 +203,7 @@ A “successful-looking” run is not enough. Stage 1 evidence must state:
 | Sim-to-sim gap (training simulator -> Chaos) | High | High | Likely permanent tuning burden |
 | Phase 1 contract correct but physically non-viable | High | High | Still plausible |
 | Phase 3 shell-maintenance truth model under-specified | High | High | Current doc/implementation drift point |
-| Material shell correction during Settle hides the true blocker | High | High | Latest truthful safe-deny frontier |
+| Material shell correction during Settle hides the true blocker | High | High | Latest truthful failure frontier; no longer acceptable as a passing outcome |
 | Post-RootOn continuity depends on hidden shell support | Medium | High | Must be separated from shell state and shell lock bookkeeping |
 | Physics Control limitations / Experimental behavior | Medium | Medium | Must not be treated as a black-box stable motor system |
 | Over-constrained kinematic hold set destabilizes sim set | Medium | High | Needs evidence-driven review |
@@ -218,6 +226,8 @@ Stage 1 balance entry is only truly “working” when all are true in the same 
 - Phase 2 guard window contains no hidden shell or policy assistance
 - Phase 3 Settle can either activate or deny safely with truthful reasons
 - Settle continuity holds without material shell correction becoming active
+- the run reaches `BalanceActive_Standing`
+- `BalanceActive_Standing` persists for `3.0` continuous seconds
 
 Until then, Stage 1 remains an active balance-entry investigation rather than a solved runtime.
 

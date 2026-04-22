@@ -41,6 +41,8 @@ Interpretation rules:
 - `Phase2_ReadyForPhase3` is an internal handoff boundary, not an active-balance phase
 - runtime `BalanceEntry_Settle` maps to `Phase3_Settle`
 - balance mode is not active until `Phase3_Settle` succeeds
+- `BalanceActive_Standing` is the only current success publication state for balance entry
+- truthful safe deny remains a terminal failure outcome, not a success outcome
 
 ## Phase 1 Truth Model Alignment
 
@@ -168,6 +170,8 @@ Phase 3 begins only after the runtime crosses the explicit `Phase2_ReadyForPhase
 - non-ready Settle frames reset the success hold timer
 - the first truthful post-RootOn instability/spike frame is terminal
 - Settle diagnostics may observe continuity loss, but must not repair physics/control state in the same frame to turn failure into success
+- after Settle success, the run must publish `BalanceActive_Standing`
+- a balance-entry run counts as successful only if `BalanceActive_Standing` then persists continuously for `3.0` seconds
 
 ### Phase 3 required observables and source-of-truth order
 

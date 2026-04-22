@@ -14,9 +14,9 @@ Use it to track:
 
 ## Current State
 
-- `Current phase`: Phase 3 / truthful post-RootOn instability revalidation, with Settle now explicitly distinguishing shell-carried linear motion, planar shell-dominance truth for combined bursts, bounded late angular carry-through tied to the observed RootOn peak, and tick-8 root-isolated angular carry-through only when the live non-root set stays inside the observed pre-Phase-3 non-root envelope.
-- `Overall status`: UE startup is stable, the transactional Phase 1 auto-calibration harness still reports reproducible passes, and the deterministic balance-mode contract now separates a late root-only angular shell burst from a truthful full-body angular failure by checking the live non-root simulated set against the measured pre-Phase-3 non-root envelope. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine still does not reach active balance: it remains a truthful safe deny at the later tick-8 Settle frontier, and the newest audit now shows that the blocker is a real non-root spine blow-up rather than another root-isolated carry-through seam.
-- `Latest runtime forensics`: the latest verified `PhysAnim.PIE.BalanceModeSmoke` still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3. The latest run then safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=947` with `tick=8` on `phase3_post_root_on_instability`, where `rootLinear=1038.66/3000.00`, `rootAngular=4564.85/2160.00`, `shellOffsetDelta=0.00/2.00`, `shellVelocityDelta=985.67/10.00`, `prePhase3PeakNonRootAngular=2546.21`, `currentMaxNonRootAngular=27440.18`, and `currentMaxNonRootAngularBone=spine_01`. That keeps the truthful frontier on the later Settle blocker while ruling out another over-broad grace: the current live failure on this machine is a genuine non-root angular explosion that far exceeds the observed pre-Phase-3 envelope.
+- `Current phase`: Phase 3 / standing-benchmark enforcement. The active goal is no longer to refine later Settle grace or truthful denial taxonomy in isolation; it is to make entry reach `BalanceActive_Standing` and hold it continuously for `3.0` seconds.
+- `Overall status`: UE startup is stable, the deterministic balance-mode contract is cleaner, and the transactional Phase 1 auto-calibration harness now records standing-hold telemetry. Truthful safe-deny remains useful forensics, but it is no longer counted as success. The latest live `PhysAnim.PIE.BalanceModeSmoke` on this machine still fails the product benchmark because it does not reach sustained `BalanceActive_Standing`.
+- `Latest runtime forensics`: the latest verified live smoke still clears Phase 1 admission and Phase 2 RootOn, reaches `BalanceEntry_Settle`, and preserves the explicit transition-owned shell lock into Phase 3. It then fails before sustained standing and therefore fails the benchmark. The most recent audited blocker remains the later Settle non-root spine blow-up at `PHASE3_FIRST_FAILURE_AUDIT frame=947`, `tick=8`, `phase3_post_root_on_instability`, with `currentMaxNonRootAngular=27440.18` on `spine_01`, far beyond the observed pre-Phase-3 non-root envelope.
 
 ## Active Tasks
 
@@ -108,7 +108,7 @@ Use it to track:
 | S1-P2-A1 | blocked | depends on G2 pass |
 | S1-P2-A2 | blocked | depends on Phase 2 result |
 | Ramp / slope locomotion fidelity | deferred | flat-ground locomotion playback and truthful balance transition remain higher priority |
-| Broad perturbation tuning by guesswork | deferred | explicit transition design and objective phase diagnostics are now preferred over ad hoc tuning |
+| Broad perturbation tuning by guesswork | deferred | explicit transition design and the standing-hold benchmark are now preferred over ad hoc tuning |
 
 ## Ledger Sync Note
 
@@ -117,6 +117,26 @@ Whenever new setup or gate evidence arrives:
 1. update `assumption-ledger.md`
 2. update this execution log
 3. only then issue or advance worker tasks
+
+---
+
+## 2026-04-22 — Standing benchmark pivot
+
+- branch direction was explicitly tightened to prevent optimization-target drift
+- truthful safe-deny and late failure taxonomy remain valuable observability, but no longer count as balance-entry success
+- the active product benchmark is now:
+  - reach `BalanceActive_Standing`
+  - hold it continuously for `3.0` seconds
+  - do not count safe-deny as success
+- the balance smoke helper and Phase 1 auto-calibration harness were aligned to that benchmark
+- Phase 1 auto-calibration artifacts now export:
+  - `time_to_balance_active_standing_seconds`
+  - `reached_balance_active_standing`
+  - `balance_active_standing_hold_seconds`
+  - `requiredBalanceActiveStandingHoldSeconds`
+- practical effect:
+  - a branch can no longer claim a passing calibration result merely by reaching truthful `RootOn` / `Settle` territory
+  - further grace refinements are now treated as suspect unless they materially move the standing-hold benchmark
 
 ---
 
@@ -417,15 +437,16 @@ Repository baseline:
 - Enforce the "Distal Kinematic" topology as the source of truth for Phase 1.
 - Keep the transactional Phase 1 auto-calibration harness as the bounded search/reporting path rather than adding a parallel solver.
 
-Current truthful smoke read as of 2026-04-21:
-- `PhysAnim.PIE.BalanceModeSmoke` reaches explicit safe denial truthfully instead of stalling ambiguously or retrying through a secondary failure.
-- the latest observed terminal reason is `phase3_material_shell_correction`
-- that means the current blocking surface is Phase 3 shell-maintenance continuity, not the older Phase 1 RootOn-readiness thigh proof and not the later retry artifact `phase1_prepare_terminal_persistent_body_motion_instability`
+Current standing-benchmark read as of 2026-04-22:
+- `PhysAnim.PIE.BalanceModeSmoke` still fails before sustained `BalanceActive_Standing`
+- truthful safe-deny remains useful evidence, but it no longer counts as a passing outcome
+- the latest observed blocking surface is still Phase 3 shell-maintenance continuity, not the older Phase 1 RootOn-readiness thigh proof and not the later retry artifact `phase1_prepare_terminal_persistent_body_motion_instability`
 
 Active engineering problem:
-1. keep the truthful safe-deny / terminal-state contract intact
+1. keep the truthful failure / terminal-state contract intact without confusing it for success
 2. preserve read-only telemetry, phase-correct failure labeling, and non-brute-force retry policy
 3. isolate why shell correction becomes materially active immediately after the otherwise truthful RootOn -> Settle handoff
+4. move the `BalanceActive_Standing` 3.0-second hold benchmark without relying on new grace rules as the apparent source of progress
 
 ## Notes
 
