@@ -576,6 +576,9 @@ public:
 		const FPhysAnimStabilizationDomain& Domain,
 		const struct FPhysAnimStabilizationSettings& Settings,
 		FString& OutReason);
+	static bool IsPhase2ShellCorrectionOwnerActive(
+		bool bTransitionOwnedShellLocked,
+		bool bLocomotionAuthorityIdle);
 	static bool IsPhase3ShellCorrectionOwnerActive(
 		bool bTransitionOwnedShellLocked,
 		bool bLocomotionAuthorityIdle);

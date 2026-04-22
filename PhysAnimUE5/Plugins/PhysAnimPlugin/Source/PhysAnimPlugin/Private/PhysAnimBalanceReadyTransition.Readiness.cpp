@@ -185,6 +185,14 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(
 		 ShellPlanarVelocityCmPerSec > MaxAllowedShellVelocityCmPerSec);
 }
 
+bool FPhysAnimBalanceReadyTransition::IsPhase2ShellCorrectionOwnerActive(
+	bool bTransitionOwnedShellLocked,
+	bool bLocomotionAuthorityIdle)
+{
+	return bTransitionOwnedShellLocked ||
+		!bLocomotionAuthorityIdle;
+}
+
 bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 	bool bTransitionOwnedShellLocked,
 	bool bLocomotionAuthorityIdle,
@@ -194,6 +202,8 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 	float MaxAllowedShellOffsetCm,
 	float MaxAllowedShellVelocityCmPerSec)
 {
+	static constexpr int32 Phase3VelocityOnlyHandoffGraceTickCount = 1;
+
 	const bool bShellCorrectionOwnerActive =
 		IsPhase3ShellCorrectionOwnerActive(
 			bTransitionOwnedShellLocked,
@@ -210,6 +220,7 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 	// velocity-only spike is therefore still pre-material unless it
 	// survives past the handoff frame or turns into real shell drift.
 	const bool bVelocityOnlyHandoffSpike =
+		Phase3TickCount <= Phase3VelocityOnlyHandoffGraceTickCount &&
 		bTransitionOwnedShellLocked &&
 		bLocomotionAuthorityIdle &&
 		!bOffsetBreached &&

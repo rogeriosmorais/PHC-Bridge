@@ -422,7 +422,17 @@ namespace
 				2.0f,
 				10.0f));
 		TestFalse(
-			TEXT("Later Settle ticks also suppress velocity-only shell spikes while the transition lock holds and offset is zero"),
+			TEXT("Pre-validation handoff tick also ignores a velocity-only shell spike while explicit lock continuity still holds"),
+			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				true,
+				true,
+				0,
+				0.0f,
+				682.36f,
+				2.0f,
+				10.0f));
+		TestTrue(
+			TEXT("Later Settle ticks classify a sustained velocity-only shell spike as material once handoff grace expires"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 				true,
 				true,

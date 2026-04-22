@@ -421,6 +421,26 @@ namespace
 				GetDefaultSettings().BalancePhase2AbortShellOffsetDelta,
 				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta));
 		TestTrue(
+			TEXT("Phase 2 treats an explicit transition-owned shell lock as an active shell correction owner while locomotion is idle"),
+			FPhysAnimBalanceReadyTransition::IsPhase2ShellCorrectionOwnerActive(
+				true,
+				true));
+		TestTrue(
+			TEXT("Phase 2 shell correction remains material at idle when the explicit transition-owned shell lock still owns the shell"),
+			FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(
+				FPhysAnimBalanceReadyTransition::IsPhase2ShellCorrectionOwnerActive(
+					true,
+					true),
+				0.0f,
+				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta + 1.0f,
+				GetDefaultSettings().BalancePhase2AbortShellOffsetDelta,
+				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta));
+		TestFalse(
+			TEXT("Phase 2 idle locomotion without the explicit transition-owned shell lock does not overclaim shell correction ownership"),
+			FPhysAnimBalanceReadyTransition::IsPhase2ShellCorrectionOwnerActive(
+				false,
+				true));
+		TestTrue(
 			TEXT("Phase 3 keeps shell correction classification active while transition-owned shell lock is held"),
 			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
 				true,
