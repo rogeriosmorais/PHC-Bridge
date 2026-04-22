@@ -1969,6 +1969,66 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibFinalizationRequiresStandingHoldTest,
+		"PhysAnim.Component.Phase1AutoCalibFinalizationRequiresStandingHold",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibFinalizationRequiresStandingHoldTest::RunTest(const FString& Parameters)
+	{
+		const double RequiredHoldSeconds = static_cast<double>(PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds);
+
+		TestFalse(
+			TEXT("RootOn does not finalize before standing hold can be measured"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Phase2_RootOn,
+				0.0,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("Settle does not finalize before standing hold can be measured"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Phase3_Settle,
+				0.0,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("Succeeded still waits for the required standing hold"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Succeeded,
+				RequiredHoldSeconds - 0.25,
+				false,
+				false));
+
+		TestTrue(
+			TEXT("Succeeded finalizes once the standing hold benchmark is met"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Succeeded,
+				RequiredHoldSeconds,
+				false,
+				false));
+
+		TestTrue(
+			TEXT("Transition failure finalizes immediately"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Phase2_RootOn,
+				0.0,
+				true,
+				false));
+
+		TestTrue(
+			TEXT("Safe denial finalizes immediately"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Phase2_RootOn,
+				0.0,
+				false,
+				true));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibActionHistorySnapshotRoundTripTest,
 		"PhysAnim.Component.Phase1AutoCalibActionHistorySnapshotRoundTrip",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

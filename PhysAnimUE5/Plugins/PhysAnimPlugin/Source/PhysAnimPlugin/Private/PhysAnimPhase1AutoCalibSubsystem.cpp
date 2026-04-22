@@ -584,6 +584,18 @@ bool UPhysAnimPhase1AutoCalibSubsystem::ShouldAccumulateActiveTrialMetrics(const
 	return bTrialStarted;
 }
 
+bool UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+	const EBalanceReadyTransitionPhase Phase,
+	const double BalanceActiveStandingHoldSeconds,
+	const bool bTransitionFailed,
+	const bool bSafeDenied)
+{
+	return bTransitionFailed ||
+		bSafeDenied ||
+		(Phase == EBalanceReadyTransitionPhase::BRT_Succeeded &&
+			IsStandingHoldBenchmarkSatisfied(BalanceActiveStandingHoldSeconds));
+}
+
 void UPhysAnimPhase1AutoCalibSubsystem::Deinitialize()
 {
 	StopPhase1AutoCalib(TEXT("deinitialize"));
@@ -1290,10 +1302,11 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 		ActiveTrialStandingHoldStartTimeSeconds = -1.0;
 	}
 
-	if (IsStandingHoldBenchmarkSatisfied(ActiveTrialMaxBalanceActiveStandingHoldSeconds) ||
-		IsLaterThanPhase1(Phase) ||
-		Component->HasBalanceReadyTransitionFailed() ||
-		Component->HasSafePhase2Denial())
+	if (ShouldFinalizeActiveTrial(
+		Phase,
+		ActiveTrialMaxBalanceActiveStandingHoldSeconds,
+		Component->HasBalanceReadyTransitionFailed(),
+		Component->HasSafePhase2Denial()))
 	{
 		FinalizeActiveTrial(false);
 	}

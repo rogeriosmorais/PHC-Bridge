@@ -32,6 +32,11 @@ public:
 		float Tolerance = 1.0e-3f);
 	static bool IsActiveTrialTimeoutReached(bool bTrialStarted, double TrialStartTimeSeconds, double CurrentTimeSeconds, double TimeoutSeconds);
 	static bool ShouldAccumulateActiveTrialMetrics(bool bTrialStarted);
+	static bool ShouldFinalizeActiveTrial(
+		EBalanceReadyTransitionPhase Phase,
+		double BalanceActiveStandingHoldSeconds,
+		bool bTransitionFailed,
+		bool bSafeDenied);
 	static void FinalizeReportData(FPhase1AutoCalibReport& InOutReport, TArray<FPhase1AutoCalibTrialResult>* StageCTrials = nullptr);
 #if WITH_DEV_AUTOMATION_TESTS
 	static bool TestOnlyWriteArtifacts(FPhase1AutoCalibReport& InOutReport);
