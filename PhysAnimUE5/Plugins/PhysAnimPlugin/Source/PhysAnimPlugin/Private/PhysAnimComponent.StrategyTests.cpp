@@ -630,7 +630,18 @@ namespace
 				1446.03f,
 				10.0f,
 				848.97f,
-				2752.96f));
+				2752.96f,
+				573.06f,
+				900.0f,
+				1275.93f,
+				TEXT("spine_01"),
+				900.0f,
+				1275.93f,
+				0.0f,
+				2400.0f,
+				0.0f,
+				2600.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 6 Settle grace no longer suppresses the same angular-only shell burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
@@ -677,6 +688,33 @@ namespace
 				10.0f,
 				848.97f,
 				2100.0f));
+		TestFalse(
+			TEXT("Tick 6 bounded angular carry-through grace does not apply when the failing spine family expands beyond its observed envelope"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				6,
+				true,
+				true,
+				573.06f,
+				3000.0f,
+				3458.00f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				1446.03f,
+				10.0f,
+				848.97f,
+				2752.96f,
+				573.06f,
+				900.0f,
+				1275.93f,
+				TEXT("spine_01"),
+				900.0f,
+				1275.93f,
+				0.0f,
+				3200.0f,
+				0.0f,
+				2600.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 5 angular-only grace does not apply once shell offset drift appears"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(

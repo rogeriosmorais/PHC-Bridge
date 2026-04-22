@@ -329,6 +329,25 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	const bool bAngularBreached = RootAngularSpeed > AngularThreshold;
 	const bool bOffsetBreached = ShellPlanarOffsetCm > MaxAllowedShellOffsetCm;
 	const bool bShellVelocityBreached = ShellPlanarVelocityCmPerSec > MaxAllowedShellVelocityCmPerSec;
+	const float ObservedNonRootAngularEnvelope = ResolveObservedNonRootAngularEnvelopeForBone(
+		CurrentMaxNonRootAngularBone,
+		PrePhase3PeakNonRootAngularSpeed,
+		PrePhase3PeakThighAngularSpeed,
+		PrePhase3PeakSpineAngularSpeed,
+		PrePhase3PeakFeetAngularSpeed);
+	const bool bNonRootAngularStillWithinObservedCarryThroughEnvelope =
+		ObservedNonRootAngularEnvelope > 0.0f &&
+		CurrentMaxNonRootAngularSpeed <=
+			ObservedNonRootAngularEnvelope * Phase3RootIsolatedNonRootAngularPeakMultiplier;
+	const float ObservedNonRootFamilyAngularEnvelope = ResolveObservedNonRootAngularFamilyEnvelopeForBone(
+		CurrentMaxNonRootAngularBone,
+		PrePhase3PeakThighFamilyAngularSpeed,
+		PrePhase3PeakSpineFamilyAngularSpeed,
+		PrePhase3PeakFeetFamilyAngularSpeed);
+	const bool bNonRootFamilyStillWithinObservedCarryThroughEnvelope =
+		ObservedNonRootFamilyAngularEnvelope <= 0.0f ||
+		CurrentNonRootFamilyAngularSpeed <=
+			ObservedNonRootFamilyAngularEnvelope * Phase3RootIsolatedNonRootAngularPeakMultiplier;
 
 	// A zero-offset, explicit-lock Settle burst can still carry residual RootOn snap
 	// energy through the shell-maintenance path for one extra tick after the
@@ -396,6 +415,8 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		!bOffsetBreached &&
 		bShellVelocityBreached &&
 		bPrePhase3AngularPeakAlreadyBreached &&
+		bNonRootAngularStillWithinObservedCarryThroughEnvelope &&
+		bNonRootFamilyStillWithinObservedCarryThroughEnvelope &&
 		bBoundedAngularCarryThrough)
 	{
 		return true;
@@ -407,25 +428,6 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	// during RootOn carry-through. Keep that separate from a truthful full-body
 	// angular failure unless the non-root set expands into a new regime or the
 	// root is no longer materially dominating the angular burst.
-	const float ObservedNonRootAngularEnvelope = ResolveObservedNonRootAngularEnvelopeForBone(
-		CurrentMaxNonRootAngularBone,
-		PrePhase3PeakNonRootAngularSpeed,
-		PrePhase3PeakThighAngularSpeed,
-		PrePhase3PeakSpineAngularSpeed,
-		PrePhase3PeakFeetAngularSpeed);
-	const bool bNonRootAngularStillWithinObservedCarryThroughEnvelope =
-		ObservedNonRootAngularEnvelope > 0.0f &&
-		CurrentMaxNonRootAngularSpeed <=
-			ObservedNonRootAngularEnvelope * Phase3RootIsolatedNonRootAngularPeakMultiplier;
-	const float ObservedNonRootFamilyAngularEnvelope = ResolveObservedNonRootAngularFamilyEnvelopeForBone(
-		CurrentMaxNonRootAngularBone,
-		PrePhase3PeakThighFamilyAngularSpeed,
-		PrePhase3PeakSpineFamilyAngularSpeed,
-		PrePhase3PeakFeetFamilyAngularSpeed);
-	const bool bNonRootFamilyStillWithinObservedCarryThroughEnvelope =
-		ObservedNonRootFamilyAngularEnvelope <= 0.0f ||
-		CurrentNonRootFamilyAngularSpeed <=
-			ObservedNonRootFamilyAngularEnvelope * Phase3RootIsolatedNonRootAngularPeakMultiplier;
 	const bool bRootAngularStillWithinObservedCarryThroughEnvelope =
 		PrePhase3PeakBodyAngularSpeed > AngularThreshold &&
 		RootAngularSpeed <=
