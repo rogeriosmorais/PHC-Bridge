@@ -26,6 +26,30 @@ namespace
 
 		return GenericObservedPeak;
 	}
+
+	static float ResolveObservedNonRootAngularFamilyEnvelopeForBone(
+		FName BoneName,
+		float ThighObservedPeak,
+		float SpineObservedPeak,
+		float FeetObservedPeak)
+	{
+		if (BalanceTransitionSets::IsThigh(BoneName))
+		{
+			return ThighObservedPeak;
+		}
+
+		if (BalanceTransitionSets::IsSpine(BoneName))
+		{
+			return SpineObservedPeak;
+		}
+
+		if (BalanceTransitionSets::IsDistalLowerLimb(BoneName))
+		{
+			return FeetObservedPeak;
+		}
+
+		return 0.0f;
+	}
 }
 
 EBalanceReadyEntryClassification FPhysAnimBalanceReadyTransition::ClassifyEntryState(UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& Settings) const
@@ -268,7 +292,11 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	FName CurrentMaxNonRootAngularBone,
 	float PrePhase3PeakThighAngularSpeed,
 	float PrePhase3PeakSpineAngularSpeed,
-	float PrePhase3PeakFeetAngularSpeed)
+	float PrePhase3PeakFeetAngularSpeed,
+	float CurrentNonRootFamilyAngularSpeed,
+	float PrePhase3PeakThighFamilyAngularSpeed,
+	float PrePhase3PeakSpineFamilyAngularSpeed,
+	float PrePhase3PeakFeetFamilyAngularSpeed)
 {
 	if (IsPhase3EarlySettleAngularGraceActive(
 			Phase3TickCount,
@@ -389,6 +417,15 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		ObservedNonRootAngularEnvelope > 0.0f &&
 		CurrentMaxNonRootAngularSpeed <=
 			ObservedNonRootAngularEnvelope * Phase3RootIsolatedNonRootAngularPeakMultiplier;
+	const float ObservedNonRootFamilyAngularEnvelope = ResolveObservedNonRootAngularFamilyEnvelopeForBone(
+		CurrentMaxNonRootAngularBone,
+		PrePhase3PeakThighFamilyAngularSpeed,
+		PrePhase3PeakSpineFamilyAngularSpeed,
+		PrePhase3PeakFeetFamilyAngularSpeed);
+	const bool bNonRootFamilyStillWithinObservedCarryThroughEnvelope =
+		ObservedNonRootFamilyAngularEnvelope <= 0.0f ||
+		CurrentNonRootFamilyAngularSpeed <=
+			ObservedNonRootFamilyAngularEnvelope * Phase3RootIsolatedNonRootAngularPeakMultiplier;
 	const bool bRootAngularStillWithinObservedCarryThroughEnvelope =
 		PrePhase3PeakBodyAngularSpeed > AngularThreshold &&
 		RootAngularSpeed <=
@@ -404,6 +441,7 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		!bOffsetBreached &&
 		bShellVelocityBreached &&
 		bNonRootAngularStillWithinObservedCarryThroughEnvelope &&
+		bNonRootFamilyStillWithinObservedCarryThroughEnvelope &&
 		bRootAngularStillDominantOverNonRoot &&
 		bRootAngularStillWithinObservedCarryThroughEnvelope)
 	{
@@ -757,6 +795,9 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	const float PelvisAngularSpeed = PelvisAngularVelocityDegPerSec.Size();
 	float CurrentMaxNonRootAngularSpeed = 0.0f;
 	FName CurrentMaxNonRootAngularBone = NAME_None;
+	float CurrentThighFamilyAngularSpeed = 0.0f;
+	float CurrentSpineFamilyAngularSpeed = 0.0f;
+	float CurrentFeetFamilyAngularSpeed = 0.0f;
 
 	FPhysAnimStabilizationDomain Domain;
 	Domain.CurrentPhase = InternalPhase;
@@ -782,6 +823,18 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 			{
 			const float AngularSpeedDegPerSecond =
 				FMath::RadiansToDegrees(BodyInstance->GetUnrealWorldAngularVelocityInRadians()).Size();
+			if (BalanceTransitionSets::IsThigh(BoneName))
+			{
+				CurrentThighFamilyAngularSpeed += AngularSpeedDegPerSecond;
+			}
+			else if (BalanceTransitionSets::IsSpine(BoneName))
+			{
+				CurrentSpineFamilyAngularSpeed += AngularSpeedDegPerSecond;
+			}
+			else if (BalanceTransitionSets::IsDistalLowerLimb(BoneName))
+			{
+				CurrentFeetFamilyAngularSpeed += AngularSpeedDegPerSecond;
+			}
 			if (AngularSpeedDegPerSecond > CurrentMaxNonRootAngularSpeed)
 			{
 				CurrentMaxNonRootAngularSpeed = AngularSpeedDegPerSecond;
@@ -800,7 +853,19 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 		Diagnostics.PeakMaxThighBodyAngularSpeed,
 		Diagnostics.PeakMaxSpineBodyAngularSpeed,
 		Diagnostics.PeakMaxFeetBodyAngularSpeed);
+	const float CurrentNonRootFamilyAngularSpeed = ResolveObservedNonRootAngularFamilyEnvelopeForBone(
+		CurrentMaxNonRootAngularBone,
+		CurrentThighFamilyAngularSpeed,
+		CurrentSpineFamilyAngularSpeed,
+		CurrentFeetFamilyAngularSpeed);
+	const float CurrentObservedNonRootFamilyAngularEnvelope = ResolveObservedNonRootAngularFamilyEnvelopeForBone(
+		CurrentMaxNonRootAngularBone,
+		Diagnostics.PeakTotalThighBodyAngularSpeed,
+		Diagnostics.PeakTotalSpineBodyAngularSpeed,
+		Diagnostics.PeakTotalFeetBodyAngularSpeed);
 	Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope = CurrentObservedNonRootAngularEnvelope;
+	Diagnostics.Phase3CurrentNonRootFamilyAngularSpeed = CurrentNonRootFamilyAngularSpeed;
+	Diagnostics.Phase3CurrentObservedNonRootFamilyAngularEnvelope = CurrentObservedNonRootFamilyAngularEnvelope;
 
 	Domain.CertifiedSimCount = CertifiedHandoff.SimCount;
 	Domain.CertifiedDistalSimCount = CertifiedHandoff.DistalSimCount;
@@ -835,7 +900,11 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				CurrentMaxNonRootAngularBone,
 				Diagnostics.PeakMaxThighBodyAngularSpeed,
 				Diagnostics.PeakMaxSpineBodyAngularSpeed,
-				Diagnostics.PeakMaxFeetBodyAngularSpeed))
+				Diagnostics.PeakMaxFeetBodyAngularSpeed,
+				CurrentNonRootFamilyAngularSpeed,
+				Diagnostics.PeakTotalThighBodyAngularSpeed,
+				Diagnostics.PeakTotalSpineBodyAngularSpeed,
+				Diagnostics.PeakTotalFeetBodyAngularSpeed))
 		{
 			// Not yet material - continue with remaining continuity checks
 		}

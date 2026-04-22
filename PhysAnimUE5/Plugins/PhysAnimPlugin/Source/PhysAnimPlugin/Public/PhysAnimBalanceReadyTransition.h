@@ -379,10 +379,13 @@ struct FBalanceReadyTransitionDiagnostics
 	float MaxAngVelPelvis = 0.0f;
 	float MaxLinVelThighs = 0.0f;
 	float MaxAngVelThighs = 0.0f;
+	float TotalAngVelThighs = 0.0f;
 	float MaxLinVelSpine = 0.0f;
 	float MaxAngVelSpine = 0.0f;
+	float TotalAngVelSpine = 0.0f;
 	float MaxLinVelFeet = 0.0f;
 	float MaxAngVelFeet = 0.0f;
+	float TotalAngVelFeet = 0.0f;
 
 	float PreflightPolicyAlpha = 0.0f;
 	
@@ -410,8 +413,13 @@ struct FBalanceReadyTransitionDiagnostics
 	float PeakMaxThighBodyAngularSpeed = 0.0f;
 	float PeakMaxSpineBodyAngularSpeed = 0.0f;
 	float PeakMaxFeetBodyAngularSpeed = 0.0f;
+	float PeakTotalThighBodyAngularSpeed = 0.0f;
+	float PeakTotalSpineBodyAngularSpeed = 0.0f;
+	float PeakTotalFeetBodyAngularSpeed = 0.0f;
 	float Phase3CurrentMaxNonRootAngularSpeed = 0.0f;
 	float Phase3CurrentObservedNonRootAngularEnvelope = 0.0f;
+	float Phase3CurrentNonRootFamilyAngularSpeed = 0.0f;
+	float Phase3CurrentObservedNonRootFamilyAngularEnvelope = 0.0f;
 	FName Phase3CurrentMaxNonRootAngularBone = NAME_None;
 	FName LateLoopWorstBone = NAME_None;
 };
@@ -617,7 +625,11 @@ public:
 		FName CurrentMaxNonRootAngularBone = NAME_None,
 		float PrePhase3PeakThighAngularSpeed = 0.0f,
 		float PrePhase3PeakSpineAngularSpeed = 0.0f,
-		float PrePhase3PeakFeetAngularSpeed = 0.0f);
+		float PrePhase3PeakFeetAngularSpeed = 0.0f,
+		float CurrentNonRootFamilyAngularSpeed = 0.0f,
+		float PrePhase3PeakThighFamilyAngularSpeed = 0.0f,
+		float PrePhase3PeakSpineFamilyAngularSpeed = 0.0f,
+		float PrePhase3PeakFeetFamilyAngularSpeed = 0.0f);
 
 	static bool IsRootStable(
 		const FPhase1AcceptedConvergenceSnapshot& Snapshot,

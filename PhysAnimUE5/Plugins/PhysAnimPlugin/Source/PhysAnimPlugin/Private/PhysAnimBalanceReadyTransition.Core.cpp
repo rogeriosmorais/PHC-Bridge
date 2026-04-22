@@ -1783,6 +1783,9 @@ extern int32 GVerbosePhase2Forensics;
 		Diagnostics.PeakMaxThighBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxThighBodyAngularSpeed, Diagnostics.MaxAngVelThighs);
 		Diagnostics.PeakMaxSpineBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxSpineBodyAngularSpeed, Diagnostics.MaxAngVelSpine);
 		Diagnostics.PeakMaxFeetBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxFeetBodyAngularSpeed, Diagnostics.MaxAngVelFeet);
+		Diagnostics.PeakTotalThighBodyAngularSpeed = FMath::Max(Diagnostics.PeakTotalThighBodyAngularSpeed, Diagnostics.TotalAngVelThighs);
+		Diagnostics.PeakTotalSpineBodyAngularSpeed = FMath::Max(Diagnostics.PeakTotalSpineBodyAngularSpeed, Diagnostics.TotalAngVelSpine);
+		Diagnostics.PeakTotalFeetBodyAngularSpeed = FMath::Max(Diagnostics.PeakTotalFeetBodyAngularSpeed, Diagnostics.TotalAngVelFeet);
 
 		FString AbortReason;
 		FString AbortDetail;
@@ -2335,7 +2338,7 @@ extern int32 GVerbosePhase2Forensics;
 				const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PelvisModifierName);
 				const EPhysicsMovementType PelvisModifierType = PelvisRecord ? PelvisRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_FIRST_FAILURE_AUDIT frame=%d reason=%s tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d rootLinear=%.2f/%.2f rootAngular=%.2f/%.2f shellOffsetDelta=%.2f/%.2f shellVelocityDelta=%.2f/%.2f prePhase3PeakNonRootAngular=%.2f observedNonRootAngularEnvelope=%.2f currentMaxNonRootAngular=%.2f currentMaxNonRootAngularBone=%s shellCorrectionActive=%d owner=%d actor=%s component=%s"),
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_FIRST_FAILURE_AUDIT frame=%d reason=%s tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d rootLinear=%.2f/%.2f rootAngular=%.2f/%.2f shellOffsetDelta=%.2f/%.2f shellVelocityDelta=%.2f/%.2f prePhase3PeakNonRootAngular=%.2f observedNonRootAngularEnvelope=%.2f currentMaxNonRootAngular=%.2f currentMaxNonRootAngularBone=%s observedNonRootFamilyAngularEnvelope=%.2f currentNonRootFamilyAngular=%.2f shellCorrectionActive=%d owner=%d actor=%s component=%s"),
 					static_cast<int32>(GFrameCounter),
 					*Phase3Violation,
 					static_cast<int32>(Phase3GuardTickCount),
@@ -2357,6 +2360,8 @@ extern int32 GVerbosePhase2Forensics;
 					Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope,
 					Diagnostics.Phase3CurrentMaxNonRootAngularSpeed,
 					*Diagnostics.Phase3CurrentMaxNonRootAngularBone.ToString(),
+					Diagnostics.Phase3CurrentObservedNonRootFamilyAngularEnvelope,
+					Diagnostics.Phase3CurrentNonRootFamilyAngularSpeed,
 					bShellCorrectionOwnerActive ? 1 : 0,
 					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Phase3Violation)),
 					*Owner->GetOwner()->GetName(),
@@ -3061,8 +3066,13 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	Diagnostics.PeakMaxThighBodyAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxSpineBodyAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxFeetBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakTotalThighBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakTotalSpineBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakTotalFeetBodyAngularSpeed = 0.0f;
 	Diagnostics.Phase3CurrentMaxNonRootAngularSpeed = 0.0f;
 	Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope = 0.0f;
+	Diagnostics.Phase3CurrentNonRootFamilyAngularSpeed = 0.0f;
+	Diagnostics.Phase3CurrentObservedNonRootFamilyAngularEnvelope = 0.0f;
 	Diagnostics.Phase3CurrentMaxNonRootAngularBone = NAME_None;
 	bLateValidationProofPassed = false;
 	ResetCertifiedHandoffState();
@@ -3108,8 +3118,13 @@ void FPhysAnimBalanceReadyTransition::ResetCertifiedHandoffState()
 	Diagnostics.PeakMaxThighBodyAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxSpineBodyAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxFeetBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakTotalThighBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakTotalSpineBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakTotalFeetBodyAngularSpeed = 0.0f;
 	Diagnostics.Phase3CurrentMaxNonRootAngularSpeed = 0.0f;
 	Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope = 0.0f;
+	Diagnostics.Phase3CurrentNonRootFamilyAngularSpeed = 0.0f;
+	Diagnostics.Phase3CurrentObservedNonRootFamilyAngularEnvelope = 0.0f;
 	Diagnostics.Phase3CurrentMaxNonRootAngularBone = NAME_None;
 	ResetRootOnReadinessNoCouplingProofState();
 }
