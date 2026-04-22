@@ -340,9 +340,9 @@ namespace
 			TEXT("Phase 2 instability fails readiness"),
 			FPhysAnimBalanceReadyTransition::IsSnapshotReady(Phase2Instability, GetDefaultSettings(), Reason));
 		TestEqual(
-			TEXT("Phase 2 instability uses the RootOn-specific precursor reason"),
+			TEXT("Phase 2 instability uses the RootOn-specific spike reason"),
 			Reason,
-			BalanceReadinessReasons::Phase2FailStopPrecursor);
+			BalanceReadinessReasons::Phase2RootOnSpike);
 		FPhysAnimStabilizationDomain Phase3TopologyRegression = GetStableDomain();
 		Phase3TopologyRegression.CurrentPhase = EBalanceReadyTransitionPhase::BRT_Phase3_Settle;
 		Phase3TopologyRegression.CertifiedSimCount = 6;
@@ -376,6 +376,65 @@ namespace
 			TEXT("Phase 3 instability uses the Settle-specific instability reason"),
 			Reason,
 			BalanceReadinessReasons::Phase3InstabilitySpike);
+		FPhase1AcceptedConvergenceSnapshot Phase3Snapshot;
+		Phase3Snapshot.bIsPelvisSimulating = true;
+		Phase3Snapshot.RootLinearSpeed = 200.0f;
+		Phase3Snapshot.RootAngularSpeed = 100.0f;
+		Phase3Snapshot.RootGroundDistance = 5.0f;
+		TestTrue(
+			TEXT("Phase-aware root stability uses the Settle thresholds instead of silently falling back to Phase 1"),
+			FPhysAnimBalanceReadyTransition::IsRootStable(
+				Phase3Snapshot,
+				EBalanceReadyTransitionPhase::BRT_Phase3_Settle,
+				GetDefaultSettings(),
+				Reason));
+		TestEqual(
+			TEXT("Phase-aware Settle root stability reports ready when only the relaxed Phase 3 thresholds permit it"),
+			Reason,
+			BalanceReadinessReasons::Ready);
+		Phase3Snapshot.bIsPelvisSimulating = false;
+		TestFalse(
+			TEXT("Phase-aware root stability keeps the Settle-specific root simulation drop reason"),
+			FPhysAnimBalanceReadyTransition::IsRootStable(
+				Phase3Snapshot,
+				EBalanceReadyTransitionPhase::BRT_Phase3_Settle,
+				GetDefaultSettings(),
+				Reason));
+		TestEqual(
+			TEXT("Phase-aware root stability does not overclaim a simulated root from a stale snapshot wrapper"),
+			Reason,
+			BalanceReadinessReasons::Phase3RootSimulationDropped);
+		TestFalse(
+			TEXT("Idle shell state with large deltas is not material shell correction by itself"),
+			FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(
+				false,
+				0.0f,
+				410.11f,
+				GetDefaultSettings().BalancePhase2AbortShellOffsetDelta,
+				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta));
+		TestTrue(
+			TEXT("Active shell correction owner with threshold breach is material shell correction"),
+			FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(
+				true,
+				0.0f,
+				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta + 1.0f,
+				GetDefaultSettings().BalancePhase2AbortShellOffsetDelta,
+				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta));
+		TestTrue(
+			TEXT("Phase 3 keeps shell correction classification active while transition-owned shell lock is held"),
+			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
+				true,
+				true));
+		TestTrue(
+			TEXT("Non-idle locomotion also keeps shell correction classification active without the transition-owned shell lock"),
+			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
+				false,
+				false));
+		TestFalse(
+			TEXT("Idle locomotion without the transition-owned shell lock does not treat shell correction as active by itself"),
+			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
+				false,
+				true));
 
 		TestEqual(
 			TEXT("Phase 2 root simulation drop is owned by RootOn execution"),
@@ -425,6 +484,9 @@ namespace
 			TEXT("Phase 3 timeout is not retryable"),
 			FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(TEXT("phase3_no_convergence_path")));
 		TestFalse(
+			TEXT("Phase 3 shell maintenance failure is not retryable"),
+			FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(TEXT("phase3_material_shell_correction")));
+		TestFalse(
 			TEXT("Current pelvis-spine readiness blocker is not retryable as a failure class"),
 			FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(TEXT("phase1_root_on_readiness_pelvis_spine_margin_insufficient")));
 		TestFalse(
@@ -450,6 +512,15 @@ namespace
 			TEXT("Automatic retry is denied for terminal RootOn spike even if gates are satisfied"),
 			FPhysAnimBalanceReadyTransition::IsAutomaticRetryAllowed(
 				TEXT("phase2_root_on_spike"),
+				true,
+				true,
+				true,
+				true,
+				true));
+		TestFalse(
+			TEXT("Automatic retry is denied for Phase 3 shell maintenance failure even if gates are satisfied"),
+			FPhysAnimBalanceReadyTransition::IsAutomaticRetryAllowed(
+				TEXT("phase3_material_shell_correction"),
 				true,
 				true,
 				true,

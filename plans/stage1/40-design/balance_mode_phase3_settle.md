@@ -61,6 +61,21 @@ Implementation note:
 
 - if root raw simulation holds but the pelvis modifier record disagrees, current runtime logs `PHASE3_ROOT_MODIFIER_DIAGNOSTIC` rather than emitting a terminal `phase3_root_modifier_mismatch`
 
+### Current truthful frontier
+
+In the latest truthful smoke:
+
+- Phase 1 Prepare / LateValidate pass
+- Phase 2 RootOn passes truthfully
+- Phase 3 Settle emits `PHASE3_FIRST_FAILURE_AUDIT reason=phase3_material_shell_correction`
+- the transition then ends immediately on safe denial with `phase3_material_shell_correction`
+
+Interpretation:
+
+- the current blocker has moved past the earlier Phase 1 readiness frontier and past the earlier Phase 2 spike frontier
+- the active engineering question is now shell-maintenance truth in Settle, not restart-path cleanup
+- Settle documentation must therefore stay focused on first-failure continuity classification rather than on post-failure recovery behavior
+
 ## 4. Timer Rules
 
 Phase 3 timing is:
@@ -75,7 +90,48 @@ Interpretation rules:
 - Settle success is based on the ready-hold window, not merely surviving for the timeout duration
 - activation is allowed only after the stable-hold requirement is satisfied
 
-## 5. Continuity Checks
+## 5. Truth Model And Continuity Checks
+
+### 5.1 Required observables
+
+During Settle, the runtime must keep these observables separate:
+
+1. certified post-RootOn topology and continuity contract
+2. raw post-RootOn body continuity
+3. modifier-record ownership continuity
+4. shell-maintenance bookkeeping state
+5. shell-correction materiality
+6. locomotion/reset authority state
+
+Interpretation:
+
+- the certified post-RootOn contract defines what continuity is supposed to hold
+- raw continuity determines whether root simulation and the accepted topology are still physically present
+- modifier-record ownership remains routing evidence, but does not by itself prove or disprove raw continuity
+- shell-maintenance bookkeeping state means whether shell lock is still held and whether the shell reference was reseeded
+- shell-correction materiality means whether shell correction has become materially active on the Settle path, not merely whether shell bookkeeping exists
+- locomotion/reset authority state remains separate from shell state and must not be merged into shell-correction classification
+
+### 5.2 Source-of-truth order
+
+For Settle failure classification, use this order:
+
+1. certified post-RootOn topology and continuity contract
+2. raw post-RootOn body continuity
+3. modifier-record ownership continuity
+4. shell-maintenance bookkeeping state
+5. shell-correction materiality
+6. locomotion/reset authority state
+
+Interpretation rules:
+
+- continuity intent is not proof that the accepted post-RootOn continuity still holds
+- raw continuity is the deciding proof for root-simulation loss, topology regression, and post-RootOn instability
+- modifier disagreement under preserved raw continuity is routing evidence and diagnostic value, not by itself a `phase3_material_shell_correction` failure
+- shell lock state and shell-reference state are bookkeeping observables; they are not identical to shell-correction materiality
+- `phase3_material_shell_correction` is valid only if the earlier continuity layers still hold and shell correction is the first material failure
+
+### 5.3 First-failure classification
 
 Phase 3 continuity must reject truthfully when the first material failure is one of:
 
@@ -87,6 +143,26 @@ Phase 3 continuity must reject truthfully when the first material failure is one
 - startup or gameplay locomotion authority reclaimed control
 - a reset became pending
 - shell correction became materially active
+
+Classification rules:
+
+- if raw root simulation is no longer present before any shell-maintenance failure wins, classify `phase3_root_simulation_dropped`
+- if raw continuity still exists but post-RootOn instability exceeds Settle thresholds first, classify `phase3_post_root_on_instability`
+- if the accepted post-RootOn topology no longer matches the raw state first, classify `phase3_topology_regressed`
+- if transition-owned shell lock is already lost before shell correction becomes the deciding failure, classify `phase3_shell_lock_lost`
+- if shell reference reseed occurs before shell correction becomes the deciding failure, classify `phase3_shell_reference_reseeded`
+- if startup or gameplay locomotion authority reclaims control first, classify `phase3_startup_or_gameplay_authority_reclaimed`
+- if reset-pending state returns first, classify `phase3_reset_pending`
+- classify `phase3_material_shell_correction` only when the certified post-RootOn contract still stands, raw continuity still holds, modifier disagreement is not the deciding failure, shell lock still holds, the shell reference has not been reseeded, and shell correction becomes materially active first
+- if raw continuity still holds and only the pelvis/root modifier record disagrees, emit `PHASE3_ROOT_MODIFIER_DIAGNOSTIC` rather than relabeling that routing mismatch as `phase3_material_shell_correction`
+
+### 5.4 Retryability
+
+Current Settle retry boundary:
+
+- `phase3_material_shell_correction` is not retryable within the current attempt
+- when `phase3_material_shell_correction` is the first truthful failure, the runtime should end the transition as a truthful safe denial rather than recover and auto-retry into a secondary artifact
+- `phase3_no_convergence_path` must remain reserved for genuine timeout-without-earlier-material-failure cases; it must not overwrite an earlier `phase3_material_shell_correction`
 
 Current emitted reasons:
 

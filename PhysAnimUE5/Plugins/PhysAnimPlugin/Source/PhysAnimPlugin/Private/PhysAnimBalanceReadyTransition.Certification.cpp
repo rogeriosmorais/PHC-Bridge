@@ -435,8 +435,8 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.bShellCorrectionOwnerActive = Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle;
 	OutSnapshot.bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame =
 		Owner->WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame();
-	OutSnapshot.bTransitionOwnedShellLocked = Owner->IsTransitionOwnedShellLocked();
-	OutSnapshot.bTransitionOwnedShellLocked = Owner->IsTransitionOwnedShellLocked();
+	OutSnapshot.bTransitionOwnedShellLocked = Owner->HasExplicitTransitionOwnedShellLock();
+	OutSnapshot.bTransitionOwnedShellLocked = Owner->HasExplicitTransitionOwnedShellLock();
 	
 	const bool bExplicitReanchored = Owner->WasTransitionShellReferenceReanchored();
 	

@@ -623,7 +623,9 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 
 bool UPhysAnimComponent::IsInstabilityPrecursorActive() const
 {
-	return RuntimeInstabilityState.UnstableAccumulatedSeconds > 0.0f;
+	return TestOnlyShouldTreatInstabilityPrecursorAsTransitionBlocker(
+		RuntimeState,
+		RuntimeInstabilityState.UnstableAccumulatedSeconds);
 }
 
 
@@ -872,7 +874,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				: 1.0f;
 		FPhysicsControlMultiplier ControlMultiplier;
 		float HandoverEasing = 1.0f;
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+		if (IsBalanceActiveState(RuntimeState))
 		{
 			const double TimeSinceTransition = GetWorld() ? (GetWorld()->GetTimeSeconds() - BalanceScenarioStartTimeSeconds) : 0.0;
 			if (TimeSinceTransition < 1.0)
@@ -959,7 +961,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		// Deep diagnostics for Balance Mode Final Ramp Enable
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery && BringUpGroupIndex == (GetBringUpGroupCount() - 1))
+		if (IsBalanceActiveState(RuntimeState) && BringUpGroupIndex == (GetBringUpGroupCount() - 1))
 		{
 			const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
 			const bool bRampJustStarted = (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(BringUpGroupIndex) && 
@@ -1009,7 +1011,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	// After the control loop, if the ramp just started, log the AFTER state.
 	const int32 FinalGroupIndex = GetBringUpGroupCount() - 1;
 	const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery && 
+	if (IsBalanceActiveState(RuntimeState) &&
 		BringUpGroupControlRampStartTimeSeconds.IsValidIndex(FinalGroupIndex) && 
 		BringUpGroupControlRampStartTimeSeconds[FinalGroupIndex] == WorldTime &&
 		WorldTime >= 0.0)
@@ -1024,7 +1026,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUseSkeletalAnimationTargetRepresentation ? TEXT("true") : TEXT("false"));
 	}
 
-	if ((bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BridgeActive) && BalanceReadyTransition.IsDistalKinematicAccepted())
+	const bool bUseAuthoritativePerBoneBodyModifierSync =
+		ShouldUseAuthoritativePerBoneBodyModifierSync(RuntimeState, BalanceReadyTransition.IsDistalKinematicAccepted());
+	if (bUseAuthoritativePerBoneBodyModifierSync)
 	{
 		static bool bLoggedAuthoritativeWrite = false;
 		if (!bLoggedAuthoritativeWrite)
@@ -1042,16 +1046,20 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		// We use bUpdateBody=true to ensure the engine state is updated immediately.
 		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 		{
-			// Skip proximal bones (Group 0) during Phase 1 if they are NOT explicitly kept kinematic.
-			// This prevents frame-internal thrash where we set it to Kinematic then Simulated immediately after.
-			if ((bPhase1Prepare || bPhase1LateValidate) && ResolveBringUpGroupIndex(BoneName) == 0 && !BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, EffectiveSettings))
+			// Skip simulated carry-through bones during entry/settle so the later per-bone
+			// sync remains the first live movement-type write they see this tick.
+			if ((bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
+				ResolveBringUpGroupIndex(BoneName) == 0 &&
+				!BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, EffectiveSettings))
 			{
 				continue;
 			}
 
-			// NARROW GUARD: Do not drop the root during the Phase 2 guard window here.
-			// Per-bone resolution (Phase 2 persistence guard) later in the function handles the final write.
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BoneName == PhysAnimBridge::GetRootBoneName())
+			// Do not drop the root in RootOn or Settle here; the later per-bone resolution
+			// owns the authoritative pelvis movement write for both phases.
+			if ((RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+				 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
+				BoneName == PhysAnimBridge::GetRootBoneName())
 			{
 				continue;
 			}
@@ -1350,13 +1358,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
+		const bool bUpdateBodyOnPerBoneSync = ShouldUpdateBodyOnPerBoneBodyModifierSync(RuntimeState);
 		PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(
 			ModifierName,
 			bUpdateKinematicFromSimulation,
 			false,
 			false);
-		TrackDistalModifierWrite(BoneName, BodyModifierMovementType, (bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn), TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
-		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, (bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn));
+		TrackDistalModifierWrite(BoneName, BodyModifierMovementType, bUpdateBodyOnPerBoneSync, TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
+		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, bUpdateBodyOnPerBoneSync);
 		
 
 		if (bPhase1Prepare || bPhase1LateValidate)
@@ -1377,7 +1386,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		TrackDistalBoneOwnershipChange(BoneName, BodyModifierMovementType, TEXT("ApplyRuntimeControlTuning_PerBone_BodyModSync"));
-		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, (bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn));
+		PhysicsControl->SetBodyModifierMovementType(ModifierName, BodyModifierMovementType, false, bUpdateBodyOnPerBoneSync);
 		PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, BodyModifierPhysicsBlendWeight, false, false);
 		PhysicsControl->SetBodyModifierCollisionType(ModifierName, BodyModifierCollisionType, false, false);
 		if (bIsRootBodyModifier && (bPhase1Prepare || bPhase1LateValidate))
@@ -1435,7 +1444,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		if (bShouldResetThisBone &&
 			!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+			if (IsBalanceActiveState(RuntimeState))
 			{
 				if (bIsRootBodyModifier)
 				{
@@ -1504,7 +1513,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bHipQuarantineReleasedThisFrame)
 		{
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+			if (IsBalanceActiveState(RuntimeState))
 			{
 				UE_LOG(
 					LogPhysAnimBridge,

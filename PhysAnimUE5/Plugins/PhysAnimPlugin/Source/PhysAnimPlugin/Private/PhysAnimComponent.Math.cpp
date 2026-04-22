@@ -669,6 +669,22 @@ float UPhysAnimComponent::ResolveShellCouplingPlanarVelocityAlignment(
 }
 
 
+FVector UPhysAnimComponent::ResolveEffectiveShellCouplingPlanarVelocityCmPerSecond(
+	const FVector& OwnerVelocityCmPerSecond,
+	const FVector& AppliedShellCorrectionVelocityCmPerSecond,
+	bool bTransitionOwnedShellLocked)
+{
+	FVector EffectiveVelocity = OwnerVelocityCmPerSecond;
+	if (bTransitionOwnedShellLocked)
+	{
+		EffectiveVelocity += AppliedShellCorrectionVelocityCmPerSecond;
+	}
+
+	EffectiveVelocity.Z = 0.0f;
+	return EffectiveVelocity;
+}
+
+
 float UPhysAnimComponent::CalculateConstraintMinLimitedAngleDegrees(
 	EAngularConstraintMotion TwistMotion,
 	float TwistLimit,
@@ -977,7 +993,7 @@ bool UPhysAnimComponent::ShouldDeactivateBridgeToSafeMode(EPhysAnimRuntimeState 
 			State == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
 			State == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 			State == EPhysAnimRuntimeState::BalanceEntry_Settle ||
-			State == EPhysAnimRuntimeState::BalanceActive_Recovery) && bForceZeroActions;
+			IsBalanceActiveState(State)) && bForceZeroActions;
 }
 
 
@@ -988,7 +1004,7 @@ bool UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState Sta
 			State == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
 			State == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 			State == EPhysAnimRuntimeState::BalanceEntry_Settle ||
-			State == EPhysAnimRuntimeState::BalanceActive_Recovery;
+			IsBalanceActiveState(State);
 }
 
 bool UPhysAnimComponent::ShouldRunRootOnReadinessUltraFineMarginSweep(float RootOnReadinessTotalDeficitDeg)
@@ -1405,6 +1421,7 @@ EPhysAnimRuntimeState UPhysAnimComponent::MapBalanceTransitionPhaseToRuntimeStat
 		TransitionPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ? EPhysAnimRuntimeState::BalanceEntry_RootOn :
 		(TransitionPhase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3 ||
 		 TransitionPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle) ? EPhysAnimRuntimeState::BalanceEntry_Settle :
+		TransitionPhase == EBalanceReadyTransitionPhase::BRT_Succeeded ? EPhysAnimRuntimeState::BalanceActive_Standing :
 		TransitionPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied ? EPhysAnimRuntimeState::BalanceSafeDeny :
 		EPhysAnimRuntimeState::BridgeActive;
 }
@@ -1435,6 +1452,8 @@ const TCHAR* UPhysAnimComponent::GetRuntimeStateName(EPhysAnimRuntimeState State
 		return TEXT("BalanceActive_Recovery");
 	case EPhysAnimRuntimeState::BalanceSafeDeny:
 		return TEXT("BalanceSafeDeny");
+	case EPhysAnimRuntimeState::BalanceActive_Standing:
+		return TEXT("BalanceActive_Standing");
 	case EPhysAnimRuntimeState::FailStopped:
 		return TEXT("FailStopped");
 	default:

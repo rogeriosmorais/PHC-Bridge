@@ -1,4 +1,5 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimBalanceReadyTransitionPrivate.h"
 #include "PhysAnimComponentPrivate.h"
 
 #if !UE_BUILD_SHIPPING
@@ -160,6 +161,7 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibBaseline(FPhase1AutoCalibBaseline
 	OutSnapshot.bPendingBalanceModeStartAttemptIssued = bPendingBalanceModeStartAttemptIssued;
 	OutSnapshot.PendingBalanceModeStartReason = PendingBalanceModeStartReason;
 	OutSnapshot.PendingBalanceModeRequestTimeSeconds = PendingBalanceModeRequestTimeSeconds;
+	OutSnapshot.RecoveryPreEntryTelemetrySkipFrames = RecoveryPreEntryTelemetrySkipFrames;
 	OutSnapshot.bPhase1TiltDiagnosticEmitted = bPhase1TiltDiagnosticEmitted;
 	OutSnapshot.bPhase1PelvisCouplingSkipLogged = bPhase1PelvisCouplingSkipLogged;
 	OutSnapshot.bPelvisResetAppliedThisTick = bPelvisResetAppliedThisTick;
@@ -191,7 +193,7 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 		BalanceReadyTransition.Cancel(this);
 	}
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+	if (IsBalanceActiveState(RuntimeState))
 	{
 		StopBalancePerturbationMode();
 	}
@@ -262,10 +264,15 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 		}
 	}
 
+	Mesh->RefreshBoneTransforms();
+
 	PreviousControlTargetRotations = Snapshot.PreviousControlTargetRotations;
 	PolicyBlendStartControlTargetRotations = Snapshot.PolicyBlendStartControlTargetRotations;
 	if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
 	{
+		// Restore-side cache sync keeps the next trial from inheriting stale
+		// control-space pose data from the previous run.
+		PhysicsControl->UpdateTargetCaches(0.0f);
 		for (const TPair<FName, FQuat>& Pair : PreviousControlTargetRotations)
 		{
 			if (PhysicsControl->GetControlExists(Pair.Key))
@@ -273,6 +280,7 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 				PhysicsControl->SetControlTargetOrientation(Pair.Key, Pair.Value.Rotator(), 0.0f, true, false, true, false);
 			}
 		}
+		PhysicsControl->UpdateControls(0.0f);
 	}
 
 	SelfObservationBuffer = Snapshot.SelfObservationBuffer;
@@ -332,6 +340,7 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 	bPendingBalanceModeStartAttemptIssued = Snapshot.bPendingBalanceModeStartAttemptIssued;
 	PendingBalanceModeStartReason = Snapshot.PendingBalanceModeStartReason;
 	PendingBalanceModeRequestTimeSeconds = Snapshot.PendingBalanceModeRequestTimeSeconds;
+	RecoveryPreEntryTelemetrySkipFrames = Snapshot.RecoveryPreEntryTelemetrySkipFrames;
 	bPhase1TiltDiagnosticEmitted = Snapshot.bPhase1TiltDiagnosticEmitted;
 	bPhase1PelvisCouplingSkipLogged = Snapshot.bPhase1PelvisCouplingSkipLogged;
 	bPelvisResetAppliedThisTick = Snapshot.bPelvisResetAppliedThisTick;
@@ -422,6 +431,15 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibDeterminismFingerprint(FPhase1Aut
 	OutFingerprint.RootBodyTransform = RootBody->GetUnrealWorldTransform();
 	OutFingerprint.RootLinearVelocity = RootBody->GetUnrealWorldVelocity();
 	OutFingerprint.RootAngularVelocity = RootBody->GetUnrealWorldAngularVelocityInRadians();
+	BalanceTransitionSets::FDirectPelvisLinkForensicRecord PelvisThighLRecord;
+	BalanceTransitionSets::FDirectPelvisLinkForensicRecord PelvisThighRRecord;
+	BalanceTransitionSets::FDirectPelvisLinkForensicRecord PelvisSpine01Record;
+	BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, PhysAnimBridge::GetRootBoneName(), TEXT("thigh_l"), PelvisThighLRecord);
+	BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, PhysAnimBridge::GetRootBoneName(), TEXT("thigh_r"), PelvisThighRRecord);
+	BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, PhysAnimBridge::GetRootBoneName(), TEXT("spine_01"), PelvisSpine01Record);
+	OutFingerprint.PelvisThighLAngularErrorDeg = PelvisThighLRecord.ConstraintAngularErrorDeg;
+	OutFingerprint.PelvisThighRAngularErrorDeg = PelvisThighRRecord.ConstraintAngularErrorDeg;
+	OutFingerprint.PelvisSpine01AngularErrorDeg = PelvisSpine01Record.ConstraintAngularErrorDeg;
 	OutFingerprint.ShellOffsetDeltaCm = LiveMetrics.ShellOffsetDeltaCm;
 	OutFingerprint.ShellVelocityDeltaCmPerSecond = LiveMetrics.ShellVelocityDeltaCmPerSecond;
 	OutFingerprint.MaxTargetDeltaDeg = LiveMetrics.MaxTargetDeltaDeg;
@@ -441,6 +459,20 @@ bool UPhysAnimComponent::StartPhase1AutoCalibTrial(FString& OutError)
 
 	StartBalancePerturbationMode();
 	return true;
+}
+
+void UPhysAnimComponent::SetPhase1AutoCalibOwnsStartRequests(const bool bOwned)
+{
+	bPhase1AutoCalibOwnsStartRequests = bOwned;
+	if (bOwned &&
+		bPendingBalanceModeStartRequest &&
+		!bPendingBalanceModeStartAttemptIssued &&
+		PendingBalanceModeStartReason == TEXT("auto_trigger"))
+	{
+		bPendingBalanceModeStartRequest = false;
+		PendingBalanceModeStartReason.Reset();
+		PendingBalanceModeRequestTimeSeconds = -1.0;
+	}
 }
 
 #endif

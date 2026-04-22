@@ -42,7 +42,7 @@ bool UPhysAnimComponent::CheckRuntimeInstability(
 		EffectiveRootLinearVelocityCmPerSecond);
 
 	const bool bBalanceScenarioAllowsPostImpactGrace =
-		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery &&
+		IsBalanceActiveState(RuntimeState) &&
 		BalanceScenarios.IsValidIndex(ActiveBalanceScenarioIndex) &&
 		BalanceScenarios[ActiveBalanceScenarioIndex].bTriggered &&
 		!BalanceScenarios[ActiveBalanceScenarioIndex].Name.Contains(TEXT("NoPush")) &&

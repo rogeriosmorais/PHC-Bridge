@@ -127,7 +127,7 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 		const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
 		if (!PendingBodyModifierCachedResetNames.Contains(ModifierName))
 		{
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery && CalculateCurrentPolicyInfluenceAlpha(ResolveEffectiveStabilizationSettings()) > 0.0f)
+			if (IsBalanceActiveState(RuntimeState) && CalculateCurrentPolicyInfluenceAlpha(ResolveEffectiveStabilizationSettings()) > 0.0f)
 			{
 				const FString ViolationReason = FString::Printf(TEXT("bodyPromotionViolation:%s"), *BoneName.ToString());
 				UE_LOG(
@@ -191,7 +191,7 @@ void UPhysAnimComponent::ApplyStartupMovementLock()
 	CharacterMovement->DisableMovement();
 	CharacterMovement->SetComponentTickEnabled(false);
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+	if (IsBalanceActiveState(RuntimeState))
 	{
 		if (UCapsuleComponent* const CapsuleComponent = CharacterOwner->GetCapsuleComponent())
 		{
@@ -584,7 +584,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 
 			// Violation class: If the act of enabling the final ramp causes a massive root spike, 
 			// it means our bridge setup itself is explosive.
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery && AngularVelocity > EffectiveSettings.MaxRootAngularSpeedDegPerSecond)
+			if (IsBalanceActiveState(RuntimeState) && AngularVelocity > EffectiveSettings.MaxRootAngularSpeedDegPerSecond)
 			{
 				UE_LOG(
 					LogPhysAnimBridge,
@@ -624,7 +624,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 			? FMath::Min(EffectiveSettings.MaxAutoUnlockBringUpGroup, GetBringUpGroupCount() - 1)
 			: (GetBringUpGroupCount() - 1);
 	const int32 PhaseAwareMaxAutoUnlockGroup =
-		(RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+		(IsBalanceActiveState(RuntimeState))
 			? MaxConfiguredAutoUnlockGroup
 			: FMath::Min(MaxConfiguredAutoUnlockGroup, 1);
 	if (HighestUnlockedBringUpGroupIndex < PhaseAwareMaxAutoUnlockGroup)

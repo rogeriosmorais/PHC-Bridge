@@ -53,8 +53,10 @@ enum class EBalanceLateValidationOutcome : uint8
 
 namespace BalanceTransitionSets
 {
+	inline bool IsThigh(FName BoneName) { return BoneName == "thigh_l" || BoneName == "thigh_r"; }
+	inline bool IsSpine(FName BoneName) { return BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03"; }
 	inline bool IsRoot(FName BoneName) { return BoneName == "pelvis"; }
-	inline bool IsProximal(FName BoneName) { return BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"; }
+	inline bool IsProximal(FName BoneName) { return IsSpine(BoneName) || IsThigh(BoneName); }
 	inline bool IsDistalLowerLimb(FName BoneName) { return BoneName == "calf_l" || BoneName == "calf_r" || BoneName == "foot_l" || BoneName == "foot_r" || BoneName == "ball_l" || BoneName == "ball_r"; }
 	inline bool IsUpperLimbDistal(FName BoneName)
 	{
@@ -279,6 +281,7 @@ namespace BalanceReadinessReasons
 	static const FString TargetDiscontinuityTooHigh = TEXT("target_discontinuity_too_high");
 	static const FString RootSimulationDropped = TEXT("root_simulation_dropped");
 	static const FString TopologyMismatch = TEXT("topology_mismatch");
+	static const FString Phase2RootOnSpike = TEXT("phase2_root_on_spike");
 	static const FString Phase2FailStopPrecursor = TEXT("phase2_fail_stop_precursor");
 	static const FString Phase2RootSimulationDropped = TEXT("phase2_root_simulation_dropped");
 	static const FString Phase2TopologyNotPreserved = TEXT("phase2_topology_not_preserved");
@@ -376,10 +379,13 @@ struct FBalanceReadyTransitionDiagnostics
 	float MaxAngVelPelvis = 0.0f;
 	float MaxLinVelThighs = 0.0f;
 	float MaxAngVelThighs = 0.0f;
+	float TotalAngVelThighs = 0.0f;
 	float MaxLinVelSpine = 0.0f;
 	float MaxAngVelSpine = 0.0f;
+	float TotalAngVelSpine = 0.0f;
 	float MaxLinVelFeet = 0.0f;
 	float MaxAngVelFeet = 0.0f;
+	float TotalAngVelFeet = 0.0f;
 
 	float PreflightPolicyAlpha = 0.0f;
 	
@@ -403,6 +409,18 @@ struct FBalanceReadyTransitionDiagnostics
 	int32 UpperBodySimCountPost = 0;
 	float PeakMaxBodyLinearSpeed = 0.0f;
 	float PeakMaxBodyAngularSpeed = 0.0f;
+	float PeakMaxNonRootBodyAngularSpeed = 0.0f;
+	float PeakMaxThighBodyAngularSpeed = 0.0f;
+	float PeakMaxSpineBodyAngularSpeed = 0.0f;
+	float PeakMaxFeetBodyAngularSpeed = 0.0f;
+	float PeakTotalThighBodyAngularSpeed = 0.0f;
+	float PeakTotalSpineBodyAngularSpeed = 0.0f;
+	float PeakTotalFeetBodyAngularSpeed = 0.0f;
+	float Phase3CurrentMaxNonRootAngularSpeed = 0.0f;
+	float Phase3CurrentObservedNonRootAngularEnvelope = 0.0f;
+	float Phase3CurrentNonRootFamilyAngularSpeed = 0.0f;
+	float Phase3CurrentObservedNonRootFamilyAngularEnvelope = 0.0f;
+	FName Phase3CurrentMaxNonRootAngularBone = NAME_None;
 	FName LateLoopWorstBone = NAME_None;
 };
 
@@ -558,8 +576,66 @@ public:
 		const FPhysAnimStabilizationDomain& Domain,
 		const struct FPhysAnimStabilizationSettings& Settings,
 		FString& OutReason);
+	static bool IsPhase3ShellCorrectionOwnerActive(
+		bool bTransitionOwnedShellLocked,
+		bool bLocomotionAuthorityIdle);
+	static bool ShouldRetainExplicitShellLockForPhase(EBalanceReadyTransitionPhase Phase);
+	static bool IsMaterialShellCorrectionActive(
+		bool bShellCorrectionOwnerActive,
+		float ShellPlanarOffsetCm,
+		float ShellPlanarVelocityCmPerSec,
+		float MaxAllowedShellOffsetCm,
+		float MaxAllowedShellVelocityCmPerSec);
+	static bool IsMaterialPhase3ShellCorrectionActive(
+		bool bTransitionOwnedShellLocked,
+		bool bLocomotionAuthorityIdle,
+		int32 Phase3TickCount,
+		float ShellPlanarOffsetCm,
+		float ShellPlanarVelocityCmPerSec,
+		float MaxAllowedShellOffsetCm,
+		float MaxAllowedShellVelocityCmPerSec);
+	static bool IsPhase3EarlySettleAngularGraceActive(
+		int32 Phase3TickCount,
+		float RootLinearSpeed,
+		float LinearThreshold,
+		float RootAngularSpeed,
+		float AngularThreshold);
+	static FVector ResolvePhase3EffectiveRootLinearVelocityCmPerSecond(
+		const FVector& RootLinearVelocityCmPerSecond,
+		const FVector& OwnerLinearVelocityCmPerSecond,
+		const FVector& AppliedShellCorrectionVelocityCmPerSecond,
+		bool bTransitionOwnedShellLocked);
+	static bool IsPhase3EarlySettleInstabilityGraceActive(
+		int32 Phase3TickCount,
+		bool bTransitionOwnedShellLocked,
+		bool bLocomotionAuthorityIdle,
+		float RootLinearSpeed,
+		float LinearThreshold,
+		float RootAngularSpeed,
+		float AngularThreshold,
+		float ShellPlanarOffsetCm,
+		float MaxAllowedShellOffsetCm,
+		float ShellPlanarVelocityCmPerSec,
+		float MaxAllowedShellVelocityCmPerSec,
+		float PrePhase3PeakBodyLinearSpeed = 0.0f,
+		float PrePhase3PeakBodyAngularSpeed = 0.0f,
+		float RootPlanarSpeedCmPerSecond = -1.0f,
+		float CurrentMaxNonRootAngularSpeed = 0.0f,
+		float PrePhase3PeakNonRootAngularSpeed = 0.0f,
+		FName CurrentMaxNonRootAngularBone = NAME_None,
+		float PrePhase3PeakThighAngularSpeed = 0.0f,
+		float PrePhase3PeakSpineAngularSpeed = 0.0f,
+		float PrePhase3PeakFeetAngularSpeed = 0.0f,
+		float CurrentNonRootFamilyAngularSpeed = 0.0f,
+		float PrePhase3PeakThighFamilyAngularSpeed = 0.0f,
+		float PrePhase3PeakSpineFamilyAngularSpeed = 0.0f,
+		float PrePhase3PeakFeetFamilyAngularSpeed = 0.0f);
 
-	static bool IsRootStable(const FPhase1AcceptedConvergenceSnapshot& Snapshot, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
+	static bool IsRootStable(
+		const FPhase1AcceptedConvergenceSnapshot& Snapshot,
+		EBalanceReadyTransitionPhase Phase,
+		const struct FPhysAnimStabilizationSettings& Settings,
+		FString& OutReason);
 	static FString ResolveRootOnReadinessGateReason(
 		EBalanceReadyRootOnReadinessClassification Classification,
 		bool bDirectPelvisLinkPositionSatisfied,

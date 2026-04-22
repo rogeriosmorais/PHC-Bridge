@@ -1,6 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "PhysAnimPhase1AutoCalibSubsystem.h"
 #include "PhysAnimPhase1PelvisCouplingSearch.h"
 
 void UPhysAnimComponent::BeginPlay()
@@ -2602,6 +2603,26 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 		GetRuntimeStateName(RuntimeState));
 }
 
+namespace
+{
+	bool IsPhase1AutoCalibSubsystemActive(const UActorComponent* Component)
+	{
+#if !UE_BUILD_SHIPPING
+		const UWorld* const World = Component ? Component->GetWorld() : nullptr;
+		if (!World)
+		{
+			return false;
+		}
+
+		const UPhysAnimPhase1AutoCalibSubsystem* const AutoCalibSubsystem =
+			World->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>();
+		return AutoCalibSubsystem && AutoCalibSubsystem->IsPhase1AutoCalibActive();
+#else
+		return false;
+#endif
+	}
+}
+
 EPhysAnimBridgeTraceOutputMode UPhysAnimComponent::ResolveBridgeTraceOutputMode() const
 {
 	const int32 OverrideMode = PhysAnimComponentInternal::CVarPhysAnimTraceOutput.GetValueOnGameThread();
@@ -2744,7 +2765,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		RuntimeState != EPhysAnimRuntimeState::ReadyForActivation &&
 		RuntimeState != EPhysAnimRuntimeState::BridgeActive &&
 		!IsBalanceEntryState(RuntimeState) &&
-		RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery)
+		!IsBalanceActiveState(RuntimeState))
 	{
 		return;
 	}
@@ -2755,7 +2776,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	const bool bCanTraceFrames =
 		BridgeTraceWriter.IsValid() &&
 		BridgeTraceWriter->CanWriteFrames() &&
-		(RuntimeState == EPhysAnimRuntimeState::BridgeActive || RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery);
+		(RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState));
 	const int32 TraceSampleEveryNthFrame = FMath::Max(BridgeTraceSampleEveryNthFrame, 1);
 	const double BridgeTickStartSeconds = FPlatformTime::Seconds();
 	bool bTraceFrameFinalized = false;
@@ -3108,7 +3129,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				}
 			}
 
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ROOTON_TICK4_SPIKE_SOURCE source=%s worstBone=%s maxLinearSpeed=%.2f maxAngularSpeed=%.2f"),
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOTON_TICK4_SPIKE_SOURCE source=%s worstBone=%s maxLinearSpeed=%.2f maxAngularSpeed=%.2f"),
 				Source, WorstBone.IsNone() ? TEXT("none") : *WorstBone.ToString(), MaxLinearSpeed, MaxAngularSpeed);
 
 			if (BalanceReadyTransition.GetDiagnostics().FirstContradictionSource.IsEmpty())
@@ -3128,7 +3149,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	UpdateStabilizationStressTestState(StabilizationSettings);
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	ApplyMovementSmokeInput(EffectiveSettings);
-	if ((RuntimeState == EPhysAnimRuntimeState::BridgeActive || RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery) && bStartupMovementLockActive)
+	if ((RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState)) && bStartupMovementLockActive)
 	{
 		const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
 		const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
@@ -3147,7 +3168,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 		// In Balance Mode, we always want the CharacterMovement to be locked (MOVE_None)
 		// to ensure the capsule doesn't move and we can measure drift/contamination accurately.
-		if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery && 
+		if (!IsBalanceActiveState(RuntimeState) &&
 		!bPhase1Prepare &&
 		!bPhase1LateValidate &&
 		!bPhase1RootOn &&
@@ -3393,7 +3414,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	TrackStabilizationStressTestObservations();
 	AdvanceBringUpState(DeltaTime, EffectiveSettings);
-	MaintainTransitionOwnedShellLock();
+	MaintainTransitionOwnedShellLock(DeltaTime);
 	
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && BalanceReadyTransition.GetPhase2GuardTickCount() == 0)
 	{
@@ -3458,7 +3479,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		EBalanceReadyTransitionPhase TransitionPhase = BalanceReadyTransition.GetPhase();
 		if (TransitionPhase == EBalanceReadyTransitionPhase::BRT_Succeeded)
 		{
-			if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Recovery)
+			if (!IsBalanceActiveState(RuntimeState))
 			{
 				CompleteBalanceModeEntry();
 			}
@@ -3470,9 +3491,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		if (TransitionPhase == EBalanceReadyTransitionPhase::BRT_Inactive)
 		{
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+			if (IsBalanceActiveState(RuntimeState))
 			{
-				// Completion path already published recovery.
+				// Completion path already published active balance.
 			}
 			else if (RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
 			{
@@ -3489,51 +3510,101 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
-	if (RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
-		!bPendingBalanceModeStartRequest &&
-		!BalanceReadyTransition.HasActuallyStarted())
+	if (ShouldAttemptAutoTriggeredBalanceStart(
+		RuntimeState,
+		bPendingBalanceModeStartRequest,
+		BalanceReadyTransition.HasActuallyStarted(),
+		bPhase1AutoCalibOwnsStartRequests,
+		IsPhase1AutoCalibSubsystemActive(this)))
 	{
 		static TMap<const UPhysAnimComponent*, FString> LastAutoTriggerPreEntryBlockReasonByComponent;
-		const int32 AutoBalanceTriggerGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
-		if (GetHighestUnlockedBringUpGroupIndex() >= AutoBalanceTriggerGroupIndex &&
-			GetLastControlTargetDiagnostics().bPolicyInfluenceActive)
+		if (ShouldDeferAutoTriggeredBalanceStartForRecoveryTelemetry(RecoveryPreEntryTelemetrySkipFrames))
 		{
-			FString AutoBalanceGateReason;
-			if (EvaluateBalanceModeQueueGates(EffectiveSettings, AutoBalanceGateReason))
+			const FString PreEntryReason = TEXT("preentry_recovery_telemetry_pending");
+			FString& LastBlockedReason = LastAutoTriggerPreEntryBlockReasonByComponent.FindOrAdd(this);
+			if (LastBlockedReason != PreEntryReason)
 			{
-				FString PreEntryReason;
-				if (EvaluateBalanceBridgeActivePreEntryPrerequisites(EffectiveSettings, PreEntryReason))
+				FString RootTiltSource;
+				const float RootTiltDeg = ResolvePhase1Uprightness(GetMeshComponent(), GetOwner(), PhysAnimBridge::GetRootBoneName(), RootTiltSource);
+				const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = GetLastControlTargetDiagnostics();
+				UE_LOG(
+					LogPhysAnimBridge,
+					Log,
+					TEXT("[PhysAnimBalance] AUTO_TRIGGER_PREENTRY_BLOCKED reason=%s rootLinear=%.2f/%.2f rootAngular=%.2f/%.2f maxBodyLinear=%.2f/%.2f maxBodyAngular=%.2f/%.2f rootTilt=%.2f/%.2f tiltSource=%s lowerLimbLimitBone=%s lowerLimbLimit=%.2f lowerLimbLimitProxy=%.2f lowerLimbMean=%.2f lowerLimbTargets=%d holdFramesRemaining=%d"),
+					*PreEntryReason,
+					LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
+					EffectiveSettings.BalancePhase1MaxRootLinearBaseline,
+					LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond,
+					EffectiveSettings.BalancePhase1MaxRootAngularBaseline,
+					LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond,
+					EffectiveSettings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneLinearSpeed,
+					LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond,
+					EffectiveSettings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneAngularSpeed,
+					RootTiltDeg,
+					BalanceQuietTiltThresholdDeg,
+					*RootTiltSource,
+					*ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
+					ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
+					ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
+					ControlTargetDiagnostics.MeanLowerLimbLimitOccupancy,
+					ControlTargetDiagnostics.NumLowerLimbTargetsConsidered,
+					RecoveryPreEntryTelemetrySkipFrames);
+				LastBlockedReason = PreEntryReason;
+			}
+
+			--RecoveryPreEntryTelemetrySkipFrames;
+		}
+		else
+		{
+			const int32 AutoBalanceTriggerGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
+			if (GetHighestUnlockedBringUpGroupIndex() >= AutoBalanceTriggerGroupIndex &&
+				GetLastControlTargetDiagnostics().bPolicyInfluenceActive)
+			{
+				FString AutoBalanceGateReason;
+				if (EvaluateBalanceModeQueueGates(EffectiveSettings, AutoBalanceGateReason))
 				{
-					LastAutoTriggerPreEntryBlockReasonByComponent.Remove(this);
-					QueueBalanceModeStartRequest(TEXT("auto_trigger"));
+					FString PreEntryReason;
+					if (EvaluateBalanceBridgeActivePreEntryPrerequisites(EffectiveSettings, PreEntryReason))
+					{
+						LastAutoTriggerPreEntryBlockReasonByComponent.Remove(this);
+						QueueBalanceModeStartRequest(TEXT("auto_trigger"));
+					}
+					else
+					{
+						FString& LastBlockedReason = LastAutoTriggerPreEntryBlockReasonByComponent.FindOrAdd(this);
+						if (LastBlockedReason != PreEntryReason)
+						{
+							FString RootTiltSource;
+							const float RootTiltDeg = ResolvePhase1Uprightness(GetMeshComponent(), GetOwner(), PhysAnimBridge::GetRootBoneName(), RootTiltSource);
+							const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = GetLastControlTargetDiagnostics();
+							UE_LOG(
+								LogPhysAnimBridge,
+								Log,
+								TEXT("[PhysAnimBalance] AUTO_TRIGGER_PREENTRY_BLOCKED reason=%s rootLinear=%.2f/%.2f rootAngular=%.2f/%.2f maxBodyLinear=%.2f/%.2f maxBodyAngular=%.2f/%.2f rootTilt=%.2f/%.2f tiltSource=%s lowerLimbLimitBone=%s lowerLimbLimit=%.2f lowerLimbLimitProxy=%.2f lowerLimbMean=%.2f lowerLimbTargets=%d"),
+								*PreEntryReason,
+								LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
+								EffectiveSettings.BalancePhase1MaxRootLinearBaseline,
+								LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond,
+								EffectiveSettings.BalancePhase1MaxRootAngularBaseline,
+								LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond,
+								EffectiveSettings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneLinearSpeed,
+								LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond,
+								EffectiveSettings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneAngularSpeed,
+								RootTiltDeg,
+								BalanceQuietTiltThresholdDeg,
+								*RootTiltSource,
+								*ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
+								ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
+								ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
+								ControlTargetDiagnostics.MeanLowerLimbLimitOccupancy,
+								ControlTargetDiagnostics.NumLowerLimbTargetsConsidered);
+							LastBlockedReason = PreEntryReason;
+						}
+					}
 				}
 				else
 				{
-					FString& LastBlockedReason = LastAutoTriggerPreEntryBlockReasonByComponent.FindOrAdd(this);
-					if (LastBlockedReason != PreEntryReason)
-					{
-						FString RootTiltSource;
-						const float RootTiltDeg = ResolvePhase1Uprightness(GetMeshComponent(), GetOwner(), PhysAnimBridge::GetRootBoneName(), RootTiltSource);
-						const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = GetLastControlTargetDiagnostics();
-						UE_LOG(
-							LogPhysAnimBridge,
-							Log,
-							TEXT("[PhysAnimBalance] AUTO_TRIGGER_PREENTRY_BLOCKED reason=%s rootLinear=%.2f/%.2f rootAngular=%.2f/%.2f rootTilt=%.2f/%.2f tiltSource=%s lowerLimbLimitBone=%s lowerLimbLimit=%.2f lowerLimbLimitProxy=%.2f lowerLimbMean=%.2f lowerLimbTargets=%d"),
-							*PreEntryReason,
-							LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
-							EffectiveSettings.BalancePhase1MaxRootLinearBaseline,
-							LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond,
-							EffectiveSettings.BalancePhase1MaxRootAngularBaseline,
-							RootTiltDeg,
-							BalanceQuietTiltThresholdDeg,
-							*RootTiltSource,
-							*ControlTargetDiagnostics.MaxLowerLimbLimitOccupancyBoneName.ToString(),
-							ControlTargetDiagnostics.MaxLowerLimbLimitOccupancy,
-							ControlTargetDiagnostics.MaxLowerLimbLimitProxyDegrees,
-							ControlTargetDiagnostics.MeanLowerLimbLimitOccupancy,
-							ControlTargetDiagnostics.NumLowerLimbTargetsConsidered);
-						LastBlockedReason = PreEntryReason;
-					}
+					LastAutoTriggerPreEntryBlockReasonByComponent.Remove(this);
 				}
 			}
 			else
@@ -3541,17 +3612,13 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				LastAutoTriggerPreEntryBlockReasonByComponent.Remove(this);
 			}
 		}
-		else
-		{
-			LastAutoTriggerPreEntryBlockReasonByComponent.Remove(this);
-		}
 	}
 
 	TryStartPendingBalanceModeRequest(EffectiveSettings);
 
 
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+	if (IsBalanceActiveState(RuntimeState))
 	{
 		UpdateBalancePerturbation(DeltaTime);
 	}
@@ -4474,6 +4541,8 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	LastControlTargetDiagnostics = {};
 	RuntimeInstabilityState = {};
 	LastRuntimeInstabilityDiagnostics = {};
+	RecoveryPreEntryTelemetrySkipFrames = 0;
+	ClearPublishedBalanceTransitionFailureReason();
 	SimulationHandoffAlpha = 0.0f;
 	bLastAppliedSimulationHandoffSettled = false;
 	LastAppliedControlAuthorityAlpha = -1.0f;

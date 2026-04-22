@@ -147,17 +147,19 @@ This means:
 - Prepare / LateValidate decisions must use a **post-update authoritative convergence snapshot**
 - freeze lifetime must cover the **full Phase 1 attempt**
 
-### Phase 2 current contract reality
+### Phase 2 / Phase 3 current contract reality
 
 The investigation has now moved beyond earlier Phase 1 ownership/telemetry problems.
 
-The active unresolved Phase 2 questions are:
+Phase 2 RootOn is now substantially specified and currently passes truthfully in the latest smoke.
 
-- how RootOn preserves the certified Phase 1 sim set while adding root simulation
-- how to prevent hidden same-frame policy or shell influence during the RootOn guard window
-- how to evaluate RootOn using the correct source of truth when intended ownership, modifier-record ownership, and raw body state are briefly out of sync
+The active unresolved Phase 3 questions are:
 
-The current unsolved question is therefore no longer only whether the accepted frozen Phase 1 setup is viable. It is also whether the current Phase 2 warm-start choreography is contract-correct and physically viable.
+- how Settle distinguishes shell lock state, shell reference state, and materially active shell correction
+- how to tell whether post-RootOn shell maintenance loss is a contract mismatch, a physical-viability limit, or both
+- how to preserve truthful Settle failure classification without collapsing back into retry noise or generic no-convergence labeling
+
+The current unsolved question is therefore no longer mainly whether the accepted frozen Phase 1 setup is viable or whether RootOn can pass truthfully. It is whether the post-RootOn Settle continuity path can hold without material shell correction under the current runtime contract.
 
 ---
 
@@ -168,7 +170,7 @@ The current unsolved question is therefore no longer only whether the accepted f
 Before any further large refactor, preserve the following distinctions:
 
 - **substantially cleaned up:** queueing, explicit acceptance, hold-vs-policy separation, freeze lifetime, root tilt source correction, post-update convergence snapshot timing, broad-write distrust, explicit modifier-record diagnostics
-- **still open:** physical viability of the accepted Phase 1 setup, Phase 2 RootOn truth model, Phase 2 shell/policy suppression correctness, RootOn raw/modifier synchronization semantics
+- **still open:** Settle shell-maintenance truth, post-RootOn continuity without material correction, and the remaining physical-viability question in Phase 3
 
 Do not re-open solved contract areas casually.
 
@@ -192,10 +194,9 @@ A “successful-looking” run is not enough. Stage 1 evidence must state:
 |---|---:|---:|---|
 | Sim-to-sim gap (training simulator -> Chaos) | High | High | Likely permanent tuning burden |
 | Phase 1 contract correct but physically non-viable | High | High | Still plausible |
-| Phase 2 truth model under-specified | High | High | Current doc/implementation drift point |
-| Hidden shell/reference influence during RootOn | Medium | High | Must be separated from shell state itself |
-| Policy leakage into RootOn guard window | Medium | High | Already observed in runtime investigation |
-| Modifier-record and raw-body disagreement during RootOn | Medium | High | Must be classified truthfully, not hand-waved |
+| Phase 3 shell-maintenance truth model under-specified | High | High | Current doc/implementation drift point |
+| Material shell correction during Settle hides the true blocker | High | High | Latest truthful safe-deny frontier |
+| Post-RootOn continuity depends on hidden shell support | Medium | High | Must be separated from shell state and shell lock bookkeeping |
 | Physics Control limitations / Experimental behavior | Medium | Medium | Must not be treated as a black-box stable motor system |
 | Over-constrained kinematic hold set destabilizes sim set | Medium | High | Needs evidence-driven review |
 | Weak admission margin allows LateValidate / RootOn too early | Medium | Medium | Should be treated separately from deny thresholds |
@@ -215,7 +216,8 @@ Stage 1 balance entry is only truly “working” when all are true in the same 
 - Phase 1 survives long enough to show the accepted setup is at least provisionally viable
 - Phase 2 performs a truthful warm start from that still-valid handoff
 - Phase 2 guard window contains no hidden shell or policy assistance
-- RootOn activation can either activate or deny safely with truthful reasons
+- Phase 3 Settle can either activate or deny safely with truthful reasons
+- Settle continuity holds without material shell correction becoming active
 
 Until then, Stage 1 remains an active balance-entry investigation rather than a solved runtime.
 

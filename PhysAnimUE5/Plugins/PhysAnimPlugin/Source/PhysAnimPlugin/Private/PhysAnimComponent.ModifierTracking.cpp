@@ -175,7 +175,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		PolicyInfluenceRampStartTimeSeconds >= 0.0 &&
 		(
 			RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
-			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery ||
+			IsBalanceActiveState(RuntimeState) ||
 			bPhase1RootOn ||
 			bPhase1Settle);
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
@@ -688,6 +688,28 @@ ECollisionEnabled::Type UPhysAnimComponent::ResolveBodyModifierCollisionType(
 }
 
 
+bool UPhysAnimComponent::ShouldUseAuthoritativePerBoneBodyModifierSync(
+	EPhysAnimRuntimeState RuntimeState,
+	bool bDistalKinematicAccepted)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+		(bDistalKinematicAccepted &&
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+			 RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+			 RuntimeState == EPhysAnimRuntimeState::BridgeActive));
+}
+
+
+bool UPhysAnimComponent::ShouldUpdateBodyOnPerBoneBodyModifierSync(EPhysAnimRuntimeState RuntimeState)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+}
+
+
 bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 	FName BoneName,
 	EPhysAnimRuntimeState InRuntimeState,
@@ -724,7 +746,7 @@ bool UPhysAnimComponent::ShouldResetBodyModifierToCachedBoneTransform(
 		return LogReturn(false);
 	}
 
-	if (InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+	if (IsBalanceActiveState(InRuntimeState))
 	{
 		if (bIsRootBodyModifier)
 		{

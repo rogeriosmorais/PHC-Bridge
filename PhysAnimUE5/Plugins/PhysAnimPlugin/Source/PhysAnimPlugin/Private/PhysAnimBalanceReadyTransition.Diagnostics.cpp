@@ -141,11 +141,23 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 			MaxAng = FMath::Max(MaxAng, Mesh->GetPhysicsAngularVelocityInDegrees(BoneName).Size());
 		}
 	};
+	auto GetTotalAngularVel = [&](const TArray<FName>& Bones)
+	{
+		float TotalAng = 0.0f;
+		for (const FName BoneName : Bones)
+		{
+			TotalAng += Mesh->GetPhysicsAngularVelocityInDegrees(BoneName).Size();
+		}
+		return TotalAng;
+	};
 
 	GetMaxVel({ RootBoneName }, Diagnostics.MaxLinVelPelvis, Diagnostics.MaxAngVelPelvis);
 	GetMaxVel({ TEXT("thigh_l"), TEXT("thigh_r") }, Diagnostics.MaxLinVelThighs, Diagnostics.MaxAngVelThighs);
 	GetMaxVel({ TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") }, Diagnostics.MaxLinVelSpine, Diagnostics.MaxAngVelSpine);
 	GetMaxVel({ TEXT("foot_l"), TEXT("foot_r"), TEXT("ball_l"), TEXT("ball_r"), TEXT("calf_l"), TEXT("calf_r") }, Diagnostics.MaxLinVelFeet, Diagnostics.MaxAngVelFeet);
+	Diagnostics.TotalAngVelThighs = GetTotalAngularVel({ TEXT("thigh_l"), TEXT("thigh_r") });
+	Diagnostics.TotalAngVelSpine = GetTotalAngularVel({ TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03") });
+	Diagnostics.TotalAngVelFeet = GetTotalAngularVel({ TEXT("foot_l"), TEXT("foot_r"), TEXT("ball_l"), TEXT("ball_r"), TEXT("calf_l"), TEXT("calf_r") });
 
 	FName CurrentWorstLinearBone = NAME_None;
 	float CurrentWorstLinearSpeed = 0.0f;
@@ -177,7 +189,7 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 	UE_LOG(
 		LogPhysAnimBridge,
 		Warning,
-		TEXT("[PhysAnimBalance] PHASE2_CAPTURE_FLIP_DIAGNOSTICS frame=%d tick=%d crossedSpike=%d prevPeakLinear=%.2f prevPeakAngular=%.2f peakLinear=%.2f peakAngular=%.2f worstLinearBone=%s worstLinearSpeed=%.2f worstAngularBone=%s worstAngularSpeed=%.2f pelvisLinear=%.2f pelvisAngular=%.2f thighsLinear=%.2f thighsAngular=%.2f spineLinear=%.2f spineAngular=%.2f feetLinear=%.2f feetAngular=%.2f"),
+		TEXT("[PhysAnimBalance] PHASE2_CAPTURE_FLIP_DIAGNOSTICS frame=%d tick=%d crossedSpike=%d prevPeakLinear=%.2f prevPeakAngular=%.2f peakLinear=%.2f peakAngular=%.2f worstLinearBone=%s worstLinearSpeed=%.2f worstAngularBone=%s worstAngularSpeed=%.2f pelvisLinear=%.2f pelvisAngular=%.2f thighsLinear=%.2f thighsAngular=%.2f thighsAngularTotal=%.2f spineLinear=%.2f spineAngular=%.2f spineAngularTotal=%.2f feetLinear=%.2f feetAngular=%.2f feetAngularTotal=%.2f"),
 		static_cast<int32>(GFrameCounter),
 		Phase2GuardTickCount,
 		bCrossedSpikeThresholdThisCapture ? 1 : 0,
@@ -193,10 +205,13 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 		Diagnostics.MaxAngVelPelvis,
 		Diagnostics.MaxLinVelThighs,
 		Diagnostics.MaxAngVelThighs,
+		Diagnostics.TotalAngVelThighs,
 		Diagnostics.MaxLinVelSpine,
 		Diagnostics.MaxAngVelSpine,
+		Diagnostics.TotalAngVelSpine,
 		Diagnostics.MaxLinVelFeet,
-		Diagnostics.MaxAngVelFeet);
+		Diagnostics.MaxAngVelFeet,
+		Diagnostics.TotalAngVelFeet);
 }
 
 
