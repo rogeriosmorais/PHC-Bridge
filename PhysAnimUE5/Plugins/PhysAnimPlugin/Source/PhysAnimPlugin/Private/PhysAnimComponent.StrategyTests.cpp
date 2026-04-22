@@ -833,6 +833,33 @@ namespace
 				1700.0f,
 				2600.0f,
 				0.0f));
+		TestFalse(
+			TEXT("Tick 8 root-isolated angular carry-through grace does not let an unobserved feet family borrow the generic non-root envelope"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				8,
+				true,
+				true,
+				1038.65f,
+				3000.0f,
+				4564.81f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				985.64f,
+				10.0f,
+				848.98f,
+				2752.96f,
+				1038.65f,
+				500.0f,
+				2546.24f,
+				TEXT("foot_l"),
+				1275.93f,
+				2546.24f,
+				0.0f,
+				500.0f,
+				1700.0f,
+				2600.0f,
+				0.0f));
 		TestTrue(
 			TEXT("Tick 8 Settle grace preserves a root-isolated angular shell burst when non-root simulated bodies stay comparatively calm"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(

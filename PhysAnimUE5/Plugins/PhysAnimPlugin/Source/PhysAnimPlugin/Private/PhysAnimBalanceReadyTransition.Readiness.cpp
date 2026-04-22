@@ -9,17 +9,17 @@ namespace
 		float SpineObservedPeak,
 		float FeetObservedPeak)
 	{
-		if (BalanceTransitionSets::IsThigh(BoneName) && ThighObservedPeak > 0.0f)
+		if (BalanceTransitionSets::IsThigh(BoneName))
 		{
 			return ThighObservedPeak;
 		}
 
-		if (BalanceTransitionSets::IsSpine(BoneName) && SpineObservedPeak > 0.0f)
+		if (BalanceTransitionSets::IsSpine(BoneName))
 		{
 			return SpineObservedPeak;
 		}
 
-		if (BalanceTransitionSets::IsDistalLowerLimb(BoneName) && FeetObservedPeak > 0.0f)
+		if (BalanceTransitionSets::IsDistalLowerLimb(BoneName))
 		{
 			return FeetObservedPeak;
 		}

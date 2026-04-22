@@ -761,3 +761,17 @@ Known important reference points from this work:
 - Practical meaning:
   - the old tick-8 proof could still overclaim continuity when a whole non-root family expanded collectively while no single bone alone told the whole story
   - the latest verified blocker is now explicitly shown as a genuine spine-family blow-up under preserved shell lock, so the next slice should keep focusing on truthful late-Settle physical continuity rather than on broadening grace
+
+## 2026-04-22 — Tick-8 unobserved-family fallback truthfulness
+
+- Added deterministic TDD for the next late-Settle loophole: a recognized non-root family with no observed Phase 2 envelope can no longer borrow the generic mixed non-root peak to claim tick-8 root-isolated carry-through.
+- Refined `ResolveObservedNonRootAngularEnvelopeForBone` so recognized `thigh`, `spine`, and distal lower-limb families now require their own observed envelope; only truly unclassified bones still fall back to the generic non-root peak.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component.TransitionOwnedShellLockTruthfulness`, `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.Bridge.BalanceStateless`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The deterministic contract moved forward, while the latest live smoke on this machine still truthfully safe-denied in the earlier tick-6 Settle window:
+  - the new helper now rejects late carry-through when an unobserved feet-family burst tries to borrow the generic non-root envelope instead of family-specific Phase 2 evidence
+  - the latest verified smoke still safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=947` with `tick=6`
+  - that run reported `rootLinear=836.49/3000.00`, `rootAngular=14225.62/2160.00`, `shellOffsetDelta=0.00/2.00`, `shellVelocityDelta=4530.69/10.00`, `currentMaxNonRootAngular=27149.64`, `currentMaxNonRootAngularBone=spine_01`, `observedNonRootFamilyAngularEnvelope=7369.83`, and `currentNonRootFamilyAngular=45213.60`
+  - terminal outcome remained truthful safe denial on `phase3_post_root_on_instability`
+- Practical meaning:
+  - the old tick-8 family logic still had one fallback loophole because an unobserved recognized family could borrow a mixed envelope that belonged to some other family
+  - the current live blocker remains an explicit spine-family blow-up at tick `6`, so the next balance-mode slice should keep focusing on truthful late-Settle physical continuity rather than expanding grace
