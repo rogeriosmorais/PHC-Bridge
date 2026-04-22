@@ -502,6 +502,54 @@ namespace
 				1898.77f,
 				10.0f));
 		TestTrue(
+			TEXT("Tick 5 Settle grace preserves a zero-offset combined shell burst when the Phase 2 handoff stayed comparatively quiet and shell carry-through dominates the linear burst"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				5,
+				true,
+				true,
+				4856.66f,
+				3000.0f,
+				7898.95f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				3177.91f,
+				10.0f,
+				848.97f,
+				2752.97f));
+		TestFalse(
+			TEXT("Tick 5 combined shell-burst grace does not apply when Phase 2 already handed off with a large body-instability peak"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				5,
+				true,
+				true,
+				4856.66f,
+				3000.0f,
+				7898.95f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				3177.91f,
+				10.0f,
+				3200.0f,
+				4000.0f));
+		TestFalse(
+			TEXT("Tick 5 combined shell-burst grace does not apply when shell carry-through is not the dominant source of the linear burst"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				5,
+				true,
+				true,
+				4856.66f,
+				3000.0f,
+				7898.95f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				1800.0f,
+				10.0f,
+				848.97f,
+				2752.97f));
+		TestTrue(
 			TEXT("Tick 5 Settle grace still suppresses an angular-only zero-offset shell burst under explicit lock"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 				5,

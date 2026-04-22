@@ -594,7 +594,9 @@ public:
 		float ShellPlanarOffsetCm,
 		float MaxAllowedShellOffsetCm,
 		float ShellPlanarVelocityCmPerSec,
-		float MaxAllowedShellVelocityCmPerSec);
+		float MaxAllowedShellVelocityCmPerSec,
+		float PrePhase3PeakBodyLinearSpeed = 0.0f,
+		float PrePhase3PeakBodyAngularSpeed = 0.0f);
 
 	static bool IsRootStable(
 		const FPhase1AcceptedConvergenceSnapshot& Snapshot,

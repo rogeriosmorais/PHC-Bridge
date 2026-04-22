@@ -655,3 +655,15 @@ Known important reference points from this work:
 - Practical meaning:
   - the balance-mode contract now has explicit deterministic coverage for the later mild angular carry-through case instead of letting it collapse back into the generic instability bucket
   - the live frontier remains Phase 3 physical continuity, but the first failing Settle frame on this machine is currently runtime-variant rather than locked to the earlier tick-7 repro
+
+## 2026-04-21 — Tick-5 combined shell-burst carry-through grace
+
+- Added deterministic TDD for the current Settle edge case where a tick-5 zero-offset combined linear/angular burst is still treated as pre-material only when the explicit shell lock holds, Phase 2 handed off comparatively quietly, and shell carry-through dominates the observed linear burst.
+- Refined `IsPhase3EarlySettleInstabilityGraceActive` to use pre-Phase-3 body-peak telemetry from the truthful RootOn handoff instead of a blind extra grace tick, keeping the new grace narrow and evidence-based.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component.TransitionOwnedShellLockTruthfulness`, `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.Bridge.BalanceStateless`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The truthful frontier moved exactly one Settle frame later on this machine:
+  - before this pass, the smoke first failed at `PHASE3_FIRST_FAILURE_AUDIT frame=944` with `tick=5`, `rootLinear=4856.66/3000.00`, `rootAngular=7898.95/2160.00`, and `shellVelocityDelta=3177.91/10.00`
+  - after this pass, the smoke survives that shell-dominated burst and first fails at `PHASE3_FIRST_FAILURE_AUDIT frame=945` with `tick=6`, `rootLinear=5320.63/3000.00`, `rootAngular=13934.15/2160.00`, and `shellVelocityDelta=2220.76/10.00`
+- Practical meaning:
+  - the old tick-5 combined burst is now ruled out as another shell-locked carry-through artifact rather than the deciding Phase 3 failure
+  - the remaining blocker is a later, more severe post-RootOn instability beyond the new evidence-based grace boundary

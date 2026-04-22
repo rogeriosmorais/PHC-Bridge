@@ -209,7 +209,9 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	float ShellPlanarOffsetCm,
 	float MaxAllowedShellOffsetCm,
 	float ShellPlanarVelocityCmPerSec,
-	float MaxAllowedShellVelocityCmPerSec)
+	float MaxAllowedShellVelocityCmPerSec,
+	float PrePhase3PeakBodyLinearSpeed,
+	float PrePhase3PeakBodyAngularSpeed)
 {
 	if (IsPhase3EarlySettleAngularGraceActive(
 			Phase3TickCount,
@@ -246,6 +248,29 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		bAngularBreached &&
 		!bOffsetBreached &&
 		bShellVelocityBreached)
+	{
+		return true;
+	}
+
+	// A later tick-5 combined burst is only still pre-material when the Phase 2
+	// handoff itself stayed comparatively quiet and the observed linear burst is
+	// dominated by shell carry-through rather than by already-large body chaos.
+	static constexpr int32 Phase3CombinedShellBurstCarryThroughTickCount = 5;
+	static constexpr float Phase3CombinedBurstQuietPhase2AngularMultiplier = 1.5f;
+	static constexpr float Phase3CombinedBurstShellDominanceRatio = 0.5f;
+	const bool bQuietPhase2Handoff =
+		PrePhase3PeakBodyLinearSpeed <= LinearThreshold &&
+		PrePhase3PeakBodyAngularSpeed <=
+			AngularThreshold * Phase3CombinedBurstQuietPhase2AngularMultiplier;
+	const bool bShellDominatedLinearBurst =
+		ShellPlanarVelocityCmPerSec >= RootLinearSpeed * Phase3CombinedBurstShellDominanceRatio;
+	if (Phase3TickCount <= Phase3CombinedShellBurstCarryThroughTickCount &&
+		bQuietPhase2Handoff &&
+		bLinearBreached &&
+		bAngularBreached &&
+		!bOffsetBreached &&
+		bShellVelocityBreached &&
+		bShellDominatedLinearBurst)
 	{
 		return true;
 	}
@@ -646,7 +671,9 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				ShellPlanarOffsetCm,
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				ShellPlanarVelocityCmPerSecond,
-				Settings.BalancePhase2AbortShellVelocityDelta))
+				Settings.BalancePhase2AbortShellVelocityDelta,
+				Diagnostics.PeakMaxBodyLinearSpeed,
+				Diagnostics.PeakMaxBodyAngularSpeed))
 		{
 			// Not yet material - continue with remaining continuity checks
 		}
