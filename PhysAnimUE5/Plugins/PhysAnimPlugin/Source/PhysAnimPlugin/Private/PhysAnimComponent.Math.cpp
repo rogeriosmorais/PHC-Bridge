@@ -1015,13 +1015,17 @@ bool UPhysAnimComponent::ShouldRunRootOnReadinessUltraFineMarginSweep(float Root
 #if !UE_BUILD_SHIPPING
 void UPhysAnimComponent::FinalizePhase1AutoCalibScore(FPhase1AutoCalibScore& InOutScore)
 {
+	const bool bStandingBenchmarkSatisfied =
+		InOutScore.bReachedBalanceActiveStanding &&
+		InOutScore.BalanceActiveStandingHoldSeconds + KINDA_SMALL_NUMBER >= PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds;
 	const bool bHardRejected =
 		!InOutScore.bContractPassed ||
 		InOutScore.bTimedOut ||
 		InOutScore.bSafeDenied ||
 		!InOutScore.bRestoreDeterministic ||
 		!InOutScore.bReachedRootOn ||
-		!InOutScore.bNoCouplingProofSatisfied;
+		!InOutScore.bNoCouplingProofSatisfied ||
+		!bStandingBenchmarkSatisfied;
 
 	const float RejectionPenalty = bHardRejected ? 1000000.0f : 0.0f;
 	InOutScore.StableSortScalar =
@@ -1034,19 +1038,24 @@ void UPhysAnimComponent::FinalizePhase1AutoCalibScore(FPhase1AutoCalibScore& InO
 		InOutScore.ShellOffsetDeltaCm +
 		(InOutScore.ShellVelocityDeltaCmPerSecond * 0.1f) +
 		(InOutScore.PeakRootLinearSpeedCmPerSecond * 0.01f) +
-		(InOutScore.PeakRootAngularSpeedDegPerSecond * 0.001f);
+		(InOutScore.PeakRootAngularSpeedDegPerSecond * 0.001f) -
+		InOutScore.BalanceActiveStandingHoldSeconds;
 }
 
 bool UPhysAnimComponent::IsBetterPhase1AutoCalibScore(const FPhase1AutoCalibScore& Candidate, const FPhase1AutoCalibScore& CurrentBest)
 {
 	const auto IsRejected = [](const FPhase1AutoCalibScore& Score)
 	{
+		const bool bStandingBenchmarkSatisfied =
+			Score.bReachedBalanceActiveStanding &&
+			Score.BalanceActiveStandingHoldSeconds + KINDA_SMALL_NUMBER >= PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds;
 		return !Score.bContractPassed ||
 			Score.bTimedOut ||
 			Score.bSafeDenied ||
 			!Score.bRestoreDeterministic ||
 			!Score.bReachedRootOn ||
-			!Score.bNoCouplingProofSatisfied;
+			!Score.bNoCouplingProofSatisfied ||
+			!bStandingBenchmarkSatisfied;
 	};
 
 	const bool bCandidateRejected = IsRejected(Candidate);

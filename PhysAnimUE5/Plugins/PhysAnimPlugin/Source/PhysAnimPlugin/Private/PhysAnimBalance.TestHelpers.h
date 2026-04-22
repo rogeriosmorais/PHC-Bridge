@@ -30,28 +30,24 @@ namespace PhysAnimBalanceTestHelpers
 	{
 		OutError.Reset();
 
-		if (UPhysAnimComponent::TestOnlyIsBalanceActiveState(RuntimeState))
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
 		{
 			return true;
 		}
 
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
+		{
+			OutError = TEXT("[PhysAnimPieBalanceSmoke] Balance entry did not settle into BalanceActive_Standing within the benchmark window.");
+			return false;
+		}
+
 		if (RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
 		{
-			if (!bHasSafePhase2Denial)
-			{
-				OutError = TEXT("[PhysAnimPieBalanceSmoke] BalanceSafeDeny requires a published safe-deny reason.");
-				return false;
-			}
-
-			if (!IsTruthfulBalanceSmokeSafeDenyReason(SafePhase2DenialReason))
-			{
-				OutError = FString::Printf(
-					TEXT("[PhysAnimPieBalanceSmoke] BalanceSafeDeny published a non-truthful safe-deny reason=%s."),
-					*SafePhase2DenialReason);
-				return false;
-			}
-
-			return true;
+			OutError = FString::Printf(
+				TEXT("[PhysAnimPieBalanceSmoke] BalanceSafeDeny is not a benchmark success. reason=%s truthful=%s"),
+				*SafePhase2DenialReason,
+				IsTruthfulBalanceSmokeSafeDenyReason(SafePhase2DenialReason) ? TEXT("true") : TEXT("false"));
+			return false;
 		}
 
 		if (bInPublicBalanceEntryState)

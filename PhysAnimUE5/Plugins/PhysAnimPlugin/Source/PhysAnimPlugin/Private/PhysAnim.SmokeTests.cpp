@@ -153,6 +153,13 @@ namespace
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes trials.csv"), IFileManager::Get().FileExists(*Report.TrialsCsvPath));
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke writes pareto.json"), IFileManager::Get().FileExists(*Report.ParetoJsonPath));
 		Test->TestTrue(TEXT("Phase1 auto-calibration smoke records timeout budget telemetry"), Report.Trials[0].TrialTimeoutBudgetSeconds > 0.0f);
+		Test->TestTrue(TEXT("Phase1 auto-calibration smoke publishes a standing hold benchmark"), Report.RequiredBalanceActiveStandingHoldSeconds > 0.0f);
+		if (Report.bHasBestCandidate)
+		{
+			Test->TestTrue(
+				TEXT("Any reported best candidate satisfies the standing hold benchmark"),
+				Report.BestCandidate.Score.BalanceActiveStandingHoldSeconds >= Report.RequiredBalanceActiveStandingHoldSeconds);
+		}
 
 		TArray<FPhase1AutoCalibTrialResult> StageCTrials;
 		for (const FPhase1AutoCalibTrialResult& Trial : Report.Trials)

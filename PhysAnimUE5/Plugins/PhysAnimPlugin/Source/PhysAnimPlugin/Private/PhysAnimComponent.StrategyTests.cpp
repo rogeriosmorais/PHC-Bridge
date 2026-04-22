@@ -36,6 +36,7 @@ namespace
 		Trial.Score.bContractPassed = bContractPassed;
 		Trial.Score.bReachedRootOn = bContractPassed;
 		Trial.Score.bNoCouplingProofSatisfied = bContractPassed;
+		Trial.Score.bReachedBalanceActiveStanding = bContractPassed;
 		Trial.Score.WorstDirectLinkAngularErrorDeg = WorstDirectLinkAngularErrorDeg;
 		Trial.Score.MeanTargetDeltaDeg = 2.0f;
 		Trial.Score.MaxTargetDeltaDeg = 4.0f;
@@ -45,9 +46,11 @@ namespace
 		Trial.Score.ShellVelocityDeltaCmPerSecond = 2.0f;
 		Trial.Score.PeakRootLinearSpeedCmPerSecond = 25.0f;
 		Trial.Score.PeakRootAngularSpeedDegPerSecond = 35.0f;
+		Trial.Score.BalanceActiveStandingHoldSeconds = bContractPassed ? PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds : 0.0f;
 		Trial.TrialTimeoutBudgetSeconds = 0.75f;
 		Trial.TimeToRootOnSeconds = bContractPassed ? 0.20f : -1.0f;
 		Trial.TimeToNoCouplingProofSeconds = bContractPassed ? 0.23f : -1.0f;
+		Trial.TimeToBalanceActiveStandingSeconds = bContractPassed ? 0.30f : -1.0f;
 		Trial.bTimedOutBeforeRootOn = !bContractPassed;
 		Trial.bTimedOutBeforeNoCouplingProof = !bContractPassed;
 		Trial.WinningSearchFamily = TEXT("direct_seed");
@@ -85,7 +88,7 @@ namespace
 		FString OutcomeError;
 
 		TestTrue(
-			TEXT("Active standing balance remains a passing smoke outcome"),
+			TEXT("Active standing balance remains a passing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceActive_Standing,
 				false,
@@ -98,8 +101,8 @@ namespace
 		TestTrue(TEXT("Successful active-balance outcome emits no error"), OutcomeError.IsEmpty());
 
 		OutcomeError.Reset();
-		TestTrue(
-			TEXT("Balance recovery remains a passing smoke outcome"),
+		TestFalse(
+			TEXT("Balance recovery is not a passing standing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceActive_Recovery,
 				false,
@@ -109,11 +112,11 @@ namespace
 				TEXT(""),
 				TEXT(""),
 				OutcomeError));
-		TestTrue(TEXT("Successful recovery outcome still emits no error"), OutcomeError.IsEmpty());
+		TestTrue(TEXT("Recovery failure reports the standing requirement"), OutcomeError.Contains(TEXT("BalanceActive_Standing")));
 
 		OutcomeError.Reset();
-		TestTrue(
-			TEXT("Explicit safe deny is a passing smoke outcome when the reason is truthful"),
+		TestFalse(
+			TEXT("Explicit safe deny is not a passing benchmark outcome when the reason is truthful"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceSafeDeny,
 				false,
@@ -123,11 +126,11 @@ namespace
 				TEXT("phase2_root_on_spike"),
 				TEXT(""),
 				OutcomeError));
-		TestTrue(TEXT("Safe deny pass emits no error"), OutcomeError.IsEmpty());
+		TestTrue(TEXT("Safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
 
 		OutcomeError.Reset();
-		TestTrue(
-			TEXT("Phase 3 shell maintenance safe deny is a passing truthful smoke outcome"),
+		TestFalse(
+			TEXT("Phase 3 shell maintenance safe deny is not a passing standing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceSafeDeny,
 				false,
@@ -137,7 +140,7 @@ namespace
 				TEXT("phase3_material_shell_correction"),
 				TEXT(""),
 				OutcomeError));
-		TestTrue(TEXT("Phase 3 safe deny pass emits no error"), OutcomeError.IsEmpty());
+		TestTrue(TEXT("Phase 3 safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
 
 		OutcomeError.Reset();
 		TestFalse(
@@ -1852,6 +1855,7 @@ namespace
 		ContractPassing.bContractPassed = true;
 		ContractPassing.bReachedRootOn = true;
 		ContractPassing.bNoCouplingProofSatisfied = true;
+		ContractPassing.bReachedBalanceActiveStanding = true;
 		ContractPassing.WorstDirectLinkAngularErrorDeg = 18.0f;
 		ContractPassing.MeanTargetDeltaDeg = 2.0f;
 		ContractPassing.MaxTargetDeltaDeg = 5.0f;
@@ -1861,6 +1865,7 @@ namespace
 		ContractPassing.ShellVelocityDeltaCmPerSecond = 2.0f;
 		ContractPassing.PeakRootLinearSpeedCmPerSecond = 20.0f;
 		ContractPassing.PeakRootAngularSpeedDegPerSecond = 30.0f;
+		ContractPassing.BalanceActiveStandingHoldSeconds = PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds;
 		UPhysAnimComponent::FinalizePhase1AutoCalibScore(ContractPassing);
 
 		FPhase1AutoCalibScore ContractFailing = ContractPassing;
@@ -1895,6 +1900,15 @@ namespace
 		TestFalse(
 			TEXT("Timed-out candidates cannot outrank a passing non-timeout candidate"),
 			UPhysAnimComponent::IsBetterPhase1AutoCalibScore(TimedOut, ContractPassing));
+
+		FPhase1AutoCalibScore UnsustainedStanding = ContractPassing;
+		UnsustainedStanding.bContractPassed = false;
+		UnsustainedStanding.BalanceActiveStandingHoldSeconds =
+			PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds - 0.5f;
+		UPhysAnimComponent::FinalizePhase1AutoCalibScore(UnsustainedStanding);
+		TestFalse(
+			TEXT("RootOn without a sustained standing hold cannot outrank a benchmark pass"),
+			UPhysAnimComponent::IsBetterPhase1AutoCalibScore(UnsustainedStanding, ContractPassing));
 		return true;
 	}
 
@@ -2091,7 +2105,7 @@ namespace
 			1.8f));
 		FPhase1AutoCalibTrialResult StageCTruthfulPass = MakePhase1AutoCalibTrial(
 			EPhase1AutoCalibStrategyPreset::BalancedCoupled,
-			TEXT("reached_root_on"),
+			TEXT("stable_balance_active_standing"),
 			TEXT("ready"),
 			true,
 			17.0f,
@@ -2139,6 +2153,8 @@ namespace
 		TestTrue(TEXT("Report picks the contract-passing best candidate"), Report.bHasBestCandidate);
 		TestEqual(TEXT("Best candidate comes from the passing preset"), Report.BestCandidate.Params.SourcePreset, EPhase1AutoCalibStrategyPreset::BalancedCoupled);
 		TestTrue(TEXT("Report marks the reproducible truthful pass when one exists"), Report.bHasReproducibleTruthfulPass);
+		TestEqual(TEXT("Report publishes the standing hold benchmark threshold"), Report.RequiredBalanceActiveStandingHoldSeconds, PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds);
+		TestTrue(TEXT("Best candidate satisfies the standing hold benchmark"), Report.BestCandidate.Score.BalanceActiveStandingHoldSeconds >= Report.RequiredBalanceActiveStandingHoldSeconds);
 		TestEqual(TEXT("Truthful pass classification wins when a passing candidate exists"), Report.FrontierClassification, EPhase1AutoCalibFrontierClassification::TruthfulPassFound);
 		TestEqual(TEXT("Passing frontier recommends promotion"), Report.RecommendedAction, EPhase1AutoCalibRecommendedAction::PromoteBestCandidate);
 		TestEqual(TEXT("Passing frontier does not name a follow-up expansion"), Report.RecommendedExpansionName, FString());
@@ -2341,7 +2357,7 @@ namespace
 		FPhase1AutoCalibTrialResult BestPass =
 			MakePhase1AutoCalibTrial(
 				EPhase1AutoCalibStrategyPreset::CurrentDefault,
-				TEXT("reached_root_on"),
+				TEXT("stable_balance_active_standing"),
 				TEXT("ready"),
 				true,
 				30.5f,
@@ -2351,7 +2367,7 @@ namespace
 		FPhase1AutoCalibTrialResult SecondPass =
 			MakePhase1AutoCalibTrial(
 				EPhase1AutoCalibStrategyPreset::SpineBiased,
-				TEXT("reached_root_on"),
+				TEXT("stable_balance_active_standing"),
 				TEXT("ready"),
 				true,
 				31.5f,
@@ -2401,6 +2417,7 @@ namespace
 		TrialA.TerminalClass = TEXT("failed");
 		TrialA.TruthfulBlocker = TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient");
 		TrialA.Score.bContractPassed = false;
+		TrialA.Score.bReachedBalanceActiveStanding = true;
 		TrialA.Score.WorstDirectLinkAngularErrorDeg = 33.89f;
 		TrialA.Score.MeanTargetDeltaDeg = 2.0f;
 		TrialA.Score.MaxTargetDeltaDeg = 4.0f;
@@ -2410,9 +2427,11 @@ namespace
 		TrialA.Score.ShellVelocityDeltaCmPerSecond = 2.0f;
 		TrialA.Score.PeakRootLinearSpeedCmPerSecond = 25.0f;
 		TrialA.Score.PeakRootAngularSpeedDegPerSecond = 35.0f;
+		TrialA.Score.BalanceActiveStandingHoldSeconds = PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds - 0.25f;
 		TrialA.TrialTimeoutBudgetSeconds = 0.75f;
 		TrialA.TimeToRootOnSeconds = 0.20f;
 		TrialA.TimeToNoCouplingProofSeconds = 0.23f;
+		TrialA.TimeToBalanceActiveStandingSeconds = 0.31f;
 
 		FPhase1AutoCalibTrialResult TrialB = TrialA;
 		TrialB.Score.WorstDirectLinkAngularErrorDeg += 1.0e-4f;

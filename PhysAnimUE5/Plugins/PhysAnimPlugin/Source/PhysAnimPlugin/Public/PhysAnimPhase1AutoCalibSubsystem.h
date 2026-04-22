@@ -81,6 +81,9 @@ private:
 	double ActiveTrialStartTimeSeconds = -1.0;
 	double ActiveTrialFirstRootOnTimeSeconds = -1.0;
 	double ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
+	double ActiveTrialFirstBalanceActiveStandingTimeSeconds = -1.0;
+	double ActiveTrialStandingHoldStartTimeSeconds = -1.0;
+	double ActiveTrialMaxBalanceActiveStandingHoldSeconds = 0.0;
 	double CurrentStageStartTimeSeconds = -1.0;
 	double LastReadinessLogTimeSeconds = -1.0;
 	FPhase1AutoCalibLiveMetrics ActiveTrialPeakMetrics;
