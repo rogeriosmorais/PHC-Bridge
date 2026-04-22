@@ -348,6 +348,10 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		ObservedNonRootFamilyAngularEnvelope <= 0.0f ||
 		CurrentNonRootFamilyAngularSpeed <=
 			ObservedNonRootFamilyAngularEnvelope * Phase3RootIsolatedNonRootAngularPeakMultiplier;
+	const bool bRootAngularStillDominantOverNonRoot =
+		CurrentMaxNonRootAngularSpeed <= 0.0f ||
+		RootAngularSpeed >=
+			CurrentMaxNonRootAngularSpeed * Phase3RootIsolatedRootVsNonRootAngularRatio;
 
 	// A zero-offset, explicit-lock Settle burst can still carry residual RootOn snap
 	// energy through the shell-maintenance path for one extra tick after the
@@ -403,7 +407,8 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 
 	// A later tick-6 angular-only spike is still the same RootOn carry-through
 	// shape when Settle linear speed is already below threshold, the shell is
-	// still perfectly locked, and the angular burst remains close to the
+	// still perfectly locked, the root burst remains materially dominant over the
+	// preserved non-root set, and the angular burst remains close to the
 	// already-observed pre-Phase-3 peak rather than expanding into a new regime.
 	const bool bPrePhase3AngularPeakAlreadyBreached = PrePhase3PeakBodyAngularSpeed > AngularThreshold;
 	const bool bBoundedAngularCarryThrough =
@@ -415,6 +420,7 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		!bOffsetBreached &&
 		bShellVelocityBreached &&
 		bPrePhase3AngularPeakAlreadyBreached &&
+		bRootAngularStillDominantOverNonRoot &&
 		bNonRootAngularStillWithinObservedCarryThroughEnvelope &&
 		bNonRootFamilyStillWithinObservedCarryThroughEnvelope &&
 		bBoundedAngularCarryThrough)
@@ -432,10 +438,6 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		PrePhase3PeakBodyAngularSpeed > AngularThreshold &&
 		RootAngularSpeed <=
 			PrePhase3PeakBodyAngularSpeed * Phase3RootIsolatedAngularPeakMultiplier;
-	const bool bRootAngularStillDominantOverNonRoot =
-		CurrentMaxNonRootAngularSpeed <= 0.0f ||
-		RootAngularSpeed >=
-			CurrentMaxNonRootAngularSpeed * Phase3RootIsolatedRootVsNonRootAngularRatio;
 	if (Phase3TickCount > Phase3LateAngularOnlyShellBurstGraceTickCount &&
 		Phase3TickCount <= Phase3RootIsolatedAngularCarryThroughTickCount &&
 		!bLinearBreached &&

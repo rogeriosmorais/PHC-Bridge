@@ -789,3 +789,17 @@ Known important reference points from this work:
 - Practical meaning:
   - the old tick-6 bounded-angular proof could still overclaim continuity by ignoring a simultaneous spine-family expansion while the root burst stayed near the pre-Phase-3 peak
   - the current live blocker remains a genuine spine-family blow-up under preserved shell lock, so the next slice should keep targeting truthful late-Settle physical continuity rather than expanding grace
+
+## 2026-04-22 — Tick-6 root-dominance carry-through truthfulness
+
+- Added deterministic TDD for the next tick-6 loophole: a bounded angular carry-through burst is only still pre-material when the root burst remains materially dominant over the hottest non-root body, not merely when both sides still fit inside their observed envelopes.
+- Refined `IsPhase3EarlySettleInstabilityGraceActive` so the tick-6 bounded carry-through branch now shares the same root-vs-non-root dominance proof already required by the later root-isolated carry-through rule.
+- Verified with `.\scripts\build.ps1 -Test PhysAnim.Component.TransitionOwnedShellLockTruthfulness`, `.\scripts\build.ps1 -Test PhysAnim.Component`, `.\scripts\build.ps1 -Test PhysAnim.Bridge.BalanceStateless`, `.\scripts\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke`, and `python .\scripts\read_logs.py`.
+- The deterministic contract moved forward, while the latest live smoke on this machine still truthfully safe-denied at the same tick-6 Settle frontier:
+  - the new helper now rejects tick-6 bounded carry-through when non-root angular motion becomes too comparable to the root burst even if the observed envelopes still pass
+  - the latest verified smoke still safe-denied at `PHASE3_FIRST_FAILURE_AUDIT frame=947` with `tick=6`
+  - that run reported `rootLinear=836.54/3000.00`, `rootAngular=14225.61/2160.00`, `shellOffsetDelta=0.00/2.00`, `shellVelocityDelta=4530.78/10.00`, `prePhase3PeakNonRootAngular=2546.27`, `observedNonRootAngularEnvelope=2546.27`, `currentMaxNonRootAngular=27149.64`, `currentMaxNonRootAngularBone=spine_01`, `observedNonRootFamilyAngularEnvelope=7369.85`, and `currentNonRootFamilyAngular=45213.58`
+  - terminal outcome remained truthful safe denial on `phase3_post_root_on_instability`
+- Practical meaning:
+  - the old tick-6 proof could still overclaim a root-owned carry-through when the preserved non-root set had become too comparable to the root spike to call that shape isolated
+  - the current live blocker remains a genuine spine-dominant blow-up under preserved shell lock, so the next slice should keep targeting truthful post-RootOn physical continuity rather than expanding grace
