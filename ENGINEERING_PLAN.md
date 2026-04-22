@@ -162,11 +162,11 @@ The active benchmark is now:
 
 The active unresolved Phase 3 questions are:
 
-- how Settle distinguishes shell lock state, shell reference state, and materially active shell correction
-- how to tell whether post-RootOn shell maintenance loss is a contract mismatch, a physical-viability limit, or both
+- how Settle distinguishes shell lock state, shell reference state, and materially active shell correction on the current latest frontier
+- how to tell whether the current post-RootOn shell-maintenance loss is a contract mismatch, a physical-viability limit, or both
 - how to preserve truthful Settle failure classification without collapsing back into retry noise or generic no-convergence labeling
 
-The current unsolved question is therefore no longer mainly whether the accepted frozen Phase 1 setup is viable or whether RootOn can pass truthfully. It is whether the post-RootOn Settle continuity path can reach real `BalanceActive_Standing` and hold it for the benchmark window without material shell correction under the current runtime contract.
+The current unsolved question is therefore no longer mainly whether the accepted frozen Phase 1 setup is viable or whether RootOn can pass truthfully. It is whether the post-RootOn Settle continuity path can reach real `BalanceActive_Standing` and hold it for the benchmark window once the current `phase3_material_shell_correction` frontier is crossed under the current runtime contract.
 
 ---
 
@@ -203,7 +203,7 @@ A “successful-looking” run is not enough. Stage 1 evidence must state:
 | Sim-to-sim gap (training simulator -> Chaos) | High | High | Likely permanent tuning burden |
 | Phase 1 contract correct but physically non-viable | High | High | Still plausible |
 | Phase 3 shell-maintenance truth model under-specified | High | High | Current doc/implementation drift point |
-| Material shell correction during Settle hides the true blocker | High | High | Latest truthful failure frontier; no longer acceptable as a passing outcome |
+| Material shell correction during Settle hides the true blocker | High | High | Latest truthful failure frontier after the refreshed `2026-04-22` live smoke; no longer acceptable as a passing outcome |
 | Post-RootOn continuity depends on hidden shell support | Medium | High | Must be separated from shell state and shell lock bookkeeping |
 | Physics Control limitations / Experimental behavior | Medium | Medium | Must not be treated as a black-box stable motor system |
 | Over-constrained kinematic hold set destabilizes sim set | Medium | High | Needs evidence-driven review |

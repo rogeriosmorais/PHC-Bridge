@@ -34,8 +34,8 @@ Current focus:
 5. preserve a truthful Settle continuity contract in Phase 3
 6. treat truthful deny and failure taxonomy as observability only, not as product success
 7. require balance entry to reach `BalanceActive_Standing` and hold it for `3.0` seconds before any run counts as success
-8. isolate why shell maintenance becomes materially corrective during Phase 3 Settle after an otherwise truthful RootOn handoff
-9. determine whether the current Settle shell-maintenance failure is a contract-level mismatch, a physical-viability limit, or both
+8. isolate why shell maintenance becomes materially corrective during the current latest Phase 3 Settle frontier after an otherwise truthful RootOn handoff
+9. determine whether the current Settle `phase3_material_shell_correction` frontier is a contract-level mismatch, a physical-viability limit, or both
 10. if needed, revise Settle shell behavior / continuity checks / tuning using evidence rather than ad hoc workaround changes
 
 ## Current Stage 1 Truth
@@ -49,10 +49,11 @@ The Stage 1 balance-entry investigation has reached this point:
 - Phase 1 Prepare / LateValidate and Phase 2 RootOn may now pass truthfully without that implying product success
 - the active benchmark is now stricter than RootOn truth:
   balance entry must reach `BalanceActive_Standing` and remain there for `3.0` continuous seconds
-- the current active blocker in the latest live smoke remains Phase 3 Settle shell-maintenance continuity:
+- the current active blocker in the latest saved live smoke on `2026-04-22` remains Phase 3 Settle shell-maintenance continuity:
   `phase3_material_shell_correction`
+- the current audited shape is an early Settle shell-correction frontier at `tick=2` with `shellVelocityDelta=33.20/10.00` under preserved shell lock after truthful RootOn
 - further grace-window refinement is now suspect unless it moves the standing-hold benchmark
-- the next engineering slice is Settle shell-maintenance truth and real standing continuity, not restart cleanup and not the older Phase 1 readiness-margin frontier
+- the next engineering slice is truthful standing-benchmark evidence and then Settle shell-maintenance truth, not restart cleanup and not the older Phase 1 readiness-margin frontier
 
 This is progress, not regression.
 

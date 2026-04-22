@@ -1890,6 +1890,22 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReport()
 	WriteArtifacts();
 }
 
+#if WITH_DEV_AUTOMATION_TESTS
+bool UPhysAnimPhase1AutoCalibSubsystem::TestOnlyWriteArtifacts(FPhase1AutoCalibReport& InOutReport)
+{
+	UPhysAnimPhase1AutoCalibSubsystem* const Subsystem = NewObject<UPhysAnimPhase1AutoCalibSubsystem>();
+	if (!Subsystem)
+	{
+		return false;
+	}
+
+	Subsystem->LatestReport = InOutReport;
+	Subsystem->WriteArtifacts();
+	InOutReport = Subsystem->LatestReport;
+	return true;
+}
+#endif
+
 void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 {
 	const FString OutputDirectory = LatestReport.OutputDirectory;

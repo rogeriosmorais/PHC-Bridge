@@ -6,6 +6,7 @@
 #endif
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/FileHelper.h"
 #include "Misc/AutomationTest.h"
 #include "Tests/AutomationCommon.h"
 #include "Tests/AutomationEditorCommon.h"
@@ -159,6 +160,62 @@ namespace
 			Test->TestTrue(
 				TEXT("Any reported best candidate satisfies the standing hold benchmark"),
 				Report.BestCandidate.Score.BalanceActiveStandingHoldSeconds >= Report.RequiredBalanceActiveStandingHoldSeconds);
+		}
+
+		FString SummaryJson;
+		Test->TestTrue(
+			TEXT("Phase1 auto-calibration smoke can read summary.json"),
+			FFileHelper::LoadFileToString(SummaryJson, *Report.SummaryPath));
+		if (!SummaryJson.IsEmpty())
+		{
+			Test->TestTrue(
+				TEXT("summary.json emits the standing hold benchmark field"),
+				SummaryJson.Contains(TEXT("\"requiredBalanceActiveStandingHoldSeconds\":")));
+			Test->TestTrue(
+				TEXT("summary.json emits per-trial standing timing"),
+				SummaryJson.Contains(TEXT("\"timeToBalanceActiveStandingSeconds\":")));
+			Test->TestTrue(
+				TEXT("summary.json emits per-trial standing reach flags"),
+				SummaryJson.Contains(TEXT("\"reachedBalanceActiveStanding\":")));
+			Test->TestTrue(
+				TEXT("summary.json emits per-trial standing hold seconds"),
+				SummaryJson.Contains(TEXT("\"balanceActiveStandingHoldSeconds\":")));
+		}
+
+		FString ParetoJson;
+		Test->TestTrue(
+			TEXT("Phase1 auto-calibration smoke can read pareto.json"),
+			FFileHelper::LoadFileToString(ParetoJson, *Report.ParetoJsonPath));
+		if (!ParetoJson.IsEmpty())
+		{
+			Test->TestTrue(
+				TEXT("pareto.json emits per-trial standing timing"),
+				ParetoJson.Contains(TEXT("\"timeToBalanceActiveStandingSeconds\":")));
+			Test->TestTrue(
+				TEXT("pareto.json emits per-trial standing reach flags"),
+				ParetoJson.Contains(TEXT("\"reachedBalanceActiveStanding\":")));
+			Test->TestTrue(
+				TEXT("pareto.json emits per-trial standing hold seconds"),
+				ParetoJson.Contains(TEXT("\"balanceActiveStandingHoldSeconds\":")));
+		}
+
+		FString TrialsCsv;
+		Test->TestTrue(
+			TEXT("Phase1 auto-calibration smoke can read trials.csv"),
+			FFileHelper::LoadFileToString(TrialsCsv, *Report.TrialsCsvPath));
+		if (!TrialsCsv.IsEmpty())
+		{
+			const int32 HeaderEndIndex = TrialsCsv.Find(TEXT("\n"));
+			const FString Header = HeaderEndIndex >= 0 ? TrialsCsv.Left(HeaderEndIndex) : TrialsCsv;
+			Test->TestTrue(
+				TEXT("trials.csv header emits standing timing"),
+				Header.Contains(TEXT("time_to_balance_active_standing_seconds")));
+			Test->TestTrue(
+				TEXT("trials.csv header emits standing reach flags"),
+				Header.Contains(TEXT("reached_balance_active_standing")));
+			Test->TestTrue(
+				TEXT("trials.csv header emits standing hold seconds"),
+				Header.Contains(TEXT("balance_active_standing_hold_seconds")));
 		}
 
 		TArray<FPhase1AutoCalibTrialResult> StageCTrials;

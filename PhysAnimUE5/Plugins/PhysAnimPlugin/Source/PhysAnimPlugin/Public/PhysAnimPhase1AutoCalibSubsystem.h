@@ -33,6 +33,9 @@ public:
 	static bool IsActiveTrialTimeoutReached(bool bTrialStarted, double TrialStartTimeSeconds, double CurrentTimeSeconds, double TimeoutSeconds);
 	static bool ShouldAccumulateActiveTrialMetrics(bool bTrialStarted);
 	static void FinalizeReportData(FPhase1AutoCalibReport& InOutReport, TArray<FPhase1AutoCalibTrialResult>* StageCTrials = nullptr);
+#if WITH_DEV_AUTOMATION_TESTS
+	static bool TestOnlyWriteArtifacts(FPhase1AutoCalibReport& InOutReport);
+#endif
 
 private:
 	enum class EAutoCalibStage : uint8
