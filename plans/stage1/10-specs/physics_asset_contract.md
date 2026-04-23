@@ -10,7 +10,7 @@ Disagreement with this contract triggers a terminal `activation_physics_asset_co
 
 1.  **Static Structural Audit (Entry Gate)**:
     - Runs **BEFORE** entering `BalanceActivation_Ready`.
-    - **Scope**: Skeleton topology, asset identity, hierarchy hashing, and bone length integrity.
+    - **Scope**: Skeleton topology, asset identity, hierarchy hashing, bone length integrity, and bone axis alignment.
     - **Enforcement**: Passing this audit is a hard prerequisite for entry.
 
 2.  **Mutation-Triggered Audit (Integrity Monitoring)**:

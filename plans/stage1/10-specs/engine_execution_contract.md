@@ -100,7 +100,11 @@ The implementation must perform truth adjudication in this exact order:
 5.  **Proxy Adjudication**: 
     - If `Proxy` is outside the hull, increment drift timer. 
     - If `timer > COM Proxy Drift`, emit `activation_proxy_outside_support_region`.
-6.  **Classification**: Assign `support_mode` based on active side-set (L, R, or Both).
+6.  **Classification**: Assign `support_mode` using the following priority:
+    - **Airborne**: Both sides `false` AND `gap_timer > Support Gap (Max)`. (Triggers `activation_support_failure`).
+    - **TransientRecovery**: One or both sides `false` AND `gap_timer <= Support Gap (Max)`.
+    - **SingleFootSurvival**: Exactly one side `true` (debounced) AND `Proxy` is `Inside`.
+    - **TwoFootStable**: Both sides `true` (debounced).
 
 ### 5. Proxy-vs-Hull Test Logic
 - **Projection**: Project the **Support Proxy** (defined in [continuous_balance_truth_model.md](continuous_balance_truth_model.md)) onto the same planar support surface.
@@ -112,12 +116,12 @@ The implementation must perform truth adjudication in this exact order:
 ### 6. Substep Persistence (Debounce Rule)
 - State changes accepted only if they persist for **2 consecutive substeps**.
 
-### 5. Churn and Uptime Counting
+### 7. Churn and Uptime Counting
 - Count each debounced `false<->true` transition as 1 churn event.
 - Increment uptime only on side-support `true` substeps.
 
-### 6. False-Failure Risk
+### 8. False-Failure Risk
 Area-preserving reduction is mandatory. Collapsing a plantar contact to its "deepest point" is a contract violation because it eliminates the stability margin required for honest swaying.
 
-### 6. 30 Hz Artifact Emission
+### 9. 30 Hz Artifact Emission
 Emit immediately if a terminal failure occurs between 30Hz samples.

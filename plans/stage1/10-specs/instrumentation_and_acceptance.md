@@ -41,6 +41,8 @@ The implementation must emit a JSON artifact for every attempt, containing:
 ### 3. Support Truth
 - `support_state_l` / `support_state_r`: Debounced side-contact status.
 - `support_mode`: Dominant stability grade (`TwoFootStable`, `SingleFootSurvival`, `TransientRecovery`, `Airborne`).
+- `support_hull_area_cm2`: Total planar area of the frame support hull.
+- `support_patch_area_l_cm2` / `support_patch_area_r_cm2`: Individual plantar area per side.
 - `support_hull_points`: World-space coordinates of the active footprint.
 - `com_proxy_pos`: Projected planar centroid of the critical chain.
 - `max_penetration_cm`: Deepest manifold point recorded for the frame.
@@ -109,13 +111,14 @@ These are the authoritative operational thresholds for the `V0` artifact and ter
 | **Mismatch (Max Body)** | `25.0 deg` | Orientation fidelity limit (for 100ms) |
 | **Mismatch (RMS Chain)** | `15.0 deg` | Average pose fidelity limit (for 100ms) |
 | **Target Discontinuity** | `15.0 deg` | Max jump at blend start |
+| **Mismatch Grace Period** | `0.2 sec` | Settling time for reference match |
 | **Support Churn** | `12.0 Hz` | Jitter/Popping limit |
 | **Pelvis Sleep Limit** | `100.0 ms` | Max contiguous sleep before simulation loss |
-| **Support Sleep Dominance** | `50%` | Max cumulative sleep in validation window |
-| **Plant Admissibility** | Per [physics_asset_contract.md](physics_asset_contract.md) | Mirrored authority for mass/inertia/skeleton. |
+| **Plant Admissibility** | Per Authoritative Plant Tolerances in [physics_asset_contract.md](physics_asset_contract.md) | Mirrored authority for mass/inertia/skeleton. |
 | **Skeleton Axis Alignment** | Per [physics_asset_contract.md](physics_asset_contract.md) | Authoritative joint axis audit. |
 | **Segment Length Tolerance** | Per [physics_asset_contract.md](physics_asset_contract.md) | Authoritative bone length audit. |
 | **Capsule Lock Delta** | `0.01 cm` | Max deviation for frozen root |
+| **Support Area (Min)** | `50.0 cm2` | Minimum area required for a valid planar support proof |
 | **Hold Duration (Min)** | `3.0 sec` | Acceptance duration for V0 |
 
 ## Must-Fail Gates (Regression Criteria)

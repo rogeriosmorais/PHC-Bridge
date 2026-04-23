@@ -98,9 +98,9 @@ The `V0` support proxy is the world-space planar centroid of:
 - `pelvis`, `thigh_l`, `thigh_r`, `spine_01`
 
 ### Support region definition
-The `V0` support region is the convex hull of all qualifying `foot_*` and `ball_*` manifold points from the final qualifying Chaos substep.
+The authoritative definition of the support region, including per-body patch reduction, hull construction, and the proxy-vs-hull test, is owned exclusively by [engine_execution_contract.md](engine_execution_contract.md).
 
-**Calf Limitation**: Contact on `calf_l` or `calf_r` is strictly defined as contamination in [authority_matrix.md](authority_matrix.md). It is NOT valid support truth and cannot be downgraded to diagnostic-only.
+**Calf Limitation**: Contact on `calf_l` or `calf_r` is strictly defined as contamination in [authority_matrix.md](authority_matrix.md). It is NOT valid support truth and does not contribute to the support region.
 
 ## Material Contamination Rules
 
