@@ -38,7 +38,7 @@ When multiple failure conditions are simultaneously active, the implementation m
 | **10** | **Pose/Reference** | `activation_pose_reference_mismatch` | [continuous_balance_truth_model.md](continuous_balance_truth_model.md) |
 | **11** | **Authority/Ownership** | `activation_movement_reclaim` | [authority_matrix.md](authority_matrix.md) |
 | **12** | **Authority/Ownership** | `activation_shell_helper_violation` | [authority_matrix.md](authority_matrix.md) |
-| **13** | **Authority/Ownership** | `activation_authority_conflict` | [continuous_balance_truth_model.md](continuous_balance_truth_model.md) |
+| **13** | **Authority/Ownership** | `activation_authority_conflict` | [authority_matrix.md](authority_matrix.md) |
 | **14** | **Time/Duration** | `activation_standing_validation_timeout` | [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md) |
 
 ### General Arbitration Rule
@@ -90,7 +90,8 @@ The support state is classified at the frame level into these four mutually excl
 The run fails on `activation_pose_reference_mismatch` if:
 1.  Any body in the balance-critical chain exceeds the **Mismatch (Max Body)** threshold for more than the **Mismatch Grace Period** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 2.  The RMS mismatch across the entire chain exceeds the **Mismatch (RMS Chain)** threshold for more than the **Mismatch Grace Period** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
-3.  **Target Discontinuity**: Delta at blend start exceeds the **Target Discontinuity** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+
+The run fails on `activation_target_discontinuity` if the delta at blend start exceeds the **Target Discontinuity** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 
 ## Instability & Support Churn
 

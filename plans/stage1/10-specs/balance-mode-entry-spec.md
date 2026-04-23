@@ -31,6 +31,16 @@ The detailed entry preconditions, exit conditions, and failure reasons for each 
 
 **Note on Plant Audit**: Passing the full Static Structural Audit (Entry Gate) (See [physics_asset_contract.md](physics_asset_contract.md)) is a **prerequisite** for entering the balance state machine; it does not occur during `BalanceActivation_Ready`.
 
+## Outcome Vocabulary
+
+For V0 balance activation:
+
+- `BalanceActive_Standing` is the only successful runtime outcome.
+- `SafeDenied` is a truthful denial outcome and is never product success.
+- `Failed` is the canonical terminal failure outcome for contract, continuity, support, instability, authority, and timeout failures.
+- `No Entry` is not a runtime state; it means a prerequisite failed before `BalanceActivation_Ready` and the attempt terminates as `Failed`.
+- Legacy `FailStopped` code or log labels map to canonical `Failed` in balance-first planning docs and artifacts.
+
 ## Authoritative State Mapping
 
 Legacy filenames and code symbols (Phase 1/2/3, LateValidate, RootOn, Settle) are mapped to the new flow as follows:
@@ -41,5 +51,7 @@ Legacy filenames and code symbols (Phase 1/2/3, LateValidate, RootOn, Settle) ar
 | `RootOn` | (Superseded ownership-flip concept; not part of target design) |
 | `Settle` | `BalanceActivation_Validate` |
 | `BalanceActive` | `BalanceActive_Standing` |
+| `FailStopped` | `Failed` |
+| `BalanceSafeDeny` | `SafeDenied` |
 
 No implementation detail is allowed that relies on logic from this demoted spec that is not present in the authoritative documents listed above.

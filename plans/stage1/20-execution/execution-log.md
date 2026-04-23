@@ -54,6 +54,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 - `Supporting Docs`:
   - `AGENTS.md`, `ENGINEERING_PLAN.md`, `STAGE1_PLAN.md`, `plans/stage1/20-execution/assumption-ledger.md`
 - `Unfreeze rule`: Only unfreeze if the user explicitly requests an architecture review or if an implementation spike proves a contract requirement is physically impossible.
+- `Outcome vocabulary`: Use `Failed` for canonical balance-first terminal failure. Treat legacy `FailStopped` as a code/log compatibility label only.
 
 ## Next Runnable Tasks
 

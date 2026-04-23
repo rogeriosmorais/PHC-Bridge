@@ -10,15 +10,18 @@ It defines the frozen document hierarchy, the active execution focus, and the ru
 
 Authority order:
 
-1. `plans/stage1/10-specs/*`
+1. Active contract documents explicitly listed in this file
 2. `STAGE1_PLAN.md`
+3. Active execution-planning documents explicitly listed in this file
 
 **Historical reference (Non-authoritative)**:
 - `plans/stage1/90-archive/40-design-legacy/*`
+- frozen task, content, user, evidence, and control documents under `plans/stage1/` unless explicitly reactivated here
 
 Interpretation rules:
 
-- if `STAGE1_PLAN.md` conflicts with a `10-specs` document, the `10-specs` document wins
+- if `STAGE1_PLAN.md` conflicts with an active `10-specs` contract, the contract wins
+- if execution-planning docs conflict with active contracts, the contracts win
 - balance activation rules are contract rules and must exist in `10-specs`
 
 ## Current Execution Focus
@@ -111,6 +114,7 @@ The planning bundle under `plans/stage1/` remains frozen except for contract cor
 Only these categories may change during the current stabilization loop:
 
 - `10-specs` documents that define runtime contract
+- active balance-first execution-planning documents listed below
 - evidence documents that record results
 
 ## Planning Bundle Index
@@ -120,10 +124,21 @@ Only these categories may change during the current stabilization loop:
 - `plans/stage1/10-specs/continuous_balance_architecture.md`
 - `plans/stage1/10-specs/continuous_balance_truth_model.md`
 - `plans/stage1/10-specs/authority_matrix.md`
+- `plans/stage1/10-specs/engine_execution_contract.md`
+- `plans/stage1/10-specs/physics_asset_contract.md`
+- `plans/stage1/10-specs/character_capsule_contract.md`
 - `plans/stage1/10-specs/instrumentation_and_acceptance.md`
-- `plans/stage1/10-specs/bridge-spec.md`
-- `plans/stage1/10-specs/ue-bridge-implementation-spec.md`
 - `plans/stage1/10-specs/balance-mode-entry-spec.md`
+- `plans/stage1/10-specs/rewrite_migration_plan.md`
+
+### Active execution-planning documents
+
+- `plans/stage1/20-execution/execution-log.md`
+- `plans/stage1/20-execution/assumption-ledger.md`
+- `plans/stage1/20-execution/balance_first_refactor_plan.md`
+- `plans/stage1/20-execution/balance_first_tdd_strategy.md`
+- `plans/stage1/20-execution/balance_first_test_matrix.md`
+- `plans/stage1/20-execution/first-slice-definition.md`
 
 ### Archived design documents (Historical)
 
@@ -136,7 +151,7 @@ The design is considered documented only when all of the following are true:
 - the balance-activation contract is explicit in `10-specs`
 - the continuous-balance architecture, truth model, authority matrix, and instrumentation docs exist and are referenced as the primary rewrite documents
 - `STAGE1_PLAN.md` points to that contract
-- `40-design` repeats the same contract without divergence
+- archived design docs are clearly non-authoritative and are not used as implementation inputs
 - the docs explicitly distinguish contract correctness from physical viability
 - no authoritative document implies a flip-based handoff is the intended activation mechanism
 - the docs explicitly define continuous physical ownership of the balance-critical chain as the target design

@@ -26,11 +26,11 @@ Update this ledger ONLY when one of these events occurs:
 
 | ID | Assumption | Why It Matters Now | Current Status | Next Test | Falsification Signal | Immediate Fallback | Stop Work If False | Blocked Tasks | Last Reviewed |
 |---|---|---|---|---|---|---|---|---|---|
-| **A-01** | Internal contract coherence | Avoids implementation-time dead ends | `green` | `INTEG-01` | Contradictions emerge during TDD | Revise specialized contracts | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
+| **A-01** | Internal contract coherence | Avoids implementation-time dead ends | `green` | `ARBIT-01` to `ARBIT-05`, `INTEG-01` | Contradictions emerge during TDD | Revise specialized contracts | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
 | **A-02** | Pure-first slice viability | Foundation for logic isolation | `green` | Slice 1 unit suite | Logic requires direct engine object access | Insert adapter boundary | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
 | **A-03** | Adapter-fed validator portability | Keeps truth logic testable and decoupled | `green` | `VALID-01` to `VALID-07` | Validators require deep Unreal-only wiring | Implement as thin Unreal wrappers | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
 | **A-04** | Validator-first TDD sequencing | Prevents broad, high-risk refactors | `green` | `VALID-01` to `VALID-07` | Runtime edits necessary before tests are green | Insert narrower extraction layer | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
-| **A-05** | Artifact-forensic sufficiency | Ensures truth without log forensics | `green` | `LOGIC-05` artifact audit | Failures require log forensics | Expand artifact schema | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
+| **A-05** | Artifact-forensic sufficiency | Ensures truth without log forensics | `green` | `SMOKE-05` artifact audit | Failures require log forensics | Expand artifact schema | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
 | **A-06** | Late state-machine rewiring | Minimizes surgery on active runtime | `green` | `INTEG-01` wiring | State machine depends on unbuilt logic | Pull rewiring earlier | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
 | **A-07** | 3.0s standing is V0 target | Definitive product success gate | `green` | `INTEG-07` | Target found to be physically unreachable | Revise benchmark | No | None | 2026-04-23 |
 | **A-08** | Sufficient runtime data access | Validators must be fed truthfully | `green` | Slice 1 implementation | Required Unreal data is inaccessible | Modify bridge component | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
@@ -49,16 +49,29 @@ Update this ledger ONLY when one of these events occurs:
 - A planning spec is locked.
 - A gate package is prepared.
 - User evidence arrives.
-- Implementation spike prove a contract is physically impossible.
+- Implementation spikes prove a contract is physically impossible.
 
 ## Planning Authority
 
 The following documents are the ONLY active authority for Stage 1 execution:
-- **Contract Suite**: `plans/stage1/10-specs/*.md`
-- **TDD / Refactor Planning**: `plans/stage1/20-execution/*.md`
+- **Contract Suite**:
+  - `plans/stage1/10-specs/continuous_balance_architecture.md`
+  - `plans/stage1/10-specs/continuous_balance_truth_model.md`
+  - `plans/stage1/10-specs/engine_execution_contract.md`
+  - `plans/stage1/10-specs/authority_matrix.md`
+  - `plans/stage1/10-specs/physics_asset_contract.md`
+  - `plans/stage1/10-specs/character_capsule_contract.md`
+  - `plans/stage1/10-specs/instrumentation_and_acceptance.md`
+  - `plans/stage1/10-specs/balance-mode-entry-spec.md`
+  - `plans/stage1/10-specs/rewrite_migration_plan.md`
+- **TDD / Refactor Planning**:
+  - `plans/stage1/20-execution/balance_first_refactor_plan.md`
+  - `plans/stage1/20-execution/balance_first_tdd_strategy.md`
+  - `plans/stage1/20-execution/balance_first_test_matrix.md`
+  - `plans/stage1/20-execution/first-slice-definition.md`
 - **History / Control**: `plans/stage1/20-execution/execution-log.md`
 
-**Deprecated/Purged**:
+**Deprecated/Decommissioned**:
 - `bridge-spec.md`, `retargeting-spec.md`, `test-strategy.md`
 - Archived `40-design` design artifacts
 - `plans/stage1/40-tasks/` (Legacy task-packet storage only)

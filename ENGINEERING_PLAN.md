@@ -224,22 +224,21 @@ NewEngine/
 |   |-- continuous_balance_architecture.md
 |   |-- continuous_balance_truth_model.md
 |   |-- authority_matrix.md
+|   |-- engine_execution_contract.md
+|   |-- physics_asset_contract.md
+|   |-- character_capsule_contract.md
 |   |-- instrumentation_and_acceptance.md
-|   |-- bridge-spec.md
-|   |-- ue-bridge-implementation-spec.md
-|   `-- balance-mode-entry-spec.md
-|-- plans/stage1/40-design/
-|   |-- adr-reject-flip-centered-balance-entry-as-primary-architecture.md
-|   |-- rewrite_migration_plan.md
-|   |-- legacy_handoff_contract.md
-|   |-- balance-perturbation-mode-design.md
-|   |-- balance_mode_entry_transition_spec.md
-|   |-- balance_mode_phase1_stabilization_spec.md
-|   |-- balance_mode_phase2.md
-|   |-- balance_mode_phase3_settle.md
-|   |-- phase1-late-validate-truth-model.md
-|   |-- phase1-transactional-auto-calibration-harness.md
-|   `-- phase2-rooton-truth-model.md
+|   |-- balance-mode-entry-spec.md
+|   `-- rewrite_migration_plan.md
+|-- plans/stage1/20-execution/
+|   |-- execution-log.md
+|   |-- assumption-ledger.md
+|   |-- balance_first_refactor_plan.md
+|   |-- balance_first_tdd_strategy.md
+|   |-- balance_first_test_matrix.md
+|   `-- first-slice-definition.md
+|-- plans/stage1/90-archive/
+|   `-- 40-design-legacy/
 `-- PhysAnimUE5/
     `-- Plugins/PhysAnimPlugin/
 ```

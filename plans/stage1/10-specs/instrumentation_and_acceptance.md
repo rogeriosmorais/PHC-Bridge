@@ -102,7 +102,7 @@ The implementation must emit a JSON artifact for every attempt, containing:
 
 ## Canonical Terminal Reasons
 
-When a run terminates in failure, the primary `terminal_reason` must be exactly one of the values from this canonical set. For successful attempts, `terminal_reason` must be `nullptr`.
+When a run terminates in failure, the primary `terminal_reason` must be exactly one of the values from this canonical set. For successful attempts, the JSON artifact `terminal_reason` must be `null`.
 
 1. `activation_physics_asset_contract_violation`
 2. `activation_capsule_contract_violation`
@@ -157,7 +157,7 @@ The implementation is considered broken if it fails to detect and correctly labe
 ## Acceptance Gates
 
 A run is **Successful** ONLY if:
-1.  The artifact `terminal_reason` is `nullptr`.
+1.  The artifact `terminal_reason` is `null`.
 2.  The `hold_duration_sec` reaches or exceeds `3.0`.
 3.  All primary metrics remained within the thresholds above for the entire duration.
 4.  The artifact `physical_continuity_validator_passed` is `true`.

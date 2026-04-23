@@ -19,81 +19,89 @@ This document is the authoritative implementation order for the balance-first re
 - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComparisonSubsystem.cpp`
 
 **New Extraction Modules**:
-- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/Support/PhysAnimSupportTruth.h` (and `.cpp`)
-- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/Validation/PhysAnimValidators.h` (and `.cpp`)
+- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimSupportTruth.h`
+- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.cpp`
+- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimValidators.h`
+- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimValidators.cpp`
 
 **Test Suites**:
-- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/Tests/PhysAnimSupportTests.cpp`
-- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/Tests/PhysAnimValidatorTests.cpp`
+- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.Tests.cpp`
+- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimValidators.Tests.cpp`
 
 ## 4. Refactor Sequence
 
 The refactor MUST proceed in this exact order. Do not skip or reorder these phases.
 
-### Phase 1 — Test Harness First
-1.  **Artifact Schema**: Add assertions and builders for the 10-spec suite.
-    - **Change**: `PhysAnimComparisonSubsystem.cpp`
-    - **Test**: `PhysAnimValidatorTests.cpp`
-2.  **Support Harness**: Add pure test harness for support geometry, hulls, and timers.
-    - **New**: `PhysAnimSupportTests.cpp`
-3.  **Arbitration Harness**: Add pure test harness for terminal-reason arbitration.
-    - **New**: `PhysAnimValidatorTests.cpp`
-
-### Phase 2 — Pure Logic Extraction (Slice 1)
-4.  **Patch Reduction**: Extract support patch reduction.
+### Phase 1 — Pure Support Logic Extraction (Slice 1)
+1.  **Patch Reduction**: Extract support patch reduction.
     - **Destination**: `PhysAnimSupportTruth::ExtractPatchHull`
-    - **Test**: `PhysAnimSupportTests.cpp` (red -> green)
-5.  **Classification**: Extract support-mode classification.
+    - **Test**: `PhysAnimSupportTruth.Tests.cpp` (red -> green)
+2.  **Frame Hull Union**: Extract frame-level hull construction from per-body patches.
+    - **Destination**: `PhysAnimSupportTruth::BuildFrameHull`
+    - **Test**: `PhysAnimSupportTruth.Tests.cpp` (red -> green)
+3.  **Classification**: Extract support-mode classification.
     - **Destination**: `PhysAnimSupportTruth::ClassifySupportMode`
-    - **Test**: `PhysAnimSupportTests.cpp` (red -> green)
-6.  **Proxy Drift**: Extract proxy drift timing.
+    - **Test**: `PhysAnimSupportTruth.Tests.cpp` (red -> green)
+4.  **Proxy Drift**: Extract proxy containment and drift timing.
     - **Destination**: `PhysAnimSupportTruth::AdjudicateProxy`
-    - **Test**: `PhysAnimSupportTests.cpp` (red -> green)
-7.  **Churn Frequency**: Extract churn rolling-window frequency calculation.
+    - **Test**: `PhysAnimSupportTruth.Tests.cpp` (red -> green)
+5.  **Churn Frequency**: Extract churn rolling-window frequency calculation.
     - **Destination**: `PhysAnimSupportTruth::CalculateChurnHz`
-    - **Test**: `PhysAnimSupportTests.cpp` (red -> green)
+    - **Test**: `PhysAnimSupportTruth.Tests.cpp` (red -> green)
+6.  **30 Hz Reduction**: Extract report-window support-mode reduction and tie-breaks.
+    - **Destination**: `PhysAnimSupportTruth::ReduceSupportModeForReportWindow`
+    - **Test**: `PhysAnimSupportTruth.Tests.cpp` (red -> green)
 
-### Phase 3 — Validator Extraction
+### Phase 2 — Arbitration and Validator Extraction
+7.  **Arbitration Harness**: Extract terminal-reason arbitration before runtime rewiring.
+    - **Destination**: `PhysAnimValidators::ArbitrateFailure`
+    - **Test**: `PhysAnimValidators.Tests.cpp` (red -> green)
 8.  **Continuity**: Extract the physical-continuity validator.
     - **Destination**: `PhysAnimValidators::ValidateContinuity`
-    - **Test**: `PhysAnimValidatorTests.cpp`
+    - **Test**: `PhysAnimValidators.Tests.cpp`
 9.  **Capsule**: Extract the capsule contract validator.
     - **Destination**: `PhysAnimValidators::ValidateCapsule`
-    - **Test**: `PhysAnimValidatorTests.cpp`
+    - **Test**: `PhysAnimValidators.Tests.cpp`
 10. **Plant**: Extract the plant contract validator.
     - **Destination**: `PhysAnimValidators::ValidatePlant`
-    - **Test**: `PhysAnimValidatorTests.cpp`
+    - **Test**: `PhysAnimValidators.Tests.cpp`
 11. **Contamination**: Extract the authority-matrix contamination classifier.
     - **Destination**: `PhysAnimValidators::ValidateAuthority`
-    - **Test**: `PhysAnimValidatorTests.cpp`
+    - **Test**: `PhysAnimValidators.Tests.cpp`
+12. **Controller Stability**: Extract target discontinuity, gain/damping, pose mismatch, and standing-timeout checks.
+    - **Destination**: `PhysAnimValidators::ValidateControllerStability`
+    - **Test**: `PhysAnimValidators.Tests.cpp`
 
-### Phase 4 — Runtime Adapters
-12. **Mapping**: Build adapters mapping `UPhysicsControlComponent` data into validators.
+### Phase 3 — Artifact Schema and Runtime Adapters
+13. **Artifact Schema**: Add assertions and builders for the 10-spec suite.
+    - **Change**: `PhysAnimComparisonSubsystem.cpp`
+    - **Test**: `PhysAnimValidators.Tests.cpp`
+14. **Mapping**: Build adapters mapping `UPhysicsControlComponent` data into validators.
     - **Change**: `PhysAnimBridge.cpp` (internal private helpers)
-    - **Test**: `PhysAnimValidatorTests.cpp` (integration mocks)
-13. **Integration Tests**: Verify validator input mapping from Unreal types.
-14. **Freeze**: Freeze `PhysAnimSupportTruth` and `PhysAnimValidators` interfaces.
+    - **Test**: `PhysAnimValidators.Tests.cpp` (integration mocks)
+15. **Integration Tests**: Verify validator input mapping from Unreal types.
+16. **Freeze**: Freeze `PhysAnimSupportTruth` and `PhysAnimValidators` interfaces.
 
-### Phase 5 — State Machine Rewrite
-15. **Ready**: Rewire `PhysAnimBalanceReadyTransition::Tick` with new audits.
-16. **BlendIn**: Rewire the rollout and reference-readiness checks in `PhysAnimBridge`.
-17. **Validate**: Rewire the hold state in `PhysAnimBridge`.
-18. **Standing**: Wire the 3.0s terminal success path.
-19. **Terminal Failures**: Wire artifact population in `PhysAnimComparisonSubsystem`.
+### Phase 4 — State Machine Rewrite
+17. **Ready**: Rewire `PhysAnimBalanceReadyTransition::Tick` with new audits.
+18. **BlendIn**: Rewire the rollout and reference-readiness checks in `PhysAnimBridge`.
+19. **Validate**: Rewire the hold state in `PhysAnimBridge`.
+20. **Standing**: Wire the 3.0s terminal success path.
+21. **Terminal Failures**: Wire artifact population in `PhysAnimComparisonSubsystem`.
 
-### Phase 6 — End-to-End Verification
-20. **Smoke Harness**: Deterministic runtime smokes for all reasons in `PhysAnim.PIE.BalanceModeSmoke`.
-21. **Regression Smokes**: Must-fail smokes for plant/authority breaches.
-22. **Product Benchmark**: 3.0s standing pass criteria verification.
-23. **Forensic Audit**: Artifact verification for telemetry truth.
+### Phase 5 — End-to-End Verification
+22. **Smoke Harness**: Deterministic runtime smokes for all reasons in `PhysAnim.PIE.BalanceModeSmoke`.
+23. **Regression Smokes**: Must-fail smokes for plant/authority breaches.
+24. **Product Benchmark**: 3.0s standing pass criteria verification.
+25. **Forensic Audit**: Artifact verification for telemetry truth.
 
 ## 5. Definition of Done Per Slice
 
 - Failing tests first (demonstrating the need for the change).
 - Minimal production change (only what is required for the slice).
-- Green unit tests (validating the logic).
-- Green integration tests (validating the plumbing).
-- No regression in the smoke harness.
+- Pure-logic slices require green unit tests for the extracted logic.
+- Adapter and runtime slices require green integration tests for the touched plumbing.
+- Smoke regression is required only for runtime/state-machine or end-to-end slices, not for pure extraction slices.
 
 ## 6. Forbidden Moves
 

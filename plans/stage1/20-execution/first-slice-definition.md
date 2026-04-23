@@ -10,6 +10,7 @@ This is the first coding slice of the balance-first rewrite. It focuses exclusiv
 - **Support-Mode Classification**: Grading the contact pattern (TwoFoot, SingleFoot, Transient, Airborne).
 - **Proxy Drift Timer**: Adjudicating proxy containment vs. time.
 - **Churn Frequency Calculation**: Computing rolling 1.0s Hz from transitions.
+- **30 Hz Support-Mode Reduction**: Reducing frame-level classifications into report-window artifacts with the contract tie-break order.
 
 ## 2. Why This Slice First
 
@@ -22,6 +23,7 @@ This is the first coding slice of the balance-first rewrite. It focuses exclusiv
 - **Zero Runtime Surgery**: Do not touch existing bridge state-machine or handoff logic.
 - **Pure Functions**: Implementation must use pure inputs (structs/arrays) and produce pure outputs.
 - **Contract Alignment**: Use the exact field names and types defined in the 10-spec suite.
+- **Repo-Local Paths**: Follow the plugin's existing layout: `Public/PhysAnimSupportTruth.h`, `Private/PhysAnimSupportTruth.cpp`, and `Private/PhysAnimSupportTruth.Tests.cpp`.
 
 ## 4. Definition of Done
 

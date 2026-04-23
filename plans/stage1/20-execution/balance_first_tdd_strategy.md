@@ -22,9 +22,11 @@ This document defines the TDD strategy and testing pyramid for the balance-first
 
 ### 4.1 Pure Logic (PhysAnimSupportTruth)
 - **Support Patch Reduction**: Verify area-preserving hull construction from manifold points.
+- **Frame Hull Union**: Verify frame-level hull construction from per-body support patches.
 - **Support-Mode Classification**: Verify the four contact-pattern grades (TwoFoot, SingleFoot, Transient, Airborne) against side-support and gap-timer states.
 - **Proxy-Outside-Hull Adjudication**: Verify proxy containment and drift-timer logic.
 - **Churn Frequency Calculation**: Verify rolling 1.0s Hz calculation with synthetic transition streams.
+- **30 Hz Support-Mode Reduction**: Verify report-window duration reduction and severity tie-breaks.
 
 ### 4.2 Adapter-Fed Validators (PhysAnimValidators)
 - **Continuity Validator**:
@@ -51,8 +53,12 @@ This document defines the TDD strategy and testing pyramid for the balance-first
 
 ### 4.3 Instability and Discontinuity
 - **Target Discontinuity**: Detect pose/velocity jumps between reference frames (`activation_target_discontinuity`).
+- **Gain/Damping Instability**: Detect unstable controller configuration (`activation_unstable_gain_or_damping`).
 - **Instability Thresholds**: Detect peak angular speed or root tilt breaches (`activation_instability_threshold_breach`).
+- **Pose Reference Mismatch**: Detect sustained body or RMS mismatch (`activation_pose_reference_mismatch`).
+- **Standing Timeout**: Detect failure to reach the 3.0s hold benchmark within the attempt budget (`activation_standing_validation_timeout`).
 - **Movement Reclaim**: Verification of CMC interference detection (`activation_movement_reclaim`). *Note: This is an independent reason path and NOT part of contamination classification.*
+- **Shell Helper Violation**: Verification of shell helper writes during activation (`activation_shell_helper_violation`).
 
 ## 5. Validator Scope Freeze
 

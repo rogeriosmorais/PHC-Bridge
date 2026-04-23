@@ -10,7 +10,7 @@ Gate text from the engineering plan:
 
 This package exists so the user does not have to invent the comparison method at evaluation time.
 
-Use [acceptance-thresholds.md](/F:/NewEngine/plans/stage1/10-specs/acceptance-thresholds.md) as the tie-breaker when the verdict feels vague.
+Use [instrumentation_and_acceptance.md](/F:/NewEngine/plans/stage1/10-specs/instrumentation_and_acceptance.md) as the tie-breaker when the verdict feels vague.
 Use [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/50-content/comparison-sequence-lock.md) to decide what sequence is allowed to count as a valid G2 comparison.
 
 ## Gate Status
@@ -31,7 +31,8 @@ Do not run G2 until:
 
 - Phase 1 is complete enough for comparison
 - the one-character bridge runs end to end
-- the Phase 1 runtime-stability threshold already scores `pass`
+- `PhysAnim.PIE.BalanceModeSmoke` reaches `BalanceActive_Standing`
+- the `BalanceActive_Standing` hold threshold already scores `pass`
 - the comparison sequence is chosen and frozen
 - the orchestrator confirms no `red` assumption blocks the quality comparison
 
@@ -69,7 +70,7 @@ Preferred setup:
 2. Confirm the setup uses the same frozen sequence from [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/50-content/comparison-sequence-lock.md).
 3. If the live side-by-side harness is available, prefer it:
    - start PIE
-   - enter `BridgeActive`
+   - enter `BalanceActive_Standing`
    - run `PhysAnim.G2.StartPresentation`
 4. Identify the labeled actors:
    - `Kinematic`
