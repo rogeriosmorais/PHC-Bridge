@@ -4,6 +4,8 @@
 
 This document defines the authoritative Stage 1 balance-activation contract.
 
+This document is now a contract wrapper around the continuous-balance rewrite docs, not the primary place to center the architecture on replacement phases.
+
 It exists to separate:
 
 - normal bridge startup behavior
@@ -38,6 +40,15 @@ Truthful safe deny remains a terminal failure outcome, not a success outcome.
 
 The design intent is to prove the controller can stand on its own in continuous physics, not to prove a protected handoff moment was safe.
 
+Primary architecture and truth sources live in:
+
+- `continuous_balance_architecture.md`
+- `continuous_balance_truth_model.md`
+- `authority_matrix.md`
+- `instrumentation_and_acceptance.md`
+
+Use this file to tie those documents into the broader Stage 1 contract.
+
 ## Balance-Critical Chain
 
 The default Stage 1 balance-critical chain is:
@@ -56,6 +67,8 @@ Interpretation rules:
 - changes to this chain must be documented as real contract changes, not tuning tweaks
 
 ## Canonical Activation Flow
+
+These runtime labels are operational states, not the primary architecture. The primary architecture is defined by continuous-physics invariants.
 
 ### `BridgeActive_Physical`
 
@@ -125,6 +138,7 @@ Therefore:
 - grace windows may explain classification, but not convert instability into success
 - transitional mismatch may be logged, but not treated as proof that activation worked
 - safe deny remains preferred over dishonest activation
+- phase completion by itself is not a valid success metric
 
 ## Contract Correctness Vs Physical Viability
 
@@ -194,6 +208,7 @@ At minimum this includes distinguishing:
 
 This spec is satisfied only when:
 
+- the continuous-balance architecture, truth model, authority matrix, and instrumentation docs are treated as primary references
 - the balance-critical chain is explicit
 - the target activation flow is explicit
 - continuous physical ownership is defined as the target design

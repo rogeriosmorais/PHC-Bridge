@@ -9,6 +9,12 @@ This filename is retained for compatibility.
 
 The target design is no longer a post-flip `Settle` phase. This document now defines standing-validation behavior before publishing `BalanceActive_Standing`.
 
+Primary rewrite docs live in:
+
+- `../10-specs/continuous_balance_truth_model.md`
+- `../10-specs/instrumentation_and_acceptance.md`
+- `./legacy_handoff_contract.md`
+
 ## 1. Purpose
 
 This document defines the standing-validation hold window for balance activation.

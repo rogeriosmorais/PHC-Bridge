@@ -38,6 +38,18 @@ Current focus:
 9. require balance activation to reach `BalanceActive_Standing` and hold it for `3.0` seconds before any run counts as success
 10. defer legacy flip-path refinement except where needed for temporary backward-compat notes
 
+## Rewrite Ladder
+
+The rewrite proceeds in this order:
+
+1. write the continuous-balance truth model
+2. write the authority matrix
+3. delete success criteria tied to phase completion
+4. build instrumentation for continuous mode before tuning behavior
+5. implement the smallest always-simulated proximal prototype
+6. run the new mode in parallel with the old one until the metrics are trustworthy
+7. only then begin deleting old handoff logic
+
 ## Current Stage 1 Truth
 
 The Stage 1 balance investigation now assumes:
@@ -52,6 +64,15 @@ The Stage 1 balance investigation now assumes:
 - truthful safe denial remains useful forensics, not product success
 - the only passing benchmark remains `BalanceActive_Standing` held continuously for `3.0` seconds
 - the next engineering slice is balance-first activation implementation, not further certification of ownership flips
+
+The first scoped target is intentionally narrow:
+
+- always-sim proximal chain
+- idle stance
+- flat ground
+- no perturbation
+- no locomotion authority
+- no shell cleverness
 
 ## Frozen Balance Rule
 
@@ -96,12 +117,19 @@ Only these categories may change during the current stabilization loop:
 
 ### Contract documents
 
+- `plans/stage1/10-specs/continuous_balance_architecture.md`
+- `plans/stage1/10-specs/continuous_balance_truth_model.md`
+- `plans/stage1/10-specs/authority_matrix.md`
+- `plans/stage1/10-specs/instrumentation_and_acceptance.md`
 - `plans/stage1/10-specs/bridge-spec.md`
 - `plans/stage1/10-specs/ue-bridge-implementation-spec.md`
 - `plans/stage1/10-specs/balance-mode-entry-spec.md`
 
 ### Derived design documents
 
+- `plans/stage1/40-design/adr-reject-flip-centered-balance-entry-as-primary-architecture.md`
+- `plans/stage1/40-design/rewrite_migration_plan.md`
+- `plans/stage1/40-design/legacy_handoff_contract.md`
 - `plans/stage1/40-design/balance-perturbation-mode-design.md`
 - `plans/stage1/40-design/balance_mode_entry_transition_spec.md`
 - `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
@@ -116,6 +144,7 @@ Only these categories may change during the current stabilization loop:
 The design is considered documented only when all of the following are true:
 
 - the balance-activation contract is explicit in `10-specs`
+- the continuous-balance architecture, truth model, authority matrix, and instrumentation docs exist and are referenced as the primary rewrite documents
 - `STAGE1_PLAN.md` points to that contract
 - `40-design` repeats the same contract without divergence
 - the docs explicitly distinguish contract correctness from physical viability
@@ -125,11 +154,20 @@ The design is considered documented only when all of the following are true:
 - the docs explicitly say this is a rewrite of the old transition-state-machine assumption, not a small extension
 - the docs explicitly separate controller-strength problems from ownership-continuity problems
 - the docs explicitly require a truth model that does not secretly depend on shell-maintained containment
+- the docs explicitly define the smallest always-simulated proximal prototype as the first rewrite target
+- the docs explicitly say no distal or upper-body sophistication is in scope before proximal standing is honest
 - the docs explicitly call out hidden multi-owner authority fights as a primary implementation risk
 - the docs explicitly require observability strong enough to debug sustained standing honestly
 - the docs explicitly state that diagnostics are observational and cannot justify grace-based passing
 - the docs explicitly state that truthful safe deny is not a passing outcome
 - the docs explicitly state the active benchmark: `BalanceActive_Standing` held for `3.0` continuous seconds
+
+## Rewrite Success Ladder
+
+- Milestone 1: honest continuous-physics diagnostics
+- Milestone 2: `1.0` second stable hold
+- Milestone 3: `3.0` second stable hold
+- Milestone 4: small perturbation recovery
 
 ## Architectural Direction
 

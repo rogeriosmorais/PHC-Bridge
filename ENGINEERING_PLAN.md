@@ -87,6 +87,26 @@ The hardest shift is this:
 - the old system tried to prove the handoff was safe
 - the new system must prove the controller can stand on its own in continuous physics
 
+The primary architecture for this rewrite is defined in:
+
+- `plans/stage1/10-specs/continuous_balance_architecture.md`
+- `plans/stage1/10-specs/continuous_balance_truth_model.md`
+- `plans/stage1/10-specs/authority_matrix.md`
+- `plans/stage1/10-specs/instrumentation_and_acceptance.md`
+
+The old handoff pipeline is now a legacy compatibility subsystem, not the architectural center.
+
+### Rewrite scope ladder
+
+- `V0`: always-sim proximal chain, idle stance, no perturbation
+- `V1`: sustained standing
+- `V2`: recovery from small pushes
+- `V3`: locomotion coupling
+
+Hard non-goal:
+
+- no distal or upper-body sophistication before proximal standing is honest
+
 ---
 
 ## 4. Contract And Viability
@@ -149,6 +169,12 @@ Evidence for any standing claim must state:
 - worst-body or worst-family instability
 - whether the failure was contract-level or physical-level
 
+Forbidden success proxies:
+
+- phase-completion counters
+- shell status by itself
+- “clean transition” claims that do not end in sustained standing
+
 ---
 
 ## 6. Key Risks
@@ -192,10 +218,17 @@ NewEngine/
 |-- ENGINEERING_PLAN.md
 |-- STAGE1_PLAN.md
 |-- plans/stage1/10-specs/
+|   |-- continuous_balance_architecture.md
+|   |-- continuous_balance_truth_model.md
+|   |-- authority_matrix.md
+|   |-- instrumentation_and_acceptance.md
 |   |-- bridge-spec.md
 |   |-- ue-bridge-implementation-spec.md
 |   `-- balance-mode-entry-spec.md
 |-- plans/stage1/40-design/
+|   |-- adr-reject-flip-centered-balance-entry-as-primary-architecture.md
+|   |-- rewrite_migration_plan.md
+|   |-- legacy_handoff_contract.md
 |   |-- balance-perturbation-mode-design.md
 |   |-- balance_mode_entry_transition_spec.md
 |   |-- balance_mode_phase1_stabilization_spec.md

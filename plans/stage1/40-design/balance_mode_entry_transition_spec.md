@@ -9,11 +9,22 @@ This filename is retained for compatibility.
 
 The target design is no longer a multi-phase handoff ritual. This document defines balance-first activation onto an already-physical state.
 
+Primary rewrite docs live in:
+
+- `../10-specs/continuous_balance_architecture.md`
+- `../10-specs/continuous_balance_truth_model.md`
+- `../10-specs/authority_matrix.md`
+- `../10-specs/instrumentation_and_acceptance.md`
+- `./rewrite_migration_plan.md`
+- `./legacy_handoff_contract.md`
+
 ## 1. Purpose
 
 This document specifies the balance activation design for Stage 1.
 
 It replaces the core assumption behind the old transition state machine rather than extending it.
+
+This file is migration-facing and compatibility-facing. It must not become the place where the rewrite drifts back into “Prepare/LateValidate/RootOn/Settle, but cleaner.”
 
 It defines:
 

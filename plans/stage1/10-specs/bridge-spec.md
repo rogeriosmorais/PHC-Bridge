@@ -17,6 +17,13 @@ This spec covers:
 - the frozen rules implementation must follow
 - the required distinction between contract correctness and physical viability
 
+The primary continuous-balance design references are:
+
+- `continuous_balance_architecture.md`
+- `continuous_balance_truth_model.md`
+- `authority_matrix.md`
+- `instrumentation_and_acceptance.md`
+
 ## Runtime Phases
 
 Stage 1 uses these target runtime phases:
@@ -64,6 +71,9 @@ When balance mode is requested:
 
 The authoritative activation contract is defined in:
 
+- `plans/stage1/10-specs/continuous_balance_architecture.md`
+- `plans/stage1/10-specs/continuous_balance_truth_model.md`
+- `plans/stage1/10-specs/authority_matrix.md`
 - `plans/stage1/10-specs/balance-mode-entry-spec.md`
 
 ## Balance-Critical Chain
@@ -82,6 +92,19 @@ Interpretation rules:
 - these bodies must stay continuously simulated through activation
 - temporary kinematic re-ownership of this chain is not the intended activation mechanism
 - distal and upper-body tuning may still evolve, but not by violating balance-critical continuity
+
+First rewrite target:
+
+- pelvis + thighs + lower spine only
+- fixed stance
+- flat ground
+- no perturbation
+- no locomotion authority
+- no shell cleverness
+
+Hard non-goal:
+
+- no distal or upper-body sophistication before proximal standing is honest
 
 ## Observation Contract
 

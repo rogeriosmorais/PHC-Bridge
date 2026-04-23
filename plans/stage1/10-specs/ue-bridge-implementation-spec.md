@@ -6,6 +6,12 @@ This document freezes the Unreal-side implementation contract for the Stage 1 br
 
 It is implementation-facing and must match the runtime contract in the balance-mode design docs.
 
+Primary operational references:
+
+- `continuous_balance_truth_model.md`
+- `authority_matrix.md`
+- `instrumentation_and_acceptance.md`
+
 ## Runtime Owner
 
 The live Stage 1 runtime owner is:
@@ -55,6 +61,8 @@ On balance request acceptance, the runtime must create a dedicated activation re
 - standing-validation timer state
 - shell bookkeeping state
 - shell influence diagnostics
+- topology change event count
+- authority conflict count
 - terminal outcome flag
 - failure reason if any
 
@@ -70,6 +78,8 @@ The implementation must keep these sources separate:
 - shell influence materiality
 
 These are different signals.
+
+The implementation must also surface authority conflict events explicitly rather than letting subsystem fights remain implicit.
 
 ## Required Continuity Snapshot
 

@@ -23,6 +23,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 - `Latest runtime read`: the latest verified live smoke from `2026-04-22` still failed to reach sustained `BalanceActive_Standing`. That evidence remains useful as legacy forensic context, but it no longer justifies further refinement of the old flip-based ritual as the target design.
 - `Tracked evidence sync`: the checked-in `test-results/phase1-autocalib/automation_phase1_smoke` artifacts still align with the standing benchmark and still show no passing candidate. They remain evidence that the product benchmark is unmet, not evidence that the old activation model should keep being refined.
 - `Current interpretation`: if early balance-first runs look worse, that is not automatically regression. The new direction is expected to expose controller tuning weakness, authority conflicts, shell-truth problems, and long-lived oscillation more directly because it removes protective transition guards and grace logic.
+- `Rewrite rule`: the new docs must be written around continuous-physics invariants, not around replacement phases. The old handoff pipeline is now legacy compatibility context.
 
 ## Active Tasks
 
@@ -143,3 +144,24 @@ Whenever new setup or gate evidence arrives:
   - the next implementation target is balance-first activation on a continuously physical chain
   - the first likely failure surface is now “controller cannot stand in continuous physics” rather than “handoff is unsafe”
   - observability must stay strong enough to diagnose sustained-balance metrics, control effort, contact quality, COM behavior, and long-lived oscillation without falling back into vague visual debugging
+
+---
+
+## 2026-04-23 — Continuous-invariants rewrite recommendation adopted
+
+- the rewrite will be centered on continuous-physics invariants, not replacement phases
+- the old handoff pipeline is being frozen as a legacy compatibility subsystem rather than edited into the new model
+- new primary docs are being added for:
+  - continuous balance architecture
+  - continuous balance truth model
+  - authority matrix
+  - instrumentation and acceptance
+  - rewrite migration plan
+  - legacy handoff contract
+- the smallest intended first prototype is:
+  - pelvis + thighs + lower spine continuously simulated
+  - fixed stance
+  - flat ground
+  - no perturbations
+  - no locomotion authority
+  - no shell cleverness
