@@ -6,19 +6,26 @@ This document is the **sole authoritative owner** of the physical plant contract
 
 Disagreement with this contract triggers a terminal `activation_physics_asset_contract_violation`.
 
-## Validation Cadence
+## Validation Schedule
 
-1.  **Pre-Activation Audit**: The full skeleton and asset identity audit must pass before `BalanceActivation_Ready` can transition to `BalanceActivation_BlendIn`.
-2.  **Continuous Monitoring**: Mass, inertia, and asset-path integrity are monitored every frame during the attempt. Any mid-run mutation is a Rank 1 terminal failure.
+1.  **Pre-Attempt Audit (Gated Transition)**:
+    - Runs at the `Ready -> BlendIn` boundary.
+    - Performs full skeleton topology, asset identity, and hierarchy hashing.
+    - If any audit field fails, the transition is denied and the run fails.
+2.  **Per-Frame Audit (Continuous Monitoring)**:
+    - Runs every Chaos substep for mass, inertia, and constraint profile integrity.
+    - Monitors for ad hoc mutation calls.
+3.  **Mutation-Triggered Revalidation**:
+    - Any external call to `SetPhysicsAsset`, `SetPhysicsMaterialOverride`, or `SetConstraintProfile` during the attempt triggers an immediate Rank 1 terminal violation.
 
 ## Physics Asset Identity
 
 - **Authoritative Baseline**: Every attempt must be recorded against a specific `physics_asset_baseline_id`.
-- **Identity Check**: If the active `UPhysicsAsset` pointer or asset path does not match the audited baseline for the current skeleton variant, the run is non-admissible.
+- **Identity Check**: If the active `UPhysicsAsset` pointer or asset path does not match the audited baseline, the run is non-admissible.
 
 ## Skeleton Audit Contract
 
-The bridge recognizes a skeleton as "Audited Manny/Quinn-Derived" only if it passes this automated audit at activation start:
+The bridge recognizes a skeleton as "Audited Manny/Quinn-Derived" only if it passes this automated audit:
 
 | Audit Field | Threshold | Failure Condition |
 | :--- | :--- | :--- |
@@ -46,27 +53,29 @@ The implementation must audit the live mass distribution against the baseline:
 
 ### 1. Self-Collision
 - **V0 Rule**: Self-collision between bodies in the truth set (Critical Chain + Support Set) must be **DISABLED**.
-- **Justification**: Uncontrolled self-penetration impulses can inject non-policy forces into the balance truth.
 
 ### 2. Support-Body Filtering
 - **V0 Rule**: `foot_*` and `ball_*` bodies must be filtered to collide **only** with `WorldStatic` geometry.
-- **Inadmissible Collision**: Contact with `WorldDynamic`, other characters, or moving platforms is terminal contamination.
 
 ### 3. Upper-Body Collision
 - **V0 Rule**: Collision for all bodies above `spine_01` (head, arms, upper chest) must be **DISABLED**.
 
 ## Support-Geometry Audit
 
-The runtime must audit the `FBodySetup` of support bodies to ensure physical stability:
+The runtime must audit the `FBodySetup` of support bodies:
 - **Geometry Type**: Must be `Convex` or `Sphyl`. `Box` or `Sphere` is permitted only if authored as a flat plantar surface.
 - **Surface Area**: The planar bounding box of the support geometry must exceed `50.0 cm^2` per foot.
 - **Bilateral Integrity**: The `L` and `R` support geometries must have symmetric volume within `10.0%`.
 
-## Baseline JSON Fields (The "Fingerprint")
+## Baseline JSON Definition (The "Fingerprint")
 
-The `V0_Plant_Baseline.json` must contain:
-- `baseline_id`: GUID
-- `target_skeleton_hash`: String
-- `body_baselines`: Array of `{ name, mass, inertia_tensor, local_com }`
-- `joint_baselines`: Array of `{ name, parent_offset, local_axes }`
-- `authored_constraint_profile`: `{ linear_gains, angular_gains, limits }`
+The `V0_Plant_Baseline.json` must contain exactly:
+- `asset_path`: Full Unreal asset path.
+- `baseline_id`: Unique GUID for this plant version.
+- `skeleton_hash`: Hash of bone names and parentage hierarchy.
+- `mass_table`: Array of `{ name, mass, local_com }`.
+- `inertia_table`: Array of `{ name, principal_inertias[] }`.
+- `constraint_profile_id`: Identifier for the authored gains/limits.
+- `material_set_id`: Identifier for the assigned physics materials.
+- `collision_disable_table_id`: Identifier for the self-collision filter set.
+- `support_geometry_audit_id`: Identifier for the audited plantar surface data.

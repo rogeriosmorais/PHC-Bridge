@@ -10,10 +10,10 @@ This document is a shallow entry point for the Stage 1 balance-activation contra
 
 The balance-activation contract is defined by the following authoritative documents:
 
-- **Timing, Cadence, and Arbitration**: [engine_execution_contract.md](engine_execution_contract.md)
+- **Timing and Cadence**: [engine_execution_contract.md](engine_execution_contract.md)
 - **Subsystem Ownership and States**: [authority_matrix.md](authority_matrix.md)
 - **Instrumentation and Acceptance Gates**: [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)
-- **Physical Truth and Support Model**: [continuous_balance_truth_model.md](continuous_balance_truth_model.md)
+- **Failure Truth and Arbitration**: [continuous_balance_truth_model.md](continuous_balance_truth_model.md)
 - **Structural Body Sets**: [continuous_balance_architecture.md](continuous_balance_architecture.md)
 
 ## Canonical Runtime States

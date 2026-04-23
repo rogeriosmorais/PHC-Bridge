@@ -4,9 +4,12 @@
 
 This document is the **sole authoritative owner** of failure truth for the continuous-balance bridge. It defines exactly what constitutes a successful run, how failure is detected, and how competing failure reasons are adjudicated.
 
-Core rule:
-- success is sustained physical stability under continuous simulation
-- no phase completion, shell status, or compatibility label can substitute for that
+It owns exclusively:
+- **Terminal-reason arbitration** (Master Precedence)
+- **Continuity validation** (Body Instance/Simulate Physics truth)
+- **Raw-vs-bookkeeping classification**
+- **Support-truth precedence** (Plantar Hull vs Contamination)
+- **Pose/reference mismatch escalation**
 
 ## Primary Physical Signal Families
 
@@ -139,3 +142,5 @@ The `V0` support proxy is the world-space planar centroid of:
 
 ### Support region definition
 The `V0` support region is the convex hull of all qualifying `foot_*` and `ball_*` manifold points from the final qualifying Chaos substep.
+
+**Calf Limitation**: Contact on `calf_l` or `calf_r` is strictly defined as contamination in [authority_matrix.md](authority_matrix.md). It is NOT valid support truth and cannot be downgraded to diagnostic-only.

@@ -8,7 +8,9 @@ Disagreement with this contract triggers a terminal `activation_capsule_contract
 
 ## The "Mesh-Isolated Character" Model
 
-For `V0`, the bridge implements a **Suspended ACharacter** model where the Actor root is spatially and physically decoupled from the simulated humanoid.
+For `V0`, the bridge implements a **Suspended ACharacter** model where the Actor root is spatially and physically decoupled from the simulated humanoid. 
+
+**Architectural Note**: This is NOT a standard `ACharacter` movement model. The system structurally prevents the `CharacterMovementComponent` from exerting authority to ensure the balance proof is purely physical.
 
 ### 1. Capsule and Actor Transform
 - **Actor Follow Rule**: The `Actor` transform does **NOT** follow the simulated mesh. It remains frozen at the rebase origin.

@@ -82,27 +82,32 @@ During `BalanceActivation_BlendIn`, the bridge asserts authority via a gradual r
 
 The implementation must use this deterministic algorithm to reduce the high-rate Chaos substep stream into frame-level truth and 30 Hz artifacts.
 
-### 1. Per-Substep Point Selection
+### 1. Per-Substep Manifold Capture
 For every body in the support set (`foot_*`, `ball_*`) on every Chaos substep:
-- The implementation must include **All Qualifying Contact Manifold Points** for that body.
-- **Justification**: A single "deepest point" reduction is too lossy for feet; it can collapse a planar support patch into a line. V0 mandates full manifold inclusion to preserve the real footprint area and prevent false-failure in the stability check.
-- A point is "qualifying" if it meets the criteria defined in the [Truth Model](continuous_balance_truth_model.md).
+- **Accepted Points**: Capture **All Manifold Points** where `ContactDistance <= 0.0` (active penetration or touch).
+- **Calf Exclusion**: Manifold points on `calf_l` or `calf_r` must be **EXCLUDED** from hull construction. They represent terminal contamination, not support.
+- **Per-Body Reduction**: For each body, reduce the manifold to a representative **Support Patch** (a set of world-space points) that preserves the planar area of the contact. A single "deepest point" reduction is forbidden as it collapses the plantar footprint into a point.
+- **Justification**: Foot-based balance requires a stable area; collapsing this area into a single point causes the Support Proxy to auto-fail during minor angular sway.
 
 ### 2. Substep Persistence (Debounce Rule)
-- A state change (Contact-Active `true<->false`) is only accepted if it persists for **2 consecutive substeps**.
+- A state change (Contact-Active `true<->false`) for any support body is only accepted if the state persists for **2 consecutive substeps**.
 - All timing-sensitive metrics (uptime, gap max) must be calculated using this debounced state.
 
 ### 3. Churn and Uptime Counting
 - Count each debounced `false->true` or `true->false` transition on either side as **1 churn event**.
 - Increment the support uptime timer only on substeps where at least one side-support state is `true` after debounce.
-- Track the longest contiguous duration (gap) where both side-support states are `false` after debounce.
 
-### 4. Frame-Level Reduction
+### 4. Final Frame Hull Construction
 To produce the single "Frame Truth" reported at the **Truth-Sensitive Sampling Point**:
-- **Final Qualifying Substep Rule**: The frame state must be sampled from the **final qualifying Chaos substep** of that frame.
-- **Frame Support Hull**: The reported support hull for the frame is the **Convex Hull** of all representative points selected in Step 1 from that final qualifying substep.
-- **Proxy Check**: The support proxy check for the frame must be performed against this reduced convex hull.
+- **Qualifying Substep**: Select the **final qualifying Chaos substep** of the frame (the last substep before post-simulation sampling).
+- **Hull Union**: The authoritative Support Hull for the frame is the **Convex Hull** formed by the union of all **Support Patches** (from Step 1) for all active support bodies in that final qualifying substep.
+- **Stability Check**: The support proxy check must be performed against this frame-level convex hull.
 
-### 5. 30 Hz Artifact Emission
+### 5. False-Failure Risk
+If the implementation uses a "Conservative reduction" (e.g., using only the 4 corners of a box or a single average point), the Support Hull will be smaller than the physical footprint. 
+- **Expected Behavior**: This will trigger premature `activation_proxy_outside_support_region` failures during honest standing trials.
+- **V0 Requirement**: The reduction must be "Lossless enough" to preserve the authored plantar surface area.
+
+### 6. 30 Hz Artifact Emission
 - The `30 Hz` artifact is a downsampled snapshot of the Frame-Level Truth.
 - If a terminal failure occurs between 30 Hz samples, the artifact must be emitted immediately to capture the exact terminal state, regardless of the 30 Hz cadence.

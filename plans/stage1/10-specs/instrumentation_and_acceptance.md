@@ -17,7 +17,18 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `standing_reference_id`: Identifier for the authored stance asset.
 - `physics_asset_contract_valid`: Boolean flag from the plant audit.
 - `skeleton_audit_passed`: Boolean flag from the skeleton alignment check.
-- `capsule_contract_active`: Boolean flag confirming neutralized root.
+- **Capsule Contract Truth**:
+  - `capsule_collision_enabled`: Actual `ECollisionEnabled` state.
+  - `capsule_generate_overlap_events`: Actual boolean state.
+  - `capsule_world_pos_cm`: Raw world coordinates of the root.
+  - `capsule_lock_delta_cm`: Distance from the rebase origin.
+  - `mesh_uses_absolute_location/rotation/scale`: Flags for transform isolation.
+  - `cmc_is_active`: Boolean state of the component.
+  - `cmc_tick_enabled`: Actual tick-function state.
+  - `cmc_movement_mode`: Actual `EMovementMode` value.
+  - `cmc_updated_component_is_null`: Confirmation of UpdatedComponent state.
+
+**Rule**: The implementation must emit `activation_capsule_contract_violation` if any of the above fields violate the structural requirements defined in [character_capsule_contract.md](character_capsule_contract.md).
 
 ### 2. Primary Metrics
 - `hold_duration_sec`: Total contiguous standing time.
@@ -34,6 +45,8 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `com_proxy_pos`: Projected planar centroid of the critical chain.
 - `max_penetration_cm`: Deepest manifold point recorded for the frame.
 - `support_churn_count`: Number of debounced state transitions.
+- `calf_world_contact_l` / `calf_world_contact_r`: Boolean contamination flags.
+- `calf_contact_terminal`: Confirmation that calf contact triggered arbitration.
 
 ### 4. Diagnostics and Continuity
 - `control_alpha`: Current blend rollout progress (0.0 - 1.0).
@@ -85,10 +98,9 @@ These are the authoritative operational thresholds for the `V0` artifact and ter
 | **Support Churn** | `12.0 Hz` | Jitter/Popping limit |
 | **Pelvis Sleep Limit** | `100.0 ms` | Max contiguous sleep before simulation loss |
 | **Support Sleep Dominance** | `50%` | Max cumulative sleep in validation window |
-| **Mass Tolerance (Total)** | `+/- 2.5%` | Plant fidelity limit against baseline |
-| **Inertia Tolerance** | `+/- 5.0%` | Plant fidelity limit against baseline |
-| **Skeleton Axis Alignment** | `+/- 0.5 deg` | Reference projection fidelity limit |
-| **Segment Length Tolerance** | `+/- 5.0%` | Reference projection fidelity limit |
+| **Plant Admissibility** | Per [physics_asset_contract.md](physics_asset_contract.md) | Mirrored authority for mass/inertia/skeleton. |
+| **Skeleton Axis Alignment** | Per [physics_asset_contract.md](physics_asset_contract.md) | Authoritative joint axis audit. |
+| **Segment Length Tolerance** | Per [physics_asset_contract.md](physics_asset_contract.md) | Authoritative bone length audit. |
 | **Capsule Lock Delta** | `0.01 cm` | Max deviation for frozen root |
 | **Hold Duration (Min)** | `3.0 sec` | Acceptance duration for V0 |
 
