@@ -39,15 +39,15 @@
 
 ## 4. Runtime Integration Tests (Layer 3)
 
-| Test ID | Target | Scenario | Trigger | Expected State |
-|---|---|---|---|---|
-| **INTEG-01** | `Ready` State | Invalid mass | `Mass delta > limit` | `Ready` (No transition) |
-| **INTEG-02** | `Ready` State | Overlapping capsule | `Overlap > 0` | `Ready` (No transition) |
-| **INTEG-03** | `BlendIn` State | Continuity breach | `Simulate=false at alpha=0.5` | `FailStopped` |
-| **INTEG-04** | `Validate` State | Airborne breach | `support_gap_timer_ms` > 100 | `FailStopped` |
-| **INTEG-05** | `Validate` State | Proxy drift breach | `proxy_drift_timer_ms` > 100 | `FailStopped` |
-| **INTEG-06** | `Validate` State | Churn Hz breach | `support_churn_hz` > 12.0 | `FailStopped` |
-| **INTEG-07** | `Standing` Target | Full success | `hold_duration_sec` > 3.0 | `BalanceActive_Standing` |
+| Test ID | Target | Scenario | Expected Outcome | Expected Reason | Expected Fields |
+|---|---|---|---|---|---|
+| **INTEG-01** | `Entry` Gate | Invalid mass | Fail to enter `Ready` | `activation_physics_asset_contract_violation` | `physics_asset_contract_valid` = false |
+| **INTEG-02** | `Ready` State | Overlapping capsule | Stay in `Ready` | `nullptr` | `activation_capsule_contract_violation` (in `co_terminal_reasons` if aborted) |
+| **INTEG-03** | `BlendIn` State | Continuity breach | Transition to `FailStopped` | `activation_continuous_simulation_lost` | `physical_continuity_validator_passed` = false |
+| **INTEG-04** | `Validate` State | Airborne breach | Transition to `FailStopped` | `activation_support_failure` | `support_gap_timer_ms` > 100 |
+| **INTEG-05** | `Validate` State | Proxy drift breach | Transition to `FailStopped` | `activation_proxy_outside_support_region` | `proxy_drift_timer_ms` > 100 |
+| **INTEG-06** | `Validate` State | Churn Hz breach | Transition to `FailStopped` | `activation_instability_threshold_breach` | `support_churn_hz` > 12.0 |
+| **INTEG-07** | `Standing` Target | Full success | Transition to `BalanceActive_Standing` | `nullptr` | `hold_duration_sec` >= 3.0 |
 
 ## 5. End-to-End Smoke Tests (Layer 4)
 

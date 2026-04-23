@@ -31,7 +31,7 @@ This document defines the TDD strategy and testing pyramid for the balance-first
     - **Body Instance**: Detect invalid or missing body instances.
     - **Physics State**: Detect "Simulate Physics" disabling on active bodies.
     - **Sleep Management**: Detect bodies exceeding the sleep/wake limit semantics (Pelvis Sleep Rule).
-    - **Bookkeeping**: Detect raw-vs-bookkeeping priority mismatches.
+    - **Bookkeeping**: Detect raw-vs-bookkeeping disagreements as diagnostic signals; raw state remains authoritative.
 - **Capsule Validator**:
     - **Actor Lock**: Detect actor-level transform changes (Freeze check).
     - **Mesh Integrity**: Detect absolute transform deltas on the mesh component.
@@ -58,7 +58,7 @@ This document defines the TDD strategy and testing pyramid for the balance-first
 
 The validator scopes are frozen as follows. No validator may decide surfaces outside its explicit remit.
 
-- **Continuity Validator**: Decides instance validity, simulate-physics continuity, **pelvis sleep rule**, and **raw-vs-bookkeeping priority**.
+- **Continuity Validator**: Decides instance validity, simulate-physics continuity, and **pelvis sleep rule**. *Note: raw-vs-bookkeeping disagreement is diagnostic only.*
 - **Capsule Validator**: Decides collision/overlap mode, **actor freeze**, mesh absolute transform, **CMC inactive**, **tick disabled**, **movement mode**, and **UpdatedComponent null**.
 - **Plant Validator**: Decides topology, **axis alignment**, **segment length**, support geometry, collision/filter baseline, **mass/inertia tolerances**, and mutation checks.
 - **Contamination Classifier**: Decides **authority-matrix conflict surfaces only**: `mesh_wide_assist`, `non_critical_body_assist`, `excluded_body_world_brace`, and `global_blend_or_kinematic_assist`.
