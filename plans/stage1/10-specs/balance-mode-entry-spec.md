@@ -19,6 +19,8 @@ Balance activation is a distinct runtime contract layered on top of a running br
 
 The target design is not a flip-based `Prepare -> LateValidate -> RootOn -> Settle` ritual.
 
+That means the old transition-state-machine assumption is being replaced, not merely relaxed.
+
 The target design is:
 
 1. `BridgeActive_Physical`
@@ -33,6 +35,8 @@ Success is only:
 - and holding it continuously for `3.0` seconds
 
 Truthful safe deny remains a terminal failure outcome, not a success outcome.
+
+The design intent is to prove the controller can stand on its own in continuous physics, not to prove a protected handoff moment was safe.
 
 ## Balance-Critical Chain
 
@@ -106,6 +110,12 @@ Interpretation rules:
 - shell bookkeeping is not proof of shell influence
 - diagnostics are observability only
 
+The runtime must also distinguish:
+
+- ownership-continuity problems
+- controller-strength and control-shaping problems
+- hidden authority conflicts between policy, Physics Control, locomotion authority, and startup logic
+
 ## Measurement-Only Rule
 
 The activation contract explicitly forbids using diagnostics to manufacture a pass.
@@ -132,10 +142,12 @@ Balance activation is contract-correct when:
 Balance activation is physically viable only if the live physical state can:
 
 - remain continuously simulated on the balance-critical chain
-- tolerate the controller blend
+- tolerate the controller blend under current gains, damping, target representation, action scaling, latency, and pose continuity
 - remain upright enough to satisfy the standing-validation window
 
 A run may satisfy contract correctness and still fail physical viability.
+
+Removing the old flip-based ritual will often expose controller weakness more directly. That should be treated as more honest evidence, not as a reason to restore protective transition logic.
 
 ## Failure Boundary
 
@@ -161,6 +173,8 @@ For design intent:
 
 No authoritative document may present the legacy phase sequence as the intended activation mechanism.
 
+The new truth model must also avoid silently depending on shell-maintained containment that used to live inside the old readiness and continuity checks.
+
 ## Required Terminal Truthfulness
 
 When activation fails, the deny or failure path should identify that explicitly rather than collapsing everything to a generic label.
@@ -169,7 +183,9 @@ At minimum this includes distinguishing:
 
 - balance-critical ownership continuity lost
 - controller blend instability
+- controller-strength or target-shaping weakness
 - shell influence material
+- hidden multi-owner authority conflict
 - gameplay or reset authority reclaimed
 - standing validation timeout
 - no path to sustained `BalanceActive_Standing`

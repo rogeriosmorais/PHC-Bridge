@@ -43,6 +43,16 @@ The Stage 1 bridge stays small:
 
 Stage 1 now uses a **balance-first activation** design.
 
+This is not a small transition tweak. It is an architectural unwind of the state machine that was organized around:
+
+- `Prepare`
+- `LateValidate`
+- `RootOn`
+- `Settle`
+- per-phase retries, guards, and safe-deny logic
+
+Moving to continuous physical ownership plus controller blend-in means rewriting the core assumption behind that transition model.
+
 The target runtime is not a flip-based ritual with a later certified handoff. The target runtime is:
 
 ```text
@@ -72,6 +82,11 @@ The default balance-critical chain for Stage 1 is:
 
 Distal and upper-body ownership may still be tuned, but the balance-critical chain must not rely on temporary kinematic re-ownership during activation.
 
+The hardest shift is this:
+
+- the old system tried to prove the handoff was safe
+- the new system must prove the controller can stand on its own in continuous physics
+
 ---
 
 ## 4. Contract And Viability
@@ -91,6 +106,9 @@ Can Unreal reproduce the required runtime contract for:
 
 Even if the contract is correct, can the live physical system survive activation under current:
 
+- gains and damping
+- target representation and action scaling
+- latency and pose discontinuity
 - control tuning
 - contact behavior
 - sub-step regime
@@ -111,11 +129,21 @@ Preserve these solved or intentional distinctions:
 - diagnostics are allowed to classify failure, not to widen grace until the run appears successful
 - truthful safe deny is useful telemetry but never a passing outcome
 
+The new direction also requires these explicit interpretations:
+
+- if instability now appears more directly, that is often progress rather than regression
+- controller-strength problems must be kept separate from ownership problems
+- removing the flip-based ritual removes a major crutch for explaining instability as a handoff artifact
+- policy, Physics Control, locomotion authority, and startup logic are more likely to fight each other earlier in the run and must be treated as simultaneously live systems
+- shell-lock truth from the old design cannot simply be carried forward as-is; the new model needs a cleaner truth definition that does not secretly depend on shell-maintained containment
+
 Evidence for any standing claim must state:
 
 - sub-step regime
 - balance-critical ownership continuity
 - controller-authority blend behavior
+- control effort or controller strength evidence
+- contact quality and long-lived oscillation evidence when available
 - whether policy/control authority was blended or abruptly applied
 - whether shell influence was absent or materially active
 - worst-body or worst-family instability
@@ -130,10 +158,14 @@ Evidence for any standing claim must state:
 | Sim-to-sim gap (training simulator -> Chaos) | High | High | Likely persistent tuning burden |
 | Balance-critical ownership continuity is not achievable with current UE path | High | High | Main structural risk after the direction change |
 | Controller blend-in destabilizes an already-physical state | High | High | New primary activation risk |
+| Instability is misdiagnosed as ownership failure when it is really controller weakness | High | High | Gains, damping, target representation, action scale, latency, and pose discontinuity now sit closer to the surface |
 | Shell bookkeeping is correct but shell influence is still materially active | High | High | Must be measured, not explained away |
+| The new truth model still depends implicitly on shell containment from the old design | High | High | Would recreate the old ritual under a different name |
+| Hidden authority conflicts between policy, Physics Control, locomotion, and startup logic | High | High | More systems will be live together earlier in activation |
 | Hidden ownership flips remain in the runtime | Medium | High | Would violate the target activation contract |
 | Physics Control limitations / Experimental behavior | Medium | Medium | Must not be treated as a turnkey balance stack |
 | Standing validation passes briefly but does not sustain | Medium | High | Product failure even if activation looks promising |
+| Early results look worse and are mistaken for a design regression | Medium | High | Expected when guards and grace logic stop hiding controller weakness |
 
 ---
 

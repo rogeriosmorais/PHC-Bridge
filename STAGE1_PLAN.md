@@ -31,18 +31,24 @@ Current focus:
 2. minimize topology and ownership flips during activation
 3. ramp controller authority gradually onto an already-physical state
 4. preserve truthful diagnostics as observability only
-5. distinguish contract failures from physical-viability failures
-6. require balance activation to reach `BalanceActive_Standing` and hold it for `3.0` seconds before any run counts as success
-7. treat shell bookkeeping and shell influence as separate observables
-8. defer legacy flip-path refinement except where needed for temporary backward-compat notes
+5. distinguish controller tuning failures from ownership-continuity failures
+6. replace shell-lock-dependent truth with a cleaner activation truth model
+7. stop hidden authority conflicts between policy, Physics Control, locomotion authority, and startup logic
+8. require strong observability around sustained-balance metrics, control effort, contact quality, COM behavior, and long-lived oscillation
+9. require balance activation to reach `BalanceActive_Standing` and hold it for `3.0` seconds before any run counts as success
+10. defer legacy flip-path refinement except where needed for temporary backward-compat notes
 
 ## Current Stage 1 Truth
 
 The Stage 1 balance investigation now assumes:
 
 - the earlier flip-based `Prepare -> LateValidate -> RootOn -> Settle` model is conceptually flawed as the target design
+- moving away from that model is an architecture rewrite, not a tuning tweak
 - the new target design is activation onto a continuously physical balance-critical chain
+- the hard problem is no longer “make the handoff safe,” but “make the controller stand on its own in continuous physics”
 - truthful diagnostics are still required, but diagnostics must not justify grace-based passing
+- controller instability will now appear more directly as gains, damping, target representation, action scaling, latency, or pose-discontinuity problems
+- early results may look worse because the new design removes protective transition guards and grace logic that previously hid those problems
 - truthful safe denial remains useful forensics, not product success
 - the only passing benchmark remains `BalanceActive_Standing` held continuously for `3.0` seconds
 - the next engineering slice is balance-first activation implementation, not further certification of ownership flips
@@ -116,6 +122,11 @@ The design is considered documented only when all of the following are true:
 - no authoritative document implies a flip-based handoff is the intended activation mechanism
 - the docs explicitly define continuous physical ownership of the balance-critical chain as the target design
 - the docs explicitly define controller authority as a gradual blend onto an already-physical state
+- the docs explicitly say this is a rewrite of the old transition-state-machine assumption, not a small extension
+- the docs explicitly separate controller-strength problems from ownership-continuity problems
+- the docs explicitly require a truth model that does not secretly depend on shell-maintained containment
+- the docs explicitly call out hidden multi-owner authority fights as a primary implementation risk
+- the docs explicitly require observability strong enough to debug sustained standing honestly
 - the docs explicitly state that diagnostics are observational and cannot justify grace-based passing
 - the docs explicitly state that truthful safe deny is not a passing outcome
 - the docs explicitly state the active benchmark: `BalanceActive_Standing` held for `3.0` continuous seconds

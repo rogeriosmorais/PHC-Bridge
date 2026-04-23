@@ -22,6 +22,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 - `Overall status`: UE startup is still stable and the standing benchmark is unchanged, but the active objective has changed. Stage 1 now aims to activate from continuous physical ownership of the balance-critical chain, ramp controller authority gradually onto that already-physical state, and measure sustained physical stability rather than certify a multi-phase handoff.
 - `Latest runtime read`: the latest verified live smoke from `2026-04-22` still failed to reach sustained `BalanceActive_Standing`. That evidence remains useful as legacy forensic context, but it no longer justifies further refinement of the old flip-based ritual as the target design.
 - `Tracked evidence sync`: the checked-in `test-results/phase1-autocalib/automation_phase1_smoke` artifacts still align with the standing benchmark and still show no passing candidate. They remain evidence that the product benchmark is unmet, not evidence that the old activation model should keep being refined.
+- `Current interpretation`: if early balance-first runs look worse, that is not automatically regression. The new direction is expected to expose controller tuning weakness, authority conflicts, shell-truth problems, and long-lived oscillation more directly because it removes protective transition guards and grace logic.
 
 ## Active Tasks
 
@@ -140,3 +141,5 @@ Whenever new setup or gate evidence arrives:
 - practical effect:
   - further `RootOn`, `Settle`, grace-window, or flip-certification refinement is no longer the active direction
   - the next implementation target is balance-first activation on a continuously physical chain
+  - the first likely failure surface is now “controller cannot stand in continuous physics” rather than “handoff is unsafe”
+  - observability must stay strong enough to diagnose sustained-balance metrics, control effort, contact quality, COM behavior, and long-lived oscillation without falling back into vague visual debugging

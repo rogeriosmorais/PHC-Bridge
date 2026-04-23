@@ -13,6 +13,8 @@ The target design is no longer a multi-phase handoff ritual. This document defin
 
 This document specifies the balance activation design for Stage 1.
 
+It replaces the core assumption behind the old transition state machine rather than extending it.
+
 It defines:
 
 - request handling
@@ -79,6 +81,8 @@ Preflight must confirm:
 
 Preflight must not certify a later ownership flip as the intended path to success.
 
+Preflight must also not assume shell-maintained containment will hide controller weakness later in the run.
+
 ## 6. Physical-Readiness Rule
 
 Before blend-in begins, the runtime must establish `BridgeActive_Physical`.
@@ -100,6 +104,10 @@ Required rules:
 - abrupt assertion of full authority is not the intended path
 - topology flips are not the intended success mechanism
 - diagnostics may classify instability, but may not widen grace until instability looks acceptable
+
+Interpretation rule:
+
+- when instability appears here, the runtime must first consider controller strength, damping, target representation, action scaling, latency, pose discontinuity, and authority conflicts before blaming a missing handoff ritual
 
 ## 8. Standing-Validation Rule
 
@@ -139,6 +147,14 @@ And whether the deciding mismatch was in:
 - controller blend
 - shell influence
 - standing stability
+
+The activation logs should also make it possible to tell whether failure is dominated by:
+
+- controller effort or target-shaping weakness
+- poor contact quality
+- COM drift behavior
+- long-lived oscillation
+- hidden authority fights between policy, Physics Control, locomotion, and startup logic
 
 ## 10. Recovery Contract
 

@@ -39,6 +39,8 @@ Blend-in may begin only from a still-valid physically simulated state.
 
 If the required ownership continuity or quiet-state proof is absent, the runtime must deny safely before blend-in.
 
+If blend-in fails, the default interpretation should no longer be “the handoff was bad.” The first interpretation should be that continuous-physics controller behavior may be too weak or too discontinuous under current gains, damping, target representation, action scaling, latency, or live authority interactions.
+
 ## 4. Required Entry Preconditions
 
 Blend-in may begin only if all are true:
@@ -59,6 +61,8 @@ During `BalanceActivation_BlendIn`:
 - action publishing must be interpreted together with control-authority alpha
 - topology flips are not the intended success mechanism
 
+Policy, Physics Control, locomotion authority, and startup logic must be treated as potentially live together here. Hidden fights between them are a primary blend-in risk, not a corner case.
+
 ## 6. Shell Rule
 
 During blend-in, distinguish:
@@ -78,7 +82,9 @@ Use the following current target taxonomy:
 | :--- | :--- | :--- |
 | `activation_physical_ownership_lost` | the balance-critical chain lost continuous simulation | terminal |
 | `activation_blend_instability` | controller blend caused truthful instability | not retryable |
+| `activation_controller_strength_or_representation_failure` | gains, damping, target representation, action scaling, latency, or pose discontinuity made the controller unable to stand cleanly in continuous physics | not retryable without material state change |
 | `activation_policy_write_leak` | writes bypassed intended blend semantics | terminal |
+| `activation_authority_conflict` | live systems fought over control of the same physical state | terminal |
 | `activation_shell_influence_material` | shell influence became materially active | terminal |
 | `activation_reset_violation` | reset or conflicting authority contaminated the attempt | terminal |
 

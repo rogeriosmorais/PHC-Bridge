@@ -44,6 +44,8 @@ Required rules:
 - first truthful terminal failure ends the attempt
 - diagnostics may classify failure, but may not repair the state into success
 
+Because the old transition guards are no longer the intended protection layer, early standing-validation runs may look worse than the old ritualized path. That is expected if the runtime is now exposing controller weakness or long-lived oscillation more honestly.
+
 ## 4. Required Observables
 
 During standing validation, the runtime must keep these observables separate:
@@ -54,6 +56,8 @@ During standing validation, the runtime must keep these observables separate:
 4. shell bookkeeping state
 5. shell influence materiality
 6. locomotion or reset authority state
+7. control effort and controller saturation when available
+8. COM behavior, contact quality, and long-lived oscillation when available
 
 Interpretation rules:
 
@@ -87,7 +91,9 @@ Suggested emitted reasons:
 
 - `standing_validation_ownership_lost`
 - `standing_validation_instability`
+- `standing_validation_controller_strength_or_representation_failure`
 - `standing_validation_shell_influence_material`
+- `standing_validation_authority_conflict`
 - `standing_validation_authority_reclaimed`
 - `standing_validation_timeout`
 
