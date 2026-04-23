@@ -30,21 +30,25 @@ This document defines the TDD strategy and testing pyramid for the balance-first
 - **Continuity Validator**:
     - **Body Instance**: Detect invalid or missing body instances.
     - **Physics State**: Detect "Simulate Physics" disabling on active bodies.
-    - **Sleep Management**: Detect bodies exceeding the sleep/wake limit semantics.
-    - **State Jump**: Detect pose/velocity jumps between frames.
+    - **Sleep Management**: Detect bodies exceeding the sleep/wake limit semantics (Pelvis Sleep Rule).
+    - **Bookkeeping**: Detect raw-vs-bookkeeping priority mismatches.
 - **Capsule Validator**:
     - **Actor Lock**: Detect actor-level transform changes (Freeze check).
     - **Mesh Integrity**: Detect absolute transform deltas on the mesh component.
-    - **Component States**: Detect CMC (Character Movement) activity or UpdatedComponent nulling.
+    - **Component States**: Detect CMC (Character Movement) activity, tick function status, movement mode, or UpdatedComponent nulling.
     - **External State**: Detect unauthorized collision mode changes or overlap mutations.
 - **Plant Validator**:
     - **Topology**: Detect skeleton or skeletal mesh mismatch.
-    - **Axis/Length**: Detect bone length or alignment drift.
+    - **Axis/Length**: Detect bone length or axis alignment drift.
     - **Mass/Inertia**: Detect mass, center of mass, or inertia tensor mutations against the contract baseline.
     - **Geometry**: Detect collision/filter baseline breaches.
 - **Contamination Classifier**:
     - **Authority Matrix**: Detect unauthorized external writes to policy-driven bodies.
     - **Material Breaches**: Detect material-state contamination during activation.
+
+### 4.3 Instability and Discontinuity
+- **Target Discontinuity**: Detect pose/velocity jumps between reference frames (`activation_target_discontinuity`).
+- **Instability Thresholds**: Detect peak angular speed or root tilt breaches (`activation_instability_threshold_breach`).
 
 ## 5. Validator Scope Freeze
 

@@ -20,22 +20,22 @@
 
 | Test ID | Target | Scenario | Expected Reason | Expected Fields |
 |---|---|---|---|---|
-| **VALID-01** | `ValidateContinuity` | Velocity jump | `activation_physical_continuity_breach` | `terminal_failure_reason` = reason |
-| **VALID-02** | `ValidateContinuity` | Physics disabled | `activation_physical_continuity_breach` | `terminal_failure_reason` = reason |
-| **VALID-03** | `ValidateCapsule` | Actor moved | `activation_capsule_contract_breach` | `terminal_failure_reason` = reason |
-| **VALID-04** | `ValidateCapsule` | CMC active | `activation_capsule_contract_breach` | `terminal_failure_reason` = reason |
-| **VALID-05** | `ValidatePlant` | Skeleton mismatch | `activation_plant_contract_breach` | `plant_failure_class` = "Topology" |
-| **VALID-06** | `ValidatePlant` | Length drift | `activation_plant_contract_breach` | `plant_failure_class` = "StructuralIntegrity" |
-| **VALID-07** | `ValidatePlant` | Mass mutation | `activation_plant_contract_breach` | `plant_failure_class` = "MassDistribution", `plant_failure_field` = "mass" |
-| **VALID-08** | `ValidateAuthority` | External write | `activation_authority_contamination` | `terminal_failure_reason` = reason |
+| **VALID-01** | `ValidateContinuity` | Velocity jump | `activation_continuous_simulation_lost` | `terminal_reason` = reason |
+| **VALID-02** | `ValidateContinuity` | Physics disabled | `activation_continuous_simulation_lost` | `terminal_reason` = reason |
+| **VALID-03** | `ValidateCapsule` | Actor moved | `activation_capsule_contract_violation` | `terminal_reason` = reason |
+| **VALID-04** | `ValidateCapsule` | CMC active | `activation_capsule_contract_violation` | `terminal_reason` = reason |
+| **VALID-05** | `ValidatePlant` | Skeleton mismatch | `activation_physics_asset_contract_violation` | `plant_failure_class` = "StaticStructural" |
+| **VALID-06** | `ValidatePlant` | Length drift | `activation_physics_asset_contract_violation` | `plant_failure_class` = "StaticStructural" |
+| **VALID-07** | `ValidatePlant` | Mass mutation | `activation_physics_asset_contract_violation` | `plant_failure_class` = "Mutation", `plant_failure_field` = "mass" |
+| **VALID-08** | `ValidateAuthority` | External write | `activation_authority_conflict` | `terminal_reason` = reason |
 
 ## 3. Arbitration Logic Tests (Layer 2.5)
 
 | Test ID | Target | Scenario | Trigger | Expected Outcome |
 |---|---|---|---|---|
-| **ARBIT-01** | `ArbitrateFailure` | Multiple failures | `Plant + Support` | `activation_plant_contract_breach` (Higher rank) |
-| **ARBIT-02** | `ArbitrateFailure` | Multiple failures | `Support + Proxy` | `activation_support_failure` (Higher rank) |
-| **ARBIT-03** | `ArbitrateFailure` | No failures | `All green` | `nullptr` / `None` |
+| **ARBIT-01** | `ArbitrateFailure` | Multiple failures | `Plant + Support` | `activation_physics_asset_contract_violation` |
+| **ARBIT-02** | `ArbitrateFailure` | Multiple failures | `Support + Proxy` | `activation_support_failure` |
+| **ARBIT-03** | `ArbitrateFailure` | No failures | `All green` | `nullptr` |
 
 ## 4. Runtime Integration Tests (Layer 3)
 
@@ -53,6 +53,6 @@
 
 | Test ID | Target | Scenario | Pass Criteria |
 |---|---|---|---|
-| **SMOKE-01** | `BalanceModeSmoke` | Clean run | `terminal_failure_reason` = `nullptr` AND `BalanceActive_Standing` |
-| **SMOKE-02** | `Regression` | Plant breach | `terminal_failure_reason` = `activation_plant_contract_breach` |
-| **SMOKE-03** | `Regression` | Authority breach | `terminal_failure_reason` = `activation_authority_contamination` |
+| **SMOKE-01** | `BalanceModeSmoke` | Clean run | `terminal_reason` = `nullptr` AND `BalanceActive_Standing` |
+| **SMOKE-02** | `Regression` | Plant breach | `terminal_reason` = `activation_physics_asset_contract_violation` |
+| **SMOKE-03** | `Regression` | Authority breach | `terminal_reason` = `activation_authority_conflict` |

@@ -5,7 +5,6 @@
 This file is the orchestrator-owned live task-state board for Stage 1.
 
 Use it to track:
-
 - what is active
 - what is blocked
 - what is waiting on the user
@@ -18,18 +17,11 @@ Pre-pivot history remains available in git. This live log now tracks the current
 
 - `Date`: `2026-04-23`
 - `Direction change`: the previous flip-based activation model is now considered conceptually flawed as the target design.
-- `Current phase`: TDD planning and refactor sequencing for balance-first activation.
+- `Current phase`: **Slice 1 implementation (Pure Logic Extraction)**.
 - **Stop Rule**: Do not proceed to runtime rewrite until the first pure-logic slice is green.
-- `Overall status`: Specialized contracts (10-spec suite) are architecturally closed. Execution has moved from "documentation alignment" to "implementation planning." Implementation is blocked until:
-  - Refactor plan exists
-  - TDD strategy exists
-  - Test matrix exists
-  - First slice is defined
+- `Overall status`: Planning and TDD strategy for the balance-first rewrite are complete. **Implementation is runnable for Slice 1 (Pure Logic) only.** Runtime state-machine surgery remains blocked until Slice 1 passes all Layer 1 unit tests.
 - `State naming`: preferred rewrite states are now `BalanceActivation_Ready -> BalanceActivation_BlendIn -> BalanceActivation_Validate -> BalanceActive_Standing`; older names remain compatibility labels only.
 - `Latest runtime read`: the latest verified live smoke from `2026-04-22` still failed to reach sustained `BalanceActive_Standing`. That evidence remains useful as legacy forensic context, but it no longer justifies further refinement of the old flip-based ritual as the target design.
-- `Tracked evidence sync`: the checked-in `test-results/phase1-autocalib/automation_phase1_smoke` artifacts still align with the standing benchmark and still show no passing candidate. They remain evidence that the product benchmark is unmet, not evidence that the old activation model should keep being refined.
-- `Current interpretation`: if early balance-first runs look worse, that is not automatically regression. The new direction is expected to expose controller tuning weakness, authority conflicts, shell-truth problems, and long-lived oscillation more directly because it removes protective transition guards and grace logic.
-- `Rewrite rule`: the new docs must be written around continuous-physics invariants, not around replacement phases. The old handoff pipeline is now legacy compatibility context.
 
 ## Active Tasks
 
@@ -47,7 +39,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | S1-PLAN-REFACTOR-ORDER | AI | completed | specialized 10-spec suite, existing bridge source | `plans/stage1/20-execution/balance_first_refactor_plan.md` | none |
 | S1-PLAN-TEST-MATRIX | AI | completed | instrumentation_and_acceptance.md, truth model | `plans/stage1/20-execution/balance_first_test_matrix.md` | none |
 | S1-PLAN-FIRST-SLICE | AI | completed | specialized 10-spec suite | `plans/stage1/20-execution/first-slice-definition.md` | none |
-| S1-IMPL-BALANCE-FIRST | AI | blocked | TDD plan, refactor order, specialized 10-spec suite | runtime bridge and balance activation code paths | TDD/Refactor Plan acceptance |
+| S1-IMPL-BALANCE-FIRST | AI | **runnable** | TDD plan, refactor order, 10-spec suite | `PhysAnimSupportTruth.h/cpp`, `PhysAnimSupportTests.cpp` | **Slice 1 Green** |
 
 ## Frozen Inputs For Continuous Balance Rewrite
 
@@ -60,18 +52,14 @@ Pre-pivot history remains available in git. This live log now tracks the current
   - `plans/stage1/10-specs/instrumentation_and_acceptance.md`
   - `plans/stage1/10-specs/balance-mode-entry-spec.md`
 - `Supporting Docs`:
-  - `AGENTS.md`
-  - `ENGINEERING_PLAN.md`
-  - `STAGE1_PLAN.md`
-  - `plans/stage1/60-user/manual-verification.md`
-  - `plans/stage1/20-execution/assumption-ledger.md`
+  - `AGENTS.md`, `ENGINEERING_PLAN.md`, `STAGE1_PLAN.md`, `plans/stage1/20-execution/assumption-ledger.md`
 - `Unfreeze rule`: Only unfreeze if the user explicitly requests an architecture review or if an implementation spike proves a contract requirement is physically impossible.
 
 ## Next Runnable Tasks
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-IMPL-BALANCE-FIRST | runnable now for **Slice 1 (Pure Logic)**; TDD and Refactor plans are accepted; gated by the Stop Rule (Slice 1 must be green before runtime rewrite). |
+| 1 | S1-IMPL-BALANCE-FIRST | **Slice 1 (Pure Logic)** is runnable; TDD and Refactor plans are accepted. Runtime rewrite remains blocked by the Stop Rule until Slice 1 is green. |
 
 ## Waiting On User
 
@@ -81,47 +69,40 @@ Pre-pivot history remains available in git. This live log now tracks the current
 
 ## Latest Evidence Progress
 
-- the UE scaffold remains concretely verified:
-  - `PhysAnimUE5.uproject` lists `PoseSearch` and `PhysicsControl`
-  - Manny content exists under `Content/Characters/Mannequins`
-  - editor logs show `NNERuntimeORT` runtime availability
-  - PIE launched successfully
-- Visual Studio Build Tools 2022 with MSVC v143 and Windows SDK `22621` remain installed and usable
-- the UE startup-success path remains proven:
-  - `[PhysAnim] Startup success. Runtime=NNERuntimeORTDml Model=/Game/NNEModels/phc_policy.phc_policy`
-- Gate G1 remains `pass`
-- Phase 0 evidence capture remains complete
+- the UE scaffold remains concretely verified (NNERuntimeORT, PhysicsControl, Manny characters)
+- PIE launches and Manny content is accessible
+- build tools and SDKs remain verified for v143 toolset
+- startup success confirmed for `phc_policy` under `NNERuntimeORTDml`
 
 ## Accepted Handoffs
 
 | Task ID | Artifact | Accepted? | Notes |
 |---|---|---|---|
-| S1-PLAN-01 | Stage 1 planning bundle | yes | foundational planning artifacts in place |
-| S1-DOCS-BALANCE-FIRST | balance-first activation docs rewrite | yes | canonical docs now point to continuous physical ownership, gradual controller blend, and standing validation |
+| S1-DOCS-BALANCE-FIRST | balance-first activation docs rewrite | yes | canonical docs now point to continuous physical ownership and standing validation |
+| S1-PLAN-REWRITE | TDD + Refactor + Matrix + Slice 1 | yes | planning frontier is closed; implementation is unblocked for Slice 1 |
 
 ## Blocked / Deferred
 
 | Task ID | Status | Reason |
 |---|---|---|
-| S1-IMPL-BALANCE-FIRST | blocked | implementation is blocked until the TDD plan, refactor order, and test definitions are accepted |
+| S1-IMPL-BALANCE-FIRST | **runnable (Slice 1)** | Pure logic extraction is runnable; runtime surgery remains blocked by the Stop Rule until Slice 1 unit tests are green |
 | G2 | readying | comparison packaging must reflect the new activation model honestly |
 | S1-P2-A1 | blocked | depends on G2 pass |
-| Legacy flip-path tuning | deferred | archived; only worth touching for temporary backward-compat notes, not as the target design |
-| Broad perturbation tuning by guesswork | deferred | explicit activation design and the standing benchmark remain higher priority |
+| Legacy flip-path tuning | deferred | archived; legacy compatibility context only |
+| Broad perturbation tuning | deferred | standing benchmark remains the priority |
 
 ## Ledger Sync Note
 
 Whenever new setup or gate evidence arrives:
-
 1. update `assumption-ledger.md`
 2. update this execution log
 3. only then issue or advance worker tasks
 
 ---
 
-## 2026-04-23 — Transition to TDD Planning
+## 2026-04-23 — Implementation Unlocked (Slice 1)
 
-- the specialized 10-spec contract suite is now the single source of truth
-- implementation is officially blocked until TDD and refactor sequencing are planned
-- legacy design documents have been archived to `90-archive/40-design-legacy/`
-- the execution focus is now on mapping contract requirements to deterministic tests
+- the planning frontier (TDD strategy, refactor plan, test matrix, slice definition) is formally accepted
+- **S1-IMPL-BALANCE-FIRST** is unblocked for **Slice 1 (Pure Logic Extraction)**
+- the Stop Rule remains in effect: no runtime state-machine rewiring until pure support logic is verified green
+- all legacy design and Phase 0/1 packages have been moved to `90-archive`
