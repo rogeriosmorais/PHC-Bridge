@@ -41,6 +41,7 @@ Only the orchestrator updates status.
 | A-07c | The locked Stage 1 locomotion-only motion set is sourceable without major scope creep | undefined or missing motions create silent planning drift | yellow | motion-source review against `motion-set.md` | key locomotion motions are missing or only available through major extra pipeline work | replace or remove missing motions explicitly | maybe |
 | A-08 | Physics-driven motion will look noticeably better than kinematic playback | this is the thesis tested by G2 | yellow | G2 side-by-side evaluation | user judges difference as negligible or worse | ship only as experiment documentation, do not continue to Stage 2 | yes |
 | A-09 | The final Stage 1 locomotion showcase will be compelling enough to justify Stage 2 | Stage 2 is optional and should not start on weak evidence | yellow | G3 observer evaluation | observers find the result unconvincing | stop at Stage 1 | no |
+| A-10 | The balance-first rewrite can be decomposed into validator-first TDD slices without broad runtime surgery | implementation integrity depends on isolated, testable truth logic | green | Slice 1 execution | extracted pure logic cannot be defined cleanly without dragging Unreal runtime state through every layer | insert an adapter layer and postpone state-machine rewiring | yes |
 
 ## Latest Orchestrator Review
 

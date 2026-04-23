@@ -18,8 +18,13 @@ Pre-pivot history remains available in git. This live log now tracks the current
 
 - `Date`: `2026-04-23`
 - `Direction change`: the previous flip-based activation model is now considered conceptually flawed as the target design.
-- `Current phase`: documentation and execution alignment for balance-first activation.
-- `Overall status`: UE startup is still stable and the standing benchmark is unchanged, but the active objective has changed. Stage 1 now aims to activate from continuous physical ownership of the balance-critical chain, ramp controller authority gradually onto that already-physical state, and measure sustained physical stability rather than certify a multi-phase handoff.
+- `Current phase`: TDD planning and refactor sequencing for balance-first activation.
+- **Stop Rule**: Do not proceed to runtime rewrite until the first pure-logic slice is green.
+- `Overall status`: Specialized contracts (10-spec suite) are architecturally closed. Execution has moved from "documentation alignment" to "implementation planning." Implementation is blocked until:
+  - Refactor plan exists
+  - TDD strategy exists
+  - Test matrix exists
+  - First slice is defined
 - `State naming`: preferred rewrite states are now `BalanceActivation_Ready -> BalanceActivation_BlendIn -> BalanceActivation_Validate -> BalanceActive_Standing`; older names remain compatibility labels only.
 - `Latest runtime read`: the latest verified live smoke from `2026-04-22` still failed to reach sustained `BalanceActive_Standing`. That evidence remains useful as legacy forensic context, but it no longer justifies further refinement of the old flip-based ritual as the target design.
 - `Tracked evidence sync`: the checked-in `test-results/phase1-autocalib/automation_phase1_smoke` artifacts still align with the standing benchmark and still show no passing candidate. They remain evidence that the product benchmark is unmet, not evidence that the old activation model should keep being refined.
@@ -36,38 +41,39 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | S1-P0-A1 | AI | completed | frozen Phase 0 inputs | Phase 0 package + spec paths | none |
 | S1-P0-A2 | AI + User | completed | Phase 0 execution package + G1 evidence paths | evidence + log paths | none |
 | S1-P1-A1 | AI | completed | Phase 1 implementation package, ONNX/export specs, UE bridge implementation spec | ONNX export/runtime bridge paths | none |
-| S1-P1-A2 | AI | completed | accepted `S1-P1-A1` handoff, Phase 1 implementation package, manual verification, acceptance thresholds, bring-up runbook, newer balance design docs | `plans/stage1/40-design/*.md`, `plans/stage1/30-evidence/g2-evaluation.md`, `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none |
-| S1-DOCS-BALANCE-FIRST | AI | completed | balance-first activation direction | `ENGINEERING_PLAN.md`, `STAGE1_PLAN.md`, `plans/stage1/10-specs/*.md`, `plans/stage1/40-design/*.md`, `plans/stage1/20-execution/execution-log.md` | none |
-| S1-IMPL-BALANCE-FIRST | AI | pending | balance-first activation docs, standing benchmark, existing code symbols retained for compatibility | runtime bridge and balance activation code paths | none |
+| S1-P1-A2 | AI | completed | accepted `S1-P1-A1` handoff, Phase 1 implementation package, manual verification, acceptance thresholds, bring-up runbook | `plans/stage1/30-evidence/g2-evaluation.md`, `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none |
+| S1-DOCS-BALANCE-FIRST | AI | completed | balance-first activation direction, specialized 10-spec suite | `ENGINEERING_PLAN.md`, `STAGE1_PLAN.md`, `plans/stage1/10-specs/*.md`, `plans/stage1/20-execution/execution-log.md` | none |
+| S1-PLAN-TDD | AI | pending | specialized 10-spec suite, standing benchmark | `plans/stage1/40-tasks/tdd-plan.md` | none |
+| S1-PLAN-REFACTOR-ORDER | AI | pending | specialized 10-spec suite, existing bridge source | `plans/stage1/40-tasks/refactor-sequence.md` | none |
+| S1-PLAN-TEST-MATRIX | AI | pending | instrumentation_and_acceptance.md, truth model | `plans/stage1/40-tasks/test-matrix.md` | none |
+| S1-PLAN-FIRST-SLICE | AI | pending | specialized 10-spec suite | `plans/stage1/40-tasks/first-slice-definition.md` | none |
+| S1-IMPL-BALANCE-FIRST | AI | blocked | TDD plan, refactor order, specialized 10-spec suite | runtime bridge and balance activation code paths | TDD/Refactor Plan acceptance |
 
-## Frozen Inputs For Phase 0 Preparation
+## Frozen Inputs For Continuous Balance Rewrite
 
-- `Frozen docs`:
+- `Authoritative Contract Suite`:
+  - `plans/stage1/10-specs/continuous_balance_architecture.md`
+  - `plans/stage1/10-specs/continuous_balance_truth_model.md`
+  - `plans/stage1/10-specs/engine_execution_contract.md`
+  - `plans/stage1/10-specs/authority_matrix.md`
+  - `plans/stage1/10-specs/physics_asset_contract.md`
+  - `plans/stage1/10-specs/instrumentation_and_acceptance.md`
+  - `plans/stage1/10-specs/balance-mode-entry-spec.md`
+- `Supporting Docs`:
   - `AGENTS.md`
   - `ENGINEERING_PLAN.md`
-  - `plans/stage1/10-specs/bridge-spec.md`
-  - `plans/stage1/10-specs/retargeting-spec.md`
-  - `plans/stage1/10-specs/test-strategy.md`
+  - `STAGE1_PLAN.md`
   - `plans/stage1/60-user/manual-verification.md`
   - `plans/stage1/20-execution/assumption-ledger.md`
-  - `plans/stage1/10-specs/acceptance-thresholds.md`
-  - `plans/stage1/50-content/pretrained-model-selection.md`
-  - `plans/stage1/50-content/pretrained-checkpoint-retrieval.md`
-  - `plans/stage1/10-specs/environment-spec.md`
-  - `plans/stage1/50-content/motion-set.md`
-  - `plans/stage1/50-content/motion-source-map.md`
-  - `plans/stage1/50-content/motion-source-lock-table.md`
-  - `plans/stage1/50-content/ue-project-scaffold.md`
-  - `plans/stage1/20-execution/phase0-execution-package.md`
-- `Unfreeze rule`: only unfreeze if the user returns setup evidence that changes a planned value or if an assumption moves materially in the ledger
+- `Unfreeze rule`: Only unfreeze if the user explicitly requests an architecture review or if an implementation spike proves a contract requirement is physically impossible.
 
 ## Next Runnable Tasks
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-IMPL-BALANCE-FIRST | runnable now; the target design is now documented and the next step is runtime implementation for continuous physical ownership plus gradual controller blend |
-| 2 | G2 evidence capture | runnable once comparison packaging reflects the new activation model honestly |
-| 3 | S1-P2-A1 | not runnable until G2 is explicitly passed |
+| 1 | S1-PLAN-TDD | runnable now; 10-spec contracts are closed; TDD plan is the first requirement for implementation |
+| 2 | S1-PLAN-REFACTOR-ORDER | runnable now; sequences the transition from legacy flip-path to continuous invariants |
+| 3 | S1-IMPL-BALANCE-FIRST | blocked until TDD and Refactor plans are accepted |
 
 ## Waiting On User
 
@@ -75,11 +81,8 @@ Pre-pivot history remains available in git. This live log now tracks the current
 |---|---|
 | none | no setup evidence remains outstanding |
 
-## Latest Phase 0 Evidence Progress
+## Latest Evidence Progress
 
-- the selected local `motion_tracker/smpl` checkpoint contract remains written down in `bridge-spec.md`
-- G1 Criterion 2 remains `pass`
-- the motion-source review remains `pass`
 - the UE scaffold remains concretely verified:
   - `PhysAnimUE5.uproject` lists `PoseSearch` and `PhysicsControl`
   - Manny content exists under `Content/Characters/Mannequins`
@@ -96,24 +99,16 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | Task ID | Artifact | Accepted? | Notes |
 |---|---|---|---|
 | S1-PLAN-01 | Stage 1 planning bundle | yes | foundational planning artifacts in place |
-| S1-PLAN-02 | `bridge-spec.md` | yes | planning-level contract defined and updated with selected local runtime contract |
-| S1-PLAN-03 | `retargeting-spec.md` | yes | planning-level mapping defined; runtime validation work followed |
-| S1-PLAN-04 | `test-strategy.md` | yes | verification split defined |
-| S1-PLAN-05 | environment / pretrained / scaffold / threshold bundle | yes | execution-planning gaps materially reduced |
-| S1-PLAN-06 | task packets / lock sheets / user return path | yes | re-entry into Phase 0 operationally defined |
-| S1-PLAN-07 | retrieval / export / comparison lock bundle | yes | Phase 0-1 planning gaps materially reduced |
-| S1-P0-A1 | Phase 0 machine-specific execution package | yes | Windows-native Isaac Sim / Isaac Lab path frozen |
-| S1-P1-A1 | single-character implementation package freeze + ONNX export path | yes | startup now succeeds through `NNERuntimeORTDml`; export/import discovery no longer critical path |
 | S1-DOCS-BALANCE-FIRST | balance-first activation docs rewrite | yes | canonical docs now point to continuous physical ownership, gradual controller blend, and standing validation |
 
 ## Blocked / Deferred
 
 | Task ID | Status | Reason |
 |---|---|---|
+| S1-IMPL-BALANCE-FIRST | blocked | implementation is blocked until the TDD plan, refactor order, and test definitions are accepted |
 | G2 | readying | comparison packaging must reflect the new activation model honestly |
 | S1-P2-A1 | blocked | depends on G2 pass |
-| S1-P2-A2 | blocked | depends on Phase 2 result |
-| Legacy flip-path tuning | deferred | only worth touching for temporary backward-compat notes, not as the target design |
+| Legacy flip-path tuning | deferred | archived; only worth touching for temporary backward-compat notes, not as the target design |
 | Broad perturbation tuning by guesswork | deferred | explicit activation design and the standing benchmark remain higher priority |
 
 ## Ledger Sync Note
@@ -126,44 +121,9 @@ Whenever new setup or gate evidence arrives:
 
 ---
 
-## 2026-04-23 — Balance-first activation pivot
+## 2026-04-23 — Transition to TDD Planning
 
-- branch direction changed explicitly
-- the previous flip-based activation model is now considered conceptually flawed as the target design
-- the new principles are:
-  - keep the balance-critical chain continuously simulated as much as possible
-  - minimize topology and ownership flips
-  - ramp controller authority gradually onto an already-physical state
-  - use transition diagnostics to measure reality, not to manufacture a pass
-  - define success as sustained physical stability, not completion of a multi-phase ritual
-- the active product benchmark is unchanged:
-  - reach `BalanceActive_Standing`
-  - hold it continuously for `3.0` seconds
-  - do not count safe deny as success
-- practical effect:
-  - further `RootOn`, `Settle`, grace-window, or flip-certification refinement is no longer the active direction
-  - the next implementation target is balance-first activation on a continuously physical chain
-  - the first likely failure surface is now “controller cannot stand in continuous physics” rather than “handoff is unsafe”
-  - observability must stay strong enough to diagnose sustained-balance metrics, control effort, contact quality, COM behavior, and long-lived oscillation without falling back into vague visual debugging
-
----
-
-## 2026-04-23 — Continuous-invariants rewrite recommendation adopted
-
-- the rewrite will be centered on continuous-physics invariants, not replacement phases
-- the old handoff pipeline is being frozen as a legacy compatibility subsystem rather than edited into the new model
-- new primary docs are being added for:
-  - continuous balance architecture
-  - continuous balance truth model
-  - authority matrix
-  - instrumentation and acceptance
-  - rewrite migration plan
-  - legacy handoff contract
-- the smallest intended first prototype is:
-  - pelvis + thighs + lower spine continuously simulated
-  - distal support set continuously simulated for honest contact truth
-  - fixed stance
-  - flat ground
-  - no perturbations
-  - no locomotion authority
-  - no shell cleverness
+- the specialized 10-spec contract suite is now the single source of truth
+- implementation is officially blocked until TDD and refactor sequencing are planned
+- legacy design documents have been archived to `90-archive/40-design-legacy/`
+- the execution focus is now on mapping contract requirements to deterministic tests
