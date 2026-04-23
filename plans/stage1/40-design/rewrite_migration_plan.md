@@ -41,6 +41,8 @@ Preferred rewrite names are:
 - `BalanceActivation_Validate`
 - `BalanceActive_Standing`
 
+All new migration, shadow-run, and deletion work should use those names rather than compatibility labels.
+
 ## What Is Being Deleted, Not Ported
 
 - flip-centered success criteria
@@ -61,19 +63,21 @@ Delete the old path only after all stop-using criteria are met:
 
 The old handoff path stops being a primary execution path only when:
 
-- instrumentation is trustworthy
+- instrumentation is trustworthy against the published run-artifact schema
 - the authority matrix is enforced
 - the continuous-balance truth model explains failures honestly
-- the smallest always-sim proximal prototype is stable enough to compare
-- the new mode can be shadow-run against the legacy mode with consistent artifact output
+- the `V0` continuously simulated set is active as designed: balance-critical proximal chain plus support set
+- the new mode can be shadow-run against the legacy mode with consistent artifact output using the current schema fields and preferred runtime-state names
 
 ## Shadow-Run Only
 
 Run the new continuous-balance mode in parallel with the legacy mode until:
 
-- instrumentation is trustworthy
+- instrumentation is trustworthy against the published run-artifact schema
 - the authority matrix is enforced
 - the new truth model is stable enough to explain failures honestly
+- the shadow-run outputs use `BalanceActivation_Ready`, `BalanceActivation_BlendIn`, `BalanceActivation_Validate`, and `BalanceActive_Standing`
+- the shadow-run outputs publish the same required artifact fields defined in `instrumentation_and_acceptance.md`
 
 Only then begin deleting old handoff logic.
 
@@ -82,6 +86,6 @@ Only then begin deleting old handoff logic.
 1. truth model
 2. authority matrix
 3. instrumentation and acceptance
-4. smallest always-simulated proximal prototype
+4. smallest `V0` prototype with the continuously simulated balance-critical chain and support set
 5. shadow-run comparison with the legacy path
 6. deletion of old handoff logic after trust is earned
