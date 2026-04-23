@@ -44,6 +44,7 @@ Every continuous-balance run must emit a structured artifact with the following 
 | `terminal_state` | string | enum | yes |
 | `terminal_reason_family` | string | enum | yes |
 | `terminal_reason` | string | enum | yes |
+| `co_terminal_reasons` | array of string | enum values | yes |
 | `physics_asset_contract_valid` | boolean | boolean | yes |
 | `sustained_hold_time_seconds` | number | seconds | yes |
 | `contiguous_hold_time_seconds` | number | seconds | yes |
@@ -225,6 +226,25 @@ Standing validation must fail if:
 - peak angular speed for the support set exceeds `720.0 deg/s`
 - reference mismatch exceeds `25.0 deg` on any balance-critical-chain body for more than `100 ms`
 - reference mismatch RMS across the balance-critical chain exceeds `15.0 deg` for more than `100 ms`
+
+## Threshold Basis
+
+Each numeric threshold in this spec is a `V0` conservative working value, not an empirically validated contract number.
+The table below states the derivation class for each value and the kind of evidence required to tighten or relax it.
+
+| Threshold | Value | Derivation class | Evidence needed to revise |
+| :--- | :--- | :--- | :--- |
+| Root tilt envelope | `20.0 deg` | Conservative design choice based on observed ~45° tilt budget from Phase 1/2 calibration runs; V0 target is intentionally tighter to force honest proximal standing | Artifact histogram of root tilt across multi-second standing attempts on the audited plant |
+| Peak angular speed (balance-critical chain) | `720.0 deg/s` | Conservative ceiling derived from Phase 1/2 abort thresholds (~4000 deg/s) divided down to a standing-stability regime; not measured from successful standing runs | Per-body angular speed distribution from artifact time-series on successful V0 hold attempts |
+| Peak angular speed (support set) | `720.0 deg/s` | Same derivation class as balance-critical chain; foot/calf speed budget assumed to be in the same regime | Same as above; may be revised independently once foot-contact dynamics are measured |
+| Support-loss gap | `100 ms` | Design choice: one-foot-off events shorter than one Chaos substep window (~8 ms) must survive debounce; 100 ms is three full frames at 30 Hz and is wide enough to avoid debounce artifacts without permitting real loss | Measured gap distribution from substep-resolution contact logs on flat-ground standing |
+| Contact churn rate | `12 Hz` | Design choice: two side-state transitions per frame at 30 Hz frame rate; intended to allow normal single-foot-off transients while blocking persistent instability | Contact-churn histogram from substep-resolution truth logs on stable standing attempts |
+| Reference mismatch max | `25.0 deg` | Conservative ceiling; below the ~45° posture error seen in Phase 1/2; wide enough to survive blend-in transients without permitting gross pose failure | Per-body mismatch time-series from blend-in and validate phases of recorded run artifacts |
+| Reference mismatch RMS | `15.0 deg` | Conservative aggregate ceiling; set below the max to catch distributed pose error; not derived from standing run data | RMS mismatch distribution across balance-critical chain from multi-second standing artifacts |
+| Support proxy outside region | `100 ms` | Same design class as support-loss gap; chosen to match that timer so neither gate is structurally weaker than the other | Proxy-outside-region duration histogram from artifact time-series on flat-ground standing |
+
+All of these values are open to revision once real V0 run artifacts exist.
+Revisions must update this table with the evidence source and must not be made as silent tuning edits.
 
 ## Regression Gates
 

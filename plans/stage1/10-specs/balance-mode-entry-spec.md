@@ -170,7 +170,7 @@ Frame-order rule for `V0`:
 
 Movement-component non-interference rule for `V0`:
 
-- "movement component idle" means the movement path must not own floor finding, based movement, regular movement integration, post-physics correction, deferred mesh movement, root-motion application, network correction, or depenetration for the active attempt
+- "movement component idle" means the movement path must not own floor finding, based movement, regular movement integration, post-physics correction, deferred mesh movement, mesh smoothing (client-side interpolation), root-motion application, network correction, or depenetration for the active attempt
 - any such path that materially changes actor, capsule, or mesh motion relative to the balance-critical chain or support set is `activation_movement_reclaim`
 
 ## Measurement-Only Rule

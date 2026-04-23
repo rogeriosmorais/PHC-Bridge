@@ -144,6 +144,61 @@ Interpretation rules:
 - if root tilt is acceptable, the support proxy is acceptable, and contact fails, the run fails on support truth
 - sustained hold duration counts only while higher-precedence truth sources remain valid; time alone never rescues an invalid support or continuity state
 
+## Terminal Reason Arbitration
+
+When multiple failure conditions are simultaneously active, exactly one leaf-level `terminal_reason` must be emitted.
+Use the following arbitration rules in order.
+
+### Rule 1 — Plant contract violation pre-empts all other classification
+
+If the active physics asset violates the `V0` plant contract, emit `activation_physics_asset_contract_violation` and stop.
+No controller-class or support-class reason may be emitted instead.
+
+### Rule 2 — Raw continuity vs modifier/bookkeeping disagreement
+
+| Observable state | Classification |
+| :--- | :--- |
+| Modifier record disagrees with raw body state; raw `IsInstanceSimulatingPhysics` remains `true`; body instance is valid and in the expected truth set | `Diagnostic mismatch` only — log `continuity_bookkeeping_mismatch`; do not emit a terminal reason on this alone |
+| Raw `IsInstanceSimulatingPhysics` is `false` or body instance is invalid; no explicit truth-set membership change | `activation_continuous_simulation_lost` |
+| Truth-set membership has changed explicitly: a body has been added to or removed from the declared truth set, or a body instance has been recreated or replaced | `activation_topology_change` — takes precedence over `activation_continuous_simulation_lost` when both apply because topology change is the proximate cause |
+
+"Explicitly" means: a body-instance pointer changed, a body was destroyed and rebuilt, or the runtime truth-set registry no longer contains a previously-registered body.
+Modifier disagreement alone, without any of those raw conditions, is never "explicit" topology change.
+
+### Rule 3 — Pose/reference mismatch escalation
+
+| Observable state | Classification |
+| :--- | :--- |
+| Per-body mismatch is below `25.0 deg` AND RMS is below `15.0 deg` | `Diagnostic mismatch` — log `reference_mismatch_*` fields; do not emit a terminal reason |
+| Per-body mismatch exceeds `25.0 deg` on any balance-critical-chain body for longer than `100 ms`, OR RMS exceeds `15.0 deg` for longer than `100 ms` | `activation_pose_reference_mismatch` — terminal |
+| The pose mismatch is caused by a prior authority conflict or topology change that already fired | Emit the earlier reason; log reference mismatch as secondary context only |
+
+### Rule 4 — Authority conflict vs support failure co-occurrence
+
+Authority conflict events are secondary diagnostics when support failure is the observable outcome.
+Authority conflict is the emitted leaf reason only when it is the proximate cause of the terminal condition.
+
+| Co-occurrence scenario | Emitted reason |
+| :--- | :--- |
+| Support failure preceded or coincided with authority conflict; no evidence that the conflict caused the loss | `activation_support_failure` — emit; log authority conflict events as secondary context |
+| Authority conflict is the clear proximate cause: movement reclaim or competing locomotion write is observed first, and support failure follows within the same or next frame | `activation_authority_conflict` if the reclaim is locomotion-driven and generic, or `activation_movement_reclaim` if the specific movement-component path is identified; log support failure as secondary |
+| Both authority conflict and instability threshold breach co-occur without a clear ordering | Emit the reason corresponding to the higher-precedence signal family: raw continuity and contact truth outrank controller-layer conflicts; prefer `activation_support_failure` or `activation_instability_threshold_breach` unless the conflict demonstrably preceded the physical failure |
+
+### Rule 5 — General tie-break when two terminal reasons fire simultaneously
+
+Emit the reason corresponding to the highest-precedence signal family that actually failed, using this order:
+
+1. physics-asset contract (`activation_physics_asset_contract_violation`)
+2. raw continuity / topology (`activation_continuous_simulation_lost`, `activation_topology_change`)
+3. support truth (`activation_support_failure`, `activation_proxy_outside_support_region`)
+4. controller stability (`activation_target_discontinuity`, `activation_unstable_gain_or_damping`, `activation_instability_threshold_breach`)
+5. pose/reference (`activation_pose_reference_mismatch`)
+6. authority / ownership (`activation_authority_conflict`, `activation_movement_reclaim`, `activation_shell_helper_violation`)
+7. timeout (`activation_standing_validation_timeout`)
+
+If two reasons are in the same precedence tier, emit the one whose triggering condition was first observed in the substep-level truth stream.
+Record all co-occurring reasons in a secondary `co_terminal_reasons` field in the run artifact.
+
 ## Secondary Diagnostics
 
 These may explain why the primary truth sources failed:
@@ -152,9 +207,10 @@ These may explain why the primary truth sources failed:
 - shell influence metrics
 - modifier-record bookkeeping
 - controller effort proxies
-- authority conflict events
+- authority conflict events (when not the proximate terminal cause)
 
 None of these secondary diagnostics can certify success by themselves.
+Authority conflict events are both secondary diagnostics and a valid leaf terminal reason; the distinction is whether the conflict is the proximate cause of termination or a contributing context.
 
 ## Continuous Simulation Contract
 
