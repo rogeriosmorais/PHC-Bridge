@@ -1,172 +1,95 @@
 # Phase 1 Transactional Auto-Calibration Harness
 
+## Legacy Filename Note
+
+This filename is retained for compatibility.
+
+The harness is no longer defined around passing `Prepare`, `LateValidate`, `RootOn`, or `Settle`. It now searches for stable balance-first activation onto a continuously physical chain.
+
 ## Purpose
 
-This document defines a dev-only Phase 1 search harness for truthful balance-entry calibration.
+This document defines a dev-only search harness for truthful balance-activation calibration.
 
-It exists to replace ad hoc one-knob-at-a-time tuning with deterministic trial search over a bounded solver parameter space while keeping the existing Phase 1 contract authoritative.
+It exists to replace ad hoc one-knob-at-a-time tuning with deterministic trial search over a bounded parameter space while keeping the activation contract authoritative.
 
 ## Scope
 
-This first milestone is Phase 1 only:
+This milestone optimizes for:
 
-1. static geometry fit during Prepare and LateValidate
-2. no-coupling proof through the first successful `BRT_Phase2_RootOn` entry tick
+1. continuous physical ownership of the balance-critical chain
+2. stable controller blend-in
 3. benchmark verification that the resulting run reaches `BalanceActive_Standing` and holds it continuously for `3.0` seconds
 
 It does not tune:
 
-1. readiness thresholds
-2. LateValidate proof durations
-3. no-coupling proof durations
-4. deny taxonomy
-5. grace-window growth as a substitute for physical progress
-6. Phase 2 RootOn behavior
-7. Phase 3 Settle behavior
-8. locomotion
+1. the success benchmark itself
+2. failure taxonomy as a substitute for physical progress
+3. grace-window growth as a substitute for physical progress
+4. locomotion
 
-## Architectural fit
+## Architectural Fit
 
 The harness must not create a second runtime balance implementation.
 
-The system under test remains:
-
-1. `UPhysAnimComponent`
-2. `FPhysAnimBalanceReadyTransition`
-3. the existing Phase 1 pelvis-coupling and late-validation path
+The system under test remains the existing runtime path.
 
 The harness is only:
 
 1. a world-scoped orchestrator
-2. a transactional snapshot/restore layer
+2. a transactional snapshot and restore layer
 3. a bounded candidate generator
 4. a scorer and artifact writer
 
-## Required properties
+## Required Properties
 
 Every candidate trial must:
 
 1. start from the exact same captured baseline
-2. apply only transient Phase 1 solver-side overrides
-3. use the normal balance-entry start path
+2. apply only transient calibration overrides
+3. use the normal balance-activation start path
 4. continue until the run either holds `BalanceActive_Standing` for `3.0` continuous seconds, `Failed`, `SafeDenied`, or times out
 5. restore the same baseline after the trial
 
-The harness must reject candidates that appear calm by violating the existing Phase 1 contract.
+The harness must reject candidates that appear calm only because diagnostics or grace rules hid real instability.
 
-## Search space
+## Runtime Shape
 
-The searchable candidate type is `FPhase1AutoCalibParams`.
+Existing dev-only naming may remain in code for compatibility.
 
-It contains only:
-
-1. source preset
-2. seed-family preset
-3. spine interpolation alpha
-4. worst-thigh interpolation alpha
-5. focused-delta scale
-6. uprightness-weight scale
-7. clamp-strength scale
-8. pelvis pitch bias degrees
-9. pelvis roll bias degrees
-
-The fixed v1 discrete presets are:
-
-1. `CurrentDefault`
-2. `SpineBiased`
-3. `WorstThighBiased`
-4. `BalancedCoupled`
-5. `SpineThenWorstThigh`
-6. `RescueOnly`
-
-These overrides are solver hints only. They must not alter Phase 1 contract thresholds or durations.
-
-## Runtime shape
-
-Add a dev-only `UPhysAnimPhase1AutoCalibSubsystem`.
-
-Responsibilities:
+The harness responsibilities are:
 
 1. resolve target component by filter
 2. capture and restore baseline
 3. generate candidate queue
 4. run determinism preflight
-5. execute Stage A, Stage B, and Stage C
+5. execute candidate trials
 6. score candidates
 7. write `trials.csv`, `summary.json`, and `pareto.json`
-
-Add debug commands:
-
-1. `pa.RunPhase1AutoCalib [ownerFilter] [seed] [maxTrials] [outputSubfolder]`
-2. `pa.StopPhase1AutoCalib [ownerFilter]`
 
 Artifacts write under:
 
 `test-results/phase1-autocalib/<timestamp>/`
 
-## Snapshot contract
+## Snapshot Contract
 
-The baseline snapshot must be sufficient for deterministic replay of a Phase 1 trial.
+The baseline snapshot must be sufficient for deterministic replay of a balance-activation trial.
 
-`FPhase1AutoCalibBaselineSnapshot` must include:
+The snapshot must include:
 
 1. owner actor transform and velocity
 2. skeletal mesh transform
 3. required body transforms
 4. required body linear and angular velocities
 5. required body sleep or awake state
-6. body-modifier state required to reproduce ownership and kinematic-vs-sim behavior
-7. control target state required to reproduce held and previous targets
-8. policy and shell accumulators used by Phase 1
+6. body-modifier state required to reproduce ownership and simulation behavior
+7. control target and blend state
+8. policy and shell accumulators used by activation
 9. pending reset bookkeeping
-10. `SafePhase1ConvergenceSnapshot`
-11. serialized `FPhysAnimBalanceReadyTransition` state
-12. current runtime state and related Phase 1 bookkeeping that affects the next trial
+10. current runtime state and related activation bookkeeping that affects the next trial
 
-The balance-transition snapshot must explicitly export and import:
+## Trial Success And Scoring
 
-1. current and previous phase
-2. timers and counters
-3. no-coupling proof state
-4. certified handoff snapshot
-5. certified late-validation result
-6. diagnostics
-7. failure and safe-deny reasons
-
-## Trial flow
-
-### Preflight
-
-1. capture baseline
-2. restore baseline
-3. capture metrics
-4. restore baseline again
-5. capture metrics again
-6. abort the run if the two restored metric bundles differ
-
-### Stage A
-
-For each of the six discrete presets:
-
-1. generate `24` deterministic Latin-hypercube samples across the continuous dimensions
-2. execute each candidate from the restored baseline
-3. keep full trial results
-
-### Stage B
-
-1. keep the best `8` Stage A candidates by score ordering
-2. run `3` shrinking coordinate-sweep rounds around each retained candidate
-3. evaluate each refined candidate from restored baseline
-
-### Stage C
-
-1. keep the best `5` refined candidates
-2. rerun each candidate `5` times from restored baseline
-3. mark the candidate reproducible only if terminal class, blocker string, and score breakdown stay within epsilon on all five runs
-
-## Trial success and scoring
-
-`FPhase1AutoCalibTrialResult` must record:
+Trial results must record:
 
 1. candidate id and parameters
 2. terminal class
@@ -175,29 +98,20 @@ For each of the six discrete presets:
 5. score breakdown
 6. reproducibility summary
 
-`FPhase1AutoCalibScore` must store the raw ordering metrics:
+Score ordering must prioritize:
 
 1. contract pass
-2. timeout flag
-3. safe-deny flag
-4. determinism-pass flag
-5. root-on reached flag
-6. no-coupling proof satisfied flag
-7. `BalanceActive_Standing` reached flag
-8. `BalanceActive_Standing` hold seconds
-9. worst direct-link angular error
-10. mean target delta
-11. max target delta
-12. thigh asymmetry
-13. peak root tilt
-14. shell offset delta
-15. shell velocity delta
-16. peak root linear speed
-17. peak root angular speed
+2. determinism pass
+3. continuous physical ownership preserved
+4. stable controller blend
+5. `BalanceActive_Standing` reached
+6. `BalanceActive_Standing` hold seconds
+7. worst physical instability metrics
+8. shell influence metrics
 
 Ordering rule:
 
-1. reject any candidate that fails contract, safe-denies, times out, misses required proof, fails to reach `BalanceActive_Standing`, fails to hold that state for `3.0` continuous seconds, or restores non-deterministically
+1. reject any candidate that fails contract, safe-denies, times out, loses balance-critical continuity, fails to reach `BalanceActive_Standing`, fails to hold that state for `3.0` continuous seconds, or restores non-deterministically
 2. rank survivors by the metric order listed above
 3. use a derived scalar only as a stable tiebreak and export convenience
 
@@ -205,16 +119,16 @@ If all candidates fail, the report must still name:
 
 1. the best near-pass
 2. the truthful blocker distribution
-3. the furthest progressed failure when any rejected trial reaches `RootOn`, `Settle`, or even `BalanceActive_Standing` before failing the hold benchmark
+3. the furthest progressed failure when any rejected trial reaches standing validation or even `BalanceActive_Standing` before failing the hold benchmark
 4. the best reproducible failed candidate
 
-## Testing requirements
+## Testing Requirements
 
 Add deterministic tests for:
 
 1. score ordering and gate rejection
-2. contract thresholds remaining outside the override surface
-3. balance-transition snapshot export and import
+2. benchmark thresholds remaining outside the override surface
+3. activation snapshot export and import
 4. component baseline snapshot round-trip
 5. reproducibility of identical candidate plus identical baseline
 
@@ -230,9 +144,9 @@ Add a PIE smoke that:
 This milestone is complete only when:
 
 1. the harness is dev-only and inactive by default
-2. it uses the existing Phase 1 runtime path rather than a parallel solver
+2. it uses the existing activation runtime path rather than a parallel solver
 3. identical candidate plus identical baseline is deterministic after restore
 4. no contract-failing candidate outranks a contract-passing candidate
 5. all-fail runs still produce truthful output
-6. passing runs report the best `5/5` reproducible candidate, not a one-off winner
-7. no report treats truthful safe-deny or RootOn-only progress as a passing result
+6. passing runs report the best reproducible candidate, not a one-off winner
+7. no report treats truthful safe-deny or legacy phase progress as a passing result

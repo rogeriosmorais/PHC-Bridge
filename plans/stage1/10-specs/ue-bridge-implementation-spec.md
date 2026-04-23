@@ -2,11 +2,11 @@
 
 ## Purpose
 
-This document freezes the Unreal-side implementation contract for the Stage 1 bridge and for balance-mode entry.
+This document freezes the Unreal-side implementation contract for the Stage 1 bridge and for balance activation.
 
 It is implementation-facing and must match the runtime contract in the balance-mode design docs.
 
-## Runtime owner
+## Runtime Owner
 
 The live Stage 1 runtime owner is:
 
@@ -19,188 +19,151 @@ The live Stage 1 runtime owner is:
 - NNE runtime/model/session lifetime
 - observation packing
 - action unpacking
-- PhysicsControl writes
+- Physics Control writes
 - bridge runtime state
-- balance-entry state
-- frozen topology capture
-- convergence snapshots
+- balance-activation state
+- diagnostic snapshots
 - smoke-visible terminal outcome
 
-## Runtime states
+## Runtime States
 
-The implementation must expose distinct runtime states or equivalent explicit balance-entry sub-states for:
+The implementation must expose distinct runtime states or equivalent explicit sub-states for:
 
 - `BridgeActive`
-- balance-entry Prepare
-- balance-entry LateValidate
-- `BalanceActive`
+- `BridgeActive_Physical`
+- `BalanceActivation_BlendIn`
+- `BalanceActivation_StandingValidation`
+- `BalanceActive_Standing`
+- `BalanceActive_Recovery`
 - `SafeDenied`
+- `Failed`
 
-Current implementation note:
+Compatibility note:
 
-- active balance is currently published via explicit active sub-states rather than one undifferentiated enum value
-- `BalanceActive_Standing` is the truthful Settle-success publication state
-- `BalanceActive_Recovery` remains available for active-mode recovery semantics instead of being used as the generic success state
+- existing code symbols may still contain legacy `Phase1`, `Phase2`, `Phase3`, `RootOn`, or `Settle` names
+- this documentation pass does not require renaming those symbols
 
-Implementation must not leave balance entry represented only as plain `BridgeActive`.
+## Required Balance-Activation Data
 
-## Required balance-entry data
-
-On balance request acceptance, the runtime must create a dedicated balance-entry record containing:
+On balance request acceptance, the runtime must create a dedicated activation record containing:
 
 - attempt-active state
 - request-accepted timestamp
-- accepted topology snapshot
-- frozen upper-body ownership mode
-- freeze state
-- quiet-proof state
-- LateValidate state
+- balance-critical chain definition
+- ownership-continuity snapshot
+- controller-authority blend state
+- standing-validation timer state
+- shell bookkeeping state
+- shell influence diagnostics
 - terminal outcome flag
 - failure reason if any
 
-## Required convergence snapshot
-
-Prepare and LateValidate gating must use a dedicated authoritative post-update convergence snapshot.
-
-That snapshot must be populated after the runtime work that can change the evaluated state, including target publication and relevant body/control updates.
-
-The snapshot must at minimum be able to report:
-
-- root-side validity
-- root tilt from authoritative source
-- max sim-body linear speed
-- max sim-body angular speed
-- worst-bone identifiers
-- shell/reference deltas used by entry gating
-- target-delta metrics used by entry gating
-- live sim-coverage counts used by Phase 1 validation
-
-## Required write-routing contract
-
-During Prepare and LateValidate:
-
-- normal policy writes over the accepted Phase 1 set must be suppressed
-- only the explicit allowed hold path may publish to the allowed kinematic bones
-- simulated Phase 1 bones must not receive held target writes
-- diagnostics must distinguish `normal`, `held`, and `total` writes
-
-## Required freeze contract
-
-The startup bring-up freeze must:
-
-- acquire on transition accept
-- remain active for the full Phase 1 attempt
-- survive Prepare / LateValidate bouncing inside the same attempt
-- release only on terminal outcome
-
-There must be one acquire and one release per attempt.
-
-## Required topology rule
-
-Under the current accepted Phase 1 design, the implementation must treat the intended topology as:
-
-- `root = kinematic`
-- `proximal = simulated`
-- `distal = kinematic`
-- `upper = kinematic`
-
-The implementation must not silently change ownership semantics under the guise of runtime tuning or diagnostics work.
-
-If ownership semantics change, the implementation spec and balance-mode design docs must change in the same commit.
-
-## Required frozen-capture rule
-
-The accepted Phase 1 topology record is authoritative once captured.
-
-The implementation must not derive ongoing Phase 1 ownership from live readiness classification when that would conflict with the frozen accepted topology.
-
-Current specific requirement:
-
-- if Phase 1 LateValidate requires upper-body hold, the frozen record must store `LateValidationKinematicHold`
-- it must not silently freeze `None` just because the live classification happened to look ready on the entry tick
-
-## Required ownership-separation rule
+## Required Truth Sources
 
 The implementation must keep these sources separate:
 
 - intended ownership
-- PhysicsControl modifier-record ownership
-- raw body sim state
+- raw body simulation state
+- modifier-record or control-layer ownership bookkeeping
+- controller-authority alpha
+- shell bookkeeping state
+- shell influence materiality
 
 These are different signals.
 
-### Timing rule
+## Required Continuity Snapshot
 
-Phase 1 topology intent and raw body sim state are not guaranteed to be frame-synchronous inside the same component tick.
+Balance activation must use a dedicated authoritative post-update snapshot for truth-sensitive decisions.
 
-So:
+That snapshot must at minimum be able to report:
 
-- same-frame ownership mismatch is provisional
-- ownership-violation telemetry must use next-frame confirmation
-- the telemetry path must be read-only, not self-healing
+- raw simulation state for the balance-critical chain
+- worst-body linear and angular stability metrics
+- controller-authority alpha / blend progress
+- shell offset and velocity deltas
+- shell influence materiality
+- locomotion or reset authority contamination
+- standing-validation accumulated hold time
 
-## Required topology-critical write rule
+## Required Ownership Rule
 
-For topology-critical Phase 1 bones, the implementation must not depend solely on broad-set PhysicsControl movement-type writes such as `"All"`.
+Under the target Stage 1 design, the implementation must treat the balance-critical chain as continuously simulated through activation.
 
-Current requirement:
+The implementation must not silently change that contract under the guise of runtime tuning or diagnostics work.
 
-- topology-critical Phase 1 bones must be enforced by explicit per-bone authoritative writes
+If balance-critical ownership semantics change, the implementation spec and design docs must change in the same commit.
 
-## Required BridgeActive suppression rule
+## Required Blend Rule
 
-The runtime must not allow BridgeActive per-bone sync to re-promote accepted distal kinematic bones back to simulated before or during a balance-entry attempt.
+During `BalanceActivation_BlendIn`:
 
-## Required LateValidate behavior
+- controller authority must ramp gradually
+- abrupt activation of full authority is not the intended path
+- diagnostics may record blend instability, but may not reclassify that instability as success
 
-LateValidate may begin only after Prepare has satisfied the documented admission conditions.
+## Required Shell Rule
 
-LateValidate must not be entered if a required admission precondition is already known false on that tick.
+The runtime must distinguish:
 
-LateValidate must emit specific failure reasons where possible, including current contract/viability reasons such as:
+- shell bookkeeping (`locked`, `reanchored`, `reseeded`, or equivalent)
+- shell influence on the balance-critical chain
 
-- `phase1_late_validate_upper_body_instability`
-- `phase1_late_validate_sim_coverage_regressed`
+The presence of shell bookkeeping is not itself a failure.
 
-## Smoke-test evaluation rule
+Material shell influence on the balance-critical chain during activation is a failure.
 
-The automation smoke must evaluate the final state using the balance-entry terminal state, not the generic bridge-running state.
+## Required Standing-Validation Behavior
 
-Passing outcomes:
+`BalanceActivation_StandingValidation` may begin only after the bridge is in a physically ready state and the controller blend has reached its required activation range.
+
+Standing validation must:
+
+- require contiguous readiness for the configured hold duration
+- reset its hold timer on non-ready frames
+- end truthfully on the first terminal failure
+
+## Smoke-Test Evaluation Rule
+
+The automation smoke must evaluate the final state using the balance-activation terminal state, not the generic bridge-running state.
+
+Passing outcome:
 
 - `BalanceActive_Standing`
-
-Implementation note:
-
-- `BalanceActive_Standing` is the only current passing smoke outcome
-- `BalanceActive_Recovery` is not a passing entry-smoke state
-- truthful `SafeDenied` remains required telemetry, but it is not a passing smoke outcome
 
 Failing outcomes:
 
 - `BridgeActive`
+- `BridgeActive_Physical`
+- `BalanceActivation_BlendIn`
+- `BalanceActivation_StandingValidation`
 - `BalanceActive_Recovery`
 - `SafeDenied`
-- unresolved entry state
+- unresolved activation state
 - ambiguous failure state
 
-## Documentation alignment rule
+## Documentation Alignment Rule
 
-No implementation detail is allowed that requires a hidden balance-entry rule absent from the current design/spec docs.
+No implementation detail is allowed that requires a hidden balance-activation rule absent from the current design or spec docs.
 
-If implementation adds or removes a real gate, ownership rule, frozen-topology rule, or terminal reason, the design/spec docs must be updated in the same change.
+If implementation adds or removes a real:
 
-## Acceptance criteria
+- ownership rule
+- blend rule
+- standing-validation rule
+- diagnostic truth source
+- terminal reason
+
+the design and spec docs must be updated in the same change.
+
+## Acceptance Criteria
 
 This implementation spec is satisfied only when:
 
-- balance entry is implemented as a distinct state path
-- a dedicated frozen Phase 1 topology record exists
-- a dedicated post-update convergence snapshot exists
-- the write-routing contract is explicit
-- the freeze contract is explicit
-- ownership sources remain distinct
-- topology-critical writes are authoritative per-bone where required
+- balance activation is implemented as a distinct state path
+- the balance-critical chain is explicit in runtime data
+- a dedicated post-update truth snapshot exists
+- ownership, bookkeeping, and shell influence remain distinct
+- controller blend is explicit
+- standing validation is explicit
 - smoke evaluation uses terminal balance outcomes
-- the runtime cannot silently end the smoke in plain `BridgeActive`
-- the runtime cannot count truthful safe deny as a passing smoke result
+- truthful safe deny is not a passing smoke result

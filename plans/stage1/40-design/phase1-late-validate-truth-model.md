@@ -1,148 +1,86 @@
 # Phase 1 / LateValidate Truth Model
 
 Status: Authoritative design contract  
-Scope: Truth sources and gating rules for `Prepare` and `LateValidate`
+Scope: Ownership continuity truth sources for balance-first activation
 
-## 1. Frozen Phase 1 Topology Contract
+## Legacy Filename Note
 
-When Phase 1 is accepted, the following topology is frozen as the authoritative contract:
+This filename is retained for compatibility.
 
-- **Root (pelvis)**: `Kinematic`
-- **Proximal set**: `Simulated`
-- **Distal set**: `Kinematic`
-- **Upper-body set**: `Kinematic`
+The target design is no longer `Prepare` / `LateValidate`. This document now defines how the runtime truthfully measures ownership continuity before and during activation.
 
-### Expected sim counts (Stage 1)
-- `simCount = 5` (proximal only)
-- `proximalSimCount = 5`
-- `distalSimCount = 0`
-- `upperBodySimCount = 0`
+## 1. Purpose
 
-## 2. Ownership Source Priority
+This document defines how the runtime must interpret ownership continuity for the balance-critical chain.
 
-Decision gates must evaluate ownership by consulting sources in this strict priority order:
+It exists to prevent these mistakes:
 
-1. **Frozen Topology Contract**: The absolute source of truth for what *should* be happening during this attempt.
-2. **Intended Ownership**: The high-level state machine's current request.
-3. **Modifier-Record Ownership**: What `PhysicsControl` believes it has applied.
-4. **Raw Body State**: The actual simulation state observed from the physics engine.
+- treating intended ownership as proof of raw physical continuity
+- treating modifier-record ownership as proof of raw physical continuity
+- treating shell bookkeeping as proof of shell influence
 
-## 3. LateValidate Gate Definitions
+## 2. Observables
 
-These gates define the transition from Phase 1 (`Prepare`/`LateValidate`) to Phase 2 (`RootOn`).
+The runtime must keep these observables separate:
 
-### [bringUp] - Control Authority Settlement
-- **Condition**: `FinalBringUpGroupControlAuthorityAlpha >= 1.0` (with `KINDA_SMALL_NUMBER` epsilon).
-- **Source**: `UPhysAnimComponent::CalculateBringUpGroupControlAuthorityAlpha` (reads `HighestUnlockedBringUpGroupIndex` and `MaxAutoUnlockBringUpGroup`).
-- **Logic**: All bring-up groups (including the final stabilization group) must be fully unlocked. This ensures no hidden "movement smoke" or transition-shaping forces are active during proof.
+### A. Intended ownership continuity
 
-### [shellSafety] - Pre-Root-On Proof
-- **Condition**: A multi-vector proof that the shell is stable and authority is correctly transitioned.
-  - `RootOnReadinessShellProofDurationSeconds >= BalancePhase2PreRootOnShellProofRequiredSeconds`
-  - `ShellOffsetDelta <= BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm`
-  - `ShellVelocityDelta <= BalancePhase2PreRootOnShellProofMaxVelocityDeltaCmPerSecond`
-  - `ShellOffsetGrowth <= BalancePhase2PreRootOnShellProofMaxOffsetGrowthCm`
-  - `ShellVelocityGrowth <= BalancePhase2PreRootOnShellProofMaxVelocityGrowthCmPerSecond`
-  - **Not Actively Affecting**: `!bShellCorrectionActivelyAffecting` (metrics must be below significant thresholds: 0.1cm / 1.0cm/s).
-  - **Lock/Anchor**: Shell must be `Locked` by the transition and `Reanchored` to the current state.
-- **Source**: `FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot` (aggregating metrics from `FPhase1AcceptedConvergenceSnapshot` and `UPhysAnimComponent`).
-- **Logic**: This gate proves that the shell authority transfer is not just logically correct but physically stable. Stale `shellCorrectionActive` states (owner active but metric below threshold) are logged but do not block the proof. Active metrics block the proof.
+What the activation contract expects for the balance-critical chain.
 
-### [expectedRelease] - Upper-Body Release Readiness
-- **Condition**: Both the LateValidate clock and the ShellHold clock must satisfy their required durations.
-  - `LateValidationAccumulatedSeconds >= BalancePhase1LateValidateRequiredSeconds`
-  - `RootOnReadinessShellHoldAccumulatedSeconds >= BalancePhase2RequiredShellHoldDuration`
-- **Source**: `FPhysAnimBalanceReadyTransition::Tick` (comparing `LateValidationAccumulatedSeconds` and `RootOnReadinessShellHoldAccumulatedSeconds` against settings).
-- **Logic**: This gate allows the upper body to transition from `LateValidationKinematicHold` to `None` (Normal ownership). It is the primary protection against "release instability" where the upper body sim-set collapses immediately upon RootOn.
+### B. Raw body simulation state
 
-### [readyProven] - Aggregate Readiness
-- **Source**: `FPhysAnimBalanceReadyTransition::ValidateRootOnReadinessSnapshot` (aggregating the results of `bringUp`, `shellSafety`, and `expectedRelease`).
-- **Logic**: All primary readiness signals must be `True`. This is the final "go/no-go" signal for Phase 2 entry.
-  - Classification must be `RootCoupledReady` (proximal simulation count == 5).
-  - Classification `UpperOnlySafeDeny` (proximal simulation count == 0) results in a safe denial instead of Phase 2 entry.
+What Chaos actually reports for the balance-critical chain.
 
-## 4. Operational Transition Rules
+### C. Modifier-record ownership
 
-### Confirmation Semantics
-- **Next-frame confirmation**: Raw body state is provisional on the same frame as an intent change. Ownership-violation diagnostics *must* require next-frame confirmation before triggerring a reset.
-- **Same-frame mismatch**: A same-frame mismatch between intent and raw state is *insufficient evidence* for failure.
+What the control layer believes it has applied.
 
-### Latching vs Recomputed
-- **Latched**: Frozen topology, upper-body hold mode (must be frozen from Phase 1 contract, not live readiness).
-- **Recomputed live**: Root validity, target continuity, max sim-body speeds, shell/reference deltas.
+### D. Shell bookkeeping state
 
-### Stale Latched State (Shell)
-- **Informational**: `bShellCorrectionOwnerActive` without significant metric influence is logged as a "stale latch" but does not block the safety proof.
-- **Blocking**: Only *active* influence (`bShellCorrectionActivelyAffecting`) blocks the `shellSafety` proof.
-- **Source**: `FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot`.
+What shell lock, anchor, or reseed bookkeeping is active.
 
-### Pending-Reset Leakage
-- **Global Block**: `bHasPendingResets` blocks admission to `LateValidate`.
-- **Upper-Body Violation**: During `LateValidationKinematicHold`, any pending reset on an upper-body bone is a terminal instability violation.
-- **Stale State**: Resets must be drained/applied before the quiet window can advance. This prevents "latent discontinuities" from passing the quiet window.
-- **Source**: `UPhysAnimComponent::GetPendingBodyModifierCachedResetNames`.
+### E. Shell influence materiality
 
-### Modifier-Record / Raw-Body Desync
-- **Hazard**: A state where the intended ownership, modifier record, and physical body state disagree.
-- **Proven Pattern**:
-  - `Intended Ownership` = `Kinematic` (correct)
-  - `Body Modifier Record` = `Simulated` (incorrect/stale)
-  - `Raw Body State` = `Kinematic` (correct, but potentially coincidental)
-- **Interpretation**: This is a **Stale-State / Truth-Source Mismatch**, not a physical instability. If the modifier record says "Simulated" but the body is not moving, the gate must not treat it as a "success" for kinematic bones.
+Whether shell behavior is materially affecting the balance-critical chain.
 
-### Convergence Gate State Dependencies
-Gates must rely on specific truth sources according to the risk of the check:
+## 3. Source-Of-Truth Order
 
-| Gate / Check | Truth Source(s) | Requirement |
-| :--- | :--- | :--- |
-| **Topology (Freeze)** | Frozen Topology only | Absolute authority; ignore live readiness. |
-| **Ownership (Distal)** | Modifier Record + Raw Body | **Confirmation required**. Do not fail on stale record alone; do not pass on raw-body coincidence alone. |
-| **Stability (Proximal)** | Raw Body + Convergence Snapshot | Physical reality only. |
-| **Root Tilt / Target Delta** | Convergence Snapshot | Post-update processed values only. |
-| **Shell Safety Proof** | UPhysAnimComponent Metrics | Authoritative telemetry source. |
+For ownership-continuity classification, use this order:
 
+1. intended ownership continuity
+2. raw body simulation state
+3. modifier-record ownership
+4. shell bookkeeping state
+5. shell influence materiality
 
-## 5. Failure Classification
+Interpretation:
 
-### Contract Failure
-The runtime failed to uphold the logic of the bridge.
-- Topology mismatch or wrong frozen capture.
-- Illegal write leaks to simulated bones.
-- `BridgeActive` distal re-promotion suppression failure.
-- Stale or wrong convergence source.
+- intended ownership defines what the runtime is trying to maintain
+- raw body state is the deciding proof of continuity
+- modifier state is routing evidence, not deciding proof
+- shell bookkeeping is not shell influence
 
-### Physical-Viability Failure
-The contract was upheld, but the physical world was too unstable to satisfy the gates.
-- Accepted sim set (proximal) is dynamically unstable.
-- Entry quietness collapses under contact/tuning.
-- Body-motion instability after contract-correct admission.
+## 4. Classification Rules
 
-### Stale-State / Reset-Leak Failure
-The contract logic is correct, but the system state contains "latent" or "stale" data that invalidates the proof.
-- Pending body-modifier resets leaked into LateValidate.
-- Stale shell-correction flags held after metric quietness.
-- Unapplied target caches from a previous attempt.
+Examples:
 
-### Telemetry-Only Observation
-Findings that inform debugging but do not independently trigger resets.
-- Individual bone drift below the cumulative gate threshold.
-- Sub-threshold target discontinuity.
-- `Proxy` bone promotion confirmed by next-frame check.
+- intended continuity present, raw simulation present, modifier disagrees
+  - classify as modifier-record disagreement
+- intended continuity present, raw simulation lost
+  - classify as ownership continuity failure
+- shell bookkeeping present, shell influence not material
+  - classify as bookkeeping only
+- shell bookkeeping present, shell influence material
+  - classify as shell influence failure
 
-## 6. Current Empirically Proven Findings
+## 5. Acceptance
 
-- **Auth writes**: Broad `"All"` writes are not authoritative enough for topology-critical bones; explicit per-bone writes are required.
-- **Upper-body hold**: must be frozen from the Phase 1 contract, not live readiness.
-- **Distal suppression**: `BridgeActive` distal re-promotion must be explicitly suppressed to prevent ownership thrash.
-- **Confirmation timing**: Same-frame ownership mismatch is not sufficient evidence of failure.
+This truth model is satisfied only when ownership continuity decisions are based on explicit classification of:
 
-## 7. Investigation Surface (Temporary)
+- intended ownership
+- raw body state
+- modifier-record ownership
+- shell bookkeeping
+- shell influence
 
-This section identifies the last confirmed failure modes as of the latest smoke tests. These are investigation-facing details and are expected to change frequently; they do not form part of the timeless design contract.
-
-### Last Confirmed Failure Mode
-- **Identifier**: `phase1_late_validate_upper_body_instability`
-- **Context**: Convergence failures in `LateValidationKinematicHold`.
-- **Confirmed Producer**: `ClassifyLateValidationFailureReason` had a parallel stale path; now consolidated to the authoritative observed-violation gate.
-- **Current Contract**: this reason must reflect only authoritative upper-body failures during kinematic hold: raw simulation, non-trivial motion, or pending-reset leakage. Mesh-pose drift relative to frozen entry-hold quats is forensic-only; target continuity remains owned by convergence/control-target diagnostics.
-
+and no authoritative document treats a later topology flip as the target proof of success.
