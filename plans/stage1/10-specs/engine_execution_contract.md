@@ -104,8 +104,10 @@ The implementation must perform truth adjudication in this exact order:
     - **Result**: Emit `activation_support_failure` as adjudicated by the [Truth Model](continuous_balance_truth_model.md).
     - **Reasoning**: If at least one foot is down, it MUST provide sufficient area. If both are up, the failure is instead adjudicated by the **Support Gap** in Step 6.
 5.  **Proxy Adjudication**: 
-    - If `Proxy` is outside the hull, increment drift timer. 
-    - If `timer > COM Proxy Drift`, emit `activation_proxy_outside_support_region`.
+    - **Condition**: Only if `active_support_side_count > 0`.
+    - **Test**: If `Proxy` is outside the hull, increment drift timer. 
+    - **Result**: If `timer > COM Proxy Drift`, emit `activation_proxy_outside_support_region`.
+    - **No-Hull Behavior**: If `active_support_side_count == 0`, skip this test entirely. The artifact `proxy_inside_hull` must be emitted as `null` (not evaluated).
 6.  **Classification**: Assign `support_mode` using the following priority:
     - **TwoFootStable**: Both sides `true` (debounced).
     - **SingleFootSurvival**: Exactly one side `true` (debounced) AND `Proxy` is `Inside`.
