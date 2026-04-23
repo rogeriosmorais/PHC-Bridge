@@ -272,7 +272,7 @@ Support truth precedence:
 
 - if support truth fails, the run fails even if COM or root-side metrics still look temporarily acceptable
 
-## Physics Asset Contract
+### Physics Asset Contract
 
 `V0` is defined against one audited physical plant, not just against runtime ownership rules.
 
@@ -292,9 +292,19 @@ Required `V0` plant prerequisites:
 - solver-sensitive damping assumption: body-level linear/angular damping and physical-material damping/friction behavior must remain at the declared audited baseline; runtime claims of controller success may not depend on untracked plant-side damping edits
 - support-geometry quality: `calf_*`, `foot_*`, and `ball_*` bodies must use authored collision geometry that is bilateral, non-degenerate, and broad enough to produce stable plantar support contacts on flat ground; capsule-tip or needle-contact support geometry is not admissible for `V0`
 
-Weak assumption explicitly rejected:
+## Capsule Contract
 
-- "If the runtime contract is correct, the physical plant is close enough by default."
+The character capsule (`UCapsuleComponent`) is part of the physical plant and must not provide hidden assistance.
+
+Required `V0` capsule rules:
+
+- **Collision**: Capsule collision with the world (`WorldStatic`, `WorldDynamic`) and with the character's own bodies must be DISABLED during an active attempt. The capsule may not provide physical support, containment, or depenetration forces to the simulating mesh.
+- **Gravity**: Capsule gravity must be DISABLED. The capsule must not fall and drag the skeletal mesh via the root attachment.
+- **Transform**: The capsule must remain frozen at the world-space rebase origin and yaw captured at blend start. It must not "shadow-follow" the simulating pelvis in a way that injects forces or constrains the root's physical freedom.
+- **Attachment**: The skeletal mesh's relationship to the capsule must not result in "hard" kinematic containment. The simulating bodies must be physically free to fall or move away from the capsule's origin if the controller fails.
+
+Weak assumption rejected:
+- "If the movement component is idle, the capsule state is a non-material implementation detail."
 
 ## What Is Explicitly Not Allowed
 

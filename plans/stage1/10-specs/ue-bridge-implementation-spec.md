@@ -186,30 +186,13 @@ Weak assumption rejected:
 
 - "Owning only the balance-critical chain and support set makes the rest of the mesh inert enough."
 
-## Required Engine Update Order
+## Required Engine Execution Contract
 
-`V0` balance activation must use one explicit frame-order contract.
+The implementation must follow the authoritative execution-order and data-freshness contract defined in:
 
-Required per-frame order:
+- [engine_execution_contract.md](engine_execution_contract.md)
 
-1. animation evaluation: `USkeletalMeshComponent` updates the authored standing-reference pose inputs and any required bone-space state for the active frame
-2. Physics Control cached-pose update: any Physics Control pose capture, cached target-pose refresh, or equivalent skeletal-pose read used to derive current-frame control inputs must occur after skeletal-mesh evaluation and before any activation ownership/truth decision for that frame
-3. `UPhysAnimComponent` tick: runs in `TG_PrePhysics`, after skeletal-mesh evaluation and after the required Physics Control cached-pose update, and owns activation-state updates, standing-reference rebasing, quiet-state gating, observations, and bridge-side control decisions
-4. `UPhysicsControlComponent` application point: Physics Control target writes and body-modifier writes issued by `UPhysAnimComponent` must be applied in the same pre-physics window before Chaos simulation for that frame; no later component may overwrite them on the balance-critical chain or support set
-5. CharacterMovement regular tick: during `V0` activation it may exist, but it must be inert with respect to the balance-critical chain and support set; no movement-component transform, floor-correction, based-movement, or deferred mesh write may alter those bodies
-6. Chaos simulation: physics substeps consume the already-published Physics Control and body-modifier state for the frame
-7. substep truth accumulation: during Chaos simulation, the runtime accumulates support truth, continuity truth, churn events, timer advancement, and other terminal-condition evidence at substep resolution
-8. instrumentation sample: the truth-sensitive activation snapshot is taken once per frame immediately after the final Chaos substep and before any post-physics movement correction, deferred mesh movement, or recovery/termination cleanup writes
-9. CharacterMovement post-physics behavior: post-physics based movement, deferred mesh movement, or similar late corrections must remain inert during `V0` activation; any such write is an authority conflict and, if it touches the balance-critical chain or support set, an `activation_movement_reclaim`
-
-Interpretation rules:
-
-- if the skeletal mesh has not evaluated for the frame yet, `UPhysAnimComponent` must not publish new standing-reference targets for that frame
-- if the Physics Control cached pose or equivalent source pose is stale relative to the current skeletal-mesh evaluation, ownership and truth decisions for that frame are not admissible
-- ownership and truth for a frame must be evaluated against the post-Chaos raw state produced from the same frame's skeletal-mesh evaluation, Physics Control cached pose, target writes, and body-modifier writes
-- if Physics Control or body-modifier writes land after Chaos has already simulated the frame, they count for the next frame and must not be treated as current-frame truth
-- terminal truth must be accumulated at Chaos substep resolution before the post-update snapshot is emitted
-- the post-update activation snapshot is the authoritative per-frame publication surface for state advancement and artifacts, but it must reflect the already-accumulated substep truth for that frame
+This document defines the hard requirements for tick groups (`TG_PrePhysics`), pre-physics authority publication, substep truth resolution, and the post-simulation sampling point. Any implementation that deviates from this order is a contract violation.
 
 ## Required Movement-Component Non-Interference Rule
 
@@ -222,6 +205,7 @@ The following movement-component surfaces must not write, correct, reposition, o
 - regular movement integration and velocity-driven capsule motion
 - post-physics correction paths
 - deferred skeletal-mesh movement or mesh-follow updates
+- mesh smoothing (client-side interpolation)
 - root-motion extraction, accumulation, or application paths
 - network smoothing, prediction correction, or replay correction paths
 - penetration resolution and depenetration paths owned by the movement component
@@ -233,6 +217,19 @@ Interpretation rules:
 - disabling only one of these surfaces is not sufficient if another movement path still owns actor, capsule, or mesh correction
 - if any movement-component-owned path changes actor transform, capsule transform, skeletal-mesh relative transform, or base-relative motion in a way that materially affects the balance-critical chain or support set, the run must report `activation_movement_reclaim`
 - movement intent may still exist as data, but it may not become a live transform-authority surface during `V0`
+
+## Required Capsule Contract Implementation
+
+The character capsule (`UCapsuleComponent`) must be explicitly managed by `UPhysAnimComponent` during activation to prevent hidden physical assistance.
+
+For `V0`, the implementation must:
+
+- **Disable Collision**: On activation entry, set the capsule's collision enabled state to `NoCollision` or move it to a dedicated non-colliding object channel. It must not generate `WorldStatic` or `WorldDynamic` contacts.
+- **Disable Gravity**: Ensure `EnableGravity` is set to `false` for the capsule component.
+- **Freeze Transform**: The capsule world-space transform must be set to the rebase origin/yaw captured at blend start and held constant. The implementation must not use `SetActorLocation` or similar calls to "pull" the capsule toward the simulating pelvis during the attempt.
+- **Root Independence**: The skeletal mesh's root body must be simulating and its world-space motion must be determined by the physics solver and Physics Control, not by kinematic attachment to the frozen capsule.
+
+If any other system (e.g., CharacterMovement) attempts to re-enable capsule collision or move the capsule during the attempt, it must be reported as a capsule contract violation and fail the run.
 
 ## Required Ownership Rule
 

@@ -107,14 +107,17 @@ Every continuous-balance run must emit a structured artifact with the following 
 | `samples[].terminal_reason_candidate` | string | enum or empty | fixed cadence | yes |
 | `samples[].standing_reference_id` | string | identifier | fixed cadence | yes |
 
-### Cadence And Time Windows
+### Cadence And Execution Order
 
-- artifact sample cadence: `30 Hz` minimum
-- truth evaluation cadence: every Chaos substep
+All timing, cadence, and execution-order rules are defined in the authoritative:
+
+- [engine_execution_contract.md](engine_execution_contract.md)
+
+### Time Windows and Sampling Rules
+
 - validation hold window: contiguous interval spent in `BalanceActivation_Validate`
 - sustained hold window: contiguous interval spent in `BalanceActive_Standing`
 - support uptime window: total time with valid support contact during validate and standing windows
-- truth-sensitive sampling point: once per frame immediately after the final Chaos substep and before any CharacterMovement post-physics correction or deferred mesh movement
 - mesh-wide side-effect fields are required because nominally body-level Physics Control and body-modifier writes can still alter whole-skeletal-mesh behavior
 - `blend_primitive_bundle` must declare which Physics Control primitives are alpha-ramped in `V0` and which are fixed-per-attempt
 - `standing_reference_asset_path`, `standing_reference_authored_space`, and `standing_reference_control_space` are required so every run names the exact authored pose asset, authored-space convention, and runtime control-space projection used for rebasing

@@ -262,7 +262,13 @@ Only after that may the runtime add secondary context such as shell influence or
 
 Support truth is primary only because `V0` requires the support set to remain simulated.
 
-Cadence rule:
+Execution and Cadence Rule:
+
+The truth evaluation cadence, frame execution order, and data-freshness requirements are defined in the authoritative:
+
+- [engine_execution_contract.md](engine_execution_contract.md)
+
+Interpretation:
 
 - truth evaluation cadence is Chaos substep resolution, not artifact cadence
 - the `30 Hz` artifact stream is a reporting/downsample layer only
