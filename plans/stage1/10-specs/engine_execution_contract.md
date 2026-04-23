@@ -4,7 +4,7 @@
 
 This document defines the authoritative Unreal Engine execution order and data-freshness contract for the continuous-balance bridge.
 
-**Failure truth definitions and arbitration logic are owned exclusively by [continuous_balance_truth_model.md](continuous_balance_truth_model.md).**
+**Failure truth is owned exclusively by [continuous_balance_truth_model.md](continuous_balance_truth_model.md).**
 
 ## Per-Frame Execution Order
 
@@ -60,25 +60,32 @@ Authority rollout during `BalanceActivation_BlendIn`:
 
 ## Support-Truth Reduction Algorithm (V0)
 
-### 1. Per-Substep Manifold Capture
-- **Accepted Points**: All points where `ContactDistance <= 0.0`.
-- **Calf Exclusion**: Manifold points on `calf_l/r` must be **EXCLUDED**.
-- **Per-Body Reduction**: Reduce to a representative **Support Patch** that preserves planar area.
-- **Justification**: Area preservation prevents false proxy-outside-region failures.
+The implementation must use this deterministic algorithm to reduce the high-rate Chaos substep stream into frame-level truth.
 
-### 2. Substep Persistence (Debounce Rule)
+### 1. Per-Substep Manifold Capture
+For every body in the support set (`foot_*`, `ball_*`) on every Chaos substep:
+- **Accepted Points**: Capture **All Manifold Points** where `ContactDistance <= 0.0`.
+- **Calf Exclusion**: Manifold points on `calf_l/r` must be **EXCLUDED**.
+- **Per-Body Reduction Rule**: 
+  - Construct a **2D Convex Hull** of the world-space contact points projected onto the planar support surface.
+  - The resulting **Support Patch** for the body is the set of vertices forming this hull.
+  - **Minimum Geometry**: A valid patch requires at least **3 non-collinear vertices** to represent a planar area.
+  - **Fallback**: If fewer than 3 points exist, the patch collapses to a line or point, triggering a high risk of `activation_proxy_outside_support_region`.
+
+### 2. Final Frame Hull Construction
+- **Qualifying Substep**: Sample from the final qualifying Chaos substep of the frame.
+- **Hull Union**: The authoritative Frame Support Hull is the **Convex Hull** of the union of all vertices from all active **Support Patches**.
+- **Failure Condition**: If the total vertex set across all bodies contains fewer than **3 points**, emit `activation_support_failure`.
+
+### 3. Substep Persistence (Debounce Rule)
 - State changes accepted only if they persist for **2 consecutive substeps**.
 
-### 3. Churn and Uptime Counting
+### 4. Churn and Uptime Counting
 - Count each debounced `false<->true` transition as 1 churn event.
 - Increment uptime only on side-support `true` substeps.
 
-### 4. Final Frame Hull Construction
-- **Qualifying Substep**: Sample from the final qualifying Chaos substep of the frame.
-- **Hull Union**: Convex Hull of all Support Patches for active bodies.
-
 ### 5. False-Failure Risk
-Conservative reduction collapses the hull and triggers premature `activation_proxy_outside_support_region` failures. V0 requires area-preserving reduction.
+Area-preserving reduction is mandatory. Collapsing a plantar contact to its "deepest point" is a contract violation because it eliminates the stability margin required for honest swaying.
 
 ### 6. 30 Hz Artifact Emission
 Emit immediately if a terminal failure occurs between 30Hz samples.

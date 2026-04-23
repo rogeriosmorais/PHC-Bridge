@@ -18,7 +18,7 @@ This document defines the high-level architecture of the PhysAnim bridge. It est
 ### 1. Balance-Critical Chain
 The architectural center of the humanoid:
 - `pelvis`, `spine_01`, `spine_02`, `spine_03`, `thigh_l`, `thigh_r`
-- **Ownership**: Must be continuously simulated. Topology changes are terminal.
+- **Ownership**: Must be continuously simulated. Any bone removal or renaming triggers `activation_topology_change`.
 
 ### 2. Support Set
 Bodies that provide valid, plantar support for the balance hull:
@@ -28,7 +28,7 @@ Bodies that provide valid, plantar support for the balance hull:
 ### 3. Contamination Monitor Set
 Bodies whose world contact is forbidden during the attempt:
 - `calf_l`, `calf_r`
-- **Truth Role**: World contact triggers terminal `activation_authority_conflict` (Rule 5). These bodies must remain clear of all world geometry to maintain the "Honest Standing" proof.
+- **Truth Role**: World contact triggers terminal `activation_authority_conflict` as defined in [authority_matrix.md](authority_matrix.md). These bodies must remain clear of all world geometry to maintain the "Honest Standing" proof.
 
 ### 4. Upper-Body & Excluded Sets
 - All bodies not in the critical or support sets.

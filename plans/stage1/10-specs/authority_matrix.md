@@ -4,20 +4,27 @@
 
 This document is the **sole authoritative owner** of runtime ownership and subsystem authority. It defines who is allowed to write to which body at any given time and establishes the non-negotiable boundaries of material contamination.
 
-**Failure truth and terminal arbitration are owned exclusively by [continuous_balance_truth_model.md](continuous_balance_truth_model.md).**
+**Failure truth is owned exclusively by [continuous_balance_truth_model.md](continuous_balance_truth_model.md).**
 
 ## Subsystem Authority Matrix
 
 | Runtime mode | Authoritative owner | Forbidden writes | Capsule state | Mesh-wide authority |
 | :--- | :--- | :--- | :--- | :--- |
-| `BalanceActivation_Ready` | bridge | locomotion-drive; shell helper | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
-| `BalanceActivation_BlendIn` | bridge | movement-component; plant-profile swap | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
-| `BalanceActivation_Validate` | bridge | shell helper; movement-component | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
-| `BalanceActive_Standing` | bridge | external authority reclamation | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
+| `BalanceActivation_Ready` | bridge | locomotion-drive; shell helper | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; MOVE_None; UpdatedComp=null |
+| `BalanceActivation_BlendIn` | bridge | movement-component; plant-profile swap | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; MOVE_None; UpdatedComp=null |
+| `BalanceActivation_Validate` | bridge | shell helper; movement-component | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; MOVE_None; UpdatedComp=null |
+| `BalanceActive_Standing` | bridge | external authority reclamation | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; MOVE_None; UpdatedComp=null |
+
+**Operational Pre-condition**: Entering `BalanceActivation_Ready` requires a **passed** physical plant audit as defined in [physics_asset_contract.md](physics_asset_contract.md).
 
 ## ACharacter Movement Model (V0)
 
-**CRITICAL**: V0 is NOT running a standard `ACharacter` movement model. Structural deactivation of CMC and mesh isolation are mandatory.
+**CRITICAL**: V0 is NOT running a standard `ACharacter` movement model. Structural deactivation of the `CharacterMovementComponent` (CMC) and isolation of the skeletal mesh from the capsule root are mandatory.
+
+**Structural Deactivation Rule**: Passive non-interference is insufficient for `V0`. The implementation must structurally prevent CMC from asserting authority via:
+- `Deactivate()` + Tick Disabled
+- `MOVE_None` or dedicated `MOVE_PhysAnimBalance` (skips internal CMC logic)
+- `UpdatedComponent = nullptr`
 
 ## Movement-Component Do-Not-Own List
 

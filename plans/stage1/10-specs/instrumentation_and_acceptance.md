@@ -55,7 +55,18 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `movement_reclaim_count`: Number of CMC interference events.
 - `continuity_bookkeeping_mismatch`: Diagnostic flag for modifier/raw drift.
 
-### 5. Termination
+### 5. Contamination and Authority
+- `contamination_class`: Classification of the violation (`mesh_wide_assist`, `non_critical_body_assist`, `excluded_body_world_brace`, `global_blend_or_kinematic_assist`).
+- `contamination_source_body`: Name of the body triggering the conflict.
+- `contamination_source_subsystem`: Name of the external system issuing the write.
+- `non_critical_body_write_detected`: Boolean flag for excluded body interference.
+- `excluded_body_world_contact_source`: Body name for world-bracing events.
+- `global_blend_weight`: Live `PhysicsBlendWeight` value.
+- `mesh_update_when_kinematic_enabled`: Actual boolean state of the flag.
+
+**Requirement**: All fields in this section must be populated whenever `activation_authority_conflict` is the primary `terminal_reason`.
+
+### 6. Termination
 - `terminal_reason`: The winning leaf-level reason from the canonical set below.
 - `co_terminal_reasons[]`: List of co-occurring terminal conditions.
 - `terminal_substep_timestamp`: Exact Chaos substep count of failure.

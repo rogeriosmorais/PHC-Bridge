@@ -8,10 +8,11 @@ Disagreement with this contract triggers a terminal `activation_physics_asset_co
 
 ## Validation Schedule
 
-1.  **Pre-Attempt Audit (Gated Transition)**:
-    - Runs at the `Ready -> BlendIn` boundary.
+1.  **Pre-Attempt Audit (Entry Gate)**:
+    - Runs **BEFORE** entering `BalanceActivation_Ready`.
+    - Passing this audit is a hard prerequisite for balance state machine activation.
     - Performs full skeleton topology, asset identity, and hierarchy hashing.
-    - If any audit field fails, the transition is denied and the run fails.
+    - If any audit field fails, the activation is denied.
 2.  **Per-Frame Audit (Continuous Monitoring)**:
     - Runs every Chaos substep for mass, inertia, and constraint profile integrity.
     - Monitors for ad hoc mutation calls.

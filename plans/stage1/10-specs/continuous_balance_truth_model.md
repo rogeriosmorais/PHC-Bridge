@@ -58,7 +58,7 @@ The implementation must validate the physical continuity of the truth set on eve
 
 ### 2. Simulation Continuity
 - **Rule**: `IsInstanceSimulatingPhysics()` must be true for all bodies in the Critical Chain and Support Set.
-- **V0 Exception**: Pelvis may enter "Sleep" if and only if it persists for less than the **Pelvis Sleep Limit**.
+- **V0 Exception**: Pelvis may enter "Sleep" if and only if it persists for less than the **Pelvis Sleep Limit** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 - **Fail Condition**: If simulation is disabled mid-attempt or if sleep exceeds the limit.
 - **Result**: Emit `activation_continuous_simulation_lost`.
 
@@ -71,7 +71,7 @@ The implementation must validate the physical continuity of the truth set on eve
 ### Support failure definition
 The run fails on `activation_support_failure` if:
 1.  Both side-support states are `false` after the persistence debounce.
-2.  The cumulative airborne duration exceeds the **Support Gap (Max)**.
+2.  The cumulative airborne duration exceeds the **Support Gap (Max)** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 
 ### One-Foot Support Policy (Honest Balance Survival)
 - A run remains **Support Valid** even if only **one side** (e.g., `foot_l` or `ball_l`) is in contact, provided the **Support Proxy** remains within that single-foot hull.
@@ -80,16 +80,17 @@ The run fails on `activation_support_failure` if:
 ### Standing Stability Grades
 The implementation must classify the support state into these grades:
 1.  **Two-Foot Stable**: Both sides maintain persistent contact (> 90% of frame substeps).
-2.  **Single-Foot Survival**: Only one side maintains persistent contact, but the **Support Proxy** remains within that single-foot hull.
+2.  **Support Churn**: High-frequency contact transitions must not exceed the **Support Churn** limit (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+3.  **Single-Foot Survival**: Only one side maintains persistent contact, but the **Support Proxy** remains within that single-foot hull.
 3.  **Transient Recovery**: A side loses contact but regains it within the gap limit.
 4.  **Airborne (Terminal)**: Both sides lose contact for more than the gap limit.
 
 ## Pose Fidelity (Reference Mismatch)
 
 The run fails on `activation_pose_reference_mismatch` if:
-1.  Any body in the balance-critical chain exceeds the **Mismatch (Max Body)** threshold for more than the **Mismatch Grace Period**.
-2.  The RMS mismatch across the entire chain exceeds the **Mismatch (RMS Chain)** threshold for more than the **Mismatch Grace Period**.
-3.  **Target Discontinuity**: Delta at blend start exceeds the **Target Discontinuity** threshold.
+1.  Any body in the balance-critical chain exceeds the **Mismatch (Max Body)** threshold for more than the **Mismatch Grace Period** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+2.  The RMS mismatch across the entire chain exceeds the **Mismatch (RMS Chain)** threshold for more than the **Mismatch Grace Period** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+3.  **Target Discontinuity**: Delta at blend start exceeds the **Target Discontinuity** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 
 ## COM / Support Proxy Definition
 
