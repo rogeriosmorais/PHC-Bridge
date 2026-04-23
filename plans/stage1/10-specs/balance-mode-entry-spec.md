@@ -65,6 +65,7 @@ Interpretation rules:
 - this chain must stay continuously simulated through activation
 - no temporary kinematic re-ownership of this chain is part of the target activation contract
 - changes to this chain must be documented as real contract changes, not tuning tweaks
+- "continuously simulated" uses the raw-physics continuity contract defined in `continuous_balance_truth_model.md`, not a loose bookkeeping label
 
 ## Canonical Activation Flow
 
@@ -110,9 +111,9 @@ This is the only current passing publication state for balance activation.
 
 | Runtime mode | Entry preconditions | Exit conditions | Fail conditions | Forbidden writes | Authoritative owner | Required emitted metrics |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `BalanceActivation_Ready` | valid bridge context; balance-critical chain and support set continuously simulated; movement component idle; no pending reset | enter `BalanceActivation_BlendIn` once rebased targets are valid and quiet-state proof passes | topology change on critical chain, loss of continuous simulation, shell helper use on critical/support set, movement reclaim | locomotion-drive writes, shell helper writes, kinematic mode writes on critical/support set | balance activation runtime | topology change count, authority conflict count, shell helper used count, quiet-state duration, standing-reference id, rebase frame |
-| `BalanceActivation_BlendIn` | `Ready` satisfied; rebased targets exist; `ControlAuthorityAlpha=0.0` | enter `BalanceActivation_Validate` when `ControlAuthorityAlpha=1.0` and no fail condition fired | target discontinuity, unstable gains/damping, support failure, proxy outside support region, pose/reference mismatch, movement reclaim, shell-helper violation | abrupt full-authority writes, shell helper writes, movement-component writes, reset writes | balance activation runtime | alpha, blend duration, target discontinuity, controller effort proxy, authority conflicts, support uptime, standing-reference id, terminal-reason detail |
-| `BalanceActivation_Validate` | blend complete; support truth valid; no prior fail | enter `BalanceActive_Standing` after contiguous hold completes | support failure, proxy outside support region, instability threshold breach, topology change, non-contiguous hold, shell-helper violation, movement reclaim | shell helper writes, movement-component writes, topology edits on critical chain, reset writes | balance activation runtime | contiguous hold time, root tilt envelope, peak angular speed by family, contact uptime, COM/support proxy drift, standing-reference id, terminal-reason detail |
+| `BalanceActivation_Ready` | valid bridge context; physics-asset contract satisfied; balance-critical chain and support set continuously simulated; movement component idle; no pending reset | enter `BalanceActivation_BlendIn` once rebased targets are valid and quiet-state proof passes | physics-asset contract violation, topology change on critical chain, loss of continuous simulation, shell helper use on critical/support set, movement reclaim | locomotion-drive writes, shell helper writes, kinematic mode writes on critical/support set, plant-profile swaps during attempt | balance activation runtime | topology change count, authority conflict count, shell helper used count, quiet-state duration, standing-reference id, rebase frame, physics-asset baseline id, constraint-profile id |
+| `BalanceActivation_BlendIn` | `Ready` satisfied; rebased targets exist; `ControlAuthorityAlpha=0.0` | enter `BalanceActivation_Validate` when `ControlAuthorityAlpha=1.0` and no fail condition fired | physics-asset contract violation, target discontinuity, unstable gains/damping, support failure, proxy outside support region, pose/reference mismatch, authority conflict, movement reclaim, shell-helper violation | abrupt full-authority writes, shell helper writes, movement-component writes, reset writes, plant-profile swaps during attempt | balance activation runtime | alpha, blend duration, target discontinuity, controller effort proxy, authority conflicts, support uptime, standing-reference id, terminal-reason detail |
+| `BalanceActivation_Validate` | blend complete; support truth valid; no prior fail | enter `BalanceActive_Standing` after contiguous hold completes | physics-asset contract violation, support failure, proxy outside support region, instability threshold breach, topology change, authority conflict, non-contiguous hold, shell-helper violation, movement reclaim | shell helper writes, movement-component writes, topology edits on critical chain, reset writes, plant-profile swaps during attempt | balance activation runtime | contiguous hold time, root tilt envelope, peak angular speed by family, contact uptime, COM/support proxy drift, standing-reference id, terminal-reason detail |
 | `BalanceActive_Standing` | contiguous hold complete | remain active or enter recovery/termination | loss of standing validity or explicit recovery trigger | legacy activation writes that bypass standing-mode ownership | balance mode runtime | sustained hold time, ongoing stability metrics |
 
 Compatibility note:
@@ -135,15 +136,17 @@ The runtime must keep these observables distinct:
 1. intended continuous ownership
 2. raw body simulation state
 3. modifier-record or control-layer ownership bookkeeping
-4. controller-authority alpha / blend progress
-5. shell bookkeeping state
-6. shell influence materiality
-7. locomotion or reset authority state
+4. mesh-wide physics/update side-effect state
+5. controller-authority alpha / blend progress
+6. shell bookkeeping state
+7. shell influence materiality
+8. locomotion or reset authority state
 
 Interpretation rules:
 
 - intended ownership is not proof of applied ownership
 - bookkeeping is not proof of raw physical continuity
+- truth-set ownership is not proof that whole-mesh side effects stayed inert
 - shell bookkeeping is not proof of shell influence
 - diagnostics are observability only
 
@@ -151,9 +154,16 @@ The runtime must also distinguish:
 
 - ownership-continuity problems
 - controller-strength and control-shaping problems
+- mesh-wide side-effect contamination from Physics Control or body-modifier paths
 - hidden authority conflicts between policy, Physics Control, locomotion authority, and startup logic
+- movement-component reclaim through floor finding, based movement, root motion, post-physics correction, deferred mesh movement, network correction, or depenetration paths
 
 Primary truth precedence is defined in `continuous_balance_truth_model.md` and must be followed exactly.
+
+Movement-component non-interference rule for `V0`:
+
+- "movement component idle" means the movement path must not own floor finding, based movement, regular movement integration, post-physics correction, deferred mesh movement, root-motion application, network correction, or depenetration for the active attempt
+- any such path that materially changes actor, capsule, or mesh motion relative to the balance-critical chain or support set is `activation_movement_reclaim`
 
 ## Measurement-Only Rule
 
@@ -193,8 +203,10 @@ Removing the old flip-based ritual will often expose controller weakness more di
 
 `V0` uses one exact standing-reference source for all fixed-stance targets:
 
-- source: the versioned authored idle-standing pose for the active Manny/Quinn-derived runtime skeleton
-- pose space: parent-local rotations for all `V0` driven bodies
+- source asset: the versioned authored idle-standing pose asset for the active Manny/Quinn-derived runtime skeleton
+- authored-versus-live rule: the reference is authored data only; live sampled poses may be compared diagnostically but may not become the standing reference
+- pose space: parent-local rotations for all `V0` driven bodies in authored skeleton-reference space
+- translation rule: no authored per-body translation offsets are consumed in `V0`; only the rebased pelvis/world anchor places the reference in world space
 - target velocities: zero desired angular and linear velocity in the reference
 - forbidden sources: shell state, locomotion intent, prior phase state, and ad hoc helper corrections
 
@@ -204,8 +216,22 @@ Rebasing contract:
 - use live `pelvis` world position as the rebase origin
 - use gravity-up as the rebase up axis
 - use live `pelvis` yaw projected around gravity-up as the rebase yaw
+- rebase affects only target publication and target-history initialization for the activation attempt
+- authored parent-local pose values are not modified by rebasing
+- target position frame, target orientation frame, and zero-velocity target frame are all rebuilt from that one rebase capture
+- pre-blend locomotion, shell, or legacy handoff target history must not survive into the rebased standing-reference history
 - freeze that rebased frame for the rest of the activation attempt
 - do not run per-body fitting or repeated rebasing after blend start
+
+Reference mismatch contract:
+
+- `activation_pose_reference_mismatch` is reserved for disagreement between the live achieved pose and the rebased authored standing reference, not for support loss or controller-effort failure
+- mismatch is computed on the balance-critical chain and support set only
+- per-body mismatch is the shortest-arc angle in degrees between live body orientation and rebased target orientation
+- the run publishes both per-body mismatch detail and the max-family mismatch scalar
+- `V0` treats reference mismatch as terminal when either:
+  - any balance-critical-chain body exceeds `25.0 deg` mismatch for longer than `100 ms`, or
+  - the RMS mismatch across the balance-critical chain exceeds `15.0 deg` for longer than `100 ms`
 
 `BalanceActivation_Ready` may exit only after:
 
@@ -213,6 +239,22 @@ Rebasing contract:
 - the one-time rebase frame has been computed
 - rebased targets have been materialized from that source
 - the quiet-state proof has passed on live physical state
+
+## Physics Asset Prerequisites
+
+`V0` activation is admissible only on the audited physical plant defined in `continuous_balance_architecture.md`.
+
+Required preconditions before `BalanceActivation_Ready`:
+
+- the active physics asset, authored constraint profile set, physical-material set, and collision-disable table match the declared `V0` baseline
+- total mass, truth-set family mass totals, and truth-set principal inertias remain within the documented `V0` tolerances
+- upper-body collision is disabled for `V0` acceptance
+- support-set collision geometry has passed the authored support-geometry audit
+- no runtime plant-profile swap, ad hoc mass edit, or hidden constraint retune is pending for the activation attempt
+
+Interpretation rule:
+
+- if these prerequisites are not satisfied, the run must fail or deny as a plant-contract problem before being classified as controller weakness
 
 ## `V0` Standing Thresholds
 
@@ -226,7 +268,30 @@ An instability threshold breach means any of those limits is exceeded during the
 
 ## Blend-In Contract
 
-`BalanceActivation_BlendIn` uses one explicit controller blend:
+`BalanceActivation_BlendIn` uses one explicit primitive-bundle rollout, not a claim that Physics Control is inherently a single-alpha system.
+
+`ControlAuthorityAlpha` is the `V0` rollout scheduler for a fixed bundle of Physics Control primitives:
+
+- target orientation
+- target position
+- target angular velocity
+- target linear velocity
+- spring strength
+- damping
+- max torque
+- max force
+
+These primitives remain fixed during `V0` blend start and are not independently retuned within an attempt:
+
+- parent/child dominance stays fixed for the whole attempt
+- control-point offsets stay fixed for the whole attempt
+- target-space transforms stay fixed for the whole attempt
+
+Weak assumption explicitly rejected:
+
+- "A single global alpha over support plus proximal chain is the right activation primitive."
+
+`V0` therefore defines one global alpha only as the contract for how that primitive bundle is rolled out:
 
 - blended quantity: `ControlAuthorityAlpha`
 - alpha range: `0.0 -> 1.0`
@@ -234,20 +299,33 @@ An instability threshold breach means any of those limits is exceeded during the
 - alpha scope: one global alpha for the balance-critical chain and support set in `V0`
 - support-set targets: included in the same blend contract in `V0`
 - target source during blend: the authored `V0` standing reference expressed in the one rebased frame captured at blend start
-- damping/strength scaling: use the same alpha as target authority in `V0`; separate scaling is out of scope
+- target position/orientation rollout: interpolated by the same global alpha in `V0`
+- target linear/angular velocity rollout: interpolated by the same global alpha in `V0`
+- spring strength rollout: scaled by the same global alpha in `V0`
+- damping rollout: scaled by the same global alpha in `V0`
+- max force/max torque rollout: scaled by the same global alpha in `V0`
+- parent/child dominance: fixed during the attempt; not alpha-ramped in `V0`
+- control-point offsets: fixed during the attempt; not alpha-ramped in `V0`
+- target-space transforms: fixed during the attempt; not alpha-ramped in `V0`
 - gating: time-based after `BalanceActivation_Ready` entry because `Ready` already owns the physical quietness proof; if a fail condition appears, the mode fails rather than pausing alpha
 - history rebasing: one-time rebase on entry to `BalanceActivation_BlendIn`
 - target discontinuity check: fail if `target_discontinuity_deg > 15.0` on the balance-critical chain during blend start
 
-Failure reasons tied to the blend:
+Canonical leaf-level activation terminal reasons:
 
+- `activation_physics_asset_contract_violation`
+- `activation_continuous_simulation_lost`
+- `activation_topology_change`
 - `activation_target_discontinuity`
 - `activation_unstable_gain_or_damping`
 - `activation_support_failure`
 - `activation_proxy_outside_support_region`
 - `activation_pose_reference_mismatch`
+- `activation_authority_conflict`
 - `activation_movement_reclaim`
 - `activation_shell_helper_violation`
+- `activation_instability_threshold_breach`
+- `activation_standing_validation_timeout`
 
 ## Failure Boundary
 
@@ -281,15 +359,19 @@ When activation fails, the deny or failure path should identify that explicitly 
 
 At minimum this includes distinguishing:
 
-- balance-critical ownership continuity lost
-- target discontinuity
-- unstable gains or damping
-- support failure
-- support proxy outside support region
-- shell-helper violation
-- gameplay or reset authority reclaimed
-- standing validation timeout
-- no path to sustained `BalanceActive_Standing`
+- `activation_physics_asset_contract_violation`
+- `activation_continuous_simulation_lost`
+- `activation_topology_change`
+- `activation_target_discontinuity`
+- `activation_unstable_gain_or_damping`
+- `activation_support_failure`
+- `activation_proxy_outside_support_region`
+- `activation_pose_reference_mismatch`
+- `activation_authority_conflict`
+- `activation_movement_reclaim`
+- `activation_shell_helper_violation`
+- `activation_instability_threshold_breach`
+- `activation_standing_validation_timeout`
 
 Broad families may still be used for dashboards or aggregation, but `terminal_reason` on the emitted run artifact must carry the leaf-level reason rather than a bundled umbrella label.
 

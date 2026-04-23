@@ -9,15 +9,20 @@ Core rule:
 - success is sustained physical stability under continuous simulation
 - no phase completion, shell status, or compatibility label can substitute for that
 
-## Primary Truth Sources
+## Primary Physical Signal Families
 
-The primary truth sources for continuous balance are:
+This list names the physical signal families used by the truth model.
 
-1. root pose and root tilt
-2. COM behavior or support proxy
-3. contact persistence
-4. body angular and linear stability
-5. sustained hold duration
+It is not a precedence order.
+
+The primary physical signal families for continuous balance are:
+
+1. raw body continuity
+2. contact persistence and support truth
+3. root pose and root tilt
+4. COM behavior or support proxy
+5. body angular and linear stability
+6. sustained hold duration
 
 Shell metrics may explain failure, but cannot certify balance.
 
@@ -62,6 +67,16 @@ The proxy is therefore not claiming to be the physically perfect COM. It is a de
 ### Support region definition
 
 The `V0` support region is the convex hull of the currently supporting `foot_*` and `ball_*` contact points.
+
+Support-hull construction rule for `V0`:
+
+- source contacts come only from accepted Chaos manifold contacts
+- accepted contacts must be between a support-set body and walkable world support
+- walkable world support means non-character `WorldStatic` level geometry only
+- the accepted contact normal must be within `5.0 deg` of gravity-up
+- contacts against `WorldDynamic`, simulated rigid bodies, moving platforms, other characters, or the character's own bodies are excluded before hull construction
+- if multiple accepted manifold points exist for one support body in a qualifying substep, use the world-space point with greatest penetration depth for that body
+- the support region for a sample is built from those reduced per-body points from the final qualifying Chaos substep of that frame
 
 ### Failure threshold
 
@@ -108,6 +123,14 @@ Use this precedence order whenever observables disagree:
 4. declared intent
 5. shell state
 
+Within derived physical metrics, use this conflict-resolution order:
+
+1. support truth from accepted contact state
+2. root pose and root tilt
+3. COM/support-proxy behavior
+4. body angular and linear stability
+5. sustained hold duration
+
 Interpretation rules:
 
 - raw body continuity beats bookkeeping
@@ -115,7 +138,11 @@ Interpretation rules:
 - control-target publication is never proof of achieved pose
 - shell state is never proof of standing
 - movement-component non-interference is required, not inferred
-- support truth beats acceptable-looking COM/support-proxy behavior when the support set is not actually sustaining the body
+- support truth beats acceptable-looking root tilt, COM/support-proxy behavior, and stability metrics when the support set is not actually sustaining the body
+- contact persistence outranks the support proxy
+- root tilt is derived physical evidence, not a substitute for valid support contact
+- if root tilt is acceptable, the support proxy is acceptable, and contact fails, the run fails on support truth
+- sustained hold duration counts only while higher-precedence truth sources remain valid; time alone never rescues an invalid support or continuity state
 
 ## Secondary Diagnostics
 
@@ -129,7 +156,37 @@ These may explain why the primary truth sources failed:
 
 None of these secondary diagnostics can certify success by themselves.
 
+## Continuous Simulation Contract
+
+For `V0`, "continuously simulated" is a raw-physics continuity contract, not a vague synonym for "probably physical enough."
+
+Continuous simulation requires all of the following for every body in the active truth sets:
+
+- raw simulation state remains `true` on every truth-sensitive sample
+- the body remains in the expected truth set for the active attempt
+- the runtime does not recreate or replace that truth-set body instance during the attempt
+- no kinematic override or equivalent non-simulated movement type is applied to that body
+
+Interpretation rules:
+
+- raw `IsInstanceSimulatingPhysics == true` or equivalent raw body-instance truth is the deciding source for simulation continuity
+- modifier or bookkeeping disagreement is diagnostic by itself, not automatic proof that continuity was lost
+- sleeping is not automatically a continuity failure
+- sleeping is allowed during `BalanceActivation_Ready` because quiet-state proof may include low-motion or sleeping bodies
+- during `BalanceActivation_BlendIn` and `BalanceActivation_Validate`, the pelvis must remain awake enough to participate physically; a persistent sleeping pelvis is treated as continuity lost rather than "successfully simulated"
+- mesh-wide update settings may still contaminate participation truth and must be evaluated separately from raw simulation continuity
+
+`activation_continuous_simulation_lost` is the required leaf reason when raw simulation continuity fails without a separate topology change being the primary cause.
+
+`activation_topology_change` is the required leaf reason when truth-set membership or topology changes explicitly.
+
 ## Control-First Failure Taxonomy
+
+Plant-contract failure must be separated before this taxonomy is applied.
+
+Interpretation rule:
+
+- if the active physics asset violates the documented `V0` plant contract, classify the run as a physics-asset contract failure before discussing controller weakness
 
 Every failure in the new mode must be classified first as one of:
 
@@ -145,6 +202,12 @@ Only after that may the runtime add secondary context such as shell influence or
 
 Support truth is primary only because `V0` requires the support set to remain simulated.
 
+Cadence rule:
+
+- truth evaluation cadence is Chaos substep resolution, not artifact cadence
+- the `30 Hz` artifact stream is a reporting/downsample layer only
+- short support losses, churn events, and continuity violations must be detected from substep-level truth before they are summarized into frame or artifact outputs
+
 Contact persistence is measured from:
 
 - active contact state on `foot_*` and `ball_*`
@@ -154,16 +217,34 @@ Contact persistence is measured from:
 Active-contact semantics:
 
 - source of truth: Chaos contact manifolds for the support-set rigid bodies
-- active contact means one or more live body contacts between `foot_*` or `ball_*` and walkable world support during the current `30 Hz` sample window
+- active contact means one or more accepted body contacts between `foot_*` or `ball_*` and walkable world support at substep truth cadence
 - traces, overlap checks, or shell-side heuristics may be logged as secondary diagnostics only
 - side support state is `true` when `foot_* OR ball_*` is in active contact on that side
 - minimum support-contact count is the count of support sides currently in active contact, not the raw manifold count
 
+Walkable-support contract for `V0`:
+
+- accepted support comes only from non-character `WorldStatic` level geometry
+- the support surface must satisfy the `5.0 deg` flat-ground tolerance relative to gravity-up
+- moving platforms are banned in `V0`; any contacted support surface with point velocity greater than `5.0 cm/s` is excluded
+- contacts with dynamic bodies may be logged, but they are diagnostic-only and may not contribute to support truth
+- self-contacts and body-on-body contacts within the same character must be excluded explicitly
+
 Contact churn semantics:
 
-- churn is counted from side-support state changes at the `30 Hz` sample cadence
+- Chaos contacts are evaluated at physics-substep resolution and debounced before the `30 Hz` sample reduction
+- a side-support state change is accepted only when the new state persists for `2` consecutive Chaos substeps
+- churn is counted from those debounced side-support state changes at substep truth cadence and then summarized for reporting
 - each false->true or true->false transition for left or right support contributes one churn event
 - the reported churn rate is the total churn events divided by elapsed validation time in seconds
+
+Substep reduction rule:
+
+- support-loss timing uses the debounced substep-level support state, not only the `30 Hz` sampled boolean
+- continuity loss, support failure, and timer advancement are decided from substep-level truth, not from the `30 Hz` artifact stream
+- `samples[].support_contact_active` and `samples[].support_contact_count` publish the debounced side-support state at the frame's truth-sensitive sample point
+- transient single-substep contact appearance or disappearance that does not survive the debounce rule is treated as substep noise, not as truth-state churn
+- longer substep gaps still accumulate toward `support_loss_gap_max_ms` even though the artifact is only emitted at `30 Hz`
 
 Support truth is invalid if:
 

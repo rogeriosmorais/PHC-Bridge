@@ -78,6 +78,7 @@ Interpretation rules:
 - this chain is the architectural center of the rewrite
 - topology or ownership changes in this chain are diagnostic events
 - they are not normal operation
+- this chain is a primary truth set, not a claim that engine side effects stay local to these bodies
 
 ### Support Set
 
@@ -95,6 +96,7 @@ Interpretation rules:
 - the support set is continuously simulated in `V0`
 - support truth may be primary only because these bodies are physical in `V0`
 - kinematic containment of the support set is not allowed in `V0`
+- the support set is a primary truth set, not an isolation boundary for mesh-wide runtime effects
 
 ### Upper-Body Set
 
@@ -127,17 +129,43 @@ Upper-body rule:
 - upper-body kinematic hold is banned in `V0`
 - any future compatibility path must use a separate explicit mode name and must emit `compatibility_path_used=true`
 
+## Truth Sets Vs Effect Domain
+
+The rewrite distinguishes between:
+
+- truth sets: the balance-critical chain and support set used to define standing truth
+- effect domain: the full skeletal mesh and any mesh-wide runtime behavior influenced by Physics Control, body modifiers, physics blend state, mesh-follow flags, or deferred mesh updates
+
+Interpretation rules:
+
+- owning the balance-critical chain and support set does not imply the rest of the mesh is inert
+- nominally per-body writes may still leak into whole-mesh behavior
+- `V0` acceptance therefore requires both truthful continuity on the truth sets and no unauthorized mesh-wide assist that materially stabilizes, drags, or contains them
+
+Weak assumption explicitly rejected:
+
+- "If we own only these bodies, the rest of the mesh is inert enough."
+
 ## Standing Reference Source
 
 The `V0` fixed stance reference is one explicit authored standing pose, not an inferred shell state, locomotion state, or leftover transition snapshot.
 
 `V0` standing-reference contract:
 
-- source: a versioned authored idle-standing reference pose bound to the active Manny/Quinn-derived runtime skeleton
-- space: parent-local bone rotations for every body that receives stance targets in `V0`
+- exact source asset: one versioned authored idle-standing reference asset bound to the active Manny/Quinn-derived runtime skeleton; this is the only admissible `V0` stance source
+- authored-versus-live rule: the standing reference comes from that authored asset, not from a live sampled pose, shell snapshot, locomotion frame, or previous activation attempt
+- pose convention: parent-local bone rotations for every driven body in authored skeleton-reference space
+- translation convention: no authored per-body translation offsets are consumed in `V0`; the authored reference is rotational plus pelvis-frame anchoring only
 - velocity contract: desired local angular velocity and desired body linear velocity are zero for the standing reference
 - driven sets: balance-critical chain, support set, and non-critical simulated bodies that still receive stance targets
 - excluded sources: shell state, locomotion intent, prior handoff phase labels, and per-run helper corrections are not allowed to define the standing reference
+
+Reference-space interpretation rules:
+
+- authored parent-local rotations are first resolved against the active runtime skeleton mapping
+- the runtime standing-reference frame is then built from one live pelvis/world capture, not from per-bone live fitting
+- rebasing changes the world-frame placement of the authored reference, not the authored local pose itself
+- target publication derived from the reference is still not proof that the body achieved that pose
 
 One-time rebasing is the only allowed adaptation step for this source in `V0`:
 
@@ -145,8 +173,16 @@ One-time rebasing is the only allowed adaptation step for this source in `V0`:
 - rebase origin: live `pelvis` world position at capture time
 - rebase up axis: runtime gravity-up
 - rebase yaw: live `pelvis` yaw projected around gravity-up at capture time
+- rebased quantities: pelvis/world anchor, target position frame, target orientation frame, and zero-velocity target frame for every driven `V0` body
+- unrebased quantities: authored parent-local pose values themselves, constraint profile selection, and control-point topology
 - no per-body fitting: the runtime may not solve a custom body-by-body target pose to make the reference look easier
 - no repeated rebasing: the standing reference frame remains frozen for the rest of the activation attempt
+
+History rule:
+
+- the one-time rebase applies to target publication and target-history initialization at blend start
+- no pre-blend live target history is allowed to leak into the rebased `V0` standing-reference history
+- velocity history is rebased to the standing-reference zero-velocity contract at blend entry; it is not inherited from locomotion, shell, or prior transition phases
 
 Interpretation rule:
 
@@ -180,10 +216,17 @@ Support truth is measured by:
 Active-contact measurement contract for `V0`:
 
 - contact source: Chaos rigid-body contact data for the support-set bodies
-- an active contact means at least one live Chaos contact on `foot_*` or `ball_*` against walkable world support during the current sample window
+- walkable world support in `V0` means non-character `WorldStatic` level geometry only
+- slope handling in `V0`: the accepted support contact normal must be within `5.0 deg` of gravity-up
+- moving platforms are banned in `V0`; any support surface with sampled point velocity above `5.0 cm/s` does not count as walkable world support
+- contacts with dynamic rigid bodies, `WorldDynamic` bodies, other characters, and the character's own bodies do not count as walkable world support
+- self-contact and body-on-body character contact must be excluded explicitly before support truth is computed
+- an active contact means at least one accepted Chaos contact on `foot_*` or `ball_*` against walkable world support during the current sample window
 - traces may be logged as secondary diagnostics, but they do not define support truth in `V0`
 - contact aggregation rule: `foot_* OR ball_*` on the same side counts as that side being in support
-- churn counting is evaluated on the `30 Hz` instrumentation cadence; each false->true or true->false side-support state transition counts as one churn event
+- support-hull points come from the accepted world-space manifold point with greatest penetration depth per contributing support body in the final qualifying Chaos substep of the frame
+- substep contacts are reduced into the sampled truth signal with substep debouncing first; transient single-substep flips do not count as support-state changes
+- churn counting is evaluated at substep truth cadence after debounce, then summarized into the `30 Hz` instrumentation stream; each false->true or true->false side-support state transition counts as one churn event
 
 `V0` numeric support thresholds:
 
@@ -202,6 +245,30 @@ Support failure means any of:
 Support truth precedence:
 
 - if support truth fails, the run fails even if COM or root-side metrics still look temporarily acceptable
+
+## Physics Asset Contract
+
+`V0` is defined against one audited physical plant, not just against runtime ownership rules.
+
+Interpretation rule:
+
+- if the active physics asset violates this contract, the run is not admissible as a `V0` controller evaluation
+
+Required `V0` plant prerequisites:
+
+- physics-asset identity: the active Manny/Quinn-derived skeletal asset, physics asset, authored constraint-profile set, physical-material set, and collision-disable table must match a declared audited `V0` baseline
+- mass distribution: total character mass must remain within `+/- 5%` of the audited `V0` baseline, and family mass totals for the balance-critical chain and support set must remain within `+/- 10%` of that baseline
+- inertia expectations: principal inertia components for truth-set bodies must remain within `+/- 15%` of the audited baseline and may not be degenerate or silently recomputed to materially different values at runtime
+- constraint policy: truth-set bodies must use the approved authored `V0` constraint profile only; runtime widening, loosening, or profile swapping during an activation attempt is forbidden
+- self-collision policy: self-contact within the support set and between the support set and the proximal chain must follow the approved collision-disable table so self-contact cannot become hidden support or churn noise
+- foot/support collision filtering: `foot_*` and `ball_*` must collide with walkable world support; dynamic-body, self-body, and character-body contacts may be logged, but may not count as support truth
+- upper-body collision policy: upper-body collision is disabled for `V0` acceptance and may not create environmental support, containment, or stabilization forces
+- solver-sensitive damping assumption: body-level linear/angular damping and physical-material damping/friction behavior must remain at the declared audited baseline; runtime claims of controller success may not depend on untracked plant-side damping edits
+- support-geometry quality: `calf_*`, `foot_*`, and `ball_*` bodies must use authored collision geometry that is bilateral, non-degenerate, and broad enough to produce stable plantar support contacts on flat ground; capsule-tip or needle-contact support geometry is not admissible for `V0`
+
+Weak assumption explicitly rejected:
+
+- "If the runtime contract is correct, the physical plant is close enough by default."
 
 ## What Is Explicitly Not Allowed
 

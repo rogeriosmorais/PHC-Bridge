@@ -54,15 +54,24 @@ Compatibility note:
 On balance request acceptance, the runtime must create a dedicated activation record containing:
 
 - attempt-active state
+- physics-asset baseline identifiers
+- physics-asset contract valid flag
+- standing-reference asset identifier
+- standing-reference authored-space identifier
+- standing-reference mismatch accumulator state
 - request-accepted timestamp
 - balance-critical chain definition
 - support-set definition
 - ownership-continuity snapshot
+- mesh-side-effect snapshot
 - controller-authority blend state
 - standing-validation timer state
 - shell bookkeeping state
 - shell influence diagnostics
 - shell helper used flag
+- mesh physics blend state if any
+- mesh update-when-kinematic state if any
+- mesh-wide side-effect event count
 - topology change event count
 - authority conflict count
 - terminal outcome flag
@@ -76,6 +85,7 @@ The implementation must keep these sources separate:
 - intended ownership
 - raw body simulation state
 - modifier-record or control-layer ownership bookkeeping
+- mesh-wide physics/update side-effect state
 - controller-authority alpha
 - shell bookkeeping state
 - shell influence materiality
@@ -91,14 +101,45 @@ When activation terminates, the implementation must emit:
 
 At minimum the leaf-level emitted reason set must distinguish:
 
+- `activation_physics_asset_contract_violation`
+- `activation_continuous_simulation_lost`
+- `activation_topology_change`
 - `activation_target_discontinuity`
 - `activation_unstable_gain_or_damping`
 - `activation_support_failure`
 - `activation_proxy_outside_support_region`
+- `activation_pose_reference_mismatch`
+- `activation_authority_conflict`
 - `activation_movement_reclaim`
 - `activation_shell_helper_violation`
+- `activation_instability_threshold_breach`
+- `activation_standing_validation_timeout`
 
-Bundled labels such as controller-strength-or-representation failure or generic authority conflict may exist only as derived rollups, not as the sole terminal reason recorded for a run.
+Bundled labels such as controller-strength-or-representation failure or generic continuity failure may exist only as derived rollups, not as the sole terminal reason recorded for a run.
+
+`activation_authority_conflict` is itself a valid leaf-level terminal reason when subsystem fights are the primary terminating cause.
+
+## Required Physics-Asset Contract
+
+The implementation must validate the active physical plant before `BalanceActivation_Ready`.
+
+For `V0`, that validation must at minimum verify:
+
+- active skeletal mesh and physics asset identity match the declared audited Manny/Quinn-derived baseline
+- active authored constraint-profile set matches the declared `V0` standing baseline
+- active physical-material set and collision-disable table match the declared `V0` baseline
+- total body mass remains within `+/- 5%` of the audited `V0` baseline
+- family mass totals for the balance-critical chain and support set remain within `+/- 10%` of the audited baseline
+- principal inertia components for truth-set bodies remain within `+/- 15%` of the audited baseline
+- upper-body collision is disabled for `V0` acceptance
+- support-set collision geometry passed the authored support-geometry audit for flat-ground standing
+
+Interpretation rules:
+
+- this is a plant contract, not a controller-quality heuristic
+- if the plant contract fails, the run must deny or fail as `activation_physics_asset_contract_violation`
+- runtime tuning or control diagnostics may not relabel a plant-contract violation as controller weakness
+- physics-asset swaps, runtime mass edits, constraint-profile swaps, collision-profile edits, or other plant mutations during an active attempt are forbidden
 
 ## Required Continuity Snapshot
 
@@ -108,6 +149,10 @@ That snapshot must at minimum be able to report:
 
 - raw simulation state for the balance-critical chain
 - raw simulation state for the support set
+- truth-set body recreation or replacement events
+- raw awake/sleep state for the pelvis and support-set bodies
+- bookkeeping-versus-raw continuity disagreement state
+- mesh-level physics blend and update flags that could change how the skeletal mesh follows simulated or kinematic bodies
 - worst-body linear and angular stability metrics
 - controller-authority alpha / blend progress
 - shell offset and velocity deltas
@@ -115,9 +160,83 @@ That snapshot must at minimum be able to report:
 - locomotion or reset authority contamination
 - standing-validation accumulated hold time
 
+## Required Mesh-Wide Side-Effect Rule
+
+The implementation must not model ownership as if Physics Control and body modifiers are purely local.
+
+For `V0`:
+
+- body-set ownership defines the truth boundary for standing evaluation
+- mesh-wide effect tracking defines whether nominally local writes leaked into whole-skeletal-mesh behavior
+- any path that changes skeletal-mesh-wide physics blending, `bUpdateMeshWhenKinematic`, deferred mesh following behavior, or equivalent whole-mesh state must be surfaced explicitly in diagnostics
+
+Truth rule:
+
+- a run is not truth-clean merely because the balance-critical chain and support set kept their declared writers
+- if mesh-wide side effects materially stabilize, drag, contain, or reposition those sets, the runtime must report an authority conflict and fail truthfully
+
+Weak assumption rejected:
+
+- "Owning only the balance-critical chain and support set makes the rest of the mesh inert enough."
+
+## Required Engine Update Order
+
+`V0` balance activation must use one explicit frame-order contract.
+
+Required per-frame order:
+
+1. animation evaluation: `USkeletalMeshComponent` updates the authored standing-reference pose inputs and any required bone-space state for the active frame
+2. `UPhysAnimComponent` tick: runs in `TG_PrePhysics`, after skeletal-mesh evaluation, and owns activation-state updates, standing-reference rebasing, quiet-state gating, observations, and bridge-side control decisions
+3. `UPhysicsControlComponent` application point: Physics Control target writes and body-modifier writes issued by `UPhysAnimComponent` must be applied in the same pre-physics window before Chaos simulation for that frame; no later component may overwrite them on the balance-critical chain or support set
+4. CharacterMovement regular tick: during `V0` activation it may exist, but it must be inert with respect to the balance-critical chain and support set; no movement-component transform, floor-correction, based-movement, or deferred mesh write may alter those bodies
+5. Chaos simulation: physics substeps consume the already-published Physics Control and body-modifier state for the frame
+6. substep truth accumulation: during Chaos simulation, the runtime accumulates support truth, continuity truth, churn events, timer advancement, and other terminal-condition evidence at substep resolution
+7. instrumentation sample: the truth-sensitive activation snapshot is taken once per frame immediately after the final Chaos substep and before any post-physics movement correction, deferred mesh movement, or recovery/termination cleanup writes
+8. CharacterMovement post-physics behavior: post-physics based movement, deferred mesh movement, or similar late corrections must remain inert during `V0` activation; any such write is an authority conflict and, if it touches the balance-critical chain or support set, an `activation_movement_reclaim`
+
+Interpretation rules:
+
+- if the skeletal mesh has not evaluated for the frame yet, `UPhysAnimComponent` must not publish new standing-reference targets for that frame
+- if Physics Control or body-modifier writes land after Chaos has already simulated the frame, they count for the next frame and must not be treated as current-frame truth
+- terminal truth must be accumulated at Chaos substep resolution before the post-update snapshot is emitted
+- the post-update activation snapshot is the authoritative per-frame publication surface for state advancement and artifacts, but it must reflect the already-accumulated substep truth for that frame
+
+## Required Movement-Component Non-Interference Rule
+
+For `V0`, "movement component inert" means a concrete do-not-own and do-not-call contract, not merely "do not add velocity."
+
+The following movement-component surfaces must not write, correct, reposition, or indirectly drag the balance-critical chain or support set during an active `V0` attempt:
+
+- floor finding and floor adjustment paths
+- based-movement updates and base-relative correction paths
+- regular movement integration and velocity-driven capsule motion
+- post-physics correction paths
+- deferred skeletal-mesh movement or mesh-follow updates
+- root-motion extraction, accumulation, or application paths
+- network smoothing, prediction correction, or replay correction paths
+- penetration resolution and depenetration paths owned by the movement component
+- movement-mode transitions that reassert capsule or mesh authority
+- any helper path that teleports, snaps, or reanchors the actor or mesh for movement correctness
+
+Interpretation rules:
+
+- disabling only one of these surfaces is not sufficient if another movement path still owns actor, capsule, or mesh correction
+- if any movement-component-owned path changes actor transform, capsule transform, skeletal-mesh relative transform, or base-relative motion in a way that materially affects the balance-critical chain or support set, the run must report `activation_movement_reclaim`
+- movement intent may still exist as data, but it may not become a live transform-authority surface during `V0`
+
 ## Required Ownership Rule
 
 Under the target Stage 1 design, the implementation must treat the balance-critical chain as continuously simulated through activation.
+
+For `V0`, that means:
+
+- raw simulation state must remain `true` for every truth-set body on every truth-sensitive sample
+- truth-set body membership must remain stable for the whole attempt
+- truth-set body recreation or replacement during the attempt is forbidden
+- kinematic override or equivalent non-simulated movement type on a truth-set body is forbidden
+- bookkeeping disagreement is diagnostic unless raw continuity is also broken
+- pelvis sleep is allowed during `BalanceActivation_Ready` only as part of quiet-state proof
+- once `BalanceActivation_BlendIn` begins, a persistently sleeping pelvis is not admissible as "continuous simulation"
 
 The implementation must not silently change that contract under the guise of runtime tuning or diagnostics work.
 
@@ -129,19 +248,40 @@ During `BalanceActivation_BlendIn`:
 
 - controller authority must ramp gradually
 - abrupt activation of full authority is not the intended path
-- the default alpha is `ControlAuthorityAlpha`
+- the default rollout scheduler is `ControlAuthorityAlpha`
 - the default blend duration is `0.75` seconds
 - the alpha is global across the balance-critical chain and support set in `V0`
 - support-set targets use the same alpha in `V0`
-- damping and strength scale with the same alpha in `V0`
-- target source is the authored `V0` standing reference pose for the active Manny/Quinn-derived runtime skeleton
-- the standing reference is parent-local pose data plus zero target velocities, not shell state or locomotion state
+- target source is the authored `V0` standing reference pose asset for the active Manny/Quinn-derived runtime skeleton
+- the standing reference is authored parent-local pose data plus zero target velocities, not shell state, locomotion state, or a live sampled pose
 - the runtime must compute one rebase frame from live `pelvis` position, gravity-up, and projected live `pelvis` yaw at blend entry
+- the rebase frame remaps authored reference targets into runtime world placement; it does not mutate the authored parent-local pose values
 - that rebased frame is frozen for the rest of the attempt
 - the runtime must not perform per-body fitting or repeated rebasing after blend start
-- target history is rebased once on blend entry
+- target-history initialization is rebuilt from the rebased standing reference at blend start
+- pre-blend locomotion, shell, or legacy transition target history must not survive into the rebased activation history
+- the runtime must treat the `V0` blend as a rollout of a fixed Physics Control primitive bundle, not as a single magical scalar
+- the `V0` primitive bundle includes:
+  - target orientation
+  - target position
+  - target angular velocity
+  - target linear velocity
+  - spring strength
+  - damping
+  - max torque
+  - max force
+- in `V0`, target position/orientation, target linear/angular velocity, spring strength, damping, max torque, and max force all roll out under the same global alpha
+- in `V0`, parent/child dominance, control-point offsets, and target-space transforms are fixed per attempt and must not be alpha-ramped
+- target history is rebased once on blend entry, including resetting target-velocity history to the standing reference zero-velocity contract
 - target discontinuity greater than `15.0` degrees on the balance-critical chain is terminal
+- pose/reference mismatch is measured as the shortest-arc orientation error between live body orientation and rebased target orientation
+- `activation_pose_reference_mismatch` is terminal when any balance-critical-chain body exceeds `25.0 deg` mismatch for more than `100 ms` or RMS balance-critical-chain mismatch exceeds `15.0 deg` for more than `100 ms`
 - diagnostics may record blend instability, but may not reclassify that instability as success
+
+Interpretation rule:
+
+- `ControlAuthorityAlpha` is only the rollout coordinate for the `V0` primitive bundle
+- if later work needs separate schedules for different primitives, that is a real contract change rather than hidden tuning
 
 `BalanceActivation_Ready` must not exit until:
 
