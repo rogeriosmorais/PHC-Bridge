@@ -134,9 +134,21 @@ During `BalanceActivation_BlendIn`:
 - the alpha is global across the balance-critical chain and support set in `V0`
 - support-set targets use the same alpha in `V0`
 - damping and strength scale with the same alpha in `V0`
+- target source is the authored `V0` standing reference pose for the active Manny/Quinn-derived runtime skeleton
+- the standing reference is parent-local pose data plus zero target velocities, not shell state or locomotion state
+- the runtime must compute one rebase frame from live `pelvis` position, gravity-up, and projected live `pelvis` yaw at blend entry
+- that rebased frame is frozen for the rest of the attempt
+- the runtime must not perform per-body fitting or repeated rebasing after blend start
 - target history is rebased once on blend entry
 - target discontinuity greater than `15.0` degrees on the balance-critical chain is terminal
 - diagnostics may record blend instability, but may not reclassify that instability as success
+
+`BalanceActivation_Ready` must not exit until:
+
+- the standing reference is present for every driven `V0` body
+- the one-time rebase frame is valid
+- rebased targets have been materialized from that source
+- the readiness quiet-state gate has passed
 
 ## Required Shell Rule
 
@@ -164,6 +176,12 @@ Standing validation must:
 - reset its hold timer on non-ready frames
 - end truthfully on the first terminal failure
 - preserve the first truthful leaf-level terminal reason in emitted artifacts
+
+Default `V0` standing thresholds:
+
+- root tilt envelope must remain at or below `20.0` degrees
+- peak angular speed for the balance-critical chain must remain at or below `720.0 deg/s`
+- peak angular speed for the support set must remain at or below `720.0 deg/s`
 
 ## Smoke-Test Evaluation Rule
 

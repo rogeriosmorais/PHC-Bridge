@@ -18,6 +18,9 @@ Every continuous-balance run must emit a structured artifact with the following 
 | `map_name` | string | UE map name | yes |
 | `character_asset` | string | asset path | yes |
 | `policy_build` | string | build or model identifier | yes |
+| `standing_reference_id` | string | versioned reference identifier | yes |
+| `standing_reference_space` | string | `parent_local_pose_zero_velocity` | yes |
+| `standing_reference_rebase_frame` | object | origin/up/yaw capture | yes |
 | `dt_seconds` | number | seconds | yes |
 | `substeps` | integer | count | yes |
 | `solver_settings` | object | named key/value set | yes |
@@ -64,6 +67,7 @@ Every continuous-balance run must emit a structured artifact with the following 
 | `samples[].authority_conflict_events` | integer | count in sample window | fixed cadence | yes |
 | `samples[].topology_change_events` | integer | count in sample window | fixed cadence | yes |
 | `samples[].terminal_reason_candidate` | string | enum or empty | fixed cadence | yes |
+| `samples[].standing_reference_id` | string | identifier | fixed cadence | yes |
 
 ### Cadence And Time Windows
 
@@ -95,6 +99,7 @@ Contact-measurement rules:
 - contact churn is counted from side-support state transitions at the sample cadence, not from raw manifold creation/destruction counts
 - `support_loss_gap_max_ms` is measured from consecutive samples where `support_contact_count=0`
 - support-proxy-outside-region time is measured independently from consecutive samples where `support_region_valid=false`
+- `standing_reference_rebase_frame` captures the one-time `pelvis` origin, gravity-up axis, and projected `pelvis` yaw used for the attempt
 
 ## Forbidden Metrics
 
@@ -140,6 +145,12 @@ Support truth must fail if:
 - support-loss gap exceeds `100 ms`
 - support-contact churn exceeds `12 Hz`
 - minimum support-contact count drops below `1`
+
+Standing validation must fail if:
+
+- root tilt envelope exceeds `20.0 deg`
+- peak angular speed for the balance-critical chain exceeds `720.0 deg/s`
+- peak angular speed for the support set exceeds `720.0 deg/s`
 
 ## Regression Gates
 

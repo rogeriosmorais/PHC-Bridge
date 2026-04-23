@@ -117,15 +117,41 @@ Interpretation rules:
 
 | Body set | Allowed movement type in `V0` | Target source in `V0` | May inject force indirectly into critical chain? |
 | :--- | :--- | :--- | :--- |
-| Upper body | simulated only in `V0` | fixed stance reference only; no advanced policy shaping | yes through normal articulation only; no per-tick kinematic forcing that stabilizes the proximal chain |
-| Distal lower limbs / support set | simulated only in `V0` | fixed stance reference only; no advanced policy shaping | yes through honest contact only; no helper forcing |
-| Root-adjacent but non-critical bodies | match nearest articulated parent; no ad hoc flips during an active attempt | fixed stance reference or none | yes only through normal articulation |
+| Upper body | simulated only in `V0` | rebased `V0` standing reference only; no advanced policy shaping | yes through normal articulation only; no per-tick kinematic forcing that stabilizes the proximal chain |
+| Distal lower limbs / support set | simulated only in `V0` | rebased `V0` standing reference only; no advanced policy shaping | yes through honest contact only; no helper forcing |
+| Root-adjacent but non-critical bodies | match nearest articulated parent; no ad hoc flips during an active attempt | rebased `V0` standing reference or none | yes only through normal articulation |
 | Excluded bodies | disabled or passive only | none | no |
 
 Upper-body rule:
 
 - upper-body kinematic hold is banned in `V0`
 - any future compatibility path must use a separate explicit mode name and must emit `compatibility_path_used=true`
+
+## Standing Reference Source
+
+The `V0` fixed stance reference is one explicit authored standing pose, not an inferred shell state, locomotion state, or leftover transition snapshot.
+
+`V0` standing-reference contract:
+
+- source: a versioned authored idle-standing reference pose bound to the active Manny/Quinn-derived runtime skeleton
+- space: parent-local bone rotations for every body that receives stance targets in `V0`
+- velocity contract: desired local angular velocity and desired body linear velocity are zero for the standing reference
+- driven sets: balance-critical chain, support set, and non-critical simulated bodies that still receive stance targets
+- excluded sources: shell state, locomotion intent, prior handoff phase labels, and per-run helper corrections are not allowed to define the standing reference
+
+One-time rebasing is the only allowed adaptation step for this source in `V0`:
+
+- capture time: exactly once at the `BalanceActivation_Ready -> BalanceActivation_BlendIn` boundary
+- rebase origin: live `pelvis` world position at capture time
+- rebase up axis: runtime gravity-up
+- rebase yaw: live `pelvis` yaw projected around gravity-up at capture time
+- no per-body fitting: the runtime may not solve a custom body-by-body target pose to make the reference look easier
+- no repeated rebasing: the standing reference frame remains frozen for the rest of the activation attempt
+
+Interpretation rule:
+
+- `V0` targets come from the authored standing reference expressed in that one rebased frame
+- target publication is still not proof that the body achieved the pose
 
 ## Shell Rule
 

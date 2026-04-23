@@ -110,9 +110,9 @@ This is the only current passing publication state for balance activation.
 
 | Runtime mode | Entry preconditions | Exit conditions | Fail conditions | Forbidden writes | Authoritative owner | Required emitted metrics |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `BalanceActivation_Ready` | valid bridge context; balance-critical chain and support set continuously simulated; movement component idle; no pending reset | enter `BalanceActivation_BlendIn` once rebased targets are valid and quiet-state proof passes | topology change on critical chain, loss of continuous simulation, shell helper use on critical/support set, movement reclaim | locomotion-drive writes, shell helper writes, kinematic mode writes on critical/support set | balance activation runtime | topology change count, authority conflict count, shell helper used count, quiet-state duration |
-| `BalanceActivation_BlendIn` | `Ready` satisfied; rebased targets exist; `ControlAuthorityAlpha=0.0` | enter `BalanceActivation_Validate` when `ControlAuthorityAlpha=1.0` and no fail condition fired | target discontinuity, unstable gains/damping, support failure, proxy outside support region, pose/reference mismatch, movement reclaim, shell-helper violation | abrupt full-authority writes, shell helper writes, movement-component writes, reset writes | balance activation runtime | alpha, blend duration, target discontinuity, controller effort proxy, authority conflicts, support uptime, terminal-reason detail |
-| `BalanceActivation_Validate` | blend complete; support truth valid; no prior fail | enter `BalanceActive_Standing` after contiguous hold completes | support failure, proxy outside support region, instability threshold breach, topology change, non-contiguous hold, shell-helper violation, movement reclaim | shell helper writes, movement-component writes, topology edits on critical chain, reset writes | balance activation runtime | contiguous hold time, root tilt envelope, peak angular speed by family, contact uptime, COM/support proxy drift, terminal-reason detail |
+| `BalanceActivation_Ready` | valid bridge context; balance-critical chain and support set continuously simulated; movement component idle; no pending reset | enter `BalanceActivation_BlendIn` once rebased targets are valid and quiet-state proof passes | topology change on critical chain, loss of continuous simulation, shell helper use on critical/support set, movement reclaim | locomotion-drive writes, shell helper writes, kinematic mode writes on critical/support set | balance activation runtime | topology change count, authority conflict count, shell helper used count, quiet-state duration, standing-reference id, rebase frame |
+| `BalanceActivation_BlendIn` | `Ready` satisfied; rebased targets exist; `ControlAuthorityAlpha=0.0` | enter `BalanceActivation_Validate` when `ControlAuthorityAlpha=1.0` and no fail condition fired | target discontinuity, unstable gains/damping, support failure, proxy outside support region, pose/reference mismatch, movement reclaim, shell-helper violation | abrupt full-authority writes, shell helper writes, movement-component writes, reset writes | balance activation runtime | alpha, blend duration, target discontinuity, controller effort proxy, authority conflicts, support uptime, standing-reference id, terminal-reason detail |
+| `BalanceActivation_Validate` | blend complete; support truth valid; no prior fail | enter `BalanceActive_Standing` after contiguous hold completes | support failure, proxy outside support region, instability threshold breach, topology change, non-contiguous hold, shell-helper violation, movement reclaim | shell helper writes, movement-component writes, topology edits on critical chain, reset writes | balance activation runtime | contiguous hold time, root tilt envelope, peak angular speed by family, contact uptime, COM/support proxy drift, standing-reference id, terminal-reason detail |
 | `BalanceActive_Standing` | contiguous hold complete | remain active or enter recovery/termination | loss of standing validity or explicit recovery trigger | legacy activation writes that bypass standing-mode ownership | balance mode runtime | sustained hold time, ongoing stability metrics |
 
 Compatibility note:
@@ -189,6 +189,41 @@ A run may satisfy contract correctness and still fail physical viability.
 
 Removing the old flip-based ritual will often expose controller weakness more directly. That should be treated as more honest evidence, not as a reason to restore protective transition logic.
 
+## Standing Reference Contract
+
+`V0` uses one exact standing-reference source for all fixed-stance targets:
+
+- source: the versioned authored idle-standing pose for the active Manny/Quinn-derived runtime skeleton
+- pose space: parent-local rotations for all `V0` driven bodies
+- target velocities: zero desired angular and linear velocity in the reference
+- forbidden sources: shell state, locomotion intent, prior phase state, and ad hoc helper corrections
+
+Rebasing contract:
+
+- capture once at the `BalanceActivation_Ready -> BalanceActivation_BlendIn` boundary
+- use live `pelvis` world position as the rebase origin
+- use gravity-up as the rebase up axis
+- use live `pelvis` yaw projected around gravity-up as the rebase yaw
+- freeze that rebased frame for the rest of the activation attempt
+- do not run per-body fitting or repeated rebasing after blend start
+
+`BalanceActivation_Ready` may exit only after:
+
+- the authored standing reference exists for every driven `V0` body
+- the one-time rebase frame has been computed
+- rebased targets have been materialized from that source
+- the quiet-state proof has passed on live physical state
+
+## `V0` Standing Thresholds
+
+`BalanceActivation_Validate` and `BalanceActive_Standing` use these default physical thresholds in addition to the support-truth thresholds defined elsewhere:
+
+- maximum root tilt envelope: `20.0 deg`
+- maximum peak angular speed for the balance-critical chain: `720.0 deg/s`
+- maximum peak angular speed for the support set: `720.0 deg/s`
+
+An instability threshold breach means any of those limits is exceeded during the active validation or standing window.
+
 ## Blend-In Contract
 
 `BalanceActivation_BlendIn` uses one explicit controller blend:
@@ -198,6 +233,7 @@ Removing the old flip-based ritual will often expose controller weakness more di
 - default duration: `0.75` seconds
 - alpha scope: one global alpha for the balance-critical chain and support set in `V0`
 - support-set targets: included in the same blend contract in `V0`
+- target source during blend: the authored `V0` standing reference expressed in the one rebased frame captured at blend start
 - damping/strength scaling: use the same alpha as target authority in `V0`; separate scaling is out of scope
 - gating: time-based after `BalanceActivation_Ready` entry because `Ready` already owns the physical quietness proof; if a fail condition appears, the mode fails rather than pausing alpha
 - history rebasing: one-time rebase on entry to `BalanceActivation_BlendIn`
