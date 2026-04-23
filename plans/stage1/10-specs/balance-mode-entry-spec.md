@@ -111,8 +111,8 @@ This is the only current passing publication state for balance activation.
 | Runtime mode | Entry preconditions | Exit conditions | Fail conditions | Forbidden writes | Authoritative owner | Required emitted metrics |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `BalanceActivation_Ready` | valid bridge context; balance-critical chain and support set continuously simulated; movement component idle; no pending reset | enter `BalanceActivation_BlendIn` once rebased targets are valid and quiet-state proof passes | topology change on critical chain, loss of continuous simulation, shell helper use on critical/support set, movement reclaim | locomotion-drive writes, shell helper writes, kinematic mode writes on critical/support set | balance activation runtime | topology change count, authority conflict count, shell helper used count, quiet-state duration |
-| `BalanceActivation_BlendIn` | `Ready` satisfied; rebased targets exist; `ControlAuthorityAlpha=0.0` | enter `BalanceActivation_Validate` when `ControlAuthorityAlpha=1.0` and no fail condition fired | target discontinuity, gain/damping instability, contact/support failure, pose/reference mismatch, authority conflict, shell helper use | abrupt full-authority writes, shell helper writes, movement-component writes, reset writes | balance activation runtime | alpha, blend duration, target discontinuity, controller effort proxy, authority conflicts, support uptime |
-| `BalanceActivation_Validate` | blend complete; support truth valid; no prior fail | enter `BalanceActive_Standing` after contiguous hold completes | any support failure, instability threshold breach, topology change, non-contiguous hold, shell helper use, movement reclaim | shell helper writes, movement-component writes, topology edits on critical chain, reset writes | balance activation runtime | contiguous hold time, root tilt envelope, peak angular speed by family, contact uptime, COM/support proxy drift |
+| `BalanceActivation_BlendIn` | `Ready` satisfied; rebased targets exist; `ControlAuthorityAlpha=0.0` | enter `BalanceActivation_Validate` when `ControlAuthorityAlpha=1.0` and no fail condition fired | target discontinuity, unstable gains/damping, support failure, proxy outside support region, pose/reference mismatch, movement reclaim, shell-helper violation | abrupt full-authority writes, shell helper writes, movement-component writes, reset writes | balance activation runtime | alpha, blend duration, target discontinuity, controller effort proxy, authority conflicts, support uptime, terminal-reason detail |
+| `BalanceActivation_Validate` | blend complete; support truth valid; no prior fail | enter `BalanceActive_Standing` after contiguous hold completes | support failure, proxy outside support region, instability threshold breach, topology change, non-contiguous hold, shell-helper violation, movement reclaim | shell helper writes, movement-component writes, topology edits on critical chain, reset writes | balance activation runtime | contiguous hold time, root tilt envelope, peak angular speed by family, contact uptime, COM/support proxy drift, terminal-reason detail |
 | `BalanceActive_Standing` | contiguous hold complete | remain active or enter recovery/termination | loss of standing validity or explicit recovery trigger | legacy activation writes that bypass standing-mode ownership | balance mode runtime | sustained hold time, ongoing stability metrics |
 
 Compatibility note:
@@ -124,6 +124,8 @@ Recovery note:
 
 - `BalanceActive_Recovery`, `SafeDenied`, and `Failed` are named architectural states
 - detailed recovery behavior is out of the current rewrite scope
+- `BalanceActive_Recovery` is non-authoritative for `V0` acceptance
+- recovery behavior must not be used to satisfy standing success
 - implementers must not improvise new standing-success logic inside those paths
 
 ## Authority And Diagnostics
@@ -204,8 +206,12 @@ Removing the old flip-based ritual will often expose controller weakness more di
 Failure reasons tied to the blend:
 
 - `activation_target_discontinuity`
-- `activation_controller_strength_or_representation_failure`
-- `activation_authority_conflict`
+- `activation_unstable_gain_or_damping`
+- `activation_support_failure`
+- `activation_proxy_outside_support_region`
+- `activation_pose_reference_mismatch`
+- `activation_movement_reclaim`
+- `activation_shell_helper_violation`
 
 ## Failure Boundary
 
@@ -240,13 +246,16 @@ When activation fails, the deny or failure path should identify that explicitly 
 At minimum this includes distinguishing:
 
 - balance-critical ownership continuity lost
-- controller blend instability
-- controller-strength or target-shaping weakness
-- shell influence material
-- hidden multi-owner authority conflict
+- target discontinuity
+- unstable gains or damping
+- support failure
+- support proxy outside support region
+- shell-helper violation
 - gameplay or reset authority reclaimed
 - standing validation timeout
 - no path to sustained `BalanceActive_Standing`
+
+Broad families may still be used for dashboards or aggregation, but `terminal_reason` on the emitted run artifact must carry the leaf-level reason rather than a bundled umbrella label.
 
 ## Acceptance Criteria
 

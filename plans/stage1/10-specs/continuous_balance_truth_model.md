@@ -48,6 +48,17 @@ The `V0` support proxy is:
 
 If a later full COM computation becomes trustworthy, it may replace this proxy only in a documented contract change.
 
+### Why this proxy is acceptable in `V0`
+
+This proxy is preferred over full-body COM in `V0` because:
+
+- the rewrite is intentionally centered on the proximal standing problem first
+- the contributing bodies are the architectural center of the `V0` balance-critical chain
+- full-body COM would be more sensitive to distal and upper-body behavior that `V0` explicitly does not want to optimize yet
+- the planar centroid is cheaper to compute, easier to audit, and easier to compare across runs during the first rewrite milestone
+
+The proxy is therefore not claiming to be the physically perfect COM. It is a deliberately narrower measure chosen to keep the first rewrite honest about proximal standing without prematurely reintroducing full-body complexity.
+
 ### Support region definition
 
 The `V0` support region is the convex hull of the currently supporting `foot_*` and `ball_*` contact points.
@@ -58,9 +69,34 @@ The run fails support-proxy truth if:
 
 - the planar support proxy remains outside the support region for more than `100 ms`
 
+### Known proxy limitations
+
+Known false positives:
+
+- upper-body or distal motion may move the real full-body COM unfavorably while the proximal proxy still looks acceptable
+- asymmetric limb motion outside the contributing set may understate true whole-body lean risk
+
+Known false negatives:
+
+- transient proximal motion may push the proxy outside the support region even when the full-body COM would still remain acceptable
+- local proximal oscillation can make the proxy noisier than a trusted full-body COM estimate
+
+These limitations are acceptable in `V0` because support truth and raw contact persistence still remain primary gates. The proxy is an additional physical indicator, not a permission slip to ignore support failure.
+
 ### Precedence rule
 
 If support truth fails, the run fails even when the support proxy or root tilt still look temporarily acceptable.
+
+### Replacement criteria
+
+Replace the `V0` support proxy with a fuller COM measure only when all are true:
+
+- the full-body COM computation is derived from trustworthy raw physical state
+- its contributing bodies and frame definition are explicit and stable across runs
+- it improves failure explanation quality versus the proximal proxy on recorded artifacts
+- it does not reintroduce distal or upper-body sophistication as a hidden prerequisite for honest `V0` standing evaluation
+
+Until then, the proximal support proxy remains the contract measure for `V0`.
 
 ## Source-Of-Truth Precedence
 
@@ -115,10 +151,29 @@ Contact persistence is measured from:
 - support uptime across the validation window
 - support-loss event count
 
+Active-contact semantics:
+
+- source of truth: Chaos contact manifolds for the support-set rigid bodies
+- active contact means one or more live body contacts between `foot_*` or `ball_*` and walkable world support during the current `30 Hz` sample window
+- traces, overlap checks, or shell-side heuristics may be logged as secondary diagnostics only
+- side support state is `true` when `foot_* OR ball_*` is in active contact on that side
+- minimum support-contact count is the count of support sides currently in active contact, not the raw manifold count
+
+Contact churn semantics:
+
+- churn is counted from side-support state changes at the `30 Hz` sample cadence
+- each false->true or true->false transition for left or right support contributes one churn event
+- the reported churn rate is the total churn events divided by elapsed validation time in seconds
+
 Support truth is invalid if:
 
 - the support set is not physical
 - shell or helper behavior is required to preserve support
+
+Timer rule:
+
+- the support-loss timer and the support-proxy-outside-support-region timer are independent
+- either timer exceeding `100 ms` is terminal
 
 ## Legacy Mapping
 

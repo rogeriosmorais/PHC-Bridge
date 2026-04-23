@@ -31,6 +31,7 @@ Every continuous-balance run must emit a structured artifact with the following 
 | `run_start_time_utc` | string | ISO-8601 | yes |
 | `run_duration_seconds` | number | seconds | yes |
 | `terminal_state` | string | enum | yes |
+| `terminal_reason_family` | string | enum | yes |
 | `terminal_reason` | string | enum | yes |
 | `sustained_hold_time_seconds` | number | seconds | yes |
 | `contiguous_hold_time_seconds` | number | seconds | yes |
@@ -54,6 +55,7 @@ Every continuous-balance run must emit a structured artifact with the following 
 | `samples[].root_tilt_deg` | number | degrees | fixed cadence | yes |
 | `samples[].support_contact_active` | boolean | boolean | fixed cadence | yes |
 | `samples[].support_contact_count` | integer | count | fixed cadence | yes |
+| `samples[].support_contact_source` | string | enum | fixed cadence | yes |
 | `samples[].peak_family_angular_deg_per_sec` | object | deg/s | fixed cadence | yes |
 | `samples[].control_authority_alpha` | number | `0..1` | fixed cadence | yes |
 | `samples[].target_discontinuity_deg` | number | degrees | fixed cadence | yes |
@@ -61,6 +63,7 @@ Every continuous-balance run must emit a structured artifact with the following 
 | `samples[].support_region_valid` | boolean | boolean | fixed cadence | yes |
 | `samples[].authority_conflict_events` | integer | count in sample window | fixed cadence | yes |
 | `samples[].topology_change_events` | integer | count in sample window | fixed cadence | yes |
+| `samples[].terminal_reason_candidate` | string | enum or empty | fixed cadence | yes |
 
 ### Cadence And Time Windows
 
@@ -68,6 +71,30 @@ Every continuous-balance run must emit a structured artifact with the following 
 - validation hold window: contiguous interval spent in `BalanceActivation_Validate`
 - sustained hold window: contiguous interval spent in `BalanceActive_Standing`
 - support uptime window: total time with valid support contact during validate and standing windows
+
+### Terminal Reason Contract
+
+- `terminal_reason_family` may be used for coarse grouping only
+- `terminal_reason` must carry the first truthful leaf-level reason that ended the run
+- `samples[].terminal_reason_candidate` records the best current leaf-level reason at each sample, or empty when no terminal condition exists yet
+
+Required leaf-level `terminal_reason` values for `V0`:
+
+- `activation_target_discontinuity`
+- `activation_unstable_gain_or_damping`
+- `activation_support_failure`
+- `activation_proxy_outside_support_region`
+- `activation_movement_reclaim`
+- `activation_shell_helper_violation`
+
+Contact-measurement rules:
+
+- `support_contact_source` must be `chaos_contacts` for `V0`
+- `support_contact_active=true` means at least one active Chaos contact exists on either support side during the sample window
+- `support_contact_count` is the count of support sides currently active: `0`, `1`, or `2`
+- contact churn is counted from side-support state transitions at the sample cadence, not from raw manifold creation/destruction counts
+- `support_loss_gap_max_ms` is measured from consecutive samples where `support_contact_count=0`
+- support-proxy-outside-region time is measured independently from consecutive samples where `support_region_valid=false`
 
 ## Forbidden Metrics
 

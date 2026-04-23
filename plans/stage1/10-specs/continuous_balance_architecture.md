@@ -151,13 +151,21 @@ Support truth is measured by:
 - support-side uptime over the active validation window
 - support loss events
 
+Active-contact measurement contract for `V0`:
+
+- contact source: Chaos rigid-body contact data for the support-set bodies
+- an active contact means at least one live Chaos contact on `foot_*` or `ball_*` against walkable world support during the current sample window
+- traces may be logged as secondary diagnostics, but they do not define support truth in `V0`
+- contact aggregation rule: `foot_* OR ball_*` on the same side counts as that side being in support
+- churn counting is evaluated on the `30 Hz` instrumentation cadence; each false->true or true->false side-support state transition counts as one churn event
+
 `V0` numeric support thresholds:
 
 - minimum support-contact count: `1`
 - one foot is sufficient in `V0`; both feet are not required
-- contact aggregation rule: `foot_* OR ball_*` on the same side counts as that side being in support
 - max support-loss gap: `100 ms`
 - max contact-churn rate: `12 Hz` aggregated across both sides during `BalanceActivation_Validate`
+- support-loss timer and support-proxy-outside-region timer are independent timers; either one may fail the run first
 
 Support failure means any of:
 
@@ -190,6 +198,11 @@ The current rewrite success ladder is:
 The production benchmark remains:
 
 - `BalanceActive_Standing` held continuously for `3.0` seconds
+
+For `V0` acceptance:
+
+- `BalanceActive_Recovery` is non-authoritative
+- recovery behavior must not be used to satisfy standing success
 
 ## Expected Early Regressions That Are Acceptable
 

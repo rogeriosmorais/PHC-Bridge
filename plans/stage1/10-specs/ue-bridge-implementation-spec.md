@@ -66,6 +66,7 @@ On balance request acceptance, the runtime must create a dedicated activation re
 - topology change event count
 - authority conflict count
 - terminal outcome flag
+- terminal reason family if any
 - failure reason if any
 
 ## Required Truth Sources
@@ -82,6 +83,22 @@ The implementation must keep these sources separate:
 These are different signals.
 
 The implementation must also surface authority conflict events explicitly rather than letting subsystem fights remain implicit.
+
+When activation terminates, the implementation must emit:
+
+- `terminal_reason_family` for coarse rollup only
+- `terminal_reason` as the leaf-level emitted reason used by logs and run artifacts
+
+At minimum the leaf-level emitted reason set must distinguish:
+
+- `activation_target_discontinuity`
+- `activation_unstable_gain_or_damping`
+- `activation_support_failure`
+- `activation_proxy_outside_support_region`
+- `activation_movement_reclaim`
+- `activation_shell_helper_violation`
+
+Bundled labels such as controller-strength-or-representation failure or generic authority conflict may exist only as derived rollups, not as the sole terminal reason recorded for a run.
 
 ## Required Continuity Snapshot
 
@@ -146,6 +163,7 @@ Standing validation must:
 - require contiguous readiness for the configured hold duration
 - reset its hold timer on non-ready frames
 - end truthfully on the first terminal failure
+- preserve the first truthful leaf-level terminal reason in emitted artifacts
 
 ## Smoke-Test Evaluation Rule
 
