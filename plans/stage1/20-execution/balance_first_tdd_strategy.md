@@ -20,18 +20,42 @@ This document defines the TDD strategy and testing pyramid for the balance-first
 
 ## 4. Primary Test Targets
 
+### 4.1 Pure Logic (PhysAnimSupportTruth)
 - **Support Patch Reduction**: Verify area-preserving hull construction from manifold points.
-- **Support-Mode Classification**: Verify the four contact-pattern grades against side-support and gap-timer states.
-- **Proxy-Outside-Hull Timing**: Verify `activation_proxy_outside_support_region` triggers only after the drift limit.
-- **Support-Failure Timing**: Verify `activation_support_failure` for both area and gap breaches.
+- **Support-Mode Classification**: Verify the four contact-pattern grades (TwoFoot, SingleFoot, Transient, Airborne) against side-support and gap-timer states.
+- **Proxy-Outside-Hull Adjudication**: Verify proxy containment and drift-timer logic.
 - **Churn Frequency Calculation**: Verify rolling 1.0s Hz calculation with synthetic transition streams.
-- **Continuity Validator**: Verify detection of velocity/pose jumps during activation.
-- **Capsule Validator**: Verify detection of unauthorized capsule movement.
-- **Plant Validator**: Verify static audit and mutation-triggered mass/alignment checks.
-- **Contamination Classification**: Verify the authority matrix rules against simulated external writes.
-- **Terminal-Reason Arbitration**: Verify that the rank-based precedence table correctly selects the dominant failure reason.
 
-## 5. Runtime Test Targets
+### 4.2 Adapter-Fed Validators (PhysAnimValidators)
+- **Continuity Validator**:
+    - **Body Instance**: Detect invalid or missing body instances.
+    - **Physics State**: Detect "Simulate Physics" disabling on active bodies.
+    - **Sleep Management**: Detect bodies exceeding the sleep/wake limit semantics.
+    - **State Jump**: Detect pose/velocity jumps between frames.
+- **Capsule Validator**:
+    - **Actor Lock**: Detect actor-level transform changes (Freeze check).
+    - **Mesh Integrity**: Detect absolute transform deltas on the mesh component.
+    - **Component States**: Detect CMC (Character Movement) activity or UpdatedComponent nulling.
+    - **External State**: Detect unauthorized collision mode changes or overlap mutations.
+- **Plant Validator**:
+    - **Topology**: Detect skeleton or skeletal mesh mismatch.
+    - **Axis/Length**: Detect bone length or alignment drift.
+    - **Mass/Inertia**: Detect mass, center of mass, or inertia tensor mutations against the contract baseline.
+    - **Geometry**: Detect collision/filter baseline breaches.
+- **Contamination Classifier**:
+    - **Authority Matrix**: Detect unauthorized external writes to policy-driven bodies.
+    - **Material Breaches**: Detect material-state contamination during activation.
+
+## 5. Validator Scope Freeze
+
+Each validator is strictly allowed to decide ONLY the following:
+
+- **Continuity**: Is the simulation physically contiguous? (Yes/No + Reason)
+- **Capsule**: Is the gameplay shell anchored and passive? (Yes/No + Reason)
+- **Plant**: Is the physical body-set structurally identical to the training target? (Yes/No + Reason)
+- **Contamination**: Is there an authority conflict for simulation ownership? (Yes/No + Reason)
+
+## 6. Runtime Test Targets
 
 - **Ready -> BlendIn Entry Proof**: Verify successful gate completion before starting the blend.
 - **BlendIn Rollout Stability**: Verify continuity and authority during the authority ramp.
@@ -39,7 +63,7 @@ This document defines the TDD strategy and testing pyramid for the balance-first
 - **Standing 3.0-Second Success**: The primary product benchmark for a passing run.
 - **Must-Fail Scenarios**: Verification that the system correctly labels deliberate breaches (Capsule, Plant, Contamination, Simulation Loss).
 
-## 6. Artifact Validation Rule
+## 7. Artifact Validation Rule
 
 - Every terminal failure MUST be reconstructible from emitted artifact fields.
 - The artifact `support_mode` MUST be derivable from the frame-level classifications and the 30 Hz reduction rule.

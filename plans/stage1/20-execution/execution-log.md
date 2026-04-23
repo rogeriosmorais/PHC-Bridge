@@ -43,10 +43,10 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | S1-P1-A1 | AI | completed | Phase 1 implementation package, ONNX/export specs, UE bridge implementation spec | ONNX export/runtime bridge paths | none |
 | S1-P1-A2 | AI | completed | accepted `S1-P1-A1` handoff, Phase 1 implementation package, manual verification, acceptance thresholds, bring-up runbook | `plans/stage1/30-evidence/g2-evaluation.md`, `plans/stage1/20-execution/execution-log.md`, `plans/stage1/20-execution/assumption-ledger.md` | none |
 | S1-DOCS-BALANCE-FIRST | AI | completed | balance-first activation direction, specialized 10-spec suite | `ENGINEERING_PLAN.md`, `STAGE1_PLAN.md`, `plans/stage1/10-specs/*.md`, `plans/stage1/20-execution/execution-log.md` | none |
-| S1-PLAN-TDD | AI | pending | specialized 10-spec suite, standing benchmark | `plans/stage1/40-tasks/tdd-plan.md` | none |
-| S1-PLAN-REFACTOR-ORDER | AI | pending | specialized 10-spec suite, existing bridge source | `plans/stage1/40-tasks/refactor-sequence.md` | none |
-| S1-PLAN-TEST-MATRIX | AI | pending | instrumentation_and_acceptance.md, truth model | `plans/stage1/40-tasks/test-matrix.md` | none |
-| S1-PLAN-FIRST-SLICE | AI | pending | specialized 10-spec suite | `plans/stage1/40-tasks/first-slice-definition.md` | none |
+| S1-PLAN-TDD | AI | completed | specialized 10-spec suite, standing benchmark | `plans/stage1/20-execution/balance_first_tdd_strategy.md` | none |
+| S1-PLAN-REFACTOR-ORDER | AI | completed | specialized 10-spec suite, existing bridge source | `plans/stage1/20-execution/balance_first_refactor_plan.md` | none |
+| S1-PLAN-TEST-MATRIX | AI | completed | instrumentation_and_acceptance.md, truth model | `plans/stage1/20-execution/balance_first_test_matrix.md` | none |
+| S1-PLAN-FIRST-SLICE | AI | completed | specialized 10-spec suite | `plans/stage1/20-execution/balance_first_slice_1_definition.md` | none |
 | S1-IMPL-BALANCE-FIRST | AI | blocked | TDD plan, refactor order, specialized 10-spec suite | runtime bridge and balance activation code paths | TDD/Refactor Plan acceptance |
 
 ## Frozen Inputs For Continuous Balance Rewrite
@@ -71,9 +71,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-PLAN-TDD | runnable now; 10-spec contracts are closed; TDD plan is the first requirement for implementation |
-| 2 | S1-PLAN-REFACTOR-ORDER | runnable now; sequences the transition from legacy flip-path to continuous invariants |
-| 3 | S1-IMPL-BALANCE-FIRST | blocked until TDD and Refactor plans are accepted |
+| 1 | S1-IMPL-BALANCE-FIRST | runnable now for **Slice 1 (Pure Logic)**; TDD and Refactor plans are accepted; gated by the Stop Rule (Slice 1 must be green before runtime rewrite). |
 
 ## Waiting On User
 
