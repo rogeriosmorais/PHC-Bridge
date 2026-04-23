@@ -30,11 +30,15 @@ The `CharacterMovementComponent` (CMC) must be structurally prevented from asser
 - **Overlap Generation**: `SetGenerateOverlapEvents(false)` must be set for the capsule.
 - **Justification**: Any capsule collision or overlap resolution can inject kinematic "tugging" into the actor root, which may stabilize or destabilize the mesh simulation through hidden engine paths.
 
-### 4. Camera and Attachment Ownership
+## Non-Terminal Implementation Requirements (Functional)
+
+These requirements are necessary for a correct bridge implementation but are **not** currently part of the physical stability proof. Disagreement with these items does **not** emit `activation_capsule_contract_violation`.
+
+### 1. Camera and Attachment Ownership
 - **Camera Anchor**: The bridge **must** re-target the player camera to a simulated bone (e.g., `head`) or the mesh component itself. A camera remaining on the frozen capsule is a functional bug.
 - **Attachment Authority**: All gameplay-critical attachments (weapons, props) must be child-attached to **Skeletal Mesh Bones**, not the capsule root.
 
-### 5. Replication and Authority (V0)
+### 2. Replication and Authority (V0)
 - **V0 Scope**: Local-only proof of concept. Networked prediction for the frozen capsule is not required.
 - **Authority**: The physical simulation (mesh) is the sole authority for balance; the capsule remains as a "lifecycle anchor" only.
 

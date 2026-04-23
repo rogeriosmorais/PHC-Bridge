@@ -89,7 +89,15 @@ For each body with at least one accepted point, build an authoritative **Support
 - **Data Structure**: A `TArray<FVector2D>` defining the world-space planar support region.
 - **Failure Condition**: If the total unioned vertex set contains fewer than **3 points**, or if the resulting hull area is below the **Support Area (Min)** threshold, emit `activation_support_failure`.
 
-### 4. Substep Persistence (Debounce Rule)
+### 4. Proxy-vs-Hull Adjudication
+- **Projection**: Project the **Support Proxy** (defined in [continuous_balance_truth_model.md](continuous_balance_truth_model.md)) onto the same planar support surface.
+- **Test**: Perform a **2D Point-in-Polygon** test of the projected proxy against the Frame Support Hull.
+- **Result**:
+  - `Inside`: Proxy is within the hull or on the edge.
+  - `Outside`: Proxy world-space distance to the hull boundary > 0.
+- **Failure Rule**: Emit `activation_proxy_outside_support_region` if the proxy remains `Outside` for more than the **COM Proxy Drift** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+
+### 5. Substep Persistence (Debounce Rule)
 - State changes accepted only if they persist for **2 consecutive substeps**.
 
 ### 5. Churn and Uptime Counting

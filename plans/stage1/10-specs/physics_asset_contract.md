@@ -8,16 +8,33 @@ Disagreement with this contract triggers a terminal `activation_physics_asset_co
 
 ## Validation Schedule
 
-1.  **Pre-Attempt Audit (Entry Gate)**:
+1.  **Static Structural Audit (Entry Gate)**:
     - Runs **BEFORE** entering `BalanceActivation_Ready`.
-    - Passing this audit is a hard prerequisite for balance state machine activation.
-    - Performs full skeleton topology, asset identity, and hierarchy hashing.
-    - If any audit field fails, the activation is denied.
-2.  **Per-Frame Audit (Continuous Monitoring)**:
-    - Runs every Chaos substep for mass, inertia, and constraint profile integrity.
-    - Monitors for ad hoc mutation calls.
-3.  **Mutation-Triggered Revalidation**:
-    - Any external call to `SetPhysicsAsset`, `SetPhysicsMaterialOverride`, or `SetConstraintProfile` during the attempt triggers an immediate Rank 1 terminal violation.
+    - **Scope**: Skeleton topology, asset identity, hierarchy hashing, and bone length integrity.
+    - **Enforcement**: Passing this audit is a hard prerequisite for entry.
+
+2.  **Mutation-Triggered Audit (Integrity Monitoring)**:
+    - Runs immediately if any mutation event is detected (e.g., API calls to `SetMass`, `SetInertia`, `SetPhysicsAsset`, `SetConstraintProfile`).
+    - **Scope**: Re-validates the Mass Table, Inertia Table, and Constraint Profiles against the audited baseline.
+    - **Result**: Immediate `activation_physics_asset_contract_violation` (Rank 1) if the mutation creates drift.
+
+3.  **Live Dynamic Monitoring**:
+    - Runs every Chaos substep (~120Hz).
+    - **Scope**: Material property integrity and constraint limit state.
+    - **Reasoning**: Monitors for properties that could materially affect solver stability but are not captured by the structural or mutation audits.
+
+## Physical Plant Requirements
+
+### 1. Mass Distribution Audit
+- **Total Mass**: Must match baseline within **Total Mass Tolerance**.
+- **Critical Chain Mass**: Aggregate mass of `pelvis` through `thigh_*` must match baseline.
+- **Support Set Mass**: Aggregate mass of `foot_*` and `ball_*` must match baseline.
+- **Justification**: Support-body mass drift materially alters the dynamics of the plantar hull.
+
+### 2. Inertia Tensor Audit
+- **Critical Bodies**: `pelvis` and `thigh_*` principal moments must match baseline.
+- **Support Bodies**: `foot_*` and `ball_*` moments must match baseline within **Inertia Tolerance**.
+- **Justification**: Support-body inertia affects the fidelity of the "Honest Balance" proof during rapid support transitions.
 
 ## Physics Asset Identity
 

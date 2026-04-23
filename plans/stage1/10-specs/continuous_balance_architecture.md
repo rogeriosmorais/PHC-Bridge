@@ -26,13 +26,13 @@ Bodies that provide valid, plantar support for the balance hull:
 - **Truth Role**: Every qualifying contact on these bodies contributes to the support hull.
 
 ### 3. Contamination Monitor Set
-Bodies whose world contact is forbidden during the attempt:
+Bodies whose world contact is monitored for bridge integrity:
 - `calf_l`, `calf_r`
-- **Truth Role**: World contact on these bodies is treated as terminal contamination. Authority and contamination boundaries are defined in [authority_matrix.md](authority_matrix.md).
+- **Structural Role**: These bodies must remain clear of all world geometry to maintain the "Honest Standing" proof. Contamination boundaries are defined in [authority_matrix.md](authority_matrix.md).
 
 ### 4. Upper-Body & Excluded Sets
 - All bodies not in the critical or support sets.
-- **V0 Rule**: Collision must be disabled to ensure isolation.
+- **Structural Intent**: These bodies are isolated from the simulation truth surface via collision deactivation as defined in [physics_asset_contract.md](physics_asset_contract.md).
 
 ## Concepts
 
