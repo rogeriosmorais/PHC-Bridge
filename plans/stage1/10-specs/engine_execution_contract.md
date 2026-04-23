@@ -87,17 +87,29 @@ For each body with at least one accepted point, build an authoritative **Support
 - **Qualifying Substep**: Select the **final qualifying Chaos substep** of the frame.
 - **Hull Union**: The authoritative Frame Support Hull is the **2D Convex Hull** formed by the union of all vertices from all active **Support Patches**.
 - **Data Structure**: A `TArray<FVector2D>` defining the world-space planar support region.
-- **Failure Condition**: If the total unioned vertex set contains fewer than **3 points**, or if the resulting hull area is below the **Support Area (Min)** threshold, emit `activation_support_failure`.
+- **Degeneracy Interaction**: Zero-area patches (single-point or collinear) are **valid** for contributing vertices to the union, but a hull formed solely from such patches will fail the **Area-Threshold Test**.
 
-### 4. Proxy-vs-Hull Adjudication
+### 4. Support Adjudication Sequence
+The implementation must perform truth adjudication in this exact order:
+1.  **Manifold Capture**: Collect all valid substep contacts.
+2.  **Patch Reduction**: Construct per-body 2D convex hulls.
+3.  **Frame Hull Union**: Merge all active patches into the frame-level 2D hull.
+4.  **Area-Threshold Test**: 
+    - If `FrameHullArea < Support Area (Min)`, emit `activation_support_failure`.
+    - *Note*: `SingleFootSurvival` is only valid if the single side provides sufficient area.
+5.  **Proxy Adjudication**: 
+    - If `Proxy` is outside the hull, increment drift timer. 
+    - If `timer > COM Proxy Drift`, emit `activation_proxy_outside_support_region`.
+6.  **Classification**: Assign `support_mode` based on active side-set (L, R, or Both).
+
+### 5. Proxy-vs-Hull Test Logic
 - **Projection**: Project the **Support Proxy** (defined in [continuous_balance_truth_model.md](continuous_balance_truth_model.md)) onto the same planar support surface.
 - **Test**: Perform a **2D Point-in-Polygon** test of the projected proxy against the Frame Support Hull.
 - **Result**:
   - `Inside`: Proxy is within the hull or on the edge.
   - `Outside`: Proxy world-space distance to the hull boundary > 0.
-- **Failure Rule**: Emit `activation_proxy_outside_support_region` if the proxy remains `Outside` for more than the **COM Proxy Drift** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 
-### 5. Substep Persistence (Debounce Rule)
+### 6. Substep Persistence (Debounce Rule)
 - State changes accepted only if they persist for **2 consecutive substeps**.
 
 ### 5. Churn and Uptime Counting

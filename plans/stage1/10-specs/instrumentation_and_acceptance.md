@@ -40,7 +40,7 @@ The implementation must emit a JSON artifact for every attempt, containing:
 
 ### 3. Support Truth
 - `support_state_l` / `support_state_r`: Debounced side-contact status.
-- `support_mode`: Dominant stability grade (`TwoFootStable`, `SingleFootSurvival`, `TransientRecovery`).
+- `support_mode`: Dominant stability grade (`TwoFootStable`, `SingleFootSurvival`, `TransientRecovery`, `Airborne`).
 - `support_hull_points`: World-space coordinates of the active footprint.
 - `com_proxy_pos`: Projected planar centroid of the critical chain.
 - `max_penetration_cm`: Deepest manifold point recorded for the frame.
@@ -77,7 +77,7 @@ The implementation must emit a JSON artifact for every attempt, containing:
 
 ## Canonical Terminal Reasons
 
-Every run artifact must emit exactly one primary `terminal_reason` from this canonical set:
+When a run terminates in failure, the primary `terminal_reason` must be exactly one of the values from this canonical set. For successful attempts, `terminal_reason` must be `nullptr`.
 
 1. `activation_physics_asset_contract_violation`
 2. `activation_capsule_contract_violation`
@@ -131,7 +131,7 @@ The implementation is considered broken if it fails to detect and correctly labe
 ## Acceptance Gates
 
 A run is **Successful** ONLY if:
-1.  The artifact `terminal_reason` is `nullptr` (or success label).
+1.  The artifact `terminal_reason` is `nullptr`.
 2.  The `hold_duration_sec` reaches or exceeds `3.0`.
 3.  All primary metrics remained within the thresholds above for the entire duration.
 4.  The artifact passed the physical-continuity validator.

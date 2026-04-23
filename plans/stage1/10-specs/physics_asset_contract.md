@@ -23,18 +23,19 @@ Disagreement with this contract triggers a terminal `activation_physics_asset_co
     - **Scope**: Material property integrity and constraint limit state.
     - **Reasoning**: Monitors for properties that could materially affect solver stability but are not captured by the structural or mutation audits.
 
-## Physical Plant Requirements
+## Authoritative Plant Tolerances
 
-### 1. Mass Distribution Audit
-- **Total Mass**: Must match baseline within **Total Mass Tolerance**.
-- **Critical Chain Mass**: Aggregate mass of `pelvis` through `thigh_*` must match baseline.
-- **Support Set Mass**: Aggregate mass of `foot_*` and `ball_*` must match baseline.
-- **Justification**: Support-body mass drift materially alters the dynamics of the plantar hull.
+The implementation must audit the live mass distribution and inertia tensors against the baseline. Any deviation beyond these thresholds triggers `activation_physics_asset_contract_violation`.
 
-### 2. Inertia Tensor Audit
-- **Critical Bodies**: `pelvis` and `thigh_*` principal moments must match baseline.
-- **Support Bodies**: `foot_*` and `ball_*` moments must match baseline within **Inertia Tolerance**.
-- **Justification**: Support-body inertia affects the fidelity of the "Honest Balance" proof during rapid support transitions.
+| Audit Field | Tolerance | Justification |
+| :--- | :--- | :--- |
+| **Total Mass** | `+/- 2.5%` | Global simulation stability |
+| **Critical-Chain Mass** | `+/- 2.5%` | Core body dynamics (`pelvis` to `thigh_*`) |
+| **Support-Set Mass** | `+/- 2.5%` | Support dynamics (`foot_*`, `ball_*`) |
+| **Critical-Body Inertia** | `+/- 5.0%` | Fidelity of `pelvis`/`thigh` principal moments |
+| **Support-Body Inertia** | `+/- 5.0%` | Support transition fidelity (`foot_*`, `ball_*`) |
+
+**Mutation Rule**: Any mid-attempt call to `SetMassOverride`, `SetCenterOfMass`, `SetInertiaTensor`, or `SetPhysicsAsset` is terminal.
 
 ## Physics Asset Identity
 
@@ -51,15 +52,6 @@ The bridge recognizes a skeleton as "Audited Manny/Quinn-Derived" only if it pas
 | **Bone Axis Alignment** | `+/- 0.5 deg` | Local joint axes deviate from source reference |
 | **Segment Length** | `+/- 5.0%` | Parent-to-child distance deviates from baseline |
 | **Hierarchy Hash** | Exact Match | Bone names and parentage don't hash to Baseline ID |
-
-## Mass and Inertia Tolerances
-
-The implementation must audit the live mass distribution against the baseline:
-
-- **Total Mass**: `+/- 2.5%` tolerance.
-- **Truth-Set Mass**: `+/- 2.5%` tolerance for the balance-critical chain.
-- **Principal Inertias**: `+/- 5.0%` tolerance for `pelvis` and `thigh` bodies.
-- **Plant Mutation**: Any mid-attempt call to `SetMassOverride`, `SetCenterOfMass`, or `SetInertiaTensor` is terminal.
 
 ## Constraint Profile Rules
 

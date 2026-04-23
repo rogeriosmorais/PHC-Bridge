@@ -79,11 +79,10 @@ The run fails on `activation_support_failure` if:
 
 ### Standing Stability Grades
 The implementation must classify the support state into these grades:
-1.  **Two-Foot Stable**: Both sides maintain persistent contact (> 90% of frame substeps).
-2.  **Support Churn**: High-frequency contact transitions must not exceed the **Support Churn** limit (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
-3.  **Single-Foot Survival**: Only one side maintains persistent contact, but the **Support Proxy** remains within that single-foot hull.
-3.  **Transient Recovery**: A side loses contact but regains it within the gap limit.
-4.  **Airborne (Terminal)**: Both sides lose contact for more than the gap limit.
+1.  **TwoFootStable**: Both sides maintain persistent contact (> 90% of frame substeps).
+2.  **SingleFootSurvival**: Only one side maintains persistent contact, but the **Support Proxy** remains within that single-foot hull.
+3.  **TransientRecovery**: A side loses contact but regains it within the gap limit.
+4.  **Airborne**: Both sides lose contact for more than the gap limit.
 
 ## Pose Fidelity (Reference Mismatch)
 

@@ -18,7 +18,7 @@ This document is the **sole authoritative owner** of runtime ownership and subsy
 | `SafeDenied` | locomotion / engine | active balance policy writes | Collision-Active (Reverting) | Root-Relative (Reverting); CMC Active |
 | `Failed` | system (ragdoll) | all active bridge writes | Collision-Active (Reverting) | Physics-Simulated (Ragdoll); CMC Disabled |
 
-**Operational Pre-condition**: Entering `BalanceActivation_Ready` requires a **passed** physical plant audit as defined in [physics_asset_contract.md](physics_asset_contract.md).
+**Operational Pre-condition**: Entering `BalanceActivation_Ready` requires a **passed** Static Structural Audit (Entry Gate) as defined in [physics_asset_contract.md](physics_asset_contract.md).
 
 ## ACharacter Movement Model (V0)
 
