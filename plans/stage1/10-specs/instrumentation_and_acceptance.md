@@ -60,7 +60,8 @@ The implementation must emit a JSON artifact for every attempt, containing:
   - `true`: Proxy evaluated and inside/on edge.
   - `false`: Proxy evaluated and outside.
   - `null`: Proxy test not evaluated because `active_support_side_count == 0`.
-  - **Constraint**: The 30 Hz artifact MUST preserve this nullable meaning and MUST NOT coerce `null` to `false`.
+- `proxy_drift_timer_ms`: Current contiguous duration that the proxy has remained outside the hull.
+  - **Constraint**: The 30 Hz artifact MUST preserve these nullable meanings and MUST NOT coerce `null` to `false`.
 - `active_support_side_count`: Number of sides currently in debounced contact (0, 1, or 2).
 - `support_hull_area_cm2`: Total planar area of the frame support hull.
 - `support_patch_area_l_cm2` / `support_patch_area_r_cm2`: Individual plantar area per side.

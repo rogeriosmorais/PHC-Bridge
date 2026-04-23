@@ -43,12 +43,16 @@ This document defines the TDD strategy and testing pyramid for the balance-first
     - **Mass/Inertia**: Detect mass, center of mass, or inertia tensor mutations against the contract baseline.
     - **Geometry**: Detect collision/filter baseline breaches.
 - **Contamination Classifier**:
-    - **Authority Matrix**: Detect unauthorized external writes to policy-driven bodies.
-    - **Material Breaches**: Detect material-state contamination during activation.
+    - **Mesh Assist**: Detect mesh-wide global assist interference.
+    - **Non-Critical Assist**: Detect non-critical-body assist interference.
+    - **World Brace**: Detect excluded-body world bracing events.
+    - **Global/Kinematic**: Detect global blend weight or kinematic mesh-update contamination.
+    - **Result**: Emits exclusively `activation_authority_conflict`.
 
 ### 4.3 Instability and Discontinuity
 - **Target Discontinuity**: Detect pose/velocity jumps between reference frames (`activation_target_discontinuity`).
 - **Instability Thresholds**: Detect peak angular speed or root tilt breaches (`activation_instability_threshold_breach`).
+- **Movement Reclaim**: Verification of CMC interference detection (`activation_movement_reclaim`). *Note: This is an independent reason path and NOT part of contamination classification.*
 
 ## 5. Validator Scope Freeze
 
@@ -57,7 +61,7 @@ The validator scopes are frozen as follows. No validator may decide surfaces out
 - **Continuity Validator**: Decides instance validity, simulate-physics continuity, **pelvis sleep rule**, and **raw-vs-bookkeeping priority**.
 - **Capsule Validator**: Decides collision/overlap mode, **actor freeze**, mesh absolute transform, **CMC inactive**, **tick disabled**, **movement mode**, and **UpdatedComponent null**.
 - **Plant Validator**: Decides topology, **axis alignment**, **segment length**, support geometry, collision/filter baseline, **mass/inertia tolerances**, and mutation checks.
-- **Contamination Classifier**: Decides **authority-matrix conflict surfaces only** (material contamination, external simulation writes).
+- **Contamination Classifier**: Decides **authority-matrix conflict surfaces only**: `mesh_wide_assist`, `non_critical_body_assist`, `excluded_body_world_brace`, and `global_blend_or_kinematic_assist`.
 
 ## 6. Runtime Test Targets
 
