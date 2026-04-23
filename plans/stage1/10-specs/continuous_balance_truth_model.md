@@ -78,11 +78,11 @@ The run fails on `activation_support_failure` if **any** of these support-truth 
 - **Justification**: This is an "Honest Balance Survival" benchmark.
 
 ### Standing Stability Grades
-The implementation must classify the support state into these grades:
-1.  **TwoFootStable**: Both sides maintain persistent contact (> 90% of frame substeps).
-2.  **SingleFootSurvival**: Only one side maintains persistent contact, but the **Support Proxy** remains within that single-foot hull.
-3.  **TransientRecovery**: A side loses contact but regains it within the gap limit.
-4.  **Airborne**: Both sides lose contact for more than the gap limit.
+The support state is classified at the frame level into these four mutually exclusive grades, as defined by the authoritative priority in [engine_execution_contract.md](engine_execution_contract.md):
+1.  **TwoFootStable**
+2.  **SingleFootSurvival**
+3.  **TransientRecovery**
+4.  **Airborne**
 
 ## Pose Fidelity (Reference Mismatch)
 
@@ -94,7 +94,7 @@ The run fails on `activation_pose_reference_mismatch` if:
 ## Instability & Support Churn
 
 The run fails on `activation_instability_threshold_breach` if:
-1.  **Support Churn**: The frequency of contact transitions exceeds the **Support Churn** limit (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+1.  **Support Churn**: The authoritative `support_churn_hz` exceeds the **Support Churn** limit (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 2.  **Justification**: High-frequency contact "popping" or jitter indicates an unstable simulation state that falsifies the truth-set support proof.
 
 ## COM / Support Proxy Definition

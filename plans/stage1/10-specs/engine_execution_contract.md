@@ -122,9 +122,11 @@ The implementation must perform truth adjudication in this exact order:
 ### 6. Substep Persistence (Debounce Rule)
 - State changes accepted only if they persist for **2 consecutive substeps**.
 
-### 7. Churn and Uptime Counting
-- Count each debounced `false<->true` transition as 1 churn event.
-- Increment uptime only on side-support `true` substeps.
+### 7. Churn and Frequency Measurement
+- **Measurement**: Track debounced `false<->true` transitions from **both** support sides combined at substep resolution.
+- **Window**: Use a rolling **1.0-second** window.
+- **Calculation**: `support_churn_hz = transitions_in_last_1_0_sec / 1.0`.
+- **Uptime**: Increment uptime only on side-support `true` substeps.
 
 ### 8. False-Failure Risk
 Area-preserving reduction is mandatory. Collapsing a plantar contact to its "deepest point" is a contract violation because it eliminates the stability margin required for honest swaying.

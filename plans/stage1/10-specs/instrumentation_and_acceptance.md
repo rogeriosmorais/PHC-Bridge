@@ -51,7 +51,8 @@ The implementation must emit a JSON artifact for every attempt, containing:
 
 ### 3. Support Truth
 - `support_state_l` / `support_state_r`: Debounced side-contact status.
-- `support_mode`: Dominant stability grade (`TwoFootStable`, `SingleFootSurvival`, `TransientRecovery`, `Airborne`).
+- `support_mode`: The dominant frame-level stability grade over the 30 Hz sample window.
+  - **Tie-Breaking**: If multiple modes occur equally, the artifact MUST report the most severe mode in this priority: `Airborne` > `TransientRecovery` > `SingleFootSurvival` > `TwoFootStable`.
 - `support_gap_timer_ms`: Current contiguous contact-loss duration (reset to 0.0 on any contact).
 - `proxy_inside_hull`: Boolean result of the point-in-polygon test.
 - `active_support_side_count`: Number of sides currently in debounced contact (0, 1, or 2).
@@ -60,7 +61,8 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `support_hull_points`: World-space coordinates of the active footprint.
 - `com_proxy_pos`: Projected planar centroid of the critical chain.
 - `max_penetration_cm`: Deepest manifold point recorded for the frame.
-- `support_churn_count`: Number of debounced state transitions.
+- `support_churn_count`: Number of debounced state transitions in the current 30 Hz sample window.
+- `support_churn_hz`: Rolling frequency of combined transitions (See [engine_execution_contract.md](engine_execution_contract.md)).
 - `calf_world_contact_l` / `calf_world_contact_r`: Boolean contamination flags.
 - `calf_contact_terminal`: Confirmation that calf contact triggered arbitration.
 
