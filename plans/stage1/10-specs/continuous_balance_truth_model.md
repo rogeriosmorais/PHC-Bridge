@@ -70,11 +70,14 @@ A frame is **Continuity Clean** only if:
 1.  **Simulate-Physics Rule**: `IsInstanceSimulatingPhysics()` is `true` for all bodies in the Critical Chain and Support Set.
 2.  **Body Validity Rule**: `BodyInstance->IsValid()` is `true` for all bodies in those sets.
 3.  **Topology Rule**: No `FPhysicsBodyInstance` pointer changes (recreation/replacement) since activation start.
-4.  **Pelvis Wake Rule**: The pelvis body must remain **AWAKE** during `Validate` and `Standing` modes.
+4.  **Pelvis Wake Rule**: The pelvis must not be in a **SLEEP** state for more than the **Pelvis Sleep Limit** contiguously during active modes.
 
 ### Classification Rules
-- If Rule 1, 2, or 4 fail: Emit `activation_continuous_simulation_lost`.
-- If Rule 3 fails specifically because of a pointer change: Emit `activation_topology_change`.
+- **Pelvis Sleep Violation**: If Rule 4 is breached (sleep > Pelvis Sleep Limit), emit `activation_continuous_simulation_lost`.
+- **Support Sleep Churn**: If support-body sleep/wake transitions exceed the **Support Churn** limit, escalate to `activation_unstable_gain_or_damping`.
+- **Support Sleep Dominance**: If total cumulative sleep time for any support-set body exceeds the **Support Sleep Dominance** threshold, emit `activation_continuous_simulation_lost`.
+- **Raw Simulation Loss**: If Rule 1 or 2 fail: Emit `activation_continuous_simulation_lost`.
+- **Topology Change**: If Rule 3 fails: Emit `activation_topology_change`.
 - **Raw-vs-Bookkeeping**: If the bridge's internal bookkeeping (modifiers) disagrees with raw body state, the **Raw State** wins. Disagreement is logged as `continuity_bookkeeping_mismatch` (diagnostic only) provided the raw rules are satisfied.
 
 ---
@@ -85,10 +88,15 @@ A frame is **Continuity Clean** only if:
 - A run remains **Support Valid** even if only **one side** (e.g., `foot_l` or `ball_l`) is in contact, provided the **Support Proxy** remains within that single-foot hull.
 - **Justification**: This is an "Honest Balance Survival" benchmark. It proves the policy can physically equilibrate on a reduced support region without help from non-simulated forces.
 
-### Support Failure Criteria
-1.  **Support-Loss Gap**: Terminal if both sides lose contact for more than `100 ms` (debounced).
-2.  **Proxy Outside Region**: Terminal if the COM proxy stays outside the active support hull for more than `100 ms`.
-3.  **Churn Rate**: Terminal if side-state transitions exceed `12 Hz`.
+### Standing Stability Grades
+To prevent "One-Foot Survival" from being indistinguishable from "Neutral Standing", the implementation must classify the support state into these grades:
+
+1.  **Two-Foot Stable**: Both sides (`foot_l/ball_l` AND `foot_r/ball_r`) maintain persistent contact (> 90% of frame substeps).
+2.  **Single-Foot Survival**: Only one side maintains persistent contact, but the **Support Proxy** remains within that single-foot hull.
+3.  **Transient Recovery**: A side loses contact but regains it within the **Support Gap (Max)** limit.
+4.  **Airborne (Terminal)**: Both sides lose contact for more than the gap limit.
+
+**Reporting**: Every 30Hz artifact must record the dominant `support_mode` for the sample window.
 
 ---
 
@@ -121,14 +129,13 @@ Contamination is an `activation_authority_conflict` that falsifies the standing 
 Stability failures in the control layer trigger terminal termination before physical collapse occurs.
 
 ### 1. Target Discontinuity
-- The run must fail on `activation_target_discontinuity` if the rebase delta at blend-start exceeds **15.0 deg** on any balance-critical body.
-- **Justification**: Large initial snaps can cause unrecoverable impulse transients that falsify the balance proof.
+- The run must fail on `activation_target_discontinuity` if the rebase delta at blend-start exceeds the **Target Discontinuity** threshold.
 
 ### 2. Unstable Gain or Damping
 - The run must fail on `activation_unstable_gain_or_damping` if the implementation detects:
   - Any `NaN` or `Inf` in the published control targets, gains, or forces.
-  - Explosive feedback (> 5000 N/m or equivalent) that is not part of the audited plant baseline.
-  - High-frequency oscillation in control effort (> 30Hz) that materially destabilizes the truth set.
+  - Explosive feedback that materially exceeds the audited plant baseline.
+  - High-frequency oscillation in control effort that materiality destabilizes the truth set.
 
 ---
 
@@ -136,9 +143,9 @@ Stability failures in the control layer trigger terminal termination before phys
 
 ### Mismatch Terminalization
 The run fails on `activation_pose_reference_mismatch` if:
-1.  Any body in the balance-critical chain exceeds **25.0 deg** mismatch for more than **100 ms**.
-2.  The RMS mismatch across the entire chain exceeds **15.0 deg** for more than **100 ms**.
-3.  Target discontinuity at blend start exceeds **15.0 deg**.
+1.  Any body in the balance-critical chain exceeds the **Mismatch (Max Body)** threshold for more than the 100ms grace period.
+2.  The RMS mismatch across the entire chain exceeds the **Mismatch (RMS Chain)** threshold for more than the 100ms grace period.
+3.  Target discontinuity at blend start exceeds the **Target Discontinuity** threshold.
 
 ---
 

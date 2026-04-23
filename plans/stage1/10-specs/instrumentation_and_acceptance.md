@@ -29,6 +29,7 @@ The implementation must emit a JSON artifact for every attempt, containing:
 
 ### 3. Support Truth
 - `support_state_l` / `support_state_r`: Debounced side-contact status.
+- `support_mode`: Dominant stability grade (`TwoFootStable`, `SingleFootSurvival`, `TransientRecovery`).
 - `support_hull_points`: World-space coordinates of the active footprint.
 - `com_proxy_pos`: Projected planar centroid of the critical chain.
 - `max_penetration_cm`: Deepest manifold point recorded for the frame.
@@ -49,7 +50,7 @@ The implementation must emit a JSON artifact for every attempt, containing:
 
 ## Threshold Basis Table
 
-These are the operational thresholds for the `V0` artifact.
+These are the authoritative operational thresholds for the `V0` artifact and terminal logic.
 
 | Metric | Threshold | Threshold Source / Logic |
 | :--- | :--- | :--- |
@@ -61,6 +62,14 @@ These are the operational thresholds for the `V0` artifact.
 | **Mismatch (RMS Chain)** | `15.0 deg` | Average pose fidelity limit (for 100ms) |
 | **Target Discontinuity** | `15.0 deg` | Max jump at blend start |
 | **Support Churn** | `12.0 Hz` | Jitter/Popping limit |
+| **Pelvis Sleep Limit** | `100.0 ms` | Max contiguous sleep before simulation loss |
+| **Support Sleep Dominance** | `50%` | Max cumulative sleep in validation window |
+| **Mass Tolerance (Total)** | `+/- 2.5%` | Plant fidelity limit against baseline |
+| **Inertia Tolerance** | `+/- 5.0%` | Plant fidelity limit against baseline |
+| **Skeleton Axis Alignment** | `+/- 0.5 deg` | Reference projection fidelity limit |
+| **Segment Length Tolerance** | `+/- 5.0%` | Reference projection fidelity limit |
+| **Capsule Lock Delta** | `0.01 cm` | Max deviation for frozen root |
+| **Hold Duration (Min)** | `3.0 sec` | Acceptance duration for V0 |
 
 ## Must-Fail Gates (Regression Criteria)
 

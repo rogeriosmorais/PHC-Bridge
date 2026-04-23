@@ -44,7 +44,7 @@ During `BalanceActivation_BlendIn`, the bridge asserts authority via a gradual r
 - **Primitive Bundle**: Includes Target Orientation, Target Position, Target Velocity (Angular/Linear), Spring Strength, Damping, Max Torque, and Max Force.
 - **Blend Rule**: All primitives in the bundle must be scaled or interpolated by the same global alpha.
 - **Fixed Parameters**: Control-point offsets, target-space transforms, and parent-dominance settings must remain **fixed** for the whole attempt; they are not alpha-ramped.
-- **Discontinuity Rule**: If the delta between the live pose and the initial rebased target exceeds `15.0 deg`, emit `activation_target_discontinuity`.
+- **Discontinuity Rule**: If the delta between the live pose and the initial rebased target exceeds the **Target Discontinuity** threshold, emit `activation_target_discontinuity`.
 5.  **Movement Integration (Pre-Physics CMC)**
     - `CharacterMovementComponent` regular tick runs.
     - **Inertness Rule**: Must not write to the actor transform, capsule, or truth-set bodies.

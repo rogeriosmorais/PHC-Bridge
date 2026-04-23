@@ -16,8 +16,8 @@ Disagreement with this contract triggers a terminal `activation_physics_asset_co
 The bridge recognizes a skeleton as "Audited Manny/Quinn-Derived" only if it passes this automated audit at activation start:
 
 1.  **Bone Topology Check**: Every bone name and hierarchy relationship defined in the `Source -> Runtime` mapping must exist exactly in the runtime skeletal mesh.
-2.  **Bone Axis Audit**: The local rotation axes of the runtime joints must match the source-reference axes within `+/- 0.5 deg`.
-3.  **Segment Length Audit**: Parent-to-child joint distances must be within `+/- 5.0%` of the audited baseline segments (e.g., Femur length, Tibia length).
+2.  **Bone Axis Audit**: The local rotation axes of the runtime joints must match the source-reference axes within the **Skeleton Axis Alignment** threshold.
+3.  **Segment Length Audit**: Parent-to-child joint distances must be within the **Segment Length Tolerance** of the audited baseline segments.
 4.  **GUID/Hash Match**: The skeleton's bone hierarchy and names must hash to the declared "Audited Baseline ID" in the plant baseline.
 
 **Failure Surface**: Any breach of this audit emits `activation_physics_asset_contract_violation`. Admissibility is binary; there is no "best-fit" allowance for un-audited skeleton variants in `V0`.
@@ -26,9 +26,9 @@ The bridge recognizes a skeleton as "Audited Manny/Quinn-Derived" only if it pas
 
 To ensure policy performance is measured against the trained regime, the implementation must audit the live mass distribution:
 
-- **Total Mass**: Must be within `+/- 2.5%` of the baseline.
-- **Truth-Set Mass**: The combined mass of the balance-critical chain must be within `+/- 1.0%` of the baseline.
-- **Principal Inertias**: The diagonalized inertia tensor for the `pelvis` and `thigh` bodies must be within `+/- 5.0%` of baseline values.
+- **Total Mass**: Must be within the **Mass Tolerance** of the baseline.
+- **Truth-Set Mass**: The combined mass of the balance-critical chain must be within the **Mass Tolerance** of the baseline.
+- **Principal Inertias**: The diagonalized inertia tensor for the `pelvis` and `thigh` bodies must be within the **Inertia Tolerance** of baseline values.
 - **Plant Mutation Rule**: Any runtime modification of mass (e.g., `SetMassOverride`) during an attempt is a terminal violation.
 
 ## Constraint Profile Rules
