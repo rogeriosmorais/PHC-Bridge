@@ -51,8 +51,10 @@ The implementation must emit a JSON artifact for every attempt, containing:
 
 ### 3. Support Truth
 - `support_state_l` / `support_state_r`: Debounced side-contact status.
-- `support_mode`: The dominant frame-level stability grade over the 30 Hz sample window.
-  - **Tie-Breaking**: If multiple modes occur equally, the artifact MUST report the most severe mode in this priority: `Airborne` > `TransientRecovery` > `SingleFootSurvival` > `TwoFootStable`.
+- `support_mode`: The authoritative frame-level stability grade reduced to 30 Hz.
+  - **Reduction Rule**: Accumulate the duration of every frame-level `support_mode` whose timestamp falls within the 30 Hz sample window. The mode with the **greatest accumulated duration** is emitted.
+  - **Tie-Breaking**: If multiple modes share the same maximum duration, break the tie by severity: `Airborne` > `TransientRecovery` > `SingleFootSurvival` > `TwoFootStable`.
+  - **Auditability**: Artifact `support_mode` MUST be directly derivable from frame-level classifications, window boundaries, and the fixed tie-break order.
 - `support_gap_timer_ms`: Current contiguous contact-loss duration (reset to 0.0 on any contact).
 - `proxy_inside_hull`: Boolean result of the point-in-polygon test.
 - `active_support_side_count`: Number of sides currently in debounced contact (0, 1, or 2).
