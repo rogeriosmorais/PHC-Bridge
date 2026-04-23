@@ -149,6 +149,7 @@ Required leaf-level `terminal_reason` values for `V0`:
 - `activation_authority_conflict`
 - `activation_movement_reclaim`
 - `activation_shell_helper_violation`
+- `activation_capsule_contract_violation`
 - `activation_instability_threshold_breach`
 - `activation_standing_validation_timeout`
 

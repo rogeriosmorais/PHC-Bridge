@@ -144,76 +144,16 @@ Interpretation rules:
 - if root tilt is acceptable, the support proxy is acceptable, and contact fails, the run fails on support truth
 - sustained hold duration counts only while higher-precedence truth sources remain valid; time alone never rescues an invalid support or continuity state
 
-## Terminal Reason Arbitration
+### Terminal Reason Arbitration
 
-When multiple failure conditions are simultaneously active, exactly one leaf-level `terminal_reason` must be emitted.
+All terminal reason arbitration, rank-ordered precedence, and simultaneous-failure tie-break rules are defined in the authoritative:
 
-### Master Terminal Reason Precedence Table
+- [engine_execution_contract.md](engine_execution_contract.md)
 
-Use this table to decide the "winning" `terminal_reason` when multiple conditions are observed in the same or co-occurring truth-evaluation windows. **Rank 1 is the highest precedence.**
+Interpretation:
 
-| Rank | Reason Class | Leaf-level `terminal_reason` | Arbitration Logic |
-| :--- | :--- | :--- | :--- |
-| **1** | **Plant Contract** | `activation_physics_asset_contract_violation` | Always wins; pre-empts all other classes. |
-| **2** | **Raw Continuity** | `activation_topology_change` | Wins over `simulation_lost` if both occur. |
-| **3** | **Raw Continuity** | `activation_continuous_simulation_lost` | Wins over support/controller classes. |
-| **4** | **Support Truth** | `activation_support_failure` | Wins over `proxy_outside_region`. |
-| **5** | **Support Truth** | `activation_proxy_outside_support_region` | Wins over controller stability classes. |
-| **6** | **Controller Stability** | `activation_target_discontinuity` | Wins over gain/damping instability. |
-| **7** | **Controller Stability** | `activation_unstable_gain_or_damping` | Wins over threshold breaches. |
-| **8** | **Controller Stability** | `activation_instability_threshold_breach` | Wins over pose mismatch. |
-| **9** | **Pose/Reference** | `activation_pose_reference_mismatch` | Wins over authority conflict. |
-| **10** | **Authority/Ownership** | `activation_movement_reclaim` | Wins over generic authority conflict. |
-| **11** | **Authority/Ownership** | `activation_shell_helper_violation` | Wins over generic authority conflict. |
-| **12** | **Authority/Ownership** | `activation_authority_conflict` | Wins only over timeout. |
-| **13** | **Time/Duration** | `activation_standing_validation_timeout` | Only emitted if no physical failure occurred. |
-
-### Arbitration Rules
-
-Use the following rules to apply the precedence table.
-
-### Rule 1 — Plant contract violation pre-empts all other classification
-
-If the active physics asset violates the `V0` plant contract, emit `activation_physics_asset_contract_violation` and stop.
-No controller-class or support-class reason may be emitted instead.
-
-### Rule 2 — Raw continuity vs modifier/bookkeeping disagreement
-
-| Observable state | Classification |
-| :--- | :--- |
-| Modifier record disagrees with raw body state; raw `IsInstanceSimulatingPhysics` remains `true`; body instance is valid and in the expected truth set | `Diagnostic mismatch` only — log `continuity_bookkeeping_mismatch`; do not emit a terminal reason on this alone |
-| Raw `IsInstanceSimulatingPhysics` is `false` or body instance is invalid; no explicit truth-set membership change | `activation_continuous_simulation_lost` |
-| Truth-set membership has changed explicitly: a body has been added to or removed from the declared truth set, or a body instance has been recreated or replaced | `activation_topology_change` — takes precedence over `activation_continuous_simulation_lost` per Rank 2. |
-
-"Explicitly" means: a body-instance pointer changed, a body was destroyed and rebuilt, or the runtime truth-set registry no longer contains a previously-registered body.
-
-### Rule 3 — Pose/reference mismatch escalation
-
-| Observable state | Classification |
-| :--- | :--- |
-| Per-body mismatch is below `25.0 deg` AND RMS is below `15.0 deg` | `Diagnostic mismatch` — log `reference_mismatch_*` fields; do not emit a terminal reason |
-| Per-body mismatch exceeds `25.0 deg` on any balance-critical-chain body for longer than `100 ms`, OR RMS exceeds `15.0 deg` for longer than `100 ms` | `activation_pose_reference_mismatch` — terminal |
-| The pose mismatch is caused by a prior authority conflict or topology change that already fired | Emit the higher-ranked reason; log reference mismatch as secondary context only |
-
-### Rule 4 — Authority conflict vs support failure co-occurrence
-
-Authority conflict is the emitted leaf reason only when it is the proximate cause of the terminal condition and rank-precedes the support failure.
-
-| Co-occurrence scenario | Emitted reason |
-| :--- | :--- |
-| Support failure preceded or coincided with authority conflict; no evidence that the conflict caused the loss | `activation_support_failure` (Rank 4) — emit; log authority conflict events as secondary context |
-| Authority conflict is the clear proximate cause: movement reclaim or competing locomotion write is observed first, and support failure follows within the same or next frame | `activation_authority_conflict` (Rank 12) or `activation_movement_reclaim` (Rank 10) only if the physical failure has not yet been logged in the substep stream. If a higher-ranked physical failure co-occurs, the physical failure wins. |
-
-### Rule 5 — General tie-break when two terminal reasons fire simultaneously
-
-When two terminal conditions are observed in the same truth-evaluation window:
-
-1.  Consult the **Master Terminal Reason Precedence Table**.
-2.  Emit the reason with the **highest Rank (lowest number)**.
-3.  If two reasons have equal Rank or are in the same family, emit the one whose triggering condition was first observed in the substep-level truth stream.
-4.  Record all co-occurring reasons in the secondary `co_terminal_reasons` array in the run artifact.
-
-This ensures that different implementations follow the same deterministic path when arbitrating multiple simultaneous failures.
+- the rank-ordered precedence table in the contract is the final source for the "winning" `terminal_reason`
+- all co-occurring reasons must be recorded in the `co_terminal_reasons` field per the contract rule
 
 ## Secondary Diagnostics
 
@@ -290,13 +230,7 @@ Interpretation:
 - the `30 Hz` artifact stream is a reporting/downsample layer only
 - short support losses, churn events, and continuity violations must be detected from substep-level truth before they are summarized into frame or artifact outputs
 
-Contact persistence is measured from:
-
-- active contact state on `foot_*` and `ball_*`
-- support uptime across the validation window
-- support-loss event count
-
-Active-contact semantics:
+Contact-measurement rules:
 
 - source of truth: Chaos contact manifolds for the support-set rigid bodies
 - active contact means one or more accepted body contacts between `foot_*` or `ball_*` and walkable world support at substep truth cadence
@@ -304,30 +238,39 @@ Active-contact semantics:
 - side support state is `true` when `foot_* OR ball_*` is in active contact on that side
 - minimum support-contact count is the count of support sides currently in active contact, not the raw manifold count
 
-## One-Foot Support Policy
+## One-Foot Support Policy: Survival vs. Idle Standing
 
-`V0` explicitly allows one-foot support (`support_contact_count == 1`) to be admissible as a successful standing state.
+`V0` explicitly allows one-foot support (`support_contact_count == 1`) to be admissible as a successful state. This is a deliberate design choice to validate **Honest Balance Survival** rather than only a narrow definition of "Idle Standing."
 
-### Justification
+### Benchmark Definition
 
-- **Physical Honesty**: A physical humanoid should be capable of one-foot stability. Allowing it forces the controller to prove it can balance the COM over a reduced support hull without hidden assistance.
-- **Transient Robustness**: Real standing involves minor weight-shifts and transient "foot-popping." Requiring two-foot contact at all times would produce brittle results that fail on non-material physics noise.
+For `V0`, the distinction is:
+- **Honest Idle Standing**: Maintaining two-foot contact with minimal COM oscillation (Quality Target).
+- **Honest Balance Survival**: Maintaining equilibrium over a reduced support hull (one foot) without hidden assistance (Technical Gate).
+
+**`V0` is primarily a validation of Honest Balance Survival.** 
+
+### Justification for the Survival Benchmark
+
+- **Higher Physical Rigor**: Balancing a physical humanoid over one foot is significantly harder than two. If the controller can survive on one foot without capsule/helper contamination, the "honesty" of the bridge is proven more strongly.
+- **Motion Continuity**: A character that can transiently survive on one foot is capable of weight-shifting and recovery. A character that requires two feet is brittle and non-physical.
+- **Truth over Stance**: "Standing" is a stance policy; "Equilibrium" is a physical truth. `V0` prioritizes the proof of physical equilibrium.
 
 ### Constraints and Honest-Truth Rules
 
-One-foot standing is only admissible if it satisfies the full "honest standing" contract:
+One-foot standing is only admissible if it satisfies the full "honest survival" contract:
 
 1.  **Reduced Support Hull**: When only one foot is in contact, the "support region" for the proxy check is reduced to the boundary of that single foot's contact manifold.
 2.  **Proxy Convergence**: The planar support proxy (COM projection) must remain inside that reduced hull. If the proxy drifts outside the single foot's support area for more than `100 ms`, the run fails on `activation_proxy_outside_support_region`.
 3.  **Stability Thresholds**: The character must still satisfy the `20 deg` root-tilt and `720 deg/s` angular speed envelopes. "Surviving" on one foot while flailing or tilting excessively is terminal.
 4.  **Churn Penalty**: Rapidly alternating between one-foot and zero-foot or one-foot and two-foot support will trigger the `12 Hz` churn threshold.
 
-### Interpretation for V0
+### Interpretation for V0 Artifacts
 
-For `V0`, one-foot standing is allowed for the entire duration of the hold if it remains stable. However, successful artifacts will be audited to distinguish between "two-foot stable" and "one-foot survival" regimes.
+Successful `V0` artifacts will be audited to distinguish between these classes. A run that survives for 30 seconds on one foot is a **Technical Pass (Survival)**, but it may be flagged for further tuning if the goal of that specific test was **Idle Standing**.
 
 Weak assumption rejected:
-- "Standing is only valid when both feet are firmly planted."
+- "The bridge only needs to prove it can stand with both feet planted." (This masks solver and authority issues that one-foot survival exposes).
 
 ## Walkable-support contract for `V0`
 
@@ -337,21 +280,11 @@ Weak assumption rejected:
 - contacts with dynamic bodies may be logged, but they are diagnostic-only and may not contribute to support truth
 - self-contacts and body-on-body contacts within the same character must be excluded explicitly
 
-Contact churn semantics:
+Contact Churn and Substep Reduction Rule:
 
-- Chaos contacts are evaluated at physics-substep resolution and debounced before the `30 Hz` sample reduction
-- a side-support state change is accepted only when the new state persists for `2` consecutive Chaos substeps
-- churn is counted from those debounced side-support state changes at substep truth cadence and then summarized for reporting
-- each false->true or true->false transition for left or right support contributes one churn event
-- the reported churn rate is the total churn events divided by elapsed validation time in seconds
+The algorithm for substep-level debounce, churn counting, and frame-reduction is defined in the authoritative:
 
-Substep reduction rule:
-
-- support-loss timing uses the debounced substep-level support state, not only the `30 Hz` sampled boolean
-- continuity loss, support failure, and timer advancement are decided from substep-level truth, not from the `30 Hz` artifact stream
-- `samples[].support_contact_active` and `samples[].support_contact_count` publish the debounced side-support state at the frame's truth-sensitive sample point
-- transient single-substep contact appearance or disappearance that does not survive the debounce rule is treated as substep noise, not as truth-state churn
-- longer substep gaps still accumulate toward `support_loss_gap_max_ms` even though the artifact is only emitted at `30 Hz`
+- [engine_execution_contract.md](engine_execution_contract.md)
 
 Support truth is invalid if:
 

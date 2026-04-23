@@ -124,55 +124,68 @@ Bundled labels such as controller-strength-or-representation failure or generic 
 
 The implementation must validate the active physical plant before `BalanceActivation_Ready`.
 
-### Baseline Definition
+### Baseline Definition: The Structural Fingerprint
 
 For `V0`, the authoritative physical-plant baseline is defined in:
 - `/Config/PhysAnim/V0_Plant_Baseline.json`
 
-This JSON file contains the audited mass, inertia, asset GUIDs, and collision-disable tables. The implementation must load this file at startup and use it as the comparison source for all activation attempts.
+This file is a **Structural Fingerprint** that formally defines the expected physical tree. It must include:
+- **Asset GUIDs**: Unique identifiers for the `USkeletalMesh` and `UPhysicsAsset`.
+- **Inertial Fingerprint**: Per-body mass and principal inertia components (Ixx, Iyy, Izz) and their local offsets.
+- **Topological Fingerprint**: The exact parent-child connectivity of all simulating bodies.
+- **Constraint Fingerprint**: Active constraint profile names and the rotation/translation limits for all joints in the balance-critical chain.
+- **Collision Fingerprint**: The exact collision-disable adjacency table for the mesh.
 
 ### Runtime Validation Rules
 
-| Property | Check Type | V0 Tolerance | Failure Action |
-| :--- | :--- | :--- | :--- |
-| **Asset Identity** | Live GUID/Name check | Exact match | `activation_physics_asset_contract_violation` |
-| **Total Mass** | Live summation of raw bodies | `+/- 5%` | `activation_physics_asset_contract_violation` |
-| **Family Mass** | Live summation (Critical/Support) | `+/- 10%` | `activation_physics_asset_contract_violation` |
-| **Principal Inertia** | Live read from raw bodies | `+/- 15%` | `activation_physics_asset_contract_violation` |
-| **Constraint Profile** | Live name check on all joints | Exact match | `activation_physics_asset_contract_violation` |
-| **Collision Disable** | Live check of adjacency table | No extra enabled | `activation_physics_asset_contract_violation` |
-| **Support Geometry** | Binary Audit (Pass/Fail) | Exact match | `activation_physics_asset_contract_violation` |
+| Property | Check Type | **Check Cadence** | V0 Tolerance | Failure Action |
+| :--- | :--- | :--- | :--- | :--- |
+| **Asset Identity** | Live GUID check | **Continuous (Every Frame)** | Exact match | `activation_physics_asset_contract_violation` |
+| **Topological Match**| Instance pointer audit | **Continuous (Every Frame)** | No pointer changes | `activation_topology_change` |
+| **Total Mass** | Live raw summation | At `Ready` & `Blend Start` | `+/- 5%` | `activation_physics_asset_contract_violation` |
+| **Family Mass** | Live raw summation | At `Ready` & `Blend Start` | `+/- 10%` | `activation_physics_asset_contract_violation` |
+| **Principal Inertia**| Live raw read | At `Ready` & `Blend Start` | `+/- 15%` | `activation_physics_asset_contract_violation` |
+| **Constraint Profile**| Live profile name | **Continuous (Every Frame)** | Exact match | `activation_physics_asset_contract_violation` |
+| **Collision Disable**| Live adjacency check | **Continuous (Every Frame)** | Exact match | `activation_physics_asset_contract_violation` |
+| **Support Geometry** | Binary Audit | At `Ready` & `Blend Start` | Exact match | `activation_physics_asset_contract_violation` |
 
 ### Interpretation Rules
 
 - **Live vs Trusted**: Mass and inertia must be computed from the live `FPhysicsBodyInstance` states, not from authored config, to catch runtime overrides or scaling errors. Asset identities and physical materials are trusted once the GUID match is verified.
-- **Binary Support Audit**: The support-geometry audit is **binary**. A body in the support set (`foot_*`, `ball_*`) passes only if its collision shape and dimensions exactly match the audited baseline (e.g., specific box dimensions). Graded or "close enough" geometry is not admissible in `V0`.
-- **Mutation Block**: If a `PhysicsAsset` is swapped, a `MassOverride` is applied, or a `ConstraintProfile` is changed while in any `BalanceActivation` or `BalanceActive` state, the run must fail immediately.
-- **Reporting**: The run artifact must record the `physics_asset_baseline_id` used for the check and any field that triggered a violation.
+- **Continuous Check Point**: "Continuous" checks must be performed in the **Bridge Update (TG_PrePhysics)** step of every frame.
+- **Binary Support Audit**: The support-geometry audit is **binary**. A body in the support set passes only if its collision shape and dimensions exactly match the fingerprint.
+- **Mutation Block**: If any field marked as `Continuous` changes while in any `BalanceActivation` or `BalanceActive` state, the run must fail immediately.
+- **Reporting**: The run artifact must record the `physics_asset_baseline_id` and the specific field that triggered a violation.
+
+Weak assumption rejected:
+- "The plant only needs to be checked once at spawn time." (Runtime overrides or scaling events can falsify the balance proof after the character has spawned).
 
 Weak assumption rejected:
 - "If the asset name matches, the physical mass and inertia are correct by default."
 
+## Required Skeleton Mapping Admissibility Contract
+
+The implementation must validate that the runtime skeleton is compatible with the authored standing-reference asset before reaching `BalanceActivation_Ready`.
+
+### Skeleton Audit Baseline
+
+The bridge recognizes a skeleton as "Audited Manny/Quinn-Derived" only if it passes this automated audit:
+
+1.  **Bone Topology Check**: Every bone name and hierarchy relationship defined in the `Source -> Runtime` mapping must exist exactly in the runtime skeletal mesh.
+2.  **Bone Axis Audit**: The local rotation axes of the runtime joints must match the source-reference axes within `+/- 0.5 deg`.
+3.  **Segment Length Audit**: The distance between parent and child joints in the runtime skeleton must be within `+/- 5.0%` of the audited Manny/Quinn segments (e.g., Femur length, Tibia length).
+4.  **GUID/Hash Match**: The skeleton's bone hierarchy and names must hash to a value that matches the declared "Audited Baseline ID" in the `V0_Plant_Baseline.json`.
+
+### Operational Rules
+
+- **Admissibility Point**: This audit must be performed at **Activation Start**. If it fails, the bridge must never enter `BalanceActivation_Ready`.
+- **Failure Surface**: A mapping failure must emit `activation_physics_asset_contract_violation` with a secondary diagnostic field `skeleton_mapping_error_details` explaining the specific axis or length breach.
+- **Variant Policy**: Any variant (e.g., a "buff" or "skinny" Manny) is only admissible if it stays within the `5%` segment-length and `0.5 deg` axis-alignment tolerances. If a variant exceeds these, it requires a dedicated, newly-audited standing-reference asset and a new baseline entry.
+
+Weak assumption rejected:
+- "If the skeleton uses the same bone names as Manny, the reference pose will project correctly." (Small axis differences in the skeleton can lead to significant physical instability when the reference is projected into control space).
+
 ## Required Continuity Snapshot
-
-Balance activation must use a dedicated authoritative post-update snapshot for truth-sensitive decisions.
-
-That snapshot must at minimum be able to report:
-
-- raw body-instance validity for every body in the active truth sets
-- raw simulation state for the balance-critical chain
-- raw simulation state for the support set
-- truth-set membership intact/not-intact state
-- truth-set body recreation or replacement events
-- raw awake/sleep state for the pelvis and support-set bodies
-- bookkeeping-versus-raw continuity disagreement state
-- mesh-level physics blend and update flags that could change how the skeletal mesh follows simulated or kinematic bodies
-- worst-body linear and angular stability metrics
-- controller-authority alpha / blend progress
-- shell offset and velocity deltas
-- shell influence materiality
-- locomotion or reset authority contamination
-- standing-validation accumulated hold time
 
 ## Required Mesh-Wide Side-Effect Rule
 
@@ -229,16 +242,20 @@ Interpretation rules:
 
 ## Required Capsule Contract Implementation
 
-The character capsule (`UCapsuleComponent`) must be explicitly managed by `UPhysAnimComponent` during activation to prevent hidden physical assistance.
+The character capsule (`UCapsuleComponent`) must be explicitly managed by `UPhysAnimComponent` during activation to ensure the standing proof is physically honest and non-contaminated by engine-side character logic.
 
 For `V0`, the implementation must:
 
-- **Disable Collision**: On activation entry, set the capsule's collision enabled state to `NoCollision` or move it to a dedicated non-colliding object channel. It must not generate `WorldStatic` or `WorldDynamic` contacts.
-- **Disable Gravity**: Ensure `EnableGravity` is set to `false` for the capsule component.
-- **Freeze Transform**: The capsule world-space transform must be set to the rebase origin/yaw captured at blend start and held constant. The implementation must not use `SetActorLocation` or similar calls to "pull" the capsule toward the simulating pelvis during the attempt.
-- **Root Independence**: The skeletal mesh's root body must be simulating and its world-space motion must be determined by the physics solver and Physics Control, not by kinematic attachment to the frozen capsule.
+- **Root Component Role**: The capsule remains the **Root Component** and the **UpdatedComponent** for the actor to maintain engine compatibility, but it is treated as **authoritative but frozen**.
+- **Disable Collision**: On activation entry, set the capsule's collision enabled state to `NoCollision`. It must not generate `WorldStatic` or `WorldDynamic` contacts. Any collision response against the character's own simulating bodies must also be disabled.
+- **Disable Gravity**: `EnableGravity` must be set to `false` for the capsule component.
+- **Freeze Transform**: The capsule world-space transform must be locked to the rebase origin/yaw captured at blend start. The implementation must not call `SetActorLocation`, `AddMovementInput`, or similar transform-modifying functions during the attempt.
+- **Root Independence**: The skeletal mesh's root body must be simulating (`FPhysicsBodyInstance::SetInstanceSimulatePhysics(true)`). Its motion must be determined purely by the physics solver and Physics Control, not by kinematic attachment to the frozen capsule.
 
-If any other system (e.g., CharacterMovement) attempts to re-enable capsule collision or move the capsule during the attempt, it must be reported as a capsule contract violation and fail the run.
+If any other system (e.g., CharacterMovement, Animation Blueprint, or Sequencer) attempts to re-enable capsule collision, apply velocity to the capsule, or move the capsule transform during the attempt, it must be reported as an `activation_capsule_contract_violation` and the run must terminate immediately.
+
+Weak assumption rejected:
+- "The capsule can shadow-follow the pelvis as long as it doesn't collide." (Shadowing still risks injecting forces via the mesh attachment or character-movement logic).
 
 ## Required Ownership Rule
 
