@@ -39,6 +39,14 @@ public:
 		bool bSafeDenied);
 	static void FinalizeReportData(FPhase1AutoCalibReport& InOutReport, TArray<FPhase1AutoCalibTrialResult>* StageCTrials = nullptr);
 #if WITH_DEV_AUTOMATION_TESTS
+	static void TestOnlyResetActiveTrialTrackingState(
+		double& InOutActiveTrialStartTimeSeconds,
+		double& InOutActiveTrialFirstRootOnTimeSeconds,
+		double& InOutActiveTrialFirstNoCouplingProofTimeSeconds,
+		double& InOutActiveTrialFirstBalanceActiveStandingTimeSeconds,
+		double& InOutActiveTrialStandingHoldStartTimeSeconds,
+		double& InOutActiveTrialMaxBalanceActiveStandingHoldSeconds,
+		FPhase1AutoCalibLiveMetrics& InOutActiveTrialPeakMetrics);
 	static bool TestOnlyWriteArtifacts(FPhase1AutoCalibReport& InOutReport);
 #endif
 
@@ -68,6 +76,7 @@ private:
 	void TickActiveTrial();
 	void FinalizeActiveTrial(bool bTimedOut);
 	void AdvanceStageOrFinish();
+	void ResetActiveTrialTrackingState();
 	void UpdatePeakMetrics(const FPhase1AutoCalibLiveMetrics& Metrics);
 	FPhase1AutoCalibTrialResult BuildTrialResult(bool bTimedOut) const;
 	void FinalizeReport();

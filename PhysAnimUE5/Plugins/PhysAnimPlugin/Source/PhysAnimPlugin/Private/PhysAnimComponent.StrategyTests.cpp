@@ -2029,6 +2029,53 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibResetClearsStandingHoldStateTest,
+		"PhysAnim.Component.Phase1AutoCalibResetClearsStandingHoldState",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibResetClearsStandingHoldStateTest::RunTest(const FString& Parameters)
+	{
+		double ActiveTrialStartTimeSeconds = 12.0;
+		double ActiveTrialFirstRootOnTimeSeconds = 12.5;
+		double ActiveTrialFirstNoCouplingProofTimeSeconds = 12.75;
+		double ActiveTrialFirstBalanceActiveStandingTimeSeconds = 13.0;
+		double ActiveTrialStandingHoldStartTimeSeconds = 13.25;
+		double ActiveTrialMaxBalanceActiveStandingHoldSeconds = static_cast<double>(PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds);
+		FPhase1AutoCalibLiveMetrics ActiveTrialPeakMetrics;
+		ActiveTrialPeakMetrics.RuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
+		ActiveTrialPeakMetrics.TransitionPhase = EBalanceReadyTransitionPhase::BRT_Succeeded;
+		ActiveTrialPeakMetrics.RootLinearSpeedCmPerSecond = 123.0f;
+
+		UPhysAnimPhase1AutoCalibSubsystem::TestOnlyResetActiveTrialTrackingState(
+			ActiveTrialStartTimeSeconds,
+			ActiveTrialFirstRootOnTimeSeconds,
+			ActiveTrialFirstNoCouplingProofTimeSeconds,
+			ActiveTrialFirstBalanceActiveStandingTimeSeconds,
+			ActiveTrialStandingHoldStartTimeSeconds,
+			ActiveTrialMaxBalanceActiveStandingHoldSeconds,
+			ActiveTrialPeakMetrics);
+
+		TestEqual(TEXT("Reset clears active trial start time"), ActiveTrialStartTimeSeconds, -1.0);
+		TestEqual(TEXT("Reset clears first RootOn time"), ActiveTrialFirstRootOnTimeSeconds, -1.0);
+		TestEqual(TEXT("Reset clears first no-coupling-proof time"), ActiveTrialFirstNoCouplingProofTimeSeconds, -1.0);
+		TestEqual(TEXT("Reset clears first standing time"), ActiveTrialFirstBalanceActiveStandingTimeSeconds, -1.0);
+		TestEqual(TEXT("Reset clears standing hold start time"), ActiveTrialStandingHoldStartTimeSeconds, -1.0);
+		TestEqual(TEXT("Reset clears standing hold benchmark progress"), ActiveTrialMaxBalanceActiveStandingHoldSeconds, 0.0);
+		TestEqual(TEXT("Reset clears accumulated peak runtime state"), ActiveTrialPeakMetrics.RuntimeState, EPhysAnimRuntimeState::Uninitialized);
+		TestEqual(TEXT("Reset clears accumulated peak transition phase"), ActiveTrialPeakMetrics.TransitionPhase, EBalanceReadyTransitionPhase::BRT_Inactive);
+		TestEqual(TEXT("Reset clears accumulated peak linear speed"), ActiveTrialPeakMetrics.RootLinearSpeedCmPerSecond, 0.0f);
+		TestFalse(
+			TEXT("A reset trial cannot immediately finalize as a standing-hold success"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Succeeded,
+				ActiveTrialMaxBalanceActiveStandingHoldSeconds,
+				false,
+				false));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibActionHistorySnapshotRoundTripTest,
 		"PhysAnim.Component.Phase1AutoCalibActionHistorySnapshotRoundTrip",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

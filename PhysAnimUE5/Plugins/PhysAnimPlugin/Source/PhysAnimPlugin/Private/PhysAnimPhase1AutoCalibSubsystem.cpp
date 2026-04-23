@@ -80,6 +80,24 @@ namespace
 		return OwnerNameLower.Contains(FilterLower) || PathNameLower.Contains(FilterLower);
 	}
 
+	void ResetActiveTrialTrackingState(
+		double& InOutActiveTrialStartTimeSeconds,
+		double& InOutActiveTrialFirstRootOnTimeSeconds,
+		double& InOutActiveTrialFirstNoCouplingProofTimeSeconds,
+		double& InOutActiveTrialFirstBalanceActiveStandingTimeSeconds,
+		double& InOutActiveTrialStandingHoldStartTimeSeconds,
+		double& InOutActiveTrialMaxBalanceActiveStandingHoldSeconds,
+		FPhase1AutoCalibLiveMetrics& InOutActiveTrialPeakMetrics)
+	{
+		InOutActiveTrialStartTimeSeconds = -1.0;
+		InOutActiveTrialFirstRootOnTimeSeconds = -1.0;
+		InOutActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
+		InOutActiveTrialFirstBalanceActiveStandingTimeSeconds = -1.0;
+		InOutActiveTrialStandingHoldStartTimeSeconds = -1.0;
+		InOutActiveTrialMaxBalanceActiveStandingHoldSeconds = 0.0;
+		InOutActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
+	}
+
 	float SampleStratifiedValue(const float MinValue, const float MaxValue, const int32 StratumIndex, const int32 NumStrata, FRandomStream& RandomStream)
 	{
 		const float FractionMin = static_cast<float>(StratumIndex) / static_cast<float>(NumStrata);
@@ -703,13 +721,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reaso
 	TargetComponent.Reset();
 	PendingTrials.Reset();
 	ActiveTrial = FPendingTrial();
-	ActiveTrialStartTimeSeconds = -1.0;
-	ActiveTrialFirstRootOnTimeSeconds = -1.0;
-	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
-	ActiveTrialFirstBalanceActiveStandingTimeSeconds = -1.0;
-	ActiveTrialStandingHoldStartTimeSeconds = -1.0;
-	ActiveTrialMaxBalanceActiveStandingHoldSeconds = 0.0;
-	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
+	ResetActiveTrialTrackingState();
 }
 
 void UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates)
@@ -1187,13 +1199,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::BeginNextTrial()
 	}
 
 	Component->ApplyPhase1AutoCalibParams(ActiveTrial.Params);
-	ActiveTrialStartTimeSeconds = -1.0;
-	ActiveTrialFirstRootOnTimeSeconds = -1.0;
-	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
-	ActiveTrialFirstBalanceActiveStandingTimeSeconds = -1.0;
-	ActiveTrialStandingHoldStartTimeSeconds = -1.0;
-	ActiveTrialMaxBalanceActiveStandingHoldSeconds = 0.0;
-	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
+	ResetActiveTrialTrackingState();
 	bActiveTrialStarted = false;
 	bTrialActive = true;
 	return true;
@@ -1378,13 +1384,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeActiveTrial(bool bTimedOut)
 	bTrialActive = false;
 	bActiveTrialStarted = false;
 	ActiveTrial = FPendingTrial();
-	ActiveTrialStartTimeSeconds = -1.0;
-	ActiveTrialFirstRootOnTimeSeconds = -1.0;
-	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
-	ActiveTrialFirstBalanceActiveStandingTimeSeconds = -1.0;
-	ActiveTrialStandingHoldStartTimeSeconds = -1.0;
-	ActiveTrialMaxBalanceActiveStandingHoldSeconds = 0.0;
-	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
+	ResetActiveTrialTrackingState();
 
 	if (!LastError.IsEmpty())
 	{
@@ -1450,6 +1450,18 @@ void UPhysAnimPhase1AutoCalibSubsystem::AdvanceStageOrFinish()
 		FinalizeReport();
 		StopPhase1AutoCalib(TEXT("completed"));
 	}
+}
+
+void UPhysAnimPhase1AutoCalibSubsystem::ResetActiveTrialTrackingState()
+{
+	::ResetActiveTrialTrackingState(
+		ActiveTrialStartTimeSeconds,
+		ActiveTrialFirstRootOnTimeSeconds,
+		ActiveTrialFirstNoCouplingProofTimeSeconds,
+		ActiveTrialFirstBalanceActiveStandingTimeSeconds,
+		ActiveTrialStandingHoldStartTimeSeconds,
+		ActiveTrialMaxBalanceActiveStandingHoldSeconds,
+		ActiveTrialPeakMetrics);
 }
 
 void UPhysAnimPhase1AutoCalibSubsystem::UpdatePeakMetrics(const FPhase1AutoCalibLiveMetrics& Metrics)
@@ -1911,6 +1923,25 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReport()
 }
 
 #if WITH_DEV_AUTOMATION_TESTS
+void UPhysAnimPhase1AutoCalibSubsystem::TestOnlyResetActiveTrialTrackingState(
+	double& InOutActiveTrialStartTimeSeconds,
+	double& InOutActiveTrialFirstRootOnTimeSeconds,
+	double& InOutActiveTrialFirstNoCouplingProofTimeSeconds,
+	double& InOutActiveTrialFirstBalanceActiveStandingTimeSeconds,
+	double& InOutActiveTrialStandingHoldStartTimeSeconds,
+	double& InOutActiveTrialMaxBalanceActiveStandingHoldSeconds,
+	FPhase1AutoCalibLiveMetrics& InOutActiveTrialPeakMetrics)
+{
+	::ResetActiveTrialTrackingState(
+		InOutActiveTrialStartTimeSeconds,
+		InOutActiveTrialFirstRootOnTimeSeconds,
+		InOutActiveTrialFirstNoCouplingProofTimeSeconds,
+		InOutActiveTrialFirstBalanceActiveStandingTimeSeconds,
+		InOutActiveTrialStandingHoldStartTimeSeconds,
+		InOutActiveTrialMaxBalanceActiveStandingHoldSeconds,
+		InOutActiveTrialPeakMetrics);
+}
+
 bool UPhysAnimPhase1AutoCalibSubsystem::TestOnlyWriteArtifacts(FPhase1AutoCalibReport& InOutReport)
 {
 	UPhysAnimPhase1AutoCalibSubsystem* const Subsystem = NewObject<UPhysAnimPhase1AutoCalibSubsystem>();

@@ -53,7 +53,7 @@ The Stage 1 balance-entry investigation has reached this point:
   `phase3_material_shell_correction`
 - the current audited shape is an early Settle shell-correction frontier at `tick=2` with `shellVelocityDelta=33.20/10.00` under preserved shell lock after truthful RootOn
 - further grace-window refinement is now suspect unless it moves the standing-hold benchmark
-- the next engineering slice is truthful standing-benchmark evidence and then Settle shell-maintenance truth, not restart cleanup and not the older Phase 1 readiness-margin frontier
+- the standing-benchmark evidence sync is now complete; the next engineering slice is Settle shell-maintenance truth under that benchmark, not restart cleanup and not the older Phase 1 readiness-margin frontier
 
 This is progress, not regression.
 
