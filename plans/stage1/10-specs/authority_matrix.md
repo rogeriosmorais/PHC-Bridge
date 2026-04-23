@@ -10,56 +10,46 @@ This document is the **sole authoritative owner** of runtime ownership and subsy
 
 | Runtime mode | Authoritative owner | Forbidden writes | Capsule state | Mesh-wide authority |
 | :--- | :--- | :--- | :--- | :--- |
-| `BalanceActivation_Ready` | bridge | locomotion-drive; shell helper; kinematic mode writes | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
-| `BalanceActivation_BlendIn` | bridge | abrupt full-authority writes; shell helper; movement-component; plant-profile swap | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
-| `BalanceActivation_Validate` | bridge | shell helper; movement-component; topology edits; plant-profile swap | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
-| `BalanceActive_Standing` | bridge | legacy activation writes; any external authority reclamation | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
+| `BalanceActivation_Ready` | bridge | locomotion-drive; shell helper | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
+| `BalanceActivation_BlendIn` | bridge | movement-component; plant-profile swap | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
+| `BalanceActivation_Validate` | bridge | shell helper; movement-component | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
+| `BalanceActive_Standing` | bridge | external authority reclamation | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; UpdatedComp=null |
 
 ## ACharacter Movement Model (V0)
 
-**CRITICAL**: During all active balance modes, the system is NOT running a standard `ACharacter` movement model. The structural deactivation of the `CharacterMovementComponent` and the isolation of the skeletal mesh from the capsule root represent a complete departure from the default Unreal Engine character authority. Any implementation that allows standard CMC logic to execute is a contract violation.
+**CRITICAL**: V0 is NOT running a standard `ACharacter` movement model. Structural deactivation of CMC and mesh isolation are mandatory.
 
 ## Movement-Component Do-Not-Own List
 
-During all active modes, the `CharacterMovementComponent` is forbidden from owning or influencing:
+During activation, CMC is forbidden from owning:
 - Floor finding / Based movement
-- Regular movement integration (Velocity/Acceleration)
+- Regular movement integration
 - Post-physics correction / Deferred mesh movement
-- Mesh smoothing / Client-side interpolation
-- Root motion application
-- Network correction / Depenetration
+- Mesh smoothing / Root motion / Network correction
 
-Any violation of this list is a terminal `activation_movement_reclaim`.
+Violation emits `activation_movement_reclaim` as adjudicated by the [Truth Model](continuous_balance_truth_model.md).
 
 ## Contamination Policy (Material Assist)
 
-Contamination is an `activation_authority_conflict` that falsifies the standing proof by injecting non-policy forces or constraints into the truth set.
+Contamination is an `activation_authority_conflict` that falsifies the standing proof.
 
 ### 1. Mesh-Wide Assist
-- **Rule**: Any global mesh write (Alpha-blend, Mobility reset, bUpdateMeshWhenKinematic) that originates outside the bridge is terminal.
-- **Materiality**: These writes materially assist the proof by damping simulation transients or forcing bone placement independent of the policy.
+- Global mesh writes (Alpha-blend, Mobility reset, Kinematic updates) originating outside the bridge are terminal.
 
 ### 2. Non-Critical-Body Assist
-- **Rule**: Any authoritative write (Kinematic position, Physics Control target) to a body in the **Excluded Set** that is physically connected to the **Critical Chain** is terminal.
-- **Materiality**: Energy injected into connected bodies (e.g., arms, head) can act as a counterbalance or inertial damper, falsifying the policy's balance performance.
+- Authoritative writes to an **Excluded Body** physically connected to the **Critical Chain** are terminal.
 
 ### 3. Excluded-Body World Bracing (Calf Promote)
-- **Rule**: Terminal if any body in the **Excluded Set** or **Monitor Set** (calves) contacts `WorldStatic` geometry.
+- World contact on any **Excluded** or **Monitor** (calf) body is terminal.
 - **Emitted Reason**: `activation_authority_conflict`.
-- **Materiality**: This "Third-Point Support" (e.g., leaning against a wall with an arm, or floor contact with a calf) provides external bracing that rescues an otherwise failing balance state.
 
 ### 4. Global Blend/Kinematic Assist
-- **Rule**: Terminal if `PhysicsBlendWeight` > 0.0 for any truth-set body, or if `bUpdateMeshWhenKinematic` is enabled without **Absolute Transform** isolation.
-- **Materiality**: This allows the engine's animation-matching or root-relative placement logic to "carry" the simulated bodies, masking true physical instability.
+- Terminal if `PhysicsBlendWeight` > 0.0 for any truth-set body, or if `bUpdateMeshWhenKinematic` is enabled without absolute isolation.
 
 ## Implementation Note: PhysicsControl Side Effects
 
-**Non-Admissibility Warning**: If the current `UPhysicsControlComponent` implementation or its parent runtime path sets mesh-wide states (e.g., global blend weights or kinematic updates) that auto-trigger Rule 1 or Rule 4, the `V0` attempt is **non-admissible**. The runtime path must be modified to ensure isolation before the bridge can consider the balance proof valid.
+If `UPhysicsControlComponent` sets mesh-wide states that auto-trigger Rule 1 or 4, the V0 attempt is **non-admissible**. The runtime path must be modified to ensure isolation.
 
 ## Required Runtime Counters
 
-The implementation must track and emit these metrics for each attempt:
-- `topology_change_count`
-- `authority_conflict_count`
-- `shell_helper_used_count`
-- `movement_reclaim_event_count`
+Implementation must track: `topology_change_count`, `authority_conflict_count`, `shell_helper_used_count`, `movement_reclaim_event_count`.
