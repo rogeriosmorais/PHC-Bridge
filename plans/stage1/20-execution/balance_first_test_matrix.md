@@ -45,8 +45,8 @@
 |---|---|---|---|---|---|
 | **INTEG-01** | `Entry` Gate | Invalid mass | `No Entry` | `activation_physics_asset_contract_violation` | `physics_asset_contract_valid` = false, `plant_failure_class` = "Mutation" |
 | **INTEG-02A** | `Ready` State | Waiting for stance | `BalanceActivation_Ready` | `nullptr` | `hold_duration_sec` = 0.0, `terminal_reason` = null |
-| **INTEG-02B** | `Ready` State | Capsule breach | `FailStopped` | `activation_capsule_contract_violation` | `cmc_is_active` = true, `capsule_collision_enabled` = false |
-| **INTEG-03** | `BlendIn` State | Continuity breach | `FailStopped` | `activation_continuous_simulation_lost` | `physical_continuity_validator_passed` = false, `alpha` < 1.0 |
+| **INTEG-02B** | `Ready` State | CMC Reclaim | `FailStopped` | `activation_capsule_contract_violation` | `cmc_is_active` = true |
+| **INTEG-03** | `BlendIn` State | Continuity breach | `FailStopped` | `activation_continuous_simulation_lost` | `physical_continuity_validator_passed` = false, `control_alpha` < 1.0 |
 | **INTEG-04** | `Validate` State | Airborne breach | `FailStopped` | `activation_support_failure` | `support_mode` = "Airborne", `support_gap_timer_ms` > 100 |
 | **INTEG-05** | `Validate` State | Proxy drift breach | `FailStopped` | `activation_proxy_outside_support_region` | `proxy_inside_hull` = false |
 | **INTEG-06** | `Validate` State | Churn Hz breach | `FailStopped` | `activation_instability_threshold_breach` | `support_churn_hz` > 12.0 |

@@ -39,7 +39,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | S1-PLAN-REFACTOR-ORDER | AI | completed | specialized 10-spec suite, existing bridge source | `plans/stage1/20-execution/balance_first_refactor_plan.md` | none |
 | S1-PLAN-TEST-MATRIX | AI | completed | instrumentation_and_acceptance.md, truth model | `plans/stage1/20-execution/balance_first_test_matrix.md` | none |
 | S1-PLAN-FIRST-SLICE | AI | completed | specialized 10-spec suite | `plans/stage1/20-execution/first-slice-definition.md` | none |
-| S1-IMPL-BALANCE-FIRST | AI | **runnable** | TDD plan, refactor order, 10-spec suite | `PhysAnimSupportTruth.h/cpp`, `PhysAnimSupportTests.cpp` | **Slice 1 Green** |
+| S1-IMPL-BALANCE-FIRST | AI | **runnable** | TDD plan, refactor order, 10-spec suite | `PhysAnimSupportTruth.h/cpp`, `PhysAnimSupportTests.cpp` | none |
 
 ## Frozen Inputs For Continuous Balance Rewrite
 
