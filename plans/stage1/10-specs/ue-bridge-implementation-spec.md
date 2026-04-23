@@ -58,6 +58,7 @@ On balance request acceptance, the runtime must create a dedicated activation re
 - physics-asset contract valid flag
 - standing-reference asset identifier
 - standing-reference authored-space identifier
+- standing-reference control-space projection identifier
 - standing-reference mismatch accumulator state
 - request-accepted timestamp
 - balance-critical chain definition
@@ -128,6 +129,7 @@ For `V0`, that validation must at minimum verify:
 - active skeletal mesh and physics asset identity match the declared audited Manny/Quinn-derived baseline
 - active authored constraint-profile set matches the declared `V0` standing baseline
 - active physical-material set and collision-disable table match the declared `V0` baseline
+- the exact authored standing-reference asset and its gravity-aligned control-space projection are part of that audited baseline
 - total body mass remains within `+/- 5%` of the audited `V0` baseline
 - family mass totals for the balance-critical chain and support set remain within `+/- 10%` of the audited baseline
 - principal inertia components for truth-set bodies remain within `+/- 15%` of the audited baseline
@@ -137,6 +139,7 @@ For `V0`, that validation must at minimum verify:
 Interpretation rules:
 
 - this is a plant contract, not a controller-quality heuristic
+- the authored standing-reference asset is not assumed physically compatible by default; compatibility exists only when it is admitted by the audited plant/control baseline
 - if the plant contract fails, the run must deny or fail as `activation_physics_asset_contract_violation`
 - runtime tuning or control diagnostics may not relabel a plant-contract violation as controller weakness
 - physics-asset swaps, runtime mass edits, constraint-profile swaps, collision-profile edits, or other plant mutations during an active attempt are forbidden
@@ -147,8 +150,10 @@ Balance activation must use a dedicated authoritative post-update snapshot for t
 
 That snapshot must at minimum be able to report:
 
+- raw body-instance validity for every body in the active truth sets
 - raw simulation state for the balance-critical chain
 - raw simulation state for the support set
+- truth-set membership intact/not-intact state
 - truth-set body recreation or replacement events
 - raw awake/sleep state for the pelvis and support-set bodies
 - bookkeeping-versus-raw continuity disagreement state
@@ -169,11 +174,13 @@ For `V0`:
 - body-set ownership defines the truth boundary for standing evaluation
 - mesh-wide effect tracking defines whether nominally local writes leaked into whole-skeletal-mesh behavior
 - any path that changes skeletal-mesh-wide physics blending, `bUpdateMeshWhenKinematic`, deferred mesh following behavior, or equivalent whole-mesh state must be surfaced explicitly in diagnostics
+- non-critical and excluded bodies remain in the mesh-wide contamination surface even when they are outside the primary truth sets
 
 Truth rule:
 
 - a run is not truth-clean merely because the balance-critical chain and support set kept their declared writers
 - if mesh-wide side effects materially stabilize, drag, contain, or reposition those sets, the runtime must report an authority conflict and fail truthfully
+- if the stabilizing path is routed indirectly through non-critical bodies, excluded bodies, shared mesh settings, or shared body-modifier state, the runtime must still fail truthfully rather than treating it as outside the contract
 
 Weak assumption rejected:
 
@@ -186,17 +193,20 @@ Weak assumption rejected:
 Required per-frame order:
 
 1. animation evaluation: `USkeletalMeshComponent` updates the authored standing-reference pose inputs and any required bone-space state for the active frame
-2. `UPhysAnimComponent` tick: runs in `TG_PrePhysics`, after skeletal-mesh evaluation, and owns activation-state updates, standing-reference rebasing, quiet-state gating, observations, and bridge-side control decisions
-3. `UPhysicsControlComponent` application point: Physics Control target writes and body-modifier writes issued by `UPhysAnimComponent` must be applied in the same pre-physics window before Chaos simulation for that frame; no later component may overwrite them on the balance-critical chain or support set
-4. CharacterMovement regular tick: during `V0` activation it may exist, but it must be inert with respect to the balance-critical chain and support set; no movement-component transform, floor-correction, based-movement, or deferred mesh write may alter those bodies
-5. Chaos simulation: physics substeps consume the already-published Physics Control and body-modifier state for the frame
-6. substep truth accumulation: during Chaos simulation, the runtime accumulates support truth, continuity truth, churn events, timer advancement, and other terminal-condition evidence at substep resolution
-7. instrumentation sample: the truth-sensitive activation snapshot is taken once per frame immediately after the final Chaos substep and before any post-physics movement correction, deferred mesh movement, or recovery/termination cleanup writes
-8. CharacterMovement post-physics behavior: post-physics based movement, deferred mesh movement, or similar late corrections must remain inert during `V0` activation; any such write is an authority conflict and, if it touches the balance-critical chain or support set, an `activation_movement_reclaim`
+2. Physics Control cached-pose update: any Physics Control pose capture, cached target-pose refresh, or equivalent skeletal-pose read used to derive current-frame control inputs must occur after skeletal-mesh evaluation and before any activation ownership/truth decision for that frame
+3. `UPhysAnimComponent` tick: runs in `TG_PrePhysics`, after skeletal-mesh evaluation and after the required Physics Control cached-pose update, and owns activation-state updates, standing-reference rebasing, quiet-state gating, observations, and bridge-side control decisions
+4. `UPhysicsControlComponent` application point: Physics Control target writes and body-modifier writes issued by `UPhysAnimComponent` must be applied in the same pre-physics window before Chaos simulation for that frame; no later component may overwrite them on the balance-critical chain or support set
+5. CharacterMovement regular tick: during `V0` activation it may exist, but it must be inert with respect to the balance-critical chain and support set; no movement-component transform, floor-correction, based-movement, or deferred mesh write may alter those bodies
+6. Chaos simulation: physics substeps consume the already-published Physics Control and body-modifier state for the frame
+7. substep truth accumulation: during Chaos simulation, the runtime accumulates support truth, continuity truth, churn events, timer advancement, and other terminal-condition evidence at substep resolution
+8. instrumentation sample: the truth-sensitive activation snapshot is taken once per frame immediately after the final Chaos substep and before any post-physics movement correction, deferred mesh movement, or recovery/termination cleanup writes
+9. CharacterMovement post-physics behavior: post-physics based movement, deferred mesh movement, or similar late corrections must remain inert during `V0` activation; any such write is an authority conflict and, if it touches the balance-critical chain or support set, an `activation_movement_reclaim`
 
 Interpretation rules:
 
 - if the skeletal mesh has not evaluated for the frame yet, `UPhysAnimComponent` must not publish new standing-reference targets for that frame
+- if the Physics Control cached pose or equivalent source pose is stale relative to the current skeletal-mesh evaluation, ownership and truth decisions for that frame are not admissible
+- ownership and truth for a frame must be evaluated against the post-Chaos raw state produced from the same frame's skeletal-mesh evaluation, Physics Control cached pose, target writes, and body-modifier writes
 - if Physics Control or body-modifier writes land after Chaos has already simulated the frame, they count for the next frame and must not be treated as current-frame truth
 - terminal truth must be accumulated at Chaos substep resolution before the post-update snapshot is emitted
 - the post-update activation snapshot is the authoritative per-frame publication surface for state advancement and artifacts, but it must reflect the already-accumulated substep truth for that frame
@@ -230,13 +240,16 @@ Under the target Stage 1 design, the implementation must treat the balance-criti
 
 For `V0`, that means:
 
+- raw body-instance validity must remain true for every truth-set body on every truth-sensitive sample
 - raw simulation state must remain `true` for every truth-set body on every truth-sensitive sample
 - truth-set body membership must remain stable for the whole attempt
 - truth-set body recreation or replacement during the attempt is forbidden
 - kinematic override or equivalent non-simulated movement type on a truth-set body is forbidden
+- raw body-instance validity and raw simulation state outrank modifier or ownership bookkeeping
 - bookkeeping disagreement is diagnostic unless raw continuity is also broken
 - pelvis sleep is allowed during `BalanceActivation_Ready` only as part of quiet-state proof
 - once `BalanceActivation_BlendIn` begins, a persistently sleeping pelvis is not admissible as "continuous simulation"
+- during `BalanceActivation_Validate` and `BalanceActive_Standing`, support-set bodies may sleep only while raw body-instance validity, raw simulation state, truth-set membership, and accepted support truth all remain intact
 
 The implementation must not silently change that contract under the guise of runtime tuning or diagnostics work.
 
@@ -255,9 +268,11 @@ During `BalanceActivation_BlendIn`:
 - target source is the authored `V0` standing reference pose asset for the active Manny/Quinn-derived runtime skeleton
 - the standing reference is authored parent-local pose data plus zero target velocities, not shell state, locomotion state, or a live sampled pose
 - the runtime must compute one rebase frame from live `pelvis` position, gravity-up, and projected live `pelvis` yaw at blend entry
+- the runtime must construct one gravity-aligned world/control frame from that captured gravity-up and projected pelvis yaw before projecting body targets
 - the rebase frame remaps authored reference targets into runtime world placement; it does not mutate the authored parent-local pose values
 - that rebased frame is frozen for the rest of the attempt
 - the runtime must not perform per-body fitting or repeated rebasing after blend start
+- the balance-critical chain, support set, and upper body all use that same authored stance source in `V0`; no per-set derived stance variants are allowed
 - target-history initialization is rebuilt from the rebased standing reference at blend start
 - pre-blend locomotion, shell, or legacy transition target history must not survive into the rebased activation history
 - the runtime must treat the `V0` blend as a rollout of a fixed Physics Control primitive bundle, not as a single magical scalar
@@ -272,9 +287,11 @@ During `BalanceActivation_BlendIn`:
   - max force
 - in `V0`, target position/orientation, target linear/angular velocity, spring strength, damping, max torque, and max force all roll out under the same global alpha
 - in `V0`, parent/child dominance, control-point offsets, and target-space transforms are fixed per attempt and must not be alpha-ramped
+- control-point offsets are applied only as fixed active Physics Control configuration after standing-reference projection; they are not authored by the standing-reference asset and may not be changed to rescue stance compatibility inside an attempt
 - target history is rebased once on blend entry, including resetting target-velocity history to the standing reference zero-velocity contract
 - target discontinuity greater than `15.0` degrees on the balance-critical chain is terminal
-- pose/reference mismatch is measured as the shortest-arc orientation error between live body orientation and rebased target orientation
+- pose/reference mismatch is measured as the shortest-arc quaternion orientation error between live body orientation and rebased target orientation in the same runtime world/control frame
+- RMS mismatch is the unweighted root-mean-square of per-body mismatch across the balance-critical chain
 - `activation_pose_reference_mismatch` is terminal when any balance-critical-chain body exceeds `25.0 deg` mismatch for more than `100 ms` or RMS balance-critical-chain mismatch exceeds `15.0 deg` for more than `100 ms`
 - diagnostics may record blend instability, but may not reclassify that instability as success
 
@@ -287,6 +304,7 @@ Interpretation rule:
 
 - the standing reference is present for every driven `V0` body
 - the one-time rebase frame is valid
+- the gravity-aligned control-space projection is valid for every driven `V0` body
 - rebased targets have been materialized from that source
 - the readiness quiet-state gate has passed
 

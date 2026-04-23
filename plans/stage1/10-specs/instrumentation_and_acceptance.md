@@ -26,6 +26,7 @@ Every continuous-balance run must emit a structured artifact with the following 
 | `standing_reference_id` | string | versioned reference identifier | yes |
 | `standing_reference_asset_path` | string | asset path | yes |
 | `standing_reference_authored_space` | string | `authored_parent_local_rotations` | yes |
+| `standing_reference_control_space` | string | `gravity_aligned_world_frame` | yes |
 | `standing_reference_space` | string | `parent_local_pose_zero_velocity` | yes |
 | `standing_reference_rebase_frame` | object | origin/up/yaw capture | yes |
 | `dt_seconds` | number | seconds | yes |
@@ -97,6 +98,7 @@ Every continuous-balance run must emit a structured artifact with the following 
 | `samples[].target_discontinuity_deg` | number | degrees | fixed cadence | yes |
 | `samples[].reference_mismatch_max_deg` | number | degrees | fixed cadence | yes |
 | `samples[].reference_mismatch_rms_deg` | number | degrees | fixed cadence | yes |
+| `samples[].reference_projection_valid` | boolean | boolean | fixed cadence | yes |
 | `samples[].support_proxy_world_xy_cm` | object | centimeters | fixed cadence | yes |
 | `samples[].support_region_valid` | boolean | boolean | fixed cadence | yes |
 | `samples[].authority_conflict_events` | integer | count in sample window | fixed cadence | yes |
@@ -114,7 +116,7 @@ Every continuous-balance run must emit a structured artifact with the following 
 - truth-sensitive sampling point: once per frame immediately after the final Chaos substep and before any CharacterMovement post-physics correction or deferred mesh movement
 - mesh-wide side-effect fields are required because nominally body-level Physics Control and body-modifier writes can still alter whole-skeletal-mesh behavior
 - `blend_primitive_bundle` must declare which Physics Control primitives are alpha-ramped in `V0` and which are fixed-per-attempt
-- `standing_reference_asset_path` and `standing_reference_authored_space` are required so every run names the exact authored pose asset and authored-space convention used for rebasing
+- `standing_reference_asset_path`, `standing_reference_authored_space`, and `standing_reference_control_space` are required so every run names the exact authored pose asset, authored-space convention, and runtime control-space projection used for rebasing
 - `truth_set_raw_simulating=true` means every active truth-set body reported raw simulation enabled on that sample
 - `continuity_bookkeeping_mismatch=true` means raw body continuity and bookkeeping continuity disagreed on that sample; this is diagnostic unless raw continuity was also lost
 - `pelvis_awake` exists because `V0` treats persistent sleeping pelvis state after blend start as non-participating physics, not acceptable standing truth
@@ -122,6 +124,7 @@ Every continuous-balance run must emit a structured artifact with the following 
 - terminal truth is not decided from the `30 Hz` artifact stream; the artifact reports the result of higher-rate truth evaluation
 - the sampled support hull uses reduced accepted manifold points from the frame's final qualifying Chaos substep, not an arbitrary trace fallback
 - `reference_mismatch_*` fields are measured against the rebased authored standing reference, not against a live sampled pose or shell snapshot
+- `reference_projection_valid=true` means the authored standing reference projected cleanly through the fixed runtime skeleton mapping, gravity-aligned rebase frame, and active fixed Physics Control configuration for that sample
 
 ### Terminal Reason Contract
 
@@ -159,8 +162,8 @@ Contact-measurement rules:
 - `support_loss_gap_max_ms` is measured from debounced substep-level intervals where `support_contact_count=0`, then summarized into the artifact
 - support-proxy-outside-region time is measured independently from consecutive samples where `support_region_valid=false`
 - `standing_reference_rebase_frame` captures the one-time `pelvis` origin, gravity-up axis, and projected `pelvis` yaw used for the attempt
-- `reference_mismatch_max_deg` is the maximum shortest-arc orientation error across the balance-critical chain for the run
-- `reference_mismatch_rms_deg` is the RMS shortest-arc orientation error across the balance-critical chain for the run
+- `reference_mismatch_max_deg` is the maximum shortest-arc quaternion orientation error across the balance-critical chain for the run
+- `reference_mismatch_rms_deg` is the unweighted RMS shortest-arc quaternion orientation error across the balance-critical chain for the run
 
 Physics-asset-contract rules:
 

@@ -41,6 +41,8 @@ Hard invariant:
 - body-set ownership is a truth contract, not proof that engine effects remain local to those bodies
 - Physics Control and body-modifier writes must be evaluated at both the body-set level and the mesh-wide effect level
 - mesh-wide flags or blend state that materially help the balance-critical chain or support set count as authority conflicts even when the initiating write was nominally per-body
+- non-critical and excluded bodies remain part of the falsification surface even though they are not primary truth sets
+- if a non-critical body, excluded body, or shared mesh setting materially changes the standing outcome of the balance-critical chain or support set, the run is invalid rather than "out of scope"
 
 ## Runtime Subsystem Appendix
 
@@ -64,6 +66,7 @@ Mesh-wide side-effect rule:
 - any activation write path that can alter whole-mesh update behavior, mesh physics blending, or shared body-modifier state is a first-class authority surface
 - those surfaces may not be changed implicitly by non-activation systems during `V0`
 - if a nominally local write causes a mesh-wide assist that materially changes standing outcome, the run is not truth-clean
+- if that assist is routed through bodies outside the truth sets, the run still fails truthfully; the truth-set boundary does not shield off-mesh contamination
 
 Movement-component do-not-own list for `V0`:
 

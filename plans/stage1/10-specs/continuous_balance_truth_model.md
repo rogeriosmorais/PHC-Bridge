@@ -162,6 +162,7 @@ For `V0`, "continuously simulated" is a raw-physics continuity contract, not a v
 
 Continuous simulation requires all of the following for every body in the active truth sets:
 
+- the raw body instance exists and is valid on every truth-sensitive sample
 - raw simulation state remains `true` on every truth-sensitive sample
 - the body remains in the expected truth set for the active attempt
 - the runtime does not recreate or replace that truth-set body instance during the attempt
@@ -169,11 +170,14 @@ Continuous simulation requires all of the following for every body in the active
 
 Interpretation rules:
 
+- "continuous simulation" in engine terms therefore means: valid raw body instance, raw simulate-physics true, stable truth-set membership, no body recreation/replacement, and no non-simulated override
 - raw `IsInstanceSimulatingPhysics == true` or equivalent raw body-instance truth is the deciding source for simulation continuity
+- raw body-instance validity beats modifier or ownership bookkeeping
 - modifier or bookkeeping disagreement is diagnostic by itself, not automatic proof that continuity was lost
 - sleeping is not automatically a continuity failure
 - sleeping is allowed during `BalanceActivation_Ready` because quiet-state proof may include low-motion or sleeping bodies
-- during `BalanceActivation_BlendIn` and `BalanceActivation_Validate`, the pelvis must remain awake enough to participate physically; a persistent sleeping pelvis is treated as continuity lost rather than "successfully simulated"
+- during `BalanceActivation_BlendIn`, `BalanceActivation_Validate`, and `BalanceActive_Standing`, the pelvis must remain awake enough to participate physically; a persistent sleeping pelvis is treated as continuity lost rather than "successfully simulated"
+- during `BalanceActivation_Validate` and `BalanceActive_Standing`, support-set bodies may sleep only if their raw body instances remain valid, raw simulation remains enabled, truth-set membership stays intact, and accepted support/contact truth remains valid; sleep is therefore conditionally allowed for non-pelvis truth-set bodies, not categorically forbidden
 - mesh-wide update settings may still contaminate participation truth and must be evaluated separately from raw simulation continuity
 
 `activation_continuous_simulation_lost` is the required leaf reason when raw simulation continuity fails without a separate topology change being the primary cause.

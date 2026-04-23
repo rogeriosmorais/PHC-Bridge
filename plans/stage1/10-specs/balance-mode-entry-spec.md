@@ -66,6 +66,7 @@ Interpretation rules:
 - no temporary kinematic re-ownership of this chain is part of the target activation contract
 - changes to this chain must be documented as real contract changes, not tuning tweaks
 - "continuously simulated" uses the raw-physics continuity contract defined in `continuous_balance_truth_model.md`, not a loose bookkeeping label
+- in `V0`, that means valid raw body instances, raw simulate-physics enabled, stable truth-set membership, no body recreation/replacement, raw state winning over bookkeeping, and the documented pelvis/support-set sleep rules
 
 ## Canonical Activation Flow
 
@@ -149,16 +150,23 @@ Interpretation rules:
 - truth-set ownership is not proof that whole-mesh side effects stayed inert
 - shell bookkeeping is not proof of shell influence
 - diagnostics are observability only
+- non-critical or excluded bodies are not outside falsification scope if they materially alter the standing outcome of the truth sets
 
 The runtime must also distinguish:
 
 - ownership-continuity problems
 - controller-strength and control-shaping problems
 - mesh-wide side-effect contamination from Physics Control or body-modifier paths
+- contamination routed indirectly through non-critical bodies, excluded bodies, or skeletal-mesh-wide update settings
 - hidden authority conflicts between policy, Physics Control, locomotion authority, and startup logic
 - movement-component reclaim through floor finding, based movement, root motion, post-physics correction, deferred mesh movement, network correction, or depenetration paths
 
 Primary truth precedence is defined in `continuous_balance_truth_model.md` and must be followed exactly.
+
+Frame-order rule for `V0`:
+
+- ownership and truth are evaluated only after current-frame skeletal-mesh evaluation, Physics Control cached-pose update, control-target publication, and body-modifier writes have all happened in the documented pre-physics order, and after Chaos has produced the corresponding post-step raw state
+- current-frame truth may not be inferred from stale cached pose, pre-write intent, or pre-physics bookkeeping alone
 
 Movement-component non-interference rule for `V0`:
 
@@ -208,6 +216,7 @@ Removing the old flip-based ritual will often expose controller weakness more di
 - pose space: parent-local rotations for all `V0` driven bodies in authored skeleton-reference space
 - translation rule: no authored per-body translation offsets are consumed in `V0`; only the rebased pelvis/world anchor places the reference in world space
 - target velocities: zero desired angular and linear velocity in the reference
+- set-variant rule: the balance-critical chain, support set, and upper body all use that same authored stance source in `V0`; there are no per-set derived stance variants
 - forbidden sources: shell state, locomotion intent, prior phase state, and ad hoc helper corrections
 
 Rebasing contract:
@@ -223,12 +232,25 @@ Rebasing contract:
 - freeze that rebased frame for the rest of the activation attempt
 - do not run per-body fitting or repeated rebasing after blend start
 
+Projection-to-control-space contract:
+
+- under arbitrary gravity-up, the runtime constructs one gravity-aligned world frame from the captured gravity-up axis and projected pelvis yaw
+- each driven body's runtime target orientation is then produced by composing:
+  - the authored parent-local rotation
+  - the resolved runtime skeleton hierarchy
+  - the one-time rebased pelvis/world frame
+- control-point offsets are not authored by the stance asset and are not solved from live pose
+- in `V0`, control-point offsets, target spaces, and parent dominance come from the fixed active Physics Control setup and are applied after standing-reference projection
+- changing offsets, target spaces, or parent dominance to rescue the stance is a real contract change, not tuning inside `V0`
+
 Reference mismatch contract:
 
 - `activation_pose_reference_mismatch` is reserved for disagreement between the live achieved pose and the rebased authored standing reference, not for support loss or controller-effort failure
 - mismatch is computed on the balance-critical chain and support set only
-- per-body mismatch is the shortest-arc angle in degrees between live body orientation and rebased target orientation
-- the run publishes both per-body mismatch detail and the max-family mismatch scalar
+- per-body mismatch is the shortest-arc quaternion angle in degrees between live body orientation and the rebased target orientation for that same body
+- live body orientation and target orientation must be compared in the same runtime world/control frame after the one-time rebase and fixed control-space projection are applied
+- RMS mismatch is the unweighted root-mean-square of the per-body mismatch angles across the balance-critical chain
+- the run publishes per-body mismatch detail, max-body mismatch, and the RMS mismatch scalar
 - `V0` treats reference mismatch as terminal when either:
   - any balance-critical-chain body exceeds `25.0 deg` mismatch for longer than `100 ms`, or
   - the RMS mismatch across the balance-critical chain exceeds `15.0 deg` for longer than `100 ms`
@@ -237,6 +259,7 @@ Reference mismatch contract:
 
 - the authored standing reference exists for every driven `V0` body
 - the one-time rebase frame has been computed
+- the gravity-aligned control-space projection is valid for every driven `V0` body
 - rebased targets have been materialized from that source
 - the quiet-state proof has passed on live physical state
 
@@ -250,11 +273,12 @@ Required preconditions before `BalanceActivation_Ready`:
 - total mass, truth-set family mass totals, and truth-set principal inertias remain within the documented `V0` tolerances
 - upper-body collision is disabled for `V0` acceptance
 - support-set collision geometry has passed the authored support-geometry audit
+- the exact authored standing-reference asset and its projected control-space mapping are part of the audited `V0` baseline
 - no runtime plant-profile swap, ad hoc mass edit, or hidden constraint retune is pending for the activation attempt
 
 Interpretation rule:
 
-- if these prerequisites are not satisfied, the run must fail or deny as a plant-contract problem before being classified as controller weakness
+- if these prerequisites are not satisfied, or the authored stance cannot be projected through the audited control configuration cleanly, the run must fail or deny as a plant/reference-contract problem before being classified as controller weakness
 
 ## `V0` Standing Thresholds
 

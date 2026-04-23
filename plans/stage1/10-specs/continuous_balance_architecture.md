@@ -124,6 +124,12 @@ Interpretation rules:
 | Root-adjacent but non-critical bodies | match nearest articulated parent; no ad hoc flips during an active attempt | rebased `V0` standing reference or none | yes only through normal articulation |
 | Excluded bodies | disabled or passive only | none | no |
 
+Scope rule:
+
+- "non-critical" means "not a primary truth set," not "physically outside evaluation"
+- non-critical bodies remain inside the full mesh effect domain and may still contaminate standing truth through articulation, collision, shared mesh settings, body-modifier state, or mesh-follow behavior
+- if a non-critical body or mesh-wide setting materially stabilizes, drags, reanchors, or contains the balance-critical chain or support set, the run is not truth-clean
+
 Upper-body rule:
 
 - upper-body kinematic hold is banned in `V0`
@@ -141,6 +147,8 @@ Interpretation rules:
 - owning the balance-critical chain and support set does not imply the rest of the mesh is inert
 - nominally per-body writes may still leak into whole-mesh behavior
 - `V0` acceptance therefore requires both truthful continuity on the truth sets and no unauthorized mesh-wide assist that materially stabilizes, drags, or contains them
+- non-critical bodies, excluded bodies, and nominally "out-of-scope" mesh regions may still falsify a run if they materially change the standing outcome of the truth sets
+- truth-set membership narrows what defines standing truth; it does not narrow what can invalidate standing truth
 
 Weak assumption explicitly rejected:
 
@@ -158,12 +166,14 @@ The `V0` fixed stance reference is one explicit authored standing pose, not an i
 - translation convention: no authored per-body translation offsets are consumed in `V0`; the authored reference is rotational plus pelvis-frame anchoring only
 - velocity contract: desired local angular velocity and desired body linear velocity are zero for the standing reference
 - driven sets: balance-critical chain, support set, and non-critical simulated bodies that still receive stance targets
+- variant rule: `V0` uses the same authored standing-reference source asset for the balance-critical chain, support set, and upper body; no per-set derived stance variants are allowed in `V0`
 - excluded sources: shell state, locomotion intent, prior handoff phase labels, and per-run helper corrections are not allowed to define the standing reference
 
 Reference-space interpretation rules:
 
 - authored parent-local rotations are first resolved against the active runtime skeleton mapping
 - the runtime standing-reference frame is then built from one live pelvis/world capture, not from per-bone live fitting
+- under arbitrary gravity-up, the runtime first constructs a gravity-aligned world frame from the captured gravity-up vector and projected pelvis yaw, then composes each body's authored parent-local rotation through the skeletal hierarchy into that frame
 - rebasing changes the world-frame placement of the authored reference, not the authored local pose itself
 - target publication derived from the reference is still not proof that the body achieved that pose
 
@@ -183,6 +193,22 @@ History rule:
 - the one-time rebase applies to target publication and target-history initialization at blend start
 - no pre-blend live target history is allowed to leak into the rebased `V0` standing-reference history
 - velocity history is rebased to the standing-reference zero-velocity contract at blend entry; it is not inherited from locomotion, shell, or prior transition phases
+
+Control-space projection rule:
+
+- the runtime control target for each driven body is the rebased world-space body frame implied by:
+  - the authored parent-local rotation for that body
+  - the resolved runtime skeleton hierarchy
+  - the one-time pelvis/world rebase frame
+- control-point offsets are not authored by the standing-reference asset and are not derived from live pose fitting
+- in `V0`, control-point offsets remain the fixed per-attempt values declared by the active Physics Control setup and are applied after standing-reference projection as part of the control primitive configuration
+- parent/child dominance and target-space transforms are also fixed per attempt and may not be changed to make the authored stance easier
+
+Physical-compatibility rule:
+
+- the authored standing-reference asset is not assumed physically admissible by itself
+- `V0` admissibility requires that exact authored stance source to be part of the audited baseline with the active physics asset, constraint profile set, collision setup, and control configuration
+- if the authored reference cannot be projected into runtime control space without violating the audited plant/control baseline, the run is non-admissible rather than a controller pass/fail result
 
 Interpretation rule:
 
