@@ -48,12 +48,12 @@ This document defines the TDD strategy and testing pyramid for the balance-first
 
 ## 5. Validator Scope Freeze
 
-Each validator is strictly allowed to decide ONLY the following:
+The validator scopes are frozen as follows. No validator may decide surfaces outside its explicit remit.
 
-- **Continuity**: Is the simulation physically contiguous? (Yes/No + Reason)
-- **Capsule**: Is the gameplay shell anchored and passive? (Yes/No + Reason)
-- **Plant**: Is the physical body-set structurally identical to the training target? (Yes/No + Reason)
-- **Contamination**: Is there an authority conflict for simulation ownership? (Yes/No + Reason)
+- **Continuity Validator**: Decides instance validity, simulate-physics continuity, **pelvis sleep rule**, and **raw-vs-bookkeeping priority**.
+- **Capsule Validator**: Decides collision/overlap mode, **actor freeze**, mesh absolute transform, **CMC inactive**, **tick disabled**, **movement mode**, and **UpdatedComponent null**.
+- **Plant Validator**: Decides topology, **axis alignment**, **segment length**, support geometry, collision/filter baseline, **mass/inertia tolerances**, and mutation checks.
+- **Contamination Classifier**: Decides **authority-matrix conflict surfaces only** (material contamination, external simulation writes).
 
 ## 6. Runtime Test Targets
 

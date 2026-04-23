@@ -46,7 +46,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | S1-PLAN-TDD | AI | completed | specialized 10-spec suite, standing benchmark | `plans/stage1/20-execution/balance_first_tdd_strategy.md` | none |
 | S1-PLAN-REFACTOR-ORDER | AI | completed | specialized 10-spec suite, existing bridge source | `plans/stage1/20-execution/balance_first_refactor_plan.md` | none |
 | S1-PLAN-TEST-MATRIX | AI | completed | instrumentation_and_acceptance.md, truth model | `plans/stage1/20-execution/balance_first_test_matrix.md` | none |
-| S1-PLAN-FIRST-SLICE | AI | completed | specialized 10-spec suite | `plans/stage1/20-execution/balance_first_slice_1_definition.md` | none |
+| S1-PLAN-FIRST-SLICE | AI | completed | specialized 10-spec suite | `plans/stage1/20-execution/first-slice-definition.md` | none |
 | S1-IMPL-BALANCE-FIRST | AI | blocked | TDD plan, refactor order, specialized 10-spec suite | runtime bridge and balance activation code paths | TDD/Refactor Plan acceptance |
 
 ## Frozen Inputs For Continuous Balance Rewrite
