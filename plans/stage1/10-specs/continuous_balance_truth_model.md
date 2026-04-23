@@ -102,25 +102,7 @@ To prevent "One-Foot Survival" from being indistinguishable from "Neutral Standi
 
 ## Material Contamination Rules
 
-Contamination is an `activation_authority_conflict` that falsifies the standing proof.
-
-### Rule 1 — Physics Blend Contamination
-- Terminal if any body in the truth set has a live `PhysicsBlendWeight` > `0.0`.
-
-### Rule 2 — Kinematic Update Contamination
-- Terminal if `bUpdateMeshWhenKinematic` is enabled **AND** the mesh is NOT in **Absolute Transform** mode.
-- Terminal if the flag is **mutated mid-attempt** by an external system.
-
-### Rule 3 — Mesh-Wide Side Effects
-- Terminal if a non-activation system issues global blend, mobility, or reset writes.
-- **Plugin-Mandated Exception**: Events issued by `PhysicsControl` for its internal setup are diagnostic-only.
-
-### Rule 4 — Excluded-Body Contamination
-- Terminal if an excluded body is physically connected to the truth set AND receives an authoritative write.
-- Terminal if an excluded body bridges the truth set and the walkable world (Dual-Contact).
-
-### Rule 5 — Calf-Contact Contamination
-- Terminal if `calf_l` or `calf_r` contacts `WorldStatic` geometry. (Honest Standing must be plantar).
+Contamination logic and authority conflict rules are defined exclusively in [authority_matrix.md](authority_matrix.md). Any breach of these rules triggers an `activation_authority_conflict`.
 
 ---
 

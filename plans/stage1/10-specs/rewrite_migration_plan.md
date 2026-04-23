@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document summarizes the migration from the legacy phase-based PhysAnim design to the continuous-balance architectural suite. It provides a mapping of decommissioned documents and the consolidation of their logic into the new Single Source of Truth (SSoT) files.
+This document summarizes the migration from the legacy phase-based PhysAnim design to the continuous-balance architectural suite. **The migration and doc-suite cleanup are now complete.** All legacy logic has been consolidated into the 9 specialized files below, establishing a rigorous Single Source of Truth (SSoT) for the V0 implementation.
 
 ## Decommissioned Documents
 

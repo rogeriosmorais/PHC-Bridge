@@ -21,11 +21,16 @@ The architectural center of the humanoid:
 - **Ownership**: Must be continuously simulated. Topology changes are terminal.
 
 ### 2. Support Set
-Bodies required for meaningful support truth:
-- `calf_l`, `calf_r`, `foot_l`, `foot_r`, `ball_l`, `ball_r`
-- **Truth Role**: Only `foot_*` and `ball_*` contribute to the support footprint. `calf_*` is for stability monitoring only.
+Bodies that provide valid, plantar support for the balance hull:
+- `foot_l`, `foot_r`, `ball_l`, `ball_r`
+- **Truth Role**: Every qualifying contact on these bodies contributes to the support hull.
 
-### 3. Upper-Body & Excluded Sets
+### 3. Contamination Monitor Set
+Bodies whose world contact is forbidden during the attempt:
+- `calf_l`, `calf_r`
+- **Truth Role**: World contact triggers terminal `activation_authority_conflict` (Rule 5). These bodies must remain clear of all world geometry to maintain the "Honest Standing" proof.
+
+### 4. Upper-Body & Excluded Sets
 - All bodies not in the critical or support sets.
 - **V0 Rule**: Collision must be disabled to ensure isolation.
 

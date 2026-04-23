@@ -14,7 +14,6 @@ The balance-activation contract is defined by the following authoritative docume
 - **Subsystem Ownership and States**: [authority_matrix.md](authority_matrix.md)
 - **Instrumentation and Acceptance Gates**: [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)
 - **Physical Truth and Support Model**: [continuous_balance_truth_model.md](continuous_balance_truth_model.md)
-- **Unreal Engine Implementation Details**: [ue-bridge-implementation-spec.md](ue-bridge-implementation-spec.md)
 - **Structural Body Sets**: [continuous_balance_architecture.md](continuous_balance_architecture.md)
 
 ## Canonical Runtime States
@@ -28,7 +27,7 @@ The authoritative runtime states for balance activation are:
 5. `BalanceActive_Recovery`
 6. `SafeDenied` / `Failed` (Terminal Outcomes)
 
-The detailed entry preconditions, exit conditions, and failure reasons for each mode are defined exclusively in the [Authority Matrix](authority_matrix.md).
+The detailed entry preconditions, exit conditions, and failure reasons for each mode are defined exclusively in the [Authority Matrix](authority_matrix.md) and the [Truth Model](continuous_balance_truth_model.md).
 
 ## Authoritative State Mapping
 

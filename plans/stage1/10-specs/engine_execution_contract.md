@@ -45,9 +45,10 @@ During `BalanceActivation_BlendIn`, the bridge asserts authority via a gradual r
 - **Blend Rule**: All primitives in the bundle must be scaled or interpolated by the same global alpha.
 - **Fixed Parameters**: Control-point offsets, target-space transforms, and parent-dominance settings must remain **fixed** for the whole attempt; they are not alpha-ramped.
 - **Discontinuity Rule**: If the delta between the live pose and the initial rebased target exceeds the **Target Discontinuity** threshold, emit `activation_target_discontinuity`.
-5.  **Movement Integration (Pre-Physics CMC)**
-    - `CharacterMovementComponent` regular tick runs.
-    - **Inertness Rule**: Must not write to the actor transform, capsule, or truth-set bodies.
+
+5.  **Forbidden Latent Path: Movement Integration (Pre-Physics)**
+    - Standard `CharacterMovementComponent` tick path.
+    - **V0 Contract**: This path must **NOT** execute. It is structurally disabled via `MOVE_None`, `Deactivate()`, and `Tick Disable` (See [character_capsule_contract.md](character_capsule_contract.md)).
 6.  **Chaos Simulation (The "Step")**
     - Physics solver runs `N` substeps using the published pre-physics state.
 7.  **Substep Truth Accumulation**
@@ -58,9 +59,9 @@ During `BalanceActivation_BlendIn`, the bridge asserts authority via a gradual r
     - The authoritative truth snapshot is taken **immediately after the final Chaos substep**.
     - This is the "Live/Raw" state for the frame.
     - **Ordering Rule**: Must occur before any deferred mesh movement or post-physics movement correction.
-9.  **Movement Reclaim/Correction (Post-Physics CMC)**
-    - `CharacterMovementComponent` post-physics correction, based-movement, and deferred mesh movement paths run.
-    - **Inertness Rule**: Any write that displaces the mesh or truth-set bodies here is an `activation_movement_reclaim` violation.
+9.  **Forbidden Latent Path: Movement Reclaim (Post-Physics)**
+    - Post-physics correction, based-movement, and deferred mesh movement paths.
+    - **V0 Contract**: This path must **NOT** execute. Any write that displaces the mesh or truth-set bodies here is an `activation_movement_reclaim` violation.
 
 ## Data Freshness Contract
 
@@ -84,6 +85,7 @@ The implementation must use this deterministic algorithm to reduce the high-rate
 ### 1. Per-Substep Point Selection
 For every body in the support set (`foot_*`, `ball_*`) on every Chaos substep:
 - The implementation must include **All Qualifying Contact Manifold Points** for that body.
+- **Justification**: A single "deepest point" reduction is too lossy for feet; it can collapse a planar support patch into a line. V0 mandates full manifold inclusion to preserve the real footprint area and prevent false-failure in the stability check.
 - A point is "qualifying" if it meets the criteria defined in the [Truth Model](continuous_balance_truth_model.md).
 
 ### 2. Substep Persistence (Debounce Rule)

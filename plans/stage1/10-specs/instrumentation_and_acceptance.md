@@ -43,10 +43,31 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `continuity_bookkeeping_mismatch`: Diagnostic flag for modifier/raw drift.
 
 ### 5. Termination
-- `terminal_reason`: The winning leaf-level reason (1-14).
+- `terminal_reason`: The winning leaf-level reason from the canonical set below.
 - `co_terminal_reasons[]`: List of co-occurring terminal conditions.
 - `terminal_substep_timestamp`: Exact Chaos substep count of failure.
 - `terminal_frame_artifact`: Full raw snapshot of the failure frame.
+
+## Canonical Terminal Reasons
+
+Every run artifact must emit exactly one primary `terminal_reason` from this canonical set:
+
+1. `activation_physics_asset_contract_violation`
+2. `activation_capsule_contract_violation`
+3. `activation_topology_change`
+4. `activation_continuous_simulation_lost`
+5. `activation_support_failure`
+6. `activation_proxy_outside_support_region`
+7. `activation_target_discontinuity`
+8. `activation_unstable_gain_or_damping`
+9. `activation_instability_threshold_breach`
+10. `activation_pose_reference_mismatch`
+11. `activation_movement_reclaim`
+12. `activation_shell_helper_violation`
+13. `activation_authority_conflict`
+14. `activation_standing_validation_timeout`
+
+No other reason labels are permitted for V0 artifacts.
 
 ## Threshold Basis Table
 
