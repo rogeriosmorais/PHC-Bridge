@@ -17,6 +17,17 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `standing_reference_id`: Identifier for the authored stance asset.
 - `physics_asset_contract_valid`: Boolean flag from the plant audit.
 - `skeleton_audit_passed`: Boolean flag from the skeleton alignment check.
+- **Plant Audit Telemetry**:
+  - `plant_failure_class`: Category of breach (`StaticStructural`, `Mutation`, `Dynamic`).
+  - `plant_failure_field`: Specific field triggering the failure.
+  - `mass_drift_total_pct`: Observed total mass deviation.
+  - `mass_drift_critical_chain_pct`: Observed deviation for critical bodies.
+  - `mass_drift_support_set_pct`: Observed deviation for support bodies.
+  - `inertia_drift_critical_pct`: Orientation-averaged inertia drift for critical chain.
+  - `inertia_drift_support_pct`: Orientation-averaged inertia drift for support set.
+  - `constraint_profile_match`: Boolean flag for authored gain/limit integrity.
+  - `support_geometry_audit_passed`: Boolean flag for plantar surface validity.
+  - `collision_filter_audit_passed`: Boolean flag for self/world filtering integrity.
 - **Capsule Contract Truth**:
   - `capsule_collision_enabled`: Actual `ECollisionEnabled` state.
   - `capsule_generate_overlap_events`: Actual boolean state.
@@ -41,6 +52,9 @@ The implementation must emit a JSON artifact for every attempt, containing:
 ### 3. Support Truth
 - `support_state_l` / `support_state_r`: Debounced side-contact status.
 - `support_mode`: Dominant stability grade (`TwoFootStable`, `SingleFootSurvival`, `TransientRecovery`, `Airborne`).
+- `support_gap_timer_ms`: Cumulative time spent in contact loss (reset on any contact).
+- `proxy_inside_hull`: Boolean result of the point-in-polygon test.
+- `active_support_side_count`: Number of sides currently in debounced contact (0, 1, or 2).
 - `support_hull_area_cm2`: Total planar area of the frame support hull.
 - `support_patch_area_l_cm2` / `support_patch_area_r_cm2`: Individual plantar area per side.
 - `support_hull_points`: World-space coordinates of the active footprint.
@@ -67,7 +81,7 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `global_blend_weight`: Live `PhysicsBlendWeight` value (per sample).
 - `mesh_update_when_kinematic_enabled`: Actual boolean state of the flag (per sample).
 
-**Requirement**: All fields in this section must be populated whenever `activation_authority_conflict`, `activation_movement_reclaim`, or `activation_capsule_contract_violation` is the primary `terminal_reason`.
+**Requirement**: All fields in the Authority and Plant Audit sections must be populated whenever `activation_physics_asset_contract_violation`, `activation_authority_conflict`, `activation_movement_reclaim`, or `activation_capsule_contract_violation` is the primary `terminal_reason`.
 
 **Auditability Rule**: Terminal contamination must be fully auditable from the artifact schema without requiring external log correlation.
 

@@ -70,8 +70,13 @@ The implementation must use this deterministic algorithm to reduce the high-rate
 
 ### 1. Per-Substep Manifold Capture
 For every body in the support set (`foot_*`, `ball_*`) on every Chaos substep:
-- **Accepted Points**: Capture **All Manifold Points** where `ContactDistance <= 0.0`.
-- **Calf Exclusion**: Manifold points on `calf_l/r` must be **EXCLUDED**.
+- **Accepted Points**: Capture manifold points ONLY if they satisfy all of the following:
+  - **Proximity**: `ContactDistance <= 0.0`.
+  - **Support Side**: Contacting body is in the **Support Set** (`foot_*`, `ball_*`).
+  - **Admissible Opposing Surface**: Opposing body is **WorldStatic** (Environment).
+  - **No Self-Contact**: Opposing body is not part of the character's own skeletal mesh.
+  - **No Dynamic Contact**: Opposing body is not a `WorldDynamic`, `PhysicsBody`, or another `SkeletalMesh` (No other characters).
+- **Calf Exclusion**: Manifold points on `calf_l/r` must be **EXCLUDED** from patch construction; they are monitored for contamination only.
 
 ### 2. Per-Body Support Patch Reduction
 For each body with at least one accepted point, build an authoritative **Support Patch**:
