@@ -147,7 +147,30 @@ Interpretation rules:
 ## Terminal Reason Arbitration
 
 When multiple failure conditions are simultaneously active, exactly one leaf-level `terminal_reason` must be emitted.
-Use the following arbitration rules in order.
+
+### Master Terminal Reason Precedence Table
+
+Use this table to decide the "winning" `terminal_reason` when multiple conditions are observed in the same or co-occurring truth-evaluation windows. **Rank 1 is the highest precedence.**
+
+| Rank | Reason Class | Leaf-level `terminal_reason` | Arbitration Logic |
+| :--- | :--- | :--- | :--- |
+| **1** | **Plant Contract** | `activation_physics_asset_contract_violation` | Always wins; pre-empts all other classes. |
+| **2** | **Raw Continuity** | `activation_topology_change` | Wins over `simulation_lost` if both occur. |
+| **3** | **Raw Continuity** | `activation_continuous_simulation_lost` | Wins over support/controller classes. |
+| **4** | **Support Truth** | `activation_support_failure` | Wins over `proxy_outside_region`. |
+| **5** | **Support Truth** | `activation_proxy_outside_support_region` | Wins over controller stability classes. |
+| **6** | **Controller Stability** | `activation_target_discontinuity` | Wins over gain/damping instability. |
+| **7** | **Controller Stability** | `activation_unstable_gain_or_damping` | Wins over threshold breaches. |
+| **8** | **Controller Stability** | `activation_instability_threshold_breach` | Wins over pose mismatch. |
+| **9** | **Pose/Reference** | `activation_pose_reference_mismatch` | Wins over authority conflict. |
+| **10** | **Authority/Ownership** | `activation_movement_reclaim` | Wins over generic authority conflict. |
+| **11** | **Authority/Ownership** | `activation_shell_helper_violation` | Wins over generic authority conflict. |
+| **12** | **Authority/Ownership** | `activation_authority_conflict` | Wins only over timeout. |
+| **13** | **Time/Duration** | `activation_standing_validation_timeout` | Only emitted if no physical failure occurred. |
+
+### Arbitration Rules
+
+Use the following rules to apply the precedence table.
 
 ### Rule 1 — Plant contract violation pre-empts all other classification
 
@@ -160,10 +183,9 @@ No controller-class or support-class reason may be emitted instead.
 | :--- | :--- |
 | Modifier record disagrees with raw body state; raw `IsInstanceSimulatingPhysics` remains `true`; body instance is valid and in the expected truth set | `Diagnostic mismatch` only — log `continuity_bookkeeping_mismatch`; do not emit a terminal reason on this alone |
 | Raw `IsInstanceSimulatingPhysics` is `false` or body instance is invalid; no explicit truth-set membership change | `activation_continuous_simulation_lost` |
-| Truth-set membership has changed explicitly: a body has been added to or removed from the declared truth set, or a body instance has been recreated or replaced | `activation_topology_change` — takes precedence over `activation_continuous_simulation_lost` when both apply because topology change is the proximate cause |
+| Truth-set membership has changed explicitly: a body has been added to or removed from the declared truth set, or a body instance has been recreated or replaced | `activation_topology_change` — takes precedence over `activation_continuous_simulation_lost` per Rank 2. |
 
 "Explicitly" means: a body-instance pointer changed, a body was destroyed and rebuilt, or the runtime truth-set registry no longer contains a previously-registered body.
-Modifier disagreement alone, without any of those raw conditions, is never "explicit" topology change.
 
 ### Rule 3 — Pose/reference mismatch escalation
 
@@ -171,33 +193,27 @@ Modifier disagreement alone, without any of those raw conditions, is never "expl
 | :--- | :--- |
 | Per-body mismatch is below `25.0 deg` AND RMS is below `15.0 deg` | `Diagnostic mismatch` — log `reference_mismatch_*` fields; do not emit a terminal reason |
 | Per-body mismatch exceeds `25.0 deg` on any balance-critical-chain body for longer than `100 ms`, OR RMS exceeds `15.0 deg` for longer than `100 ms` | `activation_pose_reference_mismatch` — terminal |
-| The pose mismatch is caused by a prior authority conflict or topology change that already fired | Emit the earlier reason; log reference mismatch as secondary context only |
+| The pose mismatch is caused by a prior authority conflict or topology change that already fired | Emit the higher-ranked reason; log reference mismatch as secondary context only |
 
 ### Rule 4 — Authority conflict vs support failure co-occurrence
 
-Authority conflict events are secondary diagnostics when support failure is the observable outcome.
-Authority conflict is the emitted leaf reason only when it is the proximate cause of the terminal condition.
+Authority conflict is the emitted leaf reason only when it is the proximate cause of the terminal condition and rank-precedes the support failure.
 
 | Co-occurrence scenario | Emitted reason |
 | :--- | :--- |
-| Support failure preceded or coincided with authority conflict; no evidence that the conflict caused the loss | `activation_support_failure` — emit; log authority conflict events as secondary context |
-| Authority conflict is the clear proximate cause: movement reclaim or competing locomotion write is observed first, and support failure follows within the same or next frame | `activation_authority_conflict` if the reclaim is locomotion-driven and generic, or `activation_movement_reclaim` if the specific movement-component path is identified; log support failure as secondary |
-| Both authority conflict and instability threshold breach co-occur without a clear ordering | Emit the reason corresponding to the higher-precedence signal family: raw continuity and contact truth outrank controller-layer conflicts; prefer `activation_support_failure` or `activation_instability_threshold_breach` unless the conflict demonstrably preceded the physical failure |
+| Support failure preceded or coincided with authority conflict; no evidence that the conflict caused the loss | `activation_support_failure` (Rank 4) — emit; log authority conflict events as secondary context |
+| Authority conflict is the clear proximate cause: movement reclaim or competing locomotion write is observed first, and support failure follows within the same or next frame | `activation_authority_conflict` (Rank 12) or `activation_movement_reclaim` (Rank 10) only if the physical failure has not yet been logged in the substep stream. If a higher-ranked physical failure co-occurs, the physical failure wins. |
 
 ### Rule 5 — General tie-break when two terminal reasons fire simultaneously
 
-Emit the reason corresponding to the highest-precedence signal family that actually failed, using this order:
+When two terminal conditions are observed in the same truth-evaluation window:
 
-1. physics-asset contract (`activation_physics_asset_contract_violation`)
-2. raw continuity / topology (`activation_continuous_simulation_lost`, `activation_topology_change`)
-3. support truth (`activation_support_failure`, `activation_proxy_outside_support_region`)
-4. controller stability (`activation_target_discontinuity`, `activation_unstable_gain_or_damping`, `activation_instability_threshold_breach`)
-5. pose/reference (`activation_pose_reference_mismatch`)
-6. authority / ownership (`activation_authority_conflict`, `activation_movement_reclaim`, `activation_shell_helper_violation`)
-7. timeout (`activation_standing_validation_timeout`)
+1.  Consult the **Master Terminal Reason Precedence Table**.
+2.  Emit the reason with the **highest Rank (lowest number)**.
+3.  If two reasons have equal Rank or are in the same family, emit the one whose triggering condition was first observed in the substep-level truth stream.
+4.  Record all co-occurring reasons in the secondary `co_terminal_reasons` array in the run artifact.
 
-If two reasons are in the same precedence tier, emit the one whose triggering condition was first observed in the substep-level truth stream.
-Record all co-occurring reasons in a secondary `co_terminal_reasons` field in the run artifact.
+This ensures that different implementations follow the same deterministic path when arbitrating multiple simultaneous failures.
 
 ## Secondary Diagnostics
 
@@ -288,7 +304,32 @@ Active-contact semantics:
 - side support state is `true` when `foot_* OR ball_*` is in active contact on that side
 - minimum support-contact count is the count of support sides currently in active contact, not the raw manifold count
 
-Walkable-support contract for `V0`:
+## One-Foot Support Policy
+
+`V0` explicitly allows one-foot support (`support_contact_count == 1`) to be admissible as a successful standing state.
+
+### Justification
+
+- **Physical Honesty**: A physical humanoid should be capable of one-foot stability. Allowing it forces the controller to prove it can balance the COM over a reduced support hull without hidden assistance.
+- **Transient Robustness**: Real standing involves minor weight-shifts and transient "foot-popping." Requiring two-foot contact at all times would produce brittle results that fail on non-material physics noise.
+
+### Constraints and Honest-Truth Rules
+
+One-foot standing is only admissible if it satisfies the full "honest standing" contract:
+
+1.  **Reduced Support Hull**: When only one foot is in contact, the "support region" for the proxy check is reduced to the boundary of that single foot's contact manifold.
+2.  **Proxy Convergence**: The planar support proxy (COM projection) must remain inside that reduced hull. If the proxy drifts outside the single foot's support area for more than `100 ms`, the run fails on `activation_proxy_outside_support_region`.
+3.  **Stability Thresholds**: The character must still satisfy the `20 deg` root-tilt and `720 deg/s` angular speed envelopes. "Surviving" on one foot while flailing or tilting excessively is terminal.
+4.  **Churn Penalty**: Rapidly alternating between one-foot and zero-foot or one-foot and two-foot support will trigger the `12 Hz` churn threshold.
+
+### Interpretation for V0
+
+For `V0`, one-foot standing is allowed for the entire duration of the hold if it remains stable. However, successful artifacts will be audited to distinguish between "two-foot stable" and "one-foot survival" regimes.
+
+Weak assumption rejected:
+- "Standing is only valid when both feet are firmly planted."
+
+## Walkable-support contract for `V0`
 
 - accepted support comes only from non-character `WorldStatic` level geometry
 - the support surface must satisfy the `5.0 deg` flat-ground tolerance relative to gravity-up

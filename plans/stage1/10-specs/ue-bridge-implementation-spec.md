@@ -124,25 +124,34 @@ Bundled labels such as controller-strength-or-representation failure or generic 
 
 The implementation must validate the active physical plant before `BalanceActivation_Ready`.
 
-For `V0`, that validation must at minimum verify:
+### Baseline Definition
 
-- active skeletal mesh and physics asset identity match the declared audited Manny/Quinn-derived baseline
-- active authored constraint-profile set matches the declared `V0` standing baseline
-- active physical-material set and collision-disable table match the declared `V0` baseline
-- the exact authored standing-reference asset and its gravity-aligned control-space projection are part of that audited baseline
-- total body mass remains within `+/- 5%` of the audited `V0` baseline
-- family mass totals for the balance-critical chain and support set remain within `+/- 10%` of the audited baseline
-- principal inertia components for truth-set bodies remain within `+/- 15%` of the audited baseline
-- upper-body collision is disabled for `V0` acceptance
-- support-set collision geometry passed the authored support-geometry audit for flat-ground standing
+For `V0`, the authoritative physical-plant baseline is defined in:
+- `/Config/PhysAnim/V0_Plant_Baseline.json`
 
-Interpretation rules:
+This JSON file contains the audited mass, inertia, asset GUIDs, and collision-disable tables. The implementation must load this file at startup and use it as the comparison source for all activation attempts.
 
-- this is a plant contract, not a controller-quality heuristic
-- the authored standing-reference asset is not assumed physically compatible by default; compatibility exists only when it is admitted by the audited plant/control baseline
-- if the plant contract fails, the run must deny or fail as `activation_physics_asset_contract_violation`
-- runtime tuning or control diagnostics may not relabel a plant-contract violation as controller weakness
-- physics-asset swaps, runtime mass edits, constraint-profile swaps, collision-profile edits, or other plant mutations during an active attempt are forbidden
+### Runtime Validation Rules
+
+| Property | Check Type | V0 Tolerance | Failure Action |
+| :--- | :--- | :--- | :--- |
+| **Asset Identity** | Live GUID/Name check | Exact match | `activation_physics_asset_contract_violation` |
+| **Total Mass** | Live summation of raw bodies | `+/- 5%` | `activation_physics_asset_contract_violation` |
+| **Family Mass** | Live summation (Critical/Support) | `+/- 10%` | `activation_physics_asset_contract_violation` |
+| **Principal Inertia** | Live read from raw bodies | `+/- 15%` | `activation_physics_asset_contract_violation` |
+| **Constraint Profile** | Live name check on all joints | Exact match | `activation_physics_asset_contract_violation` |
+| **Collision Disable** | Live check of adjacency table | No extra enabled | `activation_physics_asset_contract_violation` |
+| **Support Geometry** | Binary Audit (Pass/Fail) | Exact match | `activation_physics_asset_contract_violation` |
+
+### Interpretation Rules
+
+- **Live vs Trusted**: Mass and inertia must be computed from the live `FPhysicsBodyInstance` states, not from authored config, to catch runtime overrides or scaling errors. Asset identities and physical materials are trusted once the GUID match is verified.
+- **Binary Support Audit**: The support-geometry audit is **binary**. A body in the support set (`foot_*`, `ball_*`) passes only if its collision shape and dimensions exactly match the audited baseline (e.g., specific box dimensions). Graded or "close enough" geometry is not admissible in `V0`.
+- **Mutation Block**: If a `PhysicsAsset` is swapped, a `MassOverride` is applied, or a `ConstraintProfile` is changed while in any `BalanceActivation` or `BalanceActive` state, the run must fail immediately.
+- **Reporting**: The run artifact must record the `physics_asset_baseline_id` used for the check and any field that triggered a violation.
+
+Weak assumption rejected:
+- "If the asset name matches, the physical mass and inertia are correct by default."
 
 ## Required Continuity Snapshot
 
