@@ -110,7 +110,7 @@ The implementation must perform truth adjudication in this exact order:
     - **No-Hull Behavior**: If `active_support_side_count == 0`, skip this test entirely. The artifact `proxy_inside_hull` must be emitted as `null` (not evaluated).
 6.  **Classification**: Assign `support_mode` using the following priority:
     - **TwoFootStable**: Both sides `true` (debounced).
-    - **SingleFootSurvival**: Exactly one side `true` (debounced) AND `Proxy` is `Inside`.
+    - **SingleFootSurvival**: Exactly one side `true` (debounced).
     - **TransientRecovery**: Both sides `false` (debounced) AND `gap_timer <= Support Gap (Max)`.
     - **Airborne**: Both sides `false` (debounced) AND `gap_timer > Support Gap (Max)`. (Triggers `activation_support_failure`).
 

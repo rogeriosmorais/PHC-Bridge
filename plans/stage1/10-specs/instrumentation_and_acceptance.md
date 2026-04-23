@@ -56,7 +56,11 @@ The implementation must emit a JSON artifact for every attempt, containing:
   - **Tie-Breaking**: If multiple modes share the same maximum duration, break the tie by severity: `Airborne` > `TransientRecovery` > `SingleFootSurvival` > `TwoFootStable`.
   - **Auditability**: Artifact `support_mode` MUST be directly derivable from frame-level classifications, window boundaries, and the fixed tie-break order.
 - `support_gap_timer_ms`: Current contiguous contact-loss duration (reset to 0.0 on any contact).
-- `proxy_inside_hull`: Boolean result of the point-in-polygon test (or `null` if `active_support_side_count == 0`).
+- `proxy_inside_hull`: The result of the proxy-vs-hull test.
+  - `true`: Proxy evaluated and inside/on edge.
+  - `false`: Proxy evaluated and outside.
+  - `null`: Proxy test not evaluated because `active_support_side_count == 0`.
+  - **Constraint**: The 30 Hz artifact MUST preserve this nullable meaning and MUST NOT coerce `null` to `false`.
 - `active_support_side_count`: Number of sides currently in debounced contact (0, 1, or 2).
 - `support_hull_area_cm2`: Total planar area of the frame support hull.
 - `support_patch_area_l_cm2` / `support_patch_area_r_cm2`: Individual plantar area per side.

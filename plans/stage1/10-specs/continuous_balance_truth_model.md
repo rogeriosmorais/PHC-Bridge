@@ -75,6 +75,7 @@ The run fails on `activation_support_failure` if **any** of these support-truth 
 
 ### One-Foot Support Policy (Honest Balance Survival)
 - A run remains **Support Valid** even if only **one side** (e.g., `foot_l` or `ball_l`) is in contact, provided the **Support Proxy** remains within that single-foot hull.
+- If the proxy remains outside the single-foot hull for longer than the **COM Proxy Drift** limit, the run fails on `activation_proxy_outside_support_region`.
 - **Justification**: This is an "Honest Balance Survival" benchmark.
 
 ### Standing Stability Grades
