@@ -25,9 +25,9 @@ That means the old transition-state-machine assumption is being replaced, not me
 
 The target design is:
 
-1. `BridgeActive_Physical`
+1. `BalanceActivation_Ready`
 2. `BalanceActivation_BlendIn`
-3. `BalanceActivation_StandingValidation`
+3. `BalanceActivation_Validate`
 4. `BalanceActive_Standing`
 5. `SafeDenied` or `Failed`
 
@@ -70,15 +70,17 @@ Interpretation rules:
 
 These runtime labels are operational states, not the primary architecture. The primary architecture is defined by continuous-physics invariants.
 
-### `BridgeActive_Physical`
+### `BalanceActivation_Ready`
 
 The bridge is alive and the balance-critical chain is already physically owned.
 
 Required properties:
 
 - raw body state confirms continuous simulation of the balance-critical chain
+- raw body state confirms continuous simulation of the support set in `V0`
 - no pending topology flip is required to begin balance activation
 - shell bookkeeping and shell influence remain separate observables
+- shell assistance on the balance-critical chain or support set is disabled in `V0`
 
 ### `BalanceActivation_BlendIn`
 
@@ -90,7 +92,7 @@ Required properties:
 - policy/control writes are blended rather than abruptly asserted
 - no diagnostic or grace rule may reinterpret a destabilizing blend as success
 
-### `BalanceActivation_StandingValidation`
+### `BalanceActivation_Validate`
 
 The runtime validates sustained physical standing after blend-in.
 
@@ -103,6 +105,20 @@ Required properties:
 ### `BalanceActive_Standing`
 
 This is the only current passing publication state for balance activation.
+
+## Runtime Mode Contract
+
+| Runtime mode | Entry preconditions | Exit conditions | Fail conditions | Forbidden writes | Authoritative owner | Required emitted metrics |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `BalanceActivation_Ready` | valid bridge context; balance-critical chain and support set continuously simulated; movement component idle; no pending reset | enter `BalanceActivation_BlendIn` once rebased targets are valid and quiet-state proof passes | topology change on critical chain, loss of continuous simulation, shell helper use on critical/support set, movement reclaim | locomotion-drive writes, shell helper writes, kinematic mode writes on critical/support set | balance activation runtime | topology change count, authority conflict count, shell helper used count, quiet-state duration |
+| `BalanceActivation_BlendIn` | `Ready` satisfied; rebased targets exist; `ControlAuthorityAlpha=0.0` | enter `BalanceActivation_Validate` when `ControlAuthorityAlpha=1.0` and no fail condition fired | target discontinuity, gain/damping instability, contact/support failure, pose/reference mismatch, authority conflict, shell helper use | abrupt full-authority writes, shell helper writes, movement-component writes, reset writes | balance activation runtime | alpha, blend duration, target discontinuity, controller effort proxy, authority conflicts, support uptime |
+| `BalanceActivation_Validate` | blend complete; support truth valid; no prior fail | enter `BalanceActive_Standing` after contiguous hold completes | any support failure, instability threshold breach, topology change, non-contiguous hold, shell helper use, movement reclaim | shell helper writes, movement-component writes, topology edits on critical chain, reset writes | balance activation runtime | contiguous hold time, root tilt envelope, peak angular speed by family, contact uptime, COM/support proxy drift |
+| `BalanceActive_Standing` | contiguous hold complete | remain active or enter recovery/termination | loss of standing validity or explicit recovery trigger | legacy activation writes that bypass standing-mode ownership | balance mode runtime | sustained hold time, ongoing stability metrics |
+
+Compatibility note:
+
+- legacy `BridgeActive_Physical` maps to `BalanceActivation_Ready`
+- legacy `BalanceActivation_StandingValidation` maps to `BalanceActivation_Validate`
 
 ## Authority And Diagnostics
 
@@ -128,6 +144,8 @@ The runtime must also distinguish:
 - ownership-continuity problems
 - controller-strength and control-shaping problems
 - hidden authority conflicts between policy, Physics Control, locomotion authority, and startup logic
+
+Primary truth precedence is defined in `continuous_balance_truth_model.md` and must be followed exactly.
 
 ## Measurement-Only Rule
 
@@ -163,6 +181,23 @@ A run may satisfy contract correctness and still fail physical viability.
 
 Removing the old flip-based ritual will often expose controller weakness more directly. That should be treated as more honest evidence, not as a reason to restore protective transition logic.
 
+## Blend-In Contract
+
+`BalanceActivation_BlendIn` uses one explicit controller blend:
+
+- blended quantity: `ControlAuthorityAlpha`
+- alpha range: `0.0 -> 1.0`
+- default duration: `0.75` seconds
+- gating: time-based after `BalanceActivation_Ready` entry; if a fail condition appears, the mode fails rather than pausing alpha
+- history rebasing: one-time rebase on entry to `BalanceActivation_BlendIn`
+- target discontinuity check: fail if `target_discontinuity_deg > 15.0` on the balance-critical chain during blend start
+
+Failure reasons tied to the blend:
+
+- `activation_target_discontinuity`
+- `activation_controller_strength_or_representation_failure`
+- `activation_authority_conflict`
+
 ## Failure Boundary
 
 Use the following boundary for all balance-activation stages:
@@ -181,9 +216,9 @@ Those names are compatibility labels only.
 
 For design intent:
 
-- old `Prepare` / `LateValidate` map to physical-readiness checks before or at `BridgeActive_Physical`
+- old `Prepare` / `LateValidate` map to physical-readiness checks before or at `BalanceActivation_Ready`
 - old `RootOn` maps to a superseded ownership-flip concept and is not the target design
-- old `Settle` maps most closely to `BalanceActivation_StandingValidation`
+- old `Settle` maps most closely to `BalanceActivation_Validate`
 
 No authoritative document may present the legacy phase sequence as the intended activation mechanism.
 

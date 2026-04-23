@@ -56,9 +56,9 @@ Moving to continuous physical ownership plus controller blend-in means rewriting
 The target runtime is not a flip-based ritual with a later certified handoff. The target runtime is:
 
 ```text
-BridgeActive_Physical
+BalanceActivation_Ready
 -> BalanceActivation_BlendIn
--> BalanceActivation_StandingValidation
+-> BalanceActivation_Validate
 -> BalanceActive_Standing
 -> BalanceActive_Recovery / SafeDenied / Failed
 ```
@@ -99,6 +99,7 @@ The old handoff pipeline is now a legacy compatibility subsystem, not the archit
 ### Rewrite scope ladder
 
 - `V0`: always-sim proximal chain, idle stance, no perturbation
+  support set simulated, shell disabled on critical/support sets
 - `V1`: sustained standing
 - `V2`: recovery from small pushes
 - `V3`: locomotion coupling
@@ -161,6 +162,7 @@ Evidence for any standing claim must state:
 
 - sub-step regime
 - balance-critical ownership continuity
+- support-set continuity
 - controller-authority blend behavior
 - control effort or controller strength evidence
 - contact quality and long-lived oscillation evidence when available

@@ -20,6 +20,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 - `Direction change`: the previous flip-based activation model is now considered conceptually flawed as the target design.
 - `Current phase`: documentation and execution alignment for balance-first activation.
 - `Overall status`: UE startup is still stable and the standing benchmark is unchanged, but the active objective has changed. Stage 1 now aims to activate from continuous physical ownership of the balance-critical chain, ramp controller authority gradually onto that already-physical state, and measure sustained physical stability rather than certify a multi-phase handoff.
+- `State naming`: preferred rewrite states are now `BalanceActivation_Ready -> BalanceActivation_BlendIn -> BalanceActivation_Validate -> BalanceActive_Standing`; older names remain compatibility labels only.
 - `Latest runtime read`: the latest verified live smoke from `2026-04-22` still failed to reach sustained `BalanceActive_Standing`. That evidence remains useful as legacy forensic context, but it no longer justifies further refinement of the old flip-based ritual as the target design.
 - `Tracked evidence sync`: the checked-in `test-results/phase1-autocalib/automation_phase1_smoke` artifacts still align with the standing benchmark and still show no passing candidate. They remain evidence that the product benchmark is unmet, not evidence that the old activation model should keep being refined.
 - `Current interpretation`: if early balance-first runs look worse, that is not automatically regression. The new direction is expected to expose controller tuning weakness, authority conflicts, shell-truth problems, and long-lived oscillation more directly because it removes protective transition guards and grace logic.
@@ -160,6 +161,7 @@ Whenever new setup or gate evidence arrives:
   - legacy handoff contract
 - the smallest intended first prototype is:
   - pelvis + thighs + lower spine continuously simulated
+  - distal support set continuously simulated for honest contact truth
   - fixed stance
   - flat ground
   - no perturbations

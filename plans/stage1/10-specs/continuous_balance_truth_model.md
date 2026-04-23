@@ -21,6 +21,24 @@ The primary truth sources for continuous balance are:
 
 Shell metrics may explain failure, but cannot certify balance.
 
+## Source-Of-Truth Precedence
+
+Use this precedence order whenever observables disagree:
+
+1. raw body continuity and raw contact state
+2. derived physical metrics built from raw state
+3. bookkeeping state
+4. declared intent
+5. shell state
+
+Interpretation rules:
+
+- raw body continuity beats bookkeeping
+- bookkeeping beats declared intent only for diagnostics, not success
+- control-target publication is never proof of achieved pose
+- shell state is never proof of standing
+- movement-component non-interference is required, not inferred
+
 ## Secondary Diagnostics
 
 These may explain why the primary truth sources failed:
@@ -45,6 +63,21 @@ Every failure in the new mode must be classified first as one of:
 
 Only after that may the runtime add secondary context such as shell influence or bookkeeping disagreement.
 
+## Support Truth
+
+Support truth is primary only because `V0` requires the support set to remain simulated.
+
+Contact persistence is measured from:
+
+- active contact state on `foot_*` and `ball_*`
+- support uptime across the validation window
+- support-loss event count
+
+Support truth is invalid if:
+
+- the support set is not physical
+- shell or helper behavior is required to preserve support
+
 ## Legacy Mapping
 
 The old labels remain available only for migration and comparison.
@@ -61,6 +94,7 @@ The old labels remain available only for migration and comparison.
 A run is successful only when:
 
 - the balance-critical chain remained continuously simulated
+- the support set remained physically valid for support truth
 - the controller remained applied without forbidden authority conflict
 - standing stability held continuously for the configured duration
 

@@ -36,9 +36,9 @@ The live Stage 1 runtime owner is:
 The implementation must expose distinct runtime states or equivalent explicit sub-states for:
 
 - `BridgeActive`
-- `BridgeActive_Physical`
+- `BalanceActivation_Ready`
 - `BalanceActivation_BlendIn`
-- `BalanceActivation_StandingValidation`
+- `BalanceActivation_Validate`
 - `BalanceActive_Standing`
 - `BalanceActive_Recovery`
 - `SafeDenied`
@@ -56,11 +56,13 @@ On balance request acceptance, the runtime must create a dedicated activation re
 - attempt-active state
 - request-accepted timestamp
 - balance-critical chain definition
+- support-set definition
 - ownership-continuity snapshot
 - controller-authority blend state
 - standing-validation timer state
 - shell bookkeeping state
 - shell influence diagnostics
+- shell helper used flag
 - topology change event count
 - authority conflict count
 - terminal outcome flag
@@ -88,6 +90,7 @@ Balance activation must use a dedicated authoritative post-update snapshot for t
 That snapshot must at minimum be able to report:
 
 - raw simulation state for the balance-critical chain
+- raw simulation state for the support set
 - worst-body linear and angular stability metrics
 - controller-authority alpha / blend progress
 - shell offset and velocity deltas
@@ -109,6 +112,10 @@ During `BalanceActivation_BlendIn`:
 
 - controller authority must ramp gradually
 - abrupt activation of full authority is not the intended path
+- the default alpha is `ControlAuthorityAlpha`
+- the default blend duration is `0.75` seconds
+- target history is rebased once on blend entry
+- target discontinuity greater than `15.0` degrees on the balance-critical chain is terminal
 - diagnostics may record blend instability, but may not reclassify that instability as success
 
 ## Required Shell Rule
@@ -122,9 +129,14 @@ The presence of shell bookkeeping is not itself a failure.
 
 Material shell influence on the balance-critical chain during activation is a failure.
 
+For `V0`:
+
+- shell helper use on the balance-critical chain or support set is forbidden
+- any such use must emit a helper-used event and fail the run
+
 ## Required Standing-Validation Behavior
 
-`BalanceActivation_StandingValidation` may begin only after the bridge is in a physically ready state and the controller blend has reached its required activation range.
+`BalanceActivation_Validate` may begin only after the bridge is in a physically ready state, the controller blend has reached its required activation range, and support truth remains valid.
 
 Standing validation must:
 
@@ -143,9 +155,9 @@ Passing outcome:
 Failing outcomes:
 
 - `BridgeActive`
-- `BridgeActive_Physical`
+- `BalanceActivation_Ready`
 - `BalanceActivation_BlendIn`
-- `BalanceActivation_StandingValidation`
+- `BalanceActivation_Validate`
 - `BalanceActive_Recovery`
 - `SafeDenied`
 - unresolved activation state

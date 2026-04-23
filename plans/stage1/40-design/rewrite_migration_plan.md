@@ -4,17 +4,35 @@
 
 This document defines what stays, what is wrapped, what is deleted, and what is shadow-run only during the continuous-balance rewrite.
 
-## What Stays
+## Legacy Codepaths That Remain Temporarily
 
 - existing bridge startup and inference path
-- existing code symbols where temporary compatibility is useful
-- existing legacy handoff implementation as a compatibility subsystem during migration
+- existing flip-centered handoff implementation as a legacy compatibility subsystem
+- compatibility log labels that still mention `Phase1`, `Phase2`, `Phase3`, `RootOn`, or `Settle`
 
-## What Is Wrapped
+## What May Be Wrapped But Not Extended
 
 - old handoff state-machine logic
 - legacy labels used only for comparison or compatibility
 - shell-heavy transition diagnostics that are still useful as secondary failure explanations
+
+Do not extend these paths with new primary-balance behavior.
+
+## Compatibility-Only Symbols And Labels
+
+These are compatibility-only until removed:
+
+- `BridgeActive_Physical`
+- `BalanceActivation_StandingValidation`
+- legacy `RootOn` / `Settle` labels
+- legacy phase-oriented counters or audits
+
+Preferred rewrite names are:
+
+- `BalanceActivation_Ready`
+- `BalanceActivation_BlendIn`
+- `BalanceActivation_Validate`
+- `BalanceActive_Standing`
 
 ## What Is Being Deleted, Not Ported
 
@@ -22,6 +40,25 @@ This document defines what stays, what is wrapped, what is deleted, and what is 
 - handoff completion as the architectural center
 - shell status as a success substitute
 - any assumption that balance-critical topology changes are normal operation
+
+## What Is Scheduled For Deletion
+
+Delete the old path only after all stop-using criteria are met:
+
+- phase-completion counters as success signals
+- shell-certification logic as a success signal
+- retry logic that exists only to rescue the legacy handoff path
+- legacy top-level design docs as primary references
+
+## Stop-Using Criteria For The Old Path
+
+The old handoff path stops being a primary execution path only when:
+
+- instrumentation is trustworthy
+- the authority matrix is enforced
+- the continuous-balance truth model explains failures honestly
+- the smallest always-sim proximal prototype is stable enough to compare
+- the new mode can be shadow-run against the legacy mode with consistent artifact output
 
 ## Shadow-Run Only
 

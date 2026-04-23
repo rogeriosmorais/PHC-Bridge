@@ -68,6 +68,7 @@ The Stage 1 balance investigation now assumes:
 The first scoped target is intentionally narrow:
 
 - always-sim proximal chain
+- simulated support set for honest contact truth
 - idle stance
 - flat ground
 - no perturbation
@@ -155,6 +156,7 @@ The design is considered documented only when all of the following are true:
 - the docs explicitly separate controller-strength problems from ownership-continuity problems
 - the docs explicitly require a truth model that does not secretly depend on shell-maintained containment
 - the docs explicitly define the smallest always-simulated proximal prototype as the first rewrite target
+- the docs explicitly define how support/contact truth works in that prototype
 - the docs explicitly say no distal or upper-body sophistication is in scope before proximal standing is honest
 - the docs explicitly call out hidden multi-owner authority fights as a primary implementation risk
 - the docs explicitly require observability strong enough to debug sustained standing honestly

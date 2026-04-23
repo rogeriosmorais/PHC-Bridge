@@ -4,13 +4,32 @@
 
 This is the main architecture doc for the continuous-balance rewrite.
 
+The new system must not be described as `Prepare/LateValidate/RootOn/Settle, but cleaner`.
+
 Core rules:
 
 - the balance-critical proximal chain remains continuously simulated during balance mode
-- the controller is blended onto an already-physical state instead of triggering a discrete root-ownership flip
+- the controller is blended onto an already-physical state instead of triggering a discrete ownership flip
 - success is defined only by sustained standing stability over time
 - shell or reference diagnostics may be recorded, but may not certify success
 - any topology or ownership change in the balance-critical chain is a diagnostic event, not normal operation
+
+## Preferred Runtime States
+
+These are the preferred design names for the rewrite:
+
+1. `BalanceActivation_Ready`
+2. `BalanceActivation_BlendIn`
+3. `BalanceActivation_Validate`
+4. `BalanceActive_Standing`
+5. `BalanceActive_Recovery`
+6. `SafeDenied`
+7. `Failed`
+
+Compatibility mapping:
+
+- `BridgeActive_Physical` maps to `BalanceActivation_Ready`
+- `BalanceActivation_StandingValidation` maps to `BalanceActivation_Validate`
 
 ## First Rewrite Scope
 
@@ -41,7 +60,9 @@ Hard non-goal:
 
 - no distal or upper-body sophistication before proximal standing is honest
 
-## Balance-Critical Proximal Chain
+## Body Sets
+
+### Balance-Critical Proximal Chain
 
 The first rewrite target keeps this chain continuously simulated:
 
@@ -58,6 +79,77 @@ Interpretation rules:
 - topology or ownership changes in this chain are diagnostic events
 - they are not normal operation
 
+### Support Set
+
+The support set is required so support truth is physically meaningful in `V0`:
+
+- `calf_l`
+- `calf_r`
+- `foot_l`
+- `foot_r`
+- `ball_l`
+- `ball_r`
+
+Interpretation rules:
+
+- the support set is continuously simulated in `V0`
+- support truth may be primary only because these bodies are physical in `V0`
+- kinematic containment of the support set is not allowed in `V0`
+
+### Upper-Body Set
+
+- `clavicle_l`
+- `upperarm_l`
+- `lowerarm_l`
+- `hand_l`
+- `clavicle_r`
+- `upperarm_r`
+- `lowerarm_r`
+- `hand_r`
+- `neck_01`
+- `head`
+
+### Excluded Or Non-Essential Bodies
+
+- any cosmetic, helper, or non-contact body not listed above
+
+## Non-Critical Body Ownership
+
+| Body set | Allowed movement type in `V0` | Target source in `V0` | May inject force indirectly into critical chain? |
+| :--- | :--- | :--- | :--- |
+| Upper body | simulated preferred; kinematic hold only if declared explicitly as a temporary compatibility path outside `V0` acceptance | fixed stance reference only; no advanced policy shaping | yes through normal articulation only; no per-tick kinematic forcing that stabilizes the proximal chain |
+| Distal lower limbs / support set | simulated only in `V0` | fixed stance reference only; no advanced policy shaping | yes through honest contact only; no helper forcing |
+| Root-adjacent but non-critical bodies | match nearest articulated parent; no ad hoc flips during an active attempt | fixed stance reference or none | yes only through normal articulation |
+| Excluded bodies | disabled or passive only | none | no |
+
+## Shell Rule
+
+Pick one rule and make it executable:
+
+- in `V0`, shell assistance is fully disabled on the balance-critical chain and the support set
+
+Interpretation rules:
+
+- shell metrics may still be logged
+- shell helper application on the balance-critical chain or support set is a failure
+- no helper-ceiling path exists for `V0`
+
+## Support And Contact Rule
+
+`V0` standing uses a support model built from the physical support set.
+
+Support truth is measured by:
+
+- contact persistence on `foot_*` and `ball_*`
+- support-side uptime over the active validation window
+- support loss events
+
+Support failure means any of:
+
+- all support contacts absent for longer than the configured tolerance window
+- contact churn exceeds the allowed event rate while standing still fails
+- support truth depends on non-physical helper behavior
+
 ## What Is Explicitly Not Allowed
 
 - treating phase completion as success
@@ -65,6 +157,7 @@ Interpretation rules:
 - treating a protected ownership flip as the intended activation mechanism
 - reintroducing grace logic to hide controller weakness
 - adding distal or upper-body sophistication before proximal standing is honest
+- allowing hidden shell assistance on the balance-critical chain or support set in `V0`
 
 ## Success Definition
 

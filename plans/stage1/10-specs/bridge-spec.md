@@ -32,9 +32,9 @@ Stage 1 uses these target runtime phases:
 2. `RuntimeReady`
 3. `WaitingForPoseSearch`
 4. `BridgeActive`
-5. `BridgeActive_Physical`
+5. `BalanceActivation_Ready`
 6. `BalanceActivation_BlendIn`
-7. `BalanceActivation_StandingValidation`
+7. `BalanceActivation_Validate`
 8. `BalanceActive_Standing`
 9. `BalanceActive_Recovery`
 10. `SafeDenied`
@@ -43,8 +43,12 @@ Stage 1 uses these target runtime phases:
 Rules:
 
 - `BridgeActive` means the normal bridge is alive
-- `BridgeActive_Physical` means the bridge is alive with the balance-critical chain already simulated
+- `BalanceActivation_Ready` means the bridge is alive with the balance-critical chain and support set already simulated
 - active balance is not claimed until standing validation succeeds
+
+Compatibility note:
+
+- older docs or code may still use `BridgeActive_Physical` and `BalanceActivation_StandingValidation`
 
 ## Normal Bridge Contract
 
@@ -66,6 +70,7 @@ When balance mode is requested:
 
 - the runtime must enter an explicit balance-activation attempt
 - the balance-critical chain must already be or become continuously simulated before controller blend-in is treated as active activation
+- the support set must be physical in `V0` so support truth is honest
 - controller authority must ramp onto that already-physical state
 - the runtime must resolve to either `BalanceActive_Standing`, `SafeDenied`, or `Failed`
 
@@ -105,6 +110,11 @@ First rewrite target:
 Hard non-goal:
 
 - no distal or upper-body sophistication before proximal standing is honest
+
+Support rule:
+
+- the distal support set is simulated in `V0`
+- support truth may not be primary if support bodies are not physical
 
 ## Observation Contract
 
@@ -178,9 +188,9 @@ No diagnostic, grace window, or classification rule may convert instability into
 The smoke fails if the runtime ends in:
 
 - `BridgeActive`
-- `BridgeActive_Physical`
+- `BalanceActivation_Ready`
 - `BalanceActivation_BlendIn`
-- `BalanceActivation_StandingValidation`
+- `BalanceActivation_Validate`
 - `BalanceActive_Recovery`
 - `SafeDenied`
 - unresolved entry state
