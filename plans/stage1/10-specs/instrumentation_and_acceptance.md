@@ -70,6 +70,7 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `shell_influence_materiality`: Estimated assist force/torque from shell.
 - `movement_reclaim_count`: Number of CMC interference events.
 - `continuity_bookkeeping_mismatch`: Diagnostic flag for modifier/raw drift.
+- `physical_continuity_validator_passed`: Authoritative pass/fail flag from the continuity check.
 
 ### 5. Contamination and Authority
 - `contamination_class`: Classification of the violation (`mesh_wide_assist`, `non_critical_body_assist`, `excluded_body_world_brace`, `global_blend_or_kinematic_assist`).
@@ -151,4 +152,4 @@ A run is **Successful** ONLY if:
 1.  The artifact `terminal_reason` is `nullptr`.
 2.  The `hold_duration_sec` reaches or exceeds `3.0`.
 3.  All primary metrics remained within the thresholds above for the entire duration.
-4.  The artifact passed the physical-continuity validator.
+4.  The artifact `physical_continuity_validator_passed` is `true`.
