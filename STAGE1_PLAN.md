@@ -12,13 +12,13 @@ Authority order:
 
 1. `plans/stage1/10-specs/*`
 2. `STAGE1_PLAN.md`
-3. `plans/stage1/40-design/*`
+
+**Historical reference (Non-authoritative)**:
+- `plans/stage1/90-archive/40-design-legacy/*`
 
 Interpretation rules:
 
-- if a `40-design` document conflicts with a `10-specs` document, the `10-specs` document wins
 - if `STAGE1_PLAN.md` conflicts with a `10-specs` document, the `10-specs` document wins
-- `40-design` may explain or sequence implementation work, but it may not introduce a runtime contract absent from `10-specs`
 - balance activation rules are contract rules and must exist in `10-specs`
 
 ## Current Execution Focus
@@ -111,7 +111,6 @@ The planning bundle under `plans/stage1/` remains frozen except for contract cor
 Only these categories may change during the current stabilization loop:
 
 - `10-specs` documents that define runtime contract
-- `40-design` documents that explain the implementation and design consequences of that contract
 - evidence documents that record results
 
 ## Planning Bundle Index
@@ -126,19 +125,9 @@ Only these categories may change during the current stabilization loop:
 - `plans/stage1/10-specs/ue-bridge-implementation-spec.md`
 - `plans/stage1/10-specs/balance-mode-entry-spec.md`
 
-### Derived design documents
+### Archived design documents (Historical)
 
-- `plans/stage1/40-design/adr-reject-flip-centered-balance-entry-as-primary-architecture.md`
-- `plans/stage1/40-design/rewrite_migration_plan.md`
-- `plans/stage1/40-design/legacy_handoff_contract.md`
-- `plans/stage1/40-design/balance-perturbation-mode-design.md`
-- `plans/stage1/40-design/balance_mode_entry_transition_spec.md`
-- `plans/stage1/40-design/balance_mode_phase1_stabilization_spec.md`
-- `plans/stage1/40-design/balance_mode_phase2.md`
-- `plans/stage1/40-design/balance_mode_phase3_settle.md`
-- `plans/stage1/40-design/phase1-late-validate-truth-model.md`
-- `plans/stage1/40-design/phase1-transactional-auto-calibration-harness.md`
-- `plans/stage1/40-design/phase2-rooton-truth-model.md`
+- See `plans/stage1/90-archive/40-design-legacy/` for historical design rationale and research notes.
 
 ## Documentation Acceptance Rule
 
