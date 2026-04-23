@@ -376,6 +376,17 @@ namespace
 			TEXT("Phase 3 instability uses the Settle-specific instability reason"),
 			Reason,
 			BalanceReadinessReasons::Phase3InstabilitySpike);
+		FPhysAnimStabilizationDomain Phase3ThresholdRegression = GetStableDomain();
+		Phase3ThresholdRegression.CurrentPhase = EBalanceReadyTransitionPhase::BRT_Phase3_Settle;
+		Phase3ThresholdRegression.RootLinearSpeed = 300.0f;
+		Phase3ThresholdRegression.RootAngularSpeed = 200.0f;
+		TestFalse(
+			TEXT("Phase 3 does not widen instability thresholds beyond the bounded 2.5x and 3.0x Settle multipliers"),
+			FPhysAnimBalanceReadyTransition::IsSnapshotReady(Phase3ThresholdRegression, GetDefaultSettings(), Reason));
+		TestEqual(
+			TEXT("Phase 3 widened-threshold regression still reports the Settle instability reason"),
+			Reason,
+			BalanceReadinessReasons::Phase3InstabilitySpike);
 		FPhase1AcceptedConvergenceSnapshot Phase3Snapshot;
 		Phase3Snapshot.bIsPelvisSimulating = true;
 		Phase3Snapshot.RootLinearSpeed = 200.0f;
@@ -421,6 +432,26 @@ namespace
 				GetDefaultSettings().BalancePhase2AbortShellOffsetDelta,
 				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta));
 		TestTrue(
+			TEXT("Phase 2 treats an explicit transition-owned shell lock as an active shell correction owner while locomotion is idle"),
+			FPhysAnimBalanceReadyTransition::IsPhase2ShellCorrectionOwnerActive(
+				true,
+				true));
+		TestTrue(
+			TEXT("Phase 2 shell correction remains material at idle when the explicit transition-owned shell lock still owns the shell"),
+			FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(
+				FPhysAnimBalanceReadyTransition::IsPhase2ShellCorrectionOwnerActive(
+					true,
+					true),
+				0.0f,
+				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta + 1.0f,
+				GetDefaultSettings().BalancePhase2AbortShellOffsetDelta,
+				GetDefaultSettings().BalancePhase2AbortShellVelocityDelta));
+		TestFalse(
+			TEXT("Phase 2 idle locomotion without the explicit transition-owned shell lock does not overclaim shell correction ownership"),
+			FPhysAnimBalanceReadyTransition::IsPhase2ShellCorrectionOwnerActive(
+				false,
+				true));
+		TestTrue(
 			TEXT("Phase 3 keeps shell correction classification active while transition-owned shell lock is held"),
 			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
 				true,
@@ -435,6 +466,16 @@ namespace
 			FPhysAnimBalanceReadyTransition::IsPhase3ShellCorrectionOwnerActive(
 				false,
 				true));
+		FPhysAnimBalanceReadyTransition PolicySuppressionTransition;
+		FPhysAnimBalanceReadyTransitionSnapshot RootOnSuppressionSnapshot;
+		RootOnSuppressionSnapshot.InternalPhase = EBalanceReadyTransitionPhase::BRT_Phase2_RootOn;
+		PolicySuppressionTransition.ImportSnapshot(RootOnSuppressionSnapshot);
+		TestTrue(
+			TEXT("RootOn keeps normal policy fully suppressed to preserve truthful handoff evaluation"),
+			PolicySuppressionTransition.ShouldSuppressPolicy());
+		TestTrue(
+			TEXT("RootOn keeps per-bone policy writes suppressed to preserve truthful handoff evaluation"),
+			PolicySuppressionTransition.ShouldSuppressPolicyWrites(TEXT("pelvis")));
 
 		TestEqual(
 			TEXT("Phase 2 root simulation drop is owned by RootOn execution"),

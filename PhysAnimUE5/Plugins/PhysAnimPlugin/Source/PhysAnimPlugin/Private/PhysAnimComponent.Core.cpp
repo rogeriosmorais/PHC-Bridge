@@ -4709,6 +4709,8 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 		if (NewState == EPhysAnimRuntimeState::BalanceEntry_Settle)
 		{
 			BalanceEntrySettleFrameCount = 0;
+			BalanceScenarioStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+			RuntimeInstabilityState = FPhysAnimRuntimeInstabilityState();
 		}
 
 		// Phase 2 states (RootOn/Settle) will receive their tuning via the normal per-tick path in TickComponent.

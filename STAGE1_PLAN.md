@@ -32,9 +32,11 @@ Current focus:
 3. distinguish contract failures from physical-viability failures
 4. preserve a truthful RootOn truth model in Phase 2
 5. preserve a truthful Settle continuity contract in Phase 3
-6. isolate why shell maintenance becomes materially corrective during Phase 3 Settle after an otherwise truthful RootOn handoff
-7. determine whether the current Settle shell-maintenance failure is a contract-level mismatch, a physical-viability limit, or both
-8. if needed, revise Settle shell behavior / continuity checks / tuning using evidence rather than ad hoc workaround changes
+6. treat truthful deny and failure taxonomy as observability only, not as product success
+7. require balance entry to reach `BalanceActive_Standing` and hold it for `3.0` seconds before any run counts as success
+8. isolate why shell maintenance becomes materially corrective during the current latest Phase 3 Settle frontier after an otherwise truthful RootOn handoff
+9. determine whether the current Settle `phase3_material_shell_correction` frontier is a contract-level mismatch, a physical-viability limit, or both
+10. if needed, revise Settle shell behavior / continuity checks / tuning using evidence rather than ad hoc workaround changes
 
 ## Current Stage 1 Truth
 
@@ -43,12 +45,15 @@ The Stage 1 balance-entry investigation has reached this point:
 - many earlier failures were contract / ownership / telemetry problems
 - those areas are now substantially cleaner
 - Phase 1 upper-body hold / LateValidate bookkeeping is no longer the dominant active blocker
-- the latest truthful smoke outcome is explicit safe denial rather than ambiguous fallback
-- Phase 1 Prepare / LateValidate now pass truthfully in the latest smoke
-- Phase 2 RootOn now passes truthfully in the latest smoke
-- the current active blocker in the latest smoke is Phase 3 Settle shell-maintenance continuity:
+- truthful safe denial is now treated as a useful forensic outcome, not a successful smoke outcome
+- Phase 1 Prepare / LateValidate and Phase 2 RootOn may now pass truthfully without that implying product success
+- the active benchmark is now stricter than RootOn truth:
+  balance entry must reach `BalanceActive_Standing` and remain there for `3.0` continuous seconds
+- the current active blocker in the latest saved live smoke on `2026-04-22` remains Phase 3 Settle shell-maintenance continuity:
   `phase3_material_shell_correction`
-- the next engineering slice is Settle shell-maintenance truth, not restart cleanup and not the older Phase 1 readiness-margin frontier
+- the current audited shape is an early Settle shell-correction frontier at `tick=2` with `shellVelocityDelta=33.20/10.00` under preserved shell lock after truthful RootOn
+- further grace-window refinement is now suspect unless it moves the standing-hold benchmark
+- the standing-benchmark evidence sync is now complete; the next engineering slice is Settle shell-maintenance truth under that benchmark, not restart cleanup and not the older Phase 1 readiness-margin frontier
 
 This is progress, not regression.
 
@@ -70,12 +75,13 @@ The authoritative balance-entry contract is defined in:
 
 The `PhysAnim.PIE.BalanceModeSmoke` test is successful only if the run ends as one of:
 
-- `BalanceActive`
-- explicit safe denial
+- `BalanceActive_Standing`
 
 The test is a failure if the run ends in:
 
 - `BridgeActive`
+- `BalanceActive_Recovery`
+- explicit safe denial
 - unresolved entry ambiguity
 - misleading success caused by hidden same-frame assistance
 
@@ -119,6 +125,8 @@ The design is considered documented only when all of the following are true:
 - no remaining design text implies that a contract-correct Phase 1, Phase 2, or Phase 3 setup is automatically physically viable
 - Phase 2 documents explicitly define the RootOn source-of-truth order and shell / policy suppression semantics
 - Phase 3 documents explicitly define the Settle continuity contract, runtime mapping, timers, and emitted failure taxonomy
+- the docs explicitly state that truthful safe deny is not a passing outcome
+- the docs explicitly state the active benchmark: `BalanceActive_Standing` held for `3.0` continuous seconds
 
 ## Long-Term Architectural Direction
 

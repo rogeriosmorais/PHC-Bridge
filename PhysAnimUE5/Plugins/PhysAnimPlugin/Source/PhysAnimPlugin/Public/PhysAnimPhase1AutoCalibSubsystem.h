@@ -32,7 +32,23 @@ public:
 		float Tolerance = 1.0e-3f);
 	static bool IsActiveTrialTimeoutReached(bool bTrialStarted, double TrialStartTimeSeconds, double CurrentTimeSeconds, double TimeoutSeconds);
 	static bool ShouldAccumulateActiveTrialMetrics(bool bTrialStarted);
+	static bool ShouldFinalizeActiveTrial(
+		EBalanceReadyTransitionPhase Phase,
+		double BalanceActiveStandingHoldSeconds,
+		bool bTransitionFailed,
+		bool bSafeDenied);
 	static void FinalizeReportData(FPhase1AutoCalibReport& InOutReport, TArray<FPhase1AutoCalibTrialResult>* StageCTrials = nullptr);
+#if WITH_DEV_AUTOMATION_TESTS
+	static void TestOnlyResetActiveTrialTrackingState(
+		double& InOutActiveTrialStartTimeSeconds,
+		double& InOutActiveTrialFirstRootOnTimeSeconds,
+		double& InOutActiveTrialFirstNoCouplingProofTimeSeconds,
+		double& InOutActiveTrialFirstBalanceActiveStandingTimeSeconds,
+		double& InOutActiveTrialStandingHoldStartTimeSeconds,
+		double& InOutActiveTrialMaxBalanceActiveStandingHoldSeconds,
+		FPhase1AutoCalibLiveMetrics& InOutActiveTrialPeakMetrics);
+	static bool TestOnlyWriteArtifacts(FPhase1AutoCalibReport& InOutReport);
+#endif
 
 private:
 	enum class EAutoCalibStage : uint8
@@ -60,6 +76,7 @@ private:
 	void TickActiveTrial();
 	void FinalizeActiveTrial(bool bTimedOut);
 	void AdvanceStageOrFinish();
+	void ResetActiveTrialTrackingState();
 	void UpdatePeakMetrics(const FPhase1AutoCalibLiveMetrics& Metrics);
 	FPhase1AutoCalibTrialResult BuildTrialResult(bool bTimedOut) const;
 	void FinalizeReport();
@@ -81,6 +98,9 @@ private:
 	double ActiveTrialStartTimeSeconds = -1.0;
 	double ActiveTrialFirstRootOnTimeSeconds = -1.0;
 	double ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
+	double ActiveTrialFirstBalanceActiveStandingTimeSeconds = -1.0;
+	double ActiveTrialStandingHoldStartTimeSeconds = -1.0;
+	double ActiveTrialMaxBalanceActiveStandingHoldSeconds = 0.0;
 	double CurrentStageStartTimeSeconds = -1.0;
 	double LastReadinessLogTimeSeconds = -1.0;
 	FPhase1AutoCalibLiveMetrics ActiveTrialPeakMetrics;

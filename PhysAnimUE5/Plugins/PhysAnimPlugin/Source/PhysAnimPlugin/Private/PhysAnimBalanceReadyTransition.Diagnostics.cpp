@@ -221,8 +221,6 @@ bool FPhysAnimBalanceReadyTransition::IsFailureClassRetryable(const FString& Fai
 		FailureReason == TEXT("phase2_topology_not_preserved") ||
 		FailureReason == TEXT("phase2_guard_window_interrupted_by_transient_contamination");
 }
-
-
 EBalanceReadyConditionOwner FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(const FString& Reason)
 {
 	static const FString Phase1NoConvergencePrefix = TEXT("phase1_no_convergence_path_");

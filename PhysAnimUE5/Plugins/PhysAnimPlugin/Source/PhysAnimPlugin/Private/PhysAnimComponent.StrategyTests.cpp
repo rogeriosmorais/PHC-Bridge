@@ -7,9 +7,12 @@
 #include "PhysAnimBalance.TestHelpers.h"
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
 #include "Engine/SkeletalMesh.h"
+#include "HAL/FileManager.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "PhysicsEngine/ConstraintInstance.h"
 #include "PhysicsEngine/PhysicsConstraintTemplate.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Misc/AutomationTest.h"
 
 namespace
@@ -36,6 +39,7 @@ namespace
 		Trial.Score.bContractPassed = bContractPassed;
 		Trial.Score.bReachedRootOn = bContractPassed;
 		Trial.Score.bNoCouplingProofSatisfied = bContractPassed;
+		Trial.Score.bReachedBalanceActiveStanding = bContractPassed;
 		Trial.Score.WorstDirectLinkAngularErrorDeg = WorstDirectLinkAngularErrorDeg;
 		Trial.Score.MeanTargetDeltaDeg = 2.0f;
 		Trial.Score.MaxTargetDeltaDeg = 4.0f;
@@ -45,9 +49,11 @@ namespace
 		Trial.Score.ShellVelocityDeltaCmPerSecond = 2.0f;
 		Trial.Score.PeakRootLinearSpeedCmPerSecond = 25.0f;
 		Trial.Score.PeakRootAngularSpeedDegPerSecond = 35.0f;
+		Trial.Score.BalanceActiveStandingHoldSeconds = bContractPassed ? PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds : 0.0f;
 		Trial.TrialTimeoutBudgetSeconds = 0.75f;
 		Trial.TimeToRootOnSeconds = bContractPassed ? 0.20f : -1.0f;
 		Trial.TimeToNoCouplingProofSeconds = bContractPassed ? 0.23f : -1.0f;
+		Trial.TimeToBalanceActiveStandingSeconds = bContractPassed ? 0.30f : -1.0f;
 		Trial.bTimedOutBeforeRootOn = !bContractPassed;
 		Trial.bTimedOutBeforeNoCouplingProof = !bContractPassed;
 		Trial.WinningSearchFamily = TEXT("direct_seed");
@@ -85,7 +91,7 @@ namespace
 		FString OutcomeError;
 
 		TestTrue(
-			TEXT("Active standing balance remains a passing smoke outcome"),
+			TEXT("Active standing balance remains a passing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceActive_Standing,
 				false,
@@ -98,8 +104,8 @@ namespace
 		TestTrue(TEXT("Successful active-balance outcome emits no error"), OutcomeError.IsEmpty());
 
 		OutcomeError.Reset();
-		TestTrue(
-			TEXT("Balance recovery remains a passing smoke outcome"),
+		TestFalse(
+			TEXT("Balance recovery is not a passing standing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceActive_Recovery,
 				false,
@@ -109,11 +115,11 @@ namespace
 				TEXT(""),
 				TEXT(""),
 				OutcomeError));
-		TestTrue(TEXT("Successful recovery outcome still emits no error"), OutcomeError.IsEmpty());
+		TestTrue(TEXT("Recovery failure reports the standing requirement"), OutcomeError.Contains(TEXT("BalanceActive_Standing")));
 
 		OutcomeError.Reset();
-		TestTrue(
-			TEXT("Explicit safe deny is a passing smoke outcome when the reason is truthful"),
+		TestFalse(
+			TEXT("Explicit safe deny is not a passing benchmark outcome when the reason is truthful"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceSafeDeny,
 				false,
@@ -123,11 +129,11 @@ namespace
 				TEXT("phase2_root_on_spike"),
 				TEXT(""),
 				OutcomeError));
-		TestTrue(TEXT("Safe deny pass emits no error"), OutcomeError.IsEmpty());
+		TestTrue(TEXT("Safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
 
 		OutcomeError.Reset();
-		TestTrue(
-			TEXT("Phase 3 shell maintenance safe deny is a passing truthful smoke outcome"),
+		TestFalse(
+			TEXT("Phase 3 shell maintenance safe deny is not a passing standing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceSafeDeny,
 				false,
@@ -137,7 +143,7 @@ namespace
 				TEXT("phase3_material_shell_correction"),
 				TEXT(""),
 				OutcomeError));
-		TestTrue(TEXT("Phase 3 safe deny pass emits no error"), OutcomeError.IsEmpty());
+		TestTrue(TEXT("Phase 3 safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
 
 		OutcomeError.Reset();
 		TestFalse(
@@ -422,7 +428,17 @@ namespace
 				2.0f,
 				10.0f));
 		TestFalse(
-			TEXT("Later Settle ticks also suppress velocity-only shell spikes while the transition lock holds and offset is zero"),
+			TEXT("Pre-validation handoff tick also ignores a velocity-only shell spike while explicit lock continuity still holds"),
+			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				true,
+				true,
+				0,
+				0.0f,
+				682.36f,
+				2.0f,
+				10.0f));
+		TestTrue(
+			TEXT("Later Settle ticks classify a sustained velocity-only shell spike as material once handoff grace expires"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 				true,
 				true,
@@ -1842,6 +1858,7 @@ namespace
 		ContractPassing.bContractPassed = true;
 		ContractPassing.bReachedRootOn = true;
 		ContractPassing.bNoCouplingProofSatisfied = true;
+		ContractPassing.bReachedBalanceActiveStanding = true;
 		ContractPassing.WorstDirectLinkAngularErrorDeg = 18.0f;
 		ContractPassing.MeanTargetDeltaDeg = 2.0f;
 		ContractPassing.MaxTargetDeltaDeg = 5.0f;
@@ -1851,6 +1868,7 @@ namespace
 		ContractPassing.ShellVelocityDeltaCmPerSecond = 2.0f;
 		ContractPassing.PeakRootLinearSpeedCmPerSecond = 20.0f;
 		ContractPassing.PeakRootAngularSpeedDegPerSecond = 30.0f;
+		ContractPassing.BalanceActiveStandingHoldSeconds = PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds;
 		UPhysAnimComponent::FinalizePhase1AutoCalibScore(ContractPassing);
 
 		FPhase1AutoCalibScore ContractFailing = ContractPassing;
@@ -1885,6 +1903,15 @@ namespace
 		TestFalse(
 			TEXT("Timed-out candidates cannot outrank a passing non-timeout candidate"),
 			UPhysAnimComponent::IsBetterPhase1AutoCalibScore(TimedOut, ContractPassing));
+
+		FPhase1AutoCalibScore UnsustainedStanding = ContractPassing;
+		UnsustainedStanding.bContractPassed = false;
+		UnsustainedStanding.BalanceActiveStandingHoldSeconds =
+			PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds - 0.5f;
+		UPhysAnimComponent::FinalizePhase1AutoCalibScore(UnsustainedStanding);
+		TestFalse(
+			TEXT("RootOn without a sustained standing hold cannot outrank a benchmark pass"),
+			UPhysAnimComponent::IsBetterPhase1AutoCalibScore(UnsustainedStanding, ContractPassing));
 		return true;
 	}
 
@@ -1937,6 +1964,113 @@ namespace
 		TestTrue(
 			TEXT("Only started trials contribute to active trial peak metrics"),
 			UPhysAnimPhase1AutoCalibSubsystem::ShouldAccumulateActiveTrialMetrics(true));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibFinalizationRequiresStandingHoldTest,
+		"PhysAnim.Component.Phase1AutoCalibFinalizationRequiresStandingHold",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibFinalizationRequiresStandingHoldTest::RunTest(const FString& Parameters)
+	{
+		const double RequiredHoldSeconds = static_cast<double>(PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds);
+
+		TestFalse(
+			TEXT("RootOn does not finalize before standing hold can be measured"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Phase2_RootOn,
+				0.0,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("Settle does not finalize before standing hold can be measured"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Phase3_Settle,
+				0.0,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("Succeeded still waits for the required standing hold"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Succeeded,
+				RequiredHoldSeconds - 0.25,
+				false,
+				false));
+
+		TestTrue(
+			TEXT("Succeeded finalizes once the standing hold benchmark is met"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Succeeded,
+				RequiredHoldSeconds,
+				false,
+				false));
+
+		TestTrue(
+			TEXT("Transition failure finalizes immediately"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Phase2_RootOn,
+				0.0,
+				true,
+				false));
+
+		TestTrue(
+			TEXT("Safe denial finalizes immediately"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Phase2_RootOn,
+				0.0,
+				false,
+				true));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibResetClearsStandingHoldStateTest,
+		"PhysAnim.Component.Phase1AutoCalibResetClearsStandingHoldState",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibResetClearsStandingHoldStateTest::RunTest(const FString& Parameters)
+	{
+		double ActiveTrialStartTimeSeconds = 12.0;
+		double ActiveTrialFirstRootOnTimeSeconds = 12.5;
+		double ActiveTrialFirstNoCouplingProofTimeSeconds = 12.75;
+		double ActiveTrialFirstBalanceActiveStandingTimeSeconds = 13.0;
+		double ActiveTrialStandingHoldStartTimeSeconds = 13.25;
+		double ActiveTrialMaxBalanceActiveStandingHoldSeconds = static_cast<double>(PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds);
+		FPhase1AutoCalibLiveMetrics ActiveTrialPeakMetrics;
+		ActiveTrialPeakMetrics.RuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
+		ActiveTrialPeakMetrics.TransitionPhase = EBalanceReadyTransitionPhase::BRT_Succeeded;
+		ActiveTrialPeakMetrics.RootLinearSpeedCmPerSecond = 123.0f;
+
+		UPhysAnimPhase1AutoCalibSubsystem::TestOnlyResetActiveTrialTrackingState(
+			ActiveTrialStartTimeSeconds,
+			ActiveTrialFirstRootOnTimeSeconds,
+			ActiveTrialFirstNoCouplingProofTimeSeconds,
+			ActiveTrialFirstBalanceActiveStandingTimeSeconds,
+			ActiveTrialStandingHoldStartTimeSeconds,
+			ActiveTrialMaxBalanceActiveStandingHoldSeconds,
+			ActiveTrialPeakMetrics);
+
+		TestEqual(TEXT("Reset clears active trial start time"), ActiveTrialStartTimeSeconds, -1.0);
+		TestEqual(TEXT("Reset clears first RootOn time"), ActiveTrialFirstRootOnTimeSeconds, -1.0);
+		TestEqual(TEXT("Reset clears first no-coupling-proof time"), ActiveTrialFirstNoCouplingProofTimeSeconds, -1.0);
+		TestEqual(TEXT("Reset clears first standing time"), ActiveTrialFirstBalanceActiveStandingTimeSeconds, -1.0);
+		TestEqual(TEXT("Reset clears standing hold start time"), ActiveTrialStandingHoldStartTimeSeconds, -1.0);
+		TestEqual(TEXT("Reset clears standing hold benchmark progress"), ActiveTrialMaxBalanceActiveStandingHoldSeconds, 0.0);
+		TestEqual(TEXT("Reset clears accumulated peak runtime state"), ActiveTrialPeakMetrics.RuntimeState, EPhysAnimRuntimeState::Uninitialized);
+		TestEqual(TEXT("Reset clears accumulated peak transition phase"), ActiveTrialPeakMetrics.TransitionPhase, EBalanceReadyTransitionPhase::BRT_Inactive);
+		TestEqual(TEXT("Reset clears accumulated peak linear speed"), ActiveTrialPeakMetrics.RootLinearSpeedCmPerSecond, 0.0f);
+		TestFalse(
+			TEXT("A reset trial cannot immediately finalize as a standing-hold success"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Succeeded,
+				ActiveTrialMaxBalanceActiveStandingHoldSeconds,
+				false,
+				false));
 
 		return true;
 	}
@@ -2081,7 +2215,7 @@ namespace
 			1.8f));
 		FPhase1AutoCalibTrialResult StageCTruthfulPass = MakePhase1AutoCalibTrial(
 			EPhase1AutoCalibStrategyPreset::BalancedCoupled,
-			TEXT("reached_root_on"),
+			TEXT("stable_balance_active_standing"),
 			TEXT("ready"),
 			true,
 			17.0f,
@@ -2129,6 +2263,8 @@ namespace
 		TestTrue(TEXT("Report picks the contract-passing best candidate"), Report.bHasBestCandidate);
 		TestEqual(TEXT("Best candidate comes from the passing preset"), Report.BestCandidate.Params.SourcePreset, EPhase1AutoCalibStrategyPreset::BalancedCoupled);
 		TestTrue(TEXT("Report marks the reproducible truthful pass when one exists"), Report.bHasReproducibleTruthfulPass);
+		TestEqual(TEXT("Report publishes the standing hold benchmark threshold"), Report.RequiredBalanceActiveStandingHoldSeconds, PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds);
+		TestTrue(TEXT("Best candidate satisfies the standing hold benchmark"), Report.BestCandidate.Score.BalanceActiveStandingHoldSeconds >= Report.RequiredBalanceActiveStandingHoldSeconds);
 		TestEqual(TEXT("Truthful pass classification wins when a passing candidate exists"), Report.FrontierClassification, EPhase1AutoCalibFrontierClassification::TruthfulPassFound);
 		TestEqual(TEXT("Passing frontier recommends promotion"), Report.RecommendedAction, EPhase1AutoCalibRecommendedAction::PromoteBestCandidate);
 		TestEqual(TEXT("Passing frontier does not name a follow-up expansion"), Report.RecommendedExpansionName, FString());
@@ -2224,6 +2360,59 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibRootOnOnlyReportSemanticsTest,
+		"PhysAnim.Component.Phase1AutoCalibRootOnOnlyReportSemantics",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibRootOnOnlyReportSemanticsTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibReport Report;
+
+		FPhase1AutoCalibTrialResult RootOnOnly = MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::BalancedCoupled,
+			TEXT("reached_root_on"),
+			TEXT("ready"),
+			false,
+			24.0f,
+			0.9f);
+		RootOnOnly.bReproducible = true;
+		RootOnOnly.Score.bReachedRootOn = true;
+		RootOnOnly.Score.bNoCouplingProofSatisfied = true;
+		RootOnOnly.Score.bReachedBalanceActiveStanding = false;
+		RootOnOnly.Score.BalanceActiveStandingHoldSeconds = 0.0f;
+		RootOnOnly.TimeToRootOnSeconds = 0.20f;
+		RootOnOnly.TimeToNoCouplingProofSeconds = 0.24f;
+		RootOnOnly.TimeToBalanceActiveStandingSeconds = -1.0f;
+		RootOnOnly.bTimedOutBeforeRootOn = false;
+		RootOnOnly.bTimedOutBeforeNoCouplingProof = false;
+		UPhysAnimComponent::FinalizePhase1AutoCalibScore(RootOnOnly.Score);
+
+		FPhase1AutoCalibTrialResult EarlierFailure = MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::CurrentDefault,
+			TEXT("timed_out"),
+			TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient"),
+			false,
+			32.0f,
+			1.5f);
+
+		Report.Trials.Add(EarlierFailure);
+		Report.Trials.Add(RootOnOnly);
+
+		UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(Report);
+
+		TestFalse(TEXT("RootOn-only output does not become a truthful pass"), Report.bHasReproducibleTruthfulPass);
+		TestFalse(TEXT("RootOn-only output does not produce a best candidate"), Report.bHasBestCandidate);
+		TestTrue(TEXT("RootOn-only output does not classify as truthful pass found"), Report.FrontierClassification != EPhase1AutoCalibFrontierClassification::TruthfulPassFound);
+		TestTrue(TEXT("RootOn-only output does not recommend promotion"), Report.RecommendedAction != EPhase1AutoCalibRecommendedAction::PromoteBestCandidate);
+		TestTrue(TEXT("RootOn-only output is still exposed as the best near-pass"), Report.bHasBestNearPass);
+		TestEqual(TEXT("Best near-pass keeps the root-on-only terminal class"), Report.BestNearPass.TerminalClass, FString(TEXT("reached_root_on")));
+		TestTrue(TEXT("RootOn-only output remains the furthest progressed failure"), Report.bHasFurthestProgressedFailure);
+		TestEqual(TEXT("Furthest progressed failure keeps the root-on-only blocker"), Report.FurthestProgressedFailure.TruthfulBlocker, FString(TEXT("ready")));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibFrontierClassificationTest,
 		"PhysAnim.Component.Phase1AutoCalibFrontierClassification",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -2259,6 +2448,110 @@ namespace
 		TestEqual(TEXT("Coupled flip recommends the bounded coupled trade-control expansion"), Report.RecommendedAction, EPhase1AutoCalibRecommendedAction::AddCoupledTradeControlExpansion);
 		TestEqual(TEXT("Coupled flip names the bounded next expansion"), Report.RecommendedExpansionName, FString(TEXT("CoupledTradeControlFamily")));
 		TestEqual(TEXT("Overall dominant blocker keeps the highest-count truthful blocker"), Report.DominantTruthfulBlocker, FString(TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient")));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibArtifactSerializationTest,
+		"PhysAnim.Component.Phase1AutoCalibArtifactSerialization",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibArtifactSerializationTest::RunTest(const FString& Parameters)
+	{
+		FPhase1AutoCalibReport Report;
+
+		FPhase1AutoCalibTrialResult TruthfulPass = MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::BalancedCoupled,
+			TEXT("stable_balance_active_standing"),
+			TEXT("ready"),
+			true,
+			17.0f,
+			0.8f);
+		TruthfulPass.StageName = TEXT("stage_c");
+		TruthfulPass.bReproducible = true;
+		TruthfulPass.WinningSearchFamily = TEXT("focused_delta");
+		TruthfulPass.WinningSearchSource = TEXT("focused_delta_variant");
+		TruthfulPass.ExecutedSearchFamilies = { TEXT("direct_seed"), TEXT("focused_delta") };
+
+		FPhase1AutoCalibTrialResult RootOnOnly = MakePhase1AutoCalibTrial(
+			EPhase1AutoCalibStrategyPreset::CurrentDefault,
+			TEXT("reached_root_on"),
+			TEXT("ready"),
+			false,
+			24.0f,
+			1.0f);
+		RootOnOnly.Score.bReachedRootOn = true;
+		RootOnOnly.Score.bNoCouplingProofSatisfied = true;
+		RootOnOnly.Score.bReachedBalanceActiveStanding = false;
+		RootOnOnly.Score.BalanceActiveStandingHoldSeconds = 0.0f;
+		RootOnOnly.TimeToRootOnSeconds = 0.20f;
+		RootOnOnly.TimeToNoCouplingProofSeconds = 0.24f;
+		RootOnOnly.TimeToBalanceActiveStandingSeconds = -1.0f;
+		RootOnOnly.bTimedOutBeforeRootOn = false;
+		RootOnOnly.bTimedOutBeforeNoCouplingProof = false;
+		UPhysAnimComponent::FinalizePhase1AutoCalibScore(RootOnOnly.Score);
+
+		Report.Trials.Add(TruthfulPass);
+		Report.Trials.Add(RootOnOnly);
+		UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(Report);
+
+		const FString OutputDirectory = FPaths::ConvertRelativePathToFull(
+			FPaths::Combine(
+				FPaths::ProjectSavedDir(),
+				TEXT("Automation"),
+				TEXT("Phase1AutoCalibArtifactSerialization")));
+		IFileManager::Get().DeleteDirectory(*OutputDirectory, false, true);
+		IFileManager::Get().MakeDirectory(*OutputDirectory, true);
+
+		Report.OutputDirectory = OutputDirectory;
+		Report.SummaryPath = FPaths::Combine(OutputDirectory, TEXT("summary.json"));
+		Report.TrialsCsvPath = FPaths::Combine(OutputDirectory, TEXT("trials.csv"));
+		Report.ParetoJsonPath = FPaths::Combine(OutputDirectory, TEXT("pareto.json"));
+
+		TestTrue(
+			TEXT("Artifact writer can serialize the finalized report"),
+			UPhysAnimPhase1AutoCalibSubsystem::TestOnlyWriteArtifacts(Report));
+
+		TestTrue(TEXT("Artifact writer emits summary.json"), IFileManager::Get().FileExists(*Report.SummaryPath));
+		TestTrue(TEXT("Artifact writer emits trials.csv"), IFileManager::Get().FileExists(*Report.TrialsCsvPath));
+		TestTrue(TEXT("Artifact writer emits pareto.json"), IFileManager::Get().FileExists(*Report.ParetoJsonPath));
+
+		FString SummaryJson;
+		TestTrue(TEXT("summary.json can be loaded"), FFileHelper::LoadFileToString(SummaryJson, *Report.SummaryPath));
+		if (!SummaryJson.IsEmpty())
+		{
+			TestTrue(TEXT("summary.json emits the standing hold benchmark field"), SummaryJson.Contains(TEXT("\"requiredBalanceActiveStandingHoldSeconds\":")));
+			TestTrue(TEXT("summary.json emits the best candidate payload"), SummaryJson.Contains(TEXT("\"bestCandidate\":{")));
+			TestTrue(TEXT("summary.json keeps the active-standing pass as best candidate"), SummaryJson.Contains(TEXT("\"bestCandidate\":{\"trialId\":")) && SummaryJson.Contains(TEXT("\"terminalClass\":\"stable_balance_active_standing\"")));
+			TestTrue(TEXT("summary.json emits standing timing"), SummaryJson.Contains(TEXT("\"timeToBalanceActiveStandingSeconds\":")));
+			TestTrue(TEXT("summary.json emits standing reach flags"), SummaryJson.Contains(TEXT("\"reachedBalanceActiveStanding\":true")));
+			TestTrue(TEXT("summary.json emits standing hold seconds"), SummaryJson.Contains(TEXT("\"balanceActiveStandingHoldSeconds\":")));
+			TestTrue(TEXT("summary.json keeps the root-on-only result as best near-pass"), SummaryJson.Contains(TEXT("\"bestNearPass\":{\"trialId\":")) && SummaryJson.Contains(TEXT("\"terminalClass\":\"reached_root_on\"")));
+		}
+
+		FString ParetoJson;
+		TestTrue(TEXT("pareto.json can be loaded"), FFileHelper::LoadFileToString(ParetoJson, *Report.ParetoJsonPath));
+		if (!ParetoJson.IsEmpty())
+		{
+			TestTrue(TEXT("pareto.json emits standing timing"), ParetoJson.Contains(TEXT("\"timeToBalanceActiveStandingSeconds\":")));
+			TestTrue(TEXT("pareto.json emits standing reach flags"), ParetoJson.Contains(TEXT("\"reachedBalanceActiveStanding\":")));
+			TestTrue(TEXT("pareto.json emits standing hold seconds"), ParetoJson.Contains(TEXT("\"balanceActiveStandingHoldSeconds\":")));
+		}
+
+		FString TrialsCsv;
+		TestTrue(TEXT("trials.csv can be loaded"), FFileHelper::LoadFileToString(TrialsCsv, *Report.TrialsCsvPath));
+		if (!TrialsCsv.IsEmpty())
+		{
+			const int32 HeaderEndIndex = TrialsCsv.Find(TEXT("\n"));
+			const FString Header = HeaderEndIndex >= 0 ? TrialsCsv.Left(HeaderEndIndex) : TrialsCsv;
+			TestTrue(TEXT("trials.csv header emits standing timing"), Header.Contains(TEXT("time_to_balance_active_standing_seconds")));
+			TestTrue(TEXT("trials.csv header emits standing reach flags"), Header.Contains(TEXT("reached_balance_active_standing")));
+			TestTrue(TEXT("trials.csv header emits standing hold seconds"), Header.Contains(TEXT("balance_active_standing_hold_seconds")));
+			TestTrue(TEXT("trials.csv writes the benchmark pass row"), TrialsCsv.Contains(TEXT("stable_balance_active_standing")) && TrialsCsv.Contains(TEXT("true,3.000000")));
+			TestTrue(TEXT("trials.csv writes the root-on-only row as non-standing"), TrialsCsv.Contains(TEXT("reached_root_on")) && TrialsCsv.Contains(TEXT("false,0.000000")));
+		}
+
+		IFileManager::Get().DeleteDirectory(*OutputDirectory, false, true);
 		return true;
 	}
 
@@ -2331,7 +2624,7 @@ namespace
 		FPhase1AutoCalibTrialResult BestPass =
 			MakePhase1AutoCalibTrial(
 				EPhase1AutoCalibStrategyPreset::CurrentDefault,
-				TEXT("reached_root_on"),
+				TEXT("stable_balance_active_standing"),
 				TEXT("ready"),
 				true,
 				30.5f,
@@ -2341,7 +2634,7 @@ namespace
 		FPhase1AutoCalibTrialResult SecondPass =
 			MakePhase1AutoCalibTrial(
 				EPhase1AutoCalibStrategyPreset::SpineBiased,
-				TEXT("reached_root_on"),
+				TEXT("stable_balance_active_standing"),
 				TEXT("ready"),
 				true,
 				31.5f,
@@ -2391,6 +2684,7 @@ namespace
 		TrialA.TerminalClass = TEXT("failed");
 		TrialA.TruthfulBlocker = TEXT("phase1_root_on_readiness_pelvis_thigh_margin_insufficient");
 		TrialA.Score.bContractPassed = false;
+		TrialA.Score.bReachedBalanceActiveStanding = true;
 		TrialA.Score.WorstDirectLinkAngularErrorDeg = 33.89f;
 		TrialA.Score.MeanTargetDeltaDeg = 2.0f;
 		TrialA.Score.MaxTargetDeltaDeg = 4.0f;
@@ -2400,9 +2694,11 @@ namespace
 		TrialA.Score.ShellVelocityDeltaCmPerSecond = 2.0f;
 		TrialA.Score.PeakRootLinearSpeedCmPerSecond = 25.0f;
 		TrialA.Score.PeakRootAngularSpeedDegPerSecond = 35.0f;
+		TrialA.Score.BalanceActiveStandingHoldSeconds = PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds - 0.25f;
 		TrialA.TrialTimeoutBudgetSeconds = 0.75f;
 		TrialA.TimeToRootOnSeconds = 0.20f;
 		TrialA.TimeToNoCouplingProofSeconds = 0.23f;
+		TrialA.TimeToBalanceActiveStandingSeconds = 0.31f;
 
 		FPhase1AutoCalibTrialResult TrialB = TrialA;
 		TrialB.Score.WorstDirectLinkAngularErrorDeg += 1.0e-4f;

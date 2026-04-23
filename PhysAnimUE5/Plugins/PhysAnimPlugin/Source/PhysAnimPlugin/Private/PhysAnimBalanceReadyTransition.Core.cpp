@@ -1811,7 +1811,9 @@ extern int32 GVerbosePhase2Forensics;
 		}
 		else if (Diagnostics.bShellContributed &&
 			IsMaterialShellCorrectionActive(
-				Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle,
+				IsPhase2ShellCorrectionOwnerActive(
+					Owner->HasExplicitTransitionOwnedShellLock(),
+					Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle),
 				Diagnostics.BaselineShellOffset,
 				Diagnostics.BaselineShellVel,
 				Settings.BalancePhase2AbortShellOffsetDelta,
@@ -1882,7 +1884,9 @@ extern int32 GVerbosePhase2Forensics;
 		else if (Diagnostics.RootSpeed > Settings.BalancePhase2AbortRootLinearSpeed ||
 			Diagnostics.RootAngularSpeed > Settings.BalancePhase2AbortRootAngularSpeed ||
 			(IsMaterialShellCorrectionActive(
-				Owner->GetLocomotionAuthorityState() != EBridgeLocomotionAuthorityState::Idle,
+				IsPhase2ShellCorrectionOwnerActive(
+					Owner->HasExplicitTransitionOwnedShellLock(),
+					Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle),
 				Diagnostics.BaselineShellOffset,
 				Diagnostics.BaselineShellVel,
 				Settings.BalancePhase2AbortShellOffsetDelta,

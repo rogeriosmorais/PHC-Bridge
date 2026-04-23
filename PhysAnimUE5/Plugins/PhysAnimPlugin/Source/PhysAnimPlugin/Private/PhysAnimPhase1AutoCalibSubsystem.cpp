@@ -41,6 +41,7 @@ namespace
 	constexpr float ReproShellVelocityToleranceCmPerSecond = 0.1f;
 	constexpr float ReproPeakRootLinearSpeedToleranceCmPerSecond = 25.0f;
 	constexpr float ReproPeakRootAngularSpeedToleranceDegPerSecond = 120.0f;
+	constexpr float ReproBalanceActiveStandingHoldToleranceSeconds = 0.25f;
 
 	enum class EPhase1AutoCalibBuildStage : uint8
 	{
@@ -77,6 +78,24 @@ namespace
 		const FString OwnerNameLower = Owner->GetName().ToLower();
 		const FString PathNameLower = Owner->GetPathName().ToLower();
 		return OwnerNameLower.Contains(FilterLower) || PathNameLower.Contains(FilterLower);
+	}
+
+	void ResetActiveTrialTrackingState(
+		double& InOutActiveTrialStartTimeSeconds,
+		double& InOutActiveTrialFirstRootOnTimeSeconds,
+		double& InOutActiveTrialFirstNoCouplingProofTimeSeconds,
+		double& InOutActiveTrialFirstBalanceActiveStandingTimeSeconds,
+		double& InOutActiveTrialStandingHoldStartTimeSeconds,
+		double& InOutActiveTrialMaxBalanceActiveStandingHoldSeconds,
+		FPhase1AutoCalibLiveMetrics& InOutActiveTrialPeakMetrics)
+	{
+		InOutActiveTrialStartTimeSeconds = -1.0;
+		InOutActiveTrialFirstRootOnTimeSeconds = -1.0;
+		InOutActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
+		InOutActiveTrialFirstBalanceActiveStandingTimeSeconds = -1.0;
+		InOutActiveTrialStandingHoldStartTimeSeconds = -1.0;
+		InOutActiveTrialMaxBalanceActiveStandingHoldSeconds = 0.0;
+		InOutActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
 	}
 
 	float SampleStratifiedValue(const float MinValue, const float MaxValue, const int32 StratumIndex, const int32 NumStrata, FRandomStream& RandomStream)
@@ -144,6 +163,11 @@ namespace
 			Phase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3 ||
 			Phase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle ||
 			Phase == EBalanceReadyTransitionPhase::BRT_Succeeded;
+	}
+
+	bool IsStandingHoldBenchmarkSatisfied(const double HoldSeconds)
+	{
+		return HoldSeconds + KINDA_SMALL_NUMBER >= static_cast<double>(PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds);
 	}
 
 	bool AreTransformsNear(
@@ -425,6 +449,11 @@ namespace
 	{
 		if (Trial.Score.bContractPassed)
 		{
+			return 5;
+		}
+
+		if (Trial.Score.bReachedBalanceActiveStanding)
+		{
 			return 4;
 		}
 
@@ -573,6 +602,18 @@ bool UPhysAnimPhase1AutoCalibSubsystem::ShouldAccumulateActiveTrialMetrics(const
 	return bTrialStarted;
 }
 
+bool UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+	const EBalanceReadyTransitionPhase Phase,
+	const double BalanceActiveStandingHoldSeconds,
+	const bool bTransitionFailed,
+	const bool bSafeDenied)
+{
+	return bTransitionFailed ||
+		bSafeDenied ||
+		(Phase == EBalanceReadyTransitionPhase::BRT_Succeeded &&
+			IsStandingHoldBenchmarkSatisfied(BalanceActiveStandingHoldSeconds));
+}
+
 void UPhysAnimPhase1AutoCalibSubsystem::Deinitialize()
 {
 	StopPhase1AutoCalib(TEXT("deinitialize"));
@@ -680,10 +721,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::StopPhase1AutoCalib(const FString& Reaso
 	TargetComponent.Reset();
 	PendingTrials.Reset();
 	ActiveTrial = FPendingTrial();
-	ActiveTrialStartTimeSeconds = -1.0;
-	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
-	ActiveTrialFirstRootOnTimeSeconds = -1.0;
-	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
+	ResetActiveTrialTrackingState();
 }
 
 void UPhysAnimPhase1AutoCalibSubsystem::BuildStageACandidates(const FPhase1AutoCalibRequest& Request, TArray<FPhase1AutoCalibParams>& OutCandidates)
@@ -931,7 +969,16 @@ bool UPhysAnimPhase1AutoCalibSubsystem::AreTrialResultsReproducible(const TArray
 			Candidate.Score.bSafeDenied != Reference.Score.bSafeDenied ||
 			Candidate.Score.bRestoreDeterministic != Reference.Score.bRestoreDeterministic ||
 			Candidate.Score.bReachedRootOn != Reference.Score.bReachedRootOn ||
-			Candidate.Score.bNoCouplingProofSatisfied != Reference.Score.bNoCouplingProofSatisfied)
+			Candidate.Score.bNoCouplingProofSatisfied != Reference.Score.bNoCouplingProofSatisfied ||
+			Candidate.Score.bReachedBalanceActiveStanding != Reference.Score.bReachedBalanceActiveStanding)
+		{
+			return false;
+		}
+
+		if (!FMath::IsNearlyEqual(
+				Candidate.Score.BalanceActiveStandingHoldSeconds,
+				Reference.Score.BalanceActiveStandingHoldSeconds,
+				FMath::Max(Epsilon, ReproBalanceActiveStandingHoldToleranceSeconds)))
 		{
 			return false;
 		}
@@ -1152,10 +1199,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::BeginNextTrial()
 	}
 
 	Component->ApplyPhase1AutoCalibParams(ActiveTrial.Params);
-	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
-	ActiveTrialStartTimeSeconds = -1.0;
-	ActiveTrialFirstRootOnTimeSeconds = -1.0;
-	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
+	ResetActiveTrialTrackingState();
 	bActiveTrialStarted = false;
 	bTrialActive = true;
 	return true;
@@ -1181,7 +1225,11 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 	}
 
 	const FPhysAnimStabilizationSettings& Settings = Component->GetConfiguredStabilizationSettings();
-	const double TimeoutSeconds = static_cast<double>(Settings.BalancePhase1PrepareDuration + Settings.BalancePhase1LateValidateRequiredSeconds + 3.5f);
+	const double TimeoutSeconds = static_cast<double>(
+		Settings.BalancePhase1PrepareDuration +
+		Settings.BalancePhase1LateValidateRequiredSeconds +
+		PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds +
+		3.5f);
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	const double ElapsedSeconds = bActiveTrialStarted && ActiveTrialStartTimeSeconds >= 0.0
 		? (CurrentTimeSeconds - ActiveTrialStartTimeSeconds)
@@ -1192,7 +1240,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 		return;
 	}
 
-	if (Component->GetBalanceReadyTransitionPhase() == EBalanceReadyTransitionPhase::BRT_Inactive)
+	if (Component->GetBalanceReadyTransitionPhase() == EBalanceReadyTransitionPhase::BRT_Inactive && !bActiveTrialStarted)
 	{
 		FString QueueReason;
 		if (!Component->EvaluateBalanceModeQueueGates(Settings, QueueReason))
@@ -1240,7 +1288,31 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickActiveTrial()
 		ActiveTrialFirstNoCouplingProofTimeSeconds = ElapsedSeconds;
 	}
 
-	if (IsLaterThanPhase1(Phase) || Component->HasBalanceReadyTransitionFailed() || Component->HasSafePhase2Denial())
+	const bool bStandingActive = Component->GetRuntimeState() == EPhysAnimRuntimeState::BalanceActive_Standing;
+	if (bStandingActive)
+	{
+		if (ActiveTrialFirstBalanceActiveStandingTimeSeconds < 0.0)
+		{
+			ActiveTrialFirstBalanceActiveStandingTimeSeconds = ElapsedSeconds;
+		}
+		if (ActiveTrialStandingHoldStartTimeSeconds < 0.0)
+		{
+			ActiveTrialStandingHoldStartTimeSeconds = CurrentTimeSeconds;
+		}
+		ActiveTrialMaxBalanceActiveStandingHoldSeconds = FMath::Max(
+			ActiveTrialMaxBalanceActiveStandingHoldSeconds,
+			CurrentTimeSeconds - ActiveTrialStandingHoldStartTimeSeconds);
+	}
+	else
+	{
+		ActiveTrialStandingHoldStartTimeSeconds = -1.0;
+	}
+
+	if (ShouldFinalizeActiveTrial(
+		Phase,
+		ActiveTrialMaxBalanceActiveStandingHoldSeconds,
+		Component->HasBalanceReadyTransitionFailed(),
+		Component->HasSafePhase2Denial()))
 	{
 		FinalizeActiveTrial(false);
 	}
@@ -1312,10 +1384,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeActiveTrial(bool bTimedOut)
 	bTrialActive = false;
 	bActiveTrialStarted = false;
 	ActiveTrial = FPendingTrial();
-	ActiveTrialStartTimeSeconds = -1.0;
-	ActiveTrialFirstRootOnTimeSeconds = -1.0;
-	ActiveTrialFirstNoCouplingProofTimeSeconds = -1.0;
-	ActiveTrialPeakMetrics = FPhase1AutoCalibLiveMetrics();
+	ResetActiveTrialTrackingState();
 
 	if (!LastError.IsEmpty())
 	{
@@ -1383,6 +1452,18 @@ void UPhysAnimPhase1AutoCalibSubsystem::AdvanceStageOrFinish()
 	}
 }
 
+void UPhysAnimPhase1AutoCalibSubsystem::ResetActiveTrialTrackingState()
+{
+	::ResetActiveTrialTrackingState(
+		ActiveTrialStartTimeSeconds,
+		ActiveTrialFirstRootOnTimeSeconds,
+		ActiveTrialFirstNoCouplingProofTimeSeconds,
+		ActiveTrialFirstBalanceActiveStandingTimeSeconds,
+		ActiveTrialStandingHoldStartTimeSeconds,
+		ActiveTrialMaxBalanceActiveStandingHoldSeconds,
+		ActiveTrialPeakMetrics);
+}
+
 void UPhysAnimPhase1AutoCalibSubsystem::UpdatePeakMetrics(const FPhase1AutoCalibLiveMetrics& Metrics)
 {
 	ActiveTrialPeakMetrics.RuntimeState = Metrics.RuntimeState;
@@ -1428,9 +1509,16 @@ FPhase1AutoCalibTrialResult UPhysAnimPhase1AutoCalibSubsystem::BuildTrialResult(
 	Result.Score.bNoCouplingProofSatisfied =
 		LateValidation.bRootOnReadinessNoCouplingProofSatisfied ||
 		Handoff.bRootOnReadinessNoCouplingProofSatisfied;
-	Result.TrialTimeoutBudgetSeconds = static_cast<float>(Component->GetConfiguredStabilizationSettings().BalancePhase1PrepareDuration + Component->GetConfiguredStabilizationSettings().BalancePhase1LateValidateRequiredSeconds + 0.5f);
+	Result.Score.bReachedBalanceActiveStanding = ActiveTrialFirstBalanceActiveStandingTimeSeconds >= 0.0;
+	Result.Score.BalanceActiveStandingHoldSeconds = static_cast<float>(ActiveTrialMaxBalanceActiveStandingHoldSeconds);
+	Result.TrialTimeoutBudgetSeconds = static_cast<float>(
+		Component->GetConfiguredStabilizationSettings().BalancePhase1PrepareDuration +
+		Component->GetConfiguredStabilizationSettings().BalancePhase1LateValidateRequiredSeconds +
+		PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds +
+		3.5f);
 	Result.TimeToRootOnSeconds = ActiveTrialFirstRootOnTimeSeconds >= 0.0 ? static_cast<float>(ActiveTrialFirstRootOnTimeSeconds) : -1.0f;
 	Result.TimeToNoCouplingProofSeconds = ActiveTrialFirstNoCouplingProofTimeSeconds >= 0.0 ? static_cast<float>(ActiveTrialFirstNoCouplingProofTimeSeconds) : -1.0f;
+	Result.TimeToBalanceActiveStandingSeconds = ActiveTrialFirstBalanceActiveStandingTimeSeconds >= 0.0 ? static_cast<float>(ActiveTrialFirstBalanceActiveStandingTimeSeconds) : -1.0f;
 	Result.bTimedOutBeforeRootOn = bTimedOut && Result.TimeToRootOnSeconds < 0.0f;
 	Result.bTimedOutBeforeNoCouplingProof = bTimedOut && Result.TimeToNoCouplingProofSeconds < 0.0f;
 
@@ -1451,7 +1539,9 @@ FPhase1AutoCalibTrialResult UPhysAnimPhase1AutoCalibSubsystem::BuildTrialResult(
 		!bFailed &&
 		!bSafeDenied &&
 		bReachedRootOn &&
-		Result.Score.bNoCouplingProofSatisfied;
+		Result.Score.bNoCouplingProofSatisfied &&
+		Result.Score.bReachedBalanceActiveStanding &&
+		IsStandingHoldBenchmarkSatisfied(ActiveTrialMaxBalanceActiveStandingHoldSeconds);
 
 	if (bTimedOut)
 	{
@@ -1476,7 +1566,12 @@ FPhase1AutoCalibTrialResult UPhysAnimPhase1AutoCalibSubsystem::BuildTrialResult(
 
 	if (Result.Score.bContractPassed)
 	{
+		Result.TerminalClass = TEXT("stable_balance_active_standing");
 		Result.TruthfulBlocker = TEXT("ready");
+	}
+	else if (bTimedOut && Result.Score.bReachedBalanceActiveStanding)
+	{
+		Result.TruthfulBlocker = TEXT("phase3_balance_active_standing_not_sustained");
 	}
 	else if (!Snapshot.SafePhase2DenialReason.IsEmpty())
 	{
@@ -1596,6 +1691,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReportData(FPhase1AutoCalibRepor
 	InOutReport.DominantTruthfulBlocker.Reset();
 	InOutReport.bAnyTimedOutBeforeRootOn = false;
 	InOutReport.bAnyTimedOutBeforeNoCouplingProof = false;
+	InOutReport.RequiredBalanceActiveStandingHoldSeconds = PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds;
 
 	for (int32 TrialIndex = 0; TrialIndex < InOutReport.Trials.Num(); ++TrialIndex)
 	{
@@ -1826,6 +1922,41 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReport()
 	WriteArtifacts();
 }
 
+#if WITH_DEV_AUTOMATION_TESTS
+void UPhysAnimPhase1AutoCalibSubsystem::TestOnlyResetActiveTrialTrackingState(
+	double& InOutActiveTrialStartTimeSeconds,
+	double& InOutActiveTrialFirstRootOnTimeSeconds,
+	double& InOutActiveTrialFirstNoCouplingProofTimeSeconds,
+	double& InOutActiveTrialFirstBalanceActiveStandingTimeSeconds,
+	double& InOutActiveTrialStandingHoldStartTimeSeconds,
+	double& InOutActiveTrialMaxBalanceActiveStandingHoldSeconds,
+	FPhase1AutoCalibLiveMetrics& InOutActiveTrialPeakMetrics)
+{
+	::ResetActiveTrialTrackingState(
+		InOutActiveTrialStartTimeSeconds,
+		InOutActiveTrialFirstRootOnTimeSeconds,
+		InOutActiveTrialFirstNoCouplingProofTimeSeconds,
+		InOutActiveTrialFirstBalanceActiveStandingTimeSeconds,
+		InOutActiveTrialStandingHoldStartTimeSeconds,
+		InOutActiveTrialMaxBalanceActiveStandingHoldSeconds,
+		InOutActiveTrialPeakMetrics);
+}
+
+bool UPhysAnimPhase1AutoCalibSubsystem::TestOnlyWriteArtifacts(FPhase1AutoCalibReport& InOutReport)
+{
+	UPhysAnimPhase1AutoCalibSubsystem* const Subsystem = NewObject<UPhysAnimPhase1AutoCalibSubsystem>();
+	if (!Subsystem)
+	{
+		return false;
+	}
+
+	Subsystem->LatestReport = InOutReport;
+	Subsystem->WriteArtifacts();
+	InOutReport = Subsystem->LatestReport;
+	return true;
+}
+#endif
+
 void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 {
 	const FString OutputDirectory = LatestReport.OutputDirectory;
@@ -1836,12 +1967,12 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 
 	IFileManager::Get().MakeDirectory(*OutputDirectory, true);
 
-	FString Csv = TEXT("trial_id,stage,repetition,preset_rank,preset_near_pass_rank,terminal_class,truthful_blocker,contract_passed,reproducible,trial_timeout_budget_seconds,time_to_root_on_seconds,time_to_no_coupling_proof_seconds,timed_out_before_root_on,timed_out_before_no_coupling_proof,winning_search_family,winning_search_source,executed_search_families,coupled_trade_control_won,source_preset,seed_family_preset,spine_alpha,worst_thigh_alpha,focused_delta_scale,uprightness_weight_scale,clamp_strength_scale,pelvis_pitch_bias_deg,pelvis_roll_bias_deg,worst_direct_link_angular_error_deg,mean_target_delta_deg,max_target_delta_deg,thigh_asymmetry_deg,peak_root_tilt_deg,shell_offset_delta_cm,shell_velocity_delta_cm_per_second,peak_root_linear_speed_cm_per_second,peak_root_angular_speed_deg_per_second\n");
+	FString Csv = TEXT("trial_id,stage,repetition,preset_rank,preset_near_pass_rank,terminal_class,truthful_blocker,contract_passed,reproducible,trial_timeout_budget_seconds,time_to_root_on_seconds,time_to_no_coupling_proof_seconds,time_to_balance_active_standing_seconds,timed_out_before_root_on,timed_out_before_no_coupling_proof,winning_search_family,winning_search_source,executed_search_families,coupled_trade_control_won,source_preset,seed_family_preset,spine_alpha,worst_thigh_alpha,focused_delta_scale,uprightness_weight_scale,clamp_strength_scale,pelvis_pitch_bias_deg,pelvis_roll_bias_deg,worst_direct_link_angular_error_deg,mean_target_delta_deg,max_target_delta_deg,thigh_asymmetry_deg,peak_root_tilt_deg,shell_offset_delta_cm,shell_velocity_delta_cm_per_second,peak_root_linear_speed_cm_per_second,peak_root_angular_speed_deg_per_second,reached_balance_active_standing,balance_active_standing_hold_seconds\n");
 	for (const FPhase1AutoCalibTrialResult& Trial : LatestReport.Trials)
 	{
 		const FString ExecutedFamilies = FString::Join(Trial.ExecutedSearchFamilies, TEXT("|"));
 		Csv += FString::Printf(
-			TEXT("%d,%s,%d,%d,%d,%s,%s,%s,%s,%.6f,%.6f,%.6f,%s,%s,%s,%s,%s,%s,%s,%s,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n"),
+			TEXT("%d,%s,%d,%d,%d,%s,%s,%s,%s,%.6f,%.6f,%.6f,%.6f,%s,%s,%s,%s,%s,%s,%s,%s,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%s,%.6f\n"),
 			Trial.TrialId,
 			*Trial.StageName,
 			Trial.RepetitionIndex,
@@ -1854,6 +1985,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 			Trial.TrialTimeoutBudgetSeconds,
 			Trial.TimeToRootOnSeconds,
 			Trial.TimeToNoCouplingProofSeconds,
+			Trial.TimeToBalanceActiveStandingSeconds,
 			Trial.bTimedOutBeforeRootOn ? TEXT("true") : TEXT("false"),
 			Trial.bTimedOutBeforeNoCouplingProof ? TEXT("true") : TEXT("false"),
 			*Trial.WinningSearchFamily,
@@ -1877,7 +2009,9 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 			Trial.Score.ShellOffsetDeltaCm,
 			Trial.Score.ShellVelocityDeltaCmPerSecond,
 			Trial.Score.PeakRootLinearSpeedCmPerSecond,
-			Trial.Score.PeakRootAngularSpeedDegPerSecond);
+			Trial.Score.PeakRootAngularSpeedDegPerSecond,
+			Trial.Score.bReachedBalanceActiveStanding ? TEXT("true") : TEXT("false"),
+			Trial.Score.BalanceActiveStandingHoldSeconds);
 	}
 	FFileHelper::SaveStringToFile(Csv, *LatestReport.TrialsCsvPath);
 
@@ -1894,7 +2028,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 		}
 		ExecutedFamiliesJson += TEXT("]");
 		return FString::Printf(
-			TEXT("{\"trialId\":%d,\"stage\":\"%s\",\"repetition\":%d,\"presetRank\":%d,\"presetNearPassRank\":%d,\"terminalClass\":\"%s\",\"truthfulBlocker\":\"%s\",\"contractPassed\":%s,\"reproducible\":%s,\"trialTimeoutBudgetSeconds\":%.6f,\"timeToRootOnSeconds\":%.6f,\"timeToNoCouplingProofSeconds\":%.6f,\"timedOutBeforeRootOn\":%s,\"timedOutBeforeNoCouplingProof\":%s,\"winningSearchFamily\":\"%s\",\"winningSearchSource\":\"%s\",\"executedSearchFamilies\":%s,\"coupledTradeControlWon\":%s,\"sourcePreset\":\"%s\",\"seedFamilyPreset\":\"%s\",\"score\":{\"worstDirectLinkAngularErrorDeg\":%.6f,\"meanTargetDeltaDeg\":%.6f,\"maxTargetDeltaDeg\":%.6f,\"thighAsymmetryDeg\":%.6f,\"peakRootTiltDeg\":%.6f,\"shellOffsetDeltaCm\":%.6f,\"shellVelocityDeltaCmPerSecond\":%.6f,\"peakRootLinearSpeedCmPerSecond\":%.6f,\"peakRootAngularSpeedDegPerSecond\":%.6f}}"),
+			TEXT("{\"trialId\":%d,\"stage\":\"%s\",\"repetition\":%d,\"presetRank\":%d,\"presetNearPassRank\":%d,\"terminalClass\":\"%s\",\"truthfulBlocker\":\"%s\",\"contractPassed\":%s,\"reproducible\":%s,\"trialTimeoutBudgetSeconds\":%.6f,\"timeToRootOnSeconds\":%.6f,\"timeToNoCouplingProofSeconds\":%.6f,\"timeToBalanceActiveStandingSeconds\":%.6f,\"timedOutBeforeRootOn\":%s,\"timedOutBeforeNoCouplingProof\":%s,\"winningSearchFamily\":\"%s\",\"winningSearchSource\":\"%s\",\"executedSearchFamilies\":%s,\"coupledTradeControlWon\":%s,\"sourcePreset\":\"%s\",\"seedFamilyPreset\":\"%s\",\"score\":{\"worstDirectLinkAngularErrorDeg\":%.6f,\"meanTargetDeltaDeg\":%.6f,\"maxTargetDeltaDeg\":%.6f,\"thighAsymmetryDeg\":%.6f,\"peakRootTiltDeg\":%.6f,\"shellOffsetDeltaCm\":%.6f,\"shellVelocityDeltaCmPerSecond\":%.6f,\"peakRootLinearSpeedCmPerSecond\":%.6f,\"peakRootAngularSpeedDegPerSecond\":%.6f,\"reachedBalanceActiveStanding\":%s,\"balanceActiveStandingHoldSeconds\":%.6f}}"),
 			Trial.TrialId,
 			*JsonEscape(Trial.StageName),
 			Trial.RepetitionIndex,
@@ -1907,6 +2041,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 			Trial.TrialTimeoutBudgetSeconds,
 			Trial.TimeToRootOnSeconds,
 			Trial.TimeToNoCouplingProofSeconds,
+			Trial.TimeToBalanceActiveStandingSeconds,
 			Trial.bTimedOutBeforeRootOn ? TEXT("true") : TEXT("false"),
 			Trial.bTimedOutBeforeNoCouplingProof ? TEXT("true") : TEXT("false"),
 			*JsonEscape(Trial.WinningSearchFamily),
@@ -1923,7 +2058,9 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 			Trial.Score.ShellOffsetDeltaCm,
 			Trial.Score.ShellVelocityDeltaCmPerSecond,
 			Trial.Score.PeakRootLinearSpeedCmPerSecond,
-			Trial.Score.PeakRootAngularSpeedDegPerSecond);
+			Trial.Score.PeakRootAngularSpeedDegPerSecond,
+			Trial.Score.bReachedBalanceActiveStanding ? TEXT("true") : TEXT("false"),
+			Trial.Score.BalanceActiveStandingHoldSeconds);
 	};
 
 	const auto BuildBlockerCountJson = [](const FPhase1AutoCalibBlockerCount& Entry) -> FString
@@ -1986,10 +2123,11 @@ void UPhysAnimPhase1AutoCalibSubsystem::WriteArtifacts()
 	OverallBlockersJson += TEXT("]");
 
 	FString SummaryJson = FString::Printf(
-		TEXT("{\"outputDirectory\":\"%s\",\"trialCount\":%d,\"hasReproducibleTruthfulPass\":%s,\"frontierClassification\":\"%s\",\"recommendedAction\":\"%s\",\"recommendedExpansionName\":\"%s\",\"dominantTruthfulBlocker\":\"%s\",\"anyTimedOutBeforeRootOn\":%s,\"anyTimedOutBeforeNoCouplingProof\":%s,\"bestCandidate\":%s,\"bestNearPass\":%s,\"furthestProgressedFailure\":%s,\"overallBlockerCounts\":%s,\"presetSummaries\":%s}"),
+		TEXT("{\"outputDirectory\":\"%s\",\"trialCount\":%d,\"hasReproducibleTruthfulPass\":%s,\"requiredBalanceActiveStandingHoldSeconds\":%.6f,\"frontierClassification\":\"%s\",\"recommendedAction\":\"%s\",\"recommendedExpansionName\":\"%s\",\"dominantTruthfulBlocker\":\"%s\",\"anyTimedOutBeforeRootOn\":%s,\"anyTimedOutBeforeNoCouplingProof\":%s,\"bestCandidate\":%s,\"bestNearPass\":%s,\"furthestProgressedFailure\":%s,\"overallBlockerCounts\":%s,\"presetSummaries\":%s}"),
 		*JsonEscape(LatestReport.OutputDirectory),
 		LatestReport.Trials.Num(),
 		LatestReport.bHasReproducibleTruthfulPass ? TEXT("true") : TEXT("false"),
+		LatestReport.RequiredBalanceActiveStandingHoldSeconds,
 		FrontierClassificationToString(LatestReport.FrontierClassification),
 		RecommendedActionToString(LatestReport.RecommendedAction),
 		*JsonEscape(LatestReport.RecommendedExpansionName),

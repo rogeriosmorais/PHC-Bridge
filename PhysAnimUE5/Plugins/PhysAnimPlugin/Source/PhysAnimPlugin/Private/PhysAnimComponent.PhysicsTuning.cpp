@@ -873,15 +873,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					EffectiveSettings.TrainingAlignedLocomotionLowerLimbResponsePolicyBlend)
 				: 1.0f;
 		FPhysicsControlMultiplier ControlMultiplier;
-		float HandoverEasing = 1.0f;
-		if (IsBalanceActiveState(RuntimeState))
-		{
-			const double TimeSinceTransition = GetWorld() ? (GetWorld()->GetTimeSeconds() - BalanceScenarioStartTimeSeconds) : 0.0;
-			if (TimeSinceTransition < 1.0)
-			{
-				HandoverEasing = FMath::Lerp(0.05f, 1.0f, FMath::Clamp(static_cast<float>(TimeSinceTransition / 1.0), 0.0f, 1.0f));
-			}
-		}
+		const float HandoverEasing = 1.0f;
 
 		ControlMultiplier.AngularStrengthMultiplier =
 			EffectiveSettings.AngularStrengthMultiplier * FamilyStrengthScale * ControlAuthorityAlpha * HandoverEasing;

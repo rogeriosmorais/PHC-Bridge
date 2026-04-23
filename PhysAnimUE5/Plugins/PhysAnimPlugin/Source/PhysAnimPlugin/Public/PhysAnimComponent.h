@@ -736,6 +736,11 @@ struct FPhase1AutoCalibParams
 	float PelvisRollBiasDeg = 0.0f;
 };
 
+namespace PhysAnimAutoCalibBenchmark
+{
+	inline constexpr float RequiredBalanceActiveStandingHoldSeconds = 3.0f;
+}
+
 struct FPhase1AutoCalibScore
 {
 	bool bContractPassed = false;
@@ -744,6 +749,7 @@ struct FPhase1AutoCalibScore
 	bool bRestoreDeterministic = true;
 	bool bReachedRootOn = false;
 	bool bNoCouplingProofSatisfied = false;
+	bool bReachedBalanceActiveStanding = false;
 	float WorstDirectLinkAngularErrorDeg = TNumericLimits<float>::Max();
 	float MeanTargetDeltaDeg = TNumericLimits<float>::Max();
 	float MaxTargetDeltaDeg = TNumericLimits<float>::Max();
@@ -753,6 +759,7 @@ struct FPhase1AutoCalibScore
 	float ShellVelocityDeltaCmPerSecond = TNumericLimits<float>::Max();
 	float PeakRootLinearSpeedCmPerSecond = TNumericLimits<float>::Max();
 	float PeakRootAngularSpeedDegPerSecond = TNumericLimits<float>::Max();
+	float BalanceActiveStandingHoldSeconds = 0.0f;
 	float StableSortScalar = TNumericLimits<float>::Max();
 };
 
@@ -770,6 +777,7 @@ struct FPhase1AutoCalibTrialResult
 	float TrialTimeoutBudgetSeconds = 0.0f;
 	float TimeToRootOnSeconds = -1.0f;
 	float TimeToNoCouplingProofSeconds = -1.0f;
+	float TimeToBalanceActiveStandingSeconds = -1.0f;
 	bool bTimedOutBeforeRootOn = false;
 	bool bTimedOutBeforeNoCouplingProof = false;
 	FString WinningSearchFamily;
@@ -826,6 +834,7 @@ struct FPhase1AutoCalibReport
 	FString DominantTruthfulBlocker;
 	bool bAnyTimedOutBeforeRootOn = false;
 	bool bAnyTimedOutBeforeNoCouplingProof = false;
+	float RequiredBalanceActiveStandingHoldSeconds = PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds;
 };
 
 struct FPhase1AutoCalibLiveMetrics
@@ -964,11 +973,12 @@ enum class EPhase1AutoCalibFrontierClassification : uint8 { Unknown };
 enum class EPhase1AutoCalibRecommendedAction : uint8 { None };
 struct FPhase1AutoCalibRequest { float ReadinessTimeoutSeconds = 0.0f; FString OwnerFilter; int32 Seed = 0; EPhase1AutoCalibBudgetMode BudgetMode = EPhase1AutoCalibBudgetMode::FullSearch; int32 MaxTrials = 0; FString OutputSubfolder; };
 struct FPhase1AutoCalibParams {};
+namespace PhysAnimAutoCalibBenchmark { inline constexpr float RequiredBalanceActiveStandingHoldSeconds = 3.0f; }
 struct FPhase1AutoCalibScore {};
-struct FPhase1AutoCalibTrialResult { int32 PresetRank = INDEX_NONE; int32 PresetNearPassRank = INDEX_NONE; FPhase1AutoCalibParams Params; FPhase1AutoCalibScore Score; FString TerminalClass; FString TruthfulBlocker; float TrialTimeoutBudgetSeconds = 0.0f; float TimeToRootOnSeconds = -1.0f; float TimeToNoCouplingProofSeconds = -1.0f; bool bTimedOutBeforeRootOn = false; bool bTimedOutBeforeNoCouplingProof = false; };
+struct FPhase1AutoCalibTrialResult { int32 PresetRank = INDEX_NONE; int32 PresetNearPassRank = INDEX_NONE; FPhase1AutoCalibParams Params; FPhase1AutoCalibScore Score; FString TerminalClass; FString TruthfulBlocker; float TrialTimeoutBudgetSeconds = 0.0f; float TimeToRootOnSeconds = -1.0f; float TimeToNoCouplingProofSeconds = -1.0f; float TimeToBalanceActiveStandingSeconds = -1.0f; bool bTimedOutBeforeRootOn = false; bool bTimedOutBeforeNoCouplingProof = false; };
 struct FPhase1AutoCalibBlockerCount { FString TruthfulBlocker; int32 Count = 0; };
 struct FPhase1AutoCalibPresetSummary { bool bHasReproducibleTruthfulPass = false; FString DominantTruthfulBlocker; TArray<FPhase1AutoCalibBlockerCount> BlockerCounts; };
-struct FPhase1AutoCalibReport { TArray<FPhase1AutoCalibTrialResult> Trials; TArray<FPhase1AutoCalibTrialResult> ParetoFrontier; TArray<FPhase1AutoCalibPresetSummary> PresetSummaries; TArray<FPhase1AutoCalibBlockerCount> OverallBlockerCounts; FPhase1AutoCalibTrialResult BestCandidate; FPhase1AutoCalibTrialResult BestNearPass; bool bHasBestCandidate; bool bHasBestNearPass; bool bHasReproducibleTruthfulPass; EPhase1AutoCalibFrontierClassification FrontierClassification = EPhase1AutoCalibFrontierClassification::Unknown; EPhase1AutoCalibRecommendedAction RecommendedAction = EPhase1AutoCalibRecommendedAction::None; FString RecommendedExpansionName; FString DominantTruthfulBlocker; bool bAnyTimedOutBeforeRootOn = false; bool bAnyTimedOutBeforeNoCouplingProof = false; };
+struct FPhase1AutoCalibReport { TArray<FPhase1AutoCalibTrialResult> Trials; TArray<FPhase1AutoCalibTrialResult> ParetoFrontier; TArray<FPhase1AutoCalibPresetSummary> PresetSummaries; TArray<FPhase1AutoCalibBlockerCount> OverallBlockerCounts; FPhase1AutoCalibTrialResult BestCandidate; FPhase1AutoCalibTrialResult BestNearPass; bool bHasBestCandidate; bool bHasBestNearPass; bool bHasReproducibleTruthfulPass; EPhase1AutoCalibFrontierClassification FrontierClassification = EPhase1AutoCalibFrontierClassification::Unknown; EPhase1AutoCalibRecommendedAction RecommendedAction = EPhase1AutoCalibRecommendedAction::None; FString RecommendedExpansionName; FString DominantTruthfulBlocker; bool bAnyTimedOutBeforeRootOn = false; bool bAnyTimedOutBeforeNoCouplingProof = false; float RequiredBalanceActiveStandingHoldSeconds = PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds; };
 struct FPhase1AutoCalibLiveMetrics { EPhysAnimRuntimeState RuntimeState; EBalanceReadyTransitionPhase TransitionPhase; float RootLinearSpeedCmPerSecond; float RootAngularSpeedDegPerSecond; float RootTiltDeg; float ShellOffsetDeltaCm; float ShellVelocityDeltaCmPerSecond; float MaxTargetDeltaDeg; float MeanTargetDeltaDeg; };
 struct FPhase1AutoCalibDeterminismFingerprint {};
 struct FPhase1AutoCalibBodyState {};

@@ -185,6 +185,14 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialShellCorrectionActive(
 		 ShellPlanarVelocityCmPerSec > MaxAllowedShellVelocityCmPerSec);
 }
 
+bool FPhysAnimBalanceReadyTransition::IsPhase2ShellCorrectionOwnerActive(
+	bool bTransitionOwnedShellLocked,
+	bool bLocomotionAuthorityIdle)
+{
+	return bTransitionOwnedShellLocked ||
+		!bLocomotionAuthorityIdle;
+}
+
 bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 	bool bTransitionOwnedShellLocked,
 	bool bLocomotionAuthorityIdle,
@@ -205,11 +213,14 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 		return false;
 	}
 
+	static constexpr int32 Phase3VelocityOnlyHandoffGraceTickCount = 1;
+
 	// The ReadyForPhase3 -> Settle handoff validates before the next shell-lock
 	// maintenance pass can publish an updated correction velocity. A zero-offset,
 	// velocity-only spike is therefore still pre-material unless it
 	// survives past the handoff frame or turns into real shell drift.
 	const bool bVelocityOnlyHandoffSpike =
+		Phase3TickCount <= Phase3VelocityOnlyHandoffGraceTickCount &&
 		bTransitionOwnedShellLocked &&
 		bLocomotionAuthorityIdle &&
 		!bOffsetBreached &&
