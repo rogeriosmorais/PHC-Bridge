@@ -20,7 +20,8 @@ For `V0`, the bridge implements a **Suspended ACharacter** model where the Actor
 ### 2. CharacterMovement (Structural Deactivation)
 The `CharacterMovementComponent` (CMC) must be structurally prevented from asserting authority. Passive non-interference is not sufficient for `V0`.
 - **Deactivation**: The component must be explicitly deactivated (`Deactivate()`).
-- **Tick Disabling**: The `PrimaryComponentTick.bCanEverTick` must be set to `false` or the tick function explicitly disabled during the attempt.
+- **Tick Disabling**: The `CharacterMovementComponent` tick function must be explicitly **disabled** during the attempt (`SetComponentTickEnabled(false)`). 
+  - *Hardening*: Setting `bCanEverTick = false` is a recommended setup-time hardening but is not the primary runtime contract surface.
 - **Movement Mode**: The character must be in `MOVE_None` or a dedicated `MOVE_PhysAnimBalance` mode that overrides and skips all internal CMC logic (Floor Finding, Based Movement, etc.).
 - **UpdatedComponent**: The `UpdatedComponent` must be set to `nullptr` to ensure no hidden `SafeMoveUpdatedComponent` calls occur during the activation window.
 

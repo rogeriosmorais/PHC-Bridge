@@ -30,7 +30,13 @@ This document defines the authoritative Unreal Engine execution order and data-f
 
 ## Reference Rebasing Contract
 
-The bridge computes a **one-time rebase frame** at the `Ready -> BlendIn` boundary:
+The bridge performs these **Reference Readiness** tasks at the `Ready -> BlendIn` boundary:
+- **Existence Check**: Verify that a valid authored `standing_reference_id` exists and is loaded.
+- **Rebase Frame Computation**: Compute a one-time world-space rebase frame (frozen for the attempt).
+- **Target Materialization**: Project the target reference pose into the rebase frame.
+- **Quiet-State Proof**: Confirm the live pose is sufficiently quiet (velocity/stability) to begin the blend.
+
+**Rebase Frame Details**:
 - **Origin**: Live `pelvis` world-space position.
 - **Up**: Gravity-up.
 - **Yaw**: Live `pelvis` forward projected onto horizontal plane.
@@ -66,25 +72,31 @@ The implementation must use this deterministic algorithm to reduce the high-rate
 For every body in the support set (`foot_*`, `ball_*`) on every Chaos substep:
 - **Accepted Points**: Capture **All Manifold Points** where `ContactDistance <= 0.0`.
 - **Calf Exclusion**: Manifold points on `calf_l/r` must be **EXCLUDED**.
-- **Per-Body Reduction Rule**: 
-  - Construct a **2D Convex Hull** of the world-space contact points projected onto the planar support surface.
-  - The resulting **Support Patch** for the body is the set of vertices forming this hull.
-  - **Minimum Geometry**: A valid patch requires at least **3 non-collinear vertices** to represent a planar area.
-  - **Fallback**: If fewer than 3 points exist, the patch collapses to a line or point, triggering a high risk of `activation_proxy_outside_support_region`.
 
-### 2. Final Frame Hull Construction
-- **Qualifying Substep**: Sample from the final qualifying Chaos substep of the frame.
-- **Hull Union**: The authoritative Frame Support Hull is the **Convex Hull** of the union of all vertices from all active **Support Patches**.
-- **Failure Condition**: If the total vertex set across all bodies contains fewer than **3 points**, emit `activation_support_failure`.
+### 2. Per-Body Support Patch Reduction
+For each body with at least one accepted point, build an authoritative **Support Patch**:
+- **Projection**: Project all points onto the plane normal to the gravity-up axis.
+- **Data Structure**: A `TArray<FVector2D>` representing the vertices of the reduced patch.
+- **Reduction Operation**: Compute the **2D Convex Hull** of the projected points.
+- **Degeneracy Rules**:
+  - **Single Point**: Patch is valid but area is 0.
+  - **Collinear Points**: Patch is valid but area is 0.
+  - **Area Proof**: A patch provides a stability area only if it contains >= 3 non-collinear vertices.
 
-### 3. Substep Persistence (Debounce Rule)
+### 3. Final Frame Hull Construction
+- **Qualifying Substep**: Select the **final qualifying Chaos substep** of the frame.
+- **Hull Union**: The authoritative Frame Support Hull is the **2D Convex Hull** formed by the union of all vertices from all active **Support Patches**.
+- **Data Structure**: A `TArray<FVector2D>` defining the world-space planar support region.
+- **Failure Condition**: If the total unioned vertex set contains fewer than **3 points**, or if the resulting hull area is below the **Support Area (Min)** threshold, emit `activation_support_failure`.
+
+### 4. Substep Persistence (Debounce Rule)
 - State changes accepted only if they persist for **2 consecutive substeps**.
 
-### 4. Churn and Uptime Counting
+### 5. Churn and Uptime Counting
 - Count each debounced `false<->true` transition as 1 churn event.
 - Increment uptime only on side-support `true` substeps.
 
-### 5. False-Failure Risk
+### 6. False-Failure Risk
 Area-preserving reduction is mandatory. Collapsing a plantar contact to its "deepest point" is a contract violation because it eliminates the stability margin required for honest swaying.
 
 ### 6. 30 Hz Artifact Emission

@@ -29,6 +29,8 @@ The authoritative runtime states for balance activation are:
 
 The detailed entry preconditions, exit conditions, and failure reasons for each mode are defined exclusively in the [Authority Matrix](authority_matrix.md) and the [Truth Model](continuous_balance_truth_model.md).
 
+**Note on Plant Audit**: Passing the full physical plant audit (See [physics_asset_contract.md](physics_asset_contract.md)) is a **prerequisite** for entering the balance state machine; it does not occur during `BalanceActivation_Ready`.
+
 ## Authoritative State Mapping
 
 Legacy filenames and code symbols (Phase 1/2/3, LateValidate, RootOn, Settle) are mapped to the new flow as follows:

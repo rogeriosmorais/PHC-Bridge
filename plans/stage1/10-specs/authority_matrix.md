@@ -10,10 +10,13 @@ This document is the **sole authoritative owner** of runtime ownership and subsy
 
 | Runtime mode | Authoritative owner | Forbidden writes | Capsule state | Mesh-wide authority |
 | :--- | :--- | :--- | :--- | :--- |
-| `BalanceActivation_Ready` | bridge | locomotion-drive; shell helper | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; MOVE_None; UpdatedComp=null |
-| `BalanceActivation_BlendIn` | bridge | movement-component; plant-profile swap | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; MOVE_None; UpdatedComp=null |
-| `BalanceActivation_Validate` | bridge | shell helper; movement-component | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; MOVE_None; UpdatedComp=null |
-| `BalanceActive_Standing` | bridge | external authority reclamation | NoCollision; Overlaps Off; Actor Frozen | Mesh Absolute; CMC Deactivated; Tick Disabled; MOVE_None; UpdatedComp=null |
+| `BalanceActivation_Ready` | bridge | locomotion-drive; shell helper | NoCollision;<br>Overlaps off;<br>Actor frozen at rebase origin | Mesh absolute transform;<br>CMC deactivated;<br>Tick function disabled;<br>UpdatedComponent=nullptr;<br>MOVE_None or MOVE_PhysAnimBalance |
+| `BalanceActivation_BlendIn` | bridge | movement-component; plant-profile swap | NoCollision;<br>Overlaps off;<br>Actor frozen at rebase origin | Mesh absolute transform;<br>CMC deactivated;<br>Tick function disabled;<br>UpdatedComponent=nullptr;<br>MOVE_None or MOVE_PhysAnimBalance |
+| `BalanceActivation_Validate` | bridge | shell helper; movement-component | NoCollision;<br>Overlaps off;<br>Actor frozen at rebase origin | Mesh absolute transform;<br>CMC deactivated;<br>Tick function disabled;<br>UpdatedComponent=nullptr;<br>MOVE_None or MOVE_PhysAnimBalance |
+| `BalanceActive_Standing` | bridge | external authority reclamation | NoCollision;<br>Overlaps off;<br>Actor frozen at rebase origin | Mesh absolute transform;<br>CMC deactivated;<br>Tick function disabled;<br>UpdatedComponent=nullptr;<br>MOVE_None or MOVE_PhysAnimBalance |
+| `BalanceActive_Recovery` | bridge (recovery) | locomotion-drive; shell helper | NoCollision;<br>Overlaps off;<br>Actor frozen at rebase origin | Mesh absolute transform;<br>CMC deactivated;<br>Tick function disabled;<br>UpdatedComponent=nullptr;<br>MOVE_None or MOVE_PhysAnimBalance |
+| `SafeDenied` | locomotion / engine | active balance policy writes | Collision-Active (Reverting) | Root-Relative (Reverting); CMC Active |
+| `Failed` | system (ragdoll) | all active bridge writes | Collision-Active (Reverting) | Physics-Simulated (Ragdoll); CMC Disabled |
 
 **Operational Pre-condition**: Entering `BalanceActivation_Ready` requires a **passed** physical plant audit as defined in [physics_asset_contract.md](physics_asset_contract.md).
 
@@ -22,7 +25,7 @@ This document is the **sole authoritative owner** of runtime ownership and subsy
 **CRITICAL**: V0 is NOT running a standard `ACharacter` movement model. Structural deactivation of the `CharacterMovementComponent` (CMC) and isolation of the skeletal mesh from the capsule root are mandatory.
 
 **Structural Deactivation Rule**: Passive non-interference is insufficient for `V0`. The implementation must structurally prevent CMC from asserting authority via:
-- `Deactivate()` + Tick Disabled
+- `Deactivate()` + Tick function disabled
 - `MOVE_None` or dedicated `MOVE_PhysAnimBalance` (skips internal CMC logic)
 - `UpdatedComponent = nullptr`
 

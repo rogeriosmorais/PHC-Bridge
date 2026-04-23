@@ -59,12 +59,15 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `contamination_class`: Classification of the violation (`mesh_wide_assist`, `non_critical_body_assist`, `excluded_body_world_brace`, `global_blend_or_kinematic_assist`).
 - `contamination_source_body`: Name of the body triggering the conflict.
 - `contamination_source_subsystem`: Name of the external system issuing the write.
-- `non_critical_body_write_detected`: Boolean flag for excluded body interference.
+- `mesh_wide_assist_detected`: Boolean flag for global mesh-level interference.
+- `non_critical_body_assist_detected`: Boolean flag for excluded body interference.
 - `excluded_body_world_contact_source`: Body name for world-bracing events.
-- `global_blend_weight`: Live `PhysicsBlendWeight` value.
-- `mesh_update_when_kinematic_enabled`: Actual boolean state of the flag.
+- `global_blend_weight`: Live `PhysicsBlendWeight` value (per sample).
+- `mesh_update_when_kinematic_enabled`: Actual boolean state of the flag (per sample).
 
-**Requirement**: All fields in this section must be populated whenever `activation_authority_conflict` is the primary `terminal_reason`.
+**Requirement**: All fields in this section must be populated whenever `activation_authority_conflict`, `activation_movement_reclaim`, or `activation_capsule_contract_violation` is the primary `terminal_reason`.
+
+**Auditability Rule**: Terminal contamination must be fully auditable from the artifact schema without requiring external log correlation.
 
 ### 6. Termination
 - `terminal_reason`: The winning leaf-level reason from the canonical set below.
