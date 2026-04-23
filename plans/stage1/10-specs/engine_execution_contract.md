@@ -100,16 +100,16 @@ The implementation must perform truth adjudication in this exact order:
 2.  **Patch Reduction**: Construct per-body 2D convex hulls.
 3.  **Frame Hull Union**: Merge all active patches into the frame-level 2D hull.
 4.  **Area-Threshold Test**: 
-    - If `FrameHullArea < Support Area (Min)`, emit `activation_support_failure`.
+    - If `FrameHullArea < Support Area (Min)`, emit `activation_support_failure` as adjudicated by the [Truth Model](continuous_balance_truth_model.md).
     - *Note*: `SingleFootSurvival` is only valid if the single side provides sufficient area.
 5.  **Proxy Adjudication**: 
     - If `Proxy` is outside the hull, increment drift timer. 
     - If `timer > COM Proxy Drift`, emit `activation_proxy_outside_support_region`.
 6.  **Classification**: Assign `support_mode` using the following priority:
-    - **Airborne**: Both sides `false` AND `gap_timer > Support Gap (Max)`. (Triggers `activation_support_failure`).
-    - **TransientRecovery**: One or both sides `false` AND `gap_timer <= Support Gap (Max)`.
-    - **SingleFootSurvival**: Exactly one side `true` (debounced) AND `Proxy` is `Inside`.
     - **TwoFootStable**: Both sides `true` (debounced).
+    - **SingleFootSurvival**: Exactly one side `true` (debounced).
+    - **TransientRecovery**: Both sides `false` (debounced) AND `gap_timer <= Support Gap (Max)`.
+    - **Airborne**: Both sides `false` (debounced) AND `gap_timer > Support Gap (Max)`. (Triggers `activation_support_failure`).
 
 ### 5. Proxy-vs-Hull Test Logic
 - **Projection**: Project the **Support Proxy** (defined in [continuous_balance_truth_model.md](continuous_balance_truth_model.md)) onto the same planar support surface.

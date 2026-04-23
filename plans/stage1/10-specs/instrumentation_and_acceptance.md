@@ -52,7 +52,7 @@ The implementation must emit a JSON artifact for every attempt, containing:
 ### 3. Support Truth
 - `support_state_l` / `support_state_r`: Debounced side-contact status.
 - `support_mode`: Dominant stability grade (`TwoFootStable`, `SingleFootSurvival`, `TransientRecovery`, `Airborne`).
-- `support_gap_timer_ms`: Cumulative time spent in contact loss (reset on any contact).
+- `support_gap_timer_ms`: Current contiguous contact-loss duration (reset to 0.0 on any contact).
 - `proxy_inside_hull`: Boolean result of the point-in-polygon test.
 - `active_support_side_count`: Number of sides currently in debounced contact (0, 1, or 2).
 - `support_hull_area_cm2`: Total planar area of the frame support hull.

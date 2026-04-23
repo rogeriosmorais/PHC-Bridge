@@ -69,9 +69,9 @@ The implementation must validate the physical continuity of the truth set on eve
 ## Support Truth & One-Foot Policy
 
 ### Support failure definition
-The run fails on `activation_support_failure` if:
-1.  Both side-support states are `false` after the persistence debounce.
-2.  The cumulative airborne duration exceeds the **Support Gap (Max)** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+The run fails on `activation_support_failure` if **any** of these support-truth conditions are breached:
+1.  **Support Area Breach**: The total unioned **FrameHullArea** is below the **Support Area (Min)** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+2.  **Airborne Gap Breach**: Both side-support states are `false` AND the cumulative airborne duration exceeds the **Support Gap (Max)** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 
 ### One-Foot Support Policy (Honest Balance Survival)
 - A run remains **Support Valid** even if only **one side** (e.g., `foot_l` or `ball_l`) is in contact, provided the **Support Proxy** remains within that single-foot hull.
@@ -90,6 +90,12 @@ The run fails on `activation_pose_reference_mismatch` if:
 1.  Any body in the balance-critical chain exceeds the **Mismatch (Max Body)** threshold for more than the **Mismatch Grace Period** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 2.  The RMS mismatch across the entire chain exceeds the **Mismatch (RMS Chain)** threshold for more than the **Mismatch Grace Period** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 3.  **Target Discontinuity**: Delta at blend start exceeds the **Target Discontinuity** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+
+## Instability & Support Churn
+
+The run fails on `activation_instability_threshold_breach` if:
+1.  **Support Churn**: The frequency of contact transitions exceeds the **Support Churn** limit (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+2.  **Justification**: High-frequency contact "popping" or jitter indicates an unstable simulation state that falsifies the truth-set support proof.
 
 ## COM / Support Proxy Definition
 
