@@ -88,7 +88,7 @@ The implementation must classify the support state into these grades:
 
 The run fails on `activation_pose_reference_mismatch` if:
 1.  Any body in the balance-critical chain exceeds the **Mismatch (Max Body)** threshold for more than the **Mismatch Grace Period**.
-2.  The RMS mismatch across the entire chain exceeds the **Mismatch (RMS Chain)** threshold for more than the grace period.
+2.  The RMS mismatch across the entire chain exceeds the **Mismatch (RMS Chain)** threshold for more than the **Mismatch Grace Period**.
 3.  **Target Discontinuity**: Delta at blend start exceeds the **Target Discontinuity** threshold.
 
 ## COM / Support Proxy Definition
