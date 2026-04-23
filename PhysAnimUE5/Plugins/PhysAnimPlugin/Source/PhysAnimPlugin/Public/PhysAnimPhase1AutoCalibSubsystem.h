@@ -39,6 +39,12 @@ public:
 		bool bSafeDenied);
 	static void FinalizeReportData(FPhase1AutoCalibReport& InOutReport, TArray<FPhase1AutoCalibTrialResult>* StageCTrials = nullptr);
 #if WITH_DEV_AUTOMATION_TESTS
+	static EBalanceReadyTransitionPhase TestOnlyMergeObservedTransitionPhase(
+		EBalanceReadyTransitionPhase PeakPhase,
+		EBalanceReadyTransitionPhase ObservedPhase);
+	static bool TestOnlyDidTrialReachRootOn(
+		EBalanceReadyTransitionPhase CurrentPhase,
+		EBalanceReadyTransitionPhase PeakPhase);
 	static void TestOnlyResetActiveTrialTrackingState(
 		double& InOutActiveTrialStartTimeSeconds,
 		double& InOutActiveTrialFirstRootOnTimeSeconds,
