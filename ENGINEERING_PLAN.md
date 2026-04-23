@@ -201,8 +201,9 @@ Forbidden success proxies:
 
 Stage 1 balance activation is only truly working when all are true in the same run:
 
-- the bridge enters `BridgeActive_Physical`
+- the bridge enters `BalanceActivation_Ready`
 - the balance-critical chain remains continuously simulated through activation
+- the support set remains physically valid for support truth
 - controller authority ramps gradually onto the already-physical chain
 - diagnostics stay observational only
 - no hidden shell or gameplay correction manufactures a pass

@@ -41,6 +41,9 @@ Every continuous-balance run must emit a structured artifact with the following 
 | `authority_conflict_count` | integer | count | yes |
 | `topology_change_event_count` | integer | count | yes |
 | `shell_helper_used_count` | integer | count | yes |
+| `support_loss_gap_max_ms` | number | milliseconds | yes |
+| `contact_churn_rate_hz` | number | changes per second | yes |
+| `min_support_contact_count_seen` | integer | count | yes |
 
 ### Time-Series Fields
 
@@ -54,6 +57,8 @@ Every continuous-balance run must emit a structured artifact with the following 
 | `samples[].peak_family_angular_deg_per_sec` | object | deg/s | fixed cadence | yes |
 | `samples[].control_authority_alpha` | number | `0..1` | fixed cadence | yes |
 | `samples[].target_discontinuity_deg` | number | degrees | fixed cadence | yes |
+| `samples[].support_proxy_world_xy_cm` | object | centimeters | fixed cadence | yes |
+| `samples[].support_region_valid` | boolean | boolean | fixed cadence | yes |
 | `samples[].authority_conflict_events` | integer | count in sample window | fixed cadence | yes |
 | `samples[].topology_change_events` | integer | count in sample window | fixed cadence | yes |
 
@@ -102,6 +107,12 @@ Activation must fail if:
 - the movement component reclaims authority over the balance-critical chain or support set
 - a topology change occurs on the balance-critical chain
 - standing duration is not contiguous
+
+Support truth must fail if:
+
+- support-loss gap exceeds `100 ms`
+- support-contact churn exceeds `12 Hz`
+- minimum support-contact count drops below `1`
 
 ## Regression Gates
 

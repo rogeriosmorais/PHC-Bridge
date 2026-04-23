@@ -4,6 +4,8 @@
 
 This document defines what stays, what is wrapped, what is deleted, and what is shadow-run only during the continuous-balance rewrite.
 
+This is the explicit migration and deletion contract for the rewrite.
+
 ## Legacy Codepaths That Remain Temporarily
 
 - existing bridge startup and inference path
@@ -17,6 +19,11 @@ This document defines what stays, what is wrapped, what is deleted, and what is 
 - shell-heavy transition diagnostics that are still useful as secondary failure explanations
 
 Do not extend these paths with new primary-balance behavior.
+
+Freeze rule:
+
+- legacy codepaths may be wrapped for comparison or compatibility only
+- they must not receive new success logic, new assistance logic, or new architecture-defining behavior
 
 ## Compatibility-Only Symbols And Labels
 

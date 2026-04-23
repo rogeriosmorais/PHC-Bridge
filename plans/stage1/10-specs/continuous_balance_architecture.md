@@ -117,10 +117,15 @@ Interpretation rules:
 
 | Body set | Allowed movement type in `V0` | Target source in `V0` | May inject force indirectly into critical chain? |
 | :--- | :--- | :--- | :--- |
-| Upper body | simulated preferred; kinematic hold only if declared explicitly as a temporary compatibility path outside `V0` acceptance | fixed stance reference only; no advanced policy shaping | yes through normal articulation only; no per-tick kinematic forcing that stabilizes the proximal chain |
+| Upper body | simulated only in `V0` | fixed stance reference only; no advanced policy shaping | yes through normal articulation only; no per-tick kinematic forcing that stabilizes the proximal chain |
 | Distal lower limbs / support set | simulated only in `V0` | fixed stance reference only; no advanced policy shaping | yes through honest contact only; no helper forcing |
 | Root-adjacent but non-critical bodies | match nearest articulated parent; no ad hoc flips during an active attempt | fixed stance reference or none | yes only through normal articulation |
 | Excluded bodies | disabled or passive only | none | no |
+
+Upper-body rule:
+
+- upper-body kinematic hold is banned in `V0`
+- any future compatibility path must use a separate explicit mode name and must emit `compatibility_path_used=true`
 
 ## Shell Rule
 
@@ -134,6 +139,8 @@ Interpretation rules:
 - shell helper application on the balance-critical chain or support set is a failure
 - no helper-ceiling path exists for `V0`
 
+There is no compatibility backdoor for shell help in `V0`.
+
 ## Support And Contact Rule
 
 `V0` standing uses a support model built from the physical support set.
@@ -144,11 +151,23 @@ Support truth is measured by:
 - support-side uptime over the active validation window
 - support loss events
 
+`V0` numeric support thresholds:
+
+- minimum support-contact count: `1`
+- one foot is sufficient in `V0`; both feet are not required
+- contact aggregation rule: `foot_* OR ball_*` on the same side counts as that side being in support
+- max support-loss gap: `100 ms`
+- max contact-churn rate: `12 Hz` aggregated across both sides during `BalanceActivation_Validate`
+
 Support failure means any of:
 
 - all support contacts absent for longer than the configured tolerance window
 - contact churn exceeds the allowed event rate while standing still fails
 - support truth depends on non-physical helper behavior
+
+Support truth precedence:
+
+- if support truth fails, the run fails even if COM or root-side metrics still look temporarily acceptable
 
 ## What Is Explicitly Not Allowed
 

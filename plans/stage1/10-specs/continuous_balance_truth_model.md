@@ -21,6 +21,47 @@ The primary truth sources for continuous balance are:
 
 Shell metrics may explain failure, but cannot certify balance.
 
+## COM / Support Proxy Contract
+
+The continuous-balance rewrite uses one explicit support proxy for `V0`.
+
+### Bodies contributing
+
+Use the world-space positions of:
+
+- `pelvis`
+- `thigh_l`
+- `thigh_r`
+- `spine_01`
+
+to build the proximal support proxy.
+
+### Measurement frame
+
+Measure the proxy in world frame projected onto the ground plane.
+
+### Proxy definition
+
+The `V0` support proxy is:
+
+- the planar centroid of the contributing bodies
+
+If a later full COM computation becomes trustworthy, it may replace this proxy only in a documented contract change.
+
+### Support region definition
+
+The `V0` support region is the convex hull of the currently supporting `foot_*` and `ball_*` contact points.
+
+### Failure threshold
+
+The run fails support-proxy truth if:
+
+- the planar support proxy remains outside the support region for more than `100 ms`
+
+### Precedence rule
+
+If support truth fails, the run fails even when the support proxy or root tilt still look temporarily acceptable.
+
 ## Source-Of-Truth Precedence
 
 Use this precedence order whenever observables disagree:
@@ -38,6 +79,7 @@ Interpretation rules:
 - control-target publication is never proof of achieved pose
 - shell state is never proof of standing
 - movement-component non-interference is required, not inferred
+- support truth beats acceptable-looking COM/support-proxy behavior when the support set is not actually sustaining the body
 
 ## Secondary Diagnostics
 

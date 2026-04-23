@@ -96,9 +96,9 @@ The `PhysAnim.PIE.BalanceModeSmoke` test is successful only if the run ends as:
 The test is a failure if the run ends in:
 
 - `BridgeActive`
-- `BridgeActive_Physical`
+- `BalanceActivation_Ready`
 - `BalanceActivation_BlendIn`
-- `BalanceActivation_StandingValidation`
+- `BalanceActivation_Validate`
 - `BalanceActive_Recovery`
 - explicit safe denial
 - unresolved entry ambiguity

@@ -120,6 +120,12 @@ Compatibility note:
 - legacy `BridgeActive_Physical` maps to `BalanceActivation_Ready`
 - legacy `BalanceActivation_StandingValidation` maps to `BalanceActivation_Validate`
 
+Recovery note:
+
+- `BalanceActive_Recovery`, `SafeDenied`, and `Failed` are named architectural states
+- detailed recovery behavior is out of the current rewrite scope
+- implementers must not improvise new standing-success logic inside those paths
+
 ## Authority And Diagnostics
 
 The runtime must keep these observables distinct:
@@ -188,7 +194,10 @@ Removing the old flip-based ritual will often expose controller weakness more di
 - blended quantity: `ControlAuthorityAlpha`
 - alpha range: `0.0 -> 1.0`
 - default duration: `0.75` seconds
-- gating: time-based after `BalanceActivation_Ready` entry; if a fail condition appears, the mode fails rather than pausing alpha
+- alpha scope: one global alpha for the balance-critical chain and support set in `V0`
+- support-set targets: included in the same blend contract in `V0`
+- damping/strength scaling: use the same alpha as target authority in `V0`; separate scaling is out of scope
+- gating: time-based after `BalanceActivation_Ready` entry because `Ready` already owns the physical quietness proof; if a fail condition appears, the mode fails rather than pausing alpha
 - history rebasing: one-time rebase on entry to `BalanceActivation_BlendIn`
 - target discontinuity check: fail if `target_discontinuity_deg > 15.0` on the balance-critical chain during blend start
 

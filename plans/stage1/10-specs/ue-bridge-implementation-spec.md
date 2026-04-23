@@ -114,6 +114,9 @@ During `BalanceActivation_BlendIn`:
 - abrupt activation of full authority is not the intended path
 - the default alpha is `ControlAuthorityAlpha`
 - the default blend duration is `0.75` seconds
+- the alpha is global across the balance-critical chain and support set in `V0`
+- support-set targets use the same alpha in `V0`
+- damping and strength scale with the same alpha in `V0`
 - target history is rebased once on blend entry
 - target discontinuity greater than `15.0` degrees on the balance-critical chain is terminal
 - diagnostics may record blend instability, but may not reclassify that instability as success
