@@ -86,6 +86,20 @@ means:
 
 `execute current task packet only`
 
+Review shortcut:
+
+`review current task`
+
+means:
+
+`review the latest implementation diff against the current task packet only`
+
+Review agents must use:
+
+`plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
+
+The reviewer must not implement fixes or advance the task.
+
 ## Review Gate
 
 The current task packet may move from completed-by-implementer to accepted only after a separate reviewer pass.

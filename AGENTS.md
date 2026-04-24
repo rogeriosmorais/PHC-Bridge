@@ -128,6 +128,39 @@ Do not interpret `go` as permission to perform broad work, skip review gates, ad
 - run required build/tests
 - return the required handoff block
 
+## Review Startup Rule
+
+If the user says any of the following:
+
+- `review current task`
+- `review current packet`
+- `review S1-...`
+- `review latest task`
+
+then the agent must act as a reviewer, not an implementer.
+
+The reviewer must:
+
+1. Read `AGENTS.md`.
+2. Read `plans/stage1/20-execution/execution-log.md`.
+3. Identify the current task packet from the `## Current Task Packet` section unless the user explicitly named a task ID.
+4. Read `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`.
+5. Generate or request a bounded review packet using:
+
+   `.\scripts\make_review_packet.ps1 -TaskPacket <current-task-packet> -BuildLog <path-if-known> -TestLog <path-if-known>`
+
+6. Review only the generated review packet.
+7. Do not implement fixes.
+8. Do not edit files.
+9. Do not advance the task.
+10. Return only the reviewer format from `REVIEWER_PROMPT.md`.
+
+If no implementation diff exists, report:
+
+`Blocked: no implementation diff found to review`
+
+Do not interpret `review current task` as permission to execute implementation work.
+
 ## Review Rule
 
 After implementation commits, review must be done from a bounded review packet.

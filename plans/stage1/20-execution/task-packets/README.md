@@ -100,3 +100,22 @@ The reviewer must not receive:
 - implementer reasoning
 - architecture summaries
 - unrelated docs
+
+## User Shortcuts
+
+Use:
+
+`go`
+
+to execute the current implementation task.
+
+Use:
+
+`review current task`
+
+to review the latest implementation diff against the current task packet.
+
+Do not use `go` for review.
+
+A reviewer must not implement fixes.
+An implementer must not self-approve.
