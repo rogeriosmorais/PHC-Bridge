@@ -4,10 +4,12 @@
 
 | Test ID | Target | Scenario | Trigger | Expected Output |
 |---|---|---|---|---|
+
+**Note**: In the following tables, `terminal_reason = nullptr` refers to the artifact mapping of the internal `EPhysAnimTerminalReason::None` value.
 | **LOGIC-01** | `ExtractPatchHull` | Valid 2D points | `NumPoints > 2` | `patch_area_cm2` > 0 |
 | **LOGIC-02** | `ExtractPatchHull` | Points on a line | `Collinear points` | `patch_area_cm2` = 0 |
 | **LOGIC-03** | `ExtractPatchHull` | Empty points | `NumPoints = 0` | `patch_area_cm2` = 0 |
-| **LOGIC-04** | `BuildFrameHull` | Offset Unit Squares | L:[0,0]-[1,1]; R:[2,0]-[3,1] | `support_hull_area_cm2` = 3.0 |
+| **LOGIC-04** | `BuildFrameHull` | Offset Unit Squares | L:{(0,0),(1,0),(1,1),(0,1)}; R:{(2,0),(3,0),(3,1),(2,1)} | `HullPointsCm` = {(0,0),(3,0),(3,1),(0,1)}, `support_hull_area_cm2` = 3.0 |
 | **LOGIC-05** | `ClassifySupportMode` | Both feet down | `Left=true, Right=true` | `support_mode` = `TwoFootStable` |
 | **LOGIC-06** | `ClassifySupportMode` | One foot down | `Left=true, Right=false` | `support_mode` = `SingleFootSurvival` |
 | **LOGIC-07** | `ClassifySupportMode` | Both feet up, gap <= max | `Both=false, Timer <= limit` | `support_mode` = `TransientRecovery` |

@@ -277,25 +277,27 @@ These are the exact value-only types Slice 1 must introduce before implementatio
 - **Fields**:
   - `FVector2D PositionCm`
   - `FName BodyName`
-  - `FName SupportSide`
+  - `EPhysAnimSupportSide SupportSide`
 - **Units**:
   - `PositionCm`: world-space planar centimeters
 - **Nullable fields**: none
-- **Allowed enum values**: none
+- **Allowed enum values**:
+  - values from `EPhysAnimSupportSide`
 - **Classification**: future adapter input and Slice 1 production input
 
 ### `FPhysAnimSupportPatch`
 
 - **Fields**:
   - `FName BodyName`
-  - `FName SupportSide`
+  - `EPhysAnimSupportSide SupportSide`
   - `TArray<FVector2D> HullPointsCm`
   - `double PatchAreaCm2`
 - **Units**:
   - `HullPointsCm`: world-space planar centimeters
   - `PatchAreaCm2`: square centimeters
 - **Nullable fields**: none
-- **Allowed enum values**: none
+- **Allowed enum values**:
+  - values from `EPhysAnimSupportSide`
 - **Classification**: Slice 1 production result
 
 ### `FPhysAnimFrameHull`
@@ -312,6 +314,16 @@ These are the exact value-only types Slice 1 must introduce before implementatio
 - **Allowed enum values**: none
 - **Classification**: Slice 1 production result
 
+### `EPhysAnimSupportSide`
+
+- **Fields**: enum only
+- **Units**: none
+- **Nullable fields**: none
+- **Allowed enum values**:
+  - `Left`
+  - `Right`
+- **Classification**: Slice 1 production enum
+
 ### `EPhysAnimSupportMode`
 
 - **Fields**: enum only
@@ -324,20 +336,46 @@ These are the exact value-only types Slice 1 must introduce before implementatio
   - `Airborne`
 - **Classification**: Slice 1 production enum
 
+### `EPhysAnimTerminalReason`
+
+- **Fields**: enum only
+- **Units**: none
+- **Nullable fields**: none
+- **Allowed enum values**:
+  - `None`
+  - `ActivationPhysicsAssetContractViolation`
+  - `ActivationCapsuleContractViolation`
+  - `ActivationTopologyChange`
+  - `ActivationContinuousSimulationLost`
+  - `ActivationSupportFailure`
+  - `ActivationProxyOutsideSupportRegion`
+  - `ActivationTargetDiscontinuity`
+  - `ActivationUnstableGainOrDamping`
+  - `ActivationInstabilityThresholdBreach`
+  - `ActivationPoseReferenceMismatch`
+  - `ActivationMovementReclaim`
+  - `ActivationShellHelperViolation`
+  - `ActivationAuthorityConflict`
+  - `ActivationStandingValidationTimeout`
+- **Classification**: Slice 1 shared value enum
+
 ### `FPhysAnimProxyAdjudicationInput`
 
 - **Fields**:
-  - `TOptional<bool> ProxyInsideHull`
+  - `FVector2D ProxyPositionCm`
+  - `TArray<FVector2D> HullPointsCm`
+  - `int32 ActiveSupportSideCount`
   - `TOptional<double> PreviousProxyOutsideHullDurationMs`
   - `double DeltaMs`
   - `double ProxyDriftLimitMs`
 - **Units**:
+  - `ProxyPositionCm`: world-space planar centimeters
+  - `HullPointsCm`: world-space planar centimeters
   - `PreviousProxyOutsideHullDurationMs`: milliseconds
   - `DeltaMs`: milliseconds
   - `ProxyDriftLimitMs`: milliseconds
 - **Nullable fields**:
-  - `ProxyInsideHull`: unset means proxy test not evaluated because `active_support_side_count == 0`
-  - `PreviousProxyOutsideHullDurationMs`: unset only when `ProxyInsideHull` is unset
+  - `PreviousProxyOutsideHullDurationMs`: unset only when proxy test was skipped in previous frame
 - **Allowed enum values**: none
 - **Classification**: Slice 1 production input
 
@@ -346,27 +384,28 @@ These are the exact value-only types Slice 1 must introduce before implementatio
 - **Fields**:
   - `TOptional<bool> ProxyInsideHull`
   - `TOptional<double> ProxyOutsideHullDurationMs`
-  - `const TCHAR* TerminalReason`
+  - `EPhysAnimTerminalReason TerminalReason`
 - **Units**:
   - `ProxyOutsideHullDurationMs`: milliseconds
 - **Nullable fields**:
   - `ProxyInsideHull`: unset maps to artifact `proxy_inside_hull = nullptr`
   - `ProxyOutsideHullDurationMs`: unset maps to artifact `proxy_outside_hull_duration_ms = nullptr`
-  - `TerminalReason`: `nullptr` means no terminal reason
-- **Allowed enum values**: none
+- **Allowed enum values**:
+  - values from `EPhysAnimTerminalReason`
 - **Classification**: Slice 1 production result
 
 ### `FPhysAnimChurnEvent`
 
 - **Fields**:
   - `double TimestampSec`
-  - `FName SupportSide`
+  - `EPhysAnimSupportSide SupportSide`
   - `bool bNewSupportState`
 - **Units**:
   - `TimestampSec`: seconds
   - `bNewSupportState`: debounced side-support state after the transition
 - **Nullable fields**: none
-- **Allowed enum values**: none
+- **Allowed enum values**:
+  - values from `EPhysAnimSupportSide`
 - **Classification**: Slice 1 production input and future adapter input
 
 ### `FPhysAnimChurnResult`
@@ -405,13 +444,18 @@ These are the exact value-only types Slice 1 must introduce before implementatio
   - values from `EPhysAnimSupportMode`
 - **Classification**: Slice 1 production result
 
-All terminal-reason empty values use `nullptr`. Implementation must not introduce alternate Slice 1 structs or enum values without updating this section first.
+All terminal-reason empty values use `EPhysAnimTerminalReason::None`. Implementation must not introduce alternate Slice 1 structs or enum values without updating this section first.
+
+### Artifact Mapping Rule (Post-Slice 1)
+
+The artifact mapper must use these rules when converting pure results to JSON:
+- `EPhysAnimTerminalReason::None` -> `terminal_reason = nullptr`
+- All other values map to their lower-snake-case canonical strings.
 
 ### Validator Types
 
 Introduce only after Slice 1 is green:
 
-- `EPhysAnimTerminalReason`
 - `FPhysAnimFailureCandidate`
 - `FPhysAnimFailureArbitrationResult`
 - `FPhysAnimContinuitySnapshot`
@@ -536,35 +580,46 @@ Slice 1 allows only:
 
 ### Slice 1 Commit Plan
 
-Every Slice 1 commit must compile. No Slice 1 commit may touch the runtime state machine.
+Every Slice 1 commit must compile and pass its mapped tests. No Slice 1 commit may touch the runtime state machine.
+
+**TDD Commit Policy**:
+- **Red State**: Create and observe failing tests locally to verify the test surface. Do not commit red tests alone.
+- **Green State**: Implement the minimal code required to pass the tests. Commit only when the mapped tests are green.
+- **Exceptions**: Only explicitly marked temporary checkpoints may be committed in a failing state (e.g., during handoff).
 
 Use this exact order:
 
 1. Add empty `PhysAnimSupportTruth.h/.cpp`.
    - no runtime references
    - compile only
-2. Add `PhysAnimSupportTruth.Tests.cpp` with one intentionally failing test harness compile target.
+2. Add `PhysAnimSupportTruth.Tests.cpp` and verify the harness test runs.
    - prove tests are discoverable
 3. Add pure data types and enums.
    - no behavior yet
-4. Add `ExtractPatchHull` tests.
-   - red first
-   - implement only enough to pass
-5. Add `BuildFrameHull` tests.
-   - red first
-   - implement only enough to pass
-6. Add `ClassifySupportMode` tests.
-   - red first
-   - implement only enough to pass
-7. Add `AdjudicateProxy` tests.
-   - red first
-   - implement only enough to pass
-8. Add `CalculateChurnHz` tests.
-   - red first
-   - implement only enough to pass
-9. Add `ReduceSupportModeForReportWindow` tests.
-   - red first
-   - implement only enough to pass
+4. Implement `ExtractPatchHull`.
+   - write failing test locally
+   - implement minimal code
+   - commit only when `LOGIC-01` to `LOGIC-03` are green
+5. Implement `BuildFrameHull`.
+   - write failing test locally
+   - implement minimal code
+   - commit only when `LOGIC-04` is green
+6. Implement `ClassifySupportMode`.
+   - write failing test locally
+   - implement minimal code
+   - commit only when `LOGIC-05` to `LOGIC-08` are green
+7. Implement `AdjudicateProxy`.
+   - write failing test locally
+   - implement minimal code
+   - commit only when `LOGIC-09` to `LOGIC-12` are green
+8. Implement `CalculateChurnHz`.
+   - write failing test locally
+   - implement minimal code
+   - commit only when `LOGIC-13` is green
+9. Implement `ReduceSupportModeForReportWindow`.
+   - write failing test locally
+   - implement minimal code
+   - commit only when `LOGIC-14` is green
 10. Add one Slice 1 aggregation test proving all outputs can be produced without runtime dependencies.
 
 No step may include `UPhysAnimComponent`, `FPhysAnimBalanceReadyTransition`, `UPhysicsControlComponent`, `FBodyInstance`, `UWorld`, `AActor`, or Chaos runtime handles.
@@ -629,6 +684,14 @@ Goal: implement `LOGIC-09` to `LOGIC-12`.
 Production function:
 
 - `PhysAnimSupportTruth::AdjudicateProxy`
+- `PhysAnimSupportTruth::IsPointInsideOrOnConvexPolygon` (private helper)
+
+Required logic:
+
+- if `ActiveSupportSideCount == 0`, return `nullptr` for both truth fields and skip test.
+- if `ActiveSupportSideCount > 0`, perform 2D point-in-polygon test.
+- update `ProxyOutsideHullDurationMs` (increment if outside, reset to 0.0 if inside).
+- emit `activation_proxy_outside_support_region` if duration > limit.
 
 Required artifact fields in result:
 
@@ -636,7 +699,7 @@ Required artifact fields in result:
 - `proxy_outside_hull_duration_ms`
 - `terminal_reason`
 
-This slice proves proxy drift without surrounding sample reconstruction.
+This slice proves proxy drift via real geometric adjudication.
 
 ### Commit 5: Churn And 30 Hz Reduction
 
