@@ -1,78 +1,5 @@
 # Stage 1 Execution Log
 
-## Purpose
-
-This file is the orchestrator-owned live task-state board for Stage 1.
-
-Use it to track:
-- what is active
-- what is blocked
-- what is waiting on the user
-- what frozen inputs are in effect
-- what handoffs were accepted
-
-Pre-pivot history remains available in git. This live log now tracks the current balance-first direction.
-
-## Current State
-
-- `Date`: `2026-04-23`
-- `Direction change`: the previous flip-based activation model is now considered conceptually flawed as the target design.
-- `Current phase`: **Slice 1 implementation**.
-- **Stop Rule**: Do not continue runtime/in-engine tuning after an unexplained failure. If artifacts cannot explain the failure with a canonical terminal reason and forensic fields, stop implementation and improve instrumentation or contracts. Do not proceed to runtime rewrite until the first pure-logic slice is green.
-- `Overall status`: Balance-first implementation is runnable. Runtime state-machine surgery remains blocked until Slice 1 passes all Layer 1 unit tests.
-- `State naming`: preferred rewrite states are now `BalanceActivation_Ready -> BalanceActivation_BlendIn -> BalanceActivation_Validate -> BalanceActive_Standing`; older names remain compatibility labels only.
-- `Latest runtime read`: the latest verified live smoke from `2026-04-22` still failed to reach sustained `BalanceActive_Standing`. That evidence remains useful as legacy forensic context, but it no longer justifies further refinement of the old flip-based ritual as the target design.
-
-## Active Tasks
-
-| Task ID | Owner | Status | Frozen Inputs | Writable Paths | Waiting On |
-|---|---|---|---|---|---|
-| S1-IMPL-BALANCE-FIRST | AI | active | TDD plan, refactor order, 10-spec suite | `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp`, `PhysAnimSupportTruth.Tests.cpp` | none |
-| S1-IMPL-BALANCE-FIRST-01 | AI | **review-pending** | task implementation commit exists; valid review evidence still required | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`, `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp` | valid review report |
-| S1-IMPL-BLOCKER-PROTOCOL | AI | active guardrail | accepted rollout/refactor protocol | `plans/stage1/20-execution/balance_first_rollout_protocol.md`, `plans/stage1/20-execution/balance_first_refactor_plan.md`, `plans/stage1/20-execution/execution-log.md` | none |
-
-Historical completed task rows were moved to:
-
-`plans/stage1/90-archive/execution-log-completed-tasks-2026-04-23.md`
-
-The active table contains only live, runnable, blocked, or guardrail tasks.
-
-## Frozen Inputs For Continuous Balance Rewrite
-
-- `Authoritative Contract Suite`:
-  - `plans/stage1/10-specs/continuous_balance_architecture.md`
-  - `plans/stage1/10-specs/continuous_balance_truth_model.md`
-  - `plans/stage1/10-specs/engine_execution_contract.md`
-  - `plans/stage1/10-specs/authority_matrix.md`
-  - `plans/stage1/10-specs/physics_asset_contract.md`
-  - `plans/stage1/10-specs/instrumentation_and_acceptance.md`
-  - `plans/stage1/10-specs/balance-mode-entry-spec.md`
-- `Supporting Docs`:
-  - `AGENTS.md`
-  - `ENGINEERING_PLAN.md`
-  - `STAGE1_PLAN.md`
-  - `plans/stage1/20-execution/assumption-ledger.md`
-  - `plans/stage1/20-execution/decision-locks.md`
-  - `plans/stage1/20-execution/task-packets/README.md`
-- `Unfreeze rule`: Only unfreeze if the user explicitly requests an architecture review or if an implementation spike proves a contract requirement is physically impossible.
-- `Outcome vocabulary`: Use `Failed` for canonical balance-first terminal failure. Treat legacy `FailStopped` as a code/log compatibility label only.
-
-## Next Runnable Tasks
-
-| Priority | Task ID | Why Runnable / Not Runnable Yet |
-|---|---|---|
-| 1 | none | Waiting for valid review report for `S1-IMPL-BALANCE-FIRST-01`. |
-
-## Current Task Packet
-
-Implementer prompt:
-
-`plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
-
-Current packet:
-
-`plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`
-
 ## Current Task State
 
 | Field | Value |
@@ -90,140 +17,18 @@ Current packet:
 | Review Verdict | `missing` |
 | Blocking Reason | `valid review report required before advancing` |
 
-Command validity:
-- `go` is valid only when Lifecycle Status is `runnable` or `fix-required`.
-- `review current task` is valid only when Lifecycle Status is `review-pending`.
-- `fix current task` is valid only when Lifecycle Status is `fix-required`.
-- `accept current task` is valid only when Review Verdict is `accept`.
+## Next Runnable Tasks
 
-Agents must not implement from the broad refactor plan directly.
-
-Implementation must follow the current task packet first.
-The refactor plan remains authority only when the task packet is incomplete or contradictory.
-
-User shortcut:
-
-`go`
-
-means:
-
-`execute current task packet only`
-
-Review shortcut:
-
-`review current task`
-
-means:
-
-`review the latest implementation commit or provided task head against the current task packet only`
-
-Fix shortcut:
-
-`fix current task`
-
-means:
-
-`fix reviewer blockers inside the current task packet only`
-
-Accept shortcut:
-
-`accept current task`
-
-means:
-
-`advance the execution log to the next task packet after reviewer verdict accept`
-
-Do not use `go` for review.
-Do not use `review current task` for implementation.
-Do not use `accept current task` without reviewer verdict `accept`.
-
-
-## Review Gate
-
-The current task packet may move from completed-by-implementer to accepted only after a separate reviewer pass.
-
-The implementer must stop after handoff.
-
-The user/orchestrator triggers review.
-
-The next task is not runnable until the reviewer verdict is `accept`.
-
-## Review Evidence Gate
-
-Reviewer verdicts do not directly change task state.
-
-A task may move to `fix-required`, `rejected`, or `accepted` only if a valid review report exists.
-
-Valid review evidence must include:
-- task ID
-- task base SHA
-- task head SHA
-- commit SHA
-- verdict
-- blockers
-- next action
-
-A verdict of `fix required` without blocker details is invalid.
-A verdict of `reject` without blocker details is invalid.
-A verdict of `accept` with blockers is invalid.
-
-Reviewers must not edit `execution-log.md`.
-
-Only the orchestrator may update this execution log after reading valid review evidence.
-
-## Commit Gate
-
-The implementer must commit after required build/tests pass and before review.
-
-Before editing, the implementer records:
-
-`Task base = git rev-parse HEAD`
-
-After committing, the implementer records:
-
-`Task head = git rev-parse HEAD`
-
-If build/tests fail:
-- no commit is created
-- review does not start
-- the current task remains active
-
-If build/tests pass:
-- one task implementation commit is created
-- review compares `Task base` to `Task head`
-- the next task remains blocked until reviewer verdict is `accept`
-
-If reviewer verdict is `fix required`:
-- the current task remains active
-- fixes must stay inside the same task packet
-- review must compare the original task base to the new task head
-
-If reviewer verdict is `reject`:
-- revert the task implementation commit
-- keep the current task active
-
-If reviewer verdict is `accept`:
-- advance the execution log to the next task packet
-
-## Waiting On User
-
-| Item | Expected Evidence |
-|---|---|
-| none | no setup evidence remains outstanding |
-
-## Latest Evidence Progress
-
-- the UE scaffold remains concretely verified (NNERuntimeORT, PhysicsControl, Manny characters)
-- PIE launches and Manny content is accessible
-- build tools and SDKs remain verified for v143 toolset
-- startup success confirmed for `phc_policy` under `NNERuntimeORTDml`
+| Priority | Task ID | Why Runnable / Not Runnable Yet |
+|---|---|---|
+| 1 | none | Waiting for valid review report for `S1-IMPL-BALANCE-FIRST-01`. |
 
 ## Accepted Handoffs
 
 | Task ID | Artifact | Accepted? | Notes |
 |---|---|---|---|
+| S1-PLAN-REWRITE | TDD + Matrix + initial refactor order + Slice 1 | yes | SHA: `09451213...` |
 | S1-DOCS-BALANCE-FIRST | balance-first activation docs rewrite | yes | canonical docs now point to continuous physical ownership and standing validation |
-| S1-PLAN-REWRITE | TDD + Matrix + initial refactor order + Slice 1 | yes | detailed refactor migration plan accepted; Slice 1 scaffold is runnable |
 
 ## Blocked / Deferred
 
@@ -234,54 +39,3 @@ If reviewer verdict is `accept`:
 | S1-P2-A1 | blocked | depends on G2 pass |
 | Legacy flip-path tuning | deferred | archived; legacy compatibility context only |
 | Broad perturbation tuning | deferred | standing benchmark remains the priority |
-
-## Minimal Ledger Gate
-
-The assumption ledger is not updated for normal task progress.
-
-Every task handoff must declare ledger impact:
-
-- `Ledger impact: none`
-- `Ledger impact: updated: A-XX`
-- `Ledger impact: blocked: assumption decision needed`
-
-A task may be marked complete with `Ledger impact: none` only when it did not change, weaken, falsify, or create an assumption.
-
-Update `plans/stage1/20-execution/assumption-ledger.md` before marking a task complete if the task reveals:
-
-- a pure function unexpectedly needs runtime data
-- a mapped test cannot be written from the matrix
-- an artifact field cannot be emitted
-- a contract is ambiguous
-- a planned API is insufficient
-- a forbidden dependency becomes necessary
-- a repeated unexplained failure pattern appears
-- an in-engine failure has no canonical terminal reason
-- a shortcut, stub, or approximation is proposed
-- the planned commit order cannot be followed
-
-Do not add a ledger-impact column to the Active Tasks table.
-Use the one-line handoff declaration instead.
-
----
-
-## 2026-04-23 — Refactor Detail Accepted; Slice 1 Scaffold Runnable
-
-- the refactor-detail planning frontier is closed
-- **S1-PLAN-REFACTOR-DETAIL** is completed
-- **S1-IMPL-BALANCE-FIRST-01** is review-pending
-- **S1-IMPL-BALANCE-FIRST** is active
-- the Stop Rule remains in effect: no runtime state-machine rewiring until pure support logic is verified green
-- all legacy design and Phase 0/1 packages have been moved to `90-archive`
-
-### S1-PLAN-REFACTOR-DETAIL Acceptance Checklist
-- [x] current code inventory present
-- [x] extraction seams present
-- [x] Slice 1 data types present
-- [x] Slice 1 public API present
-- [x] test harness wiring present
-- [x] dependency direction present
-- [x] compile-safe commit sequence present
-- [x] slice-to-test mapping present
-- [x] Slice 1 forbidden edits present
-- [x] implementation code absent before acceptance
