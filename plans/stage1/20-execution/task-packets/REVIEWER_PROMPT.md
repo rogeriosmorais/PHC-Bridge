@@ -27,19 +27,35 @@ Review against:
 
 Return exactly this format:
 
+## Review target
+
+Task:
+Task packet:
+Task base:
+Task head:
+Commit:
+
 ## Blockers
 
-- blocker 1
-- blocker 2
-- blocker 3
+Use this format for each blocker:
 
-Use `none` if there are no blockers.
+- `B-01`
+  - Violated rule:
+  - File/path:
+  - Problem:
+  - Required fix:
+  - Must stay inside current packet: yes/no
+
+Use `none` only if there are no blockers.
 
 ## Non-blocking nits
 
-- nit 1
-- nit 2
-- nit 3
+Use this format for each nit:
+
+- `N-01`
+  - File/path:
+  - Issue:
+  - Suggested fix:
 
 Use `none` if there are no nits.
 
@@ -51,8 +67,18 @@ Use `none` if there are no nits.
 
 One sentence.
 
+## Review evidence
+
+Review report:
+- `inline`
+
 Rules:
 
-- Use `accept` only if the task packet is fully satisfied.
-- Use `fix required` if the task is mostly correct but needs bounded changes inside the same packet.
-- Use `reject` if the implementation violates forbidden files, adds forbidden behavior, skips required tests/build, implements the wrong task, includes unrelated files, or includes multiple task packets.
+- `accept` is valid only when Blockers is `none`.
+- `fix required` is valid only when at least one blocker is listed.
+- `reject` is valid only when at least one blocker is listed.
+- Do not change `execution-log.md`.
+- Do not edit files.
+- Do not implement fixes.
+- Do not advance the task.
+- Do not mark the task accepted.

@@ -28,7 +28,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | Task ID | Owner | Status | Frozen Inputs | Writable Paths | Waiting On |
 |---|---|---|---|---|---|
 | S1-IMPL-BALANCE-FIRST | AI | active | TDD plan, refactor order, 10-spec suite | `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp`, `PhysAnimSupportTruth.Tests.cpp` | none |
-| S1-IMPL-BALANCE-FIRST-01 | AI | **completed** | accepted refactor detail plan | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`, `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp` | none |
+| S1-IMPL-BALANCE-FIRST-01 | AI | **review-pending** | accepted refactor detail plan; implementation commit exists; review verdict missing valid blocker evidence | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`, `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp` | valid review report |
 | S1-IMPL-BLOCKER-PROTOCOL | AI | active guardrail | accepted rollout/refactor protocol | `plans/stage1/20-execution/balance_first_rollout_protocol.md`, `plans/stage1/20-execution/balance_first_refactor_plan.md`, `plans/stage1/20-execution/execution-log.md` | none |
 
 Historical completed task rows were moved to:
@@ -61,7 +61,7 @@ The active table contains only live, runnable, blocked, or guardrail tasks.
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-IMPL-BALANCE-FIRST-01 | Pure Support Module Scaffold. Create headers and source with zero behavior. |
+| 1 | none | Waiting for valid review report for `S1-IMPL-BALANCE-FIRST-01`. |
 
 ## Current Task Packet
 
@@ -114,19 +114,6 @@ Do not use `go` for review.
 Do not use `review current task` for implementation.
 Do not use `accept current task` without reviewer verdict `accept`.
 
-Review shortcut:
-
-`review current task`
-
-means:
-
-`review the latest implementation diff against the current task packet only`
-
-Review agents must use:
-
-`plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
-
-The reviewer must not implement fixes or advance the task.
 
 ## Review Gate
 
@@ -137,6 +124,29 @@ The implementer must stop after handoff.
 The user/orchestrator triggers review.
 
 The next task is not runnable until the reviewer verdict is `accept`.
+
+## Review Evidence Gate
+
+Reviewer verdicts do not directly change task state.
+
+A task may move to `fix-required`, `rejected`, or `accepted` only if a valid review report exists.
+
+Valid review evidence must include:
+- task ID
+- task base SHA
+- task head SHA
+- commit SHA
+- verdict
+- blockers
+- next action
+
+A verdict of `fix required` without blocker details is invalid.
+A verdict of `reject` without blocker details is invalid.
+A verdict of `accept` with blockers is invalid.
+
+Reviewers must not edit `execution-log.md`.
+
+Only the orchestrator may update this execution log after reading valid review evidence.
 
 ## Commit Gate
 

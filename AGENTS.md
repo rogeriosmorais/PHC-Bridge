@@ -106,6 +106,25 @@ If workflow state is unclear, stop and report:
 
 `Blocked: workflow state unclear`
 
+Reviewer verdicts do not directly change task state.
+
+Reviewers must not edit:
+- `plans/stage1/20-execution/execution-log.md`
+- task packets
+- production code
+- tests
+- planning docs
+
+A reviewer may only return a structured review report, or create a file under:
+
+`plans/stage1/30-evidence/reviews/`
+
+if explicitly instructed.
+
+A verdict of `fix required` or `reject` without at least one blocker is invalid.
+
+Only the orchestrator may update task state after valid review evidence exists.
+
 
 ## Failure Classification Rule
 

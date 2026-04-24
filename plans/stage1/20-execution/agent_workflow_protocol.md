@@ -161,6 +161,39 @@ When reviewing a task, the reviewer must:
 
 The reviewer must not implement fixes.
 
+## Review Evidence Rule
+
+A reviewer verdict is not valid unless it is backed by a review report.
+
+A review report may be:
+- returned in the reviewer response, or
+- written to `plans/stage1/30-evidence/reviews/`
+
+The reviewer must not update:
+- `execution-log.md`
+- task packets
+- production code
+- tests
+- planning docs
+
+The reviewer may only:
+- return a structured review response, or
+- create a review report file if explicitly instructed by the orchestrator.
+
+A verdict of `fix required` is invalid unless it includes at least one blocker.
+
+A verdict of `reject` is invalid unless it includes at least one blocker.
+
+Each blocker must include:
+- blocker ID
+- violated task-packet rule
+- file/path involved
+- exact required fix
+- whether the fix must stay inside the current task packet
+
+A reviewer may not set task status directly.
+Only the orchestrator may update task status after reading the review report.
+
 ## Commit Rules
 
 The implementer must not commit before required build/tests pass.
@@ -210,6 +243,56 @@ If reviewer verdict is `accept`:
 2. `execution-log.md` may advance to the next task packet.
 3. The next task becomes runnable only after the execution-log pointer is updated.
 4. Runtime rewrite remains blocked until Slice 1 pure support logic is green.
+
+## State Transition Evidence Rule
+
+No task status may change based only on a bare verdict.
+
+Every transition must cite the evidence that caused it.
+
+Allowed transitions:
+
+1. `runnable` -> `implementation-active`
+   Evidence required:
+   - user/orchestrator command `go`
+
+2. `implementation-active` -> `implementation-failed`
+   Evidence required:
+   - failed build/test command
+   - no commit SHA
+
+3. `implementation-active` -> `review-pending`
+   Evidence required:
+   - task base SHA
+   - task head SHA
+   - commit SHA
+   - build/test result
+
+4. `review-pending` -> `fix-required`
+   Evidence required:
+   - review report path or pasted review report
+   - reviewer verdict `fix required`
+   - at least one blocker ID
+
+5. `review-pending` -> `rejected`
+   Evidence required:
+   - review report path or pasted review report
+   - reviewer verdict `reject`
+   - at least one blocker ID
+
+6. `review-pending` -> `accepted`
+   Evidence required:
+   - review report path or pasted review report
+   - reviewer verdict `accept`
+   - no blockers
+
+7. `fix-required` -> `review-pending`
+   Evidence required:
+   - fix commit SHA or amended task head SHA
+   - build/test result
+   - same original task base SHA
+
+A state transition without required evidence is invalid.
 
 ## Execution Log Advance
 
