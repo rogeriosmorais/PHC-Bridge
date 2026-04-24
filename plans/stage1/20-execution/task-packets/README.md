@@ -90,7 +90,7 @@ Fix:
 
 Accept:
 
-`.\scripts\check_workflow_state.ps1 -Mode accept -Checkpoint <CHECKPOINT-ID>`
+`.\scripts\check_workflow_state.ps1 -Mode accept -Checkpoint <CHECKPOINT-ID> -ReviewReport <review-report-path>`
 
 If preflight fails, stop without editing files.
 
@@ -101,7 +101,7 @@ Use checkpoint commands by default:
 - `execute checkpoint <CHECKPOINT-ID>`
 - `review checkpoint <CHECKPOINT-ID>`
 - `fix checkpoint <CHECKPOINT-ID>`
-- `accept checkpoint <CHECKPOINT-ID>`
+- `accept checkpoint <CHECKPOINT-ID> with review report <path>`
 
 Do not use `go` as the normal project loop.
 

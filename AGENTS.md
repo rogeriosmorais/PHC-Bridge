@@ -117,7 +117,7 @@ Allowed commands:
 - `execute checkpoint <CHECKPOINT-ID>`
 - `review checkpoint <CHECKPOINT-ID>`
 - `fix checkpoint <CHECKPOINT-ID>`
-- `accept checkpoint <CHECKPOINT-ID>`
+- `accept checkpoint <CHECKPOINT-ID> with review report <path>`
 
 Task-level commands are allowed only when the user explicitly names a single task packet.
 
@@ -142,7 +142,7 @@ Use these checkpoint commands:
 - `execute checkpoint <CHECKPOINT-ID>` = execute the active checkpoint only
 - `review checkpoint <CHECKPOINT-ID>` = review the generated checkpoint review packet only
 - `fix checkpoint <CHECKPOINT-ID>` = fix reviewer blockers inside the active checkpoint only
-- `accept checkpoint <CHECKPOINT-ID>` = advance execution-log only after reviewer verdict `accept`
+- `accept checkpoint <CHECKPOINT-ID> with review report <path>` = advance execution-log only after reviewer verdict `accept`
 
 Before any command, agents must run:
 
@@ -225,7 +225,7 @@ Required ownership:
 - Reviewer consumes the generated review packet.
 - Reviewer does not generate the review packet.
 - Reviewer does not edit `execution-log.md`.
-- Orchestrator runs workflow preflight before acceptance.
+- Orchestrator runs workflow preflight before acceptance with `-ReviewReport`.
 - Orchestrator updates `execution-log.md` only after valid review evidence exists.
 
 ## Dirty Tree Rule

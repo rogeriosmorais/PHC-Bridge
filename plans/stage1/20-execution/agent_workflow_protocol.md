@@ -19,7 +19,7 @@ Use checkpoint commands by default:
 - `fix checkpoint <CHECKPOINT-ID>`
   - fix reviewer blockers inside the active checkpoint only
 
-- `accept checkpoint <CHECKPOINT-ID>`
+- `accept checkpoint <CHECKPOINT-ID> with review report <path>`
   - advance execution-log after reviewer verdict `accept`
 
 Task-level commands are allowed only when the user explicitly names a single task packet.
@@ -50,7 +50,7 @@ Fix preflight:
 
 Accept preflight:
 
-`.\scripts\check_workflow_state.ps1 -Mode accept -Checkpoint <CHECKPOINT-ID>`
+`.\scripts\check_workflow_state.ps1 -Mode accept -Checkpoint <CHECKPOINT-ID> -ReviewReport <review-report-path>`
 
 If preflight fails:
 - do not edit files

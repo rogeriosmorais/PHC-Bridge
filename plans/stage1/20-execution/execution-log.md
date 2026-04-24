@@ -14,8 +14,8 @@
 | Build Result | `passed for tasks 01, 02, and 03; task 02 automation test passed` |
 | Review Packet | `plans/stage1/30-evidence/reviews/S1-SUPPORT-TRUTH-A-review-packet.md` |
 | Review Verdict | `pending` |
-| Blocking Reason | `checkpoint review packet exists, but mechanical scope evidence is missing` |
-| Scope Check | `missing` |
+| Blocking Reason | `checkpoint range scope check failed because the recorded base/head range includes workflow/planning commits; individual task commit scope checks passed` |
+| Scope Check | `checkpoint range failed; task 01, 02, and 03 commit scope checks passed` |
 | Scope Log | `plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-A-scope.log` |
 | Build Log | `plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-A-build.log` |
 | Test Log | `plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-A-test.log` |
