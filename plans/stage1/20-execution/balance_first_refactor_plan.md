@@ -23,7 +23,32 @@ It is not a feature roadmap. It defines:
 - Each deterministic behavior change must have a failing automation test first.
 - Old symbols and public runtime states remain available until the final cutover.
 
-## 3. Current Legacy Call Graph
+## 3. Minimal Assumption Ledger Rule
+
+The assumption ledger is used only when implementation changes the plan.
+
+Do not update the ledger for normal Slice 1 progress.
+
+Ledger update is required only if:
+
+1. A pure Slice 1 function needs runtime data.
+2. A mapped test cannot be written from the matrix.
+3. A planned API signature is insufficient.
+4. A forbidden include or runtime dependency becomes necessary.
+5. A mapped test exposes missing contract behavior.
+6. A compile failure reveals an unexpected module dependency.
+7. A behavior requires changing the test matrix.
+8. A helper function changes the responsibility boundary.
+9. An implementation needs a shortcut, stub, or approximation.
+10. A task cannot complete in the planned commit order.
+
+If none of those occur, the correct handoff line is:
+
+`Ledger impact: none`
+
+If one occurs, update `plans/stage1/20-execution/assumption-ledger.md` before marking the task complete.
+
+## 4. Current Legacy Call Graph
 
 The active balance-entry runtime still flows through the legacy transition controller:
 
@@ -49,7 +74,7 @@ Runtime and reporting side effects currently pass through:
 
 This migration must not rewrite that call graph directly in Slice 1.
 
-## 4. Extraction Seams
+## 5. Extraction Seams
 
 ### `PhysAnimSupportTruth`
 
@@ -184,7 +209,7 @@ Allowed dependency direction:
 - `PhysAnimSupportTruth` must never include `PhysAnimValidators.h`.
 - Runtime files may include both only after adapter slices.
 
-## 5. Current Code Inventory
+## 6. Current Code Inventory
 
 ### `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimBridge.cpp`
 
@@ -271,11 +296,11 @@ Allowed dependency direction:
 - **New behavior that will eventually replace it**: support truth used by runtime adapters and validators.
 - **Slice 1 may touch it**: **Yes. These are the only normal Slice 1 production/test files.**
 
-## 6. Slice 1 Data Types
+## 7. Slice 1 Logic Mapping
 
 These are the exact value-only types Slice 1 must introduce before implementation begins. Shared enums live in `PhysAnimTruthTypes.h`; support structs and function declarations live in `PhysAnimSupportTruth.h`, which includes `PhysAnimTruthTypes.h`.
 
-### `FPhysAnimSupportPoint2D`
+## 8. Slice 1 Data Types
 
 - **Fields**:
   - `FVector2D PositionCm`
@@ -487,7 +512,7 @@ Introduce only after Slice 1 is green:
 
 These structs must contain fields named after `instrumentation_and_acceptance.md` wherever they represent emitted artifact data.
 
-## 7. Slice 1 Public API
+## 9. Slice 1 Public API
 
 These exact signatures must be implemented in `PhysAnimSupportTruth.h`.
 
@@ -559,7 +584,7 @@ namespace PhysAnimSupportTruth
 }
 ```
 
-## 8. Test Harness Wiring
+## 10. Test Harness Wiring
 
 Slice 1 tests are real Unreal Automation Tests, not conceptual matrix rows.
 
@@ -631,7 +656,7 @@ Slice 1 test files must not include:
 
 That include list is the compile-time proof that Slice 1 is value-only.
 
-## 9. Slice 1 Commit Plan
+## 11. Slice 1 Commit Plan
 
 Every Slice 1 commit must compile and pass its mapped tests. No Slice 1 commit may touch the runtime state machine.
 
@@ -639,6 +664,19 @@ Every Slice 1 commit must compile and pass its mapped tests. No Slice 1 commit m
 - **Red State**: Create and observe failing tests locally to verify the test surface. Do not commit red tests alone.
 - **Green State**: Implement the minimal code required to pass the tests. Commit only when the mapped tests are green.
 - **Exceptions**: Only explicitly marked temporary checkpoints may be committed in a failing state.
+
+### Handoff Requirement
+
+Every Slice 1 commit handoff must end with:
+
+`Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
+
+`Execution log impact: none|updated|blocked`
+
+`Next task: <task id or none>`
+
+Do not write long ledger explanations in the handoff.
+If the ledger was updated, reference only the assumption ID.
 
 Use this exact order:
 
@@ -696,23 +734,26 @@ No behavior commit is complete until its mapped tests are green.
 | Commit 8 | `CalculateChurnHz` | `LOGIC-13` | All mapped tests pass. |
 | Commit 9 | `ReduceSupportModeForReportWindow` | `LOGIC-14`, `LOGIC-14A`, `LOGIC-14B`, `LOGIC-14C` | All mapped tests pass. |
 
-## 10. Build Blocker Protocol
+## 12. Build Blocker Protocol
 
 If a commit fails to compile:
 - stop immediately
 - do not start the next commit
 - fix only the compile failure
 - do not add behavior while fixing compile
+- `Ledger impact: none` unless the failure reveals an unexpected dependency assumption
 
 If the automation harness is not discoverable:
 - stop at Commit 2
 - fix test registration only
 - do not add value types
+- update the ledger only if the harness requires an unexpected module or runtime dependency
 
 If a mapped test cannot be written cleanly:
 - stop
 - update the test matrix
 - update this refactor plan
+- update the assumption ledger
 - do not implement behavior until the test expectation is clear
 
 If implementation requires a runtime object:
@@ -724,18 +765,20 @@ If implementation requires a runtime object:
 If a pure function needs behavior not covered by the matrix:
 - stop
 - add the missing test row first
+- update the assumption ledger only if this changes the plan or contract
 - then implement
 
 If a commit touches forbidden files:
 - reject the commit
 - rollback forbidden edits
-- reapply only allowed Slice 1 changes
+- update the assumption ledger only if the forbidden edit was necessary rather than accidental
 
-If a shortcut or stub is introduced:
+If a shortcut, stub, or approximation is introduced:
 - reject the commit
+- update the assumption ledger if the shortcut was introduced because the real implementation path is unclear
 - replace with either real implementation or no implementation
 
-## 11. Slice 1 Forbidden Edits
+## 13. Slice 1 Forbidden Edits
 
 Slice 1 forbids edits to:
 
@@ -893,7 +936,7 @@ Required tests:
 - `INTEG-08`
 - `SMOKE-01` to `SMOKE-05`
 
-## 12. How Old Runtime Stays Untouched
+## 14. How Old Runtime Stays Untouched
 
 Before Commit 12:
 
@@ -909,7 +952,7 @@ After Commit 12:
 - validators decide only from snapshots
 - state-machine code may consume validator results only in the assigned wiring commits
 
-## 13. Dependency Direction
+## 15. Dependency Direction
 
 Exact dependency rule:
 
@@ -957,7 +1000,7 @@ Slice 1 forbidden include/dependency list:
 - no `BodyInstance` dependency
 - no `UObject` ownership
 
-## 14. Slice 1 Completion Proof
+## 16. Slice 1 Completion Proof
 
 Slice 1 is complete only when:
 
@@ -969,7 +1012,7 @@ Slice 1 is complete only when:
 
 Slice 1 is not complete if it requires editor runtime setup, PIE, smoke tests, skeletal mesh instances, body instances, or Physics Control components.
 
-## 15. Stop Conditions
+## 17. Stop Conditions
 
 Stop and revise contracts if any of these occur:
 

@@ -95,12 +95,33 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | Legacy flip-path tuning | deferred | archived; legacy compatibility context only |
 | Broad perturbation tuning | deferred | standing benchmark remains the priority |
 
-## Ledger Sync Note
+## Minimal Ledger Gate
 
-Whenever new setup or gate evidence arrives:
-1. update `assumption-ledger.md`
-2. update this execution log
-3. only then issue or advance worker tasks
+The assumption ledger is not updated for normal task progress.
+
+Every task handoff must declare ledger impact:
+
+- `Ledger impact: none`
+- `Ledger impact: updated: A-XX`
+- `Ledger impact: blocked: assumption decision needed`
+
+A task may be marked complete with `Ledger impact: none` only when it did not change, weaken, falsify, or create an assumption.
+
+Update `plans/stage1/20-execution/assumption-ledger.md` before marking a task complete if the task reveals:
+
+- a pure function unexpectedly needs runtime data
+- a mapped test cannot be written from the matrix
+- an artifact field cannot be emitted
+- a contract is ambiguous
+- a planned API is insufficient
+- a forbidden dependency becomes necessary
+- a repeated unexplained failure pattern appears
+- an in-engine failure has no canonical terminal reason
+- a shortcut, stub, or approximation is proposed
+- the planned commit order cannot be followed
+
+Do not add a ledger-impact column to the Active Tasks table.
+Use the one-line handoff declaration instead.
 
 ---
 

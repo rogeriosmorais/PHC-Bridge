@@ -41,6 +41,44 @@ Interpretation:
 10. Build with .\scripts\build.ps1
 11. If you ran any smoke tests, then read the logs with "python .\scripts\read_logs.py". If you didn't, then ignore this step.
 
+## Context Budget Rule
+
+Default working context for repo work is:
+
+1. `AGENTS.md`
+2. the current task packet in `plans/stage1/20-execution/task-packets/`
+3. directly edited files
+4. directly relevant tests
+5. directly relevant build/test output
+
+Do not reread or summarize the full Stage 1 document set unless the current task packet is missing, contradictory, or explicitly asks for architecture review.
+
+Do not perform broad review by default.
+
+If broader context is required, stop and report exactly:
+
+`Context expansion needed: <specific file or reason>`
+
+Do not silently expand scope.
+
+## Task Packet Rule
+
+All implementation work must be driven by a task packet.
+
+Task packets live in:
+
+`plans/stage1/20-execution/task-packets/`
+
+An implementation agent may only edit files allowed by the current task packet.
+
+If the task requires editing a file not listed in the packet, stop and report:
+
+`Blocked: task packet does not allow required file <path>`
+
+Do not continue by guessing.
+Do not widen scope.
+Do not edit runtime files unless the packet explicitly allows them.
+
 ## Anti-Spiral Rule
 
 Do not debug balance visually.
@@ -54,6 +92,40 @@ A visual improvement is not progress unless it is explained by:
 
 If an in-engine failure cannot be explained by artifacts, stop implementation and improve instrumentation or contracts before tuning behavior.
 
+## Minimal Assumption Ledger Rule
+
+The assumption ledger is a high-signal risk register, not a task log.
+
+Do not update `plans/stage1/20-execution/assumption-ledger.md` for normal implementation progress, passing tests, scaffold work, typo fixes, or expected compile fixes.
+
+Update the ledger only when work reveals that a project assumption is new, false, weaker, stronger, blocked, or dangerous.
+
+Ledger update triggers:
+- a pure function unexpectedly needs runtime data
+- a mapped test cannot be written from the matrix
+- an artifact field cannot be emitted
+- a contract is ambiguous
+- a planned API is insufficient
+- a forbidden dependency becomes necessary
+- a repeated unexplained failure pattern appears
+- an in-engine failure has no canonical terminal reason
+- a shortcut, stub, or approximation is proposed to make progress look better
+- the planned commit order cannot be followed
+
+Every repo-work handoff must include exactly one ledger line:
+
+`Ledger impact: none`
+
+or:
+
+`Ledger impact: updated: A-XX`
+
+or:
+
+`Ledger impact: blocked: assumption decision needed`
+
+No task is complete until ledger impact has been declared.
+
 ## Response Style
 
 When working in this repo:
@@ -61,6 +133,9 @@ When working in this repo:
 - do not include large code snippets or diffs unless explicitly requested
 - after edits, reply with:
   - one-sentence summary of all changes
+  - `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
+  - `Execution log impact: none|updated|blocked`
+  - `Next task: <task id or none>`
 - keep responses short
 
 ## What To Read

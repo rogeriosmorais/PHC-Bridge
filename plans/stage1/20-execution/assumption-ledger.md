@@ -2,77 +2,82 @@
 
 ## Purpose
 
-This is the orchestrator-owned control document for Stage 1. It tracks the assumptions that can kill the project, the signals that would prove them wrong, and the immediate decision for each.
+This file tracks only high-risk assumptions that can change the plan, tests, contracts, instrumentation, dependency boundaries, or runtime rollout.
 
-## Status Scale
+This is not:
+- a task log
+- a daily journal
+- a commit history
+- a place to record normal implementation progress
+- a place to record every failed test
 
-- `green`: acceptable for downstream work
-- `yellow`: plausible, but under active watch
-- `red`: likely false; downstream work should stop
+Git history is sufficient for old ledger history.
 
-## How To Update This Ledger
+## Update Rule
 
-Update this ledger ONLY when one of these events occurs:
-1. A new planning document is accepted.
-2. A test slice is defined.
-3. A test slice goes **RED** or **GREEN**.
-4. A fallback becomes more likely than the primary path.
-5. An assumption changes status.
-6. A blocked task becomes unblocked or newly blocked.
+Update this file only when an assumption is:
 
-**When updating**: Change statuses, blocked tasks, falsification signals, or immediate fallbacks directly. **Do not append historical prose.**
+- new
+- false
+- weaker than expected
+- stronger than expected
+- blocked
+- dangerous
+- responsible for changing the plan
 
-## Critical Assumptions (Rewrite Frontier)
+Do not update this file for:
+- scaffold commits
+- passing tests
+- normal implementation work
+- typo fixes
+- expected compile fixes
+- ordinary red/green TDD cycles
+- implementation of already-planned behavior
 
-| ID | Assumption | Why It Matters Now | Current Status | Next Test | Falsification Signal | Immediate Fallback | Stop Work If False | Blocked Tasks | Last Reviewed |
-|---|---|---|---|---|---|---|---|---|---|
-| **A-01** | Internal contract coherence | Avoids implementation-time dead ends | `green` | `ARBIT-01` to `ARBIT-05`, `INTEG-01` | Contradictions emerge during TDD | Revise specialized contracts | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
-| **A-02** | Pure-first slice viability | Foundation for logic isolation | `green` | Slice 1 unit suite | Logic requires direct engine object access | Insert adapter boundary | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
-| **A-03** | Adapter-fed validator portability | Keeps truth logic testable and decoupled | `green` | `VALID-01` to `VALID-07` | Validators require deep Unreal-only wiring | Implement as thin Unreal wrappers | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
-| **A-04** | Validator-first TDD sequencing | Prevents broad, high-risk refactors | `green` | `VALID-01` to `VALID-07` | Runtime edits necessary before tests are green | Insert narrower extraction layer | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
-| **A-05** | Artifact-forensic sufficiency | Ensures truth without log forensics | `green` | `SMOKE-05` artifact audit | Failures require log forensics | Expand artifact schema | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
-| **A-06** | Late state-machine rewiring | Minimizes surgery on active runtime | `green` | `INTEG-01` wiring | State machine depends on unbuilt logic | Pull rewiring earlier | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
-| **A-07** | 3.0s standing is V0 target | Definitive product success gate | `green` | `INTEG-07` | Target found to be physically unreachable | Revise benchmark | No | None | 2026-04-23 |
-| **A-08** | Sufficient runtime data access | Validators must be fed truthfully | `green` | Slice 1 implementation | Required Unreal data is inaccessible | Modify bridge component | **Yes** | `S1-IMPL-BALANCE-FIRST` | 2026-04-23 |
+## Required Handoff Line
 
-## Resolved / Locomotion-Era (Historical)
+Every repo-work handoff must declare one of:
 
-- `A-LOCO-01` (Training): Policy looks alive enough to justify integration.
-- `A-LOCO-02` (Contract): PHC config can be mapped into the bridge contract.
-- `A-LOCO-03` (Retargeting): SMPL-to-Manny transforms are stable enough.
-- `A-LOCO-04` (PhysicsControl): Expresses policy intent well enough for POC.
-- `A-LOCO-05` (Chaos): Substepping at 120-240 Hz is stable enough.
-- `A-LOCO-06` (NNE): Model load and inference are compatible.
+- `Ledger impact: none`
+- `Ledger impact: updated: A-XX`
+- `Ledger impact: blocked: assumption decision needed`
 
-## Reassessment Triggers
+## Status Values
 
-- A planning spec is locked.
-- A gate package is prepared.
-- User evidence arrives.
-- Implementation spikes prove a contract is physically impossible.
+Use only these status values:
 
-## Planning Authority
+- `Open`
+- `Watching`
+- `Resolved`
+- `Falsified`
+- `Blocked`
 
-The following documents are the ONLY active authority for Stage 1 execution:
-- **Contract Suite**:
-  - `plans/stage1/10-specs/continuous_balance_architecture.md`
-  - `plans/stage1/10-specs/continuous_balance_truth_model.md`
-  - `plans/stage1/10-specs/engine_execution_contract.md`
-  - `plans/stage1/10-specs/authority_matrix.md`
-  - `plans/stage1/10-specs/physics_asset_contract.md`
-  - `plans/stage1/10-specs/character_capsule_contract.md`
-  - `plans/stage1/10-specs/instrumentation_and_acceptance.md`
-  - `plans/stage1/10-specs/balance-mode-entry-spec.md`
-  - `plans/stage1/10-specs/rewrite_migration_plan.md`
-- **TDD / Refactor Planning**:
-  - `plans/stage1/20-execution/balance_first_refactor_plan.md`
-  - `plans/stage1/20-execution/balance_first_tdd_strategy.md`
-  - `plans/stage1/20-execution/balance_first_test_matrix.md`
-  - `plans/stage1/20-execution/first-slice-definition.md`
-- **History / Control**: `plans/stage1/20-execution/execution-log.md`
+## Active Assumptions
 
-**Deprecated/Decommissioned**:
-- `bridge-spec.md`, `retargeting-spec.md`, `test-strategy.md`
-- Archived `40-design` design artifacts
-- `plans/stage1/40-tasks/` (Legacy task-packet storage only)
-- Phase 0 machine-specific execution packages
+| ID | Assumption | Status | Trigger For Update | Current Decision | Next Check |
+|---|---|---|---|---|---|
+| A-01 | Slice 1 pure support truth can be implemented without runtime object dependencies. | Watching | A pure support function needs `UObject`, `FBodyInstance`, component state, `UWorld`, `AActor`, or Chaos runtime handles. | Keep Slice 1 value-only. Stop if runtime data becomes necessary. | Commits 1-10 of Slice 1. |
+| A-02 | The test matrix is sufficient to drive Slice 1 without implementation guessing. | Watching | A mapped test cannot be written cleanly, has missing expected behavior, or lacks required data. | Update the matrix before implementing behavior. | Each Slice 1 behavior commit. |
+| A-03 | Runtime adapter capture can be delayed until pure support truth and validators are green. | Watching | Slice 1 or validator code requires live runtime reads before adapter commits. | Do not cross adapter boundary early. Update refactor plan if this fails. | Validator scaffolding and adapter planning. |
+| A-04 | Artifact-backed failure classification is sufficient to prevent visual tuning spirals. | Watching | An in-engine failure cannot be explained by canonical terminal reason and required forensic fields. | Stop tuning. Fix instrumentation or contract coverage first. | First shadow-validation and runtime wiring runs. |
+
+## Entry Format
+
+When adding a new assumption, use this format:
+
+| ID | Assumption | Status | Trigger For Update | Current Decision | Next Check |
+|---|---|---|---|---|---|
+| A-XX | One sentence. | Open | Exact event that requires updating this row. | Current decision or stop rule. | Next test, commit, run, or review point. |
+
+## Minimal Update Rules
+
+When updating an existing row:
+- change the status
+- change the current decision
+- change the next check
+- keep the row short
+
+Do not add long narrative history.
+Do not paste logs.
+Do not duplicate execution-log content.
+Do not add run cards here.
