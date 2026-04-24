@@ -15,7 +15,7 @@
 | **LOGIC-09** | `AdjudicateProxy` | Proxy inside hull | `Inside polygon` | `proxy_inside_hull` = `true` |
 | **LOGIC-10** | `AdjudicateProxy` | Proxy outside hull under limit | `Outside polygon, Timer <= limit` | `proxy_inside_hull` = `false`, `proxy_outside_hull_duration_ms` <= 100.0, `terminal_reason` = `nullptr` |
 | **LOGIC-11** | `AdjudicateProxy` | Proxy outside hull over limit | `Outside polygon, Timer > limit` | `proxy_inside_hull` = `false`, `proxy_outside_hull_duration_ms` > 100.0, `terminal_reason` = `activation_proxy_outside_support_region` |
-| **LOGIC-12** | `AdjudicateProxy` | No support hull | `SideCount = 0` | `proxy_inside_hull` = `nullptr`, proxy test skipped |
+| **LOGIC-12** | `AdjudicateProxy` | No support hull | `SideCount = 0` | `proxy_inside_hull` = `nullptr`, `proxy_outside_hull_duration_ms` = `nullptr` |
 | **LOGIC-13** | `CalculateChurnHz` | 5 transitions in 1.0s | `5 events / 1.0s` | `support_churn_hz` = 5.0 |
 | **LOGIC-14** | `ReduceSupportModeForReportWindow` | 30 Hz tie-break | Equal durations | severity tie-break: `Airborne` > `TransientRecovery` > `SingleFootSurvival` > `TwoFootStable` |
 
@@ -23,32 +23,32 @@
 
 | Test ID | Target | Scenario | Expected Reason | Required Artifact Truth |
 |---|---|---|---|---|
-| **VALID-01A** | `ValidateContinuity` | Physics disabled | `activation_continuous_simulation_lost` | `physical_continuity_validator_passed` = `false` |
+| **VALID-01A** | `ValidateContinuity` | Physics disabled | `activation_continuous_simulation_lost` | `physical_continuity_validator_passed` = `false`, `terminal_reason` = `activation_continuous_simulation_lost` |
 | **VALID-01B** | `ValidateContinuity` | Pelvis sleep limit exceeded | `activation_continuous_simulation_lost` | `pelvis_sleep_duration_ms` > 100.0, `physical_continuity_validator_passed` = `false`, `terminal_reason` = `activation_continuous_simulation_lost` |
 | **VALID-01C** | `ValidateContinuity` | Body instance loss | `activation_topology_change` | `terminal_reason` = `activation_topology_change`, `physical_continuity_validator_passed` = `false` |
 | **VALID-01D** | `ValidateContinuity` | Bookkeeping delta only | `terminal_reason` = `nullptr` | `continuity_bookkeeping_mismatch` = `true` |
-| **VALID-02A** | `ValidateCapsule` | Actor moved | `activation_capsule_contract_violation` | `capsule_lock_delta_cm` > 0.01 |
-| **VALID-02B** | `ValidateCapsule` | Capsule collision active | `activation_capsule_contract_violation` | `capsule_collision_enabled` != `NoCollision` |
-| **VALID-02C** | `ValidateCapsule` | CMC active/ticking | `activation_capsule_contract_violation` | `cmc_is_active` or `cmc_tick_enabled` = `true` |
-| **VALID-02D** | `ValidateCapsule` | UpdatedComponent still owned | `activation_capsule_contract_violation` | `cmc_updated_component_is_null` = `false` |
-| **VALID-03A** | `ValidatePlant` | Skeleton mismatch | `activation_physics_asset_contract_violation` | `plant_failure_class` = `StaticStructural` |
-| **VALID-03B** | `ValidatePlant` | Length or axis drift | `activation_physics_asset_contract_violation` | `physics_asset_contract_valid` = `false`, `plant_failure_class` = `StaticStructural`, `plant_failure_field` = `segment_length` or `axis_alignment` |
-| **VALID-03C** | `ValidatePlant` | Mass mutation | `activation_physics_asset_contract_violation` | `plant_failure_class` = `Mutation`, `plant_failure_field` = `mass` |
-| **VALID-03D** | `ValidatePlant` | Physics asset swap | `activation_physics_asset_contract_violation` | `physics_asset_contract_valid` = `false`, `plant_failure_class` = `Mutation`, `plant_failure_field` = `physics_asset_identity` |
-| **VALID-04A** | `ValidateAuthority` | Mesh-wide assist | `activation_authority_conflict` | `contamination_class` = `mesh_wide_assist` |
-| **VALID-04B** | `ValidateAuthority` | Non-critical body assist | `activation_authority_conflict` | `contamination_class` = `non_critical_body_assist` |
-| **VALID-04C** | `ValidateAuthority` | Calf or excluded world brace | `activation_authority_conflict` | `contamination_class` = `excluded_body_world_brace` |
-| **VALID-04D** | `ValidateAuthority` | Global blend/kinematic assist | `activation_authority_conflict` | `contamination_class` = `global_blend_or_kinematic_assist` |
+| **VALID-02A** | `ValidateCapsule` | Actor moved | `activation_capsule_contract_violation` | `capsule_lock_delta_cm` > 0.01, `terminal_reason` = `activation_capsule_contract_violation` |
+| **VALID-02B** | `ValidateCapsule` | Capsule collision active | `activation_capsule_contract_violation` | `capsule_collision_enabled` != `NoCollision`, `terminal_reason` = `activation_capsule_contract_violation` |
+| **VALID-02C** | `ValidateCapsule` | CMC active/ticking | `activation_capsule_contract_violation` | `cmc_is_active` or `cmc_tick_enabled` = `true`, `terminal_reason` = `activation_capsule_contract_violation` |
+| **VALID-02D** | `ValidateCapsule` | UpdatedComponent still owned | `activation_capsule_contract_violation` | `cmc_updated_component_is_null` = `false`, `terminal_reason` = `activation_capsule_contract_violation` |
+| **VALID-03A** | `ValidatePlant` | Skeleton mismatch | `activation_physics_asset_contract_violation` | `plant_failure_class` = `StaticStructural`, `terminal_reason` = `activation_physics_asset_contract_violation` |
+| **VALID-03B** | `ValidatePlant` | Length or axis drift | `activation_physics_asset_contract_violation` | `physics_asset_contract_valid` = `false`, `plant_failure_class` = `StaticStructural`, `plant_failure_field` = `segment_length` or `axis_alignment`, `terminal_reason` = `activation_physics_asset_contract_violation` |
+| **VALID-03C** | `ValidatePlant` | Mass mutation | `activation_physics_asset_contract_violation` | `plant_failure_class` = `Mutation`, `plant_failure_field` = `mass`, `terminal_reason` = `activation_physics_asset_contract_violation` |
+| **VALID-03D** | `ValidatePlant` | Physics asset swap | `activation_physics_asset_contract_violation` | `physics_asset_contract_valid` = `false`, `plant_failure_class` = `Mutation`, `plant_failure_field` = `physics_asset_identity`, `terminal_reason` = `activation_physics_asset_contract_violation` |
+| **VALID-04A** | `ValidateAuthority` | Mesh-wide assist | `activation_authority_conflict` | `contamination_class` = `mesh_wide_assist`, `terminal_reason` = `activation_authority_conflict` |
+| **VALID-04B** | `ValidateAuthority` | Non-critical body assist | `activation_authority_conflict` | `contamination_class` = `non_critical_body_assist`, `terminal_reason` = `activation_authority_conflict` |
+| **VALID-04C** | `ValidateAuthority` | Calf or excluded world brace | `activation_authority_conflict` | `contamination_class` = `excluded_body_world_brace`, `terminal_reason` = `activation_authority_conflict` |
+| **VALID-04D** | `ValidateAuthority` | Global blend/kinematic assist | `activation_authority_conflict` | `contamination_class` = `global_blend_or_kinematic_assist`, `terminal_reason` = `activation_authority_conflict` |
 | **VALID-05A** | `ValidateControllerStability` | Target jump at blend start | `activation_target_discontinuity` | `target_discontinuity_deg` > 15.0, `target_discontinuity_phase` = `BlendStart`, `terminal_reason` = `activation_target_discontinuity` |
-| **VALID-05B** | `ValidateControllerStability` | Controller gain breach | `activation_unstable_gain_or_damping` | `controller_gain_damping_valid` = `false`, `controller_gain_scale` > Controller Gain Scale (Max), `controller_stability_failure_field` = `controller_gain_scale` |
-| **VALID-05C** | `ValidateControllerStability` | Controller damping breach | `activation_unstable_gain_or_damping` | `controller_gain_damping_valid` = `false`, `controller_damping_ratio` < Controller Damping Ratio (Min), `controller_stability_failure_field` = `controller_damping_ratio` |
-| **VALID-05D** | `ValidateControllerStability` | Root tilt breach | `activation_instability_threshold_breach` | `max_root_tilt_deg` > 20.0, `controller_stability_failure_field` = `max_root_tilt_deg` |
-| **VALID-05E** | `ValidateControllerStability` | Angular speed breach | `activation_instability_threshold_breach` | `peak_angular_speed` > 720.0, `controller_stability_failure_field` = `peak_angular_speed` |
-| **VALID-05F** | `ValidateControllerStability` | Max-body mismatch over grace | `activation_pose_reference_mismatch` | `max_body_mismatch_deg` > 25.0, `mismatch_duration_ms` > 200.0, `controller_stability_failure_field` = `max_body_mismatch_deg` |
-| **VALID-05G** | `ValidateControllerStability` | RMS-chain mismatch over grace | `activation_pose_reference_mismatch` | `rms_mismatch_deg` > 15.0, `mismatch_duration_ms` > 200.0, `controller_stability_failure_field` = `rms_mismatch_deg` |
+| **VALID-05B** | `ValidateControllerStability` | Controller gain breach | `activation_unstable_gain_or_damping` | `controller_gain_damping_valid` = `false`, `controller_gain_scale` > Controller Gain Scale (Max), `controller_stability_failure_field` = `controller_gain_scale`, `terminal_reason` = `activation_unstable_gain_or_damping` |
+| **VALID-05C** | `ValidateControllerStability` | Controller damping breach | `activation_unstable_gain_or_damping` | `controller_gain_damping_valid` = `false`, `controller_damping_ratio` < Controller Damping Ratio (Min), `controller_stability_failure_field` = `controller_damping_ratio`, `terminal_reason` = `activation_unstable_gain_or_damping` |
+| **VALID-05D** | `ValidateControllerStability` | Root tilt breach | `activation_instability_threshold_breach` | `max_root_tilt_deg` > 20.0, `controller_stability_failure_field` = `max_root_tilt_deg`, `terminal_reason` = `activation_instability_threshold_breach` |
+| **VALID-05E** | `ValidateControllerStability` | Angular speed breach | `activation_instability_threshold_breach` | `peak_angular_speed` > 720.0, `controller_stability_failure_field` = `peak_angular_speed`, `terminal_reason` = `activation_instability_threshold_breach` |
+| **VALID-05F** | `ValidateControllerStability` | Max-body mismatch over grace | `activation_pose_reference_mismatch` | `max_body_mismatch_deg` > 25.0, `mismatch_duration_ms` > 200.0, `controller_stability_failure_field` = `max_body_mismatch_deg`, `terminal_reason` = `activation_pose_reference_mismatch` |
+| **VALID-05G** | `ValidateControllerStability` | RMS-chain mismatch over grace | `activation_pose_reference_mismatch` | `rms_mismatch_deg` > 15.0, `mismatch_duration_ms` > 200.0, `controller_stability_failure_field` = `rms_mismatch_deg`, `terminal_reason` = `activation_pose_reference_mismatch` |
 | **VALID-05H** | `ValidateControllerStability` | Standing validation timeout | `activation_standing_validation_timeout` | `hold_duration_sec` < 3.0, `standing_validation_timed_out` = `true`, `terminal_reason` = `activation_standing_validation_timeout` |
-| **VALID-06A** | `ValidateMovementReclaim` | CMC correction path runs | `activation_movement_reclaim` | `movement_reclaim_count` > 0 |
-| **VALID-06B** | `ValidateShellHelper` | Shell helper writes during activation | `activation_shell_helper_violation` | `shell_helper_used_count` > 0 |
+| **VALID-06A** | `ValidateMovementReclaim` | CMC correction path runs | `activation_movement_reclaim` | `movement_reclaim_count` > 0, `terminal_reason` = `activation_movement_reclaim` |
+| **VALID-06B** | `ValidateShellHelper` | Shell helper writes during activation | `activation_shell_helper_violation` | `shell_helper_used_count` > 0, `terminal_reason` = `activation_shell_helper_violation` |
 
 ## 3. Arbitration Logic Tests (Layer 2.5)
 
