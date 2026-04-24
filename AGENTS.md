@@ -150,17 +150,6 @@ The reviewer verdict must be one of:
 
 The implementer may continue to the next task only after reviewer verdict is `accept`.
 
-## Review Scope Rule
-
-Reviewers must use:
-
-`plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
-
-Reviewers must review only the generated review packet.
-
-Do not reopen architecture unless the task packet is impossible to execute.
-Do not restate unchanged project context.
-Do not review unrelated files.
 
 ## Failure Classification Rule
 

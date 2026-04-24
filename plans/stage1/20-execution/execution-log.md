@@ -158,9 +158,9 @@ Use the one-line handoff declaration instead.
 
 ## 2026-04-23 — Refactor Detail Accepted; Slice 1 Scaffold Runnable
 
-- the planning frontier remains open for detailed refactor migration planning
+- the refactor-detail planning frontier is closed
 - **S1-PLAN-REFACTOR-DETAIL** is completed
-- **S1-IMPL-BALANCE-FIRST-01** is runnable (Pure Support Module Scaffold)
+- **S1-IMPL-BALANCE-FIRST-01** is runnable
 - **S1-IMPL-BALANCE-FIRST** is active
 - the Stop Rule remains in effect: no runtime state-machine rewiring until pure support logic is verified green
 - all legacy design and Phase 0/1 packages have been moved to `90-archive`
