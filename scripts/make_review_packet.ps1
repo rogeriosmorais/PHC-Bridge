@@ -1,11 +1,6 @@
 param(
-    [Parameter(Mandatory=$false)]
     [string]$TaskPacket = "",
-
-    [Parameter(Mandatory=$false)]
     [string]$CheckpointPacket = "",
-
-    [Parameter(Mandatory=$false)]
     [string[]]$ExtraPackets = @(),
 
     [Parameter(Mandatory=$true)]
@@ -21,6 +16,8 @@ param(
 
     [string]$TestLog = "",
 
+    [string]$ScopeLog = "",
+
     [int]$MaxDiffLines = 800,
 
     [int]$MaxLogLines = 200,
@@ -28,8 +25,37 @@ param(
     [switch]$FullDiff
 )
 
-if (-not $TaskPacket -and -not $CheckpointPacket) {
-    Write-Error "Either -TaskPacket or -CheckpointPacket must be specified."
+$PacketList = @()
+
+if ($CheckpointPacket) {
+    if (-not (Test-Path $CheckpointPacket)) {
+        Write-Error "Checkpoint packet not found: $CheckpointPacket"
+        exit 1
+    }
+
+    $PacketList += $CheckpointPacket
+}
+
+if ($TaskPacket) {
+    if (-not (Test-Path $TaskPacket)) {
+        Write-Error "Task packet not found: $TaskPacket"
+        exit 1
+    }
+
+    $PacketList += $TaskPacket
+}
+
+foreach ($Packet in $ExtraPackets) {
+    if (-not (Test-Path $Packet)) {
+        Write-Error "Extra packet not found: $Packet"
+        exit 1
+    }
+
+    $PacketList += $Packet
+}
+
+if ($PacketList.Count -eq 0) {
+    Write-Error "Provide -TaskPacket, -CheckpointPacket, or -ExtraPackets."
     exit 1
 }
 
@@ -79,42 +105,25 @@ Add-Line (git rev-parse $BaseRef)
 Add-Line ""
 
 Add-Line "Review target:"
-if ($CheckpointPacket) { Add-Line "Checkpoint packet: $CheckpointPacket" }
-if ($TaskPacket) { Add-Line "Task packet: $TaskPacket" }
-Add-Line "Task base: $BaseRef"
-Add-Line "Task head: $HeadRef"
+if ($CheckpointPacket) {
+    Add-Line "Checkpoint packet: $CheckpointPacket"
+}
+if ($TaskPacket) {
+    Add-Line "Task packet: $TaskPacket"
+}
+Add-Line "Extra packets: $($ExtraPackets -join ', ')"
+Add-Line "Base: $BaseRef"
+Add-Line "Head: $HeadRef"
 Add-Line "Commit: $HeadRef"
 Add-Line ""
 
-if ($CheckpointPacket) {
-    Add-Line "=== CHECKPOINT PACKET CONTENT ==="
-    if (Test-Path $CheckpointPacket) {
-        Get-Content $CheckpointPacket | ForEach-Object { Add-Line $_ }
-    } else {
-        Add-Line "Checkpoint packet not found: $CheckpointPacket"
-    }
+Add-Line "=== PACKET CONTENT ==="
+foreach ($Packet in $PacketList) {
     Add-Line ""
+    Add-Line "--- PACKET: $Packet ---"
+    Get-Content $Packet | ForEach-Object { Add-Line $_ }
 }
-
-if ($TaskPacket) {
-    Add-Line "=== TASK PACKET CONTENT ==="
-    if (Test-Path $TaskPacket) {
-        Get-Content $TaskPacket | ForEach-Object { Add-Line $_ }
-    } else {
-        Add-Line "Task packet not found: $TaskPacket"
-    }
-    Add-Line ""
-}
-
-foreach ($Extra in $ExtraPackets) {
-    Add-Line "=== EXTRA PACKET CONTENT: $Extra ==="
-    if (Test-Path $Extra) {
-        Get-Content $Extra | ForEach-Object { Add-Line $_ }
-    } else {
-        Add-Line "Extra packet not found: $Extra"
-    }
-    Add-Line ""
-}
+Add-Line ""
 
 Add-Line "=== CHANGED FILES ==="
 $ChangedFiles | ForEach-Object { Add-Line $_ }
@@ -150,6 +159,14 @@ if ($TestLog -and (Test-Path $TestLog)) {
     Get-Content $TestLog | Select-Object -Last $MaxLogLines | ForEach-Object { Add-Line $_ }
 } else {
     Add-Line "No test log supplied."
+}
+Add-Line ""
+
+Add-Line "=== SCOPE LOG ==="
+if ($ScopeLog -and (Test-Path $ScopeLog)) {
+    Get-Content $ScopeLog | ForEach-Object { Add-Line $_ }
+} else {
+    Add-Line "No scope log supplied."
 }
 Add-Line ""
 

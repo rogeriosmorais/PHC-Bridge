@@ -104,6 +104,26 @@ When executing a checkpoint:
 
 Review happens at checkpoint boundaries, not after every tiny task.
 
+## Default Work Command
+
+The normal implementation command is:
+
+`execute checkpoint <CHECKPOINT-ID>`
+
+Use `go` only for explicitly assigned single-task work.
+
+Do not use `go` as the default project loop.
+
+Current preferred loop:
+
+1. execute checkpoint
+2. review checkpoint
+3. accept/fix/reject checkpoint
+4. execute next checkpoint
+
+Task packets are atomic commit units.
+Checkpoint packets are review units.
+
 ## Agent Workflow Rule
 
 All implementation, review, commit, fix, reject, and acceptance behavior is governed by:
@@ -154,20 +174,30 @@ Only the orchestrator may update task state after valid review evidence exists.
 
 Only mandatory scripts belong in the workflow.
 
-Implementation agents must run:
+The user must not be required to run workflow scripts manually.
 
-- `.\scripts\build.ps1` after each task packet
-- `.\scripts\make_review_packet.ps1` only after completing the final task in a checkpoint packet
+Implementation agents must run after each task packet:
+
+- `.\scripts\build.ps1`
+- `.\scripts\check_task_scope.ps1`
+
+Implementation agents must create durable build/scope evidence under:
+
+`plans/stage1/30-evidence/build/`
+
+Implementation agents must run only at checkpoint boundaries:
+
+- `.\scripts\make_review_packet.ps1`
 
 Review agents must not run scripts by default.
-
-The user must not be required to run workflow scripts manually.
 
 Do not create optional workflow helper scripts.
 
 Required ownership:
 
 - Implementer runs build after each task packet.
+- Implementer writes durable build/test/scope logs.
+- Implementer runs scope check before creating a successful task commit.
 - Implementer commits after each successful task packet.
 - Implementer creates a blocked-task commit after useful edits plus failure.
 - Implementer generates review packet only at checkpoint boundary.

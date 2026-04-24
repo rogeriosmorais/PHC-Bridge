@@ -53,9 +53,12 @@ Every implementer handoff must end with:
 `Commit: <sha|none>`
 `Review: pending|not started|review report attached`
 `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
-`Execution log impact: none|updated|blocked`
-`Tests: <not run|passed|failed + command>`
-`Build: <not run|passed|failed + command>`
+`Execution| Blocking Reason | `none` |
+| Scope Check | `missing` |
+| Scope Log | `none` |
+| Build Log | `none` |
+| Test Log | `none` |
+| Working Tree | `clean at handoff` |
 `Files changed: <comma-separated paths>`
 `Forbidden files touched: none|<paths>`
 `Next task: <task id|blocked|none>`
@@ -139,11 +142,37 @@ If verdict is `reject` or `fix required`, the next task remains blocked.
 
 Reviewer agents must be launched with:
 
-`plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
+- `plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
+- `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
 
-The reviewer receives only:
+## Mechanical Gates
 
-1. `REVIEWER_PROMPT.md`
+Agents must not rely on hand-written claims for scope/build/test status.
+
+Implementation agents must create durable evidence for:
+- build
+- tests, if applicable
+- scope check
+
+Scope check is mandatory before every successful task commit.
+
+Checkpoint-wide scope check is mandatory before checkpoint review.
+
+Reviewer must reject or block any checkpoint review packet missing scope evidence.
+
+## Clean Workflow Separation
+
+Workflow/process changes must not be mixed into implementation checkpoints.
+
+Allowed exceptions:
+- execution-log status updates
+- build/test/scope evidence files
+- blocker reports
+- review packets
+
+If an implementation checkpoint requires changing AGENTS.md, workflow protocol files, scripts, task packets, or checkpoint files, stop and classify it as a workflow blocker.
+
+Do not continue implementation until the workflow change is reviewed separately.
 2. the generated review packet
 
 The reviewer must not receive:

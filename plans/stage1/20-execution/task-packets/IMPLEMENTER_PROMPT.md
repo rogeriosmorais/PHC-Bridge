@@ -22,7 +22,9 @@ If executing a checkpoint:
 - resume from `Current Task ID` in `execution-log.md`
 - skip task packets already listed under completed task commits
 - execute one task packet at a time
+- create durable build/test/scope logs under `plans/stage1/30-evidence/build/`
 - run required build/tests after each task packet
+- run scope check before each successful task commit
 - commit after each successful task packet
 - update `execution-log.md` after each successful task commit
 - continue to the next task packet only if the checkpoint packet allows it
@@ -30,6 +32,10 @@ If executing a checkpoint:
 - stop after generating the checkpoint review packet
 
 Do not review individual task commits inside a checkpoint unless a task fails.
+
+Required per-task scope check:
+
+`.\scripts\check_task_scope.ps1 -TaskPacket <current-task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence`
 
 ## Task Mode
 
@@ -65,29 +71,42 @@ Blocked commit format:
 
 After each successful task packet:
 
-- create exactly one task commit
-- include only files allowed by the task packet
-- use commit message:
+1. Run required build/tests.
+2. Save durable build/test evidence.
+3. Run scope check.
+4. Confirm working tree contains no forbidden files.
+5. Create exactly one task commit.
+6. Include only files allowed by the task packet plus allowed execution/evidence updates.
+7. Use commit message:
 
 `<TASK-ID>: <short task name>`
 
 Then update `execution-log.md` with:
-- current completed task commit
-- current task head
+- completed task commit
+- current checkpoint head
 - next task ID if checkpoint continues
-- build/test result
+- build/test/scope result
+
+Do not create a successful task commit if scope check fails.
 
 ## Checkpoint Review Packet Rule
 
 Only after the final task in a checkpoint passes:
 
-- generate one checkpoint review packet
-- include the checkpoint packet
-- include all included task packets
-- include changed files from checkpoint base to checkpoint head
-- include build/test evidence
-- update `execution-log.md` with the review packet path
-- stop
+1. Run checkpoint-wide scope check.
+2. Save the scope check output under `plans/stage1/30-evidence/build/<CHECKPOINT-ID>-scope.log`.
+3. Generate one checkpoint review packet.
+4. Include the checkpoint packet.
+5. Include all included task packets.
+6. Include changed files from checkpoint base to checkpoint head.
+7. Include build/test/scope evidence.
+8. Update `execution-log.md` with the review packet path.
+9. Ensure working tree is clean.
+10. Stop.
+
+Required checkpoint scope check:
+
+`.\scripts\check_task_scope.ps1 -CheckpointPacket <checkpoint-packet> -BaseRef <checkpoint-base> -HeadRef <checkpoint-head> -AllowExecutionLog -AllowEvidence`
 
 ## Required Handoff
 

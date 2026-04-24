@@ -14,12 +14,12 @@
 | Build Result | `passed for tasks 01, 02, and 03; task 02 automation test passed` |
 | Review Packet | `plans/stage1/30-evidence/reviews/S1-SUPPORT-TRUTH-A-review-packet.md` |
 | Review Verdict | `pending` |
-| Blocking Reason | `none` |
-| Blocker Report | `none` |
-| Blocked Commit | `none` |
-| Last Failed Command | `none` |
-| Recovery Action | `none` |
-| Working Tree Requirement | `clean at handoff` |
+| Blocking Reason | `checkpoint review packet exists, but mechanical scope evidence is missing` |
+| Scope Check | `missing` |
+| Scope Log | `none` |
+| Build Log | `none` |
+| Test Log | `none` |
+| Working Tree | `clean at handoff` |
 
 ## Blocked Work Rule
 
@@ -38,7 +38,7 @@ The next task is not runnable while the current checkpoint is blocked.
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | checkpoint review | Checkpoint `S1-SUPPORT-TRUTH-A` is review-pending; do not start task 04 before review disposition. |
+| 1 | checkpoint review | Checkpoint `S1-SUPPORT-TRUTH-A` is review-pending; reviewer must treat missing scope evidence as a blocker unless scope is generated first. |
 
 ## Accepted Handoffs
 

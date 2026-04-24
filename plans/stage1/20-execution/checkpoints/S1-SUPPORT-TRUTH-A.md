@@ -63,6 +63,22 @@ After task 03:
 - generate one checkpoint review packet from checkpoint base to checkpoint head
 - stop
 
+## Mechanical Gates
+
+After each task packet:
+- write durable build/test output under `plans/stage1/30-evidence/build/`
+- run scope check for the current task packet
+- commit only after build/tests and scope check pass
+
+At checkpoint end:
+- run checkpoint-wide scope check
+- write checkpoint scope output to `plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-A-scope.log`
+- generate checkpoint review packet with checkpoint packet plus all included task packets
+
+Required checkpoint review packet command:
+
+`.\scripts\make_review_packet.ps1 -CheckpointPacket plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-A.md -ExtraPackets plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md,plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-02.md,plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-03.md -BaseRef <checkpoint-base> -HeadRef <checkpoint-head> -ScopeLog plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-A-scope.log -BuildLog <build-log> -TestLog <test-log-if-any> -OutputPath plans/stage1/30-evidence/reviews/S1-SUPPORT-TRUTH-A-review-packet.md`
+
 ## Checkpoint Review
 
 After task 03 passes and is committed:

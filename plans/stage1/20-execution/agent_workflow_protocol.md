@@ -105,24 +105,29 @@ For checkpoint execution:
 4. Resume from `Current Task ID`.
 5. Read the current task packet.
 6. Execute the current task packet.
-7. Run required build/tests.
-8. If successful:
-   - commit one atomic task commit
-   - update `execution-log.md`
-   - continue to the next task in the checkpoint
-9. If failed before useful edits:
-   - leave tree clean
-   - update `execution-log.md` as blocked
-   - stop
-10. If failed after useful edits:
-   - create blocker report
-   - create blocked-task commit
-   - update `execution-log.md` as blocked
-   - stop
-11. If final checkpoint task passes:
-   - generate checkpoint review packet
-   - update `execution-log.md` with review packet path
-   - stop
+7. Write durable build/test/scope logs under `plans/stage1/30-evidence/build/`.
+8. Run the required build/tests.
+9. Run scope check before creating a successful task commit.
+10. If successful:
+    - create one atomic task commit
+    - update `execution-log.md`
+    - continue to the next task in the checkpoint
+11. If failed before useful edits:
+    - leave tree clean
+    - preserve failure log
+    - update `execution-log.md` as blocked
+    - stop
+12. If failed after useful edits:
+    - preserve failure log
+    - create blocker report
+    - create blocked-task commit
+    - update `execution-log.md` as blocked
+    - stop
+13. If final checkpoint task passes:
+    - generate checkpoint review packet
+    - update `execution-log.md` with review packet path
+    - ensure working tree is clean
+    - stop
 
 No dirty-tree handoffs are allowed.
 
@@ -145,6 +150,26 @@ Blocked-task commit format:
 
 A blocked-task commit is not accepted work.
 It is a durable recovery point.
+
+## Scope Check Rule
+
+Every successful task commit must be preceded by a passing scope check.
+
+For task mode, run:
+
+`.\scripts\check_task_scope.ps1 -TaskPacket <task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence`
+
+For checkpoint mode, run the same command for the current task packet before each task commit.
+
+At checkpoint review time, run:
+
+`.\scripts\check_task_scope.ps1 -CheckpointPacket <checkpoint-packet> -BaseRef <checkpoint-base> -HeadRef <checkpoint-head> -AllowExecutionLog -AllowEvidence`
+
+If scope check fails:
+- do not create a successful task commit
+- revert forbidden edits if safe
+- otherwise create a blocker report and blocked-task commit
+- stop
 
 ## Reviewer Lifecycle
 
