@@ -17,9 +17,9 @@ Pre-pivot history remains available in git. This live log now tracks the current
 
 - `Date`: `2026-04-23`
 - `Direction change`: the previous flip-based activation model is now considered conceptually flawed as the target design.
-- `Current phase`: **Slice 1 implementation (Pure Logic Extraction)**.
+- `Current phase`: **Refactor-detail planning**.
 - **Stop Rule**: Do not proceed to runtime rewrite until the first pure-logic slice is green.
-- `Overall status`: Planning and TDD strategy for the balance-first rewrite are complete. **Implementation is runnable for Slice 1 (Pure Logic) only.** Runtime state-machine surgery remains blocked until Slice 1 passes all Layer 1 unit tests.
+- `Overall status`: Balance-first implementation is blocked until the detailed refactor migration plan is accepted. Runtime state-machine surgery remains blocked until Slice 1 passes all Layer 1 unit tests.
 - `State naming`: preferred rewrite states are now `BalanceActivation_Ready -> BalanceActivation_BlendIn -> BalanceActivation_Validate -> BalanceActive_Standing`; older names remain compatibility labels only.
 - `Latest runtime read`: the latest verified live smoke from `2026-04-22` still failed to reach sustained `BalanceActive_Standing`. That evidence remains useful as legacy forensic context, but it no longer justifies further refinement of the old flip-based ritual as the target design.
 
@@ -37,9 +37,10 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | S1-DOCS-BALANCE-FIRST | AI | completed | balance-first activation direction, specialized 10-spec suite | `ENGINEERING_PLAN.md`, `STAGE1_PLAN.md`, `plans/stage1/10-specs/*.md`, `plans/stage1/20-execution/execution-log.md` | none |
 | S1-PLAN-TDD | AI | completed | specialized 10-spec suite, standing benchmark | `plans/stage1/20-execution/balance_first_tdd_strategy.md` | none |
 | S1-PLAN-REFACTOR-ORDER | AI | completed | specialized 10-spec suite, existing bridge source | `plans/stage1/20-execution/balance_first_refactor_plan.md` | none |
+| S1-PLAN-REFACTOR-DETAIL | AI | **active** | specialized 10-spec suite, test matrix, current plugin source inventory | `plans/stage1/20-execution/balance_first_refactor_plan.md` | none |
 | S1-PLAN-TEST-MATRIX | AI | completed | instrumentation_and_acceptance.md, truth model | `plans/stage1/20-execution/balance_first_test_matrix.md` | none |
 | S1-PLAN-FIRST-SLICE | AI | completed | specialized 10-spec suite | `plans/stage1/20-execution/first-slice-definition.md` | none |
-| S1-IMPL-BALANCE-FIRST | AI | **runnable** | TDD plan, refactor order, 10-spec suite | `PhysAnimSupportTruth.h/cpp`, `PhysAnimSupportTests.cpp` | none |
+| S1-IMPL-BALANCE-FIRST | AI | **blocked** | TDD plan, refactor order, 10-spec suite | `PhysAnimSupportTruth.h/cpp`, `PhysAnimSupportTruth.Tests.cpp` | `S1-PLAN-REFACTOR-DETAIL` accepted |
 
 ## Frozen Inputs For Continuous Balance Rewrite
 
@@ -60,7 +61,8 @@ Pre-pivot history remains available in git. This live log now tracks the current
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-IMPL-BALANCE-FIRST | **Slice 1 (Pure Logic)** is runnable; TDD and Refactor plans are accepted. Runtime rewrite remains blocked by the Stop Rule until Slice 1 is green. |
+| 1 | S1-PLAN-REFACTOR-DETAIL | Active planning task to complete the migration plan required before Slice 1 implementation. |
+| 2 | S1-IMPL-BALANCE-FIRST | Blocked until `balance_first_refactor_plan.md` contains current code inventory, extraction seams, Slice 1 data types, compile-safe commit sequence, test harness wiring, dependency direction, slice-to-test mapping, and forbidden edits. |
 
 ## Waiting On User
 
@@ -80,13 +82,13 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | Task ID | Artifact | Accepted? | Notes |
 |---|---|---|---|
 | S1-DOCS-BALANCE-FIRST | balance-first activation docs rewrite | yes | canonical docs now point to continuous physical ownership and standing validation |
-| S1-PLAN-REWRITE | TDD + Refactor + Matrix + Slice 1 | yes | planning frontier is closed; implementation is unblocked for Slice 1 |
+| S1-PLAN-REWRITE | TDD + Matrix + initial refactor order + Slice 1 | partial | implementation remains blocked until detailed refactor migration plan is accepted |
 
 ## Blocked / Deferred
 
 | Task ID | Status | Reason |
 |---|---|---|
-| S1-IMPL-BALANCE-FIRST | **runnable (Slice 1)** | Pure logic extraction is runnable; runtime surgery remains blocked by the Stop Rule until Slice 1 unit tests are green |
+| S1-IMPL-BALANCE-FIRST | **blocked** | Blocked until `balance_first_refactor_plan.md` contains current code inventory, extraction seams, Slice 1 data types, compile-safe commit sequence, test harness wiring, dependency direction, slice-to-test mapping, and forbidden edits |
 | G2 | readying | comparison packaging must reflect the new activation model honestly |
 | S1-P2-A1 | blocked | depends on G2 pass |
 | Legacy flip-path tuning | deferred | archived; legacy compatibility context only |
@@ -101,9 +103,10 @@ Whenever new setup or gate evidence arrives:
 
 ---
 
-## 2026-04-23 — Implementation Unlocked (Slice 1)
+## 2026-04-23 — Implementation Blocked Pending Refactor Detail
 
-- the planning frontier (TDD strategy, refactor plan, test matrix, slice definition) is formally accepted
-- **S1-IMPL-BALANCE-FIRST** is unblocked for **Slice 1 (Pure Logic Extraction)**
+- the planning frontier remains open for detailed refactor migration planning
+- **S1-PLAN-REFACTOR-DETAIL** is active
+- **S1-IMPL-BALANCE-FIRST** is blocked until the detailed migration plan is accepted
 - the Stop Rule remains in effect: no runtime state-machine rewiring until pure support logic is verified green
 - all legacy design and Phase 0/1 packages have been moved to `90-archive`
