@@ -57,7 +57,7 @@ The next task is not runnable while the current checkpoint is blocked.
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | checkpoint review | Checkpoint `S1-SUPPORT-TRUTH-A` is review-pending; reviewer must treat missing scope evidence as a blocker unless scope is generated first. |
+| 1 | checkpoint review | Checkpoint `S1-SUPPORT-TRUTH-A` is review-pending; reviewer must evaluate whether transitional scope failure blocks acceptance. |
 
 ## Accepted Handoffs
 

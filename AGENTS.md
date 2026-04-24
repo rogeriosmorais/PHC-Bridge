@@ -146,7 +146,13 @@ Use these checkpoint commands:
 
 Before any command, agents must run:
 
-`.\scripts\check_workflow_state.ps1 -Mode <execute|review|fix|accept> -Checkpoint <CHECKPOINT-ID>`
+Implementation/review/fix preflight:
+
+`.\scripts\check_workflow_state.ps1 -Mode <execute|review|fix> -Checkpoint <CHECKPOINT-ID>`
+
+Accept preflight:
+
+`.\scripts\check_workflow_state.ps1 -Mode accept -Checkpoint <CHECKPOINT-ID> -ReviewReport <review-report-path>`
 
 If preflight fails, stop.
 
