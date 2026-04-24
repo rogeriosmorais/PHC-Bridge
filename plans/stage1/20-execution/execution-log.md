@@ -85,14 +85,15 @@ Current packet:
 | Commit | `d512b19b5e0b91b42dddaf994ab3d0f8edb60560` |
 | Build Result | `passed` |
 | Test Result | `not run` |
+| Review Packet | `plans/stage1/30-evidence/reviews/S1-IMPL-BALANCE-FIRST-01-review-packet.md` |
 | Review Report | `missing` |
 | Review Verdict | `missing` |
-| Blocking Reason | `valid review evidence required before advancing` |
+| Blocking Reason | `valid review report required before advancing` |
 
-Rules:
-- `go` is invalid while Lifecycle Status is `review-pending`.
-- `review current task` is valid while Lifecycle Status is `review-pending`.
-- `fix current task` is valid only while Lifecycle Status is `fix-required`.
+Command validity:
+- `go` is valid only when Lifecycle Status is `runnable` or `fix-required`.
+- `review current task` is valid only when Lifecycle Status is `review-pending`.
+- `fix current task` is valid only when Lifecycle Status is `fix-required`.
 - `accept current task` is valid only when Review Verdict is `accept`.
 
 Agents must not implement from the broad refactor plan directly.

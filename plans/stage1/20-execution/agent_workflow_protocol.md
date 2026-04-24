@@ -96,46 +96,57 @@ Each task moves through this lifecycle:
 When executing a task, the implementer must:
 
 1. Read `AGENTS.md`.
-2. Read `plans/stage1/20-execution/execution-log.md`.
-3. Read `plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`.
-4. Read the current task packet.
-5. Record the task base ref before edits:
+2. Read `plans/stage1/20-execution/agent_workflow_protocol.md`.
+3. Read `plans/stage1/20-execution/execution-log.md`.
+4. Read `plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`.
+5. Read the current task packet.
+6. Record the task base ref before edits:
 
    `git rev-parse HEAD`
 
-6. Edit only files allowed by the packet.
-7. Run required build/tests.
-8. If build/tests fail:
-   - do not commit
-   - stop
-   - return handoff with `Commit: none`
-   - return `Review: not started`
+7. Edit only files allowed by the task packet.
+8. Run required build/tests.
 
-9. If build/tests pass:
-   - create exactly one task implementation commit
-   - use commit message format:
+For every implementation task, the implementer must run:
 
-     `<TASK-ID>: <short task name>`
+`.\scripts\build.ps1`
 
-   - record task head ref:
+If build/tests fail:
+- do not commit
+- do not generate a review packet
+- stop
+- return handoff with `Commit: none`
+- return `Review: not started`
 
-     `git rev-parse HEAD`
+If build/tests pass:
+- create exactly one task implementation commit
+- use commit message format:
 
-10. Generate a review packet using:
+  `<TASK-ID>: <short task name>`
 
-    `.\scripts\make_review_packet.ps1 -TaskPacket <packet> -BaseRef <task-base-ref> -HeadRef <task-head-ref> -BuildLog <path-if-known> -TestLog <path-if-known>`
+- record task head ref:
 
-11. If context-isolated reviewer sub-agent is available:
-    - give it only:
-      - `REVIEWER_PROMPT.md`
-      - generated review packet
-    - report reviewer verdict in the handoff
+  `git rev-parse HEAD`
 
-12. If context-isolated reviewer sub-agent is not available:
-    - stop
-    - report `Review: pending`
-    - include exact review command
+Then the implementer must generate a review packet.
 
+The implementer must run:
+
+`.\scripts\make_review_packet.ps1 -TaskPacket <packet> -BaseRef <task-base-ref> -HeadRef <task-head-ref> -BuildLog <path-if-known> -TestLog <path-if-known> -OutputPath <review-packet-path>`
+
+The review packet path must be:
+
+`plans/stage1/30-evidence/reviews/<TASK-ID>-review-packet.md`
+
+After generating the review packet, the implementer must update `execution-log.md` only enough to record:
+- lifecycle status: `review-pending`
+- task base SHA
+- task head SHA
+- commit SHA
+- build/test result
+- review packet path
+
+The implementer must not mark the task accepted.
 The implementer must not continue to the next task.
 
 ## Reviewer Lifecycle
@@ -143,29 +154,31 @@ The implementer must not continue to the next task.
 When reviewing a task, the reviewer must:
 
 1. Read `AGENTS.md`.
-2. Read `plans/stage1/20-execution/execution-log.md`.
-3. Read `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`.
-4. Identify the current task packet unless a task ID was explicitly provided.
-5. Use only the generated review packet supplied by the orchestrator or implementer handoff.
-
-The reviewer must not generate the review packet.
-The review packet must be generated before reviewer launch.
-If no review packet is supplied, the reviewer must return:
-
-`Blocked: review packet missing`
-6. Review only:
+2. Read `plans/stage1/20-execution/agent_workflow_protocol.md`.
+3. Read `plans/stage1/20-execution/execution-log.md`.
+4. Read `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`.
+5. Find the review packet path in `execution-log.md`.
+6. Read the review packet.
+7. Review only:
    - task packet
    - changed files
    - diff
    - build/test output
    - required handoff
-7. Return:
-   - blockers
-   - non-blocking nits
-   - verdict
-   - next action
+8. Return or write a structured review report.
 
+The reviewer must not run scripts by default.
+The reviewer must not generate the review packet.
+The reviewer must not edit `execution-log.md`.
 The reviewer must not implement fixes.
+
+If the review packet path is missing, return:
+
+`Blocked: review packet missing`
+
+If the review packet file is missing, return:
+
+`Blocked: review packet file not found`
 
 ## Review Evidence Rule
 

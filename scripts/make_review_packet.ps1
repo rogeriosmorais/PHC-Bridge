@@ -8,6 +8,9 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$HeadRef,
 
+    [Parameter(Mandatory=$true)]
+    [string]$OutputPath,
+
     [string]$BuildLog = "",
 
     [string]$TestLog = "",
@@ -42,70 +45,88 @@ if (-not $ChangedFiles) {
     exit 1
 }
 
-Write-Host "=== REVIEW PACKET ==="
-Write-Host ""
+$OutputDir = Split-Path -Parent $OutputPath
+if ($OutputDir -and -not (Test-Path $OutputDir)) {
+    New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+}
 
-Write-Host "Branch:"
-git branch --show-current
-Write-Host ""
+$Lines = New-Object System.Collections.Generic.List[string]
 
-Write-Host "Head:"
-git rev-parse $HeadRef
-Write-Host ""
+function Add-Line {
+    param([string]$Text = "")
+    $script:Lines.Add($Text)
+}
 
-Write-Host "Base:"
-git rev-parse $BaseRef
-Write-Host ""
+Add-Line "=== REVIEW PACKET ==="
+Add-Line ""
 
-Write-Host "Review target:"
-Write-Host "Task packet: $TaskPacket"
-Write-Host "Task base: $BaseRef"
-Write-Host "Task head: $HeadRef"
-Write-Host "Commit: $HeadRef"
-Write-Host ""
+Add-Line "Branch:"
+Add-Line (git branch --show-current)
+Add-Line ""
 
-Write-Host "=== TASK PACKET CONTENT ==="
-Get-Content $TaskPacket
-Write-Host ""
+Add-Line "Head:"
+Add-Line (git rev-parse $HeadRef)
+Add-Line ""
 
-Write-Host "=== CHANGED FILES ==="
-$ChangedFiles
-Write-Host ""
+Add-Line "Base:"
+Add-Line (git rev-parse $BaseRef)
+Add-Line ""
 
-Write-Host "=== DIFF STAT ==="
-git diff --stat $BaseRef $HeadRef
-Write-Host ""
+Add-Line "Review target:"
+Add-Line "Task packet: $TaskPacket"
+Add-Line "Task base: $BaseRef"
+Add-Line "Task head: $HeadRef"
+Add-Line "Commit: $HeadRef"
+Add-Line ""
 
-Write-Host "=== DIFF ==="
+Add-Line "=== TASK PACKET CONTENT ==="
+Get-Content $TaskPacket | ForEach-Object { Add-Line $_ }
+Add-Line ""
+
+Add-Line "=== CHANGED FILES ==="
+$ChangedFiles | ForEach-Object { Add-Line $_ }
+Add-Line ""
+
+Add-Line "=== DIFF STAT ==="
+git diff --stat $BaseRef $HeadRef | ForEach-Object { Add-Line $_ }
+Add-Line ""
+
+Add-Line "=== DIFF ==="
 $DiffLines = git diff $BaseRef $HeadRef
 if ($FullDiff) {
-    $DiffLines
+    $DiffLines | ForEach-Object { Add-Line $_ }
 } else {
-    $DiffLines | Select-Object -First $MaxDiffLines
+    $DiffLines | Select-Object -First $MaxDiffLines | ForEach-Object { Add-Line $_ }
     if ($DiffLines.Count -gt $MaxDiffLines) {
-        Write-Host ""
-        Write-Host "[diff truncated after $MaxDiffLines lines; rerun with -FullDiff if needed]"
+        Add-Line ""
+        Add-Line "[diff truncated after $MaxDiffLines lines; rerun with -FullDiff if needed]"
     }
 }
-Write-Host ""
+Add-Line ""
 
-Write-Host "=== BUILD OUTPUT ==="
+Add-Line "=== BUILD OUTPUT ==="
 if ($BuildLog -and (Test-Path $BuildLog)) {
-    Get-Content $BuildLog | Select-Object -Last $MaxLogLines
+    Get-Content $BuildLog | Select-Object -Last $MaxLogLines | ForEach-Object { Add-Line $_ }
 } else {
-    Write-Host "No build log supplied."
+    Add-Line "No build log supplied."
 }
-Write-Host ""
+Add-Line ""
 
-Write-Host "=== TEST OUTPUT ==="
+Add-Line "=== TEST OUTPUT ==="
 if ($TestLog -and (Test-Path $TestLog)) {
-    Get-Content $TestLog | Select-Object -Last $MaxLogLines
+    Get-Content $TestLog | Select-Object -Last $MaxLogLines | ForEach-Object { Add-Line $_ }
 } else {
-    Write-Host "No test log supplied."
+    Add-Line "No test log supplied."
 }
-Write-Host ""
+Add-Line ""
 
-Write-Host "=== REVIEW INSTRUCTION ==="
-Write-Host "Review this diff only against the task packet above."
-Write-Host "Do not review architecture."
-Write-Host "Return at most 3 blockers, 3 non-blocking nits, verdict, and next action."
+Add-Line "=== REVIEW INSTRUCTION ==="
+Add-Line "Review this packet only using plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md."
+Add-Line "Do not review architecture."
+Add-Line "Do not edit files."
+Add-Line "Return a structured review report."
+
+$Lines | Set-Content -Path $OutputPath -Encoding UTF8
+
+Write-Host "Review packet written to:"
+Write-Host $OutputPath

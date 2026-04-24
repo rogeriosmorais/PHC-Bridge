@@ -64,24 +64,25 @@ After committing, record:
 
 This is `Task head`.
 
-## Review Rule
+## Review Packet Rule
 
-After committing, generate a review packet:
+After committing, the implementer must generate a review packet.
 
-`.\scripts\make_review_packet.ps1 -TaskPacket <task-packet> -BaseRef <task-base> -HeadRef <task-head> -BuildLog <path-if-known> -TestLog <path-if-known>`
+Run:
 
-If a context-isolated reviewer sub-agent is available:
-- launch it with only:
-  - `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
-  - the generated review packet
-- report its verdict in the handoff
+`.\scripts\make_review_packet.ps1 -TaskPacket <task-packet> -BaseRef <task-base> -HeadRef <task-head> -BuildLog <path-if-known> -TestLog <path-if-known> -OutputPath plans/stage1/30-evidence/reviews/<TASK-ID>-review-packet.md`
 
-If a context-isolated reviewer sub-agent is not available:
-- stop
-- set `Review: pending`
-- include the exact review command in the handoff
+The implementer must then update `execution-log.md` only enough to record:
+- lifecycle status: `review-pending`
+- task base SHA
+- task head SHA
+- commit SHA
+- build/test result
+- review packet path
 
-Do not continue to the next task.
+The implementer must not mark the task accepted.
+
+The implementer must not continue to the next task.
 
 ## If Blocked
 

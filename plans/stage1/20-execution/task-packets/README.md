@@ -51,7 +51,7 @@ Every implementer handoff must end with:
 `Task base: <sha|none>`
 `Task head: <sha|none>`
 `Commit: <sha|none>`
-`Review: pending|accept|fix required|reject|not started`
+`Review: pending|not started|review report attached`
 `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
 `Execution log impact: none|updated|blocked`
 `Tests: <not run|passed|failed + command>`
@@ -98,30 +98,36 @@ Do not start the next task until reviewer verdict is `accept`.
 
 ## Review Packet Command
 
-After a task commit, generate a bounded review packet with:
+The implementer must generate the review packet after a successful task commit.
 
-`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md -BaseRef <task-base> -HeadRef <task-head> -BuildLog <path> -TestLog <path>`
+The user does not run this manually.
 
-Use `-FullDiff` only when the reviewer explicitly asks for the full diff.
+Required command:
 
-The review packet must include:
-- task packet content
-- changed files
-- diff from task base to task head
-- build output, if available
-- test output, if available
+`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md -BaseRef <task-base> -HeadRef <task-head> -BuildLog <path-if-known> -TestLog <path-if-known> -OutputPath plans/stage1/30-evidence/reviews/<TASK-ID>-review-packet.md`
 
-Do not ask for broad repo review after implementation commits.
+The reviewer consumes the generated review packet.
+
+The reviewer must not generate the review packet.
 
 ## Reviewer Trigger
 
 The implementer must not self-approve.
 
-After a task packet is completed, the implementer stops.
+After a task packet is implemented and committed, a review packet must be generated from task base to task head.
 
-The user/orchestrator then triggers a reviewer pass using:
+The reviewer receives only:
+- `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
+- the generated review packet
 
-`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md`
+The reviewer must not receive:
+- broad repo context
+- full conversation history
+- implementer reasoning
+- architecture summaries
+- unrelated docs
+
+The reviewer must not edit files.
 
 The next task may start only after reviewer verdict:
 
@@ -169,12 +175,23 @@ to fix reviewer blockers inside the current task packet.
 
 Use:
 
-`accept current task`
+`accept current task` to advance the execution log after reviewer verdict `accept`.
 
-to advance the execution log after reviewer verdict `accept`.
+## Mandatory Script Ownership
 
-Do not use `go` for review.
-Do not use `review current task` for implementation.
-Do not use `accept current task` without reviewer verdict `accept`.
+The user does not run workflow scripts manually.
+
+Implementer agents must run:
+- `.\scripts\build.ps1`
+- `.\scripts\make_review_packet.ps1`
+
+Reviewer agents must run no scripts by default.
+
+Optional startup scripts are forbidden.
+
+Do not create helper scripts unless they are mandatory and assigned to a role in:
+- `AGENTS.md`
+- `agent_workflow_protocol.md`
+- this README
 
 

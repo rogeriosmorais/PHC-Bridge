@@ -105,6 +105,9 @@ Enums are introduced only in S1-IMPL-BALANCE-FIRST-03.
 - no tests were added
 - no forbidden files were touched
 - handoff block is provided
+- review packet generated at `plans/stage1/30-evidence/reviews/S1-IMPL-BALANCE-FIRST-01-review-packet.md`
+- execution-log current task state updated to `review-pending`
+- task is not marked accepted by implementer
 
 ## Stop Conditions
 
@@ -151,7 +154,7 @@ This is `Task head`.
 
 Generate a review packet:
 
-`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md -BaseRef <task-base> -HeadRef <task-head>`
+`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md -BaseRef <task-base> -HeadRef <task-head> -OutputPath plans/stage1/30-evidence/reviews/S1-IMPL-BALANCE-FIRST-01-review-packet.md`
 
 If a context-isolated reviewer sub-agent is available:
 - give it only:
@@ -182,7 +185,7 @@ Do not continue to `S1-IMPL-BALANCE-FIRST-02`.
 `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
 `Execution log impact: none|updated|blocked`
 `Tests: not run`
-`Build: <passed|failed> .\\scripts\\build.ps1`
+`Build: <passed|failed> .\scripts\build.ps1`
 `Files changed: <paths>`
 `Forbidden files touched: none|<paths>`
 `Next task: S1-IMPL-BALANCE-FIRST-02|blocked|none`

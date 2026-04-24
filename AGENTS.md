@@ -125,6 +125,32 @@ A verdict of `fix required` or `reject` without at least one blocker is invalid.
 
 Only the orchestrator may update task state after valid review evidence exists.
 
+## Mandatory Script Rule
+
+Only mandatory scripts belong in the workflow.
+
+Implementation agents must run:
+
+- `.\scripts\build.ps1`
+- `.\scripts\make_review_packet.ps1`
+
+Review agents must not run scripts by default.
+
+Deleted helper scripts must not be recreated unless they become mandatory in this file.
+
+Do not create optional workflow helper scripts.
+Do not depend on the user running scripts manually.
+
+Required ownership:
+
+- Implementer runs `.\scripts\build.ps1` after edits.
+- Implementer runs `.\scripts\make_review_packet.ps1` after committing.
+- Reviewer consumes the generated review packet.
+- Reviewer does not generate the review packet.
+- Reviewer does not edit `execution-log.md`.
+- Orchestrator updates `execution-log.md` only after valid review evidence exists.
+
+
 
 ## Failure Classification Rule
 
