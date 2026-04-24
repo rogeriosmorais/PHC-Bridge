@@ -65,7 +65,7 @@ If preflight fails:
 ### Implementer
 
 The implementer:
-- executes exactly one task packet
+- executes one checkpoint by running its task packets one at a time.
 - edits only allowed files
 - runs required build/tests
 - commits only after required build/tests pass
@@ -91,39 +91,39 @@ The orchestrator:
 - accepts/rejects the reviewer verdict
 - advances `execution-log.md` after acceptance
 
-## Task Lifecycle
+## Checkpoint Lifecycle
 
-Each task moves through this lifecycle:
+Each checkpoint moves through this lifecycle:
 
 1. `runnable`
    - current task packet is ready
 
 2. `implementation-active`
-   - implementer is working on the packet
+   - implementer is working on the checkpoint
 
 3. `implementation-failed`
    - build/tests failed
-   - no commit is created
-   - same task remains current
+   - no task commit is created
+   - same checkpoint remains current
 
 4. `review-pending`
-   - build/tests passed
-   - implementation commit exists
+   - checkpoint task packets passed
+   - implementation commits exist
    - review has not accepted it yet
 
 5. `fix-required`
    - reviewer found bounded issues
-   - same task remains current
-   - fixes must stay inside the same task packet
+   - same checkpoint remains current
+   - fixes must stay inside the active checkpoint
 
 6. `rejected`
    - reviewer found forbidden scope, wrong task, failed required tests/build, unrelated files, or fake implementation
-   - task commit must be reverted
-   - same task remains current
+   - task commits must be reverted
+   - same checkpoint remains current
 
 7. `accepted`
    - reviewer verdict is `accept`
-   - execution log may advance to the next task packet
+   - execution log may advance to the next checkpoint
 
 ## Implementer Lifecycle
 
@@ -207,7 +207,7 @@ If scope check fails:
 
 ## Reviewer Lifecycle
 
-When reviewing a task, the reviewer must:
+When reviewing a checkpoint, the reviewer must:
 
 1. Read `AGENTS.md`.
 2. Read `plans/stage1/20-execution/agent_workflow_protocol.md`.
@@ -216,10 +216,11 @@ When reviewing a task, the reviewer must:
 5. Find the review packet path in `execution-log.md`.
 6. Read the review packet.
 7. Review only:
-   - task packet
+   - checkpoint packet
+   - included task packets
    - changed files
    - diff
-   - build/test output
+   - build/test/scope evidence
    - required handoff
 8. Return or write a structured review report.
 
@@ -266,10 +267,10 @@ Each blocker must include:
 - violated task-packet rule
 - file/path involved
 - exact required fix
-- whether the fix must stay inside the current task packet
+- whether the fix must stay inside the active checkpoint
 
-A reviewer may not set task status directly.
-Only the orchestrator may update task status after reading valid review evidence.
+A reviewer may not set checkpoint status directly.
+Only the orchestrator may update checkpoint status after reading valid review evidence.
 
 ## Commit Rules
 
@@ -341,23 +342,23 @@ After a blocked-task commit, the next agent must start from the blocked commit a
 
 If reviewer verdict is `fix required`:
 
-1. Same task remains current.
-2. Implementer runs `fix current task`.
-3. Fixes must stay inside the same task packet.
+1. Same checkpoint remains current.
+2. Implementer runs `fix checkpoint <CHECKPOINT-ID>`.
+3. Fixes must stay inside the active checkpoint.
 4. Build/tests must pass again.
 5. Implementer may either:
-   - amend the task commit, or
-   - create a small fixup commit
-6. Review must compare from the original task base ref to the new task head ref.
-7. The next task remains blocked until reviewer verdict is `accept`.
+   - amend the task commit(s), or
+   - create small fixup commits
+6. Review must compare from the original checkpoint base ref to the new checkpoint head ref.
+7. The next checkpoint remains blocked until reviewer verdict is `accept`.
 
 ## Reject Rules
 
 If reviewer verdict is `reject`:
 
 1. Do not continue.
-2. Revert the task implementation commit.
-3. Keep the current task packet unchanged.
+2. Revert the implementation commits in the checkpoint.
+3. Keep the checkpoint packet unchanged.
 4. Record the rejection reason in the handoff.
 5. Update the assumption ledger only if the rejection reveals a plan/contract/dependency assumption problem.
 
@@ -365,14 +366,14 @@ If reviewer verdict is `reject`:
 
 If reviewer verdict is `accept`:
 
-1. The current task may be marked accepted.
-2. `execution-log.md` may advance to the next task packet.
-3. The next task becomes runnable only after the execution-log pointer is updated.
+1. The current checkpoint may be marked accepted.
+2. `execution-log.md` may advance to the next checkpoint.
+3. The next checkpoint becomes runnable only after the execution-log pointer is updated.
 4. Runtime rewrite remains blocked until Slice 1 pure support logic is green.
 
 ## State Transition Evidence Rule
 
-No task status may change based only on a bare verdict.
+No status may change based only on a bare verdict.
 
 Every transition must cite evidence.
 
@@ -380,7 +381,7 @@ Allowed transitions:
 
 1. `runnable` -> `implementation-active`
    Required evidence:
-   - user/orchestrator command: `go`
+   - user/orchestrator command: `execute checkpoint <CHECKPOINT-ID>`
 
 2. `implementation-active` -> `implementation-failed`
    Required evidence:
@@ -389,10 +390,10 @@ Allowed transitions:
 
 3. `implementation-active` -> `review-pending`
    Required evidence:
-   - task base SHA
-   - task head SHA
-   - commit SHA
-   - build/test result
+   - task base SHAs
+   - task head SHAs
+   - commit SHAs
+   - build/test/scope result
 
 4. `review-pending` -> `fix-required`
    Required evidence:
@@ -414,45 +415,29 @@ Allowed transitions:
 
 7. `fix-required` -> `review-pending`
    Required evidence:
-   - original task base SHA
-   - new task head SHA
-   - fix commit SHA or amended commit SHA
-   - build/test result
+   - original checkpoint base SHA
+   - new checkpoint head SHA
+   - fix commit SHAs or amended commit SHAs
+   - build/test/scope result
 
 A state transition without required evidence is invalid.
-
-
 
 ## Execution Log Advance
 
 Advancing the execution log is a separate orchestration step.
 
 It may change only:
-- current task status
-- current task packet pointer
-- next runnable task
+- current status
+- current pointer
+- next runnable item
 - latest accepted commit SHA
-- notes required to preserve task state
+- notes required to preserve state
 
 It must not change implementation code.
 
 ## Handoff Fields
 
-Every implementer handoff must include:
-
-`Summary: <one sentence>`
-`Task: <task id>`
-`Task base: <sha|none>`
-`Task head: <sha|none>`
-`Commit: <sha|none>`
-`Review: pending|not started|review report attached`
-`Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
-`Execution log impact: none|updated|blocked`
-`Tests: <not run|passed|failed + command>`
-`Build: <not run|passed|failed + command>`
-`Files changed: <comma-separated paths>`
-`Forbidden files touched: none|<paths>`
-`Next task: <task id|blocked|none>`
+Every implementer handoff must include the canonical status block defined in `AGENTS.md`.
 
 Every reviewer handoff must use `REVIEWER_PROMPT.md`.
 
@@ -466,3 +451,4 @@ Stop immediately if:
 - build/test failure requires widening scope
 - implementation crosses into the next packet
 - reviewer verdict is not `accept`
+- preflight fails

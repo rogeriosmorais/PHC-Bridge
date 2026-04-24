@@ -1,167 +1,80 @@
 # Task Packets
 
-This folder contains the implementation task packets for Stage 1.
+This folder contains atomic implementation task packets for Stage 1.
+
+Task packets are not review units.
+
+## Operating Model
+
+- task packet = atomic commit unit
+- checkpoint packet = review unit
+- execution-log = current workflow pointer
+- build/test/scope evidence = mechanical proof
+- reviewer = consumes generated review packet only
+- orchestrator = advances execution-log after valid review evidence
+
+## Task Packet Rule
 
 Agents must not implement from broad plans directly.
 
-## Implementer Prompt
+Each implementation task must be driven by a task packet in:
 
-Implementation agents should be launched with:
+`plans/stage1/20-execution/task-packets/`
 
-`plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
+Agents may edit only files allowed by the active task packet.
 
-The user may simply say:
+If a task requires a file not listed in the packet, stop and report:
 
-`execute current task`
+`Blocked: task packet does not allow required file <path>`
 
-or:
+Do not widen scope.
 
-`go`
+## Checkpoint Rule
 
-The agent must then read `execution-log.md`, find the current task packet, and execute only that packet.
+Checkpoint packets live in:
 
-For implementation work, read only:
+`plans/stage1/20-execution/checkpoints/`
 
-1. `AGENTS.md`
-2. the current task packet
-3. directly edited files
-4. directly relevant tests
-5. build/test output
+A checkpoint packet may contain multiple task packets.
 
-The task packet is the working context.
-The refactor plan is the authority.
-The execution log is the state board.
+When executing a checkpoint:
 
-## Rules
+- run task packets strictly in order
+- resume from `Current Task ID` in `execution-log.md`
+- skip already completed task commits listed in `execution-log.md`
+- run build/tests after each task packet
+- run scope check before each successful task commit
+- commit after each successful task packet
+- stop immediately on failure
+- create a blocked-task commit after useful edits plus failure
+- generate one checkpoint review packet at checkpoint end
+- do not continue beyond the checkpoint
 
-- Do not edit files outside the current task packet.
-- Do not advance to the next packet until the current packet is complete.
-- Do not combine packets.
-- Do not add behavior in scaffold-only packets.
-- Do not add tests in packets that forbid tests.
-- Do not touch runtime state-machine files unless the packet explicitly allows them.
-- Do not reopen architecture unless the packet is impossible.
-
-## Required Handoff
-
-Every implementer handoff must end with:
-
-`Summary: <one sentence>`
-`Task: <task id>`
-`Task base: <sha|none>`
-`Task head: <sha|none>`
-`Commit: <sha|none>`
-`Review: pending|not started|review report attached`
-`Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
-`Execution log impact: none|updated|blocked`
-`Tests: <not run|passed|failed + command>`
-`Build: <not run|passed|failed + command>`
-`Files changed: <comma-separated paths>`
-`Forbidden files touched: none|<paths>`
-`Next task: <task id|blocked|none>`
-
-## Complete Task Lifecycle
-
-Use this lifecycle for every implementation task:
-
-1. User says `go`.
-2. Implementer reads:
-   - `AGENTS.md`
-   - `agent_workflow_protocol.md`
-   - `execution-log.md`
-   - `IMPLEMENTER_PROMPT.md`
-   - current task packet
-3. Implementer records task base with `git rev-parse HEAD`.
-4. Implementer edits only allowed files.
-5. Implementer runs required build/tests.
-6. If build/tests fail:
-   - no commit
-   - handoff reports failure
-   - task remains current
-7. If build/tests pass:
-   - one task commit is created
-   - handoff includes task base, task head, and commit SHA
-8. Review packet is generated from task base to task head.
-9. Reviewer uses only:
-   - `REVIEWER_PROMPT.md`
-   - generated review packet
-10. If reviewer verdict is `accept`:
-   - orchestrator may advance execution-log to the next task packet
-11. If reviewer verdict is `fix required`:
-   - same task remains current
-   - fixes must stay inside the same task packet
-12. If reviewer verdict is `reject`:
-   - task commit is reverted
-   - same task remains current
-
-Do not start the next task until reviewer verdict is `accept`.
-
-## Review Packet Command
-
-The implementer must generate the review packet after a successful task commit.
-
-The user does not run this manually.
-
-Required command:
-
-`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md -BaseRef <task-base> -HeadRef <task-head> -BuildLog <path-if-known> -TestLog <path-if-known> -OutputPath plans/stage1/30-evidence/reviews/<TASK-ID>-review-packet.md`
-
-The reviewer consumes the generated review packet.
-
-The reviewer must not generate the review packet.
-
-## Reviewer Trigger
-
-The implementer must not self-approve.
-
-After a task packet is implemented and committed, a review packet must be generated from task base to task head.
-
-The reviewer receives only:
-- `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
-- the generated review packet
-
-The reviewer must not receive:
-- broad repo context
-- full conversation history
-- implementer reasoning
-- architecture summaries
-- unrelated docs
-
-The reviewer must not edit files.
-
-The next task may start only after reviewer verdict:
-
-`accept`
-
-If verdict is `reject` or `fix required`, the next task remains blocked.
-
-## Reviewer Prompt
-
-Reviewer agents must be launched with:
-
-- `plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
-- `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
+Review happens at checkpoint boundaries, not after every task packet.
 
 ## Mechanical Gates
 
 Agents must not rely on hand-written claims for scope/build/test status.
 
 Implementation agents must create durable evidence for:
+
 - build
 - tests, if applicable
 - scope check
+
+Evidence goes under:
+
+`plans/stage1/30-evidence/build/`
 
 Scope check is mandatory before every successful task commit.
 
 Checkpoint-wide scope check is mandatory before checkpoint review.
 
-Reviewer must reject or block any checkpoint review packet missing scope evidence.
+Reviewer must reject or block any checkpoint review packet missing required evidence.
 
 ## Workflow Preflight
 
-Agents must not infer whether implementation/review/fix/acceptance is allowed.
-
-Before acting, run:
+Before acting, agents must run:
 
 Implementation:
 
@@ -179,7 +92,7 @@ Accept:
 
 `.\scripts\check_workflow_state.ps1 -Mode accept -Checkpoint <CHECKPOINT-ID>`
 
-If preflight fails, the agent must stop without editing files.
+If preflight fails, stop without editing files.
 
 ## Command Vocabulary
 
@@ -190,7 +103,7 @@ Use checkpoint commands by default:
 - `fix checkpoint <CHECKPOINT-ID>`
 - `accept checkpoint <CHECKPOINT-ID>`
 
-Do not use `go` for normal project work.
+Do not use `go` as the normal project loop.
 
 Task-level commands are allowed only when the user explicitly names a single task packet.
 
@@ -199,15 +112,17 @@ Task-level commands are allowed only when the user explicitly names a single tas
 Implementation checkpoints must not include workflow/process changes.
 
 Forbidden inside implementation checkpoints:
+
 - `AGENTS.md`
 - `plans/stage1/20-execution/agent_workflow_protocol.md`
-- `plans/stage1/20-execution/task-packets/README.md`
+- this README
 - `plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
 - `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
 - checkpoint packet rewrites
 - workflow script rewrites
 
 Allowed inside implementation checkpoints:
+
 - files allowed by the active task packet
 - `plans/stage1/20-execution/execution-log.md` status updates
 - durable build/test/scope evidence under `plans/stage1/30-evidence/build/`
@@ -215,48 +130,8 @@ Allowed inside implementation checkpoints:
 - review packets under `plans/stage1/30-evidence/reviews/`
 
 If an implementation checkpoint requires workflow/process changes:
+
 - stop
 - classify as `workflow blocker`
 - do not continue implementation
 - make workflow changes in a separate workflow checkpoint/commit
-
-## Command Cheatsheet
-
-Use:
-
-`go`
-
-to execute the current implementation task.
-
-Use:
-
-`review current task`
-
-to review the current implementation commit against the current task packet.
-
-Use:
-
-`fix current task`
-
-to fix reviewer blockers inside the current task packet.
-
-Use:
-
-`accept current task` to advance the execution log after reviewer verdict `accept`.
-
-## Mandatory Script Ownership
-
-The user does not run workflow scripts manually.
-
-Implementer agents must run:
-- `.\scripts\build.ps1`
-- `.\scripts\make_review_packet.ps1`
-
-Reviewer agents must run no scripts by default.
-
-Optional startup scripts are forbidden.
-
-Do not create helper scripts unless they are mandatory and assigned to a role in:
-- `AGENTS.md`
-- `agent_workflow_protocol.md`
-- this README

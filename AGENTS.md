@@ -335,19 +335,24 @@ When working in this repo:
 - make file edits directly instead of pasting code into chat
 - do not include large code snippets or diffs unless explicitly requested
 - after edits, reply with:
+
 - `Summary: <one sentence>`
+- `Checkpoint: <checkpoint id|none>`
 - `Task: <task id>`
 - `Task base: <sha|none>`
 - `Task head: <sha|none>`
 - `Commit: <sha|none>`
-- `Review: pending|accept|fix required|reject|not started`
+- `Blocked commit: <sha|none>`
+- `Review packet: <path|none>`
 - `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
 - `Execution log impact: none|updated|blocked`
 - `Tests: <not run|passed|failed + command>`
 - `Build: <not run|passed|failed + command>`
 - `Files changed: <comma-separated paths>`
 - `Forbidden files touched: none|<paths>`
+- `Working tree: clean|dirty + reason`
 - `Next task: <task id|blocked|none>`
+
 - keep responses short
 
 ## What To Read

@@ -6,6 +6,8 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$Checkpoint,
 
+    [string]$ReviewReport = "",
+
     [string]$ExecutionLog = "plans/stage1/20-execution/execution-log.md"
 )
 
@@ -88,6 +90,11 @@ switch ($Mode) {
             exit 1
         }
 
+        if (-not $ScopeCheck -or $ScopeCheck -eq "missing") {
+            Write-Error "Cannot review. Scope Check field is missing."
+            exit 1
+        }
+
         if (-not $ReviewPacket -or $ReviewPacket -eq "none" -or $ReviewPacket -eq "missing") {
             Write-Error "Cannot review. Review Packet path is missing."
             exit 1
@@ -138,8 +145,30 @@ switch ($Mode) {
             exit 1
         }
 
-        if ($ReviewVerdict -ne "accept") {
-            Write-Error "Cannot accept. Review Verdict must be 'accept', got '$ReviewVerdict'."
+        if (-not $ReviewReport) {
+            Write-Error "Cannot accept. ReviewReport path is required for accept mode."
+            exit 1
+        }
+
+        if (-not (Test-Path $ReviewReport)) {
+            Write-Error "Cannot accept. ReviewReport file not found: $ReviewReport"
+            exit 1
+        }
+
+        $ReviewText = Get-Content $ReviewReport -Raw
+
+        if ($ReviewText -notmatch "## Verdict") {
+            Write-Error "Cannot accept. Review report missing verdict section."
+            exit 1
+        }
+
+        if ($ReviewText -notmatch "(?im)^`?accept`?\s*$") {
+            Write-Error "Cannot accept. Review report verdict is not accept."
+            exit 1
+        }
+
+        if ($ReviewText -notmatch "(?is)## Blockers\s+none") {
+            Write-Error "Cannot accept. Review report blockers are not none."
             exit 1
         }
 
