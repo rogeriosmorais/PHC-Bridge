@@ -4,24 +4,23 @@
 
 | Field | Value |
 |---|---|
-| Task ID | `S1-IMPL-BALANCE-FIRST-01` |
-| Lifecycle Status | `review-pending` |
-| Task Packet | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md` |
-| Task Base | `0945121312d7fd0a9236f2b3e566a5b31dc600f7` |
-| Task Head | `d512b19b5e0b91b42dddaf994ab3d0f8edb60560` |
-| Commit | `d512b19b5e0b91b42dddaf994ab3d0f8edb60560` |
-| Build Result | `passed` |
-| Test Result | `not run` |
-| Review Packet | `plans/stage1/30-evidence/reviews/S1-IMPL-BALANCE-FIRST-01-review-packet.md` |
-| Review Report | `missing` |
-| Review Verdict | `missing` |
-| Blocking Reason | `valid review report required before advancing` |
+| Checkpoint ID | `S1-SUPPORT-TRUTH-A` |
+| Checkpoint Status | `in-progress` |
+| Current Task ID | `S1-IMPL-BALANCE-FIRST-02` |
+| Current Task Packet | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-02.md` |
+| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560` |
+| Checkpoint Base | `0945121312d7fd0a9236f2b3e566a5b31dc600f7` |
+| Checkpoint Head | `d512b19b5e0b91b42dddaf994ab3d0f8edb60560` |
+| Build Result | `passed for task 01` |
+| Review Packet | `not generated until checkpoint end` |
+| Review Verdict | `not applicable until checkpoint end` |
+| Blocking Reason | `none` |
 
 ## Next Runnable Tasks
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | none | Waiting for valid review report for `S1-IMPL-BALANCE-FIRST-01`. |
+| 1 | S1-IMPL-BALANCE-FIRST-02 | Continue checkpoint `S1-SUPPORT-TRUTH-A`; task 01 is committed and checkpoint review happens after task 03. |
 
 ## Accepted Handoffs
 

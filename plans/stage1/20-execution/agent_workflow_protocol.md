@@ -128,26 +128,31 @@ If build/tests pass:
 
   `git rev-parse HEAD`
 
-Then the implementer must generate a review packet.
+Then the implementer must generate a review packet only at checkpoint boundaries.
+
+Checkpoint boundary means:
+- the last task listed in the checkpoint packet has passed
+- all task commits in the checkpoint exist
+- all required builds/tests passed
+- no forbidden files were touched
+
+If the current task is NOT a checkpoint boundary:
+- the implementer may continue to the next task in the checkpoint
+
+If the current task IS a checkpoint boundary:
+- the implementer must generate a review packet
+- the implementer must stop
+- the implementer must update `execution-log.md` only enough to record the checkpoint status and review evidence
 
 The implementer must run:
 
-`.\scripts\make_review_packet.ps1 -TaskPacket <packet> -BaseRef <task-base-ref> -HeadRef <task-head-ref> -BuildLog <path-if-known> -TestLog <path-if-known> -OutputPath <review-packet-path>`
+`.\scripts\make_review_packet.ps1 -TaskPacket <packet> -BaseRef <checkpoint-base-ref> -HeadRef <checkpoint-head-ref> -BuildLog <path-if-known> -TestLog <path-if-known> -OutputPath <review-packet-path>`
 
 The review packet path must be:
 
-`plans/stage1/30-evidence/reviews/<TASK-ID>-review-packet.md`
+`plans/stage1/30-evidence/reviews/<CHECKPOINT-ID>-review-packet.md`
 
-After generating the review packet, the implementer must update `execution-log.md` only enough to record:
-- lifecycle status: `review-pending`
-- task base SHA
-- task head SHA
-- commit SHA
-- build/test result
-- review packet path
-
-The implementer must not mark the task accepted.
-The implementer must not continue to the next task.
+The implementer must not mark the checkpoint accepted.
 
 ## Reviewer Lifecycle
 

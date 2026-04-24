@@ -155,9 +155,10 @@ Only the orchestrator may update task state after valid review evidence exists.
 Only mandatory scripts belong in the workflow.
 
 Implementation agents must run:
+- `.\scripts\build.ps1` after each task packet
 
-- `.\scripts\build.ps1`
-- `.\scripts\make_review_packet.ps1`
+Implementation agents must run:
+- `.\scripts\make_review_packet.ps1` only after completing the final task in a checkpoint packet.
 
 Review agents must not run scripts by default.
 

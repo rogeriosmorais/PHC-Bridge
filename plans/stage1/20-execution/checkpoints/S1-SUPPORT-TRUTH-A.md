@@ -24,6 +24,22 @@ Run in this order:
 - Do not start task 02 unless task 01 passes.
 - Do not start task 03 unless task 02 passes.
 
+## Execution Mode
+
+This checkpoint is the active review unit.
+
+Do not review task 01, task 02, or task 03 separately unless a task fails.
+
+For each included task:
+- run the task packet
+- run required build/tests
+- commit atomically
+- continue to the next task if successful
+
+After task 03:
+- generate one checkpoint review packet from checkpoint base to checkpoint head
+- stop
+
 ## Checkpoint Review
 
 After task 03 passes and is committed:
