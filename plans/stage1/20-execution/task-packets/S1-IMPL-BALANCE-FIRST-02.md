@@ -20,9 +20,11 @@ Register the first Unreal Automation Test for the pure support module.
 ## Required Inputs
 
 - `AGENTS.md`
-- `plans/stage1/20-execution/balance_first_refactor_plan.md`
+- `plans/stage1/20-execution/execution-log.md`
 - this task packet
 - existing scaffold files from `S1-IMPL-BALANCE-FIRST-01`
+
+Do not read `balance_first_refactor_plan.md` unless this packet is missing, incomplete, or contradictory.
 
 ## Required Work
 
@@ -62,10 +64,15 @@ Stop immediately if:
 ## Required Handoff
 
 `Summary: <one sentence>`
+`Task: S1-IMPL-BALANCE-FIRST-02`
+`Task base: <sha|none>`
+`Task head: <sha|none>`
+`Commit: <sha|none>`
+`Review: pending|not started|review report attached`
 `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
 `Execution log impact: none|updated|blocked`
-`Tests: <passed|failed> .\scripts\build.ps1 -Test PhysAnim.SupportTruth.Harness.CompilesAndRuns`
-`Build: <passed|failed> .\scripts\build.ps1`
-`Files changed: <paths>`
+`Tests: <not run|passed|failed + command>`
+`Build: <not run|passed|failed + command>`
+`Files changed: <comma-separated paths>`
 `Forbidden files touched: none|<paths>`
-`Next task: S1-IMPL-BALANCE-FIRST-03 or blocked`
+`Next task: S1-IMPL-BALANCE-FIRST-03|blocked|none`
