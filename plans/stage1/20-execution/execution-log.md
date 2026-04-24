@@ -28,7 +28,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | Task ID | Owner | Status | Frozen Inputs | Writable Paths | Waiting On |
 |---|---|---|---|---|---|
 | S1-IMPL-BALANCE-FIRST | AI | active | TDD plan, refactor order, 10-spec suite | `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp`, `PhysAnimSupportTruth.Tests.cpp` | none |
-| S1-IMPL-BALANCE-FIRST-01 | AI | **runnable** | accepted refactor detail plan | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`, `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp` | none |
+| S1-IMPL-BALANCE-FIRST-01 | AI | **completed** | accepted refactor detail plan | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`, `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp` | none |
 | S1-IMPL-BLOCKER-PROTOCOL | AI | active guardrail | accepted rollout/refactor protocol | `plans/stage1/20-execution/balance_first_rollout_protocol.md`, `plans/stage1/20-execution/balance_first_refactor_plan.md`, `plans/stage1/20-execution/execution-log.md` | none |
 
 Historical completed task rows were moved to:
