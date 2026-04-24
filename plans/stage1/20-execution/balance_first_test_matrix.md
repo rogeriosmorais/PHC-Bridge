@@ -13,8 +13,8 @@
 | **LOGIC-07** | `ClassifySupportMode` | Both feet up, gap <= max | `Both=false, Timer <= limit` | `support_mode` = `TransientRecovery` |
 | **LOGIC-08** | `ClassifySupportMode` | Both feet up, gap > max | `Both=false, Timer > limit` | `support_mode` = `Airborne` |
 | **LOGIC-09** | `AdjudicateProxy` | Proxy inside hull | `Inside polygon` | `proxy_inside_hull` = `true` |
-| **LOGIC-10** | `AdjudicateProxy` | Proxy outside hull under limit | `Outside polygon, Timer <= limit` | `proxy_inside_hull` = `false`, no terminal reason |
-| **LOGIC-11** | `AdjudicateProxy` | Proxy outside hull over limit | `Outside polygon, Timer > limit` | `activation_proxy_outside_support_region` |
+| **LOGIC-10** | `AdjudicateProxy` | Proxy outside hull under limit | `Outside polygon, Timer <= limit` | `proxy_inside_hull` = `false`, `proxy_outside_hull_duration_ms` <= 100.0, `terminal_reason` = `nullptr` |
+| **LOGIC-11** | `AdjudicateProxy` | Proxy outside hull over limit | `Outside polygon, Timer > limit` | `proxy_inside_hull` = `false`, `proxy_outside_hull_duration_ms` > 100.0, `terminal_reason` = `activation_proxy_outside_support_region` |
 | **LOGIC-12** | `AdjudicateProxy` | No support hull | `SideCount = 0` | `proxy_inside_hull` = `nullptr`, proxy test skipped |
 | **LOGIC-13** | `CalculateChurnHz` | 5 transitions in 1.0s | `5 events / 1.0s` | `support_churn_hz` = 5.0 |
 | **LOGIC-14** | `ReduceSupportModeForReportWindow` | 30 Hz tie-break | Equal durations | severity tie-break: `Airborne` > `TransientRecovery` > `SingleFootSurvival` > `TwoFootStable` |
@@ -72,7 +72,7 @@
 | **INTEG-02B4** | Ready State | UpdatedComponent still owned | `Failed` | `activation_capsule_contract_violation` | `cmc_updated_component_is_null` = `false` |
 | **INTEG-03** | BlendIn State | Continuity breach | `Failed` | `activation_continuous_simulation_lost` | `physical_continuity_validator_passed` = `false`, `control_alpha` < 1.0 |
 | **INTEG-04** | Validate State | Airborne breach | `Failed` | `activation_support_failure` | `support_mode` = `Airborne`, `support_gap_timer_ms` > 100 |
-| **INTEG-05** | Validate State | Proxy drift breach | `Failed` | `activation_proxy_outside_support_region` | `proxy_inside_hull` = `false` |
+| **INTEG-05** | Validate State | Proxy drift breach | `Failed` | `activation_proxy_outside_support_region` | `proxy_inside_hull` = `false`, `proxy_outside_hull_duration_ms` > 100.0, `terminal_reason` = `activation_proxy_outside_support_region` |
 | **INTEG-06** | Validate State | Churn Hz breach | `Failed` | `activation_instability_threshold_breach` | `support_churn_hz` > 12.0 |
 | **INTEG-07** | Validate State | Authority conflict | `Failed` | `activation_authority_conflict` | `contamination_class`, `contamination_source_body`, `contamination_source_subsystem` |
 | **INTEG-08** | Standing Target | Full success | `BalanceActive_Standing` | `terminal_reason` = `nullptr` | `hold_duration_sec` >= 3.0 |
