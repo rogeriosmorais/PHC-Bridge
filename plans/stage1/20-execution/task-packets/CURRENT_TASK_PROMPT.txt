@@ -1,1 +1,10 @@
-Execute current task. Use AGENTS.md, plans/stage1/20-execution/execution-log.md, and plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md. Execute only the current task packet. Do not read broader docs unless blocked. Do not continue to the next task. Return the required handoff block.
+go
+
+Meaning:
+Execute the current task packet only.
+Use AGENTS.md, agent_workflow_protocol.md, execution-log.md, IMPLEMENTER_PROMPT.md, and the current task packet.
+Record task base before edits.
+Commit only after required build/tests pass.
+Generate or prepare review.
+Do not continue to the next task.
+Return the required handoff block.

@@ -9,6 +9,8 @@ Do not reopen architecture.
 Do not review unrelated files.
 Do not suggest improvements outside the task packet.
 Do not approve work that violates the task packet.
+Do not implement fixes.
+Do not edit files.
 
 Review against:
 
@@ -20,6 +22,8 @@ Review against:
 6. required build
 7. definition of done
 8. required handoff
+9. commit contains only the current task packet changes
+10. no next-task work is included
 
 Return exactly this format:
 
@@ -51,4 +55,4 @@ Rules:
 
 - Use `accept` only if the task packet is fully satisfied.
 - Use `fix required` if the task is mostly correct but needs bounded changes inside the same packet.
-- Use `reject` if the implementation violates forbidden files, adds forbidden behavior, skips required tests/build, or implements the wrong task.
+- Use `reject` if the implementation violates forbidden files, adds forbidden behavior, skips required tests/build, implements the wrong task, includes unrelated files, or includes multiple task packets.

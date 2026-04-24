@@ -115,13 +115,69 @@ Stop immediately if:
 - an enum/type decision is unclear
 - any forbidden file appears in the diff
 
+## Commit And Review
+
+Before editing, record:
+
+`git rev-parse HEAD`
+
+This is `Task base`.
+
+Commit only after `.\\scripts\\build.ps1` passes.
+
+If build fails:
+- do not commit
+- stop
+- report the failure
+- set `Commit: none`
+- set `Review: not started`
+
+If build passes:
+- create exactly one task implementation commit
+- include only:
+  - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimTruthTypes.h`
+  - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimSupportTruth.h`
+  - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.cpp`
+
+Commit message:
+
+`S1-IMPL-BALANCE-FIRST-01: add pure support scaffold`
+
+After committing, record:
+
+`git rev-parse HEAD`
+
+This is `Task head`.
+
+Generate a review packet:
+
+`.\\scripts\\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md -BaseRef <task-base> -HeadRef <task-head>`
+
+If a context-isolated reviewer sub-agent is available:
+- give it only:
+  - `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
+  - the generated review packet
+- report its verdict
+
+If no context-isolated reviewer sub-agent is available:
+- stop
+- set `Review: pending`
+- include the exact review packet command in the handoff
+
+Do not continue to `S1-IMPL-BALANCE-FIRST-02`.
+
 ## Required Handoff
 
 `Summary: <one sentence>`
+`Task: S1-IMPL-BALANCE-FIRST-01`
+`Task base: <sha|none>`
+`Task head: <sha|none>`
+`Commit: <sha|none>`
+`Review: pending|accept|fix required|reject|not started`
 `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
 `Execution log impact: none|updated|blocked`
 `Tests: not run`
-`Build: <passed|failed> .\scripts\build.ps1`
+`Build: <passed|failed> .\\scripts\\build.ps1`
 `Files changed: <paths>`
 `Forbidden files touched: none|<paths>`
-`Next task: S1-IMPL-BALANCE-FIRST-02 or blocked`
+`Next task: S1-IMPL-BALANCE-FIRST-02|blocked|none`

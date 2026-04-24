@@ -65,13 +65,45 @@ Stop immediately if:
 - the task cannot be completed without changing the packet
 - a shortcut, stub, or approximation is proposed
 
+## Commit And Review
+
+Before editing, record:
+
+`git rev-parse HEAD`
+
+Commit only after required build/tests pass.
+
+If build/tests fail:
+- do not commit
+- stop
+- report failure
+
+If build/tests pass:
+- create exactly one task implementation commit
+- include only files allowed by this task packet
+- use commit message format:
+
+`<TASK-ID>: <short task name>`
+
+After committing:
+- generate a review packet using the task base and task head
+- trigger context-isolated review if available
+- otherwise report `Review: pending`
+
+Do not continue to the next task.
+
 ## Required Handoff
 
 `Summary: <one sentence>`
+`Task: <task id>`
+`Task base: <sha|none>`
+`Task head: <sha|none>`
+`Commit: <sha|none>`
+`Review: pending|accept|fix required|reject|not started`
 `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
 `Execution log impact: none|updated|blocked`
 `Tests: <not run|passed|failed + command>`
 `Build: <not run|passed|failed + command>`
 `Files changed: <comma-separated paths>`
 `Forbidden files touched: none|<paths>`
-`Next task: <task id or none>`
+`Next task: <task id|blocked|none>`

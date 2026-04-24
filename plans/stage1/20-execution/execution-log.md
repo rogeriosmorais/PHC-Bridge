@@ -92,6 +92,34 @@ Review shortcut:
 
 means:
 
+`review the latest implementation commit or provided task head against the current task packet only`
+
+Fix shortcut:
+
+`fix current task`
+
+means:
+
+`fix reviewer blockers inside the current task packet only`
+
+Accept shortcut:
+
+`accept current task`
+
+means:
+
+`advance the execution log to the next task packet after reviewer verdict accept`
+
+Do not use `go` for review.
+Do not use `review current task` for implementation.
+Do not use `accept current task` without reviewer verdict `accept`.
+
+Review shortcut:
+
+`review current task`
+
+means:
+
 `review the latest implementation diff against the current task packet only`
 
 Review agents must use:
@@ -109,6 +137,40 @@ The implementer must stop after handoff.
 The user/orchestrator triggers review.
 
 The next task is not runnable until the reviewer verdict is `accept`.
+
+## Commit Gate
+
+The implementer must commit after required build/tests pass and before review.
+
+Before editing, the implementer records:
+
+`Task base = git rev-parse HEAD`
+
+After committing, the implementer records:
+
+`Task head = git rev-parse HEAD`
+
+If build/tests fail:
+- no commit is created
+- review does not start
+- the current task remains active
+
+If build/tests pass:
+- one task implementation commit is created
+- review compares `Task base` to `Task head`
+- the next task remains blocked until reviewer verdict is `accept`
+
+If reviewer verdict is `fix required`:
+- the current task remains active
+- fixes must stay inside the same task packet
+- review must compare the original task base to the new task head
+
+If reviewer verdict is `reject`:
+- revert the task implementation commit
+- keep the current task active
+
+If reviewer verdict is `accept`:
+- advance the execution log to the next task packet
 
 ## Waiting On User
 

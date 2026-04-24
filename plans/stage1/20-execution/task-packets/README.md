@@ -55,6 +55,42 @@ Every task handoff must end with:
 `Forbidden files touched: none|<paths>`
 `Next task: <task id or none>`
 
+## Complete Task Lifecycle
+
+Use this lifecycle for every implementation task:
+
+1. User says `go`.
+2. Implementer reads:
+   - `AGENTS.md`
+   - `agent_workflow_protocol.md`
+   - `execution-log.md`
+   - `IMPLEMENTER_PROMPT.md`
+   - current task packet
+3. Implementer records task base with `git rev-parse HEAD`.
+4. Implementer edits only allowed files.
+5. Implementer runs required build/tests.
+6. If build/tests fail:
+   - no commit
+   - handoff reports failure
+   - task remains current
+7. If build/tests pass:
+   - one task commit is created
+   - handoff includes task base, task head, and commit SHA
+8. Review packet is generated from task base to task head.
+9. Reviewer uses only:
+   - `REVIEWER_PROMPT.md`
+   - generated review packet
+10. If reviewer verdict is `accept`:
+   - orchestrator may advance execution-log to the next task packet
+11. If reviewer verdict is `fix required`:
+   - same task remains current
+   - fixes must stay inside the same task packet
+12. If reviewer verdict is `reject`:
+   - task commit is reverted
+   - same task remains current
+
+Do not start the next task until reviewer verdict is `accept`.
+
 ## Review Packet Command
 
 After a task commit, generate a bounded review packet with:
@@ -101,7 +137,7 @@ The reviewer must not receive:
 - architecture summaries
 - unrelated docs
 
-## User Shortcuts
+## Command Cheatsheet
 
 Use:
 
@@ -113,9 +149,22 @@ Use:
 
 `review current task`
 
-to review the latest implementation diff against the current task packet.
+to review the current implementation commit against the current task packet.
+
+Use:
+
+`fix current task`
+
+to fix reviewer blockers inside the current task packet.
+
+Use:
+
+`accept current task`
+
+to advance the execution log after reviewer verdict `accept`.
 
 Do not use `go` for review.
+Do not use `review current task` for implementation.
+Do not use `accept current task` without reviewer verdict `accept`.
 
-A reviewer must not implement fixes.
-An implementer must not self-approve.
+

@@ -79,109 +79,32 @@ Do not continue by guessing.
 Do not widen scope.
 Do not edit runtime files unless the packet explicitly allows them.
 
-## Implementer Startup Rule
+## Agent Workflow Rule
 
-If the user says any of the following:
+All implementation, review, commit, fix, reject, and acceptance behavior is governed by:
 
-- `execute current task`
-- `start current task`
-- `run current packet`
-- `execute S1-...`
-- `start S1-...`
+`plans/stage1/20-execution/agent_workflow_protocol.md`
 
-then the agent must use the repository task-packet protocol automatically.
+Use these shortcuts:
 
-The agent must:
+- `go` = execute the current task packet only
+- `review current task` = review the current task implementation only
+- `fix current task` = fix reviewer blockers inside the current task packet only
+- `accept current task` = advance the execution log after reviewer verdict `accept`
 
-1. Read `AGENTS.md`.
-2. Read `plans/stage1/20-execution/execution-log.md`.
-3. Identify the current task packet from the `## Current Task Packet` section unless the user explicitly named a task ID.
-4. Read only the current task packet.
-5. Execute only that task packet.
-6. Do not read broader docs unless blocked by missing or contradictory packet instructions.
-7. Do not edit files outside the task packet.
-8. Do not continue to the next task.
-9. Return the required handoff block.
+Agents must not improvise workflow behavior.
 
-The user should not need to repeat task-specific guardrails that are already encoded in the task packet.
+Implementation agents must use:
 
-If the current task packet is missing, unclear, or contradictory, stop and report:
+`plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
 
-`Blocked: current task packet missing or contradictory`
-
-## Current Task Shortcut
-
-When the user says:
-
-`go`
-
-inside an implementation context, interpret it as:
-
-`execute current task`
-
-Do not interpret `go` as permission to perform broad work, skip review gates, advance multiple packets, or modify architecture.
-
-`go` means:
-- execute the current task packet only
-- obey allowed files
-- obey forbidden files
-- run required build/tests
-- return the required handoff block
-
-## Review Startup Rule
-
-If the user says any of the following:
-
-- `review current task`
-- `review current packet`
-- `review S1-...`
-- `review latest task`
-
-then the agent must act as a reviewer, not an implementer.
-
-The reviewer must:
-
-1. Read `AGENTS.md`.
-2. Read `plans/stage1/20-execution/execution-log.md`.
-3. Identify the current task packet from the `## Current Task Packet` section unless the user explicitly named a task ID.
-4. Read `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`.
-5. Generate or request a bounded review packet using:
-
-   `.\scripts\make_review_packet.ps1 -TaskPacket <current-task-packet> -BuildLog <path-if-known> -TestLog <path-if-known>`
-
-6. Review only the generated review packet.
-7. Do not implement fixes.
-8. Do not edit files.
-9. Do not advance the task.
-10. Return only the reviewer format from `REVIEWER_PROMPT.md`.
-
-If no implementation diff exists, report:
-
-`Blocked: no implementation diff found to review`
-
-Do not interpret `review current task` as permission to execute implementation work.
-
-## Review Rule
-
-After implementation commits, review must be done from a bounded review packet.
-
-Generate it with:
-
-`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md -BuildLog <path> -TestLog <path>`
-
-The implementer must not self-approve.
-
-The reviewer must use:
+Reviewer agents must use:
 
 `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
 
-The reviewer verdict must be one of:
+If workflow state is unclear, stop and report:
 
-- `accept`
-- `fix required`
-- `reject`
-
-The implementer may continue to the next task only after reviewer verdict is `accept`.
+`Blocked: workflow state unclear`
 
 
 ## Failure Classification Rule
@@ -257,14 +180,19 @@ When working in this repo:
 - make file edits directly instead of pasting code into chat
 - do not include large code snippets or diffs unless explicitly requested
 - after edits, reply with:
-  - `Summary: <one sentence>`
-  - `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
-  - `Execution log impact: none|updated|blocked`
-  - `Tests: <not run|passed|failed + command>`
-  - `Build: <not run|passed|failed + command>`
-  - `Files changed: <comma-separated paths>`
-  - `Forbidden files touched: none|<paths>`
-  - `Next task: <task id or none>`
+- `Summary: <one sentence>`
+- `Task: <task id>`
+- `Task base: <sha|none>`
+- `Task head: <sha|none>`
+- `Commit: <sha|none>`
+- `Review: pending|accept|fix required|reject|not started`
+- `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
+- `Execution log impact: none|updated|blocked`
+- `Tests: <not run|passed|failed + command>`
+- `Build: <not run|passed|failed + command>`
+- `Files changed: <comma-separated paths>`
+- `Forbidden files touched: none|<paths>`
+- `Next task: <task id|blocked|none>`
 - keep responses short
 
 ## What To Read
