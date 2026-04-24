@@ -4,7 +4,11 @@ param(
 
     [string]$BaseRef = "HEAD~1",
 
-    [string]$HeadRef = "HEAD"
+    [string]$HeadRef = "HEAD",
+
+    [string]$BuildLog = "",
+
+    [string]$TestLog = ""
 )
 
 Write-Host "=== REVIEW PACKET ==="
@@ -40,6 +44,22 @@ Write-Host ""
 
 Write-Host "=== FULL DIFF ==="
 git diff $BaseRef $HeadRef
+Write-Host ""
+
+Write-Host "=== BUILD OUTPUT ==="
+if ($BuildLog -and (Test-Path $BuildLog)) {
+    Get-Content $BuildLog
+} else {
+    Write-Host "No build log supplied."
+}
+Write-Host ""
+
+Write-Host "=== TEST OUTPUT ==="
+if ($TestLog -and (Test-Path $TestLog)) {
+    Get-Content $TestLog
+} else {
+    Write-Host "No test log supplied."
+}
 Write-Host ""
 
 Write-Host "=== REVIEW INSTRUCTION ==="

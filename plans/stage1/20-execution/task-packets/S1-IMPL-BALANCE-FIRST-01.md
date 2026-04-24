@@ -4,6 +4,16 @@
 
 Create the empty pure support module scaffold with no behavior.
 
+## Startup Shortcut
+
+If the user says `go` or `execute current task`, execute this packet only.
+
+Do not require the user to repeat the task instructions.
+
+Do not add enums, structs, tests, or behavior.
+
+This packet is scaffold-only.
+
 ## Allowed Files
 
 - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimTruthTypes.h`
@@ -47,7 +57,9 @@ Create the empty pure support module scaffold with no behavior.
 `PhysAnimTruthTypes.h` may contain only:
 - `#pragma once`
 - minimal Core include if required
-- shared enum declarations needed by later Slice 1 work
+
+Do not add enums, structs, function declarations, or behavior in this packet.
+Enums are introduced only in S1-IMPL-BALANCE-FIRST-03.
 
 `PhysAnimSupportTruth.h` may contain only:
 - `#pragma once`

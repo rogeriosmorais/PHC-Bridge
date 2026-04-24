@@ -4,6 +4,22 @@ This folder contains the implementation task packets for Stage 1.
 
 Agents must not implement from broad plans directly.
 
+## Implementer Prompt
+
+Implementation agents should be launched with:
+
+`plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
+
+The user may simply say:
+
+`execute current task`
+
+or:
+
+`go`
+
+The agent must then read `execution-log.md`, find the current task packet, and execute only that packet.
+
 For implementation work, read only:
 
 1. `AGENTS.md`
@@ -43,8 +59,24 @@ Every task handoff must end with:
 
 After a task commit, generate a bounded review packet with:
 
-`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md`
+`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md -BuildLog <path> -TestLog <path>`
 
 Paste only that review packet into the reviewer.
 
 Do not ask for broad repo review after implementation commits.
+
+## Reviewer Trigger
+
+The implementer must not self-approve.
+
+After a task packet is completed, the implementer stops.
+
+The user/orchestrator then triggers a reviewer pass using:
+
+`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md`
+
+The next task may start only after reviewer verdict:
+
+`accept`
+
+If verdict is `reject` or `fix required`, the next task remains blocked.

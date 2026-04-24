@@ -72,6 +72,10 @@ Pre-pivot history remains available in git. This live log now tracks the current
 
 ## Current Task Packet
 
+Implementer prompt:
+
+`plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
+
 Current packet:
 
 `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`
@@ -80,6 +84,24 @@ Agents must not implement from the broad refactor plan directly.
 
 Implementation must follow the current task packet first.
 The refactor plan remains authority only when the task packet is incomplete or contradictory.
+
+User shortcut:
+
+`go`
+
+means:
+
+`execute current task packet only`
+
+## Review Gate
+
+The current task packet may move from completed-by-implementer to accepted only after a separate reviewer pass.
+
+The implementer must stop after handoff.
+
+The user/orchestrator triggers review.
+
+The next task is not runnable until the reviewer verdict is `accept`.
 
 ## Waiting On User
 

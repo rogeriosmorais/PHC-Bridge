@@ -36,7 +36,7 @@ Interpretation:
 5. Use TDD by default for all deterministic logic. TDD is optional only for: live runtime/editor/physics behavior, visual/manual quality checks, short exploratory spikes.
 6. Any exploratory spike must convert its deterministic logic into tests before the work is considered complete.
 7. Do not leave permanent fail-by-design or permanent skip-by-design tests in the main suite without an explicit temporary reason and removal plan.
-9. Treat Manny/Quinn as the default runtime skeleton unless changed explicitly.
+8. Treat Manny/Quinn as the default runtime skeleton unless changed explicitly.
 9. Keep commits small and atomic.
 10. Build with .\scripts\build.ps1
 11. If you ran any smoke tests, then read the logs with "python .\scripts\read_logs.py". If you didn't, then ignore this step.
@@ -79,6 +79,55 @@ Do not continue by guessing.
 Do not widen scope.
 Do not edit runtime files unless the packet explicitly allows them.
 
+## Implementer Startup Rule
+
+If the user says any of the following:
+
+- `execute current task`
+- `start current task`
+- `run current packet`
+- `execute S1-...`
+- `start S1-...`
+
+then the agent must use the repository task-packet protocol automatically.
+
+The agent must:
+
+1. Read `AGENTS.md`.
+2. Read `plans/stage1/20-execution/execution-log.md`.
+3. Identify the current task packet from the `## Current Task Packet` section unless the user explicitly named a task ID.
+4. Read only the current task packet.
+5. Execute only that task packet.
+6. Do not read broader docs unless blocked by missing or contradictory packet instructions.
+7. Do not edit files outside the task packet.
+8. Do not continue to the next task.
+9. Return the required handoff block.
+
+The user should not need to repeat task-specific guardrails that are already encoded in the task packet.
+
+If the current task packet is missing, unclear, or contradictory, stop and report:
+
+`Blocked: current task packet missing or contradictory`
+
+## Current Task Shortcut
+
+When the user says:
+
+`go`
+
+inside an implementation context, interpret it as:
+
+`execute current task`
+
+Do not interpret `go` as permission to perform broad work, skip review gates, advance multiple packets, or modify architecture.
+
+`go` means:
+- execute the current task packet only
+- obey allowed files
+- obey forbidden files
+- run required build/tests
+- return the required handoff block
+
 ## Review Packet Rule
 
 After implementation commits, review must be done from a review packet.
@@ -94,6 +143,26 @@ The reviewer must compare only:
 - forbidden file list
 
 Do not request broad review unless the task packet is impossible.
+
+## Reviewer Trigger Rule
+
+The implementer does not trigger its own review and does not approve its own work.
+
+After completing a task packet, the implementer must stop and return the required handoff block.
+
+The user/orchestrator triggers review by generating or requesting a review packet:
+
+`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md`
+
+A separate reviewer pass must review the packet.
+
+The reviewer may only return:
+- up to 3 blockers
+- up to 3 non-blocking nits
+- verdict
+- next action
+
+The implementer may continue to the next task only after the reviewer verdict is `accept`.
 
 ## Review Scope Rule
 
