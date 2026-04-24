@@ -37,7 +37,7 @@ This document defines the TDD strategy and testing pyramid for the balance-first
 - **Capsule Validator**:
     - **Actor Lock**: Detect actor-level transform changes (Freeze check).
     - **Mesh Integrity**: Detect absolute transform deltas on the mesh component.
-    - **Component States**: Detect CMC (Character Movement) activity, tick function status, movement mode, or UpdatedComponent nulling.
+    - **Component States**: Detect CMC (Character Movement) activity, tick function status, movement mode, or `UpdatedComponent = nullptr`.
     - **External State**: Detect unauthorized collision mode changes or overlap mutations.
 - **Plant Validator**:
     - **Topology**: Detect skeleton or skeletal mesh mismatch.
@@ -65,7 +65,7 @@ This document defines the TDD strategy and testing pyramid for the balance-first
 The validator scopes are frozen as follows. No validator may decide surfaces outside its explicit remit.
 
 - **Continuity Validator**: Decides instance validity, simulate-physics continuity, and **pelvis sleep rule**. *Note: raw-vs-bookkeeping disagreement is diagnostic only.*
-- **Capsule Validator**: Decides collision/overlap mode, **actor freeze**, mesh absolute transform, **CMC inactive**, **tick disabled**, **movement mode**, and **UpdatedComponent null**.
+- **Capsule Validator**: Decides collision/overlap mode, **actor freeze**, mesh absolute transform, **CMC inactive**, **tick disabled**, **movement mode**, and **UpdatedComponent = nullptr**.
 - **Plant Validator**: Decides topology, **axis alignment**, **segment length**, support geometry, collision/filter baseline, **mass/inertia tolerances**, and mutation checks.
 - **Contamination Classifier**: Decides **authority-matrix conflict surfaces only**: `mesh_wide_assist`, `non_critical_body_assist`, `excluded_body_world_brace`, and `global_blend_or_kinematic_assist`.
 

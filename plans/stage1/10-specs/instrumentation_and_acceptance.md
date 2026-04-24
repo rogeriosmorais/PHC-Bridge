@@ -48,6 +48,13 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `peak_angular_speed`: Max body angular velocity recorded.
 - `rms_mismatch_deg`: Root-mean-square pose fidelity scalar.
 - `max_body_mismatch_deg`: Worst-case orientation error for any body.
+- `target_discontinuity_deg`: Maximum target orientation jump observed at blend start.
+- `mismatch_duration_ms`: Contiguous duration of pose/reference mismatch beyond threshold.
+- `controller_gain_scale`: Maximum normalized controller gain scale observed during the attempt.
+- `controller_damping_ratio`: Minimum normalized controller damping ratio observed during the attempt.
+- `controller_gain_damping_valid`: Boolean result of the gain/damping stability audit.
+- `controller_stability_failure_field`: Specific controller-stability field triggering failure.
+- `standing_validation_timeout_sec`: Attempt timeout budget for reaching the standing hold benchmark.
 
 ### 3. Support Truth
 - `support_state_l` / `support_state_r`: Debounced side-contact status.
@@ -59,8 +66,8 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `proxy_inside_hull`: The result of the proxy-vs-hull test.
   - `true`: Proxy evaluated and inside/on edge.
   - `false`: Proxy evaluated and outside.
-  - `null`: Proxy test not evaluated because `active_support_side_count == 0`.
-  - **Constraint**: The 30 Hz artifact MUST preserve this nullable meaning and MUST NOT coerce `null` to `false`.
+  - `nullptr`: Proxy test not evaluated because `active_support_side_count == 0`.
+  - **Constraint**: The 30 Hz artifact MUST preserve this nullable meaning and MUST NOT coerce `nullptr` to `false`.
 - `active_support_side_count`: Number of sides currently in debounced contact (0, 1, or 2).
 - `support_hull_area_cm2`: Total planar area of the frame support hull.
 - `support_patch_area_l_cm2` / `support_patch_area_r_cm2`: Individual plantar area per side.
@@ -76,6 +83,7 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `control_alpha`: Current blend rollout progress (0.0 - 1.0).
 - `shell_bookkeeping_state`: Flags for `locked`, `reanchored`, etc.
 - `shell_influence_materiality`: Estimated assist force/torque from shell.
+- `shell_helper_used_count`: Number of shell-helper writes observed during activation.
 - `movement_reclaim_count`: Number of CMC interference events.
 - `continuity_bookkeeping_mismatch`: Diagnostic flag for modifier/raw drift.
 - `physical_continuity_validator_passed`: Authoritative pass/fail flag from the continuity check.
@@ -102,7 +110,7 @@ The implementation must emit a JSON artifact for every attempt, containing:
 
 ## Canonical Terminal Reasons
 
-When a run terminates in failure, the primary `terminal_reason` must be exactly one of the values from this canonical set. For successful attempts, the JSON artifact `terminal_reason` must be `null`.
+When a run terminates in failure, the primary `terminal_reason` must be exactly one of the values from this canonical set. For successful attempts, the artifact `terminal_reason` must be `nullptr`.
 
 1. `activation_physics_asset_contract_violation`
 2. `activation_capsule_contract_violation`
@@ -157,7 +165,7 @@ The implementation is considered broken if it fails to detect and correctly labe
 ## Acceptance Gates
 
 A run is **Successful** ONLY if:
-1.  The artifact `terminal_reason` is `null`.
+1.  The artifact `terminal_reason` is `nullptr`.
 2.  The `hold_duration_sec` reaches or exceeds `3.0`.
 3.  All primary metrics remained within the thresholds above for the entire duration.
 4.  The artifact `physical_continuity_validator_passed` is `true`.

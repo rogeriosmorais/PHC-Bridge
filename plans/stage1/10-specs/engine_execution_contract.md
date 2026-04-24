@@ -107,7 +107,7 @@ The implementation must perform truth adjudication in this exact order:
     - **Condition**: Only if `active_support_side_count > 0`.
     - **Test**: If `Proxy` is outside the hull, increment drift timer. 
     - **Result**: If `timer > COM Proxy Drift`, emit `activation_proxy_outside_support_region`.
-    - **No-Hull Behavior**: If `active_support_side_count == 0`, skip this test entirely. The artifact `proxy_inside_hull` must be emitted as `null` (not evaluated).
+    - **No-Hull Behavior**: If `active_support_side_count == 0`, skip this test entirely. The artifact `proxy_inside_hull` must be emitted as `nullptr` (not evaluated).
 6.  **Classification**: Assign `support_mode` using the following priority:
     - **TwoFootStable**: Both sides `true` (debounced).
     - **SingleFootSurvival**: Exactly one side `true` (debounced).
