@@ -24,6 +24,29 @@ Run in this order:
 - Do not start task 02 unless task 01 passes.
 - Do not start task 03 unless task 02 passes.
 
+## Resume Rule
+
+When executing this checkpoint, resume from `Current Task ID` in `execution-log.md`.
+
+Do not rerun already committed task packets listed in `Completed Task Commits`.
+
+For the current repository state:
+- task 01 is already committed
+- resume at task 02
+
+## Blocked Task Handling
+
+If a task fails after useful allowed-file edits:
+
+- do not continue to the next task
+- do not leave the working tree dirty
+- create a blocker report under `plans/stage1/30-evidence/blockers/`
+- update `execution-log.md` to blocked
+- create a blocked-task commit
+- stop
+
+The next agent resumes from the blocked commit.
+
 ## Execution Mode
 
 This checkpoint is the active review unit.

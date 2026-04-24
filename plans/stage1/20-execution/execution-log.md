@@ -5,22 +5,40 @@
 | Field | Value |
 |---|---|
 | Checkpoint ID | `S1-SUPPORT-TRUTH-A` |
-| Checkpoint Status | `in-progress` |
-| Current Task ID | `S1-IMPL-BALANCE-FIRST-02` |
-| Current Task Packet | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-02.md` |
-| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560` |
+| Checkpoint Status | `review-pending` |
+| Current Task ID | `S1-IMPL-BALANCE-FIRST-03` |
+| Current Task Packet | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-03.md` |
+| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560`; `S1-IMPL-BALANCE-FIRST-02 = 23a53f33d59139362282f3437ecf36ea1b2a3b51`; `S1-IMPL-BALANCE-FIRST-03 = 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1` |
 | Checkpoint Base | `0945121312d7fd0a9236f2b3e566a5b31dc600f7` |
-| Checkpoint Head | `d512b19b5e0b91b42dddaf994ab3d0f8edb60560` |
-| Build Result | `passed for task 01` |
-| Review Packet | `not generated until checkpoint end` |
-| Review Verdict | `not applicable until checkpoint end` |
+| Checkpoint Head | `21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1` |
+| Build Result | `passed for tasks 01, 02, and 03; task 02 automation test passed` |
+| Review Packet | `plans/stage1/30-evidence/reviews/S1-SUPPORT-TRUTH-A-review-packet.md` |
+| Review Verdict | `pending` |
 | Blocking Reason | `none` |
+| Blocker Report | `none` |
+| Blocked Commit | `none` |
+| Last Failed Command | `none` |
+| Recovery Action | `none` |
+| Working Tree Requirement | `clean at handoff` |
+
+## Blocked Work Rule
+
+If an agent makes useful allowed-file edits but cannot complete the task, the agent must not leave the work only in the working tree.
+
+The agent must create:
+- a blocker report under `plans/stage1/30-evidence/blockers/`
+- a blocked-task commit
+- an execution-log update pointing to the blocker report and blocked commit
+
+A task blocked after useful edits is not complete and not accepted.
+
+The next task is not runnable while the current checkpoint is blocked.
 
 ## Next Runnable Tasks
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | S1-IMPL-BALANCE-FIRST-02 | Continue checkpoint `S1-SUPPORT-TRUTH-A`; task 01 is committed and checkpoint review happens after task 03. |
+| 1 | checkpoint review | Checkpoint `S1-SUPPORT-TRUTH-A` is review-pending; do not start task 04 before review disposition. |
 
 ## Accepted Handoffs
 

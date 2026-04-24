@@ -93,66 +93,58 @@ Each task moves through this lifecycle:
 
 ## Implementer Lifecycle
 
-When executing a task, the implementer must:
+Agents execute checkpoints by default when a checkpoint is active.
+
+A checkpoint is active when `execution-log.md` has `Checkpoint Status = in-progress`.
+
+For checkpoint execution:
 
 1. Read `AGENTS.md`.
-2. Read `plans/stage1/20-execution/agent_workflow_protocol.md`.
-3. Read `plans/stage1/20-execution/execution-log.md`.
-4. Read `plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`.
+2. Read `execution-log.md`.
+3. Read the active checkpoint packet.
+4. Resume from `Current Task ID`.
 5. Read the current task packet.
-6. Record the task base ref before edits:
+6. Execute the current task packet.
+7. Run required build/tests.
+8. If successful:
+   - commit one atomic task commit
+   - update `execution-log.md`
+   - continue to the next task in the checkpoint
+9. If failed before useful edits:
+   - leave tree clean
+   - update `execution-log.md` as blocked
+   - stop
+10. If failed after useful edits:
+   - create blocker report
+   - create blocked-task commit
+   - update `execution-log.md` as blocked
+   - stop
+11. If final checkpoint task passes:
+   - generate checkpoint review packet
+   - update `execution-log.md` with review packet path
+   - stop
 
-   `git rev-parse HEAD`
+No dirty-tree handoffs are allowed.
 
-7. Edit only files allowed by the task packet.
-8. Run required build/tests.
+Review happens at checkpoint boundaries, not after every tiny task.
 
-For every implementation task, the implementer must run:
+## Dirty Tree Invariant
 
-`.\scripts\build.ps1`
+Every agent handoff must leave the working tree clean unless the blocker is that git cannot commit.
 
-If build/tests fail:
-- do not commit
-- do not generate a review packet
-- stop
-- return handoff with `Commit: none`
-- return `Review: not started`
+If useful allowed-file edits exist and the task cannot complete, the agent must create a blocked-task commit.
 
-If build/tests pass:
-- create exactly one task implementation commit
-- use commit message format:
+A blocked-task commit must include:
+- useful allowed-file edits
+- blocker report
+- execution-log blocked update
 
-  `<TASK-ID>: <short task name>`
+Blocked-task commit format:
 
-- record task head ref:
+`BLOCKED <TASK-ID>: <short blocker reason>`
 
-  `git rev-parse HEAD`
-
-Then the implementer must generate a review packet only at checkpoint boundaries.
-
-Checkpoint boundary means:
-- the last task listed in the checkpoint packet has passed
-- all task commits in the checkpoint exist
-- all required builds/tests passed
-- no forbidden files were touched
-
-If the current task is NOT a checkpoint boundary:
-- the implementer may continue to the next task in the checkpoint
-
-If the current task IS a checkpoint boundary:
-- the implementer must generate a review packet
-- the implementer must stop
-- the implementer must update `execution-log.md` only enough to record the checkpoint status and review evidence
-
-The implementer must run:
-
-`.\scripts\make_review_packet.ps1 -TaskPacket <packet> -BaseRef <checkpoint-base-ref> -HeadRef <checkpoint-head-ref> -BuildLog <path-if-known> -TestLog <path-if-known> -OutputPath <review-packet-path>`
-
-The review packet path must be:
-
-`plans/stage1/30-evidence/reviews/<CHECKPOINT-ID>-review-packet.md`
-
-The implementer must not mark the checkpoint accepted.
+A blocked-task commit is not accepted work.
+It is a durable recovery point.
 
 ## Reviewer Lifecycle
 
@@ -222,11 +214,26 @@ Only the orchestrator may update task status after reading valid review evidence
 
 ## Commit Rules
 
-The implementer must not commit before required build/tests pass.
+The implementer must not create a successful task commit before required build/tests pass.
 
-If required build/tests fail:
-- no commit
-- same task remains current
+If build/tests fail before any useful file edits:
+- do not commit
+- return a failure handoff
+- working tree must be clean
+
+If build/tests fail after useful allowed-file edits:
+- create a blocker report under `plans/stage1/30-evidence/blockers/`
+- update `execution-log.md` to show the checkpoint/task is blocked
+- create a blocked-task commit
+- stop
+
+Blocked-task commit format:
+
+`BLOCKED <TASK-ID>: <short blocker reason>`
+
+A blocked-task commit preserves work for future agents.
+It does not mark the task complete.
+It does not allow the next task to start.
 
 If required build/tests pass:
 - create one task commit
@@ -236,6 +243,40 @@ If required build/tests pass:
 - include no next-task work
 
 Reviewer reviews committed code, not an uncommitted working tree.
+
+## Blocked Commit Rules
+
+A blocked-task commit is required when all of these are true:
+
+1. the agent made useful allowed-file changes
+2. the required build/test failed or could not run
+3. the task cannot continue safely
+4. the work would otherwise be left only in the working tree or chat
+
+The blocked-task commit must include:
+
+- current allowed-file edits
+- blocker report
+- execution-log blocked-state update
+
+The blocker report must include:
+
+- task ID
+- checkpoint ID, if any
+- task base SHA
+- current HEAD before blocked commit
+- blocked commit SHA after commit
+- changed files
+- failed command
+- failure category
+- exact error summary
+- next recommended action
+- whether the existing edits should be kept, reverted, or inspected
+
+After a blocked-task commit, the next agent must start from the blocked commit and either:
+- fix the blocker and continue the same task
+- revert the blocked work
+- or escalate if the blocker is outside the task scope
 
 ## Fix Rules
 

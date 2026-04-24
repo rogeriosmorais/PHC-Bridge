@@ -21,6 +21,7 @@ Register the first Unreal Automation Test for the pure support module.
 
 - `AGENTS.md`
 - `plans/stage1/20-execution/execution-log.md`
+- active checkpoint packet, if executing inside a checkpoint
 - this task packet
 - existing scaffold files from `S1-IMPL-BALANCE-FIRST-01`
 
@@ -64,15 +65,18 @@ Stop immediately if:
 ## Required Handoff
 
 `Summary: <one sentence>`
+`Checkpoint: <checkpoint id|none>`
 `Task: S1-IMPL-BALANCE-FIRST-02`
 `Task base: <sha|none>`
 `Task head: <sha|none>`
 `Commit: <sha|none>`
-`Review: pending|not started|review report attached`
+`Blocked commit: <sha|none>`
+`Review packet: <path|none>`
 `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
 `Execution log impact: none|updated|blocked`
 `Tests: <not run|passed|failed + command>`
 `Build: <not run|passed|failed + command>`
-`Files changed: <comma-separated paths>`
+`Files changed: <paths>`
 `Forbidden files touched: none|<paths>`
+`Working tree: clean|dirty + reason`
 `Next task: S1-IMPL-BALANCE-FIRST-03|blocked|none`

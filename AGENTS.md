@@ -155,26 +155,58 @@ Only the orchestrator may update task state after valid review evidence exists.
 Only mandatory scripts belong in the workflow.
 
 Implementation agents must run:
-- `.\scripts\build.ps1` after each task packet
 
-Implementation agents must run:
-- `.\scripts\make_review_packet.ps1` only after completing the final task in a checkpoint packet.
+- `.\scripts\build.ps1` after each task packet
+- `.\scripts\make_review_packet.ps1` only after completing the final task in a checkpoint packet
 
 Review agents must not run scripts by default.
 
-Deleted helper scripts must not be recreated unless they become mandatory in this file.
+The user must not be required to run workflow scripts manually.
 
 Do not create optional workflow helper scripts.
-Do not depend on the user running scripts manually.
 
 Required ownership:
 
-- Implementer runs `.\scripts\build.ps1` after edits.
-- Implementer runs `.\scripts\make_review_packet.ps1` after committing.
+- Implementer runs build after each task packet.
+- Implementer commits after each successful task packet.
+- Implementer creates a blocked-task commit after useful edits plus failure.
+- Implementer generates review packet only at checkpoint boundary.
 - Reviewer consumes the generated review packet.
 - Reviewer does not generate the review packet.
 - Reviewer does not edit `execution-log.md`.
 - Orchestrator updates `execution-log.md` only after valid review evidence exists.
+
+## Dirty Tree Rule
+
+Agents must not end a task with useful uncommitted work and no durable trace.
+
+At handoff, the working tree must be one of:
+
+1. clean after a successful task commit
+2. clean after a blocked-task commit
+3. dirty only if the blocker is specifically that git cannot commit
+
+If build/tests fail after useful allowed-file edits were made, the agent must preserve the work in a blocked-task commit.
+
+Do not leave untracked task files behind.
+
+Blocked-task commit format:
+
+`BLOCKED <TASK-ID>: <short blocker reason>`
+
+A blocked-task commit is not accepted work.
+It is a durable handoff point for the next agent.
+
+Blocked-task commits may include:
+- allowed task files already edited
+- blocker report under `plans/stage1/30-evidence/blockers/`
+- `execution-log.md` update to blocked state
+
+Blocked-task commits must not include:
+- forbidden files
+- next-task work
+- unrelated cleanup
+- broad refactors
 
 
 

@@ -1,6 +1,12 @@
 param(
-    [Parameter(Mandatory=$true)]
-    [string]$TaskPacket,
+    [Parameter(Mandatory=$false)]
+    [string]$TaskPacket = "",
+
+    [Parameter(Mandatory=$false)]
+    [string]$CheckpointPacket = "",
+
+    [Parameter(Mandatory=$false)]
+    [string[]]$ExtraPackets = @(),
 
     [Parameter(Mandatory=$true)]
     [string]$BaseRef,
@@ -22,8 +28,8 @@ param(
     [switch]$FullDiff
 )
 
-if (-not (Test-Path $TaskPacket)) {
-    Write-Error "Task packet not found: $TaskPacket"
+if (-not $TaskPacket -and -not $CheckpointPacket) {
+    Write-Error "Either -TaskPacket or -CheckpointPacket must be specified."
     exit 1
 }
 
@@ -73,15 +79,42 @@ Add-Line (git rev-parse $BaseRef)
 Add-Line ""
 
 Add-Line "Review target:"
-Add-Line "Task packet: $TaskPacket"
+if ($CheckpointPacket) { Add-Line "Checkpoint packet: $CheckpointPacket" }
+if ($TaskPacket) { Add-Line "Task packet: $TaskPacket" }
 Add-Line "Task base: $BaseRef"
 Add-Line "Task head: $HeadRef"
 Add-Line "Commit: $HeadRef"
 Add-Line ""
 
-Add-Line "=== TASK PACKET CONTENT ==="
-Get-Content $TaskPacket | ForEach-Object { Add-Line $_ }
-Add-Line ""
+if ($CheckpointPacket) {
+    Add-Line "=== CHECKPOINT PACKET CONTENT ==="
+    if (Test-Path $CheckpointPacket) {
+        Get-Content $CheckpointPacket | ForEach-Object { Add-Line $_ }
+    } else {
+        Add-Line "Checkpoint packet not found: $CheckpointPacket"
+    }
+    Add-Line ""
+}
+
+if ($TaskPacket) {
+    Add-Line "=== TASK PACKET CONTENT ==="
+    if (Test-Path $TaskPacket) {
+        Get-Content $TaskPacket | ForEach-Object { Add-Line $_ }
+    } else {
+        Add-Line "Task packet not found: $TaskPacket"
+    }
+    Add-Line ""
+}
+
+foreach ($Extra in $ExtraPackets) {
+    Add-Line "=== EXTRA PACKET CONTENT: $Extra ==="
+    if (Test-Path $Extra) {
+        Get-Content $Extra | ForEach-Object { Add-Line $_ }
+    } else {
+        Add-Line "Extra packet not found: $Extra"
+    }
+    Add-Line ""
+}
 
 Add-Line "=== CHANGED FILES ==="
 $ChangedFiles | ForEach-Object { Add-Line $_ }
