@@ -40,7 +40,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | S1-PLAN-REFACTOR-DETAIL | AI | completed | specialized 10-spec suite, test matrix, current plugin source inventory | `plans/stage1/20-execution/balance_first_refactor_plan.md` | none |
 | S1-PLAN-TEST-MATRIX | AI | completed | instrumentation_and_acceptance.md, truth model | `plans/stage1/20-execution/balance_first_test_matrix.md` | none |
 | S1-PLAN-FIRST-SLICE | AI | completed | specialized 10-spec suite | `plans/stage1/20-execution/first-slice-definition.md` | none |
-| S1-IMPL-BALANCE-FIRST | AI | active | TDD plan, refactor order, 10-spec suite | `PhysAnimSupportTruth.h/cpp`, `PhysAnimSupportTruth.Tests.cpp` | none |
+| S1-IMPL-BALANCE-FIRST | AI | active | TDD plan, refactor order, 10-spec suite | `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp`, `PhysAnimSupportTruth.Tests.cpp` | none |
 | S1-IMPL-BALANCE-FIRST-01 | AI | **runnable** | accepted refactor detail plan | `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp` | none |
 
 ## Frozen Inputs For Continuous Balance Rewrite
@@ -82,13 +82,13 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | Task ID | Artifact | Accepted? | Notes |
 |---|---|---|---|
 | S1-DOCS-BALANCE-FIRST | balance-first activation docs rewrite | yes | canonical docs now point to continuous physical ownership and standing validation |
-| S1-PLAN-REWRITE | TDD + Matrix + initial refactor order + Slice 1 | partial | implementation remains blocked until detailed refactor migration plan is accepted |
+| S1-PLAN-REWRITE | TDD + Matrix + initial refactor order + Slice 1 | yes | detailed refactor migration plan accepted; Slice 1 scaffold is runnable |
 
 ## Blocked / Deferred
 
 | Task ID | Status | Reason |
 |---|---|---|
-| S1-IMPL-BALANCE-FIRST | **runnable** | Pure support logic layer implementation (Slice 1) |
+| Runtime state-machine rewrite | **blocked** | blocked until Slice 1 pure support logic is green |
 | G2 | readying | comparison packaging must reflect the new activation model honestly |
 | S1-P2-A1 | blocked | depends on G2 pass |
 | Legacy flip-path tuning | deferred | archived; legacy compatibility context only |
@@ -103,7 +103,7 @@ Whenever new setup or gate evidence arrives:
 
 ---
 
-## 2026-04-23 — Implementation Blocked Pending Refactor Detail
+## 2026-04-23 — Refactor Detail Accepted; Slice 1 Scaffold Runnable
 
 - the planning frontier remains open for detailed refactor migration planning
 - **S1-PLAN-REFACTOR-DETAIL** is completed
