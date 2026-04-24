@@ -74,7 +74,7 @@
 | **INTEG-04** | Validate State | Airborne breach | `Failed` | `activation_support_failure` | `support_mode` = `Airborne`, `support_gap_timer_ms` > 100 |
 | **INTEG-05** | Validate State | Proxy drift breach | `Failed` | `activation_proxy_outside_support_region` | `proxy_inside_hull` = `false`, `proxy_outside_hull_duration_ms` > 100.0, `terminal_reason` = `activation_proxy_outside_support_region` |
 | **INTEG-06** | Validate State | Churn Hz breach | `Failed` | `activation_instability_threshold_breach` | `support_churn_hz` > 12.0 |
-| **INTEG-07** | Validate State | Authority conflict | `Failed` | `activation_authority_conflict` | `contamination_class`, `contamination_source_body`, `contamination_source_subsystem` |
+| **INTEG-07** | Validate State | Authority conflict | `Failed` | `activation_authority_conflict` | `contamination_class` in {canonical_set}, `contamination_source_body` != "", `contamination_source_subsystem` != "", `terminal_reason` = `activation_authority_conflict` |
 | **INTEG-08** | Standing Target | Full success | `BalanceActive_Standing` | `terminal_reason` = `nullptr` | `hold_duration_sec` >= 3.0 |
 
 ## 5. End-to-End Smoke Tests (Layer 4)
@@ -85,4 +85,4 @@
 | **SMOKE-02** | Regression | Plant breach | `terminal_reason` = `activation_physics_asset_contract_violation` |
 | **SMOKE-03** | Regression | Capsule breach | `terminal_reason` = `activation_capsule_contract_violation` |
 | **SMOKE-04** | Regression | Authority breach | `terminal_reason` = `activation_authority_conflict` |
-| **SMOKE-05** | Artifact audit | Terminal failure | `terminal_reason`, `terminal_substep_timestamp`, and `terminal_frame_artifact` emitted |
+| **SMOKE-05** | Artifact audit | Terminal failure | `terminal_reason` is canonical, `terminal_substep_timestamp` emitted, `terminal_frame_artifact` emitted, all reason-specific forensic fields populated |
