@@ -2,7 +2,7 @@
 
 ## Purpose
 
-<One sentence only.>
+<One sentence.>
 
 ## Allowed Files
 
@@ -11,39 +11,29 @@
 ## Forbidden Files
 
 - all files not listed under Allowed Files
-- runtime state-machine files
-- bridge activation files
-- PhysicsControl setup files
-- capsule/CMC behavior files
-- artifact emission files
+- runtime state-machine files unless explicitly allowed
+- bridge activation files unless explicitly allowed
+- PhysicsControl setup files unless explicitly allowed
+- artifact emission files unless explicitly allowed
+- workflow/process files
 
 ## Required Inputs
 
 - `AGENTS.md`
 - `plans/stage1/20-execution/execution-log.md`
 - this task packet
-- directly relevant test rows, if this task has mapped tests
+- directly relevant tests or matrix rows, if applicable
 
 Do not read broad Stage 1 docs by default.
-
-Read `balance_first_refactor_plan.md` only if:
-- this packet is incomplete
-- this packet contradicts another active control document
-- the implementation is blocked by missing architecture/refactor detail
 
 ## Required Work
 
 1. <step>
 2. <step>
-3. <step>
-
-## Forbidden Work
-
-- <forbidden item>
 
 ## Required Tests
 
-- <test or not applicable>
+- `<test command or not applicable>`
 
 ## Required Build
 
@@ -51,59 +41,39 @@ Read `balance_first_refactor_plan.md` only if:
 
 ## Definition Of Done
 
-- <condition>
-- build result recorded
+- required behavior implemented
+- required tests pass
+- build passes
+- scope check passes
 - forbidden files untouched
-- handoff block provided
+- one task commit created
+- `execution-log.md` updated
 
 ## Stop Conditions
 
 Stop immediately if:
 - a required edit is outside Allowed Files
-- a runtime dependency is needed
+- runtime dependency is needed but forbidden
 - the build requires widening scope
 - the task cannot be completed without changing the packet
 - a shortcut, stub, or approximation is proposed
+- the same conceptual failure happens twice
 
-## Commit And Review
+## Handoff
 
-Before editing, record:
-
-`git rev-parse HEAD`
-
-Commit only after required build/tests pass.
-
-If build/tests fail:
-- do not commit
-- stop
-- report failure
-
-If build/tests pass:
-- create exactly one task implementation commit
-- include only files allowed by this task packet
-- use commit message format:
-
-`<TASK-ID>: <short task name>`
-
-After committing:
-- generate a review packet using the task base and task head
-- trigger context-isolated review if available
-- otherwise report `Review: pending`
-
-Do not continue to the next task.
-
-## Required Handoff
-
-`Summary: <one sentence>`
-`Task: <task id>`
-`Task base: <sha|none>`
-`Task head: <sha|none>`
-`Commit: <sha|none>`
-`Review: pending|not started|review report attached`
-`Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
-`Execution log impact: none|updated|blocked`
-`Tests: <not run|passed|failed + command>`
-`Build: <not run|passed|failed + command>`
-`Files changed: <comma-separated paths>`
-`Forbidden files touched: none|<paths>`
-`Next task: <task id|blocked|none>`
+```text
+Summary:
+Task:
+Base:
+Head:
+Commit:
+Build:
+Tests:
+Scope:
+Ledger impact:
+Execution log:
+Files changed:
+Forbidden files touched:
+Working tree:
+Next task:
+```

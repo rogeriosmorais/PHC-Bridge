@@ -1,45 +1,34 @@
-# Review Report — <TASK-ID>
+# Optional Review
 
 ## Review target
 
 Task:
-Task packet:
-Task base:
-Task head:
+Packet:
+Base:
+Head:
 Commit:
-
-## Blockers
-
-- `B-01`
-  - Violated rule:
-  - File/path:
-  - Problem:
-  - Required fix:
-  - Must stay inside current packet: yes/no
-
-Use `none` if there are no blockers.
-
-## Non-blocking nits
-
-- `N-01`
-  - File/path:
-  - Issue:
-  - Suggested fix:
-
-Use `none` if there are no nits.
 
 ## Verdict
 
 `accept` OR `fix required` OR `reject`
 
+## Blockers
+
+Use `none` if there are no blockers.
+
+A blocker must be a real implementation issue:
+- forbidden file touched
+- required build/test failed
+- scope check failed
+- wrong task implemented
+- fake/stub implementation
+- runtime dependency introduced in a pure task
+- next-task work included
+
+## Non-blocking notes
+
+Use `none` if there are no notes.
+
 ## Next action
 
 One sentence.
-
-## Validity Check
-
-- [ ] `accept` has zero blockers
-- [ ] `fix required` has at least one blocker
-- [ ] `reject` has at least one blocker
-- [ ] no execution-log changes were made by reviewer
-- [ ] no implementation files were edited by reviewer

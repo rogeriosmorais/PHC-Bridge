@@ -36,12 +36,12 @@ function Read-AllowedFilesFromPacket {
     $InAllowed = $false
 
     foreach ($Line in $Lines) {
-        if ($Line -match '^##\s+Allowed Files\s*$') {
+        if ($Line -match '^\s*##\s+Allowed Files\s*$') {
             $InAllowed = $true
             continue
         }
 
-        if ($InAllowed -and $Line -match '^##\s+') {
+        if ($InAllowed -and $Line -match '^\s*##\s+') {
             break
         }
 
@@ -66,7 +66,7 @@ function Read-IncludedPacketsFromCheckpoint {
         }
     }
 
-    return $Packets
+    return $Packets | Sort-Object -Unique
 }
 
 $Allowed = New-Object 'System.Collections.Generic.HashSet[string]'
@@ -96,9 +96,9 @@ if ($AllowExecutionLog) {
 }
 
 if ($AllowEvidence) {
-    Add-AllowedPath $Allowed "plans/stage1/30-evidence/reviews"
-    Add-AllowedPath $Allowed "plans/stage1/30-evidence/blockers"
     Add-AllowedPath $Allowed "plans/stage1/30-evidence/build"
+    Add-AllowedPath $Allowed "plans/stage1/30-evidence/blockers"
+    Add-AllowedPath $Allowed "plans/stage1/30-evidence/reviews"
 }
 
 $Changed = @()
@@ -140,7 +140,8 @@ foreach ($File in $Changed) {
     $Ok = $false
 
     foreach ($AllowedPath in $Allowed) {
-        if ($File -eq $AllowedPath -or $File.StartsWith($AllowedPath.TrimEnd("/") + "/")) {
+        $Prefix = $AllowedPath.TrimEnd("/")
+        if ($File -eq $AllowedPath -or $File.StartsWith($Prefix + "/")) {
             $Ok = $true
             break
         }

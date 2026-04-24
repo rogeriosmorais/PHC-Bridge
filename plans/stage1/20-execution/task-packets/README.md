@@ -2,24 +2,26 @@
 
 This folder contains atomic implementation task packets for Stage 1.
 
-Task packets are not review units.
-
 ## Operating Model
 
-- task packet = atomic commit unit
-- checkpoint packet = review unit
-- execution-log = current workflow pointer
-- build/test/scope evidence = mechanical proof
-- reviewer = consumes generated review packet only
-- orchestrator = advances execution-log after valid review evidence
+- task packet = atomic implementation unit
+- one task packet = one successful commit
+- checkpoint = optional batch of task packets
+- mechanical proof = build/test/scope output
+- execution-log = current pointer
 
 ## Task Packet Rule
 
 Agents must not implement from broad plans directly.
 
-Each implementation task must be driven by a task packet in:
-
-`plans/stage1/20-execution/task-packets/`
+Each task packet must define:
+- purpose
+- allowed files
+- forbidden files
+- required work
+- required tests/build
+- definition of done
+- stop conditions
 
 Agents may edit only files allowed by the active task packet.
 
@@ -27,139 +29,53 @@ If a task requires a file not listed in the packet, stop and report:
 
 `Blocked: task packet does not allow required file <path>`
 
-Do not widen scope.
+## Default Flow
 
-## Checkpoint Rule
-
-Checkpoint packets live in:
-
-`plans/stage1/20-execution/checkpoints/`
-
-A checkpoint packet may contain multiple task packets.
-
-When executing a checkpoint:
-
-- run task packets strictly in order
-- resume from `Current Task ID` in `execution-log.md`
-- skip already completed task commits listed in `execution-log.md`
-- run build/tests after each task packet
-- run scope check before each successful task commit
-- commit after each successful task packet
-- stop immediately on failure
-- create a blocked-task commit after useful edits plus failure
-- generate one checkpoint review packet at checkpoint end
-- do not continue beyond the checkpoint
-
-Review happens at checkpoint boundaries, not after every task packet.
+1. Read `AGENTS.md`.
+2. Read `plans/stage1/20-execution/execution-log.md`.
+3. Read the current task packet.
+4. Edit only allowed files.
+5. Run required build/tests.
+6. Run scope check.
+7. Commit.
+8. Update execution log.
+9. Stop.
 
 ## Mechanical Gates
 
-Agents must not rely on hand-written claims for scope/build/test status.
+Before a successful task commit:
 
-Implementation agents must create durable evidence for:
+```powershell
+.\scripts\check_task_scope.ps1 -TaskPacket <task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence
+```
 
-- build
-- tests, if applicable
-- scope check
+Build/test commands come from the task packet.
 
-Evidence goes under:
+## Checkpoints
 
-`plans/stage1/30-evidence/build/`
+Checkpoints may group task packets, but they are not mandatory review gates.
 
-Scope check is mandatory before every successful task commit.
+When executing a checkpoint:
+- run task packets in order
+- commit after each task
+- stop on failure
+- do not combine commits
+- do not generate review packets by default
 
-Checkpoint-wide scope check is mandatory before checkpoint review.
+## Review
 
-Reviewer must reject or block any checkpoint review packet missing required evidence.
+Review is optional unless explicitly requested.
 
-## Durable Review Reports
+A review should inspect:
+- the task packet
+- changed files
+- build/test result
+- scope result
 
-Reviewer agents must write their review report to:
+Do not require durable review reports by default.
 
-`plans/stage1/30-evidence/reviews/<CHECKPOINT-ID>-review-report.md`
+## Workflow / Product Separation
 
-The user must not manually copy reviewer output into repo files.
+Implementation tasks must not include workflow/process changes.
 
-Reviewer agents may update `execution-log.md` only with review metadata:
-- review report path
-- review verdict
-- blocking reason
-- next runnable action
-- `Checkpoint Status = fix-required` for `fix required` or `reject`
-
-Reviewer agents must not:
-- mark an accepted checkpoint complete
-- advance to the next checkpoint
-- edit production code
-- edit tests
-- edit task packets
-- edit checkpoint packets
-- edit workflow scripts
-- edit planning docs
-- edit `AGENTS.md`
-
-Only the accept/orchestrator step may mark a checkpoint accepted and advance to the next checkpoint.
-
-## Workflow Preflight
-
-Before acting, agents must run:
-
-Implementation:
-
-`.\scripts\check_workflow_state.ps1 -Mode execute -Checkpoint <CHECKPOINT-ID>`
-
-Review:
-
-`.\scripts\check_workflow_state.ps1 -Mode review -Checkpoint <CHECKPOINT-ID>`
-
-Fix:
-
-`.\scripts\check_workflow_state.ps1 -Mode fix -Checkpoint <CHECKPOINT-ID>`
-
-Accept:
-
-`.\scripts\check_workflow_state.ps1 -Mode accept -Checkpoint <CHECKPOINT-ID> -ReviewReport <review-report-path>`
-
-If preflight fails, stop without editing files.
-
-## Command Vocabulary
-
-Use checkpoint commands by default:
-
-- `execute checkpoint <CHECKPOINT-ID>`
-- `review checkpoint <CHECKPOINT-ID>`
-- `fix checkpoint <CHECKPOINT-ID>`
-- `accept checkpoint <CHECKPOINT-ID> with review report <path>`
-
-Do not use `go` as the normal project loop.
-
-Task-level commands are allowed only when the user explicitly names a single task packet.
-
-## Clean Workflow Separation
-
-Implementation checkpoints must not include workflow/process changes.
-
-Forbidden inside implementation checkpoints:
-
-- `AGENTS.md`
-- `plans/stage1/20-execution/agent_workflow_protocol.md`
-- this README
-- `plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
-- `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
-- checkpoint packet rewrites
-- workflow script rewrites
-
-Allowed inside implementation checkpoints:
-
-- files allowed by the active task packet
-- `plans/stage1/20-execution/execution-log.md` status updates
-- durable build/test/scope evidence under `plans/stage1/30-evidence/build/`
-- blocker reports under `plans/stage1/30-evidence/blockers/`
-- review packets under `plans/stage1/30-evidence/reviews/`
-
-If an implementation checkpoint requires workflow/process changes:
-
-- stop
-- classify as `workflow blocker`
-- do not continue implementation
-- make workflow changes in a separate workflow checkpoint/commit
+Workflow/process changes must be separate commits.

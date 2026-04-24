@@ -15,56 +15,32 @@ Run in this order:
 ## Rules
 
 - Execute one task packet at a time.
-- Commit after each task packet passes its required build/tests.
+- Commit after each task packet passes.
 - Do not combine task commits.
-- Do not skip a task.
-- Do not continue after a failed build/test.
-- Do not continue after a scope violation.
-- Do not continue after forbidden files are touched.
-- Do not start task 05 unless task 04 passes.
-- Do not start task 06 unless task 05 passes.
+- Do not skip tasks.
+- Stop after any failed build/test/scope check.
+- Do not touch runtime state-machine files.
+- Do not touch workflow/process files.
+- Do not generate a mandatory review packet.
 
-## Mechanical Gates
+## Mechanical Gates Per Task
 
-After each task packet:
-- write durable build/test output under `plans/stage1/30-evidence/build/`
-- run scope check for the current task packet
-- commit only after build/tests and scope check pass
+For each task:
 
-At checkpoint end:
-- run checkpoint-wide scope check
-- write checkpoint scope output to `plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-B-scope.log`
-- generate checkpoint review packet with this checkpoint packet plus all included task packets
-- stop before task 07
+1. Run the task's required build/test commands.
+2. Run:
 
-Required checkpoint scope command:
+   `.\scripts\check_task_scope.ps1 -TaskPacket <task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence`
 
-`.\scripts\check_task_scope.ps1 -CheckpointPacket plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-B.md -BaseRef <checkpoint-base> -HeadRef <checkpoint-head> -AllowExecutionLog -AllowEvidence`
+3. Commit if build/tests/scope pass.
+4. Update `execution-log.md`.
 
-Required checkpoint review packet command:
+## Checkpoint Done
 
-`.\scripts\make_review_packet.ps1 -CheckpointPacket plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-B.md -ExtraPackets plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-04.md,plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-05.md,plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-06.md -BaseRef <checkpoint-base> -HeadRef <checkpoint-head> -ScopeLog plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-B-scope.log -BuildLog <build-log> -TestLog <test-log-if-any> -OutputPath plans/stage1/30-evidence/reviews/S1-SUPPORT-TRUTH-B-review-packet.md`
+Checkpoint B is done when tasks 04, 05, and 06 have passing task commits.
 
-## Checkpoint Review
+Optional final suite command:
 
-After task 06 passes and is committed:
+`.\scripts\build.ps1 -Test PhysAnim.SupportTruth`
 
-Generate a checkpoint review packet covering the full range from the base before task 04 to the head after task 06.
-
-Reviewer must review:
-- all three task packets
-- all commits in the checkpoint
-- changed files
-- build/test evidence
-- scope compliance
-- no fake geometry implementation
-- no runtime dependencies
-
-## Definition Of Done
-
-- task 04 committed
-- task 05 committed
-- task 06 committed
-- all required builds/tests passed
-- checkpoint review packet generated
-- agent stops before task 07
+Do not block checkpoint completion on a reviewer report unless the user explicitly requests review.

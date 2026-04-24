@@ -2,495 +2,192 @@
 
 ## Purpose
 
-This document defines the complete implementation/review/acceptance lifecycle for Stage 1 agent work.
+This protocol keeps Stage 1 automated, small, and implementation-focused.
 
-It exists to prevent improvisation.
+It intentionally avoids a custom lifecycle engine. The default unit of work is one task packet, one mechanical validation pass, and one commit.
 
-## Commands
+## Core Principle
 
-Use checkpoint commands by default:
+Spend tokens on technical progress.
 
-- `execute checkpoint <CHECKPOINT-ID>`
-  - execute the active checkpoint only
+Do not spend tokens maintaining review packets, state machines, role ceremonies, or workflow artifacts unless they directly unblock implementation.
 
-- `review checkpoint <CHECKPOINT-ID>`
-  - review the generated checkpoint review packet only
+## Source Of Truth
 
-- `fix checkpoint <CHECKPOINT-ID>`
-  - fix reviewer blockers inside the active checkpoint only
+The active state is:
 
-- `accept checkpoint <CHECKPOINT-ID> with review report <path>`
-  - advance execution-log after reviewer verdict `accept`
+`plans/stage1/20-execution/execution-log.md`
 
-Task-level commands are allowed only when the user explicitly names a single task packet.
+The active execution authority is the current task packet in:
 
-Do not use `go` as the project loop.
+`plans/stage1/20-execution/task-packets/`
 
-Before any command, run:
+A task packet controls:
+- allowed files
+- forbidden files
+- required work
+- required tests/build
+- stop conditions
+- definition of done
 
-`.\scripts\check_workflow_state.ps1 -Mode <execute|review|fix|accept> -Checkpoint <CHECKPOINT-ID>`
+## Default Command
 
-If preflight fails, stop.
+`go` means:
 
-## Workflow Preflight Rule
+`execute the current task packet only`
 
-Every agent must run workflow preflight before acting.
+Do not interpret `go` as permission for broad work, workflow rewrites, architecture review, or multi-system debugging.
 
-Implementation preflight:
+## Implementation Loop
 
-`.\scripts\check_workflow_state.ps1 -Mode execute -Checkpoint <CHECKPOINT-ID>`
-
-Review preflight:
-
-`.\scripts\check_workflow_state.ps1 -Mode review -Checkpoint <CHECKPOINT-ID>`
-
-Fix preflight:
-
-`.\scripts\check_workflow_state.ps1 -Mode fix -Checkpoint <CHECKPOINT-ID>`
-
-Accept preflight:
-
-`.\scripts\check_workflow_state.ps1 -Mode accept -Checkpoint <CHECKPOINT-ID> -ReviewReport <review-report-path>`
-
-If preflight fails:
-- do not edit files
-- do not run build
-- do not review
-- do not update execution-log
-- report the preflight failure
-- stop
-
-## Roles
-
-### Implementer
-
-The implementer:
-- executes one checkpoint by running its task packets one at a time.
-- edits only allowed files
-- runs required build/tests
-- commits only after required build/tests pass
-- triggers or prepares review
-- does not approve its own work
-- does not advance to the next task
-
-### Reviewer
-
-The reviewer:
-- reviews only the review packet
-- uses `REVIEWER_PROMPT.md`
-- does not edit files
-- does not fix code
-- does not reopen architecture unless the task packet is impossible
-- returns only `accept`, `fix required`, or `reject`
-
-### Orchestrator
-
-The orchestrator:
-- decides when to start implementation
-- decides when to start review if automated review is unavailable
-- accepts/rejects the reviewer verdict
-- advances `execution-log.md` after acceptance
-
-## Checkpoint Lifecycle
-
-Each checkpoint moves through this lifecycle:
-
-1. `runnable`
-   - current task packet is ready
-
-2. `implementation-active`
-   - implementer is working on the checkpoint
-
-3. `implementation-failed`
-   - build/tests failed
-   - no task commit is created
-   - same checkpoint remains current
-
-4. `review-pending`
-   - checkpoint task packets passed
-   - implementation commits exist
-   - review has not accepted it yet
-
-5. `fix-required`
-   - reviewer found bounded issues
-   - same checkpoint remains current
-   - fixes must stay inside the active checkpoint
-
-6. `rejected`
-   - reviewer found forbidden scope, wrong task, failed required tests/build, unrelated files, or fake implementation
-   - task commits must be reverted
-   - same checkpoint remains current
-
-7. `accepted`
-   - reviewer verdict is `accept`
-   - execution log may advance to the next checkpoint
-
-## Implementer Lifecycle
-
-Agents execute checkpoints by default when a checkpoint is active.
-
-A checkpoint is active when `execution-log.md` has `Checkpoint Status = in-progress`.
-
-For checkpoint execution:
+For each task:
 
 1. Read `AGENTS.md`.
 2. Read `execution-log.md`.
-3. Read the active checkpoint packet.
-4. Resume from `Current Task ID`.
-5. Read the current task packet.
-6. Execute the current task packet.
-7. Write durable build/test/scope logs under `plans/stage1/30-evidence/build/`.
-8. Run the required build/tests.
-9. Run scope check before creating a successful task commit.
-10. If successful:
-    - create one atomic task commit
-    - update `execution-log.md`
-    - continue to the next task in the checkpoint
-11. If failed before useful edits:
-    - leave tree clean
-    - preserve failure log
-    - update `execution-log.md` as blocked
-    - stop
-12. If failed after useful edits:
-    - preserve failure log
-    - create blocker report
-    - create blocked-task commit
-    - update `execution-log.md` as blocked
-    - stop
-13. If final checkpoint task passes:
-    - generate checkpoint review packet
-    - update `execution-log.md` with review packet path
-    - ensure working tree is clean
-    - stop
-
-No dirty-tree handoffs are allowed.
-
-Review happens at checkpoint boundaries, not after every tiny task.
-
-## Dirty Tree Invariant
-
-Every agent handoff must leave the working tree clean unless the blocker is that git cannot commit.
-
-If useful allowed-file edits exist and the task cannot complete, the agent must create a blocked-task commit.
-
-A blocked-task commit must include:
-- useful allowed-file edits
-- blocker report
-- execution-log blocked update
-
-Blocked-task commit format:
-
-`BLOCKED <TASK-ID>: <short blocker reason>`
-
-A blocked-task commit is not accepted work.
-It is a durable recovery point.
-
-## Scope Check Rule
-
-Every successful task commit must be preceded by a passing scope check.
-
-For task mode, run:
-
-`.\scripts\check_task_scope.ps1 -TaskPacket <task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence`
-
-For checkpoint mode, run the same command for the current task packet before each task commit.
-
-At checkpoint review time, run:
-
-`.\scripts\check_task_scope.ps1 -CheckpointPacket <checkpoint-packet> -BaseRef <checkpoint-base> -HeadRef <checkpoint-head> -AllowExecutionLog -AllowEvidence`
-
-If scope check fails:
-- do not create a successful task commit
-- revert forbidden edits if safe
-- otherwise create a blocker report and blocked-task commit
-- stop
-
-## Reviewer Lifecycle
-
-When reviewing a checkpoint, the reviewer must:
-
-1. Read `AGENTS.md`.
-2. Read `plans/stage1/20-execution/agent_workflow_protocol.md`.
-3. Read `plans/stage1/20-execution/execution-log.md`.
-4. Read `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`.
-5. Find the review packet path in `execution-log.md`.
-6. Read the review packet.
-7. Review only:
-   - checkpoint packet
-   - included task packets
-   - changed files
-   - diff
-   - build/test/scope evidence
-   - required handoff
-8. Return or write a structured review report.
-
-The reviewer must not run scripts by default.
-The reviewer must not generate the review packet.
-The reviewer must not edit `execution-log.md`.
-The reviewer must not implement fixes.
-
-If the review packet path is missing, return:
-
-`Blocked: review packet missing`
-
-If the review packet file is missing, return:
-
-`Blocked: review packet file not found`
-
-## Review Evidence Rule
-
-A reviewer verdict is invalid unless it is backed by a durable review report file.
-
-The reviewer must write exactly one review report file under:
-
-`plans/stage1/30-evidence/reviews/`
-
-The reviewer may edit only:
-- the review report file
-- `plans/stage1/20-execution/execution-log.md`
-
-The reviewer may update `execution-log.md` only with review metadata:
-- review report path
-- review verdict
-- blocking reason
-- next runnable action
-- `Checkpoint Status = fix-required` for `fix required` or `reject`
-
-The reviewer must not:
-- mark an accepted checkpoint complete
-- advance to the next checkpoint
-- edit task packets
-- edit checkpoint packets
-- edit production code
-- edit tests
-- edit planning docs
-- edit workflow scripts
-- edit `AGENTS.md`
-
-A verdict of `accept` is valid only when blockers are `none`.
-
-A verdict of `fix required` is valid only when at least one blocker is listed.
-
-A verdict of `reject` is valid only when at least one blocker is listed.
-
-Each blocker must include:
-- blocker ID
-- violated task-packet or checkpoint rule
-- file/path involved
-- exact required fix
-- whether the fix must stay inside the active checkpoint
-
-A reviewer must not return inline-only review output.
-
-The user must not be required to manually persist review output.
-
-## Commit Rules
-
-The implementer must not create a successful task commit before required build/tests pass.
-
-If build/tests fail before any useful file edits:
-- do not commit
-- return a failure handoff
-- working tree must be clean
-
-If build/tests fail after useful allowed-file edits:
-- create a blocker report under `plans/stage1/30-evidence/blockers/`
-- update `execution-log.md` to show the checkpoint/task is blocked
-- create a blocked-task commit
-- stop
-
-Blocked-task commit format:
-
-`BLOCKED <TASK-ID>: <short blocker reason>`
-
-A blocked-task commit preserves work for future agents.
-It does not mark the task complete.
-It does not allow the next task to start.
-
-If required build/tests pass:
-- create one task commit
-- include only allowed files
-- include no forbidden files
-- include no unrelated edits
-- include no next-task work
-
-Reviewer reviews committed code, not an uncommitted working tree.
-
-## Blocked Commit Rules
-
-A blocked-task commit is required when all of these are true:
-
-1. the agent made useful allowed-file changes
-2. the required build/test failed or could not run
-3. the task cannot continue safely
-4. the work would otherwise be left only in the working tree or chat
-
-The blocked-task commit must include:
-
-- current allowed-file edits
-- blocker report
-- execution-log blocked-state update
-
-The blocker report must include:
-
-- task ID
-- checkpoint ID, if any
-- task base SHA
-- current HEAD before blocked commit
-- blocked commit SHA after commit
-- changed files
-- failed command
-- failure category
-- exact error summary
-- next recommended action
-- whether the existing edits should be kept, reverted, or inspected
-
-After a blocked-task commit, the next agent must start from the blocked commit and either:
-- fix the blocker and continue the same task
-- revert the blocked work
-- or escalate if the blocker is outside the task scope
-
-## Fix Rules
-
-If reviewer verdict is `fix required`:
-
-1. Same checkpoint remains current.
-2. Implementer runs `fix checkpoint <CHECKPOINT-ID>`.
-3. Fixes must stay inside the active checkpoint.
-4. Build/tests must pass again.
-5. Implementer may either:
-   - amend the task commit(s), or
-   - create small fixup commits
-6. Review must compare from the original checkpoint base ref to the new checkpoint head ref.
-7. The next checkpoint remains blocked until reviewer verdict is `accept`.
-
-## Reject Rules
-
-If reviewer verdict is `reject`:
-
-1. Do not continue.
-2. Revert the implementation commits in the checkpoint.
-3. Keep the checkpoint packet unchanged.
-4. Record the rejection reason in the handoff.
-5. Update the assumption ledger only if the rejection reveals a plan/contract/dependency assumption problem.
-
-## Evidence Rejection Rules
-
-A reviewer may reject a checkpoint because the review evidence is invalid even when individual task commits appear scope-clean.
-
-Evidence rejection is not the same as implementation rejection.
-
-If the reviewer rejects because of:
-- contaminated review range
-- missing evidence
-- invalid review packet
-- workflow/process pollution in the checkpoint range
-- inconsistent scope evidence
-
-then:
-
-1. Do not start the next checkpoint.
-2. Do not immediately revert implementation commits.
-3. Mark the checkpoint as `fix-required`.
-4. Preserve the review report.
-5. Run `fix checkpoint <CHECKPOINT-ID>` to repair the evidence/range.
-6. Generate a new review packet.
-7. Review again.
-
-Only mark the checkpoint as `rejected` when the implementation itself must be reverted because of:
-- forbidden files inside task commits
+3. Read the current task packet.
+4. Record base SHA:
+   - `git rev-parse HEAD`
+5. Edit only allowed files.
+6. Run required build/test commands from the task packet.
+7. Run scope check:
+   - `.\scripts\check_task_scope.ps1 -TaskPacket <task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence`
+8. If build/tests/scope pass:
+   - create one task commit
+   - update `execution-log.md`
+   - stop or continue only if the user/checkpoint explicitly asked for a batch
+9. If build/tests/scope fail:
+   - do not widen scope
+   - preserve useful work only if allowed
+   - report the failure
+   - stop
+
+## Commit Rule
+
+Each task packet produces at most one successful implementation commit.
+
+Commit message format:
+
+`<TASK-ID>: <short task name>`
+
+A successful task commit must not contain:
+- forbidden files
+- next-task work
+- unrelated cleanup
+- workflow/process changes
+- broad refactors
+
+## Checkpoints
+
+Checkpoints are optional batching documents.
+
+They are not mandatory review gates.
+
+When executing a checkpoint:
+- run included task packets in order
+- commit after each task passes
+- stop on the first failure
+- do not combine task commits
+- do not generate review packets by default
+- do not block later technical tasks on report-format or evidence-range issues
+
+At checkpoint end, run the checkpoint's final build/test command if one exists and record a short summary.
+
+## Mechanical Gates
+
+The only mandatory gates are:
+
+1. required build/test command passes
+2. scope check passes
+3. forbidden files untouched
+4. commit created
+5. execution log updated
+
+Durable build/test/scope logs are useful, but missing review reports are not product-code blockers.
+
+## Reviews
+
+Reviews are optional unless the user explicitly requests one.
+
+A review must be small:
+- read the task packet
+- inspect changed files
+- inspect build/test/scope output
+- return `accept`, `fix required`, or `reject`
+
+Do not require a durable review report by default.
+Do not require an accept step by default.
+Do not block product-code progress because a review packet was not generated.
+
+A reviewer may block only for implementation issues:
+- forbidden file touched
+- required build/test failed
+- scope widened
 - fake/stub implementation
-- failed required tests
-- wrong task implementation
-- unrecoverable scope violation
+- wrong task implemented
+- pure task gained runtime dependency
+- next-task work included
 
-## Acceptance Rules
+Workflow/report formatting issues are not implementation blockers.
 
-If reviewer verdict is `accept`:
+## Workflow / Product Separation
 
-1. The current checkpoint may be marked accepted.
-2. `execution-log.md` may advance to the next checkpoint.
-3. The next checkpoint becomes runnable only after the execution-log pointer is updated.
-4. Runtime rewrite remains blocked until Slice 1 pure support logic is green.
+Workflow files must not be edited inside implementation tasks.
 
-## State Transition Evidence Rule
+Workflow files include:
+- `AGENTS.md`
+- `plans/stage1/20-execution/agent_workflow_protocol.md`
+- `plans/stage1/20-execution/task-packets/README.md`
+- `plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
+- `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
+- `scripts/check_workflow_state.ps1`
+- `scripts/make_review_packet.ps1`
+- `scripts/check_task_scope.ps1`
 
-No status may change based only on a bare verdict.
+If workflow must change, create a separate workflow commit.
 
-Every transition must cite evidence.
+## Dirty Tree Rule
 
-Allowed transitions:
+Do not leave useful uncommitted work at handoff.
 
-1. `runnable` -> `implementation-active`
-   Required evidence:
-   - user/orchestrator command: `execute checkpoint <CHECKPOINT-ID>`
+Acceptable handoff states:
+- clean after successful commit
+- clean after reverting failed edits
+- dirty only if git itself is the blocker
 
-2. `implementation-active` -> `implementation-failed`
-   Required evidence:
-   - failed build/test command
-   - no commit SHA
+If useful allowed-file edits exist but the task cannot finish, either:
+- keep them only if the next action is immediate and explicit, or
+- commit them as a clearly marked blocked handoff commit
 
-3. `implementation-active` -> `review-pending`
-   Required evidence:
-   - task base SHAs
-   - task head SHAs
-   - commit SHAs
-   - build/test/scope result
+Blocked commit format:
 
-4. `review-pending` -> `fix-required`
-   Required evidence:
-   - review report path or inline review report
-   - reviewer verdict: `fix required`
-   - at least one blocker ID
+`BLOCKED <TASK-ID>: <short blocker reason>`
 
-5. `review-pending` -> `rejected`
-   Required evidence:
-   - review report path or inline review report
-   - reviewer verdict: `reject`
-   - at least one blocker ID
+Blocked commits are recovery points, not accepted work.
 
-6. `review-pending` -> `accepted`
-   Required evidence:
-   - review report path or inline review report
-   - reviewer verdict: `accept`
-   - blockers: `none`
+## Anti-Tunnel-Vision Pivot Gate
 
-7. `fix-required` -> `review-pending`
-   Required evidence:
-   - original checkpoint base SHA
-   - new checkpoint head SHA
-   - fix commit SHAs or amended commit SHAs
-   - build/test/scope result
+If the same task fails twice for the same conceptual reason, stop implementation and write:
 
-A state transition without required evidence is invalid.
+```text
+Pivot memo:
+- Task:
+- Hypothesis:
+- Evidence for:
+- Evidence against:
+- Failed attempts:
+- Cheaper alternative:
+- Recommended next experiment:
+```
 
-## Execution Log Advance
+Do not continue stacking fixes in the same direction without this memo.
 
-Advancing the execution log is a separate orchestration step.
-
-It may change only:
-- current status
-- current pointer
-- next runnable item
-- latest accepted commit SHA
-- notes required to preserve state
-
-It must not change implementation code.
-
-## Handoff Fields
-
-Every implementer handoff must include the canonical status block defined in `AGENTS.md`.
-
-Every reviewer handoff must use `REVIEWER_PROMPT.md`.
-
-## Non-Negotiable Stop Rules
+## Stop Conditions
 
 Stop immediately if:
-- a task needs a file not allowed by the packet
-- a task needs runtime data forbidden by the packet
-- a test cannot be written from the matrix
+- a required file is not allowed by the task packet
+- the task needs runtime data forbidden by the packet
+- a mapped test cannot be written from the matrix
 - a shortcut/stub/fake implementation is proposed
 - build/test failure requires widening scope
-- implementation crosses into the next packet
-- reviewer verdict is not `accept`
-- preflight fails
+- implementation crosses into the next task
+- the same conceptual failure repeats twice

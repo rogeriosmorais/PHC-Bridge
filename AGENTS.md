@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This is a WINDOWS MACHINE. Do NOT run linux commands like grep, findstr, etc. Use PowerShell syntax instead.
+This is a Windows machine. Use PowerShell commands. Do not use Linux shell commands.
 
 ## Project
 
@@ -18,7 +18,7 @@ Secondary goals:
 
 Do not change this architecture unless explicitly asked for an architecture review.
 
-PoseSearch -> PHC Policy (NNE/ONNX) -> Physics Control Component -> Chaos Physics -> Renderer
+`PoseSearch -> PHC Policy (NNE/ONNX) -> Physics Control Component -> Chaos Physics -> Renderer`
 
 Interpretation:
 - motion selection/search belongs to PoseSearch
@@ -33,254 +33,172 @@ Interpretation:
 2. Keep training and runtime separate.
 3. No TensorRT dependency.
 4. No custom Python pipeline for UE5 asset authoring.
-5. Use TDD by default for all deterministic logic. TDD is optional only for: live runtime/editor/physics behavior, visual/manual quality checks, short exploratory spikes.
-6. Any exploratory spike must convert its deterministic logic into tests before the work is considered complete.
-7. Do not leave permanent fail-by-design or permanent skip-by-design tests in the main suite without an explicit temporary reason and removal plan.
-8. Treat Manny/Quinn as the default runtime skeleton unless changed explicitly.
+5. Use TDD for deterministic logic.
+6. Exploratory spikes must become deterministic tests before the work is complete.
+7. Do not leave permanent fail-by-design or skip-by-design tests in the main suite.
+8. Treat Manny/Quinn as the default runtime skeleton unless explicitly changed.
 9. Keep commits small and atomic.
-10. Build with .\scripts\build.ps1
-11. If you ran any smoke tests, then read the logs with "python .\scripts\read_logs.py". If you didn't, then ignore this step.
+10. Build with `.\scripts\build.ps1`.
+11. If smoke tests were run, read logs with `python .\scripts\read_logs.py`.
 
 ## Context Budget Rule
 
-Default working context for repo work is:
+Default working context is:
 
 1. `AGENTS.md`
-2. the current task packet in `plans/stage1/20-execution/task-packets/`
-3. directly edited files
-4. directly relevant tests
-5. directly relevant build/test output
+2. `plans/stage1/20-execution/execution-log.md`
+3. the current task packet
+4. directly edited files
+5. directly relevant tests
+6. directly relevant build/test output
 
 Do not reread or summarize the full Stage 1 document set unless the current task packet is missing, contradictory, or explicitly asks for architecture review.
 
-Do not perform broad review by default.
-
-If broader context is required, stop and report exactly:
+If broader context is required, stop and report:
 
 `Context expansion needed: <specific file or reason>`
 
-Do not silently expand scope.
-
 ## Task Packet Rule
 
-All implementation work must be driven by a task packet.
+All implementation work must be driven by one task packet.
 
 Task packets live in:
 
 `plans/stage1/20-execution/task-packets/`
 
-An implementation agent may only edit files allowed by the current task packet.
+A task packet is the execution authority for:
+- purpose
+- allowed files
+- forbidden files
+- required work
+- required tests/build
+- definition of done
+- stop conditions
+
+An implementation agent may edit only files allowed by the active task packet.
 
 If the task requires editing a file not listed in the packet, stop and report:
 
 `Blocked: task packet does not allow required file <path>`
 
-Do not continue by guessing.
 Do not widen scope.
-Do not edit runtime files unless the packet explicitly allows them.
+Do not edit runtime files unless the task packet explicitly allows them.
+Do not implement from broad plans directly.
+
+## Default Work Loop
+
+`go` means:
+
+`execute the current task packet only`
+
+The current task packet is read from `plans/stage1/20-execution/execution-log.md`.
+
+Implementation loop:
+
+1. Read `AGENTS.md`.
+2. Read `execution-log.md`.
+3. Read the current task packet.
+4. Record `git rev-parse HEAD`.
+5. Edit only allowed files.
+6. Run the task's required build/test commands.
+7. Run scope check:
+   - `.\scripts\check_task_scope.ps1 -TaskPacket <task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence`
+8. Commit only if build/tests/scope pass.
+9. Update `execution-log.md` to the next task.
+10. Stop.
+
+Do not require the user to manually persist output.
+Do not create review packets by default.
+Do not block task progress on reviewer reports unless the user explicitly asks for a review.
 
 ## Checkpoint Rule
 
-Tiny tasks do not require individual PRs.
+Checkpoints are batching aids, not acceptance gates.
 
-Agents may execute a checkpoint packet when explicitly instructed.
+A checkpoint may list several task packets to execute in order, but each task packet remains the atomic commit unit.
 
-Checkpoint packets live in:
-
-`plans/stage1/20-execution/checkpoints/`
-
-A checkpoint packet may contain multiple task packets.
-
-When executing a checkpoint:
-
-- run task packets strictly in order
-- commit after each task packet
-- run required build/tests after each task packet
-- stop immediately on failure
-- do not skip tasks
+Checkpoint rules:
+- execute one task at a time
+- commit after each task passes
+- stop on failure
 - do not combine task commits
-- generate one checkpoint review packet at the end
-- do not continue beyond the checkpoint
+- do not generate mandatory review packets
+- do not treat process/evidence formatting issues as product-code blockers
 
-Review happens at checkpoint boundaries, not after every tiny task.
+At checkpoint end, optionally run a suite-level build/test command and record a short summary.
 
-## Default Work Command
+## Mechanical Gates
 
-The normal implementation command is:
+A task is complete only when:
 
-`execute checkpoint <CHECKPOINT-ID>`
+- required build/test command passed
+- scope check passed
+- forbidden files untouched
+- implementation committed
+- `execution-log.md` points to the next task or blocked state
 
-Do not use `go` as the default project loop.
+The useful proof is mechanical:
+- build output
+- test output
+- scope check output
+- commit SHA
 
-Allowed commands:
+Do not replace mechanical proof with long written reviews.
 
-- `execute checkpoint <CHECKPOINT-ID>`
-- `review checkpoint <CHECKPOINT-ID>`
-- `fix checkpoint <CHECKPOINT-ID>`
-- `accept checkpoint <CHECKPOINT-ID> with review report <path>`
+## Review Rule
 
-Task-level commands are allowed only when the user explicitly names a single task packet.
+Review is optional unless explicitly requested by the user.
 
-Current preferred loop:
+Default review behavior:
+- inspect only the task packet, changed files, build/test output, and scope output
+- return `accept`, `fix required`, or `reject`
+- do not edit files unless explicitly asked
+- do not create durable review reports unless explicitly asked
+- do not block progress because a review packet or report is missing
 
-1. execute checkpoint
-2. review checkpoint
-3. accept/fix/reject checkpoint
-4. execute next checkpoint
+A reviewer may block only for real implementation issues:
+- forbidden file touched
+- required test/build failed
+- wrong function implemented
+- fake/stub implementation
+- runtime dependency introduced in a pure task
+- scope widened beyond the packet
 
-Task packets are atomic commit units.
-Checkpoint packets are review units.
+Process-format issues are not product-code blockers.
 
-## Agent Workflow Rule
+## Workflow / Product Separation
 
-All implementation, review, commit, fix, reject, and acceptance behavior is governed by:
+Do not mix workflow/process changes with implementation tasks.
 
-`plans/stage1/20-execution/agent_workflow_protocol.md`
+Implementation tasks may touch:
+- files listed in the task packet
+- `execution-log.md`
+- build/test/scope evidence under `plans/stage1/30-evidence/`
 
-Use these checkpoint commands:
+Workflow/process changes must be separate commits.
 
-- `execute checkpoint <CHECKPOINT-ID>` = execute the active checkpoint only
-- `review checkpoint <CHECKPOINT-ID>` = review the generated checkpoint review packet only
-- `fix checkpoint <CHECKPOINT-ID>` = fix reviewer blockers inside the active checkpoint only
-- `accept checkpoint <CHECKPOINT-ID> with review report <path>` = advance execution-log only after reviewer verdict `accept`
+If an implementation task reveals that the workflow is wrong, stop implementation and create a separate workflow task. Do not repair workflow inside the implementation task.
 
-Before any command, agents must run:
+## Anti-Tunnel-Vision Rule
 
-Implementation/review/fix preflight:
+If the same task fails twice for the same conceptual reason, stop coding and write a pivot memo of at most 10 lines:
 
-`.\scripts\check_workflow_state.ps1 -Mode <execute|review|fix> -Checkpoint <CHECKPOINT-ID>`
+```text
+Pivot memo:
+- Task:
+- Hypothesis:
+- Evidence for:
+- Evidence against:
+- Failed attempts:
+- Cheaper alternative:
+- Recommended next experiment:
+```
 
-Accept preflight:
-
-`.\scripts\check_workflow_state.ps1 -Mode accept -Checkpoint <CHECKPOINT-ID> -ReviewReport <review-report-path>`
-
-If preflight fails, stop.
-
-Do not improvise workflow behavior.
-Do not silently switch command modes.
-
-Implementation agents must use:
-
-`plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
-
-Reviewer agents must use:
-
-`plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
-
-If workflow state is unclear, stop and report:
-
-`Blocked: workflow state unclear`
-
-Reviewer verdicts do not directly advance checkpoints.
-
-Reviewer agents must write exactly one durable review report under:
-
-`plans/stage1/30-evidence/reviews/`
-
-Reviewer agents may update `execution-log.md` only with review metadata:
-- review report path
-- review verdict
-- blocking reason
-- next runnable action
-- `Checkpoint Status = fix-required` for `fix required` or `reject`
-
-Reviewer agents must not:
-- mark an accepted checkpoint complete
-- advance to the next checkpoint
-- edit production code
-- edit tests
-- edit task packets
-- edit checkpoint packets
-- edit planning docs
-- edit workflow scripts
-- edit `AGENTS.md`
-
-A verdict of `fix required` or `reject` without at least one blocker is invalid.
-
-Only the orchestrator/accept step may mark a checkpoint accepted and advance to the next checkpoint.
-
-## Mandatory Script Rule
-
-Only mandatory scripts belong in the workflow.
-
-The user must not be required to run workflow scripts manually.
-
-Before every checkpoint command, the acting agent must run:
-
-- `.\scripts\check_workflow_state.ps1`
-
-Implementation agents must run after each task packet:
-
-- `.\scripts\build.ps1`
-- `.\scripts\check_task_scope.ps1`
-
-Implementation agents must create durable build/scope evidence under:
-
-`plans/stage1/30-evidence/build/`
-
-Implementation agents must run only at checkpoint boundaries:
-
-- `.\scripts\make_review_packet.ps1`
-
-Review agents must not run build, scope, or review-packet scripts by default.
-Review agents only consume the generated review packet.
-
-Do not create optional workflow helper scripts.
-
-Required ownership:
-
-- Implementer runs workflow preflight before checkpoint execution.
-- Implementer runs build after each task packet.
-- Implementer writes durable build/test/scope logs.
-- Implementer runs scope check before creating a successful task commit.
-- Implementer commits after each successful task packet.
-- Implementer creates a blocked-task commit after useful edits plus failure.
-- Implementer generates review packet only at checkpoint boundary.
-- Reviewer runs workflow preflight before review.
-- Reviewer consumes the generated review packet.
-- Reviewer does not generate the review packet.
-- Reviewer writes exactly one durable review report under `plans/stage1/30-evidence/reviews/`.
-- Reviewer may update `execution-log.md` only with review status fields defined in the README.
-- Orchestrator runs workflow preflight before acceptance with `-ReviewReport`.
-- Orchestrator updates `execution-log.md` only after valid review evidence exists.
-
-## Dirty Tree Rule
-
-Agents must not end a task with useful uncommitted work and no durable trace.
-
-At handoff, the working tree must be one of:
-
-1. clean after a successful task commit
-2. clean after a blocked-task commit
-3. dirty only if the blocker is specifically that git cannot commit
-
-If build/tests fail after useful allowed-file edits were made, the agent must preserve the work in a blocked-task commit.
-
-Do not leave untracked task files behind.
-
-Blocked-task commit format:
-
-`BLOCKED <TASK-ID>: <short blocker reason>`
-
-A blocked-task commit is not accepted work.
-It is a durable handoff point for the next agent.
-
-Blocked-task commits may include:
-- allowed task files already edited
-- blocker report under `plans/stage1/30-evidence/blockers/`
-- `execution-log.md` update to blocked state
-
-Blocked-task commits must not include:
-- forbidden files
-- next-task work
-- unrelated cleanup
-- broad refactors
-
-
+Do not keep stacking fixes in the same direction after the pivot memo trigger.
 
 ## Failure Classification Rule
 
-When a task fails, classify the failure using exactly one primary category:
+When a task fails, classify the primary failure as one of:
 
 - compile failure
 - harness registration failure
@@ -291,8 +209,9 @@ When a task fails, classify the failure using exactly one primary category:
 - implementation bug
 - instrumentation gap
 - runtime tuning temptation
+- workflow/process blocker
 
-After classification, perform only the action allowed by the current task packet or blocker protocol.
+Then take the smallest allowed action.
 
 Do not make broad fixes.
 Do not tune visually.
@@ -300,7 +219,7 @@ Do not change multiple subsystems in response to one failure.
 
 ## Anti-Spiral Rule
 
-Do not debug balance visually.
+Do not debug balance visually as the primary loop.
 
 A visual improvement is not progress unless it is explained by:
 - a mapped test
@@ -309,7 +228,7 @@ A visual improvement is not progress unless it is explained by:
 - one explicit hypothesis
 - one owning code surface
 
-If an in-engine failure cannot be explained by artifacts, stop implementation and improve instrumentation or contracts before tuning behavior.
+If an in-engine failure cannot be explained by artifacts, improve instrumentation or contracts before tuning behavior.
 
 ## Minimal Assumption Ledger Rule
 
@@ -318,18 +237,6 @@ The assumption ledger is a high-signal risk register, not a task log.
 Do not update `plans/stage1/20-execution/assumption-ledger.md` for normal implementation progress, passing tests, scaffold work, typo fixes, or expected compile fixes.
 
 Update the ledger only when work reveals that a project assumption is new, false, weaker, stronger, blocked, or dangerous.
-
-Ledger update triggers:
-- a pure function unexpectedly needs runtime data
-- a mapped test cannot be written from the matrix
-- an artifact field cannot be emitted
-- a contract is ambiguous
-- a planned API is insufficient
-- a forbidden dependency becomes necessary
-- a repeated unexplained failure pattern appears
-- an in-engine failure has no canonical terminal reason
-- a shortcut, stub, or approximation is proposed to make progress look better
-- the planned commit order cannot be followed
 
 Every repo-work handoff must include exactly one ledger line:
 
@@ -343,37 +250,26 @@ or:
 
 `Ledger impact: blocked: assumption decision needed`
 
-No task is complete until ledger impact has been declared.
+## Required Handoff
 
-## Response Style
+Keep handoffs short:
 
-When working in this repo:
-- make file edits directly instead of pasting code into chat
-- do not include large code snippets or diffs unless explicitly requested
-- after edits, reply with:
-
-- `Summary: <one sentence>`
-- `Checkpoint: <checkpoint id|none>`
-- `Task: <task id>`
-- `Task base: <sha|none>`
-- `Task head: <sha|none>`
-- `Commit: <sha|none>`
-- `Blocked commit: <sha|none>`
-- `Review packet: <path|none>`
-- `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
-- `Execution log impact: none|updated|blocked`
-- `Tests: <not run|passed|failed + command>`
-- `Build: <not run|passed|failed + command>`
-- `Files changed: <comma-separated paths>`
-- `Forbidden files touched: none|<paths>`
-- `Working tree: clean|dirty + reason`
-- `Next task: <task id|blocked|none>`
-
-- keep responses short
-
-## What To Read
-
-Use `AGENTS.md` for project rules.
+```text
+Summary:
+Task:
+Base:
+Head:
+Commit:
+Build:
+Tests:
+Scope:
+Ledger impact:
+Execution log:
+Files changed:
+Forbidden files touched:
+Working tree:
+Next task:
+```
 
 ## Constraint To Remember
 

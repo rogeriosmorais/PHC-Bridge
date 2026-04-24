@@ -1,32 +1,21 @@
-# Review Reports
+# Reviews
 
-This folder stores durable review evidence for implementation task packets.
+Reviews are optional unless explicitly requested by the user.
 
-A task status may not change to:
-- `fix-required`
-- `rejected`
-- `accepted`
+This folder may store review notes, but review files are not mandatory workflow gates.
 
-unless there is a review report or inline reviewer output containing the required verdict evidence.
+A task may proceed based on mechanical proof:
+- required build passed
+- required tests passed
+- scope check passed
+- forbidden files untouched
+- task commit created
 
-## Required Review Report Fields
+Use reviews only when they add signal:
+- suspected scope violation
+- suspected fake/stub implementation
+- unclear task packet
+- repeated failure
+- architecture risk
 
-Each review report must include:
-
-- task ID
-- task packet path
-- task base SHA
-- task head SHA
-- commit SHA
-- blockers
-- non-blocking nits
-- verdict
-- next action
-
-## Valid Verdict Rules
-
-- `accept` requires blockers = `none`.
-- `fix required` requires at least one blocker.
-- `reject` requires at least one blocker.
-
-A bare verdict without blocker details is invalid.
+Do not block implementation because a durable review report is missing.
