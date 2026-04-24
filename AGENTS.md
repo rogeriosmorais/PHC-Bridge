@@ -79,6 +79,31 @@ Do not continue by guessing.
 Do not widen scope.
 Do not edit runtime files unless the packet explicitly allows them.
 
+## Checkpoint Rule
+
+Tiny tasks do not require individual PRs.
+
+Agents may execute a checkpoint packet when explicitly instructed.
+
+Checkpoint packets live in:
+
+`plans/stage1/20-execution/checkpoints/`
+
+A checkpoint packet may contain multiple task packets.
+
+When executing a checkpoint:
+
+- run task packets strictly in order
+- commit after each task packet
+- run required build/tests after each task packet
+- stop immediately on failure
+- do not skip tasks
+- do not combine task commits
+- generate one checkpoint review packet at the end
+- do not continue beyond the checkpoint
+
+Review happens at checkpoint boundaries, not after every tiny task.
+
 ## Agent Workflow Rule
 
 All implementation, review, commit, fix, reject, and acceptance behavior is governed by:
