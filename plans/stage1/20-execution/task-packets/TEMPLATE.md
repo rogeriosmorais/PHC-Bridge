@@ -20,8 +20,16 @@
 ## Required Inputs
 
 - `AGENTS.md`
+- `plans/stage1/20-execution/execution-log.md`
 - this task packet
-- directly relevant test rows, if any
+- directly relevant test rows, if this task has mapped tests
+
+Do not read broad Stage 1 docs by default.
+
+Read `balance_first_refactor_plan.md` only if:
+- this packet is incomplete
+- this packet contradicts another active control document
+- the implementation is blocked by missing architecture/refactor detail
 
 ## Required Work
 

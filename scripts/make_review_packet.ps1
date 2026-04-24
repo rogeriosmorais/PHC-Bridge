@@ -8,7 +8,13 @@ param(
 
     [string]$BuildLog = "",
 
-    [string]$TestLog = ""
+    [string]$TestLog = "",
+
+    [int]$MaxDiffLines = 800,
+
+    [int]$MaxLogLines = 200,
+
+    [switch]$FullDiff
 )
 
 Write-Host "=== REVIEW PACKET ==="
@@ -42,13 +48,22 @@ Write-Host "=== DIFF STAT ==="
 git diff --stat $BaseRef $HeadRef
 Write-Host ""
 
-Write-Host "=== FULL DIFF ==="
-git diff $BaseRef $HeadRef
+Write-Host "=== DIFF ==="
+$DiffLines = git diff $BaseRef $HeadRef
+if ($FullDiff) {
+    $DiffLines
+} else {
+    $DiffLines | Select-Object -First $MaxDiffLines
+    if ($DiffLines.Count -gt $MaxDiffLines) {
+        Write-Host ""
+        Write-Host "[diff truncated after $MaxDiffLines lines; rerun with -FullDiff if needed]"
+    }
+}
 Write-Host ""
 
 Write-Host "=== BUILD OUTPUT ==="
 if ($BuildLog -and (Test-Path $BuildLog)) {
-    Get-Content $BuildLog
+    Get-Content $BuildLog | Select-Object -Last $MaxLogLines
 } else {
     Write-Host "No build log supplied."
 }
@@ -56,7 +71,7 @@ Write-Host ""
 
 Write-Host "=== TEST OUTPUT ==="
 if ($TestLog -and (Test-Path $TestLog)) {
-    Get-Content $TestLog
+    Get-Content $TestLog | Select-Object -Last $MaxLogLines
 } else {
     Write-Host "No test log supplied."
 }

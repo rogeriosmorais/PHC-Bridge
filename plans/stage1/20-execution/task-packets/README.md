@@ -61,6 +61,8 @@ After a task commit, generate a bounded review packet with:
 
 `.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md -BuildLog <path> -TestLog <path>`
 
+Use `-FullDiff` only when the reviewer explicitly asks for the full diff.
+
 Paste only that review packet into the reviewer.
 
 Do not ask for broad repo review after implementation commits.
@@ -80,3 +82,21 @@ The next task may start only after reviewer verdict:
 `accept`
 
 If verdict is `reject` or `fix required`, the next task remains blocked.
+
+## Reviewer Prompt
+
+Reviewer agents must be launched with:
+
+`plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
+
+The reviewer receives only:
+
+1. `REVIEWER_PROMPT.md`
+2. the generated review packet
+
+The reviewer must not receive:
+- broad repo context
+- full conversation history
+- implementer reasoning
+- architecture summaries
+- unrelated docs

@@ -39,8 +39,10 @@ This packet is scaffold-only.
 ## Required Inputs
 
 - `AGENTS.md`
-- `plans/stage1/20-execution/balance_first_refactor_plan.md`
+- `plans/stage1/20-execution/execution-log.md`
 - this task packet
+
+Do not read `balance_first_refactor_plan.md` unless this packet is missing, incomplete, or contradictory.
 
 ## Required Work
 

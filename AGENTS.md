@@ -128,62 +128,38 @@ Do not interpret `go` as permission to perform broad work, skip review gates, ad
 - run required build/tests
 - return the required handoff block
 
-## Review Packet Rule
+## Review Rule
 
-After implementation commits, review must be done from a review packet.
+After implementation commits, review must be done from a bounded review packet.
 
 Generate it with:
 
-`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md`
+`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md -BuildLog <path> -TestLog <path>`
 
-The reviewer must compare only:
-- the task packet
-- changed files
-- build/test output
-- forbidden file list
+The implementer must not self-approve.
 
-Do not request broad review unless the task packet is impossible.
+The reviewer must use:
 
-## Reviewer Trigger Rule
+`plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
 
-The implementer does not trigger its own review and does not approve its own work.
+The reviewer verdict must be one of:
 
-After completing a task packet, the implementer must stop and return the required handoff block.
+- `accept`
+- `fix required`
+- `reject`
 
-The user/orchestrator triggers review by generating or requesting a review packet:
-
-`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md`
-
-A separate reviewer pass must review the packet.
-
-The reviewer may only return:
-- up to 3 blockers
-- up to 3 non-blocking nits
-- verdict
-- next action
-
-The implementer may continue to the next task only after the reviewer verdict is `accept`.
+The implementer may continue to the next task only after reviewer verdict is `accept`.
 
 ## Review Scope Rule
 
-Reviewers must review only against:
+Reviewers must use:
 
-1. the current task packet
-2. the commit diff
-3. build/test output
-4. relevant mapped tests
+`plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
 
-Review output must contain at most:
-
-- 3 blockers
-- 3 non-blocking nits
-- verdict
-- next action
+Reviewers must review only the generated review packet.
 
 Do not reopen architecture unless the task packet is impossible to execute.
-
 Do not restate unchanged project context.
-Do not summarize the full plan.
 Do not review unrelated files.
 
 ## Failure Classification Rule
