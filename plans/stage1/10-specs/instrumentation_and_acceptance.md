@@ -89,6 +89,8 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `control_alpha`: Current blend rollout progress (0.0 - 1.0).
 - `shell_bookkeeping_state`: Flags for `locked`, `reanchored`, etc.
 - `shell_influence_materiality`: Estimated assist force/torque from shell.
+- `topology_change_count`: Number of body instance or topology mutations observed.
+- `authority_conflict_count`: Number of non-material external writes detected.
 - `shell_helper_used_count`: Number of shell-helper writes observed during activation.
 - `movement_reclaim_count`: Number of CMC interference events.
 - `continuity_bookkeeping_mismatch`: Diagnostic flag for modifier/raw drift.

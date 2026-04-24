@@ -62,4 +62,4 @@ If `UPhysicsControlComponent` sets mesh-wide states that auto-trigger Rule 1 or 
 
 ## Required Runtime Counters
 
-Implementation must track: `topology_change_count`, `authority_conflict_count`, `shell_helper_used_count`, `movement_reclaim_event_count`.
+Implementation must track: `topology_change_count`, `authority_conflict_count`, `shell_helper_used_count`, `movement_reclaim_count`.

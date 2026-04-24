@@ -4,10 +4,10 @@
 
 | Test ID | Target | Scenario | Trigger | Expected Output |
 |---|---|---|---|---|
-| **LOGIC-01** | `ExtractPatchHull` | Valid 2D points | `NumPoints > 2` | `support_hull_area_cm2` > 0 |
-| **LOGIC-02** | `ExtractPatchHull` | Points on a line | `Collinear points` | `support_hull_area_cm2` = 0 |
-| **LOGIC-03** | `ExtractPatchHull` | Empty points | `NumPoints = 0` | `support_hull_area_cm2` = 0 |
-| **LOGIC-04** | `BuildFrameHull` | Two valid body patches | Union vertices from both sides | frame hull area is computed from the union |
+| **LOGIC-01** | `ExtractPatchHull` | Valid 2D points | `NumPoints > 2` | `patch_area_cm2` > 0 |
+| **LOGIC-02** | `ExtractPatchHull` | Points on a line | `Collinear points` | `patch_area_cm2` = 0 |
+| **LOGIC-03** | `ExtractPatchHull` | Empty points | `NumPoints = 0` | `patch_area_cm2` = 0 |
+| **LOGIC-04** | `BuildFrameHull` | Offset Unit Squares | L:[0,0]-[1,1]; R:[2,0]-[3,1] | `support_hull_area_cm2` = 3.0 |
 | **LOGIC-05** | `ClassifySupportMode` | Both feet down | `Left=true, Right=true` | `support_mode` = `TwoFootStable` |
 | **LOGIC-06** | `ClassifySupportMode` | One foot down | `Left=true, Right=false` | `support_mode` = `SingleFootSurvival` |
 | **LOGIC-07** | `ClassifySupportMode` | Both feet up, gap <= max | `Both=false, Timer <= limit` | `support_mode` = `TransientRecovery` |

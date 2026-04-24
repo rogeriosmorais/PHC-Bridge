@@ -70,12 +70,15 @@ The implementation must validate the physical continuity of the truth set on eve
 
 ### Support failure definition
 The run fails on `activation_support_failure` if **any** of these support-truth conditions are breached:
-1.  **Support Area Breach**: The total unioned **FrameHullArea** is below the **Support Area (Min)** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+1.  **Support Area Breach**: If `active_support_side_count > 0` AND the total unioned **FrameHullArea** is below the **Support Area (Min)** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 2.  **Airborne Gap Breach**: Both side-support states are `false` AND the cumulative airborne duration exceeds the **Support Gap (Max)** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 
+When `active_support_side_count == 0`, support failure is governed exclusively by the **Airborne Gap Breach** rule, not the area test.
+
 ### One-Foot Support Policy (Honest Balance Survival)
-- A run remains **Support Valid** even if only **one side** (e.g., `foot_l` or `ball_l`) is in contact, provided the **Support Proxy** remains within that single-foot hull.
-- If the proxy remains outside the single-foot hull for longer than the **COM Proxy Drift** limit, the run fails on `activation_proxy_outside_support_region`.
+- A run remains **Support Valid** even if only **one side** (e.g., `foot_l` or `ball_l`) is in contact, provided that:
+  1.  The active single-foot hull area exceeds the **Support Area (Min)** threshold (breach emits `activation_support_failure`).
+  2.  The **Support Proxy** remains within that single-foot hull (breach exceeding **COM Proxy Drift** emits `activation_proxy_outside_support_region`).
 - **Justification**: This is an "Honest Balance Survival" benchmark.
 
 ### Standing Stability Grades
@@ -92,6 +95,12 @@ The run fails on `activation_pose_reference_mismatch` if:
 2.  The RMS mismatch across the entire chain exceeds the **Mismatch (RMS Chain)** threshold for more than the **Mismatch Grace Period** (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 
 The run fails on `activation_target_discontinuity` if the delta at blend start exceeds the **Target Discontinuity** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+
+## Unstable Gain / Damping
+
+The run fails on `activation_unstable_gain_or_damping` if:
+1.  The `controller_gain_scale` exceeds the **Controller Gain Scale (Max)** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
+2.  The `controller_damping_ratio` falls below the **Controller Damping Ratio (Min)** threshold (See [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)).
 
 ## Instability & Support Churn
 
