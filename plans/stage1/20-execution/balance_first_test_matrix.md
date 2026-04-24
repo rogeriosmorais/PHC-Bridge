@@ -15,7 +15,7 @@
 | **LOGIC-09** | `AdjudicateProxy` | Proxy inside hull | `Inside polygon` | `proxy_inside_hull` = `true` |
 | **LOGIC-10** | `AdjudicateProxy` | Proxy outside hull under limit | `Outside polygon, Timer <= limit` | `proxy_inside_hull` = `false`, `proxy_outside_hull_duration_ms` <= 100.0, `terminal_reason` = `nullptr` |
 | **LOGIC-11** | `AdjudicateProxy` | Proxy outside hull over limit | `Outside polygon, Timer > limit` | `proxy_inside_hull` = `false`, `proxy_outside_hull_duration_ms` > 100.0, `terminal_reason` = `activation_proxy_outside_support_region` |
-| **LOGIC-12** | `AdjudicateProxy` | No support hull | `SideCount = 0` | `proxy_inside_hull` = `nullptr`, `proxy_outside_hull_duration_ms` = `nullptr` |
+| **LOGIC-12** | `AdjudicateProxy` | No support hull | `SideCount = 0` | `proxy_inside_hull` = `nullptr`, `proxy_outside_hull_duration_ms` = `nullptr`, proxy test skipped |
 | **LOGIC-13** | `CalculateChurnHz` | 5 transitions in 1.0s | `5 events / 1.0s` | `support_churn_hz` = 5.0 |
 | **LOGIC-14** | `ReduceSupportModeForReportWindow` | 30 Hz tie-break | Equal durations | severity tie-break: `Airborne` > `TransientRecovery` > `SingleFootSurvival` > `TwoFootStable` |
 
