@@ -6,6 +6,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Checkpoint,
 
+    [string]$ReviewReport = "",
+
     [string]$ExecutionLog = "plans/stage1/20-execution/execution-log.md"
 )
 
@@ -24,11 +26,30 @@ if ($GitStatus) {
 $Lines = Get-Content $ExecutionLog
 
 function Get-StateValue {
-    param([string]$Key)
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Key
+    )
 
     foreach ($Line in $Lines) {
-        if ($Line -match "^\|\s*$([regex]::Escape($Key))\s*\|\s*(.+?)\s*\|") {
-            return $Matches[1].Trim().Trim("`").Trim()
+        if (-not $Line.StartsWith("|")) {
+            continue
+        }
+
+        $Cells = $Line -split "\|"
+
+        if ($Cells.Count -lt 4) {
+            continue
+        }
+
+        $CellKey = $Cells[1].Trim()
+        $CellValue = $Cells[2].Trim()
+
+        if ($CellKey -eq $Key) {
+            $CellValue = $CellValue.Trim()
+            $CellValue = $CellValue -replace "^`+", ""
+            $CellValue = $CellValue -replace "`+$", ""
+            return $CellValue.Trim()
         }
     }
 
@@ -88,13 +109,13 @@ switch ($Mode) {
             exit 1
         }
 
-        if (-not $ReviewPacket -or $ReviewPacket -eq "none" -or $ReviewPacket -eq "missing") {
-            Write-Error "Cannot review. Review Packet path is missing."
         if (-not $ScopeCheck -or $ScopeCheck -eq "missing") {
             Write-Error "Cannot review. Scope Check field is missing."
             exit 1
         }
 
+        if (-not $ReviewPacket -or $ReviewPacket -eq "none" -or $ReviewPacket -eq "missing") {
+            Write-Error "Cannot review. Review Packet path is missing."
             exit 1
         }
 
@@ -126,32 +147,6 @@ switch ($Mode) {
         Write-Host "WORKFLOW PREFLIGHT: review allowed"
         exit 0
     }
-
-    "fix" {
-        if ($CheckpointStatus -ne "fix-required" -and $CheckpointStatus -ne "blocked") {
-            Write-Error "Cannot fix. Checkpoint status must be 'fix-required' or 'blocked', got '$CheckpointStatus'."
-            exit 1
-        }
-
-        Write-Host "WORKFLOW PREFLIGHT: fix allowed"
-        exit 0
-    }
-
-    "accept" {
-        if ($CheckpointStatus -ne "review-pending") {
-            Write-Error "Cannot accept. Checkpoint status must be 'review-pending', got '$CheckpointStatus'."
-            exit 1
-        }
-
-        if ($ReviewVerdict -ne "accept") {
-            Write-Error "Cannot accept. Review Verdict must be 'accept', got '$ReviewVerdict'."
-            exit 1
-        }
-
-        Write-Host "WORKFLOW PREFLIGHT: accept allowed"
-        exit 0
-    }
-}
 
     "fix" {
         if ($CheckpointStatus -ne "fix-required" -and $CheckpointStatus -ne "blocked") {
