@@ -8,18 +8,37 @@
 | Checkpoint Status | `review-pending` |
 | Current Task ID | `S1-IMPL-BALANCE-FIRST-03` |
 | Current Task Packet | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-03.md` |
-| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560`; `S1-IMPL-BALANCE-FIRST-02 = 23a53f366f17695317dc30675da65a64bc2c578c`; `S1-IMPL-BALANCE-FIRST-03 = 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1` |
+| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560`; `S1-IMPL-BALANCE-FIRST-02 = 23a53f33d59139362282f3437ecf36ea1b2a3b51`; `S1-IMPL-BALANCE-FIRST-03 = 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1` |
 | Checkpoint Base | `0945121312d7fd0a9236f2b3e566a5b31dc600f7` |
 | Checkpoint Head | `21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1` |
 | Build Result | `passed for tasks 01, 02, and 03; task 02 automation test passed` |
 | Review Packet | `plans/stage1/30-evidence/reviews/S1-SUPPORT-TRUTH-A-review-packet.md` |
 | Review Verdict | `pending` |
-| Blocking Reason | `checkpoint range scope check failed because the recorded base/head range includes non-task workflow/planning commits; individual task commit scope checks passed` |
-| Scope Check | `checkpoint range failed; task 01, 02, and 03 commit scope checks passed` |
+| Blocking Reason | `checkpoint review packet exists, but mechanical scope evidence is missing` |
+| Scope Check | `missing` |
 | Scope Log | `plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-A-scope.log` |
 | Build Log | `plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-A-build.log` |
 | Test Log | `plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-A-test.log` |
-| Working Tree | `clean at handoff` |
+| Working Tree Requirement | `clean at handoff` |
+
+## Command Gate
+
+Current valid command:
+
+`review checkpoint S1-SUPPORT-TRUTH-A`
+
+Invalid until checkpoint A is accepted:
+
+`execute checkpoint S1-SUPPORT-TRUTH-B`
+
+If an implementation agent is asked to start checkpoint B before checkpoint A is accepted, it must stop and report:
+
+`Blocked: S1-SUPPORT-TRUTH-A is review-pending; review/accept/fix checkpoint A before starting checkpoint B.`
+
+Checkpoint A scope note:
+- checkpoint-range scope check failed because the recorded base/head range includes workflow/planning commits
+- individual task commit scope checks passed
+- reviewer must evaluate whether this transitional contamination blocks acceptance
 
 ## Blocked Work Rule
 
@@ -38,7 +57,7 @@ The next task is not runnable while the current checkpoint is blocked.
 
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
-| 1 | checkpoint review | Checkpoint `S1-SUPPORT-TRUTH-A` is review-pending with repaired evidence; reviewer must evaluate the recorded checkpoint-range scope failure. |
+| 1 | checkpoint review | Checkpoint `S1-SUPPORT-TRUTH-A` is review-pending; reviewer must treat missing scope evidence as a blocker unless scope is generated first. |
 
 ## Accepted Handoffs
 

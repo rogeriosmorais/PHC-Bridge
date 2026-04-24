@@ -53,12 +53,9 @@ Every implementer handoff must end with:
 `Commit: <sha|none>`
 `Review: pending|not started|review report attached`
 `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
-`Execution| Blocking Reason | `none` |
-| Scope Check | `missing` |
-| Scope Log | `none` |
-| Build Log | `none` |
-| Test Log | `none` |
-| Working Tree | `clean at handoff` |
+`Execution log impact: none|updated|blocked`
+`Tests: <not run|passed|failed + command>`
+`Build: <not run|passed|failed + command>`
 `Files changed: <comma-separated paths>`
 `Forbidden files touched: none|<paths>`
 `Next task: <task id|blocked|none>`
@@ -162,25 +159,29 @@ Reviewer must reject or block any checkpoint review packet missing scope evidenc
 
 ## Clean Workflow Separation
 
-Workflow/process changes must not be mixed into implementation checkpoints.
+Implementation checkpoints must not include workflow/process changes.
 
-Allowed exceptions:
-- execution-log status updates
-- build/test/scope evidence files
-- blocker reports
-- review packets
+Forbidden inside implementation checkpoints:
+- `AGENTS.md`
+- `plans/stage1/20-execution/agent_workflow_protocol.md`
+- `plans/stage1/20-execution/task-packets/README.md`
+- `plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
+- `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
+- checkpoint packet rewrites
+- workflow script rewrites
 
-If an implementation checkpoint requires changing AGENTS.md, workflow protocol files, scripts, task packets, or checkpoint files, stop and classify it as a workflow blocker.
+Allowed inside implementation checkpoints:
+- files allowed by the active task packet
+- `plans/stage1/20-execution/execution-log.md` status updates
+- durable build/test/scope evidence under `plans/stage1/30-evidence/build/`
+- blocker reports under `plans/stage1/30-evidence/blockers/`
+- review packets under `plans/stage1/30-evidence/reviews/`
 
-Do not continue implementation until the workflow change is reviewed separately.
-2. the generated review packet
-
-The reviewer must not receive:
-- broad repo context
-- full conversation history
-- implementer reasoning
-- architecture summaries
-- unrelated docs
+If an implementation checkpoint requires workflow/process changes:
+- stop
+- classify as `workflow blocker`
+- do not continue implementation
+- make workflow changes in a separate workflow checkpoint/commit
 
 ## Command Cheatsheet
 
@@ -222,5 +223,3 @@ Do not create helper scripts unless they are mandatory and assigned to a role in
 - `AGENTS.md`
 - `agent_workflow_protocol.md`
 - this README
-
-

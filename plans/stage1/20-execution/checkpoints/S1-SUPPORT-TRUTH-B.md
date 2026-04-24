@@ -24,6 +24,27 @@ Run in this order:
 - Do not start task 05 unless task 04 passes.
 - Do not start task 06 unless task 05 passes.
 
+## Mechanical Gates
+
+After each task packet:
+- write durable build/test output under `plans/stage1/30-evidence/build/`
+- run scope check for the current task packet
+- commit only after build/tests and scope check pass
+
+At checkpoint end:
+- run checkpoint-wide scope check
+- write checkpoint scope output to `plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-B-scope.log`
+- generate checkpoint review packet with this checkpoint packet plus all included task packets
+- stop before task 07
+
+Required checkpoint scope command:
+
+`.\scripts\check_task_scope.ps1 -CheckpointPacket plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-B.md -BaseRef <checkpoint-base> -HeadRef <checkpoint-head> -AllowExecutionLog -AllowEvidence`
+
+Required checkpoint review packet command:
+
+`.\scripts\make_review_packet.ps1 -CheckpointPacket plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-B.md -ExtraPackets plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-04.md,plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-05.md,plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-06.md -BaseRef <checkpoint-base> -HeadRef <checkpoint-head> -ScopeLog plans/stage1/30-evidence/build/S1-SUPPORT-TRUTH-B-scope.log -BuildLog <build-log> -TestLog <test-log-if-any> -OutputPath plans/stage1/30-evidence/reviews/S1-SUPPORT-TRUTH-B-review-packet.md`
+
 ## Checkpoint Review
 
 After task 06 passes and is committed:
