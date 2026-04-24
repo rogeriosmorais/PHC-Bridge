@@ -41,7 +41,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | S1-PLAN-TEST-MATRIX | AI | completed | instrumentation_and_acceptance.md, truth model | `plans/stage1/20-execution/balance_first_test_matrix.md` | none |
 | S1-PLAN-FIRST-SLICE | AI | completed | specialized 10-spec suite | `plans/stage1/20-execution/first-slice-definition.md` | none |
 | S1-IMPL-BALANCE-FIRST | AI | active | TDD plan, refactor order, 10-spec suite | `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp`, `PhysAnimSupportTruth.Tests.cpp` | none |
-| S1-IMPL-BALANCE-FIRST-01 | AI | **runnable** | accepted refactor detail plan | `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp` | none |
+| S1-IMPL-BALANCE-FIRST-01 | AI | **runnable** | accepted refactor detail plan | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`, `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp` | none |
 | S1-IMPL-BLOCKER-PROTOCOL | AI | active guardrail | accepted rollout/refactor protocol | `plans/stage1/20-execution/balance_first_rollout_protocol.md`, `plans/stage1/20-execution/balance_first_refactor_plan.md`, `plans/stage1/20-execution/execution-log.md` | none |
 
 ## Frozen Inputs For Continuous Balance Rewrite
@@ -55,7 +55,12 @@ Pre-pivot history remains available in git. This live log now tracks the current
   - `plans/stage1/10-specs/instrumentation_and_acceptance.md`
   - `plans/stage1/10-specs/balance-mode-entry-spec.md`
 - `Supporting Docs`:
-  - `AGENTS.md`, `ENGINEERING_PLAN.md`, `STAGE1_PLAN.md`, `plans/stage1/20-execution/assumption-ledger.md`, `plans/stage1/20-execution/balance_first_rollout_protocol.md`
+  - `AGENTS.md`
+  - `ENGINEERING_PLAN.md`
+  - `STAGE1_PLAN.md`
+  - `plans/stage1/20-execution/assumption-ledger.md`
+  - `plans/stage1/20-execution/decision-locks.md`
+  - `plans/stage1/20-execution/task-packets/README.md`
 - `Unfreeze rule`: Only unfreeze if the user explicitly requests an architecture review or if an implementation spike proves a contract requirement is physically impossible.
 - `Outcome vocabulary`: Use `Failed` for canonical balance-first terminal failure. Treat legacy `FailStopped` as a code/log compatibility label only.
 
@@ -64,6 +69,17 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | Priority | Task ID | Why Runnable / Not Runnable Yet |
 |---|---|---|
 | 1 | S1-IMPL-BALANCE-FIRST-01 | Pure Support Module Scaffold. Create headers and source with zero behavior. |
+
+## Current Task Packet
+
+Current packet:
+
+`plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`
+
+Agents must not implement from the broad refactor plan directly.
+
+Implementation must follow the current task packet first.
+The refactor plan remains authority only when the task packet is incomplete or contradictory.
 
 ## Waiting On User
 

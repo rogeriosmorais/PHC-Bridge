@@ -660,10 +660,26 @@ That include list is the compile-time proof that Slice 1 is value-only.
 
 Every Slice 1 commit must compile and pass its mapped tests. No Slice 1 commit may touch the runtime state machine.
 
+The executable working instructions for each Slice 1 commit live in `plans/stage1/20-execution/task-packets/`. Agents must use the task packet for the current commit and must not implement from this broad plan directly.
+
 **TDD Commit Policy**:
 - **Red State**: Create and observe failing tests locally to verify the test surface. Do not commit red tests alone.
 - **Green State**: Implement the minimal code required to pass the tests. Commit only when the mapped tests are green.
 - **Exceptions**: Only explicitly marked temporary checkpoints may be committed in a failing state.
+
+### Task Packet Authority
+
+For each Slice 1 commit:
+
+1. The refactor plan defines the authoritative order and architecture.
+2. The task packet defines the executable working scope.
+3. The execution log defines the current active task.
+4. The test matrix defines expected behavior.
+
+If these disagree:
+- stop
+- classify as `contract gap`
+- update the conflicting docs before implementation
 
 ### Handoff Requirement
 

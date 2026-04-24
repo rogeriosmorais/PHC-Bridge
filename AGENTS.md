@@ -79,6 +79,64 @@ Do not continue by guessing.
 Do not widen scope.
 Do not edit runtime files unless the packet explicitly allows them.
 
+## Review Packet Rule
+
+After implementation commits, review must be done from a review packet.
+
+Generate it with:
+
+`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md`
+
+The reviewer must compare only:
+- the task packet
+- changed files
+- build/test output
+- forbidden file list
+
+Do not request broad review unless the task packet is impossible.
+
+## Review Scope Rule
+
+Reviewers must review only against:
+
+1. the current task packet
+2. the commit diff
+3. build/test output
+4. relevant mapped tests
+
+Review output must contain at most:
+
+- 3 blockers
+- 3 non-blocking nits
+- verdict
+- next action
+
+Do not reopen architecture unless the task packet is impossible to execute.
+
+Do not restate unchanged project context.
+Do not summarize the full plan.
+Do not review unrelated files.
+
+## Failure Classification Rule
+
+When a task fails, classify the failure using exactly one primary category:
+
+- compile failure
+- harness registration failure
+- mapped test failure
+- missing test expectation
+- contract gap
+- forbidden dependency pressure
+- implementation bug
+- instrumentation gap
+- runtime tuning temptation
+
+After classification, perform only the action allowed by the current task packet or blocker protocol.
+
+Do not make broad fixes.
+Do not tune visually.
+Do not change multiple subsystems in response to one failure.
+
 ## Anti-Spiral Rule
 
 Do not debug balance visually.
@@ -132,9 +190,13 @@ When working in this repo:
 - make file edits directly instead of pasting code into chat
 - do not include large code snippets or diffs unless explicitly requested
 - after edits, reply with:
-  - one-sentence summary of all changes
+  - `Summary: <one sentence>`
   - `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
   - `Execution log impact: none|updated|blocked`
+  - `Tests: <not run|passed|failed + command>`
+  - `Build: <not run|passed|failed + command>`
+  - `Files changed: <comma-separated paths>`
+  - `Forbidden files touched: none|<paths>`
   - `Next task: <task id or none>`
 - keep responses short
 

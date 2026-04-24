@@ -1,0 +1,71 @@
+# S1-IMPL-BALANCE-FIRST-02 — Automation Harness Registration
+
+## Purpose
+
+Register the first Unreal Automation Test for the pure support module.
+
+## Allowed Files
+
+- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.Tests.cpp`
+
+## Forbidden Files
+
+- runtime state-machine files
+- bridge activation files
+- PhysicsControl setup files
+- capsule/CMC behavior files
+- artifact emission files
+- `PhysAnimSupportTruth.cpp` behavior implementation
+
+## Required Inputs
+
+- `AGENTS.md`
+- `plans/stage1/20-execution/balance_first_refactor_plan.md`
+- this task packet
+- existing scaffold files from `S1-IMPL-BALANCE-FIRST-01`
+
+## Required Work
+
+1. Add `PhysAnimSupportTruth.Tests.cpp`.
+2. Register exactly one test:
+   - `PhysAnim.SupportTruth.Harness.CompilesAndRuns`
+3. The test must only prove the harness compiles and runs.
+4. Do not add behavior tests.
+5. Do not add production behavior.
+
+## Required Test
+
+- `PhysAnim.SupportTruth.Harness.CompilesAndRuns`
+
+## Required Commands
+
+- `.\scripts\build.ps1`
+- `.\scripts\build.ps1 -Test PhysAnim.SupportTruth.Harness.CompilesAndRuns`
+
+## Definition Of Done
+
+- harness test appears in Automation
+- harness test runs
+- build passes
+- no production behavior added
+- no forbidden files touched
+- handoff block provided
+
+## Stop Conditions
+
+Stop immediately if:
+- the test cannot register without changing module dependencies
+- the test requires PIE, a map, a skeletal mesh, `UWorld`, `UObject`, `FBodyInstance`, or PhysicsControl
+- production behavior becomes necessary
+- a forbidden file appears in the diff
+
+## Required Handoff
+
+`Summary: <one sentence>`
+`Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
+`Execution log impact: none|updated|blocked`
+`Tests: <passed|failed> .\scripts\build.ps1 -Test PhysAnim.SupportTruth.Harness.CompilesAndRuns`
+`Build: <passed|failed> .\scripts\build.ps1`
+`Files changed: <paths>`
+`Forbidden files touched: none|<paths>`
+`Next task: S1-IMPL-BALANCE-FIRST-03 or blocked`
