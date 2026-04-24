@@ -171,24 +171,33 @@ If workflow state is unclear, stop and report:
 
 `Blocked: workflow state unclear`
 
-Reviewer verdicts do not directly change task state.
+Reviewer verdicts do not directly advance checkpoints.
 
-Reviewers must not edit:
-- `plans/stage1/20-execution/execution-log.md`
-- task packets
-- production code
-- tests
-- planning docs
-
-A reviewer may only return a structured review report, or create a file under:
+Reviewer agents must write exactly one durable review report under:
 
 `plans/stage1/30-evidence/reviews/`
 
-if explicitly instructed.
+Reviewer agents may update `execution-log.md` only with review metadata:
+- review report path
+- review verdict
+- blocking reason
+- next runnable action
+- `Checkpoint Status = fix-required` for `fix required` or `reject`
+
+Reviewer agents must not:
+- mark an accepted checkpoint complete
+- advance to the next checkpoint
+- edit production code
+- edit tests
+- edit task packets
+- edit checkpoint packets
+- edit planning docs
+- edit workflow scripts
+- edit `AGENTS.md`
 
 A verdict of `fix required` or `reject` without at least one blocker is invalid.
 
-Only the orchestrator may update task state after valid review evidence exists.
+Only the orchestrator/accept step may mark a checkpoint accepted and advance to the next checkpoint.
 
 ## Mandatory Script Rule
 

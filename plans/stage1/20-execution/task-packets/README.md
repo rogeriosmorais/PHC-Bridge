@@ -80,21 +80,25 @@ Reviewer agents must write their review report to:
 
 The user must not manually copy reviewer output into repo files.
 
-Reviewer agents may update `execution-log.md` only after writing the durable review report, and only with:
+Reviewer agents may update `execution-log.md` only with review metadata:
 - review report path
 - review verdict
-- checkpoint status
 - blocking reason
 - next runnable action
+- `Checkpoint Status = fix-required` for `fix required` or `reject`
 
-Reviewer agents must not edit:
-- production code
-- tests
-- task packets
-- checkpoint packets
-- workflow scripts
-- planning docs
-- AGENTS.md
+Reviewer agents must not:
+- mark an accepted checkpoint complete
+- advance to the next checkpoint
+- edit production code
+- edit tests
+- edit task packets
+- edit checkpoint packets
+- edit workflow scripts
+- edit planning docs
+- edit `AGENTS.md`
+
+Only the accept/orchestrator step may mark a checkpoint accepted and advance to the next checkpoint.
 
 ## Workflow Preflight
 

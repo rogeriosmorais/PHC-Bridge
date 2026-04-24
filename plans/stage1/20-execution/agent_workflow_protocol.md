@@ -239,28 +239,33 @@ If the review packet file is missing, return:
 
 ## Review Evidence Rule
 
-A reviewer verdict is invalid unless it is backed by a review report.
+A reviewer verdict is invalid unless it is backed by a durable review report file.
 
-The review report may be:
-- inline in the reviewer response, or
-- saved under `plans/stage1/30-evidence/reviews/`
-
-The reviewer must not edit:
-- `plans/stage1/20-execution/execution-log.md`
-- task packets
-- production code
-- tests
-- planning docs
-
-The reviewer must create a durable review report file under:
+The reviewer must write exactly one review report file under:
 
 `plans/stage1/30-evidence/reviews/`
 
 The reviewer may edit only:
-- that review report file
-- `execution-log.md` (only fields defined in the README)
+- the review report file
+- `plans/stage1/20-execution/execution-log.md`
 
-The reviewer must not edit production/test code.
+The reviewer may update `execution-log.md` only with review metadata:
+- review report path
+- review verdict
+- blocking reason
+- next runnable action
+- `Checkpoint Status = fix-required` for `fix required` or `reject`
+
+The reviewer must not:
+- mark an accepted checkpoint complete
+- advance to the next checkpoint
+- edit task packets
+- edit checkpoint packets
+- edit production code
+- edit tests
+- edit planning docs
+- edit workflow scripts
+- edit `AGENTS.md`
 
 A verdict of `accept` is valid only when blockers are `none`.
 
@@ -270,13 +275,14 @@ A verdict of `reject` is valid only when at least one blocker is listed.
 
 Each blocker must include:
 - blocker ID
-- violated task-packet rule
+- violated task-packet or checkpoint rule
 - file/path involved
 - exact required fix
 - whether the fix must stay inside the active checkpoint
 
-A reviewer may not set checkpoint status directly.
-Only the orchestrator may update checkpoint status after reading valid review evidence.
+A reviewer must not return inline-only review output.
+
+The user must not be required to manually persist review output.
 
 ## Commit Rules
 
