@@ -110,9 +110,16 @@ The normal implementation command is:
 
 `execute checkpoint <CHECKPOINT-ID>`
 
-Use `go` only for explicitly assigned single-task work.
-
 Do not use `go` as the default project loop.
+
+Allowed commands:
+
+- `execute checkpoint <CHECKPOINT-ID>`
+- `review checkpoint <CHECKPOINT-ID>`
+- `fix checkpoint <CHECKPOINT-ID>`
+- `accept checkpoint <CHECKPOINT-ID>`
+
+Task-level commands are allowed only when the user explicitly names a single task packet.
 
 Current preferred loop:
 
@@ -130,14 +137,21 @@ All implementation, review, commit, fix, reject, and acceptance behavior is gove
 
 `plans/stage1/20-execution/agent_workflow_protocol.md`
 
-Use these shortcuts:
+Use these checkpoint commands:
 
-- `go` = execute the current task packet only
-- `review current task` = review the current task implementation only
-- `fix current task` = fix reviewer blockers inside the current task packet only
-- `accept current task` = advance the execution log after reviewer verdict `accept`
+- `execute checkpoint <CHECKPOINT-ID>` = execute the active checkpoint only
+- `review checkpoint <CHECKPOINT-ID>` = review the generated checkpoint review packet only
+- `fix checkpoint <CHECKPOINT-ID>` = fix reviewer blockers inside the active checkpoint only
+- `accept checkpoint <CHECKPOINT-ID>` = advance execution-log only after reviewer verdict `accept`
 
-Agents must not improvise workflow behavior.
+Before any command, agents must run:
+
+`.\scripts\check_workflow_state.ps1 -Mode <execute|review|fix|accept> -Checkpoint <CHECKPOINT-ID>`
+
+If preflight fails, stop.
+
+Do not improvise workflow behavior.
+Do not silently switch command modes.
 
 Implementation agents must use:
 
@@ -176,6 +190,10 @@ Only mandatory scripts belong in the workflow.
 
 The user must not be required to run workflow scripts manually.
 
+Before every checkpoint command, the acting agent must run:
+
+- `.\scripts\check_workflow_state.ps1`
+
 Implementation agents must run after each task packet:
 
 - `.\scripts\build.ps1`
@@ -189,21 +207,25 @@ Implementation agents must run only at checkpoint boundaries:
 
 - `.\scripts\make_review_packet.ps1`
 
-Review agents must not run scripts by default.
+Review agents must not run build, scope, or review-packet scripts by default.
+Review agents only consume the generated review packet.
 
 Do not create optional workflow helper scripts.
 
 Required ownership:
 
+- Implementer runs workflow preflight before checkpoint execution.
 - Implementer runs build after each task packet.
 - Implementer writes durable build/test/scope logs.
 - Implementer runs scope check before creating a successful task commit.
 - Implementer commits after each successful task packet.
 - Implementer creates a blocked-task commit after useful edits plus failure.
 - Implementer generates review packet only at checkpoint boundary.
+- Reviewer runs workflow preflight before review.
 - Reviewer consumes the generated review packet.
 - Reviewer does not generate the review packet.
 - Reviewer does not edit `execution-log.md`.
+- Orchestrator runs workflow preflight before acceptance.
 - Orchestrator updates `execution-log.md` only after valid review evidence exists.
 
 ## Dirty Tree Rule

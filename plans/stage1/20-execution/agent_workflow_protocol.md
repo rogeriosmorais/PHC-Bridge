@@ -8,23 +8,57 @@ It exists to prevent improvisation.
 
 ## Commands
 
-Use these commands:
+Use checkpoint commands by default:
 
-- `go`
-  - execute the current implementation task packet only
+- `execute checkpoint <CHECKPOINT-ID>`
+  - execute the active checkpoint only
 
-- `review current task`
-  - review the current task implementation against the current task packet only
+- `review checkpoint <CHECKPOINT-ID>`
+  - review the generated checkpoint review packet only
 
-- `fix current task`
-  - fix reviewer blockers inside the same task packet only
+- `fix checkpoint <CHECKPOINT-ID>`
+  - fix reviewer blockers inside the active checkpoint only
 
-- `accept current task`
-  - advance the execution log to the next task packet after reviewer verdict `accept`
+- `accept checkpoint <CHECKPOINT-ID>`
+  - advance execution-log after reviewer verdict `accept`
 
-Do not use `go` for review.
-Do not use `review current task` for implementation.
-Do not advance to the next task without reviewer verdict `accept`.
+Task-level commands are allowed only when the user explicitly names a single task packet.
+
+Do not use `go` as the project loop.
+
+Before any command, run:
+
+`.\scripts\check_workflow_state.ps1 -Mode <execute|review|fix|accept> -Checkpoint <CHECKPOINT-ID>`
+
+If preflight fails, stop.
+
+## Workflow Preflight Rule
+
+Every agent must run workflow preflight before acting.
+
+Implementation preflight:
+
+`.\scripts\check_workflow_state.ps1 -Mode execute -Checkpoint <CHECKPOINT-ID>`
+
+Review preflight:
+
+`.\scripts\check_workflow_state.ps1 -Mode review -Checkpoint <CHECKPOINT-ID>`
+
+Fix preflight:
+
+`.\scripts\check_workflow_state.ps1 -Mode fix -Checkpoint <CHECKPOINT-ID>`
+
+Accept preflight:
+
+`.\scripts\check_workflow_state.ps1 -Mode accept -Checkpoint <CHECKPOINT-ID>`
+
+If preflight fails:
+- do not edit files
+- do not run build
+- do not review
+- do not update execution-log
+- report the preflight failure
+- stop
 
 ## Roles
 

@@ -22,7 +22,9 @@ param(
 
     [int]$MaxLogLines = 200,
 
-    [switch]$FullDiff
+    [switch]$FullDiff,
+
+    [switch]$AllowMissingEvidence
 )
 
 $PacketList = @()
@@ -57,6 +59,33 @@ foreach ($Packet in $ExtraPackets) {
 if ($PacketList.Count -eq 0) {
     Write-Error "Provide -TaskPacket, -CheckpointPacket, or -ExtraPackets."
     exit 1
+}
+
+if ($CheckpointPacket -and -not $AllowMissingEvidence) {
+    if (-not $ScopeLog) {
+        Write-Error "Checkpoint review packet requires -ScopeLog. Use -AllowMissingEvidence only for blocked/transitional checkpoint review."
+        exit 1
+    }
+
+    if (-not (Test-Path $ScopeLog)) {
+        Write-Error "Scope log not found: $ScopeLog"
+        exit 1
+    }
+
+    if (-not $BuildLog) {
+        Write-Error "Checkpoint review packet requires -BuildLog. Use -AllowMissingEvidence only for blocked/transitional checkpoint review."
+        exit 1
+    }
+
+    if (-not (Test-Path $BuildLog)) {
+        Write-Error "Build log not found: $BuildLog"
+        exit 1
+    }
+
+    if ($TestLog -and -not (Test-Path $TestLog)) {
+        Write-Error "Test log path was supplied but not found: $TestLog"
+        exit 1
+    }
 }
 
 git rev-parse $BaseRef | Out-Null

@@ -157,6 +157,43 @@ Checkpoint-wide scope check is mandatory before checkpoint review.
 
 Reviewer must reject or block any checkpoint review packet missing scope evidence.
 
+## Workflow Preflight
+
+Agents must not infer whether implementation/review/fix/acceptance is allowed.
+
+Before acting, run:
+
+Implementation:
+
+`.\scripts\check_workflow_state.ps1 -Mode execute -Checkpoint <CHECKPOINT-ID>`
+
+Review:
+
+`.\scripts\check_workflow_state.ps1 -Mode review -Checkpoint <CHECKPOINT-ID>`
+
+Fix:
+
+`.\scripts\check_workflow_state.ps1 -Mode fix -Checkpoint <CHECKPOINT-ID>`
+
+Accept:
+
+`.\scripts\check_workflow_state.ps1 -Mode accept -Checkpoint <CHECKPOINT-ID>`
+
+If preflight fails, the agent must stop without editing files.
+
+## Command Vocabulary
+
+Use checkpoint commands by default:
+
+- `execute checkpoint <CHECKPOINT-ID>`
+- `review checkpoint <CHECKPOINT-ID>`
+- `fix checkpoint <CHECKPOINT-ID>`
+- `accept checkpoint <CHECKPOINT-ID>`
+
+Do not use `go` for normal project work.
+
+Task-level commands are allowed only when the user explicitly names a single task packet.
+
 ## Clean Workflow Separation
 
 Implementation checkpoints must not include workflow/process changes.

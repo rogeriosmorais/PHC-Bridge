@@ -15,6 +15,21 @@ Use repository protocol.
 4. Read the current task packet from `execution-log.md`.
 5. Execute only the active task or checkpoint.
 
+## Mandatory Preflight
+
+Before implementation, run:
+
+`.\scripts\check_workflow_state.ps1 -Mode execute -Checkpoint <CHECKPOINT-ID>`
+
+Use the active checkpoint ID from `execution-log.md` unless the user explicitly provided one.
+
+If preflight fails:
+- do not edit files
+- do not run build
+- do not change execution-log
+- report the preflight failure
+- stop
+
 ## Checkpoint Mode
 
 If executing a checkpoint:
