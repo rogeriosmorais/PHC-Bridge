@@ -9,7 +9,10 @@
 | **LOGIC-01** | `ExtractPatchHull` | Valid 2D points | `NumPoints > 2` | `patch_area_cm2` > 0 |
 | **LOGIC-02** | `ExtractPatchHull` | Points on a line | `Collinear points` | `patch_area_cm2` = 0 |
 | **LOGIC-03** | `ExtractPatchHull` | Empty points | `NumPoints = 0` | `patch_area_cm2` = 0 |
-| **LOGIC-04** | `BuildFrameHull` | Offset Unit Squares | L:{(0,0),(1,0),(1,1),(0,1)}; R:{(2,0),(3,0),(3,1),(2,1)} | `HullPointsCm` = {(0,0),(3,0),(3,1),(0,1)}, `support_hull_area_cm2` = 3.0 |
+| **LOGIC-04** | `BuildFrameHull` | Offset Unit Squares | L:{(0,0),(1,0),(1,1),(0,1)}; R:{(2,0),(3,0),(3,1),(2,1)} | `HullPointsCm` = {(0,0),(3,0),(3,1),(0,1)}, `support_hull_area_cm2` = 3.0, `ActiveSupportSideCount` = 2 |
+| **LOGIC-04A** | `BuildFrameHull` | Empty patches | `NumPatches = 0` | `ActiveSupportSideCount` = 0 |
+| **LOGIC-04B** | `BuildFrameHull` | Multiple patches same side | `LeftFoot, LeftBall` | `ActiveSupportSideCount` = 1 |
+| **LOGIC-04C** | `BuildFrameHull` | Both sides | `LeftFoot, RightFoot` | `ActiveSupportSideCount` = 2 |
 | **LOGIC-05** | `ClassifySupportMode` | Both feet down | `Left=true, Right=true` | `support_mode` = `TwoFootStable` |
 | **LOGIC-06** | `ClassifySupportMode` | One foot down | `Left=true, Right=false` | `support_mode` = `SingleFootSurvival` |
 | **LOGIC-07** | `ClassifySupportMode` | Both feet up, gap <= max | `Both=false, Timer <= limit` | `support_mode` = `TransientRecovery` |
@@ -17,9 +20,13 @@
 | **LOGIC-09** | `AdjudicateProxy` | Proxy inside hull | `Inside polygon` | `proxy_inside_hull` = `true` |
 | **LOGIC-10** | `AdjudicateProxy` | Proxy outside hull under limit | `Outside polygon, Timer <= limit` | `proxy_inside_hull` = `false`, `proxy_outside_hull_duration_ms` <= 100.0, `terminal_reason` = `nullptr` |
 | **LOGIC-11** | `AdjudicateProxy` | Proxy outside hull over limit | `Outside polygon, Timer > limit` | `proxy_inside_hull` = `false`, `proxy_outside_hull_duration_ms` > 100.0, `terminal_reason` = `activation_proxy_outside_support_region` |
-| **LOGIC-12** | `AdjudicateProxy` | No support hull | `SideCount = 0` | `proxy_inside_hull` = `nullptr`, `proxy_outside_hull_duration_ms` = `nullptr`, proxy test skipped |
-| **LOGIC-13** | `CalculateChurnHz` | 5 transitions in 1.0s | `5 events / 1.0s` | `support_churn_hz` = 5.0 |
+| **LOGIC-12** | `AdjudicateProxy` | No support hull | `ActiveSupportSideCount = 0` | `proxy_inside_hull` = nullptr, `proxy_outside_hull_duration_ms` = nullptr |
+| **LOGIC-12A** | `AdjudicateProxy` | Degenerate hull | `ActiveSupportSideCount > 0`, `Points < 3` | `proxy_inside_hull` = false, duration follows outside rule |
+| **LOGIC-12B** | `AdjudicateProxy` | First frame outside | `PrevDuration = nullptr`, `IsOutside = true` | `proxy_outside_hull_duration_ms` = `DeltaMs` |
+| **LOGIC-12C** | `AdjudicateProxy` | First frame inside | `PrevDuration = nullptr`, `IsOutside = false` | `proxy_outside_hull_duration_ms` = 0.0 |
+| **LOGIC-13** | `CalculateChurnHz` | 5 transitions in 1.0s | `CurrentTime=1.0, Window=1.0, 5 events in (0.0, 1.0]` | `SupportChurnCount` = 5, `support_churn_hz` = 5.0 |
 | **LOGIC-14** | `ReduceSupportModeForReportWindow` | 30 Hz tie-break | Equal durations | severity tie-break: `Airborne` > `TransientRecovery` > `SingleFootSurvival` > `TwoFootStable` |
+| **LOGIC-14A** | `ReduceSupportModeForReportWindow` | Empty or zero input | `NumModes = 0` OR `TotalDuration = 0` | `support_mode` = `Airborne`, `TotalWindowDurationMs` = 0.0 |
 
 ## 2. Validator Contract Tests (Layer 2)
 

@@ -178,7 +178,8 @@ New files:
 
 Allowed dependency direction:
 
-- `PhysAnimValidators` may include `PhysAnimSupportTruth.h`.
+- `PhysAnimValidators.h` includes `PhysAnimTruthTypes.h`.
+- `PhysAnimValidators.h` includes `PhysAnimSupportTruth.h` only when it needs support result structs.
 - `PhysAnimSupportTruth` must never include `PhysAnimValidators.h`.
 - Runtime files may include both only after adapter slices.
 
@@ -259,6 +260,7 @@ Allowed dependency direction:
 ### New Pure Support Files
 
 - **File paths**:
+  - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimTruthTypes.h`
   - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimSupportTruth.h`
   - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.cpp`
   - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.Tests.cpp`
@@ -270,7 +272,7 @@ Allowed dependency direction:
 
 ## 6. Slice 1 Data Types
 
-These are the exact value-only types Slice 1 must introduce before implementation begins. They live in `PhysAnimSupportTruth.h` and are Slice 1 production types unless marked otherwise.
+These are the exact value-only types Slice 1 must introduce before implementation begins. Shared enums live in `PhysAnimTruthTypes.h`; support structs and function declarations live in `PhysAnimSupportTruth.h`, which includes `PhysAnimTruthTypes.h`.
 
 ### `FPhysAnimSupportPoint2D`
 
@@ -316,6 +318,7 @@ These are the exact value-only types Slice 1 must introduce before implementatio
 
 ### `EPhysAnimSupportSide`
 
+- **Header**: `PhysAnimTruthTypes.h`
 - **Fields**: enum only
 - **Units**: none
 - **Nullable fields**: none
@@ -326,6 +329,7 @@ These are the exact value-only types Slice 1 must introduce before implementatio
 
 ### `EPhysAnimSupportMode`
 
+- **Header**: `PhysAnimTruthTypes.h`
 - **Fields**: enum only
 - **Units**: none
 - **Nullable fields**: none
@@ -338,6 +342,7 @@ These are the exact value-only types Slice 1 must introduce before implementatio
 
 ### `EPhysAnimTerminalReason`
 
+- **Header**: `PhysAnimTruthTypes.h`
 - **Fields**: enum only
 - **Units**: none
 - **Nullable fields**: none
@@ -420,6 +425,19 @@ These are the exact value-only types Slice 1 must introduce before implementatio
 - **Allowed enum values**: none
 - **Classification**: Slice 1 production result
 
+### `FPhysAnimChurnCalculationInput`
+
+- **Fields**:
+  - `double CurrentTimestampSec`
+  - `double WindowSeconds`
+  - `TArray<FPhysAnimChurnEvent> HistoricalEvents`
+- **Units**:
+  - `CurrentTimestampSec`: seconds
+  - `WindowSeconds`: seconds (nominal 1.0)
+- **Nullable fields**: none
+- **Allowed enum values**: none
+- **Classification**: Slice 1 production input
+
 ### `FPhysAnimSupportReportWindowInput`
 
 - **Fields**:
@@ -467,7 +485,67 @@ Introduce only after Slice 1 is green:
 
 These structs must contain fields named after `instrumentation_and_acceptance.md` wherever they represent emitted artifact data.
 
-## 7. Test Harness Wiring
+## 7. Slice 1 Public API
+
+These exact signatures must be implemented in `PhysAnimSupportTruth.h`.
+
+### Support Logic
+
+```cpp
+namespace PhysAnimSupportTruth
+{
+    /** Extract a convex hull from raw support points. Resulting area is 0.0 if collinear or empty. */
+    FPhysAnimSupportPatch ExtractPatchHull(const TArray<FPhysAnimSupportPoint2D>& Points);
+
+    /** Build the frame-level support hull from per-body patches. Sets ActiveSupportSideCount. */
+    FPhysAnimFrameHull BuildFrameHull(const TArray<FPhysAnimSupportPatch>& Patches);
+
+    /** Classify the support mode based on side-support states and gap timing. */
+    EPhysAnimSupportMode ClassifySupportMode(bool bLeftSupport, bool bRightSupport, double SupportGapTimerMs, double SupportGapMaxMs);
+
+    /** Adjudicate proxy drift against the frame hull. Returns EPhysAnimTerminalReason::None if valid. */
+    FPhysAnimProxyAdjudicationResult AdjudicateProxy(const FPhysAnimProxyAdjudicationInput& Input);
+
+    /** AdjudicateProxy Logic Rules:
+     * 1. If ActiveSupportSideCount == 0:
+     *    - skip polygon test
+     *    - ProxyInsideHull = unset
+     *    - ProxyOutsideHullDurationMs = unset
+     *    - TerminalReason = None
+     * 2. If ActiveSupportSideCount > 0 and HullPointsCm.Num() < 3:
+     *    - treat proxy as outside
+     *    - proxy timer follows the normal outside rule (see rule 3/4)
+     * 3. If previous duration is unset and current proxy is outside:
+     *    - ProxyOutsideHullDurationMs = DeltaMs
+     * 4. If previous duration is unset and current proxy is inside:
+     *    - ProxyOutsideHullDurationMs = 0.0
+     * 5. If proxy is outside and duration exceeds limit:
+     *    - TerminalReason = ActivationProxyOutsideSupportRegion
+     */
+
+    /** Calculate transition frequency (Churn Hz) over a rolling window. */
+    FPhysAnimChurnResult CalculateChurnHz(const FPhysAnimChurnCalculationInput& Input);
+
+    /** CalculateChurnHz Logic Rules:
+     * 1. Inclusion boundary: filter HistoricalEvents where (TimestampSec > CurrentTimeSec - WindowSec) AND (TimestampSec <= CurrentTimeSec).
+     * 2. SupportChurnCount = count of filtered events.
+     * 3. SupportChurnHz = SupportChurnCount / WindowSec.
+     */
+
+    /** Reduce 30Hz modes into the dominant mode for the artifact report window. */
+    FPhysAnimSupportReportWindowResult ReduceSupportModeForReportWindow(const FPhysAnimSupportReportWindowInput& Input);
+
+    /** ReduceSupportModeForReportWindow Logic Rules:
+     * 1. Array parity: Input.Modes.Num() must equal Input.DurationsMs.Num().
+     * 2. Empty input: returns SupportMode = Airborne, TotalWindowDurationMs = 0.0.
+     * 3. Negative durations: clamped to 0.0 before accumulation.
+     * 4. Zero total duration: returns SupportMode = Airborne, TotalWindowDurationMs = 0.0.
+     * 5. Accumulation & Tie-break: accumulate duration by mode. If durations are equal, use severity tie-break (Airborne > TransientRecovery > SingleFootSurvival > TwoFootStable).
+     */
+}
+```
+
+## 8. Test Harness Wiring
 
 Slice 1 tests are real Unreal Automation Tests, not conceptual matrix rows.
 
@@ -589,130 +667,47 @@ Every Slice 1 commit must compile and pass its mapped tests. No Slice 1 commit m
 
 Use this exact order:
 
-1. Add empty `PhysAnimSupportTruth.h/.cpp`.
+1. `Commit 1: Pure Support Module Scaffold`
+   - Add `PhysAnimTruthTypes.h` and empty `PhysAnimSupportTruth.h/.cpp`.
+   - `PhysAnimSupportTruth.h` includes `PhysAnimTruthTypes.h`.
    - no runtime references
    - compile only
-2. Add `PhysAnimSupportTruth.Tests.cpp` and verify the harness test runs.
+2. `Commit 2: Automation Harness Registration`
+   - Add `PhysAnimSupportTruth.Tests.cpp` and verify the harness test runs.
    - prove tests are discoverable
-3. Add pure data types and enums.
+3. `Commit 3: Slice 1 Value Types`
+   - Add pure data structs in `PhysAnimSupportTruth.h`; keep shared enums in `PhysAnimTruthTypes.h`.
    - no behavior yet
-4. Implement `ExtractPatchHull`.
+4. `Commit 4: ExtractPatchHull`
    - write failing test locally
    - implement minimal code
    - commit only when `LOGIC-01` to `LOGIC-03` are green
-5. Implement `BuildFrameHull`.
+5. `Commit 5: BuildFrameHull`
    - write failing test locally
    - implement minimal code
    - commit only when `LOGIC-04` is green
-6. Implement `ClassifySupportMode`.
+6. `Commit 6: ClassifySupportMode`
    - write failing test locally
    - implement minimal code
    - commit only when `LOGIC-05` to `LOGIC-08` are green
-7. Implement `AdjudicateProxy`.
+7. `Commit 7: AdjudicateProxy`
    - write failing test locally
    - implement minimal code
    - commit only when `LOGIC-09` to `LOGIC-12` are green
-8. Implement `CalculateChurnHz`.
+8. `Commit 8: CalculateChurnHz`
    - write failing test locally
    - implement minimal code
    - commit only when `LOGIC-13` is green
-9. Implement `ReduceSupportModeForReportWindow`.
+9. `Commit 9: ReduceSupportModeForReportWindow`
    - write failing test locally
    - implement minimal code
    - commit only when `LOGIC-14` is green
-10. Add one Slice 1 aggregation test proving all outputs can be produced without runtime dependencies.
+10. `Commit 10: Slice 1 Aggregation / No-Runtime-Dependency Proof`
+   - add one Slice 1 aggregation test proving all outputs can be produced without runtime dependencies.
 
 No step may include `UPhysAnimComponent`, `FPhysAnimBalanceReadyTransition`, `UPhysicsControlComponent`, `FBodyInstance`, `UWorld`, `AActor`, or Chaos runtime handles.
 
-### Commit 1: Empty Pure Support Module
-
-Goal: add compile-only scaffolding.
-
-Writable paths:
-
-- `Public/PhysAnimSupportTruth.h`
-- `Private/PhysAnimSupportTruth.cpp`
-- `Private/PhysAnimSupportTruth.Tests.cpp`
-
-Required contents:
-
-- namespace or class shell
-- value enum stubs
-- one trivial automation test proving the module links
-
-Forbidden:
-
-- touching legacy runtime files
-- adding Unreal object dependencies
-
-Verification:
-
-- `.\scripts\build.ps1`
-
-### Commit 2: Support Patch Hull
-
-Goal: implement `LOGIC-01` to `LOGIC-04`.
-
-Add tests first for:
-
-- valid hull area
-- collinear zero-area hull
-- empty input
-- frame hull union
-
-Production functions:
-
-- `PhysAnimSupportTruth::ExtractPatchHull`
-- `PhysAnimSupportTruth::BuildFrameHull`
-
-Legacy runtime remains untouched.
-
-### Commit 3: Support Classification
-
-Goal: implement `LOGIC-05` to `LOGIC-08`.
-
-Production function:
-
-- `PhysAnimSupportTruth::ClassifySupportMode`
-
-Inputs must be booleans and timers only. Do not read contacts or body instances.
-
-### Commit 4: Proxy Adjudication
-
-Goal: implement `LOGIC-09` to `LOGIC-12`.
-
-Production function:
-
-- `PhysAnimSupportTruth::AdjudicateProxy`
-- `PhysAnimSupportTruth::IsPointInsideOrOnConvexPolygon` (private helper)
-
-Required logic:
-
-- if `ActiveSupportSideCount == 0`, return `nullptr` for both truth fields and skip test.
-- if `ActiveSupportSideCount > 0`, perform 2D point-in-polygon test.
-- update `ProxyOutsideHullDurationMs` (increment if outside, reset to 0.0 if inside).
-- emit `activation_proxy_outside_support_region` if duration > limit.
-
-Required artifact fields in result:
-
-- `proxy_inside_hull`
-- `proxy_outside_hull_duration_ms`
-- `terminal_reason`
-
-This slice proves proxy drift via real geometric adjudication.
-
-### Commit 5: Churn And 30 Hz Reduction
-
-Goal: implement `LOGIC-13` and `LOGIC-14`.
-
-Production functions:
-
-- `PhysAnimSupportTruth::CalculateChurnHz`
-- `PhysAnimSupportTruth::ReduceSupportModeForReportWindow`
-
-Tie-break order must match `instrumentation_and_acceptance.md`.
-
-### Commit 6: Empty Validator Module
+### Commit 11: Empty Validator Module Scaffolding
 
 Goal: add compile-only validator scaffolding.
 
@@ -724,14 +719,15 @@ Writable paths:
 
 Allowed include:
 
-- `PhysAnimSupportTruth.h`
+- `PhysAnimTruthTypes.h`
+- `PhysAnimSupportTruth.h` only when support result structs are required
 
 Forbidden:
 
 - runtime object includes
 - runtime state-machine edits
 
-### Commit 7: Terminal Arbitration
+### Commit 12: Terminal Arbitration
 
 Goal: implement `ARBIT-01` to `ARBIT-05`.
 
@@ -750,7 +746,7 @@ Output:
 - primary `terminal_reason`
 - `co_terminal_reasons`
 
-### Commit 8: Continuity And Capsule Validators
+### Commit 13: Continuity And Capsule Validators
 
 Goal: implement `VALID-01*` and `VALID-02*`.
 
@@ -761,7 +757,7 @@ Production functions:
 
 Inputs are snapshots only. Runtime object reads remain forbidden.
 
-### Commit 9: Plant And Authority Validators
+### Commit 14: Plant And Authority Validators
 
 Goal: implement `VALID-03*`, `VALID-04*`, `VALID-06A`, and `VALID-06B`.
 
@@ -772,7 +768,7 @@ Production functions:
 - `PhysAnimValidators::ValidateMovementReclaim`
 - `PhysAnimValidators::ValidateShellHelper`
 
-### Commit 10: Controller Stability Validator
+### Commit 15: Controller Stability Validator
 
 Goal: implement `VALID-05A` to `VALID-05H`.
 
@@ -782,7 +778,7 @@ Production function:
 
 All comparisons must use named thresholds from `instrumentation_and_acceptance.md`.
 
-### Commit 11: Artifact Snapshot Builder
+### Commit 16: Artifact Snapshot Builder
 
 Goal: create a value-only artifact snapshot that matches the schema.
 
@@ -795,7 +791,7 @@ Forbidden:
 
 - changing `PhysAnimComparisonSubsystem.cpp` behavior
 
-### Commit 12: Runtime Adapter Capture
+### Commit 17: Runtime Adapter Capture
 
 Goal: add adapters that fill value snapshots from runtime objects without changing decisions.
 
@@ -810,7 +806,7 @@ Rules:
 - adapters do not transition runtime state
 - adapters do not emit terminal decisions yet
 
-### Commit 13: Ready-State Contract Wiring
+### Commit 18: Ready-State Contract Wiring
 
 Goal: wire plant, capsule, continuity, movement reclaim, and shell-helper failures into `BalanceActivation_Ready`.
 
@@ -823,7 +819,7 @@ Required tests:
 
 - integration rows `INTEG-01`, `INTEG-02A`, `INTEG-02B1` to `INTEG-02B4`
 
-### Commit 14: BlendIn And Validate Wiring
+### Commit 19: BlendIn And Validate Wiring
 
 Goal: wire support truth, controller stability, and proxy drift into `BalanceActivation_BlendIn` and `BalanceActivation_Validate`.
 
@@ -831,7 +827,7 @@ Required tests:
 
 - `INTEG-03` to `INTEG-07`
 
-### Commit 15: Standing Success And Artifact Emission
+### Commit 20: Standing Success And Artifact Emission
 
 Goal: wire the 3.0 second success path and terminal artifact emission.
 
@@ -866,8 +862,11 @@ After Commit 12:
 
 Exact dependency rule:
 
+- `PhysAnimTruthTypes` owns shared enums and depends on no support or validator headers.
 - `PhysAnimSupportTruth` depends on nothing from the bridge runtime.
-- `PhysAnimValidators` may depend on `PhysAnimSupportTruth`.
+- `PhysAnimSupportTruth.h` includes `PhysAnimTruthTypes.h`.
+- `PhysAnimValidators.h` includes `PhysAnimTruthTypes.h`.
+- `PhysAnimValidators` may depend on `PhysAnimSupportTruth` only when it consumes support result structs.
 - runtime adapters may depend on validators and support truth.
 - `PhysAnimBridge.cpp` may call adapters only after validators are green.
 - `PhysAnimComparisonSubsystem.cpp` may consume artifact-ready outputs only after artifact schema helpers exist.
@@ -876,7 +875,9 @@ Exact dependency rule:
 Allowed:
 
 ```text
-Tests -> PhysAnimValidators -> PhysAnimSupportTruth -> Core value types
+Tests -> PhysAnimValidators -> PhysAnimTruthTypes
+Tests -> PhysAnimValidators -> PhysAnimSupportTruth (only for support result structs)
+Tests -> PhysAnimSupportTruth -> PhysAnimTruthTypes
 Runtime adapters -> PhysAnimValidators
 Runtime adapters -> PhysAnimSupportTruth
 State machine -> adapter results
@@ -887,6 +888,8 @@ Forbidden:
 
 ```text
 PhysAnimSupportTruth -> PhysAnimValidators
+PhysAnimTruthTypes -> PhysAnimSupportTruth
+PhysAnimTruthTypes -> PhysAnimValidators
 PhysAnimSupportTruth -> UPhysAnimComponent
 PhysAnimValidators -> UPhysAnimComponent
 PhysAnimValidators -> UPhysicsControlComponent
@@ -908,7 +911,7 @@ Slice 1 forbidden include/dependency list:
 Slice 1 is complete only when:
 
 - `PhysAnimSupportTruth.Tests.cpp` covers `LOGIC-01` to `LOGIC-14`
-- `PhysAnimSupportTruth.h` contains only value structs, enums, and pure function declarations
+- `PhysAnimSupportTruth.h` contains only value structs, shared truth-type includes, and pure function declarations
 - `PhysAnimSupportTruth.cpp` contains no `UObject`, `AActor`, component, world, or Chaos runtime references
 - no existing runtime `.cpp` includes `PhysAnimSupportTruth.h`
 - `.\scripts\build.ps1` succeeds

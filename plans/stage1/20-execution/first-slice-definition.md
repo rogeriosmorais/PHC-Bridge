@@ -23,7 +23,7 @@ This is the first coding slice of the balance-first rewrite. It focuses exclusiv
 - **Zero Runtime Surgery**: Do not touch existing bridge state-machine or handoff logic.
 - **Pure Functions**: Implementation must use pure inputs (structs/arrays) and produce pure outputs.
 - **Contract Alignment**: Use the exact field names and types defined in the 10-spec suite.
-- **Repo-Local Paths**: Follow the plugin's existing layout: `Public/PhysAnimSupportTruth.h`, `Private/PhysAnimSupportTruth.cpp`, and `Private/PhysAnimSupportTruth.Tests.cpp`.
+- **Repo-Local Paths**: Follow the plugin's existing layout: `Public/PhysAnimTruthTypes.h`, `Public/PhysAnimSupportTruth.h`, `Private/PhysAnimSupportTruth.cpp`, and `Private/PhysAnimSupportTruth.Tests.cpp`.
 
 ## 4. Definition of Done
 

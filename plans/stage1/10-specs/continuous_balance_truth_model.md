@@ -81,6 +81,13 @@ When `active_support_side_count == 0`, support failure is governed exclusively b
   2.  The **Support Proxy** remains within that single-foot hull (breach exceeding **COM Proxy Drift** emits `activation_proxy_outside_support_region`).
 - **Justification**: This is an "Honest Balance Survival" benchmark.
 
+### Active Support Side Calculation
+The implementation of `BuildFrameHull` must compute `ActiveSupportSideCount` using this exact rule:
+1.  **Count Rule**: `ActiveSupportSideCount` is the number of **distinct** `EPhysAnimSupportSide` values represented by the input set of non-empty support patches.
+2.  **Allowed Values**: The output must be in the range `[0, 2]`.
+3.  **Side Collapse**: Multiple patches on the same physical side (e.g., `foot_l` and `ball_l` both being `EPhysAnimSupportSide::Left`) count as **one** active side.
+4.  **Empty patches**: Patches with `PatchAreaCm2 == 0` or empty `HullPointsCm` must not contribute to the count.
+
 ### Standing Stability Grades
 The support state is classified at the frame level into these four mutually exclusive grades, as defined by the authoritative priority in [engine_execution_contract.md](engine_execution_contract.md):
 1.  **TwoFootStable**
