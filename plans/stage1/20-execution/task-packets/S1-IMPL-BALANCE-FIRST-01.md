@@ -123,7 +123,7 @@ Before editing, record:
 
 This is `Task base`.
 
-Commit only after `.\\scripts\\build.ps1` passes.
+Commit only after `.\scripts\build.ps1` passes.
 
 If build fails:
 - do not commit
@@ -151,13 +151,18 @@ This is `Task head`.
 
 Generate a review packet:
 
-`.\\scripts\\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md -BaseRef <task-base> -HeadRef <task-head>`
+`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md -BaseRef <task-base> -HeadRef <task-head>`
 
 If a context-isolated reviewer sub-agent is available:
 - give it only:
   - `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
   - the generated review packet
-- report its verdict
+- report its full structured review report
+- set `Review: accept|fix required|reject` only if the review report is valid
+- do not update `execution-log.md`
+- do not continue to `S1-IMPL-BALANCE-FIRST-02`
+
+A reviewer verdict without a structured review report is invalid.
 
 If no context-isolated reviewer sub-agent is available:
 - stop
@@ -173,7 +178,7 @@ Do not continue to `S1-IMPL-BALANCE-FIRST-02`.
 `Task base: <sha|none>`
 `Task head: <sha|none>`
 `Commit: <sha|none>`
-`Review: pending|accept|fix required|reject|not started`
+`Review: pending|not started|review report attached`
 `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
 `Execution log impact: none|updated|blocked`
 `Tests: not run`

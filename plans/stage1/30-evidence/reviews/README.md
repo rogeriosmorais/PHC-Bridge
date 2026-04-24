@@ -9,7 +9,7 @@ A task status may not change to:
 
 unless there is a review report or inline reviewer output containing the required verdict evidence.
 
-## Required Review Report Format
+## Required Review Report Fields
 
 Each review report must include:
 
@@ -25,7 +25,7 @@ Each review report must include:
 
 ## Valid Verdict Rules
 
-- `accept` requires zero blockers.
+- `accept` requires blockers = `none`.
 - `fix required` requires at least one blocker.
 - `reject` requires at least one blocker.
 

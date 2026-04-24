@@ -28,7 +28,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | Task ID | Owner | Status | Frozen Inputs | Writable Paths | Waiting On |
 |---|---|---|---|---|---|
 | S1-IMPL-BALANCE-FIRST | AI | active | TDD plan, refactor order, 10-spec suite | `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp`, `PhysAnimSupportTruth.Tests.cpp` | none |
-| S1-IMPL-BALANCE-FIRST-01 | AI | **review-pending** | accepted refactor detail plan; implementation commit exists; review verdict missing valid blocker evidence | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`, `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp` | valid review report |
+| S1-IMPL-BALANCE-FIRST-01 | AI | **review-pending** | task implementation commit exists; valid review evidence still required | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`, `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp` | valid review report |
 | S1-IMPL-BLOCKER-PROTOCOL | AI | active guardrail | accepted rollout/refactor protocol | `plans/stage1/20-execution/balance_first_rollout_protocol.md`, `plans/stage1/20-execution/balance_first_refactor_plan.md`, `plans/stage1/20-execution/execution-log.md` | none |
 
 Historical completed task rows were moved to:
@@ -72,6 +72,28 @@ Implementer prompt:
 Current packet:
 
 `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md`
+
+## Current Task State
+
+| Field | Value |
+|---|---|
+| Task ID | `S1-IMPL-BALANCE-FIRST-01` |
+| Lifecycle Status | `review-pending` |
+| Task Packet | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md` |
+| Task Base | `0945121312d7fd0a9236f2b3e566a5b31dc600f7` |
+| Task Head | `d512b19b5e0b91b42dddaf994ab3d0f8edb60560` |
+| Commit | `d512b19b5e0b91b42dddaf994ab3d0f8edb60560` |
+| Build Result | `passed` |
+| Test Result | `not run` |
+| Review Report | `missing` |
+| Review Verdict | `missing` |
+| Blocking Reason | `valid review evidence required before advancing` |
+
+Rules:
+- `go` is invalid while Lifecycle Status is `review-pending`.
+- `review current task` is valid while Lifecycle Status is `review-pending`.
+- `fix current task` is valid only while Lifecycle Status is `fix-required`.
+- `accept current task` is valid only when Review Verdict is `accept`.
 
 Agents must not implement from the broad refactor plan directly.
 
@@ -246,7 +268,7 @@ Use the one-line handoff declaration instead.
 
 - the refactor-detail planning frontier is closed
 - **S1-PLAN-REFACTOR-DETAIL** is completed
-- **S1-IMPL-BALANCE-FIRST-01** is runnable
+- **S1-IMPL-BALANCE-FIRST-01** is review-pending
 - **S1-IMPL-BALANCE-FIRST** is active
 - the Stop Rule remains in effect: no runtime state-machine rewiring until pure support logic is verified green
 - all legacy design and Phase 0/1 packages have been moved to `90-archive`

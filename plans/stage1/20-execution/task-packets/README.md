@@ -44,16 +44,21 @@ The execution log is the state board.
 
 ## Required Handoff
 
-Every task handoff must end with:
+Every implementer handoff must end with:
 
 `Summary: <one sentence>`
+`Task: <task id>`
+`Task base: <sha|none>`
+`Task head: <sha|none>`
+`Commit: <sha|none>`
+`Review: pending|accept|fix required|reject|not started`
 `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
 `Execution log impact: none|updated|blocked`
 `Tests: <not run|passed|failed + command>`
 `Build: <not run|passed|failed + command>`
 `Files changed: <comma-separated paths>`
 `Forbidden files touched: none|<paths>`
-`Next task: <task id or none>`
+`Next task: <task id|blocked|none>`
 
 ## Complete Task Lifecycle
 
@@ -95,11 +100,16 @@ Do not start the next task until reviewer verdict is `accept`.
 
 After a task commit, generate a bounded review packet with:
 
-`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md -BuildLog <path> -TestLog <path>`
+`.\scripts\make_review_packet.ps1 -TaskPacket plans/stage1/20-execution/task-packets/<TASK-ID>.md -BaseRef <task-base> -HeadRef <task-head> -BuildLog <path> -TestLog <path>`
 
 Use `-FullDiff` only when the reviewer explicitly asks for the full diff.
 
-Paste only that review packet into the reviewer.
+The review packet must include:
+- task packet content
+- changed files
+- diff from task base to task head
+- build output, if available
+- test output, if available
 
 Do not ask for broad repo review after implementation commits.
 

@@ -12,6 +12,21 @@ Do not approve work that violates the task packet.
 Do not implement fixes.
 Do not edit files.
 
+The reviewer must not update:
+- `plans/stage1/20-execution/execution-log.md`
+- task packets
+- production code
+- tests
+- planning docs
+
+The reviewer must not change task status.
+
+The reviewer may only return the review report.
+
+If a review packet is missing, incomplete, or does not include task base/task head/commit, return:
+
+`Blocked: review packet missing required evidence`
+
 Review against:
 
 1. allowed files

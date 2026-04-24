@@ -106,7 +106,7 @@ Then return the required handoff block.
 `Task base: <sha|none>`
 `Task head: <sha|none>`
 `Commit: <sha|none>`
-`Review: pending|accept|fix required|reject|not started`
+`Review: pending|not started|review report attached`
 `Ledger impact: none|updated: A-XX|blocked: assumption decision needed`
 `Execution log impact: none|updated|blocked`
 `Tests: <not run|passed|failed + command>`

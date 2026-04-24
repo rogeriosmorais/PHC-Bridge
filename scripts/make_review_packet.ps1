@@ -2,9 +2,11 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$TaskPacket,
 
-    [string]$BaseRef = "HEAD~1",
+    [Parameter(Mandatory=$true)]
+    [string]$BaseRef,
 
-    [string]$HeadRef = "HEAD",
+    [Parameter(Mandatory=$true)]
+    [string]$HeadRef,
 
     [string]$BuildLog = "",
 
@@ -16,6 +18,29 @@ param(
 
     [switch]$FullDiff
 )
+
+if (-not (Test-Path $TaskPacket)) {
+    Write-Error "Task packet not found: $TaskPacket"
+    exit 1
+}
+
+git rev-parse $BaseRef | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Invalid BaseRef: $BaseRef"
+    exit 1
+}
+
+git rev-parse $HeadRef | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Invalid HeadRef: $HeadRef"
+    exit 1
+}
+
+$ChangedFiles = git diff --name-only $BaseRef $HeadRef
+if (-not $ChangedFiles) {
+    Write-Error "No diff found between BaseRef and HeadRef."
+    exit 1
+}
 
 Write-Host "=== REVIEW PACKET ==="
 Write-Host ""
@@ -32,8 +57,11 @@ Write-Host "Base:"
 git rev-parse $BaseRef
 Write-Host ""
 
-Write-Host "Task packet:"
-Write-Host $TaskPacket
+Write-Host "Review target:"
+Write-Host "Task packet: $TaskPacket"
+Write-Host "Task base: $BaseRef"
+Write-Host "Task head: $HeadRef"
+Write-Host "Commit: $HeadRef"
 Write-Host ""
 
 Write-Host "=== TASK PACKET CONTENT ==="
@@ -41,7 +69,7 @@ Get-Content $TaskPacket
 Write-Host ""
 
 Write-Host "=== CHANGED FILES ==="
-git diff --name-only $BaseRef $HeadRef
+$ChangedFiles
 Write-Host ""
 
 Write-Host "=== DIFF STAT ==="

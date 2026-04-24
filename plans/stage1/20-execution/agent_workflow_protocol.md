@@ -146,7 +146,13 @@ When reviewing a task, the reviewer must:
 2. Read `plans/stage1/20-execution/execution-log.md`.
 3. Read `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`.
 4. Identify the current task packet unless a task ID was explicitly provided.
-5. Use the generated review packet, or generate it if enough refs/log paths are available.
+5. Use only the generated review packet supplied by the orchestrator or implementer handoff.
+
+The reviewer must not generate the review packet.
+The review packet must be generated before reviewer launch.
+If no review packet is supplied, the reviewer must return:
+
+`Blocked: review packet missing`
 6. Review only:
    - task packet
    - changed files
@@ -163,26 +169,28 @@ The reviewer must not implement fixes.
 
 ## Review Evidence Rule
 
-A reviewer verdict is not valid unless it is backed by a review report.
+A reviewer verdict is invalid unless it is backed by a review report.
 
-A review report may be:
-- returned in the reviewer response, or
-- written to `plans/stage1/30-evidence/reviews/`
+The review report may be:
+- inline in the reviewer response, or
+- saved under `plans/stage1/30-evidence/reviews/`
 
-The reviewer must not update:
-- `execution-log.md`
+The reviewer must not edit:
+- `plans/stage1/20-execution/execution-log.md`
 - task packets
 - production code
 - tests
 - planning docs
 
 The reviewer may only:
-- return a structured review response, or
+- return a structured review report, or
 - create a review report file if explicitly instructed by the orchestrator.
 
-A verdict of `fix required` is invalid unless it includes at least one blocker.
+A verdict of `accept` is valid only when blockers are `none`.
 
-A verdict of `reject` is invalid unless it includes at least one blocker.
+A verdict of `fix required` is valid only when at least one blocker is listed.
+
+A verdict of `reject` is valid only when at least one blocker is listed.
 
 Each blocker must include:
 - blocker ID
@@ -192,7 +200,7 @@ Each blocker must include:
 - whether the fix must stay inside the current task packet
 
 A reviewer may not set task status directly.
-Only the orchestrator may update task status after reading the review report.
+Only the orchestrator may update task status after reading valid review evidence.
 
 ## Commit Rules
 
@@ -248,51 +256,54 @@ If reviewer verdict is `accept`:
 
 No task status may change based only on a bare verdict.
 
-Every transition must cite the evidence that caused it.
+Every transition must cite evidence.
 
 Allowed transitions:
 
 1. `runnable` -> `implementation-active`
-   Evidence required:
-   - user/orchestrator command `go`
+   Required evidence:
+   - user/orchestrator command: `go`
 
 2. `implementation-active` -> `implementation-failed`
-   Evidence required:
+   Required evidence:
    - failed build/test command
    - no commit SHA
 
 3. `implementation-active` -> `review-pending`
-   Evidence required:
+   Required evidence:
    - task base SHA
    - task head SHA
    - commit SHA
    - build/test result
 
 4. `review-pending` -> `fix-required`
-   Evidence required:
-   - review report path or pasted review report
-   - reviewer verdict `fix required`
+   Required evidence:
+   - review report path or inline review report
+   - reviewer verdict: `fix required`
    - at least one blocker ID
 
 5. `review-pending` -> `rejected`
-   Evidence required:
-   - review report path or pasted review report
-   - reviewer verdict `reject`
+   Required evidence:
+   - review report path or inline review report
+   - reviewer verdict: `reject`
    - at least one blocker ID
 
 6. `review-pending` -> `accepted`
-   Evidence required:
-   - review report path or pasted review report
-   - reviewer verdict `accept`
-   - no blockers
+   Required evidence:
+   - review report path or inline review report
+   - reviewer verdict: `accept`
+   - blockers: `none`
 
 7. `fix-required` -> `review-pending`
-   Evidence required:
-   - fix commit SHA or amended task head SHA
+   Required evidence:
+   - original task base SHA
+   - new task head SHA
+   - fix commit SHA or amended commit SHA
    - build/test result
-   - same original task base SHA
 
 A state transition without required evidence is invalid.
+
+
 
 ## Execution Log Advance
 
