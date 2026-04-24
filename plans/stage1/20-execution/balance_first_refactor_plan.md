@@ -630,7 +630,7 @@ Slice 1 test files must not include:
 
 That include list is the compile-time proof that Slice 1 is value-only.
 
-## 8. Slice 1 Commit Plan
+## 9. Slice 1 Commit Plan
 
 Every Slice 1 commit must compile and pass its mapped tests. No Slice 1 commit may touch the runtime state machine.
 
@@ -641,20 +641,61 @@ Every Slice 1 commit must compile and pass its mapped tests. No Slice 1 commit m
 
 Use this exact order:
 
-1. scaffold
-2. automation harness
-3. value types
-4. `ExtractPatchHull`
-5. `BuildFrameHull`
-6. `ClassifySupportMode`
-7. `AdjudicateProxy`
-8. `CalculateChurnHz`
-9. `ReduceSupportModeForReportWindow`
-10. aggregation/no-runtime proof
+1. `Commit 1: Pure Support Module Scaffold`
+   - Add `PhysAnimTruthTypes.h` and empty `PhysAnimSupportTruth.h/.cpp`.
+   - `PhysAnimSupportTruth.h` includes `PhysAnimTruthTypes.h`.
+   - No runtime references.
+   - Compile only.
+2. `Commit 2: Automation Harness Registration`
+   - Add `PhysAnimSupportTruth.Tests.cpp`.
+   - Verify `PhysAnim.SupportTruth.Harness.CompilesAndRuns` is discoverable and runs.
+3. `Commit 3: Slice 1 Value Types`
+   - Add pure data structs in `PhysAnimSupportTruth.h`.
+   - Keep shared enums in `PhysAnimTruthTypes.h`.
+   - No behavior yet.
+4. `Commit 4: ExtractPatchHull`
+   - Write mapped failing tests locally.
+   - Implement minimal code.
+   - Commit only when mapped tests are green.
+5. `Commit 5: BuildFrameHull`
+   - Write mapped failing tests locally.
+   - Implement minimal code.
+   - Commit only when mapped tests are green.
+6. `Commit 6: ClassifySupportMode`
+   - Write mapped failing tests locally.
+   - Implement minimal code.
+   - Commit only when mapped tests are green.
+7. `Commit 7: AdjudicateProxy`
+   - Write mapped failing tests locally.
+   - Implement minimal code.
+   - Commit only when mapped tests are green.
+8. `Commit 8: CalculateChurnHz`
+   - Write mapped failing tests locally.
+   - Implement minimal code.
+   - Commit only when mapped tests are green.
+9. `Commit 9: ReduceSupportModeForReportWindow`
+   - Write mapped failing tests locally.
+   - Implement minimal code.
+   - Commit only when mapped tests are green.
+10. `Commit 10: Slice 1 Aggregation / No-Runtime-Dependency Proof`
+   - Add one Slice 1 aggregation test proving all outputs can be produced without runtime dependencies.
 
 No step may include `UPhysAnimComponent`, `FPhysAnimBalanceReadyTransition`, `UPhysicsControlComponent`, `FBodyInstance`, `UWorld`, `AActor`, or Chaos runtime handles.
 
-## Slice 1 Forbidden Edits
+## Slice-to-Test Mapping
+
+No behavior commit is complete until its mapped tests are green.
+
+| Commit | Function | Required Tests | Completion Gate |
+|---|---|---|---|
+| Commit 4 | `ExtractPatchHull` | `LOGIC-01`, `LOGIC-02`, `LOGIC-03`, `LOGIC-03A` | All mapped tests pass. |
+| Commit 5 | `BuildFrameHull` | `LOGIC-04`, `LOGIC-04A`, `LOGIC-04B`, `LOGIC-04C` | All mapped tests pass. |
+| Commit 6 | `ClassifySupportMode` | `LOGIC-05`, `LOGIC-06`, `LOGIC-07`, `LOGIC-08` | All mapped tests pass. |
+| Commit 7 | `AdjudicateProxy` | `LOGIC-09`, `LOGIC-10`, `LOGIC-11`, `LOGIC-12`, `LOGIC-12A`, `LOGIC-12B`, `LOGIC-12C` | All mapped tests pass. |
+| Commit 8 | `CalculateChurnHz` | `LOGIC-13` | All mapped tests pass. |
+| Commit 9 | `ReduceSupportModeForReportWindow` | `LOGIC-14`, `LOGIC-14A`, `LOGIC-14B`, `LOGIC-14C` | All mapped tests pass. |
+
+## 10. Slice 1 Forbidden Edits
 
 Slice 1 forbids edits to:
 
@@ -812,7 +853,7 @@ Required tests:
 - `INTEG-08`
 - `SMOKE-01` to `SMOKE-05`
 
-## 9. How Old Runtime Stays Untouched
+## 11. How Old Runtime Stays Untouched
 
 Before Commit 12:
 
@@ -828,7 +869,7 @@ After Commit 12:
 - validators decide only from snapshots
 - state-machine code may consume validator results only in the assigned wiring commits
 
-## 10. Dependency Direction
+## 12. Dependency Direction
 
 Exact dependency rule:
 
@@ -876,11 +917,11 @@ Slice 1 forbidden include/dependency list:
 - no `BodyInstance` dependency
 - no `UObject` ownership
 
-## 11. Slice 1 Completion Proof
+## 13. Slice 1 Completion Proof
 
 Slice 1 is complete only when:
 
-- `PhysAnimSupportTruth.Tests.cpp` covers `LOGIC-01` to `LOGIC-14`
+- `PhysAnimSupportTruth.Tests.cpp` covers every test in the Slice-to-Test Mapping section, including `LOGIC-03A`, `LOGIC-04A` to `LOGIC-04C`, `LOGIC-12A` to `LOGIC-12C`, and `LOGIC-14A` to `LOGIC-14C`
 - `PhysAnimSupportTruth.h` contains only value structs, shared truth-type includes, and pure function declarations
 - `PhysAnimSupportTruth.cpp` contains no `UObject`, `AActor`, component, world, or Chaos runtime references
 - no existing runtime `.cpp` includes `PhysAnimSupportTruth.h`
@@ -888,7 +929,7 @@ Slice 1 is complete only when:
 
 Slice 1 is not complete if it requires editor runtime setup, PIE, smoke tests, skeletal mesh instances, body instances, or Physics Control components.
 
-## 12. Stop Conditions
+## 14. Stop Conditions
 
 Stop and revise contracts if any of these occur:
 

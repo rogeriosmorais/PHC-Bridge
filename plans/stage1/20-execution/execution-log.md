@@ -110,3 +110,15 @@ Whenever new setup or gate evidence arrives:
 - **S1-IMPL-BALANCE-FIRST** is blocked until the detailed migration plan is accepted
 - the Stop Rule remains in effect: no runtime state-machine rewiring until pure support logic is verified green
 - all legacy design and Phase 0/1 packages have been moved to `90-archive`
+
+### S1-PLAN-REFACTOR-DETAIL Acceptance Checklist
+- [ ] current code inventory present
+- [ ] extraction seams present
+- [ ] Slice 1 data types present
+- [ ] Slice 1 public API present
+- [ ] test harness wiring present
+- [ ] dependency direction present
+- [ ] compile-safe commit sequence present
+- [ ] slice-to-test mapping present
+- [ ] Slice 1 forbidden edits present
+- [ ] implementation code absent before acceptance
