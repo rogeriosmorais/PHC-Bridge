@@ -4,13 +4,7 @@
 
 This is the first coding slice of the balance-first rewrite. It focuses exclusively on the pure geometric and temporal logic of the support pipeline.
 
-**Targets**:
-- **Support Patch Reduction**: Constructing per-body 2D convex hulls from manifold points.
-- **Frame Hull Union**: Merging per-body hulls into the authoritative frame hull.
-- **Support-Mode Classification**: Grading the contact pattern (TwoFoot, SingleFoot, Transient, Airborne).
-- **Proxy Drift Timer**: Adjudicating proxy containment vs. time.
-- **Churn Frequency Calculation**: Computing rolling 1.0s Hz from transitions.
-- **30 Hz Support-Mode Reduction**: Reducing frame-level classifications into report-window artifacts with the contract tie-break order.
+**Targets**: See the authoritative [Slice 1 Commit Plan](balance_first_refactor_plan.md#8-slice-1-commit-plan).
 
 ## 2. Why This Slice First
 

@@ -2,13 +2,14 @@
 
 ## 1. Pure Logic Unit Tests (Layer 1)
 
+**Note**: In the following tables, `terminal_reason = nullptr` refers to the artifact mapping of the internal `EPhysAnimTerminalReason::None` value.
+
 | Test ID | Target | Scenario | Trigger | Expected Output |
 |---|---|---|---|---|
-
-**Note**: In the following tables, `terminal_reason = nullptr` refers to the artifact mapping of the internal `EPhysAnimTerminalReason::None` value.
 | **LOGIC-01** | `ExtractPatchHull` | Valid 2D points | `NumPoints > 2` | `patch_area_cm2` > 0 |
 | **LOGIC-02** | `ExtractPatchHull` | Points on a line | `Collinear points` | `patch_area_cm2` = 0 |
 | **LOGIC-03** | `ExtractPatchHull` | Empty points | `NumPoints = 0` | `patch_area_cm2` = 0 |
+| **LOGIC-03A** | `ExtractPatchHull` | Mixed input | `Mixed Body/Side` | `bValidInput` = false, `patch_area_cm2` = 0 |
 | **LOGIC-04** | `BuildFrameHull` | Offset Unit Squares | L:{(0,0),(1,0),(1,1),(0,1)}; R:{(2,0),(3,0),(3,1),(2,1)} | `HullPointsCm` = {(0,0),(3,0),(3,1),(0,1)}, `support_hull_area_cm2` = 3.0, `ActiveSupportSideCount` = 2 |
 | **LOGIC-04A** | `BuildFrameHull` | Empty patches | `NumPatches = 0` | `ActiveSupportSideCount` = 0 |
 | **LOGIC-04B** | `BuildFrameHull` | Multiple patches same side | `LeftFoot, LeftBall` | `ActiveSupportSideCount` = 1 |
@@ -24,9 +25,11 @@
 | **LOGIC-12A** | `AdjudicateProxy` | Degenerate hull | `ActiveSupportSideCount > 0`, `Points < 3` | `proxy_inside_hull` = false, duration follows outside rule |
 | **LOGIC-12B** | `AdjudicateProxy` | First frame outside | `PrevDuration = nullptr`, `IsOutside = true` | `proxy_outside_hull_duration_ms` = `DeltaMs` |
 | **LOGIC-12C** | `AdjudicateProxy` | First frame inside | `PrevDuration = nullptr`, `IsOutside = false` | `proxy_outside_hull_duration_ms` = 0.0 |
-| **LOGIC-13** | `CalculateChurnHz` | 5 transitions in 1.0s | `CurrentTime=1.0, Window=1.0, 5 events in (0.0, 1.0]` | `SupportChurnCount` = 5, `support_churn_hz` = 5.0 |
+| **LOGIC-13** | `CalculateChurnHz` | 5 transitions in 1.0s | `CurrentTimestampSec=1.0, WindowSeconds=1.0, 5 events in (0.0, 1.0]` | `SupportChurnCount` = 5, `support_churn_hz` = 5.0 |
 | **LOGIC-14** | `ReduceSupportModeForReportWindow` | 30 Hz tie-break | Equal durations | severity tie-break: `Airborne` > `TransientRecovery` > `SingleFootSurvival` > `TwoFootStable` |
 | **LOGIC-14A** | `ReduceSupportModeForReportWindow` | Empty or zero input | `NumModes = 0` OR `TotalDuration = 0` | `support_mode` = `Airborne`, `TotalWindowDurationMs` = 0.0 |
+| **LOGIC-14B** | `ReduceSupportModeForReportWindow` | Array length mismatch | `Modes.Num() != DurationsMs.Num()` | `support_mode` = `Airborne`, `TotalWindowDurationMs` = 0.0, `bValidInput` = `false` |
+| **LOGIC-14C** | `ReduceSupportModeForReportWindow` | Negative duration | `DurationsMs` contains negative values | Clamped to 0.0 before accumulation |
 
 ## 2. Validator Contract Tests (Layer 2)
 

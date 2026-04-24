@@ -294,6 +294,7 @@ These are the exact value-only types Slice 1 must introduce before implementatio
   - `EPhysAnimSupportSide SupportSide`
   - `TArray<FVector2D> HullPointsCm`
   - `double PatchAreaCm2`
+  - `bool bValidInput`
 - **Units**:
   - `HullPointsCm`: world-space planar centimeters
   - `PatchAreaCm2`: square centimeters
@@ -311,7 +312,7 @@ These are the exact value-only types Slice 1 must introduce before implementatio
 - **Units**:
   - `HullPointsCm`: world-space planar centimeters
   - `SupportHullAreaCm2`: square centimeters
-  - `ActiveSupportSideCount`: count in `[0, 2]`
+  - `ActiveSupportSideCount`: count in `[0, 2]` of distinct `EPhysAnimSupportSide` values represented by non-empty patches.
 - **Nullable fields**: none
 - **Allowed enum values**: none
 - **Classification**: Slice 1 production result
@@ -494,10 +495,22 @@ These exact signatures must be implemented in `PhysAnimSupportTruth.h`.
 ```cpp
 namespace PhysAnimSupportTruth
 {
-    /** Extract a convex hull from raw support points. Resulting area is 0.0 if collinear or empty. */
+    /** Extract a convex hull from raw support points. 
+     * Rule: Expects all points to belong to one BodyName and one SupportSide.
+     * - empty input -> returns empty patch, PatchAreaCm2 = 0.0, bValidInput = true.
+     * - mixed body or side input -> returns empty patch, PatchAreaCm2 = 0.0, bValidInput = false.
+     * - collinear points -> returns empty patch, PatchAreaCm2 = 0.0, bValidInput = true.
+     */
     FPhysAnimSupportPatch ExtractPatchHull(const TArray<FPhysAnimSupportPoint2D>& Points);
 
-    /** Build the frame-level support hull from per-body patches. Sets ActiveSupportSideCount. */
+    /** Build the frame-level support hull from per-body patches. Sets ActiveSupportSideCount. 
+     * Rule: ActiveSupportSideCount is the number of distinct EPhysAnimSupportSide values from non-empty patches.
+     * - empty patch list -> 0
+     * - multiple patches on Left only -> 1
+     * - multiple patches on Right only -> 1
+     * - any Left + any Right -> 2
+     * - empty patches (no hull points) do not contribute to the count
+     */
     FPhysAnimFrameHull BuildFrameHull(const TArray<FPhysAnimSupportPatch>& Patches);
 
     /** Classify the support mode based on side-support states and gap timing. */
@@ -527,9 +540,9 @@ namespace PhysAnimSupportTruth
     FPhysAnimChurnResult CalculateChurnHz(const FPhysAnimChurnCalculationInput& Input);
 
     /** CalculateChurnHz Logic Rules:
-     * 1. Inclusion boundary: filter HistoricalEvents where (TimestampSec > CurrentTimeSec - WindowSec) AND (TimestampSec <= CurrentTimeSec).
+     * 1. Inclusion boundary: filter HistoricalEvents where (TimestampSec > CurrentTimestampSec - WindowSeconds) AND (TimestampSec <= CurrentTimestampSec).
      * 2. SupportChurnCount = count of filtered events.
-     * 3. SupportChurnHz = SupportChurnCount / WindowSec.
+     * 3. SupportChurnHz = SupportChurnCount / WindowSeconds.
      */
 
     /** Reduce 30Hz modes into the dominant mode for the artifact report window. */
@@ -617,22 +630,29 @@ Slice 1 test files must not include:
 
 That include list is the compile-time proof that Slice 1 is value-only.
 
-## 8. Compile-Safe Commit Order
+## 8. Slice 1 Commit Plan
 
-## Slice-to-Test Mapping
+Every Slice 1 commit must compile and pass its mapped tests. No Slice 1 commit may touch the runtime state machine.
 
-Slice 1 implementation must follow this mapping exactly:
+**TDD Commit Policy**:
+- **Red State**: Create and observe failing tests locally to verify the test surface. Do not commit red tests alone.
+- **Green State**: Implement the minimal code required to pass the tests. Commit only when the mapped tests are green.
+- **Exceptions**: Only explicitly marked temporary checkpoints may be committed in a failing state.
 
-| Slice 1 function | Required tests |
-|---|---|
-| `ExtractPatchHull` | `LOGIC-01`, `LOGIC-02`, `LOGIC-03` |
-| `BuildFrameHull` | `LOGIC-04` |
-| `ClassifySupportMode` | `LOGIC-05`, `LOGIC-06`, `LOGIC-07`, `LOGIC-08` |
-| `AdjudicateProxy` | `LOGIC-09`, `LOGIC-10`, `LOGIC-11`, `LOGIC-12` |
-| `CalculateChurnHz` | `LOGIC-13` |
-| `ReduceSupportModeForReportWindow` | `LOGIC-14` |
+Use this exact order:
 
-No Slice 1 work is complete until all mapped tests are green.
+1. scaffold
+2. automation harness
+3. value types
+4. `ExtractPatchHull`
+5. `BuildFrameHull`
+6. `ClassifySupportMode`
+7. `AdjudicateProxy`
+8. `CalculateChurnHz`
+9. `ReduceSupportModeForReportWindow`
+10. aggregation/no-runtime proof
+
+No step may include `UPhysAnimComponent`, `FPhysAnimBalanceReadyTransition`, `UPhysicsControlComponent`, `FBodyInstance`, `UWorld`, `AActor`, or Chaos runtime handles.
 
 ## Slice 1 Forbidden Edits
 
@@ -656,56 +676,6 @@ Slice 1 allows only:
 - new support tests
 - build file edits required to compile tests
 
-### Slice 1 Commit Plan
-
-Every Slice 1 commit must compile and pass its mapped tests. No Slice 1 commit may touch the runtime state machine.
-
-**TDD Commit Policy**:
-- **Red State**: Create and observe failing tests locally to verify the test surface. Do not commit red tests alone.
-- **Green State**: Implement the minimal code required to pass the tests. Commit only when the mapped tests are green.
-- **Exceptions**: Only explicitly marked temporary checkpoints may be committed in a failing state (e.g., during handoff).
-
-Use this exact order:
-
-1. `Commit 1: Pure Support Module Scaffold`
-   - Add `PhysAnimTruthTypes.h` and empty `PhysAnimSupportTruth.h/.cpp`.
-   - `PhysAnimSupportTruth.h` includes `PhysAnimTruthTypes.h`.
-   - no runtime references
-   - compile only
-2. `Commit 2: Automation Harness Registration`
-   - Add `PhysAnimSupportTruth.Tests.cpp` and verify the harness test runs.
-   - prove tests are discoverable
-3. `Commit 3: Slice 1 Value Types`
-   - Add pure data structs in `PhysAnimSupportTruth.h`; keep shared enums in `PhysAnimTruthTypes.h`.
-   - no behavior yet
-4. `Commit 4: ExtractPatchHull`
-   - write failing test locally
-   - implement minimal code
-   - commit only when `LOGIC-01` to `LOGIC-03` are green
-5. `Commit 5: BuildFrameHull`
-   - write failing test locally
-   - implement minimal code
-   - commit only when `LOGIC-04` is green
-6. `Commit 6: ClassifySupportMode`
-   - write failing test locally
-   - implement minimal code
-   - commit only when `LOGIC-05` to `LOGIC-08` are green
-7. `Commit 7: AdjudicateProxy`
-   - write failing test locally
-   - implement minimal code
-   - commit only when `LOGIC-09` to `LOGIC-12` are green
-8. `Commit 8: CalculateChurnHz`
-   - write failing test locally
-   - implement minimal code
-   - commit only when `LOGIC-13` is green
-9. `Commit 9: ReduceSupportModeForReportWindow`
-   - write failing test locally
-   - implement minimal code
-   - commit only when `LOGIC-14` is green
-10. `Commit 10: Slice 1 Aggregation / No-Runtime-Dependency Proof`
-   - add one Slice 1 aggregation test proving all outputs can be produced without runtime dependencies.
-
-No step may include `UPhysAnimComponent`, `FPhysAnimBalanceReadyTransition`, `UPhysicsControlComponent`, `FBodyInstance`, `UWorld`, `AActor`, or Chaos runtime handles.
 
 ### Commit 11: Empty Validator Module Scaffolding
 
