@@ -1,12 +1,10 @@
 param(
-    [Parameter(Mandatory=$true)]
-    [ValidateSet("execute","review","fix","accept")]
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("execute", "review", "fix", "accept")]
     [string]$Mode,
 
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
     [string]$Checkpoint,
-
-    [string]$ReviewReport = "",
 
     [string]$ExecutionLog = "plans/stage1/20-execution/execution-log.md"
 )
@@ -90,13 +88,13 @@ switch ($Mode) {
             exit 1
         }
 
+        if (-not $ReviewPacket -or $ReviewPacket -eq "none" -or $ReviewPacket -eq "missing") {
+            Write-Error "Cannot review. Review Packet path is missing."
         if (-not $ScopeCheck -or $ScopeCheck -eq "missing") {
             Write-Error "Cannot review. Scope Check field is missing."
             exit 1
         }
 
-        if (-not $ReviewPacket -or $ReviewPacket -eq "none" -or $ReviewPacket -eq "missing") {
-            Write-Error "Cannot review. Review Packet path is missing."
             exit 1
         }
 
@@ -145,17 +143,43 @@ switch ($Mode) {
             exit 1
         }
 
+        if ($ReviewVerdict -ne "accept") {
+            Write-Error "Cannot accept. Review Verdict must be 'accept', got '$ReviewVerdict'."
+            exit 1
+        }
+
+        Write-Host "WORKFLOW PREFLIGHT: accept allowed"
+        exit 0
+    }
+}
+
+    "fix" {
+        if ($CheckpointStatus -ne "fix-required" -and $CheckpointStatus -ne "blocked") {
+            Write-Error "Cannot fix. Checkpoint status must be 'fix-required' or 'blocked', got '$CheckpointStatus'."
+            exit 1
+        }
+
+        Write-Host "WORKFLOW PREFLIGHT: fix allowed"
+        exit 0
+    }
+
+    "accept" {
+        if ($CheckpointStatus -ne "review-pending") {
+            Write-Error "Cannot accept. Checkpoint status must be 'review-pending', got '$CheckpointStatus'."
+            exit 1
+        }
+
         if (-not $ReviewReport) {
             Write-Error "Cannot accept. ReviewReport path is required for accept mode."
             exit 1
         }
 
-        if (-not (Test-Path $ReviewReport)) {
+        if (-not (Test-Path -LiteralPath $ReviewReport)) {
             Write-Error "Cannot accept. ReviewReport file not found: $ReviewReport"
             exit 1
         }
 
-        $ReviewText = Get-Content $ReviewReport -Raw
+        $ReviewText = Get-Content -LiteralPath $ReviewReport -Raw
 
         if ($ReviewText -notmatch "## Verdict") {
             Write-Error "Cannot accept. Review report missing verdict section."
