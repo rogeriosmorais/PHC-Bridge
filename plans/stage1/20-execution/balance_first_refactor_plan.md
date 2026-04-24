@@ -696,7 +696,46 @@ No behavior commit is complete until its mapped tests are green.
 | Commit 8 | `CalculateChurnHz` | `LOGIC-13` | All mapped tests pass. |
 | Commit 9 | `ReduceSupportModeForReportWindow` | `LOGIC-14`, `LOGIC-14A`, `LOGIC-14B`, `LOGIC-14C` | All mapped tests pass. |
 
-## 10. Slice 1 Forbidden Edits
+## 10. Build Blocker Protocol
+
+If a commit fails to compile:
+- stop immediately
+- do not start the next commit
+- fix only the compile failure
+- do not add behavior while fixing compile
+
+If the automation harness is not discoverable:
+- stop at Commit 2
+- fix test registration only
+- do not add value types
+
+If a mapped test cannot be written cleanly:
+- stop
+- update the test matrix
+- update this refactor plan
+- do not implement behavior until the test expectation is clear
+
+If implementation requires a runtime object:
+- stop
+- mark the child task blocked
+- update the assumption ledger
+- do not cross the adapter boundary
+
+If a pure function needs behavior not covered by the matrix:
+- stop
+- add the missing test row first
+- then implement
+
+If a commit touches forbidden files:
+- reject the commit
+- rollback forbidden edits
+- reapply only allowed Slice 1 changes
+
+If a shortcut or stub is introduced:
+- reject the commit
+- replace with either real implementation or no implementation
+
+## 11. Slice 1 Forbidden Edits
 
 Slice 1 forbids edits to:
 
@@ -854,7 +893,7 @@ Required tests:
 - `INTEG-08`
 - `SMOKE-01` to `SMOKE-05`
 
-## 11. How Old Runtime Stays Untouched
+## 12. How Old Runtime Stays Untouched
 
 Before Commit 12:
 
@@ -870,7 +909,7 @@ After Commit 12:
 - validators decide only from snapshots
 - state-machine code may consume validator results only in the assigned wiring commits
 
-## 12. Dependency Direction
+## 13. Dependency Direction
 
 Exact dependency rule:
 
@@ -918,7 +957,7 @@ Slice 1 forbidden include/dependency list:
 - no `BodyInstance` dependency
 - no `UObject` ownership
 
-## 13. Slice 1 Completion Proof
+## 14. Slice 1 Completion Proof
 
 Slice 1 is complete only when:
 
@@ -930,7 +969,7 @@ Slice 1 is complete only when:
 
 Slice 1 is not complete if it requires editor runtime setup, PIE, smoke tests, skeletal mesh instances, body instances, or Physics Control components.
 
-## 14. Stop Conditions
+## 15. Stop Conditions
 
 Stop and revise contracts if any of these occur:
 

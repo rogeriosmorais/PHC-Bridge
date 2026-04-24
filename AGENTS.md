@@ -41,6 +41,19 @@ Interpretation:
 10. Build with .\scripts\build.ps1
 11. If you ran any smoke tests, then read the logs with "python .\scripts\read_logs.py". If you didn't, then ignore this step.
 
+## Anti-Spiral Rule
+
+Do not debug balance visually.
+
+A visual improvement is not progress unless it is explained by:
+- a mapped test
+- a canonical terminal reason
+- populated artifact fields
+- one explicit hypothesis
+- one owning code surface
+
+If an in-engine failure cannot be explained by artifacts, stop implementation and improve instrumentation or contracts before tuning behavior.
+
 ## Response Style
 
 When working in this repo:

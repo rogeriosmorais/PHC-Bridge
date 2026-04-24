@@ -18,7 +18,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 - `Date`: `2026-04-23`
 - `Direction change`: the previous flip-based activation model is now considered conceptually flawed as the target design.
 - `Current phase`: **Slice 1 implementation**.
-- **Stop Rule**: Do not proceed to runtime rewrite until the first pure-logic slice is green.
+- **Stop Rule**: Do not continue runtime/in-engine tuning after an unexplained failure. If artifacts cannot explain the failure with a canonical terminal reason and forensic fields, stop implementation and improve instrumentation or contracts. Do not proceed to runtime rewrite until the first pure-logic slice is green.
 - `Overall status`: Balance-first implementation is runnable. Runtime state-machine surgery remains blocked until Slice 1 passes all Layer 1 unit tests.
 - `State naming`: preferred rewrite states are now `BalanceActivation_Ready -> BalanceActivation_BlendIn -> BalanceActivation_Validate -> BalanceActive_Standing`; older names remain compatibility labels only.
 - `Latest runtime read`: the latest verified live smoke from `2026-04-22` still failed to reach sustained `BalanceActive_Standing`. That evidence remains useful as legacy forensic context, but it no longer justifies further refinement of the old flip-based ritual as the target design.
@@ -42,6 +42,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
 | S1-PLAN-FIRST-SLICE | AI | completed | specialized 10-spec suite | `plans/stage1/20-execution/first-slice-definition.md` | none |
 | S1-IMPL-BALANCE-FIRST | AI | active | TDD plan, refactor order, 10-spec suite | `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp`, `PhysAnimSupportTruth.Tests.cpp` | none |
 | S1-IMPL-BALANCE-FIRST-01 | AI | **runnable** | accepted refactor detail plan | `PhysAnimTruthTypes.h`, `PhysAnimSupportTruth.h`, `PhysAnimSupportTruth.cpp` | none |
+| S1-IMPL-BLOCKER-PROTOCOL | AI | active guardrail | accepted rollout/refactor protocol | `plans/stage1/20-execution/balance_first_rollout_protocol.md`, `plans/stage1/20-execution/balance_first_refactor_plan.md`, `plans/stage1/20-execution/execution-log.md` | none |
 
 ## Frozen Inputs For Continuous Balance Rewrite
 
@@ -54,7 +55,7 @@ Pre-pivot history remains available in git. This live log now tracks the current
   - `plans/stage1/10-specs/instrumentation_and_acceptance.md`
   - `plans/stage1/10-specs/balance-mode-entry-spec.md`
 - `Supporting Docs`:
-  - `AGENTS.md`, `ENGINEERING_PLAN.md`, `STAGE1_PLAN.md`, `plans/stage1/20-execution/assumption-ledger.md`
+  - `AGENTS.md`, `ENGINEERING_PLAN.md`, `STAGE1_PLAN.md`, `plans/stage1/20-execution/assumption-ledger.md`, `plans/stage1/20-execution/balance_first_rollout_protocol.md`
 - `Unfreeze rule`: Only unfreeze if the user explicitly requests an architecture review or if an implementation spike proves a contract requirement is physically impossible.
 - `Outcome vocabulary`: Use `Failed` for canonical balance-first terminal failure. Treat legacy `FailStopped` as a code/log compatibility label only.
 
