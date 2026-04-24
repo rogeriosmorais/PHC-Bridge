@@ -230,7 +230,8 @@ Required ownership:
 - Reviewer runs workflow preflight before review.
 - Reviewer consumes the generated review packet.
 - Reviewer does not generate the review packet.
-- Reviewer does not edit `execution-log.md`.
+- Reviewer writes exactly one durable review report under `plans/stage1/30-evidence/reviews/`.
+- Reviewer may update `execution-log.md` only with review status fields defined in the README.
 - Orchestrator runs workflow preflight before acceptance with `-ReviewReport`.
 - Orchestrator updates `execution-log.md` only after valid review evidence exists.
 

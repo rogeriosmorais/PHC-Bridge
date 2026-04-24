@@ -252,9 +252,15 @@ The reviewer must not edit:
 - tests
 - planning docs
 
-The reviewer may only:
-- return a structured review report, or
-- create a review report file if explicitly instructed by the orchestrator.
+The reviewer must create a durable review report file under:
+
+`plans/stage1/30-evidence/reviews/`
+
+The reviewer may edit only:
+- that review report file
+- `execution-log.md` (only fields defined in the README)
+
+The reviewer must not edit production/test code.
 
 A verdict of `accept` is valid only when blockers are `none`.
 
@@ -361,6 +367,36 @@ If reviewer verdict is `reject`:
 3. Keep the checkpoint packet unchanged.
 4. Record the rejection reason in the handoff.
 5. Update the assumption ledger only if the rejection reveals a plan/contract/dependency assumption problem.
+
+## Evidence Rejection Rules
+
+A reviewer may reject a checkpoint because the review evidence is invalid even when individual task commits appear scope-clean.
+
+Evidence rejection is not the same as implementation rejection.
+
+If the reviewer rejects because of:
+- contaminated review range
+- missing evidence
+- invalid review packet
+- workflow/process pollution in the checkpoint range
+- inconsistent scope evidence
+
+then:
+
+1. Do not start the next checkpoint.
+2. Do not immediately revert implementation commits.
+3. Mark the checkpoint as `fix-required`.
+4. Preserve the review report.
+5. Run `fix checkpoint <CHECKPOINT-ID>` to repair the evidence/range.
+6. Generate a new review packet.
+7. Review again.
+
+Only mark the checkpoint as `rejected` when the implementation itself must be reverted because of:
+- forbidden files inside task commits
+- fake/stub implementation
+- failed required tests
+- wrong task implementation
+- unrecoverable scope violation
 
 ## Acceptance Rules
 

@@ -72,6 +72,30 @@ Checkpoint-wide scope check is mandatory before checkpoint review.
 
 Reviewer must reject or block any checkpoint review packet missing required evidence.
 
+## Durable Review Reports
+
+Reviewer agents must write their review report to:
+
+`plans/stage1/30-evidence/reviews/<CHECKPOINT-ID>-review-report.md`
+
+The user must not manually copy reviewer output into repo files.
+
+Reviewer agents may update `execution-log.md` only after writing the durable review report, and only with:
+- review report path
+- review verdict
+- checkpoint status
+- blocking reason
+- next runnable action
+
+Reviewer agents must not edit:
+- production code
+- tests
+- task packets
+- checkpoint packets
+- workflow scripts
+- planning docs
+- AGENTS.md
+
 ## Workflow Preflight
 
 Before acting, agents must run:

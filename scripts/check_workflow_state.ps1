@@ -151,6 +151,12 @@ switch ($Mode) {
             exit 1
         }
 
+        if ($ReviewVerdict -eq "reject" -and $CheckpointStatus -eq "fix-required") {
+            Write-Host "WORKFLOW PREFLIGHT: fix allowed after evidence rejection"
+            Write-Host "Fix scope: repair evidence/range/review packet unless implementation rejection requires rollback."
+            exit 0
+        }
+
         Write-Host "WORKFLOW PREFLIGHT: fix allowed"
         exit 0
     }

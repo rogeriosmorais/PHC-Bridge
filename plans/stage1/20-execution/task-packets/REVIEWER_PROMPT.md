@@ -35,7 +35,11 @@ The reviewer must not update:
 - tests
 - planning docs
 
-The reviewer may only return a structured review report.
+The reviewer must write a structured review report file under:
+
+`plans/stage1/30-evidence/reviews/`
+
+The reviewer must then return the report path and verdict.
 
 If the review packet is missing, incomplete, or does not include base/head/commit information, return:
 
@@ -55,9 +59,37 @@ The review packet must include:
 - test evidence, if applicable
 - scope-check evidence
 
-If scope-check evidence is missing, this is a blocker.
-
 If scope-check evidence failed, verdict must be `reject` unless the packet is explicitly reviewing a blocked/transitional checkpoint and the failure is explained by valid per-task scope evidence.
+
+## Durable Review Report
+
+The reviewer must write the review report to:
+
+`plans/stage1/30-evidence/reviews/<CHECKPOINT-ID>-review-report.md`
+
+The reviewer may create or overwrite only this review report file.
+
+Reviewer agents may update `execution-log.md` only after writing the durable review report, and only with:
+- review report path
+- review verdict
+- checkpoint status
+- blocking reason
+- next runnable action
+
+The reviewer must not edit:
+- production code
+- tests
+- task packets
+- checkpoint packets
+- workflow scripts
+- planning docs
+- AGENTS.md
+
+After writing the report file, the reviewer response must include only:
+
+`Review report: plans/stage1/30-evidence/reviews/<CHECKPOINT-ID>-review-report.md`
+`Verdict: accept|fix required|reject`
+`Next action: <one sentence>`
 
 ## Review Against
 
@@ -116,16 +148,16 @@ Use `none` if there are no nits.
 
 One sentence.
 
-## Review evidence
+## Review Evidence
 
 Review report:
-- `inline`
+- `plans/stage1/30-evidence/reviews/<CHECKPOINT-ID>-review-report.md`
 
 Rules:
 - `accept` is valid only when Blockers is `none`.
 - `fix required` is valid only when at least one blocker is listed.
 - `reject` is valid only when at least one blocker is listed.
 - Do not change `execution-log.md`.
-- Do not edit files.
+- Do not edit production/test files.
 - Do not implement fixes.
 - Do not advance the task or checkpoint.
