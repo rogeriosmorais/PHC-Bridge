@@ -264,7 +264,7 @@ Allowed dependency direction:
   - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimSupportTruth.h`
   - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.cpp`
   - `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.Tests.cpp`
-- **Relevant classes/functions**: `FPhysAnimSupportPatch`, `FPhysAnimFrameSupportHull`, `EPhysAnimSupportMode`, `ExtractPatchHull`, `BuildFrameHull`, `ClassifySupportMode`, `AdjudicateProxy`, `CalculateChurnHz`, `ReduceSupportModeForReportWindow`.
+- **Relevant classes/functions**: `FPhysAnimSupportPatch`, `FPhysAnimFrameHull`, `EPhysAnimSupportMode`, `ExtractPatchHull`, `BuildFrameHull`, `ClassifySupportMode`, `AdjudicateProxy`, `CalculateChurnHz`, `ReduceSupportModeForReportWindow`.
 - **Current responsibility**: new value-only support truth extraction.
 - **Legacy behavior that must not be extended**: none; these files must not know legacy phases exist.
 - **New behavior that will eventually replace it**: support truth used by runtime adapters and validators.
