@@ -24,7 +24,7 @@
 | Test ID | Target | Scenario | Expected Reason | Required Artifact Truth |
 |---|---|---|---|---|
 | **VALID-01A** | `ValidateContinuity` | Physics disabled | `activation_continuous_simulation_lost` | `physical_continuity_validator_passed` = `false` |
-| **VALID-01B** | `ValidateContinuity` | Pelvis sleep limit exceeded | `activation_continuous_simulation_lost` | `terminal_reason` = `activation_continuous_simulation_lost`, `physical_continuity_validator_passed` = `false` |
+| **VALID-01B** | `ValidateContinuity` | Pelvis sleep limit exceeded | `activation_continuous_simulation_lost` | `pelvis_sleep_duration_ms` > 100.0, `physical_continuity_validator_passed` = `false`, `terminal_reason` = `activation_continuous_simulation_lost` |
 | **VALID-01C** | `ValidateContinuity` | Body instance loss | `activation_topology_change` | `terminal_reason` = `activation_topology_change`, `physical_continuity_validator_passed` = `false` |
 | **VALID-01D** | `ValidateContinuity` | Bookkeeping delta only | `terminal_reason` = `nullptr` | `continuity_bookkeeping_mismatch` = `true` |
 | **VALID-02A** | `ValidateCapsule` | Actor moved | `activation_capsule_contract_violation` | `capsule_lock_delta_cm` > 0.01 |
@@ -39,14 +39,14 @@
 | **VALID-04B** | `ValidateAuthority` | Non-critical body assist | `activation_authority_conflict` | `contamination_class` = `non_critical_body_assist` |
 | **VALID-04C** | `ValidateAuthority` | Calf or excluded world brace | `activation_authority_conflict` | `contamination_class` = `excluded_body_world_brace` |
 | **VALID-04D** | `ValidateAuthority` | Global blend/kinematic assist | `activation_authority_conflict` | `contamination_class` = `global_blend_or_kinematic_assist` |
-| **VALID-05A** | `ValidateControllerStability` | Target jump at blend start | `activation_target_discontinuity` | `target_discontinuity_deg` > 15.0, `controller_stability_failure_field` = `target_discontinuity_deg` |
-| **VALID-05B** | `ValidateControllerStability` | Controller gain breach | `activation_unstable_gain_or_damping` | `controller_gain_damping_valid` = `false`, `controller_gain_scale` > 1.0, `controller_stability_failure_field` = `controller_gain_scale` |
-| **VALID-05C** | `ValidateControllerStability` | Controller damping breach | `activation_unstable_gain_or_damping` | `controller_gain_damping_valid` = `false`, `controller_damping_ratio` < 1.0, `controller_stability_failure_field` = `controller_damping_ratio` |
+| **VALID-05A** | `ValidateControllerStability` | Target jump at blend start | `activation_target_discontinuity` | `target_discontinuity_deg` > 15.0, `target_discontinuity_phase` = `BlendStart`, `terminal_reason` = `activation_target_discontinuity` |
+| **VALID-05B** | `ValidateControllerStability` | Controller gain breach | `activation_unstable_gain_or_damping` | `controller_gain_damping_valid` = `false`, `controller_gain_scale` > Controller Gain Scale (Max), `controller_stability_failure_field` = `controller_gain_scale` |
+| **VALID-05C** | `ValidateControllerStability` | Controller damping breach | `activation_unstable_gain_or_damping` | `controller_gain_damping_valid` = `false`, `controller_damping_ratio` < Controller Damping Ratio (Min), `controller_stability_failure_field` = `controller_damping_ratio` |
 | **VALID-05D** | `ValidateControllerStability` | Root tilt breach | `activation_instability_threshold_breach` | `max_root_tilt_deg` > 20.0, `controller_stability_failure_field` = `max_root_tilt_deg` |
 | **VALID-05E** | `ValidateControllerStability` | Angular speed breach | `activation_instability_threshold_breach` | `peak_angular_speed` > 720.0, `controller_stability_failure_field` = `peak_angular_speed` |
 | **VALID-05F** | `ValidateControllerStability` | Max-body mismatch over grace | `activation_pose_reference_mismatch` | `max_body_mismatch_deg` > 25.0, `mismatch_duration_ms` > 200.0, `controller_stability_failure_field` = `max_body_mismatch_deg` |
 | **VALID-05G** | `ValidateControllerStability` | RMS-chain mismatch over grace | `activation_pose_reference_mismatch` | `rms_mismatch_deg` > 15.0, `mismatch_duration_ms` > 200.0, `controller_stability_failure_field` = `rms_mismatch_deg` |
-| **VALID-05H** | `ValidateControllerStability` | Standing validation timeout | `activation_standing_validation_timeout` | `hold_duration_sec` < 3.0, `standing_validation_timeout_sec` > 0.0, `terminal_reason` = `activation_standing_validation_timeout` |
+| **VALID-05H** | `ValidateControllerStability` | Standing validation timeout | `activation_standing_validation_timeout` | `hold_duration_sec` < 3.0, `standing_validation_timed_out` = `true`, `terminal_reason` = `activation_standing_validation_timeout` |
 | **VALID-06A** | `ValidateMovementReclaim` | CMC correction path runs | `activation_movement_reclaim` | `movement_reclaim_count` > 0 |
 | **VALID-06B** | `ValidateShellHelper` | Shell helper writes during activation | `activation_shell_helper_violation` | `shell_helper_used_count` > 0 |
 
@@ -66,7 +66,10 @@
 |---|---|---|---|---|---|
 | **INTEG-01** | Entry Gate | Invalid plant audit | `Failed` | `activation_physics_asset_contract_violation` | `physics_asset_contract_valid` = `false` |
 | **INTEG-02A** | Ready State | Waiting for stance | `BalanceActivation_Ready` | `terminal_reason` = `nullptr` | `hold_duration_sec` = 0.0 |
-| **INTEG-02B** | Ready State | Capsule/CMC breach | `Failed` | `activation_capsule_contract_violation` | `capsule_collision_enabled`, `capsule_generate_overlap_events`, `cmc_is_active`, `cmc_tick_enabled`, `cmc_updated_component_is_null` |
+| **INTEG-02B1** | Ready State | CMC active during Ready | `Failed` | `activation_capsule_contract_violation` | `cmc_is_active` = `true` |
+| **INTEG-02B2** | Ready State | CMC tick enabled during Ready | `Failed` | `activation_capsule_contract_violation` | `cmc_tick_enabled` = `true` |
+| **INTEG-02B3** | Ready State | Capsule collision not disabled | `Failed` | `activation_capsule_contract_violation` | `capsule_collision_enabled` != `NoCollision` |
+| **INTEG-02B4** | Ready State | UpdatedComponent still owned | `Failed` | `activation_capsule_contract_violation` | `cmc_updated_component_is_null` = `false` |
 | **INTEG-03** | BlendIn State | Continuity breach | `Failed` | `activation_continuous_simulation_lost` | `physical_continuity_validator_passed` = `false`, `control_alpha` < 1.0 |
 | **INTEG-04** | Validate State | Airborne breach | `Failed` | `activation_support_failure` | `support_mode` = `Airborne`, `support_gap_timer_ms` > 100 |
 | **INTEG-05** | Validate State | Proxy drift breach | `Failed` | `activation_proxy_outside_support_region` | `proxy_inside_hull` = `false` |

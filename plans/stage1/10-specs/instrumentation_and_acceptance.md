@@ -49,12 +49,14 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `rms_mismatch_deg`: Root-mean-square pose fidelity scalar.
 - `max_body_mismatch_deg`: Worst-case orientation error for any body.
 - `target_discontinuity_deg`: Maximum target orientation jump observed at blend start.
+- `target_discontinuity_phase`: Runtime phase where the target discontinuity was observed (`BlendStart` for V0 discontinuity checks).
 - `mismatch_duration_ms`: Contiguous duration of pose/reference mismatch beyond threshold.
 - `controller_gain_scale`: Maximum normalized controller gain scale observed during the attempt.
 - `controller_damping_ratio`: Minimum normalized controller damping ratio observed during the attempt.
 - `controller_gain_damping_valid`: Boolean result of the gain/damping stability audit.
 - `controller_stability_failure_field`: Specific controller-stability field triggering failure.
 - `standing_validation_timeout_sec`: Attempt timeout budget for reaching the standing hold benchmark.
+- `standing_validation_timed_out`: Boolean flag indicating the standing validation timeout elapsed before the hold benchmark passed.
 
 ### 3. Support Truth
 - `support_state_l` / `support_state_r`: Debounced side-contact status.
@@ -86,6 +88,7 @@ The implementation must emit a JSON artifact for every attempt, containing:
 - `shell_helper_used_count`: Number of shell-helper writes observed during activation.
 - `movement_reclaim_count`: Number of CMC interference events.
 - `continuity_bookkeeping_mismatch`: Diagnostic flag for modifier/raw drift.
+- `pelvis_sleep_duration_ms`: Current contiguous pelvis sleep duration.
 - `physical_continuity_validator_passed`: Authoritative pass/fail flag from the continuity check.
 
 ### 5. Contamination and Authority
@@ -142,6 +145,8 @@ These are the authoritative operational thresholds for the `V0` artifact and ter
 | **Mismatch (Max Body)** | `25.0 deg` | Orientation fidelity limit (for 100ms) |
 | **Mismatch (RMS Chain)** | `15.0 deg` | Average pose fidelity limit (for 100ms) |
 | **Target Discontinuity** | `15.0 deg` | Max jump at blend start |
+| **Controller Gain Scale (Max)** | `1.0` | Maximum normalized controller gain scale before `activation_unstable_gain_or_damping` |
+| **Controller Damping Ratio (Min)** | `1.0` | Minimum normalized controller damping ratio before `activation_unstable_gain_or_damping` |
 | **Mismatch Grace Period** | `0.2 sec` | Settling time for reference match |
 | **Support Churn** | `12.0 Hz` | Jitter/Popping limit |
 | **Pelvis Sleep Limit** | `100.0 ms` | Max contiguous sleep before simulation loss |
