@@ -47,8 +47,8 @@ function Get-StateValue {
 
         if ($CellKey -eq $Key) {
             $CellValue = $CellValue.Trim()
-            $CellValue = $CellValue -replace "^`+", ""
-            $CellValue = $CellValue -replace "`+$", ""
+            $CellValue = $CellValue -replace "^[`]+", ""
+            $CellValue = $CellValue -replace "[`]+$", ""
             return $CellValue.Trim()
         }
     }
