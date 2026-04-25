@@ -4,6 +4,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/PhysicsAsset.h"
 
 namespace
 {
@@ -110,6 +111,48 @@ namespace PhysAnimRuntimeAdapter
 			Snapshot.bCmcIsActive = CharacterMovement->IsActive();
 			Snapshot.bCmcTickEnabled = CharacterMovement->IsComponentTickEnabled();
 			Snapshot.bCmcUpdatedComponentIsNull = CharacterMovement->UpdatedComponent == nullptr;
+		}
+
+		return Snapshot;
+	}
+
+	FPhysAnimPlantContractSnapshot CapturePlantContractSnapshot(const FPhysAnimPlantContractSnapshotCaptureInput& Input)
+	{
+		FPhysAnimPlantContractSnapshot Snapshot;
+		Snapshot.bSkeletonAuditPassed = Input.bSkeletonAuditPassed;
+		Snapshot.PlantFailureClass = Input.PlantFailureClass;
+		Snapshot.PlantFailureField = Input.PlantFailureField;
+		Snapshot.MassDriftTotalPct = Input.MassDriftTotalPct;
+
+		const UPhysicsAsset* const PhysicsAsset = Input.SkeletalMeshComponent
+			? Input.SkeletalMeshComponent->GetPhysicsAsset()
+			: nullptr;
+		const FString PhysicsAssetPath = PhysicsAsset ? PhysicsAsset->GetPathName() : FString();
+
+		if (!Input.ExpectedPhysicsAssetPath.IsEmpty() && PhysicsAssetPath != Input.ExpectedPhysicsAssetPath)
+		{
+			Snapshot.bPhysicsAssetContractValid = false;
+			Snapshot.PlantFailureClass = EPhysAnimPlantFailureClass::Mutation;
+			Snapshot.PlantFailureField = EPhysAnimPlantFailureField::PhysicsAssetIdentity;
+		}
+
+		if (!Input.bSkeletonAuditPassed)
+		{
+			Snapshot.bPhysicsAssetContractValid = false;
+			if (Snapshot.PlantFailureClass == EPhysAnimPlantFailureClass::None)
+			{
+				Snapshot.PlantFailureClass = EPhysAnimPlantFailureClass::StaticStructural;
+			}
+			if (Snapshot.PlantFailureField == EPhysAnimPlantFailureField::None)
+			{
+				Snapshot.PlantFailureField = EPhysAnimPlantFailureField::Skeleton;
+			}
+		}
+
+		if (Input.PlantFailureClass != EPhysAnimPlantFailureClass::None ||
+			Input.PlantFailureField != EPhysAnimPlantFailureField::None)
+		{
+			Snapshot.bPhysicsAssetContractValid = false;
 		}
 
 		return Snapshot;

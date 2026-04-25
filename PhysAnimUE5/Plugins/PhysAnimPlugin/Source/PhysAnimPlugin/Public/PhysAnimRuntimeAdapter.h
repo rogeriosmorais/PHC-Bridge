@@ -24,8 +24,19 @@ struct FPhysAnimCapsuleContractSnapshotCaptureInput
 	FVector RebaseOriginCm = FVector::ZeroVector;
 };
 
+struct FPhysAnimPlantContractSnapshotCaptureInput
+{
+	USkeletalMeshComponent* SkeletalMeshComponent = nullptr;
+	FString ExpectedPhysicsAssetPath;
+	bool bSkeletonAuditPassed = true;
+	EPhysAnimPlantFailureClass PlantFailureClass = EPhysAnimPlantFailureClass::None;
+	EPhysAnimPlantFailureField PlantFailureField = EPhysAnimPlantFailureField::None;
+	double MassDriftTotalPct = 0.0;
+};
+
 namespace PhysAnimRuntimeAdapter
 {
 	FPhysAnimContinuitySnapshot CaptureContinuitySnapshot(const FPhysAnimContinuitySnapshotCaptureInput& Input);
 	FPhysAnimCapsuleContractSnapshot CaptureCapsuleContractSnapshot(const FPhysAnimCapsuleContractSnapshotCaptureInput& Input);
+	FPhysAnimPlantContractSnapshot CapturePlantContractSnapshot(const FPhysAnimPlantContractSnapshotCaptureInput& Input);
 }
