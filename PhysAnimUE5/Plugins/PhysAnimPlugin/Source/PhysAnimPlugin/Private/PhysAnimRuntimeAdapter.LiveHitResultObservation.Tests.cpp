@@ -5,14 +5,14 @@
 
 namespace
 {
-	UBoxComponent* MakeHitComponent(EComponentMobility::Type Mobility)
+	UBoxComponent* LiveHitResultObservation_MakeHitComponent(EComponentMobility::Type Mobility)
 	{
 		UBoxComponent* Component = NewObject<UBoxComponent>();
 		Component->SetMobility(Mobility);
 		return Component;
 	}
 
-	FPhysAnimSupportBodyMapping MakeSupportBodyMapping(const FName BodyName, const EPhysAnimSupportSide SupportSide)
+	FPhysAnimSupportBodyMapping LiveHitResultObservation_MakeSupportBodyMapping(const FName BodyName, const EPhysAnimSupportSide SupportSide)
 	{
 		FPhysAnimSupportBodyMapping Mapping;
 		Mapping.BodyName = BodyName;
@@ -20,7 +20,7 @@ namespace
 		return Mapping;
 	}
 
-	FHitResult MakeHitResult(
+	FHitResult LiveHitResultObservation_MakeHitResult(
 		const FName BoneName,
 		const FVector& ImpactPoint,
 		UPrimitiveComponent* Component,
@@ -35,13 +35,13 @@ namespace
 		return Hit;
 	}
 
-	void AddLeftFootSquareHitResults(FPhysAnimSupportHitResultObservationInput& Input, UPrimitiveComponent* Component)
+	void LiveHitResultObservation_AddLeftFootSquareHitResults(FPhysAnimSupportHitResultObservationInput& Input, UPrimitiveComponent* Component)
 	{
-		Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-		Input.HitResults.Add(MakeHitResult(TEXT("foot_l"), FVector(0.0, 0.0, 0.0), Component));
-		Input.HitResults.Add(MakeHitResult(TEXT("foot_l"), FVector(10.0, 0.0, 0.0), Component));
-		Input.HitResults.Add(MakeHitResult(TEXT("foot_l"), FVector(10.0, 10.0, 0.0), Component));
-		Input.HitResults.Add(MakeHitResult(TEXT("foot_l"), FVector(0.0, 10.0, 0.0), Component));
+		Input.SupportBodies.Add(LiveHitResultObservation_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+		Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("foot_l"), FVector(0.0, 0.0, 0.0), Component));
+		Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("foot_l"), FVector(10.0, 0.0, 0.0), Component));
+		Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("foot_l"), FVector(10.0, 10.0, 0.0), Component));
+		Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("foot_l"), FVector(0.0, 10.0, 0.0), Component));
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -52,11 +52,11 @@ namespace
 	bool FPhysAnimRuntimeAdapterLiveHitResultObservationTest::RunTest(const FString& Parameters)
 	{
 		{
-			UBoxComponent* StaticComponent = MakeHitComponent(EComponentMobility::Static);
+			UBoxComponent* StaticComponent = LiveHitResultObservation_MakeHitComponent(EComponentMobility::Static);
 
 			FPhysAnimSupportHitResultConversionInput Input;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.HitResults.Add(MakeHitResult(TEXT("foot_l"), FVector(10.0, 20.0, 30.0), StaticComponent));
+			Input.SupportBodies.Add(LiveHitResultObservation_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+			Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("foot_l"), FVector(10.0, 20.0, 30.0), StaticComponent));
 
 			const TArray<FPhysAnimSupportHitRecord> Records = PhysAnimRuntimeAdapter::ConvertSupportHitResultsToHitRecords(Input);
 
@@ -68,11 +68,11 @@ namespace
 		}
 
 		{
-			UBoxComponent* StaticComponent = MakeHitComponent(EComponentMobility::Static);
+			UBoxComponent* StaticComponent = LiveHitResultObservation_MakeHitComponent(EComponentMobility::Static);
 
 			FPhysAnimSupportHitResultObservationInput Input;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.HitResults.Add(MakeHitResult(TEXT("foot_l"), FVector(0.0, 0.0, 0.0), StaticComponent, false));
+			Input.SupportBodies.Add(LiveHitResultObservation_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+			Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("foot_l"), FVector(0.0, 0.0, 0.0), StaticComponent, false));
 			Input.PreviousSupportGapTimerMs = 10.0;
 			Input.DeltaMs = 15.0;
 			Input.SupportGapMaxMs = 100.0;
@@ -85,11 +85,11 @@ namespace
 		}
 
 		{
-			UBoxComponent* MovableComponent = MakeHitComponent(EComponentMobility::Movable);
+			UBoxComponent* MovableComponent = LiveHitResultObservation_MakeHitComponent(EComponentMobility::Movable);
 
 			FPhysAnimSupportHitResultObservationInput Input;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.HitResults.Add(MakeHitResult(TEXT("foot_l"), FVector(0.0, 0.0, 0.0), MovableComponent));
+			Input.SupportBodies.Add(LiveHitResultObservation_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+			Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("foot_l"), FVector(0.0, 0.0, 0.0), MovableComponent));
 			Input.PreviousSupportGapTimerMs = 10.0;
 			Input.DeltaMs = 15.0;
 			Input.SupportGapMaxMs = 100.0;
@@ -102,11 +102,11 @@ namespace
 		}
 
 		{
-			UBoxComponent* StaticComponent = MakeHitComponent(EComponentMobility::Static);
+			UBoxComponent* StaticComponent = LiveHitResultObservation_MakeHitComponent(EComponentMobility::Static);
 
 			FPhysAnimSupportHitResultObservationInput Input;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.HitResults.Add(MakeHitResult(TEXT("hand_l"), FVector(0.0, 0.0, 0.0), StaticComponent));
+			Input.SupportBodies.Add(LiveHitResultObservation_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+			Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("hand_l"), FVector(0.0, 0.0, 0.0), StaticComponent));
 			Input.PreviousSupportGapTimerMs = 10.0;
 			Input.DeltaMs = 15.0;
 			Input.SupportGapMaxMs = 100.0;
@@ -119,17 +119,17 @@ namespace
 		}
 
 		{
-			UBoxComponent* StaticComponent = MakeHitComponent(EComponentMobility::Static);
+			UBoxComponent* StaticComponent = LiveHitResultObservation_MakeHitComponent(EComponentMobility::Static);
 
 			FPhysAnimSupportHitResultObservationInput Input;
 			Input.WorldOriginCm = FVector(100.0, 200.0, 0.0);
 			Input.ComProxyPosCm = FVector2D(5.0, 5.0);
 			Input.DeltaMs = 10.0;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.HitResults.Add(MakeHitResult(TEXT("foot_l"), FVector(100.0, 200.0, 0.0), StaticComponent));
-			Input.HitResults.Add(MakeHitResult(TEXT("foot_l"), FVector(110.0, 200.0, 0.0), StaticComponent));
-			Input.HitResults.Add(MakeHitResult(TEXT("foot_l"), FVector(110.0, 210.0, 0.0), StaticComponent));
-			Input.HitResults.Add(MakeHitResult(TEXT("foot_l"), FVector(100.0, 210.0, 0.0), StaticComponent));
+			Input.SupportBodies.Add(LiveHitResultObservation_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+			Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("foot_l"), FVector(100.0, 200.0, 0.0), StaticComponent));
+			Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("foot_l"), FVector(110.0, 200.0, 0.0), StaticComponent));
+			Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("foot_l"), FVector(110.0, 210.0, 0.0), StaticComponent));
+			Input.HitResults.Add(LiveHitResultObservation_MakeHitResult(TEXT("foot_l"), FVector(100.0, 210.0, 0.0), StaticComponent));
 
 			const FPhysAnimSupportObservationResult Result = PhysAnimRuntimeAdapter::BuildSupportObservationFromHitResults(Input);
 
@@ -139,12 +139,12 @@ namespace
 		}
 
 		{
-			UBoxComponent* StaticComponent = MakeHitComponent(EComponentMobility::Static);
+			UBoxComponent* StaticComponent = LiveHitResultObservation_MakeHitComponent(EComponentMobility::Static);
 
 			FPhysAnimSupportHitResultObservationInput Input;
 			Input.ComProxyPosCm = FVector2D(5.0, 5.0);
 			Input.DeltaMs = 10.0;
-			AddLeftFootSquareHitResults(Input, StaticComponent);
+			LiveHitResultObservation_AddLeftFootSquareHitResults(Input, StaticComponent);
 
 			const FPhysAnimSupportObservationResult Result = PhysAnimRuntimeAdapter::BuildSupportObservationFromHitResults(Input);
 
@@ -158,14 +158,14 @@ namespace
 		}
 
 		{
-			UBoxComponent* StaticComponent = MakeHitComponent(EComponentMobility::Static);
+			UBoxComponent* StaticComponent = LiveHitResultObservation_MakeHitComponent(EComponentMobility::Static);
 
 			FPhysAnimSupportHitResultObservationInput Input;
 			Input.ComProxyPosCm = FVector2D(50.0, 50.0);
 			Input.PreviousProxyOutsideHullDurationMs = 90.0;
 			Input.DeltaMs = 20.0;
 			Input.ProxyDriftLimitMs = 100.0;
-			AddLeftFootSquareHitResults(Input, StaticComponent);
+			LiveHitResultObservation_AddLeftFootSquareHitResults(Input, StaticComponent);
 
 			const FPhysAnimSupportObservationResult Result = PhysAnimRuntimeAdapter::BuildSupportObservationFromHitResults(Input);
 

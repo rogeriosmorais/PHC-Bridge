@@ -3,7 +3,7 @@
 
 namespace
 {
-	FPhysAnimSupportBodyMapping MakeSupportBodyMapping(const FName BodyName, const EPhysAnimSupportSide SupportSide)
+	FPhysAnimSupportBodyMapping SupportHitSnapshot_MakeSupportBodyMapping(const FName BodyName, const EPhysAnimSupportSide SupportSide)
 	{
 		FPhysAnimSupportBodyMapping Mapping;
 		Mapping.BodyName = BodyName;
@@ -11,7 +11,7 @@ namespace
 		return Mapping;
 	}
 
-	FPhysAnimSupportHitRecord MakeSupportHit(
+	FPhysAnimSupportHitRecord SupportHitSnapshot_MakeSupportHit(
 		const FName BodyName,
 		const FVector& WorldPositionCm,
 		const bool bBlockingHit = true,
@@ -25,13 +25,13 @@ namespace
 		return Hit;
 	}
 
-	void AddLeftFootSquareHits(FPhysAnimSupportHitSnapshotCaptureInput& Input, const FVector& Offset = FVector::ZeroVector)
+	void SupportHitSnapshot_AddLeftFootSquareHits(FPhysAnimSupportHitSnapshotCaptureInput& Input, const FVector& Offset = FVector::ZeroVector)
 	{
-		Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), Offset + FVector(0.0, 0.0, 0.0)));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), Offset + FVector(10.0, 0.0, 0.0)));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), Offset + FVector(10.0, 10.0, 0.0)));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), Offset + FVector(0.0, 10.0, 0.0)));
+		Input.SupportBodies.Add(SupportHitSnapshot_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+		Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_l"), Offset + FVector(0.0, 0.0, 0.0)));
+		Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_l"), Offset + FVector(10.0, 0.0, 0.0)));
+		Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_l"), Offset + FVector(10.0, 10.0, 0.0)));
+		Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_l"), Offset + FVector(0.0, 10.0, 0.0)));
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -45,7 +45,7 @@ namespace
 			FPhysAnimSupportHitSnapshotCaptureInput Input;
 			Input.ComProxyPosCm = FVector2D(5.0, 5.0);
 			Input.DeltaMs = 10.0;
-			AddLeftFootSquareHits(Input);
+			SupportHitSnapshot_AddLeftFootSquareHits(Input);
 
 			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromHits(Input);
 
@@ -65,7 +65,7 @@ namespace
 			Input.WorldOriginCm = FVector(100.0, 200.0, 0.0);
 			Input.ComProxyPosCm = FVector2D(5.0, 5.0);
 			Input.DeltaMs = 10.0;
-			AddLeftFootSquareHits(Input, FVector(100.0, 200.0, 0.0));
+			SupportHitSnapshot_AddLeftFootSquareHits(Input, FVector(100.0, 200.0, 0.0));
 
 			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromHits(Input);
 
@@ -81,10 +81,10 @@ namespace
 
 		{
 			FPhysAnimSupportHitSnapshotCaptureInput Input;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0), false, true));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(10.0, 0.0, 0.0), true, false));
-			Input.Hits.Add(MakeSupportHit(TEXT("hand_l"), FVector(20.0, 0.0, 0.0), true, true));
+			Input.SupportBodies.Add(SupportHitSnapshot_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+			Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0), false, true));
+			Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_l"), FVector(10.0, 0.0, 0.0), true, false));
+			Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("hand_l"), FVector(20.0, 0.0, 0.0), true, true));
 			Input.PreviousSupportGapTimerMs = 30.0;
 			Input.DeltaMs = 20.0;
 			Input.SupportGapMaxMs = 100.0;
@@ -128,7 +128,7 @@ namespace
 			Input.PreviousProxyOutsideHullDurationMs = 90.0;
 			Input.DeltaMs = 20.0;
 			Input.ProxyDriftLimitMs = 100.0;
-			AddLeftFootSquareHits(Input);
+			SupportHitSnapshot_AddLeftFootSquareHits(Input);
 
 			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromHits(Input);
 
@@ -143,16 +143,16 @@ namespace
 
 		{
 			FPhysAnimSupportHitSnapshotCaptureInput Input;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_r"), EPhysAnimSupportSide::Right));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0)));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(1.0, 0.0, 0.0)));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(1.0, 1.0, 0.0)));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(0.0, 1.0, 0.0)));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_r"), FVector(10.0, 0.0, 0.0)));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_r"), FVector(11.0, 0.0, 0.0)));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_r"), FVector(11.0, 1.0, 0.0)));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_r"), FVector(10.0, 1.0, 0.0)));
+			Input.SupportBodies.Add(SupportHitSnapshot_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+			Input.SupportBodies.Add(SupportHitSnapshot_MakeSupportBodyMapping(TEXT("foot_r"), EPhysAnimSupportSide::Right));
+			Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0)));
+			Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_l"), FVector(1.0, 0.0, 0.0)));
+			Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_l"), FVector(1.0, 1.0, 0.0)));
+			Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_l"), FVector(0.0, 1.0, 0.0)));
+			Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_r"), FVector(10.0, 0.0, 0.0)));
+			Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_r"), FVector(11.0, 0.0, 0.0)));
+			Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_r"), FVector(11.0, 1.0, 0.0)));
+			Input.Hits.Add(SupportHitSnapshot_MakeSupportHit(TEXT("foot_r"), FVector(10.0, 1.0, 0.0)));
 
 			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromHits(Input);
 

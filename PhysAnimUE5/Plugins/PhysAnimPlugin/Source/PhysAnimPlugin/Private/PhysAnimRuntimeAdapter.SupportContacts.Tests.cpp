@@ -3,6 +3,20 @@
 
 namespace
 {
+	FPhysAnimSupportContactSample SupportContacts_MakeContact(
+		const FVector2D& PositionCm,
+		const FName BodyName,
+		const EPhysAnimSupportSide SupportSide,
+		const bool bIsValidSupportContact = true)
+	{
+		FPhysAnimSupportContactSample Contact;
+		Contact.PositionCm = PositionCm;
+		Contact.BodyName = BodyName;
+		Contact.SupportSide = SupportSide;
+		Contact.bIsValidSupportContact = bIsValidSupportContact;
+		return Contact;
+	}
+
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimRuntimeAdapterSupportContactsTest,
 		"PhysAnim.RuntimeAdapter.SupportContacts",
@@ -15,12 +29,12 @@ namespace
 			Input.ComProxyPosCm = FVector2D(5.0, 5.0);
 			Input.DeltaMs = 10.0;
 
-			FPhysAnimSupportContactSample C1, C2, C3, C4;
-			C1.PositionCm = FVector2D(0, 0); C1.BodyName = "foot_l"; C1.SupportSide = EPhysAnimSupportSide::Left;
-			C2.PositionCm = FVector2D(10, 0); C2.BodyName = "foot_l"; C2.SupportSide = EPhysAnimSupportSide::Left;
-			C3.PositionCm = FVector2D(10, 10); C3.BodyName = "foot_l"; C3.SupportSide = EPhysAnimSupportSide::Left;
-			C4.PositionCm = FVector2D(0, 10); C4.BodyName = "foot_l"; C4.SupportSide = EPhysAnimSupportSide::Left;
-			Input.Contacts = {C1, C2, C3, C4};
+			Input.Contacts = {
+				SupportContacts_MakeContact(FVector2D(0.0, 0.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(10.0, 0.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(10.0, 10.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(0.0, 10.0), TEXT("foot_l"), EPhysAnimSupportSide::Left)
+			};
 
 			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromContacts(Input);
 
@@ -37,18 +51,16 @@ namespace
 
 		{
 			FPhysAnimSupportContactsSnapshotCaptureInput Input;
-			FPhysAnimSupportContactSample C1, C2, C3, C4, C5, C6, C7, C8;
-			C1.PositionCm = FVector2D(0, 0); C1.BodyName = "foot_l"; C1.SupportSide = EPhysAnimSupportSide::Left;
-			C2.PositionCm = FVector2D(1, 0); C2.BodyName = "foot_l"; C2.SupportSide = EPhysAnimSupportSide::Left;
-			C3.PositionCm = FVector2D(1, 1); C3.BodyName = "foot_l"; C3.SupportSide = EPhysAnimSupportSide::Left;
-			C4.PositionCm = FVector2D(0, 1); C4.BodyName = "foot_l"; C4.SupportSide = EPhysAnimSupportSide::Left;
-			
-			C5.PositionCm = FVector2D(10, 10); C5.BodyName = "foot_r"; C5.SupportSide = EPhysAnimSupportSide::Right;
-			C6.PositionCm = FVector2D(11, 10); C6.BodyName = "foot_r"; C6.SupportSide = EPhysAnimSupportSide::Right;
-			C7.PositionCm = FVector2D(11, 11); C7.BodyName = "foot_r"; C7.SupportSide = EPhysAnimSupportSide::Right;
-			C8.PositionCm = FVector2D(10, 11); C8.BodyName = "foot_r"; C8.SupportSide = EPhysAnimSupportSide::Right;
-			
-			Input.Contacts = {C1, C2, C3, C4, C5, C6, C7, C8};
+			Input.Contacts = {
+				SupportContacts_MakeContact(FVector2D(0.0, 0.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(1.0, 0.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(1.0, 1.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(0.0, 1.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(10.0, 10.0), TEXT("foot_r"), EPhysAnimSupportSide::Right),
+				SupportContacts_MakeContact(FVector2D(11.0, 10.0), TEXT("foot_r"), EPhysAnimSupportSide::Right),
+				SupportContacts_MakeContact(FVector2D(11.0, 11.0), TEXT("foot_r"), EPhysAnimSupportSide::Right),
+				SupportContacts_MakeContact(FVector2D(10.0, 11.0), TEXT("foot_r"), EPhysAnimSupportSide::Right)
+			};
 
 			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromContacts(Input);
 
@@ -89,22 +101,22 @@ namespace
 				TEXT("SUPPORT-CONTACTS-04 mode is Airborne"),
 				static_cast<uint8>(Snapshot.SupportMode),
 				static_cast<uint8>(EPhysAnimSupportMode::Airborne));
-			
+
 			const FPhysAnimSupportContractValidationResult Validation = PhysAnimValidators::ValidateSupport(Snapshot);
 			TestFalse(TEXT("SUPPORT-CONTACTS-04 validation fails"), Validation.bSupportContractPassed);
 		}
 
 		{
 			FPhysAnimSupportContactsSnapshotCaptureInput Input;
-			Input.ComProxyPosCm = FVector2D(5, 5);
+			Input.ComProxyPosCm = FVector2D(5.0, 5.0);
 			Input.PreviousProxyOutsideHullDurationMs = 50.0;
 
-			FPhysAnimSupportContactSample C1, C2, C3, C4;
-			C1.PositionCm = FVector2D(0, 0); C1.BodyName = "foot_l"; C1.SupportSide = EPhysAnimSupportSide::Left;
-			C2.PositionCm = FVector2D(10, 0); C2.BodyName = "foot_l"; C2.SupportSide = EPhysAnimSupportSide::Left;
-			C3.PositionCm = FVector2D(10, 10); C3.BodyName = "foot_l"; C3.SupportSide = EPhysAnimSupportSide::Left;
-			C4.PositionCm = FVector2D(0, 10); C4.BodyName = "foot_l"; C4.SupportSide = EPhysAnimSupportSide::Left;
-			Input.Contacts = {C1, C2, C3, C4};
+			Input.Contacts = {
+				SupportContacts_MakeContact(FVector2D(0.0, 0.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(10.0, 0.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(10.0, 10.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(0.0, 10.0), TEXT("foot_l"), EPhysAnimSupportSide::Left)
+			};
 
 			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromContacts(Input);
 
@@ -114,17 +126,17 @@ namespace
 
 		{
 			FPhysAnimSupportContactsSnapshotCaptureInput Input;
-			Input.ComProxyPosCm = FVector2D(50, 50);
+			Input.ComProxyPosCm = FVector2D(50.0, 50.0);
 			Input.PreviousProxyOutsideHullDurationMs = 90.0;
 			Input.DeltaMs = 20.0;
 			Input.ProxyDriftLimitMs = 100.0;
 
-			FPhysAnimSupportContactSample C1, C2, C3, C4;
-			C1.PositionCm = FVector2D(0, 0); C1.BodyName = "foot_l"; C1.SupportSide = EPhysAnimSupportSide::Left;
-			C2.PositionCm = FVector2D(10, 0); C2.BodyName = "foot_l"; C2.SupportSide = EPhysAnimSupportSide::Left;
-			C3.PositionCm = FVector2D(10, 10); C3.BodyName = "foot_l"; C3.SupportSide = EPhysAnimSupportSide::Left;
-			C4.PositionCm = FVector2D(0, 10); C4.BodyName = "foot_l"; C4.SupportSide = EPhysAnimSupportSide::Left;
-			Input.Contacts = {C1, C2, C3, C4};
+			Input.Contacts = {
+				SupportContacts_MakeContact(FVector2D(0.0, 0.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(10.0, 0.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(10.0, 10.0), TEXT("foot_l"), EPhysAnimSupportSide::Left),
+				SupportContacts_MakeContact(FVector2D(0.0, 10.0), TEXT("foot_l"), EPhysAnimSupportSide::Left)
+			};
 
 			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromContacts(Input);
 
@@ -138,10 +150,9 @@ namespace
 
 		{
 			FPhysAnimSupportContactsSnapshotCaptureInput Input;
-			FPhysAnimSupportContactSample C1;
-			C1.PositionCm = FVector2D(0, 0); C1.BodyName = "foot_l"; C1.SupportSide = EPhysAnimSupportSide::Left;
-			C1.bIsValidSupportContact = false;
-			Input.Contacts = {C1};
+			Input.Contacts = {
+				SupportContacts_MakeContact(FVector2D(0.0, 0.0), TEXT("foot_l"), EPhysAnimSupportSide::Left, false)
+			};
 
 			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromContacts(Input);
 

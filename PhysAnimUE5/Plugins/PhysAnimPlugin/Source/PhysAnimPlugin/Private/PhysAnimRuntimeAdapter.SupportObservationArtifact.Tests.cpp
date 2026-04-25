@@ -3,7 +3,7 @@
 
 namespace
 {
-	FPhysAnimSupportBodyMapping MakeSupportBodyMapping(const FName BodyName, const EPhysAnimSupportSide SupportSide)
+	FPhysAnimSupportBodyMapping SupportObservationArtifact_MakeSupportBodyMapping(const FName BodyName, const EPhysAnimSupportSide SupportSide)
 	{
 		FPhysAnimSupportBodyMapping Mapping;
 		Mapping.BodyName = BodyName;
@@ -11,7 +11,7 @@ namespace
 		return Mapping;
 	}
 
-	FPhysAnimSupportHitRecord MakeSupportHit(
+	FPhysAnimSupportHitRecord SupportObservationArtifact_MakeSupportHit(
 		const FName BodyName,
 		const FVector& WorldPositionCm,
 		const bool bBlockingHit = true,
@@ -25,7 +25,7 @@ namespace
 		return Hit;
 	}
 
-	FPhysAnimFailureCandidate MakeFailureCandidate(EPhysAnimTerminalReason Reason, int64 TerminalSubstepTimestamp)
+	FPhysAnimFailureCandidate SupportObservationArtifact_MakeFailureCandidate(EPhysAnimTerminalReason Reason, int64 TerminalSubstepTimestamp)
 	{
 		FPhysAnimFailureCandidate Candidate;
 		Candidate.TerminalReason = Reason;
@@ -33,13 +33,13 @@ namespace
 		return Candidate;
 	}
 
-	void AddLeftFootSquareHits(FPhysAnimSupportHitSnapshotCaptureInput& Input)
+	void SupportObservationArtifact_AddLeftFootSquareHits(FPhysAnimSupportHitSnapshotCaptureInput& Input)
 	{
-		Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0)));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(10.0, 0.0, 0.0)));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(10.0, 10.0, 0.0)));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(0.0, 10.0, 0.0)));
+		Input.SupportBodies.Add(SupportObservationArtifact_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+		Input.Hits.Add(SupportObservationArtifact_MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0)));
+		Input.Hits.Add(SupportObservationArtifact_MakeSupportHit(TEXT("foot_l"), FVector(10.0, 0.0, 0.0)));
+		Input.Hits.Add(SupportObservationArtifact_MakeSupportHit(TEXT("foot_l"), FVector(10.0, 10.0, 0.0)));
+		Input.Hits.Add(SupportObservationArtifact_MakeSupportHit(TEXT("foot_l"), FVector(0.0, 10.0, 0.0)));
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -53,7 +53,7 @@ namespace
 			FPhysAnimSupportObservationInput ObservationInput;
 			ObservationInput.HitSnapshot.ComProxyPosCm = FVector2D(5.0, 5.0);
 			ObservationInput.HitSnapshot.DeltaMs = 10.0;
-			AddLeftFootSquareHits(ObservationInput.HitSnapshot);
+			SupportObservationArtifact_AddLeftFootSquareHits(ObservationInput.HitSnapshot);
 
 			FPhysAnimSupportObservationArtifactInput ArtifactInput;
 			ArtifactInput.Observation = PhysAnimRuntimeAdapter::BuildSupportObservationFromHits(ObservationInput);
@@ -99,7 +99,7 @@ namespace
 			ObservationInput.HitSnapshot.PreviousProxyOutsideHullDurationMs = 90.0;
 			ObservationInput.HitSnapshot.DeltaMs = 20.0;
 			ObservationInput.HitSnapshot.ProxyDriftLimitMs = 100.0;
-			AddLeftFootSquareHits(ObservationInput.HitSnapshot);
+			SupportObservationArtifact_AddLeftFootSquareHits(ObservationInput.HitSnapshot);
 
 			FPhysAnimSupportObservationArtifactInput ArtifactInput;
 			ArtifactInput.Observation = PhysAnimRuntimeAdapter::BuildSupportObservationFromHits(ObservationInput);
@@ -126,7 +126,7 @@ namespace
 			ArtifactInput.Observation = PhysAnimRuntimeAdapter::BuildSupportObservationFromHits(ObservationInput);
 			ArtifactInput.Values.TerminalSubstepTimestamp = 400;
 			ArtifactInput.AdditionalFailureCandidates.Add(
-				MakeFailureCandidate(EPhysAnimTerminalReason::ActivationAuthorityConflict, 399));
+				SupportObservationArtifact_MakeFailureCandidate(EPhysAnimTerminalReason::ActivationAuthorityConflict, 399));
 
 			const FPhysAnimRunArtifactSnapshot Artifact = PhysAnimRuntimeAdapter::BuildSupportObservationArtifactSnapshot(ArtifactInput);
 
@@ -147,7 +147,7 @@ namespace
 			ArtifactInput.Observation = PhysAnimRuntimeAdapter::BuildSupportObservationFromHits(ObservationInput);
 			ArtifactInput.Values.TerminalSubstepTimestamp = 500;
 			ArtifactInput.AdditionalFailureCandidates.Add(
-				MakeFailureCandidate(EPhysAnimTerminalReason::ActivationAuthorityConflict, 500));
+				SupportObservationArtifact_MakeFailureCandidate(EPhysAnimTerminalReason::ActivationAuthorityConflict, 500));
 
 			const FPhysAnimRunArtifactSnapshot Artifact = PhysAnimRuntimeAdapter::BuildSupportObservationArtifactSnapshot(ArtifactInput);
 
@@ -166,7 +166,7 @@ namespace
 			ObservationInput.HitSnapshot.ComProxyPosCm = FVector2D(5.0, 5.0);
 			ObservationInput.HitSnapshot.SupportChurnCount = 4;
 			ObservationInput.HitSnapshot.SupportChurnHz = 2.0;
-			AddLeftFootSquareHits(ObservationInput.HitSnapshot);
+			SupportObservationArtifact_AddLeftFootSquareHits(ObservationInput.HitSnapshot);
 
 			FPhysAnimSupportObservationArtifactInput ArtifactInput;
 			ArtifactInput.Observation = PhysAnimRuntimeAdapter::BuildSupportObservationFromHits(ObservationInput);

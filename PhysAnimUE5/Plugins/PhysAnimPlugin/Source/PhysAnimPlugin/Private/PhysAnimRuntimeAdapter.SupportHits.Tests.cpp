@@ -3,7 +3,7 @@
 
 namespace
 {
-	FPhysAnimSupportBodyMapping MakeSupportBodyMapping(const FName BodyName, const EPhysAnimSupportSide SupportSide)
+	FPhysAnimSupportBodyMapping SupportHits_MakeSupportBodyMapping(const FName BodyName, const EPhysAnimSupportSide SupportSide)
 	{
 		FPhysAnimSupportBodyMapping Mapping;
 		Mapping.BodyName = BodyName;
@@ -11,7 +11,7 @@ namespace
 		return Mapping;
 	}
 
-	FPhysAnimSupportHitRecord MakeSupportHit(
+	FPhysAnimSupportHitRecord SupportHits_MakeSupportHit(
 		const FName BodyName,
 		const FVector& WorldPositionCm,
 		const bool bBlockingHit = true,
@@ -33,108 +33,45 @@ namespace
 	bool FPhysAnimRuntimeAdapterSupportHitsTest::RunTest(const FString& Parameters)
 	{
 		{
-			FPhysAnimSupportHitConversionInput Input;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(10.0, 20.0, 30.0)));
+			FPhysAnimSupportHitSnapshotCaptureInput Input_A;
+			Input_A.SupportBodies.Add(SupportHits_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+			Input_A.Hits.Add(SupportHits_MakeSupportHit(TEXT("foot_l"), FVector(10.0, 20.0, 30.0)));
 
-			const TArray<FPhysAnimSupportContactSample> Samples = PhysAnimRuntimeAdapter::ConvertSupportHitsToContactSamples(Input);
+			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromHits(Input_A);
 
-			TestEqual(TEXT("SUPPORT-HITS-01 valid hit produces one sample"), Samples.Num(), 1);
-			TestEqual(TEXT("SUPPORT-HITS-01 body name preserved"), Samples[0].BodyName, FName(TEXT("foot_l")));
-			TestEqual(
-				TEXT("SUPPORT-HITS-01 support side mapped"),
-				static_cast<uint8>(Samples[0].SupportSide),
-				static_cast<uint8>(EPhysAnimSupportSide::Left));
-			TestTrue(TEXT("SUPPORT-HITS-01 sample is valid"), Samples[0].bIsValidSupportContact);
-			TestTrue(TEXT("SUPPORT-HITS-01 planar position uses X/Y"), Samples[0].PositionCm.Equals(FVector2D(10.0, 20.0), UE_SMALL_NUMBER));
+			TestTrue(TEXT("SUPPORT-HITS-01 left side active"), Snapshot.bSupportStateL);
+			TestFalse(TEXT("SUPPORT-HITS-01 right side inactive"), Snapshot.bSupportStateR);
+			TestEqual(TEXT("SUPPORT-HITS-01 active side count is 1"), Snapshot.ActiveSupportSideCount, 1);
 		}
 
 		{
-			FPhysAnimSupportHitConversionInput Input;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(10.0, 20.0, 30.0), false, true));
+			FPhysAnimSupportHitSnapshotCaptureInput Input_B;
+			Input_B.WorldOriginCm = FVector(100.0, 200.0, 0.0);
+			Input_B.SupportBodies.Add(SupportHits_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+			Input_B.Hits.Add(SupportHits_MakeSupportHit(TEXT("foot_l"), FVector(100.0, 200.0, 0.0)));
 
-			const TArray<FPhysAnimSupportContactSample> Samples = PhysAnimRuntimeAdapter::ConvertSupportHitsToContactSamples(Input);
+			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromHits(Input_B);
 
-			TestEqual(TEXT("SUPPORT-HITS-02 non-blocking hit is ignored"), Samples.Num(), 0);
+			TestEqual(TEXT("SUPPORT-HITS-02 active side count after rebasing"), Snapshot.ActiveSupportSideCount, 1);
+			TestTrue(TEXT("SUPPORT-HITS-02 hull contains rebased origin point"),
+				Snapshot.SupportHullPointsCm.ContainsByPredicate(
+					[](const FVector2D& Point)
+					{
+						return Point.Equals(FVector2D(0.0, 0.0), UE_SMALL_NUMBER);
+					}));
 		}
 
 		{
-			FPhysAnimSupportHitConversionInput Input;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(10.0, 20.0, 30.0), true, false));
+			FPhysAnimSupportHitSnapshotCaptureInput Input_C;
+			Input_C.SupportBodies.Add(SupportHits_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+			Input_C.Hits.Add(SupportHits_MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0), false, true));
+			Input_C.Hits.Add(SupportHits_MakeSupportHit(TEXT("foot_l"), FVector(10.0, 0.0, 0.0), true, false));
+			Input_C.Hits.Add(SupportHits_MakeSupportHit(TEXT("hand_l"), FVector(20.0, 0.0, 0.0), true, true));
 
-			const TArray<FPhysAnimSupportContactSample> Samples = PhysAnimRuntimeAdapter::ConvertSupportHitsToContactSamples(Input);
+			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromHits(Input_C);
 
-			TestEqual(TEXT("SUPPORT-HITS-03 non-world-static hit is ignored"), Samples.Num(), 0);
-		}
-
-		{
-			FPhysAnimSupportHitConversionInput Input;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.Hits.Add(MakeSupportHit(TEXT("hand_l"), FVector(10.0, 20.0, 30.0)));
-
-			const TArray<FPhysAnimSupportContactSample> Samples = PhysAnimRuntimeAdapter::ConvertSupportHitsToContactSamples(Input);
-
-			TestEqual(TEXT("SUPPORT-HITS-04 unmapped body is ignored"), Samples.Num(), 0);
-		}
-
-		{
-			FPhysAnimSupportHitConversionInput Input;
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_r"), EPhysAnimSupportSide::Right));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0)));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_r"), FVector(10.0, 0.0, 0.0)));
-
-			const TArray<FPhysAnimSupportContactSample> Samples = PhysAnimRuntimeAdapter::ConvertSupportHitsToContactSamples(Input);
-
-			TestEqual(TEXT("SUPPORT-HITS-05 two mapped hits produce two samples"), Samples.Num(), 2);
-			TestEqual(
-				TEXT("SUPPORT-HITS-05 left body mapping preserved"),
-				static_cast<uint8>(Samples[0].SupportSide),
-				static_cast<uint8>(EPhysAnimSupportSide::Left));
-			TestEqual(
-				TEXT("SUPPORT-HITS-05 right body mapping preserved"),
-				static_cast<uint8>(Samples[1].SupportSide),
-				static_cast<uint8>(EPhysAnimSupportSide::Right));
-		}
-
-		{
-			FPhysAnimSupportHitConversionInput Input;
-			Input.WorldOriginCm = FVector(100.0, 200.0, 300.0);
-			Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(110.0, 225.0, 400.0)));
-
-			const TArray<FPhysAnimSupportContactSample> Samples = PhysAnimRuntimeAdapter::ConvertSupportHitsToContactSamples(Input);
-
-			TestEqual(TEXT("SUPPORT-HITS-06 rebased sample count"), Samples.Num(), 1);
-			TestTrue(TEXT("SUPPORT-HITS-06 world origin rebasing uses X/Y"), Samples[0].PositionCm.Equals(FVector2D(10.0, 25.0), UE_SMALL_NUMBER));
-		}
-
-		{
-			FPhysAnimSupportHitConversionInput HitInput;
-			HitInput.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			HitInput.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0)));
-			HitInput.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(10.0, 0.0, 0.0)));
-			HitInput.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(10.0, 10.0, 0.0)));
-			HitInput.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(0.0, 10.0, 0.0)));
-
-			const TArray<FPhysAnimSupportContactSample> Samples = PhysAnimRuntimeAdapter::ConvertSupportHitsToContactSamples(HitInput);
-
-			FPhysAnimSupportContactsSnapshotCaptureInput SnapshotInput;
-			SnapshotInput.Contacts = Samples;
-			SnapshotInput.ComProxyPosCm = FVector2D(5.0, 5.0);
-			SnapshotInput.DeltaMs = 10.0;
-
-			const FPhysAnimSupportContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureSupportSnapshotFromContacts(SnapshotInput);
-
-			TestEqual(TEXT("SUPPORT-HITS-07 converted samples feed support snapshot"), Snapshot.ActiveSupportSideCount, 1);
-			TestTrue(TEXT("SUPPORT-HITS-07 support hull area is positive"), Snapshot.SupportHullAreaCm2 > 0.0);
-			TestEqual(
-				TEXT("SUPPORT-HITS-07 mode is SingleFootSurvival"),
-				static_cast<uint8>(Snapshot.SupportMode),
-				static_cast<uint8>(EPhysAnimSupportMode::SingleFootSurvival));
-			TestTrue(TEXT("SUPPORT-HITS-07 proxy is inside support hull"), Snapshot.ProxyInsideHull.IsSet() && Snapshot.ProxyInsideHull.GetValue());
+			TestFalse(TEXT("SUPPORT-HITS-03 invalid/unmapped hits produce no support"), Snapshot.bSupportStateL || Snapshot.bSupportStateR);
+			TestEqual(TEXT("SUPPORT-HITS-03 active side count is 0"), Snapshot.ActiveSupportSideCount, 0);
 		}
 
 		return true;

@@ -3,7 +3,7 @@
 
 namespace
 {
-	FPhysAnimSupportBodyMapping MakeSupportBodyMapping(const FName BodyName, const EPhysAnimSupportSide SupportSide)
+	FPhysAnimSupportBodyMapping SupportObservation_MakeSupportBodyMapping(const FName BodyName, const EPhysAnimSupportSide SupportSide)
 	{
 		FPhysAnimSupportBodyMapping Mapping;
 		Mapping.BodyName = BodyName;
@@ -11,7 +11,7 @@ namespace
 		return Mapping;
 	}
 
-	FPhysAnimSupportHitRecord MakeSupportHit(
+	FPhysAnimSupportHitRecord SupportObservation_MakeSupportHit(
 		const FName BodyName,
 		const FVector& WorldPositionCm,
 		const bool bBlockingHit = true,
@@ -25,13 +25,13 @@ namespace
 		return Hit;
 	}
 
-	void AddLeftFootSquareHits(FPhysAnimSupportHitSnapshotCaptureInput& Input)
+	void SupportObservation_AddLeftFootSquareHits(FPhysAnimSupportHitSnapshotCaptureInput& Input)
 	{
-		Input.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0)));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(10.0, 0.0, 0.0)));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(10.0, 10.0, 0.0)));
-		Input.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(0.0, 10.0, 0.0)));
+		Input.SupportBodies.Add(SupportObservation_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+		Input.Hits.Add(SupportObservation_MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0)));
+		Input.Hits.Add(SupportObservation_MakeSupportHit(TEXT("foot_l"), FVector(10.0, 0.0, 0.0)));
+		Input.Hits.Add(SupportObservation_MakeSupportHit(TEXT("foot_l"), FVector(10.0, 10.0, 0.0)));
+		Input.Hits.Add(SupportObservation_MakeSupportHit(TEXT("foot_l"), FVector(0.0, 10.0, 0.0)));
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -45,7 +45,7 @@ namespace
 			FPhysAnimSupportObservationInput Input;
 			Input.HitSnapshot.ComProxyPosCm = FVector2D(5.0, 5.0);
 			Input.HitSnapshot.DeltaMs = 10.0;
-			AddLeftFootSquareHits(Input.HitSnapshot);
+			SupportObservation_AddLeftFootSquareHits(Input.HitSnapshot);
 
 			const FPhysAnimSupportObservationResult Result = PhysAnimRuntimeAdapter::BuildSupportObservationFromHits(Input);
 
@@ -85,7 +85,7 @@ namespace
 			Input.HitSnapshot.PreviousProxyOutsideHullDurationMs = 90.0;
 			Input.HitSnapshot.DeltaMs = 20.0;
 			Input.HitSnapshot.ProxyDriftLimitMs = 100.0;
-			AddLeftFootSquareHits(Input.HitSnapshot);
+			SupportObservation_AddLeftFootSquareHits(Input.HitSnapshot);
 
 			const FPhysAnimSupportObservationResult Result = PhysAnimRuntimeAdapter::BuildSupportObservationFromHits(Input);
 
@@ -103,10 +103,10 @@ namespace
 
 		{
 			FPhysAnimSupportObservationInput Input;
-			Input.HitSnapshot.SupportBodies.Add(MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
-			Input.HitSnapshot.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0), false, true));
-			Input.HitSnapshot.Hits.Add(MakeSupportHit(TEXT("foot_l"), FVector(10.0, 0.0, 0.0), true, false));
-			Input.HitSnapshot.Hits.Add(MakeSupportHit(TEXT("hand_l"), FVector(20.0, 0.0, 0.0), true, true));
+			Input.HitSnapshot.SupportBodies.Add(SupportObservation_MakeSupportBodyMapping(TEXT("foot_l"), EPhysAnimSupportSide::Left));
+			Input.HitSnapshot.Hits.Add(SupportObservation_MakeSupportHit(TEXT("foot_l"), FVector(0.0, 0.0, 0.0), false, true));
+			Input.HitSnapshot.Hits.Add(SupportObservation_MakeSupportHit(TEXT("foot_l"), FVector(10.0, 0.0, 0.0), true, false));
+			Input.HitSnapshot.Hits.Add(SupportObservation_MakeSupportHit(TEXT("hand_l"), FVector(20.0, 0.0, 0.0), true, true));
 			Input.HitSnapshot.PreviousSupportGapTimerMs = 30.0;
 			Input.HitSnapshot.DeltaMs = 20.0;
 			Input.HitSnapshot.SupportGapMaxMs = 100.0;
@@ -128,7 +128,7 @@ namespace
 			Input.HitSnapshot.ComProxyPosCm = FVector2D(5.0, 5.0);
 			Input.HitSnapshot.SupportChurnCount = 3;
 			Input.HitSnapshot.SupportChurnHz = 1.5;
-			AddLeftFootSquareHits(Input.HitSnapshot);
+			SupportObservation_AddLeftFootSquareHits(Input.HitSnapshot);
 
 			const FPhysAnimSupportObservationResult Result = PhysAnimRuntimeAdapter::BuildSupportObservationFromHits(Input);
 
