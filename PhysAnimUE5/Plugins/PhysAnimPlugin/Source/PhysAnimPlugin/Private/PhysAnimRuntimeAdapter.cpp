@@ -5,6 +5,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysAnimSupportTruth.h"
 
 namespace
 {
@@ -116,11 +117,6 @@ namespace PhysAnimRuntimeAdapter
 		return Snapshot;
 	}
 
-	FPhysAnimPlantContractSnapshot CapturePlantSnapshot(const FPhysAnimPlantContractSnapshotCaptureInput& Input)
-	{
-		return CapturePlantContractSnapshot(Input);
-	}
-
 	FPhysAnimPlantContractSnapshot CapturePlantContractSnapshot(const FPhysAnimPlantContractSnapshotCaptureInput& Input)
 	{
 		FPhysAnimPlantContractSnapshot Snapshot;
@@ -185,5 +181,83 @@ namespace PhysAnimRuntimeAdapter
 		Snapshot.ProxyOutsideHullDurationMs = Input.ProxyOutsideHullDurationMs;
 		Snapshot.ProxyTerminalReason = Input.ProxyTerminalReason;
 		return Snapshot;
+	}
+
+	FPhysAnimSupportContractSnapshot CaptureSupportSnapshotFromContacts(const FPhysAnimSupportContactsSnapshotCaptureInput& Input)
+	{
+		TMap<TTuple<FName, EPhysAnimSupportSide>, TArray<FPhysAnimSupportPoint2D>> GroupedPoints;
+
+		for (const FPhysAnimSupportContactSample& Sample : Input.Contacts)
+		{
+			if (!Sample.bIsValidSupportContact)
+			{
+				continue;
+			}
+
+			FPhysAnimSupportPoint2D Point;
+			Point.PositionCm = Sample.PositionCm;
+			Point.BodyName = Sample.BodyName;
+			Point.SupportSide = Sample.SupportSide;
+
+			GroupedPoints.FindOrAdd({Sample.BodyName, Sample.SupportSide}).Add(Point);
+		}
+
+		TArray<FPhysAnimSupportPatch> Patches;
+		double PatchAreaL = 0.0;
+		double PatchAreaR = 0.0;
+
+		for (auto& Elem : GroupedPoints)
+		{
+			const FPhysAnimSupportPatch Patch = PhysAnimSupportTruth::ExtractPatchHull(Elem.Value);
+			if (Patch.bValidInput && !Patch.HullPointsCm.IsEmpty())
+			{
+				Patches.Add(Patch);
+				if (Patch.SupportSide == EPhysAnimSupportSide::Left)
+				{
+					PatchAreaL += Patch.PatchAreaCm2;
+				}
+				else
+				{
+					PatchAreaR += Patch.PatchAreaCm2;
+				}
+			}
+		}
+
+		const FPhysAnimFrameHull FrameHull = PhysAnimSupportTruth::BuildFrameHull(Patches);
+
+		const bool bActiveL = PatchAreaL > UE_SMALL_NUMBER;
+		const bool bActiveR = PatchAreaR > UE_SMALL_NUMBER;
+
+		FPhysAnimSupportSnapshotCaptureInput CaptureInput;
+		CaptureInput.bSupportStateL = bActiveL;
+		CaptureInput.bSupportStateR = bActiveR;
+		CaptureInput.SupportGapMaxMs = Input.SupportGapMaxMs;
+		CaptureInput.SupportAreaMinCm2 = Input.SupportAreaMinCm2;
+		CaptureInput.SupportGapTimerMs = (bActiveL || bActiveR) ? 0.0 : Input.PreviousSupportGapTimerMs + FMath::Max(0.0, Input.DeltaMs);
+		CaptureInput.SupportMode = PhysAnimSupportTruth::ClassifySupportMode(bActiveL, bActiveR, CaptureInput.SupportGapTimerMs, CaptureInput.SupportGapMaxMs);
+
+		FPhysAnimProxyAdjudicationInput ProxyInput;
+		ProxyInput.ProxyPositionCm = Input.ComProxyPosCm;
+		ProxyInput.HullPointsCm = FrameHull.HullPointsCm;
+		ProxyInput.ActiveSupportSideCount = FrameHull.ActiveSupportSideCount;
+		ProxyInput.PreviousProxyOutsideHullDurationMs = Input.PreviousProxyOutsideHullDurationMs;
+		ProxyInput.DeltaMs = Input.DeltaMs;
+		ProxyInput.ProxyDriftLimitMs = Input.ProxyDriftLimitMs;
+
+		const FPhysAnimProxyAdjudicationResult ProxyResult = PhysAnimSupportTruth::AdjudicateProxy(ProxyInput);
+
+		CaptureInput.ActiveSupportSideCount = FrameHull.ActiveSupportSideCount;
+		CaptureInput.SupportHullAreaCm2 = FrameHull.SupportHullAreaCm2;
+		CaptureInput.SupportPatchAreaLCm2 = PatchAreaL;
+		CaptureInput.SupportPatchAreaRCm2 = PatchAreaR;
+		CaptureInput.SupportHullPointsCm = FrameHull.HullPointsCm;
+		CaptureInput.ComProxyPosCm = Input.ComProxyPosCm;
+		CaptureInput.SupportChurnCount = Input.SupportChurnCount;
+		CaptureInput.SupportChurnHz = Input.SupportChurnHz;
+		CaptureInput.ProxyInsideHull = ProxyResult.ProxyInsideHull;
+		CaptureInput.ProxyOutsideHullDurationMs = ProxyResult.ProxyOutsideHullDurationMs;
+		CaptureInput.ProxyTerminalReason = ProxyResult.TerminalReason;
+
+		return CaptureSupportSnapshot(CaptureInput);
 	}
 }

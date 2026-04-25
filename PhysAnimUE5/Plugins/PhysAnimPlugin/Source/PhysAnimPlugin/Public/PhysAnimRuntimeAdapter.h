@@ -56,10 +56,35 @@ struct FPhysAnimSupportSnapshotCaptureInput
 	EPhysAnimTerminalReason ProxyTerminalReason = EPhysAnimTerminalReason::None;
 };
 
+struct FPhysAnimSupportContactSample
+{
+	FVector2D PositionCm = FVector2D::ZeroVector;
+	FName BodyName = NAME_None;
+	EPhysAnimSupportSide SupportSide = EPhysAnimSupportSide::Left;
+	bool bIsValidSupportContact = true;
+};
+
+struct FPhysAnimSupportContactsSnapshotCaptureInput
+{
+	TArray<FPhysAnimSupportContactSample> Contacts;
+	bool bPreviousSupportStateL = false;
+	bool bPreviousSupportStateR = false;
+	double PreviousSupportGapTimerMs = 0.0;
+	TOptional<double> PreviousProxyOutsideHullDurationMs;
+	double DeltaMs = 0.0;
+	double SupportGapMaxMs = 100.0;
+	double SupportAreaMinCm2 = 50.0;
+	double ProxyDriftLimitMs = 100.0;
+	FVector2D ComProxyPosCm = FVector2D::ZeroVector;
+	int32 SupportChurnCount = 0;
+	double SupportChurnHz = 0.0;
+};
+
 namespace PhysAnimRuntimeAdapter
 {
 	FPhysAnimContinuitySnapshot CaptureContinuitySnapshot(const FPhysAnimContinuitySnapshotCaptureInput& Input);
 	FPhysAnimCapsuleContractSnapshot CaptureCapsuleContractSnapshot(const FPhysAnimCapsuleContractSnapshotCaptureInput& Input);
 	FPhysAnimPlantContractSnapshot CapturePlantContractSnapshot(const FPhysAnimPlantContractSnapshotCaptureInput& Input);
 	FPhysAnimSupportContractSnapshot CaptureSupportSnapshot(const FPhysAnimSupportSnapshotCaptureInput& Input);
+	FPhysAnimSupportContractSnapshot CaptureSupportSnapshotFromContacts(const FPhysAnimSupportContactsSnapshotCaptureInput& Input);
 }
