@@ -243,7 +243,7 @@ namespace
 	bool FPhysAnimSupportTruthAdjudicateProxyTest::RunTest(const FString& Parameters)
 	{
 		{
-			// LOGIC-09: No active support sides
+			// LOGIC-12: No support hull
 			FPhysAnimProxyAdjudicationInput Input;
 			Input.ActiveSupportSideCount = 0;
 			Input.ProxyPositionCm = FVector2D(0.0, 0.0);
@@ -251,13 +251,13 @@ namespace
 
 			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
 
-			TestFalse(TEXT("LOGIC-09 ProxyInsideHull is unset"), Result.ProxyInsideHull.IsSet());
-			TestFalse(TEXT("LOGIC-09 ProxyOutsideHullDurationMs is unset"), Result.ProxyOutsideHullDurationMs.IsSet());
-			TestEqual(TEXT("LOGIC-09 TerminalReason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+			TestFalse(TEXT("LOGIC-12 proxy_inside_hull is unset"), Result.ProxyInsideHull.IsSet());
+			TestFalse(TEXT("LOGIC-12 proxy_outside_hull_duration_ms is unset"), Result.ProxyOutsideHullDurationMs.IsSet());
+			TestEqual(TEXT("LOGIC-12 TerminalReason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
 		}
 
 		{
-			// LOGIC-10: Active support but insufficient points for hull (e.g. collinear or single point)
+			// LOGIC-12A: Degenerate hull
 			FPhysAnimProxyAdjudicationInput Input;
 			Input.ActiveSupportSideCount = 1;
 			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0)}; // Collinear
@@ -267,13 +267,13 @@ namespace
 
 			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
 
-			TestTrue(TEXT("LOGIC-10 ProxyInsideHull is set to false"), Result.ProxyInsideHull.IsSet() && !Result.ProxyInsideHull.GetValue());
-			TestEqual(TEXT("LOGIC-10 ProxyOutsideHullDurationMs is DeltaMs"), Result.ProxyOutsideHullDurationMs.GetValue(), 10.0);
-			TestEqual(TEXT("LOGIC-10 TerminalReason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+			TestTrue(TEXT("LOGIC-12A proxy_inside_hull is false"), Result.ProxyInsideHull.IsSet() && !Result.ProxyInsideHull.GetValue());
+			TestEqual(TEXT("LOGIC-12A duration follows outside rule"), Result.ProxyOutsideHullDurationMs.GetValue(), 10.0);
+			TestEqual(TEXT("LOGIC-12A TerminalReason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
 		}
 
 		{
-			// LOGIC-11: Proxy inside hull
+			// LOGIC-09: Proxy inside hull
 			FPhysAnimProxyAdjudicationInput Input;
 			Input.ActiveSupportSideCount = 1;
 			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
@@ -283,27 +283,30 @@ namespace
 
 			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
 
-			TestTrue(TEXT("LOGIC-11 ProxyInsideHull is true"), Result.ProxyInsideHull.IsSet() && Result.ProxyInsideHull.GetValue());
-			TestEqual(TEXT("LOGIC-11 ProxyOutsideHullDurationMs is reset to 0"), Result.ProxyOutsideHullDurationMs.GetValue(), 0.0);
-			TestEqual(TEXT("LOGIC-11 TerminalReason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+			TestTrue(TEXT("LOGIC-09 proxy_inside_hull is true"), Result.ProxyInsideHull.IsSet() && Result.ProxyInsideHull.GetValue());
+			TestEqual(TEXT("LOGIC-09 proxy_outside_hull_duration_ms is reset to 0"), Result.ProxyOutsideHullDurationMs.GetValue(), 0.0);
+			TestEqual(TEXT("LOGIC-09 TerminalReason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
 		}
 
 		{
-			// LOGIC-12: Proxy outside hull, no previous duration
+			// LOGIC-10: Proxy outside hull under limit
 			FPhysAnimProxyAdjudicationInput Input;
 			Input.ActiveSupportSideCount = 1;
 			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
 			Input.ProxyPositionCm = FVector2D(15.0, 15.0);
+			Input.PreviousProxyOutsideHullDurationMs = 50.0;
 			Input.DeltaMs = 10.0;
+			Input.ProxyDriftLimitMs = 100.0;
 
 			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
 
-			TestTrue(TEXT("LOGIC-12 ProxyInsideHull is false"), Result.ProxyInsideHull.IsSet() && !Result.ProxyInsideHull.GetValue());
-			TestEqual(TEXT("LOGIC-12 ProxyOutsideHullDurationMs is DeltaMs"), Result.ProxyOutsideHullDurationMs.GetValue(), 10.0);
+			TestTrue(TEXT("LOGIC-10 proxy_inside_hull is false"), Result.ProxyInsideHull.IsSet() && !Result.ProxyInsideHull.GetValue());
+			TestTrue(TEXT("LOGIC-10 proxy_outside_hull_duration_ms is under limit"), Result.ProxyOutsideHullDurationMs.GetValue() <= 100.0);
+			TestEqual(TEXT("LOGIC-10 TerminalReason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
 		}
 
 		{
-			// LOGIC-12A: Proxy outside hull, increment duration
+			// Outside hull duration accumulates while under limit
 			FPhysAnimProxyAdjudicationInput Input;
 			Input.ActiveSupportSideCount = 1;
 			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
@@ -313,11 +316,11 @@ namespace
 
 			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
 
-			TestEqual(TEXT("LOGIC-12A ProxyOutsideHullDurationMs is incremented"), Result.ProxyOutsideHullDurationMs.GetValue(), 60.0);
+			TestEqual(TEXT("Outside hull duration is incremented"), Result.ProxyOutsideHullDurationMs.GetValue(), 60.0);
 		}
 
 		{
-			// LOGIC-12B: Proxy outside hull, exceed limit
+			// LOGIC-11: Proxy outside hull over limit
 			FPhysAnimProxyAdjudicationInput Input;
 			Input.ActiveSupportSideCount = 1;
 			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
@@ -328,20 +331,47 @@ namespace
 
 			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
 
-			TestEqual(TEXT("LOGIC-12B ProxyOutsideHullDurationMs is 105"), Result.ProxyOutsideHullDurationMs.GetValue(), 105.0);
-			TestEqual(TEXT("LOGIC-12B TerminalReason is ActivationProxyOutsideSupportRegion"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion));
+			TestTrue(TEXT("LOGIC-11 proxy_inside_hull is false"), Result.ProxyInsideHull.IsSet() && !Result.ProxyInsideHull.GetValue());
+			TestTrue(TEXT("LOGIC-11 proxy_outside_hull_duration_ms exceeds limit"), Result.ProxyOutsideHullDurationMs.GetValue() > 100.0);
+			TestEqual(TEXT("LOGIC-11 TerminalReason is ActivationProxyOutsideSupportRegion"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion));
 		}
 
 		{
-			// LOGIC-12C: Proxy on edge is inside
+			// LOGIC-12B: First frame outside
 			FPhysAnimProxyAdjudicationInput Input;
 			Input.ActiveSupportSideCount = 1;
 			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
-			Input.ProxyPositionCm = FVector2D(10.0, 5.0); // Right edge
+			Input.ProxyPositionCm = FVector2D(15.0, 15.0);
+			Input.DeltaMs = 10.0;
+			Input.ProxyDriftLimitMs = 100.0;
 
 			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
 
-			TestTrue(TEXT("LOGIC-12C Proxy on edge is inside"), Result.ProxyInsideHull.IsSet() && Result.ProxyInsideHull.GetValue());
+			TestEqual(TEXT("LOGIC-12B proxy_outside_hull_duration_ms is DeltaMs"), Result.ProxyOutsideHullDurationMs.GetValue(), 10.0);
+		}
+
+		{
+			// LOGIC-12C: First frame inside
+			FPhysAnimProxyAdjudicationInput Input;
+			Input.ActiveSupportSideCount = 1;
+			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
+			Input.ProxyPositionCm = FVector2D(5.0, 5.0);
+
+			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
+
+			TestEqual(TEXT("LOGIC-12C proxy_outside_hull_duration_ms is 0.0"), Result.ProxyOutsideHullDurationMs.GetValue(), 0.0);
+		}
+
+		{
+			// Proxy on edge is inside
+			FPhysAnimProxyAdjudicationInput Input;
+			Input.ActiveSupportSideCount = 1;
+			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
+			Input.ProxyPositionCm = FVector2D(10.0, 5.0);
+
+			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
+
+			TestTrue(TEXT("Proxy on edge is inside"), Result.ProxyInsideHull.IsSet() && Result.ProxyInsideHull.GetValue());
 		}
 
 		return true;
@@ -354,21 +384,23 @@ namespace
 
 	bool FPhysAnimSupportTruthCalculateChurnHzTest::RunTest(const FString& Parameters)
 	{
-		// LOGIC-13: Filter events by window and calculate Hz
+		// LOGIC-13: 5 transitions in 1.0s
 		FPhysAnimChurnCalculationInput Input;
-		Input.CurrentTimestampSec = 100.0;
-		Input.WindowSeconds = 10.0;
+		Input.CurrentTimestampSec = 1.0;
+		Input.WindowSeconds = 1.0;
 		
-		// Boundaries: > (100 - 10 = 90) and <= 100
-		FPhysAnimChurnEvent E1; E1.TimestampSec = 90.0; Input.HistoricalEvents.Add(E1);  // Exclude (boundary)
-		FPhysAnimChurnEvent E2; E2.TimestampSec = 95.0; Input.HistoricalEvents.Add(E2);  // Include
-		FPhysAnimChurnEvent E3; E3.TimestampSec = 100.0; Input.HistoricalEvents.Add(E3); // Include
-		FPhysAnimChurnEvent E4; E4.TimestampSec = 100.1; Input.HistoricalEvents.Add(E4); // Exclude (future)
+		FPhysAnimChurnEvent BoundaryExcluded; BoundaryExcluded.TimestampSec = 0.0; Input.HistoricalEvents.Add(BoundaryExcluded);
+		FPhysAnimChurnEvent E1; E1.TimestampSec = 0.1; Input.HistoricalEvents.Add(E1);
+		FPhysAnimChurnEvent E2; E2.TimestampSec = 0.25; Input.HistoricalEvents.Add(E2);
+		FPhysAnimChurnEvent E3; E3.TimestampSec = 0.5; Input.HistoricalEvents.Add(E3);
+		FPhysAnimChurnEvent E4; E4.TimestampSec = 0.75; Input.HistoricalEvents.Add(E4);
+		FPhysAnimChurnEvent E5; E5.TimestampSec = 1.0; Input.HistoricalEvents.Add(E5);
+		FPhysAnimChurnEvent FutureExcluded; FutureExcluded.TimestampSec = 1.1; Input.HistoricalEvents.Add(FutureExcluded);
 
 		const FPhysAnimChurnResult Result = PhysAnimSupportTruth::CalculateChurnHz(Input);
 
-		TestEqual(TEXT("LOGIC-13 SupportChurnCount is 2"), Result.SupportChurnCount, 2);
-		TestEqual(TEXT("LOGIC-13 SupportChurnHz is 0.2"), Result.SupportChurnHz, 0.2);
+		TestEqual(TEXT("LOGIC-13 SupportChurnCount is 5"), Result.SupportChurnCount, 5);
+		TestEqual(TEXT("LOGIC-13 support_churn_hz is 5.0"), Result.SupportChurnHz, 5.0);
 
 		return true;
 	}
@@ -381,27 +413,54 @@ namespace
 	bool FPhysAnimSupportTruthReduceSupportModeForReportWindowTest::RunTest(const FString& Parameters)
 	{
 		{
-			// LOGIC-14: Greatest accumulated duration wins
+			// Greatest accumulated duration wins
 			FPhysAnimSupportReportWindowInput Input;
 			Input.Modes = {EPhysAnimSupportMode::TwoFootStable, EPhysAnimSupportMode::SingleFootSurvival, EPhysAnimSupportMode::SingleFootSurvival};
 			Input.DurationsMs = {100.0, 60.0, 60.0};
 
 			const FPhysAnimSupportReportWindowResult Result = PhysAnimSupportTruth::ReduceSupportModeForReportWindow(Input);
 
-			TestEqual(TEXT("LOGIC-14 Survival wins by duration"), static_cast<uint8>(Result.SupportMode), static_cast<uint8>(EPhysAnimSupportMode::SingleFootSurvival));
-			TestEqual(TEXT("LOGIC-14 Total duration is 220"), Result.TotalWindowDurationMs, 220.0);
-			TestTrue(TEXT("LOGIC-14 input is valid"), Result.bValidInput);
+			TestEqual(TEXT("Survival wins by duration"), static_cast<uint8>(Result.SupportMode), static_cast<uint8>(EPhysAnimSupportMode::SingleFootSurvival));
+			TestEqual(TEXT("Total duration is 220"), Result.TotalWindowDurationMs, 220.0);
+			TestTrue(TEXT("Input is valid"), Result.bValidInput);
 		}
 
 		{
-			// LOGIC-14A: Tie-break by severity (Airborne > Recovery > Survival > TwoFoot)
+			// LOGIC-14: 30 Hz severity tie-break
 			FPhysAnimSupportReportWindowInput Input;
-			Input.Modes = {EPhysAnimSupportMode::TwoFootStable, EPhysAnimSupportMode::SingleFootSurvival};
-			Input.DurationsMs = {100.0, 100.0};
+			Input.Modes = {
+				EPhysAnimSupportMode::TwoFootStable,
+				EPhysAnimSupportMode::SingleFootSurvival,
+				EPhysAnimSupportMode::TransientRecovery,
+				EPhysAnimSupportMode::Airborne
+			};
+			Input.DurationsMs = {100.0, 100.0, 100.0, 100.0};
 
 			const FPhysAnimSupportReportWindowResult Result = PhysAnimSupportTruth::ReduceSupportModeForReportWindow(Input);
 
-			TestEqual(TEXT("LOGIC-14A Survival wins tie-break over TwoFoot"), static_cast<uint8>(Result.SupportMode), static_cast<uint8>(EPhysAnimSupportMode::SingleFootSurvival));
+			TestEqual(TEXT("LOGIC-14 Airborne wins equal-duration severity tie-break"), static_cast<uint8>(Result.SupportMode), static_cast<uint8>(EPhysAnimSupportMode::Airborne));
+		}
+
+		{
+			// LOGIC-14A: Empty or zero input
+			FPhysAnimSupportReportWindowInput Input;
+
+			const FPhysAnimSupportReportWindowResult Result = PhysAnimSupportTruth::ReduceSupportModeForReportWindow(Input);
+
+			TestEqual(TEXT("LOGIC-14A empty input mode is Airborne"), static_cast<uint8>(Result.SupportMode), static_cast<uint8>(EPhysAnimSupportMode::Airborne));
+			TestEqual(TEXT("LOGIC-14A empty input total duration is zero"), Result.TotalWindowDurationMs, 0.0);
+		}
+
+		{
+			// LOGIC-14A: Empty or zero input
+			FPhysAnimSupportReportWindowInput Input;
+			Input.Modes = {EPhysAnimSupportMode::TwoFootStable};
+			Input.DurationsMs = {0.0};
+
+			const FPhysAnimSupportReportWindowResult Result = PhysAnimSupportTruth::ReduceSupportModeForReportWindow(Input);
+
+			TestEqual(TEXT("LOGIC-14A zero-duration input mode is Airborne"), static_cast<uint8>(Result.SupportMode), static_cast<uint8>(EPhysAnimSupportMode::Airborne));
+			TestEqual(TEXT("LOGIC-14A zero-duration total duration is zero"), Result.TotalWindowDurationMs, 0.0);
 		}
 
 		{
