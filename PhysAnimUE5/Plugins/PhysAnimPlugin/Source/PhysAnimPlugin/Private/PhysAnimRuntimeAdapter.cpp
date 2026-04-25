@@ -1,6 +1,8 @@
 #include "PhysAnimRuntimeAdapter.h"
 
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
 
 namespace
@@ -69,6 +71,46 @@ namespace PhysAnimRuntimeAdapter
 		Snapshot.bAllCriticalBodiesValid = bRawBodiesValid;
 		Snapshot.bAllCriticalBodiesSimulating = bRawBodiesSimulating;
 		Snapshot.bContinuityBookkeepingMismatch = Input.bBookkeepingReportsContinuity != bRawContinuityValid;
+
+		return Snapshot;
+	}
+
+	FPhysAnimCapsuleContractSnapshot CaptureCapsuleContractSnapshot(const FPhysAnimCapsuleContractSnapshotCaptureInput& Input)
+	{
+		FPhysAnimCapsuleContractSnapshot Snapshot;
+
+		if (const UCapsuleComponent* const Capsule = Input.CapsuleComponent)
+		{
+			Snapshot.CapsuleCollisionEnabled = Capsule->GetCollisionEnabled() == ECollisionEnabled::NoCollision
+				? EPhysAnimCapsuleCollisionState::NoCollision
+				: EPhysAnimCapsuleCollisionState::CollisionEnabled;
+			Snapshot.bCapsuleGenerateOverlapEvents = Capsule->GetGenerateOverlapEvents();
+			Snapshot.CapsuleLockDeltaCm = FVector::Dist(Capsule->GetComponentLocation(), Input.RebaseOriginCm);
+		}
+		else
+		{
+			Snapshot.CapsuleCollisionEnabled = EPhysAnimCapsuleCollisionState::CollisionEnabled;
+		}
+
+		if (const USkeletalMeshComponent* const Mesh = Input.SkeletalMeshComponent)
+		{
+			Snapshot.bMeshUsesAbsoluteLocation = Mesh->IsUsingAbsoluteLocation();
+			Snapshot.bMeshUsesAbsoluteRotation = Mesh->IsUsingAbsoluteRotation();
+			Snapshot.bMeshUsesAbsoluteScale = Mesh->IsUsingAbsoluteScale();
+		}
+		else
+		{
+			Snapshot.bMeshUsesAbsoluteLocation = false;
+			Snapshot.bMeshUsesAbsoluteRotation = false;
+			Snapshot.bMeshUsesAbsoluteScale = false;
+		}
+
+		if (const UCharacterMovementComponent* const CharacterMovement = Input.CharacterMovementComponent)
+		{
+			Snapshot.bCmcIsActive = CharacterMovement->IsActive();
+			Snapshot.bCmcTickEnabled = CharacterMovement->IsComponentTickEnabled();
+			Snapshot.bCmcUpdatedComponentIsNull = CharacterMovement->UpdatedComponent == nullptr;
+		}
 
 		return Snapshot;
 	}
