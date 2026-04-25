@@ -290,4 +290,69 @@ namespace PhysAnimSupportTruth
 
 		return Result;
 	}
+
+	FPhysAnimSupportReportWindowResult ReduceSupportModeForReportWindow(const FPhysAnimSupportReportWindowInput& Input)
+	{
+		FPhysAnimSupportReportWindowResult Result;
+
+		if (Input.Modes.Num() != Input.DurationsMs.Num())
+		{
+			Result.SupportMode = EPhysAnimSupportMode::Airborne;
+			Result.TotalWindowDurationMs = 0.0;
+			Result.bValidInput = false;
+			return Result;
+		}
+
+		if (Input.Modes.IsEmpty())
+		{
+			Result.SupportMode = EPhysAnimSupportMode::Airborne;
+			Result.TotalWindowDurationMs = 0.0;
+			Result.bValidInput = true;
+			return Result;
+		}
+
+		TMap<EPhysAnimSupportMode, double> DurationByMode;
+		double TotalDuration = 0.0;
+
+		for (int32 Index = 0; Index < Input.Modes.Num(); ++Index)
+		{
+			const double ClampedDuration = FMath::Max(0.0, Input.DurationsMs[Index]);
+			DurationByMode.FindOrAdd(Input.Modes[Index]) += ClampedDuration;
+			TotalDuration += ClampedDuration;
+		}
+
+		Result.TotalWindowDurationMs = TotalDuration;
+
+		if (TotalDuration <= 0.0)
+		{
+			Result.SupportMode = EPhysAnimSupportMode::Airborne;
+			return Result;
+		}
+
+		// Severity tie-break order: Airborne (highest) > TransientRecovery > SingleFootSurvival > TwoFootStable
+		const TArray<EPhysAnimSupportMode> SeverityOrder = {
+			EPhysAnimSupportMode::TwoFootStable,
+			EPhysAnimSupportMode::SingleFootSurvival,
+			EPhysAnimSupportMode::TransientRecovery,
+			EPhysAnimSupportMode::Airborne
+		};
+
+		EPhysAnimSupportMode BestMode = EPhysAnimSupportMode::Airborne;
+		double MaxDuration = -1.0;
+
+		for (EPhysAnimSupportMode Mode : SeverityOrder)
+		{
+			if (const double* Duration = DurationByMode.Find(Mode))
+			{
+				if (*Duration >= MaxDuration)
+				{
+					BestMode = Mode;
+					MaxDuration = *Duration;
+				}
+			}
+		}
+
+		Result.SupportMode = BestMode;
+		return Result;
+	}
 }

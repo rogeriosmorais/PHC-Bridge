@@ -372,4 +372,62 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimSupportTruthReduceSupportModeForReportWindowTest,
+		"PhysAnim.SupportTruth.ReduceSupportModeForReportWindow",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimSupportTruthReduceSupportModeForReportWindowTest::RunTest(const FString& Parameters)
+	{
+		{
+			// LOGIC-14: Greatest accumulated duration wins
+			FPhysAnimSupportReportWindowInput Input;
+			Input.Modes = {EPhysAnimSupportMode::TwoFootStable, EPhysAnimSupportMode::SingleFootSurvival, EPhysAnimSupportMode::SingleFootSurvival};
+			Input.DurationsMs = {100.0, 60.0, 60.0};
+
+			const FPhysAnimSupportReportWindowResult Result = PhysAnimSupportTruth::ReduceSupportModeForReportWindow(Input);
+
+			TestEqual(TEXT("LOGIC-14 Survival wins by duration"), static_cast<uint8>(Result.SupportMode), static_cast<uint8>(EPhysAnimSupportMode::SingleFootSurvival));
+			TestEqual(TEXT("LOGIC-14 Total duration is 220"), Result.TotalWindowDurationMs, 220.0);
+			TestTrue(TEXT("LOGIC-14 input is valid"), Result.bValidInput);
+		}
+
+		{
+			// LOGIC-14A: Tie-break by severity (Airborne > Recovery > Survival > TwoFoot)
+			FPhysAnimSupportReportWindowInput Input;
+			Input.Modes = {EPhysAnimSupportMode::TwoFootStable, EPhysAnimSupportMode::SingleFootSurvival};
+			Input.DurationsMs = {100.0, 100.0};
+
+			const FPhysAnimSupportReportWindowResult Result = PhysAnimSupportTruth::ReduceSupportModeForReportWindow(Input);
+
+			TestEqual(TEXT("LOGIC-14A Survival wins tie-break over TwoFoot"), static_cast<uint8>(Result.SupportMode), static_cast<uint8>(EPhysAnimSupportMode::SingleFootSurvival));
+		}
+
+		{
+			// LOGIC-14B: Array length mismatch
+			FPhysAnimSupportReportWindowInput Input;
+			Input.Modes = {EPhysAnimSupportMode::TwoFootStable};
+			Input.DurationsMs = {100.0, 50.0};
+
+			const FPhysAnimSupportReportWindowResult Result = PhysAnimSupportTruth::ReduceSupportModeForReportWindow(Input);
+
+			TestFalse(TEXT("LOGIC-14B invalid input detected"), Result.bValidInput);
+			TestEqual(TEXT("LOGIC-14B mode defaults to Airborne"), static_cast<uint8>(Result.SupportMode), static_cast<uint8>(EPhysAnimSupportMode::Airborne));
+		}
+
+		{
+			// LOGIC-14C: Negative durations clamped to 0
+			FPhysAnimSupportReportWindowInput Input;
+			Input.Modes = {EPhysAnimSupportMode::TwoFootStable, EPhysAnimSupportMode::SingleFootSurvival};
+			Input.DurationsMs = {-100.0, 50.0};
+
+			const FPhysAnimSupportReportWindowResult Result = PhysAnimSupportTruth::ReduceSupportModeForReportWindow(Input);
+
+			TestEqual(TEXT("LOGIC-14C negative clamped to 0, Survival wins"), static_cast<uint8>(Result.SupportMode), static_cast<uint8>(EPhysAnimSupportMode::SingleFootSurvival));
+			TestEqual(TEXT("LOGIC-14C total duration reflects clamp"), Result.TotalWindowDurationMs, 50.0);
+		}
+
+		return true;
+	}
 }

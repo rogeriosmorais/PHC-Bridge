@@ -72,6 +72,7 @@ struct FPhysAnimSupportReportWindowResult
 {
 	EPhysAnimSupportMode SupportMode = EPhysAnimSupportMode::Airborne;
 	double TotalWindowDurationMs = 0.0;
+	bool bValidInput = true;
 };
 
 namespace PhysAnimSupportTruth
