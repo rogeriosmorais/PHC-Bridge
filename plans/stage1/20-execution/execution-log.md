@@ -10,16 +10,16 @@ It should stay small.
 
 | Field | Value |
 |---|---|
-| Current Task ID | `S1-IMPL-BALANCE-FIRST-04` |
-| Current Task Packet | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-04.md` |
+| Current Task ID | `S1-IMPL-BALANCE-FIRST-05` |
+| Current Task Packet | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-05.md` |
 | Current Checkpoint | `S1-SUPPORT-TRUTH-B` |
 | Status | `runnable` |
-| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560`; `S1-IMPL-BALANCE-FIRST-02 = 23a53f33d59139362282f3437ecf36ea1b2a3b51`; `S1-IMPL-BALANCE-FIRST-03 = 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1` |
-| Latest Technical Head | `21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1` |
+| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560`; `S1-IMPL-BALANCE-FIRST-02 = 23a53f33d59139362282f3437ecf36ea1b2a3b51`; `S1-IMPL-BALANCE-FIRST-03 = 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1`; `S1-IMPL-BALANCE-FIRST-04 = pending current commit` |
+| Latest Technical Head | `pending S1-IMPL-BALANCE-FIRST-04 commit` |
 | Last Build | `passed: .\scripts\build.ps1` |
-| Last Test | `passed: .\scripts\build.ps1 -Test PhysAnim.SupportTruth.Harness.CompilesAndRuns` |
-| Last Scope | `task-level scope checks passed` |
-| Workflow Note | `Previous checkpoint A rejection was process/range contamination, not a product-code blocker. Continue with task 04.` |
+| Last Test | `passed: .\scripts\build.ps1 -Test PhysAnim.SupportTruth.ExtractPatchHull` |
+| Last Scope | `passed: check_task_scope.ps1 for S1-IMPL-BALANCE-FIRST-04` |
+| Workflow Note | `S1-IMPL-BALANCE-FIRST-04 complete. Continue with task 05.` |
 | Working Tree Requirement | `clean before starting a task` |
 
 ## Next Action
@@ -33,16 +33,15 @@ go
 Meaning:
 
 ```text
-execute S1-IMPL-BALANCE-FIRST-04 only
+execute S1-IMPL-BALANCE-FIRST-05 only
 ```
 
 ## Next Runnable Tasks
 
 | Priority | Task ID | Packet | Notes |
 |---|---|---|---|
-| 1 | `S1-IMPL-BALANCE-FIRST-04` | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-04.md` | Implement `ExtractPatchHull` only. |
-| 2 | `S1-IMPL-BALANCE-FIRST-05` | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-05.md` | Run only after task 04 passes. |
-| 3 | `S1-IMPL-BALANCE-FIRST-06` | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-06.md` | Run only after task 05 passes. |
+| 1 | `S1-IMPL-BALANCE-FIRST-05` | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-05.md` | Implement `BuildFrameHull` only. |
+| 2 | `S1-IMPL-BALANCE-FIRST-06` | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-06.md` | Run only after task 05 passes. |
 
 ## Blocked / Deferred
 
