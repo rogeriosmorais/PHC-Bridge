@@ -13,6 +13,28 @@ namespace
 	{
 		return BodyInstance && BodyInstance->IsValidBodyInstance();
 	}
+
+	bool TryGetSupportSideForBody(
+		const TArray<FPhysAnimSupportBodyMapping>& SupportBodies,
+		const FName BodyName,
+		EPhysAnimSupportSide& OutSupportSide)
+	{
+		if (BodyName.IsNone())
+		{
+			return false;
+		}
+
+		for (const FPhysAnimSupportBodyMapping& Mapping : SupportBodies)
+		{
+			if (Mapping.BodyName == BodyName)
+			{
+				OutSupportSide = Mapping.SupportSide;
+				return true;
+			}
+		}
+
+		return false;
+	}
 }
 
 namespace PhysAnimRuntimeAdapter
@@ -259,5 +281,36 @@ namespace PhysAnimRuntimeAdapter
 		CaptureInput.ProxyTerminalReason = ProxyResult.TerminalReason;
 
 		return CaptureSupportSnapshot(CaptureInput);
+	}
+
+	TArray<FPhysAnimSupportContactSample> ConvertSupportHitsToContactSamples(const FPhysAnimSupportHitConversionInput& Input)
+	{
+		TArray<FPhysAnimSupportContactSample> Samples;
+
+		for (const FPhysAnimSupportHitRecord& Hit : Input.Hits)
+		{
+			if (!Hit.bBlockingHit || !Hit.bFromWorldStatic)
+			{
+				continue;
+			}
+
+			EPhysAnimSupportSide SupportSide = EPhysAnimSupportSide::Left;
+			if (!TryGetSupportSideForBody(Input.SupportBodies, Hit.BodyName, SupportSide))
+			{
+				continue;
+			}
+
+			FPhysAnimSupportContactSample Sample;
+			Sample.BodyName = Hit.BodyName;
+			Sample.SupportSide = SupportSide;
+			Sample.PositionCm = FVector2D(
+				Hit.WorldPositionCm.X - Input.WorldOriginCm.X,
+				Hit.WorldPositionCm.Y - Input.WorldOriginCm.Y);
+			Sample.bIsValidSupportContact = true;
+
+			Samples.Add(Sample);
+		}
+
+		return Samples;
 	}
 }

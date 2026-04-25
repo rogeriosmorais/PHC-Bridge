@@ -80,6 +80,29 @@ struct FPhysAnimSupportContactsSnapshotCaptureInput
 	double SupportChurnHz = 0.0;
 };
 
+struct FPhysAnimSupportBodyMapping
+{
+	FName BodyName = NAME_None;
+	EPhysAnimSupportSide SupportSide = EPhysAnimSupportSide::Left;
+};
+
+struct FPhysAnimSupportHitRecord
+{
+	FName BodyName = NAME_None;
+	FVector WorldPositionCm = FVector::ZeroVector;
+	bool bBlockingHit = false;
+	bool bFromWorldStatic = false;
+	bool bIsPenetrating = false;
+	double PenetrationDepthCm = 0.0;
+};
+
+struct FPhysAnimSupportHitConversionInput
+{
+	TArray<FPhysAnimSupportHitRecord> Hits;
+	TArray<FPhysAnimSupportBodyMapping> SupportBodies;
+	FVector WorldOriginCm = FVector::ZeroVector;
+};
+
 namespace PhysAnimRuntimeAdapter
 {
 	FPhysAnimContinuitySnapshot CaptureContinuitySnapshot(const FPhysAnimContinuitySnapshotCaptureInput& Input);
@@ -87,4 +110,5 @@ namespace PhysAnimRuntimeAdapter
 	FPhysAnimPlantContractSnapshot CapturePlantContractSnapshot(const FPhysAnimPlantContractSnapshotCaptureInput& Input);
 	FPhysAnimSupportContractSnapshot CaptureSupportSnapshot(const FPhysAnimSupportSnapshotCaptureInput& Input);
 	FPhysAnimSupportContractSnapshot CaptureSupportSnapshotFromContacts(const FPhysAnimSupportContactsSnapshotCaptureInput& Input);
+	TArray<FPhysAnimSupportContactSample> ConvertSupportHitsToContactSamples(const FPhysAnimSupportHitConversionInput& Input);
 }
