@@ -103,6 +103,24 @@ struct FPhysAnimSupportHitConversionInput
 	FVector WorldOriginCm = FVector::ZeroVector;
 };
 
+struct FPhysAnimSupportHitSnapshotCaptureInput
+{
+	TArray<FPhysAnimSupportHitRecord> Hits;
+	TArray<FPhysAnimSupportBodyMapping> SupportBodies;
+	FVector WorldOriginCm = FVector::ZeroVector;
+	bool bPreviousSupportStateL = false;
+	bool bPreviousSupportStateR = false;
+	double PreviousSupportGapTimerMs = 0.0;
+	TOptional<double> PreviousProxyOutsideHullDurationMs;
+	double DeltaMs = 0.0;
+	double SupportGapMaxMs = 100.0;
+	double SupportAreaMinCm2 = 50.0;
+	double ProxyDriftLimitMs = 100.0;
+	FVector2D ComProxyPosCm = FVector2D::ZeroVector;
+	int32 SupportChurnCount = 0;
+	double SupportChurnHz = 0.0;
+};
+
 namespace PhysAnimRuntimeAdapter
 {
 	FPhysAnimContinuitySnapshot CaptureContinuitySnapshot(const FPhysAnimContinuitySnapshotCaptureInput& Input);
@@ -111,4 +129,5 @@ namespace PhysAnimRuntimeAdapter
 	FPhysAnimSupportContractSnapshot CaptureSupportSnapshot(const FPhysAnimSupportSnapshotCaptureInput& Input);
 	FPhysAnimSupportContractSnapshot CaptureSupportSnapshotFromContacts(const FPhysAnimSupportContactsSnapshotCaptureInput& Input);
 	TArray<FPhysAnimSupportContactSample> ConvertSupportHitsToContactSamples(const FPhysAnimSupportHitConversionInput& Input);
+	FPhysAnimSupportContractSnapshot CaptureSupportSnapshotFromHits(const FPhysAnimSupportHitSnapshotCaptureInput& Input);
 }

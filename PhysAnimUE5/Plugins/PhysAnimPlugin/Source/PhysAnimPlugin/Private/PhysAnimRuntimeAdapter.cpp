@@ -313,4 +313,28 @@ namespace PhysAnimRuntimeAdapter
 
 		return Samples;
 	}
+
+	FPhysAnimSupportContractSnapshot CaptureSupportSnapshotFromHits(const FPhysAnimSupportHitSnapshotCaptureInput& Input)
+	{
+		FPhysAnimSupportHitConversionInput HitConversionInput;
+		HitConversionInput.Hits = Input.Hits;
+		HitConversionInput.SupportBodies = Input.SupportBodies;
+		HitConversionInput.WorldOriginCm = Input.WorldOriginCm;
+
+		FPhysAnimSupportContactsSnapshotCaptureInput ContactsInput;
+		ContactsInput.Contacts = ConvertSupportHitsToContactSamples(HitConversionInput);
+		ContactsInput.bPreviousSupportStateL = Input.bPreviousSupportStateL;
+		ContactsInput.bPreviousSupportStateR = Input.bPreviousSupportStateR;
+		ContactsInput.PreviousSupportGapTimerMs = Input.PreviousSupportGapTimerMs;
+		ContactsInput.PreviousProxyOutsideHullDurationMs = Input.PreviousProxyOutsideHullDurationMs;
+		ContactsInput.DeltaMs = Input.DeltaMs;
+		ContactsInput.SupportGapMaxMs = Input.SupportGapMaxMs;
+		ContactsInput.SupportAreaMinCm2 = Input.SupportAreaMinCm2;
+		ContactsInput.ProxyDriftLimitMs = Input.ProxyDriftLimitMs;
+		ContactsInput.ComProxyPosCm = Input.ComProxyPosCm;
+		ContactsInput.SupportChurnCount = Input.SupportChurnCount;
+		ContactsInput.SupportChurnHz = Input.SupportChurnHz;
+
+		return CaptureSupportSnapshotFromContacts(ContactsInput);
+	}
 }
