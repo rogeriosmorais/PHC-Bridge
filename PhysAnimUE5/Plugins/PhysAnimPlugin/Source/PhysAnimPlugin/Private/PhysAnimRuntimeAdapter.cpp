@@ -116,6 +116,11 @@ namespace PhysAnimRuntimeAdapter
 		return Snapshot;
 	}
 
+	FPhysAnimPlantContractSnapshot CapturePlantSnapshot(const FPhysAnimPlantContractSnapshotCaptureInput& Input)
+	{
+		return CapturePlantContractSnapshot(Input);
+	}
+
 	FPhysAnimPlantContractSnapshot CapturePlantContractSnapshot(const FPhysAnimPlantContractSnapshotCaptureInput& Input)
 	{
 		FPhysAnimPlantContractSnapshot Snapshot;
@@ -155,6 +160,30 @@ namespace PhysAnimRuntimeAdapter
 			Snapshot.bPhysicsAssetContractValid = false;
 		}
 
+		return Snapshot;
+	}
+
+	FPhysAnimSupportContractSnapshot CaptureSupportSnapshot(const FPhysAnimSupportSnapshotCaptureInput& Input)
+	{
+		FPhysAnimSupportContractSnapshot Snapshot;
+		Snapshot.bSupportStateL = Input.bSupportStateL;
+		Snapshot.bSupportStateR = Input.bSupportStateR;
+		Snapshot.SupportMode = Input.SupportMode;
+		Snapshot.SupportGapTimerMs = Input.SupportGapTimerMs;
+		Snapshot.SupportGapMaxMs = Input.SupportGapMaxMs;
+		Snapshot.ActiveSupportSideCount = Input.ActiveSupportSideCount;
+		Snapshot.SupportHullAreaCm2 = Input.SupportHullAreaCm2;
+		Snapshot.SupportAreaMinCm2 = Input.SupportAreaMinCm2;
+		Snapshot.SupportPatchAreaLCm2 = Input.SupportPatchAreaLCm2;
+		Snapshot.SupportPatchAreaRCm2 = Input.SupportPatchAreaRCm2;
+		Snapshot.SupportHullPointsCm = Input.SupportHullPointsCm;
+		Snapshot.ComProxyPosCm = Input.ComProxyPosCm;
+		Snapshot.MaxPenetrationCm = Input.MaxPenetrationCm;
+		Snapshot.SupportChurnCount = Input.SupportChurnCount;
+		Snapshot.SupportChurnHz = Input.SupportChurnHz;
+		Snapshot.ProxyInsideHull = Input.ProxyInsideHull;
+		Snapshot.ProxyOutsideHullDurationMs = Input.ProxyOutsideHullDurationMs;
+		Snapshot.ProxyTerminalReason = Input.ProxyTerminalReason;
 		return Snapshot;
 	}
 }
