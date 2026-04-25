@@ -131,4 +131,101 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimValidatorsCapsuleTest,
+		"PhysAnim.Validators.Capsule.ValidateCapsule",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimValidatorsCapsuleTest::RunTest(const FString& Parameters)
+	{
+		{
+			const FPhysAnimCapsuleContractSnapshot Snapshot;
+			const FPhysAnimCapsuleContractValidationResult Result = PhysAnimValidators::ValidateCapsule(Snapshot);
+
+			TestTrue(TEXT("Default capsule contract passes"), Result.bCapsuleContractPassed);
+			TestEqual(TEXT("Default capsule terminal_reason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+		}
+
+		{
+			// VALID-02A: Actor moved.
+			FPhysAnimCapsuleContractSnapshot Snapshot;
+			Snapshot.CapsuleLockDeltaCm = 0.02;
+
+			const FPhysAnimCapsuleContractValidationResult Result = PhysAnimValidators::ValidateCapsule(Snapshot);
+
+			TestTrue(TEXT("VALID-02A capsule_lock_delta_cm exceeds threshold"), Result.CapsuleLockDeltaCm > 0.01);
+			TestFalse(TEXT("VALID-02A capsule contract fails"), Result.bCapsuleContractPassed);
+			TestEqual(TEXT("VALID-02A terminal_reason is activation_capsule_contract_violation"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationCapsuleContractViolation));
+		}
+
+		{
+			// VALID-02B: Capsule collision active.
+			FPhysAnimCapsuleContractSnapshot Snapshot;
+			Snapshot.CapsuleCollisionEnabled = EPhysAnimCapsuleCollisionState::CollisionEnabled;
+
+			const FPhysAnimCapsuleContractValidationResult Result = PhysAnimValidators::ValidateCapsule(Snapshot);
+
+			TestEqual(TEXT("VALID-02B capsule_collision_enabled is not NoCollision"), static_cast<uint8>(Result.CapsuleCollisionEnabled), static_cast<uint8>(EPhysAnimCapsuleCollisionState::CollisionEnabled));
+			TestFalse(TEXT("VALID-02B capsule contract fails"), Result.bCapsuleContractPassed);
+			TestEqual(TEXT("VALID-02B terminal_reason is activation_capsule_contract_violation"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationCapsuleContractViolation));
+		}
+
+		{
+			// VALID-02C: CMC active/ticking.
+			FPhysAnimCapsuleContractSnapshot ActiveSnapshot;
+			ActiveSnapshot.bCmcIsActive = true;
+
+			const FPhysAnimCapsuleContractValidationResult ActiveResult = PhysAnimValidators::ValidateCapsule(ActiveSnapshot);
+
+			TestTrue(TEXT("VALID-02C cmc_is_active is true"), ActiveResult.bCmcIsActive);
+			TestFalse(TEXT("VALID-02C active CMC fails capsule contract"), ActiveResult.bCapsuleContractPassed);
+			TestEqual(TEXT("VALID-02C active CMC terminal_reason is activation_capsule_contract_violation"), static_cast<uint8>(ActiveResult.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationCapsuleContractViolation));
+
+			FPhysAnimCapsuleContractSnapshot TickingSnapshot;
+			TickingSnapshot.bCmcTickEnabled = true;
+
+			const FPhysAnimCapsuleContractValidationResult TickingResult = PhysAnimValidators::ValidateCapsule(TickingSnapshot);
+
+			TestTrue(TEXT("VALID-02C cmc_tick_enabled is true"), TickingResult.bCmcTickEnabled);
+			TestFalse(TEXT("VALID-02C ticking CMC fails capsule contract"), TickingResult.bCapsuleContractPassed);
+			TestEqual(TEXT("VALID-02C ticking CMC terminal_reason is activation_capsule_contract_violation"), static_cast<uint8>(TickingResult.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationCapsuleContractViolation));
+		}
+
+		{
+			// VALID-02D: UpdatedComponent still owned.
+			FPhysAnimCapsuleContractSnapshot Snapshot;
+			Snapshot.bCmcUpdatedComponentIsNull = false;
+
+			const FPhysAnimCapsuleContractValidationResult Result = PhysAnimValidators::ValidateCapsule(Snapshot);
+
+			TestFalse(TEXT("VALID-02D cmc_updated_component_is_null is false"), Result.bCmcUpdatedComponentIsNull);
+			TestFalse(TEXT("VALID-02D capsule contract fails"), Result.bCapsuleContractPassed);
+			TestEqual(TEXT("VALID-02D terminal_reason is activation_capsule_contract_violation"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationCapsuleContractViolation));
+		}
+
+		{
+			FPhysAnimCapsuleContractSnapshot Snapshot;
+			Snapshot.bCapsuleGenerateOverlapEvents = true;
+
+			const FPhysAnimCapsuleContractValidationResult Result = PhysAnimValidators::ValidateCapsule(Snapshot);
+
+			TestTrue(TEXT("Overlap generation is represented in capsule result"), Result.bCapsuleGenerateOverlapEvents);
+			TestFalse(TEXT("Overlap generation fails capsule contract"), Result.bCapsuleContractPassed);
+			TestEqual(TEXT("Overlap generation terminal_reason is activation_capsule_contract_violation"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationCapsuleContractViolation));
+		}
+
+		{
+			FPhysAnimCapsuleContractSnapshot Snapshot;
+			Snapshot.bMeshUsesAbsoluteLocation = false;
+
+			const FPhysAnimCapsuleContractValidationResult Result = PhysAnimValidators::ValidateCapsule(Snapshot);
+
+			TestFalse(TEXT("Mesh absolute transform violation is represented"), Result.bMeshUsesAbsoluteLocation);
+			TestFalse(TEXT("Mesh absolute transform violation fails capsule contract"), Result.bCapsuleContractPassed);
+			TestEqual(TEXT("Mesh absolute transform terminal_reason is activation_capsule_contract_violation"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationCapsuleContractViolation));
+		}
+
+		return true;
+	}
 }

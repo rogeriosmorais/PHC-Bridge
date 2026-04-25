@@ -20,7 +20,42 @@ struct FPhysAnimContinuityValidationResult
 	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
 };
 
+enum class EPhysAnimCapsuleCollisionState : uint8
+{
+	NoCollision,
+	CollisionEnabled
+};
+
+struct FPhysAnimCapsuleContractSnapshot
+{
+	double CapsuleLockDeltaCm = 0.0;
+	EPhysAnimCapsuleCollisionState CapsuleCollisionEnabled = EPhysAnimCapsuleCollisionState::NoCollision;
+	bool bCapsuleGenerateOverlapEvents = false;
+	bool bMeshUsesAbsoluteLocation = true;
+	bool bMeshUsesAbsoluteRotation = true;
+	bool bMeshUsesAbsoluteScale = true;
+	bool bCmcIsActive = false;
+	bool bCmcTickEnabled = false;
+	bool bCmcUpdatedComponentIsNull = true;
+};
+
+struct FPhysAnimCapsuleContractValidationResult
+{
+	double CapsuleLockDeltaCm = 0.0;
+	EPhysAnimCapsuleCollisionState CapsuleCollisionEnabled = EPhysAnimCapsuleCollisionState::NoCollision;
+	bool bCapsuleGenerateOverlapEvents = false;
+	bool bMeshUsesAbsoluteLocation = true;
+	bool bMeshUsesAbsoluteRotation = true;
+	bool bMeshUsesAbsoluteScale = true;
+	bool bCmcIsActive = false;
+	bool bCmcTickEnabled = false;
+	bool bCmcUpdatedComponentIsNull = true;
+	bool bCapsuleContractPassed = true;
+	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
+};
+
 namespace PhysAnimValidators
 {
 	FPhysAnimContinuityValidationResult ValidateContinuity(const FPhysAnimContinuitySnapshot& Snapshot);
+	FPhysAnimCapsuleContractValidationResult ValidateCapsule(const FPhysAnimCapsuleContractSnapshot& Snapshot);
 }

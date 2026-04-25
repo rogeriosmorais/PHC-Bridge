@@ -27,4 +27,39 @@ namespace PhysAnimValidators
 
 		return Result;
 	}
+
+	FPhysAnimCapsuleContractValidationResult ValidateCapsule(const FPhysAnimCapsuleContractSnapshot& Snapshot)
+	{
+		constexpr double CapsuleLockDeltaLimitCm = 0.01;
+
+		FPhysAnimCapsuleContractValidationResult Result;
+		Result.CapsuleLockDeltaCm = Snapshot.CapsuleLockDeltaCm;
+		Result.CapsuleCollisionEnabled = Snapshot.CapsuleCollisionEnabled;
+		Result.bCapsuleGenerateOverlapEvents = Snapshot.bCapsuleGenerateOverlapEvents;
+		Result.bMeshUsesAbsoluteLocation = Snapshot.bMeshUsesAbsoluteLocation;
+		Result.bMeshUsesAbsoluteRotation = Snapshot.bMeshUsesAbsoluteRotation;
+		Result.bMeshUsesAbsoluteScale = Snapshot.bMeshUsesAbsoluteScale;
+		Result.bCmcIsActive = Snapshot.bCmcIsActive;
+		Result.bCmcTickEnabled = Snapshot.bCmcTickEnabled;
+		Result.bCmcUpdatedComponentIsNull = Snapshot.bCmcUpdatedComponentIsNull;
+
+		const bool bCapsuleContractViolated =
+			Snapshot.CapsuleLockDeltaCm > CapsuleLockDeltaLimitCm ||
+			Snapshot.CapsuleCollisionEnabled != EPhysAnimCapsuleCollisionState::NoCollision ||
+			Snapshot.bCapsuleGenerateOverlapEvents ||
+			!Snapshot.bMeshUsesAbsoluteLocation ||
+			!Snapshot.bMeshUsesAbsoluteRotation ||
+			!Snapshot.bMeshUsesAbsoluteScale ||
+			Snapshot.bCmcIsActive ||
+			Snapshot.bCmcTickEnabled ||
+			!Snapshot.bCmcUpdatedComponentIsNull;
+
+		if (bCapsuleContractViolated)
+		{
+			Result.bCapsuleContractPassed = false;
+			Result.TerminalReason = EPhysAnimTerminalReason::ActivationCapsuleContractViolation;
+		}
+
+		return Result;
+	}
 }
