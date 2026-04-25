@@ -14,8 +14,8 @@ It should stay small.
 | Current Task Packet | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-05.md` |
 | Current Checkpoint | `S1-SUPPORT-TRUTH-B` |
 | Status | `runnable` |
-| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560`; `S1-IMPL-BALANCE-FIRST-02 = 23a53f33d59139362282f3437ecf36ea1b2a3b51`; `S1-IMPL-BALANCE-FIRST-03 = 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1`; `S1-IMPL-BALANCE-FIRST-04 = pending current commit` |
-| Latest Technical Head | `pending S1-IMPL-BALANCE-FIRST-04 commit` |
+| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560`; `S1-IMPL-BALANCE-FIRST-02 = 23a53f33d59139362282f3437ecf36ea1b2a3b51`; `S1-IMPL-BALANCE-FIRST-03 = 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1`; `S1-IMPL-BALANCE-FIRST-04 = b70a17a2fc76b8c7316a9c291faa23977833c2f1` |
+| Latest Technical Head | `b70a17a2fc76b8c7316a9c291faa23977833c2f1` |
 | Last Build | `passed: .\scripts\build.ps1` |
 | Last Test | `passed: .\scripts\build.ps1 -Test PhysAnim.SupportTruth.ExtractPatchHull` |
 | Last Scope | `passed: check_task_scope.ps1 for S1-IMPL-BALANCE-FIRST-04` |
