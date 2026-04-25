@@ -1,5 +1,23 @@
 #include "PhysAnimValidators.h"
 
+namespace {
+	void AddFallbackFailureCandidate(
+		TArray<FPhysAnimFailureCandidate>& Candidates,
+		EPhysAnimTerminalReason Reason,
+		int64 TerminalSubstepTimestamp)
+	{
+		if (Reason == EPhysAnimTerminalReason::None)
+		{
+			return;
+		}
+
+		FPhysAnimFailureCandidate Candidate;
+		Candidate.TerminalReason = Reason;
+		Candidate.TerminalSubstepTimestamp = TerminalSubstepTimestamp;
+		Candidates.Add(Candidate);
+	}
+}
+
 namespace PhysAnimValidators
 {
 	FPhysAnimContinuityValidationResult ValidateContinuity(const FPhysAnimContinuitySnapshot& Snapshot)
@@ -143,7 +161,7 @@ namespace PhysAnimValidators
 		constexpr double TargetDiscontinuityLimitDeg = 15.0;
 		constexpr double ControllerGainScaleMax = 1.0;
 		constexpr double ControllerDampingRatioMin = 1.0;
-		constexpr double MaxRootTiltLimitDeg = 20.0;
+		constexpr double MaxRootTiltDegLimit = 20.0;
 		constexpr double PeakAngularSpeedLimitDegPerSec = 720.0;
 		constexpr double MaxBodyMismatchLimitDeg = 25.0;
 		constexpr double RmsMismatchLimitDeg = 15.0;
@@ -186,7 +204,7 @@ namespace PhysAnimValidators
 			Fail(EPhysAnimControllerStabilityFailureField::ControllerDampingRatio, EPhysAnimTerminalReason::ActivationUnstableGainOrDamping);
 			Result.bControllerGainDampingValid = false;
 		}
-		else if (Snapshot.MaxRootTiltDeg > MaxRootTiltLimitDeg)
+		else if (Snapshot.MaxRootTiltDeg > MaxRootTiltDegLimit)
 		{
 			Fail(EPhysAnimControllerStabilityFailureField::MaxRootTiltDeg, EPhysAnimTerminalReason::ActivationInstabilityThresholdBreach);
 		}
@@ -262,35 +280,27 @@ namespace PhysAnimValidators
 		Snapshot.ControllerStabilityFailureField = Input.ControllerStability.FailureField;
 		Snapshot.bStandingValidationTimedOut = Input.ControllerStability.bStandingValidationTimedOut;
 
-		const EPhysAnimTerminalReason CandidateReasons[] = {
-			Input.Plant.TerminalReason,
-			Input.Capsule.TerminalReason,
-			Input.Continuity.TerminalReason,
-			Input.ControllerStability.TerminalReason,
-			Input.MovementReclaim.TerminalReason,
-			Input.ShellHelper.TerminalReason,
-			Input.Authority.TerminalReason
-		};
+		TArray<FPhysAnimFailureCandidate> Candidates = Input.FailureCandidates;
 
-		Snapshot.TerminalReason = EPhysAnimTerminalReason::None;
-		Snapshot.CoTerminalReasons.Reset();
-
-		for (const EPhysAnimTerminalReason Reason : CandidateReasons)
+		if (Candidates.IsEmpty())
 		{
-			if (Reason == EPhysAnimTerminalReason::None)
-			{
-				continue;
-			}
-
-			if (Snapshot.TerminalReason == EPhysAnimTerminalReason::None)
-			{
-				Snapshot.TerminalReason = Reason;
-			}
-			else
-			{
-				Snapshot.CoTerminalReasons.Add(Reason);
-			}
+			const int64 FallbackTimestamp = Input.Values.TerminalSubstepTimestamp;
+			AddFallbackFailureCandidate(Candidates, Input.Plant.TerminalReason, FallbackTimestamp);
+			AddFallbackFailureCandidate(Candidates, Input.Capsule.TerminalReason, FallbackTimestamp);
+			AddFallbackFailureCandidate(Candidates, Input.Continuity.TerminalReason, FallbackTimestamp);
+			AddFallbackFailureCandidate(Candidates, Input.ControllerStability.TerminalReason, FallbackTimestamp);
+			AddFallbackFailureCandidate(Candidates, Input.MovementReclaim.TerminalReason, FallbackTimestamp);
+			AddFallbackFailureCandidate(Candidates, Input.ShellHelper.TerminalReason, FallbackTimestamp);
+			AddFallbackFailureCandidate(Candidates, Input.Authority.TerminalReason, FallbackTimestamp);
 		}
+
+		const FPhysAnimFailureArbitrationResult Arbitration = PhysAnimFailureArbitration::ArbitrateFailure(Candidates);
+
+		Snapshot.TerminalReason = Arbitration.TerminalReason;
+		Snapshot.CoTerminalReasons = Arbitration.CoTerminalReasons;
+		Snapshot.TerminalSubstepTimestamp = Arbitration.bHasTerminalReason
+			? Arbitration.TerminalSubstepTimestamp
+			: Input.Values.TerminalSubstepTimestamp;
 
 		return Snapshot;
 	}

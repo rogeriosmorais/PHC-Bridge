@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PhysAnimFailureArbitration.h"
 #include "PhysAnimTruthTypes.h"
 
 struct FPhysAnimContinuitySnapshot
@@ -294,6 +295,7 @@ struct FPhysAnimRunArtifactSnapshotInput
 	FPhysAnimShellHelperValidationResult ShellHelper;
 	FPhysAnimControllerStabilityValidationResult ControllerStability;
 	FPhysAnimRunArtifactSnapshot Values;
+	TArray<FPhysAnimFailureCandidate> FailureCandidates;
 };
 
 namespace PhysAnimValidators
