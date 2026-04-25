@@ -346,4 +346,30 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimSupportTruthCalculateChurnHzTest,
+		"PhysAnim.SupportTruth.CalculateChurnHz",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimSupportTruthCalculateChurnHzTest::RunTest(const FString& Parameters)
+	{
+		// LOGIC-13: Filter events by window and calculate Hz
+		FPhysAnimChurnCalculationInput Input;
+		Input.CurrentTimestampSec = 100.0;
+		Input.WindowSeconds = 10.0;
+		
+		// Boundaries: > (100 - 10 = 90) and <= 100
+		FPhysAnimChurnEvent E1; E1.TimestampSec = 90.0; Input.HistoricalEvents.Add(E1);  // Exclude (boundary)
+		FPhysAnimChurnEvent E2; E2.TimestampSec = 95.0; Input.HistoricalEvents.Add(E2);  // Include
+		FPhysAnimChurnEvent E3; E3.TimestampSec = 100.0; Input.HistoricalEvents.Add(E3); // Include
+		FPhysAnimChurnEvent E4; E4.TimestampSec = 100.1; Input.HistoricalEvents.Add(E4); // Exclude (future)
+
+		const FPhysAnimChurnResult Result = PhysAnimSupportTruth::CalculateChurnHz(Input);
+
+		TestEqual(TEXT("LOGIC-13 SupportChurnCount is 2"), Result.SupportChurnCount, 2);
+		TestEqual(TEXT("LOGIC-13 SupportChurnHz is 0.2"), Result.SupportChurnHz, 0.2);
+
+		return true;
+	}
 }

@@ -264,4 +264,30 @@ namespace PhysAnimSupportTruth
 
 		return Result;
 	}
+
+	FPhysAnimChurnResult CalculateChurnHz(const FPhysAnimChurnCalculationInput& Input)
+	{
+		FPhysAnimChurnResult Result;
+
+		if (Input.WindowSeconds <= 0.0)
+		{
+			return Result;
+		}
+
+		int32 Count = 0;
+		const double ThresholdSec = Input.CurrentTimestampSec - Input.WindowSeconds;
+
+		for (const FPhysAnimChurnEvent& Event : Input.HistoricalEvents)
+		{
+			if (Event.TimestampSec > ThresholdSec && Event.TimestampSec <= Input.CurrentTimestampSec)
+			{
+				Count++;
+			}
+		}
+
+		Result.SupportChurnCount = Count;
+		Result.SupportChurnHz = static_cast<double>(Count) / Input.WindowSeconds;
+
+		return Result;
+	}
 }
