@@ -22,4 +22,5 @@ struct FPhysAnimContinuityValidationResult
 
 namespace PhysAnimValidators
 {
+	FPhysAnimContinuityValidationResult ValidateContinuity(const FPhysAnimContinuitySnapshot& Snapshot);
 }

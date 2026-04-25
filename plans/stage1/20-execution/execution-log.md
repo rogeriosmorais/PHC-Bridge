@@ -10,16 +10,16 @@ It should stay small.
 
 | Field | Value |
 |---|---|
-| Current Task ID | `S2-IMPL-RUNTIME-ADAPTER-03` |
-| Current Task Packet | `plans/stage1/20-execution/task-packets/S2-IMPL-RUNTIME-ADAPTER-03.md` |
+| Current Task ID | `S2-IMPL-RUNTIME-ADAPTER-04` |
+| Current Task Packet | `plans/stage1/20-execution/task-packets/S2-IMPL-RUNTIME-ADAPTER-04.md` |
 | Current Checkpoint | `S2-RUNTIME-ADAPTER-SNAPSHOT` |
 | Status | `runnable` |
-| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560; S1-IMPL-BALANCE-FIRST-02 = 23a53f33d59139362282f3437ecf36ea1b2a3b51; S1-IMPL-BALANCE-FIRST-03 = 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1; S1-IMPL-BALANCE-FIRST-04 = b70a17a2fc76b8c7316a9c291faa23977833c2f1; S1-IMPL-BALANCE-FIRST-05 = a7e22adedb8e3f6b7c4e1a05f04e51d789902e3c; S1-IMPL-BALANCE-FIRST-06 = 2dbbf6cc4dfc9686fdc75426243a3369f06cfc96; S1-IMPL-BALANCE-FIRST-07 = 1c256d836fc04fcc936fa8d20067964837d6305d; S1-IMPL-BALANCE-FIRST-08 = fa406438bd7ea9c431a029c152333845c2f3804c; S1-IMPL-BALANCE-FIRST-09 = d060b3a730036a5e649cdeb6826be8dd22a7ac54; S1-IMPL-BALANCE-FIRST-10 = 8d4dda1044bef5bd8e8f06fd9c95f67b2e21f0b5; S1-CLEANUP-SUPPORT-TRUTH-TRACEABILITY-01 = 4457d48934bd1e934a81a1cad04daf149a1dfebc; S2-DESIGN-RUNTIME-ADAPTER-01 = 75dac29284ad9efd64a660abdaf71d6bf91bff41; S2-IMPL-RUNTIME-ADAPTER-01 = b62de4b116d6a9721866bed68b3d39f609cf52a2; S2-IMPL-RUNTIME-ADAPTER-02 = current task commit` |
+| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560; S1-IMPL-BALANCE-FIRST-02 = 23a53f33d59139362282f3437ecf36ea1b2a3b51; S1-IMPL-BALANCE-FIRST-03 = 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1; S1-IMPL-BALANCE-FIRST-04 = b70a17a2fc76b8c7316a9c291faa23977833c2f1; S1-IMPL-BALANCE-FIRST-05 = a7e22adedb8e3f6b7c4e1a05f04e51d789902e3c; S1-IMPL-BALANCE-FIRST-06 = 2dbbf6cc4dfc9686fdc75426243a3369f06cfc96; S1-IMPL-BALANCE-FIRST-07 = 1c256d836fc04fcc936fa8d20067964837d6305d; S1-IMPL-BALANCE-FIRST-08 = fa406438bd7ea9c431a029c152333845c2f3804c; S1-IMPL-BALANCE-FIRST-09 = d060b3a730036a5e649cdeb6826be8dd22a7ac54; S1-IMPL-BALANCE-FIRST-10 = 8d4dda1044bef5bd8e8f06fd9c95f67b2e21f0b5; S1-CLEANUP-SUPPORT-TRUTH-TRACEABILITY-01 = 4457d48934bd1e934a81a1cad04daf149a1dfebc; S2-DESIGN-RUNTIME-ADAPTER-01 = 75dac29284ad9efd64a660abdaf71d6bf91bff41; S2-IMPL-RUNTIME-ADAPTER-01 = b62de4b116d6a9721866bed68b3d39f609cf52a2; S2-IMPL-RUNTIME-ADAPTER-02 = 782439babb4d0693b9f4e9d1daf75a25d11c4e9a; S2-IMPL-RUNTIME-ADAPTER-03 = current task commit` |
 | Latest Technical Head | `current task commit` |
 | Last Build | `passed: .\scripts\build.ps1` |
-| Last Test | `passed: .\scripts\build.ps1 -Test PhysAnim.Validators.ContinuitySnapshot` |
-| Last Scope | `passed: check_task_scope.ps1 for S2-IMPL-RUNTIME-ADAPTER-02` |
-| Workflow Note | `Continuity snapshot semantics tests added. Continue with pure continuity validator implementation.` |
+| Last Test | `passed: .\scripts\build.ps1 -Test PhysAnim.Validators.Continuity` |
+| Last Scope | `passed: check_task_scope.ps1 for S2-IMPL-RUNTIME-ADAPTER-03` |
+| Workflow Note | `Pure continuity validator is green. Continue with runtime adapter snapshot shell.` |
 | Working Tree Requirement | `clean before starting a task` |
 
 ## Next Action
@@ -29,13 +29,13 @@ Run:
 
 Meaning:
 
-`execute S2-IMPL-RUNTIME-ADAPTER-03 only`
+`execute S2-IMPL-RUNTIME-ADAPTER-04 only`
 
 ## Next Runnable Tasks
 
 | Priority | Task ID | Packet | Notes |
 |---|---|---|---|
-| 1 | `S2-IMPL-RUNTIME-ADAPTER-03` | `plans/stage1/20-execution/task-packets/S2-IMPL-RUNTIME-ADAPTER-03.md` | Implement pure continuity validator for VALID-01A through VALID-01D. |
+| 1 | `S2-IMPL-RUNTIME-ADAPTER-04` | `plans/stage1/20-execution/task-packets/S2-IMPL-RUNTIME-ADAPTER-04.md` | Add snapshot-only runtime adapter shell. |
 
 ## Blocked / Deferred
 

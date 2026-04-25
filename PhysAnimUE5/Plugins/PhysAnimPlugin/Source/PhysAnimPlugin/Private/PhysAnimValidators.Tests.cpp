@@ -62,4 +62,73 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimValidatorsContinuityTest,
+		"PhysAnim.Validators.Continuity.ValidateContinuity",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimValidatorsContinuityTest::RunTest(const FString& Parameters)
+	{
+		{
+			// VALID-01A: Physics disabled.
+			FPhysAnimContinuitySnapshot Snapshot;
+			Snapshot.bAllCriticalBodiesSimulating = false;
+
+			const FPhysAnimContinuityValidationResult Result = PhysAnimValidators::ValidateContinuity(Snapshot);
+
+			TestFalse(TEXT("VALID-01A physical_continuity_validator_passed is false"), Result.bPhysicalContinuityValidatorPassed);
+			TestEqual(TEXT("VALID-01A terminal_reason is activation_continuous_simulation_lost"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationContinuousSimulationLost));
+		}
+
+		{
+			// VALID-01B: Pelvis sleep limit exceeded.
+			FPhysAnimContinuitySnapshot Snapshot;
+			Snapshot.PelvisSleepDurationMs = 100.1;
+
+			const FPhysAnimContinuityValidationResult Result = PhysAnimValidators::ValidateContinuity(Snapshot);
+
+			TestTrue(TEXT("VALID-01B pelvis_sleep_duration_ms exceeds limit"), Result.PelvisSleepDurationMs > 100.0);
+			TestFalse(TEXT("VALID-01B physical_continuity_validator_passed is false"), Result.bPhysicalContinuityValidatorPassed);
+			TestEqual(TEXT("VALID-01B terminal_reason is activation_continuous_simulation_lost"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationContinuousSimulationLost));
+		}
+
+		{
+			// VALID-01C: Body instance loss.
+			FPhysAnimContinuitySnapshot Snapshot;
+			Snapshot.TopologyChangeCount = 1;
+
+			const FPhysAnimContinuityValidationResult Result = PhysAnimValidators::ValidateContinuity(Snapshot);
+
+			TestEqual(TEXT("VALID-01C terminal_reason is activation_topology_change"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationTopologyChange));
+			TestFalse(TEXT("VALID-01C physical_continuity_validator_passed is false"), Result.bPhysicalContinuityValidatorPassed);
+		}
+
+		{
+			// VALID-01D: Bookkeeping delta only.
+			FPhysAnimContinuitySnapshot Snapshot;
+			Snapshot.bContinuityBookkeepingMismatch = true;
+
+			const FPhysAnimContinuityValidationResult Result = PhysAnimValidators::ValidateContinuity(Snapshot);
+
+			TestEqual(TEXT("VALID-01D terminal_reason is nullptr/None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+			TestTrue(TEXT("VALID-01D continuity_bookkeeping_mismatch is true"), Result.bContinuityBookkeepingMismatch);
+			TestTrue(TEXT("VALID-01D physical_continuity_validator_passed remains true"), Result.bPhysicalContinuityValidatorPassed);
+		}
+
+		{
+			// Raw continuity loss remains authoritative over bookkeeping mismatch.
+			FPhysAnimContinuitySnapshot Snapshot;
+			Snapshot.bAllCriticalBodiesSimulating = false;
+			Snapshot.bContinuityBookkeepingMismatch = true;
+
+			const FPhysAnimContinuityValidationResult Result = PhysAnimValidators::ValidateContinuity(Snapshot);
+
+			TestTrue(TEXT("Bookkeeping mismatch diagnostic is preserved"), Result.bContinuityBookkeepingMismatch);
+			TestEqual(TEXT("Raw simulation loss wins over bookkeeping mismatch"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationContinuousSimulationLost));
+			TestFalse(TEXT("Raw simulation loss fails continuity"), Result.bPhysicalContinuityValidatorPassed);
+		}
+
+		return true;
+	}
 }
