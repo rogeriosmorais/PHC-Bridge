@@ -337,4 +337,13 @@ namespace PhysAnimRuntimeAdapter
 
 		return CaptureSupportSnapshotFromContacts(ContactsInput);
 	}
+
+	FPhysAnimSupportObservationResult BuildSupportObservationFromHits(const FPhysAnimSupportObservationInput& Input)
+	{
+		FPhysAnimSupportObservationResult Result;
+		Result.Snapshot = CaptureSupportSnapshotFromHits(Input.HitSnapshot);
+		Result.Validation = PhysAnimValidators::ValidateSupport(Result.Snapshot);
+		Result.bObservationValid = Result.Validation.bSupportContractPassed;
+		return Result;
+	}
 }

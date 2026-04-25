@@ -121,6 +121,18 @@ struct FPhysAnimSupportHitSnapshotCaptureInput
 	double SupportChurnHz = 0.0;
 };
 
+struct FPhysAnimSupportObservationInput
+{
+	FPhysAnimSupportHitSnapshotCaptureInput HitSnapshot;
+};
+
+struct FPhysAnimSupportObservationResult
+{
+	FPhysAnimSupportContractSnapshot Snapshot;
+	FPhysAnimSupportContractValidationResult Validation;
+	bool bObservationValid = true;
+};
+
 namespace PhysAnimRuntimeAdapter
 {
 	FPhysAnimContinuitySnapshot CaptureContinuitySnapshot(const FPhysAnimContinuitySnapshotCaptureInput& Input);
@@ -130,4 +142,5 @@ namespace PhysAnimRuntimeAdapter
 	FPhysAnimSupportContractSnapshot CaptureSupportSnapshotFromContacts(const FPhysAnimSupportContactsSnapshotCaptureInput& Input);
 	TArray<FPhysAnimSupportContactSample> ConvertSupportHitsToContactSamples(const FPhysAnimSupportHitConversionInput& Input);
 	FPhysAnimSupportContractSnapshot CaptureSupportSnapshotFromHits(const FPhysAnimSupportHitSnapshotCaptureInput& Input);
+	FPhysAnimSupportObservationResult BuildSupportObservationFromHits(const FPhysAnimSupportObservationInput& Input);
 }
