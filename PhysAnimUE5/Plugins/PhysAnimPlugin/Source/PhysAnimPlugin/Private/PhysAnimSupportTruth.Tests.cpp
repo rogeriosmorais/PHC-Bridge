@@ -32,6 +32,17 @@ namespace
 			});
 	}
 
+	FPhysAnimSupportPatch MakeSupportPatch(const EPhysAnimSupportSide SupportSide, const TArray<FVector2D>& HullPointsCm, const bool bValidInput = true)
+	{
+		FPhysAnimSupportPatch Patch;
+		Patch.BodyName = SupportSide == EPhysAnimSupportSide::Left ? FName(TEXT("LeftFoot")) : FName(TEXT("RightFoot"));
+		Patch.SupportSide = SupportSide;
+		Patch.HullPointsCm = HullPointsCm;
+		Patch.PatchAreaCm2 = HullPointsCm.Num() >= 3 ? 1.0 : 0.0;
+		Patch.bValidInput = bValidInput;
+		return Patch;
+	}
+
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimSupportTruthExtractPatchHullTest,
 		"PhysAnim.SupportTruth.ExtractPatchHull",
@@ -103,6 +114,86 @@ namespace
 			TestFalse(TEXT("LOGIC-03A mixed side input is invalid"), MixedSidePatch.bValidInput);
 			TestEqual(TEXT("LOGIC-03A mixed side has empty hull"), MixedSidePatch.HullPointsCm.Num(), 0);
 			TestEqual(TEXT("LOGIC-03A mixed side area is zero"), MixedSidePatch.PatchAreaCm2, 0.0);
+		}
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimSupportTruthBuildFrameHullTest,
+		"PhysAnim.SupportTruth.BuildFrameHull",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimSupportTruthBuildFrameHullTest::RunTest(const FString& Parameters)
+	{
+		{
+			TArray<FPhysAnimSupportPatch> Patches;
+			Patches.Add(MakeSupportPatch(
+				EPhysAnimSupportSide::Left,
+				{FVector2D(0.0, 0.0), FVector2D(1.0, 0.0), FVector2D(1.0, 1.0), FVector2D(0.0, 1.0)}));
+			Patches.Add(MakeSupportPatch(
+				EPhysAnimSupportSide::Right,
+				{FVector2D(2.0, 0.0), FVector2D(3.0, 0.0), FVector2D(3.0, 1.0), FVector2D(2.0, 1.0)}));
+
+			const FPhysAnimFrameHull FrameHull = PhysAnimSupportTruth::BuildFrameHull(Patches);
+
+			TestEqual(TEXT("LOGIC-04 active support side count is two"), FrameHull.ActiveSupportSideCount, 2);
+			TestEqual(TEXT("LOGIC-04 frame hull has four points"), FrameHull.HullPointsCm.Num(), 4);
+			TestEqual(TEXT("LOGIC-04 frame hull area spans offset squares"), FrameHull.SupportHullAreaCm2, 3.0);
+			TestTrue(TEXT("LOGIC-04 hull contains lower-left"), ContainsPoint(FrameHull.HullPointsCm, FVector2D(0.0, 0.0)));
+			TestTrue(TEXT("LOGIC-04 hull contains lower-right"), ContainsPoint(FrameHull.HullPointsCm, FVector2D(3.0, 0.0)));
+			TestTrue(TEXT("LOGIC-04 hull contains upper-right"), ContainsPoint(FrameHull.HullPointsCm, FVector2D(3.0, 1.0)));
+			TestTrue(TEXT("LOGIC-04 hull contains upper-left"), ContainsPoint(FrameHull.HullPointsCm, FVector2D(0.0, 1.0)));
+		}
+
+		{
+			const FPhysAnimFrameHull EmptyFrameHull = PhysAnimSupportTruth::BuildFrameHull(TArray<FPhysAnimSupportPatch>());
+
+			TestEqual(TEXT("LOGIC-04A empty patch list has zero active sides"), EmptyFrameHull.ActiveSupportSideCount, 0);
+			TestEqual(TEXT("LOGIC-04A empty patch list has empty hull"), EmptyFrameHull.HullPointsCm.Num(), 0);
+			TestEqual(TEXT("LOGIC-04A empty patch list has zero area"), EmptyFrameHull.SupportHullAreaCm2, 0.0);
+
+			TArray<FPhysAnimSupportPatch> IgnoredPatches;
+			IgnoredPatches.Add(MakeSupportPatch(EPhysAnimSupportSide::Left, TArray<FVector2D>()));
+			IgnoredPatches.Add(MakeSupportPatch(
+				EPhysAnimSupportSide::Right,
+				{FVector2D(0.0, 0.0), FVector2D(1.0, 0.0), FVector2D(0.0, 1.0)},
+				false));
+
+			const FPhysAnimFrameHull IgnoredFrameHull = PhysAnimSupportTruth::BuildFrameHull(IgnoredPatches);
+
+			TestEqual(TEXT("LOGIC-04A invalid and empty patches do not count active sides"), IgnoredFrameHull.ActiveSupportSideCount, 0);
+			TestEqual(TEXT("LOGIC-04A invalid and empty patches have empty hull"), IgnoredFrameHull.HullPointsCm.Num(), 0);
+			TestEqual(TEXT("LOGIC-04A invalid and empty patches have zero area"), IgnoredFrameHull.SupportHullAreaCm2, 0.0);
+		}
+
+		{
+			TArray<FPhysAnimSupportPatch> Patches;
+			Patches.Add(MakeSupportPatch(
+				EPhysAnimSupportSide::Left,
+				{FVector2D(0.0, 0.0), FVector2D(1.0, 0.0), FVector2D(1.0, 1.0), FVector2D(0.0, 1.0)}));
+			Patches.Add(MakeSupportPatch(
+				EPhysAnimSupportSide::Left,
+				{FVector2D(2.0, 0.0), FVector2D(3.0, 0.0), FVector2D(3.0, 1.0), FVector2D(2.0, 1.0)}));
+
+			const FPhysAnimFrameHull FrameHull = PhysAnimSupportTruth::BuildFrameHull(Patches);
+
+			TestEqual(TEXT("LOGIC-04B multiple patches on same side count once"), FrameHull.ActiveSupportSideCount, 1);
+			TestEqual(TEXT("LOGIC-04B same-side frame hull area is still computed"), FrameHull.SupportHullAreaCm2, 3.0);
+		}
+
+		{
+			TArray<FPhysAnimSupportPatch> Patches;
+			Patches.Add(MakeSupportPatch(
+				EPhysAnimSupportSide::Left,
+				{FVector2D(0.0, 0.0), FVector2D(1.0, 0.0), FVector2D(0.0, 1.0)}));
+			Patches.Add(MakeSupportPatch(
+				EPhysAnimSupportSide::Right,
+				{FVector2D(2.0, 0.0), FVector2D(3.0, 0.0), FVector2D(3.0, 1.0)}));
+
+			const FPhysAnimFrameHull FrameHull = PhysAnimSupportTruth::BuildFrameHull(Patches);
+
+			TestEqual(TEXT("LOGIC-04C left and right patches count two sides"), FrameHull.ActiveSupportSideCount, 2);
 		}
 
 		return true;
