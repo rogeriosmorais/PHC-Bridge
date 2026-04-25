@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/HitResult.h"
 #include "PhysAnimValidators.h"
 
 class UCharacterMovementComponent;
@@ -140,6 +141,33 @@ struct FPhysAnimSupportObservationArtifactInput
 	TArray<FPhysAnimFailureCandidate> AdditionalFailureCandidates;
 };
 
+struct FPhysAnimSupportHitResultConversionInput
+{
+	TArray<FHitResult> HitResults;
+	TArray<FPhysAnimSupportBodyMapping> SupportBodies;
+	FVector WorldOriginCm = FVector::ZeroVector;
+	bool bRequireWorldStatic = true;
+};
+
+struct FPhysAnimSupportHitResultObservationInput
+{
+	TArray<FHitResult> HitResults;
+	TArray<FPhysAnimSupportBodyMapping> SupportBodies;
+	FVector WorldOriginCm = FVector::ZeroVector;
+	bool bRequireWorldStatic = true;
+	bool bPreviousSupportStateL = false;
+	bool bPreviousSupportStateR = false;
+	double PreviousSupportGapTimerMs = 0.0;
+	TOptional<double> PreviousProxyOutsideHullDurationMs;
+	double DeltaMs = 0.0;
+	double SupportGapMaxMs = 100.0;
+	double SupportAreaMinCm2 = 50.0;
+	double ProxyDriftLimitMs = 100.0;
+	FVector2D ComProxyPosCm = FVector2D::ZeroVector;
+	int32 SupportChurnCount = 0;
+	double SupportChurnHz = 0.0;
+};
+
 namespace PhysAnimRuntimeAdapter
 {
 	FPhysAnimContinuitySnapshot CaptureContinuitySnapshot(const FPhysAnimContinuitySnapshotCaptureInput& Input);
@@ -151,4 +179,6 @@ namespace PhysAnimRuntimeAdapter
 	FPhysAnimSupportContractSnapshot CaptureSupportSnapshotFromHits(const FPhysAnimSupportHitSnapshotCaptureInput& Input);
 	FPhysAnimSupportObservationResult BuildSupportObservationFromHits(const FPhysAnimSupportObservationInput& Input);
 	FPhysAnimRunArtifactSnapshot BuildSupportObservationArtifactSnapshot(const FPhysAnimSupportObservationArtifactInput& Input);
+	TArray<FPhysAnimSupportHitRecord> ConvertSupportHitResultsToHitRecords(const FPhysAnimSupportHitResultConversionInput& Input);
+	FPhysAnimSupportObservationResult BuildSupportObservationFromHitResults(const FPhysAnimSupportHitResultObservationInput& Input);
 }

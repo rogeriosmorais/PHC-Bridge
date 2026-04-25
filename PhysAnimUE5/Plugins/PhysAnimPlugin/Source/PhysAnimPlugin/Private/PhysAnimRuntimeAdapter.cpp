@@ -1,6 +1,7 @@
 #include "PhysAnimRuntimeAdapter.h"
 
 #include "Components/CapsuleComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
@@ -50,6 +51,12 @@ namespace
 		Candidate.TerminalReason = Reason;
 		Candidate.TerminalSubstepTimestamp = TerminalSubstepTimestamp;
 		Candidates.Add(Candidate);
+	}
+
+	bool IsStaticWorldHitComponent(const FHitResult& Hit)
+	{
+		const UPrimitiveComponent* const HitComponent = Hit.Component.Get();
+		return HitComponent && HitComponent->Mobility == EComponentMobility::Static;
 	}
 }
 
@@ -376,5 +383,55 @@ namespace PhysAnimRuntimeAdapter
 			Input.Values.TerminalSubstepTimestamp);
 
 		return PhysAnimValidators::BuildRunArtifactSnapshot(ArtifactInput);
+	}
+
+	TArray<FPhysAnimSupportHitRecord> ConvertSupportHitResultsToHitRecords(const FPhysAnimSupportHitResultConversionInput& Input)
+	{
+		TArray<FPhysAnimSupportHitRecord> Records;
+		Records.Reserve(Input.HitResults.Num());
+
+		for (const FHitResult& Hit : Input.HitResults)
+		{
+			FPhysAnimSupportHitRecord Record;
+			Record.BodyName = Hit.BoneName;
+			Record.WorldPositionCm = Hit.ImpactPoint;
+			Record.bBlockingHit = Hit.bBlockingHit;
+			Record.bFromWorldStatic = Input.bRequireWorldStatic ? IsStaticWorldHitComponent(Hit) : true;
+			Record.bIsPenetrating = Hit.bStartPenetrating;
+			Record.PenetrationDepthCm = Hit.PenetrationDepth;
+			Records.Add(Record);
+		}
+
+		return Records;
+	}
+
+	FPhysAnimSupportObservationResult BuildSupportObservationFromHitResults(const FPhysAnimSupportHitResultObservationInput& Input)
+	{
+		FPhysAnimSupportHitResultConversionInput ConversionInput;
+		ConversionInput.HitResults = Input.HitResults;
+		ConversionInput.SupportBodies = Input.SupportBodies;
+		ConversionInput.WorldOriginCm = Input.WorldOriginCm;
+		ConversionInput.bRequireWorldStatic = Input.bRequireWorldStatic;
+
+		FPhysAnimSupportHitSnapshotCaptureInput HitSnapshotInput;
+		HitSnapshotInput.Hits = ConvertSupportHitResultsToHitRecords(ConversionInput);
+		HitSnapshotInput.SupportBodies = Input.SupportBodies;
+		HitSnapshotInput.WorldOriginCm = Input.WorldOriginCm;
+		HitSnapshotInput.bPreviousSupportStateL = Input.bPreviousSupportStateL;
+		HitSnapshotInput.bPreviousSupportStateR = Input.bPreviousSupportStateR;
+		HitSnapshotInput.PreviousSupportGapTimerMs = Input.PreviousSupportGapTimerMs;
+		HitSnapshotInput.PreviousProxyOutsideHullDurationMs = Input.PreviousProxyOutsideHullDurationMs;
+		HitSnapshotInput.DeltaMs = Input.DeltaMs;
+		HitSnapshotInput.SupportGapMaxMs = Input.SupportGapMaxMs;
+		HitSnapshotInput.SupportAreaMinCm2 = Input.SupportAreaMinCm2;
+		HitSnapshotInput.ProxyDriftLimitMs = Input.ProxyDriftLimitMs;
+		HitSnapshotInput.ComProxyPosCm = Input.ComProxyPosCm;
+		HitSnapshotInput.SupportChurnCount = Input.SupportChurnCount;
+		HitSnapshotInput.SupportChurnHz = Input.SupportChurnHz;
+
+		FPhysAnimSupportObservationInput ObservationInput;
+		ObservationInput.HitSnapshot = HitSnapshotInput;
+
+		return BuildSupportObservationFromHits(ObservationInput);
 	}
 }
