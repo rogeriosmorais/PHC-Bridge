@@ -228,4 +228,88 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimValidatorsPlantTest,
+		"PhysAnim.Validators.Plant.ValidatePlant",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimValidatorsPlantTest::RunTest(const FString& Parameters)
+	{
+		{
+			const FPhysAnimPlantContractSnapshot Snapshot;
+			const FPhysAnimPlantContractValidationResult Result = PhysAnimValidators::ValidatePlant(Snapshot);
+
+			TestTrue(TEXT("Default physics_asset_contract_valid is true"), Result.bPhysicsAssetContractValid);
+			TestEqual(TEXT("Default plant_failure_class is None"), static_cast<uint8>(Result.PlantFailureClass), static_cast<uint8>(EPhysAnimPlantFailureClass::None));
+			TestEqual(TEXT("Default terminal_reason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+		}
+
+		{
+			// VALID-03A: Skeleton mismatch.
+			FPhysAnimPlantContractSnapshot Snapshot;
+			Snapshot.bSkeletonAuditPassed = false;
+			Snapshot.PlantFailureClass = EPhysAnimPlantFailureClass::StaticStructural;
+			Snapshot.PlantFailureField = EPhysAnimPlantFailureField::Skeleton;
+
+			const FPhysAnimPlantContractValidationResult Result = PhysAnimValidators::ValidatePlant(Snapshot);
+
+			TestEqual(TEXT("VALID-03A plant_failure_class is StaticStructural"), static_cast<uint8>(Result.PlantFailureClass), static_cast<uint8>(EPhysAnimPlantFailureClass::StaticStructural));
+			TestEqual(TEXT("VALID-03A terminal_reason is activation_physics_asset_contract_violation"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation));
+		}
+
+		{
+			// VALID-03B: Segment length drift.
+			FPhysAnimPlantContractSnapshot Snapshot;
+			Snapshot.bPhysicsAssetContractValid = false;
+			Snapshot.PlantFailureClass = EPhysAnimPlantFailureClass::StaticStructural;
+			Snapshot.PlantFailureField = EPhysAnimPlantFailureField::SegmentLength;
+
+			const FPhysAnimPlantContractValidationResult Result = PhysAnimValidators::ValidatePlant(Snapshot);
+
+			TestFalse(TEXT("VALID-03B physics_asset_contract_valid is false"), Result.bPhysicsAssetContractValid);
+			TestEqual(TEXT("VALID-03B plant_failure_class is StaticStructural"), static_cast<uint8>(Result.PlantFailureClass), static_cast<uint8>(EPhysAnimPlantFailureClass::StaticStructural));
+			TestEqual(TEXT("VALID-03B plant_failure_field is segment_length"), static_cast<uint8>(Result.PlantFailureField), static_cast<uint8>(EPhysAnimPlantFailureField::SegmentLength));
+			TestEqual(TEXT("VALID-03B terminal_reason is activation_physics_asset_contract_violation"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation));
+
+			Snapshot.PlantFailureField = EPhysAnimPlantFailureField::AxisAlignment;
+
+			const FPhysAnimPlantContractValidationResult AxisResult = PhysAnimValidators::ValidatePlant(Snapshot);
+
+			TestEqual(TEXT("VALID-03B plant_failure_field can be axis_alignment"), static_cast<uint8>(AxisResult.PlantFailureField), static_cast<uint8>(EPhysAnimPlantFailureField::AxisAlignment));
+			TestEqual(TEXT("VALID-03B axis terminal_reason is activation_physics_asset_contract_violation"), static_cast<uint8>(AxisResult.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation));
+		}
+
+		{
+			// VALID-03C: Mass mutation.
+			FPhysAnimPlantContractSnapshot Snapshot;
+			Snapshot.PlantFailureClass = EPhysAnimPlantFailureClass::Mutation;
+			Snapshot.PlantFailureField = EPhysAnimPlantFailureField::Mass;
+			Snapshot.MassDriftTotalPct = 3.0;
+
+			const FPhysAnimPlantContractValidationResult Result = PhysAnimValidators::ValidatePlant(Snapshot);
+
+			TestEqual(TEXT("VALID-03C plant_failure_class is Mutation"), static_cast<uint8>(Result.PlantFailureClass), static_cast<uint8>(EPhysAnimPlantFailureClass::Mutation));
+			TestEqual(TEXT("VALID-03C plant_failure_field is mass"), static_cast<uint8>(Result.PlantFailureField), static_cast<uint8>(EPhysAnimPlantFailureField::Mass));
+			TestEqual(TEXT("VALID-03C mass drift is preserved"), Result.MassDriftTotalPct, 3.0);
+			TestEqual(TEXT("VALID-03C terminal_reason is activation_physics_asset_contract_violation"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation));
+		}
+
+		{
+			// VALID-03D: Physics asset swap.
+			FPhysAnimPlantContractSnapshot Snapshot;
+			Snapshot.bPhysicsAssetContractValid = false;
+			Snapshot.PlantFailureClass = EPhysAnimPlantFailureClass::Mutation;
+			Snapshot.PlantFailureField = EPhysAnimPlantFailureField::PhysicsAssetIdentity;
+
+			const FPhysAnimPlantContractValidationResult Result = PhysAnimValidators::ValidatePlant(Snapshot);
+
+			TestFalse(TEXT("VALID-03D physics_asset_contract_valid is false"), Result.bPhysicsAssetContractValid);
+			TestEqual(TEXT("VALID-03D plant_failure_class is Mutation"), static_cast<uint8>(Result.PlantFailureClass), static_cast<uint8>(EPhysAnimPlantFailureClass::Mutation));
+			TestEqual(TEXT("VALID-03D plant_failure_field is physics_asset_identity"), static_cast<uint8>(Result.PlantFailureField), static_cast<uint8>(EPhysAnimPlantFailureField::PhysicsAssetIdentity));
+			TestEqual(TEXT("VALID-03D terminal_reason is activation_physics_asset_contract_violation"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation));
+		}
+
+		return true;
+	}
 }

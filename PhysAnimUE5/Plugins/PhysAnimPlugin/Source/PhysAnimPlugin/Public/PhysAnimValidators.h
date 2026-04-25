@@ -54,8 +54,46 @@ struct FPhysAnimCapsuleContractValidationResult
 	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
 };
 
+enum class EPhysAnimPlantFailureClass : uint8
+{
+	None,
+	StaticStructural,
+	Mutation,
+	Dynamic
+};
+
+enum class EPhysAnimPlantFailureField : uint8
+{
+	None,
+	Skeleton,
+	SegmentLength,
+	AxisAlignment,
+	Mass,
+	PhysicsAssetIdentity
+};
+
+struct FPhysAnimPlantContractSnapshot
+{
+	bool bPhysicsAssetContractValid = true;
+	bool bSkeletonAuditPassed = true;
+	EPhysAnimPlantFailureClass PlantFailureClass = EPhysAnimPlantFailureClass::None;
+	EPhysAnimPlantFailureField PlantFailureField = EPhysAnimPlantFailureField::None;
+	double MassDriftTotalPct = 0.0;
+};
+
+struct FPhysAnimPlantContractValidationResult
+{
+	bool bPhysicsAssetContractValid = true;
+	bool bSkeletonAuditPassed = true;
+	EPhysAnimPlantFailureClass PlantFailureClass = EPhysAnimPlantFailureClass::None;
+	EPhysAnimPlantFailureField PlantFailureField = EPhysAnimPlantFailureField::None;
+	double MassDriftTotalPct = 0.0;
+	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
+};
+
 namespace PhysAnimValidators
 {
 	FPhysAnimContinuityValidationResult ValidateContinuity(const FPhysAnimContinuitySnapshot& Snapshot);
 	FPhysAnimCapsuleContractValidationResult ValidateCapsule(const FPhysAnimCapsuleContractSnapshot& Snapshot);
+	FPhysAnimPlantContractValidationResult ValidatePlant(const FPhysAnimPlantContractSnapshot& Snapshot);
 }

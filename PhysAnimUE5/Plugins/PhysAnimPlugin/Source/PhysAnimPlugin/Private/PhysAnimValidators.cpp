@@ -62,4 +62,28 @@ namespace PhysAnimValidators
 
 		return Result;
 	}
+
+	FPhysAnimPlantContractValidationResult ValidatePlant(const FPhysAnimPlantContractSnapshot& Snapshot)
+	{
+		FPhysAnimPlantContractValidationResult Result;
+		Result.bPhysicsAssetContractValid = Snapshot.bPhysicsAssetContractValid;
+		Result.bSkeletonAuditPassed = Snapshot.bSkeletonAuditPassed;
+		Result.PlantFailureClass = Snapshot.PlantFailureClass;
+		Result.PlantFailureField = Snapshot.PlantFailureField;
+		Result.MassDriftTotalPct = Snapshot.MassDriftTotalPct;
+
+		const bool bPlantContractViolated =
+			!Snapshot.bPhysicsAssetContractValid ||
+			!Snapshot.bSkeletonAuditPassed ||
+			Snapshot.PlantFailureClass != EPhysAnimPlantFailureClass::None ||
+			Snapshot.PlantFailureField != EPhysAnimPlantFailureField::None;
+
+		if (bPlantContractViolated)
+		{
+			Result.bPhysicsAssetContractValid = false;
+			Result.TerminalReason = EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation;
+		}
+
+		return Result;
+	}
 }
