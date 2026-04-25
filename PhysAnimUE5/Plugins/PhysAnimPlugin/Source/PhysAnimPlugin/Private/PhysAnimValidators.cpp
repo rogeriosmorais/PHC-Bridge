@@ -137,4 +137,76 @@ namespace PhysAnimValidators
 
 		return Result;
 	}
+
+	FPhysAnimControllerStabilityValidationResult ValidateControllerStability(const FPhysAnimControllerStabilitySnapshot& Snapshot)
+	{
+		constexpr double TargetDiscontinuityLimitDeg = 15.0;
+		constexpr double ControllerGainScaleMax = 1.0;
+		constexpr double ControllerDampingRatioMin = 1.0;
+		constexpr double MaxRootTiltLimitDeg = 20.0;
+		constexpr double PeakAngularSpeedLimitDegPerSec = 720.0;
+		constexpr double MaxBodyMismatchLimitDeg = 25.0;
+		constexpr double RmsMismatchLimitDeg = 15.0;
+		constexpr double MismatchGraceMs = 200.0;
+		constexpr double HoldDurationMinSec = 3.0;
+
+		FPhysAnimControllerStabilityValidationResult Result;
+		Result.TargetDiscontinuityDeg = Snapshot.TargetDiscontinuityDeg;
+		Result.TargetDiscontinuityPhase = Snapshot.TargetDiscontinuityPhase;
+		Result.bControllerGainDampingValid = Snapshot.bControllerGainDampingValid;
+		Result.ControllerGainScale = Snapshot.ControllerGainScale;
+		Result.ControllerDampingRatio = Snapshot.ControllerDampingRatio;
+		Result.MaxRootTiltDeg = Snapshot.MaxRootTiltDeg;
+		Result.PeakAngularSpeedDegPerSec = Snapshot.PeakAngularSpeedDegPerSec;
+		Result.MaxBodyMismatchDeg = Snapshot.MaxBodyMismatchDeg;
+		Result.RmsMismatchDeg = Snapshot.RmsMismatchDeg;
+		Result.MismatchDurationMs = Snapshot.MismatchDurationMs;
+		Result.HoldDurationSec = Snapshot.HoldDurationSec;
+		Result.bStandingValidationTimedOut = Snapshot.bStandingValidationTimedOut;
+
+		auto Fail = [&Result](EPhysAnimControllerStabilityFailureField Field, EPhysAnimTerminalReason Reason)
+		{
+			Result.bControllerStabilityPassed = false;
+			Result.FailureField = Field;
+			Result.TerminalReason = Reason;
+		};
+
+		if (Snapshot.TargetDiscontinuityDeg > TargetDiscontinuityLimitDeg &&
+			Snapshot.TargetDiscontinuityPhase == EPhysAnimTargetDiscontinuityPhase::BlendStart)
+		{
+			Fail(EPhysAnimControllerStabilityFailureField::TargetDiscontinuityDeg, EPhysAnimTerminalReason::ActivationTargetDiscontinuity);
+		}
+		else if (!Snapshot.bControllerGainDampingValid || Snapshot.ControllerGainScale > ControllerGainScaleMax)
+		{
+			Fail(EPhysAnimControllerStabilityFailureField::ControllerGainScale, EPhysAnimTerminalReason::ActivationUnstableGainOrDamping);
+			Result.bControllerGainDampingValid = false;
+		}
+		else if (Snapshot.ControllerDampingRatio < ControllerDampingRatioMin)
+		{
+			Fail(EPhysAnimControllerStabilityFailureField::ControllerDampingRatio, EPhysAnimTerminalReason::ActivationUnstableGainOrDamping);
+			Result.bControllerGainDampingValid = false;
+		}
+		else if (Snapshot.MaxRootTiltDeg > MaxRootTiltLimitDeg)
+		{
+			Fail(EPhysAnimControllerStabilityFailureField::MaxRootTiltDeg, EPhysAnimTerminalReason::ActivationInstabilityThresholdBreach);
+		}
+		else if (Snapshot.PeakAngularSpeedDegPerSec > PeakAngularSpeedLimitDegPerSec)
+		{
+			Fail(EPhysAnimControllerStabilityFailureField::PeakAngularSpeed, EPhysAnimTerminalReason::ActivationInstabilityThresholdBreach);
+		}
+		else if (Snapshot.MaxBodyMismatchDeg > MaxBodyMismatchLimitDeg && Snapshot.MismatchDurationMs > MismatchGraceMs)
+		{
+			Fail(EPhysAnimControllerStabilityFailureField::MaxBodyMismatchDeg, EPhysAnimTerminalReason::ActivationPoseReferenceMismatch);
+		}
+		else if (Snapshot.RmsMismatchDeg > RmsMismatchLimitDeg && Snapshot.MismatchDurationMs > MismatchGraceMs)
+		{
+			Fail(EPhysAnimControllerStabilityFailureField::RmsMismatchDeg, EPhysAnimTerminalReason::ActivationPoseReferenceMismatch);
+		}
+		else if (Snapshot.bStandingValidationTimedOut && Snapshot.HoldDurationSec < HoldDurationMinSec)
+		{
+			Fail(EPhysAnimControllerStabilityFailureField::StandingValidationTimedOut, EPhysAnimTerminalReason::ActivationStandingValidationTimeout);
+		}
+
+		return Result;
+	}
 }

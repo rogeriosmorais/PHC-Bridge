@@ -410,4 +410,127 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimValidatorsControllerStabilityTest,
+		"PhysAnim.Validators.ControllerStability.ValidateControllerStability",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimValidatorsControllerStabilityTest::RunTest(const FString& Parameters)
+	{
+		{
+			const FPhysAnimControllerStabilitySnapshot Snapshot;
+			const FPhysAnimControllerStabilityValidationResult Result = PhysAnimValidators::ValidateControllerStability(Snapshot);
+
+			TestTrue(TEXT("Default controller stability passes"), Result.bControllerStabilityPassed);
+			TestEqual(TEXT("Default failure field is None"), static_cast<uint8>(Result.FailureField), static_cast<uint8>(EPhysAnimControllerStabilityFailureField::None));
+			TestEqual(TEXT("Default terminal_reason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+		}
+
+		{
+			// VALID-05A: Target jump at blend start.
+			FPhysAnimControllerStabilitySnapshot Snapshot;
+			Snapshot.TargetDiscontinuityDeg = 15.1;
+			Snapshot.TargetDiscontinuityPhase = EPhysAnimTargetDiscontinuityPhase::BlendStart;
+
+			const FPhysAnimControllerStabilityValidationResult Result = PhysAnimValidators::ValidateControllerStability(Snapshot);
+
+			TestTrue(TEXT("VALID-05A target_discontinuity_deg exceeds limit"), Result.TargetDiscontinuityDeg > 15.0);
+			TestEqual(TEXT("VALID-05A target_discontinuity_phase is BlendStart"), static_cast<uint8>(Result.TargetDiscontinuityPhase), static_cast<uint8>(EPhysAnimTargetDiscontinuityPhase::BlendStart));
+			TestEqual(TEXT("VALID-05A terminal_reason is activation_target_discontinuity"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationTargetDiscontinuity));
+		}
+
+		{
+			// VALID-05B: Controller gain breach.
+			FPhysAnimControllerStabilitySnapshot Snapshot;
+			Snapshot.ControllerGainScale = 1.1;
+
+			const FPhysAnimControllerStabilityValidationResult Result = PhysAnimValidators::ValidateControllerStability(Snapshot);
+
+			TestFalse(TEXT("VALID-05B controller_gain_damping_valid is false"), Result.bControllerGainDampingValid);
+			TestTrue(TEXT("VALID-05B controller_gain_scale exceeds max"), Result.ControllerGainScale > 1.0);
+			TestEqual(TEXT("VALID-05B failure field is controller_gain_scale"), static_cast<uint8>(Result.FailureField), static_cast<uint8>(EPhysAnimControllerStabilityFailureField::ControllerGainScale));
+			TestEqual(TEXT("VALID-05B terminal_reason is activation_unstable_gain_or_damping"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationUnstableGainOrDamping));
+		}
+
+		{
+			// VALID-05C: Controller damping breach.
+			FPhysAnimControllerStabilitySnapshot Snapshot;
+			Snapshot.ControllerDampingRatio = 0.9;
+
+			const FPhysAnimControllerStabilityValidationResult Result = PhysAnimValidators::ValidateControllerStability(Snapshot);
+
+			TestFalse(TEXT("VALID-05C controller_gain_damping_valid is false"), Result.bControllerGainDampingValid);
+			TestTrue(TEXT("VALID-05C controller_damping_ratio below min"), Result.ControllerDampingRatio < 1.0);
+			TestEqual(TEXT("VALID-05C failure field is controller_damping_ratio"), static_cast<uint8>(Result.FailureField), static_cast<uint8>(EPhysAnimControllerStabilityFailureField::ControllerDampingRatio));
+			TestEqual(TEXT("VALID-05C terminal_reason is activation_unstable_gain_or_damping"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationUnstableGainOrDamping));
+		}
+
+		{
+			// VALID-05D: Root tilt breach.
+			FPhysAnimControllerStabilitySnapshot Snapshot;
+			Snapshot.MaxRootTiltDeg = 20.1;
+
+			const FPhysAnimControllerStabilityValidationResult Result = PhysAnimValidators::ValidateControllerStability(Snapshot);
+
+			TestTrue(TEXT("VALID-05D max_root_tilt_deg exceeds limit"), Result.MaxRootTiltDeg > 20.0);
+			TestEqual(TEXT("VALID-05D failure field is max_root_tilt_deg"), static_cast<uint8>(Result.FailureField), static_cast<uint8>(EPhysAnimControllerStabilityFailureField::MaxRootTiltDeg));
+			TestEqual(TEXT("VALID-05D terminal_reason is activation_instability_threshold_breach"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationInstabilityThresholdBreach));
+		}
+
+		{
+			// VALID-05E: Angular speed breach.
+			FPhysAnimControllerStabilitySnapshot Snapshot;
+			Snapshot.PeakAngularSpeedDegPerSec = 720.1;
+
+			const FPhysAnimControllerStabilityValidationResult Result = PhysAnimValidators::ValidateControllerStability(Snapshot);
+
+			TestTrue(TEXT("VALID-05E peak_angular_speed exceeds limit"), Result.PeakAngularSpeedDegPerSec > 720.0);
+			TestEqual(TEXT("VALID-05E failure field is peak_angular_speed"), static_cast<uint8>(Result.FailureField), static_cast<uint8>(EPhysAnimControllerStabilityFailureField::PeakAngularSpeed));
+			TestEqual(TEXT("VALID-05E terminal_reason is activation_instability_threshold_breach"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationInstabilityThresholdBreach));
+		}
+
+		{
+			// VALID-05F: Max-body mismatch over grace.
+			FPhysAnimControllerStabilitySnapshot Snapshot;
+			Snapshot.MaxBodyMismatchDeg = 25.1;
+			Snapshot.MismatchDurationMs = 200.1;
+
+			const FPhysAnimControllerStabilityValidationResult Result = PhysAnimValidators::ValidateControllerStability(Snapshot);
+
+			TestTrue(TEXT("VALID-05F max_body_mismatch_deg exceeds limit"), Result.MaxBodyMismatchDeg > 25.0);
+			TestTrue(TEXT("VALID-05F mismatch_duration_ms exceeds grace"), Result.MismatchDurationMs > 200.0);
+			TestEqual(TEXT("VALID-05F failure field is max_body_mismatch_deg"), static_cast<uint8>(Result.FailureField), static_cast<uint8>(EPhysAnimControllerStabilityFailureField::MaxBodyMismatchDeg));
+			TestEqual(TEXT("VALID-05F terminal_reason is activation_pose_reference_mismatch"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationPoseReferenceMismatch));
+		}
+
+		{
+			// VALID-05G: RMS-chain mismatch over grace.
+			FPhysAnimControllerStabilitySnapshot Snapshot;
+			Snapshot.RmsMismatchDeg = 15.1;
+			Snapshot.MismatchDurationMs = 200.1;
+
+			const FPhysAnimControllerStabilityValidationResult Result = PhysAnimValidators::ValidateControllerStability(Snapshot);
+
+			TestTrue(TEXT("VALID-05G rms_mismatch_deg exceeds limit"), Result.RmsMismatchDeg > 15.0);
+			TestTrue(TEXT("VALID-05G mismatch_duration_ms exceeds grace"), Result.MismatchDurationMs > 200.0);
+			TestEqual(TEXT("VALID-05G failure field is rms_mismatch_deg"), static_cast<uint8>(Result.FailureField), static_cast<uint8>(EPhysAnimControllerStabilityFailureField::RmsMismatchDeg));
+			TestEqual(TEXT("VALID-05G terminal_reason is activation_pose_reference_mismatch"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationPoseReferenceMismatch));
+		}
+
+		{
+			// VALID-05H: Standing validation timeout.
+			FPhysAnimControllerStabilitySnapshot Snapshot;
+			Snapshot.HoldDurationSec = 2.9;
+			Snapshot.bStandingValidationTimedOut = true;
+
+			const FPhysAnimControllerStabilityValidationResult Result = PhysAnimValidators::ValidateControllerStability(Snapshot);
+
+			TestTrue(TEXT("VALID-05H hold_duration_sec is below success threshold"), Result.HoldDurationSec < 3.0);
+			TestTrue(TEXT("VALID-05H standing_validation_timed_out is true"), Result.bStandingValidationTimedOut);
+			TestEqual(TEXT("VALID-05H terminal_reason is activation_standing_validation_timeout"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationStandingValidationTimeout));
+		}
+
+		return true;
+	}
 }

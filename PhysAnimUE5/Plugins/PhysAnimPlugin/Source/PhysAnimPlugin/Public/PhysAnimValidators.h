@@ -144,6 +144,60 @@ struct FPhysAnimShellHelperValidationResult
 	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
 };
 
+enum class EPhysAnimTargetDiscontinuityPhase : uint8
+{
+	None,
+	BlendStart
+};
+
+enum class EPhysAnimControllerStabilityFailureField : uint8
+{
+	None,
+	TargetDiscontinuityDeg,
+	ControllerGainScale,
+	ControllerDampingRatio,
+	MaxRootTiltDeg,
+	PeakAngularSpeed,
+	MaxBodyMismatchDeg,
+	RmsMismatchDeg,
+	StandingValidationTimedOut
+};
+
+struct FPhysAnimControllerStabilitySnapshot
+{
+	double TargetDiscontinuityDeg = 0.0;
+	EPhysAnimTargetDiscontinuityPhase TargetDiscontinuityPhase = EPhysAnimTargetDiscontinuityPhase::None;
+	bool bControllerGainDampingValid = true;
+	double ControllerGainScale = 1.0;
+	double ControllerDampingRatio = 1.0;
+	double MaxRootTiltDeg = 0.0;
+	double PeakAngularSpeedDegPerSec = 0.0;
+	double MaxBodyMismatchDeg = 0.0;
+	double RmsMismatchDeg = 0.0;
+	double MismatchDurationMs = 0.0;
+	double HoldDurationSec = 0.0;
+	bool bStandingValidationTimedOut = false;
+};
+
+struct FPhysAnimControllerStabilityValidationResult
+{
+	double TargetDiscontinuityDeg = 0.0;
+	EPhysAnimTargetDiscontinuityPhase TargetDiscontinuityPhase = EPhysAnimTargetDiscontinuityPhase::None;
+	bool bControllerGainDampingValid = true;
+	double ControllerGainScale = 1.0;
+	double ControllerDampingRatio = 1.0;
+	double MaxRootTiltDeg = 0.0;
+	double PeakAngularSpeedDegPerSec = 0.0;
+	double MaxBodyMismatchDeg = 0.0;
+	double RmsMismatchDeg = 0.0;
+	double MismatchDurationMs = 0.0;
+	double HoldDurationSec = 0.0;
+	bool bStandingValidationTimedOut = false;
+	EPhysAnimControllerStabilityFailureField FailureField = EPhysAnimControllerStabilityFailureField::None;
+	bool bControllerStabilityPassed = true;
+	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
+};
+
 namespace PhysAnimValidators
 {
 	FPhysAnimContinuityValidationResult ValidateContinuity(const FPhysAnimContinuitySnapshot& Snapshot);
@@ -152,4 +206,5 @@ namespace PhysAnimValidators
 	FPhysAnimAuthorityValidationResult ValidateAuthority(const FPhysAnimAuthoritySnapshot& Snapshot);
 	FPhysAnimMovementReclaimValidationResult ValidateMovementReclaim(const FPhysAnimMovementReclaimSnapshot& Snapshot);
 	FPhysAnimShellHelperValidationResult ValidateShellHelper(const FPhysAnimShellHelperSnapshot& Snapshot);
+	FPhysAnimControllerStabilityValidationResult ValidateControllerStability(const FPhysAnimControllerStabilitySnapshot& Snapshot);
 }
