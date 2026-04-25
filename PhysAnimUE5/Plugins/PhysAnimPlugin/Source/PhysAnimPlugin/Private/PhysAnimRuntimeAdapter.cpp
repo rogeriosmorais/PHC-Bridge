@@ -35,6 +35,22 @@ namespace
 
 		return false;
 	}
+
+	void AddTerminalCandidateIfPresent(
+		TArray<FPhysAnimFailureCandidate>& Candidates,
+		EPhysAnimTerminalReason Reason,
+		int64 TerminalSubstepTimestamp)
+	{
+		if (Reason == EPhysAnimTerminalReason::None)
+		{
+			return;
+		}
+
+		FPhysAnimFailureCandidate Candidate;
+		Candidate.TerminalReason = Reason;
+		Candidate.TerminalSubstepTimestamp = TerminalSubstepTimestamp;
+		Candidates.Add(Candidate);
+	}
 }
 
 namespace PhysAnimRuntimeAdapter
@@ -345,5 +361,20 @@ namespace PhysAnimRuntimeAdapter
 		Result.Validation = PhysAnimValidators::ValidateSupport(Result.Snapshot);
 		Result.bObservationValid = Result.Validation.bSupportContractPassed;
 		return Result;
+	}
+
+	FPhysAnimRunArtifactSnapshot BuildSupportObservationArtifactSnapshot(const FPhysAnimSupportObservationArtifactInput& Input)
+	{
+		FPhysAnimRunArtifactSnapshotInput ArtifactInput;
+		ArtifactInput.Support = Input.Observation.Validation;
+		ArtifactInput.Values = Input.Values;
+		ArtifactInput.FailureCandidates = Input.AdditionalFailureCandidates;
+
+		AddTerminalCandidateIfPresent(
+			ArtifactInput.FailureCandidates,
+			Input.Observation.Validation.TerminalReason,
+			Input.Values.TerminalSubstepTimestamp);
+
+		return PhysAnimValidators::BuildRunArtifactSnapshot(ArtifactInput);
 	}
 }

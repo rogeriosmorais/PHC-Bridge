@@ -133,6 +133,13 @@ struct FPhysAnimSupportObservationResult
 	bool bObservationValid = true;
 };
 
+struct FPhysAnimSupportObservationArtifactInput
+{
+	FPhysAnimSupportObservationResult Observation;
+	FPhysAnimRunArtifactSnapshot Values;
+	TArray<FPhysAnimFailureCandidate> AdditionalFailureCandidates;
+};
+
 namespace PhysAnimRuntimeAdapter
 {
 	FPhysAnimContinuitySnapshot CaptureContinuitySnapshot(const FPhysAnimContinuitySnapshotCaptureInput& Input);
@@ -143,4 +150,5 @@ namespace PhysAnimRuntimeAdapter
 	TArray<FPhysAnimSupportContactSample> ConvertSupportHitsToContactSamples(const FPhysAnimSupportHitConversionInput& Input);
 	FPhysAnimSupportContractSnapshot CaptureSupportSnapshotFromHits(const FPhysAnimSupportHitSnapshotCaptureInput& Input);
 	FPhysAnimSupportObservationResult BuildSupportObservationFromHits(const FPhysAnimSupportObservationInput& Input);
+	FPhysAnimRunArtifactSnapshot BuildSupportObservationArtifactSnapshot(const FPhysAnimSupportObservationArtifactInput& Input);
 }
