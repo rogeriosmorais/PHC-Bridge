@@ -162,4 +162,24 @@ namespace PhysAnimSupportTruth
 		Result.SupportHullAreaCm2 = Result.HullPointsCm.Num() >= 3 ? CalculatePolygonAreaCm2(Result.HullPointsCm) : 0.0;
 		return Result;
 	}
+
+	EPhysAnimSupportMode ClassifySupportMode(bool bLeftSupport, bool bRightSupport, double SupportGapTimerMs, double SupportGapMaxMs)
+	{
+		if (bLeftSupport && bRightSupport)
+		{
+			return EPhysAnimSupportMode::TwoFootStable;
+		}
+
+		if (bLeftSupport || bRightSupport)
+		{
+			return EPhysAnimSupportMode::SingleFootSurvival;
+		}
+
+		if (SupportGapTimerMs <= SupportGapMaxMs)
+		{
+			return EPhysAnimSupportMode::TransientRecovery;
+		}
+
+		return EPhysAnimSupportMode::Airborne;
+	}
 }

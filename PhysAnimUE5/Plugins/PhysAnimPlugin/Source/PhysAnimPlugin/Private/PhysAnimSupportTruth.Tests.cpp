@@ -198,4 +198,40 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimSupportTruthClassifySupportModeTest,
+		"PhysAnim.SupportTruth.ClassifySupportMode",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimSupportTruthClassifySupportModeTest::RunTest(const FString& Parameters)
+	{
+		// LOGIC-05: TwoFootStable when both sides active
+		TestEqual(TEXT("LOGIC-05 both sides active"), 
+			static_cast<uint8>(PhysAnimSupportTruth::ClassifySupportMode(true, true, 0.0, 100.0)), 
+			static_cast<uint8>(EPhysAnimSupportMode::TwoFootStable));
+
+		// LOGIC-06: SingleFootSurvival when exactly one side active
+		TestEqual(TEXT("LOGIC-06 left only active"), 
+			static_cast<uint8>(PhysAnimSupportTruth::ClassifySupportMode(true, false, 0.0, 100.0)), 
+			static_cast<uint8>(EPhysAnimSupportMode::SingleFootSurvival));
+		TestEqual(TEXT("LOGIC-06 right only active"), 
+			static_cast<uint8>(PhysAnimSupportTruth::ClassifySupportMode(false, true, 0.0, 100.0)), 
+			static_cast<uint8>(EPhysAnimSupportMode::SingleFootSurvival));
+
+		// LOGIC-07: TransientRecovery when neither side active and timer <= max
+		TestEqual(TEXT("LOGIC-07 neither side active, timer at limit"), 
+			static_cast<uint8>(PhysAnimSupportTruth::ClassifySupportMode(false, false, 100.0, 100.0)), 
+			static_cast<uint8>(EPhysAnimSupportMode::TransientRecovery));
+		TestEqual(TEXT("LOGIC-07 neither side active, timer below limit"), 
+			static_cast<uint8>(PhysAnimSupportTruth::ClassifySupportMode(false, false, 50.0, 100.0)), 
+			static_cast<uint8>(EPhysAnimSupportMode::TransientRecovery));
+
+		// LOGIC-08: Airborne when neither side active and timer > max
+		TestEqual(TEXT("LOGIC-08 neither side active, timer exceeds limit"), 
+			static_cast<uint8>(PhysAnimSupportTruth::ClassifySupportMode(false, false, 100.1, 100.0)), 
+			static_cast<uint8>(EPhysAnimSupportMode::Airborne));
+
+		return true;
+	}
 }
