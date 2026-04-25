@@ -199,6 +199,49 @@ struct FPhysAnimControllerStabilityValidationResult
 	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
 };
 
+struct FPhysAnimSupportContractSnapshot
+{
+	bool bSupportStateL = false;
+	bool bSupportStateR = false;
+	EPhysAnimSupportMode SupportMode = EPhysAnimSupportMode::Airborne;
+	double SupportGapTimerMs = 0.0;
+	double SupportGapMaxMs = 100.0;
+	int32 ActiveSupportSideCount = 0;
+	double SupportHullAreaCm2 = 0.0;
+	double SupportAreaMinCm2 = 50.0;
+	double SupportPatchAreaLCm2 = 0.0;
+	double SupportPatchAreaRCm2 = 0.0;
+	TArray<FVector2D> SupportHullPointsCm;
+	FVector2D ComProxyPosCm = FVector2D::ZeroVector;
+	double MaxPenetrationCm = 0.0;
+	int32 SupportChurnCount = 0;
+	double SupportChurnHz = 0.0;
+	TOptional<bool> ProxyInsideHull;
+	TOptional<double> ProxyOutsideHullDurationMs;
+	EPhysAnimTerminalReason ProxyTerminalReason = EPhysAnimTerminalReason::None;
+};
+
+struct FPhysAnimSupportContractValidationResult
+{
+	bool bSupportStateL = false;
+	bool bSupportStateR = false;
+	EPhysAnimSupportMode SupportMode = EPhysAnimSupportMode::Airborne;
+	double SupportGapTimerMs = 0.0;
+	int32 ActiveSupportSideCount = 0;
+	double SupportHullAreaCm2 = 0.0;
+	double SupportPatchAreaLCm2 = 0.0;
+	double SupportPatchAreaRCm2 = 0.0;
+	TArray<FVector2D> SupportHullPointsCm;
+	FVector2D ComProxyPosCm = FVector2D::ZeroVector;
+	double MaxPenetrationCm = 0.0;
+	int32 SupportChurnCount = 0;
+	double SupportChurnHz = 0.0;
+	TOptional<bool> ProxyInsideHull;
+	TOptional<double> ProxyOutsideHullDurationMs;
+	bool bSupportContractPassed = true;
+	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
+};
+
 struct FPhysAnimRunArtifactSnapshot
 {
 	FString AttemptUuid;
@@ -290,6 +333,7 @@ struct FPhysAnimRunArtifactSnapshotInput
 	FPhysAnimPlantContractValidationResult Plant;
 	FPhysAnimCapsuleContractValidationResult Capsule;
 	FPhysAnimContinuityValidationResult Continuity;
+	FPhysAnimSupportContractValidationResult Support;
 	FPhysAnimAuthorityValidationResult Authority;
 	FPhysAnimMovementReclaimValidationResult MovementReclaim;
 	FPhysAnimShellHelperValidationResult ShellHelper;
@@ -307,5 +351,6 @@ namespace PhysAnimValidators
 	FPhysAnimMovementReclaimValidationResult ValidateMovementReclaim(const FPhysAnimMovementReclaimSnapshot& Snapshot);
 	FPhysAnimShellHelperValidationResult ValidateShellHelper(const FPhysAnimShellHelperSnapshot& Snapshot);
 	FPhysAnimControllerStabilityValidationResult ValidateControllerStability(const FPhysAnimControllerStabilitySnapshot& Snapshot);
+	FPhysAnimSupportContractValidationResult ValidateSupport(const FPhysAnimSupportContractSnapshot& Snapshot);
 	FPhysAnimRunArtifactSnapshot BuildRunArtifactSnapshot(const FPhysAnimRunArtifactSnapshotInput& Input);
 }

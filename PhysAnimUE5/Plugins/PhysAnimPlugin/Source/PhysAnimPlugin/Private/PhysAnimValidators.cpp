@@ -1,6 +1,7 @@
 #include "PhysAnimValidators.h"
 
-namespace {
+namespace
+{
 	void AddFallbackFailureCandidate(
 		TArray<FPhysAnimFailureCandidate>& Candidates,
 		EPhysAnimTerminalReason Reason,
@@ -161,7 +162,7 @@ namespace PhysAnimValidators
 		constexpr double TargetDiscontinuityLimitDeg = 15.0;
 		constexpr double ControllerGainScaleMax = 1.0;
 		constexpr double ControllerDampingRatioMin = 1.0;
-		constexpr double MaxRootTiltDegLimit = 20.0;
+		constexpr double MaxRootTiltLimitDeg = 20.0;
 		constexpr double PeakAngularSpeedLimitDegPerSec = 720.0;
 		constexpr double MaxBodyMismatchLimitDeg = 25.0;
 		constexpr double RmsMismatchLimitDeg = 15.0;
@@ -204,7 +205,7 @@ namespace PhysAnimValidators
 			Fail(EPhysAnimControllerStabilityFailureField::ControllerDampingRatio, EPhysAnimTerminalReason::ActivationUnstableGainOrDamping);
 			Result.bControllerGainDampingValid = false;
 		}
-		else if (Snapshot.MaxRootTiltDeg > MaxRootTiltDegLimit)
+		else if (Snapshot.MaxRootTiltDeg > MaxRootTiltLimitDeg)
 		{
 			Fail(EPhysAnimControllerStabilityFailureField::MaxRootTiltDeg, EPhysAnimTerminalReason::ActivationInstabilityThresholdBreach);
 		}
@@ -223,6 +224,50 @@ namespace PhysAnimValidators
 		else if (Snapshot.bStandingValidationTimedOut && Snapshot.HoldDurationSec < HoldDurationMinSec)
 		{
 			Fail(EPhysAnimControllerStabilityFailureField::StandingValidationTimedOut, EPhysAnimTerminalReason::ActivationStandingValidationTimeout);
+		}
+
+		return Result;
+	}
+
+	FPhysAnimSupportContractValidationResult ValidateSupport(const FPhysAnimSupportContractSnapshot& Snapshot)
+	{
+		FPhysAnimSupportContractValidationResult Result;
+		Result.bSupportStateL = Snapshot.bSupportStateL;
+		Result.bSupportStateR = Snapshot.bSupportStateR;
+		Result.SupportMode = Snapshot.SupportMode;
+		Result.SupportGapTimerMs = Snapshot.SupportGapTimerMs;
+		Result.ActiveSupportSideCount = Snapshot.ActiveSupportSideCount;
+		Result.SupportHullAreaCm2 = Snapshot.SupportHullAreaCm2;
+		Result.SupportPatchAreaLCm2 = Snapshot.SupportPatchAreaLCm2;
+		Result.SupportPatchAreaRCm2 = Snapshot.SupportPatchAreaRCm2;
+		Result.SupportHullPointsCm = Snapshot.SupportHullPointsCm;
+		Result.ComProxyPosCm = Snapshot.ComProxyPosCm;
+		Result.MaxPenetrationCm = Snapshot.MaxPenetrationCm;
+		Result.SupportChurnCount = Snapshot.SupportChurnCount;
+		Result.SupportChurnHz = Snapshot.SupportChurnHz;
+		Result.ProxyInsideHull = Snapshot.ProxyInsideHull;
+		Result.ProxyOutsideHullDurationMs = Snapshot.ProxyOutsideHullDurationMs;
+
+		const bool bAreaBreach =
+			Snapshot.ActiveSupportSideCount > 0 &&
+			Snapshot.SupportHullAreaCm2 < Snapshot.SupportAreaMinCm2;
+
+		const bool bAirborneGapBreach =
+			Snapshot.SupportMode == EPhysAnimSupportMode::Airborne &&
+			Snapshot.SupportGapTimerMs > Snapshot.SupportGapMaxMs;
+
+		if (bAreaBreach || bAirborneGapBreach)
+		{
+			Result.bSupportContractPassed = false;
+			Result.TerminalReason = EPhysAnimTerminalReason::ActivationSupportFailure;
+			return Result;
+		}
+
+		if (Snapshot.ProxyTerminalReason == EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion)
+		{
+			Result.bSupportContractPassed = false;
+			Result.TerminalReason = EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion;
+			return Result;
 		}
 
 		return Result;
@@ -252,6 +297,22 @@ namespace PhysAnimValidators
 		Snapshot.bContinuityBookkeepingMismatch = Input.Continuity.bContinuityBookkeepingMismatch;
 		Snapshot.PelvisSleepDurationMs = Input.Continuity.PelvisSleepDurationMs;
 		Snapshot.bPhysicalContinuityValidatorPassed = Input.Continuity.bPhysicalContinuityValidatorPassed;
+
+		Snapshot.bSupportStateL = Input.Support.bSupportStateL;
+		Snapshot.bSupportStateR = Input.Support.bSupportStateR;
+		Snapshot.SupportMode = Input.Support.SupportMode;
+		Snapshot.SupportGapTimerMs = Input.Support.SupportGapTimerMs;
+		Snapshot.ProxyInsideHull = Input.Support.ProxyInsideHull;
+		Snapshot.ProxyOutsideHullDurationMs = Input.Support.ProxyOutsideHullDurationMs;
+		Snapshot.ActiveSupportSideCount = Input.Support.ActiveSupportSideCount;
+		Snapshot.SupportHullAreaCm2 = Input.Support.SupportHullAreaCm2;
+		Snapshot.SupportPatchAreaLCm2 = Input.Support.SupportPatchAreaLCm2;
+		Snapshot.SupportPatchAreaRCm2 = Input.Support.SupportPatchAreaRCm2;
+		Snapshot.SupportHullPointsCm = Input.Support.SupportHullPointsCm;
+		Snapshot.ComProxyPosCm = Input.Support.ComProxyPosCm;
+		Snapshot.MaxPenetrationCm = Input.Support.MaxPenetrationCm;
+		Snapshot.SupportChurnCount = Input.Support.SupportChurnCount;
+		Snapshot.SupportChurnHz = Input.Support.SupportChurnHz;
 
 		Snapshot.AuthorityConflictCount = Input.Authority.AuthorityConflictCount;
 		Snapshot.ContaminationClass = Input.Authority.ContaminationClass;
@@ -288,6 +349,7 @@ namespace PhysAnimValidators
 			AddFallbackFailureCandidate(Candidates, Input.Plant.TerminalReason, FallbackTimestamp);
 			AddFallbackFailureCandidate(Candidates, Input.Capsule.TerminalReason, FallbackTimestamp);
 			AddFallbackFailureCandidate(Candidates, Input.Continuity.TerminalReason, FallbackTimestamp);
+			AddFallbackFailureCandidate(Candidates, Input.Support.TerminalReason, FallbackTimestamp);
 			AddFallbackFailureCandidate(Candidates, Input.ControllerStability.TerminalReason, FallbackTimestamp);
 			AddFallbackFailureCandidate(Candidates, Input.MovementReclaim.TerminalReason, FallbackTimestamp);
 			AddFallbackFailureCandidate(Candidates, Input.ShellHelper.TerminalReason, FallbackTimestamp);
