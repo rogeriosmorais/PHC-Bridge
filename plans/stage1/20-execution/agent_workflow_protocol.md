@@ -30,6 +30,28 @@ A task packet controls:
 - stop conditions
 - definition of done
 
+## Workflow Invariants
+
+The execution log is a machine-checked contract.
+
+Before any implementation task starts, run:
+
+`.\\scripts\\check_workflow_state.ps1 -Mode execute`
+
+After any workflow-state update, run:
+
+`.\\scripts\\check_workflow_state.ps1 -Mode status -Strict`
+
+Required invariants:
+
+- if `Current Task ID = none`, `Current Task Packet = none`, status is idle, and `Next Action` must not say `go`
+- if `Current Task ID != none`, the packet exists, status is `runnable`, and `Next Action` references that exact task
+- a task already listed in `Completed Task Commits` cannot be the current task
+- checkpoint packet references must point to existing files
+- blocked/deferred text must not contradict completed checkpoint state
+
+If invariant validation fails, stop. Do not infer intent from stale prose.
+
 ## Default Command
 
 `go` means:
@@ -38,24 +60,28 @@ A task packet controls:
 
 Do not interpret `go` as permission for broad work, workflow rewrites, architecture review, or multi-system debugging.
 
+`go` is valid only after `.\\scripts\\check_workflow_state.ps1 -Mode execute` passes.
+
 ## Implementation Loop
 
 For each task:
 
 1. Read `AGENTS.md`.
-2. Read `execution-log.md`.
-3. Read the current task packet.
-4. Record base SHA:
+2. Run `.\\scripts\\check_workflow_state.ps1 -Mode execute`.
+3. Read `execution-log.md`.
+4. Read the current task packet.
+5. Record base SHA:
    - `git rev-parse HEAD`
-5. Edit only allowed files.
-6. Run required build/test commands from the task packet.
-7. Run scope check:
-   - `.\scripts\check_task_scope.ps1 -TaskPacket <task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence`
-8. If build/tests/scope pass:
+6. Edit only allowed files.
+7. Run required build/test commands from the task packet.
+8. Run scope check:
+   - `.\\scripts\\check_task_scope.ps1 -TaskPacket <task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence`
+9. If build/tests/scope pass:
    - create one task commit
-   - update `execution-log.md`
+   - advance `execution-log.md` using `.\\scripts\\complete_task.ps1` whenever possible
+   - run `.\\scripts\\check_workflow_state.ps1 -Mode status -Strict`
    - stop or continue only if the user/checkpoint explicitly asked for a batch
-9. If build/tests/scope fail:
+10. If build/tests/scope fail:
    - do not widen scope
    - preserve useful work only if allowed
    - report the failure
@@ -75,6 +101,23 @@ A successful task commit must not contain:
 - unrelated cleanup
 - workflow/process changes
 - broad refactors
+
+## Completion Transition Rule
+
+Do not manually duplicate task state.
+
+Use `scripts/complete_task.ps1` to move from one task to the next whenever possible. The completion transition must update:
+
+- `Current Task ID`
+- `Current Task Packet`
+- `Status`
+- `Completed Task Commits`
+- `Latest Technical Head`
+- last build/test/scope lines
+- `Next Action`
+- `Next Runnable Tasks`
+
+If manual editing is unavoidable, strict workflow validation is mandatory before handoff.
 
 ## Checkpoints
 
@@ -96,11 +139,13 @@ At checkpoint end, run the checkpoint's final build/test command if one exists a
 
 The only mandatory gates are:
 
-1. required build/test command passes
-2. scope check passes
-3. forbidden files untouched
-4. commit created
-5. execution log updated
+1. workflow execute check passes
+2. required build/test command passes
+3. scope check passes
+4. forbidden files untouched
+5. commit created
+6. execution log updated
+7. strict workflow status check passes
 
 Durable build/test/scope logs are useful, but missing review reports are not product-code blockers.
 
@@ -140,6 +185,7 @@ Workflow files include:
 - `plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
 - `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
 - `scripts/check_workflow_state.ps1`
+- `scripts/complete_task.ps1`
 - `scripts/make_review_packet.ps1`
 - `scripts/check_task_scope.ps1`
 
@@ -184,6 +230,7 @@ Do not continue stacking fixes in the same direction without this memo.
 ## Stop Conditions
 
 Stop immediately if:
+- workflow invariant validation fails
 - a required file is not allowed by the task packet
 - the task needs runtime data forbidden by the packet
 - a mapped test cannot be written from the matrix

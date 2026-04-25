@@ -38,8 +38,8 @@ Interpretation:
 7. Do not leave permanent fail-by-design or skip-by-design tests in the main suite.
 8. Treat Manny/Quinn as the default runtime skeleton unless explicitly changed.
 9. Keep commits small and atomic.
-10. Build with `.\scripts\build.ps1`.
-11. If smoke tests were run, read logs with `python .\scripts\read_logs.py`.
+10. Build with `.\\scripts\\build.ps1`.
+11. If smoke tests were run, read logs with `python .\\scripts\\read_logs.py`.
 
 ## Context Budget Rule
 
@@ -57,6 +57,20 @@ Do not reread or summarize the full Stage 1 document set unless the current task
 If broader context is required, stop and report:
 
 `Context expansion needed: <specific file or reason>`
+
+## Workflow Invariant Rule
+
+Before executing any task, run:
+
+`.\\scripts\\check_workflow_state.ps1 -Mode execute`
+
+If this command fails, stop. Do not infer the next task from prose. Do not execute a completed task. Do not repair implementation files while the workflow state is inconsistent.
+
+After any workflow-state update, run:
+
+`.\\scripts\\check_workflow_state.ps1 -Mode status -Strict`
+
+The execution log must never say `go` when `Current Task ID = none`.
 
 ## Task Packet Rule
 
@@ -96,20 +110,37 @@ The current task packet is read from `plans/stage1/20-execution/execution-log.md
 Implementation loop:
 
 1. Read `AGENTS.md`.
-2. Read `execution-log.md`.
-3. Read the current task packet.
-4. Record `git rev-parse HEAD`.
-5. Edit only allowed files.
-6. Run the task's required build/test commands.
-7. Run scope check:
-   - `.\scripts\check_task_scope.ps1 -TaskPacket <task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence`
-8. Commit only if build/tests/scope pass.
-9. Update `execution-log.md` to the next task.
-10. Stop.
+2. Run `.\\scripts\\check_workflow_state.ps1 -Mode execute`.
+3. Read `execution-log.md`.
+4. Read the current task packet.
+5. Record `git rev-parse HEAD`.
+6. Edit only allowed files.
+7. Run the task's required build/test commands.
+8. Run scope check:
+   - `.\\scripts\\check_task_scope.ps1 -TaskPacket <task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence`
+9. Commit only if build/tests/scope pass.
+10. Advance `execution-log.md` using `.\\scripts\\complete_task.ps1` whenever possible.
+11. Run `.\\scripts\\check_workflow_state.ps1 -Mode status -Strict`.
+12. Stop.
 
 Do not require the user to manually persist output.
 Do not create review packets by default.
 Do not block task progress on reviewer reports unless the user explicitly asks for a review.
+
+## Execution Log Update Rule
+
+Do not manually duplicate task truth in prose.
+
+After a successful task, update execution state with `scripts/complete_task.ps1` whenever possible. If manual editing is unavoidable, the final step must be:
+
+`.\\scripts\\check_workflow_state.ps1 -Mode status -Strict`
+
+The execution log must satisfy:
+
+- if `Current Task ID = none`, then `Current Task Packet = none`, status is idle, and `Next Action` must not say `go`
+- if `Current Task ID != none`, then the packet exists, status is `runnable`, and `Next Action` references that exact task
+- a task listed in `Completed Task Commits` must never be the current task
+- checkpoint packet references must point to existing files
 
 ## Checkpoint Rule
 
@@ -135,13 +166,15 @@ A task is complete only when:
 - scope check passed
 - forbidden files untouched
 - implementation committed
-- `execution-log.md` points to the next task or blocked state
+- `execution-log.md` points to the next task or blocked/idle state
+- strict workflow validation passed
 
 The useful proof is mechanical:
 - build output
 - test output
 - scope check output
 - commit SHA
+- strict workflow-state output
 
 Do not replace mechanical proof with long written reviews.
 
@@ -263,6 +296,7 @@ Commit:
 Build:
 Tests:
 Scope:
+Workflow:
 Ledger impact:
 Execution log:
 Files changed:
