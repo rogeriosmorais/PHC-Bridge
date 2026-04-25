@@ -10,16 +10,16 @@ It should stay small.
 
 | Field | Value |
 |---|---|
-| Current Task ID | `S1-IMPL-BALANCE-FIRST-07` |
-| Current Task Packet | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-07.md` |
+| Current Task ID | `S1-IMPL-BALANCE-FIRST-08` |
+| Current Task Packet | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-08.md` |
 | Current Checkpoint | `S1-SUPPORT-TRUTH-B` |
 | Status | `runnable` |
-| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560`; `S1-IMPL-BALANCE-FIRST-02 = 23a53f33d59139362282f3437ecf36ea1b2a3b51`; `S1-IMPL-BALANCE-FIRST-03 = 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1`; `S1-IMPL-BALANCE-FIRST-04 = b70a17a2fc76b8c7316a9c291faa23977833c2f1`; `S1-IMPL-BALANCE-FIRST-05 = a7e22adedb8e3f6b7c4e1a05f04e51d789902e3c`; `S1-IMPL-BALANCE-FIRST-06 = 2dbbf6cc4dfc9686fdc75426243a3369f06cfc96` |
-| Latest Technical Head | `2dbbf6cc4dfc9686fdc75426243a3369f06cfc96` |
+| Completed Task Commits | `S1-IMPL-BALANCE-FIRST-01 = d512b19b5e0b91b42dddaf994ab3d0f8edb60560`; `S1-IMPL-BALANCE-FIRST-02 = 23a53f33d59139362282f3437ecf36ea1b2a3b51`; `S1-IMPL-BALANCE-FIRST-03 = 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1`; `S1-IMPL-BALANCE-FIRST-04 = b70a17a2fc76b8c7316a9c291faa23977833c2f1`; `S1-IMPL-BALANCE-FIRST-05 = a7e22adedb8e3f6b7c4e1a05f04e51d789902e3c`; `S1-IMPL-BALANCE-FIRST-06 = 2dbbf6cc4dfc9686fdc75426243a3369f06cfc96`; `S1-IMPL-BALANCE-FIRST-07 = 1c256d836fc04fcc936fa8d20067964837d6305d` |
+| Latest Technical Head | `1c256d836fc04fcc936fa8d20067964837d6305d` |
 | Last Build | `passed: .\scripts\build.ps1` |
-| Last Test | `passed: .\scripts\build.ps1 -Test PhysAnim.SupportTruth.ClassifySupportMode` |
-| Last Scope | `passed: check_task_scope.ps1 for S1-IMPL-BALANCE-FIRST-06` |
-| Workflow Note | `S1-IMPL-BALANCE-FIRST-06 complete. Continue with task 07.` |
+| Last Test | `passed: .\scripts\build.ps1 -Test PhysAnim.SupportTruth.AdjudicateProxy` |
+| Last Scope | `passed: check_task_scope.ps1 for S1-IMPL-BALANCE-FIRST-07` |
+| Workflow Note | `S1-IMPL-BALANCE-FIRST-07 complete. Continue with task 08.` |
 | Working Tree Requirement | `clean before starting a task` |
 
 ## Next Action
@@ -40,7 +40,7 @@ execute S1-IMPL-BALANCE-FIRST-06 only
 
 | Priority | Task ID | Packet | Notes |
 |---|---|---|---|
-| 1 | `S1-IMPL-BALANCE-FIRST-07` | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-07.md` | Implement AdjudicateProxy. |
+| 1 | `S1-IMPL-BALANCE-FIRST-08` | `plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-08.md` | Implement CalculateChurnHz. |
 
 ## Blocked / Deferred
 
