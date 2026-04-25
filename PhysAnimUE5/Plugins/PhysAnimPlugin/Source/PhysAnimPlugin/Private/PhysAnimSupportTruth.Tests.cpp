@@ -430,4 +430,56 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimSupportTruthAggregationNoRuntimeDependencyProofTest,
+		"PhysAnim.SupportTruth.Aggregation.NoRuntimeDependencyProof",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimSupportTruthAggregationNoRuntimeDependencyProofTest::RunTest(const FString& Parameters)
+	{
+		// 1. ExtractPatchHull
+		TArray<FPhysAnimSupportPoint2D> Points;
+		Points.Add(MakeSupportPoint(0.0, 0.0));
+		Points.Add(MakeSupportPoint(10.0, 0.0));
+		Points.Add(MakeSupportPoint(0.0, 10.0));
+		const FPhysAnimSupportPatch Patch = PhysAnimSupportTruth::ExtractPatchHull(Points);
+		TestTrue(TEXT("Aggregation: Patch extracted"), Patch.PatchAreaCm2 > 0);
+
+		// 2. BuildFrameHull
+		TArray<FPhysAnimSupportPatch> Patches;
+		Patches.Add(Patch);
+		const FPhysAnimFrameHull FrameHull = PhysAnimSupportTruth::BuildFrameHull(Patches);
+		TestEqual(TEXT("Aggregation: Frame hull built"), FrameHull.ActiveSupportSideCount, 1);
+
+		// 3. ClassifySupportMode
+		const EPhysAnimSupportMode Mode = PhysAnimSupportTruth::ClassifySupportMode(true, false, 0.0, 100.0);
+		TestEqual(TEXT("Aggregation: Mode classified"), static_cast<uint8>(Mode), static_cast<uint8>(EPhysAnimSupportMode::SingleFootSurvival));
+
+		// 4. AdjudicateProxy
+		FPhysAnimProxyAdjudicationInput AdjInput;
+		AdjInput.ActiveSupportSideCount = FrameHull.ActiveSupportSideCount;
+		AdjInput.HullPointsCm = FrameHull.HullPointsCm;
+		AdjInput.ProxyPositionCm = FVector2D(5.0, 5.0);
+		AdjInput.DeltaMs = 10.0;
+		const FPhysAnimProxyAdjudicationResult AdjResult = PhysAnimSupportTruth::AdjudicateProxy(AdjInput);
+		TestTrue(TEXT("Aggregation: Proxy adjudicated"), AdjResult.ProxyInsideHull.IsSet() && AdjResult.ProxyInsideHull.GetValue());
+
+		// 5. CalculateChurnHz
+		FPhysAnimChurnCalculationInput ChurnInput;
+		ChurnInput.CurrentTimestampSec = 1.0;
+		ChurnInput.WindowSeconds = 1.0;
+		FPhysAnimChurnEvent Event; Event.TimestampSec = 0.5; ChurnInput.HistoricalEvents.Add(Event);
+		const FPhysAnimChurnResult ChurnResult = PhysAnimSupportTruth::CalculateChurnHz(ChurnInput);
+		TestEqual(TEXT("Aggregation: Churn calculated"), ChurnResult.SupportChurnCount, 1);
+
+		// 6. ReduceSupportModeForReportWindow
+		FPhysAnimSupportReportWindowInput RepInput;
+		RepInput.Modes = {EPhysAnimSupportMode::TwoFootStable};
+		RepInput.DurationsMs = {100.0};
+		const FPhysAnimSupportReportWindowResult RepResult = PhysAnimSupportTruth::ReduceSupportModeForReportWindow(RepInput);
+		TestEqual(TEXT("Aggregation: Report window reduced"), static_cast<uint8>(RepResult.SupportMode), static_cast<uint8>(EPhysAnimSupportMode::TwoFootStable));
+
+		return true;
+	}
 }
