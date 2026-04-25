@@ -86,4 +86,55 @@ namespace PhysAnimValidators
 
 		return Result;
 	}
+
+	FPhysAnimAuthorityValidationResult ValidateAuthority(const FPhysAnimAuthoritySnapshot& Snapshot)
+	{
+		FPhysAnimAuthorityValidationResult Result;
+		Result.AuthorityConflictCount = Snapshot.AuthorityConflictCount;
+		Result.ContaminationClass = Snapshot.ContaminationClass;
+		Result.ContaminationSourceBody = Snapshot.ContaminationSourceBody;
+		Result.ContaminationSourceSubsystem = Snapshot.ContaminationSourceSubsystem;
+		Result.bMeshWideAssistDetected = Snapshot.bMeshWideAssistDetected;
+
+		const bool bAuthorityConflict =
+			Snapshot.AuthorityConflictCount > 0 ||
+			Snapshot.ContaminationClass != EPhysAnimContaminationClass::None ||
+			Snapshot.bMeshWideAssistDetected;
+
+		if (bAuthorityConflict)
+		{
+			Result.bAuthorityPassed = false;
+			Result.TerminalReason = EPhysAnimTerminalReason::ActivationAuthorityConflict;
+		}
+
+		return Result;
+	}
+
+	FPhysAnimMovementReclaimValidationResult ValidateMovementReclaim(const FPhysAnimMovementReclaimSnapshot& Snapshot)
+	{
+		FPhysAnimMovementReclaimValidationResult Result;
+		Result.MovementReclaimCount = Snapshot.MovementReclaimCount;
+
+		if (Snapshot.MovementReclaimCount > 0)
+		{
+			Result.bMovementReclaimPassed = false;
+			Result.TerminalReason = EPhysAnimTerminalReason::ActivationMovementReclaim;
+		}
+
+		return Result;
+	}
+
+	FPhysAnimShellHelperValidationResult ValidateShellHelper(const FPhysAnimShellHelperSnapshot& Snapshot)
+	{
+		FPhysAnimShellHelperValidationResult Result;
+		Result.ShellHelperUsedCount = Snapshot.ShellHelperUsedCount;
+
+		if (Snapshot.ShellHelperUsedCount > 0)
+		{
+			Result.bShellHelperPassed = false;
+			Result.TerminalReason = EPhysAnimTerminalReason::ActivationShellHelperViolation;
+		}
+
+		return Result;
+	}
 }

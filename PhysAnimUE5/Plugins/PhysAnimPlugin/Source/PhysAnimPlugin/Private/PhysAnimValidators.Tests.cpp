@@ -312,4 +312,102 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimValidatorsAuthorityTest,
+		"PhysAnim.Validators.Authority.ValidateAuthority",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimValidatorsAuthorityTest::RunTest(const FString& Parameters)
+	{
+		{
+			const FPhysAnimAuthoritySnapshot Snapshot;
+			const FPhysAnimAuthorityValidationResult Result = PhysAnimValidators::ValidateAuthority(Snapshot);
+
+			TestTrue(TEXT("Default authority snapshot passes"), Result.bAuthorityPassed);
+			TestEqual(TEXT("Default contamination_class is None"), static_cast<uint8>(Result.ContaminationClass), static_cast<uint8>(EPhysAnimContaminationClass::None));
+			TestEqual(TEXT("Default terminal_reason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+		}
+
+		{
+			// VALID-04A: Mesh-wide assist.
+			FPhysAnimAuthoritySnapshot Snapshot;
+			Snapshot.AuthorityConflictCount = 1;
+			Snapshot.ContaminationClass = EPhysAnimContaminationClass::MeshWideAssist;
+			Snapshot.ContaminationSourceSubsystem = TEXT("ExternalBlend");
+			Snapshot.bMeshWideAssistDetected = true;
+
+			const FPhysAnimAuthorityValidationResult Result = PhysAnimValidators::ValidateAuthority(Snapshot);
+
+			TestEqual(TEXT("VALID-04A contamination_class is mesh_wide_assist"), static_cast<uint8>(Result.ContaminationClass), static_cast<uint8>(EPhysAnimContaminationClass::MeshWideAssist));
+			TestEqual(TEXT("VALID-04A terminal_reason is activation_authority_conflict"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationAuthorityConflict));
+		}
+
+		{
+			// VALID-04B: Non-critical body assist.
+			FPhysAnimAuthoritySnapshot Snapshot;
+			Snapshot.AuthorityConflictCount = 1;
+			Snapshot.ContaminationClass = EPhysAnimContaminationClass::NonCriticalBodyAssist;
+			Snapshot.ContaminationSourceBody = TEXT("calf_l");
+			Snapshot.ContaminationSourceSubsystem = TEXT("ExternalAssist");
+
+			const FPhysAnimAuthorityValidationResult Result = PhysAnimValidators::ValidateAuthority(Snapshot);
+
+			TestEqual(TEXT("VALID-04B contamination_class is non_critical_body_assist"), static_cast<uint8>(Result.ContaminationClass), static_cast<uint8>(EPhysAnimContaminationClass::NonCriticalBodyAssist));
+			TestEqual(TEXT("VALID-04B terminal_reason is activation_authority_conflict"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationAuthorityConflict));
+		}
+
+		{
+			// VALID-04C: Calf or excluded world brace.
+			FPhysAnimAuthoritySnapshot Snapshot;
+			Snapshot.AuthorityConflictCount = 1;
+			Snapshot.ContaminationClass = EPhysAnimContaminationClass::ExcludedBodyWorldBrace;
+			Snapshot.ContaminationSourceBody = TEXT("calf_r");
+			Snapshot.ContaminationSourceSubsystem = TEXT("WorldContact");
+
+			const FPhysAnimAuthorityValidationResult Result = PhysAnimValidators::ValidateAuthority(Snapshot);
+
+			TestEqual(TEXT("VALID-04C contamination_class is excluded_body_world_brace"), static_cast<uint8>(Result.ContaminationClass), static_cast<uint8>(EPhysAnimContaminationClass::ExcludedBodyWorldBrace));
+			TestEqual(TEXT("VALID-04C terminal_reason is activation_authority_conflict"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationAuthorityConflict));
+		}
+
+		{
+			// VALID-04D: Global blend/kinematic assist.
+			FPhysAnimAuthoritySnapshot Snapshot;
+			Snapshot.AuthorityConflictCount = 1;
+			Snapshot.ContaminationClass = EPhysAnimContaminationClass::GlobalBlendOrKinematicAssist;
+			Snapshot.ContaminationSourceSubsystem = TEXT("KinematicAssist");
+
+			const FPhysAnimAuthorityValidationResult Result = PhysAnimValidators::ValidateAuthority(Snapshot);
+
+			TestEqual(TEXT("VALID-04D contamination_class is global_blend_or_kinematic_assist"), static_cast<uint8>(Result.ContaminationClass), static_cast<uint8>(EPhysAnimContaminationClass::GlobalBlendOrKinematicAssist));
+			TestEqual(TEXT("VALID-04D terminal_reason is activation_authority_conflict"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationAuthorityConflict));
+		}
+
+		{
+			// VALID-06A: CMC correction path runs.
+			FPhysAnimMovementReclaimSnapshot Snapshot;
+			Snapshot.MovementReclaimCount = 1;
+
+			const FPhysAnimMovementReclaimValidationResult Result = PhysAnimValidators::ValidateMovementReclaim(Snapshot);
+
+			TestTrue(TEXT("VALID-06A movement_reclaim_count is greater than zero"), Result.MovementReclaimCount > 0);
+			TestFalse(TEXT("VALID-06A movement reclaim validation fails"), Result.bMovementReclaimPassed);
+			TestEqual(TEXT("VALID-06A terminal_reason is activation_movement_reclaim"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationMovementReclaim));
+		}
+
+		{
+			// VALID-06B: Shell helper writes during activation.
+			FPhysAnimShellHelperSnapshot Snapshot;
+			Snapshot.ShellHelperUsedCount = 1;
+
+			const FPhysAnimShellHelperValidationResult Result = PhysAnimValidators::ValidateShellHelper(Snapshot);
+
+			TestTrue(TEXT("VALID-06B shell_helper_used_count is greater than zero"), Result.ShellHelperUsedCount > 0);
+			TestFalse(TEXT("VALID-06B shell helper validation fails"), Result.bShellHelperPassed);
+			TestEqual(TEXT("VALID-06B terminal_reason is activation_shell_helper_violation"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationShellHelperViolation));
+		}
+
+		return true;
+	}
 }

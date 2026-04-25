@@ -91,9 +91,65 @@ struct FPhysAnimPlantContractValidationResult
 	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
 };
 
+enum class EPhysAnimContaminationClass : uint8
+{
+	None,
+	MeshWideAssist,
+	NonCriticalBodyAssist,
+	ExcludedBodyWorldBrace,
+	GlobalBlendOrKinematicAssist
+};
+
+struct FPhysAnimAuthoritySnapshot
+{
+	int32 AuthorityConflictCount = 0;
+	EPhysAnimContaminationClass ContaminationClass = EPhysAnimContaminationClass::None;
+	FName ContaminationSourceBody = NAME_None;
+	FName ContaminationSourceSubsystem = NAME_None;
+	bool bMeshWideAssistDetected = false;
+};
+
+struct FPhysAnimAuthorityValidationResult
+{
+	int32 AuthorityConflictCount = 0;
+	EPhysAnimContaminationClass ContaminationClass = EPhysAnimContaminationClass::None;
+	FName ContaminationSourceBody = NAME_None;
+	FName ContaminationSourceSubsystem = NAME_None;
+	bool bMeshWideAssistDetected = false;
+	bool bAuthorityPassed = true;
+	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
+};
+
+struct FPhysAnimMovementReclaimSnapshot
+{
+	int32 MovementReclaimCount = 0;
+};
+
+struct FPhysAnimMovementReclaimValidationResult
+{
+	int32 MovementReclaimCount = 0;
+	bool bMovementReclaimPassed = true;
+	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
+};
+
+struct FPhysAnimShellHelperSnapshot
+{
+	int32 ShellHelperUsedCount = 0;
+};
+
+struct FPhysAnimShellHelperValidationResult
+{
+	int32 ShellHelperUsedCount = 0;
+	bool bShellHelperPassed = true;
+	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
+};
+
 namespace PhysAnimValidators
 {
 	FPhysAnimContinuityValidationResult ValidateContinuity(const FPhysAnimContinuitySnapshot& Snapshot);
 	FPhysAnimCapsuleContractValidationResult ValidateCapsule(const FPhysAnimCapsuleContractSnapshot& Snapshot);
 	FPhysAnimPlantContractValidationResult ValidatePlant(const FPhysAnimPlantContractSnapshot& Snapshot);
+	FPhysAnimAuthorityValidationResult ValidateAuthority(const FPhysAnimAuthoritySnapshot& Snapshot);
+	FPhysAnimMovementReclaimValidationResult ValidateMovementReclaim(const FPhysAnimMovementReclaimSnapshot& Snapshot);
+	FPhysAnimShellHelperValidationResult ValidateShellHelper(const FPhysAnimShellHelperSnapshot& Snapshot);
 }
