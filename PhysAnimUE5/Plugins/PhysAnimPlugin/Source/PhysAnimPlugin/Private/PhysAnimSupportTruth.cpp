@@ -86,6 +86,48 @@ namespace
 
 		return Hull;
 	}
+
+	bool IsPointInPolygon(const FVector2D& Point, const TArray<FVector2D>& Polygon)
+	{
+		if (Polygon.Num() < 3)
+		{
+			return false;
+		}
+
+		bool bInside = false;
+		for (int32 i = 0, j = Polygon.Num() - 1; i < Polygon.Num(); j = i++)
+		{
+			if (((Polygon[i].Y > Point.Y) != (Polygon[j].Y > Point.Y)) &&
+				(Point.X < (Polygon[j].X - Polygon[i].X) * (Point.Y - Polygon[i].Y) / (Polygon[j].Y - Polygon[i].Y) + Polygon[i].X))
+			{
+				bInside = !bInside;
+			}
+		}
+
+		if (bInside)
+		{
+			return true;
+		}
+
+		for (int32 i = 0, j = Polygon.Num() - 1; i < Polygon.Num(); j = i++)
+		{
+			const FVector2D& A = Polygon[i];
+			const FVector2D& B = Polygon[j];
+
+			if (Point.X >= FMath::Min(A.X, B.X) - UE_KINDA_SMALL_NUMBER &&
+				Point.X <= FMath::Max(A.X, B.X) + UE_KINDA_SMALL_NUMBER &&
+				Point.Y >= FMath::Min(A.Y, B.Y) - UE_KINDA_SMALL_NUMBER &&
+				Point.Y <= FMath::Max(A.Y, B.Y) + UE_KINDA_SMALL_NUMBER)
+			{
+				if (FMath::Abs(Cross(A, B, Point)) < UE_KINDA_SMALL_NUMBER)
+				{
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
 }
 
 namespace PhysAnimSupportTruth
@@ -181,5 +223,45 @@ namespace PhysAnimSupportTruth
 		}
 
 		return EPhysAnimSupportMode::Airborne;
+	}
+
+	FPhysAnimProxyAdjudicationResult AdjudicateProxy(const FPhysAnimProxyAdjudicationInput& Input)
+	{
+		FPhysAnimProxyAdjudicationResult Result;
+
+		if (Input.ActiveSupportSideCount == 0)
+		{
+			return Result;
+		}
+
+		const bool bInside = (Input.HullPointsCm.Num() >= 3) ? IsPointInPolygon(Input.ProxyPositionCm, Input.HullPointsCm) : false;
+
+		Result.ProxyInsideHull = bInside;
+
+		if (bInside)
+		{
+			Result.ProxyOutsideHullDurationMs = 0.0;
+			Result.TerminalReason = EPhysAnimTerminalReason::None;
+		}
+		else
+		{
+			double Duration = Input.DeltaMs;
+			if (Input.PreviousProxyOutsideHullDurationMs.IsSet())
+			{
+				Duration += Input.PreviousProxyOutsideHullDurationMs.GetValue();
+			}
+			Result.ProxyOutsideHullDurationMs = Duration;
+
+			if (Duration > Input.ProxyDriftLimitMs)
+			{
+				Result.TerminalReason = EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion;
+			}
+			else
+			{
+				Result.TerminalReason = EPhysAnimTerminalReason::None;
+			}
+		}
+
+		return Result;
 	}
 }

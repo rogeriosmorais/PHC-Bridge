@@ -234,4 +234,116 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimSupportTruthAdjudicateProxyTest,
+		"PhysAnim.SupportTruth.AdjudicateProxy",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimSupportTruthAdjudicateProxyTest::RunTest(const FString& Parameters)
+	{
+		{
+			// LOGIC-09: No active support sides
+			FPhysAnimProxyAdjudicationInput Input;
+			Input.ActiveSupportSideCount = 0;
+			Input.ProxyPositionCm = FVector2D(0.0, 0.0);
+			Input.DeltaMs = 10.0;
+
+			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
+
+			TestFalse(TEXT("LOGIC-09 ProxyInsideHull is unset"), Result.ProxyInsideHull.IsSet());
+			TestFalse(TEXT("LOGIC-09 ProxyOutsideHullDurationMs is unset"), Result.ProxyOutsideHullDurationMs.IsSet());
+			TestEqual(TEXT("LOGIC-09 TerminalReason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+		}
+
+		{
+			// LOGIC-10: Active support but insufficient points for hull (e.g. collinear or single point)
+			FPhysAnimProxyAdjudicationInput Input;
+			Input.ActiveSupportSideCount = 1;
+			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0)}; // Collinear
+			Input.ProxyPositionCm = FVector2D(5.0, 5.0);
+			Input.DeltaMs = 10.0;
+			Input.ProxyDriftLimitMs = 100.0;
+
+			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
+
+			TestTrue(TEXT("LOGIC-10 ProxyInsideHull is set to false"), Result.ProxyInsideHull.IsSet() && !Result.ProxyInsideHull.GetValue());
+			TestEqual(TEXT("LOGIC-10 ProxyOutsideHullDurationMs is DeltaMs"), Result.ProxyOutsideHullDurationMs.GetValue(), 10.0);
+			TestEqual(TEXT("LOGIC-10 TerminalReason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+		}
+
+		{
+			// LOGIC-11: Proxy inside hull
+			FPhysAnimProxyAdjudicationInput Input;
+			Input.ActiveSupportSideCount = 1;
+			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
+			Input.ProxyPositionCm = FVector2D(5.0, 5.0);
+			Input.DeltaMs = 10.0;
+			Input.PreviousProxyOutsideHullDurationMs = 50.0;
+
+			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
+
+			TestTrue(TEXT("LOGIC-11 ProxyInsideHull is true"), Result.ProxyInsideHull.IsSet() && Result.ProxyInsideHull.GetValue());
+			TestEqual(TEXT("LOGIC-11 ProxyOutsideHullDurationMs is reset to 0"), Result.ProxyOutsideHullDurationMs.GetValue(), 0.0);
+			TestEqual(TEXT("LOGIC-11 TerminalReason is None"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+		}
+
+		{
+			// LOGIC-12: Proxy outside hull, no previous duration
+			FPhysAnimProxyAdjudicationInput Input;
+			Input.ActiveSupportSideCount = 1;
+			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
+			Input.ProxyPositionCm = FVector2D(15.0, 15.0);
+			Input.DeltaMs = 10.0;
+
+			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
+
+			TestTrue(TEXT("LOGIC-12 ProxyInsideHull is false"), Result.ProxyInsideHull.IsSet() && !Result.ProxyInsideHull.GetValue());
+			TestEqual(TEXT("LOGIC-12 ProxyOutsideHullDurationMs is DeltaMs"), Result.ProxyOutsideHullDurationMs.GetValue(), 10.0);
+		}
+
+		{
+			// LOGIC-12A: Proxy outside hull, increment duration
+			FPhysAnimProxyAdjudicationInput Input;
+			Input.ActiveSupportSideCount = 1;
+			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
+			Input.ProxyPositionCm = FVector2D(15.0, 15.0);
+			Input.PreviousProxyOutsideHullDurationMs = 50.0;
+			Input.DeltaMs = 10.0;
+
+			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
+
+			TestEqual(TEXT("LOGIC-12A ProxyOutsideHullDurationMs is incremented"), Result.ProxyOutsideHullDurationMs.GetValue(), 60.0);
+		}
+
+		{
+			// LOGIC-12B: Proxy outside hull, exceed limit
+			FPhysAnimProxyAdjudicationInput Input;
+			Input.ActiveSupportSideCount = 1;
+			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
+			Input.ProxyPositionCm = FVector2D(15.0, 15.0);
+			Input.PreviousProxyOutsideHullDurationMs = 95.0;
+			Input.DeltaMs = 10.0;
+			Input.ProxyDriftLimitMs = 100.0;
+
+			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
+
+			TestEqual(TEXT("LOGIC-12B ProxyOutsideHullDurationMs is 105"), Result.ProxyOutsideHullDurationMs.GetValue(), 105.0);
+			TestEqual(TEXT("LOGIC-12B TerminalReason is ActivationProxyOutsideSupportRegion"), static_cast<uint8>(Result.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion));
+		}
+
+		{
+			// LOGIC-12C: Proxy on edge is inside
+			FPhysAnimProxyAdjudicationInput Input;
+			Input.ActiveSupportSideCount = 1;
+			Input.HullPointsCm = {FVector2D(0.0, 0.0), FVector2D(10.0, 0.0), FVector2D(10.0, 10.0), FVector2D(0.0, 10.0)};
+			Input.ProxyPositionCm = FVector2D(10.0, 5.0); // Right edge
+
+			const FPhysAnimProxyAdjudicationResult Result = PhysAnimSupportTruth::AdjudicateProxy(Input);
+
+			TestTrue(TEXT("LOGIC-12C Proxy on edge is inside"), Result.ProxyInsideHull.IsSet() && Result.ProxyInsideHull.GetValue());
+		}
+
+		return true;
+	}
 }
