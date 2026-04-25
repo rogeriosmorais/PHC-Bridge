@@ -209,4 +209,89 @@ namespace PhysAnimValidators
 
 		return Result;
 	}
+
+	FPhysAnimRunArtifactSnapshot BuildRunArtifactSnapshot(const FPhysAnimRunArtifactSnapshotInput& Input)
+	{
+		FPhysAnimRunArtifactSnapshot Snapshot = Input.Values;
+
+		Snapshot.bPhysicsAssetContractValid = Input.Plant.bPhysicsAssetContractValid;
+		Snapshot.bSkeletonAuditPassed = Input.Plant.bSkeletonAuditPassed;
+		Snapshot.PlantFailureClass = Input.Plant.PlantFailureClass;
+		Snapshot.PlantFailureField = Input.Plant.PlantFailureField;
+		Snapshot.MassDriftTotalPct = Input.Plant.MassDriftTotalPct;
+
+		Snapshot.CapsuleCollisionEnabled = Input.Capsule.CapsuleCollisionEnabled;
+		Snapshot.bCapsuleGenerateOverlapEvents = Input.Capsule.bCapsuleGenerateOverlapEvents;
+		Snapshot.CapsuleLockDeltaCm = Input.Capsule.CapsuleLockDeltaCm;
+		Snapshot.bMeshUsesAbsoluteLocation = Input.Capsule.bMeshUsesAbsoluteLocation;
+		Snapshot.bMeshUsesAbsoluteRotation = Input.Capsule.bMeshUsesAbsoluteRotation;
+		Snapshot.bMeshUsesAbsoluteScale = Input.Capsule.bMeshUsesAbsoluteScale;
+		Snapshot.bCmcIsActive = Input.Capsule.bCmcIsActive;
+		Snapshot.bCmcTickEnabled = Input.Capsule.bCmcTickEnabled;
+		Snapshot.bCmcUpdatedComponentIsNull = Input.Capsule.bCmcUpdatedComponentIsNull;
+
+		Snapshot.TopologyChangeCount = Input.Continuity.TopologyChangeCount;
+		Snapshot.bContinuityBookkeepingMismatch = Input.Continuity.bContinuityBookkeepingMismatch;
+		Snapshot.PelvisSleepDurationMs = Input.Continuity.PelvisSleepDurationMs;
+		Snapshot.bPhysicalContinuityValidatorPassed = Input.Continuity.bPhysicalContinuityValidatorPassed;
+
+		Snapshot.AuthorityConflictCount = Input.Authority.AuthorityConflictCount;
+		Snapshot.ContaminationClass = Input.Authority.ContaminationClass;
+		Snapshot.ContaminationSourceBody = Input.Authority.ContaminationSourceBody;
+		Snapshot.ContaminationSourceSubsystem = Input.Authority.ContaminationSourceSubsystem;
+		Snapshot.bMeshWideAssistDetected = Input.Authority.bMeshWideAssistDetected;
+		Snapshot.bNonCriticalBodyAssistDetected = Input.Authority.ContaminationClass == EPhysAnimContaminationClass::NonCriticalBodyAssist;
+		Snapshot.ExcludedBodyWorldContactSource = Input.Authority.ContaminationClass == EPhysAnimContaminationClass::ExcludedBodyWorldBrace
+			? Input.Authority.ContaminationSourceBody
+			: Snapshot.ExcludedBodyWorldContactSource;
+
+		Snapshot.MovementReclaimCount = Input.MovementReclaim.MovementReclaimCount;
+		Snapshot.ShellHelperUsedCount = Input.ShellHelper.ShellHelperUsedCount;
+
+		Snapshot.HoldDurationSec = Input.ControllerStability.HoldDurationSec;
+		Snapshot.MaxRootTiltDeg = Input.ControllerStability.MaxRootTiltDeg;
+		Snapshot.PeakAngularSpeedDegPerSec = Input.ControllerStability.PeakAngularSpeedDegPerSec;
+		Snapshot.RmsMismatchDeg = Input.ControllerStability.RmsMismatchDeg;
+		Snapshot.MaxBodyMismatchDeg = Input.ControllerStability.MaxBodyMismatchDeg;
+		Snapshot.TargetDiscontinuityDeg = Input.ControllerStability.TargetDiscontinuityDeg;
+		Snapshot.TargetDiscontinuityPhase = Input.ControllerStability.TargetDiscontinuityPhase;
+		Snapshot.MismatchDurationMs = Input.ControllerStability.MismatchDurationMs;
+		Snapshot.ControllerGainScale = Input.ControllerStability.ControllerGainScale;
+		Snapshot.ControllerDampingRatio = Input.ControllerStability.ControllerDampingRatio;
+		Snapshot.bControllerGainDampingValid = Input.ControllerStability.bControllerGainDampingValid;
+		Snapshot.ControllerStabilityFailureField = Input.ControllerStability.FailureField;
+		Snapshot.bStandingValidationTimedOut = Input.ControllerStability.bStandingValidationTimedOut;
+
+		const EPhysAnimTerminalReason CandidateReasons[] = {
+			Input.Plant.TerminalReason,
+			Input.Capsule.TerminalReason,
+			Input.Continuity.TerminalReason,
+			Input.ControllerStability.TerminalReason,
+			Input.MovementReclaim.TerminalReason,
+			Input.ShellHelper.TerminalReason,
+			Input.Authority.TerminalReason
+		};
+
+		Snapshot.TerminalReason = EPhysAnimTerminalReason::None;
+		Snapshot.CoTerminalReasons.Reset();
+
+		for (const EPhysAnimTerminalReason Reason : CandidateReasons)
+		{
+			if (Reason == EPhysAnimTerminalReason::None)
+			{
+				continue;
+			}
+
+			if (Snapshot.TerminalReason == EPhysAnimTerminalReason::None)
+			{
+				Snapshot.TerminalReason = Reason;
+			}
+			else
+			{
+				Snapshot.CoTerminalReasons.Add(Reason);
+			}
+		}
+
+		return Snapshot;
+	}
 }

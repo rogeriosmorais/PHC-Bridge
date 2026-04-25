@@ -533,4 +533,110 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimValidatorsArtifactSnapshotTest,
+		"PhysAnim.Validators.ArtifactSnapshot.BuildRunArtifactSnapshot",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimValidatorsArtifactSnapshotTest::RunTest(const FString& Parameters)
+	{
+		{
+			FPhysAnimRunArtifactSnapshotInput Input;
+			Input.Values.AttemptUuid = TEXT("attempt-001");
+			Input.Values.Timestamp = 12.5;
+			Input.Values.BaselineId = TEXT("baseline-001");
+			Input.Values.StandingReferenceId = TEXT("stand-001");
+			Input.Values.ProxyInsideHull = TOptional<bool>();
+			Input.Values.ProxyOutsideHullDurationMs = TOptional<double>();
+
+			const FPhysAnimRunArtifactSnapshot Snapshot = PhysAnimValidators::BuildRunArtifactSnapshot(Input);
+
+			TestEqual(TEXT("Artifact preserves attempt_uuid"), Snapshot.AttemptUuid, FString(TEXT("attempt-001")));
+			TestEqual(TEXT("Artifact preserves timestamp"), Snapshot.Timestamp, 12.5);
+			TestEqual(TEXT("Artifact preserves baseline_id"), Snapshot.BaselineId, FString(TEXT("baseline-001")));
+			TestEqual(TEXT("Artifact preserves standing_reference_id"), Snapshot.StandingReferenceId, FString(TEXT("stand-001")));
+			TestFalse(TEXT("Artifact preserves nullable proxy_inside_hull"), Snapshot.ProxyInsideHull.IsSet());
+			TestFalse(TEXT("Artifact preserves nullable proxy_outside_hull_duration_ms"), Snapshot.ProxyOutsideHullDurationMs.IsSet());
+			TestEqual(TEXT("Artifact default terminal_reason is None/null"), static_cast<uint8>(Snapshot.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+		}
+
+		{
+			FPhysAnimRunArtifactSnapshotInput Input;
+			Input.Plant.bPhysicsAssetContractValid = false;
+			Input.Plant.bSkeletonAuditPassed = false;
+			Input.Plant.PlantFailureClass = EPhysAnimPlantFailureClass::StaticStructural;
+			Input.Plant.PlantFailureField = EPhysAnimPlantFailureField::Skeleton;
+			Input.Plant.MassDriftTotalPct = 3.0;
+			Input.Plant.TerminalReason = EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation;
+
+			Input.Capsule.CapsuleCollisionEnabled = EPhysAnimCapsuleCollisionState::CollisionEnabled;
+			Input.Capsule.bCmcIsActive = true;
+			Input.Capsule.bCmcUpdatedComponentIsNull = false;
+			Input.Capsule.TerminalReason = EPhysAnimTerminalReason::ActivationCapsuleContractViolation;
+
+			Input.Continuity.TopologyChangeCount = 2;
+			Input.Continuity.bContinuityBookkeepingMismatch = true;
+			Input.Continuity.PelvisSleepDurationMs = 125.0;
+			Input.Continuity.bPhysicalContinuityValidatorPassed = false;
+			Input.Continuity.TerminalReason = EPhysAnimTerminalReason::ActivationTopologyChange;
+
+			Input.Authority.AuthorityConflictCount = 1;
+			Input.Authority.ContaminationClass = EPhysAnimContaminationClass::ExcludedBodyWorldBrace;
+			Input.Authority.ContaminationSourceBody = TEXT("calf_l");
+			Input.Authority.ContaminationSourceSubsystem = TEXT("WorldContact");
+			Input.Authority.TerminalReason = EPhysAnimTerminalReason::ActivationAuthorityConflict;
+
+			Input.MovementReclaim.MovementReclaimCount = 1;
+			Input.MovementReclaim.TerminalReason = EPhysAnimTerminalReason::ActivationMovementReclaim;
+			Input.ShellHelper.ShellHelperUsedCount = 1;
+			Input.ShellHelper.TerminalReason = EPhysAnimTerminalReason::ActivationShellHelperViolation;
+
+			Input.ControllerStability.HoldDurationSec = 2.5;
+			Input.ControllerStability.MaxRootTiltDeg = 21.0;
+			Input.ControllerStability.PeakAngularSpeedDegPerSec = 721.0;
+			Input.ControllerStability.RmsMismatchDeg = 16.0;
+			Input.ControllerStability.MaxBodyMismatchDeg = 26.0;
+			Input.ControllerStability.TargetDiscontinuityDeg = 16.0;
+			Input.ControllerStability.TargetDiscontinuityPhase = EPhysAnimTargetDiscontinuityPhase::BlendStart;
+			Input.ControllerStability.MismatchDurationMs = 201.0;
+			Input.ControllerStability.ControllerGainScale = 1.2;
+			Input.ControllerStability.ControllerDampingRatio = 0.8;
+			Input.ControllerStability.bControllerGainDampingValid = false;
+			Input.ControllerStability.FailureField = EPhysAnimControllerStabilityFailureField::ControllerGainScale;
+			Input.ControllerStability.bStandingValidationTimedOut = true;
+			Input.ControllerStability.TerminalReason = EPhysAnimTerminalReason::ActivationUnstableGainOrDamping;
+
+			Input.Values.ProxyInsideHull = false;
+			Input.Values.ProxyOutsideHullDurationMs = 101.0;
+			Input.Values.SupportMode = EPhysAnimSupportMode::SingleFootSurvival;
+			Input.Values.SupportChurnCount = 3;
+			Input.Values.SupportChurnHz = 9.0;
+
+			const FPhysAnimRunArtifactSnapshot Snapshot = PhysAnimValidators::BuildRunArtifactSnapshot(Input);
+
+			TestFalse(TEXT("Artifact maps physics_asset_contract_valid"), Snapshot.bPhysicsAssetContractValid);
+			TestFalse(TEXT("Artifact maps skeleton_audit_passed"), Snapshot.bSkeletonAuditPassed);
+			TestEqual(TEXT("Artifact maps plant_failure_class"), static_cast<uint8>(Snapshot.PlantFailureClass), static_cast<uint8>(EPhysAnimPlantFailureClass::StaticStructural));
+			TestEqual(TEXT("Artifact maps plant_failure_field"), static_cast<uint8>(Snapshot.PlantFailureField), static_cast<uint8>(EPhysAnimPlantFailureField::Skeleton));
+			TestEqual(TEXT("Artifact maps capsule_collision_enabled"), static_cast<uint8>(Snapshot.CapsuleCollisionEnabled), static_cast<uint8>(EPhysAnimCapsuleCollisionState::CollisionEnabled));
+			TestTrue(TEXT("Artifact maps cmc_is_active"), Snapshot.bCmcIsActive);
+			TestFalse(TEXT("Artifact maps cmc_updated_component_is_null"), Snapshot.bCmcUpdatedComponentIsNull);
+			TestEqual(TEXT("Artifact maps topology_change_count"), Snapshot.TopologyChangeCount, 2);
+			TestTrue(TEXT("Artifact maps continuity_bookkeeping_mismatch"), Snapshot.bContinuityBookkeepingMismatch);
+			TestFalse(TEXT("Artifact maps physical_continuity_validator_passed"), Snapshot.bPhysicalContinuityValidatorPassed);
+			TestEqual(TEXT("Artifact maps contamination_class"), static_cast<uint8>(Snapshot.ContaminationClass), static_cast<uint8>(EPhysAnimContaminationClass::ExcludedBodyWorldBrace));
+			TestEqual(TEXT("Artifact maps contamination_source_body"), Snapshot.ContaminationSourceBody, FName(TEXT("calf_l")));
+			TestEqual(TEXT("Artifact maps excluded_body_world_contact_source"), Snapshot.ExcludedBodyWorldContactSource, FName(TEXT("calf_l")));
+			TestEqual(TEXT("Artifact maps movement_reclaim_count"), Snapshot.MovementReclaimCount, 1);
+			TestEqual(TEXT("Artifact maps shell_helper_used_count"), Snapshot.ShellHelperUsedCount, 1);
+			TestEqual(TEXT("Artifact maps controller_stability_failure_field"), static_cast<uint8>(Snapshot.ControllerStabilityFailureField), static_cast<uint8>(EPhysAnimControllerStabilityFailureField::ControllerGainScale));
+			TestTrue(TEXT("Artifact preserves proxy_inside_hull false"), Snapshot.ProxyInsideHull.IsSet() && !Snapshot.ProxyInsideHull.GetValue());
+			TestEqual(TEXT("Artifact preserves proxy_outside_hull_duration_ms"), Snapshot.ProxyOutsideHullDurationMs.GetValue(), 101.0);
+			TestEqual(TEXT("Artifact primary terminal_reason uses validator order"), static_cast<uint8>(Snapshot.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation));
+			TestEqual(TEXT("Artifact records co_terminal_reasons"), Snapshot.CoTerminalReasons.Num(), 6);
+		}
+
+		return true;
+	}
 }
