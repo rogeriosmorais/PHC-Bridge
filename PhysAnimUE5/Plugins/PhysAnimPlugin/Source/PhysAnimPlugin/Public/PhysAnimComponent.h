@@ -14,6 +14,7 @@
 #include "PhysAnimBridge.h"
 #include "PhysAnimBalanceReadyTransition.h"
 
+#include "PhysAnimRuntimeTerminationPipeline.h"
 #include "PhysAnimComponent.generated.h"
 
 class UAnimInstance;
@@ -996,6 +997,34 @@ class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPo
 public:
 	UPhysAnimComponent();
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
+	bool bEnableLiveRuntimeEvidenceProof = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
+	FName LiveRuntimeEvidenceLeftSupportBodyName = TEXT("foot_l");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
+	FName LiveRuntimeEvidenceRightSupportBodyName = TEXT("foot_r");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceSupportSweepRadiusCm = 6.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceSupportSweepDistanceCm = 18.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceSupportSweepStartLiftCm = 6.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
+	bool bLiveRuntimeEvidenceWorldStaticOnly = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceStandingTargetSeconds = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceProgressLogIntervalSeconds = 0.25f;
+
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
@@ -1460,6 +1489,38 @@ protected:
 	int32 BridgeTraceSampleEveryNthFrame = 1;
 
 private:
+
+	bool bLiveRuntimeEvidenceProofActive = false;
+	bool bLiveRuntimeEvidenceProofComplete = false;
+	bool bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
+
+	FString LiveRuntimeEvidenceAttemptUuid;
+	float LiveRuntimeEvidenceStandingSeconds = 0.0f;
+	float LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
+	int64 LiveRuntimeEvidenceSubstepCounter = 0;
+
+	FPhysAnimRuntimeTerminationState LiveRuntimeEvidenceTerminationState;
+
+	void TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds);
+	void ResetLiveRuntimeEvidenceProof();
+	bool CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>& OutHitResults, int32& OutMappedSupportHitCount) const;
+	bool CaptureLiveRuntimeEvidenceHitResultForBody(const FName BodyName, TArray<FHitResult>& OutHitResults) const;
+	FPhysAnimSupportHitResultObservationInput BuildLiveRuntimeEvidenceObservationInput(
+		const TArray<FHitResult>& HitResults,
+		float DeltaTimeSeconds) const;
+	FPhysAnimRuntimeSubstepInput BuildLiveRuntimeEvidenceSubstepInput(
+		const FPhysAnimSupportObservationResult& SupportObservation,
+		float DeltaTimeSeconds) const;
+	void EmitLiveRuntimeEvidenceProgressLog(
+		const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult,
+		int32 HitCount,
+		int32 MappedSupportHitCount);
+	void EmitLiveRuntimeEvidenceTerminalArtifactOnce(
+		const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult);
+	void EmitLiveRuntimeEvidenceAttemptResult(
+		bool bPassed,
+		const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult);
+
 	bool ResolveRuntimeContext(FString& OutError);
 	bool ValidateRequiredBodies(FString& OutError) const;
 	bool ValidatePhysicsControlAuthoring(FString& OutError) const;

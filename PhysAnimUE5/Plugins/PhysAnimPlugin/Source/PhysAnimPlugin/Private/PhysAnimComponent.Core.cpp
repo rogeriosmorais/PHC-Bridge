@@ -2651,6 +2651,7 @@ EPhysAnimBridgeTraceOutputMode UPhysAnimComponent::ResolveBridgeTraceOutputMode(
 void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	TickLiveRuntimeEvidenceProof(DeltaTime);
 
 	const EPhysAnimRuntimeState RuntimeStateAtTickStart = RuntimeState;
 	const uint32 RootOnTickAtTickStart = BalanceEntryRootOnFrameCount;

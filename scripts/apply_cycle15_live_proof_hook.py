@@ -1,105 +1,143 @@
-#include "PhysAnimComponent.h"
-#include "PhysAnimComponentPrivate.h"
-#include "Components/SkeletalMeshComponent.h"
+from pathlib import Path
+
+ROOT = Path(".")
+H = ROOT / "PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h"
+CPP = ROOT / "PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.cpp"
+CORE = ROOT / "PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.Core.cpp"
+
+def replace_once(text: str, old: str, new: str, path: Path) -> str:
+    if old not in text:
+        raise RuntimeError(f"Marker not found in {path}: {old[:120]!r}")
+    return text.replace(old, new, 1)
+
+def insert_before(text: str, marker: str, insertion: str, path: Path) -> str:
+    if insertion.strip() in text:
+        return text
+    return replace_once(text, marker, insertion + marker, path)
+
+def insert_after(text: str, marker: str, insertion: str, path: Path) -> str:
+    if insertion.strip() in text:
+        return text
+    return replace_once(text, marker, marker + insertion, path)
+
+h = H.read_text(encoding="utf-8")
+cpp = CPP.read_text(encoding="utf-8")
+core = CORE.read_text(encoding="utf-8")
+
+# Header include
+h = insert_before(
+    h,
+    '#include "PhysAnimComponent.generated.h"',
+    '#include "PhysAnimRuntimeTerminationPipeline.h"\n',
+    H,
+)
+
+# Insert public/proof UPROPERTY block
+proof_properties = r'''
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
+	bool bEnableLiveRuntimeEvidenceProof = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
+	FName LiveRuntimeEvidenceLeftSupportBodyName = TEXT("foot_l");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
+	FName LiveRuntimeEvidenceRightSupportBodyName = TEXT("foot_r");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceSupportSweepRadiusCm = 6.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceSupportSweepDistanceCm = 18.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceSupportSweepStartLiftCm = 6.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
+	bool bLiveRuntimeEvidenceWorldStaticOnly = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceStandingTargetSeconds = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceProgressLogIntervalSeconds = 0.25f;
+
+'''
+
+if "bEnableLiveRuntimeEvidenceProof" not in h:
+    if "public:\n\tUPhysAnimComponent();" in h:
+        h = insert_after(h, "public:\n\tUPhysAnimComponent();\n", proof_properties, H)
+    else:
+        raise RuntimeError("Could not find UPhysAnimComponent public constructor anchor.")
+
+proof_private = r'''
+	bool bLiveRuntimeEvidenceProofActive = false;
+	bool bLiveRuntimeEvidenceProofComplete = false;
+	bool bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
+
+	FString LiveRuntimeEvidenceAttemptUuid;
+	float LiveRuntimeEvidenceStandingSeconds = 0.0f;
+	float LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
+	int64 LiveRuntimeEvidenceSubstepCounter = 0;
+
+	FPhysAnimRuntimeTerminationState LiveRuntimeEvidenceTerminationState;
+
+	void TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds);
+	void ResetLiveRuntimeEvidenceProof();
+	bool CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>& OutHitResults, int32& OutMappedSupportHitCount) const;
+	bool CaptureLiveRuntimeEvidenceHitResultForBody(const FName BodyName, TArray<FHitResult>& OutHitResults) const;
+	FPhysAnimSupportHitResultObservationInput BuildLiveRuntimeEvidenceObservationInput(
+		const TArray<FHitResult>& HitResults,
+		float DeltaTimeSeconds) const;
+	FPhysAnimRuntimeSubstepInput BuildLiveRuntimeEvidenceSubstepInput(
+		const FPhysAnimSupportObservationResult& SupportObservation,
+		float DeltaTimeSeconds) const;
+	void EmitLiveRuntimeEvidenceProgressLog(
+		const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult,
+		int32 HitCount,
+		int32 MappedSupportHitCount);
+	void EmitLiveRuntimeEvidenceTerminalArtifactOnce(
+		const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult);
+	void EmitLiveRuntimeEvidenceAttemptResult(
+		bool bPassed,
+		const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult);
+
+'''
+
+if "TickLiveRuntimeEvidenceProof" not in h:
+    if "\nprivate:\n" in h:
+        h = insert_after(h, "\nprivate:\n", proof_private, H)
+    else:
+        raise RuntimeError("Could not find private: anchor in PhysAnimComponent.h")
+
+# CPP includes
+cpp = insert_after(cpp, '#include "PhysAnimComponentPrivate.h"\n', '''#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+''', CPP)
 
-DEFINE_LOG_CATEGORY(LogPhysAnimBridge);
+# Constructor init
+# Search for constructor body end or similar.
+# In PhysAnimComponent.cpp, we can look for the closing brace of the constructor if it's there, 
+# or just look for the first method implementation.
+if "LiveRuntimeEvidenceAttemptUuid" not in cpp:
+    if "\n}\n\nbool UPhysAnimComponent::BuildConditionedActions" in cpp:
+         cpp = insert_before(
+            cpp,
+            "\n}\n\nbool UPhysAnimComponent::BuildConditionedActions",
+            '\n\tLiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);\n',
+            CPP,
+        )
+    else:
+        # Fallback: look for the constructor definition start
+        if "UPhysAnimComponent::UPhysAnimComponent()" in cpp:
+             cpp = insert_after(
+                cpp,
+                "UPhysAnimComponent::UPhysAnimComponent()\n{",
+                '\n\tLiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);',
+                CPP,
+            )
 
-TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_PoseSearchQueryMs, TEXT("PhysAnim/PoseSearch Query ms"));
-TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_FuturePoseSampleMs, TEXT("PhysAnim/Future Pose Sample ms"));
-TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_ObservationPackMs, TEXT("PhysAnim/Observation Pack ms"));
-TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_RunSyncMs, TEXT("PhysAnim/RunSync ms"));
-TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_ControlWritesMs, TEXT("PhysAnim/Control Writes ms"));
-TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_UpdateControlsMs, TEXT("PhysAnim/UpdateControls ms"));
-TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_MaxBodyAngularSpeedDegPerSec, TEXT("PhysAnim/Max Body Angular Speed deg/s"));
-TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_MaxLowerLimbLimitOccupancy, TEXT("PhysAnim/Max Lower Limb Limit Occupancy"));
-TRACE_DECLARE_INT_COUNTER(COUNTER_PhysAnim_NumNormalPolicyTargetsWritten, TEXT("PhysAnim/Normal Policy Targets Written"));
-TRACE_DECLARE_INT_COUNTER(COUNTER_PhysAnim_NumHeldTargetsWritten, TEXT("PhysAnim/Held Targets Written"));
-TRACE_DECLARE_INT_COUNTER(COUNTER_PhysAnim_NumTotalTargetsWritten, TEXT("PhysAnim/Total Targets Written"));
-TRACE_DECLARE_INT_COUNTER(COUNTER_PhysAnim_RuntimeState, TEXT("PhysAnim/Runtime State"));
-TRACE_DECLARE_INT_COUNTER(COUNTER_PhysAnim_FailStopCount, TEXT("PhysAnim/FailStop Count"));
-
-int32 GStrictPhase1Certification = 1;
-FAutoConsoleVariableRef CVarStrictPhase1Certification(
-	TEXT("p.PhysAnim.StrictPhase1Certification"),
-	GStrictPhase1Certification,
-	TEXT("If 1, Phase 1 certification restores original, more stringent constraints (timeout, dwell, shell reanchor, and ownership rules) to verify genuine convergence."),
-	ECVF_Cheat);
-
-int32 GVerbosePhase1Forensics = 0;
-FAutoConsoleVariableRef CVarVerbosePhase1Forensics(
-	TEXT("p.PhysAnim.VerbosePhase1Forensics"),
-	GVerbosePhase1Forensics,
-	TEXT("If 1, enables high-volume per-tick forensics for Phase 1 (modifier syncs, simulating body lists, persistent write traces). Default OFF to keep logs readable."),
-	ECVF_Cheat);
-
-int32 GVerbosePhase2Forensics = 0;
-FAutoConsoleVariableRef CVarVerbosePhase2Forensics(
-	TEXT("p.PhysAnim.VerbosePhase2Forensics"),
-	GVerbosePhase2Forensics,
-	TEXT("If 1, enables high-volume per-tick forensics for Phase 2 (root sim status, write coverage, shell drop status). Default OFF to keep logs readable."),
-	ECVF_Cheat);
-
-
-UPhysAnimComponent::UPhysAnimComponent()
-{
-	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.bStartWithTickEnabled = false;
-	PrimaryComponentTick.TickGroup = TG_PrePhysics;
-
-	ModelDataAsset = TSoftObjectPtr<UNNEModelData>(FSoftObjectPath(PhysAnimComponentInternal::DefaultModelPath));
-	LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
-
-}
-
-bool UPhysAnimComponent::BuildConditionedActions(
-	const TArray<float>& RawActions,
-	const TArray<float>* PreviousConditionedActions,
-	const FPhysAnimActionConditioningSettings& Settings,
-	TArray<float>& OutConditionedActions,
-	FPhysAnimActionDiagnostics& OutDiagnostics,
-	FString& OutError)
-{
-	return PhysAnimBridge::ConditionModelActions(
-		RawActions,
-		PreviousConditionedActions,
-		Settings,
-		OutConditionedActions,
-		OutDiagnostics,
-		OutError);
-}
-
-FQuat UPhysAnimComponent::LimitTargetRotationStep(
-	const FQuat& PreviousRotation,
-	const FQuat& TargetRotation,
-	float MaxAngularStepDegrees)
-{
-	return PhysAnimBridge::LimitControlRotationStep(PreviousRotation, TargetRotation, MaxAngularStepDegrees);
-}
-
-bool UPhysAnimComponent::EvaluateRuntimeInstability(
-	const FVector& RootLocationCm,
-	const FVector& RootLinearVelocityCmPerSecond,
-	const FVector& RootAngularVelocityDegPerSecond,
-	float DeltaTimeSeconds,
-	const FPhysAnimRuntimeInstabilitySettings& Settings,
-	FPhysAnimRuntimeInstabilityState& InOutState,
-	FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics,
-	FString& OutError)
-{
-	return PhysAnimBridge::UpdateRuntimeInstabilityState(
-		RootLocationCm,
-		RootLinearVelocityCmPerSecond,
-		RootAngularVelocityDegPerSecond,
-		DeltaTimeSeconds,
-		Settings,
-		InOutState,
-		OutDiagnostics,
-		OutError);
-}
-
-
+impl = r'''
 
 void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 {
@@ -414,24 +452,48 @@ void UPhysAnimComponent::EmitLiveRuntimeEvidenceAttemptResult(
 			? EPhysAnimTerminalReason::None
 			: PipelineResult.StateApplyResult.State.TerminalReason;
 
-	if (bPassed)
-	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=PASS duration=%.3f terminal_reason=%d"),
-			*LiveRuntimeEvidenceAttemptUuid,
-			LiveRuntimeEvidenceStandingSeconds,
-			static_cast<int32>(TerminalReason));
-	}
-	else
-	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Error,
-			TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=FAIL duration=%.3f terminal_reason=%d"),
-			*LiveRuntimeEvidenceAttemptUuid,
-			LiveRuntimeEvidenceStandingSeconds,
-			static_cast<int32>(TerminalReason));
-	}
+	UE_LOG(
+		LogPhysAnimBridge,
+		bPassed ? ELogVerbosity::Warning : ELogVerbosity::Error,
+		TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=%s duration=%.3f terminal_reason=%d"),
+		*LiveRuntimeEvidenceAttemptUuid,
+		bPassed ? TEXT("PASS") : TEXT("FAIL"),
+		LiveRuntimeEvidenceStandingSeconds,
+		static_cast<int32>(TerminalReason));
 }
+'''
+
+if "UPhysAnimComponent::TickLiveRuntimeEvidenceProof" not in cpp:
+    cpp = cpp + impl
+
+# Core tick hook
+if "TickLiveRuntimeEvidenceProof(DeltaTime)" not in core:
+    candidates = [
+        "\n}\n\nvoid UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()",
+        "\n}\n\nvoid UPhysAnimComponent::EndPlay",
+    ]
+    inserted = False
+    for marker in candidates:
+        if marker in core:
+            core = replace_once(core, marker, "\n\tTickLiveRuntimeEvidenceProof(DeltaTime);\n" + marker, CORE)
+            inserted = True
+            break
+    if not inserted:
+        # Final fallback: look for TickComponent implementation
+        if "void UPhysAnimComponent::TickComponent" in core:
+             core = insert_after(
+                core,
+                "UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)\n{",
+                "\n\tTickLiveRuntimeEvidenceProof(DeltaTime);",
+                CORE,
+            )
+             inserted = True
+
+    if not inserted:
+        raise RuntimeError("Could not automatically place TickLiveRuntimeEvidenceProof(DeltaTime).")
+
+H.write_text(h, encoding="utf-8")
+CPP.write_text(cpp, encoding="utf-8")
+CORE.write_text(core, encoding="utf-8")
+
+print("Cycle 15 live runtime evidence proof hook applied.")
