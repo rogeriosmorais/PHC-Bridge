@@ -1,5 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimProofArtifactEmitter.h"
+#include "PhysAnimRuntimeAdapter.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -116,32 +118,15 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 
 void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 {
-	if (!bEnableLiveRuntimeEvidenceProof)
-	{
-		if (bLiveRuntimeEvidenceProofActive || bLiveRuntimeEvidenceProofComplete)
-		{
-			ResetLiveRuntimeEvidenceProof();
-		}
-		return;
-	}
-
-	if (bLiveRuntimeEvidenceProofComplete)
+	if (!bEnableLiveRuntimeEvidenceProof || bLiveRuntimeEvidenceProofComplete)
 	{
 		return;
 	}
 
-	if (!bLiveRuntimeEvidenceProofActive)
+	if (LiveRuntimeEvidenceAttemptUuid.IsEmpty())
 	{
-		bLiveRuntimeEvidenceProofActive = true;
-		bLiveRuntimeEvidenceProofComplete = false;
-		bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
 		LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
-		LiveRuntimeEvidenceStandingSeconds = 0.0f;
-		LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
-		LiveRuntimeEvidenceSubstepCounter = 0;
-		LiveRuntimeEvidenceTerminationState = FPhysAnimRuntimeTerminationState();
-
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("PhysAnimProof: AttemptStart uuid=%s"), *LiveRuntimeEvidenceAttemptUuid);
+		PhysAnimProofArtifactEmitter::LogAttemptStart(LiveRuntimeEvidenceAttemptUuid);
 	}
 
 	LiveRuntimeEvidenceStandingSeconds += FMath::Max(0.0f, DeltaTimeSeconds);
@@ -168,31 +153,43 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 
 	LiveRuntimeEvidenceTerminationState = PipelineResult.StateApplyResult.State;
 
-	UE_LOG(
-		LogPhysAnimBridge,
-		Verbose,
-		TEXT("PhysAnimProof: RuntimeEvidence uuid=%s hits=%d mapped=%d support_mode=%d active_sides=%d hull_area=%.3f"),
-		*LiveRuntimeEvidenceAttemptUuid,
+	PhysAnimProofArtifactEmitter::LogRuntimeEvidence(
+		LiveRuntimeEvidenceAttemptUuid,
 		HitResults.Num(),
 		MappedSupportHitCount,
-		static_cast<int32>(PipelineResult.SubstepResult.Artifact.SupportMode),
-		PipelineResult.SubstepResult.Artifact.ActiveSupportSideCount,
-		PipelineResult.SubstepResult.Artifact.SupportHullAreaCm2);
+		PipelineResult.SubstepResult.Artifact);
 
-	EmitLiveRuntimeEvidenceProgressLog(PipelineResult, HitResults.Num(), MappedSupportHitCount);
-
-	if (PipelineResult.StateApplyResult.State.bTerminated)
+	if (LiveRuntimeEvidenceTerminationState.bTerminated)
 	{
-		EmitLiveRuntimeEvidenceTerminalArtifactOnce(PipelineResult);
-		EmitLiveRuntimeEvidenceAttemptResult(false, PipelineResult);
 		bLiveRuntimeEvidenceProofComplete = true;
+
+		FPhysAnimProofArtifactEmitInput EmitInput;
+		EmitInput.AttemptUuid = LiveRuntimeEvidenceAttemptUuid;
+		EmitInput.StandingSeconds = LiveRuntimeEvidenceStandingSeconds;
+		EmitInput.RuntimeHitCount = HitResults.Num();
+		EmitInput.MappedSupportHitCount = MappedSupportHitCount;
+		EmitInput.PipelineResult = PipelineResult;
+
+		PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(EmitInput);
+
+		PhysAnimProofArtifactEmitter::LogAttemptResult(
+			LiveRuntimeEvidenceAttemptUuid,
+			false,
+			LiveRuntimeEvidenceStandingSeconds,
+			LiveRuntimeEvidenceTerminationState.TerminalReason);
+		
 		return;
 	}
 
 	if (LiveRuntimeEvidenceStandingSeconds >= LiveRuntimeEvidenceStandingTargetSeconds)
 	{
-		EmitLiveRuntimeEvidenceAttemptResult(true, PipelineResult);
 		bLiveRuntimeEvidenceProofComplete = true;
+		
+		PhysAnimProofArtifactEmitter::LogAttemptResult(
+			LiveRuntimeEvidenceAttemptUuid,
+			true,
+			LiveRuntimeEvidenceStandingSeconds,
+			EPhysAnimTerminalReason::None);
 	}
 }
 
@@ -335,103 +332,7 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	return Input;
 }
 
-void UPhysAnimComponent::EmitLiveRuntimeEvidenceProgressLog(
-	const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult,
-	int32 HitCount,
-	int32 MappedSupportHitCount)
+void UPhysAnimComponent::EmitLiveRuntimeEvidenceTerminalArtifactOnce(const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult)
 {
-	const bool bShouldLog =
-		LiveRuntimeEvidenceLastProgressLogSeconds < 0.0f ||
-		LiveRuntimeEvidenceStandingSeconds - LiveRuntimeEvidenceLastProgressLogSeconds >= LiveRuntimeEvidenceProgressLogIntervalSeconds ||
-		PipelineResult.Command.bTerminate;
-
-	if (!bShouldLog)
-	{
-		return;
-	}
-
-	LiveRuntimeEvidenceLastProgressLogSeconds = LiveRuntimeEvidenceStandingSeconds;
-
-	UE_LOG(
-		LogPhysAnimBridge,
-		Warning,
-		TEXT("PhysAnimProof: StandingProgress uuid=%s t=%.3f terminal_reason=%d hits=%d mapped=%d support_mode=%d active_sides=%d hull_area=%.3f"),
-		*LiveRuntimeEvidenceAttemptUuid,
-		LiveRuntimeEvidenceStandingSeconds,
-		static_cast<int32>(PipelineResult.SubstepResult.TerminalReason),
-		HitCount,
-		MappedSupportHitCount,
-		static_cast<int32>(PipelineResult.SubstepResult.Artifact.SupportMode),
-		PipelineResult.SubstepResult.Artifact.ActiveSupportSideCount,
-		PipelineResult.SubstepResult.Artifact.SupportHullAreaCm2);
-}
-
-void UPhysAnimComponent::EmitLiveRuntimeEvidenceTerminalArtifactOnce(
-	const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult)
-{
-	if (bLiveRuntimeEvidenceTerminalArtifactEmitted)
-	{
-		return;
-	}
-
-	bLiveRuntimeEvidenceTerminalArtifactEmitted = true;
-
-	const FPhysAnimRunArtifactSnapshot& Artifact = PipelineResult.StateApplyResult.State.TerminalArtifact;
-
-	const FString ProxyInsideText =
-		Artifact.ProxyInsideHull.IsSet()
-			? (Artifact.ProxyInsideHull.GetValue() ? TEXT("true") : TEXT("false"))
-			: TEXT("unset");
-
-	const FString ProxyOutsideDurationText =
-		Artifact.ProxyOutsideHullDurationMs.IsSet()
-			? FString::Printf(TEXT("%.3f"), Artifact.ProxyOutsideHullDurationMs.GetValue())
-			: TEXT("unset");
-
-	UE_LOG(
-		LogPhysAnimBridge,
-		Error,
-		TEXT("PhysAnimProof: TerminalArtifact uuid=%s terminal_reason=%d timestamp=%lld support_mode=%d active_sides=%d hull_area=%.3f support_gap=%.3f proxy_inside=%s proxy_outside_duration=%s terminal_frame_captured=%d coterminal_count=%d"),
-		*LiveRuntimeEvidenceAttemptUuid,
-		static_cast<int32>(Artifact.TerminalReason),
-		static_cast<long long>(Artifact.TerminalSubstepTimestamp),
-		static_cast<int32>(Artifact.SupportMode),
-		Artifact.ActiveSupportSideCount,
-		Artifact.SupportHullAreaCm2,
-		Artifact.SupportGapTimerMs,
-		*ProxyInsideText,
-		*ProxyOutsideDurationText,
-		Artifact.bTerminalFrameArtifactCaptured ? 1 : 0,
-		Artifact.CoTerminalReasons.Num());
-}
-
-void UPhysAnimComponent::EmitLiveRuntimeEvidenceAttemptResult(
-	bool bPassed,
-	const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult)
-{
-	const EPhysAnimTerminalReason TerminalReason =
-		bPassed
-			? EPhysAnimTerminalReason::None
-			: PipelineResult.StateApplyResult.State.TerminalReason;
-
-	if (bPassed)
-	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=PASS duration=%.3f terminal_reason=%d"),
-			*LiveRuntimeEvidenceAttemptUuid,
-			LiveRuntimeEvidenceStandingSeconds,
-			static_cast<int32>(TerminalReason));
-	}
-	else
-	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Error,
-			TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=FAIL duration=%.3f terminal_reason=%d"),
-			*LiveRuntimeEvidenceAttemptUuid,
-			LiveRuntimeEvidenceStandingSeconds,
-			static_cast<int32>(TerminalReason));
-	}
+	// Implementation moved to PhysAnimProofArtifactEmitter
 }

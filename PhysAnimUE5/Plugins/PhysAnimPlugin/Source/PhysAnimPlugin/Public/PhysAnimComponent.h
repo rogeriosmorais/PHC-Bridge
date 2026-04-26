@@ -15,6 +15,7 @@
 #include "PhysAnimBalanceReadyTransition.h"
 
 #include "PhysAnimRuntimeTerminationPipeline.h"
+#include "PhysAnimProofArtifactEmitter.h"
 #include "PhysAnimComponent.generated.h"
 
 class UAnimInstance;
@@ -1502,6 +1503,9 @@ private:
 	FPhysAnimRuntimeTerminationState LiveRuntimeEvidenceTerminationState;
 
 	void TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds);
+
+private:
+	void EmitLiveRuntimeEvidenceTerminalArtifactOnce(const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult);
 	void ResetLiveRuntimeEvidenceProof();
 	bool CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>& OutHitResults, int32& OutMappedSupportHitCount) const;
 	bool CaptureLiveRuntimeEvidenceHitResultForBody(const FName BodyName, TArray<FHitResult>& OutHitResults) const;
@@ -1511,15 +1515,6 @@ private:
 	FPhysAnimRuntimeSubstepInput BuildLiveRuntimeEvidenceSubstepInput(
 		const FPhysAnimSupportObservationResult& SupportObservation,
 		float DeltaTimeSeconds) const;
-	void EmitLiveRuntimeEvidenceProgressLog(
-		const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult,
-		int32 HitCount,
-		int32 MappedSupportHitCount);
-	void EmitLiveRuntimeEvidenceTerminalArtifactOnce(
-		const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult);
-	void EmitLiveRuntimeEvidenceAttemptResult(
-		bool bPassed,
-		const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult);
 
 	bool ResolveRuntimeContext(FString& OutError);
 	bool ValidateRequiredBodies(FString& OutError) const;
