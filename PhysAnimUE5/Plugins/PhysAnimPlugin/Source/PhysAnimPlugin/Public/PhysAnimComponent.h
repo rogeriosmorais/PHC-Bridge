@@ -998,8 +998,8 @@ class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPo
 public:
 	UPhysAnimComponent();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
-	bool bEnableLiveRuntimeEvidenceProof = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim | Proof", meta = (AllowPrivateAccess = "true"))
+	bool bEnableLiveRuntimeEvidenceProof = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
 	FName LiveRuntimeEvidenceLeftSupportBodyName = TEXT("foot_l");
