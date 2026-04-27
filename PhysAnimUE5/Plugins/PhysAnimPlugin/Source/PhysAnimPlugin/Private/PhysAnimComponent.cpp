@@ -179,11 +179,6 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 
 bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerminationState& TerminationState) const
 {
-	if (TerminationState.bTerminated)
-	{
-		return true;
-	}
-
 	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
 
 	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne)
@@ -224,6 +219,13 @@ bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerm
 
 EPhysAnimRuntimeState UPhysAnimComponent::EvaluateBalanceActiveStanding() const
 {
+	if (LiveRuntimeEvidenceTerminationState.bTerminated)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=FailStopped reason=TERMINATED_IN_LOOP terminal_reason=%d"), 
+			static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
+		return EPhysAnimRuntimeState::FailStopped;
+	}
+
 	if (ShouldExitStandingToSafeDeny(LiveRuntimeEvidenceTerminationState))
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=BalanceSafeDeny reason=PHASE3_ACTIVE_SUPPORT_FAILURE hull_area=%.1f gap=%.1f proxy_inside=%d proxy_drift=%.1f"),
@@ -263,7 +265,6 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 
 void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] TICK_ENTRY enable=%d complete=%d"), bEnableLiveRuntimeEvidenceProof ? 1 : 0, bLiveRuntimeEvidenceProofComplete ? 1 : 0);
 	if (!bEnableLiveRuntimeEvidenceProof || bLiveRuntimeEvidenceProofComplete)
 	{
 		return;
@@ -279,9 +280,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 
 	TArray<FHitResult> HitResults;
 	int32 MappedSupportHitCount = 0;
-	UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] PRE_CAPTURE"));
 	CaptureLiveRuntimeEvidenceHitResults(HitResults, MappedSupportHitCount);
-	UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] POST_CAPTURE hits=%d"), HitResults.Num());
 
 	const FPhysAnimSupportHitResultObservationInput ObservationInput =
 		BuildLiveRuntimeEvidenceObservationInput(HitResults, DeltaTimeSeconds);
@@ -345,9 +344,6 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>
 	OutHitResults.Reset();
 	OutMappedSupportHitCount = 0;
 
-	UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] CaptureLiveRuntimeEvidenceHitResults CALLED left=%s right=%s"), 
-		*LiveRuntimeEvidenceLeftSupportBodyName.ToString(), *LiveRuntimeEvidenceRightSupportBodyName.ToString());
-
 	const int32 BeforeLeft = OutHitResults.Num();
 	if (CaptureLiveRuntimeEvidenceHitResultForBody(LiveRuntimeEvidenceLeftSupportBodyName, OutHitResults))
 	{
@@ -367,7 +363,6 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName 
 {
 	if (BodyName == NAME_None)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] BodyName is NAME_None"));
 		return false;
 	}
 
@@ -376,21 +371,16 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName 
 
 	if (!Mesh || !World)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] Mesh or World is NULL"));
 		return false;
 	}
 
 	const int32 BoneIndex = Mesh->GetBoneIndex(BodyName);
-	const FVector BoneWorldLocation = Mesh->GetBoneLocation(BodyName);
-	if (BoneWorldLocation.IsZero())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] BoneWorldLocation is ZERO for %s"), *BodyName.ToString());
-	}
 	if (BoneIndex == INDEX_NONE)
 	{
 		return false;
 	}
 
+	const FVector BoneWorldLocation = Mesh->GetBoneLocation(BodyName);
 	const FVector TraceStart = BoneWorldLocation + FVector(0.0, 0.0, LiveRuntimeEvidenceSupportSweepStartLiftCm);
 	const FVector TraceEnd = BoneWorldLocation - FVector(0.0, 0.0, LiveRuntimeEvidenceSupportSweepDistanceCm);
 
@@ -414,9 +404,6 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName 
 
 	if (!bHit || !Hit.bBlockingHit)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] SWEEP_FAILED body=%s start=(%.1f,%.1f,%.1f) end=(%.1f,%.1f,%.1f) radius=%.1f hit=%d blocking=%d"),
-			*BodyName.ToString(), TraceStart.X, TraceStart.Y, TraceStart.Z, TraceEnd.X, TraceEnd.Y, TraceEnd.Z, 
-			LiveRuntimeEvidenceSupportSweepRadiusCm, bHit ? 1 : 0, Hit.bBlockingHit ? 1 : 0);
 		return false;
 	}
 
