@@ -330,6 +330,24 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 	if (LiveRuntimeEvidenceStandingSeconds >= LiveRuntimeEvidenceStandingTargetSeconds)
 	{
 		bLiveRuntimeEvidenceProofComplete = true;
+
+		// On success, we haven't officially "terminated" via the pipeline, 
+		// but we want to capture the final state as the terminal artifact.
+		LiveRuntimeEvidenceTerminationState.bTerminated = true;
+		LiveRuntimeEvidenceTerminationState.TerminalReason = EPhysAnimTerminalReason::None;
+		LiveRuntimeEvidenceTerminationState.TerminalArtifact = PipelineResult.SubstepResult.Artifact;
+		LiveRuntimeEvidenceTerminationState.LatestArtifact = PipelineResult.SubstepResult.Artifact;
+		
+		FPhysAnimProofArtifactEmitInput EmitInput;
+		EmitInput.AttemptUuid = LiveRuntimeEvidenceAttemptUuid;
+		EmitInput.StandingSeconds = LiveRuntimeEvidenceStandingSeconds;
+		EmitInput.RuntimeHitCount = HitResults.Num();
+		EmitInput.MappedSupportHitCount = MappedSupportHitCount;
+		EmitInput.PipelineResult = PipelineResult;
+		// Ensure the terminal state we just built is the one that gets emitted
+		EmitInput.PipelineResult.StateApplyResult.State = LiveRuntimeEvidenceTerminationState;
+
+		PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(EmitInput);
 		
 		PhysAnimProofArtifactEmitter::LogAttemptResult(
 			LiveRuntimeEvidenceAttemptUuid,

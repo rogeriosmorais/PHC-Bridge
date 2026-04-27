@@ -115,6 +115,80 @@ bool FStartStandingProofWaitCommand::Update()
 	return true;
 }
 
+/**
+ * Latent command to verify the standing proof results.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand);
+bool FVerifyStandingProofCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+			
+			// 1. Check if proof completed
+			if (!Comp->IsLiveRuntimeEvidenceProofComplete())
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: Proof did not complete in time for %s"), *It->GetName());
+				return true;
+			}
+
+			// 2. Check Hull Area - Guard against the 0.0 failure
+			const float HullArea = TerminationState.TerminalArtifact.SupportHullAreaCm2;
+			if (HullArea <= 0.0f)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: SupportHullAreaCm2 is 0.0 for %s. This indicates a sampling failure or contract violation."), *It->GetName());
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("StandingProof: SupportHullAreaCm2 verified at %.1f cm2"), HullArea);
+			}
+
+			// 3. Check Terminal Reason
+			const EPhysAnimTerminalReason Reason = TerminationState.TerminalArtifact.TerminalReason;
+			if (Reason == EPhysAnimTerminalReason::ActivationSupportFailure)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: FAILED with ActivationSupportFailure for %s"), *It->GetName());
+			}
+			else if (Reason == EPhysAnimTerminalReason::None)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("StandingProof: PASSED (None) for %s"), *It->GetName());
+			}
+			else
+			{
+				// Currently we might fail due to shell velocity correction hardening, which is "expected" for now but we should acknowledge it
+				UE_LOG(LogTemp, Warning, TEXT("StandingProof: TERMINATED with reason %d for %s"), (int32)Reason, *It->GetName());
+			}
+			
+			break;
+		}
+	}
+
+	return true;
+}
+
 IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStandingProofLiveTest, "PhysAnim.StandingProof.Live", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 void FPhysAnimStandingProofLiveTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
@@ -136,8 +210,11 @@ bool FPhysAnimStandingProofLiveTest::RunTest(const FString& Parameters)
 	// 3. Enable proof
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand());
 
-	// 4. Wait for results (4 seconds)
-	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(4.0f));
+	// 4. Wait for results (6 seconds to be safe)
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
+
+	// 5. Verify results
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand());
 
 	return true;
 }

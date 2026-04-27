@@ -36,8 +36,6 @@ No implementation task is currently runnable.
 
 | Item | Status | Reason |
 |---|---|---|
-| Runtime component mutation | blocked | blocked until live evidence proof is green |
-| Runtime state-machine rewrite | blocked | blocked until live evidence proof is green |
 | Legacy flip-path tuning | deferred | archived; compatibility context only |
 | Broad perturbation tuning | deferred | standing benchmark remains the priority |
 

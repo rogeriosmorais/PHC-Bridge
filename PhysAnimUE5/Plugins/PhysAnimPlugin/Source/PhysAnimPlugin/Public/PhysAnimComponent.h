@@ -1114,6 +1114,7 @@ public:
 	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
 
 	const FPhysAnimRuntimeTerminationState& GetLiveRuntimeEvidenceTerminationState() const { return LiveRuntimeEvidenceTerminationState; }
+	bool IsLiveRuntimeEvidenceProofComplete() const { return bLiveRuntimeEvidenceProofComplete; }
 
 	static EPhysAnimRuntimeState MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase TransitionPhase);
 
