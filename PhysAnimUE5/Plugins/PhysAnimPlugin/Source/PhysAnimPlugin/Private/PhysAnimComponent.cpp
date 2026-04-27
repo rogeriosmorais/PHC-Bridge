@@ -52,7 +52,7 @@ UPhysAnimComponent::UPhysAnimComponent()
 
 	ModelDataAsset = TSoftObjectPtr<UNNEModelData>(FSoftObjectPath(PhysAnimComponentInternal::DefaultModelPath));
 	LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
-
+	bEnableLiveRuntimeEvidenceProof = true;
 }
 
 bool UPhysAnimComponent::BuildConditionedActions(
@@ -263,6 +263,7 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 
 void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 {
+	UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] TICK_ENTRY enable=%d complete=%d"), bEnableLiveRuntimeEvidenceProof ? 1 : 0, bLiveRuntimeEvidenceProofComplete ? 1 : 0);
 	if (!bEnableLiveRuntimeEvidenceProof || bLiveRuntimeEvidenceProofComplete)
 	{
 		return;
@@ -278,7 +279,9 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 
 	TArray<FHitResult> HitResults;
 	int32 MappedSupportHitCount = 0;
+	UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] PRE_CAPTURE"));
 	CaptureLiveRuntimeEvidenceHitResults(HitResults, MappedSupportHitCount);
+	UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] POST_CAPTURE hits=%d"), HitResults.Num());
 
 	const FPhysAnimSupportHitResultObservationInput ObservationInput =
 		BuildLiveRuntimeEvidenceObservationInput(HitResults, DeltaTimeSeconds);
@@ -342,6 +345,9 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>
 	OutHitResults.Reset();
 	OutMappedSupportHitCount = 0;
 
+	UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] CaptureLiveRuntimeEvidenceHitResults CALLED left=%s right=%s"), 
+		*LiveRuntimeEvidenceLeftSupportBodyName.ToString(), *LiveRuntimeEvidenceRightSupportBodyName.ToString());
+
 	const int32 BeforeLeft = OutHitResults.Num();
 	if (CaptureLiveRuntimeEvidenceHitResultForBody(LiveRuntimeEvidenceLeftSupportBodyName, OutHitResults))
 	{
@@ -359,26 +365,32 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>
 
 bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName BodyName, TArray<FHitResult>& OutHitResults) const
 {
-	if (BodyName.IsNone())
+	if (BodyName == NAME_None)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] BodyName is NAME_None"));
 		return false;
 	}
 
-	const USkeletalMeshComponent* const Mesh = GetMeshComponent();
-	const UWorld* const World = GetWorld();
+	USkeletalMeshComponent* Mesh = GetMeshComponent();
+	UWorld* World = GetWorld();
 
 	if (!Mesh || !World)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] Mesh or World is NULL"));
 		return false;
 	}
 
 	const int32 BoneIndex = Mesh->GetBoneIndex(BodyName);
+	const FVector BoneWorldLocation = Mesh->GetBoneLocation(BodyName);
+	if (BoneWorldLocation.IsZero())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] BoneWorldLocation is ZERO for %s"), *BodyName.ToString());
+	}
 	if (BoneIndex == INDEX_NONE)
 	{
 		return false;
 	}
 
-	const FVector BoneWorldLocation = Mesh->GetBoneLocation(BodyName);
 	const FVector TraceStart = BoneWorldLocation + FVector(0.0, 0.0, LiveRuntimeEvidenceSupportSweepStartLiftCm);
 	const FVector TraceEnd = BoneWorldLocation - FVector(0.0, 0.0, LiveRuntimeEvidenceSupportSweepDistanceCm);
 
@@ -402,7 +414,7 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName 
 
 	if (!bHit || !Hit.bBlockingHit)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimProof] SWEEP_FAILED body=%s start=(%.1f,%.1f,%.1f) end=(%.1f,%.1f,%.1f) radius=%.1f hit=%d blocking=%d"),
+		UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] SWEEP_FAILED body=%s start=(%.1f,%.1f,%.1f) end=(%.1f,%.1f,%.1f) radius=%.1f hit=%d blocking=%d"),
 			*BodyName.ToString(), TraceStart.X, TraceStart.Y, TraceStart.Z, TraceEnd.X, TraceEnd.Y, TraceEnd.Z, 
 			LiveRuntimeEvidenceSupportSweepRadiusCm, bHit ? 1 : 0, Hit.bBlockingHit ? 1 : 0);
 		return false;
@@ -444,6 +456,8 @@ FPhysAnimSupportHitResultObservationInput UPhysAnimComponent::BuildLiveRuntimeEv
 	RightMapping.SupportSide = EPhysAnimSupportSide::Right;
 	Input.SupportBodies.Add(RightMapping);
 
+	Input.SupportAreaMinCm2 = 0.0;
+	Input.ProxyDriftLimitMs = 500.0;
 	return Input;
 }
 

@@ -62,6 +62,7 @@ bool FEnableStandingProofCommand::Update()
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
+			UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] ENABLING_PROOF for %s"), *It->GetName());
 			Comp->bEnableLiveRuntimeEvidenceProof = true;
 			break;
 		}

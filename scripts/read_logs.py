@@ -20,7 +20,7 @@ def extract_physa_to_clipboard(folder_path=r"F:\NewEngine\PhysAnimUE5\Saved\Logs
     try:
         with open(latest_file, 'r', encoding='utf-8') as file:
             for line in file:
-                if "PhysA" in line:
+                if "PhysA" in line or "PROOFIX" in line:
                     extracted_lines.append(line.strip())
     except Exception as e:
         print(f"Erro ao ler o arquivo: {e}")

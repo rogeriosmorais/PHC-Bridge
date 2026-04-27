@@ -3511,6 +3511,12 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
+	if (bEnableLiveRuntimeEvidenceProof)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] PROOF_TICKING attempt=%s"), *LiveRuntimeEvidenceAttemptUuid);
+		TickLiveRuntimeEvidenceProof(DeltaTime);
+	}
+
 	const bool bStandingProofPass = !bEnableLiveRuntimeEvidenceProof || bLiveRuntimeEvidenceProofComplete;
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
