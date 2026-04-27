@@ -4,6 +4,7 @@
 Record and validate the G2 side-by-side proof clip showing the physics-driven character correctly activated and standing alongside a kinematic baseline.
 
 ## Allowed Files
+- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnim.SmokeTests.cpp`
 - `plans/stage1/20-execution/execution-log.md`
 - `plans/stage1/20-execution/task-packets/S2-PROOF-G2-SIDE-BY-SIDE-ACTIVATION-01.md`
 - `plans/stage1/30-evidence/S2-PROOF-G2-SIDE-BY-SIDE-ACTIVATION-01/` (new directory for evidence)
