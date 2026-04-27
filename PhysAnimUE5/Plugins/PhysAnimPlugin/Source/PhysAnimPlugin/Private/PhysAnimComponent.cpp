@@ -381,8 +381,15 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName 
 	}
 
 	const FVector BoneWorldLocation = Mesh->GetBoneLocation(BodyName);
-	const FVector TraceStart = BoneWorldLocation + FVector(0.0, 0.0, LiveRuntimeEvidenceSupportSweepStartLiftCm);
-	const FVector TraceEnd = BoneWorldLocation - FVector(0.0, 0.0, LiveRuntimeEvidenceSupportSweepDistanceCm);
+	const float R = LiveRuntimeEvidenceSupportSweepRadiusCm;
+	
+	const FVector Offsets[] = {
+		FVector(0, 0, 0),
+		FVector(R, 0, 0),
+		FVector(-R, 0, 0),
+		FVector(0, R, 0),
+		FVector(0, -R, 0)
+	};
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PhysAnimLiveRuntimeEvidenceProof), false);
 	QueryParams.bReturnPhysicalMaterial = false;
@@ -392,23 +399,36 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName 
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 
-	FHitResult Hit;
-	const bool bHit = World->SweepSingleByObjectType(
-		Hit,
-		TraceStart,
-		TraceEnd,
-		FQuat::Identity,
-		ObjectQueryParams,
-		FCollisionShape::MakeSphere(LiveRuntimeEvidenceSupportSweepRadiusCm),
-		QueryParams);
-
-	if (!bHit || !Hit.bBlockingHit)
+	int32 HitCount = 0;
+	for (const FVector& Offset : Offsets)
 	{
+		const FVector SampleLocation = BoneWorldLocation + Offset;
+		const FVector TraceStart = SampleLocation + FVector(0.0, 0.0, LiveRuntimeEvidenceSupportSweepStartLiftCm);
+		const FVector TraceEnd = SampleLocation - FVector(0.0, 0.0, LiveRuntimeEvidenceSupportSweepDistanceCm);
+
+		FHitResult Hit;
+		const bool bHit = World->LineTraceSingleByObjectType(
+			Hit,
+			TraceStart,
+			TraceEnd,
+			ObjectQueryParams,
+			QueryParams);
+
+		if (bHit && Hit.bBlockingHit)
+		{
+			Hit.BoneName = BodyName;
+			OutHitResults.Add(Hit);
+			HitCount++;
+		}
+	}
+
+	if (HitCount == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] ALL_SAMPLES_FAILED body=%s location=(%.1f,%.1f,%.1f) radius=%.1f"),
+			*BodyName.ToString(), BoneWorldLocation.X, BoneWorldLocation.Y, BoneWorldLocation.Z, R);
 		return false;
 	}
 
-	Hit.BoneName = BodyName;
-	OutHitResults.Add(Hit);
 	return true;
 }
 
