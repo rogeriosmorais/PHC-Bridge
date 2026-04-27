@@ -135,6 +135,31 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 }
 
 
+EPhysAnimRuntimeState UPhysAnimComponent::EvaluateBalanceActiveStanding() const
+{
+	if (LiveRuntimeEvidenceTerminationState.bTerminated)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=FailStopped reason=TERMINATED_IN_LOOP terminal_reason=%d"), 
+			static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
+		return EPhysAnimRuntimeState::FailStopped;
+	}
+
+	if (LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportMode == EPhysAnimSupportMode::Airborne)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=BalanceSafeDeny reason=AIRBORNE_MODE"));
+		return EPhysAnimRuntimeState::BalanceSafeDeny;
+	}
+
+	if (LiveRuntimeEvidenceTerminationState.LatestArtifact.ActiveSupportSideCount == 0)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=BalanceSafeDeny reason=NO_SUPPORT_SIDES"));
+		return EPhysAnimRuntimeState::BalanceSafeDeny;
+	}
+
+	return EPhysAnimRuntimeState::BalanceActive_Standing;
+}
+
+
 void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 {
 	bLiveRuntimeEvidenceProofActive = false;

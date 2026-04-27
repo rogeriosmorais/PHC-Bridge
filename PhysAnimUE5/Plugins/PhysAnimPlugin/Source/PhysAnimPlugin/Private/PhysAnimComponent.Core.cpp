@@ -3624,6 +3624,15 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		UpdateBalancePerturbation(DeltaTime);
 	}
 
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		const EPhysAnimRuntimeState EvaluatedState = EvaluateBalanceActiveStanding();
+		if (EvaluatedState != RuntimeState)
+		{
+			TransitionRuntimeState(EvaluatedState);
+		}
+	}
+
 	PhysicsControl->UpdateTargetCaches(DeltaTime);
 
 	if (bRunPolicyUpdateThisTick)

@@ -1097,6 +1097,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
 	bool CanEnterBalanceActiveStanding() const;
 
+	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
+	EPhysAnimRuntimeState EvaluateBalanceActiveStanding() const;
+
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
 
