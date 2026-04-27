@@ -270,8 +270,13 @@ namespace PhysAnimRuntimeAdapter
 
 		const FPhysAnimFrameHull FrameHull = PhysAnimSupportTruth::BuildFrameHull(Patches);
 
-		const bool bActiveL = PatchAreaL > UE_SMALL_NUMBER;
-		const bool bActiveR = PatchAreaR > UE_SMALL_NUMBER;
+		bool bActiveL = false;
+		bool bActiveR = false;
+		for (const FPhysAnimSupportPatch& Patch : Patches)
+		{
+			if (Patch.SupportSide == EPhysAnimSupportSide::Left) bActiveL = true;
+			if (Patch.SupportSide == EPhysAnimSupportSide::Right) bActiveR = true;
+		}
 
 		FPhysAnimSupportSnapshotCaptureInput CaptureInput;
 		CaptureInput.bSupportStateL = bActiveL;

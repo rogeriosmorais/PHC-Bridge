@@ -44,7 +44,7 @@ namespace
 
 		if (Points.Num() < 3)
 		{
-			return TArray<FVector2D>();
+			return Points;
 		}
 
 		TArray<FVector2D> Hull;
@@ -77,11 +77,6 @@ namespace
 		if (!Hull.IsEmpty())
 		{
 			Hull.Pop(EAllowShrinking::No);
-		}
-
-		if (Hull.Num() < 3 || CalculatePolygonAreaCm2(Hull) <= UE_SMALL_NUMBER)
-		{
-			return TArray<FVector2D>();
 		}
 
 		return Hull;
@@ -161,14 +156,8 @@ namespace PhysAnimSupportTruth
 		}
 
 		TArray<FVector2D> Hull = BuildConvexHull(MoveTemp(SortedPoints));
-		const double AreaCm2 = Hull.Num() >= 3 ? CalculatePolygonAreaCm2(Hull) : 0.0;
-		if (AreaCm2 <= UE_SMALL_NUMBER)
-		{
-			return Result;
-		}
-
 		Result.HullPointsCm = MoveTemp(Hull);
-		Result.PatchAreaCm2 = AreaCm2;
+		Result.PatchAreaCm2 = Result.HullPointsCm.Num() >= 3 ? CalculatePolygonAreaCm2(Result.HullPointsCm) : 0.0;
 		return Result;
 	}
 

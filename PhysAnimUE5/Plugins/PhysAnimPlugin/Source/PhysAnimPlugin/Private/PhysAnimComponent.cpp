@@ -180,6 +180,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		return;
 	}
 
+
 	if (LiveRuntimeEvidenceAttemptUuid.IsEmpty())
 	{
 		LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
@@ -319,6 +320,9 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName 
 
 	if (!bHit || !Hit.bBlockingHit)
 	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimProof] SWEEP_FAILED body=%s start=(%.1f,%.1f,%.1f) end=(%.1f,%.1f,%.1f) radius=%.1f hit=%d blocking=%d"),
+			*BodyName.ToString(), TraceStart.X, TraceStart.Y, TraceStart.Z, TraceEnd.X, TraceEnd.Y, TraceEnd.Z, 
+			LiveRuntimeEvidenceSupportSweepRadiusCm, bHit ? 1 : 0, Hit.bBlockingHit ? 1 : 0);
 		return false;
 	}
 
@@ -333,9 +337,12 @@ FPhysAnimSupportHitResultObservationInput UPhysAnimComponent::BuildLiveRuntimeEv
 {
 	FPhysAnimSupportHitResultObservationInput Input;
 
+	const USkeletalMeshComponent* const Mesh = GetMeshComponent();
+	const FVector ActorLocation = Mesh ? Mesh->GetComponentLocation() : FVector::ZeroVector;
+
 	Input.HitResults = HitResults;
-	Input.WorldOriginCm = FVector::ZeroVector;
-	Input.ComProxyPosCm = FVector2D::ZeroVector;
+	Input.WorldOriginCm = ActorLocation;
+	Input.ComProxyPosCm = FVector2D::ZeroVector; // Local relative to WorldOrigin
 	Input.DeltaMs = static_cast<double>(FMath::Max(0.0f, DeltaTimeSeconds) * 1000.0f);
 	Input.PreviousSupportGapTimerMs = LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportGapTimerMs;
 
