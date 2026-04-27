@@ -3511,7 +3511,24 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
-	if (ShouldAttemptAutoTriggeredBalanceStart(
+	const bool bStandingProofPass = !bEnableLiveRuntimeEvidenceProof || bLiveRuntimeEvidenceProofComplete;
+
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+	{
+		if (ShouldExitStandingToSafeDeny(LiveRuntimeEvidenceTerminationState))
+		{
+			const FPhysAnimRunArtifactSnapshot& Latest = LiveRuntimeEvidenceTerminationState.LatestArtifact;
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SETTLE_DENIED reason=PHASE3_ACTIVE_SUPPORT_FAILURE hull_area=%.1f gap=%.1f proxy_inside=%d proxy_drift=%.1f"),
+				Latest.SupportHullAreaCm2,
+				Latest.SupportGapTimerMs,
+				Latest.ProxyInsideHull.IsSet() ? (Latest.ProxyInsideHull.GetValue() ? 1 : 0) : -1,
+				Latest.ProxyOutsideHullDurationMs.IsSet() ? Latest.ProxyOutsideHullDurationMs.GetValue() : 0.0);
+			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceSafeDeny);
+			return;
+		}
+	}
+
+	if (bStandingProofPass && ShouldAttemptAutoTriggeredBalanceStart(
 		RuntimeState,
 		bPendingBalanceModeStartRequest,
 		BalanceReadyTransition.HasActuallyStarted(),

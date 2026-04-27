@@ -105,6 +105,18 @@ bool UPhysAnimComponent::EvaluateRuntimeInstability(
 
 bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 {
+	if (!bEnableLiveRuntimeEvidenceProof)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_DISABLED"));
+		return false;
+	}
+
+	if (!bLiveRuntimeEvidenceProofActive && !bLiveRuntimeEvidenceProofComplete)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_INACTIVE"));
+		return false;
+	}
+
 	if (LiveRuntimeEvidenceTerminationState.bTerminated)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=TERMINATED_IN_PROOF terminal_reason=%d"), 
@@ -112,22 +124,52 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 		return false;
 	}
 
-	if (LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportMode == EPhysAnimSupportMode::Airborne)
+	const FPhysAnimRunArtifactSnapshot& Latest = LiveRuntimeEvidenceTerminationState.LatestArtifact;
+
+	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=AIRBORNE_MODE"));
 		return false;
 	}
 
-	if (LiveRuntimeEvidenceTerminationState.LatestArtifact.ActiveSupportSideCount == 0)
+	if (Latest.ActiveSupportSideCount == 0)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=NO_SUPPORT_SIDES"));
 		return false;
 	}
 
-	if (LiveRuntimeEvidenceStandingSeconds < 3.0f)
+	if (Latest.SupportHullAreaCm2 <= 0.0f)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=INSUFFICIENT_STANDING_DURATION duration=%.3f target=3.0"), 
-			LiveRuntimeEvidenceStandingSeconds);
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=NO_SUPPORT_AREA"));
+		return false;
+	}
+
+	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
+
+	if (Latest.SupportGapTimerMs >= Settings.BalancePhase1AdmissionMaxSupportGapMs)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=SUPPORT_GAP gap=%.1f threshold=%.1f"), 
+			Latest.SupportGapTimerMs, Settings.BalancePhase1AdmissionMaxSupportGapMs);
+		return false;
+	}
+
+	if (Latest.ProxyInsideHull.IsSet() && !Latest.ProxyInsideHull.GetValue())
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROXY_OUTSIDE_HULL"));
+		return false;
+	}
+
+	if (Latest.ProxyOutsideHullDurationMs.IsSet() && Latest.ProxyOutsideHullDurationMs.GetValue() >= Settings.ProxyDriftLimitMs)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROXY_DRIFT_THRESHOLD drift=%.1f threshold=%.1f"), 
+			Latest.ProxyOutsideHullDurationMs.GetValue(), Settings.ProxyDriftLimitMs);
+		return false;
+	}
+
+	if (LiveRuntimeEvidenceStandingSeconds < LiveRuntimeEvidenceStandingTargetSeconds)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=INSUFFICIENT_STANDING_DURATION duration=%.3f target=%.3f"), 
+			LiveRuntimeEvidenceStandingSeconds, LiveRuntimeEvidenceStandingTargetSeconds);
 		return false;
 	}
 
@@ -135,24 +177,61 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 }
 
 
+bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerminationState& TerminationState) const
+{
+	if (TerminationState.bTerminated)
+	{
+		return true;
+	}
+
+	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
+
+	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne)
+	{
+		return true;
+	}
+
+	if (Latest.ActiveSupportSideCount == 0)
+	{
+		return true;
+	}
+
+	if (Latest.SupportHullAreaCm2 <= 0.0f)
+	{
+		return true;
+	}
+
+	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
+
+	if (Latest.SupportGapTimerMs >= Settings.BalancePhase1AdmissionMaxSupportGapMs)
+	{
+		return true;
+	}
+
+	if (Latest.ProxyInsideHull.IsSet() && !Latest.ProxyInsideHull.GetValue())
+	{
+		return true;
+	}
+
+	if (Latest.ProxyOutsideHullDurationMs.Get(0.0) >= Settings.ProxyDriftLimitMs)
+	{
+		return true;
+	}
+
+	return false;
+}
+
+
 EPhysAnimRuntimeState UPhysAnimComponent::EvaluateBalanceActiveStanding() const
 {
-	if (LiveRuntimeEvidenceTerminationState.bTerminated)
+	if (ShouldExitStandingToSafeDeny(LiveRuntimeEvidenceTerminationState))
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=FailStopped reason=TERMINATED_IN_LOOP terminal_reason=%d"), 
-			static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
-		return EPhysAnimRuntimeState::FailStopped;
-	}
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=BalanceSafeDeny reason=PHASE3_ACTIVE_SUPPORT_FAILURE hull_area=%.1f gap=%.1f proxy_inside=%d proxy_drift=%.1f"),
+			LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportHullAreaCm2,
+			LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportGapTimerMs,
+			LiveRuntimeEvidenceTerminationState.LatestArtifact.ProxyInsideHull.IsSet() ? (LiveRuntimeEvidenceTerminationState.LatestArtifact.ProxyInsideHull.GetValue() ? 1 : 0) : -1,
+			LiveRuntimeEvidenceTerminationState.LatestArtifact.ProxyOutsideHullDurationMs.IsSet() ? LiveRuntimeEvidenceTerminationState.LatestArtifact.ProxyOutsideHullDurationMs.GetValue() : 0.0);
 
-	if (LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportMode == EPhysAnimSupportMode::Airborne)
-	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=BalanceSafeDeny reason=AIRBORNE_MODE"));
-		return EPhysAnimRuntimeState::BalanceSafeDeny;
-	}
-
-	if (LiveRuntimeEvidenceTerminationState.LatestArtifact.ActiveSupportSideCount == 0)
-	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=BalanceSafeDeny reason=NO_SUPPORT_SIDES"));
 		return EPhysAnimRuntimeState::BalanceSafeDeny;
 	}
 
@@ -169,6 +248,15 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
 	LiveRuntimeEvidenceStandingSeconds = 0.0f;
 	LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
+
+	if (ACharacter* Character = Cast<ACharacter>(GetOwner()))
+	{
+		if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+		{
+			MoveComp->StopMovementImmediately();
+		}
+	}
+
 	LiveRuntimeEvidenceSubstepCounter = 0;
 	LiveRuntimeEvidenceTerminationState = FPhysAnimRuntimeTerminationState();
 }
@@ -179,8 +267,6 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 	{
 		return;
 	}
-
-
 	if (LiveRuntimeEvidenceAttemptUuid.IsEmpty())
 	{
 		LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
@@ -302,11 +388,7 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName 
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
-
-	if (!bLiveRuntimeEvidenceWorldStaticOnly)
-	{
-		ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
-	}
+	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
 
 	FHitResult Hit;
 	const bool bHit = World->SweepSingleByObjectType(

@@ -303,6 +303,12 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase1PrepareDuration = 0.10f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1AdmissionMaxSupportGapMs = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float ProxyDriftLimitMs = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase1MaxRootLinearBaseline = 25.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
@@ -512,6 +518,8 @@ struct FPhysAnimStabilizationSettings
 			BalanceEntryMaxDistalSimCount == Other.BalanceEntryMaxDistalSimCount &&
 			FMath::IsNearlyEqual(BalanceEntryMinPolicyAlpha, Other.BalanceEntryMinPolicyAlpha) &&
 			FMath::IsNearlyEqual(BalancePhase1PrepareDuration, Other.BalancePhase1PrepareDuration) &&
+			FMath::IsNearlyEqual(BalancePhase1AdmissionMaxSupportGapMs, Other.BalancePhase1AdmissionMaxSupportGapMs) &&
+			FMath::IsNearlyEqual(ProxyDriftLimitMs, Other.ProxyDriftLimitMs) &&
 			FMath::IsNearlyEqual(BalancePhase1MaxRootLinearBaseline, Other.BalancePhase1MaxRootLinearBaseline) &&
 			FMath::IsNearlyEqual(BalancePhase1MaxRootAngularBaseline, Other.BalancePhase1MaxRootAngularBaseline) &&
 			FMath::IsNearlyEqual(BalancePhase1QuietRootLinearSpeed, Other.BalancePhase1QuietRootLinearSpeed) &&
@@ -1008,7 +1016,7 @@ public:
 	FName LiveRuntimeEvidenceRightSupportBodyName = TEXT("foot_r");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
-	float LiveRuntimeEvidenceSupportSweepRadiusCm = 6.0f;
+	float LiveRuntimeEvidenceSupportSweepRadiusCm = 12.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
 	float LiveRuntimeEvidenceSupportSweepDistanceCm = 18.0f;
@@ -1100,8 +1108,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
 	EPhysAnimRuntimeState EvaluateBalanceActiveStanding() const;
 
+	bool ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerminationState& TerminationState) const;
+
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
+
+	const FPhysAnimRuntimeTerminationState& GetLiveRuntimeEvidenceTerminationState() const { return LiveRuntimeEvidenceTerminationState; }
 
 	static EPhysAnimRuntimeState MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase TransitionPhase);
 
