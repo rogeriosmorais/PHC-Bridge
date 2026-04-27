@@ -356,5 +356,156 @@ bool FPhysAnimStandingProofNegativeSupportTest::RunTest(const FString& Parameter
 
 	return true;
 }
+/**
+ * Command to enable activation wiring test cases.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FEnableActivationWiringCommand, bool, bEnableProof, bool, bFinishProof, bool, bForceFailure);
+bool FEnableActivationWiringCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			Comp->StopBridge();
+			Comp->ResetLiveRuntimeEvidenceProof();
+			Comp->bEnableLiveRuntimeEvidenceProof = bEnableProof;
+			
+			if (bForceFailure)
+			{
+				Comp->SetForceSupportFailure(true);
+			}
+
+			Comp->StartBridge();
+			break;
+		}
+	}
+
+	return true;
+}
+
+/**
+ * Command to verify activation wiring results.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyActivationWiringCommand, EPhysAnimRuntimeState, ExpectedState);
+bool FVerifyActivationWiringCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			const EPhysAnimRuntimeState ActualState = Comp->GetRuntimeState();
+			if (ActualState == ExpectedState)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED ActualState=%d"), (int32)ActualState);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("ActivationWiring: TEST_FAILED. Expected %d but got %d for %s"), (int32)ExpectedState, (int32)ActualState, *It->GetName());
+			}
+			break;
+		}
+	}
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationWiringTest, "ActivationPath.Wiring", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivationWiringTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ProofDisabled"));
+	OutTestCommands.Add(TEXT("ProofDisabled"));
+
+	OutBeautifiedNames.Add(TEXT("ProofNotSatisfied"));
+	OutTestCommands.Add(TEXT("ProofNotSatisfied"));
+
+	OutBeautifiedNames.Add(TEXT("ProofSatisfied"));
+	OutTestCommands.Add(TEXT("ProofSatisfied"));
+
+	OutBeautifiedNames.Add(TEXT("ProofFailed"));
+	OutTestCommands.Add(TEXT("ProofFailed"));
+}
+
+bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
+{
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+
+	if (Parameters == TEXT("ProofDisabled"))
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(false, false, false));
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f)); // Wait for startup
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BridgeActive));
+	}
+	else if (Parameters == TEXT("ProofNotSatisfied"))
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, false, false));
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f)); // Wait for startup (but proof takes 3s)
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch));
+	}
+	else if (Parameters == TEXT("ProofSatisfied"))
+	{
+		AddExpectedError(TEXT("PhysAnimProof: TerminalArtifact"), EAutomationExpectedErrorFlags::Contains, 0);
+		AddExpectedError(TEXT("PhysAnimProof: AttemptResult"), EAutomationExpectedErrorFlags::Contains, 0);
+
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f)); // Wait for 3s proof + startup
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing));
+	}
+	else if (Parameters == TEXT("ProofFailed"))
+	{
+		AddExpectedError(TEXT("PhysAnimProof: TerminalArtifact"), EAutomationExpectedErrorFlags::Contains, 0);
+		AddExpectedError(TEXT("PhysAnimProof: AttemptResult"), EAutomationExpectedErrorFlags::Contains, 0);
+		AddExpectedError(TEXT("Fail-stop: Proof failed"), EAutomationExpectedErrorFlags::Contains, 0);
+
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, true));
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::FailStopped));
+	}
+
+	return true;
+}
 
 #endif

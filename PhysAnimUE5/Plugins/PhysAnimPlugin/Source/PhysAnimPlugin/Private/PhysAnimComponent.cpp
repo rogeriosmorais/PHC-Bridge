@@ -111,13 +111,14 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 		return false;
 	}
 
-	if (!bLiveRuntimeEvidenceProofActive && !bLiveRuntimeEvidenceProofComplete)
+	if (!bLiveRuntimeEvidenceProofComplete)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_INACTIVE"));
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_NOT_COMPLETE"));
 		return false;
 	}
 
-	if (LiveRuntimeEvidenceTerminationState.bTerminated)
+	if (LiveRuntimeEvidenceTerminationState.bTerminated && 
+		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=TERMINATED_IN_PROOF terminal_reason=%d"), 
 			static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
@@ -219,7 +220,8 @@ bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerm
 
 EPhysAnimRuntimeState UPhysAnimComponent::EvaluateBalanceActiveStanding() const
 {
-	if (LiveRuntimeEvidenceTerminationState.bTerminated)
+	if (LiveRuntimeEvidenceTerminationState.bTerminated && 
+		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=FailStopped reason=TERMINATED_IN_LOOP terminal_reason=%d"), 
 			static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
@@ -238,6 +240,14 @@ EPhysAnimRuntimeState UPhysAnimComponent::EvaluateBalanceActiveStanding() const
 	}
 
 	return EPhysAnimRuntimeState::BalanceActive_Standing;
+}
+
+
+bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
+{
+	return bLiveRuntimeEvidenceProofComplete && 
+		LiveRuntimeEvidenceTerminationState.bTerminated && 
+		LiveRuntimeEvidenceTerminationState.TerminalReason == EPhysAnimTerminalReason::None;
 }
 
 

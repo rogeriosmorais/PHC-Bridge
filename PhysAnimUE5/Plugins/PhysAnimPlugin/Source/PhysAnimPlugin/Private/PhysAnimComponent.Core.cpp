@@ -3338,6 +3338,23 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			return;
 		}
 
+		if (bEnableLiveRuntimeEvidenceProof)
+		{
+			if (LiveRuntimeEvidenceTerminationState.bTerminated && 
+				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+			{
+				FailStopWithTrace(FString::Printf(TEXT("Proof failed during activation wait: %d"), (int32)LiveRuntimeEvidenceTerminationState.TerminalReason));
+				return;
+			}
+
+			if (!bLiveRuntimeEvidenceProofComplete)
+			{
+				// Hold activation until proof is complete
+				FinalizeTraceFrame();
+				return;
+			}
+		}
+
 		if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("StartupActivation"), TickError))
 		{
 			FailStopWithTrace(TickError);
@@ -3370,6 +3387,23 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	if (ShouldActivateBridgeFromSafeMode(RuntimeState, EffectiveSettings.bForceZeroActions))
 	{
+		if (bEnableLiveRuntimeEvidenceProof)
+		{
+			if (LiveRuntimeEvidenceTerminationState.bTerminated && 
+				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+			{
+				FailStopWithTrace(FString::Printf(TEXT("Proof failed during deferred activation wait: %d"), (int32)LiveRuntimeEvidenceTerminationState.TerminalReason));
+				return;
+			}
+
+			if (!bLiveRuntimeEvidenceProofComplete)
+			{
+				// Hold activation until proof is complete
+				FinalizeTraceFrame();
+				return;
+			}
+		}
+
 		if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("DeferredActivation"), TickError))
 		{
 			FailStopWithTrace(TickError);
@@ -3511,10 +3545,19 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
-	if (bEnableLiveRuntimeEvidenceProof)
+	if (bEnableLiveRuntimeEvidenceProof && RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] PROOF_TICKING attempt=%s"), *LiveRuntimeEvidenceAttemptUuid);
-		TickLiveRuntimeEvidenceProof(DeltaTime);
+		if (!IsLiveRuntimeEvidenceProofSatisfied())
+		{
+			if (LiveRuntimeEvidenceTerminationState.bTerminated &&
+				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+			{
+				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: Proof failed during activation wait: %d"),
+					static_cast<int32>(RuntimeState));
+				TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+			}
+			return;
+		}
 	}
 
 	const bool bStandingProofPass = !bEnableLiveRuntimeEvidenceProof || bLiveRuntimeEvidenceProofComplete;
@@ -4566,6 +4609,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 void UPhysAnimComponent::ResetStabilizationRuntimeState()
 {
+	BalanceReadyTransition.Cancel(this);
 	ConditionedActionBuffer.Reset();
 	PreviousConditionedActionBuffer.Reset();
 	PreviousActionOutputBuffer.Reset();
