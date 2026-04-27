@@ -1112,6 +1112,8 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
+	bool GetForceSupportFailure() const { return bForceSupportFailure; }
+	void SetForceSupportFailure(bool bInForce) { bForceSupportFailure = bInForce; }
 
 	const FPhysAnimRuntimeTerminationState& GetLiveRuntimeEvidenceTerminationState() const { return LiveRuntimeEvidenceTerminationState; }
 	bool IsLiveRuntimeEvidenceProofComplete() const { return bLiveRuntimeEvidenceProofComplete; }
@@ -1515,6 +1517,7 @@ private:
 
 	bool bLiveRuntimeEvidenceProofActive = false;
 	bool bLiveRuntimeEvidenceProofComplete = false;
+	bool bForceSupportFailure = false;
 	bool bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
 
 	FString LiveRuntimeEvidenceAttemptUuid;

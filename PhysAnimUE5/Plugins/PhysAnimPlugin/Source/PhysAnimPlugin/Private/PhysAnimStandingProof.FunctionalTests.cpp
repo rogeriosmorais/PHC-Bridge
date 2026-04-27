@@ -63,6 +63,7 @@ bool FEnableStandingProofCommand::Update()
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] ENABLING_PROOF for %s"), *It->GetName());
+			Comp->ResetLiveRuntimeEvidenceProof();
 			Comp->bEnableLiveRuntimeEvidenceProof = true;
 			break;
 		}
@@ -189,6 +190,113 @@ bool FVerifyStandingProofCommand::Update()
 	return true;
 }
 
+/**
+ * Command to enable the negative support proof hook.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND(FEnableNegativeSupportProofCommand);
+bool FEnableNegativeSupportProofCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("StandingProof: ENABLING_NEGATIVE_SUPPORT_PROOF for %s"), *It->GetName());
+			Comp->ResetLiveRuntimeEvidenceProof();
+			Comp->bEnableLiveRuntimeEvidenceProof = true;
+			Comp->SetForceSupportFailure(true);
+			break;
+		}
+	}
+
+	return true;
+}
+
+/**
+ * Latent command to verify the negative standing proof results.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND(FVerifyNegativeSupportProofCommand);
+bool FVerifyNegativeSupportProofCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+			
+			// 1. Check if proof completed
+			if (!Comp->IsLiveRuntimeEvidenceProofComplete())
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: Negative proof did not complete in time for %s"), *It->GetName());
+				return true;
+			}
+
+			// 2. Check Terminal Reason - Expected ActivationSupportFailure
+			const EPhysAnimTerminalReason Reason = TerminationState.TerminalArtifact.TerminalReason;
+			if (Reason == EPhysAnimTerminalReason::ActivationSupportFailure)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("StandingProof: NEGATIVE_TEST_PASSED (Expected ActivationSupportFailure) for %s"), *It->GetName());
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: NEGATIVE_TEST_FAILED. Expected ActivationSupportFailure but got %d for %s"), (int32)Reason, *It->GetName());
+			}
+
+			// 3. Ensure we didn't stay in active standing
+			const EPhysAnimRuntimeState RuntimeState = Comp->GetRuntimeState();
+			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: NEGATIVE_TEST_FAILED. Remained in BalanceActive_Standing despite support loss for %s"), *It->GetName());
+			}
+			
+			break;
+		}
+	}
+
+	return true;
+}
+
 IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStandingProofLiveTest, "PhysAnim.StandingProof.Live", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 void FPhysAnimStandingProofLiveTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
@@ -215,6 +323,36 @@ bool FPhysAnimStandingProofLiveTest::RunTest(const FString& Parameters)
 
 	// 5. Verify results
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand());
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStandingProofNegativeSupportTest, "PhysAnim.StandingProof.NegativeSupport", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimStandingProofNegativeSupportTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_Negative"));
+	OutTestCommands.Add(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+}
+
+bool FPhysAnimStandingProofNegativeSupportTest::RunTest(const FString& Parameters)
+{
+	const FString MapName = Parameters;
+
+	// 1. Load the map
+	AutomationOpenMap(MapName);
+
+	// 2. Wait for map to load
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+
+	// 3. Enable negative proof
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableNegativeSupportProofCommand());
+
+	// 4. Wait for results (6 seconds)
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
+
+	// 5. Verify negative results
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyNegativeSupportProofCommand());
 
 	return true;
 }

@@ -261,6 +261,8 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 
 	LiveRuntimeEvidenceSubstepCounter = 0;
 	LiveRuntimeEvidenceTerminationState = FPhysAnimRuntimeTerminationState();
+	LiveRuntimeEvidenceAttemptUuid.Empty();
+	bForceSupportFailure = false;
 }
 
 void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
@@ -361,6 +363,11 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>
 {
 	OutHitResults.Reset();
 	OutMappedSupportHitCount = 0;
+
+	if (bForceSupportFailure)
+	{
+		return false;
+	}
 
 	const int32 BeforeLeft = OutHitResults.Num();
 	if (CaptureLiveRuntimeEvidenceHitResultForBody(LiveRuntimeEvidenceLeftSupportBodyName, OutHitResults))
