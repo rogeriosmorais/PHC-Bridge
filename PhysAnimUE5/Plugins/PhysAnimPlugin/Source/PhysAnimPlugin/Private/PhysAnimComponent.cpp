@@ -103,6 +103,38 @@ bool UPhysAnimComponent::EvaluateRuntimeInstability(
 
 
 
+bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
+{
+	if (LiveRuntimeEvidenceTerminationState.bTerminated)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=TERMINATED_IN_PROOF terminal_reason=%d"), 
+			static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
+		return false;
+	}
+
+	if (LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportMode == EPhysAnimSupportMode::Airborne)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=AIRBORNE_MODE"));
+		return false;
+	}
+
+	if (LiveRuntimeEvidenceTerminationState.LatestArtifact.ActiveSupportSideCount == 0)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=NO_SUPPORT_SIDES"));
+		return false;
+	}
+
+	if (LiveRuntimeEvidenceStandingSeconds < 3.0f)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=INSUFFICIENT_STANDING_DURATION duration=%.3f target=3.0"), 
+			LiveRuntimeEvidenceStandingSeconds);
+		return false;
+	}
+
+	return true;
+}
+
+
 void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 {
 	bLiveRuntimeEvidenceProofActive = false;

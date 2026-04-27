@@ -984,7 +984,6 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	QueueBalanceModeStartRequest(TEXT("manual_trigger"));
 }
 
-
 void UPhysAnimComponent::CompleteBalanceModeEntry()
 {
 	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
@@ -1000,6 +999,12 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	PendingBalanceModeRequestTimeSeconds = -1.0;
 	ClearPublishedBalanceTransitionFailureReason();
 	BalanceReadyTransition.Cancel(this);
+	
+	if (!CanEnterBalanceActiveStanding())
+	{
+		TransitionRuntimeState(EPhysAnimRuntimeState::BalanceSafeDeny);
+		return;
+	}
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
 	int32 RecoveryTotalSimCount = 0;
@@ -1029,6 +1034,7 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 		PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0,
 		GetPhysicsMovementTypeName(RecoveryPelvisModifierMovementType),
 		RecoveryTotalSimCount);
+
 	ApplyStartupMovementLock();
 	ResetBridgeLocomotionAuthorityState();
 	const double CurrentWorldTimeSeconds = World->GetTimeSeconds();

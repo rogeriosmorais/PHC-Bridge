@@ -1091,6 +1091,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	void StopBridge();
 
+	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
+	void ResetLiveRuntimeEvidenceProof();
+
+	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
+	bool CanEnterBalanceActiveStanding() const;
+
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
 
@@ -1506,7 +1512,6 @@ private:
 
 private:
 	void EmitLiveRuntimeEvidenceTerminalArtifactOnce(const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult);
-	void ResetLiveRuntimeEvidenceProof();
 	bool CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>& OutHitResults, int32& OutMappedSupportHitCount) const;
 	bool CaptureLiveRuntimeEvidenceHitResultForBody(const FName BodyName, TArray<FHitResult>& OutHitResults) const;
 	FPhysAnimSupportHitResultObservationInput BuildLiveRuntimeEvidenceObservationInput(
