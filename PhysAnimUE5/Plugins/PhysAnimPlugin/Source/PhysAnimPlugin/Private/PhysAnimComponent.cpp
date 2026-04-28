@@ -167,6 +167,18 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 		return false;
 	}
 
+	if (!Latest.bCapsuleContractPassed)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CAPSULE_CONTRACT_FAILED"));
+		return false;
+	}
+
+	if (!Latest.bPhysicalContinuityValidatorPassed)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CONTINUITY_CONTRACT_FAILED"));
+		return false;
+	}
+
 	if (LiveRuntimeEvidenceStandingSeconds < LiveRuntimeEvidenceStandingTargetSeconds)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=INSUFFICIENT_STANDING_DURATION duration=%.3f target=%.3f"), 
@@ -529,7 +541,9 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Authority.bAuthorityPassed = true;
 	Input.MovementReclaim.bMovementReclaimPassed = true;
 	Input.ShellHelper.bShellHelperPassed = true;
-	Input.Continuity.bPhysicalContinuityValidatorPassed = true;
+
+	Input.Capsule = PhysAnimValidators::ValidateCapsule(BuildCapsuleContractSnapshot());
+	Input.Continuity = PhysAnimValidators::ValidateContinuity(BuildContinuitySnapshot());
 
 	return Input;
 }

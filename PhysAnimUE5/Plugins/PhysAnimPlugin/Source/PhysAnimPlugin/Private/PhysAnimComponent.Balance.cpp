@@ -33,6 +33,10 @@ bool UPhysAnimComponent::ShouldRebaselineBridgeStateAfterTransitionFailure(const
 	}
 }
 
+
+
+
+
 void UPhysAnimComponent::PublishBalanceTransitionFailureReason(const FString& FailureReason)
 {
 	LastPublishedBalanceTransitionFailureReason = FailureReason;
@@ -1367,5 +1371,81 @@ void UPhysAnimComponent::TrackStabilizationStressTestObservations()
 			LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
 			LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond);
 	}
+}
+
+
+FPhysAnimCapsuleContractSnapshot UPhysAnimComponent::BuildCapsuleContractSnapshot() const
+{
+	FPhysAnimCapsuleContractSnapshot Snapshot;
+	
+	const ACharacter* Character = Cast<ACharacter>(GetOwner());
+	const UCapsuleComponent* Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
+	const USkeletalMeshComponent* Mesh = GetMeshComponent();
+	const UCharacterMovementComponent* CMC = Character ? Character->GetCharacterMovement() : nullptr;
+
+	if (Capsule)
+	{
+		Snapshot.CapsuleCollisionEnabled = Capsule->GetCollisionEnabled() == ECollisionEnabled::NoCollision 
+			? EPhysAnimCapsuleCollisionState::NoCollision 
+			: EPhysAnimCapsuleCollisionState::CollisionEnabled;
+		Snapshot.bCapsuleGenerateOverlapEvents = Capsule->GetGenerateOverlapEvents();
+		
+		const FVector RelativeLoc = Mesh ? Mesh->GetRelativeLocation() : FVector::ZeroVector;
+		// Standard Manny offset is -90.0 on Z. 
+		const float DefaultZ = -90.0f; 
+		Snapshot.CapsuleLockDeltaCm = FMath::Abs(RelativeLoc.Z - DefaultZ);
+	}
+
+	if (Mesh)
+	{
+		Snapshot.bMeshUsesAbsoluteLocation = Mesh->IsUsingAbsoluteLocation();
+		Snapshot.bMeshUsesAbsoluteRotation = Mesh->IsUsingAbsoluteRotation();
+		Snapshot.bMeshUsesAbsoluteScale = Mesh->IsUsingAbsoluteScale();
+	}
+
+	if (CMC)
+	{
+		Snapshot.bCmcIsActive = CMC->IsActive();
+		Snapshot.bCmcTickEnabled = CMC->IsComponentTickEnabled();
+		Snapshot.bCmcUpdatedComponentIsNull = (CMC->UpdatedComponent == nullptr);
+	}
+
+	Snapshot.bIsBridgeActive = (RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState));
+
+	if (bEnableLiveRuntimeEvidenceProof)
+	{
+		UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnim] BuildCapsuleContractSnapshot: state=%d bIsBridgeActive=%d"), (int32)RuntimeState, (int32)Snapshot.bIsBridgeActive);
+	}
+
+	return Snapshot;
+}
+
+FPhysAnimContinuitySnapshot UPhysAnimComponent::BuildContinuitySnapshot() const
+{
+	FPhysAnimContinuitySnapshot Snapshot;
+	
+	USkeletalMeshComponent* Mesh = GetMeshComponent();
+	if (!Mesh)
+	{
+		Snapshot.bAllCriticalBodiesValid = false;
+		return Snapshot;
+	}
+
+	const FName PelvisName = PhysAnimBridge::GetRootBoneName();
+	FBodyInstance* PelvisBody = Mesh->GetBodyInstance(PelvisName);
+	
+	Snapshot.bAllCriticalBodiesValid = (PelvisBody != nullptr);
+	Snapshot.bAllCriticalBodiesSimulating = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
+	
+	if (PelvisBody)
+	{
+		Snapshot.PelvisSleepDurationMs = PelvisBody->IsInstanceAwake() ? 0.0 : 1000.0;
+	}
+
+	Snapshot.TopologyChangeCount = 0;
+	Snapshot.bContinuityBookkeepingMismatch = false;
+	Snapshot.bIsBridgeActive = (RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState));
+
+	return Snapshot;
 }
 

@@ -1007,7 +1007,7 @@ public:
 	UPhysAnimComponent();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim | Proof", meta = (AllowPrivateAccess = "true"))
-	bool bEnableLiveRuntimeEvidenceProof = true;
+	bool bEnableLiveRuntimeEvidenceProof = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
 	FName LiveRuntimeEvidenceLeftSupportBodyName = TEXT("foot_l");
@@ -1540,6 +1540,9 @@ private:
 	FPhysAnimRuntimeSubstepInput BuildLiveRuntimeEvidenceSubstepInput(
 		const FPhysAnimSupportObservationResult& SupportObservation,
 		float DeltaTimeSeconds) const;
+
+	FPhysAnimCapsuleContractSnapshot BuildCapsuleContractSnapshot() const;
+	FPhysAnimContinuitySnapshot BuildContinuitySnapshot() const;
 
 	bool ResolveRuntimeContext(FString& OutError);
 	bool ValidateRequiredBodies(FString& OutError) const;

@@ -10,6 +10,7 @@ struct FPhysAnimContinuitySnapshot
 	bool bAllCriticalBodiesSimulating = true;
 	double PelvisSleepDurationMs = 0.0;
 	bool bContinuityBookkeepingMismatch = false;
+	bool bIsBridgeActive = false;
 };
 
 struct FPhysAnimContinuityValidationResult
@@ -17,6 +18,7 @@ struct FPhysAnimContinuityValidationResult
 	int32 TopologyChangeCount = 0;
 	bool bContinuityBookkeepingMismatch = false;
 	double PelvisSleepDurationMs = 0.0;
+	bool bIsBridgeActive = false;
 	bool bPhysicalContinuityValidatorPassed = true;
 	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
 };
@@ -38,6 +40,7 @@ struct FPhysAnimCapsuleContractSnapshot
 	bool bCmcIsActive = false;
 	bool bCmcTickEnabled = false;
 	bool bCmcUpdatedComponentIsNull = true;
+	bool bIsBridgeActive = false;
 };
 
 struct FPhysAnimCapsuleContractValidationResult
@@ -51,6 +54,7 @@ struct FPhysAnimCapsuleContractValidationResult
 	bool bCmcIsActive = false;
 	bool bCmcTickEnabled = false;
 	bool bCmcUpdatedComponentIsNull = true;
+	bool bIsBridgeActive = false;
 	bool bCapsuleContractPassed = true;
 	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
 };
@@ -266,6 +270,8 @@ struct FPhysAnimRunArtifactSnapshot
 	bool bCmcTickEnabled = false;
 	FName CmcMovementMode = NAME_None;
 	bool bCmcUpdatedComponentIsNull = true;
+	bool bIsBridgeActive = false;
+	bool bCapsuleContractPassed = true;
 
 	double HoldDurationSec = 0.0;
 	double SupportUptimeSec = 0.0;

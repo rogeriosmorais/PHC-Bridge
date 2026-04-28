@@ -156,7 +156,7 @@ namespace PhysAnimSupportTruth
 		}
 
 		TArray<FVector2D> Hull = BuildConvexHull(MoveTemp(SortedPoints));
-		Result.HullPointsCm = MoveTemp(Hull);
+		Result.HullPointsCm = (Hull.Num() >= 3) ? MoveTemp(Hull) : TArray<FVector2D>();
 		Result.PatchAreaCm2 = Result.HullPointsCm.Num() >= 3 ? CalculatePolygonAreaCm2(Result.HullPointsCm) : 0.0;
 		return Result;
 	}

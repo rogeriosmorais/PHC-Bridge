@@ -29,6 +29,7 @@ namespace PhysAnimValidators
 		Result.TopologyChangeCount = Snapshot.TopologyChangeCount;
 		Result.bContinuityBookkeepingMismatch = Snapshot.bContinuityBookkeepingMismatch;
 		Result.PelvisSleepDurationMs = Snapshot.PelvisSleepDurationMs;
+		Result.bIsBridgeActive = Snapshot.bIsBridgeActive;
 
 		if (Snapshot.TopologyChangeCount > 0 || !Snapshot.bAllCriticalBodiesValid)
 		{
@@ -37,7 +38,7 @@ namespace PhysAnimValidators
 			return Result;
 		}
 
-		if (!Snapshot.bAllCriticalBodiesSimulating || Snapshot.PelvisSleepDurationMs > PelvisSleepLimitMs)
+		if (Snapshot.bIsBridgeActive && (!Snapshot.bAllCriticalBodiesSimulating || Snapshot.PelvisSleepDurationMs > PelvisSleepLimitMs))
 		{
 			Result.bPhysicalContinuityValidatorPassed = false;
 			Result.TerminalReason = EPhysAnimTerminalReason::ActivationContinuousSimulationLost;
@@ -61,8 +62,9 @@ namespace PhysAnimValidators
 		Result.bCmcIsActive = Snapshot.bCmcIsActive;
 		Result.bCmcTickEnabled = Snapshot.bCmcTickEnabled;
 		Result.bCmcUpdatedComponentIsNull = Snapshot.bCmcUpdatedComponentIsNull;
+		Result.bIsBridgeActive = Snapshot.bIsBridgeActive;
 
-		const bool bCapsuleContractViolated =
+		const bool bCapsuleContractViolated = Snapshot.bIsBridgeActive && (
 			Snapshot.CapsuleLockDeltaCm > CapsuleLockDeltaLimitCm ||
 			Snapshot.CapsuleCollisionEnabled != EPhysAnimCapsuleCollisionState::NoCollision ||
 			Snapshot.bCapsuleGenerateOverlapEvents ||
@@ -71,7 +73,7 @@ namespace PhysAnimValidators
 			!Snapshot.bMeshUsesAbsoluteScale ||
 			Snapshot.bCmcIsActive ||
 			Snapshot.bCmcTickEnabled ||
-			!Snapshot.bCmcUpdatedComponentIsNull;
+			!Snapshot.bCmcUpdatedComponentIsNull);
 
 		if (bCapsuleContractViolated)
 		{
@@ -292,6 +294,7 @@ namespace PhysAnimValidators
 		Snapshot.bCmcIsActive = Input.Capsule.bCmcIsActive;
 		Snapshot.bCmcTickEnabled = Input.Capsule.bCmcTickEnabled;
 		Snapshot.bCmcUpdatedComponentIsNull = Input.Capsule.bCmcUpdatedComponentIsNull;
+		Snapshot.bCapsuleContractPassed = Input.Capsule.bCapsuleContractPassed;
 
 		Snapshot.TopologyChangeCount = Input.Continuity.TopologyChangeCount;
 		Snapshot.bContinuityBookkeepingMismatch = Input.Continuity.bContinuityBookkeepingMismatch;
@@ -317,6 +320,9 @@ namespace PhysAnimValidators
 		Snapshot.AuthorityConflictCount = Input.Authority.AuthorityConflictCount;
 		Snapshot.ContaminationClass = Input.Authority.ContaminationClass;
 		Snapshot.ContaminationSourceBody = Input.Authority.ContaminationSourceBody;
+
+		Snapshot.bIsBridgeActive = Input.Capsule.bIsBridgeActive;
+		Snapshot.bIsBridgeActive = Input.Continuity.bIsBridgeActive;
 		Snapshot.ContaminationSourceSubsystem = Input.Authority.ContaminationSourceSubsystem;
 		Snapshot.bMeshWideAssistDetected = Input.Authority.bMeshWideAssistDetected;
 		Snapshot.bNonCriticalBodyAssistDetected = Input.Authority.ContaminationClass == EPhysAnimContaminationClass::NonCriticalBodyAssist;

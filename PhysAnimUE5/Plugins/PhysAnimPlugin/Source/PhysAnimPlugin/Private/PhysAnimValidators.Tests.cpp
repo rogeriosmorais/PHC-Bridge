@@ -151,6 +151,7 @@ namespace
 			// VALID-02A: Actor moved.
 			FPhysAnimCapsuleContractSnapshot Snapshot;
 			Snapshot.CapsuleLockDeltaCm = 0.02;
+			Snapshot.bIsBridgeActive = true;
 
 			const FPhysAnimCapsuleContractValidationResult Result = PhysAnimValidators::ValidateCapsule(Snapshot);
 
@@ -163,6 +164,7 @@ namespace
 			// VALID-02B: Capsule collision active.
 			FPhysAnimCapsuleContractSnapshot Snapshot;
 			Snapshot.CapsuleCollisionEnabled = EPhysAnimCapsuleCollisionState::CollisionEnabled;
+			Snapshot.bIsBridgeActive = true;
 
 			const FPhysAnimCapsuleContractValidationResult Result = PhysAnimValidators::ValidateCapsule(Snapshot);
 
@@ -175,6 +177,7 @@ namespace
 			// VALID-02C: CMC active/ticking.
 			FPhysAnimCapsuleContractSnapshot ActiveSnapshot;
 			ActiveSnapshot.bCmcIsActive = true;
+			ActiveSnapshot.bIsBridgeActive = true;
 
 			const FPhysAnimCapsuleContractValidationResult ActiveResult = PhysAnimValidators::ValidateCapsule(ActiveSnapshot);
 
@@ -184,6 +187,7 @@ namespace
 
 			FPhysAnimCapsuleContractSnapshot TickingSnapshot;
 			TickingSnapshot.bCmcTickEnabled = true;
+			TickingSnapshot.bIsBridgeActive = true;
 
 			const FPhysAnimCapsuleContractValidationResult TickingResult = PhysAnimValidators::ValidateCapsule(TickingSnapshot);
 
@@ -196,6 +200,7 @@ namespace
 			// VALID-02D: UpdatedComponent still owned.
 			FPhysAnimCapsuleContractSnapshot Snapshot;
 			Snapshot.bCmcUpdatedComponentIsNull = false;
+			Snapshot.bIsBridgeActive = true;
 
 			const FPhysAnimCapsuleContractValidationResult Result = PhysAnimValidators::ValidateCapsule(Snapshot);
 
@@ -207,6 +212,7 @@ namespace
 		{
 			FPhysAnimCapsuleContractSnapshot Snapshot;
 			Snapshot.bCapsuleGenerateOverlapEvents = true;
+			Snapshot.bIsBridgeActive = true;
 
 			const FPhysAnimCapsuleContractValidationResult Result = PhysAnimValidators::ValidateCapsule(Snapshot);
 
@@ -218,6 +224,7 @@ namespace
 		{
 			FPhysAnimCapsuleContractSnapshot Snapshot;
 			Snapshot.bMeshUsesAbsoluteLocation = false;
+			Snapshot.bIsBridgeActive = true;
 
 			const FPhysAnimCapsuleContractValidationResult Result = PhysAnimValidators::ValidateCapsule(Snapshot);
 
@@ -607,8 +614,8 @@ namespace
 			Input.ControllerStability.bStandingValidationTimedOut = true;
 			Input.ControllerStability.TerminalReason = EPhysAnimTerminalReason::ActivationUnstableGainOrDamping;
 
-			Input.Values.ProxyInsideHull = false;
-			Input.Values.ProxyOutsideHullDurationMs = 101.0;
+			Input.Support.ProxyInsideHull = false;
+			Input.Support.ProxyOutsideHullDurationMs = 101.0;
 			Input.Values.SupportMode = EPhysAnimSupportMode::SingleFootSurvival;
 			Input.Values.SupportChurnCount = 3;
 			Input.Values.SupportChurnHz = 9.0;

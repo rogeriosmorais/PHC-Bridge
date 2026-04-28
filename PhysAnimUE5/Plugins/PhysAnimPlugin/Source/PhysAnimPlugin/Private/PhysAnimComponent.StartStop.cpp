@@ -52,6 +52,7 @@ bool UPhysAnimComponent::StartBridge()
 	ResetPolicySettleWindowState();
 
 	bStartupReported = true;
+	bEnableLiveRuntimeEvidenceProof = true;
 	SetComponentTickEnabled(true);
 	TransitionRuntimeState(EPhysAnimRuntimeState::RuntimeReady);
 	TransitionRuntimeState(EPhysAnimRuntimeState::WaitingForPoseSearch);
