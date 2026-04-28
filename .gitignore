@@ -65,3 +65,4 @@ memory-bank/systemPatterns.md
 memory-bank/techContext.md
 _tmp/
 .aider*
+.playwright-mcp/*

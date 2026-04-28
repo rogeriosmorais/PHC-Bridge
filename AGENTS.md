@@ -58,20 +58,6 @@ If broader context is required, stop and report:
 
 `Context expansion needed: <specific file or reason>`
 
-## Workflow Invariant Rule
-
-Before executing any task, run:
-
-`.\\scripts\\check_workflow_state.ps1 -Mode execute`
-
-If this command fails, stop. Do not infer the next task from prose. Do not execute a completed task. Do not repair implementation files while the workflow state is inconsistent.
-
-After any workflow-state update, run:
-
-`.\\scripts\\check_workflow_state.ps1 -Mode status -Strict`
-
-The execution log must never say `go` when `Current Task ID = none`.
-
 ## Task Packet Rule
 
 All implementation work must be driven by one task packet.
