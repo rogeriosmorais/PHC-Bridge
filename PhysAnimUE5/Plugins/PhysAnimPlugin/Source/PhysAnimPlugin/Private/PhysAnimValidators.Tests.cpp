@@ -73,6 +73,7 @@ namespace
 		{
 			// VALID-01A: Physics disabled.
 			FPhysAnimContinuitySnapshot Snapshot;
+			Snapshot.bIsBridgeActive = true;
 			Snapshot.bAllCriticalBodiesSimulating = false;
 
 			const FPhysAnimContinuityValidationResult Result = PhysAnimValidators::ValidateContinuity(Snapshot);
@@ -84,6 +85,7 @@ namespace
 		{
 			// VALID-01B: Pelvis sleep limit exceeded.
 			FPhysAnimContinuitySnapshot Snapshot;
+			Snapshot.bIsBridgeActive = true;
 			Snapshot.PelvisSleepDurationMs = 100.1;
 
 			const FPhysAnimContinuityValidationResult Result = PhysAnimValidators::ValidateContinuity(Snapshot);
@@ -96,6 +98,7 @@ namespace
 		{
 			// VALID-01C: Body instance loss.
 			FPhysAnimContinuitySnapshot Snapshot;
+			Snapshot.bIsBridgeActive = true;
 			Snapshot.TopologyChangeCount = 1;
 
 			const FPhysAnimContinuityValidationResult Result = PhysAnimValidators::ValidateContinuity(Snapshot);
@@ -119,6 +122,7 @@ namespace
 		{
 			// Raw continuity loss remains authoritative over bookkeeping mismatch.
 			FPhysAnimContinuitySnapshot Snapshot;
+			Snapshot.bIsBridgeActive = true;
 			Snapshot.bAllCriticalBodiesSimulating = false;
 			Snapshot.bContinuityBookkeepingMismatch = true;
 

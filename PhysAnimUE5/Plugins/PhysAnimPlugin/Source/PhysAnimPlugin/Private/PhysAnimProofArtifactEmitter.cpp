@@ -334,7 +334,7 @@ namespace PhysAnimProofArtifactEmitter
 
 		UE_LOG(
 			LogPhysAnimBridge,
-			Error,
+			Warning,
 			TEXT("PhysAnimProof: TerminalArtifact uuid=%s terminal_reason=%s timestamp=%lld support_mode=%s active_sides=%d hull_area=%.3f support_gap=%.3f proxy_inside=%s proxy_outside_duration=%s terminal_frame_captured=%d coterminal_count=%d artifact_json=%s artifact_json_written=%d"),
 			*Input.AttemptUuid,
 			*ToTerminalReasonString(Artifact.TerminalReason),
@@ -373,7 +373,7 @@ namespace PhysAnimProofArtifactEmitter
 		{
 			UE_LOG(
 				LogPhysAnimBridge,
-				Error,
+				Warning,
 				TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=FAIL duration=%.3f terminal_reason=%s"),
 				*AttemptUuid,
 				StandingSeconds,
