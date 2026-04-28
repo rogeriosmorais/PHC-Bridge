@@ -37,18 +37,11 @@ Implementing agent must report exact base/head SHAs.
 
 ## Allowed Files
 
-```text
-plans/stage1/20-execution/task-packets/S2-REVIEW-ACTIVATION-PROOF-AND-LOCK-01.md
-plans/stage1/20-execution/evidence/S2-REVIEW-ACTIVATION-PROOF-AND-LOCK-01.md
-plans/stage1/20-execution/execution-log.md
-```
-
-Optional only if a typo or stale task reference is found in evidence:
-
-```text
-plans/stage1/20-execution/evidence/S2-IMPL-ACTIVATION-PATH-WIRING-01.md
-plans/stage1/20-execution/evidence/S2-PROOF-G2-SIDE-BY-SIDE-ACTIVATION-01.md
-```
+- `plans/stage1/20-execution/task-packets/S2-REVIEW-ACTIVATION-PROOF-AND-LOCK-01.md`
+- `plans/stage1/20-execution/evidence/S2-REVIEW-ACTIVATION-PROOF-AND-LOCK-01.md`
+- `plans/stage1/20-execution/execution-log.md`
+- `plans/stage1/20-execution/evidence/S2-IMPL-ACTIVATION-PATH-WIRING-01.md`
+- `plans/stage1/20-execution/evidence/S2-PROOF-G2-SIDE-BY-SIDE-ACTIVATION-01.md`
 
 ## Forbidden Files
 
