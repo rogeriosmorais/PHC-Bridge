@@ -23,26 +23,15 @@ It should stay small.
 | Working Tree Requirement | `clean before starting a task` |
 
 ## Next Action
-No implementation task is currently runnable.
 
-Reason:
+go S2-REVIEW-ACTIVATION-PROOF-AND-LOCK-01
 
-`	ext
-G2 side-by-side presentation verified stable for 30s; smoke test improved.
-`
-"@
-
-    Replace-Section "Next Runnable Tasks" @"
-| Priority | Task ID | Packet | Notes |
-|---|---|---|---|
-| 1 | 
-one | 
-one | No task is currently runnable. |
 ## Next Runnable Tasks
 
 | Priority | Task ID | Packet | Notes |
 |---|---|---|---|
-| 1 | `none` | `none` | All currently identified tasks are complete. |
+| 1 | `S2-REVIEW-ACTIVATION-PROOF-AND-LOCK-01` | `plans/stage1/20-execution/task-packets/S2-REVIEW-ACTIVATION-PROOF-AND-LOCK-01.md` | Activation proof review and lock. |
+| 2 | `none` | `none` | All other currently identified tasks are complete. |
 
 ## Blocked / Deferred
 
