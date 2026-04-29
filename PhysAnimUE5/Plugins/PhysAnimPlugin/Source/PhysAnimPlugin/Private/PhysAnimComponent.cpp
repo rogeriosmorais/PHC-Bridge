@@ -25,6 +25,13 @@ namespace
 			Terminal.TerminalSubstepTimestamp == Latest.TerminalSubstepTimestamp &&
 			Terminal.bTerminalFrameArtifactCaptured == Latest.bTerminalFrameArtifactCaptured;
 	}
+
+	const TCHAR* ToCapsuleCollisionStateName(EPhysAnimCapsuleCollisionState State)
+	{
+		return State == EPhysAnimCapsuleCollisionState::CollisionEnabled
+			? TEXT("collision_enabled")
+			: TEXT("no_collision");
+	}
 }
 
 TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_PoseSearchQueryMs, TEXT("PhysAnim/PoseSearch Query ms"));
@@ -350,6 +357,12 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
 	LiveRuntimeEvidenceStandingSeconds = 0.0f;
 	LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
+	ActivatedStandingStabilityMetrics = FPhysAnimActivatedStandingStabilityMetrics();
+	bActivatedStandingStabilityBaselineInitialized = false;
+	ActivatedStandingStabilityBaselineRootLocationCm = FVector::ZeroVector;
+	ActivatedStandingStabilityBaselineRootTiltDeg = 0.0f;
+	ActivatedStandingStabilitySupportHullAreaSumCm2 = 0.0;
+	ActivatedStandingStabilityActiveSupportSideCountSum = 0.0;
 
 	if (ACharacter* Character = Cast<ACharacter>(GetOwner()))
 	{
@@ -407,6 +420,8 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		MappedSupportHitCount,
 		PipelineResult.SubstepResult.Artifact);
 
+	UpdateActivatedStandingStabilityMetrics(DeltaTimeSeconds);
+
 	if (LiveRuntimeEvidenceTerminationState.bTerminated)
 	{
 		bLiveRuntimeEvidenceProofComplete = true;
@@ -457,6 +472,71 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			LiveRuntimeEvidenceStandingSeconds,
 			EPhysAnimTerminalReason::None);
 	}
+}
+
+void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTimeSeconds)
+{
+	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* const Mesh = GetMeshComponent();
+	AActor* const OwnerActor = GetOwner();
+	if (!Mesh || !OwnerActor)
+	{
+		return;
+	}
+
+	FString TiltSource;
+	const float CurrentRootTiltDeg = ResolvePhase1Uprightness(Mesh, OwnerActor, PhysAnimBridge::GetRootBoneName(), TiltSource);
+	const FVector CurrentRootLocationCm = LastRuntimeInstabilityDiagnostics.RootLocationCm;
+	const double CurrentSupportHullAreaCm2 = LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportHullAreaCm2;
+	const double CurrentActiveSupportSideCount = static_cast<double>(LiveRuntimeEvidenceTerminationState.LatestArtifact.ActiveSupportSideCount);
+
+	if (!bActivatedStandingStabilityBaselineInitialized)
+	{
+		bActivatedStandingStabilityBaselineInitialized = true;
+		ActivatedStandingStabilityBaselineRootLocationCm = CurrentRootLocationCm;
+		ActivatedStandingStabilityBaselineRootTiltDeg = CurrentRootTiltDeg;
+		ActivatedStandingStabilityMetrics.SupportHullAreaMinCm2 = CurrentSupportHullAreaCm2;
+		ActivatedStandingStabilityMetrics.SupportHullAreaMaxCm2 = CurrentSupportHullAreaCm2;
+		ActivatedStandingStabilityMetrics.ActiveSupportSideCountMin = CurrentActiveSupportSideCount;
+		ActivatedStandingStabilityMetrics.ActiveSupportSideCountMax = CurrentActiveSupportSideCount;
+	}
+
+	ActivatedStandingStabilityMetrics.bHasSamples = true;
+	ActivatedStandingStabilityMetrics.RuntimeState = RuntimeState;
+	ActivatedStandingStabilityMetrics.TerminalReason = static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason);
+	ActivatedStandingStabilityMetrics.ActivationDurationSec += FMath::Max(0.0f, DeltaTimeSeconds);
+	ActivatedStandingStabilityMetrics.SampleCount++;
+
+	const double CurrentRootWorldPositionDriftCm = FVector::Dist(CurrentRootLocationCm, ActivatedStandingStabilityBaselineRootLocationCm);
+	const double CurrentRootVerticalDriftCm = FMath::Abs(CurrentRootLocationCm.Z - ActivatedStandingStabilityBaselineRootLocationCm.Z);
+	const double CurrentRootAngularDriftDeg = FMath::Abs(CurrentRootTiltDeg - ActivatedStandingStabilityBaselineRootTiltDeg);
+
+	ActivatedStandingStabilityMetrics.RootWorldPositionDriftCm = FMath::Max(ActivatedStandingStabilityMetrics.RootWorldPositionDriftCm, CurrentRootWorldPositionDriftCm);
+	ActivatedStandingStabilityMetrics.RootVerticalDriftCm = FMath::Max(ActivatedStandingStabilityMetrics.RootVerticalDriftCm, CurrentRootVerticalDriftCm);
+	ActivatedStandingStabilityMetrics.RootAngularDriftDeg = FMath::Max(ActivatedStandingStabilityMetrics.RootAngularDriftDeg, CurrentRootAngularDriftDeg);
+	ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond = FMath::Max(
+		ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond,
+		static_cast<double>(LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond));
+	ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond = FMath::Max(
+		ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond,
+		static_cast<double>(LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond));
+
+	ActivatedStandingStabilitySupportHullAreaSumCm2 += CurrentSupportHullAreaCm2;
+	ActivatedStandingStabilityActiveSupportSideCountSum += CurrentActiveSupportSideCount;
+	ActivatedStandingStabilityMetrics.SupportHullAreaMinCm2 = FMath::Min(ActivatedStandingStabilityMetrics.SupportHullAreaMinCm2, CurrentSupportHullAreaCm2);
+	ActivatedStandingStabilityMetrics.SupportHullAreaMaxCm2 = FMath::Max(ActivatedStandingStabilityMetrics.SupportHullAreaMaxCm2, CurrentSupportHullAreaCm2);
+	ActivatedStandingStabilityMetrics.SupportHullAreaMeanCm2 = ActivatedStandingStabilitySupportHullAreaSumCm2 / ActivatedStandingStabilityMetrics.SampleCount;
+	ActivatedStandingStabilityMetrics.ActiveSupportSideCountMin = FMath::Min(ActivatedStandingStabilityMetrics.ActiveSupportSideCountMin, CurrentActiveSupportSideCount);
+	ActivatedStandingStabilityMetrics.ActiveSupportSideCountMax = FMath::Max(ActivatedStandingStabilityMetrics.ActiveSupportSideCountMax, CurrentActiveSupportSideCount);
+	ActivatedStandingStabilityMetrics.ActiveSupportSideCountMean = ActivatedStandingStabilityActiveSupportSideCountSum / ActivatedStandingStabilityMetrics.SampleCount;
+	ActivatedStandingStabilityMetrics.FailStopCount =
+		LiveRuntimeEvidenceTerminationState.bTerminated && LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None
+		? 1
+		: 0;
 }
 
 bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>& OutHitResults, int32& OutMappedSupportHitCount) const
@@ -687,6 +767,22 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 			Input.Values.bContinuityBookkeepingMismatch ? 1 : 0,
 			Input.Values.bCapsuleContractPassed ? 1 : 0,
 			Input.Values.bPhysicalContinuityValidatorPassed ? 1 : 0);
+		UE_LOG(
+			LogPhysAnimBridge,
+			Verbose,
+			TEXT("PhysAnimProof: LiveCapsule capsule_valid=%d collision=%s cmc_active=%d cmc_tick=%d lock_delta=%.2f"),
+			CapsuleValidation.bCapsuleContractPassed ? 1 : 0,
+			ToCapsuleCollisionStateName(CapsuleValidation.CapsuleCollisionEnabled),
+			CharacterMovement && CharacterMovement->IsActive() ? 1 : 0,
+			CharacterMovement && CharacterMovement->IsComponentTickEnabled() ? 1 : 0,
+			CapsuleValidation.CapsuleLockDeltaCm);
+		UE_LOG(
+			LogPhysAnimBridge,
+			Verbose,
+			TEXT("PhysAnimProof: LiveContinuity continuity_valid=%d pelvis_sleep_ms=%.2f bookkeeping_mismatch=%d"),
+			ContinuityValidation.bPhysicalContinuityValidatorPassed ? 1 : 0,
+			ContinuityValidation.PelvisSleepDurationMs,
+			ContinuityValidation.bContinuityBookkeepingMismatch ? 1 : 0);
 		if (!PlantValidation.bPhysicsAssetContractValid || !PlantValidation.bSkeletonAuditPassed)
 		{
 			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] LiveProof plant audit failed: %s"), *PlantAuditError);

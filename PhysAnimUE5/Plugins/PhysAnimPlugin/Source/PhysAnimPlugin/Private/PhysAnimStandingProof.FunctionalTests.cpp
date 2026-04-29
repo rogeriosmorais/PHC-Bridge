@@ -489,6 +489,184 @@ bool FVerifyActivationWiringCommand::Update()
 		}
 	}
 
+return true;
+}
+
+/**
+ * Latent command to collect activated standing stability metrics for a duration.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FCollectActivatedStandingStabilityMetricsCommand, float, DurationSeconds);
+bool FCollectActivatedStandingStabilityMetricsCommand::Update()
+{
+	static double StartTimeSeconds = -1.0;
+
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return false;
+	}
+
+	if (StartTimeSeconds < 0.0)
+	{
+		StartTimeSeconds = FPlatformTime::Seconds();
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			Comp->UpdateActivatedStandingStabilityMetrics(FMath::Max(0.0f, World->GetDeltaSeconds()));
+			break;
+		}
+	}
+
+	const bool bFinished = (FPlatformTime::Seconds() - StartTimeSeconds) >= static_cast<double>(DurationSeconds);
+	if (bFinished)
+	{
+		StartTimeSeconds = -1.0;
+	}
+
+	return bFinished;
+}
+
+/**
+ * Command to verify activated standing stability metrics.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingStabilityMetricsCommand);
+bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			const EPhysAnimRuntimeState RuntimeState = Comp->GetRuntimeState();
+			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+			const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Comp->GetActivatedStandingStabilityMetrics();
+
+			if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics expected BalanceActive_Standing but got %d for %s"), (int32)RuntimeState, *It->GetName());
+			}
+
+			if (!Comp->IsLiveRuntimeEvidenceProofComplete())
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics proof did not complete for %s"), *It->GetName());
+			}
+
+			if (!Comp->IsLiveRuntimeEvidenceProofSatisfied())
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics proof is not truthful for %s"), *It->GetName());
+			}
+
+			if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics expected terminal_reason=None but got %d for %s"), (int32)TerminationState.TerminalReason, *It->GetName());
+			}
+
+			if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics were not collected for %s"), *It->GetName());
+			}
+
+			const auto CheckFinite = [&](const TCHAR* Label, double Value)
+			{
+				if (!FMath::IsFinite(Value))
+				{
+					UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics %s is not finite for %s"), Label, *It->GetName());
+				}
+			};
+
+			CheckFinite(TEXT("activation_duration_sec"), Metrics.ActivationDurationSec);
+			CheckFinite(TEXT("root_world_position_drift_cm"), Metrics.RootWorldPositionDriftCm);
+			CheckFinite(TEXT("root_vertical_drift_cm"), Metrics.RootVerticalDriftCm);
+			CheckFinite(TEXT("root_angular_drift_deg"), Metrics.RootAngularDriftDeg);
+			CheckFinite(TEXT("max_body_linear_speed_cm_per_second"), Metrics.MaxBodyLinearSpeedCmPerSecond);
+			CheckFinite(TEXT("max_body_angular_speed_deg_per_second"), Metrics.MaxBodyAngularSpeedDegPerSecond);
+			CheckFinite(TEXT("support_hull_area_min_cm2"), Metrics.SupportHullAreaMinCm2);
+			CheckFinite(TEXT("support_hull_area_mean_cm2"), Metrics.SupportHullAreaMeanCm2);
+			CheckFinite(TEXT("support_hull_area_max_cm2"), Metrics.SupportHullAreaMaxCm2);
+			CheckFinite(TEXT("active_support_side_count_min"), Metrics.ActiveSupportSideCountMin);
+			CheckFinite(TEXT("active_support_side_count_mean"), Metrics.ActiveSupportSideCountMean);
+			CheckFinite(TEXT("active_support_side_count_max"), Metrics.ActiveSupportSideCountMax);
+
+			if (Metrics.FailStopCount != 0)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics expected no fail-stop but got %d for %s"), Metrics.FailStopCount, *It->GetName());
+			}
+
+			if (Metrics.ActivationDurationSec < 30.0)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics activation duration %.2f is below 30.0 seconds for %s"), Metrics.ActivationDurationSec, *It->GetName());
+			}
+
+			if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics support hull area did not stay above zero for %s"), *It->GetName());
+			}
+
+			if (Metrics.ActiveSupportSideCountMin < 1.0 || Metrics.ActiveSupportSideCountMean < 1.0 || Metrics.ActiveSupportSideCountMax < 1.0)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics active support side count dropped below 1 for %s"), *It->GetName());
+			}
+
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("StandingProof: StabilityMetrics samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f terminalReason=%d"),
+				Metrics.SampleCount,
+				Metrics.ActivationDurationSec,
+				Metrics.RootWorldPositionDriftCm,
+				Metrics.RootVerticalDriftCm,
+				Metrics.RootAngularDriftDeg,
+				Metrics.SupportHullAreaMinCm2,
+				Metrics.SupportHullAreaMeanCm2,
+				Metrics.SupportHullAreaMaxCm2,
+				Metrics.ActiveSupportSideCountMin,
+				Metrics.ActiveSupportSideCountMean,
+				Metrics.ActiveSupportSideCountMax,
+				Metrics.MaxBodyLinearSpeedCmPerSecond,
+				Metrics.MaxBodyAngularSpeedDegPerSecond,
+				Metrics.TerminalReason);
+			break;
+		}
+	}
+
 	return true;
 }
 
@@ -582,6 +760,28 @@ bool FPhysAnimStateMachinePhase2StandingTest::RunTest(const FString& Parameters)
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing));
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingStabilityMetricsTest, "PhysAnim.ActivatedStanding.StabilityMetrics", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingStabilityMetricsTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_StabilityMetrics"));
+	OutTestCommands.Add(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+}
+
+bool FPhysAnimActivatedStandingStabilityMetricsTest::RunTest(const FString& Parameters)
+{
+	const FString MapName = Parameters;
+
+	AutomationOpenMap(MapName);
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(30.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingStabilityMetricsCommand());
+
 	return true;
 }
 

@@ -13,6 +13,7 @@
 #include "Animation/TrajectoryTypes.h"
 #include "PhysAnimBridge.h"
 #include "PhysAnimBalanceReadyTransition.h"
+#include "PhysAnimTruthTypes.h"
 
 #include "PhysAnimRuntimeTerminationPipeline.h"
 #include "PhysAnimProofArtifactEmitter.h"
@@ -996,6 +997,63 @@ struct FPhase1AutoCalibBodyModifierState {};
 struct FPhase1AutoCalibBaselineSnapshot { TArray<FPhase1AutoCalibBodyState> Bodies; };
 #endif
 
+USTRUCT(BlueprintType)
+struct FPhysAnimActivatedStandingStabilityMetrics
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	bool bHasSamples = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 TerminalReason = static_cast<int32>(EPhysAnimTerminalReason::None);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ActivationDurationSec = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double RootWorldPositionDriftCm = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double RootVerticalDriftCm = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double RootAngularDriftDeg = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double MaxBodyLinearSpeedCmPerSecond = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double MaxBodyAngularSpeedDegPerSecond = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double SupportHullAreaMinCm2 = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double SupportHullAreaMeanCm2 = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double SupportHullAreaMaxCm2 = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ActiveSupportSideCountMin = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ActiveSupportSideCountMean = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ActiveSupportSideCountMax = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 FailStopCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 SampleCount = 0;
+};
+
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
 class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPoseSearchTrajectoryPredictorInterface
 {
@@ -1118,6 +1176,8 @@ public:
 	const FPhysAnimRuntimeTerminationState& GetLiveRuntimeEvidenceTerminationState() const { return LiveRuntimeEvidenceTerminationState; }
 	bool IsLiveRuntimeEvidenceProofComplete() const { return bLiveRuntimeEvidenceProofComplete; }
 	bool IsLiveRuntimeEvidenceProofSatisfied() const;
+	const FPhysAnimActivatedStandingStabilityMetrics& GetActivatedStandingStabilityMetrics() const { return ActivatedStandingStabilityMetrics; }
+	void UpdateActivatedStandingStabilityMetrics(float DeltaTimeSeconds);
 
 	static EPhysAnimRuntimeState MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase TransitionPhase);
 
@@ -1527,6 +1587,12 @@ private:
 	int64 LiveRuntimeEvidenceSubstepCounter = 0;
 
 	FPhysAnimRuntimeTerminationState LiveRuntimeEvidenceTerminationState;
+	FPhysAnimActivatedStandingStabilityMetrics ActivatedStandingStabilityMetrics;
+	bool bActivatedStandingStabilityBaselineInitialized = false;
+	FVector ActivatedStandingStabilityBaselineRootLocationCm = FVector::ZeroVector;
+	float ActivatedStandingStabilityBaselineRootTiltDeg = 0.0f;
+	double ActivatedStandingStabilitySupportHullAreaSumCm2 = 0.0;
+	double ActivatedStandingStabilityActiveSupportSideCountSum = 0.0;
 
 	void TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds);
 
