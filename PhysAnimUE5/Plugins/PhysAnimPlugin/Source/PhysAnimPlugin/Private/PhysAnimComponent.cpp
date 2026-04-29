@@ -8,6 +8,25 @@
 
 DEFINE_LOG_CATEGORY(LogPhysAnimBridge);
 
+namespace
+{
+	bool HasConsistentLiveRuntimeEvidenceArtifact(const FPhysAnimRuntimeTerminationState& State)
+	{
+		if (!State.bTerminated)
+		{
+			return false;
+		}
+
+		const FPhysAnimRunArtifactSnapshot& Latest = State.LatestArtifact;
+		const FPhysAnimRunArtifactSnapshot& Terminal = State.TerminalArtifact;
+
+		return Terminal.AttemptUuid == Latest.AttemptUuid &&
+			Terminal.TerminalReason == Latest.TerminalReason &&
+			Terminal.TerminalSubstepTimestamp == Latest.TerminalSubstepTimestamp &&
+			Terminal.bTerminalFrameArtifactCaptured == Latest.bTerminalFrameArtifactCaptured;
+	}
+}
+
 TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_PoseSearchQueryMs, TEXT("PhysAnim/PoseSearch Query ms"));
 TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_FuturePoseSampleMs, TEXT("PhysAnim/Future Pose Sample ms"));
 TRACE_DECLARE_FLOAT_COUNTER(COUNTER_PhysAnim_ObservationPackMs, TEXT("PhysAnim/Observation Pack ms"));
@@ -117,11 +136,17 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 		return false;
 	}
 
-	if (LiveRuntimeEvidenceTerminationState.bTerminated && 
+	if (LiveRuntimeEvidenceTerminationState.bTerminated &&
 		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=TERMINATED_IN_PROOF terminal_reason=%d"), 
 			static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
+		return false;
+	}
+
+	if (!IsLiveRuntimeEvidenceProofSatisfied())
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_NOT_TRUTHFUL"));
 		return false;
 	}
 
@@ -176,6 +201,26 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 	if (!Latest.bPhysicalContinuityValidatorPassed)
 	{
 		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CONTINUITY_CONTRACT_FAILED"));
+		return false;
+	}
+
+	if (Latest.bContinuityBookkeepingMismatch)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CONTINUITY_BOOKKEEPING_MISMATCH"));
+		return false;
+	}
+
+	if (!Latest.bPhysicsAssetContractValid || !Latest.bSkeletonAuditPassed)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=AUDIT_STATE_INCONSISTENT physicsAsset=%d skeletonAudit=%d"),
+			Latest.bPhysicsAssetContractValid ? 1 : 0,
+			Latest.bSkeletonAuditPassed ? 1 : 0);
+		return false;
+	}
+
+	if (!HasConsistentLiveRuntimeEvidenceArtifact(LiveRuntimeEvidenceTerminationState))
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=ARTIFACT_STATE_INCONSISTENT"));
 		return false;
 	}
 
@@ -257,9 +302,42 @@ EPhysAnimRuntimeState UPhysAnimComponent::EvaluateBalanceActiveStanding() const
 
 bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 {
-	return bLiveRuntimeEvidenceProofComplete && 
-		LiveRuntimeEvidenceTerminationState.bTerminated && 
-		LiveRuntimeEvidenceTerminationState.TerminalReason == EPhysAnimTerminalReason::None;
+	if (!bLiveRuntimeEvidenceProofComplete ||
+		!LiveRuntimeEvidenceTerminationState.bTerminated ||
+		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None ||
+		LiveRuntimeEvidenceStandingSeconds < LiveRuntimeEvidenceStandingTargetSeconds)
+	{
+		return false;
+	}
+
+	const FPhysAnimRunArtifactSnapshot& Latest = LiveRuntimeEvidenceTerminationState.LatestArtifact;
+	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
+
+	if (!Latest.bPhysicsAssetContractValid ||
+		!Latest.bSkeletonAuditPassed ||
+		!Latest.bCapsuleContractPassed ||
+		!Latest.bPhysicalContinuityValidatorPassed ||
+		Latest.bContinuityBookkeepingMismatch)
+	{
+		return false;
+	}
+
+	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne ||
+		Latest.ActiveSupportSideCount <= 0 ||
+		Latest.SupportHullAreaCm2 <= 0.0f ||
+		Latest.SupportGapTimerMs >= Settings.BalancePhase1AdmissionMaxSupportGapMs)
+	{
+		return false;
+	}
+
+	if ((Latest.ProxyInsideHull.IsSet() && !Latest.ProxyInsideHull.GetValue()) ||
+		(Latest.ProxyOutsideHullDurationMs.IsSet() &&
+			Latest.ProxyOutsideHullDurationMs.GetValue() >= Settings.ProxyDriftLimitMs))
+	{
+		return false;
+	}
+
+	return HasConsistentLiveRuntimeEvidenceArtifact(LiveRuntimeEvidenceTerminationState);
 }
 
 
@@ -520,11 +598,20 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	float DeltaTimeSeconds) const
 {
 	FPhysAnimRuntimeSubstepInput Input;
+	const ACharacter* Character = Cast<ACharacter>(GetOwner());
+	const UCharacterMovementComponent* CharacterMovement = Character ? Character->GetCharacterMovement() : nullptr;
+	const FPhysAnimCapsuleContractSnapshot CapsuleSnapshot = BuildCapsuleContractSnapshot();
+	const FPhysAnimContinuitySnapshot ContinuitySnapshot = BuildContinuitySnapshot();
+	const FPhysAnimCapsuleContractValidationResult CapsuleValidation = PhysAnimValidators::ValidateCapsule(CapsuleSnapshot);
+	const FPhysAnimContinuityValidationResult ContinuityValidation = PhysAnimValidators::ValidateContinuity(ContinuitySnapshot);
 
 	Input.SupportObservation = SupportObservation;
+	Input.Plant.bPhysicsAssetContractValid = true;
+	Input.Plant.bSkeletonAuditPassed = true;
 	Input.Values.AttemptUuid = LiveRuntimeEvidenceAttemptUuid;
 	Input.Values.Timestamp = GetWorld() ? GetWorld()->GetTimeSeconds() : LiveRuntimeEvidenceStandingSeconds;
 	Input.Values.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
+	Input.Values.CapsuleWorldPosCm = Character ? Character->GetActorLocation() : FVector::ZeroVector;
 	Input.Values.HoldDurationSec = LiveRuntimeEvidenceStandingSeconds;
 	Input.Values.SupportUptimeSec = LiveRuntimeEvidenceStandingSeconds;
 	Input.Values.ActiveSupportSideCount = SupportObservation.Validation.ActiveSupportSideCount;
@@ -535,6 +622,16 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.SupportChurnHz = SupportObservation.Validation.SupportChurnHz;
 	Input.Values.ProxyInsideHull = SupportObservation.Validation.ProxyInsideHull;
 	Input.Values.ProxyOutsideHullDurationMs = SupportObservation.Validation.ProxyOutsideHullDurationMs;
+	Input.Values.CmcMovementMode = CharacterMovement
+		? FName(*UEnum::GetValueAsString(static_cast<EMovementMode>(CharacterMovement->MovementMode)))
+		: NAME_None;
+	Input.Values.bCapsuleContractPassed = CapsuleValidation.bCapsuleContractPassed;
+	Input.Values.bPhysicsAssetContractValid = Input.Plant.bPhysicsAssetContractValid;
+	Input.Values.bSkeletonAuditPassed = Input.Plant.bSkeletonAuditPassed;
+	Input.Values.TopologyChangeCount = ContinuityValidation.TopologyChangeCount;
+	Input.Values.bContinuityBookkeepingMismatch = ContinuityValidation.bContinuityBookkeepingMismatch;
+	Input.Values.PelvisSleepDurationMs = ContinuityValidation.PelvisSleepDurationMs;
+	Input.Values.bPhysicalContinuityValidatorPassed = ContinuityValidation.bPhysicalContinuityValidatorPassed;
 
 	Input.ControllerStability.HoldDurationSec = LiveRuntimeEvidenceStandingSeconds;
 	Input.ControllerStability.bControllerStabilityPassed = true;
@@ -542,8 +639,26 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.MovementReclaim.bMovementReclaimPassed = true;
 	Input.ShellHelper.bShellHelperPassed = true;
 
-	Input.Capsule = PhysAnimValidators::ValidateCapsule(BuildCapsuleContractSnapshot());
-	Input.Continuity = PhysAnimValidators::ValidateContinuity(BuildContinuitySnapshot());
+	Input.Capsule = CapsuleValidation;
+	Input.Continuity = ContinuityValidation;
+
+	if (bEnableLiveRuntimeEvidenceProof)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Verbose,
+			TEXT("[PhysAnim] LiveProof capture capsuleWorldPos=(%.1f,%.1f,%.1f) cmcMode=%s root=%s criticalBodies=%d topologyChanges=%d bookkeepingMismatch=%d capsulePassed=%d continuityPassed=%d"),
+			Input.Values.CapsuleWorldPosCm.X,
+			Input.Values.CapsuleWorldPosCm.Y,
+			Input.Values.CapsuleWorldPosCm.Z,
+			*Input.Values.CmcMovementMode.ToString(),
+			*PhysAnimBridge::GetRootBoneName().ToString(),
+			PhysAnimBridge::GetRequiredBodyModifierBoneNames().Num(),
+			Input.Values.TopologyChangeCount,
+			Input.Values.bContinuityBookkeepingMismatch ? 1 : 0,
+			Input.Values.bCapsuleContractPassed ? 1 : 0,
+			Input.Values.bPhysicalContinuityValidatorPassed ? 1 : 0);
+	}
 
 	return Input;
 }

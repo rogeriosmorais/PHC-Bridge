@@ -3560,7 +3560,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
-	const bool bStandingProofPass = !bEnableLiveRuntimeEvidenceProof || bLiveRuntimeEvidenceProofComplete;
+	const bool bStandingProofPass = !bEnableLiveRuntimeEvidenceProof || IsLiveRuntimeEvidenceProofSatisfied();
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
 	{

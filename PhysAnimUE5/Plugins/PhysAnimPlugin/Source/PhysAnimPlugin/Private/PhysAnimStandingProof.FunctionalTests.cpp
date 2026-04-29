@@ -156,6 +156,18 @@ bool FVerifyStandingProofCommand::Update()
 				return true;
 			}
 
+			if (!Comp->IsLiveRuntimeEvidenceProofSatisfied())
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: Proof completed but is not truthfully satisfied for %s"), *It->GetName());
+				return true;
+			}
+
+			if (!Comp->CanEnterBalanceActiveStanding())
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: Proof completed but cannot enter active standing for %s"), *It->GetName());
+				return true;
+			}
+
 			// 2. Check Hull Area - Guard against the 0.0 failure
 			const float HullArea = TerminationState.TerminalArtifact.SupportHullAreaCm2;
 			if (HullArea <= 0.0f)
@@ -181,6 +193,19 @@ bool FVerifyStandingProofCommand::Update()
 			{
 				// Currently we might fail due to shell velocity correction hardening, which is "expected" for now but we should acknowledge it
 				UE_LOG(LogTemp, Warning, TEXT("StandingProof: TERMINATED with reason %d for %s"), (int32)Reason, *It->GetName());
+			}
+
+			if (!TerminationState.TerminalArtifact.bPhysicsAssetContractValid ||
+				!TerminationState.TerminalArtifact.bSkeletonAuditPassed)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: Terminal artifact audit state is inconsistent for %s"), *It->GetName());
+			}
+
+			if (!TerminationState.TerminalArtifact.bCapsuleContractPassed ||
+				!TerminationState.TerminalArtifact.bPhysicalContinuityValidatorPassed ||
+				TerminationState.TerminalArtifact.bContinuityBookkeepingMismatch)
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: Terminal artifact capsule/continuity state is invalid for %s"), *It->GetName());
 			}
 			
 			break;
@@ -281,6 +306,16 @@ bool FVerifyNegativeSupportProofCommand::Update()
 			else
 			{
 				UE_LOG(LogTemp, Error, TEXT("StandingProof: NEGATIVE_TEST_FAILED. Expected ActivationSupportFailure but got %d for %s"), (int32)Reason, *It->GetName());
+			}
+
+			if (Comp->IsLiveRuntimeEvidenceProofSatisfied())
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: NEGATIVE_TEST_FAILED. Proof should not be satisfied for %s"), *It->GetName());
+			}
+
+			if (Comp->CanEnterBalanceActiveStanding())
+			{
+				UE_LOG(LogTemp, Error, TEXT("StandingProof: NEGATIVE_TEST_FAILED. Active standing should be denied for %s"), *It->GetName());
 			}
 
 			// 3. Ensure we didn't stay in active standing
@@ -439,6 +474,11 @@ bool FVerifyActivationWiringCommand::Update()
 			if (ActualState == ExpectedState)
 			{
 				UE_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED ActualState=%d"), (int32)ActualState);
+				if (ExpectedState == EPhysAnimRuntimeState::BalanceActive_Standing &&
+					(!Comp->IsLiveRuntimeEvidenceProofSatisfied() || !Comp->CanEnterBalanceActiveStanding()))
+				{
+					UE_LOG(LogTemp, Error, TEXT("ActivationWiring: TEST_FAILED. Standing proof gate is not truthful for %s"), *It->GetName());
+				}
 			}
 			else
 			{

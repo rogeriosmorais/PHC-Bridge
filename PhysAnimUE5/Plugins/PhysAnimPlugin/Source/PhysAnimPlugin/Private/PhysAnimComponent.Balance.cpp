@@ -1423,28 +1423,55 @@ FPhysAnimCapsuleContractSnapshot UPhysAnimComponent::BuildCapsuleContractSnapsho
 FPhysAnimContinuitySnapshot UPhysAnimComponent::BuildContinuitySnapshot() const
 {
 	FPhysAnimContinuitySnapshot Snapshot;
-	
-	USkeletalMeshComponent* Mesh = GetMeshComponent();
-	if (!Mesh)
-	{
-		Snapshot.bAllCriticalBodiesValid = false;
-		return Snapshot;
-	}
-
+	USkeletalMeshComponent* const Mesh = GetMeshComponent();
 	const FName PelvisName = PhysAnimBridge::GetRootBoneName();
-	FBodyInstance* PelvisBody = Mesh->GetBodyInstance(PelvisName);
-	
-	Snapshot.bAllCriticalBodiesValid = (PelvisBody != nullptr);
-	Snapshot.bAllCriticalBodiesSimulating = PelvisBody && PelvisBody->IsInstanceSimulatingPhysics();
-	
-	if (PelvisBody)
+	const FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PelvisName) : nullptr;
+	TArray<FString> CriticalBodyNames;
+	TArray<FString> MissingCriticalBodyNames;
+	int32 MissingCriticalBodies = 0;
+	int32 NonSimulatingCriticalBodies = 0;
+
+	for (const FName& BodyName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
-		Snapshot.PelvisSleepDurationMs = PelvisBody->IsInstanceAwake() ? 0.0 : 1000.0;
+		CriticalBodyNames.Add(BodyName.ToString());
+		const FBodyInstance* const BodyInstance = Mesh ? Mesh->GetBodyInstance(BodyName) : nullptr;
+		if (!BodyInstance)
+		{
+			MissingCriticalBodyNames.Add(BodyName.ToString());
+			++MissingCriticalBodies;
+			continue;
+		}
+
+		if (!BodyInstance->IsInstanceSimulatingPhysics())
+		{
+			++NonSimulatingCriticalBodies;
+		}
 	}
 
-	Snapshot.TopologyChangeCount = 0;
-	Snapshot.bContinuityBookkeepingMismatch = false;
+	Snapshot.bAllCriticalBodiesValid = MissingCriticalBodies == 0;
+	Snapshot.bAllCriticalBodiesSimulating = Snapshot.bAllCriticalBodiesValid && NonSimulatingCriticalBodies == 0;
+	Snapshot.PelvisSleepDurationMs = PelvisBody && PelvisBody->IsInstanceAwake() ? 0.0 : 1000.0;
+	Snapshot.TopologyChangeCount = MissingCriticalBodies;
+	Snapshot.bContinuityBookkeepingMismatch = !PendingBodyModifierCachedResetNames.IsEmpty();
 	Snapshot.bIsBridgeActive = (RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState));
+
+	if (bEnableLiveRuntimeEvidenceProof)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Verbose,
+			TEXT("[PhysAnim] BuildContinuitySnapshot root=%s criticalBodies=%s missingBodies=%s pelvisSleepMs=%.1f topologyChanges=%d bookkeepingMismatch=%d valid=%d simulating=%d bridgeActive=%d pendingResets=%d"),
+			*PelvisName.ToString(),
+			*FString::Join(CriticalBodyNames, TEXT(",")),
+			*FString::Join(MissingCriticalBodyNames, TEXT(",")),
+			Snapshot.PelvisSleepDurationMs,
+			Snapshot.TopologyChangeCount,
+			Snapshot.bContinuityBookkeepingMismatch ? 1 : 0,
+			Snapshot.bAllCriticalBodiesValid ? 1 : 0,
+			Snapshot.bAllCriticalBodiesSimulating ? 1 : 0,
+			Snapshot.bIsBridgeActive ? 1 : 0,
+			PendingBodyModifierCachedResetNames.Num());
+	}
 
 	return Snapshot;
 }
