@@ -10,6 +10,7 @@ PhysAnim.StandingProof.Live: `PASS`
 PhysAnim.StandingProof.NegativeSupport: `PASS`
 PhysAnim.ActivationPath.Wiring: `PASS`
 PhysAnim.PIE.G2Presentation: `PASS`
+PhysAnim.RuntimeTermination: `PASS`
 
 Tuning change:
 - `BalanceActiveExtraDampingMultiplier` changed from `1.0f` to `1.1f`
