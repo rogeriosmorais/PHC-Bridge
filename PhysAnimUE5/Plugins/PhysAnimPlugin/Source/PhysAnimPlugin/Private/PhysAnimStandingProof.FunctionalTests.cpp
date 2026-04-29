@@ -1551,7 +1551,7 @@ bool FSetActivatedStandingLocomotionGateIntentCommand::Update()
 	return true;
 }
 
-DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FVerifyActivatedStandingLocomotionGateCommand, bool, bExpectedAllowed, FString, ExpectedReasonSubstring, FString, CaseName);
+DEFINE_LATENT_AUTOMATION_COMMAND_FOUR_PARAMETER(FVerifyActivatedStandingLocomotionGateCommand, bool, bExpectedAllowed, FString, ExpectedReasonSubstring, FString, CaseName, FAutomationTestBase*, Test);
 bool FVerifyActivatedStandingLocomotionGateCommand::Update()
 {
 	UWorld* World = nullptr;
@@ -1572,35 +1572,38 @@ bool FVerifyActivatedStandingLocomotionGateCommand::Update()
 
 	if (!World)
 	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("LocomotionGate[%s]: PIE world was not available"), *CaseName));
 		return true;
 	}
 
+	bool bFoundComponent = false;
 	for (TActorIterator<ACharacter> It(World); It; ++It)
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
+			bFoundComponent = true;
 			FString Reason;
 			const bool bAllowed = Comp->CanEnterBridgeLocomotionGate(Reason);
 			if (bAllowed != bExpectedAllowed)
 			{
-				UE_LOG(
-					LogTemp,
-					Error,
-					TEXT("LocomotionGate[%s]: expected allowed=%d but got %d reason=%s"),
-					*CaseName,
-					bExpectedAllowed ? 1 : 0,
-					bAllowed ? 1 : 0,
-					*Reason);
+				AddLatentAutomationError(
+					Test,
+					FString::Printf(
+						TEXT("LocomotionGate[%s]: expected allowed=%d but got %d reason=%s"),
+						*CaseName,
+						bExpectedAllowed ? 1 : 0,
+						bAllowed ? 1 : 0,
+						*Reason));
 			}
 			if (!ExpectedReasonSubstring.IsEmpty() && !Reason.Contains(ExpectedReasonSubstring))
 			{
-				UE_LOG(
-					LogTemp,
-					Error,
-					TEXT("LocomotionGate[%s]: expected reason containing '%s' but got '%s'"),
-					*CaseName,
-					*ExpectedReasonSubstring,
-					*Reason);
+				AddLatentAutomationError(
+					Test,
+					FString::Printf(
+						TEXT("LocomotionGate[%s]: expected reason containing '%s' but got '%s'"),
+						*CaseName,
+						*ExpectedReasonSubstring,
+						*Reason));
 			}
 			UE_LOG(
 				LogTemp,
@@ -1611,6 +1614,11 @@ bool FVerifyActivatedStandingLocomotionGateCommand::Update()
 				*Reason);
 			break;
 		}
+	}
+
+	if (!bFoundComponent)
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("LocomotionGate[%s]: no PhysAnim component was found"), *CaseName));
 	}
 
 	return true;
@@ -1646,21 +1654,21 @@ bool FPhysAnimActivatedStandingLocomotionGateTest::RunTest(const FString& Parame
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.0f, -1.0));
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT("intent_absent"), TEXT("NoIntentDenied")));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT("intent_absent"), TEXT("NoIntentDenied"), this));
 	}
 	else if (Parameters == TEXT("ShortPulseDenied"))
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.50f, 0.05));
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT("intent_too_short"), TEXT("ShortPulseDenied")));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT("intent_too_short"), TEXT("ShortPulseDenied"), this));
 	}
 	else if (Parameters == TEXT("StableAllowed"))
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.50f, 0.50));
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(true, TEXT("intent_stable"), TEXT("StableAllowed")));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(true, TEXT("intent_stable"), TEXT("StableAllowed"), this));
 	}
 	else if (Parameters == TEXT("NegativeSupportDenied"))
 	{
@@ -1669,14 +1677,14 @@ bool FPhysAnimActivatedStandingLocomotionGateTest::RunTest(const FString& Parame
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.0f, -1.0));
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableNegativeSupportProofCommand());
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT(""), TEXT("NegativeSupportDenied")));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT(""), TEXT("NegativeSupportDenied"), this));
 	}
 	else if (Parameters == TEXT("TerminalReasonDenied"))
 	{
 		AddExpectedError(TEXT("Fail-stop: Proof failed"), EAutomationExpectedErrorFlags::Contains, 0);
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, true));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT(""), TEXT("TerminalReasonDenied")));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT(""), TEXT("TerminalReasonDenied"), this));
 	}
 
 	return true;
