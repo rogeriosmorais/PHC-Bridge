@@ -433,7 +433,7 @@ struct FPhysAnimStabilizationSettings
 	float BalanceBootstrapExtraDampingMultiplier = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
-	float BalanceActiveExtraDampingMultiplier = 1.0f;
+	float BalanceActiveExtraDampingMultiplier = 1.1f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalanceSettleMaxRootLinearSpeed = 5.0f;
