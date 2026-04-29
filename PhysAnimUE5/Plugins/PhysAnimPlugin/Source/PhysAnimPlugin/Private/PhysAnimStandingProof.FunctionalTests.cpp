@@ -774,6 +774,35 @@ struct FActivatedStandingPerturbationValidationState
 	bool bPerturbationApplied = false;
 	double PerturbationAppliedWorldTimeSeconds = -1.0;
 };
+
+const TCHAR* GetLocomotionAuthorityStateName(EBridgeLocomotionAuthorityState State)
+{
+	switch (State)
+	{
+	case EBridgeLocomotionAuthorityState::Idle:
+		return TEXT("Idle");
+	case EBridgeLocomotionAuthorityState::StartupLocomotion:
+		return TEXT("StartupLocomotion");
+	case EBridgeLocomotionAuthorityState::Locomoting:
+		return TEXT("Locomoting");
+	default:
+		return TEXT("Unknown");
+	}
+}
+
+struct FActivatedStandingLocomotionReadinessValidationState
+{
+	TWeakObjectPtr<UPhysAnimComponent> Component;
+	FPhysAnimActivatedStandingStabilityMetrics BaselineMetrics;
+	FPhysAnimRuntimeTerminationState BaselineTerminationState;
+	EBridgeLocomotionAuthorityState BaselineLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+	EBridgeLocomotionAuthorityState PostIntentLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+	bool bBaselineCaptured = false;
+	bool bMovementIntentApplied = false;
+	double MovementIntentAppliedWorldTimeSeconds = -1.0;
+	FVector MovementIntentDirection = FVector::ZeroVector;
+	float MovementIntentScale = 0.0f;
+};
 }
 
 DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FCaptureActivatedStandingPerturbationBaselineCommand, FActivatedStandingPerturbationValidationState*, State);
@@ -1060,6 +1089,301 @@ bool FPhysAnimActivatedStandingPerturbationTest::RunTest(const FString& Paramete
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingPerturbationCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingPerturbationCommand(&State));
+
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FCaptureActivatedStandingLocomotionReadinessBaselineCommand, FActivatedStandingLocomotionReadinessValidationState*, State);
+bool FCaptureActivatedStandingLocomotionReadinessBaselineCommand::Update()
+{
+	if (!State)
+	{
+		return true;
+	}
+
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	UPhysAnimComponent* TargetComponent = State->Component.Get();
+	if (World && !TargetComponent)
+	{
+		for (TActorIterator<ACharacter> It(World); It; ++It)
+		{
+			if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+			{
+				TargetComponent = Comp;
+				State->Component = Comp;
+				break;
+			}
+		}
+	}
+
+	if (!TargetComponent)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: baseline capture could not find a PhysAnim component"));
+		return true;
+	}
+
+	const EPhysAnimRuntimeState RuntimeState = TargetComponent->GetRuntimeState();
+	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = TargetComponent->GetActivatedStandingStabilityMetrics();
+	const FPhysAnimRuntimeTerminationState& TerminationState = TargetComponent->GetLiveRuntimeEvidenceTerminationState();
+	const EBridgeLocomotionAuthorityState LocomotionAuthorityState = TargetComponent->GetLocomotionAuthorityState();
+
+	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected BalanceActive_Standing before intent but got %d"), (int32)RuntimeState);
+	}
+
+	if (!TargetComponent->IsLiveRuntimeEvidenceProofComplete())
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not complete before intent"));
+	}
+
+	if (!TargetComponent->IsLiveRuntimeEvidenceProofSatisfied())
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not truthful before intent"));
+	}
+
+	if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: standing metrics were not yet collected before intent"));
+	}
+
+	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: support hull area was not positive before intent"));
+	}
+
+	if (LocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected locomotion authority Idle before intent but got %s"), GetLocomotionAuthorityStateName(LocomotionAuthorityState));
+	}
+
+	State->BaselineMetrics = Metrics;
+	State->BaselineTerminationState = TerminationState;
+	State->BaselineLocomotionAuthorityState = LocomotionAuthorityState;
+	State->bBaselineCaptured = true;
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("LocomotionReadiness: baseline samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f terminalReason=%d locomotionAuthority=%s"),
+		Metrics.SampleCount,
+		Metrics.ActivationDurationSec,
+		Metrics.RootWorldPositionDriftCm,
+		Metrics.RootVerticalDriftCm,
+		Metrics.RootAngularDriftDeg,
+		Metrics.SupportHullAreaMinCm2,
+		Metrics.SupportHullAreaMeanCm2,
+		Metrics.SupportHullAreaMaxCm2,
+		Metrics.ActiveSupportSideCountMin,
+		Metrics.ActiveSupportSideCountMean,
+		Metrics.ActiveSupportSideCountMax,
+		(int32)TerminationState.TerminalReason,
+		GetLocomotionAuthorityStateName(LocomotionAuthorityState));
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FApplyActivatedStandingLocomotionReadinessIntentCommand, FActivatedStandingLocomotionReadinessValidationState*, State);
+bool FApplyActivatedStandingLocomotionReadinessIntentCommand::Update()
+{
+	if (!State || !State->Component.IsValid())
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent command has no component"));
+		return true;
+	}
+
+	UPhysAnimComponent* const Component = State->Component.Get();
+	ACharacter* const Character = Cast<ACharacter>(Component->GetOwner());
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent command has no character owner"));
+		return true;
+	}
+
+	FVector IntentDirection = Character->GetActorForwardVector().GetSafeNormal2D();
+	if (IntentDirection.IsNearlyZero())
+	{
+		IntentDirection = FVector::ForwardVector;
+	}
+
+	const float IntentScale = 0.25f;
+	Character->AddMovementInput(IntentDirection, IntentScale, true);
+
+	State->bMovementIntentApplied = true;
+	State->MovementIntentAppliedWorldTimeSeconds = Component->GetWorld() ? Component->GetWorld()->GetTimeSeconds() : -1.0;
+	State->MovementIntentDirection = IntentDirection;
+	State->MovementIntentScale = IntentScale;
+	State->PostIntentLocomotionAuthorityState = Component->GetLocomotionAuthorityState();
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("LocomotionReadiness: movement intent applied world=(%.2f,%.2f) scale=%.2f postIntentAuthority=%s"),
+		IntentDirection.X,
+		IntentDirection.Y,
+		IntentScale,
+		GetLocomotionAuthorityStateName(State->PostIntentLocomotionAuthorityState));
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyActivatedStandingLocomotionReadinessCommand, FActivatedStandingLocomotionReadinessValidationState*, State);
+bool FVerifyActivatedStandingLocomotionReadinessCommand::Update()
+{
+	if (!State || !State->Component.IsValid())
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: verification command has no component"));
+		return true;
+	}
+
+	UPhysAnimComponent* const Component = State->Component.Get();
+	const UWorld* const World = Component->GetWorld();
+	const EPhysAnimRuntimeState RuntimeState = Component->GetRuntimeState();
+	const EBridgeLocomotionAuthorityState LocomotionAuthorityState = Component->GetLocomotionAuthorityState();
+	const FPhysAnimRuntimeTerminationState& TerminationState = Component->GetLiveRuntimeEvidenceTerminationState();
+	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
+
+	if (!State->bBaselineCaptured)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: baseline was not captured"));
+	}
+
+	if (!State->bMovementIntentApplied)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: movement intent was not applied"));
+	}
+
+	if (LocomotionAuthorityState == EBridgeLocomotionAuthorityState::StartupLocomotion ||
+		LocomotionAuthorityState == EBridgeLocomotionAuthorityState::Locomoting)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: unsupported locomotion authority state entered (%s)"), GetLocomotionAuthorityStateName(LocomotionAuthorityState));
+	}
+
+	const double IntentDurationSec =
+		(World && State->MovementIntentAppliedWorldTimeSeconds >= 0.0)
+			? (World->GetTimeSeconds() - State->MovementIntentAppliedWorldTimeSeconds)
+			: -1.0;
+	if (!FMath::IsFinite(IntentDurationSec) || IntentDurationSec < 0.0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent duration is invalid"));
+	}
+
+	if (Metrics.SampleCount <= State->BaselineMetrics.SampleCount)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: samples did not advance after intent baseline=%d current=%d"),
+			State->BaselineMetrics.SampleCount,
+			Metrics.SampleCount);
+	}
+
+	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: support hull area collapsed during intent"));
+	}
+
+	if (Metrics.ActiveSupportSideCountMin < 1.0 || Metrics.ActiveSupportSideCountMean < 1.0 || Metrics.ActiveSupportSideCountMax < 1.0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: active support side count dropped below 1 during intent"));
+	}
+
+	const bool bStandingStayedStanding = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+	const bool bSafeTransition =
+		RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny ||
+		RuntimeState == EPhysAnimRuntimeState::FailStopped;
+	if (!bStandingStayedStanding && !bSafeTransition)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: runtime state after intent was unexpected (%d)"), (int32)RuntimeState);
+	}
+
+	if (bStandingStayedStanding)
+	{
+		if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+		{
+			UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: standing result expected terminal_reason=None but got %d"), (int32)TerminationState.TerminalReason);
+		}
+		if (!Component->IsLiveRuntimeEvidenceProofSatisfied())
+		{
+			UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: standing result is not truthful"));
+		}
+	}
+	else
+	{
+		if (TerminationState.TerminalReason == EPhysAnimTerminalReason::None)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("LocomotionReadiness: safe transition kept terminal_reason=None"));
+		}
+		else if (Component->IsLiveRuntimeEvidenceProofSatisfied())
+		{
+			UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: failure reason was not truthful"));
+		}
+	}
+
+	if (TerminationState.TerminalArtifact.TerminalReason != TerminationState.TerminalReason ||
+		TerminationState.LatestArtifact.TerminalReason != TerminationState.TerminalReason)
+	{
+		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: audit artifact terminal reason does not match final state"));
+	}
+
+	const bool bLocomotionTransitionAllowed = LocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle;
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("LocomotionReadiness: intentDuration=%.2f standing=%s locomotionAuthority=%s transitionAllowed=%s samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f terminalReason=%d"),
+		IntentDurationSec,
+		bStandingStayedStanding ? TEXT("true") : TEXT("false"),
+		GetLocomotionAuthorityStateName(LocomotionAuthorityState),
+		bLocomotionTransitionAllowed ? TEXT("yes") : TEXT("no"),
+		Metrics.SampleCount,
+		Metrics.RootWorldPositionDriftCm,
+		Metrics.RootVerticalDriftCm,
+		Metrics.RootAngularDriftDeg,
+		Metrics.SupportHullAreaMinCm2,
+		Metrics.SupportHullAreaMeanCm2,
+		Metrics.SupportHullAreaMaxCm2,
+		Metrics.ActiveSupportSideCountMin,
+		Metrics.ActiveSupportSideCountMean,
+		Metrics.ActiveSupportSideCountMax,
+		Metrics.MaxBodyLinearSpeedCmPerSecond,
+		Metrics.MaxBodyAngularSpeedDegPerSecond,
+		(int32)TerminationState.TerminalReason);
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingLocomotionReadinessTest, "PhysAnim.ActivatedStanding.LocomotionReadiness", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingLocomotionReadinessTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionReadiness"));
+	OutTestCommands.Add(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+}
+
+bool FPhysAnimActivatedStandingLocomotionReadinessTest::RunTest(const FString& Parameters)
+{
+	const FString MapName = Parameters;
+	static FActivatedStandingLocomotionReadinessValidationState State;
+
+	State = FActivatedStandingLocomotionReadinessValidationState();
+
+	AutomationOpenMap(MapName);
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCaptureActivatedStandingLocomotionReadinessBaselineCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionReadinessIntentCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionReadinessCommand(&State));
 
 	return true;
 }
