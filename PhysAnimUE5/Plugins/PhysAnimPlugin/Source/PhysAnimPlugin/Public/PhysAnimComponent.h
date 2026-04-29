@@ -1163,6 +1163,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
 	bool CanEnterBalanceActiveStanding() const;
 
+	bool CanEnterBridgeLocomotionGate(FString& OutReason) const;
+
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
 	EPhysAnimRuntimeState EvaluateBalanceActiveStanding() const;
 
@@ -1229,6 +1231,7 @@ public:
 #if WITH_DEV_AUTOMATION_TESTS
 	static bool TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState State) { return IsBalanceEntryState(State); }
 	static bool TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState State) { return IsBalanceActiveState(State); }
+	void TestOnlySetBridgeLocomotionGateIntent(float IntentMagnitude, double IntentAgeSeconds);
 	static bool TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
 		EPhysAnimRuntimeState RuntimeState,
 		bool bDistalKinematicAccepted)
@@ -1645,6 +1648,7 @@ private:
 	void ResetBridgePhysicsState();
 	bool GatherCurrentPoseControlTargetOrientations(TMap<FName, FQuat>& OutTargetOrientations, FString& OutError) const;
 	bool SeedControlTargetsFromCurrentPose(float DeltaTime, FString& OutError);
+	void UpdateBridgeLocomotionGateTiming(const FPhysAnimStabilizationSettings& EffectiveSettings, double CurrentTimeSeconds);
 	void UpdateBridgeLocomotionAuthorityState(const FVector& QueryVelocity, const FPhysAnimStabilizationSettings& EffectiveSettings, double CurrentTimeSeconds);
 	bool IsBridgeLocomotionQueryActive() const;
 	bool IsBridgeLocomotionEntryRequested(const FPhysAnimStabilizationSettings& EffectiveSettings) const;

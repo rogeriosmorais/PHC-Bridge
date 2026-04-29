@@ -41,6 +41,190 @@ void UPhysAnimComponent::ResetBridgeLocomotionAuthorityState()
 }
 
 
+void UPhysAnimComponent::UpdateBridgeLocomotionGateTiming(const FPhysAnimStabilizationSettings& EffectiveSettings, double CurrentTimeSeconds)
+{
+	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		DistalLocomotionCompositionTimeSinceActiveIntentSeconds = -1.0f;
+		return;
+	}
+
+	if (IsBridgeLocomotionEntryRequested(EffectiveSettings))
+	{
+		if (DistalLocomotionCompositionTimeSinceActiveIntentSeconds < 0.0f)
+		{
+			DistalLocomotionCompositionTimeSinceActiveIntentSeconds = static_cast<float>(CurrentTimeSeconds);
+		}
+	}
+	else
+	{
+		DistalLocomotionCompositionTimeSinceActiveIntentSeconds = -1.0f;
+	}
+}
+
+
+bool UPhysAnimComponent::CanEnterBridgeLocomotionGate(FString& OutReason) const
+{
+	OutReason.Reset();
+
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	const double IntentStartTimeSeconds = static_cast<double>(DistalLocomotionCompositionTimeSinceActiveIntentSeconds);
+	const double IntentAgeSeconds =
+		IntentStartTimeSeconds >= 0.0 ? (CurrentTimeSeconds - IntentStartTimeSeconds) : -1.0;
+	const FPhysAnimRuntimeTerminationState& TerminationState = LiveRuntimeEvidenceTerminationState;
+	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
+	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = ActivatedStandingStabilityMetrics;
+	const auto Deny = [&](const TCHAR* Reason) -> bool
+	{
+		OutReason = Reason;
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimLocomotion] LOCOMOTION_GATE_DENIED reason=%s runtimeState=%s proofComplete=%d proofSatisfied=%d terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f intentAge=%.2f intentThreshold=%.2f"),
+			*OutReason,
+			GetRuntimeStateName(RuntimeState),
+			bLiveRuntimeEvidenceProofComplete ? 1 : 0,
+			IsLiveRuntimeEvidenceProofSatisfied() ? 1 : 0,
+			static_cast<int32>(TerminationState.TerminalReason),
+			static_cast<int32>(Latest.SupportMode),
+			Latest.SupportHullAreaCm2,
+			static_cast<double>(Latest.ActiveSupportSideCount),
+			IntentAgeSeconds,
+			EffectiveSettings.DistalLocomotionCompositionPolicyIntentGraceSeconds);
+		return false;
+	};
+
+	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		return Deny(TEXT("standing_inactive"));
+	}
+
+	if (!bEnableLiveRuntimeEvidenceProof)
+	{
+		return Deny(TEXT("proof_disabled"));
+	}
+
+	if (!bLiveRuntimeEvidenceProofComplete)
+	{
+		return Deny(TEXT("proof_incomplete"));
+	}
+
+	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne ||
+		Latest.SupportHullAreaCm2 <= 0.0f ||
+		Latest.ActiveSupportSideCount < 1)
+	{
+		return Deny(TEXT("negative_support"));
+	}
+
+	if (!Latest.bPhysicsAssetContractValid || !Latest.bSkeletonAuditPassed)
+	{
+		return Deny(TEXT("support_audit_invalid"));
+	}
+
+	if (!Latest.bCapsuleContractPassed)
+	{
+		return Deny(TEXT("capsule_invalid"));
+	}
+
+	if (!Latest.bPhysicalContinuityValidatorPassed || Latest.bContinuityBookkeepingMismatch)
+	{
+		return Deny(TEXT("continuity_invalid"));
+	}
+
+	if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+	{
+		return Deny(TEXT("terminal_reason_present"));
+	}
+
+	if (!IsLiveRuntimeEvidenceProofSatisfied())
+	{
+		return Deny(TEXT("proof_not_truthful"));
+	}
+
+	if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
+	{
+		return Deny(TEXT("stability_metrics_unavailable"));
+	}
+
+	if (Metrics.FailStopCount != 0)
+	{
+		return Deny(TEXT("stability_metrics_fail_stop"));
+	}
+
+	if (!FMath::IsFinite(Metrics.ActivationDurationSec) ||
+		!FMath::IsFinite(Metrics.RootWorldPositionDriftCm) ||
+		!FMath::IsFinite(Metrics.RootVerticalDriftCm) ||
+		!FMath::IsFinite(Metrics.RootAngularDriftDeg) ||
+		!FMath::IsFinite(Metrics.MaxBodyLinearSpeedCmPerSecond) ||
+		!FMath::IsFinite(Metrics.MaxBodyAngularSpeedDegPerSecond) ||
+		!FMath::IsFinite(Metrics.SupportHullAreaMinCm2) ||
+		!FMath::IsFinite(Metrics.SupportHullAreaMeanCm2) ||
+		!FMath::IsFinite(Metrics.SupportHullAreaMaxCm2) ||
+		!FMath::IsFinite(Metrics.ActiveSupportSideCountMin) ||
+		!FMath::IsFinite(Metrics.ActiveSupportSideCountMean) ||
+		!FMath::IsFinite(Metrics.ActiveSupportSideCountMax))
+	{
+		return Deny(TEXT("stability_metrics_invalid"));
+	}
+
+	if (!IsBridgeLocomotionEntryRequested(EffectiveSettings))
+	{
+		return Deny(TEXT("intent_absent"));
+	}
+
+	if (IntentAgeSeconds < EffectiveSettings.DistalLocomotionCompositionPolicyIntentGraceSeconds)
+	{
+		return Deny(TEXT("intent_too_short"));
+	}
+
+	OutReason = TEXT("standing_active intent_stable");
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimLocomotion] LOCOMOTION_GATE_ALLOWED reason=%s runtimeState=%s proofComplete=%d proofSatisfied=%d terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f intentAge=%.2f intentThreshold=%.2f"),
+		*OutReason,
+		GetRuntimeStateName(RuntimeState),
+		1,
+		1,
+		static_cast<int32>(TerminationState.TerminalReason),
+		static_cast<int32>(Latest.SupportMode),
+		Latest.SupportHullAreaCm2,
+		static_cast<double>(Latest.ActiveSupportSideCount),
+		IntentAgeSeconds,
+		EffectiveSettings.DistalLocomotionCompositionPolicyIntentGraceSeconds);
+	return true;
+}
+
+
+#if WITH_DEV_AUTOMATION_TESTS
+void UPhysAnimComponent::TestOnlySetBridgeLocomotionGateIntent(float IntentMagnitude, double IntentAgeSeconds)
+{
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	const float ClampedMagnitude = FMath::Clamp(IntentMagnitude, 0.0f, 1.0f);
+	const FVector WorldDirection = ClampedMagnitude > KINDA_SMALL_NUMBER ? FVector::ForwardVector : FVector::ZeroVector;
+
+	BridgeIntentState.WorldMoveDirection = WorldDirection;
+	BridgeIntentState.LocalMoveDirection = WorldDirection;
+	BridgeIntentState.IntentMagnitude = ClampedMagnitude;
+	BridgeIntentState.DesiredSpeedCmPerSecond = ClampedMagnitude * FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementMaxPlanarSpeedCmPerSecond);
+	BridgeIntentState.DesiredFacingYawDegrees = 0.0f;
+	BridgeIntentState.bHasDesiredFacing = ClampedMagnitude > KINDA_SMALL_NUMBER;
+	BridgeTrajectoryState.DesiredVelocityCmPerSecond = WorldDirection * BridgeIntentState.DesiredSpeedCmPerSecond;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = BridgeTrajectoryState.DesiredVelocityCmPerSecond;
+	BridgeTrajectoryState.AcceptedVelocityCmPerSecond = BridgeTrajectoryState.DesiredVelocityCmPerSecond;
+	BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+	BridgeLocomotionStateEnterTimeSeconds = -1.0;
+	BridgeLocomotionExitHoldStartTimeSeconds = -1.0;
+	BridgeOwnedMovementLastWorldIntent = WorldDirection;
+	DistalLocomotionCompositionTimeSinceActiveIntentSeconds =
+		IntentAgeSeconds >= 0.0
+			? static_cast<float>((GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0) - IntentAgeSeconds)
+			: -1.0f;
+}
+#endif
+
+
 void UPhysAnimComponent::CaptureBridgeIntent(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
 	if (!ShouldUseBridgeOwnedMovementDrive(EffectiveSettings))

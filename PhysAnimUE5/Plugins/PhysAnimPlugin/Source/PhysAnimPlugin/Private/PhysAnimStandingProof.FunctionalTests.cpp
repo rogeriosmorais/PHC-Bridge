@@ -1388,4 +1388,234 @@ bool FPhysAnimActivatedStandingLocomotionReadinessTest::RunTest(const FString& P
 	return true;
 }
 
+DEFINE_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionGateIntentCommand);
+bool FApplyActivatedStandingLocomotionGateIntentCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			ACharacter* const Character = Cast<ACharacter>(Comp->GetOwner());
+			if (!Character)
+			{
+				UE_LOG(LogTemp, Error, TEXT("LocomotionGate: intent command has no character owner"));
+				return true;
+			}
+
+			FVector IntentDirection = Character->GetActorForwardVector().GetSafeNormal2D();
+			if (IntentDirection.IsNearlyZero())
+			{
+				IntentDirection = FVector::ForwardVector;
+			}
+
+			const float IntentScale = 0.25f;
+			Character->AddMovementInput(IntentDirection, IntentScale, true);
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("LocomotionGate: movement intent applied world=(%.2f,%.2f) scale=%.2f"),
+				IntentDirection.X,
+				IntentDirection.Y,
+				IntentScale);
+			break;
+		}
+	}
+
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FSetActivatedStandingLocomotionGateIntentCommand, float, IntentMagnitude, double, IntentAgeSeconds);
+bool FSetActivatedStandingLocomotionGateIntentCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			Comp->TestOnlySetBridgeLocomotionGateIntent(IntentMagnitude, IntentAgeSeconds);
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("LocomotionGate: test intent set magnitude=%.2f age=%.2f"),
+				IntentMagnitude,
+				IntentAgeSeconds);
+			break;
+		}
+	}
+
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FVerifyActivatedStandingLocomotionGateCommand, bool, bExpectedAllowed, FString, ExpectedReasonSubstring, FString, CaseName);
+bool FVerifyActivatedStandingLocomotionGateCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			FString Reason;
+			const bool bAllowed = Comp->CanEnterBridgeLocomotionGate(Reason);
+			if (bAllowed != bExpectedAllowed)
+			{
+				UE_LOG(
+					LogTemp,
+					Error,
+					TEXT("LocomotionGate[%s]: expected allowed=%d but got %d reason=%s"),
+					*CaseName,
+					bExpectedAllowed ? 1 : 0,
+					bAllowed ? 1 : 0,
+					*Reason);
+			}
+			if (!ExpectedReasonSubstring.IsEmpty() && !Reason.Contains(ExpectedReasonSubstring))
+			{
+				UE_LOG(
+					LogTemp,
+					Error,
+					TEXT("LocomotionGate[%s]: expected reason containing '%s' but got '%s'"),
+					*CaseName,
+					*ExpectedReasonSubstring,
+					*Reason);
+			}
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("LocomotionGate[%s]: allowed=%d reason=%s"),
+				*CaseName,
+				bAllowed ? 1 : 0,
+				*Reason);
+			break;
+		}
+	}
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingLocomotionGateTest, "PhysAnim.ActivatedStanding.LocomotionGate", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingLocomotionGateTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGate_NoIntentDenied"));
+	OutTestCommands.Add(TEXT("NoIntentDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGate_ShortPulseDenied"));
+	OutTestCommands.Add(TEXT("ShortPulseDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGate_StableAllowed"));
+	OutTestCommands.Add(TEXT("StableAllowed"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGate_NegativeSupportDenied"));
+	OutTestCommands.Add(TEXT("NegativeSupportDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGate_TerminalReasonDenied"));
+	OutTestCommands.Add(TEXT("TerminalReasonDenied"));
+}
+
+bool FPhysAnimActivatedStandingLocomotionGateTest::RunTest(const FString& Parameters)
+{
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+
+	if (Parameters == TEXT("NoIntentDenied"))
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.0f, -1.0));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT("intent_absent"), TEXT("NoIntentDenied")));
+	}
+	else if (Parameters == TEXT("ShortPulseDenied"))
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.50f, 0.05));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT("intent_too_short"), TEXT("ShortPulseDenied")));
+	}
+	else if (Parameters == TEXT("StableAllowed"))
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.50f, 0.50));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(true, TEXT("intent_stable"), TEXT("StableAllowed")));
+	}
+	else if (Parameters == TEXT("NegativeSupportDenied"))
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.0f, -1.0));
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableNegativeSupportProofCommand());
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT(""), TEXT("NegativeSupportDenied")));
+	}
+	else if (Parameters == TEXT("TerminalReasonDenied"))
+	{
+		AddExpectedError(TEXT("Fail-stop: Proof failed"), EAutomationExpectedErrorFlags::Contains, 0);
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, true));
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT(""), TEXT("TerminalReasonDenied")));
+	}
+
+	return true;
+}
+
 #endif
