@@ -359,6 +359,7 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
 	ActivatedStandingStabilityMetrics = FPhysAnimActivatedStandingStabilityMetrics();
 	bActivatedStandingStabilityBaselineInitialized = false;
+	bActivatedStandingPerturbationApplied = false;
 	ActivatedStandingStabilityBaselineRootLocationCm = FVector::ZeroVector;
 	ActivatedStandingStabilityBaselineRootTiltDeg = 0.0f;
 	ActivatedStandingStabilitySupportHullAreaSumCm2 = 0.0;
@@ -537,6 +538,134 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 		LiveRuntimeEvidenceTerminationState.bTerminated && LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None
 		? 1
 		: 0;
+}
+
+bool UPhysAnimComponent::ApplyActivatedStandingPerturbation(
+	EPhysAnimPerturbationDirection Direction,
+	EPhysAnimPerturbationMagnitude Magnitude)
+{
+	if (bActivatedStandingPerturbationApplied)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation already applied once."));
+		return false;
+	}
+
+	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation blocked by runtime state=%s"), GetRuntimeStateName(RuntimeState));
+		return false;
+	}
+
+	if (!bLiveRuntimeEvidenceProofComplete || !IsLiveRuntimeEvidenceProofSatisfied())
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation blocked by proof state complete=%d satisfied=%d"),
+			bLiveRuntimeEvidenceProofComplete ? 1 : 0,
+			IsLiveRuntimeEvidenceProofSatisfied() ? 1 : 0);
+		return false;
+	}
+
+	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = GetActivatedStandingStabilityMetrics();
+	if (!Metrics.bHasSamples || Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.ActiveSupportSideCountMin < 1.0)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation blocked by unstable metrics samples=%d supportHullMin=%.2f activeSidesMin=%.2f"),
+			Metrics.SampleCount,
+			Metrics.SupportHullAreaMinCm2,
+			Metrics.ActiveSupportSideCountMin);
+		return false;
+	}
+
+	FVector ShoveDirection = FVector::ZeroVector;
+	switch (Direction)
+	{
+	case EPhysAnimPerturbationDirection::Forward:
+		ShoveDirection = FVector(1.0f, 0.0f, 0.0f);
+		break;
+	case EPhysAnimPerturbationDirection::Backward:
+		ShoveDirection = FVector(-1.0f, 0.0f, 0.0f);
+		break;
+	case EPhysAnimPerturbationDirection::Left:
+		ShoveDirection = FVector(0.0f, -1.0f, 0.0f);
+		break;
+	case EPhysAnimPerturbationDirection::Right:
+		ShoveDirection = FVector(0.0f, 1.0f, 0.0f);
+		break;
+	}
+
+	float TargetDeltaVCmPerSec = 0.0f;
+	switch (Magnitude)
+	{
+	case EPhysAnimPerturbationMagnitude::Small:
+		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVSmall;
+		break;
+	case EPhysAnimPerturbationMagnitude::Medium:
+		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVMedium;
+		break;
+	case EPhysAnimPerturbationMagnitude::Large:
+		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVLarge;
+		break;
+	}
+
+	bool bApplied = false;
+	AActor* const OwnerActor = GetOwner();
+	if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
+	{
+		if (FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
+			PelvisBody && PelvisBody->IsInstanceSimulatingPhysics())
+		{
+			ApplyPelvisImpulse(Direction, Magnitude);
+			bApplied = true;
+		}
+	}
+
+	if (!bApplied)
+	{
+		if (OwnerActor)
+		{
+			const FVector OffsetCm = ShoveDirection * (TargetDeltaVCmPerSec * 0.05f);
+			OwnerActor->AddActorWorldOffset(OffsetCm, false, nullptr, ETeleportType::TeleportPhysics);
+			bApplied = true;
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimBalance] Activated standing perturbation applied actor offset=(%.1f,%.1f,%.1f)"),
+				OffsetCm.X,
+				OffsetCm.Y,
+				OffsetCm.Z);
+		}
+
+		if (!bApplied && OwnerActor)
+		{
+			if (ACharacter* const Character = Cast<ACharacter>(OwnerActor))
+			{
+				Character->LaunchCharacter(ShoveDirection * TargetDeltaVCmPerSec, true, true);
+				bApplied = true;
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimBalance] Activated standing perturbation launched character velocity=(%.1f,%.1f,%.1f)"),
+					(ShoveDirection * TargetDeltaVCmPerSec).X,
+					(ShoveDirection * TargetDeltaVCmPerSec).Y,
+					(ShoveDirection * TargetDeltaVCmPerSec).Z);
+			}
+		}
+	}
+
+	if (!bApplied)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation could not be applied."));
+		return false;
+	}
+
+	bActivatedStandingPerturbationApplied = true;
+
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimBalance] Activated standing perturbation applied direction=%d magnitude=%d runtimeState=%s"),
+		static_cast<int32>(Direction),
+		static_cast<int32>(Magnitude),
+		GetRuntimeStateName(RuntimeState));
+	return true;
 }
 
 bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>& OutHitResults, int32& OutMappedSupportHitCount) const

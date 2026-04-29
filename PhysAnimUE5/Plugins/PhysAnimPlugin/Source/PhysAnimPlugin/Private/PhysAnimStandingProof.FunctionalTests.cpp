@@ -763,6 +763,258 @@ bool FPhysAnimStateMachinePhase2StandingTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+namespace
+{
+struct FActivatedStandingPerturbationValidationState
+{
+	TWeakObjectPtr<UPhysAnimComponent> Component;
+	FPhysAnimActivatedStandingStabilityMetrics BaselineMetrics;
+	FPhysAnimRuntimeTerminationState BaselineTerminationState;
+	bool bBaselineCaptured = false;
+	bool bPerturbationApplied = false;
+	double PerturbationAppliedWorldTimeSeconds = -1.0;
+};
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FCaptureActivatedStandingPerturbationBaselineCommand, FActivatedStandingPerturbationValidationState*, State);
+bool FCaptureActivatedStandingPerturbationBaselineCommand::Update()
+{
+	if (!State)
+	{
+		return true;
+	}
+
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	UPhysAnimComponent* TargetComponent = State->Component.Get();
+	if (World && !TargetComponent)
+	{
+		for (TActorIterator<ACharacter> It(World); It; ++It)
+		{
+			if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+			{
+				TargetComponent = Comp;
+				State->Component = Comp;
+				break;
+			}
+		}
+	}
+
+	if (!TargetComponent)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: baseline capture could not find a PhysAnim component"));
+		return true;
+	}
+
+	const EPhysAnimRuntimeState RuntimeState = TargetComponent->GetRuntimeState();
+	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = TargetComponent->GetActivatedStandingStabilityMetrics();
+	const FPhysAnimRuntimeTerminationState& TerminationState = TargetComponent->GetLiveRuntimeEvidenceTerminationState();
+
+	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: expected BalanceActive_Standing before perturbation but got %d"), (int32)RuntimeState);
+	}
+
+	if (!TargetComponent->IsLiveRuntimeEvidenceProofComplete())
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: proof was not complete before perturbation"));
+	}
+
+	if (!TargetComponent->IsLiveRuntimeEvidenceProofSatisfied())
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: proof was not truthful before perturbation"));
+	}
+
+	if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: standing metrics were not yet collected before perturbation"));
+	}
+
+	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: support hull area was not positive before perturbation"));
+	}
+
+	State->BaselineMetrics = Metrics;
+	State->BaselineTerminationState = TerminationState;
+	State->bBaselineCaptured = true;
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("PerturbationProof: baseline samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f terminalReason=%d"),
+		Metrics.SampleCount,
+		Metrics.ActivationDurationSec,
+		Metrics.RootWorldPositionDriftCm,
+		Metrics.RootVerticalDriftCm,
+		Metrics.RootAngularDriftDeg,
+		Metrics.SupportHullAreaMinCm2,
+		Metrics.SupportHullAreaMeanCm2,
+		Metrics.SupportHullAreaMaxCm2,
+		Metrics.ActiveSupportSideCountMin,
+		Metrics.ActiveSupportSideCountMean,
+		Metrics.ActiveSupportSideCountMax,
+		(int32)TerminationState.TerminalReason);
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FApplyActivatedStandingPerturbationCommand, FActivatedStandingPerturbationValidationState*, State);
+bool FApplyActivatedStandingPerturbationCommand::Update()
+{
+	if (!State || !State->Component.IsValid())
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation command has no component"));
+		return true;
+	}
+
+	UPhysAnimComponent* const Component = State->Component.Get();
+	if (!Component->ApplyActivatedStandingPerturbation(EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small))
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
+		return true;
+	}
+
+	State->bPerturbationApplied = true;
+	State->PerturbationAppliedWorldTimeSeconds = Component->GetWorld() ? Component->GetWorld()->GetTimeSeconds() : -1.0;
+
+	if (!Component->HasActivatedStandingPerturbationApplied())
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: component did not record the perturbation application"));
+	}
+
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyActivatedStandingPerturbationCommand, FActivatedStandingPerturbationValidationState*, State);
+bool FVerifyActivatedStandingPerturbationCommand::Update()
+{
+	if (!State || !State->Component.IsValid())
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: verification command has no component"));
+		return true;
+	}
+
+	UPhysAnimComponent* const Component = State->Component.Get();
+	const UWorld* const World = Component->GetWorld();
+	const EPhysAnimRuntimeState RuntimeState = Component->GetRuntimeState();
+	const FPhysAnimRuntimeTerminationState& TerminationState = Component->GetLiveRuntimeEvidenceTerminationState();
+	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
+
+	if (!State->bBaselineCaptured)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: baseline was not captured"));
+	}
+
+	if (!State->bPerturbationApplied)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
+	}
+
+	if (!Component->HasActivatedStandingPerturbationApplied())
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: component did not remember the perturbation"));
+	}
+
+	const double RecoveryDurationSec =
+		(World && State->PerturbationAppliedWorldTimeSeconds >= 0.0)
+			? (World->GetTimeSeconds() - State->PerturbationAppliedWorldTimeSeconds)
+			: -1.0;
+	if (!FMath::IsFinite(RecoveryDurationSec) || RecoveryDurationSec < 0.0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: recovery duration is invalid"));
+	}
+
+	if (Metrics.SampleCount <= State->BaselineMetrics.SampleCount)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: samples did not advance after perturbation baseline=%d current=%d"),
+			State->BaselineMetrics.SampleCount,
+			Metrics.SampleCount);
+	}
+
+	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: support hull area collapsed after perturbation"));
+	}
+
+	if (Metrics.ActiveSupportSideCountMin < 1.0 || Metrics.ActiveSupportSideCountMean < 1.0 || Metrics.ActiveSupportSideCountMax < 1.0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: active support side count dropped below 1 after perturbation"));
+	}
+
+	const bool bStandingStayedStanding = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+	const bool bSafeTransition =
+		RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny ||
+		RuntimeState == EPhysAnimRuntimeState::FailStopped;
+	if (!bStandingStayedStanding && !bSafeTransition)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: runtime state after perturbation was unexpected (%d)"), (int32)RuntimeState);
+	}
+
+	if (bStandingStayedStanding)
+	{
+		if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+		{
+			UE_LOG(LogTemp, Error, TEXT("PerturbationProof: standing result expected terminal_reason=None but got %d"), (int32)TerminationState.TerminalReason);
+		}
+		if (!Component->IsLiveRuntimeEvidenceProofSatisfied())
+		{
+			UE_LOG(LogTemp, Error, TEXT("PerturbationProof: standing result is not truthful"));
+		}
+	}
+	else
+	{
+		if (TerminationState.TerminalReason == EPhysAnimTerminalReason::None)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("PerturbationProof: safe transition kept terminal_reason=None"));
+		}
+		else if (Component->IsLiveRuntimeEvidenceProofSatisfied())
+		{
+			UE_LOG(LogTemp, Error, TEXT("PerturbationProof: failure reason was not truthful"));
+		}
+	}
+
+	if (TerminationState.TerminalArtifact.TerminalReason != TerminationState.TerminalReason ||
+		TerminationState.LatestArtifact.TerminalReason != TerminationState.TerminalReason)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: audit artifact terminal reason does not match final state"));
+	}
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("PerturbationProof: recoveryDuration=%.2f state=%d terminalReason=%d samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f"),
+		RecoveryDurationSec,
+		(int32)RuntimeState,
+		(int32)TerminationState.TerminalReason,
+		Metrics.SampleCount,
+		Metrics.RootWorldPositionDriftCm,
+		Metrics.RootVerticalDriftCm,
+		Metrics.RootAngularDriftDeg,
+		Metrics.SupportHullAreaMinCm2,
+		Metrics.SupportHullAreaMeanCm2,
+		Metrics.SupportHullAreaMaxCm2,
+		Metrics.ActiveSupportSideCountMin,
+		Metrics.ActiveSupportSideCountMean,
+		Metrics.ActiveSupportSideCountMax,
+		Metrics.MaxBodyLinearSpeedCmPerSecond,
+		Metrics.MaxBodyAngularSpeedDegPerSecond);
+
+	return true;
+}
+
 IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingStabilityMetricsTest, "PhysAnim.ActivatedStanding.StabilityMetrics", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 void FPhysAnimActivatedStandingStabilityMetricsTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
@@ -781,6 +1033,33 @@ bool FPhysAnimActivatedStandingStabilityMetricsTest::RunTest(const FString& Para
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(30.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingStabilityMetricsCommand());
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingPerturbationTest, "PhysAnim.ActivatedStanding.Perturbation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingPerturbationTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_Perturbation"));
+	OutTestCommands.Add(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+}
+
+bool FPhysAnimActivatedStandingPerturbationTest::RunTest(const FString& Parameters)
+{
+	const FString MapName = Parameters;
+	static FActivatedStandingPerturbationValidationState State;
+
+	State = FActivatedStandingPerturbationValidationState();
+
+	AutomationOpenMap(MapName);
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCaptureActivatedStandingPerturbationBaselineCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingPerturbationCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingPerturbationCommand(&State));
 
 	return true;
 }

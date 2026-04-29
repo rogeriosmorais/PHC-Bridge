@@ -1178,6 +1178,8 @@ public:
 	bool IsLiveRuntimeEvidenceProofSatisfied() const;
 	const FPhysAnimActivatedStandingStabilityMetrics& GetActivatedStandingStabilityMetrics() const { return ActivatedStandingStabilityMetrics; }
 	void UpdateActivatedStandingStabilityMetrics(float DeltaTimeSeconds);
+	bool ApplyActivatedStandingPerturbation(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude);
+	bool HasActivatedStandingPerturbationApplied() const { return bActivatedStandingPerturbationApplied; }
 
 	static EPhysAnimRuntimeState MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase TransitionPhase);
 
@@ -1589,6 +1591,7 @@ private:
 	FPhysAnimRuntimeTerminationState LiveRuntimeEvidenceTerminationState;
 	FPhysAnimActivatedStandingStabilityMetrics ActivatedStandingStabilityMetrics;
 	bool bActivatedStandingStabilityBaselineInitialized = false;
+	bool bActivatedStandingPerturbationApplied = false;
 	FVector ActivatedStandingStabilityBaselineRootLocationCm = FVector::ZeroVector;
 	float ActivatedStandingStabilityBaselineRootTiltDeg = 0.0f;
 	double ActivatedStandingStabilitySupportHullAreaSumCm2 = 0.0;
