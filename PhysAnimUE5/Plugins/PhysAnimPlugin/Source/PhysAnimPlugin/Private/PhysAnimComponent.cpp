@@ -530,16 +530,35 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName 
 		const FVector SampleLocation = BoneWorldLocation + Offset;
 		const FVector TraceStart = SampleLocation + FVector(0.0, 0.0, LiveRuntimeEvidenceSupportSweepStartLiftCm);
 		const FVector TraceEnd = SampleLocation - FVector(0.0, 0.0, LiveRuntimeEvidenceSupportSweepDistanceCm);
+		const FCollisionShape SweepShape = FCollisionShape::MakeSphere(FMath::Max(4.0f, R * 0.5f));
 
 		FHitResult Hit;
-		const bool bHit = World->LineTraceSingleByObjectType(
+		const bool bHit = World->SweepSingleByObjectType(
 			Hit,
 			TraceStart,
 			TraceEnd,
+			FQuat::Identity,
 			ObjectQueryParams,
+			SweepShape,
 			QueryParams);
 
-		if (bHit && Hit.bBlockingHit)
+		if (!bHit || !Hit.bBlockingHit)
+		{
+			const bool bFallbackHit = World->LineTraceSingleByObjectType(
+				Hit,
+				TraceStart,
+				TraceEnd,
+				ObjectQueryParams,
+				QueryParams);
+
+			if (bFallbackHit && Hit.bBlockingHit)
+			{
+				Hit.BoneName = BodyName;
+				OutHitResults.Add(Hit);
+				HitCount++;
+			}
+		}
+		else
 		{
 			Hit.BoneName = BodyName;
 			OutHitResults.Add(Hit);
@@ -600,14 +619,21 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	FPhysAnimRuntimeSubstepInput Input;
 	const ACharacter* Character = Cast<ACharacter>(GetOwner());
 	const UCharacterMovementComponent* CharacterMovement = Character ? Character->GetCharacterMovement() : nullptr;
+	const USkeletalMeshComponent* Mesh = GetMeshComponent();
 	const FPhysAnimCapsuleContractSnapshot CapsuleSnapshot = BuildCapsuleContractSnapshot();
 	const FPhysAnimContinuitySnapshot ContinuitySnapshot = BuildContinuitySnapshot();
 	const FPhysAnimCapsuleContractValidationResult CapsuleValidation = PhysAnimValidators::ValidateCapsule(CapsuleSnapshot);
 	const FPhysAnimContinuityValidationResult ContinuityValidation = PhysAnimValidators::ValidateContinuity(ContinuitySnapshot);
+	FString PlantAuditError;
+	FPhysAnimPlantContractSnapshotCaptureInput PlantCaptureInput;
+	PlantCaptureInput.SkeletalMeshComponent = const_cast<USkeletalMeshComponent*>(Mesh);
+	PlantCaptureInput.ExpectedPhysicsAssetPath = PhysAnimComponentInternal::ExpectedPhysicsAssetPath;
+	PlantCaptureInput.bSkeletonAuditPassed = ValidateRequiredBodies(PlantAuditError);
+	const FPhysAnimPlantContractSnapshot PlantSnapshot = PhysAnimRuntimeAdapter::CapturePlantContractSnapshot(PlantCaptureInput);
+	const FPhysAnimPlantContractValidationResult PlantValidation = PhysAnimValidators::ValidatePlant(PlantSnapshot);
 
 	Input.SupportObservation = SupportObservation;
-	Input.Plant.bPhysicsAssetContractValid = true;
-	Input.Plant.bSkeletonAuditPassed = true;
+	Input.Plant = PlantValidation;
 	Input.Values.AttemptUuid = LiveRuntimeEvidenceAttemptUuid;
 	Input.Values.Timestamp = GetWorld() ? GetWorld()->GetTimeSeconds() : LiveRuntimeEvidenceStandingSeconds;
 	Input.Values.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
@@ -625,9 +651,12 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.CmcMovementMode = CharacterMovement
 		? FName(*UEnum::GetValueAsString(static_cast<EMovementMode>(CharacterMovement->MovementMode)))
 		: NAME_None;
+	Input.Values.bPhysicsAssetContractValid = PlantValidation.bPhysicsAssetContractValid;
+	Input.Values.bSkeletonAuditPassed = PlantValidation.bSkeletonAuditPassed;
 	Input.Values.bCapsuleContractPassed = CapsuleValidation.bCapsuleContractPassed;
-	Input.Values.bPhysicsAssetContractValid = Input.Plant.bPhysicsAssetContractValid;
-	Input.Values.bSkeletonAuditPassed = Input.Plant.bSkeletonAuditPassed;
+	Input.Values.PlantFailureClass = PlantValidation.PlantFailureClass;
+	Input.Values.PlantFailureField = PlantValidation.PlantFailureField;
+	Input.Values.MassDriftTotalPct = PlantValidation.MassDriftTotalPct;
 	Input.Values.TopologyChangeCount = ContinuityValidation.TopologyChangeCount;
 	Input.Values.bContinuityBookkeepingMismatch = ContinuityValidation.bContinuityBookkeepingMismatch;
 	Input.Values.PelvisSleepDurationMs = ContinuityValidation.PelvisSleepDurationMs;
@@ -658,6 +687,10 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 			Input.Values.bContinuityBookkeepingMismatch ? 1 : 0,
 			Input.Values.bCapsuleContractPassed ? 1 : 0,
 			Input.Values.bPhysicalContinuityValidatorPassed ? 1 : 0);
+		if (!PlantValidation.bPhysicsAssetContractValid || !PlantValidation.bSkeletonAuditPassed)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] LiveProof plant audit failed: %s"), *PlantAuditError);
+		}
 	}
 
 	return Input;

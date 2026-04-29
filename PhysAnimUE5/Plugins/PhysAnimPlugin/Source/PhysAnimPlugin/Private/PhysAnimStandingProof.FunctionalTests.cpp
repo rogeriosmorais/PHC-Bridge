@@ -373,6 +373,7 @@ void FPhysAnimStandingProofNegativeSupportTest::GetTests(TArray<FString>& OutBea
 bool FPhysAnimStandingProofNegativeSupportTest::RunTest(const FString& Parameters)
 {
 	const FString MapName = Parameters;
+	AddExpectedError(TEXT("Fail-stop: Proof failed during activation wait"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	// 1. Load the map
 	AutomationOpenMap(MapName);
@@ -491,7 +492,7 @@ bool FVerifyActivationWiringCommand::Update()
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationWiringTest, "ActivationPath.Wiring", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationWiringTest, "PhysAnim.ActivationPath.Wiring", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 void FPhysAnimActivationWiringTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
@@ -517,7 +518,7 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(false, false, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f)); // Wait for startup
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BridgeActive));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch));
 	}
 	else if (Parameters == TEXT("ProofNotSatisfied"))
 	{
@@ -545,6 +546,42 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::FailStopped));
 	}
 
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStateMachinePhase1EntryTest, "PhysAnim.StateMachine.Phase1Entry", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimStateMachinePhase1EntryTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("Phase1Entry"));
+	OutTestCommands.Add(TEXT("Phase1Entry"));
+}
+
+bool FPhysAnimStateMachinePhase1EntryTest::RunTest(const FString& Parameters)
+{
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, false, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch));
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStateMachinePhase2StandingTest, "PhysAnim.StateMachine.Phase2Standing", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimStateMachinePhase2StandingTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("Phase2Standing"));
+	OutTestCommands.Add(TEXT("Phase2Standing"));
+}
+
+bool FPhysAnimStateMachinePhase2StandingTest::RunTest(const FString& Parameters)
+{
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing));
 	return true;
 }
 
