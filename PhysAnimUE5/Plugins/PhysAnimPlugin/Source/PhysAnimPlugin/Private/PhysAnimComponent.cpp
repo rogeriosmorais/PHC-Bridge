@@ -2,8 +2,10 @@
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimProofArtifactEmitter.h"
 #include "PhysAnimRuntimeAdapter.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/Actor.h"
 
 DEFINE_LOG_CATEGORY(LogPhysAnimBridge);
@@ -12,13 +14,16 @@ namespace
 {
 	bool HasConsistentLiveRuntimeEvidenceArtifact(const FPhysAnimRuntimeTerminationState& State)
 	{
-		if (!State.bTerminated)
-		{
-			return false;
-		}
-
 		const FPhysAnimRunArtifactSnapshot& Latest = State.LatestArtifact;
 		const FPhysAnimRunArtifactSnapshot& Terminal = State.TerminalArtifact;
+
+		if (!State.bTerminated)
+		{
+			return !Terminal.AttemptUuid.IsEmpty() &&
+				Terminal.AttemptUuid == Latest.AttemptUuid &&
+				Terminal.TerminalReason == EPhysAnimTerminalReason::None &&
+				Terminal.bTerminalFrameArtifactCaptured;
+		}
 
 		return Terminal.AttemptUuid == Latest.AttemptUuid &&
 			Terminal.TerminalReason == Latest.TerminalReason &&
@@ -133,8 +138,8 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 {
 	if (!bEnableLiveRuntimeEvidenceProof)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_DISABLED"));
-		return false;
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] ENTRY_ALLOWED reason=PROOF_DISABLED_BYPASS"));
+		return true;
 	}
 
 	if (!bLiveRuntimeEvidenceProofComplete)
@@ -310,7 +315,6 @@ EPhysAnimRuntimeState UPhysAnimComponent::EvaluateBalanceActiveStanding() const
 bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 {
 	if (!bLiveRuntimeEvidenceProofComplete ||
-		!LiveRuntimeEvidenceTerminationState.bTerminated ||
 		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None ||
 		LiveRuntimeEvidenceStandingSeconds < LiveRuntimeEvidenceStandingTargetSeconds)
 	{
@@ -381,7 +385,25 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 
 void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 {
-	if (!bEnableLiveRuntimeEvidenceProof || bLiveRuntimeEvidenceProofComplete)
+	const bool bTerminalFailureLatched =
+		LiveRuntimeEvidenceTerminationState.bTerminated &&
+		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None;
+	if (!bEnableLiveRuntimeEvidenceProof || bTerminalFailureLatched)
+	{
+		return;
+	}
+
+	const bool bContinuingSafeDenyProof =
+		RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny &&
+		bLiveRuntimeEvidenceProofActive &&
+		!bLiveRuntimeEvidenceProofComplete;
+	const bool bProofEligibleRuntimeState =
+		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
+		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation ||
+		IsBalanceEntryState(RuntimeState) ||
+		IsBalanceActiveState(RuntimeState) ||
+		bContinuingSafeDenyProof;
+	if (!bProofEligibleRuntimeState)
 	{
 		return;
 	}
@@ -390,6 +412,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
 		PhysAnimProofArtifactEmitter::LogAttemptStart(LiveRuntimeEvidenceAttemptUuid);
 	}
+	bLiveRuntimeEvidenceProofActive = true;
 
 	LiveRuntimeEvidenceStandingSeconds += FMath::Max(0.0f, DeltaTimeSeconds);
 	++LiveRuntimeEvidenceSubstepCounter;
@@ -407,7 +430,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 	FPhysAnimRuntimeTerminationPipelineInput PipelineInput;
 	PipelineInput.PreviousState = LiveRuntimeEvidenceTerminationState;
 	PipelineInput.SubstepInput = BuildLiveRuntimeEvidenceSubstepInput(SupportObservation, DeltaTimeSeconds);
-	PipelineInput.bEnableTerminationCommand = true;
+	PipelineInput.bEnableTerminationCommand = !bLiveRuntimeEvidenceProofComplete;
 	PipelineInput.bAllowMovementReclaimOnTermination = true;
 
 	const FPhysAnimRuntimeTerminationPipelineResult PipelineResult =
@@ -445,16 +468,22 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		return;
 	}
 
-	if (LiveRuntimeEvidenceStandingSeconds >= LiveRuntimeEvidenceStandingTargetSeconds)
+	if (!bLiveRuntimeEvidenceProofComplete &&
+		LiveRuntimeEvidenceStandingSeconds >= LiveRuntimeEvidenceStandingTargetSeconds)
 	{
 		bLiveRuntimeEvidenceProofComplete = true;
 
-		// On success, we haven't officially "terminated" via the pipeline, 
-		// but we want to capture the final state as the terminal artifact.
-		LiveRuntimeEvidenceTerminationState.bTerminated = true;
+		FPhysAnimRunArtifactSnapshot CompletionArtifact = PipelineResult.SubstepResult.Artifact;
+		CompletionArtifact.TerminalReason = EPhysAnimTerminalReason::None;
+		CompletionArtifact.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
+		CompletionArtifact.bTerminalFrameArtifactCaptured = true;
+
+		LiveRuntimeEvidenceTerminationState.bTerminated = false;
 		LiveRuntimeEvidenceTerminationState.TerminalReason = EPhysAnimTerminalReason::None;
-		LiveRuntimeEvidenceTerminationState.TerminalArtifact = PipelineResult.SubstepResult.Artifact;
-		LiveRuntimeEvidenceTerminationState.LatestArtifact = PipelineResult.SubstepResult.Artifact;
+		LiveRuntimeEvidenceTerminationState.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
+		LiveRuntimeEvidenceTerminationState.bTerminalFrameArtifactCaptured = true;
+		LiveRuntimeEvidenceTerminationState.TerminalArtifact = CompletionArtifact;
+		LiveRuntimeEvidenceTerminationState.LatestArtifact = CompletionArtifact;
 		
 		FPhysAnimProofArtifactEmitInput EmitInput;
 		EmitInput.AttemptUuid = LiveRuntimeEvidenceAttemptUuid;
@@ -466,6 +495,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		EmitInput.PipelineResult.StateApplyResult.State = LiveRuntimeEvidenceTerminationState;
 
 		PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(EmitInput);
+		bLiveRuntimeEvidenceTerminalArtifactEmitted = true;
 		
 		PhysAnimProofArtifactEmitter::LogAttemptResult(
 			LiveRuntimeEvidenceAttemptUuid,
@@ -731,7 +761,10 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName 
 
 	FCollisionObjectQueryParams ObjectQueryParams;
 	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldStatic);
-	ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+	if (!bLiveRuntimeEvidenceWorldStaticOnly)
+	{
+		ObjectQueryParams.AddObjectTypesToQuery(ECC_WorldDynamic);
+	}
 
 	int32 HitCount = 0;
 	for (const FVector& Offset : Offsets)
@@ -792,13 +825,25 @@ FPhysAnimSupportHitResultObservationInput UPhysAnimComponent::BuildLiveRuntimeEv
 	FPhysAnimSupportHitResultObservationInput Input;
 
 	const USkeletalMeshComponent* const Mesh = GetMeshComponent();
-	const FVector ActorLocation = Mesh ? Mesh->GetComponentLocation() : FVector::ZeroVector;
+	const AActor* const OwnerActor = GetOwner();
+	const ACharacter* const Character = Cast<ACharacter>(OwnerActor);
+	const UCapsuleComponent* const Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
+	const FVector RebaseOriginCm = Capsule
+		? Capsule->GetComponentLocation()
+		: (OwnerActor ? OwnerActor->GetActorLocation() : (Mesh ? Mesh->GetComponentLocation() : FVector::ZeroVector));
+	const FVector ProxyWorldCm = Capsule
+		? Capsule->GetComponentLocation()
+		: (OwnerActor ? OwnerActor->GetActorLocation() : RebaseOriginCm);
+	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
 
 	Input.HitResults = HitResults;
-	Input.WorldOriginCm = ActorLocation;
-	Input.ComProxyPosCm = FVector2D::ZeroVector; // Local relative to WorldOrigin
+	Input.WorldOriginCm = RebaseOriginCm;
+	Input.ComProxyPosCm = FVector2D(ProxyWorldCm.X - RebaseOriginCm.X, ProxyWorldCm.Y - RebaseOriginCm.Y);
+	Input.bRequireWorldStatic = bLiveRuntimeEvidenceWorldStaticOnly;
 	Input.DeltaMs = static_cast<double>(FMath::Max(0.0f, DeltaTimeSeconds) * 1000.0f);
 	Input.PreviousSupportGapTimerMs = LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportGapTimerMs;
+	Input.SupportGapMaxMs = Settings.BalancePhase1AdmissionMaxSupportGapMs;
+	Input.ProxyDriftLimitMs = Settings.ProxyDriftLimitMs;
 
 	if (LiveRuntimeEvidenceTerminationState.LatestArtifact.ProxyOutsideHullDurationMs.IsSet())
 	{
@@ -816,8 +861,6 @@ FPhysAnimSupportHitResultObservationInput UPhysAnimComponent::BuildLiveRuntimeEv
 	RightMapping.SupportSide = EPhysAnimSupportSide::Right;
 	Input.SupportBodies.Add(RightMapping);
 
-	Input.SupportAreaMinCm2 = 0.0;
-	Input.ProxyDriftLimitMs = 500.0;
 	return Input;
 }
 
@@ -829,10 +872,14 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	const ACharacter* Character = Cast<ACharacter>(GetOwner());
 	const UCharacterMovementComponent* CharacterMovement = Character ? Character->GetCharacterMovement() : nullptr;
 	const USkeletalMeshComponent* Mesh = GetMeshComponent();
+	const bool bEvaluateActivationContracts =
+		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
+		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation ||
+		IsBalanceEntryState(RuntimeState);
 	const FPhysAnimCapsuleContractSnapshot CapsuleSnapshot = BuildCapsuleContractSnapshot();
-	const FPhysAnimContinuitySnapshot ContinuitySnapshot = BuildContinuitySnapshot();
-	const FPhysAnimCapsuleContractValidationResult CapsuleValidation = PhysAnimValidators::ValidateCapsule(CapsuleSnapshot);
-	const FPhysAnimContinuityValidationResult ContinuityValidation = PhysAnimValidators::ValidateContinuity(ContinuitySnapshot);
+	const FPhysAnimContinuitySnapshot ContinuitySnapshot = BuildContinuitySnapshot(DeltaTimeSeconds);
+	FPhysAnimCapsuleContractValidationResult CapsuleValidation = PhysAnimValidators::ValidateCapsule(CapsuleSnapshot);
+	FPhysAnimContinuityValidationResult ContinuityValidation = PhysAnimValidators::ValidateContinuity(ContinuitySnapshot);
 	FString PlantAuditError;
 	FPhysAnimPlantContractSnapshotCaptureInput PlantCaptureInput;
 	PlantCaptureInput.SkeletalMeshComponent = const_cast<USkeletalMeshComponent*>(Mesh);
@@ -840,6 +887,12 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	PlantCaptureInput.bSkeletonAuditPassed = ValidateRequiredBodies(PlantAuditError);
 	const FPhysAnimPlantContractSnapshot PlantSnapshot = PhysAnimRuntimeAdapter::CapturePlantContractSnapshot(PlantCaptureInput);
 	const FPhysAnimPlantContractValidationResult PlantValidation = PhysAnimValidators::ValidatePlant(PlantSnapshot);
+
+	if (!bEvaluateActivationContracts)
+	{
+		CapsuleValidation = FPhysAnimCapsuleContractValidationResult();
+		ContinuityValidation = FPhysAnimContinuityValidationResult();
+	}
 
 	Input.SupportObservation = SupportObservation;
 	Input.Plant = PlantValidation;

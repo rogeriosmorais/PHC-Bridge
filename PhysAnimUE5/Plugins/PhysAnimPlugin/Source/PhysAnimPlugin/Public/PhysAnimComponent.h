@@ -1614,7 +1614,7 @@ private:
 		float DeltaTimeSeconds) const;
 
 	FPhysAnimCapsuleContractSnapshot BuildCapsuleContractSnapshot() const;
-	FPhysAnimContinuitySnapshot BuildContinuitySnapshot() const;
+	FPhysAnimContinuitySnapshot BuildContinuitySnapshot(float DeltaTimeSeconds) const;
 
 	bool ResolveRuntimeContext(FString& OutError);
 	bool ValidateRequiredBodies(FString& OutError) const;

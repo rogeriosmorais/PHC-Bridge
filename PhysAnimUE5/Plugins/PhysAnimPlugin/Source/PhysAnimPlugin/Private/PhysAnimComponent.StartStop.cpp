@@ -51,8 +51,13 @@ bool UPhysAnimComponent::StartBridge()
 	ResetStartupQuietWindowState();
 	ResetPolicySettleWindowState();
 
+	const bool bRequestedLiveRuntimeEvidenceProof = bEnableLiveRuntimeEvidenceProof;
+	const bool bRequestedForceSupportFailure = bForceSupportFailure;
+	ResetLiveRuntimeEvidenceProof();
+	bEnableLiveRuntimeEvidenceProof = bRequestedLiveRuntimeEvidenceProof;
+	bForceSupportFailure = bRequestedForceSupportFailure;
+
 	bStartupReported = true;
-	bEnableLiveRuntimeEvidenceProof = true;
 	SetComponentTickEnabled(true);
 	TransitionRuntimeState(EPhysAnimRuntimeState::RuntimeReady);
 	TransitionRuntimeState(EPhysAnimRuntimeState::WaitingForPoseSearch);

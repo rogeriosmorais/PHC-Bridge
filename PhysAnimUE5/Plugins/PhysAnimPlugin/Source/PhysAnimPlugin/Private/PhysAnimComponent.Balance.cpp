@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimRuntimeAdapter.h"
 
 namespace
 {
@@ -1376,40 +1377,20 @@ void UPhysAnimComponent::TrackStabilizationStressTestObservations()
 
 FPhysAnimCapsuleContractSnapshot UPhysAnimComponent::BuildCapsuleContractSnapshot() const
 {
-	FPhysAnimCapsuleContractSnapshot Snapshot;
-	
 	const ACharacter* Character = Cast<ACharacter>(GetOwner());
 	const UCapsuleComponent* Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
 	const USkeletalMeshComponent* Mesh = GetMeshComponent();
 	const UCharacterMovementComponent* CMC = Character ? Character->GetCharacterMovement() : nullptr;
 
-	if (Capsule)
-	{
-		Snapshot.CapsuleCollisionEnabled = Capsule->GetCollisionEnabled() == ECollisionEnabled::NoCollision 
-			? EPhysAnimCapsuleCollisionState::NoCollision 
-			: EPhysAnimCapsuleCollisionState::CollisionEnabled;
-		Snapshot.bCapsuleGenerateOverlapEvents = Capsule->GetGenerateOverlapEvents();
-		
-		const FVector RelativeLoc = Mesh ? Mesh->GetRelativeLocation() : FVector::ZeroVector;
-		// Standard Manny offset is -90.0 on Z. 
-		const float DefaultZ = -90.0f; 
-		Snapshot.CapsuleLockDeltaCm = FMath::Abs(RelativeLoc.Z - DefaultZ);
-	}
+	FPhysAnimCapsuleContractSnapshotCaptureInput CaptureInput;
+	CaptureInput.CapsuleComponent = const_cast<UCapsuleComponent*>(Capsule);
+	CaptureInput.SkeletalMeshComponent = const_cast<USkeletalMeshComponent*>(Mesh);
+	CaptureInput.CharacterMovementComponent = const_cast<UCharacterMovementComponent*>(CMC);
+	CaptureInput.RebaseOriginCm = Character
+		? Character->GetActorLocation()
+		: (Capsule ? Capsule->GetComponentLocation() : FVector::ZeroVector);
 
-	if (Mesh)
-	{
-		Snapshot.bMeshUsesAbsoluteLocation = Mesh->IsUsingAbsoluteLocation();
-		Snapshot.bMeshUsesAbsoluteRotation = Mesh->IsUsingAbsoluteRotation();
-		Snapshot.bMeshUsesAbsoluteScale = Mesh->IsUsingAbsoluteScale();
-	}
-
-	if (CMC)
-	{
-		Snapshot.bCmcIsActive = CMC->IsActive();
-		Snapshot.bCmcTickEnabled = CMC->IsComponentTickEnabled();
-		Snapshot.bCmcUpdatedComponentIsNull = (CMC->UpdatedComponent == nullptr);
-	}
-
+	FPhysAnimCapsuleContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureCapsuleContractSnapshot(CaptureInput);
 	Snapshot.bIsBridgeActive = (RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState));
 
 	if (bEnableLiveRuntimeEvidenceProof)
@@ -1420,7 +1401,7 @@ FPhysAnimCapsuleContractSnapshot UPhysAnimComponent::BuildCapsuleContractSnapsho
 	return Snapshot;
 }
 
-FPhysAnimContinuitySnapshot UPhysAnimComponent::BuildContinuitySnapshot() const
+FPhysAnimContinuitySnapshot UPhysAnimComponent::BuildContinuitySnapshot(float DeltaTimeSeconds) const
 {
 	FPhysAnimContinuitySnapshot Snapshot;
 	USkeletalMeshComponent* const Mesh = GetMeshComponent();
@@ -1450,7 +1431,17 @@ FPhysAnimContinuitySnapshot UPhysAnimComponent::BuildContinuitySnapshot() const
 
 	Snapshot.bAllCriticalBodiesValid = MissingCriticalBodies == 0;
 	Snapshot.bAllCriticalBodiesSimulating = Snapshot.bAllCriticalBodiesValid && NonSimulatingCriticalBodies == 0;
-	Snapshot.PelvisSleepDurationMs = PelvisBody && PelvisBody->IsInstanceAwake() ? 0.0 : 1000.0;
+	if (PelvisBody && PelvisBody->IsValidBodyInstance() && PelvisBody->IsInstanceSimulatingPhysics())
+	{
+		Snapshot.PelvisSleepDurationMs = PelvisBody->IsInstanceAwake()
+			? 0.0
+			: LiveRuntimeEvidenceTerminationState.LatestArtifact.PelvisSleepDurationMs +
+				static_cast<double>(FMath::Max(0.0f, DeltaTimeSeconds) * 1000.0f);
+	}
+	else
+	{
+		Snapshot.PelvisSleepDurationMs = 0.0;
+	}
 	Snapshot.TopologyChangeCount = MissingCriticalBodies;
 	Snapshot.bContinuityBookkeepingMismatch = !PendingBodyModifierCachedResetNames.IsEmpty();
 	Snapshot.bIsBridgeActive = (RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState));

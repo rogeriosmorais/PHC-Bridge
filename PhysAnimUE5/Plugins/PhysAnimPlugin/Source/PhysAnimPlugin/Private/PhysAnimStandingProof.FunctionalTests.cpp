@@ -9,6 +9,18 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+namespace
+{
+	void AddLatentAutomationError(FAutomationTestBase* Test, const FString& Message)
+	{
+		if (Test)
+		{
+			Test->AddError(Message);
+		}
+		UE_LOG(LogTemp, Error, TEXT("%s"), *Message);
+	}
+}
+
 /**
  * Latent command to wait for the standing proof to complete.
  */
@@ -119,7 +131,7 @@ bool FStartStandingProofWaitCommand::Update()
 /**
  * Latent command to verify the standing proof results.
  */
-DEFINE_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand);
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyStandingProofCommand, FAutomationTestBase*, Test);
 bool FVerifyStandingProofCommand::Update()
 {
 	UWorld* World = nullptr;
@@ -140,31 +152,34 @@ bool FVerifyStandingProofCommand::Update()
 
 	if (!World)
 	{
+		AddLatentAutomationError(Test, TEXT("StandingProof: PIE world was not available"));
 		return true;
 	}
 
+	bool bFoundComponent = false;
 	for (TActorIterator<ACharacter> It(World); It; ++It)
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
+			bFoundComponent = true;
 			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
 			
 			// 1. Check if proof completed
 			if (!Comp->IsLiveRuntimeEvidenceProofComplete())
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: Proof did not complete in time for %s"), *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: Proof did not complete in time for %s"), *It->GetName()));
 				return true;
 			}
 
 			if (!Comp->IsLiveRuntimeEvidenceProofSatisfied())
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: Proof completed but is not truthfully satisfied for %s"), *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: Proof completed but is not truthfully satisfied for %s"), *It->GetName()));
 				return true;
 			}
 
 			if (!Comp->CanEnterBalanceActiveStanding())
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: Proof completed but cannot enter active standing for %s"), *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: Proof completed but cannot enter active standing for %s"), *It->GetName()));
 				return true;
 			}
 
@@ -172,7 +187,7 @@ bool FVerifyStandingProofCommand::Update()
 			const float HullArea = TerminationState.TerminalArtifact.SupportHullAreaCm2;
 			if (HullArea <= 0.0f)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: SupportHullAreaCm2 is 0.0 for %s. This indicates a sampling failure or contract violation."), *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: SupportHullAreaCm2 is 0.0 for %s. This indicates a sampling failure or contract violation."), *It->GetName()));
 			}
 			else
 			{
@@ -183,7 +198,7 @@ bool FVerifyStandingProofCommand::Update()
 			const EPhysAnimTerminalReason Reason = TerminationState.TerminalArtifact.TerminalReason;
 			if (Reason == EPhysAnimTerminalReason::ActivationSupportFailure)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: FAILED with ActivationSupportFailure for %s"), *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: FAILED with ActivationSupportFailure for %s"), *It->GetName()));
 			}
 			else if (Reason == EPhysAnimTerminalReason::None)
 			{
@@ -198,18 +213,23 @@ bool FVerifyStandingProofCommand::Update()
 			if (!TerminationState.TerminalArtifact.bPhysicsAssetContractValid ||
 				!TerminationState.TerminalArtifact.bSkeletonAuditPassed)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: Terminal artifact audit state is inconsistent for %s"), *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: Terminal artifact audit state is inconsistent for %s"), *It->GetName()));
 			}
 
 			if (!TerminationState.TerminalArtifact.bCapsuleContractPassed ||
 				!TerminationState.TerminalArtifact.bPhysicalContinuityValidatorPassed ||
 				TerminationState.TerminalArtifact.bContinuityBookkeepingMismatch)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: Terminal artifact capsule/continuity state is invalid for %s"), *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: Terminal artifact capsule/continuity state is invalid for %s"), *It->GetName()));
 			}
 			
 			break;
 		}
+	}
+
+	if (!bFoundComponent)
+	{
+		AddLatentAutomationError(Test, TEXT("StandingProof: no PhysAnim component was found"));
 	}
 
 	return true;
@@ -260,7 +280,7 @@ bool FEnableNegativeSupportProofCommand::Update()
 /**
  * Latent command to verify the negative standing proof results.
  */
-DEFINE_LATENT_AUTOMATION_COMMAND(FVerifyNegativeSupportProofCommand);
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyNegativeSupportProofCommand, FAutomationTestBase*, Test);
 bool FVerifyNegativeSupportProofCommand::Update()
 {
 	UWorld* World = nullptr;
@@ -281,19 +301,22 @@ bool FVerifyNegativeSupportProofCommand::Update()
 
 	if (!World)
 	{
+		AddLatentAutomationError(Test, TEXT("StandingProof: negative proof PIE world was not available"));
 		return true;
 	}
 
+	bool bFoundComponent = false;
 	for (TActorIterator<ACharacter> It(World); It; ++It)
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
+			bFoundComponent = true;
 			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
 			
 			// 1. Check if proof completed
 			if (!Comp->IsLiveRuntimeEvidenceProofComplete())
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: Negative proof did not complete in time for %s"), *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: Negative proof did not complete in time for %s"), *It->GetName()));
 				return true;
 			}
 
@@ -305,28 +328,33 @@ bool FVerifyNegativeSupportProofCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: NEGATIVE_TEST_FAILED. Expected ActivationSupportFailure but got %d for %s"), (int32)Reason, *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: NEGATIVE_TEST_FAILED. Expected ActivationSupportFailure but got %d for %s"), (int32)Reason, *It->GetName()));
 			}
 
 			if (Comp->IsLiveRuntimeEvidenceProofSatisfied())
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: NEGATIVE_TEST_FAILED. Proof should not be satisfied for %s"), *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: NEGATIVE_TEST_FAILED. Proof should not be satisfied for %s"), *It->GetName()));
 			}
 
 			if (Comp->CanEnterBalanceActiveStanding())
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: NEGATIVE_TEST_FAILED. Active standing should be denied for %s"), *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: NEGATIVE_TEST_FAILED. Active standing should be denied for %s"), *It->GetName()));
 			}
 
 			// 3. Ensure we didn't stay in active standing
 			const EPhysAnimRuntimeState RuntimeState = Comp->GetRuntimeState();
 			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: NEGATIVE_TEST_FAILED. Remained in BalanceActive_Standing despite support loss for %s"), *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: NEGATIVE_TEST_FAILED. Remained in BalanceActive_Standing despite support loss for %s"), *It->GetName()));
 			}
 			
 			break;
 		}
+	}
+
+	if (!bFoundComponent)
+	{
+		AddLatentAutomationError(Test, TEXT("StandingProof: negative proof found no PhysAnim component"));
 	}
 
 	return true;
@@ -357,7 +385,7 @@ bool FPhysAnimStandingProofLiveTest::RunTest(const FString& Parameters)
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
 
 	// 5. Verify results
-	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand());
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand(this));
 
 	return true;
 }
@@ -373,7 +401,6 @@ void FPhysAnimStandingProofNegativeSupportTest::GetTests(TArray<FString>& OutBea
 bool FPhysAnimStandingProofNegativeSupportTest::RunTest(const FString& Parameters)
 {
 	const FString MapName = Parameters;
-	AddExpectedError(TEXT("Fail-stop: Proof failed during activation wait"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	// 1. Load the map
 	AutomationOpenMap(MapName);
@@ -388,7 +415,7 @@ bool FPhysAnimStandingProofNegativeSupportTest::RunTest(const FString& Parameter
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
 
 	// 5. Verify negative results
-	ADD_LATENT_AUTOMATION_COMMAND(FVerifyNegativeSupportProofCommand());
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyNegativeSupportProofCommand(this));
 
 	return true;
 }
@@ -398,6 +425,8 @@ bool FPhysAnimStandingProofNegativeSupportTest::RunTest(const FString& Parameter
 DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FEnableActivationWiringCommand, bool, bEnableProof, bool, bFinishProof, bool, bForceFailure);
 bool FEnableActivationWiringCommand::Update()
 {
+	static TOptional<FTransform> InitialActorTransform;
+
 	UWorld* World = nullptr;
 #if WITH_EDITOR
 	if (GIsEditor)
@@ -423,7 +452,14 @@ bool FEnableActivationWiringCommand::Update()
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
+			ACharacter* Character = *It;
+			if (!InitialActorTransform.IsSet())
+			{
+				InitialActorTransform = Character->GetActorTransform();
+			}
+
 			Comp->StopBridge();
+			Character->SetActorTransform(InitialActorTransform.GetValue(), false, nullptr, ETeleportType::TeleportPhysics);
 			Comp->ResetLiveRuntimeEvidenceProof();
 			Comp->bEnableLiveRuntimeEvidenceProof = bEnableProof;
 			
@@ -443,7 +479,7 @@ bool FEnableActivationWiringCommand::Update()
 /**
  * Command to verify activation wiring results.
  */
-DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyActivationWiringCommand, EPhysAnimRuntimeState, ExpectedState);
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FVerifyActivationWiringCommand, EPhysAnimRuntimeState, ExpectedState, FAutomationTestBase*, Test);
 bool FVerifyActivationWiringCommand::Update()
 {
 	UWorld* World = nullptr;
@@ -464,13 +500,16 @@ bool FVerifyActivationWiringCommand::Update()
 
 	if (!World)
 	{
+		AddLatentAutomationError(Test, TEXT("ActivationWiring: PIE world was not available"));
 		return true;
 	}
 
+	bool bFoundComponent = false;
 	for (TActorIterator<ACharacter> It(World); It; ++It)
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
+			bFoundComponent = true;
 			const EPhysAnimRuntimeState ActualState = Comp->GetRuntimeState();
 			if (ActualState == ExpectedState)
 			{
@@ -478,18 +517,23 @@ bool FVerifyActivationWiringCommand::Update()
 				if (ExpectedState == EPhysAnimRuntimeState::BalanceActive_Standing &&
 					(!Comp->IsLiveRuntimeEvidenceProofSatisfied() || !Comp->CanEnterBalanceActiveStanding()))
 				{
-					UE_LOG(LogTemp, Error, TEXT("ActivationWiring: TEST_FAILED. Standing proof gate is not truthful for %s"), *It->GetName());
+					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationWiring: TEST_FAILED. Standing proof gate is not truthful for %s"), *It->GetName()));
 				}
 			}
 			else
 			{
-				UE_LOG(LogTemp, Error, TEXT("ActivationWiring: TEST_FAILED. Expected %d but got %d for %s"), (int32)ExpectedState, (int32)ActualState, *It->GetName());
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationWiring: TEST_FAILED. Expected %d but got %d for %s"), (int32)ExpectedState, (int32)ActualState, *It->GetName()));
 			}
 			break;
 		}
 	}
 
-return true;
+	if (!bFoundComponent)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationWiring: no PhysAnim component was found"));
+	}
+
+	return true;
 }
 
 /**
@@ -547,7 +591,7 @@ bool FCollectActivatedStandingStabilityMetricsCommand::Update()
 /**
  * Command to verify activated standing stability metrics.
  */
-DEFINE_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingStabilityMetricsCommand);
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyActivatedStandingStabilityMetricsCommand, FAutomationTestBase*, Test);
 bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 {
 	UWorld* World = nullptr;
@@ -568,47 +612,54 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 
 	if (!World)
 	{
+		AddLatentAutomationError(Test, TEXT("StandingProof: StabilityMetrics PIE world was not available"));
 		return true;
 	}
 
+	bool bFoundComponent = false;
 	for (TActorIterator<ACharacter> It(World); It; ++It)
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
+			bFoundComponent = true;
+			const auto Fail = [&](const FString& Message)
+			{
+				AddLatentAutomationError(Test, Message);
+			};
 			const EPhysAnimRuntimeState RuntimeState = Comp->GetRuntimeState();
 			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
 			const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Comp->GetActivatedStandingStabilityMetrics();
 
 			if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics expected BalanceActive_Standing but got %d for %s"), (int32)RuntimeState, *It->GetName());
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics expected BalanceActive_Standing but got %d for %s"), (int32)RuntimeState, *It->GetName()));
 			}
 
 			if (!Comp->IsLiveRuntimeEvidenceProofComplete())
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics proof did not complete for %s"), *It->GetName());
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics proof did not complete for %s"), *It->GetName()));
 			}
 
 			if (!Comp->IsLiveRuntimeEvidenceProofSatisfied())
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics proof is not truthful for %s"), *It->GetName());
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics proof is not truthful for %s"), *It->GetName()));
 			}
 
 			if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics expected terminal_reason=None but got %d for %s"), (int32)TerminationState.TerminalReason, *It->GetName());
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics expected terminal_reason=None but got %d for %s"), (int32)TerminationState.TerminalReason, *It->GetName()));
 			}
 
 			if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics were not collected for %s"), *It->GetName());
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics were not collected for %s"), *It->GetName()));
 			}
 
 			const auto CheckFinite = [&](const TCHAR* Label, double Value)
 			{
 				if (!FMath::IsFinite(Value))
 				{
-					UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics %s is not finite for %s"), Label, *It->GetName());
+					Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics %s is not finite for %s"), Label, *It->GetName()));
 				}
 			};
 
@@ -627,22 +678,22 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 
 			if (Metrics.FailStopCount != 0)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics expected no fail-stop but got %d for %s"), Metrics.FailStopCount, *It->GetName());
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics expected no fail-stop but got %d for %s"), Metrics.FailStopCount, *It->GetName()));
 			}
 
 			if (Metrics.ActivationDurationSec < 30.0)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics activation duration %.2f is below 30.0 seconds for %s"), Metrics.ActivationDurationSec, *It->GetName());
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics activation duration %.2f is below 30.0 seconds for %s"), Metrics.ActivationDurationSec, *It->GetName()));
 			}
 
 			if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics support hull area did not stay above zero for %s"), *It->GetName());
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics support hull area did not stay above zero for %s"), *It->GetName()));
 			}
 
 			if (Metrics.ActiveSupportSideCountMin < 1.0 || Metrics.ActiveSupportSideCountMean < 1.0 || Metrics.ActiveSupportSideCountMax < 1.0)
 			{
-				UE_LOG(LogTemp, Error, TEXT("StandingProof: StabilityMetrics active support side count dropped below 1 for %s"), *It->GetName());
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics active support side count dropped below 1 for %s"), *It->GetName()));
 			}
 
 			UE_LOG(
@@ -665,6 +716,11 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Metrics.TerminalReason);
 			break;
 		}
+	}
+
+	if (!bFoundComponent)
+	{
+		AddLatentAutomationError(Test, TEXT("StandingProof: StabilityMetrics found no PhysAnim component"));
 	}
 
 	return true;
@@ -696,13 +752,13 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(false, false, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f)); // Wait for startup
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BridgeActive, this));
 	}
 	else if (Parameters == TEXT("ProofNotSatisfied"))
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, false, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f)); // Wait for startup (but proof takes 3s)
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
 	}
 	else if (Parameters == TEXT("ProofSatisfied"))
 	{
@@ -711,7 +767,7 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f)); // Wait for 3s proof + startup
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing, this));
 	}
 	else if (Parameters == TEXT("ProofFailed"))
 	{
@@ -721,7 +777,7 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, true));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::FailStopped));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::FailStopped, this));
 	}
 
 	return true;
@@ -741,7 +797,7 @@ bool FPhysAnimStateMachinePhase1EntryTest::RunTest(const FString& Parameters)
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, false, false));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
-	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
 	return true;
 }
 
@@ -759,7 +815,7 @@ bool FPhysAnimStateMachinePhase2StandingTest::RunTest(const FString& Parameters)
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f));
-	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing, this));
 	return true;
 }
 
@@ -927,12 +983,12 @@ bool FApplyActivatedStandingPerturbationCommand::Update()
 	return true;
 }
 
-DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyActivatedStandingPerturbationCommand, FActivatedStandingPerturbationValidationState*, State);
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FVerifyActivatedStandingPerturbationCommand, FActivatedStandingPerturbationValidationState*, State, FAutomationTestBase*, Test);
 bool FVerifyActivatedStandingPerturbationCommand::Update()
 {
 	if (!State || !State->Component.IsValid())
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: verification command has no component"));
+		AddLatentAutomationError(Test, TEXT("PerturbationProof: verification command has no component"));
 		return true;
 	}
 
@@ -941,20 +997,24 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 	const EPhysAnimRuntimeState RuntimeState = Component->GetRuntimeState();
 	const FPhysAnimRuntimeTerminationState& TerminationState = Component->GetLiveRuntimeEvidenceTerminationState();
 	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
+	const auto Fail = [&](const FString& Message)
+	{
+		AddLatentAutomationError(Test, Message);
+	};
 
 	if (!State->bBaselineCaptured)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: baseline was not captured"));
+		Fail(TEXT("PerturbationProof: baseline was not captured"));
 	}
 
 	if (!State->bPerturbationApplied)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
+		Fail(TEXT("PerturbationProof: perturbation was not applied"));
 	}
 
 	if (!Component->HasActivatedStandingPerturbationApplied())
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: component did not remember the perturbation"));
+		Fail(TEXT("PerturbationProof: component did not remember the perturbation"));
 	}
 
 	const double RecoveryDurationSec =
@@ -963,24 +1023,24 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 			: -1.0;
 	if (!FMath::IsFinite(RecoveryDurationSec) || RecoveryDurationSec < 0.0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: recovery duration is invalid"));
+		Fail(TEXT("PerturbationProof: recovery duration is invalid"));
 	}
 
 	if (Metrics.SampleCount <= State->BaselineMetrics.SampleCount)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: samples did not advance after perturbation baseline=%d current=%d"),
+		Fail(FString::Printf(TEXT("PerturbationProof: samples did not advance after perturbation baseline=%d current=%d"),
 			State->BaselineMetrics.SampleCount,
-			Metrics.SampleCount);
+			Metrics.SampleCount));
 	}
 
 	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: support hull area collapsed after perturbation"));
+		Fail(TEXT("PerturbationProof: support hull area collapsed after perturbation"));
 	}
 
 	if (Metrics.ActiveSupportSideCountMin < 1.0 || Metrics.ActiveSupportSideCountMean < 1.0 || Metrics.ActiveSupportSideCountMax < 1.0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: active support side count dropped below 1 after perturbation"));
+		Fail(TEXT("PerturbationProof: active support side count dropped below 1 after perturbation"));
 	}
 
 	const bool bStandingStayedStanding = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
@@ -989,18 +1049,18 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 		RuntimeState == EPhysAnimRuntimeState::FailStopped;
 	if (!bStandingStayedStanding && !bSafeTransition)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: runtime state after perturbation was unexpected (%d)"), (int32)RuntimeState);
+		Fail(FString::Printf(TEXT("PerturbationProof: runtime state after perturbation was unexpected (%d)"), (int32)RuntimeState));
 	}
 
 	if (bStandingStayedStanding)
 	{
 		if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 		{
-			UE_LOG(LogTemp, Error, TEXT("PerturbationProof: standing result expected terminal_reason=None but got %d"), (int32)TerminationState.TerminalReason);
+			Fail(FString::Printf(TEXT("PerturbationProof: standing result expected terminal_reason=None but got %d"), (int32)TerminationState.TerminalReason));
 		}
 		if (!Component->IsLiveRuntimeEvidenceProofSatisfied())
 		{
-			UE_LOG(LogTemp, Error, TEXT("PerturbationProof: standing result is not truthful"));
+			Fail(TEXT("PerturbationProof: standing result is not truthful"));
 		}
 	}
 	else
@@ -1011,14 +1071,14 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 		}
 		else if (Component->IsLiveRuntimeEvidenceProofSatisfied())
 		{
-			UE_LOG(LogTemp, Error, TEXT("PerturbationProof: failure reason was not truthful"));
+			Fail(TEXT("PerturbationProof: failure reason was not truthful"));
 		}
 	}
 
 	if (TerminationState.TerminalArtifact.TerminalReason != TerminationState.TerminalReason ||
 		TerminationState.LatestArtifact.TerminalReason != TerminationState.TerminalReason)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: audit artifact terminal reason does not match final state"));
+		Fail(TEXT("PerturbationProof: audit artifact terminal reason does not match final state"));
 	}
 
 	UE_LOG(
@@ -1061,7 +1121,7 @@ bool FPhysAnimActivatedStandingStabilityMetricsTest::RunTest(const FString& Para
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(30.0f));
-	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingStabilityMetricsCommand());
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingStabilityMetricsCommand(this));
 
 	return true;
 }
@@ -1088,7 +1148,7 @@ bool FPhysAnimActivatedStandingPerturbationTest::RunTest(const FString& Paramete
 	ADD_LATENT_AUTOMATION_COMMAND(FCaptureActivatedStandingPerturbationBaselineCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingPerturbationCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
-	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingPerturbationCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingPerturbationCommand(&State, this));
 
 	return true;
 }
@@ -1239,12 +1299,12 @@ bool FApplyActivatedStandingLocomotionReadinessIntentCommand::Update()
 	return true;
 }
 
-DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyActivatedStandingLocomotionReadinessCommand, FActivatedStandingLocomotionReadinessValidationState*, State);
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FVerifyActivatedStandingLocomotionReadinessCommand, FActivatedStandingLocomotionReadinessValidationState*, State, FAutomationTestBase*, Test);
 bool FVerifyActivatedStandingLocomotionReadinessCommand::Update()
 {
 	if (!State || !State->Component.IsValid())
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: verification command has no component"));
+		AddLatentAutomationError(Test, TEXT("LocomotionReadiness: verification command has no component"));
 		return true;
 	}
 
@@ -1254,21 +1314,25 @@ bool FVerifyActivatedStandingLocomotionReadinessCommand::Update()
 	const EBridgeLocomotionAuthorityState LocomotionAuthorityState = Component->GetLocomotionAuthorityState();
 	const FPhysAnimRuntimeTerminationState& TerminationState = Component->GetLiveRuntimeEvidenceTerminationState();
 	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
+	const auto Fail = [&](const FString& Message)
+	{
+		AddLatentAutomationError(Test, Message);
+	};
 
 	if (!State->bBaselineCaptured)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: baseline was not captured"));
+		Fail(TEXT("LocomotionReadiness: baseline was not captured"));
 	}
 
 	if (!State->bMovementIntentApplied)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: movement intent was not applied"));
+		Fail(TEXT("LocomotionReadiness: movement intent was not applied"));
 	}
 
 	if (LocomotionAuthorityState == EBridgeLocomotionAuthorityState::StartupLocomotion ||
 		LocomotionAuthorityState == EBridgeLocomotionAuthorityState::Locomoting)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: unsupported locomotion authority state entered (%s)"), GetLocomotionAuthorityStateName(LocomotionAuthorityState));
+		Fail(FString::Printf(TEXT("LocomotionReadiness: unsupported locomotion authority state entered (%s)"), GetLocomotionAuthorityStateName(LocomotionAuthorityState)));
 	}
 
 	const double IntentDurationSec =
@@ -1277,24 +1341,24 @@ bool FVerifyActivatedStandingLocomotionReadinessCommand::Update()
 			: -1.0;
 	if (!FMath::IsFinite(IntentDurationSec) || IntentDurationSec < 0.0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent duration is invalid"));
+		Fail(TEXT("LocomotionReadiness: intent duration is invalid"));
 	}
 
 	if (Metrics.SampleCount <= State->BaselineMetrics.SampleCount)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: samples did not advance after intent baseline=%d current=%d"),
+		Fail(FString::Printf(TEXT("LocomotionReadiness: samples did not advance after intent baseline=%d current=%d"),
 			State->BaselineMetrics.SampleCount,
-			Metrics.SampleCount);
+			Metrics.SampleCount));
 	}
 
 	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: support hull area collapsed during intent"));
+		Fail(TEXT("LocomotionReadiness: support hull area collapsed during intent"));
 	}
 
 	if (Metrics.ActiveSupportSideCountMin < 1.0 || Metrics.ActiveSupportSideCountMean < 1.0 || Metrics.ActiveSupportSideCountMax < 1.0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: active support side count dropped below 1 during intent"));
+		Fail(TEXT("LocomotionReadiness: active support side count dropped below 1 during intent"));
 	}
 
 	const bool bStandingStayedStanding = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
@@ -1303,18 +1367,18 @@ bool FVerifyActivatedStandingLocomotionReadinessCommand::Update()
 		RuntimeState == EPhysAnimRuntimeState::FailStopped;
 	if (!bStandingStayedStanding && !bSafeTransition)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: runtime state after intent was unexpected (%d)"), (int32)RuntimeState);
+		Fail(FString::Printf(TEXT("LocomotionReadiness: runtime state after intent was unexpected (%d)"), (int32)RuntimeState));
 	}
 
 	if (bStandingStayedStanding)
 	{
 		if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 		{
-			UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: standing result expected terminal_reason=None but got %d"), (int32)TerminationState.TerminalReason);
+			Fail(FString::Printf(TEXT("LocomotionReadiness: standing result expected terminal_reason=None but got %d"), (int32)TerminationState.TerminalReason));
 		}
 		if (!Component->IsLiveRuntimeEvidenceProofSatisfied())
 		{
-			UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: standing result is not truthful"));
+			Fail(TEXT("LocomotionReadiness: standing result is not truthful"));
 		}
 	}
 	else
@@ -1325,14 +1389,14 @@ bool FVerifyActivatedStandingLocomotionReadinessCommand::Update()
 		}
 		else if (Component->IsLiveRuntimeEvidenceProofSatisfied())
 		{
-			UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: failure reason was not truthful"));
+			Fail(TEXT("LocomotionReadiness: failure reason was not truthful"));
 		}
 	}
 
 	if (TerminationState.TerminalArtifact.TerminalReason != TerminationState.TerminalReason ||
 		TerminationState.LatestArtifact.TerminalReason != TerminationState.TerminalReason)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: audit artifact terminal reason does not match final state"));
+		Fail(TEXT("LocomotionReadiness: audit artifact terminal reason does not match final state"));
 	}
 
 	const bool bLocomotionTransitionAllowed = LocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle;
@@ -1383,7 +1447,7 @@ bool FPhysAnimActivatedStandingLocomotionReadinessTest::RunTest(const FString& P
 	ADD_LATENT_AUTOMATION_COMMAND(FCaptureActivatedStandingLocomotionReadinessBaselineCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionReadinessIntentCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
-	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionReadinessCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionReadinessCommand(&State, this));
 
 	return true;
 }
