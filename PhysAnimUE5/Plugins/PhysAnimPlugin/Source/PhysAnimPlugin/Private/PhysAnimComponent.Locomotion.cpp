@@ -30,6 +30,21 @@ namespace
 			return TEXT("Unknown");
 		}
 	}
+
+	const TCHAR* GetLocomotionHandoffCommitStateName(EBridgeLocomotionHandoffCommitState State)
+	{
+		switch (State)
+		{
+		case EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending:
+			return TEXT("LocomotionHandoffCommitPending");
+		case EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitted:
+			return TEXT("LocomotionHandoffCommitted");
+		case EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitDenied:
+			return TEXT("LocomotionHandoffCommitDenied");
+		default:
+			return TEXT("Unknown");
+		}
+	}
 }
 
 bool UPhysAnimComponent::ShouldUseBridgeOwnedMovementDrive(const FPhysAnimStabilizationSettings& EffectiveSettings) const
@@ -79,6 +94,7 @@ void UPhysAnimComponent::ResetBridgeLocomotionRequestState()
 	BridgeLocomotionRequestReason.Reset();
 	BridgeLocomotionRequestStateEnteredTimeSeconds = -1.0;
 	ResetBridgeLocomotionHandoffPreflightState();
+	ResetBridgeLocomotionHandoffCommitState();
 }
 
 
@@ -87,6 +103,15 @@ void UPhysAnimComponent::ResetBridgeLocomotionHandoffPreflightState()
 	BridgeLocomotionHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
 	BridgeLocomotionHandoffPreflightReason.Reset();
 	BridgeLocomotionHandoffPreflightStateEnteredTimeSeconds = -1.0;
+	ResetBridgeLocomotionHandoffCommitState();
+}
+
+
+void UPhysAnimComponent::ResetBridgeLocomotionHandoffCommitState()
+{
+	BridgeLocomotionHandoffCommitState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending;
+	BridgeLocomotionHandoffCommitReason.Reset();
+	BridgeLocomotionHandoffCommitStateEnteredTimeSeconds = -1.0;
 }
 
 
@@ -438,6 +463,109 @@ bool UPhysAnimComponent::EvaluateBridgeLocomotionHandoffPreflight(FString& OutRe
 }
 
 
+bool UPhysAnimComponent::EvaluateBridgeLocomotionHandoffCommit(FString& OutReason) const
+{
+	OutReason.Reset();
+
+	const FPhysAnimRuntimeTerminationState& TerminationState = LiveRuntimeEvidenceTerminationState;
+	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
+	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = ActivatedStandingStabilityMetrics;
+	const auto Deny = [&](const TCHAR* Reason) -> bool
+	{
+		OutReason = Reason;
+		return false;
+	};
+
+	if (BridgeLocomotionHandoffPreflightState != EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightPassed)
+	{
+		return Deny(BridgeLocomotionHandoffPreflightReason.IsEmpty() ? TEXT("handoff_preflight_pending") : *BridgeLocomotionHandoffPreflightReason);
+	}
+
+	if (BridgeLocomotionRequestState != EBridgeLocomotionRequestState::LocomotionRequested)
+	{
+		return Deny(BridgeLocomotionRequestReason.IsEmpty() ? TEXT("request_state_denied") : *BridgeLocomotionRequestReason);
+	}
+
+	if (BridgeLocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle)
+	{
+		return Deny(TEXT("standing_authority_lost"));
+	}
+
+	if (!RuntimeStateOwnsBridgePhysics(RuntimeState))
+	{
+		return Deny(TEXT("physics_ownership_changed"));
+	}
+
+	if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+	{
+		return Deny(TEXT("terminal_reason_present"));
+	}
+
+	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne ||
+		Latest.SupportHullAreaCm2 <= 0.0f ||
+		Latest.ActiveSupportSideCount < 1)
+	{
+		return Deny(TEXT("negative_support"));
+	}
+
+	if (!Latest.bCapsuleContractPassed)
+	{
+		return Deny(TEXT("capsule_invalid"));
+	}
+
+	if (!Latest.bPhysicalContinuityValidatorPassed || Latest.bContinuityBookkeepingMismatch)
+	{
+		return Deny(TEXT("continuity_invalid"));
+	}
+
+	if (!IsLiveRuntimeEvidenceProofSatisfied())
+	{
+		return Deny(TEXT("proof_not_truthful"));
+	}
+
+	if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
+	{
+		return Deny(TEXT("stability_metrics_unavailable"));
+	}
+
+	if (Metrics.FailStopCount != 0)
+	{
+		return Deny(TEXT("stability_metrics_fail_stop"));
+	}
+
+	if (!FMath::IsFinite(Metrics.ActivationDurationSec) ||
+		!FMath::IsFinite(Metrics.RootWorldPositionDriftCm) ||
+		!FMath::IsFinite(Metrics.RootVerticalDriftCm) ||
+		!FMath::IsFinite(Metrics.RootAngularDriftDeg) ||
+		!FMath::IsFinite(Metrics.MaxBodyLinearSpeedCmPerSecond) ||
+		!FMath::IsFinite(Metrics.MaxBodyAngularSpeedDegPerSecond) ||
+		!FMath::IsFinite(Metrics.SupportHullAreaMinCm2) ||
+		!FMath::IsFinite(Metrics.SupportHullAreaMeanCm2) ||
+		!FMath::IsFinite(Metrics.SupportHullAreaMaxCm2) ||
+		!FMath::IsFinite(Metrics.ActiveSupportSideCountMin) ||
+		!FMath::IsFinite(Metrics.ActiveSupportSideCountMean) ||
+		!FMath::IsFinite(Metrics.ActiveSupportSideCountMax))
+	{
+		return Deny(TEXT("stability_metrics_invalid"));
+	}
+
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	if (!IsBridgeLocomotionEntryRequested(EffectiveSettings))
+	{
+		return Deny(TEXT("intent_absent"));
+	}
+
+	const double IntentAgeSeconds = GetBridgeLocomotionIntentAgeSeconds();
+	if (IntentAgeSeconds < EffectiveSettings.DistalLocomotionCompositionPolicyIntentGraceSeconds)
+	{
+		return Deny(TEXT("intent_too_short"));
+	}
+
+	OutReason = FString::Printf(TEXT("handoff_commit_ready request_reason=%s"), *BridgeLocomotionRequestReason);
+	return true;
+}
+
+
 void UPhysAnimComponent::UpdateBridgeLocomotionHandoffPreflightState(double CurrentTimeSeconds)
 {
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
@@ -489,6 +617,91 @@ void UPhysAnimComponent::UpdateBridgeLocomotionHandoffPreflightState(double Curr
 }
 
 
+void UPhysAnimComponent::UpdateBridgeLocomotionHandoffCommitState(double CurrentTimeSeconds)
+{
+	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		ResetBridgeLocomotionHandoffCommitState();
+		return;
+	}
+
+	FString Reason;
+	const bool bCanCommit = EvaluateBridgeLocomotionHandoffCommit(Reason);
+	EBridgeLocomotionHandoffCommitState NewState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitDenied;
+	if (bCanCommit)
+	{
+		const bool bCanLendCommitToCommitted =
+			BridgeLocomotionHandoffCommitState == EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending &&
+			BridgeLocomotionHandoffCommitReason == Reason &&
+			BridgeLocomotionHandoffCommitStateEnteredTimeSeconds >= 0.0;
+		NewState = bCanLendCommitToCommitted
+			? EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitted
+			: EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending;
+	}
+
+	if (BridgeLocomotionHandoffCommitState == NewState && BridgeLocomotionHandoffCommitReason == Reason)
+	{
+		return;
+	}
+
+	BridgeLocomotionHandoffCommitState = NewState;
+	BridgeLocomotionHandoffCommitReason = Reason;
+	BridgeLocomotionHandoffCommitStateEnteredTimeSeconds = CurrentTimeSeconds;
+
+	const FPhysAnimRuntimeTerminationState& TerminationState = LiveRuntimeEvidenceTerminationState;
+	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
+	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = ActivatedStandingStabilityMetrics;
+	if (NewState == EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitted)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimLocomotion] LOCOMOTION_HANDOFF_COMMITTED reason=%s runtimeState=%s requestState=%s preflightState=%s requestReason=%s preflightReason=%s terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d standingAuthority=%d bridgeOwnsPhysics=%d intentMagnitude=%.2f intentAge=%.2f metricsSamples=%d"),
+			*BridgeLocomotionHandoffCommitReason,
+			GetRuntimeStateName(RuntimeState),
+			GetLocomotionRequestStateName(BridgeLocomotionRequestState),
+			GetLocomotionHandoffPreflightStateName(BridgeLocomotionHandoffPreflightState),
+			*BridgeLocomotionRequestReason,
+			*BridgeLocomotionHandoffPreflightReason,
+			static_cast<int32>(TerminationState.TerminalReason),
+			static_cast<int32>(Latest.SupportMode),
+			Latest.SupportHullAreaCm2,
+			static_cast<double>(Latest.ActiveSupportSideCount),
+			Latest.bCapsuleContractPassed ? 1 : 0,
+			(Latest.bPhysicalContinuityValidatorPassed && !Latest.bContinuityBookkeepingMismatch) ? 1 : 0,
+			static_cast<int32>(BridgeLocomotionAuthorityState),
+			RuntimeStateOwnsBridgePhysics(RuntimeState) ? 1 : 0,
+			BridgeIntentState.IntentMagnitude,
+			GetBridgeLocomotionIntentAgeSeconds(),
+			Metrics.SampleCount);
+	}
+	else if (NewState == EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitDenied)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimLocomotion] LOCOMOTION_HANDOFF_COMMIT_DENIED reason=%s runtimeState=%s requestState=%s preflightState=%s requestReason=%s preflightReason=%s terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d standingAuthority=%d bridgeOwnsPhysics=%d intentMagnitude=%.2f intentAge=%.2f metricsSamples=%d"),
+			*BridgeLocomotionHandoffCommitReason,
+			GetRuntimeStateName(RuntimeState),
+			GetLocomotionRequestStateName(BridgeLocomotionRequestState),
+			GetLocomotionHandoffPreflightStateName(BridgeLocomotionHandoffPreflightState),
+			*BridgeLocomotionRequestReason,
+			*BridgeLocomotionHandoffPreflightReason,
+			static_cast<int32>(TerminationState.TerminalReason),
+			static_cast<int32>(Latest.SupportMode),
+			Latest.SupportHullAreaCm2,
+			static_cast<double>(Latest.ActiveSupportSideCount),
+			Latest.bCapsuleContractPassed ? 1 : 0,
+			(Latest.bPhysicalContinuityValidatorPassed && !Latest.bContinuityBookkeepingMismatch) ? 1 : 0,
+			static_cast<int32>(BridgeLocomotionAuthorityState),
+			RuntimeStateOwnsBridgePhysics(RuntimeState) ? 1 : 0,
+			BridgeIntentState.IntentMagnitude,
+			GetBridgeLocomotionIntentAgeSeconds(),
+			Metrics.SampleCount);
+	}
+}
+
+
 void UPhysAnimComponent::UpdateBridgeLocomotionRequestState(double CurrentTimeSeconds)
 {
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
@@ -534,6 +747,7 @@ void UPhysAnimComponent::UpdateBridgeLocomotionRequestState(double CurrentTimeSe
 	}
 
 	UpdateBridgeLocomotionHandoffPreflightState(CurrentTimeSeconds);
+	UpdateBridgeLocomotionHandoffCommitState(CurrentTimeSeconds);
 }
 
 
@@ -593,7 +807,6 @@ void UPhysAnimComponent::TestOnlySetBridgeLocomotionRequestEvidence(
 			? static_cast<float>((GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0) - IntentAgeSeconds)
 			: -1.0f;
 
-	ResetBridgeLocomotionRequestState();
 	UpdateBridgeLocomotionRequestState(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0);
 }
 #endif

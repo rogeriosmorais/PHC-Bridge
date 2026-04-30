@@ -82,6 +82,14 @@ enum class EBridgeLocomotionHandoffPreflightState : uint8
 	LocomotionHandoffPreflightDenied
 };
 
+UENUM(BlueprintType)
+enum class EBridgeLocomotionHandoffCommitState : uint8
+{
+	LocomotionHandoffCommitPending,
+	LocomotionHandoffCommitted,
+	LocomotionHandoffCommitDenied
+};
+
 enum class EBalanceTransitionShellAuthorityMode : uint8
 {
 	GameplayShellObservedOnly,
@@ -1194,6 +1202,8 @@ public:
 	EBridgeLocomotionHandoffPreflightState GetLocomotionHandoffPreflightState() const { return BridgeLocomotionHandoffPreflightState; }
 	const FString& GetLocomotionRequestReason() const { return BridgeLocomotionRequestReason; }
 	const FString& GetLocomotionHandoffPreflightReason() const { return BridgeLocomotionHandoffPreflightReason; }
+	EBridgeLocomotionHandoffCommitState GetLocomotionHandoffCommitState() const { return BridgeLocomotionHandoffCommitState; }
+	const FString& GetLocomotionHandoffCommitReason() const { return BridgeLocomotionHandoffCommitReason; }
 	float GetBridgeLocomotionIntentMagnitude() const { return BridgeIntentState.IntentMagnitude; }
 	double GetBridgeLocomotionIntentAgeSeconds() const
 	{
@@ -1741,10 +1751,13 @@ private:
 	void ResetBridgeLocomotionAuthorityState();
 	void ResetBridgeLocomotionRequestState();
 	void ResetBridgeLocomotionHandoffPreflightState();
+	void ResetBridgeLocomotionHandoffCommitState();
 	bool EvaluateBridgeLocomotionGate(FString& OutReason) const;
 	bool EvaluateBridgeLocomotionHandoffPreflight(FString& OutReason) const;
+	bool EvaluateBridgeLocomotionHandoffCommit(FString& OutReason) const;
 	void UpdateBridgeLocomotionRequestState(double CurrentTimeSeconds);
 	void UpdateBridgeLocomotionHandoffPreflightState(double CurrentTimeSeconds);
+	void UpdateBridgeLocomotionHandoffCommitState(double CurrentTimeSeconds);
 	void RecoverBridgeActiveStateAfterBalanceTransitionFailure(const FString& FailureReason);
 	void PublishBalanceTransitionFailureReason(const FString& FailureReason);
 	void ClearPublishedBalanceTransitionFailureReason();
@@ -1896,6 +1909,9 @@ private:
 	EBridgeLocomotionHandoffPreflightState BridgeLocomotionHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
 	FString BridgeLocomotionHandoffPreflightReason;
 	double BridgeLocomotionHandoffPreflightStateEnteredTimeSeconds = -1.0;
+	EBridgeLocomotionHandoffCommitState BridgeLocomotionHandoffCommitState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending;
+	FString BridgeLocomotionHandoffCommitReason;
+	double BridgeLocomotionHandoffCommitStateEnteredTimeSeconds = -1.0;
 	double BridgeLocomotionStateEnterTimeSeconds = -1.0;
 	double BridgeLocomotionExitHoldStartTimeSeconds = -1.0;
 	double LastPrePolicyShellRecoveryLogTimeSeconds = -1.0;

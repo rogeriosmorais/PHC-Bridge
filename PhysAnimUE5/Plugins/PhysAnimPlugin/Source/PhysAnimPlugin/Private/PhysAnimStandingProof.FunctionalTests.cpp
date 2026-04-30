@@ -32,6 +32,21 @@ namespace
 			return TEXT("Unknown");
 		}
 	}
+
+	const TCHAR* GetLocomotionHandoffCommitStateName(EBridgeLocomotionHandoffCommitState State)
+	{
+		switch (State)
+		{
+		case EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending:
+			return TEXT("LocomotionHandoffCommitPending");
+		case EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitted:
+			return TEXT("LocomotionHandoffCommitted");
+		case EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitDenied:
+			return TEXT("LocomotionHandoffCommitDenied");
+		default:
+			return TEXT("Unknown");
+		}
+	}
 }
 
 /**
@@ -1730,6 +1745,7 @@ struct FActivatedStandingLocomotionRequestValidationState
 	bool bCheckTransitionPreservation = false;
 	EBridgeLocomotionRequestState ExpectedRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
 	FString ExpectedReasonSubstring;
+	bool bRequireStandingRuntimeState = true;
 	float ExpectedIntentMagnitude = 0.0f;
 	double ExpectedIntentAgeSeconds = -1.0;
 	EPhysAnimTerminalReason ExpectedTerminalReason = EPhysAnimTerminalReason::None;
@@ -1741,6 +1757,9 @@ struct FActivatedStandingLocomotionRequestValidationState
 	bool bCheckHandoffPreflight = false;
 	EBridgeLocomotionHandoffPreflightState ExpectedHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
 	FString ExpectedHandoffPreflightReasonSubstring;
+	bool bCheckHandoffCommit = false;
+	EBridgeLocomotionHandoffCommitState ExpectedHandoffCommitState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending;
+	FString ExpectedHandoffCommitReasonSubstring;
 	EPhysAnimRuntimeState PreRuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
 	EPhysAnimRuntimeState PostRuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
 	EBridgeLocomotionAuthorityState PreAuthorityState = EBridgeLocomotionAuthorityState::Idle;
@@ -1751,6 +1770,10 @@ struct FActivatedStandingLocomotionRequestValidationState
 	EBridgeLocomotionHandoffPreflightState PostHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
 	FString PreHandoffPreflightReason;
 	FString PostHandoffPreflightReason;
+	EBridgeLocomotionHandoffCommitState PreHandoffCommitState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending;
+	EBridgeLocomotionHandoffCommitState PostHandoffCommitState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending;
+	FString PreHandoffCommitReason;
+	FString PostHandoffCommitReason;
 	bool bPreBridgeOwnsPhysics = false;
 	bool bPostBridgeOwnsPhysics = false;
 };
@@ -1794,6 +1817,8 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 			State->PreRequestState = Comp->GetLocomotionRequestState();
 			State->PreHandoffPreflightState = Comp->GetLocomotionHandoffPreflightState();
 			State->PreHandoffPreflightReason = Comp->GetLocomotionHandoffPreflightReason();
+			State->PreHandoffCommitState = Comp->GetLocomotionHandoffCommitState();
+			State->PreHandoffCommitReason = Comp->GetLocomotionHandoffCommitReason();
 			State->bPreBridgeOwnsPhysics = Comp->DoesBridgeOwnPhysics();
 			FPhysAnimRuntimeTerminationState EvidenceState = Comp->GetLiveRuntimeEvidenceTerminationState();
 
@@ -1812,6 +1837,9 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 				!EvidenceState.LatestArtifact.bContinuityBookkeepingMismatch;
 			State->ExpectedHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
 			State->ExpectedHandoffPreflightReasonSubstring = State->ExpectedReasonSubstring;
+			State->bCheckHandoffCommit = false;
+			State->ExpectedHandoffCommitState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitDenied;
+			State->ExpectedHandoffCommitReasonSubstring = State->ExpectedReasonSubstring;
 
 			if (State->CaseName == TEXT("NoIntentDenied"))
 			{
@@ -1887,6 +1915,46 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 				EvidenceState.LatestArtifact.bContinuityBookkeepingMismatch = true;
 				State->bExpectedContinuityValid = false;
 			}
+			else if (State->CaseName == TEXT("StableCommitted"))
+			{
+				State->bExpectedAllowed = true;
+				State->ExpectedReasonSubstring = TEXT("intent_stable");
+				State->ExpectedIntentMagnitude = 0.50f;
+				State->ExpectedIntentAgeSeconds = 0.50;
+				State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+				State->ExpectedHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightPassed;
+				State->ExpectedHandoffPreflightReasonSubstring = TEXT("handoff_ready");
+				State->bCheckHandoffCommit = true;
+				State->ExpectedHandoffCommitState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitted;
+				State->ExpectedHandoffCommitReasonSubstring = TEXT("handoff_commit_ready");
+			}
+			else if (State->CaseName == TEXT("DroppedAfterPreflightDenied"))
+			{
+				State->bExpectedAllowed = false;
+				State->ExpectedReasonSubstring = TEXT("intent_absent");
+				State->ExpectedIntentMagnitude = 0.0f;
+				State->ExpectedIntentAgeSeconds = -1.0;
+				State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+				State->ExpectedHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
+				State->ExpectedHandoffPreflightReasonSubstring = TEXT("intent_absent");
+				State->bCheckHandoffCommit = true;
+				State->ExpectedHandoffCommitState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitDenied;
+				State->ExpectedHandoffCommitReasonSubstring = TEXT("intent_absent");
+			}
+			else if (State->CaseName == TEXT("NoPreflightDenied"))
+			{
+				State->bRequireStandingRuntimeState = false;
+				State->bCheckTransitionPreservation = false;
+				State->ExpectedReasonSubstring = TEXT("");
+				State->ExpectedIntentMagnitude = 0.50f;
+				State->ExpectedIntentAgeSeconds = 0.50;
+				State->ExpectedRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+				State->ExpectedHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
+				State->ExpectedHandoffPreflightReasonSubstring = TEXT("");
+				State->bCheckHandoffCommit = true;
+				State->ExpectedHandoffCommitState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending;
+				State->ExpectedHandoffCommitReasonSubstring = TEXT("");
+			}
 
 			if (State->ExpectedHandoffPreflightState == EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightPassed)
 			{
@@ -1901,16 +1969,32 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 			State->ExpectedActiveSupportSideCount = EvidenceState.LatestArtifact.ActiveSupportSideCount;
 			State->ExpectedTerminalReason = EvidenceState.TerminalReason;
 
+			const bool bCommitTwoPassStable = State->CaseName == TEXT("StableCommitted");
+			const bool bCommitDropAfterPreflight = State->CaseName == TEXT("DroppedAfterPreflightDenied");
 			const double IntentAgeSeconds =
 				(State->CaseName == TEXT("NoIntentDenied"))
 					? -1.0
 					: (State->CaseName == TEXT("ShortPulseDenied") ? 0.05 : 0.50);
 			Comp->TestOnlySetBridgeLocomotionRequestEvidence(EvidenceState, State->ExpectedIntentMagnitude, IntentAgeSeconds);
+			if (bCommitTwoPassStable || bCommitDropAfterPreflight)
+			{
+				FPhysAnimRuntimeTerminationState SecondEvidenceState = EvidenceState;
+				float SecondIntentMagnitude = State->ExpectedIntentMagnitude;
+				double SecondIntentAgeSeconds = IntentAgeSeconds;
+				if (bCommitDropAfterPreflight)
+				{
+					SecondIntentMagnitude = 0.0f;
+					SecondIntentAgeSeconds = -1.0;
+				}
+				Comp->TestOnlySetBridgeLocomotionRequestEvidence(SecondEvidenceState, SecondIntentMagnitude, SecondIntentAgeSeconds);
+			}
 			State->PostRuntimeState = Comp->GetRuntimeState();
 			State->PostAuthorityState = Comp->GetLocomotionAuthorityState();
 			State->PostRequestState = Comp->GetLocomotionRequestState();
 			State->PostHandoffPreflightState = Comp->GetLocomotionHandoffPreflightState();
 			State->PostHandoffPreflightReason = Comp->GetLocomotionHandoffPreflightReason();
+			State->PostHandoffCommitState = Comp->GetLocomotionHandoffCommitState();
+			State->PostHandoffCommitReason = Comp->GetLocomotionHandoffCommitReason();
 			State->bPostBridgeOwnsPhysics = Comp->DoesBridgeOwnPhysics();
 
 			UE_LOG(
@@ -1950,6 +2034,8 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 	const FString& RequestReason = Comp->GetLocomotionRequestReason();
 	const EBridgeLocomotionHandoffPreflightState HandoffPreflightState = Comp->GetLocomotionHandoffPreflightState();
 	const FString& HandoffPreflightReason = Comp->GetLocomotionHandoffPreflightReason();
+	const EBridgeLocomotionHandoffCommitState HandoffCommitState = Comp->GetLocomotionHandoffCommitState();
+	const FString& HandoffCommitReason = Comp->GetLocomotionHandoffCommitReason();
 	const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
 	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
 	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Comp->GetActivatedStandingStabilityMetrics();
@@ -1959,7 +2045,7 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 		AddLatentAutomationError(Test, Message);
 	};
 
-	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	if (State->bRequireStandingRuntimeState && RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
 	{
 		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected BalanceActive_Standing but got %d"), *State->CaseName, (int32)RuntimeState));
 	}
@@ -2017,6 +2103,25 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 		}
 	}
 
+	if (State->bCheckHandoffCommit)
+	{
+		if (HandoffCommitState != State->ExpectedHandoffCommitState)
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected handoff commit state=%s but got %s"),
+				*State->CaseName,
+				GetLocomotionHandoffCommitStateName(State->ExpectedHandoffCommitState),
+				GetLocomotionHandoffCommitStateName(HandoffCommitState)));
+		}
+
+		if (!HandoffCommitReason.Contains(State->ExpectedHandoffCommitReasonSubstring))
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected handoff commit reason containing '%s' but got '%s'"),
+				*State->CaseName,
+				*State->ExpectedHandoffCommitReasonSubstring,
+				*HandoffCommitReason));
+		}
+	}
+
 	if (State->bCheckTransitionPreservation)
 	{
 		if (State->PostHandoffPreflightState != HandoffPreflightState)
@@ -2033,6 +2138,22 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 				*State->CaseName,
 				*State->PostHandoffPreflightReason,
 				*HandoffPreflightReason));
+		}
+
+		if (State->PostHandoffCommitState != HandoffCommitState)
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: post-handoff-commit state snapshot mismatch expected=%s actual=%s"),
+				*State->CaseName,
+				GetLocomotionHandoffCommitStateName(State->PostHandoffCommitState),
+				GetLocomotionHandoffCommitStateName(HandoffCommitState)));
+		}
+
+		if (State->PostHandoffCommitReason != HandoffCommitReason)
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: post-handoff-commit reason snapshot mismatch expected=%s actual=%s"),
+				*State->CaseName,
+				*State->PostHandoffCommitReason,
+				*HandoffCommitReason));
 		}
 	}
 
@@ -2144,7 +2265,7 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 	UE_LOG(
 		LogTemp,
 		Warning,
-		TEXT("LocomotionRequest[%s]: preRuntimeState=%d postRuntimeState=%d preAuthorityState=%d postAuthorityState=%d preRequestState=%s postRequestState=%s preHandoffPreflightState=%s postHandoffPreflightState=%s runtimeState=%d requestState=%s handoffPreflightState=%s gateAllowed=%d gateReason=%s requestReason=%s handoffPreflightReason=%s intentMagnitude=%.2f intentAge=%.2f expectedIntentAge=%.2f supportMode=%d supportHull=%.2f activeSides=%d capsuleValid=%d continuityValid=%d terminalReason=%d preBridgeOwnsPhysics=%d postBridgeOwnsPhysics=%d samples=%d"),
+		TEXT("LocomotionRequest[%s]: preRuntimeState=%d postRuntimeState=%d preAuthorityState=%d postAuthorityState=%d preRequestState=%s postRequestState=%s preHandoffPreflightState=%s postHandoffPreflightState=%s preHandoffCommitState=%s postHandoffCommitState=%s runtimeState=%d requestState=%s handoffPreflightState=%s handoffCommitState=%s gateAllowed=%d gateReason=%s requestReason=%s handoffPreflightReason=%s handoffCommitReason=%s intentMagnitude=%.2f intentAge=%.2f expectedIntentAge=%.2f supportMode=%d supportHull=%.2f activeSides=%d capsuleValid=%d continuityValid=%d terminalReason=%d preBridgeOwnsPhysics=%d postBridgeOwnsPhysics=%d samples=%d"),
 		*State->CaseName,
 		static_cast<int32>(State->PreRuntimeState),
 		static_cast<int32>(State->PostRuntimeState),
@@ -2154,13 +2275,17 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 		GetLocomotionRequestStateName(State->PostRequestState),
 		GetLocomotionHandoffPreflightStateName(State->PreHandoffPreflightState),
 		GetLocomotionHandoffPreflightStateName(State->PostHandoffPreflightState),
+		GetLocomotionHandoffCommitStateName(State->PreHandoffCommitState),
+		GetLocomotionHandoffCommitStateName(State->PostHandoffCommitState),
 		static_cast<int32>(RuntimeState),
 		GetLocomotionRequestStateName(RequestState),
 		GetLocomotionHandoffPreflightStateName(HandoffPreflightState),
+		GetLocomotionHandoffCommitStateName(HandoffCommitState),
 		bAllowed ? 1 : 0,
 		*GateReason,
 		*RequestReason,
 		*HandoffPreflightReason,
+		*HandoffCommitReason,
 		Comp->GetBridgeLocomotionIntentMagnitude(),
 		Comp->GetBridgeLocomotionIntentAgeSeconds(),
 		State->ExpectedIntentAgeSeconds,
@@ -2391,6 +2516,68 @@ bool FPhysAnimActivatedStandingLocomotionHandoffPreflightProofTest::RunTest(cons
 	State.CaseName = Parameters;
 	State.bCheckTransitionPreservation = true;
 	State.bCheckHandoffPreflight = true;
+
+	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingLocomotionHandoffCommitTest, "PhysAnim.ActivatedStanding.LocomotionHandoffCommit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingLocomotionHandoffCommitTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffCommit_NoPreflightDenied"));
+	OutTestCommands.Add(TEXT("NoPreflightDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffCommit_NoIntentDenied"));
+	OutTestCommands.Add(TEXT("NoIntentDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffCommit_ShortPulseDenied"));
+	OutTestCommands.Add(TEXT("ShortPulseDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffCommit_StableCommitted"));
+	OutTestCommands.Add(TEXT("StableCommitted"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffCommit_DroppedAfterPreflightDenied"));
+	OutTestCommands.Add(TEXT("DroppedAfterPreflightDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffCommit_NegativeSupportDenied"));
+	OutTestCommands.Add(TEXT("NegativeSupportDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffCommit_TerminalReasonDenied"));
+	OutTestCommands.Add(TEXT("TerminalReasonDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffCommit_CapsuleInvalidDenied"));
+	OutTestCommands.Add(TEXT("CapsuleInvalidDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffCommit_ContinuityInvalidDenied"));
+	OutTestCommands.Add(TEXT("ContinuityInvalidDenied"));
+}
+
+bool FPhysAnimActivatedStandingLocomotionHandoffCommitTest::RunTest(const FString& Parameters)
+{
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	if (Parameters == TEXT("NoPreflightDenied"))
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(false, false, false));
+	}
+	else
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	}
+	if (Parameters != TEXT("NoPreflightDenied"))
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	}
+
+	static FActivatedStandingLocomotionRequestValidationState State;
+	State = FActivatedStandingLocomotionRequestValidationState();
+	State.CaseName = Parameters;
+	State.bCheckTransitionPreservation = true;
+	State.bCheckHandoffPreflight = true;
+	State.bCheckHandoffCommit = true;
 
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
