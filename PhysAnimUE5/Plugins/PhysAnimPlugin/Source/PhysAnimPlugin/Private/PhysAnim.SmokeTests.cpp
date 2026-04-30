@@ -340,7 +340,7 @@ namespace
 
 		AddExpectedError(TEXT("PhysAnimProof: TerminalArtifact"), EAutomationExpectedErrorFlags::Contains, 0);
 		AddExpectedError(TEXT("PhysAnimProof: AttemptResult"), EAutomationExpectedErrorFlags::Contains, 0);
-		AddExpectedError(TEXT("HIP_QUARANTINE_RELEASED"), EAutomationExpectedErrorFlags::Contains, 0);
+		AddExpectedError(TEXT("Fail-stop: Proof failed"), EAutomationExpectedErrorFlags::Contains, 0);
 
 		AddCommand(new FStartPIECommand(false));
 		AddCommand(new FWaitLatentCommand(PhysAnimPieG2PresentationLeadInSeconds));

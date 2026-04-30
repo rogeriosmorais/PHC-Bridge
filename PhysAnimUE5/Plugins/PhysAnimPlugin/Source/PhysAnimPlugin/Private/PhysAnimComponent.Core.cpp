@@ -3151,6 +3151,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	ApplyMovementSmokeInput(EffectiveSettings);
 	UpdateBridgeLocomotionGateTiming(EffectiveSettings, GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0);
+	UpdateBridgeLocomotionRequestState(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0);
 	if ((RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState)) && bStartupMovementLockActive)
 	{
 		const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;

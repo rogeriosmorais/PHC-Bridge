@@ -402,6 +402,10 @@ bool FPhysAnimStandingProofNegativeSupportTest::RunTest(const FString& Parameter
 {
 	const FString MapName = Parameters;
 
+	AddExpectedError(TEXT("PhysAnimProof: TerminalArtifact"), EAutomationExpectedErrorFlags::Contains, 0);
+	AddExpectedError(TEXT("PhysAnimProof: AttemptResult"), EAutomationExpectedErrorFlags::Contains, 0);
+	AddExpectedError(TEXT("Fail-stop: Proof failed"), EAutomationExpectedErrorFlags::Contains, 0);
+
 	// 1. Load the map
 	AutomationOpenMap(MapName);
 
@@ -841,6 +845,21 @@ const TCHAR* GetLocomotionAuthorityStateName(EBridgeLocomotionAuthorityState Sta
 		return TEXT("StartupLocomotion");
 	case EBridgeLocomotionAuthorityState::Locomoting:
 		return TEXT("Locomoting");
+	default:
+		return TEXT("Unknown");
+	}
+}
+
+const TCHAR* GetLocomotionRequestStateName(EBridgeLocomotionRequestState State)
+{
+	switch (State)
+	{
+	case EBridgeLocomotionRequestState::BalanceActiveStanding:
+		return TEXT("BalanceActiveStanding");
+	case EBridgeLocomotionRequestState::LocomotionRequested:
+		return TEXT("LocomotionRequested");
+	case EBridgeLocomotionRequestState::LocomotionRequestDenied:
+		return TEXT("LocomotionRequestDenied");
 	default:
 		return TEXT("Unknown");
 	}
@@ -1686,6 +1705,352 @@ bool FPhysAnimActivatedStandingLocomotionGateTest::RunTest(const FString& Parame
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT(""), TEXT("TerminalReasonDenied"), this));
 	}
+
+	return true;
+}
+
+struct FActivatedStandingLocomotionRequestValidationState
+{
+	TWeakObjectPtr<UPhysAnimComponent> Component;
+	FString CaseName;
+	bool bExpectedAllowed = false;
+	EBridgeLocomotionRequestState ExpectedRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+	FString ExpectedReasonSubstring;
+	float ExpectedIntentMagnitude = 0.0f;
+	EPhysAnimTerminalReason ExpectedTerminalReason = EPhysAnimTerminalReason::None;
+	EPhysAnimSupportMode ExpectedSupportMode = EPhysAnimSupportMode::Airborne;
+	double ExpectedSupportHullAreaCm2 = 0.0;
+	int32 ExpectedActiveSupportSideCount = 0;
+	bool bExpectedCapsuleValid = true;
+	bool bExpectedContinuityValid = true;
+};
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FApplyActivatedStandingLocomotionRequestStateCommand, FActivatedStandingLocomotionRequestValidationState*, State);
+bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
+{
+	if (!State)
+	{
+		return true;
+	}
+
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			State->Component = Comp;
+			FPhysAnimRuntimeTerminationState EvidenceState = Comp->GetLiveRuntimeEvidenceTerminationState();
+
+			State->bExpectedAllowed = false;
+			State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+			State->ExpectedReasonSubstring = TEXT("intent_absent");
+			State->ExpectedIntentMagnitude = 0.0f;
+			State->ExpectedTerminalReason = EvidenceState.TerminalReason;
+			State->ExpectedSupportMode = EvidenceState.LatestArtifact.SupportMode;
+			State->ExpectedSupportHullAreaCm2 = EvidenceState.LatestArtifact.SupportHullAreaCm2;
+			State->ExpectedActiveSupportSideCount = EvidenceState.LatestArtifact.ActiveSupportSideCount;
+			State->bExpectedCapsuleValid = EvidenceState.LatestArtifact.bCapsuleContractPassed;
+			State->bExpectedContinuityValid =
+				EvidenceState.LatestArtifact.bPhysicalContinuityValidatorPassed &&
+				!EvidenceState.LatestArtifact.bContinuityBookkeepingMismatch;
+
+			if (State->CaseName == TEXT("NoIntentDenied"))
+			{
+				State->ExpectedReasonSubstring = TEXT("intent_absent");
+				State->ExpectedIntentMagnitude = 0.0f;
+				State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+			}
+			else if (State->CaseName == TEXT("ShortPulseDenied"))
+			{
+				State->ExpectedReasonSubstring = TEXT("intent_too_short");
+				State->ExpectedIntentMagnitude = 0.50f;
+				State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+			}
+			else if (State->CaseName == TEXT("StableRequested"))
+			{
+				State->bExpectedAllowed = true;
+				State->ExpectedReasonSubstring = TEXT("intent_stable");
+				State->ExpectedIntentMagnitude = 0.50f;
+				State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+			}
+			else if (State->CaseName == TEXT("NegativeSupportDenied"))
+			{
+				State->ExpectedReasonSubstring = TEXT("negative_support");
+				State->ExpectedIntentMagnitude = 0.50f;
+				State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+				EvidenceState.TerminalArtifact.SupportMode = EPhysAnimSupportMode::Airborne;
+				EvidenceState.LatestArtifact.SupportMode = EPhysAnimSupportMode::Airborne;
+				EvidenceState.TerminalArtifact.SupportHullAreaCm2 = 0.0;
+				EvidenceState.LatestArtifact.SupportHullAreaCm2 = 0.0;
+				EvidenceState.TerminalArtifact.ActiveSupportSideCount = 0;
+				EvidenceState.LatestArtifact.ActiveSupportSideCount = 0;
+				State->ExpectedSupportMode = EPhysAnimSupportMode::Airborne;
+				State->ExpectedSupportHullAreaCm2 = 0.0;
+				State->ExpectedActiveSupportSideCount = 0;
+			}
+			else if (State->CaseName == TEXT("TerminalReasonDenied"))
+			{
+				State->ExpectedReasonSubstring = TEXT("terminal_reason_present");
+				State->ExpectedIntentMagnitude = 0.50f;
+				State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+				EvidenceState.bTerminated = true;
+				EvidenceState.TerminalReason = EPhysAnimTerminalReason::ActivationSupportFailure;
+				EvidenceState.TerminalArtifact.TerminalReason = EPhysAnimTerminalReason::ActivationSupportFailure;
+				EvidenceState.LatestArtifact.TerminalReason = EPhysAnimTerminalReason::ActivationSupportFailure;
+				State->ExpectedTerminalReason = EPhysAnimTerminalReason::ActivationSupportFailure;
+			}
+			else if (State->CaseName == TEXT("CapsuleInvalidDenied"))
+			{
+				State->ExpectedReasonSubstring = TEXT("capsule_invalid");
+				State->ExpectedIntentMagnitude = 0.50f;
+				State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+				EvidenceState.TerminalArtifact.bCapsuleContractPassed = false;
+				EvidenceState.LatestArtifact.bCapsuleContractPassed = false;
+				State->bExpectedCapsuleValid = false;
+			}
+			else if (State->CaseName == TEXT("ContinuityInvalidDenied"))
+			{
+				State->ExpectedReasonSubstring = TEXT("continuity_invalid");
+				State->ExpectedIntentMagnitude = 0.50f;
+				State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+				EvidenceState.TerminalArtifact.bPhysicalContinuityValidatorPassed = false;
+				EvidenceState.TerminalArtifact.bContinuityBookkeepingMismatch = true;
+				EvidenceState.LatestArtifact.bPhysicalContinuityValidatorPassed = false;
+				EvidenceState.LatestArtifact.bContinuityBookkeepingMismatch = true;
+				State->bExpectedContinuityValid = false;
+			}
+
+			State->ExpectedSupportMode = EvidenceState.LatestArtifact.SupportMode;
+			State->ExpectedSupportHullAreaCm2 = EvidenceState.LatestArtifact.SupportHullAreaCm2;
+			State->ExpectedActiveSupportSideCount = EvidenceState.LatestArtifact.ActiveSupportSideCount;
+			State->ExpectedTerminalReason = EvidenceState.TerminalReason;
+
+			const double IntentAgeSeconds =
+				(State->CaseName == TEXT("NoIntentDenied"))
+					? -1.0
+					: (State->CaseName == TEXT("ShortPulseDenied") ? 0.05 : 0.50);
+			Comp->TestOnlySetBridgeLocomotionRequestEvidence(EvidenceState, State->ExpectedIntentMagnitude, IntentAgeSeconds);
+
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("LocomotionRequest[%s]: applied intentMagnitude=%.2f intentAge=%.2f supportMode=%d supportHull=%.2f activeSides=%d capsuleValid=%d continuityValid=%d terminalReason=%d"),
+				*State->CaseName,
+				State->ExpectedIntentMagnitude,
+				IntentAgeSeconds,
+				static_cast<int32>(State->ExpectedSupportMode),
+				State->ExpectedSupportHullAreaCm2,
+				State->ExpectedActiveSupportSideCount,
+				State->bExpectedCapsuleValid ? 1 : 0,
+				State->bExpectedContinuityValid ? 1 : 0,
+				static_cast<int32>(State->ExpectedTerminalReason));
+			break;
+		}
+	}
+
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FVerifyActivatedStandingLocomotionRequestStateCommand, FActivatedStandingLocomotionRequestValidationState*, State, FAutomationTestBase*, Test);
+bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
+{
+	if (!State || !State->Component.IsValid())
+	{
+		AddLatentAutomationError(Test, TEXT("LocomotionRequest: verification command has no component"));
+		return true;
+	}
+
+	UPhysAnimComponent* const Comp = State->Component.Get();
+	FString GateReason;
+	const bool bAllowed = Comp->CanEnterBridgeLocomotionGate(GateReason);
+	const EPhysAnimRuntimeState RuntimeState = Comp->GetRuntimeState();
+	const EBridgeLocomotionRequestState RequestState = Comp->GetLocomotionRequestState();
+	const FString& RequestReason = Comp->GetLocomotionRequestReason();
+	const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
+	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Comp->GetActivatedStandingStabilityMetrics();
+
+	const auto Fail = [&](const FString& Message)
+	{
+		AddLatentAutomationError(Test, Message);
+	};
+
+	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected BalanceActive_Standing but got %d"), *State->CaseName, (int32)RuntimeState));
+	}
+
+	if (bAllowed != State->bExpectedAllowed)
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected allowed=%d but got %d reason=%s"),
+			*State->CaseName,
+			State->bExpectedAllowed ? 1 : 0,
+			bAllowed ? 1 : 0,
+			*GateReason));
+	}
+
+	if (RequestState != State->ExpectedRequestState)
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected request state=%s but got %s"),
+			*State->CaseName,
+			GetLocomotionRequestStateName(State->ExpectedRequestState),
+			GetLocomotionRequestStateName(RequestState)));
+	}
+
+	if (!GateReason.Contains(State->ExpectedReasonSubstring))
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected gate reason containing '%s' but got '%s'"),
+			*State->CaseName,
+			*State->ExpectedReasonSubstring,
+			*GateReason));
+	}
+
+	if (!RequestReason.Contains(State->ExpectedReasonSubstring))
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected request reason containing '%s' but got '%s'"),
+			*State->CaseName,
+			*State->ExpectedReasonSubstring,
+			*RequestReason));
+	}
+
+	if (!FMath::IsNearlyEqual(Comp->GetBridgeLocomotionIntentMagnitude(), State->ExpectedIntentMagnitude, 0.0001f))
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected intent magnitude %.2f but got %.2f"),
+			*State->CaseName,
+			State->ExpectedIntentMagnitude,
+			Comp->GetBridgeLocomotionIntentMagnitude()));
+	}
+
+	if (TerminationState.TerminalReason != State->ExpectedTerminalReason)
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected terminal reason=%d but got %d"),
+			*State->CaseName,
+			static_cast<int32>(State->ExpectedTerminalReason),
+			static_cast<int32>(TerminationState.TerminalReason)));
+	}
+
+	if (Latest.SupportMode != State->ExpectedSupportMode)
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected support mode=%d but got %d"),
+			*State->CaseName,
+			static_cast<int32>(State->ExpectedSupportMode),
+			static_cast<int32>(Latest.SupportMode)));
+	}
+
+	if (!FMath::IsNearlyEqual(Latest.SupportHullAreaCm2, State->ExpectedSupportHullAreaCm2, 0.01))
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected support hull %.2f but got %.2f"),
+			*State->CaseName,
+			State->ExpectedSupportHullAreaCm2,
+			Latest.SupportHullAreaCm2));
+	}
+
+	if (Latest.ActiveSupportSideCount != State->ExpectedActiveSupportSideCount)
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected active support side count=%d but got %d"),
+			*State->CaseName,
+			State->ExpectedActiveSupportSideCount,
+			Latest.ActiveSupportSideCount));
+	}
+
+	if (Latest.bCapsuleContractPassed != State->bExpectedCapsuleValid)
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected capsule valid=%d but got %d"),
+			*State->CaseName,
+			State->bExpectedCapsuleValid ? 1 : 0,
+			Latest.bCapsuleContractPassed ? 1 : 0));
+	}
+
+	if ((Latest.bPhysicalContinuityValidatorPassed && !Latest.bContinuityBookkeepingMismatch) != State->bExpectedContinuityValid)
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected continuity valid=%d but got %d"),
+			*State->CaseName,
+			State->bExpectedContinuityValid ? 1 : 0,
+			(Latest.bPhysicalContinuityValidatorPassed && !Latest.bContinuityBookkeepingMismatch) ? 1 : 0));
+	}
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("LocomotionRequest[%s]: runtimeState=%d requestState=%s gateAllowed=%d gateReason=%s requestReason=%s intentMagnitude=%.2f intentAge=%.2f supportMode=%d supportHull=%.2f activeSides=%d capsuleValid=%d continuityValid=%d terminalReason=%d samples=%d"),
+		*State->CaseName,
+		static_cast<int32>(RuntimeState),
+		GetLocomotionRequestStateName(RequestState),
+		bAllowed ? 1 : 0,
+		*GateReason,
+		*RequestReason,
+		Comp->GetBridgeLocomotionIntentMagnitude(),
+		Comp->GetBridgeLocomotionIntentAgeSeconds(),
+		static_cast<int32>(Latest.SupportMode),
+		Latest.SupportHullAreaCm2,
+		Latest.ActiveSupportSideCount,
+		Latest.bCapsuleContractPassed ? 1 : 0,
+		(Latest.bPhysicalContinuityValidatorPassed && !Latest.bContinuityBookkeepingMismatch) ? 1 : 0,
+		static_cast<int32>(TerminationState.TerminalReason),
+		Metrics.SampleCount);
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingLocomotionRequestStateTest, "PhysAnim.ActivatedStanding.LocomotionRequestState", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingLocomotionRequestStateTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequest_NoIntentDenied"));
+	OutTestCommands.Add(TEXT("NoIntentDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequest_ShortPulseDenied"));
+	OutTestCommands.Add(TEXT("ShortPulseDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequest_StableRequested"));
+	OutTestCommands.Add(TEXT("StableRequested"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequest_NegativeSupportDenied"));
+	OutTestCommands.Add(TEXT("NegativeSupportDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequest_TerminalReasonDenied"));
+	OutTestCommands.Add(TEXT("TerminalReasonDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequest_CapsuleInvalidDenied"));
+	OutTestCommands.Add(TEXT("CapsuleInvalidDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequest_ContinuityInvalidDenied"));
+	OutTestCommands.Add(TEXT("ContinuityInvalidDenied"));
+}
+
+bool FPhysAnimActivatedStandingLocomotionRequestStateTest::RunTest(const FString& Parameters)
+{
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+
+	static FActivatedStandingLocomotionRequestValidationState State;
+	State = FActivatedStandingLocomotionRequestValidationState();
+	State.CaseName = Parameters;
+
+	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
 
 	return true;
 }

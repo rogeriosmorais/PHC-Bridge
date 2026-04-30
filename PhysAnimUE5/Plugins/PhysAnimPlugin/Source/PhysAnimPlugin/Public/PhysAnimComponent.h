@@ -67,6 +67,14 @@ enum class EBridgeLocomotionAuthorityState : uint8
 	Locomoting
 };
 
+UENUM(BlueprintType)
+enum class EBridgeLocomotionRequestState : uint8
+{
+	BalanceActiveStanding,
+	LocomotionRequested,
+	LocomotionRequestDenied
+};
+
 enum class EBalanceTransitionShellAuthorityMode : uint8
 {
 	GameplayShellObservedOnly,
@@ -1106,7 +1114,6 @@ public:
 	{
 		return Mode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked;
 	}
-	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
 	FVector GetAcceptedShellPlanarVelocity() const { return BridgeShellState.AcceptedPlanarVelocityCmPerSecond; }
 	float GetCurrentShellPlanarOffsetDeltaCm() const;
 	float GetCurrentShellPlanarVelocityDeltaCmPerSecond() const;
@@ -1174,6 +1181,21 @@ public:
 	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
 	bool GetForceSupportFailure() const { return bForceSupportFailure; }
 	void SetForceSupportFailure(bool bInForce) { bForceSupportFailure = bInForce; }
+	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
+	EBridgeLocomotionRequestState GetLocomotionRequestState() const { return BridgeLocomotionRequestState; }
+	const FString& GetLocomotionRequestReason() const { return BridgeLocomotionRequestReason; }
+	float GetBridgeLocomotionIntentMagnitude() const { return BridgeIntentState.IntentMagnitude; }
+	double GetBridgeLocomotionIntentAgeSeconds() const
+	{
+		const double IntentStartTimeSeconds = static_cast<double>(DistalLocomotionCompositionTimeSinceActiveIntentSeconds);
+		if (IntentStartTimeSeconds < 0.0)
+		{
+			return -1.0;
+		}
+
+		const UWorld* const World = GetWorld();
+		return World ? (World->GetTimeSeconds() - IntentStartTimeSeconds) : -1.0;
+	}
 
 	const FPhysAnimRuntimeTerminationState& GetLiveRuntimeEvidenceTerminationState() const { return LiveRuntimeEvidenceTerminationState; }
 	bool IsLiveRuntimeEvidenceProofComplete() const { return bLiveRuntimeEvidenceProofComplete; }
@@ -1232,6 +1254,10 @@ public:
 	static bool TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState State) { return IsBalanceEntryState(State); }
 	static bool TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState State) { return IsBalanceActiveState(State); }
 	void TestOnlySetBridgeLocomotionGateIntent(float IntentMagnitude, double IntentAgeSeconds);
+	void TestOnlySetBridgeLocomotionRequestEvidence(
+		const FPhysAnimRuntimeTerminationState& EvidenceState,
+		float IntentMagnitude,
+		double IntentAgeSeconds);
 	static bool TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
 		EPhysAnimRuntimeState RuntimeState,
 		bool bDistalKinematicAccepted)
@@ -1703,6 +1729,9 @@ private:
 	void CaptureBridgeIntent(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ApplyBridgeOwnedMovementDrive(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResetBridgeLocomotionAuthorityState();
+	void ResetBridgeLocomotionRequestState();
+	bool EvaluateBridgeLocomotionGate(FString& OutReason) const;
+	void UpdateBridgeLocomotionRequestState(double CurrentTimeSeconds);
 	void RecoverBridgeActiveStateAfterBalanceTransitionFailure(const FString& FailureReason);
 	void PublishBalanceTransitionFailureReason(const FString& FailureReason);
 	void ClearPublishedBalanceTransitionFailureReason();
@@ -1848,6 +1877,9 @@ private:
 	bool bHasBridgePoseSearchLatchedWalkResult = false;
 	bool bBridgePoseSearchTrajectoryInitialized = false;
 	EBridgeLocomotionAuthorityState BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+	EBridgeLocomotionRequestState BridgeLocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+	FString BridgeLocomotionRequestReason;
+	double BridgeLocomotionRequestStateEnteredTimeSeconds = -1.0;
 	double BridgeLocomotionStateEnterTimeSeconds = -1.0;
 	double BridgeLocomotionExitHoldStartTimeSeconds = -1.0;
 	double LastPrePolicyShellRecoveryLogTimeSeconds = -1.0;

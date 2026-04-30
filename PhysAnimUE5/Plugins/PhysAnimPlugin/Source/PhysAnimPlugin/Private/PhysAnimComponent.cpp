@@ -381,6 +381,7 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	LiveRuntimeEvidenceTerminationState = FPhysAnimRuntimeTerminationState();
 	LiveRuntimeEvidenceAttemptUuid.Empty();
 	bForceSupportFailure = false;
+	ResetBridgeLocomotionRequestState();
 }
 
 void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)

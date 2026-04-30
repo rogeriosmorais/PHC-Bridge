@@ -1,6 +1,24 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 
+namespace
+{
+	const TCHAR* GetLocomotionRequestStateName(EBridgeLocomotionRequestState State)
+	{
+		switch (State)
+		{
+		case EBridgeLocomotionRequestState::BalanceActiveStanding:
+			return TEXT("BalanceActiveStanding");
+		case EBridgeLocomotionRequestState::LocomotionRequested:
+			return TEXT("LocomotionRequested");
+		case EBridgeLocomotionRequestState::LocomotionRequestDenied:
+			return TEXT("LocomotionRequestDenied");
+		default:
+			return TEXT("Unknown");
+		}
+	}
+}
+
 bool UPhysAnimComponent::ShouldUseBridgeOwnedMovementDrive(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
 	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
@@ -38,6 +56,15 @@ void UPhysAnimComponent::ResetBridgeLocomotionAuthorityState()
 	BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
 	BridgeLocomotionStateEnterTimeSeconds = -1.0;
 	BridgeLocomotionExitHoldStartTimeSeconds = -1.0;
+	ResetBridgeLocomotionRequestState();
+}
+
+
+void UPhysAnimComponent::ResetBridgeLocomotionRequestState()
+{
+	BridgeLocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+	BridgeLocomotionRequestReason.Reset();
+	BridgeLocomotionRequestStateEnteredTimeSeconds = -1.0;
 }
 
 
@@ -60,6 +87,112 @@ void UPhysAnimComponent::UpdateBridgeLocomotionGateTiming(const FPhysAnimStabili
 	{
 		DistalLocomotionCompositionTimeSinceActiveIntentSeconds = -1.0f;
 	}
+}
+
+
+bool UPhysAnimComponent::EvaluateBridgeLocomotionGate(FString& OutReason) const
+{
+	OutReason.Reset();
+
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	const double IntentStartTimeSeconds = static_cast<double>(DistalLocomotionCompositionTimeSinceActiveIntentSeconds);
+	const double IntentAgeSeconds =
+		IntentStartTimeSeconds >= 0.0 ? (CurrentTimeSeconds - IntentStartTimeSeconds) : -1.0;
+	const FPhysAnimRuntimeTerminationState& TerminationState = LiveRuntimeEvidenceTerminationState;
+	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
+	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = ActivatedStandingStabilityMetrics;
+	const auto Deny = [&](const TCHAR* Reason) -> bool
+	{
+		OutReason = Reason;
+		return false;
+	};
+
+	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		return Deny(TEXT("standing_inactive"));
+	}
+
+	if (!bEnableLiveRuntimeEvidenceProof)
+	{
+		return Deny(TEXT("proof_disabled"));
+	}
+
+	if (!bLiveRuntimeEvidenceProofComplete)
+	{
+		return Deny(TEXT("proof_incomplete"));
+	}
+
+	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne ||
+		Latest.SupportHullAreaCm2 <= 0.0f ||
+		Latest.ActiveSupportSideCount < 1)
+	{
+		return Deny(TEXT("negative_support"));
+	}
+
+	if (!Latest.bPhysicsAssetContractValid || !Latest.bSkeletonAuditPassed)
+	{
+		return Deny(TEXT("support_audit_invalid"));
+	}
+
+	if (!Latest.bCapsuleContractPassed)
+	{
+		return Deny(TEXT("capsule_invalid"));
+	}
+
+	if (!Latest.bPhysicalContinuityValidatorPassed || Latest.bContinuityBookkeepingMismatch)
+	{
+		return Deny(TEXT("continuity_invalid"));
+	}
+
+	if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+	{
+		return Deny(TEXT("terminal_reason_present"));
+	}
+
+	if (!IsLiveRuntimeEvidenceProofSatisfied())
+	{
+		return Deny(TEXT("proof_not_truthful"));
+	}
+
+	if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
+	{
+		return Deny(TEXT("stability_metrics_unavailable"));
+	}
+
+	if (Metrics.FailStopCount != 0)
+	{
+		return Deny(TEXT("stability_metrics_fail_stop"));
+	}
+
+	if (!FMath::IsFinite(Metrics.ActivationDurationSec) ||
+		!FMath::IsFinite(Metrics.RootWorldPositionDriftCm) ||
+		!FMath::IsFinite(Metrics.RootVerticalDriftCm) ||
+		!FMath::IsFinite(Metrics.RootAngularDriftDeg) ||
+		!FMath::IsFinite(Metrics.MaxBodyLinearSpeedCmPerSecond) ||
+		!FMath::IsFinite(Metrics.MaxBodyAngularSpeedDegPerSecond) ||
+		!FMath::IsFinite(Metrics.SupportHullAreaMinCm2) ||
+		!FMath::IsFinite(Metrics.SupportHullAreaMeanCm2) ||
+		!FMath::IsFinite(Metrics.SupportHullAreaMaxCm2) ||
+		!FMath::IsFinite(Metrics.ActiveSupportSideCountMin) ||
+		!FMath::IsFinite(Metrics.ActiveSupportSideCountMean) ||
+		!FMath::IsFinite(Metrics.ActiveSupportSideCountMax))
+	{
+		return Deny(TEXT("stability_metrics_invalid"));
+	}
+
+	if (!IsBridgeLocomotionEntryRequested(EffectiveSettings))
+	{
+		return Deny(TEXT("intent_absent"));
+	}
+
+	if (IntentAgeSeconds < EffectiveSettings.DistalLocomotionCompositionPolicyIntentGraceSeconds)
+	{
+		return Deny(TEXT("intent_too_short"));
+	}
+
+	OutReason = TEXT("standing_active intent_stable");
+	return true;
 }
 
 
@@ -197,6 +330,53 @@ bool UPhysAnimComponent::CanEnterBridgeLocomotionGate(FString& OutReason) const
 }
 
 
+void UPhysAnimComponent::UpdateBridgeLocomotionRequestState(double CurrentTimeSeconds)
+{
+	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		ResetBridgeLocomotionRequestState();
+		return;
+	}
+
+	FString Reason;
+	const bool bAllowed = EvaluateBridgeLocomotionGate(Reason);
+	const EBridgeLocomotionRequestState NewState =
+		bAllowed ? EBridgeLocomotionRequestState::LocomotionRequested : EBridgeLocomotionRequestState::LocomotionRequestDenied;
+	if (BridgeLocomotionRequestState == NewState && BridgeLocomotionRequestReason == Reason)
+	{
+		return;
+	}
+
+	BridgeLocomotionRequestState = NewState;
+	BridgeLocomotionRequestReason = Reason;
+	BridgeLocomotionRequestStateEnteredTimeSeconds = CurrentTimeSeconds;
+
+	const FPhysAnimRuntimeTerminationState& TerminationState = LiveRuntimeEvidenceTerminationState;
+	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
+	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = ActivatedStandingStabilityMetrics;
+	const TCHAR* const StateLabel = bAllowed ? TEXT("LOCOMOTION_REQUESTED") : TEXT("LOCOMOTION_REQUEST_DENIED");
+	UE_LOG(
+		LogPhysAnimBridge,
+		Warning,
+		TEXT("[PhysAnimLocomotion] %s reason=%s runtimeState=%s requestState=%s proofComplete=%d proofSatisfied=%d terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d intentMagnitude=%.2f intentAge=%.2f metricsSamples=%d"),
+		StateLabel,
+		*BridgeLocomotionRequestReason,
+		GetRuntimeStateName(RuntimeState),
+		GetLocomotionRequestStateName(BridgeLocomotionRequestState),
+		bLiveRuntimeEvidenceProofComplete ? 1 : 0,
+		IsLiveRuntimeEvidenceProofSatisfied() ? 1 : 0,
+		static_cast<int32>(TerminationState.TerminalReason),
+		static_cast<int32>(Latest.SupportMode),
+		Latest.SupportHullAreaCm2,
+		static_cast<double>(Latest.ActiveSupportSideCount),
+		Latest.bCapsuleContractPassed ? 1 : 0,
+		(Latest.bPhysicalContinuityValidatorPassed && !Latest.bContinuityBookkeepingMismatch) ? 1 : 0,
+		BridgeIntentState.IntentMagnitude,
+		GetBridgeLocomotionIntentAgeSeconds(),
+		Metrics.SampleCount);
+}
+
+
 #if WITH_DEV_AUTOMATION_TESTS
 void UPhysAnimComponent::TestOnlySetBridgeLocomotionGateIntent(float IntentMagnitude, double IntentAgeSeconds)
 {
@@ -221,6 +401,40 @@ void UPhysAnimComponent::TestOnlySetBridgeLocomotionGateIntent(float IntentMagni
 		IntentAgeSeconds >= 0.0
 			? static_cast<float>((GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0) - IntentAgeSeconds)
 			: -1.0f;
+}
+
+
+void UPhysAnimComponent::TestOnlySetBridgeLocomotionRequestEvidence(
+	const FPhysAnimRuntimeTerminationState& EvidenceState,
+	float IntentMagnitude,
+	double IntentAgeSeconds)
+{
+	LiveRuntimeEvidenceTerminationState = EvidenceState;
+	bLiveRuntimeEvidenceProofActive = true;
+	bLiveRuntimeEvidenceProofComplete = true;
+	LiveRuntimeEvidenceStandingSeconds = FMath::Max(LiveRuntimeEvidenceStandingSeconds, LiveRuntimeEvidenceStandingTargetSeconds);
+
+	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
+	const float ClampedMagnitude = FMath::Clamp(IntentMagnitude, 0.0f, 1.0f);
+	const FVector WorldDirection = ClampedMagnitude > KINDA_SMALL_NUMBER ? FVector::ForwardVector : FVector::ZeroVector;
+
+	BridgeIntentState.WorldMoveDirection = WorldDirection;
+	BridgeIntentState.LocalMoveDirection = WorldDirection;
+	BridgeIntentState.IntentMagnitude = ClampedMagnitude;
+	BridgeIntentState.DesiredSpeedCmPerSecond = ClampedMagnitude * FMath::Max(0.0f, EffectiveSettings.BridgeOwnedMovementMaxPlanarSpeedCmPerSecond);
+	BridgeIntentState.DesiredFacingYawDegrees = 0.0f;
+	BridgeIntentState.bHasDesiredFacing = ClampedMagnitude > KINDA_SMALL_NUMBER;
+	BridgeTrajectoryState.DesiredVelocityCmPerSecond = WorldDirection * BridgeIntentState.DesiredSpeedCmPerSecond;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = BridgeTrajectoryState.DesiredVelocityCmPerSecond;
+	BridgeTrajectoryState.AcceptedVelocityCmPerSecond = BridgeTrajectoryState.DesiredVelocityCmPerSecond;
+	BridgeOwnedMovementLastWorldIntent = WorldDirection;
+	DistalLocomotionCompositionTimeSinceActiveIntentSeconds =
+		IntentAgeSeconds >= 0.0
+			? static_cast<float>((GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0) - IntentAgeSeconds)
+			: -1.0f;
+
+	ResetBridgeLocomotionRequestState();
+	UpdateBridgeLocomotionRequestState(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0);
 }
 #endif
 
