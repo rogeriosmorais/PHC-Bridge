@@ -533,11 +533,7 @@ bool FEnableActivationWiringCommand::Update()
 			Character->SetActorTransform(InitialActorTransform.GetValue(), false, nullptr, ETeleportType::TeleportPhysics);
 			Comp->ResetLiveRuntimeEvidenceProof();
 			Comp->bEnableLiveRuntimeEvidenceProof = bEnableProof;
-			
-			if (bForceFailure)
-			{
-				Comp->SetForceSupportFailure(true);
-			}
+			Comp->SetForceSupportFailure(bForceFailure);
 
 			Comp->StartBridge();
 			break;
@@ -606,6 +602,75 @@ bool FVerifyActivationWiringCommand::Update()
 
 	return true;
 }
+
+
+/**
+ * Command to verify proof-disabled runtime never safe-denies from stale proof artifacts.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyProofDisabledSafeDenyCommand, FAutomationTestBase*, Test);
+bool FVerifyProofDisabledSafeDenyCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		return true;
+	}
+
+	bool bFoundComponent = false;
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			bFoundComponent = true;
+			const EPhysAnimRuntimeState ActualState = Comp->GetRuntimeState();
+			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+			if (ActualState == EPhysAnimRuntimeState::BalanceSafeDeny ||
+				ActualState == EPhysAnimRuntimeState::FailStopped)
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected proof-disabled startup to avoid safe deny but got %s for %s"),
+					GetRuntimeStateName(ActualState),
+					*It->GetName()));
+			}
+			else if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected terminal_reason=None but got %d for %s"),
+					static_cast<int32>(TerminationState.TerminalReason),
+					*It->GetName()));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("ActivationReview: TEST_PASSED runtime=%s terminalReason=None for %s"),
+					GetRuntimeStateName(ActualState),
+					*It->GetName());
+			}
+			break;
+		}
+	}
+
+	if (!bFoundComponent)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+	}
+
+	return true;
+}
+
 
 /**
  * Latent command to collect activated standing stability metrics for a duration.
@@ -810,29 +875,32 @@ void FPhysAnimActivationWiringTest::GetTests(TArray<FString>& OutBeautifiedNames
 	OutBeautifiedNames.Add(TEXT("ProofSatisfied"));
 	OutTestCommands.Add(TEXT("ProofSatisfied"));
 
-	OutBeautifiedNames.Add(TEXT("ProofFailed"));
-	OutTestCommands.Add(TEXT("ProofFailed"));
+	OutBeautifiedNames.Add(TEXT("ZProofFailed"));
+	OutTestCommands.Add(TEXT("ZProofFailed"));
 }
 
 bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 {
-	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
-	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
-
 	if (Parameters == TEXT("ProofDisabled"))
 	{
+		AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(false, false, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f)); // Wait for startup
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BridgeActive, this));
 	}
 	else if (Parameters == TEXT("ProofNotSatisfied"))
 	{
+		AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, false, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f)); // Wait for startup (but proof takes 3s)
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
 	}
 	else if (Parameters == TEXT("ProofSatisfied"))
 	{
+		AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 		AddExpectedError(TEXT("PhysAnimProof: TerminalArtifact"), EAutomationExpectedErrorFlags::Contains, 0);
 		AddExpectedError(TEXT("PhysAnimProof: AttemptResult"), EAutomationExpectedErrorFlags::Contains, 0);
 
@@ -840,11 +908,14 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f)); // Wait for 3s proof + startup
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing, this));
 	}
-	else if (Parameters == TEXT("ProofFailed"))
+	else if (Parameters == TEXT("ZProofFailed"))
 	{
+		AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 		AddExpectedError(TEXT("PhysAnimProof: TerminalArtifact"), EAutomationExpectedErrorFlags::Contains, 0);
 		AddExpectedError(TEXT("PhysAnimProof: AttemptResult"), EAutomationExpectedErrorFlags::Contains, 0);
 		AddExpectedError(TEXT("Fail-stop: Proof failed"), EAutomationExpectedErrorFlags::Contains, 0);
+		AddExpectedError(TEXT("STATE MACHINE VIOLATION: Body promotion"), EAutomationExpectedErrorFlags::Contains, 0);
 
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, true));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
@@ -853,6 +924,29 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofDisabledSafeDenyTest, "PhysAnim.ActivationReview.ProofDisabledSafeDeny", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivationReviewProofDisabledSafeDenyTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ProofDisabledSafeDeny"));
+	OutTestCommands.Add(TEXT("ProofDisabledSafeDeny"));
+}
+
+bool FPhysAnimActivationReviewProofDisabledSafeDenyTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(false, false, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BridgeActive, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyProofDisabledSafeDenyCommand(this));
+	return true;
+}
+
 
 IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStateMachinePhase1EntryTest, "PhysAnim.StateMachine.Phase1Entry", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 

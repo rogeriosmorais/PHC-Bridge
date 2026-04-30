@@ -3504,6 +3504,25 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
+	if (!bEnableLiveRuntimeEvidenceProof && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+	{
+		const FPhysAnimRuntimeTerminationState& SettleTerminationState = LiveRuntimeEvidenceTerminationState;
+		const FPhysAnimRunArtifactSnapshot& LatestArtifact = SettleTerminationState.LatestArtifact;
+		const bool bDefaultProofArtifact =
+			!SettleTerminationState.bTerminated &&
+			SettleTerminationState.TerminalReason == EPhysAnimTerminalReason::None &&
+			LatestArtifact.SupportMode == EPhysAnimSupportMode::Airborne &&
+			LatestArtifact.ActiveSupportSideCount == 0 &&
+			LatestArtifact.SupportHullAreaCm2 <= 0.0f;
+		if (bDefaultProofArtifact)
+		{
+			BalanceReadyTransition.Cancel(this);
+			ClearPublishedBalanceTransitionFailureReason();
+			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
+			return;
+		}
+	}
+
 	BalanceReadyTransition.Tick(DeltaTime, this, EffectiveSettings);
 
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)

@@ -249,6 +249,11 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 
 bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerminationState& TerminationState) const
 {
+	if (!bEnableLiveRuntimeEvidenceProof)
+	{
+		return false;
+	}
+
 	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
 
 	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne)
