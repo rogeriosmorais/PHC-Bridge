@@ -1,8 +1,8 @@
 # S2-PROOF-ACTIVATED-STANDING-LOCOMOTION-HANDOFF-PREFLIGHT-01 Evidence
 
 Base: `cfc7bda9dda81b7659433c5b8102188a0dd376ac`
-Head: `working tree`
-Commit: `pending`
+Head: `df3c5728e5e74f5a9e2a4dbfc1bda9db6c31f0f8`
+Commit: `df3c5728e5e74f5a9e2a4dbfc1bda9db6c31f0f8`
 Build: `SUCCESS`
 
 PhysAnim.ActivatedStanding.LocomotionHandoffPreflightProof: `PASS`
