@@ -75,6 +75,13 @@ enum class EBridgeLocomotionRequestState : uint8
 	LocomotionRequestDenied
 };
 
+UENUM(BlueprintType)
+enum class EBridgeLocomotionHandoffPreflightState : uint8
+{
+	LocomotionHandoffPreflightPassed,
+	LocomotionHandoffPreflightDenied
+};
+
 enum class EBalanceTransitionShellAuthorityMode : uint8
 {
 	GameplayShellObservedOnly,
@@ -1184,7 +1191,9 @@ public:
 	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
 	bool DoesBridgeOwnPhysics() const { return RuntimeStateOwnsBridgePhysics(RuntimeState); }
 	EBridgeLocomotionRequestState GetLocomotionRequestState() const { return BridgeLocomotionRequestState; }
+	EBridgeLocomotionHandoffPreflightState GetLocomotionHandoffPreflightState() const { return BridgeLocomotionHandoffPreflightState; }
 	const FString& GetLocomotionRequestReason() const { return BridgeLocomotionRequestReason; }
+	const FString& GetLocomotionHandoffPreflightReason() const { return BridgeLocomotionHandoffPreflightReason; }
 	float GetBridgeLocomotionIntentMagnitude() const { return BridgeIntentState.IntentMagnitude; }
 	double GetBridgeLocomotionIntentAgeSeconds() const
 	{
@@ -1731,8 +1740,11 @@ private:
 	void ApplyBridgeOwnedMovementDrive(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResetBridgeLocomotionAuthorityState();
 	void ResetBridgeLocomotionRequestState();
+	void ResetBridgeLocomotionHandoffPreflightState();
 	bool EvaluateBridgeLocomotionGate(FString& OutReason) const;
+	bool EvaluateBridgeLocomotionHandoffPreflight(FString& OutReason) const;
 	void UpdateBridgeLocomotionRequestState(double CurrentTimeSeconds);
+	void UpdateBridgeLocomotionHandoffPreflightState(double CurrentTimeSeconds);
 	void RecoverBridgeActiveStateAfterBalanceTransitionFailure(const FString& FailureReason);
 	void PublishBalanceTransitionFailureReason(const FString& FailureReason);
 	void ClearPublishedBalanceTransitionFailureReason();
@@ -1881,6 +1893,9 @@ private:
 	EBridgeLocomotionRequestState BridgeLocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
 	FString BridgeLocomotionRequestReason;
 	double BridgeLocomotionRequestStateEnteredTimeSeconds = -1.0;
+	EBridgeLocomotionHandoffPreflightState BridgeLocomotionHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
+	FString BridgeLocomotionHandoffPreflightReason;
+	double BridgeLocomotionHandoffPreflightStateEnteredTimeSeconds = -1.0;
 	double BridgeLocomotionStateEnterTimeSeconds = -1.0;
 	double BridgeLocomotionExitHoldStartTimeSeconds = -1.0;
 	double LastPrePolicyShellRecoveryLogTimeSeconds = -1.0;

@@ -19,6 +19,19 @@ namespace
 		}
 		UE_LOG(LogTemp, Error, TEXT("%s"), *Message);
 	}
+
+	const TCHAR* GetLocomotionHandoffPreflightStateName(EBridgeLocomotionHandoffPreflightState State)
+	{
+		switch (State)
+		{
+		case EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightPassed:
+			return TEXT("LocomotionHandoffPreflightPassed");
+		case EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied:
+			return TEXT("LocomotionHandoffPreflightDenied");
+		default:
+			return TEXT("Unknown");
+		}
+	}
 }
 
 /**
@@ -1724,12 +1737,19 @@ struct FActivatedStandingLocomotionRequestValidationState
 	int32 ExpectedActiveSupportSideCount = 0;
 	bool bExpectedCapsuleValid = true;
 	bool bExpectedContinuityValid = true;
+	bool bCheckHandoffPreflight = false;
+	EBridgeLocomotionHandoffPreflightState ExpectedHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
+	FString ExpectedHandoffPreflightReasonSubstring;
 	EPhysAnimRuntimeState PreRuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
 	EPhysAnimRuntimeState PostRuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
 	EBridgeLocomotionAuthorityState PreAuthorityState = EBridgeLocomotionAuthorityState::Idle;
 	EBridgeLocomotionAuthorityState PostAuthorityState = EBridgeLocomotionAuthorityState::Idle;
 	EBridgeLocomotionRequestState PreRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
 	EBridgeLocomotionRequestState PostRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+	EBridgeLocomotionHandoffPreflightState PreHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
+	EBridgeLocomotionHandoffPreflightState PostHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
+	FString PreHandoffPreflightReason;
+	FString PostHandoffPreflightReason;
 	bool bPreBridgeOwnsPhysics = false;
 	bool bPostBridgeOwnsPhysics = false;
 };
@@ -1771,6 +1791,8 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 			State->PreRuntimeState = Comp->GetRuntimeState();
 			State->PreAuthorityState = Comp->GetLocomotionAuthorityState();
 			State->PreRequestState = Comp->GetLocomotionRequestState();
+			State->PreHandoffPreflightState = Comp->GetLocomotionHandoffPreflightState();
+			State->PreHandoffPreflightReason = Comp->GetLocomotionHandoffPreflightReason();
 			State->bPreBridgeOwnsPhysics = Comp->DoesBridgeOwnPhysics();
 			FPhysAnimRuntimeTerminationState EvidenceState = Comp->GetLiveRuntimeEvidenceTerminationState();
 
@@ -1786,6 +1808,8 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 			State->bExpectedContinuityValid =
 				EvidenceState.LatestArtifact.bPhysicalContinuityValidatorPassed &&
 				!EvidenceState.LatestArtifact.bContinuityBookkeepingMismatch;
+			State->ExpectedHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
+			State->ExpectedHandoffPreflightReasonSubstring = State->ExpectedReasonSubstring;
 
 			if (State->CaseName == TEXT("NoIntentDenied"))
 			{
@@ -1805,6 +1829,8 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 				State->ExpectedReasonSubstring = TEXT("intent_stable");
 				State->ExpectedIntentMagnitude = 0.50f;
 				State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+				State->ExpectedHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightPassed;
+				State->ExpectedHandoffPreflightReasonSubstring = TEXT("handoff_ready");
 			}
 			else if (State->CaseName == TEXT("NegativeSupportDenied"))
 			{
@@ -1853,6 +1879,14 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 				State->bExpectedContinuityValid = false;
 			}
 
+			if (State->ExpectedHandoffPreflightState == EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightPassed)
+			{
+				State->ExpectedHandoffPreflightReasonSubstring = TEXT("handoff_ready");
+			}
+			else
+			{
+				State->ExpectedHandoffPreflightReasonSubstring = State->ExpectedReasonSubstring;
+			}
 			State->ExpectedSupportMode = EvidenceState.LatestArtifact.SupportMode;
 			State->ExpectedSupportHullAreaCm2 = EvidenceState.LatestArtifact.SupportHullAreaCm2;
 			State->ExpectedActiveSupportSideCount = EvidenceState.LatestArtifact.ActiveSupportSideCount;
@@ -1866,6 +1900,8 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 			State->PostRuntimeState = Comp->GetRuntimeState();
 			State->PostAuthorityState = Comp->GetLocomotionAuthorityState();
 			State->PostRequestState = Comp->GetLocomotionRequestState();
+			State->PostHandoffPreflightState = Comp->GetLocomotionHandoffPreflightState();
+			State->PostHandoffPreflightReason = Comp->GetLocomotionHandoffPreflightReason();
 			State->bPostBridgeOwnsPhysics = Comp->DoesBridgeOwnPhysics();
 
 			UE_LOG(
@@ -1903,6 +1939,8 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 	const EPhysAnimRuntimeState RuntimeState = Comp->GetRuntimeState();
 	const EBridgeLocomotionRequestState RequestState = Comp->GetLocomotionRequestState();
 	const FString& RequestReason = Comp->GetLocomotionRequestReason();
+	const EBridgeLocomotionHandoffPreflightState HandoffPreflightState = Comp->GetLocomotionHandoffPreflightState();
+	const FString& HandoffPreflightReason = Comp->GetLocomotionHandoffPreflightReason();
 	const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
 	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
 	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Comp->GetActivatedStandingStabilityMetrics();
@@ -1949,7 +1987,44 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 				State->bPreBridgeOwnsPhysics ? 1 : 0,
 				State->bPostBridgeOwnsPhysics ? 1 : 0));
 		}
+	}
 
+	if (State->bCheckHandoffPreflight)
+	{
+		if (HandoffPreflightState != State->ExpectedHandoffPreflightState)
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected handoff preflight state=%s but got %s"),
+				*State->CaseName,
+				GetLocomotionHandoffPreflightStateName(State->ExpectedHandoffPreflightState),
+				GetLocomotionHandoffPreflightStateName(HandoffPreflightState)));
+		}
+
+		if (!HandoffPreflightReason.Contains(State->ExpectedHandoffPreflightReasonSubstring))
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected handoff preflight reason containing '%s' but got '%s'"),
+				*State->CaseName,
+				*State->ExpectedHandoffPreflightReasonSubstring,
+				*HandoffPreflightReason));
+		}
+	}
+
+	if (State->bCheckTransitionPreservation)
+	{
+		if (State->PostHandoffPreflightState != HandoffPreflightState)
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: post-handoff-preflight state snapshot mismatch expected=%s actual=%s"),
+				*State->CaseName,
+				GetLocomotionHandoffPreflightStateName(State->PostHandoffPreflightState),
+				GetLocomotionHandoffPreflightStateName(HandoffPreflightState)));
+		}
+
+		if (State->PostHandoffPreflightReason != HandoffPreflightReason)
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: post-handoff-preflight reason snapshot mismatch expected=%s actual=%s"),
+				*State->CaseName,
+				*State->PostHandoffPreflightReason,
+				*HandoffPreflightReason));
+		}
 	}
 
 	if (bAllowed != State->bExpectedAllowed)
@@ -2196,6 +2271,51 @@ bool FPhysAnimActivatedStandingLocomotionGateProofTest::RunTest(const FString& P
 	State = FActivatedStandingLocomotionRequestValidationState();
 	State.CaseName = Parameters;
 	State.bCheckTransitionPreservation = true;
+
+	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingLocomotionHandoffPreflightTest, "PhysAnim.ActivatedStanding.LocomotionHandoffPreflight", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingLocomotionHandoffPreflightTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffPreflight_NoIntentDenied"));
+	OutTestCommands.Add(TEXT("NoIntentDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffPreflight_ShortPulseDenied"));
+	OutTestCommands.Add(TEXT("ShortPulseDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffPreflight_StableRequested"));
+	OutTestCommands.Add(TEXT("StableRequested"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffPreflight_NegativeSupportDenied"));
+	OutTestCommands.Add(TEXT("NegativeSupportDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffPreflight_TerminalReasonDenied"));
+	OutTestCommands.Add(TEXT("TerminalReasonDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffPreflight_CapsuleInvalidDenied"));
+	OutTestCommands.Add(TEXT("CapsuleInvalidDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionHandoffPreflight_ContinuityInvalidDenied"));
+	OutTestCommands.Add(TEXT("ContinuityInvalidDenied"));
+}
+
+bool FPhysAnimActivatedStandingLocomotionHandoffPreflightTest::RunTest(const FString& Parameters)
+{
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+
+	static FActivatedStandingLocomotionRequestValidationState State;
+	State = FActivatedStandingLocomotionRequestValidationState();
+	State.CaseName = Parameters;
+	State.bCheckTransitionPreservation = true;
+	State.bCheckHandoffPreflight = true;
 
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
