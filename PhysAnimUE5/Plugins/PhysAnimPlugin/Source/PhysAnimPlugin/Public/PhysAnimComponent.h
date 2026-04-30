@@ -1182,6 +1182,7 @@ public:
 	bool GetForceSupportFailure() const { return bForceSupportFailure; }
 	void SetForceSupportFailure(bool bInForce) { bForceSupportFailure = bInForce; }
 	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
+	bool DoesBridgeOwnPhysics() const { return RuntimeStateOwnsBridgePhysics(RuntimeState); }
 	EBridgeLocomotionRequestState GetLocomotionRequestState() const { return BridgeLocomotionRequestState; }
 	const FString& GetLocomotionRequestReason() const { return BridgeLocomotionRequestReason; }
 	float GetBridgeLocomotionIntentMagnitude() const { return BridgeIntentState.IntentMagnitude; }

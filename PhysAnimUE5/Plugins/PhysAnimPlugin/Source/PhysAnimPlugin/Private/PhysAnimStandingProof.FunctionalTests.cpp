@@ -1714,6 +1714,7 @@ struct FActivatedStandingLocomotionRequestValidationState
 	TWeakObjectPtr<UPhysAnimComponent> Component;
 	FString CaseName;
 	bool bExpectedAllowed = false;
+	bool bCheckTransitionPreservation = false;
 	EBridgeLocomotionRequestState ExpectedRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
 	FString ExpectedReasonSubstring;
 	float ExpectedIntentMagnitude = 0.0f;
@@ -1723,6 +1724,14 @@ struct FActivatedStandingLocomotionRequestValidationState
 	int32 ExpectedActiveSupportSideCount = 0;
 	bool bExpectedCapsuleValid = true;
 	bool bExpectedContinuityValid = true;
+	EPhysAnimRuntimeState PreRuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
+	EPhysAnimRuntimeState PostRuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
+	EBridgeLocomotionAuthorityState PreAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+	EBridgeLocomotionAuthorityState PostAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+	EBridgeLocomotionRequestState PreRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+	EBridgeLocomotionRequestState PostRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+	bool bPreBridgeOwnsPhysics = false;
+	bool bPostBridgeOwnsPhysics = false;
 };
 
 DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FApplyActivatedStandingLocomotionRequestStateCommand, FActivatedStandingLocomotionRequestValidationState*, State);
@@ -1759,6 +1768,10 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
 			State->Component = Comp;
+			State->PreRuntimeState = Comp->GetRuntimeState();
+			State->PreAuthorityState = Comp->GetLocomotionAuthorityState();
+			State->PreRequestState = Comp->GetLocomotionRequestState();
+			State->bPreBridgeOwnsPhysics = Comp->DoesBridgeOwnPhysics();
 			FPhysAnimRuntimeTerminationState EvidenceState = Comp->GetLiveRuntimeEvidenceTerminationState();
 
 			State->bExpectedAllowed = false;
@@ -1850,6 +1863,10 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 					? -1.0
 					: (State->CaseName == TEXT("ShortPulseDenied") ? 0.05 : 0.50);
 			Comp->TestOnlySetBridgeLocomotionRequestEvidence(EvidenceState, State->ExpectedIntentMagnitude, IntentAgeSeconds);
+			State->PostRuntimeState = Comp->GetRuntimeState();
+			State->PostAuthorityState = Comp->GetLocomotionAuthorityState();
+			State->PostRequestState = Comp->GetLocomotionRequestState();
+			State->bPostBridgeOwnsPhysics = Comp->DoesBridgeOwnPhysics();
 
 			UE_LOG(
 				LogTemp,
@@ -1900,6 +1917,41 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected BalanceActive_Standing but got %d"), *State->CaseName, (int32)RuntimeState));
 	}
 
+	if (State->bCheckTransitionPreservation)
+	{
+		if (State->PreRuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected pre-runtime state BalanceActive_Standing but got %d"),
+				*State->CaseName,
+				(int32)State->PreRuntimeState));
+		}
+
+		if (State->PostRuntimeState != State->PreRuntimeState)
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: runtime state changed from %d to %d"),
+				*State->CaseName,
+				(int32)State->PreRuntimeState,
+				(int32)State->PostRuntimeState));
+		}
+
+		if (State->PostAuthorityState != State->PreAuthorityState)
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: locomotion authority changed from %d to %d"),
+				*State->CaseName,
+				(int32)State->PreAuthorityState,
+				(int32)State->PostAuthorityState));
+		}
+
+		if (State->bPostBridgeOwnsPhysics != State->bPreBridgeOwnsPhysics)
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: bridge physics ownership changed from %d to %d"),
+				*State->CaseName,
+				State->bPreBridgeOwnsPhysics ? 1 : 0,
+				State->bPostBridgeOwnsPhysics ? 1 : 0));
+		}
+
+	}
+
 	if (bAllowed != State->bExpectedAllowed)
 	{
 		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected allowed=%d but got %d reason=%s"),
@@ -1914,6 +1966,14 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected request state=%s but got %s"),
 			*State->CaseName,
 			GetLocomotionRequestStateName(State->ExpectedRequestState),
+			GetLocomotionRequestStateName(RequestState)));
+	}
+
+	if (State->bCheckTransitionPreservation && State->PostRequestState != RequestState)
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: post-request state snapshot mismatch expected=%s actual=%s"),
+			*State->CaseName,
+			GetLocomotionRequestStateName(State->PostRequestState),
 			GetLocomotionRequestStateName(RequestState)));
 	}
 
@@ -2048,6 +2108,94 @@ bool FPhysAnimActivatedStandingLocomotionRequestStateTest::RunTest(const FString
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
 	State.CaseName = Parameters;
+
+	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingLocomotionRequestStateProofTest, "PhysAnim.ActivatedStanding.LocomotionRequestStateProof", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingLocomotionRequestStateProofTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequestProof_NoIntentDenied"));
+	OutTestCommands.Add(TEXT("NoIntentDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequestProof_ShortPulseDenied"));
+	OutTestCommands.Add(TEXT("ShortPulseDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequestProof_StableRequested"));
+	OutTestCommands.Add(TEXT("StableRequested"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequestProof_NegativeSupportDenied"));
+	OutTestCommands.Add(TEXT("NegativeSupportDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequestProof_TerminalReasonDenied"));
+	OutTestCommands.Add(TEXT("TerminalReasonDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequestProof_CapsuleInvalidDenied"));
+	OutTestCommands.Add(TEXT("CapsuleInvalidDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionRequestProof_ContinuityInvalidDenied"));
+	OutTestCommands.Add(TEXT("ContinuityInvalidDenied"));
+}
+
+bool FPhysAnimActivatedStandingLocomotionRequestStateProofTest::RunTest(const FString& Parameters)
+{
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+
+	static FActivatedStandingLocomotionRequestValidationState State;
+	State = FActivatedStandingLocomotionRequestValidationState();
+	State.CaseName = Parameters;
+	State.bCheckTransitionPreservation = true;
+
+	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingLocomotionGateProofTest, "PhysAnim.ActivatedStanding.LocomotionGateProof", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingLocomotionGateProofTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGateProof_NoIntentDenied"));
+	OutTestCommands.Add(TEXT("NoIntentDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGateProof_ShortPulseDenied"));
+	OutTestCommands.Add(TEXT("ShortPulseDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGateProof_StableAllowed"));
+	OutTestCommands.Add(TEXT("StableRequested"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGateProof_NegativeSupportDenied"));
+	OutTestCommands.Add(TEXT("NegativeSupportDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGateProof_TerminalReasonDenied"));
+	OutTestCommands.Add(TEXT("TerminalReasonDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGateProof_CapsuleInvalidDenied"));
+	OutTestCommands.Add(TEXT("CapsuleInvalidDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionGateProof_ContinuityInvalidDenied"));
+	OutTestCommands.Add(TEXT("ContinuityInvalidDenied"));
+}
+
+bool FPhysAnimActivatedStandingLocomotionGateProofTest::RunTest(const FString& Parameters)
+{
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+
+	static FActivatedStandingLocomotionRequestValidationState State;
+	State = FActivatedStandingLocomotionRequestValidationState();
+	State.CaseName = Parameters;
+	State.bCheckTransitionPreservation = true;
 
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
