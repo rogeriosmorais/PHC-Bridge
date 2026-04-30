@@ -1281,6 +1281,7 @@ public:
 		const FPhysAnimRuntimeTerminationState& EvidenceState,
 		float IntentMagnitude,
 		double IntentAgeSeconds);
+	void TestOnlyUpdateBridgeLocomotionActiveShellState(double CurrentTimeSeconds);
 	static bool TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
 		EPhysAnimRuntimeState RuntimeState,
 		bool bDistalKinematicAccepted)

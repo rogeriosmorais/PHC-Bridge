@@ -401,7 +401,8 @@ bool UPhysAnimComponent::EvaluateBridgeLocomotionHandoffPreflight(FString& OutRe
 		return false;
 	};
 
-	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing &&
+		!IsLocomotionActiveShellState(RuntimeState))
 	{
 		return Deny(TEXT("standing_inactive"));
 	}
@@ -712,7 +713,6 @@ void UPhysAnimComponent::UpdateBridgeLocomotionHandoffCommitState(double Current
 		}
 	}
 
-	UpdateBridgeLocomotionActiveShellState(CurrentTimeSeconds);
 }
 
 
@@ -877,6 +877,12 @@ void UPhysAnimComponent::UpdateBridgeLocomotionActiveShellState(double CurrentTi
 		BridgeIntentState.IntentMagnitude,
 		GetBridgeLocomotionIntentAgeSeconds(),
 		Metrics.SampleCount);
+}
+
+
+void UPhysAnimComponent::TestOnlyUpdateBridgeLocomotionActiveShellState(double CurrentTimeSeconds)
+{
+	UpdateBridgeLocomotionActiveShellState(CurrentTimeSeconds);
 }
 
 
