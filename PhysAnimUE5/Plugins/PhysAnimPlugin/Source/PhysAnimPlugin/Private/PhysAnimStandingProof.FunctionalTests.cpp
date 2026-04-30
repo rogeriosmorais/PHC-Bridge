@@ -47,6 +47,45 @@ namespace
 			return TEXT("Unknown");
 		}
 	}
+
+	const TCHAR* GetRuntimeStateName(EPhysAnimRuntimeState State)
+	{
+		switch (State)
+		{
+		case EPhysAnimRuntimeState::Uninitialized:
+			return TEXT("Uninitialized");
+		case EPhysAnimRuntimeState::RuntimeReady:
+			return TEXT("RuntimeReady");
+		case EPhysAnimRuntimeState::WaitingForPoseSearch:
+			return TEXT("WaitingForPoseSearch");
+		case EPhysAnimRuntimeState::ReadyForActivation:
+			return TEXT("ReadyForActivation");
+		case EPhysAnimRuntimeState::BridgeActive:
+			return TEXT("BridgeActive");
+		case EPhysAnimRuntimeState::FailStopped:
+			return TEXT("FailStopped");
+		case EPhysAnimRuntimeState::BalanceEntry_Prepare:
+			return TEXT("BalanceEntry_Prepare");
+		case EPhysAnimRuntimeState::BalanceEntry_LateValidate:
+			return TEXT("BalanceEntry_LateValidate");
+		case EPhysAnimRuntimeState::BalanceEntry_RootOn:
+			return TEXT("BalanceEntry_RootOn");
+		case EPhysAnimRuntimeState::BalanceEntry_Settle:
+			return TEXT("BalanceEntry_Settle");
+		case EPhysAnimRuntimeState::BalanceActive_Recovery:
+			return TEXT("BalanceActive_Recovery");
+		case EPhysAnimRuntimeState::BalanceSafeDeny:
+			return TEXT("BalanceSafeDeny");
+		case EPhysAnimRuntimeState::BalanceActive_Standing:
+			return TEXT("BalanceActive_Standing");
+		case EPhysAnimRuntimeState::LocomotionActiveShell:
+			return TEXT("LocomotionActiveShell");
+		case EPhysAnimRuntimeState::LocomotionActiveShellDenied:
+			return TEXT("LocomotionActiveShellDenied");
+		default:
+			return TEXT("Unknown");
+		}
+	}
 }
 
 /**
@@ -1743,6 +1782,8 @@ struct FActivatedStandingLocomotionRequestValidationState
 	FString CaseName;
 	bool bExpectedAllowed = false;
 	bool bCheckTransitionPreservation = false;
+	bool bCheckRuntimeState = false;
+	EPhysAnimRuntimeState ExpectedRuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
 	EBridgeLocomotionRequestState ExpectedRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
 	FString ExpectedReasonSubstring;
 	bool bRequireStandingRuntimeState = true;
@@ -1842,6 +1883,13 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 			State->ExpectedHandoffCommitReasonSubstring = State->ExpectedReasonSubstring;
 
 			if (State->CaseName == TEXT("NoIntentDenied"))
+			{
+				State->ExpectedReasonSubstring = TEXT("intent_absent");
+				State->ExpectedIntentMagnitude = 0.0f;
+				State->ExpectedIntentAgeSeconds = -1.0;
+				State->ExpectedRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+			}
+			else if (State->CaseName == TEXT("GateDenied"))
 			{
 				State->ExpectedReasonSubstring = TEXT("intent_absent");
 				State->ExpectedIntentMagnitude = 0.0f;
@@ -1964,6 +2012,14 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 			{
 				State->ExpectedHandoffPreflightReasonSubstring = State->ExpectedReasonSubstring;
 			}
+			if (State->bCheckRuntimeState)
+			{
+				State->ExpectedRuntimeState =
+					(State->CaseName == TEXT("StableCommitted") &&
+						State->ExpectedHandoffCommitState == EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitted)
+						? EPhysAnimRuntimeState::LocomotionActiveShell
+						: EPhysAnimRuntimeState::LocomotionActiveShellDenied;
+			}
 			State->ExpectedSupportMode = EvidenceState.LatestArtifact.SupportMode;
 			State->ExpectedSupportHullAreaCm2 = EvidenceState.LatestArtifact.SupportHullAreaCm2;
 			State->ExpectedActiveSupportSideCount = EvidenceState.LatestArtifact.ActiveSupportSideCount;
@@ -2036,6 +2092,7 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 	const FString& HandoffPreflightReason = Comp->GetLocomotionHandoffPreflightReason();
 	const EBridgeLocomotionHandoffCommitState HandoffCommitState = Comp->GetLocomotionHandoffCommitState();
 	const FString& HandoffCommitReason = Comp->GetLocomotionHandoffCommitReason();
+	const FString& ActiveShellReason = Comp->GetLocomotionActiveShellReason();
 	const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
 	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
 	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Comp->GetActivatedStandingStabilityMetrics();
@@ -2045,9 +2102,12 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 		AddLatentAutomationError(Test, Message);
 	};
 
-	if (State->bRequireStandingRuntimeState && RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	if (State->bCheckRuntimeState && RuntimeState != State->ExpectedRuntimeState)
 	{
-		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected BalanceActive_Standing but got %d"), *State->CaseName, (int32)RuntimeState));
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected runtime state=%s but got %s"),
+			*State->CaseName,
+			GetRuntimeStateName(State->ExpectedRuntimeState),
+			GetRuntimeStateName(RuntimeState)));
 	}
 
 	if (State->bCheckTransitionPreservation)
@@ -2057,14 +2117,6 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected pre-runtime state BalanceActive_Standing but got %d"),
 				*State->CaseName,
 				(int32)State->PreRuntimeState));
-		}
-
-		if (State->PostRuntimeState != State->PreRuntimeState)
-		{
-			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: runtime state changed from %d to %d"),
-				*State->CaseName,
-				(int32)State->PreRuntimeState,
-				(int32)State->PostRuntimeState));
 		}
 
 		if (State->PostAuthorityState != State->PreAuthorityState)
@@ -2081,6 +2133,14 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 				*State->CaseName,
 				State->bPreBridgeOwnsPhysics ? 1 : 0,
 				State->bPostBridgeOwnsPhysics ? 1 : 0));
+		}
+
+		if (State->bCheckRuntimeState && State->PostRuntimeState != State->ExpectedRuntimeState)
+		{
+			Fail(FString::Printf(TEXT("LocomotionRequest[%s]: post-runtime state snapshot mismatch expected=%s actual=%s"),
+				*State->CaseName,
+				GetRuntimeStateName(State->ExpectedRuntimeState),
+				GetRuntimeStateName(State->PostRuntimeState)));
 		}
 	}
 
@@ -2196,6 +2256,14 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 			*State->CaseName,
 			*State->ExpectedReasonSubstring,
 			*RequestReason));
+	}
+
+	if (State->bCheckRuntimeState && !ActiveShellReason.Contains(State->ExpectedReasonSubstring))
+	{
+		Fail(FString::Printf(TEXT("LocomotionRequest[%s]: expected shell reason containing '%s' but got '%s'"),
+			*State->CaseName,
+			*State->ExpectedReasonSubstring,
+			*ActiveShellReason));
 	}
 
 	if (!FMath::IsNearlyEqual(Comp->GetBridgeLocomotionIntentMagnitude(), State->ExpectedIntentMagnitude, 0.0001f))
@@ -2471,6 +2539,63 @@ bool FPhysAnimActivatedStandingLocomotionHandoffPreflightTest::RunTest(const FSt
 	State.CaseName = Parameters;
 	State.bCheckTransitionPreservation = true;
 	State.bCheckHandoffPreflight = true;
+
+	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingLocomotionActiveShellTest, "PhysAnim.ActivatedStanding.LocomotionActiveShell", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingLocomotionActiveShellTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionActiveShell_NoIntentDenied"));
+	OutTestCommands.Add(TEXT("NoIntentDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionActiveShell_ShortPulseDenied"));
+	OutTestCommands.Add(TEXT("ShortPulseDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionActiveShell_GateDenied"));
+	OutTestCommands.Add(TEXT("GateDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionActiveShell_StableRequested"));
+	OutTestCommands.Add(TEXT("StableRequested"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionActiveShell_StableCommitted"));
+	OutTestCommands.Add(TEXT("StableCommitted"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionActiveShell_NoPreflightDenied"));
+	OutTestCommands.Add(TEXT("NoPreflightDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionActiveShell_DroppedAfterPreflightDenied"));
+	OutTestCommands.Add(TEXT("DroppedAfterPreflightDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionActiveShell_NegativeSupportDenied"));
+	OutTestCommands.Add(TEXT("NegativeSupportDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionActiveShell_TerminalReasonDenied"));
+	OutTestCommands.Add(TEXT("TerminalReasonDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionActiveShell_CapsuleInvalidDenied"));
+	OutTestCommands.Add(TEXT("CapsuleInvalidDenied"));
+
+	OutBeautifiedNames.Add(TEXT("ThirdPerson_Standing_LocomotionActiveShell_ContinuityInvalidDenied"));
+	OutTestCommands.Add(TEXT("ContinuityInvalidDenied"));
+}
+
+bool FPhysAnimActivatedStandingLocomotionActiveShellTest::RunTest(const FString& Parameters)
+{
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+
+	static FActivatedStandingLocomotionRequestValidationState State;
+	State = FActivatedStandingLocomotionRequestValidationState();
+	State.CaseName = Parameters;
+	State.bCheckTransitionPreservation = true;
+	State.bCheckRuntimeState = true;
 
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));

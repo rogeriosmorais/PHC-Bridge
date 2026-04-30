@@ -253,7 +253,16 @@ bool UPhysAnimComponent::TryGetPublicBalanceEntryRuntimeState(EPhysAnimRuntimeSt
 bool UPhysAnimComponent::IsBalanceActiveState(EPhysAnimRuntimeState State)
 {
 	return State == EPhysAnimRuntimeState::BalanceActive_Standing ||
-		State == EPhysAnimRuntimeState::BalanceActive_Recovery;
+		State == EPhysAnimRuntimeState::BalanceActive_Recovery ||
+		State == EPhysAnimRuntimeState::LocomotionActiveShell ||
+		State == EPhysAnimRuntimeState::LocomotionActiveShellDenied;
+}
+
+
+bool UPhysAnimComponent::IsLocomotionActiveShellState(EPhysAnimRuntimeState State)
+{
+	return State == EPhysAnimRuntimeState::LocomotionActiveShell ||
+		State == EPhysAnimRuntimeState::LocomotionActiveShellDenied;
 }
 
 

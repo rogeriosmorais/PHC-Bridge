@@ -613,7 +613,9 @@ enum class EPhysAnimRuntimeState : uint8
 	BalanceEntry_Settle,
 	BalanceActive_Recovery,
 	BalanceSafeDeny,
-	BalanceActive_Standing
+	BalanceActive_Standing,
+	LocomotionActiveShell,
+	LocomotionActiveShellDenied
 };
 
 UENUM(BlueprintType)
@@ -1204,6 +1206,7 @@ public:
 	const FString& GetLocomotionHandoffPreflightReason() const { return BridgeLocomotionHandoffPreflightReason; }
 	EBridgeLocomotionHandoffCommitState GetLocomotionHandoffCommitState() const { return BridgeLocomotionHandoffCommitState; }
 	const FString& GetLocomotionHandoffCommitReason() const { return BridgeLocomotionHandoffCommitReason; }
+	const FString& GetLocomotionActiveShellReason() const { return BridgeLocomotionActiveShellReason; }
 	float GetBridgeLocomotionIntentMagnitude() const { return BridgeIntentState.IntentMagnitude; }
 	double GetBridgeLocomotionIntentAgeSeconds() const
 	{
@@ -1755,9 +1758,12 @@ private:
 	bool EvaluateBridgeLocomotionGate(FString& OutReason) const;
 	bool EvaluateBridgeLocomotionHandoffPreflight(FString& OutReason) const;
 	bool EvaluateBridgeLocomotionHandoffCommit(FString& OutReason) const;
+	bool EvaluateBridgeLocomotionActiveShell(FString& OutReason) const;
 	void UpdateBridgeLocomotionRequestState(double CurrentTimeSeconds);
 	void UpdateBridgeLocomotionHandoffPreflightState(double CurrentTimeSeconds);
 	void UpdateBridgeLocomotionHandoffCommitState(double CurrentTimeSeconds);
+	void UpdateBridgeLocomotionActiveShellState(double CurrentTimeSeconds);
+	void ResetBridgeLocomotionActiveShellState();
 	void RecoverBridgeActiveStateAfterBalanceTransitionFailure(const FString& FailureReason);
 	void PublishBalanceTransitionFailureReason(const FString& FailureReason);
 	void ClearPublishedBalanceTransitionFailureReason();
@@ -1820,6 +1826,7 @@ private:
 	static bool IsBalanceEntryState(EPhysAnimRuntimeState State);
 	EPhysAnimRuntimeState GetPublicBalanceEntryRuntimeState() const;
 	static bool IsBalanceActiveState(EPhysAnimRuntimeState State);
+	static bool IsLocomotionActiveShellState(EPhysAnimRuntimeState State);
 	void ResetBalanceScenarioQuietGate(const FString& Reason);
 	void CompleteBalanceModeEntry();
 	bool EvaluateBalanceModeQueueGates(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
@@ -1912,6 +1919,8 @@ private:
 	EBridgeLocomotionHandoffCommitState BridgeLocomotionHandoffCommitState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending;
 	FString BridgeLocomotionHandoffCommitReason;
 	double BridgeLocomotionHandoffCommitStateEnteredTimeSeconds = -1.0;
+	FString BridgeLocomotionActiveShellReason;
+	double BridgeLocomotionActiveShellStateEnteredTimeSeconds = -1.0;
 	double BridgeLocomotionStateEnterTimeSeconds = -1.0;
 	double BridgeLocomotionExitHoldStartTimeSeconds = -1.0;
 	double LastPrePolicyShellRecoveryLogTimeSeconds = -1.0;
