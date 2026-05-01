@@ -131,6 +131,28 @@ namespace
 		return Input;
 	}
 
+	FPhysAnimRuntimeProofFailureFailStopRoutingInput RuntimeTerminationPipeline_MakeProofFailureRoutingInput(
+		const int64 TerminalSubstepTimestamp,
+		const TCHAR* AttemptUuid,
+		const EPhysAnimTerminalReason Reason)
+	{
+		FPhysAnimRuntimeProofFailureFailStopRoutingInput Input;
+		FPhysAnimRuntimeSubstepInput SeedSubstepInput =
+			RuntimeTerminationPipeline_MakeCleanSubstepInput(TerminalSubstepTimestamp, AttemptUuid);
+		Input.PreviousState.bTerminated = true;
+		Input.PreviousState.TerminalReason = Reason;
+		Input.PreviousState.TerminalSubstepTimestamp = TerminalSubstepTimestamp;
+		Input.PreviousState.bTerminalFrameArtifactCaptured = true;
+		Input.PreviousState.TerminalArtifact = SeedSubstepInput.Values;
+		Input.PreviousState.TerminalArtifact.TerminalReason = Reason;
+		Input.PreviousState.TerminalArtifact.TerminalSubstepTimestamp = TerminalSubstepTimestamp;
+		Input.PreviousState.TerminalArtifact.bTerminalFrameArtifactCaptured = true;
+		Input.Artifact = Input.PreviousState.TerminalArtifact;
+		Input.TerminalReason = Reason;
+		Input.TerminalSubstepTimestamp = TerminalSubstepTimestamp;
+		return Input;
+	}
+
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimRuntimeTerminationPipelineTest,
 		"PhysAnim.RuntimeTermination.Pipeline",
@@ -290,6 +312,28 @@ namespace
 				static_cast<uint8>(Result_I.Command.TerminalReason),
 				static_cast<uint8>(EPhysAnimTerminalReason::ActivationAuthorityConflict));
 			TestEqual(TEXT("TERMINATION-PIPELINE-09 earlier terminal timestamp copied"), Result_I.Command.TerminalSubstepTimestamp, static_cast<int64>(899));
+		}
+
+		{
+			constexpr int64 ProofFailureTimestamp = 901;
+			const FPhysAnimRuntimeProofFailureFailStopRoutingInput Input_J =
+				RuntimeTerminationPipeline_MakeProofFailureRoutingInput(
+					ProofFailureTimestamp,
+					TEXT("pipeline-proof-fail-stop"),
+					EPhysAnimTerminalReason::ActivationSupportFailure);
+
+			const FPhysAnimRuntimeTerminationPipelineResult Result_J =
+				PhysAnimRuntimeTerminationPipeline::EvaluateProofFailureFailStopRouting(Input_J);
+
+			TestTrue(TEXT("TERMINATION-PIPELINE-10 proof failure command terminates"), Result_J.Command.bTerminate);
+			TestTrue(TEXT("TERMINATION-PIPELINE-10 proof failure command requests physics fail-stop"), Result_J.Command.bRequestPhysicsFailStop);
+			TestTrue(TEXT("TERMINATION-PIPELINE-10 proof failure state remains terminated"), Result_J.StateApplyResult.State.bTerminated);
+			TestTrue(TEXT("TERMINATION-PIPELINE-10 proof failure route does not reapply terminal state"), Result_J.StateApplyResult.bIgnoredBecauseAlreadyTerminated);
+			TestEqual(
+				TEXT("TERMINATION-PIPELINE-10 proof failure terminal reason preserved"),
+				static_cast<uint8>(Result_J.StateApplyResult.State.TerminalReason),
+				static_cast<uint8>(EPhysAnimTerminalReason::ActivationSupportFailure));
+			TestEqual(TEXT("TERMINATION-PIPELINE-10 proof failure terminal timestamp preserved"), Result_J.StateApplyResult.State.TerminalSubstepTimestamp, ProofFailureTimestamp);
 		}
 
 		return true;

@@ -4,6 +4,23 @@
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
 #include "PhysAnimPhase1PelvisCouplingSearch.h"
 
+namespace
+{
+	FPhysAnimRuntimeTerminationPipelineResult BuildProofFailureFailStopRoutingResult(
+		const FPhysAnimRuntimeTerminationState& PreviousState,
+		const FPhysAnimRunArtifactSnapshot& Artifact,
+		const EPhysAnimTerminalReason TerminalReason,
+		const int64 TerminalSubstepTimestamp)
+	{
+		FPhysAnimRuntimeProofFailureFailStopRoutingInput RoutingInput;
+		RoutingInput.PreviousState = PreviousState;
+		RoutingInput.Artifact = Artifact;
+		RoutingInput.TerminalReason = TerminalReason;
+		RoutingInput.TerminalSubstepTimestamp = TerminalSubstepTimestamp;
+		return PhysAnimRuntimeTerminationPipeline::EvaluateProofFailureFailStopRouting(RoutingInput);
+	}
+}
+
 void UPhysAnimComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -3616,6 +3633,12 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 					GetRuntimeStateName(RuntimeState));
 				const FString ProofFailStopReason =
 					FString::Printf(TEXT("Proof failed during activation wait: %d"), static_cast<int32>(RuntimeState));
+				const FPhysAnimRuntimeTerminationPipelineResult ProofFailureRoutingResult =
+					BuildProofFailureFailStopRoutingResult(
+						LiveRuntimeEvidenceTerminationState,
+						LiveRuntimeEvidenceTerminationState.TerminalArtifact,
+						StartupProofDeferredTerminalReason,
+						LiveRuntimeEvidenceSubstepCounter);
 				UE_LOG(
 					LogPhysAnimBridge,
 					Error,
@@ -3632,7 +3655,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 					LogPhysAnimBridge,
 					Error,
 					TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
-					static_cast<int32>(StartupProofDeferredTerminalReason));
+					static_cast<int32>(ProofFailureRoutingResult.StateApplyResult.State.TerminalReason));
 				return;
 			}
 
@@ -3641,6 +3664,12 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			{
 				const FString ProofFailStopReason =
 					FString::Printf(TEXT("Proof failed during activation wait: %d"), static_cast<int32>(RuntimeState));
+				const FPhysAnimRuntimeTerminationPipelineResult ProofFailureRoutingResult =
+					BuildProofFailureFailStopRoutingResult(
+						LiveRuntimeEvidenceTerminationState,
+						LiveRuntimeEvidenceTerminationState.TerminalArtifact,
+						LiveRuntimeEvidenceTerminationState.TerminalReason,
+						LiveRuntimeEvidenceSubstepCounter);
 				UE_LOG(
 					LogPhysAnimBridge,
 					Error,
@@ -3657,7 +3686,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 					LogPhysAnimBridge,
 					Error,
 					TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
-					static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
+					static_cast<int32>(ProofFailureRoutingResult.StateApplyResult.State.TerminalReason));
 			}
 			return;
 		}
@@ -4837,6 +4866,14 @@ void UPhysAnimComponent::TriggerProofFailureFailStopRoutingForTesting()
 {
 	const FString ProofFailStopReason =
 		FString::Printf(TEXT("Proof failed during activation wait: %d"), static_cast<int32>(RuntimeState));
+	const FPhysAnimRuntimeTerminationPipelineResult ProofFailureRoutingResult =
+		BuildProofFailureFailStopRoutingResult(
+			LiveRuntimeEvidenceTerminationState,
+			LiveRuntimeEvidenceTerminationState.TerminalArtifact,
+			StartupProofDeferredTerminalReason != EPhysAnimTerminalReason::None
+				? StartupProofDeferredTerminalReason
+				: LiveRuntimeEvidenceTerminationState.TerminalReason,
+			LiveRuntimeEvidenceSubstepCounter);
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("PhysAnimProof: TerminalArtifact"));
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("PhysAnimProof: AttemptResult"));
 	UE_LOG(
@@ -4860,7 +4897,7 @@ void UPhysAnimComponent::TriggerProofFailureFailStopRoutingForTesting()
 		LogPhysAnimBridge,
 		Error,
 		TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
-		static_cast<int32>(StartupProofDeferredTerminalReason));
+		static_cast<int32>(ProofFailureRoutingResult.StateApplyResult.State.TerminalReason));
 }
 #endif
 
