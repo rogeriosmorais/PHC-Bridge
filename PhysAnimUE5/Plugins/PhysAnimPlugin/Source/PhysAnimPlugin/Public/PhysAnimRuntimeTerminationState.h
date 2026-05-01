@@ -12,6 +12,10 @@ struct FPhysAnimRuntimeTerminationState
 	bool bBridgeOutputFrozen = false;
 	bool bPhysicsFailStopRequested = false;
 	bool bMovementReclaimRequested = false;
+	bool bHasDeferredStartupProxyTerminalReason = false;
+	EPhysAnimTerminalReason DeferredStartupProxyTerminalReason = EPhysAnimTerminalReason::None;
+	FString DeferredStartupProxyTerminalAttemptUuid;
+	int64 DeferredStartupProxyTerminalSubstepTimestamp = -1;
 	FPhysAnimRunArtifactSnapshot TerminalArtifact;
 	FPhysAnimRunArtifactSnapshot LatestArtifact;
 };

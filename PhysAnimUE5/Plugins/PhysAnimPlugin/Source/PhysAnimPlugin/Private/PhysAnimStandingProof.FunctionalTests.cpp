@@ -849,6 +849,18 @@ bool FVerifyActivationWiringCommand::Update()
 							static_cast<int32>(Comp->GetDeferredStartupProxyTerminalReason()),
 							*It->GetName()));
 					}
+					if (Comp->HasDeferredStartupProxyTerminalReason() &&
+						Comp->GetDeferredStartupProxyTerminalReason() == EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion)
+					{
+						if (Comp->GetDeferredStartupProxyTerminalAttemptUuid().IsEmpty())
+						{
+							AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationWiring: TEST_FAILED. Deferred proxy terminal attempt uuid was empty for %s"), *It->GetName()));
+						}
+						if (Comp->GetDeferredStartupProxyTerminalSubstepTimestamp() < 0)
+						{
+							AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationWiring: TEST_FAILED. Deferred proxy terminal substep was invalid for %s"), *It->GetName()));
+						}
+					}
 				}
 			}
 			else
@@ -1151,6 +1163,20 @@ bool FVerifyProofCompleteStandingEntryProxyTimingCommand::Update()
 				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Unexpected deferred proxy terminal reason %d for %s"),
 					static_cast<int32>(Comp->GetDeferredStartupProxyTerminalReason()),
 					*It->GetName()));
+			}
+			if (Comp->HasDeferredStartupProxyTerminalReason() &&
+				Comp->GetDeferredStartupProxyTerminalReason() == EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion)
+			{
+				if (Comp->GetDeferredStartupProxyTerminalAttemptUuid().IsEmpty())
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred proxy terminal attempt uuid was empty for %s"),
+						*It->GetName()));
+				}
+				if (Comp->GetDeferredStartupProxyTerminalSubstepTimestamp() < 0)
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred proxy terminal substep was invalid for %s"),
+						*It->GetName()));
+				}
 			}
 
 			UE_LOG(LogTemp, Warning, TEXT("ActivationReview: TEST_PASSED standing entry proxy timing accepted=%d proxyArmed=%d for %s"),
@@ -1603,6 +1629,141 @@ bool FPhysAnimActivationReviewProofCompleteStandingEntryProxyTimingTest::RunTest
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing, this));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyProofCompleteStandingEntryProxyTimingCommand(this));
+	ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyProxyHandoffResetCommand, FAutomationTestBase*, Test);
+bool FVerifyProxyHandoffResetCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World)
+	{
+		World = GWorld;
+	}
+
+	if (!World)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		return true;
+	}
+
+	bool bFoundComponent = false;
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			bFoundComponent = true;
+			if (Comp->IsStartupProofProxySupportHandoffArmed())
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Proxy handoff was armed during reset for %s"), *It->GetName()));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("ActivationReview: TEST_PASSED proxy handoff reset disarmed for %s"), *It->GetName());
+			}
+
+			if (Comp->HasDeferredStartupProxyTerminalReason() &&
+				Comp->GetDeferredStartupProxyTerminalReason() == EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion)
+			{
+				if (Comp->GetDeferredStartupProxyTerminalAttemptUuid().IsEmpty())
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred proxy terminal attempt uuid was empty for %s"), *It->GetName()));
+				}
+				if (Comp->GetDeferredStartupProxyTerminalSubstepTimestamp() < 0)
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred proxy terminal substep was invalid for %s"), *It->GetName()));
+				}
+			}
+			break;
+		}
+	}
+
+	if (!bFoundComponent)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+	}
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthTest, "PhysAnim.ActivationReview.ProofSatisfiedProxyHandoffSourceOfTruth", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ProofSatisfiedProxyHandoffSourceOfTruth"));
+	OutTestCommands.Add(TEXT("ProofSatisfiedProxyHandoffSourceOfTruth"));
+}
+
+bool FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyProofCompleteStandingEntryProxyTimingCommand(this));
+	ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewActivationPathProxyTimingSurfaceWidenTest, "PhysAnim.ActivationReview.ActivationPathProxyTimingSurfaceWiden", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivationReviewActivationPathProxyTimingSurfaceWidenTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ActivationPathProxyTimingSurfaceWiden"));
+	OutTestCommands.Add(TEXT("ActivationPathProxyTimingSurfaceWiden"));
+}
+
+bool FPhysAnimActivationReviewActivationPathProxyTimingSurfaceWidenTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, false, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(0.25f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyProxyHandoffResetCommand(this));
+	ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProxyHandoffArmingTimingResetTest, "PhysAnim.ActivationReview.ProxyHandoffArmingTimingReset", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivationReviewProxyHandoffArmingTimingResetTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ProxyHandoffArmingTimingReset"));
+	OutTestCommands.Add(TEXT("ProxyHandoffArmingTimingReset"));
+}
+
+bool FPhysAnimActivationReviewProxyHandoffArmingTimingResetTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, false, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(0.25f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyProxyHandoffResetCommand(this));
+	ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, false, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(0.25f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyProxyHandoffResetCommand(this));
 	ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
 	return true;
 }

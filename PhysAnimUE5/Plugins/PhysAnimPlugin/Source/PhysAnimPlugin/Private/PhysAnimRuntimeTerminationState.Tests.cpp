@@ -59,6 +59,7 @@ namespace
 			TestFalse(TEXT("TERMINATION-STATE-01 clean command not applied as termination"), Result_A.bAppliedTermination);
 			TestTrue(TEXT("TERMINATION-STATE-01 policy remains enabled"), Result_A.State.bPolicyEvaluationEnabled);
 			TestFalse(TEXT("TERMINATION-STATE-01 bridge output not frozen"), Result_A.State.bBridgeOutputFrozen);
+			TestFalse(TEXT("TERMINATION-STATE-01 no deferred startup proxy reason"), Result_A.State.bHasDeferredStartupProxyTerminalReason);
 			TestEqual(TEXT("TERMINATION-STATE-01 latest artifact copied"), Result_A.State.LatestArtifact.AttemptUuid, FString(TEXT("runtime-termination-state-clean")));
 		}
 
@@ -77,6 +78,7 @@ namespace
 				static_cast<uint8>(EPhysAnimTerminalReason::ActivationSupportFailure));
 			TestEqual(TEXT("TERMINATION-STATE-02 terminal timestamp copied"), Result_B.State.TerminalSubstepTimestamp, static_cast<int64>(200));
 			TestTrue(TEXT("TERMINATION-STATE-02 terminal frame captured"), Result_B.State.bTerminalFrameArtifactCaptured);
+			TestFalse(TEXT("TERMINATION-STATE-02 no deferred startup proxy reason"), Result_B.State.bHasDeferredStartupProxyTerminalReason);
 		}
 
 		{
@@ -175,20 +177,40 @@ namespace
 
 		{
 			FPhysAnimRuntimeTerminationStateApplyInput Input_J;
-			Input_J.Command = RuntimeTerminationState_MakeTerminalCommand(
-				EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion,
-				400,
-				TEXT("terminal-artifact-preserved"));
+			Input_J.PreviousState.bHasDeferredStartupProxyTerminalReason = true;
+			Input_J.PreviousState.DeferredStartupProxyTerminalReason = EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion;
+			Input_J.PreviousState.DeferredStartupProxyTerminalAttemptUuid = TEXT("deferred-startup-proxy");
+			Input_J.PreviousState.DeferredStartupProxyTerminalSubstepTimestamp = 1234;
+			Input_J.Command = RuntimeTerminationState_MakeCleanCommand();
 
 			const FPhysAnimRuntimeTerminationStateApplyResult Result_J =
 				PhysAnimRuntimeTerminationState::ApplyTerminationCommand(Input_J);
 
-			TestEqual(TEXT("TERMINATION-STATE-09 terminal artifact uuid preserved"), Result_J.State.TerminalArtifact.AttemptUuid, FString(TEXT("terminal-artifact-preserved")));
+			TestTrue(TEXT("TERMINATION-STATE-09 deferred startup proxy reason preserved"), Result_J.State.bHasDeferredStartupProxyTerminalReason);
 			TestEqual(
-				TEXT("TERMINATION-STATE-09 terminal artifact reason preserved"),
-				static_cast<uint8>(Result_J.State.TerminalArtifact.TerminalReason),
+				TEXT("TERMINATION-STATE-09 deferred startup proxy reason copied"),
+				static_cast<uint8>(Result_J.State.DeferredStartupProxyTerminalReason),
 				static_cast<uint8>(EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion));
-			TestEqual(TEXT("TERMINATION-STATE-09 terminal artifact timestamp preserved"), Result_J.State.TerminalArtifact.TerminalSubstepTimestamp, static_cast<int64>(400));
+			TestEqual(TEXT("TERMINATION-STATE-09 deferred startup proxy attempt copied"), Result_J.State.DeferredStartupProxyTerminalAttemptUuid, FString(TEXT("deferred-startup-proxy")));
+			TestEqual(TEXT("TERMINATION-STATE-09 deferred startup proxy substep copied"), Result_J.State.DeferredStartupProxyTerminalSubstepTimestamp, static_cast<int64>(1234));
+		}
+
+		{
+			FPhysAnimRuntimeTerminationStateApplyInput Input_K;
+			Input_K.Command = RuntimeTerminationState_MakeTerminalCommand(
+				EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion,
+				400,
+				TEXT("terminal-artifact-preserved"));
+
+			const FPhysAnimRuntimeTerminationStateApplyResult Result_K =
+				PhysAnimRuntimeTerminationState::ApplyTerminationCommand(Input_K);
+
+			TestEqual(TEXT("TERMINATION-STATE-10 terminal artifact uuid preserved"), Result_K.State.TerminalArtifact.AttemptUuid, FString(TEXT("terminal-artifact-preserved")));
+			TestEqual(
+				TEXT("TERMINATION-STATE-10 terminal artifact reason preserved"),
+				static_cast<uint8>(Result_K.State.TerminalArtifact.TerminalReason),
+				static_cast<uint8>(EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion));
+			TestEqual(TEXT("TERMINATION-STATE-10 terminal artifact timestamp preserved"), Result_K.State.TerminalArtifact.TerminalSubstepTimestamp, static_cast<int64>(400));
 		}
 
 		return true;

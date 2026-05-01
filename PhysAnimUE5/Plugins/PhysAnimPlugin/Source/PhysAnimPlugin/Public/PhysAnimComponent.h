@@ -1233,6 +1233,8 @@ public:
 	bool IsStartupProofProxySupportHandoffArmed() const { return bLiveRuntimeEvidenceStartupProxySupportHandoffArmed; }
 	bool HasDeferredStartupProxyTerminalReason() const { return LiveRuntimeEvidenceTerminationState.bHasDeferredStartupProxyTerminalReason; }
 	EPhysAnimTerminalReason GetDeferredStartupProxyTerminalReason() const { return LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalReason; }
+	const FString& GetDeferredStartupProxyTerminalAttemptUuid() const { return LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalAttemptUuid; }
+	int64 GetDeferredStartupProxyTerminalSubstepTimestamp() const { return LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalSubstepTimestamp; }
 	EPhysAnimTerminalReason GetStartupProofDeferredTerminalReason() const { return StartupProofDeferredTerminalReason; }
 	const FPhysAnimActivatedStandingStabilityMetrics& GetActivatedStandingStabilityMetrics() const { return ActivatedStandingStabilityMetrics; }
 	void UpdateActivatedStandingStabilityMetrics(float DeltaTimeSeconds);

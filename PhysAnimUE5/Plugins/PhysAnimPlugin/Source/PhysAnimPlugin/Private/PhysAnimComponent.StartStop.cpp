@@ -95,8 +95,6 @@ void UPhysAnimComponent::StopBridge()
 	bLiveRuntimeEvidenceStartupVerificationHandoffArmed = false;
 	StartupProofVerificationHandoffArmedSubstep = -1;
 	bLiveRuntimeEvidenceStartupProxySupportHandoffArmed = false;
-	LiveRuntimeEvidenceTerminationState.bHasDeferredStartupProxyTerminalReason = false;
-	LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalReason = EPhysAnimTerminalReason::None;
 	StartupProofDeferredTerminalReason = EPhysAnimTerminalReason::None;
 	bLiveRuntimeEvidenceProofShouldComplete = true;
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Proxy handoff reset state=%s"), GetRuntimeStateName(RuntimeState));

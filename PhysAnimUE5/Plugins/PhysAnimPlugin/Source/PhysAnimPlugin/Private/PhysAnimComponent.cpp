@@ -25,10 +25,29 @@ namespace
 				Terminal.bTerminalFrameArtifactCaptured;
 		}
 
-		return Terminal.AttemptUuid == Latest.AttemptUuid &&
+	return Terminal.AttemptUuid == Latest.AttemptUuid &&
 			Terminal.TerminalReason == Latest.TerminalReason &&
 			Terminal.TerminalSubstepTimestamp == Latest.TerminalSubstepTimestamp &&
 			Terminal.bTerminalFrameArtifactCaptured == Latest.bTerminalFrameArtifactCaptured;
+	}
+
+	bool HasDeferredStartupProxyTerminalForCurrentAttempt(
+		const FPhysAnimRuntimeTerminationState& State,
+		const FString& CurrentAttemptUuid)
+	{
+		return State.bHasDeferredStartupProxyTerminalReason &&
+			State.DeferredStartupProxyTerminalReason == EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion &&
+			!CurrentAttemptUuid.IsEmpty() &&
+			State.DeferredStartupProxyTerminalAttemptUuid == CurrentAttemptUuid &&
+			State.DeferredStartupProxyTerminalSubstepTimestamp >= 0;
+	}
+
+	bool IsDeferredStartupProxyTerminalStillCurrent(
+		const FPhysAnimRuntimeTerminationState& State,
+		const FString& CurrentAttemptUuid)
+	{
+		return HasDeferredStartupProxyTerminalForCurrentAttempt(State, CurrentAttemptUuid) &&
+			State.LatestArtifact.TerminalSubstepTimestamp <= State.DeferredStartupProxyTerminalSubstepTimestamp;
 	}
 
 	const TCHAR* ToCapsuleCollisionStateName(EPhysAnimCapsuleCollisionState State)
@@ -204,9 +223,11 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 	}
 
 	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
+	const bool bDeferredStartupProxyTerminalCurrentAttempt =
+		IsDeferredStartupProxyTerminalStillCurrent(LiveRuntimeEvidenceTerminationState, LiveRuntimeEvidenceAttemptUuid);
 	const bool bProxyOutsideHullDeferred =
 		bLiveRuntimeEvidenceProofComplete &&
-		!bLiveRuntimeEvidenceStartupProxySupportHandoffArmed;
+		(!bLiveRuntimeEvidenceStartupProxySupportHandoffArmed || bDeferredStartupProxyTerminalCurrentAttempt);
 
 	if (Latest.SupportGapTimerMs >= Settings.BalancePhase1AdmissionMaxSupportGapMs)
 	{
@@ -376,6 +397,8 @@ bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerm
 	}
 
 	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
+	const bool bDeferredStartupProxyTerminalCurrentAttempt =
+		IsDeferredStartupProxyTerminalStillCurrent(TerminationState, LiveRuntimeEvidenceAttemptUuid);
 
 	if (Latest.SupportGapTimerMs >= Settings.BalancePhase1AdmissionMaxSupportGapMs)
 	{
@@ -386,15 +409,24 @@ bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerm
 		(Latest.ProxyInsideHull.IsSet() && !Latest.ProxyInsideHull.GetValue()) ||
 		(Latest.ProxyOutsideHullDurationMs.IsSet() &&
 			Latest.ProxyOutsideHullDurationMs.GetValue() >= Settings.ProxyDriftLimitMs);
-	if (bLiveRuntimeEvidenceProofComplete &&
-		!bLiveRuntimeEvidenceStartupProxySupportHandoffArmed &&
-		bProxyOutsideHull)
+	if (bProxyOutsideHull)
 	{
+		if (!bLiveRuntimeEvidenceStartupProxySupportHandoffArmed || bDeferredStartupProxyTerminalCurrentAttempt)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Verbose,
+				TEXT("[PhysAnim] Proxy outside hull deferred during standing entry state=%s"),
+				GetRuntimeStateName(RuntimeState));
+			return false;
+		}
+
 		UE_LOG(
 			LogPhysAnimBridge,
 			Verbose,
-			TEXT("[PhysAnim] Proxy handoff not armed during proof-complete entry bridge reason=PROXY_OUTSIDE_HULL state=%s"),
+			TEXT("[PhysAnim] Proxy outside hull enforced after handoff armed state=%s"),
 			GetRuntimeStateName(RuntimeState));
+		return true;
 	}
 
 	return false;
@@ -513,7 +545,25 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	}
 
 	LiveRuntimeEvidenceSubstepCounter = 0;
+	const bool bPreserveDeferredStartupProxyTerminalReason =
+		LiveRuntimeEvidenceTerminationState.bHasDeferredStartupProxyTerminalReason &&
+		LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalReason ==
+			EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion;
+	const FString DeferredStartupProxyTerminalAttemptUuid =
+		LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalAttemptUuid;
+	const int64 DeferredStartupProxyTerminalSubstepTimestamp =
+		LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalSubstepTimestamp;
 	LiveRuntimeEvidenceTerminationState = FPhysAnimRuntimeTerminationState();
+	if (bPreserveDeferredStartupProxyTerminalReason)
+	{
+		LiveRuntimeEvidenceTerminationState.bHasDeferredStartupProxyTerminalReason = true;
+		LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalReason =
+			EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion;
+		LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalAttemptUuid =
+			DeferredStartupProxyTerminalAttemptUuid;
+		LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalSubstepTimestamp =
+			DeferredStartupProxyTerminalSubstepTimestamp;
+	}
 	LiveRuntimeEvidenceAttemptUuid.Empty();
 	StartupProofDeferredTerminalReason = EPhysAnimTerminalReason::None;
 	bLiveRuntimeEvidenceStartupEvidenceFresh = false;
@@ -711,6 +761,9 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			LiveRuntimeEvidenceTerminationState.bHasDeferredStartupProxyTerminalReason = true;
 			LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalReason =
 				LiveRuntimeEvidenceTerminationState.TerminalReason;
+			LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalAttemptUuid = LiveRuntimeEvidenceAttemptUuid;
+			LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalSubstepTimestamp =
+				LiveRuntimeEvidenceSubstepCounter;
 
 			FPhysAnimRunArtifactSnapshot DeferredArtifact = PipelineResult.SubstepResult.Artifact;
 			DeferredArtifact.TerminalReason = EPhysAnimTerminalReason::None;
