@@ -676,63 +676,6 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 
 	UpdateActivatedStandingStabilityMetrics(DeltaTimeSeconds);
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
-		!bLiveRuntimeEvidenceStartupStandingEntryAccepted &&
-		IsLiveRuntimeEvidenceProofSatisfied())
-	{
-		ArmStartupProofTerminalEnforcement();
-		bLiveRuntimeEvidenceStartupStandingEntryAccepted = true;
-		StartupProofStandingEntryAcceptedSubstep = LiveRuntimeEvidenceSubstepCounter;
-		UE_LOG(
-			LogPhysAnimBridge,
-			Verbose,
-			TEXT("[PhysAnim] Standing entry accepted proxy handoff arming pending state=%s"),
-			GetRuntimeStateName(RuntimeState));
-		UE_LOG(
-			LogPhysAnimBridge,
-			Verbose,
-			TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
-			GetRuntimeStateName(RuntimeState));
-	}
-
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
-		bLiveRuntimeEvidenceStartupStandingEntryAccepted &&
-		!bLiveRuntimeEvidenceStartupProxySupportHandoffArmed)
-	{
-		const FPhysAnimRunArtifactSnapshot& StandingArtifact = LiveRuntimeEvidenceTerminationState.LatestArtifact;
-		const bool bStandingSupportFresh =
-			StandingArtifact.SupportMode != EPhysAnimSupportMode::Airborne &&
-			StandingArtifact.ActiveSupportSideCount > 0 &&
-			StandingArtifact.SupportHullAreaCm2 > 0.0f;
-		const bool bStandingProxyOutsideHull =
-			(StandingArtifact.ProxyInsideHull.IsSet() && !StandingArtifact.ProxyInsideHull.GetValue()) ||
-			(StandingArtifact.ProxyOutsideHullDurationMs.IsSet() &&
-				StandingArtifact.ProxyOutsideHullDurationMs.GetValue() >= ResolveEffectiveStabilizationSettings().ProxyDriftLimitMs);
-		if (bStandingSupportFresh &&
-			LiveRuntimeEvidenceSubstepCounter > (StartupProofStandingEntryAcceptedSubstep + 1))
-		{
-			bLiveRuntimeEvidenceStartupProxySupportHandoffArmed = true;
-			UE_LOG(
-				LogPhysAnimBridge,
-				Verbose,
-				TEXT("[PhysAnim] Standing entry accepted proxy handoff armed state=%s"),
-				GetRuntimeStateName(RuntimeState));
-			UE_LOG(
-				LogPhysAnimBridge,
-				Verbose,
-				TEXT("[PhysAnim] Proxy handoff armed state=%s"),
-				GetRuntimeStateName(RuntimeState));
-		}
-		else if (bStandingSupportFresh && bStandingProxyOutsideHull)
-		{
-			UE_LOG(
-				LogPhysAnimBridge,
-				Verbose,
-				TEXT("[PhysAnim] Proxy outside hull deferred during standing entry state=%s"),
-				GetRuntimeStateName(RuntimeState));
-		}
-	}
-
 	if (LiveRuntimeEvidenceTerminationState.bTerminated)
 	{
 		const bool bStartupProofRuntime =
@@ -835,6 +778,63 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 				LiveRuntimeEvidenceTerminationState.TerminalReason);
 			
 			return;
+		}
+	}
+
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
+		!bLiveRuntimeEvidenceStartupStandingEntryAccepted &&
+		IsLiveRuntimeEvidenceProofSatisfied())
+	{
+		ArmStartupProofTerminalEnforcement();
+		bLiveRuntimeEvidenceStartupStandingEntryAccepted = true;
+		StartupProofStandingEntryAcceptedSubstep = LiveRuntimeEvidenceSubstepCounter;
+		UE_LOG(
+			LogPhysAnimBridge,
+			Verbose,
+			TEXT("[PhysAnim] Standing entry accepted proxy handoff arming pending state=%s"),
+			GetRuntimeStateName(RuntimeState));
+		UE_LOG(
+			LogPhysAnimBridge,
+			Verbose,
+			TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
+			GetRuntimeStateName(RuntimeState));
+	}
+
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
+		bLiveRuntimeEvidenceStartupStandingEntryAccepted &&
+		!bLiveRuntimeEvidenceStartupProxySupportHandoffArmed)
+	{
+		const FPhysAnimRunArtifactSnapshot& StandingArtifact = LiveRuntimeEvidenceTerminationState.LatestArtifact;
+		const bool bStandingSupportFresh =
+			StandingArtifact.SupportMode != EPhysAnimSupportMode::Airborne &&
+			StandingArtifact.ActiveSupportSideCount > 0 &&
+			StandingArtifact.SupportHullAreaCm2 > 0.0f;
+		const bool bStandingProxyOutsideHull =
+			(StandingArtifact.ProxyInsideHull.IsSet() && !StandingArtifact.ProxyInsideHull.GetValue()) ||
+			(StandingArtifact.ProxyOutsideHullDurationMs.IsSet() &&
+				StandingArtifact.ProxyOutsideHullDurationMs.GetValue() >= ResolveEffectiveStabilizationSettings().ProxyDriftLimitMs);
+		if (bStandingSupportFresh &&
+			LiveRuntimeEvidenceSubstepCounter > (StartupProofStandingEntryAcceptedSubstep + 1))
+		{
+			bLiveRuntimeEvidenceStartupProxySupportHandoffArmed = true;
+			UE_LOG(
+				LogPhysAnimBridge,
+				Verbose,
+				TEXT("[PhysAnim] Standing entry accepted proxy handoff armed state=%s"),
+				GetRuntimeStateName(RuntimeState));
+			UE_LOG(
+				LogPhysAnimBridge,
+				Verbose,
+				TEXT("[PhysAnim] Proxy handoff armed state=%s"),
+				GetRuntimeStateName(RuntimeState));
+		}
+		else if (bStandingSupportFresh && bStandingProxyOutsideHull)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Verbose,
+				TEXT("[PhysAnim] Proxy outside hull deferred during standing entry state=%s"),
+				GetRuntimeStateName(RuntimeState));
 		}
 	}
 

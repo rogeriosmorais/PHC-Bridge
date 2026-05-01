@@ -14,8 +14,7 @@ void UPhysAnimComponent::BeginPlay()
 	if (!BeginStartupTPoseCapture(Error))
 	{
 		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked before live T-pose capture: %s"), *Error);
-		SetComponentTickEnabled(false);
-		TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+		FailStop(FString::Printf(TEXT("Startup blocked before live T-pose capture: %s"), *Error));
 		UpdateBridgeStatusIndicator(5.0f);
 	}
 }
@@ -2760,9 +2759,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		if (!FinalizeStartupTPoseCaptureAndStartBridge(StartupError))
 		{
 			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked after live T-pose capture: %s"), *StartupError);
-			TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+			FailStop(FString::Printf(TEXT("Startup blocked after live T-pose capture: %s"), *StartupError));
 			UpdateBridgeStatusIndicator(5.0f);
-			SetComponentTickEnabled(false);
 		}
 		return;
 	}
@@ -3616,18 +3614,50 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 					Error,
 					TEXT("[PhysAnim] Startup entry bridge terminal enforced reason=ActivationSupportFailure state=%s"),
 					GetRuntimeStateName(RuntimeState));
-				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: Proof failed during activation wait: %d"),
-					static_cast<int32>(RuntimeState));
-				TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+				const FString ProofFailStopReason =
+					FString::Printf(TEXT("Proof failed during activation wait: %d"), static_cast<int32>(RuntimeState));
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure routed through fail-stop helper reason=%s state=%s"),
+					*ProofFailStopReason,
+					GetRuntimeStateName(RuntimeState));
+				FailStopWithTrace(ProofFailStopReason);
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure fail-stop side effects complete reason=%s"),
+					*ProofFailStopReason);
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
+					static_cast<int32>(StartupProofDeferredTerminalReason));
 				return;
 			}
 
 			if (LiveRuntimeEvidenceTerminationState.bTerminated &&
 				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 			{
-				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: Proof failed during activation wait: %d"),
-					static_cast<int32>(RuntimeState));
-				TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+				const FString ProofFailStopReason =
+					FString::Printf(TEXT("Proof failed during activation wait: %d"), static_cast<int32>(RuntimeState));
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure routed through fail-stop helper reason=%s state=%s"),
+					*ProofFailStopReason,
+					GetRuntimeStateName(RuntimeState));
+				FailStopWithTrace(ProofFailStopReason);
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure fail-stop side effects complete reason=%s"),
+					*ProofFailStopReason);
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
+					static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
 			}
 			return;
 		}
@@ -4801,6 +4831,38 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 	SetComponentTickEnabled(false);
 	ResetStabilizationRuntimeState();
 }
+
+#if !UE_BUILD_SHIPPING
+void UPhysAnimComponent::TriggerProofFailureFailStopRoutingForTesting()
+{
+	const FString ProofFailStopReason =
+		FString::Printf(TEXT("Proof failed during activation wait: %d"), static_cast<int32>(RuntimeState));
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("PhysAnimProof: TerminalArtifact"));
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("PhysAnimProof: AttemptResult"));
+	UE_LOG(
+		LogPhysAnimBridge,
+		Error,
+		TEXT("[PhysAnim] Startup entry bridge terminal enforced reason=ActivationSupportFailure state=%s"),
+		GetRuntimeStateName(RuntimeState));
+	UE_LOG(
+		LogPhysAnimBridge,
+		Error,
+		TEXT("[PhysAnim] Proof failure routed through fail-stop helper reason=%s state=%s"),
+		*ProofFailStopReason,
+		GetRuntimeStateName(RuntimeState));
+	FailStop(ProofFailStopReason);
+	UE_LOG(
+		LogPhysAnimBridge,
+		Error,
+		TEXT("[PhysAnim] Proof failure fail-stop side effects complete reason=%s"),
+		*ProofFailStopReason);
+	UE_LOG(
+		LogPhysAnimBridge,
+		Error,
+		TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
+		static_cast<int32>(StartupProofDeferredTerminalReason));
+}
+#endif
 
 
 void UPhysAnimComponent::SetStartupBringUpFrozenByBalanceEntry(bool bFrozen, const FString& InReason)

@@ -22,9 +22,7 @@ bool UPhysAnimComponent::StartBridge()
 	{
 		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked: %s"), *Error);
 		EmitBridgeTraceEvent(TEXT("startup_blocked"), TEXT("Runtime context resolution failed during startup."), Error);
-		SetComponentTickEnabled(false);
-		TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
-		StopBridgeTraceSession(TEXT("StartupBlocked"), TEXT("Bridge trace session stopped after startup block."));
+		FailStop(FString::Printf(TEXT("Startup blocked: %s"), *Error));
 		return false;
 	}
 
@@ -37,9 +35,7 @@ bool UPhysAnimComponent::StartBridge()
 	{
 		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked: %s"), *Error);
 		EmitBridgeTraceEvent(TEXT("startup_blocked"), TEXT("Startup validation failed before bridge activation."), Error);
-		SetComponentTickEnabled(false);
-		TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
-		StopBridgeTraceSession(TEXT("StartupBlocked"), TEXT("Bridge trace session stopped after startup block."));
+		FailStop(FString::Printf(TEXT("Startup blocked: %s"), *Error));
 		return false;
 	}
 

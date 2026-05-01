@@ -572,8 +572,6 @@ bool FPhysAnimStandingProofNegativeSupportTest::RunTest(const FString& Parameter
 {
 	const FString MapName = Parameters;
 
-	AddExpectedError(TEXT("PhysAnimProof: TerminalArtifact"), EAutomationExpectedErrorFlags::Contains, 0);
-	AddExpectedError(TEXT("PhysAnimProof: AttemptResult"), EAutomationExpectedErrorFlags::Contains, 0);
 	AddExpectedError(TEXT("ENTRY_DENIED reason=TERMINATED_IN_PROOF"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	// 1. Load the map
@@ -1104,6 +1102,335 @@ bool FVerifyProofEnabledStartupWaitingHandoffCommand::Update()
 	return true;
 }
 
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FArmProofFailureFailStopRoutingCommand, FAutomationTestBase*, Test);
+bool FArmProofFailureFailStopRoutingCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World)
+	{
+		World = GWorld;
+	}
+
+	if (!World)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		return true;
+	}
+
+	bool bFoundComponent = false;
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			bFoundComponent = true;
+			if (Comp->GetRuntimeState() != EPhysAnimRuntimeState::WaitingForPoseSearch)
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected WaitingForPoseSearch but got %s for %s"),
+					GetRuntimeStateName(Comp->GetRuntimeState()),
+					*It->GetName()));
+			}
+
+			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+			const EPhysAnimTerminalReason DeferredReason = Comp->GetStartupProofDeferredTerminalReason();
+			if (DeferredReason != EPhysAnimTerminalReason::ActivationSupportFailure &&
+				TerminationState.TerminalReason != EPhysAnimTerminalReason::ActivationSupportFailure)
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected deferred ActivationSupportFailure before arming but got deferred=%d terminal=%d for %s"),
+					static_cast<int32>(DeferredReason),
+					static_cast<int32>(TerminationState.TerminalReason),
+					*It->GetName()));
+			}
+
+			Comp->ArmStartupProofTerminalEnforcement();
+			if (!Comp->IsStartupProofTerminalEnforcementArmed())
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Startup proof handoff did not arm for %s"),
+					*It->GetName()));
+			}
+			else
+			{
+				UE_LOG(
+					LogTemp,
+					Warning,
+					TEXT("ActivationReview: TEST_PASSED fail-stop handoff armed deferredReason=%d terminalReason=%d for %s"),
+					static_cast<int32>(DeferredReason),
+					static_cast<int32>(TerminationState.TerminalReason),
+					*It->GetName());
+#if !UE_BUILD_SHIPPING
+				Comp->TriggerProofFailureFailStopRoutingForTesting();
+#endif
+
+				const EPhysAnimRuntimeState RoutedState = Comp->GetRuntimeState();
+				const FPhysAnimRuntimeTerminationState& RoutedTerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+				const EPhysAnimTerminalReason RoutedDeferredReason = Comp->GetStartupProofDeferredTerminalReason();
+				const USkeletalMeshComponent* const RoutedMesh = Comp->GetMeshComponent();
+				const bool bRoutedTraceSessionActive = Comp->HasActiveBridgeTraceSession();
+				const EPhysAnimTerminalReason RoutedPreservedReason =
+					RoutedDeferredReason != EPhysAnimTerminalReason::None ? RoutedDeferredReason : RoutedTerminationState.TerminalReason;
+
+				if (RoutedState != EPhysAnimRuntimeState::FailStopped)
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected FailStopped immediately after routed trigger but got %s for %s"),
+						GetRuntimeStateName(RoutedState),
+						*It->GetName()));
+				}
+
+				if (Comp->DoesBridgeOwnPhysics())
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Bridge still owned physics immediately after routed trigger for %s"),
+						*It->GetName()));
+				}
+
+				if (Comp->IsComponentTickEnabled())
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Component tick still enabled immediately after routed trigger for %s"),
+						*It->GetName()));
+				}
+
+				if (RoutedMesh && RoutedMesh->IsSimulatingPhysics())
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Mesh still simulating physics immediately after routed trigger for %s"),
+						*It->GetName()));
+				}
+
+				if (RoutedPreservedReason != EPhysAnimTerminalReason::ActivationSupportFailure)
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected preserved terminal reason ActivationSupportFailure but got deferred=%d terminal=%d for %s"),
+						static_cast<int32>(RoutedDeferredReason),
+						static_cast<int32>(RoutedTerminationState.TerminalReason),
+						*It->GetName()));
+				}
+
+				if (bRoutedTraceSessionActive)
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Bridge trace session remained active immediately after routed trigger for %s"),
+						*It->GetName()));
+				}
+
+				UE_LOG(
+					LogTemp,
+					Warning,
+					TEXT("ActivationReview: TEST_PASSED proof fail-stop routed runtime=%s deferredReason=%d terminalReason=%d traceActive=%d ownsPhysics=%d tickEnabled=%d meshSim=%d"),
+					GetRuntimeStateName(RoutedState),
+					static_cast<int32>(RoutedDeferredReason),
+					static_cast<int32>(RoutedTerminationState.TerminalReason),
+					bRoutedTraceSessionActive ? 1 : 0,
+					Comp->DoesBridgeOwnPhysics() ? 1 : 0,
+					Comp->IsComponentTickEnabled() ? 1 : 0,
+					RoutedMesh && RoutedMesh->IsSimulatingPhysics() ? 1 : 0);
+			}
+			break;
+		}
+	}
+
+	if (!bFoundComponent)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+	}
+
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FSeedProofFailureDeferredReasonCommand, FAutomationTestBase*, Test);
+bool FSeedProofFailureDeferredReasonCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World)
+	{
+		World = GWorld;
+	}
+
+	if (!World)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		return true;
+	}
+
+	bool bFoundComponent = false;
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			bFoundComponent = true;
+			Comp->SetStartupProofDeferredTerminalReasonForTesting(EPhysAnimTerminalReason::ActivationSupportFailure);
+			if (Comp->GetStartupProofDeferredTerminalReason() != EPhysAnimTerminalReason::ActivationSupportFailure)
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred terminal reason did not seed for %s"),
+					*It->GetName()));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("ActivationReview: TEST_PASSED deferred terminal reason seeded for %s"), *It->GetName());
+			}
+			break;
+		}
+	}
+
+	if (!bFoundComponent)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+	}
+
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyProofFailureFailStopRoutingCommand, FAutomationTestBase*, Test);
+bool FVerifyProofFailureFailStopRoutingCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World)
+	{
+		World = GWorld;
+	}
+
+	if (!World)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		return true;
+	}
+
+	bool bFoundComponent = false;
+	UPhysAnimComponent* SelectedComponent = nullptr;
+	ACharacter* SelectedCharacter = nullptr;
+	UPhysAnimComponent* FirstComponent = nullptr;
+	ACharacter* FirstCharacter = nullptr;
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			bFoundComponent = true;
+			if (!FirstComponent)
+			{
+				FirstComponent = Comp;
+				FirstCharacter = *It;
+			}
+
+			if (Comp->GetRuntimeState() == EPhysAnimRuntimeState::FailStopped)
+			{
+				SelectedComponent = Comp;
+				SelectedCharacter = *It;
+				break;
+			}
+		}
+	}
+
+	if (!bFoundComponent)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+		return true;
+	}
+
+	if (!SelectedComponent)
+	{
+		SelectedComponent = FirstComponent;
+		SelectedCharacter = FirstCharacter;
+	}
+
+	const EPhysAnimRuntimeState ActualState = SelectedComponent->GetRuntimeState();
+	const FPhysAnimRuntimeTerminationState& TerminationState = SelectedComponent->GetLiveRuntimeEvidenceTerminationState();
+	const EPhysAnimTerminalReason DeferredReason = SelectedComponent->GetStartupProofDeferredTerminalReason();
+	const USkeletalMeshComponent* const Mesh = SelectedComponent->GetMeshComponent();
+	const bool bTraceSessionActive = SelectedComponent->HasActiveBridgeTraceSession();
+	const EPhysAnimTerminalReason PreservedReason =
+		DeferredReason != EPhysAnimTerminalReason::None ? DeferredReason : TerminationState.TerminalReason;
+
+	if (ActualState != EPhysAnimRuntimeState::FailStopped)
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected FailStopped but got %s for %s"),
+			GetRuntimeStateName(ActualState),
+			*SelectedCharacter->GetName()));
+	}
+
+	if (SelectedComponent->DoesBridgeOwnPhysics())
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Bridge still owned physics after routed fail-stop for %s"),
+			*SelectedCharacter->GetName()));
+	}
+
+	if (SelectedComponent->IsComponentTickEnabled())
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Component tick still enabled after routed fail-stop for %s"),
+			*SelectedCharacter->GetName()));
+	}
+
+	if (!Mesh)
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. No mesh component was available after routed fail-stop for %s"),
+			*SelectedCharacter->GetName()));
+	}
+	else if (Mesh->IsSimulatingPhysics())
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Mesh still simulating physics after routed fail-stop for %s"),
+			*SelectedCharacter->GetName()));
+	}
+
+	if (PreservedReason != EPhysAnimTerminalReason::ActivationSupportFailure)
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected preserved terminal reason ActivationSupportFailure but got deferred=%d terminal=%d for %s"),
+			static_cast<int32>(DeferredReason),
+			static_cast<int32>(TerminationState.TerminalReason),
+			*SelectedCharacter->GetName()));
+	}
+
+	if (bTraceSessionActive)
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Bridge trace session remained active after fail-stop for %s"),
+			*SelectedCharacter->GetName()));
+	}
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("ActivationReview: TEST_PASSED proof fail-stop routed runtime=%s deferredReason=%d terminalReason=%d traceActive=%d ownsPhysics=%d tickEnabled=%d meshSim=%d"),
+		GetRuntimeStateName(ActualState),
+		static_cast<int32>(DeferredReason),
+		static_cast<int32>(TerminationState.TerminalReason),
+		bTraceSessionActive ? 1 : 0,
+		SelectedComponent->DoesBridgeOwnPhysics() ? 1 : 0,
+		SelectedComponent->IsComponentTickEnabled() ? 1 : 0,
+		Mesh && Mesh->IsSimulatingPhysics() ? 1 : 0);
+	return true;
+}
+
 DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyProofCompleteStandingEntryProxyTimingCommand, FAutomationTestBase*, Test);
 bool FVerifyProofCompleteStandingEntryProxyTimingCommand::Update()
 {
@@ -1465,8 +1792,6 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 	{
 		AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
-		AddExpectedError(TEXT("PhysAnimProof: TerminalArtifact"), EAutomationExpectedErrorFlags::Contains, 0);
-		AddExpectedError(TEXT("PhysAnimProof: AttemptResult"), EAutomationExpectedErrorFlags::Contains, 0);
 
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f)); // Wait for 3s proof + startup
@@ -1477,8 +1802,6 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 	{
 		AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
-		AddExpectedError(TEXT("PhysAnimProof: TerminalArtifact"), EAutomationExpectedErrorFlags::Contains, 0);
-		AddExpectedError(TEXT("PhysAnimProof: AttemptResult"), EAutomationExpectedErrorFlags::Contains, 0);
 
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, true));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
@@ -1700,6 +2023,120 @@ bool FVerifyProxyHandoffResetCommand::Update()
 	return true;
 }
 
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyProofSatisfiedProxyHandoffSourceOfTruthProofCommand, FAutomationTestBase*, Test);
+bool FVerifyProofSatisfiedProxyHandoffSourceOfTruthProofCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		return true;
+	}
+
+	bool bFoundComponent = false;
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			bFoundComponent = true;
+			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+			const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
+			const bool bProofComplete = Comp->IsLiveRuntimeEvidenceProofComplete();
+			const bool bProofSatisfied = Comp->IsLiveRuntimeEvidenceProofSatisfied();
+			const bool bFreshEvidence = Comp->IsStartupProofEvidenceFresh();
+			const bool bStandingAccepted = Comp->IsStartupProofStandingEntryAccepted();
+			const bool bProxyArmed = Comp->IsStartupProofProxySupportHandoffArmed();
+			const bool bDeferredProxyRecorded = Comp->HasDeferredStartupProxyTerminalReason();
+			const EPhysAnimTerminalReason DeferredProxyReason = Comp->GetDeferredStartupProxyTerminalReason();
+
+			if (Comp->GetRuntimeState() != EPhysAnimRuntimeState::BalanceActive_Standing)
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected BalanceActive_Standing but got %s for %s"),
+					GetRuntimeStateName(Comp->GetRuntimeState()),
+					*It->GetName()));
+			}
+
+			if (!bProofComplete || !bProofSatisfied || !bFreshEvidence || !bStandingAccepted || !bProxyArmed)
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Proof source-of-truth state was not complete for %s complete=%d satisfied=%d fresh=%d standingAccepted=%d proxyArmed=%d"),
+					*It->GetName(),
+					bProofComplete ? 1 : 0,
+					bProofSatisfied ? 1 : 0,
+					bFreshEvidence ? 1 : 0,
+					bStandingAccepted ? 1 : 0,
+					bProxyArmed ? 1 : 0));
+			}
+
+			if (bDeferredProxyRecorded &&
+				(DeferredProxyReason != EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion ||
+					Comp->GetDeferredStartupProxyTerminalAttemptUuid().IsEmpty() ||
+					Comp->GetDeferredStartupProxyTerminalSubstepTimestamp() < 0))
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred proxy terminal was not truthfully recorded for %s deferred=%d reason=%d attemptEmpty=%d substep=%lld"),
+					*It->GetName(),
+					bDeferredProxyRecorded ? 1 : 0,
+					static_cast<int32>(DeferredProxyReason),
+					Comp->GetDeferredStartupProxyTerminalAttemptUuid().IsEmpty() ? 1 : 0,
+					static_cast<long long>(Comp->GetDeferredStartupProxyTerminalSubstepTimestamp())));
+			}
+
+			if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None ||
+				Latest.TerminalReason != EPhysAnimTerminalReason::None)
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected neutral terminal reasons but got state=%d latest=%d for %s"),
+					static_cast<int32>(TerminationState.TerminalReason),
+					static_cast<int32>(Latest.TerminalReason),
+					*It->GetName()));
+			}
+
+			if (!Comp->CanEnterBalanceActiveStanding())
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Proof satisfied standing entry was not allowed for %s"),
+					*It->GetName()));
+			}
+
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("ActivationReview: TEST_PASSED proof source-of-truth runtime=%s proofComplete=%d proofSatisfied=%d freshEvidence=%d standingAccepted=%d proxyArmed=%d deferredProxyRecorded=%d deferredProxyReason=%d terminalReason=%d latestTerminalReason=%d finalActivationPath=%s"),
+				GetRuntimeStateName(Comp->GetRuntimeState()),
+				bProofComplete ? 1 : 0,
+				bProofSatisfied ? 1 : 0,
+				bFreshEvidence ? 1 : 0,
+				bStandingAccepted ? 1 : 0,
+				bProxyArmed ? 1 : 0,
+				bDeferredProxyRecorded ? 1 : 0,
+				static_cast<int32>(DeferredProxyReason),
+				static_cast<int32>(TerminationState.TerminalReason),
+				static_cast<int32>(Latest.TerminalReason),
+				GetRuntimeStateName(Comp->GetRuntimeState()));
+			break;
+		}
+	}
+
+	if (!bFoundComponent)
+	{
+		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+	}
+
+	return true;
+}
+
 IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthTest, "PhysAnim.ActivationReview.ProofSatisfiedProxyHandoffSourceOfTruth", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 void FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
@@ -1718,6 +2155,61 @@ bool FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthTest::RunTe
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing, this));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyProofCompleteStandingEntryProxyTimingCommand(this));
 	ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthProofTest, "PhysAnim.ActivationReview.ProofSatisfiedProxyHandoffSourceOfTruthProof", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthProofTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ProofSatisfiedProxyHandoffSourceOfTruthProof"));
+	OutTestCommands.Add(TEXT("ProofSatisfiedProxyHandoffSourceOfTruthProof"));
+}
+
+bool FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthProofTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	AddExpectedMessagePlain(TEXT("PhysAnimProof: TerminalArtifact"), ELogVerbosity::All, EAutomationExpectedMessageFlags::Contains, 0);
+	AddExpectedMessagePlain(TEXT("PhysAnimProof: AttemptResult"), ELogVerbosity::All, EAutomationExpectedMessageFlags::Contains, 0);
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(0.25f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyProofSatisfiedProxyHandoffSourceOfTruthProofCommand(this));
+	ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofFailureFailStopRoutingTest, "PhysAnim.ActivationReview.ProofFailureFailStopRouting", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivationReviewProofFailureFailStopRoutingTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("ProofFailureFailStopRouting"));
+	OutTestCommands.Add(TEXT("ProofFailureFailStopRouting"));
+}
+
+bool FPhysAnimActivationReviewProofFailureFailStopRoutingTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	AddExpectedErrorPlain(TEXT("[PhysAnim] Startup entry bridge terminal enforced reason=ActivationSupportFailure state="), EAutomationExpectedErrorFlags::Contains, 0);
+	AddExpectedErrorPlain(TEXT("[PhysAnim] Proof failure routed through fail-stop helper reason="), EAutomationExpectedErrorFlags::Contains, 0);
+	AddExpectedErrorPlain(TEXT("[PhysAnim] Fail-stop: Proof failed during activation wait"), EAutomationExpectedErrorFlags::Contains, 0);
+	AddExpectedErrorPlain(TEXT("[PhysAnim] Proof failure fail-stop side effects complete reason="), EAutomationExpectedErrorFlags::Contains, 0);
+	AddExpectedErrorPlain(TEXT("[PhysAnim] Proof failure terminal reason preserved reason="), EAutomationExpectedErrorFlags::Contains, 0);
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, false, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(0.25f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableNegativeSupportProofCommand());
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(0.25f));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringFailureCommand(this));
+	ADD_LATENT_AUTOMATION_COMMAND(FSeedProofFailureDeferredReasonCommand(this));
+	ADD_LATENT_AUTOMATION_COMMAND(FArmProofFailureFailStopRoutingCommand(this));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(0.25f));
 	return true;
 }
 

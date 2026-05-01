@@ -1223,6 +1223,7 @@ public:
 	const FPhysAnimRuntimeTerminationState& GetLiveRuntimeEvidenceTerminationState() const { return LiveRuntimeEvidenceTerminationState; }
 	bool IsLiveRuntimeEvidenceProofComplete() const { return bLiveRuntimeEvidenceProofComplete; }
 	bool IsLiveRuntimeEvidenceProofSatisfied() const;
+	bool HasActiveBridgeTraceSession() const { return BridgeTraceWriter.IsValid(); }
 	void NoteStartupProofWaitingForPoseSearchObserved();
 	void ArmStartupProofTerminalEnforcement();
 	void SetStartupProofShouldComplete(bool bShouldComplete) { bLiveRuntimeEvidenceProofShouldComplete = bShouldComplete; }
@@ -1236,6 +1237,10 @@ public:
 	const FString& GetDeferredStartupProxyTerminalAttemptUuid() const { return LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalAttemptUuid; }
 	int64 GetDeferredStartupProxyTerminalSubstepTimestamp() const { return LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalSubstepTimestamp; }
 	EPhysAnimTerminalReason GetStartupProofDeferredTerminalReason() const { return StartupProofDeferredTerminalReason; }
+#if !UE_BUILD_SHIPPING
+	void SetStartupProofDeferredTerminalReasonForTesting(EPhysAnimTerminalReason Reason) { StartupProofDeferredTerminalReason = Reason; }
+	void TriggerProofFailureFailStopRoutingForTesting();
+#endif
 	const FPhysAnimActivatedStandingStabilityMetrics& GetActivatedStandingStabilityMetrics() const { return ActivatedStandingStabilityMetrics; }
 	void UpdateActivatedStandingStabilityMetrics(float DeltaTimeSeconds);
 	bool ApplyActivatedStandingPerturbation(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude);
