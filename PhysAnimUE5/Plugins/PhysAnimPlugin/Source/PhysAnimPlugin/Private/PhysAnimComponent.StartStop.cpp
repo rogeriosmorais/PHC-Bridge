@@ -53,7 +53,16 @@ bool UPhysAnimComponent::StartBridge()
 
 	const bool bRequestedLiveRuntimeEvidenceProof = bEnableLiveRuntimeEvidenceProof;
 	const bool bRequestedForceSupportFailure = bForceSupportFailure;
+	const bool bRequestedProofShouldComplete = bLiveRuntimeEvidenceProofShouldComplete;
 	ResetLiveRuntimeEvidenceProof();
+	bLiveRuntimeEvidenceStartupEvidenceFresh = false;
+	bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved = false;
+	bLiveRuntimeEvidenceStartupStandingEntryAccepted = false;
+	StartupProofStandingEntryAcceptedSubstep = -1;
+	bLiveRuntimeEvidenceStartupVerificationHandoffArmed = false;
+	bLiveRuntimeEvidenceStartupProxySupportHandoffArmed = false;
+	bLiveRuntimeEvidenceProofShouldComplete = bRequestedProofShouldComplete;
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Proxy handoff reset state=%s"), GetRuntimeStateName(RuntimeState));
 	bEnableLiveRuntimeEvidenceProof = bRequestedLiveRuntimeEvidenceProof;
 	bForceSupportFailure = bRequestedForceSupportFailure;
 
@@ -79,6 +88,18 @@ void UPhysAnimComponent::StopBridge()
 	StopBridgeTraceSession(TEXT("StopBridge"), TEXT("Bridge stopped."));
 	UpdateBridgeStatusIndicator(5.0f);
 	SetComponentTickEnabled(false);
+	bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved = false;
+	bLiveRuntimeEvidenceStartupEvidenceFresh = false;
+	bLiveRuntimeEvidenceStartupStandingEntryAccepted = false;
+	StartupProofStandingEntryAcceptedSubstep = -1;
+	bLiveRuntimeEvidenceStartupVerificationHandoffArmed = false;
+	StartupProofVerificationHandoffArmedSubstep = -1;
+	bLiveRuntimeEvidenceStartupProxySupportHandoffArmed = false;
+	LiveRuntimeEvidenceTerminationState.bHasDeferredStartupProxyTerminalReason = false;
+	LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalReason = EPhysAnimTerminalReason::None;
+	StartupProofDeferredTerminalReason = EPhysAnimTerminalReason::None;
+	bLiveRuntimeEvidenceProofShouldComplete = true;
+	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Proxy handoff reset state=%s"), GetRuntimeStateName(RuntimeState));
 	ConsecutiveInvalidPoseSearchFrames = 0;
 	LastValidPoseSearchResult = FPoseSearchBlueprintResult();
 	ResetStabilizationRuntimeState();

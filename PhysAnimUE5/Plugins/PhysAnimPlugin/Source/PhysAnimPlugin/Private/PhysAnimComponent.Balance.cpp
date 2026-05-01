@@ -1020,7 +1020,42 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 		return;
 	}
 
+	const double CurrentWorldTimeSeconds = World->GetTimeSeconds();
+	const FPhysAnimStabilizationSettings RecoverySettings = ResolveEffectiveStabilizationSettings();
+	const double SettledRampStartTimeSeconds =
+		CurrentWorldTimeSeconds - static_cast<double>(FMath::Max(RecoverySettings.StartupRampSeconds, 0.0f)) - 0.01;
+	HighestUnlockedBringUpGroupIndex = GetBringUpGroupCount() - 1;
+	BringUpGroupStableAccumulatedSeconds = 0.0f;
+	for (int32 GroupIndex = 0; GroupIndex < GetBringUpGroupCount(); ++GroupIndex)
+	{
+		if (BringUpGroupActivationTimeSeconds.IsValidIndex(GroupIndex))
+		{
+			BringUpGroupActivationTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
+		}
+		if (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex))
+		{
+			BringUpGroupControlRampStartTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
+		}
+		if (BringUpGroupAlphaActiveLogged.IsValidIndex(GroupIndex))
+		{
+			BringUpGroupAlphaActiveLogged[GroupIndex] = 1;
+		}
+	}
+
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
+	ArmStartupProofTerminalEnforcement();
+	bLiveRuntimeEvidenceStartupStandingEntryAccepted = true;
+	StartupProofStandingEntryAcceptedSubstep = LiveRuntimeEvidenceSubstepCounter;
+	UE_LOG(
+		LogPhysAnimBridge,
+		Verbose,
+		TEXT("[PhysAnim] Standing entry accepted proxy handoff arming pending state=%s"),
+		GetRuntimeStateName(RuntimeState));
+	UE_LOG(
+		LogPhysAnimBridge,
+		Verbose,
+		TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
+		GetRuntimeStateName(RuntimeState));
 	int32 RecoveryTotalSimCount = 0;
 	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
@@ -1051,27 +1086,6 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 
 	ApplyStartupMovementLock();
 	ResetBridgeLocomotionAuthorityState();
-	const double CurrentWorldTimeSeconds = World->GetTimeSeconds();
-	const FPhysAnimStabilizationSettings RecoverySettings = ResolveEffectiveStabilizationSettings();
-	const double SettledRampStartTimeSeconds =
-		CurrentWorldTimeSeconds - static_cast<double>(FMath::Max(RecoverySettings.StartupRampSeconds, 0.0f)) - 0.01;
-	HighestUnlockedBringUpGroupIndex = GetBringUpGroupCount() - 1;
-	BringUpGroupStableAccumulatedSeconds = 0.0f;
-	for (int32 GroupIndex = 0; GroupIndex < GetBringUpGroupCount(); ++GroupIndex)
-	{
-		if (BringUpGroupActivationTimeSeconds.IsValidIndex(GroupIndex))
-		{
-			BringUpGroupActivationTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
-		}
-		if (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex))
-		{
-			BringUpGroupControlRampStartTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
-		}
-		if (BringUpGroupAlphaActiveLogged.IsValidIndex(GroupIndex))
-		{
-			BringUpGroupAlphaActiveLogged[GroupIndex] = 1;
-		}
-	}
 	BridgePoseSearchLatchedWalkResult = FPoseSearchBlueprintResult();
 	BridgePoseSearchLatchedQueryDirection = FVector::ZeroVector;
 	BridgePoseSearchLatchedQuerySpeedCmPerSecond = 0.0f;

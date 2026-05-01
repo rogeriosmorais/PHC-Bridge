@@ -2652,6 +2652,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	TickLiveRuntimeEvidenceProof(DeltaTime);
+	if (bEnableLiveRuntimeEvidenceProof && !bLiveRuntimeEvidenceProofComplete)
+	{
+		PolicyInfluenceRampStartTimeSeconds = -1.0;
+	}
 
 	const EPhysAnimRuntimeState RuntimeStateAtTickStart = RuntimeState;
 	const uint32 RootOnTickAtTickStart = BalanceEntryRootOnFrameCount;
@@ -3345,6 +3349,18 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			if (LiveRuntimeEvidenceTerminationState.bTerminated && 
 				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 			{
+				if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch &&
+					LiveRuntimeEvidenceTerminationState.TerminalReason == EPhysAnimTerminalReason::ActivationSupportFailure)
+				{
+					UE_LOG(
+						LogPhysAnimBridge,
+						Verbose,
+						TEXT("[PhysAnim] Startup entry bridge deferred terminal reason=ActivationSupportFailure state=%s"),
+						GetRuntimeStateName(RuntimeState));
+					FinalizeTraceFrame();
+					return;
+				}
+
 				FailStopWithTrace(FString::Printf(TEXT("Proof failed during activation wait: %d"), (int32)LiveRuntimeEvidenceTerminationState.TerminalReason));
 				return;
 			}
@@ -3394,6 +3410,18 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			if (LiveRuntimeEvidenceTerminationState.bTerminated && 
 				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 			{
+				if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch &&
+					LiveRuntimeEvidenceTerminationState.TerminalReason == EPhysAnimTerminalReason::ActivationSupportFailure)
+				{
+					UE_LOG(
+						LogPhysAnimBridge,
+						Verbose,
+						TEXT("[PhysAnim] Startup proof deferred terminal reason=ActivationSupportFailure phase=%s"),
+						GetRuntimeStateName(RuntimeState));
+					FinalizeTraceFrame();
+					return;
+				}
+
 				FailStopWithTrace(FString::Printf(TEXT("Proof failed during deferred activation wait: %d"), (int32)LiveRuntimeEvidenceTerminationState.TerminalReason));
 				return;
 			}
@@ -3570,6 +3598,30 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		if (!IsLiveRuntimeEvidenceProofSatisfied())
 		{
+			if (StartupProofDeferredTerminalReason == EPhysAnimTerminalReason::ActivationSupportFailure)
+			{
+				if (!bLiveRuntimeEvidenceStartupVerificationHandoffArmed)
+				{
+					return;
+				}
+
+				if (StartupProofVerificationHandoffArmedSubstep >= 0 &&
+					LiveRuntimeEvidenceSubstepCounter <= StartupProofVerificationHandoffArmedSubstep)
+				{
+					return;
+				}
+
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Startup entry bridge terminal enforced reason=ActivationSupportFailure state=%s"),
+					GetRuntimeStateName(RuntimeState));
+				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: Proof failed during activation wait: %d"),
+					static_cast<int32>(RuntimeState));
+				TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+				return;
+			}
+
 			if (LiveRuntimeEvidenceTerminationState.bTerminated &&
 				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 			{
@@ -4704,6 +4756,10 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	bPolicyTargetsAppliedLastFrame = false;
 	bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
 	LastAppliedStabilizationSettings = {};
+	bPendingBalanceModeStartRequest = false;
+	bPendingBalanceModeStartAttemptIssued = false;
+	PendingBalanceModeStartReason.Reset();
+	PendingBalanceModeRequestTimeSeconds = -1.0;
 }
 
 

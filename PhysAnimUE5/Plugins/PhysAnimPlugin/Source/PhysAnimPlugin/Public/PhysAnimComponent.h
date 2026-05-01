@@ -1223,6 +1223,17 @@ public:
 	const FPhysAnimRuntimeTerminationState& GetLiveRuntimeEvidenceTerminationState() const { return LiveRuntimeEvidenceTerminationState; }
 	bool IsLiveRuntimeEvidenceProofComplete() const { return bLiveRuntimeEvidenceProofComplete; }
 	bool IsLiveRuntimeEvidenceProofSatisfied() const;
+	void NoteStartupProofWaitingForPoseSearchObserved();
+	void ArmStartupProofTerminalEnforcement();
+	void SetStartupProofShouldComplete(bool bShouldComplete) { bLiveRuntimeEvidenceProofShouldComplete = bShouldComplete; }
+	bool IsStartupProofWaitingForPoseSearchObserved() const { return bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved; }
+	bool IsStartupProofEvidenceFresh() const { return bLiveRuntimeEvidenceStartupEvidenceFresh; }
+	bool IsStartupProofStandingEntryAccepted() const { return bLiveRuntimeEvidenceStartupStandingEntryAccepted; }
+	bool IsStartupProofTerminalEnforcementArmed() const { return bLiveRuntimeEvidenceStartupVerificationHandoffArmed; }
+	bool IsStartupProofProxySupportHandoffArmed() const { return bLiveRuntimeEvidenceStartupProxySupportHandoffArmed; }
+	bool HasDeferredStartupProxyTerminalReason() const { return LiveRuntimeEvidenceTerminationState.bHasDeferredStartupProxyTerminalReason; }
+	EPhysAnimTerminalReason GetDeferredStartupProxyTerminalReason() const { return LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalReason; }
+	EPhysAnimTerminalReason GetStartupProofDeferredTerminalReason() const { return StartupProofDeferredTerminalReason; }
 	const FPhysAnimActivatedStandingStabilityMetrics& GetActivatedStandingStabilityMetrics() const { return ActivatedStandingStabilityMetrics; }
 	void UpdateActivatedStandingStabilityMetrics(float DeltaTimeSeconds);
 	bool ApplyActivatedStandingPerturbation(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude);
@@ -1633,8 +1644,17 @@ private:
 
 	bool bLiveRuntimeEvidenceProofActive = false;
 	bool bLiveRuntimeEvidenceProofComplete = false;
+	bool bLiveRuntimeEvidenceProofShouldComplete = true;
+	bool bLiveRuntimeEvidenceStartupEvidenceFresh = false;
+	bool bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved = false;
+	bool bLiveRuntimeEvidenceStartupStandingEntryAccepted = false;
+	int64 StartupProofStandingEntryAcceptedSubstep = -1;
+	bool bLiveRuntimeEvidenceStartupVerificationHandoffArmed = false;
+	int64 StartupProofVerificationHandoffArmedSubstep = -1;
+	bool bLiveRuntimeEvidenceStartupProxySupportHandoffArmed = false;
 	bool bForceSupportFailure = false;
 	bool bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
+	EPhysAnimTerminalReason StartupProofDeferredTerminalReason = EPhysAnimTerminalReason::None;
 
 	FString LiveRuntimeEvidenceAttemptUuid;
 	float LiveRuntimeEvidenceStandingSeconds = 0.0f;
