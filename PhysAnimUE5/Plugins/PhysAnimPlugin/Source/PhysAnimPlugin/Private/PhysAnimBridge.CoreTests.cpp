@@ -96,6 +96,55 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimActionConditioningContractTest,
+		"PhysAnim.Bridge.ActionConditioningContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimActionConditioningContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<float> RawActions;
+		RawActions.Init(2.0f, NumActionFloats);
+
+		TArray<float> PreviousActions;
+		PreviousActions.Init(0.0f, NumActionFloats);
+
+		FPhysAnimActionConditioningSettings Settings;
+		Settings.ActionScale = 1.0f;
+		Settings.ActionClampAbs = 0.25f;
+		Settings.ActionSmoothingAlpha = 0.5f;
+
+		TArray<float> ConditionedActions;
+		FPhysAnimActionDiagnostics Diagnostics;
+		FString Error;
+		TestTrue(
+			TEXT("Conditioning accepts the PHC action width"),
+			ConditionModelActions(RawActions, &PreviousActions, Settings, ConditionedActions, Diagnostics, Error));
+		TestEqual(TEXT("Conditioned action width"), ConditionedActions.Num(), NumActionFloats);
+		TestEqual(TEXT("All oversized action floats were clamped"), Diagnostics.NumClampedActionFloats, NumActionFloats);
+		TestTrue(TEXT("Raw mean abs records pre-clamp policy output"), FMath::IsNearlyEqual(Diagnostics.RawMeanAbs, 2.0f));
+		TestTrue(TEXT("Conditioned mean abs records post-smoothing target"), FMath::IsNearlyEqual(Diagnostics.ConditionedMeanAbs, 0.125f));
+
+		for (const float Action : ConditionedActions)
+		{
+			TestTrue(TEXT("Conditioned action respects clamp and smoothing"), FMath::IsNearlyEqual(Action, 0.125f));
+		}
+
+		Settings.bForceZeroActions = true;
+		ConditionedActions.Reset();
+		Diagnostics = {};
+		TestTrue(
+			TEXT("Force-zero action policy still accepts valid action width"),
+			ConditionModelActions(RawActions, nullptr, Settings, ConditionedActions, Diagnostics, Error));
+		TestTrue(TEXT("Force-zero removes policy influence"), FMath::IsNearlyZero(Diagnostics.ConditionedMeanAbs));
+
+		RawActions.RemoveAt(RawActions.Num() - 1);
+		TestFalse(
+			TEXT("Conditioning rejects malformed action width"),
+			ConditionModelActions(RawActions, nullptr, Settings, ConditionedActions, Diagnostics, Error));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimActionToBoneMappingContractTest,
 		"PhysAnim.Bridge.ActionToBoneMappingContract",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -111,6 +160,19 @@ namespace
 		TMap<FName, FQuat> ControlRotations;
 		FString Error;
 		TestTrue(TEXT("Action conversion succeed"), ConvertModelActionsToControlRotations(Actions, ControlRotations, Error));
+		TestEqual(TEXT("Conversion writes exactly the controlled bone count"), ControlRotations.Num(), NumControlledBones);
+		for (const FName BoneName : GetControlledBoneNames())
+		{
+			TestTrue(
+				FString::Printf(TEXT("Controlled bone target exists: %s"), *BoneName.ToString()),
+				ControlRotations.Contains(BoneName));
+			if (const FQuat* const TargetRotation = ControlRotations.Find(BoneName))
+			{
+				TestTrue(
+					FString::Printf(TEXT("Controlled bone target is normalized: %s"), *BoneName.ToString()),
+					TargetRotation->IsNormalized());
+			}
+		}
 		
 		TestTrue(TEXT("thigh_l target exists"), ControlRotations.Contains(TEXT("thigh_l")));
 		if (ControlRotations.Contains(TEXT("thigh_l")))
@@ -128,6 +190,60 @@ namespace
 		TestTrue(TEXT("Collapse conversion succeed"), ConvertModelActionsToControlRotations(Actions, ControlRotations, Error));
 		TestTrue(TEXT("hand_l target exists"), ControlRotations.Contains(TEXT("hand_l")));
 		TestFalse(TEXT("No standalone wrist target"), ControlRotations.Contains(TEXT("wrist_l")));
+
+		TArray<float> RawActions;
+		RawActions.Init(4.0f, NumActionFloats);
+		FPhysAnimActionConditioningSettings Settings;
+		Settings.ActionScale = 1.0f;
+		Settings.ActionClampAbs = 0.2f;
+		Settings.ActionSmoothingAlpha = 1.0f;
+
+		TArray<float> ConditionedActions;
+		FPhysAnimActionDiagnostics Diagnostics;
+		TestTrue(
+			TEXT("Conditioning prepares bounded policy actions"),
+			ConditionModelActions(RawActions, nullptr, Settings, ConditionedActions, Diagnostics, Error));
+		TestEqual(TEXT("All raw actions are clamped before conversion"), Diagnostics.NumClampedActionFloats, NumActionFloats);
+
+		ControlRotations.Reset();
+		TestTrue(
+			TEXT("Bounded conditioned actions convert to control rotations"),
+			ConvertModelActionsToControlRotations(ConditionedActions, ControlRotations, Error));
+		for (const TPair<FName, FQuat>& Pair : ControlRotations)
+		{
+			TestTrue(
+				FString::Printf(TEXT("Bounded conditioned target is normalized: %s"), *Pair.Key.ToString()),
+				Pair.Value.IsNormalized());
+			TestTrue(
+				FString::Printf(TEXT("Bounded conditioned target stays below full-turn distance: %s"), *Pair.Key.ToString()),
+				FMath::RadiansToDegrees(Pair.Value.AngularDistance(FQuat::Identity)) <= 180.0 + KINDA_SMALL_NUMBER);
+		}
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimControlTargetStepLimitContractTest,
+		"PhysAnim.Bridge.ControlTargetStepLimitContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimControlTargetStepLimitContractTest::RunTest(const FString& Parameters)
+	{
+		const FQuat PreviousRotation = FQuat::Identity;
+		const FQuat LargeTargetRotation(FVector::UpVector, FMath::DegreesToRadians(90.0));
+		const FQuat LimitedRotation = LimitControlRotationStep(PreviousRotation, LargeTargetRotation, 10.0f);
+		const double LimitedStepDegrees = FMath::RadiansToDegrees(PreviousRotation.AngularDistance(LimitedRotation));
+
+		TestTrue(TEXT("Limited target remains normalized"), LimitedRotation.IsNormalized());
+		TestTrue(TEXT("LimitControlRotationStep respects max angular step"), LimitedStepDegrees <= 10.0 + KINDA_SMALL_NUMBER);
+		TestFalse(TEXT("Limited target still advances toward policy target"), LimitedRotation.Equals(PreviousRotation, KINDA_SMALL_NUMBER));
+
+		const FQuat SmallTargetRotation(FVector::UpVector, FMath::DegreesToRadians(5.0));
+		TestTrue(
+			TEXT("Targets already inside the limit are preserved"),
+			LimitControlRotationStep(PreviousRotation, SmallTargetRotation, 10.0f).Equals(SmallTargetRotation, KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Non-positive limit disables step limiting"),
+			LimitControlRotationStep(PreviousRotation, LargeTargetRotation, 0.0f).Equals(LargeTargetRotation, KINDA_SMALL_NUMBER));
 		return true;
 	}
 
