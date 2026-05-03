@@ -91,9 +91,8 @@ bool UPhysAnimComponent::ValidateModelDescriptorContract(FString& OutError)
 	}
 
 	const TConstArrayView<UE::NNE::FTensorDesc> OutputDescs = ModelInstance->GetOutputTensorDescs();
-	if (OutputDescs.Num() != 1)
+	if (!PhysAnimBridge::ValidateActionOutputTensorDescs(OutputDescs, OutError))
 	{
-		OutError = FString::Printf(TEXT("Expected exactly one output tensor but found %d."), OutputDescs.Num());
 		return false;
 	}
 

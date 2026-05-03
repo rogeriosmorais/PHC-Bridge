@@ -53,6 +53,44 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimActionOutputDescriptorContractTest,
+		"PhysAnim.Bridge.ActionOutputDescriptorContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimActionOutputDescriptorContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<UE::NNE::FTensorDesc> OutputDescs;
+		FString Error;
+
+		OutputDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("actions"), UE::NNE::FSymbolicTensorShape::Make({1, NumActionFloats}), ENNETensorDataType::Float));
+		TestTrue(TEXT("Fixed batch action output descriptor is accepted"), ValidateActionOutputTensorDescs(OutputDescs, Error));
+
+		OutputDescs.Reset();
+		OutputDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("actions"), UE::NNE::FSymbolicTensorShape::Make({-1, NumActionFloats}), ENNETensorDataType::Float));
+		TestTrue(TEXT("Dynamic batch action output descriptor is accepted"), ValidateActionOutputTensorDescs(OutputDescs, Error));
+
+		OutputDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("extra"), UE::NNE::FSymbolicTensorShape::Make({1, NumActionFloats}), ENNETensorDataType::Float));
+		TestFalse(TEXT("Multiple output tensors are rejected"), ValidateActionOutputTensorDescs(OutputDescs, Error));
+
+		OutputDescs.Reset();
+		OutputDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("actions"), UE::NNE::FSymbolicTensorShape::Make({1, NumActionFloats}), ENNETensorDataType::Half));
+		TestFalse(TEXT("Non-float action output is rejected"), ValidateActionOutputTensorDescs(OutputDescs, Error));
+
+		OutputDescs.Reset();
+		OutputDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("actions"), UE::NNE::FSymbolicTensorShape::Make({NumActionFloats}), ENNETensorDataType::Float));
+		TestFalse(TEXT("Rank-1 action output is rejected"), ValidateActionOutputTensorDescs(OutputDescs, Error));
+
+		OutputDescs.Reset();
+		OutputDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("actions"), UE::NNE::FSymbolicTensorShape::Make({2, NumActionFloats}), ENNETensorDataType::Float));
+		TestFalse(TEXT("Unexpected fixed batch size is rejected"), ValidateActionOutputTensorDescs(OutputDescs, Error));
+
+		OutputDescs.Reset();
+		OutputDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("actions"), UE::NNE::FSymbolicTensorShape::Make({1, NumActionFloats - 1}), ENNETensorDataType::Float));
+		TestFalse(TEXT("Wrong action width is rejected"), ValidateActionOutputTensorDescs(OutputDescs, Error));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimSmplOrderContractTest,
 		"PhysAnim.Bridge.SmplOrderContract",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
