@@ -2,6 +2,8 @@
 #include "PhysAnimComponent.h"
 #include "Misc/AutomationTest.h"
 
+#include <limits>
+
 namespace
 {
 	using namespace PhysAnimBridge;
@@ -151,6 +153,34 @@ namespace
 		OutputDescs.Reset();
 		OutputDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("actions"), UE::NNE::FSymbolicTensorShape::Make({1, NumActionFloats - 1}), ENNETensorDataType::Float));
 		TestFalse(TEXT("Wrong action width is rejected"), ValidateActionOutputTensorDescs(OutputDescs, Error));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimFiniteFloatBufferContractTest,
+		"PhysAnim.Bridge.FiniteFloatBufferContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimFiniteFloatBufferContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<float> Values;
+		Values.Add(0.0f);
+		Values.Add(1.0f);
+		Values.Add(-1.0f);
+
+		FString Error;
+		TestTrue(TEXT("Finite buffer is accepted"), ValidateFiniteFloatBuffer(TEXT("terrain"), Values, Error));
+
+		Values[1] = std::numeric_limits<float>::quiet_NaN();
+		TestFalse(TEXT("NaN buffer is rejected"), ValidateFiniteFloatBuffer(TEXT("terrain"), Values, Error));
+		TestEqual(TEXT("Error names the rejected buffer"), Error, TEXT("terrain contained NaN or Inf."));
+
+		Values[1] = std::numeric_limits<float>::infinity();
+		TestFalse(TEXT("Inf buffer is rejected"), ValidateFiniteFloatBuffer(TEXT("model_actions"), Values, Error));
+		TestEqual(TEXT("Error names the rejected output buffer"), Error, TEXT("model_actions contained NaN or Inf."));
+
+		Values[1] = 0.0f;
+		TestTrue(TEXT("Recovered finite buffer is accepted"), ValidateFiniteFloatBuffer(TEXT("terrain"), Values, Error));
 		return true;
 	}
 

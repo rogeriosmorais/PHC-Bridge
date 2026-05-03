@@ -12,22 +12,19 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		return false;
 	}
 
-	for (const float Value : SelfObservationBuffer)
+	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("self_obs"), SelfObservationBuffer, OutError))
 	{
-		if (!FMath::IsFinite(Value))
-		{
-			OutError = TEXT("self_obs contained NaN or Inf.");
-			return false;
-		}
+		return false;
 	}
 
-	for (const float Value : MimicTargetPosesBuffer)
+	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("mimic_target_poses"), MimicTargetPosesBuffer, OutError))
 	{
-		if (!FMath::IsFinite(Value))
-		{
-			OutError = TEXT("mimic_target_poses contained NaN or Inf.");
-			return false;
-		}
+		return false;
+	}
+
+	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("terrain"), TerrainBuffer, OutError))
+	{
+		return false;
 	}
 
 	const TArray<float> ActionOutputsBeforeRun = ActionOutputBuffer;
@@ -43,13 +40,9 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 	}
 	TRACE_COUNTER_SET(COUNTER_PhysAnim_RunSyncMs, static_cast<float>((FPlatformTime::Seconds() - RunSyncStartSeconds) * 1000.0));
 
-	for (const float Value : ActionOutputBuffer)
+	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("Model action output"), ActionOutputBuffer, OutError))
 	{
-		if (!FMath::IsFinite(Value))
-		{
-			OutError = TEXT("Model action output contained NaN or Inf.");
-			return false;
-		}
+		return false;
 	}
 	PreviousActionOutputBuffer = ActionOutputsBeforeRun;
 

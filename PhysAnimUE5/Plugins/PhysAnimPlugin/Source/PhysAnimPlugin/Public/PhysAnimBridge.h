@@ -157,6 +157,11 @@ namespace PhysAnimBridge
 		TConstArrayView<UE::NNE::FTensorDesc> OutputTensorDescs,
 		FString& OutError);
 
+	PHYSANIMPLUGIN_API bool ValidateFiniteFloatBuffer(
+		const TCHAR* BufferName,
+		TConstArrayView<float> Values,
+		FString& OutError);
+
 	PHYSANIMPLUGIN_API TArray<float> BuildFutureSampleTimeSchedule();
 	PHYSANIMPLUGIN_API float ResolveFutureTargetTimeSeconds(float CurrentTimeSeconds, float RequestedFutureOffsetSeconds, float AnimationLengthSeconds);
 

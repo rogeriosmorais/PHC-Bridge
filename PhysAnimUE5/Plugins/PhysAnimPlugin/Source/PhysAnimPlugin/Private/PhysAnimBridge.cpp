@@ -400,6 +400,23 @@ namespace PhysAnimBridge
 		return true;
 	}
 
+	bool ValidateFiniteFloatBuffer(
+		const TCHAR* BufferName,
+		TConstArrayView<float> Values,
+		FString& OutError)
+	{
+		for (int32 ValueIndex = 0; ValueIndex < Values.Num(); ++ValueIndex)
+		{
+			if (!FMath::IsFinite(Values[ValueIndex]))
+			{
+				OutError = FString::Printf(TEXT("%s contained NaN or Inf."), BufferName ? BufferName : TEXT("float_buffer"));
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	TArray<float> BuildFutureSampleTimeSchedule()
 	{
 		TArray<float> SampleTimes;
