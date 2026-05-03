@@ -85,7 +85,7 @@ bool UPhysAnimComponent::ValidateModelDescriptorContract(FString& OutError)
 	TArray<UE::NNE::FTensorDesc> InputDescs;
 	InputDescs.Append(InputDescsView.GetData(), InputDescsView.Num());
 
-	if (!PhysAnimBridge::BuildInputTensorIndexMap(InputDescs, TensorIndexMap, OutError))
+	if (!PhysAnimBridge::ValidateInputTensorDescs(InputDescs, TensorIndexMap, OutError))
 	{
 		return false;
 	}

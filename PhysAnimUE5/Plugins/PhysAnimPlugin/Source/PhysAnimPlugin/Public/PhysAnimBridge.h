@@ -148,6 +148,11 @@ namespace PhysAnimBridge
 		FPhysAnimTensorIndexMap& OutIndexMap,
 		FString& OutError);
 
+	PHYSANIMPLUGIN_API bool ValidateInputTensorDescs(
+		const TArray<UE::NNE::FTensorDesc>& InputTensorDescs,
+		FPhysAnimTensorIndexMap& OutIndexMap,
+		FString& OutError);
+
 	PHYSANIMPLUGIN_API bool ValidateActionOutputTensorDescs(
 		TConstArrayView<UE::NNE::FTensorDesc> OutputTensorDescs,
 		FString& OutError);

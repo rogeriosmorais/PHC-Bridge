@@ -53,6 +53,70 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimInputDescriptorContractTest,
+		"PhysAnim.Bridge.InputDescriptorContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimInputDescriptorContractTest::RunTest(const FString& Parameters)
+	{
+		auto MakeValidInputs = []()
+		{
+			TArray<UE::NNE::FTensorDesc> TensorDescs;
+			TensorDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("self_obs"), UE::NNE::FSymbolicTensorShape::Make({1, SelfObsSize}), ENNETensorDataType::Float));
+			TensorDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("mimic_target_poses"), UE::NNE::FSymbolicTensorShape::Make({1, MimicTargetPosesSize}), ENNETensorDataType::Float));
+			TensorDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("terrain"), UE::NNE::FSymbolicTensorShape::Make({1, TerrainSize}), ENNETensorDataType::Float));
+			return TensorDescs;
+		};
+
+		FPhysAnimTensorIndexMap IndexMap;
+		FString Error;
+
+		TArray<UE::NNE::FTensorDesc> TensorDescs = MakeValidInputs();
+		TestTrue(TEXT("Valid input descriptor contract succeeds"), ValidateInputTensorDescs(TensorDescs, IndexMap, Error));
+		TestEqual(TEXT("self_obs index is recorded"), IndexMap.SelfObs, 0);
+		TestEqual(TEXT("mimic_target_poses index is recorded"), IndexMap.MimicTargetPoses, 1);
+		TestEqual(TEXT("terrain index is recorded"), IndexMap.Terrain, 2);
+
+		TensorDescs.Reset();
+		TensorDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("terrain"), UE::NNE::FSymbolicTensorShape::Make({-1, TerrainSize}), ENNETensorDataType::Float));
+		TensorDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("self_obs"), UE::NNE::FSymbolicTensorShape::Make({-1, SelfObsSize}), ENNETensorDataType::Float));
+		TensorDescs.Add(UE::NNE::FTensorDesc::Make(TEXT("mimic_target_poses"), UE::NNE::FSymbolicTensorShape::Make({-1, MimicTargetPosesSize}), ENNETensorDataType::Float));
+		TestTrue(TEXT("Reordered dynamic-batch input descriptors succeed"), ValidateInputTensorDescs(TensorDescs, IndexMap, Error));
+		TestEqual(TEXT("reordered terrain index is recorded"), IndexMap.Terrain, 0);
+		TestEqual(TEXT("reordered self_obs index is recorded"), IndexMap.SelfObs, 1);
+		TestEqual(TEXT("reordered mimic target index is recorded"), IndexMap.MimicTargetPoses, 2);
+
+		TensorDescs = MakeValidInputs();
+		TensorDescs[0] = UE::NNE::FTensorDesc::Make(TEXT("terrain"), UE::NNE::FSymbolicTensorShape::Make({1, TerrainSize}), ENNETensorDataType::Float);
+		TestFalse(TEXT("Duplicate input names are rejected"), ValidateInputTensorDescs(TensorDescs, IndexMap, Error));
+
+		TensorDescs = MakeValidInputs();
+		TensorDescs.RemoveAt(2);
+		TestFalse(TEXT("Missing input descriptors are rejected"), ValidateInputTensorDescs(TensorDescs, IndexMap, Error));
+
+		TensorDescs = MakeValidInputs();
+		TensorDescs[2] = UE::NNE::FTensorDesc::Make(TEXT("unknown"), UE::NNE::FSymbolicTensorShape::Make({1, TerrainSize}), ENNETensorDataType::Float);
+		TestFalse(TEXT("Unknown input descriptors are rejected"), ValidateInputTensorDescs(TensorDescs, IndexMap, Error));
+
+		TensorDescs = MakeValidInputs();
+		TensorDescs[0] = UE::NNE::FTensorDesc::Make(TEXT("self_obs"), UE::NNE::FSymbolicTensorShape::Make({1, SelfObsSize}), ENNETensorDataType::Half);
+		TestFalse(TEXT("Non-float input descriptors are rejected"), ValidateInputTensorDescs(TensorDescs, IndexMap, Error));
+
+		TensorDescs = MakeValidInputs();
+		TensorDescs[0] = UE::NNE::FTensorDesc::Make(TEXT("self_obs"), UE::NNE::FSymbolicTensorShape::Make({SelfObsSize}), ENNETensorDataType::Float);
+		TestFalse(TEXT("Rank-1 input descriptors are rejected"), ValidateInputTensorDescs(TensorDescs, IndexMap, Error));
+
+		TensorDescs = MakeValidInputs();
+		TensorDescs[0] = UE::NNE::FTensorDesc::Make(TEXT("self_obs"), UE::NNE::FSymbolicTensorShape::Make({2, SelfObsSize}), ENNETensorDataType::Float);
+		TestFalse(TEXT("Unexpected fixed batch size is rejected"), ValidateInputTensorDescs(TensorDescs, IndexMap, Error));
+
+		TensorDescs = MakeValidInputs();
+		TensorDescs[0] = UE::NNE::FTensorDesc::Make(TEXT("self_obs"), UE::NNE::FSymbolicTensorShape::Make({1, SelfObsSize - 1}), ENNETensorDataType::Float);
+		TestFalse(TEXT("Wrong input feature width is rejected"), ValidateInputTensorDescs(TensorDescs, IndexMap, Error));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimActionOutputDescriptorContractTest,
 		"PhysAnim.Bridge.ActionOutputDescriptorContract",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

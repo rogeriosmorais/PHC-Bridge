@@ -169,6 +169,54 @@ namespace PhysAnimBridge
 
 			return Offsets;
 		}
+
+		bool ValidateFloatBatchFeatureTensorDesc(
+			const UE::NNE::FTensorDesc& TensorDesc,
+			int32 ExpectedFeatureWidth,
+			FString& OutError)
+		{
+			if (TensorDesc.GetDataType() != ENNETensorDataType::Float)
+			{
+				OutError = FString::Printf(
+					TEXT("Expected input tensor '%s' to be Float but found data type %d."),
+					*TensorDesc.GetName(),
+					static_cast<int32>(TensorDesc.GetDataType()));
+				return false;
+			}
+
+			const TConstArrayView<int32> ShapeData = TensorDesc.GetShape().GetData();
+			if (ShapeData.Num() != 2)
+			{
+				OutError = FString::Printf(
+					TEXT("Expected input tensor '%s' to have rank 2 but found rank %d."),
+					*TensorDesc.GetName(),
+					ShapeData.Num());
+				return false;
+			}
+
+			const int32 BatchDim = ShapeData[0];
+			if (BatchDim != 1 && BatchDim != -1)
+			{
+				OutError = FString::Printf(
+					TEXT("Expected input tensor '%s' batch dimension to be 1 or -1 but found %d."),
+					*TensorDesc.GetName(),
+					BatchDim);
+				return false;
+			}
+
+			const int32 FeatureWidth = ShapeData[1];
+			if (FeatureWidth != ExpectedFeatureWidth)
+			{
+				OutError = FString::Printf(
+					TEXT("Expected input tensor '%s' feature width to be %d but found %d."),
+					*TensorDesc.GetName(),
+					ExpectedFeatureWidth,
+					FeatureWidth);
+				return false;
+			}
+
+			return true;
+		}
 	}
 
 	const TArray<FName>& GetControlledBoneNames()
@@ -264,6 +312,34 @@ namespace PhysAnimBridge
 		if (!OutIndexMap.IsValid())
 		{
 			OutError = TEXT("One or more required input tensors were missing.");
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ValidateInputTensorDescs(
+		const TArray<UE::NNE::FTensorDesc>& InputTensorDescs,
+		FPhysAnimTensorIndexMap& OutIndexMap,
+		FString& OutError)
+	{
+		if (!BuildInputTensorIndexMap(InputTensorDescs, OutIndexMap, OutError))
+		{
+			return false;
+		}
+
+		if (!ValidateFloatBatchFeatureTensorDesc(InputTensorDescs[OutIndexMap.SelfObs], SelfObsSize, OutError))
+		{
+			return false;
+		}
+
+		if (!ValidateFloatBatchFeatureTensorDesc(InputTensorDescs[OutIndexMap.MimicTargetPoses], MimicTargetPosesSize, OutError))
+		{
+			return false;
+		}
+
+		if (!ValidateFloatBatchFeatureTensorDesc(InputTensorDescs[OutIndexMap.Terrain], TerrainSize, OutError))
+		{
 			return false;
 		}
 
