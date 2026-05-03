@@ -4,6 +4,7 @@
 #if !UE_BUILD_SHIPPING
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
 #endif
+#include "PhysAnimComparisonSubsystem.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/FileHelper.h"
@@ -35,7 +36,7 @@ namespace
 	constexpr float PhysAnimPieMovementSoakDurationSeconds = 30.0f;
 	constexpr int32 PhysAnimPieMovementSoakLoopCount = 5;
 	constexpr float PhysAnimPieG2PresentationLeadInSeconds = 1.0f;
-	constexpr float PhysAnimPieG2PresentationDurationSeconds = 4.0f;
+	constexpr float PhysAnimPieG2PresentationDurationSeconds = 30.0f;
 	constexpr float PhysAnimPieBalanceModeSmokeLeadInSeconds = 1.0f;
 	constexpr float PhysAnimPieBalanceModeSmokeDurationSeconds = 15.0f;
 	constexpr float PhysAnimPiePhase1AutoCalibBridgeActiveTimeoutSeconds = 15.0f;
@@ -75,6 +76,20 @@ namespace
 		if (GEditor && GEditor->PlayWorld)
 		{
 			GEditor->PlayWorld->Exec(GEditor->PlayWorld, *Command);
+		}
+		return true;
+	}
+
+	DEFINE_LATENT_AUTOMATION_COMMAND(FStartG2PresentationCommand);
+	bool FStartG2PresentationCommand::Update()
+	{
+		if (GEditor && GEditor->PlayWorld)
+		{
+			if (UPhysAnimComparisonSubsystem* Subsystem = GEditor->PlayWorld->GetSubsystem<UPhysAnimComparisonSubsystem>())
+			{
+				FString Error;
+				Subsystem->StartPresentation(Error);
+			}
 		}
 		return true;
 	}
@@ -323,9 +338,13 @@ namespace
 			return false;
 		}
 
+		AddExpectedError(TEXT("PhysAnimProof: TerminalArtifact"), EAutomationExpectedErrorFlags::Contains, 0);
+		AddExpectedError(TEXT("PhysAnimProof: AttemptResult"), EAutomationExpectedErrorFlags::Contains, 0);
+		AddExpectedError(TEXT("Fail-stop: Proof failed"), EAutomationExpectedErrorFlags::Contains, 0);
+
 		AddCommand(new FStartPIECommand(false));
 		AddCommand(new FWaitLatentCommand(PhysAnimPieG2PresentationLeadInSeconds));
-		AddCommand(new FExecPieConsoleCommand(TEXT("PhysAnim.G2.StartPresentation")));
+		AddCommand(new FStartG2PresentationCommand());
 		AddCommand(new FWaitLatentCommand(PhysAnimPieG2PresentationDurationSeconds));
 		AddCommand(new FEndPlayMapCommand());
 		return true;

@@ -18,17 +18,66 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 		return false;
 	}
 
-	TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
+	if (bEnableLiveRuntimeEvidenceProof)
+	{
+		if (CanEnterBalanceActiveStanding())
+		{
+			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] WIRING_SUCCESS state=BalanceActive_Standing"));
+		}
+		else
+		{
+			OutError = TEXT("Proof active but not satisfied. Activation denied.");
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] WIRING_DENIED reason=PROOF_NOT_SATISFIED"));
+			return false;
+		}
+	}
+	else
+	{
+		TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
+	}
+
 	LogBridgeStateSnapshot(TEXT("BeforeActivateBridgePhysicsState"));
 	ActivateBridgePhysicsState(EffectiveSettings);
 	LogBridgeStateSnapshot(TEXT("AfterActivateBridgePhysicsState"));
 	ResetStabilizationRuntimeState();
-	BridgeStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+
+	const double CurrentWorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		const double SettledRampStartTimeSeconds =
+			CurrentWorldTimeSeconds - static_cast<double>(FMath::Max(EffectiveSettings.StartupRampSeconds, 0.0f)) - 0.1;
+
+		BridgeStartTimeSeconds = SettledRampStartTimeSeconds;
+		PolicyInfluenceRampStartTimeSeconds = SettledRampStartTimeSeconds;
+		HighestUnlockedBringUpGroupIndex = GetBringUpGroupCount() - 1;
+
+		if (BringUpGroupActivationTimeSeconds.Num() < GetBringUpGroupCount())
+			BringUpGroupActivationTimeSeconds.Init(-1.0, GetBringUpGroupCount());
+		if (BringUpGroupControlRampStartTimeSeconds.Num() < GetBringUpGroupCount())
+			BringUpGroupControlRampStartTimeSeconds.Init(-1.0, GetBringUpGroupCount());
+		if (BringUpGroupAlphaActiveLogged.Num() < GetBringUpGroupCount())
+			BringUpGroupAlphaActiveLogged.Init(false, GetBringUpGroupCount());
+
+		for (int32 GroupIndex = 0; GroupIndex < GetBringUpGroupCount(); ++GroupIndex)
+		{
+			BringUpGroupActivationTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
+			BringUpGroupControlRampStartTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
+			BringUpGroupAlphaActiveLogged[GroupIndex] = 1;
+		}
+	}
+	else
+	{
+		BridgeStartTimeSeconds = CurrentWorldTimeSeconds;
+	}
+
 	if (const AActor* const OwnerActor = GetOwner())
 	{
 		MovementSmokeStartLocation = OwnerActor->GetActorLocation();
 	}
 	SimulationHandoffAlpha = CalculateSimulationHandoffAlpha(EffectiveSettings);
+	bLastAppliedSimulationHandoffSettled = (SimulationHandoffAlpha >= (1.0f - KINDA_SMALL_NUMBER));
+
 	PrewarmPhysicsControlActivationPose();
 	PhysicsControl->UpdateTargetCaches(0.0f);
 	if (!SeedControlTargetsFromCurrentPose(0.0f, OutError))

@@ -1463,6 +1463,10 @@ const TCHAR* UPhysAnimComponent::GetRuntimeStateName(EPhysAnimRuntimeState State
 		return TEXT("BalanceSafeDeny");
 	case EPhysAnimRuntimeState::BalanceActive_Standing:
 		return TEXT("BalanceActive_Standing");
+	case EPhysAnimRuntimeState::LocomotionActiveShell:
+		return TEXT("LocomotionActiveShell");
+	case EPhysAnimRuntimeState::LocomotionActiveShellDenied:
+		return TEXT("LocomotionActiveShellDenied");
 	case EPhysAnimRuntimeState::FailStopped:
 		return TEXT("FailStopped");
 	default:

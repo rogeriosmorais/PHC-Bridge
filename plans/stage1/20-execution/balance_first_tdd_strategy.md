@@ -1,0 +1,84 @@
+# Balance-First TDD Strategy
+
+## 1. Purpose
+
+This document defines the TDD strategy and testing pyramid for the balance-first rewrite. It ensures that every contract requirement is verified by deterministic tests before and during implementation.
+
+## 2. Test Layers
+
+- **Layer 1: Pure Logic Unit Tests**: Stateless verification of geometry, classification, and math (e.g., hull reduction, churn Hz).
+- **Layer 2: Validator Contract Tests**: State-aware verification of individual validators (e.g., plant audit, capsule lock).
+- **Layer 3: Runtime Integration Tests**: Verification of bridge state transitions and subsystem communication in the UE environment.
+- **Layer 4: Deterministic Smoke Tests**: End-to-end PIE tests targeting specific success/failure paths (e.g., `PhysAnim.PIE.BalanceModeSmoke`).
+- **Layer 5: Long Soak / Artifact Validation**: Forensic audit of large artifact batches to ensure truth consistency and terminal-reason accuracy.
+
+## 3. TDD Rule
+
+- **Red -> Green -> Refactor**: No production code is written until a test demonstrating its necessity fails.
+- **One Contract Surface at a Time**: Complete the test-suite for a single validator or classification logic before moving to the next.
+- **No Implementation-First Slices**: Implementation without a corresponding test is a contract violation.
+
+## 4. Primary Test Targets
+
+### 4.1 Pure Logic (PhysAnimSupportTruth)
+- **Support Patch Reduction**: Verify area-preserving hull construction from manifold points.
+- **Frame Hull Union**: Verify frame-level hull construction from per-body support patches.
+- **Support-Mode Classification**: Verify the four contact-pattern grades (TwoFoot, SingleFoot, Transient, Airborne) against side-support and gap-timer states.
+- **Proxy-Outside-Hull Adjudication**: Verify proxy containment and drift-timer logic.
+- **Churn Frequency Calculation**: Verify rolling 1.0s Hz calculation with synthetic transition streams.
+- **30 Hz Support-Mode Reduction**: Verify report-window duration reduction and severity tie-breaks.
+
+### 4.2 Adapter-Fed Validators (PhysAnimValidators)
+- **Continuity Validator**:
+    - **Body Instance**: Detect invalid or missing body instances.
+    - **Physics State**: Detect "Simulate Physics" disabling on active bodies.
+    - **Sleep Management**: Detect bodies exceeding the sleep/wake limit semantics (Pelvis Sleep Rule).
+    - **Bookkeeping**: Detect raw-vs-bookkeeping disagreements as diagnostic signals; raw state remains authoritative.
+- **Capsule Validator**:
+    - **Actor Lock**: Detect actor-level transform changes (Freeze check).
+    - **Mesh Integrity**: Detect absolute transform deltas on the mesh component.
+    - **Component States**: Detect CMC (Character Movement) activity, tick function status, movement mode, or `UpdatedComponent = nullptr`.
+    - **External State**: Detect unauthorized collision mode changes or overlap mutations.
+- **Plant Validator**:
+    - **Topology**: Detect skeleton or skeletal mesh mismatch.
+    - **Axis/Length**: Detect bone length or axis alignment drift.
+    - **Mass/Inertia**: Detect mass, center of mass, or inertia tensor mutations against the contract baseline.
+    - **Geometry**: Detect collision/filter baseline breaches.
+- **Contamination Classifier**:
+    - **Mesh Assist**: Detect mesh-wide global assist interference.
+    - **Non-Critical Assist**: Detect non-critical-body assist interference.
+    - **World Brace**: Detect excluded-body world bracing events.
+    - **Global/Kinematic**: Detect global blend weight or kinematic mesh-update contamination.
+    - **Result**: Emits exclusively `activation_authority_conflict`.
+
+### 4.3 Instability and Discontinuity
+- **Target Discontinuity**: Detect pose/velocity jumps between reference frames (`activation_target_discontinuity`).
+- **Gain/Damping Instability**: Detect unstable controller configuration (`activation_unstable_gain_or_damping`).
+- **Instability Thresholds**: Detect peak angular speed or root tilt breaches (`activation_instability_threshold_breach`).
+- **Pose Reference Mismatch**: Detect sustained body or RMS mismatch (`activation_pose_reference_mismatch`).
+- **Standing Timeout**: Detect failure to reach the 3.0s hold benchmark within the attempt budget (`activation_standing_validation_timeout`).
+- **Movement Reclaim**: Verification of CMC interference detection (`activation_movement_reclaim`). *Note: This is an independent reason path and NOT part of contamination classification.*
+- **Shell Helper Violation**: Verification of shell helper writes during activation (`activation_shell_helper_violation`).
+
+## 5. Validator Scope Freeze
+
+The validator scopes are frozen as follows. No validator may decide surfaces outside its explicit remit.
+
+- **Continuity Validator**: Decides instance validity, simulate-physics continuity, and **pelvis sleep rule**. *Note: raw-vs-bookkeeping disagreement is diagnostic only.*
+- **Capsule Validator**: Decides collision/overlap mode, **actor freeze**, mesh absolute transform, **CMC inactive**, **tick disabled**, **movement mode**, and **UpdatedComponent = nullptr**.
+- **Plant Validator**: Decides topology, **axis alignment**, **segment length**, support geometry, collision/filter baseline, **mass/inertia tolerances**, and mutation checks.
+- **Contamination Classifier**: Decides **authority-matrix conflict surfaces only**: `mesh_wide_assist`, `non_critical_body_assist`, `excluded_body_world_brace`, and `global_blend_or_kinematic_assist`.
+
+## 6. Runtime Test Targets
+
+- **Ready -> BlendIn Entry Proof**: Verify successful gate completion before starting the blend.
+- **BlendIn Rollout Stability**: Verify continuity and authority during the authority ramp.
+- **Validate Hold Behavior**: Verify that the system maintains stability for the full hold duration.
+- **Standing 3.0-Second Success**: The primary product benchmark for a passing run.
+- **Must-Fail Scenarios**: Verification that the system correctly labels deliberate breaches (Capsule, Plant, Contamination, Simulation Loss).
+
+## 7. Artifact Validation Rule
+
+- Every terminal failure MUST be reconstructible from emitted artifact fields.
+- The artifact `support_mode` MUST be derivable from the frame-level classifications and the 30 Hz reduction rule.
+- If a terminal reason is emitted without the supporting forensic fields being populated, the test fails.

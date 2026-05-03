@@ -16,7 +16,8 @@ public class PhysAnimPlugin : ModuleRules
                 "PhysicsCore",
                 "PhysicsControl",
                 "PoseSearch",
-                "Chooser"
+                "Chooser",
+                "Json"
             });
 
         if (Target.bBuildEditor)

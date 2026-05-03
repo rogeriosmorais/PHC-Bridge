@@ -4,6 +4,23 @@
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
 #include "PhysAnimPhase1PelvisCouplingSearch.h"
 
+namespace
+{
+	FPhysAnimRuntimeTerminationPipelineResult BuildProofFailureFailStopRoutingResult(
+		const FPhysAnimRuntimeTerminationState& PreviousState,
+		const FPhysAnimRunArtifactSnapshot& Artifact,
+		const EPhysAnimTerminalReason TerminalReason,
+		const int64 TerminalSubstepTimestamp)
+	{
+		FPhysAnimRuntimeProofFailureFailStopRoutingInput RoutingInput;
+		RoutingInput.PreviousState = PreviousState;
+		RoutingInput.Artifact = Artifact;
+		RoutingInput.TerminalReason = TerminalReason;
+		RoutingInput.TerminalSubstepTimestamp = TerminalSubstepTimestamp;
+		return PhysAnimRuntimeTerminationPipeline::EvaluateProofFailureFailStopRouting(RoutingInput);
+	}
+}
+
 void UPhysAnimComponent::BeginPlay()
 {
 	Super::BeginPlay();
@@ -14,8 +31,7 @@ void UPhysAnimComponent::BeginPlay()
 	if (!BeginStartupTPoseCapture(Error))
 	{
 		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked before live T-pose capture: %s"), *Error);
-		SetComponentTickEnabled(false);
-		TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+		FailStop(FString::Printf(TEXT("Startup blocked before live T-pose capture: %s"), *Error));
 		UpdateBridgeStatusIndicator(5.0f);
 	}
 }
@@ -2651,6 +2667,11 @@ EPhysAnimBridgeTraceOutputMode UPhysAnimComponent::ResolveBridgeTraceOutputMode(
 void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	TickLiveRuntimeEvidenceProof(DeltaTime);
+	if (bEnableLiveRuntimeEvidenceProof && !bLiveRuntimeEvidenceProofComplete)
+	{
+		PolicyInfluenceRampStartTimeSeconds = -1.0;
+	}
 
 	const EPhysAnimRuntimeState RuntimeStateAtTickStart = RuntimeState;
 	const uint32 RootOnTickAtTickStart = BalanceEntryRootOnFrameCount;
@@ -2755,9 +2776,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		if (!FinalizeStartupTPoseCaptureAndStartBridge(StartupError))
 		{
 			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked after live T-pose capture: %s"), *StartupError);
-			TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
+			FailStop(FString::Printf(TEXT("Startup blocked after live T-pose capture: %s"), *StartupError));
 			UpdateBridgeStatusIndicator(5.0f);
-			SetComponentTickEnabled(false);
 		}
 		return;
 	}
@@ -3149,6 +3169,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	UpdateStabilizationStressTestState(StabilizationSettings);
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 	ApplyMovementSmokeInput(EffectiveSettings);
+	UpdateBridgeLocomotionGateTiming(EffectiveSettings, GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0);
+	UpdateBridgeLocomotionRequestState(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0);
 	if ((RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState)) && bStartupMovementLockActive)
 	{
 		const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
@@ -3337,6 +3359,35 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			return;
 		}
 
+		if (bEnableLiveRuntimeEvidenceProof)
+		{
+			if (LiveRuntimeEvidenceTerminationState.bTerminated && 
+				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+			{
+				if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch &&
+					LiveRuntimeEvidenceTerminationState.TerminalReason == EPhysAnimTerminalReason::ActivationSupportFailure)
+				{
+					UE_LOG(
+						LogPhysAnimBridge,
+						Verbose,
+						TEXT("[PhysAnim] Startup entry bridge deferred terminal reason=ActivationSupportFailure state=%s"),
+						GetRuntimeStateName(RuntimeState));
+					FinalizeTraceFrame();
+					return;
+				}
+
+				FailStopWithTrace(FString::Printf(TEXT("Proof failed during activation wait: %d"), (int32)LiveRuntimeEvidenceTerminationState.TerminalReason));
+				return;
+			}
+
+			if (!bLiveRuntimeEvidenceProofComplete)
+			{
+				// Hold activation until proof is complete
+				FinalizeTraceFrame();
+				return;
+			}
+		}
+
 		if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("StartupActivation"), TickError))
 		{
 			FailStopWithTrace(TickError);
@@ -3369,6 +3420,35 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	if (ShouldActivateBridgeFromSafeMode(RuntimeState, EffectiveSettings.bForceZeroActions))
 	{
+		if (bEnableLiveRuntimeEvidenceProof)
+		{
+			if (LiveRuntimeEvidenceTerminationState.bTerminated && 
+				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+			{
+				if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch &&
+					LiveRuntimeEvidenceTerminationState.TerminalReason == EPhysAnimTerminalReason::ActivationSupportFailure)
+				{
+					UE_LOG(
+						LogPhysAnimBridge,
+						Verbose,
+						TEXT("[PhysAnim] Startup proof deferred terminal reason=ActivationSupportFailure phase=%s"),
+						GetRuntimeStateName(RuntimeState));
+					FinalizeTraceFrame();
+					return;
+				}
+
+				FailStopWithTrace(FString::Printf(TEXT("Proof failed during deferred activation wait: %d"), (int32)LiveRuntimeEvidenceTerminationState.TerminalReason));
+				return;
+			}
+
+			if (!bLiveRuntimeEvidenceProofComplete)
+			{
+				// Hold activation until proof is complete
+				FinalizeTraceFrame();
+				return;
+			}
+		}
+
 		if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("DeferredActivation"), TickError))
 		{
 			FailStopWithTrace(TickError);
@@ -3467,6 +3547,25 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
+	if (!bEnableLiveRuntimeEvidenceProof && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+	{
+		const FPhysAnimRuntimeTerminationState& SettleTerminationState = LiveRuntimeEvidenceTerminationState;
+		const FPhysAnimRunArtifactSnapshot& LatestArtifact = SettleTerminationState.LatestArtifact;
+		const bool bDefaultProofArtifact =
+			!SettleTerminationState.bTerminated &&
+			SettleTerminationState.TerminalReason == EPhysAnimTerminalReason::None &&
+			LatestArtifact.SupportMode == EPhysAnimSupportMode::Airborne &&
+			LatestArtifact.ActiveSupportSideCount == 0 &&
+			LatestArtifact.SupportHullAreaCm2 <= 0.0f;
+		if (bDefaultProofArtifact)
+		{
+			BalanceReadyTransition.Cancel(this);
+			ClearPublishedBalanceTransitionFailureReason();
+			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
+			return;
+		}
+	}
+
 	BalanceReadyTransition.Tick(DeltaTime, this, EffectiveSettings);
 
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
@@ -3510,7 +3609,107 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
-	if (ShouldAttemptAutoTriggeredBalanceStart(
+	if (bEnableLiveRuntimeEvidenceProof && RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
+	{
+		if (!IsLiveRuntimeEvidenceProofSatisfied())
+		{
+			if (StartupProofDeferredTerminalReason == EPhysAnimTerminalReason::ActivationSupportFailure)
+			{
+				if (!bLiveRuntimeEvidenceStartupVerificationHandoffArmed)
+				{
+					return;
+				}
+
+				if (StartupProofVerificationHandoffArmedSubstep >= 0 &&
+					LiveRuntimeEvidenceSubstepCounter <= StartupProofVerificationHandoffArmedSubstep)
+				{
+					return;
+				}
+
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Startup entry bridge terminal enforced reason=ActivationSupportFailure state=%s"),
+					GetRuntimeStateName(RuntimeState));
+				const FString ProofFailStopReason =
+					FString::Printf(TEXT("Proof failed during activation wait: %d"), static_cast<int32>(RuntimeState));
+				const FPhysAnimRuntimeTerminationPipelineResult ProofFailureRoutingResult =
+					BuildProofFailureFailStopRoutingResult(
+						LiveRuntimeEvidenceTerminationState,
+						LiveRuntimeEvidenceTerminationState.TerminalArtifact,
+						StartupProofDeferredTerminalReason,
+						LiveRuntimeEvidenceSubstepCounter);
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure routed through fail-stop helper reason=%s state=%s"),
+					*ProofFailStopReason,
+					GetRuntimeStateName(RuntimeState));
+				FailStopWithTrace(ProofFailStopReason);
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure fail-stop side effects complete reason=%s"),
+					*ProofFailStopReason);
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
+					static_cast<int32>(ProofFailureRoutingResult.StateApplyResult.State.TerminalReason));
+				return;
+			}
+
+			if (LiveRuntimeEvidenceTerminationState.bTerminated &&
+				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+			{
+				const FString ProofFailStopReason =
+					FString::Printf(TEXT("Proof failed during activation wait: %d"), static_cast<int32>(RuntimeState));
+				const FPhysAnimRuntimeTerminationPipelineResult ProofFailureRoutingResult =
+					BuildProofFailureFailStopRoutingResult(
+						LiveRuntimeEvidenceTerminationState,
+						LiveRuntimeEvidenceTerminationState.TerminalArtifact,
+						LiveRuntimeEvidenceTerminationState.TerminalReason,
+						LiveRuntimeEvidenceSubstepCounter);
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure routed through fail-stop helper reason=%s state=%s"),
+					*ProofFailStopReason,
+					GetRuntimeStateName(RuntimeState));
+				FailStopWithTrace(ProofFailStopReason);
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure fail-stop side effects complete reason=%s"),
+					*ProofFailStopReason);
+				UE_LOG(
+					LogPhysAnimBridge,
+					Error,
+					TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
+					static_cast<int32>(ProofFailureRoutingResult.StateApplyResult.State.TerminalReason));
+			}
+			return;
+		}
+	}
+
+	const bool bStandingProofPass = !bEnableLiveRuntimeEvidenceProof || IsLiveRuntimeEvidenceProofSatisfied();
+
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+	{
+		if (ShouldExitStandingToSafeDeny(LiveRuntimeEvidenceTerminationState))
+		{
+			const FPhysAnimRunArtifactSnapshot& Latest = LiveRuntimeEvidenceTerminationState.LatestArtifact;
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] SETTLE_DENIED reason=PHASE3_ACTIVE_SUPPORT_FAILURE hull_area=%.1f gap=%.1f proxy_inside=%d proxy_drift=%.1f"),
+				Latest.SupportHullAreaCm2,
+				Latest.SupportGapTimerMs,
+				Latest.ProxyInsideHull.IsSet() ? (Latest.ProxyInsideHull.GetValue() ? 1 : 0) : -1,
+				Latest.ProxyOutsideHullDurationMs.IsSet() ? Latest.ProxyOutsideHullDurationMs.GetValue() : 0.0);
+			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceSafeDeny);
+			return;
+		}
+	}
+
+	if (bStandingProofPass && ShouldAttemptAutoTriggeredBalanceStart(
 		RuntimeState,
 		bPendingBalanceModeStartRequest,
 		BalanceReadyTransition.HasActuallyStarted(),
@@ -3621,6 +3820,15 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	if (IsBalanceActiveState(RuntimeState))
 	{
 		UpdateBalancePerturbation(DeltaTime);
+	}
+
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		const EPhysAnimRuntimeState EvaluatedState = EvaluateBalanceActiveStanding();
+		if (EvaluatedState != RuntimeState)
+		{
+			TransitionRuntimeState(EvaluatedState);
+		}
 	}
 
 	PhysicsControl->UpdateTargetCaches(DeltaTime);
@@ -4533,6 +4741,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 void UPhysAnimComponent::ResetStabilizationRuntimeState()
 {
+	BalanceReadyTransition.Cancel(this);
 	ConditionedActionBuffer.Reset();
 	PreviousConditionedActionBuffer.Reset();
 	PreviousActionOutputBuffer.Reset();
@@ -4606,6 +4815,10 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	bPolicyTargetsAppliedLastFrame = false;
 	bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
 	LastAppliedStabilizationSettings = {};
+	bPendingBalanceModeStartRequest = false;
+	bPendingBalanceModeStartAttemptIssued = false;
+	PendingBalanceModeStartReason.Reset();
+	PendingBalanceModeRequestTimeSeconds = -1.0;
 }
 
 
@@ -4647,6 +4860,46 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 	SetComponentTickEnabled(false);
 	ResetStabilizationRuntimeState();
 }
+
+#if !UE_BUILD_SHIPPING
+void UPhysAnimComponent::TriggerProofFailureFailStopRoutingForTesting()
+{
+	const FString ProofFailStopReason =
+		FString::Printf(TEXT("Proof failed during activation wait: %d"), static_cast<int32>(RuntimeState));
+	const FPhysAnimRuntimeTerminationPipelineResult ProofFailureRoutingResult =
+		BuildProofFailureFailStopRoutingResult(
+			LiveRuntimeEvidenceTerminationState,
+			LiveRuntimeEvidenceTerminationState.TerminalArtifact,
+			StartupProofDeferredTerminalReason != EPhysAnimTerminalReason::None
+				? StartupProofDeferredTerminalReason
+				: LiveRuntimeEvidenceTerminationState.TerminalReason,
+			LiveRuntimeEvidenceSubstepCounter);
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("PhysAnimProof: TerminalArtifact"));
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("PhysAnimProof: AttemptResult"));
+	UE_LOG(
+		LogPhysAnimBridge,
+		Error,
+		TEXT("[PhysAnim] Startup entry bridge terminal enforced reason=ActivationSupportFailure state=%s"),
+		GetRuntimeStateName(RuntimeState));
+	UE_LOG(
+		LogPhysAnimBridge,
+		Error,
+		TEXT("[PhysAnim] Proof failure routed through fail-stop helper reason=%s state=%s"),
+		*ProofFailStopReason,
+		GetRuntimeStateName(RuntimeState));
+	FailStop(ProofFailStopReason);
+	UE_LOG(
+		LogPhysAnimBridge,
+		Error,
+		TEXT("[PhysAnim] Proof failure fail-stop side effects complete reason=%s"),
+		*ProofFailStopReason);
+	UE_LOG(
+		LogPhysAnimBridge,
+		Error,
+		TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
+		static_cast<int32>(ProofFailureRoutingResult.StateApplyResult.State.TerminalReason));
+}
+#endif
 
 
 void UPhysAnimComponent::SetStartupBringUpFrozenByBalanceEntry(bool bFrozen, const FString& InReason)
@@ -4729,4 +4982,3 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 
 	UpdateBridgeStatusIndicator(60.0f);
 }
-

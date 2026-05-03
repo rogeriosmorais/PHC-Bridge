@@ -1,0 +1,18 @@
+--- Checking for running Unreal processes ---
+--- Starting Build (Mode: Fast Iteration) ---
+[1] Compiling Editor Binaries...
+Using bundled DotNet SDK version: 8.0.412 win-x64
+Running UnrealBuildTool: dotnet "..\..\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.dll" PhysAnimUE5Editor Win64 Development -Project=F:\NewEngine\PhysAnimUE5\PhysAnimUE5.uproject -Progress -NoHotReloadFromIDE
+Log file: C:\Users\roger\AppData\Local\UnrealBuildTool\Log.txt
+Using 'git status' to determine working set for adaptive non-unity build (F:\NewEngine).
+@progress push 5%
+@progress 'Generating code...' 0%
+@progress 'Generating code...' 67%
+@progress 'Generating code...' 100%
+@progress pop
+Target is up to date
+
+Result: Succeeded
+Total execution time: 0.61 seconds
+[3] Running Automation Test: PhysAnim.SupportTruth.Harness.CompilesAndRuns
+--- Tasks Complete (00:12). ---

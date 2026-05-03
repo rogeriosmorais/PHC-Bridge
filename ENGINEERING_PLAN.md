@@ -1,255 +1,244 @@
-# GPU-Native Animation Engine - Engineering Plan (v10)
+# PHC-Bridge Engineering Plan (v11)
 
 ## 1. Objective
 
 Build a real-time demo in **Unreal Engine 5** where **physics simulation is the animation system**, in two stages:
 
-- **Stage 1 (Proof of Quality):** Prove physics-driven locomotion looks fundamentally better than kinematic animation, using mostly UE5 built-in systems plus a small bridge.
-- **Stage 2 (GPU Migration):** Move physics from CPU to GPU compute shaders once Stage 1 proves the visual and control thesis.
+- **Stage 1:** prove a small UE bridge can drive a physics-based humanoid from a PHC-family policy and reach sustained physical standing.
+- **Stage 2:** consider GPU-side physics migration only if Stage 1 proves the visual and control thesis.
 
 **Hardware:** Intel i7-14700 + RTX 4070 SUPER.
-
-### Why Two Stages
-
-1. **Animation quality** — does physics-driven motion look better?
-2. **GPU utilization** — is GPU execution worth the added complexity?
 
 Do not pursue Stage 2 unless Stage 1 succeeds.
 
 ---
 
-## 2. Stage 1 Architecture (all UE5 built-in, small custom bridge)
+## 2. Stage 1 Architecture
 
 ```text
 Unreal Engine 5.7.x
 
-UE5 PoseSearch (CPU)
+UE5 PoseSearch
   -> target motion context / reference pose
-PHC / ProtoMotions policy via NNE (GPU)
+PHC / ProtoMotions policy via NNE
   -> desired joint-relative action output
-UPhysicsControlComponent (CPU, Experimental)
-  -> orientation and angular control targets
-Chaos Physics (CPU)
+UPhysicsControlComponent
+  -> control targets and authority ramp
+Chaos Physics
   -> articulated body simulation, contact, friction, collision
-Optional UPhysicalAnimationComponent / visual blending
-  -> visual transition support only where explicitly allowed
 UE5 Renderer
 ```
 
-### Important Stage 1 reality
+The Stage 1 bridge stays small:
 
-Stage 1 is **not** “turn on physics and get stable humanoid balance for free.”
-
-It is a **hybrid articulated control problem** built on:
-
-- Chaos articulated bodies
-- Physics Control targets
-- contact-rich foot interactions
-- mixed kinematic/simulated ownership
-- staged authority transfer
-- model inference + retargeting
-
-UE provides the pieces, but not a complete stable humanoid-balance stack. The docs and implementation must therefore treat balance entry as a strict contract and a physical-viability experiment, not as a trivial engine feature.
-
-### Engine-grounded constraints
-
-These points must be treated as part of the Stage 1 design basis:
-
-- `UPhysicsControlComponent` is **Experimental** in UE.
-- Physics **sub-stepping materially affects** ragdoll and complex articulated stability.
-- `Kinematic` vs `Simulated` is a real ownership boundary, not a cosmetic tuning choice.
-- Body-modifier writes are not synonymous with raw-body state changes; intended ownership, modifier-record ownership, and raw body state must be treated as separate observables.
-- Broad-set writes and named-set writes must not be assumed authoritative enough for topology-critical ownership without explicit proof.
-- Constraint damping and body damping are not universal “make it stable” knobs; they act in different ways and do not replace a correct ownership/control design.
-
-### The only custom bridge code
-
-A small C++ plugin (`PhysAnimPlugin`) that each frame:
-
-1. gathers authoritative body state
-2. packs the observation tensors expected by the selected policy
-3. runs NNE inference
-4. unpacks the model action output
-5. writes the resulting control targets into the UE runtime path
-
-The plugin also owns the balance-entry runtime contract and its transition diagnostics.
+1. gather authoritative runtime state
+2. pack observations
+3. run NNE inference
+4. unpack actions
+5. publish control targets and activation diagnostics
 
 ---
 
-## 3. Stage 1 bridge problem statement
+## 3. Active Direction
 
-The bridge has two separate questions:
+Stage 1 now uses a **balance-first activation** design.
 
-### A. Contract correctness
-Can Unreal reproduce the exact runtime ownership, write-routing, and convergence contract that the selected Stage 1 path requires?
+This is not a small transition tweak. It is an architectural unwind of the state machine that was organized around:
 
-### B. Physical viability
-Even if the contract is correct, is the accepted entry setup physically viable under current:
+- `Prepare`
+- `LateValidate`
+- `RootOn`
+- `Settle`
+- per-phase retries, guards, and safe-deny logic
 
+Moving to continuous physical ownership plus controller blend-in means rewriting the core assumption behind that transition model.
+
+The target runtime is not a flip-based ritual with a later certified handoff. The target runtime is:
+
+```text
+BalanceActivation_Ready
+-> BalanceActivation_BlendIn
+-> BalanceActivation_Validate
+-> BalanceActive_Standing
+-> BalanceActive_Recovery / SafeDenied / Failed
+```
+
+Core rules:
+
+- the balance-critical chain stays continuously simulated through activation
+- controller authority ramps onto an already-physical state
+- topology and ownership flips must be minimized
+- diagnostics measure reality and must not manufacture a pass
+- success is only sustained `BalanceActive_Standing` for `3.0` continuous seconds
+
+The default balance-critical chain for Stage 1 is:
+
+- `pelvis`
+- `spine_01`
+- `spine_02`
+- `spine_03`
+- `thigh_l`
+- `thigh_r`
+
+Distal and upper-body ownership may still be tuned, but the balance-critical chain must not rely on temporary kinematic re-ownership during activation.
+
+The hardest shift is this:
+
+- the old system tried to prove the handoff was safe
+- the new system must prove the controller can stand on its own in continuous physics
+
+The primary architecture for this rewrite is defined in:
+
+- `plans/stage1/10-specs/continuous_balance_architecture.md`
+- `plans/stage1/10-specs/continuous_balance_truth_model.md`
+- `plans/stage1/10-specs/authority_matrix.md`
+- `plans/stage1/10-specs/instrumentation_and_acceptance.md`
+
+The old handoff pipeline is now a legacy compatibility subsystem, not the architectural center.
+
+### Rewrite scope ladder
+
+- `V0`: always-sim proximal chain, idle stance, no perturbation
+  support set simulated, shell disabled on critical/support sets
+- `V1`: sustained standing
+- `V2`: recovery from small pushes
+- `V3`: locomotion coupling
+
+Hard non-goal:
+
+- no distal or upper-body sophistication before proximal standing is honest
+
+---
+
+## 4. Contract And Viability
+
+The bridge still has two separate questions.
+
+### Contract correctness
+
+Can Unreal reproduce the required runtime contract for:
+
+- continuous simulated ownership of the balance-critical chain
+- gradual controller-authority blend
+- truthful shell bookkeeping versus shell influence separation
+- explicit terminal outcomes
+
+### Physical viability
+
+Even if the contract is correct, can the live physical system survive activation under current:
+
+- gains and damping
+- target representation and action scaling
+- latency and pose discontinuity
 - control tuning
 - contact behavior
 - sub-step regime
-- topology ownership
-- hold/reference behavior
-- shell/reference coupling
+- shell behavior
+- balance-critical ownership
+- controller blend timing
 
-These questions must stay separate in both code and docs.
-
----
-
-## 4. Current Stage 1 balance-entry interpretation
-
-The long-term goal is **always-on balance**.
-
-That means the current architecture should be treated as **transitional**:
-
-- normal bridge startup / bring-up gets the runtime alive
-- balance entry converts that live runtime into a frozen Phase 1 contract
-- Phase 2 warm-starts root simulation from that still-valid handoff
-
-This is acceptable for now, but not the final architecture.
-
-Long-term target:
-
-```text
-balance startup
--> balance settle
--> balance active
--> balance recovery / safe deny
-```
-
-Not:
-
-```text
-generic bridge runtime
--> special balance mode layered on later
-```
+These questions must stay separate in code, docs, and evidence.
 
 ---
 
-## 5. Current Stage 1 contract summary
+## 5. Development Guidance
 
-### Phase 1 accepted topology
+Preserve these solved or intentional distinctions:
 
-Under the current design, the accepted Phase 1 topology is:
+- intended ownership, modifier-record ownership, and raw body state are different observables
+- shell bookkeeping and shell influence are different observables
+- diagnostics are allowed to classify failure, not to widen grace until the run appears successful
+- truthful safe deny is useful telemetry but never a passing outcome
 
-- `root = kinematic`
-- `proximal = simulated`
-- `distal = kinematic`
-- `upper = kinematic`
+The new direction also requires these explicit interpretations:
 
-This means:
+- if instability now appears more directly, that is often progress rather than regression
+- controller-strength problems must be kept separate from ownership problems
+- removing the flip-based ritual removes a major crutch for explaining instability as a handoff artifact
+- policy, Physics Control, locomotion authority, and startup logic are more likely to fight each other earlier in the run and must be treated as simultaneously live systems
+- shell-lock truth from the old design cannot simply be carried forward as-is; the new model needs a cleaner truth definition that does not secretly depend on shell-maintained containment
 
-- pelvis/root may remain kinematic in Phase 1
-- `pelvisSimulating=false` is not, by itself, a Phase 1 failure
-- normal policy writes must be suppressed over the accepted Phase 1 set
-- only the explicit hold path may publish to allowed kinematic bones
-- Prepare / LateValidate decisions must use a **post-update authoritative convergence snapshot**
-- freeze lifetime must cover the **full Phase 1 attempt**
+Evidence for any standing claim must state:
 
-### Phase 2 / Phase 3 current contract reality
+- sub-step regime
+- balance-critical ownership continuity
+- support-set continuity
+- controller-authority blend behavior
+- control effort or controller strength evidence
+- contact quality and long-lived oscillation evidence when available
+- whether policy/control authority was blended or abruptly applied
+- whether shell influence was absent or materially active
+- worst-body or worst-family instability
+- whether the failure was contract-level or physical-level
 
-The investigation has now moved beyond earlier Phase 1 ownership/telemetry problems.
+Forbidden success proxies:
 
-Phase 2 RootOn is now substantially specified and can pass truthfully in isolation, but that is no longer treated as sufficient evidence of success.
-
-The active benchmark is now:
-
-- reach `BalanceActive_Standing`
-- hold that state continuously for `3.0` seconds
-- do not count safe-deny as success
-- do not treat further grace-window broadening as progress unless it moves that benchmark
-
-The active unresolved Phase 3 questions are:
-
-- how Settle distinguishes shell lock state, shell reference state, and materially active shell correction on the current latest frontier
-- how to tell whether the current post-RootOn shell-maintenance loss is a contract mismatch, a physical-viability limit, or both
-- how to preserve truthful Settle failure classification without collapsing back into retry noise or generic no-convergence labeling
-
-The current unsolved question is therefore no longer mainly whether the accepted frozen Phase 1 setup is viable or whether RootOn can pass truthfully. It is whether the post-RootOn Settle continuity path can reach real `BalanceActive_Standing` and hold it for the benchmark window once the current `phase3_material_shell_correction` frontier is crossed under the current runtime contract.
+- phase-completion counters
+- shell status by itself
+- “clean transition” claims that do not end in sustained standing
 
 ---
 
-## 6. Development guidance
-
-### Preserve solved areas
-
-Before any further large refactor, preserve the following distinctions:
-
-- **substantially cleaned up:** queueing, explicit acceptance, hold-vs-policy separation, freeze lifetime, root tilt source correction, post-update convergence snapshot timing, broad-write distrust, explicit modifier-record diagnostics
-- **still open:** Settle shell-maintenance truth, post-RootOn continuity without material correction, and the remaining physical-viability question in Phase 3
-- **not success by itself:** truthful safe-deny, `reached_root_on`, or any other outcome that fails to hold `BalanceActive_Standing` for `3.0` continuous seconds
-
-Do not re-open solved contract areas casually.
-
-### Evidence quality rule
-
-A “successful-looking” run is not enough. Stage 1 evidence must state:
-
-- sub-step regime used
-- topology at each entry phase
-- whether policy writes were suppressed
-- whether hold-only writes remained
-- whether shell influence was suppressed versus merely shell-locked
-- which body set produced the worst motion
-- whether failure was contract-level or physical-level
-
----
-
-## 7. Key risks
+## 6. Key Risks
 
 | Risk | Likelihood | Impact | Notes |
 |---|---:|---:|---|
-| Sim-to-sim gap (training simulator -> Chaos) | High | High | Likely permanent tuning burden |
-| Phase 1 contract correct but physically non-viable | High | High | Still plausible |
-| Phase 3 shell-maintenance truth model under-specified | High | High | Current doc/implementation drift point |
-| Material shell correction during Settle hides the true blocker | High | High | Latest truthful failure frontier after the refreshed `2026-04-22` live smoke; no longer acceptable as a passing outcome |
-| Post-RootOn continuity depends on hidden shell support | Medium | High | Must be separated from shell state and shell lock bookkeeping |
-| Physics Control limitations / Experimental behavior | Medium | Medium | Must not be treated as a black-box stable motor system |
-| Over-constrained kinematic hold set destabilizes sim set | Medium | High | Needs evidence-driven review |
-| Weak admission margin allows LateValidate / RootOn too early | Medium | Medium | Should be treated separately from deny thresholds |
+| Sim-to-sim gap (training simulator -> Chaos) | High | High | Likely persistent tuning burden |
+| Balance-critical ownership continuity is not achievable with current UE path | High | High | Main structural risk after the direction change |
+| Controller blend-in destabilizes an already-physical state | High | High | New primary activation risk |
+| Instability is misdiagnosed as ownership failure when it is really controller weakness | High | High | Gains, damping, target representation, action scale, latency, and pose discontinuity now sit closer to the surface |
+| Shell bookkeeping is correct but shell influence is still materially active | High | High | Must be measured, not explained away |
+| The new truth model still depends implicitly on shell containment from the old design | High | High | Would recreate the old ritual under a different name |
+| Hidden authority conflicts between policy, Physics Control, locomotion, and startup logic | High | High | More systems will be live together earlier in activation |
+| Hidden ownership flips remain in the runtime | Medium | High | Would violate the target activation contract |
+| Physics Control limitations / Experimental behavior | Medium | Medium | Must not be treated as a turnkey balance stack |
+| Standing validation passes briefly but does not sustain | Medium | High | Product failure even if activation looks promising |
+| Early results look worse and are mistaken for a design regression | Medium | High | Expected when guards and grace logic stop hiding controller weakness |
 
 ---
 
-## 8. Acceptance view for Stage 1
+## 7. Acceptance View For Stage 1
 
-Stage 1 balance entry is only truly “working” when all are true in the same run:
+Stage 1 balance activation is only truly working when all are true in the same run:
 
-- request / preflight / entry state machine are correct
-- accepted Phase 1 topology is correct
-- suppression and hold-only semantics are correct
-- freeze lifetime is correct
-- post-update convergence snapshot is correct
-- Prepare -> LateValidate admission requires real stability margin
-- Phase 1 survives long enough to show the accepted setup is at least provisionally viable
-- Phase 2 performs a truthful warm start from that still-valid handoff
-- Phase 2 guard window contains no hidden shell or policy assistance
-- Phase 3 Settle can either activate or deny safely with truthful reasons
-- Settle continuity holds without material shell correction becoming active
+- the bridge enters `BalanceActivation_Ready`
+- the balance-critical chain remains continuously simulated through activation
+- the support set remains physically valid for support truth
+- controller authority ramps gradually onto the already-physical chain
+- diagnostics stay observational only
+- no hidden shell or gameplay correction manufactures a pass
 - the run reaches `BalanceActive_Standing`
-- `BalanceActive_Standing` persists for `3.0` continuous seconds
+- `BalanceActive_Standing` persists continuously for `3.0` seconds
 
-Until then, Stage 1 remains an active balance-entry investigation rather than a solved runtime.
+Until then, Stage 1 remains an active balance-activation investigation.
 
 ---
 
-## 9. Project structure
+## 8. Project Structure
 
 ```text
 NewEngine/
 |-- ENGINEERING_PLAN.md
 |-- STAGE1_PLAN.md
 |-- plans/stage1/10-specs/
-|   |-- bridge-spec.md
-|   |-- ue-bridge-implementation-spec.md
-|   `-- balance-mode-entry-spec.md
-|-- plans/stage1/40-design/
-|   |-- balance-perturbation-mode-design.md
-|   |-- balance_mode_entry_transition_spec.md
-|   |-- balance_mode_phase1_stabilization_spec.md
-|   |-- balance_mode_phase2.md
-|   |-- phase1-late-validate-truth-model.md
-|   `-- phase2-rooton-truth-model.md
+|   |-- continuous_balance_architecture.md
+|   |-- continuous_balance_truth_model.md
+|   |-- authority_matrix.md
+|   |-- engine_execution_contract.md
+|   |-- physics_asset_contract.md
+|   |-- character_capsule_contract.md
+|   |-- instrumentation_and_acceptance.md
+|   |-- balance-mode-entry-spec.md
+|   `-- rewrite_migration_plan.md
+|-- plans/stage1/20-execution/
+|   |-- execution-log.md
+|   |-- assumption-ledger.md
+|   |-- balance_first_refactor_plan.md
+|   |-- balance_first_tdd_strategy.md
+|   |-- balance_first_test_matrix.md
+|   `-- first-slice-definition.md
+|-- plans/stage1/90-archive/
+|   `-- 40-design-legacy/
 `-- PhysAnimUE5/
     `-- Plugins/PhysAnimPlugin/
 ```

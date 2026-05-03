@@ -13,7 +13,10 @@
 #include "Animation/TrajectoryTypes.h"
 #include "PhysAnimBridge.h"
 #include "PhysAnimBalanceReadyTransition.h"
+#include "PhysAnimTruthTypes.h"
 
+#include "PhysAnimRuntimeTerminationPipeline.h"
+#include "PhysAnimProofArtifactEmitter.h"
 #include "PhysAnimComponent.generated.h"
 
 class UAnimInstance;
@@ -62,6 +65,29 @@ enum class EBridgeLocomotionAuthorityState : uint8
 	Idle,
 	StartupLocomotion,
 	Locomoting
+};
+
+UENUM(BlueprintType)
+enum class EBridgeLocomotionRequestState : uint8
+{
+	BalanceActiveStanding,
+	LocomotionRequested,
+	LocomotionRequestDenied
+};
+
+UENUM(BlueprintType)
+enum class EBridgeLocomotionHandoffPreflightState : uint8
+{
+	LocomotionHandoffPreflightPassed,
+	LocomotionHandoffPreflightDenied
+};
+
+UENUM(BlueprintType)
+enum class EBridgeLocomotionHandoffCommitState : uint8
+{
+	LocomotionHandoffCommitPending,
+	LocomotionHandoffCommitted,
+	LocomotionHandoffCommitDenied
 };
 
 enum class EBalanceTransitionShellAuthorityMode : uint8
@@ -301,6 +327,12 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase1PrepareDuration = 0.10f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float BalancePhase1AdmissionMaxSupportGapMs = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
+	float ProxyDriftLimitMs = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalancePhase1MaxRootLinearBaseline = 25.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
@@ -424,7 +456,7 @@ struct FPhysAnimStabilizationSettings
 	float BalanceBootstrapExtraDampingMultiplier = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
-	float BalanceActiveExtraDampingMultiplier = 1.0f;
+	float BalanceActiveExtraDampingMultiplier = 1.2f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalanceSettleMaxRootLinearSpeed = 5.0f;
@@ -510,6 +542,8 @@ struct FPhysAnimStabilizationSettings
 			BalanceEntryMaxDistalSimCount == Other.BalanceEntryMaxDistalSimCount &&
 			FMath::IsNearlyEqual(BalanceEntryMinPolicyAlpha, Other.BalanceEntryMinPolicyAlpha) &&
 			FMath::IsNearlyEqual(BalancePhase1PrepareDuration, Other.BalancePhase1PrepareDuration) &&
+			FMath::IsNearlyEqual(BalancePhase1AdmissionMaxSupportGapMs, Other.BalancePhase1AdmissionMaxSupportGapMs) &&
+			FMath::IsNearlyEqual(ProxyDriftLimitMs, Other.ProxyDriftLimitMs) &&
 			FMath::IsNearlyEqual(BalancePhase1MaxRootLinearBaseline, Other.BalancePhase1MaxRootLinearBaseline) &&
 			FMath::IsNearlyEqual(BalancePhase1MaxRootAngularBaseline, Other.BalancePhase1MaxRootAngularBaseline) &&
 			FMath::IsNearlyEqual(BalancePhase1QuietRootLinearSpeed, Other.BalancePhase1QuietRootLinearSpeed) &&
@@ -579,7 +613,9 @@ enum class EPhysAnimRuntimeState : uint8
 	BalanceEntry_Settle,
 	BalanceActive_Recovery,
 	BalanceSafeDeny,
-	BalanceActive_Standing
+	BalanceActive_Standing,
+	LocomotionActiveShell,
+	LocomotionActiveShellDenied
 };
 
 UENUM(BlueprintType)
@@ -986,6 +1022,63 @@ struct FPhase1AutoCalibBodyModifierState {};
 struct FPhase1AutoCalibBaselineSnapshot { TArray<FPhase1AutoCalibBodyState> Bodies; };
 #endif
 
+USTRUCT(BlueprintType)
+struct FPhysAnimActivatedStandingStabilityMetrics
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	bool bHasSamples = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 TerminalReason = static_cast<int32>(EPhysAnimTerminalReason::None);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ActivationDurationSec = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double RootWorldPositionDriftCm = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double RootVerticalDriftCm = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double RootAngularDriftDeg = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double MaxBodyLinearSpeedCmPerSecond = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double MaxBodyAngularSpeedDegPerSecond = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double SupportHullAreaMinCm2 = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double SupportHullAreaMeanCm2 = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double SupportHullAreaMaxCm2 = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ActiveSupportSideCountMin = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ActiveSupportSideCountMean = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ActiveSupportSideCountMax = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 FailStopCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 SampleCount = 0;
+};
+
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
 class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPoseSearchTrajectoryPredictorInterface
 {
@@ -995,6 +1088,34 @@ class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPo
 
 public:
 	UPhysAnimComponent();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim | Proof", meta = (AllowPrivateAccess = "true"))
+	bool bEnableLiveRuntimeEvidenceProof = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
+	FName LiveRuntimeEvidenceLeftSupportBodyName = TEXT("foot_l");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
+	FName LiveRuntimeEvidenceRightSupportBodyName = TEXT("foot_r");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceSupportSweepRadiusCm = 12.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceSupportSweepDistanceCm = 18.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceSupportSweepStartLiftCm = 6.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
+	bool bLiveRuntimeEvidenceWorldStaticOnly = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceStandingTargetSeconds = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence", meta = (ClampMin = "0.0"))
+	float LiveRuntimeEvidenceProgressLogIntervalSeconds = 0.25f;
+
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -1010,7 +1131,6 @@ public:
 	{
 		return Mode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked;
 	}
-	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
 	FVector GetAcceptedShellPlanarVelocity() const { return BridgeShellState.AcceptedPlanarVelocityCmPerSecond; }
 	float GetCurrentShellPlanarOffsetDeltaCm() const;
 	float GetCurrentShellPlanarVelocityDeltaCmPerSecond() const;
@@ -1061,8 +1181,70 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	void StopBridge();
 
+	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
+	void ResetLiveRuntimeEvidenceProof();
+
+	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
+	bool CanEnterBalanceActiveStanding() const;
+
+	bool CanEnterBridgeLocomotionGate(FString& OutReason) const;
+
+	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
+	EPhysAnimRuntimeState EvaluateBalanceActiveStanding() const;
+
+	bool ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerminationState& TerminationState) const;
+
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
+	bool GetForceSupportFailure() const { return bForceSupportFailure; }
+	void SetForceSupportFailure(bool bInForce) { bForceSupportFailure = bInForce; }
+	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
+	bool DoesBridgeOwnPhysics() const { return RuntimeStateOwnsBridgePhysics(RuntimeState); }
+	EBridgeLocomotionRequestState GetLocomotionRequestState() const { return BridgeLocomotionRequestState; }
+	EBridgeLocomotionHandoffPreflightState GetLocomotionHandoffPreflightState() const { return BridgeLocomotionHandoffPreflightState; }
+	const FString& GetLocomotionRequestReason() const { return BridgeLocomotionRequestReason; }
+	const FString& GetLocomotionHandoffPreflightReason() const { return BridgeLocomotionHandoffPreflightReason; }
+	EBridgeLocomotionHandoffCommitState GetLocomotionHandoffCommitState() const { return BridgeLocomotionHandoffCommitState; }
+	const FString& GetLocomotionHandoffCommitReason() const { return BridgeLocomotionHandoffCommitReason; }
+	const FString& GetLocomotionActiveShellReason() const { return BridgeLocomotionActiveShellReason; }
+	float GetBridgeLocomotionIntentMagnitude() const { return BridgeIntentState.IntentMagnitude; }
+	double GetBridgeLocomotionIntentAgeSeconds() const
+	{
+		const double IntentStartTimeSeconds = static_cast<double>(DistalLocomotionCompositionTimeSinceActiveIntentSeconds);
+		if (IntentStartTimeSeconds < 0.0)
+		{
+			return -1.0;
+		}
+
+		const UWorld* const World = GetWorld();
+		return World ? (World->GetTimeSeconds() - IntentStartTimeSeconds) : -1.0;
+	}
+
+	const FPhysAnimRuntimeTerminationState& GetLiveRuntimeEvidenceTerminationState() const { return LiveRuntimeEvidenceTerminationState; }
+	bool IsLiveRuntimeEvidenceProofComplete() const { return bLiveRuntimeEvidenceProofComplete; }
+	bool IsLiveRuntimeEvidenceProofSatisfied() const;
+	bool HasActiveBridgeTraceSession() const { return BridgeTraceWriter.IsValid(); }
+	void NoteStartupProofWaitingForPoseSearchObserved();
+	void ArmStartupProofTerminalEnforcement();
+	void SetStartupProofShouldComplete(bool bShouldComplete) { bLiveRuntimeEvidenceProofShouldComplete = bShouldComplete; }
+	bool IsStartupProofWaitingForPoseSearchObserved() const { return bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved; }
+	bool IsStartupProofEvidenceFresh() const { return bLiveRuntimeEvidenceStartupEvidenceFresh; }
+	bool IsStartupProofStandingEntryAccepted() const { return bLiveRuntimeEvidenceStartupStandingEntryAccepted; }
+	bool IsStartupProofTerminalEnforcementArmed() const { return bLiveRuntimeEvidenceStartupVerificationHandoffArmed; }
+	bool IsStartupProofProxySupportHandoffArmed() const { return bLiveRuntimeEvidenceStartupProxySupportHandoffArmed; }
+	bool HasDeferredStartupProxyTerminalReason() const { return LiveRuntimeEvidenceTerminationState.bHasDeferredStartupProxyTerminalReason; }
+	EPhysAnimTerminalReason GetDeferredStartupProxyTerminalReason() const { return LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalReason; }
+	const FString& GetDeferredStartupProxyTerminalAttemptUuid() const { return LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalAttemptUuid; }
+	int64 GetDeferredStartupProxyTerminalSubstepTimestamp() const { return LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalSubstepTimestamp; }
+	EPhysAnimTerminalReason GetStartupProofDeferredTerminalReason() const { return StartupProofDeferredTerminalReason; }
+#if !UE_BUILD_SHIPPING
+	void SetStartupProofDeferredTerminalReasonForTesting(EPhysAnimTerminalReason Reason) { StartupProofDeferredTerminalReason = Reason; }
+	void TriggerProofFailureFailStopRoutingForTesting();
+#endif
+	const FPhysAnimActivatedStandingStabilityMetrics& GetActivatedStandingStabilityMetrics() const { return ActivatedStandingStabilityMetrics; }
+	void UpdateActivatedStandingStabilityMetrics(float DeltaTimeSeconds);
+	bool ApplyActivatedStandingPerturbation(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude);
+	bool HasActivatedStandingPerturbationApplied() const { return bActivatedStandingPerturbationApplied; }
 
 	static EPhysAnimRuntimeState MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase TransitionPhase);
 
@@ -1112,6 +1294,12 @@ public:
 #if WITH_DEV_AUTOMATION_TESTS
 	static bool TestOnlyIsBalanceEntryState(EPhysAnimRuntimeState State) { return IsBalanceEntryState(State); }
 	static bool TestOnlyIsBalanceActiveState(EPhysAnimRuntimeState State) { return IsBalanceActiveState(State); }
+	void TestOnlySetBridgeLocomotionGateIntent(float IntentMagnitude, double IntentAgeSeconds);
+	void TestOnlySetBridgeLocomotionRequestEvidence(
+		const FPhysAnimRuntimeTerminationState& EvidenceState,
+		float IntentMagnitude,
+		double IntentAgeSeconds);
+	void TestOnlyUpdateBridgeLocomotionActiveShellState(double CurrentTimeSeconds);
 	static bool TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
 		EPhysAnimRuntimeState RuntimeState,
 		bool bDistalKinematicAccepted)
@@ -1460,6 +1648,51 @@ protected:
 	int32 BridgeTraceSampleEveryNthFrame = 1;
 
 private:
+
+	bool bLiveRuntimeEvidenceProofActive = false;
+	bool bLiveRuntimeEvidenceProofComplete = false;
+	bool bLiveRuntimeEvidenceProofShouldComplete = true;
+	bool bLiveRuntimeEvidenceStartupEvidenceFresh = false;
+	bool bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved = false;
+	bool bLiveRuntimeEvidenceStartupStandingEntryAccepted = false;
+	int64 StartupProofStandingEntryAcceptedSubstep = -1;
+	bool bLiveRuntimeEvidenceStartupVerificationHandoffArmed = false;
+	int64 StartupProofVerificationHandoffArmedSubstep = -1;
+	bool bLiveRuntimeEvidenceStartupProxySupportHandoffArmed = false;
+	bool bForceSupportFailure = false;
+	bool bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
+	EPhysAnimTerminalReason StartupProofDeferredTerminalReason = EPhysAnimTerminalReason::None;
+
+	FString LiveRuntimeEvidenceAttemptUuid;
+	float LiveRuntimeEvidenceStandingSeconds = 0.0f;
+	float LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
+	int64 LiveRuntimeEvidenceSubstepCounter = 0;
+
+	FPhysAnimRuntimeTerminationState LiveRuntimeEvidenceTerminationState;
+	FPhysAnimActivatedStandingStabilityMetrics ActivatedStandingStabilityMetrics;
+	bool bActivatedStandingStabilityBaselineInitialized = false;
+	bool bActivatedStandingPerturbationApplied = false;
+	FVector ActivatedStandingStabilityBaselineRootLocationCm = FVector::ZeroVector;
+	float ActivatedStandingStabilityBaselineRootTiltDeg = 0.0f;
+	double ActivatedStandingStabilitySupportHullAreaSumCm2 = 0.0;
+	double ActivatedStandingStabilityActiveSupportSideCountSum = 0.0;
+
+	void TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds);
+
+private:
+	void EmitLiveRuntimeEvidenceTerminalArtifactOnce(const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult);
+	bool CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>& OutHitResults, int32& OutMappedSupportHitCount) const;
+	bool CaptureLiveRuntimeEvidenceHitResultForBody(const FName BodyName, TArray<FHitResult>& OutHitResults) const;
+	FPhysAnimSupportHitResultObservationInput BuildLiveRuntimeEvidenceObservationInput(
+		const TArray<FHitResult>& HitResults,
+		float DeltaTimeSeconds) const;
+	FPhysAnimRuntimeSubstepInput BuildLiveRuntimeEvidenceSubstepInput(
+		const FPhysAnimSupportObservationResult& SupportObservation,
+		float DeltaTimeSeconds) const;
+
+	FPhysAnimCapsuleContractSnapshot BuildCapsuleContractSnapshot() const;
+	FPhysAnimContinuitySnapshot BuildContinuitySnapshot(float DeltaTimeSeconds) const;
+
 	bool ResolveRuntimeContext(FString& OutError);
 	bool ValidateRequiredBodies(FString& OutError) const;
 	bool ValidatePhysicsControlAuthoring(FString& OutError) const;
@@ -1492,6 +1725,7 @@ private:
 	void ResetBridgePhysicsState();
 	bool GatherCurrentPoseControlTargetOrientations(TMap<FName, FQuat>& OutTargetOrientations, FString& OutError) const;
 	bool SeedControlTargetsFromCurrentPose(float DeltaTime, FString& OutError);
+	void UpdateBridgeLocomotionGateTiming(const FPhysAnimStabilizationSettings& EffectiveSettings, double CurrentTimeSeconds);
 	void UpdateBridgeLocomotionAuthorityState(const FVector& QueryVelocity, const FPhysAnimStabilizationSettings& EffectiveSettings, double CurrentTimeSeconds);
 	bool IsBridgeLocomotionQueryActive() const;
 	bool IsBridgeLocomotionEntryRequested(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
@@ -1546,6 +1780,18 @@ private:
 	void CaptureBridgeIntent(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ApplyBridgeOwnedMovementDrive(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResetBridgeLocomotionAuthorityState();
+	void ResetBridgeLocomotionRequestState();
+	void ResetBridgeLocomotionHandoffPreflightState();
+	void ResetBridgeLocomotionHandoffCommitState();
+	bool EvaluateBridgeLocomotionGate(FString& OutReason) const;
+	bool EvaluateBridgeLocomotionHandoffPreflight(FString& OutReason) const;
+	bool EvaluateBridgeLocomotionHandoffCommit(FString& OutReason) const;
+	bool EvaluateBridgeLocomotionActiveShell(FString& OutReason) const;
+	void UpdateBridgeLocomotionRequestState(double CurrentTimeSeconds);
+	void UpdateBridgeLocomotionHandoffPreflightState(double CurrentTimeSeconds);
+	void UpdateBridgeLocomotionHandoffCommitState(double CurrentTimeSeconds);
+	void UpdateBridgeLocomotionActiveShellState(double CurrentTimeSeconds);
+	void ResetBridgeLocomotionActiveShellState();
 	void RecoverBridgeActiveStateAfterBalanceTransitionFailure(const FString& FailureReason);
 	void PublishBalanceTransitionFailureReason(const FString& FailureReason);
 	void ClearPublishedBalanceTransitionFailureReason();
@@ -1608,6 +1854,7 @@ private:
 	static bool IsBalanceEntryState(EPhysAnimRuntimeState State);
 	EPhysAnimRuntimeState GetPublicBalanceEntryRuntimeState() const;
 	static bool IsBalanceActiveState(EPhysAnimRuntimeState State);
+	static bool IsLocomotionActiveShellState(EPhysAnimRuntimeState State);
 	void ResetBalanceScenarioQuietGate(const FString& Reason);
 	void CompleteBalanceModeEntry();
 	bool EvaluateBalanceModeQueueGates(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const;
@@ -1691,6 +1938,17 @@ private:
 	bool bHasBridgePoseSearchLatchedWalkResult = false;
 	bool bBridgePoseSearchTrajectoryInitialized = false;
 	EBridgeLocomotionAuthorityState BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+	EBridgeLocomotionRequestState BridgeLocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+	FString BridgeLocomotionRequestReason;
+	double BridgeLocomotionRequestStateEnteredTimeSeconds = -1.0;
+	EBridgeLocomotionHandoffPreflightState BridgeLocomotionHandoffPreflightState = EBridgeLocomotionHandoffPreflightState::LocomotionHandoffPreflightDenied;
+	FString BridgeLocomotionHandoffPreflightReason;
+	double BridgeLocomotionHandoffPreflightStateEnteredTimeSeconds = -1.0;
+	EBridgeLocomotionHandoffCommitState BridgeLocomotionHandoffCommitState = EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitPending;
+	FString BridgeLocomotionHandoffCommitReason;
+	double BridgeLocomotionHandoffCommitStateEnteredTimeSeconds = -1.0;
+	FString BridgeLocomotionActiveShellReason;
+	double BridgeLocomotionActiveShellStateEnteredTimeSeconds = -1.0;
 	double BridgeLocomotionStateEnterTimeSeconds = -1.0;
 	double BridgeLocomotionExitHoldStartTimeSeconds = -1.0;
 	double LastPrePolicyShellRecoveryLogTimeSeconds = -1.0;

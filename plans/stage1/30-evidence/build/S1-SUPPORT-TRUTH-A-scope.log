@@ -1,0 +1,117 @@
+S1-SUPPORT-TRUTH-A scope evidence
+Generated: 2026-04-24T19:24:57.4007885-03:00
+
+=== Checkpoint range scope check ===
+COMMAND: .\scripts\check_task_scope.ps1 -CheckpointPacket plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-A.md -BaseRef 0945121312d7fd0a9236f2b3e566a5b31dc600f7 -HeadRef 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1 -AllowExecutionLog -AllowEvidence
+=== SCOPE CHECK ===
+Changed files:
+- AGENTS.md
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.cpp
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.Tests.cpp
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimSupportTruth.h
+- plans/stage1/20-execution/agent_workflow_protocol.md
+- plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-A.md
+- plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-B.md
+- plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-C.md
+- plans/stage1/20-execution/execution-log.md
+- plans/stage1/20-execution/task-packets/CURRENT_TASK_PROMPT.txt
+- plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md
+- plans/stage1/20-execution/task-packets/README.md
+- plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md
+- plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md
+- plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-02.md
+- plans/stage1/20-execution/task-packets/TEMPLATE.md
+- plans/stage1/30-evidence/reviews/README.md
+- plans/stage1/30-evidence/reviews/TEMPLATE.md
+- scripts/make_review_packet.ps1
+- scripts/start_current_task.ps1
+
+Allowed files/prefixes:
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimTruthTypes.h
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimSupportTruth.h
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.cpp
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.Tests.cpp
+- plans/stage1/20-execution/execution-log.md
+- plans/stage1/30-evidence/reviews
+- plans/stage1/30-evidence/blockers
+- plans/stage1/30-evidence/build
+
+SCOPE CHECK: FAILED
+Forbidden files:
+- AGENTS.md
+- plans/stage1/20-execution/agent_workflow_protocol.md
+- plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-A.md
+- plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-B.md
+- plans/stage1/20-execution/checkpoints/S1-SUPPORT-TRUTH-C.md
+- plans/stage1/20-execution/task-packets/CURRENT_TASK_PROMPT.txt
+- plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md
+- plans/stage1/20-execution/task-packets/README.md
+- plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md
+- plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md
+- plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-02.md
+- plans/stage1/20-execution/task-packets/TEMPLATE.md
+- scripts/make_review_packet.ps1
+- scripts/start_current_task.ps1
+EXIT: 1
+
+=== Task 01 scope check ===
+COMMAND: .\scripts\check_task_scope.ps1 -TaskPacket plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-01.md -BaseRef 0945121312d7fd0a9236f2b3e566a5b31dc600f7 -HeadRef d512b19b5e0b91b42dddaf994ab3d0f8edb60560 -AllowExecutionLog -AllowEvidence
+=== SCOPE CHECK ===
+Changed files:
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.cpp
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimSupportTruth.h
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimTruthTypes.h
+- plans/stage1/20-execution/execution-log.md
+
+Allowed files/prefixes:
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimTruthTypes.h
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimSupportTruth.h
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.cpp
+- plans/stage1/20-execution/execution-log.md
+- plans/stage1/30-evidence/reviews
+- plans/stage1/30-evidence/blockers
+- plans/stage1/30-evidence/build
+
+SCOPE CHECK: PASSED
+EXIT: 0
+
+=== Task 02 scope check ===
+COMMAND: .\scripts\check_task_scope.ps1 -TaskPacket plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-02.md -BaseRef 23a53f366f17695317dc30675da65a64bc2c578c^ -HeadRef 23a53f366f17695317dc30675da65a64bc2c578c -AllowExecutionLog -AllowEvidence
+=== SCOPE CHECK ===
+Changed files:
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.Tests.cpp
+
+Allowed files/prefixes:
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimSupportTruth.Tests.cpp
+- plans/stage1/20-execution/execution-log.md
+- plans/stage1/30-evidence/reviews
+- plans/stage1/30-evidence/blockers
+- plans/stage1/30-evidence/build
+
+SCOPE CHECK: PASSED
+EXIT: 0
+
+=== Task 03 scope check ===
+COMMAND: .\scripts\check_task_scope.ps1 -TaskPacket plans/stage1/20-execution/task-packets/S1-IMPL-BALANCE-FIRST-03.md -BaseRef 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1^ -HeadRef 21109d3d288cc4fdb2b3daebbf119b4c8d9ccfe1 -AllowExecutionLog -AllowEvidence
+=== SCOPE CHECK ===
+Changed files:
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimSupportTruth.h
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimTruthTypes.h
+
+Allowed files/prefixes:
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimTruthTypes.h
+- PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimSupportTruth.h
+- plans/stage1/20-execution/execution-log.md
+- plans/stage1/30-evidence/reviews
+- plans/stage1/30-evidence/blockers
+- plans/stage1/30-evidence/build
+
+SCOPE CHECK: PASSED
+EXIT: 0
+
+=== Summary ===
+Checkpoint range scope exit: 1
+Task 01 scope exit: 0
+Task 02 scope exit: 0
+Task 03 scope exit: 0
+Interpretation: task commits are scope-clean; recorded checkpoint linear range is scope-dirty because it contains non-task workflow/planning commits.

@@ -2,290 +2,56 @@
 
 ## Purpose
 
-This document defines the authoritative Stage 1 balance-entry contract.
+This document is a shallow entry point for the Stage 1 balance-activation contract. It defines the canonical state names and maps legacy concepts to the new architecture.
 
-It exists to separate:
+**This file is NOT an authority surface for timing, ownership, or physical truth.**
 
-- normal bridge startup behavior
-- balance-entry state-machine behavior
-- Phase 1 ownership and write-routing behavior
-- Phase 2 RootOn ownership and guard-window behavior
-- Phase 3 Settle continuity behavior
-- the still-open physical-viability question
+## Authoritative Documentation
 
-## Core interpretation
+The balance-activation contract is defined by the following authoritative documents:
 
-Balance entry is a distinct runtime contract layered on top of a running bridge.
+- **Timing and Cadence**: [engine_execution_contract.md](engine_execution_contract.md)
+- **Failure Truth and Arbitration**: [continuous_balance_truth_model.md](continuous_balance_truth_model.md)
+- **Subsystem Ownership and States**: [authority_matrix.md](authority_matrix.md)
+- **Instrumentation and Acceptance Gates**: [instrumentation_and_acceptance.md](instrumentation_and_acceptance.md)
+- **Structural Body Sets**: [continuous_balance_architecture.md](continuous_balance_architecture.md)
 
-The major contract question is no longer whether the runtime can represent entry at all.
+## Canonical Runtime States
 
-The current contract surface is now split across:
+The authoritative runtime states for balance activation are:
 
-- Phase 1 accepted topology and LateValidate truthfulness
-- Phase 2 warm-start RootOn truthfulness
-- Phase 3 post-RootOn Settle continuity before active mode
+1. `BalanceActivation_Ready`
+2. `BalanceActivation_BlendIn`
+3. `BalanceActivation_Validate`
+4. `BalanceActive_Standing`
+5. `BalanceActive_Recovery`
+6. `SafeDenied` / `Failed` (Terminal Outcomes)
 
-## Canonical phase sequence
+The detailed entry preconditions, exit conditions, and failure reasons for each mode are defined exclusively in the [Authority Matrix](authority_matrix.md) and the [Truth Model](continuous_balance_truth_model.md).
 
-Use the following canonical balance-entry phase sequence in docs, logs, and design discussion:
+**Note on Plant Audit**: Passing the full Static Structural Audit (Entry Gate) (See [physics_asset_contract.md](physics_asset_contract.md)) is a **prerequisite** for entering the balance state machine; it does not occur during `BalanceActivation_Ready`.
 
-1. `Phase1_Prepare`
-2. `Phase1_LateValidate`
-3. `Phase2_RootOn`
-4. `Phase2_ReadyForPhase3`
-5. `Phase3_Settle`
-6. `BalancePerturbationActive`
+## Outcome Vocabulary
 
-Interpretation rules:
+For V0 balance activation:
 
-- `Phase2_ReadyForPhase3` is an internal handoff boundary, not an active-balance phase
-- runtime `BalanceEntry_Settle` maps to `Phase3_Settle`
-- balance mode is not active until `Phase3_Settle` succeeds
-- `BalanceActive_Standing` is the only current success publication state for balance entry
-- truthful safe deny remains a terminal failure outcome, not a success outcome
+- `BalanceActive_Standing` is the only successful runtime outcome.
+- `SafeDenied` is a truthful denial outcome and is never product success.
+- `Failed` is the canonical terminal failure outcome for contract, continuity, support, instability, authority, and timeout failures.
+- `No Entry` is not a runtime state; it means a prerequisite failed before `BalanceActivation_Ready` and the attempt terminates as `Failed`.
+- Legacy `FailStopped` code or log labels map to canonical `Failed` in balance-first planning docs and artifacts.
 
-## Phase 1 Truth Model Alignment
+## Authoritative State Mapping
 
-Phase 1 behavior is governed by the authoritative [Phase 1 / LateValidate Truth Model](../40-design/phase1-late-validate-truth-model.md).
+Legacy filenames and code symbols (Phase 1/2/3, LateValidate, RootOn, Settle) are mapped to the new flow as follows:
 
-The accepted Phase 1 topology is:
+| Legacy Concept | New Architectural State |
+| :--- | :--- |
+| `Prepare` / `LateValidate` | `BalanceActivation_Ready` |
+| `RootOn` | (Superseded ownership-flip concept; not part of target design) |
+| `Settle` | `BalanceActivation_Validate` |
+| `BalanceActive` | `BalanceActive_Standing` |
+| `FailStopped` | `Failed` |
+| `BalanceSafeDeny` | `SafeDenied` |
 
-- `root = kinematic`
-- `proximal = simulated`
-- `distal = kinematic`
-- `upper = kinematic`
-
-Interpretation rules:
-
-- the root side may remain kinematic during Phase 1
-- `pelvisSimulating=false` is not, by itself, a Phase 1 deny condition
-- Phase 1 topology intent and raw body sim state are not guaranteed to be frame-synchronous; violations must be tracked according to the truth-model confirmation rules
-- topology changes are ownership changes, not mere tuning changes
-
-## Authority And Suppression By Phase
-
-| Phase | Authority source order | Target contract | Current implementation note |
-| :--- | :--- | :--- | :--- |
-| `Phase 1` | see the authoritative Phase 1 truth model | explicit frozen topology, hold-only writes, and convergence-snapshot gating | unchanged by this pass |
-| `Phase2_RootOn` | `certified intent` -> same-tick `raw body end state` -> `modifier-record state` -> `shell/policy influence` | policy/reset/shell/move-smoke suppression must stay active through the guard window; same-tick raw continuity is the deciding proof of technical RootOn success | modifier disagreement remains important routing evidence and must still be logged/classified truthfully |
-| `Phase3_Settle` | `certified post-RootOn topology` -> post-RootOn `raw body state` -> `modifier-record state` -> `shell/policy influence` | Settle is the continuity window between RootOn and active mode; hidden support must not mask instability | policy activity can resume in the current runtime, but Settle still requires idle locomotion, preserved shell lock, no shell reseed, no pending resets, no topology regression, and no material shell correction |
-
-## Mismatch Outcome Boundary
-
-Use the following boundary for all balance-entry phases:
-
-| Outcome class | Meaning | Typical examples |
-| :--- | :--- | :--- |
-| `Tolerated diagnostic mismatch` | Observable disagreement that is recorded truthfully but is not the deciding failure source because authoritative end-state proof still holds | same-frame intent/raw lag during Phase 1 application; RootOn preserved proximal `modifier=Kinematic` with `rawSim=1`; Settle root modifier mismatch logged while raw continuity still holds |
-| `Retryable transient failure` | The current tick or window is not yet admissible, but the attempt may continue because the contract is not yet falsified and recovery inside the active attempt remains allowed | quiet-window not yet satisfied; LateValidate shell-hold/readiness proof incomplete; RootOn topology not yet preserved but recovery prerequisites can still be met |
-| `Hard terminal failure` | The current attempt has been falsified and must terminate truthfully rather than continue or be reclassified as generic no-convergence | certified topology contradicted by confirmed end state; root simulation dropped after RootOn decision point; policy leak; shell material influence; persistent instability/spike; preserved set no longer present after RootOn |
-
-## Phase 1 Write-Routing Contract
-
-During Prepare and LateValidate:
-
-- normal policy target writes over the accepted Phase 1 set are suppressed
-- only the explicit allowed hold path may publish to the allowed kinematic bones
-- simulated Phase 1 bones must not receive held target writes
-- diagnostics must distinguish `normal`, `held`, and `total`
-
-## Phase 1 Freeze Contract
-
-On transition accept:
-
-- freeze is acquired
-
-During the full Phase 1 attempt:
-
-- freeze remains active
-- Prepare / LateValidate bounces do not release it
-
-Freeze releases only when the attempt reaches terminal success, terminal safe deny, explicit abort, or teardown.
-
-## Convergence-Snapshot Contract
-
-Prepare and LateValidate decisions must use an authoritative post-update convergence snapshot.
-
-That snapshot is the source of truth for:
-
-- authoritative root tilt
-- root validity
-- body-motion instability metrics
-- target-delta metrics
-- shell/reference deltas used by gating
-
-## Phase 2 RootOn Alignment
-
-Phase 2 behavior is governed by the authoritative [Phase 2 / RootOn Truth Model](../40-design/phase2-rooton-truth-model.md) and the implementation design in [balance_mode_phase2.md](../40-design/balance_mode_phase2.md).
-
-Phase 2 consumes a still-valid Phase 1 handoff and attempts a warm-start RootOn.
-
-### Required Phase 2 interpretation
-
-At the moment RootOn begins:
-
-- the certified Phase 1 handoff remains the topology source of truth
-- Phase 2 may add root simulation only through the explicit RootOn choreography
-- Phase 2 must not silently rewrite the preserved non-root topology under the guise of tuning
-- the guard window ends at `Phase2_ReadyForPhase3`, not at active mode
-
-### Phase 2 source-of-truth order
-
-During RootOn and its guard window, the following must be treated as distinct observables:
-
-1. frozen / certified topology intent
-2. same-tick raw body end state
-3. modifier-record ownership
-4. shell / policy influence
-
-Interpretation rules:
-
-- intended ownership is not proof of applied ownership
-- same-tick raw end state is the deciding proof of technical RootOn success or failure
-- modifier-record ownership is still required routing evidence and must be classified truthfully when it disagrees
-- shell state and shell influence remain separate observables
-
-### Phase 2 guard-window contract
-
-During the guard window, all of the following are forbidden unless the spec later says otherwise:
-
-- normal policy writes into the transition set
-- cached resets
-- topology expansion not explicitly defined by the certified handoff + RootOn choreography
-- hidden shell assistance on simulated bodies
-- CharacterMovement correction influence on the simulated transition set
-- shell-reference reseed used as same-frame support
-
-## Phase 3 Settle Alignment
-
-Phase 3 behavior is governed by [balance_mode_phase3_settle.md](../40-design/balance_mode_phase3_settle.md).
-
-Phase 3 begins only after the runtime crosses the explicit `Phase2_ReadyForPhase3` handoff.
-
-### Required Phase 3 interpretation
-
-- runtime `BalanceEntry_Settle` is Phase 3
-- Settle validates post-RootOn continuity before activation
-- Settle success requires a contiguous ready hold over the accepted post-RootOn topology
-- non-ready Settle frames reset the success hold timer
-- the first truthful post-RootOn instability/spike frame is terminal
-- Settle diagnostics may observe continuity loss, but must not repair physics/control state in the same frame to turn failure into success
-- after Settle success, the run must publish `BalanceActive_Standing`
-- a balance-entry run counts as successful only if `BalanceActive_Standing` then persists continuously for `3.0` seconds
-
-### Phase 3 required observables and source-of-truth order
-
-During Settle, the following must be treated as distinct observables:
-
-1. certified post-RootOn topology and continuity contract
-2. raw post-RootOn body continuity
-3. modifier-record ownership continuity
-4. shell-maintenance bookkeeping state
-5. shell-correction materiality
-6. locomotion/reset authority state
-
-Interpretation rules:
-
-- certified continuity intent is not proof that continuity still holds
-- raw continuity is the deciding proof for root-simulation loss, topology regression, and post-RootOn instability
-- modifier-record disagreement under preserved raw continuity is routing evidence, not by itself a shell-correction failure
-- shell-maintenance bookkeeping state and shell-correction materiality are separate observables
-
-### Phase 3 first-failure and retry boundary
-
-- `phase3_material_shell_correction` may be emitted only when the certified post-RootOn contract still stands, raw continuity still holds, modifier disagreement is not the deciding failure, shell lock still holds, the shell reference has not been reseeded, and shell correction becomes materially active first
-- if raw continuity still holds and only the root/pelvis modifier record disagrees, that remains a diagnostic mismatch rather than `phase3_material_shell_correction`
-- `phase3_material_shell_correction` is not retryable within the current attempt and should end as truthful safe denial rather than recovery-driven auto-retry
-- `phase3_no_convergence_path` must not overwrite an earlier material shell-correction failure
-
-### Phase 3 timers
-
-- Phase 2 hands off after `BalancePhase2GuardWindowDuration`
-- Settle succeeds only after `BalancePhase3RequiredStableHoldDuration`
-- Settle fails with `phase3_no_convergence_path` after `BalancePhase3TimeoutDuration`
-
-### Phase 3 emitted failure reasons
-
-The current emitted Phase 3 reasons are:
-
-- `phase3_root_simulation_dropped`
-- `phase3_post_root_on_instability`
-- `phase3_topology_regressed`
-- `phase3_shell_lock_lost`
-- `phase3_shell_reference_reseeded`
-- `phase3_startup_or_gameplay_authority_reclaimed`
-- `phase3_reset_pending`
-- `phase3_material_shell_correction`
-- `phase3_no_convergence_path`
-
-Implementation note:
-
-- `phase3_root_modifier_mismatch` is currently classified in tests/owner mapping, but the live Phase 3 validator does not emit it as a terminal failure; current runtime behavior logs the modifier disagreement diagnostically instead
-
-## Contract Correctness Vs Physical Viability
-
-### Contract correctness
-
-Balance entry is contract-correct when:
-
-- topology is accepted correctly
-- suppression is correct
-- hold-only semantics are correct
-- freeze lifetime is correct
-- convergence timing/source is correct
-- RootOn source-of-truth evaluation is correct
-- Settle continuity is evaluated truthfully
-- terminal reasons are truthful
-
-### Physical viability
-
-Balance entry is physically viable only if the accepted setup remains dynamically quiet enough to survive entry under current:
-
-- control tuning
-- contact behavior
-- sub-step regime
-- hold/reference behavior
-- RootOn shell/reference conditions
-- post-RootOn Settle continuity conditions
-
-A run may satisfy contract correctness and still fail physical viability.
-
-## Required Terminal Truthfulness
-
-When the accepted setup fails, the deny/reset path should identify that explicitly rather than collapsing everything to a generic no-convergence label.
-
-For RootOn this includes distinguishing:
-
-- policy leak
-- reset violation
-- raw/modifier disagreement
-- root simulation drop
-- shell material influence
-- spike / motion instability
-- topology not preserved
-
-For Settle this includes distinguishing:
-
-- root simulation dropped
-- post-RootOn instability
-- topology regressed
-- shell lock lost
-- shell reference reseeded
-- startup or gameplay authority reclaimed
-- reset pending
-- material shell correction
-- no convergence path
-
-## Acceptance Criteria
-
-This spec is satisfied only when:
-
-- the accepted Phase 1 topology is explicit
-- the write-routing contract is explicit
-- the freeze contract is explicit
-- the convergence snapshot contract is explicit
-- the Phase 2 RootOn source-of-truth order is explicit
-- Phase 3 Settle is explicit as its own post-RootOn continuity phase
-- `BalanceEntry_Settle` is documented as Phase 3
-- shell state versus shell influence is explicit
-- the docs explicitly allow a contract-correct but physically non-viable Phase 1, Phase 2, or Phase 3 result
+No implementation detail is allowed that relies on logic from this demoted spec that is not present in the authoritative documents listed above.

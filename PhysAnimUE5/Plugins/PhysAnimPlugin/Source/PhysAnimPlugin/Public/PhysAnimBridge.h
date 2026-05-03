@@ -148,6 +148,20 @@ namespace PhysAnimBridge
 		FPhysAnimTensorIndexMap& OutIndexMap,
 		FString& OutError);
 
+	PHYSANIMPLUGIN_API bool ValidateInputTensorDescs(
+		const TArray<UE::NNE::FTensorDesc>& InputTensorDescs,
+		FPhysAnimTensorIndexMap& OutIndexMap,
+		FString& OutError);
+
+	PHYSANIMPLUGIN_API bool ValidateActionOutputTensorDescs(
+		TConstArrayView<UE::NNE::FTensorDesc> OutputTensorDescs,
+		FString& OutError);
+
+	PHYSANIMPLUGIN_API bool ValidateFiniteFloatBuffer(
+		const TCHAR* BufferName,
+		TConstArrayView<float> Values,
+		FString& OutError);
+
 	PHYSANIMPLUGIN_API TArray<float> BuildFutureSampleTimeSchedule();
 	PHYSANIMPLUGIN_API float ResolveFutureTargetTimeSeconds(float CurrentTimeSeconds, float RequestedFutureOffsetSeconds, float AnimationLengthSeconds);
 

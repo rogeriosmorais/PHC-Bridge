@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimRuntimeAdapter.h"
 
 namespace
 {
@@ -32,6 +33,10 @@ bool UPhysAnimComponent::ShouldRebaselineBridgeStateAfterTransitionFailure(const
 		return false;
 	}
 }
+
+
+
+
 
 void UPhysAnimComponent::PublishBalanceTransitionFailureReason(const FString& FailureReason)
 {
@@ -248,7 +253,16 @@ bool UPhysAnimComponent::TryGetPublicBalanceEntryRuntimeState(EPhysAnimRuntimeSt
 bool UPhysAnimComponent::IsBalanceActiveState(EPhysAnimRuntimeState State)
 {
 	return State == EPhysAnimRuntimeState::BalanceActive_Standing ||
-		State == EPhysAnimRuntimeState::BalanceActive_Recovery;
+		State == EPhysAnimRuntimeState::BalanceActive_Recovery ||
+		State == EPhysAnimRuntimeState::LocomotionActiveShell ||
+		State == EPhysAnimRuntimeState::LocomotionActiveShellDenied;
+}
+
+
+bool UPhysAnimComponent::IsLocomotionActiveShellState(EPhysAnimRuntimeState State)
+{
+	return State == EPhysAnimRuntimeState::LocomotionActiveShell ||
+		State == EPhysAnimRuntimeState::LocomotionActiveShellDenied;
 }
 
 
@@ -984,7 +998,6 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	QueueBalanceModeStartRequest(TEXT("manual_trigger"));
 }
 
-
 void UPhysAnimComponent::CompleteBalanceModeEntry()
 {
 	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
@@ -1000,8 +1013,49 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	PendingBalanceModeRequestTimeSeconds = -1.0;
 	ClearPublishedBalanceTransitionFailureReason();
 	BalanceReadyTransition.Cancel(this);
+	
+	if (!CanEnterBalanceActiveStanding())
+	{
+		TransitionRuntimeState(EPhysAnimRuntimeState::BalanceSafeDeny);
+		return;
+	}
+
+	const double CurrentWorldTimeSeconds = World->GetTimeSeconds();
+	const FPhysAnimStabilizationSettings RecoverySettings = ResolveEffectiveStabilizationSettings();
+	const double SettledRampStartTimeSeconds =
+		CurrentWorldTimeSeconds - static_cast<double>(FMath::Max(RecoverySettings.StartupRampSeconds, 0.0f)) - 0.01;
+	HighestUnlockedBringUpGroupIndex = GetBringUpGroupCount() - 1;
+	BringUpGroupStableAccumulatedSeconds = 0.0f;
+	for (int32 GroupIndex = 0; GroupIndex < GetBringUpGroupCount(); ++GroupIndex)
+	{
+		if (BringUpGroupActivationTimeSeconds.IsValidIndex(GroupIndex))
+		{
+			BringUpGroupActivationTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
+		}
+		if (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex))
+		{
+			BringUpGroupControlRampStartTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
+		}
+		if (BringUpGroupAlphaActiveLogged.IsValidIndex(GroupIndex))
+		{
+			BringUpGroupAlphaActiveLogged[GroupIndex] = 1;
+		}
+	}
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
+	ArmStartupProofTerminalEnforcement();
+	bLiveRuntimeEvidenceStartupStandingEntryAccepted = true;
+	StartupProofStandingEntryAcceptedSubstep = LiveRuntimeEvidenceSubstepCounter;
+	UE_LOG(
+		LogPhysAnimBridge,
+		Verbose,
+		TEXT("[PhysAnim] Standing entry accepted proxy handoff arming pending state=%s"),
+		GetRuntimeStateName(RuntimeState));
+	UE_LOG(
+		LogPhysAnimBridge,
+		Verbose,
+		TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
+		GetRuntimeStateName(RuntimeState));
 	int32 RecoveryTotalSimCount = 0;
 	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
@@ -1029,29 +1083,9 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 		PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0,
 		GetPhysicsMovementTypeName(RecoveryPelvisModifierMovementType),
 		RecoveryTotalSimCount);
+
 	ApplyStartupMovementLock();
 	ResetBridgeLocomotionAuthorityState();
-	const double CurrentWorldTimeSeconds = World->GetTimeSeconds();
-	const FPhysAnimStabilizationSettings RecoverySettings = ResolveEffectiveStabilizationSettings();
-	const double SettledRampStartTimeSeconds =
-		CurrentWorldTimeSeconds - static_cast<double>(FMath::Max(RecoverySettings.StartupRampSeconds, 0.0f)) - 0.01;
-	HighestUnlockedBringUpGroupIndex = GetBringUpGroupCount() - 1;
-	BringUpGroupStableAccumulatedSeconds = 0.0f;
-	for (int32 GroupIndex = 0; GroupIndex < GetBringUpGroupCount(); ++GroupIndex)
-	{
-		if (BringUpGroupActivationTimeSeconds.IsValidIndex(GroupIndex))
-		{
-			BringUpGroupActivationTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
-		}
-		if (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex))
-		{
-			BringUpGroupControlRampStartTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
-		}
-		if (BringUpGroupAlphaActiveLogged.IsValidIndex(GroupIndex))
-		{
-			BringUpGroupAlphaActiveLogged[GroupIndex] = 1;
-		}
-	}
 	BridgePoseSearchLatchedWalkResult = FPoseSearchBlueprintResult();
 	BridgePoseSearchLatchedQueryDirection = FVector::ZeroVector;
 	BridgePoseSearchLatchedQuerySpeedCmPerSecond = 0.0f;
@@ -1361,5 +1395,98 @@ void UPhysAnimComponent::TrackStabilizationStressTestObservations()
 			LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond,
 			LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond);
 	}
+}
+
+
+FPhysAnimCapsuleContractSnapshot UPhysAnimComponent::BuildCapsuleContractSnapshot() const
+{
+	const ACharacter* Character = Cast<ACharacter>(GetOwner());
+	const UCapsuleComponent* Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
+	const USkeletalMeshComponent* Mesh = GetMeshComponent();
+	const UCharacterMovementComponent* CMC = Character ? Character->GetCharacterMovement() : nullptr;
+
+	FPhysAnimCapsuleContractSnapshotCaptureInput CaptureInput;
+	CaptureInput.CapsuleComponent = const_cast<UCapsuleComponent*>(Capsule);
+	CaptureInput.SkeletalMeshComponent = const_cast<USkeletalMeshComponent*>(Mesh);
+	CaptureInput.CharacterMovementComponent = const_cast<UCharacterMovementComponent*>(CMC);
+	CaptureInput.RebaseOriginCm = Character
+		? Character->GetActorLocation()
+		: (Capsule ? Capsule->GetComponentLocation() : FVector::ZeroVector);
+
+	FPhysAnimCapsuleContractSnapshot Snapshot = PhysAnimRuntimeAdapter::CaptureCapsuleContractSnapshot(CaptureInput);
+	Snapshot.bIsBridgeActive = (RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState));
+
+	if (bEnableLiveRuntimeEvidenceProof)
+	{
+		UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnim] BuildCapsuleContractSnapshot: state=%d bIsBridgeActive=%d"), (int32)RuntimeState, (int32)Snapshot.bIsBridgeActive);
+	}
+
+	return Snapshot;
+}
+
+FPhysAnimContinuitySnapshot UPhysAnimComponent::BuildContinuitySnapshot(float DeltaTimeSeconds) const
+{
+	FPhysAnimContinuitySnapshot Snapshot;
+	USkeletalMeshComponent* const Mesh = GetMeshComponent();
+	const FName PelvisName = PhysAnimBridge::GetRootBoneName();
+	const FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PelvisName) : nullptr;
+	TArray<FString> CriticalBodyNames;
+	TArray<FString> MissingCriticalBodyNames;
+	int32 MissingCriticalBodies = 0;
+	int32 NonSimulatingCriticalBodies = 0;
+
+	for (const FName& BodyName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+	{
+		CriticalBodyNames.Add(BodyName.ToString());
+		const FBodyInstance* const BodyInstance = Mesh ? Mesh->GetBodyInstance(BodyName) : nullptr;
+		if (!BodyInstance)
+		{
+			MissingCriticalBodyNames.Add(BodyName.ToString());
+			++MissingCriticalBodies;
+			continue;
+		}
+
+		if (!BodyInstance->IsInstanceSimulatingPhysics())
+		{
+			++NonSimulatingCriticalBodies;
+		}
+	}
+
+	Snapshot.bAllCriticalBodiesValid = MissingCriticalBodies == 0;
+	Snapshot.bAllCriticalBodiesSimulating = Snapshot.bAllCriticalBodiesValid && NonSimulatingCriticalBodies == 0;
+	if (PelvisBody && PelvisBody->IsValidBodyInstance() && PelvisBody->IsInstanceSimulatingPhysics())
+	{
+		Snapshot.PelvisSleepDurationMs = PelvisBody->IsInstanceAwake()
+			? 0.0
+			: LiveRuntimeEvidenceTerminationState.LatestArtifact.PelvisSleepDurationMs +
+				static_cast<double>(FMath::Max(0.0f, DeltaTimeSeconds) * 1000.0f);
+	}
+	else
+	{
+		Snapshot.PelvisSleepDurationMs = 0.0;
+	}
+	Snapshot.TopologyChangeCount = MissingCriticalBodies;
+	Snapshot.bContinuityBookkeepingMismatch = !PendingBodyModifierCachedResetNames.IsEmpty();
+	Snapshot.bIsBridgeActive = (RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState));
+
+	if (bEnableLiveRuntimeEvidenceProof)
+	{
+		UE_LOG(
+			LogPhysAnimBridge,
+			Verbose,
+			TEXT("[PhysAnim] BuildContinuitySnapshot root=%s criticalBodies=%s missingBodies=%s pelvisSleepMs=%.1f topologyChanges=%d bookkeepingMismatch=%d valid=%d simulating=%d bridgeActive=%d pendingResets=%d"),
+			*PelvisName.ToString(),
+			*FString::Join(CriticalBodyNames, TEXT(",")),
+			*FString::Join(MissingCriticalBodyNames, TEXT(",")),
+			Snapshot.PelvisSleepDurationMs,
+			Snapshot.TopologyChangeCount,
+			Snapshot.bContinuityBookkeepingMismatch ? 1 : 0,
+			Snapshot.bAllCriticalBodiesValid ? 1 : 0,
+			Snapshot.bAllCriticalBodiesSimulating ? 1 : 0,
+			Snapshot.bIsBridgeActive ? 1 : 0,
+			PendingBodyModifierCachedResetNames.Num());
+	}
+
+	return Snapshot;
 }
 

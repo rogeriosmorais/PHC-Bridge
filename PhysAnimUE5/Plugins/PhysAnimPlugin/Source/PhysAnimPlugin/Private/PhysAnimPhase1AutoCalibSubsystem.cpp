@@ -165,6 +165,22 @@ namespace
 			Phase == EBalanceReadyTransitionPhase::BRT_Succeeded;
 	}
 
+	EBalanceReadyTransitionPhase MergeObservedTransitionPhase(
+		const EBalanceReadyTransitionPhase PeakPhase,
+		const EBalanceReadyTransitionPhase ObservedPhase)
+	{
+		return static_cast<uint8>(ObservedPhase) > static_cast<uint8>(PeakPhase)
+			? ObservedPhase
+			: PeakPhase;
+	}
+
+	bool DidTrialReachRootOn(
+		const EBalanceReadyTransitionPhase CurrentPhase,
+		const EBalanceReadyTransitionPhase PeakPhase)
+	{
+		return IsLaterThanPhase1(CurrentPhase) || IsLaterThanPhase1(PeakPhase);
+	}
+
 	bool IsStandingHoldBenchmarkSatisfied(const double HoldSeconds)
 	{
 		return HoldSeconds + KINDA_SMALL_NUMBER >= static_cast<double>(PhysAnimAutoCalibBenchmark::RequiredBalanceActiveStandingHoldSeconds);
@@ -610,7 +626,8 @@ bool UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
 {
 	return bTransitionFailed ||
 		bSafeDenied ||
-		(Phase == EBalanceReadyTransitionPhase::BRT_Succeeded &&
+		((Phase == EBalanceReadyTransitionPhase::BRT_Succeeded ||
+			Phase == EBalanceReadyTransitionPhase::BRT_Inactive) &&
 			IsStandingHoldBenchmarkSatisfied(BalanceActiveStandingHoldSeconds));
 }
 
@@ -1467,7 +1484,8 @@ void UPhysAnimPhase1AutoCalibSubsystem::ResetActiveTrialTrackingState()
 void UPhysAnimPhase1AutoCalibSubsystem::UpdatePeakMetrics(const FPhase1AutoCalibLiveMetrics& Metrics)
 {
 	ActiveTrialPeakMetrics.RuntimeState = Metrics.RuntimeState;
-	ActiveTrialPeakMetrics.TransitionPhase = Metrics.TransitionPhase;
+	ActiveTrialPeakMetrics.TransitionPhase =
+		MergeObservedTransitionPhase(ActiveTrialPeakMetrics.TransitionPhase, Metrics.TransitionPhase);
 	ActiveTrialPeakMetrics.RootLinearSpeedCmPerSecond = FMath::Max(ActiveTrialPeakMetrics.RootLinearSpeedCmPerSecond, Metrics.RootLinearSpeedCmPerSecond);
 	ActiveTrialPeakMetrics.RootAngularSpeedDegPerSecond = FMath::Max(ActiveTrialPeakMetrics.RootAngularSpeedDegPerSecond, Metrics.RootAngularSpeedDegPerSecond);
 	ActiveTrialPeakMetrics.RootTiltDeg = FMath::Max(ActiveTrialPeakMetrics.RootTiltDeg, Metrics.RootTiltDeg);
@@ -1498,9 +1516,11 @@ FPhase1AutoCalibTrialResult UPhysAnimPhase1AutoCalibSubsystem::BuildTrialResult(
 
 	const FPhysAnimBalanceReadyTransitionSnapshot Snapshot = Component->ExportBalanceReadyTransitionSnapshot();
 	const FPhase1PelvisCouplingRotationForensics& Forensics = Component->LastPhase1PelvisCouplingRotationForensics;
-	const bool bFailed = Component->HasBalanceReadyTransitionFailed() || Snapshot.InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed;
-	const bool bSafeDenied = Component->HasSafePhase2Denial() || Snapshot.InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied;
-	const bool bReachedRootOn = IsLaterThanPhase1(Snapshot.InternalPhase);
+	const EBalanceReadyTransitionPhase EffectivePhase =
+		MergeObservedTransitionPhase(ActiveTrialPeakMetrics.TransitionPhase, Snapshot.InternalPhase);
+	const bool bFailed = Component->HasBalanceReadyTransitionFailed() || EffectivePhase == EBalanceReadyTransitionPhase::BRT_Failed;
+	const bool bSafeDenied = Component->HasSafePhase2Denial() || EffectivePhase == EBalanceReadyTransitionPhase::BRT_SafeDenied;
+	const bool bReachedRootOn = DidTrialReachRootOn(Snapshot.InternalPhase, ActiveTrialPeakMetrics.TransitionPhase);
 	const FPhysAnimLateValidationResult& LateValidation = Snapshot.CertifiedLateValidationResult;
 	const FPhysAnimCertifiedHandoffSnapshot& Handoff = Snapshot.CertifiedHandoff;
 
@@ -1923,6 +1943,20 @@ void UPhysAnimPhase1AutoCalibSubsystem::FinalizeReport()
 }
 
 #if WITH_DEV_AUTOMATION_TESTS
+EBalanceReadyTransitionPhase UPhysAnimPhase1AutoCalibSubsystem::TestOnlyMergeObservedTransitionPhase(
+	const EBalanceReadyTransitionPhase PeakPhase,
+	const EBalanceReadyTransitionPhase ObservedPhase)
+{
+	return ::MergeObservedTransitionPhase(PeakPhase, ObservedPhase);
+}
+
+bool UPhysAnimPhase1AutoCalibSubsystem::TestOnlyDidTrialReachRootOn(
+	const EBalanceReadyTransitionPhase CurrentPhase,
+	const EBalanceReadyTransitionPhase PeakPhase)
+{
+	return ::DidTrialReachRootOn(CurrentPhase, PeakPhase);
+}
+
 void UPhysAnimPhase1AutoCalibSubsystem::TestOnlyResetActiveTrialTrackingState(
 	double& InOutActiveTrialStartTimeSeconds,
 	double& InOutActiveTrialFirstRootOnTimeSeconds,

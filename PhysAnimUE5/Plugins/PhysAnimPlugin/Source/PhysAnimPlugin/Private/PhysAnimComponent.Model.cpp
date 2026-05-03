@@ -85,15 +85,14 @@ bool UPhysAnimComponent::ValidateModelDescriptorContract(FString& OutError)
 	TArray<UE::NNE::FTensorDesc> InputDescs;
 	InputDescs.Append(InputDescsView.GetData(), InputDescsView.Num());
 
-	if (!PhysAnimBridge::BuildInputTensorIndexMap(InputDescs, TensorIndexMap, OutError))
+	if (!PhysAnimBridge::ValidateInputTensorDescs(InputDescs, TensorIndexMap, OutError))
 	{
 		return false;
 	}
 
 	const TConstArrayView<UE::NNE::FTensorDesc> OutputDescs = ModelInstance->GetOutputTensorDescs();
-	if (OutputDescs.Num() != 1)
+	if (!PhysAnimBridge::ValidateActionOutputTensorDescs(OutputDescs, OutError))
 	{
-		OutError = FString::Printf(TEXT("Expected exactly one output tensor but found %d."), OutputDescs.Num());
 		return false;
 	}
 

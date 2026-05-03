@@ -2009,6 +2009,22 @@ namespace
 				false,
 				false));
 
+		TestFalse(
+			TEXT("Inactive still waits until the standing hold benchmark is met"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Inactive,
+				RequiredHoldSeconds - 0.25,
+				false,
+				false));
+
+		TestTrue(
+			TEXT("Inactive finalizes once a successful standing hold benchmark is preserved"),
+			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
+				EBalanceReadyTransitionPhase::BRT_Inactive,
+				RequiredHoldSeconds,
+				false,
+				false));
+
 		TestTrue(
 			TEXT("Transition failure finalizes immediately"),
 			UPhysAnimPhase1AutoCalibSubsystem::ShouldFinalizeActiveTrial(
@@ -2024,6 +2040,42 @@ namespace
 				0.0,
 				false,
 				true));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase1AutoCalibObservedTransitionPhaseTest,
+		"PhysAnim.Component.Phase1AutoCalibObservedTransitionPhase",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase1AutoCalibObservedTransitionPhaseTest::RunTest(const FString& Parameters)
+	{
+		TestEqual(
+			TEXT("Inactive does not erase a previously observed success"),
+			UPhysAnimPhase1AutoCalibSubsystem::TestOnlyMergeObservedTransitionPhase(
+				EBalanceReadyTransitionPhase::BRT_Succeeded,
+				EBalanceReadyTransitionPhase::BRT_Inactive),
+			EBalanceReadyTransitionPhase::BRT_Succeeded);
+
+		TestEqual(
+			TEXT("A later terminal failure still dominates the observed phase"),
+			UPhysAnimPhase1AutoCalibSubsystem::TestOnlyMergeObservedTransitionPhase(
+				EBalanceReadyTransitionPhase::BRT_Succeeded,
+				EBalanceReadyTransitionPhase::BRT_Failed),
+			EBalanceReadyTransitionPhase::BRT_Failed);
+
+		TestTrue(
+			TEXT("A prior success still counts as reaching root-on after cleanup"),
+			UPhysAnimPhase1AutoCalibSubsystem::TestOnlyDidTrialReachRootOn(
+				EBalanceReadyTransitionPhase::BRT_Inactive,
+				EBalanceReadyTransitionPhase::BRT_Succeeded));
+
+		TestFalse(
+			TEXT("Inactive without later-than-phase1 evidence is not root-on"),
+			UPhysAnimPhase1AutoCalibSubsystem::TestOnlyDidTrialReachRootOn(
+				EBalanceReadyTransitionPhase::BRT_Inactive,
+				EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate));
 
 		return true;
 	}

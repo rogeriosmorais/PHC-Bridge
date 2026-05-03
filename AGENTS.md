@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This is a WINDOWS MACHINE. Do NOT run linux commands like grep, findstr, etc. Use PowerShell syntax instead.
+This is a Windows machine. Use PowerShell commands. Do not use Linux shell commands.
 
 ## Project
 
@@ -18,7 +18,7 @@ Secondary goals:
 
 Do not change this architecture unless explicitly asked for an architecture review.
 
-PoseSearch -> PHC Policy (NNE/ONNX) -> Physics Control Component -> Chaos Physics -> Renderer
+`PoseSearch -> PHC Policy (NNE/ONNX) -> Physics Control Component -> Chaos Physics -> Renderer`
 
 Interpretation:
 - motion selection/search belongs to PoseSearch
@@ -33,29 +33,10 @@ Interpretation:
 2. Keep training and runtime separate.
 3. No TensorRT dependency.
 4. No custom Python pipeline for UE5 asset authoring.
-5. Use TDD by default for all deterministic logic. TDD is optional only for: live runtime/editor/physics behavior, visual/manual quality checks, short exploratory spikes.
-6. Any exploratory spike must convert its deterministic logic into tests before the work is considered complete.
-7. Do not leave permanent fail-by-design or permanent skip-by-design tests in the main suite without an explicit temporary reason and removal plan.
-9. Treat Manny/Quinn as the default runtime skeleton unless changed explicitly.
+5. Use TDD for deterministic logic.
+6. Exploratory spikes must become deterministic tests before the work is complete.
+7. Do not leave permanent fail-by-design or skip-by-design tests in the main suite.
+8. Treat Manny/Quinn as the default runtime skeleton unless explicitly changed.
 9. Keep commits small and atomic.
-10. Build with .\scripts\build.ps1
-11. If you ran any smoke tests, then read the logs with "python .\scripts\read_logs.py". If you didn't, then ignore this step.
-
-## Response Style
-
-When working in this repo:
-- make file edits directly instead of pasting code into chat
-- do not include large code snippets or diffs unless explicitly requested
-- after edits, reply with:
-  - one-sentence summary of all changes
-- keep responses short
-
-## What To Read
-
-Use `AGENTS.md` for project rules.
-
-## Constraint To Remember
-
-The bridge is supposed to stay small.
-
-If a proposal replaces an existing UE5 subsystem with a large custom runtime system, it is probably the wrong move.
+10. Build with `.\\scripts\\build.ps1`.
+11. If smoke tests were run, read logs with `python .\\scripts\\read_logs.py`.
