@@ -3380,9 +3380,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				return;
 			}
 
-			if (!bLiveRuntimeEvidenceProofComplete)
+			if (!bLiveRuntimeEvidenceProofComplete || !IsLiveRuntimeEvidenceProofSatisfied())
 			{
-				// Hold activation until proof is complete
+				// Hold activation until proof is complete and truthful
 				FinalizeTraceFrame();
 				return;
 			}
@@ -3441,9 +3441,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				return;
 			}
 
-			if (!bLiveRuntimeEvidenceProofComplete)
+			if (!bLiveRuntimeEvidenceProofComplete || !IsLiveRuntimeEvidenceProofSatisfied())
 			{
-				// Hold activation until proof is complete
+				// Hold activation until proof is complete and truthful
 				FinalizeTraceFrame();
 				return;
 			}
