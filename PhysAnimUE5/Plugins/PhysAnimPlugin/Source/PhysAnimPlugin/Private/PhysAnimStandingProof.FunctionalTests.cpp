@@ -2694,34 +2694,47 @@ bool FCaptureActivatedStandingLocomotionReadinessBaselineCommand::Update()
 	const FPhysAnimRuntimeTerminationState& TerminationState = TargetComponent->GetLiveRuntimeEvidenceTerminationState();
 	const EBridgeLocomotionAuthorityState LocomotionAuthorityState = TargetComponent->GetLocomotionAuthorityState();
 
+	bool bSetupValid = true;
+
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected BalanceActive_Standing before intent but got %d"), (int32)RuntimeState);
+		bSetupValid = false;
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofComplete())
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not complete before intent"));
+		bSetupValid = false;
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofSatisfied())
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not truthful before intent"));
+		bSetupValid = false;
 	}
 
 	if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: standing metrics were not yet collected before intent"));
+		bSetupValid = false;
 	}
 
 	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: support hull area was not positive before intent"));
+		bSetupValid = false;
 	}
 
 	if (LocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle)
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected locomotion authority Idle before intent but got %s"), GetLocomotionAuthorityStateName(LocomotionAuthorityState));
+		bSetupValid = false;
+	}
+
+	if (!bSetupValid)
+	{
+		return true;
 	}
 
 	State->BaselineMetrics = Metrics;
