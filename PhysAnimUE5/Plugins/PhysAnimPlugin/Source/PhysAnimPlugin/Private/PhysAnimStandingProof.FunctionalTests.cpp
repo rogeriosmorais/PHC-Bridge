@@ -24,6 +24,20 @@ namespace
 		return GPhysAnimStrictLivePolicyProofQuality != 0;
 	}
 
+	constexpr int32 RequiredCriticalBodyMask =
+		(1 << 0) | // pelvis
+		(1 << 1) | // spine_01
+		(1 << 2) | // spine_02
+		(1 << 3) | // spine_03
+		(1 << 4) | // thigh_l
+		(1 << 5);  // thigh_r
+
+	constexpr int32 RequiredSupportBodyMask =
+		(1 << 0) | // foot_l
+		(1 << 1) | // foot_r
+		(1 << 2) | // ball_l
+		(1 << 3);  // ball_r
+
 	void AddLatentAutomationError(FAutomationTestBase* Test, const FString& Message)
 	{
 		if (Test)
@@ -1768,10 +1782,49 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no simulating body telemetry during hold for %s"), *It->GetName()));
 			}
 
+			if (bStrictProofQuality && (Metrics.CriticalBodyValidMask & RequiredCriticalBodyMask) != RequiredCriticalBodyMask)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing valid critical bodies mask=0x%x required=0x%x for %s"),
+					Metrics.CriticalBodyValidMask,
+					RequiredCriticalBodyMask,
+					*It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.CriticalBodySimulatingMask & RequiredCriticalBodyMask) != RequiredCriticalBodyMask)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing simulating critical bodies mask=0x%x required=0x%x for %s"),
+					Metrics.CriticalBodySimulatingMask,
+					RequiredCriticalBodyMask,
+					*It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.SupportBodyValidMask & RequiredSupportBodyMask) != RequiredSupportBodyMask)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing valid support bodies mask=0x%x required=0x%x for %s"),
+					Metrics.SupportBodyValidMask,
+					RequiredSupportBodyMask,
+					*It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.SupportBodySimulatingMask & RequiredSupportBodyMask) != RequiredSupportBodyMask)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing simulating support bodies mask=0x%x required=0x%x for %s"),
+					Metrics.SupportBodySimulatingMask,
+					RequiredSupportBodyMask,
+					*It->GetName()));
+			}
+
+			if (bStrictProofQuality &&
+				(!TerminationState.LatestArtifact.bPhysicalContinuityValidatorPassed ||
+					TerminationState.LatestArtifact.bContinuityBookkeepingMismatch))
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics physical continuity did not pass for %s"), *It->GetName()));
+			}
+
 			UE_LOG(
 				LogTemp,
 				Warning,
-				TEXT("StandingProof: StabilityMetrics samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f clampedMax=%d] targets[samples=%d normal=%d total=%d maxDelta=%.2f meanDeltaMax=%.2f maxRawOffset=%.2f meanRawOffsetMax=%.2f] bodies[samples=%d simMax=%d] terminalReason=%d"),
+				TEXT("StandingProof: StabilityMetrics samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f clampedMax=%d] targets[samples=%d normal=%d total=%d maxDelta=%.2f meanDeltaMax=%.2f maxRawOffset=%.2f meanRawOffsetMax=%.2f] bodies[samples=%d simMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] terminalReason=%d"),
 				Metrics.SampleCount,
 				Metrics.ActivationDurationSec,
 				Metrics.RootWorldPositionDriftCm,
@@ -1799,6 +1852,11 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Metrics.ControlTargetMeanRawPolicyOffsetDegMax,
 				Metrics.BodyTelemetrySampleCount,
 				Metrics.SimulatingBodyCountMax,
+				Metrics.CriticalBodyValidMask,
+				Metrics.CriticalBodySimulatingMask,
+				Metrics.SupportBodyValidMask,
+				Metrics.SupportBodySimulatingMask,
+				Metrics.BodyVelocityNonZeroSampleCount,
 				Metrics.TerminalReason);
 			break;
 		}
@@ -1807,6 +1865,94 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 	if (!bFoundComponent)
 	{
 		AddLatentAutomationError(Test, TEXT("StandingProof: StabilityMetrics found no PhysAnim component"));
+	}
+
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FSetRawSimDiagnosticGroupCommand, int32, DiagnosticGroup);
+bool FSetRawSimDiagnosticGroupCommand::Update()
+{
+	if (IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("p.PhysAnim.RawSimDiagnosticGroup")))
+	{
+		CVar->Set(DiagnosticGroup, ECVF_SetByCode);
+	}
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FLogRawSimBisectCommand, FString, CaseName, int32, DiagnosticGroup, FAutomationTestBase*, Test);
+bool FLogRawSimBisectCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("RawSimBisect[%s]: PIE world was not available"), *CaseName));
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Comp->GetActivatedStandingStabilityMetrics();
+			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+			if (Metrics.SampleCount <= 0)
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("RawSimBisect[%s]: no stability samples were collected"), *CaseName));
+			}
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("RawSimBisect[%s]: group=%d runtimeState=%d terminalReason=%d samples=%d duration=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f] targets[samples=%d normal=%d total=%d maxDelta=%.2f maxRawOffset=%.2f] bodies[samples=%d simMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] continuityValid=%d"),
+				*CaseName,
+				DiagnosticGroup,
+				static_cast<int32>(Comp->GetRuntimeState()),
+				static_cast<int32>(TerminationState.TerminalReason),
+				Metrics.SampleCount,
+				Metrics.ActivationDurationSec,
+				Metrics.SupportHullAreaMinCm2,
+				Metrics.SupportHullAreaMeanCm2,
+				Metrics.SupportHullAreaMaxCm2,
+				Metrics.ActiveSupportSideCountMin,
+				Metrics.ActiveSupportSideCountMean,
+				Metrics.ActiveSupportSideCountMax,
+				Metrics.MaxBodyLinearSpeedCmPerSecond,
+				Metrics.MaxBodyAngularSpeedDegPerSecond,
+				Metrics.PolicyInferenceSuccessCount,
+				Metrics.PolicyActionSampleCount,
+				Metrics.PolicyActionRawMeanAbsMax,
+				Metrics.PolicyActionConditionedMeanAbsMax,
+				Metrics.ControlTargetSampleCount,
+				Metrics.ControlTargetNormalWrites,
+				Metrics.ControlTargetTotalWrites,
+				Metrics.ControlTargetMaxDeltaDeg,
+				Metrics.ControlTargetMaxRawPolicyOffsetDeg,
+				Metrics.BodyTelemetrySampleCount,
+				Metrics.SimulatingBodyCountMax,
+				Metrics.CriticalBodyValidMask,
+				Metrics.CriticalBodySimulatingMask,
+				Metrics.SupportBodyValidMask,
+				Metrics.SupportBodySimulatingMask,
+				Metrics.BodyVelocityNonZeroSampleCount,
+				(TerminationState.LatestArtifact.bPhysicalContinuityValidatorPassed &&
+					!TerminationState.LatestArtifact.bContinuityBookkeepingMismatch) ? 1 : 0);
+			break;
+		}
 	}
 
 	return true;
@@ -2586,6 +2732,16 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 			RequiredPhysicalPerturbationDeltaVCmPerSecond));
 	}
 
+	if (bStrictProofQuality &&
+		Metrics.BodyVelocityNonZeroSampleCount <= State->BaselineMetrics.BodyVelocityNonZeroSampleCount)
+	{
+		Fail(FString::Printf(TEXT("PerturbationProof: body velocity telemetry did not become nonzero after perturbation baseline=%d current=%d maxLinear=%.2f maxAngular=%.2f"),
+			State->BaselineMetrics.BodyVelocityNonZeroSampleCount,
+			Metrics.BodyVelocityNonZeroSampleCount,
+			Metrics.MaxBodyLinearSpeedCmPerSecond,
+			Metrics.MaxBodyAngularSpeedDegPerSecond));
+	}
+
 	const double RecoveryDurationSec =
 		(World && State->PerturbationAppliedWorldTimeSeconds >= 0.0)
 			? (World->GetTimeSeconds() - State->PerturbationAppliedWorldTimeSeconds)
@@ -2654,7 +2810,7 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 	UE_LOG(
 		LogTemp,
 		Warning,
-		TEXT("PerturbationProof: recoveryDuration=%.2f state=%d terminalReason=%d samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f physicalPerturbation=%d measuredDeltaV=%.2f"),
+		TEXT("PerturbationProof: recoveryDuration=%.2f state=%d terminalReason=%d samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f physicalPerturbation=%d measuredDeltaV=%.2f nonzeroVelocitySamples=%d"),
 		RecoveryDurationSec,
 		(int32)RuntimeState,
 		(int32)TerminationState.TerminalReason,
@@ -2671,7 +2827,8 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 		Metrics.MaxBodyLinearSpeedCmPerSecond,
 		Metrics.MaxBodyAngularSpeedDegPerSecond,
 		Metrics.bPhysicalPerturbationApplied ? 1 : 0,
-		Metrics.PerturbationMeasuredDeltaVCmPerSecond);
+		Metrics.PerturbationMeasuredDeltaVCmPerSecond,
+		Metrics.BodyVelocityNonZeroSampleCount);
 
 	return true;
 }
@@ -2694,6 +2851,43 @@ bool FPhysAnimActivatedStandingStabilityMetricsTest::RunTest(const FString& Para
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(30.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingStabilityMetricsCommand(this));
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingRawSimBisectTest, "PhysAnim.ActivatedStanding.RawSimBisect", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingRawSimBisectTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("A_PelvisSpine"));
+	OutTestCommands.Add(TEXT("1"));
+
+	OutBeautifiedNames.Add(TEXT("B_AddThighs"));
+	OutTestCommands.Add(TEXT("2"));
+
+	OutBeautifiedNames.Add(TEXT("C_AddSupport"));
+	OutTestCommands.Add(TEXT("3"));
+
+	OutBeautifiedNames.Add(TEXT("D_FullRequired"));
+	OutTestCommands.Add(TEXT("4"));
+}
+
+bool FPhysAnimActivatedStandingRawSimBisectTest::RunTest(const FString& Parameters)
+{
+	const int32 DiagnosticGroup = FMath::Clamp(FCString::Atoi(*Parameters), 1, 4);
+	const FString CaseName =
+		DiagnosticGroup == 1 ? TEXT("A_PelvisSpine") :
+		DiagnosticGroup == 2 ? TEXT("B_AddThighs") :
+		DiagnosticGroup == 3 ? TEXT("C_AddSupport") :
+		TEXT("D_FullRequired");
+
+	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(DiagnosticGroup));
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FLogRawSimBisectCommand(CaseName, DiagnosticGroup, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(0));
 
 	return true;
 }

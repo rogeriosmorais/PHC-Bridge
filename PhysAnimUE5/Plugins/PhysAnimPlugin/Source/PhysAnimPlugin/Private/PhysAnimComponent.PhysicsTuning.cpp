@@ -2,6 +2,51 @@
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
 
+namespace
+{
+	TAutoConsoleVariable<int32> CVarPhysAnimRawSimDiagnosticGroup(
+		TEXT("p.PhysAnim.RawSimDiagnosticGroup"),
+		0,
+		TEXT("Diagnostic-only raw-sim body group for activated standing. 0=off, 1=pelvis+spine, 2=+thighs, 3=+support bodies, 4=full required set."),
+		ECVF_Default);
+
+	bool ShouldForceDiagnosticRawSimBody(FName BoneName, int32 DiagnosticGroup)
+	{
+		if (DiagnosticGroup <= 0)
+		{
+			return false;
+		}
+
+		const bool bPelvisOrSpine =
+			BoneName == PhysAnimBridge::GetRootBoneName() ||
+			BoneName == TEXT("spine_01") ||
+			BoneName == TEXT("spine_02") ||
+			BoneName == TEXT("spine_03");
+		const bool bThigh =
+			BoneName == TEXT("thigh_l") ||
+			BoneName == TEXT("thigh_r");
+		const bool bRequiredSupport =
+			BoneName == TEXT("foot_l") ||
+			BoneName == TEXT("foot_r") ||
+			BoneName == TEXT("ball_l") ||
+			BoneName == TEXT("ball_r");
+
+		if (DiagnosticGroup >= 4)
+		{
+			return PhysAnimBridge::GetRequiredBodyModifierBoneNames().Contains(BoneName);
+		}
+		if (DiagnosticGroup >= 3)
+		{
+			return bPelvisOrSpine || bThigh || bRequiredSupport;
+		}
+		if (DiagnosticGroup >= 2)
+		{
+			return bPelvisOrSpine || bThigh;
+		}
+		return bPelvisOrSpine;
+	}
+}
+
 bool UPhysAnimComponent::ActivateRuntimePhysicsControl(FString& OutError)
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
@@ -1064,7 +1109,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	else
 	{
 		PhysicsControl->SetBodyModifiersInSetMovementType(TEXT("All"), EPhysicsMovementType::Kinematic);
-		
 		PhysicsControl->SetBodyModifiersInSetPhysicsBlendWeight(TEXT("All"), 0.0f);
 		PhysicsControl->SetBodyModifiersInSetCollisionType(TEXT("All"), ECollisionEnabled::NoCollision);
 		PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
@@ -1115,6 +1159,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const bool bIsCertifiedRootOnPreservedBone =
 			BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
 			BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03");
+		const int32 RawSimDiagnosticGroup = CVarPhysAnimRawSimDiagnosticGroup.GetValueOnGameThread();
+		const bool bDiagnosticRawSimBody =
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
+			!EffectiveSettings.bForceZeroActions &&
+			ShouldForceDiagnosticRawSimBody(BoneName, RawSimDiagnosticGroup);
 
 		// During entry transition the component path keeps the root body modifier kinematic
 		// until the transition explicitly enters Phase 2 root-on. Once Phase 2 owns the guard
@@ -1160,6 +1209,15 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierMovementType,
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
+
+		if (bDiagnosticRawSimBody)
+		{
+			BodyModifierMovementType = EPhysicsMovementType::Simulated;
+			BodyModifierPhysicsBlendWeight = 1.0f;
+			BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
+			bUpdateKinematicFromSimulation = false;
+			bBringUpGroupUnlocked = true;
+		}
 
 		if (bPhase1Prepare || bPhase1LateValidate)
 		{
@@ -1350,7 +1408,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
-		const bool bUpdateBodyOnPerBoneSync = ShouldUpdateBodyOnPerBoneBodyModifierSync(RuntimeState);
+		const bool bUpdateBodyOnPerBoneSync =
+			ShouldUpdateBodyOnPerBoneBodyModifierSync(RuntimeState) ||
+			bDiagnosticRawSimBody;
 		PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(
 			ModifierName,
 			bUpdateKinematicFromSimulation,
@@ -1401,6 +1461,20 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				BodyModifierPhysicsBlendWeight,
 				BodyModifierCollisionType,
 				bUpdateKinematicFromSimulation);
+		}
+		if (bDiagnosticRawSimBody)
+		{
+			ForceBodyModifierRecordState(
+				PhysicsControl,
+				ModifierName,
+				BodyModifierMovementType,
+				BodyModifierPhysicsBlendWeight,
+				BodyModifierCollisionType,
+				bUpdateKinematicFromSimulation);
+			if (FBodyInstance* const BodyInstance = MeshComponentPtr ? MeshComponentPtr->GetBodyInstance(BoneName) : nullptr)
+			{
+				BodyInstance->WakeInstance();
+			}
 		}
 		if (bIsRootBodyModifier && bRootOnApplicationTick && BodyModifierMovementType == EPhysicsMovementType::Simulated)
 		{

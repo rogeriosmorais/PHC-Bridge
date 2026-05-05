@@ -934,21 +934,78 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 
 	int32 DirectBodySampleCount = 0;
 	int32 DirectSimulatingBodyCount = 0;
+	bool bAnyNonzeroBodyVelocity = false;
+	const FName CriticalBodyNames[] =
+	{
+		PhysAnimBridge::GetRootBoneName(),
+		TEXT("spine_01"),
+		TEXT("spine_02"),
+		TEXT("spine_03"),
+		TEXT("thigh_l"),
+		TEXT("thigh_r")
+	};
+	const FName SupportBodyNames[] =
+	{
+		TEXT("foot_l"),
+		TEXT("foot_r"),
+		TEXT("ball_l"),
+		TEXT("ball_r")
+	};
+	const auto FindNamedBodyBit = [](const FName& BoneName, const FName* BodyNames, int32 NumBodyNames) -> int32
+	{
+		for (int32 Index = 0; Index < NumBodyNames; ++Index)
+		{
+			if (BoneName == BodyNames[Index])
+			{
+				return 1 << Index;
+			}
+		}
+		return 0;
+	};
+
 	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
 		if (const FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
 		{
+			const bool bValidBodyInstance = BodyInstance->IsValidBodyInstance();
 			++DirectBodySampleCount;
-			if (BodyInstance->IsInstanceSimulatingPhysics())
+			if (bValidBodyInstance)
+			{
+				ActivatedStandingStabilityMetrics.CriticalBodyValidMask |=
+					FindNamedBodyBit(BoneName, CriticalBodyNames, UE_ARRAY_COUNT(CriticalBodyNames));
+				ActivatedStandingStabilityMetrics.SupportBodyValidMask |=
+					FindNamedBodyBit(BoneName, SupportBodyNames, UE_ARRAY_COUNT(SupportBodyNames));
+			}
+
+			const bool bSimulating = bValidBodyInstance && BodyInstance->IsInstanceSimulatingPhysics();
+			if (bSimulating)
 			{
 				++DirectSimulatingBodyCount;
+				ActivatedStandingStabilityMetrics.CriticalBodySimulatingMask |=
+					FindNamedBodyBit(BoneName, CriticalBodyNames, UE_ARRAY_COUNT(CriticalBodyNames));
+				ActivatedStandingStabilityMetrics.SupportBodySimulatingMask |=
+					FindNamedBodyBit(BoneName, SupportBodyNames, UE_ARRAY_COUNT(SupportBodyNames));
 			}
+
+			const double LinearSpeedCmPerSecond = static_cast<double>(BodyInstance->GetUnrealWorldVelocity().Size());
+			const double AngularSpeedDegPerSecond = static_cast<double>(FMath::RadiansToDegrees(BodyInstance->GetUnrealWorldAngularVelocityInRadians().Size()));
+			ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond = FMath::Max(
+				ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond,
+				LinearSpeedCmPerSecond);
+			ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond = FMath::Max(
+				ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond,
+				AngularSpeedDegPerSecond);
+			bAnyNonzeroBodyVelocity = bAnyNonzeroBodyVelocity || LinearSpeedCmPerSecond > 0.1 || AngularSpeedDegPerSecond > 0.1;
 		}
 	}
 	ActivatedStandingStabilityMetrics.BodyTelemetrySampleCount += DirectBodySampleCount;
 	ActivatedStandingStabilityMetrics.SimulatingBodyCountMax = FMath::Max(
 		ActivatedStandingStabilityMetrics.SimulatingBodyCountMax,
 		DirectSimulatingBodyCount);
+	if (bAnyNonzeroBodyVelocity)
+	{
+		++ActivatedStandingStabilityMetrics.BodyVelocityNonZeroSampleCount;
+	}
 
 	ActivatedStandingStabilitySupportHullAreaSumCm2 += CurrentSupportHullAreaCm2;
 	ActivatedStandingStabilityActiveSupportSideCountSum += CurrentActiveSupportSideCount;
