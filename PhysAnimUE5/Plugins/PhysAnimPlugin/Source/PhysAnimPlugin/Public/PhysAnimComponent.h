@@ -1052,7 +1052,13 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	double MaxBodyLinearSpeedCmPerSecond = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	FName MaxBodyLinearSpeedBodyName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double MaxBodyAngularSpeedDegPerSecond = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	FName MaxBodyAngularSpeedBodyName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double SupportHullAreaMinCm2 = 0.0;
@@ -1113,6 +1119,9 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 SimulatingBodyCountMax = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 ExcludedRequiredBodySimulatingCountMax = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 CriticalBodyValidMask = 0;

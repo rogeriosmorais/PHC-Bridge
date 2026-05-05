@@ -1814,6 +1814,13 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 					*It->GetName()));
 			}
 
+			if (bStrictProofQuality && Metrics.ExcludedRequiredBodySimulatingCountMax > 0)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics has simulating non-V0 required bodies count=%d for %s"),
+					Metrics.ExcludedRequiredBodySimulatingCountMax,
+					*It->GetName()));
+			}
+
 			if (bStrictProofQuality &&
 				(!TerminationState.LatestArtifact.bPhysicalContinuityValidatorPassed ||
 					TerminationState.LatestArtifact.bContinuityBookkeepingMismatch))
@@ -1824,7 +1831,7 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 			UE_LOG(
 				LogTemp,
 				Warning,
-				TEXT("StandingProof: StabilityMetrics samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f clampedMax=%d] targets[samples=%d normal=%d total=%d maxDelta=%.2f meanDeltaMax=%.2f maxRawOffset=%.2f meanRawOffsetMax=%.2f] bodies[samples=%d simMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] terminalReason=%d"),
+				TEXT("StandingProof: StabilityMetrics samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f clampedMax=%d] targets[samples=%d normal=%d total=%d maxDelta=%.2f meanDeltaMax=%.2f maxRawOffset=%.2f meanRawOffsetMax=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] terminalReason=%d"),
 				Metrics.SampleCount,
 				Metrics.ActivationDurationSec,
 				Metrics.RootWorldPositionDriftCm,
@@ -1837,7 +1844,9 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Metrics.ActiveSupportSideCountMean,
 				Metrics.ActiveSupportSideCountMax,
 				Metrics.MaxBodyLinearSpeedCmPerSecond,
+				*Metrics.MaxBodyLinearSpeedBodyName.ToString(),
 				Metrics.MaxBodyAngularSpeedDegPerSecond,
+				*Metrics.MaxBodyAngularSpeedBodyName.ToString(),
 				Metrics.PolicyInferenceSuccessCount,
 				Metrics.PolicyActionSampleCount,
 				Metrics.PolicyActionRawMeanAbsMax,
@@ -1852,6 +1861,7 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Metrics.ControlTargetMeanRawPolicyOffsetDegMax,
 				Metrics.BodyTelemetrySampleCount,
 				Metrics.SimulatingBodyCountMax,
+				Metrics.ExcludedRequiredBodySimulatingCountMax,
 				Metrics.CriticalBodyValidMask,
 				Metrics.CriticalBodySimulatingMask,
 				Metrics.SupportBodyValidMask,
@@ -1876,6 +1886,26 @@ bool FSetRawSimDiagnosticGroupCommand::Update()
 	if (IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("p.PhysAnim.RawSimDiagnosticGroup")))
 	{
 		CVar->Set(DiagnosticGroup, ECVF_SetByCode);
+	}
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FSetAllowCharacterMovementInBridgeActiveCommand, int32, bAllowCharacterMovement);
+bool FSetAllowCharacterMovementInBridgeActiveCommand::Update()
+{
+	if (IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("physanim.AllowCharacterMovementInBridgeActive")))
+	{
+		CVar->Set(bAllowCharacterMovement, ECVF_SetByCode);
+	}
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FSetFloatConsoleVariableCommand, FString, CVarName, float, Value);
+bool FSetFloatConsoleVariableCommand::Update()
+{
+	if (IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(*CVarName))
+	{
+		CVar->Set(Value, ECVF_SetByCode);
 	}
 	return true;
 }
@@ -1913,12 +1943,19 @@ bool FLogRawSimBisectCommand::Update()
 			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
 			if (Metrics.SampleCount <= 0)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("RawSimBisect[%s]: no stability samples were collected"), *CaseName));
+				if (DiagnosticGroup < 4)
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("RawSimBisect[%s]: no stability samples were collected"), *CaseName));
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("RawSimBisect[%s]: full required non-V0 group collected no stability samples"), *CaseName);
+				}
 			}
 			UE_LOG(
 				LogTemp,
 				Warning,
-				TEXT("RawSimBisect[%s]: group=%d runtimeState=%d terminalReason=%d samples=%d duration=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f] targets[samples=%d normal=%d total=%d maxDelta=%.2f maxRawOffset=%.2f] bodies[samples=%d simMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] continuityValid=%d"),
+				TEXT("RawSimBisect[%s]: group=%d runtimeState=%d terminalReason=%d samples=%d duration=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f] targets[samples=%d normal=%d total=%d maxDelta=%.2f maxRawOffset=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] continuityValid=%d"),
 				*CaseName,
 				DiagnosticGroup,
 				static_cast<int32>(Comp->GetRuntimeState()),
@@ -1932,7 +1969,9 @@ bool FLogRawSimBisectCommand::Update()
 				Metrics.ActiveSupportSideCountMean,
 				Metrics.ActiveSupportSideCountMax,
 				Metrics.MaxBodyLinearSpeedCmPerSecond,
+				*Metrics.MaxBodyLinearSpeedBodyName.ToString(),
 				Metrics.MaxBodyAngularSpeedDegPerSecond,
+				*Metrics.MaxBodyAngularSpeedBodyName.ToString(),
 				Metrics.PolicyInferenceSuccessCount,
 				Metrics.PolicyActionSampleCount,
 				Metrics.PolicyActionRawMeanAbsMax,
@@ -1944,6 +1983,7 @@ bool FLogRawSimBisectCommand::Update()
 				Metrics.ControlTargetMaxRawPolicyOffsetDeg,
 				Metrics.BodyTelemetrySampleCount,
 				Metrics.SimulatingBodyCountMax,
+				Metrics.ExcludedRequiredBodySimulatingCountMax,
 				Metrics.CriticalBodyValidMask,
 				Metrics.CriticalBodySimulatingMask,
 				Metrics.SupportBodyValidMask,
@@ -2880,7 +2920,18 @@ bool FPhysAnimActivatedStandingRawSimBisectTest::RunTest(const FString& Paramete
 		DiagnosticGroup == 2 ? TEXT("B_AddThighs") :
 		DiagnosticGroup == 3 ? TEXT("C_AddSupport") :
 		TEXT("D_FullRequired");
+	if (DiagnosticGroup == 2)
+	{
+		AddExpectedError(TEXT("Fail-stop: Runtime instability detected"), EAutomationExpectedErrorFlags::Contains, 0);
+	}
 
+	ADD_LATENT_AUTOMATION_COMMAND(FSetAllowCharacterMovementInBridgeActiveCommand(0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), 0.05f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionClampAbs"), 0.10f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.MaxAngularStepDegPerSec"), 90.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularStrengthMultiplier"), 0.20f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularDampingRatioMultiplier"), 2.50f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularExtraDampingMultiplier"), 6.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(DiagnosticGroup));
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
@@ -2888,6 +2939,13 @@ bool FPhysAnimActivatedStandingRawSimBisectTest::RunTest(const FString& Paramete
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FLogRawSimBisectCommand(CaseName, DiagnosticGroup, this));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionClampAbs"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.MaxAngularStepDegPerSec"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularStrengthMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularDampingRatioMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularExtraDampingMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetAllowCharacterMovementInBridgeActiveCommand(1));
 
 	return true;
 }

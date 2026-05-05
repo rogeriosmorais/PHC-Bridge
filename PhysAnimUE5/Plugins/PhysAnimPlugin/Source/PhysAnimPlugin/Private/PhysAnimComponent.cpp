@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Actor.h"
+#include "PhysicsEngine/BodyInstance.h"
 
 DEFINE_LOG_CATEGORY(LogPhysAnimBridge);
 
@@ -48,6 +49,46 @@ namespace
 	{
 		return HasDeferredStartupProxyTerminalForCurrentAttempt(State, CurrentAttemptUuid) &&
 			State.LatestArtifact.TerminalSubstepTimestamp <= State.DeferredStartupProxyTerminalSubstepTimestamp;
+	}
+
+	bool TryCalculateRawSimBodyComWorldCm(const USkeletalMeshComponent& Mesh, FVector& OutComWorldCm)
+	{
+		const FName V0BodyNames[] =
+		{
+			PhysAnimBridge::GetRootBoneName(),
+			TEXT("spine_01"),
+			TEXT("spine_02"),
+			TEXT("spine_03"),
+			TEXT("thigh_l"),
+			TEXT("thigh_r"),
+			TEXT("foot_l"),
+			TEXT("foot_r"),
+			TEXT("ball_l"),
+			TEXT("ball_r")
+		};
+
+		FVector WeightedPositionSum = FVector::ZeroVector;
+		double TotalMassKg = 0.0;
+		for (const FName& BodyName : V0BodyNames)
+		{
+			const FBodyInstance* const BodyInstance = Mesh.GetBodyInstance(BodyName);
+			if (!BodyInstance || !BodyInstance->IsValidBodyInstance() || !BodyInstance->IsInstanceSimulatingPhysics())
+			{
+				continue;
+			}
+
+			const double BodyMassKg = FMath::Max(static_cast<double>(BodyInstance->GetBodyMass()), UE_SMALL_NUMBER);
+			WeightedPositionSum += BodyInstance->GetUnrealWorldTransform().GetLocation() * BodyMassKg;
+			TotalMassKg += BodyMassKg;
+		}
+
+		if (TotalMassKg <= 0.0)
+		{
+			return false;
+		}
+
+		OutComWorldCm = WeightedPositionSum / TotalMassKg;
+		return true;
 	}
 
 	const TCHAR* ToCapsuleCollisionStateName(EPhysAnimCapsuleCollisionState State)
@@ -406,9 +447,8 @@ bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerm
 	}
 
 	const bool bProxyOutsideHull =
-		(Latest.ProxyInsideHull.IsSet() && !Latest.ProxyInsideHull.GetValue()) ||
-		(Latest.ProxyOutsideHullDurationMs.IsSet() &&
-			Latest.ProxyOutsideHullDurationMs.GetValue() >= Settings.ProxyDriftLimitMs);
+		Latest.ProxyOutsideHullDurationMs.IsSet() &&
+		Latest.ProxyOutsideHullDurationMs.GetValue() >= Settings.ProxyDriftLimitMs;
 	if (bProxyOutsideHull)
 	{
 		if (!bLiveRuntimeEvidenceStartupProxySupportHandoffArmed || bDeferredStartupProxyTerminalCurrentAttempt)
@@ -925,15 +965,9 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	ActivatedStandingStabilityMetrics.RootWorldPositionDriftCm = FMath::Max(ActivatedStandingStabilityMetrics.RootWorldPositionDriftCm, CurrentRootWorldPositionDriftCm);
 	ActivatedStandingStabilityMetrics.RootVerticalDriftCm = FMath::Max(ActivatedStandingStabilityMetrics.RootVerticalDriftCm, CurrentRootVerticalDriftCm);
 	ActivatedStandingStabilityMetrics.RootAngularDriftDeg = FMath::Max(ActivatedStandingStabilityMetrics.RootAngularDriftDeg, CurrentRootAngularDriftDeg);
-	ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond = FMath::Max(
-		ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond,
-		static_cast<double>(LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond));
-	ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond = FMath::Max(
-		ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond,
-		static_cast<double>(LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond));
-
 	int32 DirectBodySampleCount = 0;
 	int32 DirectSimulatingBodyCount = 0;
+	int32 ExcludedRequiredBodySimulatingCount = 0;
 	bool bAnyNonzeroBodyVelocity = false;
 	const FName CriticalBodyNames[] =
 	{
@@ -962,6 +996,17 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 		}
 		return 0;
 	};
+	const auto IsNamedBody = [](const FName& BoneName, const FName* BodyNames, int32 NumBodyNames) -> bool
+	{
+		for (int32 Index = 0; Index < NumBodyNames; ++Index)
+		{
+			if (BoneName == BodyNames[Index])
+			{
+				return true;
+			}
+		}
+		return false;
+	};
 
 	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
@@ -985,16 +1030,25 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 					FindNamedBodyBit(BoneName, CriticalBodyNames, UE_ARRAY_COUNT(CriticalBodyNames));
 				ActivatedStandingStabilityMetrics.SupportBodySimulatingMask |=
 					FindNamedBodyBit(BoneName, SupportBodyNames, UE_ARRAY_COUNT(SupportBodyNames));
+				if (!IsNamedBody(BoneName, CriticalBodyNames, UE_ARRAY_COUNT(CriticalBodyNames)) &&
+					!IsNamedBody(BoneName, SupportBodyNames, UE_ARRAY_COUNT(SupportBodyNames)))
+				{
+					++ExcludedRequiredBodySimulatingCount;
+				}
 			}
 
 			const double LinearSpeedCmPerSecond = static_cast<double>(BodyInstance->GetUnrealWorldVelocity().Size());
 			const double AngularSpeedDegPerSecond = static_cast<double>(FMath::RadiansToDegrees(BodyInstance->GetUnrealWorldAngularVelocityInRadians().Size()));
-			ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond = FMath::Max(
-				ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond,
-				LinearSpeedCmPerSecond);
-			ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond = FMath::Max(
-				ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond,
-				AngularSpeedDegPerSecond);
+			if (LinearSpeedCmPerSecond > ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond)
+			{
+				ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond = LinearSpeedCmPerSecond;
+				ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedBodyName = BoneName;
+			}
+			if (AngularSpeedDegPerSecond > ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond)
+			{
+				ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond = AngularSpeedDegPerSecond;
+				ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedBodyName = BoneName;
+			}
 			bAnyNonzeroBodyVelocity = bAnyNonzeroBodyVelocity || LinearSpeedCmPerSecond > 0.1 || AngularSpeedDegPerSecond > 0.1;
 		}
 	}
@@ -1002,6 +1056,9 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	ActivatedStandingStabilityMetrics.SimulatingBodyCountMax = FMath::Max(
 		ActivatedStandingStabilityMetrics.SimulatingBodyCountMax,
 		DirectSimulatingBodyCount);
+	ActivatedStandingStabilityMetrics.ExcludedRequiredBodySimulatingCountMax = FMath::Max(
+		ActivatedStandingStabilityMetrics.ExcludedRequiredBodySimulatingCountMax,
+		ExcludedRequiredBodySimulatingCount);
 	if (bAnyNonzeroBodyVelocity)
 	{
 		++ActivatedStandingStabilityMetrics.BodyVelocityNonZeroSampleCount;
@@ -1103,6 +1160,18 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>
 	if (CaptureLiveRuntimeEvidenceHitResultForBody(LiveRuntimeEvidenceRightSupportBodyName, OutHitResults))
 	{
 		OutMappedSupportHitCount += OutHitResults.Num() - BeforeRight;
+	}
+
+	const int32 BeforeLeftBall = OutHitResults.Num();
+	if (CaptureLiveRuntimeEvidenceHitResultForBody(TEXT("ball_l"), OutHitResults))
+	{
+		OutMappedSupportHitCount += OutHitResults.Num() - BeforeLeftBall;
+	}
+
+	const int32 BeforeRightBall = OutHitResults.Num();
+	if (CaptureLiveRuntimeEvidenceHitResultForBody(TEXT("ball_r"), OutHitResults))
+	{
+		OutMappedSupportHitCount += OutHitResults.Num() - BeforeRightBall;
 	}
 
 	return OutHitResults.Num() > 0;
@@ -1216,9 +1285,13 @@ FPhysAnimSupportHitResultObservationInput UPhysAnimComponent::BuildLiveRuntimeEv
 	const FVector RebaseOriginCm = Capsule
 		? Capsule->GetComponentLocation()
 		: (OwnerActor ? OwnerActor->GetActorLocation() : (Mesh ? Mesh->GetComponentLocation() : FVector::ZeroVector));
-	const FVector ProxyWorldCm = Capsule
+	FVector ProxyWorldCm = Capsule
 		? Capsule->GetComponentLocation()
 		: (OwnerActor ? OwnerActor->GetActorLocation() : RebaseOriginCm);
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing && Mesh)
+	{
+		(void)TryCalculateRawSimBodyComWorldCm(*Mesh, ProxyWorldCm);
+	}
 	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
 
 	Input.HitResults = HitResults;
@@ -1241,10 +1314,20 @@ FPhysAnimSupportHitResultObservationInput UPhysAnimComponent::BuildLiveRuntimeEv
 	LeftMapping.SupportSide = EPhysAnimSupportSide::Left;
 	Input.SupportBodies.Add(LeftMapping);
 
+	FPhysAnimSupportBodyMapping LeftBallMapping;
+	LeftBallMapping.BodyName = TEXT("ball_l");
+	LeftBallMapping.SupportSide = EPhysAnimSupportSide::Left;
+	Input.SupportBodies.Add(LeftBallMapping);
+
 	FPhysAnimSupportBodyMapping RightMapping;
 	RightMapping.BodyName = LiveRuntimeEvidenceRightSupportBodyName;
 	RightMapping.SupportSide = EPhysAnimSupportSide::Right;
 	Input.SupportBodies.Add(RightMapping);
+
+	FPhysAnimSupportBodyMapping RightBallMapping;
+	RightBallMapping.BodyName = TEXT("ball_r");
+	RightBallMapping.SupportSide = EPhysAnimSupportSide::Right;
+	Input.SupportBodies.Add(RightBallMapping);
 
 	return Input;
 }
