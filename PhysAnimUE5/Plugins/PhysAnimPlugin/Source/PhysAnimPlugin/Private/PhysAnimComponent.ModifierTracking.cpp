@@ -164,7 +164,6 @@ void UPhysAnimComponent::ApplyControlTargets(
 	USkeletalMeshComponent* const Mesh = GetMeshComponent();
 	const FBodyInstance* const PelvisBodyScope = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 
-
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
 	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
@@ -571,6 +570,24 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	LastControlTargetDiagnostics = ControlTargetDiagnostics;
 	bPolicyTargetsAppliedLastFrame = bPolicyInfluenceActive && !bRootSimFlipFrame;
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		++ActivatedStandingStabilityMetrics.ControlTargetSampleCount;
+		ActivatedStandingStabilityMetrics.ControlTargetNormalWrites += ControlTargetDiagnostics.NumNormalPolicyTargetsWritten;
+		ActivatedStandingStabilityMetrics.ControlTargetTotalWrites += ControlTargetDiagnostics.NumTotalTargetsWritten;
+		ActivatedStandingStabilityMetrics.ControlTargetMaxDeltaDeg = FMath::Max(
+			ActivatedStandingStabilityMetrics.ControlTargetMaxDeltaDeg,
+			static_cast<double>(ControlTargetDiagnostics.MaxTargetDeltaDegrees));
+		ActivatedStandingStabilityMetrics.ControlTargetMeanDeltaDegMax = FMath::Max(
+			ActivatedStandingStabilityMetrics.ControlTargetMeanDeltaDegMax,
+			static_cast<double>(ControlTargetDiagnostics.MeanTargetDeltaDegrees));
+		ActivatedStandingStabilityMetrics.ControlTargetMaxRawPolicyOffsetDeg = FMath::Max(
+			ActivatedStandingStabilityMetrics.ControlTargetMaxRawPolicyOffsetDeg,
+			static_cast<double>(ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees));
+		ActivatedStandingStabilityMetrics.ControlTargetMeanRawPolicyOffsetDegMax = FMath::Max(
+			ActivatedStandingStabilityMetrics.ControlTargetMeanRawPolicyOffsetDegMax,
+			static_cast<double>(ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees));
+	}
 
 	if (bRootSimFlipFrame)
 	{

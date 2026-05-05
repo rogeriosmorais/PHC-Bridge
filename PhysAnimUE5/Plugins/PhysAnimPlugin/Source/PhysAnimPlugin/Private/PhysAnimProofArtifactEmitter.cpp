@@ -153,6 +153,24 @@ namespace
 		Json->SetBoolField(TEXT("calf_contact_terminal"), Artifact.bCalfContactTerminal);
 
 		Json->SetNumberField(TEXT("control_alpha"), Artifact.ControlAlpha);
+		Json->SetNumberField(TEXT("policy_inference_success_count"), Artifact.PolicyInferenceSuccessCount);
+		Json->SetNumberField(TEXT("policy_action_sample_count"), Artifact.PolicyActionSampleCount);
+		Json->SetNumberField(TEXT("policy_action_raw_mean_abs_max"), Artifact.PolicyActionRawMeanAbsMax);
+		Json->SetNumberField(TEXT("policy_action_conditioned_mean_abs_max"), Artifact.PolicyActionConditionedMeanAbsMax);
+		Json->SetNumberField(TEXT("policy_action_clamped_float_max"), Artifact.PolicyActionClampedFloatMax);
+		Json->SetNumberField(TEXT("control_target_sample_count"), Artifact.ControlTargetSampleCount);
+		Json->SetNumberField(TEXT("control_target_normal_writes"), Artifact.ControlTargetNormalWrites);
+		Json->SetNumberField(TEXT("control_target_total_writes"), Artifact.ControlTargetTotalWrites);
+		Json->SetNumberField(TEXT("control_target_max_delta_deg"), Artifact.ControlTargetMaxDeltaDeg);
+		Json->SetNumberField(TEXT("control_target_mean_delta_deg_max"), Artifact.ControlTargetMeanDeltaDegMax);
+		Json->SetNumberField(TEXT("control_target_max_raw_policy_offset_deg"), Artifact.ControlTargetMaxRawPolicyOffsetDeg);
+		Json->SetNumberField(TEXT("control_target_mean_raw_policy_offset_deg_max"), Artifact.ControlTargetMeanRawPolicyOffsetDegMax);
+		Json->SetNumberField(TEXT("runtime_body_sample_count"), Artifact.RuntimeBodySampleCount);
+		Json->SetNumberField(TEXT("runtime_simulating_body_count"), Artifact.RuntimeSimulatingBodyCount);
+		Json->SetNumberField(TEXT("runtime_max_body_linear_speed_cm_per_second"), Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond);
+		Json->SetNumberField(TEXT("runtime_max_body_angular_speed_deg_per_second"), Artifact.RuntimeMaxBodyAngularSpeedDegPerSecond);
+		Json->SetBoolField(TEXT("physical_perturbation_applied"), Artifact.bPhysicalPerturbationApplied);
+		Json->SetNumberField(TEXT("perturbation_measured_delta_v_cm_per_second"), Artifact.PerturbationMeasuredDeltaVCmPerSecond);
 		Json->SetStringField(TEXT("shell_bookkeeping_state"), Artifact.ShellBookkeepingState);
 		Json->SetNumberField(TEXT("shell_influence_materiality"), Artifact.ShellInfluenceMateriality);
 		Json->SetNumberField(TEXT("topology_change_count"), Artifact.TopologyChangeCount);
@@ -254,13 +272,22 @@ namespace PhysAnimProofArtifactEmitter
 		UE_LOG(
 			LogPhysAnimBridge,
 			Verbose,
-			TEXT("PhysAnimProof: RuntimeEvidence uuid=%s hits=%d mapped=%d support_mode=%s active_sides=%d hull_area=%.3f"),
+			TEXT("PhysAnimProof: RuntimeEvidence uuid=%s hits=%d mapped=%d support_mode=%s active_sides=%d hull_area=%.3f inference=%d action_samples=%d action_abs=%.3f control_samples=%d control_writes=%d control_delta=%.3f sim_bodies=%d max_body_lin=%.3f max_body_ang=%.3f"),
 			*AttemptUuid,
 			RuntimeHitCount,
 			MappedSupportHitCount,
 			*ToSupportModeString(Artifact.SupportMode),
 			Artifact.ActiveSupportSideCount,
-			Artifact.SupportHullAreaCm2);
+			Artifact.SupportHullAreaCm2,
+			Artifact.PolicyInferenceSuccessCount,
+			Artifact.PolicyActionSampleCount,
+			Artifact.PolicyActionConditionedMeanAbsMax,
+			Artifact.ControlTargetSampleCount,
+			Artifact.ControlTargetTotalWrites,
+			Artifact.ControlTargetMaxDeltaDeg,
+			Artifact.RuntimeSimulatingBodyCount,
+			Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond,
+			Artifact.RuntimeMaxBodyAngularSpeedDegPerSecond);
 	}
 
 	void LogStandingProgress(

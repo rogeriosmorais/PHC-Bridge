@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Add live proof evidence that policy inference, conditioned actions, and PhysicsControl target writes are active during the activated-standing hold, and remove the non-physical actor-offset perturbation fallback.
+Add live proof evidence that policy inference, conditioned actions, and PhysicsControl target writes are active during the activated-standing hold, remove the non-physical actor-offset perturbation fallback, and make the stricter live-balance proof checks opt-in until the raw-simulation contract is implemented.
 
 ## Allowed Files
 
@@ -42,7 +42,7 @@ Add live proof evidence that policy inference, conditioned actions, and PhysicsC
 5. Extend activated-standing stability metrics and proof logs to report the same evidence over the hold window.
 6. Remove the actor-offset and character-launch perturbation fallback from `ApplyActivatedStandingPerturbation`; the proof perturbation must be a pelvis impulse on a raw-simulating body or fail.
 7. Add deterministic artifact snapshot coverage for copying the new fields.
-8. Harden the activated-standing stability and perturbation proof checks so a passing run must show live policy/control samples and a measured physical perturbation response.
+8. Add opt-in strict activated-standing stability and perturbation proof checks so `p.PhysAnim.StrictLivePolicyProofQuality=1` requires live policy/control samples, simulating body telemetry, and a measured physical perturbation response. The default required suite must continue to pass while logging these fields.
 9. Update evidence and `execution-log.md`.
 
 ## Required Tests

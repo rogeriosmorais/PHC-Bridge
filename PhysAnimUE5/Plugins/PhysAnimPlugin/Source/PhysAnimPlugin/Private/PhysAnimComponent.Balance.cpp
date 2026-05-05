@@ -484,7 +484,11 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 
 		if (!Scenario.Name.Contains(TEXT("NoPush")))
 		{
-			ApplyPelvisImpulse(Scenario.Direction, Scenario.Magnitude);
+			if (!ApplyPelvisImpulse(Scenario.Direction, Scenario.Magnitude))
+			{
+				FinalizeBalanceScenario(false, TEXT("INVALID_PERTURBATION"));
+				return;
+			}
 		}
 		else
 		{
@@ -552,13 +556,13 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 }
 
 
-void UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude)
+bool UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude)
 {
 	UWorld* const World = GetWorld();
 	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	if (!World || !Mesh)
 	{
-		return;
+		return false;
 	}
 
 	const FName PelvisName = PhysAnimBridge::GetRootBoneName();
@@ -566,7 +570,7 @@ void UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 	if (!PelvisBody || !PelvisBody->IsInstanceSimulatingPhysics())
 	{
 		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] FAILED: pelvis body not found or not simulating."));
-		return;
+		return false;
 	}
 
 	FVector ShoveDirection = FVector::ZeroVector;
@@ -613,6 +617,11 @@ void UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 
 	const float MeasuredDeltaV = (BalanceScenarioImpactPelvisLinearVelPost - BalanceScenarioImpactPelvisLinearVelPre).Size();
 	const bool bValidResponse = MeasuredDeltaV >= BalanceResponseVelocityThresholdCmPerSec;
+	ActivatedStandingStabilityMetrics.PerturbationMeasuredDeltaVCmPerSecond = FMath::Max(
+		ActivatedStandingStabilityMetrics.PerturbationMeasuredDeltaVCmPerSecond,
+		static_cast<double>(MeasuredDeltaV));
+	ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied =
+		ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied || bValidResponse;
 
 	UE_LOG(
 		LogPhysAnimBridge,
@@ -638,6 +647,7 @@ void UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 		BalanceScenarioImpactPelvisAngularVelPost.Z,
 		MeasuredDeltaV,
 		bValidResponse ? TEXT("true") : TEXT("false"));
+	return bValidResponse;
 }
 
 

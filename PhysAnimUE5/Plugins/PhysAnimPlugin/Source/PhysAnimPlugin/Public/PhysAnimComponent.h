@@ -1073,6 +1073,54 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	double ActiveSupportSideCountMax = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 PolicyInferenceSuccessCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 PolicyActionSampleCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double PolicyActionRawMeanAbsMax = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double PolicyActionConditionedMeanAbsMax = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 PolicyActionClampedFloatMax = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 ControlTargetSampleCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 ControlTargetNormalWrites = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 ControlTargetTotalWrites = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ControlTargetMaxDeltaDeg = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ControlTargetMeanDeltaDegMax = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ControlTargetMaxRawPolicyOffsetDeg = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ControlTargetMeanRawPolicyOffsetDegMax = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 BodyTelemetrySampleCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 SimulatingBodyCountMax = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	bool bPhysicalPerturbationApplied = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double PerturbationMeasuredDeltaVCmPerSecond = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 FailStopCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
@@ -1836,7 +1884,7 @@ private:
 	float CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	bool IsPresentationPerturbationOverrideActive() const;
 	void UpdateBalancePerturbation(float DeltaTime);
-	void ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude);
+	bool ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude);
 	void FinalizeBalanceScenario(bool bSuccess, const FString& Reason);
 	bool ShouldAllowBalanceSimulation(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	static bool ShouldRebaselineBridgeStateAfterTransitionFailure(const FString& FailureReason);

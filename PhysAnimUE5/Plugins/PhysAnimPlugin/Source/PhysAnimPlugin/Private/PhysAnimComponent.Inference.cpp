@@ -45,6 +45,10 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		return false;
 	}
 	PreviousActionOutputBuffer = ActionOutputsBeforeRun;
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		++ActivatedStandingStabilityMetrics.PolicyInferenceSuccessCount;
+	}
 
 	return true;
 }
@@ -68,6 +72,19 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 	if (bSuccess)
 	{
 		PreviousConditionedActionBuffer = ConditionedActionBuffer;
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		{
+			++ActivatedStandingStabilityMetrics.PolicyActionSampleCount;
+			ActivatedStandingStabilityMetrics.PolicyActionRawMeanAbsMax = FMath::Max(
+				ActivatedStandingStabilityMetrics.PolicyActionRawMeanAbsMax,
+				static_cast<double>(LastActionDiagnostics.RawMeanAbs));
+			ActivatedStandingStabilityMetrics.PolicyActionConditionedMeanAbsMax = FMath::Max(
+				ActivatedStandingStabilityMetrics.PolicyActionConditionedMeanAbsMax,
+				static_cast<double>(LastActionDiagnostics.ConditionedMeanAbs));
+			ActivatedStandingStabilityMetrics.PolicyActionClampedFloatMax = FMath::Max(
+				ActivatedStandingStabilityMetrics.PolicyActionClampedFloatMax,
+				LastActionDiagnostics.NumClampedActionFloats);
+		}
 	}
 
 	return bSuccess;

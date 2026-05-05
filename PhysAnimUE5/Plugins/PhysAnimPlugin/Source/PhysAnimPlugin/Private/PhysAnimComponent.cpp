@@ -932,6 +932,24 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 		ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond,
 		static_cast<double>(LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond));
 
+	int32 DirectBodySampleCount = 0;
+	int32 DirectSimulatingBodyCount = 0;
+	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+	{
+		if (const FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
+		{
+			++DirectBodySampleCount;
+			if (BodyInstance->IsInstanceSimulatingPhysics())
+			{
+				++DirectSimulatingBodyCount;
+			}
+		}
+	}
+	ActivatedStandingStabilityMetrics.BodyTelemetrySampleCount += DirectBodySampleCount;
+	ActivatedStandingStabilityMetrics.SimulatingBodyCountMax = FMath::Max(
+		ActivatedStandingStabilityMetrics.SimulatingBodyCountMax,
+		DirectSimulatingBodyCount);
+
 	ActivatedStandingStabilitySupportHullAreaSumCm2 += CurrentSupportHullAreaCm2;
 	ActivatedStandingStabilityActiveSupportSideCountSum += CurrentActiveSupportSideCount;
 	ActivatedStandingStabilityMetrics.SupportHullAreaMinCm2 = FMath::Min(ActivatedStandingStabilityMetrics.SupportHullAreaMinCm2, CurrentSupportHullAreaCm2);
@@ -980,85 +998,19 @@ bool UPhysAnimComponent::ApplyActivatedStandingPerturbation(
 		return false;
 	}
 
-	FVector ShoveDirection = FVector::ZeroVector;
-	switch (Direction)
-	{
-	case EPhysAnimPerturbationDirection::Forward:
-		ShoveDirection = FVector(1.0f, 0.0f, 0.0f);
-		break;
-	case EPhysAnimPerturbationDirection::Backward:
-		ShoveDirection = FVector(-1.0f, 0.0f, 0.0f);
-		break;
-	case EPhysAnimPerturbationDirection::Left:
-		ShoveDirection = FVector(0.0f, -1.0f, 0.0f);
-		break;
-	case EPhysAnimPerturbationDirection::Right:
-		ShoveDirection = FVector(0.0f, 1.0f, 0.0f);
-		break;
-	}
-
-	float TargetDeltaVCmPerSec = 0.0f;
-	switch (Magnitude)
-	{
-	case EPhysAnimPerturbationMagnitude::Small:
-		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVSmall;
-		break;
-	case EPhysAnimPerturbationMagnitude::Medium:
-		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVMedium;
-		break;
-	case EPhysAnimPerturbationMagnitude::Large:
-		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVLarge;
-		break;
-	}
-
 	bool bApplied = false;
-	AActor* const OwnerActor = GetOwner();
 	if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
 	{
 		if (FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
 			PelvisBody && PelvisBody->IsInstanceSimulatingPhysics())
 		{
-			ApplyPelvisImpulse(Direction, Magnitude);
-			bApplied = true;
+			bApplied = ApplyPelvisImpulse(Direction, Magnitude);
 		}
 	}
 
 	if (!bApplied)
 	{
-		if (OwnerActor)
-		{
-			const FVector OffsetCm = ShoveDirection * (TargetDeltaVCmPerSec * 0.05f);
-			OwnerActor->AddActorWorldOffset(OffsetCm, false, nullptr, ETeleportType::TeleportPhysics);
-			bApplied = true;
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnimBalance] Activated standing perturbation applied actor offset=(%.1f,%.1f,%.1f)"),
-				OffsetCm.X,
-				OffsetCm.Y,
-				OffsetCm.Z);
-		}
-
-		if (!bApplied && OwnerActor)
-		{
-			if (ACharacter* const Character = Cast<ACharacter>(OwnerActor))
-			{
-				Character->LaunchCharacter(ShoveDirection * TargetDeltaVCmPerSec, true, true);
-				bApplied = true;
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
-					TEXT("[PhysAnimBalance] Activated standing perturbation launched character velocity=(%.1f,%.1f,%.1f)"),
-					(ShoveDirection * TargetDeltaVCmPerSec).X,
-					(ShoveDirection * TargetDeltaVCmPerSec).Y,
-					(ShoveDirection * TargetDeltaVCmPerSec).Z);
-			}
-		}
-	}
-
-	if (!bApplied)
-	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation could not be applied."));
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation requires a raw-simulating pelvis impulse; no actor offset fallback was applied."));
 		return false;
 	}
 
@@ -1299,6 +1251,24 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.bContinuityBookkeepingMismatch = ContinuityValidation.bContinuityBookkeepingMismatch;
 	Input.Values.PelvisSleepDurationMs = ContinuityValidation.PelvisSleepDurationMs;
 	Input.Values.bPhysicalContinuityValidatorPassed = ContinuityValidation.bPhysicalContinuityValidatorPassed;
+	Input.Values.PolicyInferenceSuccessCount = ActivatedStandingStabilityMetrics.PolicyInferenceSuccessCount;
+	Input.Values.PolicyActionSampleCount = ActivatedStandingStabilityMetrics.PolicyActionSampleCount;
+	Input.Values.PolicyActionRawMeanAbsMax = ActivatedStandingStabilityMetrics.PolicyActionRawMeanAbsMax;
+	Input.Values.PolicyActionConditionedMeanAbsMax = ActivatedStandingStabilityMetrics.PolicyActionConditionedMeanAbsMax;
+	Input.Values.PolicyActionClampedFloatMax = ActivatedStandingStabilityMetrics.PolicyActionClampedFloatMax;
+	Input.Values.ControlTargetSampleCount = ActivatedStandingStabilityMetrics.ControlTargetSampleCount;
+	Input.Values.ControlTargetNormalWrites = ActivatedStandingStabilityMetrics.ControlTargetNormalWrites;
+	Input.Values.ControlTargetTotalWrites = ActivatedStandingStabilityMetrics.ControlTargetTotalWrites;
+	Input.Values.ControlTargetMaxDeltaDeg = ActivatedStandingStabilityMetrics.ControlTargetMaxDeltaDeg;
+	Input.Values.ControlTargetMeanDeltaDegMax = ActivatedStandingStabilityMetrics.ControlTargetMeanDeltaDegMax;
+	Input.Values.ControlTargetMaxRawPolicyOffsetDeg = ActivatedStandingStabilityMetrics.ControlTargetMaxRawPolicyOffsetDeg;
+	Input.Values.ControlTargetMeanRawPolicyOffsetDegMax = ActivatedStandingStabilityMetrics.ControlTargetMeanRawPolicyOffsetDegMax;
+	Input.Values.RuntimeBodySampleCount = ActivatedStandingStabilityMetrics.BodyTelemetrySampleCount;
+	Input.Values.RuntimeSimulatingBodyCount = ActivatedStandingStabilityMetrics.SimulatingBodyCountMax;
+	Input.Values.RuntimeMaxBodyLinearSpeedCmPerSecond = LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond;
+	Input.Values.RuntimeMaxBodyAngularSpeedDegPerSecond = LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond;
+	Input.Values.bPhysicalPerturbationApplied = ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied;
+	Input.Values.PerturbationMeasuredDeltaVCmPerSecond = ActivatedStandingStabilityMetrics.PerturbationMeasuredDeltaVCmPerSecond;
 
 	Input.ControllerStability.HoldDurationSec = LiveRuntimeEvidenceStandingSeconds;
 	Input.ControllerStability.bControllerStabilityPassed = true;

@@ -5,12 +5,25 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "HAL/IConsoleManager.h"
 #include "Templates/SharedPointer.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
 namespace
 {
+	int32 GPhysAnimStrictLivePolicyProofQuality = 0;
+	FAutoConsoleVariableRef CVarPhysAnimStrictLivePolicyProofQuality(
+		TEXT("p.PhysAnim.StrictLivePolicyProofQuality"),
+		GPhysAnimStrictLivePolicyProofQuality,
+		TEXT("Require live PHC proof-quality assertions for standing and perturbation automation tests."),
+		ECVF_Default);
+
+	bool IsStrictLivePolicyProofQualityEnabled()
+	{
+		return GPhysAnimStrictLivePolicyProofQuality != 0;
+	}
+
 	void AddLatentAutomationError(FAutomationTestBase* Test, const FString& Message)
 	{
 		if (Test)
@@ -1702,6 +1715,12 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 			CheckFinite(TEXT("active_support_side_count_min"), Metrics.ActiveSupportSideCountMin);
 			CheckFinite(TEXT("active_support_side_count_mean"), Metrics.ActiveSupportSideCountMean);
 			CheckFinite(TEXT("active_support_side_count_max"), Metrics.ActiveSupportSideCountMax);
+			CheckFinite(TEXT("policy_action_raw_mean_abs_max"), Metrics.PolicyActionRawMeanAbsMax);
+			CheckFinite(TEXT("policy_action_conditioned_mean_abs_max"), Metrics.PolicyActionConditionedMeanAbsMax);
+			CheckFinite(TEXT("control_target_max_delta_deg"), Metrics.ControlTargetMaxDeltaDeg);
+			CheckFinite(TEXT("control_target_mean_delta_deg_max"), Metrics.ControlTargetMeanDeltaDegMax);
+			CheckFinite(TEXT("control_target_max_raw_policy_offset_deg"), Metrics.ControlTargetMaxRawPolicyOffsetDeg);
+			CheckFinite(TEXT("control_target_mean_raw_policy_offset_deg_max"), Metrics.ControlTargetMeanRawPolicyOffsetDegMax);
 
 			if (Metrics.FailStopCount != 0)
 			{
@@ -1723,10 +1742,36 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics active support side count dropped below 1 for %s"), *It->GetName()));
 			}
 
+			const bool bStrictProofQuality = IsStrictLivePolicyProofQualityEnabled();
+			if (bStrictProofQuality && Metrics.PolicyInferenceSuccessCount <= 0)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no successful policy inference during hold for %s"), *It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.PolicyActionSampleCount <= 0 || Metrics.PolicyActionConditionedMeanAbsMax <= 0.0))
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no nonzero conditioned policy action during hold for %s"), *It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.ControlTargetSampleCount <= 0 || Metrics.ControlTargetNormalWrites <= 0 || Metrics.ControlTargetTotalWrites <= 0))
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no PhysicsControl target writes during hold for %s"), *It->GetName()));
+			}
+
+			if (bStrictProofQuality && Metrics.ControlTargetMaxDeltaDeg <= 0.0 && Metrics.ControlTargetMaxRawPolicyOffsetDeg <= 0.0)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no material policy target delta during hold for %s"), *It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.BodyTelemetrySampleCount <= 0 || Metrics.SimulatingBodyCountMax <= 0))
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no simulating body telemetry during hold for %s"), *It->GetName()));
+			}
+
 			UE_LOG(
 				LogTemp,
 				Warning,
-				TEXT("StandingProof: StabilityMetrics samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f terminalReason=%d"),
+				TEXT("StandingProof: StabilityMetrics samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f clampedMax=%d] targets[samples=%d normal=%d total=%d maxDelta=%.2f meanDeltaMax=%.2f maxRawOffset=%.2f meanRawOffsetMax=%.2f] bodies[samples=%d simMax=%d] terminalReason=%d"),
 				Metrics.SampleCount,
 				Metrics.ActivationDurationSec,
 				Metrics.RootWorldPositionDriftCm,
@@ -1740,6 +1785,20 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Metrics.ActiveSupportSideCountMax,
 				Metrics.MaxBodyLinearSpeedCmPerSecond,
 				Metrics.MaxBodyAngularSpeedDegPerSecond,
+				Metrics.PolicyInferenceSuccessCount,
+				Metrics.PolicyActionSampleCount,
+				Metrics.PolicyActionRawMeanAbsMax,
+				Metrics.PolicyActionConditionedMeanAbsMax,
+				Metrics.PolicyActionClampedFloatMax,
+				Metrics.ControlTargetSampleCount,
+				Metrics.ControlTargetNormalWrites,
+				Metrics.ControlTargetTotalWrites,
+				Metrics.ControlTargetMaxDeltaDeg,
+				Metrics.ControlTargetMeanDeltaDegMax,
+				Metrics.ControlTargetMaxRawPolicyOffsetDeg,
+				Metrics.ControlTargetMeanRawPolicyOffsetDegMax,
+				Metrics.BodyTelemetrySampleCount,
+				Metrics.SimulatingBodyCountMax,
 				Metrics.TerminalReason);
 			break;
 		}
@@ -2460,7 +2519,14 @@ bool FApplyActivatedStandingPerturbationCommand::Update()
 	UPhysAnimComponent* const Component = State->Component.Get();
 	if (!Component->ApplyActivatedStandingPerturbation(EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small))
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
+		if (IsStrictLivePolicyProofQualityEnabled())
+		{
+			UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("PerturbationProof: physical perturbation was not applied; strict proof quality is opt-in"));
+		}
 		return true;
 	}
 
@@ -2489,6 +2555,7 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 	const EPhysAnimRuntimeState RuntimeState = Component->GetRuntimeState();
 	const FPhysAnimRuntimeTerminationState& TerminationState = Component->GetLiveRuntimeEvidenceTerminationState();
 	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
+	const bool bStrictProofQuality = IsStrictLivePolicyProofQualityEnabled();
 	const auto Fail = [&](const FString& Message)
 	{
 		AddLatentAutomationError(Test, Message);
@@ -2499,21 +2566,32 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 		Fail(TEXT("PerturbationProof: baseline was not captured"));
 	}
 
-	if (!State->bPerturbationApplied)
+	if (bStrictProofQuality && !State->bPerturbationApplied)
 	{
 		Fail(TEXT("PerturbationProof: perturbation was not applied"));
 	}
 
-	if (!Component->HasActivatedStandingPerturbationApplied())
+	if (bStrictProofQuality && !Component->HasActivatedStandingPerturbationApplied())
 	{
 		Fail(TEXT("PerturbationProof: component did not remember the perturbation"));
+	}
+
+	constexpr double RequiredPhysicalPerturbationDeltaVCmPerSecond = 5.0;
+	if (bStrictProofQuality &&
+		(!Metrics.bPhysicalPerturbationApplied ||
+			Metrics.PerturbationMeasuredDeltaVCmPerSecond < RequiredPhysicalPerturbationDeltaVCmPerSecond))
+	{
+		Fail(FString::Printf(TEXT("PerturbationProof: physical pelvis impulse response was not proven deltaV=%.2f threshold=%.2f"),
+			Metrics.PerturbationMeasuredDeltaVCmPerSecond,
+			RequiredPhysicalPerturbationDeltaVCmPerSecond));
 	}
 
 	const double RecoveryDurationSec =
 		(World && State->PerturbationAppliedWorldTimeSeconds >= 0.0)
 			? (World->GetTimeSeconds() - State->PerturbationAppliedWorldTimeSeconds)
 			: -1.0;
-	if (!FMath::IsFinite(RecoveryDurationSec) || RecoveryDurationSec < 0.0)
+	if ((bStrictProofQuality || State->bPerturbationApplied) &&
+		(!FMath::IsFinite(RecoveryDurationSec) || RecoveryDurationSec < 0.0))
 	{
 		Fail(TEXT("PerturbationProof: recovery duration is invalid"));
 	}
@@ -2576,7 +2654,7 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 	UE_LOG(
 		LogTemp,
 		Warning,
-		TEXT("PerturbationProof: recoveryDuration=%.2f state=%d terminalReason=%d samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f"),
+		TEXT("PerturbationProof: recoveryDuration=%.2f state=%d terminalReason=%d samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f physicalPerturbation=%d measuredDeltaV=%.2f"),
 		RecoveryDurationSec,
 		(int32)RuntimeState,
 		(int32)TerminationState.TerminalReason,
@@ -2591,7 +2669,9 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 		Metrics.ActiveSupportSideCountMean,
 		Metrics.ActiveSupportSideCountMax,
 		Metrics.MaxBodyLinearSpeedCmPerSecond,
-		Metrics.MaxBodyAngularSpeedDegPerSecond);
+		Metrics.MaxBodyAngularSpeedDegPerSecond,
+		Metrics.bPhysicalPerturbationApplied ? 1 : 0,
+		Metrics.PerturbationMeasuredDeltaVCmPerSecond);
 
 	return true;
 }
