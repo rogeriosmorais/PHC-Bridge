@@ -60,6 +60,7 @@ Use only these status values:
 | A-02 | The test matrix is sufficient to drive Slice 1 without implementation guessing. | Watching | A mapped test cannot be written cleanly, has missing expected behavior, or lacks required data. | Update the matrix before implementing behavior. | Each Slice 1 behavior commit. |
 | A-03 | Runtime adapter capture can be delayed until pure support truth and validators are green. | Watching | Slice 1 or validator code requires live runtime reads before adapter commits. | Do not cross adapter boundary early. Update refactor plan if this fails. | Validator scaffolding and adapter planning. |
 | A-04 | Artifact-backed failure classification is sufficient to prevent visual tuning spirals. | Watching | An in-engine failure cannot be explained by canonical terminal reason and required forensic fields. | Stop tuning. Fix instrumentation or contract coverage first. | First shadow-validation and runtime wiring runs. |
+| A-05 | V0 activated-standing proof is a 10-body raw-sim contract, not all required body modifiers. | Open | A proof tries to accept `simMax=0`, force all 22 body modifiers, or add staged runtime activation. | Require pelvis/spine/thigh/foot/ball raw-sim; exclude remaining bodies from V0 truth and prevent contamination. | S2-IMPL-V0-RAW-SIM-GROUP-C-STABILITY-01. |
 
 ## Entry Format
 
