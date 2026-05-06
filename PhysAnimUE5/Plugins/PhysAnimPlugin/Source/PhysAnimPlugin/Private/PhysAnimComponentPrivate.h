@@ -720,6 +720,8 @@ namespace PhysAnimComponentInternal
 
 		return true;
 	}
+
+	void ClearPhysicsTuningDiagnosticCaches(const UPhysAnimComponent* Component);
 }
 
 using PhysAnimComponentInternal::FPhysAnimPhysicsControlAccessor;

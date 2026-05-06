@@ -299,9 +299,11 @@ namespace
 			*JoinNamesForV0RawSim(OverlapSummary.ContactBodies));
 	}
 
+	TMap<const UPhysAnimComponent*, TSet<FName>> EnabledBodiesByComponent;
+	TMap<const UPhysAnimComponent*, TSet<FName>> LoggedBodiesByComponent;
+
 	void LogV0RawSimGroupCCompleteIfReady(const UPhysAnimComponent* OwnerComponent, FName BoneName, bool bAfterRawSimulating)
 	{
-		static TMap<const UPhysAnimComponent*, TSet<FName>> EnabledBodiesByComponent;
 		if (!OwnerComponent || !bAfterRawSimulating || !IsV0GroupCRawSimBody(BoneName))
 		{
 			return;
@@ -324,7 +326,6 @@ namespace
 
 	bool MarkV0RawSimBodyEnableLogged(const UPhysAnimComponent* OwnerComponent, FName BoneName)
 	{
-		static TMap<const UPhysAnimComponent*, TSet<FName>> LoggedBodiesByComponent;
 		if (!OwnerComponent || !IsV0GroupCRawSimBody(BoneName))
 		{
 			return false;
@@ -495,6 +496,8 @@ namespace
 		double ReleaseActivationTimeSeconds = -1.0;
 	};
 
+	TMap<const UPhysAnimComponent*, TMap<FName, FHipQuarantineTraceSnapshot>> PreviousSnapshotsByComponent;
+
 	void LogHipQuarantineTraceFrame(
 		const UPhysAnimComponent* OwnerComponent,
 		const UPhysicsControlComponent* PhysicsControl,
@@ -508,7 +511,6 @@ namespace
 		bool bQuarantineActiveForTuning,
 		const TMap<FName, FHipQuarantineControlIntent>& ControlIntents)
 	{
-		static TMap<const UPhysAnimComponent*, TMap<FName, FHipQuarantineTraceSnapshot>> PreviousSnapshotsByComponent;
 		if (!OwnerComponent || !SkeletalMesh)
 		{
 			return;
@@ -592,6 +594,15 @@ namespace
 		}
 	}
 
+	struct FPerComponentEarlyControlState
+	{
+		uint8 LoggedMilestoneMask = 0;
+		bool bLoggedFirstLinearThreshold = false;
+		bool bLoggedFirstAngularThreshold = false;
+	};
+
+	TMap<const UPhysAnimComponent*, TMap<int32, FPerComponentEarlyControlState>> StatesByComponent;
+
 	void LogV0PlantEarlyControlDiagnostics(
 		const UPhysAnimComponent* OwnerComponent,
 		const UPhysicsControlComponent* PhysicsControl,
@@ -608,15 +619,6 @@ namespace
 		{
 			return;
 		}
-
-		struct FPerComponentEarlyControlState
-		{
-			uint8 LoggedMilestoneMask = 0;
-			bool bLoggedFirstLinearThreshold = false;
-			bool bLoggedFirstAngularThreshold = false;
-		};
-
-		static TMap<const UPhysAnimComponent*, TMap<int32, FPerComponentEarlyControlState>> StatesByComponent;
 		TMap<int32, FPerComponentEarlyControlState>& StatesByZeroGroup = StatesByComponent.FindOrAdd(OwnerComponent);
 		FPerComponentEarlyControlState& State = StatesByZeroGroup.FindOrAdd(ZeroGroup);
 		const double ActivationTimeSeconds = OwnerComponent->GetActivatedStandingStabilityMetrics().ActivationDurationSec;
@@ -799,6 +801,17 @@ namespace
 					*JoinNamesForV0RawSim(OverlapSummary.ContactBodies));
 			}
 		}
+	}
+}
+
+namespace PhysAnimComponentInternal
+{
+	void ClearPhysicsTuningDiagnosticCaches(const UPhysAnimComponent* Component)
+	{
+		EnabledBodiesByComponent.Remove(Component);
+		LoggedBodiesByComponent.Remove(Component);
+		PreviousSnapshotsByComponent.Remove(Component);
+		StatesByComponent.Remove(Component);
 	}
 }
 

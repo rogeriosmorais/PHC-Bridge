@@ -40,6 +40,7 @@ void UPhysAnimComponent::BeginPlay()
 void UPhysAnimComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopBridge();
+	PhysAnimComponentInternal::ClearPhysicsTuningDiagnosticCaches(this);
 	Super::EndPlay(EndPlayReason);
 }
 
