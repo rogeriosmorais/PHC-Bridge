@@ -1593,6 +1593,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		case 4: // zero_fixed
 			ThighRestoreAlpha = 0.0f;
 			break;
+		case 5: // abrupt(0.02)
+			ThighRestoreAlpha = 0.02f;
+			break;
+		case 6: // abrupt(0.10)
+			ThighRestoreAlpha = 0.10f;
+			break;
 		default:
 			ThighRestoreAlpha = 1.0f;
 			break;

@@ -3058,11 +3058,29 @@ void FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::GetTests(TArray<F
 	OutBeautifiedNames.Add(TEXT("A1_StaticTarget_NoPHC_AllV0ControlsZero"));
 	OutTestCommands.Add(TEXT("A1"));
 
+	OutBeautifiedNames.Add(TEXT("A1-full_AllV0ControlsZero_FullRun"));
+	OutTestCommands.Add(TEXT("A1-full"));
+
 	OutBeautifiedNames.Add(TEXT("A2_StaticTarget_NoPHC_TorsoControlsZero"));
 	OutTestCommands.Add(TEXT("A2"));
 
 	OutBeautifiedNames.Add(TEXT("A3_StaticTarget_NoPHC_ThighControlsZero"));
 	OutTestCommands.Add(TEXT("A3"));
+
+	OutBeautifiedNames.Add(TEXT("A3-full_ThighControlsZero_FullRun"));
+	OutTestCommands.Add(TEXT("A3-full"));
+
+	OutBeautifiedNames.Add(TEXT("A3-ramp_ThighRestoreRamp"));
+	OutTestCommands.Add(TEXT("A3-ramp"));
+
+	OutBeautifiedNames.Add(TEXT("A3-low-02_ThighRestore0.02"));
+	OutTestCommands.Add(TEXT("A3-low-02"));
+
+	OutBeautifiedNames.Add(TEXT("A3-low-05_ThighRestore0.05"));
+	OutTestCommands.Add(TEXT("A3-low-05"));
+
+	OutBeautifiedNames.Add(TEXT("A3-low-10_ThighRestore0.10"));
+	OutTestCommands.Add(TEXT("A3-low-10"));
 
 	OutBeautifiedNames.Add(TEXT("A4_StaticTarget_NoPHC_SupportControlsZero"));
 	OutTestCommands.Add(TEXT("A4"));
@@ -3079,25 +3097,32 @@ void FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::GetTests(TArray<F
 
 bool FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::RunTest(const FString& Parameters)
 {
-	const bool bStaticTargetNoPhc = Parameters == TEXT("A") || Parameters == TEXT("A1") || Parameters == TEXT("A2") || Parameters == TEXT("A3") || Parameters == TEXT("A4");
+	const bool bStaticTargetNoPhc = Parameters.StartsWith(TEXT("A"));
 	const bool bZeroActions = Parameters == TEXT("B");
 	const bool bCurrentActions = Parameters == TEXT("C");
 	const bool bTinySyntheticActions = Parameters == TEXT("D");
+
 	const int32 EarlyControlZeroGroup =
-		Parameters == TEXT("A1") ? 1 :
+		(Parameters == TEXT("A1") || Parameters == TEXT("A1-full")) ? 1 :
 		Parameters == TEXT("A2") ? 2 :
-		Parameters == TEXT("A3") ? 3 :
+		(Parameters == TEXT("A3") || Parameters == TEXT("A3-full") || Parameters.StartsWith(TEXT("A3-"))) ? 3 :
 		Parameters == TEXT("A4") ? 4 :
 		0;
-	const FString CaseName =
-		Parameters == TEXT("A1") ? TEXT("A1_StaticTarget_NoPHC_AllV0ControlsZero") :
-		Parameters == TEXT("A2") ? TEXT("A2_StaticTarget_NoPHC_TorsoControlsZero") :
-		Parameters == TEXT("A3") ? TEXT("A3_StaticTarget_NoPHC_ThighControlsZero") :
-		Parameters == TEXT("A4") ? TEXT("A4_StaticTarget_NoPHC_SupportControlsZero") :
-		bStaticTargetNoPhc ? TEXT("A_StaticTarget_NoPHC") :
-		bZeroActions ? TEXT("B_PHC_ZeroActions") :
-		bCurrentActions ? TEXT("C_PHC_CurrentActions") :
-		TEXT("D_TinySyntheticActions");
+
+	const float ZeroDuration = 
+		(Parameters == TEXT("A1-full") || Parameters == TEXT("A3-full")) ? 5.0f : 0.30f;
+
+	const int32 RestoreVariant =
+		Parameters == TEXT("A3-ramp") ? 2 :
+		Parameters == TEXT("A3-low-02") ? 5 :
+		Parameters == TEXT("A3-low-05") ? 3 :
+		Parameters == TEXT("A3-low-10") ? 6 :
+		0;
+
+	const float RampDuration = Parameters == TEXT("A3-ramp") ? 0.50f : 0.30f;
+
+	const FString CaseName = Parameters;
+	
 	const int32 ReviewMode =
 		bStaticTargetNoPhc ? 1 :
 		bZeroActions ? 2 :
@@ -3116,7 +3141,9 @@ bool FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::RunTest(const FSt
 	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), 0));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.EnableInstabilityFailStop"), 0));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantEarlyControlZeroGroup"), EarlyControlZeroGroup));
-	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantEarlyControlZeroDurationSeconds"), 0.30f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantEarlyControlZeroDurationSeconds"), ZeroDuration));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantThighRestoreVariant"), RestoreVariant));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantThighRestoreRampDurationSeconds"), RampDuration));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.V0PlantReviewSyntheticActionValue"), SyntheticActionValue));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), ActionScale));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionClampAbs"), ActionClamp));
@@ -3135,6 +3162,8 @@ bool FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::RunTest(const FSt
 	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.EnableInstabilityFailStop"), -1));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantEarlyControlZeroGroup"), 0));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantEarlyControlZeroDurationSeconds"), 0.30f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantThighRestoreVariant"), 0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantThighRestoreRampDurationSeconds"), 0.30f));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.V0PlantReviewSyntheticActionValue"), 0.01f));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), -1.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionClampAbs"), -1.0f));
