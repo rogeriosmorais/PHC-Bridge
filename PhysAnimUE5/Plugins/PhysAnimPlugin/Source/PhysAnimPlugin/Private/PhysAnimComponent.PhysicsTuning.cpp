@@ -21,6 +21,16 @@ namespace
 		0.3f,
 		TEXT("Diagnostic-only V0 Case A duration for early control-zero variants."),
 		ECVF_Default);
+	TAutoConsoleVariable<int32> CVarPhysAnimV0PlantThighRestoreVariant(
+		TEXT("p.PhysAnim.V0PlantThighRestoreVariant"),
+		0,
+		TEXT("Diagnostic-only V0 variant for restoring thigh controls after zero window. 0=off, 1=abrupt(0.20), 2=ramp(0.0-0.20), 3=abrupt(0.05), 4=zero_fixed."),
+		ECVF_Default);
+	TAutoConsoleVariable<float> CVarPhysAnimV0PlantThighRestoreRampDurationSeconds(
+		TEXT("p.PhysAnim.V0PlantThighRestoreRampDurationSeconds"),
+		0.3f,
+		TEXT("Diagnostic-only V0 duration for thigh restore ramp (Variant 2)."),
+		ECVF_Default);
 
 	bool ShouldForceDiagnosticRawSimBody(FName BoneName, int32 DiagnosticGroup)
 	{
@@ -599,6 +609,7 @@ namespace
 		uint8 LoggedMilestoneMask = 0;
 		bool bLoggedFirstLinearThreshold = false;
 		bool bLoggedFirstAngularThreshold = false;
+		bool bLoggedRestoreStarted = false;
 	};
 
 	TMap<const UPhysAnimComponent*, TMap<int32, FPerComponentEarlyControlState>> StatesByComponent;
@@ -641,7 +652,9 @@ namespace
 		const int32 PendingCachedResetCount = PendingCachedResets.Num();
 		constexpr double LinearThresholdCmPerSecond = 1200.0;
 		constexpr double AngularThresholdDegPerSecond = 3600.0;
-		constexpr double Milestones[] = { 0.05, 0.10, 0.15, 0.20 };
+		constexpr double Milestones[] = { 0.05, 0.10, 0.15, 0.20, 0.30, 0.45, 0.60 };
+
+		const int32 ThighRestoreVariant = CVarPhysAnimV0PlantThighRestoreVariant.GetValueOnGameThread();
 
 		uint8 MilestoneMaskToLog = 0;
 		for (int32 MilestoneIndex = 0; MilestoneIndex < UE_ARRAY_COUNT(Milestones); ++MilestoneIndex)
@@ -652,6 +665,13 @@ namespace
 				MilestoneMaskToLog |= MilestoneBit;
 				State.LoggedMilestoneMask |= MilestoneBit;
 			}
+		}
+
+		if (!State.bLoggedRestoreStarted && !bZeroWindowActive && ThighRestoreVariant > 0)
+		{
+			State.bLoggedRestoreStarted = true;
+			// Forçar um log imediato no início do restore
+			MilestoneMaskToLog |= 0xFF; // Gambiarra controlada para disparar log em todos os ossos relevantes neste frame
 		}
 
 		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
@@ -679,19 +699,32 @@ namespace
 			const double LinearSpeedCmPerSecond = Body.LinearVelocityCmPerSec.Size();
 			const double AngularSpeedDegPerSecond = FMath::RadiansToDegrees(Body.AngularVelocityRadPerSec.Size());
 
+			double TargetOrientationDeltaDeg = -1.0;
+			if (ControlIntent && ControlIntent->bValid)
+			{
+				FPhysicsControlTarget CurrentTarget;
+				PhysicsControl->GetControlTarget(ControlName, CurrentTarget);
+				if (const FQuat* PrevTarget = PreviousTargets.Find(ControlName))
+				{
+					TargetOrientationDeltaDeg = FMath::RadiansToDegrees(FQuat(CurrentTarget.TargetOrientation).AngularDistance(*PrevTarget));
+				}
+			}
+
 			if (!State.bLoggedFirstLinearThreshold && LinearSpeedCmPerSecond >= LinearThresholdCmPerSecond)
 			{
 				State.bLoggedFirstLinearThreshold = true;
 				UE_LOG(
 					LogPhysAnimBridge,
 					Warning,
-					TEXT("[PhysAnimV0] EARLY_CONTROL_THRESHOLD variant=%s zeroGroup=%d kind=linear activationT=%.3f bone=%s lin=%.2f angDeg=%.2f supportHull=%.2f activeSides=%d zeroActive=%d currentPoseTargetsSeeded=%d previousTargets=%d blendStartTargets=%d pendingCachedResets=%d control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
+					TEXT("[PhysAnimV0] EARLY_CONTROL_THRESHOLD variant=%s zeroGroup=%d restoreVariant=%d kind=linear activationT=%.3f bone=%s lin=%.2f angDeg=%.2f targetDeltaDeg=%.2f supportHull=%.2f activeSides=%d zeroActive=%d currentPoseTargetsSeeded=%d previousTargets=%d blendStartTargets=%d pendingCachedResets=%d control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
 					GetV0PlantEarlyControlZeroGroupName(ZeroGroup),
 					ZeroGroup,
+					ThighRestoreVariant,
 					ActivationTimeSeconds,
 					*BoneName.ToString(),
 					LinearSpeedCmPerSecond,
 					AngularSpeedDegPerSecond,
+					TargetOrientationDeltaDeg,
 					SupportHullAreaCm2,
 					ActiveSupportSides,
 					bZeroWindowActive ? 1 : 0,
@@ -720,13 +753,15 @@ namespace
 				UE_LOG(
 					LogPhysAnimBridge,
 					Warning,
-					TEXT("[PhysAnimV0] EARLY_CONTROL_THRESHOLD variant=%s zeroGroup=%d kind=angular activationT=%.3f bone=%s lin=%.2f angDeg=%.2f supportHull=%.2f activeSides=%d zeroActive=%d currentPoseTargetsSeeded=%d previousTargets=%d blendStartTargets=%d pendingCachedResets=%d control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
+					TEXT("[PhysAnimV0] EARLY_CONTROL_THRESHOLD variant=%s zeroGroup=%d restoreVariant=%d kind=angular activationT=%.3f bone=%s lin=%.2f angDeg=%.2f targetDeltaDeg=%.2f supportHull=%.2f activeSides=%d zeroActive=%d currentPoseTargetsSeeded=%d previousTargets=%d blendStartTargets=%d pendingCachedResets=%d control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
 					GetV0PlantEarlyControlZeroGroupName(ZeroGroup),
 					ZeroGroup,
+					ThighRestoreVariant,
 					ActivationTimeSeconds,
 					*BoneName.ToString(),
 					LinearSpeedCmPerSecond,
 					AngularSpeedDegPerSecond,
+					TargetOrientationDeltaDeg,
 					SupportHullAreaCm2,
 					ActiveSupportSides,
 					bZeroWindowActive ? 1 : 0,
@@ -761,9 +796,10 @@ namespace
 				UE_LOG(
 					LogPhysAnimBridge,
 					Warning,
-					TEXT("[PhysAnimV0] EARLY_CONTROL_SAMPLE variant=%s zeroGroup=%d milestone=%.2f activationT=%.3f zeroDuration=%.2f zeroActive=%d bone=%s lin=%.2f angDeg=%.2f body{sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d} control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} targets{currentPoseSeeded=%d hasPrevious=%d hasBlendStart=%d pendingCachedReset=%d previousCount=%d blendStartCount=%d pendingResetCount=%d} support{hull=%.2f activeSides=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
+					TEXT("[PhysAnimV0] EARLY_CONTROL_SAMPLE variant=%s zeroGroup=%d restoreVariant=%d milestone=%.2f activationT=%.3f zeroDuration=%.2f zeroActive=%d bone=%s lin=%.2f angDeg=%.2f targetDeltaDeg=%.2f body{sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d} control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} targets{currentPoseSeeded=%d hasPrevious=%d hasBlendStart=%d pendingCachedReset=%d previousCount=%d blendStartCount=%d pendingResetCount=%d} support{hull=%.2f activeSides=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
 					GetV0PlantEarlyControlZeroGroupName(ZeroGroup),
 					ZeroGroup,
+					ThighRestoreVariant,
 					Milestones[MilestoneIndex],
 					ActivationTimeSeconds,
 					ZeroDurationSeconds,
@@ -771,6 +807,7 @@ namespace
 					*BoneName.ToString(),
 					LinearSpeedCmPerSecond,
 					AngularSpeedDegPerSecond,
+					TargetOrientationDeltaDeg,
 					Body.bSimulating ? 1 : 0,
 					Body.bAwake ? 1 : 0,
 					static_cast<int32>(Body.BodyCollision),
@@ -1527,10 +1564,40 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		CVarPhysAnimV0PlantEarlyControlZeroGroup.GetValueOnGameThread();
 	const float V0PlantEarlyControlZeroDurationSeconds =
 		FMath::Max(0.0f, CVarPhysAnimV0PlantEarlyControlZeroDurationSeconds.GetValueOnGameThread());
+	const int32 V0PlantThighRestoreVariant =
+		CVarPhysAnimV0PlantThighRestoreVariant.GetValueOnGameThread();
+	const float V0PlantThighRestoreRampDurationSeconds =
+		FMath::Max(0.01f, CVarPhysAnimV0PlantThighRestoreRampDurationSeconds.GetValueOnGameThread());
 	const bool bV0PlantEarlyControlZeroWindowActive =
 		V0PlantEarlyControlZeroGroup > 0 &&
 		IsBalanceActiveState(RuntimeState) &&
 		GetActivatedStandingStabilityMetrics().ActivationDurationSec <= V0PlantEarlyControlZeroDurationSeconds;
+
+	float ThighRestoreAlpha = 1.0f;
+	if (V0PlantThighRestoreVariant > 0 && 
+		IsBalanceActiveState(RuntimeState) && 
+		GetActivatedStandingStabilityMetrics().ActivationDurationSec > V0PlantEarlyControlZeroDurationSeconds)
+	{
+		const float TimeSinceZero = GetActivatedStandingStabilityMetrics().ActivationDurationSec - V0PlantEarlyControlZeroDurationSeconds;
+		switch (V0PlantThighRestoreVariant)
+		{
+		case 1: // abrupt(0.20)
+			ThighRestoreAlpha = 0.20f;
+			break;
+		case 2: // ramp(0.0-0.20)
+			ThighRestoreAlpha = FMath::Min(0.20f, 0.20f * (TimeSinceZero / V0PlantThighRestoreRampDurationSeconds));
+			break;
+		case 3: // abrupt(0.05)
+			ThighRestoreAlpha = 0.05f;
+			break;
+		case 4: // zero_fixed
+			ThighRestoreAlpha = 0.0f;
+			break;
+		default:
+			ThighRestoreAlpha = 1.0f;
+			break;
+		}
+	}
 	bool bHipQuarantineReleasedThisFrame = false;
 	if (!PhysicsControl)
 	{
@@ -1761,6 +1828,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			ShouldZeroV0PlantEarlyControl(BoneName, V0PlantEarlyControlZeroGroup))
 		{
 			ControlMultiplier.AngularStrengthMultiplier = 0.0f;
+		}
+		else if (V0PlantThighRestoreVariant > 0 && (BoneName == "thigh_l" || BoneName == "thigh_r"))
+		{
+			ControlMultiplier.AngularStrengthMultiplier *= ThighRestoreAlpha;
 		}
 
 		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
