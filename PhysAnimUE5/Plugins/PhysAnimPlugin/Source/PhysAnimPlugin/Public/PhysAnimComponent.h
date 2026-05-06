@@ -1061,6 +1061,27 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	FName MaxBodyAngularSpeedBodyName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double Spine01MaxLinearSpeedCmPerSecond = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double Spine01MaxAngularSpeedDegPerSecond = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double Spine03MaxLinearSpeedCmPerSecond = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double Spine03MaxAngularSpeedDegPerSecond = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double FirstMajorSpineSpikeTimeSec = -1.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	FName FirstMajorSpineSpikeBodyName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double FirstSupportFailureTimeSec = -1.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double SupportHullAreaMinCm2 = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")

@@ -252,6 +252,14 @@ namespace PhysAnimComponentInternal
 		TEXT("physanim.PolicyControlRateHz"),
 		-1.0f,
 		TEXT("Override for the fixed PhysAnim policy/control update rate in Hz. Negative values keep the component default."));
+	inline TAutoConsoleVariable<int32> CVarPhysAnimV0PlantReviewMode(
+		TEXT("physanim.V0PlantReviewMode"),
+		0,
+		TEXT("Review-only V0 plant mode. 0=normal, 1=static targets/no PHC inference, 2=zero actions after PHC inference, 3=tiny synthetic actions after PHC inference."));
+	inline TAutoConsoleVariable<float> CVarPhysAnimV0PlantReviewSyntheticActionValue(
+		TEXT("physanim.V0PlantReviewSyntheticActionValue"),
+		0.01f,
+		TEXT("Review-only raw action value used when physanim.V0PlantReviewMode=3."));
 	inline TAutoConsoleVariable<int32> CVarPhysAnimApplyTrainingAlignedMassScales(
 		TEXT("physanim.ApplyTrainingAlignedMassScales"),
 		-1,

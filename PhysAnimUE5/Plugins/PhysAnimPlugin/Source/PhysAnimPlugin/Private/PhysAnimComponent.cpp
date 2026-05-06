@@ -940,6 +940,7 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	const FVector CurrentRootLocationCm = LastRuntimeInstabilityDiagnostics.RootLocationCm;
 	const double CurrentSupportHullAreaCm2 = LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportHullAreaCm2;
 	const double CurrentActiveSupportSideCount = static_cast<double>(LiveRuntimeEvidenceTerminationState.LatestArtifact.ActiveSupportSideCount);
+	const double CurrentSampleTimeSec = ActivatedStandingStabilityMetrics.ActivationDurationSec + FMath::Max(0.0f, DeltaTimeSeconds);
 
 	if (!bActivatedStandingStabilityBaselineInitialized)
 	{
@@ -961,6 +962,11 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	const double CurrentRootWorldPositionDriftCm = FVector::Dist(CurrentRootLocationCm, ActivatedStandingStabilityBaselineRootLocationCm);
 	const double CurrentRootVerticalDriftCm = FMath::Abs(CurrentRootLocationCm.Z - ActivatedStandingStabilityBaselineRootLocationCm.Z);
 	const double CurrentRootAngularDriftDeg = FMath::Abs(CurrentRootTiltDeg - ActivatedStandingStabilityBaselineRootTiltDeg);
+	if (ActivatedStandingStabilityMetrics.FirstSupportFailureTimeSec < 0.0 &&
+		(CurrentSupportHullAreaCm2 <= UE_SMALL_NUMBER || CurrentActiveSupportSideCount < 1.0))
+	{
+		ActivatedStandingStabilityMetrics.FirstSupportFailureTimeSec = CurrentSampleTimeSec;
+	}
 
 	ActivatedStandingStabilityMetrics.RootWorldPositionDriftCm = FMath::Max(ActivatedStandingStabilityMetrics.RootWorldPositionDriftCm, CurrentRootWorldPositionDriftCm);
 	ActivatedStandingStabilityMetrics.RootVerticalDriftCm = FMath::Max(ActivatedStandingStabilityMetrics.RootVerticalDriftCm, CurrentRootVerticalDriftCm);
@@ -1039,6 +1045,31 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 
 			const double LinearSpeedCmPerSecond = static_cast<double>(BodyInstance->GetUnrealWorldVelocity().Size());
 			const double AngularSpeedDegPerSecond = static_cast<double>(FMath::RadiansToDegrees(BodyInstance->GetUnrealWorldAngularVelocityInRadians().Size()));
+			if (BoneName == TEXT("spine_01"))
+			{
+				ActivatedStandingStabilityMetrics.Spine01MaxLinearSpeedCmPerSecond = FMath::Max(
+					ActivatedStandingStabilityMetrics.Spine01MaxLinearSpeedCmPerSecond,
+					LinearSpeedCmPerSecond);
+				ActivatedStandingStabilityMetrics.Spine01MaxAngularSpeedDegPerSecond = FMath::Max(
+					ActivatedStandingStabilityMetrics.Spine01MaxAngularSpeedDegPerSecond,
+					AngularSpeedDegPerSecond);
+			}
+			else if (BoneName == TEXT("spine_03"))
+			{
+				ActivatedStandingStabilityMetrics.Spine03MaxLinearSpeedCmPerSecond = FMath::Max(
+					ActivatedStandingStabilityMetrics.Spine03MaxLinearSpeedCmPerSecond,
+					LinearSpeedCmPerSecond);
+				ActivatedStandingStabilityMetrics.Spine03MaxAngularSpeedDegPerSecond = FMath::Max(
+					ActivatedStandingStabilityMetrics.Spine03MaxAngularSpeedDegPerSecond,
+					AngularSpeedDegPerSecond);
+			}
+			if (ActivatedStandingStabilityMetrics.FirstMajorSpineSpikeTimeSec < 0.0 &&
+				(BoneName == TEXT("spine_01") || BoneName == TEXT("spine_03")) &&
+				(LinearSpeedCmPerSecond >= 1200.0 || AngularSpeedDegPerSecond >= 3600.0))
+			{
+				ActivatedStandingStabilityMetrics.FirstMajorSpineSpikeTimeSec = CurrentSampleTimeSec;
+				ActivatedStandingStabilityMetrics.FirstMajorSpineSpikeBodyName = BoneName;
+			}
 			if (LinearSpeedCmPerSecond > ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond)
 			{
 				ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond = LinearSpeedCmPerSecond;

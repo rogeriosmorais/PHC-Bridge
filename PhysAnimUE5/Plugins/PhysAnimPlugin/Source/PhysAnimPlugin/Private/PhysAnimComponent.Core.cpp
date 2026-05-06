@@ -4005,8 +4005,16 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			TraceFrame.bDistalLocomotionCompositionModeActive = bDistalLocomotionCompositionModeActive;
 		}
 
+		const int32 V0PlantReviewMode = PhysAnimComponentInternal::CVarPhysAnimV0PlantReviewMode.GetValueOnGameThread();
+		const bool bV0PlantReviewStaticTargets =
+			V0PlantReviewMode == 1 &&
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+		const bool bV0PlantReviewZeroActions =
+			V0PlantReviewMode == 2 &&
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+		const bool bV0PlantReviewTinySyntheticActions = V0PlantReviewMode == 3;
 		const double InferenceStartSeconds = FPlatformTime::Seconds();
-		if (!RunInference(TickError))
+		if (!bV0PlantReviewStaticTargets && !RunInference(TickError))
 		{
 			if (bWriteTraceFrameThisTick)
 			{
@@ -4015,10 +4023,20 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			FailStopWithTrace(TickError);
 			return;
 		}
+		if (bV0PlantReviewZeroActions)
+		{
+			ActionOutputBuffer.Init(0.0f, PhysAnimBridge::NumActionFloats);
+		}
+		else if (bV0PlantReviewTinySyntheticActions)
+		{
+			ActionOutputBuffer.Init(
+				PhysAnimComponentInternal::CVarPhysAnimV0PlantReviewSyntheticActionValue.GetValueOnGameThread(),
+				PhysAnimBridge::NumActionFloats);
+		}
 		if (bWriteTraceFrameThisTick)
 		{
 			TraceFrame.InferenceMs = MeasureElapsedMs(InferenceStartSeconds);
-			TraceFrame.bRunSyncSucceeded = true;
+			TraceFrame.bRunSyncSucceeded = !bV0PlantReviewStaticTargets;
 		}
 	}
 
@@ -4129,7 +4147,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
-	if (bRunPolicyUpdateThisTick)
+	const int32 V0PlantReviewModeForActions = PhysAnimComponentInternal::CVarPhysAnimV0PlantReviewMode.GetValueOnGameThread();
+	const bool bV0PlantReviewStaticTargetsForActions =
+		V0PlantReviewModeForActions == 1 &&
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+	if (bRunPolicyUpdateThisTick && !bV0PlantReviewStaticTargetsForActions)
 	{
 		const double ActionConditionStartSeconds = FPlatformTime::Seconds();
 		if (!ConditionModelActions(EffectiveSettings, TickError))
@@ -4150,11 +4172,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	const double ControlTargetStartSeconds = FPlatformTime::Seconds();
 	TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_ControlWrites);
 	ApplyControlTargets(
-		bRunPolicyUpdateThisTick
+		(bRunPolicyUpdateThisTick && !bV0PlantReviewStaticTargetsForActions)
 			? (PolicyControlIntervalSeconds * FMath::Max(ElapsedPolicySteps, 1))
 			: 0.0f,
 		EffectiveSettings,
-		bRunPolicyUpdateThisTick,
+		bRunPolicyUpdateThisTick && !bV0PlantReviewStaticTargetsForActions,
 		TickError);
 
 

@@ -1900,6 +1900,16 @@ bool FSetAllowCharacterMovementInBridgeActiveCommand::Update()
 	return true;
 }
 
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FSetIntConsoleVariableCommand, FString, CVarName, int32, Value);
+bool FSetIntConsoleVariableCommand::Update()
+{
+	if (IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(*CVarName))
+	{
+		CVar->Set(Value, ECVF_SetByCode);
+	}
+	return true;
+}
+
 DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FSetFloatConsoleVariableCommand, FString, CVarName, float, Value);
 bool FSetFloatConsoleVariableCommand::Update()
 {
@@ -1907,6 +1917,94 @@ bool FSetFloatConsoleVariableCommand::Update()
 	{
 		CVar->Set(Value, ECVF_SetByCode);
 	}
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FLogV0PlantReviewCommand, FString, CaseName, int32, ReviewMode, FAutomationTestBase*, Test);
+bool FLogV0PlantReviewCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("V0PlantReview[%s]: PIE world was not available"), *CaseName));
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Comp->GetActivatedStandingStabilityMetrics();
+			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+			if (Metrics.SampleCount <= 0)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("V0PlantReview[%s]: no stability samples were collected"), *CaseName);
+			}
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("V0PlantReview[%s]: mode=%d runtimeState=%d terminalReason=%d samples=%d duration=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) spine01[lin=%.2f ang=%.2f] spine03[lin=%.2f ang=%.2f] firstSpineSpike=%.2f(%s) firstSupportFailure=%.2f policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f] targets[samples=%d normal=%d total=%d maxDelta=%.2f maxRawOffset=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] continuityValid=%d"),
+				*CaseName,
+				ReviewMode,
+				static_cast<int32>(Comp->GetRuntimeState()),
+				static_cast<int32>(TerminationState.TerminalReason),
+				Metrics.SampleCount,
+				Metrics.ActivationDurationSec,
+				Metrics.SupportHullAreaMinCm2,
+				Metrics.SupportHullAreaMeanCm2,
+				Metrics.SupportHullAreaMaxCm2,
+				Metrics.ActiveSupportSideCountMin,
+				Metrics.ActiveSupportSideCountMean,
+				Metrics.ActiveSupportSideCountMax,
+				Metrics.MaxBodyLinearSpeedCmPerSecond,
+				*Metrics.MaxBodyLinearSpeedBodyName.ToString(),
+				Metrics.MaxBodyAngularSpeedDegPerSecond,
+				*Metrics.MaxBodyAngularSpeedBodyName.ToString(),
+				Metrics.Spine01MaxLinearSpeedCmPerSecond,
+				Metrics.Spine01MaxAngularSpeedDegPerSecond,
+				Metrics.Spine03MaxLinearSpeedCmPerSecond,
+				Metrics.Spine03MaxAngularSpeedDegPerSecond,
+				Metrics.FirstMajorSpineSpikeTimeSec,
+				*Metrics.FirstMajorSpineSpikeBodyName.ToString(),
+				Metrics.FirstSupportFailureTimeSec,
+				Metrics.PolicyInferenceSuccessCount,
+				Metrics.PolicyActionSampleCount,
+				Metrics.PolicyActionRawMeanAbsMax,
+				Metrics.PolicyActionConditionedMeanAbsMax,
+				Metrics.ControlTargetSampleCount,
+				Metrics.ControlTargetNormalWrites,
+				Metrics.ControlTargetTotalWrites,
+				Metrics.ControlTargetMaxDeltaDeg,
+				Metrics.ControlTargetMaxRawPolicyOffsetDeg,
+				Metrics.BodyTelemetrySampleCount,
+				Metrics.SimulatingBodyCountMax,
+				Metrics.ExcludedRequiredBodySimulatingCountMax,
+				Metrics.CriticalBodyValidMask,
+				Metrics.CriticalBodySimulatingMask,
+				Metrics.SupportBodyValidMask,
+				Metrics.SupportBodySimulatingMask,
+				Metrics.BodyVelocityNonZeroSampleCount,
+				(TerminationState.LatestArtifact.bPhysicalContinuityValidatorPassed &&
+					!TerminationState.LatestArtifact.bContinuityBookkeepingMismatch) ? 1 : 0);
+			break;
+		}
+	}
+
 	return true;
 }
 
@@ -2946,6 +3044,80 @@ bool FPhysAnimActivatedStandingRawSimBisectTest::RunTest(const FString& Paramete
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularDampingRatioMultiplier"), -1.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularExtraDampingMultiplier"), -1.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetAllowCharacterMovementInBridgeActiveCommand(1));
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivatedStandingV0PlantContractAssumptionsTest, "PhysAnim.ActivatedStanding.V0PlantContractAssumptions", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("A_StaticTarget_NoPHC"));
+	OutTestCommands.Add(TEXT("A"));
+
+	OutBeautifiedNames.Add(TEXT("B_PHC_ZeroActions"));
+	OutTestCommands.Add(TEXT("B"));
+
+	OutBeautifiedNames.Add(TEXT("C_PHC_CurrentActions"));
+	OutTestCommands.Add(TEXT("C"));
+
+	OutBeautifiedNames.Add(TEXT("D_TinySyntheticActions"));
+	OutTestCommands.Add(TEXT("D"));
+}
+
+bool FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::RunTest(const FString& Parameters)
+{
+	const bool bStaticTargetNoPhc = Parameters == TEXT("A");
+	const bool bZeroActions = Parameters == TEXT("B");
+	const bool bCurrentActions = Parameters == TEXT("C");
+	const bool bTinySyntheticActions = Parameters == TEXT("D");
+	const FString CaseName =
+		bStaticTargetNoPhc ? TEXT("A_StaticTarget_NoPHC") :
+		bZeroActions ? TEXT("B_PHC_ZeroActions") :
+		bCurrentActions ? TEXT("C_PHC_CurrentActions") :
+		TEXT("D_TinySyntheticActions");
+	const int32 ReviewMode =
+		bStaticTargetNoPhc ? 1 :
+		bZeroActions ? 2 :
+		bTinySyntheticActions ? 3 :
+		0;
+	const float ActionScale =
+		bTinySyntheticActions ? 1.0f :
+		0.05f;
+	const float ActionClamp =
+		bTinySyntheticActions ? 0.02f :
+		0.10f;
+	const float SyntheticActionValue = bTinySyntheticActions ? 0.01f : 0.0f;
+
+	ADD_LATENT_AUTOMATION_COMMAND(FSetAllowCharacterMovementInBridgeActiveCommand(0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(3));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), 0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.EnableInstabilityFailStop"), 0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.V0PlantReviewSyntheticActionValue"), SyntheticActionValue));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), ActionScale));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionClampAbs"), ActionClamp));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.MaxAngularStepDegPerSec"), 90.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularStrengthMultiplier"), 0.20f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularDampingRatioMultiplier"), 2.50f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularExtraDampingMultiplier"), 6.0f));
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), ReviewMode));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FLogV0PlantReviewCommand(CaseName, ReviewMode, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), 0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.EnableInstabilityFailStop"), -1));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.V0PlantReviewSyntheticActionValue"), 0.01f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionClampAbs"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.MaxAngularStepDegPerSec"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularStrengthMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularDampingRatioMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularExtraDampingMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetAllowCharacterMovementInBridgeActiveCommand(1));
+	ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
 
 	return true;
 }
