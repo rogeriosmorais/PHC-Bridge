@@ -1,58 +1,4 @@
-# AGENTS.md
-
-This is a Windows machine. Use PowerShell commands. Do not use Linux shell commands.
-
-## Project
-
-PHC-Bridge is a UE5 proof-of-concept bridge between an offline-trained PHC-family policy and Unreal Engine runtime systems.
-
-Primary goal:
-- drive a physics-based humanoid in UE5 from a neural policy
-
-Secondary goals:
-- keep the UE bridge small
-- maximize reuse of UE5 built-ins
-- preserve a clean separation between offline training and runtime inference
-
-## Architecture Lock
-
-Do not change this architecture unless explicitly asked for an architecture review.
-
-`PoseSearch -> PHC Policy (NNE/ONNX) -> Physics Control Component -> Chaos Physics -> Renderer`
-
-Interpretation:
-- motion selection/search belongs to PoseSearch
-- policy inference belongs to UE5 NNE with ONNX Runtime
-- low-level actuation belongs to Physics Control
-- simulation belongs to Chaos
-- training belongs outside UE5
-
-## Hard Rules
-
-1. Prefer UE5 built-ins over custom systems.
-2. Keep training and runtime separate.
-3. No TensorRT dependency.
-4. No custom Python pipeline for UE5 asset authoring.
-5. Use TDD for deterministic logic.
-6. Exploratory spikes must become deterministic tests before the work is complete.
-7. Do not leave permanent fail-by-design or skip-by-design tests in the main suite.
-8. Treat Manny/Quinn as the default runtime skeleton unless explicitly changed.
-9. Keep commits small and atomic.
-10. Build with `.\\scripts\\build.ps1`.
-11. If smoke tests were run, read logs with `python .\\scripts\\read_logs.py`.
-
 <!-- mcp-graph:start -->
-# AGENTS.md — NewEngine-AgentB
-
-### Codex-Specific Rules
-
-- Root project instructions live in `AGENTS.md`; repo-scoped skills live in `.agents/skills/<skill>/SKILL.md`.
-- Invoke skills explicitly with `$graph-implement`, `$graph-security`, or another installed skill name when a task needs that workflow.
-- In Codex Plan Mode, use mcp-graph and skills for discovery and planning only. Do not edit files until the user asks for implementation outside Plan Mode.
-- During implementation, use `apply_patch` for manual edits and preserve unrelated user changes in the worktree.
-- Respect sandbox and approval prompts. If a required command fails because of sandbox/network restrictions, rerun it with an approval request.
-- Do not spawn subagents unless the user explicitly asks for delegation or parallel agent work.
-
 ## mcp-graph — NewEngine-AgentB
 
 Este projeto usa **mcp-graph** para gestão de execução via grafo persistente (SQLite).
@@ -278,10 +224,4 @@ Memory files são **snapshots point-in-time**, não estado live. Contagens de pr
 > **Nunca confiar em contagens de progresso de memories. Sempre verificar no código antes de planejar.**
 
 > **Referências detalhadas on-demand:** Use `help` tool para consultar: `tools`, `analyze_modes`, `skills`, `cli`, `knowledge`, `workflow`, `gates`, `dod`, `dor`, `prerequisites`, `workflows`, `flow`, `quality_metrics`, `tdd`, `pipeline`, `antipatterns`, `harness`, `dream`, `siebel`, `davinci`, `translate`, `journey`, `teamtask`, `snapshot`, `graph_health`.
-
-### Codex Skills
-
-Essential mcp-graph workflows are installed as repo-scoped Codex skills in `.agents/skills`.
-Use `$graph-implement` for tracked TDD implementation, `$graph-tests` for test strategy,
-`$graph-security` for security review, and `$ui-ux-pro-max` for UI/UX work.
 <!-- mcp-graph:end -->
