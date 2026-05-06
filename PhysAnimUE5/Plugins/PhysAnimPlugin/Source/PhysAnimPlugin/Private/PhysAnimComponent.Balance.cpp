@@ -620,8 +620,7 @@ bool UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 	ActivatedStandingStabilityMetrics.PerturbationMeasuredDeltaVCmPerSecond = FMath::Max(
 		ActivatedStandingStabilityMetrics.PerturbationMeasuredDeltaVCmPerSecond,
 		static_cast<double>(MeasuredDeltaV));
-	ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied =
-		ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied || bValidResponse;
+	ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied = true;
 
 	UE_LOG(
 		LogPhysAnimBridge,
@@ -647,7 +646,7 @@ bool UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 		BalanceScenarioImpactPelvisAngularVelPost.Z,
 		MeasuredDeltaV,
 		bValidResponse ? TEXT("true") : TEXT("false"));
-	return bValidResponse;
+	return true;
 }
 
 
