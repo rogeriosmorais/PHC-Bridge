@@ -564,6 +564,7 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	bLiveRuntimeEvidenceProofComplete = false;
 	bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
 	bLiveRuntimeEvidenceProofShouldComplete = true;
+	PhysAnimComponentInternal::ClearPhysicsTuningDiagnosticCaches(this);
 
 	LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
 	LiveRuntimeEvidenceStandingSeconds = 0.0f;
