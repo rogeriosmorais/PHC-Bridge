@@ -1,3 +1,8 @@
+---
+name: graph-prd
+description: Transform vague ideas into structured, import-ready PRDs using 5W2H, Jobs-to-be-Done, Pareto 80/20, MoSCoW, INVEST, Given-When-Then acceptance criteria, and risk/constraint analysis. Use before mcp-graph ANALYZE when no PRD document exists, or when Codex needs to produce a parser-compatible PRD with epics, tasks, acceptance criteria, risks, and constraints for import_prd dry-run validation.
+---
+
 # graph-prd
 
 Phase 0 — Transform a vague idea into a structured, import-ready PRD using 7 product methodologies: 5W2H, Jobs-to-be-Done, Pareto 80/20, MoSCoW, INVEST, Given-When-Then, and Risk Matrix.
