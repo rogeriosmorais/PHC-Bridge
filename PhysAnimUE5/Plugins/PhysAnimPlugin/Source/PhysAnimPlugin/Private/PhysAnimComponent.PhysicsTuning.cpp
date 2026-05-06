@@ -14,7 +14,7 @@ namespace
 	TAutoConsoleVariable<int32> CVarPhysAnimV0PlantEarlyControlZeroGroup(
 		TEXT("p.PhysAnim.V0PlantEarlyControlZeroGroup"),
 		0,
-		TEXT("Diagnostic-only V0 Case A early control-zero group. 0=off, 1=all V0 controls, 2=torso, 3=thighs, 4=support feet/balls."),
+		TEXT("Diagnostic-only V0 Case A early control-zero group. 0=off, 1=all V0 controls, 2=torso, 3=thighs, 4=support feet/balls, 5=torso-only(zero thighs+support), 6=thigh-only(zero torso+support), 7=support-only(zero torso+thighs)."),
 		ECVF_Default);
 	TAutoConsoleVariable<float> CVarPhysAnimV0PlantEarlyControlZeroDurationSeconds(
 		TEXT("p.PhysAnim.V0PlantEarlyControlZeroDurationSeconds"),
@@ -24,7 +24,7 @@ namespace
 	TAutoConsoleVariable<int32> CVarPhysAnimV0PlantThighRestoreVariant(
 		TEXT("p.PhysAnim.V0PlantThighRestoreVariant"),
 		0,
-		TEXT("Diagnostic-only V0 variant for restoring thigh controls after zero window. 0=off, 1=abrupt(0.20), 2=ramp(0.0-0.20), 3=abrupt(0.05), 4=zero_fixed."),
+		TEXT("Diagnostic-only V0 variant for restoring thigh controls after zero window. 0=off, 1=abrupt(0.20), 2=ramp(0.0-0.20), 3=abrupt(0.05), 4=zero_fixed, 5=abrupt(0.02), 6=abrupt(0.10), 7=abrupt(0.20_actual)."),
 		ECVF_Default);
 	TAutoConsoleVariable<float> CVarPhysAnimV0PlantThighRestoreRampDurationSeconds(
 		TEXT("p.PhysAnim.V0PlantThighRestoreRampDurationSeconds"),
@@ -409,6 +409,36 @@ namespace
 				BoneName == TEXT("ball_l") ||
 				BoneName == TEXT("ball_r");
 		}
+		if (ZeroGroup == 5) // torso-only (zeros thighs + support)
+		{
+			return
+				BoneName == TEXT("thigh_l") ||
+				BoneName == TEXT("thigh_r") ||
+				BoneName == TEXT("foot_l") ||
+				BoneName == TEXT("foot_r") ||
+				BoneName == TEXT("ball_l") ||
+				BoneName == TEXT("ball_r");
+		}
+		if (ZeroGroup == 6) // thigh-only (zeros torso + support)
+		{
+			return
+				BoneName == TEXT("spine_01") ||
+				BoneName == TEXT("spine_02") ||
+				BoneName == TEXT("spine_03") ||
+				BoneName == TEXT("foot_l") ||
+				BoneName == TEXT("foot_r") ||
+				BoneName == TEXT("ball_l") ||
+				BoneName == TEXT("ball_r");
+		}
+		if (ZeroGroup == 7) // support-only (zeros torso + thighs)
+		{
+			return
+				BoneName == TEXT("spine_01") ||
+				BoneName == TEXT("spine_02") ||
+				BoneName == TEXT("spine_03") ||
+				BoneName == TEXT("thigh_l") ||
+				BoneName == TEXT("thigh_r");
+		}
 		return false;
 	}
 
@@ -424,6 +454,12 @@ namespace
 			return TEXT("thighs");
 		case 4:
 			return TEXT("support");
+		case 5:
+			return TEXT("torso-only");
+		case 6:
+			return TEXT("thigh-only");
+		case 7:
+			return TEXT("support-only");
 		default:
 			return TEXT("off");
 		}
@@ -1598,6 +1634,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			break;
 		case 6: // abrupt(0.10)
 			ThighRestoreAlpha = 0.10f;
+			break;
+		case 7: // abrupt(0.20)
+			ThighRestoreAlpha = 0.20f;
 			break;
 		default:
 			ThighRestoreAlpha = 1.0f;

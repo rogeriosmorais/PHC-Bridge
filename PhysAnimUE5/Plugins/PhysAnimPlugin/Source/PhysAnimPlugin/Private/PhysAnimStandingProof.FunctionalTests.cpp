@@ -3061,6 +3061,30 @@ void FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::GetTests(TArray<F
 	OutBeautifiedNames.Add(TEXT("A1-full_AllV0ControlsZero_FullRun"));
 	OutTestCommands.Add(TEXT("A1-full"));
 
+	OutBeautifiedNames.Add(TEXT("A1-passive_PassiveOnly_FullRun"));
+	OutTestCommands.Add(TEXT("A1-passive"));
+
+	OutBeautifiedNames.Add(TEXT("A5-torso_TorsoOnly_FullRun"));
+	OutTestCommands.Add(TEXT("A5-torso"));
+
+	OutBeautifiedNames.Add(TEXT("A6-thigh_ThighOnly_FullRun"));
+	OutTestCommands.Add(TEXT("A6-thigh"));
+
+	OutBeautifiedNames.Add(TEXT("A6-thigh-02_ThighOnly_0.02"));
+	OutTestCommands.Add(TEXT("A6-thigh-02"));
+
+	OutBeautifiedNames.Add(TEXT("A6-thigh-05_ThighOnly_0.05"));
+	OutTestCommands.Add(TEXT("A6-thigh-05"));
+
+	OutBeautifiedNames.Add(TEXT("A6-thigh-10_ThighOnly_0.10"));
+	OutTestCommands.Add(TEXT("A6-thigh-10"));
+
+	OutBeautifiedNames.Add(TEXT("A6-thigh-20_ThighOnly_0.20"));
+	OutTestCommands.Add(TEXT("A6-thigh-20"));
+
+	OutBeautifiedNames.Add(TEXT("A7-support_SupportOnly_FullRun"));
+	OutTestCommands.Add(TEXT("A7-support"));
+
 	OutBeautifiedNames.Add(TEXT("A2_StaticTarget_NoPHC_TorsoControlsZero"));
 	OutTestCommands.Add(TEXT("A2"));
 
@@ -3081,6 +3105,9 @@ void FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::GetTests(TArray<F
 
 	OutBeautifiedNames.Add(TEXT("A3-low-10_ThighRestore0.10"));
 	OutTestCommands.Add(TEXT("A3-low-10"));
+
+	OutBeautifiedNames.Add(TEXT("A3-low-20_ThighRestore0.20"));
+	OutTestCommands.Add(TEXT("A3-low-20"));
 
 	OutBeautifiedNames.Add(TEXT("A4_StaticTarget_NoPHC_SupportControlsZero"));
 	OutTestCommands.Add(TEXT("A4"));
@@ -3103,20 +3130,28 @@ bool FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::RunTest(const FSt
 	const bool bTinySyntheticActions = Parameters == TEXT("D");
 
 	const int32 EarlyControlZeroGroup =
-		(Parameters == TEXT("A1") || Parameters == TEXT("A1-full")) ? 1 :
+		(Parameters == TEXT("A1") || Parameters == TEXT("A1-full") || Parameters == TEXT("A1-passive")) ? 1 :
 		Parameters == TEXT("A2") ? 2 :
 		(Parameters == TEXT("A3") || Parameters == TEXT("A3-full") || Parameters.StartsWith(TEXT("A3-"))) ? 3 :
 		Parameters == TEXT("A4") ? 4 :
+		(Parameters == TEXT("A5-torso")) ? 5 :
+		(Parameters.StartsWith(TEXT("A6-thigh"))) ? 6 :
+		(Parameters == TEXT("A7-support")) ? 7 :
 		0;
 
 	const float ZeroDuration = 
-		(Parameters == TEXT("A1-full") || Parameters == TEXT("A3-full")) ? 5.0f : 0.30f;
+		(Parameters.Contains(TEXT("-full")) || 
+         Parameters.Contains(TEXT("-passive")) || 
+         Parameters.Contains(TEXT("-torso")) || 
+         Parameters.Contains(TEXT("-thigh")) || 
+         Parameters.Contains(TEXT("-support"))) ? 5.0f : 0.30f;
 
 	const int32 RestoreVariant =
 		Parameters == TEXT("A3-ramp") ? 2 :
 		Parameters == TEXT("A3-low-02") ? 5 :
 		Parameters == TEXT("A3-low-05") ? 3 :
 		Parameters == TEXT("A3-low-10") ? 6 :
+		Parameters == TEXT("A3-low-20") ? 7 :
 		0;
 
 	const float RampDuration = Parameters == TEXT("A3-ramp") ? 0.50f : 0.30f;
@@ -3136,6 +3171,13 @@ bool FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::RunTest(const FSt
 		0.10f;
 	const float SyntheticActionValue = bTinySyntheticActions ? 0.01f : 0.0f;
 
+	const float BaseAngularStrength =
+		Parameters == TEXT("A6-thigh-02") ? 0.02f :
+		Parameters == TEXT("A6-thigh-05") ? 0.05f :
+		Parameters == TEXT("A6-thigh-10") ? 0.10f :
+		Parameters == TEXT("A6-thigh-20") ? 0.20f :
+		0.20f;
+
 	ADD_LATENT_AUTOMATION_COMMAND(FSetAllowCharacterMovementInBridgeActiveCommand(0));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(3));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), 0));
@@ -3148,7 +3190,7 @@ bool FPhysAnimActivatedStandingV0PlantContractAssumptionsTest::RunTest(const FSt
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), ActionScale));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionClampAbs"), ActionClamp));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.MaxAngularStepDegPerSec"), 90.0f));
-	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularStrengthMultiplier"), 0.20f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularStrengthMultiplier"), BaseAngularStrength));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularDampingRatioMultiplier"), 2.50f));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularExtraDampingMultiplier"), 6.0f));
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
