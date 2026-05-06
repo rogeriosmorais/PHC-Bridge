@@ -4012,7 +4012,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		const bool bV0PlantReviewZeroActions =
 			V0PlantReviewMode == 2 &&
 			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
-		const bool bV0PlantReviewTinySyntheticActions = V0PlantReviewMode == 3;
+		const bool bV0PlantReviewTinySyntheticActions =
+			V0PlantReviewMode == 3 &&
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
 		const double InferenceStartSeconds = FPlatformTime::Seconds();
 		if (!bV0PlantReviewStaticTargets && !RunInference(TickError))
 		{
