@@ -329,6 +329,195 @@ namespace
 		LoggedBodies.Add(BoneName);
 		return true;
 	}
+
+	bool IsHipQuarantineTraceBody(FName BoneName)
+	{
+		return
+			BoneName == PhysAnimBridge::GetRootBoneName() ||
+			BoneName == TEXT("thigh_l") ||
+			BoneName == TEXT("thigh_r") ||
+			BoneName == TEXT("spine_01") ||
+			BoneName == TEXT("spine_02") ||
+			BoneName == TEXT("spine_03") ||
+			BoneName == TEXT("foot_l") ||
+			BoneName == TEXT("foot_r") ||
+			BoneName == TEXT("ball_l") ||
+			BoneName == TEXT("ball_r");
+	}
+
+	struct FHipQuarantineControlIntent
+	{
+		bool bValid = false;
+		bool bEnabled = false;
+		FPhysicsControlMultiplier Multiplier;
+	};
+
+	struct FHipQuarantineModifierSnapshot
+	{
+		bool bValid = false;
+		EPhysicsMovementType MovementType = EPhysicsMovementType::Static;
+		ECollisionEnabled::Type CollisionType = ECollisionEnabled::NoCollision;
+		float PhysicsBlendWeight = 0.0f;
+		bool bUpdateKinematicFromSimulation = false;
+	};
+
+	FHipQuarantineModifierSnapshot MakeHipQuarantineModifierSnapshot(
+		const UPhysicsControlComponent* PhysicsControl,
+		FName BoneName)
+	{
+		FHipQuarantineModifierSnapshot Snapshot;
+		const FPhysicsBodyModifierRecord* const Record =
+			PhysicsControl
+				? FPhysAnimPhysicsControlAccessor::GetModifierRecord(
+					PhysicsControl,
+					PhysAnimBridge::MakeBodyModifierName(BoneName))
+				: nullptr;
+		if (!Record)
+		{
+			return Snapshot;
+		}
+
+		const FPhysicsControlModifierData& ModifierData = Record->BodyModifier.ModifierData;
+		Snapshot.bValid = true;
+		Snapshot.MovementType = ModifierData.MovementType;
+		Snapshot.CollisionType = ModifierData.CollisionType;
+		Snapshot.PhysicsBlendWeight = ModifierData.PhysicsBlendWeight;
+		Snapshot.bUpdateKinematicFromSimulation = ModifierData.bUpdateKinematicFromSimulation;
+		return Snapshot;
+	}
+
+	struct FHipQuarantineTraceSnapshot
+	{
+		FV0RawSimBodySnapshot Body;
+		FHipQuarantineModifierSnapshot Modifier;
+	};
+
+	FString BuildHipQuarantineChangeSummary(
+		const FHipQuarantineTraceSnapshot* Previous,
+		const FHipQuarantineTraceSnapshot& Current)
+	{
+		if (!Previous)
+		{
+			return TEXT("baseline=1");
+		}
+
+		return FString::Printf(
+			TEXT("bodySim=%d bodyAwake=%d bodyCollision=%d bodyBlend=%d bodyUpdateKin=%d modifierMove=%d modifierCollision=%d modifierBlend=%d modifierUpdateKin=%d"),
+			Previous->Body.bSimulating != Current.Body.bSimulating ? 1 : 0,
+			Previous->Body.bAwake != Current.Body.bAwake ? 1 : 0,
+			Previous->Body.BodyCollision != Current.Body.BodyCollision ? 1 : 0,
+			!FMath::IsNearlyEqual(Previous->Body.BodyPhysicsBlendWeight, Current.Body.BodyPhysicsBlendWeight) ? 1 : 0,
+			Previous->Body.bBodyUpdateKinematicFromSimulation != Current.Body.bBodyUpdateKinematicFromSimulation ? 1 : 0,
+			Previous->Modifier.MovementType != Current.Modifier.MovementType ? 1 : 0,
+			Previous->Modifier.CollisionType != Current.Modifier.CollisionType ? 1 : 0,
+			!FMath::IsNearlyEqual(Previous->Modifier.PhysicsBlendWeight, Current.Modifier.PhysicsBlendWeight) ? 1 : 0,
+			Previous->Modifier.bUpdateKinematicFromSimulation != Current.Modifier.bUpdateKinematicFromSimulation ? 1 : 0);
+	}
+
+	struct FHipQuarantinePendingNextTickTrace
+	{
+		bool bPending = false;
+		uint64 ReleaseFrame = 0;
+		double ReleaseWorldTimeSeconds = -1.0;
+		double ReleaseActivationTimeSeconds = -1.0;
+	};
+
+	void LogHipQuarantineTraceFrame(
+		const UPhysAnimComponent* OwnerComponent,
+		const UPhysicsControlComponent* PhysicsControl,
+		USkeletalMeshComponent* SkeletalMesh,
+		const TCHAR* Phase,
+		uint64 ReleaseFrame,
+		double ReleaseWorldTimeSeconds,
+		double ReleaseActivationTimeSeconds,
+		int32 TicksBefore,
+		int32 TicksAfter,
+		bool bQuarantineActiveForTuning,
+		const TMap<FName, FHipQuarantineControlIntent>& ControlIntents)
+	{
+		static TMap<const UPhysAnimComponent*, TMap<FName, FHipQuarantineTraceSnapshot>> PreviousSnapshotsByComponent;
+		if (!OwnerComponent || !SkeletalMesh)
+		{
+			return;
+		}
+
+		const uint64 CurrentFrame = GFrameNumber;
+		const double WorldTimeSeconds = OwnerComponent->GetWorld() ? OwnerComponent->GetWorld()->GetTimeSeconds() : -1.0;
+		const double ActivationTimeSeconds = OwnerComponent->GetActivatedStandingStabilityMetrics().ActivationDurationSec;
+		TMap<FName, FHipQuarantineTraceSnapshot>& PreviousSnapshots = PreviousSnapshotsByComponent.FindOrAdd(OwnerComponent);
+		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+		{
+			if (!IsHipQuarantineTraceBody(BoneName))
+			{
+				continue;
+			}
+
+			const FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName);
+			FHipQuarantineTraceSnapshot Current;
+			Current.Body = MakeV0RawSimBodySnapshot(BodyInstance);
+			Current.Modifier = MakeHipQuarantineModifierSnapshot(PhysicsControl, BoneName);
+			const FHipQuarantineTraceSnapshot* const Previous = PreviousSnapshots.Find(BoneName);
+			const FString ChangeSummary = BuildHipQuarantineChangeSummary(Previous, Current);
+			PreviousSnapshots.FindOrAdd(BoneName) = Current;
+
+			const FTransform BoneWorldTransform = SkeletalMesh->GetBoneTransform(BoneName, RTS_World);
+			const FHipQuarantineControlIntent* const ControlIntent = ControlIntents.Find(BoneName);
+			const FV0RawSimOverlapSummary OverlapSummary = BuildV0RawSimOverlapSummary(
+				OwnerComponent,
+				SkeletalMesh,
+				BoneName,
+				BodyInstance,
+				Current.Body.BodyTransform);
+			const double LinearSpeedCmPerSecond = Current.Body.LinearVelocityCmPerSec.Size();
+			const double AngularSpeedDegPerSecond =
+				FMath::RadiansToDegrees(Current.Body.AngularVelocityRadPerSec.Size());
+
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimV0] HIP_QUARANTINE_TRACE phase=%s frame=%llu worldT=%.3f activationT=%.3f releaseFrame=%llu releaseWorldT=%.3f releaseActivationT=%.3f ticksBefore=%d ticksAfter=%d activeForTuning=%d bone=%s boneWorld{%s} body{valid=%d sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d mass=%.3f inertia=%s xf=%s lin=%s linSpeed=%.2f angRad=%s angDeg=%.2f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} penetration{world=%d capsule=%d skeletal=%d bodies=%s} changed{%s}"),
+				Phase,
+				CurrentFrame,
+				WorldTimeSeconds,
+				ActivationTimeSeconds,
+				ReleaseFrame,
+				ReleaseWorldTimeSeconds,
+				ReleaseActivationTimeSeconds,
+				TicksBefore,
+				TicksAfter,
+				bQuarantineActiveForTuning ? 1 : 0,
+				*BoneName.ToString(),
+				*FormatTransformForV0RawSim(BoneWorldTransform),
+				Current.Body.bValid ? 1 : 0,
+				Current.Body.bSimulating ? 1 : 0,
+				Current.Body.bAwake ? 1 : 0,
+				static_cast<int32>(Current.Body.BodyCollision),
+				Current.Body.BodyPhysicsBlendWeight,
+				Current.Body.bBodyUpdateKinematicFromSimulation ? 1 : 0,
+				Current.Body.MassKg,
+				*FormatVectorForV0RawSim(Current.Body.InertiaTensor),
+				*FormatTransformForV0RawSim(Current.Body.BodyTransform),
+				*FormatVectorForV0RawSim(Current.Body.LinearVelocityCmPerSec),
+				LinearSpeedCmPerSecond,
+				*FormatVectorForV0RawSim(Current.Body.AngularVelocityRadPerSec),
+				AngularSpeedDegPerSecond,
+				Current.Modifier.bValid ? 1 : 0,
+				Current.Modifier.bValid ? UPhysAnimComponent::GetPhysicsMovementTypeName(Current.Modifier.MovementType) : TEXT("none"),
+				Current.Modifier.bValid ? static_cast<int32>(Current.Modifier.CollisionType) : -1,
+				Current.Modifier.bValid ? Current.Modifier.PhysicsBlendWeight : -1.0f,
+				Current.Modifier.bValid && Current.Modifier.bUpdateKinematicFromSimulation ? 1 : 0,
+				ControlIntent && ControlIntent->bValid ? 1 : 0,
+				ControlIntent && ControlIntent->bEnabled ? 1 : 0,
+				ControlIntent ? ControlIntent->Multiplier.AngularStrengthMultiplier : -1.0f,
+				ControlIntent ? ControlIntent->Multiplier.AngularDampingRatioMultiplier : -1.0f,
+				ControlIntent ? ControlIntent->Multiplier.AngularExtraDampingMultiplier : -1.0f,
+				OverlapSummary.WorldOverlapCount,
+				OverlapSummary.CapsuleOverlapCount,
+				OverlapSummary.SkeletalBodyOverlapCount,
+				*JoinNamesForV0RawSim(OverlapSummary.ContactBodies),
+				*ChangeSummary);
+		}
+	}
 }
 
 bool UPhysAnimComponent::ActivateRuntimePhysicsControl(FString& OutError)
@@ -1035,6 +1224,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		HipQuarantineTicksRemaining = 10;
 	}
 	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0;
+	const bool bHipQuarantineWillReleaseThisFrame =
+		bHipQuarantineActiveThisFrame &&
+		HipQuarantineTicksRemaining == 1 &&
+		RuntimeState != EPhysAnimRuntimeState::FailStopped;
 	bool bHipQuarantineReleasedThisFrame = false;
 	if (!PhysicsControl)
 	{
@@ -1047,6 +1240,48 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		bLastAppliedSimulationHandoffSettled = bSimulationHandoffSettled;
 		LastAppliedControlAuthorityAlpha = CalculateCurrentControlAuthorityAlpha(EffectiveSettings);
 		return;
+	}
+
+	static TMap<UPhysAnimComponent*, FHipQuarantinePendingNextTickTrace> HipQuarantinePendingNextTickTraces;
+	FHipQuarantinePendingNextTickTrace& HipQuarantinePendingNextTickTrace =
+		HipQuarantinePendingNextTickTraces.FindOrAdd(this);
+	const bool bTraceHipReleaseFrame =
+		IsBalanceActiveState(RuntimeState) &&
+		bHipQuarantineWillReleaseThisFrame;
+	const bool bTraceHipReleaseNextTick =
+		IsBalanceActiveState(RuntimeState) &&
+		HipQuarantinePendingNextTickTrace.bPending &&
+		HipQuarantinePendingNextTickTrace.ReleaseFrame != CurrentFrameNumber;
+	TMap<FName, FHipQuarantineControlIntent> HipQuarantineControlIntents;
+	if (bTraceHipReleaseFrame)
+	{
+		LogHipQuarantineTraceFrame(
+			this,
+			PhysicsControl,
+			MeshComponent.Get(),
+			TEXT("release_frame_pre_tuning"),
+			CurrentFrameNumber,
+			GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
+			GetActivatedStandingStabilityMetrics().ActivationDurationSec,
+			HipQuarantineTicksRemaining,
+			HipQuarantineTicksRemaining,
+			true,
+			HipQuarantineControlIntents);
+	}
+	else if (bTraceHipReleaseNextTick)
+	{
+		LogHipQuarantineTraceFrame(
+			this,
+			PhysicsControl,
+			MeshComponent.Get(),
+			TEXT("next_tick_pre_tuning"),
+			HipQuarantinePendingNextTickTrace.ReleaseFrame,
+			HipQuarantinePendingNextTickTrace.ReleaseWorldTimeSeconds,
+			HipQuarantinePendingNextTickTrace.ReleaseActivationTimeSeconds,
+			HipQuarantineTicksRemaining,
+			HipQuarantineTicksRemaining,
+			false,
+			HipQuarantineControlIntents);
 	}
 
 	const float OwnerPlanarSpeedCmPerSec = [this]() -> float
@@ -1238,6 +1473,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bBringUpGroupUnlocked && !EffectiveSettings.bForceZeroActions,
 			true,
 			false);
+		if ((bTraceHipReleaseFrame || bTraceHipReleaseNextTick) && IsHipQuarantineTraceBody(BoneName))
+		{
+			FHipQuarantineControlIntent& ControlIntent = HipQuarantineControlIntents.FindOrAdd(BoneName);
+			ControlIntent.bValid = true;
+			ControlIntent.bEnabled = bBringUpGroupUnlocked && !EffectiveSettings.bForceZeroActions;
+			ControlIntent.Multiplier = ControlMultiplier;
+		}
 
 		// One-shot trace capture for preserved spine
 		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && (BoneName == "pelvis" || BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"))
@@ -1888,8 +2130,41 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 	}
 
+	if (bTraceHipReleaseFrame)
+	{
+		LogHipQuarantineTraceFrame(
+			this,
+			PhysicsControl,
+			MeshComponent.Get(),
+			TEXT("release_frame_post_tuning_pre_release"),
+			CurrentFrameNumber,
+			GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
+			GetActivatedStandingStabilityMetrics().ActivationDurationSec,
+			HipQuarantineTicksRemaining,
+			HipQuarantineTicksRemaining,
+			true,
+			HipQuarantineControlIntents);
+	}
+	else if (bTraceHipReleaseNextTick)
+	{
+		LogHipQuarantineTraceFrame(
+			this,
+			PhysicsControl,
+			MeshComponent.Get(),
+			TEXT("next_tick_post_tuning"),
+			HipQuarantinePendingNextTickTrace.ReleaseFrame,
+			HipQuarantinePendingNextTickTrace.ReleaseWorldTimeSeconds,
+			HipQuarantinePendingNextTickTrace.ReleaseActivationTimeSeconds,
+			HipQuarantineTicksRemaining,
+			HipQuarantineTicksRemaining,
+			false,
+			HipQuarantineControlIntents);
+		HipQuarantinePendingNextTickTrace.bPending = false;
+	}
+
 	if (bHipQuarantineActiveThisFrame)
 	{
+		const int32 HipQuarantineTicksBeforeDecrement = HipQuarantineTicksRemaining;
 		if (HipQuarantineTicksRemaining > 0 && RuntimeState != EPhysAnimRuntimeState::FailStopped)
 		{
 			--HipQuarantineTicksRemaining;
@@ -1903,7 +2178,30 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				UE_LOG(
 					LogPhysAnimBridge,
 					Warning,
-					TEXT("[PhysAnimBalance] HIP_QUARANTINE_RELEASED"));
+					TEXT("[PhysAnimBalance] HIP_QUARANTINE_RELEASED frame=%llu worldT=%.3f activationT=%.3f ticksBefore=%d ticksAfter=%d nextTickTraceArmed=1"),
+					CurrentFrameNumber,
+					GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
+					GetActivatedStandingStabilityMetrics().ActivationDurationSec,
+					HipQuarantineTicksBeforeDecrement,
+					HipQuarantineTicksRemaining);
+				HipQuarantinePendingNextTickTrace.bPending = true;
+				HipQuarantinePendingNextTickTrace.ReleaseFrame = CurrentFrameNumber;
+				HipQuarantinePendingNextTickTrace.ReleaseWorldTimeSeconds =
+					GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
+				HipQuarantinePendingNextTickTrace.ReleaseActivationTimeSeconds =
+					GetActivatedStandingStabilityMetrics().ActivationDurationSec;
+				LogHipQuarantineTraceFrame(
+					this,
+					PhysicsControl,
+					MeshComponent.Get(),
+					TEXT("release_frame_post_decrement"),
+					CurrentFrameNumber,
+					HipQuarantinePendingNextTickTrace.ReleaseWorldTimeSeconds,
+					HipQuarantinePendingNextTickTrace.ReleaseActivationTimeSeconds,
+					HipQuarantineTicksBeforeDecrement,
+					HipQuarantineTicksRemaining,
+					true,
+					HipQuarantineControlIntents);
 			}
 		}
 	}

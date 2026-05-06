@@ -66,3 +66,46 @@ The strongest current explanation is raw-sim enable into an already interpenetra
 ## Remaining Gap
 
 This pass reduces the uncertainty around the Case A failure but does not yet reduce the physical spike itself. The next smallest technical work should stay in the plant/collision/physical-asset path and explain whether `spine_01` mass/inertia, initial torso interpenetration, or constraint impulses are authoritative for the first spike.
+
+## Hip Quarantine Release Diagnostic
+
+Context: editor-side physics asset changes were present in `PA_Mannequin.uasset` and were intentionally left unstaged. Those changes corrected `spine_01` to sane mass/inertia and disabled relevant V0 spine projection/collision. This code pass only adds release-sequence instrumentation.
+
+Additional instrumentation:
+
+- `HIP_QUARANTINE_RELEASED` now logs frame, world time, activation time, ticks before/after decrement, and whether the next-tick trace is armed.
+- `HIP_QUARANTINE_TRACE` logs release-frame pre-tuning, release-frame post-tuning/pre-release, release-frame post-decrement, next-tick pre-tuning, and next-tick post-tuning body snapshots.
+- The trace covers pelvis, thighs, V0 spine bodies, feet, and balls with body velocities, transforms, collision, modifier movement/collision/blend/update-kinematic state, support/world/skeletal penetrations, and intended PhysicsControl multiplier state.
+
+Verification:
+
+- `powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1`: PASS
+- `powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Test PhysAnim.ActivatedStanding.V0PlantContractAssumptions.A_StaticTarget_NoPHC`: PASS
+- `python .\scripts\read_logs.py`: run after automation
+
+Case A summary with the editor-side physics asset changes:
+
+```text
+V0PlantReview[A_StaticTarget_NoPHC]: mode=1 runtimeState=11 terminalReason=0 samples=34 duration=0.28 supportHull[min/mean/max]=0.00/1681.17/2214.42 activeSides[min/mean/max]=0.00/1.76/2.00 maxBodyLinear=7164.29(spine_02) maxBodyAngular=47599.99(spine_01) spine01[lin=7102.64 ang=47599.99] spine03[lin=6175.54 ang=22440.08] firstSpineSpike=0.18(spine_01) firstSupportFailure=0.28 policy[inference=0 actionSamples=0 rawAbsMax=0.000 conditionedAbsMax=0.000] targets[samples=0 normal=0 total=0 maxDelta=0.00 maxRawOffset=0.00] bodies[samples=748 simMax=10 excludedSimMax=0 criticalValid=0x3f criticalSim=0x3f supportValid=0xf supportSim=0xf nonzeroVelocitySamples=32] continuityValid=1
+```
+
+Sequence:
+
+- Group C still completes at `activationT=0.000` with `simBodies=10` and `excludedSimMax=0`.
+- `HIP_QUARANTINE_RELEASED` occurs at frame `1222`, `activationT=0.150`, `ticksBefore=1`, `ticksAfter=0`.
+- On the release frame, thighs are still in the active quarantine tuning path and their intended angular strength is held at `0.0000`.
+- On the next tuning tick, frame `1223`, `activationT=0.167`, quarantine is inactive and thigh angular strength returns to `0.2000`.
+- No traced body changes movement type, collision, physics blend, or update-kinematic-from-simulation across release or the next tuning tick.
+- `FIRST_MAJOR_SPINE_SPIKE` follows at `activationT=0.175`, one tick after thigh control resumes, with `spine_01 lin=3221.39 cm/s`, `ang=7135.92 deg/s`, `supportHull=2145.12`, and `activeSides=2`.
+- Support sampling fails later and reaches `PHASE3_ACTIVE_SUPPORT_FAILURE` with `hull_area=0.0`.
+
+Key release-frame / next-tick body telemetry:
+
+- Release frame pre-tuning: `spine_01 linSpeed=330.96`, `angDeg=2429.58`; `spine_03 linSpeed=577.60`, `angDeg=696.79`; `foot_l angDeg=1288.31`; `ball_l linSpeed=100.50`; thighs are below `110 cm/s` and `280 deg/s`.
+- Next tick post-tuning: `spine_01 linSpeed=231.28`, `angDeg=2436.87`; `spine_03 linSpeed=460.10`, `angDeg=623.69`; `foot_l angDeg=1177.51`; `ball_l angDeg=812.44`; thighs remain below `75 cm/s` and `200 deg/s`.
+
+Interpretation:
+
+Hip quarantine release is causal in the narrow control-state sense: it is the transition that re-enables thigh angular strength from `0.0000` to `0.2000` on the next tick. It is not causal through hidden simulation authority changes: movement type, collision, blend, and update-kinematic flags remain unchanged for all traced V0 bodies.
+
+The spine is already carrying large angular velocity before the release (`spine_01` around `2430 deg/s`). The release appears to be an amplifier/correlation point rather than the first energy source. The next technical blocker is why the pelvis/thigh/spine/support coupled plant has already accumulated high V0 body motion by `activationT=0.150` and why resumed thigh control lets that existing motion turn into a larger `spine_01` spike and support-body sample loss.
