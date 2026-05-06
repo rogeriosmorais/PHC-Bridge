@@ -2,6 +2,8 @@
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
 
+#include "Engine/OverlapResult.h"
+
 namespace
 {
 	TAutoConsoleVariable<int32> CVarPhysAnimRawSimDiagnosticGroup(
@@ -44,6 +46,288 @@ namespace
 			return bPelvisOrSpine || bThigh;
 		}
 		return bPelvisOrSpine;
+	}
+
+	bool IsV0GroupCRawSimBody(FName BoneName)
+	{
+		return
+			BoneName == PhysAnimBridge::GetRootBoneName() ||
+			BoneName == TEXT("spine_01") ||
+			BoneName == TEXT("spine_02") ||
+			BoneName == TEXT("spine_03") ||
+			BoneName == TEXT("thigh_l") ||
+			BoneName == TEXT("thigh_r") ||
+			BoneName == TEXT("foot_l") ||
+			BoneName == TEXT("foot_r") ||
+			BoneName == TEXT("ball_l") ||
+			BoneName == TEXT("ball_r");
+	}
+
+	FString FormatTransformForV0RawSim(const FTransform& Transform)
+	{
+		const FVector Location = Transform.GetLocation();
+		const FRotator Rotation = Transform.GetRotation().Rotator();
+		return FString::Printf(
+			TEXT("loc=(%.2f,%.2f,%.2f) rot=(%.2f,%.2f,%.2f)"),
+			Location.X,
+			Location.Y,
+			Location.Z,
+			Rotation.Pitch,
+			Rotation.Yaw,
+			Rotation.Roll);
+	}
+
+	FString FormatVectorForV0RawSim(const FVector& Vector)
+	{
+		return FString::Printf(TEXT("(%.2f,%.2f,%.2f)"), Vector.X, Vector.Y, Vector.Z);
+	}
+
+	FString JoinNamesForV0RawSim(const TArray<FString>& Names)
+	{
+		return Names.Num() > 0 ? FString::Join(Names, TEXT(",")) : TEXT("none");
+	}
+
+	struct FV0RawSimBodySnapshot
+	{
+		bool bValid = false;
+		bool bSimulating = false;
+		bool bAwake = false;
+		ECollisionEnabled::Type BodyCollision = ECollisionEnabled::NoCollision;
+		float BodyPhysicsBlendWeight = 0.0f;
+		bool bBodyUpdateKinematicFromSimulation = false;
+		float MassKg = 0.0f;
+		FVector InertiaTensor = FVector::ZeroVector;
+		FTransform BodyTransform = FTransform::Identity;
+		FVector LinearVelocityCmPerSec = FVector::ZeroVector;
+		FVector AngularVelocityRadPerSec = FVector::ZeroVector;
+	};
+
+	FV0RawSimBodySnapshot MakeV0RawSimBodySnapshot(const FBodyInstance* BodyInstance)
+	{
+		FV0RawSimBodySnapshot Snapshot;
+		if (!BodyInstance || !BodyInstance->IsValidBodyInstance())
+		{
+			return Snapshot;
+		}
+
+		Snapshot.bValid = true;
+		Snapshot.bSimulating = BodyInstance->IsInstanceSimulatingPhysics();
+		Snapshot.bAwake = BodyInstance->IsInstanceAwake();
+		Snapshot.BodyCollision = BodyInstance->GetCollisionEnabled();
+		Snapshot.BodyPhysicsBlendWeight = BodyInstance->PhysicsBlendWeight;
+		Snapshot.bBodyUpdateKinematicFromSimulation = BodyInstance->bUpdateKinematicFromSimulation != 0;
+		Snapshot.MassKg = BodyInstance->GetBodyMass();
+		Snapshot.InertiaTensor = BodyInstance->GetBodyInertiaTensor();
+		Snapshot.BodyTransform = BodyInstance->GetUnrealWorldTransform();
+		Snapshot.LinearVelocityCmPerSec = BodyInstance->GetUnrealWorldVelocity();
+		Snapshot.AngularVelocityRadPerSec = BodyInstance->GetUnrealWorldAngularVelocityInRadians();
+		return Snapshot;
+	}
+
+	struct FV0RawSimOverlapSummary
+	{
+		int32 WorldOverlapCount = 0;
+		int32 CapsuleOverlapCount = 0;
+		int32 SkeletalBodyOverlapCount = 0;
+		TArray<FString> ContactBodies;
+	};
+
+	FV0RawSimOverlapSummary BuildV0RawSimOverlapSummary(
+		const UPhysAnimComponent* OwnerComponent,
+		USkeletalMeshComponent* SkeletalMesh,
+		FName BoneName,
+		const FBodyInstance* BodyInstance,
+		const FTransform& BodyTransform)
+	{
+		FV0RawSimOverlapSummary Summary;
+		if (!OwnerComponent || !SkeletalMesh || !BodyInstance || !BodyInstance->IsValidBodyInstance())
+		{
+			return Summary;
+		}
+
+		const UWorld* const World = OwnerComponent->GetWorld();
+		if (World)
+		{
+			TArray<FOverlapResult> Overlaps;
+			FComponentQueryParams QueryParams(TEXT("V0RawSimBodyEnable"), OwnerComponent->GetOwner());
+			QueryParams.AddIgnoredComponent(SkeletalMesh);
+			FCollisionResponseParams ResponseParams(BodyInstance->GetResponseToChannels());
+			const FCollisionObjectQueryParams ObjectParams(FCollisionObjectQueryParams::InitType::AllObjects);
+			BodyInstance->OverlapMulti(
+				Overlaps,
+				World,
+				nullptr,
+				BodyTransform.GetLocation(),
+				BodyTransform.GetRotation(),
+				BodyInstance->GetObjectType(),
+				QueryParams,
+				ResponseParams,
+				ObjectParams);
+
+			for (const FOverlapResult& Overlap : Overlaps)
+			{
+				UPrimitiveComponent* const OverlapComponent = Overlap.GetComponent();
+				if (!OverlapComponent)
+				{
+					continue;
+				}
+
+				++Summary.WorldOverlapCount;
+				Summary.ContactBodies.Add(FString::Printf(
+					TEXT("world:%s:%s:%d"),
+					Overlap.GetActor() ? *Overlap.GetActor()->GetName() : TEXT("none"),
+					*OverlapComponent->GetName(),
+					Overlap.GetItemIndex()));
+			}
+		}
+
+		if (const ACharacter* const CharacterOwner = Cast<ACharacter>(OwnerComponent->GetOwner()))
+		{
+			if (const UCapsuleComponent* const Capsule = CharacterOwner->GetCapsuleComponent())
+			{
+				if (FBodyInstance* const CapsuleBody = Capsule->GetBodyInstance())
+				{
+					if (BodyInstance->OverlapTestForBody(BodyTransform.GetLocation(), BodyTransform.GetRotation(), CapsuleBody))
+					{
+						++Summary.CapsuleOverlapCount;
+						Summary.ContactBodies.Add(TEXT("capsule"));
+					}
+				}
+			}
+		}
+
+		for (const FName OtherBoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+		{
+			if (OtherBoneName == BoneName)
+			{
+				continue;
+			}
+
+			if (FBodyInstance* const OtherBody = SkeletalMesh->GetBodyInstance(OtherBoneName))
+			{
+				if (BodyInstance->OverlapTestForBody(BodyTransform.GetLocation(), BodyTransform.GetRotation(), OtherBody))
+				{
+					++Summary.SkeletalBodyOverlapCount;
+					Summary.ContactBodies.Add(FString::Printf(TEXT("skeletal:%s"), *OtherBoneName.ToString()));
+				}
+			}
+		}
+
+		return Summary;
+	}
+
+	void LogV0RawSimBodyEnable(
+		const UPhysAnimComponent* OwnerComponent,
+		const UPhysicsControlComponent* PhysicsControl,
+		USkeletalMeshComponent* SkeletalMesh,
+		FName BoneName,
+		const FTransform& BoneWorldBefore,
+		const FV0RawSimBodySnapshot& Before,
+		const FV0RawSimBodySnapshot& After,
+		EPhysicsMovementType PreviousModifierMovementType,
+		EPhysicsMovementType NewModifierMovementType,
+		ECollisionEnabled::Type NewCollisionType,
+		float NewPhysicsBlendWeight,
+		bool bNewUpdateKinematicFromSimulation)
+	{
+		const FPhysicsBodyModifierRecord* const Record =
+			PhysicsControl
+				? FPhysAnimPhysicsControlAccessor::GetModifierRecord(
+					PhysicsControl,
+					PhysAnimBridge::MakeBodyModifierName(BoneName))
+				: nullptr;
+		const FPhysicsControlModifierData* const ModifierData = Record ? &Record->BodyModifier.ModifierData : nullptr;
+		const FV0RawSimOverlapSummary OverlapSummary = BuildV0RawSimOverlapSummary(
+			OwnerComponent,
+			SkeletalMesh,
+			BoneName,
+			SkeletalMesh ? SkeletalMesh->GetBodyInstance(BoneName) : nullptr,
+			After.BodyTransform);
+
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimV0] RAW_SIM_ENABLE bone=%s activationT=%.3f runtimeState=%s boneBefore{%s} bodyBefore{valid=%d sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d mass=%.3f inertia=%s xf=%s lin=%s angRad=%s} bodyAfter{valid=%d sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d mass=%.3f inertia=%s xf=%s lin=%s angRad=%s} modifier{prevMove=%s intendedMove=%s recordMove=%s intendedCollision=%d recordCollision=%d intendedBlend=%.2f recordBlend=%.2f intendedUpdateKinFromSim=%d recordUpdateKinFromSim=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
+			*BoneName.ToString(),
+			OwnerComponent ? OwnerComponent->GetActivatedStandingStabilityMetrics().ActivationDurationSec : -1.0,
+			OwnerComponent ? OwnerComponent->GetRuntimeStateName(OwnerComponent->GetRuntimeState()) : TEXT("none"),
+			*FormatTransformForV0RawSim(BoneWorldBefore),
+			Before.bValid ? 1 : 0,
+			Before.bSimulating ? 1 : 0,
+			Before.bAwake ? 1 : 0,
+			static_cast<int32>(Before.BodyCollision),
+			Before.BodyPhysicsBlendWeight,
+			Before.bBodyUpdateKinematicFromSimulation ? 1 : 0,
+			Before.MassKg,
+			*FormatVectorForV0RawSim(Before.InertiaTensor),
+			*FormatTransformForV0RawSim(Before.BodyTransform),
+			*FormatVectorForV0RawSim(Before.LinearVelocityCmPerSec),
+			*FormatVectorForV0RawSim(Before.AngularVelocityRadPerSec),
+			After.bValid ? 1 : 0,
+			After.bSimulating ? 1 : 0,
+			After.bAwake ? 1 : 0,
+			static_cast<int32>(After.BodyCollision),
+			After.BodyPhysicsBlendWeight,
+			After.bBodyUpdateKinematicFromSimulation ? 1 : 0,
+			After.MassKg,
+			*FormatVectorForV0RawSim(After.InertiaTensor),
+			*FormatTransformForV0RawSim(After.BodyTransform),
+			*FormatVectorForV0RawSim(After.LinearVelocityCmPerSec),
+			*FormatVectorForV0RawSim(After.AngularVelocityRadPerSec),
+			UPhysAnimComponent::GetPhysicsMovementTypeName(PreviousModifierMovementType),
+			UPhysAnimComponent::GetPhysicsMovementTypeName(NewModifierMovementType),
+			ModifierData ? UPhysAnimComponent::GetPhysicsMovementTypeName(ModifierData->MovementType) : TEXT("none"),
+			static_cast<int32>(NewCollisionType),
+			ModifierData ? static_cast<int32>(ModifierData->CollisionType.GetValue()) : -1,
+			NewPhysicsBlendWeight,
+			ModifierData ? ModifierData->PhysicsBlendWeight : -1.0f,
+			bNewUpdateKinematicFromSimulation ? 1 : 0,
+			ModifierData && ModifierData->bUpdateKinematicFromSimulation ? 1 : 0,
+			OverlapSummary.WorldOverlapCount,
+			OverlapSummary.CapsuleOverlapCount,
+			OverlapSummary.SkeletalBodyOverlapCount,
+			*JoinNamesForV0RawSim(OverlapSummary.ContactBodies));
+	}
+
+	void LogV0RawSimGroupCCompleteIfReady(const UPhysAnimComponent* OwnerComponent, FName BoneName, bool bAfterRawSimulating)
+	{
+		static TMap<const UPhysAnimComponent*, TSet<FName>> EnabledBodiesByComponent;
+		if (!OwnerComponent || !bAfterRawSimulating || !IsV0GroupCRawSimBody(BoneName))
+		{
+			return;
+		}
+
+		TSet<FName>& EnabledBodies = EnabledBodiesByComponent.FindOrAdd(OwnerComponent);
+		const int32 PreviousCount = EnabledBodies.Num();
+		EnabledBodies.Add(BoneName);
+		if (PreviousCount < 10 && EnabledBodies.Num() == 10)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimV0] RAW_SIM_GROUP_C_COMPLETE activationT=%.3f runtimeState=%s simBodies=10 excludedSimMax=%d bodies=pelvis,spine_01,spine_02,spine_03,thigh_l,thigh_r,foot_l,foot_r,ball_l,ball_r"),
+				OwnerComponent->GetActivatedStandingStabilityMetrics().ActivationDurationSec,
+				OwnerComponent->GetRuntimeStateName(OwnerComponent->GetRuntimeState()),
+				OwnerComponent->GetActivatedStandingStabilityMetrics().ExcludedRequiredBodySimulatingCountMax);
+		}
+	}
+
+	bool MarkV0RawSimBodyEnableLogged(const UPhysAnimComponent* OwnerComponent, FName BoneName)
+	{
+		static TMap<const UPhysAnimComponent*, TSet<FName>> LoggedBodiesByComponent;
+		if (!OwnerComponent || !IsV0GroupCRawSimBody(BoneName))
+		{
+			return false;
+		}
+
+		TSet<FName>& LoggedBodies = LoggedBodiesByComponent.FindOrAdd(OwnerComponent);
+		if (LoggedBodies.Contains(BoneName))
+		{
+			return false;
+		}
+
+		LoggedBodies.Add(BoneName);
+		return true;
 	}
 }
 
@@ -1411,6 +1695,16 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const bool bUpdateBodyOnPerBoneSync =
 			ShouldUpdateBodyOnPerBoneBodyModifierSync(RuntimeState) ||
 			bDiagnosticRawSimBody;
+		const FPhysicsBodyModifierRecord* const PreviousModifierRecord =
+			FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName);
+		const EPhysicsMovementType PreviousModifierMovementType = PreviousModifierRecord
+			? PreviousModifierRecord->BodyModifier.ModifierData.MovementType
+			: EPhysicsMovementType::Static;
+		const FTransform BoneWorldBeforeRawSim = MeshComponentPtr
+			? MeshComponentPtr->GetBoneTransform(BoneName, RTS_World)
+			: FTransform::Identity;
+		const FV0RawSimBodySnapshot BodyBeforeRawSim = MakeV0RawSimBodySnapshot(
+			MeshComponentPtr ? MeshComponentPtr->GetBodyInstance(BoneName) : nullptr);
 		PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(
 			ModifierName,
 			bUpdateKinematicFromSimulation,
@@ -1474,6 +1768,31 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			if (FBodyInstance* const BodyInstance = MeshComponentPtr ? MeshComponentPtr->GetBodyInstance(BoneName) : nullptr)
 			{
 				BodyInstance->WakeInstance();
+			}
+		}
+		if (bDiagnosticRawSimBody)
+		{
+			const FV0RawSimBodySnapshot BodyAfterRawSim = MakeV0RawSimBodySnapshot(
+				MeshComponentPtr ? MeshComponentPtr->GetBodyInstance(BoneName) : nullptr);
+			if (BodyAfterRawSim.bSimulating)
+			{
+				if (MarkV0RawSimBodyEnableLogged(this, BoneName))
+				{
+					LogV0RawSimBodyEnable(
+						this,
+						PhysicsControl,
+						MeshComponentPtr,
+						BoneName,
+						BoneWorldBeforeRawSim,
+						BodyBeforeRawSim,
+						BodyAfterRawSim,
+						PreviousModifierMovementType,
+						BodyModifierMovementType,
+						BodyModifierCollisionType,
+						BodyModifierPhysicsBlendWeight,
+						bUpdateKinematicFromSimulation);
+				}
+				LogV0RawSimGroupCCompleteIfReady(this, BoneName, true);
 			}
 		}
 		if (bIsRootBodyModifier && bRootOnApplicationTick && BodyModifierMovementType == EPhysicsMovementType::Simulated)

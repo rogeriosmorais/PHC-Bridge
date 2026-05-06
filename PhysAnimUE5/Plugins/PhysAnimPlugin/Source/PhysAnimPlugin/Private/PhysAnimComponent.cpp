@@ -1069,6 +1069,29 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 			{
 				ActivatedStandingStabilityMetrics.FirstMajorSpineSpikeTimeSec = CurrentSampleTimeSec;
 				ActivatedStandingStabilityMetrics.FirstMajorSpineSpikeBodyName = BoneName;
+				const FTransform BodyTransform = BodyInstance->GetUnrealWorldTransform();
+				const FVector BodyLocation = BodyTransform.GetLocation();
+				const FRotator BodyRotation = BodyTransform.GetRotation().Rotator();
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimV0] FIRST_MAJOR_SPINE_SPIKE bone=%s activationT=%.3f runtimeState=%s lin=%.2f angDeg=%.2f sim=%d awake=%d collision=%d supportHull=%.2f activeSides=%.0f xfLoc=(%.2f,%.2f,%.2f) xfRot=(%.2f,%.2f,%.2f)"),
+					*BoneName.ToString(),
+					CurrentSampleTimeSec,
+					GetRuntimeStateName(RuntimeState),
+					LinearSpeedCmPerSecond,
+					AngularSpeedDegPerSecond,
+					bSimulating ? 1 : 0,
+					BodyInstance->IsInstanceAwake() ? 1 : 0,
+					static_cast<int32>(BodyInstance->GetCollisionEnabled()),
+					CurrentSupportHullAreaCm2,
+					CurrentActiveSupportSideCount,
+					BodyLocation.X,
+					BodyLocation.Y,
+					BodyLocation.Z,
+					BodyRotation.Pitch,
+					BodyRotation.Yaw,
+					BodyRotation.Roll);
 			}
 			if (LinearSpeedCmPerSecond > ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond)
 			{
