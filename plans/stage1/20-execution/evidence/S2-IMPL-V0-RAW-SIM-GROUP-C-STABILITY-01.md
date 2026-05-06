@@ -109,3 +109,78 @@ Interpretation:
 Hip quarantine release is causal in the narrow control-state sense: it is the transition that re-enables thigh angular strength from `0.0000` to `0.2000` on the next tick. It is not causal through hidden simulation authority changes: movement type, collision, blend, and update-kinematic flags remain unchanged for all traced V0 bodies.
 
 The spine is already carrying large angular velocity before the release (`spine_01` around `2430 deg/s`). The release appears to be an amplifier/correlation point rather than the first energy source. The next technical blocker is why the pelvis/thigh/spine/support coupled plant has already accumulated high V0 body motion by `activationT=0.150` and why resumed thigh control lets that existing motion turn into a larger `spine_01` spike and support-body sample loss.
+
+## Early Control Isolation Subvariants
+
+Context: these are Case A subvariants only. PHC remains disabled, action samples remain zero, control target writes remain zero, Group C remains `simMax=10`, and excluded bodies remain `excludedSimMax=0`.
+
+Additional instrumentation:
+
+- `p.PhysAnim.V0PlantEarlyControlZeroGroup` selects a diagnostic-only early zero-strength group for the first `0.30s`: `1=all_v0`, `2=torso`, `3=thighs`, `4=support`.
+- `EARLY_CONTROL_SAMPLE` logs pelvis, thighs, feet, balls, and spine bodies at `0.05`, `0.10`, `0.15`, and `0.20s`.
+- Each sample includes body speed, applied PhysicsControl multipliers, modifier movement/collision/blend/update-kinematic state, target cache state, support hull/active sides, and penetration summary.
+- `EARLY_CONTROL_THRESHOLD` records the first body to exceed `1200 cm/s` linear speed and `3600 deg/s` angular speed for each variant.
+
+Verification:
+
+- `powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1`: PASS
+- `powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Test PhysAnim.ActivatedStanding.V0PlantContractAssumptions.A1_StaticTarget_NoPHC_AllV0ControlsZero`: PASS
+- `python .\scripts\read_logs.py`: run after A1
+- `powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Test PhysAnim.ActivatedStanding.V0PlantContractAssumptions.A2_StaticTarget_NoPHC_TorsoControlsZero`: PASS
+- `python .\scripts\read_logs.py`: run after A2
+- `powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Test PhysAnim.ActivatedStanding.V0PlantContractAssumptions.A3_StaticTarget_NoPHC_ThighControlsZero`: PASS
+- `python .\scripts\read_logs.py`: run after A3
+- `powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Test PhysAnim.ActivatedStanding.V0PlantContractAssumptions.A4_StaticTarget_NoPHC_SupportControlsZero`: PASS
+- `python .\scripts\read_logs.py`: run after A4
+
+Summary:
+
+```text
+A1 all V0 controls zero:
+  duration=0.32, firstSpineSpike=0.31(spine_01), firstSupportFailure=0.32
+  maxBodyLinear=3664.39(pelvis), maxBodyAngular=23296.11(spine_01)
+  0.15 sample: spine_01 lin=82.78 ang=780.23, spine_02 lin=164.32 ang=2105.99, spine_03 lin=417.61 ang=1866.87
+  0.20 sample: spine_01 lin=185.49 ang=802.16, spine_02 lin=275.08 ang=1314.63, spine_03 lin=439.49 ang=1555.92
+
+A2 torso controls zero:
+  duration=0.23, firstSpineSpike=0.18(spine_01), firstSupportFailure=0.23
+  maxBodyLinear=7418.15(pelvis), maxBodyAngular=17712.39(spine_01)
+  first thresholds at 0.183: pelvis lin=3565.19 ang=6193.46, supportHull=1570.54, activeSides=2
+  0.15 sample: spine_01 lin=86.81 ang=785.65, spine_02 lin=169.73 ang=2113.19, spine_03 lin=423.31 ang=1881.71
+  0.20 sample: spine_01 lin=5090.33 ang=17712.39, spine_02 lin=4403.26 ang=17280.83, spine_03 lin=2640.51 ang=8003.11
+
+A3 thigh controls zero:
+  duration=0.43, firstSpineSpike=0.31(spine_01), firstSupportFailure=0.43
+  maxBodyLinear=7350.99(pelvis), maxBodyAngular=47395.49(spine_01)
+  first angular threshold at 0.100: ball_r lin=312.53 ang=4617.55, supportHull=2211.29, activeSides=2
+  first linear threshold at 0.317: pelvis lin=3752.13 ang=8463.45, supportHull=1764.98, activeSides=2
+  0.15 sample: spine_01 lin=331.11 ang=2429.87, spine_02 lin=473.07 ang=562.38, spine_03 lin=577.71 ang=696.89
+  0.20 sample: spine_01 lin=119.61 ang=2301.79, spine_02 lin=228.87 ang=757.54, spine_03 lin=317.92 ang=486.87
+
+A4 support controls zero:
+  duration=0.28, firstSpineSpike=0.18(spine_01), firstSupportFailure=0.28
+  maxBodyLinear=7284.75(spine_02), maxBodyAngular=47645.73(spine_01)
+  first thresholds at 0.183: pelvis lin=3825.89 ang=8595.21, supportHull=1783.85, activeSides=2
+  0.15 sample: spine_01 lin=333.29 ang=2435.43, spine_02 lin=476.20 ang=571.64, spine_03 lin=583.71 ang=709.20
+  0.20 sample: spine_01 lin=1889.03 ang=19799.32, spine_02 lin=2332.76 ang=17561.26, spine_03 lin=3441.22 ang=7370.00
+```
+
+Target/cache state:
+
+- All subvariants report `currentPoseTargetsSeeded=1`, `previousTargets=21`, `blendStartTargets=21`, and `pendingCachedResets=0`.
+- The Case A summaries keep `policy[inference=0 actionSamples=0 rawAbsMax=0 conditionedAbsMax=0]`.
+- The Case A summaries keep `targets[samples=0 normal=0 total=0 maxDelta=0 maxRawOffset=0]`.
+
+Interpretation:
+
+Early motion is not PHC/policy driven and is not caused by control target writes. It is present with PHC disabled and no action samples.
+
+Passive raw physics/contact/constraint settling contributes immediately: A1, with all traced V0 control strengths zero for the first `0.30s`, still shows nonzero support/body motion and support-body angular speeds by `0.05-0.15s`. That motion remains much smaller through `0.20s` and the major spine spike is delayed until after the zero window ends.
+
+Torso controls are not sufficient to explain the early catastrophic spike. In A2, torso angular strengths are zero, but active thigh/support control still produces the same early failure shape: first major spine spike at `0.175s`, first pelvis threshold at `0.183s`, and support failure at `0.23s`.
+
+Support controls are not sufficient to explain the early catastrophic spike. In A4, foot/ball angular strengths are zero, but active thigh/torso control still produces first major spine spike at `0.175s` and pelvis thresholds at `0.183s`.
+
+Thigh/hip coupling is the strongest current causal lever. A3, with thigh controls zero, delays the major spine spike to `0.308s` and support failure to `0.43s`, similar to A1. This matches the earlier hip-quarantine finding: re-enabling thigh angular strength amplifies already accumulated pelvis/spine/support motion into the spine spike.
+
+The first energy source before `0.150s` is best described as passive raw-sim contact/constraint settling in an already interpenetrating V0 plant, with active thigh/hip PhysicsControl coupling acting as the early amplifier. Support-body drive contributes local foot/ball angular churn, but zeroing it does not prevent the pelvis/spine threshold. Torso drive contributes once active, but zeroing torso alone does not prevent the early pelvis-driven failure.

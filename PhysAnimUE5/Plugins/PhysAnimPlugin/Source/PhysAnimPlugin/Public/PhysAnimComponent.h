@@ -1240,6 +1240,8 @@ public:
 	bool WasTransitionShellReferenceReanchored() const { return bTransitionOwnedShellReferenceReanchored; }
 	bool WasTransitionShellReferenceReseededAfterLock() const { return bTransitionOwnedShellReferenceReseededAfterLock; }
 	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
+	const TMap<FName, FQuat>& GetPreviousControlTargetRotationsForDiagnostics() const { return PreviousControlTargetRotations; }
+	const TMap<FName, FQuat>& GetPolicyBlendStartControlTargetRotationsForDiagnostics() const { return PolicyBlendStartControlTargetRotations; }
 	void ConsumeUpperBodyPendingResets();
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
 	const FPhysAnimControlTargetDiagnostics& GetLastControlTargetDiagnostics() const { return LastControlTargetDiagnostics; }
