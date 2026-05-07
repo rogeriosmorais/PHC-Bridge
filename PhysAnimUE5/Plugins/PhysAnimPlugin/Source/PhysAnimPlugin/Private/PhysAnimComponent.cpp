@@ -1107,16 +1107,16 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 		TEXT("ball_l"),
 		TEXT("ball_r")
 	};
-	const auto IsNamedBody = [](const FName& BoneName, const FName* BodyNames, int32 NumBodyNames) -> bool
+	const auto GetNamedBodyIndex = [](const FName& BoneName, const FName* BodyNames, int32 NumBodyNames) -> int32
 	{
 		for (int32 Index = 0; Index < NumBodyNames; ++Index)
 		{
 			if (BoneName == BodyNames[Index])
 			{
-				return true;
+				return Index;
 			}
 		}
-		return false;
+		return INDEX_NONE;
 	};
 
 	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
@@ -1125,13 +1125,33 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 		{
 			const bool bSimulating = BodyInstance->IsInstanceSimulatingPhysics();
 			++DirectBodySampleCount;
-			
+
+			const int32 CriticalBodyIndex = GetNamedBodyIndex(BoneName, CriticalBodyNames, UE_ARRAY_COUNT(CriticalBodyNames));
+			const int32 SupportBodyIndex = GetNamedBodyIndex(BoneName, SupportBodyNames, UE_ARRAY_COUNT(SupportBodyNames));
+
+			if (CriticalBodyIndex != INDEX_NONE)
+			{
+				ActivatedStandingStabilityMetrics.CriticalBodyValidMask |= (1 << CriticalBodyIndex);
+				if (bSimulating)
+				{
+					ActivatedStandingStabilityMetrics.CriticalBodySimulatingMask |= (1 << CriticalBodyIndex);
+				}
+			}
+
+			if (SupportBodyIndex != INDEX_NONE)
+			{
+				ActivatedStandingStabilityMetrics.SupportBodyValidMask |= (1 << SupportBodyIndex);
+				if (bSimulating)
+				{
+					ActivatedStandingStabilityMetrics.SupportBodySimulatingMask |= (1 << SupportBodyIndex);
+				}
+			}
+
 			if (bSimulating)
 			{
 				++DirectSimulatingBodyCount;
 
-				if (!IsNamedBody(BoneName, CriticalBodyNames, UE_ARRAY_COUNT(CriticalBodyNames)) &&
-					!IsNamedBody(BoneName, SupportBodyNames, UE_ARRAY_COUNT(SupportBodyNames)))
+				if (CriticalBodyIndex == INDEX_NONE && SupportBodyIndex == INDEX_NONE)
 				{
 					++ExcludedRequiredBodySimulatingCount;
 				}
