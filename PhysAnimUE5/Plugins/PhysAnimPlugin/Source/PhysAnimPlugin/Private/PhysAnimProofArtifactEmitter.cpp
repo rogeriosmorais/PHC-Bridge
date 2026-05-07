@@ -216,6 +216,8 @@ namespace PhysAnimProofArtifactEmitter
 			return TEXT("ActivationTopologyChange");
 		case EPhysAnimTerminalReason::ActivationContinuousSimulationLost:
 			return TEXT("ActivationContinuousSimulationLost");
+		case EPhysAnimTerminalReason::ActivationPhysicsNotStarted:
+			return TEXT("ActivationPhysicsNotStarted");
 		case EPhysAnimTerminalReason::ActivationSupportFailure:
 			return TEXT("ActivationSupportFailure");
 		case EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion:

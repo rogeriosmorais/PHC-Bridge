@@ -36,6 +36,8 @@ namespace BalanceTransitionSets
 		FQuat AuthoredParentRefFrame = FQuat::Identity;
 		FQuat AuthoredChildRefFrame = FQuat::Identity;
 		float ConstraintAngularErrorDeg = 0.0f;
+		float AuthoredConstraintFrameAngularFloorDeg = 0.0f;
+		float BaselineCompensatedConstraintAngularErrorDeg = 0.0f;
 		float BodyOriginDistanceCm = 0.0f;
 		bool bConstraintFound = false;
 		bool bParentUsedBodyInstance = false;
@@ -56,6 +58,18 @@ namespace BalanceTransitionSets
 		const TArray<FDirectPelvisLinkForensicRecord>& Records,
 		const TCHAR* ContextTag,
 		bool bEmitMissingConstraintErrors);
+	inline float GetPhase2WarmStartDirectLinkAngularThresholdDeg(const FDirectPelvisLinkForensicRecord& Record)
+	{
+		return Record.ChildBoneName == TEXT("spine_01")
+			? Phase2MaxPelvisSpineDirectLinkAngularErrorDeg
+			: Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
+	}
+	inline bool IsPhase2WarmStartDirectLinkAngularSatisfied(const FDirectPelvisLinkForensicRecord& Record)
+	{
+		return Record.bConstraintFound &&
+			Record.BaselineCompensatedConstraintAngularErrorDeg <=
+				GetPhase2WarmStartDirectLinkAngularThresholdDeg(Record);
+	}
 
 	FTransform BuildWarmStartPelvisTransform(
 		const USkeletalMeshComponent* Mesh,

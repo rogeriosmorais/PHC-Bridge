@@ -2731,25 +2731,21 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				const float PelvisThighRErrorCm = PelvisThighRRecord.bConstraintFound ? PelvisThighRRecord.AnchorDistanceCm : PelvisThighRRecord.BodyOriginDistanceCm;
 				const float PelvisSpine01ErrorCm = PelvisSpine01Record.bConstraintFound ? PelvisSpine01Record.AnchorDistanceCm : PelvisSpine01Record.BodyOriginDistanceCm;
 				const bool bPelvisThighLAngularSatisfied =
-					PelvisThighLRecord.bConstraintFound &&
-					PelvisThighLRecord.ConstraintAngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
+					BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(PelvisThighLRecord);
 				const bool bPelvisThighRAngularSatisfied =
-					PelvisThighRRecord.bConstraintFound &&
-					PelvisThighRRecord.ConstraintAngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
+					BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(PelvisThighRRecord);
 				const bool bPelvisSpine01AngularSatisfied =
-					PelvisSpine01Record.bConstraintFound &&
-					PelvisSpine01Record.ConstraintAngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg;
+					BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(PelvisSpine01Record);
 				for (const BalanceTransitionSets::FDirectPelvisLinkForensicRecord& Record : DirectPelvisLinkForensics)
 				{
-					const float AngularThresholdDeg =
-						Record.ChildBoneName == TEXT("spine_01")
-							? BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg
-							: BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_PRE link=%s errorCm=%.2f threshold=%.2f angularErrorDeg=%.2f angularThreshold=%.2f"),
+					const float AngularThresholdDeg = BalanceTransitionSets::GetPhase2WarmStartDirectLinkAngularThresholdDeg(Record);
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_PRE link=%s errorCm=%.2f threshold=%.2f angularErrorDeg=%.2f authoredAngularFloorDeg=%.2f baselineCompensatedAngularErrorDeg=%.2f angularThreshold=%.2f"),
 						*Record.LinkName,
 						Record.bConstraintFound ? Record.AnchorDistanceCm : Record.BodyOriginDistanceCm,
 						BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm,
 						Record.ConstraintAngularErrorDeg,
+						Record.AuthoredConstraintFrameAngularFloorDeg,
+						Record.BaselineCompensatedConstraintAngularErrorDeg,
 						AngularThresholdDeg);
 				}
 				if (PelvisThighLErrorCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm ||
@@ -2759,13 +2755,9 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					TArray<BalanceTransitionSets::FDirectPelvisLinkForensicRecord> FailingLinkForensics;
 					for (const BalanceTransitionSets::FDirectPelvisLinkForensicRecord& Record : DirectPelvisLinkForensics)
 					{
-						const float AngularThresholdDeg =
-							Record.ChildBoneName == TEXT("spine_01")
-								? BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg
-								: BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
 						if (!Record.bConstraintFound ||
 							Record.AnchorDistanceCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm ||
-							Record.ConstraintAngularErrorDeg > AngularThresholdDeg)
+							!BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(Record))
 						{
 							FailingLinkForensics.Add(Record);
 						}
@@ -2779,14 +2771,17 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					UE_LOG(
 						LogPhysAnimBridge,
 						Warning,
-						TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f"),
+						TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f pelvisThighLCompensatedAngular=%.2f pelvisThighRCompensatedAngular=%.2f pelvisSpine01CompensatedAngular=%.2f"),
 						*SafeDenyReason,
 						PelvisThighLErrorCm,
 						PelvisThighRErrorCm,
 						PelvisSpine01ErrorCm,
 						PelvisThighLRecord.ConstraintAngularErrorDeg,
 						PelvisThighRRecord.ConstraintAngularErrorDeg,
-						PelvisSpine01Record.ConstraintAngularErrorDeg);
+						PelvisSpine01Record.ConstraintAngularErrorDeg,
+						PelvisThighLRecord.BaselineCompensatedConstraintAngularErrorDeg,
+						PelvisThighRRecord.BaselineCompensatedConstraintAngularErrorDeg,
+						PelvisSpine01Record.BaselineCompensatedConstraintAngularErrorDeg);
 					Owner->ReleaseTransitionOwnedShellLock();
 					MarkSafePhase2Denied(Owner, SafeDenyReason);
 					return;
@@ -2798,11 +2793,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					TArray<BalanceTransitionSets::FDirectPelvisLinkForensicRecord> AngularMismatchForensics;
 					for (const BalanceTransitionSets::FDirectPelvisLinkForensicRecord& Record : DirectPelvisLinkForensics)
 					{
-						const float AngularThresholdDeg =
-							Record.ChildBoneName == TEXT("spine_01")
-								? BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg
-								: BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
-						if (!Record.bConstraintFound || Record.ConstraintAngularErrorDeg > AngularThresholdDeg)
+						if (!BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(Record))
 						{
 							AngularMismatchForensics.Add(Record);
 						}
@@ -2814,13 +2805,16 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					UE_LOG(
 						LogPhysAnimBridge,
 						Warning,
-						TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED phase2_root_on_warm_start_incoherent pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f"),
+						TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED phase2_root_on_warm_start_incoherent pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f pelvisThighLCompensatedAngular=%.2f pelvisThighRCompensatedAngular=%.2f pelvisSpine01CompensatedAngular=%.2f"),
 						PelvisThighLErrorCm,
 						PelvisThighRErrorCm,
 						PelvisSpine01ErrorCm,
 						PelvisThighLRecord.ConstraintAngularErrorDeg,
 						PelvisThighRRecord.ConstraintAngularErrorDeg,
-						PelvisSpine01Record.ConstraintAngularErrorDeg);
+						PelvisSpine01Record.ConstraintAngularErrorDeg,
+						PelvisThighLRecord.BaselineCompensatedConstraintAngularErrorDeg,
+						PelvisThighRRecord.BaselineCompensatedConstraintAngularErrorDeg,
+						PelvisSpine01Record.BaselineCompensatedConstraintAngularErrorDeg);
 					const FString SafeDenyReason = TEXT("phase2_root_on_warm_start_incoherent");
 					Diagnostics.FailureReason = SafeDenyReason;
 					Owner->ReleaseTransitionOwnedShellLock();

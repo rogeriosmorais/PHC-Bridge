@@ -94,6 +94,8 @@ namespace
 			TEXT("Active standing balance remains a passing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceActive_Standing,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
@@ -105,9 +107,27 @@ namespace
 
 		OutcomeError.Reset();
 		TestFalse(
+			TEXT("Active standing without physical continuity evidence is not a passing benchmark outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BalanceActive_Standing,
+				false,
+				EPhysAnimTerminalReason::None,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				OutcomeError));
+		TestTrue(TEXT("Physical continuity failure reports physical continuity"), OutcomeError.Contains(TEXT("physical continuity")));
+
+		OutcomeError.Reset();
+		TestFalse(
 			TEXT("Balance recovery is not a passing standing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceActive_Recovery,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
@@ -122,6 +142,8 @@ namespace
 			TEXT("Explicit safe deny is not a passing benchmark outcome when the reason is truthful"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceSafeDeny,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
@@ -136,6 +158,8 @@ namespace
 			TEXT("Phase 3 shell maintenance safe deny is not a passing standing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceSafeDeny,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
@@ -150,6 +174,8 @@ namespace
 			TEXT("Generic fail-stop precursor is not a truthful safe-deny smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceSafeDeny,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
@@ -160,10 +186,60 @@ namespace
 		TestTrue(TEXT("Generic safe deny failure reports the non-truthful reason"), OutcomeError.Contains(TEXT("phase2_fail_stop_precursor")));
 
 		OutcomeError.Reset();
+		TestTrue(
+			TEXT("Canonical terminal failure is a truthful smoke diagnostic outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::FailStopped,
+				false,
+				EPhysAnimTerminalReason::ActivationContinuousSimulationLost,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				OutcomeError));
+		TestTrue(TEXT("Canonical terminal outcome emits no benchmark error"), OutcomeError.IsEmpty());
+
+		OutcomeError.Reset();
+		TestTrue(
+			TEXT("BridgeActive with canonical terminal evidence is a truthful smoke diagnostic outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				EPhysAnimTerminalReason::ActivationContinuousSimulationLost,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				OutcomeError));
+		TestTrue(TEXT("BridgeActive terminal diagnostic emits no benchmark error"), OutcomeError.IsEmpty());
+
+		OutcomeError.Reset();
+		TestFalse(
+			TEXT("FailStopped without a terminal reason remains unsafe"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::FailStopped,
+				false,
+				EPhysAnimTerminalReason::None,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				OutcomeError));
+		TestTrue(TEXT("Unsafe fail-stop reports unsafe failure"), OutcomeError.Contains(TEXT("Unsafe failure path")));
+
+		OutcomeError.Reset();
 		TestFalse(
 			TEXT("BridgeActive remains a failing smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
@@ -178,6 +254,8 @@ namespace
 			TEXT("BridgeActive with a published transition failure remains an unsafe smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				true,
@@ -186,6 +264,110 @@ namespace
 				TEXT("phase3_material_shell_correction"),
 				OutcomeError));
 		TestTrue(TEXT("Published transition failure reports the truthful blocker"), OutcomeError.Contains(TEXT("phase3_material_shell_correction")));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimStartupProofPhysicalContinuityContractTest,
+		"PhysAnim.Component.StartupProofPhysicalContinuityContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimStartupProofPhysicalContinuityContractTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimRunArtifactSnapshot Artifact;
+		Artifact.bPhysicalContinuityValidatorPassed = true;
+		Artifact.RuntimeSimulatingBodyCount = 0;
+
+		TestFalse(
+			TEXT("Continuity validator pass without simulated truth-set bodies is not physical-continuity evidence"),
+			UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(Artifact));
+
+		Artifact.RuntimeSimulatingBodyCount = 1;
+		TestTrue(
+			TEXT("Continuity validator pass with simulated truth-set bodies is physical-continuity evidence"),
+			UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(Artifact));
+
+		Artifact.bPhysicalContinuityValidatorPassed = false;
+		TestFalse(
+			TEXT("Simulated bodies without continuity validator pass is not physical-continuity evidence"),
+			UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(Artifact));
+
+		Artifact.RuntimeSimulatingBodyCount = 0;
+		TestEqual(
+			TEXT("Pre-activation zero simulated bodies reports physics-not-started"),
+			UPhysAnimComponent::TestOnlyResolveStartupPhysicalContinuityTerminalReason(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				Artifact),
+			EPhysAnimTerminalReason::ActivationPhysicsNotStarted);
+
+		Artifact.RuntimeSimulatingBodyCount = 3;
+		TestEqual(
+			TEXT("Post-activation continuity loss remains continuous-simulation loss"),
+			UPhysAnimComponent::TestOnlyResolveStartupPhysicalContinuityTerminalReason(
+				EPhysAnimRuntimeState::BalanceActive_Standing,
+				Artifact),
+			EPhysAnimTerminalReason::ActivationContinuousSimulationLost);
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimStartupProofPhysicsOwnershipSequencingTest,
+		"PhysAnim.Component.StartupProofPhysicsOwnershipSequencing",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimStartupProofPhysicsOwnershipSequencingTest::RunTest(const FString& Parameters)
+	{
+		TestTrue(
+			TEXT("Valid PoseSearch may start bridge physics ownership while proof is waiting for physical continuity"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgePhysicsOwnershipForStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				true,
+				true,
+				false,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("Startup proof must not start bridge physics before PoseSearch is valid"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgePhysicsOwnershipForStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				false,
+				true,
+				false,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("Already satisfied proof uses the normal standing publication path"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgePhysicsOwnershipForStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				true,
+				true,
+				true,
+				true,
+				false));
+
+		TestFalse(
+			TEXT("Terminated proof must not start bridge physics ownership"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgePhysicsOwnershipForStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				true,
+				true,
+				false,
+				false,
+				true));
+
+		TestFalse(
+			TEXT("BridgeActive does not re-enter startup ownership handoff"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgePhysicsOwnershipForStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				true,
+				false,
+				false,
+				false));
+
 		return true;
 	}
 
@@ -447,6 +629,26 @@ namespace
 				682.36f,
 				2.0f,
 				10.0f));
+		TestFalse(
+			TEXT("Tick 3 Settle ignores bounded zero-offset shell carry-through while explicit lock continuity still holds"),
+			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				true,
+				true,
+				3,
+				0.0f,
+				46.30f,
+				2.0f,
+				10.0f));
+		TestFalse(
+			TEXT("Tick 4 Settle ignores zero-offset RootOn snap carry-through while explicit lock continuity still holds"),
+			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				true,
+				true,
+				4,
+				0.0f,
+				1123.47f,
+				2.0f,
+				10.0f));
 		TestTrue(
 			TEXT("First Settle tick still classifies positional shell drift as material"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
@@ -583,6 +785,33 @@ namespace
 				10.0f,
 				848.97f,
 				2752.97f));
+		TestFalse(
+			TEXT("Tick 5 combined shell-burst grace does not hide expanded non-root angular instability"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				5,
+				true,
+				true,
+				949.56f,
+				3000.0f,
+				2775.80f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				693.77f,
+				10.0f,
+				341.60f,
+				1778.28f,
+				949.56f,
+				2792.26f,
+				1778.28f,
+				TEXT("spine_01"),
+				0.0f,
+				1778.28f,
+				0.0f,
+				7066.84f,
+				0.0f,
+				2508.44f,
+				0.0f));
 		TestTrue(
 			TEXT("Tick 5 combined shell-burst grace compares shell dominance against planar root speed so vertical carry-through does not overstate the blocker"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
@@ -1473,6 +1702,109 @@ namespace
 			TEXT("BridgeActive without the distal kinematic experiment can still use the broad modifier path"),
 			UPhysAnimComponent::TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
 				EPhysAnimRuntimeState::BridgeActive,
+				false));
+		TestTrue(
+			TEXT("BridgeActive with accepted distal kinematic mode still uses per-bone modifier records"),
+			UPhysAnimComponent::TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
+				EPhysAnimRuntimeState::BridgeActive,
+				true));
+		TestFalse(
+			TEXT("BridgeActive startup proof ownership must not push authoritative kinematic record writes into raw body simulation"),
+			UPhysAnimComponent::TestOnlyShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(
+				EPhysAnimRuntimeState::BridgeActive));
+		TestTrue(
+			TEXT("Balance entry authoritative kinematic writes still update live bodies immediately"),
+			UPhysAnimComponent::TestOnlyShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(
+				EPhysAnimRuntimeState::BalanceEntry_Prepare));
+		TestTrue(
+			TEXT("BridgeActive live startup proof preserves raw simulation until proof completion"),
+			UPhysAnimComponent::TestOnlyShouldPreserveRawSimulationForBridgeActiveStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false));
+		TestFalse(
+			TEXT("BridgeActive raw-simulation preservation ends once live proof completes"),
+			UPhysAnimComponent::TestOnlyShouldPreserveRawSimulationForBridgeActiveStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				true));
+		TestFalse(
+			TEXT("WaitingForPoseSearch never preserves raw simulation before physics ownership"),
+			UPhysAnimComponent::TestOnlyShouldPreserveRawSimulationForBridgeActiveStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				true,
+				false));
+		TestTrue(
+			TEXT("BridgeActive live startup proof uses raw simulated body COM for support proxy coupling"),
+			UPhysAnimComponent::TestOnlyShouldUseRawSimComProxyForStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false));
+		TestFalse(
+			TEXT("BridgeActive support proxy returns to normal capsule/actor proxy once proof completes"),
+			UPhysAnimComponent::TestOnlyShouldUseRawSimComProxyForStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				true));
+		TestFalse(
+			TEXT("WaitingForPoseSearch does not use raw simulated COM before bridge physics ownership"),
+			UPhysAnimComponent::TestOnlyShouldUseRawSimComProxyForStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				true,
+				false));
+		TestTrue(
+			TEXT("BridgeActive live startup proof defers proxy terminal until support handoff is armed"),
+			UPhysAnimComponent::TestOnlyShouldDeferStartupProxyTerminalForProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false,
+				false,
+				EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion));
+		TestFalse(
+			TEXT("BridgeActive startup proof stops deferring proxy terminal after proof completion"),
+			UPhysAnimComponent::TestOnlyShouldDeferStartupProxyTerminalForProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				true,
+				false,
+				EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion));
+		TestFalse(
+			TEXT("BridgeActive startup proof does not defer non-proxy terminal reasons"),
+			UPhysAnimComponent::TestOnlyShouldDeferStartupProxyTerminalForProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false,
+				false,
+				EPhysAnimTerminalReason::ActivationContinuousSimulationLost));
+		TestTrue(
+			TEXT("BridgeActive proof completion can start policy influence once the core bring-up ramp is active"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgeActivePolicyRampAfterStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false,
+				false,
+				true,
+				true,
+				false));
+		TestFalse(
+			TEXT("BridgeActive proof completion does not restart an already-started policy influence ramp"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgeActivePolicyRampAfterStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				true,
+				false,
+				true,
+				true,
+				false));
+		TestFalse(
+			TEXT("BridgeActive proof completion waits for the core bring-up ramp before policy influence"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgeActivePolicyRampAfterStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false,
+				false,
+				true,
+				false,
 				false));
 		TestTrue(
 			TEXT("Ultra-fine RootOn readiness cleanup still runs for the current 1.55 degree near-miss class"),
@@ -3032,6 +3364,26 @@ namespace
 			AddInfo(TEXT("------------------------------------------------------------"));
 		}
 
+		if (USkeletalMesh* LoadedMesh = LoadObject<USkeletalMesh>(nullptr, *MeshPath))
+		{
+			AActor* Actor = GEditor->GetEditorWorldContext().World()->SpawnActor<AActor>();
+			USkeletalMeshComponent* MeshComp = NewObject<USkeletalMeshComponent>(Actor);
+			MeshComp->SetSkeletalMesh(LoadedMesh);
+			MeshComp->RegisterComponent();
+			MeshComp->RefreshBoneTransforms();
+
+			BalanceTransitionSets::FDirectPelvisLinkForensicRecord ThighRecord;
+			if (BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(MeshComp, TEXT("pelvis"), TEXT("thigh_l"), ThighRecord))
+			{
+				TestTrue(
+					TEXT("Baseline-compensated readiness angle removes the authored thigh frame floor"),
+					ThighRecord.BaselineCompensatedConstraintAngularErrorDeg <
+						ThighRecord.ConstraintAngularErrorDeg);
+			}
+
+			Actor->Destroy();
+		}
+
 		AddInfo(TEXT("============================================================"));
 		AddInfo(TEXT("INTERPRETATION GUIDE:"));
 		AddInfo(TEXT("  ALIGNED (<= 1°):"));
@@ -3058,6 +3410,50 @@ namespace
 			}
 		}
 		TestEqual(TEXT("All three Phase 1 critical constraints found"), FoundCount, 3);
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase2WarmStartBaselineAngularGateTest,
+		"PhysAnim.Component.Phase2WarmStartBaselineAngularGate",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase2WarmStartBaselineAngularGateTest::RunTest(const FString& Parameters)
+	{
+		BalanceTransitionSets::FDirectPelvisLinkForensicRecord ThighRecord;
+		ThighRecord.ChildBoneName = TEXT("thigh_l");
+		ThighRecord.bConstraintFound = true;
+		ThighRecord.ConstraintAngularErrorDeg = 53.47f;
+		ThighRecord.AuthoredConstraintFrameAngularFloorDeg = 55.83f;
+		ThighRecord.BaselineCompensatedConstraintAngularErrorDeg = 0.0f;
+
+		TestTrue(
+			TEXT("Raw smoke thigh angle exceeds the Phase 2 warm-start thigh threshold"),
+			ThighRecord.ConstraintAngularErrorDeg > BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg);
+		TestTrue(
+			TEXT("Baseline-compensated thigh angle satisfies the Phase 2 warm-start thigh threshold"),
+			BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(ThighRecord));
+
+		BalanceTransitionSets::FDirectPelvisLinkForensicRecord SpineRecord;
+		SpineRecord.ChildBoneName = TEXT("spine_01");
+		SpineRecord.bConstraintFound = true;
+		SpineRecord.ConstraintAngularErrorDeg = 43.48f;
+		SpineRecord.AuthoredConstraintFrameAngularFloorDeg = 14.46f;
+		SpineRecord.BaselineCompensatedConstraintAngularErrorDeg = 29.02f;
+
+		TestTrue(
+			TEXT("Raw smoke spine angle exceeds the Phase 2 warm-start spine threshold"),
+			SpineRecord.ConstraintAngularErrorDeg > BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg);
+		TestTrue(
+			TEXT("Baseline-compensated spine angle satisfies the Phase 2 warm-start spine threshold"),
+			BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(SpineRecord));
+
+		SpineRecord.BaselineCompensatedConstraintAngularErrorDeg =
+			BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg + 0.5f;
+		TestFalse(
+			TEXT("Runtime angular error above the compensated spine threshold still denies warm-start"),
+			BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(SpineRecord));
 
 		return true;
 	}

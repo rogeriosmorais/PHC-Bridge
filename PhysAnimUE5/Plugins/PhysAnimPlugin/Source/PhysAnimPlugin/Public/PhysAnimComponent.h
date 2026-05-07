@@ -1168,6 +1168,18 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double ThighNegativeWorkAccumulated = 0.0;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double FirstLinearThresholdTimeSec = -1.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	FName FirstLinearThresholdBodyName = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double FirstAngularThresholdTimeSec = -1.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	FName FirstAngularThresholdBodyName = NAME_None;
+
 	// Snapshot at first entry into the 0.05s-0.30s diagnostic window (thigh_l).
 	// Required by AC-2 of S2-IMPL-V0-THIGH-PHYSICSCONTROL-MITIGATION-DIAGNOSTICS-01.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
@@ -1175,6 +1187,9 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	float ThighAngularDampingAtWindowEntry = -1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	float ThighLinearStrengthAtWindowEntry = -1.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 PoseTargetsSeededAtWindowEntry = -1; // -1=not yet sampled, 0=not seeded, 1=seeded
@@ -1458,6 +1473,56 @@ public:
 	{
 		return ShouldUpdateBodyOnPerBoneBodyModifierSync(RuntimeState);
 	}
+	static bool TestOnlyShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(EPhysAnimRuntimeState RuntimeState)
+	{
+		return ShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(RuntimeState);
+	}
+	static bool TestOnlyShouldPreserveRawSimulationForBridgeActiveStartupProof(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bLiveProofEnabled,
+		bool bProofComplete)
+	{
+		return ShouldPreserveRawSimulationForBridgeActiveStartupProof(RuntimeState, bLiveProofEnabled, bProofComplete);
+	}
+	static bool TestOnlyShouldUseRawSimComProxyForStartupProof(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bLiveProofEnabled,
+		bool bProofComplete)
+	{
+		return ShouldUseRawSimComProxyForStartupProof(RuntimeState, bLiveProofEnabled, bProofComplete);
+	}
+	static bool TestOnlyShouldDeferStartupProxyTerminalForProof(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bLiveProofEnabled,
+		bool bProofComplete,
+		bool bProxySupportHandoffArmed,
+		EPhysAnimTerminalReason TerminalReason)
+	{
+		return ShouldDeferStartupProxyTerminalForProof(
+			RuntimeState,
+			bLiveProofEnabled,
+			bProofComplete,
+			bProxySupportHandoffArmed,
+			TerminalReason);
+	}
+	static bool TestOnlyShouldStartBridgeActivePolicyRampAfterStartupProof(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bLiveProofComplete,
+		bool bPolicyRampAlreadyStarted,
+		bool bForceZeroActions,
+		bool bCoreBringUpGroupUnlocked,
+		bool bCoreBringUpGroupRampActive,
+		bool bStartupBringUpFrozenByBalanceEntry)
+	{
+		return ShouldStartBridgeActivePolicyRampAfterStartupProof(
+			RuntimeState,
+			bLiveProofComplete,
+			bPolicyRampAlreadyStarted,
+			bForceZeroActions,
+			bCoreBringUpGroupUnlocked,
+			bCoreBringUpGroupRampActive,
+			bStartupBringUpFrozenByBalanceEntry);
+	}
 	static bool TestOnlyShouldAttemptAutoTriggeredBalanceStart(
 		EPhysAnimRuntimeState RuntimeState,
 		bool bPendingBalanceModeStartRequest,
@@ -1521,6 +1586,32 @@ public:
 	static bool TestOnlyShouldRebaselineBridgeStateAfterTransitionFailure(const FString& FailureReason)
 	{
 		return ShouldRebaselineBridgeStateAfterTransitionFailure(FailureReason);
+	}
+	static bool TestOnlyHasStartupProofPhysicalContinuityEvidence(const FPhysAnimRunArtifactSnapshot& Artifact)
+	{
+		return HasStartupProofPhysicalContinuityEvidence(Artifact);
+	}
+	static EPhysAnimTerminalReason TestOnlyResolveStartupPhysicalContinuityTerminalReason(
+		EPhysAnimRuntimeState RuntimeState,
+		const FPhysAnimRunArtifactSnapshot& Artifact)
+	{
+		return ResolveStartupPhysicalContinuityTerminalReason(RuntimeState, Artifact);
+	}
+	static bool TestOnlyShouldStartBridgePhysicsOwnershipForStartupProof(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bPoseSearchValid,
+		bool bLiveProofEnabled,
+		bool bProofComplete,
+		bool bProofSatisfied,
+		bool bProofTerminated)
+	{
+		return ShouldStartBridgePhysicsOwnershipForStartupProof(
+			RuntimeState,
+			bPoseSearchValid,
+			bLiveProofEnabled,
+			bProofComplete,
+			bProofSatisfied,
+			bProofTerminated);
 	}
 	static bool TestOnlyIsActiveBalanceTransitionFailure(bool bTransitionHasFailed)
 	{
@@ -1837,6 +1928,17 @@ private:
 	FPhysAnimRuntimeSubstepInput BuildLiveRuntimeEvidenceSubstepInput(
 		const FPhysAnimSupportObservationResult& SupportObservation,
 		float DeltaTimeSeconds) const;
+	static bool HasStartupProofPhysicalContinuityEvidence(const FPhysAnimRunArtifactSnapshot& Artifact);
+	static EPhysAnimTerminalReason ResolveStartupPhysicalContinuityTerminalReason(
+		EPhysAnimRuntimeState RuntimeState,
+		const FPhysAnimRunArtifactSnapshot& Artifact);
+	static bool ShouldStartBridgePhysicsOwnershipForStartupProof(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bPoseSearchValid,
+		bool bLiveProofEnabled,
+		bool bProofComplete,
+		bool bProofSatisfied,
+		bool bProofTerminated);
 
 	FPhysAnimCapsuleContractSnapshot BuildCapsuleContractSnapshot() const;
 	FPhysAnimContinuitySnapshot BuildContinuitySnapshot(float DeltaTimeSeconds) const;
@@ -1860,10 +1962,15 @@ private:
 	void LogBridgeStateSnapshot(const TCHAR* Context) const;
 	bool ActivateRuntimePhysicsControl(FString& OutError);
 	void DeactivateRuntimePhysicsControl(const TCHAR* Context);
-	bool ActivateBridgeFromReadyState(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* ActivationContext, FString& OutError);
+	bool ActivateBridgeFromReadyState(
+		const FPhysAnimStabilizationSettings& EffectiveSettings,
+		const TCHAR* ActivationContext,
+		FString& OutError,
+		bool bRequireLiveProofSatisfied = true);
 	bool PrewarmPhysicsControlActivationPose();
 	void EnterReadyForActivation(const FPhysAnimStabilizationSettings& EffectiveSettings, const TCHAR* Context, bool bLogDeferredStartupSuccess);
 	void ActivateBridgePhysicsState(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void ReassertBridgeActiveStartupProofRawSimulation(const TCHAR* Context);
 	void ApplyTrainingAlignedMassScales(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResetTrainingAlignedMassScales();
 	void ApplyTrainingAlignedSpineLimitPolicy(const FPhysAnimStabilizationSettings& EffectiveSettings);
@@ -2351,7 +2458,30 @@ public:
 	static bool ShouldUseAuthoritativePerBoneBodyModifierSync(
 		EPhysAnimRuntimeState RuntimeState,
 		bool bDistalKinematicAccepted);
+	static bool ShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(EPhysAnimRuntimeState RuntimeState);
 	static bool ShouldUpdateBodyOnPerBoneBodyModifierSync(EPhysAnimRuntimeState RuntimeState);
+	static bool ShouldPreserveRawSimulationForBridgeActiveStartupProof(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bLiveProofEnabled,
+		bool bProofComplete);
+	static bool ShouldUseRawSimComProxyForStartupProof(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bLiveProofEnabled,
+		bool bProofComplete);
+	static bool ShouldDeferStartupProxyTerminalForProof(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bLiveProofEnabled,
+		bool bProofComplete,
+		bool bProxySupportHandoffArmed,
+		EPhysAnimTerminalReason TerminalReason);
+	static bool ShouldStartBridgeActivePolicyRampAfterStartupProof(
+		EPhysAnimRuntimeState RuntimeState,
+		bool bLiveProofComplete,
+		bool bPolicyRampAlreadyStarted,
+		bool bForceZeroActions,
+		bool bCoreBringUpGroupUnlocked,
+		bool bCoreBringUpGroupRampActive,
+		bool bStartupBringUpFrozenByBalanceEntry);
 	static bool ShouldResetBodyModifierToCachedBoneTransform(
 		FName BoneName,
 		EPhysAnimRuntimeState InRuntimeState,

@@ -129,6 +129,8 @@ Only these categories may change during the current stabilization loop:
 - `plans/stage1/10-specs/character_capsule_contract.md`
 - `plans/stage1/10-specs/instrumentation_and_acceptance.md`
 - `plans/stage1/10-specs/balance-mode-entry-spec.md`
+- `plans/stage1/10-specs/ue-bridge-implementation-spec.md`
+- `plans/stage1/10-specs/smpl-ue5-retargeting-spec.md`
 - `plans/stage1/10-specs/rewrite_migration_plan.md`
 
 ### Active execution-planning documents
@@ -136,8 +138,11 @@ Only these categories may change during the current stabilization loop:
 - `plans/stage1/20-execution/execution-log.md`
 - `plans/stage1/20-execution/assumption-ledger.md`
 - `plans/stage1/20-execution/balance_first_refactor_plan.md`
+- `plans/stage1/20-execution/single-character-implementation-package.md`
+- `plans/stage1/20-execution/stabilization-and-tuning-package.md`
 - `plans/stage1/20-execution/balance_first_tdd_strategy.md`
 - `plans/stage1/20-execution/balance_first_test_matrix.md`
+- `plans/stage1/20-execution/stage1-test-strategy.md`
 - `plans/stage1/20-execution/first-slice-definition.md`
 
 ### Archived design documents (Historical)

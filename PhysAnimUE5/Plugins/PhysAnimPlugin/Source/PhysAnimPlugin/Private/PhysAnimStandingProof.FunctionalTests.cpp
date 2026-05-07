@@ -12,6 +12,25 @@
 
 namespace
 {
+	struct FThighRestoreDiagnosticVariant
+	{
+		const TCHAR* Name;
+		const TCHAR* Command;
+	};
+
+	static const FThighRestoreDiagnosticVariant ThighRestoreDiagnosticVariants[] =
+	{
+		{ TEXT("Abrupt_0.01"), TEXT("8") },
+		{ TEXT("Abrupt_0.02"), TEXT("5") },
+		{ TEXT("Abrupt_0.05"), TEXT("3") },
+		{ TEXT("Abrupt_0.10"), TEXT("6") },
+		{ TEXT("Abrupt_0.15"), TEXT("9") },
+		{ TEXT("Abrupt_0.20"), TEXT("7") },
+		{ TEXT("Ramp_0.20_0.5s"), TEXT("10") },
+		{ TEXT("Ramp_0.20_1.0s"), TEXT("11") },
+		{ TEXT("KineticGate_ForcedHold_0.20"), TEXT("7:-1.0") },
+	};
+
 	int32 GPhysAnimStrictLivePolicyProofQuality = 0;
 	FAutoConsoleVariableRef CVarPhysAnimStrictLivePolicyProofQuality(
 		TEXT("p.PhysAnim.StrictLivePolicyProofQuality"),
@@ -483,9 +502,11 @@ bool FLogThighRestoreVariantSummaryCommand::Update()
 		UE_LOG(LogTemp, Warning,
 			TEXT("[PhysAnimV0] THIGH_RESTORE_VARIANT_SUMMARY variant=%d terminalReason=%d duration=%.3f "
 			     "firstSpineSpikeT=%.3f firstSpineSpikeBody=%s firstSupportFailT=%.3f "
+			     "firstLinearThresholdT=%.3f firstLinearThresholdBody=%s "
+			     "firstAngularThresholdT=%.3f firstAngularThresholdBody=%s "
 			     "maxAngVel005=%.1f maxAngVel010=%.1f maxAngVel015=%.1f maxAngVel020=%.1f "
 			     "maxAngVel030=%.1f maxAngVel060=%.1f maxAngVel100=%.1f "
-			     "thighAngStr=%.4f thighAngDamp=%.4f poseSeeded=%d "
+			     "thighAngStr=%.4f thighAngDamp=%.4f thighLinStr=%.4f poseSeeded=%d "
 			     "gateReleaseCount=%d pelvisAngVelAtRelease=%.2f maxSpineAngVelAtRelease=%.2f "
 			     "thighStrAtRelease=%.4f activationTAtRelease=%.3f "
 			     "positiveWork=%.6f negativeWork=%.6f samples=%d [log]"),
@@ -495,9 +516,14 @@ bool FLogThighRestoreVariantSummaryCommand::Update()
 			M.FirstMajorSpineSpikeTimeSec,
 			*M.FirstMajorSpineSpikeBodyName.ToString(),
 			M.FirstSupportFailureTimeSec,
+			M.FirstLinearThresholdTimeSec,
+			*M.FirstLinearThresholdBodyName.ToString(),
+			M.FirstAngularThresholdTimeSec,
+			*M.FirstAngularThresholdBodyName.ToString(),
 			M.MaxAngVel005s, M.MaxAngVel010s, M.MaxAngVel015s, M.MaxAngVel020s,
 			M.MaxAngVel030s, M.MaxAngVel060s, M.MaxAngVel100s,
-			M.ThighAngularStrengthAtWindowEntry, M.ThighAngularDampingAtWindowEntry, M.PoseTargetsSeededAtWindowEntry,
+			M.ThighAngularStrengthAtWindowEntry, M.ThighAngularDampingAtWindowEntry,
+			M.ThighLinearStrengthAtWindowEntry, M.PoseTargetsSeededAtWindowEntry,
 			M.KineticGateReleaseCount, M.PelvisAngVelAtGateRelease, M.MaxSpineAngVelAtGateRelease,
 			M.ThighStrengthAtGateRelease, M.ActivationTimeAtGateRelease,
 			M.ThighPositiveWorkAccumulated, M.ThighNegativeWorkAccumulated,
@@ -4623,37 +4649,28 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimThighRestoreDiagnosticTest, "PhysAnim
 
 void FPhysAnimThighRestoreDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
-	// AC-3 sweep: 0.01, 0.02, 0.05, 0.10, 0.15, 0.20 (abrupt)
-	OutBeautifiedNames.Add(TEXT("Abrupt_0.01"));
-	OutTestCommands.Add(TEXT("8"));
-
-	OutBeautifiedNames.Add(TEXT("Abrupt_0.02"));
-	OutTestCommands.Add(TEXT("5"));
-
-	OutBeautifiedNames.Add(TEXT("Abrupt_0.05"));
-	OutTestCommands.Add(TEXT("3"));
-
-	OutBeautifiedNames.Add(TEXT("Abrupt_0.10"));
-	OutTestCommands.Add(TEXT("6"));
-
-	OutBeautifiedNames.Add(TEXT("Abrupt_0.15"));
-	OutTestCommands.Add(TEXT("9"));
-
-	// AC-4 ramp variants
-	OutBeautifiedNames.Add(TEXT("Ramp_0.20_0.5s"));
-	OutTestCommands.Add(TEXT("10"));
-
-	OutBeautifiedNames.Add(TEXT("Ramp_0.20_1.0s"));
-	OutTestCommands.Add(TEXT("11"));
+	for (const FThighRestoreDiagnosticVariant& Variant : ThighRestoreDiagnosticVariants)
+	{
+		OutBeautifiedNames.Add(Variant.Name);
+		OutTestCommands.Add(Variant.Command);
+	}
 }
 
 bool FPhysAnimThighRestoreDiagnosticTest::RunTest(const FString& Parameters)
 {
-	const int32 Variant = FCString::Atoi(*Parameters);
+	FString VariantParameter = Parameters;
+	FString GateThresholdParameter;
+	const bool bHasGateThresholdOverride = Parameters.Split(TEXT(":"), &VariantParameter, &GateThresholdParameter);
+	const int32 Variant = FCString::Atoi(*VariantParameter);
+	const float GateThresholdOverride = bHasGateThresholdOverride ? FCString::Atof(*GateThresholdParameter) : 3600.0f;
 
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	
+	if (bHasGateThresholdOverride)
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0KineticGateThresholdDegPerSec"), GateThresholdOverride));
+	}
 	ADD_LATENT_AUTOMATION_COMMAND(FSetThighRestoreVariantCommand(Variant));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand());
 	
@@ -4665,7 +4682,47 @@ bool FPhysAnimThighRestoreDiagnosticTest::RunTest(const FString& Parameters)
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand(this));
 	
 	ADD_LATENT_AUTOMATION_COMMAND(FSetThighRestoreVariantCommand(0));
+	if (bHasGateThresholdOverride)
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0KineticGateThresholdDegPerSec"), 3600.0f));
+	}
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimThighRestoreDiagnosticContractTest, "PhysAnim.Diagnostics.ThighRestoreContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimThighRestoreDiagnosticContractTest::RunTest(const FString& Parameters)
+{
+	TSet<FString> VariantNames;
+	TSet<FString> VariantCommands;
+	for (const FThighRestoreDiagnosticVariant& Variant : ThighRestoreDiagnosticVariants)
+	{
+		VariantNames.Add(Variant.Name);
+		VariantCommands.Add(Variant.Command);
+	}
+
+	const TCHAR* RequiredNames[] =
+	{
+		TEXT("Abrupt_0.01"),
+		TEXT("Abrupt_0.02"),
+		TEXT("Abrupt_0.05"),
+		TEXT("Abrupt_0.10"),
+		TEXT("Abrupt_0.15"),
+		TEXT("Abrupt_0.20"),
+		TEXT("Ramp_0.20_0.5s"),
+		TEXT("Ramp_0.20_1.0s"),
+		TEXT("KineticGate_ForcedHold_0.20"),
+	};
+
+	for (const TCHAR* RequiredName : RequiredNames)
+	{
+		TestTrue(FString::Printf(TEXT("ThighRestore diagnostic includes %s"), RequiredName), VariantNames.Contains(RequiredName));
+	}
+
+	TestTrue(TEXT("Abrupt 0.20 maps to restore variant 7"), VariantCommands.Contains(TEXT("7")));
+	TestTrue(TEXT("Forced kinetic gate hold maps to restore variant 7 with threshold override"), VariantCommands.Contains(TEXT("7:-1.0")));
+	TestEqual(TEXT("ThighRestore diagnostic variant count"), VariantNames.Num(), static_cast<int32>(UE_ARRAY_COUNT(RequiredNames)));
 	return true;
 }
 

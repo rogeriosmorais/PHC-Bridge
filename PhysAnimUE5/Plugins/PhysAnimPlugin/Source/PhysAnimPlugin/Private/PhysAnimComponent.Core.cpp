@@ -3362,6 +3362,32 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		if (bEnableLiveRuntimeEvidenceProof)
 		{
+			const bool bProofTerminated =
+				LiveRuntimeEvidenceTerminationState.bTerminated &&
+				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None;
+			const bool bProofSatisfied = IsLiveRuntimeEvidenceProofSatisfied();
+			if (ShouldStartBridgePhysicsOwnershipForStartupProof(
+				RuntimeState,
+				true,
+				bEnableLiveRuntimeEvidenceProof,
+				bLiveRuntimeEvidenceProofComplete,
+				bProofSatisfied,
+				bProofTerminated))
+			{
+				if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("StartupProofPhysicsOwnership"), TickError, false))
+				{
+					FailStopWithTrace(TickError);
+					return;
+				}
+				if (EffectiveSettings.bLockCharacterMovementUntilStartupReady)
+				{
+					ApplyStartupMovementLock();
+				}
+				EmitBridgeTraceEvent(TEXT("startup_physics_ownership"), TEXT("Startup began bridge physics ownership after the first valid PoseSearch result."));
+				FinalizeTraceFrame();
+				return;
+			}
+
 			if (LiveRuntimeEvidenceTerminationState.bTerminated && 
 				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 			{
@@ -3381,7 +3407,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				return;
 			}
 
-			if (!bLiveRuntimeEvidenceProofComplete || !IsLiveRuntimeEvidenceProofSatisfied())
+			if (!bLiveRuntimeEvidenceProofComplete || !bProofSatisfied)
 			{
 				// Hold activation until proof is complete and truthful
 				FinalizeTraceFrame();
@@ -4395,6 +4421,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	TraceSpineTick2(TEXT("pre_updatecontrols"));
 	TracePreservedTick4(TEXT("pre_updatecontrols_tick4"));
 	PhysicsControl->UpdateControls(DeltaTime);
+	ReassertBridgeActiveStartupProofRawSimulation(TEXT("tick_updatecontrols"));
 	TraceSpineTick2(TEXT("post_updatecontrols"));
 	TracePreservedTick4(TEXT("post_updatecontrols_tick4"));
 	TraceUpperBodyTick4(TEXT("post_updatecontrols_tick4"));

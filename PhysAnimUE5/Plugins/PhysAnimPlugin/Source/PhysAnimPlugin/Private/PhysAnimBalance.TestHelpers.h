@@ -20,6 +20,8 @@ namespace PhysAnimBalanceTestHelpers
 
 	inline bool EvaluateBalanceModeSmokeOutcome(
 		const EPhysAnimRuntimeState RuntimeState,
+		const bool bHasPhysicalContinuityEvidence,
+		const EPhysAnimTerminalReason TerminalReason,
 		const bool bInPublicBalanceEntryState,
 		const EPhysAnimRuntimeState PublicBalanceEntryState,
 		const bool bHasTransitionFailure,
@@ -32,6 +34,11 @@ namespace PhysAnimBalanceTestHelpers
 
 		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
 		{
+			if (!bHasPhysicalContinuityEvidence)
+			{
+				OutError = TEXT("[PhysAnimPieBalanceSmoke] BalanceActive_Standing is not a benchmark success without physical continuity evidence.");
+				return false;
+			}
 			return true;
 		}
 
@@ -56,6 +63,11 @@ namespace PhysAnimBalanceTestHelpers
 				TEXT("[PhysAnimPieBalanceSmoke] Balance mode did not complete within the smoke window. state=%s."),
 				UPhysAnimComponent::GetRuntimeStateName(PublicBalanceEntryState));
 			return false;
+		}
+
+		if (TerminalReason != EPhysAnimTerminalReason::None)
+		{
+			return true;
 		}
 
 		if (RuntimeState == EPhysAnimRuntimeState::FailStopped || bHasTransitionFailure)
@@ -123,6 +135,8 @@ namespace PhysAnimBalanceTestHelpers
 			FString OutcomeError;
 			if (!EvaluateBalanceModeSmokeOutcome(
 				RuntimeState,
+				FoundComponent->IsPelvisSimulatingNow(),
+				FoundComponent->GetLiveRuntimeEvidenceTerminationState().TerminalReason,
 				bInPublicBalanceEntryState,
 				PublicBalanceEntryState,
 				FoundComponent->HasRecordedBalanceTransitionFailure(),

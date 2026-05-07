@@ -1060,6 +1060,33 @@ void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilization
 }
 
 
+void UPhysAnimComponent::ReassertBridgeActiveStartupProofRawSimulation(const TCHAR* Context)
+{
+	if (!ShouldPreserveRawSimulationForBridgeActiveStartupProof(
+		RuntimeState,
+		bEnableLiveRuntimeEvidenceProof,
+		bLiveRuntimeEvidenceProofComplete))
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		return;
+	}
+
+	SkeletalMesh->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
+	SkeletalMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	SkeletalMesh->SetSimulatePhysics(true);
+	SkeletalMesh->SetEnablePhysicsBlending(true);
+	SkeletalMesh->WakeAllRigidBodies();
+
+	UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnim] BridgeActive startup proof raw simulation reasserted after %s."), Context);
+}
+
+
 void UPhysAnimComponent::ApplyTrainingAlignedMassScales(const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
 	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
@@ -1553,6 +1580,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		ShouldUseSkeletalAnimationTargetRepresentation(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
 			bPolicyInfluenceActive);
+	const bool bPreserveBridgeActiveStartupProofRawSimulation =
+		ShouldPreserveRawSimulationForBridgeActiveStartupProof(
+			RuntimeState,
+			bEnableLiveRuntimeEvidenceProof,
+			bLiveRuntimeEvidenceProofComplete);
 
 	static uint64 LastFrameNumber = 0;
 	static TMap<UPhysAnimComponent*, int32> CallCounts;
@@ -2124,7 +2156,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
 
 		// But for movement type, we perform explicit per-bone writes to ensure the modifier record updates reliably.
-		// We use bUpdateBody=true to ensure the engine state is updated immediately.
+		// We update the live body only in balance-entry states. BridgeActive startup proof
+		// ownership must preserve raw simulation that ActivateBridgePhysicsState just enabled.
+		const bool bUpdateBodyOnAuthoritativeKinematicWrite =
+			ShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(RuntimeState);
 		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 		{
 			// Skip simulated carry-through bones during entry/settle so the later per-bone
@@ -2146,8 +2181,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 
 			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-			TrackDistalModifierWrite(BoneName, EPhysicsMovementType::Kinematic, true, TEXT("ApplyRuntimeControlTuning_AuthoritativeDistalKin"));
-			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic, false, true);
+			TrackDistalModifierWrite(BoneName, EPhysicsMovementType::Kinematic, bUpdateBodyOnAuthoritativeKinematicWrite, TEXT("ApplyRuntimeControlTuning_AuthoritativeDistalKin"));
+			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic, false, bUpdateBodyOnAuthoritativeKinematicWrite);
 		}
 	}
 	else
@@ -2255,6 +2290,16 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bUpdateKinematicFromSimulation);
 
 		if (bDiagnosticRawSimBody)
+		{
+			BodyModifierMovementType = EPhysicsMovementType::Simulated;
+			BodyModifierPhysicsBlendWeight = 1.0f;
+			BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
+			bUpdateKinematicFromSimulation = false;
+			bBringUpGroupUnlocked = true;
+		}
+		if (bPreserveBridgeActiveStartupProofRawSimulation &&
+			!bTransitionKeepsBoneKinematic &&
+			!EffectiveSettings.bForceZeroActions)
 		{
 			BodyModifierMovementType = EPhysicsMovementType::Simulated;
 			BodyModifierPhysicsBlendWeight = 1.0f;

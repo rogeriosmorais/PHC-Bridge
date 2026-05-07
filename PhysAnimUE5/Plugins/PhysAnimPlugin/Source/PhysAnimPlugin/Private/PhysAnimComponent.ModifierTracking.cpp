@@ -718,12 +718,80 @@ bool UPhysAnimComponent::ShouldUseAuthoritativePerBoneBodyModifierSync(
 }
 
 
+bool UPhysAnimComponent::ShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(EPhysAnimRuntimeState RuntimeState)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+}
+
+
 bool UPhysAnimComponent::ShouldUpdateBodyOnPerBoneBodyModifierSync(EPhysAnimRuntimeState RuntimeState)
 {
 	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
 		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
 		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+}
+
+
+bool UPhysAnimComponent::ShouldPreserveRawSimulationForBridgeActiveStartupProof(
+	EPhysAnimRuntimeState RuntimeState,
+	bool bLiveProofEnabled,
+	bool bProofComplete)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+		bLiveProofEnabled &&
+		!bProofComplete;
+}
+
+
+bool UPhysAnimComponent::ShouldUseRawSimComProxyForStartupProof(
+	EPhysAnimRuntimeState RuntimeState,
+	bool bLiveProofEnabled,
+	bool bProofComplete)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+		bLiveProofEnabled &&
+		!bProofComplete;
+}
+
+
+bool UPhysAnimComponent::ShouldDeferStartupProxyTerminalForProof(
+	EPhysAnimRuntimeState RuntimeState,
+	bool bLiveProofEnabled,
+	bool bProofComplete,
+	bool bProxySupportHandoffArmed,
+	EPhysAnimTerminalReason TerminalReason)
+{
+	const bool bStartupProofRuntime =
+		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
+		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation ||
+		(RuntimeState == EPhysAnimRuntimeState::BridgeActive && bLiveProofEnabled && !bProofComplete);
+
+	return bStartupProofRuntime &&
+		!bProxySupportHandoffArmed &&
+		TerminalReason == EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion;
+}
+
+
+bool UPhysAnimComponent::ShouldStartBridgeActivePolicyRampAfterStartupProof(
+	EPhysAnimRuntimeState RuntimeState,
+	bool bLiveProofComplete,
+	bool bPolicyRampAlreadyStarted,
+	bool bForceZeroActions,
+	bool bCoreBringUpGroupUnlocked,
+	bool bCoreBringUpGroupRampActive,
+	bool bStartupBringUpFrozenByBalanceEntry)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+		bLiveProofComplete &&
+		!bPolicyRampAlreadyStarted &&
+		!bForceZeroActions &&
+		bCoreBringUpGroupUnlocked &&
+		bCoreBringUpGroupRampActive &&
+		!bStartupBringUpFrozenByBalanceEntry;
 }
 
 

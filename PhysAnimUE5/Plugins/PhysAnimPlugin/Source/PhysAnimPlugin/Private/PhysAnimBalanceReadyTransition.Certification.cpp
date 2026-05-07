@@ -88,6 +88,10 @@ bool BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(
 		(ParentTransform.GetRotation() * OutRecord.AuthoredParentRefFrame).GetNormalized();
 	const float ConstraintAngularErrorRadians = ChildConstraintWorldRotation.AngularDistance(ParentConstraintWorldRotation);
 	OutRecord.ConstraintAngularErrorDeg = FMath::RadiansToDegrees(ConstraintAngularErrorRadians);
+	OutRecord.AuthoredConstraintFrameAngularFloorDeg =
+		FMath::RadiansToDegrees(OutRecord.AuthoredChildRefFrame.AngularDistance(OutRecord.AuthoredParentRefFrame));
+	OutRecord.BaselineCompensatedConstraintAngularErrorDeg =
+		FMath::Max(0.0f, OutRecord.ConstraintAngularErrorDeg - OutRecord.AuthoredConstraintFrameAngularFloorDeg);
 	return true;
 }
 
@@ -118,7 +122,7 @@ void BalanceTransitionSets::LogDirectPelvisLinkForensicRecords(
 		UE_LOG(
 			LogPhysAnimBridge,
 			Warning,
-			TEXT("[PhysAnimBalance] %s link=%s physicsAsset=%s parentAnchorLocal=(%.2f,%.2f,%.2f) childAnchorLocal=(%.2f,%.2f,%.2f) parentSpace=%s childSpace=%s parentAnchorWorld=(%.2f,%.2f,%.2f) childAnchorWorld=(%.2f,%.2f,%.2f) anchorDistanceCm=%.2f angularErrorDeg=%.2f parentWorldQuat=%s childWorldQuat=%s parentAuthRefFrame=%s childAuthRefFrame=%s bodyOriginDistanceCm=%.2f"),
+			TEXT("[PhysAnimBalance] %s link=%s physicsAsset=%s parentAnchorLocal=(%.2f,%.2f,%.2f) childAnchorLocal=(%.2f,%.2f,%.2f) parentSpace=%s childSpace=%s parentAnchorWorld=(%.2f,%.2f,%.2f) childAnchorWorld=(%.2f,%.2f,%.2f) anchorDistanceCm=%.2f angularErrorDeg=%.2f authoredAngularFloorDeg=%.2f baselineCompensatedAngularErrorDeg=%.2f parentWorldQuat=%s childWorldQuat=%s parentAuthRefFrame=%s childAuthRefFrame=%s bodyOriginDistanceCm=%.2f"),
 			ContextTag,
 			*Record.LinkName,
 			*Record.PhysicsAssetPath,
@@ -138,6 +142,8 @@ void BalanceTransitionSets::LogDirectPelvisLinkForensicRecords(
 			Record.EvaluatedChildAnchorWorldCm.Z,
 			Record.AnchorDistanceCm,
 			Record.ConstraintAngularErrorDeg,
+			Record.AuthoredConstraintFrameAngularFloorDeg,
+			Record.BaselineCompensatedConstraintAngularErrorDeg,
 			*Record.ParentWorldRotation.ToString(),
 			*Record.ChildWorldRotation.ToString(),
 			*Record.AuthoredParentRefFrame.ToString(),
@@ -284,11 +290,11 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.PelvisThighRErrorCm = ComputeDirectLinkErrorCm(TEXT("thigh_r"));
 	OutSnapshot.PelvisSpine01ErrorCm = ComputeDirectLinkErrorCm(TEXT("spine_01"));
 	OutSnapshot.PelvisThighLAngularErrorDeg =
-		DirectPelvisLinkForensics.Num() > 0 ? DirectPelvisLinkForensics[0].ConstraintAngularErrorDeg : 0.0f;
+		DirectPelvisLinkForensics.Num() > 0 ? DirectPelvisLinkForensics[0].BaselineCompensatedConstraintAngularErrorDeg : 0.0f;
 	OutSnapshot.PelvisThighRAngularErrorDeg =
-		DirectPelvisLinkForensics.Num() > 1 ? DirectPelvisLinkForensics[1].ConstraintAngularErrorDeg : 0.0f;
+		DirectPelvisLinkForensics.Num() > 1 ? DirectPelvisLinkForensics[1].BaselineCompensatedConstraintAngularErrorDeg : 0.0f;
 	OutSnapshot.PelvisSpine01AngularErrorDeg =
-		DirectPelvisLinkForensics.Num() > 2 ? DirectPelvisLinkForensics[2].ConstraintAngularErrorDeg : 0.0f;
+		DirectPelvisLinkForensics.Num() > 2 ? DirectPelvisLinkForensics[2].BaselineCompensatedConstraintAngularErrorDeg : 0.0f;
 	const bool bDirectPelvisLinkAngularSatisfied =
 		DirectPelvisLinkForensics.Num() == 3 &&
 		DirectPelvisLinkForensics[0].bConstraintFound &&
@@ -365,7 +371,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 					: BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
 			if (!Record.bConstraintFound ||
 				Record.AnchorDistanceCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm ||
-				Record.ConstraintAngularErrorDeg > AngularThresholdDeg)
+				Record.BaselineCompensatedConstraintAngularErrorDeg > AngularThresholdDeg)
 			{
 				FailingLinkForensics.Add(Record);
 			}

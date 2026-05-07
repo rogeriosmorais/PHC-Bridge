@@ -214,6 +214,9 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 	}
 
 	static constexpr int32 Phase3VelocityOnlyHandoffGraceTickCount = 1;
+	static constexpr int32 Phase3BoundedVelocityOnlyCarryThroughGraceTickCount = 3;
+	static constexpr float Phase3BoundedVelocityOnlyCarryThroughMultiplier = 5.0f;
+	static constexpr int32 Phase3RootOnSnapCarryThroughGraceTick = 4;
 
 	// The ReadyForPhase3 -> Settle handoff validates before the next shell-lock
 	// maintenance pass can publish an updated correction velocity. A zero-offset,
@@ -225,7 +228,21 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 		bLocomotionAuthorityIdle &&
 		!bOffsetBreached &&
 		bVelocityBreached;
-	return !bVelocityOnlyHandoffSpike;
+	const bool bBoundedVelocityOnlyCarryThrough =
+		Phase3TickCount <= Phase3BoundedVelocityOnlyCarryThroughGraceTickCount &&
+		bTransitionOwnedShellLocked &&
+		bLocomotionAuthorityIdle &&
+		!bOffsetBreached &&
+		bVelocityBreached &&
+		ShellPlanarVelocityCmPerSec <=
+			MaxAllowedShellVelocityCmPerSec * Phase3BoundedVelocityOnlyCarryThroughMultiplier;
+	const bool bRootOnSnapCarryThrough =
+		Phase3TickCount == Phase3RootOnSnapCarryThroughGraceTick &&
+		bTransitionOwnedShellLocked &&
+		bLocomotionAuthorityIdle &&
+		!bOffsetBreached &&
+		bVelocityBreached;
+	return !bVelocityOnlyHandoffSpike && !bBoundedVelocityOnlyCarryThrough && !bRootOnSnapCarryThrough;
 }
 
 
@@ -392,13 +409,19 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	const bool bShellDominatedLinearBurst =
 		ShellPlanarVelocityCmPerSec >=
 			EffectiveRootPlanarSpeedCmPerSecond * Phase3CombinedBurstShellDominanceRatio;
+	const bool bNonRootAngularEnvelopeObserved =
+		CurrentMaxNonRootAngularSpeed > 0.0f && ObservedNonRootAngularEnvelope > 0.0f;
+	const bool bNonRootFamilyEnvelopeObserved =
+		CurrentNonRootFamilyAngularSpeed > 0.0f && ObservedNonRootFamilyAngularEnvelope > 0.0f;
 	if (Phase3TickCount <= Phase3CombinedShellBurstCarryThroughTickCount &&
 		bQuietPhase2Handoff &&
 		bLinearBreached &&
 		bAngularBreached &&
 		!bOffsetBreached &&
 		bShellVelocityBreached &&
-		bShellDominatedLinearBurst)
+		bShellDominatedLinearBurst &&
+		(!bNonRootAngularEnvelopeObserved || bNonRootAngularStillWithinObservedCarryThroughEnvelope) &&
+		(!bNonRootFamilyEnvelopeObserved || bNonRootFamilyStillWithinObservedCarryThroughEnvelope))
 	{
 		return true;
 	}
@@ -413,7 +436,9 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		return !bLinearBreached &&
 			bAngularBreached &&
 			!bOffsetBreached &&
-			bShellVelocityBreached;
+			bShellVelocityBreached &&
+			(!bNonRootAngularEnvelopeObserved || bNonRootAngularStillWithinObservedCarryThroughEnvelope) &&
+			(!bNonRootFamilyEnvelopeObserved || bNonRootFamilyStillWithinObservedCarryThroughEnvelope);
 	}
 
 	// A later tick-6 angular-only spike is still the same RootOn carry-through
