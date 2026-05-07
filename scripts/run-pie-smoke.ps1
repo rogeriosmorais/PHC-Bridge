@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$EngineRoot = $(if ($env:UE5_PATH) { $env:UE5_PATH } else { "E:\UE_5.7\Engine" }),
-    [string]$ProjectPath = "F:\NewEngine\PhysAnimUE5\PhysAnimUE5.uproject",
+    [string]$ProjectPath = "$PSScriptRoot\..\PhysAnimUE5\PhysAnimUE5.uproject",
     [string]$TestName = "PhysAnim.PIE.Smoke",
     [string]$PreExecCmds = "",
     [switch]$UseEditorExe
@@ -32,7 +32,7 @@ function Split-ExecCommands {
 
     return @(
         $CommandText `
-            -split "[;\r\n]+" |
+            -split "[;,\r\n]+" |
             ForEach-Object { $_.Trim() } |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
     )
@@ -40,6 +40,7 @@ function Split-ExecCommands {
 
 $execCmdParts = @()
 if (-not [string]::IsNullOrWhiteSpace($PreExecCmds)) {
+    Write-Host "DEBUG: PreExecCmds raw: $PreExecCmds"
     $execCmdParts += Split-ExecCommands -CommandText $PreExecCmds
 }
 $execCmdParts += ('Automation RunTests {0}' -f $TestName)
