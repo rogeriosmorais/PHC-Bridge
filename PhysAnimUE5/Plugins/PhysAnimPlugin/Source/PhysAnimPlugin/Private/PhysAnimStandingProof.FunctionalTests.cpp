@@ -446,6 +446,61 @@ bool FVerifyStandingProofCommand::Update()
 }
 
 /**
+ * Emits a structured THIGH_RESTORE_VARIANT_SUMMARY line after a ThighRestore diagnostic run.
+ * Satisfies AC-2: diagnostic variants report terminal reason, duration, firstSpineSpike, velocity
+ * snapshots, thigh angular strength/damping, and positive/negative work evidence.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FLogThighRestoreVariantSummaryCommand, int32, Variant, FAutomationTestBase*, Test);
+bool FLogThighRestoreVariantSummaryCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+	if (!World) { return true; }
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		UPhysAnimComponent* const Comp = It->FindComponentByClass<UPhysAnimComponent>();
+		if (!Comp) { continue; }
+
+		const FPhysAnimActivatedStandingStabilityMetrics& M = Comp->GetActivatedStandingStabilityMetrics();
+
+		// Note: per-frame thigh angular strength/damping is captured in WORK_DIAG and
+		// THIGH_RESTORE_STARTED log lines. This summary captures aggregate evidence only.
+		UE_LOG(LogTemp, Warning,
+			TEXT("[PhysAnimV0] THIGH_RESTORE_VARIANT_SUMMARY variant=%d terminalReason=%d duration=%.3f "
+			     "firstSpineSpikeT=%.3f firstSpineSpikeBody=%s firstSupportFailT=%.3f "
+			     "maxAngVel005=%.1f maxAngVel010=%.1f maxAngVel015=%.1f maxAngVel020=%.1f "
+			     "maxAngVel030=%.1f maxAngVel060=%.1f maxAngVel100=%.1f "
+			     "positiveWork=%.6f negativeWork=%.6f samples=%d [log]"),
+			Variant,
+			M.TerminalReason,
+			M.ActivationDurationSec,
+			M.FirstMajorSpineSpikeTimeSec,
+			*M.FirstMajorSpineSpikeBodyName.ToString(),
+			M.FirstSupportFailureTimeSec,
+			M.MaxAngVel005s, M.MaxAngVel010s, M.MaxAngVel015s, M.MaxAngVel020s,
+			M.MaxAngVel030s, M.MaxAngVel060s, M.MaxAngVel100s,
+			M.ThighPositiveWorkAccumulated, M.ThighNegativeWorkAccumulated,
+			M.SampleCount);
+		break;
+	}
+	return true;
+}
+
+/**
  * Command to enable the negative support proof hook.
  */
 DEFINE_LATENT_AUTOMATION_COMMAND(FEnableNegativeSupportProofCommand);
@@ -4561,12 +4616,23 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimThighRestoreDiagnosticTest, "PhysAnim
 
 void FPhysAnimThighRestoreDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
+	// AC-3 sweep: 0.01, 0.02, 0.05, 0.10, 0.15, 0.20 (abrupt)
 	OutBeautifiedNames.Add(TEXT("Abrupt_0.01"));
 	OutTestCommands.Add(TEXT("8"));
+
+	OutBeautifiedNames.Add(TEXT("Abrupt_0.02"));
+	OutTestCommands.Add(TEXT("5"));
+
+	OutBeautifiedNames.Add(TEXT("Abrupt_0.05"));
+	OutTestCommands.Add(TEXT("3"));
+
+	OutBeautifiedNames.Add(TEXT("Abrupt_0.10"));
+	OutTestCommands.Add(TEXT("6"));
 
 	OutBeautifiedNames.Add(TEXT("Abrupt_0.15"));
 	OutTestCommands.Add(TEXT("9"));
 
+	// AC-4 ramp variants
 	OutBeautifiedNames.Add(TEXT("Ramp_0.20_0.5s"));
 	OutTestCommands.Add(TEXT("10"));
 
@@ -4585,6 +4651,9 @@ bool FPhysAnimThighRestoreDiagnosticTest::RunTest(const FString& Parameters)
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand());
 	
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
+
+	// AC-2: emit structured summary before proof teardown so thigh state is still live
+	ADD_LATENT_AUTOMATION_COMMAND(FLogThighRestoreVariantSummaryCommand(Variant, this));
 	
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand(this));
 	
