@@ -30,11 +30,19 @@ namespace PhysAnimValidators
 		Result.bContinuityBookkeepingMismatch = Snapshot.bContinuityBookkeepingMismatch;
 		Result.PelvisSleepDurationMs = Snapshot.PelvisSleepDurationMs;
 		Result.bIsBridgeActive = Snapshot.bIsBridgeActive;
+		Result.bKineticGateActive = Snapshot.bKineticGateActive;
 
 		if (Snapshot.TopologyChangeCount > 0 || !Snapshot.bAllCriticalBodiesValid)
 		{
 			Result.bPhysicalContinuityValidatorPassed = false;
 			Result.TerminalReason = EPhysAnimTerminalReason::ActivationTopologyChange;
+			return Result;
+		}
+
+		if (Snapshot.bIsBridgeActive && Snapshot.bKineticGateActive)
+		{
+			Result.bPhysicalContinuityValidatorPassed = false;
+			Result.TerminalReason = EPhysAnimTerminalReason::ActivationKineticGateActive;
 			return Result;
 		}
 

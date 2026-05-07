@@ -2291,6 +2291,10 @@ extern int32 GVerbosePhase2Forensics;
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3)
 	{
+		// Section 17.3.2 - Phase3 Entry Grace: seed counter to 0 so the first
+		// Phase3KineticGateReleaseGraceTicks (5) ticks suppress shell/instability
+		// aborts caused by the transient burst when root goes fully simulated.
+		Phase3KineticGateReleaseTickCount = 0;
 		SetPhase(EBalanceReadyTransitionPhase::BRT_Phase3_Settle, Owner);
 		return;
 	}

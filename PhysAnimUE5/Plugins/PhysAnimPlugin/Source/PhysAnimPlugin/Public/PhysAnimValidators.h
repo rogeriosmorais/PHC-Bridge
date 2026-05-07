@@ -11,6 +11,7 @@ struct FPhysAnimContinuitySnapshot
 	double PelvisSleepDurationMs = 0.0;
 	bool bContinuityBookkeepingMismatch = false;
 	bool bIsBridgeActive = false;
+	bool bKineticGateActive = false;
 };
 
 struct FPhysAnimContinuityValidationResult
@@ -19,6 +20,7 @@ struct FPhysAnimContinuityValidationResult
 	bool bContinuityBookkeepingMismatch = false;
 	double PelvisSleepDurationMs = 0.0;
 	bool bIsBridgeActive = false;
+	bool bKineticGateActive = false;
 	bool bPhysicalContinuityValidatorPassed = true;
 	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
 };

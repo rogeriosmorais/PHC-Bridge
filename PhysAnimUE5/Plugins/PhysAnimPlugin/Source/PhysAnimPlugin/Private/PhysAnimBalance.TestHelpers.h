@@ -135,7 +135,7 @@ namespace PhysAnimBalanceTestHelpers
 			FString OutcomeError;
 			if (!EvaluateBalanceModeSmokeOutcome(
 				RuntimeState,
-				FoundComponent->IsPelvisSimulatingNow(),
+				UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(FoundComponent->GetLiveRuntimeEvidenceTerminationState().LatestArtifact),
 				FoundComponent->GetLiveRuntimeEvidenceTerminationState().TerminalReason,
 				bInPublicBalanceEntryState,
 				PublicBalanceEntryState,

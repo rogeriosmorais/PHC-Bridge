@@ -1477,6 +1477,7 @@ FPhysAnimContinuitySnapshot UPhysAnimComponent::BuildContinuitySnapshot(float De
 	Snapshot.TopologyChangeCount = MissingCriticalBodies;
 	Snapshot.bContinuityBookkeepingMismatch = !PendingBodyModifierCachedResetNames.IsEmpty();
 	Snapshot.bIsBridgeActive = (RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState));
+	Snapshot.bKineticGateActive = bKineticGateActiveLastFrame;
 
 	if (bEnableLiveRuntimeEvidenceProof)
 	{
