@@ -6,34 +6,38 @@ namespace PhysAnimFailureArbitration
 	{
 		switch (Reason)
 		{
-		case EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation:
+		case EPhysAnimTerminalReason::ActivationPhysicsNotStarted:
 			return 1;
-		case EPhysAnimTerminalReason::ActivationCapsuleContractViolation:
+		case EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation:
 			return 2;
-		case EPhysAnimTerminalReason::ActivationTopologyChange:
+		case EPhysAnimTerminalReason::ActivationCapsuleContractViolation:
 			return 3;
-		case EPhysAnimTerminalReason::ActivationContinuousSimulationLost:
+		case EPhysAnimTerminalReason::ActivationTopologyChange:
 			return 4;
-		case EPhysAnimTerminalReason::ActivationSupportFailure:
+		case EPhysAnimTerminalReason::ActivationKineticGateActive:
 			return 5;
-		case EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion:
+		case EPhysAnimTerminalReason::ActivationContinuousSimulationLost:
 			return 6;
-		case EPhysAnimTerminalReason::ActivationTargetDiscontinuity:
+		case EPhysAnimTerminalReason::ActivationSupportFailure:
 			return 7;
-		case EPhysAnimTerminalReason::ActivationUnstableGainOrDamping:
+		case EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion:
 			return 8;
-		case EPhysAnimTerminalReason::ActivationInstabilityThresholdBreach:
+		case EPhysAnimTerminalReason::ActivationTargetDiscontinuity:
 			return 9;
-		case EPhysAnimTerminalReason::ActivationPoseReferenceMismatch:
+		case EPhysAnimTerminalReason::ActivationUnstableGainOrDamping:
 			return 10;
-		case EPhysAnimTerminalReason::ActivationMovementReclaim:
+		case EPhysAnimTerminalReason::ActivationInstabilityThresholdBreach:
 			return 11;
-		case EPhysAnimTerminalReason::ActivationShellHelperViolation:
+		case EPhysAnimTerminalReason::ActivationPoseReferenceMismatch:
 			return 12;
-		case EPhysAnimTerminalReason::ActivationAuthorityConflict:
+		case EPhysAnimTerminalReason::ActivationMovementReclaim:
 			return 13;
-		case EPhysAnimTerminalReason::ActivationStandingValidationTimeout:
+		case EPhysAnimTerminalReason::ActivationShellHelperViolation:
 			return 14;
+		case EPhysAnimTerminalReason::ActivationAuthorityConflict:
+			return 15;
+		case EPhysAnimTerminalReason::ActivationStandingValidationTimeout:
+			return 16;
 		case EPhysAnimTerminalReason::None:
 		default:
 			return MAX_int32;
