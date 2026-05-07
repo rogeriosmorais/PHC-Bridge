@@ -4871,6 +4871,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	bPendingBalanceModeStartAttemptIssued = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
+	bKineticGateActiveLastFrame = false;
 }
 
 

@@ -1253,6 +1253,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
 	bool bV0PlantThighWorkDiagnosticEnabled = false;
 
+	/** Per-component gate state tracking (release edge detection) for V0 kinetic gate diagnostic. */
+	bool bKineticGateActiveLastFrame = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
 	FName LiveRuntimeEvidenceLeftSupportBodyName = TEXT("foot_l");
 

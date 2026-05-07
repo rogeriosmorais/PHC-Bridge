@@ -890,6 +890,12 @@ namespace PhysAnimComponentInternal
 		LoggedBodiesByComponent.Remove(Component);
 		PreviousSnapshotsByComponent.Remove(Component);
 		StatesByComponent.Remove(Component);
+
+		if (Component)
+		{
+			// Reset per-instance diagnostic tracking state
+			const_cast<UPhysAnimComponent*>(Component)->bKineticGateActiveLastFrame = false;
+		}
 	}
 }
 
@@ -1957,13 +1963,12 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					Spine02AngVel > GateThreshold || Spine03AngVel > GateThreshold;
 
 				// Per-component gate state tracking (release edge detection)
-				static TMap<UPhysAnimComponent*, bool> KineticGateActiveLastFrame;
-				const bool bGateWasActive = KineticGateActiveLastFrame.FindOrAdd(this, false);
+				const bool bGateWasActive = bKineticGateActiveLastFrame;
 
 				// Only update the "last frame" state from thigh_l to avoid double-write per tick
 				if (BoneName == TEXT("thigh_l"))
 				{
-					KineticGateActiveLastFrame.FindOrAdd(this) = bGateActiveNow;
+					bKineticGateActiveLastFrame = bGateActiveNow;
 				}
 
 				if (bGateActiveNow)
