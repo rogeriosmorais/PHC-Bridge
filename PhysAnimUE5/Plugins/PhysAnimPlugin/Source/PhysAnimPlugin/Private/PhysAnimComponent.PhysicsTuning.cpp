@@ -547,6 +547,8 @@ namespace
 		double ReleaseActivationTimeSeconds = -1.0;
 	};
 
+	TMap<const UPhysAnimComponent*, FHipQuarantinePendingNextTickTrace> HipQuarantinePendingNextTickTraces;
+	TMap<const UPhysAnimComponent*, int32> CallCounts;
 	TMap<const UPhysAnimComponent*, TMap<FName, FHipQuarantineTraceSnapshot>> PreviousSnapshotsByComponent;
 
 	void LogHipQuarantineTraceFrame(
@@ -890,6 +892,8 @@ namespace PhysAnimComponentInternal
 		LoggedBodiesByComponent.Remove(Component);
 		PreviousSnapshotsByComponent.Remove(Component);
 		StatesByComponent.Remove(Component);
+		HipQuarantinePendingNextTickTraces.Remove(Component);
+		CallCounts.Remove(Component);
 
 		if (Component)
 		{
@@ -1593,7 +1597,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bLiveRuntimeEvidenceProofComplete);
 
 	static uint64 LastFrameNumber = 0;
-	static TMap<UPhysAnimComponent*, int32> CallCounts;
 	const uint64 CurrentFrameNumber = GFrameNumber;
 	if (LastFrameNumber != CurrentFrameNumber)
 	{
@@ -1712,7 +1715,6 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		return;
 	}
 
-	static TMap<UPhysAnimComponent*, FHipQuarantinePendingNextTickTrace> HipQuarantinePendingNextTickTraces;
 	FHipQuarantinePendingNextTickTrace& HipQuarantinePendingNextTickTrace =
 		HipQuarantinePendingNextTickTraces.FindOrAdd(this);
 	const bool bTraceHipReleaseFrame =
