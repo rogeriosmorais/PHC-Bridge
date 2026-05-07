@@ -219,6 +219,21 @@ namespace
 
 		OutcomeError.Reset();
 		TestFalse(
+			TEXT("BridgeActive with non-canonical terminal evidence (AuthorityConflict) must be a smoke failure"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				EPhysAnimTerminalReason::ActivationAuthorityConflict,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				OutcomeError));
+
+		OutcomeError.Reset();
+		TestFalse(
 			TEXT("FailStopped without a terminal reason remains unsafe"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::FailStopped,
@@ -3459,9 +3474,9 @@ namespace
 	}
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimPhase1ZeroSolverForensicDumpTest, "PhysAnim.Component.Phase1ZeroSolverForensicDump", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimPhase1ConstraintFrameDiagnosticTest, "PhysAnim.Diagnostics.Phase1ConstraintFrameDump", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FPhysAnimPhase1ZeroSolverForensicDumpTest::RunTest(const FString& Parameters)
+bool FPhysAnimPhase1ConstraintFrameDiagnosticTest::RunTest(const FString& Parameters)
 {
 	// We use the long-form paths that match the PhysAnim component's expectations
 	const FString MeshPath = TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple");
@@ -3469,7 +3484,7 @@ bool FPhysAnimPhase1ZeroSolverForensicDumpTest::RunTest(const FString& Parameter
 
 	if (!SkelMesh)
 	{
-		AddInfo(TEXT("DUMP: Could not load SkeletalMesh from '/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple'. This test must run in an editor context with Manny content mounted."));
+		AddInfo(TEXT("DIAGNOSTIC: Could not load SkeletalMesh from '/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple'. This test must run in an editor context with Manny content mounted."));
 		return true;
 	}
 
@@ -3484,7 +3499,7 @@ bool FPhysAnimPhase1ZeroSolverForensicDumpTest::RunTest(const FString& Parameter
 	const auto RunDumpForPose = [&](const TCHAR* PoseName)
 	{
 		AddInfo(TEXT("============================================================"));
-		AddInfo(FString::Printf(TEXT("ZERO-SOLVER FORENSIC DUMP: %s"), PoseName));
+		AddInfo(FString::Printf(TEXT("PHASE1 CONSTRAINT FRAME DIAGNOSTIC: %s"), PoseName));
 		AddInfo(TEXT("============================================================"));
 
 		TArray<BalanceTransitionSets::FDirectPelvisLinkForensicRecord> Records;

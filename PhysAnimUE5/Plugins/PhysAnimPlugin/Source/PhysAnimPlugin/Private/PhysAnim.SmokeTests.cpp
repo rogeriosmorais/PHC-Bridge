@@ -22,11 +22,11 @@ namespace
 
 	const FString PhysAnimPieSmokeMap = TEXT("/Game/ThirdPerson/Lvl_ThirdPerson");
 
-	const TCHAR* PhysAnimPieSmokePrefix = TEXT("[PhysAnimPieSmoke]");
+	const TCHAR* PhysAnimPieSmokePrefix = TEXT("[PhysAnimPieMapOpenSmoke]");
 	const TCHAR* PhysAnimPieMovementSmokePrefix = TEXT("[PhysAnimPieMovementSmoke]");
 	const TCHAR* PhysAnimPieMovementTraceSmokePrefix = TEXT("[PhysAnimPieMovementTraceSmoke]");
 	const TCHAR* PhysAnimPieMovementSoakPrefix = TEXT("[PhysAnimPieMovementSoak]");
-	const TCHAR* PhysAnimPieG2PresentationPrefix = TEXT("[PhysAnimPieG2Presentation]");
+	const TCHAR* PhysAnimPieStandingProofPresentationPrefix = TEXT("[PhysAnimPieStandingProofPresentation]");
 	const TCHAR* PhysAnimPiePhase1AutoCalibSmokePrefix = TEXT("[PhysAnimPiePhase1AutoCalibSmoke]");
 
 	constexpr float PhysAnimPieSmokeStartTimeoutSeconds = 30.0f;
@@ -35,8 +35,8 @@ namespace
 	constexpr float PhysAnimPieMovementSmokeDurationSeconds = 5.0f;
 	constexpr float PhysAnimPieMovementSoakDurationSeconds = 30.0f;
 	constexpr int32 PhysAnimPieMovementSoakLoopCount = 5;
-	constexpr float PhysAnimPieG2PresentationLeadInSeconds = 1.0f;
-	constexpr float PhysAnimPieG2PresentationDurationSeconds = 30.0f;
+	constexpr float PhysAnimPieStandingProofPresentationLeadInSeconds = 1.0f;
+	constexpr float PhysAnimPieStandingProofPresentationDurationSeconds = 30.0f;
 	constexpr float PhysAnimPieBalanceModeSmokeLeadInSeconds = 1.0f;
 	constexpr float PhysAnimPieBalanceModeSmokeDurationSeconds = 15.0f;
 	constexpr float PhysAnimPiePhase1AutoCalibBridgeActiveTimeoutSeconds = 15.0f;
@@ -80,8 +80,8 @@ namespace
 		return true;
 	}
 
-	DEFINE_LATENT_AUTOMATION_COMMAND(FStartG2PresentationCommand);
-	bool FStartG2PresentationCommand::Update()
+	DEFINE_LATENT_AUTOMATION_COMMAND(FStartStandingProofPresentationCommand);
+	bool FStartStandingProofPresentationCommand::Update()
 	{
 		if (GEditor && GEditor->PlayWorld)
 		{
@@ -258,7 +258,7 @@ namespace
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPieSmokeTest,
-		"PhysAnim.PIE.Smoke",
+		"PhysAnim.PIE.MapOpenSmoke",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 	bool FPhysAnimPieSmokeTest::RunTest(const FString& Parameters)
@@ -326,15 +326,15 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-		FPhysAnimPieG2PresentationTest,
-		"PhysAnim.PIE.G2Presentation",
+		FPhysAnimPieStandingProofPresentationTest,
+		"PhysAnim.PIE.StandingProofPresentation",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-	bool FPhysAnimPieG2PresentationTest::RunTest(const FString& Parameters)
+	bool FPhysAnimPieStandingProofPresentationTest::RunTest(const FString& Parameters)
 	{
 		if (!AutomationOpenMap(PhysAnimPieSmokeMap, true))
 		{
-			AddError(FString::Printf(TEXT("%s Failed to open map '%s'."), PhysAnimPieG2PresentationPrefix, *PhysAnimPieSmokeMap));
+			AddError(FString::Printf(TEXT("%s Failed to open map '%s'."), PhysAnimPieStandingProofPresentationPrefix, *PhysAnimPieSmokeMap));
 			return false;
 		}
 
@@ -343,9 +343,9 @@ namespace
 		AddExpectedError(TEXT("Fail-stop: Proof failed"), EAutomationExpectedErrorFlags::Contains, 0);
 
 		AddCommand(new FStartPIECommand(false));
-		AddCommand(new FWaitLatentCommand(PhysAnimPieG2PresentationLeadInSeconds));
-		AddCommand(new FStartG2PresentationCommand());
-		AddCommand(new FWaitLatentCommand(PhysAnimPieG2PresentationDurationSeconds));
+		AddCommand(new FWaitLatentCommand(PhysAnimPieStandingProofPresentationLeadInSeconds));
+		AddCommand(new FStartStandingProofPresentationCommand());
+		AddCommand(new FWaitLatentCommand(PhysAnimPieStandingProofPresentationDurationSeconds));
 		AddCommand(new FEndPlayMapCommand());
 		return true;
 	}

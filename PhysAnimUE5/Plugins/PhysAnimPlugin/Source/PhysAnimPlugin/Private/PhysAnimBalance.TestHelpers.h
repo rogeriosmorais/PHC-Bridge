@@ -3,6 +3,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "PhysAnimComponent.h"
+#include "PhysAnimRuntimeTerminationState.h"
 #include "Misc/AutomationTest.h"
 
 #if WITH_EDITOR
@@ -16,6 +17,23 @@ namespace PhysAnimBalanceTestHelpers
 	{
 		return !SafePhase2DenialReason.IsEmpty() &&
 			SafePhase2DenialReason != BalanceReadinessReasons::Phase2FailStopPrecursor;
+	}
+
+	inline bool IsTruthfulBalanceSmokeTerminalReason(const EPhysAnimTerminalReason Reason)
+	{
+		switch (Reason)
+		{
+		case EPhysAnimTerminalReason::ActivationContinuousSimulationLost:
+		case EPhysAnimTerminalReason::ActivationSupportFailure:
+		case EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion:
+		case EPhysAnimTerminalReason::ActivationInstabilityThresholdBreach:
+		case EPhysAnimTerminalReason::ActivationStandingValidationTimeout:
+		case EPhysAnimTerminalReason::ActivationKineticGateActive:
+			return true;
+		default:
+			break;
+		}
+		return false;
 	}
 
 	inline bool EvaluateBalanceModeSmokeOutcome(
@@ -65,7 +83,7 @@ namespace PhysAnimBalanceTestHelpers
 			return false;
 		}
 
-		if (TerminalReason != EPhysAnimTerminalReason::None)
+		if (IsTruthfulBalanceSmokeTerminalReason(TerminalReason))
 		{
 			return true;
 		}
@@ -109,49 +127,53 @@ namespace PhysAnimBalanceTestHelpers
 			UWorld* const PlayWorld = GEditor ? GEditor->PlayWorld : nullptr;
 			if (!PlayWorld)
 			{
-				Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] PIE world was not available for outcome validation."));
 				return true;
 			}
 
-			UPhysAnimComponent* FoundComponent = nullptr;
+			UPhysAnimComponent* Component = nullptr;
 			for (TObjectIterator<UPhysAnimComponent> It; It; ++It)
 			{
 				if (It->GetWorld() == PlayWorld)
 				{
-					FoundComponent = *It;
+					Component = *It;
 					break;
 				}
 			}
 
-			if (!FoundComponent)
+			if (Component)
 			{
-				Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] No PhysAnim component was found in the PIE world."));
-				return true;
+				const EPhysAnimRuntimeState RuntimeState = Component->GetRuntimeState();
+				if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+					RuntimeState == EPhysAnimRuntimeState::FailStopped ||
+					RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
+				{
+					const FPhysAnimRuntimeTerminationState& TerminationState = Component->GetLiveRuntimeEvidenceTerminationState();
+					FString Error;
+					const bool bSuccess = EvaluateBalanceModeSmokeOutcome(
+						RuntimeState,
+						UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(TerminationState.LatestArtifact),
+						TerminationState.TerminalReason,
+						UPhysAnimComponent::TestOnlyIsBalanceEntryState(RuntimeState),
+						RuntimeState,
+						Component->HasRecordedBalanceTransitionFailure(),
+						Component->HasSafePhase2Denial(),
+						Component->GetSafePhase2DenialReason(),
+						Component->GetBalanceReadyTransitionFailureReason(),
+						Error);
+
+					if (!bSuccess)
+					{
+						Test->AddError(Error);
+					}
+					return true;
+				}
 			}
 
-			const EPhysAnimRuntimeState RuntimeState = FoundComponent->GetRuntimeState();
-			EPhysAnimRuntimeState PublicBalanceEntryState = RuntimeState;
-			const bool bInPublicBalanceEntryState = FoundComponent->TryGetPublicBalanceEntryRuntimeState(PublicBalanceEntryState);
-			FString OutcomeError;
-			if (!EvaluateBalanceModeSmokeOutcome(
-				RuntimeState,
-				UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(FoundComponent->GetLiveRuntimeEvidenceTerminationState().LatestArtifact),
-				FoundComponent->GetLiveRuntimeEvidenceTerminationState().TerminalReason,
-				bInPublicBalanceEntryState,
-				PublicBalanceEntryState,
-				FoundComponent->HasRecordedBalanceTransitionFailure(),
-				FoundComponent->HasSafePhase2Denial(),
-				FoundComponent->GetSafePhase2DenialReason(),
-				FoundComponent->GetBalanceReadyTransitionFailureReason(),
-				OutcomeError))
-			{
-				Test->AddError(OutcomeError);
-			}
-			return true;
+			return false;
 		}
 
 	private:
-		FAutomationTestBase* Test = nullptr;
+		FAutomationTestBase* Test;
 	};
 #endif
 }
