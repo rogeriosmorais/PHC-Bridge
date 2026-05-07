@@ -213,7 +213,9 @@ float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(FName
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		return Settings.BalanceBootstrapExtraDampingMultiplier * 2.0f;
+		// Boost damping significantly during the kinetic gate release window to absorb the transient energy burst.
+		const float KineticGraceMultiplier = (Phase3KineticGateReleaseTickCount <= 20) ? 5.0f : 2.0f;
+		return Settings.BalanceBootstrapExtraDampingMultiplier * KineticGraceMultiplier;
 	}
 
 	return Settings.BalanceBootstrapExtraDampingMultiplier;

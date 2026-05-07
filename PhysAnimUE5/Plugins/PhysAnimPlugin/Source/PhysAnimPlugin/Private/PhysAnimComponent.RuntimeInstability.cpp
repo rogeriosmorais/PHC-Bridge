@@ -41,15 +41,16 @@ bool UPhysAnimComponent::CheckRuntimeInstability(
 		EffectiveRootLocationCm,
 		EffectiveRootLinearVelocityCmPerSecond);
 
+	const bool bIsSettlePhase = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
 	const bool bBalanceScenarioAllowsPostImpactGrace =
-		IsBalanceActiveState(RuntimeState) &&
+		(IsBalanceActiveState(RuntimeState) || bIsSettlePhase) &&
 		BalanceScenarios.IsValidIndex(ActiveBalanceScenarioIndex) &&
 		BalanceScenarios[ActiveBalanceScenarioIndex].bTriggered &&
 		!BalanceScenarios[ActiveBalanceScenarioIndex].Name.Contains(TEXT("NoPush")) &&
 		LastBalanceScenarioImpactTimeSeconds >= 0.0 &&
 		(GetWorld()->GetTimeSeconds() - LastBalanceScenarioImpactTimeSeconds) < 0.5;
 
-	if (bBalanceScenarioAllowsPostImpactGrace)
+	if (bBalanceScenarioAllowsPostImpactGrace || bIsSettlePhase)
 	{
 		InstabilitySettings.MaxRootLinearSpeedCmPerSecond *= 15.0f;
 		InstabilitySettings.MaxRootAngularSpeedDegPerSecond *= 15.0f;

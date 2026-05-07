@@ -537,6 +537,7 @@ public:
 	EBalanceReadyTransitionPhase GetPhase() const { return InternalPhase; }
 	EBalanceReadyTransitionPhase GetPreviousPhase() const { return PreviousPhase; }
 	int32 GetPhase2GuardTickCount() const { return Phase2GuardTickCount; }
+	int32 GetPhase3KineticGateReleaseTickCount() const { return Phase3KineticGateReleaseTickCount; }
 	const FString& GetBlockReason() const { return Diagnostics.BlockReason; }
 	const FString& GetFailureReason() const { return Diagnostics.FailureReason; }
 	const TMap<FName, FQuat>& GetEntryHoldRotations() const { return EntryHoldRotations; }

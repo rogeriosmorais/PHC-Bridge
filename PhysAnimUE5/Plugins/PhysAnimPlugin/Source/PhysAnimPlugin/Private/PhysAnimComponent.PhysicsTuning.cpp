@@ -1970,6 +1970,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				// Only update the "last frame" state from thigh_l to avoid double-write per tick
 				if (BoneName == TEXT("thigh_l"))
 				{
+					bKineticGateReleasedThisFrame = bGateWasActive && !bGateActiveNow;
 					bKineticGateActiveLastFrame = bGateActiveNow;
 				}
 

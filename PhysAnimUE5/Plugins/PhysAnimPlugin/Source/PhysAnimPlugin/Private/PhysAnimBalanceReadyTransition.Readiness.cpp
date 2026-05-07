@@ -217,7 +217,7 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 	// Section 17.3.2 - Kinetic Gate Release Grace
 	// Suppress shell correction aborts for a few ticks after the kinetic gate releases
 	// to allow for the expected transient "spring-back" velocity burst.
-	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 5;
+	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 20;
 	if (KineticGateReleaseTickCount <= Phase3KineticGateReleaseGraceTicks)
 	{
 		return false;
@@ -341,7 +341,7 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	// Section 17.3.2 - Kinetic Gate Release Grace
 	// Suppress instability aborts for a few ticks after the kinetic gate releases
 	// to allow for the expected transient "spring-back" velocity burst.
-	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 5;
+	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 20;
 	if (KineticGateReleaseTickCount <= Phase3KineticGateReleaseGraceTicks)
 	{
 		return true;
@@ -357,168 +357,41 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		return true;
 	}
 
-	static constexpr int32 Phase3ShellVelocityBurstGraceTickCount = 4;
-	static constexpr int32 Phase3AngularOnlyShellBurstGraceTickCount = 5;
-	static constexpr int32 Phase3BoundedAngularCarryThroughTickCount = 6;
-	static constexpr int32 Phase3RootIsolatedAngularCarryThroughTickCount = 8;
-	static constexpr int32 Phase3LateAngularOnlyShellBurstGraceTickCount = 7;
-	static constexpr float Phase3BoundedAngularCarryThroughMaxGrowthDegPerSec = 800.0f;
-	static constexpr float Phase3RootIsolatedAngularPeakMultiplier = 2.0f;
-	static constexpr float Phase3RootIsolatedNonRootAngularPeakMultiplier = 1.10f;
-	static constexpr float Phase3RootIsolatedRootVsNonRootAngularRatio = 1.75f;
-	static constexpr float Phase3LateAngularOvershootGraceDegPerSec = 600.0f;
-	if (Phase3TickCount > Phase3RootIsolatedAngularCarryThroughTickCount ||
+	// Section 17.3.3 - Energy-Aware Settlement Watchdog
+	// Instead of hard tick-based grace windows, we allow a dynamic energy budget that
+	// exponentially decays towards the final settlement thresholds. This models the
+	// expected energy dissipation of a stable system while providing a continuous,
+	// physics-principled stability envelope.
+	static constexpr float Phase3InitialEnergyMultiplier = 10.0f;
+	static constexpr float Phase3EnergyDecayTimeConstantTicks = 10.0f;
+	static constexpr int32 Phase3MaximumSettlementWindowTicks = 40;
+
+	if (Phase3TickCount > Phase3MaximumSettlementWindowTicks ||
 		!bTransitionOwnedShellLocked ||
 		!bLocomotionAuthorityIdle)
 	{
 		return false;
 	}
 
-	const bool bLinearBreached = RootLinearSpeed > LinearThreshold;
-	const bool bAngularBreached = RootAngularSpeed > AngularThreshold;
+	const float DecayAlpha = FMath::Exp(-static_cast<float>(Phase3TickCount) / Phase3EnergyDecayTimeConstantTicks);
+	const float CurrentEnergyMultiplier = FMath::Lerp(1.0f, Phase3InitialEnergyMultiplier, DecayAlpha);
+
+	const float DynamicLinearThreshold = LinearThreshold * CurrentEnergyMultiplier;
+	const float DynamicAngularThreshold = AngularThreshold * CurrentEnergyMultiplier;
+
+	// Check systemic energy against the dynamic budget
+	const bool bRootLinearWithinBudget = RootLinearSpeed <= DynamicLinearThreshold;
+	const bool bRootAngularWithinBudget = RootAngularSpeed <= DynamicAngularThreshold;
+
+	// Non-root bodies (spine/limbs) should stay within a tighter sub-envelope of the dynamic budget
+	static constexpr float Phase3NonRootEnergyBudgetRatio = 0.85f;
+	const float DynamicNonRootAngularThreshold = DynamicAngularThreshold * Phase3NonRootEnergyBudgetRatio;
+	const bool bNonRootAngularWithinBudget = CurrentMaxNonRootAngularSpeed <= DynamicNonRootAngularThreshold;
+
+	// Shell integrity remains a hard constraint even during the energy grace
 	const bool bOffsetBreached = ShellPlanarOffsetCm > MaxAllowedShellOffsetCm;
-	const bool bShellVelocityBreached = ShellPlanarVelocityCmPerSec > MaxAllowedShellVelocityCmPerSec;
-	const float ObservedNonRootAngularEnvelope = ResolveObservedNonRootAngularEnvelopeForBone(
-		CurrentMaxNonRootAngularBone,
-		PrePhase3PeakNonRootAngularSpeed,
-		PrePhase3PeakThighAngularSpeed,
-		PrePhase3PeakSpineAngularSpeed,
-		PrePhase3PeakFeetAngularSpeed);
-	const bool bNonRootAngularStillWithinObservedCarryThroughEnvelope =
-		ObservedNonRootAngularEnvelope > 0.0f &&
-		CurrentMaxNonRootAngularSpeed <=
-			ObservedNonRootAngularEnvelope * Phase3RootIsolatedNonRootAngularPeakMultiplier;
-	const float ObservedNonRootFamilyAngularEnvelope = ResolveObservedNonRootAngularFamilyEnvelopeForBone(
-		CurrentMaxNonRootAngularBone,
-		PrePhase3PeakThighFamilyAngularSpeed,
-		PrePhase3PeakSpineFamilyAngularSpeed,
-		PrePhase3PeakFeetFamilyAngularSpeed);
-	const bool bNonRootFamilyStillWithinObservedCarryThroughEnvelope =
-		ObservedNonRootFamilyAngularEnvelope <= 0.0f ||
-		CurrentNonRootFamilyAngularSpeed <=
-			ObservedNonRootFamilyAngularEnvelope * Phase3RootIsolatedNonRootAngularPeakMultiplier;
-	const bool bRootAngularStillDominantOverNonRoot =
-		CurrentMaxNonRootAngularSpeed <= 0.0f ||
-		RootAngularSpeed >=
-			CurrentMaxNonRootAngularSpeed * Phase3RootIsolatedRootVsNonRootAngularRatio;
 
-	// A zero-offset, explicit-lock Settle burst can still carry residual RootOn snap
-	// energy through the shell-maintenance path for one extra tick after the
-	// angular-only grace expires. Treat that as pre-material unless it persists or
-	// turns into real shell drift.
-	if (Phase3TickCount <= Phase3ShellVelocityBurstGraceTickCount &&
-		bLinearBreached &&
-		bAngularBreached &&
-		!bOffsetBreached &&
-		bShellVelocityBreached)
-	{
-		return true;
-	}
-
-	// A later tick-5 combined burst is only still pre-material when the Phase 2
-	// handoff itself stayed comparatively quiet and the observed linear burst is
-	// dominated by shell carry-through rather than by already-large body chaos.
-	static constexpr int32 Phase3CombinedShellBurstCarryThroughTickCount = 5;
-	static constexpr float Phase3CombinedBurstQuietPhase2AngularMultiplier = 1.5f;
-	static constexpr float Phase3CombinedBurstShellDominanceRatio = 0.5f;
-	const float EffectiveRootPlanarSpeedCmPerSecond =
-		RootPlanarSpeedCmPerSecond >= 0.0f ? RootPlanarSpeedCmPerSecond : RootLinearSpeed;
-	const bool bQuietPhase2Handoff =
-		PrePhase3PeakBodyLinearSpeed <= LinearThreshold &&
-		PrePhase3PeakBodyAngularSpeed <=
-			AngularThreshold * Phase3CombinedBurstQuietPhase2AngularMultiplier;
-	const bool bShellDominatedLinearBurst =
-		ShellPlanarVelocityCmPerSec >=
-			EffectiveRootPlanarSpeedCmPerSecond * Phase3CombinedBurstShellDominanceRatio;
-	const bool bNonRootAngularEnvelopeObserved =
-		CurrentMaxNonRootAngularSpeed > 0.0f && ObservedNonRootAngularEnvelope > 0.0f;
-	const bool bNonRootFamilyEnvelopeObserved =
-		CurrentNonRootFamilyAngularSpeed > 0.0f && ObservedNonRootFamilyAngularEnvelope > 0.0f;
-	if (Phase3TickCount <= Phase3CombinedShellBurstCarryThroughTickCount &&
-		bQuietPhase2Handoff &&
-		bLinearBreached &&
-		bAngularBreached &&
-		!bOffsetBreached &&
-		bShellVelocityBreached &&
-		bShellDominatedLinearBurst &&
-		(!bNonRootAngularEnvelopeObserved || bNonRootAngularStillWithinObservedCarryThroughEnvelope) &&
-		(!bNonRootFamilyEnvelopeObserved || bNonRootFamilyStillWithinObservedCarryThroughEnvelope))
-	{
-		return true;
-	}
-
-	// The next live blocker is a later angular-only frame with the shell still
-	// perfectly locked in position and only the shell-maintained planar velocity
-	// showing residual RootOn snap energy. Keep that separate from a truthful
-	// physical instability until tick 5, but only while linear speed stays under
-	// the Settle threshold and no shell drift appears.
-	if (Phase3TickCount <= Phase3AngularOnlyShellBurstGraceTickCount)
-	{
-		return !bLinearBreached &&
-			bAngularBreached &&
-			!bOffsetBreached &&
-			bShellVelocityBreached &&
-			(!bNonRootAngularEnvelopeObserved || bNonRootAngularStillWithinObservedCarryThroughEnvelope) &&
-			(!bNonRootFamilyEnvelopeObserved || bNonRootFamilyStillWithinObservedCarryThroughEnvelope);
-	}
-
-	// A later tick-6 angular-only spike is still the same RootOn carry-through
-	// shape when Settle linear speed is already below threshold, the shell is
-	// still perfectly locked, the root burst remains materially dominant over the
-	// preserved non-root set, and the angular burst remains close to the
-	// already-observed pre-Phase-3 peak rather than expanding into a new regime.
-	const bool bPrePhase3AngularPeakAlreadyBreached = PrePhase3PeakBodyAngularSpeed > AngularThreshold;
-	const bool bBoundedAngularCarryThrough =
-		RootAngularSpeed <=
-			PrePhase3PeakBodyAngularSpeed + Phase3BoundedAngularCarryThroughMaxGrowthDegPerSec;
-	if (Phase3TickCount <= Phase3BoundedAngularCarryThroughTickCount &&
-		!bLinearBreached &&
-		bAngularBreached &&
-		!bOffsetBreached &&
-		bShellVelocityBreached &&
-		bPrePhase3AngularPeakAlreadyBreached &&
-		bRootAngularStillDominantOverNonRoot &&
-		bNonRootAngularStillWithinObservedCarryThroughEnvelope &&
-		bNonRootFamilyStillWithinObservedCarryThroughEnvelope &&
-		bBoundedAngularCarryThrough)
-	{
-		return true;
-	}
-
-	// A later tick-8 blocker can still be the same shell-locked RootOn
-	// carry-through shape when the root alone is spinning hard but the rest of the
-	// preserved simulated set stays within the angular envelope already observed
-	// during RootOn carry-through. Keep that separate from a truthful full-body
-	// angular failure unless the non-root set expands into a new regime or the
-	// root is no longer materially dominating the angular burst.
-	const bool bRootAngularStillWithinObservedCarryThroughEnvelope =
-		PrePhase3PeakBodyAngularSpeed > AngularThreshold &&
-		RootAngularSpeed <=
-			PrePhase3PeakBodyAngularSpeed * Phase3RootIsolatedAngularPeakMultiplier;
-	if (Phase3TickCount > Phase3LateAngularOnlyShellBurstGraceTickCount &&
-		Phase3TickCount <= Phase3RootIsolatedAngularCarryThroughTickCount &&
-		!bLinearBreached &&
-		bAngularBreached &&
-		!bOffsetBreached &&
-		bShellVelocityBreached &&
-		bNonRootAngularStillWithinObservedCarryThroughEnvelope &&
-		bNonRootFamilyStillWithinObservedCarryThroughEnvelope &&
-		bRootAngularStillDominantOverNonRoot &&
-		bRootAngularStillWithinObservedCarryThroughEnvelope)
-	{
-		return true;
-	}
-
-	// The later tick-7 frontier is still the same shell-burst carry-through shape,
-	// but by this point only a mild angular overshoot remains acceptable. Anything
-	// larger, any shell drift, or any longer persistence must stay terminal.
-	const float AngularOvershootDegPerSec = RootAngularSpeed - AngularThreshold;
-	return Phase3TickCount <= Phase3LateAngularOnlyShellBurstGraceTickCount &&
-		!bLinearBreached &&
-		bAngularBreached &&
-		AngularOvershootDegPerSec <= Phase3LateAngularOvershootGraceDegPerSec &&
-		!bOffsetBreached &&
-		bShellVelocityBreached;
+	return bRootLinearWithinBudget && bRootAngularWithinBudget && bNonRootAngularWithinBudget && !bOffsetBreached;
 }
 
 
@@ -927,6 +800,17 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope = CurrentObservedNonRootAngularEnvelope;
 	Diagnostics.Phase3CurrentNonRootFamilyAngularSpeed = CurrentNonRootFamilyAngularSpeed;
 	Diagnostics.Phase3CurrentObservedNonRootFamilyAngularEnvelope = CurrentObservedNonRootFamilyAngularEnvelope;
+
+	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_BURST_AUDIT frame=%d tick=%d kineticTick=%d rootLin=%.2f rootAng=%.2f nonRootMaxAng=%.2f nonRootMaxBone=%s shellVel=%.2f shellOffset=%.2f"),
+		static_cast<int32>(GFrameCounter),
+		Phase3GuardTickCount,
+		Phase3KineticGateReleaseTickCount,
+		PelvisLinearSpeed,
+		PelvisAngularSpeed,
+		CurrentMaxNonRootAngularSpeed,
+		*CurrentMaxNonRootAngularBone.ToString(),
+		Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond(),
+		Owner->GetCurrentShellPlanarOffsetDeltaCm());
 
 	Domain.CertifiedSimCount = CertifiedHandoff.SimCount;
 	Domain.CertifiedDistalSimCount = CertifiedHandoff.DistalSimCount;

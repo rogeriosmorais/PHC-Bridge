@@ -249,6 +249,16 @@ namespace PhysAnimBridge
 		return *FString::Printf(TEXT("PAMod_%s"), *BoneName.ToString());
 	}
 
+	FName GetBoneNameFromControlName(const FName ControlName)
+	{
+		FString Name = ControlName.ToString();
+		if (Name.StartsWith(TEXT("PACtrl_")))
+		{
+			return *Name.RightChop(7);
+		}
+		return ControlName;
+	}
+	
 	FName GetBoneNameFromBodyModifierName(const FName ModifierName)
 	{
 		FString Name = ModifierName.ToString();

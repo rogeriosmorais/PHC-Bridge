@@ -340,29 +340,83 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 		bool bPolicyTargetsAppliedThisTick = true;
 		const int32 RootRawSimPost = (PelvisBodyScope && PelvisBodyScope->IsInstanceSimulatingPhysics()) ? 1 : 0;
+		const int32 Phase3KineticTick = BalanceReadyTransition.GetPhase3KineticGateReleaseTickCount();
+		const bool bIsPhase3SuppressionWindow = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle && Phase3KineticTick > 0 && Phase3KineticTick <= 20);
+
 		bSuppressPostShellPolicy =
-			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
 			BalanceEntryRootOnFrameCount >= 4 &&
 			RootRawSimPost == 1 &&
 			LastRuntimeInstabilityDiagnostics.NumSimulatingBodies >= 6 &&
-			BalanceReadyTransition.GetDiagnostics().bShellMaterialGuardSuppressed;
+			BalanceReadyTransition.GetDiagnostics().bShellMaterialGuardSuppressed) ||
+			bIsPhase3SuppressionWindow;
+
+		float Phase3HandoverAlpha = 1.0f;
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle && Phase3KineticTick > 20 && Phase3KineticTick <= 40)
+		{
+			Phase3HandoverAlpha = FMath::Clamp((Phase3KineticTick - 20) / 20.0f, 0.0f, 1.0f);
+		}
+
+		const bool bInSettlementWindow = Phase3KineticTick > 0 && Phase3KineticTick <= 20;
+
+		// §EPIC-13.2 - Kinetic Gate Warm-Start Rebase
+		// If the gate just released, OR we are in the settlement window, rebase the targets to 
+		// the current physical pose to prevent "snap-back" energy spikes.
+		// Continuous rebase during settlement provides "Active Damping" (Strength*0 + Damping*Vel).
+		if ((bKineticGateReleasedThisFrame || bInSettlementWindow) && Mesh)
+		{
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+				
+				// We only care about controls that are child of the bone being tracked
+				// (mostly limbs and spine).
+				const FQuat ChildWorldRot = Mesh->GetBoneQuaternion(BoneName, EBoneSpaces::WorldSpace);
+				const FName ParentBoneName = Mesh->GetParentBone(BoneName);
+				const FQuat ParentWorldRot = (ParentBoneName != NAME_None) ? 
+					Mesh->GetBoneQuaternion(ParentBoneName, EBoneSpaces::WorldSpace) : 
+					FQuat::Identity;
+
+				const FQuat LocalRot = (ParentWorldRot.Inverse() * ChildWorldRot).GetNormalized();
+				PreviousControlTargetRotations.Add(ControlName, LocalRot);
+
+				// Only initialize the blend start once at the very first release or beginning of Phase 3
+				if (bKineticGateReleasedThisFrame)
+				{
+					PolicyBlendStartControlTargetRotations.Add(ControlName, LocalRot);
+				}
+			}
+		}
+
+		if (Phase3HandoverAlpha <= 0.0f)
+		{
+			bSuppressPostShellPolicy = true;
+		}
 
 		if (bSuppressPostShellPolicy && bApplyNewPolicyStepThisTick)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_POST_SHELL_POLICY_SUPPRESSED frame=%d tick=%d normalWrites=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
-				static_cast<int32>(GFrameNumber),
-				static_cast<int32>(BalanceEntryRootOnFrameCount),
-				0,
-				ControlTargetDiagnostics.NumHeldTargetsWritten,
-				RootRawSimPost,
-				LastRuntimeInstabilityDiagnostics.NumSimulatingBodies,
-				PolicyInfluenceAlpha,
-				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
-				*GetOwner()->GetName(),
-				*GetName());
+			const int32 SuppressionTick = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) ? Phase3KineticTick : static_cast<int32>(BalanceEntryRootOnFrameCount);
+			const TCHAR* SuppressionPhaseStr = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) ? TEXT("PHASE3") : TEXT("PHASE2");
 
-			ControlTargetDiagnostics.NumNormalPolicyTargetsWritten = 0;
-			bPolicyTargetsAppliedThisTick = false;
+			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] %s_POST_SHELL_POLICY_SUPPRESSED frame=%d tick=%d normalWrites=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
+					SuppressionPhaseStr,
+					static_cast<int32>(GFrameNumber),
+					SuppressionTick,
+					0,
+					ControlTargetDiagnostics.NumHeldTargetsWritten,
+					RootRawSimPost,
+					LastRuntimeInstabilityDiagnostics.NumSimulatingBodies,
+					PolicyInfluenceAlpha,
+					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+					*GetOwner()->GetName(),
+					*GetName());
+
+				ControlTargetDiagnostics.NumNormalPolicyTargetsWritten = 0;
+				bPolicyTargetsAppliedThisTick = false;
+				return;
+			}
 		}
 
 		bool bNormalWritesBlockedByRootOn = false;
@@ -373,8 +427,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 			bNormalWritesBlockedByRootOn = !bIsPhase1PolicyLoopSuppressed && !bSuppressPostShellPolicy;
 		}
 
-		if (!bIsPhase1PolicyLoopSuppressed && !bSuppressPostShellPolicy && !bNormalWritesBlockedByRootOn)
+		const bool bIsPhase3FlowActive = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
+		if (!bIsPhase1PolicyLoopSuppressed && (!bSuppressPostShellPolicy || bIsPhase3FlowActive) && !bNormalWritesBlockedByRootOn)
 		{
+			float EffectiveHandoverAlpha = Phase3HandoverAlpha;
+			if (bIsPhase3SuppressionWindow) EffectiveHandoverAlpha = 0.0f;
 			bPolicyTargetsAppliedLastFrame = true;
 			for (const TPair<FName, FQuat>& Pair : ControlRotations)
 			{
@@ -424,10 +481,54 @@ void UPhysAnimComponent::ApplyControlTargets(
 				return;
 			}
 
-			if (bRebaseControlTargetHistoryThisFrame)
+			const bool bIsPhase3HandoverBlend = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle && Phase3KineticTick > 20 && Phase3KineticTick <= 40);
+			if (bRebaseControlTargetHistoryThisFrame || bIsPhase3HandoverBlend)
 			{
-				PreviousControlTargetRotations.Add(ControlName, Pair.Value);
-				PolicyBlendStartControlTargetRotations.Add(ControlName, Pair.Value);
+				if (!PreviousControlTargetRotations.Contains(ControlName) || bIsPhase3HandoverBlend)
+				{
+					PreviousControlTargetRotations.Add(ControlName, Pair.Value);
+				}
+				if (!PolicyBlendStartControlTargetRotations.Contains(ControlName) || bIsPhase3HandoverBlend)
+				{
+					PolicyBlendStartControlTargetRotations.Add(ControlName, Pair.Value);
+				}
+			}
+
+			FQuat TargetRot = Pair.Value;
+			if (EffectiveHandoverAlpha < 1.0f - KINDA_SMALL_NUMBER)
+			{
+				const FQuat HeldRot = PreviousControlTargetRotations.FindRef(ControlName);
+				TargetRot = FQuat::Slerp(HeldRot, Pair.Value, EffectiveHandoverAlpha);
+			}
+
+			PhysicsControl->SetControlTargetOrientation(ControlName, TargetRot.Rotator(), 0.0f, false);
+			
+			// Kinetic Gate Warm-Start Rebase: Align control history with current physical body pose 
+			// at the exact moment of gate release to eliminate impulsive spinal snapping.
+			if (bKineticGateReleasedThisFrame && Mesh)
+			{
+				if (const FPhysicsControlRecord* ControlRecord = FPhysAnimPhysicsControlAccessor::GetControlRecord(PhysicsControl, ControlName))
+				{
+					const FName ChildBoneName = ControlRecord->PhysicsControl.ChildBoneName;
+					const FName ParentBoneName = ControlRecord->PhysicsControl.ParentBoneName;
+
+					const FQuat ChildWorldRot = Mesh->GetBoneQuaternion(ChildBoneName, EBoneSpaces::WorldSpace);
+					const FQuat ParentWorldRot = (ParentBoneName != NAME_None) 
+						? Mesh->GetBoneQuaternion(ParentBoneName, EBoneSpaces::WorldSpace) 
+						: Mesh->GetComponentQuat();
+
+					// Calculate target-space rotation (usually Parent Space for these controls)
+					const FQuat LocalRot = (ParentWorldRot.Inverse() * ChildWorldRot).GetNormalized();
+
+					PreviousControlTargetRotations.Add(ControlName, LocalRot);
+					PolicyBlendStartControlTargetRotations.Add(ControlName, LocalRot);
+
+					if (UE_GET_LOG_VERBOSITY(LogPhysAnimBridge) >= ELogVerbosity::Verbose)
+					{
+						UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnim] KINETIC_GATE_RELEASE_WARM_START_REBASE bone=%s control=%s localRot=%s"), 
+							*ChildBoneName.ToString(), *ControlName.ToString(), *LocalRot.ToString());
+					}
+				}
 			}
 
 			const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);

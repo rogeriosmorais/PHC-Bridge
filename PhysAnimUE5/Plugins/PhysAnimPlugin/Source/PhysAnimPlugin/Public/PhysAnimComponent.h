@@ -1255,6 +1255,7 @@ public:
 
 	/** Per-component gate state tracking (release edge detection) for V0 kinetic gate diagnostic. */
 	bool bKineticGateActiveLastFrame = false;
+	bool bKineticGateReleasedThisFrame = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Proof|RuntimeEvidence")
 	FName LiveRuntimeEvidenceLeftSupportBodyName = TEXT("foot_l");
