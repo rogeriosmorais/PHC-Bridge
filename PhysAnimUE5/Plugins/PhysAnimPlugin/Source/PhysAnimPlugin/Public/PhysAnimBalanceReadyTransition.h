@@ -596,7 +596,8 @@ public:
 		float ShellPlanarOffsetCm,
 		float ShellPlanarVelocityCmPerSec,
 		float MaxAllowedShellOffsetCm,
-		float MaxAllowedShellVelocityCmPerSec);
+		float MaxAllowedShellVelocityCmPerSec,
+		int32 KineticGateReleaseTickCount = 0);
 	static bool IsPhase3EarlySettleAngularGraceActive(
 		int32 Phase3TickCount,
 		float RootLinearSpeed,
@@ -632,7 +633,8 @@ public:
 		float CurrentNonRootFamilyAngularSpeed = 0.0f,
 		float PrePhase3PeakThighFamilyAngularSpeed = 0.0f,
 		float PrePhase3PeakSpineFamilyAngularSpeed = 0.0f,
-		float PrePhase3PeakFeetFamilyAngularSpeed = 0.0f);
+		float PrePhase3PeakFeetFamilyAngularSpeed = 0.0f,
+		int32 KineticGateReleaseTickCount = 0);
 
 	static bool IsRootStable(
 		const FPhase1AcceptedConvergenceSnapshot& Snapshot,
@@ -687,7 +689,7 @@ private:
 	void ReturnToPhase1Prepare(class UPhysAnimComponent* Owner, const FString& Reason, const TCHAR* EventName);
 	void CapturePhase1TopologyRecord(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);
 	void ResetRootOnReadinessNoCouplingProofState();
-	void ResetTransitionLocalState();
+	void ResetTransitionLocalState(class UPhysAnimComponent* Owner);
 	void ResetCertifiedHandoffState();
 	void MarkSafePhase2Denied(class UPhysAnimComponent* Owner, const FString& Reason);
 	void CaptureFlipDiagnostics(class UPhysAnimComponent* Owner);
@@ -727,6 +729,8 @@ private:
 	float RetryCooldownTimerSeconds = 0.0f;
 	int32 Phase2GuardTickCount = 0;
 	int32 Phase3GuardTickCount = 0;
+	int32 Phase3KineticGateReleaseTickCount = 0;
+	bool bLastKineticGateActive = false;
 	bool bPreviousFrameSettleEndRootRawSim = false;
 	bool bPreviousFrameSettleEndPelvisRawSim = false;
 	bool bPhase2RootAuthorityQuarantined = false;

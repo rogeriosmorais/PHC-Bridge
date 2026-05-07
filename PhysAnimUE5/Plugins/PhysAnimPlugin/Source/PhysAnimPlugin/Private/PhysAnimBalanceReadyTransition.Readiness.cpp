@@ -200,7 +200,8 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 	float ShellPlanarOffsetCm,
 	float ShellPlanarVelocityCmPerSec,
 	float MaxAllowedShellOffsetCm,
-	float MaxAllowedShellVelocityCmPerSec)
+	float MaxAllowedShellVelocityCmPerSec,
+	int32 KineticGateReleaseTickCount)
 {
 	const bool bShellCorrectionOwnerActive =
 		IsPhase3ShellCorrectionOwnerActive(
@@ -212,6 +213,16 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 	{
 		return false;
 	}
+
+	// Section 17.3.2 - Kinetic Gate Release Grace
+	// Suppress shell correction aborts for a few ticks after the kinetic gate releases
+	// to allow for the expected transient "spring-back" velocity burst.
+	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 5;
+	if (KineticGateReleaseTickCount <= Phase3KineticGateReleaseGraceTicks)
+	{
+		return false;
+	}
+
 
 	static constexpr int32 Phase3VelocityOnlyHandoffGraceTickCount = 1;
 	static constexpr int32 Phase3BoundedVelocityOnlyCarryThroughGraceTickCount = 3;
@@ -324,8 +335,18 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	float CurrentNonRootFamilyAngularSpeed,
 	float PrePhase3PeakThighFamilyAngularSpeed,
 	float PrePhase3PeakSpineFamilyAngularSpeed,
-	float PrePhase3PeakFeetFamilyAngularSpeed)
+	float PrePhase3PeakFeetFamilyAngularSpeed,
+	int32 KineticGateReleaseTickCount)
 {
+	// Section 17.3.2 - Kinetic Gate Release Grace
+	// Suppress instability aborts for a few ticks after the kinetic gate releases
+	// to allow for the expected transient "spring-back" velocity burst.
+	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 5;
+	if (KineticGateReleaseTickCount <= Phase3KineticGateReleaseGraceTicks)
+	{
+		return true;
+	}
+
 	if (IsPhase3EarlySettleAngularGraceActive(
 			Phase3TickCount,
 			RootLinearSpeed,
@@ -944,7 +965,8 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				CurrentNonRootFamilyAngularSpeed,
 				Diagnostics.PeakTotalThighBodyAngularSpeed,
 				Diagnostics.PeakTotalSpineBodyAngularSpeed,
-				Diagnostics.PeakTotalFeetBodyAngularSpeed))
+				Diagnostics.PeakTotalFeetBodyAngularSpeed,
+				Phase3KineticGateReleaseTickCount))
 		{
 			// Not yet material - continue with remaining continuity checks
 		}
@@ -990,7 +1012,8 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 			Owner->GetCurrentShellPlanarOffsetDeltaCm(),
 			Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond(),
 			Settings.BalancePhase2AbortShellOffsetDelta,
-			Settings.BalancePhase2AbortShellVelocityDelta))
+			Settings.BalancePhase2AbortShellVelocityDelta,
+			Phase3KineticGateReleaseTickCount))
 	{
 		OutReason = TEXT("phase3_material_shell_correction");
 		return false;

@@ -146,7 +146,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	TotalTransitionTimeSeconds = 0.0f;
 	LastLogTimeSeconds = -1.0;
 	LastQuietBlockReason.Reset();
-	ResetTransitionLocalState();
+	ResetTransitionLocalState(Owner);
 	bLatchedPelvisResetApplied = false;
 	QuietHandoffCount = 0;
 	HipQuarantineTimerSeconds = 0.0f;
@@ -271,7 +271,20 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		Phase3GuardTickCount++;
 	}
 
+	const bool bKineticGateActiveNow = Owner->bKineticGateActiveLastFrame;
+	if (bKineticGateActiveNow)
+	{
+		Phase3KineticGateReleaseTickCount = 0;
+	}
+	else
+	{
+		Phase3KineticGateReleaseTickCount++;
+	}
+	bLastKineticGateActive = bKineticGateActiveNow;
 	FString BlockReason;
+
+
+
 	const bool bReadyThisFrame = EvaluateReadiness(Owner, Settings, BlockReason);
 	Diagnostics.BlockReason = BlockReason;
 
@@ -3023,7 +3036,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					}
 				}
 				Owner->RecoverBridgeActiveStateAfterBalanceTransitionFailure(FailureReason);
-				ResetTransitionLocalState();
+				ResetTransitionLocalState(Owner);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RECOVERY_COMPLETE"));
 			}
 		}
@@ -3040,7 +3053,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 }
 
 
-void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
+void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState(class UPhysAnimComponent* Owner)
 {
 	Diagnostics = {};
 	ConsecutivePelvisNotSimulatingTicks = 0;
@@ -3086,6 +3099,8 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	LoggedProximalPromotions.Empty();
 	LoggedProximalStates.Empty();
 	Phase2GuardTickCount = 0;
+	bLastKineticGateActive = Owner ? Owner->bKineticGateActiveLastFrame : false;
+	Phase3KineticGateReleaseTickCount = bLastKineticGateActive ? 0 : 999;
 	Phase3GuardTickCount = 0;
 	bPreviousFrameSettleEndRootRawSim = false;
 	bPreviousFrameSettleEndPelvisRawSim = false;

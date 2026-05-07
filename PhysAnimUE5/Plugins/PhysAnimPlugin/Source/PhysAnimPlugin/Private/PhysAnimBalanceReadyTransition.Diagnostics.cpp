@@ -399,7 +399,7 @@ void FPhysAnimBalanceReadyTransition::ReturnToPhase1Prepare(UPhysAnimComponent* 
 	{
 		Owner->ReleaseTransitionOwnedShellLock();
 	}
-	ResetTransitionLocalState();
+	ResetTransitionLocalState(Owner);
 	InternalPhase = EBalanceReadyTransitionPhase::BRT_Phase1_Prepare;
 	PhaseTimeSeconds = 0.0f;
 	StableHoldAccumulatedSeconds = 0.0f;
