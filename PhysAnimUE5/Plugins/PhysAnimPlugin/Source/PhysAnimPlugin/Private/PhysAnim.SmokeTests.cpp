@@ -41,6 +41,7 @@ namespace
 	constexpr float PhysAnimPieBalanceModeSmokeDurationSeconds = 15.0f;
 	constexpr float PhysAnimPiePhase1AutoCalibBridgeActiveTimeoutSeconds = 15.0f;
 	constexpr float PhysAnimPiePhase1AutoCalibTimeoutSeconds = 90.0f;
+	constexpr float PhysAnimPieBalanceModeSmokeOutcomeTimeoutSeconds = 15.0f;
 
 	UPhysAnimComponent* FindFirstPhysAnimComponent(UWorld* World)
 	{
@@ -320,6 +321,27 @@ namespace
 			PhysAnimPieSmokeStartTimeoutSeconds));
 		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeLeadInSeconds));
 		AddCommand(new FWaitLatentCommand(PhysAnimPieBalanceModeSmokeDurationSeconds));
+		AddCommand(new FUntilCommand(
+			[this]() -> bool
+			{
+				if (GEditor && GEditor->PlayWorld)
+				{
+					if (UPhysAnimComponent* const Component = FindFirstPhysAnimComponent(GEditor->PlayWorld))
+					{
+						const EPhysAnimRuntimeState RuntimeState = Component->GetRuntimeState();
+						return RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+							RuntimeState == EPhysAnimRuntimeState::FailStopped ||
+							RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny;
+					}
+				}
+				return false;
+			},
+			[this]() -> bool
+			{
+				AddError(TEXT("[PhysAnimPieBalanceSmoke] Timeout waiting for terminal balance state (BalanceActive_Standing, FailStopped, or BalanceSafeDeny)."));
+				return true;
+			},
+			PhysAnimPieBalanceModeSmokeOutcomeTimeoutSeconds));
 		AddCommand(new FValidateBalanceModeSmokeOutcomeCommand(this));
 		AddCommand(new FEndPlayMapCommand());
 		return true;

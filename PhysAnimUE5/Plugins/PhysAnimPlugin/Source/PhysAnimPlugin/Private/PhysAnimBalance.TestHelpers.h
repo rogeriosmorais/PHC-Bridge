@@ -143,33 +143,31 @@ namespace PhysAnimBalanceTestHelpers
 			if (Component)
 			{
 				const EPhysAnimRuntimeState RuntimeState = Component->GetRuntimeState();
-				if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
-					RuntimeState == EPhysAnimRuntimeState::FailStopped ||
-					RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
-				{
-					const FPhysAnimRuntimeTerminationState& TerminationState = Component->GetLiveRuntimeEvidenceTerminationState();
-					FString Error;
-					const bool bSuccess = EvaluateBalanceModeSmokeOutcome(
-						RuntimeState,
-						UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(TerminationState.LatestArtifact),
-						TerminationState.TerminalReason,
-						UPhysAnimComponent::TestOnlyIsBalanceEntryState(RuntimeState),
-						RuntimeState,
-						Component->HasRecordedBalanceTransitionFailure(),
-						Component->HasSafePhase2Denial(),
-						Component->GetSafePhase2DenialReason(),
-						Component->GetBalanceReadyTransitionFailureReason(),
-						Error);
+				const FPhysAnimRuntimeTerminationState& TerminationState = Component->GetLiveRuntimeEvidenceTerminationState();
+				FString Error;
+				const bool bSuccess = EvaluateBalanceModeSmokeOutcome(
+					RuntimeState,
+					UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(TerminationState.LatestArtifact),
+					TerminationState.TerminalReason,
+					UPhysAnimComponent::TestOnlyIsBalanceEntryState(RuntimeState),
+					RuntimeState,
+					Component->HasRecordedBalanceTransitionFailure(),
+					Component->HasSafePhase2Denial(),
+					Component->GetSafePhase2DenialReason(),
+					Component->GetBalanceReadyTransitionFailureReason(),
+					Error);
 
-					if (!bSuccess)
-					{
-						Test->AddError(Error);
-					}
-					return true;
+				if (!bSuccess)
+				{
+					Test->AddError(Error);
 				}
 			}
+			else
+			{
+				Test->AddError(TEXT("[PhysAnimPieBalanceSmoke] Could not find UPhysAnimComponent to validate outcome."));
+			}
 
-			return false;
+			return true;
 		}
 
 	private:
