@@ -9,7 +9,7 @@ Dados armazenados em `workflow-graph/graph.db` (local, gitignored).
 **O mcp-graph é a fonte de verdade ABSOLUTA. Nenhuma implementação acontece fora do grafo.**
 
 1. **Node deve existir** — antes de escrever QUALQUER código, o node correspondente DEVE existir no grafo
-2. **Fluxo obrigatório** — `start_task → [implementar com TDD] → finish_task` (pipeline v8.0) ou `next → context(compact) → context(rag) → [TDD] → analyze(implement_done) → update_status` (granular) — SEM EXCEÇÕES
+2. **Fluxo obrigatório** — `next → context(compact) → context(rag) → update_status(in_progress) → [TDD] → analyze(implement_done) → update_status(done)` — SEM EXCEÇÕES
 3. **Epic = estrutura primeiro** — criar Epic + tasks filhas + edges ANTES de implementar
 4. **Status tracking** — `update_status → in_progress` ANTES de codar, `→ done` APÓS completar
 5. **Validação** — usar `validate` (action: `ac`) após cada task para checar critérios de aceitação
@@ -19,15 +19,13 @@ Dados armazenados em `workflow-graph/graph.db` (local, gitignored).
 
 ### Fluxo de trabalho OBRIGATÓRIO
 
-**Pipeline v8.0 (recomendado — 2 calls):**
+**Granular (MANDATÓRIO — 6 calls):**
 ```
-start_task → [implementar com TDD] → finish_task
+next → context(compact) → context(rag) → update_status(in_progress) → [implementar com TDD] → analyze(implement_done) → update_status(done)
 ```
 
-**Granular (6 calls — disponível para controle fino):**
-```
-next → context(compact) → context(rag) → [implementar com TDD] → analyze(implement_done) → update_status
-```
+**⚠️ Pipeline v8.0 (PROIBIDO):**
+Não usar `start_task` ou `finish_task`, pois estas ferramentas criam branches `ai-shadow` indesejadas.
 
 ### Lifecycle (9 fases)
 
@@ -187,7 +185,7 @@ Quanto maior o score, menor o risco de alucinação e retrabalho.
 | ANALYZE | Rodar harness_scan para baseline inicial |
 | DESIGN | Gate: score >= 55 (C) para avançar para PLAN |
 | PLAN | Sprint health mostra harness delta; tasks que melhoram dimensões fracas ganham prioridade via harnessBonus |
-| IMPLEMENT | start_task mostra harnessWarning se score < 70; finish_task detecta regressão > 5pts e retorna ruleSuggestions |
+| IMPLEMENT | `update_status(in_progress)` mostra harnessWarning se score < 70; `analyze(implement_done)` detecta regressão > 5pts e retorna ruleSuggestions |
 | VALIDATE | Gate: sem regressão > 10pts |
 | REVIEW | Gate: score >= 55 (C) |
 | HANDOFF | Gate: score >= 55 (C) recomendado |
@@ -202,7 +200,7 @@ Ambos são visíveis no lifecycle block de cada tool response.
 
 ### Issue Pattern Tracker (Steering Loop)
 
-finish_task grava padrões recorrentes de falha DoD. Ao atingir 3 ocorrências,
+`analyze(implement_done)` grava padrões recorrentes de falha DoD. Ao atingir 3 ocorrências,
 auto-sugere regras em `.claude/rules/`. Padrões rastreados:
 - `missing_ac` — Task sem acceptance criteria
 - `status_skip` — Pulo de status (ex: backlog → done)
