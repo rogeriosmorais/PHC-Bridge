@@ -1177,7 +1177,7 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 			}
 
 			// Work calculation for thighs during critical window (0.05s - 0.30s)
-			if (CurrentSampleTimeSec >= 0.05 && CurrentSampleTimeSec <= 0.30)
+			if (bV0PlantThighWorkDiagnosticEnabled && CurrentSampleTimeSec >= 0.05 && CurrentSampleTimeSec <= 0.30)
 			{
 				if (BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r"))
 				{

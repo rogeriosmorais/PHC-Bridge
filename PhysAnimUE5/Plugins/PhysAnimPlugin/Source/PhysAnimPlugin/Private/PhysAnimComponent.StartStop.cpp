@@ -93,9 +93,12 @@ void UPhysAnimComponent::StopBridge()
 	bLiveRuntimeEvidenceStartupProxySupportHandoffArmed = false;
 	StartupProofDeferredTerminalReason = EPhysAnimTerminalReason::None;
 	bLiveRuntimeEvidenceProofShouldComplete = true;
-	UE_LOG(LogPhysAnimBridge, Display, TEXT("[PhysAnimV0] THIGH_WORK_DIAGNOSTIC positiveWork=%.6f negativeWork=%.6f"), 
-		ActivatedStandingStabilityMetrics.ThighPositiveWorkAccumulated, 
-		ActivatedStandingStabilityMetrics.ThighNegativeWorkAccumulated);
+	if (bV0PlantThighWorkDiagnosticEnabled)
+	{
+		UE_LOG(LogPhysAnimBridge, Display, TEXT("[PhysAnimV0] THIGH_WORK_DIAGNOSTIC positiveWork=%.6f negativeWork=%.6f"), 
+			ActivatedStandingStabilityMetrics.ThighPositiveWorkAccumulated, 
+			ActivatedStandingStabilityMetrics.ThighNegativeWorkAccumulated);
+	}
 
 	ConsecutiveInvalidPoseSearchFrames = 0;
 	LastValidPoseSearchResult = FPoseSearchBlueprintResult();
