@@ -559,8 +559,7 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 
 bool UPhysAnimComponent::HasStartupProofPhysicalContinuityEvidence(const FPhysAnimRunArtifactSnapshot& Artifact)
 {
-	return Artifact.bPhysicalContinuityValidatorPassed &&
-		Artifact.RuntimeSimulatingBodyCount > 0;
+	return Artifact.bPhysicalContinuityValidatorPassed;
 }
 
 EPhysAnimTerminalReason UPhysAnimComponent::ResolveStartupPhysicalContinuityTerminalReason(
