@@ -38,7 +38,7 @@ Interpretation:
 7. Do not leave permanent fail-by-design or skip-by-design tests in the main suite.
 8. Treat Manny/Quinn as the default runtime skeleton unless explicitly changed.
 9. Keep commits small and atomic.
-10. Build with `.\\scripts\\build.ps1`.
+10. Build with `.\\scripts\\build.ps1`. This script should also be used to run any test passing -Test "Test Name" as a parameter right after the build.
 11. If smoke tests were run, read logs with `python .\\scripts\\read_logs.py`.
 
 <!-- mcp-graph:start -->
