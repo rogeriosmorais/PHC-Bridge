@@ -1130,9 +1130,7 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 			if (bSimulating)
 			{
 				++DirectSimulatingBodyCount;
-			}
-			else
-			{
+
 				if (!IsNamedBody(BoneName, CriticalBodyNames, UE_ARRAY_COUNT(CriticalBodyNames)) &&
 					!IsNamedBody(BoneName, SupportBodyNames, UE_ARRAY_COUNT(SupportBodyNames)))
 				{
