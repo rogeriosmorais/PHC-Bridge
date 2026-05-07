@@ -1077,6 +1077,18 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 								ActivatedStandingStabilityMetrics.ThighNegativeWorkAccumulated += static_cast<double>(FMath::Abs(WorkIncrement));
 							}
 
+							// AC-2: snapshot thigh control state and pose-seeded flag on first window entry (thigh_l only)
+							if (BoneName == TEXT("thigh_l") && ActivatedStandingStabilityMetrics.PoseTargetsSeededAtWindowEntry < 0)
+							{
+								ActivatedStandingStabilityMetrics.ThighAngularStrengthAtWindowEntry =
+									ControlData.AngularStrength * ControlMultiplier.AngularStrengthMultiplier;
+								ActivatedStandingStabilityMetrics.ThighAngularDampingAtWindowEntry =
+									ControlData.AngularDampingRatio * ControlMultiplier.AngularDampingRatioMultiplier;
+								const bool bPrevSeeded = GetPreviousControlTargetRotationsForDiagnostics().Num() > 0;
+								const bool bBlendSeeded = GetPolicyBlendStartControlTargetRotationsForDiagnostics().Num() > 0;
+								ActivatedStandingStabilityMetrics.PoseTargetsSeededAtWindowEntry = (bPrevSeeded && bBlendSeeded) ? 1 : 0;
+							}
+
 							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimV0] WORK_DIAG bone=%s t=%.3f dW=%.6f dot=%.4f sim=%d"), 
 								*BoneName.ToString(), CurrentSampleTimeSec, WorkIncrement, TorqueDotVel, bIsSimulating ? 1 : 0);
 						}

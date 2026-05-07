@@ -1168,6 +1168,17 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double ThighNegativeWorkAccumulated = 0.0;
 
+	// Snapshot at first entry into the 0.05s-0.30s diagnostic window (thigh_l).
+	// Required by AC-2 of S2-IMPL-V0-THIGH-PHYSICSCONTROL-MITIGATION-DIAGNOSTICS-01.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	float ThighAngularStrengthAtWindowEntry = -1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	float ThighAngularDampingAtWindowEntry = -1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 PoseTargetsSeededAtWindowEntry = -1; // -1=not yet sampled, 0=not seeded, 1=seeded
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double PerturbationMeasuredDeltaVCmPerSecond = 0.0;
 
