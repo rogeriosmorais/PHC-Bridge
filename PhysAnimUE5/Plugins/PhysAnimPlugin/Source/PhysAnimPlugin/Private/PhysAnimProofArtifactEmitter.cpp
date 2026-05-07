@@ -218,6 +218,8 @@ namespace PhysAnimProofArtifactEmitter
 			return TEXT("ActivationContinuousSimulationLost");
 		case EPhysAnimTerminalReason::ActivationPhysicsNotStarted:
 			return TEXT("ActivationPhysicsNotStarted");
+		case EPhysAnimTerminalReason::ActivationKineticGateActive:
+			return TEXT("ActivationKineticGateActive");
 		case EPhysAnimTerminalReason::ActivationSupportFailure:
 			return TEXT("ActivationSupportFailure");
 		case EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion:

@@ -3,7 +3,7 @@
 
 namespace
 {
-	FPhysAnimFailureCandidate MakeCandidate(EPhysAnimTerminalReason Reason, int64 SubstepTimestamp)
+	FPhysAnimFailureCandidate MakeBugFixCandidate(EPhysAnimTerminalReason Reason, int64 SubstepTimestamp)
 	{
 		FPhysAnimFailureCandidate Candidate;
 		Candidate.TerminalReason = Reason;
@@ -21,8 +21,8 @@ namespace
 		{
 			// BUGFIX-01: Kinetic gate should win over generic simulation loss.
 			TArray<FPhysAnimFailureCandidate> Candidates;
-			Candidates.Add(MakeCandidate(EPhysAnimTerminalReason::ActivationKineticGateActive, 100));
-			Candidates.Add(MakeCandidate(EPhysAnimTerminalReason::ActivationContinuousSimulationLost, 100));
+			Candidates.Add(MakeBugFixCandidate(EPhysAnimTerminalReason::ActivationKineticGateActive, 100));
+			Candidates.Add(MakeBugFixCandidate(EPhysAnimTerminalReason::ActivationContinuousSimulationLost, 100));
 
 			const FPhysAnimFailureArbitrationResult Result = PhysAnimFailureArbitration::ArbitrateFailure(Candidates);
 
@@ -36,8 +36,8 @@ namespace
 		{
 			// BUGFIX-02: Physics not started should be a high-priority failure.
 			TArray<FPhysAnimFailureCandidate> Candidates;
-			Candidates.Add(MakeCandidate(EPhysAnimTerminalReason::ActivationPhysicsNotStarted, 200));
-			Candidates.Add(MakeCandidate(EPhysAnimTerminalReason::ActivationContinuousSimulationLost, 200));
+			Candidates.Add(MakeBugFixCandidate(EPhysAnimTerminalReason::ActivationPhysicsNotStarted, 200));
+			Candidates.Add(MakeBugFixCandidate(EPhysAnimTerminalReason::ActivationContinuousSimulationLost, 200));
 
 			const FPhysAnimFailureArbitrationResult Result = PhysAnimFailureArbitration::ArbitrateFailure(Candidates);
 
