@@ -924,7 +924,17 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 
 void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTimeSeconds)
 {
-	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		const USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+		const FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+		const bool bPelvisSim = PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : false;
+		const bool bPelvisAwake = PelvisBody ? PelvisBody->IsInstanceAwake() : false;
+		UE_LOG(LogTemp, Warning, TEXT("[PhysAnimV0] METRICS_TICK state=%s t=%.3f PelvisSim=%d PelvisAwake=%d"), GetRuntimeStateName(RuntimeState), ActivatedStandingStabilityMetrics.ActivationDurationSec, bPelvisSim ? 1 : 0, bPelvisAwake ? 1 : 0);
+	}
+	if (!bV0PlantThighWorkDiagnosticEnabled &&
+		!IsBalanceActiveState(RuntimeState) &&
+		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_Settle)
 	{
 		return;
 	}
@@ -957,7 +967,6 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	ActivatedStandingStabilityMetrics.bHasSamples = true;
 	ActivatedStandingStabilityMetrics.RuntimeState = RuntimeState;
 	ActivatedStandingStabilityMetrics.TerminalReason = static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason);
-	ActivatedStandingStabilityMetrics.ActivationDurationSec += FMath::Max(0.0f, DeltaTimeSeconds);
 	ActivatedStandingStabilityMetrics.SampleCount++;
 
 	const double CurrentRootWorldPositionDriftCm = FVector::Dist(CurrentRootLocationCm, ActivatedStandingStabilityBaselineRootLocationCm);
@@ -976,6 +985,7 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	int32 DirectSimulatingBodyCount = 0;
 	int32 ExcludedRequiredBodySimulatingCount = 0;
 	bool bAnyNonzeroBodyVelocity = false;
+
 	const FName CriticalBodyNames[] =
 	{
 		PhysAnimBridge::GetRootBoneName(),
@@ -992,17 +1002,6 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 		TEXT("ball_l"),
 		TEXT("ball_r")
 	};
-	const auto FindNamedBodyBit = [](const FName& BoneName, const FName* BodyNames, int32 NumBodyNames) -> int32
-	{
-		for (int32 Index = 0; Index < NumBodyNames; ++Index)
-		{
-			if (BoneName == BodyNames[Index])
-			{
-				return 1 << Index;
-			}
-		}
-		return 0;
-	};
 	const auto IsNamedBody = [](const FName& BoneName, const FName* BodyNames, int32 NumBodyNames) -> bool
 	{
 		for (int32 Index = 0; Index < NumBodyNames; ++Index)
@@ -1017,26 +1016,17 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 
 	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 	{
-		if (const FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
+		if (FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
 		{
-			const bool bValidBodyInstance = BodyInstance->IsValidBodyInstance();
+			const bool bSimulating = BodyInstance->IsInstanceSimulatingPhysics();
 			++DirectBodySampleCount;
-			if (bValidBodyInstance)
-			{
-				ActivatedStandingStabilityMetrics.CriticalBodyValidMask |=
-					FindNamedBodyBit(BoneName, CriticalBodyNames, UE_ARRAY_COUNT(CriticalBodyNames));
-				ActivatedStandingStabilityMetrics.SupportBodyValidMask |=
-					FindNamedBodyBit(BoneName, SupportBodyNames, UE_ARRAY_COUNT(SupportBodyNames));
-			}
-
-			const bool bSimulating = bValidBodyInstance && BodyInstance->IsInstanceSimulatingPhysics();
+			
 			if (bSimulating)
 			{
 				++DirectSimulatingBodyCount;
-				ActivatedStandingStabilityMetrics.CriticalBodySimulatingMask |=
-					FindNamedBodyBit(BoneName, CriticalBodyNames, UE_ARRAY_COUNT(CriticalBodyNames));
-				ActivatedStandingStabilityMetrics.SupportBodySimulatingMask |=
-					FindNamedBodyBit(BoneName, SupportBodyNames, UE_ARRAY_COUNT(SupportBodyNames));
+			}
+			else
+			{
 				if (!IsNamedBody(BoneName, CriticalBodyNames, UE_ARRAY_COUNT(CriticalBodyNames)) &&
 					!IsNamedBody(BoneName, SupportBodyNames, UE_ARRAY_COUNT(SupportBodyNames)))
 				{
@@ -1046,6 +1036,75 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 
 			const double LinearSpeedCmPerSecond = static_cast<double>(BodyInstance->GetUnrealWorldVelocity().Size());
 			const double AngularSpeedDegPerSecond = static_cast<double>(FMath::RadiansToDegrees(BodyInstance->GetUnrealWorldAngularVelocityInRadians().Size()));
+
+			// Work calculation for thighs during critical window (0.05s - 0.30s)
+			if (CurrentSampleTimeSec >= 0.05 && CurrentSampleTimeSec <= 0.30)
+			{
+				if (BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r"))
+				{
+					if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
+					{
+						const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+						FPhysicsControlTarget ControlTarget;
+						FPhysicsControlData ControlData;
+						FPhysicsControlMultiplier ControlMultiplier;
+						
+						if (PhysicsControl->GetControlTarget(ControlName, ControlTarget) &&
+							PhysicsControl->GetControlData(ControlName, ControlData) &&
+							PhysicsControl->GetControlMultiplier(ControlName, ControlMultiplier))
+						{
+							const bool bIsSimulating = bSimulating; // Capture for logging
+							const FVector AngularVelocity = BodyInstance->GetUnrealWorldAngularVelocityInRadians();
+							const FQuat CurrentRotation = BodyInstance->GetUnrealWorldTransform().GetRotation();
+							const FQuat TargetRotation = FQuat(ControlTarget.TargetOrientation);
+							
+							const FQuat ErrorQuat = TargetRotation * CurrentRotation.Inverse();
+							const FVector ErrorAxis = ErrorQuat.GetRotationAxis();
+							const float ErrorAngle = ErrorQuat.GetAngle();
+
+							const FVector Torque = (ControlData.AngularStrength * ControlMultiplier.AngularStrengthMultiplier * ErrorAxis * ErrorAngle) -
+								(ControlData.AngularDampingRatio * ControlMultiplier.AngularDampingRatioMultiplier * AngularVelocity);
+
+							const float TorqueDotVel = FVector::DotProduct(Torque, AngularVelocity);
+							const float WorkIncrement = TorqueDotVel * DeltaTimeSeconds;
+							
+							if (TorqueDotVel > 0.0f)
+							{
+								ActivatedStandingStabilityMetrics.ThighPositiveWorkAccumulated += static_cast<double>(WorkIncrement);
+							}
+							else
+							{
+								ActivatedStandingStabilityMetrics.ThighNegativeWorkAccumulated += static_cast<double>(FMath::Abs(WorkIncrement));
+							}
+
+							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimV0] WORK_DIAG bone=%s t=%.3f dW=%.6f dot=%.4f sim=%d"), 
+								*BoneName.ToString(), CurrentSampleTimeSec, WorkIncrement, TorqueDotVel, bIsSimulating ? 1 : 0);
+						}
+						else
+						{
+							UE_LOG(LogTemp, Warning, TEXT("[PhysAnimV0] DEBUG_WORK Missing data for %s (PC=%d)"), *BoneName.ToString(), PhysicsControl != nullptr);
+						}
+					}
+				}
+			}
+
+			// Velocity snapshots at specific timestamps
+			const auto UpdateSnapshot = [&](double TargetT, double& MetricField)
+			{
+				if (FMath::Abs(CurrentSampleTimeSec - TargetT) < (DeltaTimeSeconds * 0.51))
+				{
+					MetricField = FMath::Max(MetricField, AngularSpeedDegPerSecond);
+				}
+			};
+
+			UpdateSnapshot(0.05, ActivatedStandingStabilityMetrics.MaxAngVel005s);
+			UpdateSnapshot(0.10, ActivatedStandingStabilityMetrics.MaxAngVel010s);
+			UpdateSnapshot(0.15, ActivatedStandingStabilityMetrics.MaxAngVel015s);
+			UpdateSnapshot(0.20, ActivatedStandingStabilityMetrics.MaxAngVel020s);
+			UpdateSnapshot(0.30, ActivatedStandingStabilityMetrics.MaxAngVel030s);
+			UpdateSnapshot(0.60, ActivatedStandingStabilityMetrics.MaxAngVel060s);
+			UpdateSnapshot(1.00, ActivatedStandingStabilityMetrics.MaxAngVel100s);
+
 			if (BoneName == TEXT("spine_01"))
 			{
 				ActivatedStandingStabilityMetrics.Spine01MaxLinearSpeedCmPerSecond = FMath::Max(
@@ -1064,6 +1123,7 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 					ActivatedStandingStabilityMetrics.Spine03MaxAngularSpeedDegPerSecond,
 					AngularSpeedDegPerSecond);
 			}
+
 			if (ActivatedStandingStabilityMetrics.FirstMajorSpineSpikeTimeSec < 0.0 &&
 				(BoneName == TEXT("spine_01") || BoneName == TEXT("spine_03")) &&
 				(LinearSpeedCmPerSecond >= 1200.0 || AngularSpeedDegPerSecond >= 3600.0))
@@ -1076,24 +1136,17 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 				UE_LOG(
 					LogPhysAnimBridge,
 					Warning,
-					TEXT("[PhysAnimV0] FIRST_MAJOR_SPINE_SPIKE bone=%s activationT=%.3f runtimeState=%s lin=%.2f angDeg=%.2f sim=%d awake=%d collision=%d supportHull=%.2f activeSides=%.0f xfLoc=(%.2f,%.2f,%.2f) xfRot=(%.2f,%.2f,%.2f)"),
+					TEXT("[PhysAnimV0] FIRST_MAJOR_SPINE_SPIKE bone=%s activationT=%.3f runtimeState=%s lin=%.2f angDeg=%.2f thighWorkP=%.4f sim=%d awake=%d"),
 					*BoneName.ToString(),
 					CurrentSampleTimeSec,
 					GetRuntimeStateName(RuntimeState),
 					LinearSpeedCmPerSecond,
 					AngularSpeedDegPerSecond,
+					ActivatedStandingStabilityMetrics.ThighPositiveWorkAccumulated,
 					bSimulating ? 1 : 0,
-					BodyInstance->IsInstanceAwake() ? 1 : 0,
-					static_cast<int32>(BodyInstance->GetCollisionEnabled()),
-					CurrentSupportHullAreaCm2,
-					CurrentActiveSupportSideCount,
-					BodyLocation.X,
-					BodyLocation.Y,
-					BodyLocation.Z,
-					BodyRotation.Pitch,
-					BodyRotation.Yaw,
-					BodyRotation.Roll);
+					BodyInstance->IsInstanceAwake() ? 1 : 0);
 			}
+
 			if (LinearSpeedCmPerSecond > ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond)
 			{
 				ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond = LinearSpeedCmPerSecond;
@@ -1107,6 +1160,7 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 			bAnyNonzeroBodyVelocity = bAnyNonzeroBodyVelocity || LinearSpeedCmPerSecond > 0.1 || AngularSpeedDegPerSecond > 0.1;
 		}
 	}
+
 	ActivatedStandingStabilityMetrics.BodyTelemetrySampleCount += DirectBodySampleCount;
 	ActivatedStandingStabilityMetrics.SimulatingBodyCountMax = FMath::Max(
 		ActivatedStandingStabilityMetrics.SimulatingBodyCountMax,
@@ -1118,6 +1172,8 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	{
 		++ActivatedStandingStabilityMetrics.BodyVelocityNonZeroSampleCount;
 	}
+
+	ActivatedStandingStabilityMetrics.ActivationDurationSec = CurrentSampleTimeSec;
 
 	ActivatedStandingStabilitySupportHullAreaSumCm2 += CurrentSupportHullAreaCm2;
 	ActivatedStandingStabilityActiveSupportSideCountSum += CurrentActiveSupportSideCount;

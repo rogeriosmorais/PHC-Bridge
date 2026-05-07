@@ -92,6 +92,11 @@ namespace PhysAnimComponentInternal
 			return ((const FPhysAnimPhysicsControlAccessor*)ControlComp)->FindBodyModifierRecord(Name);
 		}
 
+		static const FPhysicsControlRecord* GetControlRecord(const UPhysicsControlComponent* ControlComp, const FName Name)
+		{
+			return ((const FPhysAnimPhysicsControlAccessor*)ControlComp)->FindControlRecord(Name);
+		}
+
 		static FPhysicsBodyModifierRecord* GetMutableModifierRecord(UPhysicsControlComponent* ControlComp, const FName Name)
 		{
 			return ((FPhysAnimPhysicsControlAccessor*)ControlComp)->FindBodyModifierRecord(Name);

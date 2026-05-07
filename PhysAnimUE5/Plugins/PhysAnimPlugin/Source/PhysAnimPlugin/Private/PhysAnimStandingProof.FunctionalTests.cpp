@@ -223,6 +223,19 @@ bool FStartStandingProofWaitCommand::Update()
 }
 
 /**
+ * Command to set the thigh restore variant CVar.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FSetThighRestoreVariantCommand, int32, Variant);
+bool FSetThighRestoreVariantCommand::Update()
+{
+	if (IConsoleVariable* CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("p.PhysAnim.V0PlantThighRestoreVariant")))
+	{
+		CVar->Set(Variant);
+	}
+	return true;
+}
+
+/**
  * Command to arm startup proof terminal enforcement directly.
  */
 DEFINE_LATENT_AUTOMATION_COMMAND(FArmStartupProofTerminalEnforcementCommand);
@@ -4540,6 +4553,42 @@ bool FPhysAnimActivatedStandingLocomotionGateProofTest::RunTest(const FString& P
 
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimThighRestoreDiagnosticTest, "PhysAnim.Diagnostics.ThighRestore", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimThighRestoreDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("Abrupt_0.01"));
+	OutTestCommands.Add(TEXT("8"));
+
+	OutBeautifiedNames.Add(TEXT("Abrupt_0.15"));
+	OutTestCommands.Add(TEXT("9"));
+
+	OutBeautifiedNames.Add(TEXT("Ramp_0.20_0.5s"));
+	OutTestCommands.Add(TEXT("10"));
+
+	OutBeautifiedNames.Add(TEXT("Ramp_0.20_1.0s"));
+	OutTestCommands.Add(TEXT("11"));
+}
+
+bool FPhysAnimThighRestoreDiagnosticTest::RunTest(const FString& Parameters)
+{
+	const int32 Variant = FCString::Atoi(*Parameters);
+
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	
+	ADD_LATENT_AUTOMATION_COMMAND(FSetThighRestoreVariantCommand(Variant));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand());
+	
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
+	
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand(this));
+	
+	ADD_LATENT_AUTOMATION_COMMAND(FSetThighRestoreVariantCommand(0));
 
 	return true;
 }

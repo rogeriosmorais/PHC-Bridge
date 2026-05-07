@@ -31,6 +31,11 @@ namespace
 		0.3f,
 		TEXT("Diagnostic-only V0 duration for thigh restore ramp (Variant 2)."),
 		ECVF_Default);
+	TAutoConsoleVariable<float> CVarPhysAnimV0KineticGateThresholdDegPerSec(
+		TEXT("p.PhysAnim.V0KineticGateThresholdDegPerSec"),
+		3600.0f,
+		TEXT("Diagnostic-only V0 kinetic gate threshold (deg/sec) for holding thighs at zero strength when pelvis/spine spikes."),
+		ECVF_Default);
 
 	bool ShouldForceDiagnosticRawSimBody(FName BoneName, int32 DiagnosticGroup)
 	{
@@ -1606,7 +1611,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		FMath::Max(0.01f, CVarPhysAnimV0PlantThighRestoreRampDurationSeconds.GetValueOnGameThread());
 	const bool bV0PlantEarlyControlZeroWindowActive =
 		V0PlantEarlyControlZeroGroup > 0 &&
-		IsBalanceActiveState(RuntimeState) &&
+		(IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState)) &&
 		GetActivatedStandingStabilityMetrics().ActivationDurationSec <= V0PlantEarlyControlZeroDurationSeconds;
 
 	float ThighRestoreAlpha = 1.0f;
@@ -1637,6 +1642,18 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			break;
 		case 7: // abrupt(0.20)
 			ThighRestoreAlpha = 0.20f;
+			break;
+		case 8: // abrupt(0.01)
+			ThighRestoreAlpha = 0.01f;
+			break;
+		case 9: // abrupt(0.15)
+			ThighRestoreAlpha = 0.15f;
+			break;
+		case 10: // ramp(0.0-0.20, 0.5s)
+			ThighRestoreAlpha = FMath::Min(0.20f, 0.20f * (TimeSinceZero / 0.5f));
+			break;
+		case 11: // ramp(0.0-0.20, 1.0s)
+			ThighRestoreAlpha = FMath::Min(0.20f, 0.20f * (TimeSinceZero / 1.0f));
 			break;
 		default:
 			ThighRestoreAlpha = 1.0f;
@@ -1877,6 +1894,39 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		else if (V0PlantThighRestoreVariant > 0 && (BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
 			ControlMultiplier.AngularStrengthMultiplier *= ThighRestoreAlpha;
+		}
+
+		// Kinetic Gating (V0 Diagnostic)
+		if ((IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState)) && (BoneName == "thigh_l" || BoneName == "thigh_r"))
+		{
+			if (const USkeletalMeshComponent* const Mesh = MeshComponent.Get())
+			{
+				const FName PelvisName = PhysAnimBridge::GetRootBoneName();
+				const FBodyInstance* PelvisBody = Mesh->GetBodyInstance(PelvisName);
+				const FBodyInstance* Spine01Body = Mesh->GetBodyInstance(TEXT("spine_01"));
+				const FBodyInstance* Spine02Body = Mesh->GetBodyInstance(TEXT("spine_02"));
+				const FBodyInstance* Spine03Body = Mesh->GetBodyInstance(TEXT("spine_03"));
+				
+				const auto GetAngVelDeg = [](const FBodyInstance* BI) -> double
+				{
+					return BI ? FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians().Size()) : 0.0;
+				};
+
+				const double PelvisAngVel = GetAngVelDeg(PelvisBody);
+				const double Spine01AngVel = GetAngVelDeg(Spine01Body);
+				const double Spine02AngVel = GetAngVelDeg(Spine02Body);
+				const double Spine03AngVel = GetAngVelDeg(Spine03Body);
+
+				const float GateThreshold = CVarPhysAnimV0KineticGateThresholdDegPerSec.GetValueOnGameThread();
+
+				// Diagnostic threshold: hold thighs at zero if any spine/pelvis body spikes
+				if (PelvisAngVel > GateThreshold || Spine01AngVel > GateThreshold || Spine02AngVel > GateThreshold || Spine03AngVel > GateThreshold)
+				{
+					ControlMultiplier.AngularStrengthMultiplier = 0.0f;
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimV0] KINETIC_GATING_ACTIVE bone=%s P=%.1f S1=%.1f S2=%.1f S3=%.1f thresh=%.1f"), 
+						*BoneName.ToString(), PelvisAngVel, Spine01AngVel, Spine02AngVel, Spine03AngVel, GateThreshold);
+				}
+			}
 		}
 
 		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
@@ -2235,6 +2285,20 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
+		if (bIsRootBodyModifier && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+		{
+			if (BodyModifierMovementType != EPhysicsMovementType::Simulated)
+			{
+				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PELVIS_BODYMOD_SIM_ACTIVATION_FAIL bone=%s allowRootSim=%d handoffSettled=%d bringUpUnlocked=%d keepsKinematic=%d quarantined=%d"),
+					*BoneName.ToString(),
+					bAllowRootBodyModifierSimulation ? 1 : 0,
+					bSimulationHandoffSettled ? 1 : 0,
+					bBringUpGroupUnlocked ? 1 : 0,
+					bTransitionKeepsBoneKinematic ? 1 : 0,
+					BalanceReadyTransition.IsPhase2RootAuthorityQuarantined() ? 1 : 0);
+			}
+		}
+
 		// Phase 2 Root Promotion Audit (One-Shot per Frame)
 		const bool bIsRootTraceTargetState = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
 		if (bIsRootBodyModifier && bIsRootTraceTargetState)
@@ -2473,6 +2537,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				1.0f,
 				ECollisionEnabled::QueryAndPhysics,
 				false);
+
+			if (FBodyInstance* const BodyInstance = MeshComponentPtr ? MeshComponentPtr->GetBodyInstance(BoneName) : nullptr)
+			{
+				BodyInstance->WakeInstance();
+			}
 		}
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
