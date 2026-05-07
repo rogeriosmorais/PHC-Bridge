@@ -1200,6 +1200,24 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double MaxAngVel100s = 0.0;
 
+	// Kinetic gate release snapshot (AC-6 corrected measurement).
+	// Captures pelvis/spine angular velocity on the exact frame the kinetic gate first releases.
+	// Sign of pelvisAngVelDeltaAtGateRelease answers: does thigh restore ADD or REMOVE energy?
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double PelvisAngVelAtGateRelease = -1.0; // deg/s at gate release frame (-1 = gate never released)
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double MaxSpineAngVelAtGateRelease = -1.0; // max(spine_01..03) deg/s at release frame
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	float ThighStrengthAtGateRelease = -1.f; // effective thigh angular strength being restored
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ActivationTimeAtGateRelease = -1.0; // activation timer when gate released
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 KineticGateReleaseCount = 0; // how many times gate released in this run
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 SampleCount = 0;
 };

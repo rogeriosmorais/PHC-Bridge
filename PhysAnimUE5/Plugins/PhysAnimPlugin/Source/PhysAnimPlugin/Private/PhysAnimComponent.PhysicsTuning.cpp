@@ -1897,6 +1897,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 
 		// Kinetic Gating (V0 Diagnostic)
+		// Holds thigh angular strength at zero while pelvis/spine angular velocity exceeds threshold.
+		// Also detects the gate release frame to snapshot pelvis/spine ω for AC-6 energy answer.
 		if ((IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState)) && (BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
 			if (const USkeletalMeshComponent* const Mesh = MeshComponent.Get())
@@ -1918,13 +1920,54 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				const double Spine03AngVel = GetAngVelDeg(Spine03Body);
 
 				const float GateThreshold = CVarPhysAnimV0KineticGateThresholdDegPerSec.GetValueOnGameThread();
+				const bool bGateActiveNow =
+					PelvisAngVel > GateThreshold || Spine01AngVel > GateThreshold ||
+					Spine02AngVel > GateThreshold || Spine03AngVel > GateThreshold;
 
-				// Diagnostic threshold: hold thighs at zero if any spine/pelvis body spikes
-				if (PelvisAngVel > GateThreshold || Spine01AngVel > GateThreshold || Spine02AngVel > GateThreshold || Spine03AngVel > GateThreshold)
+				// Per-component gate state tracking (release edge detection)
+				static TMap<UPhysAnimComponent*, bool> KineticGateActiveLastFrame;
+				const bool bGateWasActive = KineticGateActiveLastFrame.FindOrAdd(this, false);
+
+				// Only update the "last frame" state from thigh_l to avoid double-write per tick
+				if (BoneName == TEXT("thigh_l"))
+				{
+					KineticGateActiveLastFrame.FindOrAdd(this) = bGateActiveNow;
+				}
+
+				if (bGateActiveNow)
 				{
 					ControlMultiplier.AngularStrengthMultiplier = 0.0f;
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimV0] KINETIC_GATING_ACTIVE bone=%s P=%.1f S1=%.1f S2=%.1f S3=%.1f thresh=%.1f"), 
-						*BoneName.ToString(), PelvisAngVel, Spine01AngVel, Spine02AngVel, Spine03AngVel, GateThreshold);
+					UE_LOG(LogPhysAnimBridge, Warning,
+						TEXT("[PhysAnimV0] KINETIC_GATE_HOLD bone=%s P=%.1f S1=%.1f S2=%.1f S3=%.1f thresh=%.1f activationT=%.3f"),
+						*BoneName.ToString(), PelvisAngVel, Spine01AngVel, Spine02AngVel, Spine03AngVel, GateThreshold,
+						GetActivatedStandingStabilityMetrics().ActivationDurationSec);
+				}
+				else if (bGateWasActive && !bGateActiveNow && BoneName == TEXT("thigh_l"))
+				{
+					// Gate just released this frame — snapshot pelvis/spine ω and restore strength.
+					// This is the definitive AC-6 measurement: does the restored thigh strength
+					// add or remove energy from the pelvis/spine chain?
+					const double MaxSpineAngVel = FMath::Max3(Spine01AngVel, Spine02AngVel, Spine03AngVel);
+					const float EffectiveRestoreStrength = ControlMultiplier.AngularStrengthMultiplier;
+					const double ActivationT = GetActivatedStandingStabilityMetrics().ActivationDurationSec;
+
+					++ActivatedStandingStabilityMetrics.KineticGateReleaseCount;
+					if (ActivatedStandingStabilityMetrics.PelvisAngVelAtGateRelease < 0.0)
+					{
+						// First release only — subsequent releases tracked in log only
+						ActivatedStandingStabilityMetrics.PelvisAngVelAtGateRelease = PelvisAngVel;
+						ActivatedStandingStabilityMetrics.MaxSpineAngVelAtGateRelease = MaxSpineAngVel;
+						ActivatedStandingStabilityMetrics.ThighStrengthAtGateRelease = EffectiveRestoreStrength;
+						ActivatedStandingStabilityMetrics.ActivationTimeAtGateRelease = ActivationT;
+					}
+
+					UE_LOG(LogPhysAnimBridge, Warning,
+						TEXT("[PhysAnimV0] KINETIC_GATE_RELEASE pelvisAngVel=%.2f maxSpineAngVel=%.2f "
+						     "thighRestoreStrength=%.4f activationT=%.3f releaseN=%d variant=%d thresh=%.1f"),
+						PelvisAngVel, MaxSpineAngVel, EffectiveRestoreStrength, ActivationT,
+						ActivatedStandingStabilityMetrics.KineticGateReleaseCount,
+						CVarPhysAnimV0PlantThighRestoreVariant.GetValueOnGameThread(),
+						GateThreshold);
 				}
 			}
 		}

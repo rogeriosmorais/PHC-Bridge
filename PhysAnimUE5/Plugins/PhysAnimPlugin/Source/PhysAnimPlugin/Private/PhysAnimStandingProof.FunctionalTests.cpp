@@ -479,12 +479,15 @@ bool FLogThighRestoreVariantSummaryCommand::Update()
 
 		// Note: per-frame thigh angular strength/damping is captured in WORK_DIAG and
 		// THIGH_RESTORE_STARTED log lines. This summary captures aggregate evidence at window entry.
+		// KINETIC_GATE_RELEASE fields answer AC-6: does thigh restore add/remove energy from pelvis/spine?
 		UE_LOG(LogTemp, Warning,
 			TEXT("[PhysAnimV0] THIGH_RESTORE_VARIANT_SUMMARY variant=%d terminalReason=%d duration=%.3f "
 			     "firstSpineSpikeT=%.3f firstSpineSpikeBody=%s firstSupportFailT=%.3f "
 			     "maxAngVel005=%.1f maxAngVel010=%.1f maxAngVel015=%.1f maxAngVel020=%.1f "
 			     "maxAngVel030=%.1f maxAngVel060=%.1f maxAngVel100=%.1f "
 			     "thighAngStr=%.4f thighAngDamp=%.4f poseSeeded=%d "
+			     "gateReleaseCount=%d pelvisAngVelAtRelease=%.2f maxSpineAngVelAtRelease=%.2f "
+			     "thighStrAtRelease=%.4f activationTAtRelease=%.3f "
 			     "positiveWork=%.6f negativeWork=%.6f samples=%d [log]"),
 			Variant,
 			M.TerminalReason,
@@ -495,6 +498,8 @@ bool FLogThighRestoreVariantSummaryCommand::Update()
 			M.MaxAngVel005s, M.MaxAngVel010s, M.MaxAngVel015s, M.MaxAngVel020s,
 			M.MaxAngVel030s, M.MaxAngVel060s, M.MaxAngVel100s,
 			M.ThighAngularStrengthAtWindowEntry, M.ThighAngularDampingAtWindowEntry, M.PoseTargetsSeededAtWindowEntry,
+			M.KineticGateReleaseCount, M.PelvisAngVelAtGateRelease, M.MaxSpineAngVelAtGateRelease,
+			M.ThighStrengthAtGateRelease, M.ActivationTimeAtGateRelease,
 			M.ThighPositiveWorkAccumulated, M.ThighNegativeWorkAccumulated,
 			M.SampleCount);
 		break;
