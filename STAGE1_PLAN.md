@@ -6,13 +6,16 @@ This document is the Stage 1 index and control document.
 
 It defines the frozen document hierarchy, the active execution focus, and the rule for which document wins when two documents overlap.
 
+Live task state is not stored in this document or in Stage 1 mirror logs. Live task state is owned by mcp-graph.
+
 ## Stage 1 Document Hierarchy
 
 Authority order:
 
-1. Active contract documents explicitly listed in this file
-2. `STAGE1_PLAN.md`
-3. Active execution-planning documents explicitly listed in this file
+1. mcp-graph for live workflow state: task status, WIP, dependencies, blockers, acceptance criteria, and next action
+2. Active contract documents explicitly listed in this file
+3. `STAGE1_PLAN.md`
+4. Active execution-planning documents explicitly listed in this file
 
 **Historical reference (Non-authoritative)**:
 - `plans/stage1/90-archive/40-design-legacy/*`
@@ -135,8 +138,7 @@ Only these categories may change during the current stabilization loop:
 
 ### Active execution-planning documents
 
-- `plans/stage1/20-execution/execution-log.md`
-- `plans/stage1/20-execution/assumption-ledger.md`
+- `plans/stage1/20-execution/assumption-ledger.md` (risk notes only; not task state)
 - `plans/stage1/20-execution/balance_first_refactor_plan.md`
 - `plans/stage1/20-execution/single-character-implementation-package.md`
 - `plans/stage1/20-execution/stabilization-and-tuning-package.md`
@@ -144,6 +146,18 @@ Only these categories may change during the current stabilization loop:
 - `plans/stage1/20-execution/balance_first_test_matrix.md`
 - `plans/stage1/20-execution/stage1-test-strategy.md`
 - `plans/stage1/20-execution/first-slice-definition.md`
+- `plans/stage1/20-execution/weak-agent-balanceactive-protocol.md`
+
+### Legacy mirror workflow documents
+
+These documents may be useful for historical reconstruction, but they are not live task authority:
+
+- `plans/stage1/20-execution/execution-log.md`
+- `plans/stage1/20-execution/task-packets/*`
+- `plans/stage1/20-execution/checkpoints/*`
+- `plans/stage1/40-tasks/*`
+
+Do not use them to decide current task status, next action, blockers, dependencies, or acceptance criteria. Use mcp-graph.
 
 ### Archived design documents (Historical)
 

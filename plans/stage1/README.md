@@ -10,8 +10,9 @@ The planning phase is complete. Gate G1 has passed. Phase 1 implementation and s
 
 **Living or actively rewritten documents are:**
 
-- `20-execution/execution-log.md` — active task state
-- `20-execution/assumption-ledger.md` — risk tracking
+- mcp-graph — live task state, status, WIP, dependencies, blockers, acceptance criteria, and next action
+- `20-execution/assumption-ledger.md` — high-risk assumption/risk notes only, not task state
+- `20-execution/weak-agent-balanceactive-protocol.md` — weak-agent route and branch rules for first truthful `BalanceActive_Standing >= 3.0s`
 - `30-evidence/g2-evaluation.md` — G2 gate evidence
 - the balance-first rewrite docs under `10-specs` that are now named in `STAGE1_PLAN.md`
 - the balance-first execution-planning docs under `20-execution` that are now named in `STAGE1_PLAN.md`
@@ -34,6 +35,8 @@ If a frozen document becomes wrong because of a code change, update it in the sa
 ## Source-of-Truth Rules
 
 - [`STAGE1_PLAN.md`](/F:/NewEngine/STAGE1_PLAN.md) is the Stage 1 index and control document.
+- mcp-graph is the only live workflow/task-state authority.
 - Active files in `10-specs` define frozen contracts.
-- Active files in `20-execution` define execution state and implementation order; they do not override contracts.
+- Active files in `20-execution` define durable execution guidance, risk notes, protocols, and strategy; they do not define live task state and they do not override contracts.
 - Files in `60-user` remain operator-facing and easy to follow.
+- Legacy mirror workflow docs such as `execution-log.md`, `task-packets/*`, checkpoints, and `40-tasks/*` are historical/reference only unless a current mcp-graph task explicitly asks for them as evidence.

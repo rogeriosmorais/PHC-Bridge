@@ -4,7 +4,9 @@
 
 This protocol keeps Stage 1 automated, small, and implementation-focused.
 
-It intentionally avoids a custom lifecycle engine. The default unit of work is one task packet, one mechanical validation pass, and one commit.
+The live workflow engine is now mcp-graph. The default unit of work is one mcp-graph task, one bounded validation pass, and one handoff.
+
+Legacy task packets and `execution-log.md` are historical reference material. They are not live task authority unless a current mcp-graph node explicitly names them as evidence.
 
 ## Core Principle
 
@@ -14,74 +16,78 @@ Do not spend tokens maintaining review packets, state machines, role ceremonies,
 
 ## Source Of Truth
 
-The active state is:
+The active state is mcp-graph.
 
-`plans/stage1/20-execution/execution-log.md`
+mcp-graph owns:
 
-The active execution authority is the current task packet in:
+- task status
+- WIP
+- next action
+- dependencies
+- blockers
+- acceptance criteria
+- estimates
+- completion rationale
+- evidence/test file references
 
-`plans/stage1/20-execution/task-packets/`
+Docs own durable context:
 
-A task packet controls:
-- allowed files
-- forbidden files
-- required work
-- required tests/build
-- stop conditions
-- definition of done
+- contracts in `plans/stage1/10-specs`
+- evidence summaries in `plans/stage1/30-evidence` and `docs/evidence`
+- risk notes in `assumption-ledger.md`
+- weak-agent route and branch rules in `weak-agent-balanceactive-protocol.md`
+- test and stabilization strategy documents
+
+Legacy mirror workflow files are not live state:
+
+- `plans/stage1/20-execution/execution-log.md`
+- `plans/stage1/20-execution/task-packets/*`
+- `plans/stage1/20-execution/checkpoints/*`
+- `plans/stage1/40-tasks/*`
+
+If any legacy mirror doc conflicts with mcp-graph, mcp-graph wins.
 
 ## Workflow Invariants
 
-The execution log is a machine-checked contract.
-
-Before any implementation task starts, run:
-
-`.\\scripts\\check_workflow_state.ps1 -Mode execute`
-
-After any workflow-state update, run:
-
-`.\\scripts\\check_workflow_state.ps1 -Mode status -Strict`
-
 Required invariants:
 
-- if `Current Task ID = none`, `Current Task Packet = none`, status is idle, and `Next Action` must not say `go`
-- if `Current Task ID != none`, the packet exists, status is `runnable`, and `Next Action` references that exact task
-- a task already listed in `Completed Task Commits` cannot be the current task
-- checkpoint packet references must point to existing files
-- blocked/deferred text must not contradict completed checkpoint state
+- there is at most one implementation task in progress per agent
+- every implementation edit has a corresponding mcp-graph node before code changes start
+- the node has acceptance criteria, stop conditions, and a validation route
+- task completion records exact commands, evidence paths, and rationale in mcp-graph
+- docs may supplement but must not override graph task state
 
-If invariant validation fails, stop. Do not infer intent from stale prose.
+If graph state and docs disagree, stop and update/demote the stale doc instead of inferring intent from prose.
 
 ## Default Command
 
 `go` means:
 
-`execute the current task packet only`
+`pull and execute the current mcp-graph task only`
 
 Do not interpret `go` as permission for broad work, workflow rewrites, architecture review, or multi-system debugging.
 
-`go` is valid only after `.\\scripts\\check_workflow_state.ps1 -Mode execute` passes.
+`go` is valid only after the mcp-graph route identifies the next executable node.
 
 ## Implementation Loop
 
 For each task:
 
 1. Read `AGENTS.md`.
-2. Run `.\\scripts\\check_workflow_state.ps1 -Mode execute`.
-3. Read `execution-log.md`.
-4. Read the current task packet.
-5. Record base SHA:
+2. Pull the next mcp-graph task with the granular workflow required by `AGENTS.md`.
+3. Read compact graph context and relevant RAG/context.
+4. Read only the docs named by the graph task or its authoritative contracts.
+5. Move the graph task to `in_progress`.
+6. Record base SHA:
    - `git rev-parse HEAD`
-6. Edit only allowed files.
-7. Run required build/test commands from the task packet.
-8. Run scope check:
-   - `.\\scripts\\check_task_scope.ps1 -TaskPacket <task-packet> -WorkingTree -AllowExecutionLog -AllowEvidence`
-9. If build/tests/scope pass:
-   - create one task commit
-   - advance `execution-log.md` using `.\\scripts\\complete_task.ps1` whenever possible
-   - run `.\\scripts\\check_workflow_state.ps1 -Mode status -Strict`
-   - stop or continue only if the user/checkpoint explicitly asked for a batch
-10. If build/tests/scope fail:
+7. Edit only files needed for the current graph task.
+8. Run required build/test commands from the graph task AC or authoritative test strategy.
+9. If smoke tests run, read logs with `python .\\scripts\\read_logs.py`.
+10. Validate AC through mcp-graph.
+11. If build/tests/AC pass:
+   - update graph status to `done` with rationale and test/evidence paths
+   - stop or pull the next task only if explicitly requested
+12. If build/tests/AC fail:
    - do not widen scope
    - preserve useful work only if allowed
    - report the failure
@@ -89,7 +95,7 @@ For each task:
 
 ## Commit Rule
 
-Each task packet produces at most one successful implementation commit.
+Each mcp-graph implementation task should produce at most one successful implementation commit when commits are requested.
 
 Commit message format:
 
@@ -104,48 +110,35 @@ A successful task commit must not contain:
 
 ## Completion Transition Rule
 
-Do not manually duplicate task state.
+Do not manually duplicate live task state in docs.
 
-Use `scripts/complete_task.ps1` to move from one task to the next whenever possible. The completion transition must update:
+Use mcp-graph status updates for task transitions:
 
-- `Current Task ID`
-- `Current Task Packet`
-- `Status`
-- `Completed Task Commits`
-- `Latest Technical Head`
-- last build/test/scope lines
-- `Next Action`
-- `Next Runnable Tasks`
+- `in_progress` before work starts
+- `blocked` when branch/stop conditions fire
+- `done` only after AC validation and required evidence
 
-If manual editing is unavoidable, strict workflow validation is mandatory before handoff.
+If a doc needs updating, it must be because the graph task asked for a durable contract, protocol, risk, or evidence update. Do not recreate `execution-log.md` style state.
 
 ## Checkpoints
 
 Checkpoints are optional batching documents.
 
-They are not mandatory review gates.
+They are legacy reference material unless a current mcp-graph task explicitly reactivates one.
 
-When executing a checkpoint:
-- run included task packets in order
-- commit after each task passes
-- stop on the first failure
-- do not combine task commits
-- do not generate review packets by default
-- do not block later technical tasks on report-format or evidence-range issues
-
-At checkpoint end, run the checkpoint's final build/test command if one exists and record a short summary.
+Do not execute a checkpoint as a live plan without first importing or mapping it to mcp-graph nodes.
 
 ## Mechanical Gates
 
 The only mandatory gates are:
 
-1. workflow execute check passes
-2. required build/test command passes
-3. scope check passes
-4. forbidden files untouched
-5. commit created
-6. execution log updated
-7. strict workflow status check passes
+1. graph node exists
+2. graph status is set to `in_progress` before work
+3. required build/test command passes
+4. AC validation passes
+5. forbidden architecture/workflow shortcuts are absent
+6. smoke logs are read when smoke tests run
+7. graph status and rationale are updated
 
 Durable build/test/scope logs are useful, but missing review reports are not product-code blockers.
 
@@ -154,7 +147,7 @@ Durable build/test/scope logs are useful, but missing review reports are not pro
 Reviews are optional unless the user explicitly requests one.
 
 A review must be small:
-- read the task packet
+- read the graph task and AC
 - inspect changed files
 - inspect build/test/scope output
 - return `accept`, `fix required`, or `reject`
@@ -181,6 +174,7 @@ Workflow files must not be edited inside implementation tasks.
 Workflow files include:
 - `AGENTS.md`
 - `plans/stage1/20-execution/agent_workflow_protocol.md`
+- `plans/stage1/20-execution/weak-agent-balanceactive-protocol.md`
 - `plans/stage1/20-execution/task-packets/README.md`
 - `plans/stage1/20-execution/task-packets/IMPLEMENTER_PROMPT.md`
 - `plans/stage1/20-execution/task-packets/REVIEWER_PROMPT.md`
@@ -230,9 +224,9 @@ Do not continue stacking fixes in the same direction without this memo.
 ## Stop Conditions
 
 Stop immediately if:
-- workflow invariant validation fails
-- a required file is not allowed by the task packet
-- the task needs runtime data forbidden by the packet
+- graph workflow invariants fail
+- a required file is outside the graph task scope
+- the task needs runtime data forbidden by the graph task or active contract
 - a mapped test cannot be written from the matrix
 - a shortcut/stub/fake implementation is proposed
 - build/test failure requires widening scope
