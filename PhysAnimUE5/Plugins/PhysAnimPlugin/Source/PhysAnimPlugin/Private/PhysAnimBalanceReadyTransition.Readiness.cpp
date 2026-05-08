@@ -935,24 +935,25 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
 				Domain.RootLinearSpeed,
 				Settings.MaxRootLinearSpeedCmPerSecond * 2.0f,
-				5000.0f, // Bounded RootAngularSpeed (was 1440.0f)
+				Domain.RootAngularSpeed,
+				5000.0f, // Bounded root angular threshold
 				Owner->GetCurrentShellPlanarOffsetDeltaCm(),
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				CurrentMaxNonRootAngularSpeed,
-				8000.0f, // Bounded MaxBodyAngularSpeed (was 2000.0f)
+				8000.0f, // Bounded non-root angular threshold
 				Diagnostics.PeakRootAngularSpeed,
 				Diagnostics.PeakMaxNonRootBodyAngularSpeed,
 				Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond(),
-				500.0f, // Bounded ShellVelocityDelta (was 100.0f)
+				500.0f, // Bounded shell velocity threshold
 				Diagnostics.BaselineShellVel,
 				CurrentMaxNonRootAngularBone,
 				CurrentSpineFamilyAngularSpeed,
 				CurrentThighFamilyAngularSpeed,
 				CurrentFeetFamilyAngularSpeed,
 				CurrentNonRootFamilyAngularSpeed,
-				Diagnostics.PeakTotalThighBodyAngularSpeed,
-				Diagnostics.PeakTotalSpineBodyAngularSpeed,
-				Diagnostics.PeakTotalFeetBodyAngularSpeed))
+				Diagnostics.PeakMaxThighBodyAngularSpeed,
+				Diagnostics.PeakMaxSpineBodyAngularSpeed,
+				Diagnostics.PeakMaxFeetBodyAngularSpeed))
 		{
 			// Within grace budget - continue
 		}
