@@ -591,14 +591,14 @@ public:
 		float MaxAllowedShellOffsetCm,
 		float MaxAllowedShellVelocityCmPerSec);
 	static bool IsMaterialPhase3ShellCorrectionActive(
+		int32 KineticGateReleaseTickCount,
 		bool bTransitionOwnedShellLocked,
 		bool bLocomotionAuthorityIdle,
 		int32 Phase3TickCount,
 		float ShellPlanarOffsetCm,
 		float ShellPlanarVelocityCmPerSec,
 		float MaxAllowedShellOffsetCm,
-		float MaxAllowedShellVelocityCmPerSec,
-		int32 KineticGateReleaseTickCount = 0);
+		float MaxAllowedShellVelocityCmPerSec);
 	static bool IsPhase3EarlySettleAngularGraceActive(
 		int32 Phase3TickCount,
 		float RootLinearSpeed,
@@ -611,6 +611,7 @@ public:
 		const FVector& AppliedShellCorrectionVelocityCmPerSecond,
 		bool bTransitionOwnedShellLocked);
 	static bool IsPhase3EarlySettleInstabilityGraceActive(
+		int32 KineticGateReleaseTickCount,
 		int32 Phase3TickCount,
 		bool bTransitionOwnedShellLocked,
 		bool bLocomotionAuthorityIdle,
@@ -624,7 +625,7 @@ public:
 		float MaxAllowedShellVelocityCmPerSec,
 		float PrePhase3PeakBodyLinearSpeed = 0.0f,
 		float PrePhase3PeakBodyAngularSpeed = 0.0f,
-		float RootPlanarSpeedCmPerSecond = -1.0f,
+		float RootPlanarSpeedCmPerSecond = 0.0f,
 		float CurrentMaxNonRootAngularSpeed = 0.0f,
 		float PrePhase3PeakNonRootAngularSpeed = 0.0f,
 		FName CurrentMaxNonRootAngularBone = NAME_None,
@@ -634,8 +635,7 @@ public:
 		float CurrentNonRootFamilyAngularSpeed = 0.0f,
 		float PrePhase3PeakThighFamilyAngularSpeed = 0.0f,
 		float PrePhase3PeakSpineFamilyAngularSpeed = 0.0f,
-		float PrePhase3PeakFeetFamilyAngularSpeed = 0.0f,
-		int32 KineticGateReleaseTickCount = 0);
+		float PrePhase3PeakFeetFamilyAngularSpeed = 0.0f);
 
 	static bool IsRootStable(
 		const FPhase1AcceptedConvergenceSnapshot& Snapshot,

@@ -271,16 +271,24 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		Phase3GuardTickCount++;
 	}
 
-	const bool bKineticGateActiveNow = Owner->bKineticGateActiveLastFrame;
-	if (bKineticGateActiveNow)
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		Phase3KineticGateReleaseTickCount = 0;
+		const bool bKineticGateActiveNow = Owner->bKineticGateActiveLastFrame;
+		if (bKineticGateActiveNow)
+		{
+			Phase3KineticGateReleaseTickCount = 0;
+		}
+		else
+		{
+			Phase3KineticGateReleaseTickCount++;
+		}
+		bLastKineticGateActive = bKineticGateActiveNow;
 	}
 	else
 	{
-		Phase3KineticGateReleaseTickCount++;
+		// Ensure counter is out-of-grace when not in Phase 3
+		Phase3KineticGateReleaseTickCount = 999;
 	}
-	bLastKineticGateActive = bKineticGateActiveNow;
 	FString BlockReason;
 
 
