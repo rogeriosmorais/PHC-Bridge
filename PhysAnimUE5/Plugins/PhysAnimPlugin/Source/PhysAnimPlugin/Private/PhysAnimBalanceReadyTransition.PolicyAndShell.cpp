@@ -124,8 +124,20 @@ float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneNam
 		// and authority is instantly revoked to allow the system to re-settle.
 		
 		float Alpha = 0.0f;
-		if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
+		// §EPIC-13.2 - Phase 3 Soft Handover / Kinetic Gate Synchronization
+		if (Phase3KineticGateReleaseTickCount > 0 && Phase3KineticGateReleaseTickCount <= 20)
 		{
+			// During settlement window (1-20), strength is zero to allow pure damping
+			Alpha = 0.0f;
+		}
+		else if (Phase3KineticGateReleaseTickCount > 20 && Phase3KineticGateReleaseTickCount <= 40)
+		{
+			// During handover window (21-40), ramp up strength
+			Alpha = FMath::Clamp((float)(Phase3KineticGateReleaseTickCount - 20) / 20.0f, 0.0f, 1.0f);
+		}
+		else
+		{
+			// Post-handover, use the stability feedback ramp
 			// Enforce immediate floor in Phase 3 to prevent ragdoll deadlock during kinetic grace.
 			Alpha = FMath::Max(Phase3StableAlpha, BalanceTransitionSets::Phase3AlphaFloor);
 		}
