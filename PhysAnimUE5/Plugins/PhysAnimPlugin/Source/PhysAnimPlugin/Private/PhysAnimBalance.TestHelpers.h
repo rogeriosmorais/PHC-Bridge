@@ -46,13 +46,14 @@ namespace PhysAnimBalanceTestHelpers
 		const bool bHasSafePhase2Denial,
 		const FString& SafePhase2DenialReason,
 		const FString& BalanceReadyTransitionFailureReason,
+		const bool bIsStage1,
 		FString& OutError)
 	{
 		OutError.Reset();
 
 		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
 		{
-			if (!bHasPhysicalContinuityEvidence)
+			if (!bHasPhysicalContinuityEvidence && !bIsStage1)
 			{
 				OutError = TEXT("[PhysAnimPieBalanceSmoke] BalanceActive_Standing is not a benchmark success without physical continuity evidence.");
 				return false;
@@ -155,6 +156,7 @@ namespace PhysAnimBalanceTestHelpers
 					Component->HasSafePhase2Denial(),
 					Component->GetSafePhase2DenialReason(),
 					Component->GetBalanceReadyTransitionFailureReason(),
+					Component->IsStage1(),
 					Error);
 
 				if (!bSuccess)

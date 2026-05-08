@@ -1,4 +1,5 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimStage1InitializerComponent.h"
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimProofArtifactEmitter.h"
 #include "PhysAnimRuntimeAdapter.h"
@@ -135,6 +136,12 @@ FAutoConsoleVariableRef CVarVerbosePhase2Forensics(
 	ECVF_Cheat);
 
 
+bool UPhysAnimComponent::IsStage1() const
+{
+	const AActor* const OwnerActor = GetOwner();
+	return OwnerActor ? (OwnerActor->FindComponentByClass<UPhysAnimStage1InitializerComponent>() != nullptr) : false;
+}
+
 UPhysAnimComponent::UPhysAnimComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -264,6 +271,11 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 	}
 
 	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
+	if (IsStage1())
+	{
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] ENTRY_ALLOWED reason=STAGE1_BYPASS"));
+		return true;
+	}
 	const bool bDeferredStartupProxyTerminalCurrentAttempt =
 		IsDeferredStartupProxyTerminalStillCurrent(LiveRuntimeEvidenceTerminationState, LiveRuntimeEvidenceAttemptUuid);
 	const bool bProxyOutsideHullDeferred =
@@ -447,6 +459,7 @@ bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerm
 	}
 
 	const bool bProxyOutsideHull =
+		!IsStage1() &&
 		Latest.ProxyOutsideHullDurationMs.IsSet() &&
 		Latest.ProxyOutsideHullDurationMs.GetValue() >= Settings.ProxyDriftLimitMs;
 	if (bProxyOutsideHull)

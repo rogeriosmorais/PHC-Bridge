@@ -1237,6 +1237,8 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	int32 SampleCount = 0;
 };
 
+class UPhysAnimStage1InitializerComponent;
+
 UCLASS(ClassGroup = (Physics), meta = (BlueprintSpawnableComponent))
 class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPoseSearchTrajectoryPredictorInterface
 {
@@ -1246,6 +1248,7 @@ class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPo
 
 public:
 	UPhysAnimComponent();
+	bool IsStage1() const;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim | Proof", meta = (AllowPrivateAccess = "true"))
 	bool bEnableLiveRuntimeEvidenceProof = false;
@@ -2413,6 +2416,7 @@ public:
 		bool bHasPendingBodyModifierCachedResets,
 		bool bHasPelvisBody,
 		bool bPelvisBodySimulating,
+		bool bIsStage1,
 		FString* OutFailureReason = nullptr);
 
 	static bool EvaluateRuntimeInstability(

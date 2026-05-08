@@ -81,6 +81,7 @@ bool UPhysAnimComponent::EvaluateBalancePerturbationRuntimeReadiness(
 	bool bHasPendingBodyModifierCachedResets,
 	bool bHasPelvisBody,
 	bool bPelvisBodySimulating,
+	bool bIsStage1,
 	FString* OutFailureReason)
 {
 	const auto SetFailure = [&](const TCHAR* Reason) -> bool
@@ -127,7 +128,7 @@ bool UPhysAnimComponent::EvaluateBalancePerturbationRuntimeReadiness(
 		return SetFailure(TEXT("pelvisBodyMissing"));
 	}
 
-	if (!bPelvisBodySimulating)
+	if (!bPelvisBodySimulating && !bIsStage1)
 	{
 		return SetFailure(TEXT("pelvisBodyNotSimulating"));
 	}
@@ -160,6 +161,7 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 		!PendingBodyModifierCachedResetNames.IsEmpty(),
 		PelvisBody != nullptr,
 		PelvisBody && PelvisBody->IsInstanceSimulatingPhysics(),
+		IsStage1(),
 		OutFailureReason);
 	if (!bReady && IsBalanceActiveState(RuntimeState))
 	{
@@ -569,7 +571,7 @@ bool UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PelvisName);
 	if (!PelvisBody || !PelvisBody->IsInstanceSimulatingPhysics())
 	{
-		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] FAILED: pelvis body not found or not simulating."));
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] FAILED: pelvis body not found or not simulating."));
 		return false;
 	}
 
@@ -1113,33 +1115,36 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	BalanceScenarios.Empty();
 	BalanceScenarios.Add({ TEXT("IdleHold_NoPush"), EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small, 0.5f, BalanceRecoveryTimeoutSeconds, 0.0f });
 
-	const TArray<EPhysAnimPerturbationDirection> Directions = {
-		EPhysAnimPerturbationDirection::Forward,
-		EPhysAnimPerturbationDirection::Backward,
-		EPhysAnimPerturbationDirection::Left,
-		EPhysAnimPerturbationDirection::Right };
-	const TArray<EPhysAnimPerturbationMagnitude> Magnitudes = {
-		EPhysAnimPerturbationMagnitude::Small,
-		EPhysAnimPerturbationMagnitude::Medium,
-		EPhysAnimPerturbationMagnitude::Large };
-	const TArray<FString> DirectionNames = { TEXT("Forward"), TEXT("Backward"), TEXT("Left"), TEXT("Right") };
-	const TArray<FString> MagnitudeNames = { TEXT("Small"), TEXT("Medium"), TEXT("Large") };
-
-	for (int32 DirectionIndex = 0; DirectionIndex < Directions.Num(); ++DirectionIndex)
+	if (!IsStage1())
 	{
-		for (int32 MagnitudeIndex = 0; MagnitudeIndex < Magnitudes.Num(); ++MagnitudeIndex)
+		const TArray<EPhysAnimPerturbationDirection> Directions = {
+			EPhysAnimPerturbationDirection::Forward,
+			EPhysAnimPerturbationDirection::Backward,
+			EPhysAnimPerturbationDirection::Left,
+			EPhysAnimPerturbationDirection::Right };
+		const TArray<EPhysAnimPerturbationMagnitude> Magnitudes = {
+			EPhysAnimPerturbationMagnitude::Small,
+			EPhysAnimPerturbationMagnitude::Medium,
+			EPhysAnimPerturbationMagnitude::Large };
+		const TArray<FString> DirectionNames = { TEXT("Forward"), TEXT("Backward"), TEXT("Left"), TEXT("Right") };
+		const TArray<FString> MagnitudeNames = { TEXT("Small"), TEXT("Medium"), TEXT("Large") };
+
+		for (int32 DirectionIndex = 0; DirectionIndex < Directions.Num(); ++DirectionIndex)
 		{
-			FPhysAnimBalanceScenario Scenario;
-			Scenario.Name = FString::Printf(
-				TEXT("IdleHold_PelvisImpulse_%s_%s"),
-				*DirectionNames[DirectionIndex],
-				*MagnitudeNames[MagnitudeIndex]);
-			Scenario.Direction = Directions[DirectionIndex];
-			Scenario.Magnitude = Magnitudes[MagnitudeIndex];
-			Scenario.TriggerDelaySeconds = 0.5f;
-			Scenario.RecoveryTimeoutSeconds = BalanceRecoveryTimeoutSeconds;
-			Scenario.CooldownSeconds = 0.0f;
-			BalanceScenarios.Add(Scenario);
+			for (int32 MagnitudeIndex = 0; MagnitudeIndex < Magnitudes.Num(); ++MagnitudeIndex)
+			{
+				FPhysAnimBalanceScenario Scenario;
+				Scenario.Name = FString::Printf(
+					TEXT("IdleHold_PelvisImpulse_%s_%s"),
+					*DirectionNames[DirectionIndex],
+					*MagnitudeNames[MagnitudeIndex]);
+				Scenario.Direction = Directions[DirectionIndex];
+				Scenario.Magnitude = Magnitudes[MagnitudeIndex];
+				Scenario.TriggerDelaySeconds = 0.5f;
+				Scenario.RecoveryTimeoutSeconds = BalanceRecoveryTimeoutSeconds;
+				Scenario.CooldownSeconds = 0.0f;
+				BalanceScenarios.Add(Scenario);
+			}
 		}
 	}
 

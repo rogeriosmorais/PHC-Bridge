@@ -102,7 +102,7 @@ namespace
 				false,
 				TEXT(""),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Successful active-balance outcome emits no error"), OutcomeError.IsEmpty());
 
 		OutcomeError.Reset();
@@ -118,7 +118,7 @@ namespace
 				false,
 				TEXT(""),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Physical continuity failure reports physical continuity"), OutcomeError.Contains(TEXT("physical continuity")));
 
 		OutcomeError.Reset();
@@ -134,7 +134,7 @@ namespace
 				false,
 				TEXT(""),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Recovery failure reports the standing requirement"), OutcomeError.Contains(TEXT("BalanceActive_Standing")));
 
 		OutcomeError.Reset();
@@ -150,7 +150,7 @@ namespace
 				true,
 				TEXT("phase2_root_on_spike"),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
 
 		OutcomeError.Reset();
@@ -166,7 +166,7 @@ namespace
 				true,
 				TEXT("phase3_material_shell_correction"),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Phase 3 safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
 
 		OutcomeError.Reset();
@@ -182,7 +182,7 @@ namespace
 				true,
 				TEXT("phase2_fail_stop_precursor"),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Generic safe deny failure reports the non-truthful reason"), OutcomeError.Contains(TEXT("phase2_fail_stop_precursor")));
 
 		OutcomeError.Reset();
@@ -198,7 +198,7 @@ namespace
 				false,
 				TEXT(""),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Canonical terminal outcome emits no benchmark error"), OutcomeError.IsEmpty());
 
 		OutcomeError.Reset();
@@ -214,7 +214,7 @@ namespace
 				false,
 				TEXT(""),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("BridgeActive terminal diagnostic emits no benchmark error"), OutcomeError.IsEmpty());
 
 		OutcomeError.Reset();
@@ -230,7 +230,7 @@ namespace
 				false,
 				TEXT(""),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 
 		OutcomeError.Reset();
 		TestFalse(
@@ -245,7 +245,7 @@ namespace
 				false,
 				TEXT(""),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Unsafe fail-stop reports unsafe failure"), OutcomeError.Contains(TEXT("Unsafe failure path")));
 
 		OutcomeError.Reset();
@@ -261,7 +261,7 @@ namespace
 				false,
 				TEXT(""),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("BridgeActive failure reports the runtime state"), OutcomeError.Contains(TEXT("BridgeActive")));
 
 		OutcomeError.Reset();
@@ -277,7 +277,7 @@ namespace
 				false,
 				TEXT(""),
 				TEXT("phase3_material_shell_correction"),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Published transition failure reports the truthful blocker"), OutcomeError.Contains(TEXT("phase3_material_shell_correction")));
 		return true;
 	}
@@ -2031,6 +2031,7 @@ namespace
 				0.5f,
 				false,
 				true,
+				false,
 				true,
 				&PerturbationReadinessReason));
 		TestTrue(TEXT("Standing readiness emits no failure reason"), PerturbationReadinessReason.IsEmpty());
@@ -2046,6 +2047,7 @@ namespace
 				0.5f,
 				false,
 				true,
+				false,
 				true,
 				&PerturbationReadinessReason));
 		TestEqual(TEXT("BridgeActive readiness failure stays truthful"), PerturbationReadinessReason, FString(TEXT("invalidRuntimeState")));

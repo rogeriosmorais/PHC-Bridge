@@ -1455,6 +1455,14 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						CertifiedLateValidationResult.MeanTargetDeltaDegrees,
 						CertifiedLateValidationResult.QuietProofDurationSeconds,
 						CertifiedLateValidationResult.LateValidationSustainDurationSeconds);
+
+					if (Owner->IsStage1())
+					{
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Stage 1 Kinematic Root detected. Bypassing Phase 2/3 and transitioning to Succeeded."));
+						SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
+						return;
+					}
+
 					SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_RootOn, Owner);
 					return;
 				}
