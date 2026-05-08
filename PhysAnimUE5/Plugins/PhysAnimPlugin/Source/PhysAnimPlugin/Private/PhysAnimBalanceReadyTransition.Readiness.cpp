@@ -217,7 +217,7 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 	// Section 17.3.2 - Kinetic Gate Release Grace
 	// Suppress shell correction aborts for a few ticks after the kinetic gate releases
 	// to allow for the expected transient "spring-back" velocity burst.
-	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 20;
+	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 5;
 	if (KineticGateReleaseTickCount <= Phase3KineticGateReleaseGraceTicks)
 	{
 		return false;
@@ -322,17 +322,17 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	float AngularThreshold,
 	float ShellPlanarOffsetCm,
 	float MaxAllowedShellOffsetCm,
-	float ShellPlanarVelocityCmPerSec,
-	float MaxAllowedShellVelocityCmPerSec,
-	float PrePhase3PeakBodyLinearSpeed,
-	float PrePhase3PeakBodyAngularSpeed,
-	float RootPlanarSpeedCmPerSecond,
 	float CurrentMaxNonRootAngularSpeed,
+	float NonRootAngularThreshold,
+	float PrePhase3PeakRootAngularSpeed,
 	float PrePhase3PeakNonRootAngularSpeed,
+	float CurrentShellVelocity,
+	float ShellVelocityThreshold,
+	float PrePhase3PeakShellVelocity,
 	FName CurrentMaxNonRootAngularBone,
-	float PrePhase3PeakThighAngularSpeed,
-	float PrePhase3PeakSpineAngularSpeed,
-	float PrePhase3PeakFeetAngularSpeed,
+	float CurrentSpineAngularSpeed,
+	float CurrentThighAngularSpeed,
+	float CurrentFeetAngularSpeed,
 	float CurrentNonRootFamilyAngularSpeed,
 	float PrePhase3PeakThighFamilyAngularSpeed,
 	float PrePhase3PeakSpineFamilyAngularSpeed,
@@ -341,7 +341,7 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	// Section 17.3.2 - Kinetic Gate Release Grace
 	// Suppress instability aborts for a few ticks after the kinetic gate releases
 	// to allow for the expected transient "spring-back" velocity burst.
-	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 20;
+	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 5;
 	if (KineticGateReleaseTickCount <= Phase3KineticGateReleaseGraceTicks)
 	{
 		return true;
@@ -362,7 +362,7 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	// exponentially decays towards the final settlement thresholds. This models the
 	// expected energy dissipation of a stable system while providing a continuous,
 	// physics-principled stability envelope.
-	static constexpr float Phase3InitialEnergyMultiplier = 10.0f;
+	static constexpr float Phase3InitialEnergyMultiplier = 3.0f;
 	static constexpr float Phase3EnergyDecayTimeConstantTicks = 10.0f;
 	static constexpr int32 Phase3MaximumSettlementWindowTicks = 40;
 
@@ -381,12 +381,39 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 
 	// Check systemic energy against the dynamic budget
 	const bool bRootLinearWithinBudget = RootLinearSpeed <= DynamicLinearThreshold;
-	const bool bRootAngularWithinBudget = RootAngularSpeed <= DynamicAngularThreshold;
 
-	// Non-root bodies (spine/limbs) should stay within a tighter sub-envelope of the dynamic budget
-	static constexpr float Phase3NonRootEnergyBudgetRatio = 0.85f;
-	const float DynamicNonRootAngularThreshold = DynamicAngularThreshold * Phase3NonRootEnergyBudgetRatio;
-	const bool bNonRootAngularWithinBudget = CurrentMaxNonRootAngularSpeed <= DynamicNonRootAngularThreshold;
+	// Root Angular Expansion Guard: 1.1x observed peak, or dynamic budget (whichever is more discriminative)
+	const float RootExpansionLimit = PrePhase3PeakRootAngularSpeed > KINDA_SMALL_NUMBER ? 
+		FMath::Max(PrePhase3PeakRootAngularSpeed * 1.1f, AngularThreshold) : 
+		AngularThreshold;
+
+	const float FinalRootThreshold = FMath::Min(RootExpansionLimit, DynamicAngularThreshold);
+	const bool bRootAngularWithinBudget = RootAngularSpeed <= FinalRootThreshold;
+
+	// Discriminative Non-root envelope: We allow a burst if it carries through from pre-Phase 3,
+	// but we don't allow it to expand significantly beyond what was observed.
+	float ObservedFamilyEnvelope = PrePhase3PeakNonRootAngularSpeed;
+	const FString BoneNameStr = CurrentMaxNonRootAngularBone.ToString().ToLower();
+	if (BoneNameStr.Contains(TEXT("spine")) || BoneNameStr.Contains(TEXT("neck")) || BoneNameStr.Contains(TEXT("head")))
+	{
+		ObservedFamilyEnvelope = PrePhase3PeakSpineFamilyAngularSpeed;
+	}
+	else if (BoneNameStr.Contains(TEXT("thigh")))
+	{
+		ObservedFamilyEnvelope = PrePhase3PeakThighFamilyAngularSpeed;
+	}
+	else if (BoneNameStr.Contains(TEXT("foot")) || BoneNameStr.Contains(TEXT("feet")))
+	{
+		ObservedFamilyEnvelope = PrePhase3PeakFeetFamilyAngularSpeed;
+	}
+
+	// expansion cap: 1.1x observed peak, or 0.85x dynamic budget (whichever is more discriminative)
+	const float NonRootExpansionLimit = ObservedFamilyEnvelope > KINDA_SMALL_NUMBER ? 
+		FMath::Max(ObservedFamilyEnvelope * 1.1f, NonRootAngularThreshold) : 
+		NonRootAngularThreshold;
+
+	const float FinalNonRootThreshold = FMath::Min(NonRootExpansionLimit, DynamicAngularThreshold * 0.85f);
+	const bool bNonRootAngularWithinBudget = CurrentMaxNonRootAngularSpeed <= FinalNonRootThreshold;
 
 	// Shell integrity remains a hard constraint even during the energy grace
 	const bool bOffsetBreached = ShellPlanarOffsetCm > MaxAllowedShellOffsetCm;
@@ -836,17 +863,17 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				Settings.MaxRootAngularSpeedDegPerSecond * 3.0f,
 				ShellPlanarOffsetCm,
 				Settings.BalancePhase2AbortShellOffsetDelta,
+				CurrentMaxNonRootAngularSpeed,
+				Settings.BalancePhase2AbortMaxBodyAngularSpeed,
+				Diagnostics.PeakMaxBodyAngularSpeed,
+				Diagnostics.PeakMaxNonRootBodyAngularSpeed,
 				ShellPlanarVelocityCmPerSecond,
 				Settings.BalancePhase2AbortShellVelocityDelta,
-				Diagnostics.PeakMaxBodyLinearSpeed,
-				Diagnostics.PeakMaxBodyAngularSpeed,
-				EffectivePelvisPlanarSpeed,
-				CurrentMaxNonRootAngularSpeed,
-				Diagnostics.PeakMaxNonRootBodyAngularSpeed,
+				Diagnostics.BaselineShellVel,
 				CurrentMaxNonRootAngularBone,
-				Diagnostics.PeakMaxThighBodyAngularSpeed,
-				Diagnostics.PeakMaxSpineBodyAngularSpeed,
-				Diagnostics.PeakMaxFeetBodyAngularSpeed,
+				CurrentSpineFamilyAngularSpeed,
+				CurrentThighFamilyAngularSpeed,
+				CurrentFeetFamilyAngularSpeed,
 				CurrentNonRootFamilyAngularSpeed,
 				Diagnostics.PeakTotalThighBodyAngularSpeed,
 				Diagnostics.PeakTotalSpineBodyAngularSpeed,
