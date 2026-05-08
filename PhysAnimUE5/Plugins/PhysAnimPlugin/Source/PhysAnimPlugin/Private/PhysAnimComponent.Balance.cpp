@@ -571,7 +571,14 @@ bool UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PelvisName);
 	if (!PelvisBody || !PelvisBody->IsInstanceSimulatingPhysics())
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] FAILED: pelvis body not found or not simulating."));
+		if (IsStage1())
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Stage1: pelvis impulse skipped because root is kinematic."));
+		}
+		else
+		{
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] FAILED: pelvis body not found or not simulating."));
+		}
 		return false;
 	}
 
