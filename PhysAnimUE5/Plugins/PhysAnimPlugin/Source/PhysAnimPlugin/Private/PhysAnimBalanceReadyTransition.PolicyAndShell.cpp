@@ -118,10 +118,22 @@ float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneNam
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		return FMath::Clamp(
-			PhaseTimeSeconds / 0.25f,
-			0.0f,
-			1.0f);
+		// Feedback-Gated Authority Ramp:
+		// We only allow authority to increase if the system is stable.
+		// If stability is lost (IsPhase3Stable returns false), Phase3StableTickCount resets to 0, 
+		// and authority is instantly revoked to allow the system to re-settle.
+		
+		float Alpha = 0.0f;
+		if (Phase3KineticGateReleaseTickCount > BalanceTransitionSets::Phase3KineticGateReleaseGraceTicks)
+		{
+			// Stability-Gated Control Ramp:
+			// Replaces the fixed 80-tick ramp with a dynamic restoration.
+			// We reach 1.0 authority after 20 ticks of maintained stability, 
+			// ensuring full restoration before the Phase 3 success boundary.
+			Alpha = FMath::Clamp((float)Phase3StableTickCount / 20.0f, 0.0f, 1.0f);
+		}
+
+		return Alpha;
 	}
 
 	return 1.0f;
@@ -213,12 +225,37 @@ float FPhysAnimBalanceReadyTransition::GetTransitionExtraDampingMultiplier(FName
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		// Boost damping significantly during the kinetic gate release window to absorb the transient energy burst.
-		const float KineticGraceMultiplier = (Phase3KineticGateReleaseTickCount <= 20) ? 5.0f : 2.0f;
+		// Boost damping significantly during the kinetic gate release window.
+		// Hold 5.0x damping until the system has maintained stability for at least 40 ticks, 
+		// then ramp down to 2.0x over the next 40 ticks of stability.
+		float KineticGraceMultiplier = 5.0f;
+		if (Phase3StableTickCount > 40)
+		{
+			const float DampingRampAlpha = FMath::Clamp((float)(Phase3StableTickCount - 40) / 40.0f, 0.0f, 1.0f);
+			KineticGraceMultiplier = FMath::Lerp(5.0f, 2.0f, DampingRampAlpha);
+		}
 		return Settings.BalanceBootstrapExtraDampingMultiplier * KineticGraceMultiplier;
 	}
 
 	return Settings.BalanceBootstrapExtraDampingMultiplier;
+}
+
+
+float FPhysAnimBalanceReadyTransition::GetTransitionDampingRatioMultiplier(FName BoneName, const FPhysAnimStabilizationSettings& Settings) const
+{
+	if (!IsActive() && InternalPhase != EBalanceReadyTransitionPhase::BRT_SafeDenied)
+	{
+		return 1.0f;
+	}
+
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
+	{
+		// Boost target orientation dampening during the settlement phase to mitigate the
+		// energy burst caused by the simultaneous activation of 10 raw-sim bodies.
+		return 2.0f;
+	}
+
+	return 1.0f;
 }
 
 

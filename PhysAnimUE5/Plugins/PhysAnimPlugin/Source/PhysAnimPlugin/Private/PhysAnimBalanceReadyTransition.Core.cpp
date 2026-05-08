@@ -274,20 +274,45 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
 		const bool bKineticGateActiveNow = Owner->bKineticGateActiveLastFrame;
+		const bool bReleasedThisTick = bLastKineticGateActive && !bKineticGateActiveNow;
+
 		if (bKineticGateActiveNow)
 		{
 			Phase3KineticGateReleaseTickCount = 0;
 		}
+		else if (bReleasedThisTick)
+		{
+			Phase3KineticGateReleaseTickCount = 1;
+		}
+		else if (Phase3KineticGateReleaseTickCount > 0 &&
+				 Phase3KineticGateReleaseTickCount < 999)
+		{
+			++Phase3KineticGateReleaseTickCount;
+		}
 		else
 		{
-			Phase3KineticGateReleaseTickCount++;
+			Phase3KineticGateReleaseTickCount = 999;
 		}
+
+		if (IsPhase3Stable())
+		{
+			if (Phase3StableTickCount == 0)
+			{
+				Phase3StableTickCount = 1;
+			}
+			else if (Phase3StableTickCount < 999)
+			{
+				++Phase3StableTickCount;
+			}
+		}
+
 		bLastKineticGateActive = bKineticGateActiveNow;
 	}
 	else
 	{
 		// Ensure counter is out-of-grace when not in Phase 3
 		Phase3KineticGateReleaseTickCount = 999;
+		bLastKineticGateActive = Owner->bKineticGateActiveLastFrame;
 	}
 	FString BlockReason;
 
@@ -1795,6 +1820,7 @@ extern int32 GVerbosePhase2Forensics;
 		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.MaxLinVelSpine);
 		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.MaxLinVelFeet);
 		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelPelvis);
+		Diagnostics.PeakRootAngularSpeed = FMath::Max(Diagnostics.PeakRootAngularSpeed, Diagnostics.MaxAngVelPelvis);
 		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelThighs);
 		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelSpine);
 		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelFeet);
@@ -2384,7 +2410,7 @@ extern int32 GVerbosePhase2Forensics;
 					ShellOffsetDeltaCm,
 					Settings.BalancePhase2AbortShellOffsetDelta,
 					ShellVelocityDeltaCmPerSecond,
-					Settings.BalancePhase2AbortShellVelocityDelta,
+					Settings.BalancePhase2AbortShellVelocityDelta * (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle ? 2.5f : 1.0f),
 					Diagnostics.PeakMaxNonRootBodyAngularSpeed,
 					Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope,
 					Diagnostics.Phase3CurrentMaxNonRootAngularSpeed,
@@ -2408,7 +2434,17 @@ extern int32 GVerbosePhase2Forensics;
 
 		if (bReadyThisFrame)
 		{
-			StableHoldAccumulatedSeconds += DeltaTime;
+			// Ensure authority restoration is complete before transitioning to success.
+			// This prevents simulation jumps by guaranteeing a continuous alpha handover.
+			const bool bAuthorityRestored = GetProximalControlSoftAlpha(PhysAnimBridge::GetRootBoneName()) >= 0.99f;
+			if (bAuthorityRestored)
+			{
+				StableHoldAccumulatedSeconds += DeltaTime;
+			}
+			else
+			{
+				StableHoldAccumulatedSeconds = 0.0f;
+			}
 			if (StableHoldAccumulatedSeconds >= Settings.BalancePhase3RequiredStableHoldDuration)
 			{
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Phase 3 settle success. Ready for perturbation. duration=%.2f"), StableHoldAccumulatedSeconds);
@@ -3086,6 +3122,7 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState(class UPhysAnimC
 	Diagnostics.Phase1LateValidateWorstLinearSpeed = 0.0f;
 	Diagnostics.Phase1LateValidateWorstAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxNonRootBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakRootAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxThighBodyAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxSpineBodyAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxFeetBodyAngularSpeed = 0.0f;

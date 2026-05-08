@@ -38,6 +38,7 @@ FPhysAnimBalanceReadyTransitionSnapshot FPhysAnimBalanceReadyTransition::ExportS
 	Snapshot.RetryCooldownTimerSeconds = RetryCooldownTimerSeconds;
 	Snapshot.Phase2GuardTickCount = Phase2GuardTickCount;
 	Snapshot.Phase3GuardTickCount = Phase3GuardTickCount;
+	Snapshot.Phase3KineticGateReleaseTickCount = Phase3KineticGateReleaseTickCount;
 	Snapshot.bPreviousFrameSettleEndRootRawSim = bPreviousFrameSettleEndRootRawSim;
 	Snapshot.bPreviousFrameSettleEndPelvisRawSim = bPreviousFrameSettleEndPelvisRawSim;
 	Snapshot.bPhase2RootAuthorityQuarantined = bPhase2RootAuthorityQuarantined;
@@ -111,6 +112,7 @@ void FPhysAnimBalanceReadyTransition::ImportSnapshot(const FPhysAnimBalanceReady
 	RetryCooldownTimerSeconds = Snapshot.RetryCooldownTimerSeconds;
 	Phase2GuardTickCount = Snapshot.Phase2GuardTickCount;
 	Phase3GuardTickCount = Snapshot.Phase3GuardTickCount;
+	Phase3KineticGateReleaseTickCount = Snapshot.Phase3KineticGateReleaseTickCount;
 	bPreviousFrameSettleEndRootRawSim = Snapshot.bPreviousFrameSettleEndRootRawSim;
 	bPreviousFrameSettleEndPelvisRawSim = Snapshot.bPreviousFrameSettleEndPelvisRawSim;
 	bPhase2RootAuthorityQuarantined = Snapshot.bPhase2RootAuthorityQuarantined;

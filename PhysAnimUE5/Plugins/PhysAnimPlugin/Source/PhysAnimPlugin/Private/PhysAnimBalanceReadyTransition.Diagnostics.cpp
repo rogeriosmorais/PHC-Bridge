@@ -180,6 +180,10 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 
 		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, CurrentLinearSpeed);
 		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, CurrentAngularSpeed);
+		if (BoneName == RootBoneName)
+		{
+			Diagnostics.PeakRootAngularSpeed = FMath::Max(Diagnostics.PeakRootAngularSpeed, CurrentAngularSpeed);
+		}
 	}
 
 	const bool bCrossedSpikeThresholdThisCapture =

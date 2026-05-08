@@ -1641,7 +1641,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	const bool bHipQuarantineWillReleaseThisFrame =
 		bHipQuarantineActiveThisFrame &&
 		HipQuarantineTicksRemaining == 1 &&
-		RuntimeState != EPhysAnimRuntimeState::FailStopped;
+		RuntimeState != EPhysAnimRuntimeState::FailStopped &&
+		!bKineticGateActiveLastFrame;
 	const int32 V0PlantEarlyControlZeroGroup =
 		CVarPhysAnimV0PlantEarlyControlZeroGroup.GetValueOnGameThread();
 	const float V0PlantEarlyControlZeroDurationSeconds =
@@ -1657,7 +1658,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 	float ThighRestoreAlpha = 1.0f;
 	if (V0PlantThighRestoreVariant > 0 && 
-		IsBalanceActiveState(RuntimeState) && 
+		(IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState)) && 
 		GetActivatedStandingStabilityMetrics().ActivationDurationSec > V0PlantEarlyControlZeroDurationSeconds)
 	{
 		const float TimeSinceZero = GetActivatedStandingStabilityMetrics().ActivationDurationSec - V0PlantEarlyControlZeroDurationSeconds;
@@ -1915,7 +1916,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			EffectiveSettings.AngularStrengthMultiplier * FamilyStrengthScale * ControlAuthorityAlpha * HandoverEasing;
 		ControlMultiplier.AngularStrengthMultiplier *= BalanceReadyTransition.GetProximalControlSoftAlpha(BoneName);
 		ControlMultiplier.AngularDampingRatioMultiplier =
-			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale;
+			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale *
+			BalanceReadyTransition.GetTransitionDampingRatioMultiplier(BoneName, EffectiveSettings);
 		ControlMultiplier.AngularExtraDampingMultiplier =
 			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale *
 			BalanceReadyTransition.GetTransitionExtraDampingMultiplier(BoneName, EffectiveSettings);
@@ -1999,6 +2001,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 						ActivatedStandingStabilityMetrics.MaxSpineAngVelAtGateRelease = MaxSpineAngVel;
 						ActivatedStandingStabilityMetrics.ThighStrengthAtGateRelease = EffectiveRestoreStrength;
 						ActivatedStandingStabilityMetrics.ActivationTimeAtGateRelease = ActivationT;
+						
+						// Synchronize Hip Quarantine release with Kinetic Gate release
+						HipQuarantineTicksRemaining = 0;
 					}
 
 					UE_LOG(LogPhysAnimBridge, Warning,
@@ -2766,7 +2771,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	if (bHipQuarantineActiveThisFrame)
 	{
 		const int32 HipQuarantineTicksBeforeDecrement = HipQuarantineTicksRemaining;
-		if (HipQuarantineTicksRemaining > 0 && RuntimeState != EPhysAnimRuntimeState::FailStopped)
+		if (HipQuarantineTicksRemaining > 0 && RuntimeState != EPhysAnimRuntimeState::FailStopped && !bKineticGateActiveLastFrame)
 		{
 			--HipQuarantineTicksRemaining;
 			bHipQuarantineReleasedThisFrame = (HipQuarantineTicksRemaining == 0);
@@ -2774,7 +2779,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bHipQuarantineReleasedThisFrame)
 		{
-			if (IsBalanceActiveState(RuntimeState))
+			if (IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState))
 			{
 				UE_LOG(
 					LogPhysAnimBridge,

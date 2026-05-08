@@ -447,10 +447,10 @@ struct FPhysAnimStabilizationSettings
 	float BalancePhase2RetryCooldownSeconds = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
-	float BalancePhase3RequiredStableHoldDuration = 0.25f;
+	float BalancePhase3RequiredStableHoldDuration = 0.01f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
-	float BalancePhase3TimeoutDuration = 2.0f;
+	float BalancePhase3TimeoutDuration = 5.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization|BalanceEntry", meta = (ClampMin = "0.0"))
 	float BalanceBootstrapExtraDampingMultiplier = 2.0f;

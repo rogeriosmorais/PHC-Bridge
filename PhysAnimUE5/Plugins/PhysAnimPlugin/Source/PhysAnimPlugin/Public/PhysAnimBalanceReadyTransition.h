@@ -393,6 +393,12 @@ struct FBalanceReadyTransitionDiagnostics
 	float BaselineRootAngVel = 0.0f;
 	float BaselineShellOffset = 0.0f;
 	float BaselineShellVel = 0.0f;
+
+	float Phase3CurrentShellVelocity = 0.0f;
+	float Phase3CurrentRootAngularSpeed = 0.0f;
+	float LastFrameShellVelocity = 0.0f;
+	float LastFrameRootAngularSpeed = 0.0f;
+	float LastFrameMaxNonRootAngularSpeed = 0.0f;
 	FPhysAnimControlTargetDiagnostics Phase1TargetDiscontinuityGateInput;
 	float Phase1TargetDiscontinuityAccumulatedSeconds = 0.0f;
 	float Phase1LateValidateAccumulatedSeconds = 0.0f;
@@ -409,6 +415,7 @@ struct FBalanceReadyTransitionDiagnostics
 	int32 UpperBodySimCountPost = 0;
 	float PeakMaxBodyLinearSpeed = 0.0f;
 	float PeakMaxBodyAngularSpeed = 0.0f;
+	float PeakRootAngularSpeed = 0.0f;
 	float PeakMaxNonRootBodyAngularSpeed = 0.0f;
 	float PeakMaxThighBodyAngularSpeed = 0.0f;
 	float PeakMaxSpineBodyAngularSpeed = 0.0f;
@@ -460,6 +467,7 @@ struct FPhysAnimBalanceReadyTransitionSnapshot
 	float RetryCooldownTimerSeconds = 0.0f;
 	int32 Phase2GuardTickCount = 0;
 	int32 Phase3GuardTickCount = 0;
+	int32 Phase3KineticGateReleaseTickCount = 0;
 	bool bPreviousFrameSettleEndRootRawSim = false;
 	bool bPreviousFrameSettleEndPelvisRawSim = false;
 	bool bPhase2RootAuthorityQuarantined = false;
@@ -566,11 +574,13 @@ public:
 	}
 	float GetTotalTransitionTimeSeconds() const { return TotalTransitionTimeSeconds; }
 	static bool IsProximal(FName BoneName);
+	bool IsPhase3Stable() const;
 	float GetRootBodyModifierSoftSimAlpha() const;
 	float GetProximalControlSoftAlpha(FName BoneName) const;
 	bool ShouldKeepBoneKinematic(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;
 	bool ShouldSuppressPolicyWrites(FName BoneName) const;
 	float GetTransitionExtraDampingMultiplier(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;
+	float GetTransitionDampingRatioMultiplier(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;
 	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
 	/** Single source of truth for stabilization readiness math. */
 	static bool IsSnapshotReady(
@@ -591,6 +601,7 @@ public:
 		float MaxAllowedShellOffsetCm,
 		float MaxAllowedShellVelocityCmPerSec);
 	static bool IsMaterialPhase3ShellCorrectionActive(
+		const FBalanceReadyTransitionDiagnostics& Diags,
 		int32 KineticGateReleaseTickCount,
 		bool bTransitionOwnedShellLocked,
 		bool bLocomotionAuthorityIdle,
@@ -611,6 +622,7 @@ public:
 		const FVector& AppliedShellCorrectionVelocityCmPerSecond,
 		bool bTransitionOwnedShellLocked);
 	static bool IsPhase3EarlySettleInstabilityGraceActive(
+		const FBalanceReadyTransitionDiagnostics& Diags,
 		int32 KineticGateReleaseTickCount,
 		int32 Phase3TickCount,
 		bool bTransitionOwnedShellLocked,
@@ -731,6 +743,7 @@ private:
 	int32 Phase2GuardTickCount = 0;
 	int32 Phase3GuardTickCount = 0;
 	int32 Phase3KineticGateReleaseTickCount = 0;
+	int32 Phase3StableTickCount = 0;
 	bool bLastKineticGateActive = false;
 	bool bPreviousFrameSettleEndRootRawSim = false;
 	bool bPreviousFrameSettleEndPelvisRawSim = false;

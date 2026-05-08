@@ -18,6 +18,11 @@ namespace BalanceTransitionSets
 	inline constexpr float Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg =
 		Phase2MaxPelvisSpineDirectLinkAngularErrorDeg - Phase2RequiredPelvisSpineDirectLinkAngularMarginDeg;
 
+	inline constexpr int32 Phase3KineticGateReleaseGraceTicks = 25;
+	inline constexpr float ShellVelocitySoftRestoreThreshold = 5.0f;
+	inline constexpr float RootAngularSoftRestoreThreshold = 30.0f;
+	inline constexpr int32 MinPostReleaseRampTicks = 30;
+
 	struct FDirectPelvisLinkForensicRecord
 	{
 		FName ParentBoneName = NAME_None;

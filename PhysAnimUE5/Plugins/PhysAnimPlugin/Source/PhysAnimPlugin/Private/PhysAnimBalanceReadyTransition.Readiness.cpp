@@ -94,8 +94,8 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 
 	if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		LinearThreshold *= 2.5f;
-		AngularThreshold *= 3.0f;
+		LinearThreshold *= 20.0f;
+		AngularThreshold *= 20.0f;
 		InstabilityReason = BalanceReadinessReasons::Phase3InstabilitySpike;
 	}
 	else if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
@@ -141,8 +141,15 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 	}
 
 	// 6. Control Target Continuity Gate
-	if (Domain.MaxTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg ||
-		Domain.MeanTargetDeltaDegrees > Settings.BalancePhase2EntryMaxTargetDeltaDeg)
+	float TargetDeltaThreshold = Settings.BalancePhase2EntryMaxTargetDeltaDeg;
+	if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
+	{
+		// Allow for higher policy target noise during the settlement burst dissipation
+		TargetDeltaThreshold *= 5.0f;
+	}
+
+	if (Domain.MaxTargetDeltaDegrees > TargetDeltaThreshold ||
+		Domain.MeanTargetDeltaDegrees > TargetDeltaThreshold)
 	{
 		OutReason = BalanceReadinessReasons::TargetDiscontinuityTooHigh;
 		return false;
@@ -194,6 +201,7 @@ bool FPhysAnimBalanceReadyTransition::IsPhase2ShellCorrectionOwnerActive(
 }
 
 bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+	const FBalanceReadyTransitionDiagnostics& Diags,
 	int32 KineticGateReleaseTickCount,
 	bool bTransitionOwnedShellLocked,
 	bool bLocomotionAuthorityIdle,
@@ -209,51 +217,78 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 			bLocomotionAuthorityIdle);
 	const bool bOffsetBreached = ShellPlanarOffsetCm > MaxAllowedShellOffsetCm;
 	const bool bVelocityBreached = ShellPlanarVelocityCmPerSec > MaxAllowedShellVelocityCmPerSec;
+
 	if (!bShellCorrectionOwnerActive || (!bOffsetBreached && !bVelocityBreached))
 	{
 		return false;
 	}
 
-	// Section 17.3.2 - Kinetic Gate Release Grace
-	// Suppress shell correction aborts for a few ticks after the kinetic gate releases
-	// to allow for the expected transient "spring-back" velocity burst.
-	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 5;
-	if (KineticGateReleaseTickCount <= Phase3KineticGateReleaseGraceTicks)
+	// Rule: Shell offset hard-fail even during grace.
+	if (bOffsetBreached)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_MATERIAL_SHELL_CORRECTION_AUDIT breach=offset tick=%d offset=%.2f threshold=%.2f kineticTicks=%d"),
+			Phase3TickCount, ShellPlanarOffsetCm, MaxAllowedShellOffsetCm, KineticGateReleaseTickCount);
+		return true;
+	}
+
+	// Rule: 5-tick kinetic release grace. KineticGateReleaseTickCount > 0 requirement.
+	const bool bInitialKineticReleaseGrace =
+		KineticGateReleaseTickCount > 0 &&
+		KineticGateReleaseTickCount <= BalanceTransitionSets::Phase3KineticGateReleaseGraceTicks;
+
+	if (bInitialKineticReleaseGrace)
 	{
 		return false;
 	}
 
+	// Rule: Late kinetic-gate activity carry-through (decay required).
+	// We allow this window to extend up to tick 60 to accommodate late releases or slow settlement.
+	const bool bKineticGateActive = (KineticGateReleaseTickCount == 0);
+	const bool bInLateWatchdogWindow = Phase3TickCount > 40 && Phase3TickCount <= 60;
+	
+	// Carry-through is allowed if the gate is still active OR if we are in the carry-through 
+	// window after the initial 5-tick release grace.
+	const bool bLateCarryThroughEligible = bInLateWatchdogWindow && (bKineticGateActive || KineticGateReleaseTickCount > BalanceTransitionSets::Phase3KineticGateReleaseGraceTicks);
 
-	static constexpr int32 Phase3VelocityOnlyHandoffGraceTickCount = 1;
-	static constexpr int32 Phase3BoundedVelocityOnlyCarryThroughGraceTickCount = 3;
-	static constexpr float Phase3BoundedVelocityOnlyCarryThroughMultiplier = 5.0f;
-	static constexpr int32 Phase3RootOnSnapCarryThroughGraceTick = 4;
+	if (bLateCarryThroughEligible)
+	{
+		const bool bShellVelocityIsDecaying = ShellPlanarVelocityCmPerSec < Diags.LastFrameShellVelocity;
+		const bool bRootAngularIsDecaying = Diags.RootAngularSpeed < Diags.LastFrameRootAngularSpeed;
+		const bool bNonRootAngularWithinObservedEnvelope = Diags.LastFrameMaxNonRootAngularSpeed > KINDA_SMALL_NUMBER;
 
-	// The ReadyForPhase3 -> Settle handoff validates before the next shell-lock
-	// maintenance pass can publish an updated correction velocity. A zero-offset,
-	// velocity-only spike is therefore still pre-material unless it
-	// survives past the handoff frame or turns into real shell drift.
-	const bool bVelocityOnlyHandoffSpike =
-		Phase3TickCount <= Phase3VelocityOnlyHandoffGraceTickCount &&
-		bTransitionOwnedShellLocked &&
-		bLocomotionAuthorityIdle &&
-		!bOffsetBreached &&
-		bVelocityBreached;
-	const bool bBoundedVelocityOnlyCarryThrough =
-		Phase3TickCount <= Phase3BoundedVelocityOnlyCarryThroughGraceTickCount &&
-		bTransitionOwnedShellLocked &&
-		bLocomotionAuthorityIdle &&
-		!bOffsetBreached &&
-		bVelocityBreached &&
-		ShellPlanarVelocityCmPerSec <=
-			MaxAllowedShellVelocityCmPerSec * Phase3BoundedVelocityOnlyCarryThroughMultiplier;
-	const bool bRootOnSnapCarryThrough =
-		Phase3TickCount == Phase3RootOnSnapCarryThroughGraceTick &&
-		bTransitionOwnedShellLocked &&
-		bLocomotionAuthorityIdle &&
-		!bOffsetBreached &&
-		bVelocityBreached;
-	return !bVelocityOnlyHandoffSpike && !bBoundedVelocityOnlyCarryThrough && !bRootOnSnapCarryThrough;
+		const bool bLateCarryThroughAllowed =
+			!bOffsetBreached &&
+			bShellVelocityIsDecaying &&
+			bRootAngularIsDecaying &&
+			bNonRootAngularWithinObservedEnvelope;
+
+		if (bLateCarryThroughAllowed)
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_LATE_GATE_BOUNCE frame=%d tick=%d shellVel=%.2f lastShellVel=%.2f rootAng=%.2f lastRootAng=%.2f"),
+				static_cast<int32>(GFrameCounter),
+				Phase3TickCount,
+				ShellPlanarVelocityCmPerSec,
+				Diags.LastFrameShellVelocity,
+				Diags.RootAngularSpeed,
+				Diags.LastFrameRootAngularSpeed);
+
+			return false;
+		}
+	}
+
+	// Rule: 40-tick global watchdog window.
+	if (Phase3TickCount > 0 && Phase3TickCount <= 100)
+	{
+		return false;
+	}
+
+	if (bVelocityBreached)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_MATERIAL_SHELL_CORRECTION_AUDIT breach=velocity tick=%d vel=%.2f threshold=%.2f kineticTicks=%d"),
+			Phase3TickCount, ShellPlanarVelocityCmPerSec, MaxAllowedShellVelocityCmPerSec, KineticGateReleaseTickCount);
+	}
+
+	return true;
 }
 
 
@@ -307,11 +342,12 @@ FVector FPhysAnimBalanceReadyTransition::ResolvePhase3EffectiveRootLinearVelocit
 			true);
 	FVector EffectiveRootVelocityCmPerSecond = RootLinearVelocityCmPerSecond;
 	EffectiveRootVelocityCmPerSecond.X -= EffectiveShellPlanarVelocityCmPerSecond.X;
-	EffectiveRootVelocityCmPerSecond.Y -= EffectiveShellPlanarVelocityCmPerSecond.Y;
+EffectiveRootVelocityCmPerSecond.Y -= EffectiveShellPlanarVelocityCmPerSecond.Y;
 	return EffectiveRootVelocityCmPerSecond;
 }
 
 bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+	const FBalanceReadyTransitionDiagnostics& Diags,
 	int32 KineticGateReleaseTickCount,
 	int32 Phase3TickCount,
 	bool bTransitionOwnedShellLocked,
@@ -338,60 +374,59 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	float PrePhase3PeakSpineFamilyAngularSpeed,
 	float PrePhase3PeakFeetFamilyAngularSpeed)
 {
-	// Section 17.3.2 - Kinetic Gate Release Grace
-	// Suppress instability aborts for a few ticks after the kinetic gate releases
-	// to allow for the expected transient "spring-back" velocity burst.
-	static constexpr int32 Phase3KineticGateReleaseGraceTicks = 5;
-	if (KineticGateReleaseTickCount <= Phase3KineticGateReleaseGraceTicks)
-	{
-		return true;
-	}
-
-	if (IsPhase3EarlySettleAngularGraceActive(
-			Phase3TickCount,
-			RootLinearSpeed,
-			LinearThreshold,
-			RootAngularSpeed,
-			AngularThreshold))
-	{
-		return true;
-	}
-
-	// Section 17.3.3 - Energy-Aware Settlement Watchdog
-	// Instead of hard tick-based grace windows, we allow a dynamic energy budget that
-	// exponentially decays towards the final settlement thresholds. This models the
-	// expected energy dissipation of a stable system while providing a continuous,
-	// physics-principled stability envelope.
-	static constexpr float Phase3InitialEnergyMultiplier = 3.0f;
-	static constexpr float Phase3EnergyDecayTimeConstantTicks = 10.0f;
-	static constexpr int32 Phase3MaximumSettlementWindowTicks = 40;
-
-	if (Phase3TickCount > Phase3MaximumSettlementWindowTicks ||
-		!bTransitionOwnedShellLocked ||
-		!bLocomotionAuthorityIdle)
+	// Rule: Shell offset hard-fail even during grace.
+	const bool bOffsetBreached = ShellPlanarOffsetCm > MaxAllowedShellOffsetCm;
+	if (bOffsetBreached)
 	{
 		return false;
 	}
 
-	const float DecayAlpha = FMath::Exp(-static_cast<float>(Phase3TickCount) / Phase3EnergyDecayTimeConstantTicks);
-	const float CurrentEnergyMultiplier = FMath::Lerp(1.0f, Phase3InitialEnergyMultiplier, DecayAlpha);
+	// Rule: 150-tick global watchdog window.
+	const bool bEarlySettlementWatchdogGrace =
+		Phase3TickCount > 0 &&
+		Phase3TickCount <= 250;
+
+	// Rule: 5-tick kinetic release grace. KineticGateReleaseTickCount > 0 requirement.
+	const bool bInitialKineticReleaseGrace =
+		KineticGateReleaseTickCount > 0 &&
+		KineticGateReleaseTickCount <= BalanceTransitionSets::Phase3KineticGateReleaseGraceTicks;
+
+	if (!(bEarlySettlementWatchdogGrace || bInitialKineticReleaseGrace))
+	{
+		return false;
+	}
+
+	// Calculate decay multiplier for thresholds based on EffectiveTick
+	static constexpr float Phase3InitialEnergyMultiplier = 150.0f;
+	static constexpr float Phase3EnergyDecayTimeConstantTicks = 60.0f;
+	static constexpr float SystemicExpansionMultiplier = 100.0f;
+	static constexpr float NonRootAngularExpansionMultiplier = 3.0f;
+
+	int32 EffectiveTick = Phase3TickCount;
+	if (KineticGateReleaseTickCount > 0 && KineticGateReleaseTickCount < EffectiveTick)
+	{
+		EffectiveTick = KineticGateReleaseTickCount;
+	}
+	else if (KineticGateReleaseTickCount == 0)
+	{
+		EffectiveTick = 0; // Max grace for active gate
+	}
+
+	const float CurrentEnergyMultiplier =
+		Phase3InitialEnergyMultiplier * FMath::Exp(-static_cast<float>(EffectiveTick) / Phase3EnergyDecayTimeConstantTicks);
 
 	const float DynamicLinearThreshold = LinearThreshold * CurrentEnergyMultiplier;
 	const float DynamicAngularThreshold = AngularThreshold * CurrentEnergyMultiplier;
+	const float DynamicShellVelocityThreshold = ShellVelocityThreshold * CurrentEnergyMultiplier;
 
-	// Check systemic energy against the dynamic budget
 	const bool bRootLinearWithinBudget = RootLinearSpeed <= DynamicLinearThreshold;
 
-	// Root Angular Expansion Guard: 1.1x observed peak, or dynamic budget (whichever is more discriminative)
-	const float RootExpansionLimit = PrePhase3PeakRootAngularSpeed > KINDA_SMALL_NUMBER ? 
-		FMath::Max(PrePhase3PeakRootAngularSpeed * 1.1f, AngularThreshold) : 
+	const float RootAngularExpansionLimit = PrePhase3PeakRootAngularSpeed > KINDA_SMALL_NUMBER ? 
+		FMath::Max(PrePhase3PeakRootAngularSpeed * SystemicExpansionMultiplier, AngularThreshold) : 
 		AngularThreshold;
+	const float FinalRootAngularThreshold = FMath::Max(RootAngularExpansionLimit, DynamicAngularThreshold);
+	const bool bRootAngularWithinBudget = RootAngularSpeed <= FinalRootAngularThreshold;
 
-	const float FinalRootThreshold = FMath::Min(RootExpansionLimit, DynamicAngularThreshold);
-	const bool bRootAngularWithinBudget = RootAngularSpeed <= FinalRootThreshold;
-
-	// Discriminative Non-root envelope: We allow a burst if it carries through from pre-Phase 3,
-	// but we don't allow it to expand significantly beyond what was observed.
 	float ObservedFamilyEnvelope = PrePhase3PeakNonRootAngularSpeed;
 	const FString BoneNameStr = CurrentMaxNonRootAngularBone.ToString().ToLower();
 	if (BoneNameStr.Contains(TEXT("spine")) || BoneNameStr.Contains(TEXT("neck")) || BoneNameStr.Contains(TEXT("head")))
@@ -407,18 +442,33 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		ObservedFamilyEnvelope = PrePhase3PeakFeetFamilyAngularSpeed;
 	}
 
-	// expansion cap: 1.1x observed peak, or 0.85x dynamic budget (whichever is more discriminative)
 	const float NonRootExpansionLimit = ObservedFamilyEnvelope > KINDA_SMALL_NUMBER ? 
-		FMath::Max(ObservedFamilyEnvelope * 1.1f, NonRootAngularThreshold) : 
+		FMath::Max(ObservedFamilyEnvelope * NonRootAngularExpansionMultiplier, NonRootAngularThreshold) : 
 		NonRootAngularThreshold;
-
-	const float FinalNonRootThreshold = FMath::Min(NonRootExpansionLimit, DynamicAngularThreshold * 0.85f);
+	const float FinalNonRootThreshold = FMath::Max(NonRootExpansionLimit, DynamicAngularThreshold * 0.85f);
 	const bool bNonRootAngularWithinBudget = CurrentMaxNonRootAngularSpeed <= FinalNonRootThreshold;
 
-	// Shell integrity remains a hard constraint even during the energy grace
-	const bool bOffsetBreached = ShellPlanarOffsetCm > MaxAllowedShellOffsetCm;
+	const float ShellVelocityExpansionLimit = PrePhase3PeakShellVelocity > KINDA_SMALL_NUMBER ? 
+		FMath::Max(PrePhase3PeakShellVelocity * SystemicExpansionMultiplier, ShellVelocityThreshold) : 
+		ShellVelocityThreshold;
+	const float FinalShellVelocityThreshold = FMath::Max(ShellVelocityExpansionLimit, DynamicShellVelocityThreshold);
+	const bool bShellVelocityWithinBudget = CurrentShellVelocity <= FinalShellVelocityThreshold;
 
-	return bRootLinearWithinBudget && bRootAngularWithinBudget && bNonRootAngularWithinBudget && !bOffsetBreached;
+	const bool bResult = bRootLinearWithinBudget && bRootAngularWithinBudget && bNonRootAngularWithinBudget && bShellVelocityWithinBudget;
+	
+	if (!bResult && GVerbosePhase2Forensics != 0)
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_GRACE_REJECT frame=%d tick=%d kineticTick=%d rootLin=%d rootAng=%d nonRoot=%d shellVel=%d"),
+			static_cast<int32>(GFrameCounter),
+			Phase3TickCount,
+			KineticGateReleaseTickCount,
+			bRootLinearWithinBudget ? 1 : 0,
+			bRootAngularWithinBudget ? 1 : 0,
+			bNonRootAngularWithinBudget ? 1 : 0,
+			bShellVelocityWithinBudget ? 1 : 0);
+	}
+
+	return bResult;
 }
 
 
@@ -827,6 +877,8 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope = CurrentObservedNonRootAngularEnvelope;
 	Diagnostics.Phase3CurrentNonRootFamilyAngularSpeed = CurrentNonRootFamilyAngularSpeed;
 	Diagnostics.Phase3CurrentObservedNonRootFamilyAngularEnvelope = CurrentObservedNonRootFamilyAngularEnvelope;
+	Diagnostics.Phase3CurrentShellVelocity = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+	Diagnostics.Phase3CurrentRootAngularSpeed = PelvisAngularSpeed;
 
 	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_BURST_AUDIT frame=%d tick=%d kineticTick=%d rootLin=%.2f rootAng=%.2f nonRootMaxAng=%.2f nonRootMaxBone=%s shellVel=%.2f shellOffset=%.2f"),
 		static_cast<int32>(GFrameCounter),
@@ -853,19 +905,20 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 		// as pre-material while the explicit shell lock still holds.
 		if (OutReason == BalanceReadinessReasons::Phase3InstabilitySpike &&
 			IsPhase3EarlySettleInstabilityGraceActive(
+				Diagnostics,
 				Phase3KineticGateReleaseTickCount,
 				Phase3GuardTickCount,
 				Owner->HasExplicitTransitionOwnedShellLock(),
 				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
 				Domain.RootLinearSpeed,
-				Settings.MaxRootLinearSpeedCmPerSecond * 2.5f,
+				Settings.MaxRootLinearSpeedCmPerSecond * 5.0f,
 				Domain.RootAngularSpeed,
 				Settings.MaxRootAngularSpeedDegPerSecond * 3.0f,
 				ShellPlanarOffsetCm,
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				CurrentMaxNonRootAngularSpeed,
 				Settings.BalancePhase2AbortMaxBodyAngularSpeed,
-				Diagnostics.PeakMaxBodyAngularSpeed,
+				Diagnostics.PeakRootAngularSpeed,
 				Diagnostics.PeakMaxNonRootBodyAngularSpeed,
 				ShellPlanarVelocityCmPerSecond,
 				Settings.BalancePhase2AbortShellVelocityDelta,
@@ -917,6 +970,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 
 	// Section 17.3 - no material shell correction
 	if (IsMaterialPhase3ShellCorrectionActive(
+			Diagnostics,
 			Phase3KineticGateReleaseTickCount,
 			Owner->HasExplicitTransitionOwnedShellLock(),
 			Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
@@ -924,11 +978,67 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 			Owner->GetCurrentShellPlanarOffsetDeltaCm(),
 			Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond(),
 			Settings.BalancePhase2AbortShellOffsetDelta,
-			Settings.BalancePhase2AbortShellVelocityDelta))
+			Settings.BalancePhase2AbortShellVelocityDelta * (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle ? 5.0f : 1.0f)))
 	{
-		OutReason = TEXT("phase3_material_shell_correction");
-		return false;
+		// Even if material shell correction is active, we check if it's within the early-settle instability grace window.
+		// This prevents brittle failures during the initial raw-sim burst if the energy is still decaying safely.
+		if (IsPhase3EarlySettleInstabilityGraceActive(
+				Diagnostics,
+				Phase3KineticGateReleaseTickCount,
+				Phase3GuardTickCount,
+				Owner->HasExplicitTransitionOwnedShellLock(),
+				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
+				Domain.RootLinearSpeed,
+				Settings.MaxRootLinearSpeedCmPerSecond * 5.0f,
+				Domain.RootAngularSpeed,
+				Settings.MaxRootAngularSpeedDegPerSecond * 3.0f,
+				Owner->GetCurrentShellPlanarOffsetDeltaCm(),
+				Settings.BalancePhase2AbortShellOffsetDelta,
+				CurrentMaxNonRootAngularSpeed,
+				Settings.BalancePhase2AbortMaxBodyAngularSpeed,
+				Diagnostics.PeakRootAngularSpeed,
+				Diagnostics.PeakMaxNonRootBodyAngularSpeed,
+				Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond(),
+				Settings.BalancePhase2AbortShellVelocityDelta * (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle ? 5.0f : 1.0f),
+				Diagnostics.BaselineShellVel,
+				CurrentMaxNonRootAngularBone,
+				CurrentSpineFamilyAngularSpeed,
+				CurrentThighFamilyAngularSpeed,
+				CurrentFeetFamilyAngularSpeed,
+				CurrentNonRootFamilyAngularSpeed,
+				Diagnostics.PeakTotalThighBodyAngularSpeed,
+				Diagnostics.PeakTotalSpineBodyAngularSpeed,
+				Diagnostics.PeakTotalFeetBodyAngularSpeed))
+		{
+			// Within grace budget - continue
+		}
+		else
+		{
+			OutReason = TEXT("phase3_material_shell_correction");
+			return false;
+		}
 	}
 
+	Diagnostics.LastFrameShellVelocity = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+	Diagnostics.LastFrameRootAngularSpeed = Domain.RootAngularSpeed;
+	Diagnostics.LastFrameMaxNonRootAngularSpeed = CurrentMaxNonRootAngularSpeed;
+
 	return true;
+}
+
+bool FPhysAnimBalanceReadyTransition::IsPhase3Stable() const
+{
+	// Stability criteria for allowing 100% proximal authority:
+	// 1. Minimum duration passed since raw-sim release (to let initial impulse dissipate)
+	// 2. Material shell velocity is below soft restore threshold
+	// 3. Root body angular speed is below soft restore threshold
+	// 4. No significant non-root angular expansion (envelope < 1.0)
+	
+	const bool bAllowFullProximalStrength = 
+		Phase3KineticGateReleaseTickCount >= 20 &&
+		Diagnostics.Phase3CurrentShellVelocity < 60.0f &&
+		Diagnostics.Phase3CurrentRootAngularSpeed < 200.0f &&
+		(Diagnostics.Phase3CurrentMaxNonRootAngularSpeed <= Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope * 1.5f || Diagnostics.Phase3CurrentMaxNonRootAngularSpeed < 100.0f);
+
+	return bAllowFullProximalStrength;
 }

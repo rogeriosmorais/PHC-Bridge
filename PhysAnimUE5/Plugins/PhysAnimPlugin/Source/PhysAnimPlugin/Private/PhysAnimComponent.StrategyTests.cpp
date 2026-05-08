@@ -579,6 +579,7 @@ namespace
 
 	bool FPhysAnimTransitionOwnedShellLockTruthfulnessTest::RunTest(const FString& Parameters)
 	{
+		FBalanceReadyTransitionDiagnostics Diags;
 		TestTrue(
 			TEXT("Explicit transition-owned shell lock mode reports held"),
 			UPhysAnimComponent::IsExplicitTransitionOwnedShellLockMode(
@@ -617,6 +618,7 @@ namespace
 		TestFalse(
 			TEXT("First Settle validation tick ignores a velocity-only shell spike while explicit lock continuity still holds"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
 				1,
 				true,
 				true,
@@ -628,6 +630,7 @@ namespace
 		TestFalse(
 			TEXT("Pre-validation handoff tick also ignores a velocity-only shell spike while explicit lock continuity still holds"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
 				1,
 				true,
 				true,
@@ -639,6 +642,7 @@ namespace
 		TestTrue(
 			TEXT("Later Settle ticks classify a sustained velocity-only shell spike as material once handoff grace expires"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
 				999,
 				true,
 				true,
@@ -650,6 +654,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 3 Settle ignores bounded zero-offset shell carry-through while explicit lock continuity still holds"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
 				1,
 				true,
 				true,
@@ -661,6 +666,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 4 Settle ignores zero-offset RootOn snap carry-through while explicit lock continuity still holds"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
 				1,
 				true,
 				true,
@@ -672,6 +678,7 @@ namespace
 		TestTrue(
 			TEXT("First Settle tick still classifies positional shell drift as material"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
 				999,
 				true,
 				true,
@@ -683,6 +690,7 @@ namespace
 		TestFalse(
 			TEXT("Without explicit lock or locomotion reclaim, shell correction is not owner-active even on the first Settle tick"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
 				999,
 				false,
 				true,
@@ -734,6 +742,7 @@ namespace
 		TestTrue(
 			TEXT("Tick 4 Settle instability grace preserves a zero-offset explicit-lock shell burst that still carries RootOn snap energy"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				1,
 				4,
 				true,
@@ -762,6 +771,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 5 Settle instability grace does not hide a continued zero-offset shell burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				5,
 				true,
@@ -790,6 +800,7 @@ namespace
 		TestTrue(
 			TEXT("Tick 5 Settle grace preserves a zero-offset combined shell burst when the Phase 2 handoff stayed comparatively quiet and shell carry-through dominates the linear burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				1,
 				5,
 				true,
@@ -818,6 +829,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 5 combined shell-burst grace does not apply when Phase 2 already handed off with a large body-instability peak"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				5,
 				true,
@@ -846,6 +858,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 5 combined shell-burst grace does not apply when shell carry-through is not the dominant source of the linear burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				5,
 				true,
@@ -874,6 +887,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 5 combined shell-burst grace does not hide expanded non-root angular instability"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				5,
 				true,
@@ -902,6 +916,7 @@ namespace
 		TestTrue(
 			TEXT("Tick 5 combined shell-burst grace compares shell dominance against planar root speed so vertical carry-through does not overstate the blocker"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				1,
 				5,
 				true,
@@ -930,6 +945,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 5 combined shell-burst grace still rejects the same frame when planar root speed is too large for shell dominance"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				5,
 				true,
@@ -958,6 +974,7 @@ namespace
 		TestTrue(
 			TEXT("Tick 5 Settle grace still suppresses an angular-only zero-offset shell burst under explicit lock"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				1,
 				5,
 				true,
@@ -986,6 +1003,7 @@ namespace
 		TestTrue(
 			TEXT("Tick 6 Settle grace preserves an angular-only zero-offset shell burst when it remains close to the already-observed RootOn angular peak"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				1,
 				6,
 				true,
@@ -1014,6 +1032,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 6 Settle grace no longer suppresses the same angular-only shell burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				6,
 				true,
@@ -1042,6 +1061,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 6 bounded angular carry-through grace does not apply when the Settle angular spike jumps too far above the pre-Phase-3 peak"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				6,
 				true,
@@ -1070,6 +1090,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 6 bounded angular carry-through grace does not apply when Phase 2 never exposed the same angular RootOn peak"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				6,
 				true,
@@ -1098,6 +1119,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 6 bounded angular carry-through grace does not apply when the failing spine family expands beyond its observed envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				6,
 				true,
@@ -1126,6 +1148,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 6 bounded angular carry-through grace does not apply when the root burst no longer materially dominates the non-root set"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				6,
 				true,
@@ -1154,6 +1177,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 5 angular-only grace does not apply once shell offset drift appears"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				5,
 				true,
@@ -1182,6 +1206,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 5 angular-only grace does not apply without the shell velocity burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				5,
 				true,
@@ -1210,6 +1235,7 @@ namespace
 		TestTrue(
 			TEXT("Tick 7 Settle grace still suppresses a mild angular-only zero-offset shell burst under explicit lock"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				1,
 				7,
 				true,
@@ -1238,6 +1264,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 8 Settle grace no longer suppresses the same mild angular-only shell burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				8,
 				true,
@@ -1266,6 +1293,7 @@ namespace
 		TestTrue(
 			TEXT("Tick 8 root-isolated angular carry-through grace can use the observed pre-Phase-3 non-root envelope instead of a blind calm cutoff"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				1,
 				8,
 				true,
@@ -1294,6 +1322,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not let a thigh burst borrow the spine family's larger observed envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				8,
 				true,
@@ -1322,6 +1351,7 @@ namespace
 		TestTrue(
 			TEXT("Tick 8 root-isolated angular carry-through grace can use the observed family-wide spine envelope when the whole spine family stays bounded"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				1,
 				8,
 				true,
@@ -1350,6 +1380,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not apply when the failing spine family expands collectively beyond its observed envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				8,
 				true,
@@ -1378,6 +1409,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not let an unobserved feet family borrow the generic non-root envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				8,
 				true,
@@ -1406,6 +1438,7 @@ namespace
 		TestTrue(
 			TEXT("Tick 8 Settle grace preserves a root-isolated angular shell burst when non-root simulated bodies stay comparatively calm"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				1,
 				8,
 				true,
@@ -1434,6 +1467,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not apply when the non-root simulated set expands beyond the observed pre-Phase-3 envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				8,
 				true,
@@ -1462,6 +1496,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not apply when the root angular burst no longer materially dominates the non-root set"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				8,
 				true,
@@ -1490,6 +1525,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not apply once the root angular spike expands beyond the observed RootOn carry-through envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				8,
 				true,
@@ -1518,6 +1554,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 9 root-isolated angular carry-through grace no longer suppresses the same shell burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				9,
 				true,
@@ -1546,6 +1583,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 7 mild angular-only grace does not apply once the angular overshoot is too large"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				7,
 				true,
@@ -1574,6 +1612,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 4 Settle instability grace does not hide real shell drift"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				4,
 				true,
@@ -1602,6 +1641,7 @@ namespace
 		TestFalse(
 			TEXT("Tick 4 Settle instability grace does not apply without an explicit shell lock"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
 				999,
 				4,
 				false,
@@ -3846,6 +3886,75 @@ bool FPhysAnimPhase1ConstraintFrameDiagnosticTest::RunTest(const FString& Parame
 	// For now, RefPose is the primary baseline.
 
 	Actor->Destroy();
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimPhase3SettlementGraceProofTest,
+	"PhysAnim.Component.Phase3SettlementGraceProof",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimPhase3SettlementGraceProofTest::RunTest(const FString& Parameters)
+{
+	FBalanceReadyTransitionDiagnostics Diags;
+	const float StandardThreshold = 720.0f;
+	const float LinearThreshold = 3000.0f;
+	const float AngularThreshold = 2160.0f;
+
+	// 1. Tick 0 is not grace
+	TestFalse(
+		TEXT("Tick 0 (pre-release) should not have grace"),
+		FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+			Diags,
+			0, 0, true, true, 0.0f, LinearThreshold, 0.0f, AngularThreshold, 0.0f, 10.0f, 0.0f, StandardThreshold, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f, NAME_None, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+
+	// 2. Tick 1–20 is grace only after actual release
+	TestTrue(
+		TEXT("Tick 10 (post-release) should have grace"),
+		FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+			Diags,
+			10, 10, true, true, 0.0f, LinearThreshold, 0.0f, AngularThreshold, 0.0f, 10.0f, 0.0f, StandardThreshold, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f, NAME_None, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+
+	// 3. Tick 21–40 actually Slerps from physical pose to policy
+	{
+		FPhysAnimBalanceReadyTransition Transition;
+		FPhysAnimBalanceReadyTransitionSnapshot Snapshot = Transition.ExportSnapshot();
+		Snapshot.InternalPhase = EBalanceReadyTransitionPhase::BRT_Phase3_Settle;
+		
+		// Tick 20: Should be 0.0
+		Snapshot.Phase3KineticGateReleaseTickCount = 20;
+		Transition.ImportSnapshot(Snapshot);
+		TestEqual(TEXT("Tick 20 alpha should be 0.0"), Transition.GetProximalControlSoftAlpha(TEXT("thigh_l")), 0.0f);
+
+		// Tick 30: Should be 0.5
+		Snapshot.Phase3KineticGateReleaseTickCount = 30;
+		Transition.ImportSnapshot(Snapshot);
+		TestEqual(TEXT("Tick 30 alpha should be 0.5"), Transition.GetProximalControlSoftAlpha(TEXT("thigh_l")), 0.5f);
+
+		// Tick 40: Should be 1.0
+		Snapshot.Phase3KineticGateReleaseTickCount = 40;
+		Transition.ImportSnapshot(Snapshot);
+		TestEqual(TEXT("Tick 40 alpha should be 1.0"), Transition.GetProximalControlSoftAlpha(TEXT("thigh_l")), 1.0f);
+	}
+
+	// 4. Tick 41 returns to strict behavior
+	TestFalse(
+		TEXT("Tick 41 should not have grace"),
+		FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+			Diags,
+			41, 41, true, true, 0.0f, LinearThreshold, 0.0f, AngularThreshold, 0.0f, 10.0f, 0.0f, StandardThreshold, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f, NAME_None, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+
+	// 5. Non-root angular explosion still fails
+	// Tick 5: Energy budget is high (~2.2x -> ~4750 angular), but expansion cap should block explosion.
+	// Observed peak = 1000.0. Expansion limit = 1100.0.
+	// Current speed = 1500.0 -> Should FAIL.
+	TestFalse(
+		TEXT("Non-root angular explosion (5000 vs 3000 cap) should fail even if within energy budget"),
+		FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+			Diags,
+			5, 5, true, true, 0.0f, LinearThreshold, 0.0f, AngularThreshold, 0.0f, 10.0f, 5000.0f, StandardThreshold, 1000.0f, 1000.0f, 0.0f, 100.0f, 0.0f, TEXT("thigh_l"), 0.0f, 5000.0f, 0.0f, 5000.0f, 1000.0f, 0.0f, 0.0f));
+
 	return true;
 }
 
