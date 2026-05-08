@@ -387,7 +387,7 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		KineticGateReleaseTickCount > 0 &&
 		KineticGateReleaseTickCount <= BalanceTransitionSets::Phase3KineticGateReleaseGraceTicks;
 
-	if (!(bEarlySettlementWatchdogGrace || bInitialKineticReleaseGrace))
+	if (Phase3TickCount == 0 || !(bEarlySettlementWatchdogGrace || bInitialKineticReleaseGrace))
 	{
 		return false;
 	}
@@ -400,7 +400,7 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 
 	// Bounded Safety Envelopes:
 	// 1. Root Angular Expansion & Cap
-	const float RootExpansionLimit = FMath::Max(PrePhase3PeakRootAngularSpeed * 100.0f, AngularThreshold * 2.0f);
+	const float RootExpansionLimit = FMath::Max(PrePhase3PeakRootAngularSpeed * 2.0f, AngularThreshold * 1.5f);
 	const float DynamicRootAngularThreshold = FMath::Min(AngularThreshold * EnergyMultiplier, RootExpansionLimit);
 	const bool bRootAngularWithinBudget = RootAngularSpeed <= DynamicRootAngularThreshold;
 

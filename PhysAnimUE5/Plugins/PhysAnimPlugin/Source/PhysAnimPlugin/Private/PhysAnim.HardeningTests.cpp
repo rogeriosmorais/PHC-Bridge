@@ -153,7 +153,24 @@ namespace
 			TestFalse(TEXT("Watchdog grace inactive at tick 999"), 
 				FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 				Diags,
-					999, 999, true, true, 10.0f, 100.0f, RootAngularSpeed, AngularThreshold, 0.0f, 5.0f, 5.0f, 30.0f, 1.0f, 1.0f, 1.0f, 10.0f, 1.0f, TEXT("spine_01"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+					999, 999, true, true, 10.0f, 100.0f, 80.0f, 45.0f, 0.0f, 5.0f, 5.0f, 30.0f, 60.0f, 1.0f, 1.0f, 10.0f, 1.0f, TEXT("spine_01"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+
+			// Boundary Test: Tick 40 (True) vs Tick 41 (False)
+			TestTrue(TEXT("Watchdog grace active at boundary tick 40"), 
+				FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+					40, 40, true, true, 10.0f, 100.0f, 50.0f, 45.0f, 0.0f, 5.0f, 5.0f, 30.0f, 60.0f, 1.0f, 1.0f, 10.0f, 1.0f, TEXT("spine_01"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+
+			TestFalse(TEXT("Watchdog grace inactive at boundary tick 41"), 
+				FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+					41, 41, true, true, 10.0f, 100.0f, 50.0f, 45.0f, 0.0f, 5.0f, 5.0f, 30.0f, 60.0f, 1.0f, 1.0f, 10.0f, 1.0f, TEXT("spine_01"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+
+			// Kinetic Mismatch Test: Phase3TickCount == 0 must reject even if KineticGateReleaseTickCount == 1
+			TestFalse(TEXT("Phase3TickCount == 0 must reject even if KineticGateReleaseTickCount == 1"), 
+				FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+					1, 0, true, true, 10.0f, 100.0f, 50.0f, 45.0f, 0.0f, 5.0f, 5.0f, 30.0f, 60.0f, 1.0f, 1.0f, 10.0f, 1.0f, TEXT("spine_01"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
 		}
 
 		return true;
