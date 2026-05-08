@@ -744,6 +744,9 @@ private:
 	int32 Phase3GuardTickCount = 0;
 	int32 Phase3KineticGateReleaseTickCount = 0;
 	int32 Phase3StableTickCount = 0;
+	float Phase3StableAlpha = 0.0f;
+	int32 Phase3ConsecutiveEnergyDecayTicks = 0;
+	float Phase3LastFrameEnergy = 0.0f;
 	bool bLastKineticGateActive = false;
 	bool bPreviousFrameSettleEndRootRawSim = false;
 	bool bPreviousFrameSettleEndPelvisRawSim = false;

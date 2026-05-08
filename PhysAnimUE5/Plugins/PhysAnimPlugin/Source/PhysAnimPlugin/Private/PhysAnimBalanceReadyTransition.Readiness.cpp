@@ -94,8 +94,8 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 
 	if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		LinearThreshold *= 20.0f;
-		AngularThreshold *= 20.0f;
+		LinearThreshold *= 2.0f;
+		AngularThreshold *= 2.0f;
 		InstabilityReason = BalanceReadinessReasons::Phase3InstabilitySpike;
 	}
 	else if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
@@ -144,8 +144,8 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 	float TargetDeltaThreshold = Settings.BalancePhase2EntryMaxTargetDeltaDeg;
 	if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		// Allow for higher policy target noise during the settlement burst dissipation
-		TargetDeltaThreshold *= 5.0f;
+		// Allow for minor policy target noise during the settlement burst dissipation
+		TargetDeltaThreshold *= 1.2f;
 	}
 
 	if (Domain.MaxTargetDeltaDegrees > TargetDeltaThreshold ||
@@ -381,12 +381,12 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		return false;
 	}
 
-	// Rule: 150-tick global watchdog window.
+	// Rule: Coherent Early Settlement Window (40 ticks).
 	const bool bEarlySettlementWatchdogGrace =
 		Phase3TickCount > 0 &&
-		Phase3TickCount <= 250;
+		Phase3TickCount <= BalanceTransitionSets::Phase3EarlySettlementWindowTicks;
 
-	// Rule: 5-tick kinetic release grace. KineticGateReleaseTickCount > 0 requirement.
+	// Rule: 5-tick kinetic release grace.
 	const bool bInitialKineticReleaseGrace =
 		KineticGateReleaseTickCount > 0 &&
 		KineticGateReleaseTickCount <= BalanceTransitionSets::Phase3KineticGateReleaseGraceTicks;
@@ -396,63 +396,12 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		return false;
 	}
 
-	// Calculate decay multiplier for thresholds based on EffectiveTick
-	static constexpr float Phase3InitialEnergyMultiplier = 150.0f;
-	static constexpr float Phase3EnergyDecayTimeConstantTicks = 60.0f;
-	static constexpr float SystemicExpansionMultiplier = 100.0f;
-	static constexpr float NonRootAngularExpansionMultiplier = 3.0f;
-
-	int32 EffectiveTick = Phase3TickCount;
-	if (KineticGateReleaseTickCount > 0 && KineticGateReleaseTickCount < EffectiveTick)
-	{
-		EffectiveTick = KineticGateReleaseTickCount;
-	}
-	else if (KineticGateReleaseTickCount == 0)
-	{
-		EffectiveTick = 0; // Max grace for active gate
-	}
-
-	const float CurrentEnergyMultiplier =
-		Phase3InitialEnergyMultiplier * FMath::Exp(-static_cast<float>(EffectiveTick) / Phase3EnergyDecayTimeConstantTicks);
-
-	const float DynamicLinearThreshold = LinearThreshold * CurrentEnergyMultiplier;
-	const float DynamicAngularThreshold = AngularThreshold * CurrentEnergyMultiplier;
-	const float DynamicShellVelocityThreshold = ShellVelocityThreshold * CurrentEnergyMultiplier;
-
-	const bool bRootLinearWithinBudget = RootLinearSpeed <= DynamicLinearThreshold;
-
-	const float RootAngularExpansionLimit = PrePhase3PeakRootAngularSpeed > KINDA_SMALL_NUMBER ? 
-		FMath::Max(PrePhase3PeakRootAngularSpeed * SystemicExpansionMultiplier, AngularThreshold) : 
-		AngularThreshold;
-	const float FinalRootAngularThreshold = FMath::Max(RootAngularExpansionLimit, DynamicAngularThreshold);
-	const bool bRootAngularWithinBudget = RootAngularSpeed <= FinalRootAngularThreshold;
-
-	float ObservedFamilyEnvelope = PrePhase3PeakNonRootAngularSpeed;
-	const FString BoneNameStr = CurrentMaxNonRootAngularBone.ToString().ToLower();
-	if (BoneNameStr.Contains(TEXT("spine")) || BoneNameStr.Contains(TEXT("neck")) || BoneNameStr.Contains(TEXT("head")))
-	{
-		ObservedFamilyEnvelope = PrePhase3PeakSpineFamilyAngularSpeed;
-	}
-	else if (BoneNameStr.Contains(TEXT("thigh")))
-	{
-		ObservedFamilyEnvelope = PrePhase3PeakThighFamilyAngularSpeed;
-	}
-	else if (BoneNameStr.Contains(TEXT("foot")) || BoneNameStr.Contains(TEXT("feet")))
-	{
-		ObservedFamilyEnvelope = PrePhase3PeakFeetFamilyAngularSpeed;
-	}
-
-	const float NonRootExpansionLimit = ObservedFamilyEnvelope > KINDA_SMALL_NUMBER ? 
-		FMath::Max(ObservedFamilyEnvelope * NonRootAngularExpansionMultiplier, NonRootAngularThreshold) : 
-		NonRootAngularThreshold;
-	const float FinalNonRootThreshold = FMath::Max(NonRootExpansionLimit, DynamicAngularThreshold * 0.85f);
-	const bool bNonRootAngularWithinBudget = CurrentMaxNonRootAngularSpeed <= FinalNonRootThreshold;
-
-	const float ShellVelocityExpansionLimit = PrePhase3PeakShellVelocity > KINDA_SMALL_NUMBER ? 
-		FMath::Max(PrePhase3PeakShellVelocity * SystemicExpansionMultiplier, ShellVelocityThreshold) : 
-		ShellVelocityThreshold;
-	const float FinalShellVelocityThreshold = FMath::Max(ShellVelocityExpansionLimit, DynamicShellVelocityThreshold);
-	const bool bShellVelocityWithinBudget = CurrentShellVelocity <= FinalShellVelocityThreshold;
+	// Bounded Safety Envelopes:
+	// Use the thresholds passed in (which are already pre-multiplied at the call site for grace).
+	const bool bRootLinearWithinBudget = RootLinearSpeed <= LinearThreshold;
+	const bool bRootAngularWithinBudget = RootAngularSpeed <= AngularThreshold;
+	const bool bShellVelocityWithinBudget = CurrentShellVelocity <= ShellVelocityThreshold;
+	const bool bNonRootAngularWithinBudget = CurrentMaxNonRootAngularSpeed <= NonRootAngularThreshold;
 
 	const bool bResult = bRootLinearWithinBudget && bRootAngularWithinBudget && bNonRootAngularWithinBudget && bShellVelocityWithinBudget;
 	
@@ -911,9 +860,9 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				Owner->HasExplicitTransitionOwnedShellLock(),
 				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
 				Domain.RootLinearSpeed,
-				Settings.MaxRootLinearSpeedCmPerSecond * 5.0f,
+				Settings.MaxRootLinearSpeedCmPerSecond * 2.0f,
 				Domain.RootAngularSpeed,
-				Settings.MaxRootAngularSpeedDegPerSecond * 3.0f,
+				Settings.MaxRootAngularSpeedDegPerSecond * 2.0f,
 				ShellPlanarOffsetCm,
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				CurrentMaxNonRootAngularSpeed,
@@ -978,7 +927,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 			Owner->GetCurrentShellPlanarOffsetDeltaCm(),
 			Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond(),
 			Settings.BalancePhase2AbortShellOffsetDelta,
-			Settings.BalancePhase2AbortShellVelocityDelta * (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle ? 5.0f : 1.0f)))
+			Settings.BalancePhase2AbortShellVelocityDelta * (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle ? 1.5f : 1.0f)))
 	{
 		// Even if material shell correction is active, we check if it's within the early-settle instability grace window.
 		// This prevents brittle failures during the initial raw-sim burst if the energy is still decaying safely.
@@ -989,9 +938,9 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				Owner->HasExplicitTransitionOwnedShellLock(),
 				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
 				Domain.RootLinearSpeed,
-				Settings.MaxRootLinearSpeedCmPerSecond * 5.0f,
+				Settings.MaxRootLinearSpeedCmPerSecond * 2.0f,
 				Domain.RootAngularSpeed,
-				Settings.MaxRootAngularSpeedDegPerSecond * 3.0f,
+				Settings.MaxRootAngularSpeedDegPerSecond * 2.0f,
 				Owner->GetCurrentShellPlanarOffsetDeltaCm(),
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				CurrentMaxNonRootAngularSpeed,
@@ -999,7 +948,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				Diagnostics.PeakRootAngularSpeed,
 				Diagnostics.PeakMaxNonRootBodyAngularSpeed,
 				Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond(),
-				Settings.BalancePhase2AbortShellVelocityDelta * (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle ? 5.0f : 1.0f),
+				Settings.BalancePhase2AbortShellVelocityDelta * (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle ? 1.5f : 1.0f),
 				Diagnostics.BaselineShellVel,
 				CurrentMaxNonRootAngularBone,
 				CurrentSpineFamilyAngularSpeed,
@@ -1028,17 +977,15 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 
 bool FPhysAnimBalanceReadyTransition::IsPhase3Stable() const
 {
-	// Stability criteria for allowing 100% proximal authority:
-	// 1. Minimum duration passed since raw-sim release (to let initial impulse dissipate)
-	// 2. Material shell velocity is below soft restore threshold
-	// 3. Root body angular speed is below soft restore threshold
-	// 4. No significant non-root angular expansion (envelope < 1.0)
+	// Stability criteria for allowing authority ramp-up:
+	// 1. Material shell velocity is below calm threshold (10.0f)
+	// 2. Root body angular speed is below calm threshold (45.0f)
+	// 3. Energy has been decaying for at least 5 frames (monitored in UpdateInternalState)
 	
-	const bool bAllowFullProximalStrength = 
-		Phase3KineticGateReleaseTickCount >= 20 &&
-		Diagnostics.Phase3CurrentShellVelocity < 60.0f &&
-		Diagnostics.Phase3CurrentRootAngularSpeed < 200.0f &&
-		(Diagnostics.Phase3CurrentMaxNonRootAngularSpeed <= Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope * 1.5f || Diagnostics.Phase3CurrentMaxNonRootAngularSpeed < 100.0f);
+	const bool bIsCalm = 
+		Diagnostics.Phase3CurrentShellVelocity < 10.0f &&
+		Diagnostics.Phase3CurrentRootAngularSpeed < 45.0f &&
+		Phase3ConsecutiveEnergyDecayTicks >= 5;
 
-	return bAllowFullProximalStrength;
+	return bIsCalm;
 }

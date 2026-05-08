@@ -294,16 +294,32 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			Phase3KineticGateReleaseTickCount = 999;
 		}
 
+		// Section 17.3.3 - Phase 3 Root Energy Decay Tracking
+		const float CurrentEnergy = CachedConvergenceSnapshot.RootLinearSpeed * CachedConvergenceSnapshot.RootLinearSpeed + 
+									CachedConvergenceSnapshot.RootAngularSpeed * CachedConvergenceSnapshot.RootAngularSpeed;
+		if (CurrentEnergy < Phase3LastFrameEnergy)
+		{
+			++Phase3ConsecutiveEnergyDecayTicks;
+		}
+		else
+		{
+			Phase3ConsecutiveEnergyDecayTicks = 0;
+		}
+		Phase3LastFrameEnergy = CurrentEnergy;
+
+		// Section 17.3.3 - Reversible Authority Alpha Ramp
 		if (IsPhase3Stable())
 		{
-			if (Phase3StableTickCount == 0)
-			{
-				Phase3StableTickCount = 1;
-			}
-			else if (Phase3StableTickCount < 999)
+			Phase3StableAlpha = FMath::Min(Phase3StableAlpha + BalanceTransitionSets::Phase3AlphaRiseStep, 1.0f);
+			if (Phase3StableTickCount < 999)
 			{
 				++Phase3StableTickCount;
 			}
+		}
+		else
+		{
+			Phase3StableAlpha = FMath::Max(Phase3StableAlpha - BalanceTransitionSets::Phase3AlphaFallStep, BalanceTransitionSets::Phase3AlphaFloor);
+			Phase3StableTickCount = 0;
 		}
 
 		bLastKineticGateActive = bKineticGateActiveNow;
@@ -311,13 +327,16 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	else
 	{
 		// Ensure counter is out-of-grace when not in Phase 3
-		Phase3KineticGateReleaseTickCount = 999;
+		Phase3GuardTickCount = 0;
+		Phase3KineticGateReleaseTickCount = 0;
+		Phase3StableTickCount = 0;
+		Phase3StableAlpha = 0.0f;
+		Phase3ConsecutiveEnergyDecayTicks = 0;
+		Phase3LastFrameEnergy = 0.0f;
 		bLastKineticGateActive = Owner->bKineticGateActiveLastFrame;
 	}
+
 	FString BlockReason;
-
-
-
 	const bool bReadyThisFrame = EvaluateReadiness(Owner, Settings, BlockReason);
 	Diagnostics.BlockReason = BlockReason;
 

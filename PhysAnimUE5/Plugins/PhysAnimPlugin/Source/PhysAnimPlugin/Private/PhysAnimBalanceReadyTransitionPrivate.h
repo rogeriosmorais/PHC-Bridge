@@ -18,7 +18,13 @@ namespace BalanceTransitionSets
 	inline constexpr float Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg =
 		Phase2MaxPelvisSpineDirectLinkAngularErrorDeg - Phase2RequiredPelvisSpineDirectLinkAngularMarginDeg;
 
-	inline constexpr int32 Phase3KineticGateReleaseGraceTicks = 25;
+	inline constexpr int32 Phase3KineticGateReleaseGraceTicks = 5;
+	inline constexpr float Phase3AlphaFloor = 0.35f;
+	inline constexpr float Phase3AlphaRiseStep = 0.01f;
+	inline constexpr float Phase3AlphaFallStep = 0.02f;
+	inline constexpr int32 Phase3FullAuthorityRequiredStableTicks = 8;
+	inline constexpr int32 Phase3EarlySettlementWindowTicks = 40;
+
 	inline constexpr float ShellVelocitySoftRestoreThreshold = 5.0f;
 	inline constexpr float RootAngularSoftRestoreThreshold = 30.0f;
 	inline constexpr int32 MinPostReleaseRampTicks = 30;

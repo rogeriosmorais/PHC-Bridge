@@ -126,11 +126,9 @@ float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneNam
 		float Alpha = 0.0f;
 		if (Phase3KineticGateReleaseTickCount > BalanceTransitionSets::Phase3KineticGateReleaseGraceTicks)
 		{
-			// Stability-Gated Control Ramp:
-			// Replaces the fixed 80-tick ramp with a dynamic restoration.
-			// We reach 1.0 authority after 20 ticks of maintained stability, 
-			// ensuring full restoration before the Phase 3 success boundary.
-			Alpha = FMath::Clamp((float)Phase3StableTickCount / 20.0f, 0.0f, 1.0f);
+			// Reversible Authority Ramp (Replaces the fixed 20-tick ramp):
+			// Alpha is managed in UpdateInternalState based on real-time stability metrics.
+			Alpha = Phase3StableAlpha;
 		}
 
 		return Alpha;
