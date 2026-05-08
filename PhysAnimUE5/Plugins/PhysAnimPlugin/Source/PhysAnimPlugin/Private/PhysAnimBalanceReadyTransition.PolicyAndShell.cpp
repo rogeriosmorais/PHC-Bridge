@@ -124,11 +124,10 @@ float FPhysAnimBalanceReadyTransition::GetProximalControlSoftAlpha(FName BoneNam
 		// and authority is instantly revoked to allow the system to re-settle.
 		
 		float Alpha = 0.0f;
-		if (Phase3KineticGateReleaseTickCount > BalanceTransitionSets::Phase3KineticGateReleaseGraceTicks)
+		if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 		{
-			// Reversible Authority Ramp (Replaces the fixed 20-tick ramp):
-			// Alpha is managed in UpdateInternalState based on real-time stability metrics.
-			Alpha = Phase3StableAlpha;
+			// Enforce immediate floor in Phase 3 to prevent ragdoll deadlock during kinetic grace.
+			Alpha = FMath::Max(Phase3StableAlpha, BalanceTransitionSets::Phase3AlphaFloor);
 		}
 
 		return Alpha;

@@ -2352,6 +2352,7 @@ extern int32 GVerbosePhase2Forensics;
 		return;
 	}
 
+
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
 		if (!bLoggedPhase3PreGuardRootState)
@@ -2497,6 +2498,12 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	}
 
 	PreviousPhase = InternalPhase;
+
+	if (NewPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
+	{
+		Phase3StableAlpha = BalanceTransitionSets::Phase3AlphaFloor;
+	}
+
 
 	if (Owner &&
 		(NewPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || NewPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate) &&

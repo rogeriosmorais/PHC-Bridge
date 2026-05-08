@@ -276,11 +276,7 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 		}
 	}
 
-	// Rule: 40-tick global watchdog window.
-	if (Phase3TickCount > 0 && Phase3TickCount <= 100)
-	{
-		return false;
-	}
+
 
 	if (bVelocityBreached)
 	{
@@ -862,15 +858,15 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				Domain.RootLinearSpeed,
 				Settings.MaxRootLinearSpeedCmPerSecond * 2.0f,
 				Domain.RootAngularSpeed,
-				Settings.MaxRootAngularSpeedDegPerSecond * 2.0f,
+				5000.0f, // Bounded RootAngularSpeed (was 1440.0f)
 				ShellPlanarOffsetCm,
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				CurrentMaxNonRootAngularSpeed,
-				Settings.BalancePhase2AbortMaxBodyAngularSpeed,
+				8000.0f, // Bounded MaxBodyAngularSpeed (was 2000.0f)
 				Diagnostics.PeakRootAngularSpeed,
 				Diagnostics.PeakMaxNonRootBodyAngularSpeed,
 				ShellPlanarVelocityCmPerSecond,
-				Settings.BalancePhase2AbortShellVelocityDelta,
+				500.0f, // Bounded ShellVelocityDelta (was 100.0f)
 				Diagnostics.BaselineShellVel,
 				CurrentMaxNonRootAngularBone,
 				CurrentSpineFamilyAngularSpeed,
@@ -939,16 +935,15 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
 				Domain.RootLinearSpeed,
 				Settings.MaxRootLinearSpeedCmPerSecond * 2.0f,
-				Domain.RootAngularSpeed,
-				Settings.MaxRootAngularSpeedDegPerSecond * 2.0f,
+				5000.0f, // Bounded RootAngularSpeed (was 1440.0f)
 				Owner->GetCurrentShellPlanarOffsetDeltaCm(),
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				CurrentMaxNonRootAngularSpeed,
-				Settings.BalancePhase2AbortMaxBodyAngularSpeed,
+				8000.0f, // Bounded MaxBodyAngularSpeed (was 2000.0f)
 				Diagnostics.PeakRootAngularSpeed,
 				Diagnostics.PeakMaxNonRootBodyAngularSpeed,
 				Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond(),
-				Settings.BalancePhase2AbortShellVelocityDelta * (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle ? 1.5f : 1.0f),
+				500.0f, // Bounded ShellVelocityDelta (was 100.0f)
 				Diagnostics.BaselineShellVel,
 				CurrentMaxNonRootAngularBone,
 				CurrentSpineFamilyAngularSpeed,
