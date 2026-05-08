@@ -40,6 +40,7 @@ Interpretation:
 9. Keep commits small and atomic.
 10. Build with `.\\scripts\\build.ps1`. This script should also be used to run any test passing -Test "Test Name" as a parameter right after the build.
 11. If smoke tests were run, read logs with `python .\\scripts\\read_logs.py`.
+12. DO NOT ATTEMPT MORE THAN 3 TESTS. If you reach 3 tests without success stop. It's very likely we need a change in focus/direction.
 
 <!-- mcp-graph:start -->
 # AGENTS.md — NewEngine-AgentB
