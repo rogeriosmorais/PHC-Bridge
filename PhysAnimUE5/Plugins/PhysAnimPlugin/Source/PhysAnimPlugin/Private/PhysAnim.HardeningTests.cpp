@@ -20,7 +20,7 @@ namespace
 			const bool bGraceActive = FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 				Diags,
 				0,     // KineticGateReleaseTickCount
-				5,     // Phase3TickCount
+				0,     // Phase3TickCount
 				true,  // bTransitionOwnedShellLocked
 				true,  // bLocomotionAuthorityIdle
 				10.0f, // RootLinearSpeed
@@ -141,13 +141,13 @@ namespace
 			TestFalse(TEXT("Watchdog grace inactive at tick 0"), 
 				FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 				Diags,
-					0, 0, true, true, 10.0f, 100.0f, RootAngularSpeed, AngularThreshold, 0.0f, 5.0f, 5.0f, 30.0f, 1.0f, 1.0f, 1.0f, 10.0f, 1.0f, TEXT("spine_01"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+					0, 0, true, true, 10.0f, 100.0f, 5000.0f, 45.0f, 0.0f, 5.0f, 5.0f, 30.0f, 1.0f, 1.0f, 1.0f, 10.0f, 1.0f, TEXT("spine_01"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
 
 			// Tick 20 -> True (within 60 ticks max)
 			TestTrue(TEXT("Watchdog grace active at tick 20"), 
 				FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 				Diags,
-					20, 20, true, true, 10.0f, 100.0f, RootAngularSpeed, AngularThreshold, 0.0f, 5.0f, 5.0f, 30.0f, 1.0f, 1.0f, 1.0f, 10.0f, 1.0f, TEXT("spine_01"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+					20, 20, true, true, 10.0f, 100.0f, 80.0f, 45.0f, 0.0f, 5.0f, 5.0f, 30.0f, 60.0f, 1.0f, 1.0f, 10.0f, 1.0f, TEXT("spine_01"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
 
 			// Tick 999 -> False
 			TestFalse(TEXT("Watchdog grace inactive at tick 999"), 

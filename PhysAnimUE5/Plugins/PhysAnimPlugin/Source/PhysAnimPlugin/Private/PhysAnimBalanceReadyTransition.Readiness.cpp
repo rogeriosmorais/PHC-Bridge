@@ -392,19 +392,36 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 		return false;
 	}
 
+	// Energy Budget Calculation:
+	// Use the max of the two relevant timers for energy decay.
+	const int32 GraceTickCount = FMath::Max(Phase3TickCount, KineticGateReleaseTickCount);
+	const float DecayAlpha = FMath::Exp(-static_cast<float>(GraceTickCount) / 15.0f);
+	const float EnergyMultiplier = FMath::Lerp(1.0f, 150.0f, DecayAlpha);
+
 	// Bounded Safety Envelopes:
-	// Use the thresholds passed in (which are already pre-multiplied at the call site for grace).
-	const bool bRootLinearWithinBudget = RootLinearSpeed <= LinearThreshold;
-	const bool bRootAngularWithinBudget = RootAngularSpeed <= AngularThreshold;
-	const bool bShellVelocityWithinBudget = CurrentShellVelocity <= ShellVelocityThreshold;
-	const bool bNonRootAngularWithinBudget = CurrentMaxNonRootAngularSpeed <= NonRootAngularThreshold;
+	// 1. Root Angular Expansion & Cap
+	const float RootExpansionLimit = FMath::Max(PrePhase3PeakRootAngularSpeed * 100.0f, AngularThreshold * 2.0f);
+	const float DynamicRootAngularThreshold = FMath::Min(AngularThreshold * EnergyMultiplier, RootExpansionLimit);
+	const bool bRootAngularWithinBudget = RootAngularSpeed <= DynamicRootAngularThreshold;
+
+	// 2. Non-Root Angular Expansion & Cap
+	const float NonRootExpansionLimit = FMath::Max(PrePhase3PeakNonRootAngularSpeed * 1.5f, NonRootAngularThreshold * 4.0f);
+	const float DynamicNonRootAngularThreshold = FMath::Min(NonRootAngularThreshold * EnergyMultiplier, NonRootExpansionLimit);
+	const bool bNonRootAngularWithinBudget = CurrentMaxNonRootAngularSpeed <= DynamicNonRootAngularThreshold;
+
+	// 3. Shell Velocity Expansion & Cap
+	const float ShellExpansionLimit = FMath::Max(PrePhase3PeakShellVelocity * 1.5f, ShellVelocityThreshold * 4.0f);
+	const float DynamicShellVelocityThreshold = FMath::Min(ShellVelocityThreshold * EnergyMultiplier, ShellExpansionLimit);
+	const bool bShellVelocityWithinBudget = CurrentShellVelocity <= DynamicShellVelocityThreshold;
+
+	// 4. Linear Budget (Static expansion for now)
+	const bool bRootLinearWithinBudget = RootLinearSpeed <= (LinearThreshold * 2.0f);
 
 	const bool bResult = bRootLinearWithinBudget && bRootAngularWithinBudget && bNonRootAngularWithinBudget && bShellVelocityWithinBudget;
 	
 	if (!bResult && GVerbosePhase2Forensics != 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_GRACE_REJECT frame=%d tick=%d kineticTick=%d rootLin=%d rootAng=%d nonRoot=%d shellVel=%d"),
-			static_cast<int32>(GFrameCounter),
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_GRACE_REJECT tick=%d kineticTick=%d rootLin=%d rootAng=%d nonRoot=%d shellVel=%d"),
 			Phase3TickCount,
 			KineticGateReleaseTickCount,
 			bRootLinearWithinBudget ? 1 : 0,
@@ -856,17 +873,17 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				Owner->HasExplicitTransitionOwnedShellLock(),
 				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
 				Domain.RootLinearSpeed,
-				Settings.MaxRootLinearSpeedCmPerSecond * 2.0f,
+				Settings.MaxRootLinearSpeedCmPerSecond,
 				Domain.RootAngularSpeed,
-				5000.0f, // Bounded RootAngularSpeed (was 1440.0f)
+				Settings.MaxRootAngularSpeedDegPerSecond,
 				ShellPlanarOffsetCm,
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				CurrentMaxNonRootAngularSpeed,
-				8000.0f, // Bounded MaxBodyAngularSpeed (was 2000.0f)
+				Settings.MaxRootAngularSpeedDegPerSecond * 2.0f,
 				Diagnostics.PeakRootAngularSpeed,
 				Diagnostics.PeakMaxNonRootBodyAngularSpeed,
 				ShellPlanarVelocityCmPerSecond,
-				500.0f, // Bounded ShellVelocityDelta (was 100.0f)
+				Settings.BalancePhase2AbortShellVelocityDelta,
 				Diagnostics.BaselineShellVel,
 				CurrentMaxNonRootAngularBone,
 				CurrentSpineFamilyAngularSpeed,
@@ -934,17 +951,17 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 				Owner->HasExplicitTransitionOwnedShellLock(),
 				Owner->GetLocomotionAuthorityState() == EBridgeLocomotionAuthorityState::Idle,
 				Domain.RootLinearSpeed,
-				Settings.MaxRootLinearSpeedCmPerSecond * 2.0f,
+				Settings.MaxRootLinearSpeedCmPerSecond,
 				Domain.RootAngularSpeed,
-				5000.0f, // Bounded root angular threshold
+				Settings.MaxRootAngularSpeedDegPerSecond,
 				Owner->GetCurrentShellPlanarOffsetDeltaCm(),
 				Settings.BalancePhase2AbortShellOffsetDelta,
 				CurrentMaxNonRootAngularSpeed,
-				8000.0f, // Bounded non-root angular threshold
+				Settings.MaxRootAngularSpeedDegPerSecond * 2.0f,
 				Diagnostics.PeakRootAngularSpeed,
 				Diagnostics.PeakMaxNonRootBodyAngularSpeed,
 				Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond(),
-				500.0f, // Bounded shell velocity threshold
+				Settings.BalancePhase2AbortShellVelocityDelta,
 				Diagnostics.BaselineShellVel,
 				CurrentMaxNonRootAngularBone,
 				CurrentSpineFamilyAngularSpeed,
