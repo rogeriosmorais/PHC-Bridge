@@ -71,5 +71,17 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("WALK-07 AuthorityState is ActiveLocomotion"), (int32)TestComp->BridgeLocomotionAuthorityState, (int32)EBridgeLocomotionAuthorityState::ActiveLocomotion);
 	}
 
+	// 6. MovementDelta: Verify non-zero delta command is recorded
+	{
+		ResetToAllowed();
+		TestComp->Stage2AConsecutivePolicyActiveFrames = 3;
+		const float DeltaTime = 0.05f;
+		TestComp->TryActivateStage2AWalkIntent(DeltaTime);
+		TestTrue(TEXT("WALK-08 LastWalkDeltaCm (command) is non-zero"), !TestComp->Stage2ALastWalkDeltaCm.IsNearlyZero());
+		TestEqual(TEXT("WALK-09 LastWalkDeltaCm matches expected speed * time"), (double)TestComp->Stage2ALastWalkDeltaCm.X, (double)(60.0f * DeltaTime), 0.01);
+		TestTrue(TEXT("WALK-10 Move is blocked (headless)"), TestComp->BridgeShellState.bLastMoveBlocked);
+		TestTrue(TEXT("WALK-11 AcceptedWorldDeltaCm is zero (headless)"), TestComp->BridgeShellState.AcceptedWorldDeltaCm.IsNearlyZero());
+	}
+
 	return true;
 }

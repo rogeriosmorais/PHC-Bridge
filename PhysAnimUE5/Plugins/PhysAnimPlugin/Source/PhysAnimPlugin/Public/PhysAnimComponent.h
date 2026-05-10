@@ -2756,6 +2756,8 @@ public:
 
 private:
 	void UpdateBridgeStatusIndicator(float DisplayDurationSeconds) const;
+	double GetPhysAnimClockTime() const;
+	void HardenStage2ALocomotionState();
 	void TransitionRuntimeState(EPhysAnimRuntimeState NewState);
 	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
 	double InitialPoseSearchWaitStartTimeSeconds = 0.0;

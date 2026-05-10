@@ -683,7 +683,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (bApplyNewPolicyStepThisTick && OutError.IsEmpty())
 	{
-		LastPolicyControlUpdateTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : FPlatformTime::Seconds();
+		LastPolicyControlUpdateTimeSeconds = GetPhysAnimClockTime();
 	}
 
 	if (bRootSimFlipFrame)

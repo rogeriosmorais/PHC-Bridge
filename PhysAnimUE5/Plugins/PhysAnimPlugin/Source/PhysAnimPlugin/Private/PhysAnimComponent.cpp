@@ -1766,7 +1766,7 @@ void UPhysAnimComponent::EmitLiveRuntimeEvidenceTerminalArtifactOnce(const FPhys
 
 bool UPhysAnimComponent::IsStage2APolicyOutputActive() const
 {
-	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : FPlatformTime::Seconds();
+	const double CurrentTimeSeconds = GetPhysAnimClockTime();
 	return PolicyControlTicksExecuted > 0
 		&& CurrentTimeSeconds >= LastPolicyControlUpdateTimeSeconds
 		&& (CurrentTimeSeconds - LastPolicyControlUpdateTimeSeconds) <= Stage2APolicyLivenessTimeoutSeconds;
@@ -1865,13 +1865,25 @@ void UPhysAnimComponent::ApplyStage2AKinematicShellWalkDelta(const FVector& Delt
 	AActor* const OwnerActor = GetOwner();
 	if (!OwnerActor)
 	{
+		BridgeShellState.AcceptedWorldDeltaCm = FVector::ZeroVector;
+		BridgeShellState.AcceptedPlanarVelocityCmPerSecond = FVector::ZeroVector;
+		BridgeShellState.bLastMoveBlocked = true;
 		return;
 	}
 
+	BridgeShellState.bLastMoveBlocked = false;
 	const FVector NewLocation = OwnerActor->GetActorLocation() + DeltaCm;
 
 	// Movement: Update Actor Transform (Sweep=true)
-	OwnerActor->SetActorLocation(NewLocation, true);
+	const bool bMoveSuccess = OwnerActor->SetActorLocation(NewLocation, true);
+
+	if (!bMoveSuccess)
+	{
+		BridgeShellState.bLastMoveBlocked = true;
+		BridgeShellState.AcceptedWorldDeltaCm = FVector::ZeroVector;
+		BridgeShellState.AcceptedPlanarVelocityCmPerSecond = FVector::ZeroVector;
+		return;
+	}
 
 	// Sync: Explicitly update BridgeShellState to preserve root continuity
 	BridgeShellState.LastAcceptedActorLocation = OwnerActor->GetActorLocation();
@@ -1893,3 +1905,18 @@ void UPhysAnimComponent::EmitStage2ALocomotionTelemetry(const TCHAR* LocomotionI
 	UE_LOG(LogPhysAnimBridge, Display, TEXT("%s"), *LastStage2ALocomotionTelemetryLine);
 }
 
+double UPhysAnimComponent::GetPhysAnimClockTime() const
+{
+	return GetWorld() ? GetWorld()->GetTimeSeconds() : FPlatformTime::Seconds();
+}
+
+void UPhysAnimComponent::HardenStage2ALocomotionState()
+{
+	if (Stage2ALocomotionRequestState == EBridgeLocomotionRequestState::LocomotionRequested)
+	{
+		if (!IsStage2APolicyOutputActive())
+		{
+			Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+		}
+	}
+}

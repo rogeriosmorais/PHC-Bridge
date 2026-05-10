@@ -2670,6 +2670,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	bKineticGateReleasedThisFrame = false;
 	TickLiveRuntimeEvidenceProof(DeltaTime);
+	HardenStage2ALocomotionState();
 	if (bEnableLiveRuntimeEvidenceProof && !bLiveRuntimeEvidenceProofComplete)
 	{
 		PolicyInfluenceRampStartTimeSeconds = -1.0;
@@ -5002,6 +5003,11 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 
 	// Smoke-facing contract filtering: Phase 1/2 is Pending, Phase 3 is LateValidate.
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] State Transition: %s -> %s"), PreviousStateName, NewStateName);
+	
+	if (NewState != EPhysAnimRuntimeState::LocomotionActiveShell)
+	{
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+	}
 
 	RuntimeState = NewState;
 	EmitBridgeTraceEvent(
