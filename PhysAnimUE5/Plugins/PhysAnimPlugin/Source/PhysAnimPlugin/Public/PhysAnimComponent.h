@@ -1265,6 +1265,9 @@ class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPo
 	friend class UPhysAnimPhase1AutoCalibSubsystem;
 	friend class FPhysAnimStage2ALocomotionGateTest;
 	friend class FPhysAnimStage2AWalkIntentTest;
+	friend class FPhysAnimStage2AWalkSmokeTest;
+	friend class FPhysAnimStage2ATurnIntentTest;
+	friend class FPhysAnimStage2ATurnSmokeTest;
 
 
 public:
@@ -2768,6 +2771,7 @@ private:
 	bool TryOpenStage2ALocomotionRequestGate(const TCHAR* RequestReason);
 	void EmitStage2ALocomotionTelemetry(const TCHAR* LocomotionIntent, const TCHAR* CapsuleOrShellMotionSource, EStage2ALocomotionTerminalState TerminalState);
 	bool TryActivateStage2AWalkIntent(float DeltaSeconds);
+	bool TryActivateStage2ATurnIntent(float DeltaSeconds, float YawDeltaDegrees);
 	FVector BuildStage2AWalkDeltaCm(float DeltaSeconds) const;
 	void ApplyStage2AKinematicShellWalkDelta(const FVector& DeltaCm);
 	static const TCHAR* Stage2ATerminalStateToString(EStage2ALocomotionTerminalState TerminalState);
@@ -2780,6 +2784,7 @@ private:
 	int32 Stage2AConsecutivePolicyActiveFrames = 0;
 	bool bStage2AWalkIntentActive = false;
 	FVector Stage2ALastWalkDeltaCm = FVector::ZeroVector;
+	float Stage2ALastTurnYawDeltaDegrees = 0.0f;
 };
 
 

@@ -1853,6 +1853,48 @@ bool UPhysAnimComponent::TryActivateStage2AWalkIntent(float DeltaTime)
 	return true;
 }
 
+bool UPhysAnimComponent::TryActivateStage2ATurnIntent(float DeltaTime, float YawDeltaDegrees)
+{
+	if (EvaluateStage2ALocomotionRequestGate() != EStage2ALocomotionTerminalState::Allowed)
+	{
+		return false;
+	}
+
+	if (Stage2AConsecutivePolicyActiveFrames < Stage2AMinPolicyActiveFramesBeforeWalk)
+	{
+		return false;
+	}
+
+	// Update Intent/Trajectory States
+	const TCHAR* IntentName = (YawDeltaDegrees >= 0.0f) ? TEXT("TurnLeft") : TEXT("TurnRight");
+	BridgeIntentState.ActiveIntent = IntentName;
+	BridgeIntentState.bHasDesiredFacing = true;
+	BridgeTrajectoryState.MotionSource = Stage2AMotionSourceName;
+
+	AActor* const OwnerActor = GetOwner();
+	const FRotator CurrentRotation = OwnerActor ? OwnerActor->GetActorRotation() : FRotator::ZeroRotator;
+	const FRotator TargetRotation = FRotator(CurrentRotation.Pitch, CurrentRotation.Yaw + YawDeltaDegrees, CurrentRotation.Roll);
+
+	// DesiredFacing should be target absolute yaw
+	BridgeIntentState.DesiredFacingYawDegrees = TargetRotation.Yaw;
+
+	if (OwnerActor)
+	{
+		// Movement: Update Actor Rotation (Sweep=true)
+		OwnerActor->SetActorLocationAndRotation(OwnerActor->GetActorLocation(), TargetRotation, true);
+	}
+
+	Stage2ALastTurnYawDeltaDegrees = YawDeltaDegrees;
+	bStage2AWalkIntentActive = false;
+	BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::ActiveLocomotion;
+	RuntimeState = EPhysAnimRuntimeState::LocomotionActiveShell;
+	Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+
+	EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, EStage2ALocomotionTerminalState::Allowed);
+
+	return true;
+}
+
 FVector UPhysAnimComponent::BuildStage2AWalkDeltaCm(float DeltaTime) const
 {
 	const float RawDelta = Stage2AForwardWalkSpeedCmPerSecond * DeltaTime;
