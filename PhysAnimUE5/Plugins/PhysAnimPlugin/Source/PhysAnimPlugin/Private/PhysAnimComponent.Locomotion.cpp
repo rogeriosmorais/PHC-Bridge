@@ -96,6 +96,7 @@ void UPhysAnimComponent::ResetBridgeLocomotionRequestState()
 	ResetBridgeLocomotionHandoffPreflightState();
 	ResetBridgeLocomotionHandoffCommitState();
 	ResetBridgeLocomotionActiveShellState();
+	Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
 }
 
 

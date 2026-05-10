@@ -1813,11 +1813,11 @@ bool UPhysAnimComponent::TryOpenStage2ALocomotionRequestGate(const TCHAR* Reques
 	BridgeLocomotionAuthorityState = bAllowed ? EBridgeLocomotionAuthorityState::StartupLocomotion : EBridgeLocomotionAuthorityState::Idle;
 	if (bAllowed)
 	{
-		RuntimeState = EPhysAnimRuntimeState::LocomotionActiveShell;
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShell);
 	}
 	else if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
 	{
-		RuntimeState = EPhysAnimRuntimeState::LocomotionActiveShellDenied;
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
 	}
 	EmitStage2ALocomotionTelemetry(TEXT("RequestOnly"), TEXT("Stage2A_KinematicShell"), Stage2ALastLocomotionTerminalState);
 	return bAllowed;
@@ -1904,6 +1904,7 @@ FVector UPhysAnimComponent::BuildStage2AWalkDeltaCm(float DeltaTime) const
 
 void UPhysAnimComponent::ApplyStage2AKinematicShellWalkDelta(const FVector& DeltaCm)
 {
+	BridgeShellState.RequestedWorldDeltaCm = DeltaCm;
 	AActor* const OwnerActor = GetOwner();
 	if (!OwnerActor)
 	{

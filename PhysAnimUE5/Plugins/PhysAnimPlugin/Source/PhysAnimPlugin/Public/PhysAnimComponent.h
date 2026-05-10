@@ -58,6 +58,7 @@ struct FBridgeShellState
 	FVector PendingPlanarVelocityCmPerSecond = FVector::ZeroVector;
 	FVector AcceptedPlanarVelocityCmPerSecond = FVector::ZeroVector;
 	FVector AcceptedWorldDeltaCm = FVector::ZeroVector;
+	FVector RequestedWorldDeltaCm = FVector::ZeroVector;
 	FVector AppliedPlanarCorrectionVelocityCmPerSecond = FVector::ZeroVector;
 	FVector LastAcceptedActorLocation = FVector::ZeroVector;
 	bool bInitialized = false;

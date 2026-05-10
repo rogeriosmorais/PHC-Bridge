@@ -152,14 +152,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 	bool bApplyNewPolicyStepThisTick,
 	FString& OutError)
 {
-	if (bApplyNewPolicyStepThisTick && IsStage2APolicyOutputActive())
-	{
-		++Stage2AConsecutivePolicyActiveFrames;
-	}
-	else if (!IsStage2APolicyOutputActive())
-	{
-		Stage2AConsecutivePolicyActiveFrames = 0;
-	}
+	// Consecutive active frame tracking is now handled at the end of ApplyControlTargets to ensure it only increments on successful writes.
 
 	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_ApplyControlTargets);
 
@@ -681,9 +674,21 @@ void UPhysAnimComponent::ApplyControlTargets(
 			static_cast<double>(ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees));
 	}
 
-	if (bApplyNewPolicyStepThisTick && OutError.IsEmpty())
+	const bool bInferenceSucceeded = bApplyNewPolicyStepThisTick && OutError.IsEmpty();
+	const bool bTargetsWritten = ControlTargetDiagnostics.NumNormalPolicyTargetsWritten > 0;
+
+	if (bInferenceSucceeded && bTargetsWritten)
 	{
 		LastPolicyControlUpdateTimeSeconds = GetPhysAnimClockTime();
+		++Stage2AConsecutivePolicyActiveFrames;
+	}
+	else if (!IsStage2APolicyOutputActive())
+	{
+		// Only reset if the watchdog has actually timed out, or if we explicitly failed inference
+		if (!bInferenceSucceeded)
+		{
+			Stage2AConsecutivePolicyActiveFrames = 0;
+		}
 	}
 
 	if (bRootSimFlipFrame)
