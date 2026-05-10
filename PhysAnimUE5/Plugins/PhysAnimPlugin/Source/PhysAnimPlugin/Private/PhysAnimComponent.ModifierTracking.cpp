@@ -152,6 +152,15 @@ void UPhysAnimComponent::ApplyControlTargets(
 	bool bApplyNewPolicyStepThisTick,
 	FString& OutError)
 {
+	if (bApplyNewPolicyStepThisTick && IsStage2APolicyOutputActive())
+	{
+		++Stage2AConsecutivePolicyActiveFrames;
+	}
+	else if (!IsStage2APolicyOutputActive())
+	{
+		Stage2AConsecutivePolicyActiveFrames = 0;
+	}
+
 	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_ApplyControlTargets);
 
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
@@ -670,6 +679,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 		ActivatedStandingStabilityMetrics.ControlTargetMeanRawPolicyOffsetDegMax = FMath::Max(
 			ActivatedStandingStabilityMetrics.ControlTargetMeanRawPolicyOffsetDegMax,
 			static_cast<double>(ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees));
+	}
+
+	if (bApplyNewPolicyStepThisTick && OutError.IsEmpty())
+	{
+		LastPolicyControlUpdateTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : FPlatformTime::Seconds();
 	}
 
 	if (bRootSimFlipFrame)

@@ -3173,6 +3173,12 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	ApplyMovementSmokeInput(EffectiveSettings);
 	UpdateBridgeLocomotionGateTiming(EffectiveSettings, GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0);
 	UpdateBridgeLocomotionRequestState(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0);
+
+	if (BridgeLocomotionRequestState == EBridgeLocomotionRequestState::LocomotionRequested)
+	{
+		TryActivateStage2AWalkIntent(DeltaTime);
+	}
+
 	if ((RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState)) && bStartupMovementLockActive)
 	{
 		const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
@@ -3865,7 +3871,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		++PolicyControlTicksExecuted;
 		PolicyControlTicksSkipped += FMath::Max(ElapsedPolicySteps - 1, 0);
-		LastPolicyControlUpdateTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 		if (bCanTraceFrames)
 		{
 			const int64 TraceFrameIndex = BridgeTraceTickCounter++;

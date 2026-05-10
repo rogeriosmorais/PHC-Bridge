@@ -14,6 +14,13 @@ DEFINE_LOG_CATEGORY(LogPhysAnimBridge);
 
 namespace
 {
+	static constexpr float Stage2AForwardWalkSpeedCmPerSecond = 60.0f;
+	static constexpr float Stage2AMaxWalkDeltaPerTickCm = 6.0f;
+	static constexpr int32 Stage2AMinPolicyActiveFramesBeforeWalk = 3;
+	static constexpr const TCHAR* Stage2AWalkIntentName = TEXT("WalkForward");
+	static constexpr const TCHAR* Stage2AMotionSourceName = TEXT("Stage2A_KinematicShell");
+	static constexpr float Stage2APolicyLivenessTimeoutSeconds = 0.1f;
+
 	bool HasConsistentLiveRuntimeEvidenceArtifact(const FPhysAnimRuntimeTerminationState& State)
 	{
 		const FPhysAnimRunArtifactSnapshot& Latest = State.LatestArtifact;
@@ -895,7 +902,10 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			Verbose,
 			TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
 			GetRuntimeStateName(RuntimeState));
+
+		TryOpenStage2ALocomotionRequestGate(TEXT("BalanceActive_Standing"));
 	}
+
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
 		bLiveRuntimeEvidenceStartupStandingEntryAccepted &&
@@ -1753,3 +1763,133 @@ void UPhysAnimComponent::EmitLiveRuntimeEvidenceTerminalArtifactOnce(const FPhys
 {
 	// Implementation moved to PhysAnimProofArtifactEmitter
 }
+
+bool UPhysAnimComponent::IsStage2APolicyOutputActive() const
+{
+	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : FPlatformTime::Seconds();
+	return PolicyControlTicksExecuted > 0
+		&& CurrentTimeSeconds >= LastPolicyControlUpdateTimeSeconds
+		&& (CurrentTimeSeconds - LastPolicyControlUpdateTimeSeconds) <= Stage2APolicyLivenessTimeoutSeconds;
+}
+
+bool UPhysAnimComponent::IsStage2AShellRootLocked() const
+{
+	return BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked
+		&& BridgeShellState.bInitialized;
+}
+
+const TCHAR* UPhysAnimComponent::Stage2ATerminalStateToString(EStage2ALocomotionTerminalState TerminalState)
+{
+	switch (TerminalState)
+	{
+	case EStage2ALocomotionTerminalState::Allowed: return TEXT("Allowed");
+	case EStage2ALocomotionTerminalState::Denied_NotBalanceActiveStanding: return TEXT("Denied_NotBalanceActiveStanding");
+	case EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive: return TEXT("Denied_PolicyOutputInactive");
+	case EStage2ALocomotionTerminalState::Denied_SimRootAttempted: return TEXT("Denied_SimRootAttempted");
+	case EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked: return TEXT("Denied_ShellRootUnlocked");
+	case EStage2ALocomotionTerminalState::Denied_Phase3ThresholdRelaxed: return TEXT("Denied_Phase3ThresholdRelaxed");
+	default: return TEXT("NotEvaluated");
+	}
+}
+
+EStage2ALocomotionTerminalState UPhysAnimComponent::EvaluateStage2ALocomotionRequestGate() const
+{
+	const bool bInValidState = (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing || 
+	                            (RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell && 
+	                             Stage2ALocomotionRequestState == EBridgeLocomotionRequestState::LocomotionRequested));
+	if (!bInValidState) { return EStage2ALocomotionTerminalState::Denied_NotBalanceActiveStanding; }
+
+	if (!IsStage2APolicyOutputActive()) { return EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive; }
+	if (bStage2APhase3SimRootAttempted) { return EStage2ALocomotionTerminalState::Denied_SimRootAttempted; }
+	if (!IsStage2AShellRootLocked()) { return EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked; }
+	return EStage2ALocomotionTerminalState::Allowed;
+}
+
+bool UPhysAnimComponent::TryOpenStage2ALocomotionRequestGate(const TCHAR* RequestReason)
+{
+	Stage2ALastLocomotionTerminalState = EvaluateStage2ALocomotionRequestGate();
+	const bool bAllowed = Stage2ALastLocomotionTerminalState == EStage2ALocomotionTerminalState::Allowed;
+	Stage2ALocomotionRequestState = bAllowed ? EBridgeLocomotionRequestState::LocomotionRequested : EBridgeLocomotionRequestState::LocomotionRequestDenied;
+	BridgeLocomotionAuthorityState = bAllowed ? EBridgeLocomotionAuthorityState::StartupLocomotion : EBridgeLocomotionAuthorityState::Idle;
+	if (bAllowed)
+	{
+		RuntimeState = EPhysAnimRuntimeState::LocomotionActiveShell;
+	}
+	else if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		RuntimeState = EPhysAnimRuntimeState::LocomotionActiveShellDenied;
+	}
+	EmitStage2ALocomotionTelemetry(TEXT("RequestOnly"), TEXT("Stage2A_KinematicShell"), Stage2ALastLocomotionTerminalState);
+	return bAllowed;
+}
+
+bool UPhysAnimComponent::TryActivateStage2AWalkIntent(float DeltaTime)
+{
+	if (EvaluateStage2ALocomotionRequestGate() != EStage2ALocomotionTerminalState::Allowed)
+	{
+		return false;
+	}
+
+	if (Stage2AConsecutivePolicyActiveFrames < Stage2AMinPolicyActiveFramesBeforeWalk)
+	{
+		return false;
+	}
+
+	// Update Intent/Trajectory States
+	BridgeIntentState.ActiveIntent = Stage2AWalkIntentName;
+	BridgeTrajectoryState.MotionSource = Stage2AMotionSourceName;
+
+	// Calculate and apply delta
+	Stage2ALastWalkDeltaCm = BuildStage2AWalkDeltaCm(DeltaTime);
+	ApplyStage2AKinematicShellWalkDelta(Stage2ALastWalkDeltaCm);
+
+	bStage2AWalkIntentActive = true;
+	BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::ActiveLocomotion;
+	RuntimeState = EPhysAnimRuntimeState::LocomotionActiveShell;
+	Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+
+	EmitStage2ALocomotionTelemetry(Stage2AWalkIntentName, Stage2AMotionSourceName, EStage2ALocomotionTerminalState::Allowed);
+
+	return true;
+}
+
+FVector UPhysAnimComponent::BuildStage2AWalkDeltaCm(float DeltaTime) const
+{
+	const float RawDelta = Stage2AForwardWalkSpeedCmPerSecond * DeltaTime;
+	const float ClampedDelta = FMath::Min(RawDelta, Stage2AMaxWalkDeltaPerTickCm);
+	return FVector(ClampedDelta, 0.0f, 0.0f);
+}
+
+void UPhysAnimComponent::ApplyStage2AKinematicShellWalkDelta(const FVector& DeltaCm)
+{
+	AActor* const OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+
+	const FVector NewLocation = OwnerActor->GetActorLocation() + DeltaCm;
+
+	// Movement: Update Actor Transform (Sweep=true)
+	OwnerActor->SetActorLocation(NewLocation, true);
+
+	// Sync: Explicitly update BridgeShellState to preserve root continuity
+	BridgeShellState.LastAcceptedActorLocation = OwnerActor->GetActorLocation();
+	BridgeShellState.AcceptedWorldDeltaCm = DeltaCm;
+
+	const float DeltaTimeSeconds = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.033f;
+	BridgeShellState.AcceptedPlanarVelocityCmPerSecond = DeltaCm / FMath::Max(DeltaTimeSeconds, 0.001f);
+}
+
+void UPhysAnimComponent::EmitStage2ALocomotionTelemetry(const TCHAR* LocomotionIntent, const TCHAR* CapsuleOrShellMotionSource, EStage2ALocomotionTerminalState TerminalState)
+{
+	LastStage2ALocomotionTelemetryLine = FString::Printf(
+		TEXT("root_mode=Stage1_KinematicRoot locomotion_intent=%s policy_output_active=%s capsule_or_shell_motion_source=%s phase3_simroot_attempted=%s terminal_state=%s"),
+		LocomotionIntent,
+		IsStage2APolicyOutputActive() ? TEXT("true") : TEXT("false"),
+		CapsuleOrShellMotionSource,
+		bStage2APhase3SimRootAttempted ? TEXT("true") : TEXT("false"),
+		Stage2ATerminalStateToString(TerminalState));
+	UE_LOG(LogPhysAnimBridge, Display, TEXT("%s"), *LastStage2ALocomotionTelemetryLine);
+}
+

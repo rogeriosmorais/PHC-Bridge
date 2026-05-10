@@ -36,6 +36,8 @@ struct FBridgeIntentState
 	float DesiredSpeedCmPerSecond = 0.0f;
 	float DesiredFacingYawDegrees = 0.0f;
 	bool bHasDesiredFacing = false;
+
+	FString ActiveIntent;
 };
 
 struct FBridgeTrajectoryState
@@ -47,6 +49,8 @@ struct FBridgeTrajectoryState
 	float DesiredControllerYawLastUpdate = 0.0f;
 	float LastDeltaTimeSeconds = 1.0f / 30.0f;
 	bool bInitialized = false;
+
+	FString MotionSource;
 };
 
 struct FBridgeShellState
@@ -64,7 +68,8 @@ enum class EBridgeLocomotionAuthorityState : uint8
 {
 	Idle,
 	StartupLocomotion,
-	Locomoting
+	Locomoting,
+	ActiveLocomotion
 };
 
 UENUM(BlueprintType)
@@ -73,6 +78,19 @@ enum class EBridgeLocomotionRequestState : uint8
 	BalanceActiveStanding,
 	LocomotionRequested,
 	LocomotionRequestDenied
+};
+
+
+UENUM(BlueprintType)
+enum class EStage2ALocomotionTerminalState : uint8
+{
+    NotEvaluated,
+    Allowed,
+    Denied_NotBalanceActiveStanding,
+    Denied_PolicyOutputInactive,
+    Denied_SimRootAttempted,
+    Denied_ShellRootUnlocked,
+    Denied_Phase3ThresholdRelaxed
 };
 
 UENUM(BlueprintType)
@@ -1245,6 +1263,9 @@ class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPo
 	GENERATED_BODY()
 	friend class FPhysAnimBalanceReadyTransition;
 	friend class UPhysAnimPhase1AutoCalibSubsystem;
+	friend class FPhysAnimStage2ALocomotionGateTest;
+	friend class FPhysAnimStage2AWalkIntentTest;
+
 
 public:
 	UPhysAnimComponent();
@@ -2738,7 +2759,27 @@ private:
 	void TransitionRuntimeState(EPhysAnimRuntimeState NewState);
 	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
 	double InitialPoseSearchWaitStartTimeSeconds = 0.0;
+
+	bool IsStage2APolicyOutputActive() const;
+	bool IsStage2AShellRootLocked() const;
+	EStage2ALocomotionTerminalState EvaluateStage2ALocomotionRequestGate() const;
+	bool TryOpenStage2ALocomotionRequestGate(const TCHAR* RequestReason);
+	void EmitStage2ALocomotionTelemetry(const TCHAR* LocomotionIntent, const TCHAR* CapsuleOrShellMotionSource, EStage2ALocomotionTerminalState TerminalState);
+	bool TryActivateStage2AWalkIntent(float DeltaSeconds);
+	FVector BuildStage2AWalkDeltaCm(float DeltaSeconds) const;
+	void ApplyStage2AKinematicShellWalkDelta(const FVector& DeltaCm);
+	static const TCHAR* Stage2ATerminalStateToString(EStage2ALocomotionTerminalState TerminalState);
+
+	EBridgeLocomotionRequestState Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+	EStage2ALocomotionTerminalState Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::NotEvaluated;
+	bool bStage2APhase3SimRootAttempted = false;
+	FString LastStage2ALocomotionTelemetryLine;
+
+	int32 Stage2AConsecutivePolicyActiveFrames = 0;
+	bool bStage2AWalkIntentActive = false;
+	FVector Stage2ALastWalkDeltaCm = FVector::ZeroVector;
 };
+
 
 
 
