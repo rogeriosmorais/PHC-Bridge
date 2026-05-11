@@ -42,25 +42,6 @@ namespace
 			}
 		}
 	};
-
-	static void ResetToAllowed(UPhysAnimComponent* TestComp)
-	{
-		TestComp->RuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
-		TestComp->BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked;
-		TestComp->BridgeShellState = FBridgeShellState();
-		TestComp->BridgeShellState.bInitialized = true;
-		TestComp->LastPolicyControlUpdateTimeSeconds = TestComp->GetPhysAnimClockTime();
-		TestComp->PolicyControlTicksExecuted = 1;
-		TestComp->bStage2APhase3SimRootAttempted = false;
-		TestComp->Stage2AConsecutivePolicyActiveFrames = 0;
-		TestComp->bStage2AWalkIntentActive = false;
-		TestComp->Stage2ALastWalkDeltaCm = FVector::ZeroVector;
-		TestComp->BridgeIntentState = FBridgeIntentState();
-		TestComp->BridgeTrajectoryState = FBridgeTrajectoryState();
-		TestComp->BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
-		TestComp->Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
-		TestComp->Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::NotEvaluated;
-	}
 }
 
 bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
@@ -81,9 +62,29 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 
 	UPhysAnimComponent* TestComp = Fixture.Component;
 
+	// Helper to reset to "Allowed" state - must be lambda in RunTest to access private members via friendship
+	auto ResetToAllowed = [TestComp]()
+	{
+		TestComp->RuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
+		TestComp->BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked;
+		TestComp->BridgeShellState = FBridgeShellState();
+		TestComp->BridgeShellState.bInitialized = true;
+		TestComp->LastPolicyControlUpdateTimeSeconds = TestComp->GetPhysAnimClockTime();
+		TestComp->PolicyControlTicksExecuted = 1;
+		TestComp->bStage2APhase3SimRootAttempted = false;
+		TestComp->Stage2AConsecutivePolicyActiveFrames = 0;
+		TestComp->bStage2AWalkIntentActive = false;
+		TestComp->Stage2ALastWalkDeltaCm = FVector::ZeroVector;
+		TestComp->BridgeIntentState = FBridgeIntentState();
+		TestComp->BridgeTrajectoryState = FBridgeTrajectoryState();
+		TestComp->BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+		TestComp->Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+		TestComp->Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::NotEvaluated;
+	};
+
 	// 1. DeltaClamping: actor forward +X, 50ms = 3cm; 1s clamps to 6cm.
 	{
-		ResetToAllowed(TestComp);
+		ResetToAllowed();
 		Fixture.Actor->SetActorRotation(FRotator::ZeroRotator);
 		const FVector Delta1 = TestComp->BuildStage2AWalkDeltaCm(0.05f);
 		TestEqual(TEXT("WALK-01 50ms delta should be 3cm along actor forward X"), (double)Delta1.X, 3.0, 0.01);
@@ -95,7 +96,7 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 
 	// 2. Actor forward rotation: yaw 90 must move along +Y, not hard-coded +X.
 	{
-		ResetToAllowed(TestComp);
+		ResetToAllowed();
 		Fixture.Actor->SetActorLocation(FVector::ZeroVector, false);
 		Fixture.Actor->SetActorRotation(FRotator(0.0f, 90.0f, 0.0f));
 		const FVector RotatedDelta = TestComp->BuildStage2AWalkDeltaCm(0.05f);
@@ -105,7 +106,7 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 
 	// 3. ActivationGating: Verify TryActivateStage2AWalkIntent respects frame threshold.
 	{
-		ResetToAllowed(TestComp);
+		ResetToAllowed();
 		Fixture.Actor->SetActorLocation(FVector::ZeroVector, false);
 		Fixture.Actor->SetActorRotation(FRotator::ZeroRotator);
 		TestComp->TryOpenStage2ALocomotionRequestGate(TEXT("WalkIntentTest"));
@@ -114,7 +115,7 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("WALK-06 bStage2AWalkIntentActive remains false at 2 frames"), TestComp->bStage2AWalkIntentActive);
 		TestEqual(TEXT("WALK-07 Denial terminal state is policy inactive/min frames"), (int32)TestComp->Stage2ALastLocomotionTerminalState, (int32)EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive);
 
-		ResetToAllowed(TestComp);
+		ResetToAllowed();
 		Fixture.Actor->SetActorLocation(FVector::ZeroVector, false);
 		Fixture.Actor->SetActorRotation(FRotator::ZeroRotator);
 		TestComp->TryOpenStage2ALocomotionRequestGate(TEXT("WalkIntentTest"));
@@ -125,7 +126,7 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 
 	// 4. Intent and trajectory state must be fully populated.
 	{
-		ResetToAllowed(TestComp);
+		ResetToAllowed();
 		Fixture.Actor->SetActorLocation(FVector::ZeroVector, false);
 		Fixture.Actor->SetActorRotation(FRotator::ZeroRotator);
 		TestComp->TryOpenStage2ALocomotionRequestGate(TEXT("WalkIntentStateTest"));
@@ -144,7 +145,7 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 
 	// 5. Movement acceptance state and telemetry.
 	{
-		ResetToAllowed(TestComp);
+		ResetToAllowed();
 		Fixture.Actor->SetActorLocation(FVector::ZeroVector, false);
 		Fixture.Actor->SetActorRotation(FRotator::ZeroRotator);
 		TestComp->TryOpenStage2ALocomotionRequestGate(TEXT("WalkIntentMovementTest"));
