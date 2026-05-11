@@ -17,6 +17,7 @@ bool FPhysAnimStage2ALocomotionGateTest::RunTest(const FString& Parameters)
 		TestComp->BridgeShellState.bInitialized = true;
 		TestComp->bPolicyTargetsAppliedLastFrame = true;
 		TestComp->PolicyControlTicksExecuted = 1;
+		TestComp->LastPolicyControlUpdateTimeSeconds = TestComp->GetPhysAnimClockTime();
 		TestComp->bStage2APhase3SimRootAttempted = false;
 	};
 
@@ -84,6 +85,24 @@ bool FPhysAnimStage2ALocomotionGateTest::RunTest(const FString& Parameters)
 		bool bOpened = TestComp->TryOpenStage2ALocomotionRequestGate(TEXT("TestReason"));
 		TestFalse(TEXT("TryOpen denied"), bOpened);
 		TestEqual(TEXT("State should be LocomotionActiveShellDenied"), (uint8)TestComp->RuntimeState, (uint8)EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+	}
+
+	// Case: Re-entry from LocomotionActiveShell is allowed only while explicitly requested.
+	{
+		ResetToAllowed();
+		TestComp->RuntimeState = EPhysAnimRuntimeState::LocomotionActiveShell;
+		TestComp->Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+		EStage2ALocomotionTerminalState Result = TestComp->EvaluateStage2ALocomotionRequestGate();
+		TestEqual(TEXT("GATE-10 LocomotionActiveShell re-entry allowed when request is active"), (uint8)Result, (uint8)EStage2ALocomotionTerminalState::Allowed);
+	}
+
+	// Case: Re-entry from LocomotionActiveShell is denied when request state is stale/cleared.
+	{
+		ResetToAllowed();
+		TestComp->RuntimeState = EPhysAnimRuntimeState::LocomotionActiveShell;
+		TestComp->Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+		EStage2ALocomotionTerminalState Result = TestComp->EvaluateStage2ALocomotionRequestGate();
+		TestEqual(TEXT("GATE-11 LocomotionActiveShell denied without active request"), (uint8)Result, (uint8)EStage2ALocomotionTerminalState::Denied_NotBalanceActiveStanding);
 	}
 
 	// Case: TryOpen denial (not in Standing -> should NOT change state)

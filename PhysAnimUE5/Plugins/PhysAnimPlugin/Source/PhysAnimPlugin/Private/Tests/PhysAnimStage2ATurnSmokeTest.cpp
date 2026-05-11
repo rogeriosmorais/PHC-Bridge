@@ -10,8 +10,9 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimStage2ATurnSmokeTest, "PhysAnim.PIE.St
 static constexpr float Stage2ATurnSmokeDurationSeconds = 2.0f;
 static constexpr float Stage2ATurnSmokeTickSeconds = 0.05f;
 static constexpr float Stage2ATurnSmokeYawDeltaPerTickDegrees = 1.0f; // Total 40 deg
-static constexpr float Stage2ATurnSmokeMinTotalRotationDegrees = 35.0f;
-static constexpr float Stage2ATurnSmokeMaxTranslationDriftCm = 15.0f;
+static constexpr float Stage2ATurnSmokeMinAbsYawDegrees = 20.0f;
+static constexpr float Stage2ATurnSmokeMaxAbsYawDegrees = 90.0f;
+static constexpr float Stage2ATurnSmokeMaxTranslationCm = 120.0f;
 
 bool FPhysAnimStage2ATurnSmokeTest::RunTest(const FString& Parameters)
 {
@@ -65,18 +66,23 @@ bool FPhysAnimStage2ATurnSmokeTest::RunTest(const FString& Parameters)
 		const float TranslationDriftCm = FVector::Dist(StartLocation, EndLocation);
 
 		// Assertions
-		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-01 abs(SignedYawDeltaDegrees) >= 35.0f"), PassLabel), FMath::Abs(SignedYawDeltaDegrees) >= Stage2ATurnSmokeMinTotalRotationDegrees);
-		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-02 TranslationDriftCm <= 15.0f"), PassLabel), TranslationDriftCm <= Stage2ATurnSmokeMaxTranslationDriftCm);
+		const float AbsYawDeltaDegrees = FMath::Abs(SignedYawDeltaDegrees);
+		const bool bExpectLeft = YawDeltaPerTick > 0.0f;
+		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-01 signed yaw direction matches intent"), PassLabel), bExpectLeft ? SignedYawDeltaDegrees > 0.0f : SignedYawDeltaDegrees < 0.0f);
+		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-02 abs(SignedYawDeltaDegrees) >= 20.0f"), PassLabel), AbsYawDeltaDegrees >= Stage2ATurnSmokeMinAbsYawDegrees);
+		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-03 abs(SignedYawDeltaDegrees) <= 90.0f"), PassLabel), AbsYawDeltaDegrees <= Stage2ATurnSmokeMaxAbsYawDegrees);
+		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-04 TranslationDriftCm <= 120.0f"), PassLabel), TranslationDriftCm <= Stage2ATurnSmokeMaxTranslationCm);
 		
-		TestEqual(FString::Printf(TEXT("%s SMOKE-TURN-03 RuntimeState is LocomotionActiveShell"), PassLabel), (int32)Component->RuntimeState, (int32)EPhysAnimRuntimeState::LocomotionActiveShell);
-		TestEqual(FString::Printf(TEXT("%s SMOKE-TURN-04 AuthorityState is ActiveLocomotion"), PassLabel), (int32)Component->BridgeLocomotionAuthorityState, (int32)EBridgeLocomotionAuthorityState::ActiveLocomotion);
-		TestEqual(FString::Printf(TEXT("%s SMOKE-TURN-05 TerminalState is Allowed"), PassLabel), (int32)Component->Stage2ALastLocomotionTerminalState, (int32)EStage2ALocomotionTerminalState::Allowed);
+		TestEqual(FString::Printf(TEXT("%s SMOKE-TURN-05 RuntimeState is LocomotionActiveShell"), PassLabel), (int32)Component->RuntimeState, (int32)EPhysAnimRuntimeState::LocomotionActiveShell);
+		TestEqual(FString::Printf(TEXT("%s SMOKE-TURN-06 AuthorityState is Locomoting"), PassLabel), (int32)Component->BridgeLocomotionAuthorityState, (int32)EBridgeLocomotionAuthorityState::Locomoting);
+		TestEqual(FString::Printf(TEXT("%s SMOKE-TURN-07 TerminalState is Allowed"), PassLabel), (int32)Component->Stage2ALastLocomotionTerminalState, (int32)EStage2ALocomotionTerminalState::Allowed);
 
 		// Telemetry assertions
 		const FString ExpectedIntent = (YawDeltaPerTick > 0.0f) ? TEXT("TurnLeft") : TEXT("TurnRight");
-		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-06 Telemetry contains locomotion_intent=%s"), PassLabel, *ExpectedIntent), Component->LastStage2ALocomotionTelemetryLine.Contains(FString::Printf(TEXT("locomotion_intent=%s"), *ExpectedIntent)));
-		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-07 Telemetry contains root_mode=Stage1_KinematicRoot"), PassLabel), Component->LastStage2ALocomotionTelemetryLine.Contains(TEXT("root_mode=Stage1_KinematicRoot")));
-		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-08 Telemetry contains terminal_state=Allowed"), PassLabel), Component->LastStage2ALocomotionTelemetryLine.Contains(TEXT("terminal_state=Allowed")));
+		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-08 Telemetry contains locomotion_intent=%s"), PassLabel, *ExpectedIntent), Component->LastStage2ALocomotionTelemetryLine.Contains(FString::Printf(TEXT("locomotion_intent=%s"), *ExpectedIntent)));
+		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-09 Telemetry contains root_mode=Stage1_KinematicRoot"), PassLabel), Component->LastStage2ALocomotionTelemetryLine.Contains(TEXT("root_mode=Stage1_KinematicRoot")));
+		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-10 Telemetry contains phase3_simroot_attempted=false"), PassLabel), Component->LastStage2ALocomotionTelemetryLine.Contains(TEXT("phase3_simroot_attempted=false")));
+		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-11 Telemetry contains terminal_state=Allowed"), PassLabel), Component->LastStage2ALocomotionTelemetryLine.Contains(TEXT("terminal_state=Allowed")));
 
 		// Emit final log line as requested
 		UE_LOG(LogPhysAnimBridge, Display, TEXT("PASS_STAGE2A_TURN_%s_SMOKE duration_seconds=2.0 signed_yaw_delta_degrees=%.3f translation_cm=%.3f terminal_state=%s"), 

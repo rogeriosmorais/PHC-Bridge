@@ -73,7 +73,7 @@ bool FPhysAnimStage2AWalkSmokeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("SMOKE-03 VerticalDriftCm <= 15.0f"), VerticalDriftCm <= Stage2AWalkSmokeMaxVerticalDriftCm);
 	
 	TestEqual(TEXT("SMOKE-04 RuntimeState is LocomotionActiveShell"), (int32)Component->RuntimeState, (int32)EPhysAnimRuntimeState::LocomotionActiveShell);
-	TestEqual(TEXT("SMOKE-05 AuthorityState is ActiveLocomotion"), (int32)Component->BridgeLocomotionAuthorityState, (int32)EBridgeLocomotionAuthorityState::ActiveLocomotion);
+	TestEqual(TEXT("SMOKE-05 AuthorityState is Locomoting"), (int32)Component->BridgeLocomotionAuthorityState, (int32)EBridgeLocomotionAuthorityState::Locomoting);
 	TestEqual(TEXT("SMOKE-06 TerminalState is Allowed"), (int32)Component->Stage2ALastLocomotionTerminalState, (int32)EStage2ALocomotionTerminalState::Allowed);
 
 	// Telemetry assertions

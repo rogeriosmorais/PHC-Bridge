@@ -111,3 +111,4 @@ node_modules/requires-port/LICENSE
 node_modules/requires-port/package.json
 node_modules/requires-port/README.md
 node_modules/requires-port/test.js
+cloudflared.log

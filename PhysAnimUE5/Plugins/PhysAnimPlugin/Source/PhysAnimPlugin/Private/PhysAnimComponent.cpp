@@ -1825,88 +1825,177 @@ bool UPhysAnimComponent::TryOpenStage2ALocomotionRequestGate(const TCHAR* Reques
 
 bool UPhysAnimComponent::TryActivateStage2AWalkIntent(float DeltaTime)
 {
-	if (EvaluateStage2ALocomotionRequestGate() != EStage2ALocomotionTerminalState::Allowed)
+	Stage2ALastLocomotionTerminalState = EvaluateStage2ALocomotionRequestGate();
+	if (Stage2ALastLocomotionTerminalState != EStage2ALocomotionTerminalState::Allowed)
 	{
+		bStage2AWalkIntentActive = false;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		EmitStage2ALocomotionTelemetry(Stage2AWalkIntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
 		return false;
 	}
 
 	if (Stage2AConsecutivePolicyActiveFrames < Stage2AMinPolicyActiveFramesBeforeWalk)
 	{
+		bStage2AWalkIntentActive = false;
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+		EmitStage2ALocomotionTelemetry(Stage2AWalkIntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
 		return false;
 	}
 
-	// Update Intent/Trajectory States
-	BridgeIntentState.ActiveIntent = Stage2AWalkIntentName;
-	BridgeTrajectoryState.MotionSource = Stage2AMotionSourceName;
+	AActor* const OwnerActor = GetOwner();
+	FVector WorldMoveDirection = OwnerActor ? OwnerActor->GetActorForwardVector() : FVector::ForwardVector;
+	WorldMoveDirection.Z = 0.0f;
+	if (!WorldMoveDirection.Normalize())
+	{
+		WorldMoveDirection = FVector::ForwardVector;
+	}
 
-	// Calculate and apply delta
+	BridgeIntentState.ActiveIntent = Stage2AWalkIntentName;
+	BridgeIntentState.WorldMoveDirection = WorldMoveDirection;
+	BridgeIntentState.LocalMoveDirection = FVector::ForwardVector;
+	BridgeIntentState.IntentMagnitude = 1.0f;
+	BridgeIntentState.DesiredSpeedCmPerSecond = Stage2AForwardWalkSpeedCmPerSecond;
+	BridgeIntentState.bHasDesiredFacing = false;
+
+	BridgeTrajectoryState.MotionSource = Stage2AMotionSourceName;
+	BridgeTrajectoryState.DesiredVelocityCmPerSecond = WorldMoveDirection * Stage2AForwardWalkSpeedCmPerSecond;
+	BridgeTrajectoryState.AcceptedVelocityCmPerSecond = FVector::ZeroVector;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = BridgeTrajectoryState.DesiredVelocityCmPerSecond;
+	BridgeTrajectoryState.LastDeltaTimeSeconds = DeltaTime;
+	BridgeTrajectoryState.bInitialized = true;
+
 	Stage2ALastWalkDeltaCm = BuildStage2AWalkDeltaCm(DeltaTime);
 	ApplyStage2AKinematicShellWalkDelta(Stage2ALastWalkDeltaCm);
 
-	bStage2AWalkIntentActive = true;
-	BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::ActiveLocomotion;
-	RuntimeState = EPhysAnimRuntimeState::LocomotionActiveShell;
-	Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+	const bool bAcceptedMovement = !BridgeShellState.AcceptedWorldDeltaCm.IsNearlyZero();
+	bStage2AWalkIntentActive = bAcceptedMovement;
+	Stage2ALocomotionRequestState = bAcceptedMovement
+		? EBridgeLocomotionRequestState::LocomotionRequested
+		: EBridgeLocomotionRequestState::LocomotionRequestDenied;
+	BridgeLocomotionAuthorityState = bAcceptedMovement
+		? EBridgeLocomotionAuthorityState::Locomoting
+		: EBridgeLocomotionAuthorityState::StartupLocomotion;
+	Stage2ALastLocomotionTerminalState = bAcceptedMovement
+		? EStage2ALocomotionTerminalState::Allowed
+		: EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked;
 
-	EmitStage2ALocomotionTelemetry(Stage2AWalkIntentName, Stage2AMotionSourceName, EStage2ALocomotionTerminalState::Allowed);
+	if (bAcceptedMovement)
+	{
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShell);
+		BridgeTrajectoryState.AcceptedVelocityCmPerSecond = BridgeShellState.AcceptedPlanarVelocityCmPerSecond;
+	}
+	else
+	{
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+	}
 
-	return true;
+	EmitStage2ALocomotionTelemetry(Stage2AWalkIntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
+
+	return bAcceptedMovement;
 }
 
 bool UPhysAnimComponent::TryActivateStage2ATurnIntent(float DeltaTime, float YawDeltaDegrees)
 {
-	if (EvaluateStage2ALocomotionRequestGate() != EStage2ALocomotionTerminalState::Allowed)
+	const TCHAR* IntentName = (YawDeltaDegrees >= 0.0f) ? TEXT("TurnLeft") : TEXT("TurnRight");
+	Stage2ALastLocomotionTerminalState = EvaluateStage2ALocomotionRequestGate();
+	if (Stage2ALastLocomotionTerminalState != EStage2ALocomotionTerminalState::Allowed)
 	{
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
 		return false;
 	}
 
 	if (Stage2AConsecutivePolicyActiveFrames < Stage2AMinPolicyActiveFramesBeforeWalk)
 	{
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+		EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
 		return false;
 	}
 
-	// Update Intent/Trajectory States
-	const TCHAR* IntentName = (YawDeltaDegrees >= 0.0f) ? TEXT("TurnLeft") : TEXT("TurnRight");
 	BridgeIntentState.ActiveIntent = IntentName;
+	BridgeIntentState.WorldMoveDirection = FVector::ZeroVector;
+	BridgeIntentState.LocalMoveDirection = FVector::ZeroVector;
+	BridgeIntentState.IntentMagnitude = 1.0f;
+	BridgeIntentState.DesiredSpeedCmPerSecond = 0.0f;
 	BridgeIntentState.bHasDesiredFacing = true;
 	BridgeTrajectoryState.MotionSource = Stage2AMotionSourceName;
+	BridgeTrajectoryState.LastDeltaTimeSeconds = DeltaTime;
+	BridgeTrajectoryState.bInitialized = true;
 
 	AActor* const OwnerActor = GetOwner();
 	const FRotator CurrentRotation = OwnerActor ? OwnerActor->GetActorRotation() : FRotator::ZeroRotator;
 	const FRotator TargetRotation = FRotator(CurrentRotation.Pitch, CurrentRotation.Yaw + YawDeltaDegrees, CurrentRotation.Roll);
 
-	// DesiredFacing should be target absolute yaw
 	BridgeIntentState.DesiredFacingYawDegrees = TargetRotation.Yaw;
 
+	bool bRotationAccepted = true;
 	if (OwnerActor)
 	{
-		// Movement: Update Actor Rotation (Sweep=true)
-		OwnerActor->SetActorLocationAndRotation(OwnerActor->GetActorLocation(), TargetRotation, true);
+		bRotationAccepted = OwnerActor->SetActorLocationAndRotation(OwnerActor->GetActorLocation(), TargetRotation, true);
+	}
+
+	if (!bRotationAccepted)
+	{
+		Stage2ALastTurnYawDeltaDegrees = 0.0f;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::StartupLocomotion;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked;
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+		EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
+		return false;
 	}
 
 	Stage2ALastTurnYawDeltaDegrees = YawDeltaDegrees;
 	bStage2AWalkIntentActive = false;
-	BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::ActiveLocomotion;
-	RuntimeState = EPhysAnimRuntimeState::LocomotionActiveShell;
+	BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Locomoting;
 	Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+	Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Allowed;
+	TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShell);
 
-	EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, EStage2ALocomotionTerminalState::Allowed);
+	EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
 
 	return true;
 }
 
 FVector UPhysAnimComponent::BuildStage2AWalkDeltaCm(float DeltaTime) const
 {
+	if (DeltaTime <= 0.0f)
+	{
+		return FVector::ZeroVector;
+	}
+
+	const AActor* const OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return FVector::ZeroVector;
+	}
+
+	FVector Forward = OwnerActor->GetActorForwardVector();
+	Forward.Z = 0.0f;
+	if (!Forward.Normalize())
+	{
+		return FVector::ZeroVector;
+	}
+
 	const float RawDelta = Stage2AForwardWalkSpeedCmPerSecond * DeltaTime;
-	const float ClampedDelta = FMath::Min(RawDelta, Stage2AMaxWalkDeltaPerTickCm);
-	return FVector(ClampedDelta, 0.0f, 0.0f);
+	const float ClampedDelta = FMath::Clamp(RawDelta, 0.0f, Stage2AMaxWalkDeltaPerTickCm);
+	return Forward * ClampedDelta;
 }
 
 void UPhysAnimComponent::ApplyStage2AKinematicShellWalkDelta(const FVector& DeltaCm)
 {
 	BridgeShellState.RequestedWorldDeltaCm = DeltaCm;
+	Stage2ALastWalkDeltaCm = DeltaCm;
 	AActor* const OwnerActor = GetOwner();
-	if (!OwnerActor)
+	if (!OwnerActor || DeltaCm.IsNearlyZero())
 	{
 		BridgeShellState.AcceptedWorldDeltaCm = FVector::ZeroVector;
 		BridgeShellState.AcceptedPlanarVelocityCmPerSecond = FVector::ZeroVector;
@@ -1915,9 +2004,9 @@ void UPhysAnimComponent::ApplyStage2AKinematicShellWalkDelta(const FVector& Delt
 	}
 
 	BridgeShellState.bLastMoveBlocked = false;
-	const FVector NewLocation = OwnerActor->GetActorLocation() + DeltaCm;
+	const FVector OldLocation = OwnerActor->GetActorLocation();
+	const FVector NewLocation = OldLocation + DeltaCm;
 
-	// Movement: Update Actor Transform (Sweep=true)
 	const bool bMoveSuccess = OwnerActor->SetActorLocation(NewLocation, true);
 
 	if (!bMoveSuccess)
@@ -1928,12 +2017,14 @@ void UPhysAnimComponent::ApplyStage2AKinematicShellWalkDelta(const FVector& Delt
 		return;
 	}
 
-	// Sync: Explicitly update BridgeShellState to preserve root continuity
+	const FVector AcceptedDeltaCm = OwnerActor->GetActorLocation() - OldLocation;
 	BridgeShellState.LastAcceptedActorLocation = OwnerActor->GetActorLocation();
-	BridgeShellState.AcceptedWorldDeltaCm = DeltaCm;
+	BridgeShellState.AcceptedWorldDeltaCm = AcceptedDeltaCm;
+	BridgeShellState.bInitialized = true;
+	BridgeShellState.bLastMoveBlocked = AcceptedDeltaCm.IsNearlyZero();
 
-	const float DeltaTimeSeconds = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.033f;
-	BridgeShellState.AcceptedPlanarVelocityCmPerSecond = DeltaCm / FMath::Max(DeltaTimeSeconds, 0.001f);
+	const float DeltaTimeSeconds = FMath::Max(BridgeTrajectoryState.LastDeltaTimeSeconds, 0.001f);
+	BridgeShellState.AcceptedPlanarVelocityCmPerSecond = FVector(AcceptedDeltaCm.X, AcceptedDeltaCm.Y, 0.0f) / DeltaTimeSeconds;
 }
 
 void UPhysAnimComponent::EmitStage2ALocomotionTelemetry(const TCHAR* LocomotionIntent, const TCHAR* CapsuleOrShellMotionSource, EStage2ALocomotionTerminalState TerminalState)

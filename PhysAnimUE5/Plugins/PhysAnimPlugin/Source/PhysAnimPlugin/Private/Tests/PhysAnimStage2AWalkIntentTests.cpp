@@ -1,87 +1,165 @@
 #include "PhysAnimComponent.h"
 #include "Misc/AutomationTest.h"
+#include "GameFramework/Actor.h"
+#include "Engine/World.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPhysAnimStage2AWalkIntentTest,
 	"PhysAnim.Locomotion.Stage2AWalkIntent",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
+namespace
 {
-	UPhysAnimComponent* TestComp = NewObject<UPhysAnimComponent>();
-	
-	// Helper to reset to "Allowed" state
-	auto ResetToAllowed = [TestComp]() {
+	struct FStage2AWalkIntentFixture
+	{
+		AActor* Actor = nullptr;
+		USceneComponent* Root = nullptr;
+		UPhysAnimComponent* Component = nullptr;
+
+		static FStage2AWalkIntentFixture Create(UWorld* World)
+		{
+			FStage2AWalkIntentFixture Fixture;
+			Fixture.Actor = World ? World->SpawnActor<AActor>() : nullptr;
+			if (!Fixture.Actor)
+			{
+				return Fixture;
+			}
+
+			Fixture.Root = NewObject<USceneComponent>(Fixture.Actor);
+			Fixture.Actor->SetRootComponent(Fixture.Root);
+			Fixture.Root->RegisterComponent();
+
+			Fixture.Component = NewObject<UPhysAnimComponent>(Fixture.Actor);
+			Fixture.Component->RegisterComponent();
+			return Fixture;
+		}
+
+		void Destroy()
+		{
+			if (Actor)
+			{
+				Actor->Destroy();
+			}
+		}
+	};
+
+	static void ResetToAllowed(UPhysAnimComponent* TestComp)
+	{
 		TestComp->RuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
 		TestComp->BalanceTransitionShellAuthorityMode = EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked;
+		TestComp->BridgeShellState = FBridgeShellState();
 		TestComp->BridgeShellState.bInitialized = true;
-		TestComp->LastPolicyControlUpdateTimeSeconds = FPlatformTime::Seconds();
+		TestComp->LastPolicyControlUpdateTimeSeconds = TestComp->GetPhysAnimClockTime();
 		TestComp->PolicyControlTicksExecuted = 1;
 		TestComp->bStage2APhase3SimRootAttempted = false;
 		TestComp->Stage2AConsecutivePolicyActiveFrames = 0;
 		TestComp->bStage2AWalkIntentActive = false;
+		TestComp->Stage2ALastWalkDeltaCm = FVector::ZeroVector;
+		TestComp->BridgeIntentState = FBridgeIntentState();
+		TestComp->BridgeTrajectoryState = FBridgeTrajectoryState();
 		TestComp->BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
-	};
+		TestComp->Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+		TestComp->Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::NotEvaluated;
+	}
+}
 
-	// 1. DeltaClamping: Verify BuildStage2AWalkDeltaCm clamps correctly
+bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = GWorld;
+	if (!World)
 	{
-		ResetToAllowed();
-		// Speed = 60cm/s. 0.05s * 60 = 3.0cm (Below 6.0cm limit)
-		FVector Delta1 = TestComp->BuildStage2AWalkDeltaCm(0.05f);
-		TestEqual(TEXT("WALK-01 50ms delta should be 3cm forward"), (float)Delta1.X, 3.0f);
-
-		// 1.0s * 60 = 60.0cm (Above 6.0cm limit -> Clamped to 6.0cm)
-		FVector Delta2 = TestComp->BuildStage2AWalkDeltaCm(1.0f);
-		TestEqual(TEXT("WALK-02 1s delta should be clamped to 6cm forward"), (float)Delta2.X, 6.0f);
+		AddError(TEXT("WALK-SETUP Missing automation world"));
+		return false;
 	}
 
-	// 2. ActivationGating: Verify TryActivateStage2AWalkIntent respects frame threshold
+	FStage2AWalkIntentFixture Fixture = FStage2AWalkIntentFixture::Create(World);
+	if (!Fixture.Actor || !Fixture.Component)
 	{
-		ResetToAllowed();
-		TestComp->Stage2AConsecutivePolicyActiveFrames = 2; // Below threshold (3)
-		TestComp->TryActivateStage2AWalkIntent(0.05f);
-		TestFalse(TEXT("WALK-03 Should not activate at 2 frames"), TestComp->bStage2AWalkIntentActive);
-
-		TestComp->Stage2AConsecutivePolicyActiveFrames = 3; // At threshold
-		TestComp->TryActivateStage2AWalkIntent(0.05f);
-		TestTrue(TEXT("WALK-04 Should activate at 3 frames"), TestComp->bStage2AWalkIntentActive);
+		AddError(TEXT("WALK-SETUP Failed to create actor/component fixture"));
+		return false;
 	}
 
-	// 3. StatePersistence: Verify bStage2AWalkIntentActive stays true
+	UPhysAnimComponent* TestComp = Fixture.Component;
+
+	// 1. DeltaClamping: actor forward +X, 50ms = 3cm; 1s clamps to 6cm.
 	{
-		ResetToAllowed();
+		ResetToAllowed(TestComp);
+		Fixture.Actor->SetActorRotation(FRotator::ZeroRotator);
+		const FVector Delta1 = TestComp->BuildStage2AWalkDeltaCm(0.05f);
+		TestEqual(TEXT("WALK-01 50ms delta should be 3cm along actor forward X"), (double)Delta1.X, 3.0, 0.01);
+		TestEqual(TEXT("WALK-01B 50ms delta should not drift Y"), (double)Delta1.Y, 0.0, 0.01);
+
+		const FVector Delta2 = TestComp->BuildStage2AWalkDeltaCm(1.0f);
+		TestEqual(TEXT("WALK-02 1s delta should be clamped to 6cm forward"), (double)Delta2.X, 6.0, 0.01);
+	}
+
+	// 2. Actor forward rotation: yaw 90 must move along +Y, not hard-coded +X.
+	{
+		ResetToAllowed(TestComp);
+		Fixture.Actor->SetActorLocation(FVector::ZeroVector, false);
+		Fixture.Actor->SetActorRotation(FRotator(0.0f, 90.0f, 0.0f));
+		const FVector RotatedDelta = TestComp->BuildStage2AWalkDeltaCm(0.05f);
+		TestEqual(TEXT("WALK-03 Rotated actor should not move on X"), (double)RotatedDelta.X, 0.0, 0.01);
+		TestEqual(TEXT("WALK-04 Rotated actor should move 3cm on Y"), (double)RotatedDelta.Y, 3.0, 0.01);
+	}
+
+	// 3. ActivationGating: Verify TryActivateStage2AWalkIntent respects frame threshold.
+	{
+		ResetToAllowed(TestComp);
+		Fixture.Actor->SetActorLocation(FVector::ZeroVector, false);
+		Fixture.Actor->SetActorRotation(FRotator::ZeroRotator);
+		TestComp->TryOpenStage2ALocomotionRequestGate(TEXT("WalkIntentTest"));
+		TestComp->Stage2AConsecutivePolicyActiveFrames = 2;
+		TestFalse(TEXT("WALK-05 Should not activate at 2 frames"), TestComp->TryActivateStage2AWalkIntent(0.05f));
+		TestFalse(TEXT("WALK-06 bStage2AWalkIntentActive remains false at 2 frames"), TestComp->bStage2AWalkIntentActive);
+		TestEqual(TEXT("WALK-07 Denial terminal state is policy inactive/min frames"), (int32)TestComp->Stage2ALastLocomotionTerminalState, (int32)EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive);
+
+		ResetToAllowed(TestComp);
+		Fixture.Actor->SetActorLocation(FVector::ZeroVector, false);
+		Fixture.Actor->SetActorRotation(FRotator::ZeroRotator);
+		TestComp->TryOpenStage2ALocomotionRequestGate(TEXT("WalkIntentTest"));
 		TestComp->Stage2AConsecutivePolicyActiveFrames = 3;
-		TestComp->TryActivateStage2AWalkIntent(0.05f);
-		TestTrue(TEXT("WALK-05 bStage2AWalkIntentActive is true"), TestComp->bStage2AWalkIntentActive);
+		TestTrue(TEXT("WALK-08 Should activate at 3 frames"), TestComp->TryActivateStage2AWalkIntent(0.05f));
+		TestTrue(TEXT("WALK-09 bStage2AWalkIntentActive is true"), TestComp->bStage2AWalkIntentActive);
 	}
 
-	// 4. TrajectorySync: Verify BridgeTrajectoryState.MotionSource is set correctly
+	// 4. Intent and trajectory state must be fully populated.
 	{
-		ResetToAllowed();
+		ResetToAllowed(TestComp);
+		Fixture.Actor->SetActorLocation(FVector::ZeroVector, false);
+		Fixture.Actor->SetActorRotation(FRotator::ZeroRotator);
+		TestComp->TryOpenStage2ALocomotionRequestGate(TEXT("WalkIntentStateTest"));
 		TestComp->Stage2AConsecutivePolicyActiveFrames = 3;
-		TestComp->TryActivateStage2AWalkIntent(0.05f);
-		TestEqual(TEXT("WALK-06 MotionSource is Stage2A_KinematicShell"), TestComp->BridgeTrajectoryState.MotionSource, FString(TEXT("Stage2A_KinematicShell")));
+		TestTrue(TEXT("WALK-10 Activation succeeds for state sync"), TestComp->TryActivateStage2AWalkIntent(0.05f));
+
+		TestEqual(TEXT("WALK-11 ActiveIntent is WalkForward"), TestComp->BridgeIntentState.ActiveIntent, FString(TEXT("WalkForward")));
+		TestEqual(TEXT("WALK-12 MotionSource is Stage2A_KinematicShell"), TestComp->BridgeTrajectoryState.MotionSource, FString(TEXT("Stage2A_KinematicShell")));
+		TestEqual(TEXT("WALK-13 Intent magnitude is 1"), (double)TestComp->BridgeIntentState.IntentMagnitude, 1.0, 0.01);
+		TestEqual(TEXT("WALK-14 Desired speed is 60cm/s"), (double)TestComp->BridgeIntentState.DesiredSpeedCmPerSecond, 60.0, 0.01);
+		TestFalse(TEXT("WALK-15 Walk does not request desired facing"), TestComp->BridgeIntentState.bHasDesiredFacing);
+		TestTrue(TEXT("WALK-16 Trajectory initialized"), TestComp->BridgeTrajectoryState.bInitialized);
+		TestEqual(TEXT("WALK-17 Trajectory dt is 0.05"), (double)TestComp->BridgeTrajectoryState.LastDeltaTimeSeconds, 0.05, 0.001);
+		TestEqual(TEXT("WALK-18 Desired velocity X is 60cm/s"), (double)TestComp->BridgeTrajectoryState.DesiredVelocityCmPerSecond.X, 60.0, 0.01);
 	}
 
-	// 5. AuthorityState: Verify BridgeLocomotionAuthorityState is ActiveLocomotion
+	// 5. Movement acceptance state and telemetry.
 	{
-		ResetToAllowed();
-		TestComp->Stage2AConsecutivePolicyActiveFrames = 3;
-		TestComp->TryActivateStage2AWalkIntent(0.05f);
-		TestEqual(TEXT("WALK-07 AuthorityState is ActiveLocomotion"), (int32)TestComp->BridgeLocomotionAuthorityState, (int32)EBridgeLocomotionAuthorityState::ActiveLocomotion);
-	}
-
-	// 6. MovementDelta: Verify non-zero delta command is recorded
-	{
-		ResetToAllowed();
+		ResetToAllowed(TestComp);
+		Fixture.Actor->SetActorLocation(FVector::ZeroVector, false);
+		Fixture.Actor->SetActorRotation(FRotator::ZeroRotator);
+		TestComp->TryOpenStage2ALocomotionRequestGate(TEXT("WalkIntentMovementTest"));
 		TestComp->Stage2AConsecutivePolicyActiveFrames = 3;
 		const float DeltaTime = 0.05f;
-		TestComp->TryActivateStage2AWalkIntent(DeltaTime);
-		TestTrue(TEXT("WALK-08 LastWalkDeltaCm (command) is non-zero"), !TestComp->Stage2ALastWalkDeltaCm.IsNearlyZero());
-		TestEqual(TEXT("WALK-09 LastWalkDeltaCm matches expected speed * time"), (double)TestComp->Stage2ALastWalkDeltaCm.X, (double)(60.0f * DeltaTime), 0.01);
-		TestTrue(TEXT("WALK-10 Move is blocked (headless)"), TestComp->BridgeShellState.bLastMoveBlocked);
-		TestTrue(TEXT("WALK-11 AcceptedWorldDeltaCm is zero (headless)"), TestComp->BridgeShellState.AcceptedWorldDeltaCm.IsNearlyZero());
+		TestTrue(TEXT("WALK-19 Activation succeeds for movement"), TestComp->TryActivateStage2AWalkIntent(DeltaTime));
+		TestEqual(TEXT("WALK-20 LastWalkDeltaCm command is 3cm"), (double)TestComp->Stage2ALastWalkDeltaCm.X, (double)(60.0f * DeltaTime), 0.01);
+		TestEqual(TEXT("WALK-21 AcceptedWorldDeltaCm is 3cm"), (double)TestComp->BridgeShellState.AcceptedWorldDeltaCm.X, (double)(60.0f * DeltaTime), 0.01);
+		TestFalse(TEXT("WALK-22 Move is not blocked"), TestComp->BridgeShellState.bLastMoveBlocked);
+		TestEqual(TEXT("WALK-23 AuthorityState is Locomoting"), (int32)TestComp->BridgeLocomotionAuthorityState, (int32)EBridgeLocomotionAuthorityState::Locomoting);
+		TestEqual(TEXT("WALK-24 RuntimeState is LocomotionActiveShell"), (int32)TestComp->RuntimeState, (int32)EPhysAnimRuntimeState::LocomotionActiveShell);
+		TestTrue(TEXT("WALK-25 Telemetry reports WalkForward"), TestComp->LastStage2ALocomotionTelemetryLine.Contains(TEXT("locomotion_intent=WalkForward")));
+		TestTrue(TEXT("WALK-26 Telemetry reports terminal_state=Allowed"), TestComp->LastStage2ALocomotionTelemetryLine.Contains(TEXT("terminal_state=Allowed")));
 	}
 
+	Fixture.Destroy();
 	return true;
 }
