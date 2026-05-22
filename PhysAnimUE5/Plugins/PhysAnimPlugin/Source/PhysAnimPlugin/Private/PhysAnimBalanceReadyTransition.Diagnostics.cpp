@@ -180,6 +180,10 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 
 		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, CurrentLinearSpeed);
 		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, CurrentAngularSpeed);
+		if (BoneName == RootBoneName)
+		{
+			Diagnostics.PeakRootAngularSpeed = FMath::Max(Diagnostics.PeakRootAngularSpeed, CurrentAngularSpeed);
+		}
 	}
 
 	const bool bCrossedSpikeThresholdThisCapture =
@@ -399,7 +403,7 @@ void FPhysAnimBalanceReadyTransition::ReturnToPhase1Prepare(UPhysAnimComponent* 
 	{
 		Owner->ReleaseTransitionOwnedShellLock();
 	}
-	ResetTransitionLocalState();
+	ResetTransitionLocalState(Owner);
 	InternalPhase = EBalanceReadyTransitionPhase::BRT_Phase1_Prepare;
 	PhaseTimeSeconds = 0.0f;
 	StableHoldAccumulatedSeconds = 0.0f;

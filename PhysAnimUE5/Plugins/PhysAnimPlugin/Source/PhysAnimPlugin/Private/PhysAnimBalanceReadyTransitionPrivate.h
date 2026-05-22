@@ -18,6 +18,17 @@ namespace BalanceTransitionSets
 	inline constexpr float Phase2MaxRootOnReadinessPelvisSpineDirectLinkAngularErrorDeg =
 		Phase2MaxPelvisSpineDirectLinkAngularErrorDeg - Phase2RequiredPelvisSpineDirectLinkAngularMarginDeg;
 
+	inline constexpr int32 Phase3KineticGateReleaseGraceTicks = 5;
+	inline constexpr float Phase3AlphaFloor = 0.35f;
+	inline constexpr float Phase3AlphaRiseStep = 0.01f;
+	inline constexpr float Phase3AlphaFallStep = 0.02f;
+	inline constexpr int32 Phase3FullAuthorityRequiredStableTicks = 8;
+	inline constexpr int32 Phase3EarlySettlementWindowTicks = 40;
+
+	inline constexpr float ShellVelocitySoftRestoreThreshold = 5.0f;
+	inline constexpr float RootAngularSoftRestoreThreshold = 30.0f;
+	inline constexpr int32 MinPostReleaseRampTicks = 30;
+
 	struct FDirectPelvisLinkForensicRecord
 	{
 		FName ParentBoneName = NAME_None;
@@ -36,6 +47,8 @@ namespace BalanceTransitionSets
 		FQuat AuthoredParentRefFrame = FQuat::Identity;
 		FQuat AuthoredChildRefFrame = FQuat::Identity;
 		float ConstraintAngularErrorDeg = 0.0f;
+		float AuthoredConstraintFrameAngularFloorDeg = 0.0f;
+		float BaselineCompensatedConstraintAngularErrorDeg = 0.0f;
 		float BodyOriginDistanceCm = 0.0f;
 		bool bConstraintFound = false;
 		bool bParentUsedBodyInstance = false;
@@ -56,6 +69,18 @@ namespace BalanceTransitionSets
 		const TArray<FDirectPelvisLinkForensicRecord>& Records,
 		const TCHAR* ContextTag,
 		bool bEmitMissingConstraintErrors);
+	inline float GetPhase2WarmStartDirectLinkAngularThresholdDeg(const FDirectPelvisLinkForensicRecord& Record)
+	{
+		return Record.ChildBoneName == TEXT("spine_01")
+			? Phase2MaxPelvisSpineDirectLinkAngularErrorDeg
+			: Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
+	}
+	inline bool IsPhase2WarmStartDirectLinkAngularSatisfied(const FDirectPelvisLinkForensicRecord& Record)
+	{
+		return Record.bConstraintFound &&
+			Record.BaselineCompensatedConstraintAngularErrorDeg <=
+				GetPhase2WarmStartDirectLinkAngularThresholdDeg(Record);
+	}
 
 	FTransform BuildWarmStartPelvisTransform(
 		const USkeletalMeshComponent* Mesh,

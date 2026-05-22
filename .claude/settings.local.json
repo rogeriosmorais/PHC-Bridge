@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mcp-graph:*)",
+      "Bash(mg:*)",
+      "mcp__mcp-graph__*"
+    ]
+  }
+}

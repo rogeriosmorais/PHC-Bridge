@@ -152,6 +152,8 @@ void UPhysAnimComponent::ApplyControlTargets(
 	bool bApplyNewPolicyStepThisTick,
 	FString& OutError)
 {
+	// Consecutive active frame tracking is now handled at the end of ApplyControlTargets to ensure it only increments on successful writes.
+
 	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_ApplyControlTargets);
 
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
@@ -163,7 +165,6 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	USkeletalMeshComponent* const Mesh = GetMeshComponent();
 	const FBodyInstance* const PelvisBodyScope = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
-
 
 	const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
@@ -341,29 +342,80 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 		bool bPolicyTargetsAppliedThisTick = true;
 		const int32 RootRawSimPost = (PelvisBodyScope && PelvisBodyScope->IsInstanceSimulatingPhysics()) ? 1 : 0;
+		const int32 Phase3KineticTick = BalanceReadyTransition.GetPhase3KineticGateReleaseTickCount();
+		const bool bIsPhase3SuppressionWindow = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle && Phase3KineticTick > 0 && Phase3KineticTick <= 20);
+
 		bSuppressPostShellPolicy =
-			RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn &&
 			BalanceEntryRootOnFrameCount >= 4 &&
 			RootRawSimPost == 1 &&
 			LastRuntimeInstabilityDiagnostics.NumSimulatingBodies >= 6 &&
-			BalanceReadyTransition.GetDiagnostics().bShellMaterialGuardSuppressed;
+			BalanceReadyTransition.GetDiagnostics().bShellMaterialGuardSuppressed) ||
+			bIsPhase3SuppressionWindow;
+
+		float Phase3HandoverAlpha = 1.0f;
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle && Phase3KineticTick > 20 && Phase3KineticTick <= 40)
+		{
+			Phase3HandoverAlpha = FMath::Clamp((Phase3KineticTick - 20) / 20.0f, 0.0f, 1.0f);
+		}
+
+		const bool bInSettlementWindow = Phase3KineticTick > 0 && Phase3KineticTick <= 20;
+		const bool bIsPhase3HandoverBlend = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle && Phase3KineticTick > 20 && Phase3KineticTick <= 40);
+
+		// §EPIC-13.2 - Kinetic Gate Warm-Start Rebase
+		// If the gate just released, OR we are in the settlement window, rebase the targets to 
+		// the current physical pose to prevent "snap-back" energy spikes.
+		// Continuous rebase during settlement provides "Active Damping" (Strength*0 + Damping*Vel).
+		if ((bKineticGateReleasedThisFrame || bInSettlementWindow) && Mesh)
+		{
+			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+				
+				const FQuat ChildWorldRot = Mesh->GetBoneQuaternion(BoneName, EBoneSpaces::WorldSpace);
+				const FName ParentBoneName = Mesh->GetParentBone(BoneName);
+				const FQuat ParentWorldRot = (ParentBoneName != NAME_None) ? 
+					Mesh->GetBoneQuaternion(ParentBoneName, EBoneSpaces::WorldSpace) : 
+					FQuat::Identity;
+
+				const FQuat LocalRot = (ParentWorldRot.Inverse() * ChildWorldRot).GetNormalized();
+				PreviousControlTargetRotations.Add(ControlName, LocalRot);
+
+				// During settlement, we keep updating the blend start so it carries the final settled pose 
+				// into the handover phase at Tick 21.
+				PolicyBlendStartControlTargetRotations.Add(ControlName, LocalRot);
+			}
+		}
+
+		if (Phase3HandoverAlpha <= 0.0f)
+		{
+			bSuppressPostShellPolicy = true;
+		}
 
 		if (bSuppressPostShellPolicy && bApplyNewPolicyStepThisTick)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_POST_SHELL_POLICY_SUPPRESSED frame=%d tick=%d normalWrites=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
-				static_cast<int32>(GFrameNumber),
-				static_cast<int32>(BalanceEntryRootOnFrameCount),
-				0,
-				ControlTargetDiagnostics.NumHeldTargetsWritten,
-				RootRawSimPost,
-				LastRuntimeInstabilityDiagnostics.NumSimulatingBodies,
-				PolicyInfluenceAlpha,
-				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
-				*GetOwner()->GetName(),
-				*GetName());
+			const int32 SuppressionTick = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) ? Phase3KineticTick : static_cast<int32>(BalanceEntryRootOnFrameCount);
+			const TCHAR* SuppressionPhaseStr = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) ? TEXT("PHASE3") : TEXT("PHASE2");
 
-			ControlTargetDiagnostics.NumNormalPolicyTargetsWritten = 0;
-			bPolicyTargetsAppliedThisTick = false;
+			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+			{
+				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] %s_POST_SHELL_POLICY_SUPPRESSED frame=%d tick=%d normalWrites=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
+					SuppressionPhaseStr,
+					static_cast<int32>(GFrameNumber),
+					SuppressionTick,
+					0,
+					ControlTargetDiagnostics.NumHeldTargetsWritten,
+					RootRawSimPost,
+					LastRuntimeInstabilityDiagnostics.NumSimulatingBodies,
+					PolicyInfluenceAlpha,
+					static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(BalanceReadyTransition.GetFailureReason())),
+					*GetOwner()->GetName(),
+					*GetName());
+
+				ControlTargetDiagnostics.NumNormalPolicyTargetsWritten = 0;
+				bPolicyTargetsAppliedThisTick = false;
+				return;
+			}
 		}
 
 		bool bNormalWritesBlockedByRootOn = false;
@@ -373,10 +425,13 @@ void UPhysAnimComponent::ApplyControlTargets(
 			bPolicyTargetsAppliedThisTick = false;
 			bNormalWritesBlockedByRootOn = !bIsPhase1PolicyLoopSuppressed && !bSuppressPostShellPolicy;
 		}
-
-		if (!bIsPhase1PolicyLoopSuppressed && !bSuppressPostShellPolicy && !bNormalWritesBlockedByRootOn)
+		const bool bIsPhase3FlowActive = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
+		if (!bIsPhase1PolicyLoopSuppressed && (!bSuppressPostShellPolicy || bIsPhase3FlowActive) && !bNormalWritesBlockedByRootOn)
 		{
+			float EffectiveHandoverAlpha = Phase3HandoverAlpha;
+			if (bIsPhase3SuppressionWindow) EffectiveHandoverAlpha = 0.0f;
 			bPolicyTargetsAppliedLastFrame = true;
+
 			for (const TPair<FName, FQuat>& Pair : ControlRotations)
 			{
 				if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && 
@@ -418,22 +473,50 @@ void UPhysAnimComponent::ApplyControlTargets(
 					continue;
 				}
 
-			const FName ControlName = PhysAnimBridge::MakeControlName(Pair.Key);
-			if (!PhysicsControl->GetControlExists(ControlName))
-			{
-				OutError = FString::Printf(TEXT("Missing required control '%s' during target write."), *ControlName.ToString());
-				return;
-			}
+				const FName ControlName = PhysAnimBridge::MakeControlName(Pair.Key);
+				if (!PhysicsControl->GetControlExists(ControlName))
+				{
+					OutError = FString::Printf(TEXT("Missing required control '%s' during target write."), *ControlName.ToString());
+					return;
+				}
 
-			if (bRebaseControlTargetHistoryThisFrame)
-			{
-				PreviousControlTargetRotations.Add(ControlName, Pair.Value);
-				PolicyBlendStartControlTargetRotations.Add(ControlName, Pair.Value);
-			}
+				if (bRebaseControlTargetHistoryThisFrame)
+				{
+					if (!PreviousControlTargetRotations.Contains(ControlName))
+					{
+						PreviousControlTargetRotations.Add(ControlName, Pair.Value);
+					}
+					if (!PolicyBlendStartControlTargetRotations.Contains(ControlName))
+					{
+						PolicyBlendStartControlTargetRotations.Add(ControlName, Pair.Value);
+					}
+				}
 
-			const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
-			const FQuat* const BlendStartRotation = PolicyBlendStartControlTargetRotations.Find(ControlName);
-			const bool bApplyTrainingAlignedLowerLimbTargetRangePolicy =
+				// §EPIC-13.2 - Phase 3 Soft Handover
+				FQuat BasePolicyRotation = Pair.Value;
+				if (bIsPhase3HandoverBlend && EffectiveHandoverAlpha < 1.0f - KINDA_SMALL_NUMBER)
+				{
+					// Blend from the physically settled pose (captured at Tick 20) to the current policy target
+					const FQuat* const StartRotPtr = PolicyBlendStartControlTargetRotations.Find(ControlName);
+					if (StartRotPtr)
+					{
+						BasePolicyRotation = FQuat::Slerp(*StartRotPtr, Pair.Value, EffectiveHandoverAlpha).GetNormalized();
+					}
+				}
+				else if (bInSettlementWindow)
+				{
+					// During settlement, strictly follow the rebased physical pose
+					const FQuat* const SettledRotPtr = PreviousControlTargetRotations.Find(ControlName);
+					if (SettledRotPtr)
+					{
+						BasePolicyRotation = *SettledRotPtr;
+					}
+				}
+
+				const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
+				const FQuat* const BlendStartRotation = PolicyBlendStartControlTargetRotations.Find(ControlName);
+
+				const bool bApplyTrainingAlignedLowerLimbTargetRangePolicy =
 				ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
 					EffectiveSettings.bApplyTrainingAlignedLowerLimbTargetRangePolicy,
 					EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend);
@@ -454,11 +537,12 @@ void UPhysAnimComponent::ApplyControlTargets(
 					EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend)
 				: 1.0f;
 			const float RawPolicyOffsetDegrees = BlendStartRotation
-				? CalculateControlTargetDeltaDegrees(*BlendStartRotation, Pair.Value)
+				? CalculateControlTargetDeltaDegrees(*BlendStartRotation, BasePolicyRotation)
 				: 0.0f;
 			const FQuat RangeAlignedPolicyRotation = BlendStartRotation
-				? BlendPolicyTargetRotation(*BlendStartRotation, Pair.Value, LowerLimbTargetRangeScale)
-				: Pair.Value;
+				? BlendPolicyTargetRotation(*BlendStartRotation, BasePolicyRotation, LowerLimbTargetRangeScale)
+				: BasePolicyRotation;
+
 			const FQuat DistalLocomotionAlignedPolicyRotation = BlendStartRotation
 				? BlendPolicyTargetRotation(*BlendStartRotation, RangeAlignedPolicyRotation, DistalLocomotionTargetScale)
 				: RangeAlignedPolicyRotation;
@@ -571,6 +655,41 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	LastControlTargetDiagnostics = ControlTargetDiagnostics;
 	bPolicyTargetsAppliedLastFrame = bPolicyInfluenceActive && !bRootSimFlipFrame;
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		++ActivatedStandingStabilityMetrics.ControlTargetSampleCount;
+		ActivatedStandingStabilityMetrics.ControlTargetNormalWrites += ControlTargetDiagnostics.NumNormalPolicyTargetsWritten;
+		ActivatedStandingStabilityMetrics.ControlTargetTotalWrites += ControlTargetDiagnostics.NumTotalTargetsWritten;
+		ActivatedStandingStabilityMetrics.ControlTargetMaxDeltaDeg = FMath::Max(
+			ActivatedStandingStabilityMetrics.ControlTargetMaxDeltaDeg,
+			static_cast<double>(ControlTargetDiagnostics.MaxTargetDeltaDegrees));
+		ActivatedStandingStabilityMetrics.ControlTargetMeanDeltaDegMax = FMath::Max(
+			ActivatedStandingStabilityMetrics.ControlTargetMeanDeltaDegMax,
+			static_cast<double>(ControlTargetDiagnostics.MeanTargetDeltaDegrees));
+		ActivatedStandingStabilityMetrics.ControlTargetMaxRawPolicyOffsetDeg = FMath::Max(
+			ActivatedStandingStabilityMetrics.ControlTargetMaxRawPolicyOffsetDeg,
+			static_cast<double>(ControlTargetDiagnostics.MaxRawPolicyOffsetDegrees));
+		ActivatedStandingStabilityMetrics.ControlTargetMeanRawPolicyOffsetDegMax = FMath::Max(
+			ActivatedStandingStabilityMetrics.ControlTargetMeanRawPolicyOffsetDegMax,
+			static_cast<double>(ControlTargetDiagnostics.MeanRawPolicyOffsetDegrees));
+	}
+
+	const bool bInferenceSucceeded = bApplyNewPolicyStepThisTick && OutError.IsEmpty();
+	const bool bTargetsWritten = ControlTargetDiagnostics.NumNormalPolicyTargetsWritten > 0;
+
+	if (bInferenceSucceeded && bTargetsWritten)
+	{
+		LastPolicyControlUpdateTimeSeconds = GetPhysAnimClockTime();
+		++Stage2AConsecutivePolicyActiveFrames;
+	}
+	else if (!IsStage2APolicyOutputActive())
+	{
+		// Only reset if the watchdog has actually timed out, or if we explicitly failed inference
+		if (!bInferenceSucceeded)
+		{
+			Stage2AConsecutivePolicyActiveFrames = 0;
+		}
+	}
 
 	if (bRootSimFlipFrame)
 	{
@@ -701,12 +820,80 @@ bool UPhysAnimComponent::ShouldUseAuthoritativePerBoneBodyModifierSync(
 }
 
 
+bool UPhysAnimComponent::ShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(EPhysAnimRuntimeState RuntimeState)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+}
+
+
 bool UPhysAnimComponent::ShouldUpdateBodyOnPerBoneBodyModifierSync(EPhysAnimRuntimeState RuntimeState)
 {
 	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
 		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
 		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
+}
+
+
+bool UPhysAnimComponent::ShouldPreserveRawSimulationForBridgeActiveStartupProof(
+	EPhysAnimRuntimeState RuntimeState,
+	bool bLiveProofEnabled,
+	bool bProofComplete)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+		bLiveProofEnabled &&
+		!bProofComplete;
+}
+
+
+bool UPhysAnimComponent::ShouldUseRawSimComProxyForStartupProof(
+	EPhysAnimRuntimeState RuntimeState,
+	bool bLiveProofEnabled,
+	bool bProofComplete)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+		bLiveProofEnabled &&
+		!bProofComplete;
+}
+
+
+bool UPhysAnimComponent::ShouldDeferStartupProxyTerminalForProof(
+	EPhysAnimRuntimeState RuntimeState,
+	bool bLiveProofEnabled,
+	bool bProofComplete,
+	bool bProxySupportHandoffArmed,
+	EPhysAnimTerminalReason TerminalReason)
+{
+	const bool bStartupProofRuntime =
+		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
+		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation ||
+		(RuntimeState == EPhysAnimRuntimeState::BridgeActive && bLiveProofEnabled && !bProofComplete);
+
+	return bStartupProofRuntime &&
+		!bProxySupportHandoffArmed &&
+		TerminalReason == EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion;
+}
+
+
+bool UPhysAnimComponent::ShouldStartBridgeActivePolicyRampAfterStartupProof(
+	EPhysAnimRuntimeState RuntimeState,
+	bool bLiveProofComplete,
+	bool bPolicyRampAlreadyStarted,
+	bool bForceZeroActions,
+	bool bCoreBringUpGroupUnlocked,
+	bool bCoreBringUpGroupRampActive,
+	bool bStartupBringUpFrozenByBalanceEntry)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+		bLiveProofComplete &&
+		!bPolicyRampAlreadyStarted &&
+		!bForceZeroActions &&
+		bCoreBringUpGroupUnlocked &&
+		bCoreBringUpGroupRampActive &&
+		!bStartupBringUpFrozenByBalanceEntry;
 }
 
 

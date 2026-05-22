@@ -1,0 +1,15 @@
+
+bool FPhysAnimBalanceReadyTransition::IsPhase3Stable() const
+{
+	// Stability criteria for allowing 100% proximal authority:
+	// 1. Minimum duration passed since raw-sim release (to let initial impulse dissipate)
+	// 2. Material shell velocity is below soft restore threshold
+	// 3. Root body angular speed is below soft restore threshold
+	// 4. No significant non-root angular expansion (envelope < 1.0)
+	
+	return Phase3KineticGateReleaseTickCount > 0 &&
+		Phase3KineticGateReleaseTickCount >= BalanceTransitionSets::MinPostReleaseRampTicks &&
+		Diagnostics.Phase3CurrentShellVelocity < BalanceTransitionSets::ShellVelocitySoftRestoreThreshold &&
+		Diagnostics.Phase3CurrentRootAngularSpeed < BalanceTransitionSets::RootAngularSoftRestoreThreshold &&
+		Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope < 1.0f;
+}

@@ -94,27 +94,47 @@ namespace
 			TEXT("Active standing balance remains a passing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceActive_Standing,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
 				false,
 				TEXT(""),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Successful active-balance outcome emits no error"), OutcomeError.IsEmpty());
+
+		OutcomeError.Reset();
+		TestFalse(
+			TEXT("Active standing without physical continuity evidence is not a passing benchmark outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BalanceActive_Standing,
+				false,
+				EPhysAnimTerminalReason::None,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				false, OutcomeError));
+		TestTrue(TEXT("Physical continuity failure reports physical continuity"), OutcomeError.Contains(TEXT("physical continuity")));
 
 		OutcomeError.Reset();
 		TestFalse(
 			TEXT("Balance recovery is not a passing standing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceActive_Recovery,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
 				false,
 				TEXT(""),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Recovery failure reports the standing requirement"), OutcomeError.Contains(TEXT("BalanceActive_Standing")));
 
 		OutcomeError.Reset();
@@ -122,13 +142,15 @@ namespace
 			TEXT("Explicit safe deny is not a passing benchmark outcome when the reason is truthful"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceSafeDeny,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
 				true,
 				TEXT("phase2_root_on_spike"),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
 
 		OutcomeError.Reset();
@@ -136,13 +158,15 @@ namespace
 			TEXT("Phase 3 shell maintenance safe deny is not a passing standing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceSafeDeny,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
 				true,
 				TEXT("phase3_material_shell_correction"),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Phase 3 safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
 
 		OutcomeError.Reset();
@@ -150,27 +174,94 @@ namespace
 			TEXT("Generic fail-stop precursor is not a truthful safe-deny smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BalanceSafeDeny,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
 				true,
 				TEXT("phase2_fail_stop_precursor"),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Generic safe deny failure reports the non-truthful reason"), OutcomeError.Contains(TEXT("phase2_fail_stop_precursor")));
+
+		OutcomeError.Reset();
+		TestTrue(
+			TEXT("Canonical terminal failure is a truthful smoke diagnostic outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::FailStopped,
+				false,
+				EPhysAnimTerminalReason::ActivationContinuousSimulationLost,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				false, OutcomeError));
+		TestTrue(TEXT("Canonical terminal outcome emits no benchmark error"), OutcomeError.IsEmpty());
+
+		OutcomeError.Reset();
+		TestTrue(
+			TEXT("BridgeActive with canonical terminal evidence is a truthful smoke diagnostic outcome"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				EPhysAnimTerminalReason::ActivationContinuousSimulationLost,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				false, OutcomeError));
+		TestTrue(TEXT("BridgeActive terminal diagnostic emits no benchmark error"), OutcomeError.IsEmpty());
+
+		OutcomeError.Reset();
+		TestFalse(
+			TEXT("BridgeActive with non-canonical terminal evidence (AuthorityConflict) must be a smoke failure"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				EPhysAnimTerminalReason::ActivationAuthorityConflict,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				false, OutcomeError));
+
+		OutcomeError.Reset();
+		TestFalse(
+			TEXT("FailStopped without a terminal reason remains unsafe"),
+			EvaluateBalanceModeSmokeOutcome(
+				EPhysAnimRuntimeState::FailStopped,
+				false,
+				EPhysAnimTerminalReason::None,
+				false,
+				EPhysAnimRuntimeState::BridgeActive,
+				false,
+				false,
+				TEXT(""),
+				TEXT(""),
+				false, OutcomeError));
+		TestTrue(TEXT("Unsafe fail-stop reports unsafe failure"), OutcomeError.Contains(TEXT("Unsafe failure path")));
 
 		OutcomeError.Reset();
 		TestFalse(
 			TEXT("BridgeActive remains a failing smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
 				false,
 				TEXT(""),
 				TEXT(""),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("BridgeActive failure reports the runtime state"), OutcomeError.Contains(TEXT("BridgeActive")));
 
 		OutcomeError.Reset();
@@ -178,14 +269,120 @@ namespace
 			TEXT("BridgeActive with a published transition failure remains an unsafe smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				EPhysAnimTerminalReason::None,
 				false,
 				EPhysAnimRuntimeState::BridgeActive,
 				true,
 				false,
 				TEXT(""),
 				TEXT("phase3_material_shell_correction"),
-				OutcomeError));
+				false, OutcomeError));
 		TestTrue(TEXT("Published transition failure reports the truthful blocker"), OutcomeError.Contains(TEXT("phase3_material_shell_correction")));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimStartupProofPhysicalContinuityContractTest,
+		"PhysAnim.Component.StartupProofPhysicalContinuityContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimStartupProofPhysicalContinuityContractTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimRunArtifactSnapshot Artifact;
+		Artifact.bPhysicalContinuityValidatorPassed = true;
+		Artifact.RuntimeSimulatingBodyCount = 0;
+
+		TestFalse(
+			TEXT("Continuity validator pass without simulated truth-set bodies is not physical-continuity evidence"),
+			UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(Artifact));
+
+		Artifact.RuntimeSimulatingBodyCount = 1;
+		TestTrue(
+			TEXT("Continuity validator pass with simulated truth-set bodies is physical-continuity evidence"),
+			UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(Artifact));
+
+		Artifact.bPhysicalContinuityValidatorPassed = false;
+		TestFalse(
+			TEXT("Simulated bodies without continuity validator pass is not physical-continuity evidence"),
+			UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(Artifact));
+
+		Artifact.RuntimeSimulatingBodyCount = 0;
+		TestEqual(
+			TEXT("Pre-activation zero simulated bodies reports simulation-loss evidence"),
+			UPhysAnimComponent::TestOnlyResolveStartupPhysicalContinuityTerminalReason(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				Artifact),
+			EPhysAnimTerminalReason::ActivationContinuousSimulationLost);
+
+		Artifact.RuntimeSimulatingBodyCount = 3;
+		TestEqual(
+			TEXT("Post-activation continuity loss remains continuous-simulation loss"),
+			UPhysAnimComponent::TestOnlyResolveStartupPhysicalContinuityTerminalReason(
+				EPhysAnimRuntimeState::BalanceActive_Standing,
+				Artifact),
+			EPhysAnimTerminalReason::ActivationContinuousSimulationLost);
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimStartupProofPhysicsOwnershipSequencingTest,
+		"PhysAnim.Component.StartupProofPhysicsOwnershipSequencing",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimStartupProofPhysicsOwnershipSequencingTest::RunTest(const FString& Parameters)
+	{
+		TestTrue(
+			TEXT("Valid PoseSearch may start bridge physics ownership while proof is waiting for physical continuity"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgePhysicsOwnershipForStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				true,
+				true,
+				false,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("Startup proof must not start bridge physics before PoseSearch is valid"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgePhysicsOwnershipForStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				false,
+				true,
+				false,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("Already satisfied proof uses the normal standing publication path"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgePhysicsOwnershipForStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				true,
+				true,
+				true,
+				true,
+				false));
+
+		TestFalse(
+			TEXT("Terminated proof must not start bridge physics ownership"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgePhysicsOwnershipForStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				true,
+				true,
+				false,
+				false,
+				true));
+
+		TestFalse(
+			TEXT("BridgeActive does not re-enter startup ownership handoff"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgePhysicsOwnershipForStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				true,
+				false,
+				false,
+				false));
+
 		return true;
 	}
 
@@ -382,6 +579,7 @@ namespace
 
 	bool FPhysAnimTransitionOwnedShellLockTruthfulnessTest::RunTest(const FString& Parameters)
 	{
+		FBalanceReadyTransitionDiagnostics Diags;
 		TestTrue(
 			TEXT("Explicit transition-owned shell lock mode reports held"),
 			UPhysAnimComponent::IsExplicitTransitionOwnedShellLockMode(
@@ -420,6 +618,8 @@ namespace
 		TestFalse(
 			TEXT("First Settle validation tick ignores a velocity-only shell spike while explicit lock continuity still holds"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
+				1,
 				true,
 				true,
 				1,
@@ -430,6 +630,8 @@ namespace
 		TestFalse(
 			TEXT("Pre-validation handoff tick also ignores a velocity-only shell spike while explicit lock continuity still holds"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
+				1,
 				true,
 				true,
 				0,
@@ -440,6 +642,8 @@ namespace
 		TestTrue(
 			TEXT("Later Settle ticks classify a sustained velocity-only shell spike as material once handoff grace expires"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
+				999,
 				true,
 				true,
 				2,
@@ -447,9 +651,35 @@ namespace
 				682.36f,
 				2.0f,
 				10.0f));
+		TestFalse(
+			TEXT("Tick 3 Settle ignores bounded zero-offset shell carry-through while explicit lock continuity still holds"),
+			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
+				1,
+				true,
+				true,
+				3,
+				0.0f,
+				46.30f,
+				2.0f,
+				10.0f));
+		TestFalse(
+			TEXT("Tick 4 Settle ignores zero-offset RootOn snap carry-through while explicit lock continuity still holds"),
+			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
+				1,
+				true,
+				true,
+				4,
+				0.0f,
+				1123.47f,
+				2.0f,
+				10.0f));
 		TestTrue(
 			TEXT("First Settle tick still classifies positional shell drift as material"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
+				999,
 				true,
 				true,
 				0,
@@ -460,6 +690,8 @@ namespace
 		TestFalse(
 			TEXT("Without explicit lock or locomotion reclaim, shell correction is not owner-active even on the first Settle tick"),
 			FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
+				Diags,
+				999,
 				false,
 				true,
 				0,
@@ -510,6 +742,8 @@ namespace
 		TestTrue(
 			TEXT("Tick 4 Settle instability grace preserves a zero-offset explicit-lock shell burst that still carries RootOn snap energy"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				1,
 				4,
 				true,
 				true,
@@ -520,10 +754,25 @@ namespace
 				0.0f,
 				2.0f,
 				1898.77f,
-				10.0f));
+				10.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 5 Settle instability grace does not hide a continued zero-offset shell burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				5,
 				true,
 				true,
@@ -534,10 +783,25 @@ namespace
 				0.0f,
 				2.0f,
 				1898.77f,
-				10.0f));
+				10.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestTrue(
 			TEXT("Tick 5 Settle grace preserves a zero-offset combined shell burst when the Phase 2 handoff stayed comparatively quiet and shell carry-through dominates the linear burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				1,
 				5,
 				true,
 				true,
@@ -550,10 +814,23 @@ namespace
 				3177.91f,
 				10.0f,
 				848.97f,
-				2752.97f));
+				2752.97f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 5 combined shell-burst grace does not apply when Phase 2 already handed off with a large body-instability peak"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				5,
 				true,
 				true,
@@ -566,10 +843,23 @@ namespace
 				3177.91f,
 				10.0f,
 				3200.0f,
-				4000.0f));
+				4000.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 5 combined shell-burst grace does not apply when shell carry-through is not the dominant source of the linear burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				5,
 				true,
 				true,
@@ -582,10 +872,52 @@ namespace
 				1800.0f,
 				10.0f,
 				848.97f,
-				2752.97f));
+				2752.97f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
+		TestFalse(
+			TEXT("Tick 5 combined shell-burst grace does not hide expanded non-root angular instability"),
+			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
+				5,
+				true,
+				true,
+				949.56f,
+				3000.0f,
+				2775.80f,
+				2160.0f,
+				0.0f,
+				2.0f,
+				693.77f,
+				10.0f,
+				341.60f,
+				1778.28f,
+				949.56f,
+				2792.26f,
+				1778.28f,
+				TEXT("spine_01"),
+				0.0f,
+				1778.28f,
+				0.0f,
+				7066.84f,
+				0.0f,
+				2508.44f,
+				0.0f));
 		TestTrue(
 			TEXT("Tick 5 combined shell-burst grace compares shell dominance against planar root speed so vertical carry-through does not overstate the blocker"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				1,
 				5,
 				true,
 				true,
@@ -599,10 +931,22 @@ namespace
 				10.0f,
 				848.97f,
 				2752.95f,
-				2000.0f));
+				2000.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 5 combined shell-burst grace still rejects the same frame when planar root speed is too large for shell dominance"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				5,
 				true,
 				true,
@@ -616,10 +960,22 @@ namespace
 				10.0f,
 				848.97f,
 				2752.95f,
-				3000.0f));
+				3000.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestTrue(
 			TEXT("Tick 5 Settle grace still suppresses an angular-only zero-offset shell burst under explicit lock"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				1,
 				5,
 				true,
 				true,
@@ -630,10 +986,25 @@ namespace
 				0.0f,
 				2.0f,
 				680.75f,
-				10.0f));
+				10.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestTrue(
 			TEXT("Tick 6 Settle grace preserves an angular-only zero-offset shell burst when it remains close to the already-observed RootOn angular peak"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				1,
 				6,
 				true,
 				true,
@@ -661,6 +1032,8 @@ namespace
 		TestFalse(
 			TEXT("Tick 6 Settle grace no longer suppresses the same angular-only shell burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				6,
 				true,
 				true,
@@ -671,10 +1044,25 @@ namespace
 				0.0f,
 				2.0f,
 				680.75f,
-				10.0f));
+				10.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 6 bounded angular carry-through grace does not apply when the Settle angular spike jumps too far above the pre-Phase-3 peak"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				6,
 				true,
 				true,
@@ -687,10 +1075,23 @@ namespace
 				1446.03f,
 				10.0f,
 				848.97f,
-				2752.96f));
+				2752.96f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 6 bounded angular carry-through grace does not apply when Phase 2 never exposed the same angular RootOn peak"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				6,
 				true,
 				true,
@@ -703,10 +1104,23 @@ namespace
 				1446.03f,
 				10.0f,
 				848.97f,
-				2100.0f));
+				2100.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 6 bounded angular carry-through grace does not apply when the failing spine family expands beyond its observed envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				6,
 				true,
 				true,
@@ -734,6 +1148,8 @@ namespace
 		TestFalse(
 			TEXT("Tick 6 bounded angular carry-through grace does not apply when the root burst no longer materially dominates the non-root set"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				6,
 				true,
 				true,
@@ -761,6 +1177,8 @@ namespace
 		TestFalse(
 			TEXT("Tick 5 angular-only grace does not apply once shell offset drift appears"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				5,
 				true,
 				true,
@@ -771,10 +1189,25 @@ namespace
 				2.25f,
 				2.0f,
 				680.75f,
-				10.0f));
+				10.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 5 angular-only grace does not apply without the shell velocity burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				5,
 				true,
 				true,
@@ -785,10 +1218,25 @@ namespace
 				0.0f,
 				2.0f,
 				8.0f,
-				10.0f));
+				10.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestTrue(
 			TEXT("Tick 7 Settle grace still suppresses a mild angular-only zero-offset shell burst under explicit lock"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				1,
 				7,
 				true,
 				true,
@@ -799,10 +1247,25 @@ namespace
 				0.0f,
 				2.0f,
 				787.59f,
-				10.0f));
+				10.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 8 Settle grace no longer suppresses the same mild angular-only shell burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				8,
 				true,
 				true,
@@ -813,10 +1276,25 @@ namespace
 				0.0f,
 				2.0f,
 				787.59f,
-				10.0f));
+				10.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestTrue(
 			TEXT("Tick 8 root-isolated angular carry-through grace can use the observed pre-Phase-3 non-root envelope instead of a blind calm cutoff"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				1,
 				8,
 				true,
 				true,
@@ -836,10 +1314,16 @@ namespace
 				TEXT("spine_01"),
 				1275.93f,
 				2546.24f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
 				0.0f));
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not let a thigh burst borrow the spine family's larger observed envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				8,
 				true,
 				true,
@@ -859,10 +1343,16 @@ namespace
 				TEXT("thigh_r"),
 				1275.93f,
 				2546.24f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
 				0.0f));
 		TestTrue(
 			TEXT("Tick 8 root-isolated angular carry-through grace can use the observed family-wide spine envelope when the whole spine family stays bounded"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				1,
 				8,
 				true,
 				true,
@@ -890,6 +1380,8 @@ namespace
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not apply when the failing spine family expands collectively beyond its observed envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				8,
 				true,
 				true,
@@ -917,6 +1409,8 @@ namespace
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not let an unobserved feet family borrow the generic non-root envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				8,
 				true,
 				true,
@@ -944,6 +1438,8 @@ namespace
 		TestTrue(
 			TEXT("Tick 8 Settle grace preserves a root-isolated angular shell burst when non-root simulated bodies stay comparatively calm"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				1,
 				8,
 				true,
 				true,
@@ -959,10 +1455,20 @@ namespace
 				2752.99f,
 				1112.99f,
 				900.0f,
-				1275.93f));
+				1275.93f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not apply when the non-root simulated set expands beyond the observed pre-Phase-3 envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				8,
 				true,
 				true,
@@ -978,10 +1484,20 @@ namespace
 				2752.99f,
 				1112.99f,
 				2900.0f,
-				2546.24f));
+				2546.24f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not apply when the root angular burst no longer materially dominates the non-root set"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				8,
 				true,
 				true,
@@ -997,10 +1513,20 @@ namespace
 				2752.96f,
 				1038.65f,
 				2400.0f,
-				2546.24f));
+				2546.24f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 8 root-isolated angular carry-through grace does not apply once the root angular spike expands beyond the observed RootOn carry-through envelope"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				8,
 				true,
 				true,
@@ -1016,10 +1542,20 @@ namespace
 				2752.99f,
 				1112.99f,
 				900.0f,
-				1275.93f));
+				1275.93f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 9 root-isolated angular carry-through grace no longer suppresses the same shell burst"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				9,
 				true,
 				true,
@@ -1035,10 +1571,20 @@ namespace
 				2752.99f,
 				1112.99f,
 				900.0f,
-				1275.93f));
+				1275.93f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 7 mild angular-only grace does not apply once the angular overshoot is too large"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				7,
 				true,
 				true,
@@ -1049,10 +1595,25 @@ namespace
 				0.0f,
 				2.0f,
 				787.59f,
-				10.0f));
+				10.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 4 Settle instability grace does not hide real shell drift"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				4,
 				true,
 				true,
@@ -1063,10 +1624,25 @@ namespace
 				2.25f,
 				2.0f,
 				1898.77f,
-				10.0f));
+				10.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		TestFalse(
 			TEXT("Tick 4 Settle instability grace does not apply without an explicit shell lock"),
 			FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+				Diags,
+				999,
 				4,
 				false,
 				true,
@@ -1077,7 +1653,20 @@ namespace
 				0.0f,
 				2.0f,
 				1898.77f,
-				10.0f));
+				10.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				NAME_None,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f,
+				0.0f));
 		return true;
 	}
 
@@ -1442,6 +2031,7 @@ namespace
 				0.5f,
 				false,
 				true,
+				false,
 				true,
 				&PerturbationReadinessReason));
 		TestTrue(TEXT("Standing readiness emits no failure reason"), PerturbationReadinessReason.IsEmpty());
@@ -1457,6 +2047,7 @@ namespace
 				0.5f,
 				false,
 				true,
+				false,
 				true,
 				&PerturbationReadinessReason));
 		TestEqual(TEXT("BridgeActive readiness failure stays truthful"), PerturbationReadinessReason, FString(TEXT("invalidRuntimeState")));
@@ -1473,6 +2064,109 @@ namespace
 			TEXT("BridgeActive without the distal kinematic experiment can still use the broad modifier path"),
 			UPhysAnimComponent::TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
 				EPhysAnimRuntimeState::BridgeActive,
+				false));
+		TestTrue(
+			TEXT("BridgeActive with accepted distal kinematic mode still uses per-bone modifier records"),
+			UPhysAnimComponent::TestOnlyShouldUseAuthoritativePerBoneBodyModifierSync(
+				EPhysAnimRuntimeState::BridgeActive,
+				true));
+		TestFalse(
+			TEXT("BridgeActive startup proof ownership must not push authoritative kinematic record writes into raw body simulation"),
+			UPhysAnimComponent::TestOnlyShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(
+				EPhysAnimRuntimeState::BridgeActive));
+		TestTrue(
+			TEXT("Balance entry authoritative kinematic writes still update live bodies immediately"),
+			UPhysAnimComponent::TestOnlyShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(
+				EPhysAnimRuntimeState::BalanceEntry_Prepare));
+		TestTrue(
+			TEXT("BridgeActive live startup proof preserves raw simulation until proof completion"),
+			UPhysAnimComponent::TestOnlyShouldPreserveRawSimulationForBridgeActiveStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false));
+		TestFalse(
+			TEXT("BridgeActive raw-simulation preservation ends once live proof completes"),
+			UPhysAnimComponent::TestOnlyShouldPreserveRawSimulationForBridgeActiveStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				true));
+		TestFalse(
+			TEXT("WaitingForPoseSearch never preserves raw simulation before physics ownership"),
+			UPhysAnimComponent::TestOnlyShouldPreserveRawSimulationForBridgeActiveStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				true,
+				false));
+		TestTrue(
+			TEXT("BridgeActive live startup proof uses raw simulated body COM for support proxy coupling"),
+			UPhysAnimComponent::TestOnlyShouldUseRawSimComProxyForStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false));
+		TestFalse(
+			TEXT("BridgeActive support proxy returns to normal capsule/actor proxy once proof completes"),
+			UPhysAnimComponent::TestOnlyShouldUseRawSimComProxyForStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				true));
+		TestFalse(
+			TEXT("WaitingForPoseSearch does not use raw simulated COM before bridge physics ownership"),
+			UPhysAnimComponent::TestOnlyShouldUseRawSimComProxyForStartupProof(
+				EPhysAnimRuntimeState::WaitingForPoseSearch,
+				true,
+				false));
+		TestTrue(
+			TEXT("BridgeActive live startup proof defers proxy terminal until support handoff is armed"),
+			UPhysAnimComponent::TestOnlyShouldDeferStartupProxyTerminalForProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false,
+				false,
+				EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion));
+		TestFalse(
+			TEXT("BridgeActive startup proof stops deferring proxy terminal after proof completion"),
+			UPhysAnimComponent::TestOnlyShouldDeferStartupProxyTerminalForProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				true,
+				false,
+				EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion));
+		TestFalse(
+			TEXT("BridgeActive startup proof does not defer non-proxy terminal reasons"),
+			UPhysAnimComponent::TestOnlyShouldDeferStartupProxyTerminalForProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false,
+				false,
+				EPhysAnimTerminalReason::ActivationContinuousSimulationLost));
+		TestTrue(
+			TEXT("BridgeActive proof completion can start policy influence once the core bring-up ramp is active"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgeActivePolicyRampAfterStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false,
+				false,
+				true,
+				true,
+				false));
+		TestFalse(
+			TEXT("BridgeActive proof completion does not restart an already-started policy influence ramp"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgeActivePolicyRampAfterStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				true,
+				false,
+				true,
+				true,
+				false));
+		TestFalse(
+			TEXT("BridgeActive proof completion waits for the core bring-up ramp before policy influence"),
+			UPhysAnimComponent::TestOnlyShouldStartBridgeActivePolicyRampAfterStartupProof(
+				EPhysAnimRuntimeState::BridgeActive,
+				true,
+				false,
+				false,
+				true,
+				false,
 				false));
 		TestTrue(
 			TEXT("Ultra-fine RootOn readiness cleanup still runs for the current 1.55 degree near-miss class"),
@@ -3032,6 +3726,26 @@ namespace
 			AddInfo(TEXT("------------------------------------------------------------"));
 		}
 
+		if (USkeletalMesh* LoadedMesh = LoadObject<USkeletalMesh>(nullptr, *MeshPath))
+		{
+			AActor* Actor = GEditor->GetEditorWorldContext().World()->SpawnActor<AActor>();
+			USkeletalMeshComponent* MeshComp = NewObject<USkeletalMeshComponent>(Actor);
+			MeshComp->SetSkeletalMesh(LoadedMesh);
+			MeshComp->RegisterComponent();
+			MeshComp->RefreshBoneTransforms();
+
+			BalanceTransitionSets::FDirectPelvisLinkForensicRecord ThighRecord;
+			if (BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(MeshComp, TEXT("pelvis"), TEXT("thigh_l"), ThighRecord))
+			{
+				TestTrue(
+					TEXT("Baseline-compensated readiness angle removes the authored thigh frame floor"),
+					ThighRecord.BaselineCompensatedConstraintAngularErrorDeg <
+						ThighRecord.ConstraintAngularErrorDeg);
+			}
+
+			Actor->Destroy();
+		}
+
 		AddInfo(TEXT("============================================================"));
 		AddInfo(TEXT("INTERPRETATION GUIDE:"));
 		AddInfo(TEXT("  ALIGNED (<= 1°):"));
@@ -3061,11 +3775,55 @@ namespace
 
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPhase2WarmStartBaselineAngularGateTest,
+		"PhysAnim.Component.Phase2WarmStartBaselineAngularGate",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPhase2WarmStartBaselineAngularGateTest::RunTest(const FString& Parameters)
+	{
+		BalanceTransitionSets::FDirectPelvisLinkForensicRecord ThighRecord;
+		ThighRecord.ChildBoneName = TEXT("thigh_l");
+		ThighRecord.bConstraintFound = true;
+		ThighRecord.ConstraintAngularErrorDeg = 53.47f;
+		ThighRecord.AuthoredConstraintFrameAngularFloorDeg = 55.83f;
+		ThighRecord.BaselineCompensatedConstraintAngularErrorDeg = 0.0f;
+
+		TestTrue(
+			TEXT("Raw smoke thigh angle exceeds the Phase 2 warm-start thigh threshold"),
+			ThighRecord.ConstraintAngularErrorDeg > BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg);
+		TestTrue(
+			TEXT("Baseline-compensated thigh angle satisfies the Phase 2 warm-start thigh threshold"),
+			BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(ThighRecord));
+
+		BalanceTransitionSets::FDirectPelvisLinkForensicRecord SpineRecord;
+		SpineRecord.ChildBoneName = TEXT("spine_01");
+		SpineRecord.bConstraintFound = true;
+		SpineRecord.ConstraintAngularErrorDeg = 43.48f;
+		SpineRecord.AuthoredConstraintFrameAngularFloorDeg = 14.46f;
+		SpineRecord.BaselineCompensatedConstraintAngularErrorDeg = 29.02f;
+
+		TestTrue(
+			TEXT("Raw smoke spine angle exceeds the Phase 2 warm-start spine threshold"),
+			SpineRecord.ConstraintAngularErrorDeg > BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg);
+		TestTrue(
+			TEXT("Baseline-compensated spine angle satisfies the Phase 2 warm-start spine threshold"),
+			BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(SpineRecord));
+
+		SpineRecord.BaselineCompensatedConstraintAngularErrorDeg =
+			BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg + 0.5f;
+		TestFalse(
+			TEXT("Runtime angular error above the compensated spine threshold still denies warm-start"),
+			BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(SpineRecord));
+
+		return true;
+	}
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimPhase1ZeroSolverForensicDumpTest, "PhysAnim.Component.Phase1ZeroSolverForensicDump", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimPhase1ConstraintFrameDiagnosticTest, "PhysAnim.Diagnostics.Phase1ConstraintFrameDump", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FPhysAnimPhase1ZeroSolverForensicDumpTest::RunTest(const FString& Parameters)
+bool FPhysAnimPhase1ConstraintFrameDiagnosticTest::RunTest(const FString& Parameters)
 {
 	// We use the long-form paths that match the PhysAnim component's expectations
 	const FString MeshPath = TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple");
@@ -3073,7 +3831,7 @@ bool FPhysAnimPhase1ZeroSolverForensicDumpTest::RunTest(const FString& Parameter
 
 	if (!SkelMesh)
 	{
-		AddInfo(TEXT("DUMP: Could not load SkeletalMesh from '/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple'. This test must run in an editor context with Manny content mounted."));
+		AddInfo(TEXT("DIAGNOSTIC: Could not load SkeletalMesh from '/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple'. This test must run in an editor context with Manny content mounted."));
 		return true;
 	}
 
@@ -3088,7 +3846,7 @@ bool FPhysAnimPhase1ZeroSolverForensicDumpTest::RunTest(const FString& Parameter
 	const auto RunDumpForPose = [&](const TCHAR* PoseName)
 	{
 		AddInfo(TEXT("============================================================"));
-		AddInfo(FString::Printf(TEXT("ZERO-SOLVER FORENSIC DUMP: %s"), PoseName));
+		AddInfo(FString::Printf(TEXT("PHASE1 CONSTRAINT FRAME DIAGNOSTIC: %s"), PoseName));
 		AddInfo(TEXT("============================================================"));
 
 		TArray<BalanceTransitionSets::FDirectPelvisLinkForensicRecord> Records;
@@ -3130,6 +3888,75 @@ bool FPhysAnimPhase1ZeroSolverForensicDumpTest::RunTest(const FString& Parameter
 	// For now, RefPose is the primary baseline.
 
 	Actor->Destroy();
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimPhase3SettlementGraceProofTest,
+	"PhysAnim.Component.Phase3SettlementGraceProof",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimPhase3SettlementGraceProofTest::RunTest(const FString& Parameters)
+{
+	FBalanceReadyTransitionDiagnostics Diags;
+	const float StandardThreshold = 720.0f;
+	const float LinearThreshold = 3000.0f;
+	const float AngularThreshold = 2160.0f;
+
+	// 1. Tick 0 is not grace
+	TestFalse(
+		TEXT("Tick 0 (pre-release) should not have grace"),
+		FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+			Diags,
+			0, 0, true, true, 0.0f, LinearThreshold, 0.0f, AngularThreshold, 0.0f, 10.0f, 0.0f, StandardThreshold, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f, NAME_None, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+
+	// 2. Tick 1–20 is grace only after actual release
+	TestTrue(
+		TEXT("Tick 10 (post-release) should have grace"),
+		FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+			Diags,
+			10, 10, true, true, 0.0f, LinearThreshold, 0.0f, AngularThreshold, 0.0f, 10.0f, 0.0f, StandardThreshold, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f, NAME_None, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+
+	// 3. Tick 21–40 actually Slerps from physical pose to policy
+	{
+		FPhysAnimBalanceReadyTransition Transition;
+		FPhysAnimBalanceReadyTransitionSnapshot Snapshot = Transition.ExportSnapshot();
+		Snapshot.InternalPhase = EBalanceReadyTransitionPhase::BRT_Phase3_Settle;
+		
+		// Tick 20: Should be 0.0
+		Snapshot.Phase3KineticGateReleaseTickCount = 20;
+		Transition.ImportSnapshot(Snapshot);
+		TestEqual(TEXT("Tick 20 alpha should be 0.0"), Transition.GetProximalControlSoftAlpha(TEXT("thigh_l")), 0.0f);
+
+		// Tick 30: Should be 0.5
+		Snapshot.Phase3KineticGateReleaseTickCount = 30;
+		Transition.ImportSnapshot(Snapshot);
+		TestEqual(TEXT("Tick 30 alpha should be 0.5"), Transition.GetProximalControlSoftAlpha(TEXT("thigh_l")), 0.5f);
+
+		// Tick 40: Should be 1.0
+		Snapshot.Phase3KineticGateReleaseTickCount = 40;
+		Transition.ImportSnapshot(Snapshot);
+		TestEqual(TEXT("Tick 40 alpha should be 1.0"), Transition.GetProximalControlSoftAlpha(TEXT("thigh_l")), 1.0f);
+	}
+
+	// 4. Tick 41 returns to strict behavior
+	TestFalse(
+		TEXT("Tick 41 should not have grace"),
+		FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+			Diags,
+			41, 41, true, true, 0.0f, LinearThreshold, 0.0f, AngularThreshold, 0.0f, 10.0f, 0.0f, StandardThreshold, 0.0f, 0.0f, 0.0f, 100.0f, 0.0f, NAME_None, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f));
+
+	// 5. Non-root angular explosion still fails
+	// Tick 5: Energy budget is high (~2.2x -> ~4750 angular), but expansion cap should block explosion.
+	// Observed peak = 1000.0. Expansion limit = 1100.0.
+	// Current speed = 1500.0 -> Should FAIL.
+	TestFalse(
+		TEXT("Non-root angular explosion (5000 vs 3000 cap) should fail even if within energy budget"),
+		FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
+			Diags,
+			5, 5, true, true, 0.0f, LinearThreshold, 0.0f, AngularThreshold, 0.0f, 10.0f, 5000.0f, StandardThreshold, 1000.0f, 1000.0f, 0.0f, 100.0f, 0.0f, TEXT("thigh_l"), 0.0f, 5000.0f, 0.0f, 5000.0f, 1000.0f, 0.0f, 0.0f));
+
 	return true;
 }
 

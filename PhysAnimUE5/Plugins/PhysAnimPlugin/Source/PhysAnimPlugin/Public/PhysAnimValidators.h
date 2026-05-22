@@ -11,6 +11,7 @@ struct FPhysAnimContinuitySnapshot
 	double PelvisSleepDurationMs = 0.0;
 	bool bContinuityBookkeepingMismatch = false;
 	bool bIsBridgeActive = false;
+	bool bKineticGateActive = false;
 };
 
 struct FPhysAnimContinuityValidationResult
@@ -19,6 +20,7 @@ struct FPhysAnimContinuityValidationResult
 	bool bContinuityBookkeepingMismatch = false;
 	double PelvisSleepDurationMs = 0.0;
 	bool bIsBridgeActive = false;
+	bool bKineticGateActive = false;
 	bool bPhysicalContinuityValidatorPassed = true;
 	EPhysAnimTerminalReason TerminalReason = EPhysAnimTerminalReason::None;
 };
@@ -309,6 +311,24 @@ struct FPhysAnimRunArtifactSnapshot
 	bool bCalfContactTerminal = false;
 
 	double ControlAlpha = 0.0;
+	int32 PolicyInferenceSuccessCount = 0;
+	int32 PolicyActionSampleCount = 0;
+	double PolicyActionRawMeanAbsMax = 0.0;
+	double PolicyActionConditionedMeanAbsMax = 0.0;
+	int32 PolicyActionClampedFloatMax = 0;
+	int32 ControlTargetSampleCount = 0;
+	int32 ControlTargetNormalWrites = 0;
+	int32 ControlTargetTotalWrites = 0;
+	double ControlTargetMaxDeltaDeg = 0.0;
+	double ControlTargetMeanDeltaDegMax = 0.0;
+	double ControlTargetMaxRawPolicyOffsetDeg = 0.0;
+	double ControlTargetMeanRawPolicyOffsetDegMax = 0.0;
+	int32 RuntimeBodySampleCount = 0;
+	int32 RuntimeSimulatingBodyCount = 0;
+	double RuntimeMaxBodyLinearSpeedCmPerSecond = 0.0;
+	double RuntimeMaxBodyAngularSpeedDegPerSecond = 0.0;
+	bool bPhysicalPerturbationApplied = false;
+	double PerturbationMeasuredDeltaVCmPerSecond = 0.0;
 	FString ShellBookkeepingState;
 	double ShellInfluenceMateriality = 0.0;
 	int32 TopologyChangeCount = 0;

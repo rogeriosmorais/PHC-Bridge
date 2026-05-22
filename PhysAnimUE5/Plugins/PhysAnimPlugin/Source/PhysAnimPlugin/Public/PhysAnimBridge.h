@@ -141,6 +141,7 @@ namespace PhysAnimBridge
 
 	PHYSANIMPLUGIN_API FName MakeControlName(FName BoneName);
 	PHYSANIMPLUGIN_API FName MakeBodyModifierName(FName BoneName);
+	PHYSANIMPLUGIN_API FName GetBoneNameFromControlName(FName ControlName);
 	PHYSANIMPLUGIN_API FName GetBoneNameFromBodyModifierName(FName ModifierName);
 
 	PHYSANIMPLUGIN_API bool BuildInputTensorIndexMap(

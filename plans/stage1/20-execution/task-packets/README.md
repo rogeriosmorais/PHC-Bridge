@@ -1,18 +1,25 @@
 # Task Packets
 
-This folder contains atomic implementation task packets for Stage 1.
+This folder contains legacy atomic implementation task packets for Stage 1.
+
+These packets are historical/reference material now. Live task state, next action, dependencies, blockers, acceptance criteria, and completion status are owned by mcp-graph.
+
+Do not execute a task packet directly unless a current mcp-graph node explicitly reactivates it or cites it as evidence.
 
 ## Operating Model
 
-- task packet = atomic implementation unit
-- one task packet = one successful commit
-- checkpoint = optional batch of task packets
-- mechanical proof = build/test/scope output
-- execution-log = current pointer
+- mcp-graph node = live implementation unit
+- task packet = legacy/reference implementation packet
+- legacy expectation: one task packet = one successful commit
+- checkpoint = legacy optional batch of task packets
+- mechanical proof = historical build/test/scope output
+- mcp-graph = current pointer
 
 ## Task Packet Rule
 
 Agents must not implement from broad plans directly.
+
+Agents also must not implement from this folder directly unless mcp-graph points here.
 
 Each task packet must define:
 - purpose
@@ -32,14 +39,12 @@ If a task requires a file not listed in the packet, stop and report:
 ## Default Flow
 
 1. Read `AGENTS.md`.
-2. Read `plans/stage1/20-execution/execution-log.md`.
-3. Read the current task packet.
-4. Edit only allowed files.
+2. Pull the current mcp-graph node.
+3. Read the task packet only if the graph node cites it.
+4. Follow the graph node AC and active contract docs.
 5. Run required build/tests.
-6. Run scope check.
-7. Commit.
-8. Update execution log.
-9. Stop.
+6. Update mcp-graph status/rationale.
+7. Stop.
 
 ## Mechanical Gates
 

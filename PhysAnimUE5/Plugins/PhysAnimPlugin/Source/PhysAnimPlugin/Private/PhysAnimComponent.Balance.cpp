@@ -81,6 +81,7 @@ bool UPhysAnimComponent::EvaluateBalancePerturbationRuntimeReadiness(
 	bool bHasPendingBodyModifierCachedResets,
 	bool bHasPelvisBody,
 	bool bPelvisBodySimulating,
+	bool bIsStage1,
 	FString* OutFailureReason)
 {
 	const auto SetFailure = [&](const TCHAR* Reason) -> bool
@@ -127,7 +128,7 @@ bool UPhysAnimComponent::EvaluateBalancePerturbationRuntimeReadiness(
 		return SetFailure(TEXT("pelvisBodyMissing"));
 	}
 
-	if (!bPelvisBodySimulating)
+	if (!bPelvisBodySimulating && !bIsStage1)
 	{
 		return SetFailure(TEXT("pelvisBodyNotSimulating"));
 	}
@@ -160,6 +161,7 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 		!PendingBodyModifierCachedResetNames.IsEmpty(),
 		PelvisBody != nullptr,
 		PelvisBody && PelvisBody->IsInstanceSimulatingPhysics(),
+		IsStage1(),
 		OutFailureReason);
 	if (!bReady && IsBalanceActiveState(RuntimeState))
 	{
@@ -484,7 +486,11 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 
 		if (!Scenario.Name.Contains(TEXT("NoPush")))
 		{
-			ApplyPelvisImpulse(Scenario.Direction, Scenario.Magnitude);
+			if (!ApplyPelvisImpulse(Scenario.Direction, Scenario.Magnitude))
+			{
+				FinalizeBalanceScenario(false, TEXT("INVALID_PERTURBATION"));
+				return;
+			}
 		}
 		else
 		{
@@ -552,21 +558,28 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 }
 
 
-void UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude)
+bool UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direction, EPhysAnimPerturbationMagnitude Magnitude)
 {
 	UWorld* const World = GetWorld();
 	USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	if (!World || !Mesh)
 	{
-		return;
+		return false;
 	}
 
 	const FName PelvisName = PhysAnimBridge::GetRootBoneName();
 	FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PelvisName);
 	if (!PelvisBody || !PelvisBody->IsInstanceSimulatingPhysics())
 	{
-		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] FAILED: pelvis body not found or not simulating."));
-		return;
+		if (IsStage1())
+		{
+			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Stage1: pelvis impulse skipped because root is kinematic."));
+		}
+		else
+		{
+			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] FAILED: pelvis body not found or not simulating."));
+		}
+		return false;
 	}
 
 	FVector ShoveDirection = FVector::ZeroVector;
@@ -613,6 +626,10 @@ void UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 
 	const float MeasuredDeltaV = (BalanceScenarioImpactPelvisLinearVelPost - BalanceScenarioImpactPelvisLinearVelPre).Size();
 	const bool bValidResponse = MeasuredDeltaV >= BalanceResponseVelocityThresholdCmPerSec;
+	ActivatedStandingStabilityMetrics.PerturbationMeasuredDeltaVCmPerSecond = FMath::Max(
+		ActivatedStandingStabilityMetrics.PerturbationMeasuredDeltaVCmPerSecond,
+		static_cast<double>(MeasuredDeltaV));
+	ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied = true;
 
 	UE_LOG(
 		LogPhysAnimBridge,
@@ -638,6 +655,7 @@ void UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 		BalanceScenarioImpactPelvisAngularVelPost.Z,
 		MeasuredDeltaV,
 		bValidResponse ? TEXT("true") : TEXT("false"));
+	return true;
 }
 
 
@@ -1104,33 +1122,36 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	BalanceScenarios.Empty();
 	BalanceScenarios.Add({ TEXT("IdleHold_NoPush"), EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small, 0.5f, BalanceRecoveryTimeoutSeconds, 0.0f });
 
-	const TArray<EPhysAnimPerturbationDirection> Directions = {
-		EPhysAnimPerturbationDirection::Forward,
-		EPhysAnimPerturbationDirection::Backward,
-		EPhysAnimPerturbationDirection::Left,
-		EPhysAnimPerturbationDirection::Right };
-	const TArray<EPhysAnimPerturbationMagnitude> Magnitudes = {
-		EPhysAnimPerturbationMagnitude::Small,
-		EPhysAnimPerturbationMagnitude::Medium,
-		EPhysAnimPerturbationMagnitude::Large };
-	const TArray<FString> DirectionNames = { TEXT("Forward"), TEXT("Backward"), TEXT("Left"), TEXT("Right") };
-	const TArray<FString> MagnitudeNames = { TEXT("Small"), TEXT("Medium"), TEXT("Large") };
-
-	for (int32 DirectionIndex = 0; DirectionIndex < Directions.Num(); ++DirectionIndex)
+	if (!IsStage1())
 	{
-		for (int32 MagnitudeIndex = 0; MagnitudeIndex < Magnitudes.Num(); ++MagnitudeIndex)
+		const TArray<EPhysAnimPerturbationDirection> Directions = {
+			EPhysAnimPerturbationDirection::Forward,
+			EPhysAnimPerturbationDirection::Backward,
+			EPhysAnimPerturbationDirection::Left,
+			EPhysAnimPerturbationDirection::Right };
+		const TArray<EPhysAnimPerturbationMagnitude> Magnitudes = {
+			EPhysAnimPerturbationMagnitude::Small,
+			EPhysAnimPerturbationMagnitude::Medium,
+			EPhysAnimPerturbationMagnitude::Large };
+		const TArray<FString> DirectionNames = { TEXT("Forward"), TEXT("Backward"), TEXT("Left"), TEXT("Right") };
+		const TArray<FString> MagnitudeNames = { TEXT("Small"), TEXT("Medium"), TEXT("Large") };
+
+		for (int32 DirectionIndex = 0; DirectionIndex < Directions.Num(); ++DirectionIndex)
 		{
-			FPhysAnimBalanceScenario Scenario;
-			Scenario.Name = FString::Printf(
-				TEXT("IdleHold_PelvisImpulse_%s_%s"),
-				*DirectionNames[DirectionIndex],
-				*MagnitudeNames[MagnitudeIndex]);
-			Scenario.Direction = Directions[DirectionIndex];
-			Scenario.Magnitude = Magnitudes[MagnitudeIndex];
-			Scenario.TriggerDelaySeconds = 0.5f;
-			Scenario.RecoveryTimeoutSeconds = BalanceRecoveryTimeoutSeconds;
-			Scenario.CooldownSeconds = 0.0f;
-			BalanceScenarios.Add(Scenario);
+			for (int32 MagnitudeIndex = 0; MagnitudeIndex < Magnitudes.Num(); ++MagnitudeIndex)
+			{
+				FPhysAnimBalanceScenario Scenario;
+				Scenario.Name = FString::Printf(
+					TEXT("IdleHold_PelvisImpulse_%s_%s"),
+					*DirectionNames[DirectionIndex],
+					*MagnitudeNames[MagnitudeIndex]);
+				Scenario.Direction = Directions[DirectionIndex];
+				Scenario.Magnitude = Magnitudes[MagnitudeIndex];
+				Scenario.TriggerDelaySeconds = 0.5f;
+				Scenario.RecoveryTimeoutSeconds = BalanceRecoveryTimeoutSeconds;
+				Scenario.CooldownSeconds = 0.0f;
+				BalanceScenarios.Add(Scenario);
+			}
 		}
 	}
 
@@ -1468,6 +1489,7 @@ FPhysAnimContinuitySnapshot UPhysAnimComponent::BuildContinuitySnapshot(float De
 	Snapshot.TopologyChangeCount = MissingCriticalBodies;
 	Snapshot.bContinuityBookkeepingMismatch = !PendingBodyModifierCachedResetNames.IsEmpty();
 	Snapshot.bIsBridgeActive = (RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState));
+	Snapshot.bKineticGateActive = bKineticGateActiveLastFrame;
 
 	if (bEnableLiveRuntimeEvidenceProof)
 	{

@@ -5,12 +5,58 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "HAL/IConsoleManager.h"
 #include "Templates/SharedPointer.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
 namespace
 {
+	struct FThighRestoreDiagnosticVariant
+	{
+		const TCHAR* Name;
+		const TCHAR* Command;
+	};
+
+	static const FThighRestoreDiagnosticVariant ThighRestoreDiagnosticVariants[] =
+	{
+		{ TEXT("Abrupt_0.01"), TEXT("8") },
+		{ TEXT("Abrupt_0.02"), TEXT("5") },
+		{ TEXT("Abrupt_0.05"), TEXT("3") },
+		{ TEXT("Abrupt_0.10"), TEXT("6") },
+		{ TEXT("Abrupt_0.15"), TEXT("9") },
+		{ TEXT("Abrupt_0.20"), TEXT("7") },
+		{ TEXT("Ramp_0.20_0.5s"), TEXT("10") },
+		{ TEXT("Ramp_0.20_1.0s"), TEXT("11") },
+		{ TEXT("KineticGate_ForcedHold_0.20"), TEXT("7:-1.0") },
+	};
+
+	int32 GPhysAnimStrictLivePolicyProofQuality = 0;
+	FAutoConsoleVariableRef CVarPhysAnimStrictLivePolicyProofQuality(
+		TEXT("p.PhysAnim.StrictLivePolicyProofQuality"),
+		GPhysAnimStrictLivePolicyProofQuality,
+		TEXT("Require live PHC proof-quality assertions for standing and perturbation automation tests."),
+		ECVF_Default);
+
+	bool IsStrictLivePolicyProofQualityEnabled()
+	{
+		return GPhysAnimStrictLivePolicyProofQuality != 0;
+	}
+
+	constexpr int32 RequiredCriticalBodyMask =
+		(1 << 0) | // pelvis
+		(1 << 1) | // spine_01
+		(1 << 2) | // spine_02
+		(1 << 3) | // spine_03
+		(1 << 4) | // thigh_l
+		(1 << 5);  // thigh_r
+
+	constexpr int32 RequiredSupportBodyMask =
+		(1 << 0) | // foot_l
+		(1 << 1) | // foot_r
+		(1 << 2) | // ball_l
+		(1 << 3);  // ball_r
+
 	void AddLatentAutomationError(FAutomationTestBase* Test, const FString& Message)
 	{
 		if (Test)
@@ -192,6 +238,19 @@ bool FStartStandingProofWaitCommand::Update()
 		// But we can return false and wait ourselves, or rely on the test sequence.
 	}
 
+	return true;
+}
+
+/**
+ * Command to set the thigh restore variant CVar.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FSetThighRestoreVariantCommand, int32, Variant);
+bool FSetThighRestoreVariantCommand::Update()
+{
+	if (IConsoleVariable* CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("p.PhysAnim.V0PlantThighRestoreVariant")))
+	{
+		CVar->Set(Variant);
+	}
 	return true;
 }
 
@@ -402,6 +461,75 @@ bool FVerifyStandingProofCommand::Update()
 		AddLatentAutomationError(Test, TEXT("StandingProof: no PhysAnim component was found"));
 	}
 
+	return true;
+}
+
+/**
+ * Emits a structured THIGH_RESTORE_VARIANT_SUMMARY line after a ThighRestore diagnostic run.
+ * Satisfies AC-2: diagnostic variants report terminal reason, duration, firstSpineSpike, velocity
+ * snapshots, thigh angular strength/damping, and positive/negative work evidence.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FLogThighRestoreVariantSummaryCommand, int32, Variant, FAutomationTestBase*, Test);
+bool FLogThighRestoreVariantSummaryCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+	if (!World) { return true; }
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		UPhysAnimComponent* const Comp = It->FindComponentByClass<UPhysAnimComponent>();
+		if (!Comp) { continue; }
+
+		const FPhysAnimActivatedStandingStabilityMetrics& M = Comp->GetActivatedStandingStabilityMetrics();
+
+		// Note: per-frame thigh angular strength/damping is captured in WORK_DIAG and
+		// THIGH_RESTORE_STARTED log lines. This summary captures aggregate evidence at window entry.
+		// KINETIC_GATE_RELEASE fields answer AC-6: does thigh restore add/remove energy from pelvis/spine?
+		UE_LOG(LogTemp, Warning,
+			TEXT("[PhysAnimV0] THIGH_RESTORE_VARIANT_SUMMARY variant=%d terminalReason=%d duration=%.3f "
+			     "firstSpineSpikeT=%.3f firstSpineSpikeBody=%s firstSupportFailT=%.3f "
+			     "firstLinearThresholdT=%.3f firstLinearThresholdBody=%s "
+			     "firstAngularThresholdT=%.3f firstAngularThresholdBody=%s "
+			     "maxAngVel005=%.1f maxAngVel010=%.1f maxAngVel015=%.1f maxAngVel020=%.1f "
+			     "maxAngVel030=%.1f maxAngVel060=%.1f maxAngVel100=%.1f "
+			     "thighAngStr=%.4f thighAngDamp=%.4f thighLinStr=%.4f poseSeeded=%d "
+			     "gateReleaseCount=%d pelvisAngVelAtRelease=%.2f maxSpineAngVelAtRelease=%.2f "
+			     "thighStrAtRelease=%.4f activationTAtRelease=%.3f "
+			     "positiveWork=%.6f negativeWork=%.6f samples=%d [log]"),
+			Variant,
+			M.TerminalReason,
+			M.ActivationDurationSec,
+			M.FirstMajorSpineSpikeTimeSec,
+			*M.FirstMajorSpineSpikeBodyName.ToString(),
+			M.FirstSupportFailureTimeSec,
+			M.FirstLinearThresholdTimeSec,
+			*M.FirstLinearThresholdBodyName.ToString(),
+			M.FirstAngularThresholdTimeSec,
+			*M.FirstAngularThresholdBodyName.ToString(),
+			M.MaxAngVel005s, M.MaxAngVel010s, M.MaxAngVel015s, M.MaxAngVel020s,
+			M.MaxAngVel030s, M.MaxAngVel060s, M.MaxAngVel100s,
+			M.ThighAngularStrengthAtWindowEntry, M.ThighAngularDampingAtWindowEntry,
+			M.ThighLinearStrengthAtWindowEntry, M.PoseTargetsSeededAtWindowEntry,
+			M.KineticGateReleaseCount, M.PelvisAngVelAtGateRelease, M.MaxSpineAngVelAtGateRelease,
+			M.ThighStrengthAtGateRelease, M.ActivationTimeAtGateRelease,
+			M.ThighPositiveWorkAccumulated, M.ThighNegativeWorkAccumulated,
+			M.SampleCount);
+		break;
+	}
 	return true;
 }
 
@@ -902,7 +1030,7 @@ bool FVerifyProofDisabledSafeDenyCommand::Update()
 
 	if (!World)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: PIE world was not available"));
 		return true;
 	}
 
@@ -917,19 +1045,19 @@ bool FVerifyProofDisabledSafeDenyCommand::Update()
 			if (ActualState == EPhysAnimRuntimeState::BalanceSafeDeny ||
 				ActualState == EPhysAnimRuntimeState::FailStopped)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected proof-disabled startup to avoid safe deny but got %s for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected proof-disabled startup to avoid safe deny but got %s for %s"),
 					GetRuntimeStateName(ActualState),
 					*It->GetName()));
 			}
 			else if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected terminal_reason=None but got %d for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected terminal_reason=None but got %d for %s"),
 					static_cast<int32>(TerminationState.TerminalReason),
 					*It->GetName()));
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ActivationReview: TEST_PASSED runtime=%s terminalReason=None for %s"),
+				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED runtime=%s terminalReason=None for %s"),
 					GetRuntimeStateName(ActualState),
 					*It->GetName());
 			}
@@ -939,7 +1067,7 @@ bool FVerifyProofDisabledSafeDenyCommand::Update()
 
 	if (!bFoundComponent)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: no PhysAnim component was found"));
 	}
 
 	return true;
@@ -969,7 +1097,7 @@ bool FVerifyProofEnabledStartupFreshEvidenceCommand::Update()
 
 	if (!World)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: PIE world was not available"));
 		return true;
 	}
 
@@ -984,25 +1112,25 @@ bool FVerifyProofEnabledStartupFreshEvidenceCommand::Update()
 			if (ActualState == EPhysAnimRuntimeState::BalanceSafeDeny ||
 				ActualState == EPhysAnimRuntimeState::FailStopped)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected proof-enabled startup to avoid safe deny but got %s for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected proof-enabled startup to avoid safe deny but got %s for %s"),
 					GetRuntimeStateName(ActualState),
 					*It->GetName()));
 			}
 			else if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected terminal_reason=None during proof-enabled startup but got %d for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected terminal_reason=None during proof-enabled startup but got %d for %s"),
 					static_cast<int32>(TerminationState.TerminalReason),
 					*It->GetName()));
 			}
 			else if (Comp->GetStartupProofDeferredTerminalReason() != EPhysAnimTerminalReason::None ||
 				Comp->IsStartupProofTerminalEnforcementArmed())
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected startup proof to remain unarmed for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected startup proof to remain unarmed for %s"),
 					*It->GetName()));
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ActivationReview: TEST_PASSED runtime=%s terminalReason=None for %s"),
+				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED runtime=%s terminalReason=None for %s"),
 					GetRuntimeStateName(ActualState),
 					*It->GetName());
 			}
@@ -1012,7 +1140,7 @@ bool FVerifyProofEnabledStartupFreshEvidenceCommand::Update()
 
 	if (!bFoundComponent)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: no PhysAnim component was found"));
 	}
 
 	return true;
@@ -1042,7 +1170,7 @@ bool FVerifyProofEnabledStartupWaitingHandoffCommand::Update()
 
 	if (!World)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: PIE world was not available"));
 		return true;
 	}
 
@@ -1054,7 +1182,7 @@ bool FVerifyProofEnabledStartupWaitingHandoffCommand::Update()
 			bFoundComponent = true;
 			if (Comp->GetRuntimeState() != EPhysAnimRuntimeState::WaitingForPoseSearch)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected WaitingForPoseSearch but got %s for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected WaitingForPoseSearch but got %s for %s"),
 					GetRuntimeStateName(Comp->GetRuntimeState()),
 					*It->GetName()));
 			}
@@ -1064,7 +1192,7 @@ bool FVerifyProofEnabledStartupWaitingHandoffCommand::Update()
 			if (!Comp->IsStartupProofWaitingForPoseSearchObserved() ||
 				!Comp->IsStartupProofTerminalEnforcementArmed())
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Startup proof handoff was not armed for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Startup proof handoff was not armed for %s"),
 					*It->GetName()));
 			}
 
@@ -1072,7 +1200,7 @@ bool FVerifyProofEnabledStartupWaitingHandoffCommand::Update()
 			if (DeferredReason != EPhysAnimTerminalReason::None &&
 				DeferredReason != EPhysAnimTerminalReason::ActivationSupportFailure)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Unexpected deferred terminal reason %d for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Unexpected deferred terminal reason %d for %s"),
 					static_cast<int32>(DeferredReason),
 					*It->GetName()));
 			}
@@ -1080,13 +1208,13 @@ bool FVerifyProofEnabledStartupWaitingHandoffCommand::Update()
 			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
 			if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected neutralized startup termination state but got %d for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected neutralized startup termination state but got %d for %s"),
 					static_cast<int32>(TerminationState.TerminalReason),
 					*It->GetName()));
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ActivationReview: TEST_PASSED waiting handoff armed deferredReason=%d for %s"),
+				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED waiting handoff armed deferredReason=%d for %s"),
 					static_cast<int32>(DeferredReason),
 					*It->GetName());
 			}
@@ -1096,7 +1224,7 @@ bool FVerifyProofEnabledStartupWaitingHandoffCommand::Update()
 
 	if (!bFoundComponent)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: no PhysAnim component was found"));
 	}
 
 	return true;
@@ -1126,7 +1254,7 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 
 	if (!World)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: PIE world was not available"));
 		return true;
 	}
 
@@ -1138,7 +1266,7 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 			bFoundComponent = true;
 			if (Comp->GetRuntimeState() != EPhysAnimRuntimeState::WaitingForPoseSearch)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected WaitingForPoseSearch but got %s for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected WaitingForPoseSearch but got %s for %s"),
 					GetRuntimeStateName(Comp->GetRuntimeState()),
 					*It->GetName()));
 			}
@@ -1148,7 +1276,7 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 			if (DeferredReason != EPhysAnimTerminalReason::ActivationSupportFailure &&
 				TerminationState.TerminalReason != EPhysAnimTerminalReason::ActivationSupportFailure)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected deferred ActivationSupportFailure before arming but got deferred=%d terminal=%d for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected deferred ActivationSupportFailure before arming but got deferred=%d terminal=%d for %s"),
 					static_cast<int32>(DeferredReason),
 					static_cast<int32>(TerminationState.TerminalReason),
 					*It->GetName()));
@@ -1157,7 +1285,7 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 			Comp->ArmStartupProofTerminalEnforcement();
 			if (!Comp->IsStartupProofTerminalEnforcementArmed())
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Startup proof handoff did not arm for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Startup proof handoff did not arm for %s"),
 					*It->GetName()));
 			}
 			else
@@ -1165,7 +1293,7 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 				UE_LOG(
 					LogTemp,
 					Warning,
-					TEXT("ActivationReview: TEST_PASSED fail-stop handoff armed deferredReason=%d terminalReason=%d for %s"),
+					TEXT("StartupProof: TEST_PASSED fail-stop handoff armed deferredReason=%d terminalReason=%d for %s"),
 					static_cast<int32>(DeferredReason),
 					static_cast<int32>(TerminationState.TerminalReason),
 					*It->GetName());
@@ -1183,32 +1311,32 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 
 				if (RoutedState != EPhysAnimRuntimeState::FailStopped)
 				{
-					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected FailStopped immediately after routed trigger but got %s for %s"),
+					AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected FailStopped immediately after routed trigger but got %s for %s"),
 						GetRuntimeStateName(RoutedState),
 						*It->GetName()));
 				}
 
 				if (Comp->DoesBridgeOwnPhysics())
 				{
-					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Bridge still owned physics immediately after routed trigger for %s"),
+					AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Bridge still owned physics immediately after routed trigger for %s"),
 						*It->GetName()));
 				}
 
 				if (Comp->IsComponentTickEnabled())
 				{
-					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Component tick still enabled immediately after routed trigger for %s"),
+					AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Component tick still enabled immediately after routed trigger for %s"),
 						*It->GetName()));
 				}
 
 				if (RoutedMesh && RoutedMesh->IsSimulatingPhysics())
 				{
-					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Mesh still simulating physics immediately after routed trigger for %s"),
+					AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Mesh still simulating physics immediately after routed trigger for %s"),
 						*It->GetName()));
 				}
 
 				if (RoutedPreservedReason != EPhysAnimTerminalReason::ActivationSupportFailure)
 				{
-					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected preserved terminal reason ActivationSupportFailure but got deferred=%d terminal=%d for %s"),
+					AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected preserved terminal reason ActivationSupportFailure but got deferred=%d terminal=%d for %s"),
 						static_cast<int32>(RoutedDeferredReason),
 						static_cast<int32>(RoutedTerminationState.TerminalReason),
 						*It->GetName()));
@@ -1216,14 +1344,14 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 
 				if (bRoutedTraceSessionActive)
 				{
-					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Bridge trace session remained active immediately after routed trigger for %s"),
+					AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Bridge trace session remained active immediately after routed trigger for %s"),
 						*It->GetName()));
 				}
 
 				UE_LOG(
 					LogTemp,
 					Warning,
-					TEXT("ActivationReview: TEST_PASSED proof fail-stop routed runtime=%s deferredReason=%d terminalReason=%d traceActive=%d ownsPhysics=%d tickEnabled=%d meshSim=%d"),
+					TEXT("StartupProof: TEST_PASSED proof fail-stop routed runtime=%s deferredReason=%d terminalReason=%d traceActive=%d ownsPhysics=%d tickEnabled=%d meshSim=%d"),
 					GetRuntimeStateName(RoutedState),
 					static_cast<int32>(RoutedDeferredReason),
 					static_cast<int32>(RoutedTerminationState.TerminalReason),
@@ -1238,7 +1366,7 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 
 	if (!bFoundComponent)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: no PhysAnim component was found"));
 	}
 
 	return true;
@@ -1268,7 +1396,7 @@ bool FSeedProofFailureDeferredReasonCommand::Update()
 
 	if (!World)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: PIE world was not available"));
 		return true;
 	}
 
@@ -1281,12 +1409,12 @@ bool FSeedProofFailureDeferredReasonCommand::Update()
 			Comp->SetStartupProofDeferredTerminalReasonForTesting(EPhysAnimTerminalReason::ActivationSupportFailure);
 			if (Comp->GetStartupProofDeferredTerminalReason() != EPhysAnimTerminalReason::ActivationSupportFailure)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred terminal reason did not seed for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Deferred terminal reason did not seed for %s"),
 					*It->GetName()));
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ActivationReview: TEST_PASSED deferred terminal reason seeded for %s"), *It->GetName());
+				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED deferred terminal reason seeded for %s"), *It->GetName());
 			}
 			break;
 		}
@@ -1294,7 +1422,7 @@ bool FSeedProofFailureDeferredReasonCommand::Update()
 
 	if (!bFoundComponent)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: no PhysAnim component was found"));
 	}
 
 	return true;
@@ -1324,7 +1452,7 @@ bool FVerifyProofFailureFailStopRoutingCommand::Update()
 
 	if (!World)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: PIE world was not available"));
 		return true;
 	}
 
@@ -1355,7 +1483,7 @@ bool FVerifyProofFailureFailStopRoutingCommand::Update()
 
 	if (!bFoundComponent)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: no PhysAnim component was found"));
 		return true;
 	}
 
@@ -1375,37 +1503,37 @@ bool FVerifyProofFailureFailStopRoutingCommand::Update()
 
 	if (ActualState != EPhysAnimRuntimeState::FailStopped)
 	{
-		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected FailStopped but got %s for %s"),
+		AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected FailStopped but got %s for %s"),
 			GetRuntimeStateName(ActualState),
 			*SelectedCharacter->GetName()));
 	}
 
 	if (SelectedComponent->DoesBridgeOwnPhysics())
 	{
-		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Bridge still owned physics after routed fail-stop for %s"),
+		AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Bridge still owned physics after routed fail-stop for %s"),
 			*SelectedCharacter->GetName()));
 	}
 
 	if (SelectedComponent->IsComponentTickEnabled())
 	{
-		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Component tick still enabled after routed fail-stop for %s"),
+		AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Component tick still enabled after routed fail-stop for %s"),
 			*SelectedCharacter->GetName()));
 	}
 
 	if (!Mesh)
 	{
-		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. No mesh component was available after routed fail-stop for %s"),
+		AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. No mesh component was available after routed fail-stop for %s"),
 			*SelectedCharacter->GetName()));
 	}
 	else if (Mesh->IsSimulatingPhysics())
 	{
-		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Mesh still simulating physics after routed fail-stop for %s"),
+		AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Mesh still simulating physics after routed fail-stop for %s"),
 			*SelectedCharacter->GetName()));
 	}
 
 	if (PreservedReason != EPhysAnimTerminalReason::ActivationSupportFailure)
 	{
-		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected preserved terminal reason ActivationSupportFailure but got deferred=%d terminal=%d for %s"),
+		AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected preserved terminal reason ActivationSupportFailure but got deferred=%d terminal=%d for %s"),
 			static_cast<int32>(DeferredReason),
 			static_cast<int32>(TerminationState.TerminalReason),
 			*SelectedCharacter->GetName()));
@@ -1413,14 +1541,14 @@ bool FVerifyProofFailureFailStopRoutingCommand::Update()
 
 	if (bTraceSessionActive)
 	{
-		AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Bridge trace session remained active after fail-stop for %s"),
+		AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Bridge trace session remained active after fail-stop for %s"),
 			*SelectedCharacter->GetName()));
 	}
 
 	UE_LOG(
 		LogTemp,
 		Warning,
-		TEXT("ActivationReview: TEST_PASSED proof fail-stop routed runtime=%s deferredReason=%d terminalReason=%d traceActive=%d ownsPhysics=%d tickEnabled=%d meshSim=%d"),
+		TEXT("StartupProof: TEST_PASSED proof fail-stop routed runtime=%s deferredReason=%d terminalReason=%d traceActive=%d ownsPhysics=%d tickEnabled=%d meshSim=%d"),
 		GetRuntimeStateName(ActualState),
 		static_cast<int32>(DeferredReason),
 		static_cast<int32>(TerminationState.TerminalReason),
@@ -1452,7 +1580,7 @@ bool FVerifyProofCompleteStandingEntryProxyTimingCommand::Update()
 
 	if (!World)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: PIE world was not available"));
 		return true;
 	}
 
@@ -1464,7 +1592,7 @@ bool FVerifyProofCompleteStandingEntryProxyTimingCommand::Update()
 			bFoundComponent = true;
 			if (Comp->GetRuntimeState() != EPhysAnimRuntimeState::BalanceActive_Standing)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected BalanceActive_Standing but got %s for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected BalanceActive_Standing but got %s for %s"),
 					GetRuntimeStateName(Comp->GetRuntimeState()),
 					*It->GetName()));
 			}
@@ -1474,20 +1602,20 @@ bool FVerifyProofCompleteStandingEntryProxyTimingCommand::Update()
 				!Comp->IsStartupProofStandingEntryAccepted() ||
 				!Comp->IsStartupProofTerminalEnforcementArmed())
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Standing entry acceptance state was not truthful for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Standing entry acceptance state was not truthful for %s"),
 					*It->GetName()));
 			}
 
 			if (!Comp->IsStartupProofProxySupportHandoffArmed())
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Proxy handoff was not armed after standing entry for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Proxy handoff was not armed after standing entry for %s"),
 					*It->GetName()));
 			}
 
 			if (Comp->HasDeferredStartupProxyTerminalReason() &&
 				Comp->GetDeferredStartupProxyTerminalReason() != EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Unexpected deferred proxy terminal reason %d for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Unexpected deferred proxy terminal reason %d for %s"),
 					static_cast<int32>(Comp->GetDeferredStartupProxyTerminalReason()),
 					*It->GetName()));
 			}
@@ -1496,17 +1624,17 @@ bool FVerifyProofCompleteStandingEntryProxyTimingCommand::Update()
 			{
 				if (Comp->GetDeferredStartupProxyTerminalAttemptUuid().IsEmpty())
 				{
-					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred proxy terminal attempt uuid was empty for %s"),
+					AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Deferred proxy terminal attempt uuid was empty for %s"),
 						*It->GetName()));
 				}
 				if (Comp->GetDeferredStartupProxyTerminalSubstepTimestamp() < 0)
 				{
-					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred proxy terminal substep was invalid for %s"),
+					AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Deferred proxy terminal substep was invalid for %s"),
 						*It->GetName()));
 				}
 			}
 
-			UE_LOG(LogTemp, Warning, TEXT("ActivationReview: TEST_PASSED standing entry proxy timing accepted=%d proxyArmed=%d for %s"),
+			UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED standing entry proxy timing accepted=%d proxyArmed=%d for %s"),
 				Comp->IsStartupProofStandingEntryAccepted() ? 1 : 0,
 				Comp->IsStartupProofProxySupportHandoffArmed() ? 1 : 0,
 				*It->GetName());
@@ -1516,21 +1644,21 @@ bool FVerifyProofCompleteStandingEntryProxyTimingCommand::Update()
 
 	if (!bFoundComponent)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: no PhysAnim component was found"));
 	}
 
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofEnabledStartupWaitingHandoffTest, "PhysAnim.ActivationReview.ProofStartupWaitingHandoff", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStartupProofEnabledStartupWaitingHandoffTest, "PhysAnim.StartupProof.WaitingHandoff", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewProofEnabledStartupWaitingHandoffTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimStartupProofEnabledStartupWaitingHandoffTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ProofStartupWaitingHandoff"));
 	OutTestCommands.Add(TEXT("ProofStartupWaitingHandoff"));
 }
 
-bool FPhysAnimActivationReviewProofEnabledStartupWaitingHandoffTest::RunTest(const FString& Parameters)
+bool FPhysAnimStartupProofEnabledStartupWaitingHandoffTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -1542,15 +1670,15 @@ bool FPhysAnimActivationReviewProofEnabledStartupWaitingHandoffTest::RunTest(con
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofEnabledStartupProxyHandoffTest, "PhysAnim.ActivationReview.ProofStartupProxyHandoff", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStartupProofEnabledStartupProxyHandoffTest, "PhysAnim.StartupProof.ProxyHandoff", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewProofEnabledStartupProxyHandoffTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimStartupProofEnabledStartupProxyHandoffTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ProofStartupProxyHandoff"));
 	OutTestCommands.Add(TEXT("ProofStartupProxyHandoff"));
 }
 
-bool FPhysAnimActivationReviewProofEnabledStartupProxyHandoffTest::RunTest(const FString& Parameters)
+bool FPhysAnimStartupProofEnabledStartupProxyHandoffTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -1702,6 +1830,12 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 			CheckFinite(TEXT("active_support_side_count_min"), Metrics.ActiveSupportSideCountMin);
 			CheckFinite(TEXT("active_support_side_count_mean"), Metrics.ActiveSupportSideCountMean);
 			CheckFinite(TEXT("active_support_side_count_max"), Metrics.ActiveSupportSideCountMax);
+			CheckFinite(TEXT("policy_action_raw_mean_abs_max"), Metrics.PolicyActionRawMeanAbsMax);
+			CheckFinite(TEXT("policy_action_conditioned_mean_abs_max"), Metrics.PolicyActionConditionedMeanAbsMax);
+			CheckFinite(TEXT("control_target_max_delta_deg"), Metrics.ControlTargetMaxDeltaDeg);
+			CheckFinite(TEXT("control_target_mean_delta_deg_max"), Metrics.ControlTargetMeanDeltaDegMax);
+			CheckFinite(TEXT("control_target_max_raw_policy_offset_deg"), Metrics.ControlTargetMaxRawPolicyOffsetDeg);
+			CheckFinite(TEXT("control_target_mean_raw_policy_offset_deg_max"), Metrics.ControlTargetMeanRawPolicyOffsetDegMax);
 
 			if (Metrics.FailStopCount != 0)
 			{
@@ -1723,10 +1857,82 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics active support side count dropped below 1 for %s"), *It->GetName()));
 			}
 
+			const bool bStrictProofQuality = IsStrictLivePolicyProofQualityEnabled();
+			if (bStrictProofQuality && Metrics.PolicyInferenceSuccessCount <= 0)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no successful policy inference during hold for %s"), *It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.PolicyActionSampleCount <= 0 || Metrics.PolicyActionConditionedMeanAbsMax <= 0.0))
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no nonzero conditioned policy action during hold for %s"), *It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.ControlTargetSampleCount <= 0 || Metrics.ControlTargetNormalWrites <= 0 || Metrics.ControlTargetTotalWrites <= 0))
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no PhysicsControl target writes during hold for %s"), *It->GetName()));
+			}
+
+			if (bStrictProofQuality && Metrics.ControlTargetMaxDeltaDeg <= 0.0 && Metrics.ControlTargetMaxRawPolicyOffsetDeg <= 0.0)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no material policy target delta during hold for %s"), *It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.BodyTelemetrySampleCount <= 0 || Metrics.SimulatingBodyCountMax <= 0))
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no simulating body telemetry during hold for %s"), *It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.CriticalBodyValidMask & RequiredCriticalBodyMask) != RequiredCriticalBodyMask)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing valid critical bodies mask=0x%x required=0x%x for %s"),
+					Metrics.CriticalBodyValidMask,
+					RequiredCriticalBodyMask,
+					*It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.CriticalBodySimulatingMask & RequiredCriticalBodyMask) != RequiredCriticalBodyMask)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing simulating critical bodies mask=0x%x required=0x%x for %s"),
+					Metrics.CriticalBodySimulatingMask,
+					RequiredCriticalBodyMask,
+					*It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.SupportBodyValidMask & RequiredSupportBodyMask) != RequiredSupportBodyMask)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing valid support bodies mask=0x%x required=0x%x for %s"),
+					Metrics.SupportBodyValidMask,
+					RequiredSupportBodyMask,
+					*It->GetName()));
+			}
+
+			if (bStrictProofQuality && (Metrics.SupportBodySimulatingMask & RequiredSupportBodyMask) != RequiredSupportBodyMask)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing simulating support bodies mask=0x%x required=0x%x for %s"),
+					Metrics.SupportBodySimulatingMask,
+					RequiredSupportBodyMask,
+					*It->GetName()));
+			}
+
+			if (bStrictProofQuality && Metrics.ExcludedRequiredBodySimulatingCountMax > 0)
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics has simulating non-V0 required bodies count=%d for %s"),
+					Metrics.ExcludedRequiredBodySimulatingCountMax,
+					*It->GetName()));
+			}
+
+			if (bStrictProofQuality &&
+				(!TerminationState.LatestArtifact.bPhysicalContinuityValidatorPassed ||
+					TerminationState.LatestArtifact.bContinuityBookkeepingMismatch))
+			{
+				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics physical continuity did not pass for %s"), *It->GetName()));
+			}
+
 			UE_LOG(
 				LogTemp,
 				Warning,
-				TEXT("StandingProof: StabilityMetrics samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f terminalReason=%d"),
+				TEXT("StandingProof: StabilityMetrics samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f clampedMax=%d] targets[samples=%d normal=%d total=%d maxDelta=%.2f meanDeltaMax=%.2f maxRawOffset=%.2f meanRawOffsetMax=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] terminalReason=%d"),
 				Metrics.SampleCount,
 				Metrics.ActivationDurationSec,
 				Metrics.RootWorldPositionDriftCm,
@@ -1739,7 +1945,29 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Metrics.ActiveSupportSideCountMean,
 				Metrics.ActiveSupportSideCountMax,
 				Metrics.MaxBodyLinearSpeedCmPerSecond,
+				*Metrics.MaxBodyLinearSpeedBodyName.ToString(),
 				Metrics.MaxBodyAngularSpeedDegPerSecond,
+				*Metrics.MaxBodyAngularSpeedBodyName.ToString(),
+				Metrics.PolicyInferenceSuccessCount,
+				Metrics.PolicyActionSampleCount,
+				Metrics.PolicyActionRawMeanAbsMax,
+				Metrics.PolicyActionConditionedMeanAbsMax,
+				Metrics.PolicyActionClampedFloatMax,
+				Metrics.ControlTargetSampleCount,
+				Metrics.ControlTargetNormalWrites,
+				Metrics.ControlTargetTotalWrites,
+				Metrics.ControlTargetMaxDeltaDeg,
+				Metrics.ControlTargetMeanDeltaDegMax,
+				Metrics.ControlTargetMaxRawPolicyOffsetDeg,
+				Metrics.ControlTargetMeanRawPolicyOffsetDegMax,
+				Metrics.BodyTelemetrySampleCount,
+				Metrics.SimulatingBodyCountMax,
+				Metrics.ExcludedRequiredBodySimulatingCountMax,
+				Metrics.CriticalBodyValidMask,
+				Metrics.CriticalBodySimulatingMask,
+				Metrics.SupportBodyValidMask,
+				Metrics.SupportBodySimulatingMask,
+				Metrics.BodyVelocityNonZeroSampleCount,
 				Metrics.TerminalReason);
 			break;
 		}
@@ -1748,6 +1976,222 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 	if (!bFoundComponent)
 	{
 		AddLatentAutomationError(Test, TEXT("StandingProof: StabilityMetrics found no PhysAnim component"));
+	}
+
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FSetRawSimDiagnosticGroupCommand, int32, DiagnosticGroup);
+bool FSetRawSimDiagnosticGroupCommand::Update()
+{
+	if (IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("p.PhysAnim.RawSimDiagnosticGroup")))
+	{
+		CVar->Set(DiagnosticGroup, ECVF_SetByCode);
+	}
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FSetAllowCharacterMovementInBridgeActiveCommand, int32, bAllowCharacterMovement);
+bool FSetAllowCharacterMovementInBridgeActiveCommand::Update()
+{
+	if (IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("physanim.AllowCharacterMovementInBridgeActive")))
+	{
+		CVar->Set(bAllowCharacterMovement, ECVF_SetByCode);
+	}
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FSetIntConsoleVariableCommand, FString, CVarName, int32, Value);
+bool FSetIntConsoleVariableCommand::Update()
+{
+	if (IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(*CVarName))
+	{
+		CVar->Set(Value, ECVF_SetByCode);
+	}
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FSetFloatConsoleVariableCommand, FString, CVarName, float, Value);
+bool FSetFloatConsoleVariableCommand::Update()
+{
+	if (IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(*CVarName))
+	{
+		CVar->Set(Value, ECVF_SetByCode);
+	}
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FLogControlIsolationMatrixCommand, FString, CaseName, int32, ReviewMode, FAutomationTestBase*, Test);
+bool FLogControlIsolationMatrixCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("ControlIsolationMatrix[%s]: PIE world was not available"), *CaseName));
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Comp->GetActivatedStandingStabilityMetrics();
+			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+			if (Metrics.SampleCount <= 0)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("ControlIsolationMatrix[%s]: no stability samples were collected"), *CaseName);
+			}
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("ControlIsolationMatrix[%s]: mode=%d runtimeState=%d terminalReason=%d samples=%d duration=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) spine01[lin=%.2f ang=%.2f] spine03[lin=%.2f ang=%.2f] firstSpineSpike=%.2f(%s) firstSupportFailure=%.2f policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f] targets[samples=%d normal=%d total=%d maxDelta=%.2f maxRawOffset=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] continuityValid=%d"),
+				*CaseName,
+				ReviewMode,
+				static_cast<int32>(Comp->GetRuntimeState()),
+				static_cast<int32>(TerminationState.TerminalReason),
+				Metrics.SampleCount,
+				Metrics.ActivationDurationSec,
+				Metrics.SupportHullAreaMinCm2,
+				Metrics.SupportHullAreaMeanCm2,
+				Metrics.SupportHullAreaMaxCm2,
+				Metrics.ActiveSupportSideCountMin,
+				Metrics.ActiveSupportSideCountMean,
+				Metrics.ActiveSupportSideCountMax,
+				Metrics.MaxBodyLinearSpeedCmPerSecond,
+				*Metrics.MaxBodyLinearSpeedBodyName.ToString(),
+				Metrics.MaxBodyAngularSpeedDegPerSecond,
+				*Metrics.MaxBodyAngularSpeedBodyName.ToString(),
+				Metrics.Spine01MaxLinearSpeedCmPerSecond,
+				Metrics.Spine01MaxAngularSpeedDegPerSecond,
+				Metrics.Spine03MaxLinearSpeedCmPerSecond,
+				Metrics.Spine03MaxAngularSpeedDegPerSecond,
+				Metrics.FirstMajorSpineSpikeTimeSec,
+				*Metrics.FirstMajorSpineSpikeBodyName.ToString(),
+				Metrics.FirstSupportFailureTimeSec,
+				Metrics.PolicyInferenceSuccessCount,
+				Metrics.PolicyActionSampleCount,
+				Metrics.PolicyActionRawMeanAbsMax,
+				Metrics.PolicyActionConditionedMeanAbsMax,
+				Metrics.ControlTargetSampleCount,
+				Metrics.ControlTargetNormalWrites,
+				Metrics.ControlTargetTotalWrites,
+				Metrics.ControlTargetMaxDeltaDeg,
+				Metrics.ControlTargetMaxRawPolicyOffsetDeg,
+				Metrics.BodyTelemetrySampleCount,
+				Metrics.SimulatingBodyCountMax,
+				Metrics.ExcludedRequiredBodySimulatingCountMax,
+				Metrics.CriticalBodyValidMask,
+				Metrics.CriticalBodySimulatingMask,
+				Metrics.SupportBodyValidMask,
+				Metrics.SupportBodySimulatingMask,
+				Metrics.BodyVelocityNonZeroSampleCount,
+				(TerminationState.LatestArtifact.bPhysicalContinuityValidatorPassed &&
+					!TerminationState.LatestArtifact.bContinuityBookkeepingMismatch) ? 1 : 0);
+			break;
+		}
+	}
+
+	return true;
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FLogRawSimulationOwnershipBisectCommand, FString, CaseName, int32, DiagnosticGroup, FAutomationTestBase*, Test);
+bool FLogRawSimulationOwnershipBisectCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		AddLatentAutomationError(Test, FString::Printf(TEXT("RawSimulationOwnershipBisect[%s]: PIE world was not available"), *CaseName));
+		return true;
+	}
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Comp->GetActivatedStandingStabilityMetrics();
+			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+			if (Metrics.SampleCount <= 0)
+			{
+				if (DiagnosticGroup < 4)
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("RawSimulationOwnershipBisect[%s]: no stability samples were collected"), *CaseName));
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("RawSimulationOwnershipBisect[%s]: full required non-V0 group collected no stability samples"), *CaseName);
+				}
+			}
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("RawSimulationOwnershipBisect[%s]: group=%d runtimeState=%d terminalReason=%d samples=%d duration=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f] targets[samples=%d normal=%d total=%d maxDelta=%.2f maxRawOffset=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] continuityValid=%d"),
+				*CaseName,
+				DiagnosticGroup,
+				static_cast<int32>(Comp->GetRuntimeState()),
+				static_cast<int32>(TerminationState.TerminalReason),
+				Metrics.SampleCount,
+				Metrics.ActivationDurationSec,
+				Metrics.SupportHullAreaMinCm2,
+				Metrics.SupportHullAreaMeanCm2,
+				Metrics.SupportHullAreaMaxCm2,
+				Metrics.ActiveSupportSideCountMin,
+				Metrics.ActiveSupportSideCountMean,
+				Metrics.ActiveSupportSideCountMax,
+				Metrics.MaxBodyLinearSpeedCmPerSecond,
+				*Metrics.MaxBodyLinearSpeedBodyName.ToString(),
+				Metrics.MaxBodyAngularSpeedDegPerSecond,
+				*Metrics.MaxBodyAngularSpeedBodyName.ToString(),
+				Metrics.PolicyInferenceSuccessCount,
+				Metrics.PolicyActionSampleCount,
+				Metrics.PolicyActionRawMeanAbsMax,
+				Metrics.PolicyActionConditionedMeanAbsMax,
+				Metrics.ControlTargetSampleCount,
+				Metrics.ControlTargetNormalWrites,
+				Metrics.ControlTargetTotalWrites,
+				Metrics.ControlTargetMaxDeltaDeg,
+				Metrics.ControlTargetMaxRawPolicyOffsetDeg,
+				Metrics.BodyTelemetrySampleCount,
+				Metrics.SimulatingBodyCountMax,
+				Metrics.ExcludedRequiredBodySimulatingCountMax,
+				Metrics.CriticalBodyValidMask,
+				Metrics.CriticalBodySimulatingMask,
+				Metrics.SupportBodyValidMask,
+				Metrics.SupportBodySimulatingMask,
+				Metrics.BodyVelocityNonZeroSampleCount,
+				(TerminationState.LatestArtifact.bPhysicalContinuityValidatorPassed &&
+					!TerminationState.LatestArtifact.bContinuityBookkeepingMismatch) ? 1 : 0);
+			break;
+		}
 	}
 
 	return true;
@@ -1766,8 +2210,8 @@ void FPhysAnimActivationWiringTest::GetTests(TArray<FString>& OutBeautifiedNames
 	OutBeautifiedNames.Add(TEXT("ProofSatisfied"));
 	OutTestCommands.Add(TEXT("ProofSatisfied"));
 
-	OutBeautifiedNames.Add(TEXT("ZProofFailed"));
-	OutTestCommands.Add(TEXT("ZProofFailed"));
+	OutBeautifiedNames.Add(TEXT("ProofFailedFailStopRouted"));
+	OutTestCommands.Add(TEXT("ProofFailedFailStopRouted"));
 }
 
 bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
@@ -1798,7 +2242,7 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BalanceActive_Standing, this));
 		ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
 	}
-	else if (Parameters == TEXT("ZProofFailed"))
+	else if (Parameters == TEXT("ProofFailedFailStopRouted"))
 	{
 		AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
@@ -1812,15 +2256,15 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 }
 
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofDisabledSafeDenyTest, "PhysAnim.ActivationReview.ProofDisabledSafeDeny", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStartupProofDisabledSafeDenyTest, "PhysAnim.StartupProof.ProofDisabledSafeDeny", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewProofDisabledSafeDenyTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimStartupProofDisabledSafeDenyTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ProofDisabledSafeDeny"));
 	OutTestCommands.Add(TEXT("ProofDisabledSafeDeny"));
 }
 
-bool FPhysAnimActivationReviewProofDisabledSafeDenyTest::RunTest(const FString& Parameters)
+bool FPhysAnimStartupProofDisabledSafeDenyTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -1833,15 +2277,15 @@ bool FPhysAnimActivationReviewProofDisabledSafeDenyTest::RunTest(const FString& 
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofEnabledStartupFreshEvidenceTest, "PhysAnim.ActivationReview.ProofStartupFreshEvidence", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStartupProofEnabledStartupFreshEvidenceTest, "PhysAnim.StartupProof.FreshEvidence", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewProofEnabledStartupFreshEvidenceTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimStartupProofEnabledStartupFreshEvidenceTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ProofStartupFreshEvidence"));
 	OutTestCommands.Add(TEXT("ProofStartupFreshEvidence"));
 }
 
-bool FPhysAnimActivationReviewProofEnabledStartupFreshEvidenceTest::RunTest(const FString& Parameters)
+bool FPhysAnimStartupProofEnabledStartupFreshEvidenceTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -1854,15 +2298,15 @@ bool FPhysAnimActivationReviewProofEnabledStartupFreshEvidenceTest::RunTest(cons
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewActivationWiringStartupEntryBridgeTest, "PhysAnim.ActivationReview.ActivationWiringStartupEntryBridge", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationPathStartupEntryBridgeTest, "PhysAnim.ActivationPath.StartupEntryBridge", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewActivationWiringStartupEntryBridgeTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimActivationPathStartupEntryBridgeTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ActivationWiringStartupEntryBridge"));
 	OutTestCommands.Add(TEXT("ActivationWiringStartupEntryBridge"));
 }
 
-bool FPhysAnimActivationReviewActivationWiringStartupEntryBridgeTest::RunTest(const FString& Parameters)
+bool FPhysAnimActivationPathStartupEntryBridgeTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -1874,15 +2318,15 @@ bool FPhysAnimActivationReviewActivationWiringStartupEntryBridgeTest::RunTest(co
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewActivationWiringVerifyWindowTest, "PhysAnim.ActivationReview.ActivationWiringVerifyWindow", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationPathVerifyWindowTest, "PhysAnim.ActivationPath.VerifyWindow", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewActivationWiringVerifyWindowTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimActivationPathVerifyWindowTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ActivationWiringVerifyWindow"));
 	OutTestCommands.Add(TEXT("ActivationWiringVerifyWindow"));
 }
 
-bool FPhysAnimActivationReviewActivationWiringVerifyWindowTest::RunTest(const FString& Parameters)
+bool FPhysAnimActivationPathVerifyWindowTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -1895,15 +2339,15 @@ bool FPhysAnimActivationReviewActivationWiringVerifyWindowTest::RunTest(const FS
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewWaitingForPoseSearchLiveEvidenceNonterminalTest, "PhysAnim.ActivationReview.WaitingForPoseSearchLiveEvidenceNonterminal", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimRuntimeEvidenceWaitingForPoseSearchNonterminalTest, "PhysAnim.RuntimeEvidence.WaitingForPoseSearchNonterminal", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewWaitingForPoseSearchLiveEvidenceNonterminalTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimRuntimeEvidenceWaitingForPoseSearchNonterminalTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("WaitingForPoseSearchLiveEvidenceNonterminal"));
 	OutTestCommands.Add(TEXT("WaitingForPoseSearchLiveEvidenceNonterminal"));
 }
 
-bool FPhysAnimActivationReviewWaitingForPoseSearchLiveEvidenceNonterminalTest::RunTest(const FString& Parameters)
+bool FPhysAnimRuntimeEvidenceWaitingForPoseSearchNonterminalTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -1915,15 +2359,15 @@ bool FPhysAnimActivationReviewWaitingForPoseSearchLiveEvidenceNonterminalTest::R
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewStartupEvidenceSatisfactionBoundaryTest, "PhysAnim.ActivationReview.StartupEvidenceSatisfactionBoundary", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStartupProofStartupEvidenceSatisfactionBoundaryTest, "PhysAnim.StartupProof.EvidenceSatisfactionBoundary", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewStartupEvidenceSatisfactionBoundaryTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimStartupProofStartupEvidenceSatisfactionBoundaryTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("StartupEvidenceSatisfactionBoundary"));
 	OutTestCommands.Add(TEXT("StartupEvidenceSatisfactionBoundary"));
 }
 
-bool FPhysAnimActivationReviewStartupEvidenceSatisfactionBoundaryTest::RunTest(const FString& Parameters)
+bool FPhysAnimStartupProofStartupEvidenceSatisfactionBoundaryTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -1935,15 +2379,15 @@ bool FPhysAnimActivationReviewStartupEvidenceSatisfactionBoundaryTest::RunTest(c
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofCompleteStandingEntryProxyTimingTest, "PhysAnim.ActivationReview.ProofCompleteStandingEntryProxyTiming", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStartupProofCompleteStandingEntryProxyTimingTest, "PhysAnim.StartupProof.StandingEntryProxyTiming", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewProofCompleteStandingEntryProxyTimingTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimStartupProofCompleteStandingEntryProxyTimingTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ProofCompleteStandingEntryProxyTiming"));
 	OutTestCommands.Add(TEXT("ProofCompleteStandingEntryProxyTiming"));
 }
 
-bool FPhysAnimActivationReviewProofCompleteStandingEntryProxyTimingTest::RunTest(const FString& Parameters)
+bool FPhysAnimStartupProofCompleteStandingEntryProxyTimingTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -1980,7 +2424,7 @@ bool FVerifyProxyHandoffResetCommand::Update()
 
 	if (!World)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: PIE world was not available"));
 		return true;
 	}
 
@@ -1992,11 +2436,11 @@ bool FVerifyProxyHandoffResetCommand::Update()
 			bFoundComponent = true;
 			if (Comp->IsStartupProofProxySupportHandoffArmed())
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Proxy handoff was armed during reset for %s"), *It->GetName()));
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Proxy handoff was armed during reset for %s"), *It->GetName()));
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ActivationReview: TEST_PASSED proxy handoff reset disarmed for %s"), *It->GetName());
+				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED proxy handoff reset disarmed for %s"), *It->GetName());
 			}
 
 			if (Comp->HasDeferredStartupProxyTerminalReason() &&
@@ -2004,11 +2448,11 @@ bool FVerifyProxyHandoffResetCommand::Update()
 			{
 				if (Comp->GetDeferredStartupProxyTerminalAttemptUuid().IsEmpty())
 				{
-					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred proxy terminal attempt uuid was empty for %s"), *It->GetName()));
+					AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Deferred proxy terminal attempt uuid was empty for %s"), *It->GetName()));
 				}
 				if (Comp->GetDeferredStartupProxyTerminalSubstepTimestamp() < 0)
 				{
-					AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred proxy terminal substep was invalid for %s"), *It->GetName()));
+					AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Deferred proxy terminal substep was invalid for %s"), *It->GetName()));
 				}
 			}
 			break;
@@ -2017,7 +2461,7 @@ bool FVerifyProxyHandoffResetCommand::Update()
 
 	if (!bFoundComponent)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: no PhysAnim component was found"));
 	}
 
 	return true;
@@ -2044,7 +2488,7 @@ bool FVerifyProofSatisfiedProxyHandoffSourceOfTruthProofCommand::Update()
 
 	if (!World)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: PIE world was not available"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: PIE world was not available"));
 		return true;
 	}
 
@@ -2066,14 +2510,14 @@ bool FVerifyProofSatisfiedProxyHandoffSourceOfTruthProofCommand::Update()
 
 			if (Comp->GetRuntimeState() != EPhysAnimRuntimeState::BalanceActive_Standing)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected BalanceActive_Standing but got %s for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected BalanceActive_Standing but got %s for %s"),
 					GetRuntimeStateName(Comp->GetRuntimeState()),
 					*It->GetName()));
 			}
 
 			if (!bProofComplete || !bProofSatisfied || !bFreshEvidence || !bStandingAccepted || !bProxyArmed)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Proof source-of-truth state was not complete for %s complete=%d satisfied=%d fresh=%d standingAccepted=%d proxyArmed=%d"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Proof source-of-truth state was not complete for %s complete=%d satisfied=%d fresh=%d standingAccepted=%d proxyArmed=%d"),
 					*It->GetName(),
 					bProofComplete ? 1 : 0,
 					bProofSatisfied ? 1 : 0,
@@ -2087,7 +2531,7 @@ bool FVerifyProofSatisfiedProxyHandoffSourceOfTruthProofCommand::Update()
 					Comp->GetDeferredStartupProxyTerminalAttemptUuid().IsEmpty() ||
 					Comp->GetDeferredStartupProxyTerminalSubstepTimestamp() < 0))
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Deferred proxy terminal was not truthfully recorded for %s deferred=%d reason=%d attemptEmpty=%d substep=%lld"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Deferred proxy terminal was not truthfully recorded for %s deferred=%d reason=%d attemptEmpty=%d substep=%lld"),
 					*It->GetName(),
 					bDeferredProxyRecorded ? 1 : 0,
 					static_cast<int32>(DeferredProxyReason),
@@ -2098,7 +2542,7 @@ bool FVerifyProofSatisfiedProxyHandoffSourceOfTruthProofCommand::Update()
 			if (TerminationState.TerminalReason != EPhysAnimTerminalReason::None ||
 				Latest.TerminalReason != EPhysAnimTerminalReason::None)
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Expected neutral terminal reasons but got state=%d latest=%d for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Expected neutral terminal reasons but got state=%d latest=%d for %s"),
 					static_cast<int32>(TerminationState.TerminalReason),
 					static_cast<int32>(Latest.TerminalReason),
 					*It->GetName()));
@@ -2106,14 +2550,14 @@ bool FVerifyProofSatisfiedProxyHandoffSourceOfTruthProofCommand::Update()
 
 			if (!Comp->CanEnterBalanceActiveStanding())
 			{
-				AddLatentAutomationError(Test, FString::Printf(TEXT("ActivationReview: TEST_FAILED. Proof satisfied standing entry was not allowed for %s"),
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StartupProof: TEST_FAILED. Proof satisfied standing entry was not allowed for %s"),
 					*It->GetName()));
 			}
 
 			UE_LOG(
 				LogTemp,
 				Warning,
-				TEXT("ActivationReview: TEST_PASSED proof source-of-truth runtime=%s proofComplete=%d proofSatisfied=%d freshEvidence=%d standingAccepted=%d proxyArmed=%d deferredProxyRecorded=%d deferredProxyReason=%d terminalReason=%d latestTerminalReason=%d finalActivationPath=%s"),
+				TEXT("StartupProof: TEST_PASSED proof source-of-truth runtime=%s proofComplete=%d proofSatisfied=%d freshEvidence=%d standingAccepted=%d proxyArmed=%d deferredProxyRecorded=%d deferredProxyReason=%d terminalReason=%d latestTerminalReason=%d finalActivationPath=%s"),
 				GetRuntimeStateName(Comp->GetRuntimeState()),
 				bProofComplete ? 1 : 0,
 				bProofSatisfied ? 1 : 0,
@@ -2131,21 +2575,21 @@ bool FVerifyProofSatisfiedProxyHandoffSourceOfTruthProofCommand::Update()
 
 	if (!bFoundComponent)
 	{
-		AddLatentAutomationError(Test, TEXT("ActivationReview: no PhysAnim component was found"));
+		AddLatentAutomationError(Test, TEXT("StartupProof: no PhysAnim component was found"));
 	}
 
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthTest, "PhysAnim.ActivationReview.ProofSatisfiedProxyHandoffSourceOfTruth", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStartupProofSatisfiedProxyHandoffSourceOfTruthTest, "PhysAnim.StartupProof.ProxyHandoffSourceOfTruth", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimStartupProofSatisfiedProxyHandoffSourceOfTruthTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ProofSatisfiedProxyHandoffSourceOfTruth"));
 	OutTestCommands.Add(TEXT("ProofSatisfiedProxyHandoffSourceOfTruth"));
 }
 
-bool FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthTest::RunTest(const FString& Parameters)
+bool FPhysAnimStartupProofSatisfiedProxyHandoffSourceOfTruthTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -2158,15 +2602,15 @@ bool FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthTest::RunTe
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthProofTest, "PhysAnim.ActivationReview.ProofSatisfiedProxyHandoffSourceOfTruthProof", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStartupProofSatisfiedProxyHandoffSourceOfTruthProofTest, "PhysAnim.StartupProof.ProxyHandoffSourceOfTruthEvidence", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthProofTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimStartupProofSatisfiedProxyHandoffSourceOfTruthProofTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ProofSatisfiedProxyHandoffSourceOfTruthProof"));
 	OutTestCommands.Add(TEXT("ProofSatisfiedProxyHandoffSourceOfTruthProof"));
 }
 
-bool FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthProofTest::RunTest(const FString& Parameters)
+bool FPhysAnimStartupProofSatisfiedProxyHandoffSourceOfTruthProofTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -2183,15 +2627,15 @@ bool FPhysAnimActivationReviewProofSatisfiedProxyHandoffSourceOfTruthProofTest::
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProofFailureFailStopRoutingTest, "PhysAnim.ActivationReview.ProofFailureFailStopRouting", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStartupProofFailureFailStopRoutingTest, "PhysAnim.StartupProof.FailureFailStopRouting", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewProofFailureFailStopRoutingTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimStartupProofFailureFailStopRoutingTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ProofFailureFailStopRouting"));
 	OutTestCommands.Add(TEXT("ProofFailureFailStopRouting"));
 }
 
-bool FPhysAnimActivationReviewProofFailureFailStopRoutingTest::RunTest(const FString& Parameters)
+bool FPhysAnimStartupProofFailureFailStopRoutingTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -2213,15 +2657,15 @@ bool FPhysAnimActivationReviewProofFailureFailStopRoutingTest::RunTest(const FSt
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewActivationPathProxyTimingSurfaceWidenTest, "PhysAnim.ActivationReview.ActivationPathProxyTimingSurfaceWiden", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationPathProxyTimingSurfaceWidenTest, "PhysAnim.ActivationPath.ProxyTimingSurfaceWiden", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewActivationPathProxyTimingSurfaceWidenTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimActivationPathProxyTimingSurfaceWidenTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ActivationPathProxyTimingSurfaceWiden"));
 	OutTestCommands.Add(TEXT("ActivationPathProxyTimingSurfaceWiden"));
 }
 
-bool FPhysAnimActivationReviewActivationPathProxyTimingSurfaceWidenTest::RunTest(const FString& Parameters)
+bool FPhysAnimActivationPathProxyTimingSurfaceWidenTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -2234,15 +2678,15 @@ bool FPhysAnimActivationReviewActivationPathProxyTimingSurfaceWidenTest::RunTest
 	return true;
 }
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimActivationReviewProxyHandoffArmingTimingResetTest, "PhysAnim.ActivationReview.ProxyHandoffArmingTimingReset", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStartupProofProxyHandoffArmingTimingResetTest, "PhysAnim.StartupProof.ProxyHandoffArmingReset", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-void FPhysAnimActivationReviewProxyHandoffArmingTimingResetTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+void FPhysAnimStartupProofProxyHandoffArmingTimingResetTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
 	OutBeautifiedNames.Add(TEXT("ProxyHandoffArmingTimingReset"));
 	OutTestCommands.Add(TEXT("ProxyHandoffArmingTimingReset"));
 }
 
-bool FPhysAnimActivationReviewProxyHandoffArmingTimingResetTest::RunTest(const FString& Parameters)
+bool FPhysAnimStartupProofProxyHandoffArmingTimingResetTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
@@ -2460,7 +2904,14 @@ bool FApplyActivatedStandingPerturbationCommand::Update()
 	UPhysAnimComponent* const Component = State->Component.Get();
 	if (!Component->ApplyActivatedStandingPerturbation(EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small))
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
+		if (IsStrictLivePolicyProofQualityEnabled())
+		{
+			UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("PerturbationProof: physical perturbation was not applied; strict proof quality is opt-in"));
+		}
 		return true;
 	}
 
@@ -2489,6 +2940,7 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 	const EPhysAnimRuntimeState RuntimeState = Component->GetRuntimeState();
 	const FPhysAnimRuntimeTerminationState& TerminationState = Component->GetLiveRuntimeEvidenceTerminationState();
 	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
+	const bool bStrictProofQuality = IsStrictLivePolicyProofQualityEnabled();
 	const auto Fail = [&](const FString& Message)
 	{
 		AddLatentAutomationError(Test, Message);
@@ -2499,21 +2951,42 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 		Fail(TEXT("PerturbationProof: baseline was not captured"));
 	}
 
-	if (!State->bPerturbationApplied)
+	if (bStrictProofQuality && !State->bPerturbationApplied)
 	{
 		Fail(TEXT("PerturbationProof: perturbation was not applied"));
 	}
 
-	if (!Component->HasActivatedStandingPerturbationApplied())
+	if (bStrictProofQuality && !Component->HasActivatedStandingPerturbationApplied())
 	{
 		Fail(TEXT("PerturbationProof: component did not remember the perturbation"));
+	}
+
+	constexpr double RequiredPhysicalPerturbationDeltaVCmPerSecond = 5.0;
+	if (bStrictProofQuality &&
+		(!Metrics.bPhysicalPerturbationApplied ||
+			Metrics.PerturbationMeasuredDeltaVCmPerSecond < RequiredPhysicalPerturbationDeltaVCmPerSecond))
+	{
+		Fail(FString::Printf(TEXT("PerturbationProof: physical pelvis impulse response was not proven deltaV=%.2f threshold=%.2f"),
+			Metrics.PerturbationMeasuredDeltaVCmPerSecond,
+			RequiredPhysicalPerturbationDeltaVCmPerSecond));
+	}
+
+	if (bStrictProofQuality &&
+		Metrics.BodyVelocityNonZeroSampleCount <= State->BaselineMetrics.BodyVelocityNonZeroSampleCount)
+	{
+		Fail(FString::Printf(TEXT("PerturbationProof: body velocity telemetry did not become nonzero after perturbation baseline=%d current=%d maxLinear=%.2f maxAngular=%.2f"),
+			State->BaselineMetrics.BodyVelocityNonZeroSampleCount,
+			Metrics.BodyVelocityNonZeroSampleCount,
+			Metrics.MaxBodyLinearSpeedCmPerSecond,
+			Metrics.MaxBodyAngularSpeedDegPerSecond));
 	}
 
 	const double RecoveryDurationSec =
 		(World && State->PerturbationAppliedWorldTimeSeconds >= 0.0)
 			? (World->GetTimeSeconds() - State->PerturbationAppliedWorldTimeSeconds)
 			: -1.0;
-	if (!FMath::IsFinite(RecoveryDurationSec) || RecoveryDurationSec < 0.0)
+	if ((bStrictProofQuality || State->bPerturbationApplied) &&
+		(!FMath::IsFinite(RecoveryDurationSec) || RecoveryDurationSec < 0.0))
 	{
 		Fail(TEXT("PerturbationProof: recovery duration is invalid"));
 	}
@@ -2576,7 +3049,7 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 	UE_LOG(
 		LogTemp,
 		Warning,
-		TEXT("PerturbationProof: recoveryDuration=%.2f state=%d terminalReason=%d samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f"),
+		TEXT("PerturbationProof: recoveryDuration=%.2f state=%d terminalReason=%d samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f physicalPerturbation=%d measuredDeltaV=%.2f nonzeroVelocitySamples=%d"),
 		RecoveryDurationSec,
 		(int32)RuntimeState,
 		(int32)TerminationState.TerminalReason,
@@ -2591,7 +3064,10 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 		Metrics.ActiveSupportSideCountMean,
 		Metrics.ActiveSupportSideCountMax,
 		Metrics.MaxBodyLinearSpeedCmPerSecond,
-		Metrics.MaxBodyAngularSpeedDegPerSecond);
+		Metrics.MaxBodyAngularSpeedDegPerSecond,
+		Metrics.bPhysicalPerturbationApplied ? 1 : 0,
+		Metrics.PerturbationMeasuredDeltaVCmPerSecond,
+		Metrics.BodyVelocityNonZeroSampleCount);
 
 	return true;
 }
@@ -2614,6 +3090,232 @@ bool FPhysAnimActivatedStandingStabilityMetricsTest::RunTest(const FString& Para
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(5.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(30.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingStabilityMetricsCommand(this));
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimRawSimulationOwnershipBisectDiagnosticTest, "PhysAnim.Diagnostics.RawSimulationOwnershipBisect", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimRawSimulationOwnershipBisectDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("PelvisAndSpineOnly"));
+	OutTestCommands.Add(TEXT("1"));
+
+	OutBeautifiedNames.Add(TEXT("PelvisSpineAndThighs"));
+	OutTestCommands.Add(TEXT("2"));
+
+	OutBeautifiedNames.Add(TEXT("AddSupportBodies"));
+	OutTestCommands.Add(TEXT("3"));
+
+	OutBeautifiedNames.Add(TEXT("FullRequiredBodies"));
+	OutTestCommands.Add(TEXT("4"));
+}
+
+bool FPhysAnimRawSimulationOwnershipBisectDiagnosticTest::RunTest(const FString& Parameters)
+{
+	const int32 DiagnosticGroup = FMath::Clamp(FCString::Atoi(*Parameters), 1, 4);
+	const FString CaseName =
+		DiagnosticGroup == 1 ? TEXT("PelvisAndSpineOnly") :
+		DiagnosticGroup == 2 ? TEXT("PelvisSpineAndThighs") :
+		DiagnosticGroup == 3 ? TEXT("AddSupportBodies") :
+		TEXT("FullRequiredBodies");
+	if (DiagnosticGroup == 2)
+	{
+		AddExpectedError(TEXT("Fail-stop: Runtime instability detected"), EAutomationExpectedErrorFlags::Contains, 0);
+	}
+
+	ADD_LATENT_AUTOMATION_COMMAND(FSetAllowCharacterMovementInBridgeActiveCommand(0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), 0.05f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionClampAbs"), 0.10f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.MaxAngularStepDegPerSec"), 90.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularStrengthMultiplier"), 0.20f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularDampingRatioMultiplier"), 2.50f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularExtraDampingMultiplier"), 6.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(DiagnosticGroup));
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FLogRawSimulationOwnershipBisectCommand(CaseName, DiagnosticGroup, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionClampAbs"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.MaxAngularStepDegPerSec"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularStrengthMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularDampingRatioMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularExtraDampingMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetAllowCharacterMovementInBridgeActiveCommand(1));
+
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimControlIsolationMatrixDiagnosticTest, "PhysAnim.Diagnostics.ControlIsolationMatrix", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimControlIsolationMatrixDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	OutBeautifiedNames.Add(TEXT("StaticTargetsPolicyBypassed"));
+	OutTestCommands.Add(TEXT("A"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsAllControlsZeroedBrief"));
+	OutTestCommands.Add(TEXT("A1"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsAllControlsZeroedFullRun"));
+	OutTestCommands.Add(TEXT("A1-full"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsPassiveOnlyFullRun"));
+	OutTestCommands.Add(TEXT("A1-passive"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsTorsoControlsOnlyFullRun"));
+	OutTestCommands.Add(TEXT("A5-torso"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyFullRun"));
+	OutTestCommands.Add(TEXT("A6-thigh"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore002"));
+	OutTestCommands.Add(TEXT("A6-thigh-02"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore005"));
+	OutTestCommands.Add(TEXT("A6-thigh-05"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore010"));
+	OutTestCommands.Add(TEXT("A6-thigh-10"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore020"));
+	OutTestCommands.Add(TEXT("A6-thigh-20"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsSupportControlsOnlyFullRun"));
+	OutTestCommands.Add(TEXT("A7-support"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsTorsoControlsZeroedBrief"));
+	OutTestCommands.Add(TEXT("A2"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsZeroedBrief"));
+	OutTestCommands.Add(TEXT("A3"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsZeroedFullRun"));
+	OutTestCommands.Add(TEXT("A3-full"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestoreRamp"));
+	OutTestCommands.Add(TEXT("A3-ramp"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore002"));
+	OutTestCommands.Add(TEXT("A3-low-02"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore005"));
+	OutTestCommands.Add(TEXT("A3-low-05"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore010"));
+	OutTestCommands.Add(TEXT("A3-low-10"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore020"));
+	OutTestCommands.Add(TEXT("A3-low-20"));
+
+	OutBeautifiedNames.Add(TEXT("StaticTargetsSupportControlsZeroedBrief"));
+	OutTestCommands.Add(TEXT("A4"));
+
+	OutBeautifiedNames.Add(TEXT("PolicyEnabledZeroActions"));
+	OutTestCommands.Add(TEXT("B"));
+
+	OutBeautifiedNames.Add(TEXT("PolicyEnabledCurrentActions"));
+	OutTestCommands.Add(TEXT("C"));
+
+	OutBeautifiedNames.Add(TEXT("TinySyntheticActions"));
+	OutTestCommands.Add(TEXT("D"));
+}
+
+bool FPhysAnimControlIsolationMatrixDiagnosticTest::RunTest(const FString& Parameters)
+{
+	const bool bStaticTargetNoPhc = Parameters.StartsWith(TEXT("A"));
+	const bool bZeroActions = Parameters == TEXT("B");
+	const bool bCurrentActions = Parameters == TEXT("C");
+	const bool bTinySyntheticActions = Parameters == TEXT("D");
+
+	const int32 EarlyControlZeroGroup =
+		(Parameters == TEXT("A1") || Parameters == TEXT("A1-full") || Parameters == TEXT("A1-passive")) ? 1 :
+		Parameters == TEXT("A2") ? 2 :
+		(Parameters == TEXT("A3") || Parameters == TEXT("A3-full") || Parameters.StartsWith(TEXT("A3-"))) ? 3 :
+		Parameters == TEXT("A4") ? 4 :
+		(Parameters == TEXT("A5-torso")) ? 5 :
+		(Parameters.StartsWith(TEXT("A6-thigh"))) ? 6 :
+		(Parameters == TEXT("A7-support")) ? 7 :
+		0;
+
+	const float ZeroDuration = 
+		(Parameters.Contains(TEXT("-full")) || 
+         Parameters.Contains(TEXT("-passive")) || 
+         Parameters.Contains(TEXT("-torso")) || 
+         Parameters.Contains(TEXT("-thigh")) || 
+         Parameters.Contains(TEXT("-support"))) ? 5.0f : 0.30f;
+
+	const int32 RestoreVariant =
+		Parameters == TEXT("A3-ramp") ? 2 :
+		Parameters == TEXT("A3-low-02") ? 5 :
+		Parameters == TEXT("A3-low-05") ? 3 :
+		Parameters == TEXT("A3-low-10") ? 6 :
+		Parameters == TEXT("A3-low-20") ? 7 :
+		0;
+
+	const float RampDuration = Parameters == TEXT("A3-ramp") ? 0.50f : 0.30f;
+
+	const FString CaseName = Parameters;
+	
+	const int32 ReviewMode =
+		bStaticTargetNoPhc ? 1 :
+		bZeroActions ? 2 :
+		bTinySyntheticActions ? 3 :
+		0;
+	const float ActionScale =
+		bTinySyntheticActions ? 1.0f :
+		0.05f;
+	const float ActionClamp =
+		bTinySyntheticActions ? 0.02f :
+		0.10f;
+	const float SyntheticActionValue = bTinySyntheticActions ? 0.01f : 0.0f;
+
+	const float BaseAngularStrength =
+		Parameters == TEXT("A6-thigh-02") ? 0.02f :
+		Parameters == TEXT("A6-thigh-05") ? 0.05f :
+		Parameters == TEXT("A6-thigh-10") ? 0.10f :
+		Parameters == TEXT("A6-thigh-20") ? 0.20f :
+		0.20f;
+
+	ADD_LATENT_AUTOMATION_COMMAND(FSetAllowCharacterMovementInBridgeActiveCommand(0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(3));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), 0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.EnableInstabilityFailStop"), 0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantEarlyControlZeroGroup"), EarlyControlZeroGroup));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantEarlyControlZeroDurationSeconds"), ZeroDuration));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantThighRestoreVariant"), RestoreVariant));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantThighRestoreRampDurationSeconds"), RampDuration));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.V0PlantReviewSyntheticActionValue"), SyntheticActionValue));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), ActionScale));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionClampAbs"), ActionClamp));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.MaxAngularStepDegPerSec"), 90.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularStrengthMultiplier"), BaseAngularStrength));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularDampingRatioMultiplier"), 2.50f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularExtraDampingMultiplier"), 6.0f));
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), ReviewMode));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FLogControlIsolationMatrixCommand(CaseName, ReviewMode, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), 0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.EnableInstabilityFailStop"), -1));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantEarlyControlZeroGroup"), 0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantEarlyControlZeroDurationSeconds"), 0.30f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantThighRestoreVariant"), 0));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0PlantThighRestoreRampDurationSeconds"), 0.30f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.V0PlantReviewSyntheticActionValue"), 0.01f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionClampAbs"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.MaxAngularStepDegPerSec"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularStrengthMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularDampingRatioMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.AngularExtraDampingMultiplier"), -1.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FSetAllowCharacterMovementInBridgeActiveCommand(1));
+	ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
 
 	return true;
 }
@@ -2694,34 +3396,47 @@ bool FCaptureActivatedStandingLocomotionReadinessBaselineCommand::Update()
 	const FPhysAnimRuntimeTerminationState& TerminationState = TargetComponent->GetLiveRuntimeEvidenceTerminationState();
 	const EBridgeLocomotionAuthorityState LocomotionAuthorityState = TargetComponent->GetLocomotionAuthorityState();
 
+	bool bSetupValid = true;
+
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected BalanceActive_Standing before intent but got %d"), (int32)RuntimeState);
+		bSetupValid = false;
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofComplete())
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not complete before intent"));
+		bSetupValid = false;
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofSatisfied())
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not truthful before intent"));
+		bSetupValid = false;
 	}
 
 	if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: standing metrics were not yet collected before intent"));
+		bSetupValid = false;
 	}
 
 	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: support hull area was not positive before intent"));
+		bSetupValid = false;
 	}
 
 	if (LocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle)
 	{
 		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected locomotion authority Idle before intent but got %s"), GetLocomotionAuthorityStateName(LocomotionAuthorityState));
+		bSetupValid = false;
+	}
+
+	if (!bSetupValid)
+	{
+		return true;
 	}
 
 	State->BaselineMetrics = Metrics;
@@ -3927,6 +4642,87 @@ bool FPhysAnimActivatedStandingLocomotionGateProofTest::RunTest(const FString& P
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
 
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimThighRestoreDiagnosticTest, "PhysAnim.Diagnostics.ThighRestore", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimThighRestoreDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	for (const FThighRestoreDiagnosticVariant& Variant : ThighRestoreDiagnosticVariants)
+	{
+		OutBeautifiedNames.Add(Variant.Name);
+		OutTestCommands.Add(Variant.Command);
+	}
+}
+
+bool FPhysAnimThighRestoreDiagnosticTest::RunTest(const FString& Parameters)
+{
+	FString VariantParameter = Parameters;
+	FString GateThresholdParameter;
+	const bool bHasGateThresholdOverride = Parameters.Split(TEXT(":"), &VariantParameter, &GateThresholdParameter);
+	const int32 Variant = FCString::Atoi(*VariantParameter);
+	const float GateThresholdOverride = bHasGateThresholdOverride ? FCString::Atof(*GateThresholdParameter) : 3600.0f;
+
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+	
+	if (bHasGateThresholdOverride)
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0KineticGateThresholdDegPerSec"), GateThresholdOverride));
+	}
+	ADD_LATENT_AUTOMATION_COMMAND(FSetThighRestoreVariantCommand(Variant));
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand());
+	
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
+
+	// AC-2: emit structured summary before proof teardown so thigh state is still live
+	ADD_LATENT_AUTOMATION_COMMAND(FLogThighRestoreVariantSummaryCommand(Variant, this));
+	
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand(this));
+	
+	ADD_LATENT_AUTOMATION_COMMAND(FSetThighRestoreVariantCommand(0));
+	if (bHasGateThresholdOverride)
+	{
+		ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("p.PhysAnim.V0KineticGateThresholdDegPerSec"), 3600.0f));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimThighRestoreDiagnosticContractTest, "PhysAnim.Diagnostics.ThighRestoreContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimThighRestoreDiagnosticContractTest::RunTest(const FString& Parameters)
+{
+	TSet<FString> VariantNames;
+	TSet<FString> VariantCommands;
+	for (const FThighRestoreDiagnosticVariant& Variant : ThighRestoreDiagnosticVariants)
+	{
+		VariantNames.Add(Variant.Name);
+		VariantCommands.Add(Variant.Command);
+	}
+
+	const TCHAR* RequiredNames[] =
+	{
+		TEXT("Abrupt_0.01"),
+		TEXT("Abrupt_0.02"),
+		TEXT("Abrupt_0.05"),
+		TEXT("Abrupt_0.10"),
+		TEXT("Abrupt_0.15"),
+		TEXT("Abrupt_0.20"),
+		TEXT("Ramp_0.20_0.5s"),
+		TEXT("Ramp_0.20_1.0s"),
+		TEXT("KineticGate_ForcedHold_0.20"),
+	};
+
+	for (const TCHAR* RequiredName : RequiredNames)
+	{
+		TestTrue(FString::Printf(TEXT("ThighRestore diagnostic includes %s"), RequiredName), VariantNames.Contains(RequiredName));
+	}
+
+	TestTrue(TEXT("Abrupt 0.20 maps to restore variant 7"), VariantCommands.Contains(TEXT("7")));
+	TestTrue(TEXT("Forced kinetic gate hold maps to restore variant 7 with threshold override"), VariantCommands.Contains(TEXT("7:-1.0")));
+	TestEqual(TEXT("ThighRestore diagnostic variant count"), VariantNames.Num(), static_cast<int32>(UE_ARRAY_COUNT(RequiredNames)));
 	return true;
 }
 

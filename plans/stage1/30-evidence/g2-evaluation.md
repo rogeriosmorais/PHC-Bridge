@@ -18,6 +18,7 @@ Use [comparison-sequence-lock.md](/F:/NewEngine/plans/stage1/50-content/comparis
 - `Current status`: blocked
 - `Decision owner`: user, using orchestrator-prepared evidence
 - `Final verdict`: pending
+- `Latest automation check`: `PhysAnim.PIE.BalanceModeSmoke` ran on May 7, 2026 as a diagnostic smoke; the current run passes startup proof with `terminal_reason_name=None` and `runtime_simulating_body_count=22`, queues balance entry, clears Phase 1 RootOn readiness with `rootOnReady=1`, clears Phase 2 warm-start with baseline-compensated direct-link angular errors, enters Phase 3/Settle, clears the material shell correction label, then truthfully denies with `phase3_post_root_on_instability`
 
 Use only:
 
@@ -180,14 +181,14 @@ The orchestrator must confirm:
 
 ## Final Decision Section
 
-- `Final verdict`: pending
-- `Decision date`:
-- `Decision summary`:
+- `Final verdict`: blocked
+- `Decision date`: May 7, 2026
+- `Decision summary`: `PhysAnim.PIE.BalanceModeSmoke` previously reached `BalanceActive_Standing` beyond the 3.0 second timing threshold while metrics reported `PelvisSim=0 PelvisAwake=0`. The current checkout no longer accepts that as success. It now starts bridge physics ownership after valid PoseSearch, records `AfterActivationPrepass` with `rootBodySim=true`, samples `PelvisSim=1 PelvisAwake=1`, passes startup proof with `terminal_reason_name=None`, queues balance entry, reaches Phase 2 entry after baseline-compensated Phase 1 RootOn readiness reports `rootOnReady=1`, clears Phase 2 warm-start direct-link angular gates, and enters Phase 3/Settle with `rootRawSim=1` and `pelvisRawSim=1`. The current blocker is `BalanceSafeDeny` with `phase3_post_root_on_instability`, not missing physical continuity, BridgeActive proxy termination, Phase 1 RootOn readiness, Phase 2 warm-start angular coherence, or material shell correction. G2 remains blocked until the live physical-continuity path reaches `BalanceActive_Standing` and a fair side-by-side user comparison exists.
 - `Can Phase 2 begin?`: no
 
 ## If Verdict Is Not Pass
 
-- `Failure or block reason`:
-- `Need rework?`: yes/no
-- `Fallback or stop decision`:
-- `Next task or replan action`:
+- `Failure or block reason`: balance smoke now preserves raw simulation, passes startup proof, queues balance entry, clears Phase 1 RootOn readiness, clears Phase 2 warm-start direct-link angular coherence, enters Phase 3/Settle, and clears the material shell correction label, but Phase 3 denies with `phase3_post_root_on_instability`; no live physical-continuity `BalanceActive_Standing` pass or side-by-side user verdict exists
+- `Need rework?`: yes
+- `Fallback or stop decision`: continue Stage 1 balance-first stabilization
+- `Next task or replan action`: fix Phase 3 post-RootOn instability so the physical-continuity path can progress from Phase 3/Settle to `BalanceActive_Standing`

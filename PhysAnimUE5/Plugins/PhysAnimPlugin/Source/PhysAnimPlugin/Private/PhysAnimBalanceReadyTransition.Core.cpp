@@ -146,7 +146,7 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	TotalTransitionTimeSeconds = 0.0f;
 	LastLogTimeSeconds = -1.0;
 	LastQuietBlockReason.Reset();
-	ResetTransitionLocalState();
+	ResetTransitionLocalState(Owner);
 	bLatchedPelvisResetApplied = false;
 	QuietHandoffCount = 0;
 	HipQuarantineTimerSeconds = 0.0f;
@@ -269,6 +269,71 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
 		Phase3GuardTickCount++;
+	}
+
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
+	{
+		const bool bKineticGateActiveNow = Owner->bKineticGateActiveLastFrame;
+		const bool bReleasedThisTick = bLastKineticGateActive && !bKineticGateActiveNow;
+
+		if (bKineticGateActiveNow)
+		{
+			Phase3KineticGateReleaseTickCount = 0;
+		}
+		else if (bReleasedThisTick)
+		{
+			Phase3KineticGateReleaseTickCount = 1;
+		}
+		else if (Phase3KineticGateReleaseTickCount > 0 &&
+				 Phase3KineticGateReleaseTickCount < 999)
+		{
+			++Phase3KineticGateReleaseTickCount;
+		}
+		else
+		{
+			Phase3KineticGateReleaseTickCount = 999;
+		}
+
+		// Section 17.3.3 - Phase 3 Root Energy Decay Tracking
+		const float CurrentEnergy = CachedConvergenceSnapshot.RootLinearSpeed * CachedConvergenceSnapshot.RootLinearSpeed + 
+									CachedConvergenceSnapshot.RootAngularSpeed * CachedConvergenceSnapshot.RootAngularSpeed;
+		if (CurrentEnergy < Phase3LastFrameEnergy)
+		{
+			++Phase3ConsecutiveEnergyDecayTicks;
+		}
+		else
+		{
+			Phase3ConsecutiveEnergyDecayTicks = 0;
+		}
+		Phase3LastFrameEnergy = CurrentEnergy;
+
+		// Section 17.3.3 - Reversible Authority Alpha Ramp
+		if (IsPhase3Stable())
+		{
+			Phase3StableAlpha = FMath::Min(Phase3StableAlpha + BalanceTransitionSets::Phase3AlphaRiseStep, 1.0f);
+			if (Phase3StableTickCount < 999)
+			{
+				++Phase3StableTickCount;
+			}
+		}
+		else
+		{
+			Phase3StableAlpha = FMath::Max(Phase3StableAlpha - BalanceTransitionSets::Phase3AlphaFallStep, BalanceTransitionSets::Phase3AlphaFloor);
+			Phase3StableTickCount = 0;
+		}
+
+		bLastKineticGateActive = bKineticGateActiveNow;
+	}
+	else
+	{
+		// Ensure counter is out-of-grace when not in Phase 3
+		Phase3GuardTickCount = 0;
+		Phase3KineticGateReleaseTickCount = 0;
+		Phase3StableTickCount = 0;
+		Phase3StableAlpha = 0.0f;
+		Phase3ConsecutiveEnergyDecayTicks = 0;
+		Phase3LastFrameEnergy = 0.0f;
+		bLastKineticGateActive = Owner->bKineticGateActiveLastFrame;
 	}
 
 	FString BlockReason;
@@ -1390,6 +1455,14 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						CertifiedLateValidationResult.MeanTargetDeltaDegrees,
 						CertifiedLateValidationResult.QuietProofDurationSeconds,
 						CertifiedLateValidationResult.LateValidationSustainDurationSeconds);
+
+					if (Owner->IsStage1())
+					{
+						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Stage 1 Kinematic Root detected. Bypassing Phase 2/3 and transitioning to Succeeded."));
+						SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
+						return;
+					}
+
 					SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_RootOn, Owner);
 					return;
 				}
@@ -1774,6 +1847,7 @@ extern int32 GVerbosePhase2Forensics;
 		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.MaxLinVelSpine);
 		Diagnostics.PeakMaxBodyLinearSpeed = FMath::Max(Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.MaxLinVelFeet);
 		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelPelvis);
+		Diagnostics.PeakRootAngularSpeed = FMath::Max(Diagnostics.PeakRootAngularSpeed, Diagnostics.MaxAngVelPelvis);
 		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelThighs);
 		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelSpine);
 		Diagnostics.PeakMaxBodyAngularSpeed = FMath::Max(Diagnostics.PeakMaxBodyAngularSpeed, Diagnostics.MaxAngVelFeet);
@@ -2278,9 +2352,14 @@ extern int32 GVerbosePhase2Forensics;
 	}
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3)
 	{
+		// Section 17.3.2 - Phase3 Entry Grace: seed counter to 0 so the first
+		// Phase3KineticGateReleaseGraceTicks (5) ticks suppress shell/instability
+		// aborts caused by the transient burst when root goes fully simulated.
+		Phase3KineticGateReleaseTickCount = 0;
 		SetPhase(EBalanceReadyTransitionPhase::BRT_Phase3_Settle, Owner);
 		return;
 	}
+
 
 	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
@@ -2359,7 +2438,7 @@ extern int32 GVerbosePhase2Forensics;
 					ShellOffsetDeltaCm,
 					Settings.BalancePhase2AbortShellOffsetDelta,
 					ShellVelocityDeltaCmPerSecond,
-					Settings.BalancePhase2AbortShellVelocityDelta,
+					Settings.BalancePhase2AbortShellVelocityDelta * (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle ? 2.5f : 1.0f),
 					Diagnostics.PeakMaxNonRootBodyAngularSpeed,
 					Diagnostics.Phase3CurrentObservedNonRootAngularEnvelope,
 					Diagnostics.Phase3CurrentMaxNonRootAngularSpeed,
@@ -2383,7 +2462,17 @@ extern int32 GVerbosePhase2Forensics;
 
 		if (bReadyThisFrame)
 		{
-			StableHoldAccumulatedSeconds += DeltaTime;
+			// Ensure authority restoration is complete before transitioning to success.
+			// This prevents simulation jumps by guaranteeing a continuous alpha handover.
+			const bool bAuthorityRestored = GetProximalControlSoftAlpha(PhysAnimBridge::GetRootBoneName()) >= 0.99f;
+			if (bAuthorityRestored)
+			{
+				StableHoldAccumulatedSeconds += DeltaTime;
+			}
+			else
+			{
+				StableHoldAccumulatedSeconds = 0.0f;
+			}
 			if (StableHoldAccumulatedSeconds >= Settings.BalancePhase3RequiredStableHoldDuration)
 			{
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Phase 3 settle success. Ready for perturbation. duration=%.2f"), StableHoldAccumulatedSeconds);
@@ -2417,6 +2506,12 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 	}
 
 	PreviousPhase = InternalPhase;
+
+	if (NewPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
+	{
+		Phase3StableAlpha = BalanceTransitionSets::Phase3AlphaFloor;
+	}
+
 
 	if (Owner &&
 		(NewPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || NewPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate) &&
@@ -2731,25 +2826,21 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				const float PelvisThighRErrorCm = PelvisThighRRecord.bConstraintFound ? PelvisThighRRecord.AnchorDistanceCm : PelvisThighRRecord.BodyOriginDistanceCm;
 				const float PelvisSpine01ErrorCm = PelvisSpine01Record.bConstraintFound ? PelvisSpine01Record.AnchorDistanceCm : PelvisSpine01Record.BodyOriginDistanceCm;
 				const bool bPelvisThighLAngularSatisfied =
-					PelvisThighLRecord.bConstraintFound &&
-					PelvisThighLRecord.ConstraintAngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
+					BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(PelvisThighLRecord);
 				const bool bPelvisThighRAngularSatisfied =
-					PelvisThighRRecord.bConstraintFound &&
-					PelvisThighRRecord.ConstraintAngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
+					BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(PelvisThighRRecord);
 				const bool bPelvisSpine01AngularSatisfied =
-					PelvisSpine01Record.bConstraintFound &&
-					PelvisSpine01Record.ConstraintAngularErrorDeg <= BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg;
+					BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(PelvisSpine01Record);
 				for (const BalanceTransitionSets::FDirectPelvisLinkForensicRecord& Record : DirectPelvisLinkForensics)
 				{
-					const float AngularThresholdDeg =
-						Record.ChildBoneName == TEXT("spine_01")
-							? BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg
-							: BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_PRE link=%s errorCm=%.2f threshold=%.2f angularErrorDeg=%.2f angularThreshold=%.2f"),
+					const float AngularThresholdDeg = BalanceTransitionSets::GetPhase2WarmStartDirectLinkAngularThresholdDeg(Record);
+					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_PRE link=%s errorCm=%.2f threshold=%.2f angularErrorDeg=%.2f authoredAngularFloorDeg=%.2f baselineCompensatedAngularErrorDeg=%.2f angularThreshold=%.2f"),
 						*Record.LinkName,
 						Record.bConstraintFound ? Record.AnchorDistanceCm : Record.BodyOriginDistanceCm,
 						BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm,
 						Record.ConstraintAngularErrorDeg,
+						Record.AuthoredConstraintFrameAngularFloorDeg,
+						Record.BaselineCompensatedConstraintAngularErrorDeg,
 						AngularThresholdDeg);
 				}
 				if (PelvisThighLErrorCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm ||
@@ -2759,13 +2850,9 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					TArray<BalanceTransitionSets::FDirectPelvisLinkForensicRecord> FailingLinkForensics;
 					for (const BalanceTransitionSets::FDirectPelvisLinkForensicRecord& Record : DirectPelvisLinkForensics)
 					{
-						const float AngularThresholdDeg =
-							Record.ChildBoneName == TEXT("spine_01")
-								? BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg
-								: BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
 						if (!Record.bConstraintFound ||
 							Record.AnchorDistanceCm > BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm ||
-							Record.ConstraintAngularErrorDeg > AngularThresholdDeg)
+							!BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(Record))
 						{
 							FailingLinkForensics.Add(Record);
 						}
@@ -2779,14 +2866,17 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					UE_LOG(
 						LogPhysAnimBridge,
 						Warning,
-						TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f"),
+						TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f pelvisThighLCompensatedAngular=%.2f pelvisThighRCompensatedAngular=%.2f pelvisSpine01CompensatedAngular=%.2f"),
 						*SafeDenyReason,
 						PelvisThighLErrorCm,
 						PelvisThighRErrorCm,
 						PelvisSpine01ErrorCm,
 						PelvisThighLRecord.ConstraintAngularErrorDeg,
 						PelvisThighRRecord.ConstraintAngularErrorDeg,
-						PelvisSpine01Record.ConstraintAngularErrorDeg);
+						PelvisSpine01Record.ConstraintAngularErrorDeg,
+						PelvisThighLRecord.BaselineCompensatedConstraintAngularErrorDeg,
+						PelvisThighRRecord.BaselineCompensatedConstraintAngularErrorDeg,
+						PelvisSpine01Record.BaselineCompensatedConstraintAngularErrorDeg);
 					Owner->ReleaseTransitionOwnedShellLock();
 					MarkSafePhase2Denied(Owner, SafeDenyReason);
 					return;
@@ -2798,11 +2888,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					TArray<BalanceTransitionSets::FDirectPelvisLinkForensicRecord> AngularMismatchForensics;
 					for (const BalanceTransitionSets::FDirectPelvisLinkForensicRecord& Record : DirectPelvisLinkForensics)
 					{
-						const float AngularThresholdDeg =
-							Record.ChildBoneName == TEXT("spine_01")
-								? BalanceTransitionSets::Phase2MaxPelvisSpineDirectLinkAngularErrorDeg
-								: BalanceTransitionSets::Phase2MaxPelvisThighDirectLinkAngularErrorDeg;
-						if (!Record.bConstraintFound || Record.ConstraintAngularErrorDeg > AngularThresholdDeg)
+						if (!BalanceTransitionSets::IsPhase2WarmStartDirectLinkAngularSatisfied(Record))
 						{
 							AngularMismatchForensics.Add(Record);
 						}
@@ -2814,13 +2900,16 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					UE_LOG(
 						LogPhysAnimBridge,
 						Warning,
-						TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED phase2_root_on_warm_start_incoherent pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f"),
+						TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED phase2_root_on_warm_start_incoherent pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f pelvisThighLCompensatedAngular=%.2f pelvisThighRCompensatedAngular=%.2f pelvisSpine01CompensatedAngular=%.2f"),
 						PelvisThighLErrorCm,
 						PelvisThighRErrorCm,
 						PelvisSpine01ErrorCm,
 						PelvisThighLRecord.ConstraintAngularErrorDeg,
 						PelvisThighRRecord.ConstraintAngularErrorDeg,
-						PelvisSpine01Record.ConstraintAngularErrorDeg);
+						PelvisSpine01Record.ConstraintAngularErrorDeg,
+						PelvisThighLRecord.BaselineCompensatedConstraintAngularErrorDeg,
+						PelvisThighRRecord.BaselineCompensatedConstraintAngularErrorDeg,
+						PelvisSpine01Record.BaselineCompensatedConstraintAngularErrorDeg);
 					const FString SafeDenyReason = TEXT("phase2_root_on_warm_start_incoherent");
 					Diagnostics.FailureReason = SafeDenyReason;
 					Owner->ReleaseTransitionOwnedShellLock();
@@ -3029,7 +3118,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					}
 				}
 				Owner->RecoverBridgeActiveStateAfterBalanceTransitionFailure(FailureReason);
-				ResetTransitionLocalState();
+				ResetTransitionLocalState(Owner);
 				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RECOVERY_COMPLETE"));
 			}
 		}
@@ -3046,7 +3135,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 }
 
 
-void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
+void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState(class UPhysAnimComponent* Owner)
 {
 	Diagnostics = {};
 	ConsecutivePelvisNotSimulatingTicks = 0;
@@ -3067,6 +3156,7 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	Diagnostics.Phase1LateValidateWorstLinearSpeed = 0.0f;
 	Diagnostics.Phase1LateValidateWorstAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxNonRootBodyAngularSpeed = 0.0f;
+	Diagnostics.PeakRootAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxThighBodyAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxSpineBodyAngularSpeed = 0.0f;
 	Diagnostics.PeakMaxFeetBodyAngularSpeed = 0.0f;
@@ -3092,6 +3182,8 @@ void FPhysAnimBalanceReadyTransition::ResetTransitionLocalState()
 	LoggedProximalPromotions.Empty();
 	LoggedProximalStates.Empty();
 	Phase2GuardTickCount = 0;
+	bLastKineticGateActive = Owner ? Owner->bKineticGateActiveLastFrame : false;
+	Phase3KineticGateReleaseTickCount = bLastKineticGateActive ? 0 : 999;
 	Phase3GuardTickCount = 0;
 	bPreviousFrameSettleEndRootRawSim = false;
 	bPreviousFrameSettleEndPelvisRawSim = false;

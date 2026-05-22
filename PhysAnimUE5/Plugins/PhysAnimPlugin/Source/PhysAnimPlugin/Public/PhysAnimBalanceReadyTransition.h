@@ -393,6 +393,12 @@ struct FBalanceReadyTransitionDiagnostics
 	float BaselineRootAngVel = 0.0f;
 	float BaselineShellOffset = 0.0f;
 	float BaselineShellVel = 0.0f;
+
+	float Phase3CurrentShellVelocity = 0.0f;
+	float Phase3CurrentRootAngularSpeed = 0.0f;
+	float LastFrameShellVelocity = 0.0f;
+	float LastFrameRootAngularSpeed = 0.0f;
+	float LastFrameMaxNonRootAngularSpeed = 0.0f;
 	FPhysAnimControlTargetDiagnostics Phase1TargetDiscontinuityGateInput;
 	float Phase1TargetDiscontinuityAccumulatedSeconds = 0.0f;
 	float Phase1LateValidateAccumulatedSeconds = 0.0f;
@@ -409,6 +415,7 @@ struct FBalanceReadyTransitionDiagnostics
 	int32 UpperBodySimCountPost = 0;
 	float PeakMaxBodyLinearSpeed = 0.0f;
 	float PeakMaxBodyAngularSpeed = 0.0f;
+	float PeakRootAngularSpeed = 0.0f;
 	float PeakMaxNonRootBodyAngularSpeed = 0.0f;
 	float PeakMaxThighBodyAngularSpeed = 0.0f;
 	float PeakMaxSpineBodyAngularSpeed = 0.0f;
@@ -460,6 +467,7 @@ struct FPhysAnimBalanceReadyTransitionSnapshot
 	float RetryCooldownTimerSeconds = 0.0f;
 	int32 Phase2GuardTickCount = 0;
 	int32 Phase3GuardTickCount = 0;
+	int32 Phase3KineticGateReleaseTickCount = 0;
 	bool bPreviousFrameSettleEndRootRawSim = false;
 	bool bPreviousFrameSettleEndPelvisRawSim = false;
 	bool bPhase2RootAuthorityQuarantined = false;
@@ -537,6 +545,7 @@ public:
 	EBalanceReadyTransitionPhase GetPhase() const { return InternalPhase; }
 	EBalanceReadyTransitionPhase GetPreviousPhase() const { return PreviousPhase; }
 	int32 GetPhase2GuardTickCount() const { return Phase2GuardTickCount; }
+	int32 GetPhase3KineticGateReleaseTickCount() const { return Phase3KineticGateReleaseTickCount; }
 	const FString& GetBlockReason() const { return Diagnostics.BlockReason; }
 	const FString& GetFailureReason() const { return Diagnostics.FailureReason; }
 	const TMap<FName, FQuat>& GetEntryHoldRotations() const { return EntryHoldRotations; }
@@ -565,11 +574,13 @@ public:
 	}
 	float GetTotalTransitionTimeSeconds() const { return TotalTransitionTimeSeconds; }
 	static bool IsProximal(FName BoneName);
+	bool IsPhase3Stable() const;
 	float GetRootBodyModifierSoftSimAlpha() const;
 	float GetProximalControlSoftAlpha(FName BoneName) const;
 	bool ShouldKeepBoneKinematic(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;
 	bool ShouldSuppressPolicyWrites(FName BoneName) const;
 	float GetTransitionExtraDampingMultiplier(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;
+	float GetTransitionDampingRatioMultiplier(FName BoneName, const struct FPhysAnimStabilizationSettings& Settings) const;
 	EBalanceReadyEntryClassification ClassifyEntryState(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings) const;
 	/** Single source of truth for stabilization readiness math. */
 	static bool IsSnapshotReady(
@@ -590,6 +601,8 @@ public:
 		float MaxAllowedShellOffsetCm,
 		float MaxAllowedShellVelocityCmPerSec);
 	static bool IsMaterialPhase3ShellCorrectionActive(
+		const FBalanceReadyTransitionDiagnostics& Diags,
+		int32 KineticGateReleaseTickCount,
 		bool bTransitionOwnedShellLocked,
 		bool bLocomotionAuthorityIdle,
 		int32 Phase3TickCount,
@@ -609,6 +622,8 @@ public:
 		const FVector& AppliedShellCorrectionVelocityCmPerSecond,
 		bool bTransitionOwnedShellLocked);
 	static bool IsPhase3EarlySettleInstabilityGraceActive(
+		const FBalanceReadyTransitionDiagnostics& Diags,
+		int32 KineticGateReleaseTickCount,
 		int32 Phase3TickCount,
 		bool bTransitionOwnedShellLocked,
 		bool bLocomotionAuthorityIdle,
@@ -618,21 +633,21 @@ public:
 		float AngularThreshold,
 		float ShellPlanarOffsetCm,
 		float MaxAllowedShellOffsetCm,
-		float ShellPlanarVelocityCmPerSec,
-		float MaxAllowedShellVelocityCmPerSec,
-		float PrePhase3PeakBodyLinearSpeed = 0.0f,
-		float PrePhase3PeakBodyAngularSpeed = 0.0f,
-		float RootPlanarSpeedCmPerSecond = -1.0f,
-		float CurrentMaxNonRootAngularSpeed = 0.0f,
-		float PrePhase3PeakNonRootAngularSpeed = 0.0f,
-		FName CurrentMaxNonRootAngularBone = NAME_None,
-		float PrePhase3PeakThighAngularSpeed = 0.0f,
-		float PrePhase3PeakSpineAngularSpeed = 0.0f,
-		float PrePhase3PeakFeetAngularSpeed = 0.0f,
-		float CurrentNonRootFamilyAngularSpeed = 0.0f,
-		float PrePhase3PeakThighFamilyAngularSpeed = 0.0f,
-		float PrePhase3PeakSpineFamilyAngularSpeed = 0.0f,
-		float PrePhase3PeakFeetFamilyAngularSpeed = 0.0f);
+		float CurrentMaxNonRootAngularSpeed,
+		float NonRootAngularThreshold,
+		float PrePhase3PeakRootAngularSpeed,
+		float PrePhase3PeakNonRootAngularSpeed,
+		float CurrentShellVelocity,
+		float ShellVelocityThreshold,
+		float PrePhase3PeakShellVelocity,
+		FName CurrentMaxNonRootAngularBone,
+		float CurrentSpineAngularSpeed,
+		float CurrentThighAngularSpeed,
+		float CurrentFeetAngularSpeed,
+		float CurrentNonRootFamilyAngularSpeed,
+		float PrePhase3PeakThighFamilyAngularSpeed,
+		float PrePhase3PeakSpineFamilyAngularSpeed,
+		float PrePhase3PeakFeetFamilyAngularSpeed);
 
 	static bool IsRootStable(
 		const FPhase1AcceptedConvergenceSnapshot& Snapshot,
@@ -687,7 +702,7 @@ private:
 	void ReturnToPhase1Prepare(class UPhysAnimComponent* Owner, const FString& Reason, const TCHAR* EventName);
 	void CapturePhase1TopologyRecord(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);
 	void ResetRootOnReadinessNoCouplingProofState();
-	void ResetTransitionLocalState();
+	void ResetTransitionLocalState(class UPhysAnimComponent* Owner);
 	void ResetCertifiedHandoffState();
 	void MarkSafePhase2Denied(class UPhysAnimComponent* Owner, const FString& Reason);
 	void CaptureFlipDiagnostics(class UPhysAnimComponent* Owner);
@@ -727,6 +742,12 @@ private:
 	float RetryCooldownTimerSeconds = 0.0f;
 	int32 Phase2GuardTickCount = 0;
 	int32 Phase3GuardTickCount = 0;
+	int32 Phase3KineticGateReleaseTickCount = 0;
+	int32 Phase3StableTickCount = 0;
+	float Phase3StableAlpha = 0.0f;
+	int32 Phase3ConsecutiveEnergyDecayTicks = 0;
+	float Phase3LastFrameEnergy = 0.0f;
+	bool bLastKineticGateActive = false;
 	bool bPreviousFrameSettleEndRootRawSim = false;
 	bool bPreviousFrameSettleEndPelvisRawSim = false;
 	bool bPhase2RootAuthorityQuarantined = false;

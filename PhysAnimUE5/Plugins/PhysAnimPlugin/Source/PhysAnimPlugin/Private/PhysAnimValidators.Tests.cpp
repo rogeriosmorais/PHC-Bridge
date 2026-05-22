@@ -560,6 +560,24 @@ namespace
 			Input.Values.StandingReferenceId = TEXT("stand-001");
 			Input.Values.ProxyInsideHull = TOptional<bool>();
 			Input.Values.ProxyOutsideHullDurationMs = TOptional<double>();
+			Input.Values.PolicyInferenceSuccessCount = 7;
+			Input.Values.PolicyActionSampleCount = 6;
+			Input.Values.PolicyActionRawMeanAbsMax = 0.35;
+			Input.Values.PolicyActionConditionedMeanAbsMax = 0.21;
+			Input.Values.PolicyActionClampedFloatMax = 2;
+			Input.Values.ControlTargetSampleCount = 5;
+			Input.Values.ControlTargetNormalWrites = 84;
+			Input.Values.ControlTargetTotalWrites = 89;
+			Input.Values.ControlTargetMaxDeltaDeg = 4.5;
+			Input.Values.ControlTargetMeanDeltaDegMax = 1.25;
+			Input.Values.ControlTargetMaxRawPolicyOffsetDeg = 9.5;
+			Input.Values.ControlTargetMeanRawPolicyOffsetDegMax = 2.75;
+			Input.Values.RuntimeBodySampleCount = 22;
+			Input.Values.RuntimeSimulatingBodyCount = 14;
+			Input.Values.RuntimeMaxBodyLinearSpeedCmPerSecond = 33.0;
+			Input.Values.RuntimeMaxBodyAngularSpeedDegPerSecond = 44.0;
+			Input.Values.bPhysicalPerturbationApplied = true;
+			Input.Values.PerturbationMeasuredDeltaVCmPerSecond = 12.0;
 
 			const FPhysAnimRunArtifactSnapshot Snapshot = PhysAnimValidators::BuildRunArtifactSnapshot(Input);
 
@@ -569,6 +587,24 @@ namespace
 			TestEqual(TEXT("Artifact preserves standing_reference_id"), Snapshot.StandingReferenceId, FString(TEXT("stand-001")));
 			TestFalse(TEXT("Artifact preserves nullable proxy_inside_hull"), Snapshot.ProxyInsideHull.IsSet());
 			TestFalse(TEXT("Artifact preserves nullable proxy_outside_hull_duration_ms"), Snapshot.ProxyOutsideHullDurationMs.IsSet());
+			TestEqual(TEXT("Artifact preserves policy_inference_success_count"), Snapshot.PolicyInferenceSuccessCount, 7);
+			TestEqual(TEXT("Artifact preserves policy_action_sample_count"), Snapshot.PolicyActionSampleCount, 6);
+			TestEqual(TEXT("Artifact preserves policy_action_raw_mean_abs_max"), Snapshot.PolicyActionRawMeanAbsMax, 0.35);
+			TestEqual(TEXT("Artifact preserves policy_action_conditioned_mean_abs_max"), Snapshot.PolicyActionConditionedMeanAbsMax, 0.21);
+			TestEqual(TEXT("Artifact preserves policy_action_clamped_float_max"), Snapshot.PolicyActionClampedFloatMax, 2);
+			TestEqual(TEXT("Artifact preserves control_target_sample_count"), Snapshot.ControlTargetSampleCount, 5);
+			TestEqual(TEXT("Artifact preserves control_target_normal_writes"), Snapshot.ControlTargetNormalWrites, 84);
+			TestEqual(TEXT("Artifact preserves control_target_total_writes"), Snapshot.ControlTargetTotalWrites, 89);
+			TestEqual(TEXT("Artifact preserves control_target_max_delta_deg"), Snapshot.ControlTargetMaxDeltaDeg, 4.5);
+			TestEqual(TEXT("Artifact preserves control_target_mean_delta_deg_max"), Snapshot.ControlTargetMeanDeltaDegMax, 1.25);
+			TestEqual(TEXT("Artifact preserves control_target_max_raw_policy_offset_deg"), Snapshot.ControlTargetMaxRawPolicyOffsetDeg, 9.5);
+			TestEqual(TEXT("Artifact preserves control_target_mean_raw_policy_offset_deg_max"), Snapshot.ControlTargetMeanRawPolicyOffsetDegMax, 2.75);
+			TestEqual(TEXT("Artifact preserves runtime_body_sample_count"), Snapshot.RuntimeBodySampleCount, 22);
+			TestEqual(TEXT("Artifact preserves runtime_simulating_body_count"), Snapshot.RuntimeSimulatingBodyCount, 14);
+			TestEqual(TEXT("Artifact preserves runtime_max_body_linear_speed_cm_per_second"), Snapshot.RuntimeMaxBodyLinearSpeedCmPerSecond, 33.0);
+			TestEqual(TEXT("Artifact preserves runtime_max_body_angular_speed_deg_per_second"), Snapshot.RuntimeMaxBodyAngularSpeedDegPerSecond, 44.0);
+			TestTrue(TEXT("Artifact preserves physical_perturbation_applied"), Snapshot.bPhysicalPerturbationApplied);
+			TestEqual(TEXT("Artifact preserves perturbation_measured_delta_v_cm_per_second"), Snapshot.PerturbationMeasuredDeltaVCmPerSecond, 12.0);
 			TestEqual(TEXT("Artifact default terminal_reason is None/null"), static_cast<uint8>(Snapshot.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
 		}
 

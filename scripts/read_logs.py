@@ -2,7 +2,11 @@ import os
 import glob
 import pyperclip
 
-def extract_physa_to_clipboard(folder_path=r"F:\NewEngine\PhysAnimUE5\Saved\Logs"):
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, os.pardir))
+DEFAULT_LOG_DIR = os.path.join(REPO_ROOT, "PhysAnimUE5", "Saved", "Logs")
+
+def extract_physa_to_clipboard(folder_path=DEFAULT_LOG_DIR):
     # 1. Busca todos os arquivos .log na pasta
     # Você pode mudar a extensão para '*' se os arquivos não tiverem extensão fixa
     files = glob.glob(os.path.join(folder_path, "*.log"))
@@ -37,5 +41,5 @@ def extract_physa_to_clipboard(folder_path=r"F:\NewEngine\PhysAnimUE5\Saved\Logs
 
 # Exemplo de uso:
 # Use '.' para a pasta atual ou o caminho completo como 'C:/Logs/'
-caminho_da_pasta = r"F:\NewEngine\PhysAnimUE5\Saved\Logs"
+caminho_da_pasta = DEFAULT_LOG_DIR
 print(extract_physa_to_clipboard(caminho_da_pasta))

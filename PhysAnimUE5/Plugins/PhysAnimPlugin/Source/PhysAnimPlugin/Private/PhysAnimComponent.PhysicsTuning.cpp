@@ -2,6 +2,907 @@
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
 
+#include "Engine/OverlapResult.h"
+
+namespace
+{
+	TAutoConsoleVariable<int32> CVarPhysAnimRawSimDiagnosticGroup(
+		TEXT("p.PhysAnim.RawSimDiagnosticGroup"),
+		0,
+		TEXT("Diagnostic-only raw-sim body group for activated standing. 0=off, 1=pelvis+spine, 2=+thighs, 3=+support bodies, 4=full required set."),
+		ECVF_Default);
+	TAutoConsoleVariable<int32> CVarPhysAnimV0PlantEarlyControlZeroGroup(
+		TEXT("p.PhysAnim.V0PlantEarlyControlZeroGroup"),
+		0,
+		TEXT("Diagnostic-only V0 Case A early control-zero group. 0=off, 1=all V0 controls, 2=torso, 3=thighs, 4=support feet/balls, 5=torso-only(zero thighs+support), 6=thigh-only(zero torso+support), 7=support-only(zero torso+thighs)."),
+		ECVF_Default);
+	TAutoConsoleVariable<float> CVarPhysAnimV0PlantEarlyControlZeroDurationSeconds(
+		TEXT("p.PhysAnim.V0PlantEarlyControlZeroDurationSeconds"),
+		0.3f,
+		TEXT("Diagnostic-only V0 Case A duration for early control-zero variants."),
+		ECVF_Default);
+	TAutoConsoleVariable<int32> CVarPhysAnimV0PlantThighRestoreVariant(
+		TEXT("p.PhysAnim.V0PlantThighRestoreVariant"),
+		0,
+		TEXT("Diagnostic-only V0 variant for restoring thigh controls after zero window. 0=off, 1=abrupt(0.20), 2=ramp(0.0-0.20), 3=abrupt(0.05), 4=zero_fixed, 5=abrupt(0.02), 6=abrupt(0.10), 7=abrupt(0.20_actual)."),
+		ECVF_Default);
+	TAutoConsoleVariable<float> CVarPhysAnimV0PlantThighRestoreRampDurationSeconds(
+		TEXT("p.PhysAnim.V0PlantThighRestoreRampDurationSeconds"),
+		0.3f,
+		TEXT("Diagnostic-only V0 duration for thigh restore ramp (Variant 2)."),
+		ECVF_Default);
+	TAutoConsoleVariable<float> CVarPhysAnimV0KineticGateThresholdDegPerSec(
+		TEXT("p.PhysAnim.V0KineticGateThresholdDegPerSec"),
+		3600.0f,
+		TEXT("Diagnostic-only V0 kinetic gate threshold (deg/sec) for holding thighs at zero strength when pelvis/spine spikes."),
+		ECVF_Default);
+
+	bool ShouldForceDiagnosticRawSimBody(FName BoneName, int32 DiagnosticGroup)
+	{
+		if (DiagnosticGroup <= 0)
+		{
+			return false;
+		}
+
+		const bool bPelvisOrSpine =
+			BoneName == PhysAnimBridge::GetRootBoneName() ||
+			BoneName == TEXT("spine_01") ||
+			BoneName == TEXT("spine_02") ||
+			BoneName == TEXT("spine_03");
+		const bool bThigh =
+			BoneName == TEXT("thigh_l") ||
+			BoneName == TEXT("thigh_r");
+		const bool bRequiredSupport =
+			BoneName == TEXT("foot_l") ||
+			BoneName == TEXT("foot_r") ||
+			BoneName == TEXT("ball_l") ||
+			BoneName == TEXT("ball_r");
+
+		if (DiagnosticGroup >= 4)
+		{
+			return PhysAnimBridge::GetRequiredBodyModifierBoneNames().Contains(BoneName);
+		}
+		if (DiagnosticGroup >= 3)
+		{
+			return bPelvisOrSpine || bThigh || bRequiredSupport;
+		}
+		if (DiagnosticGroup >= 2)
+		{
+			return bPelvisOrSpine || bThigh;
+		}
+		return bPelvisOrSpine;
+	}
+
+	bool IsV0GroupCRawSimBody(FName BoneName)
+	{
+		return
+			BoneName == PhysAnimBridge::GetRootBoneName() ||
+			BoneName == TEXT("spine_01") ||
+			BoneName == TEXT("spine_02") ||
+			BoneName == TEXT("spine_03") ||
+			BoneName == TEXT("thigh_l") ||
+			BoneName == TEXT("thigh_r") ||
+			BoneName == TEXT("foot_l") ||
+			BoneName == TEXT("foot_r") ||
+			BoneName == TEXT("ball_l") ||
+			BoneName == TEXT("ball_r");
+	}
+
+	FString FormatTransformForV0RawSim(const FTransform& Transform)
+	{
+		const FVector Location = Transform.GetLocation();
+		const FRotator Rotation = Transform.GetRotation().Rotator();
+		return FString::Printf(
+			TEXT("loc=(%.2f,%.2f,%.2f) rot=(%.2f,%.2f,%.2f)"),
+			Location.X,
+			Location.Y,
+			Location.Z,
+			Rotation.Pitch,
+			Rotation.Yaw,
+			Rotation.Roll);
+	}
+
+	FString FormatVectorForV0RawSim(const FVector& Vector)
+	{
+		return FString::Printf(TEXT("(%.2f,%.2f,%.2f)"), Vector.X, Vector.Y, Vector.Z);
+	}
+
+	FString JoinNamesForV0RawSim(const TArray<FString>& Names)
+	{
+		return Names.Num() > 0 ? FString::Join(Names, TEXT(",")) : TEXT("none");
+	}
+
+	struct FV0RawSimBodySnapshot
+	{
+		bool bValid = false;
+		bool bSimulating = false;
+		bool bAwake = false;
+		ECollisionEnabled::Type BodyCollision = ECollisionEnabled::NoCollision;
+		float BodyPhysicsBlendWeight = 0.0f;
+		bool bBodyUpdateKinematicFromSimulation = false;
+		float MassKg = 0.0f;
+		FVector InertiaTensor = FVector::ZeroVector;
+		FTransform BodyTransform = FTransform::Identity;
+		FVector LinearVelocityCmPerSec = FVector::ZeroVector;
+		FVector AngularVelocityRadPerSec = FVector::ZeroVector;
+	};
+
+	FV0RawSimBodySnapshot MakeV0RawSimBodySnapshot(const FBodyInstance* BodyInstance)
+	{
+		FV0RawSimBodySnapshot Snapshot;
+		if (!BodyInstance || !BodyInstance->IsValidBodyInstance())
+		{
+			return Snapshot;
+		}
+
+		Snapshot.bValid = true;
+		Snapshot.bSimulating = BodyInstance->IsInstanceSimulatingPhysics();
+		Snapshot.bAwake = BodyInstance->IsInstanceAwake();
+		Snapshot.BodyCollision = BodyInstance->GetCollisionEnabled();
+		Snapshot.BodyPhysicsBlendWeight = BodyInstance->PhysicsBlendWeight;
+		Snapshot.bBodyUpdateKinematicFromSimulation = BodyInstance->bUpdateKinematicFromSimulation != 0;
+		Snapshot.MassKg = BodyInstance->GetBodyMass();
+		Snapshot.InertiaTensor = BodyInstance->GetBodyInertiaTensor();
+		Snapshot.BodyTransform = BodyInstance->GetUnrealWorldTransform();
+		Snapshot.LinearVelocityCmPerSec = BodyInstance->GetUnrealWorldVelocity();
+		Snapshot.AngularVelocityRadPerSec = BodyInstance->GetUnrealWorldAngularVelocityInRadians();
+		return Snapshot;
+	}
+
+	struct FV0RawSimOverlapSummary
+	{
+		int32 WorldOverlapCount = 0;
+		int32 CapsuleOverlapCount = 0;
+		int32 SkeletalBodyOverlapCount = 0;
+		TArray<FString> ContactBodies;
+	};
+
+	FV0RawSimOverlapSummary BuildV0RawSimOverlapSummary(
+		const UPhysAnimComponent* OwnerComponent,
+		USkeletalMeshComponent* SkeletalMesh,
+		FName BoneName,
+		const FBodyInstance* BodyInstance,
+		const FTransform& BodyTransform)
+	{
+		FV0RawSimOverlapSummary Summary;
+		if (!OwnerComponent || !SkeletalMesh || !BodyInstance || !BodyInstance->IsValidBodyInstance())
+		{
+			return Summary;
+		}
+
+		const UWorld* const World = OwnerComponent->GetWorld();
+		if (World)
+		{
+			TArray<FOverlapResult> Overlaps;
+			FComponentQueryParams QueryParams(TEXT("V0RawSimBodyEnable"), OwnerComponent->GetOwner());
+			QueryParams.AddIgnoredComponent(SkeletalMesh);
+			FCollisionResponseParams ResponseParams(BodyInstance->GetResponseToChannels());
+			const FCollisionObjectQueryParams ObjectParams(FCollisionObjectQueryParams::InitType::AllObjects);
+			BodyInstance->OverlapMulti(
+				Overlaps,
+				World,
+				nullptr,
+				BodyTransform.GetLocation(),
+				BodyTransform.GetRotation(),
+				BodyInstance->GetObjectType(),
+				QueryParams,
+				ResponseParams,
+				ObjectParams);
+
+			for (const FOverlapResult& Overlap : Overlaps)
+			{
+				UPrimitiveComponent* const OverlapComponent = Overlap.GetComponent();
+				if (!OverlapComponent)
+				{
+					continue;
+				}
+
+				++Summary.WorldOverlapCount;
+				Summary.ContactBodies.Add(FString::Printf(
+					TEXT("world:%s:%s:%d"),
+					Overlap.GetActor() ? *Overlap.GetActor()->GetName() : TEXT("none"),
+					*OverlapComponent->GetName(),
+					Overlap.GetItemIndex()));
+			}
+		}
+
+		if (const ACharacter* const CharacterOwner = Cast<ACharacter>(OwnerComponent->GetOwner()))
+		{
+			if (const UCapsuleComponent* const Capsule = CharacterOwner->GetCapsuleComponent())
+			{
+				if (FBodyInstance* const CapsuleBody = Capsule->GetBodyInstance())
+				{
+					if (BodyInstance->OverlapTestForBody(BodyTransform.GetLocation(), BodyTransform.GetRotation(), CapsuleBody))
+					{
+						++Summary.CapsuleOverlapCount;
+						Summary.ContactBodies.Add(TEXT("capsule"));
+					}
+				}
+			}
+		}
+
+		for (const FName OtherBoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+		{
+			if (OtherBoneName == BoneName)
+			{
+				continue;
+			}
+
+			if (FBodyInstance* const OtherBody = SkeletalMesh->GetBodyInstance(OtherBoneName))
+			{
+				if (BodyInstance->OverlapTestForBody(BodyTransform.GetLocation(), BodyTransform.GetRotation(), OtherBody))
+				{
+					++Summary.SkeletalBodyOverlapCount;
+					Summary.ContactBodies.Add(FString::Printf(TEXT("skeletal:%s"), *OtherBoneName.ToString()));
+				}
+			}
+		}
+
+		return Summary;
+	}
+
+	void LogV0RawSimBodyEnable(
+		const UPhysAnimComponent* OwnerComponent,
+		const UPhysicsControlComponent* PhysicsControl,
+		USkeletalMeshComponent* SkeletalMesh,
+		FName BoneName,
+		const FTransform& BoneWorldBefore,
+		const FV0RawSimBodySnapshot& Before,
+		const FV0RawSimBodySnapshot& After,
+		EPhysicsMovementType PreviousModifierMovementType,
+		EPhysicsMovementType NewModifierMovementType,
+		ECollisionEnabled::Type NewCollisionType,
+		float NewPhysicsBlendWeight,
+		bool bNewUpdateKinematicFromSimulation)
+	{
+		const FPhysicsBodyModifierRecord* const Record =
+			PhysicsControl
+				? FPhysAnimPhysicsControlAccessor::GetModifierRecord(
+					PhysicsControl,
+					PhysAnimBridge::MakeBodyModifierName(BoneName))
+				: nullptr;
+		const FPhysicsControlModifierData* const ModifierData = Record ? &Record->BodyModifier.ModifierData : nullptr;
+		const FV0RawSimOverlapSummary OverlapSummary = BuildV0RawSimOverlapSummary(
+			OwnerComponent,
+			SkeletalMesh,
+			BoneName,
+			SkeletalMesh ? SkeletalMesh->GetBodyInstance(BoneName) : nullptr,
+			After.BodyTransform);
+
+		UE_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("[PhysAnimV0] RAW_SIM_ENABLE bone=%s activationT=%.3f runtimeState=%s boneBefore{%s} bodyBefore{valid=%d sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d mass=%.3f inertia=%s xf=%s lin=%s angRad=%s} bodyAfter{valid=%d sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d mass=%.3f inertia=%s xf=%s lin=%s angRad=%s} modifier{prevMove=%s intendedMove=%s recordMove=%s intendedCollision=%d recordCollision=%d intendedBlend=%.2f recordBlend=%.2f intendedUpdateKinFromSim=%d recordUpdateKinFromSim=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
+			*BoneName.ToString(),
+			OwnerComponent ? OwnerComponent->GetActivatedStandingStabilityMetrics().ActivationDurationSec : -1.0,
+			OwnerComponent ? OwnerComponent->GetRuntimeStateName(OwnerComponent->GetRuntimeState()) : TEXT("none"),
+			*FormatTransformForV0RawSim(BoneWorldBefore),
+			Before.bValid ? 1 : 0,
+			Before.bSimulating ? 1 : 0,
+			Before.bAwake ? 1 : 0,
+			static_cast<int32>(Before.BodyCollision),
+			Before.BodyPhysicsBlendWeight,
+			Before.bBodyUpdateKinematicFromSimulation ? 1 : 0,
+			Before.MassKg,
+			*FormatVectorForV0RawSim(Before.InertiaTensor),
+			*FormatTransformForV0RawSim(Before.BodyTransform),
+			*FormatVectorForV0RawSim(Before.LinearVelocityCmPerSec),
+			*FormatVectorForV0RawSim(Before.AngularVelocityRadPerSec),
+			After.bValid ? 1 : 0,
+			After.bSimulating ? 1 : 0,
+			After.bAwake ? 1 : 0,
+			static_cast<int32>(After.BodyCollision),
+			After.BodyPhysicsBlendWeight,
+			After.bBodyUpdateKinematicFromSimulation ? 1 : 0,
+			After.MassKg,
+			*FormatVectorForV0RawSim(After.InertiaTensor),
+			*FormatTransformForV0RawSim(After.BodyTransform),
+			*FormatVectorForV0RawSim(After.LinearVelocityCmPerSec),
+			*FormatVectorForV0RawSim(After.AngularVelocityRadPerSec),
+			UPhysAnimComponent::GetPhysicsMovementTypeName(PreviousModifierMovementType),
+			UPhysAnimComponent::GetPhysicsMovementTypeName(NewModifierMovementType),
+			ModifierData ? UPhysAnimComponent::GetPhysicsMovementTypeName(ModifierData->MovementType) : TEXT("none"),
+			static_cast<int32>(NewCollisionType),
+			ModifierData ? static_cast<int32>(ModifierData->CollisionType.GetValue()) : -1,
+			NewPhysicsBlendWeight,
+			ModifierData ? ModifierData->PhysicsBlendWeight : -1.0f,
+			bNewUpdateKinematicFromSimulation ? 1 : 0,
+			ModifierData && ModifierData->bUpdateKinematicFromSimulation ? 1 : 0,
+			OverlapSummary.WorldOverlapCount,
+			OverlapSummary.CapsuleOverlapCount,
+			OverlapSummary.SkeletalBodyOverlapCount,
+			*JoinNamesForV0RawSim(OverlapSummary.ContactBodies));
+	}
+
+	TMap<const UPhysAnimComponent*, TSet<FName>> EnabledBodiesByComponent;
+	TMap<const UPhysAnimComponent*, TSet<FName>> LoggedBodiesByComponent;
+
+	void LogV0RawSimGroupCCompleteIfReady(const UPhysAnimComponent* OwnerComponent, FName BoneName, bool bAfterRawSimulating)
+	{
+		if (!OwnerComponent || !bAfterRawSimulating || !IsV0GroupCRawSimBody(BoneName))
+		{
+			return;
+		}
+
+		TSet<FName>& EnabledBodies = EnabledBodiesByComponent.FindOrAdd(OwnerComponent);
+		const int32 PreviousCount = EnabledBodies.Num();
+		EnabledBodies.Add(BoneName);
+		if (PreviousCount < 10 && EnabledBodies.Num() == 10)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimV0] RAW_SIM_GROUP_C_COMPLETE activationT=%.3f runtimeState=%s simBodies=10 excludedSimMax=%d bodies=pelvis,spine_01,spine_02,spine_03,thigh_l,thigh_r,foot_l,foot_r,ball_l,ball_r"),
+				OwnerComponent->GetActivatedStandingStabilityMetrics().ActivationDurationSec,
+				OwnerComponent->GetRuntimeStateName(OwnerComponent->GetRuntimeState()),
+				OwnerComponent->GetActivatedStandingStabilityMetrics().ExcludedRequiredBodySimulatingCountMax);
+		}
+	}
+
+	bool MarkV0RawSimBodyEnableLogged(const UPhysAnimComponent* OwnerComponent, FName BoneName)
+	{
+		if (!OwnerComponent || !IsV0GroupCRawSimBody(BoneName))
+		{
+			return false;
+		}
+
+		TSet<FName>& LoggedBodies = LoggedBodiesByComponent.FindOrAdd(OwnerComponent);
+		if (LoggedBodies.Contains(BoneName))
+		{
+			return false;
+		}
+
+		LoggedBodies.Add(BoneName);
+		return true;
+	}
+
+	bool IsHipQuarantineTraceBody(FName BoneName)
+	{
+		return
+			BoneName == PhysAnimBridge::GetRootBoneName() ||
+			BoneName == TEXT("thigh_l") ||
+			BoneName == TEXT("thigh_r") ||
+			BoneName == TEXT("spine_01") ||
+			BoneName == TEXT("spine_02") ||
+			BoneName == TEXT("spine_03") ||
+			BoneName == TEXT("foot_l") ||
+			BoneName == TEXT("foot_r") ||
+			BoneName == TEXT("ball_l") ||
+			BoneName == TEXT("ball_r");
+	}
+
+	bool IsV0ControlTraceBody(FName BoneName)
+	{
+		return
+			BoneName == TEXT("thigh_l") ||
+			BoneName == TEXT("thigh_r") ||
+			BoneName == TEXT("foot_l") ||
+			BoneName == TEXT("foot_r") ||
+			BoneName == TEXT("ball_l") ||
+			BoneName == TEXT("ball_r") ||
+			BoneName == TEXT("spine_01") ||
+			BoneName == TEXT("spine_02") ||
+			BoneName == TEXT("spine_03");
+	}
+
+	bool ShouldZeroV0PlantEarlyControl(FName BoneName, int32 ZeroGroup)
+	{
+		if (ZeroGroup <= 0)
+		{
+			return false;
+		}
+		if (ZeroGroup == 1)
+		{
+			return IsV0ControlTraceBody(BoneName);
+		}
+		if (ZeroGroup == 2)
+		{
+			return
+				BoneName == TEXT("spine_01") ||
+				BoneName == TEXT("spine_02") ||
+				BoneName == TEXT("spine_03");
+		}
+		if (ZeroGroup == 3)
+		{
+			return BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r");
+		}
+		if (ZeroGroup == 4)
+		{
+			return
+				BoneName == TEXT("foot_l") ||
+				BoneName == TEXT("foot_r") ||
+				BoneName == TEXT("ball_l") ||
+				BoneName == TEXT("ball_r");
+		}
+		if (ZeroGroup == 5) // torso-only (zeros thighs + support)
+		{
+			return
+				BoneName == TEXT("thigh_l") ||
+				BoneName == TEXT("thigh_r") ||
+				BoneName == TEXT("foot_l") ||
+				BoneName == TEXT("foot_r") ||
+				BoneName == TEXT("ball_l") ||
+				BoneName == TEXT("ball_r");
+		}
+		if (ZeroGroup == 6) // thigh-only (zeros torso + support)
+		{
+			return
+				BoneName == TEXT("spine_01") ||
+				BoneName == TEXT("spine_02") ||
+				BoneName == TEXT("spine_03") ||
+				BoneName == TEXT("foot_l") ||
+				BoneName == TEXT("foot_r") ||
+				BoneName == TEXT("ball_l") ||
+				BoneName == TEXT("ball_r");
+		}
+		if (ZeroGroup == 7) // support-only (zeros torso + thighs)
+		{
+			return
+				BoneName == TEXT("spine_01") ||
+				BoneName == TEXT("spine_02") ||
+				BoneName == TEXT("spine_03") ||
+				BoneName == TEXT("thigh_l") ||
+				BoneName == TEXT("thigh_r");
+		}
+		return false;
+	}
+
+	const TCHAR* GetV0PlantEarlyControlZeroGroupName(int32 ZeroGroup)
+	{
+		switch (ZeroGroup)
+		{
+		case 1:
+			return TEXT("all_v0");
+		case 2:
+			return TEXT("torso");
+		case 3:
+			return TEXT("thighs");
+		case 4:
+			return TEXT("support");
+		case 5:
+			return TEXT("torso-only");
+		case 6:
+			return TEXT("thigh-only");
+		case 7:
+			return TEXT("support-only");
+		default:
+			return TEXT("off");
+		}
+	}
+
+	struct FHipQuarantineControlIntent
+	{
+		bool bValid = false;
+		bool bEnabled = false;
+		FPhysicsControlMultiplier Multiplier;
+	};
+
+	struct FHipQuarantineModifierSnapshot
+	{
+		bool bValid = false;
+		EPhysicsMovementType MovementType = EPhysicsMovementType::Static;
+		ECollisionEnabled::Type CollisionType = ECollisionEnabled::NoCollision;
+		float PhysicsBlendWeight = 0.0f;
+		bool bUpdateKinematicFromSimulation = false;
+	};
+
+	FHipQuarantineModifierSnapshot MakeHipQuarantineModifierSnapshot(
+		const UPhysicsControlComponent* PhysicsControl,
+		FName BoneName)
+	{
+		FHipQuarantineModifierSnapshot Snapshot;
+		const FPhysicsBodyModifierRecord* const Record =
+			PhysicsControl
+				? FPhysAnimPhysicsControlAccessor::GetModifierRecord(
+					PhysicsControl,
+					PhysAnimBridge::MakeBodyModifierName(BoneName))
+				: nullptr;
+		if (!Record)
+		{
+			return Snapshot;
+		}
+
+		const FPhysicsControlModifierData& ModifierData = Record->BodyModifier.ModifierData;
+		Snapshot.bValid = true;
+		Snapshot.MovementType = ModifierData.MovementType;
+		Snapshot.CollisionType = ModifierData.CollisionType;
+		Snapshot.PhysicsBlendWeight = ModifierData.PhysicsBlendWeight;
+		Snapshot.bUpdateKinematicFromSimulation = ModifierData.bUpdateKinematicFromSimulation;
+		return Snapshot;
+	}
+
+	struct FHipQuarantineTraceSnapshot
+	{
+		FV0RawSimBodySnapshot Body;
+		FHipQuarantineModifierSnapshot Modifier;
+	};
+
+	FString BuildHipQuarantineChangeSummary(
+		const FHipQuarantineTraceSnapshot* Previous,
+		const FHipQuarantineTraceSnapshot& Current)
+	{
+		if (!Previous)
+		{
+			return TEXT("baseline=1");
+		}
+
+		return FString::Printf(
+			TEXT("bodySim=%d bodyAwake=%d bodyCollision=%d bodyBlend=%d bodyUpdateKin=%d modifierMove=%d modifierCollision=%d modifierBlend=%d modifierUpdateKin=%d"),
+			Previous->Body.bSimulating != Current.Body.bSimulating ? 1 : 0,
+			Previous->Body.bAwake != Current.Body.bAwake ? 1 : 0,
+			Previous->Body.BodyCollision != Current.Body.BodyCollision ? 1 : 0,
+			!FMath::IsNearlyEqual(Previous->Body.BodyPhysicsBlendWeight, Current.Body.BodyPhysicsBlendWeight) ? 1 : 0,
+			Previous->Body.bBodyUpdateKinematicFromSimulation != Current.Body.bBodyUpdateKinematicFromSimulation ? 1 : 0,
+			Previous->Modifier.MovementType != Current.Modifier.MovementType ? 1 : 0,
+			Previous->Modifier.CollisionType != Current.Modifier.CollisionType ? 1 : 0,
+			!FMath::IsNearlyEqual(Previous->Modifier.PhysicsBlendWeight, Current.Modifier.PhysicsBlendWeight) ? 1 : 0,
+			Previous->Modifier.bUpdateKinematicFromSimulation != Current.Modifier.bUpdateKinematicFromSimulation ? 1 : 0);
+	}
+
+	struct FHipQuarantinePendingNextTickTrace
+	{
+		bool bPending = false;
+		uint64 ReleaseFrame = 0;
+		double ReleaseWorldTimeSeconds = -1.0;
+		double ReleaseActivationTimeSeconds = -1.0;
+	};
+
+	TMap<const UPhysAnimComponent*, FHipQuarantinePendingNextTickTrace> HipQuarantinePendingNextTickTraces;
+	TMap<const UPhysAnimComponent*, int32> CallCounts;
+	TMap<const UPhysAnimComponent*, TMap<FName, FHipQuarantineTraceSnapshot>> PreviousSnapshotsByComponent;
+
+	void LogHipQuarantineTraceFrame(
+		const UPhysAnimComponent* OwnerComponent,
+		const UPhysicsControlComponent* PhysicsControl,
+		USkeletalMeshComponent* SkeletalMesh,
+		const TCHAR* Phase,
+		uint64 ReleaseFrame,
+		double ReleaseWorldTimeSeconds,
+		double ReleaseActivationTimeSeconds,
+		int32 TicksBefore,
+		int32 TicksAfter,
+		bool bQuarantineActiveForTuning,
+		const TMap<FName, FHipQuarantineControlIntent>& ControlIntents)
+	{
+		if (!OwnerComponent || !SkeletalMesh)
+		{
+			return;
+		}
+
+		const uint64 CurrentFrame = GFrameNumber;
+		const double WorldTimeSeconds = OwnerComponent->GetWorld() ? OwnerComponent->GetWorld()->GetTimeSeconds() : -1.0;
+		const double ActivationTimeSeconds = OwnerComponent->GetActivatedStandingStabilityMetrics().ActivationDurationSec;
+		TMap<FName, FHipQuarantineTraceSnapshot>& PreviousSnapshots = PreviousSnapshotsByComponent.FindOrAdd(OwnerComponent);
+		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+		{
+			if (!IsHipQuarantineTraceBody(BoneName))
+			{
+				continue;
+			}
+
+			const FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName);
+			FHipQuarantineTraceSnapshot Current;
+			Current.Body = MakeV0RawSimBodySnapshot(BodyInstance);
+			Current.Modifier = MakeHipQuarantineModifierSnapshot(PhysicsControl, BoneName);
+			const FHipQuarantineTraceSnapshot* const Previous = PreviousSnapshots.Find(BoneName);
+			const FString ChangeSummary = BuildHipQuarantineChangeSummary(Previous, Current);
+			PreviousSnapshots.FindOrAdd(BoneName) = Current;
+
+			const FTransform BoneWorldTransform = SkeletalMesh->GetBoneTransform(BoneName, RTS_World);
+			const FHipQuarantineControlIntent* const ControlIntent = ControlIntents.Find(BoneName);
+			const FV0RawSimOverlapSummary OverlapSummary = BuildV0RawSimOverlapSummary(
+				OwnerComponent,
+				SkeletalMesh,
+				BoneName,
+				BodyInstance,
+				Current.Body.BodyTransform);
+			const double LinearSpeedCmPerSecond = Current.Body.LinearVelocityCmPerSec.Size();
+			const double AngularSpeedDegPerSecond =
+				FMath::RadiansToDegrees(Current.Body.AngularVelocityRadPerSec.Size());
+
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnimV0] HIP_QUARANTINE_TRACE phase=%s frame=%llu worldT=%.3f activationT=%.3f releaseFrame=%llu releaseWorldT=%.3f releaseActivationT=%.3f ticksBefore=%d ticksAfter=%d activeForTuning=%d bone=%s boneWorld{%s} body{valid=%d sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d mass=%.3f inertia=%s xf=%s lin=%s linSpeed=%.2f angRad=%s angDeg=%.2f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} penetration{world=%d capsule=%d skeletal=%d bodies=%s} changed{%s}"),
+				Phase,
+				CurrentFrame,
+				WorldTimeSeconds,
+				ActivationTimeSeconds,
+				ReleaseFrame,
+				ReleaseWorldTimeSeconds,
+				ReleaseActivationTimeSeconds,
+				TicksBefore,
+				TicksAfter,
+				bQuarantineActiveForTuning ? 1 : 0,
+				*BoneName.ToString(),
+				*FormatTransformForV0RawSim(BoneWorldTransform),
+				Current.Body.bValid ? 1 : 0,
+				Current.Body.bSimulating ? 1 : 0,
+				Current.Body.bAwake ? 1 : 0,
+				static_cast<int32>(Current.Body.BodyCollision),
+				Current.Body.BodyPhysicsBlendWeight,
+				Current.Body.bBodyUpdateKinematicFromSimulation ? 1 : 0,
+				Current.Body.MassKg,
+				*FormatVectorForV0RawSim(Current.Body.InertiaTensor),
+				*FormatTransformForV0RawSim(Current.Body.BodyTransform),
+				*FormatVectorForV0RawSim(Current.Body.LinearVelocityCmPerSec),
+				LinearSpeedCmPerSecond,
+				*FormatVectorForV0RawSim(Current.Body.AngularVelocityRadPerSec),
+				AngularSpeedDegPerSecond,
+				Current.Modifier.bValid ? 1 : 0,
+				Current.Modifier.bValid ? UPhysAnimComponent::GetPhysicsMovementTypeName(Current.Modifier.MovementType) : TEXT("none"),
+				Current.Modifier.bValid ? static_cast<int32>(Current.Modifier.CollisionType) : -1,
+				Current.Modifier.bValid ? Current.Modifier.PhysicsBlendWeight : -1.0f,
+				Current.Modifier.bValid && Current.Modifier.bUpdateKinematicFromSimulation ? 1 : 0,
+				ControlIntent && ControlIntent->bValid ? 1 : 0,
+				ControlIntent && ControlIntent->bEnabled ? 1 : 0,
+				ControlIntent ? ControlIntent->Multiplier.AngularStrengthMultiplier : -1.0f,
+				ControlIntent ? ControlIntent->Multiplier.AngularDampingRatioMultiplier : -1.0f,
+				ControlIntent ? ControlIntent->Multiplier.AngularExtraDampingMultiplier : -1.0f,
+				OverlapSummary.WorldOverlapCount,
+				OverlapSummary.CapsuleOverlapCount,
+				OverlapSummary.SkeletalBodyOverlapCount,
+				*JoinNamesForV0RawSim(OverlapSummary.ContactBodies),
+				*ChangeSummary);
+		}
+	}
+
+	struct FPerComponentEarlyControlState
+	{
+		uint8 LoggedMilestoneMask = 0;
+		bool bLoggedFirstLinearThreshold = false;
+		bool bLoggedFirstAngularThreshold = false;
+		bool bLoggedRestoreStarted = false;
+	};
+
+	TMap<const UPhysAnimComponent*, TMap<int32, FPerComponentEarlyControlState>> StatesByComponent;
+
+	void LogV0PlantEarlyControlDiagnostics(
+		const UPhysAnimComponent* OwnerComponent,
+		const UPhysicsControlComponent* PhysicsControl,
+		USkeletalMeshComponent* SkeletalMesh,
+		int32 ZeroGroup,
+		bool bZeroWindowActive,
+		float ZeroDurationSeconds,
+		const TMap<FName, FHipQuarantineControlIntent>& ControlIntents)
+	{
+		if (!OwnerComponent ||
+			!SkeletalMesh ||
+			ZeroGroup <= 0 ||
+			OwnerComponent->GetRuntimeState() != EPhysAnimRuntimeState::BalanceActive_Standing)
+		{
+			return;
+		}
+		TMap<int32, FPerComponentEarlyControlState>& StatesByZeroGroup = StatesByComponent.FindOrAdd(OwnerComponent);
+		FPerComponentEarlyControlState& State = StatesByZeroGroup.FindOrAdd(ZeroGroup);
+		const double ActivationTimeSeconds = OwnerComponent->GetActivatedStandingStabilityMetrics().ActivationDurationSec;
+		const FPhysAnimRuntimeTerminationState& TerminationState = OwnerComponent->GetLiveRuntimeEvidenceTerminationState();
+		const double SupportHullAreaCm2 = TerminationState.LatestArtifact.SupportHullAreaCm2;
+		const int32 ActiveSupportSides = TerminationState.LatestArtifact.ActiveSupportSideCount;
+		const TMap<FName, FQuat>& PreviousTargets =
+			OwnerComponent->GetPreviousControlTargetRotationsForDiagnostics();
+		const TMap<FName, FQuat>& BlendStartTargets =
+			OwnerComponent->GetPolicyBlendStartControlTargetRotationsForDiagnostics();
+		const TArray<FName>& PendingCachedResets =
+			OwnerComponent->GetPendingBodyModifierCachedResetNames();
+		const int32 CurrentPoseTargetsSeeded =
+			PreviousTargets.Num() > 0 &&
+			BlendStartTargets.Num() > 0
+				? 1
+				: 0;
+		const int32 PreviousTargetCount = PreviousTargets.Num();
+		const int32 BlendStartTargetCount = BlendStartTargets.Num();
+		const int32 PendingCachedResetCount = PendingCachedResets.Num();
+		constexpr double LinearThresholdCmPerSecond = 1200.0;
+		constexpr double AngularThresholdDegPerSecond = 3600.0;
+		constexpr double Milestones[] = { 0.05, 0.10, 0.15, 0.20, 0.30, 0.45, 0.60 };
+
+		const int32 ThighRestoreVariant = CVarPhysAnimV0PlantThighRestoreVariant.GetValueOnGameThread();
+
+		uint8 MilestoneMaskToLog = 0;
+		for (int32 MilestoneIndex = 0; MilestoneIndex < UE_ARRAY_COUNT(Milestones); ++MilestoneIndex)
+		{
+			const uint8 MilestoneBit = static_cast<uint8>(1u << MilestoneIndex);
+			if ((State.LoggedMilestoneMask & MilestoneBit) == 0 && ActivationTimeSeconds >= Milestones[MilestoneIndex])
+			{
+				MilestoneMaskToLog |= MilestoneBit;
+				State.LoggedMilestoneMask |= MilestoneBit;
+			}
+		}
+
+		if (!State.bLoggedRestoreStarted && !bZeroWindowActive && ThighRestoreVariant > 0)
+		{
+			State.bLoggedRestoreStarted = true;
+			// Forçar um log imediato no início do restore
+			MilestoneMaskToLog |= 0xFF; // Gambiarra controlada para disparar log em todos os ossos relevantes neste frame
+		}
+
+		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+		{
+			if (!IsHipQuarantineTraceBody(BoneName))
+			{
+				continue;
+			}
+
+			const FBodyInstance* const BodyInstance = SkeletalMesh->GetBodyInstance(BoneName);
+			const FV0RawSimBodySnapshot Body = MakeV0RawSimBodySnapshot(BodyInstance);
+			const FHipQuarantineModifierSnapshot Modifier = MakeHipQuarantineModifierSnapshot(PhysicsControl, BoneName);
+			const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+			const FHipQuarantineControlIntent* const ControlIntent = ControlIntents.Find(BoneName);
+			const bool bHasPreviousTarget = PreviousTargets.Contains(ControlName);
+			const bool bHasBlendStartTarget = BlendStartTargets.Contains(ControlName);
+			const bool bHasPendingCachedReset =
+				PendingCachedResets.Contains(PhysAnimBridge::MakeBodyModifierName(BoneName));
+			const FV0RawSimOverlapSummary OverlapSummary = BuildV0RawSimOverlapSummary(
+				OwnerComponent,
+				SkeletalMesh,
+				BoneName,
+				BodyInstance,
+				Body.BodyTransform);
+			const double LinearSpeedCmPerSecond = Body.LinearVelocityCmPerSec.Size();
+			const double AngularSpeedDegPerSecond = FMath::RadiansToDegrees(Body.AngularVelocityRadPerSec.Size());
+
+			double TargetOrientationDeltaDeg = -1.0;
+			if (ControlIntent && ControlIntent->bValid)
+			{
+				FPhysicsControlTarget CurrentTarget;
+				PhysicsControl->GetControlTarget(ControlName, CurrentTarget);
+				if (const FQuat* PrevTarget = PreviousTargets.Find(ControlName))
+				{
+					TargetOrientationDeltaDeg = FMath::RadiansToDegrees(FQuat(CurrentTarget.TargetOrientation).AngularDistance(*PrevTarget));
+				}
+			}
+
+			if (!State.bLoggedFirstLinearThreshold && LinearSpeedCmPerSecond >= LinearThresholdCmPerSecond)
+			{
+				State.bLoggedFirstLinearThreshold = true;
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimV0] EARLY_CONTROL_THRESHOLD variant=%s zeroGroup=%d restoreVariant=%d kind=linear activationT=%.3f bone=%s lin=%.2f angDeg=%.2f targetDeltaDeg=%.2f supportHull=%.2f activeSides=%d zeroActive=%d currentPoseTargetsSeeded=%d previousTargets=%d blendStartTargets=%d pendingCachedResets=%d control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
+					GetV0PlantEarlyControlZeroGroupName(ZeroGroup),
+					ZeroGroup,
+					ThighRestoreVariant,
+					ActivationTimeSeconds,
+					*BoneName.ToString(),
+					LinearSpeedCmPerSecond,
+					AngularSpeedDegPerSecond,
+					TargetOrientationDeltaDeg,
+					SupportHullAreaCm2,
+					ActiveSupportSides,
+					bZeroWindowActive ? 1 : 0,
+					CurrentPoseTargetsSeeded,
+					PreviousTargetCount,
+					BlendStartTargetCount,
+					PendingCachedResetCount,
+					ControlIntent && ControlIntent->bValid ? 1 : 0,
+					ControlIntent && ControlIntent->bEnabled ? 1 : 0,
+					ControlIntent ? ControlIntent->Multiplier.AngularStrengthMultiplier : -1.0f,
+					ControlIntent ? ControlIntent->Multiplier.AngularDampingRatioMultiplier : -1.0f,
+					ControlIntent ? ControlIntent->Multiplier.AngularExtraDampingMultiplier : -1.0f,
+					Modifier.bValid ? 1 : 0,
+					Modifier.bValid ? UPhysAnimComponent::GetPhysicsMovementTypeName(Modifier.MovementType) : TEXT("none"),
+					Modifier.bValid ? static_cast<int32>(Modifier.CollisionType) : -1,
+					Modifier.bValid ? Modifier.PhysicsBlendWeight : -1.0f,
+					Modifier.bValid && Modifier.bUpdateKinematicFromSimulation ? 1 : 0,
+					OverlapSummary.WorldOverlapCount,
+					OverlapSummary.CapsuleOverlapCount,
+					OverlapSummary.SkeletalBodyOverlapCount,
+					*JoinNamesForV0RawSim(OverlapSummary.ContactBodies));
+			}
+			if (!State.bLoggedFirstAngularThreshold && AngularSpeedDegPerSecond >= AngularThresholdDegPerSecond)
+			{
+				State.bLoggedFirstAngularThreshold = true;
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimV0] EARLY_CONTROL_THRESHOLD variant=%s zeroGroup=%d restoreVariant=%d kind=angular activationT=%.3f bone=%s lin=%.2f angDeg=%.2f targetDeltaDeg=%.2f supportHull=%.2f activeSides=%d zeroActive=%d currentPoseTargetsSeeded=%d previousTargets=%d blendStartTargets=%d pendingCachedResets=%d control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
+					GetV0PlantEarlyControlZeroGroupName(ZeroGroup),
+					ZeroGroup,
+					ThighRestoreVariant,
+					ActivationTimeSeconds,
+					*BoneName.ToString(),
+					LinearSpeedCmPerSecond,
+					AngularSpeedDegPerSecond,
+					TargetOrientationDeltaDeg,
+					SupportHullAreaCm2,
+					ActiveSupportSides,
+					bZeroWindowActive ? 1 : 0,
+					CurrentPoseTargetsSeeded,
+					PreviousTargetCount,
+					BlendStartTargetCount,
+					PendingCachedResetCount,
+					ControlIntent && ControlIntent->bValid ? 1 : 0,
+					ControlIntent && ControlIntent->bEnabled ? 1 : 0,
+					ControlIntent ? ControlIntent->Multiplier.AngularStrengthMultiplier : -1.0f,
+					ControlIntent ? ControlIntent->Multiplier.AngularDampingRatioMultiplier : -1.0f,
+					ControlIntent ? ControlIntent->Multiplier.AngularExtraDampingMultiplier : -1.0f,
+					Modifier.bValid ? 1 : 0,
+					Modifier.bValid ? UPhysAnimComponent::GetPhysicsMovementTypeName(Modifier.MovementType) : TEXT("none"),
+					Modifier.bValid ? static_cast<int32>(Modifier.CollisionType) : -1,
+					Modifier.bValid ? Modifier.PhysicsBlendWeight : -1.0f,
+					Modifier.bValid && Modifier.bUpdateKinematicFromSimulation ? 1 : 0,
+					OverlapSummary.WorldOverlapCount,
+					OverlapSummary.CapsuleOverlapCount,
+					OverlapSummary.SkeletalBodyOverlapCount,
+					*JoinNamesForV0RawSim(OverlapSummary.ContactBodies));
+			}
+
+			for (int32 MilestoneIndex = 0; MilestoneIndex < UE_ARRAY_COUNT(Milestones); ++MilestoneIndex)
+			{
+				const uint8 MilestoneBit = static_cast<uint8>(1u << MilestoneIndex);
+				if ((MilestoneMaskToLog & MilestoneBit) == 0)
+				{
+					continue;
+				}
+
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimV0] EARLY_CONTROL_SAMPLE variant=%s zeroGroup=%d restoreVariant=%d milestone=%.2f activationT=%.3f zeroDuration=%.2f zeroActive=%d bone=%s lin=%.2f angDeg=%.2f targetDeltaDeg=%.2f body{sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d} control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} targets{currentPoseSeeded=%d hasPrevious=%d hasBlendStart=%d pendingCachedReset=%d previousCount=%d blendStartCount=%d pendingResetCount=%d} support{hull=%.2f activeSides=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
+					GetV0PlantEarlyControlZeroGroupName(ZeroGroup),
+					ZeroGroup,
+					ThighRestoreVariant,
+					Milestones[MilestoneIndex],
+					ActivationTimeSeconds,
+					ZeroDurationSeconds,
+					bZeroWindowActive ? 1 : 0,
+					*BoneName.ToString(),
+					LinearSpeedCmPerSecond,
+					AngularSpeedDegPerSecond,
+					TargetOrientationDeltaDeg,
+					Body.bSimulating ? 1 : 0,
+					Body.bAwake ? 1 : 0,
+					static_cast<int32>(Body.BodyCollision),
+					Body.BodyPhysicsBlendWeight,
+					Body.bBodyUpdateKinematicFromSimulation ? 1 : 0,
+					ControlIntent && ControlIntent->bValid ? 1 : 0,
+					ControlIntent && ControlIntent->bEnabled ? 1 : 0,
+					ControlIntent ? ControlIntent->Multiplier.AngularStrengthMultiplier : -1.0f,
+					ControlIntent ? ControlIntent->Multiplier.AngularDampingRatioMultiplier : -1.0f,
+					ControlIntent ? ControlIntent->Multiplier.AngularExtraDampingMultiplier : -1.0f,
+					Modifier.bValid ? 1 : 0,
+					Modifier.bValid ? UPhysAnimComponent::GetPhysicsMovementTypeName(Modifier.MovementType) : TEXT("none"),
+					Modifier.bValid ? static_cast<int32>(Modifier.CollisionType) : -1,
+					Modifier.bValid ? Modifier.PhysicsBlendWeight : -1.0f,
+					Modifier.bValid && Modifier.bUpdateKinematicFromSimulation ? 1 : 0,
+					CurrentPoseTargetsSeeded,
+					bHasPreviousTarget ? 1 : 0,
+					bHasBlendStartTarget ? 1 : 0,
+					bHasPendingCachedReset ? 1 : 0,
+					PreviousTargetCount,
+					BlendStartTargetCount,
+					PendingCachedResetCount,
+					SupportHullAreaCm2,
+					ActiveSupportSides,
+					OverlapSummary.WorldOverlapCount,
+					OverlapSummary.CapsuleOverlapCount,
+					OverlapSummary.SkeletalBodyOverlapCount,
+					*JoinNamesForV0RawSim(OverlapSummary.ContactBodies));
+			}
+		}
+	}
+}
+
+namespace PhysAnimComponentInternal
+{
+	void ClearPhysicsTuningDiagnosticCaches(const UPhysAnimComponent* Component)
+	{
+		EnabledBodiesByComponent.Remove(Component);
+		LoggedBodiesByComponent.Remove(Component);
+		PreviousSnapshotsByComponent.Remove(Component);
+		StatesByComponent.Remove(Component);
+		HipQuarantinePendingNextTickTraces.Remove(Component);
+		CallCounts.Remove(Component);
+
+		if (Component)
+		{
+			// Reset per-instance diagnostic tracking state
+			const_cast<UPhysAnimComponent*>(Component)->bKineticGateActiveLastFrame = false;
+		}
+	}
+}
+
 bool UPhysAnimComponent::ActivateRuntimePhysicsControl(FString& OutError)
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
@@ -166,6 +1067,33 @@ void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilization
 			Log,
 			TEXT("[PhysAnim] BridgeActive preserving capsule collision and CharacterMovement during bridge ownership."));
 	}
+}
+
+
+void UPhysAnimComponent::ReassertBridgeActiveStartupProofRawSimulation(const TCHAR* Context)
+{
+	if (!ShouldPreserveRawSimulationForBridgeActiveStartupProof(
+		RuntimeState,
+		bEnableLiveRuntimeEvidenceProof,
+		bLiveRuntimeEvidenceProofComplete))
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	if (!SkeletalMesh)
+	{
+		return;
+	}
+
+	SkeletalMesh->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
+	SkeletalMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	SkeletalMesh->SetSimulatePhysics(true);
+	SkeletalMesh->SetEnablePhysicsBlending(true);
+	SkeletalMesh->WakeAllRigidBodies();
+
+	UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnim] BridgeActive startup proof raw simulation reasserted after %s."), Context);
 }
 
 
@@ -662,9 +1590,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		ShouldUseSkeletalAnimationTargetRepresentation(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
 			bPolicyInfluenceActive);
+	const bool bPreserveBridgeActiveStartupProofRawSimulation =
+		ShouldPreserveRawSimulationForBridgeActiveStartupProof(
+			RuntimeState,
+			bEnableLiveRuntimeEvidenceProof,
+			bLiveRuntimeEvidenceProofComplete);
 
 	static uint64 LastFrameNumber = 0;
-	static TMap<UPhysAnimComponent*, int32> CallCounts;
 	const uint64 CurrentFrameNumber = GFrameNumber;
 	if (LastFrameNumber != CurrentFrameNumber)
 	{
@@ -706,6 +1638,70 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		HipQuarantineTicksRemaining = 10;
 	}
 	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0;
+	const bool bHipQuarantineWillReleaseThisFrame =
+		bHipQuarantineActiveThisFrame &&
+		HipQuarantineTicksRemaining == 1 &&
+		RuntimeState != EPhysAnimRuntimeState::FailStopped &&
+		!bKineticGateActiveLastFrame;
+	const int32 V0PlantEarlyControlZeroGroup =
+		CVarPhysAnimV0PlantEarlyControlZeroGroup.GetValueOnGameThread();
+	const float V0PlantEarlyControlZeroDurationSeconds =
+		FMath::Max(0.0f, CVarPhysAnimV0PlantEarlyControlZeroDurationSeconds.GetValueOnGameThread());
+	const int32 V0PlantThighRestoreVariant =
+		CVarPhysAnimV0PlantThighRestoreVariant.GetValueOnGameThread();
+	const float V0PlantThighRestoreRampDurationSeconds =
+		FMath::Max(0.01f, CVarPhysAnimV0PlantThighRestoreRampDurationSeconds.GetValueOnGameThread());
+	const bool bV0PlantEarlyControlZeroWindowActive =
+		V0PlantEarlyControlZeroGroup > 0 &&
+		(IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState)) &&
+		GetActivatedStandingStabilityMetrics().ActivationDurationSec <= V0PlantEarlyControlZeroDurationSeconds;
+
+	float ThighRestoreAlpha = 1.0f;
+	if (V0PlantThighRestoreVariant > 0 && 
+		(IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState)) && 
+		GetActivatedStandingStabilityMetrics().ActivationDurationSec > V0PlantEarlyControlZeroDurationSeconds)
+	{
+		const float TimeSinceZero = GetActivatedStandingStabilityMetrics().ActivationDurationSec - V0PlantEarlyControlZeroDurationSeconds;
+		switch (V0PlantThighRestoreVariant)
+		{
+		case 1: // abrupt(0.20)
+			ThighRestoreAlpha = 0.20f;
+			break;
+		case 2: // ramp(0.0-0.20)
+			ThighRestoreAlpha = FMath::Min(0.20f, 0.20f * (TimeSinceZero / V0PlantThighRestoreRampDurationSeconds));
+			break;
+		case 3: // abrupt(0.05)
+			ThighRestoreAlpha = 0.05f;
+			break;
+		case 4: // zero_fixed
+			ThighRestoreAlpha = 0.0f;
+			break;
+		case 5: // abrupt(0.02)
+			ThighRestoreAlpha = 0.02f;
+			break;
+		case 6: // abrupt(0.10)
+			ThighRestoreAlpha = 0.10f;
+			break;
+		case 7: // abrupt(0.20)
+			ThighRestoreAlpha = 0.20f;
+			break;
+		case 8: // abrupt(0.01)
+			ThighRestoreAlpha = 0.01f;
+			break;
+		case 9: // abrupt(0.15)
+			ThighRestoreAlpha = 0.15f;
+			break;
+		case 10: // ramp(0.0-0.20, 0.5s)
+			ThighRestoreAlpha = FMath::Min(0.20f, 0.20f * (TimeSinceZero / 0.5f));
+			break;
+		case 11: // ramp(0.0-0.20, 1.0s)
+			ThighRestoreAlpha = FMath::Min(0.20f, 0.20f * (TimeSinceZero / 1.0f));
+			break;
+		default:
+			ThighRestoreAlpha = 1.0f;
+			break;
+		}
+	}
 	bool bHipQuarantineReleasedThisFrame = false;
 	if (!PhysicsControl)
 	{
@@ -718,6 +1714,47 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		bLastAppliedSimulationHandoffSettled = bSimulationHandoffSettled;
 		LastAppliedControlAuthorityAlpha = CalculateCurrentControlAuthorityAlpha(EffectiveSettings);
 		return;
+	}
+
+	FHipQuarantinePendingNextTickTrace& HipQuarantinePendingNextTickTrace =
+		HipQuarantinePendingNextTickTraces.FindOrAdd(this);
+	const bool bTraceHipReleaseFrame =
+		IsBalanceActiveState(RuntimeState) &&
+		bHipQuarantineWillReleaseThisFrame;
+	const bool bTraceHipReleaseNextTick =
+		IsBalanceActiveState(RuntimeState) &&
+		HipQuarantinePendingNextTickTrace.bPending &&
+		HipQuarantinePendingNextTickTrace.ReleaseFrame != CurrentFrameNumber;
+	TMap<FName, FHipQuarantineControlIntent> HipQuarantineControlIntents;
+	if (bTraceHipReleaseFrame)
+	{
+		LogHipQuarantineTraceFrame(
+			this,
+			PhysicsControl,
+			MeshComponent.Get(),
+			TEXT("release_frame_pre_tuning"),
+			CurrentFrameNumber,
+			GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
+			GetActivatedStandingStabilityMetrics().ActivationDurationSec,
+			HipQuarantineTicksRemaining,
+			HipQuarantineTicksRemaining,
+			true,
+			HipQuarantineControlIntents);
+	}
+	else if (bTraceHipReleaseNextTick)
+	{
+		LogHipQuarantineTraceFrame(
+			this,
+			PhysicsControl,
+			MeshComponent.Get(),
+			TEXT("next_tick_pre_tuning"),
+			HipQuarantinePendingNextTickTrace.ReleaseFrame,
+			HipQuarantinePendingNextTickTrace.ReleaseWorldTimeSeconds,
+			HipQuarantinePendingNextTickTrace.ReleaseActivationTimeSeconds,
+			HipQuarantineTicksRemaining,
+			HipQuarantineTicksRemaining,
+			false,
+			HipQuarantineControlIntents);
 	}
 
 	const float OwnerPlanarSpeedCmPerSec = [this]() -> float
@@ -879,7 +1916,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			EffectiveSettings.AngularStrengthMultiplier * FamilyStrengthScale * ControlAuthorityAlpha * HandoverEasing;
 		ControlMultiplier.AngularStrengthMultiplier *= BalanceReadyTransition.GetProximalControlSoftAlpha(BoneName);
 		ControlMultiplier.AngularDampingRatioMultiplier =
-			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale;
+			EffectiveSettings.AngularDampingRatioMultiplier * LocomotionLowerLimbDampingRatioScale *
+			BalanceReadyTransition.GetTransitionDampingRatioMultiplier(BoneName, EffectiveSettings);
 		ControlMultiplier.AngularExtraDampingMultiplier =
 			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale *
 			BalanceReadyTransition.GetTransitionExtraDampingMultiplier(BoneName, EffectiveSettings);
@@ -889,6 +1927,94 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			(BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
 			ControlMultiplier.AngularStrengthMultiplier = 0.0f;
+		}
+		if (bV0PlantEarlyControlZeroWindowActive &&
+			ShouldZeroV0PlantEarlyControl(BoneName, V0PlantEarlyControlZeroGroup))
+		{
+			ControlMultiplier.AngularStrengthMultiplier = 0.0f;
+		}
+		else if (V0PlantThighRestoreVariant > 0 && (BoneName == "thigh_l" || BoneName == "thigh_r"))
+		{
+			ControlMultiplier.AngularStrengthMultiplier *= ThighRestoreAlpha;
+		}
+
+		// Kinetic Gating (V0 Diagnostic)
+		// Holds thigh angular strength at zero while pelvis/spine angular velocity exceeds threshold.
+		// Also detects the gate release frame to snapshot pelvis/spine ω for AC-6 energy answer.
+		if ((IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState)) && (BoneName == "thigh_l" || BoneName == "thigh_r"))
+		{
+			if (const USkeletalMeshComponent* const Mesh = MeshComponent.Get())
+			{
+				const FName PelvisName = PhysAnimBridge::GetRootBoneName();
+				const FBodyInstance* PelvisBody = Mesh->GetBodyInstance(PelvisName);
+				const FBodyInstance* Spine01Body = Mesh->GetBodyInstance(TEXT("spine_01"));
+				const FBodyInstance* Spine02Body = Mesh->GetBodyInstance(TEXT("spine_02"));
+				const FBodyInstance* Spine03Body = Mesh->GetBodyInstance(TEXT("spine_03"));
+				
+				const auto GetAngVelDeg = [](const FBodyInstance* BI) -> double
+				{
+					return BI ? FMath::RadiansToDegrees(BI->GetUnrealWorldAngularVelocityInRadians().Size()) : 0.0;
+				};
+
+				const double PelvisAngVel = GetAngVelDeg(PelvisBody);
+				const double Spine01AngVel = GetAngVelDeg(Spine01Body);
+				const double Spine02AngVel = GetAngVelDeg(Spine02Body);
+				const double Spine03AngVel = GetAngVelDeg(Spine03Body);
+
+				const float GateThreshold = CVarPhysAnimV0KineticGateThresholdDegPerSec.GetValueOnGameThread();
+				const bool bGateActiveNow =
+					PelvisAngVel > GateThreshold || Spine01AngVel > GateThreshold ||
+					Spine02AngVel > GateThreshold || Spine03AngVel > GateThreshold;
+
+				// Per-component gate state tracking (release edge detection)
+				const bool bGateWasActive = bKineticGateActiveLastFrame;
+
+				// Only update the "last frame" state from thigh_l to avoid double-write per tick
+				if (BoneName == TEXT("thigh_l"))
+				{
+					bKineticGateReleasedThisFrame = bGateWasActive && !bGateActiveNow;
+					bKineticGateActiveLastFrame = bGateActiveNow;
+				}
+
+				if (bGateActiveNow)
+				{
+					ControlMultiplier.AngularStrengthMultiplier = 0.0f;
+					UE_LOG(LogPhysAnimBridge, Warning,
+						TEXT("[PhysAnimV0] KINETIC_GATE_HOLD bone=%s P=%.1f S1=%.1f S2=%.1f S3=%.1f thresh=%.1f activationT=%.3f"),
+						*BoneName.ToString(), PelvisAngVel, Spine01AngVel, Spine02AngVel, Spine03AngVel, GateThreshold,
+						GetActivatedStandingStabilityMetrics().ActivationDurationSec);
+				}
+				else if (bGateWasActive && !bGateActiveNow && BoneName == TEXT("thigh_l"))
+				{
+					// Gate just released this frame — snapshot pelvis/spine ω and restore strength.
+					// This is the definitive AC-6 measurement: does the restored thigh strength
+					// add or remove energy from the pelvis/spine chain?
+					const double MaxSpineAngVel = FMath::Max3(Spine01AngVel, Spine02AngVel, Spine03AngVel);
+					const float EffectiveRestoreStrength = ControlMultiplier.AngularStrengthMultiplier;
+					const double ActivationT = GetActivatedStandingStabilityMetrics().ActivationDurationSec;
+
+					++ActivatedStandingStabilityMetrics.KineticGateReleaseCount;
+					if (ActivatedStandingStabilityMetrics.PelvisAngVelAtGateRelease < 0.0)
+					{
+						// First release only — subsequent releases tracked in log only
+						ActivatedStandingStabilityMetrics.PelvisAngVelAtGateRelease = PelvisAngVel;
+						ActivatedStandingStabilityMetrics.MaxSpineAngVelAtGateRelease = MaxSpineAngVel;
+						ActivatedStandingStabilityMetrics.ThighStrengthAtGateRelease = EffectiveRestoreStrength;
+						ActivatedStandingStabilityMetrics.ActivationTimeAtGateRelease = ActivationT;
+						
+						// Synchronize Hip Quarantine release with Kinetic Gate release
+						HipQuarantineTicksRemaining = 0;
+					}
+
+					UE_LOG(LogPhysAnimBridge, Warning,
+						TEXT("[PhysAnimV0] KINETIC_GATE_RELEASE pelvisAngVel=%.2f maxSpineAngVel=%.2f "
+						     "thighRestoreStrength=%.4f activationT=%.3f releaseN=%d variant=%d thresh=%.1f"),
+						PelvisAngVel, MaxSpineAngVel, EffectiveRestoreStrength, ActivationT,
+						ActivatedStandingStabilityMetrics.KineticGateReleaseCount,
+						CVarPhysAnimV0PlantThighRestoreVariant.GetValueOnGameThread(),
+						GateThreshold);
+				}
+			}
 		}
 
 		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
@@ -909,6 +2035,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			bBringUpGroupUnlocked && !EffectiveSettings.bForceZeroActions,
 			true,
 			false);
+		if (((bTraceHipReleaseFrame || bTraceHipReleaseNextTick) && IsHipQuarantineTraceBody(BoneName)) ||
+			(V0PlantEarlyControlZeroGroup > 0 && IsV0ControlTraceBody(BoneName)))
+		{
+			FHipQuarantineControlIntent& ControlIntent = HipQuarantineControlIntents.FindOrAdd(BoneName);
+			ControlIntent.bValid = true;
+			ControlIntent.bEnabled = bBringUpGroupUnlocked && !EffectiveSettings.bForceZeroActions;
+			ControlIntent.Multiplier = ControlMultiplier;
+		}
 
 		// One-shot trace capture for preserved spine
 		if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn && (BoneName == "pelvis" || BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03" || BoneName == "thigh_l" || BoneName == "thigh_r"))
@@ -1035,7 +2169,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
 
 		// But for movement type, we perform explicit per-bone writes to ensure the modifier record updates reliably.
-		// We use bUpdateBody=true to ensure the engine state is updated immediately.
+		// We update the live body only in balance-entry states. BridgeActive startup proof
+		// ownership must preserve raw simulation that ActivateBridgePhysicsState just enabled.
+		const bool bUpdateBodyOnAuthoritativeKinematicWrite =
+			ShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(RuntimeState);
 		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 		{
 			// Skip simulated carry-through bones during entry/settle so the later per-bone
@@ -1057,14 +2194,13 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 
 			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-			TrackDistalModifierWrite(BoneName, EPhysicsMovementType::Kinematic, true, TEXT("ApplyRuntimeControlTuning_AuthoritativeDistalKin"));
-			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic, false, true);
+			TrackDistalModifierWrite(BoneName, EPhysicsMovementType::Kinematic, bUpdateBodyOnAuthoritativeKinematicWrite, TEXT("ApplyRuntimeControlTuning_AuthoritativeDistalKin"));
+			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Kinematic, false, bUpdateBodyOnAuthoritativeKinematicWrite);
 		}
 	}
 	else
 	{
 		PhysicsControl->SetBodyModifiersInSetMovementType(TEXT("All"), EPhysicsMovementType::Kinematic);
-		
 		PhysicsControl->SetBodyModifiersInSetPhysicsBlendWeight(TEXT("All"), 0.0f);
 		PhysicsControl->SetBodyModifiersInSetCollisionType(TEXT("All"), ECollisionEnabled::NoCollision);
 		PhysicsControl->SetBodyModifiersInSetUpdateKinematicFromSimulation(TEXT("All"), false);
@@ -1115,6 +2251,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		const bool bIsCertifiedRootOnPreservedBone =
 			BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
 			BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03");
+		const int32 RawSimDiagnosticGroup = CVarPhysAnimRawSimDiagnosticGroup.GetValueOnGameThread();
+		const bool bDiagnosticRawSimBody =
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
+			!EffectiveSettings.bForceZeroActions &&
+			ShouldForceDiagnosticRawSimBody(BoneName, RawSimDiagnosticGroup);
 
 		// During entry transition the component path keeps the root body modifier kinematic
 		// until the transition explicitly enters Phase 2 root-on. Once Phase 2 owns the guard
@@ -1160,6 +2301,25 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			BodyModifierMovementType,
 			BodyModifierPhysicsBlendWeight,
 			bUpdateKinematicFromSimulation);
+
+		if (bDiagnosticRawSimBody)
+		{
+			BodyModifierMovementType = EPhysicsMovementType::Simulated;
+			BodyModifierPhysicsBlendWeight = 1.0f;
+			BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
+			bUpdateKinematicFromSimulation = false;
+			bBringUpGroupUnlocked = true;
+		}
+		if (bPreserveBridgeActiveStartupProofRawSimulation &&
+			!bTransitionKeepsBoneKinematic &&
+			!EffectiveSettings.bForceZeroActions)
+		{
+			BodyModifierMovementType = EPhysicsMovementType::Simulated;
+			BodyModifierPhysicsBlendWeight = 1.0f;
+			BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
+			bUpdateKinematicFromSimulation = false;
+			bBringUpGroupUnlocked = true;
+		}
 
 		if (bPhase1Prepare || bPhase1LateValidate)
 		{
@@ -1223,6 +2383,20 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				{
 					BodyModifierCollisionType = ECollisionEnabled::NoCollision;
 				}
+			}
+		}
+
+		if (bIsRootBodyModifier && RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
+		{
+			if (BodyModifierMovementType != EPhysicsMovementType::Simulated)
+			{
+				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PELVIS_BODYMOD_SIM_ACTIVATION_FAIL bone=%s allowRootSim=%d handoffSettled=%d bringUpUnlocked=%d keepsKinematic=%d quarantined=%d"),
+					*BoneName.ToString(),
+					bAllowRootBodyModifierSimulation ? 1 : 0,
+					bSimulationHandoffSettled ? 1 : 0,
+					bBringUpGroupUnlocked ? 1 : 0,
+					bTransitionKeepsBoneKinematic ? 1 : 0,
+					BalanceReadyTransition.IsPhase2RootAuthorityQuarantined() ? 1 : 0);
 			}
 		}
 
@@ -1350,7 +2524,19 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			}
 		}
 
-		const bool bUpdateBodyOnPerBoneSync = ShouldUpdateBodyOnPerBoneBodyModifierSync(RuntimeState);
+		const bool bUpdateBodyOnPerBoneSync =
+			ShouldUpdateBodyOnPerBoneBodyModifierSync(RuntimeState) ||
+			bDiagnosticRawSimBody;
+		const FPhysicsBodyModifierRecord* const PreviousModifierRecord =
+			FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName);
+		const EPhysicsMovementType PreviousModifierMovementType = PreviousModifierRecord
+			? PreviousModifierRecord->BodyModifier.ModifierData.MovementType
+			: EPhysicsMovementType::Static;
+		const FTransform BoneWorldBeforeRawSim = MeshComponentPtr
+			? MeshComponentPtr->GetBoneTransform(BoneName, RTS_World)
+			: FTransform::Identity;
+		const FV0RawSimBodySnapshot BodyBeforeRawSim = MakeV0RawSimBodySnapshot(
+			MeshComponentPtr ? MeshComponentPtr->GetBodyInstance(BoneName) : nullptr);
 		PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(
 			ModifierName,
 			bUpdateKinematicFromSimulation,
@@ -1402,6 +2588,45 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				BodyModifierCollisionType,
 				bUpdateKinematicFromSimulation);
 		}
+		if (bDiagnosticRawSimBody)
+		{
+			ForceBodyModifierRecordState(
+				PhysicsControl,
+				ModifierName,
+				BodyModifierMovementType,
+				BodyModifierPhysicsBlendWeight,
+				BodyModifierCollisionType,
+				bUpdateKinematicFromSimulation);
+			if (FBodyInstance* const BodyInstance = MeshComponentPtr ? MeshComponentPtr->GetBodyInstance(BoneName) : nullptr)
+			{
+				BodyInstance->WakeInstance();
+			}
+		}
+		if (bDiagnosticRawSimBody)
+		{
+			const FV0RawSimBodySnapshot BodyAfterRawSim = MakeV0RawSimBodySnapshot(
+				MeshComponentPtr ? MeshComponentPtr->GetBodyInstance(BoneName) : nullptr);
+			if (BodyAfterRawSim.bSimulating)
+			{
+				if (MarkV0RawSimBodyEnableLogged(this, BoneName))
+				{
+					LogV0RawSimBodyEnable(
+						this,
+						PhysicsControl,
+						MeshComponentPtr,
+						BoneName,
+						BoneWorldBeforeRawSim,
+						BodyBeforeRawSim,
+						BodyAfterRawSim,
+						PreviousModifierMovementType,
+						BodyModifierMovementType,
+						BodyModifierCollisionType,
+						BodyModifierPhysicsBlendWeight,
+						bUpdateKinematicFromSimulation);
+				}
+				LogV0RawSimGroupCCompleteIfReady(this, BoneName, true);
+			}
+		}
 		if (bIsRootBodyModifier && bRootOnApplicationTick && BodyModifierMovementType == EPhysicsMovementType::Simulated)
 		{
 			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, false, false, false);
@@ -1413,6 +2638,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				1.0f,
 				ECollisionEnabled::QueryAndPhysics,
 				false);
+
+			if (FBodyInstance* const BodyInstance = MeshComponentPtr ? MeshComponentPtr->GetBodyInstance(BoneName) : nullptr)
+			{
+				BodyInstance->WakeInstance();
+			}
 		}
 
 		const float CurrentPolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
@@ -1495,9 +2725,53 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		}
 	}
 
+	if (bTraceHipReleaseFrame)
+	{
+		LogHipQuarantineTraceFrame(
+			this,
+			PhysicsControl,
+			MeshComponent.Get(),
+			TEXT("release_frame_post_tuning_pre_release"),
+			CurrentFrameNumber,
+			GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
+			GetActivatedStandingStabilityMetrics().ActivationDurationSec,
+			HipQuarantineTicksRemaining,
+			HipQuarantineTicksRemaining,
+			true,
+			HipQuarantineControlIntents);
+	}
+	else if (bTraceHipReleaseNextTick)
+	{
+		LogHipQuarantineTraceFrame(
+			this,
+			PhysicsControl,
+			MeshComponent.Get(),
+			TEXT("next_tick_post_tuning"),
+			HipQuarantinePendingNextTickTrace.ReleaseFrame,
+			HipQuarantinePendingNextTickTrace.ReleaseWorldTimeSeconds,
+			HipQuarantinePendingNextTickTrace.ReleaseActivationTimeSeconds,
+			HipQuarantineTicksRemaining,
+			HipQuarantineTicksRemaining,
+			false,
+			HipQuarantineControlIntents);
+		HipQuarantinePendingNextTickTrace.bPending = false;
+	}
+	if (V0PlantEarlyControlZeroGroup > 0)
+	{
+		LogV0PlantEarlyControlDiagnostics(
+			this,
+			PhysicsControl,
+			MeshComponent.Get(),
+			V0PlantEarlyControlZeroGroup,
+			bV0PlantEarlyControlZeroWindowActive,
+			V0PlantEarlyControlZeroDurationSeconds,
+			HipQuarantineControlIntents);
+	}
+
 	if (bHipQuarantineActiveThisFrame)
 	{
-		if (HipQuarantineTicksRemaining > 0 && RuntimeState != EPhysAnimRuntimeState::FailStopped)
+		const int32 HipQuarantineTicksBeforeDecrement = HipQuarantineTicksRemaining;
+		if (HipQuarantineTicksRemaining > 0 && RuntimeState != EPhysAnimRuntimeState::FailStopped && !bKineticGateActiveLastFrame)
 		{
 			--HipQuarantineTicksRemaining;
 			bHipQuarantineReleasedThisFrame = (HipQuarantineTicksRemaining == 0);
@@ -1505,12 +2779,35 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (bHipQuarantineReleasedThisFrame)
 		{
-			if (IsBalanceActiveState(RuntimeState))
+			if (IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState))
 			{
 				UE_LOG(
 					LogPhysAnimBridge,
 					Warning,
-					TEXT("[PhysAnimBalance] HIP_QUARANTINE_RELEASED"));
+					TEXT("[PhysAnimBalance] HIP_QUARANTINE_RELEASED frame=%llu worldT=%.3f activationT=%.3f ticksBefore=%d ticksAfter=%d nextTickTraceArmed=1"),
+					CurrentFrameNumber,
+					GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
+					GetActivatedStandingStabilityMetrics().ActivationDurationSec,
+					HipQuarantineTicksBeforeDecrement,
+					HipQuarantineTicksRemaining);
+				HipQuarantinePendingNextTickTrace.bPending = true;
+				HipQuarantinePendingNextTickTrace.ReleaseFrame = CurrentFrameNumber;
+				HipQuarantinePendingNextTickTrace.ReleaseWorldTimeSeconds =
+					GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0;
+				HipQuarantinePendingNextTickTrace.ReleaseActivationTimeSeconds =
+					GetActivatedStandingStabilityMetrics().ActivationDurationSec;
+				LogHipQuarantineTraceFrame(
+					this,
+					PhysicsControl,
+					MeshComponent.Get(),
+					TEXT("release_frame_post_decrement"),
+					CurrentFrameNumber,
+					HipQuarantinePendingNextTickTrace.ReleaseWorldTimeSeconds,
+					HipQuarantinePendingNextTickTrace.ReleaseActivationTimeSeconds,
+					HipQuarantineTicksBeforeDecrement,
+					HipQuarantineTicksRemaining,
+					true,
+					HipQuarantineControlIntents);
 			}
 		}
 	}

@@ -4,7 +4,8 @@
 bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 	const FPhysAnimStabilizationSettings& EffectiveSettings,
 	const TCHAR* ActivationContext,
-	FString& OutError)
+	FString& OutError,
+	const bool bRequireLiveProofSatisfied)
 {
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	if (!PhysicsControl)
@@ -20,10 +21,15 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 
 	if (bEnableLiveRuntimeEvidenceProof)
 	{
-		if (CanEnterBalanceActiveStanding())
+		if (bRequireLiveProofSatisfied && CanEnterBalanceActiveStanding())
 		{
 			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
 			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] WIRING_SUCCESS state=BalanceActive_Standing"));
+		}
+		else if (!bRequireLiveProofSatisfied)
+		{
+			TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] WIRING_PRE_PROOF_PHYSICS_OWNERSHIP state=BridgeActive"));
 		}
 		else
 		{
@@ -80,14 +86,38 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 
 	PrewarmPhysicsControlActivationPose();
 	PhysicsControl->UpdateTargetCaches(0.0f);
+	LogBridgeStateSnapshot(TEXT("AfterActivationUpdateTargetCaches"));
 	if (!SeedControlTargetsFromCurrentPose(0.0f, OutError))
 	{
 		return false;
 	}
+	LogBridgeStateSnapshot(TEXT("AfterActivationSeedControlTargets"));
 	ApplyRuntimeControlTuning(EffectiveSettings);
+	LogBridgeStateSnapshot(TEXT("AfterActivationRuntimeControlTuning"));
 	PhysicsControl->UpdateControls(0.0f);
+	ReassertBridgeActiveStartupProofRawSimulation(TEXT("activation_prepass_updatecontrols"));
 	LogBridgeStateSnapshot(TEXT("AfterActivationPrepass"));
 	LogActivationSummary(EffectiveSettings, ActivationContext, true, true, SimulationHandoffAlpha);
+
+	if (bEnableLiveRuntimeEvidenceProof && !bRequireLiveProofSatisfied)
+	{
+		bLiveRuntimeEvidenceProofActive = false;
+		bLiveRuntimeEvidenceProofComplete = false;
+		bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
+		LiveRuntimeEvidenceAttemptUuid.Empty();
+		LiveRuntimeEvidenceStandingSeconds = 0.0f;
+		LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
+		LiveRuntimeEvidenceSubstepCounter = 0;
+		LiveRuntimeEvidenceTerminationState = FPhysAnimRuntimeTerminationState();
+		ActivatedStandingStabilityMetrics = FPhysAnimActivatedStandingStabilityMetrics();
+		bActivatedStandingStabilityBaselineInitialized = false;
+		bActivatedStandingPerturbationApplied = false;
+		ActivatedStandingStabilityBaselineRootLocationCm = FVector::ZeroVector;
+		ActivatedStandingStabilityBaselineRootTiltDeg = 0.0f;
+		ActivatedStandingStabilitySupportHullAreaSumCm2 = 0.0;
+		ActivatedStandingStabilityActiveSupportSideCountSum = 0.0;
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Startup proof restarted after bridge physics ownership began."));
+	}
 
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Bridge physics activation[%s] complete."), ActivationContext);
 	return true;

@@ -40,6 +40,7 @@ void UPhysAnimComponent::BeginPlay()
 void UPhysAnimComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopBridge();
+	PhysAnimComponentInternal::ClearPhysicsTuningDiagnosticCaches(this);
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -2667,7 +2668,9 @@ EPhysAnimBridgeTraceOutputMode UPhysAnimComponent::ResolveBridgeTraceOutputMode(
 void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	bKineticGateReleasedThisFrame = false;
 	TickLiveRuntimeEvidenceProof(DeltaTime);
+	HardenStage2ALocomotionState();
 	if (bEnableLiveRuntimeEvidenceProof && !bLiveRuntimeEvidenceProofComplete)
 	{
 		PolicyInfluenceRampStartTimeSeconds = -1.0;
@@ -3171,6 +3174,12 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	ApplyMovementSmokeInput(EffectiveSettings);
 	UpdateBridgeLocomotionGateTiming(EffectiveSettings, GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0);
 	UpdateBridgeLocomotionRequestState(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0);
+
+	if (BridgeLocomotionRequestState == EBridgeLocomotionRequestState::LocomotionRequested)
+	{
+		TryActivateStage2AWalkIntent(DeltaTime);
+	}
+
 	if ((RuntimeState == EPhysAnimRuntimeState::BridgeActive || IsBalanceActiveState(RuntimeState)) && bStartupMovementLockActive)
 	{
 		const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
@@ -3361,6 +3370,32 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 		if (bEnableLiveRuntimeEvidenceProof)
 		{
+			const bool bProofTerminated =
+				LiveRuntimeEvidenceTerminationState.bTerminated &&
+				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None;
+			const bool bProofSatisfied = IsLiveRuntimeEvidenceProofSatisfied();
+			if (ShouldStartBridgePhysicsOwnershipForStartupProof(
+				RuntimeState,
+				true,
+				bEnableLiveRuntimeEvidenceProof,
+				bLiveRuntimeEvidenceProofComplete,
+				bProofSatisfied,
+				bProofTerminated))
+			{
+				if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("StartupProofPhysicsOwnership"), TickError, false))
+				{
+					FailStopWithTrace(TickError);
+					return;
+				}
+				if (EffectiveSettings.bLockCharacterMovementUntilStartupReady)
+				{
+					ApplyStartupMovementLock();
+				}
+				EmitBridgeTraceEvent(TEXT("startup_physics_ownership"), TEXT("Startup began bridge physics ownership after the first valid PoseSearch result."));
+				FinalizeTraceFrame();
+				return;
+			}
+
 			if (LiveRuntimeEvidenceTerminationState.bTerminated && 
 				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 			{
@@ -3380,9 +3415,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				return;
 			}
 
-			if (!bLiveRuntimeEvidenceProofComplete)
+			if (!bLiveRuntimeEvidenceProofComplete || !bProofSatisfied)
 			{
-				// Hold activation until proof is complete
+				// Hold activation until proof is complete and truthful
 				FinalizeTraceFrame();
 				return;
 			}
@@ -3441,9 +3476,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 				return;
 			}
 
-			if (!bLiveRuntimeEvidenceProofComplete)
+			if (!bLiveRuntimeEvidenceProofComplete || !IsLiveRuntimeEvidenceProofSatisfied())
 			{
-				// Hold activation until proof is complete
+				// Hold activation until proof is complete and truthful
 				FinalizeTraceFrame();
 				return;
 			}
@@ -3837,7 +3872,6 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		++PolicyControlTicksExecuted;
 		PolicyControlTicksSkipped += FMath::Max(ElapsedPolicySteps - 1, 0);
-		LastPolicyControlUpdateTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 		if (bCanTraceFrames)
 		{
 			const int64 TraceFrameIndex = BridgeTraceTickCounter++;
@@ -4005,8 +4039,18 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			TraceFrame.bDistalLocomotionCompositionModeActive = bDistalLocomotionCompositionModeActive;
 		}
 
+		const int32 V0PlantReviewMode = PhysAnimComponentInternal::CVarPhysAnimV0PlantReviewMode.GetValueOnGameThread();
+		const bool bV0PlantReviewStaticTargets =
+			V0PlantReviewMode == 1 &&
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+		const bool bV0PlantReviewZeroActions =
+			V0PlantReviewMode == 2 &&
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+		const bool bV0PlantReviewTinySyntheticActions =
+			V0PlantReviewMode == 3 &&
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
 		const double InferenceStartSeconds = FPlatformTime::Seconds();
-		if (!RunInference(TickError))
+		if (!bV0PlantReviewStaticTargets && !RunInference(TickError))
 		{
 			if (bWriteTraceFrameThisTick)
 			{
@@ -4015,10 +4059,20 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			FailStopWithTrace(TickError);
 			return;
 		}
+		if (bV0PlantReviewZeroActions)
+		{
+			ActionOutputBuffer.Init(0.0f, PhysAnimBridge::NumActionFloats);
+		}
+		else if (bV0PlantReviewTinySyntheticActions)
+		{
+			ActionOutputBuffer.Init(
+				PhysAnimComponentInternal::CVarPhysAnimV0PlantReviewSyntheticActionValue.GetValueOnGameThread(),
+				PhysAnimBridge::NumActionFloats);
+		}
 		if (bWriteTraceFrameThisTick)
 		{
 			TraceFrame.InferenceMs = MeasureElapsedMs(InferenceStartSeconds);
-			TraceFrame.bRunSyncSucceeded = true;
+			TraceFrame.bRunSyncSucceeded = !bV0PlantReviewStaticTargets;
 		}
 	}
 
@@ -4129,7 +4183,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		}
 	}
 
-	if (bRunPolicyUpdateThisTick)
+	const int32 V0PlantReviewModeForActions = PhysAnimComponentInternal::CVarPhysAnimV0PlantReviewMode.GetValueOnGameThread();
+	const bool bV0PlantReviewStaticTargetsForActions =
+		V0PlantReviewModeForActions == 1 &&
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+	if (bRunPolicyUpdateThisTick && !bV0PlantReviewStaticTargetsForActions)
 	{
 		const double ActionConditionStartSeconds = FPlatformTime::Seconds();
 		if (!ConditionModelActions(EffectiveSettings, TickError))
@@ -4150,11 +4208,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	const double ControlTargetStartSeconds = FPlatformTime::Seconds();
 	TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_ControlWrites);
 	ApplyControlTargets(
-		bRunPolicyUpdateThisTick
+		(bRunPolicyUpdateThisTick && !bV0PlantReviewStaticTargetsForActions)
 			? (PolicyControlIntervalSeconds * FMath::Max(ElapsedPolicySteps, 1))
 			: 0.0f,
 		EffectiveSettings,
-		bRunPolicyUpdateThisTick,
+		bRunPolicyUpdateThisTick && !bV0PlantReviewStaticTargetsForActions,
 		TickError);
 
 
@@ -4370,6 +4428,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	TraceSpineTick2(TEXT("pre_updatecontrols"));
 	TracePreservedTick4(TEXT("pre_updatecontrols_tick4"));
 	PhysicsControl->UpdateControls(DeltaTime);
+	ReassertBridgeActiveStartupProofRawSimulation(TEXT("tick_updatecontrols"));
 	TraceSpineTick2(TEXT("post_updatecontrols"));
 	TracePreservedTick4(TEXT("post_updatecontrols_tick4"));
 	TraceUpperBodyTick4(TEXT("post_updatecontrols_tick4"));
@@ -4819,6 +4878,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	bPendingBalanceModeStartAttemptIssued = false;
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
+	bKineticGateActiveLastFrame = false;
 }
 
 
@@ -4943,6 +5003,12 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 
 	// Smoke-facing contract filtering: Phase 1/2 is Pending, Phase 3 is LateValidate.
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] State Transition: %s -> %s"), PreviousStateName, NewStateName);
+	
+	if (NewState != EPhysAnimRuntimeState::LocomotionActiveShell && 
+	    NewState != EPhysAnimRuntimeState::LocomotionActiveShellDenied)
+	{
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+	}
 
 	RuntimeState = NewState;
 	EmitBridgeTraceEvent(

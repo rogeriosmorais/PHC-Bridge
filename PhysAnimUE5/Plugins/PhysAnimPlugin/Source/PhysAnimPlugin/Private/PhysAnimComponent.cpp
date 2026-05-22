@@ -1,4 +1,5 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimStage1InitializerComponent.h"
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimProofArtifactEmitter.h"
 #include "PhysAnimRuntimeAdapter.h"
@@ -7,11 +8,19 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Actor.h"
+#include "PhysicsEngine/BodyInstance.h"
 
 DEFINE_LOG_CATEGORY(LogPhysAnimBridge);
 
 namespace
 {
+	static constexpr float Stage2AForwardWalkSpeedCmPerSecond = 60.0f;
+	static constexpr float Stage2AMaxWalkDeltaPerTickCm = 6.0f;
+	static constexpr int32 Stage2AMinPolicyActiveFramesBeforeWalk = 3;
+	static constexpr const TCHAR* Stage2AWalkIntentName = TEXT("WalkForward");
+	static constexpr const TCHAR* Stage2AMotionSourceName = TEXT("Stage2A_KinematicShell");
+	static constexpr float Stage2APolicyLivenessTimeoutSeconds = 0.1f;
+
 	bool HasConsistentLiveRuntimeEvidenceArtifact(const FPhysAnimRuntimeTerminationState& State)
 	{
 		const FPhysAnimRunArtifactSnapshot& Latest = State.LatestArtifact;
@@ -48,6 +57,46 @@ namespace
 	{
 		return HasDeferredStartupProxyTerminalForCurrentAttempt(State, CurrentAttemptUuid) &&
 			State.LatestArtifact.TerminalSubstepTimestamp <= State.DeferredStartupProxyTerminalSubstepTimestamp;
+	}
+
+	bool TryCalculateRawSimBodyComWorldCm(const USkeletalMeshComponent& Mesh, FVector& OutComWorldCm)
+	{
+		const FName V0BodyNames[] =
+		{
+			PhysAnimBridge::GetRootBoneName(),
+			TEXT("spine_01"),
+			TEXT("spine_02"),
+			TEXT("spine_03"),
+			TEXT("thigh_l"),
+			TEXT("thigh_r"),
+			TEXT("foot_l"),
+			TEXT("foot_r"),
+			TEXT("ball_l"),
+			TEXT("ball_r")
+		};
+
+		FVector WeightedPositionSum = FVector::ZeroVector;
+		double TotalMassKg = 0.0;
+		for (const FName& BodyName : V0BodyNames)
+		{
+			const FBodyInstance* const BodyInstance = Mesh.GetBodyInstance(BodyName);
+			if (!BodyInstance || !BodyInstance->IsValidBodyInstance() || !BodyInstance->IsInstanceSimulatingPhysics())
+			{
+				continue;
+			}
+
+			const double BodyMassKg = FMath::Max(static_cast<double>(BodyInstance->GetBodyMass()), UE_SMALL_NUMBER);
+			WeightedPositionSum += BodyInstance->GetUnrealWorldTransform().GetLocation() * BodyMassKg;
+			TotalMassKg += BodyMassKg;
+		}
+
+		if (TotalMassKg <= 0.0)
+		{
+			return false;
+		}
+
+		OutComWorldCm = WeightedPositionSum / TotalMassKg;
+		return true;
 	}
 
 	const TCHAR* ToCapsuleCollisionStateName(EPhysAnimCapsuleCollisionState State)
@@ -93,6 +142,12 @@ FAutoConsoleVariableRef CVarVerbosePhase2Forensics(
 	TEXT("If 1, enables high-volume per-tick forensics for Phase 2 (root sim status, write coverage, shell drop status). Default OFF to keep logs readable."),
 	ECVF_Cheat);
 
+
+bool UPhysAnimComponent::IsStage1() const
+{
+	const AActor* const OwnerActor = GetOwner();
+	return OwnerActor ? (OwnerActor->FindComponentByClass<UPhysAnimStage1InitializerComponent>() != nullptr) : false;
+}
 
 UPhysAnimComponent::UPhysAnimComponent()
 {
@@ -223,6 +278,11 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 	}
 
 	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
+	if (IsStage1())
+	{
+		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] ENTRY_ALLOWED reason=STAGE1_BYPASS"));
+		return true;
+	}
 	const bool bDeferredStartupProxyTerminalCurrentAttempt =
 		IsDeferredStartupProxyTerminalStillCurrent(LiveRuntimeEvidenceTerminationState, LiveRuntimeEvidenceAttemptUuid);
 	const bool bProxyOutsideHullDeferred =
@@ -406,9 +466,9 @@ bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerm
 	}
 
 	const bool bProxyOutsideHull =
-		(Latest.ProxyInsideHull.IsSet() && !Latest.ProxyInsideHull.GetValue()) ||
-		(Latest.ProxyOutsideHullDurationMs.IsSet() &&
-			Latest.ProxyOutsideHullDurationMs.GetValue() >= Settings.ProxyDriftLimitMs);
+		!IsStage1() &&
+		Latest.ProxyOutsideHullDurationMs.IsSet() &&
+		Latest.ProxyOutsideHullDurationMs.GetValue() >= Settings.ProxyDriftLimitMs;
 	if (bProxyOutsideHull)
 	{
 		if (!bLiveRuntimeEvidenceStartupProxySupportHandoffArmed || bDeferredStartupProxyTerminalCurrentAttempt)
@@ -482,7 +542,7 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 	if (!Latest.bPhysicsAssetContractValid ||
 		!Latest.bSkeletonAuditPassed ||
 		!Latest.bCapsuleContractPassed ||
-		!Latest.bPhysicalContinuityValidatorPassed ||
+		!HasStartupProofPhysicalContinuityEvidence(Latest) ||
 		Latest.bContinuityBookkeepingMismatch)
 	{
 		UE_LOG(
@@ -517,6 +577,42 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 	return HasConsistentLiveRuntimeEvidenceArtifact(LiveRuntimeEvidenceTerminationState);
 }
 
+bool UPhysAnimComponent::HasStartupProofPhysicalContinuityEvidence(const FPhysAnimRunArtifactSnapshot& Artifact)
+{
+	return Artifact.bPhysicalContinuityValidatorPassed;
+}
+
+EPhysAnimTerminalReason UPhysAnimComponent::ResolveStartupPhysicalContinuityTerminalReason(
+	const EPhysAnimRuntimeState RuntimeState,
+	const FPhysAnimRunArtifactSnapshot& Artifact)
+{
+	if (!HasStartupProofPhysicalContinuityEvidence(Artifact) &&
+		Artifact.RuntimeSimulatingBodyCount <= 0 &&
+		(RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
+			RuntimeState == EPhysAnimRuntimeState::ReadyForActivation))
+	{
+		return EPhysAnimTerminalReason::ActivationContinuousSimulationLost;
+	}
+
+	return EPhysAnimTerminalReason::ActivationContinuousSimulationLost;
+}
+
+bool UPhysAnimComponent::ShouldStartBridgePhysicsOwnershipForStartupProof(
+	const EPhysAnimRuntimeState RuntimeState,
+	const bool bPoseSearchValid,
+	const bool bLiveProofEnabled,
+	const bool bProofComplete,
+	const bool bProofSatisfied,
+	const bool bProofTerminated)
+{
+	return RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch &&
+		bPoseSearchValid &&
+		bLiveProofEnabled &&
+		!bProofTerminated &&
+		!bProofSatisfied &&
+		!bProofComplete;
+}
+
 
 void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 {
@@ -524,6 +620,7 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	bLiveRuntimeEvidenceProofComplete = false;
 	bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
 	bLiveRuntimeEvidenceProofShouldComplete = true;
+	PhysAnimComponentInternal::ClearPhysicsTuningDiagnosticCaches(this);
 
 	LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
 	LiveRuntimeEvidenceStandingSeconds = 0.0f;
@@ -594,6 +691,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 	const bool bProofEligibleRuntimeState =
 		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
 		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation ||
+		RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
 		IsBalanceEntryState(RuntimeState) ||
 		IsBalanceActiveState(RuntimeState) ||
 		bContinuingSafeDenyProof;
@@ -680,11 +778,17 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 	{
 		const bool bStartupProofRuntime =
 			RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
-			RuntimeState == EPhysAnimRuntimeState::ReadyForActivation;
+			RuntimeState == EPhysAnimRuntimeState::ReadyForActivation ||
+			(RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+				bEnableLiveRuntimeEvidenceProof &&
+				!bLiveRuntimeEvidenceProofComplete);
 		const bool bStartupProxySupportHandoffDeferred =
-			bStartupProofRuntime &&
-			!bLiveRuntimeEvidenceStartupProxySupportHandoffArmed &&
-			LiveRuntimeEvidenceTerminationState.TerminalReason == EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion;
+			ShouldDeferStartupProxyTerminalForProof(
+				RuntimeState,
+				bEnableLiveRuntimeEvidenceProof,
+				bLiveRuntimeEvidenceProofComplete,
+				bLiveRuntimeEvidenceStartupProxySupportHandoffArmed,
+				LiveRuntimeEvidenceTerminationState.TerminalReason);
 		if (bStartupProxySupportHandoffDeferred)
 		{
 			UE_LOG(
@@ -798,7 +902,10 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			Verbose,
 			TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
 			GetRuntimeStateName(RuntimeState));
+
+		TryOpenStage2ALocomotionRequestGate(TEXT("BalanceActive_Standing"));
 	}
+
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
 		bLiveRuntimeEvidenceStartupStandingEntryAccepted &&
@@ -842,6 +949,50 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		bLiveRuntimeEvidenceProofShouldComplete &&
 		LiveRuntimeEvidenceStandingSeconds >= LiveRuntimeEvidenceStandingTargetSeconds)
 	{
+		FPhysAnimRunArtifactSnapshot CompletionArtifact = PipelineResult.SubstepResult.Artifact;
+		if (!HasStartupProofPhysicalContinuityEvidence(CompletionArtifact))
+		{
+			bLiveRuntimeEvidenceProofComplete = true;
+			CompletionArtifact.TerminalReason =
+				ResolveStartupPhysicalContinuityTerminalReason(RuntimeState, CompletionArtifact);
+			CompletionArtifact.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
+			CompletionArtifact.bTerminalFrameArtifactCaptured = true;
+			CompletionArtifact.bPhysicalContinuityValidatorPassed = false;
+
+			LiveRuntimeEvidenceTerminationState.bTerminated = true;
+			LiveRuntimeEvidenceTerminationState.TerminalReason = CompletionArtifact.TerminalReason;
+			LiveRuntimeEvidenceTerminationState.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
+			LiveRuntimeEvidenceTerminationState.bTerminalFrameArtifactCaptured = true;
+			LiveRuntimeEvidenceTerminationState.TerminalArtifact = CompletionArtifact;
+			LiveRuntimeEvidenceTerminationState.LatestArtifact = CompletionArtifact;
+
+			FPhysAnimProofArtifactEmitInput EmitInput;
+			EmitInput.AttemptUuid = LiveRuntimeEvidenceAttemptUuid;
+			EmitInput.StandingSeconds = LiveRuntimeEvidenceStandingSeconds;
+			EmitInput.RuntimeHitCount = HitResults.Num();
+			EmitInput.MappedSupportHitCount = MappedSupportHitCount;
+			EmitInput.PipelineResult = PipelineResult;
+			EmitInput.PipelineResult.StateApplyResult.State = LiveRuntimeEvidenceTerminationState;
+
+			PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(EmitInput);
+			bLiveRuntimeEvidenceTerminalArtifactEmitted = true;
+
+			PhysAnimProofArtifactEmitter::LogAttemptResult(
+				LiveRuntimeEvidenceAttemptUuid,
+				false,
+				LiveRuntimeEvidenceStandingSeconds,
+				CompletionArtifact.TerminalReason);
+
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("[PhysAnim] Startup proof rejected without physical continuity evidence state=%s simBodies=%d continuity=%d"),
+				GetRuntimeStateName(RuntimeState),
+				CompletionArtifact.RuntimeSimulatingBodyCount,
+				CompletionArtifact.bPhysicalContinuityValidatorPassed ? 1 : 0);
+			return;
+		}
+
 		bLiveRuntimeEvidenceProofComplete = true;
 		UE_LOG(
 			LogPhysAnimBridge,
@@ -849,7 +1000,24 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
 			GetRuntimeStateName(RuntimeState));
 
-		FPhysAnimRunArtifactSnapshot CompletionArtifact = PipelineResult.SubstepResult.Artifact;
+		const int32 CoreFinalBringUpGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
+		if (ShouldStartBridgeActivePolicyRampAfterStartupProof(
+			RuntimeState,
+			bLiveRuntimeEvidenceProofComplete,
+			PolicyInfluenceRampStartTimeSeconds >= 0.0,
+			ResolveEffectiveStabilizationSettings().bForceZeroActions,
+			IsBringUpGroupUnlocked(CoreFinalBringUpGroupIndex),
+			IsBringUpGroupControlRampActive(CoreFinalBringUpGroupIndex),
+			bStartupBringUpFrozenByBalanceEntry))
+		{
+			PolicyInfluenceRampStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+			BringUpGroupStableAccumulatedSeconds = 0.0f;
+			UE_LOG(
+				LogPhysAnimBridge,
+				Log,
+				TEXT("[PhysAnim] Startup proof completed; BridgeActive policy influence ramp enabled for balance entry."));
+		}
+
 		CompletionArtifact.TerminalReason = EPhysAnimTerminalReason::None;
 		CompletionArtifact.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
 		CompletionArtifact.bTerminalFrameArtifactCaptured = true;
@@ -883,7 +1051,18 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 
 void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTimeSeconds)
 {
-	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		const USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+		const FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
+		const bool bPelvisSim = PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : false;
+		const bool bPelvisAwake = PelvisBody ? PelvisBody->IsInstanceAwake() : false;
+		UE_LOG(LogTemp, Warning, TEXT("[PhysAnimV0] METRICS_TICK state=%s t=%.3f PelvisSim=%d PelvisAwake=%d"), GetRuntimeStateName(RuntimeState), ActivatedStandingStabilityMetrics.ActivationDurationSec, bPelvisSim ? 1 : 0, bPelvisAwake ? 1 : 0);
+	}
+	if (!bV0PlantThighWorkDiagnosticEnabled &&
+		!IsBalanceActiveState(RuntimeState) &&
+		!(bEnableLiveRuntimeEvidenceProof && RuntimeStateOwnsBridgePhysics(RuntimeState)) &&
+		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn &&
+		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_Settle)
 	{
 		return;
 	}
@@ -900,6 +1079,7 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	const FVector CurrentRootLocationCm = LastRuntimeInstabilityDiagnostics.RootLocationCm;
 	const double CurrentSupportHullAreaCm2 = LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportHullAreaCm2;
 	const double CurrentActiveSupportSideCount = static_cast<double>(LiveRuntimeEvidenceTerminationState.LatestArtifact.ActiveSupportSideCount);
+	const double CurrentSampleTimeSec = ActivatedStandingStabilityMetrics.ActivationDurationSec + FMath::Max(0.0f, DeltaTimeSeconds);
 
 	if (!bActivatedStandingStabilityBaselineInitialized)
 	{
@@ -915,22 +1095,261 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	ActivatedStandingStabilityMetrics.bHasSamples = true;
 	ActivatedStandingStabilityMetrics.RuntimeState = RuntimeState;
 	ActivatedStandingStabilityMetrics.TerminalReason = static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason);
-	ActivatedStandingStabilityMetrics.ActivationDurationSec += FMath::Max(0.0f, DeltaTimeSeconds);
 	ActivatedStandingStabilityMetrics.SampleCount++;
 
 	const double CurrentRootWorldPositionDriftCm = FVector::Dist(CurrentRootLocationCm, ActivatedStandingStabilityBaselineRootLocationCm);
 	const double CurrentRootVerticalDriftCm = FMath::Abs(CurrentRootLocationCm.Z - ActivatedStandingStabilityBaselineRootLocationCm.Z);
 	const double CurrentRootAngularDriftDeg = FMath::Abs(CurrentRootTiltDeg - ActivatedStandingStabilityBaselineRootTiltDeg);
+	if (ActivatedStandingStabilityMetrics.FirstSupportFailureTimeSec < 0.0 &&
+		(CurrentSupportHullAreaCm2 <= UE_SMALL_NUMBER || CurrentActiveSupportSideCount < 1.0))
+	{
+		ActivatedStandingStabilityMetrics.FirstSupportFailureTimeSec = CurrentSampleTimeSec;
+	}
 
 	ActivatedStandingStabilityMetrics.RootWorldPositionDriftCm = FMath::Max(ActivatedStandingStabilityMetrics.RootWorldPositionDriftCm, CurrentRootWorldPositionDriftCm);
 	ActivatedStandingStabilityMetrics.RootVerticalDriftCm = FMath::Max(ActivatedStandingStabilityMetrics.RootVerticalDriftCm, CurrentRootVerticalDriftCm);
 	ActivatedStandingStabilityMetrics.RootAngularDriftDeg = FMath::Max(ActivatedStandingStabilityMetrics.RootAngularDriftDeg, CurrentRootAngularDriftDeg);
-	ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond = FMath::Max(
-		ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond,
-		static_cast<double>(LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond));
-	ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond = FMath::Max(
-		ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond,
-		static_cast<double>(LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond));
+	int32 DirectBodySampleCount = 0;
+	int32 DirectSimulatingBodyCount = 0;
+	int32 ExcludedRequiredBodySimulatingCount = 0;
+	bool bAnyNonzeroBodyVelocity = false;
+
+	const FName CriticalBodyNames[] =
+	{
+		PhysAnimBridge::GetRootBoneName(),
+		TEXT("spine_01"),
+		TEXT("spine_02"),
+		TEXT("spine_03"),
+		TEXT("thigh_l"),
+		TEXT("thigh_r")
+	};
+	const FName SupportBodyNames[] =
+	{
+		TEXT("foot_l"),
+		TEXT("foot_r"),
+		TEXT("ball_l"),
+		TEXT("ball_r")
+	};
+	const auto GetNamedBodyIndex = [](const FName& BoneName, const FName* BodyNames, int32 NumBodyNames) -> int32
+	{
+		for (int32 Index = 0; Index < NumBodyNames; ++Index)
+		{
+			if (BoneName == BodyNames[Index])
+			{
+				return Index;
+			}
+		}
+		return INDEX_NONE;
+	};
+
+	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+	{
+		if (FBodyInstance* const BodyInstance = Mesh->GetBodyInstance(BoneName))
+		{
+			const bool bSimulating = BodyInstance->IsInstanceSimulatingPhysics();
+			++DirectBodySampleCount;
+
+			const int32 CriticalBodyIndex = GetNamedBodyIndex(BoneName, CriticalBodyNames, UE_ARRAY_COUNT(CriticalBodyNames));
+			const int32 SupportBodyIndex = GetNamedBodyIndex(BoneName, SupportBodyNames, UE_ARRAY_COUNT(SupportBodyNames));
+
+			if (CriticalBodyIndex != INDEX_NONE)
+			{
+				ActivatedStandingStabilityMetrics.CriticalBodyValidMask |= (1 << CriticalBodyIndex);
+				if (bSimulating)
+				{
+					ActivatedStandingStabilityMetrics.CriticalBodySimulatingMask |= (1 << CriticalBodyIndex);
+				}
+			}
+
+			if (SupportBodyIndex != INDEX_NONE)
+			{
+				ActivatedStandingStabilityMetrics.SupportBodyValidMask |= (1 << SupportBodyIndex);
+				if (bSimulating)
+				{
+					ActivatedStandingStabilityMetrics.SupportBodySimulatingMask |= (1 << SupportBodyIndex);
+				}
+			}
+
+			if (bSimulating)
+			{
+				++DirectSimulatingBodyCount;
+
+				if (CriticalBodyIndex == INDEX_NONE && SupportBodyIndex == INDEX_NONE)
+				{
+					++ExcludedRequiredBodySimulatingCount;
+				}
+			}
+
+			const double LinearSpeedCmPerSecond = static_cast<double>(BodyInstance->GetUnrealWorldVelocity().Size());
+			const double AngularSpeedDegPerSecond = static_cast<double>(FMath::RadiansToDegrees(BodyInstance->GetUnrealWorldAngularVelocityInRadians().Size()));
+			constexpr double DiagnosticLinearThresholdCmPerSecond = 1200.0;
+			constexpr double DiagnosticAngularThresholdDegPerSecond = 3600.0;
+
+			if (ActivatedStandingStabilityMetrics.FirstLinearThresholdTimeSec < 0.0 &&
+				LinearSpeedCmPerSecond >= DiagnosticLinearThresholdCmPerSecond)
+			{
+				ActivatedStandingStabilityMetrics.FirstLinearThresholdTimeSec = CurrentSampleTimeSec;
+				ActivatedStandingStabilityMetrics.FirstLinearThresholdBodyName = BoneName;
+			}
+
+			if (ActivatedStandingStabilityMetrics.FirstAngularThresholdTimeSec < 0.0 &&
+				AngularSpeedDegPerSecond >= DiagnosticAngularThresholdDegPerSecond)
+			{
+				ActivatedStandingStabilityMetrics.FirstAngularThresholdTimeSec = CurrentSampleTimeSec;
+				ActivatedStandingStabilityMetrics.FirstAngularThresholdBodyName = BoneName;
+			}
+
+			// Work calculation for thighs during critical window (0.05s - 0.30s)
+			if (bV0PlantThighWorkDiagnosticEnabled && CurrentSampleTimeSec >= 0.05 && CurrentSampleTimeSec <= 0.30)
+			{
+				if (BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r"))
+				{
+					if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
+					{
+						const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+						FPhysicsControlTarget ControlTarget;
+						FPhysicsControlData ControlData;
+						FPhysicsControlMultiplier ControlMultiplier;
+						
+						if (PhysicsControl->GetControlTarget(ControlName, ControlTarget) &&
+							PhysicsControl->GetControlData(ControlName, ControlData) &&
+							PhysicsControl->GetControlMultiplier(ControlName, ControlMultiplier))
+						{
+							const bool bIsSimulating = bSimulating; // Capture for logging
+							const FVector AngularVelocity = BodyInstance->GetUnrealWorldAngularVelocityInRadians();
+							const FQuat CurrentRotation = BodyInstance->GetUnrealWorldTransform().GetRotation();
+							const FQuat TargetRotation = FQuat(ControlTarget.TargetOrientation);
+							
+							const FQuat ErrorQuat = TargetRotation * CurrentRotation.Inverse();
+							const FVector ErrorAxis = ErrorQuat.GetRotationAxis();
+							const float ErrorAngle = ErrorQuat.GetAngle();
+
+							const FVector Torque = (ControlData.AngularStrength * ControlMultiplier.AngularStrengthMultiplier * ErrorAxis * ErrorAngle) -
+								(ControlData.AngularDampingRatio * ControlMultiplier.AngularDampingRatioMultiplier * AngularVelocity);
+
+							const float TorqueDotVel = FVector::DotProduct(Torque, AngularVelocity);
+							const float WorkIncrement = TorqueDotVel * DeltaTimeSeconds;
+							
+							if (TorqueDotVel > 0.0f)
+							{
+								ActivatedStandingStabilityMetrics.ThighPositiveWorkAccumulated += static_cast<double>(WorkIncrement);
+							}
+							else
+							{
+								ActivatedStandingStabilityMetrics.ThighNegativeWorkAccumulated += static_cast<double>(FMath::Abs(WorkIncrement));
+							}
+
+							// AC-2: snapshot thigh control state and pose-seeded flag on first window entry (thigh_l only)
+							if (BoneName == TEXT("thigh_l") && ActivatedStandingStabilityMetrics.PoseTargetsSeededAtWindowEntry < 0)
+							{
+								ActivatedStandingStabilityMetrics.ThighAngularStrengthAtWindowEntry =
+									ControlData.AngularStrength * ControlMultiplier.AngularStrengthMultiplier;
+								ActivatedStandingStabilityMetrics.ThighAngularDampingAtWindowEntry =
+									ControlData.AngularDampingRatio * ControlMultiplier.AngularDampingRatioMultiplier;
+								ActivatedStandingStabilityMetrics.ThighLinearStrengthAtWindowEntry =
+									(ControlData.LinearStrength * ControlMultiplier.LinearStrengthMultiplier).Size();
+								const bool bPrevSeeded = GetPreviousControlTargetRotationsForDiagnostics().Num() > 0;
+								const bool bBlendSeeded = GetPolicyBlendStartControlTargetRotationsForDiagnostics().Num() > 0;
+								ActivatedStandingStabilityMetrics.PoseTargetsSeededAtWindowEntry = (bPrevSeeded && bBlendSeeded) ? 1 : 0;
+							}
+
+							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimV0] WORK_DIAG bone=%s t=%.3f dW=%.6f dot=%.4f sim=%d"), 
+								*BoneName.ToString(), CurrentSampleTimeSec, WorkIncrement, TorqueDotVel, bIsSimulating ? 1 : 0);
+						}
+						else
+						{
+							UE_LOG(LogTemp, Warning, TEXT("[PhysAnimV0] DEBUG_WORK Missing data for %s (PC=%d)"), *BoneName.ToString(), PhysicsControl != nullptr);
+						}
+					}
+				}
+			}
+
+			// Velocity snapshots at specific timestamps
+			const auto UpdateSnapshot = [&](double TargetT, double& MetricField)
+			{
+				if (FMath::Abs(CurrentSampleTimeSec - TargetT) < (DeltaTimeSeconds * 0.51))
+				{
+					MetricField = FMath::Max(MetricField, AngularSpeedDegPerSecond);
+				}
+			};
+
+			UpdateSnapshot(0.05, ActivatedStandingStabilityMetrics.MaxAngVel005s);
+			UpdateSnapshot(0.10, ActivatedStandingStabilityMetrics.MaxAngVel010s);
+			UpdateSnapshot(0.15, ActivatedStandingStabilityMetrics.MaxAngVel015s);
+			UpdateSnapshot(0.20, ActivatedStandingStabilityMetrics.MaxAngVel020s);
+			UpdateSnapshot(0.30, ActivatedStandingStabilityMetrics.MaxAngVel030s);
+			UpdateSnapshot(0.60, ActivatedStandingStabilityMetrics.MaxAngVel060s);
+			UpdateSnapshot(1.00, ActivatedStandingStabilityMetrics.MaxAngVel100s);
+
+			if (BoneName == TEXT("spine_01"))
+			{
+				ActivatedStandingStabilityMetrics.Spine01MaxLinearSpeedCmPerSecond = FMath::Max(
+					ActivatedStandingStabilityMetrics.Spine01MaxLinearSpeedCmPerSecond,
+					LinearSpeedCmPerSecond);
+				ActivatedStandingStabilityMetrics.Spine01MaxAngularSpeedDegPerSecond = FMath::Max(
+					ActivatedStandingStabilityMetrics.Spine01MaxAngularSpeedDegPerSecond,
+					AngularSpeedDegPerSecond);
+			}
+			else if (BoneName == TEXT("spine_03"))
+			{
+				ActivatedStandingStabilityMetrics.Spine03MaxLinearSpeedCmPerSecond = FMath::Max(
+					ActivatedStandingStabilityMetrics.Spine03MaxLinearSpeedCmPerSecond,
+					LinearSpeedCmPerSecond);
+				ActivatedStandingStabilityMetrics.Spine03MaxAngularSpeedDegPerSecond = FMath::Max(
+					ActivatedStandingStabilityMetrics.Spine03MaxAngularSpeedDegPerSecond,
+					AngularSpeedDegPerSecond);
+			}
+
+			if (ActivatedStandingStabilityMetrics.FirstMajorSpineSpikeTimeSec < 0.0 &&
+				(BoneName == TEXT("spine_01") || BoneName == TEXT("spine_03")) &&
+				(LinearSpeedCmPerSecond >= 1200.0 || AngularSpeedDegPerSecond >= 3600.0))
+			{
+				ActivatedStandingStabilityMetrics.FirstMajorSpineSpikeTimeSec = CurrentSampleTimeSec;
+				ActivatedStandingStabilityMetrics.FirstMajorSpineSpikeBodyName = BoneName;
+				const FTransform BodyTransform = BodyInstance->GetUnrealWorldTransform();
+				const FVector BodyLocation = BodyTransform.GetLocation();
+				const FRotator BodyRotation = BodyTransform.GetRotation().Rotator();
+				UE_LOG(
+					LogPhysAnimBridge,
+					Warning,
+					TEXT("[PhysAnimV0] FIRST_MAJOR_SPINE_SPIKE bone=%s activationT=%.3f runtimeState=%s lin=%.2f angDeg=%.2f thighWorkP=%.4f sim=%d awake=%d"),
+					*BoneName.ToString(),
+					CurrentSampleTimeSec,
+					GetRuntimeStateName(RuntimeState),
+					LinearSpeedCmPerSecond,
+					AngularSpeedDegPerSecond,
+					ActivatedStandingStabilityMetrics.ThighPositiveWorkAccumulated,
+					bSimulating ? 1 : 0,
+					BodyInstance->IsInstanceAwake() ? 1 : 0);
+			}
+
+			if (LinearSpeedCmPerSecond > ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond)
+			{
+				ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond = LinearSpeedCmPerSecond;
+				ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedBodyName = BoneName;
+			}
+			if (AngularSpeedDegPerSecond > ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond)
+			{
+				ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond = AngularSpeedDegPerSecond;
+				ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedBodyName = BoneName;
+			}
+			bAnyNonzeroBodyVelocity = bAnyNonzeroBodyVelocity || LinearSpeedCmPerSecond > 0.1 || AngularSpeedDegPerSecond > 0.1;
+		}
+	}
+
+	ActivatedStandingStabilityMetrics.BodyTelemetrySampleCount += DirectBodySampleCount;
+	ActivatedStandingStabilityMetrics.SimulatingBodyCountMax = FMath::Max(
+		ActivatedStandingStabilityMetrics.SimulatingBodyCountMax,
+		DirectSimulatingBodyCount);
+	ActivatedStandingStabilityMetrics.ExcludedRequiredBodySimulatingCountMax = FMath::Max(
+		ActivatedStandingStabilityMetrics.ExcludedRequiredBodySimulatingCountMax,
+		ExcludedRequiredBodySimulatingCount);
+	if (bAnyNonzeroBodyVelocity)
+	{
+		++ActivatedStandingStabilityMetrics.BodyVelocityNonZeroSampleCount;
+	}
+
+	ActivatedStandingStabilityMetrics.ActivationDurationSec = CurrentSampleTimeSec;
 
 	ActivatedStandingStabilitySupportHullAreaSumCm2 += CurrentSupportHullAreaCm2;
 	ActivatedStandingStabilityActiveSupportSideCountSum += CurrentActiveSupportSideCount;
@@ -980,85 +1399,19 @@ bool UPhysAnimComponent::ApplyActivatedStandingPerturbation(
 		return false;
 	}
 
-	FVector ShoveDirection = FVector::ZeroVector;
-	switch (Direction)
-	{
-	case EPhysAnimPerturbationDirection::Forward:
-		ShoveDirection = FVector(1.0f, 0.0f, 0.0f);
-		break;
-	case EPhysAnimPerturbationDirection::Backward:
-		ShoveDirection = FVector(-1.0f, 0.0f, 0.0f);
-		break;
-	case EPhysAnimPerturbationDirection::Left:
-		ShoveDirection = FVector(0.0f, -1.0f, 0.0f);
-		break;
-	case EPhysAnimPerturbationDirection::Right:
-		ShoveDirection = FVector(0.0f, 1.0f, 0.0f);
-		break;
-	}
-
-	float TargetDeltaVCmPerSec = 0.0f;
-	switch (Magnitude)
-	{
-	case EPhysAnimPerturbationMagnitude::Small:
-		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVSmall;
-		break;
-	case EPhysAnimPerturbationMagnitude::Medium:
-		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVMedium;
-		break;
-	case EPhysAnimPerturbationMagnitude::Large:
-		TargetDeltaVCmPerSec = PhysAnimComponentInternal::BalanceTargetDeltaVLarge;
-		break;
-	}
-
 	bool bApplied = false;
-	AActor* const OwnerActor = GetOwner();
 	if (USkeletalMeshComponent* const Mesh = GetMeshComponent())
 	{
 		if (FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
 			PelvisBody && PelvisBody->IsInstanceSimulatingPhysics())
 		{
-			ApplyPelvisImpulse(Direction, Magnitude);
-			bApplied = true;
+			bApplied = ApplyPelvisImpulse(Direction, Magnitude);
 		}
 	}
 
 	if (!bApplied)
 	{
-		if (OwnerActor)
-		{
-			const FVector OffsetCm = ShoveDirection * (TargetDeltaVCmPerSec * 0.05f);
-			OwnerActor->AddActorWorldOffset(OffsetCm, false, nullptr, ETeleportType::TeleportPhysics);
-			bApplied = true;
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnimBalance] Activated standing perturbation applied actor offset=(%.1f,%.1f,%.1f)"),
-				OffsetCm.X,
-				OffsetCm.Y,
-				OffsetCm.Z);
-		}
-
-		if (!bApplied && OwnerActor)
-		{
-			if (ACharacter* const Character = Cast<ACharacter>(OwnerActor))
-			{
-				Character->LaunchCharacter(ShoveDirection * TargetDeltaVCmPerSec, true, true);
-				bApplied = true;
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
-					TEXT("[PhysAnimBalance] Activated standing perturbation launched character velocity=(%.1f,%.1f,%.1f)"),
-					(ShoveDirection * TargetDeltaVCmPerSec).X,
-					(ShoveDirection * TargetDeltaVCmPerSec).Y,
-					(ShoveDirection * TargetDeltaVCmPerSec).Z);
-			}
-		}
-	}
-
-	if (!bApplied)
-	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation could not be applied."));
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation requires a raw-simulating pelvis impulse; no actor offset fallback was applied."));
 		return false;
 	}
 
@@ -1094,6 +1447,18 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>
 	if (CaptureLiveRuntimeEvidenceHitResultForBody(LiveRuntimeEvidenceRightSupportBodyName, OutHitResults))
 	{
 		OutMappedSupportHitCount += OutHitResults.Num() - BeforeRight;
+	}
+
+	const int32 BeforeLeftBall = OutHitResults.Num();
+	if (CaptureLiveRuntimeEvidenceHitResultForBody(TEXT("ball_l"), OutHitResults))
+	{
+		OutMappedSupportHitCount += OutHitResults.Num() - BeforeLeftBall;
+	}
+
+	const int32 BeforeRightBall = OutHitResults.Num();
+	if (CaptureLiveRuntimeEvidenceHitResultForBody(TEXT("ball_r"), OutHitResults))
+	{
+		OutMappedSupportHitCount += OutHitResults.Num() - BeforeRightBall;
 	}
 
 	return OutHitResults.Num() > 0;
@@ -1207,9 +1572,18 @@ FPhysAnimSupportHitResultObservationInput UPhysAnimComponent::BuildLiveRuntimeEv
 	const FVector RebaseOriginCm = Capsule
 		? Capsule->GetComponentLocation()
 		: (OwnerActor ? OwnerActor->GetActorLocation() : (Mesh ? Mesh->GetComponentLocation() : FVector::ZeroVector));
-	const FVector ProxyWorldCm = Capsule
+	FVector ProxyWorldCm = Capsule
 		? Capsule->GetComponentLocation()
 		: (OwnerActor ? OwnerActor->GetActorLocation() : RebaseOriginCm);
+	if (Mesh &&
+		(RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+			ShouldUseRawSimComProxyForStartupProof(
+				RuntimeState,
+				bEnableLiveRuntimeEvidenceProof,
+				bLiveRuntimeEvidenceProofComplete)))
+	{
+		(void)TryCalculateRawSimBodyComWorldCm(*Mesh, ProxyWorldCm);
+	}
 	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
 
 	Input.HitResults = HitResults;
@@ -1232,10 +1606,20 @@ FPhysAnimSupportHitResultObservationInput UPhysAnimComponent::BuildLiveRuntimeEv
 	LeftMapping.SupportSide = EPhysAnimSupportSide::Left;
 	Input.SupportBodies.Add(LeftMapping);
 
+	FPhysAnimSupportBodyMapping LeftBallMapping;
+	LeftBallMapping.BodyName = TEXT("ball_l");
+	LeftBallMapping.SupportSide = EPhysAnimSupportSide::Left;
+	Input.SupportBodies.Add(LeftBallMapping);
+
 	FPhysAnimSupportBodyMapping RightMapping;
 	RightMapping.BodyName = LiveRuntimeEvidenceRightSupportBodyName;
 	RightMapping.SupportSide = EPhysAnimSupportSide::Right;
 	Input.SupportBodies.Add(RightMapping);
+
+	FPhysAnimSupportBodyMapping RightBallMapping;
+	RightBallMapping.BodyName = TEXT("ball_r");
+	RightBallMapping.SupportSide = EPhysAnimSupportSide::Right;
+	Input.SupportBodies.Add(RightBallMapping);
 
 	return Input;
 }
@@ -1252,6 +1636,9 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
 		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation ||
 		IsBalanceEntryState(RuntimeState);
+	const bool bEvaluatePhysicalContinuity =
+		bEvaluateActivationContracts ||
+		IsBalanceActiveState(RuntimeState);
 	const FPhysAnimCapsuleContractSnapshot CapsuleSnapshot = BuildCapsuleContractSnapshot();
 	const FPhysAnimContinuitySnapshot ContinuitySnapshot = BuildContinuitySnapshot(DeltaTimeSeconds);
 	FPhysAnimCapsuleContractValidationResult CapsuleValidation = PhysAnimValidators::ValidateCapsule(CapsuleSnapshot);
@@ -1267,6 +1654,10 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	if (!bEvaluateActivationContracts)
 	{
 		CapsuleValidation = FPhysAnimCapsuleContractValidationResult();
+	}
+
+	if (!bEvaluatePhysicalContinuity)
+	{
 		ContinuityValidation = FPhysAnimContinuityValidationResult();
 	}
 
@@ -1299,6 +1690,24 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.bContinuityBookkeepingMismatch = ContinuityValidation.bContinuityBookkeepingMismatch;
 	Input.Values.PelvisSleepDurationMs = ContinuityValidation.PelvisSleepDurationMs;
 	Input.Values.bPhysicalContinuityValidatorPassed = ContinuityValidation.bPhysicalContinuityValidatorPassed;
+	Input.Values.PolicyInferenceSuccessCount = ActivatedStandingStabilityMetrics.PolicyInferenceSuccessCount;
+	Input.Values.PolicyActionSampleCount = ActivatedStandingStabilityMetrics.PolicyActionSampleCount;
+	Input.Values.PolicyActionRawMeanAbsMax = ActivatedStandingStabilityMetrics.PolicyActionRawMeanAbsMax;
+	Input.Values.PolicyActionConditionedMeanAbsMax = ActivatedStandingStabilityMetrics.PolicyActionConditionedMeanAbsMax;
+	Input.Values.PolicyActionClampedFloatMax = ActivatedStandingStabilityMetrics.PolicyActionClampedFloatMax;
+	Input.Values.ControlTargetSampleCount = ActivatedStandingStabilityMetrics.ControlTargetSampleCount;
+	Input.Values.ControlTargetNormalWrites = ActivatedStandingStabilityMetrics.ControlTargetNormalWrites;
+	Input.Values.ControlTargetTotalWrites = ActivatedStandingStabilityMetrics.ControlTargetTotalWrites;
+	Input.Values.ControlTargetMaxDeltaDeg = ActivatedStandingStabilityMetrics.ControlTargetMaxDeltaDeg;
+	Input.Values.ControlTargetMeanDeltaDegMax = ActivatedStandingStabilityMetrics.ControlTargetMeanDeltaDegMax;
+	Input.Values.ControlTargetMaxRawPolicyOffsetDeg = ActivatedStandingStabilityMetrics.ControlTargetMaxRawPolicyOffsetDeg;
+	Input.Values.ControlTargetMeanRawPolicyOffsetDegMax = ActivatedStandingStabilityMetrics.ControlTargetMeanRawPolicyOffsetDegMax;
+	Input.Values.RuntimeBodySampleCount = ActivatedStandingStabilityMetrics.BodyTelemetrySampleCount;
+	Input.Values.RuntimeSimulatingBodyCount = ActivatedStandingStabilityMetrics.SimulatingBodyCountMax;
+	Input.Values.RuntimeMaxBodyLinearSpeedCmPerSecond = ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond;
+	Input.Values.RuntimeMaxBodyAngularSpeedDegPerSecond = ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond;
+	Input.Values.bPhysicalPerturbationApplied = ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied;
+	Input.Values.PerturbationMeasuredDeltaVCmPerSecond = ActivatedStandingStabilityMetrics.PerturbationMeasuredDeltaVCmPerSecond;
 
 	Input.ControllerStability.HoldDurationSec = LiveRuntimeEvidenceStandingSeconds;
 	Input.ControllerStability.bControllerStabilityPassed = true;
@@ -1353,4 +1762,326 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 void UPhysAnimComponent::EmitLiveRuntimeEvidenceTerminalArtifactOnce(const FPhysAnimRuntimeTerminationPipelineResult& PipelineResult)
 {
 	// Implementation moved to PhysAnimProofArtifactEmitter
+}
+
+bool UPhysAnimComponent::IsStage2APolicyOutputActive() const
+{
+	const double CurrentTimeSeconds = GetPhysAnimClockTime();
+	return PolicyControlTicksExecuted > 0
+		&& LastPolicyControlUpdateTimeSeconds >= 0.0
+		&& CurrentTimeSeconds >= LastPolicyControlUpdateTimeSeconds
+		&& (CurrentTimeSeconds - LastPolicyControlUpdateTimeSeconds) <= Stage2APolicyLivenessTimeoutSeconds;
+}
+
+bool UPhysAnimComponent::IsStage2AShellRootLocked() const
+{
+	return BalanceTransitionShellAuthorityMode == EBalanceTransitionShellAuthorityMode::TransitionOwnedShellLocked
+		&& BridgeShellState.bInitialized;
+}
+
+const TCHAR* UPhysAnimComponent::Stage2ATerminalStateToString(EStage2ALocomotionTerminalState TerminalState)
+{
+	switch (TerminalState)
+	{
+	case EStage2ALocomotionTerminalState::Allowed: return TEXT("Allowed");
+	case EStage2ALocomotionTerminalState::Denied_NotBalanceActiveStanding: return TEXT("Denied_NotBalanceActiveStanding");
+	case EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive: return TEXT("Denied_PolicyOutputInactive");
+	case EStage2ALocomotionTerminalState::Denied_SimRootAttempted: return TEXT("Denied_SimRootAttempted");
+	case EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked: return TEXT("Denied_ShellRootUnlocked");
+	case EStage2ALocomotionTerminalState::Denied_Phase3ThresholdRelaxed: return TEXT("Denied_Phase3ThresholdRelaxed");
+	default: return TEXT("NotEvaluated");
+	}
+}
+
+EStage2ALocomotionTerminalState UPhysAnimComponent::EvaluateStage2ALocomotionRequestGate() const
+{
+	const bool bInValidState = (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing || 
+	                            (RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell && 
+	                             Stage2ALocomotionRequestState == EBridgeLocomotionRequestState::LocomotionRequested));
+	if (!bInValidState) { return EStage2ALocomotionTerminalState::Denied_NotBalanceActiveStanding; }
+
+	if (!IsStage2APolicyOutputActive()) { return EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive; }
+	if (bStage2APhase3SimRootAttempted) { return EStage2ALocomotionTerminalState::Denied_SimRootAttempted; }
+	if (!IsStage2AShellRootLocked()) { return EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked; }
+	return EStage2ALocomotionTerminalState::Allowed;
+}
+
+bool UPhysAnimComponent::TryOpenStage2ALocomotionRequestGate(const TCHAR* RequestReason)
+{
+	Stage2ALastLocomotionTerminalState = EvaluateStage2ALocomotionRequestGate();
+	const bool bAllowed = Stage2ALastLocomotionTerminalState == EStage2ALocomotionTerminalState::Allowed;
+	Stage2ALocomotionRequestState = bAllowed ? EBridgeLocomotionRequestState::LocomotionRequested : EBridgeLocomotionRequestState::LocomotionRequestDenied;
+	BridgeLocomotionAuthorityState = bAllowed ? EBridgeLocomotionAuthorityState::StartupLocomotion : EBridgeLocomotionAuthorityState::Idle;
+	if (bAllowed)
+	{
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShell);
+	}
+	else if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+	}
+	EmitStage2ALocomotionTelemetry(TEXT("RequestOnly"), TEXT("Stage2A_KinematicShell"), Stage2ALastLocomotionTerminalState);
+	return bAllowed;
+}
+
+bool UPhysAnimComponent::TryActivateStage2AWalkIntent(float DeltaTime)
+{
+	Stage2ALastLocomotionTerminalState = EvaluateStage2ALocomotionRequestGate();
+	if (Stage2ALastLocomotionTerminalState != EStage2ALocomotionTerminalState::Allowed)
+	{
+		bStage2AWalkIntentActive = false;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+
+		EmitStage2ALocomotionTelemetry(Stage2AWalkIntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
+		return false;
+	}
+
+	if (Stage2AConsecutivePolicyActiveFrames < Stage2AMinPolicyActiveFramesBeforeWalk)
+	{
+		bStage2AWalkIntentActive = false;
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+		EmitStage2ALocomotionTelemetry(Stage2AWalkIntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
+		return false;
+	}
+
+	AActor* const OwnerActor = GetOwner();
+	FVector WorldMoveDirection = OwnerActor ? OwnerActor->GetActorForwardVector() : FVector::ForwardVector;
+	WorldMoveDirection.Z = 0.0f;
+	if (!WorldMoveDirection.Normalize())
+	{
+		WorldMoveDirection = FVector::ForwardVector;
+	}
+
+	BridgeIntentState.ActiveIntent = Stage2AWalkIntentName;
+	BridgeIntentState.WorldMoveDirection = WorldMoveDirection;
+	BridgeIntentState.LocalMoveDirection = FVector::ForwardVector;
+	BridgeIntentState.IntentMagnitude = 1.0f;
+	BridgeIntentState.DesiredSpeedCmPerSecond = Stage2AForwardWalkSpeedCmPerSecond;
+	BridgeIntentState.bHasDesiredFacing = false;
+
+	BridgeTrajectoryState.MotionSource = Stage2AMotionSourceName;
+	BridgeTrajectoryState.DesiredVelocityCmPerSecond = WorldMoveDirection * Stage2AForwardWalkSpeedCmPerSecond;
+	BridgeTrajectoryState.AcceptedVelocityCmPerSecond = FVector::ZeroVector;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = BridgeTrajectoryState.DesiredVelocityCmPerSecond;
+	BridgeTrajectoryState.LastDeltaTimeSeconds = DeltaTime;
+	BridgeTrajectoryState.bInitialized = true;
+
+	Stage2ALastWalkDeltaCm = BuildStage2AWalkDeltaCm(DeltaTime);
+	ApplyStage2AKinematicShellWalkDelta(Stage2ALastWalkDeltaCm);
+
+	const bool bAcceptedMovement = !BridgeShellState.AcceptedWorldDeltaCm.IsNearlyZero();
+	bStage2AWalkIntentActive = bAcceptedMovement;
+	
+	if (bAcceptedMovement)
+	{
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Locomoting;
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Allowed;
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShell);
+		BridgeTrajectoryState.AcceptedVelocityCmPerSecond = BridgeShellState.AcceptedPlanarVelocityCmPerSecond;
+	}
+	else
+	{
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::StartupLocomotion;
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked;
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+	}
+
+	EmitStage2ALocomotionTelemetry(Stage2AWalkIntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
+
+	return bAcceptedMovement;
+}
+
+bool UPhysAnimComponent::TryActivateStage2ATurnIntent(float DeltaTime, float YawDeltaDegrees)
+{
+	const TCHAR* IntentName = (YawDeltaDegrees >= 0.0f) ? TEXT("TurnLeft") : TEXT("TurnRight");
+	Stage2ALastLocomotionTerminalState = EvaluateStage2ALocomotionRequestGate();
+	if (Stage2ALastLocomotionTerminalState != EStage2ALocomotionTerminalState::Allowed)
+	{
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+
+		EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
+		return false;
+	}
+
+	if (Stage2AConsecutivePolicyActiveFrames < Stage2AMinPolicyActiveFramesBeforeWalk)
+	{
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+		EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
+		return false;
+	}
+
+	BridgeIntentState.ActiveIntent = IntentName;
+	BridgeIntentState.WorldMoveDirection = FVector::ZeroVector;
+	BridgeIntentState.LocalMoveDirection = FVector::ZeroVector;
+	BridgeIntentState.IntentMagnitude = 1.0f;
+	BridgeIntentState.DesiredSpeedCmPerSecond = 0.0f;
+	BridgeIntentState.bHasDesiredFacing = true;
+	
+	BridgeTrajectoryState.MotionSource = Stage2AMotionSourceName;
+	BridgeTrajectoryState.DesiredVelocityCmPerSecond = FVector::ZeroVector;
+	BridgeTrajectoryState.AcceptedVelocityCmPerSecond = FVector::ZeroVector;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = FVector::ZeroVector;
+	BridgeTrajectoryState.LastDeltaTimeSeconds = DeltaTime;
+	BridgeTrajectoryState.bInitialized = true;
+
+	AActor* const OwnerActor = GetOwner();
+	const FRotator CurrentRotation = OwnerActor ? OwnerActor->GetActorRotation() : FRotator::ZeroRotator;
+	const FRotator TargetRotation = FRotator(CurrentRotation.Pitch, CurrentRotation.Yaw + YawDeltaDegrees, CurrentRotation.Roll);
+
+	BridgeIntentState.DesiredFacingYawDegrees = TargetRotation.Yaw;
+
+	bool bRotationAccepted = true;
+	if (OwnerActor)
+	{
+		bRotationAccepted = OwnerActor->SetActorLocationAndRotation(OwnerActor->GetActorLocation(), TargetRotation, true);
+	}
+
+	if (!bRotationAccepted)
+	{
+		Stage2ALastTurnYawDeltaDegrees = 0.0f;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::StartupLocomotion;
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked;
+		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+		
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+
+		EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
+		return false;
+	}
+
+	Stage2ALastTurnYawDeltaDegrees = YawDeltaDegrees;
+	bStage2AWalkIntentActive = false;
+	BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Locomoting;
+	Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+	Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Allowed;
+	TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShell);
+
+	EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
+
+	return true;
+}
+
+FVector UPhysAnimComponent::BuildStage2AWalkDeltaCm(float DeltaTime) const
+{
+	if (DeltaTime <= 0.0f)
+	{
+		return FVector::ZeroVector;
+	}
+
+	const AActor* const OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return FVector::ZeroVector;
+	}
+
+	FVector Forward = OwnerActor->GetActorForwardVector();
+	Forward.Z = 0.0f;
+	if (!Forward.Normalize())
+	{
+		return FVector::ZeroVector;
+	}
+
+	const float RawDelta = Stage2AForwardWalkSpeedCmPerSecond * DeltaTime;
+	const float ClampedDelta = FMath::Clamp(RawDelta, 0.0f, Stage2AMaxWalkDeltaPerTickCm);
+	return Forward * ClampedDelta;
+}
+
+void UPhysAnimComponent::ApplyStage2AKinematicShellWalkDelta(const FVector& DeltaCm)
+{
+	BridgeShellState.RequestedWorldDeltaCm = DeltaCm;
+	Stage2ALastWalkDeltaCm = DeltaCm;
+	AActor* const OwnerActor = GetOwner();
+	if (!OwnerActor || DeltaCm.IsNearlyZero())
+	{
+		BridgeShellState.AcceptedWorldDeltaCm = FVector::ZeroVector;
+		BridgeShellState.AcceptedPlanarVelocityCmPerSecond = FVector::ZeroVector;
+		BridgeShellState.bLastMoveBlocked = true;
+		return;
+	}
+
+	BridgeShellState.bLastMoveBlocked = false;
+	const FVector OldLocation = OwnerActor->GetActorLocation();
+	const FVector NewLocation = OldLocation + DeltaCm;
+
+	const bool bMoveSuccess = OwnerActor->SetActorLocation(NewLocation, true);
+
+	if (!bMoveSuccess)
+	{
+		BridgeShellState.bLastMoveBlocked = true;
+		BridgeShellState.AcceptedWorldDeltaCm = FVector::ZeroVector;
+		BridgeShellState.AcceptedPlanarVelocityCmPerSecond = FVector::ZeroVector;
+		return;
+	}
+
+	const FVector AcceptedDeltaCm = OwnerActor->GetActorLocation() - OldLocation;
+	BridgeShellState.LastAcceptedActorLocation = OwnerActor->GetActorLocation();
+	BridgeShellState.AcceptedWorldDeltaCm = AcceptedDeltaCm;
+	BridgeShellState.bInitialized = true;
+	BridgeShellState.bLastMoveBlocked = AcceptedDeltaCm.IsNearlyZero();
+
+	const float DeltaTimeSeconds = FMath::Max(BridgeTrajectoryState.LastDeltaTimeSeconds, 0.001f);
+	BridgeShellState.AcceptedPlanarVelocityCmPerSecond = FVector(AcceptedDeltaCm.X, AcceptedDeltaCm.Y, 0.0f) / DeltaTimeSeconds;
+}
+
+void UPhysAnimComponent::EmitStage2ALocomotionTelemetry(const TCHAR* LocomotionIntent, const TCHAR* CapsuleOrShellMotionSource, EStage2ALocomotionTerminalState TerminalState)
+{
+	LastStage2ALocomotionTelemetryLine = FString::Printf(
+		TEXT("root_mode=Stage1_KinematicRoot locomotion_intent=%s policy_output_active=%s capsule_or_shell_motion_source=%s phase3_simroot_attempted=%s terminal_state=%s"),
+		LocomotionIntent,
+		IsStage2APolicyOutputActive() ? TEXT("true") : TEXT("false"),
+		CapsuleOrShellMotionSource,
+		bStage2APhase3SimRootAttempted ? TEXT("true") : TEXT("false"),
+		Stage2ATerminalStateToString(TerminalState));
+	UE_LOG(LogPhysAnimBridge, Display, TEXT("%s"), *LastStage2ALocomotionTelemetryLine);
+}
+
+double UPhysAnimComponent::GetPhysAnimClockTime() const
+{
+	return GetWorld() ? GetWorld()->GetTimeSeconds() : FPlatformTime::Seconds();
+}
+
+void UPhysAnimComponent::HardenStage2ALocomotionState()
+{
+	if (Stage2ALocomotionRequestState == EBridgeLocomotionRequestState::LocomotionRequested)
+	{
+		if (!IsStage2APolicyOutputActive())
+		{
+			Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
+		}
+	}
 }

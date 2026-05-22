@@ -41,19 +41,24 @@ bool UPhysAnimComponent::CheckRuntimeInstability(
 		EffectiveRootLocationCm,
 		EffectiveRootLinearVelocityCmPerSecond);
 
+	const bool bIsSettlePhase = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
+	const int32 SettleTicks = BalanceReadyTransition.GetPhase3KineticGateReleaseTickCount();
+	const bool bIsSettlePhaseEarlyWindow = bIsSettlePhase && (SettleTicks > 0 && SettleTicks <= 40);
+
 	const bool bBalanceScenarioAllowsPostImpactGrace =
-		IsBalanceActiveState(RuntimeState) &&
+		(IsBalanceActiveState(RuntimeState) || bIsSettlePhase) &&
 		BalanceScenarios.IsValidIndex(ActiveBalanceScenarioIndex) &&
 		BalanceScenarios[ActiveBalanceScenarioIndex].bTriggered &&
 		!BalanceScenarios[ActiveBalanceScenarioIndex].Name.Contains(TEXT("NoPush")) &&
 		LastBalanceScenarioImpactTimeSeconds >= 0.0 &&
 		(GetWorld()->GetTimeSeconds() - LastBalanceScenarioImpactTimeSeconds) < 0.5;
 
-	if (bBalanceScenarioAllowsPostImpactGrace)
+	if (bBalanceScenarioAllowsPostImpactGrace || bIsSettlePhaseEarlyWindow)
 	{
-		InstabilitySettings.MaxRootLinearSpeedCmPerSecond *= 15.0f;
-		InstabilitySettings.MaxRootAngularSpeedDegPerSecond *= 15.0f;
-		InstabilitySettings.MaxRootHeightDeltaCm *= 2.0f;
+		const float Multiplier = bBalanceScenarioAllowsPostImpactGrace ? 15.0f : 5.0f;
+		InstabilitySettings.MaxRootLinearSpeedCmPerSecond *= Multiplier;
+		InstabilitySettings.MaxRootAngularSpeedDegPerSecond *= Multiplier;
+		InstabilitySettings.MaxRootHeightDeltaCm *= (bBalanceScenarioAllowsPostImpactGrace ? 2.0f : 1.25f);
 		InstabilitySettings.UnstableGracePeriodSeconds = FMath::Max(InstabilitySettings.UnstableGracePeriodSeconds, 1.0f);
 	}
 

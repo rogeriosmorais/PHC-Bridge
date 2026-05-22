@@ -13,6 +13,7 @@ Gate text from the engineering plan:
 - `Current status`: pass
 - `Decision owner`: orchestrator with required user evidence
 - `Final verdict`: pass
+- `Latest reconciliation`: May 7, 2026
 
 Use only:
 
@@ -146,18 +147,25 @@ List every assumption changed by Phase 0 evidence:
 - `A-03`: move from `yellow` to `green`; the Manny smoke test completed without leaving an open mapping-failure blocker
 - `A-04`: move from `yellow` to `green`; the Physics Control command path and Manny response checks both passed
 - `A-05`: move from `yellow` to `green`; the documented `120 Hz` synchronous-substep configuration stayed controllable without jitter-dominated failure
-- `A-06`:
-- `A-07`:
-- `A-08`:
-- `A-09`:
+- `A-06`: no G1 change; thigh restore diagnostics are post-G1 observability evidence and do not prove balance viability
+- `A-07`: no G1 change; bridge/retargeting contract tests remain the authority for SMPL action and observation mapping
+- `A-08`: current evidence rule tightened; future smoke evidence must be read from this checkout's `PhysAnimUE5\Saved\Logs`
+- `A-09`: current runtime ONNX assets are present, but original offline checkpoint provenance is not confirmed in this checkout
 
 ## Open Risks
 
-- 
+- Original offline checkpoint provenance is unresolved in this checkout for tasks that need re-export or numerical checkpoint comparison.
+- Some historical G1 artifact paths point to the earlier `F:\NewEngine` checkout; current balance-first evidence must use `F:\NewEngine-AgentB`.
 
 ## Missing Evidence
 
 - none for Gate G1
+
+## Current Reconciliation
+
+The historical G1 verdict remains `pass`.
+
+Current Stage 1 balance-first work does not rely on G1 as a balance success criterion. G1 proved feasibility of the early bridge path; current product success still requires `BalanceActive_Standing` held continuously for `3.0` seconds with live physics support/contact truth and no hidden assistance.
 
 ## Final Orchestrator Decision
 
