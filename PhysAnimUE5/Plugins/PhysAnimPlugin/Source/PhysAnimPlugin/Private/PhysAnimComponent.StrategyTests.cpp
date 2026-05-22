@@ -309,11 +309,11 @@ namespace
 
 		Artifact.RuntimeSimulatingBodyCount = 0;
 		TestEqual(
-			TEXT("Pre-activation zero simulated bodies reports physics-not-started"),
+			TEXT("Pre-activation zero simulated bodies reports simulation-loss evidence"),
 			UPhysAnimComponent::TestOnlyResolveStartupPhysicalContinuityTerminalReason(
 				EPhysAnimRuntimeState::WaitingForPoseSearch,
 				Artifact),
-			EPhysAnimTerminalReason::ActivationPhysicsNotStarted);
+			EPhysAnimTerminalReason::ActivationContinuousSimulationLost);
 
 		Artifact.RuntimeSimulatingBodyCount = 3;
 		TestEqual(

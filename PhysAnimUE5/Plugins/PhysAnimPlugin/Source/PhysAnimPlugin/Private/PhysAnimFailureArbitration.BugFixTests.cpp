@@ -19,33 +19,33 @@ namespace
 	bool FPhysAnimFailureArbitrationBugFixTest::RunTest(const FString& Parameters)
 	{
 		{
-			// BUGFIX-01: Kinetic gate should win over generic simulation loss.
+			// BUGFIX-01: Simulation loss is preserved.
 			TArray<FPhysAnimFailureCandidate> Candidates;
-			Candidates.Add(MakeBugFixCandidate(EPhysAnimTerminalReason::ActivationKineticGateActive, 100));
+			Candidates.Add(MakeBugFixCandidate(EPhysAnimTerminalReason::ActivationContinuousSimulationLost, 100));
 			Candidates.Add(MakeBugFixCandidate(EPhysAnimTerminalReason::ActivationContinuousSimulationLost, 100));
 
 			const FPhysAnimFailureArbitrationResult Result = PhysAnimFailureArbitration::ArbitrateFailure(Candidates);
 
 			TestTrue(TEXT("BUGFIX-01 emits a terminal reason"), Result.bHasTerminalReason);
 			TestEqual(
-				TEXT("BUGFIX-01 kinetic gate wins over generic simulation loss"),
+				TEXT("BUGFIX-01 simulation loss is preserved"),
 				static_cast<uint8>(Result.TerminalReason),
-				static_cast<uint8>(EPhysAnimTerminalReason::ActivationKineticGateActive));
+				static_cast<uint8>(EPhysAnimTerminalReason::ActivationContinuousSimulationLost));
 		}
 
 		{
-			// BUGFIX-02: Physics not started should be a high-priority failure.
+			// BUGFIX-02: High-priority simulation loss is preserved.
 			TArray<FPhysAnimFailureCandidate> Candidates;
-			Candidates.Add(MakeBugFixCandidate(EPhysAnimTerminalReason::ActivationPhysicsNotStarted, 200));
+			Candidates.Add(MakeBugFixCandidate(EPhysAnimTerminalReason::ActivationContinuousSimulationLost, 200));
 			Candidates.Add(MakeBugFixCandidate(EPhysAnimTerminalReason::ActivationContinuousSimulationLost, 200));
 
 			const FPhysAnimFailureArbitrationResult Result = PhysAnimFailureArbitration::ArbitrateFailure(Candidates);
 
 			TestTrue(TEXT("BUGFIX-02 emits a terminal reason"), Result.bHasTerminalReason);
 			TestEqual(
-				TEXT("BUGFIX-02 physics not started wins over generic simulation loss"),
+				TEXT("BUGFIX-02 simulation loss is preserved"),
 				static_cast<uint8>(Result.TerminalReason),
-				static_cast<uint8>(EPhysAnimTerminalReason::ActivationPhysicsNotStarted));
+				static_cast<uint8>(EPhysAnimTerminalReason::ActivationContinuousSimulationLost));
 		}
 
 		return true;

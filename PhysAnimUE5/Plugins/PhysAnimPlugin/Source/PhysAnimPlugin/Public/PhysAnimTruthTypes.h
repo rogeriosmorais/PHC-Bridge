@@ -32,7 +32,5 @@ enum class EPhysAnimTerminalReason : uint8
 	ActivationMovementReclaim,
 	ActivationShellHelperViolation,
 	ActivationAuthorityConflict,
-	ActivationStandingValidationTimeout,
-	ActivationPhysicsNotStarted,
-	ActivationKineticGateActive
+	ActivationStandingValidationTimeout
 };

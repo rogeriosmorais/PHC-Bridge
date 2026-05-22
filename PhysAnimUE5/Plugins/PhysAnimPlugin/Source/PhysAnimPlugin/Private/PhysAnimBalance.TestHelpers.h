@@ -28,7 +28,6 @@ namespace PhysAnimBalanceTestHelpers
 		case EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion:
 		case EPhysAnimTerminalReason::ActivationInstabilityThresholdBreach:
 		case EPhysAnimTerminalReason::ActivationStandingValidationTimeout:
-		case EPhysAnimTerminalReason::ActivationKineticGateActive:
 			return true;
 		default:
 			break;

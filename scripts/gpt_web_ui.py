@@ -62,16 +62,44 @@ async def run():
         await asyncio.sleep(1)
         await page.keyboard.press("Enter")
 
-        # 6. Wait and get the response
-        print("⏳ Waiting for response...")
+        # 6. Wait and get the response, while auto-accepting actions
+        print("⏳ Waiting for response (Auto-Accept active)...")
         stop_btn = 'button[data-testid="stop-button"]'
         
+        # Selectors for permission buttons
+        accept_selectors = [
+            'button:has-text("Allow")',
+            'button:has-text("Accept")',
+            'button:has-text("Permitir")', # Localization support
+            'button:has-text("Aceitar")'
+        ]
+
+        async def auto_accept():
+            while True:
+                try:
+                    # Look for any of the accept buttons
+                    for selector in accept_selectors:
+                        btn = page.locator(selector).first
+                        if await btn.is_visible(timeout=500):
+                            print(f"✅ Clicking auto-accept button: {selector}")
+                            await btn.click()
+                            break
+                except:
+                    pass
+                
+                # Check if response finished
+                if not await page.locator(stop_btn).is_visible(timeout=500):
+                    break
+                
+                await asyncio.sleep(1)
+
         try:
-            # Wait for the stop button to appear and then disappear
-            await page.wait_for_selector(stop_btn, timeout=5000)
-            await page.wait_for_selector(stop_btn, state="hidden", timeout=120000)
-        except:
-            pass # Response was very fast or the selector changed
+            # Run wait and auto-accept concurrently
+            await asyncio.wait_for(auto_accept(), timeout=180000) # 3 min max
+        except asyncio.TimeoutError:
+            print("⚠️ Response wait timed out.")
+        except Exception as e:
+            print(f"ℹ️ Finished waiting: {str(e)}")
 
         await asyncio.sleep(2)
         respostas = await page.locator(".markdown").all()

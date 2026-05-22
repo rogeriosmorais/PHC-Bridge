@@ -70,13 +70,36 @@ const proxy = httpProxy.createProxyServer({
 });
 
 proxy.on("error", (err, req, res) => {
-  console.error("Proxy error:", err.message);
+  // Gracefully handle common client disconnects/cancellations
+  const isExpectedError =
+    err.code === "ECONNRESET" ||
+    err.code === "EPIPE" ||
+    err.message.includes("socket hang up") ||
+    err.message.includes("context canceled");
 
-  if (!res.headersSent) {
-    res.writeHead(502, { "content-type": "application/json" });
+  if (isExpectedError) {
+    console.log(`[INFO] Client disconnected: ${err.message}`);
+  } else {
+    console.error(`[ERROR] Proxy error: ${err.message}`, err);
   }
 
-  res.end(JSON.stringify({ error: "Bad gateway" }));
+  if (!res.headersSent && res.writeHead) {
+    res.writeHead(502, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "Bad gateway", code: err.code }));
+  } else {
+    res.end();
+  }
+});
+
+// Harden SSE responses: disable buffering and set keep-alive
+proxy.on("proxyRes", (proxyRes, req, res) => {
+  const contentType = proxyRes.headers["content-type"] || "";
+  if (contentType.includes("text/event-stream")) {
+    // Disable buffering for SSE across all hops
+    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+  }
 });
 
 function isAuthorizedPath(url) {

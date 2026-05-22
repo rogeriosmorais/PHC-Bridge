@@ -161,6 +161,24 @@ bool FPhysAnimStage2AWalkIntentTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("WALK-26 Telemetry reports terminal_state=Allowed"), TestComp->LastStage2ALocomotionTelemetryLine.Contains(TEXT("terminal_state=Allowed")));
 	}
 
+	// 6. Denial cleanup: Intent and trajectory must be cleared on denial.
+	{
+		ResetToAllowed();
+		Fixture.Actor->SetActorLocation(FVector::ZeroVector, false);
+		
+		// Manually populate state before a failed attempt
+		TestComp->BridgeIntentState.ActiveIntent = TEXT("StaleIntent");
+		TestComp->BridgeTrajectoryState.bInitialized = true;
+		
+		// Attempt activation without opening the gate - this should fail
+		TestFalse(TEXT("WALK-27 Activation fails when gate is closed"), TestComp->TryActivateStage2AWalkIntent(0.05f));
+		
+		// Verify state is cleared
+		TestTrue(TEXT("WALK-28 Intent name is cleared on denial"), TestComp->BridgeIntentState.ActiveIntent.IsEmpty());
+		TestFalse(TEXT("WALK-29 Trajectory bInitialized is cleared on denial"), TestComp->BridgeTrajectoryState.bInitialized);
+		TestEqual(TEXT("WALK-30 RequestState is LocomotionRequestDenied"), (int32)TestComp->Stage2ALocomotionRequestState, (int32)EBridgeLocomotionRequestState::LocomotionRequestDenied);
+	}
+
 	Fixture.Destroy();
 	return true;
 }

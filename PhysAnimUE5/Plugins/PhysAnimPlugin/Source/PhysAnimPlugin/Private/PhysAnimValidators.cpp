@@ -42,7 +42,7 @@ namespace PhysAnimValidators
 		if (Snapshot.bIsBridgeActive && Snapshot.bKineticGateActive)
 		{
 			Result.bPhysicalContinuityValidatorPassed = false;
-			Result.TerminalReason = EPhysAnimTerminalReason::ActivationKineticGateActive;
+			Result.TerminalReason = EPhysAnimTerminalReason::ActivationContinuousSimulationLost;
 			return Result;
 		}
 

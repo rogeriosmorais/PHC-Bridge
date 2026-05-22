@@ -5004,7 +5004,8 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 	// Smoke-facing contract filtering: Phase 1/2 is Pending, Phase 3 is LateValidate.
 	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] State Transition: %s -> %s"), PreviousStateName, NewStateName);
 	
-	if (NewState != EPhysAnimRuntimeState::LocomotionActiveShell)
+	if (NewState != EPhysAnimRuntimeState::LocomotionActiveShell && 
+	    NewState != EPhysAnimRuntimeState::LocomotionActiveShellDenied)
 	{
 		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
 	}

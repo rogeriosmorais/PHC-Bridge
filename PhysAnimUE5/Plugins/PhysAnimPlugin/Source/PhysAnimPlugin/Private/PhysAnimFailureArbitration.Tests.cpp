@@ -112,6 +112,82 @@ namespace
 			TestEqual(TEXT("ARBIT-05 has no co-terminal reasons"), Result.CoTerminalReasons.Num(), 0);
 		}
 
+		{
+			// ARBIT-06: Runtime truth arbitration must match the Continuous Balance Truth Model canonical rank table.
+			TestEqual(
+				TEXT("ARBIT-06 plant contract is canonical rank 1"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation),
+				1);
+			TestEqual(
+				TEXT("ARBIT-06 capsule contract is canonical rank 2"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationCapsuleContractViolation),
+				2);
+			TestEqual(
+				TEXT("ARBIT-06 topology change is canonical rank 3"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationTopologyChange),
+				3);
+			TestEqual(
+				TEXT("ARBIT-06 continuous simulation lost is canonical rank 4"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationContinuousSimulationLost),
+				4);
+			TestEqual(
+				TEXT("ARBIT-06 support failure is canonical rank 5"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationSupportFailure),
+				5);
+			TestEqual(
+				TEXT("ARBIT-06 proxy outside support is canonical rank 6"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationProxyOutsideSupportRegion),
+				6);
+			TestEqual(
+				TEXT("ARBIT-06 target discontinuity is canonical rank 7"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationTargetDiscontinuity),
+				7);
+			TestEqual(
+				TEXT("ARBIT-06 unstable gain or damping is canonical rank 8"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationUnstableGainOrDamping),
+				8);
+			TestEqual(
+				TEXT("ARBIT-06 instability threshold breach is canonical rank 9"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationInstabilityThresholdBreach),
+				9);
+			TestEqual(
+				TEXT("ARBIT-06 pose reference mismatch is canonical rank 10"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationPoseReferenceMismatch),
+				10);
+			TestEqual(
+				TEXT("ARBIT-06 movement reclaim is canonical rank 11"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationMovementReclaim),
+				11);
+			TestEqual(
+				TEXT("ARBIT-06 shell helper violation is canonical rank 12"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationShellHelperViolation),
+				12);
+			TestEqual(
+				TEXT("ARBIT-06 authority conflict is canonical rank 13"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationAuthorityConflict),
+				13);
+			TestEqual(
+				TEXT("ARBIT-06 standing validation timeout is canonical rank 14"),
+				PhysAnimFailureArbitration::GetTerminalReasonRank(EPhysAnimTerminalReason::ActivationStandingValidationTimeout),
+				14);
+		}
+
+		{
+			// ARBIT-07: Earlier simulation loss wins by temporal precedence.
+			TArray<FPhysAnimFailureCandidate> Candidates;
+			Candidates.Add(MakeCandidate(EPhysAnimTerminalReason::ActivationContinuousSimulationLost, 599));
+			Candidates.Add(MakeCandidate(EPhysAnimTerminalReason::ActivationContinuousSimulationLost, 600));
+
+			const FPhysAnimFailureArbitrationResult Result = PhysAnimFailureArbitration::ArbitrateFailure(Candidates);
+
+			TestTrue(TEXT("ARBIT-07 simulation loss still terminates"), Result.bHasTerminalReason);
+			TestEqual(
+				TEXT("ARBIT-07 earliest simulation loss wins"),
+				static_cast<uint8>(Result.TerminalReason),
+				static_cast<uint8>(EPhysAnimTerminalReason::ActivationContinuousSimulationLost));
+			TestEqual(TEXT("ARBIT-07 earliest timestamp is preserved"), Result.TerminalSubstepTimestamp, static_cast<int64>(599));
+		}
+
 		return true;
 	}
 }

@@ -2757,8 +2757,21 @@ public:
 		const FName& PelvisBoneName,
 		FString& OutSourceName);
 
+	// TestOnly Seams for Watchdog Robustness (S1-FIX-WATCHDOG-ROBUSTNESS-01)
+	bool TestOnlyIsStage2APolicyOutputActive() const { return IsStage2APolicyOutputActive(); }
+	double TestOnlyGetPhysAnimClockTime() const { return GetPhysAnimClockTime(); }
+	void TestOnlySetPolicyControlTicksExecuted(int32 Ticks) { PolicyControlTicksExecuted = Ticks; }
+	void TestOnlySetLastPolicyControlUpdateTimeSeconds(double Time) { LastPolicyControlUpdateTimeSeconds = Time; }
 
 private:
+	// Stage2A automation tests intentionally exercise private bridge seams that are
+	// not part of the public component API.
+	friend class FPhysAnimStage2ALocomotionGateTest;
+	friend class FPhysAnimStage2AWalkIntentTest;
+	friend class FPhysAnimStage2AWalkSmokeTest;
+	friend class FPhysAnimStage2ATurnIntentTest;
+	friend class FPhysAnimStage2ATurnSmokeTest;
+
 	void UpdateBridgeStatusIndicator(float DisplayDurationSeconds) const;
 	double GetPhysAnimClockTime() const;
 	void HardenStage2ALocomotionState();

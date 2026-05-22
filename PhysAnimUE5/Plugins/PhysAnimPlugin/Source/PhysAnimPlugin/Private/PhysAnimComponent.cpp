@@ -591,7 +591,7 @@ EPhysAnimTerminalReason UPhysAnimComponent::ResolveStartupPhysicalContinuityTerm
 		(RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
 			RuntimeState == EPhysAnimRuntimeState::ReadyForActivation))
 	{
-		return EPhysAnimTerminalReason::ActivationPhysicsNotStarted;
+		return EPhysAnimTerminalReason::ActivationContinuousSimulationLost;
 	}
 
 	return EPhysAnimTerminalReason::ActivationContinuousSimulationLost;
@@ -1768,6 +1768,7 @@ bool UPhysAnimComponent::IsStage2APolicyOutputActive() const
 {
 	const double CurrentTimeSeconds = GetPhysAnimClockTime();
 	return PolicyControlTicksExecuted > 0
+		&& LastPolicyControlUpdateTimeSeconds >= 0.0
 		&& CurrentTimeSeconds >= LastPolicyControlUpdateTimeSeconds
 		&& (CurrentTimeSeconds - LastPolicyControlUpdateTimeSeconds) <= Stage2APolicyLivenessTimeoutSeconds;
 }
@@ -1831,6 +1832,11 @@ bool UPhysAnimComponent::TryActivateStage2AWalkIntent(float DeltaTime)
 		bStage2AWalkIntentActive = false;
 		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
 		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+
 		EmitStage2ALocomotionTelemetry(Stage2AWalkIntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
 		return false;
 	}
@@ -1841,6 +1847,11 @@ bool UPhysAnimComponent::TryActivateStage2AWalkIntent(float DeltaTime)
 		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive;
 		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
 		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+
 		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
 		EmitStage2ALocomotionTelemetry(Stage2AWalkIntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
 		return false;
@@ -1873,24 +1884,25 @@ bool UPhysAnimComponent::TryActivateStage2AWalkIntent(float DeltaTime)
 
 	const bool bAcceptedMovement = !BridgeShellState.AcceptedWorldDeltaCm.IsNearlyZero();
 	bStage2AWalkIntentActive = bAcceptedMovement;
-	Stage2ALocomotionRequestState = bAcceptedMovement
-		? EBridgeLocomotionRequestState::LocomotionRequested
-		: EBridgeLocomotionRequestState::LocomotionRequestDenied;
-	BridgeLocomotionAuthorityState = bAcceptedMovement
-		? EBridgeLocomotionAuthorityState::Locomoting
-		: EBridgeLocomotionAuthorityState::StartupLocomotion;
-	Stage2ALastLocomotionTerminalState = bAcceptedMovement
-		? EStage2ALocomotionTerminalState::Allowed
-		: EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked;
-
+	
 	if (bAcceptedMovement)
 	{
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequested;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Locomoting;
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Allowed;
 		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShell);
 		BridgeTrajectoryState.AcceptedVelocityCmPerSecond = BridgeShellState.AcceptedPlanarVelocityCmPerSecond;
 	}
 	else
 	{
+		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::StartupLocomotion;
+		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked;
 		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
 	}
 
 	EmitStage2ALocomotionTelemetry(Stage2AWalkIntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
@@ -1906,6 +1918,11 @@ bool UPhysAnimComponent::TryActivateStage2ATurnIntent(float DeltaTime, float Yaw
 	{
 		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
 		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+
 		EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
 		return false;
 	}
@@ -1915,6 +1932,11 @@ bool UPhysAnimComponent::TryActivateStage2ATurnIntent(float DeltaTime, float Yaw
 		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_PolicyOutputInactive;
 		BridgeLocomotionAuthorityState = EBridgeLocomotionAuthorityState::Idle;
 		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
+		
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+
 		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
 		EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
 		return false;
@@ -1926,7 +1948,11 @@ bool UPhysAnimComponent::TryActivateStage2ATurnIntent(float DeltaTime, float Yaw
 	BridgeIntentState.IntentMagnitude = 1.0f;
 	BridgeIntentState.DesiredSpeedCmPerSecond = 0.0f;
 	BridgeIntentState.bHasDesiredFacing = true;
+	
 	BridgeTrajectoryState.MotionSource = Stage2AMotionSourceName;
+	BridgeTrajectoryState.DesiredVelocityCmPerSecond = FVector::ZeroVector;
+	BridgeTrajectoryState.AcceptedVelocityCmPerSecond = FVector::ZeroVector;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = FVector::ZeroVector;
 	BridgeTrajectoryState.LastDeltaTimeSeconds = DeltaTime;
 	BridgeTrajectoryState.bInitialized = true;
 
@@ -1949,6 +1975,11 @@ bool UPhysAnimComponent::TryActivateStage2ATurnIntent(float DeltaTime, float Yaw
 		Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::LocomotionRequestDenied;
 		Stage2ALastLocomotionTerminalState = EStage2ALocomotionTerminalState::Denied_ShellRootUnlocked;
 		TransitionRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShellDenied);
+		
+		// Clear stale intent/trajectory state on denial
+		BridgeIntentState = FBridgeIntentState();
+		BridgeTrajectoryState = FBridgeTrajectoryState();
+
 		EmitStage2ALocomotionTelemetry(IntentName, Stage2AMotionSourceName, Stage2ALastLocomotionTerminalState);
 		return false;
 	}
