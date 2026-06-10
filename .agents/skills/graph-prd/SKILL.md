@@ -1,3 +1,13 @@
+---
+name: graph-prd
+description: Transform a vague idea into a structured, import-ready PRD using 5W2H, JTBD, Pareto 80/20, MoSCoW, INVEST, Given-When-Then, and Risk Matrix
+triggers:
+  - graph-prd
+version: 2.0.0
+author: Diego Nogueira
+date: 2026-04-04
+---
+
 # graph-prd
 
 Phase 0 — Transform a vague idea into a structured, import-ready PRD using 7 product methodologies: 5W2H, Jobs-to-be-Done, Pareto 80/20, MoSCoW, INVEST, Given-When-Then, and Risk Matrix.
