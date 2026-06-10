@@ -576,6 +576,9 @@ namespace
 			Input.Values.RuntimeSimulatingBodyCount = 14;
 			Input.Values.RuntimeMaxBodyLinearSpeedCmPerSecond = 33.0;
 			Input.Values.RuntimeMaxBodyAngularSpeedDegPerSecond = 44.0;
+			Input.Values.RendererFacingMotionSampleCount = 3;
+			Input.Values.RendererFacingMotionActiveSampleCount = 1;
+			Input.Values.RendererFacingMotionMaxRootWorldPositionDriftCm = 12.5;
 			Input.Values.bPhysicalPerturbationApplied = true;
 			Input.Values.PerturbationMeasuredDeltaVCmPerSecond = 12.0;
 
@@ -603,6 +606,9 @@ namespace
 			TestEqual(TEXT("Artifact preserves runtime_simulating_body_count"), Snapshot.RuntimeSimulatingBodyCount, 14);
 			TestEqual(TEXT("Artifact preserves runtime_max_body_linear_speed_cm_per_second"), Snapshot.RuntimeMaxBodyLinearSpeedCmPerSecond, 33.0);
 			TestEqual(TEXT("Artifact preserves runtime_max_body_angular_speed_deg_per_second"), Snapshot.RuntimeMaxBodyAngularSpeedDegPerSecond, 44.0);
+			TestEqual(TEXT("Artifact preserves renderer_facing_motion_sample_count"), Snapshot.RendererFacingMotionSampleCount, 3);
+			TestEqual(TEXT("Artifact preserves renderer_facing_motion_active_sample_count"), Snapshot.RendererFacingMotionActiveSampleCount, 1);
+			TestEqual(TEXT("Artifact preserves renderer_facing_motion_max_root_world_position_drift_cm"), Snapshot.RendererFacingMotionMaxRootWorldPositionDriftCm, 12.5);
 			TestTrue(TEXT("Artifact preserves physical_perturbation_applied"), Snapshot.bPhysicalPerturbationApplied);
 			TestEqual(TEXT("Artifact preserves perturbation_measured_delta_v_cm_per_second"), Snapshot.PerturbationMeasuredDeltaVCmPerSecond, 12.0);
 			TestEqual(TEXT("Artifact default terminal_reason is None/null"), static_cast<uint8>(Snapshot.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
@@ -659,6 +665,9 @@ namespace
 			Input.Values.SupportMode = EPhysAnimSupportMode::SingleFootSurvival;
 			Input.Values.SupportChurnCount = 3;
 			Input.Values.SupportChurnHz = 9.0;
+			Input.Values.RendererFacingMotionSampleCount = 4;
+			Input.Values.RendererFacingMotionActiveSampleCount = 2;
+			Input.Values.RendererFacingMotionMaxRootWorldPositionDriftCm = 9.75;
 
 			const FPhysAnimRunArtifactSnapshot Snapshot = PhysAnimValidators::BuildRunArtifactSnapshot(Input);
 
@@ -678,6 +687,9 @@ namespace
 			TestEqual(TEXT("Artifact maps movement_reclaim_count"), Snapshot.MovementReclaimCount, 1);
 			TestEqual(TEXT("Artifact maps shell_helper_used_count"), Snapshot.ShellHelperUsedCount, 1);
 			TestEqual(TEXT("Artifact maps controller_stability_failure_field"), static_cast<uint8>(Snapshot.ControllerStabilityFailureField), static_cast<uint8>(EPhysAnimControllerStabilityFailureField::ControllerGainScale));
+			TestEqual(TEXT("Artifact maps renderer_facing_motion_sample_count"), Snapshot.RendererFacingMotionSampleCount, 4);
+			TestEqual(TEXT("Artifact maps renderer_facing_motion_active_sample_count"), Snapshot.RendererFacingMotionActiveSampleCount, 2);
+			TestEqual(TEXT("Artifact maps renderer_facing_motion_max_root_world_position_drift_cm"), Snapshot.RendererFacingMotionMaxRootWorldPositionDriftCm, 9.75);
 			TestTrue(TEXT("Artifact preserves proxy_inside_hull false"), Snapshot.ProxyInsideHull.IsSet() && !Snapshot.ProxyInsideHull.GetValue());
 			TestEqual(TEXT("Artifact preserves proxy_outside_hull_duration_ms"), Snapshot.ProxyOutsideHullDurationMs.GetValue(), 101.0);
 			TestEqual(TEXT("Artifact primary terminal_reason uses validator order"), static_cast<uint8>(Snapshot.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation));

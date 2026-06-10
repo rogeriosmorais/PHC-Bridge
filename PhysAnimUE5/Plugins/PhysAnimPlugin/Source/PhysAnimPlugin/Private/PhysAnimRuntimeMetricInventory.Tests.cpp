@@ -110,13 +110,13 @@ namespace
 		}
 
 		TestFalse(TEXT("PoseSearch reuses existing counters"), PoseSearch->bRequiresNewTelemetry);
-		TestTrue(TEXT("RendererFacingMotion requires new telemetry"), RendererFacingMotion->bRequiresNewTelemetry);
+		TestFalse(TEXT("RendererFacingMotion reuses existing counters"), RendererFacingMotion->bRequiresNewTelemetry);
 		TestFalse(TEXT("PhcPolicy reuses existing counters"), PhcPolicy->bRequiresNewTelemetry);
 		TestFalse(TEXT("PhysicsControl reuses existing counters"), PhysicsControl->bRequiresNewTelemetry);
 		TestFalse(TEXT("Chaos reuses existing counters"), Chaos->bRequiresNewTelemetry);
 
 		TestEqual(TEXT("PoseSearch has two reused counter mappings"), PoseSearch->ExistingCounterMappings.Num(), 2);
-		TestEqual(TEXT("RendererFacingMotion has no reused counter mappings"), RendererFacingMotion->ExistingCounterMappings.Num(), 0);
+		TestEqual(TEXT("RendererFacingMotion has three reused counter mappings"), RendererFacingMotion->ExistingCounterMappings.Num(), 3);
 		TestEqual(TEXT("PhcPolicy has two reused counter mappings"), PhcPolicy->ExistingCounterMappings.Num(), 2);
 		TestEqual(TEXT("PhysicsControl has two reused counter mappings"), PhysicsControl->ExistingCounterMappings.Num(), 2);
 		TestEqual(TEXT("Chaos has ten reused counter mappings"), Chaos->ExistingCounterMappings.Num(), 10);
@@ -137,13 +137,15 @@ namespace
 		const FPhysAnimRuntimeMetricSegmentInventory* PhcPolicy = FindSegment(Inventory, EPhysAnimEvidenceBaselineSegment::PhcPolicy);
 		const FPhysAnimRuntimeMetricSegmentInventory* PhysicsControl = FindSegment(Inventory, EPhysAnimEvidenceBaselineSegment::PhysicsControl);
 		const FPhysAnimRuntimeMetricSegmentInventory* Chaos = FindSegment(Inventory, EPhysAnimEvidenceBaselineSegment::Chaos);
+		const FPhysAnimRuntimeMetricSegmentInventory* RendererFacingMotion = FindSegment(Inventory, EPhysAnimEvidenceBaselineSegment::RendererFacingMotion);
 
 		TestNotNull(TEXT("PoseSearch segment exists"), PoseSearch);
 		TestNotNull(TEXT("PhcPolicy segment exists"), PhcPolicy);
 		TestNotNull(TEXT("PhysicsControl segment exists"), PhysicsControl);
 		TestNotNull(TEXT("Chaos segment exists"), Chaos);
+		TestNotNull(TEXT("RendererFacingMotion segment exists"), RendererFacingMotion);
 
-		if (!PoseSearch || !PhcPolicy || !PhysicsControl || !Chaos)
+		if (!PoseSearch || !PhcPolicy || !PhysicsControl || !Chaos || !RendererFacingMotion)
 		{
 			return false;
 		}
@@ -172,6 +174,18 @@ namespace
 		for (const TCHAR* ExpectedField : ExpectedChaosFields)
 		{
 			TestNotNull(TEXT("Expected Chaos field mapping exists"), FindMapping(*Chaos, ExpectedField));
+		}
+
+		const TCHAR* ExpectedRendererFacingMotionFields[] =
+		{
+			TEXT("RendererFacingMotionSampleCount"),
+			TEXT("RendererFacingMotionActiveSampleCount"),
+			TEXT("RendererFacingMotionMaxRootWorldPositionDriftCm")
+		};
+
+		for (const TCHAR* ExpectedField : ExpectedRendererFacingMotionFields)
+		{
+			TestNotNull(TEXT("Expected RendererFacingMotion field mapping exists"), FindMapping(*RendererFacingMotion, ExpectedField));
 		}
 
 		return true;

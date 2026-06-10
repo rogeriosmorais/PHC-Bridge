@@ -110,8 +110,18 @@ namespace
 			Artifact.RuntimeSimulatingBodyCount > 0
 				? EPhysAnimEvidenceBaselineSegmentState::Active
 				: EPhysAnimEvidenceBaselineSegmentState::NotReached;
-		BaselineInput.Segments.RendererFacingMotion =
-			EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		if (Artifact.RendererFacingMotionSampleCount <= 0)
+		{
+			BaselineInput.Segments.RendererFacingMotion = EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		}
+		else if (Artifact.RendererFacingMotionActiveSampleCount <= 0)
+		{
+			BaselineInput.Segments.RendererFacingMotion = EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive;
+		}
+		else
+		{
+			BaselineInput.Segments.RendererFacingMotion = EPhysAnimEvidenceBaselineSegmentState::Active;
+		}
 
 		BaselineInput.TruthFlags.bAssistanceTruthClean =
 			Artifact.ShellHelperUsedCount == 0 &&
@@ -210,9 +220,12 @@ namespace
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
 			TEXT("RendererFacingMotion"),
 			ClassifierResult.Segments.RendererFacingMotion,
-			Artifact.bTerminalFrameArtifactCaptured ? 1 : 0,
-			Artifact.bTerminalFrameArtifactCaptured ? 1.0 : 0.0,
-			Artifact.SupportHullAreaCm2,
+			Artifact.RendererFacingMotionSampleCount,
+			Artifact.RendererFacingMotionSampleCount > 0
+				? static_cast<double>(Artifact.RendererFacingMotionActiveSampleCount) /
+					static_cast<double>(Artifact.RendererFacingMotionSampleCount)
+				: 0.0,
+			Artifact.RendererFacingMotionMaxRootWorldPositionDriftCm,
 			TEXT("renderer")));
 
 		Summary.QualityFlags = ClassifierResult.TruthFlags;
@@ -315,6 +328,11 @@ namespace
 		Json->SetNumberField(TEXT("control_target_mean_raw_policy_offset_deg_max"), Artifact.ControlTargetMeanRawPolicyOffsetDegMax);
 		Json->SetNumberField(TEXT("pose_search_query_count"), Artifact.PoseSearchQueryCount);
 		Json->SetNumberField(TEXT("pose_search_valid_result_count"), Artifact.PoseSearchValidResultCount);
+		Json->SetNumberField(TEXT("renderer_facing_motion_sample_count"), Artifact.RendererFacingMotionSampleCount);
+		Json->SetNumberField(TEXT("renderer_facing_motion_active_sample_count"), Artifact.RendererFacingMotionActiveSampleCount);
+		Json->SetNumberField(
+			TEXT("renderer_facing_motion_max_root_world_position_drift_cm"),
+			Artifact.RendererFacingMotionMaxRootWorldPositionDriftCm);
 		Json->SetNumberField(TEXT("runtime_body_sample_count"), Artifact.RuntimeBodySampleCount);
 		Json->SetNumberField(TEXT("runtime_simulating_body_count"), Artifact.RuntimeSimulatingBodyCount);
 		Json->SetNumberField(TEXT("runtime_max_body_linear_speed_cm_per_second"), Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond);

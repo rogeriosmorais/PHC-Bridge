@@ -1125,6 +1125,15 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	int32 PoseSearchValidResultCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 RendererFacingMotionSampleCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 RendererFacingMotionActiveSampleCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double RendererFacingMotionMaxRootWorldPositionDriftCm = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 PolicyInferenceSuccessCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
@@ -1426,6 +1435,7 @@ public:
 	bool IsLiveRuntimeEvidenceProofSatisfied() const;
 	bool HasActiveBridgeTraceSession() const { return BridgeTraceWriter.IsValid(); }
 	void RecordLiveRuntimeEvidencePoseSearchQueryResult(bool bPoseSearchValid);
+	void RecordLiveRuntimeEvidenceRendererFacingMotionSample(bool bRendererFacingMotionActive, double RootWorldPositionDriftCm);
 	void NoteStartupProofWaitingForPoseSearchObserved();
 	void ArmStartupProofTerminalEnforcement();
 	void SetStartupProofShouldComplete(bool bShouldComplete) { bLiveRuntimeEvidenceProofShouldComplete = bShouldComplete; }
@@ -1472,6 +1482,14 @@ public:
 	void TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(bool bPoseSearchValid)
 	{
 		RecordLiveRuntimeEvidencePoseSearchQueryResult(bPoseSearchValid);
+	}
+	void TestOnlyRecordLiveRuntimeEvidenceRendererFacingMotionSample(
+		bool bRendererFacingMotionActive,
+		double RootWorldPositionDriftCm = 0.0)
+	{
+		RecordLiveRuntimeEvidenceRendererFacingMotionSample(
+			bRendererFacingMotionActive,
+			RootWorldPositionDriftCm);
 	}
 	FPhysAnimRuntimeSubstepInput TestOnlyBuildLiveRuntimeEvidenceSubstepInput(
 		const FPhysAnimSupportObservationResult& SupportObservation = FPhysAnimSupportObservationResult(),

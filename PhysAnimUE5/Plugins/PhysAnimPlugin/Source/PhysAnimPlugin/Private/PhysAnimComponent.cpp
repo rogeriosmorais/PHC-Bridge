@@ -688,6 +688,26 @@ void UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult(const bo
 	}
 }
 
+void UPhysAnimComponent::RecordLiveRuntimeEvidenceRendererFacingMotionSample(
+	const bool bRendererFacingMotionActive,
+	const double RootWorldPositionDriftCm)
+{
+	if (!bEnableLiveRuntimeEvidenceProof)
+	{
+		return;
+	}
+
+	++ActivatedStandingStabilityMetrics.RendererFacingMotionSampleCount;
+	if (bRendererFacingMotionActive)
+	{
+		++ActivatedStandingStabilityMetrics.RendererFacingMotionActiveSampleCount;
+	}
+
+	ActivatedStandingStabilityMetrics.RendererFacingMotionMaxRootWorldPositionDriftCm = FMath::Max(
+		ActivatedStandingStabilityMetrics.RendererFacingMotionMaxRootWorldPositionDriftCm,
+		RootWorldPositionDriftCm);
+}
+
 void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 {
 	const bool bTerminalFailureLatched =
@@ -1123,6 +1143,9 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	ActivatedStandingStabilityMetrics.RootWorldPositionDriftCm = FMath::Max(ActivatedStandingStabilityMetrics.RootWorldPositionDriftCm, CurrentRootWorldPositionDriftCm);
 	ActivatedStandingStabilityMetrics.RootVerticalDriftCm = FMath::Max(ActivatedStandingStabilityMetrics.RootVerticalDriftCm, CurrentRootVerticalDriftCm);
 	ActivatedStandingStabilityMetrics.RootAngularDriftDeg = FMath::Max(ActivatedStandingStabilityMetrics.RootAngularDriftDeg, CurrentRootAngularDriftDeg);
+	RecordLiveRuntimeEvidenceRendererFacingMotionSample(
+		CurrentRootWorldPositionDriftCm > UE_SMALL_NUMBER,
+		CurrentRootWorldPositionDriftCm);
 	int32 DirectBodySampleCount = 0;
 	int32 DirectSimulatingBodyCount = 0;
 	int32 ExcludedRequiredBodySimulatingCount = 0;
@@ -1718,6 +1741,10 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.ControlTargetMeanRawPolicyOffsetDegMax = ActivatedStandingStabilityMetrics.ControlTargetMeanRawPolicyOffsetDegMax;
 	Input.Values.PoseSearchQueryCount = ActivatedStandingStabilityMetrics.PoseSearchQueryCount;
 	Input.Values.PoseSearchValidResultCount = ActivatedStandingStabilityMetrics.PoseSearchValidResultCount;
+	Input.Values.RendererFacingMotionSampleCount = ActivatedStandingStabilityMetrics.RendererFacingMotionSampleCount;
+	Input.Values.RendererFacingMotionActiveSampleCount = ActivatedStandingStabilityMetrics.RendererFacingMotionActiveSampleCount;
+	Input.Values.RendererFacingMotionMaxRootWorldPositionDriftCm =
+		ActivatedStandingStabilityMetrics.RendererFacingMotionMaxRootWorldPositionDriftCm;
 	Input.Values.RuntimeBodySampleCount = ActivatedStandingStabilityMetrics.BodyTelemetrySampleCount;
 	Input.Values.RuntimeSimulatingBodyCount = ActivatedStandingStabilityMetrics.SimulatingBodyCountMax;
 	Input.Values.RuntimeMaxBodyLinearSpeedCmPerSecond = ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond;

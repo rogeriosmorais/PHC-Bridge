@@ -6,6 +6,7 @@
 #include "PhysAnimPhase1PelvisCouplingSearch.h"
 #include "PhysAnimBalance.TestHelpers.h"
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "PhysAnimRuntimeOrchestrator.h"
 #include "Engine/SkeletalMesh.h"
 #include "HAL/FileManager.h"
 #include "PhysicsEngine/PhysicsAsset.h"
@@ -2581,6 +2582,66 @@ namespace
 		const FPhysAnimRuntimeSubstepResult SubstepResult = PhysAnimRuntimeOrchestrator::EvaluateRuntimeSubstep(SubstepInput);
 		TestEqual(TEXT("Produced artifact preserves PoseSearch query count"), SubstepResult.Artifact.PoseSearchQueryCount, 3);
 		TestEqual(TEXT("Produced artifact preserves PoseSearch valid result count"), SubstepResult.Artifact.PoseSearchValidResultCount, 1);
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimLiveRuntimeEvidenceRendererFacingMotionCounterCaptureTest,
+		"PhysAnim.Component.LiveRuntimeEvidenceRendererFacingMotionCounterCapture",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimLiveRuntimeEvidenceRendererFacingMotionCounterCaptureTest::RunTest(const FString& Parameters)
+	{
+		UPhysAnimComponent* const Component = NewObject<UPhysAnimComponent>();
+		TestNotNull(TEXT("Transient component exists"), Component);
+		if (!Component)
+		{
+			return false;
+		}
+
+		Component->bEnableLiveRuntimeEvidenceProof = true;
+
+		const bool bFirstSampleActive = false;
+		Component->TestOnlyRecordLiveRuntimeEvidenceRendererFacingMotionSample(bFirstSampleActive, 3.25);
+		TestFalse(TEXT("Caller renderer-facing motion sample remains false after recording"), bFirstSampleActive);
+
+		const bool bSecondSampleActive = true;
+		Component->TestOnlyRecordLiveRuntimeEvidenceRendererFacingMotionSample(bSecondSampleActive, 12.5);
+		TestTrue(TEXT("Caller renderer-facing motion sample remains true after recording"), bSecondSampleActive);
+
+		const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
+		TestEqual(TEXT("Renderer-facing motion sample count increments across recordings"), Metrics.RendererFacingMotionSampleCount, 2);
+		TestEqual(TEXT("Renderer-facing motion active sample count only increments for true results"), Metrics.RendererFacingMotionActiveSampleCount, 1);
+		TestEqual(TEXT("Renderer-facing motion max root drift preserves the highest recorded value"), Metrics.RendererFacingMotionMaxRootWorldPositionDriftCm, 12.5);
+
+		Component->TestOnlyRecordLiveRuntimeEvidenceRendererFacingMotionSample(false, 6.0);
+		const FPhysAnimActivatedStandingStabilityMetrics& SnapshotMetrics = Component->GetActivatedStandingStabilityMetrics();
+		TestEqual(TEXT("Renderer-facing motion sample count includes the third recorded sample"), SnapshotMetrics.RendererFacingMotionSampleCount, 3);
+		TestEqual(TEXT("Renderer-facing motion active sample count remains one after an inactive sample"), SnapshotMetrics.RendererFacingMotionActiveSampleCount, 1);
+		TestEqual(TEXT("Renderer-facing motion max root drift remains the highest observed value"), SnapshotMetrics.RendererFacingMotionMaxRootWorldPositionDriftCm, 12.5);
+
+		const FPhysAnimRuntimeSubstepInput SubstepInput = Component->TestOnlyBuildLiveRuntimeEvidenceSubstepInput();
+		TestEqual(
+			TEXT("Substep input copies renderer-facing motion sample count from component evidence state"),
+			SubstepInput.Values.RendererFacingMotionSampleCount,
+			3);
+		TestEqual(
+			TEXT("Substep input copies renderer-facing motion active sample count from component evidence state"),
+			SubstepInput.Values.RendererFacingMotionActiveSampleCount,
+			1);
+		TestEqual(
+			TEXT("Substep input copies renderer-facing motion max root drift from component evidence state"),
+			SubstepInput.Values.RendererFacingMotionMaxRootWorldPositionDriftCm,
+			12.5);
+
+		const FPhysAnimRuntimeSubstepResult SubstepResult = PhysAnimRuntimeOrchestrator::EvaluateRuntimeSubstep(SubstepInput);
+		TestEqual(TEXT("Produced artifact preserves renderer-facing motion sample count"), SubstepResult.Artifact.RendererFacingMotionSampleCount, 3);
+		TestEqual(TEXT("Produced artifact preserves renderer-facing motion active sample count"), SubstepResult.Artifact.RendererFacingMotionActiveSampleCount, 1);
+		TestEqual(
+			TEXT("Produced artifact preserves renderer-facing motion max root drift"),
+			SubstepResult.Artifact.RendererFacingMotionMaxRootWorldPositionDriftCm,
+			12.5);
 
 		return true;
 	}

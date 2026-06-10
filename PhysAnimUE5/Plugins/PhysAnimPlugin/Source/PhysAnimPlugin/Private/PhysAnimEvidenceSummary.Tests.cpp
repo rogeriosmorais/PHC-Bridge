@@ -123,7 +123,10 @@ namespace
 	FPhysAnimProofArtifactEmitInput MakeProofEmitterInput(
 		const FString& AttemptUuid,
 		const int32 PoseSearchQueryCount = 0,
-		const int32 PoseSearchValidResultCount = 0)
+		const int32 PoseSearchValidResultCount = 0,
+		const int32 RendererFacingMotionSampleCount = 0,
+		const int32 RendererFacingMotionActiveSampleCount = 0,
+		const double RendererFacingMotionMaxRootWorldPositionDriftCm = 0.0)
 	{
 		FPhysAnimProofArtifactEmitInput Input;
 		Input.AttemptUuid = AttemptUuid;
@@ -148,6 +151,9 @@ namespace
 		Artifact.ControlTargetMaxDeltaDeg = 2.0;
 		Artifact.PoseSearchQueryCount = PoseSearchQueryCount;
 		Artifact.PoseSearchValidResultCount = PoseSearchValidResultCount;
+		Artifact.RendererFacingMotionSampleCount = RendererFacingMotionSampleCount;
+		Artifact.RendererFacingMotionActiveSampleCount = RendererFacingMotionActiveSampleCount;
+		Artifact.RendererFacingMotionMaxRootWorldPositionDriftCm = RendererFacingMotionMaxRootWorldPositionDriftCm;
 		Artifact.RuntimeBodySampleCount = 1;
 		Artifact.RuntimeSimulatingBodyCount = 1;
 		Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond = 12.0;
@@ -294,6 +300,88 @@ namespace
 				TEXT("PoseSearch state serializes from query/valid counts"),
 				static_cast<uint8>(PoseSearchSegment->State),
 				static_cast<uint8>(Case.ExpectedState));
+
+			IFileManager::Get().Delete(*TerminalPath);
+			IFileManager::Get().Delete(*SummaryPath);
+		}
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimEvidenceSummaryRendererFacingMotionStateSerializationTest,
+		"PhysAnim.EvidenceSummary.RendererFacingMotionStateSerialization",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimEvidenceSummaryRendererFacingMotionStateSerializationTest::RunTest(const FString& Parameters)
+	{
+		const struct FCase
+		{
+			const TCHAR* AttemptUuid;
+			int32 RendererFacingMotionSampleCount;
+			int32 RendererFacingMotionActiveSampleCount;
+			double RendererFacingMotionMaxRootWorldPositionDriftCm;
+			EPhysAnimEvidenceBaselineSegmentState ExpectedState;
+		} Cases[] =
+		{
+			{ TEXT("renderer-motion-0-0"), 0, 0, 0.0, EPhysAnimEvidenceBaselineSegmentState::NotReached },
+			{ TEXT("renderer-motion-2-0"), 2, 0, 7.5, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
+			{ TEXT("renderer-motion-2-1"), 2, 1, 12.5, EPhysAnimEvidenceBaselineSegmentState::Active },
+			{ TEXT("renderer-motion-4-2"), 4, 2, 16.25, EPhysAnimEvidenceBaselineSegmentState::Active }
+		};
+
+		for (const FCase& Case : Cases)
+		{
+			const FString AttemptUuid = Case.AttemptUuid;
+			const FString TerminalPath = PhysAnimProofArtifactEmitter::BuildTerminalArtifactJsonPath(AttemptUuid);
+			const FString SummaryPath = BuildEvidenceSummaryJsonPath(AttemptUuid);
+			IFileManager::Get().Delete(*TerminalPath);
+			IFileManager::Get().Delete(*SummaryPath);
+
+			const FPhysAnimProofArtifactEmitInput Input = MakeProofEmitterInput(
+				AttemptUuid,
+				0,
+				0,
+				Case.RendererFacingMotionSampleCount,
+				Case.RendererFacingMotionActiveSampleCount,
+				Case.RendererFacingMotionMaxRootWorldPositionDriftCm);
+			const FPhysAnimProofArtifactEmitResult EmitResult =
+				PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(Input);
+			TestTrue(TEXT("Terminal artifact writes successfully for RendererFacingMotion summary case"), EmitResult.bJsonWritten);
+
+			FString SummaryJson;
+			TestTrue(TEXT("RendererFacingMotion summary sidecar is readable"), FFileHelper::LoadFileToString(SummaryJson, *SummaryPath));
+
+			FPhysAnimEvidenceSummary Parsed;
+			TestTrue(TEXT("RendererFacingMotion summary sidecar parses"), DeserializeFromJsonString(SummaryJson, Parsed));
+
+			const FPhysAnimEvidenceSummarySegment* RendererFacingMotionSegment = FindSegment(Parsed, TEXT("RendererFacingMotion"));
+			TestNotNull(TEXT("RendererFacingMotion segment exists in summary"), RendererFacingMotionSegment);
+			if (!RendererFacingMotionSegment)
+			{
+				IFileManager::Get().Delete(*TerminalPath);
+				IFileManager::Get().Delete(*SummaryPath);
+				return false;
+			}
+
+			TestEqual(
+				TEXT("RendererFacingMotion sample_count matches sample count"),
+				RendererFacingMotionSegment->Metrics.SampleCount,
+				Case.RendererFacingMotionSampleCount);
+			TestEqual(
+				TEXT("RendererFacingMotion state serializes from sample counts"),
+				static_cast<uint8>(RendererFacingMotionSegment->State),
+				static_cast<uint8>(Case.ExpectedState));
+			TestEqual(
+				TEXT("RendererFacingMotion confidence uses the active/sample ratio"),
+				RendererFacingMotionSegment->Metrics.Confidence,
+				Case.RendererFacingMotionSampleCount > 0
+					? static_cast<double>(Case.RendererFacingMotionActiveSampleCount) / static_cast<double>(Case.RendererFacingMotionSampleCount)
+					: 0.0);
+			TestEqual(
+				TEXT("RendererFacingMotion score uses max root drift"),
+				RendererFacingMotionSegment->Metrics.Score,
+				Case.RendererFacingMotionMaxRootWorldPositionDriftCm);
 
 			IFileManager::Get().Delete(*TerminalPath);
 			IFileManager::Get().Delete(*SummaryPath);
@@ -472,6 +560,12 @@ namespace
 		TestEqual(TEXT("Sidecar preserves terminal artifact path reference"), Parsed.TerminalArtifactPath, TerminalPath);
 		TestEqual(TEXT("Sidecar keeps strict verdict diagnostic until missing segment metrics exist"), static_cast<uint8>(Parsed.StrictVerdict), static_cast<uint8>(EPhysAnimEvidenceBaselineVerdict::Diagnostic));
 		TestFalse(TEXT("Sidecar classifier output preserves durable terminal artifact evidence"), Parsed.QualityFlags.bMissingEvidence);
+
+		FString TerminalJson;
+		TestTrue(TEXT("Terminal proof artifact is readable"), FFileHelper::LoadFileToString(TerminalJson, *TerminalPath));
+		TestTrue(TEXT("Terminal proof artifact captures renderer-facing motion sample count"), TerminalJson.Contains(TEXT("\"renderer_facing_motion_sample_count\":0")));
+		TestTrue(TEXT("Terminal proof artifact captures renderer-facing motion active sample count"), TerminalJson.Contains(TEXT("\"renderer_facing_motion_active_sample_count\":0")));
+		TestTrue(TEXT("Terminal proof artifact captures renderer-facing motion max root drift"), TerminalJson.Contains(TEXT("\"renderer_facing_motion_max_root_world_position_drift_cm\":0")));
 
 		IFileManager::Get().Delete(*TerminalPath);
 		IFileManager::Get().Delete(*SummaryPath);

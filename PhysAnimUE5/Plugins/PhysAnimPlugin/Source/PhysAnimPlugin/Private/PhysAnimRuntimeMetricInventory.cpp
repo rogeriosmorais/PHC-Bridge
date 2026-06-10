@@ -131,7 +131,19 @@ namespace PhysAnimRuntimeMetricInventory
 			FPhysAnimRuntimeMetricSegmentInventory Segment;
 			Segment.Segment = EPhysAnimEvidenceBaselineSegment::RendererFacingMotion;
 			Segment.SegmentName = TEXT("RendererFacingMotion");
-			Segment.bRequiresNewTelemetry = true;
+			Segment.bRequiresNewTelemetry = false;
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("RendererFacingMotionSampleCount"),
+				{ TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::RecordLiveRuntimeEvidenceRendererFacingMotionSample") },
+				{ TEXT("PhysAnim.Component.LiveRuntimeEvidenceRendererFacingMotionCounterCapture"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("RendererFacingMotionActiveSampleCount"),
+				{ TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::RecordLiveRuntimeEvidenceRendererFacingMotionSample") },
+				{ TEXT("PhysAnim.Component.LiveRuntimeEvidenceRendererFacingMotionCounterCapture"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("RendererFacingMotionMaxRootWorldPositionDriftCm"),
+				{ TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.Component.LiveRuntimeEvidenceRendererFacingMotionCounterCapture"), TEXT("PhysAnim.Validators.BuildRunArtifactSnapshot") }));
 			Inventory.Segments.Add(MoveTemp(Segment));
 		}
 
