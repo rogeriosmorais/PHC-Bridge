@@ -1,0 +1,4 @@
+[mcp_servers.graph]
+command = "npx"
+args = ["-y", "@mcp-graph-workflow/mcp-graph"]
+cwd = "."
