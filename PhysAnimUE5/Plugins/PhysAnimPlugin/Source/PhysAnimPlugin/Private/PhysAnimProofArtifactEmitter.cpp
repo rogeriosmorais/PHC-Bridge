@@ -1,5 +1,7 @@
 #include "PhysAnimProofArtifactEmitter.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimEvidenceClassifier.h"
+#include "PhysAnimEvidenceSummary.h"
 
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
@@ -77,6 +79,139 @@ namespace
 		}
 
 		return Result;
+	}
+
+	FPhysAnimEvidenceBaselineInput PhysAnimProof_BuildEvidenceBaselineInput(const FPhysAnimRunArtifactSnapshot& Artifact)
+	{
+		FPhysAnimEvidenceBaselineInput BaselineInput;
+
+		BaselineInput.Segments.PoseSearch =
+			EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		BaselineInput.Segments.PhcPolicy =
+			Artifact.PolicyActionSampleCount > 0
+				? EPhysAnimEvidenceBaselineSegmentState::Active
+				: EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		BaselineInput.Segments.PhysicsControl =
+			Artifact.ControlTargetTotalWrites > 0
+				? EPhysAnimEvidenceBaselineSegmentState::Active
+				: EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		BaselineInput.Segments.Chaos =
+			Artifact.RuntimeSimulatingBodyCount > 0
+				? EPhysAnimEvidenceBaselineSegmentState::Active
+				: EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		BaselineInput.Segments.RendererFacingMotion =
+			EPhysAnimEvidenceBaselineSegmentState::NotReached;
+
+		BaselineInput.TruthFlags.bAssistanceTruthClean =
+			Artifact.ShellHelperUsedCount == 0 &&
+			!Artifact.bMeshWideAssistDetected &&
+			!Artifact.bNonCriticalBodyAssistDetected;
+		BaselineInput.TruthFlags.bContinuityTruthClean =
+			Artifact.bPhysicalContinuityValidatorPassed &&
+			!Artifact.bContinuityBookkeepingMismatch;
+		BaselineInput.TruthFlags.bSupportTruthClean =
+			Artifact.SupportMode != EPhysAnimSupportMode::Airborne &&
+			Artifact.ActiveSupportSideCount > 0 &&
+			Artifact.SupportHullAreaCm2 > 0.0 &&
+			Artifact.SupportGapTimerMs <= 100.0 &&
+			(!Artifact.ProxyInsideHull.IsSet() || Artifact.ProxyInsideHull.GetValue()) &&
+			!Artifact.bCalfContactTerminal;
+		BaselineInput.TruthFlags.bSimulationTruthClean =
+			Artifact.RuntimeBodySampleCount > 0 &&
+			Artifact.RuntimeSimulatingBodyCount > 0;
+		BaselineInput.TruthFlags.bTerminalFailure = Artifact.TerminalReason != EPhysAnimTerminalReason::None;
+		BaselineInput.TruthFlags.bArtifactLogContradiction = false;
+		BaselineInput.TruthFlags.bMissingEvidence = !Artifact.bTerminalFrameArtifactCaptured;
+
+		BaselineInput.ProofSignals.TerminalProofJsonPassed =
+			Artifact.TerminalReason == EPhysAnimTerminalReason::None;
+		BaselineInput.ProofSignals.LogPass = BaselineInput.ProofSignals.TerminalProofJsonPassed;
+		BaselineInput.ProofSignals.ArtifactPass = BaselineInput.ProofSignals.TerminalProofJsonPassed;
+		BaselineInput.bHoldThresholdSatisfied = Artifact.HoldDurationSec >= 3.0;
+
+		return BaselineInput;
+	}
+
+	FPhysAnimEvidenceSummarySegment PhysAnimProof_MakeSummarySegment(
+		const FString& SegmentName,
+		const EPhysAnimEvidenceBaselineSegmentState State,
+		const int32 SampleCount,
+		const double Confidence,
+		const double Score,
+		const TCHAR* ProvenanceTag)
+	{
+		FPhysAnimEvidenceSummarySegment Segment;
+		Segment.SegmentName = SegmentName;
+		Segment.State = State;
+		Segment.Metrics.SampleCount = SampleCount;
+		Segment.Metrics.Confidence = Confidence;
+		Segment.Metrics.Score = Score;
+		Segment.SourceProvenance.Add(ProvenanceTag);
+		Segment.SourceProvenance.Add(TEXT("EB-01"));
+		return Segment;
+	}
+
+	FPhysAnimEvidenceSummary PhysAnimProof_BuildEvidenceSummary(
+		const FPhysAnimProofArtifactEmitInput& Input,
+		const FPhysAnimRunArtifactSnapshot& Artifact,
+		const FPhysAnimEvidenceBaselineResult& ClassifierResult)
+	{
+		FPhysAnimEvidenceSummary Summary;
+		Summary.AttemptUuid = Input.AttemptUuid;
+		Summary.TestName = TEXT("PhysAnim.LiveRuntimeEvidence");
+		Summary.MapName = Artifact.BaselineId.IsEmpty() ? TEXT("UnknownMap") : Artifact.BaselineId;
+		Summary.Timestamp = Artifact.Timestamp;
+		Summary.TerminalReason = Artifact.TerminalReason;
+		Summary.TerminalArtifactPath = PhysAnimProofArtifactEmitter::BuildTerminalArtifactJsonPath(Input.AttemptUuid);
+		Summary.CommandMetadata.Reset();
+
+		Summary.Segments.Reserve(static_cast<int32>(EPhysAnimEvidenceBaselineSegment::Count));
+		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
+			TEXT("PoseSearch"),
+			ClassifierResult.Segments.PoseSearch,
+			Artifact.PolicyInferenceSuccessCount,
+			Artifact.ControlAlpha,
+			Artifact.PolicyActionConditionedMeanAbsMax,
+			TEXT("policy")));
+		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
+			TEXT("PhcPolicy"),
+			ClassifierResult.Segments.PhcPolicy,
+			Artifact.PolicyActionSampleCount,
+			Artifact.PolicyActionRawMeanAbsMax,
+			Artifact.PolicyActionConditionedMeanAbsMax,
+			TEXT("policy")));
+		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
+			TEXT("PhysicsControl"),
+			ClassifierResult.Segments.PhysicsControl,
+			Artifact.ControlTargetTotalWrites,
+			Artifact.ControlTargetNormalWrites,
+			Artifact.ControlTargetMaxDeltaDeg,
+			TEXT("control")));
+		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
+			TEXT("Chaos"),
+			ClassifierResult.Segments.Chaos,
+			Artifact.RuntimeBodySampleCount,
+			Artifact.RuntimeSimulatingBodyCount,
+			Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond,
+			TEXT("chaos")));
+		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
+			TEXT("RendererFacingMotion"),
+			ClassifierResult.Segments.RendererFacingMotion,
+			Artifact.bTerminalFrameArtifactCaptured ? 1 : 0,
+			Artifact.bTerminalFrameArtifactCaptured ? 1.0 : 0.0,
+			Artifact.SupportHullAreaCm2,
+			TEXT("renderer")));
+
+		Summary.QualityFlags = ClassifierResult.TruthFlags;
+		Summary.StrictVerdict = ClassifierResult.Verdict;
+		return Summary;
+	}
+
+	FPhysAnimEvidenceBaselineResult PhysAnimProof_ClassifySummary(
+		const FPhysAnimRunArtifactSnapshot& Artifact)
+	{
+		const FPhysAnimEvidenceBaselineInput BaselineInput = PhysAnimProof_BuildEvidenceBaselineInput(Artifact);
+		return PhysAnimEvidenceClassifier::Classify(BaselineInput);
 	}
 
 	TSharedRef<FJsonObject> PhysAnimProof_ArtifactToJson(
@@ -345,6 +480,7 @@ namespace PhysAnimProofArtifactEmitter
 		FPhysAnimProofArtifactEmitResult Result;
 
 		const FPhysAnimRunArtifactSnapshot& Artifact = Input.PipelineResult.StateApplyResult.State.TerminalArtifact;
+		const FPhysAnimEvidenceBaselineResult ClassifierResult = PhysAnimProof_ClassifySummary(Artifact);
 
 		const FString ProxyInsideText =
 			Artifact.ProxyInsideHull.IsSet()
@@ -358,6 +494,21 @@ namespace PhysAnimProofArtifactEmitter
 
 		Result.JsonPath = BuildTerminalArtifactJsonPath(Input.AttemptUuid);
 		Result.bJsonWritten = WriteTerminalArtifactJson(Result.JsonPath, Input);
+
+		FPhysAnimEvidenceSummaryWriteInput SummaryWriteInput;
+		SummaryWriteInput.Summary = PhysAnimProof_BuildEvidenceSummary(Input, Artifact, ClassifierResult);
+		SummaryWriteInput.ClassifierResult = ClassifierResult;
+		const FPhysAnimEvidenceSummaryWriteResult SummaryWriteResult =
+			PhysAnimEvidenceSummary::WriteEvidenceSummaryJson(SummaryWriteInput);
+		if (!SummaryWriteResult.bJsonWritten)
+		{
+			UE_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("PhysAnimProof: EvidenceSummaryCaptureFailure uuid=%s summary_json=%s"),
+				*Input.AttemptUuid,
+				*SummaryWriteResult.JsonPath);
+		}
 
 		UE_LOG(
 			LogPhysAnimBridge,

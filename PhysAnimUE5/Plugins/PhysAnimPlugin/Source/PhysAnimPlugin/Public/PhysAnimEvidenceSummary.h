@@ -43,10 +43,25 @@ struct FPhysAnimEvidenceSummary
 	FString TerminalArtifactPath;
 };
 
+struct FPhysAnimEvidenceSummaryWriteInput
+{
+	FPhysAnimEvidenceSummary Summary;
+	FPhysAnimEvidenceBaselineResult ClassifierResult;
+	FString OutputPathOverride;
+};
+
+struct FPhysAnimEvidenceSummaryWriteResult
+{
+	bool bJsonWritten = false;
+	bool bEvidenceCaptureFailure = false;
+	FString JsonPath;
+};
+
 namespace PhysAnimEvidenceSummary
 {
 	FString BuildEvidenceSummaryJsonPath(const FString& AttemptUuid);
 
 	FString SerializeToJsonString(const FPhysAnimEvidenceSummary& Summary);
 	bool DeserializeFromJsonString(const FString& JsonString, FPhysAnimEvidenceSummary& OutSummary);
+	FPhysAnimEvidenceSummaryWriteResult WriteEvidenceSummaryJson(const FPhysAnimEvidenceSummaryWriteInput& Input);
 }

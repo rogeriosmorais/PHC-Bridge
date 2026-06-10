@@ -1,5 +1,7 @@
 #include "PhysAnimEvidenceSummary.h"
 #include "PhysAnimProofArtifactEmitter.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/AutomationTest.h"
 
@@ -60,6 +62,97 @@ namespace
 		Summary.StrictVerdict = EPhysAnimEvidenceBaselineVerdict::Blocked;
 		Summary.TerminalArtifactPath = PhysAnimProofArtifactEmitter::BuildTerminalArtifactJsonPath(Summary.AttemptUuid);
 		return Summary;
+	}
+
+	FPhysAnimEvidenceBaselineResult MakeClassifierResultForWriterTest()
+	{
+		FPhysAnimEvidenceBaselineResult Result;
+		Result.Segments.PoseSearch = EPhysAnimEvidenceBaselineSegmentState::Active;
+		Result.Segments.PhcPolicy = EPhysAnimEvidenceBaselineSegmentState::Active;
+		Result.Segments.PhysicsControl = EPhysAnimEvidenceBaselineSegmentState::Active;
+		Result.Segments.Chaos = EPhysAnimEvidenceBaselineSegmentState::Active;
+		Result.Segments.RendererFacingMotion = EPhysAnimEvidenceBaselineSegmentState::Active;
+		Result.TruthFlags.bAssistanceTruthClean = true;
+		Result.TruthFlags.bContinuityTruthClean = true;
+		Result.TruthFlags.bSupportTruthClean = true;
+		Result.TruthFlags.bSimulationTruthClean = true;
+		Result.TruthFlags.bTerminalFailure = false;
+		Result.TruthFlags.bArtifactLogContradiction = false;
+		Result.TruthFlags.bMissingEvidence = false;
+		Result.ProofSignals.TerminalProofJsonPassed = true;
+		Result.ProofSignals.LogPass = true;
+		Result.ProofSignals.ArtifactPass = true;
+		Result.bHoldThresholdSatisfied = true;
+		Result.Verdict = EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate;
+		return Result;
+	}
+
+	FPhysAnimEvidenceSummaryWriteInput MakeWriterInput(
+		const FString& AttemptUuid,
+		const FString& OutputPathOverride,
+		const FPhysAnimEvidenceBaselineResult& ClassifierResult)
+	{
+		FPhysAnimEvidenceSummaryWriteInput Input;
+		Input.Summary = MakeCompleteSummary(true);
+		Input.Summary.AttemptUuid = AttemptUuid;
+		Input.Summary.TestName = TEXT("PhysAnim.EvidenceSummary.Writer");
+		Input.Summary.MapName = TEXT("PhysAnim_Writer_Map");
+		Input.Summary.Timestamp = 7777.25;
+		Input.Summary.QualityFlags.bAssistanceTruthClean = false;
+		Input.Summary.QualityFlags.bContinuityTruthClean = false;
+		Input.Summary.QualityFlags.bSupportTruthClean = false;
+		Input.Summary.QualityFlags.bSimulationTruthClean = false;
+		Input.Summary.StrictVerdict = EPhysAnimEvidenceBaselineVerdict::InsufficientEvidence;
+		Input.Summary.TerminalReason = EPhysAnimTerminalReason::ActivationSupportFailure;
+		Input.Summary.TerminalArtifactPath = PhysAnimProofArtifactEmitter::BuildTerminalArtifactJsonPath(AttemptUuid);
+		Input.ClassifierResult = ClassifierResult;
+		Input.OutputPathOverride = OutputPathOverride;
+		return Input;
+	}
+
+	int32 CountFilesForAttempt(const FString& AttemptUuid)
+	{
+		TArray<FString> MatchingFiles;
+		const FString SearchPattern = FPaths::Combine(
+			FPaths::GetPath(BuildEvidenceSummaryJsonPath(AttemptUuid)),
+			AttemptUuid + TEXT("*"));
+		IFileManager::Get().FindFiles(MatchingFiles, *SearchPattern, true, false);
+		return MatchingFiles.Num();
+	}
+
+	FPhysAnimProofArtifactEmitInput MakeProofEmitterInput(const FString& AttemptUuid)
+	{
+		FPhysAnimProofArtifactEmitInput Input;
+		Input.AttemptUuid = AttemptUuid;
+		Input.StandingSeconds = 3.25;
+		Input.RuntimeHitCount = 1;
+		Input.MappedSupportHitCount = 1;
+
+		FPhysAnimRunArtifactSnapshot& Artifact = Input.PipelineResult.StateApplyResult.State.TerminalArtifact;
+		Artifact.AttemptUuid = AttemptUuid;
+		Artifact.Timestamp = 8888.5;
+		Artifact.BaselineId = TEXT("PhysAnim_Emitter_Map");
+		Artifact.HoldDurationSec = 3.25;
+		Artifact.TerminalReason = EPhysAnimTerminalReason::None;
+		Artifact.bTerminalFrameArtifactCaptured = true;
+		Artifact.PolicyInferenceSuccessCount = 1;
+		Artifact.PolicyActionSampleCount = 1;
+		Artifact.PolicyActionRawMeanAbsMax = 0.5;
+		Artifact.PolicyActionConditionedMeanAbsMax = 0.5;
+		Artifact.ControlAlpha = 1.0;
+		Artifact.ControlTargetTotalWrites = 1;
+		Artifact.ControlTargetNormalWrites = 1;
+		Artifact.ControlTargetMaxDeltaDeg = 2.0;
+		Artifact.RuntimeBodySampleCount = 1;
+		Artifact.RuntimeSimulatingBodyCount = 1;
+		Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond = 12.0;
+		Artifact.bPhysicalContinuityValidatorPassed = true;
+		Artifact.SupportMode = EPhysAnimSupportMode::SingleFootSurvival;
+		Artifact.ActiveSupportSideCount = 1;
+		Artifact.SupportHullAreaCm2 = 100.0;
+		Artifact.SupportGapTimerMs = 0.0;
+
+		return Input;
 	}
 
 	void AssertSummaryRoundTrip(
@@ -188,6 +281,114 @@ namespace
 		TestFalse(TEXT("Missing command metadata stays unset after parsing"), Parsed.CommandMetadata.IsSet());
 		AssertSummaryRoundTrip(*this, Summary, Parsed);
 
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimEvidenceSummaryWriterSuccessTest,
+		"PhysAnim.EvidenceSummary.WriterSuccess",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimEvidenceSummaryWriterSuccessTest::RunTest(const FString& Parameters)
+	{
+		const FString AttemptUuid = TEXT("writer-success-attempt");
+		const FPhysAnimEvidenceBaselineResult ClassifierResult = MakeClassifierResultForWriterTest();
+		const FPhysAnimEvidenceSummaryWriteInput Input =
+			MakeWriterInput(AttemptUuid, FString(), ClassifierResult);
+		const FString ExpectedPath = BuildEvidenceSummaryJsonPath(AttemptUuid);
+		IFileManager::Get().Delete(*ExpectedPath);
+
+		FPhysAnimEvidenceSummary ExpectedSummary = Input.Summary;
+		ExpectedSummary.QualityFlags = ClassifierResult.TruthFlags;
+		ExpectedSummary.StrictVerdict = ClassifierResult.Verdict;
+		const FString ExpectedJson = SerializeToJsonString(ExpectedSummary);
+
+		const FPhysAnimEvidenceSummaryWriteResult WriteResult = WriteEvidenceSummaryJson(Input);
+		TestTrue(TEXT("Sidecar summary writes successfully"), WriteResult.bJsonWritten);
+		TestFalse(TEXT("Sidecar summary write is not reported as capture failure"), WriteResult.bEvidenceCaptureFailure);
+		TestEqual(TEXT("Sidecar summary path is built from the attempt UUID"), WriteResult.JsonPath, BuildEvidenceSummaryJsonPath(AttemptUuid));
+		TestTrue(TEXT("Sidecar summary path differs from terminal proof path"), WriteResult.JsonPath != Input.Summary.TerminalArtifactPath);
+		TestTrue(TEXT("Sidecar summary path uses the dedicated directory"), WriteResult.JsonPath.Contains(TEXT("EvidenceSummaries")));
+		TestTrue(TEXT("Sidecar summary file exists after write"), IFileManager::Get().FileExists(*WriteResult.JsonPath));
+		TestEqual(TEXT("Exactly one sidecar summary exists for the attempt"), CountFilesForAttempt(AttemptUuid), 1);
+
+		FString FileContents;
+		TestTrue(TEXT("Sidecar summary file is readable"), FFileHelper::LoadFileToString(FileContents, *WriteResult.JsonPath));
+		TestEqual(TEXT("Sidecar summary uses the EB-02 serializer output"), FileContents, ExpectedJson);
+
+		FPhysAnimEvidenceSummary Parsed;
+		TestTrue(TEXT("Sidecar summary parses back"), DeserializeFromJsonString(FileContents, Parsed));
+		TestEqual(TEXT("Classifier strict verdict is captured in the summary"), static_cast<uint8>(Parsed.StrictVerdict), static_cast<uint8>(ClassifierResult.Verdict));
+		TestEqual(TEXT("Classifier assistance flag is captured in the summary"), Parsed.QualityFlags.bAssistanceTruthClean, ClassifierResult.TruthFlags.bAssistanceTruthClean);
+		TestEqual(TEXT("Classifier continuity flag is captured in the summary"), Parsed.QualityFlags.bContinuityTruthClean, ClassifierResult.TruthFlags.bContinuityTruthClean);
+		TestEqual(TEXT("Classifier support flag is captured in the summary"), Parsed.QualityFlags.bSupportTruthClean, ClassifierResult.TruthFlags.bSupportTruthClean);
+		TestEqual(TEXT("Classifier simulation flag is captured in the summary"), Parsed.QualityFlags.bSimulationTruthClean, ClassifierResult.TruthFlags.bSimulationTruthClean);
+
+		IFileManager::Get().Delete(*WriteResult.JsonPath);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimEvidenceSummaryWriterFailureTest,
+		"PhysAnim.EvidenceSummary.WriterFailure",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimEvidenceSummaryWriterFailureTest::RunTest(const FString& Parameters)
+	{
+		const FString AttemptUuid = TEXT("writer-failure-attempt");
+		const FPhysAnimEvidenceBaselineResult ClassifierResult = MakeClassifierResultForWriterTest();
+		const FString OutputPathOverride = FPaths::Combine(
+			FPaths::ProjectSavedDir(),
+			TEXT("PhysAnim"),
+			TEXT("EvidenceSummaries"));
+		IFileManager::Get().MakeDirectory(*OutputPathOverride, true);
+		const FPhysAnimEvidenceSummaryWriteInput Input =
+			MakeWriterInput(AttemptUuid, OutputPathOverride, ClassifierResult);
+
+		const FPhysAnimEvidenceSummaryWriteResult WriteResult = WriteEvidenceSummaryJson(Input);
+		TestFalse(TEXT("Writing to a directory path fails"), WriteResult.bJsonWritten);
+		TestTrue(TEXT("Writing to a directory path is reported as evidence capture failure"), WriteResult.bEvidenceCaptureFailure);
+		TestEqual(TEXT("Failure result reports the attempted path"), WriteResult.JsonPath, OutputPathOverride);
+		TestFalse(TEXT("No file is created for the failure case"), IFileManager::Get().FileExists(*WriteResult.JsonPath));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimEvidenceSummaryProofEmitterHookTest,
+		"PhysAnim.EvidenceSummary.ProofEmitterHook",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimEvidenceSummaryProofEmitterHookTest::RunTest(const FString& Parameters)
+	{
+		const FString AttemptUuid = TEXT("proof-emitter-sidecar-attempt");
+		const FString TerminalPath = PhysAnimProofArtifactEmitter::BuildTerminalArtifactJsonPath(AttemptUuid);
+		const FString SummaryPath = BuildEvidenceSummaryJsonPath(AttemptUuid);
+		IFileManager::Get().Delete(*TerminalPath);
+		IFileManager::Get().Delete(*SummaryPath);
+
+		const FPhysAnimProofArtifactEmitInput Input = MakeProofEmitterInput(AttemptUuid);
+		const FPhysAnimProofArtifactEmitResult TerminalResult =
+			PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(Input);
+
+		TestTrue(TEXT("Terminal proof artifact still writes successfully"), TerminalResult.bJsonWritten);
+		TestEqual(TEXT("Terminal proof artifact path is unchanged"), TerminalResult.JsonPath, TerminalPath);
+		TestTrue(TEXT("Terminal proof artifact exists"), IFileManager::Get().FileExists(*TerminalPath));
+		TestTrue(TEXT("Evidence summary sidecar exists"), IFileManager::Get().FileExists(*SummaryPath));
+		TestTrue(TEXT("Evidence summary sidecar path differs from terminal proof path"), SummaryPath != TerminalPath);
+		TestEqual(TEXT("Proof attempt emits exactly one summary sidecar for the attempt"), CountFilesForAttempt(AttemptUuid), 1);
+
+		FString SummaryJson;
+		TestTrue(TEXT("Evidence summary sidecar is readable"), FFileHelper::LoadFileToString(SummaryJson, *SummaryPath));
+
+		FPhysAnimEvidenceSummary Parsed;
+		TestTrue(TEXT("Evidence summary sidecar parses"), DeserializeFromJsonString(SummaryJson, Parsed));
+		TestEqual(TEXT("Sidecar preserves terminal artifact path reference"), Parsed.TerminalArtifactPath, TerminalPath);
+		TestEqual(TEXT("Sidecar keeps strict verdict diagnostic until missing segment metrics exist"), static_cast<uint8>(Parsed.StrictVerdict), static_cast<uint8>(EPhysAnimEvidenceBaselineVerdict::Diagnostic));
+		TestFalse(TEXT("Sidecar classifier output preserves durable terminal artifact evidence"), Parsed.QualityFlags.bMissingEvidence);
+
+		IFileManager::Get().Delete(*TerminalPath);
+		IFileManager::Get().Delete(*SummaryPath);
 		return true;
 	}
 }

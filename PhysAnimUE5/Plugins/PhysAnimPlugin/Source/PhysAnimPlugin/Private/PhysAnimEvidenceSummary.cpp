@@ -3,6 +3,8 @@
 #include "PhysAnimProofArtifactEmitter.h"
 
 #include "Dom/JsonObject.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -422,6 +424,14 @@ namespace
 		OutCommandMetadata = CommandMetadata;
 		return true;
 	}
+
+	void PhysAnimEvidenceSummary_ApplyClassifierResult(
+		FPhysAnimEvidenceSummary& Summary,
+		const FPhysAnimEvidenceBaselineResult& ClassifierResult)
+	{
+		Summary.QualityFlags = ClassifierResult.TruthFlags;
+		Summary.StrictVerdict = ClassifierResult.Verdict;
+	}
 }
 
 namespace PhysAnimEvidenceSummary
@@ -595,5 +605,34 @@ namespace PhysAnimEvidenceSummary
 		}
 
 		return true;
+	}
+
+	FPhysAnimEvidenceSummaryWriteResult WriteEvidenceSummaryJson(const FPhysAnimEvidenceSummaryWriteInput& Input)
+	{
+		FPhysAnimEvidenceSummaryWriteResult Result;
+		FPhysAnimEvidenceSummary Summary = Input.Summary;
+		PhysAnimEvidenceSummary_ApplyClassifierResult(Summary, Input.ClassifierResult);
+
+		Result.JsonPath = Input.OutputPathOverride.IsEmpty()
+			? BuildEvidenceSummaryJsonPath(Summary.AttemptUuid)
+			: Input.OutputPathOverride;
+
+		const FString JsonString = SerializeToJsonString(Summary);
+		if (JsonString.IsEmpty())
+		{
+			Result.bEvidenceCaptureFailure = true;
+			return Result;
+		}
+
+		const FString Directory = FPaths::GetPath(Result.JsonPath);
+		if (!Directory.IsEmpty() && !IFileManager::Get().MakeDirectory(*Directory, true))
+		{
+			Result.bEvidenceCaptureFailure = true;
+			return Result;
+		}
+
+		Result.bJsonWritten = FFileHelper::SaveStringToFile(JsonString, *Result.JsonPath);
+		Result.bEvidenceCaptureFailure = !Result.bJsonWritten;
+		return Result;
 	}
 }
