@@ -116,6 +116,18 @@ parar de implementar e validar. Otimizar o gargalo, não produzir mais WIP.
 - **Code detachment** — Se a IA errou, explique o erro via prompt. Nunca edite manualmente.
 - **CLAUDE.md como spec evolutiva** — Documente padrões e decisões aqui.
 
+## Execução de Testes — Gates Hierárquicos
+
+Ver `.claude/rules/tests.md` para referência completa e scripts.
+
+| Gate | Comando | Trigger | Target |
+|------|---------|---------|--------|
+| Task | `npm run test:blast` | `finish_task` (cada task) | <60s |
+| Épico | `npm run test:node` | `epicPromotion.readyToPromote: true` | ~3 min |
+| PR | `npm test` | Antes de `git push` | varia |
+
+**Blast obrigatório no finish_task. Node obrigatório no epic gate. Full obrigatório pré-PR.**
+
 ### Spec-Driven Development (spec-kit)
 
 6 ferramentas adicionais para desenvolvimento guiado por especificações:

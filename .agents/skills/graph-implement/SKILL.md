@@ -1,6 +1,6 @@
 ---
 name: graph-implement
-description: Execute the IMPLEMENT phase of mcp-graph lifecycle — TDD Red-Green-Refactor with Granular flow, 8 DoD checks, epic promotion
+description: Execute the IMPLEMENT phase of mcp-graph lifecycle — TDD Red-Green-Refactor with v6.0 pipeline (start_task/finish_task), 9 DoD checks, epic promotion
 triggers:
   - graph-implement
 version: 2.0.0
@@ -25,37 +25,41 @@ Execute the IMPLEMENT phase of the mcp-graph lifecycle. Primary coding phase —
 
 ## Mandatory Flow
 
-**v8.0 Granular (MANDATORY — 6 calls):**
+**v6.0 Pipeline (PRIMARY — 2 calls):**
 ```
-next → context(compact) → context(rag) → update_status(in_progress) → [TDD] → analyze(implement_done) → update_status(done)
+start_task → [TDD Red-Green-Refactor] → finish_task
 ```
 
-**⚠️ Pipeline v6.0 (FORBIDDEN):**
-Do NOT use `start_task` or `finish_task` as they create unwanted `ai-shadow` branches.
+**v5.x Granular (FALLBACK — 6 calls, for fine control):**
+```
+next → context → context(action: "rag") → update_status(in_progress) → [TDD] → analyze(implement_done) → update_status(done)
+```
 
 ## Workflow
 
-### Step 1: Pick Next Task & Load Context
+### Step 1: Start Task (v6.0 Pipeline)
 
-**v11 surface (preferred):**
+**v11 surface (preferred — installs `@mcp-graph-workflow/cli@beta`):**
 ```
-/next                   # Claude skill — picks up next recommended task
-mg next                 # shell — same handler
-```
-
-**Legacy surface (granular):**
-```
-Tool: mcp__mcp-graph__next
-Tool: mcp__mcp-graph__context (id: <node_id>, action: "compact")
-Tool: mcp__mcp-graph__context (action: "rag", query: <task details>)
-Tool: mcp__mcp-graph__update_status (id: <node_id>, status: "in_progress")
+/start                  # Claude skill — picks up next task or pass <id>
+mg start [<id>]         # shell — same handler, also works in CI/scripts
 ```
 
-Returns: task (id, title, AC, xpSize) + context + ragContext.
+**Legacy surface (still works, slower round-trip via MCP):**
+```
+Tool: mcp__mcp-graph__start_task
+Params: contextDetail: "standard", ragBudget: 4000, autoStart: true
+```
 
-Display: title, id, priority, xpSize, acceptanceCriteria.
+Either form executes: `next` + `context` + `context(action: "rag")` + `update_status(in_progress)`.
+
+Returns: task (id, title, AC, xpSize) + context + ragContext + **tddHints** + startedAt.
+
+Display: title, id, priority, xpSize, acceptanceCriteria, tddHints, enhancedReason.
 
 If task is blocked, display blockers and ask user to resolve or skip.
+
+To target a specific task: `start_task(nodeId: "<id>")`.
 
 ### Step 2: Pre-Implementation Checks
 
@@ -71,7 +75,7 @@ Tool: mcp__mcp-graph__analyze (mode: "code_sync")
 
 ### Step 3: TDD Red-Green-Refactor
 
-Use the **tddHints** from `next` (or inferred from ACs) to guide test structure.
+Use the **tddHints** from `start_task` to guide test structure.
 
 **RED — Write failing test first:**
 1. Read existing codebase to understand APIs and patterns
@@ -88,40 +92,43 @@ Use the **tddHints** from `next` (or inferred from ACs) to guide test structure.
 2. Run the test again — it MUST still pass
 3. Run the full test suite — no regressions
 
-### Step 4: Finish Task (Granular)
+### Step 4: Finish Task (v6.0 Pipeline)
 
 Run full test suite first:
 ```bash
 npx vitest run
 ```
 
-Then finish via granular calls:
+Then finish via pipeline:
 
-1. **Validate ACs:**
+**v11 surface (preferred):**
 ```
-Tool: mcp__mcp-graph__validate (action: "ac", nodeId: <node_id>)
-```
-
-2. **Check DoD:**
-```
-Tool: mcp__mcp-graph__analyze (mode: "implement_done", nodeId: <node_id>)
+/finish                 # Claude skill — auto-detects in_progress task
+mg finish [<id>]        # shell — same handler
 ```
 
-3. **Mark Done:**
+**Legacy surface (still works, slower round-trip via MCP):**
 ```
-Tool: mcp__mcp-graph__update_status
+Tool: mcp__mcp-graph__finish_task
 Params:
-  id: <node_id>
-  status: "done"
+  nodeId: <node_id>
   rationale: "<what was implemented, key decisions>"
+  testFiles: ["src/tests/<test-file>.test.ts"]
+  autoNext: true
 ```
+
+Either form automatically executes:
+- **DoD 9 checks** (see table below)
+- AC validation
+- `update_status(done)`
+- Epic promotion check (suggests promoting parent when all children done)
+- Returns next task (if `autoNext: true`)
 
 ### Step 5: Follow `_lifecycle.nextAction`
 
 Every mcp-graph response includes `_lifecycle.nextAction`. Follow it:
-- After `update_status(done)` → `next` (recommended) — restart from Step 1
-- After `analyze(implement_done)` (fail) → fix blockers (required) — fix and retry Step 4
-- Re-run `analyze(implement_done)` after fixing
+- After `finish_task` (pass) → `start_task` (recommended) — restart from Step 1
+- After `finish_task` (fail) → fix blockers (required) — fix and retry Step 4
 
 ## Definition of Done — 9 Checks
 
@@ -145,11 +152,11 @@ Every mcp-graph response includes `_lifecycle.nextAction`. Follow it:
   - `ac_quality_pass` → Update AC with concrete assertions via `node (action: "update")`
   - `has_testable_ac` → Rewrite ACs with measurable outcomes
   - `no_unresolved_blockers` → Resolve blockers or update their status
-  - Re-run `analyze(implement_done)` after fixing
+  - Re-run `finish_task` after fixing
 - **Blocked task:** Display blockers, ask to resolve or skip to next unblocked
 - **Missing node:** Create via `node (action: "add")` BEFORE any code
 - **Test failures:** Diagnose root cause before retrying. Never skip failing tests
-- **Epic promotion:** If `update_status(done)` rationale indicates all children are done, inform user
+- **Epic promotion:** If `finish_task` returns `epicPromotion.readyToPromote: true`, inform user
 
 ## Output Format
 
@@ -173,12 +180,12 @@ Run $graph-implement to continue.
 
 ## Anti-Patterns
 
-- Do NOT use the pipeline v6.0 flow — use Granular flow v8.0 instead
+- Do NOT use the granular v5.x flow when pipeline v6.0 is available — use `start_task`/`finish_task`
 - Do NOT ignore `_lifecycle.nextAction` — it guides the optimal next action
 - Do NOT use deprecated tool names (`add_node`, `update_node`) — use `node (action: "add"|"update")`
-- Do NOT skip `analyze(implement_done)` DoD checks — they enforce quality gates
+- Do NOT skip `finish_task` DoD checks — they enforce quality gates
 - Do NOT mark done without running the full test suite first
-- Do NOT implement without loading context — use `context(compact)` and `context(rag)`
+- Do NOT implement without loading context — `start_task` does this automatically
 
 
 ## Codex Notes

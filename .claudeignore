@@ -24,11 +24,6 @@ vendor/
 dist/
 build/
 out/
-**/Intermediate/
-**/Saved/
-**/Binaries/
-**/DerivedDataCache/
-
 .next/
 .turbo/
 .cache/
