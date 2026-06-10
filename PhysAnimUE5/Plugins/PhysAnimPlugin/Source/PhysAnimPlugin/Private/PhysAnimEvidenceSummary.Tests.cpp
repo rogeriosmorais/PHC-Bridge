@@ -120,7 +120,10 @@ namespace
 		return MatchingFiles.Num();
 	}
 
-	FPhysAnimProofArtifactEmitInput MakeProofEmitterInput(const FString& AttemptUuid)
+	FPhysAnimProofArtifactEmitInput MakeProofEmitterInput(
+		const FString& AttemptUuid,
+		const int32 PoseSearchQueryCount = 0,
+		const int32 PoseSearchValidResultCount = 0)
 	{
 		FPhysAnimProofArtifactEmitInput Input;
 		Input.AttemptUuid = AttemptUuid;
@@ -143,6 +146,8 @@ namespace
 		Artifact.ControlTargetTotalWrites = 1;
 		Artifact.ControlTargetNormalWrites = 1;
 		Artifact.ControlTargetMaxDeltaDeg = 2.0;
+		Artifact.PoseSearchQueryCount = PoseSearchQueryCount;
+		Artifact.PoseSearchValidResultCount = PoseSearchValidResultCount;
 		Artifact.RuntimeBodySampleCount = 1;
 		Artifact.RuntimeSimulatingBodyCount = 1;
 		Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond = 12.0;
@@ -153,6 +158,21 @@ namespace
 		Artifact.SupportGapTimerMs = 0.0;
 
 		return Input;
+	}
+
+	const FPhysAnimEvidenceSummarySegment* FindSegment(
+		const FPhysAnimEvidenceSummary& Summary,
+		const FString& SegmentName)
+	{
+		for (const FPhysAnimEvidenceSummarySegment& Segment : Summary.Segments)
+		{
+			if (Segment.SegmentName == SegmentName)
+			{
+				return &Segment;
+			}
+		}
+
+		return nullptr;
 	}
 
 	void AssertSummaryRoundTrip(
@@ -214,6 +234,72 @@ namespace
 				Test.TestEqual(TEXT("segment source_provenance value round-trips"), ActualSegment.SourceProvenance[ValueIndex], ExpectedSegment.SourceProvenance[ValueIndex]);
 			}
 		}
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimEvidenceSummaryPoseSearchStateSerializationTest,
+		"PhysAnim.EvidenceSummary.PoseSearchStateSerialization",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimEvidenceSummaryPoseSearchStateSerializationTest::RunTest(const FString& Parameters)
+	{
+		const struct FCase
+		{
+			const TCHAR* AttemptUuid;
+			int32 PoseSearchQueryCount;
+			int32 PoseSearchValidResultCount;
+			EPhysAnimEvidenceBaselineSegmentState ExpectedState;
+		} Cases[] =
+		{
+			{ TEXT("pose-search-0-0"), 0, 0, EPhysAnimEvidenceBaselineSegmentState::NotReached },
+			{ TEXT("pose-search-2-0"), 2, 0, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
+			{ TEXT("pose-search-2-1"), 2, 1, EPhysAnimEvidenceBaselineSegmentState::Active },
+			{ TEXT("pose-search-4-2"), 4, 2, EPhysAnimEvidenceBaselineSegmentState::Active }
+		};
+
+		for (const FCase& Case : Cases)
+		{
+			const FString AttemptUuid = Case.AttemptUuid;
+			const FString TerminalPath = PhysAnimProofArtifactEmitter::BuildTerminalArtifactJsonPath(AttemptUuid);
+			const FString SummaryPath = BuildEvidenceSummaryJsonPath(AttemptUuid);
+			IFileManager::Get().Delete(*TerminalPath);
+			IFileManager::Get().Delete(*SummaryPath);
+
+			const FPhysAnimProofArtifactEmitInput Input =
+				MakeProofEmitterInput(AttemptUuid, Case.PoseSearchQueryCount, Case.PoseSearchValidResultCount);
+			const FPhysAnimProofArtifactEmitResult EmitResult =
+				PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(Input);
+			TestTrue(TEXT("Terminal artifact writes successfully for PoseSearch summary case"), EmitResult.bJsonWritten);
+
+			FString SummaryJson;
+			TestTrue(TEXT("PoseSearch summary sidecar is readable"), FFileHelper::LoadFileToString(SummaryJson, *SummaryPath));
+
+			FPhysAnimEvidenceSummary Parsed;
+			TestTrue(TEXT("PoseSearch summary sidecar parses"), DeserializeFromJsonString(SummaryJson, Parsed));
+
+			const FPhysAnimEvidenceSummarySegment* PoseSearchSegment = FindSegment(Parsed, TEXT("PoseSearch"));
+			TestNotNull(TEXT("PoseSearch segment exists in summary"), PoseSearchSegment);
+			if (!PoseSearchSegment)
+			{
+				IFileManager::Get().Delete(*TerminalPath);
+				IFileManager::Get().Delete(*SummaryPath);
+				return false;
+			}
+
+			TestEqual(
+				TEXT("PoseSearch sample_count matches query count"),
+				PoseSearchSegment->Metrics.SampleCount,
+				Case.PoseSearchQueryCount);
+			TestEqual(
+				TEXT("PoseSearch state serializes from query/valid counts"),
+				static_cast<uint8>(PoseSearchSegment->State),
+				static_cast<uint8>(Case.ExpectedState));
+
+			IFileManager::Get().Delete(*TerminalPath);
+			IFileManager::Get().Delete(*SummaryPath);
+		}
+
+		return true;
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(

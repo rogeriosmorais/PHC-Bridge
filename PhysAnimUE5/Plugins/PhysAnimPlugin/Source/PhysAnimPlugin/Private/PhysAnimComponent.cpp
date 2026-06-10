@@ -674,6 +674,20 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	ResetBridgeLocomotionRequestState();
 }
 
+void UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult(const bool bPoseSearchValid)
+{
+	if (!bEnableLiveRuntimeEvidenceProof)
+	{
+		return;
+	}
+
+	++ActivatedStandingStabilityMetrics.PoseSearchQueryCount;
+	if (bPoseSearchValid)
+	{
+		++ActivatedStandingStabilityMetrics.PoseSearchValidResultCount;
+	}
+}
+
 void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 {
 	const bool bTerminalFailureLatched =
@@ -1702,6 +1716,8 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.ControlTargetMeanDeltaDegMax = ActivatedStandingStabilityMetrics.ControlTargetMeanDeltaDegMax;
 	Input.Values.ControlTargetMaxRawPolicyOffsetDeg = ActivatedStandingStabilityMetrics.ControlTargetMaxRawPolicyOffsetDeg;
 	Input.Values.ControlTargetMeanRawPolicyOffsetDegMax = ActivatedStandingStabilityMetrics.ControlTargetMeanRawPolicyOffsetDegMax;
+	Input.Values.PoseSearchQueryCount = ActivatedStandingStabilityMetrics.PoseSearchQueryCount;
+	Input.Values.PoseSearchValidResultCount = ActivatedStandingStabilityMetrics.PoseSearchValidResultCount;
 	Input.Values.RuntimeBodySampleCount = ActivatedStandingStabilityMetrics.BodyTelemetrySampleCount;
 	Input.Values.RuntimeSimulatingBodyCount = ActivatedStandingStabilityMetrics.SimulatingBodyCountMax;
 	Input.Values.RuntimeMaxBodyLinearSpeedCmPerSecond = ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond;

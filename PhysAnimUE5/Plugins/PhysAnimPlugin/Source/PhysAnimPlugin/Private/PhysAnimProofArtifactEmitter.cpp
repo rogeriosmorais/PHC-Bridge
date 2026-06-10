@@ -85,8 +85,19 @@ namespace
 	{
 		FPhysAnimEvidenceBaselineInput BaselineInput;
 
-		BaselineInput.Segments.PoseSearch =
-			EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		const auto ResolvePoseSearchSegmentState = [&Artifact]()
+		{
+			if (Artifact.PoseSearchQueryCount <= 0)
+			{
+				return EPhysAnimEvidenceBaselineSegmentState::NotReached;
+			}
+
+			return Artifact.PoseSearchValidResultCount > 0
+				? EPhysAnimEvidenceBaselineSegmentState::Active
+				: EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive;
+		};
+
+		BaselineInput.Segments.PoseSearch = ResolvePoseSearchSegmentState();
 		BaselineInput.Segments.PhcPolicy =
 			Artifact.PolicyActionSampleCount > 0
 				? EPhysAnimEvidenceBaselineSegmentState::Active
@@ -169,10 +180,12 @@ namespace
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
 			TEXT("PoseSearch"),
 			ClassifierResult.Segments.PoseSearch,
-			Artifact.PolicyInferenceSuccessCount,
-			Artifact.ControlAlpha,
-			Artifact.PolicyActionConditionedMeanAbsMax,
-			TEXT("policy")));
+			Artifact.PoseSearchQueryCount,
+			Artifact.PoseSearchQueryCount > 0
+				? static_cast<double>(Artifact.PoseSearchValidResultCount) / static_cast<double>(Artifact.PoseSearchQueryCount)
+				: 0.0,
+			static_cast<double>(Artifact.PoseSearchValidResultCount),
+			TEXT("pose_search")));
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
 			TEXT("PhcPolicy"),
 			ClassifierResult.Segments.PhcPolicy,
@@ -300,6 +313,8 @@ namespace
 		Json->SetNumberField(TEXT("control_target_mean_delta_deg_max"), Artifact.ControlTargetMeanDeltaDegMax);
 		Json->SetNumberField(TEXT("control_target_max_raw_policy_offset_deg"), Artifact.ControlTargetMaxRawPolicyOffsetDeg);
 		Json->SetNumberField(TEXT("control_target_mean_raw_policy_offset_deg_max"), Artifact.ControlTargetMeanRawPolicyOffsetDegMax);
+		Json->SetNumberField(TEXT("pose_search_query_count"), Artifact.PoseSearchQueryCount);
+		Json->SetNumberField(TEXT("pose_search_valid_result_count"), Artifact.PoseSearchValidResultCount);
 		Json->SetNumberField(TEXT("runtime_body_sample_count"), Artifact.RuntimeBodySampleCount);
 		Json->SetNumberField(TEXT("runtime_simulating_body_count"), Artifact.RuntimeSimulatingBodyCount);
 		Json->SetNumberField(TEXT("runtime_max_body_linear_speed_cm_per_second"), Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond);

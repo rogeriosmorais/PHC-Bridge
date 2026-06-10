@@ -323,6 +323,8 @@ struct FPhysAnimRunArtifactSnapshot
 	double ControlTargetMeanDeltaDegMax = 0.0;
 	double ControlTargetMaxRawPolicyOffsetDeg = 0.0;
 	double ControlTargetMeanRawPolicyOffsetDegMax = 0.0;
+	int32 PoseSearchQueryCount = 0;
+	int32 PoseSearchValidResultCount = 0;
 	int32 RuntimeBodySampleCount = 0;
 	int32 RuntimeSimulatingBodyCount = 0;
 	double RuntimeMaxBodyLinearSpeedCmPerSecond = 0.0;

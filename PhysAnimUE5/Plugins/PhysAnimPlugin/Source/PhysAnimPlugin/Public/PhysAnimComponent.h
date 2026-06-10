@@ -1119,6 +1119,12 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	double ActiveSupportSideCountMax = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 PoseSearchQueryCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 PoseSearchValidResultCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 PolicyInferenceSuccessCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
@@ -1419,6 +1425,7 @@ public:
 	bool IsLiveRuntimeEvidenceProofComplete() const { return bLiveRuntimeEvidenceProofComplete; }
 	bool IsLiveRuntimeEvidenceProofSatisfied() const;
 	bool HasActiveBridgeTraceSession() const { return BridgeTraceWriter.IsValid(); }
+	void RecordLiveRuntimeEvidencePoseSearchQueryResult(bool bPoseSearchValid);
 	void NoteStartupProofWaitingForPoseSearchObserved();
 	void ArmStartupProofTerminalEnforcement();
 	void SetStartupProofShouldComplete(bool bShouldComplete) { bLiveRuntimeEvidenceProofShouldComplete = bShouldComplete; }
@@ -1462,6 +1469,16 @@ public:
 	const FPhysAnimStabilizationSettings& GetConfiguredStabilizationSettings() const { return StabilizationSettings; }
 	EBalanceReadyTransitionPhase GetBalanceReadyTransitionPhase() const { return BalanceReadyTransition.GetPhase(); }
 	FPhysAnimBalanceReadyTransitionSnapshot ExportBalanceReadyTransitionSnapshot() const { return BalanceReadyTransition.ExportSnapshot(); }
+	void TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(bool bPoseSearchValid)
+	{
+		RecordLiveRuntimeEvidencePoseSearchQueryResult(bPoseSearchValid);
+	}
+	FPhysAnimRuntimeSubstepInput TestOnlyBuildLiveRuntimeEvidenceSubstepInput(
+		const FPhysAnimSupportObservationResult& SupportObservation = FPhysAnimSupportObservationResult(),
+		float DeltaTimeSeconds = 0.0f) const
+	{
+		return BuildLiveRuntimeEvidenceSubstepInput(SupportObservation, DeltaTimeSeconds);
+	}
 	bool CapturePhase1AutoCalibBaseline(FPhase1AutoCalibBaselineSnapshot& OutSnapshot, FString& OutError) const;
 	bool RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBaselineSnapshot& Snapshot, FString& OutError);
 	void ApplyPhase1AutoCalibParams(const FPhase1AutoCalibParams& Params);

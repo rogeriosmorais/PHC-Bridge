@@ -109,13 +109,13 @@ namespace
 			return false;
 		}
 
-		TestTrue(TEXT("PoseSearch requires new telemetry"), PoseSearch->bRequiresNewTelemetry);
+		TestFalse(TEXT("PoseSearch reuses existing counters"), PoseSearch->bRequiresNewTelemetry);
 		TestTrue(TEXT("RendererFacingMotion requires new telemetry"), RendererFacingMotion->bRequiresNewTelemetry);
 		TestFalse(TEXT("PhcPolicy reuses existing counters"), PhcPolicy->bRequiresNewTelemetry);
 		TestFalse(TEXT("PhysicsControl reuses existing counters"), PhysicsControl->bRequiresNewTelemetry);
 		TestFalse(TEXT("Chaos reuses existing counters"), Chaos->bRequiresNewTelemetry);
 
-		TestEqual(TEXT("PoseSearch has no reused counter mappings"), PoseSearch->ExistingCounterMappings.Num(), 0);
+		TestEqual(TEXT("PoseSearch has two reused counter mappings"), PoseSearch->ExistingCounterMappings.Num(), 2);
 		TestEqual(TEXT("RendererFacingMotion has no reused counter mappings"), RendererFacingMotion->ExistingCounterMappings.Num(), 0);
 		TestEqual(TEXT("PhcPolicy has two reused counter mappings"), PhcPolicy->ExistingCounterMappings.Num(), 2);
 		TestEqual(TEXT("PhysicsControl has two reused counter mappings"), PhysicsControl->ExistingCounterMappings.Num(), 2);
@@ -133,19 +133,23 @@ namespace
 	{
 		const FPhysAnimRuntimeMetricInventory Inventory = BuildExistingCounterInventory();
 
+		const FPhysAnimRuntimeMetricSegmentInventory* PoseSearch = FindSegment(Inventory, EPhysAnimEvidenceBaselineSegment::PoseSearch);
 		const FPhysAnimRuntimeMetricSegmentInventory* PhcPolicy = FindSegment(Inventory, EPhysAnimEvidenceBaselineSegment::PhcPolicy);
 		const FPhysAnimRuntimeMetricSegmentInventory* PhysicsControl = FindSegment(Inventory, EPhysAnimEvidenceBaselineSegment::PhysicsControl);
 		const FPhysAnimRuntimeMetricSegmentInventory* Chaos = FindSegment(Inventory, EPhysAnimEvidenceBaselineSegment::Chaos);
 
+		TestNotNull(TEXT("PoseSearch segment exists"), PoseSearch);
 		TestNotNull(TEXT("PhcPolicy segment exists"), PhcPolicy);
 		TestNotNull(TEXT("PhysicsControl segment exists"), PhysicsControl);
 		TestNotNull(TEXT("Chaos segment exists"), Chaos);
 
-		if (!PhcPolicy || !PhysicsControl || !Chaos)
+		if (!PoseSearch || !PhcPolicy || !PhysicsControl || !Chaos)
 		{
 			return false;
 		}
 
+		TestNotNull(TEXT("PoseSearchQueryCount mapping exists"), FindMapping(*PoseSearch, TEXT("PoseSearchQueryCount")));
+		TestNotNull(TEXT("PoseSearchValidResultCount mapping exists"), FindMapping(*PoseSearch, TEXT("PoseSearchValidResultCount")));
 		TestNotNull(TEXT("PolicyInferenceSuccessCount mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyInferenceSuccessCount")));
 		TestNotNull(TEXT("PolicyActionSampleCount mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyActionSampleCount")));
 		TestNotNull(TEXT("ControlTargetTotalWrites mapping exists"), FindMapping(*PhysicsControl, TEXT("ControlTargetTotalWrites")));

@@ -35,7 +35,15 @@ namespace PhysAnimRuntimeMetricInventory
 			FPhysAnimRuntimeMetricSegmentInventory Segment;
 			Segment.Segment = EPhysAnimEvidenceBaselineSegment::PoseSearch;
 			Segment.SegmentName = TEXT("PoseSearch");
-			Segment.bRequiresNewTelemetry = true;
+			Segment.bRequiresNewTelemetry = false;
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("PoseSearchQueryCount"),
+				{ TEXT("PhysAnimComponent.Core.cpp::UPhysAnimComponent::TickComponent"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult") },
+				{ TEXT("PhysAnim.Component.LiveRuntimeEvidencePoseSearchCounterCapture"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("PoseSearchValidResultCount"),
+				{ TEXT("PhysAnimComponent.Core.cpp::UPhysAnimComponent::TickComponent"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult") },
+				{ TEXT("PhysAnim.Component.LiveRuntimeEvidencePoseSearchCounterCapture"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
 			Inventory.Segments.Add(MoveTemp(Segment));
 		}
 

@@ -2542,6 +2542,50 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimLiveRuntimeEvidencePoseSearchCounterCaptureTest,
+		"PhysAnim.Component.LiveRuntimeEvidencePoseSearchCounterCapture",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimLiveRuntimeEvidencePoseSearchCounterCaptureTest::RunTest(const FString& Parameters)
+	{
+		UPhysAnimComponent* const Component = NewObject<UPhysAnimComponent>();
+		TestNotNull(TEXT("Transient component exists"), Component);
+		if (!Component)
+		{
+			return false;
+		}
+
+		Component->bEnableLiveRuntimeEvidenceProof = true;
+
+		const bool bFirstQueryResult = false;
+		Component->TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(bFirstQueryResult);
+		TestFalse(TEXT("Caller PoseSearch result remains false after recording"), bFirstQueryResult);
+
+		const bool bSecondQueryResult = true;
+		Component->TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(bSecondQueryResult);
+		TestTrue(TEXT("Caller PoseSearch result remains true after recording"), bSecondQueryResult);
+
+		const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
+		TestEqual(TEXT("PoseSearch query count increments across recordings"), Metrics.PoseSearchQueryCount, 2);
+		TestEqual(TEXT("PoseSearch valid result count only increments for true results"), Metrics.PoseSearchValidResultCount, 1);
+
+		Component->TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(false);
+		const FPhysAnimActivatedStandingStabilityMetrics& SnapshotMetrics = Component->GetActivatedStandingStabilityMetrics();
+		TestEqual(TEXT("PoseSearch query count includes the third recorded result"), SnapshotMetrics.PoseSearchQueryCount, 3);
+		TestEqual(TEXT("PoseSearch valid result count remains one after a false result"), SnapshotMetrics.PoseSearchValidResultCount, 1);
+
+		const FPhysAnimRuntimeSubstepInput SubstepInput = Component->TestOnlyBuildLiveRuntimeEvidenceSubstepInput();
+		TestEqual(TEXT("Substep input copies PoseSearch query count from component evidence state"), SubstepInput.Values.PoseSearchQueryCount, 3);
+		TestEqual(TEXT("Substep input copies PoseSearch valid result count from component evidence state"), SubstepInput.Values.PoseSearchValidResultCount, 1);
+
+		const FPhysAnimRuntimeSubstepResult SubstepResult = PhysAnimRuntimeOrchestrator::EvaluateRuntimeSubstep(SubstepInput);
+		TestEqual(TEXT("Produced artifact preserves PoseSearch query count"), SubstepResult.Artifact.PoseSearchQueryCount, 3);
+		TestEqual(TEXT("Produced artifact preserves PoseSearch valid result count"), SubstepResult.Artifact.PoseSearchValidResultCount, 1);
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibScoreOrderingTest,
 		"PhysAnim.Component.Phase1AutoCalibScoreOrdering",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
