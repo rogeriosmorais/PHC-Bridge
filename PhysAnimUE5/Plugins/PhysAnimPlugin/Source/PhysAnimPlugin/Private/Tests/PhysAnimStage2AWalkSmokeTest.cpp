@@ -1,10 +1,9 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimComponentPrivate.h"
 #include "Misc/AutomationTest.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
-
-DECLARE_LOG_CATEGORY_EXTERN(LogPhysAnimBridge, Log, All);
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimStage2AWalkSmokeTest, "PhysAnim.PIE.Stage2A.WalkSmoke", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
