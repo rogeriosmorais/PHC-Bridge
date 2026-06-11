@@ -124,6 +124,7 @@ namespace
 		PhysAnimEvidenceSummary_AppendDoubleField(Json, bFirstField, TEXT("score"), Metrics.Score);
 		PhysAnimEvidenceSummary_AppendStringField(Json, bFirstField, TEXT("selected_source_identity"), Metrics.SelectedSourceIdentity);
 		PhysAnimEvidenceSummary_AppendDoubleField(Json, bFirstField, TEXT("selected_source_time"), Metrics.SelectedSourceTime);
+		PhysAnimEvidenceSummary_AppendIntField(Json, bFirstField, TEXT("consecutive_invalid_sample_count"), Metrics.ConsecutiveInvalidSampleCount);
 
 		Json += TEXT("}");
 		return Json;
@@ -401,6 +402,10 @@ namespace
 
 		JsonObject->TryGetStringField(TEXT("selected_source_identity"), OutMetrics.SelectedSourceIdentity);
 		JsonObject->TryGetNumberField(TEXT("selected_source_time"), OutMetrics.SelectedSourceTime);
+
+		double ConsecutiveInvalidSampleCount = 0.0;
+		JsonObject->TryGetNumberField(TEXT("consecutive_invalid_sample_count"), ConsecutiveInvalidSampleCount);
+		OutMetrics.ConsecutiveInvalidSampleCount = static_cast<int32>(ConsecutiveInvalidSampleCount);
 
 		OutMetrics.SampleCount = static_cast<int32>(SampleCount);
 		return true;

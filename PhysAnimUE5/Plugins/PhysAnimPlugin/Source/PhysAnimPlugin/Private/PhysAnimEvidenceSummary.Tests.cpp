@@ -126,6 +126,7 @@ namespace
 		const int32 PoseSearchValidResultCount = 0,
 		const FString& PoseSearchSelectedAnimationName = TEXT(""),
 		const double PoseSearchSelectedTime = 0.0,
+		const int32 PoseSearchConsecutiveInvalidFrameCount = 0,
 		const int32 RendererFacingMotionSampleCount = 0,
 		const int32 RendererFacingMotionActiveSampleCount = 0,
 		const double RendererFacingMotionMaxRootWorldPositionDriftCm = 0.0)
@@ -155,6 +156,7 @@ namespace
 		Artifact.PoseSearchValidResultCount = PoseSearchValidResultCount;
 		Artifact.PoseSearchSelectedAnimationName = PoseSearchSelectedAnimationName;
 		Artifact.PoseSearchSelectedTime = PoseSearchSelectedTime;
+		Artifact.PoseSearchConsecutiveInvalidFrameCount = PoseSearchConsecutiveInvalidFrameCount;
 		Artifact.RendererFacingMotionSampleCount = RendererFacingMotionSampleCount;
 		Artifact.RendererFacingMotionActiveSampleCount = RendererFacingMotionActiveSampleCount;
 		Artifact.RendererFacingMotionMaxRootWorldPositionDriftCm = RendererFacingMotionMaxRootWorldPositionDriftCm;
@@ -260,13 +262,14 @@ namespace
 			int32 PoseSearchValidResultCount;
 			const TCHAR* PoseSearchSelectedAnimationName;
 			double PoseSearchSelectedTime;
+			int32 PoseSearchConsecutiveInvalidFrameCount;
 			EPhysAnimEvidenceBaselineSegmentState ExpectedState;
 		} Cases[] =
 		{
-			{ TEXT("pose-search-0-0"), 0, 0, TEXT(""), 0.0, EPhysAnimEvidenceBaselineSegmentState::NotReached },
-			{ TEXT("pose-search-2-0"), 2, 0, TEXT(""), 0.0, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
-			{ TEXT("pose-search-2-1"), 2, 1, TEXT("Anim_Idle"), 1.25, EPhysAnimEvidenceBaselineSegmentState::Active },
-			{ TEXT("pose-search-4-2"), 4, 2, TEXT("Anim_Walk"), 3.5, EPhysAnimEvidenceBaselineSegmentState::Active }
+			{ TEXT("pose-search-0-0"), 0, 0, TEXT(""), 0.0, 0, EPhysAnimEvidenceBaselineSegmentState::NotReached },
+			{ TEXT("pose-search-2-0"), 2, 0, TEXT(""), 0.0, 2, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
+			{ TEXT("pose-search-2-1"), 2, 1, TEXT("Anim_Idle"), 1.25, 0, EPhysAnimEvidenceBaselineSegmentState::Active },
+			{ TEXT("pose-search-4-2"), 4, 2, TEXT("Anim_Walk"), 3.5, 0, EPhysAnimEvidenceBaselineSegmentState::Active }
 		};
 
 		for (const FCase& Case : Cases)
@@ -283,7 +286,8 @@ namespace
 					Case.PoseSearchQueryCount, 
 					Case.PoseSearchValidResultCount, 
 					Case.PoseSearchSelectedAnimationName,
-					Case.PoseSearchSelectedTime);
+					Case.PoseSearchSelectedTime,
+					Case.PoseSearchConsecutiveInvalidFrameCount);
 			const FPhysAnimProofArtifactEmitResult EmitResult =
 				PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(Input);
 			TestTrue(TEXT("Terminal artifact writes successfully for PoseSearch summary case"), EmitResult.bJsonWritten);
@@ -294,7 +298,7 @@ namespace
 			FPhysAnimEvidenceSummary Parsed;
 			TestTrue(TEXT("PoseSearch summary sidecar parses"), DeserializeFromJsonString(SummaryJson, Parsed));
 
-			const FPhysAnimEvidenceSummarySegment* PoseSearchSegment = FindSegment(Parsed, TEXT("PoseSearch"));
+			const FPhysAnimEvidenceSummarySegment* PoseSearchSegment = FindSegment(Parsed, TEXT("pose_search"));
 			TestNotNull(TEXT("PoseSearch segment exists in summary"), PoseSearchSegment);
 			if (!PoseSearchSegment)
 			{
@@ -328,6 +332,11 @@ namespace
 					PoseSearchSegment->Metrics.SelectedSourceTime,
 					Case.PoseSearchSelectedTime);
 			}
+
+			TestEqual(
+				TEXT("PoseSearch consecutive invalid frame count matches"),
+				PoseSearchSegment->Metrics.ConsecutiveInvalidSampleCount,
+				Case.PoseSearchConsecutiveInvalidFrameCount);
 
 			IFileManager::Get().Delete(*TerminalPath);
 			IFileManager::Get().Delete(*SummaryPath);

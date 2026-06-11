@@ -1131,6 +1131,9 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	double PoseSearchSelectedTime = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 PoseSearchConsecutiveInvalidFrameCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 RendererFacingMotionSampleCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")

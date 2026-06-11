@@ -52,6 +52,10 @@ namespace PhysAnimRuntimeMetricInventory
 				TEXT("PoseSearchSelectedTime"),
 				{ TEXT("PhysAnimComponent.Core.cpp::UPhysAnimComponent::TickComponent"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult") },
 				{ TEXT("PhysAnim.Component.LiveRuntimeEvidencePoseSearchCounterCapture"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(FPhysAnimRuntimeMetricFieldMapping(
+				TEXT("PoseSearchConsecutiveInvalidFrameCount"),
+				{ TEXT("PhysAnimComponent.Core.cpp::UPhysAnimComponent::TickComponent"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult") },
+				{ TEXT("PhysAnim.Component.LiveRuntimeEvidencePoseSearchCounterCapture"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
 			Inventory.Segments.Add(MoveTemp(Segment));
 		}
 

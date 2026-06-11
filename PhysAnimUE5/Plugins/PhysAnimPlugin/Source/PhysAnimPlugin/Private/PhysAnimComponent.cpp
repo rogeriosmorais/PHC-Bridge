@@ -685,11 +685,16 @@ void UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult(const bo
 	if (bPoseSearchValid)
 	{
 		++ActivatedStandingStabilityMetrics.PoseSearchValidResultCount;
+		ActivatedStandingStabilityMetrics.PoseSearchConsecutiveInvalidFrameCount = 0;
 		if (!SelectedAnimName.IsEmpty())
 		{
 			ActivatedStandingStabilityMetrics.PoseSearchSelectedAnimationName = SelectedAnimName;
 			ActivatedStandingStabilityMetrics.PoseSearchSelectedTime = SelectedTime;
 		}
+	}
+	else
+	{
+		++ActivatedStandingStabilityMetrics.PoseSearchConsecutiveInvalidFrameCount;
 	}
 }
 
@@ -1748,6 +1753,7 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.PoseSearchValidResultCount = ActivatedStandingStabilityMetrics.PoseSearchValidResultCount;
 	Input.Values.PoseSearchSelectedAnimationName = ActivatedStandingStabilityMetrics.PoseSearchSelectedAnimationName;
 	Input.Values.PoseSearchSelectedTime = ActivatedStandingStabilityMetrics.PoseSearchSelectedTime;
+	Input.Values.PoseSearchConsecutiveInvalidFrameCount = ActivatedStandingStabilityMetrics.PoseSearchConsecutiveInvalidFrameCount;
 	Input.Values.RendererFacingMotionSampleCount = ActivatedStandingStabilityMetrics.RendererFacingMotionSampleCount;
 	Input.Values.RendererFacingMotionActiveSampleCount = ActivatedStandingStabilityMetrics.RendererFacingMotionActiveSampleCount;
 	Input.Values.RendererFacingMotionMaxRootWorldPositionDriftCm =

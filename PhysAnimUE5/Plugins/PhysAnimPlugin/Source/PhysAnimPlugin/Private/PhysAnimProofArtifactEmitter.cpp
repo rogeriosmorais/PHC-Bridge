@@ -161,7 +161,8 @@ namespace
 		const double Score,
 		const TCHAR* ProvenanceTag,
 		const FString& SelectedSourceIdentity = TEXT(""),
-		const double SelectedSourceTime = 0.0)
+		const double SelectedSourceTime = 0.0,
+		const int32 ConsecutiveInvalidSampleCount = 0)
 	{
 		FPhysAnimEvidenceSummarySegment Segment;
 		Segment.SegmentName = SegmentName;
@@ -171,6 +172,7 @@ namespace
 		Segment.Metrics.Score = Score;
 		Segment.Metrics.SelectedSourceIdentity = SelectedSourceIdentity;
 		Segment.Metrics.SelectedSourceTime = SelectedSourceTime;
+		Segment.Metrics.ConsecutiveInvalidSampleCount = ConsecutiveInvalidSampleCount;
 		Segment.SourceProvenance.Add(ProvenanceTag);
 		Segment.SourceProvenance.Add(TEXT("EB-01"));
 		return Segment;
@@ -192,7 +194,7 @@ namespace
 
 		Summary.Segments.Reserve(static_cast<int32>(EPhysAnimEvidenceBaselineSegment::Count));
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
-			TEXT("PoseSearch"),
+			TEXT("pose_search"),
 			ClassifierResult.Segments.PoseSearch,
 			Artifact.PoseSearchQueryCount,
 			Artifact.PoseSearchQueryCount > 0
@@ -201,7 +203,8 @@ namespace
 			static_cast<double>(Artifact.PoseSearchValidResultCount),
 			TEXT("pose_search"),
 			Artifact.PoseSearchSelectedAnimationName,
-			Artifact.PoseSearchSelectedTime));
+			Artifact.PoseSearchSelectedTime,
+			Artifact.PoseSearchConsecutiveInvalidFrameCount));
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
 			TEXT("PhcPolicy"),
 			ClassifierResult.Segments.PhcPolicy,
@@ -336,6 +339,7 @@ namespace
 		Json->SetNumberField(TEXT("pose_search_valid_result_count"), Artifact.PoseSearchValidResultCount);
 		Json->SetStringField(TEXT("pose_search_selected_animation_name"), Artifact.PoseSearchSelectedAnimationName);
 		Json->SetNumberField(TEXT("pose_search_selected_time"), Artifact.PoseSearchSelectedTime);
+		Json->SetNumberField(TEXT("pose_search_consecutive_invalid_frame_count"), Artifact.PoseSearchConsecutiveInvalidFrameCount);
 		Json->SetNumberField(TEXT("renderer_facing_motion_sample_count"), Artifact.RendererFacingMotionSampleCount);
 		Json->SetNumberField(TEXT("renderer_facing_motion_active_sample_count"), Artifact.RendererFacingMotionActiveSampleCount);
 		Json->SetNumberField(

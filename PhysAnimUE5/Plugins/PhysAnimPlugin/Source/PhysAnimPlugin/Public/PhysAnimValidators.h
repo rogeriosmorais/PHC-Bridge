@@ -327,6 +327,7 @@ struct FPhysAnimRunArtifactSnapshot
 	int32 PoseSearchValidResultCount = 0;
 	FString PoseSearchSelectedAnimationName;
 	double PoseSearchSelectedTime = 0.0;
+	int32 PoseSearchConsecutiveInvalidFrameCount = 0;
 	int32 RendererFacingMotionSampleCount = 0;
 	int32 RendererFacingMotionActiveSampleCount = 0;
 	double RendererFacingMotionMaxRootWorldPositionDriftCm = 0.0;
