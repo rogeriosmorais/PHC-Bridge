@@ -122,6 +122,8 @@ namespace
 		PhysAnimEvidenceSummary_AppendIntField(Json, bFirstField, TEXT("sample_count"), Metrics.SampleCount);
 		PhysAnimEvidenceSummary_AppendDoubleField(Json, bFirstField, TEXT("confidence"), Metrics.Confidence);
 		PhysAnimEvidenceSummary_AppendDoubleField(Json, bFirstField, TEXT("score"), Metrics.Score);
+		PhysAnimEvidenceSummary_AppendStringField(Json, bFirstField, TEXT("selected_source_identity"), Metrics.SelectedSourceIdentity);
+		PhysAnimEvidenceSummary_AppendDoubleField(Json, bFirstField, TEXT("selected_source_time"), Metrics.SelectedSourceTime);
 
 		Json += TEXT("}");
 		return Json;
@@ -396,6 +398,9 @@ namespace
 		{
 			return false;
 		}
+
+		JsonObject->TryGetStringField(TEXT("selected_source_identity"), OutMetrics.SelectedSourceIdentity);
+		JsonObject->TryGetNumberField(TEXT("selected_source_time"), OutMetrics.SelectedSourceTime);
 
 		OutMetrics.SampleCount = static_cast<int32>(SampleCount);
 		return true;

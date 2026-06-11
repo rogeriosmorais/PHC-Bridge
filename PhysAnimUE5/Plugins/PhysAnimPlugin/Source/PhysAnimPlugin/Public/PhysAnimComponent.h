@@ -1125,6 +1125,12 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	int32 PoseSearchValidResultCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	FString PoseSearchSelectedAnimationName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double PoseSearchSelectedTime = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 RendererFacingMotionSampleCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
@@ -1434,7 +1440,7 @@ public:
 	bool IsLiveRuntimeEvidenceProofComplete() const { return bLiveRuntimeEvidenceProofComplete; }
 	bool IsLiveRuntimeEvidenceProofSatisfied() const;
 	bool HasActiveBridgeTraceSession() const { return BridgeTraceWriter.IsValid(); }
-	void RecordLiveRuntimeEvidencePoseSearchQueryResult(bool bPoseSearchValid);
+	void RecordLiveRuntimeEvidencePoseSearchQueryResult(bool bPoseSearchValid, const FString& SelectedAnimName = TEXT(""), double SelectedTime = 0.0);
 	void RecordLiveRuntimeEvidenceRendererFacingMotionSample(bool bRendererFacingMotionActive, double RootWorldPositionDriftCm);
 	void NoteStartupProofWaitingForPoseSearchObserved();
 	void ArmStartupProofTerminalEnforcement();

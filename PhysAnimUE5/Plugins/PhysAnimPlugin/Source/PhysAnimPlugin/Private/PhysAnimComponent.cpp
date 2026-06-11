@@ -674,7 +674,7 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	ResetBridgeLocomotionRequestState();
 }
 
-void UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult(const bool bPoseSearchValid)
+void UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult(const bool bPoseSearchValid, const FString& SelectedAnimName, double SelectedTime)
 {
 	if (!bEnableLiveRuntimeEvidenceProof)
 	{
@@ -685,6 +685,11 @@ void UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult(const bo
 	if (bPoseSearchValid)
 	{
 		++ActivatedStandingStabilityMetrics.PoseSearchValidResultCount;
+		if (!SelectedAnimName.IsEmpty())
+		{
+			ActivatedStandingStabilityMetrics.PoseSearchSelectedAnimationName = SelectedAnimName;
+			ActivatedStandingStabilityMetrics.PoseSearchSelectedTime = SelectedTime;
+		}
 	}
 }
 
@@ -1741,6 +1746,8 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.ControlTargetMeanRawPolicyOffsetDegMax = ActivatedStandingStabilityMetrics.ControlTargetMeanRawPolicyOffsetDegMax;
 	Input.Values.PoseSearchQueryCount = ActivatedStandingStabilityMetrics.PoseSearchQueryCount;
 	Input.Values.PoseSearchValidResultCount = ActivatedStandingStabilityMetrics.PoseSearchValidResultCount;
+	Input.Values.PoseSearchSelectedAnimationName = ActivatedStandingStabilityMetrics.PoseSearchSelectedAnimationName;
+	Input.Values.PoseSearchSelectedTime = ActivatedStandingStabilityMetrics.PoseSearchSelectedTime;
 	Input.Values.RendererFacingMotionSampleCount = ActivatedStandingStabilityMetrics.RendererFacingMotionSampleCount;
 	Input.Values.RendererFacingMotionActiveSampleCount = ActivatedStandingStabilityMetrics.RendererFacingMotionActiveSampleCount;
 	Input.Values.RendererFacingMotionMaxRootWorldPositionDriftCm =

@@ -159,7 +159,9 @@ namespace
 		const int32 SampleCount,
 		const double Confidence,
 		const double Score,
-		const TCHAR* ProvenanceTag)
+		const TCHAR* ProvenanceTag,
+		const FString& SelectedSourceIdentity = TEXT(""),
+		const double SelectedSourceTime = 0.0)
 	{
 		FPhysAnimEvidenceSummarySegment Segment;
 		Segment.SegmentName = SegmentName;
@@ -167,6 +169,8 @@ namespace
 		Segment.Metrics.SampleCount = SampleCount;
 		Segment.Metrics.Confidence = Confidence;
 		Segment.Metrics.Score = Score;
+		Segment.Metrics.SelectedSourceIdentity = SelectedSourceIdentity;
+		Segment.Metrics.SelectedSourceTime = SelectedSourceTime;
 		Segment.SourceProvenance.Add(ProvenanceTag);
 		Segment.SourceProvenance.Add(TEXT("EB-01"));
 		return Segment;
@@ -195,7 +199,9 @@ namespace
 				? static_cast<double>(Artifact.PoseSearchValidResultCount) / static_cast<double>(Artifact.PoseSearchQueryCount)
 				: 0.0,
 			static_cast<double>(Artifact.PoseSearchValidResultCount),
-			TEXT("pose_search")));
+			TEXT("pose_search"),
+			Artifact.PoseSearchSelectedAnimationName,
+			Artifact.PoseSearchSelectedTime));
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
 			TEXT("PhcPolicy"),
 			ClassifierResult.Segments.PhcPolicy,
@@ -328,6 +334,8 @@ namespace
 		Json->SetNumberField(TEXT("control_target_mean_raw_policy_offset_deg_max"), Artifact.ControlTargetMeanRawPolicyOffsetDegMax);
 		Json->SetNumberField(TEXT("pose_search_query_count"), Artifact.PoseSearchQueryCount);
 		Json->SetNumberField(TEXT("pose_search_valid_result_count"), Artifact.PoseSearchValidResultCount);
+		Json->SetStringField(TEXT("pose_search_selected_animation_name"), Artifact.PoseSearchSelectedAnimationName);
+		Json->SetNumberField(TEXT("pose_search_selected_time"), Artifact.PoseSearchSelectedTime);
 		Json->SetNumberField(TEXT("renderer_facing_motion_sample_count"), Artifact.RendererFacingMotionSampleCount);
 		Json->SetNumberField(TEXT("renderer_facing_motion_active_sample_count"), Artifact.RendererFacingMotionActiveSampleCount);
 		Json->SetNumberField(

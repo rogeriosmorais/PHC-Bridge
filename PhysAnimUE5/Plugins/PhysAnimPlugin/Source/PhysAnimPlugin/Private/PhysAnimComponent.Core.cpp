@@ -3310,7 +3310,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_PoseSearchQuery);
 		const bool bPoseSearchValid = QueryPoseSearch(SearchResult, TickError);
 		TRACE_COUNTER_SET(COUNTER_PhysAnim_PoseSearchQueryMs, static_cast<float>(MeasureElapsedMs(PoseSearchStartSeconds)));
-		RecordLiveRuntimeEvidencePoseSearchQueryResult(bPoseSearchValid);
+		RecordLiveRuntimeEvidencePoseSearchQueryResult(bPoseSearchValid, SearchResult.SelectedAnim ? SearchResult.SelectedAnim->GetName() : TEXT(""));
 		if (bWriteTraceFrameThisTick)
 		{
 			TraceFrame.PoseSearchQueryMs = MeasureElapsedMs(PoseSearchStartSeconds);
@@ -3892,7 +3892,7 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_PoseSearchQuery);
 		const bool bPoseSearchValid = QueryPoseSearch(SearchResult, TickError);
 		TRACE_COUNTER_SET(COUNTER_PhysAnim_PoseSearchQueryMs, static_cast<float>(MeasureElapsedMs(PoseSearchStartSeconds)));
-		RecordLiveRuntimeEvidencePoseSearchQueryResult(bPoseSearchValid);
+		RecordLiveRuntimeEvidencePoseSearchQueryResult(bPoseSearchValid, SearchResult.SelectedAnim ? SearchResult.SelectedAnim->GetName() : TEXT(""));
 		if (bWriteTraceFrameThisTick)
 		{
 			TraceFrame.PoseSearchQueryMs = MeasureElapsedMs(PoseSearchStartSeconds);

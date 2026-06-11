@@ -16,6 +16,8 @@ struct FPhysAnimEvidenceSummarySegmentMetrics
 	int32 SampleCount = 0;
 	double Confidence = 0.0;
 	double Score = 0.0;
+	FString SelectedSourceIdentity;
+	double SelectedSourceTime = 0.0;
 };
 
 struct FPhysAnimEvidenceSummarySegment

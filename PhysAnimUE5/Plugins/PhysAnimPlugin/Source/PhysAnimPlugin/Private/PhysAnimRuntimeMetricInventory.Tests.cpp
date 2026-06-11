@@ -115,7 +115,7 @@ namespace
 		TestFalse(TEXT("PhysicsControl reuses existing counters"), PhysicsControl->bRequiresNewTelemetry);
 		TestFalse(TEXT("Chaos reuses existing counters"), Chaos->bRequiresNewTelemetry);
 
-		TestEqual(TEXT("PoseSearch has two reused counter mappings"), PoseSearch->ExistingCounterMappings.Num(), 2);
+		TestEqual(TEXT("PoseSearch has four reused counter mappings"), PoseSearch->ExistingCounterMappings.Num(), 4);
 		TestEqual(TEXT("RendererFacingMotion has three reused counter mappings"), RendererFacingMotion->ExistingCounterMappings.Num(), 3);
 		TestEqual(TEXT("PhcPolicy has two reused counter mappings"), PhcPolicy->ExistingCounterMappings.Num(), 2);
 		TestEqual(TEXT("PhysicsControl has two reused counter mappings"), PhysicsControl->ExistingCounterMappings.Num(), 2);
@@ -152,6 +152,7 @@ namespace
 
 		TestNotNull(TEXT("PoseSearchQueryCount mapping exists"), FindMapping(*PoseSearch, TEXT("PoseSearchQueryCount")));
 		TestNotNull(TEXT("PoseSearchValidResultCount mapping exists"), FindMapping(*PoseSearch, TEXT("PoseSearchValidResultCount")));
+		TestNotNull(TEXT("PoseSearchSelectedAnimationName mapping exists"), FindMapping(*PoseSearch, TEXT("PoseSearchSelectedAnimationName")));
 		TestNotNull(TEXT("PolicyInferenceSuccessCount mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyInferenceSuccessCount")));
 		TestNotNull(TEXT("PolicyActionSampleCount mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyActionSampleCount")));
 		TestNotNull(TEXT("ControlTargetTotalWrites mapping exists"), FindMapping(*PhysicsControl, TEXT("ControlTargetTotalWrites")));

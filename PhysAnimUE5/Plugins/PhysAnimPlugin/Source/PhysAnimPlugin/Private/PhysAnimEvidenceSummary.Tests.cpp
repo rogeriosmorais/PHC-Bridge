@@ -124,6 +124,8 @@ namespace
 		const FString& AttemptUuid,
 		const int32 PoseSearchQueryCount = 0,
 		const int32 PoseSearchValidResultCount = 0,
+		const FString& PoseSearchSelectedAnimationName = TEXT(""),
+		const double PoseSearchSelectedTime = 0.0,
 		const int32 RendererFacingMotionSampleCount = 0,
 		const int32 RendererFacingMotionActiveSampleCount = 0,
 		const double RendererFacingMotionMaxRootWorldPositionDriftCm = 0.0)
@@ -151,6 +153,8 @@ namespace
 		Artifact.ControlTargetMaxDeltaDeg = 2.0;
 		Artifact.PoseSearchQueryCount = PoseSearchQueryCount;
 		Artifact.PoseSearchValidResultCount = PoseSearchValidResultCount;
+		Artifact.PoseSearchSelectedAnimationName = PoseSearchSelectedAnimationName;
+		Artifact.PoseSearchSelectedTime = PoseSearchSelectedTime;
 		Artifact.RendererFacingMotionSampleCount = RendererFacingMotionSampleCount;
 		Artifact.RendererFacingMotionActiveSampleCount = RendererFacingMotionActiveSampleCount;
 		Artifact.RendererFacingMotionMaxRootWorldPositionDriftCm = RendererFacingMotionMaxRootWorldPositionDriftCm;
@@ -254,13 +258,15 @@ namespace
 			const TCHAR* AttemptUuid;
 			int32 PoseSearchQueryCount;
 			int32 PoseSearchValidResultCount;
+			const TCHAR* PoseSearchSelectedAnimationName;
+			double PoseSearchSelectedTime;
 			EPhysAnimEvidenceBaselineSegmentState ExpectedState;
 		} Cases[] =
 		{
-			{ TEXT("pose-search-0-0"), 0, 0, EPhysAnimEvidenceBaselineSegmentState::NotReached },
-			{ TEXT("pose-search-2-0"), 2, 0, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
-			{ TEXT("pose-search-2-1"), 2, 1, EPhysAnimEvidenceBaselineSegmentState::Active },
-			{ TEXT("pose-search-4-2"), 4, 2, EPhysAnimEvidenceBaselineSegmentState::Active }
+			{ TEXT("pose-search-0-0"), 0, 0, TEXT(""), 0.0, EPhysAnimEvidenceBaselineSegmentState::NotReached },
+			{ TEXT("pose-search-2-0"), 2, 0, TEXT(""), 0.0, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
+			{ TEXT("pose-search-2-1"), 2, 1, TEXT("Anim_Idle"), 1.25, EPhysAnimEvidenceBaselineSegmentState::Active },
+			{ TEXT("pose-search-4-2"), 4, 2, TEXT("Anim_Walk"), 3.5, EPhysAnimEvidenceBaselineSegmentState::Active }
 		};
 
 		for (const FCase& Case : Cases)
@@ -272,7 +278,12 @@ namespace
 			IFileManager::Get().Delete(*SummaryPath);
 
 			const FPhysAnimProofArtifactEmitInput Input =
-				MakeProofEmitterInput(AttemptUuid, Case.PoseSearchQueryCount, Case.PoseSearchValidResultCount);
+				MakeProofEmitterInput(
+					AttemptUuid, 
+					Case.PoseSearchQueryCount, 
+					Case.PoseSearchValidResultCount, 
+					Case.PoseSearchSelectedAnimationName,
+					Case.PoseSearchSelectedTime);
 			const FPhysAnimProofArtifactEmitResult EmitResult =
 				PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(Input);
 			TestTrue(TEXT("Terminal artifact writes successfully for PoseSearch summary case"), EmitResult.bJsonWritten);
@@ -300,6 +311,23 @@ namespace
 				TEXT("PoseSearch state serializes from query/valid counts"),
 				static_cast<uint8>(PoseSearchSegment->State),
 				static_cast<uint8>(Case.ExpectedState));
+			
+			// We only expect the name to be populated when results are valid, although the struct copies it directly.
+			// Let's assert based on what's configured.
+			const FString ExpectedAnimName = Case.PoseSearchSelectedAnimationName;
+			if (!ExpectedAnimName.IsEmpty())
+			{
+				const FString ActualAnimName = PoseSearchSegment->Metrics.SelectedSourceIdentity;
+				TestEqual(
+					TEXT("PoseSearch selected animation matches"),
+					ActualAnimName,
+					ExpectedAnimName);
+
+				TestEqual(
+					TEXT("PoseSearch selected time matches"),
+					PoseSearchSegment->Metrics.SelectedSourceTime,
+					Case.PoseSearchSelectedTime);
+			}
 
 			IFileManager::Get().Delete(*TerminalPath);
 			IFileManager::Get().Delete(*SummaryPath);
@@ -342,6 +370,8 @@ namespace
 				AttemptUuid,
 				0,
 				0,
+				TEXT(""),
+				0.0,
 				Case.RendererFacingMotionSampleCount,
 				Case.RendererFacingMotionActiveSampleCount,
 				Case.RendererFacingMotionMaxRootWorldPositionDriftCm);

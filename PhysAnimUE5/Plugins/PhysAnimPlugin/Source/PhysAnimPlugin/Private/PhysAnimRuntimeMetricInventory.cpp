@@ -36,12 +36,20 @@ namespace PhysAnimRuntimeMetricInventory
 			Segment.Segment = EPhysAnimEvidenceBaselineSegment::PoseSearch;
 			Segment.SegmentName = TEXT("PoseSearch");
 			Segment.bRequiresNewTelemetry = false;
-			Segment.ExistingCounterMappings.Add(MakeMapping(
+			Segment.ExistingCounterMappings.Add(FPhysAnimRuntimeMetricFieldMapping(
 				TEXT("PoseSearchQueryCount"),
 				{ TEXT("PhysAnimComponent.Core.cpp::UPhysAnimComponent::TickComponent"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult") },
 				{ TEXT("PhysAnim.Component.LiveRuntimeEvidencePoseSearchCounterCapture"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
-			Segment.ExistingCounterMappings.Add(MakeMapping(
+			Segment.ExistingCounterMappings.Add(FPhysAnimRuntimeMetricFieldMapping(
 				TEXT("PoseSearchValidResultCount"),
+				{ TEXT("PhysAnimComponent.Core.cpp::UPhysAnimComponent::TickComponent"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult") },
+				{ TEXT("PhysAnim.Component.LiveRuntimeEvidencePoseSearchCounterCapture"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(FPhysAnimRuntimeMetricFieldMapping(
+				TEXT("PoseSearchSelectedAnimationName"),
+				{ TEXT("PhysAnimComponent.Core.cpp::UPhysAnimComponent::TickComponent"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult") },
+				{ TEXT("PhysAnim.Component.LiveRuntimeEvidencePoseSearchCounterCapture"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(FPhysAnimRuntimeMetricFieldMapping(
+				TEXT("PoseSearchSelectedTime"),
 				{ TEXT("PhysAnimComponent.Core.cpp::UPhysAnimComponent::TickComponent"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult") },
 				{ TEXT("PhysAnim.Component.LiveRuntimeEvidencePoseSearchCounterCapture"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
 			Inventory.Segments.Add(MoveTemp(Segment));
