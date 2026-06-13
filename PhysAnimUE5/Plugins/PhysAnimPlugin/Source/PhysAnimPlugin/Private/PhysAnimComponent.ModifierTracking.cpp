@@ -887,7 +887,10 @@ bool UPhysAnimComponent::ShouldStartBridgeActivePolicyRampAfterStartupProof(
 	bool bCoreBringUpGroupRampActive,
 	bool bStartupBringUpFrozenByBalanceEntry)
 {
-	return RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+	const bool bValidState = RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
+	                         RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+
+	return bValidState &&
 		bLiveProofComplete &&
 		!bPolicyRampAlreadyStarted &&
 		!bForceZeroActions &&

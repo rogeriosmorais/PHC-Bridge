@@ -69,7 +69,47 @@ namespace PhysAnimRuntimeMetricInventory
 				{ TEXT("PhysAnimComponent.Inference.cpp::RunInference"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
 				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
 			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("PolicyInferenceAttemptCount"),
+				{ TEXT("PhysAnimComponent.Inference.cpp::RunInference"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("PolicyInferenceFailureCount"),
+				{ TEXT("PhysAnimComponent.Inference.cpp::RunInference"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("PolicyInferenceLatencyMsMax"),
+				{ TEXT("PhysAnimComponent.Inference.cpp::RunInference"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("bPolicyModelLoaded"),
+				{ TEXT("PhysAnimComponent.Model.cpp::InitializeModel"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("PolicyRuntimeName"),
+				{ TEXT("PhysAnimComponent.Model.cpp::InitializeModel"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("PolicyModelName"),
+				{ TEXT("PhysAnimComponent.Model.cpp::InitializeModel"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("bPolicyInputBuffersFinite"),
+				{ TEXT("PhysAnimComponent.Inference.cpp::RunInference"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
 				TEXT("PolicyActionSampleCount"),
+				{ TEXT("PhysAnimComponent.Inference.cpp::ConditionModelActions"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("PolicyActionRawMeanAbsMax"),
+				{ TEXT("PhysAnimComponent.Inference.cpp::ConditionModelActions"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("PolicyActionConditionedMeanAbsMax"),
+				{ TEXT("PhysAnimComponent.Inference.cpp::ConditionModelActions"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("PolicyActionClampedFloatMax"),
 				{ TEXT("PhysAnimComponent.Inference.cpp::ConditionModelActions"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
 				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
 			Inventory.Segments.Add(MoveTemp(Segment));
@@ -87,6 +127,34 @@ namespace PhysAnimRuntimeMetricInventory
 			Segment.ExistingCounterMappings.Add(MakeMapping(
 				TEXT("ControlTargetNormalWrites"),
 				{ TEXT("PhysAnimComponent.ModifierTracking.cpp::UPhysAnimComponent::ApplyControlTargets"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::TickLiveRuntimeEvidenceProof") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("ControlTargetSampleCount"),
+				{ TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("ControlTargetMaxDeltaDeg"),
+				{ TEXT("PhysAnimComponent.ModifierTracking.cpp::UPhysAnimComponent::ApplyControlTargets"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics") },
+				{ TEXT("PhysAnim.Validators.ArtifactSnapshot.ControlTargetDeltaPreservation"), TEXT("PhysAnim.EvidenceSummary.PhysicsControlTargetDeltaEvidence") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("ControlTargetMeanDeltaDegMax"),
+				{ TEXT("PhysAnimComponent.ModifierTracking.cpp::UPhysAnimComponent::ApplyControlTargets"), TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics") },
+				{ TEXT("PhysAnim.Validators.ArtifactSnapshot.ControlTargetDeltaPreservation"), TEXT("PhysAnim.EvidenceSummary.PhysicsControlTargetDeltaEvidence") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("ControlTargetMaxRawPolicyOffsetDeg"),
+				{ TEXT("PhysAnimComponent.ModifierTracking.cpp::UPhysAnimComponent::ApplyControlTargets") },
+				{ TEXT("PhysAnim.Validators.ArtifactSnapshot.RawPolicyOffsetPreservation"), TEXT("PhysAnim.EvidenceSummary.PhysicsControlRawPolicyOffsetEvidence") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("ControlTargetMeanRawPolicyOffsetDegMax"),
+				{ TEXT("PhysAnimComponent.ModifierTracking.cpp::UPhysAnimComponent::ApplyControlTargets") },
+				{ TEXT("PhysAnim.Validators.ArtifactSnapshot.RawPolicyOffsetPreservation"), TEXT("PhysAnim.EvidenceSummary.PhysicsControlRawPolicyOffsetEvidence") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("bPhysicsControlComponentAvailable"),
+				{ TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
+				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
+			Segment.ExistingCounterMappings.Add(MakeMapping(
+				TEXT("ControlledBodyCount"),
+				{ TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics"), TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot") },
 				{ TEXT("PhysAnim.EvidenceSummary.WriterSuccess"), TEXT("PhysAnim.EvidenceSummary.ProofEmitterHook") }));
 			Inventory.Segments.Add(MoveTemp(Segment));
 		}

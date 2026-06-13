@@ -125,6 +125,12 @@ namespace
 		PhysAnimEvidenceSummary_AppendStringField(Json, bFirstField, TEXT("selected_source_identity"), Metrics.SelectedSourceIdentity);
 		PhysAnimEvidenceSummary_AppendDoubleField(Json, bFirstField, TEXT("selected_source_time"), Metrics.SelectedSourceTime);
 		PhysAnimEvidenceSummary_AppendIntField(Json, bFirstField, TEXT("consecutive_invalid_sample_count"), Metrics.ConsecutiveInvalidSampleCount);
+		PhysAnimEvidenceSummary_AppendIntField(Json, bFirstField, TEXT("inference_attempt_count"), Metrics.InferenceAttemptCount);
+		PhysAnimEvidenceSummary_AppendIntField(Json, bFirstField, TEXT("inference_failure_count"), Metrics.InferenceFailureCount);
+		PhysAnimEvidenceSummary_AppendDoubleField(Json, bFirstField, TEXT("inference_latency_ms_max"), Metrics.InferenceLatencyMsMax);
+		PhysAnimEvidenceSummary_AppendBoolField(Json, bFirstField, TEXT("model_loaded"), Metrics.bModelLoaded);
+		PhysAnimEvidenceSummary_AppendStringField(Json, bFirstField, TEXT("runtime_name"), Metrics.RuntimeName);
+		PhysAnimEvidenceSummary_AppendBoolField(Json, bFirstField, TEXT("input_buffers_finite"), Metrics.bInputBuffersFinite);
 
 		Json += TEXT("}");
 		return Json;
@@ -406,6 +412,19 @@ namespace
 		double ConsecutiveInvalidSampleCount = 0.0;
 		JsonObject->TryGetNumberField(TEXT("consecutive_invalid_sample_count"), ConsecutiveInvalidSampleCount);
 		OutMetrics.ConsecutiveInvalidSampleCount = static_cast<int32>(ConsecutiveInvalidSampleCount);
+
+		double InferenceAttemptCount = 0.0;
+		JsonObject->TryGetNumberField(TEXT("inference_attempt_count"), InferenceAttemptCount);
+		OutMetrics.InferenceAttemptCount = static_cast<int32>(InferenceAttemptCount);
+
+		double InferenceFailureCount = 0.0;
+		JsonObject->TryGetNumberField(TEXT("inference_failure_count"), InferenceFailureCount);
+		OutMetrics.InferenceFailureCount = static_cast<int32>(InferenceFailureCount);
+
+		JsonObject->TryGetNumberField(TEXT("inference_latency_ms_max"), OutMetrics.InferenceLatencyMsMax);
+		JsonObject->TryGetBoolField(TEXT("model_loaded"), OutMetrics.bModelLoaded);
+		JsonObject->TryGetStringField(TEXT("runtime_name"), OutMetrics.RuntimeName);
+		JsonObject->TryGetBoolField(TEXT("input_buffers_finite"), OutMetrics.bInputBuffersFinite);
 
 		OutMetrics.SampleCount = static_cast<int32>(SampleCount);
 		return true;

@@ -1143,7 +1143,43 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	double RendererFacingMotionMaxRootWorldPositionDriftCm = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double RendererFacingMotionMaxMeshWorldPositionDriftCm = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double RendererFacingMotionMaxRootYawDeltaDeg = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double RendererFacingMotionMaxBodyDeltaCm = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double RendererFacingMotionMaxBodyDeltaDeg = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	bool bRendererFacingMotionUsedNullRhi = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 PolicyInferenceSuccessCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 PolicyInferenceAttemptCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 PolicyInferenceFailureCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double PolicyInferenceLatencyMsMax = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	bool bPolicyModelLoaded = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	FString PolicyRuntimeName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	FString PolicyModelName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	bool bPolicyInputBuffersFinite = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 PolicyActionSampleCount = 0;
@@ -1156,6 +1192,12 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 PolicyActionClampedFloatMax = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	bool bPhysicsControlComponentAvailable = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	int32 ControlledBodyCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 ControlTargetSampleCount = 0;
@@ -1484,6 +1526,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim")
 	void StopBalancePerturbationMode();
 
+	static bool ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+		const TArray<FPhysAnimBalanceScenario>& Scenarios,
+		bool bPhysicalPerturbationApplied,
+		bool bLastScenarioSucceeded);
+
 #if !UE_BUILD_SHIPPING
 	const FPhysAnimStabilizationSettings& GetConfiguredStabilizationSettings() const { return StabilizationSettings; }
 	EBalanceReadyTransitionPhase GetBalanceReadyTransitionPhase() const { return BalanceReadyTransition.GetPhase(); }
@@ -1667,6 +1714,9 @@ public:
 	{
 		return HasStartupProofPhysicalContinuityEvidence(Artifact);
 	}
+	static bool TestOnlyIsStartupProofSatisfactionStateAccepted(
+		const FPhysAnimRuntimeTerminationState& State,
+		const FPhysAnimStabilizationSettings& Settings);
 	static EPhysAnimTerminalReason TestOnlyResolveStartupPhysicalContinuityTerminalReason(
 		EPhysAnimRuntimeState RuntimeState,
 		const FPhysAnimRunArtifactSnapshot& Artifact)
@@ -2004,6 +2054,10 @@ private:
 	FPhysAnimRuntimeSubstepInput BuildLiveRuntimeEvidenceSubstepInput(
 		const FPhysAnimSupportObservationResult& SupportObservation,
 		float DeltaTimeSeconds) const;
+	static const FPhysAnimRunArtifactSnapshot& SelectStartupProofSatisfactionArtifact(const FPhysAnimRuntimeTerminationState& State);
+	static bool IsStartupProofSatisfactionStateAccepted(
+		const FPhysAnimRuntimeTerminationState& State,
+		const FPhysAnimStabilizationSettings& Settings);
 	static bool HasStartupProofPhysicalContinuityEvidence(const FPhysAnimRunArtifactSnapshot& Artifact);
 	static EPhysAnimTerminalReason ResolveStartupPhysicalContinuityTerminalReason(
 		EPhysAnimRuntimeState RuntimeState,

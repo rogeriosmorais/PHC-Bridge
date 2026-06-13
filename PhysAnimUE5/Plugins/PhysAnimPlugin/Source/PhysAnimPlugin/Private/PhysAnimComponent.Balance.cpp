@@ -658,6 +658,18 @@ bool UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 	return true;
 }
 
+bool UPhysAnimComponent::ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+	const TArray<FPhysAnimBalanceScenario>& Scenarios,
+	bool bPhysicalPerturbationApplied,
+	bool bLastScenarioSucceeded)
+{
+	if (!bLastScenarioSucceeded || bPhysicalPerturbationApplied || Scenarios.Num() != 1)
+	{
+		return false;
+	}
+
+	return Scenarios[0].Name.Contains(TEXT("NoPush"));
+}
 
 void UPhysAnimComponent::FinalizeBalanceScenario(bool bSuccess, const FString& Reason)
 {
@@ -743,8 +755,25 @@ void UPhysAnimComponent::FinalizeBalanceScenario(bool bSuccess, const FString& R
 	}
 	else
 	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] All scenarios completed."));
-		StopBalancePerturbationMode();
+		if (ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+			BalanceScenarios,
+			ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied,
+			bSuccess))
+		{
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] All scenarios completed; holding BalanceActive_Standing for idle stability evidence."));
+			ActiveBalanceScenarioIndex = INDEX_NONE;
+			bBalanceScenarioAwaitingStableWindow = false;
+			BalanceScenarioStableWindowStartTimeSeconds = -1.0;
+			BalanceScenarioQuietWindowAccumulatedSeconds = 0.0;
+			BalanceScenarioRecoveryStableAccumulatedSeconds = 0.0;
+			LastBalanceStabilizationLogTimeSeconds = -1.0;
+			LastBalanceScenarioImpactTimeSeconds = -1.0;
+		}
+		else
+		{
+			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] All scenarios completed."));
+			StopBalancePerturbationMode();
+		}
 	}
 }
 

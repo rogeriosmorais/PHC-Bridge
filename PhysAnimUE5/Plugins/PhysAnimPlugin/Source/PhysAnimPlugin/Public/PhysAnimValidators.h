@@ -311,7 +311,16 @@ struct FPhysAnimRunArtifactSnapshot
 	bool bCalfContactTerminal = false;
 
 	double ControlAlpha = 0.0;
+	bool bPhysicsControlComponentAvailable = false;
+	int32 ControlledBodyCount = 0;
 	int32 PolicyInferenceSuccessCount = 0;
+	int32 PolicyInferenceAttemptCount = 0;
+	int32 PolicyInferenceFailureCount = 0;
+	double PolicyInferenceLatencyMsMax = 0.0;
+	bool bPolicyModelLoaded = false;
+	FString PolicyRuntimeName;
+	FString PolicyModelName;
+	bool bPolicyInputBuffersFinite = false;
 	int32 PolicyActionSampleCount = 0;
 	double PolicyActionRawMeanAbsMax = 0.0;
 	double PolicyActionConditionedMeanAbsMax = 0.0;
@@ -331,8 +340,17 @@ struct FPhysAnimRunArtifactSnapshot
 	int32 RendererFacingMotionSampleCount = 0;
 	int32 RendererFacingMotionActiveSampleCount = 0;
 	double RendererFacingMotionMaxRootWorldPositionDriftCm = 0.0;
+	double RendererFacingMotionMaxMeshWorldPositionDriftCm = 0.0;
+	double RendererFacingMotionMaxRootYawDeltaDeg = 0.0;
+	double RendererFacingMotionMaxBodyDeltaCm = 0.0;
+	double RendererFacingMotionMaxBodyDeltaDeg = 0.0;
+	bool bRendererFacingMotionUsedNullRhi = false;
 	int32 RuntimeBodySampleCount = 0;
 	int32 RuntimeSimulatingBodyCount = 0;
+	int32 CriticalBodyValidMask = 0;
+	int32 CriticalBodySimulatingMask = 0;
+	int32 SupportBodyValidMask = 0;
+	int32 SupportBodySimulatingMask = 0;
 	double RuntimeMaxBodyLinearSpeedCmPerSecond = 0.0;
 	double RuntimeMaxBodyAngularSpeedDegPerSecond = 0.0;
 	bool bPhysicalPerturbationApplied = false;

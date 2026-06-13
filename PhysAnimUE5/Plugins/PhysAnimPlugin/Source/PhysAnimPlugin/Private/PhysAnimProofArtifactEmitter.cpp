@@ -5,6 +5,7 @@
 
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
+#include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonSerializer.h"
@@ -97,15 +98,32 @@ namespace
 				: EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive;
 		};
 
+		const auto ResolvePhcPolicySegmentState = [&Artifact]()
+		{
+			if (Artifact.PolicyInferenceAttemptCount <= 0)
+			{
+				return EPhysAnimEvidenceBaselineSegmentState::NotReached;
+			}
+
+			return Artifact.PolicyInferenceSuccessCount > 0
+				? EPhysAnimEvidenceBaselineSegmentState::Active
+				: EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive;
+		};
+
 		BaselineInput.Segments.PoseSearch = ResolvePoseSearchSegmentState();
-		BaselineInput.Segments.PhcPolicy =
-			Artifact.PolicyActionSampleCount > 0
-				? EPhysAnimEvidenceBaselineSegmentState::Active
-				: EPhysAnimEvidenceBaselineSegmentState::NotReached;
-		BaselineInput.Segments.PhysicsControl =
-			Artifact.ControlTargetTotalWrites > 0
-				? EPhysAnimEvidenceBaselineSegmentState::Active
-				: EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		BaselineInput.Segments.PhcPolicy = ResolvePhcPolicySegmentState();
+		if (!Artifact.bPhysicsControlComponentAvailable || Artifact.ControlTargetSampleCount <= 0)
+		{
+			BaselineInput.Segments.PhysicsControl = EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		}
+		else if (Artifact.ControlTargetNormalWrites <= 0)
+		{
+			BaselineInput.Segments.PhysicsControl = EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive;
+		}
+		else
+		{
+			BaselineInput.Segments.PhysicsControl = EPhysAnimEvidenceBaselineSegmentState::Active;
+		}
 		BaselineInput.Segments.Chaos =
 			Artifact.RuntimeSimulatingBodyCount > 0
 				? EPhysAnimEvidenceBaselineSegmentState::Active
@@ -162,7 +180,13 @@ namespace
 		const TCHAR* ProvenanceTag,
 		const FString& SelectedSourceIdentity = TEXT(""),
 		const double SelectedSourceTime = 0.0,
-		const int32 ConsecutiveInvalidSampleCount = 0)
+		const int32 ConsecutiveInvalidSampleCount = 0,
+		const int32 InferenceAttemptCount = 0,
+		const int32 InferenceFailureCount = 0,
+		const double InferenceLatencyMsMax = 0.0,
+		const bool bModelLoaded = false,
+		const FString& RuntimeName = TEXT(""),
+		const bool bInputBuffersFinite = false)
 	{
 		FPhysAnimEvidenceSummarySegment Segment;
 		Segment.SegmentName = SegmentName;
@@ -173,6 +197,12 @@ namespace
 		Segment.Metrics.SelectedSourceIdentity = SelectedSourceIdentity;
 		Segment.Metrics.SelectedSourceTime = SelectedSourceTime;
 		Segment.Metrics.ConsecutiveInvalidSampleCount = ConsecutiveInvalidSampleCount;
+		Segment.Metrics.InferenceAttemptCount = InferenceAttemptCount;
+		Segment.Metrics.InferenceFailureCount = InferenceFailureCount;
+		Segment.Metrics.InferenceLatencyMsMax = InferenceLatencyMsMax;
+		Segment.Metrics.bModelLoaded = bModelLoaded;
+		Segment.Metrics.RuntimeName = RuntimeName;
+		Segment.Metrics.bInputBuffersFinite = bInputBuffersFinite;
 		Segment.SourceProvenance.Add(ProvenanceTag);
 		Segment.SourceProvenance.Add(TEXT("EB-01"));
 		return Segment;
@@ -190,11 +220,24 @@ namespace
 		Summary.Timestamp = Artifact.Timestamp;
 		Summary.TerminalReason = Artifact.TerminalReason;
 		Summary.TerminalArtifactPath = PhysAnimProofArtifactEmitter::BuildTerminalArtifactJsonPath(Input.AttemptUuid);
-		Summary.CommandMetadata.Reset();
+		const FString CommandLine = FCommandLine::Get();
+		const FString WorkingDirectory = FPaths::LaunchDir();
+		if (!Summary.TestName.IsEmpty() && !CommandLine.IsEmpty() && !WorkingDirectory.IsEmpty())
+		{
+			FPhysAnimEvidenceSummaryCommandMetadata CommandMetadata;
+			CommandMetadata.CommandName = Summary.TestName;
+			CommandMetadata.CommandLine = CommandLine;
+			CommandMetadata.WorkingDirectory = WorkingDirectory;
+			Summary.CommandMetadata = CommandMetadata;
+		}
+		else
+		{
+			Summary.CommandMetadata.Reset();
+		}
 
 		Summary.Segments.Reserve(static_cast<int32>(EPhysAnimEvidenceBaselineSegment::Count));
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
-			TEXT("pose_search"),
+			TEXT("PoseSearch"),
 			ClassifierResult.Segments.PoseSearch,
 			Artifact.PoseSearchQueryCount,
 			Artifact.PoseSearchQueryCount > 0
@@ -208,17 +251,37 @@ namespace
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
 			TEXT("PhcPolicy"),
 			ClassifierResult.Segments.PhcPolicy,
-			Artifact.PolicyActionSampleCount,
-			Artifact.PolicyActionRawMeanAbsMax,
+			Artifact.PolicyInferenceAttemptCount,
+			Artifact.PolicyInferenceAttemptCount > 0
+				? static_cast<double>(Artifact.PolicyInferenceSuccessCount) / static_cast<double>(Artifact.PolicyInferenceAttemptCount)
+				: 0.0,
 			Artifact.PolicyActionConditionedMeanAbsMax,
-			TEXT("policy")));
+			TEXT("phc_policy"),
+			Artifact.PolicyModelName,
+			0.0, // SelectedSourceTime
+			0,   // ConsecutiveInvalidSampleCount
+			Artifact.PolicyInferenceAttemptCount,
+			Artifact.PolicyInferenceFailureCount,
+			Artifact.PolicyInferenceLatencyMsMax,
+			Artifact.bPolicyModelLoaded,
+			Artifact.PolicyRuntimeName,
+			Artifact.bPolicyInputBuffersFinite));
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
 			TEXT("PhysicsControl"),
 			ClassifierResult.Segments.PhysicsControl,
-			Artifact.ControlTargetTotalWrites,
-			Artifact.ControlTargetNormalWrites,
+			Artifact.ControlTargetSampleCount,
+			Artifact.ControlTargetSampleCount > 0
+				? static_cast<double>(Artifact.ControlTargetNormalWrites) / static_cast<double>(Artifact.ControlTargetSampleCount)
+				: 0.0,
 			Artifact.ControlTargetMaxDeltaDeg,
-			TEXT("control")));
+			TEXT("physics_control"),
+			FString::Printf(TEXT("%d_bodies"), Artifact.ControlledBodyCount),
+			0.0,
+			0,
+			0,
+			0,
+			0.0,
+			Artifact.bPhysicsControlComponentAvailable));
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
 			TEXT("Chaos"),
 			ClassifierResult.Segments.Chaos,
@@ -323,7 +386,16 @@ namespace
 		Json->SetBoolField(TEXT("calf_contact_terminal"), Artifact.bCalfContactTerminal);
 
 		Json->SetNumberField(TEXT("control_alpha"), Artifact.ControlAlpha);
+		Json->SetBoolField(TEXT("physics_control_component_available"), Artifact.bPhysicsControlComponentAvailable);
+		Json->SetNumberField(TEXT("controlled_body_count"), Artifact.ControlledBodyCount);
 		Json->SetNumberField(TEXT("policy_inference_success_count"), Artifact.PolicyInferenceSuccessCount);
+		Json->SetNumberField(TEXT("policy_inference_attempt_count"), Artifact.PolicyInferenceAttemptCount);
+		Json->SetNumberField(TEXT("policy_inference_failure_count"), Artifact.PolicyInferenceFailureCount);
+		Json->SetNumberField(TEXT("policy_inference_latency_ms_max"), Artifact.PolicyInferenceLatencyMsMax);
+		Json->SetBoolField(TEXT("policy_model_loaded"), Artifact.bPolicyModelLoaded);
+		Json->SetStringField(TEXT("policy_runtime_name"), Artifact.PolicyRuntimeName);
+		Json->SetStringField(TEXT("policy_model_name"), Artifact.PolicyModelName);
+		Json->SetBoolField(TEXT("policy_input_buffers_finite"), Artifact.bPolicyInputBuffersFinite);
 		Json->SetNumberField(TEXT("policy_action_sample_count"), Artifact.PolicyActionSampleCount);
 		Json->SetNumberField(TEXT("policy_action_raw_mean_abs_max"), Artifact.PolicyActionRawMeanAbsMax);
 		Json->SetNumberField(TEXT("policy_action_conditioned_mean_abs_max"), Artifact.PolicyActionConditionedMeanAbsMax);
@@ -345,6 +417,21 @@ namespace
 		Json->SetNumberField(
 			TEXT("renderer_facing_motion_max_root_world_position_drift_cm"),
 			Artifact.RendererFacingMotionMaxRootWorldPositionDriftCm);
+		Json->SetNumberField(
+			TEXT("renderer_facing_motion_max_mesh_world_position_drift_cm"),
+			Artifact.RendererFacingMotionMaxMeshWorldPositionDriftCm);
+		Json->SetNumberField(
+			TEXT("renderer_facing_motion_max_root_yaw_delta_deg"),
+			Artifact.RendererFacingMotionMaxRootYawDeltaDeg);
+		Json->SetNumberField(
+			TEXT("renderer_facing_motion_max_body_delta_cm"),
+			Artifact.RendererFacingMotionMaxBodyDeltaCm);
+		Json->SetNumberField(
+			TEXT("renderer_facing_motion_max_body_delta_deg"),
+			Artifact.RendererFacingMotionMaxBodyDeltaDeg);
+		Json->SetBoolField(
+			TEXT("renderer_facing_motion_used_null_rhi"),
+			Artifact.bRendererFacingMotionUsedNullRhi);
 		Json->SetNumberField(TEXT("runtime_body_sample_count"), Artifact.RuntimeBodySampleCount);
 		Json->SetNumberField(TEXT("runtime_simulating_body_count"), Artifact.RuntimeSimulatingBodyCount);
 		Json->SetNumberField(TEXT("runtime_max_body_linear_speed_cm_per_second"), Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond);

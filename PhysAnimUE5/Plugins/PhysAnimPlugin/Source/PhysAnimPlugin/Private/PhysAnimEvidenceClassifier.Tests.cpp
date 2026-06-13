@@ -123,6 +123,15 @@ namespace
 			TestEqual(TEXT("Log pass with artifact disagreement is contradictory"), static_cast<uint8>(Result.Verdict), static_cast<uint8>(EPhysAnimEvidenceBaselineVerdict::Contradictory));
 		}
 
+		{
+			FPhysAnimEvidenceBaselineInput Input = MakeAuthoritativeSuccessInput();
+			Input.TruthFlags.bArtifactLogContradiction = true;
+
+			const FPhysAnimEvidenceBaselineResult Result = Classify(Input);
+
+			TestEqual(TEXT("Explicit artifact/log contradiction flag is contradictory"), static_cast<uint8>(Result.Verdict), static_cast<uint8>(EPhysAnimEvidenceBaselineVerdict::Contradictory));
+		}
+
 		return true;
 	}
 

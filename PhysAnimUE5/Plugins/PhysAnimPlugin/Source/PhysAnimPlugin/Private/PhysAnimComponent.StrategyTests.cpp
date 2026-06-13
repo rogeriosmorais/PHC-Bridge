@@ -284,6 +284,50 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceCompletedScenarioSetPolicyTest,
+		"PhysAnim.Component.BalanceCompletedScenarioSetPolicy",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceCompletedScenarioSetPolicyTest::RunTest(const FString& Parameters)
+	{
+		TArray<FPhysAnimBalanceScenario> IdleHoldOnly;
+		IdleHoldOnly.Add({ TEXT("IdleHold_NoPush"), EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small, 0.5f, 3.0f, 0.0f });
+
+		TestTrue(
+			TEXT("Successful no-push idle hold remains in BalanceActive_Standing for stability evidence"),
+			UPhysAnimComponent::ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+				IdleHoldOnly,
+				false,
+				true));
+
+		TestFalse(
+			TEXT("Failed no-push idle hold keeps the existing stop behavior"),
+			UPhysAnimComponent::ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+				IdleHoldOnly,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("No-push idle hold with perturbation evidence keeps the existing stop behavior"),
+			UPhysAnimComponent::ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+				IdleHoldOnly,
+				true,
+				true));
+
+		TArray<FPhysAnimBalanceScenario> PerturbationSet = IdleHoldOnly;
+		PerturbationSet.Add({ TEXT("IdleHold_PelvisImpulse_Forward_Small"), EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small, 0.5f, 3.0f, 0.0f });
+
+		TestFalse(
+			TEXT("Perturbation scenario sets keep the existing stop behavior after completion"),
+			UPhysAnimComponent::ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+				PerturbationSet,
+				false,
+				true));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimStartupProofPhysicalContinuityContractTest,
 		"PhysAnim.Component.StartupProofPhysicalContinuityContract",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -323,6 +367,68 @@ namespace
 				EPhysAnimRuntimeState::BalanceActive_Standing,
 				Artifact),
 			EPhysAnimTerminalReason::ActivationContinuousSimulationLost);
+
+		return true;
+	}
+
+	FPhysAnimRunArtifactSnapshot MakeEb14TruthfulTerminalArtifact()
+	{
+		FPhysAnimRunArtifactSnapshot Artifact;
+		Artifact.AttemptUuid = TEXT("eb14-terminal-authority");
+		Artifact.TerminalReason = EPhysAnimTerminalReason::None;
+		Artifact.TerminalSubstepTimestamp = 360;
+		Artifact.bTerminalFrameArtifactCaptured = true;
+		Artifact.SupportMode = EPhysAnimSupportMode::TwoFootStable;
+		Artifact.ActiveSupportSideCount = 2;
+		Artifact.SupportHullAreaCm2 = 1200.0;
+		Artifact.SupportGapTimerMs = 0.0;
+		Artifact.bPhysicsAssetContractValid = true;
+		Artifact.bSkeletonAuditPassed = true;
+		Artifact.bCapsuleContractPassed = true;
+		Artifact.bPhysicalContinuityValidatorPassed = true;
+		Artifact.bContinuityBookkeepingMismatch = false;
+		return Artifact;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimStartupProofTerminalArtifactAuthorityTest,
+		"PhysAnim.Component.StartupProofTerminalArtifactAuthority",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimStartupProofTerminalArtifactAuthorityTest::RunTest(const FString& Parameters)
+	{
+		const FPhysAnimRunArtifactSnapshot TerminalArtifact = MakeEb14TruthfulTerminalArtifact();
+
+		FPhysAnimRunArtifactSnapshot DirtyLatestArtifact = TerminalArtifact;
+		DirtyLatestArtifact.bPhysicalContinuityValidatorPassed = false;
+		DirtyLatestArtifact.bContinuityBookkeepingMismatch = true;
+		DirtyLatestArtifact.SupportMode = EPhysAnimSupportMode::Airborne;
+		DirtyLatestArtifact.ActiveSupportSideCount = 0;
+		DirtyLatestArtifact.SupportHullAreaCm2 = 0.0;
+
+		FPhysAnimRuntimeTerminationState State;
+		State.bTerminated = false;
+		State.TerminalReason = EPhysAnimTerminalReason::None;
+		State.TerminalArtifact = TerminalArtifact;
+		State.LatestArtifact = DirtyLatestArtifact;
+
+		FPhysAnimStabilizationSettings Settings;
+		Settings.BalancePhase1AdmissionMaxSupportGapMs = 50.0f;
+
+		TestTrue(
+			TEXT("Truthful terminal artifact remains authoritative after latest-artifact drift"),
+			UPhysAnimComponent::TestOnlyIsStartupProofSatisfactionStateAccepted(State, Settings));
+
+		State.TerminalArtifact = FPhysAnimRunArtifactSnapshot();
+		TestFalse(
+			TEXT("Missing terminal artifact does not mask a dirty latest artifact"),
+			UPhysAnimComponent::TestOnlyIsStartupProofSatisfactionStateAccepted(State, Settings));
+
+		State.TerminalArtifact = TerminalArtifact;
+		State.TerminalReason = EPhysAnimTerminalReason::ActivationSupportFailure;
+		TestFalse(
+			TEXT("Recorded terminal reason still blocks startup proof satisfaction"),
+			UPhysAnimComponent::TestOnlyIsStartupProofSatisfactionStateAccepted(State, Settings));
 
 		return true;
 	}

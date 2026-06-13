@@ -117,8 +117,8 @@ namespace
 
 		TestEqual(TEXT("PoseSearch has five reused counter mappings"), PoseSearch->ExistingCounterMappings.Num(), 5);
 		TestEqual(TEXT("RendererFacingMotion has three reused counter mappings"), RendererFacingMotion->ExistingCounterMappings.Num(), 3);
-		TestEqual(TEXT("PhcPolicy has two reused counter mappings"), PhcPolicy->ExistingCounterMappings.Num(), 2);
-		TestEqual(TEXT("PhysicsControl has two reused counter mappings"), PhysicsControl->ExistingCounterMappings.Num(), 2);
+		TestEqual(TEXT("PhcPolicy has twelve reused counter mappings"), PhcPolicy->ExistingCounterMappings.Num(), 12);
+		TestEqual(TEXT("PhysicsControl has nine reused counter mappings"), PhysicsControl->ExistingCounterMappings.Num(), 9);
 		TestEqual(TEXT("Chaos has ten reused counter mappings"), Chaos->ExistingCounterMappings.Num(), 10);
 
 		return true;
@@ -156,9 +156,97 @@ namespace
 		TestNotNull(TEXT("PoseSearchSelectedTime mapping exists"), FindMapping(*PoseSearch, TEXT("PoseSearchSelectedTime")));
 		TestNotNull(TEXT("PoseSearchConsecutiveInvalidFrameCount mapping exists"), FindMapping(*PoseSearch, TEXT("PoseSearchConsecutiveInvalidFrameCount")));
 		TestNotNull(TEXT("PolicyInferenceSuccessCount mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyInferenceSuccessCount")));
+		TestNotNull(TEXT("PolicyInferenceAttemptCount mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyInferenceAttemptCount")));
+		TestNotNull(TEXT("PolicyInferenceFailureCount mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyInferenceFailureCount")));
+		TestNotNull(TEXT("PolicyInferenceLatencyMsMax mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyInferenceLatencyMsMax")));
+		TestNotNull(TEXT("bPolicyModelLoaded mapping exists"), FindMapping(*PhcPolicy, TEXT("bPolicyModelLoaded")));
+		TestNotNull(TEXT("PolicyRuntimeName mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyRuntimeName")));
+		TestNotNull(TEXT("PolicyModelName mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyModelName")));
+		TestNotNull(TEXT("bPolicyInputBuffersFinite mapping exists"), FindMapping(*PhcPolicy, TEXT("bPolicyInputBuffersFinite")));
 		TestNotNull(TEXT("PolicyActionSampleCount mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyActionSampleCount")));
-		TestNotNull(TEXT("ControlTargetTotalWrites mapping exists"), FindMapping(*PhysicsControl, TEXT("ControlTargetTotalWrites")));
+		TestNotNull(TEXT("PolicyActionRawMeanAbsMax mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyActionRawMeanAbsMax")));
+		TestNotNull(TEXT("PolicyActionConditionedMeanAbsMax mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyActionConditionedMeanAbsMax")));
+		TestNotNull(TEXT("PolicyActionClampedFloatMax mapping exists"), FindMapping(*PhcPolicy, TEXT("PolicyActionClampedFloatMax")));
+		const FPhysAnimRuntimeMetricFieldMapping* ControlTargetTotalWritesMapping = FindMapping(*PhysicsControl, TEXT("ControlTargetTotalWrites"));
+		TestNotNull(TEXT("ControlTargetTotalWrites mapping exists"), ControlTargetTotalWritesMapping);
 		TestNotNull(TEXT("ControlTargetNormalWrites mapping exists"), FindMapping(*PhysicsControl, TEXT("ControlTargetNormalWrites")));
+		const FPhysAnimRuntimeMetricFieldMapping* ControlTargetSampleCountMapping = FindMapping(*PhysicsControl, TEXT("ControlTargetSampleCount"));
+		TestNotNull(TEXT("ControlTargetSampleCount mapping exists"), ControlTargetSampleCountMapping);
+		const FPhysAnimRuntimeMetricFieldMapping* ControlTargetMaxDeltaDegMapping = FindMapping(*PhysicsControl, TEXT("ControlTargetMaxDeltaDeg"));
+		TestNotNull(TEXT("ControlTargetMaxDeltaDeg mapping exists"), ControlTargetMaxDeltaDegMapping);
+		const FPhysAnimRuntimeMetricFieldMapping* ControlTargetMeanDeltaDegMaxMapping = FindMapping(*PhysicsControl, TEXT("ControlTargetMeanDeltaDegMax"));
+		TestNotNull(TEXT("ControlTargetMeanDeltaDegMax mapping exists"), ControlTargetMeanDeltaDegMaxMapping);
+		const FPhysAnimRuntimeMetricFieldMapping* ControlTargetMaxRawPolicyOffsetDegMapping = FindMapping(*PhysicsControl, TEXT("ControlTargetMaxRawPolicyOffsetDeg"));
+		TestNotNull(TEXT("ControlTargetMaxRawPolicyOffsetDeg mapping exists"), ControlTargetMaxRawPolicyOffsetDegMapping);
+		const FPhysAnimRuntimeMetricFieldMapping* ControlTargetMeanRawPolicyOffsetDegMaxMapping = FindMapping(*PhysicsControl, TEXT("ControlTargetMeanRawPolicyOffsetDegMax"));
+		TestNotNull(TEXT("ControlTargetMeanRawPolicyOffsetDegMax mapping exists"), ControlTargetMeanRawPolicyOffsetDegMaxMapping);
+		const FPhysAnimRuntimeMetricFieldMapping* ControlTargetNormalWritesMapping = FindMapping(*PhysicsControl, TEXT("ControlTargetNormalWrites"));
+		TestNotNull(TEXT("ControlTargetNormalWrites mapping exists"), ControlTargetNormalWritesMapping);
+		TestFalse(TEXT("PhysicsControl reuses existing telemetry"), PhysicsControl->bRequiresNewTelemetry);
+		TestNotNull(TEXT("bPhysicsControlComponentAvailable mapping exists"), FindMapping(*PhysicsControl, TEXT("bPhysicsControlComponentAvailable")));
+		const FPhysAnimRuntimeMetricFieldMapping* ControlledBodyCountMapping = FindMapping(*PhysicsControl, TEXT("ControlledBodyCount"));
+		TestNotNull(TEXT("ControlledBodyCount mapping exists"), ControlledBodyCountMapping);
+		if (!ControlledBodyCountMapping)
+		{
+			return false;
+		}
+
+		TestFalse(TEXT("ControlledBodyCount reuses existing telemetry"), PhysicsControl->bRequiresNewTelemetry);
+		TestTrue(
+			TEXT("ControlTargetTotalWrites mapping is sourced from reused telemetry"),
+			ControlTargetTotalWritesMapping != nullptr &&
+				ControlTargetTotalWritesMapping->SourceProvenance.Contains(TEXT("PhysAnimComponent.ModifierTracking.cpp::UPhysAnimComponent::ApplyControlTargets")) &&
+				ControlTargetTotalWritesMapping->SourceProvenance.Contains(TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::TickLiveRuntimeEvidenceProof")));
+		TestTrue(
+			TEXT("ControlTargetNormalWrites mapping is sourced from reused telemetry"),
+			ControlTargetNormalWritesMapping != nullptr &&
+				ControlTargetNormalWritesMapping->SourceProvenance.Contains(TEXT("PhysAnimComponent.ModifierTracking.cpp::UPhysAnimComponent::ApplyControlTargets")) &&
+				ControlTargetNormalWritesMapping->SourceProvenance.Contains(TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::TickLiveRuntimeEvidenceProof")));
+		TestTrue(
+			TEXT("ControlTargetSampleCount mapping is sourced from runtime capture and snapshot reuse"),
+			ControlTargetSampleCountMapping != nullptr &&
+				ControlTargetSampleCountMapping->SourceProvenance.Contains(TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics")) &&
+				ControlTargetSampleCountMapping->SourceProvenance.Contains(TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot")));
+		TestTrue(
+			TEXT("ControlTargetMaxDeltaDeg mapping is sourced from the control-target application path"),
+			ControlTargetMaxDeltaDegMapping != nullptr &&
+				ControlTargetMaxDeltaDegMapping->SourceProvenance.Contains(TEXT("PhysAnimComponent.ModifierTracking.cpp::UPhysAnimComponent::ApplyControlTargets")));
+		TestTrue(
+			TEXT("ControlTargetMaxDeltaDeg mapping cites focused target-delta tests"),
+			ControlTargetMaxDeltaDegMapping != nullptr &&
+				ControlTargetMaxDeltaDegMapping->TestCoverageNames.Contains(TEXT("PhysAnim.Validators.ArtifactSnapshot.ControlTargetDeltaPreservation")) &&
+				ControlTargetMaxDeltaDegMapping->TestCoverageNames.Contains(TEXT("PhysAnim.EvidenceSummary.PhysicsControlTargetDeltaEvidence")));
+		TestTrue(
+			TEXT("ControlTargetMeanDeltaDegMax mapping is sourced from the control-target application path"),
+			ControlTargetMeanDeltaDegMaxMapping != nullptr &&
+				ControlTargetMeanDeltaDegMaxMapping->SourceProvenance.Contains(TEXT("PhysAnimComponent.ModifierTracking.cpp::UPhysAnimComponent::ApplyControlTargets")));
+		TestTrue(
+			TEXT("ControlTargetMeanDeltaDegMax mapping cites focused target-delta tests"),
+			ControlTargetMeanDeltaDegMaxMapping != nullptr &&
+				ControlTargetMeanDeltaDegMaxMapping->TestCoverageNames.Contains(TEXT("PhysAnim.Validators.ArtifactSnapshot.ControlTargetDeltaPreservation")) &&
+				ControlTargetMeanDeltaDegMaxMapping->TestCoverageNames.Contains(TEXT("PhysAnim.EvidenceSummary.PhysicsControlTargetDeltaEvidence")));
+		TestTrue(
+			TEXT("ControlTargetMaxRawPolicyOffsetDeg mapping is sourced from the control-target application path"),
+			ControlTargetMaxRawPolicyOffsetDegMapping != nullptr &&
+				ControlTargetMaxRawPolicyOffsetDegMapping->SourceProvenance.Contains(TEXT("PhysAnimComponent.ModifierTracking.cpp::UPhysAnimComponent::ApplyControlTargets")));
+		TestTrue(
+			TEXT("ControlTargetMaxRawPolicyOffsetDeg mapping cites focused raw-offset tests"),
+			ControlTargetMaxRawPolicyOffsetDegMapping != nullptr &&
+				ControlTargetMaxRawPolicyOffsetDegMapping->TestCoverageNames.Contains(TEXT("PhysAnim.Validators.ArtifactSnapshot.RawPolicyOffsetPreservation")) &&
+				ControlTargetMaxRawPolicyOffsetDegMapping->TestCoverageNames.Contains(TEXT("PhysAnim.EvidenceSummary.PhysicsControlRawPolicyOffsetEvidence")));
+		TestTrue(
+			TEXT("ControlTargetMeanRawPolicyOffsetDegMax mapping is sourced from the control-target application path"),
+			ControlTargetMeanRawPolicyOffsetDegMaxMapping != nullptr &&
+				ControlTargetMeanRawPolicyOffsetDegMaxMapping->SourceProvenance.Contains(TEXT("PhysAnimComponent.ModifierTracking.cpp::UPhysAnimComponent::ApplyControlTargets")));
+		TestTrue(
+			TEXT("ControlTargetMeanRawPolicyOffsetDegMax mapping cites focused raw-offset tests"),
+			ControlTargetMeanRawPolicyOffsetDegMaxMapping != nullptr &&
+				ControlTargetMeanRawPolicyOffsetDegMaxMapping->TestCoverageNames.Contains(TEXT("PhysAnim.Validators.ArtifactSnapshot.RawPolicyOffsetPreservation")) &&
+				ControlTargetMeanRawPolicyOffsetDegMaxMapping->TestCoverageNames.Contains(TEXT("PhysAnim.EvidenceSummary.PhysicsControlRawPolicyOffsetEvidence")));
+		TestTrue(
+			TEXT("ControlledBodyCount mapping is sourced from runtime capture and snapshot reuse"),
+			ControlledBodyCountMapping->SourceProvenance.Contains(TEXT("PhysAnimComponent.cpp::UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics")) &&
+				ControlledBodyCountMapping->SourceProvenance.Contains(TEXT("PhysAnimValidators.cpp::BuildRunArtifactSnapshot")));
 
 		const TCHAR* ExpectedChaosFields[] =
 		{

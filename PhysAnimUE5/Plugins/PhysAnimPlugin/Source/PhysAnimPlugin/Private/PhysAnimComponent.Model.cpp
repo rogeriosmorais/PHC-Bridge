@@ -34,6 +34,9 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 				OutError = TEXT("Live T-pose capture did not populate cached rest transforms before model initialization.");
 				return false;
 			}
+			ActivatedStandingStabilityMetrics.bPolicyModelLoaded = true;
+			ActivatedStandingStabilityMetrics.PolicyModelName = LoadedModelData->GetName();
+			ActivatedStandingStabilityMetrics.PolicyRuntimeName = ActiveRuntimeName;
 			return true;
 		}
 	}
@@ -63,6 +66,9 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 				OutError = TEXT("Live T-pose capture did not populate cached rest transforms before model initialization.");
 				return false;
 			}
+			ActivatedStandingStabilityMetrics.bPolicyModelLoaded = true;
+			ActivatedStandingStabilityMetrics.PolicyModelName = LoadedModelData->GetName();
+			ActivatedStandingStabilityMetrics.PolicyRuntimeName = ActiveRuntimeName;
 			return true;
 		}
 	}

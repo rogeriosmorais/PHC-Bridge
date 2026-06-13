@@ -1,4 +1,5 @@
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "PhysAnimLogger.h"
 
 namespace
 {
@@ -113,22 +114,22 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 		return;
 	}
 
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Preflight begin."));
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] Preflight begin."));
 	const EBalanceReadyEntryClassification Classification = ClassifyEntryState(Owner, Owner->ResolveEffectiveStabilizationSettings());
 	if (Classification != EBalanceReadyEntryClassification::Preflight_Accept)
 	{
 		if (Classification == EBalanceReadyEntryClassification::Preflight_HardFailure)
 		{
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] TRANSITION_REJECTED reason=preflight_hard_failure"));
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f, TEXT("[PhysAnimBalance] TRANSITION_REJECTED reason=preflight_hard_failure"));
 		}
 		else
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_REJECTED reason=preflight_queue_block"));
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] TRANSITION_REJECTED reason=preflight_queue_block"));
 		}
 		return;
 	}
 
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] TRANSITION_ACCEPT reason=preflight_accept"));
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] TRANSITION_ACCEPT reason=preflight_accept"));
 	Owner->SetStartupBringUpFrozenByBalanceEntry(true, TEXT("transition_accept"));
 
 	RequestReason = InRequestReason;
@@ -184,11 +185,11 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 		FString SeedError;
 		if (!Owner->SeedControlTargetsFromCurrentPose(0.0f, SeedError))
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_ENTRY_CONTROL_RESEED_FAILED reason=%s"), *SeedError);
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_ENTRY_CONTROL_RESEED_FAILED reason=%s"), *SeedError);
 		}
 		else
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_ENTRY_CONTROL_RESEEDED source=current_pose"));
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_ENTRY_CONTROL_RESEEDED source=current_pose"));
 		}
 	}
 
@@ -212,7 +213,7 @@ void FPhysAnimBalanceReadyTransition::Cancel(UPhysAnimComponent* Owner)
 	if (InternalPhase != EBalanceReadyTransitionPhase::BRT_Inactive)
 	{
 		ResetRootOnWarmStartMotionCache(Owner);
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] BalanceReadyTransition cancelled. phase=%d"), static_cast<int32>(InternalPhase));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] BalanceReadyTransition cancelled. phase=%d"), static_cast<int32>(InternalPhase));
 		SetPhase(EBalanceReadyTransitionPhase::BRT_Inactive, Owner);
 	}
 }
@@ -360,7 +361,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						Diagnostics.FailureReason.Contains(TEXT("topology")));
 					if (bContributedToFirstFailure)
 					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_EXPERIMENT_STATE bone=%s intended=%s actual=%s changedByLaterSubsystem=%d"),
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] DISTAL_EXPERIMENT_STATE bone=%s intended=%s actual=%s changedByLaterSubsystem=%d"),
 							*BoneName.ToString(),
 							UPhysAnimComponent::GetPhysicsMovementTypeName(bIntendedKinematic ? EPhysicsMovementType::Kinematic : EPhysicsMovementType::Simulated),
 							bActualSimulating ? TEXT("Simulating") : TEXT("Kinematic"),
@@ -383,7 +384,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			const FString TerminalReason = TEXT("persistent_body_motion_instability");
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PREPARE_TERMINAL reason=%s"), *TerminalReason);
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_PREPARE_TERMINAL reason=%s"), *TerminalReason);
 
 			const FString SafeDenyReason = TEXT("phase1_prepare_terminal_") + TerminalReason;
 			Owner->ReleaseTransitionOwnedShellLock();
@@ -395,7 +396,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			if (ConsecutiveBodyMotionInstabilityTicks == 1)
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_PREPARE_BLOCKED reason=body_motion_instability maxSimBodyLinearSpeed=%.2f maxSimBodyAngularSpeed=%.2f worstLinearBone=%s worstAngularBone=%s"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_PREPARE_BLOCKED reason=body_motion_instability maxSimBodyLinearSpeed=%.2f maxSimBodyAngularSpeed=%.2f worstLinearBone=%s worstAngularBone=%s"),
 					CachedConvergenceSnapshot.MaxBodyLinearSpeed,
 					CachedConvergenceSnapshot.MaxBodyAngularSpeed,
 					*CachedConvergenceSnapshot.MaxBodyLinearSpeedBone.ToString(),
@@ -487,7 +488,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 				if (bHasInsufficientStabilityMargin)
 				{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_BLOCKED reason=insufficient_stability_margin maxSimBodyLinearSpeed=%.2f maxSimBodyAngularSpeed=%.2f worstLinearBone=%s worstAngularBone=%s"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_BLOCKED reason=insufficient_stability_margin maxSimBodyLinearSpeed=%.2f maxSimBodyAngularSpeed=%.2f worstLinearBone=%s worstAngularBone=%s"),
 						CachedConvergenceSnapshot.MaxBodyLinearSpeed,
 						CachedConvergenceSnapshot.MaxBodyAngularSpeed,
 						*CachedConvergenceSnapshot.MaxBodyLinearSpeedBone.ToString(),
@@ -504,9 +505,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					Diagnostics.Phase1LateValidateAccumulatedSeconds = 0.0f;
 					Diagnostics.Phase1LateValidateGateSource = TEXT("phase1_late_validate_start");
 					Diagnostics.Phase1LateValidateGateReason.Reset();
-					UE_LOG(
-						LogPhysAnimBridge,
-						Log,
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f,
 						TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_STARTED topology=%s upperBodyOwnership=%s simCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d quietProofDuration=%.2f requiredSeconds=%.2f"),
 						*CertifiedHandoff.TopologyClass,
 						BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
@@ -525,10 +524,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					? TEXT("phase1_late_validate_baseline_capture_failed")
 					: CaptureReason;
 				Diagnostics.FailureReason = Phase2BlockReason;
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *Phase2BlockReason);
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *Phase2BlockReason);
 				Owner->ReleaseTransitionOwnedShellLock();
 				MarkSafePhase2Denied(Owner, Phase2BlockReason);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *Phase2BlockReason);
 				return;
 			}
 		}
@@ -577,10 +576,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				? TEXT("phase1_no_convergence_path")
 				: TerminalQuietBlockReason;
 			Diagnostics.FailureReason = TimeoutReason;
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
 			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(Owner, TimeoutReason);
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *TimeoutReason);
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *TimeoutReason);
 			return;
 		}
 		return;
@@ -592,7 +591,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			if (GVerbosePhase1Forensics != 0)
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTER_LATE_VALIDATE elapsed=%.4f"), PhaseTimeSeconds);
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTER_LATE_VALIDATE elapsed=%.4f"), PhaseTimeSeconds);
 			}
 			bLoggedLateValidateEntry = true;
 		}
@@ -603,7 +602,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		{
 			const FString FailureReason = TEXT("phase1_no_convergence_path_body_motion_instability");
 			Diagnostics.FailureReason = FailureReason;
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s maxSimBodyLinearSpeed=%.2f maxSimBodyAngularSpeed=%.2f worstLinearBone=%s worstAngularBone=%s"), 
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s maxSimBodyLinearSpeed=%.2f maxSimBodyAngularSpeed=%.2f worstLinearBone=%s worstAngularBone=%s"), 
 				*FailureReason,
 				CachedConvergenceSnapshot.MaxBodyLinearSpeed,
 				CachedConvergenceSnapshot.MaxBodyAngularSpeed,
@@ -625,7 +624,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 					if (GVerbosePhase1Forensics != 0)
 					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_FAILURE_FORENSICS bone=%s lin=%.1f ang=%.1f locZ=%.1f"),
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] DISTAL_FAILURE_FORENSICS bone=%s lin=%.1f ang=%.1f locZ=%.1f"),
 							*BoneName.ToString(),
 							LinVel.Size(),
 							AngVel.Size(),
@@ -634,7 +633,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				}
 				if (GVerbosePhase1Forensics != 0)
 				{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_FAILURE_SUMMARY maxTargetDelta=%.1f(%s) maxLimitOccupancy=%.2f(%s)"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] DISTAL_FAILURE_SUMMARY maxTargetDelta=%.1f(%s) maxLimitOccupancy=%.2f(%s)"),
 						CtrlDiag.MaxTargetDeltaDegrees,
 						*CtrlDiag.MaxTargetDeltaBoneName.ToString(),
 						CtrlDiag.MaxLowerLimbLimitOccupancy,
@@ -789,7 +788,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 						if (bShouldEmitSummary)
 						{
-							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
+							PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
 								BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode),
 								Phase1TopologyRecord.UpperBodySimCount,
 								Phase1TopologyRecord.bPolicySuppressed ? 1 : 0,
@@ -840,7 +839,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 								if (LastSuppressedFrame != CurrentFrame)
 								{
 									LastSuppressedFrame = CurrentFrame;
-									UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_TARGETDELTA_SUPPRESSED frame=%d bone=%s reason=late_validate_rebase_probe"),
+									PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_TARGETDELTA_SUPPRESSED frame=%d bone=%s reason=late_validate_rebase_probe"),
 										CurrentFrame, *BoneName.ToString());
 								}
 							}
@@ -857,7 +856,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 									if (bShouldEmitFailure)
 									{
 										LastSummaryFrame = GFrameCounter;
-										UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY (FAILURE_PENDING) upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
+										PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_SUMMARY (FAILURE_PENDING) upperBodyOwnership=%s upperBodySimCount=%d policySuppressed=%d policyAlpha=%.2f quietProofDuration=%.2f requiredSeconds=%.2f pendingResets=%d maxTargetDeltaBone=%s maxTargetDelta=%.2f consumedResets=%d"),
 											BalanceTransitionSets::GetUpperBodyOwnershipModeName(Phase1TopologyRecord.UpperBodyOwnershipMode),
 											Phase1TopologyRecord.UpperBodySimCount,
 											Phase1TopologyRecord.bPolicySuppressed ? 1 : 0,
@@ -876,7 +875,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 										if (bShouldEmitFailure)
 										{
-											UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_GATE bone=%s reason=%s targetDelta=%.2f linVel=%.2f angVel=%.2f"),
+											PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_GATE bone=%s reason=%s targetDelta=%.2f linVel=%.2f angVel=%.2f"),
 												*BoneName.ToString(), *Reason.TrimEnd(), TargetDeltaDeg, LinVel, AngVel);
 										}
 									}
@@ -904,11 +903,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			if (SimDumpCount < 10)
 			{
 				SimDumpCount++;
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("--- PHASE 1 SIM-COVERAGE FORENSIC DUMP (%d) ---"), SimDumpCount);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("Counts: FrozenTotal=%d LiveTotal=%d FrozenProximal=%d LiveProximal=%d"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("--- PHASE 1 SIM-COVERAGE FORENSIC DUMP (%d) ---"), SimDumpCount);
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("Counts: FrozenTotal=%d LiveTotal=%d FrozenProximal=%d LiveProximal=%d"),
 					Phase1TopologyRecord.TotalSimCount, LiveSnapshot.SimCount,
 					Phase1TopologyRecord.ProximalSimCount, LiveSnapshot.ProximalSimCount);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("Ownership: FrozenProximal=%d LiveProximal=%d | FrozenDistal=%d LiveDistal=%d"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("Ownership: FrozenProximal=%d LiveProximal=%d | FrozenDistal=%d LiveDistal=%d"),
 					static_cast<int32>(Phase1TopologyRecord.ProximalOwnershipMode), static_cast<int32>(LiveSnapshot.ProximalOwnershipMode),
 					static_cast<int32>(Phase1TopologyRecord.DistalOwnershipMode), static_cast<int32>(LiveSnapshot.DistalOwnershipMode));
 
@@ -922,12 +921,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					const bool bIntendedSim = !ShouldKeepBoneKinematic(BoneName, Settings);
 					const FBodyInstance* Body = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
 					const bool bRawSim = Body && Body->IsInstanceSimulatingPhysics();
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("Bone: %s | FrozenExpect=Sim | Intended=%s | RawBody=%s"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("Bone: %s | FrozenExpect=Sim | Intended=%s | RawBody=%s"),
 						*BoneName.ToString(),
 						bIntendedSim ? TEXT("Sim") : TEXT("Kin"),
 						bRawSim ? TEXT("Sim") : TEXT("Kin"));
 				}
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("--- END FORENSIC DUMP ---"));
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("--- END FORENSIC DUMP ---"));
 			}
 		}
 
@@ -971,9 +970,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 		const auto EmitNoCouplingProofLog = [&](const TCHAR* State, const FString& Reason)
 		{
-			UE_LOG(
-				LogPhysAnimBridge,
-				Log,
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f,
 				TEXT("[PhysAnimBalance] PHASE1_ROOT_ON_NO_COUPLING_PROOF state=%s reason=%s duration=%.2f required=%.2f maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f"),
 				State,
 				Reason.IsEmpty() ? TEXT("none") : *Reason,
@@ -1023,7 +1020,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			const FString DenialReason = TEXT("phase1_root_on_readiness_requires_pelvis_coupling");
 			Diagnostics.FailureReason = DenialReason;
 			Diagnostics.Phase1RootOnReadinessGateReason = DenialReason;
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *DenialReason);
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *DenialReason);
 			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(Owner, DenialReason);
 			return;
@@ -1162,7 +1159,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 						if (GVerbosePhase1Forensics != 0)
 						{
-							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] UPPER_BODY_FAILURE_FORENSICS bone=%s intended=%s actual=%s targetDelta=%.2f linVel=%.2f angVel=%.2f pendingReset=%d"),
+							PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] UPPER_BODY_FAILURE_FORENSICS bone=%s intended=%s actual=%s targetDelta=%.2f linVel=%.2f angVel=%.2f pendingReset=%d"),
 								*BoneName.ToString(),
 								bIntendedKinematic ? TEXT("Kin") : TEXT("Sim"),
 								bActualSimulating ? TEXT("Sim") : TEXT("Kin"),
@@ -1179,7 +1176,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 					if (GVerbosePhase1Forensics != 0)
 					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] UPPER_BODY_FAILURE_SUMMARY worstBone=%s maxLinSpeed=%.2f maxAngSpeed=%.2f maxTargetDelta=%.2f"),
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] UPPER_BODY_FAILURE_SUMMARY worstBone=%s maxLinSpeed=%.2f maxAngSpeed=%.2f maxTargetDelta=%.2f"),
 							*MaxErrorBone.ToString(),
 							MaxLinearSpeed,
 							MaxAngularSpeed,
@@ -1307,9 +1304,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				{
 					if (GVerbosePhase1Forensics != 0)
 					{
-						UE_LOG(
-							LogPhysAnimBridge,
-							Warning,
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 							TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_MINIMUM_MET shellHoldDuration=%.2f shellHoldRequired=%.2f lateValidateDuration=%.2f requiredLateValidateSeconds=%.2f"),
 							RootOnReadinessShellHoldAccumulatedSeconds,
 							Settings.BalancePhase2RequiredShellHoldDuration,
@@ -1323,9 +1318,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				{
 					if (GVerbosePhase1Forensics != 0)
 					{
-						UE_LOG(
-							LogPhysAnimBridge,
-							Warning,
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 							TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_SHELL_HOLD_CAPPED_BY_WINDOW lateValidateDuration=%.2f requiredLateValidateSeconds=%.2f shellHoldDuration=%.2f shellHoldRequired=%.2f"),
 							LateValidationAccumulatedSeconds,
 							Settings.BalancePhase1LateValidateRequiredSeconds,
@@ -1356,9 +1349,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						Diagnostics.Phase1RootOnReadinessGateReason = DenialReason;
 						if (DenialReason == TEXT("phase1_root_on_readiness_tilt_limited_viability"))
 						{
-							UE_LOG(
-								LogPhysAnimBridge,
-								Warning,
+							PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 								TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f requiredTiltDeg=%.2f unconstrainedTiltDeg=%.2f unconstrainedPelvisThighLAngular=%.2f unconstrainedPelvisThighRAngular=%.2f unconstrainedPelvisSpine01Angular=%.2f"),
 								*DenialReason,
 								CertifiedLateValidationResult.PelvisThighLErrorCm,
@@ -1375,9 +1366,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						}
 						else
 						{
-							UE_LOG(
-								LogPhysAnimBridge,
-								Warning,
+							PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 								TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f"),
 								*DenialReason,
 								CertifiedLateValidationResult.PelvisThighLErrorCm,
@@ -1396,7 +1385,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					{
 						const FString DenialReason = TEXT("phase2_upper_only_handoff_safe_denied");
 						Diagnostics.FailureReason = DenialReason;
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *DenialReason);
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *DenialReason);
 						Owner->ReleaseTransitionOwnedShellLock();
 						MarkSafePhase2Denied(Owner, DenialReason);
 						return;
@@ -1410,12 +1399,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 							: CertifiedLateValidationResult.RootOnReadinessGateReason;
 					Diagnostics.Phase1RootOnReadinessGateReason = RootOnReadinessGateReason;
 
-					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] EMIT_READY_HANDOFF classification=%s outcome=%s"), 
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] EMIT_READY_HANDOFF classification=%s outcome=%s"), 
 						BalanceTransitionSets::GetRootOnReadinessClassificationName(CertifiedLateValidationResult.RootOnReadinessClassification),
 						BalanceTransitionSets::GetLateValidationOutcomeName(CertifiedLateValidationResult.Outcome));
-					UE_LOG(
-						LogPhysAnimBridge,
-						Log,
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f,
 						TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_SUCCESS topology=%s upperBodyOwnership=%s simCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d lateValidateDuration=%.2f quietProofDuration=%.2f"),
 						*CertifiedHandoff.TopologyClass,
 						BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
@@ -1425,9 +1412,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						CertifiedHandoff.bControlAuthoritySettled ? 1 : 0,
 						CertifiedLateValidationResult.LateValidationSustainDurationSeconds,
 						CertifiedLateValidationResult.QuietProofDurationSeconds);
-					UE_LOG(
-						LogPhysAnimBridge,
-						Log,
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f,
 					TEXT("[PhysAnimBalance] PHASE1_READY_FOR_ROOT_ON topology=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d controlAuthoritySettled=%d finalBringUpControlAlpha=%.2f policyInfluenceAlpha=%.2f policyInfluenceRequired=%.2f policyInfluenceDuration=%.2f policyInfluenceRequiredSeconds=%.2f policyInfluenceRampReanchored=%d shellHoldReady=%d bringUpReady=%d policyInfluenceReady=%d rootOnReady=%d rootOnReadinessClassification=%s rootOnReadinessGateReason=%s shellHoldDuration=%.2f shellHoldRequired=%.2f maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f lateValidateDuration=%.2f"),
 						*CertifiedHandoff.TopologyClass,
 						BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
@@ -1458,7 +1443,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 					if (Owner->IsStage1())
 					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Stage 1 Kinematic Root detected. Bypassing Phase 2/3 and transitioning to Succeeded."));
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] Stage 1 Kinematic Root detected. Bypassing Phase 2/3 and transitioning to Succeeded."));
 						SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
 						return;
 					}
@@ -1476,10 +1461,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					ReturnToPhase1Prepare(Owner, LateValidateBlockReason, TEXT("PHASE1_LATE_VALIDATE_RETURN_TO_PREPARE"));
 					return;
 				}
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *LateValidateBlockReason);
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *LateValidateBlockReason);
 				Owner->ReleaseTransitionOwnedShellLock();
 				MarkSafePhase2Denied(Owner, LateValidateBlockReason);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *LateValidateBlockReason);
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *LateValidateBlockReason);
 				return;
 			}
 		}
@@ -1499,9 +1484,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 			if (LateValidateBlockReason == TEXT("live_proximal_upper_body_velocity_instability"))
 			{
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 					TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_BODY_MOTION_RESET worstLinearBone=%s worstLinear=%.2f linearThreshold=%.2f worstAngularBone=%s worstAngular=%.2f angularThreshold=%.2f accumulatedViolation=%.2f grace=%.2f"),
 					*Diagnostics.Phase1LateValidateWorstLinearSpeedBone.ToString(),
 					Diagnostics.Phase1LateValidateWorstLinearSpeed,
@@ -1534,7 +1517,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				Diagnostics.Phase1LateValidateWorstAngularSpeed = 0.0f;
 				Diagnostics.Phase1LateValidateWorstLinearSpeedBone = NAME_None;
 				Diagnostics.Phase1LateValidateWorstAngularSpeedBone = NAME_None;
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s lateValidateSeconds=%.2f quietProofSeconds=%.2f policyAlpha=%.2f"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s lateValidateSeconds=%.2f quietProofSeconds=%.2f policyAlpha=%.2f"),
 					*LateValidateBlockReason,
 					LateValidationAccumulatedSeconds,
 					QuietWindowAccumulatedSeconds,
@@ -1592,7 +1575,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			const FString PrimaryReason = UnsatisfiedGates.Num() > 0 ? UnsatisfiedGates[0] : TEXT("unknown");
 			const FString SecondaryReason = UnsatisfiedGates.Num() > 1 ? UnsatisfiedGates[1] : TEXT("none");
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_CONVERGENCE_REPORT upperBodyHold=%d simCoverage=%d targetContinuity=%d quietProof=%d bodyMotion=%d rootValidity=%d expectedRelease=%d readyProven=%d shellHold=%d bringUp=%d policyInfl=%d shellSafety=%d rootOnGate=%s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f lateValidateSeconds=%.2f/%.2f shellHoldSeconds=%.2f/%.2f quietProofSeconds=%.2f/%.2f shellProofSeconds=%.2f/%.2f"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_CONVERGENCE_REPORT upperBodyHold=%d simCoverage=%d targetContinuity=%d quietProof=%d bodyMotion=%d rootValidity=%d expectedRelease=%d readyProven=%d shellHold=%d bringUp=%d policyInfl=%d shellSafety=%d rootOnGate=%s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f lateValidateSeconds=%.2f/%.2f shellHoldSeconds=%.2f/%.2f quietProofSeconds=%.2f/%.2f shellProofSeconds=%.2f/%.2f"),
 				bUpperBodyHoldSatisfied ? 1 : 0,
 				bSimCoverageSatisfied ? 1 : 0,
 				bTargetContinuitySatisfied ? 1 : 0,
@@ -1643,13 +1626,13 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 					Cause = TEXT("alpha_started_but_never_reached_threshold");
 				}
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_FAILURE_DETAILS group=%d alpha=%.4f threshold=%.4f settleTime=%.2f/%.2f unlocked=%d active=%d bodyGuard=%d rootGuard=%d"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_FAILURE_DETAILS group=%d alpha=%.4f threshold=%.4f settleTime=%.2f/%.2f unlocked=%d active=%d bodyGuard=%d rootGuard=%d"),
 					FinalGroupIndex, FinalAlpha, Threshold, SettleTime, RequiredSettleTime, 
 					CurrentSnapshot.bFinalBringUpGroupUnlocked ? 1 : 0,
 					CurrentSnapshot.bFinalBringUpGroupRampActive ? 1 : 0,
 					CurrentSnapshot.bBringUpWithinBodyVelocityBounds ? 1 : 0,
 					CurrentSnapshot.bBringUpWithinRootBounds ? 1 : 0);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_NOT_SETTLED cause=%s"), *Cause);
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_NOT_SETTLED cause=%s"), *Cause);
 			}
 
 			if (!bPreRootOnShellSafetyProofSatisfied && PrimaryReason.Equals(TEXT("shell_safety_proof_unsatisfied")))
@@ -1678,13 +1661,13 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 				else if (!CurrentSnapshot.bTransitionShellReferenceReanchored) Cause = TEXT("shell_not_reanchored");
 				else if (CurrentSnapshot.bTransitionShellReferenceReseededAfterLock) Cause = TEXT("shell_reseeded_after_lock");
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_FAILURE_DETAILS proofDuration=%.2f/%.2f offset=%.2f/%.2f velocity=%.2f/%.2f offsetGrowth=%.2f/%.2f velocityGrowth=%.2f/%.2f shellCorrectionActive=%d activelyAffecting=%d locked=%d reanchored=%d reseeded=%d"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_FAILURE_DETAILS proofDuration=%.2f/%.2f offset=%.2f/%.2f velocity=%.2f/%.2f offsetGrowth=%.2f/%.2f velocityGrowth=%.2f/%.2f shellCorrectionActive=%d activelyAffecting=%d locked=%d reanchored=%d reseeded=%d"),
 					ProofSeconds, RequiredProofSeconds, OffsetCm, MaxOffsetCm, VelocityCmPerSec, MaxVelocityCmPerSec, OffsetGrowthCm, MaxOffsetGrowthCm, VelocityGrowthCmPerSec, MaxVelocityGrowthCmPerSec,
 					CurrentSnapshot.bShellCorrectionOwnerActive ? 1 : 0, bShellCorrectionActivelyAffecting ? 1 : 0, CurrentSnapshot.bTransitionOwnedShellLocked ? 1 : 0, CurrentSnapshot.bTransitionShellReferenceReanchored ? 1 : 0, CurrentSnapshot.bTransitionShellReferenceReseededAfterLock ? 1 : 0);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_UNSATISFIED cause=%s"), *Cause);
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_UNSATISFIED cause=%s"), *Cause);
 			}
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_NONCONVERGENCE primary=%s secondary=%s"), *PrimaryReason, *SecondaryReason);
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_NONCONVERGENCE primary=%s secondary=%s"), *PrimaryReason, *SecondaryReason);
 			LateValidateBlockReason = PrimaryReason;
 
 			// DISTAL_FORENSIC_REPORT
@@ -1705,7 +1688,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 			if (bAnyDistalContribution)
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_CONVERGENCE_FORENSIC_REPORT_START"));
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] DISTAL_CONVERGENCE_FORENSIC_REPORT_START"));
 				for (const FName DistalBoneName : PhysAnimBridge::GetControlledBoneNames())
 				{
 					if (!BalanceTransitionSets::IsDistalLowerLimb(DistalBoneName))
@@ -1750,7 +1733,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						BoneMaxTargetDelta = Owner->GetLastControlTargetDiagnostics().MaxTargetDeltaDegrees;
 					}
 
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_BONE_FORENSIC: bone=%s expected=%d modifier=%d rawSim=%d linVel=%.1f angVel=%.1f targetDelta=%.2f pendingReset=%d persistentTicks=%d consecutiveTicks=%d contributed=%d"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] DISTAL_BONE_FORENSIC: bone=%s expected=%d modifier=%d rawSim=%d linVel=%.1f angVel=%.1f targetDelta=%.2f pendingReset=%d persistentTicks=%d consecutiveTicks=%d contributed=%d"),
 						*DistalBoneName.ToString(),
 						static_cast<int32>(ExpectedOwnership),
 						static_cast<int32>(ModifierOwnership),
@@ -1763,17 +1746,17 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						ConsecutiveTicks,
 						bContributedToFailure ? 1 : 0);
 				}
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_CONVERGENCE_FORENSIC_REPORT_END"));
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] DISTAL_CONVERGENCE_FORENSIC_REPORT_END"));
 			}
 
 			const FString TimeoutReason = LateValidateBlockReason.IsEmpty()
 				? TEXT("phase1_no_convergence_path")
 				: LateValidateBlockReason;
 			Diagnostics.FailureReason = TimeoutReason;
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s"), *TimeoutReason);
 			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(Owner, TimeoutReason);
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *TimeoutReason);
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_LATE_VALIDATE_RESET reason=%s"), *TimeoutReason);
 			return;
 		}
 		return;
@@ -1811,7 +1794,7 @@ extern int32 GVerbosePhase2Forensics;
 
 				if (GVerbosePhase2Forensics != 0)
 				{
-					UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_PRE_GUARD_PELVIS_STATE tick=%d rawSim=%d modMoveType=%d shellLocked=%d quarantined=%d state=%d owner=%d actor=%s component=%s"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE2_PRE_GUARD_PELVIS_STATE tick=%d rawSim=%d modMoveType=%d shellLocked=%d quarantined=%d state=%d owner=%d actor=%s component=%s"),
 						Phase2GuardTickCount,
 						bPelvisActualSim ? 1 : 0,
 						static_cast<int32>(PelvisModifierMovementType),
@@ -1825,9 +1808,7 @@ extern int32 GVerbosePhase2Forensics;
 
 		if (GVerbosePhase2Forensics != 0)
 		{
-			UE_LOG(
-				LogPhysAnimBridge,
-				Log,
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f,
 					TEXT("[PhysAnimBalance] PHASE2_GUARD_TICK tick=%d requestedRootSim=%d actualRootSim=%d resetScheduled=%d simCountPost=%d distalSimPost=%d shellOffsetDelta=%.1f shellVelocityDelta=%.1f owner=%d actor=%s component=%s"),
 					Phase2GuardTickCount,
 					bPelvisRequestedSim ? 1 : 0,
@@ -1903,7 +1884,7 @@ extern int32 GVerbosePhase2Forensics;
 						Diagnostics.bShellMaterialGuardSuppressed = true;
 						if (!bLoggedPhase2ReadyForPhase3)
 						{
-							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SHELL_MATERIAL_GUARD_SUPPRESSED frame=%d tick=%d shellOffsetDelta=%.2f shellVelocityDelta=%.2f rootActualSim=%d simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+							PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_SHELL_MATERIAL_GUARD_SUPPRESSED frame=%d tick=%d shellOffsetDelta=%.2f shellVelocityDelta=%.2f rootActualSim=%d simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
 							GFrameCounter, Phase2GuardTickCount, Diagnostics.BaselineShellOffset, Diagnostics.BaselineShellVel,
 							bPelvisActualSim ? 1 : 0, Diagnostics.SimCountPost,
 							CertifiedHandoff.bTransitionOwnedShellLocked ? 1 : 0,
@@ -2040,7 +2021,7 @@ extern int32 GVerbosePhase2Forensics;
 			
 			if (Phase2GuardTickCount == 4)
 			{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOTON_TICK4_SPIKE_SOURCE source=pre_guard_tick4 worstBone=%s maxLinearSpeed=%.2f maxAngularSpeed=%.2f"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_ROOTON_TICK4_SPIKE_SOURCE source=pre_guard_tick4 worstBone=%s maxLinearSpeed=%.2f maxAngularSpeed=%.2f"),
 						*WorstSpikeBone.ToString(), Diagnostics.PeakMaxBodyLinearSpeed, Diagnostics.PeakMaxBodyAngularSpeed);
 
 				if (Diagnostics.FirstContradictionSource.IsEmpty())
@@ -2051,9 +2032,7 @@ extern int32 GVerbosePhase2Forensics;
 			}
 
 
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 				TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_SPIKE_AUDIT frame=%d rootOnTick=%d maxBodyLinearSpeed=%.2f maxBodyAngularSpeed=%.2f worstBone=%s worstLinearSpeed=%.2f worstAngularSpeed=%.2f rootRawSim=%d pelvisModifier=%s totalSimCount=%d firstContradictionSource=%s firstLateLoopSource=%s lateLoopWorstBone=%s lateLoopArmWorstBone=%s"),
 				static_cast<int32>(GFrameCounter),
 				Phase2GuardTickCount,
@@ -2145,7 +2124,7 @@ extern int32 GVerbosePhase2Forensics;
 					bRetryBudgetAvailable);
 				if (bSafeDeniedOutcome)
 				{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f state=%s rootRawSim=%d pelvisRawSim=%d pelvisModType=%s simCountPost=%d upperBodySimPost=%d policyAlpha=%.2f controlAlpha=%.2f shellLocked=%d shellReanchored=%d firstContradictionSource=%s owner=%d actor=%s component=%s"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f state=%s rootRawSim=%d pelvisRawSim=%d pelvisModType=%s simCountPost=%d upperBodySimPost=%d policyAlpha=%.2f controlAlpha=%.2f shellLocked=%d shellReanchored=%d firstContradictionSource=%s owner=%d actor=%s component=%s"),
 						*AbortReason, *FailureType, *OffendingBoneValue.ToString(), MeasuredValue, ThresholdValue,
 						UPhysAnimComponent::GetRuntimeStateName(Owner->GetRuntimeState()),
 						bPelvisActualSim ? 1 : 0,
@@ -2163,7 +2142,7 @@ extern int32 GVerbosePhase2Forensics;
 				}
 				else
 				{
-					UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f state=%s rootRawSim=%d pelvisRawSim=%d pelvisModType=%s simCountPost=%d upperBodySimPost=%d policyAlpha=%.2f controlAlpha=%.2f shellLocked=%d shellReanchored=%d firstContradictionSource=%s owner=%d actor=%s component=%s"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f, TEXT("[PhysAnimBalance] PHASE2_FIRST_FAILURE_AUDIT reason=%s type=%s bone=%s measured=%.2f threshold=%.2f state=%s rootRawSim=%d pelvisRawSim=%d pelvisModType=%s simCountPost=%d upperBodySimPost=%d policyAlpha=%.2f controlAlpha=%.2f shellLocked=%d shellReanchored=%d firstContradictionSource=%s owner=%d actor=%s component=%s"),
 						*AbortReason, *FailureType, *OffendingBoneValue.ToString(), MeasuredValue, ThresholdValue,
 						UPhysAnimComponent::GetRuntimeStateName(Owner->GetRuntimeState()),
 						bPelvisActualSim ? 1 : 0,
@@ -2192,9 +2171,7 @@ extern int32 GVerbosePhase2Forensics;
 			const bool bSafeDeniedOutcome = (Diagnostics.LastRetryDecision == TEXT("denied"));
 			if (bSafeDeniedOutcome)
 			{
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 					TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_ABORTED reason=%s owner=%d detail=%s rootLinear=%.1f/%.1f rootAngular=%.1f/%.1f shellOffsetDelta=%.1f/%.1f shellVelocityDelta=%.1f/%.1f maxBodyLinear=%.1f/%.1f maxBodyAngular=%.1f/%.1f pelvisLin=%.1f pelvisAng=%.1f thighsLin=%.1f thighsAng=%.1f spineLin=%.1f spineAng=%.1f feetLin=%.1f feetAng=%.1f simCountPre=%d simCountPost=%d upperBodySimPre=%d upperBodySimPost=%d shellLocked=%d shellReanchored=%d shellReseeded=%d policyActive=%d firstPolicyFrame=%d policyWrites=%d maxTargetDeltaBone=%s maxTargetDelta=%.1f maxRawOffsetBone=%s maxRawOffset=%.1f lowerLimbLimitBone=%s lowerLimbLimit=%.2f lowerLimbLimitProxy=%.1f actor=%s component=%s"),
 					*Diagnostics.FailureReason,
 					static_cast<int32>(FailureOwner),
@@ -2240,9 +2217,7 @@ extern int32 GVerbosePhase2Forensics;
 			}
 			else
 			{
-				UE_LOG(
-					LogPhysAnimBridge,
-					Error,
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f,
 					TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_ABORTED reason=%s owner=%d detail=%s rootLinear=%.1f/%.1f rootAngular=%.1f/%.1f shellOffsetDelta=%.1f/%.1f shellVelocityDelta=%.1f/%.1f maxBodyLinear=%.1f/%.1f maxBodyAngular=%.1f/%.1f pelvisLin=%.1f pelvisAng=%.1f thighsLin=%.1f thighsAng=%.1f spineLin=%.1f spineAng=%.1f feetLin=%.1f feetAng=%.1f simCountPre=%d simCountPost=%d upperBodySimPre=%d upperBodySimPost=%d shellLocked=%d shellReanchored=%d shellReseeded=%d policyActive=%d firstPolicyFrame=%d policyWrites=%d maxTargetDeltaBone=%s maxTargetDelta=%.1f maxRawOffsetBone=%s maxRawOffset=%.1f lowerLimbLimitBone=%s lowerLimbLimit=%.2f lowerLimbLimitProxy=%.1f actor=%s component=%s"),
 					*Diagnostics.FailureReason,
 					static_cast<int32>(FailureOwner),
@@ -2287,9 +2262,7 @@ extern int32 GVerbosePhase2Forensics;
 					*Owner->GetOwner()->GetName(), *Owner->GetName());
 			}
 
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 				TEXT("[PhysAnimBalance] PHASE2_EARLY_ABORT_SUMMARY reason=%s strict=%d shellLocked=%d shellReanchored=%d rootRequestedSim=%d rootActualSim=%d preSim=%d postSim=%d shellOffset=%.1f shellVel=%.1f detail=%s owner=%d actor=%s component=%s"),
 				*Diagnostics.FailureReason,
 				GStrictPhase1Certification != 0 ? 1 : 0,
@@ -2305,7 +2278,7 @@ extern int32 GVerbosePhase2Forensics;
 				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
 				*Owner->GetOwner()->GetName(), *Owner->GetName());
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RETRY_DECISION failure=%s owner=%d decision=%s changedState=0 freshQuietProof=0 remainingRetryBudget=%d"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_RETRY_DECISION failure=%s owner=%d decision=%s changedState=0 freshQuietProof=0 remainingRetryBudget=%d"),
 				*Diagnostics.FailureReason, static_cast<int32>(FailureOwner), *Diagnostics.LastRetryDecision, FMath::Max(Settings.BalancePhase2MaxAutomaticRetries - Phase2RetryCount, 0));
 			if (bSafeDeniedOutcome)
 			{
@@ -2319,7 +2292,7 @@ extern int32 GVerbosePhase2Forensics;
 
 		if (PhaseTimeSeconds > Settings.BalancePhase2GuardWindowDuration)
 		{
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_READY_FOR_PHASE3"));
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE2_READY_FOR_PHASE3"));
 			bLoggedPhase2ReadyForPhase3 = true;
 			SetPhase(EBalanceReadyTransitionPhase::BRT_Phase2_ReadyForPhase3, Owner);
 
@@ -2333,7 +2306,7 @@ extern int32 GVerbosePhase2Forensics;
 				const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PelvisModifierName);
 				const EPhysicsMovementType PelvisModifierType = PelvisRecord ? PelvisRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_ENTRY_AUDIT frame=%d tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPre=%d simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE3_ENTRY_AUDIT frame=%d tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPre=%d simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
 					static_cast<int32>(GFrameCounter),
 					static_cast<int32>(Phase2GuardTickCount),
 					bRootRawSim ? 1 : 0,
@@ -2373,7 +2346,7 @@ extern int32 GVerbosePhase2Forensics;
 			const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PelvisModifierName);
 			const EPhysicsMovementType PelvisModifierType = PelvisRecord ? PelvisRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
 
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_PRE_GUARD_ROOT_STATE frame=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE3_PRE_GUARD_ROOT_STATE frame=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d owner=%d actor=%s component=%s"),
 				static_cast<int32>(GFrameCounter),
 				bRootRawSim ? 1 : 0,
 				bRootRawSim ? 1 : 0,
@@ -2421,7 +2394,7 @@ extern int32 GVerbosePhase2Forensics;
 				const FPhysicsBodyModifierRecord* const PelvisRecord = FPhysAnimPhysicsControlAccessor::GetModifierRecord(Owner->PhysicsControlComponent.Get(), PelvisModifierName);
 				const EPhysicsMovementType PelvisModifierType = PelvisRecord ? PelvisRecord->BodyModifier.ModifierData.MovementType : EPhysicsMovementType::Static;
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_FIRST_FAILURE_AUDIT frame=%d reason=%s tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d rootLinear=%.2f/%.2f rootAngular=%.2f/%.2f shellOffsetDelta=%.2f/%.2f shellVelocityDelta=%.2f/%.2f prePhase3PeakNonRootAngular=%.2f observedNonRootAngularEnvelope=%.2f currentMaxNonRootAngular=%.2f currentMaxNonRootAngularBone=%s observedNonRootFamilyAngularEnvelope=%.2f currentNonRootFamilyAngular=%.2f shellCorrectionActive=%d owner=%d actor=%s component=%s"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE3_FIRST_FAILURE_AUDIT frame=%d reason=%s tick=%d rootRawSim=%d pelvisRawSim=%d pelvisModifierName=%s simCountPost=%d shellLocked=%d shellReanchored=%d rootLinear=%.2f/%.2f rootAngular=%.2f/%.2f shellOffsetDelta=%.2f/%.2f shellVelocityDelta=%.2f/%.2f prePhase3PeakNonRootAngular=%.2f observedNonRootAngularEnvelope=%.2f currentMaxNonRootAngular=%.2f currentMaxNonRootAngularBone=%s observedNonRootFamilyAngularEnvelope=%.2f currentNonRootFamilyAngular=%.2f shellCorrectionActive=%d owner=%d actor=%s component=%s"),
 					static_cast<int32>(GFrameCounter),
 					*Phase3Violation,
 					static_cast<int32>(Phase3GuardTickCount),
@@ -2475,7 +2448,7 @@ extern int32 GVerbosePhase2Forensics;
 			}
 			if (StableHoldAccumulatedSeconds >= Settings.BalancePhase3RequiredStableHoldDuration)
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Phase 3 settle success. Ready for perturbation. duration=%.2f"), StableHoldAccumulatedSeconds);
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] Phase 3 settle success. Ready for perturbation. duration=%.2f"), StableHoldAccumulatedSeconds);
 				SetPhase(EBalanceReadyTransitionPhase::BRT_Succeeded, Owner);
 			}
 		}
@@ -2545,10 +2518,10 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			}
 
 			const EBalanceReadyConditionOwner FailureOwner = ClassifyConditionOwner(DenyReason);
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED reason=%s owner=%d"), *DenyReason, static_cast<int32>(FailureOwner));
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED reason=%s owner=%d"), *DenyReason, static_cast<int32>(FailureOwner));
 			Owner->ReleaseTransitionOwnedShellLock();
 			MarkSafePhase2Denied(Owner, DenyReason);
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *DenyReason);
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_QUIET_WINDOW_RESET reason=%s"), *DenyReason);
 			return;
 		}
 
@@ -2578,9 +2551,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			const FVector RootLinVel = Mesh ? Mesh->GetPhysicsLinearVelocity(RootBoneName) : FVector::ZeroVector;
 			const FVector RootAngVel = Mesh ? Mesh->GetPhysicsAngularVelocityInDegrees(RootBoneName) : FVector::ZeroVector;
 
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 				TEXT("[PhysAnimBalance] PHASE2_ENTRY_AUDIT topology=%s owner=%d actor=%s component=%s state=%s rootRawSim=%d rootModType=%s pelvisRawSim=%d pelvisModType=%s simCount=%d upperBodySimCount=%d policyAlpha=%.2f controlAlpha=%.2f groupControlAlpha=%.2f policySuppressed=%d shellLocked=%d shellReanchored=%d pendingResets=%d safetyLatch=%d rootLinVel=%.2f rootAngVel=%.2f pelvisLinVel=%.2f pelvisAngVel=%.2f"),
 				*CertifiedHandoff.TopologyClass,
 				static_cast<int32>(FPhysAnimBalanceReadyTransition::ClassifyConditionOwner(Diagnostics.FailureReason)),
@@ -2654,9 +2625,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 			}
 		}
 
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f,
 			TEXT("[PhysAnimBalance] DISTAL_PHASE1_SUMMARY: transient=%d persistent=%d pending=%d worstBone=%s worstTicks=%d totalPhase1Time=%.2f"),
 			DistalMismatchesTransientCount,
 			DistalMismatchesPersistentCount,
@@ -2686,7 +2655,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 		BalanceTransitionSets::LogDirectPelvisLinkForensicRecords(ZeroSolverRecords, TEXT("PHASE1_RUNTIME_START"), true);
 	}
 
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE_ENTRY phase=%d"), static_cast<int32>(InternalPhase));
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE_ENTRY phase=%d"), static_cast<int32>(InternalPhase));
 	PhaseTimeSeconds = 0.0f;
 	StableHoldAccumulatedSeconds = 0.0f;
 	TargetDiscontinuityAccumulatedSeconds = 0.0f;
@@ -2731,7 +2700,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					}
 				}
 
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ENTRY topology=%s upperBodyOwnership=%s rootPreLin=%.1f rootPreAng=%.1f shellOffsetDelta=%.1f shellVelocityDelta=%.1f simCountPre=%d proximalSimPre=%d distalSimPre=%d upperBodySimPre=%d policySuppressed=%d controlAuthoritySettled=%d finalBringUpControlAlpha=%.2f policyInfluenceAlpha=%.2f policyInfluenceRequired=%.2f policyInfluenceDuration=%.2f policyInfluenceRequiredSeconds=%.2f policyInfluenceRampReanchored=%d shellHoldReady=%d bringUpReady=%d policyInfluenceReady=%d rootOnReady=%d shellHoldDuration=%.2f shellHoldRequired=%.2f maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f resetScheduled=%d owner=%d actor=%s component=%s"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_ENTRY topology=%s upperBodyOwnership=%s rootPreLin=%.1f rootPreAng=%.1f shellOffsetDelta=%.1f shellVelocityDelta=%.1f simCountPre=%d proximalSimPre=%d distalSimPre=%d upperBodySimPre=%d policySuppressed=%d controlAuthoritySettled=%d finalBringUpControlAlpha=%.2f policyInfluenceAlpha=%.2f policyInfluenceRequired=%.2f policyInfluenceDuration=%.2f policyInfluenceRequiredSeconds=%.2f policyInfluenceRampReanchored=%d shellHoldReady=%d bringUpReady=%d policyInfluenceReady=%d rootOnReady=%d shellHoldDuration=%.2f shellHoldRequired=%.2f maxTargetDelta=%.1f meanTargetDelta=%.1f quietProofDuration=%.2f resetScheduled=%d owner=%d actor=%s component=%s"),
 					CertifiedHandoff.TopologyClass.IsEmpty() ? TEXT("unknown") : *CertifiedHandoff.TopologyClass,
 					BalanceTransitionSets::GetUpperBodyOwnershipModeName(CertifiedHandoff.UpperBodyOwnershipMode),
 					Diagnostics.BaselineRootLinVel,
@@ -2766,7 +2735,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				FVector LiveChainCenterCm = FVector::ZeroVector;
 				const float PelvisProximalConstraintErrorCm =
 					BalanceTransitionSets::ComputePelvisProximalConstraintErrorCm(Mesh, SimulatingBones, LiveChainCenterCm);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_CONSTRAINT_ERROR_PRE pelvisProximalError=%.2f liveChainCenter=(%.1f,%.1f,%.1f) threshold=%.2f"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_CONSTRAINT_ERROR_PRE pelvisProximalError=%.2f liveChainCenter=(%.1f,%.1f,%.1f) threshold=%.2f"),
 					PelvisProximalConstraintErrorCm,
 					LiveChainCenterCm.X,
 					LiveChainCenterCm.Y,
@@ -2784,9 +2753,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				{
 					BalanceTransitionSets::FDirectPelvisLinkForensicRecord LinkRecord;
 					BalanceTransitionSets::BuildDirectPelvisLinkForensicRecord(Mesh, Link.Key, Link.Value, LinkRecord);
-					UE_LOG(
-						LogPhysAnimBridge,
-						Warning,
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 						TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_CHAIN_LINK_PRE link=%s_%s errorCm=%.2f bodyOriginDistanceCm=%.2f constraintFound=%d"),
 						*Link.Key.ToString(),
 						*Link.Value.ToString(),
@@ -2795,9 +2762,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 						LinkRecord.bConstraintFound ? 1 : 0);
 					if (LinkRecord.bConstraintFound)
 					{
-						UE_LOG(
-							LogPhysAnimBridge,
-							Warning,
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 							TEXT("[PhysAnimBalance] PHASE2_PROXIMAL_CHAIN_ANGULAR_PRE link=%s_%s angularErrorDeg=%.2f"),
 							*Link.Key.ToString(),
 							*Link.Value.ToString(),
@@ -2834,7 +2799,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				for (const BalanceTransitionSets::FDirectPelvisLinkForensicRecord& Record : DirectPelvisLinkForensics)
 				{
 					const float AngularThresholdDeg = BalanceTransitionSets::GetPhase2WarmStartDirectLinkAngularThresholdDeg(Record);
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_PRE link=%s errorCm=%.2f threshold=%.2f angularErrorDeg=%.2f authoredAngularFloorDeg=%.2f baselineCompensatedAngularErrorDeg=%.2f angularThreshold=%.2f"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_LINK_ERROR_PRE link=%s errorCm=%.2f threshold=%.2f angularErrorDeg=%.2f authoredAngularFloorDeg=%.2f baselineCompensatedAngularErrorDeg=%.2f angularThreshold=%.2f"),
 						*Record.LinkName,
 						Record.bConstraintFound ? Record.AnchorDistanceCm : Record.BodyOriginDistanceCm,
 						BalanceTransitionSets::Phase2MaxDirectPelvisLinkErrorCm,
@@ -2863,9 +2828,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 						true);
 					const FString SafeDenyReason = TEXT("phase2_root_on_warm_start_incoherent");
 					Diagnostics.FailureReason = SafeDenyReason;
-					UE_LOG(
-						LogPhysAnimBridge,
-						Warning,
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 						TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED %s pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f pelvisThighLCompensatedAngular=%.2f pelvisThighRCompensatedAngular=%.2f pelvisSpine01CompensatedAngular=%.2f"),
 						*SafeDenyReason,
 						PelvisThighLErrorCm,
@@ -2897,9 +2860,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 						AngularMismatchForensics,
 						TEXT("PHASE2_ROOT_ON_LINK_ANGULAR_FORENSIC"),
 						true);
-					UE_LOG(
-						LogPhysAnimBridge,
-						Warning,
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 						TEXT("[PhysAnimBalance] PHASE2_SAFE_DENIED phase2_root_on_warm_start_incoherent pelvisThighL=%.2f pelvisThighR=%.2f pelvisSpine01=%.2f pelvisThighLAngular=%.2f pelvisThighRAngular=%.2f pelvisSpine01Angular=%.2f pelvisThighLCompensatedAngular=%.2f pelvisThighRCompensatedAngular=%.2f pelvisSpine01CompensatedAngular=%.2f"),
 						PelvisThighLErrorCm,
 						PelvisThighRErrorCm,
@@ -2996,9 +2957,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 					}
 				}
 				FString WarmStartRotationSource = TEXT("live_pelvis_transform");
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 					TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_WARM_START source=%s pelvisLoc=(%.2f,%.2f,%.2f) pelvisRot=(%.4f,%.4f,%.4f,%.4f) directLinks=(%.2f,%.2f,%.2f)"),
 					*WarmStartRotationSource,
 					LivePelvisTransform.GetLocation().X,
@@ -3053,16 +3012,12 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 							FMath::RadiansToDegrees(VelocityRecord.AngularVelocityRadians).Size());
 					}
 				}
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 					TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_VELOCITY_RESEED bodies=%d peakLinear=%.2f peakAngular=%.2f"),
 					RootOnVelocityReseedRecords.Num(),
 					RootOnReseedPeakLinearSpeed,
 					RootOnReseedPeakAngularSpeedDeg);
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 					TEXT("[PhysAnimBalance] PHASE2_ROOT_ON_APPLIED pelvisRawSim=%d pelvisModifierName=%s simCountPre=%d warmStartLin=%.2f warmStartAng=%.2f warmStartSamples=%d warmStartRotSamples=%d"),
 					PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0,
 					([](UPhysAnimComponent* LocalOwner) -> const TCHAR*
@@ -3088,28 +3043,28 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				// Phase 2 must preserve the pre-root-on shell proof reference through the
 				// root-on frame and guard window; reseeding here would invalidate that proof.
 				CaptureFlipDiagnostics(Owner);
-				UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_STARTED duration=%.2f"), Owner->ResolveEffectiveStabilizationSettings().BalancePhase2GuardWindowDuration);
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE2_GUARD_WINDOW_STARTED duration=%.2f"), Owner->ResolveEffectiveStabilizationSettings().BalancePhase2GuardWindowDuration);
 			}
 		}
 	}
 	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Succeeded)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Transition succeeded."));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] Transition succeeded."));
 		Phase2RetryCount = 0;
 	}
 	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] TRANSITION_SAFE_DENIED final_outcome. reason=%s"), *Diagnostics.FailureReason);
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] TRANSITION_SAFE_DENIED final_outcome. reason=%s"), *Diagnostics.FailureReason);
 	}
 	else if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Failed)
 	{
 		const FString FailureReason = Diagnostics.FailureReason;
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_ABORT reason=%s"), *FailureReason);
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_ABORT reason=%s"), *FailureReason);
 		if (Owner)
 		{
 			if (USkeletalMeshComponent* Mesh = Owner->GetMeshComponent())
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RECOVERY_BEGIN"));
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_RECOVERY_BEGIN"));
 				if (Diagnostics.bSimFlipped)
 				{
 					if (FBodyInstance* PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()))
@@ -3119,7 +3074,7 @@ void FPhysAnimBalanceReadyTransition::SetPhase(EBalanceReadyTransitionPhase NewP
 				}
 				Owner->RecoverBridgeActiveStateAfterBalanceTransitionFailure(FailureReason);
 				ResetTransitionLocalState(Owner);
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_RECOVERY_COMPLETE"));
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_RECOVERY_COMPLETE"));
 			}
 		}
 	}

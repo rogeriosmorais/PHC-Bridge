@@ -3634,7 +3634,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			{
 				// Safe deny remains published until the mode is explicitly reset.
 			}
-			else if (RuntimeState != EPhysAnimRuntimeState::BalanceSafeDeny)
+			else if (RuntimeState != EPhysAnimRuntimeState::BalanceSafeDeny &&
+				RuntimeState != EPhysAnimRuntimeState::LocomotionActiveShell &&
+				RuntimeState != EPhysAnimRuntimeState::LocomotionActiveShellDenied)
 			{
 				TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
 			}
@@ -5013,6 +5015,10 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 	}
 
 	RuntimeState = NewState;
+	if (NewState == EPhysAnimRuntimeState::WaitingForPoseSearch)
+	{
+		NoteStartupProofWaitingForPoseSearchObserved();
+	}
 	EmitBridgeTraceEvent(
 		TEXT("runtime_state_transition"),
 		FString::Printf(TEXT("Runtime state: %s -> %s"), PreviousStateName, NewStateName),

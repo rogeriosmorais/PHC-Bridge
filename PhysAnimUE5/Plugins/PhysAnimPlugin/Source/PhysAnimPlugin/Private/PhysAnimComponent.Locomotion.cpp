@@ -428,16 +428,16 @@ bool UPhysAnimComponent::EvaluateBridgeLocomotionHandoffPreflight(FString& OutRe
 		return Deny(TEXT("terminal_reason_present"));
 	}
 
+	if (!Latest.bCapsuleContractPassed)
+	{
+		return Deny(TEXT("capsule_invalid"));
+	}
+
 	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne ||
 		Latest.SupportHullAreaCm2 <= 0.0f ||
 		Latest.ActiveSupportSideCount < 1)
 	{
 		return Deny(TEXT("negative_support"));
-	}
-
-	if (!Latest.bCapsuleContractPassed)
-	{
-		return Deny(TEXT("capsule_invalid"));
 	}
 
 	if (!Latest.bPhysicalContinuityValidatorPassed || Latest.bContinuityBookkeepingMismatch)
@@ -514,16 +514,16 @@ bool UPhysAnimComponent::EvaluateBridgeLocomotionHandoffCommit(FString& OutReaso
 		return Deny(TEXT("terminal_reason_present"));
 	}
 
+	if (!Latest.bCapsuleContractPassed)
+	{
+		return Deny(TEXT("capsule_invalid"));
+	}
+
 	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne ||
 		Latest.SupportHullAreaCm2 <= 0.0f ||
 		Latest.ActiveSupportSideCount < 1)
 	{
 		return Deny(TEXT("negative_support"));
-	}
-
-	if (!Latest.bCapsuleContractPassed)
-	{
-		return Deny(TEXT("capsule_invalid"));
 	}
 
 	if (!Latest.bPhysicalContinuityValidatorPassed || Latest.bContinuityBookkeepingMismatch)
@@ -773,16 +773,16 @@ bool UPhysAnimComponent::EvaluateBridgeLocomotionActiveShell(FString& OutReason)
 		return Deny(TEXT("terminal_reason_present"));
 	}
 
+	if (!Latest.bCapsuleContractPassed)
+	{
+		return Deny(TEXT("capsule_invalid"));
+	}
+
 	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne ||
 		Latest.SupportHullAreaCm2 <= 0.0f ||
 		Latest.ActiveSupportSideCount < 1)
 	{
 		return Deny(TEXT("negative_support"));
-	}
-
-	if (!Latest.bCapsuleContractPassed)
-	{
-		return Deny(TEXT("capsule_invalid"));
 	}
 
 	if (!Latest.bPhysicalContinuityValidatorPassed || Latest.bContinuityBookkeepingMismatch)

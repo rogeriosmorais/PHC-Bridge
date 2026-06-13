@@ -1,4 +1,8 @@
 <!-- mcp-graph:start -->
+## Strict Code Standards
+
+* **C++ Logging:** NEVER use raw `UE_LOG` in Unreal Engine C++ code. You MUST use the `PHYSANIM_LOG_RATE_LIMITED` macro from `#include "PhysAnimLogger.h"` for all logging to prevent spam and enforce formatting.
+
 ## mcp-graph — NewEngine-AgentB
 
 Este projeto usa **mcp-graph** para gestão de execução via grafo persistente (SQLite).

@@ -19,6 +19,12 @@ struct FPhysAnimEvidenceSummarySegmentMetrics
 	FString SelectedSourceIdentity;
 	double SelectedSourceTime = 0.0;
 	int32 ConsecutiveInvalidSampleCount = 0;
+	int32 InferenceAttemptCount = 0;
+	int32 InferenceFailureCount = 0;
+	double InferenceLatencyMsMax = 0.0;
+	bool bModelLoaded = false;
+	FString RuntimeName;
+	bool bInputBuffersFinite = false;
 };
 
 struct FPhysAnimEvidenceSummarySegment

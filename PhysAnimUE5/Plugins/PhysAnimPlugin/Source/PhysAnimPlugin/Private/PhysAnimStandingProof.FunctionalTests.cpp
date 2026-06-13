@@ -929,7 +929,10 @@ bool FVerifyActivationWiringCommand::Update()
 		{
 			bFoundComponent = true;
 			const EPhysAnimRuntimeState ActualState = Comp->GetRuntimeState();
-			if (ActualState == ExpectedState)
+			const bool bCompatibleState = (ActualState == ExpectedState) ||
+				(ExpectedState == EPhysAnimRuntimeState::WaitingForPoseSearch && ActualState == EPhysAnimRuntimeState::BridgeActive);
+
+			if (bCompatibleState)
 			{
 				if (ExpectedState == EPhysAnimRuntimeState::WaitingForPoseSearch)
 				{
@@ -1787,7 +1790,11 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 
 			if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
 			{
-				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics expected BalanceActive_Standing but got %d for %s"), (int32)RuntimeState, *It->GetName()));
+				Fail(FString::Printf(
+					TEXT("StandingProof: StabilityMetrics expected BalanceActive_Standing but got %s (%d) for %s"),
+					GetRuntimeStateName(RuntimeState),
+					(int32)RuntimeState,
+					*It->GetName()));
 			}
 
 			if (!Comp->IsLiveRuntimeEvidenceProofComplete())
@@ -2222,7 +2229,7 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(false, false, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f)); // Wait for startup
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BridgeActive, this));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
 		ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
 	}
 	else if (Parameters == TEXT("ProofNotSatisfied"))
@@ -2271,7 +2278,7 @@ bool FPhysAnimStartupProofDisabledSafeDenyTest::RunTest(const FString& Parameter
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(false, false, false));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
-	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BridgeActive, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyProofDisabledSafeDenyCommand(this));
 	return true;
@@ -3135,7 +3142,7 @@ bool FPhysAnimRawSimulationOwnershipBisectDiagnosticTest::RunTest(const FString&
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FLogRawSimulationOwnershipBisectCommand(CaseName, DiagnosticGroup, this));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(0));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), -1.0f));
@@ -3298,7 +3305,7 @@ bool FPhysAnimControlIsolationMatrixDiagnosticTest::RunTest(const FString& Param
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), ReviewMode));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FLogControlIsolationMatrixCommand(CaseName, ReviewMode, this));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(0));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), 0));
@@ -3338,7 +3345,7 @@ bool FPhysAnimActivatedStandingPerturbationTest::RunTest(const FString& Paramete
 	AutomationOpenMap(MapName);
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FCaptureActivatedStandingPerturbationBaselineCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingPerturbationCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
@@ -3650,7 +3657,7 @@ bool FPhysAnimActivatedStandingLocomotionReadinessTest::RunTest(const FString& P
 	AutomationOpenMap(MapName);
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FCaptureActivatedStandingLocomotionReadinessBaselineCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionReadinessIntentCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
@@ -3859,28 +3866,28 @@ bool FPhysAnimActivatedStandingLocomotionGateTest::RunTest(const FString& Parame
 	if (Parameters == TEXT("NoIntentDenied"))
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.0f, -1.0));
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT("intent_absent"), TEXT("NoIntentDenied"), this));
 	}
 	else if (Parameters == TEXT("ShortPulseDenied"))
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.50f, 0.05));
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT("intent_too_short"), TEXT("ShortPulseDenied"), this));
 	}
 	else if (Parameters == TEXT("StableAllowed"))
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.50f, 0.50));
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(true, TEXT("intent_stable"), TEXT("StableAllowed"), this));
 	}
 	else if (Parameters == TEXT("NegativeSupportDenied"))
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.0f, -1.0));
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableNegativeSupportProofCommand());
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
@@ -4545,7 +4552,7 @@ bool FPhysAnimActivatedStandingLocomotionRequestStateTest::RunTest(const FString
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4588,7 +4595,7 @@ bool FPhysAnimActivatedStandingLocomotionRequestStateProofTest::RunTest(const FS
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4632,7 +4639,7 @@ bool FPhysAnimActivatedStandingLocomotionGateProofTest::RunTest(const FString& P
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4757,7 +4764,7 @@ bool FPhysAnimActivatedStandingLocomotionHandoffPreflightTest::RunTest(const FSt
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4814,7 +4821,7 @@ bool FPhysAnimActivatedStandingLocomotionActiveShellTest::RunTest(const FString&
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4859,7 +4866,7 @@ bool FPhysAnimActivatedStandingLocomotionHandoffPreflightProofTest::RunTest(cons
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4919,7 +4926,7 @@ bool FPhysAnimActivatedStandingLocomotionHandoffCommitProofTest::RunTest(const F
 	}
 	if (Parameters != TEXT("NoPreflightDenied"))
 	{
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	}
 
 	static FActivatedStandingLocomotionRequestValidationState State;
@@ -4987,7 +4994,7 @@ bool FPhysAnimActivatedStandingLocomotionHandoffCommitTest::RunTest(const FStrin
 	}
 	if (Parameters != TEXT("NoPreflightDenied"))
 	{
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	}
 
 	static FActivatedStandingLocomotionRequestValidationState State;

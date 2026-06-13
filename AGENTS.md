@@ -40,7 +40,8 @@ Interpretation:
 9. Keep commits small and atomic.
 10. Build with `.\\scripts\\build.ps1`. This script should also be used to run any test passing -Test "Test Name" as a parameter right after the build.
 11. If smoke tests were run, read logs with `python .\\scripts\\read_logs.py`.
-12. DO NOT ATTEMPT MORE THAN 3 TESTS. If you reach 3 tests without success stop. It's very likely we need a change in focus/direction.
+12. Do not repeat the same failing test more than 3 times. If the same test fails 3 times without success, stop; it is very likely we need a change in focus/direction. Distinct targeted tests and required follow-up commands, such as `python .\\scripts\\read_logs.py`, do not count as repeats of the same test.
+13. NEVER use raw `UE_LOG` in Unreal Engine C++ code. You MUST use the `PHYSANIM_LOG_RATE_LIMITED` macro from `#include "PhysAnimLogger.h"` for all logging to prevent spam and enforce formatting.
 
 <!-- mcp-graph:start -->
 # AGENTS.md — NewEngine-AgentB

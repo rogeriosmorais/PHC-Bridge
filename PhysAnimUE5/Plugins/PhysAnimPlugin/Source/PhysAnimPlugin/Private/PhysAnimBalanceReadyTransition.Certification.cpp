@@ -1,4 +1,5 @@
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "PhysAnimLogger.h"
 
 namespace
 {
@@ -106,9 +107,7 @@ void BalanceTransitionSets::LogDirectPelvisLinkForensicRecords(
 		{
 			if (bEmitMissingConstraintErrors)
 			{
-				UE_LOG(
-					LogPhysAnimBridge,
-					Error,
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f,
 					TEXT("[PhysAnimBalance] %s authored_data_missing link=%s physicsAsset=%s parent=%s child=%s"),
 					ContextTag,
 					*Record.LinkName,
@@ -119,9 +118,7 @@ void BalanceTransitionSets::LogDirectPelvisLinkForensicRecords(
 			continue;
 		}
 
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 			TEXT("[PhysAnimBalance] %s link=%s physicsAsset=%s parentAnchorLocal=(%.2f,%.2f,%.2f) childAnchorLocal=(%.2f,%.2f,%.2f) parentSpace=%s childSpace=%s parentAnchorWorld=(%.2f,%.2f,%.2f) childAnchorWorld=(%.2f,%.2f,%.2f) anchorDistanceCm=%.2f angularErrorDeg=%.2f authoredAngularFloorDeg=%.2f baselineCompensatedAngularErrorDeg=%.2f parentWorldQuat=%s childWorldQuat=%s parentAuthRefFrame=%s childAuthRefFrame=%s bodyOriginDistanceCm=%.2f"),
 			ContextTag,
 			*Record.LinkName,
@@ -212,7 +209,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	Owner->GetSimulatingBodies(SimulatingBones);
 	if (GVerbosePhase1Forensics != 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnimBalance] GET_SIMULATING_BODIES count=%d"), SimulatingBones.Num());
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Verbose, 1.0f, TEXT("[PhysAnimBalance] GET_SIMULATING_BODIES count=%d"), SimulatingBones.Num());
 	}
 	TSet<FName> SimulatingBoneSet(SimulatingBones);
 
@@ -503,7 +500,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 
 	if (Owner->bShellCorrectionStateLogged == false || GVerbosePhase1Forensics != 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_SHELL_CORRECTION_STATE active=%d influencingMetrics=%d staleLatch=%d"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE1_SHELL_CORRECTION_STATE active=%d influencingMetrics=%d staleLatch=%d"),
 			OutSnapshot.bShellCorrectionOwnerActive ? 1 : 0,
 			bShellCorrectionActivelyAffecting ? 1 : 0,
 			(OutSnapshot.bShellCorrectionOwnerActive && !bShellCorrectionActivelyAffecting) ? 1 : 0);
@@ -523,7 +520,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 		{
 			if (Owner->bShellCorrectionStateLogged == false)
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_REANCHOR_BYPASSED frame=%llu phase=%d shellCorrectionActive=%d activelyAffecting=%d offset=%.2f velocity=%.2f offsetGrowth=%.2f velocityGrowth=%.2f locked=%d reanchored=%d owner=%d actor=%s component=%s"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_SHELL_REANCHOR_BYPASSED frame=%llu phase=%d shellCorrectionActive=%d activelyAffecting=%d offset=%.2f velocity=%.2f offsetGrowth=%.2f velocityGrowth=%.2f locked=%d reanchored=%d owner=%d actor=%s component=%s"),
 					GFrameCounter, static_cast<int32>(InternalPhase),
 					OutSnapshot.bShellCorrectionOwnerActive ? 1 : 0, bShellCorrectionActivelyAffecting ? 1 : 0,
 					OutSnapshot.ShellOffsetDeltaAtCaptureCm, OutSnapshot.ShellVelocityDeltaAtCaptureCmPerSecond,
@@ -549,7 +546,7 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 
 	if (Owner->bShellCorrectionStateLogged == false || GVerbosePhase1Forensics != 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_DEBUG proof=%d complete=%d locked=%d reanchored=%d duration=%.2f/%.2f offset=%.2f/%.2f growth=%.2f/%.2f affecting=%d"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE1_SHELL_SAFETY_DEBUG proof=%d complete=%d locked=%d reanchored=%d duration=%.2f/%.2f offset=%.2f/%.2f growth=%.2f/%.2f affecting=%d"),
 			bShellSafetySatisfied ? 1 : 0, OutResult.bLateValidationCompleted ? 1 : 0, 
 			OutSnapshot.bTransitionOwnedShellLocked ? 1 : 0, OutSnapshot.bTransitionShellReferenceReanchored ? 1 : 0, 
 			OutSnapshot.RootOnReadinessShellProofDurationSeconds, Settings.BalancePhase2PreRootOnShellProofRequiredSeconds,
@@ -659,7 +656,7 @@ bool FPhysAnimBalanceReadyTransition::CaptureCertifiedHandoff(UPhysAnimComponent
 
 	if (GVerbosePhase1Forensics != 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_CERTIFICATION_AUDIT STRICT_AUDIT_V1 usedRelaxedCertification=%d usedTimeoutExtension=%d usedDwellShortcut=%d usedReanchorShortcut=%d usedShellOwnershipNarrowing=%d topology=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d shellReanchored=%d shellLocked=%d shellOffset=%.2f shellVelocity=%.2f"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_CERTIFICATION_AUDIT STRICT_AUDIT_V1 usedRelaxedCertification=%d usedTimeoutExtension=%d usedDwellShortcut=%d usedReanchorShortcut=%d usedShellOwnershipNarrowing=%d topology=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d shellReanchored=%d shellLocked=%d shellOffset=%.2f shellVelocity=%.2f"),
 			Audit.bUsedRelaxedCertification ? 1 : 0,
 			Audit.bUsedTimeoutExtension ? 1 : 0,
 			Audit.bUsedDwellShortcut ? 1 : 0,

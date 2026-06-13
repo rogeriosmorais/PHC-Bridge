@@ -283,6 +283,13 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] ENTRY_ALLOWED reason=STAGE1_BYPASS"));
 		return true;
 	}
+
+	if (!IsBringUpGroupUnlocked(GetBringUpGroupCount() - 1))
+	{
+		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=BRING_UP_INCOMPLETE"));
+		return false;
+	}
+
 	const bool bDeferredStartupProxyTerminalCurrentAttempt =
 		IsDeferredStartupProxyTerminalStillCurrent(LiveRuntimeEvidenceTerminationState, LiveRuntimeEvidenceAttemptUuid);
 	const bool bProxyOutsideHullDeferred =
@@ -536,14 +543,16 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 		return false;
 	}
 
-	const FPhysAnimRunArtifactSnapshot& Latest = LiveRuntimeEvidenceTerminationState.LatestArtifact;
 	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
 
-	if (!Latest.bPhysicsAssetContractValid ||
-		!Latest.bSkeletonAuditPassed ||
-		!Latest.bCapsuleContractPassed ||
-		!HasStartupProofPhysicalContinuityEvidence(Latest) ||
-		Latest.bContinuityBookkeepingMismatch)
+	const FPhysAnimRunArtifactSnapshot& SatisfactionArtifact =
+		SelectStartupProofSatisfactionArtifact(LiveRuntimeEvidenceTerminationState);
+
+	if (!SatisfactionArtifact.bPhysicsAssetContractValid ||
+		!SatisfactionArtifact.bSkeletonAuditPassed ||
+		!SatisfactionArtifact.bCapsuleContractPassed ||
+		!HasStartupProofPhysicalContinuityEvidence(SatisfactionArtifact) ||
+		SatisfactionArtifact.bContinuityBookkeepingMismatch)
 	{
 		UE_LOG(
 			LogPhysAnimBridge,
@@ -557,10 +566,10 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 		return false;
 	}
 
-	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne ||
-		Latest.ActiveSupportSideCount <= 0 ||
-		Latest.SupportHullAreaCm2 <= 0.0f ||
-		Latest.SupportGapTimerMs >= Settings.BalancePhase1AdmissionMaxSupportGapMs)
+	if (SatisfactionArtifact.SupportMode == EPhysAnimSupportMode::Airborne ||
+		SatisfactionArtifact.ActiveSupportSideCount <= 0 ||
+		SatisfactionArtifact.SupportHullAreaCm2 <= 0.0f ||
+		SatisfactionArtifact.SupportGapTimerMs >= Settings.BalancePhase1AdmissionMaxSupportGapMs)
 	{
 		UE_LOG(
 			LogPhysAnimBridge,
@@ -576,6 +585,63 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 
 	return HasConsistentLiveRuntimeEvidenceArtifact(LiveRuntimeEvidenceTerminationState);
 }
+
+const FPhysAnimRunArtifactSnapshot& UPhysAnimComponent::SelectStartupProofSatisfactionArtifact(
+	const FPhysAnimRuntimeTerminationState& State)
+{
+	const FPhysAnimRunArtifactSnapshot& Terminal = State.TerminalArtifact;
+	const FPhysAnimRunArtifactSnapshot& Latest = State.LatestArtifact;
+	const bool bUseTerminalArtifact =
+		!State.bTerminated &&
+		State.TerminalReason == EPhysAnimTerminalReason::None &&
+		!Terminal.AttemptUuid.IsEmpty() &&
+		Terminal.AttemptUuid == Latest.AttemptUuid &&
+		Terminal.TerminalReason == EPhysAnimTerminalReason::None &&
+		Terminal.bTerminalFrameArtifactCaptured;
+
+	return bUseTerminalArtifact ? Terminal : Latest;
+}
+
+bool UPhysAnimComponent::IsStartupProofSatisfactionStateAccepted(
+	const FPhysAnimRuntimeTerminationState& State,
+	const FPhysAnimStabilizationSettings& Settings)
+{
+	if (State.TerminalReason != EPhysAnimTerminalReason::None)
+	{
+		return false;
+	}
+
+	const FPhysAnimRunArtifactSnapshot& SatisfactionArtifact =
+		SelectStartupProofSatisfactionArtifact(State);
+
+	if (!SatisfactionArtifact.bPhysicsAssetContractValid ||
+		!SatisfactionArtifact.bSkeletonAuditPassed ||
+		!SatisfactionArtifact.bCapsuleContractPassed ||
+		!HasStartupProofPhysicalContinuityEvidence(SatisfactionArtifact) ||
+		SatisfactionArtifact.bContinuityBookkeepingMismatch)
+	{
+		return false;
+	}
+
+	if (SatisfactionArtifact.SupportMode == EPhysAnimSupportMode::Airborne ||
+		SatisfactionArtifact.ActiveSupportSideCount <= 0 ||
+		SatisfactionArtifact.SupportHullAreaCm2 <= 0.0f ||
+		SatisfactionArtifact.SupportGapTimerMs >= Settings.BalancePhase1AdmissionMaxSupportGapMs)
+	{
+		return false;
+	}
+
+	return HasConsistentLiveRuntimeEvidenceArtifact(State);
+}
+
+#if !UE_BUILD_SHIPPING
+bool UPhysAnimComponent::TestOnlyIsStartupProofSatisfactionStateAccepted(
+	const FPhysAnimRuntimeTerminationState& State,
+	const FPhysAnimStabilizationSettings& Settings)
+{
+	return IsStartupProofSatisfactionStateAccepted(State, Settings);
+}
+#endif
 
 bool UPhysAnimComponent::HasStartupProofPhysicalContinuityEvidence(const FPhysAnimRunArtifactSnapshot& Artifact)
 {
@@ -763,13 +829,11 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 	{
 		PolicyInfluenceRampStartTimeSeconds = -1.0;
 	}
-	if ((RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
-		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation) &&
-		LiveRuntimeEvidenceSubstepCounter == 0)
+	if (LiveRuntimeEvidenceSubstepCounter == 0)
 	{
+		bLiveRuntimeEvidenceStartupEvidenceFresh = true;
 		if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
 		{
-			bLiveRuntimeEvidenceStartupEvidenceFresh = true;
 			if (!bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved)
 			{
 				NoteStartupProofWaitingForPoseSearchObserved();
@@ -1044,14 +1108,26 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
 			GetRuntimeStateName(RuntimeState));
 
-		const int32 CoreFinalBringUpGroupIndex = FMath::Min(1, GetBringUpGroupCount() - 1);
+		if (RuntimeState == EPhysAnimRuntimeState::BridgeActive && CanEnterBalanceActiveStanding())
+		{
+			// Shortcut path reached standing success. Unblock all bring-up groups 
+			// BEFORE transitioning to balance mode to avoid state machine violations.
+			for (int32 i = HighestUnlockedBringUpGroupIndex + 1; i < GetBringUpGroupCount(); ++i)
+			{
+				UnlockBringUpGroup(i, TEXT("StartupProofShortcut"));
+			}
+
+			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
+		}
+
+		const int32 FinalBringUpGroupIndex = GetBringUpGroupCount() - 1;
 		if (ShouldStartBridgeActivePolicyRampAfterStartupProof(
 			RuntimeState,
 			bLiveRuntimeEvidenceProofComplete,
 			PolicyInfluenceRampStartTimeSeconds >= 0.0,
 			ResolveEffectiveStabilizationSettings().bForceZeroActions,
-			IsBringUpGroupUnlocked(CoreFinalBringUpGroupIndex),
-			IsBringUpGroupControlRampActive(CoreFinalBringUpGroupIndex),
+			IsBringUpGroupUnlocked(FinalBringUpGroupIndex),
+			IsBringUpGroupControlRampActive(FinalBringUpGroupIndex),
 			bStartupBringUpFrozenByBalanceEntry))
 		{
 			PolicyInfluenceRampStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
@@ -1139,6 +1215,14 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	ActivatedStandingStabilityMetrics.bHasSamples = true;
 	ActivatedStandingStabilityMetrics.RuntimeState = RuntimeState;
 	ActivatedStandingStabilityMetrics.TerminalReason = static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason);
+	ActivatedStandingStabilityMetrics.bPhysicsControlComponentAvailable = PhysicsControlComponent.IsValid();
+	ActivatedStandingStabilityMetrics.ControlledBodyCount = PhysAnimBridge::GetControlledBoneNames().Num();
+	ActivatedStandingStabilityMetrics.ControlTargetSampleCount++;
+	ActivatedStandingStabilityMetrics.ControlTargetTotalWrites += LastControlTargetDiagnostics.NumTotalTargetsWritten;
+	ActivatedStandingStabilityMetrics.ControlTargetNormalWrites += LastControlTargetDiagnostics.NumNormalPolicyTargetsWritten;
+	ActivatedStandingStabilityMetrics.ControlTargetMaxDeltaDeg = FMath::Max(ActivatedStandingStabilityMetrics.ControlTargetMaxDeltaDeg, static_cast<double>(LastControlTargetDiagnostics.MaxTargetDeltaDegrees));
+	ActivatedStandingStabilityMetrics.ControlTargetMaxRawPolicyOffsetDeg = FMath::Max(ActivatedStandingStabilityMetrics.ControlTargetMaxRawPolicyOffsetDeg, static_cast<double>(LastControlTargetDiagnostics.MaxRawPolicyOffsetDegrees));
+
 	ActivatedStandingStabilityMetrics.SampleCount++;
 
 	const double CurrentRootWorldPositionDriftCm = FVector::Dist(CurrentRootLocationCm, ActivatedStandingStabilityBaselineRootLocationCm);
@@ -1738,10 +1822,19 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.PelvisSleepDurationMs = ContinuityValidation.PelvisSleepDurationMs;
 	Input.Values.bPhysicalContinuityValidatorPassed = ContinuityValidation.bPhysicalContinuityValidatorPassed;
 	Input.Values.PolicyInferenceSuccessCount = ActivatedStandingStabilityMetrics.PolicyInferenceSuccessCount;
+	Input.Values.PolicyInferenceAttemptCount = ActivatedStandingStabilityMetrics.PolicyInferenceAttemptCount;
+	Input.Values.PolicyInferenceFailureCount = ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
+	Input.Values.PolicyInferenceLatencyMsMax = ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax;
+	Input.Values.bPolicyModelLoaded = ActivatedStandingStabilityMetrics.bPolicyModelLoaded;
+	Input.Values.PolicyRuntimeName = ActivatedStandingStabilityMetrics.PolicyRuntimeName;
+	Input.Values.PolicyModelName = ActivatedStandingStabilityMetrics.PolicyModelName;
+	Input.Values.bPolicyInputBuffersFinite = ActivatedStandingStabilityMetrics.bPolicyInputBuffersFinite;
 	Input.Values.PolicyActionSampleCount = ActivatedStandingStabilityMetrics.PolicyActionSampleCount;
 	Input.Values.PolicyActionRawMeanAbsMax = ActivatedStandingStabilityMetrics.PolicyActionRawMeanAbsMax;
 	Input.Values.PolicyActionConditionedMeanAbsMax = ActivatedStandingStabilityMetrics.PolicyActionConditionedMeanAbsMax;
 	Input.Values.PolicyActionClampedFloatMax = ActivatedStandingStabilityMetrics.PolicyActionClampedFloatMax;
+	Input.Values.bPhysicsControlComponentAvailable = ActivatedStandingStabilityMetrics.bPhysicsControlComponentAvailable;
+	Input.Values.ControlledBodyCount = ActivatedStandingStabilityMetrics.ControlledBodyCount;
 	Input.Values.ControlTargetSampleCount = ActivatedStandingStabilityMetrics.ControlTargetSampleCount;
 	Input.Values.ControlTargetNormalWrites = ActivatedStandingStabilityMetrics.ControlTargetNormalWrites;
 	Input.Values.ControlTargetTotalWrites = ActivatedStandingStabilityMetrics.ControlTargetTotalWrites;
@@ -1758,8 +1851,22 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.RendererFacingMotionActiveSampleCount = ActivatedStandingStabilityMetrics.RendererFacingMotionActiveSampleCount;
 	Input.Values.RendererFacingMotionMaxRootWorldPositionDriftCm =
 		ActivatedStandingStabilityMetrics.RendererFacingMotionMaxRootWorldPositionDriftCm;
-	Input.Values.RuntimeBodySampleCount = ActivatedStandingStabilityMetrics.BodyTelemetrySampleCount;
+	Input.Values.RendererFacingMotionMaxMeshWorldPositionDriftCm =
+		ActivatedStandingStabilityMetrics.RendererFacingMotionMaxMeshWorldPositionDriftCm;
+	Input.Values.RendererFacingMotionMaxRootYawDeltaDeg =
+		ActivatedStandingStabilityMetrics.RendererFacingMotionMaxRootYawDeltaDeg;
+	Input.Values.RendererFacingMotionMaxBodyDeltaCm =
+		ActivatedStandingStabilityMetrics.RendererFacingMotionMaxBodyDeltaCm;
+	Input.Values.RendererFacingMotionMaxBodyDeltaDeg =
+		ActivatedStandingStabilityMetrics.RendererFacingMotionMaxBodyDeltaDeg;
+	Input.Values.bRendererFacingMotionUsedNullRhi =
+		!FApp::CanEverRender();
+	Input.Values.RuntimeBodySampleCount = ActivatedStandingStabilityMetrics.SampleCount;
 	Input.Values.RuntimeSimulatingBodyCount = ActivatedStandingStabilityMetrics.SimulatingBodyCountMax;
+	Input.Values.CriticalBodyValidMask = ActivatedStandingStabilityMetrics.CriticalBodyValidMask;
+	Input.Values.CriticalBodySimulatingMask = ActivatedStandingStabilityMetrics.CriticalBodySimulatingMask;
+	Input.Values.SupportBodyValidMask = ActivatedStandingStabilityMetrics.SupportBodyValidMask;
+	Input.Values.SupportBodySimulatingMask = ActivatedStandingStabilityMetrics.SupportBodySimulatingMask;
 	Input.Values.RuntimeMaxBodyLinearSpeedCmPerSecond = ActivatedStandingStabilityMetrics.MaxBodyLinearSpeedCmPerSecond;
 	Input.Values.RuntimeMaxBodyAngularSpeedDegPerSecond = ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond;
 	Input.Values.bPhysicalPerturbationApplied = ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied;

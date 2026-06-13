@@ -5,25 +5,46 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_RunInference);
 
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		++ActivatedStandingStabilityMetrics.PolicyInferenceAttemptCount;
+	}
+
 	UE::NNE::IModelInstanceRunSync* const ModelInstance = GetModelInstanceRunSync();
 	if (!ModelInstance)
 	{
 		OutError = TEXT("No active model instance exists.");
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		{
+			++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
+		}
 		return false;
 	}
 
 	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("self_obs"), SelfObservationBuffer, OutError))
 	{
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		{
+			++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
+		}
 		return false;
 	}
 
 	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("mimic_target_poses"), MimicTargetPosesBuffer, OutError))
 	{
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		{
+			++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
+		}
 		return false;
 	}
 
 	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("terrain"), TerrainBuffer, OutError))
 	{
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		{
+			++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
+		}
 		return false;
 	}
 
@@ -33,21 +54,41 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		TRACE_CPUPROFILER_EVENT_SCOPE(PhysAnim_RunSync);
 		if (ModelInstance->RunSync(InputBindings, OutputBindings) != UE::NNE::EResultStatus::Ok)
 		{
-			TRACE_COUNTER_SET(COUNTER_PhysAnim_RunSyncMs, static_cast<float>((FPlatformTime::Seconds() - RunSyncStartSeconds) * 1000.0));
+			const double LatencyMs = (FPlatformTime::Seconds() - RunSyncStartSeconds) * 1000.0;
+			TRACE_COUNTER_SET(COUNTER_PhysAnim_RunSyncMs, static_cast<float>(LatencyMs));
 			OutError = TEXT("RunSync failed.");
+			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+			{
+				++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
+				ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax = FMath::Max(
+					ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax,
+					LatencyMs);
+			}
 			return false;
 		}
 	}
-	TRACE_COUNTER_SET(COUNTER_PhysAnim_RunSyncMs, static_cast<float>((FPlatformTime::Seconds() - RunSyncStartSeconds) * 1000.0));
+	const double LatencyMs = (FPlatformTime::Seconds() - RunSyncStartSeconds) * 1000.0;
+	TRACE_COUNTER_SET(COUNTER_PhysAnim_RunSyncMs, static_cast<float>(LatencyMs));
 
 	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("Model action output"), ActionOutputBuffer, OutError))
 	{
+		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		{
+			++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
+			ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax = FMath::Max(
+				ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax,
+				LatencyMs);
+		}
 		return false;
 	}
 	PreviousActionOutputBuffer = ActionOutputsBeforeRun;
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
 	{
 		++ActivatedStandingStabilityMetrics.PolicyInferenceSuccessCount;
+		ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax = FMath::Max(
+			ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax,
+			LatencyMs);
+		ActivatedStandingStabilityMetrics.bPolicyInputBuffersFinite = true;
 	}
 
 	return true;
