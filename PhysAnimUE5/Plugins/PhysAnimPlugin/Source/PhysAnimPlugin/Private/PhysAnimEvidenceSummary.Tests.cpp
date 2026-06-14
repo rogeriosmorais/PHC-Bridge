@@ -494,12 +494,19 @@ namespace
 			double MaxLatencyMs;
 			bool bModelLoaded;
 			bool bBuffersFinite;
+			int32 PolicyActionSampleCount;
+			double PolicyActionRawMeanAbsMax;
+			double PolicyActionConditionedMeanAbsMax;
 			EPhysAnimEvidenceBaselineSegmentState ExpectedState;
 		} Cases[] =
 		{
-			{ TEXT("policy-0-0"), 0, 0, 0, TEXT(""), TEXT(""), 0.0, false, false, EPhysAnimEvidenceBaselineSegmentState::NotReached },
-			{ TEXT("policy-2-0"), 2, 0, 2, TEXT("phc_policy"), TEXT("ORT_CPU"), 15.0, true, false, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
-			{ TEXT("policy-2-2"), 2, 2, 0, TEXT("phc_policy"), TEXT("ORT_DML"), 4.5, true, true, EPhysAnimEvidenceBaselineSegmentState::Active }
+			{ TEXT("policy-0-0"), 0, 0, 0, TEXT(""), TEXT(""), 0.0, false, false, 0, 0.0, 0.0, EPhysAnimEvidenceBaselineSegmentState::NotReached },
+			{ TEXT("policy-2-0"), 2, 0, 2, TEXT("phc_policy"), TEXT("ORT_CPU"), 15.0, true, false, 0, 0.0, 0.0, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
+			{ TEXT("policy-success-missing-model"), 1, 1, 0, TEXT("phc_policy"), TEXT("ORT_DML"), 4.5, false, true, 1, 0.5, 0.5, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
+			{ TEXT("policy-success-bad-buffers"), 1, 1, 0, TEXT("phc_policy"), TEXT("ORT_DML"), 4.5, true, false, 1, 0.5, 0.5, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
+			{ TEXT("policy-success-empty-action"), 1, 1, 0, TEXT("phc_policy"), TEXT("ORT_DML"), 4.5, true, true, 0, 0.0, 0.0, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
+			{ TEXT("policy-success-zero-action-magnitude"), 1, 1, 0, TEXT("phc_policy"), TEXT("ORT_DML"), 4.5, true, true, 1, 0.0, 0.0, EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive },
+			{ TEXT("policy-2-2"), 2, 2, 0, TEXT("phc_policy"), TEXT("ORT_DML"), 4.5, true, true, 1, 0.5, 0.5, EPhysAnimEvidenceBaselineSegmentState::Active }
 		};
 
 		for (const FCase& Case : Cases)
@@ -510,7 +517,7 @@ namespace
 			IFileManager::Get().Delete(*TerminalPath);
 			IFileManager::Get().Delete(*SummaryPath);
 
-			const FPhysAnimProofArtifactEmitInput Input = MakeProofEmitterInput(
+			FPhysAnimProofArtifactEmitInput Input = MakeProofEmitterInput(
 				AttemptUuid,
 				0, 0, TEXT(""), 0.0, 0, // PoseSearch defaults
 				Case.PolicyInferenceSuccessCount,
@@ -521,6 +528,10 @@ namespace
 				Case.PolicyRuntimeName,
 				Case.PolicyModelName,
 				Case.bBuffersFinite);
+			FPhysAnimRunArtifactSnapshot& Artifact = Input.PipelineResult.StateApplyResult.State.TerminalArtifact;
+			Artifact.PolicyActionSampleCount = Case.PolicyActionSampleCount;
+			Artifact.PolicyActionRawMeanAbsMax = Case.PolicyActionRawMeanAbsMax;
+			Artifact.PolicyActionConditionedMeanAbsMax = Case.PolicyActionConditionedMeanAbsMax;
 
 			const FPhysAnimProofArtifactEmitResult EmitResult =
 				PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(Input);
@@ -565,6 +576,54 @@ namespace
 				TEXT("PhcPolicy latency matches"),
 				PolicySegment->Metrics.InferenceLatencyMsMax,
 				Case.MaxLatencyMs);
+
+			IFileManager::Get().Delete(*TerminalPath);
+			IFileManager::Get().Delete(*SummaryPath);
+		}
+
+		{
+			const FString AttemptUuid = TEXT("policy-empty-product-gate");
+			const FString TerminalPath = PhysAnimProofArtifactEmitter::BuildTerminalArtifactJsonPath(AttemptUuid);
+			const FString SummaryPath = BuildEvidenceSummaryJsonPath(AttemptUuid);
+			IFileManager::Get().Delete(*TerminalPath);
+			IFileManager::Get().Delete(*SummaryPath);
+
+			FPhysAnimProofArtifactEmitInput Input = MakeProofEmitterInput(
+				AttemptUuid,
+				1, 1, TEXT("standing_idle"), 0.5, 0,
+				1, 1, 0, 4.5, true, TEXT("ORT_DML"), TEXT("phc_policy"), true,
+				1, 1, 0.0,
+				1, 1, 1, 2.0, 0.0, 0.0);
+			FPhysAnimRunArtifactSnapshot& Artifact = Input.PipelineResult.StateApplyResult.State.TerminalArtifact;
+			Artifact.bPhysicsControlComponentAvailable = true;
+			Artifact.ControlledBodyCount = 22;
+			Artifact.PolicyActionSampleCount = 0;
+			Artifact.PolicyActionRawMeanAbsMax = 0.0;
+			Artifact.PolicyActionConditionedMeanAbsMax = 0.0;
+
+			const FPhysAnimProofArtifactEmitResult EmitResult =
+				PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(Input);
+			TestTrue(TEXT("Terminal artifact writes successfully for structurally empty policy output case"), EmitResult.bJsonWritten);
+
+			FString SummaryJson;
+			TestTrue(TEXT("Empty policy output summary sidecar is readable"), FFileHelper::LoadFileToString(SummaryJson, *SummaryPath));
+
+			FPhysAnimEvidenceSummary Parsed;
+			TestTrue(TEXT("Empty policy output summary sidecar parses"), DeserializeFromJsonString(SummaryJson, Parsed));
+
+			const FPhysAnimEvidenceSummarySegment* PolicySegment = FindSegment(Parsed, TEXT("PhcPolicy"));
+			TestNotNull(TEXT("PhcPolicy segment exists in empty-output product gate case"), PolicySegment);
+			if (PolicySegment)
+			{
+				TestEqual(
+					TEXT("Structurally empty policy output is not active"),
+					static_cast<uint8>(PolicySegment->State),
+					static_cast<uint8>(EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive));
+			}
+			TestNotEqual(
+				TEXT("Structurally empty policy output cannot become product success"),
+				static_cast<uint8>(Parsed.StrictVerdict),
+				static_cast<uint8>(EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate));
 
 			IFileManager::Get().Delete(*TerminalPath);
 			IFileManager::Get().Delete(*SummaryPath);

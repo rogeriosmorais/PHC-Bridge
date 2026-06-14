@@ -233,7 +233,7 @@ namespace
 			const FPhysAnimEvidenceCollectorFixturePaths Paths = MakeFixturePaths(TEXT("cross-attempt-product-trap"));
 			const FString TerminalPath = FPaths::Combine(Paths.TerminalDir, TEXT("attempt-terminal_terminal.json"));
 			const FString SummaryPath = FPaths::Combine(Paths.SummaryDir, TEXT("attempt-summary_evidence_summary.json"));
-			const FString LogPath = FPaths::Combine(Paths.LogDir, TEXT("attempt-log.log"));
+			const FString AttemptLogPath = FPaths::Combine(Paths.LogDir, TEXT("attempt-log.log"));
 
 			TestTrue(TEXT("cross attempt terminal fixture writes"), WriteTextFile(
 				TerminalPath,
@@ -250,11 +250,11 @@ namespace
 					EPhysAnimEvidenceBaselineSegmentState::Active,
 					EPhysAnimEvidenceBaselineSegmentState::Active))));
 			TestTrue(TEXT("cross attempt log fixture writes"), WriteTextFile(
-				LogPath,
+				AttemptLogPath,
 				TEXT("PhysAnimProof: AttemptResult uuid=attempt-log verdict=PASS")));
 			SetTimestamp(TerminalPath, FDateTime(2026, 6, 10, 15, 0, 0));
 			SetTimestamp(SummaryPath, FDateTime(2026, 6, 10, 15, 30, 0));
-			SetTimestamp(LogPath, FDateTime(2026, 6, 10, 16, 0, 0));
+			SetTimestamp(AttemptLogPath, FDateTime(2026, 6, 10, 16, 0, 0));
 
 			const FPhysAnimEvidenceCollectorInput Input
 			{

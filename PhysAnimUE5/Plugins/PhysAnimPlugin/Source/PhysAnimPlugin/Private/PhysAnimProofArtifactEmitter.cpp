@@ -87,6 +87,18 @@ namespace
 	{
 		FPhysAnimEvidenceBaselineInput BaselineInput;
 
+		const auto HasStrictPhcPolicyEvidence = [&Artifact]()
+		{
+			return Artifact.bPolicyModelLoaded &&
+				Artifact.bPolicyInputBuffersFinite &&
+				Artifact.PolicyInferenceSuccessCount > 0 &&
+				Artifact.PolicyActionSampleCount > 0 &&
+				FMath::IsFinite(Artifact.PolicyActionRawMeanAbsMax) &&
+				FMath::IsFinite(Artifact.PolicyActionConditionedMeanAbsMax) &&
+				Artifact.PolicyActionRawMeanAbsMax > 0.0 &&
+				Artifact.PolicyActionConditionedMeanAbsMax > 0.0;
+		};
+
 		const auto ResolvePoseSearchSegmentState = [&Artifact]()
 		{
 			if (Artifact.PoseSearchQueryCount <= 0)
@@ -99,14 +111,14 @@ namespace
 				: EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive;
 		};
 
-		const auto ResolvePhcPolicySegmentState = [&Artifact]()
+		const auto ResolvePhcPolicySegmentState = [&Artifact, &HasStrictPhcPolicyEvidence]()
 		{
 			if (Artifact.PolicyInferenceAttemptCount <= 0)
 			{
 				return EPhysAnimEvidenceBaselineSegmentState::NotReached;
 			}
 
-			return Artifact.PolicyInferenceSuccessCount > 0
+			return HasStrictPhcPolicyEvidence()
 				? EPhysAnimEvidenceBaselineSegmentState::Active
 				: EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive;
 		};

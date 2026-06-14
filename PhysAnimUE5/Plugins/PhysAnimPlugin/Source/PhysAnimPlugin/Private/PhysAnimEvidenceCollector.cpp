@@ -16,6 +16,19 @@ namespace
 		return Sanitized.IsEmpty() ? TEXT("unknown") : Sanitized;
 	}
 
+	FString PhysAnimEvidenceCollector_NormalizeAttemptUuid(const FString& AttemptUuid)
+	{
+		return AttemptUuid.TrimStartAndEnd();
+	}
+
+	bool PhysAnimEvidenceCollector_AttemptMatches(
+		const FString& CandidateAttemptUuid,
+		const FString& RequestedAttemptUuid)
+	{
+		return RequestedAttemptUuid.IsEmpty() ||
+			CandidateAttemptUuid.Equals(RequestedAttemptUuid, ESearchCase::IgnoreCase);
+	}
+
 	bool PhysAnimEvidenceCollector_TryReadTextFile(const FString& Path, FString& OutContents)
 	{
 		return FFileHelper::LoadFileToString(OutContents, *Path);
@@ -65,6 +78,30 @@ namespace
 		}
 
 		return BestPath;
+	}
+
+	FString PhysAnimEvidenceCollector_FilterLogContentsForAttempt(
+		const FString& LogContents,
+		const FString& AttemptUuid)
+	{
+		if (AttemptUuid.IsEmpty())
+		{
+			return LogContents;
+		}
+
+		TArray<FString> Lines;
+		LogContents.ParseIntoArrayLines(Lines, false);
+
+		TArray<FString> MatchingLines;
+		for (const FString& Line : Lines)
+		{
+			if (Line.Contains(AttemptUuid, ESearchCase::IgnoreCase))
+			{
+				MatchingLines.Add(Line);
+			}
+		}
+
+		return FString::Join(MatchingLines, LINE_TERMINATOR);
 	}
 
 	TOptional<bool> PhysAnimEvidenceCollector_TryReadExplicitPassField(const TSharedPtr<FJsonObject>& JsonObject)
@@ -332,76 +369,155 @@ namespace
 
 	bool PhysAnimEvidenceCollector_LoadLatestTerminalArtifact(
 		const FString& Directory,
+		const FString& AttemptUuid,
 		FPhysAnimEvidenceCollectorTerminalArtifactResult& OutResult)
 	{
-		const FString Path = PhysAnimEvidenceCollector_FindLatestFile(Directory, TEXT("*_terminal.json"));
-		if (Path.IsEmpty())
+		const TArray<FString> FilePaths = PhysAnimEvidenceCollector_FindFiles(Directory, TEXT("*_terminal.json"));
+		if (FilePaths.IsEmpty())
 		{
 			return false;
 		}
 
-		FString Json;
-		if (!PhysAnimEvidenceCollector_TryReadTextFile(Path, Json))
+		bool bFoundMatch = false;
+		FString BestPath;
+		FPhysAnimEvidenceCollectorTerminalArtifactResult BestResult;
+		for (const FString& Path : FilePaths)
+		{
+			FString Json;
+			if (!PhysAnimEvidenceCollector_TryReadTextFile(Path, Json))
+			{
+				continue;
+			}
+
+			FPhysAnimEvidenceCollectorTerminalArtifactResult Candidate;
+			if (!PhysAnimEvidenceCollector_TryParseTerminalArtifactJson(Json, Candidate))
+			{
+				continue;
+			}
+
+			if (!PhysAnimEvidenceCollector_AttemptMatches(Candidate.TerminalArtifact.AttemptUuid, AttemptUuid))
+			{
+				continue;
+			}
+
+			if (!bFoundMatch || PhysAnimEvidenceCollector_IsLaterFile(Path, BestPath))
+			{
+				bFoundMatch = true;
+				BestPath = Path;
+				BestResult = Candidate;
+			}
+		}
+
+		if (!bFoundMatch)
 		{
 			return false;
 		}
 
-		if (!PhysAnimEvidenceCollector_TryParseTerminalArtifactJson(Json, OutResult))
-		{
-			return false;
-		}
-
-		OutResult.JsonPath = Path;
+		OutResult = BestResult;
+		OutResult.JsonPath = BestPath;
 		return true;
 	}
 
 	bool PhysAnimEvidenceCollector_LoadLatestEvidenceSummary(
 		const FString& Directory,
+		const FString& AttemptUuid,
 		FPhysAnimEvidenceCollectorEvidenceSummaryResult& OutResult)
 	{
-		const FString Path = PhysAnimEvidenceCollector_FindLatestFile(Directory, TEXT("*_evidence_summary.json"));
-		if (Path.IsEmpty())
+		const TArray<FString> FilePaths = PhysAnimEvidenceCollector_FindFiles(Directory, TEXT("*_evidence_summary.json"));
+		if (FilePaths.IsEmpty())
 		{
 			return false;
 		}
 
-		FString Json;
-		if (!PhysAnimEvidenceCollector_TryReadTextFile(Path, Json))
+		bool bFoundMatch = false;
+		FString BestPath;
+		FPhysAnimEvidenceCollectorEvidenceSummaryResult BestResult;
+		for (const FString& Path : FilePaths)
+		{
+			FString Json;
+			if (!PhysAnimEvidenceCollector_TryReadTextFile(Path, Json))
+			{
+				continue;
+			}
+
+			FPhysAnimEvidenceCollectorEvidenceSummaryResult Candidate;
+			if (!PhysAnimEvidenceCollector_TryParseEvidenceSummaryJson(Json, Candidate))
+			{
+				continue;
+			}
+
+			if (!PhysAnimEvidenceCollector_AttemptMatches(Candidate.Summary.AttemptUuid, AttemptUuid))
+			{
+				continue;
+			}
+
+			if (!bFoundMatch || PhysAnimEvidenceCollector_IsLaterFile(Path, BestPath))
+			{
+				bFoundMatch = true;
+				BestPath = Path;
+				BestResult = Candidate;
+			}
+		}
+
+		if (!bFoundMatch)
 		{
 			return false;
 		}
 
-		if (!PhysAnimEvidenceCollector_TryParseEvidenceSummaryJson(Json, OutResult))
-		{
-			return false;
-		}
-
-		OutResult.JsonPath = Path;
+		OutResult = BestResult;
+		OutResult.JsonPath = BestPath;
 		return true;
 	}
 
 	bool PhysAnimEvidenceCollector_LoadLatestLogSignal(
 		const FString& Directory,
+		const FString& AttemptUuid,
 		FPhysAnimEvidenceCollectorLogSignal& OutSignal)
 	{
-		const FString Path = PhysAnimEvidenceCollector_FindLatestFile(Directory, TEXT("*.log"));
-		if (Path.IsEmpty())
+		const TArray<FString> FilePaths = PhysAnimEvidenceCollector_FindFiles(Directory, TEXT("*.log"));
+		if (FilePaths.IsEmpty())
 		{
 			return false;
 		}
 
-		FString LogContents;
-		if (!PhysAnimEvidenceCollector_TryReadTextFile(Path, LogContents))
+		bool bFoundMatch = false;
+		FString BestPath;
+		FPhysAnimEvidenceCollectorLogSignal BestSignal;
+		for (const FString& Path : FilePaths)
+		{
+			FString LogContents;
+			if (!PhysAnimEvidenceCollector_TryReadTextFile(Path, LogContents))
+			{
+				continue;
+			}
+
+			const FString FilteredLogContents = PhysAnimEvidenceCollector_FilterLogContentsForAttempt(LogContents, AttemptUuid);
+			if (!AttemptUuid.IsEmpty() && FilteredLogContents.IsEmpty())
+			{
+				continue;
+			}
+
+			FPhysAnimEvidenceCollectorLogSignal Candidate;
+			if (!PhysAnimEvidenceCollector_TryParseLogSignal(FilteredLogContents, Candidate))
+			{
+				continue;
+			}
+
+			if (!bFoundMatch || PhysAnimEvidenceCollector_IsLaterFile(Path, BestPath))
+			{
+				bFoundMatch = true;
+				BestPath = Path;
+				BestSignal = Candidate;
+			}
+		}
+
+		if (!bFoundMatch)
 		{
 			return false;
 		}
 
-		if (!PhysAnimEvidenceCollector_TryParseLogSignal(LogContents, OutSignal))
-		{
-			return false;
-		}
-
-		OutSignal.LogPath = Path;
+		OutSignal = BestSignal;
+		OutSignal.LogPath = BestPath;
 		return true;
 	}
 
@@ -439,8 +555,12 @@ namespace
 		{
 			Input.TruthFlags = EvidenceSummary.Summary.QualityFlags;
 			Input.TruthFlags.bTerminalFailure = EvidenceSummary.Summary.TerminalReason != EPhysAnimTerminalReason::None;
-			Input.TruthFlags.bMissingEvidence = false;
 		}
+
+		Input.TruthFlags.bMissingEvidence = Input.TruthFlags.bMissingEvidence ||
+			!TerminalArtifact.bFound ||
+			!EvidenceSummary.bFound ||
+			!LogSignal.bFound;
 
 		Input.ProofSignals.TerminalProofJsonPassed = TerminalArtifact.bFound
 			? TOptional<bool>(TerminalArtifact.bExplicitPass)
@@ -466,9 +586,21 @@ namespace PhysAnimEvidenceCollector
 	FPhysAnimEvidenceCollectorResult Collect(const FPhysAnimEvidenceCollectorInput& Input)
 	{
 		FPhysAnimEvidenceCollectorResult Result;
-		PhysAnimEvidenceCollector_LoadLatestTerminalArtifact(Input.TerminalArtifactDirectory, Result.TerminalArtifact);
-		PhysAnimEvidenceCollector_LoadLatestEvidenceSummary(Input.EvidenceSummaryDirectory, Result.EvidenceSummary);
-		PhysAnimEvidenceCollector_LoadLatestLogSignal(Input.LogDirectory, Result.LogSignal);
+		FString CollectionAttemptUuid = PhysAnimEvidenceCollector_NormalizeAttemptUuid(Input.AttemptUuid);
+		PhysAnimEvidenceCollector_LoadLatestTerminalArtifact(Input.TerminalArtifactDirectory, CollectionAttemptUuid, Result.TerminalArtifact);
+
+		if (CollectionAttemptUuid.IsEmpty() && Result.TerminalArtifact.bFound)
+		{
+			CollectionAttemptUuid = Result.TerminalArtifact.TerminalArtifact.AttemptUuid;
+		}
+
+		PhysAnimEvidenceCollector_LoadLatestEvidenceSummary(Input.EvidenceSummaryDirectory, CollectionAttemptUuid, Result.EvidenceSummary);
+		if (CollectionAttemptUuid.IsEmpty() && Result.EvidenceSummary.bFound)
+		{
+			CollectionAttemptUuid = Result.EvidenceSummary.Summary.AttemptUuid;
+		}
+
+		PhysAnimEvidenceCollector_LoadLatestLogSignal(Input.LogDirectory, CollectionAttemptUuid, Result.LogSignal);
 
 		Result.ClassificationInput = PhysAnimEvidenceCollector_BuildClassificationInput(
 			Result.TerminalArtifact,

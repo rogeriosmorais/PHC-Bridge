@@ -173,3 +173,16 @@ Recommended fix:
 5. Record graph traceability limitations and add test file references to evidence-hardening graph tasks.
 
 Until those are complete, use evidence reports as diagnostic guidance only, not as final proof that product development is making validated progress.
+
+## Traceability Policy After Hardening
+
+Graph status is execution traceability, not runtime proof. A done graph node is credible progress only when it is corroborated by:
+
+- a specific local command that passed,
+- linked `testFiles` on the graph task,
+- real evidence artifacts using one attempt UUID,
+- and a collector verdict that does not depend on unrelated latest files or log-only claims.
+
+The original `done_integrity` and `status_flow` checks are useful and passed, but they should not override unresolved `code_sync` limitations. During this review, `code_sync` reported stale `sourceRef` data, done nodes without `testFiles`, and a stale code index. Those conditions mean graph completion counts must not be presented as no-doubt runtime progress until source refs are reindexed and task metadata points to the tests or artifacts that actually passed.
+
+The graph finish gate may also report advisory test parsing false negatives for C++ automation and Python commands even after the commands pass locally. In that case, the local command output and linked test files should be recorded in the task rationale, and the final status should explicitly distinguish the passed test command from any remaining graph/code-sync metadata limitation.
