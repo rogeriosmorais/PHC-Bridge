@@ -28,6 +28,7 @@ class StabilityLinkageTests(unittest.TestCase):
                 {
                     "attempt_uuid": "success",
                     "physical_continuity_validator_passed": True,
+                    "runtime_simulating_body_count": 22,
                     "hold_duration_sec": 3.0,
                     "max_root_tilt_deg": 10.0,
                     "peak_angular_speed_deg_per_sec": 100.0,
@@ -63,6 +64,7 @@ class StabilityLinkageTests(unittest.TestCase):
                 {
                     "attempt_uuid": "short",
                     "physical_continuity_validator_passed": True,
+                    "runtime_simulating_body_count": 22,
                     "hold_duration_sec": 2.9,
                     "terminal_reason": 0
                 }
@@ -90,6 +92,7 @@ class StabilityLinkageTests(unittest.TestCase):
                 {
                     "attempt_uuid": "tilt",
                     "physical_continuity_validator_passed": True,
+                    "runtime_simulating_body_count": 22,
                     "hold_duration_sec": 3.0,
                     "max_root_tilt_deg": 20.1,
                     "terminal_reason": 0
@@ -117,6 +120,7 @@ class StabilityLinkageTests(unittest.TestCase):
                 {
                     "attempt_uuid": "speed",
                     "physical_continuity_validator_passed": True,
+                    "runtime_simulating_body_count": 22,
                     "hold_duration_sec": 3.0,
                     "peak_angular_speed_deg_per_sec": 720.1,
                     "terminal_reason": 0
@@ -144,6 +148,7 @@ class StabilityLinkageTests(unittest.TestCase):
                 {
                     "attempt_uuid": "churn",
                     "physical_continuity_validator_passed": True,
+                    "runtime_simulating_body_count": 22,
                     "hold_duration_sec": 3.0,
                     "support_churn_hz": 12.1,
                     "terminal_reason": 0
@@ -171,6 +176,7 @@ class StabilityLinkageTests(unittest.TestCase):
                 {
                     "attempt_uuid": "drift",
                     "physical_continuity_validator_passed": True,
+                    "runtime_simulating_body_count": 22,
                     "hold_duration_sec": 3.0,
                     "proxy_outside_hull_duration_ms": 100.1,
                     "terminal_reason": 0
@@ -198,6 +204,7 @@ class StabilityLinkageTests(unittest.TestCase):
                 {
                     "attempt_uuid": "fail",
                     "physical_continuity_validator_passed": True,
+                    "runtime_simulating_body_count": 22,
                     "hold_duration_sec": 3.0,
                     "terminal_reason": 9 # activation_instability_threshold_breach
                 }
@@ -224,6 +231,7 @@ class StabilityLinkageTests(unittest.TestCase):
                 {
                     "attempt_uuid": "conflict",
                     "physical_continuity_validator_passed": True,
+                    "runtime_simulating_body_count": 22,
                     "hold_duration_sec": 3.0,
                     "authority_conflict_count": 1,
                     "terminal_reason": 0

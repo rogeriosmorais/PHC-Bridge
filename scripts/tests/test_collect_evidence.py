@@ -495,7 +495,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
                 20.0,
             )
             self._write_json(
-                saved_root / "PhysAnim" / "EvidenceSummaries" / "bad_summary.json",
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "bad_evidence_summary.json",
                 {
                     "attempt_uuid": "bad",
                     "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",

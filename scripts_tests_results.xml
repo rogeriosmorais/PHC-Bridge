@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="8" skipped="0" tests="25" time="1.252" timestamp="2026-06-14T09:18:32.161726-03:00" hostname="DESKTOP-79MP8GH"><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_active_segments_are_not_reported_as_next_blocker" time="0.055" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_attempt_uuid_filters_log_claims_to_matching_attempt" time="0.059" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_attempt_uuid_filters_to_matching_artifacts_and_blocker" time="0.063" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_attempt_uuid_missing_evidence_does_not_fall_back_to_global_latest" time="0.056" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_default_repo_root_uses_script_location" time="0.065" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_explicit_strict_verdict_line_is_a_failure_claim" time="0.055" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_incidental_log_words_do_not_create_contradictions" time="0.053" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_invalid_stability_metrics_are_reported_as_critical" time="0.050" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_latest_artifacts_are_selected_and_pass_log_is_marked_contradictory" time="0.049" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_missing_critical_stability_fields_are_reported_as_critical" time="0.087" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_missing_summary_is_explicit_and_never_passes" time="0.044" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_product_success_candidate_is_recognized_as_artifact_success" time="0.049" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_stability_metrics_are_extracted_and_reported" time="0.048" /><testcase classname="scripts.tests.test_collect_evidence.CollectEvidenceCLITests" name="test_terminal_proof_pass_log_is_weak_evidence_not_a_contradiction" time="0.053" /><testcase classname="scripts.tests.test_segment_evidence_row_contract.TestSegmentEvidenceRowContract" name="test_invalid_state" time="0.000" /><testcase classname="scripts.tests.test_segment_evidence_row_contract.TestSegmentEvidenceRowContract" name="test_missing_fields" time="0.000" /><testcase classname="scripts.tests.test_segment_evidence_row_contract.TestSegmentEvidenceRowContract" name="test_valid_row" time="0.000" /><testcase classname="scripts.tests.test_stability_linkage.StabilityLinkageTests" name="test_failure_due_to_authority_conflict" time="0.049"><failure message="AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- conflict_terminal.json | attempt_uuid=conflict | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=3.0\n- conflict_evidence_summary.json | attempt_uuid=conflict | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'">self = &lt;test_stability_linkage.StabilityLinkageTests testMethod=test_failure_due_to_authority_conflict&gt;
+
+    def test_failure_due_to_authority_conflict(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            saved_root = repo_root / "PhysAnimUE5" / "Saved"
+    
+            self._write_json(
+                saved_root / "PhysAnim" / "ProofArtifacts" / "conflict_terminal.json",
+                {
+                    "attempt_uuid": "conflict",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 3.0,
+                    "authority_conflict_count": 1,
+                    "terminal_reason": 0
+                }
+            )
+            self._write_json(
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "conflict_evidence_summary.json",
+                {
+                    "attempt_uuid": "conflict",
+                    "strict_verdict": "BLOCKED",
+                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
+                }
+            )
+    
+            result = self._run_cli(repo_root)
+&gt;           self.assertIn("Verdict\n- BLOCKED", result.stdout)
+E           AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- conflict_terminal.json | attempt_uuid=conflict | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=3.0\n- conflict_evidence_summary.json | attempt_uuid=conflict | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'
+
+scripts\tests\test_stability_linkage.py:242: AssertionError</failure></testcase><testcase classname="scripts.tests.test_stability_linkage.StabilityLinkageTests" name="test_failure_due_to_high_angular_speed" time="0.050"><failure message="AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- speed_terminal.json | attempt_uuid=speed | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=3.0\n- speed_evidence_summary.json | attempt_uuid=speed | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n- Peak Angular Speed=720.1\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'">self = &lt;test_stability_linkage.StabilityLinkageTests testMethod=test_failure_due_to_high_angular_speed&gt;
+
+    def test_failure_due_to_high_angular_speed(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            saved_root = repo_root / "PhysAnimUE5" / "Saved"
+    
+            self._write_json(
+                saved_root / "PhysAnim" / "ProofArtifacts" / "speed_terminal.json",
+                {
+                    "attempt_uuid": "speed",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 3.0,
+                    "peak_angular_speed_deg_per_sec": 720.1,
+                    "terminal_reason": 0
+                }
+            )
+            self._write_json(
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "speed_evidence_summary.json",
+                {
+                    "attempt_uuid": "speed",
+                    "strict_verdict": "BLOCKED",
+                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
+                }
+            )
+    
+            result = self._run_cli(repo_root)
+&gt;           self.assertIn("Verdict\n- BLOCKED", result.stdout)
+E           AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- speed_terminal.json | attempt_uuid=speed | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=3.0\n- speed_evidence_summary.json | attempt_uuid=speed | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n- Peak Angular Speed=720.1\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'
+
+scripts\tests\test_stability_linkage.py:135: AssertionError</failure></testcase><testcase classname="scripts.tests.test_stability_linkage.StabilityLinkageTests" name="test_failure_due_to_high_tilt" time="0.049"><failure message="AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- tilt_terminal.json | attempt_uuid=tilt | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=3.0\n- tilt_evidence_summary.json | attempt_uuid=tilt | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n- Max Root Tilt=20.1\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'">self = &lt;test_stability_linkage.StabilityLinkageTests testMethod=test_failure_due_to_high_tilt&gt;
+
+    def test_failure_due_to_high_tilt(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            saved_root = repo_root / "PhysAnimUE5" / "Saved"
+    
+            self._write_json(
+                saved_root / "PhysAnim" / "ProofArtifacts" / "tilt_terminal.json",
+                {
+                    "attempt_uuid": "tilt",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 3.0,
+                    "max_root_tilt_deg": 20.1,
+                    "terminal_reason": 0
+                }
+            )
+            self._write_json(
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "tilt_evidence_summary.json",
+                {
+                    "attempt_uuid": "tilt",
+                    "strict_verdict": "BLOCKED",
+                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
+                }
+            )
+    
+            result = self._run_cli(repo_root)
+&gt;           self.assertIn("Verdict\n- BLOCKED", result.stdout)
+E           AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- tilt_terminal.json | attempt_uuid=tilt | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=3.0\n- tilt_evidence_summary.json | attempt_uuid=tilt | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n- Max Root Tilt=20.1\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'
+
+scripts\tests\test_stability_linkage.py:108: AssertionError</failure></testcase><testcase classname="scripts.tests.test_stability_linkage.StabilityLinkageTests" name="test_failure_due_to_proxy_drift" time="0.050"><failure message="AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- drift_terminal.json | attempt_uuid=drift | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=3.0\n- drift_evidence_summary.json | attempt_uuid=drift | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n- Proxy Drift=100.1\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'">self = &lt;test_stability_linkage.StabilityLinkageTests testMethod=test_failure_due_to_proxy_drift&gt;
+
+    def test_failure_due_to_proxy_drift(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            saved_root = repo_root / "PhysAnimUE5" / "Saved"
+    
+            self._write_json(
+                saved_root / "PhysAnim" / "ProofArtifacts" / "drift_terminal.json",
+                {
+                    "attempt_uuid": "drift",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 3.0,
+                    "proxy_outside_hull_duration_ms": 100.1,
+                    "terminal_reason": 0
+                }
+            )
+            self._write_json(
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "drift_evidence_summary.json",
+                {
+                    "attempt_uuid": "drift",
+                    "strict_verdict": "BLOCKED",
+                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
+                }
+            )
+    
+            result = self._run_cli(repo_root)
+&gt;           self.assertIn("Verdict\n- BLOCKED", result.stdout)
+E           AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- drift_terminal.json | attempt_uuid=drift | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=3.0\n- drift_evidence_summary.json | attempt_uuid=drift | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n- Proxy Drift=100.1\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'
+
+scripts\tests\test_stability_linkage.py:189: AssertionError</failure></testcase><testcase classname="scripts.tests.test_stability_linkage.StabilityLinkageTests" name="test_failure_due_to_short_hold" time="0.052"><failure message="AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- short_terminal.json | attempt_uuid=short | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=2.9\n- short_evidence_summary.json | attempt_uuid=short | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=2.9\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'">self = &lt;test_stability_linkage.StabilityLinkageTests testMethod=test_failure_due_to_short_hold&gt;
+
+    def test_failure_due_to_short_hold(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            saved_root = repo_root / "PhysAnimUE5" / "Saved"
+    
+            self._write_json(
+                saved_root / "PhysAnim" / "ProofArtifacts" / "short_terminal.json",
+                {
+                    "attempt_uuid": "short",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 2.9,
+                    "terminal_reason": 0
+                }
+            )
+            self._write_json(
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "short_evidence_summary.json",
+                {
+                    "attempt_uuid": "short",
+                    "strict_verdict": "BLOCKED",
+                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
+                }
+            )
+    
+            result = self._run_cli(repo_root)
+&gt;           self.assertIn("Verdict\n- BLOCKED", result.stdout)
+E           AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- short_terminal.json | attempt_uuid=short | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=2.9\n- short_evidence_summary.json | attempt_uuid=short | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=2.9\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'
+
+scripts\tests\test_stability_linkage.py:80: AssertionError</failure></testcase><testcase classname="scripts.tests.test_stability_linkage.StabilityLinkageTests" name="test_failure_due_to_support_churn" time="0.049"><failure message="AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- churn_terminal.json | attempt_uuid=churn | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=3.0\n- churn_evidence_summary.json | attempt_uuid=churn | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n- Support Churn=12.1\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'">self = &lt;test_stability_linkage.StabilityLinkageTests testMethod=test_failure_due_to_support_churn&gt;
+
+    def test_failure_due_to_support_churn(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            saved_root = repo_root / "PhysAnimUE5" / "Saved"
+    
+            self._write_json(
+                saved_root / "PhysAnim" / "ProofArtifacts" / "churn_terminal.json",
+                {
+                    "attempt_uuid": "churn",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 3.0,
+                    "support_churn_hz": 12.1,
+                    "terminal_reason": 0
+                }
+            )
+            self._write_json(
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "churn_evidence_summary.json",
+                {
+                    "attempt_uuid": "churn",
+                    "strict_verdict": "BLOCKED",
+                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
+                }
+            )
+    
+            result = self._run_cli(repo_root)
+&gt;           self.assertIn("Verdict\n- BLOCKED", result.stdout)
+E           AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- churn_terminal.json | attempt_uuid=churn | physical_continuity_validator_passed=True | terminal_reason=0 | hold_duration_sec=3.0\n- churn_evidence_summary.json | attempt_uuid=churn | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n- Support Churn=12.1\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'
+
+scripts\tests\test_stability_linkage.py:162: AssertionError</failure></testcase><testcase classname="scripts.tests.test_stability_linkage.StabilityLinkageTests" name="test_failure_due_to_terminal_reason" time="0.049"><failure message="AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- fail_terminal.json | attempt_uuid=fail | physical_continuity_validator_passed=True | terminal_reason=9 | hold_duration_sec=3.0\n- fail_evidence_summary.json | attempt_uuid=fail | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'">self = &lt;test_stability_linkage.StabilityLinkageTests testMethod=test_failure_due_to_terminal_reason&gt;
+
+    def test_failure_due_to_terminal_reason(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            saved_root = repo_root / "PhysAnimUE5" / "Saved"
+    
+            self._write_json(
+                saved_root / "PhysAnim" / "ProofArtifacts" / "fail_terminal.json",
+                {
+                    "attempt_uuid": "fail",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 3.0,
+                    "terminal_reason": 9 # activation_instability_threshold_breach
+                }
+            )
+            self._write_json(
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "fail_evidence_summary.json",
+                {
+                    "attempt_uuid": "fail",
+                    "strict_verdict": "BLOCKED",
+                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
+                }
+            )
+    
+            result = self._run_cli(repo_root)
+&gt;           self.assertIn("Verdict\n- BLOCKED", result.stdout)
+E           AssertionError: 'Verdict\n- BLOCKED' not found in 'Actual Evidence\n- fail_terminal.json | attempt_uuid=fail | physical_continuity_validator_passed=True | terminal_reason=9 | hold_duration_sec=3.0\n- fail_evidence_summary.json | attempt_uuid=fail | strict_verdict=BLOCKED | quality_flags.terminal_failure=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n\nWeak Evidence\n- no log file found\n- summary strict verdict does not support product success\n- terminal artifact does not satisfy the success support check\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'
+
+scripts\tests\test_stability_linkage.py:215: AssertionError</failure></testcase><testcase classname="scripts.tests.test_stability_linkage.StabilityLinkageTests" name="test_success_with_perfect_metrics" time="0.056"><failure message="AssertionError: 'Verdict\n- PRODUCT SUCCESS' not found in 'Actual Evidence\n- success_terminal.json | attempt_uuid=success | physical_continuity_validator_passed=True | terminal_reason_name=None | terminal_reason=0 | hold_duration_sec=3.0\n- success_evidence_summary.json | attempt_uuid=success | strict_verdict=PRODUCT_SUCCESS_CANDIDATE | quality_flags.terminal_failure=False | quality_flags.artifact_log_contradiction=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n- Max Root Tilt=10.0\n- Peak Angular Speed=100.0\n- Support Churn=5.0\n- Proxy Drift=0.0\n- Terminal Reason=None\n\nWeak Evidence\n- no log file found\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'">self = &lt;test_stability_linkage.StabilityLinkageTests testMethod=test_success_with_perfect_metrics&gt;
+
+    def test_success_with_perfect_metrics(self) -&gt; None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            saved_root = repo_root / "PhysAnimUE5" / "Saved"
+    
+            self._write_json(
+                saved_root / "PhysAnim" / "ProofArtifacts" / "success_terminal.json",
+                {
+                    "attempt_uuid": "success",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 3.0,
+                    "max_root_tilt_deg": 10.0,
+                    "peak_angular_speed_deg_per_sec": 100.0,
+                    "support_churn_hz": 5.0,
+                    "proxy_outside_hull_duration_ms": 0.0,
+                    "terminal_reason": 0,
+                    "terminal_reason_name": "None"
+                }
+            )
+            self._write_json(
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "success_evidence_summary.json",
+                {
+                    "attempt_uuid": "success",
+                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                    "quality_flags": {
+                        "missing_evidence": False,
+                        "terminal_failure": False,
+                        "artifact_log_contradiction": False
+                    }
+                }
+            )
+    
+            result = self._run_cli(repo_root)
+&gt;           self.assertIn("Verdict\n- PRODUCT SUCCESS", result.stdout)
+E           AssertionError: 'Verdict\n- PRODUCT SUCCESS' not found in 'Actual Evidence\n- success_terminal.json | attempt_uuid=success | physical_continuity_validator_passed=True | terminal_reason_name=None | terminal_reason=0 | hold_duration_sec=3.0\n- success_evidence_summary.json | attempt_uuid=success | strict_verdict=PRODUCT_SUCCESS_CANDIDATE | quality_flags.terminal_failure=False | quality_flags.artifact_log_contradiction=False | quality_flags.missing_evidence=False\n\nStability Metrics\n- Hold Duration=3.0\n- Max Root Tilt=10.0\n- Peak Angular Speed=100.0\n- Support Churn=5.0\n- Proxy Drift=0.0\n- Terminal Reason=None\n\nWeak Evidence\n- no log file found\n\nContradictions\n- none\n\nMissing Evidence\n- stability field: runtime_simulating_body_count\n\nSegment Status\n- No segment data available.\nNo blocking segment identified.\n\nCRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.\n\nVerdict\n- MISSING EVIDENCE\n'
+
+scripts\tests\test_stability_linkage.py:54: AssertionError</failure></testcase></testsuite></testsuites>

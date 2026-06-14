@@ -378,6 +378,13 @@ struct FPhysAnimRunArtifactSnapshot
 	TArray<EPhysAnimTerminalReason> CoTerminalReasons;
 	int64 TerminalSubstepTimestamp = 0;
 	bool bTerminalFrameArtifactCaptured = false;
+
+	// Stage 2A Locomotion Telemetry
+	FString RootMode;
+	FString LocomotionIntent;
+	bool bPolicyOutputActive = false;
+	FVector CapsuleVelocity = FVector::ZeroVector;
+	double ShellDivergencePeak = 0.0;
 };
 
 struct FPhysAnimRunArtifactSnapshotInput

@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 
 namespace
 {
@@ -269,10 +270,7 @@ bool UPhysAnimComponent::CanEnterBridgeLocomotionGate(FString& OutReason) const
 	const auto Deny = [&](const TCHAR* Reason) -> bool
 	{
 		OutReason = Reason;
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("[PhysAnimLocomotion] LOCOMOTION_GATE_DENIED reason=%s runtimeState=%s proofComplete=%d proofSatisfied=%d terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f intentAge=%.2f intentThreshold=%.2f"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimLocomotion] LOCOMOTION_GATE_DENIED reason=%s runtimeState=%s proofComplete=%d proofSatisfied=%d terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f intentAge=%.2f intentThreshold=%.2f"),
 			*OutReason,
 			GetRuntimeStateName(RuntimeState),
 			bLiveRuntimeEvidenceProofComplete ? 1 : 0,
@@ -371,10 +369,7 @@ bool UPhysAnimComponent::CanEnterBridgeLocomotionGate(FString& OutReason) const
 	}
 
 	OutReason = TEXT("standing_active intent_stable");
-	UE_LOG(
-		LogPhysAnimBridge,
-		Warning,
-		TEXT("[PhysAnimLocomotion] LOCOMOTION_GATE_ALLOWED reason=%s runtimeState=%s proofComplete=%d proofSatisfied=%d terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f intentAge=%.2f intentThreshold=%.2f"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimLocomotion] LOCOMOTION_GATE_ALLOWED reason=%s runtimeState=%s proofComplete=%d proofSatisfied=%d terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f intentAge=%.2f intentThreshold=%.2f"),
 		*OutReason,
 		GetRuntimeStateName(RuntimeState),
 		1,
@@ -607,10 +602,7 @@ void UPhysAnimComponent::UpdateBridgeLocomotionHandoffPreflightState(double Curr
 	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
 	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = ActivatedStandingStabilityMetrics;
 	const TCHAR* const StateLabel = bPassed ? TEXT("LOCOMOTION_HANDOFF_PREFLIGHT_PASSED") : TEXT("LOCOMOTION_HANDOFF_PREFLIGHT_DENIED");
-	UE_LOG(
-		LogPhysAnimBridge,
-		Warning,
-		TEXT("[PhysAnimLocomotion] %s reason=%s runtimeState=%s requestState=%s requestReason=%s handoffState=%s proofComplete=%d proofSatisfied=%d terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d standingAuthority=%d bridgeOwnsPhysics=%d metricsSamples=%d"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimLocomotion] %s reason=%s runtimeState=%s requestState=%s requestReason=%s handoffState=%s proofComplete=%d proofSatisfied=%d terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d standingAuthority=%d bridgeOwnsPhysics=%d metricsSamples=%d"),
 		StateLabel,
 		*BridgeLocomotionHandoffPreflightReason,
 		GetRuntimeStateName(RuntimeState),
@@ -666,10 +658,7 @@ void UPhysAnimComponent::UpdateBridgeLocomotionHandoffCommitState(double Current
 		const FPhysAnimActivatedStandingStabilityMetrics& Metrics = ActivatedStandingStabilityMetrics;
 		if (NewState == EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitted)
 		{
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnimLocomotion] LOCOMOTION_HANDOFF_COMMITTED reason=%s runtimeState=%s requestState=%s preflightState=%s requestReason=%s preflightReason=%s terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d standingAuthority=%d bridgeOwnsPhysics=%d intentMagnitude=%.2f intentAge=%.2f metricsSamples=%d"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimLocomotion] LOCOMOTION_HANDOFF_COMMITTED reason=%s runtimeState=%s requestState=%s preflightState=%s requestReason=%s preflightReason=%s terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d standingAuthority=%d bridgeOwnsPhysics=%d intentMagnitude=%.2f intentAge=%.2f metricsSamples=%d"),
 				*BridgeLocomotionHandoffCommitReason,
 				GetRuntimeStateName(RuntimeState),
 				GetLocomotionRequestStateName(BridgeLocomotionRequestState),
@@ -690,10 +679,7 @@ void UPhysAnimComponent::UpdateBridgeLocomotionHandoffCommitState(double Current
 		}
 		else if (NewState == EBridgeLocomotionHandoffCommitState::LocomotionHandoffCommitDenied)
 		{
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnimLocomotion] LOCOMOTION_HANDOFF_COMMIT_DENIED reason=%s runtimeState=%s requestState=%s preflightState=%s requestReason=%s preflightReason=%s terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d standingAuthority=%d bridgeOwnsPhysics=%d intentMagnitude=%.2f intentAge=%.2f metricsSamples=%d"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimLocomotion] LOCOMOTION_HANDOFF_COMMIT_DENIED reason=%s runtimeState=%s requestState=%s preflightState=%s requestReason=%s preflightReason=%s terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d standingAuthority=%d bridgeOwnsPhysics=%d intentMagnitude=%.2f intentAge=%.2f metricsSamples=%d"),
 				*BridgeLocomotionHandoffCommitReason,
 				GetRuntimeStateName(RuntimeState),
 				GetLocomotionRequestStateName(BridgeLocomotionRequestState),
@@ -854,10 +840,7 @@ void UPhysAnimComponent::UpdateBridgeLocomotionActiveShellState(double CurrentTi
 	const FPhysAnimRuntimeTerminationState& TerminationState = LiveRuntimeEvidenceTerminationState;
 	const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
 	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = ActivatedStandingStabilityMetrics;
-	UE_LOG(
-		LogPhysAnimBridge,
-		Warning,
-		TEXT("[PhysAnimLocomotion] %s reason=%s runtimeState=%s requestState=%s preflightState=%s commitState=%s requestReason=%s preflightReason=%s commitReason=%s terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d standingAuthority=%d bridgeOwnsPhysics=%d intentMagnitude=%.2f intentAge=%.2f metricsSamples=%d"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimLocomotion] %s reason=%s runtimeState=%s requestState=%s preflightState=%s commitState=%s requestReason=%s preflightReason=%s commitReason=%s terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d standingAuthority=%d bridgeOwnsPhysics=%d intentMagnitude=%.2f intentAge=%.2f metricsSamples=%d"),
 		bEntered ? TEXT("LOCOMOTION_ACTIVE_SHELL_ENTERED") : TEXT("LOCOMOTION_ACTIVE_SHELL_DENIED"),
 		*BridgeLocomotionActiveShellReason,
 		GetRuntimeStateName(RuntimeState),
@@ -911,10 +894,7 @@ void UPhysAnimComponent::UpdateBridgeLocomotionRequestState(double CurrentTimeSe
 		const FPhysAnimRunArtifactSnapshot& Latest = TerminationState.LatestArtifact;
 		const FPhysAnimActivatedStandingStabilityMetrics& Metrics = ActivatedStandingStabilityMetrics;
 		const TCHAR* const StateLabel = bAllowed ? TEXT("LOCOMOTION_REQUESTED") : TEXT("LOCOMOTION_REQUEST_DENIED");
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("[PhysAnimLocomotion] %s reason=%s runtimeState=%s requestState=%s proofComplete=%d proofSatisfied=%d terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d intentMagnitude=%.2f intentAge=%.2f metricsSamples=%d"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimLocomotion] %s reason=%s runtimeState=%s requestState=%s proofComplete=%d proofSatisfied=%d terminalReason=%d supportMode=%d supportHull=%.2f activeSides=%.0f capsuleValid=%d continuityValid=%d intentMagnitude=%.2f intentAge=%.2f metricsSamples=%d"),
 			StateLabel,
 			*BridgeLocomotionRequestReason,
 			GetRuntimeStateName(RuntimeState),
@@ -1151,10 +1131,7 @@ void UPhysAnimComponent::ApplyBridgeOwnedMovementDrive(float DeltaTime, const FP
 	{
 		if (LastBridgeOwnedMovementLogTimeSeconds < 0.0 || (CurrentTimeSeconds - LastBridgeOwnedMovementLogTimeSeconds) >= 1.0)
 		{
-			UE_LOG(
-				LogPhysAnimBridge,
-				Log,
-				TEXT("[PhysAnim] Bridge shell authority applying intent: world=(%.2f,%.2f) desiredSpeedCmPerSec=%.1f acceptedSpeedCmPerSec=%.1f"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Bridge shell authority applying intent: world=(%.2f,%.2f) desiredSpeedCmPerSec=%.1f acceptedSpeedCmPerSec=%.1f"),
 				BridgeIntentState.WorldMoveDirection.X,
 				BridgeIntentState.WorldMoveDirection.Y,
 				BridgeIntentState.DesiredSpeedCmPerSecond,
@@ -1164,7 +1141,7 @@ void UPhysAnimComponent::ApplyBridgeOwnedMovementDrive(float DeltaTime, const FP
 	}
 	else if (LastBridgeOwnedMovementNoInputLogTimeSeconds < 0.0 || (CurrentTimeSeconds - LastBridgeOwnedMovementNoInputLogTimeSeconds) >= 2.0)
 	{
-		UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnim] Bridge shell authority idle with CharacterMovement suppressed."));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Verbose, 1.0f, TEXT("[PhysAnim] Bridge shell authority idle with CharacterMovement suppressed."));
 		LastBridgeOwnedMovementNoInputLogTimeSeconds = CurrentTimeSeconds;
 	}
 }
@@ -1591,10 +1568,7 @@ bool UPhysAnimComponent::QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprin
 		const FRotator ActorRotation = GetOwner() ? GetOwner()->GetActorRotation() : FRotator::ZeroRotator;
 		const FVector WorldIntent = BridgeIntentState.WorldMoveDirection * BridgeIntentState.IntentMagnitude;
 		const FVector LocalIntent = BridgeIntentState.LocalMoveDirection * BridgeIntentState.IntentMagnitude;
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] Bridge predictor search selected '%s' from locomotion intent: local=(%.2f,%.2f) world=(%.2f,%.2f) actualSpeedCmPerSec=%.1f querySpeedCmPerSec=%.1f"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Bridge predictor search selected '%s' from locomotion intent: local=(%.2f,%.2f) world=(%.2f,%.2f) actualSpeedCmPerSec=%.1f querySpeedCmPerSec=%.1f"),
 			OutSearchResult.SelectedAnim ? *OutSearchResult.SelectedAnim->GetName() : TEXT("None"),
 			LocalIntent.X,
 			LocalIntent.Y,
@@ -1704,5 +1678,30 @@ float UPhysAnimComponent::GetMovementSmokeDurationSeconds()
 float UPhysAnimComponent::GetMovementSmokeTotalDurationSeconds(int32 NumLoops)
 {
 	return GetMovementSmokeDurationSeconds() * FMath::Max(NumLoops, 1);
+}
+
+FString UPhysAnimComponent::ResolveBridgeLocomotionIntentName() const
+{
+	if (!BridgeIntentState.ActiveIntent.IsEmpty())
+	{
+		return BridgeIntentState.ActiveIntent;
+	}
+
+	if (Stage2ALocomotionRequestState != EBridgeLocomotionRequestState::LocomotionRequested)
+	{
+		return TEXT("Stop");
+	}
+
+	if (bStage2AWalkIntentActive)
+	{
+		return TEXT("Walk");
+	}
+
+	if (FMath::Abs(Stage2ALastTurnYawDeltaDegrees) > KINDA_SMALL_NUMBER)
+	{
+		return TEXT("Turn");
+	}
+
+	return TEXT("Stop");
 }
 

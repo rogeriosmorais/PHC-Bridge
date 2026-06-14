@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="4" failures="0" skipped="0" tests="4" time="0.141" timestamp="2026-06-14T09:18:32.161726-03:00" hostname="DESKTOP-79MP8GH"><testcase classname="" name="Training.tests.test_base_simulator_compat" time="0.000"><error message="collection failure">ImportError while importing test module 'F:\NewEngine-AgentB\Training\tests\test_base_simulator_compat.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Python39\lib\importlib\__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+Training\tests\test_base_simulator_compat.py:3: in &lt;module&gt;
+    from protomotions.simulator.base_simulator.compat import load_image_sequence_clip
+E   ModuleNotFoundError: No module named 'protomotions'</error></testcase><testcase classname="" name="Training.tests.test_isaaclab_compat" time="0.000"><error message="collection failure">ImportError while importing test module 'F:\NewEngine-AgentB\Training\tests\test_isaaclab_compat.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Python39\lib\importlib\__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+Training\tests\test_isaaclab_compat.py:3: in &lt;module&gt;
+    from protomotions.simulator.isaaclab.compat import (
+E   ModuleNotFoundError: No module named 'protomotions'</error></testcase><testcase classname="" name="Training.tests.test_onnx_export" time="0.000"><error message="collection failure">ImportError while importing test module 'F:\NewEngine-AgentB\Training\tests\test_onnx_export.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Python39\lib\importlib\__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+Training\tests\test_onnx_export.py:8: in &lt;module&gt;
+    import numpy as np
+E   ModuleNotFoundError: No module named 'numpy'</error></testcase><testcase classname="" name="Training.tests.test_retarget" time="0.000"><error message="collection failure">ImportError while importing test module 'F:\NewEngine-AgentB\Training\tests\test_retarget.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Python39\lib\importlib\__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+Training\tests\test_retarget.py:8: in &lt;module&gt;
+    import numpy as np
+E   ModuleNotFoundError: No module named 'numpy'</error></testcase></testsuite></testsuites>

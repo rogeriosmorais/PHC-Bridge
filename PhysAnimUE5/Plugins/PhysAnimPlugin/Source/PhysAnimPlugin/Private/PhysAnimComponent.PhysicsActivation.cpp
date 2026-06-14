@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 
 bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 	const FPhysAnimStabilizationSettings& EffectiveSettings,
@@ -105,7 +106,7 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 		bLiveRuntimeEvidenceProofComplete = false;
 		bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
 		LiveRuntimeEvidenceAttemptUuid.Empty();
-		LiveRuntimeEvidenceSTANDINGSeconds = 0.0f;
+		LiveRuntimeEvidenceStandingSeconds = 0.0f;
 		LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
 		LiveRuntimeEvidenceSubstepCounter = 0;
 		LiveRuntimeEvidenceTerminationState = FPhysAnimRuntimeTerminationState();

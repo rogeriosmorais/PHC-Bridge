@@ -48,19 +48,9 @@
 #include "Misc/DateTime.h"
 #include "Misc/Paths.h"
 
-DECLARE_LOG_CATEGORY_EXTERN(LogPhysAnimBridge, Log, All);
+#include "PhysAnimLogger.h"
 
-/** Rate-limited logging macro using a static local for throttle control. */
-#define PHYSANIM_LOG_RATE_LIMITED(CategoryName, Verbosity, Interval, Format, ...) \
-{ \
-	static double LastLogTime = -1.0; \
-	const double CurrentTime = FPlatformTime::Seconds(); \
-	if (CurrentTime - LastLogTime >= (Interval)) \
-	{ \
-		UE_LOG(CategoryName, Verbosity, Format, ##__VA_ARGS__); \
-		LastLogTime = CurrentTime; \
-	} \
-}
+DECLARE_LOG_CATEGORY_EXTERN(LogPhysAnimBridge, Log, All);
 
 TRACE_DECLARE_FLOAT_COUNTER_EXTERN(COUNTER_PhysAnim_PoseSearchQueryMs);
 TRACE_DECLARE_FLOAT_COUNTER_EXTERN(COUNTER_PhysAnim_FuturePoseSampleMs);

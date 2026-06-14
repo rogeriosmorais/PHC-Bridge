@@ -1,4 +1,5 @@
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "PhysAnimLogger.h"
 
 namespace
 {
@@ -226,7 +227,7 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 	// Rule: Shell offset hard-fail even during grace.
 	if (bOffsetBreached)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_MATERIAL_SHELL_CORRECTION_AUDIT breach=offset tick=%d offset=%.2f threshold=%.2f kineticTicks=%d"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE3_MATERIAL_SHELL_CORRECTION_AUDIT breach=offset tick=%d offset=%.2f threshold=%.2f kineticTicks=%d"),
 			Phase3TickCount, ShellPlanarOffsetCm, MaxAllowedShellOffsetCm, KineticGateReleaseTickCount);
 		return true;
 	}
@@ -264,7 +265,7 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 
 		if (bLateCarryThroughAllowed)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_LATE_GATE_BOUNCE frame=%d tick=%d shellVel=%.2f lastShellVel=%.2f rootAng=%.2f lastRootAng=%.2f"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE3_LATE_GATE_BOUNCE frame=%d tick=%d shellVel=%.2f lastShellVel=%.2f rootAng=%.2f lastRootAng=%.2f"),
 				static_cast<int32>(GFrameCounter),
 				Phase3TickCount,
 				ShellPlanarVelocityCmPerSec,
@@ -280,7 +281,7 @@ bool FPhysAnimBalanceReadyTransition::IsMaterialPhase3ShellCorrectionActive(
 
 	if (bVelocityBreached)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_MATERIAL_SHELL_CORRECTION_AUDIT breach=velocity tick=%d vel=%.2f threshold=%.2f kineticTicks=%d"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE3_MATERIAL_SHELL_CORRECTION_AUDIT breach=velocity tick=%d vel=%.2f threshold=%.2f kineticTicks=%d"),
 			Phase3TickCount, ShellPlanarVelocityCmPerSec, MaxAllowedShellVelocityCmPerSec, KineticGateReleaseTickCount);
 	}
 
@@ -421,7 +422,7 @@ bool FPhysAnimBalanceReadyTransition::IsPhase3EarlySettleInstabilityGraceActive(
 	
 	if (!bResult && GVerbosePhase2Forensics != 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_GRACE_REJECT tick=%d kineticTick=%d rootLin=%d rootAng=%d nonRoot=%d shellVel=%d"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE3_GRACE_REJECT tick=%d kineticTick=%d rootLin=%d rootAng=%d nonRoot=%d shellVel=%d"),
 			Phase3TickCount,
 			KineticGateReleaseTickCount,
 			bRootLinearWithinBudget ? 1 : 0,
@@ -745,10 +746,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 			const bool bModifierMismatch = PelvisRecord->BodyModifier.ModifierData.MovementType != EPhysicsMovementType::Simulated;
 			if (bModifierMismatch && GVerbosePhase2Forensics != 0)
 			{
-				UE_LOG(
-					LogPhysAnimBridge,
-					Warning,
-					TEXT("[PhysAnimBalance] PHASE3_ROOT_MODIFIER_DIAGNOSTIC frame=%d rootRawSim=1 pelvisModifierName=%s simCountPost=%d"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE3_ROOT_MODIFIER_DIAGNOSTIC frame=%d rootRawSim=1 pelvisModifierName=%s simCountPost=%d"),
 					static_cast<int32>(GFrameCounter),
 					UPhysAnimComponent::GetPhysicsMovementTypeName(PelvisRecord->BodyModifier.ModifierData.MovementType),
 					Diagnostics.SimCountPost);
@@ -842,7 +840,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase3Continuity(class UPhysAnimCo
 	Diagnostics.Phase3CurrentShellVelocity = Owner->GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 	Diagnostics.Phase3CurrentRootAngularSpeed = PelvisAngularSpeed;
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE3_BURST_AUDIT frame=%d tick=%d kineticTick=%d rootLin=%.2f rootAng=%.2f nonRootMaxAng=%.2f nonRootMaxBone=%s shellVel=%.2f shellOffset=%.2f"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE3_BURST_AUDIT frame=%d tick=%d kineticTick=%d rootLin=%.2f rootAng=%.2f nonRootMaxAng=%.2f nonRootMaxBone=%s shellVel=%.2f shellOffset=%.2f"),
 		static_cast<int32>(GFrameCounter),
 		Phase3GuardTickCount,
 		Phase3KineticGateReleaseTickCount,

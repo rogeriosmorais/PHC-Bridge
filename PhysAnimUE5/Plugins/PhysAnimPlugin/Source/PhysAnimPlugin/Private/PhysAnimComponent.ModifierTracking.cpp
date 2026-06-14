@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 
 void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 {
@@ -249,7 +250,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return FVector(OwnerVelocity.X, OwnerVelocity.Y, 0.0f).Size();
 	}();
 
-	const bool bIsPhase1PolicyLoopSuppressed = bPhase1Prepare || bPhase1LateValidate;
+	const bool bIsPhase1PolicyLoopSuppressed = (bPhase1Prepare || bPhase1LateValidate) && !bEnableLiveRuntimeEvidenceProof;
 	bool bSuppressPostShellPolicy = false;
 
 	const float TargetWriteDeltaTime =
@@ -336,8 +337,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (bApplyNewPolicyStepThisTick)
 	{
-		// Phase 1 Transition Rule: No normal policy writes during Prepare/LateValidate.
-		// Only explicit held-pose targets may be published for kinematic bones in these states.
+		// Phase 1 Transition Rule: Normally no normal policy writes during Prepare/LateValidate.
+		// HOWEVER, if bEnableLiveRuntimeEvidenceProof is active, we ALLOW these writes to provide 
+		// authentic telemetry of the policy's intent during the validation hold.
 
 
 		bool bPolicyTargetsAppliedThisTick = true;
@@ -399,7 +401,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 			if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
 			{
-				UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] %s_POST_SHELL_POLICY_SUPPRESSED frame=%d tick=%d normalWrites=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] %s_POST_SHELL_POLICY_SUPPRESSED frame=%d tick=%d normalWrites=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
 					SuppressionPhaseStr,
 					static_cast<int32>(GFrameNumber),
 					SuppressionTick,

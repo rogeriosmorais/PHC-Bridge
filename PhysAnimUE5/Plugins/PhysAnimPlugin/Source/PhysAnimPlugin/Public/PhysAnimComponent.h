@@ -1276,24 +1276,6 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	float ThighLinearStrengthAtWindowEntry = -1.f;
 
-	/** Clears attempt-level metrics while preserving architectural session status (model loaded, counts, etc.) */
-	void ResetForNewAttempt()
-	{
-		const bool bWasModelLoaded = bPolicyModelLoaded;
-		const FString PersistentRuntimeName = PolicyRuntimeName;
-		const FString PersistentModelName = PolicyModelName;
-		const bool bWasPhysicsControlAvailable = bPhysicsControlComponentAvailable;
-		const int32 PersistentControlledBodyCount = ControlledBodyCount;
-
-		*this = FPhysAnimActivatedStandingStabilityMetrics();
-
-		bPolicyModelLoaded = bWasModelLoaded;
-		PolicyRuntimeName = PersistentRuntimeName;
-		PolicyModelName = PersistentModelName;
-		bPhysicsControlComponentAvailable = bWasPhysicsControlAvailable;
-		ControlledBodyCount = PersistentControlledBodyCount;
-	}
-	};
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 PoseTargetsSeededAtWindowEntry = -1; // -1=not yet sampled, 0=not seeded, 1=seeded
 
@@ -1320,7 +1302,6 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 
 	// Kinetic gate release snapshot (AC-6 corrected measurement).
 	// Captures pelvis/spine angular velocity on the exact frame the kinetic gate first releases.
-	// Sign of pelvisAngVelDeltaAtGateRelease answers: does thigh restore ADD or REMOVE energy?
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double PelvisAngVelAtGateRelease = -1.0; // deg/s at gate release frame (-1 = gate never released)
 
@@ -1338,6 +1319,24 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 SampleCount = 0;
+
+	/** Clears attempt-level metrics while preserving architectural session status (model loaded, counts, etc.) */
+	void ResetForNewAttempt()
+	{
+		const bool bWasModelLoaded = bPolicyModelLoaded;
+		const FString PersistentRuntimeName = PolicyRuntimeName;
+		const FString PersistentModelName = PolicyModelName;
+		const bool bWasPhysicsControlAvailable = bPhysicsControlComponentAvailable;
+		const int32 PersistentControlledBodyCount = ControlledBodyCount;
+
+		*this = FPhysAnimActivatedStandingStabilityMetrics();
+
+		bPolicyModelLoaded = bWasModelLoaded;
+		PolicyRuntimeName = PersistentRuntimeName;
+		PolicyModelName = PersistentModelName;
+		bPhysicsControlComponentAvailable = bWasPhysicsControlAvailable;
+		ControlledBodyCount = PersistentControlledBodyCount;
+	}
 };
 
 class UPhysAnimStage1InitializerComponent;
@@ -2198,7 +2197,21 @@ private:
 	void UpdateBridgeLocomotionHandoffPreflightState(double CurrentTimeSeconds);
 	void UpdateBridgeLocomotionHandoffCommitState(double CurrentTimeSeconds);
 	void UpdateBridgeLocomotionActiveShellState(double CurrentTimeSeconds);
+
+	void TickRuntimeStateMachine(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void ProcessPendingDistalOwnershipChecks();
+	void UpdateStartupMovementLockState(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	void HandleInitialPoseSearchWait(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError, FPoseSearchBlueprintResult& OutSearchResult);
+	void HandleBridgeActivation(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
+	void TickPolicyAndUpdateMetrics(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
 	void ResetBridgeLocomotionActiveShellState();
+	FString ResolveBridgeLocomotionIntentName() const;
+
+	static FPhysAnimRuntimeTerminationPipelineResult BuildProofFailureFailStopRoutingResult(
+		const FPhysAnimRuntimeTerminationState& PreviousState,
+		const FPhysAnimRunArtifactSnapshot& Artifact,
+		const EPhysAnimTerminalReason TerminalReason,
+		const int64 TerminalSubstepTimestamp);
 	void RecoverBridgeActiveStateAfterBalanceTransitionFailure(const FString& FailureReason);
 	void PublishBalanceTransitionFailureReason(const FString& FailureReason);
 	void ClearPublishedBalanceTransitionFailureReason();

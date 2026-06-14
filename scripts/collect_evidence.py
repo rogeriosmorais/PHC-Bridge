@@ -160,10 +160,30 @@ def summarize_stability_metrics(terminal: Dict[str, Any]) -> List[str]:
         ("Proxy Drift", "proxy_outside_hull_duration_ms"),
         ("Terminal Reason", "terminal_reason_name"),
     ]
+    
+    # Stage 2A Locomotion Telemetry
+    stage2a_metrics = [
+        ("Root Mode", "root_mode"),
+        ("Locomotion Intent", "locomotion_intent"),
+        ("Policy Output Active", "policy_output_active"),
+        ("Shell Divergence Peak", "shell_divergence_peak"),
+    ]
+
     lines = []
     for label, key in metrics:
         if key in terminal:
             lines.append(f"{label}={terminal.get(key)}")
+            
+    for label, key in stage2a_metrics:
+        if key in terminal:
+            lines.append(f"{label}={terminal.get(key)}")
+            
+    if "capsule_velocity_x" in terminal:
+        vx = get_float(terminal, "capsule_velocity_x")
+        vy = get_float(terminal, "capsule_velocity_y")
+        vz = get_float(terminal, "capsule_velocity_z")
+        lines.append(f"Capsule Velocity=({vx}, {vy}, {vz})")
+        
     return lines
 
 
@@ -253,6 +273,16 @@ def summary_supports_success(summary: Optional[Dict[str, Any]]) -> bool:
     return True
 
 
+def get_float(data: dict, key: str, default: float = 0.0) -> float:
+    val = data.get(key)
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
 def terminal_supports_success(terminal: Optional[Dict[str, Any]]) -> bool:
     if not terminal:
         return False
@@ -273,23 +303,23 @@ def terminal_supports_success(terminal: Optional[Dict[str, Any]]) -> bool:
 
     # 3. Stability Metrics (Authoritative Stage 1 Thresholds)
     # Hold Duration (Min 3.0s)
-    if float(terminal.get("hold_duration_sec", 0.0)) < 3.0:
+    if get_float(terminal, "hold_duration_sec", 0.0) < 3.0:
         return False
 
     # Max Root Tilt (Max 20.0 deg)
-    if float(terminal.get("max_root_tilt_deg", 0.0)) > 20.0:
+    if get_float(terminal, "max_root_tilt_deg", 0.0) > 20.0:
         return False
 
     # Peak Angular Speed (Max 720.0 deg/s)
-    if float(terminal.get("peak_angular_speed_deg_per_sec", 0.0)) > 720.0:
+    if get_float(terminal, "peak_angular_speed_deg_per_sec", 0.0) > 720.0:
         return False
 
     # Support Churn (Max 12.0 Hz)
-    if float(terminal.get("support_churn_hz", 0.0)) > 12.0:
+    if get_float(terminal, "support_churn_hz", 0.0) > 12.0:
         return False
 
     # Proxy Drift (Max 100.0 ms)
-    if float(terminal.get("proxy_outside_hull_duration_ms", 0.0)) > 100.0:
+    if get_float(terminal, "proxy_outside_hull_duration_ms", 0.0) > 100.0:
         return False
 
     # 4. Authority & Assistance

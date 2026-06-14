@@ -1,6 +1,30 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 
+EPhysAnimBridgeTraceOutputMode UPhysAnimComponent::ResolveBridgeTraceOutputMode() const
+{
+	const int32 OverrideMode = PhysAnimComponentInternal::CVarPhysAnimTraceOutput.GetValueOnGameThread();
+	if (OverrideMode >= 0)
+	{
+		switch (OverrideMode)
+		{
+		case 1:
+			return EPhysAnimBridgeTraceOutputMode::MetadataAndEvents;
+		case 2:
+			return EPhysAnimBridgeTraceOutputMode::Full;
+		default:
+			return EPhysAnimBridgeTraceOutputMode::Off;
+		}
+	}
+
+	if (!bEnableBridgeTraceOutput)
+	{
+		return EPhysAnimBridgeTraceOutputMode::Off;
+	}
+
+	return BridgeTraceOutputMode;
+}
+
 void UPhysAnimComponent::StartBridgeTraceSession()
 {
 	BridgeTraceWriter.Reset();

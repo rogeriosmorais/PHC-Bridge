@@ -1,6 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimStage1InitializerComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 #include "PhysAnimProofArtifactEmitter.h"
 #include "PhysAnimRuntimeAdapter.h"
 #include "Components/CapsuleComponent.h"
@@ -213,20 +214,20 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 {
 	if (!bEnableLiveRuntimeEvidenceProof)
 	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] ENTRY_ALLOWED reason=PROOF_DISABLED_BYPASS"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] ENTRY_ALLOWED reason=PROOF_DISABLED_BYPASS"));
 		return true;
 	}
 
 	if (!bLiveRuntimeEvidenceProofComplete)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_NOT_COMPLETE"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_NOT_COMPLETE"));
 		return false;
 	}
 
 	if (LiveRuntimeEvidenceTerminationState.bTerminated &&
 		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=TERMINATED_IN_PROOF terminal_reason=%d"), 
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=TERMINATED_IN_PROOF terminal_reason=%d"), 
 			static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
 		return false;
 	}
@@ -1872,6 +1873,13 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.RuntimeMaxBodyAngularSpeedDegPerSecond = ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond;
 	Input.Values.bPhysicalPerturbationApplied = ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied;
 	Input.Values.PerturbationMeasuredDeltaVCmPerSecond = ActivatedStandingStabilityMetrics.PerturbationMeasuredDeltaVCmPerSecond;
+
+	// Stage 2A Locomotion Telemetry
+	Input.Values.RootMode = TEXT("Stage1_KinematicRoot");
+	Input.Values.LocomotionIntent = ResolveBridgeLocomotionIntentName();
+	Input.Values.bPolicyOutputActive = IsStage2APolicyOutputActive();
+	Input.Values.CapsuleVelocity = Character ? Character->GetVelocity() : FVector::ZeroVector;
+	Input.Values.ShellDivergencePeak = ActivatedStandingStabilityMetrics.RendererFacingMotionMaxRootWorldPositionDriftCm;
 
 	Input.ControllerStability.HoldDurationSec = LiveRuntimeEvidenceStandingSeconds;
 	Input.ControllerStability.bControllerStabilityPassed = true;

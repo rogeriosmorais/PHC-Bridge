@@ -463,6 +463,15 @@ namespace
 		Json->SetNumberField(TEXT("terminal_substep_timestamp"), static_cast<double>(Artifact.TerminalSubstepTimestamp));
 		Json->SetBoolField(TEXT("terminal_frame_artifact_captured"), Artifact.bTerminalFrameArtifactCaptured);
 
+		// Stage 2A Locomotion Telemetry
+		Json->SetStringField(TEXT("root_mode"), Artifact.RootMode);
+		Json->SetStringField(TEXT("locomotion_intent"), Artifact.LocomotionIntent);
+		Json->SetBoolField(TEXT("policy_output_active"), Artifact.bPolicyOutputActive);
+		Json->SetNumberField(TEXT("capsule_velocity_x"), Artifact.CapsuleVelocity.X);
+		Json->SetNumberField(TEXT("capsule_velocity_y"), Artifact.CapsuleVelocity.Y);
+		Json->SetNumberField(TEXT("capsule_velocity_z"), Artifact.CapsuleVelocity.Z);
+		Json->SetNumberField(TEXT("shell_divergence_peak"), Artifact.ShellDivergencePeak);
+
 		return Json;
 	}
 }
