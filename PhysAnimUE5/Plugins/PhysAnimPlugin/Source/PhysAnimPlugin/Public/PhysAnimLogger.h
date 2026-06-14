@@ -51,3 +51,7 @@ private:
 		FString __LogMsg = FString::Printf(Format, ##__VA_ARGS__); \
 		FPhysAnimLogger::LogRateLimited(CategoryName.GetCategoryName(), ELogVerbosity::Verbosity, __FILE__, __LINE__, TimeLimit, __LogMsg); \
 	}
+
+// Macro for standard logging through the wrapper (no rate limiting).
+#define PHYSANIM_LOG(CategoryName, Verbosity, Format, ...) \
+	PHYSANIM_LOG_RATE_LIMITED(CategoryName, Verbosity, 0.0f, Format, ##__VA_ARGS__)

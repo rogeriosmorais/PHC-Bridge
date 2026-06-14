@@ -2,6 +2,7 @@
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimEvidenceClassifier.h"
 #include "PhysAnimEvidenceSummary.h"
+#include "PhysAnimLogger.h"
 
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
@@ -536,7 +537,7 @@ namespace PhysAnimProofArtifactEmitter
 
 	void LogAttemptStart(const FString& AttemptUuid)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("PhysAnimProof: AttemptStart uuid=%s"), *AttemptUuid);
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("PhysAnimProof: AttemptStart uuid=%s"), *AttemptUuid);
 	}
 
 	void LogRuntimeEvidence(
@@ -545,9 +546,10 @@ namespace PhysAnimProofArtifactEmitter
 		const int32 MappedSupportHitCount,
 		const FPhysAnimRunArtifactSnapshot& Artifact)
 	{
-		UE_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Verbose,
+			1.0f,
 			TEXT("PhysAnimProof: RuntimeEvidence uuid=%s hits=%d mapped=%d support_mode=%s active_sides=%d hull_area=%.3f inference=%d action_samples=%d action_abs=%.3f control_samples=%d control_writes=%d control_delta=%.3f sim_bodies=%d max_body_lin=%.3f max_body_ang=%.3f"),
 			*AttemptUuid,
 			RuntimeHitCount,
@@ -574,9 +576,10 @@ namespace PhysAnimProofArtifactEmitter
 		const int32 MappedSupportHitCount,
 		const FPhysAnimRunArtifactSnapshot& Artifact)
 	{
-		UE_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Warning,
+			1.0f,
 			TEXT("PhysAnimProof: StandingProgress uuid=%s t=%.3f terminal_reason=%s hits=%d mapped=%d support_mode=%s active_sides=%d hull_area=%.3f"),
 			*AttemptUuid,
 			StandingSeconds,
@@ -643,7 +646,7 @@ namespace PhysAnimProofArtifactEmitter
 			PhysAnimEvidenceSummary::WriteEvidenceSummaryJson(SummaryWriteInput);
 		if (!SummaryWriteResult.bJsonWritten)
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Warning,
 				TEXT("PhysAnimProof: EvidenceSummaryCaptureFailure uuid=%s summary_json=%s"),
@@ -651,7 +654,7 @@ namespace PhysAnimProofArtifactEmitter
 				*SummaryWriteResult.JsonPath);
 		}
 
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Warning,
 			TEXT("PhysAnimProof: TerminalArtifact uuid=%s terminal_reason=%s timestamp=%lld support_mode=%s active_sides=%d hull_area=%.3f support_gap=%.3f proxy_inside=%s proxy_outside_duration=%s terminal_frame_captured=%d coterminal_count=%d artifact_json=%s artifact_json_written=%d"),
@@ -680,7 +683,7 @@ namespace PhysAnimProofArtifactEmitter
 	{
 		if (bPassed)
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Warning,
 				TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=PASS duration=%.3f terminal_reason=%s"),
@@ -690,7 +693,7 @@ namespace PhysAnimProofArtifactEmitter
 		}
 		else
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Warning,
 				TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=FAIL duration=%.3f terminal_reason=%s"),

@@ -1,4 +1,5 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimLogger.h"
 #include "Misc/AutomationTest.h"
 #include "Tests/AutomationCommon.h"
 #include "GameFramework/Character.h"
@@ -63,7 +64,7 @@ namespace
 		{
 			Test->AddError(Message);
 		}
-		UE_LOG(LogTemp, Error, TEXT("%s"), *Message);
+		PHYSANIM_LOG(LogTemp, Error, TEXT("%s"), *Message);
 	}
 
 	const TCHAR* GetLocomotionHandoffPreflightStateName(EBridgeLocomotionHandoffPreflightState State)
@@ -187,7 +188,7 @@ bool FEnableStandingProofCommand::Update()
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] ENABLING_PROOF for %s"), *It->GetName());
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] ENABLING_PROOF for %s"), *It->GetName());
 			Comp->ResetLiveRuntimeEvidenceProof();
 			Comp->bEnableLiveRuntimeEvidenceProof = true;
 			break;
@@ -343,7 +344,7 @@ bool FVerifyActivationWiringFailureCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED forced failure remained waiting for %s"), *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED forced failure remained waiting for %s"), *It->GetName());
 			}
 			break;
 		}
@@ -420,7 +421,7 @@ bool FVerifyStandingProofCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StandingProof: SupportHullAreaCm2 verified at %.1f cm2"), HullArea);
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: SupportHullAreaCm2 verified at %.1f cm2"), HullArea);
 			}
 
 			// 3. Check Terminal Reason
@@ -431,12 +432,12 @@ bool FVerifyStandingProofCommand::Update()
 			}
 			else if (Reason == EPhysAnimTerminalReason::None)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StandingProof: PASSED (None) for %s"), *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: PASSED (None) for %s"), *It->GetName());
 			}
 			else
 			{
 				// Currently we might fail due to shell velocity correction hardening, which is "expected" for now but we should acknowledge it
-				UE_LOG(LogTemp, Warning, TEXT("StandingProof: TERMINATED with reason %d for %s"), (int32)Reason, *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: TERMINATED with reason %d for %s"), (int32)Reason, *It->GetName());
 			}
 
 			if (!TerminationState.TerminalArtifact.bPhysicsAssetContractValid ||
@@ -499,7 +500,7 @@ bool FLogThighRestoreVariantSummaryCommand::Update()
 		// Note: per-frame thigh angular strength/damping is captured in WORK_DIAG and
 		// THIGH_RESTORE_STARTED log lines. This summary captures aggregate evidence at window entry.
 		// KINETIC_GATE_RELEASE fields answer AC-6: does thigh restore add/remove energy from pelvis/spine?
-		UE_LOG(LogTemp, Warning,
+		PHYSANIM_LOG(LogTemp, Warning,
 			TEXT("[PhysAnimV0] THIGH_RESTORE_VARIANT_SUMMARY variant=%d terminalReason=%d duration=%.3f "
 			     "firstSpineSpikeT=%.3f firstSpineSpikeBody=%s firstSupportFailT=%.3f "
 			     "firstLinearThresholdT=%.3f firstLinearThresholdBody=%s "
@@ -564,7 +565,7 @@ bool FEnableNegativeSupportProofCommand::Update()
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
-			UE_LOG(LogTemp, Warning, TEXT("StandingProof: ENABLING_NEGATIVE_SUPPORT_PROOF for %s"), *It->GetName());
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: ENABLING_NEGATIVE_SUPPORT_PROOF for %s"), *It->GetName());
 			Comp->ResetLiveRuntimeEvidenceProof();
 			Comp->bEnableLiveRuntimeEvidenceProof = true;
 			Comp->SetForceSupportFailure(true);
@@ -622,7 +623,7 @@ bool FVerifyNegativeSupportProofCommand::Update()
 			const EPhysAnimTerminalReason Reason = TerminationState.TerminalArtifact.TerminalReason;
 			if (Reason == EPhysAnimTerminalReason::ActivationSupportFailure)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StandingProof: NEGATIVE_TEST_PASSED (Expected ActivationSupportFailure) for %s"), *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: NEGATIVE_TEST_PASSED (Expected ActivationSupportFailure) for %s"), *It->GetName());
 			}
 			else
 			{
@@ -811,7 +812,7 @@ bool FStopActivationWiringCommand::Update()
 		{
 			bFoundComponent = true;
 			Comp->StopBridge();
-			UE_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED stopped bridge for %s"), *It->GetName());
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED stopped bridge for %s"), *It->GetName());
 			break;
 		}
 	}
@@ -881,7 +882,7 @@ bool FVerifyProofNotSatisfiedAndStopCommand::Update()
 			}
 
 			Comp->StopBridge();
-			UE_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED verified waiting state and stopped bridge for %s"), *It->GetName());
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED verified waiting state and stopped bridge for %s"), *It->GetName());
 			break;
 		}
 	}
@@ -947,7 +948,7 @@ bool FVerifyActivationWiringCommand::Update()
 					}
 				}
 
-				UE_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED ActualState=%d"), (int32)ActualState);
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED ActualState=%d"), (int32)ActualState);
 				if (ExpectedState == EPhysAnimRuntimeState::BalanceActive_Standing)
 				{
 					if (!Comp->IsStartupProofEvidenceFresh())
@@ -1060,7 +1061,7 @@ bool FVerifyProofDisabledSafeDenyCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED runtime=%s terminalReason=None for %s"),
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED runtime=%s terminalReason=None for %s"),
 					GetRuntimeStateName(ActualState),
 					*It->GetName());
 			}
@@ -1133,7 +1134,7 @@ bool FVerifyProofEnabledStartupFreshEvidenceCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED runtime=%s terminalReason=None for %s"),
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED runtime=%s terminalReason=None for %s"),
 					GetRuntimeStateName(ActualState),
 					*It->GetName());
 			}
@@ -1217,7 +1218,7 @@ bool FVerifyProofEnabledStartupWaitingHandoffCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED waiting handoff armed deferredReason=%d for %s"),
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED waiting handoff armed deferredReason=%d for %s"),
 					static_cast<int32>(DeferredReason),
 					*It->GetName());
 			}
@@ -1293,7 +1294,7 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 			}
 			else
 			{
-				UE_LOG(
+				PHYSANIM_LOG(
 					LogTemp,
 					Warning,
 					TEXT("StartupProof: TEST_PASSED fail-stop handoff armed deferredReason=%d terminalReason=%d for %s"),
@@ -1351,7 +1352,7 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 						*It->GetName()));
 				}
 
-				UE_LOG(
+				PHYSANIM_LOG(
 					LogTemp,
 					Warning,
 					TEXT("StartupProof: TEST_PASSED proof fail-stop routed runtime=%s deferredReason=%d terminalReason=%d traceActive=%d ownsPhysics=%d tickEnabled=%d meshSim=%d"),
@@ -1417,7 +1418,7 @@ bool FSeedProofFailureDeferredReasonCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED deferred terminal reason seeded for %s"), *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED deferred terminal reason seeded for %s"), *It->GetName());
 			}
 			break;
 		}
@@ -1548,7 +1549,7 @@ bool FVerifyProofFailureFailStopRoutingCommand::Update()
 			*SelectedCharacter->GetName()));
 	}
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("StartupProof: TEST_PASSED proof fail-stop routed runtime=%s deferredReason=%d terminalReason=%d traceActive=%d ownsPhysics=%d tickEnabled=%d meshSim=%d"),
@@ -1637,7 +1638,7 @@ bool FVerifyProofCompleteStandingEntryProxyTimingCommand::Update()
 				}
 			}
 
-			UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED standing entry proxy timing accepted=%d proxyArmed=%d for %s"),
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED standing entry proxy timing accepted=%d proxyArmed=%d for %s"),
 				Comp->IsStartupProofStandingEntryAccepted() ? 1 : 0,
 				Comp->IsStartupProofProxySupportHandoffArmed() ? 1 : 0,
 				*It->GetName());
@@ -1936,7 +1937,7 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics physical continuity did not pass for %s"), *It->GetName()));
 			}
 
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("StandingProof: StabilityMetrics samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f clampedMax=%d] targets[samples=%d normal=%d total=%d maxDelta=%.2f meanDeltaMax=%.2f maxRawOffset=%.2f meanRawOffsetMax=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] terminalReason=%d"),
@@ -2061,9 +2062,9 @@ bool FLogControlIsolationMatrixCommand::Update()
 			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
 			if (Metrics.SampleCount <= 0)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ControlIsolationMatrix[%s]: no stability samples were collected"), *CaseName);
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("ControlIsolationMatrix[%s]: no stability samples were collected"), *CaseName);
 			}
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("ControlIsolationMatrix[%s]: mode=%d runtimeState=%d terminalReason=%d samples=%d duration=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) spine01[lin=%.2f ang=%.2f] spine03[lin=%.2f ang=%.2f] firstSpineSpike=%.2f(%s) firstSupportFailure=%.2f policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f] targets[samples=%d normal=%d total=%d maxDelta=%.2f maxRawOffset=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] continuityValid=%d"),
@@ -2155,10 +2156,10 @@ bool FLogRawSimulationOwnershipBisectCommand::Update()
 				}
 				else
 				{
-					UE_LOG(LogTemp, Warning, TEXT("RawSimulationOwnershipBisect[%s]: full required non-V0 group collected no stability samples"), *CaseName);
+					PHYSANIM_LOG(LogTemp, Warning, TEXT("RawSimulationOwnershipBisect[%s]: full required non-V0 group collected no stability samples"), *CaseName);
 				}
 			}
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("RawSimulationOwnershipBisect[%s]: group=%d runtimeState=%d terminalReason=%d samples=%d duration=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f] targets[samples=%d normal=%d total=%d maxDelta=%.2f maxRawOffset=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] continuityValid=%d"),
@@ -2447,7 +2448,7 @@ bool FVerifyProxyHandoffResetCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED proxy handoff reset disarmed for %s"), *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED proxy handoff reset disarmed for %s"), *It->GetName());
 			}
 
 			if (Comp->HasDeferredStartupProxyTerminalReason() &&
@@ -2561,7 +2562,7 @@ bool FVerifyProofSatisfiedProxyHandoffSourceOfTruthProofCommand::Update()
 					*It->GetName()));
 			}
 
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("StartupProof: TEST_PASSED proof source-of-truth runtime=%s proofComplete=%d proofSatisfied=%d freshEvidence=%d standingAccepted=%d proxyArmed=%d deferredProxyRecorded=%d deferredProxyReason=%d terminalReason=%d latestTerminalReason=%d finalActivationPath=%s"),
@@ -2844,7 +2845,7 @@ bool FCaptureActivatedStandingPerturbationBaselineCommand::Update()
 
 	if (!TargetComponent)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: baseline capture could not find a PhysAnim component"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: baseline capture could not find a PhysAnim component"));
 		return true;
 	}
 
@@ -2854,33 +2855,33 @@ bool FCaptureActivatedStandingPerturbationBaselineCommand::Update()
 
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: expected BalanceActive_Standing before perturbation but got %d"), (int32)RuntimeState);
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: expected BalanceActive_Standing before perturbation but got %d"), (int32)RuntimeState);
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofComplete())
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: proof was not complete before perturbation"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: proof was not complete before perturbation"));
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofSatisfied())
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: proof was not truthful before perturbation"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: proof was not truthful before perturbation"));
 	}
 
 	if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: standing metrics were not yet collected before perturbation"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: standing metrics were not yet collected before perturbation"));
 	}
 
 	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: support hull area was not positive before perturbation"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: support hull area was not positive before perturbation"));
 	}
 
 	State->BaselineMetrics = Metrics;
 	State->BaselineTerminationState = TerminationState;
 	State->bBaselineCaptured = true;
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("PerturbationProof: baseline samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f terminalReason=%d"),
@@ -2904,7 +2905,7 @@ bool FApplyActivatedStandingPerturbationCommand::Update()
 {
 	if (!State || !State->Component.IsValid())
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation command has no component"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation command has no component"));
 		return true;
 	}
 
@@ -2913,11 +2914,11 @@ bool FApplyActivatedStandingPerturbationCommand::Update()
 	{
 		if (IsStrictLivePolicyProofQualityEnabled())
 		{
-			UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
+			PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("PerturbationProof: physical perturbation was not applied; strict proof quality is opt-in"));
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("PerturbationProof: physical perturbation was not applied; strict proof quality is opt-in"));
 		}
 		return true;
 	}
@@ -2927,7 +2928,7 @@ bool FApplyActivatedStandingPerturbationCommand::Update()
 
 	if (!Component->HasActivatedStandingPerturbationApplied())
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: component did not record the perturbation application"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: component did not record the perturbation application"));
 	}
 
 	return true;
@@ -3039,7 +3040,7 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 	{
 		if (TerminationState.TerminalReason == EPhysAnimTerminalReason::None)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("PerturbationProof: safe transition kept terminal_reason=None"));
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("PerturbationProof: safe transition kept terminal_reason=None"));
 		}
 		else if (Component->IsLiveRuntimeEvidenceProofSatisfied())
 		{
@@ -3053,7 +3054,7 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 		Fail(TEXT("PerturbationProof: audit artifact terminal reason does not match final state"));
 	}
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("PerturbationProof: recoveryDuration=%.2f state=%d terminalReason=%d samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f physicalPerturbation=%d measuredDeltaV=%.2f nonzeroVelocitySamples=%d"),
@@ -3394,7 +3395,7 @@ bool FCaptureActivatedStandingLocomotionReadinessBaselineCommand::Update()
 
 	if (!TargetComponent)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: baseline capture could not find a PhysAnim component"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: baseline capture could not find a PhysAnim component"));
 		return true;
 	}
 
@@ -3407,37 +3408,37 @@ bool FCaptureActivatedStandingLocomotionReadinessBaselineCommand::Update()
 
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected BalanceActive_Standing before intent but got %d"), (int32)RuntimeState);
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected BalanceActive_Standing before intent but got %d"), (int32)RuntimeState);
 		bSetupValid = false;
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofComplete())
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not complete before intent"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not complete before intent"));
 		bSetupValid = false;
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofSatisfied())
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not truthful before intent"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not truthful before intent"));
 		bSetupValid = false;
 	}
 
 	if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: standing metrics were not yet collected before intent"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: standing metrics were not yet collected before intent"));
 		bSetupValid = false;
 	}
 
 	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: support hull area was not positive before intent"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: support hull area was not positive before intent"));
 		bSetupValid = false;
 	}
 
 	if (LocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected locomotion authority Idle before intent but got %s"), GetLocomotionAuthorityStateName(LocomotionAuthorityState));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected locomotion authority Idle before intent but got %s"), GetLocomotionAuthorityStateName(LocomotionAuthorityState));
 		bSetupValid = false;
 	}
 
@@ -3450,7 +3451,7 @@ bool FCaptureActivatedStandingLocomotionReadinessBaselineCommand::Update()
 	State->BaselineTerminationState = TerminationState;
 	State->BaselineLocomotionAuthorityState = LocomotionAuthorityState;
 	State->bBaselineCaptured = true;
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("LocomotionReadiness: baseline samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f terminalReason=%d locomotionAuthority=%s"),
@@ -3475,7 +3476,7 @@ bool FApplyActivatedStandingLocomotionReadinessIntentCommand::Update()
 {
 	if (!State || !State->Component.IsValid())
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent command has no component"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent command has no component"));
 		return true;
 	}
 
@@ -3483,7 +3484,7 @@ bool FApplyActivatedStandingLocomotionReadinessIntentCommand::Update()
 	ACharacter* const Character = Cast<ACharacter>(Component->GetOwner());
 	if (!Character)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent command has no character owner"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent command has no character owner"));
 		return true;
 	}
 
@@ -3502,7 +3503,7 @@ bool FApplyActivatedStandingLocomotionReadinessIntentCommand::Update()
 	State->MovementIntentScale = IntentScale;
 	State->PostIntentLocomotionAuthorityState = Component->GetLocomotionAuthorityState();
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("LocomotionReadiness: movement intent applied world=(%.2f,%.2f) scale=%.2f postIntentAuthority=%s"),
@@ -3599,7 +3600,7 @@ bool FVerifyActivatedStandingLocomotionReadinessCommand::Update()
 	{
 		if (TerminationState.TerminalReason == EPhysAnimTerminalReason::None)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("LocomotionReadiness: safe transition kept terminal_reason=None"));
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("LocomotionReadiness: safe transition kept terminal_reason=None"));
 		}
 		else if (Component->IsLiveRuntimeEvidenceProofSatisfied())
 		{
@@ -3614,7 +3615,7 @@ bool FVerifyActivatedStandingLocomotionReadinessCommand::Update()
 	}
 
 	const bool bLocomotionTransitionAllowed = LocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle;
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("LocomotionReadiness: intentDuration=%.2f standing=%s locomotionAuthority=%s transitionAllowed=%s samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f terminalReason=%d"),
@@ -3697,7 +3698,7 @@ bool FApplyActivatedStandingLocomotionGateIntentCommand::Update()
 			ACharacter* const Character = Cast<ACharacter>(Comp->GetOwner());
 			if (!Character)
 			{
-				UE_LOG(LogTemp, Error, TEXT("LocomotionGate: intent command has no character owner"));
+				PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionGate: intent command has no character owner"));
 				return true;
 			}
 
@@ -3709,7 +3710,7 @@ bool FApplyActivatedStandingLocomotionGateIntentCommand::Update()
 
 			const float IntentScale = 0.25f;
 			Character->AddMovementInput(IntentDirection, IntentScale, true);
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("LocomotionGate: movement intent applied world=(%.2f,%.2f) scale=%.2f"),
@@ -3752,7 +3753,7 @@ bool FSetActivatedStandingLocomotionGateIntentCommand::Update()
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
 			Comp->TestOnlySetBridgeLocomotionGateIntent(IntentMagnitude, IntentAgeSeconds);
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("LocomotionGate: test intent set magnitude=%.2f age=%.2f"),
@@ -3819,7 +3820,7 @@ bool FVerifyActivatedStandingLocomotionGateCommand::Update()
 						*ExpectedReasonSubstring,
 						*Reason));
 			}
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("LocomotionGate[%s]: allowed=%d reason=%s"),
@@ -4204,7 +4205,7 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 			State->PostHandoffCommitReason = Comp->GetLocomotionHandoffCommitReason();
 			State->bPostBridgeOwnsPhysics = Comp->DoesBridgeOwnPhysics();
 
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("LocomotionRequest[%s]: applied intentMagnitude=%.2f intentAge=%.2f supportMode=%d supportHull=%.2f activeSides=%d capsuleValid=%d continuityValid=%d terminalReason=%d"),
@@ -4481,7 +4482,7 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 			(Latest.bPhysicalContinuityValidatorPassed && !Latest.bContinuityBookkeepingMismatch) ? 1 : 0));
 	}
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("LocomotionRequest[%s]: preRuntimeState=%d postRuntimeState=%d preAuthorityState=%d postAuthorityState=%d preRequestState=%s postRequestState=%s preHandoffPreflightState=%s postHandoffPreflightState=%s preHandoffCommitState=%s postHandoffCommitState=%s runtimeState=%d requestState=%s handoffPreflightState=%s handoffCommitState=%s gateAllowed=%d gateReason=%s requestReason=%s handoffPreflightReason=%s handoffCommitReason=%s intentMagnitude=%.2f intentAge=%.2f expectedIntentAge=%.2f supportMode=%d supportHull=%.2f activeSides=%d capsuleValid=%d continuityValid=%d terminalReason=%d preBridgeOwnsPhysics=%d postBridgeOwnsPhysics=%d samples=%d"),

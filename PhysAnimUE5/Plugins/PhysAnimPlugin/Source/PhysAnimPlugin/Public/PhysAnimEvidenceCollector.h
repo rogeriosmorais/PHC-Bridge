@@ -34,6 +34,7 @@ struct FPhysAnimEvidenceCollectorInput
 	FString TerminalArtifactDirectory;
 	FString EvidenceSummaryDirectory;
 	FString LogDirectory;
+	FString AttemptUuid;
 };
 
 struct FPhysAnimEvidenceCollectorResult

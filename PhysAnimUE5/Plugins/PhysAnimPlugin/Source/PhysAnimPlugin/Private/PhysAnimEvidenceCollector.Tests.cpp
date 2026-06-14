@@ -155,8 +155,7 @@ namespace
 	bool CollectAndAssertLatestSelection(
 		FAutomationTestBase& Test,
 		const FPhysAnimEvidenceCollectorFixturePaths& Paths,
-		const FString& ExpectedTerminalAttemptUuid,
-		const FString& ExpectedSummaryAttemptUuid)
+		const FString& ExpectedAttemptUuid)
 	{
 		const FPhysAnimEvidenceCollectorInput Input
 		{
@@ -166,8 +165,9 @@ namespace
 		};
 
 		const FPhysAnimEvidenceCollectorResult Result = PhysAnimEvidenceCollector::Collect(Input);
-		Test.TestEqual(TEXT("latest terminal artifact is selected"), Result.TerminalArtifact.TerminalArtifact.AttemptUuid, ExpectedTerminalAttemptUuid);
-		Test.TestEqual(TEXT("latest evidence summary is selected"), Result.EvidenceSummary.Summary.AttemptUuid, ExpectedSummaryAttemptUuid);
+		Test.TestEqual(TEXT("latest terminal artifact anchors collection attempt"), Result.TerminalArtifact.TerminalArtifact.AttemptUuid, ExpectedAttemptUuid);
+		Test.TestEqual(TEXT("evidence summary matches collection attempt"), Result.EvidenceSummary.Summary.AttemptUuid, ExpectedAttemptUuid);
+		Test.TestEqual(TEXT("classification input is scoped to one attempt"), Result.ClassificationInput.TruthFlags.bMissingEvidence, false);
 		return true;
 	}
 
@@ -225,7 +225,82 @@ namespace
 					EPhysAnimEvidenceBaselineSegmentState::NotReached))));
 			SetTimestamp(SummaryNewPath, FDateTime(2026, 6, 10, 11, 30, 0));
 
-			TestTrue(TEXT("latest selection collector result is valid"), CollectAndAssertLatestSelection(*this, Paths, TEXT("attempt-new"), TEXT("summary-new")));
+			TestTrue(TEXT("latest selection collector result is attempt-bound"), CollectAndAssertLatestSelection(*this, Paths, TEXT("attempt-new")));
+			CleanupFixturePaths(Paths);
+		}
+
+		{
+			const FPhysAnimEvidenceCollectorFixturePaths Paths = MakeFixturePaths(TEXT("cross-attempt-product-trap"));
+			const FString TerminalPath = FPaths::Combine(Paths.TerminalDir, TEXT("attempt-terminal_terminal.json"));
+			const FString SummaryPath = FPaths::Combine(Paths.SummaryDir, TEXT("attempt-summary_evidence_summary.json"));
+			const FString LogPath = FPaths::Combine(Paths.LogDir, TEXT("attempt-log.log"));
+
+			TestTrue(TEXT("cross attempt terminal fixture writes"), WriteTextFile(
+				TerminalPath,
+				BuildTerminalArtifactJson(TEXT("attempt-terminal"), EPhysAnimTerminalReason::None, true)));
+			TestTrue(TEXT("cross attempt summary fixture writes"), WriteTextFile(
+				SummaryPath,
+				PhysAnimEvidenceSummary::SerializeToJsonString(MakeSummary(
+					TEXT("attempt-summary"),
+					EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate,
+					EPhysAnimTerminalReason::None,
+					EPhysAnimEvidenceBaselineSegmentState::Active,
+					EPhysAnimEvidenceBaselineSegmentState::Active,
+					EPhysAnimEvidenceBaselineSegmentState::Active,
+					EPhysAnimEvidenceBaselineSegmentState::Active,
+					EPhysAnimEvidenceBaselineSegmentState::Active))));
+			TestTrue(TEXT("cross attempt log fixture writes"), WriteTextFile(
+				LogPath,
+				TEXT("PhysAnimProof: AttemptResult uuid=attempt-log verdict=PASS")));
+			SetTimestamp(TerminalPath, FDateTime(2026, 6, 10, 15, 0, 0));
+			SetTimestamp(SummaryPath, FDateTime(2026, 6, 10, 15, 30, 0));
+			SetTimestamp(LogPath, FDateTime(2026, 6, 10, 16, 0, 0));
+
+			const FPhysAnimEvidenceCollectorInput Input
+			{
+				Paths.TerminalDir,
+				Paths.SummaryDir,
+				Paths.LogDir
+			};
+			const FPhysAnimEvidenceCollectorResult Result = PhysAnimEvidenceCollector::Collect(Input);
+
+			TestFalse(TEXT("cross-attempt terminal, summary, and log are not promoted"), Result.ClassificationResult.Verdict == EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate);
+			TestTrue(TEXT("cross-attempt merge is insufficient evidence"), Result.ClassificationResult.Verdict == EPhysAnimEvidenceBaselineVerdict::InsufficientEvidence);
+			CleanupFixturePaths(Paths);
+		}
+
+		{
+			const FPhysAnimEvidenceCollectorFixturePaths Paths = MakeFixturePaths(TEXT("explicit-attempt-missing"));
+			WriteAttemptArtifacts(
+				*this,
+				Paths,
+				TEXT("attempt-other"),
+				TEXT("attempt-other.log"),
+				TEXT("PhysAnimProof: AttemptResult uuid=attempt-other verdict=PASS"),
+				FDateTime(2026, 6, 10, 17, 0, 0),
+				true,
+				EPhysAnimTerminalReason::None,
+				EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate,
+				EPhysAnimEvidenceBaselineSegmentState::Active,
+				EPhysAnimEvidenceBaselineSegmentState::Active,
+				EPhysAnimEvidenceBaselineSegmentState::Active,
+				EPhysAnimEvidenceBaselineSegmentState::Active,
+				EPhysAnimEvidenceBaselineSegmentState::Active);
+
+			FPhysAnimEvidenceCollectorInput Input
+			{
+				Paths.TerminalDir,
+				Paths.SummaryDir,
+				Paths.LogDir
+			};
+			Input.AttemptUuid = TEXT("attempt-requested");
+
+			const FPhysAnimEvidenceCollectorResult Result = PhysAnimEvidenceCollector::Collect(Input);
+
+			TestFalse(TEXT("requested attempt does not fall back to unrelated terminal"), Result.TerminalArtifact.bFound);
+			TestFalse(TEXT("requested attempt does not fall back to unrelated summary"), Result.EvidenceSummary.bFound);
+			TestFalse(TEXT("requested attempt does not fall back to unrelated log"), Result.LogSignal.bFound);
+			TestTrue(TEXT("requested attempt missing evidence is insufficient"), Result.ClassificationResult.Verdict == EPhysAnimEvidenceBaselineVerdict::InsufficientEvidence);
 			CleanupFixturePaths(Paths);
 		}
 

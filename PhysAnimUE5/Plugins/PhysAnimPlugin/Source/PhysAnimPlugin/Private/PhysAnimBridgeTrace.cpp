@@ -1,4 +1,5 @@
 #include "PhysAnimBridgeTrace.h"
+#include "PhysAnimLogger.h"
 
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
@@ -510,7 +511,7 @@ bool FPhysAnimBridgeTraceWriter::WriteWholeFile(const FString& FilePath, const F
 
 void FPhysAnimBridgeTraceWriter::HandleWriteFailure(const FString& Context)
 {
-	UE_LOG(LogPhysAnimBridgeTrace, Warning, TEXT("[PhysAnimTrace] %s"), *Context);
+	PHYSANIM_LOG(LogPhysAnimBridgeTrace, Warning, TEXT("[PhysAnimTrace] %s"), *Context);
 	bWriteFailed = true;
 	EventsBuffer.Reset();
 	FramesBuffer.Reset();

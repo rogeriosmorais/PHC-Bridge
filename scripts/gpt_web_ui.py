@@ -20,15 +20,17 @@ def is_chrome_open():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('localhost', 9222)) == 0
 
+import physanim_logger as logger
+
 async def run():    
-    print("🔍 Extracting log data...")
+    logger.info("🔍 Extracting log data...")
     conteudo_log = extract_physa_to_clipboard()
     if not conteudo_log:
-        print("❌ Empty log, stopping.")
+        logger.warning("❌ Empty log, stopping.")
         return
     
     if not is_chrome_open():
-        print("🚀 Opening Chrome...")
+        logger.info("🚀 Opening Chrome...")
         subprocess.Popen(CHROME_CMD)
         await asyncio.sleep(5)
 
@@ -51,7 +53,7 @@ async def run():
         textarea = "#prompt-textarea"
         await page.wait_for_selector(textarea)
         
-        print("📤 Posting log...")
+        logger.info("📤 Posting log...")
         await page.locator(textarea).evaluate("""
             (el, text) => {
                 el.innerText = text;
@@ -63,7 +65,7 @@ async def run():
         await page.keyboard.press("Enter")
 
         # 6. Wait and get the response, while auto-accepting actions
-        print("⏳ Waiting for response (Auto-Accept active)...")
+        logger.info("⏳ Waiting for response (Auto-Accept active)...")
         stop_btn = 'button[data-testid="stop-button"]'
         
         # Selectors for permission buttons
@@ -81,7 +83,7 @@ async def run():
                     for selector in accept_selectors:
                         btn = page.locator(selector).first
                         if await btn.is_visible(timeout=500):
-                            print(f"✅ Clicking auto-accept button: {selector}")
+                            logger.info("✅ Clicking auto-accept button: %s", 0.0, selector)
                             await btn.click()
                             break
                 except:
@@ -97,14 +99,14 @@ async def run():
             # Run wait and auto-accept concurrently
             await asyncio.wait_for(auto_accept(), timeout=180000) # 3 min max
         except asyncio.TimeoutError:
-            print("⚠️ Response wait timed out.")
+            logger.warning("⚠️ Response wait timed out.")
         except Exception as e:
-            print(f"ℹ️ Finished waiting: {str(e)}")
+            logger.info("ℹ️ Finished waiting: %s", 0.0, str(e))
 
         await asyncio.sleep(2)
         respostas = await page.locator(".markdown").all()
         if respostas:
-            print("\n--- RESPONSE ---\n", await respostas[-1].inner_text(), "\n----------------")
+            logger.info("\n--- RESPONSE ---\n %s \n----------------", 0.0, await respostas[-1].inner_text())
         
         await browser.close()
 

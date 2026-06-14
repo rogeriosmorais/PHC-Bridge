@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 
 EPhysAnimBridgeTraceOutputMode UPhysAnimComponent::ResolveBridgeTraceOutputMode() const
 {
@@ -77,13 +78,13 @@ void UPhysAnimComponent::StartBridgeTraceSession()
 	FString TraceError;
 	if (!Writer->StartSession(PhysAnimComponentInternal::GetTraceRootPath(), Metadata, TraceError))
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] Bridge trace disabled: %s"), *TraceError);
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] Bridge trace disabled: %s"), *TraceError);
 		return;
 	}
 
 	BridgeTraceWriter = MoveTemp(Writer);
 	CurrentBridgeTraceSessionId = Metadata.SessionId;
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogPhysAnimBridge,
 		Log,
 		TEXT("[PhysAnim] Bridge trace session started: %s"),

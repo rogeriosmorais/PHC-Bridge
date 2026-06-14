@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 #include "Misc/AutomationTest.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
@@ -84,7 +85,7 @@ bool FPhysAnimStage2ATurnSmokeTest::RunTest(const FString& Parameters)
 		TestTrue(FString::Printf(TEXT("%s SMOKE-TURN-11 Telemetry contains terminal_state=Allowed"), PassLabel), Component->LastStage2ALocomotionTelemetryLine.Contains(TEXT("terminal_state=Allowed")));
 
 		// Emit final log line as requested
-		UE_LOG(LogPhysAnimBridge, Display, TEXT("PASS_STAGE2A_TURN_%s_SMOKE duration_seconds=2.0 signed_yaw_delta_degrees=%.3f translation_cm=%.3f terminal_state=%s"), 
+		PHYSANIM_LOG(LogPhysAnimBridge, Display, TEXT("PASS_STAGE2A_TURN_%s_SMOKE duration_seconds=2.0 signed_yaw_delta_degrees=%.3f translation_cm=%.3f terminal_state=%s"), 
 			PassLabel, SignedYawDeltaDegrees, TranslationDriftCm, UPhysAnimComponent::Stage2ATerminalStateToString(Component->Stage2ALastLocomotionTerminalState));
 
 		// Cleanup

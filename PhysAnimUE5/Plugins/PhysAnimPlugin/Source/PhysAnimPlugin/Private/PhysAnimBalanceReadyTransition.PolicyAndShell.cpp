@@ -1,4 +1,5 @@
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "PhysAnimLogger.h"
 
 bool FPhysAnimBalanceReadyTransition::IsProximal(FName BoneName)
 {
@@ -287,13 +288,13 @@ void FPhysAnimBalanceReadyTransition::ReconcileKinematicHoldSet(UPhysAnimCompone
 
 		if (GVerbosePhase1Forensics != 0)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_BONE_ROUTING bone=%s tick=%d softAlpha=%.4f extraDampingMultiplier=%.2f rawSim=%d"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_BONE_ROUTING bone=%s tick=%d softAlpha=%.4f extraDampingMultiplier=%.2f rawSim=%d"),
 				*BoneName.ToString(), Phase2GuardTickCount, OverriddenAlpha, OverriddenDamping, RawSimulating);
 		}
 
 		if (Phase2GuardTickCount == 1 && (BoneName == "thigh_l" || BoneName == "thigh_r"))
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_THIGH_ROUTING bone=%s softAlpha=%.4f extraDampingMultiplier=%.2f policySuppressed=%d shellCorrectionActive=%d"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_THIGH_ROUTING bone=%s softAlpha=%.4f extraDampingMultiplier=%.2f policySuppressed=%d shellCorrectionActive=%d"),
 				*BoneName.ToString(), OverriddenAlpha, OverriddenDamping,
 				ShouldSuppressPolicy() ? 1 : 0,
 				Owner->IsTransitionOwnedShellLocked() ? 1 : 0);

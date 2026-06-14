@@ -1,6 +1,7 @@
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimPhase1PelvisCouplingSearch.h"
+#include "PhysAnimLogger.h"
 
 #if !UE_BUILD_SHIPPING
 
@@ -667,7 +668,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::StartPhase1AutoCalib(const FPhase1AutoCa
 	
 	if (Component->GetRuntimeState() == EPhysAnimRuntimeState::Uninitialized)
 	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimAutoCalib] Target component is uninitialized, calling StartBridge()..."));
+		PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimAutoCalib] Target component is uninitialized, calling StartBridge()..."));
 		Component->StartBridge();
 	}
 
@@ -707,7 +708,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::StartPhase1AutoCalib(const FPhase1AutoCa
 
 	Component->SetPhase1AutoCalibOwnsStartRequests(true);
 	bRunActive = true;
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting component readiness for baseline capture..."));
+	PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting component readiness for baseline capture..."));
 
 	return true;
 }
@@ -1093,7 +1094,7 @@ bool UPhysAnimPhase1AutoCalibSubsystem::RunDeterminismPreflight(
 
 	if (!AreFingerprintsNear(FingerprintA, FingerprintB, RestoreFingerprintTolerance))
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Warning,
 			TEXT("[PhysAnimAutoCalib] Determinism preflight mismatch: %s"),
@@ -1130,7 +1131,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickAwaitingReadiness()
 
 	if (bBaselineReady)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Warning,
 			TEXT("[PhysAnimAutoCalib] Queue-ready baseline reached after %.2fs. Capturing baseline. preEntry=ready"),
@@ -1176,7 +1177,7 @@ void UPhysAnimPhase1AutoCalibSubsystem::TickAwaitingReadiness()
 
 	if (World->GetTimeSeconds() - LastReadinessLogTimeSeconds >= 1.0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting queue-ready baseline... elapsed=%.1fs state=%s queue=%s preEntry=%s"),
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimAutoCalib] Awaiting queue-ready baseline... elapsed=%.1fs state=%s queue=%s preEntry=%s"),
 			World->GetTimeSeconds() - CurrentStageStartTimeSeconds,
 			UPhysAnimComponent::GetRuntimeStateName(Component->GetRuntimeState()),
 			QueueReason.IsEmpty() ? TEXT("ready") : *QueueReason,

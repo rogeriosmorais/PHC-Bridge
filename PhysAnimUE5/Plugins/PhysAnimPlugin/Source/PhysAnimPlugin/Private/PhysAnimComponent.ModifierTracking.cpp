@@ -106,7 +106,7 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		BoneNamesToReset.Add(PhysAnimBridge::GetBoneNameFromBodyModifierName(ModifierName).ToString());
 	}
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogPhysAnimBridge,
 		Log,
 		TEXT("[PhysAnim] Scheduled deferred cached-target reset for %d promoted body modifiers: [%s]"),
@@ -142,7 +142,7 @@ void UPhysAnimComponent::ConsumeUpperBodyPendingResets()
 		{
 			BoneNames.Add(BoneName.ToString());
 		}
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_PENDING_RESETS_CLEARED bones=[%s]"), *FString::Join(BoneNames, TEXT(", ")));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_PENDING_RESETS_CLEARED bones=[%s]"), *FString::Join(BoneNames, TEXT(", ")));
 	}
 }
 
@@ -464,7 +464,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 						if (bPelvisSimNow && TotalSimNow >= 6)
 						{
-							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] PHASE2_ENTRY_PROXIMAL_POLICY_SUPPRESSED bone=%s frame=%llu actor=%s component=%s"), *Pair.Key.ToString(), GFrameCounter, *GetOwner()->GetName(), *GetName());
+							PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnim] PHASE2_ENTRY_PROXIMAL_POLICY_SUPPRESSED bone=%s frame=%llu actor=%s component=%s"), *Pair.Key.ToString(), GFrameCounter, *GetOwner()->GetName(), *GetName());
 							continue;
 						}
 					}
@@ -695,7 +695,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (bRootSimFlipFrame)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Warning,
 			TEXT("[PhysAnimBalance] POLICY_TARGETS_SUPPRESSED_ON_SIM_FLIP: normal=%d hold=%d total=%d"),
@@ -712,7 +712,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 		if (bApplyNewPolicyStepThisTick && bNormalWritesBlocked && bHasPolicyWrites)
 		{
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_ROOTON_POLICY_SUPPRESSED frame=%d tick=%d normalWritesBlocked=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE2_ROOTON_POLICY_SUPPRESSED frame=%d tick=%d normalWritesBlocked=%d heldWrites=%d rootRawSim=%d simCount=%d policyInfluenceAlpha=%.2f owner=%d actor=%s component=%s"),
 				static_cast<int32>(GFrameNumber),
 				static_cast<int32>(BalanceEntryRootOnFrameCount),
 				1,
@@ -728,7 +728,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame && RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Log,
 			TEXT("[PhysAnim] First policy-enabled frame: normal=%d hold=%d total=%d maxTargetDelta=%s:%.1fdeg meanTargetDelta=%.1fdeg maxRawPolicyOffset=%s:%.1fdeg meanRawPolicyOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx"),
@@ -749,7 +749,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (bRootSimFlipFrame)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] THIGH_RESEED_ON_SIM_FLIP: leftDeltaPre=%.2f rightDeltaPre=%.2f"), ThighLDeltaPre, ThighRDeltaPre);
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] THIGH_RESEED_ON_SIM_FLIP: leftDeltaPre=%.2f rightDeltaPre=%.2f"), ThighLDeltaPre, ThighRDeltaPre);
 	}
 }
 
@@ -1010,9 +1010,10 @@ void UPhysAnimComponent::TrackDistalModifierWrite(FName BoneName, EPhysicsMoveme
 	{
 		if (GVerbosePhase1Forensics != 0)
 		{
-			UE_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Log,
+				1.0f,
 				TEXT("[PhysAnim] DISTAL_MODIFIER_WRITE: bone=%s prevModifier=%s newModifier=%s bUpdateBody=%d runtimeState=%s phase=%d reason=%s"),
 				*BoneName.ToString(),
 				bHadPrevious ? GetPhysicsMovementTypeName(PreviousMovementType) : TEXT("None"),
@@ -1057,9 +1058,10 @@ void UPhysAnimComponent::TrackDistalBoneOwnershipChange(FName BoneName, EPhysics
 
 		if (GVerbosePhase1Forensics != 0)
 		{
-			UE_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Warning,
+				1.0f,
 				TEXT("[PhysAnim] DISTAL_OWNERSHIP_CHANGE: bone=%s prevIntended=%s newIntended=%s rawSimulate=%s runtimeState=%s phase=%d reason=%s"),
 				*BoneName.ToString(),
 				bHadPrevious ? GetPhysicsMovementTypeName(PreviousOwnership) : TEXT("None"),
@@ -1097,9 +1099,10 @@ void UPhysAnimComponent::TrackDistalBoneOwnershipChange(FName BoneName, EPhysics
 				static TSet<FName> LoggedBones;
 				if (BoneName == TEXT("calf_r") && !LoggedBones.Contains(BoneName))
 				{
-					UE_LOG(
+					PHYSANIM_LOG_RATE_LIMITED(
 						LogPhysAnimBridge,
 						Warning,
+						1.0f,
 						TEXT("[PhysAnim] CALF_R_DISTAL_GATE_FORENSIC: shouldKeepKinematic=%d rawSimulating=%d runtimeState=%s phase=%d reason=%s"),
 						bShouldKeepKinematic ? 1 : 0,
 						bRawSimulating ? 1 : 0,
@@ -1109,9 +1112,10 @@ void UPhysAnimComponent::TrackDistalBoneOwnershipChange(FName BoneName, EPhysics
 					LoggedBones.Add(BoneName);
 				}
 
-				UE_LOG(
+				PHYSANIM_LOG_RATE_LIMITED(
 					LogPhysAnimBridge,
 					Warning,
+					1.0f,
 					TEXT("[PhysAnim] DISTAL_EXPERIMENT_PENDING_OWNERSHIP_MISMATCH: bone=%s ShouldKeepBoneKinematic=true but raw BodyInstance is SIMULATING! reason=%s"),
 					*BoneName.ToString(), *CallSiteReason);
 			}

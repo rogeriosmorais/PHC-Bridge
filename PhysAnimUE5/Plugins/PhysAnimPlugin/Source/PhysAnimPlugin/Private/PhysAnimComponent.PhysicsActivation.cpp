@@ -25,17 +25,17 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 		if (bRequireLiveProofSatisfied && CanEnterBalanceActiveStanding())
 		{
 			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] WIRING_SUCCESS state=BalanceActive_Standing"));
+			PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] WIRING_SUCCESS state=BalanceActive_Standing"));
 		}
 		else if (!bRequireLiveProofSatisfied)
 		{
 			TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] WIRING_PRE_PROOF_PHYSICS_OWNERSHIP state=BridgeActive"));
+			PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] WIRING_PRE_PROOF_PHYSICS_OWNERSHIP state=BridgeActive"));
 		}
 		else
 		{
 			OutError = TEXT("Proof active but not satisfied. Activation denied.");
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] WIRING_DENIED reason=PROOF_NOT_SATISFIED"));
+			PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] WIRING_DENIED reason=PROOF_NOT_SATISFIED"));
 			return false;
 		}
 	}
@@ -117,10 +117,10 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 		ActivatedStandingStabilityBaselineRootTiltDeg = 0.0f;
 		ActivatedStandingStabilitySupportHullAreaSumCm2 = 0.0;
 		ActivatedStandingStabilityActiveSupportSideCountSum = 0.0;
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Startup proof restarted after bridge physics ownership began."));
+		PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Startup proof restarted after bridge physics ownership began."));
 	}
 
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Bridge physics activation[%s] complete."), ActivationContext);
+	PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Bridge physics activation[%s] complete."), ActivationContext);
 	return true;
 }
 
@@ -137,7 +137,7 @@ bool UPhysAnimComponent::PrewarmPhysicsControlActivationPose()
 
 	SkeletalMesh->TickAnimation(0.0f, false);
 	SkeletalMesh->RefreshBoneTransforms();
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Prewarmed skeletal pose for PhysicsControl activation cache."));
+	PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Prewarmed skeletal pose for PhysicsControl activation cache."));
 	return true;
 }
 
@@ -153,17 +153,17 @@ void UPhysAnimComponent::EnterReadyForActivation(
 
 	if (bLogDeferredStartupSuccess)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Log,
 			TEXT("[PhysAnim] Startup success. Runtime=%s Model=%s DeferredActivation=true"),
 			*ActiveRuntimeName,
 			*GetPathNameSafe(LoadedModelData));
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Log,
 			TEXT("[PhysAnim] Bridge physics activation deferred by zero-action safe mode."));
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
+		PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Stabilization %s"), *PhysAnimComponentInternal::BuildStabilizationSummary(EffectiveSettings));
 	}
 }
 

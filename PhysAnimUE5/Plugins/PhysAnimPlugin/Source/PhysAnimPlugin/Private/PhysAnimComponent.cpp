@@ -233,7 +233,7 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 	}
 
 	const bool bProofSatisfied = IsLiveRuntimeEvidenceProofSatisfied();
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogPhysAnimBridge,
 		Verbose,
 		TEXT("[PhysAnim] Startup proof satisfaction evaluated satisfied=%d state=%s fresh=%d observed=%d deferredReason=%d enforceArmed=%d"),
@@ -246,7 +246,7 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 
 	if (!bProofSatisfied)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Warning,
 			TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_NOT_TRUTHFUL startupObserved=%d startupArmed=%d startupArmSubstep=%lld startupDeferredReason=%d proxyHandoffArmed=%d proofComplete=%d"),
@@ -263,32 +263,32 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 
 	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=AIRBORNE_MODE"));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=AIRBORNE_MODE"));
 		return false;
 	}
 
 	if (Latest.ActiveSupportSideCount == 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=NO_SUPPORT_SIDES"));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=NO_SUPPORT_SIDES"));
 		return false;
 	}
 
 	if (Latest.SupportHullAreaCm2 <= 0.0f)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=NO_SUPPORT_AREA"));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=NO_SUPPORT_AREA"));
 		return false;
 	}
 
 	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
 	if (IsStage1())
 	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] ENTRY_ALLOWED reason=STAGE1_BYPASS"));
+		PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] ENTRY_ALLOWED reason=STAGE1_BYPASS"));
 		return true;
 	}
 
 	if (!IsBringUpGroupUnlocked(GetBringUpGroupCount() - 1))
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=BRING_UP_INCOMPLETE"));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=BRING_UP_INCOMPLETE"));
 		return false;
 	}
 
@@ -300,7 +300,7 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 
 	if (Latest.SupportGapTimerMs >= Settings.BalancePhase1AdmissionMaxSupportGapMs)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=SUPPORT_GAP gap=%.1f threshold=%.1f"), 
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=SUPPORT_GAP gap=%.1f threshold=%.1f"), 
 			Latest.SupportGapTimerMs, Settings.BalancePhase1AdmissionMaxSupportGapMs);
 		return false;
 	}
@@ -309,7 +309,7 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 	{
 		if (bProxyOutsideHullDeferred)
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
 				TEXT("[PhysAnim] Proxy outside hull deferred during standing entry state=%s"),
@@ -317,12 +317,12 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 		}
 		else
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
 				TEXT("[PhysAnim] Proxy outside hull enforced after handoff armed state=%s"),
 				GetRuntimeStateName(RuntimeState));
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROXY_OUTSIDE_HULL"));
+			PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROXY_OUTSIDE_HULL"));
 			return false;
 		}
 	}
@@ -331,7 +331,7 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 	{
 		if (bProxyOutsideHullDeferred)
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
 				TEXT("[PhysAnim] Proxy outside hull deferred during standing entry state=%s"),
@@ -339,12 +339,12 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 		}
 		else
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
 				TEXT("[PhysAnim] Proxy outside hull enforced after handoff armed state=%s"),
 				GetRuntimeStateName(RuntimeState));
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROXY_DRIFT_THRESHOLD drift=%.1f threshold=%.1f"), 
+			PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROXY_DRIFT_THRESHOLD drift=%.1f threshold=%.1f"), 
 				Latest.ProxyOutsideHullDurationMs.GetValue(), Settings.ProxyDriftLimitMs);
 			return false;
 		}
@@ -352,25 +352,25 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 
 	if (!Latest.bCapsuleContractPassed)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CAPSULE_CONTRACT_FAILED"));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CAPSULE_CONTRACT_FAILED"));
 		return false;
 	}
 
 	if (!Latest.bPhysicalContinuityValidatorPassed)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CONTINUITY_CONTRACT_FAILED"));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CONTINUITY_CONTRACT_FAILED"));
 		return false;
 	}
 
 	if (Latest.bContinuityBookkeepingMismatch)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CONTINUITY_BOOKKEEPING_MISMATCH"));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CONTINUITY_BOOKKEEPING_MISMATCH"));
 		return false;
 	}
 
 	if (!Latest.bPhysicsAssetContractValid || !Latest.bSkeletonAuditPassed)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=AUDIT_STATE_INCONSISTENT physicsAsset=%d skeletonAudit=%d"),
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=AUDIT_STATE_INCONSISTENT physicsAsset=%d skeletonAudit=%d"),
 			Latest.bPhysicsAssetContractValid ? 1 : 0,
 			Latest.bSkeletonAuditPassed ? 1 : 0);
 		return false;
@@ -378,13 +378,13 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 
 	if (!HasConsistentLiveRuntimeEvidenceArtifact(LiveRuntimeEvidenceTerminationState))
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=ARTIFACT_STATE_INCONSISTENT"));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=ARTIFACT_STATE_INCONSISTENT"));
 		return false;
 	}
 
 	if (LiveRuntimeEvidenceStandingSeconds < LiveRuntimeEvidenceStandingTargetSeconds)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=INSUFFICIENT_STANDING_DURATION duration=%.3f target=%.3f"), 
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=INSUFFICIENT_STANDING_DURATION duration=%.3f target=%.3f"), 
 			LiveRuntimeEvidenceStandingSeconds, LiveRuntimeEvidenceStandingTargetSeconds);
 		return false;
 	}
@@ -402,7 +402,7 @@ void UPhysAnimComponent::NoteStartupProofWaitingForPoseSearchObserved()
 	if (!bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved)
 	{
 		bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved = true;
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("[PhysAnim] Startup entry bridge verify observed state=%s"),
@@ -426,7 +426,7 @@ void UPhysAnimComponent::ArmStartupProofTerminalEnforcement()
 	{
 		bLiveRuntimeEvidenceStartupVerificationHandoffArmed = true;
 		StartupProofVerificationHandoffArmedSubstep = LiveRuntimeEvidenceSubstepCounter;
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("[PhysAnim] Startup entry bridge terminal enforcement armed state=%s substep=%lld"),
@@ -482,7 +482,7 @@ bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerm
 	{
 		if (!bLiveRuntimeEvidenceStartupProxySupportHandoffArmed || bDeferredStartupProxyTerminalCurrentAttempt)
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
 				TEXT("[PhysAnim] Proxy outside hull deferred during standing entry state=%s"),
@@ -490,7 +490,7 @@ bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerm
 			return false;
 		}
 
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("[PhysAnim] Proxy outside hull enforced after handoff armed state=%s"),
@@ -507,14 +507,14 @@ EPhysAnimRuntimeState UPhysAnimComponent::EvaluateBalanceActiveStanding() const
 	if (LiveRuntimeEvidenceTerminationState.bTerminated && 
 		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=FailStopped reason=TERMINATED_IN_LOOP terminal_reason=%d"), 
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=FailStopped reason=TERMINATED_IN_LOOP terminal_reason=%d"), 
 			static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
 		return EPhysAnimRuntimeState::FailStopped;
 	}
 
 	if (ShouldExitStandingToSafeDeny(LiveRuntimeEvidenceTerminationState))
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=BalanceSafeDeny reason=PHASE3_ACTIVE_SUPPORT_FAILURE hull_area=%.1f gap=%.1f proxy_inside=%d proxy_drift=%.1f"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=BalanceSafeDeny reason=PHASE3_ACTIVE_SUPPORT_FAILURE hull_area=%.1f gap=%.1f proxy_inside=%d proxy_drift=%.1f"),
 			LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportHullAreaCm2,
 			LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportGapTimerMs,
 			LiveRuntimeEvidenceTerminationState.LatestArtifact.ProxyInsideHull.IsSet() ? (LiveRuntimeEvidenceTerminationState.LatestArtifact.ProxyInsideHull.GetValue() ? 1 : 0) : -1,
@@ -533,7 +533,7 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None ||
 		LiveRuntimeEvidenceStandingSeconds < LiveRuntimeEvidenceStandingTargetSeconds)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("[PhysAnim] Startup proof satisfaction evaluated satisfied=0 state=%s fresh=%d observed=%d deferredReason=%d enforceArmed=%d reason=proof_incomplete_or_terminated"),
@@ -556,7 +556,7 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 		!HasStartupProofPhysicalContinuityEvidence(SatisfactionArtifact) ||
 		SatisfactionArtifact.bContinuityBookkeepingMismatch)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("[PhysAnim] Startup proof satisfaction evaluated satisfied=0 state=%s fresh=%d observed=%d deferredReason=%d enforceArmed=%d reason=artifact_contract_invalid"),
@@ -573,7 +573,7 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 		SatisfactionArtifact.SupportHullAreaCm2 <= 0.0f ||
 		SatisfactionArtifact.SupportGapTimerMs >= Settings.BalancePhase1AdmissionMaxSupportGapMs)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("[PhysAnim] Startup proof satisfaction evaluated satisfied=0 state=%s fresh=%d observed=%d deferredReason=%d enforceArmed=%d reason=insufficient_support"),
@@ -843,7 +843,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		}
 
 		const bool bStartupEntryBridgeSatisfied = IsLiveRuntimeEvidenceProofSatisfied();
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("[PhysAnim] Startup entry bridge evidence fresh=%d satisfied=%d state=%s"),
@@ -901,17 +901,17 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 				LiveRuntimeEvidenceTerminationState.TerminalReason);
 		if (bStartupProxySupportHandoffDeferred)
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
 				TEXT("[PhysAnim] Startup proof deferred terminal reason=ActivationProxyOutsideSupportRegion phase=%s"),
 				GetRuntimeStateName(RuntimeState));
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
 				TEXT("[PhysAnim] Startup proxy terminal recorded reason=PROXY_OUTSIDE_HULL state=%s"),
 				GetRuntimeStateName(RuntimeState));
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
 				TEXT("[PhysAnim] Startup proxy terminal deferred for standing entry"));
@@ -939,7 +939,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			!bForceSupportFailure &&
 			LiveRuntimeEvidenceTerminationState.TerminalReason == EPhysAnimTerminalReason::ActivationSupportFailure)
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
 				TEXT("[PhysAnim] Startup terminal deferred reason=ActivationSupportFailure state=%s"),
@@ -960,7 +960,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		}
 		else if (bStartupProofRuntime && LiveRuntimeEvidenceSubstepCounter == 1)
 		{
-			UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnimProof] Startup support evidence sample ignored before activation proof was initialized or refreshed."));
+			PHYSANIM_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnimProof] Startup support evidence sample ignored before activation proof was initialized or refreshed."));
 			FPhysAnimRunArtifactSnapshot WarmupArtifact = PipelineResult.SubstepResult.Artifact;
 			WarmupArtifact.TerminalReason = EPhysAnimTerminalReason::None;
 			WarmupArtifact.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
@@ -1002,12 +1002,13 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		ArmStartupProofTerminalEnforcement();
 		bLiveRuntimeEvidenceStartupStandingEntryAccepted = true;
 		StartupProofStandingEntryAcceptedSubstep = LiveRuntimeEvidenceSubstepCounter;
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("[PhysAnim] Standing entry accepted proxy handoff arming pending state=%s"),
 			GetRuntimeStateName(RuntimeState));
-		UE_LOG(
+
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
@@ -1034,12 +1035,13 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			LiveRuntimeEvidenceSubstepCounter > (StartupProofStandingEntryAcceptedSubstep + 1))
 		{
 			bLiveRuntimeEvidenceStartupProxySupportHandoffArmed = true;
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
-				TEXT("[PhysAnim] Standing entry accepted proxy handoff armed state=%s"),
+				TEXT("[PhysAnim] Standing entry accepted proxy handoff arming pending state=%s"),
 				GetRuntimeStateName(RuntimeState));
-			UE_LOG(
+
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
 				TEXT("[PhysAnim] Proxy handoff armed state=%s"),
@@ -1047,7 +1049,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		}
 		else if (bStandingSupportFresh && bStandingProxyOutsideHull)
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Verbose,
 				TEXT("[PhysAnim] Proxy outside hull deferred during standing entry state=%s"),
@@ -1093,7 +1095,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 				LiveRuntimeEvidenceStandingSeconds,
 				CompletionArtifact.TerminalReason);
 
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Warning,
 				TEXT("[PhysAnim] Startup proof rejected without physical continuity evidence state=%s simBodies=%d continuity=%d"),
@@ -1104,7 +1106,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		}
 
 		bLiveRuntimeEvidenceProofComplete = true;
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
@@ -1134,7 +1136,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		{
 			PolicyInfluenceRampStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 			BringUpGroupStableAccumulatedSeconds = 0.0f;
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Log,
 				TEXT("[PhysAnim] Startup proof completed; BridgeActive policy influence ramp enabled for balance entry."));
@@ -1180,7 +1182,7 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 		const FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 		const bool bPelvisSim = PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : false;
 		const bool bPelvisAwake = PelvisBody ? PelvisBody->IsInstanceAwake() : false;
-		UE_LOG(LogTemp, Warning, TEXT("[PhysAnimV0] METRICS_TICK state=%s t=%.3f PelvisSim=%d PelvisAwake=%d"), GetRuntimeStateName(RuntimeState), ActivatedStandingStabilityMetrics.ActivationDurationSec, bPelvisSim ? 1 : 0, bPelvisAwake ? 1 : 0);
+		PHYSANIM_LOG_RATE_LIMITED(LogTemp, Warning, 1.0f, TEXT("[PhysAnimV0] METRICS_TICK state=%s t=%.3f PelvisSim=%d PelvisAwake=%d"), GetRuntimeStateName(RuntimeState), ActivatedStandingStabilityMetrics.ActivationDurationSec, bPelvisSim ? 1 : 0, bPelvisAwake ? 1 : 0);
 	}
 	if (!bV0PlantThighWorkDiagnosticEnabled &&
 		!((IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState)) && (bFirstProductSuccessAchieved || bLiveRuntimeEvidenceProofActive)) &&
@@ -1386,12 +1388,12 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 								ActivatedStandingStabilityMetrics.PoseTargetsSeededAtWindowEntry = (bPrevSeeded && bBlendSeeded) ? 1 : 0;
 							}
 
-							UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimV0] WORK_DIAG bone=%s t=%.3f dW=%.6f dot=%.4f sim=%d"), 
+							PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimV0] WORK_DIAG bone=%s t=%.3f dW=%.6f dot=%.4f sim=%d"), 
 								*BoneName.ToString(), CurrentSampleTimeSec, WorkIncrement, TorqueDotVel, bIsSimulating ? 1 : 0);
 						}
 						else
 						{
-							UE_LOG(LogTemp, Warning, TEXT("[PhysAnimV0] DEBUG_WORK Missing data for %s (PC=%d)"), *BoneName.ToString(), PhysicsControl != nullptr);
+							PHYSANIM_LOG_RATE_LIMITED(LogTemp, Warning, 1.0f, TEXT("[PhysAnimV0] DEBUG_WORK Missing data for %s (PC=%d)"), *BoneName.ToString(), PhysicsControl != nullptr);
 						}
 					}
 				}
@@ -1442,7 +1444,7 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 				const FTransform BodyTransform = BodyInstance->GetUnrealWorldTransform();
 				const FVector BodyLocation = BodyTransform.GetLocation();
 				const FRotator BodyRotation = BodyTransform.GetRotation().Rotator();
-				UE_LOG(
+				PHYSANIM_LOG(
 					LogPhysAnimBridge,
 					Warning,
 					TEXT("[PhysAnimV0] FIRST_MAJOR_SPINE_SPIKE bone=%s activationT=%.3f runtimeState=%s lin=%.2f angDeg=%.2f thighWorkP=%.4f sim=%d awake=%d"),
@@ -1504,19 +1506,19 @@ bool UPhysAnimComponent::ApplyActivatedStandingPerturbation(
 {
 	if (bActivatedStandingPerturbationApplied)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation already applied once."));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation already applied once."));
 		return false;
 	}
 
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation blocked by runtime state=%s"), GetRuntimeStateName(RuntimeState));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation blocked by runtime state=%s"), GetRuntimeStateName(RuntimeState));
 		return false;
 	}
 
 	if (!bLiveRuntimeEvidenceProofComplete || !IsLiveRuntimeEvidenceProofSatisfied())
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation blocked by proof state complete=%d satisfied=%d"),
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation blocked by proof state complete=%d satisfied=%d"),
 			bLiveRuntimeEvidenceProofComplete ? 1 : 0,
 			IsLiveRuntimeEvidenceProofSatisfied() ? 1 : 0);
 		return false;
@@ -1525,7 +1527,7 @@ bool UPhysAnimComponent::ApplyActivatedStandingPerturbation(
 	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = GetActivatedStandingStabilityMetrics();
 	if (!Metrics.bHasSamples || Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.ActiveSupportSideCountMin < 1.0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation blocked by unstable metrics samples=%d supportHullMin=%.2f activeSidesMin=%.2f"),
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation blocked by unstable metrics samples=%d supportHullMin=%.2f activeSidesMin=%.2f"),
 			Metrics.SampleCount,
 			Metrics.SupportHullAreaMinCm2,
 			Metrics.ActiveSupportSideCountMin);
@@ -1544,13 +1546,13 @@ bool UPhysAnimComponent::ApplyActivatedStandingPerturbation(
 
 	if (!bApplied)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation requires a raw-simulating pelvis impulse; no actor offset fallback was applied."));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Activated standing perturbation requires a raw-simulating pelvis impulse; no actor offset fallback was applied."));
 		return false;
 	}
 
 	bActivatedStandingPerturbationApplied = true;
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogPhysAnimBridge,
 		Warning,
 		TEXT("[PhysAnimBalance] Activated standing perturbation applied direction=%d magnitude=%d runtimeState=%s"),
@@ -1684,7 +1686,7 @@ bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResultForBody(const FName 
 
 	if (HitCount == 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] ALL_SAMPLES_FAILED body=%s location=(%.1f,%.1f,%.1f) radius=%.1f"),
+		PHYSANIM_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] ALL_SAMPLES_FAILED body=%s location=(%.1f,%.1f,%.1f) radius=%.1f"),
 			*BodyName.ToString(), BoneWorldLocation.X, BoneWorldLocation.Y, BoneWorldLocation.Z, R);
 		return false;
 	}
@@ -1892,7 +1894,7 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 
 	if (bEnableLiveRuntimeEvidenceProof)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("[PhysAnim] LiveProof capture capsuleWorldPos=(%.1f,%.1f,%.1f) cmcMode=%s root=%s criticalBodies=%d topologyChanges=%d bookkeepingMismatch=%d capsulePassed=%d continuityPassed=%d"),
@@ -1906,7 +1908,7 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 			Input.Values.bContinuityBookkeepingMismatch ? 1 : 0,
 			Input.Values.bCapsuleContractPassed ? 1 : 0,
 			Input.Values.bPhysicalContinuityValidatorPassed ? 1 : 0);
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("PhysAnimProof: LiveCapsule capsule_valid=%d collision=%s cmc_active=%d cmc_tick=%d lock_delta=%.2f"),
@@ -1915,7 +1917,7 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 			CharacterMovement && CharacterMovement->IsActive() ? 1 : 0,
 			CharacterMovement && CharacterMovement->IsComponentTickEnabled() ? 1 : 0,
 			CapsuleValidation.CapsuleLockDeltaCm);
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Verbose,
 			TEXT("PhysAnimProof: LiveContinuity continuity_valid=%d pelvis_sleep_ms=%.2f bookkeeping_mismatch=%d"),
@@ -1924,7 +1926,7 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 			ContinuityValidation.bContinuityBookkeepingMismatch ? 1 : 0);
 		if (!PlantValidation.bPhysicsAssetContractValid || !PlantValidation.bSkeletonAuditPassed)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] LiveProof plant audit failed: %s"), *PlantAuditError);
+			PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] LiveProof plant audit failed: %s"), *PlantAuditError);
 		}
 	}
 
@@ -2239,7 +2241,7 @@ void UPhysAnimComponent::EmitStage2ALocomotionTelemetry(const TCHAR* LocomotionI
 		CapsuleOrShellMotionSource,
 		bStage2APhase3SimRootAttempted ? TEXT("true") : TEXT("false"),
 		Stage2ATerminalStateToString(TerminalState));
-	UE_LOG(LogPhysAnimBridge, Display, TEXT("%s"), *LastStage2ALocomotionTelemetryLine);
+	PHYSANIM_LOG(LogPhysAnimBridge, Display, TEXT("%s"), *LastStage2ALocomotionTelemetryLine);
 }
 
 double UPhysAnimComponent::GetPhysAnimClockTime() const

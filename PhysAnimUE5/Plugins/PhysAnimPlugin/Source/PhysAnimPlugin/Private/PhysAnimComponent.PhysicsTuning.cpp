@@ -2,6 +2,7 @@
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
 
+#include "PhysAnimLogger.h"
 #include "Engine/OverlapResult.h"
 
 namespace
@@ -269,7 +270,7 @@ namespace
 			SkeletalMesh ? SkeletalMesh->GetBodyInstance(BoneName) : nullptr,
 			After.BodyTransform);
 
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Warning,
 			TEXT("[PhysAnimV0] RAW_SIM_ENABLE bone=%s activationT=%.3f runtimeState=%s boneBefore{%s} bodyBefore{valid=%d sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d mass=%.3f inertia=%s xf=%s lin=%s angRad=%s} bodyAfter{valid=%d sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d mass=%.3f inertia=%s xf=%s lin=%s angRad=%s} modifier{prevMove=%s intendedMove=%s recordMove=%s intendedCollision=%d recordCollision=%d intendedBlend=%.2f recordBlend=%.2f intendedUpdateKinFromSim=%d recordUpdateKinFromSim=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
@@ -329,7 +330,7 @@ namespace
 		EnabledBodies.Add(BoneName);
 		if (PreviousCount < 10 && EnabledBodies.Num() == 10)
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Warning,
 				TEXT("[PhysAnimV0] RAW_SIM_GROUP_C_COMPLETE activationT=%.3f runtimeState=%s simBodies=10 excludedSimMax=%d bodies=pelvis,spine_01,spine_02,spine_03,thigh_l,thigh_r,foot_l,foot_r,ball_l,ball_r"),
@@ -600,9 +601,10 @@ namespace
 			const double AngularSpeedDegPerSecond =
 				FMath::RadiansToDegrees(Current.Body.AngularVelocityRadPerSec.Size());
 
-			UE_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Warning,
+				1.0f,
 				TEXT("[PhysAnimV0] HIP_QUARANTINE_TRACE phase=%s frame=%llu worldT=%.3f activationT=%.3f releaseFrame=%llu releaseWorldT=%.3f releaseActivationT=%.3f ticksBefore=%d ticksAfter=%d activeForTuning=%d bone=%s boneWorld{%s} body{valid=%d sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d mass=%.3f inertia=%s xf=%s lin=%s linSpeed=%.2f angRad=%s angDeg=%.2f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} penetration{world=%d capsule=%d skeletal=%d bodies=%s} changed{%s}"),
 				Phase,
 				CurrentFrame,
@@ -756,9 +758,10 @@ namespace
 			if (!State.bLoggedFirstLinearThreshold && LinearSpeedCmPerSecond >= LinearThresholdCmPerSecond)
 			{
 				State.bLoggedFirstLinearThreshold = true;
-				UE_LOG(
+				PHYSANIM_LOG_RATE_LIMITED(
 					LogPhysAnimBridge,
 					Warning,
+					1.0f,
 					TEXT("[PhysAnimV0] EARLY_CONTROL_THRESHOLD variant=%s zeroGroup=%d restoreVariant=%d kind=linear activationT=%.3f bone=%s lin=%.2f angDeg=%.2f targetDeltaDeg=%.2f supportHull=%.2f activeSides=%d zeroActive=%d currentPoseTargetsSeeded=%d previousTargets=%d blendStartTargets=%d pendingCachedResets=%d control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
 					GetV0PlantEarlyControlZeroGroupName(ZeroGroup),
 					ZeroGroup,
@@ -793,9 +796,10 @@ namespace
 			if (!State.bLoggedFirstAngularThreshold && AngularSpeedDegPerSecond >= AngularThresholdDegPerSecond)
 			{
 				State.bLoggedFirstAngularThreshold = true;
-				UE_LOG(
+				PHYSANIM_LOG_RATE_LIMITED(
 					LogPhysAnimBridge,
 					Warning,
+					1.0f,
 					TEXT("[PhysAnimV0] EARLY_CONTROL_THRESHOLD variant=%s zeroGroup=%d restoreVariant=%d kind=angular activationT=%.3f bone=%s lin=%.2f angDeg=%.2f targetDeltaDeg=%.2f supportHull=%.2f activeSides=%d zeroActive=%d currentPoseTargetsSeeded=%d previousTargets=%d blendStartTargets=%d pendingCachedResets=%d control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
 					GetV0PlantEarlyControlZeroGroupName(ZeroGroup),
 					ZeroGroup,
@@ -836,9 +840,10 @@ namespace
 					continue;
 				}
 
-				UE_LOG(
+				PHYSANIM_LOG_RATE_LIMITED(
 					LogPhysAnimBridge,
 					Warning,
+					1.0f,
 					TEXT("[PhysAnimV0] EARLY_CONTROL_SAMPLE variant=%s zeroGroup=%d restoreVariant=%d milestone=%.2f activationT=%.3f zeroDuration=%.2f zeroActive=%d bone=%s lin=%.2f angDeg=%.2f targetDeltaDeg=%.2f body{sim=%d awake=%d collision=%d blend=%.2f updateKinFromSim=%d} control{valid=%d enabled=%d angularStrength=%.4f angularDamping=%.4f angularExtraDamping=%.4f} modifier{valid=%d move=%s collision=%d blend=%.2f updateKinFromSim=%d} targets{currentPoseSeeded=%d hasPrevious=%d hasBlendStart=%d pendingCachedReset=%d previousCount=%d blendStartCount=%d pendingResetCount=%d} support{hull=%.2f activeSides=%d} penetration{world=%d capsule=%d skeletal=%d bodies=%s}"),
 					GetV0PlantEarlyControlZeroGroupName(ZeroGroup),
 					ZeroGroup,
@@ -934,7 +939,7 @@ bool UPhysAnimComponent::ActivateRuntimePhysicsControl(FString& OutError)
 		return false;
 	}
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogPhysAnimBridge,
 		Log,
 		TEXT("[PhysAnim] Runtime operator activation: controls=%d bodyModifiers=%d"),
@@ -959,7 +964,7 @@ void UPhysAnimComponent::DeactivateRuntimePhysicsControl(const TCHAR* Context)
 		return;
 	}
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogPhysAnimBridge,
 		Log,
 		TEXT("[PhysAnim] Runtime operator deactivation[%s]: controls=%d bodyModifiers=%d"),
@@ -1062,7 +1067,7 @@ void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilization
 
 	if (bPreserveGameplayShell)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Log,
 			TEXT("[PhysAnim] BridgeActive preserving capsule collision and CharacterMovement during bridge ownership."));
@@ -1093,7 +1098,7 @@ void UPhysAnimComponent::ReassertBridgeActiveStartupProofRawSimulation(const TCH
 	SkeletalMesh->SetEnablePhysicsBlending(true);
 	SkeletalMesh->WakeAllRigidBodies();
 
-	UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnim] BridgeActive startup proof raw simulation reasserted after %s."), Context);
+	PHYSANIM_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnim] BridgeActive startup proof raw simulation reasserted after %s."), Context);
 }
 
 
@@ -1150,7 +1155,7 @@ void UPhysAnimComponent::ApplyTrainingAlignedMassScales(const FPhysAnimStabiliza
 		++NumAdjustedBodies;
 	}
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogPhysAnimBridge,
 		Log,
 		TEXT("[PhysAnim] Applied training-aligned Manny mass scales: bodies=%d blend=%.2f"),
@@ -1267,7 +1272,7 @@ void UPhysAnimComponent::ApplyTrainingAlignedToeLimitPolicy(const FPhysAnimStabi
 	bHasSavedToeConstraintLimits = OriginalToeTwistMotions.Num() > 0;
 	if (NumAdjustedToeConstraints > 0)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Log,
 			TEXT("[PhysAnim] Applied training-aligned toe operating limits: constraints=%d blend=%.2f"),
@@ -1359,7 +1364,7 @@ void UPhysAnimComponent::ApplyTrainingAlignedSpineLimitPolicy(const FPhysAnimSta
 	bHasSavedSpineConstraintLimits = OriginalSpineTwistMotions.Num() > 0;
 	if (NumAdjustedSpineConstraints > 0)
 	{
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Log,
 			TEXT("[PhysAnim] Applied training-aligned spine operating limits: constraints=%d blend=%.2f"),
@@ -1620,7 +1625,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 
 		if (CurrentCallIndex != 1)
 		{
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_TUNING_CALL_AUDIT frame=%d callIndex=%d runtimeState=%s owner=%d actor=%s component=%s"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE2_TUNING_CALL_AUDIT frame=%d callIndex=%d runtimeState=%s owner=%d actor=%s component=%s"),
 				static_cast<int32>(CurrentFrameNumber),
 				CurrentCallIndex,
 				GetRuntimeStateName(RuntimeState),
@@ -1979,7 +1984,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				if (bGateActiveNow)
 				{
 					ControlMultiplier.AngularStrengthMultiplier = 0.0f;
-					UE_LOG(LogPhysAnimBridge, Warning,
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 						TEXT("[PhysAnimV0] KINETIC_GATE_HOLD bone=%s P=%.1f S1=%.1f S2=%.1f S3=%.1f thresh=%.1f activationT=%.3f"),
 						*BoneName.ToString(), PelvisAngVel, Spine01AngVel, Spine02AngVel, Spine03AngVel, GateThreshold,
 						GetActivatedStandingStabilityMetrics().ActivationDurationSec);
@@ -2006,7 +2011,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 						HipQuarantineTicksRemaining = 0;
 					}
 
-					UE_LOG(LogPhysAnimBridge, Warning,
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
 						TEXT("[PhysAnimV0] KINETIC_GATE_RELEASE pelvisAngVel=%.2f maxSpineAngVel=%.2f "
 						     "thighRestoreStrength=%.4f activationT=%.3f releaseN=%d variant=%d thresh=%.1f"),
 						PelvisAngVel, MaxSpineAngVel, EffectiveRestoreStrength, ActivationT,
@@ -2061,18 +2066,18 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					
 					if (BalanceEntryRootOnFrameCount == 1 && (BoneName == "spine_01" || BoneName == "spine_02" || BoneName == "spine_03"))
 					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_SPINE_EFFECTIVE_ROUTING bone=%s softAlpha=%.4f extraDampingMultiplier=%.2f"),
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_SPINE_EFFECTIVE_ROUTING bone=%s softAlpha=%.4f extraDampingMultiplier=%.2f"),
 							*BoneName.ToString(), ControlMultiplier.AngularStrengthMultiplier, ExtraDamping);
 					}
 
 					if (BalanceEntryRootOnFrameCount == 1 && (BoneName == "thigh_l" || BoneName == "thigh_r"))
 					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_THIGH_EFFECTIVE_ROUTING bone=%s softAlpha=%.4f extraDampingMultiplier=%.2f"),
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_PRESERVED_THIGH_EFFECTIVE_ROUTING bone=%s softAlpha=%.4f extraDampingMultiplier=%.2f"),
 							*BoneName.ToString(), ControlMultiplier.AngularStrengthMultiplier, ExtraDamping);
 					}
 
 					const TCHAR* StateLogName = (BoneName == "thigh_l" || BoneName == "thigh_r") ? TEXT("PHASE2_PRESERVED_THIGH_STATE") : TEXT("PHASE2_PRESERVED_SPINE_STATE");
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] %s source=%s bone=%s rawSim=%d modifier=%s linSpeed=%.2f angSpeed=%.2f controlAlpha=%.4f extraDampingMultiplier=%.2f"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] %s source=%s bone=%s rawSim=%d modifier=%s linSpeed=%.2f angSpeed=%.2f controlAlpha=%.4f extraDampingMultiplier=%.2f"),
 						StateLogName,
 						BalanceEntryRootOnFrameCount == 1 ? TEXT("post_tuning_tick1") : TEXT("pre_updatecontrols_tick2"),
 						*BoneName.ToString(),
@@ -2097,9 +2102,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			{
 				const FTransform BoneTransform = MeshComponent->GetBoneTransform(MeshComponent->GetBoneIndex(BoneName));
 				
-				UE_LOG(
+				PHYSANIM_LOG_RATE_LIMITED(
 					LogPhysAnimBridge,
 					Log,
+					1.0f,
 					TEXT("[PhysAnimBalance] FINAL RAMP ENABLE DIAG: bone=%s alpha=%.4f easing=%.4f strength=%.2f useSkelAnim=%s loc=(%.1f, %.1f, %.1f) rot=(%.2f, %.2f, %.2f, %.2f)"),
 					*BoneName.ToString(),
 					ControlAuthorityAlpha,
@@ -2127,7 +2133,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					const bool bIsFirstFailureTrigger = BalanceReadyTransition.GetFailureReason().IsEmpty();
 					if (bIsFirstFailureTrigger && RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
 					{
-						UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PELVIS_SIM_CHECK_FAIL bone=%s pointer=%d [log]"), *PelvisName.ToString(), bActualSimulating ? 1 : 0);
+						PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PELVIS_SIM_CHECK_FAIL bone=%s pointer=%d [log]"), *PelvisName.ToString(), bActualSimulating ? 1 : 0);
 					}
 				}
 			}
@@ -2143,9 +2149,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		WorldTime >= 0.0)
 	{
 		const float PolicyAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
-		UE_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Log,
+			1.0f,
 			TEXT("[PhysAnimBalance] STATE FLIP - AFTER FINAL RAMP: time=%.4f policyAlpha=%.4f useSkelAnim=%s"),
 			WorldTime,
 			PolicyAlpha,
@@ -2159,7 +2166,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		static bool bLoggedAuthoritativeWrite = false;
 		if (!bLoggedAuthoritativeWrite)
 		{
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_AUTHORITATIVE_PER_BONE_WRITE active=1 broadSetWriteBypassedForCriticalBones=1"));
+			PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_AUTHORITATIVE_PER_BONE_WRITE active=1 broadSetWriteBypassedForCriticalBones=1"));
 			bLoggedAuthoritativeWrite = true;
 		}
 
@@ -2390,7 +2397,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		{
 			if (BodyModifierMovementType != EPhysicsMovementType::Simulated)
 			{
-				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PELVIS_BODYMOD_SIM_ACTIVATION_FAIL bone=%s allowRootSim=%d handoffSettled=%d bringUpUnlocked=%d keepsKinematic=%d quarantined=%d"),
+				PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PELVIS_BODYMOD_SIM_ACTIVATION_FAIL bone=%s allowRootSim=%d handoffSettled=%d bringUpUnlocked=%d keepsKinematic=%d quarantined=%d"),
 					*BoneName.ToString(),
 					bAllowRootBodyModifierSimulation ? 1 : 0,
 					bSimulationHandoffSettled ? 1 : 0,
@@ -2409,7 +2416,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			// DROP CULPRIT: Trace if the pelvis was simulating but we are about to write it as kinematic
 			if (bLastAppliedPresentationRootSimulationEnabled && BodyModifierMovementType == EPhysicsMovementType::Kinematic)
 			{
-				UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ROOT_DROP_CULPRIT frame=%d bone=%s previousSim=1 requestedSim=%d quarantined=%d keepsKin=%d source=ApplyRuntimeControlTuning"),
+				PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] PHASE2_ROOT_DROP_CULPRIT frame=%d bone=%s previousSim=1 requestedSim=%d quarantined=%d keepsKin=%d source=ApplyRuntimeControlTuning"),
 					CurrentFrame, *BoneName.ToString(), 
 					bAllowRootBodyModifierSimulation ? 1 : 0, 
 					bPhase2RootAuthorityQuarantined ? 1 : 0,
@@ -2477,7 +2484,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			{
 				if (GVerbosePhase2Forensics != 0)
 				{
-					UE_LOG(LogPhysAnimBridge, Log, TEXT("DISTAL_SYNC_REPROMOTION_SUPPRESSED bone=%s phase=%s reason=PerBone_BodyModSync blockedBy=DistalOwnershipRule"), 
+					PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("DISTAL_SYNC_REPROMOTION_SUPPRESSED bone=%s phase=%s reason=PerBone_BodyModSync blockedBy=DistalOwnershipRule"), 
 						*BoneName.ToString(), 
 						GetRuntimeStateName(RuntimeState));
 				}
@@ -2488,7 +2495,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			{
 				if (GVerbosePhase1Forensics != 0)
 				{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_MODIFIER_SYNC_CORRECTED bone=%s phase=%s previousModifier=Simulated correctedModifier=Kinematic reason=AcceptedPhase1Topology"), 
+					PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] DISTAL_MODIFIER_SYNC_CORRECTED bone=%s phase=%s previousModifier=Simulated correctedModifier=Kinematic reason=AcceptedPhase1Topology"), 
 						*BoneName.ToString(), 
 						bPhase1Prepare ? TEXT("BalanceEntry_Prepare") : TEXT("BalanceEntry_LateValidate"));
 				}
@@ -2505,7 +2512,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		{
 			if (GVerbosePhase2Forensics != 0 || RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
 			{
-				UE_LOG(
+				PHYSANIM_LOG(
 					LogPhysAnimBridge,
 					Verbose,
 					TEXT("[PhysAnimBalance] PELVIS_BODYMOD tickPhase=%d allowRootSim=%d transitionOwnsRootOn=%d transitionKeepKinematic=%d bringUpUnlocked=%d simHandoffSettled=%d movementType=%d collisionType=%d updateKinematicFromSimulation=%d bodyActivatedThisTick=%d lastAppliedRootSim=%d pendingResets=%d"),
@@ -2555,7 +2562,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					const USkeletalMeshComponent* const Mesh = GetMeshComponent();
 					const FBodyInstance* const TargetBody = Mesh ? Mesh->GetBodyInstance(BoneName) : nullptr;
 					const bool bRawSimulating = TargetBody ? TargetBody->IsInstanceSimulatingPhysics() : false;
-					UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnimBalance] PHASE1_MODIFIER_SYNC bone=%s movement=%s updateBody=1 rawSim=%d"),
+					PHYSANIM_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnimBalance] PHASE1_MODIFIER_SYNC bone=%s movement=%s updateBody=1 rawSim=%d"),
 						*BoneName.ToString(),
 						UPhysAnimComponent::GetPhysicsMovementTypeName(BodyModifierMovementType),
 						bRawSimulating ? 1 : 0);
@@ -2670,7 +2677,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			{
 				if (bIsRootBodyModifier)
 				{
-					UE_LOG(
+					PHYSANIM_LOG(
 						LogPhysAnimBridge,
 						Error,
 						TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Cached-target reset for pelvis/root '%s' requested in Balance Mode. Failing and stopping mode. reason=pelvisResetRequestedDuringBalance"),
@@ -2681,7 +2688,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				else if (CurrentPolicyAlpha > 0.0f)
 				{
 					const FString ViolationReason = FString::Printf(TEXT("bodyResetViolation:%s"), *BoneName.ToString());
-					UE_LOG(
+					PHYSANIM_LOG(
 						LogPhysAnimBridge,
 						Error,
 						TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Cached-target reset for '%s' requested after policy influence has begun (Alpha=%.2f). Failing and stopping mode."),
@@ -2697,7 +2704,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 					{
 						if (GVerbosePhase1Forensics != 0)
 						{
-							UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=recovery"), *BoneName.ToString());
+							PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=recovery"), *BoneName.ToString());
 						}
 					}
 					else
@@ -2714,7 +2721,7 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				{
 					if (GVerbosePhase1Forensics != 0)
 					{
-						UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=applyTuning"), *BoneName.ToString());
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=applyTuning"), *BoneName.ToString());
 					}
 				}
 				else
@@ -2781,9 +2788,10 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		{
 			if (IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState))
 			{
-				UE_LOG(
+				PHYSANIM_LOG_RATE_LIMITED(
 					LogPhysAnimBridge,
 					Warning,
+					1.0f,
 					TEXT("[PhysAnimBalance] HIP_QUARANTINE_RELEASED frame=%llu worldT=%.3f activationT=%.3f ticksBefore=%d ticksAfter=%d nextTickTraceArmed=1"),
 					CurrentFrameNumber,
 					GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
@@ -2849,7 +2857,7 @@ void UPhysAnimComponent::ReconcilePhase1DistalModifierRecords(const FPhysAnimSta
 			{
 				if (GVerbosePhase1Forensics != 0)
 				{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("PHASE1_DISTAL_RECORD_REPAIRED bone=%s prevModifier=%s rawBody=%s"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("PHASE1_DISTAL_RECORD_REPAIRED bone=%s prevModifier=%s rawBody=%s"),
 						*BoneName.ToString(),
 						GetPhysicsMovementTypeName(ModifierMovementType),
 						bRawSimulating ? TEXT("Simulated") : TEXT("Kinematic"));
@@ -2862,7 +2870,7 @@ void UPhysAnimComponent::ReconcilePhase1DistalModifierRecords(const FPhysAnimSta
 			{
 				if (GVerbosePhase1Forensics != 0)
 				{
-					UE_LOG(LogPhysAnimBridge, Warning, TEXT("PHASE1_DISTAL_RECORD_ENTRY_STATE bone=%s modifier=%s rawBody=%s"),
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("PHASE1_DISTAL_RECORD_ENTRY_STATE bone=%s modifier=%s rawBody=%s"),
 						*BoneName.ToString(),
 						GetPhysicsMovementTypeName(ModifierMovementType),
 						bRawSimulating ? TEXT("Simulated") : TEXT("Kinematic"));
