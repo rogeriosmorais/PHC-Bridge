@@ -1276,6 +1276,24 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	float ThighLinearStrengthAtWindowEntry = -1.f;
 
+	/** Clears attempt-level metrics while preserving architectural session status (model loaded, counts, etc.) */
+	void ResetForNewAttempt()
+	{
+		const bool bWasModelLoaded = bPolicyModelLoaded;
+		const FString PersistentRuntimeName = PolicyRuntimeName;
+		const FString PersistentModelName = PolicyModelName;
+		const bool bWasPhysicsControlAvailable = bPhysicsControlComponentAvailable;
+		const int32 PersistentControlledBodyCount = ControlledBodyCount;
+
+		*this = FPhysAnimActivatedStandingStabilityMetrics();
+
+		bPolicyModelLoaded = bWasModelLoaded;
+		PolicyRuntimeName = PersistentRuntimeName;
+		PolicyModelName = PersistentModelName;
+		bPhysicsControlComponentAvailable = bWasPhysicsControlAvailable;
+		ControlledBodyCount = PersistentControlledBodyCount;
+	}
+	};
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 PoseTargetsSeededAtWindowEntry = -1; // -1=not yet sampled, 0=not seeded, 1=seeded
 
@@ -2027,6 +2045,10 @@ private:
 	bool bForceSupportFailure = false;
 	bool bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
 	EPhysAnimTerminalReason StartupProofDeferredTerminalReason = EPhysAnimTerminalReason::None;
+
+	/** Persistent session state: true if at least one attempt achieved authentic product success. 
+	 * Used to gate the activation of detailed stability measurement metrics. */
+	bool bFirstProductSuccessAchieved = false;
 
 	FString LiveRuntimeEvidenceAttemptUuid;
 	float LiveRuntimeEvidenceStandingSeconds = 0.0f;

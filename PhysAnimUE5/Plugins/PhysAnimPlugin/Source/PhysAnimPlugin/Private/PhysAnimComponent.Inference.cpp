@@ -5,7 +5,12 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_RunInference);
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	const bool bCaptureMetrics = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		((RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
+		  RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
+		  RuntimeState == EPhysAnimRuntimeState::ReadyForActivation) && bLiveRuntimeEvidenceProofActive);
+
+	if (bCaptureMetrics)
 	{
 		++ActivatedStandingStabilityMetrics.PolicyInferenceAttemptCount;
 	}
@@ -13,8 +18,9 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 	UE::NNE::IModelInstanceRunSync* const ModelInstance = GetModelInstanceRunSync();
 	if (!ModelInstance)
 	{
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnim] RunInference failed: No active model instance exists."));
 		OutError = TEXT("No active model instance exists.");
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		if (bCaptureMetrics)
 		{
 			++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
 		}
@@ -23,7 +29,8 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 
 	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("self_obs"), SelfObservationBuffer, OutError))
 	{
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f, TEXT("[PhysAnim] RunInference failed: self_obs buffer contains non-finite values."));
+		if (bCaptureMetrics)
 		{
 			++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
 		}
@@ -32,7 +39,8 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 
 	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("mimic_target_poses"), MimicTargetPosesBuffer, OutError))
 	{
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f, TEXT("[PhysAnim] RunInference failed: mimic_target_poses buffer contains non-finite values."));
+		if (bCaptureMetrics)
 		{
 			++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
 		}
@@ -41,7 +49,8 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 
 	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("terrain"), TerrainBuffer, OutError))
 	{
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f, TEXT("[PhysAnim] RunInference failed: terrain buffer contains non-finite values."));
+		if (bCaptureMetrics)
 		{
 			++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
 		}
@@ -56,8 +65,9 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		{
 			const double LatencyMs = (FPlatformTime::Seconds() - RunSyncStartSeconds) * 1000.0;
 			TRACE_COUNTER_SET(COUNTER_PhysAnim_RunSyncMs, static_cast<float>(LatencyMs));
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f, TEXT("[PhysAnim] RunInference failed: ModelInstance->RunSync returned failure status."));
 			OutError = TEXT("RunSync failed.");
-			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+			if (bCaptureMetrics)
 			{
 				++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
 				ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax = FMath::Max(
@@ -72,7 +82,7 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 
 	if (!PhysAnimBridge::ValidateFiniteFloatBuffer(TEXT("Model action output"), ActionOutputBuffer, OutError))
 	{
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		if (bCaptureMetrics)
 		{
 			++ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
 			ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax = FMath::Max(
@@ -82,7 +92,7 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		return false;
 	}
 	PreviousActionOutputBuffer = ActionOutputsBeforeRun;
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	if (bCaptureMetrics)
 	{
 		++ActivatedStandingStabilityMetrics.PolicyInferenceSuccessCount;
 		ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax = FMath::Max(
@@ -113,7 +123,12 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 	if (bSuccess)
 	{
 		PreviousConditionedActionBuffer = ConditionedActionBuffer;
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		const bool bCaptureMetrics = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+			((RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
+			  RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
+			  RuntimeState == EPhysAnimRuntimeState::ReadyForActivation) && bLiveRuntimeEvidenceProofActive);
+
+		if (bCaptureMetrics)
 		{
 			++ActivatedStandingStabilityMetrics.PolicyActionSampleCount;
 			ActivatedStandingStabilityMetrics.PolicyActionRawMeanAbsMax = FMath::Max(

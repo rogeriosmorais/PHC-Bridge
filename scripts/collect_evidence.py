@@ -145,10 +145,26 @@ def summarize_terminal(terminal: Dict[str, Any]) -> List[str]:
         "terminal_frame_artifact_captured",
         "terminal_reason_name",
         "terminal_reason",
-        "pose_search_selected_animation_name",
-        "policy_model_loaded",
+        "hold_duration_sec",
     ]
     return [format_key_value(field, terminal.get(field)) for field in fields if field in terminal]
+
+
+def summarize_stability_metrics(terminal: Dict[str, Any]) -> List[str]:
+    metrics = [
+        ("Hold Duration", "hold_duration_sec"),
+        ("Simulating Bodies", "runtime_simulating_body_count"),
+        ("Max Root Tilt", "max_root_tilt_deg"),
+        ("Peak Angular Speed", "peak_angular_speed_deg_per_sec"),
+        ("Support Churn", "support_churn_hz"),
+        ("Proxy Drift", "proxy_outside_hull_duration_ms"),
+        ("Terminal Reason", "terminal_reason_name"),
+    ]
+    lines = []
+    for label, key in metrics:
+        if key in terminal:
+            lines.append(f"{label}={terminal.get(key)}")
+    return lines
 
 
 def summarize_summary(summary: Dict[str, Any]) -> List[str]:
@@ -240,10 +256,48 @@ def summary_supports_success(summary: Optional[Dict[str, Any]]) -> bool:
 def terminal_supports_success(terminal: Optional[Dict[str, Any]]) -> bool:
     if not terminal:
         return False
+
+    # 1. Fundamental Validation
     if not truthy(terminal.get("physical_continuity_validator_passed")):
         return False
     if "terminal_frame_artifact_captured" in terminal and not truthy(terminal.get("terminal_frame_artifact_captured")):
         return False
+
+    # 2. Terminal State (None/nullptr/0 is success)
+    reason = terminal.get("terminal_reason")
+    reason_name = normalize_upper(terminal.get("terminal_reason_name"))
+    if reason is not None and reason != 0 and reason != "nullptr":
+        return False
+    if reason_name and reason_name != "NONE" and reason_name != "NULLPTR":
+        return False
+
+    # 3. Stability Metrics (Authoritative Stage 1 Thresholds)
+    # Hold Duration (Min 3.0s)
+    if float(terminal.get("hold_duration_sec", 0.0)) < 3.0:
+        return False
+
+    # Max Root Tilt (Max 20.0 deg)
+    if float(terminal.get("max_root_tilt_deg", 0.0)) > 20.0:
+        return False
+
+    # Peak Angular Speed (Max 720.0 deg/s)
+    if float(terminal.get("peak_angular_speed_deg_per_sec", 0.0)) > 720.0:
+        return False
+
+    # Support Churn (Max 12.0 Hz)
+    if float(terminal.get("support_churn_hz", 0.0)) > 12.0:
+        return False
+
+    # Proxy Drift (Max 100.0 ms)
+    if float(terminal.get("proxy_outside_hull_duration_ms", 0.0)) > 100.0:
+        return False
+
+    # 4. Authority & Assistance
+    if int(terminal.get("authority_conflict_count", 0)) > 0:
+        return False
+    if int(terminal.get("shell_helper_used_count", 0)) > 0:
+        return False
+
     return True
 
 
@@ -317,6 +371,27 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
     terminal_success = terminal_supports_success(terminal)
 
     contradiction_items = []
+    stability_invalid = False
+
+    if terminal:
+        hold_duration = terminal.get("hold_duration_sec")
+        sim_bodies = terminal.get("runtime_simulating_body_count")
+
+        if hold_duration is None:
+            missing_items.append("stability field: hold_duration_sec")
+            stability_invalid = True
+        if sim_bodies is None:
+            missing_items.append("stability field: runtime_simulating_body_count")
+            stability_invalid = True
+
+        if hold_duration is not None and sim_bodies is not None:
+            if float(hold_duration) > 0.0 and int(sim_bodies) == 0:
+                contradiction_items.append(f"hold_duration_sec={hold_duration} but runtime_simulating_body_count=0")
+                stability_invalid = True
+            if float(hold_duration) > 1000.0:
+                contradiction_items.append(f"implausible hold_duration_sec={hold_duration}")
+                stability_invalid = True
+
     if log_path is not None and has_log_pass_claim(log_claims) and not (summary_success and terminal_success):
         contradiction_items.append("log claims PASS/PASSED/SUCCESS, but artifacts do not support product success")
     if log_path is not None and has_log_fail_claim(log_claims) and summary_success and terminal_success:
@@ -336,6 +411,8 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
         actual_lines.append(f"{summary_path.name} | " + " | ".join(summarize_summary(summary)))
     else:
         actual_lines.append("evidence summary missing")
+
+    stability_metrics = summarize_stability_metrics(terminal) if terminal else ["no terminal artifact found"]
 
     weak_lines: List[str] = []
     if log_path is not None:
@@ -357,16 +434,25 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
         missing_lines.append("- summary marked missing_evidence=true, so it cannot pass")
 
     segment_lines = []
+    blocking_segment = None
+    ordered_segments = ["PoseSearch", "PhcPolicy", "PhysicsControl", "Chaos", "RendererFacingMotion"]
+    
     if summary:
         segments = summary.get("segments")
         if isinstance(segments, list):
-            for segment in segments:
-                if isinstance(segment, dict):
-                    name = segment.get("segment_name")
-                    state = segment.get("state")
-                    segment_lines.append(f"- {name}: {state}")
-    if not segment_lines:
+            segment_map = {s.get("segment_name"): s.get("state") for s in segments if isinstance(s, dict)}
+            for name in ordered_segments:
+                if name in segment_map:
+                    state = segment_map[name]
+                    if state != "Active":
+                        segment_lines.append(f"- segment_name={name}, state={state}")
+                    if blocking_segment is None and state != "Active":
+                        blocking_segment = name
+    
+    if not segment_lines and not blocking_segment:
         segment_lines = ["- No segment data available."]
+    elif not segment_lines:
+        segment_lines = ["- All reported segments are Active."]
 
     if missing_items:
         verdict = "MISSING EVIDENCE"
@@ -375,10 +461,20 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
     else:
         verdict = artifact_verdict(summary, terminal)
 
+    if verdict == "PRODUCT SUCCESS":
+        blocker_line = "No blocking segment found."
+    elif blocking_segment:
+        blocker_line = f"Next Blocking Segment: segment_name={blocking_segment}"
+    else:
+        blocker_line = "No blocking segment identified."
+
     contradiction_lines = [f"- {line}" for line in contradiction_items] if contradiction_items else ["- none"]
     lines = [
         "Actual Evidence",
         *[f"- {line}" for line in actual_lines],
+        "",
+        "Stability Metrics",
+        *[f"- {line}" for line in stability_metrics],
         "",
         "Weak Evidence",
         *[f"- {line}" for line in weak_lines],
@@ -391,10 +487,20 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
         "",
         "Segment Status",
         *segment_lines,
+        blocker_line,
         "",
+    ]
+
+    if stability_invalid:
+        lines.extend([
+            "CRITICAL: Stability metrics are invalid. Route to Artifact Schema Acceptance work.",
+            "",
+        ])
+
+    lines.extend([
         "Verdict",
         f"- {verdict}",
-    ]
+    ])
     return lines
 
 

@@ -158,6 +158,7 @@ UPhysAnimComponent::UPhysAnimComponent()
 	ModelDataAsset = TSoftObjectPtr<UNNEModelData>(FSoftObjectPath(PhysAnimComponentInternal::DefaultModelPath));
 	LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
 	bEnableLiveRuntimeEvidenceProof = true;
+	bFirstProductSuccessAchieved = false;
 }
 
 bool UPhysAnimComponent::BuildConditionedActions(
@@ -691,7 +692,7 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
 	LiveRuntimeEvidenceStandingSeconds = 0.0f;
 	LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
-	ActivatedStandingStabilityMetrics = FPhysAnimActivatedStandingStabilityMetrics();
+	ActivatedStandingStabilityMetrics.ResetForNewAttempt();
 	bActivatedStandingStabilityBaselineInitialized = false;
 	bActivatedStandingPerturbationApplied = false;
 	ActivatedStandingStabilityBaselineRootLocationCm = FVector::ZeroVector;
@@ -1166,6 +1167,8 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			true,
 			LiveRuntimeEvidenceStandingSeconds,
 			EPhysAnimTerminalReason::None);
+
+		bFirstProductSuccessAchieved = true;
 	}
 }
 
@@ -1179,10 +1182,8 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 		UE_LOG(LogTemp, Warning, TEXT("[PhysAnimV0] METRICS_TICK state=%s t=%.3f PelvisSim=%d PelvisAwake=%d"), GetRuntimeStateName(RuntimeState), ActivatedStandingStabilityMetrics.ActivationDurationSec, bPelvisSim ? 1 : 0, bPelvisAwake ? 1 : 0);
 	}
 	if (!bV0PlantThighWorkDiagnosticEnabled &&
-		!IsBalanceActiveState(RuntimeState) &&
-		!(bEnableLiveRuntimeEvidenceProof && RuntimeStateOwnsBridgePhysics(RuntimeState)) &&
-		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn &&
-		RuntimeState != EPhysAnimRuntimeState::BalanceEntry_Settle)
+		!((IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState)) && (bFirstProductSuccessAchieved || bLiveRuntimeEvidenceProofActive)) &&
+		!(bEnableLiveRuntimeEvidenceProof && RuntimeStateOwnsBridgePhysics(RuntimeState) && (bFirstProductSuccessAchieved || bLiveRuntimeEvidenceProofActive)))
 	{
 		return;
 	}

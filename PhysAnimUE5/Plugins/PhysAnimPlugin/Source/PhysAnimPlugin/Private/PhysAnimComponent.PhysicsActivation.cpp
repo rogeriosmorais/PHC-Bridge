@@ -105,11 +105,11 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 		bLiveRuntimeEvidenceProofComplete = false;
 		bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
 		LiveRuntimeEvidenceAttemptUuid.Empty();
-		LiveRuntimeEvidenceStandingSeconds = 0.0f;
+		LiveRuntimeEvidenceSTANDINGSeconds = 0.0f;
 		LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
 		LiveRuntimeEvidenceSubstepCounter = 0;
 		LiveRuntimeEvidenceTerminationState = FPhysAnimRuntimeTerminationState();
-		ActivatedStandingStabilityMetrics = FPhysAnimActivatedStandingStabilityMetrics();
+		ActivatedStandingStabilityMetrics.ResetForNewAttempt();
 		bActivatedStandingStabilityBaselineInitialized = false;
 		bActivatedStandingPerturbationApplied = false;
 		ActivatedStandingStabilityBaselineRootLocationCm = FVector::ZeroVector;

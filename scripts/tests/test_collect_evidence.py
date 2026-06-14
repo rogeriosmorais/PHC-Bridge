@@ -58,6 +58,8 @@ class CollectEvidenceCLITests(unittest.TestCase):
                     "attempt_uuid": "new",
                     "physical_continuity_validator_passed": True,
                     "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
                 },
                 20.0,
             )
@@ -107,6 +109,8 @@ class CollectEvidenceCLITests(unittest.TestCase):
                     "attempt_uuid": "attempt",
                     "physical_continuity_validator_passed": True,
                     "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
                 },
                 20.0,
             )
@@ -146,7 +150,12 @@ class CollectEvidenceCLITests(unittest.TestCase):
 
             self._write_json(
                 saved_root / "PhysAnim" / "ProofArtifacts" / "one_terminal.json",
-                {"attempt_uuid": "one", "physical_continuity_validator_passed": True},
+                {
+                    "attempt_uuid": "one",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
+                },
                 10.0,
             )
             self._write_text(saved_root / "Logs" / "PhysAnimUE5.log", "Result: PASSED\n", 20.0)
@@ -170,6 +179,8 @@ class CollectEvidenceCLITests(unittest.TestCase):
                     "attempt_uuid": "attempt-old",
                     "physical_continuity_validator_passed": True,
                     "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
                 },
                 10.0,
             )
@@ -179,6 +190,8 @@ class CollectEvidenceCLITests(unittest.TestCase):
                     "attempt_uuid": "attempt-new",
                     "physical_continuity_validator_passed": True,
                     "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
                 },
                 20.0,
             )
@@ -232,6 +245,8 @@ class CollectEvidenceCLITests(unittest.TestCase):
                     "attempt_uuid": "attempt-other",
                     "physical_continuity_validator_passed": True,
                     "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
                 },
                 20.0,
             )
@@ -273,6 +288,8 @@ class CollectEvidenceCLITests(unittest.TestCase):
                     "attempt_uuid": "attempt-old",
                     "physical_continuity_validator_passed": True,
                     "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
                 },
                 10.0,
             )
@@ -307,7 +324,12 @@ class CollectEvidenceCLITests(unittest.TestCase):
 
             self._write_json(
                 saved_root / "PhysAnim" / "ProofArtifacts" / "default_terminal.json",
-                {"attempt_uuid": "one", "physical_continuity_validator_passed": True},
+                {
+                    "attempt_uuid": "one",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
+                },
                 10.0,
             )
             self._write_json(
@@ -348,6 +370,8 @@ class CollectEvidenceCLITests(unittest.TestCase):
                     "attempt_uuid": "one",
                     "physical_continuity_validator_passed": True,
                     "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
                 },
                 10.0,
             )
@@ -384,6 +408,8 @@ class CollectEvidenceCLITests(unittest.TestCase):
                     "attempt_uuid": "one",
                     "physical_continuity_validator_passed": True,
                     "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
                 },
                 10.0,
             )
@@ -424,6 +450,8 @@ class CollectEvidenceCLITests(unittest.TestCase):
                     "attempt_uuid": "one",
                     "physical_continuity_validator_passed": True,
                     "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
                 },
                 10.0,
             )
@@ -450,6 +478,72 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertIn("Verdict\n- BLOCKED", result.stdout)
             self.assertNotIn("CONTRADICTORY", result.stdout)
 
+    def test_invalid_stability_metrics_are_reported_as_critical(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            saved_root = repo_root / "PhysAnimUE5" / "Saved"
+
+            # Contradiction: hold duration > 0 but sim bodies = 0
+            self._write_json(
+                saved_root / "PhysAnim" / "ProofArtifacts" / "bad_terminal.json",
+                {
+                    "attempt_uuid": "bad",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 5.0,
+                    "runtime_simulating_body_count": 0,
+                },
+                20.0,
+            )
+            self._write_json(
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "bad_summary.json",
+                {
+                    "attempt_uuid": "bad",
+                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                },
+                20.0,
+            )
+            self._write_text(saved_root / "Logs" / "PhysAnimUE5.log", "Result: PASSED\n", 20.0)
+
+            result = self._run_cli(repo_root)
+
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("CONTRADICTORY", result.stdout)
+            self.assertIn("hold_duration_sec=5.0 but runtime_simulating_body_count=0", result.stdout)
+            self.assertIn("CRITICAL: Stability metrics are invalid", result.stdout)
+            self.assertIn("Route to Artifact Schema Acceptance work", result.stdout)
+
+    def test_missing_critical_stability_fields_are_reported_as_critical(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            saved_root = repo_root / "PhysAnimUE5" / "Saved"
+
+            # Missing runtime_simulating_body_count
+            self._write_json(
+                saved_root / "PhysAnim" / "ProofArtifacts" / "missing_field_terminal.json",
+                {
+                    "attempt_uuid": "missing",
+                    "physical_continuity_validator_passed": True,
+                    "hold_duration_sec": 5.0,
+                },
+                20.0,
+            )
+            self._write_json(
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "missing_field_summary.json",
+                {
+                    "attempt_uuid": "missing",
+                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                },
+                20.0,
+            )
+            self._write_text(saved_root / "Logs" / "PhysAnimUE5.log", "Result: PASSED\n", 20.0)
+
+            result = self._run_cli(repo_root)
+
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("MISSING EVIDENCE", result.stdout)
+            self.assertIn("stability field: runtime_simulating_body_count", result.stdout)
+            self.assertIn("CRITICAL: Stability metrics are invalid", result.stdout)
+
     def test_explicit_strict_verdict_line_is_a_failure_claim(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
@@ -461,6 +555,8 @@ class CollectEvidenceCLITests(unittest.TestCase):
                     "attempt_uuid": "one",
                     "physical_continuity_validator_passed": True,
                     "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
                 },
                 10.0,
             )
@@ -486,6 +582,53 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertIn("StrictVerdict=BLOCKED", result.stdout)
             self.assertIn("log claims failure", result.stdout)
             self.assertIn("CONTRADICTORY", result.stdout)
+
+    def test_stability_metrics_are_extracted_and_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            saved_root = repo_root / "PhysAnimUE5" / "Saved"
+
+            self._write_json(
+                saved_root / "PhysAnim" / "ProofArtifacts" / "one_terminal.json",
+                {
+                    "attempt_uuid": "one",
+                    "physical_continuity_validator_passed": True,
+                    "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.5,
+                    "runtime_simulating_body_count": 22,
+                    "max_root_tilt_deg": 12.5,
+                    "peak_angular_speed_deg_per_sec": 450.0,
+                    "support_churn_hz": 8.0,
+                    "proxy_outside_hull_duration_ms": 25.0,
+                    "terminal_reason_name": "None",
+                },
+                10.0,
+            )
+            self._write_json(
+                saved_root / "PhysAnim" / "EvidenceSummaries" / "one_evidence_summary.json",
+                {
+                    "attempt_uuid": "one",
+                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                    "quality_flags": {
+                        "missing_evidence": False,
+                        "terminal_failure": False,
+                        "artifact_log_contradiction": False,
+                    },
+                },
+                10.0,
+            )
+            self._write_text(saved_root / "Logs" / "PhysAnimUE5.log", "Result: PASSED\n", 10.0)
+
+            result = self._run_cli(repo_root)
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("Stability Metrics", result.stdout)
+            self.assertIn("Hold Duration=3.5", result.stdout)
+            self.assertIn("Max Root Tilt=12.5", result.stdout)
+            self.assertIn("Peak Angular Speed=450.0", result.stdout)
+            self.assertIn("Support Churn=8.0", result.stdout)
+            self.assertIn("Proxy Drift=25.0", result.stdout)
+            self.assertIn("Terminal Reason=None", result.stdout)
 
 
 if __name__ == "__main__":

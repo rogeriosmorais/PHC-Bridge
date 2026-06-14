@@ -2673,7 +2673,10 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	HardenStage2ALocomotionState();
 	if (bEnableLiveRuntimeEvidenceProof && !bLiveRuntimeEvidenceProofComplete)
 	{
-		PolicyInfluenceRampStartTimeSeconds = -1.0;
+		if (PolicyInfluenceRampStartTimeSeconds < 0.0)
+		{
+			PolicyInfluenceRampStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+		}
 	}
 
 	const EPhysAnimRuntimeState RuntimeStateAtTickStart = RuntimeState;
@@ -3517,6 +3520,9 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		ElapsedPolicySteps);
 	LastPolicyElapsedSteps = ElapsedPolicySteps;
 
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnim] TICK_POLICY state=%s runPolicy=%d steps=%d acc=%.4f interval=%.4f dt=%.4f"),
+		GetRuntimeStateName(RuntimeState), bRunPolicyUpdateThisTick ? 1 : 0, ElapsedPolicySteps, PolicyUpdateAccumulatorSeconds, PolicyControlIntervalSeconds, DeltaTime);
+
 	// State advancement must happen before tuning and control writes to avoid one-tick phase lags.
 	const float PreviousSimulationHandoffAlpha = SimulationHandoffAlpha;
 	SimulationHandoffAlpha = CalculateSimulationHandoffAlpha(EffectiveSettings);
@@ -3653,51 +3659,44 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		{
 			if (StartupProofDeferredTerminalReason == EPhysAnimTerminalReason::ActivationSupportFailure)
 			{
-				if (!bLiveRuntimeEvidenceStartupVerificationHandoffArmed)
+				if (bLiveRuntimeEvidenceStartupVerificationHandoffArmed &&
+					(StartupProofVerificationHandoffArmedSubstep < 0 ||
+					 LiveRuntimeEvidenceSubstepCounter > StartupProofVerificationHandoffArmedSubstep))
 				{
+					UE_LOG(
+						LogPhysAnimBridge,
+						Error,
+						TEXT("[PhysAnim] Startup entry bridge terminal enforced reason=ActivationSupportFailure state=%s"),
+						GetRuntimeStateName(RuntimeState));
+					const FString ProofFailStopReason =
+						FString::Printf(TEXT("Proof failed during activation wait: %d"), static_cast<int32>(RuntimeState));
+					const FPhysAnimRuntimeTerminationPipelineResult ProofFailureRoutingResult =
+						BuildProofFailureFailStopRoutingResult(
+							LiveRuntimeEvidenceTerminationState,
+							LiveRuntimeEvidenceTerminationState.TerminalArtifact,
+							StartupProofDeferredTerminalReason,
+							LiveRuntimeEvidenceSubstepCounter);
+					UE_LOG(
+						LogPhysAnimBridge,
+						Error,
+						TEXT("[PhysAnim] Proof failure routed through fail-stop helper reason=%s state=%s"),
+						*ProofFailStopReason,
+						GetRuntimeStateName(RuntimeState));
+					FailStopWithTrace(ProofFailStopReason);
+					UE_LOG(
+						LogPhysAnimBridge,
+						Error,
+						TEXT("[PhysAnim] Proof failure fail-stop side effects complete reason=%s"),
+						*ProofFailStopReason);
+					UE_LOG(
+						LogPhysAnimBridge,
+						Error,
+						TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
+						static_cast<int32>(ProofFailureRoutingResult.StateApplyResult.State.TerminalReason));
 					return;
 				}
-
-				if (StartupProofVerificationHandoffArmedSubstep >= 0 &&
-					LiveRuntimeEvidenceSubstepCounter <= StartupProofVerificationHandoffArmedSubstep)
-				{
-					return;
-				}
-
-				UE_LOG(
-					LogPhysAnimBridge,
-					Error,
-					TEXT("[PhysAnim] Startup entry bridge terminal enforced reason=ActivationSupportFailure state=%s"),
-					GetRuntimeStateName(RuntimeState));
-				const FString ProofFailStopReason =
-					FString::Printf(TEXT("Proof failed during activation wait: %d"), static_cast<int32>(RuntimeState));
-				const FPhysAnimRuntimeTerminationPipelineResult ProofFailureRoutingResult =
-					BuildProofFailureFailStopRoutingResult(
-						LiveRuntimeEvidenceTerminationState,
-						LiveRuntimeEvidenceTerminationState.TerminalArtifact,
-						StartupProofDeferredTerminalReason,
-						LiveRuntimeEvidenceSubstepCounter);
-				UE_LOG(
-					LogPhysAnimBridge,
-					Error,
-					TEXT("[PhysAnim] Proof failure routed through fail-stop helper reason=%s state=%s"),
-					*ProofFailStopReason,
-					GetRuntimeStateName(RuntimeState));
-				FailStopWithTrace(ProofFailStopReason);
-				UE_LOG(
-					LogPhysAnimBridge,
-					Error,
-					TEXT("[PhysAnim] Proof failure fail-stop side effects complete reason=%s"),
-					*ProofFailStopReason);
-				UE_LOG(
-					LogPhysAnimBridge,
-					Error,
-					TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
-					static_cast<int32>(ProofFailureRoutingResult.StateApplyResult.State.TerminalReason));
-				return;
 			}
-
-			if (LiveRuntimeEvidenceTerminationState.bTerminated &&
+			else if (LiveRuntimeEvidenceTerminationState.bTerminated &&
 				LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 			{
 				const FString ProofFailStopReason =
@@ -3725,8 +3724,8 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 					Error,
 					TEXT("[PhysAnim] Proof failure terminal reason preserved reason=%d"),
 					static_cast<int32>(ProofFailureRoutingResult.StateApplyResult.State.TerminalReason));
+				return;
 			}
-			return;
 		}
 	}
 
