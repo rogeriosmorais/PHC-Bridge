@@ -54,6 +54,21 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	UpdateStartupMovementLockState(EffectiveSettings);
 
 	FString TickError;
+
+	if (bPendingStartupRestPoseCapture)
+	{
+		if (!FinalizeStartupTPoseCaptureAndStartBridge(TickError))
+		{
+			FailStop(FString::Printf(TEXT("Failed to finalize startup T-pose capture: %s"), *TickError));
+			return;
+		}
+	}
+
+	if (RuntimeState == EPhysAnimRuntimeState::Uninitialized)
+	{
+		return;
+	}
+
 	FPoseSearchBlueprintResult SearchResult;
 
 	if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
@@ -65,6 +80,11 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	TickRuntimeStateMachine(DeltaTime, EffectiveSettings);
 	TickPolicyAndUpdateMetrics(DeltaTime, EffectiveSettings, TickError);
 	ProcessPendingDistalOwnershipChecks();
+
+	if (bEnableLiveRuntimeEvidenceProof)
+	{
+		TickLiveRuntimeEvidenceProof(DeltaTime);
+	}
 
 	if (!TickError.IsEmpty())
 	{

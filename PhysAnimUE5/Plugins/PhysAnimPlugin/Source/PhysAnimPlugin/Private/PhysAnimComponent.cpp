@@ -976,18 +976,31 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		{
 			bLiveRuntimeEvidenceProofComplete = true;
 
+			FPhysAnimRunArtifactSnapshot CompletionArtifact = PipelineResult.SubstepResult.Artifact;
+			CompletionArtifact.TerminalReason = EPhysAnimTerminalReason::None;
+			CompletionArtifact.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
+			CompletionArtifact.bTerminalFrameArtifactCaptured = true;
+
+			LiveRuntimeEvidenceTerminationState.bTerminated = false;
+			LiveRuntimeEvidenceTerminationState.TerminalReason = EPhysAnimTerminalReason::None;
+			LiveRuntimeEvidenceTerminationState.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
+			LiveRuntimeEvidenceTerminationState.bTerminalFrameArtifactCaptured = true;
+			LiveRuntimeEvidenceTerminationState.TerminalArtifact = CompletionArtifact;
+			LiveRuntimeEvidenceTerminationState.LatestArtifact = CompletionArtifact;
+
 			FPhysAnimProofArtifactEmitInput EmitInput;
 			EmitInput.AttemptUuid = LiveRuntimeEvidenceAttemptUuid;
 			EmitInput.StandingSeconds = LiveRuntimeEvidenceStandingSeconds;
 			EmitInput.RuntimeHitCount = HitResults.Num();
 			EmitInput.MappedSupportHitCount = MappedSupportHitCount;
 			EmitInput.PipelineResult = PipelineResult;
+			EmitInput.PipelineResult.StateApplyResult.State = LiveRuntimeEvidenceTerminationState;
 
 			PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(EmitInput);
 
 			PhysAnimProofArtifactEmitter::LogAttemptResult(
 				LiveRuntimeEvidenceAttemptUuid,
-				false,
+				true,
 				LiveRuntimeEvidenceStandingSeconds,
 				LiveRuntimeEvidenceTerminationState.TerminalReason);
 			

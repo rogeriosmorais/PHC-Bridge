@@ -54,6 +54,9 @@ bool UPhysAnimComponent::FinalizeStartupTPoseCaptureAndStartBridge(FString& OutE
 	}
 
 	RestoreStartupAnimationState(SkeletalMesh);
+
+	bPendingStartupRestPoseCapture = false;
+
 	return StartBridge();
 }
 
