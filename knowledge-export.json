@@ -1,0 +1,615 @@
+{
+  "version": "1.0",
+  "manifest": {
+    "projectName": "NewEngine-AgentB",
+    "exportedAt": "2026-05-22T01:32:19.303Z",
+    "documentCount": 39,
+    "memoryCount": 22,
+    "sourceTypes": [
+      "memory"
+    ],
+    "qualityThreshold": 0.5
+  },
+  "documents": [
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:decisions/stage2a-locomotion-watchdog",
+      "title": "decisions/stage2a-locomotion-watchdog",
+      "content": "# Stage 2A Locomotion & Watchdog Decisions\r\n\r\n## Locomotion Request State Management\r\n- **Context:** The `Stage2ALocomotionRequestState` was prematurely resetting to `BalanceActiveStanding` upon transitioning into `LocomotionActiveShellDenied` during a failed locomotion request. This masked denial feedback and caused test drift.\r\n- **Decision:** Modified `TransitionRuntimeState` to preserve request states across locomotion denial boundaries (i.e. skipping reset when entering `LocomotionActiveShell` or `LocomotionActiveShellDenied`).\r\n- **Consequence:** `TryActivateStage2AWalkIntent` and `TryActivateStage2ATurnIntent` now guarantee precise clearance of intent and trajectory states upon failure, aligning with graph contract requirements.\r\n\r\n## Watchdog Initialization Robustness\r\n- **Context:** The policy liveness watchdog was susceptible to T=0 false-positives and missed initializations because it implicitly assumed `LastPolicyControlUpdateTimeSeconds` was valid immediately after `PolicyControlTicksExecuted` advanced.\r\n- **Decision:** Hardened `IsStage2APolicyOutputActive` by requiring `LastPolicyControlUpdateTimeSeconds >= 0.0`. Added public `TestOnly` helper seams to the component to permit strict verification via unit tests (avoiding friend-class visibility issues).\r\n- **Consequence:** The watchdog correctly filters out uninitialized states and clock drift.",
+      "contentHash": "87f3a3f65484576d16a2ff292117cdb50350867e240c02d2bedcee36f0561390",
+      "metadata": {
+        "sizeBytes": 1382,
+        "memoryName": "decisions/stage2a-locomotion-watchdog"
+      },
+      "qualityScore": 0.5,
+      "createdAt": "2026-05-22T01:31:50.288Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:architecture/stage1_contracts_completion",
+      "title": "architecture/stage1_contracts_completion",
+      "content": "We have completed the baseline technical contracts and scenarios for Stage 1 of the PhysAnim continuous balance architecture. Key deliverables include the Authority Matrix, Balance Mode Entry, Character Capsule contract, Continuous Balance Truth Model, Engine Execution model, Instrumentation & Acceptance criteria, and the initial Physics Asset configurations. Scenarios for V0 Plant Contract Validation and Standing Proof Positive Path were also successfully validated and marked as done.",
+      "contentHash": "1db093b5e8d19a27078733e1b816025349a4f4d0fbb3fdea490c17564f11b4db",
+      "metadata": {
+        "sizeBytes": 490,
+        "memoryName": "architecture/stage1_contracts_completion"
+      },
+      "qualityScore": 0.5,
+      "createdAt": "2026-05-22T01:31:50.284Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:audits/stage1-balanceactive-gap-analysis",
+      "title": "audits/stage1-balanceactive-gap-analysis",
+      "content": "# Stage 1 BalanceActive Gap Analysis Audit (node_9f67b82b1a67)\n\n## Status: COMPLETE\nThe audit confirms that while the primary Stage 2A locomotion paths (Walk/Turn) are implemented and smoke-testable, several technical vulnerabilities exist that prevent a \"Truthful\" 3.0s product success claim.\n\n## Route to 3.0s Stability:\n1. **Watchdog Hardening (node_53fc32a674f3)**: Fix startup false-positives and clock inconsistency.\n2. **Request State Management (node_617390a4d8a6)**: Fix stale gate retention on failure/denial.\n3. **Delta Semantics (node_045035a3974b)**: Refactor world displacement to be actor-bound for truthfulness.\n4. **Final Proofing**: Re-run `WalkSmoke` and `TurnSmoke` (including TurnRight evidence) with the fixes applied.\n\n## Executability:\n- All identified gaps have corresponding tasks in the graph with testable ACs and estimates <= 120m.\n- A weaker agent can proceed ONLY after the watchdog and request state fixes are merged.\n\n## Blockers:\n- None for implementation; proofing is blocked on the three hardening tasks.",
+      "contentHash": "330dda9941fae03387da3947f1536ca2ca50618f6af3433c000b5955cd3f96bb",
+      "metadata": {
+        "sizeBytes": 1041,
+        "memoryName": "audits/stage1-balanceactive-gap-analysis"
+      },
+      "qualityScore": 0.5,
+      "createdAt": "2026-05-10T04:49:05.522Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:governance/design-change-escalation-gate-s1",
+      "title": "governance/design-change-escalation-gate-s1",
+      "content": "# Design Change Escalation Gate (Stage 1)\n\n**Status:** Active\n**Authority:** f:\\NewEngine-AgentB\\docs\\design-change-escalation-gate-s1.md\n\n## Move Classification\n- **Allowed**: PID/Threshold tuning (TDD backed).\n- **New Task**: New reasons, missing fields, regressions.\n- **Review**: Architecture Lock breach, changing V0 target.\n- **Forbidden**: Cheating (assistance), TensorRT, Custom Python.\n\n## Decision Rule\nPivot only if move is \"Allowed\". Otherwise BLOCK or ESCALATE.\nEvery \"DONE\" must confirm no forbidden/review moves.",
+      "contentHash": "43a17405b8dc2f1f00104d96c026891a04ac67f40892cda9162b10835a7775fe",
+      "metadata": {
+        "sizeBytes": 528,
+        "memoryName": "governance/design-change-escalation-gate-s1"
+      },
+      "qualityScore": 0.5,
+      "createdAt": "2026-05-10T04:46:03.215Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:governance/failure-mode-branch-map-s1",
+      "title": "governance/failure-mode-branch-map-s1",
+      "content": "# Failure Mode Branch Map (Stage 1)\n\n**Status:** Active\n**Authority:** f:\\NewEngine-AgentB\\docs\\failure-mode-branch-map-s1.md\n\n## Branches\n- **Phase 3 Instability**: Route to node_78833e2a534a (Decision).\n- **Continuity Loss**: Create S1-INSTRUMENT-CONTINUITY-SPIKE.\n- **Authority Contamination**: Create S1-SHELL-AUTHORITY-HARDENING.\n- **Controller Instability**: Create S1-CONTROLLER-TUNING-ITERATION.\n- **Schema Mismatch**: Create S1-SCHEMA-INSTRUMENTATION-TASK.\n\n## Hard Stop Rules\n- 2x Same Terminal Reason = STOP.\n- 2x Failed Hypotheses = Architecture Review.\n- Architecture Lock Pressure = STOP.",
+      "contentHash": "499f486beeeeb4ca0b9f9cd62b78ff99e646c002f87e3475b0a8200678883dc1",
+      "metadata": {
+        "sizeBytes": 603,
+        "memoryName": "governance/failure-mode-branch-map-s1"
+      },
+      "qualityScore": 0.5,
+      "createdAt": "2026-05-10T04:45:37.495Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:governance/artifact-schema-acceptance-s1",
+      "title": "governance/artifact-schema-acceptance-s1",
+      "content": "# Artifact Schema Acceptance (Stage 1)\n\n**Status:** Validated\n**Authority:** f:\\NewEngine-AgentB\\docs\\artifact-schema-check-s1.md\n\n## Mandatory Fields\n- hold_duration_sec\n- terminal_reason (None/0 for success)\n- physical_continuity_validator_passed (true for success)\n- support_mode\n- authority_conflict_count (0 for success)\n- shell_helper_used_count (0 for success)\n\n## G2 Gate Criteria\nSuccess = Duration >= 3.0s AND Reason=None AND Continuity=True AND Conflicts=0 AND Helpers=0.",
+      "contentHash": "9732c9c6c0e918b7f2a8da061df98c692219517d7b646ff47bd5fb784cfd9d1b",
+      "metadata": {
+        "sizeBytes": 483,
+        "memoryName": "governance/artifact-schema-acceptance-s1"
+      },
+      "qualityScore": 0.5,
+      "createdAt": "2026-05-10T04:45:09.960Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:governance/lesser-agent-packet-s1",
+      "title": "governance/lesser-agent-packet-s1",
+      "content": "# Lesser Agent Execution Packet (Stage 1)\n\n**Status:** Active\n**Authority:** f:\\NewEngine-AgentB\\docs\\lesser-agent-packet-s1.md\n\n## Sequence\n1. node_b895d7c254ff (Truth Model)\n2. node_78833e2a534a (Decision)\n3. node_41078a2fd9cf (Fix - Optional)\n4. node_02b012838316 (Proof)\n\n## Strict Rules\n- WIP=1.\n- Branching requires STOP/ESCALATE.\n- No hidden assistance.\n- No diagnostic-only success claims.",
+      "contentHash": "5663f8b586e83947f9e9e5bd00f04fba79aaa146b1d4251786f6215f69dc1e0b",
+      "metadata": {
+        "sizeBytes": 398,
+        "memoryName": "governance/lesser-agent-packet-s1"
+      },
+      "qualityScore": 0.5,
+      "createdAt": "2026-05-10T04:44:16.609Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:governance/stability-definition-lock",
+      "title": "governance/stability-definition-lock",
+      "content": "# Stability Definition Lock (Stage 1)\n\n**Status:** Locked\n**Authority:** f:\\NewEngine-AgentB\\docs\\stability-definition.md\n\n## Benchmark\n- 3.0s continuous `BalanceActive_Standing`.\n- No terminal failures.\n- No hidden assistance.\n\n## Key Distinction\n- **Product Success**: 3.0s continuous proof.\n- **Diagnostic Progress**: Gate/Logic verification only.\n\n## Successful Nodes\n- S1-EXECUTE-STANDING-STABILITY-PROOF-01 (node_02b012838316)\n- S1-STANDING-STABILITY-REGRESSION-SOAK-01 (node_8d94b0d7e2a3)",
+      "contentHash": "f8e78ef2652457d8c69b6246317a18e53e167178423e6b62121778fef098deca",
+      "metadata": {
+        "sizeBytes": 496,
+        "memoryName": "governance/stability-definition-lock"
+      },
+      "qualityScore": 0.5,
+      "createdAt": "2026-05-10T04:43:35.765Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_825339ea78ff_2026-05-10",
+      "title": "case_node_825339ea78ff_2026-05-10",
+      "content": "---\nname: case_node_825339ea78ff_2026-05-10\ndescription: Case-based memory distilled from grade-A finish of \"Harden Stage 2A Locomotion Gates & Watchdog\". Tags: experiential, case-based.\ntype: feedback\n---\n\n# Case: Harden Stage 2A Locomotion Gates & Watchdog\n\n**Source node:** `node_825339ea78ff` (type=task, priority=1)\n**Distilled at:** 2026-05-10\n**Tags:** experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Temporal watchdog requires PolicyControlTicksExecuted > 0 and fresh timestamp.\n- Policy timestamp updates only after verified control target application.\n- Consecutive frame counter increments on steps (ApplyNewPolicyStep), not ticks.\n- Locomotion request gate strictly validates state transitions (Standing or Requested).\n- Automated tests pass with deterministic state verification.\n\n## Rationale (what worked, in the agent's own words)\n\nFinalized Stage 2A Locomotion Hardening: 1. Synchronized all watchdog and application timestamps to a consistent GetPhysAnimClockTime() (GetWorld()->GetTimeSeconds() with FPlatformTime fallback). 2. Implemented proactive clearing of Stage2ALocomotionRequestState on policy timeout (HardenStage2ALocomotionState) and on any non-locomotion state transition. 3. Verified movement delta recording in unit tests even when owner actor is missing. All 10 WALK-intent tests now pass deterministically.\n\n## Test files that exercised the change\n\n- `f:\\NewEngine-AgentB\\PhysAnimUE5\\Plugins\\PhysAnimPlugin\\Source\\PhysAnimPlugin\\Private\\Tests\\PhysAnimStage2AWalkIntentTests.cpp`\n\n## How to apply\n\nWhen a future task carries any of these tags — (none beyond experiential/case-based) — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "9a4b5bb43b524b15f4a567323b34abf2041eb0fa47f9c6c776dfc5415e65bc2c",
+      "metadata": {
+        "sizeBytes": 1752,
+        "memoryName": "case_node_825339ea78ff_2026-05-10"
+      },
+      "qualityScore": 0.5,
+      "createdAt": "2026-05-10T04:36:33.759Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:achievements/stage2a-turn-proof",
+      "title": "achievements/stage2a-turn-proof",
+      "content": "# Stage 2A Rotation (Turn-in-Place) Implementation & Proof\n\n**Date:** 2026-05-10\n**Epic:** node_74cdd046b5f2 (Stage 2A Locomotion Integration)\n\n## Accomplishments\n- **Implemented `TryActivateStage2ATurnIntent`**: Added the runtime entrypoint for kinematic rotation.\n  - Correctly gates requests via `EvaluateStage2ALocomotionRequestGate`.\n  - Sets `BridgeIntentState.ActiveIntent` (TurnLeft/TurnRight).\n  - Updates `BridgeIntentState.DesiredFacingYawDegrees`.\n  - Applies actor rotation with `Sweep=true`.\n  - Emits telemetry with `root_mode=Stage1_KinematicRoot`.\n- **TDD Verification**: Established `PhysAnimStage2ATurnIntentTests.cpp` for logic validation.\n- **Formal Smoke Proof**: Executed `PhysAnimStage2ATurnSmokeTest.cpp`.\n  - **Result**: 40.0° rotation in 2.0s with 0.000cm translation drift.\n  - **Verdict**: PASS. Stability constraints (15cm) and telemetry accuracy (TurnLeft) verified.\n\n## Technical Details\n- **Rotation Math**: Uses `SetActorLocationAndRotation` for kinematic displacement.\n- **Telemetry**: Maps yaw delta to `TurnLeft` (positive) and `TurnRight` (negative).\n- **Gating**: Inherits the Stage 2A locomotion gate, ensuring rotation only occurs when the kinematic shell has authority and the policy is live.\n\n## Next Steps\n- Monitor rotation stability in combined walk-turn scenarios.\n- Transition to higher-stage locomotion autority (Phase 3) when required by the training curriculum.",
+      "contentHash": "6fb01f2bc1db8ffb7bd0179534653617fe90b7af3f4d05da818646a6f77fea72",
+      "metadata": {
+        "sizeBytes": 1414,
+        "memoryName": "achievements/stage2a-turn-proof"
+      },
+      "qualityScore": 0.5,
+      "createdAt": "2026-05-10T04:36:33.758Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_f2056aa390bb_2026-05-07",
+      "title": "case_node_f2056aa390bb_2026-05-07 [1/2]",
+      "content": "---\nname: case_node_f2056aa390bb_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-PHASE1-ROOTON-READINESS-PELVIS-ANGULAR-COHERENCE-01\".Tags: stage2, balance-mode, physics-control, phase1, pelvis-angular-coherence, experiential, case-based.type: feedback\n---\n# Case: S2-FIX-BALANCE-PHASE1-ROOTON-READINESS-PELVIS-ANGULAR-COHERENCE-01\n**Source node:** `node_f2056aa390bb` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** stage2, balance-mode, physics-control, phase1, pelvis-angular-coherence, experiential, case-based\n## Acceptance criteria that drove the work\n- Deterministic test covers phase1_root_on_readiness_pelvis_angular_incoherent classification using pelvis/thigh/spine angular coupling values matching the current smoke failure shape.- Deterministic fix or contract reduces the Phase 1 root-on-readiness pelvis angular incoherence path without bypassing physical continuity, active support, or safe-deny checks.- PhysAnim.PIE.BalanceModeSmoke no longer ends in BalanceSafeDeny for phase1_root_on_readiness_pelvis_angular_incoherent; it either reaches true BalanceActive_Standing with physical continuity or exposes the next specific truthful blocker.- After running smoke, run python .\\scripts\\read_logs.py and update docs/evidence/balance-mode-smoke-2026-05-07.md plus plans/stage1/30-evidence/g2-evaluation.md with the new evidence.## Rationale (what worked, in the agent's own words)\nImplemented baseline-compensated direct pelvis-link angular semantics for Phase 1 RootOn readiness.",
+      "contentHash": "da927db071652ba37cecb45b3ed53eccb0313ee4f8083f66fed337a36b499161",
+      "metadata": {
+        "sizeBytes": 2991,
+        "memoryName": "case_node_f2056aa390bb_2026-05-07"
+      },
+      "qualityScore": 0.7394126140138539,
+      "createdAt": "2026-05-10T02:28:21.452Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_f2056aa390bb_2026-05-07",
+      "title": "case_node_f2056aa390bb_2026-05-07 [2/2]",
+      "content": "## Rationale (what worked, in the agent's own words)\nImplemented baseline-compensated direct pelvis-link angular semantics for Phase 1 RootOn readiness.Manny PhysicsAsset authored constraint-frame angular floors are now logged separately and subtracted from the readiness angular metric, so raw forensic angles remain visible while authored asset offsets no longer make Phase 1 structurally impossible.Added deterministic coverage proving the compensated metric removes the authored thigh frame floor.Verified targeted tests and full build.Smoke no longer ends at phase1_root_on_readiness_pelvis_angular_incoherent; it reaches PHASE2_ENTRY with rootOnReady=1 and exposes the next truthful blocker phase2_root_on_warm_start_incoherent.Smoke logs were read with python .\\scripts\\read_logs.py and evidence/G2 docs were updated without claiming true balance.## Test files that exercised the change\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimBalanceReadyTransition.Certification.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimBalanceReadyTransitionPrivate.h`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/30-evidence/g2-evaluation.md`\n## How to apply\nWhen a future task carries any of these tags — stage2, balance-mode, physics-control, phase1, pelvis-angular-coherence — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "777af6e33a0432f1bf2c581fe2a3d194a6991cb05f43c7d49b186f0d8505ce5f",
+      "metadata": {
+        "sizeBytes": 2991,
+        "memoryName": "case_node_f2056aa390bb_2026-05-07"
+      },
+      "qualityScore": 0.7394126140138539,
+      "createdAt": "2026-05-10T02:28:21.452Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_d04dbbd27b6c_2026-05-09",
+      "title": "case_node_d04dbbd27b6c_2026-05-09 [3/3]",
+      "content": "Logic includes intent gating (EvaluateStage2ALocomotionRequestGate), frame-threshold activation (Stage2AMinPolicyActiveFramesBeforeWalk), and deterministic delta clamping (Stage2AMaxWalkDeltaPerTickCm).Integrated with BridgeShellState to maintain root continuity during kinematic translation.Verified via PhysAnim.Locomotion.Stage2AWalkIntent unit tests.## Test files that exercised the change\n- `f:\\NewEngine-AgentB\\PhysAnimUE5\\Plugins\\PhysAnimPlugin\\Source\\PhysAnimPlugin\\Private\\Tests\\PhysAnimStage2AWalkIntentTests.cpp`\n## How to apply\nWhen a future task carries any of these tags — implementation, stage2a, walk, active-track, executor-grade, repo-specific, code-intelligence-verified — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "03fecda61d586a5f82d47f7d1d539422a6df60d766f1d26b4d171329b2771797",
+      "metadata": {
+        "sizeBytes": 3549,
+        "memoryName": "case_node_d04dbbd27b6c_2026-05-09"
+      },
+      "qualityScore": 0.7394126139337855,
+      "createdAt": "2026-05-10T02:28:21.451Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_deeb9cd55fba_2026-05-07",
+      "title": "case_node_deeb9cd55fba_2026-05-07 [1/2]",
+      "content": "---\nname: case_node_deeb9cd55fba_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-PELVIS-SIMULATION-BLOCKER-01\".Tags: experiential, case-based.type: feedback\n---\n# Case: S2-FIX-PELVIS-SIMULATION-BLOCKER-01\n**Source node:** `node_deeb9cd55fba` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** experiential, case-based\n## Acceptance criteria that drove the work\n- Identify the logic branch in ResolveBodyModifierRuntimeMode causing the pelvis to remain kinematic despite ShouldAllowBalanceSimulation returning true.- Confirm if bPhase2RootAuthorityQuarantined or bTransitionKeepsBoneKinematic are incorrectly set during BalanceEntry_RootOn.- Verify that WakeInstance() is called for the pelvis body instance upon entering root-on simulation.- Implement diagnostic logging for PELVIS_BODYMOD_SIM_ACTIVATION_FAIL with the state of bAllowRootSim, bSimulationHandoffSettled, and bBringUpGroupUnlocked.- Pelvis transitions to Simulated state during BalanceEntry_RootOn as verified by logs.## Rationale (what worked, in the agent's own words)\nThe pelvis was remaining kinematic during the BalanceEntry_RootOn phase because the PhysicsControl component's SetBodyModifierMovementType function does not explicitly wake up the underlying physical body instance if it is already asleep or kinematic.We successfully implemented an explicit WakeInstance() call on the pelvis's FBodyInstance during the transition.Additionally, we added diagnostic telemetry (PELVIS_BODYMOD_SIM_ACTIVATION_FAIL) to capture any failures in the gating flags (bAllowRootBodyModifierSimulation, bSimulationHandoffSettled, bBringUpGroupUnlocked).",
+      "contentHash": "2b05a09847a6188bb39fc4dfc7591d0be72d8b3ade4d58681538a0b49fbba273",
+      "metadata": {
+        "sizeBytes": 2267,
+        "memoryName": "case_node_deeb9cd55fba_2026-05-07"
+      },
+      "qualityScore": 0.7394126139337855,
+      "createdAt": "2026-05-10T02:28:21.451Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_deeb9cd55fba_2026-05-07",
+      "title": "case_node_deeb9cd55fba_2026-05-07 [2/2]",
+      "content": "Additionally, we added diagnostic telemetry (PELVIS_BODYMOD_SIM_ACTIVATION_FAIL) to capture any failures in the gating flags (bAllowRootBodyModifierSimulation, bSimulationHandoffSettled, bBringUpGroupUnlocked).The automated functional tests confirm that the pelvis now successfully transitions to the simulated state without demotion, and no logging errors (PELVIS_SIM_CHECK_FAIL or PHASE2_ROOT_DROP_CULPRIT) were detected.## Test files that exercised the change\n- `f:\\NewEngine-AgentB\\PhysAnimUE5\\Plugins\\PhysAnimPlugin\\Source\\PhysAnimPlugin\\Private\\PhysAnimComponent.PhysicsTuning.cpp`\n## How to apply\nWhen a future task carries any of these tags — (none beyond experiential/case-based) — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "226be880286a03767be330a91a15b2a10399ce6cbd3d902c7c4383c97b274b66",
+      "metadata": {
+        "sizeBytes": 2267,
+        "memoryName": "case_node_deeb9cd55fba_2026-05-07"
+      },
+      "qualityScore": 0.7394126139337855,
+      "createdAt": "2026-05-10T02:28:21.451Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_e2e0e2ecd242_2026-05-07",
+      "title": "case_node_e2e0e2ecd242_2026-05-07",
+      "content": "---\nname: case_node_e2e0e2ecd242_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S1-P1-A1\". Tags: experiential, case-based.\ntype: feedback\n---\n\n# Case: S1-P1-A1\n\n**Source node:** `node_e2e0e2ecd242` (type=task, priority=3)\n**Distilled at:** 2026-05-07\n**Tags:** experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Single-character implementation package produced and indexed as active execution planning.\n\n## Rationale (what worked, in the agent's own words)\n\nProduced and indexed the current single-character implementation package, scoped to balance-first true standing rather than the archived staged-bringup package. Added explicit active inputs, scope boundaries, test gates, success rule, risks, and preference for graph tasks that improve true balance observability or stability.\n\n## Test files that exercised the change\n\n- `plans/stage1/20-execution/single-character-implementation-package.md`\n- `STAGE1_PLAN.md`\n\n## How to apply\n\nWhen a future task carries any of these tags — (none beyond experiential/case-based) — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "c065e96ef14bae5011a842fd580b4bf869376b3579f4d7a9c142f520d112a3e6",
+      "metadata": {
+        "sizeBytes": 1183,
+        "memoryName": "case_node_e2e0e2ecd242_2026-05-07"
+      },
+      "qualityScore": 0.7394126139337855,
+      "createdAt": "2026-05-10T02:28:21.451Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_858156fcc2c5_2026-05-09",
+      "title": "case_node_858156fcc2c5_2026-05-09 [2/2]",
+      "content": "- Given TryOpenStage2ALocomotionRequestGate returns false while starting from BalanceActive_Standing, then Stage2ALocomotionRequestState=LocomotionRequestDenied, BridgeLocomotionAuthorityState=Idle, RuntimeState=LocomotionActiveShellDenied, and telemetry contains the exact denial terminal_state.- Given changed files are searched, then no new code creates PHCBridgeRuntime, enables SimRoot/Phase3_SimRoot, uses CharacterMovement movement calls, or relaxes Phase 3 thresholds.- Given the executor reports completion, then the report includes changed files, BalanceActive_Standing writer line numbers, exact test command, exit code, telemetry sample, and all branch terminal states.## Rationale (what worked, in the agent's own words)\nStage 2A Locomotion Request Gate implementation and validation complete.Infrastructure: Defined EStage2ALocomotionTerminalState, added gate members/methods to UPhysAnimComponent, and implemented telemetry logic.Call-Site Injection: Injected TryOpenStage2ALocomotionRequestGate in PhysAnimComponent.cpp startup confirmation logic.Validation: Developed PhysAnimStage2ALocomotionGateTests.cpp covering success and denial branches.Verification: Tests passed and telemetry logs successfully validated in Unreal Engine automation suite.Architecture compliance maintained: No CharacterMovement changes, no SimRoot activation, no Phase 3 threshold modifications.## Test files that exercised the change\n- `f:\\NewEngine-AgentB\\PhysAnimUE5\\Plugins\\PhysAnimPlugin\\Source\\PhysAnimPlugin\\Private\\Tests\\PhysAnimStage2ALocomotionGateTests.cpp`\n## How to apply\nWhen a future task carries any of these tags — implementation, transition, stage2a, active-track, executor-grade, repo-specific, code-intelligence-verified — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "d74b7ddc2910ae0fae6a63e6242db44ceeb7ace5cb4314302b38218f44b8251f",
+      "metadata": {
+        "sizeBytes": 3373,
+        "memoryName": "case_node_858156fcc2c5_2026-05-09"
+      },
+      "qualityScore": 0.7394126138537174,
+      "createdAt": "2026-05-10T02:28:21.450Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_d04dbbd27b6c_2026-05-09",
+      "title": "case_node_d04dbbd27b6c_2026-05-09 [1/3]",
+      "content": "---\nname: case_node_d04dbbd27b6c_2026-05-09\ndescription: Case-based memory distilled from grade-A finish of \"S2A-IMPL-WALK-INTENT-ACTIVATION-01\".Tags: implementation, stage2a, walk, active-track, executor-grade, repo-specific, code-intelligence-verified, experiential, case-based.type: feedback\n---\n# Case: S2A-IMPL-WALK-INTENT-ACTIVATION-01\n**Source node:** `node_d04dbbd27b6c` (type=task, priority=1)\n**Distilled at:** 2026-05-09\n**Tags:** implementation, stage2a, walk, active-track, executor-grade, repo-specific, code-intelligence-verified, experiential, case-based\n## Acceptance criteria that drove the work\n- Given RuntimeState=BalanceActive_Standing, BalanceTransitionShellAuthorityMode=TransitionOwnedShellLocked, BridgeShellState.bInitialized=true, bPolicyTargetsAppliedLastFrame=true, PolicyControlTicksExecuted=1, and bStage2APhase3SimRootAttempted=false, when TryActivateStage2AWalkIntent(0.05f) runs with Stage2AConsecutivePolicyActiveFrames=0, then it returns false, bStage2AWalkIntentActive=false, Stage2ALastWalkDeltaCm=FVector::ZeroVector, and telemetry contains locomotion_intent=WalkForward plus terminal_state=Denied_PolicyOutputInactive.- Given the same ready state and Stage2AConsecutivePolicyActiveFrames=2, when TryActivateStage2AWalkIntent(0.05f) runs, then it returns false, bStage2AWalkIntentActive=false, Stage2ALastWalkDeltaCm=FVector::ZeroVector, and RuntimeState is not LocomotionActiveShell.",
+      "contentHash": "ec4ddda12b8675a536e86b5720410f409f685ea5351369eb346876333b8e3f5b",
+      "metadata": {
+        "sizeBytes": 3549,
+        "memoryName": "case_node_d04dbbd27b6c_2026-05-09"
+      },
+      "qualityScore": 0.7394126138537174,
+      "createdAt": "2026-05-10T02:28:21.450Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_d04dbbd27b6c_2026-05-09",
+      "title": "case_node_d04dbbd27b6c_2026-05-09 [2/3]",
+      "content": "- Given the same ready state and Stage2AConsecutivePolicyActiveFrames=2, when TryActivateStage2AWalkIntent(0.05f) runs, then it returns false, bStage2AWalkIntentActive=false, Stage2ALastWalkDeltaCm=FVector::ZeroVector, and RuntimeState is not LocomotionActiveShell.- Given the same ready state and Stage2AConsecutivePolicyActiveFrames=3, when TryActivateStage2AWalkIntent(0.05f) runs on an actor facing +X, then it returns true, BridgeIntentState.DesiredSpeedCmPerSecond=60.0f, BridgeIntentState.IntentMagnitude=1.0f, BridgeTrajectoryState.bInitialized=true, BridgeTrajectoryState.LastDeltaTimeSeconds=0.05f, and Stage2ALastWalkDeltaCm.X is 3.0 cm within ±0.1 cm.- Given an actor facing +X, when BuildStage2AWalkDeltaCm(1.0f) runs, then it returns a vector with X=6.0 cm within ±0.1 cm and Size()<=6.0 cm.- Given TryActivateStage2AWalkIntent(0.05f) returns true, then RuntimeState=LocomotionActiveShell, BridgeLocomotionAuthorityState=Locomoting, BridgeShellState.AcceptedWorldDeltaCm equals Stage2ALastWalkDeltaCm, and telemetry contains root_mode=Stage1_KinematicRoot, locomotion_intent=WalkForward, capsule_or_shell_motion_source=Stage2A_KinematicShell, phase3_simroot_attempted=false, and terminal_state=Allowed.- Given changed hunks are searched with rg for AddMovementInput|AddInputVector|LaunchCharacter|SetVelocity|Phase3_SimRoot|SimRoot, then no newly added line in the Stage2A walk implementation uses those APIs or enables those paths.## Rationale (what worked, in the agent's own words)\nImplemented Stage 2A Kinematic Root locomotion walk intent system.Logic includes intent gating (EvaluateStage2ALocomotionRequestGate), frame-threshold activation (Stage2AMinPolicyActiveFramesBeforeWalk), and deterministic delta clamping (Stage2AMaxWalkDeltaPerTickCm).",
+      "contentHash": "bec29996528b28f669ae43daa0d95d5162947c7160783ee5d0b09fc1800a8791",
+      "metadata": {
+        "sizeBytes": 3549,
+        "memoryName": "case_node_d04dbbd27b6c_2026-05-09"
+      },
+      "qualityScore": 0.7394126138537174,
+      "createdAt": "2026-05-10T02:28:21.450Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_5cd70e6c40f7_2026-05-07",
+      "title": "case_node_5cd70e6c40f7_2026-05-07 [3/3]",
+      "content": "## How to apply\nWhen a future task carries any of these tags — stage1, balance, physics-control, startup-proof, diagnostics — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "2c4423a8842fab448359ff9e10f6e0562f882db63959c299f26a726156ad4298",
+      "metadata": {
+        "sizeBytes": 3359,
+        "memoryName": "case_node_5cd70e6c40f7_2026-05-07"
+      },
+      "qualityScore": 0.631412613773649,
+      "createdAt": "2026-05-10T02:28:21.449Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_858156fcc2c5_2026-05-09",
+      "title": "case_node_858156fcc2c5_2026-05-09 [1/2]",
+      "content": "---\nname: case_node_858156fcc2c5_2026-05-09\ndescription: Case-based memory distilled from grade-A finish of \"S2A-IMPL-LOCOMOTION-REQUEST-GATE-01\".Tags: implementation, transition, stage2a, active-track, executor-grade, repo-specific, code-intelligence-verified, experiential, case-based.type: feedback\n---\n# Case: S2A-IMPL-LOCOMOTION-REQUEST-GATE-01\n**Source node:** `node_858156fcc2c5` (type=task, priority=1)\n**Distilled at:** 2026-05-09\n**Tags:** implementation, transition, stage2a, active-track, executor-grade, repo-specific, code-intelligence-verified, experiential, case-based\n## Acceptance criteria that drove the work\n- Given RuntimeState=BalanceActive_Standing, bPolicyTargetsAppliedLastFrame=true or PolicyControlTicksExecuted>0, BalanceTransitionShellAuthorityMode=TransitionOwnedShellLocked, BridgeShellState.bInitialized=true, and bStage2APhase3SimRootAttempted=false, when EvaluateStage2ALocomotionRequestGate runs, then it returns Allowed.- Given exactly one invalid condition is set, when EvaluateStage2ALocomotionRequestGate runs, then it returns the exact matching denial state: Denied_NotBalanceActiveStanding, Denied_PolicyOutputInactive, Denied_SimRootAttempted, or Denied_ShellRootUnlocked.- Given TryOpenStage2ALocomotionRequestGate returns true, then Stage2ALocomotionRequestState=LocomotionRequested, BridgeLocomotionAuthorityState=StartupLocomotion, RuntimeState=LocomotionActiveShell, and telemetry contains root_mode=Stage1_KinematicRoot and locomotion_intent=RequestOnly.- Given TryOpenStage2ALocomotionRequestGate returns false while starting from BalanceActive_Standing, then Stage2ALocomotionRequestState=LocomotionRequestDenied, BridgeLocomotionAuthorityState=Idle, RuntimeState=LocomotionActiveShellDenied, and telemetry contains the exact denial terminal_state.",
+      "contentHash": "2bd37546d129e3dbdefd6a2edbbf2d91fb4d13e594602e0d5c1ad68ce0b9add8",
+      "metadata": {
+        "sizeBytes": 3373,
+        "memoryName": "case_node_858156fcc2c5_2026-05-09"
+      },
+      "qualityScore": 0.639412613773649,
+      "createdAt": "2026-05-10T02:28:21.449Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_2d5c7dee4674_2026-05-07",
+      "title": "case_node_2d5c7dee4674_2026-05-07",
+      "content": "---\nname: case_node_2d5c7dee4674_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S1-P1-U1\". Tags: experiential, case-based.\ntype: feedback\n---\n\n# Case: S1-P1-U1\n\n**Source node:** `node_2d5c7dee4674` (type=task, priority=3)\n**Distilled at:** 2026-05-07\n**Tags:** experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- G2 evaluation status recorded with pass, fail, or blocked verdict and evidence path.\n\n## Rationale (what worked, in the agent's own words)\n\nRan the G2 entry balance smoke gate and recorded an honest blocked verdict. The smoke automation passed and reached BalanceActive_Standing beyond 3 seconds, but metrics simultaneously reported PelvisSim=0/PelvisAwake=0, which conflicts with the physical-continuity truth model. Created a priority follow-up graph task to audit/fix that contradiction before G2 approval.\n\n## Test files that exercised the change\n\n- `plans/stage1/30-evidence/g2-evaluation.md`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/20-execution/assumption-ledger.md`\n\n## How to apply\n\nWhen a future task carries any of these tags — (none beyond experiential/case-based) — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "f64c2d2c28c62b238441710ad1c1b88d4ce7c955b95c17757d0db2f635d657a6",
+      "metadata": {
+        "sizeBytes": 1276,
+        "memoryName": "case_node_2d5c7dee4674_2026-05-07"
+      },
+      "qualityScore": 0.739412613773649,
+      "createdAt": "2026-05-10T02:28:21.448Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_582c518e5212_2026-05-07",
+      "title": "case_node_582c518e5212_2026-05-07",
+      "content": "---\nname: case_node_582c518e5212_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S1-P1-A2\". Tags: experiential, case-based.\ntype: feedback\n---\n\n# Case: S1-P1-A2\n\n**Source node:** `node_582c518e5212` (type=task, priority=3)\n**Distilled at:** 2026-05-07\n**Tags:** experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Stabilization and tuning package produced and indexed as active execution planning.\n\n## Rationale (what worked, in the agent's own words)\n\nProduced and indexed the current stabilization and tuning package in balance-first terms. It defines stabilization order, allowed/disallowed tuning surfaces, evidence ladder, required metrics, test gates, stop rules, and interpretation of thigh diagnostics as observability rather than product success.\n\n## Test files that exercised the change\n\n- `plans/stage1/20-execution/stabilization-and-tuning-package.md`\n- `STAGE1_PLAN.md`\n\n## How to apply\n\nWhen a future task carries any of these tags — (none beyond experiential/case-based) — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "978c825ff59bdb43fe030fd15764482b1b83520d7151d0f2c2a33278f3cc08cc",
+      "metadata": {
+        "sizeBytes": 1145,
+        "memoryName": "case_node_582c518e5212_2026-05-07"
+      },
+      "qualityScore": 0.739412613773649,
+      "createdAt": "2026-05-10T02:28:21.448Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_5cd70e6c40f7_2026-05-07",
+      "title": "case_node_5cd70e6c40f7_2026-05-07 [1/3]",
+      "content": "---\nname: case_node_5cd70e6c40f7_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-ACTIVATION-PREPASS-RAW-SIM-PRESERVATION-01\".Tags: stage1, balance, physics-control, startup-proof, diagnostics, experiential, case-based.type: feedback\n---\n# Case: S2-FIX-BALANCE-ACTIVATION-PREPASS-RAW-SIM-PRESERVATION-01\n**Source node:** `node_5cd70e6c40f7` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** stage1, balance, physics-control, startup-proof, diagnostics, experiential, case-based\n## Acceptance criteria that drove the work\n- Deterministic test covers activation prepass/body-modifier policy: BridgeActive live-proof activation must not convert required truth-set bodies back to non-simulating after bridge physics ownership starts.- Preserve WaitingForPoseSearch until PoseSearch is valid; do not bypass the architecture path PoseSearch -> PHC Policy -> Physics Control -> Chaos.- PhysAnim.PIE.BalanceModeSmoke no longer emits ActivationContinuousSimulationLost with BridgeActive and runtime_simulating_body_count=0 immediately after ownership start; it either reaches true BalanceActive_Standing with physical continuity or emits the next specific post-continuity blocker.- Run python .\\scripts\\read_logs.py after smoke and update docs/evidence/balance-mode-smoke-2026-05-07.md and plans/stage1/30-evidence/g2-evaluation.md with before/after snapshots and the latest artifact.## Rationale (what worked, in the agent's own words)\nPreserved raw skeletal simulation after Physics Control activation/control updates for the BridgeActive startup proof path.",
+      "contentHash": "7ce7c85d63f04d2d1f66c395217e5b4a7afa7a080b36b1a69e5a56b72e102cc7",
+      "metadata": {
+        "sizeBytes": 3359,
+        "memoryName": "case_node_5cd70e6c40f7_2026-05-07"
+      },
+      "qualityScore": 0.639412613773649,
+      "createdAt": "2026-05-10T02:28:21.448Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_5cd70e6c40f7_2026-05-07",
+      "title": "case_node_5cd70e6c40f7_2026-05-07 [2/3]",
+      "content": "## Rationale (what worked, in the agent's own words)\nPreserved raw skeletal simulation after Physics Control activation/control updates for the BridgeActive startup proof path.Added deterministic predicates and assertions proving BridgeActive startup proof does not push authoritative kinematic record writes back into live bodies, while balance-entry phases still can update bodies, and raw simulation preservation ends after proof completion.Smoke evidence moved from the zero-simulation continuity failure to a later post-continuity support/proxy blocker: AfterActivationPrepass has rootBodySim=true, BridgeActive METRICS_TICK has PelvisSim=1/PelvisAwake=1, terminal artifact DEEF2096-424D-DA31-8B13-4081D5D041FE reports runtime_simulating_body_count=22 and physical_continuity_validator_passed=true, and terminal_reason_name=ActivationProxyOutsideSupportRegion.Evidence docs were updated with that result and next blocker.## Test files that exercised the change\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.ModifierTracking.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.PhysicsTuning.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.PhysicsActivation.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.Core.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/30-evidence/g2-evaluation.md`\n## How to apply",
+      "contentHash": "9a21e269a7072de4170741512e75cc63547b9c0161b973ee5d3f79eb7f06711f",
+      "metadata": {
+        "sizeBytes": 3359,
+        "memoryName": "case_node_5cd70e6c40f7_2026-05-07"
+      },
+      "qualityScore": 0.739412613773649,
+      "createdAt": "2026-05-10T02:28:21.448Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_1a8d2fce9629_2026-05-07",
+      "title": "case_node_1a8d2fce9629_2026-05-07 [2/3]",
+      "content": "## Rationale (what worked, in the agent's own words)\nImplemented startup support/proxy coupling mitigation for BridgeActive startup proof.The live proof now uses raw simulated body COM as the startup proxy while proof is incomplete, defers premature ActivationProxyOutsideSupportRegion only during the startup proof window, and starts the BridgeActive policy influence ramp after proof completion so balance entry can proceed.Deterministic contracts were added to PhysAnim.Component.BalanceStateClassification for raw COM proxy selection, startup proxy terminal deferral, and policy-ramp enablement.Evidence shows PhysAnim.PIE.BalanceModeSmoke now completes startup proof with terminal_reason=None, runtime_simulating_body_count=22, physical_continuity_validator_passed=true, then queues balance entry and transitions BridgeActive -> BalanceEntry_Prepare -> BalanceEntry_LateValidate.It no longer stops at ActivationProxyOutsideSupportRegion; the truthful next blocker is BalanceSafeDeny reason=phase1_root_on_readiness_pelvis_angular_incoherent.Evidence docs and G2 evaluation were updated.Verification run: .\\scripts\\build.ps1 -Test PhysAnim.Component.BalanceStateClassification passed; .\\scripts\\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke failed on the new truthful next blocker; python .\\scripts\\read_logs.py was run after smoke; .\\scripts\\build.ps1 passed.## Test files that exercised the change",
+      "contentHash": "5b30901b4d0d6a89ee3e1ba73017cc21b1f53afa72206ae1448dc3d41ea22b65",
+      "metadata": {
+        "sizeBytes": 3557,
+        "memoryName": "case_node_1a8d2fce9629_2026-05-07",
+        "consolidatedFrom": [
+          "kdoc_ae2936b78fdb"
+        ]
+      },
+      "qualityScore": 0.7394126136935808,
+      "createdAt": "2026-05-10T02:28:21.447Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_1a8d2fce9629_2026-05-07",
+      "title": "case_node_1a8d2fce9629_2026-05-07 [3/3]",
+      "content": "## Test files that exercised the change\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.ModifierTracking.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/30-evidence/g2-evaluation.md`\n## How to apply\nWhen a future task carries any of these tags — stage2, balance-mode, physics-control, diagnostics, support-proxy — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "b63db64f2e57c6b2b20dc3bcbd5e08528b51558c4ed734ab3acd0d46d1e8bddc",
+      "metadata": {
+        "sizeBytes": 3557,
+        "memoryName": "case_node_1a8d2fce9629_2026-05-07"
+      },
+      "qualityScore": 0.7394126136935808,
+      "createdAt": "2026-05-10T02:28:21.447Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_20c0471fe0c7_2026-05-07",
+      "title": "case_node_20c0471fe0c7_2026-05-07 [1/2]",
+      "content": "---\nname: case_node_20c0471fe0c7_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-STARTUP-PHYSICS-OWNERSHIP-SEQUENCING-01\".Tags: balance-first, startup, physics-ownership, physical-continuity, pose-search, experiential, case-based.type: feedback\n---\n# Case: S2-FIX-BALANCE-STARTUP-PHYSICS-OWNERSHIP-SEQUENCING-01\n**Source node:** `node_20c0471fe0c7` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** balance-first, startup, physics-ownership, physical-continuity, pose-search, experiential, case-based\n## Acceptance criteria that drove the work\n- A deterministic test covers the startup sequencing rule: after a valid PoseSearch result, live proof may authorize bridge physics ownership before physical-continuity evidence exists, but may not publish BalanceActive_Standing until physical-continuity evidence is present.- The implementation keeps WaitingForPoseSearch as the public state until PoseSearch is valid and does not bypass PoseSearch, NNE/ONNX policy inference, Physics Control, or Chaos responsibilities.- Running .\\scripts\\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke no longer terminates at ActivationPhysicsNotStarted.It must either reach BalanceActive_Standing with positive runtime_simulating_body_count and physical_continuity_validator_passed=true, or emit the next more specific post-ownership canonical blocker.- After the PIE smoke run, python .\\scripts\\read_logs.py is executed and the evidence document records the latest artifact, runtime state, simulated body count, continuity verdict, and whether bridge physics ownership started.## Rationale (what worked, in the agent's own words)",
+      "contentHash": "65cb9f18a91d8f711bfd482eca0384184f7641804f88b7af6648c5e00954f70e",
+      "metadata": {
+        "sizeBytes": 3396,
+        "memoryName": "case_node_20c0471fe0c7_2026-05-07"
+      },
+      "qualityScore": 0.6394126136935808,
+      "createdAt": "2026-05-10T02:28:21.447Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_20c0471fe0c7_2026-05-07",
+      "title": "case_node_20c0471fe0c7_2026-05-07 [2/2]",
+      "content": "## Rationale (what worked, in the agent's own words)\nImplemented startup proof physics-ownership sequencing so a valid PoseSearch result can authorize bridge physics ownership before the proof publishes BalanceActive_Standing.Added deterministic coverage for the sequencing predicate and updated the smoke outcome helper to treat canonical terminal artifacts as truthful diagnostics.The PIE smoke no longer terminates as ActivationPhysicsNotStarted; it now starts BridgeActive ownership and exposes the next post-ownership blocker: activation prepass/body-modifier handling drops root simulation, yielding ActivationContinuousSimulationLost with runtime_simulating_body_count=0.Evidence docs and G2 evaluation were updated with the latest artifact UUID 7B595134-4584-BA9B-D9C5-919A01887525.## Test files that exercised the change\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimBalance.TestHelpers.h`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnim.SmokeTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.Core.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.PhysicsActivation.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h`\n## How to apply\nWhen a future task carries any of these tags — balance-first, startup, physics-ownership, physical-continuity, pose-search — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "7630733ceabf33361ef17d970b47159eaed82f7828723d276a4fd54df24209b6",
+      "metadata": {
+        "sizeBytes": 3396,
+        "memoryName": "case_node_20c0471fe0c7_2026-05-07"
+      },
+      "qualityScore": 0.7394126136935808,
+      "createdAt": "2026-05-10T02:28:21.447Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_097de020b735_2026-05-07",
+      "title": "case_node_097de020b735_2026-05-07 [2/2]",
+      "content": "Added deterministic coverage for pending BridgeActive proof evaluation, post-proof BridgeActive disablement, and uninitialized disablement.Verified startup proof smoke evidence now records terminal_reason=None, runtime_simulating_body_count=22, physical_continuity_validator_passed=true, then queues balance entry and truthfully returns to the existing phase3_post_root_on_instability blocker.## Test files that exercised the change\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.ModifierTracking.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/30-evidence/g2-evaluation.md`\n## How to apply\nWhen a future task carries any of these tags — balance-mode, startup-proof, bridgeactive, physical-continuity — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "ea9d5e2b8151cf1878c8cc72cb17cc7ae3175c5d9f0c47b505a90b90e6b461d5",
+      "metadata": {
+        "sizeBytes": 2749,
+        "memoryName": "case_node_097de020b735_2026-05-07"
+      },
+      "qualityScore": 0.7394126136135124,
+      "createdAt": "2026-05-10T02:28:21.446Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_13e0bbe00c5d_2026-05-07",
+      "title": "case_node_13e0bbe00c5d_2026-05-07 [1/2]",
+      "content": "---\nname: case_node_13e0bbe00c5d_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-STARTUP-PHYSICAL-CONTINUITY-01\".Tags: balance-first, physical-continuity, startup, truth-model, pie-smoke, experiential, case-based.type: feedback\n---\n# Case: S2-FIX-BALANCE-STARTUP-PHYSICAL-CONTINUITY-01\n**Source node:** `node_13e0bbe00c5d` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** balance-first, physical-continuity, startup, truth-model, pie-smoke, experiential, case-based\n## Acceptance criteria that drove the work\n- A deterministic test covers the startup proof decision so a proof cannot pass unless the live runtime evidence has positive truth-set simulation body count and physical-continuity validation passed.- The implementation preserves the public WaitingForPoseSearch contract until a valid PoseSearch/motion-match path exists; it does not move motion selection into Physics Control or custom policy code.- Running .\\scripts\\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke no longer produces a false BalanceActive_Standing pass with PelvisSim=0.It must either reach BalanceActive_Standing with live physical continuity evidence or emit a more specific canonical terminal reason that identifies the next physical-continuity blocker.- After the PIE smoke run, python .\\scripts\\read_logs.py is executed and the evidence document records the latest terminal/pass artifact, runtime state, simulated body count, and physical-continuity verdict.## Rationale (what worked, in the agent's own words)\nAdded deterministic startup proof physical-continuity contract coverage and centralized the evidence definition so a validator pass without positive truth-set simulated body count is not accepted.",
+      "contentHash": "7515a8ab1713eb7e8b6e178f585ea7eb9210373106c41c94d5d071c326fbd624",
+      "metadata": {
+        "sizeBytes": 3073,
+        "memoryName": "case_node_13e0bbe00c5d_2026-05-07"
+      },
+      "qualityScore": 0.6394126136135124,
+      "createdAt": "2026-05-10T02:28:21.446Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_13e0bbe00c5d_2026-05-07",
+      "title": "case_node_13e0bbe00c5d_2026-05-07 [2/2]",
+      "content": "Added deterministic startup proof physical-continuity contract coverage and centralized the evidence definition so a validator pass without positive truth-set simulated body count is not accepted.Classified pre-activation zero-body proof completion as ActivationPhysicsNotStarted instead of generic ActivationContinuousSimulationLost, preserving existing terminal reason numeric values by appending the new reason.Updated smoke/G2 evidence with the latest PIE artifact showing stable support but zero simulated bodies while still in WaitingForPoseSearch, narrowing the next true-balance blocker to startup sequencing before bridge physics ownership.## Test files that exercised the change\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimProofArtifactEmitter.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimTruthTypes.h`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/30-evidence/g2-evaluation.md`\n## How to apply\nWhen a future task carries any of these tags — balance-first, physical-continuity, startup, truth-model, pie-smoke — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.",
+      "contentHash": "c36837e00ea44ef25c435ca34016ab173f77dff144d53d73bf7a58a55b5f4ad1",
+      "metadata": {
+        "sizeBytes": 3073,
+        "memoryName": "case_node_13e0bbe00c5d_2026-05-07"
+      },
+      "qualityScore": 0.7394126136135124,
+      "createdAt": "2026-05-10T02:28:21.446Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_1a8d2fce9629_2026-05-07",
+      "title": "case_node_1a8d2fce9629_2026-05-07 [1/3]",
+      "content": "---\nname: case_node_1a8d2fce9629_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-STARTUP-SUPPORT-PROXY-COUPLING-01\".Tags: stage2, balance-mode, physics-control, diagnostics, support-proxy, experiential, case-based.type: feedback\n---\n# Case: S2-FIX-BALANCE-STARTUP-SUPPORT-PROXY-COUPLING-01\n**Source node:** `node_1a8d2fce9629` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** stage2, balance-mode, physics-control, diagnostics, support-proxy, experiential, case-based\n## Acceptance criteria that drove the work\n- Deterministic test covers that once BridgeActive startup proof has physical continuity, ActivationProxyOutsideSupportRegion is treated as the next specific blocker rather than a continuity-loss surrogate.- Deterministic test or contract covers the startup support/proxy coupling behavior so proxy error inside the allowed root/capsule offset remains inside the active two-foot support hull during the standing hold window.- PhysAnim.PIE.BalanceModeSmoke no longer emits ActivationProxyOutsideSupportRegion before the standing hold threshold; it either reaches true BalanceActive_Standing with physical continuity or emits a more specific next blocker.- After running smoke, run python .\\scripts\\read_logs.py and update docs/evidence/balance-mode-smoke-2026-05-07.md plus plans/stage1/30-evidence/g2-evaluation.md with the evidence.## Rationale (what worked, in the agent's own words)\nImplemented startup support/proxy coupling mitigation for BridgeActive startup proof.",
+      "contentHash": "672c9cbc04202f1a1ba68c52bb5810b42926e85c21109fb8bcc3a54c7a7f7c07",
+      "metadata": {
+        "sizeBytes": 3557,
+        "memoryName": "case_node_1a8d2fce9629_2026-05-07"
+      },
+      "qualityScore": 0.7394126136135124,
+      "createdAt": "2026-05-10T02:28:21.446Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:case_node_097de020b735_2026-05-07",
+      "title": "case_node_097de020b735_2026-05-07 [1/2]",
+      "content": "---\nname: case_node_097de020b735_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-BRIDGEACTIVE-STARTUP-PROOF-CONTINUITY-01\".Tags: balance-mode, startup-proof, bridgeactive, physical-continuity, experiential, case-based.type: feedback\n---\n# Case: S2-FIX-BALANCE-BRIDGEACTIVE-STARTUP-PROOF-CONTINUITY-01\n**Source node:** `node_097de020b735` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** balance-mode, startup-proof, bridgeactive, physical-continuity, experiential, case-based\n## Acceptance criteria that drove the work\n- Deterministic test covers BridgeActive startup proof evidence with simulated bodies and continuity validator pass so HasStartupProofPhysicalContinuityEvidence can become true before BalanceActive.- BuildLiveRuntimeEvidenceSubstepInput evaluates physical continuity for BridgeActive while startup proof/activation contracts are pending, without marking unrelated BridgeActive states as successful balance.- PhysAnim.PIE.BalanceModeSmoke startup proof still passes with terminal_reason_name=None and physical continuity evidence before later balance-entry blockers.- After smoke, run python .\\scripts\\read_logs.py and update evidence docs if the observed blocker changes.## Rationale (what worked, in the agent's own words)\nImplemented scoped BridgeActive startup-proof continuity evaluation.BuildLiveRuntimeEvidenceSubstepInput now enables continuity validation for Waiting/Ready/BalanceEntry/BalanceActive and for BridgeActive only while live runtime evidence proof is enabled and incomplete.Added deterministic coverage for pending BridgeActive proof evaluation, post-proof BridgeActive disablement, and uninitialized disablement.",
+      "contentHash": "bc91387af771855d843facf2f3ecb78ef9d6e77dbfe5ef77a117376d7e328000",
+      "metadata": {
+        "sizeBytes": 2749,
+        "memoryName": "case_node_097de020b735_2026-05-07"
+      },
+      "qualityScore": 0.6394126135334443,
+      "createdAt": "2026-05-10T02:28:21.445Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:research/thigh-hip-isolation",
+      "title": "research/thigh-hip-isolation",
+      "content": "# Research: Thigh-Hip Isolation Diagnostic\n\n## Problem Statement\nDuring V0 10-body raw-sim activation, `spine_01` angular velocity spikes to >40,000 deg/s within 0.15s, leading to immediate support failure. We need to determine if this is driven by target discontinuities in PhysicsControl or passive physics instability.\n\n## Hypotheses\n1. **Target Discontinuity**: The sudden jump from kinematic targets to raw-sim targets at the hip joint is injecting massive energy.\n2. **Gain Amplification**: Current PhysicsControl gains for the hip are too high for the raw-sim configuration.\n3. **Passive Spine Spike**: The spine is losing stability purely due to the 10-body sim configuration without active policy compensation.\n\n## Diagnostic Variants (Plan)\n- **A1-full**: All V0 controls set to zero. Measures passive physics settling.\n- **A3-full**: Thigh controls set to zero, others active. Isolates the hip joint energy contribution.\n- **A3-ramp**: Ramping thigh restore over time. Tests if smoothing the target transition prevents the spike.\n- **A3-low**: Thigh restore with low gains (0.02, 0.05, 0.10). Tests gain sensitivity.\n\n## Preliminary Findings\n- `EnableInstabilityFailStop=0` is required to collect data beyond the first 0.11s of activation.\n- `PhysAnim.EnableInstabilityFailStop` was added as a project decision (ADR-06) to allow this diagnostic bypass.",
+      "contentHash": "7e2a052dd3e8b1479aada2b7dacf64f0d6686f797bb15ecb808877982e4bc351",
+      "metadata": {
+        "sizeBytes": 1364,
+        "memoryName": "research/thigh-hip-isolation"
+      },
+      "qualityScore": 0.7176852416970947,
+      "createdAt": "2026-05-06T20:13:11.226Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:status/stage-1-progress",
+      "title": "status/stage-1-progress",
+      "content": "# Project Status: Stage 1 (V0 Standing Proof)\n\n## Completed Milestones\n- [x] S1 Infrastructure: NNE integration and basic bridge wiring.\n- [x] S2 Proof Setup: Automated standing test harness.\n- [x] S2 Evidence: Diagnostic logging and JSON emitter.\n- [x] S2 Arbitration: Support failure and fail-stop routing.\n\n## Active Task\n**S2-IMPL-V0-RAW-SIM-THIGH-HIP-ISOLATION-01**\n- Objective: Isolate hip amplification root cause.\n- Method: Batch execution of 4 thigh-restore variants.\n- Blocker: Investigating why `spine_01` angular velocity spikes > 40,000 deg/s during 10-body raw-sim activation.\n\n## Known Risks\n- **A-05**: V0 Raw-Sim plant may be inherently unstable without active hip compensation.\n- **Instability Fail-Stop**: Premature aborts in the harness are currently bypassed via `EnableInstabilityFailStop=0` for diagnostic purposes.",
+      "contentHash": "743e009c7164142f53de0d4f923881a900731f4d84ca3a86bfeff0c91bd7848e",
+      "metadata": {
+        "sizeBytes": 839,
+        "memoryName": "status/stage-1-progress"
+      },
+      "qualityScore": 0.717682877258105,
+      "createdAt": "2026-05-06T20:12:39.384Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:runtime/state-machine",
+      "title": "runtime/state-machine",
+      "content": "# Runtime State Machine: EPhysAnimRuntimeState\n\nThe `PhysAnimComponent` uses a state machine to manage the transition from gameplay (CMC) to physics-driven animation (PhysAnim).\n\n## Critical States\n- **Uninitialized**: Component not yet active.\n- **RuntimeReady**: NNE and PhysicsControl assets loaded.\n- **ReadyForActivation**: Standing pose found and targets seeded.\n- **BridgeActive**: Full raw-sim activation.\n- **BalanceEntry_Prepare**: First frame of sim; body masks being applied.\n- **BalanceEntry_Settle**: Waiting for passive spikes to dissipate (0.15s–0.25s).\n- **BalanceActive_Standing**: The proof target state. Stable standing held.\n- **FailStopped**: Contract violation detected; emergency fallback triggered.\n\n## Diagnostic Focus\nCurrent investigation targets the **BalanceEntry_Prepare → Settle** window to isolate energy spikes in the hip/spine joints.",
+      "contentHash": "7719b6a26988fc8ee024738f641c413cc2ce55f68eaad29518cec438ba11c964",
+      "metadata": {
+        "sizeBytes": 874,
+        "memoryName": "runtime/state-machine"
+      },
+      "qualityScore": 0.717682492085393,
+      "createdAt": "2026-05-06T20:12:34.197Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:architecture/contracts",
+      "title": "architecture/contracts",
+      "content": "# Technical Contracts\n\nThe system is governed by 9 core technical contracts that define the boundaries between components:\n\n| Contract | Purpose |\n| :--- | :--- |\n| **Authority** | CMC vs PhysAnim handoff logic. |\n| **Balance** | COM, Support Hull, and Proxy Drift metrics. |\n| **Capsule** | Capsule interaction with world and collision rules. |\n| **Continuity** | Body velocity bounds and frame-to-frame delta limits. |\n| **Control** | NNE Observation/Action vector semantics (SMPL DFS Order). |\n| **Floor** | Floor sampling and projection for balanced standing. |\n| **Log** | Diagnostic capture and proof evidence formatting. |\n| **Model** | NNE Runtime and Model Data lifecycle management. |\n| **Search** | PoseSearch query generation and result mapping. |\n\n## Contract ADRs\n- **ADR-01**: V0 Raw-Sim requires exactly 10 bodies (Pelvis, Spines, Thighs, Feet, Balls).\n- **ADR-07**: Observation vector must match ProtoMotions DFS order.",
+      "contentHash": "845a6668778fd69f17a464f62a4d9a41bd60240c726ae7d2723dcf533628499f",
+      "metadata": {
+        "sizeBytes": 937,
+        "memoryName": "architecture/contracts"
+      },
+      "qualityScore": 0.7176821323834239,
+      "createdAt": "2026-05-06T20:12:29.353Z"
+    },
+    {
+      "sourceType": "memory",
+      "sourceId": "memory:architecture/overview",
+      "title": "architecture/overview",
+      "content": "# Architecture Overview: PHC-Bridge\n\n## Core Execution Pipeline (Architecture Lock)\nThe project adheres to a strict linear execution flow for physics-based character animation:\n`PoseSearch -> PHC Policy (NNE/ONNX) -> Physics Control Component -> Chaos Physics -> Renderer`\n\n## Governing Principles\n1. **UE5 Built-in Preference**: Maximize use of Unreal Engine built-ins (PhysicsControl, Chaos, NNE). Keep the custom bridge code minimal.\n2. **Offline/Runtime Separation**: Training (Python/PHC) and Runtime (UE5/C++) are strictly separated. No Python dependencies at runtime.\n3. **No TensorRT**: All inference must use ONNX Runtime via UE5 NNE for maximum portability.\n4. **TDD Mandatory**: All deterministic logic must be covered by automated tests. Exploratory spikes must be converted into deterministic tests.\n5. **Manny/Quinn Default**: The SMPL-to-UE5 retargeting and simulation targets are tuned for the default Unreal skeletons.\n\n## Current Phase: IMPLEMENT\nThe project is currently in the **IMPLEMENT** phase of the V0 Activated Standing proof. The primary focus is achieving a stable raw-sim plant (10 bodies) before enabling full policy actions.",
+      "contentHash": "0c209c6d953d266ebe14f02259b84bad97422d24498ae9c5e6fb8e1e3e86aae9",
+      "metadata": {
+        "sizeBytes": 1156,
+        "memoryName": "architecture/overview"
+      },
+      "qualityScore": 0.7176817844887959,
+      "createdAt": "2026-05-06T20:12:24.668Z"
+    }
+  ],
+  "memories": [
+    {
+      "name": "achievements/stage2a-turn-proof",
+      "content": "# Stage 2A Rotation (Turn-in-Place) Implementation & Proof\n\n**Date:** 2026-05-10\n**Epic:** node_74cdd046b5f2 (Stage 2A Locomotion Integration)\n\n## Accomplishments\n- **Implemented `TryActivateStage2ATurnIntent`**: Added the runtime entrypoint for kinematic rotation.\n  - Correctly gates requests via `EvaluateStage2ALocomotionRequestGate`.\n  - Sets `BridgeIntentState.ActiveIntent` (TurnLeft/TurnRight).\n  - Updates `BridgeIntentState.DesiredFacingYawDegrees`.\n  - Applies actor rotation with `Sweep=true`.\n  - Emits telemetry with `root_mode=Stage1_KinematicRoot`.\n- **TDD Verification**: Established `PhysAnimStage2ATurnIntentTests.cpp` for logic validation.\n- **Formal Smoke Proof**: Executed `PhysAnimStage2ATurnSmokeTest.cpp`.\n  - **Result**: 40.0° rotation in 2.0s with 0.000cm translation drift.\n  - **Verdict**: PASS. Stability constraints (15cm) and telemetry accuracy (TurnLeft) verified.\n\n## Technical Details\n- **Rotation Math**: Uses `SetActorLocationAndRotation` for kinematic displacement.\n- **Telemetry**: Maps yaw delta to `TurnLeft` (positive) and `TurnRight` (negative).\n- **Gating**: Inherits the Stage 2A locomotion gate, ensuring rotation only occurs when the kinematic shell has authority and the policy is live.\n\n## Next Steps\n- Monitor rotation stability in combined walk-turn scenarios.\n- Transition to higher-stage locomotion autority (Phase 3) when required by the training curriculum.\n"
+    },
+    {
+      "name": "architecture/stage1_contracts_completion",
+      "content": "We have completed the baseline technical contracts and scenarios for Stage 1 of the PhysAnim continuous balance architecture. Key deliverables include the Authority Matrix, Balance Mode Entry, Character Capsule contract, Continuous Balance Truth Model, Engine Execution model, Instrumentation & Acceptance criteria, and the initial Physics Asset configurations. Scenarios for V0 Plant Contract Validation and Standing Proof Positive Path were also successfully validated and marked as done."
+    },
+    {
+      "name": "audits/stage1-balanceactive-gap-analysis",
+      "content": "# Stage 1 BalanceActive Gap Analysis Audit (node_9f67b82b1a67)\n\n## Status: COMPLETE\nThe audit confirms that while the primary Stage 2A locomotion paths (Walk/Turn) are implemented and smoke-testable, several technical vulnerabilities exist that prevent a \"Truthful\" 3.0s product success claim.\n\n## Route to 3.0s Stability:\n1. **Watchdog Hardening (node_53fc32a674f3)**: Fix startup false-positives and clock inconsistency.\n2. **Request State Management (node_617390a4d8a6)**: Fix stale gate retention on failure/denial.\n3. **Delta Semantics (node_045035a3974b)**: Refactor world displacement to be actor-bound for truthfulness.\n4. **Final Proofing**: Re-run `WalkSmoke` and `TurnSmoke` (including TurnRight evidence) with the fixes applied.\n\n## Executability:\n- All identified gaps have corresponding tasks in the graph with testable ACs and estimates <= 120m.\n- A weaker agent can proceed ONLY after the watchdog and request state fixes are merged.\n\n## Blockers:\n- None for implementation; proofing is blocked on the three hardening tasks.\n"
+    },
+    {
+      "name": "case_node_097de020b735_2026-05-07",
+      "content": "---\nname: case_node_097de020b735_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-BRIDGEACTIVE-STARTUP-PROOF-CONTINUITY-01\". Tags: balance-mode, startup-proof, bridgeactive, physical-continuity, experiential, case-based.\ntype: feedback\n---\n\n# Case: S2-FIX-BALANCE-BRIDGEACTIVE-STARTUP-PROOF-CONTINUITY-01\n\n**Source node:** `node_097de020b735` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** balance-mode, startup-proof, bridgeactive, physical-continuity, experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Deterministic test covers BridgeActive startup proof evidence with simulated bodies and continuity validator pass so HasStartupProofPhysicalContinuityEvidence can become true before BalanceActive.\n- BuildLiveRuntimeEvidenceSubstepInput evaluates physical continuity for BridgeActive while startup proof/activation contracts are pending, without marking unrelated BridgeActive states as successful balance.\n- PhysAnim.PIE.BalanceModeSmoke startup proof still passes with terminal_reason_name=None and physical continuity evidence before later balance-entry blockers.\n- After smoke, run python .\\scripts\\read_logs.py and update evidence docs if the observed blocker changes.\n\n## Rationale (what worked, in the agent's own words)\n\nImplemented scoped BridgeActive startup-proof continuity evaluation. BuildLiveRuntimeEvidenceSubstepInput now enables continuity validation for Waiting/Ready/BalanceEntry/BalanceActive and for BridgeActive only while live runtime evidence proof is enabled and incomplete. Added deterministic coverage for pending BridgeActive proof evaluation, post-proof BridgeActive disablement, and uninitialized disablement. Verified startup proof smoke evidence now records terminal_reason=None, runtime_simulating_body_count=22, physical_continuity_validator_passed=true, then queues balance entry and truthfully returns to the existing phase3_post_root_on_instability blocker.\n\n## Test files that exercised the change\n\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.ModifierTracking.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/30-evidence/g2-evaluation.md`\n\n## How to apply\n\nWhen a future task carries any of these tags — balance-mode, startup-proof, bridgeactive, physical-continuity — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_13e0bbe00c5d_2026-05-07",
+      "content": "---\nname: case_node_13e0bbe00c5d_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-STARTUP-PHYSICAL-CONTINUITY-01\". Tags: balance-first, physical-continuity, startup, truth-model, pie-smoke, experiential, case-based.\ntype: feedback\n---\n\n# Case: S2-FIX-BALANCE-STARTUP-PHYSICAL-CONTINUITY-01\n\n**Source node:** `node_13e0bbe00c5d` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** balance-first, physical-continuity, startup, truth-model, pie-smoke, experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- A deterministic test covers the startup proof decision so a proof cannot pass unless the live runtime evidence has positive truth-set simulation body count and physical-continuity validation passed.\n- The implementation preserves the public WaitingForPoseSearch contract until a valid PoseSearch/motion-match path exists; it does not move motion selection into Physics Control or custom policy code.\n- Running .\\scripts\\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke no longer produces a false BalanceActive_Standing pass with PelvisSim=0. It must either reach BalanceActive_Standing with live physical continuity evidence or emit a more specific canonical terminal reason that identifies the next physical-continuity blocker.\n- After the PIE smoke run, python .\\scripts\\read_logs.py is executed and the evidence document records the latest terminal/pass artifact, runtime state, simulated body count, and physical-continuity verdict.\n\n## Rationale (what worked, in the agent's own words)\n\nAdded deterministic startup proof physical-continuity contract coverage and centralized the evidence definition so a validator pass without positive truth-set simulated body count is not accepted. Classified pre-activation zero-body proof completion as ActivationPhysicsNotStarted instead of generic ActivationContinuousSimulationLost, preserving existing terminal reason numeric values by appending the new reason. Updated smoke/G2 evidence with the latest PIE artifact showing stable support but zero simulated bodies while still in WaitingForPoseSearch, narrowing the next true-balance blocker to startup sequencing before bridge physics ownership.\n\n## Test files that exercised the change\n\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimProofArtifactEmitter.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimTruthTypes.h`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/30-evidence/g2-evaluation.md`\n\n## How to apply\n\nWhen a future task carries any of these tags — balance-first, physical-continuity, startup, truth-model, pie-smoke — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_1a8d2fce9629_2026-05-07",
+      "content": "---\nname: case_node_1a8d2fce9629_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-STARTUP-SUPPORT-PROXY-COUPLING-01\". Tags: stage2, balance-mode, physics-control, diagnostics, support-proxy, experiential, case-based.\ntype: feedback\n---\n\n# Case: S2-FIX-BALANCE-STARTUP-SUPPORT-PROXY-COUPLING-01\n\n**Source node:** `node_1a8d2fce9629` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** stage2, balance-mode, physics-control, diagnostics, support-proxy, experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Deterministic test covers that once BridgeActive startup proof has physical continuity, ActivationProxyOutsideSupportRegion is treated as the next specific blocker rather than a continuity-loss surrogate.\n- Deterministic test or contract covers the startup support/proxy coupling behavior so proxy error inside the allowed root/capsule offset remains inside the active two-foot support hull during the standing hold window.\n- PhysAnim.PIE.BalanceModeSmoke no longer emits ActivationProxyOutsideSupportRegion before the standing hold threshold; it either reaches true BalanceActive_Standing with physical continuity or emits a more specific next blocker.\n- After running smoke, run python .\\scripts\\read_logs.py and update docs/evidence/balance-mode-smoke-2026-05-07.md plus plans/stage1/30-evidence/g2-evaluation.md with the evidence.\n\n## Rationale (what worked, in the agent's own words)\n\nImplemented startup support/proxy coupling mitigation for BridgeActive startup proof. The live proof now uses raw simulated body COM as the startup proxy while proof is incomplete, defers premature ActivationProxyOutsideSupportRegion only during the startup proof window, and starts the BridgeActive policy influence ramp after proof completion so balance entry can proceed. Deterministic contracts were added to PhysAnim.Component.BalanceStateClassification for raw COM proxy selection, startup proxy terminal deferral, and policy-ramp enablement. Evidence shows PhysAnim.PIE.BalanceModeSmoke now completes startup proof with terminal_reason=None, runtime_simulating_body_count=22, physical_continuity_validator_passed=true, then queues balance entry and transitions BridgeActive -> BalanceEntry_Prepare -> BalanceEntry_LateValidate. It no longer stops at ActivationProxyOutsideSupportRegion; the truthful next blocker is BalanceSafeDeny reason=phase1_root_on_readiness_pelvis_angular_incoherent. Evidence docs and G2 evaluation were updated. Verification run: .\\scripts\\build.ps1 -Test PhysAnim.Component.BalanceStateClassification passed; .\\scripts\\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke failed on the new truthful next blocker; python .\\scripts\\read_logs.py was run after smoke; .\\scripts\\build.ps1 passed.\n\n## Test files that exercised the change\n\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.ModifierTracking.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/30-evidence/g2-evaluation.md`\n\n## How to apply\n\nWhen a future task carries any of these tags — stage2, balance-mode, physics-control, diagnostics, support-proxy — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_20c0471fe0c7_2026-05-07",
+      "content": "---\nname: case_node_20c0471fe0c7_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-STARTUP-PHYSICS-OWNERSHIP-SEQUENCING-01\". Tags: balance-first, startup, physics-ownership, physical-continuity, pose-search, experiential, case-based.\ntype: feedback\n---\n\n# Case: S2-FIX-BALANCE-STARTUP-PHYSICS-OWNERSHIP-SEQUENCING-01\n\n**Source node:** `node_20c0471fe0c7` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** balance-first, startup, physics-ownership, physical-continuity, pose-search, experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- A deterministic test covers the startup sequencing rule: after a valid PoseSearch result, live proof may authorize bridge physics ownership before physical-continuity evidence exists, but may not publish BalanceActive_Standing until physical-continuity evidence is present.\n- The implementation keeps WaitingForPoseSearch as the public state until PoseSearch is valid and does not bypass PoseSearch, NNE/ONNX policy inference, Physics Control, or Chaos responsibilities.\n- Running .\\scripts\\build.ps1 -Test PhysAnim.PIE.BalanceModeSmoke no longer terminates at ActivationPhysicsNotStarted. It must either reach BalanceActive_Standing with positive runtime_simulating_body_count and physical_continuity_validator_passed=true, or emit the next more specific post-ownership canonical blocker.\n- After the PIE smoke run, python .\\scripts\\read_logs.py is executed and the evidence document records the latest artifact, runtime state, simulated body count, continuity verdict, and whether bridge physics ownership started.\n\n## Rationale (what worked, in the agent's own words)\n\nImplemented startup proof physics-ownership sequencing so a valid PoseSearch result can authorize bridge physics ownership before the proof publishes BalanceActive_Standing. Added deterministic coverage for the sequencing predicate and updated the smoke outcome helper to treat canonical terminal artifacts as truthful diagnostics. The PIE smoke no longer terminates as ActivationPhysicsNotStarted; it now starts BridgeActive ownership and exposes the next post-ownership blocker: activation prepass/body-modifier handling drops root simulation, yielding ActivationContinuousSimulationLost with runtime_simulating_body_count=0. Evidence docs and G2 evaluation were updated with the latest artifact UUID 7B595134-4584-BA9B-D9C5-919A01887525.\n\n## Test files that exercised the change\n\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimBalance.TestHelpers.h`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnim.SmokeTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.Core.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.PhysicsActivation.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h`\n\n## How to apply\n\nWhen a future task carries any of these tags — balance-first, startup, physics-ownership, physical-continuity, pose-search — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_2d5c7dee4674_2026-05-07",
+      "content": "---\nname: case_node_2d5c7dee4674_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S1-P1-U1\". Tags: experiential, case-based.\ntype: feedback\n---\n\n# Case: S1-P1-U1\n\n**Source node:** `node_2d5c7dee4674` (type=task, priority=3)\n**Distilled at:** 2026-05-07\n**Tags:** experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- G2 evaluation status recorded with pass, fail, or blocked verdict and evidence path.\n\n## Rationale (what worked, in the agent's own words)\n\nRan the G2 entry balance smoke gate and recorded an honest blocked verdict. The smoke automation passed and reached BalanceActive_Standing beyond 3 seconds, but metrics simultaneously reported PelvisSim=0/PelvisAwake=0, which conflicts with the physical-continuity truth model. Created a priority follow-up graph task to audit/fix that contradiction before G2 approval.\n\n## Test files that exercised the change\n\n- `plans/stage1/30-evidence/g2-evaluation.md`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/20-execution/assumption-ledger.md`\n\n## How to apply\n\nWhen a future task carries any of these tags — (none beyond experiential/case-based) — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_582c518e5212_2026-05-07",
+      "content": "---\nname: case_node_582c518e5212_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S1-P1-A2\". Tags: experiential, case-based.\ntype: feedback\n---\n\n# Case: S1-P1-A2\n\n**Source node:** `node_582c518e5212` (type=task, priority=3)\n**Distilled at:** 2026-05-07\n**Tags:** experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Stabilization and tuning package produced and indexed as active execution planning.\n\n## Rationale (what worked, in the agent's own words)\n\nProduced and indexed the current stabilization and tuning package in balance-first terms. It defines stabilization order, allowed/disallowed tuning surfaces, evidence ladder, required metrics, test gates, stop rules, and interpretation of thigh diagnostics as observability rather than product success.\n\n## Test files that exercised the change\n\n- `plans/stage1/20-execution/stabilization-and-tuning-package.md`\n- `STAGE1_PLAN.md`\n\n## How to apply\n\nWhen a future task carries any of these tags — (none beyond experiential/case-based) — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_5cd70e6c40f7_2026-05-07",
+      "content": "---\nname: case_node_5cd70e6c40f7_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-ACTIVATION-PREPASS-RAW-SIM-PRESERVATION-01\". Tags: stage1, balance, physics-control, startup-proof, diagnostics, experiential, case-based.\ntype: feedback\n---\n\n# Case: S2-FIX-BALANCE-ACTIVATION-PREPASS-RAW-SIM-PRESERVATION-01\n\n**Source node:** `node_5cd70e6c40f7` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** stage1, balance, physics-control, startup-proof, diagnostics, experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Deterministic test covers activation prepass/body-modifier policy: BridgeActive live-proof activation must not convert required truth-set bodies back to non-simulating after bridge physics ownership starts.\n- Preserve WaitingForPoseSearch until PoseSearch is valid; do not bypass the architecture path PoseSearch -> PHC Policy -> Physics Control -> Chaos.\n- PhysAnim.PIE.BalanceModeSmoke no longer emits ActivationContinuousSimulationLost with BridgeActive and runtime_simulating_body_count=0 immediately after ownership start; it either reaches true BalanceActive_Standing with physical continuity or emits the next specific post-continuity blocker.\n- Run python .\\scripts\\read_logs.py after smoke and update docs/evidence/balance-mode-smoke-2026-05-07.md and plans/stage1/30-evidence/g2-evaluation.md with before/after snapshots and the latest artifact.\n\n## Rationale (what worked, in the agent's own words)\n\nPreserved raw skeletal simulation after Physics Control activation/control updates for the BridgeActive startup proof path. Added deterministic predicates and assertions proving BridgeActive startup proof does not push authoritative kinematic record writes back into live bodies, while balance-entry phases still can update bodies, and raw simulation preservation ends after proof completion. Smoke evidence moved from the zero-simulation continuity failure to a later post-continuity support/proxy blocker: AfterActivationPrepass has rootBodySim=true, BridgeActive METRICS_TICK has PelvisSim=1/PelvisAwake=1, terminal artifact DEEF2096-424D-DA31-8B13-4081D5D041FE reports runtime_simulating_body_count=22 and physical_continuity_validator_passed=true, and terminal_reason_name=ActivationProxyOutsideSupportRegion. Evidence docs were updated with that result and next blocker.\n\n## Test files that exercised the change\n\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.ModifierTracking.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.PhysicsTuning.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.PhysicsActivation.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.Core.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Public/PhysAnimComponent.h`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/30-evidence/g2-evaluation.md`\n\n## How to apply\n\nWhen a future task carries any of these tags — stage1, balance, physics-control, startup-proof, diagnostics — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_825339ea78ff_2026-05-10",
+      "content": "---\nname: case_node_825339ea78ff_2026-05-10\ndescription: Case-based memory distilled from grade-A finish of \"Harden Stage 2A Locomotion Gates & Watchdog\". Tags: experiential, case-based.\ntype: feedback\n---\n\n# Case: Harden Stage 2A Locomotion Gates & Watchdog\n\n**Source node:** `node_825339ea78ff` (type=task, priority=1)\n**Distilled at:** 2026-05-10\n**Tags:** experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Temporal watchdog requires PolicyControlTicksExecuted > 0 and fresh timestamp.\n- Policy timestamp updates only after verified control target application.\n- Consecutive frame counter increments on steps (ApplyNewPolicyStep), not ticks.\n- Locomotion request gate strictly validates state transitions (Standing or Requested).\n- Automated tests pass with deterministic state verification.\n\n## Rationale (what worked, in the agent's own words)\n\nFinalized Stage 2A Locomotion Hardening: 1. Synchronized all watchdog and application timestamps to a consistent GetPhysAnimClockTime() (GetWorld()->GetTimeSeconds() with FPlatformTime fallback). 2. Implemented proactive clearing of Stage2ALocomotionRequestState on policy timeout (HardenStage2ALocomotionState) and on any non-locomotion state transition. 3. Verified movement delta recording in unit tests even when owner actor is missing. All 10 WALK-intent tests now pass deterministically.\n\n## Test files that exercised the change\n\n- `f:\\NewEngine-AgentB\\PhysAnimUE5\\Plugins\\PhysAnimPlugin\\Source\\PhysAnimPlugin\\Private\\Tests\\PhysAnimStage2AWalkIntentTests.cpp`\n\n## How to apply\n\nWhen a future task carries any of these tags — (none beyond experiential/case-based) — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_858156fcc2c5_2026-05-09",
+      "content": "---\nname: case_node_858156fcc2c5_2026-05-09\ndescription: Case-based memory distilled from grade-A finish of \"S2A-IMPL-LOCOMOTION-REQUEST-GATE-01\". Tags: implementation, transition, stage2a, active-track, executor-grade, repo-specific, code-intelligence-verified, experiential, case-based.\ntype: feedback\n---\n\n# Case: S2A-IMPL-LOCOMOTION-REQUEST-GATE-01\n\n**Source node:** `node_858156fcc2c5` (type=task, priority=1)\n**Distilled at:** 2026-05-09\n**Tags:** implementation, transition, stage2a, active-track, executor-grade, repo-specific, code-intelligence-verified, experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Given RuntimeState=BalanceActive_Standing, bPolicyTargetsAppliedLastFrame=true or PolicyControlTicksExecuted>0, BalanceTransitionShellAuthorityMode=TransitionOwnedShellLocked, BridgeShellState.bInitialized=true, and bStage2APhase3SimRootAttempted=false, when EvaluateStage2ALocomotionRequestGate runs, then it returns Allowed.\n- Given exactly one invalid condition is set, when EvaluateStage2ALocomotionRequestGate runs, then it returns the exact matching denial state: Denied_NotBalanceActiveStanding, Denied_PolicyOutputInactive, Denied_SimRootAttempted, or Denied_ShellRootUnlocked.\n- Given TryOpenStage2ALocomotionRequestGate returns true, then Stage2ALocomotionRequestState=LocomotionRequested, BridgeLocomotionAuthorityState=StartupLocomotion, RuntimeState=LocomotionActiveShell, and telemetry contains root_mode=Stage1_KinematicRoot and locomotion_intent=RequestOnly.\n- Given TryOpenStage2ALocomotionRequestGate returns false while starting from BalanceActive_Standing, then Stage2ALocomotionRequestState=LocomotionRequestDenied, BridgeLocomotionAuthorityState=Idle, RuntimeState=LocomotionActiveShellDenied, and telemetry contains the exact denial terminal_state.\n- Given changed files are searched, then no new code creates PHCBridgeRuntime, enables SimRoot/Phase3_SimRoot, uses CharacterMovement movement calls, or relaxes Phase 3 thresholds.\n- Given the executor reports completion, then the report includes changed files, BalanceActive_Standing writer line numbers, exact test command, exit code, telemetry sample, and all branch terminal states.\n\n## Rationale (what worked, in the agent's own words)\n\nStage 2A Locomotion Request Gate implementation and validation complete. \nInfrastructure: Defined EStage2ALocomotionTerminalState, added gate members/methods to UPhysAnimComponent, and implemented telemetry logic.\nCall-Site Injection: Injected TryOpenStage2ALocomotionRequestGate in PhysAnimComponent.cpp startup confirmation logic.\nValidation: Developed PhysAnimStage2ALocomotionGateTests.cpp covering success and denial branches. \nVerification: Tests passed and telemetry logs successfully validated in Unreal Engine automation suite.\nArchitecture compliance maintained: No CharacterMovement changes, no SimRoot activation, no Phase 3 threshold modifications.\n\n## Test files that exercised the change\n\n- `f:\\NewEngine-AgentB\\PhysAnimUE5\\Plugins\\PhysAnimPlugin\\Source\\PhysAnimPlugin\\Private\\Tests\\PhysAnimStage2ALocomotionGateTests.cpp`\n\n## How to apply\n\nWhen a future task carries any of these tags — implementation, transition, stage2a, active-track, executor-grade, repo-specific, code-intelligence-verified — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_d04dbbd27b6c_2026-05-09",
+      "content": "---\nname: case_node_d04dbbd27b6c_2026-05-09\ndescription: Case-based memory distilled from grade-A finish of \"S2A-IMPL-WALK-INTENT-ACTIVATION-01\". Tags: implementation, stage2a, walk, active-track, executor-grade, repo-specific, code-intelligence-verified, experiential, case-based.\ntype: feedback\n---\n\n# Case: S2A-IMPL-WALK-INTENT-ACTIVATION-01\n\n**Source node:** `node_d04dbbd27b6c` (type=task, priority=1)\n**Distilled at:** 2026-05-09\n**Tags:** implementation, stage2a, walk, active-track, executor-grade, repo-specific, code-intelligence-verified, experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Given RuntimeState=BalanceActive_Standing, BalanceTransitionShellAuthorityMode=TransitionOwnedShellLocked, BridgeShellState.bInitialized=true, bPolicyTargetsAppliedLastFrame=true, PolicyControlTicksExecuted=1, and bStage2APhase3SimRootAttempted=false, when TryActivateStage2AWalkIntent(0.05f) runs with Stage2AConsecutivePolicyActiveFrames=0, then it returns false, bStage2AWalkIntentActive=false, Stage2ALastWalkDeltaCm=FVector::ZeroVector, and telemetry contains locomotion_intent=WalkForward plus terminal_state=Denied_PolicyOutputInactive.\n- Given the same ready state and Stage2AConsecutivePolicyActiveFrames=2, when TryActivateStage2AWalkIntent(0.05f) runs, then it returns false, bStage2AWalkIntentActive=false, Stage2ALastWalkDeltaCm=FVector::ZeroVector, and RuntimeState is not LocomotionActiveShell.\n- Given the same ready state and Stage2AConsecutivePolicyActiveFrames=3, when TryActivateStage2AWalkIntent(0.05f) runs on an actor facing +X, then it returns true, BridgeIntentState.DesiredSpeedCmPerSecond=60.0f, BridgeIntentState.IntentMagnitude=1.0f, BridgeTrajectoryState.bInitialized=true, BridgeTrajectoryState.LastDeltaTimeSeconds=0.05f, and Stage2ALastWalkDeltaCm.X is 3.0 cm within ±0.1 cm.\n- Given an actor facing +X, when BuildStage2AWalkDeltaCm(1.0f) runs, then it returns a vector with X=6.0 cm within ±0.1 cm and Size()<=6.0 cm.\n- Given TryActivateStage2AWalkIntent(0.05f) returns true, then RuntimeState=LocomotionActiveShell, BridgeLocomotionAuthorityState=Locomoting, BridgeShellState.AcceptedWorldDeltaCm equals Stage2ALastWalkDeltaCm, and telemetry contains root_mode=Stage1_KinematicRoot, locomotion_intent=WalkForward, capsule_or_shell_motion_source=Stage2A_KinematicShell, phase3_simroot_attempted=false, and terminal_state=Allowed.\n- Given changed hunks are searched with rg for AddMovementInput|AddInputVector|LaunchCharacter|SetVelocity|Phase3_SimRoot|SimRoot, then no newly added line in the Stage2A walk implementation uses those APIs or enables those paths.\n\n## Rationale (what worked, in the agent's own words)\n\nImplemented Stage 2A Kinematic Root locomotion walk intent system. Logic includes intent gating (EvaluateStage2ALocomotionRequestGate), frame-threshold activation (Stage2AMinPolicyActiveFramesBeforeWalk), and deterministic delta clamping (Stage2AMaxWalkDeltaPerTickCm). Integrated with BridgeShellState to maintain root continuity during kinematic translation. Verified via PhysAnim.Locomotion.Stage2AWalkIntent unit tests.\n\n## Test files that exercised the change\n\n- `f:\\NewEngine-AgentB\\PhysAnimUE5\\Plugins\\PhysAnimPlugin\\Source\\PhysAnimPlugin\\Private\\Tests\\PhysAnimStage2AWalkIntentTests.cpp`\n\n## How to apply\n\nWhen a future task carries any of these tags — implementation, stage2a, walk, active-track, executor-grade, repo-specific, code-intelligence-verified — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_deeb9cd55fba_2026-05-07",
+      "content": "---\nname: case_node_deeb9cd55fba_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-PELVIS-SIMULATION-BLOCKER-01\". Tags: experiential, case-based.\ntype: feedback\n---\n\n# Case: S2-FIX-PELVIS-SIMULATION-BLOCKER-01\n\n**Source node:** `node_deeb9cd55fba` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Identify the logic branch in ResolveBodyModifierRuntimeMode causing the pelvis to remain kinematic despite ShouldAllowBalanceSimulation returning true.\n- Confirm if bPhase2RootAuthorityQuarantined or bTransitionKeepsBoneKinematic are incorrectly set during BalanceEntry_RootOn.\n- Verify that WakeInstance() is called for the pelvis body instance upon entering root-on simulation.\n- Implement diagnostic logging for PELVIS_BODYMOD_SIM_ACTIVATION_FAIL with the state of bAllowRootSim, bSimulationHandoffSettled, and bBringUpGroupUnlocked.\n- Pelvis transitions to Simulated state during BalanceEntry_RootOn as verified by logs.\n\n## Rationale (what worked, in the agent's own words)\n\nThe pelvis was remaining kinematic during the BalanceEntry_RootOn phase because the PhysicsControl component's SetBodyModifierMovementType function does not explicitly wake up the underlying physical body instance if it is already asleep or kinematic. We successfully implemented an explicit WakeInstance() call on the pelvis's FBodyInstance during the transition. Additionally, we added diagnostic telemetry (PELVIS_BODYMOD_SIM_ACTIVATION_FAIL) to capture any failures in the gating flags (bAllowRootBodyModifierSimulation, bSimulationHandoffSettled, bBringUpGroupUnlocked). The automated functional tests confirm that the pelvis now successfully transitions to the simulated state without demotion, and no logging errors (PELVIS_SIM_CHECK_FAIL or PHASE2_ROOT_DROP_CULPRIT) were detected.\n\n## Test files that exercised the change\n\n- `f:\\NewEngine-AgentB\\PhysAnimUE5\\Plugins\\PhysAnimPlugin\\Source\\PhysAnimPlugin\\Private\\PhysAnimComponent.PhysicsTuning.cpp`\n\n## How to apply\n\nWhen a future task carries any of these tags — (none beyond experiential/case-based) — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_e2e0e2ecd242_2026-05-07",
+      "content": "---\nname: case_node_e2e0e2ecd242_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S1-P1-A1\". Tags: experiential, case-based.\ntype: feedback\n---\n\n# Case: S1-P1-A1\n\n**Source node:** `node_e2e0e2ecd242` (type=task, priority=3)\n**Distilled at:** 2026-05-07\n**Tags:** experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Single-character implementation package produced and indexed as active execution planning.\n\n## Rationale (what worked, in the agent's own words)\n\nProduced and indexed the current single-character implementation package, scoped to balance-first true standing rather than the archived staged-bringup package. Added explicit active inputs, scope boundaries, test gates, success rule, risks, and preference for graph tasks that improve true balance observability or stability.\n\n## Test files that exercised the change\n\n- `plans/stage1/20-execution/single-character-implementation-package.md`\n- `STAGE1_PLAN.md`\n\n## How to apply\n\nWhen a future task carries any of these tags — (none beyond experiential/case-based) — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "case_node_f2056aa390bb_2026-05-07",
+      "content": "---\nname: case_node_f2056aa390bb_2026-05-07\ndescription: Case-based memory distilled from grade-A finish of \"S2-FIX-BALANCE-PHASE1-ROOTON-READINESS-PELVIS-ANGULAR-COHERENCE-01\". Tags: stage2, balance-mode, physics-control, phase1, pelvis-angular-coherence, experiential, case-based.\ntype: feedback\n---\n\n# Case: S2-FIX-BALANCE-PHASE1-ROOTON-READINESS-PELVIS-ANGULAR-COHERENCE-01\n\n**Source node:** `node_f2056aa390bb` (type=task, priority=1)\n**Distilled at:** 2026-05-07\n**Tags:** stage2, balance-mode, physics-control, phase1, pelvis-angular-coherence, experiential, case-based\n\n## Acceptance criteria that drove the work\n\n- Deterministic test covers phase1_root_on_readiness_pelvis_angular_incoherent classification using pelvis/thigh/spine angular coupling values matching the current smoke failure shape.\n- Deterministic fix or contract reduces the Phase 1 root-on-readiness pelvis angular incoherence path without bypassing physical continuity, active support, or safe-deny checks.\n- PhysAnim.PIE.BalanceModeSmoke no longer ends in BalanceSafeDeny for phase1_root_on_readiness_pelvis_angular_incoherent; it either reaches true BalanceActive_Standing with physical continuity or exposes the next specific truthful blocker.\n- After running smoke, run python .\\scripts\\read_logs.py and update docs/evidence/balance-mode-smoke-2026-05-07.md plus plans/stage1/30-evidence/g2-evaluation.md with the new evidence.\n\n## Rationale (what worked, in the agent's own words)\n\nImplemented baseline-compensated direct pelvis-link angular semantics for Phase 1 RootOn readiness. Manny PhysicsAsset authored constraint-frame angular floors are now logged separately and subtracted from the readiness angular metric, so raw forensic angles remain visible while authored asset offsets no longer make Phase 1 structurally impossible. Added deterministic coverage proving the compensated metric removes the authored thigh frame floor. Verified targeted tests and full build. Smoke no longer ends at phase1_root_on_readiness_pelvis_angular_incoherent; it reaches PHASE2_ENTRY with rootOnReady=1 and exposes the next truthful blocker phase2_root_on_warm_start_incoherent. Smoke logs were read with python .\\scripts\\read_logs.py and evidence/G2 docs were updated without claiming true balance.\n\n## Test files that exercised the change\n\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimComponent.StrategyTests.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimBalanceReadyTransition.Certification.cpp`\n- `PhysAnimUE5/Plugins/PhysAnimPlugin/Source/PhysAnimPlugin/Private/PhysAnimBalanceReadyTransitionPrivate.h`\n- `docs/evidence/balance-mode-smoke-2026-05-07.md`\n- `plans/stage1/30-evidence/g2-evaluation.md`\n\n## How to apply\n\nWhen a future task carries any of these tags — stage2, balance-mode, physics-control, phase1, pelvis-angular-coherence — RAG should surface this memory so the agent can replay the working approach instead of rediscovering it.\n"
+    },
+    {
+      "name": "decisions/stage2a-locomotion-watchdog",
+      "content": "# Stage 2A Locomotion & Watchdog Decisions\r\n\r\n## Locomotion Request State Management\r\n- **Context:** The `Stage2ALocomotionRequestState` was prematurely resetting to `BalanceActiveStanding` upon transitioning into `LocomotionActiveShellDenied` during a failed locomotion request. This masked denial feedback and caused test drift.\r\n- **Decision:** Modified `TransitionRuntimeState` to preserve request states across locomotion denial boundaries (i.e. skipping reset when entering `LocomotionActiveShell` or `LocomotionActiveShellDenied`).\r\n- **Consequence:** `TryActivateStage2AWalkIntent` and `TryActivateStage2ATurnIntent` now guarantee precise clearance of intent and trajectory states upon failure, aligning with graph contract requirements.\r\n\r\n## Watchdog Initialization Robustness\r\n- **Context:** The policy liveness watchdog was susceptible to T=0 false-positives and missed initializations because it implicitly assumed `LastPolicyControlUpdateTimeSeconds` was valid immediately after `PolicyControlTicksExecuted` advanced.\r\n- **Decision:** Hardened `IsStage2APolicyOutputActive` by requiring `LastPolicyControlUpdateTimeSeconds >= 0.0`. Added public `TestOnly` helper seams to the component to permit strict verification via unit tests (avoiding friend-class visibility issues).\r\n- **Consequence:** The watchdog correctly filters out uninitialized states and clock drift.\r\n"
+    },
+    {
+      "name": "governance/artifact-schema-acceptance-s1",
+      "content": "# Artifact Schema Acceptance (Stage 1)\n\n**Status:** Validated\n**Authority:** f:\\NewEngine-AgentB\\docs\\artifact-schema-check-s1.md\n\n## Mandatory Fields\n- hold_duration_sec\n- terminal_reason (None/0 for success)\n- physical_continuity_validator_passed (true for success)\n- support_mode\n- authority_conflict_count (0 for success)\n- shell_helper_used_count (0 for success)\n\n## G2 Gate Criteria\nSuccess = Duration >= 3.0s AND Reason=None AND Continuity=True AND Conflicts=0 AND Helpers=0.\n"
+    },
+    {
+      "name": "governance/design-change-escalation-gate-s1",
+      "content": "# Design Change Escalation Gate (Stage 1)\n\n**Status:** Active\n**Authority:** f:\\NewEngine-AgentB\\docs\\design-change-escalation-gate-s1.md\n\n## Move Classification\n- **Allowed**: PID/Threshold tuning (TDD backed).\n- **New Task**: New reasons, missing fields, regressions.\n- **Review**: Architecture Lock breach, changing V0 target.\n- **Forbidden**: Cheating (assistance), TensorRT, Custom Python.\n\n## Decision Rule\nPivot only if move is \"Allowed\". Otherwise BLOCK or ESCALATE.\nEvery \"DONE\" must confirm no forbidden/review moves.\n"
+    },
+    {
+      "name": "governance/failure-mode-branch-map-s1",
+      "content": "# Failure Mode Branch Map (Stage 1)\n\n**Status:** Active\n**Authority:** f:\\NewEngine-AgentB\\docs\\failure-mode-branch-map-s1.md\n\n## Branches\n- **Phase 3 Instability**: Route to node_78833e2a534a (Decision).\n- **Continuity Loss**: Create S1-INSTRUMENT-CONTINUITY-SPIKE.\n- **Authority Contamination**: Create S1-SHELL-AUTHORITY-HARDENING.\n- **Controller Instability**: Create S1-CONTROLLER-TUNING-ITERATION.\n- **Schema Mismatch**: Create S1-SCHEMA-INSTRUMENTATION-TASK.\n\n## Hard Stop Rules\n- 2x Same Terminal Reason = STOP.\n- 2x Failed Hypotheses = Architecture Review.\n- Architecture Lock Pressure = STOP.\n"
+    },
+    {
+      "name": "governance/lesser-agent-packet-s1",
+      "content": "# Lesser Agent Execution Packet (Stage 1)\n\n**Status:** Active\n**Authority:** f:\\NewEngine-AgentB\\docs\\lesser-agent-packet-s1.md\n\n## Sequence\n1. node_b895d7c254ff (Truth Model)\n2. node_78833e2a534a (Decision)\n3. node_41078a2fd9cf (Fix - Optional)\n4. node_02b012838316 (Proof)\n\n## Strict Rules\n- WIP=1.\n- Branching requires STOP/ESCALATE.\n- No hidden assistance.\n- No diagnostic-only success claims.\n"
+    },
+    {
+      "name": "governance/stability-definition-lock",
+      "content": "# Stability Definition Lock (Stage 1)\n\n**Status:** Locked\n**Authority:** f:\\NewEngine-AgentB\\docs\\stability-definition.md\n\n## Benchmark\n- 3.0s continuous `BalanceActive_Standing`.\n- No terminal failures.\n- No hidden assistance.\n\n## Key Distinction\n- **Product Success**: 3.0s continuous proof.\n- **Diagnostic Progress**: Gate/Logic verification only.\n\n## Successful Nodes\n- S1-EXECUTE-STANDING-STABILITY-PROOF-01 (node_02b012838316)\n- S1-STANDING-STABILITY-REGRESSION-SOAK-01 (node_8d94b0d7e2a3)\n"
+    }
+  ]
+}
