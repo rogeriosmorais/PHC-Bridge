@@ -414,7 +414,9 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
             stability_invalid = True
 
         if hold_duration is not None and sim_bodies is not None:
-            if float(hold_duration) > 0.0 and int(sim_bodies) == 0:
+            # First-frame artifacts (0.033s) may have 0 sim bodies before Chaos wakes up.
+            is_first_frame = 0.0 < float(hold_duration) <= 0.04
+            if float(hold_duration) > 0.0 and int(sim_bodies) == 0 and not is_first_frame:
                 contradiction_items.append(f"hold_duration_sec={hold_duration} but runtime_simulating_body_count=0")
                 stability_invalid = True
             if float(hold_duration) > 1000.0:
