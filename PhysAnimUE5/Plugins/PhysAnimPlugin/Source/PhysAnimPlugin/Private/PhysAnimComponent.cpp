@@ -827,7 +827,14 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		PhysAnimProofArtifactEmitter::LogAttemptStart(LiveRuntimeEvidenceAttemptUuid);
 	}
 	bLiveRuntimeEvidenceProofActive = true;
-	if (bEnableLiveRuntimeEvidenceProof && !bLiveRuntimeEvidenceProofComplete)
+	// Reset the policy ramp only in the pre-activation proof window (before physics ownership
+	// is taken). Once BridgeActive (or beyond), ActivateBridgeFromReadyState has legitimately
+	// started the ramp and we must NOT clobber it — doing so permanently blocks the
+	// BalanceReadyTransition preflight gate. (S2-FIX-BALANCE-STARTUP-TICK-RACE-01)
+	const bool bPreActivationProofState =
+		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
+		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation;
+	if (bPreActivationProofState && bEnableLiveRuntimeEvidenceProof && !bLiveRuntimeEvidenceProofComplete)
 	{
 		PolicyInfluenceRampStartTimeSeconds = -1.0;
 	}
@@ -1026,8 +1033,6 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			Verbose,
 			TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
 			GetRuntimeStateName(RuntimeState));
-
-		TryOpenStage2ALocomotionRequestGate(TEXT("BalanceActive_Standing"));
 	}
 
 
@@ -1132,6 +1137,16 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			for (int32 i = HighestUnlockedBringUpGroupIndex + 1; i < GetBringUpGroupCount(); ++i)
 			{
 				UnlockBringUpGroup(i, TEXT("StartupProofShortcut"));
+			}
+
+			// Ensure all control ramps are started so the policy can activate.
+			const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+			for (int32 i = 0; i < GetBringUpGroupCount(); ++i)
+			{
+				if (BringUpGroupControlRampStartTimeSeconds[i] < 0.0)
+				{
+					BringUpGroupControlRampStartTimeSeconds[i] = CurrentTimeSeconds;
+				}
 			}
 
 			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);

@@ -1,6 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimLogger.h"
+#include "PhysAnimPhase1AutoCalibSubsystem.h"
 
 #include "Components/SkeletalMeshComponent.h"
 #include "PhysicsControlComponent.h"
@@ -77,6 +78,35 @@ void UPhysAnimComponent::TickRuntimeStateMachine(float DeltaTime, const FPhysAni
 		{
 			TransitionRuntimeState(MappedRuntimeState);
 		}
+	}
+
+	// Auto-trigger: when in BridgeActive with no pending request and no ongoing transition,
+	// queue an "auto_trigger" balance start request so the state machine progresses toward
+	// BalanceActive_Standing. This call site was previously missing, leaving the component
+	// permanently stuck in BridgeActive. (S2-FIX-BALANCE-STARTUP-TICK-RACE-01)
+	{
+		UPhysAnimPhase1AutoCalibSubsystem* const AutoCalibSubsystem =
+			GetWorld() ? GetWorld()->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>() : nullptr;
+		const bool bAutoCalibSubsystemActive = AutoCalibSubsystem && AutoCalibSubsystem->IsPhase1AutoCalibActive();
+
+		if (ShouldAttemptAutoTriggeredBalanceStart(
+				RuntimeState,
+				bPendingBalanceModeStartRequest,
+				BalanceReadyTransition.HasAnyInternalPhase(),
+				bPhase1AutoCalibOwnsStartRequests,
+				bAutoCalibSubsystemActive))
+		{
+			if (!ShouldDeferAutoTriggeredBalanceStartForRecoveryTelemetry(RecoveryPreEntryTelemetrySkipFrames))
+			{
+				QueueBalanceModeStartRequest(TEXT("auto_trigger"));
+			}
+			else
+			{
+				--RecoveryPreEntryTelemetrySkipFrames;
+			}
+		}
+
+		TryStartPendingBalanceModeRequest(EffectiveSettings);
 	}
 
 	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
@@ -271,5 +301,22 @@ void UPhysAnimComponent::HandleInitialPoseSearchWait(float DeltaTime, const FPhy
 		ReleaseStartupMovementLock(true);
 	}
 
-	TransitionRuntimeState(ResolveInitialPoseSearchSuccessState(EffectiveSettings.bForceZeroActions));
+	// Activate physics ownership and the bringup ramp sequence.
+	// bRequireLiveProofSatisfied=false because proof hasn't completed yet —
+	// it runs during BridgeActive. Without this call, physics bodies stay
+	// kinematic, bringup groups never unlock, PolicyInfluenceRampStartTimeSeconds
+	// stays -1, and the BalanceReadyTransition preflight gate permanently blocks.
+	// (S2-FIX-BALANCE-STARTUP-TICK-RACE-01)
+	if (EffectiveSettings.bForceZeroActions)
+	{
+		TransitionRuntimeState(EPhysAnimRuntimeState::ReadyForActivation);
+	}
+	else
+	{
+		FString ActivationError;
+		if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("InitialPoseSearchSuccess"), ActivationError, false))
+		{
+			FailStop(FString::Printf(TEXT("Failed to activate bridge from ready state: %s"), *ActivationError));
+		}
+	}
 }

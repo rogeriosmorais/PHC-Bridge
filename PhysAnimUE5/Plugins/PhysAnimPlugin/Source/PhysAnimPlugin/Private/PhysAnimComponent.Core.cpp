@@ -77,6 +77,14 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		return;
 	}
 
+	if (!CheckRuntimeInstability(DeltaTime, EffectiveSettings, TickError))
+	{
+		FailStop(TickError);
+		return;
+	}
+
+	AdvanceBringUpState(DeltaTime, EffectiveSettings);
+
 	TickRuntimeStateMachine(DeltaTime, EffectiveSettings);
 	TickPolicyAndUpdateMetrics(DeltaTime, EffectiveSettings, TickError);
 	ProcessPendingDistalOwnershipChecks();

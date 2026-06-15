@@ -153,6 +153,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 	bool bApplyNewPolicyStepThisTick,
 	FString& OutError)
 {
+	// Evaluate cached targets reset before updating controls so we don't clobber the frame's true targets.
+	ResetPendingBodyModifiersToCachedTargets();
+
 	// Consecutive active frame tracking is now handled at the end of ApplyControlTargets to ensure it only increments on successful writes.
 
 	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_ApplyControlTargets);

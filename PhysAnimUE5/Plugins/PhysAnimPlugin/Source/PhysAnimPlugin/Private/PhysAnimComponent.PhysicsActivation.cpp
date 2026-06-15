@@ -76,6 +76,7 @@ bool UPhysAnimComponent::ActivateBridgeFromReadyState(
 	else
 	{
 		BridgeStartTimeSeconds = CurrentWorldTimeSeconds;
+		UnlockBringUpGroup(0, TEXT("InitialBringUp"));
 	}
 
 	if (const AActor* const OwnerActor = GetOwner())
