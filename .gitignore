@@ -76,3 +76,7 @@ node_modules/
 cloudflared.log
 .antigravitycli/008854e9-b09d-4b6b-9675-4bcc0583e830.json
 test-results/logs/
+test-results/proof-artifacts/
+test-results/evidence-summaries/
+test-results/phase1-autocalib/
+*_tests_results.xml
