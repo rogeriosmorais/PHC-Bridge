@@ -270,8 +270,10 @@ bool FEnableStandingProofCommand::Update()
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
 			PHYSANIM_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] ENABLING_PROOF for %s"), *It->GetName());
+			Comp->StopBridge();
 			Comp->ResetLiveRuntimeEvidenceProof();
 			Comp->bEnableLiveRuntimeEvidenceProof = true;
+			Comp->StartBridge();
 			break;
 		}
 	}
@@ -665,9 +667,11 @@ bool FEnableNegativeSupportProofCommand::Update()
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
 			PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: ENABLING_NEGATIVE_SUPPORT_PROOF for %s"), *It->GetName());
+			Comp->StopBridge();
 			Comp->ResetLiveRuntimeEvidenceProof();
 			Comp->bEnableLiveRuntimeEvidenceProof = true;
 			Comp->SetForceSupportFailure(true);
+			Comp->StartBridge();
 			break;
 		}
 	}

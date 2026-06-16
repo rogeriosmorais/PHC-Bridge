@@ -4171,4 +4171,43 @@ bool FPhysAnimPhase3SettlementGraceProofTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimFailStopShortCircuitTest,
+	"PhysAnim.Component.FailStopShortCircuit",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimFailStopShortCircuitTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (!World)
+	{
+		return true;
+	}
+
+	AActor* Actor = World->SpawnActor<AActor>();
+	UPhysAnimComponent* Component = NewObject<UPhysAnimComponent>(Actor);
+	Component->RegisterComponent();
+
+	// Initialize ActionOutputBuffer size to match expectations (NumActionFloats is 57)
+	Component->ActionOutputBuffer.Init(1.0f, PhysAnimBridge::NumActionFloats);
+
+	// ConditionModelActions frozen actions fail-stop check
+	Component->RecentActionMagnitudeHistory.Empty();
+	Component->RecentActionMagnitudeHistory.Init(1.0f, 10);
+	Component->RuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
+
+	FPhysAnimStabilizationSettings Settings;
+	FString Error;
+
+	AddExpectedError(TEXT("ACTION_FROZEN"), EAutomationExpectedErrorFlags::Contains);
+	AddExpectedError(TEXT("Fail-stop: Model action output is frozen"), EAutomationExpectedErrorFlags::Contains);
+
+	bool bConditionResult = Component->ConditionModelActions(Settings, Error);
+	TestFalse(TEXT("ConditionModelActions returns false when action magnitude is frozen"), bConditionResult);
+
+	Actor->Destroy();
+	return true;
+}
+
 #endif

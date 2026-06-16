@@ -24,7 +24,12 @@ void FPhysAnimLogger::LogRateLimited(const FName& CategoryName, ELogVerbosity::T
 		LogsThisFrame = 0;
 	}
 
-	if (LogsThisFrame >= MAX_LOGS_PER_FRAME)
+	const bool bIsErrorOrFatal = (Verbosity == ELogVerbosity::Error || Verbosity == ELogVerbosity::Fatal);
+	const bool bIsUnrated = (TimeLimit <= 0.0f);
+	const bool bIsCriticalContent = Message.Contains(TEXT("AttemptResult")) || Message.Contains(TEXT("TerminalArtifact"));
+	const bool bBypassFrameCap = bIsErrorOrFatal || bIsUnrated || bIsCriticalContent;
+
+	if (!bBypassFrameCap && LogsThisFrame >= MAX_LOGS_PER_FRAME)
 	{
 		return;
 	}

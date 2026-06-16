@@ -233,7 +233,10 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			ActionOutputBuffer.Init(0.0f, PhysAnimBridge::NumActionFloats);
 		}
 
-		ConditionModelActions(EffectiveSettings, OutError);
+		if (!ConditionModelActions(EffectiveSettings, OutError))
+		{
+			return;
+		}
 	}
 
 	ApplyControlTargets(

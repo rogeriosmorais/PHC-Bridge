@@ -114,6 +114,7 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 			// Trigger a fail-stop if the quality is consistently below the required threshold
 			FailStop(FString::Printf(TEXT("Inference success ratio %.3f is below 0.95 threshold after %d attempts."), 
 				RecentInferenceSuccessRatio, ActivatedStandingStabilityMetrics.PolicyInferenceAttemptCount));
+			return false;
 		}
 	}
 
@@ -178,6 +179,7 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 				{
 					PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] ACTION_FROZEN variance=0.0 mean=%.4f over 10 frames — failure of intent."), Mean);
 					FailStop(TEXT("Model action output is frozen (zero variance over 10 frames)."));
+					return false;
 				}
 			}
 		}

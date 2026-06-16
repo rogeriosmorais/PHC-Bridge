@@ -37,3 +37,40 @@ bool FPhysAnimLoggerRateLimitTest::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimLoggerBypassTest, "PhysAnim.Logger.BypassTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimLoggerBypassTest::RunTest(const FString& Parameters)
+{
+	AddExpectedError(TEXT("Fill cap"), EAutomationExpectedErrorFlags::Contains, 0);
+	AddExpectedError(TEXT("Critical Error log bypassing cap"), EAutomationExpectedErrorFlags::Contains, 0);
+	AddExpectedError(TEXT("PHYSANIM_LOG bypassing cap"), EAutomationExpectedErrorFlags::Contains, 0);
+	AddExpectedError(TEXT("PhysAnimProof: AttemptResult"), EAutomationExpectedErrorFlags::Contains, 0);
+	AddExpectedError(TEXT("PhysAnimProof: TerminalArtifact"), EAutomationExpectedErrorFlags::Contains, 0);
+
+	FPhysAnimLogger::Reset();
+
+	// Fill the frame cap with 10 logs
+	for (int32 i = 0; i < 10; ++i)
+	{
+		PHYSANIM_LOG_RATE_LIMITED(LogTestLogger, Warning, 1.0f, TEXT("Fill cap %d"), i);
+	}
+
+	// The following logs should bypass the frame cap and not be dropped:
+	
+	// 1. Error verbosity
+	PHYSANIM_LOG_RATE_LIMITED(LogTestLogger, Error, 1.0f, TEXT("Critical Error log bypassing cap"));
+
+	// 2. Unrated logs (PHYSANIM_LOG has TimeLimit = 0.0f)
+	PHYSANIM_LOG(LogTestLogger, Warning, TEXT("PHYSANIM_LOG bypassing cap"));
+
+	// 3. AttemptResult content
+	PHYSANIM_LOG_RATE_LIMITED(LogTestLogger, Warning, 1.0f, TEXT("PhysAnimProof: AttemptResult uuid=test verdict=PASS"));
+
+	// 4. TerminalArtifact content
+	PHYSANIM_LOG_RATE_LIMITED(LogTestLogger, Warning, 1.0f, TEXT("PhysAnimProof: TerminalArtifact emitted"));
+
+	FPhysAnimLogger::Reset();
+	return true;
+}
+
