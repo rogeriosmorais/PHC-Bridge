@@ -201,23 +201,29 @@ bool FWaitForStandingProofCommand::Update()
 		return true;
 	}
 
-	// Spawn dumbbell
+	const FVector HandLocation = TargetCharacter->GetMesh()->GetBoneLocation(TEXT("hand_r"));
+
+	// Spawn dumbbell at the hand's location to prevent massive physics impulses
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	AStaticMeshActor* Dumbbell = World->SpawnActor<AStaticMeshActor>(SpawnParams);
+	AStaticMeshActor* Dumbbell = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), HandLocation, FRotator::ZeroRotator, SpawnParams);
 	if (!Dumbbell) return true;
 
 	UStaticMeshComponent* MeshComp = Dumbbell->GetStaticMeshComponent();
+	
+	// Disable collision with the character to prevent self-collision jitter
+	MeshComp->MoveIgnoreActors.Add(TargetCharacter);
+	TargetCharacter->GetMesh()->MoveIgnoreActors.Add(Dumbbell);
+
 	MeshComp->SetSimulatePhysics(true);
 	MeshComp->SetMassOverrideInKg(NAME_None, TargetMassKg, true);
-
-	// Optional: Set a sphere mesh if available, otherwise it's just a physics body.
-
+	
 	// Attach via physics constraint
 	UPhysicsConstraintComponent* Constraint = NewObject<UPhysicsConstraintComponent>(TargetCharacter);
 	Constraint->RegisterComponent();
-	Constraint->AttachToComponent(TargetCharacter->GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, TEXT("hand_r"));
-
+	Constraint->SetWorldLocation(HandLocation);
+	Constraint->AttachToComponent(TargetCharacter->GetMesh(), FAttachmentTransformRules::KeepWorldTransform, TEXT("hand_r"));
+	
 	Constraint->SetConstrainedComponents(TargetCharacter->GetMesh(), TEXT("hand_r"), MeshComp, NAME_None);
 	Constraint->SetAngularSwing1Limit(ACM_Locked, 0);
 	Constraint->SetAngularSwing2Limit(ACM_Locked, 0);
@@ -226,7 +232,7 @@ bool FWaitForStandingProofCommand::Update()
 	Constraint->SetLinearYLimit(LCM_Locked, 0);
 	Constraint->SetLinearZLimit(LCM_Locked, 0);
 
-	PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] Spawned %.1f kg dumbbell and attached to hand_r."), TargetMassKg);
+	PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] Spawned %.1f kg dumbbell at hand_r location and attached."), TargetMassKg);
 
 	return true;
 	}
