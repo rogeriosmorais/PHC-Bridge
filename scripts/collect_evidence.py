@@ -462,11 +462,14 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
 
     # Extract terminal reason from log
     log_terminal_reason = None
-    for line in log_claims:
-        match = LOG_REASON_RE.search(line)
-        if match:
-            log_terminal_reason = normalize_upper(match.group(1))
-            break
+    if terminal and "attempt_uuid" in terminal:
+        target_uuid = terminal["attempt_uuid"]
+        for line in log_claims:
+            if target_uuid in line:
+                match = LOG_REASON_RE.search(line)
+                if match:
+                    log_terminal_reason = normalize_upper(match.group(1))
+                    break
     
     if log_terminal_reason and terminal:
         artifact_reason = normalize_upper(terminal.get("terminal_reason_name"))

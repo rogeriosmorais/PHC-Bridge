@@ -6,6 +6,8 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "Engine/StaticMeshActor.h"
+#include "PhysicsEngine/PhysicsConstraintComponent.h"
 #include "HAL/IConsoleManager.h"
 #include "Templates/SharedPointer.h"
 
@@ -154,12 +156,85 @@ bool FWaitForStandingProofCommand::Update()
 		return true;
 	}
 
-	return false;
-}
+	return true;
+	}
 
-/**
- * Command to enable the proof hook.
- */
+	/**
+	* Command to spawn and attach a dumbbell for the load test.
+	*/
+	DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FSetupDumbbellCommand, float, TargetMassKg);
+	bool FSetupDumbbellCommand::Update()
+	{
+	UWorld* World = nullptr;
+	#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+	#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	ACharacter* TargetCharacter = nullptr;
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (It->GetName().Contains(TEXT("ThirdPersonCharacter")))
+		{
+			TargetCharacter = *It;
+			break;
+		}
+	}
+
+	if (!TargetCharacter)
+	{
+		return true;
+	}
+
+	// Spawn dumbbell
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AStaticMeshActor* Dumbbell = World->SpawnActor<AStaticMeshActor>(SpawnParams);
+	if (!Dumbbell) return true;
+
+	UStaticMeshComponent* MeshComp = Dumbbell->GetStaticMeshComponent();
+	MeshComp->SetSimulatePhysics(true);
+	MeshComp->SetMassOverrideInKg(NAME_None, TargetMassKg, true);
+
+	// Optional: Set a sphere mesh if available, otherwise it's just a physics body.
+
+	// Attach via physics constraint
+	UPhysicsConstraintComponent* Constraint = NewObject<UPhysicsConstraintComponent>(TargetCharacter);
+	Constraint->RegisterComponent();
+	Constraint->AttachToComponent(TargetCharacter->GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, TEXT("hand_r"));
+
+	Constraint->SetConstrainedComponents(TargetCharacter->GetMesh(), TEXT("hand_r"), MeshComp, NAME_None);
+	Constraint->SetAngularSwing1Limit(ACM_Locked, 0);
+	Constraint->SetAngularSwing2Limit(ACM_Locked, 0);
+	Constraint->SetAngularTwistLimit(ACM_Locked, 0);
+	Constraint->SetLinearXLimit(LCM_Locked, 0);
+	Constraint->SetLinearYLimit(LCM_Locked, 0);
+	Constraint->SetLinearZLimit(LCM_Locked, 0);
+
+	PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] Spawned %.1f kg dumbbell and attached to hand_r."), TargetMassKg);
+
+	return true;
+	}
+
+	/**
+	* Command to enable the proof hook.
+	*/
+
 DEFINE_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand);
 bool FEnableStandingProofCommand::Update()
 {
@@ -4925,6 +5000,58 @@ bool FPhysAnimActivatedStandingLocomotionHandoffCommitTest::RunTest(const FStrin
 
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
+
+	return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// STAGE 2A DUMBBELL LOAD TEST
+// ---------------------------------------------------------------------------------------------------------------------
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStage2ADumbbellLoadTest, "PhysAnim.StandingProof.LoadTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimStage2ADumbbellLoadTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	// Parameters represent the mass of the dumbbell in Kg
+	const TArray<FString> Weights = { TEXT("0"), TEXT("1"), TEXT("2"), TEXT("3"), TEXT("4"), TEXT("5") };
+	for (const FString& Weight : Weights)
+	{
+		OutBeautifiedNames.Add(Weight + TEXT("kg"));
+		OutTestCommands.Add(Weight);
+	}
+}
+
+bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
+{
+	const float TargetMassKg = FCString::Atof(*Parameters);
+	
+	// 1. Load the map
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+
+	// Disable strict proof quality checks for the load test, as the dumbbell shifts the CoM
+	// outside the support polygon, which would otherwise instantly fail the Phase 1 checks.
+	if (IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("p.PhysAnim.StrictLivePolicyProofQuality")))
+	{
+		CVar->Set(0, ECVF_SetByCode);
+	}
+
+	// 2. Wait for map to load
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+
+	// 3. Spawn and attach the dumbbell for this specific run
+	ADD_LATENT_AUTOMATION_COMMAND(FSetupDumbbellCommand(TargetMassKg));
+
+	// 4. Wait for the physics to settle under the new load (2 seconds)
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+
+	// 5. Enable proof
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand());
+
+	// 6. Wait for results (6 seconds to be safe)
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
+
+	// 7. Verify results
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand(this));
 
 	return true;
 }

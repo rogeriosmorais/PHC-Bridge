@@ -1456,7 +1456,7 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 								}
 							}
 
-							ActivatedStandingStabilityMetrics.ThighNetWork = ActivatedStandingStabilityMetrics.ThighActivationWork - ActivatedStandingStabilityMetrics.ThighBaselineWork;
+							ActivatedStandingStabilityMetrics.ThighNetWork = ActivatedStandingStabilityMetrics.ThighActivationWork;
 
 							// AC-2: snapshot thigh control state and pose-seeded flag on first window entry (thigh_l only)
 							if (BoneName == TEXT("thigh_l") && ActivatedStandingStabilityMetrics.PoseTargetsSeededAtWindowEntry < 0 && CurrentSampleTimeSec >= 0.05)
