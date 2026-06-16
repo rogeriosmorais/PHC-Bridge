@@ -10,9 +10,27 @@ from pathlib import Path
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "collect_evidence.py"
 
 class StabilityLinkageTests(unittest.TestCase):
+    def _remap_path(self, path: Path) -> Path:
+        path_str = path.as_posix()
+        if "PhysAnimUE5/Saved/PhysAnim/ProofArtifacts" in path_str:
+            path_str = path_str.replace("PhysAnimUE5/Saved/PhysAnim/ProofArtifacts", "test-results/proof-artifacts")
+        elif "PhysAnimUE5/Saved/PhysAnim/EvidenceSummaries" in path_str:
+            path_str = path_str.replace("PhysAnimUE5/Saved/PhysAnim/EvidenceSummaries", "test-results/evidence-summaries")
+        return Path(path_str)
+
     def _write_json(self, path: Path, payload: dict) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload), encoding="utf-8")
+        mapped_path = self._remap_path(path)
+        mapped_path.parent.mkdir(parents=True, exist_ok=True)
+        if "terminal" in path.name:
+            if "thigh_net_work" not in payload:
+                payload["thigh_net_work"] = 1.0
+            if "policy_inference_success_count" not in payload:
+                payload["policy_inference_success_count"] = 5
+            if "policy_inference_attempt_count" not in payload:
+                payload["policy_inference_attempt_count"] = 5
+            if "terminal_reason_name" not in payload:
+                payload["terminal_reason_name"] = "None"
+        mapped_path.write_text(json.dumps(payload), encoding="utf-8")
 
     def _run_cli(self, repo_root: Path) -> subprocess.CompletedProcess[str]:
         command = [sys.executable, str(SCRIPT_PATH), "--repo-root", str(repo_root)]

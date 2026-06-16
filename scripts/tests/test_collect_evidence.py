@@ -708,6 +708,65 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertIn("attempt-123 Result: PASSED", result.stdout)
             self.assertIn("PRODUCT SUCCESS", result.stdout)
 
+    def test_prefer_attempt_log_resolved_from_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            
+            # Write terminal and summary artifacts with attempt-999
+            self._write_json(
+                repo_root / "test-results" / "proof-artifacts" / "attempt_terminal.json",
+                {
+                    "attempt_uuid": "attempt-999",
+                    "physical_continuity_validator_passed": True,
+                    "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
+                },
+                20.0,
+            )
+            self._write_json(
+                repo_root / "test-results" / "evidence-summaries" / "attempt_evidence_summary.json",
+                {
+                    "attempt_uuid": "attempt-999",
+                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                    "missing_evidence": False,
+                    "quality_flags": {
+                        "missing_evidence": False,
+                        "terminal_failure": False,
+                        "artifact_log_contradiction": False,
+                    },
+                    "segments": [
+                        {"segment_name": "PoseSearch", "state": "Active"},
+                        {"segment_name": "PhcPolicy", "state": "Active"},
+                    ],
+                },
+                20.0,
+            )
+            
+            # Write generic log to PhysAnimUE5/Saved/Logs with conflicting BLOCKED verdict
+            self._write_text(
+                repo_root / "PhysAnimUE5" / "Saved" / "Logs" / "PhysAnimUE5.log",
+                "attempt-999 Result: BLOCKED\n",
+                20.0,
+            )
+            
+            # Write attempt-specific log to test-results/logs/attempt-999.log with PASSED
+            self._write_text(
+                repo_root / "test-results" / "logs" / "attempt-999.log",
+                "attempt-999 Result: PASSED\n",
+                20.0,
+            )
+            
+            # Run evidence collector WITHOUT specifying attempt_uuid
+            result = self._run_cli(repo_root, attempt_uuid=None)
+            
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            # It should have resolved attempt-999 from the artifacts and preferred attempt-999.log
+            self.assertIn("attempt-999.log", result.stdout)
+            self.assertNotIn("PhysAnimUE5.log", result.stdout)
+            self.assertIn("attempt-999 Result: PASSED", result.stdout)
+            self.assertIn("PRODUCT SUCCESS", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

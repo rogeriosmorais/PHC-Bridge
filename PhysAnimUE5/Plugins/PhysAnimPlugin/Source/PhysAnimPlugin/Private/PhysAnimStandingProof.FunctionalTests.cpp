@@ -216,31 +216,31 @@ bool FWaitForStandingProofCommand::Update()
 
 	UStaticMeshComponent* MeshComp = Dumbbell->GetStaticMeshComponent();
 
-	// CRITICAL FIX: The dumbbell MUST be Movable before ANY mesh is assigned or constrained.
+	// CRITICAL FIX: The dumbbell MUST be Movable before ANY mesh is assigned.
 	MeshComp->SetMobility(EComponentMobility::Movable);
 
-	// Assign a basic cube mesh so it has physical volume and weight
+	// Assign a basic cube mesh so it has physical volume
 	UStaticMesh* CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMesh)
 	{
 		MeshComp->SetStaticMesh(CubeMesh);
-		MeshComp->SetWorldScale3D(FVector(0.1f)); // Scale it down (10cm cube)
 	}
 
-	// Disable gravity on the weight so it doesn't drag the character through the floor 
-	// before the AI activates. The AI will still feel the *inertia* and the constraint force.
-	MeshComp->SetEnableGravity(false);
-
-	// CRITICAL STABILITY FIX: Disable collision entirely. 
-	// The AI will still feel the mass/torque via the constraint, but the dumbbell
-	// will never "hit" the floor or the character, preventing physics explosions.
+	// Disable collision entirely to prevent any physical displacement of the character or floor
 	MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
 
+	// SetSimulatePhysics(true) so it has its own mass for the solver to work with
 	MeshComp->SetSimulatePhysics(true);
 	MeshComp->SetMassOverrideInKg(NAME_None, TargetMassKg, true);
 
-	// Attach via physics constraint
+	// Attach to hand using SNAP_TO_TARGET but NOT including scale.
+	// Then manually set scale to be very small (e.g. 5cm cube).
+	MeshComp->AttachToComponent(TargetCharacter->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("hand_r"));
+	MeshComp->SetRelativeScale3D(FVector(0.05f)); 
+
+	// Use a Physics Constraint instead of Mass Injection for better stability.
+	// Soft constraints handle mass differences better than single-bone overrides.
 	UPhysicsConstraintComponent* Constraint = NewObject<UPhysicsConstraintComponent>(TargetCharacter);
 	Constraint->RegisterComponent();
 	Constraint->SetWorldLocation(HandLocation);
@@ -248,26 +248,18 @@ bool FWaitForStandingProofCommand::Update()
 
 	Constraint->SetConstrainedComponents(TargetCharacter->GetMesh(), TEXT("hand_r"), MeshComp, NAME_None);
 
-	// Use soft drives instead of hard locking to prevent numerical instability
-	Constraint->SetLinearXLimit(LCM_Free, 0);
-	Constraint->SetLinearYLimit(LCM_Free, 0);
-	Constraint->SetLinearZLimit(LCM_Free, 0);
-	Constraint->SetLinearPositionDrive(true, true, true);
-	Constraint->SetLinearDriveParams(10000.0f, 1000.0f, 0.0f);
+	// Soft Lock: 100% rigid position/orientation but using the constraint solver
+	Constraint->SetAngularSwing1Limit(ACM_Locked, 0);
+	Constraint->SetAngularSwing2Limit(ACM_Locked, 0);
+	Constraint->SetAngularTwistLimit(ACM_Locked, 0);
+	Constraint->SetLinearXLimit(LCM_Locked, 0);
+	Constraint->SetLinearYLimit(LCM_Locked, 0);
+	Constraint->SetLinearZLimit(LCM_Locked, 0);
 
-	Constraint->SetAngularSwing1Limit(ACM_Free, 0);
-	Constraint->SetAngularSwing2Limit(ACM_Free, 0);
-	Constraint->SetAngularTwistLimit(ACM_Free, 0);
-	Constraint->SetAngularOrientationDrive(true, true);
-	Constraint->SetAngularDriveParams(10000.0f, 1000.0f, 0.0f);
-
-	PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] SUCCESS: Spawned %.1f kg PHANTOM dumbbell at hand_r [%s]."), 
-		TargetMassKg, *HandLocation.ToString());
+	PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] SUCCESS: Constrained %.1f kg (5cm) dumbbell to hand_r."), TargetMassKg);
 
 	return true;
-
 	}
-
 	/**
 	* Command to log character position for debugging floor penetration.
 	*/

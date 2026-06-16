@@ -422,22 +422,35 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
 
     requested_attempt_uuid = normalize_text(attempt_uuid) or None
 
+    # Ensure test-results/logs directory is created if needed
+    (test_results_dir / "logs").mkdir(parents=True, exist_ok=True)
+
     terminal_path = latest_matching_file(proof_dir, "*_terminal.json", requested_attempt_uuid)
     summary_path = latest_matching_file(summary_dir, "*_evidence_summary.json", requested_attempt_uuid)
     
+    terminal = load_json_file(terminal_path)
+    summary = load_json_file(summary_path)
+
+    # Resolve attempt UUID from loaded artifacts if not explicitly requested
+    resolved_attempt_uuid = requested_attempt_uuid
+    if not resolved_attempt_uuid:
+        if terminal and "attempt_uuid" in terminal:
+            resolved_attempt_uuid = normalize_text(terminal.get("attempt_uuid"))
+        elif summary and "attempt_uuid" in summary:
+            resolved_attempt_uuid = normalize_text(summary.get("attempt_uuid"))
+
     log_path = None
-    if requested_attempt_uuid:
-        attempt_log = test_results_dir / "logs" / f"{requested_attempt_uuid}.log"
+    if resolved_attempt_uuid:
+        attempt_log = test_results_dir / "logs" / f"{resolved_attempt_uuid}.log"
         if attempt_log.exists():
             log_path = attempt_log
-    else:
+
+    if log_path is None:
         log_path = latest_matching_file(test_results_dir / "logs", "*.log")
 
     if log_path is None:
         log_path = latest_matching_file(log_dir, "*.log")
 
-    terminal = load_json_file(terminal_path)
-    summary = load_json_file(summary_path)
     log_lines = filter_lines_for_attempt(read_text_lines(log_path), requested_attempt_uuid)
     log_claims = collect_log_claims(log_lines)
 
