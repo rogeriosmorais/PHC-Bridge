@@ -139,25 +139,31 @@ namespace
 
 /**
  * Latent command to wait for the standing proof to complete.
+ * Returns false (keep waiting) until IsLiveRuntimeEvidenceProofComplete() is true
+ * or the timeout elapses. Previously this always returned true immediately — a no-op.
  */
 DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FWaitForStandingProofCommand, UPhysAnimComponent*, Component, float, TimeoutSeconds, float, StartTime);
 bool FWaitForStandingProofCommand::Update()
 {
 	if (!Component)
 	{
-		return true;
+		return true; // nothing to wait for
 	}
 
-	const float CurrentTime = FPlatformTime::Seconds();
-	const float Elapsed = CurrentTime - StartTime;
+	if (Component->IsLiveRuntimeEvidenceProofComplete())
+	{
+		return true; // proof finished — proceed to verify
+	}
 
+	const float Elapsed = static_cast<float>(FPlatformTime::Seconds()) - StartTime;
 	if (Elapsed >= TimeoutSeconds)
 	{
+		// Timed out without proof completing. The verify command will catch this.
 		return true;
 	}
 
-	return true;
-	}
+	return false; // keep polling
+}
 
 	/**
 	* Command to spawn and attach a dumbbell for the load test.
@@ -199,6 +205,13 @@ bool FWaitForStandingProofCommand::Update()
 	if (!TargetCharacter)
 	{
 		PHYSANIM_LOG(LogTemp, Error, TEXT("[DumbbellTest] FAILED to find character with UPhysAnimComponent."));
+		return true;
+	}
+
+	// 0 kg is a valid test case (no load); skip spawning but still succeed.
+	if (TargetMassKg <= 0.0f)
+	{
+		PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] 0 kg case: no dumbbell spawned."));
 		return true;
 	}
 
@@ -256,7 +269,16 @@ bool FWaitForStandingProofCommand::Update()
 	Constraint->SetLinearYLimit(LCM_Locked, 0);
 	Constraint->SetLinearZLimit(LCM_Locked, 0);
 
-	PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] SUCCESS: Constrained %.1f kg (5cm) dumbbell to hand_r."), TargetMassKg);
+	// Evidence check: verify the constraint instance is actually valid after setup.
+	// An invalid constraint would mean the dumbbell mass is NOT influencing the character.
+	if (!Constraint->ConstraintInstance.IsValidConstraintInstance())
+	{
+		PHYSANIM_LOG(LogTemp, Error, TEXT("[DumbbellTest] CONSTRAINT_INVALID after setup for %.1f kg — dumbbell will not influence character physics."), TargetMassKg);
+	}
+	else
+	{
+		PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] CONSTRAINT_VALID: %.1f kg dumbbell constrained to hand_r (ConstraintInstance confirmed active)."), TargetMassKg);
+	}
 
 	return true;
 	}
@@ -542,13 +564,24 @@ bool FVerifyStandingProofCommand::Update()
 				return true;
 			}
 
-			// Check if the mesh has fallen below the floor
+			// Check if the mesh has fallen below the floor.
+			// Threshold is spawn-relative: the pelvis must be at least 40 cm above the
+			// actor's own floor (capsule half-height ≈ 88 cm, so pelvis at ~90 cm when
+			// standing correctly). Using ActorLocation.Z as the reference keeps this
+			// correct regardless of where the character spawns in the world.
 			if (USkeletalMeshComponent* Mesh = It->GetMesh())
 			{
 				const FVector PelvisLocation = Mesh->GetSocketLocation(TEXT("pelvis"));
-				if (PelvisLocation.Z < 10.0f)
+				const float FloorZ = It->GetActorLocation().Z;
+				const float PelvisAboveFloor = PelvisLocation.Z - FloorZ;
+				// A correctly standing Manny has pelvis ~90 cm above actor origin.
+				// Reject anything below 40 cm above floor — indicates partial/full floor penetration.
+				constexpr float MinPelvisAboveFloorCm = 40.0f;
+				if (PelvisAboveFloor < MinPelvisAboveFloorCm)
 				{
-					AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: FAILED because the character mesh has fallen below the floor (Z = %.2f) for %s"), PelvisLocation.Z, *It->GetName()));
+					AddLatentAutomationError(Test, FString::Printf(
+						TEXT("StandingProof: FAILED because pelvis is only %.2f cm above actor floor (threshold=%.1f cm, PelvisZ=%.2f, FloorZ=%.2f) for %s"),
+						PelvisAboveFloor, MinPelvisAboveFloorCm, PelvisLocation.Z, FloorZ, *It->GetName()));
 					return true;
 				}
 			}
@@ -595,8 +628,12 @@ bool FVerifyStandingProofCommand::Update()
 			}
 			else
 			{
-				// Currently we might fail due to shell velocity correction hardening, which is "expected" for now but we should acknowledge it
-				PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: TERMINATED with reason %d for %s"), (int32)Reason, *It->GetName());
+				// Any terminal reason other than None or ActivationSupportFailure is an
+				// unexpected failure mode and must be treated as a hard test failure.
+				// Previously this only logged a warning, silently allowing the test to pass.
+				AddLatentAutomationError(Test, FString::Printf(
+					TEXT("StandingProof: FAILED with unexpected terminal reason %d for %s. All non-None terminal reasons must be explicitly handled."),
+					(int32)Reason, *It->GetName()));
 			}
 
 			if (!TerminationState.TerminalArtifact.bPhysicsAssetContractValid ||
@@ -5114,12 +5151,11 @@ bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
 	// 1. Load the map
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 
-	// Disable strict proof quality checks for the load test, as the dumbbell shifts the CoM
-	// outside the support polygon, which would otherwise instantly fail the Phase 1 checks.
-	if (IConsoleVariable* const CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("p.PhysAnim.StrictLivePolicyProofQuality")))
-	{
-		CVar->Set(0, ECVF_SetByCode);
-	}
+	// NOTE: StrictLivePolicyProofQuality is intentionally NOT disabled here.
+	// A previous version of this test suppressed the quality gate because the dumbbell
+	// shifts the CoM outside the support polygon. That suppression was hiding the
+	// exact failure mode the test is meant to detect. The policy must adapt to the load;
+	// if it cannot maintain support under N kg, the test should FAIL, not bypass the check.
 
 	// 2. Wait for map to load
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
@@ -5133,10 +5169,49 @@ bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
 	// 5. Enable proof
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand());
 
-	// 6. Wait for results (6 seconds to be safe)
-	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
+	// 6. Actively poll until proof completes (up to 15 s).
+	// Previously this was a blind FWaitLatentCommand(6.0f) that had no way of knowing
+	// whether the proof actually finished before the snapshot in step 7 was taken.
+	// Under -NullRHI the tick budget can be very different from an interactive session,
+	// causing the same 6 s to cover wildly different amounts of simulation time.
+	{
+		// We capture the component pointer at command-queue time via a helper latent command.
+		// FWaitForStandingProofCommand polls IsLiveRuntimeEvidenceProofComplete() each tick
+		// and returns false (keep going) until it's true or the 15 s hard timeout fires.
+		UWorld* SetupWorld = GWorld;
+	#if WITH_EDITOR
+		if (GIsEditor)
+		{
+			for (const FWorldContext& Ctx : GEngine->GetWorldContexts())
+			{
+				if (Ctx.WorldType == EWorldType::PIE || Ctx.WorldType == EWorldType::Game)
+				{
+					SetupWorld = Ctx.World();
+					break;
+				}
+			}
+		}
+	#endif
+		UPhysAnimComponent* PollingTarget = nullptr;
+		if (SetupWorld)
+		{
+			for (TActorIterator<ACharacter> It(SetupWorld); It; ++It)
+			{
+				if (UPhysAnimComponent* C = It->FindComponentByClass<UPhysAnimComponent>())
+				{
+					PollingTarget = C;
+					break;
+				}
+			}
+		}
+		constexpr float ProofTimeoutSeconds = 15.0f;
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitForStandingProofCommand(
+			PollingTarget,
+			ProofTimeoutSeconds,
+			static_cast<float>(FPlatformTime::Seconds())));
+	}
 
-	// 7. Verify results
+	// 7. Verify results — now runs only after proof actually completed (or timed out).
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand(this));
 
 	return true;
