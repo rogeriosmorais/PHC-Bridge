@@ -179,7 +179,7 @@ namespace
 			Artifact.TerminalReason == EPhysAnimTerminalReason::None;
 		BaselineInput.ProofSignals.LogPass = BaselineInput.ProofSignals.TerminalProofJsonPassed;
 		BaselineInput.ProofSignals.ArtifactPass = BaselineInput.ProofSignals.TerminalProofJsonPassed;
-		BaselineInput.bHoldThresholdSatisfied = Artifact.HoldDurationSec >= 3.0;
+		BaselineInput.bHoldThresholdSatisfied = Artifact.HoldDurationSec >= 3.3;
 
 		return BaselineInput;
 	}
@@ -199,7 +199,11 @@ namespace
 		const double InferenceLatencyMsMax = 0.0,
 		const bool bModelLoaded = false,
 		const FString& RuntimeName = TEXT(""),
-		const bool bInputBuffersFinite = false)
+		const bool bInputBuffersFinite = false,
+		const double ThighNetWork = 0.0,
+		const double ThighBaselineWork = 0.0,
+		const double ThighActivationWork = 0.0,
+		const double ActionMagnitudeVariance = 0.0)
 	{
 		FPhysAnimEvidenceSummarySegment Segment;
 		Segment.SegmentName = SegmentName;
@@ -216,6 +220,13 @@ namespace
 		Segment.Metrics.bModelLoaded = bModelLoaded;
 		Segment.Metrics.RuntimeName = RuntimeName;
 		Segment.Metrics.bInputBuffersFinite = bInputBuffersFinite;
+
+		// Stage 2A Metrics
+		Segment.Metrics.ThighNetWork = ThighNetWork;
+		Segment.Metrics.ThighBaselineWork = ThighBaselineWork;
+		Segment.Metrics.ThighActivationWork = ThighActivationWork;
+		Segment.Metrics.ActionMagnitudeVariance = ActionMagnitudeVariance;
+
 		Segment.SourceProvenance.Add(ProvenanceTag);
 		Segment.SourceProvenance.Add(TEXT("EB-01"));
 		return Segment;
@@ -278,7 +289,9 @@ namespace
 			Artifact.PolicyInferenceLatencyMsMax,
 			Artifact.bPolicyModelLoaded,
 			Artifact.PolicyRuntimeName,
-			Artifact.bPolicyInputBuffersFinite));
+			Artifact.bPolicyInputBuffersFinite,
+			0.0, 0.0, 0.0, // ThighNetWork, ThighBaselineWork, ThighActivationWork
+			Artifact.ActionMagnitudeVariance));
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
 			TEXT("PhysicsControl"),
 			ClassifierResult.Segments.PhysicsControl,
@@ -294,7 +307,13 @@ namespace
 			0,
 			0,
 			0.0,
-			Artifact.bPhysicsControlComponentAvailable));
+			Artifact.bPhysicsControlComponentAvailable,
+			TEXT(""), // RuntimeName
+			false, // bInputBuffersFinite
+			Artifact.ThighNetWork,
+			Artifact.ThighBaselineWork,
+			Artifact.ThighActivationWork,
+			0.0)); // ActionMagnitudeVariance
 		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
 			TEXT("Chaos"),
 			ClassifierResult.Segments.Chaos,
@@ -485,6 +504,14 @@ namespace
 		Json->SetNumberField(TEXT("capsule_velocity_z"), Artifact.CapsuleVelocity.Z);
 		Json->SetNumberField(TEXT("shell_divergence_peak"), Artifact.ShellDivergencePeak);
 
+		Json->SetNumberField(TEXT("policy_inference_success_count"), Artifact.PolicyInferenceSuccessCount);
+		Json->SetNumberField(TEXT("policy_inference_attempt_count"), Artifact.PolicyInferenceAttemptCount);
+
+		Json->SetNumberField(TEXT("thigh_net_work"), Artifact.ThighNetWork);
+		Json->SetNumberField(TEXT("thigh_baseline_work"), Artifact.ThighBaselineWork);
+		Json->SetNumberField(TEXT("thigh_activation_work"), Artifact.ThighActivationWork);
+		Json->SetNumberField(TEXT("action_magnitude_variance"), Artifact.ActionMagnitudeVariance);
+
 		return Json;
 	}
 }
@@ -605,7 +632,7 @@ namespace PhysAnimProofArtifactEmitter
 
 	FString BuildTerminalArtifactJsonPath(const FString& AttemptUuid)
 	{
-		const FString Directory = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("PhysAnim"), TEXT("ProofArtifacts"));
+		const FString Directory = FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("test-results"), TEXT("proof-artifacts"));
 		const FString FileName = FString::Printf(TEXT("%s_terminal.json"), *PhysAnimProof_SanitizeFileToken(AttemptUuid));
 		return FPaths::Combine(Directory, FileName);
 	}

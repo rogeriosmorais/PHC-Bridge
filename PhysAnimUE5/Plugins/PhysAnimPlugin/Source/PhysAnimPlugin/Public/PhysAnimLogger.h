@@ -30,6 +30,12 @@ public:
 	 */
 	static void Reset();
 
+	/**
+	 * Sets the current attempt UUID for per-attempt log file emission.
+	 * Pass an empty string to disable per-attempt logging.
+	 */
+	static void SetCurrentAttemptUuid(const FString& InAttemptUuid);
+
 private:
 	struct FLogRecord
 	{
@@ -37,8 +43,16 @@ private:
 		int32 SuppressedCount = 0;
 	};
 
+	// Global frame counter to limit total logs per tick
+	static uint64 LastFrameLogged;
+	static int32 LogsThisFrame;
+	static constexpr int32 MAX_LOGS_PER_FRAME = 10;
+
 	// Hash of (File, Line) -> Log Record
 	static TMap<uint32, FLogRecord> LogHistory;
+
+	// Current attempt UUID for file logging
+	static FString CurrentAttemptUuid;
 	
 	// Critical section for thread-safety (logs can come from different threads)
 	static FCriticalSection Mutex;

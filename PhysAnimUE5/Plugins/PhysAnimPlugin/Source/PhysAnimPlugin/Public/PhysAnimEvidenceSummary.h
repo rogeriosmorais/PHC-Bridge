@@ -25,6 +25,12 @@ struct FPhysAnimEvidenceSummarySegmentMetrics
 	bool bModelLoaded = false;
 	FString RuntimeName;
 	bool bInputBuffersFinite = false;
+
+	// Stage 2A Metrics
+	double ThighNetWork = 0.0;
+	double ThighBaselineWork = 0.0;
+	double ThighActivationWork = 0.0;
+	double ActionMagnitudeVariance = 0.0;
 };
 
 struct FPhysAnimEvidenceSummarySegment

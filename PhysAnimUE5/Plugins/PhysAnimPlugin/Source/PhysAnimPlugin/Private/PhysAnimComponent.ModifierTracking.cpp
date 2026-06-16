@@ -698,9 +698,10 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (bRootSimFlipFrame)
 	{
-		PHYSANIM_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
-			Warning,
+			Log,
+			1.0f,
 			TEXT("[PhysAnimBalance] POLICY_TARGETS_SUPPRESSED_ON_SIM_FLIP: normal=%d hold=%d total=%d"),
 			ControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
 			ControlTargetDiagnostics.NumHeldTargetsWritten,
@@ -731,9 +732,10 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (ControlTargetDiagnostics.bFirstPolicyEnabledFrame && RuntimeState != EPhysAnimRuntimeState::BalanceEntry_RootOn)
 	{
-		PHYSANIM_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Log,
+			1.0f,
 			TEXT("[PhysAnim] First policy-enabled frame: normal=%d hold=%d total=%d maxTargetDelta=%s:%.1fdeg meanTargetDelta=%.1fdeg maxRawPolicyOffset=%s:%.1fdeg meanRawPolicyOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx"),
 			ControlTargetDiagnostics.NumNormalPolicyTargetsWritten,
 			ControlTargetDiagnostics.NumHeldTargetsWritten,
@@ -752,7 +754,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (bRootSimFlipFrame)
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] THIGH_RESEED_ON_SIM_FLIP: leftDeltaPre=%.2f rightDeltaPre=%.2f"), ThighLDeltaPre, ThighRDeltaPre);
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] THIGH_RESEED_ON_SIM_FLIP: leftDeltaPre=%.2f rightDeltaPre=%.2f"), ThighLDeltaPre, ThighRDeltaPre);
 	}
 }
 

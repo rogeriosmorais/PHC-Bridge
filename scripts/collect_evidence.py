@@ -43,7 +43,12 @@ ACTIVE_SEGMENT_STATES = {
 LOG_VERDICT_RE = re.compile(
     r"\b(?:RESULT|VERDICT|STRICT\s*VERDICT|STRICT_VERDICT|STRICTVERDICT)\b"
     r"\s*[:=]\s*\{?\s*"
-    r"(PASS|PASSED|FAIL|FAILED|BLOCKED|SUCCESS|SUCCEEDED|CONTRADICTORY|MISSING(?:[_ ]EVIDENCE)?)\b",
+    r"(PASS|PASSED|FAIL|FAILED|BLOCKED|SUCCESS|SUCCEEDED|CONTRADICTORY|INSUFFICIENT_EVIDENCE|MISSING(?:[_ ]EVIDENCE)?)\b",
+    re.IGNORECASE,
+)
+
+LOG_REASON_RE = re.compile(
+    r"terminal_reason=([A-Za-z0-9_]+)",
     re.IGNORECASE,
 )
 
@@ -166,6 +171,9 @@ def summarize_stability_metrics(terminal: Dict[str, Any]) -> List[str]:
         ("Locomotion Intent", "locomotion_intent"),
         ("Policy Output Active", "policy_output_active"),
         ("Shell Divergence Peak", "shell_divergence_peak"),
+        ("Thigh Net Work", "thigh_net_work"),
+        ("Action Variance", "action_magnitude_variance"),
+        ("Inference Success", "policy_inference_success_count"),
     ]
 
     lines = []
@@ -259,6 +267,23 @@ def summary_supports_success(summary: Optional[Dict[str, Any]]) -> bool:
     verdict = normalize_upper(summary.get("strict_verdict"))
     if verdict not in SUCCESS_VERDICTS:
         return False
+
+    # Stage 2A Value Checks (if fields are present in summary)
+    if "ThighNetWork" in summary:
+        if get_float(summary, "ThighNetWork", 0.0) <= 0.5:
+            return False
+    
+    if "PolicyInferenceSuccessCount" in summary:
+        if get_float(summary, "PolicyInferenceSuccessCount", 0.0) <= 0:
+            return False
+
+    if "action_magnitude_variance" in summary:
+        if get_float(summary, "action_magnitude_variance", 0.0) <= 0:
+            return False
+    elif "ActionMagnitudeVariance" in summary:
+        if get_float(summary, "ActionMagnitudeVariance", 0.0) <= 0:
+            return False
+
     quality_flags = summary.get("quality_flags")
     if isinstance(quality_flags, dict):
         if truthy(quality_flags.get("missing_evidence")):
@@ -327,6 +352,32 @@ def terminal_supports_success(terminal: Optional[Dict[str, Any]]) -> bool:
     if int(terminal.get("shell_helper_used_count", 0)) > 0:
         return False
 
+    # 5. AI Activation Proofs (Stage 2)
+    # Policy Inference must have at least one success
+    if get_float(terminal, "policy_inference_success_count", 0.0) <= 0:
+        return False
+
+    # Thigh Net Work (Min 0.5 Joules)
+    if get_float(terminal, "thigh_net_work", 0.0) <= 0.5:
+        # Fallback to PascalCase just in case the emitter hasn't transitioned
+        if get_float(terminal, "ThighNetWork", 0.0) <= 0.5:
+            return False
+
+    # Action Magnitude Variance (Min > 0)
+    # A frozen action (variance=0) is a failure of intent
+    if get_float(terminal, "action_magnitude_variance", 0.0) <= 0:
+        # Fallback to PascalCase
+        if get_float(terminal, "ActionMagnitudeVariance", 0.0) <= 0:
+            # Only block if the field is actually present and zero.
+            # If both are missing, it might be an older Stage 1 artifact.
+            if "action_magnitude_variance" in terminal or "ActionMagnitudeVariance" in terminal:
+                return False
+
+    # Control Target Normal Writes (Min > 0)
+    if get_float(terminal, "control_target_normal_writes", 0.0) <= 0:
+        if "control_target_normal_writes" in terminal:
+            return False
+
     return True
 
 
@@ -364,10 +415,10 @@ def has_log_fail_claim(log_claims: Sequence[str]) -> bool:
 
 
 def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[str]:
-    saved_root = repo_root / "PhysAnimUE5" / "Saved"
-    proof_dir = saved_root / "PhysAnim" / "ProofArtifacts"
-    summary_dir = saved_root / "PhysAnim" / "EvidenceSummaries"
-    log_dir = saved_root / "Logs"
+    test_results_dir = repo_root / "test-results"
+    proof_dir = test_results_dir / "proof-artifacts"
+    summary_dir = test_results_dir / "evidence-summaries"
+    log_dir = repo_root / "PhysAnimUE5" / "Saved" / "Logs"
 
     requested_attempt_uuid = normalize_text(attempt_uuid) or None
 
@@ -396,11 +447,31 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
     if explicit_missing and "evidence summary" not in missing_items:
         missing_items.append("evidence summary flagged missing_evidence=true")
 
+    # Check for mandatory fields in terminal
+    if terminal:
+        mandatory_fields = ["thigh_net_work", "policy_inference_success_count", "policy_inference_attempt_count"]
+        for field in mandatory_fields:
+            if field not in terminal or terminal.get(field) is None:
+                missing_items.append(f"missing mandatory terminal field: {field}")
+
     summary_success = summary_supports_success(summary)
     terminal_success = terminal_supports_success(terminal)
 
     contradiction_items = []
     stability_invalid = False
+
+    # Extract terminal reason from log
+    log_terminal_reason = None
+    for line in log_claims:
+        match = LOG_REASON_RE.search(line)
+        if match:
+            log_terminal_reason = normalize_upper(match.group(1))
+            break
+    
+    if log_terminal_reason and terminal:
+        artifact_reason = normalize_upper(terminal.get("terminal_reason_name"))
+        if log_terminal_reason != artifact_reason:
+            contradiction_items.append(f"log reports reason={log_terminal_reason} but artifact reports reason={artifact_reason}")
 
     if terminal:
         hold_duration = terminal.get("hold_duration_sec")
@@ -481,12 +552,15 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
                         blocking_segment = name
     
     if not segment_lines and not blocking_segment:
-        segment_lines = ["- No segment data available."]
+        if summary and summary.get("segments"):
+            segment_lines = ["- All reported segments are Active."]
+        else:
+            segment_lines = ["- No segment data available."]
     elif not segment_lines:
         segment_lines = ["- All reported segments are Active."]
 
     if missing_items:
-        verdict = "MISSING EVIDENCE"
+        verdict = "INSUFFICIENT_EVIDENCE"
     elif contradiction_items:
         verdict = "CONTRADICTORY"
     else:

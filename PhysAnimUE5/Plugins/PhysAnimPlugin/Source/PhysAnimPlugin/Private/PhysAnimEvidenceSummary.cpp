@@ -132,6 +132,12 @@ namespace
 		PhysAnimEvidenceSummary_AppendStringField(Json, bFirstField, TEXT("runtime_name"), Metrics.RuntimeName);
 		PhysAnimEvidenceSummary_AppendBoolField(Json, bFirstField, TEXT("input_buffers_finite"), Metrics.bInputBuffersFinite);
 
+		// Stage 2A Metrics
+		PhysAnimEvidenceSummary_AppendDoubleField(Json, bFirstField, TEXT("thigh_net_work"), Metrics.ThighNetWork);
+		PhysAnimEvidenceSummary_AppendDoubleField(Json, bFirstField, TEXT("thigh_baseline_work"), Metrics.ThighBaselineWork);
+		PhysAnimEvidenceSummary_AppendDoubleField(Json, bFirstField, TEXT("thigh_activation_work"), Metrics.ThighActivationWork);
+		PhysAnimEvidenceSummary_AppendDoubleField(Json, bFirstField, TEXT("action_magnitude_variance"), Metrics.ActionMagnitudeVariance);
+
 		Json += TEXT("}");
 		return Json;
 	}
@@ -426,6 +432,12 @@ namespace
 		JsonObject->TryGetStringField(TEXT("runtime_name"), OutMetrics.RuntimeName);
 		JsonObject->TryGetBoolField(TEXT("input_buffers_finite"), OutMetrics.bInputBuffersFinite);
 
+		// Stage 2A Metrics
+		JsonObject->TryGetNumberField(TEXT("thigh_net_work"), OutMetrics.ThighNetWork);
+		JsonObject->TryGetNumberField(TEXT("thigh_baseline_work"), OutMetrics.ThighBaselineWork);
+		JsonObject->TryGetNumberField(TEXT("thigh_activation_work"), OutMetrics.ThighActivationWork);
+		JsonObject->TryGetNumberField(TEXT("action_magnitude_variance"), OutMetrics.ActionMagnitudeVariance);
+
 		OutMetrics.SampleCount = static_cast<int32>(SampleCount);
 		return true;
 	}
@@ -467,7 +479,7 @@ namespace PhysAnimEvidenceSummary
 {
 	FString BuildEvidenceSummaryJsonPath(const FString& AttemptUuid)
 	{
-		const FString Directory = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("PhysAnim"), TEXT("EvidenceSummaries"));
+		const FString Directory = FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("test-results"), TEXT("evidence-summaries"));
 		const FString FileName = FString::Printf(TEXT("%s_evidence_summary.json"), *PhysAnimEvidenceSummary_SanitizeFileToken(AttemptUuid));
 		return FPaths::Combine(Directory, FileName);
 	}

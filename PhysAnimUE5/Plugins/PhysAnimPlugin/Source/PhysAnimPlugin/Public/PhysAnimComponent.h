@@ -1254,6 +1254,15 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	double ThighNegativeWorkAccumulated = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ThighBaselineWork = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ThighActivationWork = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ThighNetWork = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double FirstLinearThresholdTimeSec = -1.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
@@ -1318,6 +1327,9 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	int32 KineticGateReleaseCount = 0; // how many times gate released in this run
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double ActionMagnitudeVariance = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	int32 SampleCount = 0;
 
 	/** Clears attempt-level metrics while preserving architectural session status (model loaded, counts, etc.) */
@@ -1360,6 +1372,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim | Proof", meta = (AllowPrivateAccess = "true"))
 	bool bEnableLiveRuntimeEvidenceProof = false;
+
+	/**
+	 * When true (default), the PHC neural policy runs inference each policy tick and drives
+	 * joint PD targets from the action output. When false, inference is bypassed and the raw
+	 * action buffer is zeroed so joint controllers hold their last reference-pose targets with
+	 * no neural actuation (SafetyGrip fallback state).
+	 *
+	 * Set bEnablePolicyInference=false programmatically when a Kinetic Gate safety threshold
+	 * is exceeded. The state machine will transition back to ReachedButInactive.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Policy")
+	bool bEnablePolicyInference = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
 	bool bV0PlantThighWorkDiagnosticEnabled = false;
@@ -1461,6 +1485,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
 	void ResetLiveRuntimeEvidenceProof();
+
+	FString GenerateNewAttemptUuid();
 
 	UFUNCTION(BlueprintCallable, Category = "PhysAnim|Balance")
 	bool CanEnterBalanceActiveStanding() const;
@@ -2319,11 +2345,13 @@ private:
 	TArray<float> TerrainBuffer;
 	TArray<float> ActionOutputBuffer;
 	TArray<float> PreviousActionOutputBuffer;
+	TArray<float> RecentActionMagnitudeHistory;
 	TArray<float> PreviousConditionedActionBuffer;
 	TArray<float> ConditionedActionBuffer;
 	TArray<UE::NNE::FTensorBindingCPU> InputBindings;
 	TArray<UE::NNE::FTensorBindingCPU> OutputBindings;
 
+	float RecentInferenceSuccessRatio = 1.0f;
 	FPoseSearchBlueprintResult LastValidPoseSearchResult;
 	int32 ConsecutiveInvalidPoseSearchFrames = 0;
 	bool bStartupReported = false;

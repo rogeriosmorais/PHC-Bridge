@@ -99,6 +99,22 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 			ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax,
 			LatencyMs);
 		ActivatedStandingStabilityMetrics.bPolicyInputBuffersFinite = true;
+
+		// §S2-IMPL-SYNC-INFERENCE-01: Enforcement of 0.95 success ratio after 50 attempts
+		RecentInferenceSuccessRatio = (float)ActivatedStandingStabilityMetrics.PolicyInferenceSuccessCount / 
+			(float)ActivatedStandingStabilityMetrics.PolicyInferenceAttemptCount;
+
+		if (ActivatedStandingStabilityMetrics.PolicyInferenceAttemptCount >= 50 && RecentInferenceSuccessRatio < 0.95f)
+		{
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, 
+				TEXT("[PhysAnim] INFERENCE_QUALITY_LOW ratio=%.3f attempts=%d success=%d — trigger diagnostic failure."),
+				RecentInferenceSuccessRatio, 
+				ActivatedStandingStabilityMetrics.PolicyInferenceAttemptCount,
+				ActivatedStandingStabilityMetrics.PolicyInferenceSuccessCount);
+			// Trigger a fail-stop if the quality is consistently below the required threshold
+			FailStop(FString::Printf(TEXT("Inference success ratio %.3f is below 0.95 threshold after %d attempts."), 
+				RecentInferenceSuccessRatio, ActivatedStandingStabilityMetrics.PolicyInferenceAttemptCount));
+		}
 	}
 
 	return true;
@@ -140,6 +156,31 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 			ActivatedStandingStabilityMetrics.PolicyActionClampedFloatMax = FMath::Max(
 				ActivatedStandingStabilityMetrics.PolicyActionClampedFloatMax,
 				LastActionDiagnostics.NumClampedActionFloats);
+
+			// §S2-IMPL-SYNC-INFERENCE-01: Action Magnitude Variance check
+			RecentActionMagnitudeHistory.Add(LastActionDiagnostics.RawMeanAbs);
+			if (RecentActionMagnitudeHistory.Num() > 10)
+			{
+				RecentActionMagnitudeHistory.RemoveAt(0);
+			}
+
+			if (RecentActionMagnitudeHistory.Num() >= 10)
+			{
+				float Sum = 0.0f;
+				for (float Mag : RecentActionMagnitudeHistory) { Sum += Mag; }
+				float Mean = Sum / 10.0f;
+				float Variance = 0.0f;
+				for (float Mag : RecentActionMagnitudeHistory) { Variance += FMath::Square(Mag - Mean); }
+				
+				ActivatedStandingStabilityMetrics.ActionMagnitudeVariance = static_cast<double>(Variance);
+
+				if (Variance <= UE_SMALL_NUMBER && Mean > UE_SMALL_NUMBER)
+				{
+					PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f, 
+						TEXT("[PhysAnim] ACTION_FROZEN variance=0.0 mean=%.4f over 10 frames — failure of intent."), Mean);
+					FailStop(TEXT("Model action output is frozen (zero variance over 10 frames)."));
+				}
+			}
 		}
 	}
 

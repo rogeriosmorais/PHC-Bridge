@@ -157,8 +157,9 @@ UPhysAnimComponent::UPhysAnimComponent()
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
 
 	ModelDataAsset = TSoftObjectPtr<UNNEModelData>(FSoftObjectPath(PhysAnimComponentInternal::DefaultModelPath));
-	LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+	GenerateNewAttemptUuid();
 	bEnableLiveRuntimeEvidenceProof = true;
+	bV0PlantThighWorkDiagnosticEnabled = true;
 	bFirstProductSuccessAchieved = false;
 }
 
@@ -233,9 +234,10 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 	}
 
 	const bool bProofSatisfied = IsLiveRuntimeEvidenceProofSatisfied();
-	PHYSANIM_LOG(
+	PHYSANIM_LOG_RATE_LIMITED(
 		LogPhysAnimBridge,
 		Verbose,
+		1.0f,
 		TEXT("[PhysAnim] Startup proof satisfaction evaluated satisfied=%d state=%s fresh=%d observed=%d deferredReason=%d enforceArmed=%d"),
 		bProofSatisfied ? 1 : 0,
 		GetRuntimeStateName(RuntimeState),
@@ -246,9 +248,10 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 
 	if (!bProofSatisfied)
 	{
-		PHYSANIM_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Warning,
+			1.0f,
 			TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_NOT_TRUTHFUL startupObserved=%d startupArmed=%d startupArmSubstep=%lld startupDeferredReason=%d proxyHandoffArmed=%d proofComplete=%d"),
 			bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved ? 1 : 0,
 			bLiveRuntimeEvidenceStartupVerificationHandoffArmed ? 1 : 0,
@@ -263,32 +266,32 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 
 	if (Latest.SupportMode == EPhysAnimSupportMode::Airborne)
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=AIRBORNE_MODE"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=AIRBORNE_MODE"));
 		return false;
 	}
 
 	if (Latest.ActiveSupportSideCount == 0)
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=NO_SUPPORT_SIDES"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=NO_SUPPORT_SIDES"));
 		return false;
 	}
 
 	if (Latest.SupportHullAreaCm2 <= 0.0f)
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=NO_SUPPORT_AREA"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=NO_SUPPORT_AREA"));
 		return false;
 	}
 
 	const FPhysAnimStabilizationSettings Settings = ResolveEffectiveStabilizationSettings();
 	if (IsStage1())
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] ENTRY_ALLOWED reason=STAGE1_BYPASS"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] ENTRY_ALLOWED reason=STAGE1_BYPASS"));
 		return true;
 	}
 
 	if (!IsBringUpGroupUnlocked(GetBringUpGroupCount() - 1))
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=BRING_UP_INCOMPLETE"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=BRING_UP_INCOMPLETE"));
 		return false;
 	}
 
@@ -309,20 +312,22 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 	{
 		if (bProxyOutsideHullDeferred)
 		{
-			PHYSANIM_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Verbose,
+				1.0f,
 				TEXT("[PhysAnim] Proxy outside hull deferred during standing entry state=%s"),
 				GetRuntimeStateName(RuntimeState));
 		}
 		else
 		{
-			PHYSANIM_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Verbose,
+				1.0f,
 				TEXT("[PhysAnim] Proxy outside hull enforced after handoff armed state=%s"),
 				GetRuntimeStateName(RuntimeState));
-			PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROXY_OUTSIDE_HULL"));
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROXY_OUTSIDE_HULL"));
 			return false;
 		}
 	}
@@ -331,20 +336,22 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 	{
 		if (bProxyOutsideHullDeferred)
 		{
-			PHYSANIM_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Verbose,
+				1.0f,
 				TEXT("[PhysAnim] Proxy outside hull deferred during standing entry state=%s"),
 				GetRuntimeStateName(RuntimeState));
 		}
 		else
 		{
-			PHYSANIM_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Verbose,
+				1.0f,
 				TEXT("[PhysAnim] Proxy outside hull enforced after handoff armed state=%s"),
 				GetRuntimeStateName(RuntimeState));
-			PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROXY_DRIFT_THRESHOLD drift=%.1f threshold=%.1f"), 
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROXY_DRIFT_THRESHOLD drift=%.1f threshold=%.1f"), 
 				Latest.ProxyOutsideHullDurationMs.GetValue(), Settings.ProxyDriftLimitMs);
 			return false;
 		}
@@ -352,25 +359,25 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 
 	if (!Latest.bCapsuleContractPassed)
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CAPSULE_CONTRACT_FAILED"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CAPSULE_CONTRACT_FAILED"));
 		return false;
 	}
 
 	if (!Latest.bPhysicalContinuityValidatorPassed)
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CONTINUITY_CONTRACT_FAILED"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CONTINUITY_CONTRACT_FAILED"));
 		return false;
 	}
 
 	if (Latest.bContinuityBookkeepingMismatch)
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CONTINUITY_BOOKKEEPING_MISMATCH"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=CONTINUITY_BOOKKEEPING_MISMATCH"));
 		return false;
 	}
 
 	if (!Latest.bPhysicsAssetContractValid || !Latest.bSkeletonAuditPassed)
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=AUDIT_STATE_INCONSISTENT physicsAsset=%d skeletonAudit=%d"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=AUDIT_STATE_INCONSISTENT physicsAsset=%d skeletonAudit=%d"),
 			Latest.bPhysicsAssetContractValid ? 1 : 0,
 			Latest.bSkeletonAuditPassed ? 1 : 0);
 		return false;
@@ -378,13 +385,13 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 
 	if (!HasConsistentLiveRuntimeEvidenceArtifact(LiveRuntimeEvidenceTerminationState))
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=ARTIFACT_STATE_INCONSISTENT"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=ARTIFACT_STATE_INCONSISTENT"));
 		return false;
 	}
 
 	if (LiveRuntimeEvidenceStandingSeconds < LiveRuntimeEvidenceStandingTargetSeconds)
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=INSUFFICIENT_STANDING_DURATION duration=%.3f target=%.3f"), 
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=INSUFFICIENT_STANDING_DURATION duration=%.3f target=%.3f"), 
 			LiveRuntimeEvidenceStandingSeconds, LiveRuntimeEvidenceStandingTargetSeconds);
 		return false;
 	}
@@ -482,17 +489,19 @@ bool UPhysAnimComponent::ShouldExitStandingToSafeDeny(const FPhysAnimRuntimeTerm
 	{
 		if (!bLiveRuntimeEvidenceStartupProxySupportHandoffArmed || bDeferredStartupProxyTerminalCurrentAttempt)
 		{
-			PHYSANIM_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Verbose,
+				1.0f,
 				TEXT("[PhysAnim] Proxy outside hull deferred during standing entry state=%s"),
 				GetRuntimeStateName(RuntimeState));
 			return false;
 		}
 
-		PHYSANIM_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Verbose,
+			1.0f,
 			TEXT("[PhysAnim] Proxy outside hull enforced after handoff armed state=%s"),
 			GetRuntimeStateName(RuntimeState));
 		return true;
@@ -507,7 +516,7 @@ EPhysAnimRuntimeState UPhysAnimComponent::EvaluateBalanceActiveStanding() const
 	if (LiveRuntimeEvidenceTerminationState.bTerminated && 
 		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
 	{
-		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=FailStopped reason=TERMINATED_IN_LOOP terminal_reason=%d"), 
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] STANDING_ACTIVE_EVAL result=FailStopped reason=TERMINATED_IN_LOOP terminal_reason=%d"), 
 			static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
 		return EPhysAnimRuntimeState::FailStopped;
 	}
@@ -533,9 +542,10 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None ||
 		LiveRuntimeEvidenceStandingSeconds < LiveRuntimeEvidenceStandingTargetSeconds)
 	{
-		PHYSANIM_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Verbose,
+			1.0f,
 			TEXT("[PhysAnim] Startup proof satisfaction evaluated satisfied=0 state=%s fresh=%d observed=%d deferredReason=%d enforceArmed=%d reason=proof_incomplete_or_terminated"),
 			GetRuntimeStateName(RuntimeState),
 			bLiveRuntimeEvidenceStartupEvidenceFresh ? 1 : 0,
@@ -556,9 +566,10 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 		!HasStartupProofPhysicalContinuityEvidence(SatisfactionArtifact) ||
 		SatisfactionArtifact.bContinuityBookkeepingMismatch)
 	{
-		PHYSANIM_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Verbose,
+			1.0f,
 			TEXT("[PhysAnim] Startup proof satisfaction evaluated satisfied=0 state=%s fresh=%d observed=%d deferredReason=%d enforceArmed=%d reason=artifact_contract_invalid"),
 			GetRuntimeStateName(RuntimeState),
 			bLiveRuntimeEvidenceStartupEvidenceFresh ? 1 : 0,
@@ -573,9 +584,10 @@ bool UPhysAnimComponent::IsLiveRuntimeEvidenceProofSatisfied() const
 		SatisfactionArtifact.SupportHullAreaCm2 <= 0.0f ||
 		SatisfactionArtifact.SupportGapTimerMs >= Settings.BalancePhase1AdmissionMaxSupportGapMs)
 	{
-		PHYSANIM_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Verbose,
+			1.0f,
 			TEXT("[PhysAnim] Startup proof satisfaction evaluated satisfied=0 state=%s fresh=%d observed=%d deferredReason=%d enforceArmed=%d reason=insufficient_support"),
 			GetRuntimeStateName(RuntimeState),
 			bLiveRuntimeEvidenceStartupEvidenceFresh ? 1 : 0,
@@ -690,10 +702,13 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	bLiveRuntimeEvidenceProofShouldComplete = true;
 	PhysAnimComponentInternal::ClearPhysicsTuningDiagnosticCaches(this);
 
-	LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+	GenerateNewAttemptUuid();
+
 	LiveRuntimeEvidenceStandingSeconds = 0.0f;
 	LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
 	ActivatedStandingStabilityMetrics.ResetForNewAttempt();
+	RecentInferenceSuccessRatio = 1.0f;
+	RecentActionMagnitudeHistory.Reset();
 	bActivatedStandingStabilityBaselineInitialized = false;
 	bActivatedStandingPerturbationApplied = false;
 	ActivatedStandingStabilityBaselineRootLocationCm = FVector::ZeroVector;
@@ -729,7 +744,6 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 		LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalSubstepTimestamp =
 			DeferredStartupProxyTerminalSubstepTimestamp;
 	}
-	LiveRuntimeEvidenceAttemptUuid.Empty();
 	StartupProofDeferredTerminalReason = EPhysAnimTerminalReason::None;
 	bLiveRuntimeEvidenceStartupEvidenceFresh = false;
 	bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved = false;
@@ -740,6 +754,13 @@ void UPhysAnimComponent::ResetLiveRuntimeEvidenceProof()
 	bLiveRuntimeEvidenceStartupProxySupportHandoffArmed = false;
 	bForceSupportFailure = false;
 	ResetBridgeLocomotionRequestState();
+}
+
+FString UPhysAnimComponent::GenerateNewAttemptUuid()
+{
+	LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+	FPhysAnimLogger::SetCurrentAttemptUuid(LiveRuntimeEvidenceAttemptUuid);
+	return LiveRuntimeEvidenceAttemptUuid;
 }
 
 void UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult(const bool bPoseSearchValid, const FString& SelectedAnimName, double SelectedTime)
@@ -823,7 +844,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 
 	if (LiveRuntimeEvidenceAttemptUuid.IsEmpty())
 	{
-		LiveRuntimeEvidenceAttemptUuid = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+		GenerateNewAttemptUuid();
 		PhysAnimProofArtifactEmitter::LogAttemptStart(LiveRuntimeEvidenceAttemptUuid);
 	}
 	bLiveRuntimeEvidenceProofActive = true;
@@ -908,19 +929,22 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 				LiveRuntimeEvidenceTerminationState.TerminalReason);
 		if (bStartupProxySupportHandoffDeferred)
 		{
-			PHYSANIM_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Verbose,
+				1.0f,
 				TEXT("[PhysAnim] Startup proof deferred terminal reason=ActivationProxyOutsideSupportRegion phase=%s"),
 				GetRuntimeStateName(RuntimeState));
-			PHYSANIM_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Verbose,
+				1.0f,
 				TEXT("[PhysAnim] Startup proxy terminal recorded reason=PROXY_OUTSIDE_HULL state=%s"),
 				GetRuntimeStateName(RuntimeState));
-			PHYSANIM_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Verbose,
+				1.0f,
 				TEXT("[PhysAnim] Startup proxy terminal deferred for standing entry"));
 			LiveRuntimeEvidenceTerminationState.bHasDeferredStartupProxyTerminalReason = true;
 			LiveRuntimeEvidenceTerminationState.DeferredStartupProxyTerminalReason =
@@ -946,9 +970,10 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			!bForceSupportFailure &&
 			LiveRuntimeEvidenceTerminationState.TerminalReason == EPhysAnimTerminalReason::ActivationSupportFailure)
 		{
-			PHYSANIM_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Verbose,
+				1.0f,
 				TEXT("[PhysAnim] Startup terminal deferred reason=ActivationSupportFailure state=%s"),
 				GetRuntimeStateName(RuntimeState));
 			StartupProofDeferredTerminalReason = EPhysAnimTerminalReason::ActivationSupportFailure;
@@ -983,17 +1008,16 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		{
 			bLiveRuntimeEvidenceProofComplete = true;
 
-			FPhysAnimRunArtifactSnapshot CompletionArtifact = PipelineResult.SubstepResult.Artifact;
-			CompletionArtifact.TerminalReason = EPhysAnimTerminalReason::None;
-			CompletionArtifact.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
-			CompletionArtifact.bTerminalFrameArtifactCaptured = true;
+			FPhysAnimRunArtifactSnapshot FailureArtifact = PipelineResult.SubstepResult.Artifact;
+			FailureArtifact.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
+			FailureArtifact.bTerminalFrameArtifactCaptured = true;
 
-			LiveRuntimeEvidenceTerminationState.bTerminated = false;
-			LiveRuntimeEvidenceTerminationState.TerminalReason = EPhysAnimTerminalReason::None;
+			LiveRuntimeEvidenceTerminationState.bTerminated = true;
+			LiveRuntimeEvidenceTerminationState.TerminalReason = FailureArtifact.TerminalReason;
 			LiveRuntimeEvidenceTerminationState.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
 			LiveRuntimeEvidenceTerminationState.bTerminalFrameArtifactCaptured = true;
-			LiveRuntimeEvidenceTerminationState.TerminalArtifact = CompletionArtifact;
-			LiveRuntimeEvidenceTerminationState.LatestArtifact = CompletionArtifact;
+			LiveRuntimeEvidenceTerminationState.TerminalArtifact = FailureArtifact;
+			LiveRuntimeEvidenceTerminationState.LatestArtifact = FailureArtifact;
 
 			FPhysAnimProofArtifactEmitInput EmitInput;
 			EmitInput.AttemptUuid = LiveRuntimeEvidenceAttemptUuid;
@@ -1007,7 +1031,7 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 
 			PhysAnimProofArtifactEmitter::LogAttemptResult(
 				LiveRuntimeEvidenceAttemptUuid,
-				true,
+				false,
 				LiveRuntimeEvidenceStandingSeconds,
 				LiveRuntimeEvidenceTerminationState.TerminalReason);
 			
@@ -1157,12 +1181,23 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			RuntimeState,
 			bLiveRuntimeEvidenceProofComplete,
 			PolicyInfluenceRampStartTimeSeconds >= 0.0,
-			ResolveEffectiveStabilizationSettings().bForceZeroActions,
+			EffectiveSettings.bForceZeroActions,
 			IsBringUpGroupUnlocked(FinalBringUpGroupIndex),
 			IsBringUpGroupControlRampActive(FinalBringUpGroupIndex),
 			bStartupBringUpFrozenByBalanceEntry))
 		{
-			PolicyInfluenceRampStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+			const double CurrentTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
+			if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+			{
+				const double SettledRampStartTimeSeconds =
+					CurrentTimeSeconds - static_cast<double>(FMath::Max(EffectiveSettings.StartupRampSeconds, 0.0f)) - 0.1;
+				PolicyInfluenceRampStartTimeSeconds = SettledRampStartTimeSeconds;
+			}
+			else
+			{
+				PolicyInfluenceRampStartTimeSeconds = CurrentTimeSeconds;
+			}
+
 			BringUpGroupStableAccumulatedSeconds = 0.0f;
 			PHYSANIM_LOG(
 				LogPhysAnimBridge,
@@ -1181,18 +1216,6 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		LiveRuntimeEvidenceTerminationState.TerminalArtifact = CompletionArtifact;
 		LiveRuntimeEvidenceTerminationState.LatestArtifact = CompletionArtifact;
 		
-		FPhysAnimProofArtifactEmitInput EmitInput;
-		EmitInput.AttemptUuid = LiveRuntimeEvidenceAttemptUuid;
-		EmitInput.StandingSeconds = LiveRuntimeEvidenceStandingSeconds;
-		EmitInput.RuntimeHitCount = HitResults.Num();
-		EmitInput.MappedSupportHitCount = MappedSupportHitCount;
-		EmitInput.PipelineResult = PipelineResult;
-		// Ensure the terminal state we just built is the one that gets emitted
-		EmitInput.PipelineResult.StateApplyResult.State = LiveRuntimeEvidenceTerminationState;
-
-		PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(EmitInput);
-		bLiveRuntimeEvidenceTerminalArtifactEmitted = true;
-		
 		PhysAnimProofArtifactEmitter::LogAttemptResult(
 			LiveRuntimeEvidenceAttemptUuid,
 			true,
@@ -1200,6 +1223,31 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 			EPhysAnimTerminalReason::None);
 
 		bFirstProductSuccessAchieved = true;
+	}
+
+	// Emit the terminal artifact for Stage 2A after a 0.3s metric gathering window
+	if (bLiveRuntimeEvidenceProofComplete && 
+		!bLiveRuntimeEvidenceTerminalArtifactEmitted &&
+		LiveRuntimeEvidenceStandingSeconds >= (LiveRuntimeEvidenceStandingTargetSeconds + 0.35f))
+	{
+		FPhysAnimRunArtifactSnapshot CompletionArtifact = PipelineResult.SubstepResult.Artifact;
+		CompletionArtifact.TerminalReason = EPhysAnimTerminalReason::None;
+		CompletionArtifact.TerminalSubstepTimestamp = LiveRuntimeEvidenceSubstepCounter;
+		CompletionArtifact.bTerminalFrameArtifactCaptured = true;
+
+		LiveRuntimeEvidenceTerminationState.TerminalArtifact = CompletionArtifact;
+		LiveRuntimeEvidenceTerminationState.LatestArtifact = CompletionArtifact;
+
+		FPhysAnimProofArtifactEmitInput EmitInput;
+		EmitInput.AttemptUuid = LiveRuntimeEvidenceAttemptUuid;
+		EmitInput.StandingSeconds = LiveRuntimeEvidenceStandingSeconds;
+		EmitInput.RuntimeHitCount = HitResults.Num();
+		EmitInput.MappedSupportHitCount = MappedSupportHitCount;
+		EmitInput.PipelineResult = PipelineResult;
+		EmitInput.PipelineResult.StateApplyResult.State = LiveRuntimeEvidenceTerminationState;
+
+		PhysAnimProofArtifactEmitter::EmitTerminalArtifactAndWriteJson(EmitInput);
+		bLiveRuntimeEvidenceTerminalArtifactEmitted = true;
 	}
 }
 
@@ -1210,7 +1258,7 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 		const FBodyInstance* const PelvisBody = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 		const bool bPelvisSim = PelvisBody ? PelvisBody->IsInstanceSimulatingPhysics() : false;
 		const bool bPelvisAwake = PelvisBody ? PelvisBody->IsInstanceAwake() : false;
-		PHYSANIM_LOG_RATE_LIMITED(LogTemp, Warning, 1.0f, TEXT("[PhysAnimV0] METRICS_TICK state=%s t=%.3f PelvisSim=%d PelvisAwake=%d"), GetRuntimeStateName(RuntimeState), ActivatedStandingStabilityMetrics.ActivationDurationSec, bPelvisSim ? 1 : 0, bPelvisAwake ? 1 : 0);
+		PHYSANIM_LOG_RATE_LIMITED(LogTemp, Verbose, 1.0f, TEXT("[PhysAnimV0] METRICS_TICK state=%s t=%.3f PelvisSim=%d PelvisAwake=%d"), GetRuntimeStateName(RuntimeState), ActivatedStandingStabilityMetrics.ActivationDurationSec, bPelvisSim ? 1 : 0, bPelvisAwake ? 1 : 0);
 	}
 	if (!bV0PlantThighWorkDiagnosticEnabled &&
 		!((IsBalanceActiveState(RuntimeState) || IsBalanceEntryState(RuntimeState)) && (bFirstProductSuccessAchieved || bLiveRuntimeEvidenceProofActive)) &&
@@ -1249,11 +1297,6 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	ActivatedStandingStabilityMetrics.TerminalReason = static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason);
 	ActivatedStandingStabilityMetrics.bPhysicsControlComponentAvailable = PhysicsControlComponent.IsValid();
 	ActivatedStandingStabilityMetrics.ControlledBodyCount = PhysAnimBridge::GetControlledBoneNames().Num();
-	ActivatedStandingStabilityMetrics.ControlTargetSampleCount++;
-	ActivatedStandingStabilityMetrics.ControlTargetTotalWrites += LastControlTargetDiagnostics.NumTotalTargetsWritten;
-	ActivatedStandingStabilityMetrics.ControlTargetNormalWrites += LastControlTargetDiagnostics.NumNormalPolicyTargetsWritten;
-	ActivatedStandingStabilityMetrics.ControlTargetMaxDeltaDeg = FMath::Max(ActivatedStandingStabilityMetrics.ControlTargetMaxDeltaDeg, static_cast<double>(LastControlTargetDiagnostics.MaxTargetDeltaDegrees));
-	ActivatedStandingStabilityMetrics.ControlTargetMaxRawPolicyOffsetDeg = FMath::Max(ActivatedStandingStabilityMetrics.ControlTargetMaxRawPolicyOffsetDeg, static_cast<double>(LastControlTargetDiagnostics.MaxRawPolicyOffsetDegrees));
 
 	ActivatedStandingStabilityMetrics.SampleCount++;
 
@@ -1362,8 +1405,8 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 				ActivatedStandingStabilityMetrics.FirstAngularThresholdBodyName = BoneName;
 			}
 
-			// Work calculation for thighs during critical window (0.05s - 0.30s)
-			if (bV0PlantThighWorkDiagnosticEnabled && CurrentSampleTimeSec >= 0.05 && CurrentSampleTimeSec <= 0.30)
+			// Work calculation for thighs during critical window (0.00s - 0.30s)
+			if (bV0PlantThighWorkDiagnosticEnabled && CurrentSampleTimeSec >= 0.00 && CurrentSampleTimeSec <= 0.30)
 			{
 				if (BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r"))
 				{
@@ -1391,19 +1434,32 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 								(ControlData.AngularDampingRatio * ControlMultiplier.AngularDampingRatioMultiplier * AngularVelocity);
 
 							const float TorqueDotVel = FVector::DotProduct(Torque, AngularVelocity);
-							const float WorkIncrement = TorqueDotVel * DeltaTimeSeconds;
+							// Apply a proxy inertia scalar (e.g. 10.0f) since PhysicsControl strength acts as acceleration
+							const float WorkIncrement = TorqueDotVel * DeltaTimeSeconds * 10.0f;
+							const double AbsWorkIncrement = static_cast<double>(FMath::Abs(WorkIncrement));
 							
-							if (TorqueDotVel > 0.0f)
+							if (CurrentSampleTimeSec < 0.05)
 							{
-								ActivatedStandingStabilityMetrics.ThighPositiveWorkAccumulated += static_cast<double>(WorkIncrement);
+								ActivatedStandingStabilityMetrics.ThighBaselineWork += AbsWorkIncrement;
 							}
 							else
 							{
-								ActivatedStandingStabilityMetrics.ThighNegativeWorkAccumulated += static_cast<double>(FMath::Abs(WorkIncrement));
+								ActivatedStandingStabilityMetrics.ThighActivationWork += AbsWorkIncrement;
+								
+								if (TorqueDotVel > 0.0f)
+								{
+									ActivatedStandingStabilityMetrics.ThighPositiveWorkAccumulated += static_cast<double>(WorkIncrement);
+								}
+								else
+								{
+									ActivatedStandingStabilityMetrics.ThighNegativeWorkAccumulated += static_cast<double>(FMath::Abs(WorkIncrement));
+								}
 							}
 
+							ActivatedStandingStabilityMetrics.ThighNetWork = ActivatedStandingStabilityMetrics.ThighActivationWork - ActivatedStandingStabilityMetrics.ThighBaselineWork;
+
 							// AC-2: snapshot thigh control state and pose-seeded flag on first window entry (thigh_l only)
-							if (BoneName == TEXT("thigh_l") && ActivatedStandingStabilityMetrics.PoseTargetsSeededAtWindowEntry < 0)
+							if (BoneName == TEXT("thigh_l") && ActivatedStandingStabilityMetrics.PoseTargetsSeededAtWindowEntry < 0 && CurrentSampleTimeSec >= 0.05)
 							{
 								ActivatedStandingStabilityMetrics.ThighAngularStrengthAtWindowEntry =
 									ControlData.AngularStrength * ControlMultiplier.AngularStrengthMultiplier;
@@ -1856,6 +1912,10 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.PolicyInferenceSuccessCount = ActivatedStandingStabilityMetrics.PolicyInferenceSuccessCount;
 	Input.Values.PolicyInferenceAttemptCount = ActivatedStandingStabilityMetrics.PolicyInferenceAttemptCount;
 	Input.Values.PolicyInferenceFailureCount = ActivatedStandingStabilityMetrics.PolicyInferenceFailureCount;
+	Input.Values.ThighNetWork = ActivatedStandingStabilityMetrics.ThighNetWork;
+	Input.Values.ThighBaselineWork = ActivatedStandingStabilityMetrics.ThighBaselineWork;
+	Input.Values.ThighActivationWork = ActivatedStandingStabilityMetrics.ThighActivationWork;
+	Input.Values.ActionMagnitudeVariance = ActivatedStandingStabilityMetrics.ActionMagnitudeVariance;
 	Input.Values.PolicyInferenceLatencyMsMax = ActivatedStandingStabilityMetrics.PolicyInferenceLatencyMsMax;
 	Input.Values.bPolicyModelLoaded = ActivatedStandingStabilityMetrics.bPolicyModelLoaded;
 	Input.Values.PolicyRuntimeName = ActivatedStandingStabilityMetrics.PolicyRuntimeName;
@@ -1903,6 +1963,9 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 	Input.Values.RuntimeMaxBodyAngularSpeedDegPerSecond = ActivatedStandingStabilityMetrics.MaxBodyAngularSpeedDegPerSecond;
 	Input.Values.bPhysicalPerturbationApplied = ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied;
 	Input.Values.PerturbationMeasuredDeltaVCmPerSecond = ActivatedStandingStabilityMetrics.PerturbationMeasuredDeltaVCmPerSecond;
+	Input.Values.ThighBaselineWork = ActivatedStandingStabilityMetrics.ThighBaselineWork;
+	Input.Values.ThighActivationWork = ActivatedStandingStabilityMetrics.ThighActivationWork;
+	Input.Values.ThighNetWork = ActivatedStandingStabilityMetrics.ThighNetWork;
 
 	// Stage 2A Locomotion Telemetry
 	Input.Values.RootMode = TEXT("Stage1_KinematicRoot");
@@ -1922,9 +1985,10 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 
 	if (bEnableLiveRuntimeEvidenceProof)
 	{
-		PHYSANIM_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Verbose,
+			1.0f,
 			TEXT("[PhysAnim] LiveProof capture capsuleWorldPos=(%.1f,%.1f,%.1f) cmcMode=%s root=%s criticalBodies=%d topologyChanges=%d bookkeepingMismatch=%d capsulePassed=%d continuityPassed=%d"),
 			Input.Values.CapsuleWorldPosCm.X,
 			Input.Values.CapsuleWorldPosCm.Y,
@@ -1936,18 +2000,20 @@ FPhysAnimRuntimeSubstepInput UPhysAnimComponent::BuildLiveRuntimeEvidenceSubstep
 			Input.Values.bContinuityBookkeepingMismatch ? 1 : 0,
 			Input.Values.bCapsuleContractPassed ? 1 : 0,
 			Input.Values.bPhysicalContinuityValidatorPassed ? 1 : 0);
-		PHYSANIM_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Verbose,
+			1.0f,
 			TEXT("PhysAnimProof: LiveCapsule capsule_valid=%d collision=%s cmc_active=%d cmc_tick=%d lock_delta=%.2f"),
 			CapsuleValidation.bCapsuleContractPassed ? 1 : 0,
 			ToCapsuleCollisionStateName(CapsuleValidation.CapsuleCollisionEnabled),
 			CharacterMovement && CharacterMovement->IsActive() ? 1 : 0,
 			CharacterMovement && CharacterMovement->IsComponentTickEnabled() ? 1 : 0,
 			CapsuleValidation.CapsuleLockDeltaCm);
-		PHYSANIM_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Verbose,
+			1.0f,
 			TEXT("PhysAnimProof: LiveContinuity continuity_valid=%d pelvis_sleep_ms=%.2f bookkeeping_mismatch=%d"),
 			ContinuityValidation.bPhysicalContinuityValidatorPassed ? 1 : 0,
 			ContinuityValidation.PelvisSleepDurationMs,

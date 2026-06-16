@@ -355,6 +355,9 @@ struct FPhysAnimRunArtifactSnapshot
 	double RuntimeMaxBodyAngularSpeedDegPerSecond = 0.0;
 	bool bPhysicalPerturbationApplied = false;
 	double PerturbationMeasuredDeltaVCmPerSecond = 0.0;
+	double ThighBaselineWork = 0.0;
+	double ThighActivationWork = 0.0;
+	double ThighNetWork = 0.0;
 	FString ShellBookkeepingState;
 	double ShellInfluenceMateriality = 0.0;
 	int32 TopologyChangeCount = 0;
@@ -385,6 +388,8 @@ struct FPhysAnimRunArtifactSnapshot
 	bool bPolicyOutputActive = false;
 	FVector CapsuleVelocity = FVector::ZeroVector;
 	double ShellDivergencePeak = 0.0;
+
+	double ActionMagnitudeVariance = 0.0;
 };
 
 struct FPhysAnimRunArtifactSnapshotInput

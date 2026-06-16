@@ -330,9 +330,10 @@ namespace
 		EnabledBodies.Add(BoneName);
 		if (PreviousCount < 10 && EnabledBodies.Num() == 10)
 		{
-			PHYSANIM_LOG(
+			PHYSANIM_LOG_RATE_LIMITED(
 				LogPhysAnimBridge,
 				Warning,
+				1.0f,
 				TEXT("[PhysAnimV0] RAW_SIM_GROUP_C_COMPLETE activationT=%.3f runtimeState=%s simBodies=10 excludedSimMax=%d bodies=pelvis,spine_01,spine_02,spine_03,thigh_l,thigh_r,foot_l,foot_r,ball_l,ball_r"),
 				OwnerComponent->GetActivatedStandingStabilityMetrics().ActivationDurationSec,
 				OwnerComponent->GetRuntimeStateName(OwnerComponent->GetRuntimeState()),

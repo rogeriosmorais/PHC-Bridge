@@ -133,7 +133,7 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 	}
 
 	LogBridgeStateSnapshot(TEXT("FailStop"));
-	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f, TEXT("[PhysAnim] Fail-stop: %s"), *Reason);
+	PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: %s"), *Reason);
 	EmitBridgeTraceEvent(TEXT("fail_stop"), TEXT("Bridge entered fail-stop."), Reason);
 	DeactivateRuntimePhysicsControl(TEXT("FailStop"));
 	ResetBridgePhysicsState();

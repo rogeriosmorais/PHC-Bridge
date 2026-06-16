@@ -42,6 +42,11 @@ Interpretation:
 11. If smoke tests were run, read logs with `python .\\scripts\\read_logs.py`.
 12. Do not repeat the same failing test more than 3 times. If the same test fails 3 times without success, stop; it is very likely we need a change in focus/direction. Distinct targeted tests and required follow-up commands, such as `python .\\scripts\\read_logs.py`, do not count as repeats of the same test.
 13. NEVER use raw `UE_LOG` in Unreal Engine C++ code. You MUST use the `PHYSANIM_LOG_RATE_LIMITED` macro from `#include "PhysAnimLogger.h"` for all logging to prevent spam and enforce formatting.
+    - **High-Frequency Restriction**: Un-rate-limited logging (`PHYSANIM_LOG` or any log with `TimeLimit = 0.0f`) is strictly forbidden inside loops, `TickComponent`, or high-frequency update functions.
+    - **Exceptions**:
+      1. *Lifecycle & Startup*: One-off setup/shutdown diagnostics, asset loading, or level transitions.
+      2. *Critical Failures*: Unrecoverable error paths and fail-states.
+      3. *Temporary Debugging*: Permitted locally during active debugging, but **MUST be removed or commented out before committing**. Un-rate-limited logs in ticks must never be merged.
 
 <!-- mcp-graph:start -->
 # AGENTS.md — NewEngine-AgentB

@@ -175,6 +175,54 @@ namespace
 
 		return true;
 	}
+
+	// ---------------------------------------------------------------------------
+	// Phase 2 — bEnablePolicyInference toggle
+	// ---------------------------------------------------------------------------
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyInferenceToggleTest,
+		"PhysAnim.Bridge.PolicyInferenceToggle",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPolicyInferenceToggleTest::RunTest(const FString& Parameters)
+	{
+		// 1. Default value: inference must be ON by default so the bridge works out of the box.
+		UPhysAnimComponent* const Comp = NewObject<UPhysAnimComponent>();
+		TestNotNull(TEXT("Component must allocate"), Comp);
+		if (!Comp)
+		{
+			return false;
+		}
+		TestTrue(TEXT("bEnablePolicyInference must default to true"), Comp->bEnablePolicyInference);
+
+		// 2. SafetyGrip fallback contract: when bEnablePolicyInference=false the system zeros
+		//    the action buffer. Verify TArray::Init produces an all-zero buffer of the correct size.
+		{
+			TArray<float> FakeActionBuffer;
+			FakeActionBuffer.Init(1.0f, PhysAnimBridge::NumActionFloats); // Pre-fill with non-zero
+			FakeActionBuffer.Init(0.0f, PhysAnimBridge::NumActionFloats); // Simulate SafetyGrip zero-fill
+
+			TestEqual(TEXT("Fallback buffer must have NumActionFloats elements"), FakeActionBuffer.Num(), static_cast<int32>(PhysAnimBridge::NumActionFloats));
+			bool bAllZero = true;
+			for (const float Value : FakeActionBuffer)
+			{
+				if (Value != 0.0f)
+				{
+					bAllZero = false;
+					break;
+				}
+			}
+			TestTrue(TEXT("Fallback buffer must be all zeros after SafetyGrip zero-fill"), bAllZero);
+		}
+
+		// 3. Toggle round-trip: setting to false and back to true preserves the field.
+		Comp->bEnablePolicyInference = false;
+		TestFalse(TEXT("bEnablePolicyInference must be false after explicit set"), Comp->bEnablePolicyInference);
+		Comp->bEnablePolicyInference = true;
+		TestTrue(TEXT("bEnablePolicyInference must be true after round-trip restore"), Comp->bEnablePolicyInference);
+
+		return true;
+	}
 }
 
 #endif

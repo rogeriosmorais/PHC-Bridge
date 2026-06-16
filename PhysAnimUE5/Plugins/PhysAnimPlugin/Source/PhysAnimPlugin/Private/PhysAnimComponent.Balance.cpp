@@ -1063,6 +1063,9 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 		}
 	}
 
+	BridgeStartTimeSeconds = SettledRampStartTimeSeconds;
+	PolicyInfluenceRampStartTimeSeconds = SettledRampStartTimeSeconds;
+
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
 	ArmStartupProofTerminalEnforcement();
 	bLiveRuntimeEvidenceStartupStandingEntryAccepted = true;

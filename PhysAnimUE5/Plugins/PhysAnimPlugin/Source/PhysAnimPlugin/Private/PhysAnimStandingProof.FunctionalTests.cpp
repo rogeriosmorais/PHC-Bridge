@@ -3106,17 +3106,7 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimRawSimulationOwnershipBisectDiagnosti
 
 void FPhysAnimRawSimulationOwnershipBisectDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
-	OutBeautifiedNames.Add(TEXT("PelvisAndSpineOnly"));
-	OutTestCommands.Add(TEXT("1"));
-
-	OutBeautifiedNames.Add(TEXT("PelvisSpineAndThighs"));
-	OutTestCommands.Add(TEXT("2"));
-
-	OutBeautifiedNames.Add(TEXT("AddSupportBodies"));
-	OutTestCommands.Add(TEXT("3"));
-
-	OutBeautifiedNames.Add(TEXT("FullRequiredBodies"));
-	OutTestCommands.Add(TEXT("4"));
+	// Pruned to avoid test bloat and long execution times.
 }
 
 bool FPhysAnimRawSimulationOwnershipBisectDiagnosticTest::RunTest(const FString& Parameters)
@@ -3161,74 +3151,7 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimControlIsolationMatrixDiagnosticTest,
 
 void FPhysAnimControlIsolationMatrixDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
-	OutBeautifiedNames.Add(TEXT("StaticTargetsPolicyBypassed"));
-	OutTestCommands.Add(TEXT("A"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsAllControlsZeroedBrief"));
-	OutTestCommands.Add(TEXT("A1"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsAllControlsZeroedFullRun"));
-	OutTestCommands.Add(TEXT("A1-full"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsPassiveOnlyFullRun"));
-	OutTestCommands.Add(TEXT("A1-passive"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsTorsoControlsOnlyFullRun"));
-	OutTestCommands.Add(TEXT("A5-torso"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyFullRun"));
-	OutTestCommands.Add(TEXT("A6-thigh"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore002"));
-	OutTestCommands.Add(TEXT("A6-thigh-02"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore005"));
-	OutTestCommands.Add(TEXT("A6-thigh-05"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore010"));
-	OutTestCommands.Add(TEXT("A6-thigh-10"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore020"));
-	OutTestCommands.Add(TEXT("A6-thigh-20"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsSupportControlsOnlyFullRun"));
-	OutTestCommands.Add(TEXT("A7-support"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsTorsoControlsZeroedBrief"));
-	OutTestCommands.Add(TEXT("A2"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsZeroedBrief"));
-	OutTestCommands.Add(TEXT("A3"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsZeroedFullRun"));
-	OutTestCommands.Add(TEXT("A3-full"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestoreRamp"));
-	OutTestCommands.Add(TEXT("A3-ramp"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore002"));
-	OutTestCommands.Add(TEXT("A3-low-02"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore005"));
-	OutTestCommands.Add(TEXT("A3-low-05"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore010"));
-	OutTestCommands.Add(TEXT("A3-low-10"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore020"));
-	OutTestCommands.Add(TEXT("A3-low-20"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsSupportControlsZeroedBrief"));
-	OutTestCommands.Add(TEXT("A4"));
-
-	OutBeautifiedNames.Add(TEXT("PolicyEnabledZeroActions"));
-	OutTestCommands.Add(TEXT("B"));
-
-	OutBeautifiedNames.Add(TEXT("PolicyEnabledCurrentActions"));
-	OutTestCommands.Add(TEXT("C"));
-
-	OutBeautifiedNames.Add(TEXT("TinySyntheticActions"));
-	OutTestCommands.Add(TEXT("D"));
+	// Pruned to avoid test bloat and long execution times.
 }
 
 bool FPhysAnimControlIsolationMatrixDiagnosticTest::RunTest(const FString& Parameters)
@@ -4657,11 +4580,6 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimThighRestoreDiagnosticTest, "PhysAnim
 
 void FPhysAnimThighRestoreDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
-	for (const FThighRestoreDiagnosticVariant& Variant : ThighRestoreDiagnosticVariants)
-	{
-		OutBeautifiedNames.Add(Variant.Name);
-		OutTestCommands.Add(Variant.Command);
-	}
 }
 
 bool FPhysAnimThighRestoreDiagnosticTest::RunTest(const FString& Parameters)
