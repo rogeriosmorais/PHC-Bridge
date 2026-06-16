@@ -85,6 +85,33 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	AdvanceBringUpState(DeltaTime, EffectiveSettings);
 
+	// Populate and push Phase 1 convergence snapshot for authoritative gating in next frame's transition controller tick
+	if (BalanceReadyTransition.IsActive())
+	{
+		SafePhase1ConvergenceSnapshot.FrameIndex = GFrameCounter;
+		SafePhase1ConvergenceSnapshot.WorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		SafePhase1ConvergenceSnapshot.MaxBodyLinearSpeed = LastRuntimeInstabilityDiagnostics.MaxBodyLinearSpeedCmPerSecond;
+		SafePhase1ConvergenceSnapshot.MaxBodyAngularSpeed = LastRuntimeInstabilityDiagnostics.MaxBodyAngularSpeedDegPerSecond;
+		SafePhase1ConvergenceSnapshot.MaxBodyLinearSpeedBone = LastRuntimeInstabilityDiagnostics.MaxLinearSpeedBoneName;
+		SafePhase1ConvergenceSnapshot.MaxBodyAngularSpeedBone = LastRuntimeInstabilityDiagnostics.MaxAngularSpeedBoneName;
+		SafePhase1ConvergenceSnapshot.RootLinearSpeed = LastRuntimeInstabilityDiagnostics.RootLinearSpeedCmPerSecond;
+		SafePhase1ConvergenceSnapshot.RootAngularSpeed = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
+
+		FString TiltSource;
+		const float ResolvedTilt = UPhysAnimComponent::ResolvePhase1Uprightness(GetMeshComponent(), GetOwner(), PhysAnimBridge::GetRootBoneName(), TiltSource);
+		SafePhase1ConvergenceSnapshot.RootTilt = ResolvedTilt;
+
+		SafePhase1ConvergenceSnapshot.ShellPlanarOffset = GetCurrentShellPlanarOffsetDeltaCm();
+		SafePhase1ConvergenceSnapshot.ShellPlanarVelocity = GetCurrentShellPlanarVelocityDeltaCmPerSecond();
+		SafePhase1ConvergenceSnapshot.bIsInstabilityPrecursorActive = IsInstabilityPrecursorActive();
+		SafePhase1ConvergenceSnapshot.bIsPelvisSimulating = IsPelvisSimulatingNow();
+		SafePhase1ConvergenceSnapshot.bHasPendingResets = PendingBodyModifierCachedResetNames.Num() > 0;
+		SafePhase1ConvergenceSnapshot.MaxTargetDeltaDegrees = LastControlTargetDiagnostics.MaxTargetDeltaDegrees;
+		SafePhase1ConvergenceSnapshot.MeanTargetDeltaDegrees = LastControlTargetDiagnostics.MeanTargetDeltaDegrees;
+
+		BalanceReadyTransition.PushConvergenceSnapshot(SafePhase1ConvergenceSnapshot);
+	}
+
 	TickRuntimeStateMachine(DeltaTime, EffectiveSettings);
 	TickPolicyAndUpdateMetrics(DeltaTime, EffectiveSettings, TickError);
 	ProcessPendingDistalOwnershipChecks();

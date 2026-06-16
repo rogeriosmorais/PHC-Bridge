@@ -1,4 +1,5 @@
 #include "PhysAnimComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "PhysAnimLogger.h"
 #include "Misc/AutomationTest.h"
 #include "Tests/AutomationCommon.h"
@@ -203,6 +204,25 @@ bool FWaitForBridgePhysicsActiveCommand::Update()
 	{
 		// Timed out. Dumbbell will be attached anyway — the setup command logs an error
 		// if the constraint ends up invalid.
+		return true;
+	}
+
+	return false; // keep polling
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FWaitForBridgeBalanceActiveCommand, UPhysAnimComponent*, Component, float, TimeoutSeconds, float, StartTime);
+bool FWaitForBridgeBalanceActiveCommand::Update()
+{
+	if (!Component) return true;
+
+	if (Component->GetRuntimeState() == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		return true; // successfully reached standing phase
+	}
+
+	const float Elapsed = static_cast<float>(FPlatformTime::Seconds()) - StartTime;
+	if (Elapsed >= TimeoutSeconds)
+	{
 		return true;
 	}
 
@@ -625,10 +645,18 @@ bool FVerifyStandingProofCommand::Update()
 			if (USkeletalMeshComponent* Mesh = It->GetMesh())
 			{
 				const FVector PelvisLocation = Mesh->GetSocketLocation(TEXT("pelvis"));
-				const float FloorZ = It->GetActorLocation().Z;
+				
+				// GetActorLocation() returns the center of the capsule. The floor is at the bottom of the capsule.
+				float CapsuleHalfHeight = 90.0f;
+				if (UCapsuleComponent* Capsule = It->FindComponentByClass<UCapsuleComponent>())
+				{
+					CapsuleHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+				}
+				const float FloorZ = It->GetActorLocation().Z - CapsuleHalfHeight;
 				const float PelvisAboveFloor = PelvisLocation.Z - FloorZ;
-				// A correctly standing Manny has pelvis ~90 cm above actor origin.
-				// Reject anything below 40 cm above floor — indicates partial/full floor penetration.
+				
+				// A correctly standing Manny has pelvis ~90 cm above the actor's bottom (floor).
+				// Reject anything below 40 cm above floor — indicates partial/full floor penetration or collapse.
 				constexpr float MinPelvisAboveFloorCm = 40.0f;
 				if (PelvisAboveFloor < MinPelvisAboveFloorCm)
 				{
@@ -5223,10 +5251,10 @@ bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
 	// then attach the dumbbell onto live (valid) physics bodies.
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand());
 
-	// 4. Actively poll until the bridge has taken physics ownership (BridgeActive or later).
-	// This is the moment SetSimulatePhysics(true) + RecreatePhysicsState() has completed and
-	// all 21 physics bodies are live. Only then is it safe to constrain the dumbbell.
-	// Hard timeout: 10 seconds (map + pose search + bridge activation in worst case).
+	// 4. Actively poll until the bridge has reached BalanceActive_Standing.
+	// This ensures the initial ragdoll drop and all stabilization phases (Prepare, RootOn, Settle)
+	// have converged and the policy is fully active to resist external mass.
+	// Hard timeout: 15 seconds.
 	{
 		UWorld* SetupWorld = GWorld;
 	#if WITH_EDITOR
@@ -5254,10 +5282,10 @@ bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
 				}
 			}
 		}
-		constexpr float BridgeActiveTimeoutSeconds = 10.0f;
-		ADD_LATENT_AUTOMATION_COMMAND(FWaitForBridgePhysicsActiveCommand(
+		constexpr float BalanceActiveTimeoutSeconds = 15.0f;
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitForBridgeBalanceActiveCommand(
 			PollingTarget,
-			BridgeActiveTimeoutSeconds,
+			BalanceActiveTimeoutSeconds,
 			static_cast<float>(FPlatformTime::Seconds())));
 	}
 
