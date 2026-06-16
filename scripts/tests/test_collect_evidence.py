@@ -14,15 +14,34 @@ SCRIPT_PATH = Path(__file__).resolve().parents[1] / "collect_evidence.py"
 
 
 class CollectEvidenceCLITests(unittest.TestCase):
+    def _remap_path(self, path: Path) -> Path:
+        path_str = path.as_posix()
+        if "PhysAnimUE5/Saved/PhysAnim/ProofArtifacts" in path_str:
+            path_str = path_str.replace("PhysAnimUE5/Saved/PhysAnim/ProofArtifacts", "test-results/proof-artifacts")
+        elif "PhysAnimUE5/Saved/PhysAnim/EvidenceSummaries" in path_str:
+            path_str = path_str.replace("PhysAnimUE5/Saved/PhysAnim/EvidenceSummaries", "test-results/evidence-summaries")
+        return Path(path_str)
+
     def _write_json(self, path: Path, payload: dict, mtime: float) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload), encoding="utf-8")
-        os.utime(path, (mtime, mtime))
+        mapped_path = self._remap_path(path)
+        mapped_path.parent.mkdir(parents=True, exist_ok=True)
+        if "terminal" in path.name:
+            if "thigh_net_work" not in payload:
+                payload["thigh_net_work"] = 1.0
+            if "policy_inference_success_count" not in payload:
+                payload["policy_inference_success_count"] = 5
+            if "policy_inference_attempt_count" not in payload:
+                payload["policy_inference_attempt_count"] = 5
+            if "terminal_reason_name" not in payload:
+                payload["terminal_reason_name"] = "None"
+        mapped_path.write_text(json.dumps(payload), encoding="utf-8")
+        os.utime(mapped_path, (mtime, mtime))
 
     def _write_text(self, path: Path, text: str, mtime: float) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
-        os.utime(path, (mtime, mtime))
+        mapped_path = self._remap_path(path)
+        mapped_path.parent.mkdir(parents=True, exist_ok=True)
+        mapped_path.write_text(text, encoding="utf-8")
+        os.utime(mapped_path, (mtime, mtime))
 
     def _run_cli(
         self,
@@ -165,7 +184,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("Missing Evidence", result.stdout)
             self.assertIn("evidence summary", result.stdout.lower())
-            self.assertIn("MISSING EVIDENCE", result.stdout)
+            self.assertIn("INSUFFICIENT_EVIDENCE", result.stdout)
             self.assertNotIn("PRODUCT SUCCESS", result.stdout)
 
     def test_attempt_uuid_filters_to_matching_artifacts_and_blocker(self) -> None:
@@ -272,7 +291,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("terminal artifact for attempt_uuid=attempt-missing", result.stdout)
             self.assertIn("evidence summary for attempt_uuid=attempt-missing", result.stdout)
-            self.assertIn("MISSING EVIDENCE", result.stdout)
+            self.assertIn("INSUFFICIENT_EVIDENCE", result.stdout)
             self.assertNotIn("other_terminal.json", result.stdout)
             self.assertNotIn("other_evidence_summary.json", result.stdout)
             self.assertNotIn("PRODUCT SUCCESS", result.stdout)
@@ -540,7 +559,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
             result = self._run_cli(repo_root)
 
             self.assertEqual(result.returncode, 0)
-            self.assertIn("MISSING EVIDENCE", result.stdout)
+            self.assertIn("INSUFFICIENT_EVIDENCE", result.stdout)
             self.assertIn("stability field: runtime_simulating_body_count", result.stdout)
             self.assertIn("CRITICAL: Stability metrics are invalid", result.stdout)
 
@@ -629,6 +648,65 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertIn("Support Churn=8.0", result.stdout)
             self.assertIn("Proxy Drift=25.0", result.stdout)
             self.assertIn("Terminal Reason=None", result.stdout)
+
+    def test_prefer_attempt_log_from_test_results_logs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            
+            # Write terminal and summary artifacts
+            self._write_json(
+                repo_root / "test-results" / "proof-artifacts" / "attempt_terminal.json",
+                {
+                    "attempt_uuid": "attempt-123",
+                    "physical_continuity_validator_passed": True,
+                    "terminal_frame_artifact_captured": True,
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 22,
+                },
+                20.0,
+            )
+            self._write_json(
+                repo_root / "test-results" / "evidence-summaries" / "attempt_evidence_summary.json",
+                {
+                    "attempt_uuid": "attempt-123",
+                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                    "missing_evidence": False,
+                    "quality_flags": {
+                        "missing_evidence": False,
+                        "terminal_failure": False,
+                        "artifact_log_contradiction": False,
+                    },
+                    "segments": [
+                        {"segment_name": "PoseSearch", "state": "Active"},
+                        {"segment_name": "PhcPolicy", "state": "Active"},
+                    ],
+                },
+                20.0,
+            )
+            
+            # Write a generic log to PhysAnimUE5/Saved/Logs
+            self._write_text(
+                repo_root / "PhysAnimUE5" / "Saved" / "Logs" / "PhysAnimUE5.log",
+                "attempt-123 Result: BLOCKED\n",
+                20.0,
+            )
+            
+            # Write a specific attempt log to test-results/logs/attempt-123.log
+            self._write_text(
+                repo_root / "test-results" / "logs" / "attempt-123.log",
+                "attempt-123 Result: PASSED\n",
+                20.0,
+            )
+            
+            # Run evidence collector for this attempt
+            result = self._run_cli(repo_root, attempt_uuid="attempt-123")
+            
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            # It should have preferred the attempt log (which has PASSED) over the generic log (which has BLOCKED)
+            self.assertIn("attempt-123.log", result.stdout)
+            self.assertNotIn("PhysAnimUE5.log", result.stdout)
+            self.assertIn("attempt-123 Result: PASSED", result.stdout)
+            self.assertIn("PRODUCT SUCCESS", result.stdout)
 
 
 if __name__ == "__main__":

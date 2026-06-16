@@ -215,42 +215,94 @@ bool FWaitForStandingProofCommand::Update()
 	}
 
 	UStaticMeshComponent* MeshComp = Dumbbell->GetStaticMeshComponent();
-	
+
+	// CRITICAL FIX: The dumbbell MUST be Movable before ANY mesh is assigned or constrained.
+	MeshComp->SetMobility(EComponentMobility::Movable);
+
 	// Assign a basic cube mesh so it has physical volume and weight
 	UStaticMesh* CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMesh)
 	{
 		MeshComp->SetStaticMesh(CubeMesh);
-		MeshComp->SetWorldScale3D(FVector(0.2f)); // Scale it down to dumbbell size
+		MeshComp->SetWorldScale3D(FVector(0.1f)); // Scale it down (10cm cube)
 	}
 
-	// Disable collision with the character to prevent self-collision jitter
-	MeshComp->MoveIgnoreActors.Add(TargetCharacter);
-	TargetCharacter->GetMesh()->MoveIgnoreActors.Add(Dumbbell);
+	// Disable gravity on the weight so it doesn't drag the character through the floor 
+	// before the AI activates. The AI will still feel the *inertia* and the constraint force.
+	MeshComp->SetEnableGravity(false);
+
+	// CRITICAL STABILITY FIX: Disable collision entirely. 
+	// The AI will still feel the mass/torque via the constraint, but the dumbbell
+	// will never "hit" the floor or the character, preventing physics explosions.
+	MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
 
 	MeshComp->SetSimulatePhysics(true);
 	MeshComp->SetMassOverrideInKg(NAME_None, TargetMassKg, true);
-	
+
 	// Attach via physics constraint
 	UPhysicsConstraintComponent* Constraint = NewObject<UPhysicsConstraintComponent>(TargetCharacter);
 	Constraint->RegisterComponent();
 	Constraint->SetWorldLocation(HandLocation);
 	Constraint->AttachToComponent(TargetCharacter->GetMesh(), FAttachmentTransformRules::KeepWorldTransform, TEXT("hand_r"));
-	
-	Constraint->SetConstrainedComponents(TargetCharacter->GetMesh(), TEXT("hand_r"), MeshComp, NAME_None);
-	Constraint->SetAngularSwing1Limit(ACM_Locked, 0);
-	Constraint->SetAngularSwing2Limit(ACM_Locked, 0);
-	Constraint->SetAngularTwistLimit(ACM_Locked, 0);
-	Constraint->SetLinearXLimit(LCM_Locked, 0);
-	Constraint->SetLinearYLimit(LCM_Locked, 0);
-	Constraint->SetLinearZLimit(LCM_Locked, 0);
 
-	PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] SUCCESS: Spawned %.1f kg dumbbell at hand_r [%s] and attached."), 
+	Constraint->SetConstrainedComponents(TargetCharacter->GetMesh(), TEXT("hand_r"), MeshComp, NAME_None);
+
+	// Use soft drives instead of hard locking to prevent numerical instability
+	Constraint->SetLinearXLimit(LCM_Free, 0);
+	Constraint->SetLinearYLimit(LCM_Free, 0);
+	Constraint->SetLinearZLimit(LCM_Free, 0);
+	Constraint->SetLinearPositionDrive(true, true, true);
+	Constraint->SetLinearDriveParams(10000.0f, 1000.0f, 0.0f);
+
+	Constraint->SetAngularSwing1Limit(ACM_Free, 0);
+	Constraint->SetAngularSwing2Limit(ACM_Free, 0);
+	Constraint->SetAngularTwistLimit(ACM_Free, 0);
+	Constraint->SetAngularOrientationDrive(true, true);
+	Constraint->SetAngularDriveParams(10000.0f, 1000.0f, 0.0f);
+
+	PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] SUCCESS: Spawned %.1f kg PHANTOM dumbbell at hand_r [%s]."), 
 		TargetMassKg, *HandLocation.ToString());
 
 	return true;
+
 	}
 
+	/**
+	* Command to log character position for debugging floor penetration.
+	*/
+	DEFINE_LATENT_AUTOMATION_COMMAND(FLogCharacterPositionCommand);
+	bool FLogCharacterPositionCommand::Update()
+	{
+	UWorld* World = nullptr;
+	#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+	#endif
+	if (!World) World = GWorld;
+	if (!World) return true;
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			const FVector Loc = It->GetActorLocation();
+			const FVector MeshLoc = It->GetMesh()->GetComponentLocation();
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] DEBUG_POS: ActorZ=%.2f MeshZ=%.2f"), Loc.Z, MeshLoc.Z);
+			break;
+		}
+	}
+	return true;
+	}
 	/**
 	* Command to enable the proof hook.
 	*/

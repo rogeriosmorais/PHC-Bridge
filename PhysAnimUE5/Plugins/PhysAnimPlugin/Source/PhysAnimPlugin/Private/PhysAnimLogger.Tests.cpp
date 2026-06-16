@@ -250,16 +250,21 @@ bool FPhysAnimLoggerBypassTest::RunTest(const FString& Parameters)
 		const FString LogDirectory = FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("test-results"), TEXT("logs"));
 		const FString LogFilePath = FPaths::Combine(LogDirectory, FString::Printf(TEXT("%s.log"), *AttemptUuid));
 
-		// Make sure the file does not exist initially
-		if (IFileManager::Get().FileExists(*LogFilePath))
+		// Make sure the directory does not exist initially (delete recursively)
+		if (IFileManager::Get().DirectoryExists(*LogDirectory))
 		{
-			IFileManager::Get().Delete(*LogFilePath);
+			IFileManager::Get().DeleteDirectory(*LogDirectory, false, true);
 		}
+		TestFalse(TEXT("Log directory should not exist initially"), IFileManager::Get().DirectoryExists(*LogDirectory));
 
 		// Log a message
 		const FString LogMessageText = TEXT("Test log line for attempt file");
 		FPhysAnimLogger::LogRateLimited(LogTestLogger.GetCategoryName(), ELogVerbosity::Log, __FILE__, 400, 0.0f, LogMessageText);
 		FlushLogs();
+
+		// Verify the directory exists
+		bool bDirExists = IFileManager::Get().DirectoryExists(*LogDirectory);
+		TestTrue(TEXT("Log directory should be created by the logger"), bDirExists);
 
 		// Verify the file exists
 		bool bFileExists = IFileManager::Get().FileExists(*LogFilePath);
@@ -279,6 +284,44 @@ bool FPhysAnimLoggerBypassTest::RunTest(const FString& Parameters)
 
 		// Clear the attempt UUID
 		FPhysAnimLogger::SetCurrentAttemptUuid(TEXT(""));
+	}
+
+	// 8. Frame Cap Reset Test
+	FPhysAnimLogger::Reset();
+	{
+		FScopedLogCapture Capture;
+
+		// Fill the frame cap (MAX_LOGS_PER_FRAME is 10)
+		for (int32 i = 0; i < 10; ++i)
+		{
+			FPhysAnimLogger::LogRateLimited(LogTestLogger.GetCategoryName(), ELogVerbosity::Log, __FILE__, 500 + i, 1.0f, FString::Printf(TEXT("FrameCapReset_%d"), i));
+			FlushLogs();
+		}
+
+		// Log 11th message (should be dropped by cap)
+		FPhysAnimLogger::LogRateLimited(LogTestLogger.GetCategoryName(), ELogVerbosity::Log, __FILE__, 600, 1.0f, TEXT("FrameCapReset_Dropped"));
+		FlushLogs();
+
+		// Reset the logger (should reset the frame cap)
+		FPhysAnimLogger::Reset();
+
+		// Log 12th message (should succeed because the frame cap was reset)
+		FPhysAnimLogger::LogRateLimited(LogTestLogger.GetCategoryName(), ELogVerbosity::Log, __FILE__, 601, 1.0f, TEXT("FrameCapReset_SucceededAfterReset"));
+		FlushLogs();
+
+		// Verify captured entries
+		TArray<FString> CapturedMsgs;
+		for (const auto& Entry : Capture.Device.Entries)
+		{
+			if (Entry.Category == LogTestLogger.GetCategoryName() && Entry.Message.Contains(TEXT("FrameCapReset_")))
+			{
+				CapturedMsgs.Add(Entry.Message);
+			}
+		}
+
+		TestEqual(TEXT("Total FrameCapReset messages should be 11"), CapturedMsgs.Num(), 11);
+		TestFalse(TEXT("Dropped message should not be logged"), CapturedMsgs.Contains(TEXT("FrameCapReset_Dropped")));
+		TestTrue(TEXT("Succeeded message after reset should be logged"), CapturedMsgs.Contains(TEXT("FrameCapReset_SucceededAfterReset")));
 	}
 
 	FPhysAnimLogger::Reset();

@@ -424,7 +424,17 @@ def build_report(repo_root: Path, attempt_uuid: Optional[str] = None) -> List[st
 
     terminal_path = latest_matching_file(proof_dir, "*_terminal.json", requested_attempt_uuid)
     summary_path = latest_matching_file(summary_dir, "*_evidence_summary.json", requested_attempt_uuid)
-    log_path = latest_matching_file(log_dir, "*.log")
+    
+    log_path = None
+    if requested_attempt_uuid:
+        attempt_log = test_results_dir / "logs" / f"{requested_attempt_uuid}.log"
+        if attempt_log.exists():
+            log_path = attempt_log
+    else:
+        log_path = latest_matching_file(test_results_dir / "logs", "*.log")
+
+    if log_path is None:
+        log_path = latest_matching_file(log_dir, "*.log")
 
     terminal = load_json_file(terminal_path)
     summary = load_json_file(summary_path)

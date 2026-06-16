@@ -60,10 +60,20 @@ void FPhysAnimLogger::LogRateLimited(const FName& CategoryName, ELogVerbosity::T
 		if (!CurrentAttemptUuid.IsEmpty())
 		{
 			const FString LogDirectory = FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("test-results"), TEXT("logs"));
+			if (!IFileManager::Get().MakeDirectory(*LogDirectory, true))
+			{
+				FMsg::Logf(File, Line, CategoryName, ELogVerbosity::Error, TEXT("Failed to create attempt log directory: %s"), *LogDirectory);
+				return;
+			}
+
 			const FString LogFilePath = FPaths::Combine(LogDirectory, FString::Printf(TEXT("%s.log"), *CurrentAttemptUuid));
 			const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y-%m-%d %H:%M:%S.%f"));
 			const FString LogLine = FString::Printf(TEXT("[%s][%s] %s\n"), *Timestamp, *CategoryName.ToString(), *FinalMessage);
-			FFileHelper::SaveStringToFile(LogLine, *LogFilePath, FFileHelper::EEncodingOptions::AutoDetect, &IFileManager::Get(), FILEWRITE_Append);
+			if (!FFileHelper::SaveStringToFile(LogLine, *LogFilePath, FFileHelper::EEncodingOptions::AutoDetect, &IFileManager::Get(), FILEWRITE_Append))
+			{
+				FMsg::Logf(File, Line, CategoryName, ELogVerbosity::Error, TEXT("Failed to write to attempt log file: %s"), *LogFilePath);
+				return;
+			}
 		}
 
 		Record.LastLogTime = CurrentTime;
@@ -80,6 +90,9 @@ void FPhysAnimLogger::Reset()
 {
 	FScopeLock Lock(&Mutex);
 	LogHistory.Empty();
+	LastFrameLogged = 0;
+	LogsThisFrame = 0;
+	CurrentAttemptUuid = TEXT("");
 }
 
 void FPhysAnimLogger::SetCurrentAttemptUuid(const FString& InAttemptUuid)
