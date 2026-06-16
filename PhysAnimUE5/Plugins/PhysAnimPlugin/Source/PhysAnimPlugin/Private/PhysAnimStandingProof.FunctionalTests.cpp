@@ -165,9 +165,51 @@ bool FWaitForStandingProofCommand::Update()
 	return false; // keep polling
 }
 
-	/**
-	* Command to spawn and attach a dumbbell for the load test.
-	*/
+/**
+ * Latent command that polls every tick until the PhysAnim bridge has taken physics ownership
+ * (RuntimeState is BridgeActive or any balance/locomotion active state) or until the hard
+ * timeout fires. This is used to synchronize dumbbell attachment: the physics constraint
+ * bodies must be live before the constraint is created, otherwise Chaos holds an orphaned
+ * body handle and applies an unconstrained impulse that drives the character through the floor.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FWaitForBridgePhysicsActiveCommand, UPhysAnimComponent*, Component, float, TimeoutSeconds, float, StartTime);
+bool FWaitForBridgePhysicsActiveCommand::Update()
+{
+	if (!Component)
+	{
+		return true; // nothing to wait for
+	}
+
+	const EPhysAnimRuntimeState State = Component->GetRuntimeState();
+	const bool bPhysicsActive =
+		State == EPhysAnimRuntimeState::BridgeActive ||
+		State == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+		State == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+		State == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+		State == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+		State == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		State == EPhysAnimRuntimeState::BalanceActive_Recovery ||
+		State == EPhysAnimRuntimeState::BalanceSafeDeny ||
+		State == EPhysAnimRuntimeState::LocomotionActiveShell ||
+		State == EPhysAnimRuntimeState::LocomotionActiveShellDenied;
+
+	if (bPhysicsActive)
+	{
+		return true; // physics bodies are live — safe to attach dumbbell
+	}
+
+	const float Elapsed = static_cast<float>(FPlatformTime::Seconds()) - StartTime;
+	if (Elapsed >= TimeoutSeconds)
+	{
+		// Timed out. Dumbbell will be attached anyway — the setup command logs an error
+		// if the constraint ends up invalid.
+		return true;
+	}
+
+	return false; // keep polling
+}
+
+
 	DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FSetupDumbbellCommand, float, TargetMassKg);
 	bool FSetupDumbbellCommand::Update()
 	{
@@ -350,10 +392,21 @@ bool FEnableStandingProofCommand::Update()
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
 			PHYSANIM_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] ENABLING_PROOF for %s"), *It->GetName());
-			Comp->StopBridge();
-			Comp->ResetLiveRuntimeEvidenceProof();
-			Comp->bEnableLiveRuntimeEvidenceProof = true;
-			Comp->StartBridge();
+			EPhysAnimRuntimeState State = Comp->GetRuntimeState();
+			const bool bIsPhysicsActive = (State == EPhysAnimRuntimeState::BridgeActive || State >= EPhysAnimRuntimeState::BalanceEntry_Prepare);
+
+			if (bIsPhysicsActive)
+			{
+				Comp->ResetLiveRuntimeEvidenceProof();
+				Comp->bEnableLiveRuntimeEvidenceProof = true;
+			}
+			else
+			{
+				Comp->StopBridge();
+				Comp->ResetLiveRuntimeEvidenceProof();
+				Comp->bEnableLiveRuntimeEvidenceProof = true;
+				Comp->StartBridge();
+			}
 			break;
 		}
 	}
@@ -5160,24 +5213,69 @@ bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
 	// 2. Wait for map to load
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 
-	// 3. Spawn and attach the dumbbell for this specific run
-	ADD_LATENT_AUTOMATION_COMMAND(FSetupDumbbellCommand(TargetMassKg));
-
-	// 4. Wait for the physics to settle under the new load (2 seconds)
-	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
-
-	// 5. Enable proof
+	// 3. Enable the proof. This calls StopBridge() + StartBridge() which destroys and
+	// recreates all skeletal mesh physics bodies via RecreatePhysicsState().
+	// The dumbbell MUST NOT be attached before this step: if the dumbbell constraint is
+	// created before StopBridge(), the constraint holds an internal physics body handle that
+	// becomes orphaned when RecreatePhysicsState() runs. Chaos then applies an unconstrained
+	// impulse from the dumbbell mass that drives the character through the floor.
+	// Solution: enable the proof first, then wait for physics ownership to be established,
+	// then attach the dumbbell onto live (valid) physics bodies.
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand());
 
-	// 6. Actively poll until proof completes (up to 15 s).
-	// Previously this was a blind FWaitLatentCommand(6.0f) that had no way of knowing
-	// whether the proof actually finished before the snapshot in step 7 was taken.
-	// Under -NullRHI the tick budget can be very different from an interactive session,
-	// causing the same 6 s to cover wildly different amounts of simulation time.
+	// 4. Actively poll until the bridge has taken physics ownership (BridgeActive or later).
+	// This is the moment SetSimulatePhysics(true) + RecreatePhysicsState() has completed and
+	// all 21 physics bodies are live. Only then is it safe to constrain the dumbbell.
+	// Hard timeout: 10 seconds (map + pose search + bridge activation in worst case).
 	{
-		// We capture the component pointer at command-queue time via a helper latent command.
-		// FWaitForStandingProofCommand polls IsLiveRuntimeEvidenceProofComplete() each tick
-		// and returns false (keep going) until it's true or the 15 s hard timeout fires.
+		UWorld* SetupWorld = GWorld;
+	#if WITH_EDITOR
+		if (GIsEditor)
+		{
+			for (const FWorldContext& Ctx : GEngine->GetWorldContexts())
+			{
+				if (Ctx.WorldType == EWorldType::PIE || Ctx.WorldType == EWorldType::Game)
+				{
+					SetupWorld = Ctx.World();
+					break;
+				}
+			}
+		}
+	#endif
+		UPhysAnimComponent* PollingTarget = nullptr;
+		if (SetupWorld)
+		{
+			for (TActorIterator<ACharacter> It(SetupWorld); It; ++It)
+			{
+				if (UPhysAnimComponent* C = It->FindComponentByClass<UPhysAnimComponent>())
+				{
+					PollingTarget = C;
+					break;
+				}
+			}
+		}
+		constexpr float BridgeActiveTimeoutSeconds = 10.0f;
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitForBridgePhysicsActiveCommand(
+			PollingTarget,
+			BridgeActiveTimeoutSeconds,
+			static_cast<float>(FPlatformTime::Seconds())));
+	}
+
+	// 5. Let Chaos settle the ragdoll for 1 second before attaching external mass.
+	// This prevents an initial impulse spike from the rigid body wakeup from compounding
+	// with the dumbbell's weight.
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
+
+	// 6. Spawn and attach the dumbbell — physics bodies are now live and stable.
+	ADD_LATENT_AUTOMATION_COMMAND(FSetupDumbbellCommand(TargetMassKg));
+
+	// 7. Let the constraint settle for 1 second before starting the standing proof timer.
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
+
+	// 8. Actively poll until proof completes (up to 15 s).
+	// FWaitForStandingProofCommand polls IsLiveRuntimeEvidenceProofComplete() each tick
+	// and returns false (keep going) until it's true or the 15 s hard timeout fires.
+	{
 		UWorld* SetupWorld = GWorld;
 	#if WITH_EDITOR
 		if (GIsEditor)
@@ -5211,7 +5309,7 @@ bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
 			static_cast<float>(FPlatformTime::Seconds())));
 	}
 
-	// 7. Verify results — now runs only after proof actually completed (or timed out).
+	// 9. Verify results — now runs only after proof actually completed (or timed out).
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand(this));
 
 	return true;
