@@ -158,7 +158,7 @@ UPhysAnimComponent::UPhysAnimComponent()
 
 	ModelDataAsset = TSoftObjectPtr<UNNEModelData>(FSoftObjectPath(PhysAnimComponentInternal::DefaultModelPath));
 	GenerateNewAttemptUuid();
-	bEnableLiveRuntimeEvidenceProof = true;
+	bEnableLiveRuntimeEvidenceProof = false;
 	bV0PlantThighWorkDiagnosticEnabled = true;
 	bFirstProductSuccessAchieved = false;
 }

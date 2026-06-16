@@ -474,6 +474,24 @@ bool FVerifyStandingProofCommand::Update()
 		{
 			bFoundComponent = true;
 			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+
+			// Check if the component has entered FailStopped state
+			if (Comp->GetRuntimeState() == EPhysAnimRuntimeState::FailStopped)
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: FAILED because the component is in FailStopped state for %s"), *It->GetName()));
+				return true;
+			}
+
+			// Check if the mesh has fallen below the floor
+			if (USkeletalMeshComponent* Mesh = It->GetMesh())
+			{
+				const FVector PelvisLocation = Mesh->GetSocketLocation(TEXT("pelvis"));
+				if (PelvisLocation.Z < 10.0f)
+				{
+					AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: FAILED because the character mesh has fallen below the floor (Z = %.2f) for %s"), PelvisLocation.Z, *It->GetName()));
+					return true;
+				}
+			}
 			
 			// 1. Check if proof completed
 			if (!Comp->IsLiveRuntimeEvidenceProofComplete())
