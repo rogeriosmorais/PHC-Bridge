@@ -189,7 +189,7 @@ bool FWaitForStandingProofCommand::Update()
 	ACharacter* TargetCharacter = nullptr;
 	for (TActorIterator<ACharacter> It(World); It; ++It)
 	{
-		if (It->GetName().Contains(TEXT("ThirdPersonCharacter")))
+		if (It->FindComponentByClass<UPhysAnimComponent>())
 		{
 			TargetCharacter = *It;
 			break;
@@ -198,6 +198,7 @@ bool FWaitForStandingProofCommand::Update()
 
 	if (!TargetCharacter)
 	{
+		PHYSANIM_LOG(LogTemp, Error, TEXT("[DumbbellTest] FAILED to find character with UPhysAnimComponent."));
 		return true;
 	}
 
@@ -207,10 +208,22 @@ bool FWaitForStandingProofCommand::Update()
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	AStaticMeshActor* Dumbbell = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), HandLocation, FRotator::ZeroRotator, SpawnParams);
-	if (!Dumbbell) return true;
+	if (!Dumbbell) 
+	{
+		PHYSANIM_LOG(LogTemp, Error, TEXT("[DumbbellTest] FAILED to spawn AStaticMeshActor."));
+		return true;
+	}
 
 	UStaticMeshComponent* MeshComp = Dumbbell->GetStaticMeshComponent();
 	
+	// Assign a basic cube mesh so it has physical volume and weight
+	UStaticMesh* CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (CubeMesh)
+	{
+		MeshComp->SetStaticMesh(CubeMesh);
+		MeshComp->SetWorldScale3D(FVector(0.2f)); // Scale it down to dumbbell size
+	}
+
 	// Disable collision with the character to prevent self-collision jitter
 	MeshComp->MoveIgnoreActors.Add(TargetCharacter);
 	TargetCharacter->GetMesh()->MoveIgnoreActors.Add(Dumbbell);
@@ -232,7 +245,8 @@ bool FWaitForStandingProofCommand::Update()
 	Constraint->SetLinearYLimit(LCM_Locked, 0);
 	Constraint->SetLinearZLimit(LCM_Locked, 0);
 
-	PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] Spawned %.1f kg dumbbell at hand_r location and attached."), TargetMassKg);
+	PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] SUCCESS: Spawned %.1f kg dumbbell at hand_r [%s] and attached."), 
+		TargetMassKg, *HandLocation.ToString());
 
 	return true;
 	}
