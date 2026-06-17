@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 #include "PhysAnimRuntimeAdapter.h"
 
 namespace
@@ -63,10 +64,7 @@ void UPhysAnimComponent::RecoverBridgeActiveStateAfterBalanceTransitionFailure(c
 	ResetBridgeLocomotionAuthorityState();
 	ReanchorShellCouplingReferenceToCurrentRoot(TEXT("transition_failure_recovery"));
 
-	UE_LOG(
-		LogPhysAnimBridge,
-		Warning,
-		TEXT("[PhysAnimBalance] PHASE2_RECOVERY_REBASELINE reason=%s locomotionReset=1 watchdogReset=1 shellReferenceReanchored=1 preEntryTelemetryHoldFrames=%d"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_RECOVERY_REBASELINE reason=%s locomotionReset=1 watchdogReset=1 shellReferenceReanchored=1 preEntryTelemetryHoldFrames=%d"),
 		*FailureReason,
 		RecoveryPreEntryTelemetrySkipFrames);
 }
@@ -197,10 +195,7 @@ bool UPhysAnimComponent::IsBalancePerturbationRuntimeReady(
 		{
 			const TCHAR* const FailureReasonText =
 				(OutFailureReason && !OutFailureReason->IsEmpty()) ? **OutFailureReason : TEXT("unknown");
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnimBalance] RECOVERY_READY_FAIL runtimeState=%s reason=%s pelvisRawSim=%d pelvisModifier=%s pendingResets=%d policyAlpha=%.2f simCount=%d"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] RECOVERY_READY_FAIL runtimeState=%s reason=%s pelvisRawSim=%d pelvisModifier=%s pendingResets=%d policyAlpha=%.2f simCount=%d"),
 				GetRuntimeStateName(RuntimeState),
 				FailureReasonText,
 				PelvisBody && PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0,
@@ -282,10 +277,7 @@ void UPhysAnimComponent::ResetBalanceScenarioQuietGate(const FString& Reason)
 
 	if (BalanceScenarios.IsValidIndex(ActiveBalanceScenarioIndex))
 	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("[PhysAnimBalance] [%d/%d %s] READY_ABORT: %s. Resetting quiet gate."),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] [%d/%d %s] READY_ABORT: %s. Resetting quiet gate."),
 			ActiveBalanceScenarioIndex + 1,
 			BalanceScenarios.Num(),
 			*BalanceScenarios[ActiveBalanceScenarioIndex].Name,
@@ -371,10 +363,7 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 
 	if (Elapsed > PhysAnimComponentInternal::BalanceModeTotalTimeoutSeconds)
 	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("[PhysAnimBalance] Scenario watchdog timeout reached (%.1fs). Stopping mode."),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] Scenario watchdog timeout reached (%.1fs). Stopping mode."),
 			Elapsed);
 		StopBalancePerturbationMode();
 		return;
@@ -396,10 +385,7 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 
 		if (LastBalanceStabilizationLogTimeSeconds < 0.0 || (WorldTime - LastBalanceStabilizationLogTimeSeconds) >= 1.0)
 		{
-			UE_LOG(
-				LogPhysAnimBridge,
-				Log,
-				TEXT("[PhysAnimBalance] [%d/%d %s] QUIET_GATE: bridgeReady=%s reason=%s policyAlpha=%.2f/%.2f speed=%.1f/%.1f tilt=%.1f/%.1f idlePose=%s locomotionState=%s quiet=%.2f/%.2fs"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] [%d/%d %s] QUIET_GATE: bridgeReady=%s reason=%s policyAlpha=%.2f/%.2f speed=%.1f/%.1f tilt=%.1f/%.1f idlePose=%s locomotionState=%s quiet=%.2f/%.2fs"),
 				ActiveBalanceScenarioIndex + 1,
 				BalanceScenarios.Num(),
 				*Scenario.Name,
@@ -431,10 +417,7 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 			BalanceScenarioPeakPelvisAngularSpeed = 0.0f;
 			BalanceScenarioPeakPelvisDisplacementCm = 0.0f;
 			BalanceScenarioPeakActorDisplacementCm = 0.0f;
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnimBalance] [%d/%d %s] READY: quietWindow=%.2fs triggerDelay=%.2fs policyAlpha=%.2f."),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] [%d/%d %s] READY: quietWindow=%.2fs triggerDelay=%.2fs policyAlpha=%.2f."),
 				ActiveBalanceScenarioIndex + 1,
 				BalanceScenarios.Num(),
 				*Scenario.Name,
@@ -494,10 +477,7 @@ void UPhysAnimComponent::UpdateBalancePerturbation(float DeltaTime)
 		}
 		else
 		{
-			UE_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("[PhysAnimBalance] [%d/%d %s] TRIGGER: skipped (NoPush baseline)."),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] [%d/%d %s] TRIGGER: skipped (NoPush baseline)."),
 				ActiveBalanceScenarioIndex + 1,
 				BalanceScenarios.Num(),
 				*Scenario.Name);
@@ -573,11 +553,11 @@ bool UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 	{
 		if (IsStage1())
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Stage1: pelvis impulse skipped because root is kinematic."));
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] Stage1: pelvis impulse skipped because root is kinematic."));
 		}
 		else
 		{
-			UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnimBalance] FAILED: pelvis body not found or not simulating."));
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f, TEXT("[PhysAnimBalance] FAILED: pelvis body not found or not simulating."));
 		}
 		return false;
 	}
@@ -631,10 +611,7 @@ bool UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 		static_cast<double>(MeasuredDeltaV));
 	ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied = true;
 
-	UE_LOG(
-		LogPhysAnimBridge,
-		Warning,
-		TEXT("[PhysAnimBalance] TRIGGER: scenario=%s impulse=(%.1f,%.1f,%.1f) mass=%.2fkg targetDv=%.1f preLin=(%.1f,%.1f,%.1f) postLin=(%.1f,%.1f,%.1f) preAng=(%.1f,%.1f,%.1f) postAng=(%.1f,%.1f,%.1f) measuredDv=%.1f valid=%s"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] TRIGGER: scenario=%s impulse=(%.1f,%.1f,%.1f) mass=%.2fkg targetDv=%.1f preLin=(%.1f,%.1f,%.1f) postLin=(%.1f,%.1f,%.1f) preAng=(%.1f,%.1f,%.1f) postAng=(%.1f,%.1f,%.1f) measuredDv=%.1f valid=%s"),
 		BalanceScenarios.IsValidIndex(ActiveBalanceScenarioIndex) ? *BalanceScenarios[ActiveBalanceScenarioIndex].Name : TEXT("Unknown"),
 		ImpulseVector.X,
 		ImpulseVector.Y,
@@ -658,6 +635,18 @@ bool UPhysAnimComponent::ApplyPelvisImpulse(EPhysAnimPerturbationDirection Direc
 	return true;
 }
 
+bool UPhysAnimComponent::ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+	const TArray<FPhysAnimBalanceScenario>& Scenarios,
+	bool bPhysicalPerturbationApplied,
+	bool bLastScenarioSucceeded)
+{
+	if (!bLastScenarioSucceeded || bPhysicalPerturbationApplied || Scenarios.Num() != 1)
+	{
+		return false;
+	}
+
+	return Scenarios[0].Name.Contains(TEXT("NoPush"));
+}
 
 void UPhysAnimComponent::FinalizeBalanceScenario(bool bSuccess, const FString& Reason)
 {
@@ -696,10 +685,7 @@ void UPhysAnimComponent::FinalizeBalanceScenario(bool bSuccess, const FString& R
 	{FinalStatus = TEXT("CONTAMINATED");
 	}
 
-	UE_LOG(
-		LogPhysAnimBridge,
-		Warning,
-		TEXT("[PhysAnimBalance] [%d/%d %s] RESULT: %s recoveryTime=%.2fs measuredDv=%.1f peakPelvisVel=%.1f peakPelvisAng=%.1f peakTilt=%.1f peakPelvisDisp=%.1f peakActorDisp=%.1f finalHeightErr=%.1f thresholds[response=%.1f recoveryVel=%.1f recoveryTilt=%.1f recoveryHeight=%.1f contam=%.1f] reason=%s"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] [%d/%d %s] RESULT: %s recoveryTime=%.2fs measuredDv=%.1f peakPelvisVel=%.1f peakPelvisAng=%.1f peakTilt=%.1f peakPelvisDisp=%.1f peakActorDisp=%.1f finalHeightErr=%.1f thresholds[response=%.1f recoveryVel=%.1f recoveryTilt=%.1f recoveryHeight=%.1f contam=%.1f] reason=%s"),
 		ActiveBalanceScenarioIndex + 1,
 		BalanceScenarios.Num(),
 		*Scenario.Name,
@@ -743,8 +729,25 @@ void UPhysAnimComponent::FinalizeBalanceScenario(bool bSuccess, const FString& R
 	}
 	else
 	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] All scenarios completed."));
-		StopBalancePerturbationMode();
+		if (ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+			BalanceScenarios,
+			ActivatedStandingStabilityMetrics.bPhysicalPerturbationApplied,
+			bSuccess))
+		{
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] All scenarios completed; holding BalanceActive_Standing for idle stability evidence."));
+			ActiveBalanceScenarioIndex = INDEX_NONE;
+			bBalanceScenarioAwaitingStableWindow = false;
+			BalanceScenarioStableWindowStartTimeSeconds = -1.0;
+			BalanceScenarioQuietWindowAccumulatedSeconds = 0.0;
+			BalanceScenarioRecoveryStableAccumulatedSeconds = 0.0;
+			LastBalanceStabilizationLogTimeSeconds = -1.0;
+			LastBalanceScenarioImpactTimeSeconds = -1.0;
+		}
+		else
+		{
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] All scenarios completed."));
+			StopBalancePerturbationMode();
+		}
 	}
 }
 
@@ -922,7 +925,7 @@ void UPhysAnimComponent::QueueBalanceModeStartRequest(const FString& Reason)
 	static FString LastQueuedReason;
 	if (Reason != LastQueuedReason)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] Request status: balance_start_queued. reason=%s"), *Reason);
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] Request status: balance_start_queued. reason=%s"), *Reason);
 		LastQueuedReason = Reason;
 	}
 
@@ -988,7 +991,7 @@ void UPhysAnimComponent::TryStartPendingBalanceModeRequest(const FPhysAnimStabil
 	}
 
 	// The pending request owns the start attempt; keep BridgeActive public state until Start accepts.
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Pending balance request entering transition start attempt."));
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] Pending balance request entering transition start attempt."));
 	ClearPublishedBalanceTransitionFailureReason();
 	BalanceReadyTransition.Start(PendingBalanceModeStartReason, this);
 	ClearPendingBalanceModeStartRequestState();
@@ -1008,7 +1011,7 @@ void UPhysAnimComponent::StartBalancePerturbationMode()
 	FString GateReason;
 	if (!EvaluateBalanceModeQueueGates(EffectiveSettings, GateReason))
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] StartBalancePerturbationMode blocked by queue gates: %s"), *GateReason);
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] StartBalancePerturbationMode blocked by queue gates: %s"), *GateReason);
 		return;
 	}
 
@@ -1060,19 +1063,16 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 		}
 	}
 
+	BridgeStartTimeSeconds = SettledRampStartTimeSeconds;
+	PolicyInfluenceRampStartTimeSeconds = SettledRampStartTimeSeconds;
+
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
 	ArmStartupProofTerminalEnforcement();
 	bLiveRuntimeEvidenceStartupStandingEntryAccepted = true;
 	StartupProofStandingEntryAcceptedSubstep = LiveRuntimeEvidenceSubstepCounter;
-	UE_LOG(
-		LogPhysAnimBridge,
-		Verbose,
-		TEXT("[PhysAnim] Standing entry accepted proxy handoff arming pending state=%s"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Verbose, 1.0f, TEXT("[PhysAnim] Standing entry accepted proxy handoff arming pending state=%s"),
 		GetRuntimeStateName(RuntimeState));
-	UE_LOG(
-		LogPhysAnimBridge,
-		Verbose,
-		TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Verbose, 1.0f, TEXT("[PhysAnim] Startup entry bridge proof satisfied transition state=%s"),
 		GetRuntimeStateName(RuntimeState));
 	int32 RecoveryTotalSimCount = 0;
 	for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
@@ -1094,10 +1094,7 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 			RecoveryPelvisModifierMovementType = Record->BodyModifier.ModifierData.MovementType;
 		}
 	}
-	UE_LOG(
-		LogPhysAnimBridge,
-		Warning,
-		TEXT("[PhysAnimBalance] BALANCE_ACTIVE_ENTRY_STATE pelvisRawSim=%d pelvisModifier=%s simCount=%d"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] BALANCE_ACTIVE_ENTRY_STATE pelvisRawSim=%d pelvisModifier=%s simCount=%d"),
 		PelvisBody->IsInstanceSimulatingPhysics() ? 1 : 0,
 		GetPhysicsMovementTypeName(RecoveryPelvisModifierMovementType),
 		RecoveryTotalSimCount);
@@ -1181,10 +1178,7 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	BalanceScenarioStartPelvisRotation = PelvisTransform.GetRotation();
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	UE_LOG(
-		LogPhysAnimBridge,
-		Warning,
-		TEXT("[PhysAnimBalance] Balance mode started. scenarios=%d idlePoseCached=%s"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] Balance mode started. scenarios=%d idlePoseCached=%s"),
 		BalanceScenarios.Num(),
 		bHasBalanceIdlePoseSearchResult ? TEXT("true") : TEXT("false"));
 }
@@ -1300,10 +1294,7 @@ void UPhysAnimComponent::UpdateStabilizationStressTestState(const FPhysAnimStabi
 			StabilizationStressTestBaselineRightFootLocalOffset =
 				SkeletalMesh->GetBoneLocation(TEXT("foot_r")) - StabilizationStressTestBaselineActorLocation;
 		}
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] Stabilization stress-test started: profile=%d sweep=%d rampSeconds=%.1f targetMultiplier=%.2f holdSeconds=%.1f recoveryRampSeconds=%.1f baseStrength=%.2f baseDampingRatio=%.2f baseExtraDamping=%.2f"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Stabilization stress-test started: profile=%d sweep=%d rampSeconds=%.1f targetMultiplier=%.2f holdSeconds=%.1f recoveryRampSeconds=%.1f baseStrength=%.2f baseDampingRatio=%.2f baseExtraDamping=%.2f"),
 			PhysAnimComponentInternal::CVarPaStabilizationStressTestProfile.GetValueOnGameThread(),
 			PhysAnimComponentInternal::CVarPaStabilizationStressTestSweepMode.GetValueOnGameThread(),
 			PhysAnimComponentInternal::CVarPaStabilizationStressTestRampSeconds.GetValueOnGameThread(),
@@ -1319,10 +1310,7 @@ void UPhysAnimComponent::UpdateStabilizationStressTestState(const FPhysAnimStabi
 	if (!bStabilizationStressTestCompletionLogged && StressMultiplier <= KINDA_SMALL_NUMBER)
 	{
 		bStabilizationStressTestCompletionLogged = true;
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] Stabilization stress-test reached zero gain multiplier after %.2fs."),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Stabilization stress-test reached zero gain multiplier after %.2fs."),
 			World->GetTimeSeconds() - StabilizationStressTestStartTimeSeconds);
 	}
 }
@@ -1375,10 +1363,7 @@ void UPhysAnimComponent::TrackStabilizationStressTestObservations()
 		StabilizationStressTestFirstAngularSpikeTimeSeconds = World->GetTimeSeconds();
 		StabilizationStressTestFirstAngularSpikeMultiplier = StressMultiplier;
 		StabilizationStressTestFirstAngularSpikeBoneName = LastRuntimeInstabilityDiagnostics.MaxAngularSpeedBoneName;
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] Stabilization stress-test first angular spike: bone=%s multiplier=%.2f elapsed=%.2fs angularDegPerSec=%.1f"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Stabilization stress-test first angular spike: bone=%s multiplier=%.2f elapsed=%.2fs angularDegPerSec=%.1f"),
 			*StabilizationStressTestFirstAngularSpikeBoneName.ToString(),
 			StressMultiplier,
 			World->GetTimeSeconds() - StabilizationStressTestStartTimeSeconds,
@@ -1391,10 +1376,7 @@ void UPhysAnimComponent::TrackStabilizationStressTestObservations()
 		StabilizationStressTestFirstLinearSpikeTimeSeconds = World->GetTimeSeconds();
 		StabilizationStressTestFirstLinearSpikeMultiplier = StressMultiplier;
 		StabilizationStressTestFirstLinearSpikeBoneName = LastRuntimeInstabilityDiagnostics.MaxLinearSpeedBoneName;
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] Stabilization stress-test first linear spike: bone=%s multiplier=%.2f elapsed=%.2fs linearCmPerSec=%.1f"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Stabilization stress-test first linear spike: bone=%s multiplier=%.2f elapsed=%.2fs linearCmPerSec=%.1f"),
 			*StabilizationStressTestFirstLinearSpikeBoneName.ToString(),
 			StressMultiplier,
 			World->GetTimeSeconds() - StabilizationStressTestStartTimeSeconds,
@@ -1406,10 +1388,7 @@ void UPhysAnimComponent::TrackStabilizationStressTestObservations()
 	{
 		StabilizationStressTestFirstInstabilitySignTimeSeconds = World->GetTimeSeconds();
 		StabilizationStressTestFirstInstabilityMultiplier = StressMultiplier;
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] Stabilization stress-test first instability sign: multiplier=%.2f elapsed=%.2fs rootHeightDeltaCm=%.1f rootLinearCmPerSec=%.1f rootAngularDegPerSec=%.1f"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Stabilization stress-test first instability sign: multiplier=%.2f elapsed=%.2fs rootHeightDeltaCm=%.1f rootLinearCmPerSec=%.1f rootAngularDegPerSec=%.1f"),
 			StressMultiplier,
 			World->GetTimeSeconds() - StabilizationStressTestStartTimeSeconds,
 			LastRuntimeInstabilityDiagnostics.RootHeightDeltaCm,
@@ -1439,7 +1418,7 @@ FPhysAnimCapsuleContractSnapshot UPhysAnimComponent::BuildCapsuleContractSnapsho
 
 	if (bEnableLiveRuntimeEvidenceProof)
 	{
-		UE_LOG(LogPhysAnimBridge, Verbose, TEXT("[PhysAnim] BuildCapsuleContractSnapshot: state=%d bIsBridgeActive=%d"), (int32)RuntimeState, (int32)Snapshot.bIsBridgeActive);
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Verbose, 1.0f, TEXT("[PhysAnim] BuildCapsuleContractSnapshot: state=%d bIsBridgeActive=%d"), (int32)RuntimeState, (int32)Snapshot.bIsBridgeActive);
 	}
 
 	return Snapshot;
@@ -1493,10 +1472,7 @@ FPhysAnimContinuitySnapshot UPhysAnimComponent::BuildContinuitySnapshot(float De
 
 	if (bEnableLiveRuntimeEvidenceProof)
 	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Verbose,
-			TEXT("[PhysAnim] BuildContinuitySnapshot root=%s criticalBodies=%s missingBodies=%s pelvisSleepMs=%.1f topologyChanges=%d bookkeepingMismatch=%d valid=%d simulating=%d bridgeActive=%d pendingResets=%d"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Verbose, 1.0f, TEXT("[PhysAnim] BuildContinuitySnapshot root=%s criticalBodies=%s missingBodies=%s pelvisSleepMs=%.1f topologyChanges=%d bookkeepingMismatch=%d valid=%d simulating=%d bridgeActive=%d pendingResets=%d"),
 			*PelvisName.ToString(),
 			*FString::Join(CriticalBodyNames, TEXT(",")),
 			*FString::Join(MissingCriticalBodyNames, TEXT(",")),

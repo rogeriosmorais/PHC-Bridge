@@ -4,9 +4,17 @@ import argparse
 import json
 import shutil
 import sys
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+
+# Add repo root to path to find scripts.physanim_logger
+repo_root_for_logger = Path(__file__).resolve().parents[2]
+if str(repo_root_for_logger) not in sys.path:
+    sys.path.append(str(repo_root_for_logger))
+
+from scripts import physanim_logger as logger
 
 import numpy as np
 import onnx
@@ -325,14 +333,14 @@ def main(argv: list[str] | None = None) -> int:
     report_path = args.report or args.output.with_suffix(".export.json")
     write_export_report(report_path, loaded.spec, accepted_opset, parity)
 
-    print(f"Exported ONNX to {args.output}")
-    print(f"Accepted opset: {accepted_opset}")
+    logger.info(f"Exported ONNX to {args.output}")
+    logger.info(f"Accepted opset: {accepted_opset}")
     if parity is not None:
-        print(f"Parity max_abs_diff={parity.max_abs_diff:.8f}")
-        print(f"Parity mean_abs_diff={parity.mean_abs_diff:.8f}")
+        logger.info(f"Parity max_abs_diff={parity.max_abs_diff:.8f}")
+        logger.info(f"Parity mean_abs_diff={parity.mean_abs_diff:.8f}")
     if args.copy_to_ue:
-        print(f"Copied ONNX to {args.ue_output}")
-    print(f"Report written to {report_path}")
+        logger.info(f"Copied ONNX to {args.ue_output}")
+    logger.info(f"Report written to {report_path}")
     return 0
 
 

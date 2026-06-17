@@ -1,4 +1,5 @@
 #include "PhysAnimBalanceQuietHandoff.h"
+#include "PhysAnimLogger.h"
 
 #include "PhysAnimComponent.h"
 #include "PhysAnimBridge.h"
@@ -15,7 +16,7 @@ void FPhysAnimBalanceQuietHandoff::Start(const FString& InReason, UPhysAnimCompo
 	FailureReason.Reset();
 	ElapsedSeconds = 0.0;
 	StableSeconds = 0.0;
-	UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] BalanceQuietHandoff started. reason=%s"), *StartReason);
+	PHYSANIM_LOG_RATE_LIMITED(LogTemp, Warning, 1.0f, TEXT("[PhysAnimBalance] BalanceQuietHandoff started. reason=%s"), *StartReason);
 }
 
 void FPhysAnimBalanceQuietHandoff::Cancel()
@@ -36,7 +37,7 @@ void FPhysAnimBalanceQuietHandoff::Fail(const FString& Reason)
 	bFailed = true;
 	bSucceeded = false;
 	FailureReason = Reason;
-	UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] Transition FAILED: %s"), *FailureReason);
+	PHYSANIM_LOG_RATE_LIMITED(LogTemp, Warning, 1.0f, TEXT("[PhysAnimBalance] Transition FAILED: %s"), *FailureReason);
 }
 
 void FPhysAnimBalanceQuietHandoff::Tick(float DeltaTime, UPhysAnimComponent* Owner, const FPhysAnimStabilizationSettings& /*EffectiveSettings*/)
@@ -65,7 +66,7 @@ void FPhysAnimBalanceQuietHandoff::Tick(float DeltaTime, UPhysAnimComponent* Own
 	if (Phase == EPhase::RequestSim)
 	{
 		Phase = EPhase::WaitForSettle;
-		UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] Transition Phase Change: 0 -> 1"));
+		PHYSANIM_LOG_RATE_LIMITED(LogTemp, Warning, 1.0f, TEXT("[PhysAnimBalance] Transition Phase Change: 0 -> 1"));
 	}
 
 	const bool bRootSim = RootBody->IsInstanceSimulatingPhysics();
@@ -94,7 +95,7 @@ void FPhysAnimBalanceQuietHandoff::Tick(float DeltaTime, UPhysAnimComponent* Own
 			Phase = EPhase::Succeeded;
 			bSucceeded = true;
 			bFailed = false;
-			UE_LOG(LogTemp, Warning, TEXT("[PhysAnimBalance] Transition SUCCEEDED: rootLin=%.1f rootAng=%.1f"), RootLinear, RootAngular);
+			PHYSANIM_LOG_RATE_LIMITED(LogTemp, Warning, 1.0f, TEXT("[PhysAnimBalance] Transition SUCCEEDED: rootLin=%.1f rootAng=%.1f"), RootLinear, RootAngular);
 		}
 	}
 	else

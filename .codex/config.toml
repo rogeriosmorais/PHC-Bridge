@@ -2,3 +2,21 @@
 command = "npx"
 args = ["-y", "@mcp-graph-workflow/mcp-graph"]
 cwd = "."
+
+[mcp_servers.graph.tools.context]
+approval_mode = "approve"
+
+[mcp_servers.graph.tools.start_task]
+approval_mode = "approve"
+
+[mcp_servers.graph.tools.analyze]
+approval_mode = "approve"
+
+[mcp_servers.graph.tools.show]
+approval_mode = "approve"
+
+[mcp_servers.graph.tools.delegate]
+approval_mode = "approve"
+
+[mcp_servers.graph.tools.update_status]
+approval_mode = "approve"

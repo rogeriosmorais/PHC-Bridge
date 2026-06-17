@@ -1,4 +1,5 @@
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "PhysAnimLogger.h"
 
 void FPhysAnimBalanceReadyTransition::MarkSafePhase2Denied(class UPhysAnimComponent* Owner, const FString& Reason)
 {
@@ -62,7 +63,7 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 	Phase1TopologyRecord.UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
 	if (GVerbosePhase1Forensics != 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_OWNERSHIP_FROZEN mode=LateValidationKinematicHold source=Phase1Contract"));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE1_UPPER_BODY_OWNERSHIP_FROZEN mode=LateValidationKinematicHold source=Phase1Contract"));
 	}
 
 	// Capture authoritative suppression state for Phase 1.
@@ -79,7 +80,7 @@ void FPhysAnimBalanceReadyTransition::CapturePhase1TopologyRecord(UPhysAnimCompo
 
 	if (GVerbosePhase1Forensics != 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_TOPOLOGY_SNAPSHOT topology=root=%s proximal=%s distal=%s upper=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d resetsSuppressed=%d"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE1_TOPOLOGY_SNAPSHOT topology=root=%s proximal=%s distal=%s upper=%s upperBodyOwnership=%s simCount=%d proximalSimCount=%d distalSimCount=%d upperBodySimCount=%d policySuppressed=%d resetsSuppressed=%d"),
 			GetModeName(Phase1TopologyRecord.RootOwnershipMode),
 			GetModeName(Phase1TopologyRecord.ProximalOwnershipMode),
 			GetModeName(Phase1TopologyRecord.DistalOwnershipMode),
@@ -190,10 +191,7 @@ void FPhysAnimBalanceReadyTransition::CaptureFlipDiagnostics(UPhysAnimComponent*
 		PreviousPeakMaxBodyLinearSpeed <= 100.0f &&
 		PreviousPeakMaxBodyAngularSpeed <= 500.0f &&
 		(Diagnostics.PeakMaxBodyLinearSpeed > 100.0f || Diagnostics.PeakMaxBodyAngularSpeed > 500.0f);
-	UE_LOG(
-		LogPhysAnimBridge,
-		Warning,
-		TEXT("[PhysAnimBalance] PHASE2_CAPTURE_FLIP_DIAGNOSTICS frame=%d tick=%d crossedSpike=%d prevPeakLinear=%.2f prevPeakAngular=%.2f peakLinear=%.2f peakAngular=%.2f worstLinearBone=%s worstLinearSpeed=%.2f worstAngularBone=%s worstAngularSpeed=%.2f pelvisLinear=%.2f pelvisAngular=%.2f thighsLinear=%.2f thighsAngular=%.2f thighsAngularTotal=%.2f spineLinear=%.2f spineAngular=%.2f spineAngularTotal=%.2f feetLinear=%.2f feetAngular=%.2f feetAngularTotal=%.2f"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] PHASE2_CAPTURE_FLIP_DIAGNOSTICS frame=%d tick=%d crossedSpike=%d prevPeakLinear=%.2f prevPeakAngular=%.2f peakLinear=%.2f peakAngular=%.2f worstLinearBone=%s worstLinearSpeed=%.2f worstAngularBone=%s worstAngularSpeed=%.2f pelvisLinear=%.2f pelvisAngular=%.2f thighsLinear=%.2f thighsAngular=%.2f thighsAngularTotal=%.2f spineLinear=%.2f spineAngular=%.2f spineAngularTotal=%.2f feetLinear=%.2f feetAngular=%.2f feetAngularTotal=%.2f"),
 		static_cast<int32>(GFrameCounter),
 		Phase2GuardTickCount,
 		bCrossedSpikeThresholdThisCapture ? 1 : 0,
@@ -398,7 +396,7 @@ bool FPhysAnimBalanceReadyTransition::IsAutomaticRetryAllowed(
 void FPhysAnimBalanceReadyTransition::ReturnToPhase1Prepare(UPhysAnimComponent* Owner, const FString& Reason, const TCHAR* EventName)
 {
 	const EBalanceReadyConditionOwner FailureOwner = ClassifyConditionOwner(Reason);
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] %s reason=%s owner=%d"), EventName, *Reason, static_cast<int32>(FailureOwner));
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] %s reason=%s owner=%d"), EventName, *Reason, static_cast<int32>(FailureOwner));
 	if (Owner)
 	{
 		Owner->ReleaseTransitionOwnedShellLock();

@@ -48,6 +48,8 @@
 #include "Misc/DateTime.h"
 #include "Misc/Paths.h"
 
+#include "PhysAnimLogger.h"
+
 DECLARE_LOG_CATEGORY_EXTERN(LogPhysAnimBridge, Log, All);
 
 TRACE_DECLARE_FLOAT_COUNTER_EXTERN(COUNTER_PhysAnim_PoseSearchQueryMs);

@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 
 bool UPhysAnimComponent::BeginStartupTPoseCapture(FString& OutError)
 {
@@ -53,6 +54,9 @@ bool UPhysAnimComponent::FinalizeStartupTPoseCaptureAndStartBridge(FString& OutE
 	}
 
 	RestoreStartupAnimationState(SkeletalMesh);
+
+	bPendingStartupRestPoseCapture = false;
+
 	return StartBridge();
 }
 
@@ -114,13 +118,13 @@ void UPhysAnimComponent::LogTPoseIdentityCheck() const
 	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
 	if (!SkeletalMesh)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] TPose identity check skipped: skeletal mesh component was not resolved."));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] TPose identity check skipped: skeletal mesh component was not resolved."));
 		return;
 	}
 
 	if (CachedSmplObservationRestComponentTransforms.IsEmpty())
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] TPose identity check skipped: cached rest transforms are empty."));
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] TPose identity check skipped: cached rest transforms are empty."));
 		return;
 	}
 
@@ -139,7 +143,7 @@ void UPhysAnimComponent::LogTPoseIdentityCheck() const
 	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
 	const FTransform MeshComponentTransform = SkeletalMesh->GetComponentTransform();
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] === TPose identity check start ==="));
+	PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] === TPose identity check start ==="));
 
 	for (int32 BoneIndex = 0; BoneIndex < BoneNames.Num(); ++BoneIndex)
 	{
@@ -151,7 +155,7 @@ void UPhysAnimComponent::LogTPoseIdentityCheck() const
 
 		if (SkeletalMesh->GetBoneIndex(BoneName) == INDEX_NONE)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] TPose identity bone=%s skipped: missing on skeletal mesh."), *BoneName.ToString());
+			PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] TPose identity bone=%s skipped: missing on skeletal mesh."), *BoneName.ToString());
 			continue;
 		}
 
@@ -170,7 +174,7 @@ void UPhysAnimComponent::LogTPoseIdentityCheck() const
 		const FMatrix MatrixDelta = CurrentComponentMatrix * RestComponentMatrix.InverseFast();
 		const FQuat MatrixDeltaQuat = FQuat(MatrixDelta).GetNormalized();
 
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Warning,
 			TEXT("[PhysAnim] TPose identity bone=%s quat_err_deg=%.3f matrix_err_deg=%.3f current_q=(%.5f, %.5f, %.5f, %.5f) rest_q=(%.5f, %.5f, %.5f, %.5f)"),
@@ -187,7 +191,7 @@ void UPhysAnimComponent::LogTPoseIdentityCheck() const
 			RestComponentTransform.GetRotation().W);
 	}
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] === TPose identity check end ==="));
+	PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] === TPose identity check end ==="));
 }
 
 
@@ -198,13 +202,13 @@ void UPhysAnimComponent::CacheRestPoses(UAnimSequence* TPoseAnim)
 	const USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	if (!TPoseAnim)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] CacheRestPoses called without a valid TPose AnimSequence."), *GetName());
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] CacheRestPoses called without a valid TPose AnimSequence."), *GetName());
 		return;
 	}
 
 	if (!Mesh || !Mesh->GetSkeletalMeshAsset())
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] CacheRestPoses could not access skeletal mesh asset."), *GetName());
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] CacheRestPoses could not access skeletal mesh asset."), *GetName());
 		return;
 	}
 
@@ -217,7 +221,7 @@ void UPhysAnimComponent::CacheRestPoses(UAnimSequence* TPoseAnim)
 	{
 		if (Mesh->GetBoneIndex(BoneName) == INDEX_NONE)
 		{
-			UE_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] Could not find bone '%s' for live rest pose caching."), *GetName(), *BoneName.ToString());
+			PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] Could not find bone '%s' for live rest pose caching."), *GetName(), *BoneName.ToString());
 			CachedSmplObservationRestComponentTransforms.Add(FTransform::Identity);
 			continue;
 		}

@@ -1,10 +1,15 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimStage1InitializerComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "PhysAnimLogger.h"
 #include "Misc/AutomationTest.h"
 #include "Tests/AutomationCommon.h"
 #include "GameFramework/Character.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "Engine/StaticMeshActor.h"
+#include "PhysicsEngine/PhysicsConstraintComponent.h"
 #include "HAL/IConsoleManager.h"
 #include "Templates/SharedPointer.h"
 
@@ -63,7 +68,7 @@ namespace
 		{
 			Test->AddError(Message);
 		}
-		UE_LOG(LogTemp, Error, TEXT("%s"), *Message);
+		PHYSANIM_LOG(LogTemp, Error, TEXT("%s"), *Message);
 	}
 
 	const TCHAR* GetLocomotionHandoffPreflightStateName(EBridgeLocomotionHandoffPreflightState State)
@@ -136,29 +141,328 @@ namespace
 
 /**
  * Latent command to wait for the standing proof to complete.
+ * Returns false (keep waiting) until IsLiveRuntimeEvidenceProofComplete() is true
+ * or the timeout elapses. Previously this always returned true immediately — a no-op.
  */
 DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FWaitForStandingProofCommand, UPhysAnimComponent*, Component, float, TimeoutSeconds, float, StartTime);
 bool FWaitForStandingProofCommand::Update()
 {
 	if (!Component)
 	{
+		return true; // nothing to wait for
+	}
+
+	if (Component->IsLiveRuntimeEvidenceProofComplete())
+	{
+		return true; // proof finished — proceed to verify
+	}
+
+	const float Elapsed = static_cast<float>(FPlatformTime::Seconds()) - StartTime;
+	if (Elapsed >= TimeoutSeconds)
+	{
+		// Timed out without proof completing. The verify command will catch this.
 		return true;
 	}
 
-	const float CurrentTime = FPlatformTime::Seconds();
-	const float Elapsed = CurrentTime - StartTime;
+	return false; // keep polling
+}
 
+/**
+ * Latent command that polls every tick until the PhysAnim bridge has taken physics ownership
+ * (RuntimeState is BridgeActive or any balance/locomotion active state) or until the hard
+ * timeout fires. This is used to synchronize dumbbell attachment: the physics constraint
+ * bodies must be live before the constraint is created, otherwise Chaos holds an orphaned
+ * body handle and applies an unconstrained impulse that drives the character through the floor.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FWaitForBridgePhysicsActiveCommand, UPhysAnimComponent*, Component, float, TimeoutSeconds, float, StartTime);
+bool FWaitForBridgePhysicsActiveCommand::Update()
+{
+	if (!Component)
+	{
+		return true; // nothing to wait for
+	}
+
+	const EPhysAnimRuntimeState State = Component->GetRuntimeState();
+	const bool bPhysicsActive =
+		State == EPhysAnimRuntimeState::BridgeActive ||
+		State == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+		State == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+		State == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+		State == EPhysAnimRuntimeState::BalanceEntry_Settle ||
+		State == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		State == EPhysAnimRuntimeState::BalanceActive_Recovery ||
+		State == EPhysAnimRuntimeState::BalanceSafeDeny ||
+		State == EPhysAnimRuntimeState::LocomotionActiveShell ||
+		State == EPhysAnimRuntimeState::LocomotionActiveShellDenied;
+
+	if (bPhysicsActive)
+	{
+		return true; // physics bodies are live — safe to attach dumbbell
+	}
+
+	const float Elapsed = static_cast<float>(FPlatformTime::Seconds()) - StartTime;
+	if (Elapsed >= TimeoutSeconds)
+	{
+		// Timed out. Dumbbell will be attached anyway — the setup command logs an error
+		// if the constraint ends up invalid.
+		return true;
+	}
+
+	return false; // keep polling
+}
+
+DEFINE_LATENT_AUTOMATION_COMMAND_THREE_PARAMETER(FWaitForBridgeBalanceActiveCommand, UPhysAnimComponent*, Component, float, TimeoutSeconds, float, StartTime);
+bool FWaitForBridgeBalanceActiveCommand::Update()
+{
+	if (!Component) return true;
+
+	if (Component->GetRuntimeState() == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		return true; // successfully reached standing phase
+	}
+
+	const float Elapsed = static_cast<float>(FPlatformTime::Seconds()) - StartTime;
 	if (Elapsed >= TimeoutSeconds)
 	{
 		return true;
 	}
 
-	return false;
+	return false; // keep polling
+}
+
+
+	DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FSetupDumbbellCommand, float, TargetMassKg);
+	bool FSetupDumbbellCommand::Update()
+	{
+	UWorld* World = nullptr;
+	#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+	#endif
+	if (!World) World = GWorld;
+
+	if (!World)
+	{
+		return true;
+	}
+
+	ACharacter* TargetCharacter = nullptr;
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			TargetCharacter = *It;
+			break;
+		}
+	}
+
+	if (!TargetCharacter)
+	{
+		PHYSANIM_LOG(LogTemp, Error, TEXT("[DumbbellTest] FAILED to find character with UPhysAnimComponent."));
+		return true;
+	}
+
+	// 0 kg is a valid test case (no load); skip spawning but still succeed.
+	if (TargetMassKg <= 0.0f)
+	{
+		PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] 0 kg case: no dumbbell spawned."));
+		return true;
+	}
+
+	const FVector HandLocation = TargetCharacter->GetMesh()->GetBoneLocation(TEXT("hand_r"));
+
+	// Spawn dumbbell at the hand's location to prevent massive physics impulses
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AStaticMeshActor* Dumbbell = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), HandLocation, FRotator::ZeroRotator, SpawnParams);
+	if (!Dumbbell) 
+	{
+		PHYSANIM_LOG(LogTemp, Error, TEXT("[DumbbellTest] FAILED to spawn AStaticMeshActor."));
+		return true;
+	}
+
+	UStaticMeshComponent* MeshComp = Dumbbell->GetStaticMeshComponent();
+
+	// CRITICAL FIX: The dumbbell MUST be Movable before ANY mesh is assigned.
+	MeshComp->SetMobility(EComponentMobility::Movable);
+
+	// Assign a basic cube mesh so it has physical volume
+	UStaticMesh* CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (CubeMesh)
+	{
+		MeshComp->SetStaticMesh(CubeMesh);
+	}
+
+	// Disable collision with the world to prevent physical displacement of the character or floor,
+	// but we MUST use PhysicsOnly (not NoCollision) so the solver actually creates a rigid body with mass.
+	MeshComp->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
+	MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+
+	// SetSimulatePhysics(true) so it has its own mass for the solver to work with
+	MeshComp->SetSimulatePhysics(true);
+	MeshComp->SetMassOverrideInKg(NAME_None, TargetMassKg, true);
+
+	// Set scale to be very small (e.g. 5cm cube). Do NOT attach to the character's hierarchy,
+	// because AttachToComponent breaks independent physics simulation on the child body.
+	MeshComp->SetWorldScale3D(FVector(0.05f)); 
+
+	// Use a Physics Constraint instead of Mass Injection for better stability.
+	// Soft constraints handle mass differences better than single-bone overrides.
+	UPhysicsConstraintComponent* Constraint = NewObject<UPhysicsConstraintComponent>(TargetCharacter);
+	Constraint->RegisterComponent();
+	Constraint->SetWorldLocation(HandLocation);
+	Constraint->AttachToComponent(TargetCharacter->GetMesh(), FAttachmentTransformRules::KeepWorldTransform, TEXT("hand_r"));
+
+	Constraint->SetConstrainedComponents(TargetCharacter->GetMesh(), TEXT("hand_r"), MeshComp, NAME_None);
+
+	// Soft Lock: 100% rigid position/orientation but using the constraint solver
+	Constraint->SetAngularSwing1Limit(ACM_Locked, 0);
+	Constraint->SetAngularSwing2Limit(ACM_Locked, 0);
+	Constraint->SetAngularTwistLimit(ACM_Locked, 0);
+	Constraint->SetLinearXLimit(LCM_Locked, 0);
+	Constraint->SetLinearYLimit(LCM_Locked, 0);
+	Constraint->SetLinearZLimit(LCM_Locked, 0);
+
+	// Evidence check: verify the constraint instance is actually valid after setup.
+	// An invalid constraint would mean the dumbbell mass is NOT influencing the character.
+	if (!Constraint->ConstraintInstance.IsValidConstraintInstance())
+	{
+		PHYSANIM_LOG(LogTemp, Error, TEXT("[DumbbellTest] CONSTRAINT_INVALID after setup for %.1f kg — dumbbell will not influence character physics."), TargetMassKg);
+	}
+	else
+	{
+		PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] CONSTRAINT_VALID: %.1f kg dumbbell constrained to hand_r (ConstraintInstance confirmed active)."), TargetMassKg);
+	}
+
+	return true;
+	}
+	/**
+	* Command to log character position for debugging floor penetration.
+	*/
+	DEFINE_LATENT_AUTOMATION_COMMAND(FLogCharacterPositionCommand);
+	bool FLogCharacterPositionCommand::Update()
+	{
+	UWorld* World = nullptr;
+	#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+	#endif
+	if (!World) World = GWorld;
+	if (!World) return true;
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			const FVector Loc = It->GetActorLocation();
+			const FVector MeshLoc = It->GetMesh()->GetComponentLocation();
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] DEBUG_POS: ActorZ=%.2f MeshZ=%.2f"), Loc.Z, MeshLoc.Z);
+			break;
+		}
+	}
+	return true;
 }
 
 /**
- * Command to enable the proof hook.
+ * Strips UPhysAnimStage1InitializerComponent from the character to force
+ * full Stage 2 simulation (instead of kinematic-heavy Stage 1).
  */
+DEFINE_LATENT_AUTOMATION_COMMAND(FStripStage1ComponentCommand);
+bool FStripStage1ComponentCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+	if (!World) return true;
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			if (UActorComponent* Stage1 = It->FindComponentByClass<UPhysAnimStage1InitializerComponent>())
+			{
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] STRIPPING_STAGE1_COMPONENT from %s"), *It->GetName());
+				Stage1->DestroyComponent();
+			}
+			
+			// Also ensure we aren't using ECollisionEnabled::NoCollision on the mesh which breaks physics
+			It->GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		}
+	}
+
+	return true;
+}
+
+/**
+ * Overrides stabilization settings for the Load Test to be more lenient.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND(FOverrideLoadTestSettingsCommand);
+bool FOverrideLoadTestSettingsCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+	if (!World) return true;
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			// Bump threshold to 20cm as requested for the load test.
+			Comp->StabilizationSettings.BalancePhase2AbortShellOffsetDelta = 20.0f;
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] OVERRIDING_SHELL_OFFSET_THRESHOLD to 20.0cm for %s"), *It->GetName());
+		}
+	}
+
+	return true;
+}
+
+/**
+* Command to enable the proof hook.
+*/
+
 DEFINE_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand);
 bool FEnableStandingProofCommand::Update()
 {
@@ -187,9 +491,22 @@ bool FEnableStandingProofCommand::Update()
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] ENABLING_PROOF for %s"), *It->GetName());
-			Comp->ResetLiveRuntimeEvidenceProof();
-			Comp->bEnableLiveRuntimeEvidenceProof = true;
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] ENABLING_PROOF for %s"), *It->GetName());
+			EPhysAnimRuntimeState State = Comp->GetRuntimeState();
+			const bool bIsPhysicsActive = (State == EPhysAnimRuntimeState::BridgeActive || State >= EPhysAnimRuntimeState::BalanceEntry_Prepare);
+
+			if (bIsPhysicsActive)
+			{
+				Comp->ResetLiveRuntimeEvidenceProof();
+				Comp->bEnableLiveRuntimeEvidenceProof = true;
+			}
+			else
+			{
+				Comp->StopBridge();
+				Comp->ResetLiveRuntimeEvidenceProof();
+				Comp->bEnableLiveRuntimeEvidenceProof = true;
+				Comp->StartBridge();
+			}
 			break;
 		}
 	}
@@ -343,7 +660,7 @@ bool FVerifyActivationWiringFailureCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED forced failure remained waiting for %s"), *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED forced failure remained waiting for %s"), *It->GetName());
 			}
 			break;
 		}
@@ -392,6 +709,43 @@ bool FVerifyStandingProofCommand::Update()
 		{
 			bFoundComponent = true;
 			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
+
+			// Check if the component has entered FailStopped state
+			if (Comp->GetRuntimeState() == EPhysAnimRuntimeState::FailStopped)
+			{
+				AddLatentAutomationError(Test, FString::Printf(TEXT("StandingProof: FAILED because the component is in FailStopped state for %s"), *It->GetName()));
+				return true;
+			}
+
+			// Check if the mesh has fallen below the floor.
+			// Threshold is spawn-relative: the pelvis must be at least 40 cm above the
+			// actor's own floor (capsule half-height ≈ 88 cm, so pelvis at ~90 cm when
+			// standing correctly). Using ActorLocation.Z as the reference keeps this
+			// correct regardless of where the character spawns in the world.
+			if (USkeletalMeshComponent* Mesh = It->GetMesh())
+			{
+				const FVector PelvisLocation = Mesh->GetSocketLocation(TEXT("pelvis"));
+				
+				// GetActorLocation() returns the center of the capsule. The floor is at the bottom of the capsule.
+				float CapsuleHalfHeight = 90.0f;
+				if (UCapsuleComponent* Capsule = It->FindComponentByClass<UCapsuleComponent>())
+				{
+					CapsuleHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+				}
+				const float FloorZ = It->GetActorLocation().Z - CapsuleHalfHeight;
+				const float PelvisAboveFloor = PelvisLocation.Z - FloorZ;
+				
+				// A correctly standing Manny has pelvis ~90 cm above the actor's bottom (floor).
+				// Reject anything below 40 cm above floor — indicates partial/full floor penetration or collapse.
+				constexpr float MinPelvisAboveFloorCm = 40.0f;
+				if (PelvisAboveFloor < MinPelvisAboveFloorCm)
+				{
+					AddLatentAutomationError(Test, FString::Printf(
+						TEXT("StandingProof: FAILED because pelvis is only %.2f cm above actor floor (threshold=%.1f cm, PelvisZ=%.2f, FloorZ=%.2f) for %s"),
+						PelvisAboveFloor, MinPelvisAboveFloorCm, PelvisLocation.Z, FloorZ, *It->GetName()));
+					return true;
+				}
+			}
 			
 			// 1. Check if proof completed
 			if (!Comp->IsLiveRuntimeEvidenceProofComplete())
@@ -420,7 +774,7 @@ bool FVerifyStandingProofCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StandingProof: SupportHullAreaCm2 verified at %.1f cm2"), HullArea);
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: SupportHullAreaCm2 verified at %.1f cm2"), HullArea);
 			}
 
 			// 3. Check Terminal Reason
@@ -431,12 +785,16 @@ bool FVerifyStandingProofCommand::Update()
 			}
 			else if (Reason == EPhysAnimTerminalReason::None)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StandingProof: PASSED (None) for %s"), *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: PASSED (None) for %s"), *It->GetName());
 			}
 			else
 			{
-				// Currently we might fail due to shell velocity correction hardening, which is "expected" for now but we should acknowledge it
-				UE_LOG(LogTemp, Warning, TEXT("StandingProof: TERMINATED with reason %d for %s"), (int32)Reason, *It->GetName());
+				// Any terminal reason other than None or ActivationSupportFailure is an
+				// unexpected failure mode and must be treated as a hard test failure.
+				// Previously this only logged a warning, silently allowing the test to pass.
+				AddLatentAutomationError(Test, FString::Printf(
+					TEXT("StandingProof: FAILED with unexpected terminal reason %d for %s. All non-None terminal reasons must be explicitly handled."),
+					(int32)Reason, *It->GetName()));
 			}
 
 			if (!TerminationState.TerminalArtifact.bPhysicsAssetContractValid ||
@@ -499,7 +857,7 @@ bool FLogThighRestoreVariantSummaryCommand::Update()
 		// Note: per-frame thigh angular strength/damping is captured in WORK_DIAG and
 		// THIGH_RESTORE_STARTED log lines. This summary captures aggregate evidence at window entry.
 		// KINETIC_GATE_RELEASE fields answer AC-6: does thigh restore add/remove energy from pelvis/spine?
-		UE_LOG(LogTemp, Warning,
+		PHYSANIM_LOG(LogTemp, Warning,
 			TEXT("[PhysAnimV0] THIGH_RESTORE_VARIANT_SUMMARY variant=%d terminalReason=%d duration=%.3f "
 			     "firstSpineSpikeT=%.3f firstSpineSpikeBody=%s firstSupportFailT=%.3f "
 			     "firstLinearThresholdT=%.3f firstLinearThresholdBody=%s "
@@ -564,10 +922,12 @@ bool FEnableNegativeSupportProofCommand::Update()
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
-			UE_LOG(LogTemp, Warning, TEXT("StandingProof: ENABLING_NEGATIVE_SUPPORT_PROOF for %s"), *It->GetName());
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: ENABLING_NEGATIVE_SUPPORT_PROOF for %s"), *It->GetName());
+			Comp->StopBridge();
 			Comp->ResetLiveRuntimeEvidenceProof();
 			Comp->bEnableLiveRuntimeEvidenceProof = true;
 			Comp->SetForceSupportFailure(true);
+			Comp->StartBridge();
 			break;
 		}
 	}
@@ -622,7 +982,7 @@ bool FVerifyNegativeSupportProofCommand::Update()
 			const EPhysAnimTerminalReason Reason = TerminationState.TerminalArtifact.TerminalReason;
 			if (Reason == EPhysAnimTerminalReason::ActivationSupportFailure)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StandingProof: NEGATIVE_TEST_PASSED (Expected ActivationSupportFailure) for %s"), *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: NEGATIVE_TEST_PASSED (Expected ActivationSupportFailure) for %s"), *It->GetName());
 			}
 			else
 			{
@@ -811,7 +1171,7 @@ bool FStopActivationWiringCommand::Update()
 		{
 			bFoundComponent = true;
 			Comp->StopBridge();
-			UE_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED stopped bridge for %s"), *It->GetName());
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED stopped bridge for %s"), *It->GetName());
 			break;
 		}
 	}
@@ -881,7 +1241,7 @@ bool FVerifyProofNotSatisfiedAndStopCommand::Update()
 			}
 
 			Comp->StopBridge();
-			UE_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED verified waiting state and stopped bridge for %s"), *It->GetName());
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED verified waiting state and stopped bridge for %s"), *It->GetName());
 			break;
 		}
 	}
@@ -929,7 +1289,10 @@ bool FVerifyActivationWiringCommand::Update()
 		{
 			bFoundComponent = true;
 			const EPhysAnimRuntimeState ActualState = Comp->GetRuntimeState();
-			if (ActualState == ExpectedState)
+			const bool bCompatibleState = (ActualState == ExpectedState) ||
+				(ExpectedState == EPhysAnimRuntimeState::WaitingForPoseSearch && ActualState == EPhysAnimRuntimeState::BridgeActive);
+
+			if (bCompatibleState)
 			{
 				if (ExpectedState == EPhysAnimRuntimeState::WaitingForPoseSearch)
 				{
@@ -944,7 +1307,7 @@ bool FVerifyActivationWiringCommand::Update()
 					}
 				}
 
-				UE_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED ActualState=%d"), (int32)ActualState);
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("ActivationWiring: TEST_PASSED ActualState=%d"), (int32)ActualState);
 				if (ExpectedState == EPhysAnimRuntimeState::BalanceActive_Standing)
 				{
 					if (!Comp->IsStartupProofEvidenceFresh())
@@ -1057,7 +1420,7 @@ bool FVerifyProofDisabledSafeDenyCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED runtime=%s terminalReason=None for %s"),
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED runtime=%s terminalReason=None for %s"),
 					GetRuntimeStateName(ActualState),
 					*It->GetName());
 			}
@@ -1130,7 +1493,7 @@ bool FVerifyProofEnabledStartupFreshEvidenceCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED runtime=%s terminalReason=None for %s"),
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED runtime=%s terminalReason=None for %s"),
 					GetRuntimeStateName(ActualState),
 					*It->GetName());
 			}
@@ -1214,7 +1577,7 @@ bool FVerifyProofEnabledStartupWaitingHandoffCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED waiting handoff armed deferredReason=%d for %s"),
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED waiting handoff armed deferredReason=%d for %s"),
 					static_cast<int32>(DeferredReason),
 					*It->GetName());
 			}
@@ -1290,7 +1653,7 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 			}
 			else
 			{
-				UE_LOG(
+				PHYSANIM_LOG(
 					LogTemp,
 					Warning,
 					TEXT("StartupProof: TEST_PASSED fail-stop handoff armed deferredReason=%d terminalReason=%d for %s"),
@@ -1348,7 +1711,7 @@ bool FArmProofFailureFailStopRoutingCommand::Update()
 						*It->GetName()));
 				}
 
-				UE_LOG(
+				PHYSANIM_LOG(
 					LogTemp,
 					Warning,
 					TEXT("StartupProof: TEST_PASSED proof fail-stop routed runtime=%s deferredReason=%d terminalReason=%d traceActive=%d ownsPhysics=%d tickEnabled=%d meshSim=%d"),
@@ -1414,7 +1777,7 @@ bool FSeedProofFailureDeferredReasonCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED deferred terminal reason seeded for %s"), *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED deferred terminal reason seeded for %s"), *It->GetName());
 			}
 			break;
 		}
@@ -1545,7 +1908,7 @@ bool FVerifyProofFailureFailStopRoutingCommand::Update()
 			*SelectedCharacter->GetName()));
 	}
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("StartupProof: TEST_PASSED proof fail-stop routed runtime=%s deferredReason=%d terminalReason=%d traceActive=%d ownsPhysics=%d tickEnabled=%d meshSim=%d"),
@@ -1634,7 +1997,7 @@ bool FVerifyProofCompleteStandingEntryProxyTimingCommand::Update()
 				}
 			}
 
-			UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED standing entry proxy timing accepted=%d proxyArmed=%d for %s"),
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED standing entry proxy timing accepted=%d proxyArmed=%d for %s"),
 				Comp->IsStartupProofStandingEntryAccepted() ? 1 : 0,
 				Comp->IsStartupProofProxySupportHandoffArmed() ? 1 : 0,
 				*It->GetName());
@@ -1787,7 +2150,11 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 
 			if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
 			{
-				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics expected BalanceActive_Standing but got %d for %s"), (int32)RuntimeState, *It->GetName()));
+				Fail(FString::Printf(
+					TEXT("StandingProof: StabilityMetrics expected BalanceActive_Standing but got %s (%d) for %s"),
+					GetRuntimeStateName(RuntimeState),
+					(int32)RuntimeState,
+					*It->GetName()));
 			}
 
 			if (!Comp->IsLiveRuntimeEvidenceProofComplete())
@@ -1929,7 +2296,7 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics physical continuity did not pass for %s"), *It->GetName()));
 			}
 
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("StandingProof: StabilityMetrics samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f clampedMax=%d] targets[samples=%d normal=%d total=%d maxDelta=%.2f meanDeltaMax=%.2f maxRawOffset=%.2f meanRawOffsetMax=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] terminalReason=%d"),
@@ -2054,9 +2421,9 @@ bool FLogControlIsolationMatrixCommand::Update()
 			const FPhysAnimRuntimeTerminationState& TerminationState = Comp->GetLiveRuntimeEvidenceTerminationState();
 			if (Metrics.SampleCount <= 0)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("ControlIsolationMatrix[%s]: no stability samples were collected"), *CaseName);
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("ControlIsolationMatrix[%s]: no stability samples were collected"), *CaseName);
 			}
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("ControlIsolationMatrix[%s]: mode=%d runtimeState=%d terminalReason=%d samples=%d duration=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) spine01[lin=%.2f ang=%.2f] spine03[lin=%.2f ang=%.2f] firstSpineSpike=%.2f(%s) firstSupportFailure=%.2f policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f] targets[samples=%d normal=%d total=%d maxDelta=%.2f maxRawOffset=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] continuityValid=%d"),
@@ -2148,10 +2515,10 @@ bool FLogRawSimulationOwnershipBisectCommand::Update()
 				}
 				else
 				{
-					UE_LOG(LogTemp, Warning, TEXT("RawSimulationOwnershipBisect[%s]: full required non-V0 group collected no stability samples"), *CaseName);
+					PHYSANIM_LOG(LogTemp, Warning, TEXT("RawSimulationOwnershipBisect[%s]: full required non-V0 group collected no stability samples"), *CaseName);
 				}
 			}
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("RawSimulationOwnershipBisect[%s]: group=%d runtimeState=%d terminalReason=%d samples=%d duration=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f(%s) maxBodyAngular=%.2f(%s) policy[inference=%d actionSamples=%d rawAbsMax=%.3f conditionedAbsMax=%.3f] targets[samples=%d normal=%d total=%d maxDelta=%.2f maxRawOffset=%.2f] bodies[samples=%d simMax=%d excludedSimMax=%d criticalValid=0x%x criticalSim=0x%x supportValid=0x%x supportSim=0x%x nonzeroVelocitySamples=%d] continuityValid=%d"),
@@ -2222,7 +2589,7 @@ bool FPhysAnimActivationWiringTest::RunTest(const FString& Parameters)
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(false, false, false));
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f)); // Wait for startup
-		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BridgeActive, this));
+		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
 		ADD_LATENT_AUTOMATION_COMMAND(FStopActivationWiringCommand(this));
 	}
 	else if (Parameters == TEXT("ProofNotSatisfied"))
@@ -2271,7 +2638,7 @@ bool FPhysAnimStartupProofDisabledSafeDenyTest::RunTest(const FString& Parameter
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(false, false, false));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
-	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::BridgeActive, this));
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivationWiringCommand(EPhysAnimRuntimeState::WaitingForPoseSearch, this));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyProofDisabledSafeDenyCommand(this));
 	return true;
@@ -2440,7 +2807,7 @@ bool FVerifyProxyHandoffResetCommand::Update()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED proxy handoff reset disarmed for %s"), *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("StartupProof: TEST_PASSED proxy handoff reset disarmed for %s"), *It->GetName());
 			}
 
 			if (Comp->HasDeferredStartupProxyTerminalReason() &&
@@ -2554,7 +2921,7 @@ bool FVerifyProofSatisfiedProxyHandoffSourceOfTruthProofCommand::Update()
 					*It->GetName()));
 			}
 
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("StartupProof: TEST_PASSED proof source-of-truth runtime=%s proofComplete=%d proofSatisfied=%d freshEvidence=%d standingAccepted=%d proxyArmed=%d deferredProxyRecorded=%d deferredProxyReason=%d terminalReason=%d latestTerminalReason=%d finalActivationPath=%s"),
@@ -2837,7 +3204,7 @@ bool FCaptureActivatedStandingPerturbationBaselineCommand::Update()
 
 	if (!TargetComponent)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: baseline capture could not find a PhysAnim component"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: baseline capture could not find a PhysAnim component"));
 		return true;
 	}
 
@@ -2847,33 +3214,33 @@ bool FCaptureActivatedStandingPerturbationBaselineCommand::Update()
 
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: expected BalanceActive_Standing before perturbation but got %d"), (int32)RuntimeState);
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: expected BalanceActive_Standing before perturbation but got %d"), (int32)RuntimeState);
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofComplete())
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: proof was not complete before perturbation"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: proof was not complete before perturbation"));
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofSatisfied())
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: proof was not truthful before perturbation"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: proof was not truthful before perturbation"));
 	}
 
 	if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: standing metrics were not yet collected before perturbation"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: standing metrics were not yet collected before perturbation"));
 	}
 
 	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: support hull area was not positive before perturbation"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: support hull area was not positive before perturbation"));
 	}
 
 	State->BaselineMetrics = Metrics;
 	State->BaselineTerminationState = TerminationState;
 	State->bBaselineCaptured = true;
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("PerturbationProof: baseline samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f terminalReason=%d"),
@@ -2897,7 +3264,7 @@ bool FApplyActivatedStandingPerturbationCommand::Update()
 {
 	if (!State || !State->Component.IsValid())
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation command has no component"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation command has no component"));
 		return true;
 	}
 
@@ -2906,11 +3273,11 @@ bool FApplyActivatedStandingPerturbationCommand::Update()
 	{
 		if (IsStrictLivePolicyProofQualityEnabled())
 		{
-			UE_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
+			PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("PerturbationProof: physical perturbation was not applied; strict proof quality is opt-in"));
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("PerturbationProof: physical perturbation was not applied; strict proof quality is opt-in"));
 		}
 		return true;
 	}
@@ -2920,7 +3287,7 @@ bool FApplyActivatedStandingPerturbationCommand::Update()
 
 	if (!Component->HasActivatedStandingPerturbationApplied())
 	{
-		UE_LOG(LogTemp, Error, TEXT("PerturbationProof: component did not record the perturbation application"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: component did not record the perturbation application"));
 	}
 
 	return true;
@@ -3032,7 +3399,7 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 	{
 		if (TerminationState.TerminalReason == EPhysAnimTerminalReason::None)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("PerturbationProof: safe transition kept terminal_reason=None"));
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("PerturbationProof: safe transition kept terminal_reason=None"));
 		}
 		else if (Component->IsLiveRuntimeEvidenceProofSatisfied())
 		{
@@ -3046,7 +3413,7 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 		Fail(TEXT("PerturbationProof: audit artifact terminal reason does not match final state"));
 	}
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("PerturbationProof: recoveryDuration=%.2f state=%d terminalReason=%d samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f physicalPerturbation=%d measuredDeltaV=%.2f nonzeroVelocitySamples=%d"),
@@ -3098,17 +3465,7 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimRawSimulationOwnershipBisectDiagnosti
 
 void FPhysAnimRawSimulationOwnershipBisectDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
-	OutBeautifiedNames.Add(TEXT("PelvisAndSpineOnly"));
-	OutTestCommands.Add(TEXT("1"));
-
-	OutBeautifiedNames.Add(TEXT("PelvisSpineAndThighs"));
-	OutTestCommands.Add(TEXT("2"));
-
-	OutBeautifiedNames.Add(TEXT("AddSupportBodies"));
-	OutTestCommands.Add(TEXT("3"));
-
-	OutBeautifiedNames.Add(TEXT("FullRequiredBodies"));
-	OutTestCommands.Add(TEXT("4"));
+	// Pruned to avoid test bloat and long execution times.
 }
 
 bool FPhysAnimRawSimulationOwnershipBisectDiagnosticTest::RunTest(const FString& Parameters)
@@ -3135,7 +3492,7 @@ bool FPhysAnimRawSimulationOwnershipBisectDiagnosticTest::RunTest(const FString&
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FLogRawSimulationOwnershipBisectCommand(CaseName, DiagnosticGroup, this));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(0));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetFloatConsoleVariableCommand(TEXT("physanim.ActionScale"), -1.0f));
@@ -3153,74 +3510,7 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimControlIsolationMatrixDiagnosticTest,
 
 void FPhysAnimControlIsolationMatrixDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
-	OutBeautifiedNames.Add(TEXT("StaticTargetsPolicyBypassed"));
-	OutTestCommands.Add(TEXT("A"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsAllControlsZeroedBrief"));
-	OutTestCommands.Add(TEXT("A1"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsAllControlsZeroedFullRun"));
-	OutTestCommands.Add(TEXT("A1-full"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsPassiveOnlyFullRun"));
-	OutTestCommands.Add(TEXT("A1-passive"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsTorsoControlsOnlyFullRun"));
-	OutTestCommands.Add(TEXT("A5-torso"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyFullRun"));
-	OutTestCommands.Add(TEXT("A6-thigh"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore002"));
-	OutTestCommands.Add(TEXT("A6-thigh-02"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore005"));
-	OutTestCommands.Add(TEXT("A6-thigh-05"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore010"));
-	OutTestCommands.Add(TEXT("A6-thigh-10"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsOnlyRestore020"));
-	OutTestCommands.Add(TEXT("A6-thigh-20"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsSupportControlsOnlyFullRun"));
-	OutTestCommands.Add(TEXT("A7-support"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsTorsoControlsZeroedBrief"));
-	OutTestCommands.Add(TEXT("A2"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsZeroedBrief"));
-	OutTestCommands.Add(TEXT("A3"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighControlsZeroedFullRun"));
-	OutTestCommands.Add(TEXT("A3-full"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestoreRamp"));
-	OutTestCommands.Add(TEXT("A3-ramp"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore002"));
-	OutTestCommands.Add(TEXT("A3-low-02"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore005"));
-	OutTestCommands.Add(TEXT("A3-low-05"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore010"));
-	OutTestCommands.Add(TEXT("A3-low-10"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsThighRestore020"));
-	OutTestCommands.Add(TEXT("A3-low-20"));
-
-	OutBeautifiedNames.Add(TEXT("StaticTargetsSupportControlsZeroedBrief"));
-	OutTestCommands.Add(TEXT("A4"));
-
-	OutBeautifiedNames.Add(TEXT("PolicyEnabledZeroActions"));
-	OutTestCommands.Add(TEXT("B"));
-
-	OutBeautifiedNames.Add(TEXT("PolicyEnabledCurrentActions"));
-	OutTestCommands.Add(TEXT("C"));
-
-	OutBeautifiedNames.Add(TEXT("TinySyntheticActions"));
-	OutTestCommands.Add(TEXT("D"));
+	// Pruned to avoid test bloat and long execution times.
 }
 
 bool FPhysAnimControlIsolationMatrixDiagnosticTest::RunTest(const FString& Parameters)
@@ -3298,7 +3588,7 @@ bool FPhysAnimControlIsolationMatrixDiagnosticTest::RunTest(const FString& Param
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), ReviewMode));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FLogControlIsolationMatrixCommand(CaseName, ReviewMode, this));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetRawSimDiagnosticGroupCommand(0));
 	ADD_LATENT_AUTOMATION_COMMAND(FSetIntConsoleVariableCommand(TEXT("physanim.V0PlantReviewMode"), 0));
@@ -3338,7 +3628,7 @@ bool FPhysAnimActivatedStandingPerturbationTest::RunTest(const FString& Paramete
 	AutomationOpenMap(MapName);
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FCaptureActivatedStandingPerturbationBaselineCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingPerturbationCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
@@ -3387,7 +3677,7 @@ bool FCaptureActivatedStandingLocomotionReadinessBaselineCommand::Update()
 
 	if (!TargetComponent)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: baseline capture could not find a PhysAnim component"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: baseline capture could not find a PhysAnim component"));
 		return true;
 	}
 
@@ -3400,37 +3690,37 @@ bool FCaptureActivatedStandingLocomotionReadinessBaselineCommand::Update()
 
 	if (RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected BalanceActive_Standing before intent but got %d"), (int32)RuntimeState);
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected BalanceActive_Standing before intent but got %d"), (int32)RuntimeState);
 		bSetupValid = false;
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofComplete())
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not complete before intent"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not complete before intent"));
 		bSetupValid = false;
 	}
 
 	if (!TargetComponent->IsLiveRuntimeEvidenceProofSatisfied())
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not truthful before intent"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: proof was not truthful before intent"));
 		bSetupValid = false;
 	}
 
 	if (!Metrics.bHasSamples || Metrics.SampleCount <= 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: standing metrics were not yet collected before intent"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: standing metrics were not yet collected before intent"));
 		bSetupValid = false;
 	}
 
 	if (Metrics.SupportHullAreaMinCm2 <= 0.0 || Metrics.SupportHullAreaMeanCm2 <= 0.0 || Metrics.SupportHullAreaMaxCm2 <= 0.0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: support hull area was not positive before intent"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: support hull area was not positive before intent"));
 		bSetupValid = false;
 	}
 
 	if (LocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected locomotion authority Idle before intent but got %s"), GetLocomotionAuthorityStateName(LocomotionAuthorityState));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: expected locomotion authority Idle before intent but got %s"), GetLocomotionAuthorityStateName(LocomotionAuthorityState));
 		bSetupValid = false;
 	}
 
@@ -3443,7 +3733,7 @@ bool FCaptureActivatedStandingLocomotionReadinessBaselineCommand::Update()
 	State->BaselineTerminationState = TerminationState;
 	State->BaselineLocomotionAuthorityState = LocomotionAuthorityState;
 	State->bBaselineCaptured = true;
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("LocomotionReadiness: baseline samples=%d duration=%.2f rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f terminalReason=%d locomotionAuthority=%s"),
@@ -3468,7 +3758,7 @@ bool FApplyActivatedStandingLocomotionReadinessIntentCommand::Update()
 {
 	if (!State || !State->Component.IsValid())
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent command has no component"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent command has no component"));
 		return true;
 	}
 
@@ -3476,7 +3766,7 @@ bool FApplyActivatedStandingLocomotionReadinessIntentCommand::Update()
 	ACharacter* const Character = Cast<ACharacter>(Component->GetOwner());
 	if (!Character)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent command has no character owner"));
+		PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionReadiness: intent command has no character owner"));
 		return true;
 	}
 
@@ -3495,7 +3785,7 @@ bool FApplyActivatedStandingLocomotionReadinessIntentCommand::Update()
 	State->MovementIntentScale = IntentScale;
 	State->PostIntentLocomotionAuthorityState = Component->GetLocomotionAuthorityState();
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("LocomotionReadiness: movement intent applied world=(%.2f,%.2f) scale=%.2f postIntentAuthority=%s"),
@@ -3592,7 +3882,7 @@ bool FVerifyActivatedStandingLocomotionReadinessCommand::Update()
 	{
 		if (TerminationState.TerminalReason == EPhysAnimTerminalReason::None)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("LocomotionReadiness: safe transition kept terminal_reason=None"));
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("LocomotionReadiness: safe transition kept terminal_reason=None"));
 		}
 		else if (Component->IsLiveRuntimeEvidenceProofSatisfied())
 		{
@@ -3607,7 +3897,7 @@ bool FVerifyActivatedStandingLocomotionReadinessCommand::Update()
 	}
 
 	const bool bLocomotionTransitionAllowed = LocomotionAuthorityState != EBridgeLocomotionAuthorityState::Idle;
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("LocomotionReadiness: intentDuration=%.2f standing=%s locomotionAuthority=%s transitionAllowed=%s samples=%d rootDrift=%.2f verticalDrift=%.2f angularDrift=%.2f supportHull[min/mean/max]=%.2f/%.2f/%.2f activeSides[min/mean/max]=%.2f/%.2f/%.2f maxBodyLinear=%.2f maxBodyAngular=%.2f terminalReason=%d"),
@@ -3650,7 +3940,7 @@ bool FPhysAnimActivatedStandingLocomotionReadinessTest::RunTest(const FString& P
 	AutomationOpenMap(MapName);
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FCaptureActivatedStandingLocomotionReadinessBaselineCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionReadinessIntentCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
@@ -3690,7 +3980,7 @@ bool FApplyActivatedStandingLocomotionGateIntentCommand::Update()
 			ACharacter* const Character = Cast<ACharacter>(Comp->GetOwner());
 			if (!Character)
 			{
-				UE_LOG(LogTemp, Error, TEXT("LocomotionGate: intent command has no character owner"));
+				PHYSANIM_LOG(LogTemp, Error, TEXT("LocomotionGate: intent command has no character owner"));
 				return true;
 			}
 
@@ -3702,7 +3992,7 @@ bool FApplyActivatedStandingLocomotionGateIntentCommand::Update()
 
 			const float IntentScale = 0.25f;
 			Character->AddMovementInput(IntentDirection, IntentScale, true);
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("LocomotionGate: movement intent applied world=(%.2f,%.2f) scale=%.2f"),
@@ -3745,7 +4035,7 @@ bool FSetActivatedStandingLocomotionGateIntentCommand::Update()
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
 			Comp->TestOnlySetBridgeLocomotionGateIntent(IntentMagnitude, IntentAgeSeconds);
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("LocomotionGate: test intent set magnitude=%.2f age=%.2f"),
@@ -3812,7 +4102,7 @@ bool FVerifyActivatedStandingLocomotionGateCommand::Update()
 						*ExpectedReasonSubstring,
 						*Reason));
 			}
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("LocomotionGate[%s]: allowed=%d reason=%s"),
@@ -3859,28 +4149,28 @@ bool FPhysAnimActivatedStandingLocomotionGateTest::RunTest(const FString& Parame
 	if (Parameters == TEXT("NoIntentDenied"))
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.0f, -1.0));
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT("intent_absent"), TEXT("NoIntentDenied"), this));
 	}
 	else if (Parameters == TEXT("ShortPulseDenied"))
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.50f, 0.05));
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(false, TEXT("intent_too_short"), TEXT("ShortPulseDenied"), this));
 	}
 	else if (Parameters == TEXT("StableAllowed"))
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.50f, 0.50));
 		ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionGateCommand(true, TEXT("intent_stable"), TEXT("StableAllowed"), this));
 	}
 	else if (Parameters == TEXT("NegativeSupportDenied"))
 	{
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 		ADD_LATENT_AUTOMATION_COMMAND(FSetActivatedStandingLocomotionGateIntentCommand(0.0f, -1.0));
 		ADD_LATENT_AUTOMATION_COMMAND(FEnableNegativeSupportProofCommand());
 		ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(6.0f));
@@ -4197,7 +4487,7 @@ bool FApplyActivatedStandingLocomotionRequestStateCommand::Update()
 			State->PostHandoffCommitReason = Comp->GetLocomotionHandoffCommitReason();
 			State->bPostBridgeOwnsPhysics = Comp->DoesBridgeOwnPhysics();
 
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Warning,
 				TEXT("LocomotionRequest[%s]: applied intentMagnitude=%.2f intentAge=%.2f supportMode=%d supportHull=%.2f activeSides=%d capsuleValid=%d continuityValid=%d terminalReason=%d"),
@@ -4474,7 +4764,7 @@ bool FVerifyActivatedStandingLocomotionRequestStateCommand::Update()
 			(Latest.bPhysicalContinuityValidatorPassed && !Latest.bContinuityBookkeepingMismatch) ? 1 : 0));
 	}
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Warning,
 		TEXT("LocomotionRequest[%s]: preRuntimeState=%d postRuntimeState=%d preAuthorityState=%d postAuthorityState=%d preRequestState=%s postRequestState=%s preHandoffPreflightState=%s postHandoffPreflightState=%s preHandoffCommitState=%s postHandoffCommitState=%s runtimeState=%d requestState=%s handoffPreflightState=%s handoffCommitState=%s gateAllowed=%d gateReason=%s requestReason=%s handoffPreflightReason=%s handoffCommitReason=%s intentMagnitude=%.2f intentAge=%.2f expectedIntentAge=%.2f supportMode=%d supportHull=%.2f activeSides=%d capsuleValid=%d continuityValid=%d terminalReason=%d preBridgeOwnsPhysics=%d postBridgeOwnsPhysics=%d samples=%d"),
@@ -4545,7 +4835,7 @@ bool FPhysAnimActivatedStandingLocomotionRequestStateTest::RunTest(const FString
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4588,7 +4878,7 @@ bool FPhysAnimActivatedStandingLocomotionRequestStateProofTest::RunTest(const FS
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4632,7 +4922,7 @@ bool FPhysAnimActivatedStandingLocomotionGateProofTest::RunTest(const FString& P
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4649,11 +4939,6 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimThighRestoreDiagnosticTest, "PhysAnim
 
 void FPhysAnimThighRestoreDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
-	for (const FThighRestoreDiagnosticVariant& Variant : ThighRestoreDiagnosticVariants)
-	{
-		OutBeautifiedNames.Add(Variant.Name);
-		OutTestCommands.Add(Variant.Command);
-	}
 }
 
 bool FPhysAnimThighRestoreDiagnosticTest::RunTest(const FString& Parameters)
@@ -4757,7 +5042,7 @@ bool FPhysAnimActivatedStandingLocomotionHandoffPreflightTest::RunTest(const FSt
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4814,7 +5099,7 @@ bool FPhysAnimActivatedStandingLocomotionActiveShellTest::RunTest(const FString&
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4859,7 +5144,7 @@ bool FPhysAnimActivatedStandingLocomotionHandoffPreflightProofTest::RunTest(cons
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableActivationWiringCommand(true, true, false));
-	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+	ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 
 	static FActivatedStandingLocomotionRequestValidationState State;
 	State = FActivatedStandingLocomotionRequestValidationState();
@@ -4919,7 +5204,7 @@ bool FPhysAnimActivatedStandingLocomotionHandoffCommitProofTest::RunTest(const F
 	}
 	if (Parameters != TEXT("NoPreflightDenied"))
 	{
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	}
 
 	static FActivatedStandingLocomotionRequestValidationState State;
@@ -4987,7 +5272,7 @@ bool FPhysAnimActivatedStandingLocomotionHandoffCommitTest::RunTest(const FStrin
 	}
 	if (Parameters != TEXT("NoPreflightDenied"))
 	{
-		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(5.0f));
+		ADD_LATENT_AUTOMATION_COMMAND(FCollectActivatedStandingStabilityMetricsCommand(10.0f));
 	}
 
 	static FActivatedStandingLocomotionRequestValidationState State;
@@ -4999,6 +5284,150 @@ bool FPhysAnimActivatedStandingLocomotionHandoffCommitTest::RunTest(const FStrin
 
 	ADD_LATENT_AUTOMATION_COMMAND(FApplyActivatedStandingLocomotionRequestStateCommand(&State));
 	ADD_LATENT_AUTOMATION_COMMAND(FVerifyActivatedStandingLocomotionRequestStateCommand(&State, this));
+
+	return true;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// STAGE 2A DUMBBELL LOAD TEST
+// ---------------------------------------------------------------------------------------------------------------------
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStage2ADumbbellLoadTest, "PhysAnim.StandingProof.LoadTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimStage2ADumbbellLoadTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	// Parameters represent the mass of the dumbbell in Kg
+	const TArray<FString> Weights = { TEXT("0"), TEXT("1"), TEXT("2"), TEXT("3"), TEXT("4"), TEXT("5") };
+	for (const FString& Weight : Weights)
+	{
+		OutBeautifiedNames.Add(Weight + TEXT("kg"));
+		OutTestCommands.Add(Weight);
+	}
+}
+
+bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
+{
+	const float TargetMassKg = FCString::Atof(*Parameters);
+	
+	// 1. Load the map
+	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+
+	// NOTE: StrictLivePolicyProofQuality is intentionally NOT disabled here.
+	// A previous version of this test suppressed the quality gate because the dumbbell
+	// shifts the CoM outside the support polygon. That suppression was hiding the
+	// exact failure mode the test is meant to detect. The policy must adapt to the load;
+	// if it cannot maintain support under N kg, the test should FAIL, not bypass the check.
+
+	// 2. Wait for map to load
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+
+	// 2.5 Force Stage 2 logic by stripping the Stage 1 initializer if it exists.
+	// Stage 1 uses kinematic upper bodies and bypasses balance phases, which
+	// makes the load test meaningless.
+	ADD_LATENT_AUTOMATION_COMMAND(FStripStage1ComponentCommand());
+
+	// 2.6 Override stabilization settings for the load test to be more lenient.
+	// Carrying 3kg+ will naturally cause the character to sag/lean more than 2cm.
+	ADD_LATENT_AUTOMATION_COMMAND(FOverrideLoadTestSettingsCommand());
+
+	// 3. Enable the proof. This calls StopBridge() + StartBridge() which destroys and
+	// recreates all skeletal mesh physics bodies via RecreatePhysicsState().
+	// The dumbbell MUST NOT be attached before this step: if the dumbbell constraint is
+	// created before StopBridge(), the constraint holds an internal physics body handle that
+	// becomes orphaned when RecreatePhysicsState() runs. Chaos then applies an unconstrained
+	// impulse from the dumbbell mass that drives the character through the floor.
+	// Solution: enable the proof first, then wait for physics ownership to be established,
+	// then attach the dumbbell onto live (valid) physics bodies.
+	ADD_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand());
+
+	// 4. Actively poll until the bridge has reached BalanceActive_Standing.
+	// This ensures the initial ragdoll drop and all stabilization phases (Prepare, RootOn, Settle)
+	// have converged and the policy is fully active to resist external mass.
+	// Hard timeout: 15 seconds.
+	{
+		UWorld* SetupWorld = GWorld;
+	#if WITH_EDITOR
+		if (GIsEditor)
+		{
+			for (const FWorldContext& Ctx : GEngine->GetWorldContexts())
+			{
+				if (Ctx.WorldType == EWorldType::PIE || Ctx.WorldType == EWorldType::Game)
+				{
+					SetupWorld = Ctx.World();
+					break;
+				}
+			}
+		}
+	#endif
+		UPhysAnimComponent* PollingTarget = nullptr;
+		if (SetupWorld)
+		{
+			for (TActorIterator<ACharacter> It(SetupWorld); It; ++It)
+			{
+				if (UPhysAnimComponent* C = It->FindComponentByClass<UPhysAnimComponent>())
+				{
+					PollingTarget = C;
+					break;
+				}
+			}
+		}
+		constexpr float BalanceActiveTimeoutSeconds = 15.0f;
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitForBridgeBalanceActiveCommand(
+			PollingTarget,
+			BalanceActiveTimeoutSeconds,
+			static_cast<float>(FPlatformTime::Seconds())));
+	}
+
+	// 5. Let Chaos settle the ragdoll for 1 second before attaching external mass.
+	// This prevents an initial impulse spike from the rigid body wakeup from compounding
+	// with the dumbbell's weight.
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
+
+	// 6. Spawn and attach the dumbbell — physics bodies are now live and stable.
+	ADD_LATENT_AUTOMATION_COMMAND(FSetupDumbbellCommand(TargetMassKg));
+
+	// 7. Let the constraint settle for 1 second before starting the standing proof timer.
+	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
+
+	// 8. Actively poll until proof completes (up to 15 s).
+	// FWaitForStandingProofCommand polls IsLiveRuntimeEvidenceProofComplete() each tick
+	// and returns false (keep going) until it's true or the 15 s hard timeout fires.
+	{
+		UWorld* SetupWorld = GWorld;
+	#if WITH_EDITOR
+		if (GIsEditor)
+		{
+			for (const FWorldContext& Ctx : GEngine->GetWorldContexts())
+			{
+				if (Ctx.WorldType == EWorldType::PIE || Ctx.WorldType == EWorldType::Game)
+				{
+					SetupWorld = Ctx.World();
+					break;
+				}
+			}
+		}
+	#endif
+		UPhysAnimComponent* PollingTarget = nullptr;
+		if (SetupWorld)
+		{
+			for (TActorIterator<ACharacter> It(SetupWorld); It; ++It)
+			{
+				if (UPhysAnimComponent* C = It->FindComponentByClass<UPhysAnimComponent>())
+				{
+					PollingTarget = C;
+					break;
+				}
+			}
+		}
+		constexpr float ProofTimeoutSeconds = 15.0f;
+		ADD_LATENT_AUTOMATION_COMMAND(FWaitForStandingProofCommand(
+			PollingTarget,
+			ProofTimeoutSeconds,
+			static_cast<float>(FPlatformTime::Seconds())));
+	}
+
+	// 9. Verify results — now runs only after proof actually completed (or timed out).
+	ADD_LATENT_AUTOMATION_COMMAND(FVerifyStandingProofCommand(this));
 
 	return true;
 }

@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 
 float UPhysAnimComponent::GetCurrentShellPlanarOffsetDeltaCm() const
 {
@@ -74,7 +75,7 @@ void UPhysAnimComponent::ReanchorShellCouplingReferenceToCurrentRoot(const TCHAR
 		bTransitionOwnedShellReferenceReanchored = true;
 	}
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_REANCHOR_EVENT source=%s locked=%d reanchored=%d reseeded=%d"),
+	PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_REANCHOR_EVENT source=%s locked=%d reanchored=%d reseeded=%d"),
 		Source ? Source : TEXT("unknown"),
 		IsTransitionOwnedShellLocked() ? 1 : 0,
 		bTransitionOwnedShellReferenceReanchored ? 1 : 0,
@@ -110,7 +111,7 @@ void UPhysAnimComponent::ReleaseTransitionOwnedShellLock()
 	bTransitionOwnedShellReferenceReanchored = false;
 	bTransitionOwnedShellReferenceReseededAfterLock = false;
 
-	UE_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_REANCHOR_EVENT source=release_lock locked=0 reanchored=0 reseeded=0"));
+	PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnimBalance] PHASE1_SHELL_REANCHOR_EVENT source=release_lock locked=0 reanchored=0 reseeded=0"));
 }
 
 
@@ -202,12 +203,12 @@ void UPhysAnimComponent::CommitTransitionOwnedShellDrop()
 			}
 		}
 
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE2_SHELL_DROP_AUDIT frame=%d bone=%s recordMovement=%s actualSim=%d"), 
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE2_SHELL_DROP_AUDIT frame=%d bone=%s recordMovement=%s actualSim=%d"), 
 			CurrentFrame, *RootBoneName.ToString(), GetPhysicsMovementTypeName(RecordMovement), bRawSimulating ? 1 : 0);
 		LastLoggedShellDropFrame = CurrentFrame;
 	}
 
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Shell explicitly dropped for transition maturation."));
+	PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] Shell explicitly dropped for transition maturation."));
 }
 
 

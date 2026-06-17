@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 
 FPhysAnimStabilizationSettings UPhysAnimComponent::ResolveEffectiveStabilizationSettings() const
 {
@@ -185,10 +186,7 @@ void UPhysAnimComponent::LogBridgeStateSnapshot(const TCHAR* Context) const
 	const FVector RootLinearVelocity = RootBody ? RootBody->GetUnrealWorldVelocity() : FVector::ZeroVector;
 	const FVector RootAngularVelocity = RootBody ? FMath::RadiansToDegrees(RootBody->GetUnrealWorldAngularVelocityInRadians()) : FVector::ZeroVector;
 
-	UE_LOG(
-		LogPhysAnimBridge,
-		Log,
-		TEXT("[PhysAnim] Snapshot[%s] state=%s bridgeOwnsPhysics=%s skeletalSim=%d skeletalBlend=%d liveControls=%d liveBodyModifiers=%d forceZero=%s controlsDesiredEnabled=%s meshProfile=%s meshCollision=%s meshPawnResponse=%s capsuleCollision=%s charMoveTick=%s movementMode=%s rootBodyValid=%s rootBodySim=%s rootLinCmPerSec=(%.1f,%.1f,%.1f) rootAngDegPerSec=(%.1f,%.1f,%.1f)"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Snapshot[%s] state=%s bridgeOwnsPhysics=%s skeletalSim=%d skeletalBlend=%d liveControls=%d liveBodyModifiers=%d forceZero=%s controlsDesiredEnabled=%s meshProfile=%s meshCollision=%s meshPawnResponse=%s capsuleCollision=%s charMoveTick=%s movementMode=%s rootBodyValid=%s rootBodySim=%s rootLinCmPerSec=(%.1f,%.1f,%.1f) rootAngDegPerSec=(%.1f,%.1f,%.1f)"),
 		Context,
 		GetRuntimeStateName(RuntimeState),
 		RuntimeStateOwnsBridgePhysics(RuntimeState) ? TEXT("true") : TEXT("false"),
@@ -222,10 +220,7 @@ void UPhysAnimComponent::LogActivationSummary(
 	bool bActivationPrepassCompleted,
 	float SimulationHandoffProgress) const
 {
-	UE_LOG(
-		LogPhysAnimBridge,
-		Log,
-		TEXT("[PhysAnim] Activation[%s]: skeletalTargets=%s currentPoseTargetsSeeded=%s activationPrepassCompleted=%s simulationHandoffAlpha=%.2f"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Activation[%s]: skeletalTargets=%s currentPoseTargetsSeeded=%s activationPrepassCompleted=%s simulationHandoffAlpha=%.2f"),
 		Context,
 		EffectiveSettings.bUseSkeletalAnimationTargets ? TEXT("true") : TEXT("false"),
 		bCurrentPoseTargetsSeeded ? TEXT("true") : TEXT("false"),
@@ -255,10 +250,7 @@ void UPhysAnimComponent::LogBodyModifierTelemetrySnapshot(const TCHAR* Context) 
 		ReferenceRootLocationCm,
 		BodyDiagnostics);
 
-	UE_LOG(
-		LogPhysAnimBridge,
-		Log,
-		TEXT("[PhysAnim] BodyTelemetry[%s]: bodies=%d simulating=%d referenceRootZ=%.1f"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] BodyTelemetry[%s]: bodies=%d simulating=%d referenceRootZ=%.1f"),
 		Context,
 		BodyDiagnostics.NumBodiesConsidered,
 		BodyDiagnostics.NumSimulatingBodies,
@@ -267,10 +259,7 @@ void UPhysAnimComponent::LogBodyModifierTelemetrySnapshot(const TCHAR* Context) 
 	for (const FPhysAnimBodyInstabilitySample& Sample : BodySamples)
 	{
 		const float HeightDeltaCm = FMath::Abs(Sample.Location.Z - ReferenceRootLocationCm.Z);
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] BodyTelemetry[%s] bone=%s sim=%s locZ=%.1f heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] BodyTelemetry[%s] bone=%s sim=%s locZ=%.1f heightDeltaCm=%.1f linearCmPerSec=%.1f angularDegPerSec=%.1f"),
 			Context,
 			*Sample.BoneName.ToString(),
 			Sample.bIsSimulatingPhysics ? TEXT("true") : TEXT("false"),
@@ -353,10 +342,7 @@ void UPhysAnimComponent::ApplyMovementSmokeInput(const FPhysAnimStabilizationSet
 	{
 		MovementSmokeStartLocation = CharacterOwner->GetActorLocation();
 		bMovementSmokeScriptStarted = true;
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] Movement smoke script started after policy settle."));
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Movement smoke script started after policy settle."));
 	}
 
 	LastMovementSmokeLocalIntent = LocalIntent;
@@ -373,10 +359,7 @@ void UPhysAnimComponent::ApplyMovementSmokeInput(const FPhysAnimStabilizationSet
 	{
 		const FVector CurrentLocation = CharacterOwner->GetActorLocation();
 		const float TotalDisplacementCm = FVector::Dist2D(CurrentLocation, MovementSmokeStartLocation);
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] Movement smoke complete: loops=%d totalDisplacementCm=%.1f finalPhase=%s runtime=%s"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Movement smoke complete: loops=%d totalDisplacementCm=%.1f finalPhase=%s runtime=%s"),
 			NumLoops,
 			TotalDisplacementCm,
 			*PhaseName.ToString(),
@@ -474,10 +457,7 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 
 	if (GVerbosePhase1Forensics != 0)
 	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] Runtime diagnostics - policyAlpha: %.2f authorityAlpha: %.2f bringUpGroup: %d/%d resets: %d"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Runtime diagnostics - policyAlpha: %.2f authorityAlpha: %.2f bringUpGroup: %d/%d resets: %d"),
 			CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings),
 			CalculateCurrentControlAuthorityAlpha(EffectiveSettings),
 			HighestUnlockedBringUpGroupIndex + 1,
@@ -486,10 +466,7 @@ void UPhysAnimComponent::MaybeLogRuntimeDiagnostics(const FPhysAnimStabilization
 	}
 	if (GVerbosePhase2Forensics != 0)
 	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Log,
-			TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] shell[offsetDeltaCm=%.1f velDeltaCmPerSec=%.1f velAlign=%.2f] obs[selfMeanAbs=%.3f mimicMeanAbs=%.3f terrainMeanAbs=%.3f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s normal=%d held=%d total=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawPolicyOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx] root[heightDeltaCm=%.1f linearCmPerSecond=%.1f angularDegPerSecond=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Runtime diagnostics: handoffAlpha=%.2f bringUpGroup=%d/%d controlAuthorityAlpha=%.2f currentGroupControlAuthorityAlpha=%.2f policyInfluenceAlpha=%.2f policyStep[rateHz=%.1f intervalMs=%.1f updated=%s elapsedSteps=%d skipped=%d accumMs=%.1f] perturbOverride=%s stressTest[enabled=%s active=%s profile=%d sweep=%d multiplier=%.2f elapsed=%.1f firstAngSpike=%s:%.2f firstLinSpike=%s:%.2f firstInstability=%.2f localSpine=%.1f localHead=%.1f localFoot=%.1f] moveSmoke[active=%s phase=%s local=(%.1f,%.1f) world=(%.2f,%.2f) ownerVelCmPerSec=%.1f] shell[offsetDeltaCm=%.1f velDeltaCmPerSec=%.1f velAlign=%.2f] obs[selfMeanAbs=%.3f mimicMeanAbs=%.3f terrainMeanAbs=%.3f] action[rawMin=%.3f rawMax=%.3f rawMeanAbs=%.3f conditionedMeanAbs=%.3f clamped=%d] targets[policyActive=%s firstPolicyFrame=%s normal=%d held=%d total=%d maxDelta=%s:%.1fdeg meanDelta=%.1fdeg maxRawOffset=%s:%.1fdeg meanRawPolicyOffset=%.1fdeg lowerLimbLimitOccupancy=%s:%.2fx proxy=%.1fdeg mean=%.2fx] root[heightDeltaCm=%.1f linearCmPerSecond=%.1f angularDegPerSecond=%.1f unstableFor=%.2f] bodies[count=%d sim=%d maxLin=%s(%s):%.1f maxAng=%s(%s):%.1f maxHeight=%s(%s):%.1f]"),
 			SimulationHandoffAlpha,
 			FMath::Max(HighestUnlockedBringUpGroupIndex + 1, 0),
 			GetBringUpGroupCount(),

@@ -1,10 +1,10 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 #include "Misc/AutomationTest.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
-
-DECLARE_LOG_CATEGORY_EXTERN(LogPhysAnimBridge, Log, All);
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimStage2AWalkSmokeTest, "PhysAnim.PIE.Stage2A.WalkSmoke", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -84,7 +84,7 @@ bool FPhysAnimStage2AWalkSmokeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("SMOKE-11 Telemetry contains terminal_state=Allowed"), Component->LastStage2ALocomotionTelemetryLine.Contains(TEXT("terminal_state=Allowed")));
 
 	// Emit final log line
-	UE_LOG(LogPhysAnimBridge, Display, TEXT("PASS_STAGE2A_WALK_SMOKE duration_seconds=3.0 forward_displacement_cm=%.3f lateral_drift_cm=%.3f vertical_drift_cm=%.3f terminal_state=%s"), 
+	PHYSANIM_LOG(LogPhysAnimBridge, Display, TEXT("PASS_STAGE2A_WALK_SMOKE duration_seconds=3.0 forward_displacement_cm=%.3f lateral_drift_cm=%.3f vertical_drift_cm=%.3f terminal_state=%s"), 
 		ForwardDisplacementCm, LateralDriftCm, VerticalDriftCm, UPhysAnimComponent::Stage2ATerminalStateToString(Component->Stage2ALastLocomotionTerminalState));
 
 	// Cleanup

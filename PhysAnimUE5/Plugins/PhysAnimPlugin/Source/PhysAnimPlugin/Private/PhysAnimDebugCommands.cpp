@@ -1,4 +1,5 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimLogger.h"
 #if !UE_BUILD_SHIPPING
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
 #endif
@@ -122,7 +123,7 @@ namespace
 		UWorld* World = nullptr;
 		if (!ResolveWorldFromConsole(InWorld, World))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.ApplyPresentationPerturbation failed: no active PIE/game world."));
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.ApplyPresentationPerturbation failed: no active PIE/game world."));
 			return;
 		}
 
@@ -141,7 +142,7 @@ namespace
 			},
 			Matched);
 
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogTemp,
 			Log,
 			TEXT("[PhysAnim] pa.ApplyPresentationPerturbation duration=%.3fs matched=%d applied=%d filter='%s'"),
@@ -156,7 +157,7 @@ namespace
 		UWorld* World = nullptr;
 		if (!ResolveWorldFromConsole(InWorld, World))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.ClearPresentationPerturbation failed: no active PIE/game world."));
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.ClearPresentationPerturbation failed: no active PIE/game world."));
 			return;
 		}
 
@@ -174,7 +175,7 @@ namespace
 			},
 			Matched);
 
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogTemp,
 			Log,
 			TEXT("[PhysAnim] pa.ClearPresentationPerturbation matched=%d cleared=%d filter='%s'"),
@@ -190,7 +191,7 @@ namespace
 
 		int32 Matched = 0;
 		ForEachMatchingPhysAnimComponent(World, ParseOptionalFilter(Args, 0), [](UPhysAnimComponent& C) { C.StartBalancePerturbationMode(); }, Matched);
-		UE_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StartBalanceMode matched=%d"), Matched);
+		PHYSANIM_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StartBalanceMode matched=%d"), Matched);
 	}
 
 	static void StopBalanceModeCommand(const TArray<FString>& Args, UWorld* InWorld)
@@ -200,7 +201,7 @@ namespace
 
 		int32 Matched = 0;
 		ForEachMatchingPhysAnimComponent(World, ParseOptionalFilter(Args, 0), [](UPhysAnimComponent& C) { C.StopBalancePerturbationMode(); }, Matched);
-		UE_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StopBalanceMode matched=%d"), Matched);
+		PHYSANIM_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StopBalanceMode matched=%d"), Matched);
 	}
 
 #if !UE_BUILD_SHIPPING
@@ -209,14 +210,14 @@ namespace
 		UWorld* World = nullptr;
 		if (!ResolveWorldFromConsole(InWorld, World))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.RunPhase1AutoCalib failed: no active PIE/game world."));
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.RunPhase1AutoCalib failed: no active PIE/game world."));
 			return;
 		}
 
 		UPhysAnimPhase1AutoCalibSubsystem* const AutoCalibSubsystem = World->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>();
 		if (!AutoCalibSubsystem)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.RunPhase1AutoCalib failed: subsystem unavailable."));
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.RunPhase1AutoCalib failed: subsystem unavailable."));
 			return;
 		}
 
@@ -230,11 +231,11 @@ namespace
 		FString Error;
 		if (!AutoCalibSubsystem->StartPhase1AutoCalib(Request, Error))
 		{
-			UE_LOG(LogTemp, Error, TEXT("[PhysAnim] pa.RunPhase1AutoCalib failed: %s"), *Error);
+			PHYSANIM_LOG(LogTemp, Error, TEXT("[PhysAnim] pa.RunPhase1AutoCalib failed: %s"), *Error);
 			return;
 		}
 
-		UE_LOG(
+		PHYSANIM_LOG(
 			LogTemp,
 			Log,
 			TEXT("[PhysAnim] pa.RunPhase1AutoCalib started filter='%s' seed=%d budgetMode=%s maxTrials=%d output='%s' readinessTimeout=%.1fs"),
@@ -251,14 +252,14 @@ namespace
 		UWorld* World = nullptr;
 		if (!ResolveWorldFromConsole(InWorld, World))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.StopPhase1AutoCalib ignored: no active PIE/game world."));
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("[PhysAnim] pa.StopPhase1AutoCalib ignored: no active PIE/game world."));
 			return;
 		}
 
 		if (UPhysAnimPhase1AutoCalibSubsystem* const AutoCalibSubsystem = World->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>())
 		{
 			AutoCalibSubsystem->StopPhase1AutoCalib(TEXT("manual_stop"));
-			UE_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StopPhase1AutoCalib completed."));
+			PHYSANIM_LOG(LogTemp, Log, TEXT("[PhysAnim] pa.StopPhase1AutoCalib completed."));
 		}
 	}
 #endif

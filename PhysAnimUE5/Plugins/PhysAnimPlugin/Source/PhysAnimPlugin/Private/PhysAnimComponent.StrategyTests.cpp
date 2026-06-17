@@ -6,6 +6,7 @@
 #include "PhysAnimPhase1PelvisCouplingSearch.h"
 #include "PhysAnimBalance.TestHelpers.h"
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "PhysAnimRuntimeOrchestrator.h"
 #include "Engine/SkeletalMesh.h"
 #include "HAL/FileManager.h"
 #include "PhysicsEngine/PhysicsAsset.h"
@@ -283,6 +284,50 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimBalanceCompletedScenarioSetPolicyTest,
+		"PhysAnim.Component.BalanceCompletedScenarioSetPolicy",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimBalanceCompletedScenarioSetPolicyTest::RunTest(const FString& Parameters)
+	{
+		TArray<FPhysAnimBalanceScenario> IdleHoldOnly;
+		IdleHoldOnly.Add({ TEXT("IdleHold_NoPush"), EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small, 0.5f, 3.0f, 0.0f });
+
+		TestTrue(
+			TEXT("Successful no-push idle hold remains in BalanceActive_Standing for stability evidence"),
+			UPhysAnimComponent::ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+				IdleHoldOnly,
+				false,
+				true));
+
+		TestFalse(
+			TEXT("Failed no-push idle hold keeps the existing stop behavior"),
+			UPhysAnimComponent::ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+				IdleHoldOnly,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("No-push idle hold with perturbation evidence keeps the existing stop behavior"),
+			UPhysAnimComponent::ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+				IdleHoldOnly,
+				true,
+				true));
+
+		TArray<FPhysAnimBalanceScenario> PerturbationSet = IdleHoldOnly;
+		PerturbationSet.Add({ TEXT("IdleHold_PelvisImpulse_Forward_Small"), EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small, 0.5f, 3.0f, 0.0f });
+
+		TestFalse(
+			TEXT("Perturbation scenario sets keep the existing stop behavior after completion"),
+			UPhysAnimComponent::ShouldHoldBalanceActiveAfterCompletedScenarioSet(
+				PerturbationSet,
+				false,
+				true));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimStartupProofPhysicalContinuityContractTest,
 		"PhysAnim.Component.StartupProofPhysicalContinuityContract",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -322,6 +367,68 @@ namespace
 				EPhysAnimRuntimeState::BalanceActive_Standing,
 				Artifact),
 			EPhysAnimTerminalReason::ActivationContinuousSimulationLost);
+
+		return true;
+	}
+
+	FPhysAnimRunArtifactSnapshot MakeEb14TruthfulTerminalArtifact()
+	{
+		FPhysAnimRunArtifactSnapshot Artifact;
+		Artifact.AttemptUuid = TEXT("eb14-terminal-authority");
+		Artifact.TerminalReason = EPhysAnimTerminalReason::None;
+		Artifact.TerminalSubstepTimestamp = 360;
+		Artifact.bTerminalFrameArtifactCaptured = true;
+		Artifact.SupportMode = EPhysAnimSupportMode::TwoFootStable;
+		Artifact.ActiveSupportSideCount = 2;
+		Artifact.SupportHullAreaCm2 = 1200.0;
+		Artifact.SupportGapTimerMs = 0.0;
+		Artifact.bPhysicsAssetContractValid = true;
+		Artifact.bSkeletonAuditPassed = true;
+		Artifact.bCapsuleContractPassed = true;
+		Artifact.bPhysicalContinuityValidatorPassed = true;
+		Artifact.bContinuityBookkeepingMismatch = false;
+		return Artifact;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimStartupProofTerminalArtifactAuthorityTest,
+		"PhysAnim.Component.StartupProofTerminalArtifactAuthority",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimStartupProofTerminalArtifactAuthorityTest::RunTest(const FString& Parameters)
+	{
+		const FPhysAnimRunArtifactSnapshot TerminalArtifact = MakeEb14TruthfulTerminalArtifact();
+
+		FPhysAnimRunArtifactSnapshot DirtyLatestArtifact = TerminalArtifact;
+		DirtyLatestArtifact.bPhysicalContinuityValidatorPassed = false;
+		DirtyLatestArtifact.bContinuityBookkeepingMismatch = true;
+		DirtyLatestArtifact.SupportMode = EPhysAnimSupportMode::Airborne;
+		DirtyLatestArtifact.ActiveSupportSideCount = 0;
+		DirtyLatestArtifact.SupportHullAreaCm2 = 0.0;
+
+		FPhysAnimRuntimeTerminationState State;
+		State.bTerminated = false;
+		State.TerminalReason = EPhysAnimTerminalReason::None;
+		State.TerminalArtifact = TerminalArtifact;
+		State.LatestArtifact = DirtyLatestArtifact;
+
+		FPhysAnimStabilizationSettings Settings;
+		Settings.BalancePhase1AdmissionMaxSupportGapMs = 50.0f;
+
+		TestTrue(
+			TEXT("Truthful terminal artifact remains authoritative after latest-artifact drift"),
+			UPhysAnimComponent::TestOnlyIsStartupProofSatisfactionStateAccepted(State, Settings));
+
+		State.TerminalArtifact = FPhysAnimRunArtifactSnapshot();
+		TestFalse(
+			TEXT("Missing terminal artifact does not mask a dirty latest artifact"),
+			UPhysAnimComponent::TestOnlyIsStartupProofSatisfactionStateAccepted(State, Settings));
+
+		State.TerminalArtifact = TerminalArtifact;
+		State.TerminalReason = EPhysAnimTerminalReason::ActivationSupportFailure;
+		TestFalse(
+			TEXT("Recorded terminal reason still blocks startup proof satisfaction"),
+			UPhysAnimComponent::TestOnlyIsStartupProofSatisfactionStateAccepted(State, Settings));
 
 		return true;
 	}
@@ -2542,6 +2649,110 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimLiveRuntimeEvidencePoseSearchCounterCaptureTest,
+		"PhysAnim.Component.LiveRuntimeEvidencePoseSearchCounterCapture",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimLiveRuntimeEvidencePoseSearchCounterCaptureTest::RunTest(const FString& Parameters)
+	{
+		UPhysAnimComponent* const Component = NewObject<UPhysAnimComponent>();
+		TestNotNull(TEXT("Transient component exists"), Component);
+		if (!Component)
+		{
+			return false;
+		}
+
+		Component->bEnableLiveRuntimeEvidenceProof = true;
+
+		const bool bFirstQueryResult = false;
+		Component->TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(bFirstQueryResult);
+		TestFalse(TEXT("Caller PoseSearch result remains false after recording"), bFirstQueryResult);
+
+		const bool bSecondQueryResult = true;
+		Component->TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(bSecondQueryResult);
+		TestTrue(TEXT("Caller PoseSearch result remains true after recording"), bSecondQueryResult);
+
+		const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
+		TestEqual(TEXT("PoseSearch query count increments across recordings"), Metrics.PoseSearchQueryCount, 2);
+		TestEqual(TEXT("PoseSearch valid result count only increments for true results"), Metrics.PoseSearchValidResultCount, 1);
+
+		Component->TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(false);
+		const FPhysAnimActivatedStandingStabilityMetrics& SnapshotMetrics = Component->GetActivatedStandingStabilityMetrics();
+		TestEqual(TEXT("PoseSearch query count includes the third recorded result"), SnapshotMetrics.PoseSearchQueryCount, 3);
+		TestEqual(TEXT("PoseSearch valid result count remains one after a false result"), SnapshotMetrics.PoseSearchValidResultCount, 1);
+
+		const FPhysAnimRuntimeSubstepInput SubstepInput = Component->TestOnlyBuildLiveRuntimeEvidenceSubstepInput();
+		TestEqual(TEXT("Substep input copies PoseSearch query count from component evidence state"), SubstepInput.Values.PoseSearchQueryCount, 3);
+		TestEqual(TEXT("Substep input copies PoseSearch valid result count from component evidence state"), SubstepInput.Values.PoseSearchValidResultCount, 1);
+
+		const FPhysAnimRuntimeSubstepResult SubstepResult = PhysAnimRuntimeOrchestrator::EvaluateRuntimeSubstep(SubstepInput);
+		TestEqual(TEXT("Produced artifact preserves PoseSearch query count"), SubstepResult.Artifact.PoseSearchQueryCount, 3);
+		TestEqual(TEXT("Produced artifact preserves PoseSearch valid result count"), SubstepResult.Artifact.PoseSearchValidResultCount, 1);
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimLiveRuntimeEvidenceRendererFacingMotionCounterCaptureTest,
+		"PhysAnim.Component.LiveRuntimeEvidenceRendererFacingMotionCounterCapture",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimLiveRuntimeEvidenceRendererFacingMotionCounterCaptureTest::RunTest(const FString& Parameters)
+	{
+		UPhysAnimComponent* const Component = NewObject<UPhysAnimComponent>();
+		TestNotNull(TEXT("Transient component exists"), Component);
+		if (!Component)
+		{
+			return false;
+		}
+
+		Component->bEnableLiveRuntimeEvidenceProof = true;
+
+		const bool bFirstSampleActive = false;
+		Component->TestOnlyRecordLiveRuntimeEvidenceRendererFacingMotionSample(bFirstSampleActive, 3.25);
+		TestFalse(TEXT("Caller renderer-facing motion sample remains false after recording"), bFirstSampleActive);
+
+		const bool bSecondSampleActive = true;
+		Component->TestOnlyRecordLiveRuntimeEvidenceRendererFacingMotionSample(bSecondSampleActive, 12.5);
+		TestTrue(TEXT("Caller renderer-facing motion sample remains true after recording"), bSecondSampleActive);
+
+		const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
+		TestEqual(TEXT("Renderer-facing motion sample count increments across recordings"), Metrics.RendererFacingMotionSampleCount, 2);
+		TestEqual(TEXT("Renderer-facing motion active sample count only increments for true results"), Metrics.RendererFacingMotionActiveSampleCount, 1);
+		TestEqual(TEXT("Renderer-facing motion max root drift preserves the highest recorded value"), Metrics.RendererFacingMotionMaxRootWorldPositionDriftCm, 12.5);
+
+		Component->TestOnlyRecordLiveRuntimeEvidenceRendererFacingMotionSample(false, 6.0);
+		const FPhysAnimActivatedStandingStabilityMetrics& SnapshotMetrics = Component->GetActivatedStandingStabilityMetrics();
+		TestEqual(TEXT("Renderer-facing motion sample count includes the third recorded sample"), SnapshotMetrics.RendererFacingMotionSampleCount, 3);
+		TestEqual(TEXT("Renderer-facing motion active sample count remains one after an inactive sample"), SnapshotMetrics.RendererFacingMotionActiveSampleCount, 1);
+		TestEqual(TEXT("Renderer-facing motion max root drift remains the highest observed value"), SnapshotMetrics.RendererFacingMotionMaxRootWorldPositionDriftCm, 12.5);
+
+		const FPhysAnimRuntimeSubstepInput SubstepInput = Component->TestOnlyBuildLiveRuntimeEvidenceSubstepInput();
+		TestEqual(
+			TEXT("Substep input copies renderer-facing motion sample count from component evidence state"),
+			SubstepInput.Values.RendererFacingMotionSampleCount,
+			3);
+		TestEqual(
+			TEXT("Substep input copies renderer-facing motion active sample count from component evidence state"),
+			SubstepInput.Values.RendererFacingMotionActiveSampleCount,
+			1);
+		TestEqual(
+			TEXT("Substep input copies renderer-facing motion max root drift from component evidence state"),
+			SubstepInput.Values.RendererFacingMotionMaxRootWorldPositionDriftCm,
+			12.5);
+
+		const FPhysAnimRuntimeSubstepResult SubstepResult = PhysAnimRuntimeOrchestrator::EvaluateRuntimeSubstep(SubstepInput);
+		TestEqual(TEXT("Produced artifact preserves renderer-facing motion sample count"), SubstepResult.Artifact.RendererFacingMotionSampleCount, 3);
+		TestEqual(TEXT("Produced artifact preserves renderer-facing motion active sample count"), SubstepResult.Artifact.RendererFacingMotionActiveSampleCount, 1);
+		TestEqual(
+			TEXT("Produced artifact preserves renderer-facing motion max root drift"),
+			SubstepResult.Artifact.RendererFacingMotionMaxRootWorldPositionDriftCm,
+			12.5);
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPhase1AutoCalibScoreOrderingTest,
 		"PhysAnim.Component.Phase1AutoCalibScoreOrdering",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -3957,6 +4168,45 @@ bool FPhysAnimPhase3SettlementGraceProofTest::RunTest(const FString& Parameters)
 			Diags,
 			5, 5, true, true, 0.0f, LinearThreshold, 0.0f, AngularThreshold, 0.0f, 10.0f, 5000.0f, StandardThreshold, 1000.0f, 1000.0f, 0.0f, 100.0f, 0.0f, TEXT("thigh_l"), 0.0f, 5000.0f, 0.0f, 5000.0f, 1000.0f, 0.0f, 0.0f));
 
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimFailStopShortCircuitTest,
+	"PhysAnim.Component.FailStopShortCircuit",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimFailStopShortCircuitTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (!World)
+	{
+		return true;
+	}
+
+	AActor* Actor = World->SpawnActor<AActor>();
+	UPhysAnimComponent* Component = NewObject<UPhysAnimComponent>(Actor);
+	Component->RegisterComponent();
+
+	// Initialize ActionOutputBuffer size to match expectations (NumActionFloats is 57)
+	Component->ActionOutputBuffer.Init(1.0f, PhysAnimBridge::NumActionFloats);
+
+	// ConditionModelActions frozen actions fail-stop check
+	Component->RecentActionMagnitudeHistory.Empty();
+	Component->RecentActionMagnitudeHistory.Init(1.0f, 10);
+	Component->RuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
+
+	FPhysAnimStabilizationSettings Settings;
+	FString Error;
+
+	AddExpectedError(TEXT("ACTION_FROZEN"), EAutomationExpectedErrorFlags::Contains);
+	AddExpectedError(TEXT("Fail-stop: Model action output is frozen"), EAutomationExpectedErrorFlags::Contains);
+
+	bool bConditionResult = Component->ConditionModelActions(Settings, Error);
+	TestFalse(TEXT("ConditionModelActions returns false when action magnitude is frozen"), bConditionResult);
+
+	Actor->Destroy();
 	return true;
 }
 

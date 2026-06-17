@@ -40,20 +40,48 @@ Interpretation:
 9. Keep commits small and atomic.
 10. Build with `.\\scripts\\build.ps1`. This script should also be used to run any test passing -Test "Test Name" as a parameter right after the build.
 11. If smoke tests were run, read logs with `python .\\scripts\\read_logs.py`.
-12. DO NOT ATTEMPT MORE THAN 3 TESTS. If you reach 3 tests without success stop. It's very likely we need a change in focus/direction.
+12. Do not repeat the same failing test more than 3 times. If the same test fails 3 times without success, stop; it is very likely we need a change in focus/direction. Distinct targeted tests and required follow-up commands, such as `python .\\scripts\\read_logs.py`, do not count as repeats of the same test.
+13. NEVER use raw `UE_LOG` in Unreal Engine C++ code. You MUST use the `PHYSANIM_LOG_RATE_LIMITED` macro from `#include "PhysAnimLogger.h"` for all logging to prevent spam and enforce formatting.
+    - **High-Frequency Restriction**: Un-rate-limited logging (`PHYSANIM_LOG` or any log with `TimeLimit = 0.0f`) is strictly forbidden inside loops, `TickComponent`, or high-frequency update functions.
+    - **Exceptions**:
+      1. *Lifecycle & Startup*: One-off setup/shutdown diagnostics, asset loading, or level transitions.
+      2. *Critical Failures*: Unrecoverable error paths and fail-states.
+      3. *Temporary Debugging*: Permitted locally during active debugging, but **MUST be removed or commented out before committing**. Un-rate-limited logs in ticks must never be merged.
+
+# Dual-Graph Knowledge & Execution Workflow
+
+This repository uses a hybrid workflow that combines **Knowledge Graph Navigation** (via `graphify`) and **Execution Graph Management** (via `mcp-graph`).
+
+## 1. Knowledge Navigation (`graphify`)
+`graphify` is the primary tool for codebase navigation, architectural mapping, and understanding system-wide dependencies.
+
+**Rules:**
+- **Navigation First:** For any codebase question, always run `graphify query "<question>"` first. Use `graphify path` for relationships and `graphify explain` for symbols.
+- **Deep Discovery:** Use `graphify-out/wiki/index.md` (if available) for broad navigation instead of raw source browsing.
+- **Sync Requirement:** After any code modification, you MUST run `graphify update .` to keep the knowledge graph current (AST-only, low cost).
+
+## 2. Execution Lifecycle (`mcp-graph`)
+`mcp-graph` is the source of truth for task tracking and the implementation lifecycle.
+
+**Rules:**
+- **No Node = No Code:** Implementation is strictly forbidden unless a corresponding node exists in the execution graph.
+- **Pipeline v8.0:** Use `start_task → [Implement] → finish_task` as the standard loop.
+- **Definition of Done:** Mandatory 8-check DoD validation via `analyze(mode: "implement_done")` before finishing any task.
+
+## 3. The Merged Cycle
+
+| Lifecycle Phase | Knowledge Action (`graphify`) | Execution Action (`mcp-graph`) |
+| :--- | :--- | :--- |
+| **ANALYZE** | `query` to map existing features/gaps | `import_prd` / `add_node` (requirements) |
+| **DESIGN** | `path` to analyze blast radius | `add_node` / `edge` (ADRs, interfaces) |
+| **PLAN** | `explain` to verify component readiness | `plan_sprint` / `sync_stack_docs` |
+| **IMPLEMENT** | `query` to load component mental model | `start_task` -> `finish_task` |
+| **VALIDATE** | `update` to sync new code structures | `validate(ac)` / `metrics` |
+| **REVIEW** | `query` to explain changes to reviewers | `export` / `analyze(review_ready)` |
+
+> **Mandatory Command:** Always run `graphify update .` as the final step of `finish_task` or after any file-mutating operation.
 
 <!-- mcp-graph:start -->
-# AGENTS.md — NewEngine-AgentB
-
-### Codex-Specific Rules
-
-- Root project instructions live in `AGENTS.md`; repo-scoped skills live in `.agents/skills/<skill>/SKILL.md`.
-- Invoke skills explicitly with `$graph-implement`, `$graph-security`, or another installed skill name when a task needs that workflow.
-- In Codex Plan Mode, use mcp-graph and skills for discovery and planning only. Do not edit files until the user asks for implementation outside Plan Mode.
-- During implementation, use `apply_patch` for manual edits and preserve unrelated user changes in the worktree.
-- Respect sandbox and approval prompts. If a required command fails because of sandbox/network restrictions, rerun it with an approval request.
-- Do not spawn subagents unless the user explicitly asks for delegation or parallel agent work.
-
 ## mcp-graph — NewEngine-AgentB
 
 Este projeto usa **mcp-graph** para gestão de execução via grafo persistente (SQLite).
@@ -298,3 +326,16 @@ Essential mcp-graph workflows are installed as repo-scoped Codex skills in `.age
 Use `$graph-implement` for tracked TDD implementation, `$graph-tests` for test strategy,
 `$graph-security` for security review, and `$ui-ux-pro-max` for UI/UX work.
 <!-- mcp-graph:end -->
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

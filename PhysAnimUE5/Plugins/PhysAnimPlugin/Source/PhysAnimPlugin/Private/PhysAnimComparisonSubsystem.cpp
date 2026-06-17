@@ -1,6 +1,7 @@
 #include "PhysAnimComparisonSubsystem.h"
 
 #include "PhysAnimComponent.h"
+#include "PhysAnimLogger.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/BoxComponent.h"
@@ -74,13 +75,13 @@ namespace
 				FString Error;
 				if (!ComparisonSubsystem->StartSideBySide(Error))
 				{
-					UE_LOG(LogTemp, Error, TEXT("%s Start failed: %s"), PhysAnimG2LogPrefix, *Error);
+					PHYSANIM_LOG(LogTemp, Error, TEXT("%s Start failed: %s"), PhysAnimG2LogPrefix, *Error);
 				}
 				return;
 			}
 		}
 
-		UE_LOG(LogTemp, Error, TEXT("%s Start failed: no active PIE/game world."), PhysAnimG2LogPrefix);
+		PHYSANIM_LOG(LogTemp, Error, TEXT("%s Start failed: no active PIE/game world."), PhysAnimG2LogPrefix);
 	}
 
 	void HandleStartPresentationCommand()
@@ -92,13 +93,13 @@ namespace
 				FString Error;
 				if (!ComparisonSubsystem->StartPresentation(Error))
 				{
-					UE_LOG(LogTemp, Error, TEXT("%s Presentation start failed: %s"), PhysAnimG2LogPrefix, *Error);
+					PHYSANIM_LOG(LogTemp, Error, TEXT("%s Presentation start failed: %s"), PhysAnimG2LogPrefix, *Error);
 				}
 				return;
 			}
 		}
 
-		UE_LOG(LogTemp, Error, TEXT("%s Presentation start failed: no active PIE/game world."), PhysAnimG2LogPrefix);
+		PHYSANIM_LOG(LogTemp, Error, TEXT("%s Presentation start failed: no active PIE/game world."), PhysAnimG2LogPrefix);
 	}
 
 	void HandleStopSideBySideCommand()
@@ -112,7 +113,7 @@ namespace
 			}
 		}
 
-		UE_LOG(LogTemp, Warning, TEXT("%s Stop ignored: no active PIE/game world."), PhysAnimG2LogPrefix);
+		PHYSANIM_LOG(LogTemp, Warning, TEXT("%s Stop ignored: no active PIE/game world."), PhysAnimG2LogPrefix);
 	}
 
 	static FAutoConsoleCommand GPhysAnimStartSideBySideCommand(
@@ -257,7 +258,7 @@ bool UPhysAnimComparisonSubsystem::StartComparison(bool bEnablePresentationMode,
 	}
 
 	bComparisonActive = true;
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Log,
 		TEXT("%s Started %s comparison. physics=%s kinematic=%s separationCm=%.1f"),
@@ -733,7 +734,7 @@ void UPhysAnimComparisonSubsystem::TickPresentationComparison(ACharacter& Source
 
 		PresentationStartTimeSeconds = World->GetTimeSeconds();
 		LastPresentationPhaseName = TEXT("WalkPerturbation");
-		UE_LOG(LogTemp, Log, TEXT("%s Scripted G2 presentation sequence started from steady BridgeActive state."), PhysAnimG2LogPrefix);
+		PHYSANIM_LOG(LogTemp, Log, TEXT("%s Scripted G2 presentation sequence started from steady BridgeActive state."), PhysAnimG2LogPrefix);
 	}
 
 	const float ElapsedSeconds = static_cast<float>(World->GetTimeSeconds() - PresentationStartTimeSeconds);
@@ -748,7 +749,7 @@ void UPhysAnimComparisonSubsystem::TickPresentationComparison(ACharacter& Source
 			LastPerturbationTelemetryLogTimeSeconds =
 				PresentationPerturbationAppliedTimeSeconds - PresentationPerturbationTelemetryIntervalSeconds;
 			bPresentationPerturbationApplied = true;
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogTemp,
 				Log,
 				TEXT("%s Applied scripted G2 contact push: halfExtent=(%.1f, %.1f, %.1f) travel=%.1fcm duration=%.2fs shellForce=(%.1f, %.1f, %.1f) stabilizationOverride=%.2fs"),
@@ -897,7 +898,7 @@ void UPhysAnimComparisonSubsystem::UpdatePerturbationPushers(
 		const ECollisionEnabled::Type Enabled = Comp->GetCollisionEnabled();
 		const ECollisionResponse Response = Comp->GetCollisionResponseToChannel(ECC_WorldDynamic);
 		const FName Profile = Comp->GetCollisionProfileName();
-		UE_LOG(LogTemp, Log, TEXT("[PhysAnimG2] Audit %s: enabled=%d response_to_worlddynamic=%d profile=%s"), 
+		PHYSANIM_LOG(LogTemp, Log, TEXT("[PhysAnimG2] Audit %s: enabled=%d response_to_worlddynamic=%d profile=%s"), 
 			Name, (int)Enabled, (int)Response, *Profile.ToString());
 	};
 
@@ -1167,7 +1168,7 @@ void UPhysAnimComparisonSubsystem::MaybeLogPerturbationTelemetry(const ACharacte
 	const float HeadLocalGapCm = SourceHeadLocalDeltaCm - KinematicHeadLocalDeltaCm;
 	const float FootLocalGapCm = SourceMaxFootLocalDeltaCm - KinematicMaxFootLocalDeltaCm;
 
-	UE_LOG(
+	PHYSANIM_LOG(
 		LogTemp,
 		Log,
 		TEXT("%s Perturbation telemetry t=%.2fs physics[actorDelta=%.1f spineDelta=%.1f headDelta=%.1f maxFootDelta=%.1f localSpine=%.1f localHead=%.1f localFoot=%.1f] kinematic[actorDelta=%.1f spineDelta=%.1f headDelta=%.1f maxFootDelta=%.1f localSpine=%.1f localHead=%.1f localFoot=%.1f] gap[spine=%.1f head=%.1f foot=%.1f localSpine=%.1f localHead=%.1f localFoot=%.1f]"),

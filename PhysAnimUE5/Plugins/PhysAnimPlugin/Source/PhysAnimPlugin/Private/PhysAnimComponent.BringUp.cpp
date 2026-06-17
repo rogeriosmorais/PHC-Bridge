@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 
 float UPhysAnimComponent::CalculateSimulationHandoffAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
@@ -130,10 +131,7 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 			if (IsBalanceActiveState(RuntimeState) && CalculateCurrentPolicyInfluenceAlpha(ResolveEffectiveStabilizationSettings()) > 0.0f)
 			{
 				const FString ViolationReason = FString::Printf(TEXT("bodyPromotionViolation:%s"), *BoneName.ToString());
-				UE_LOG(
-					LogPhysAnimBridge,
-					Error,
-					TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Body promotion for '%s' requested after policy influence has begun. Failing and stopping mode."),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f, TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Body promotion for '%s' requested after policy influence has begun. Failing and stopping mode."),
 					*BoneName.ToString());
 				FinalizeBalanceScenario(false, ViolationReason);
 				StopBalancePerturbationMode();
@@ -146,7 +144,7 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 				{
 					if (GVerbosePhase1Forensics != 0)
 					{
-						UE_LOG(LogPhysAnimBridge, Log, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=unlockGroup"), *BoneName.ToString());
+						PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("PHASE1_UPPER_BODY_RESET_READD_SUPPRESSED bone=%s source=unlockGroup"), *BoneName.ToString());
 					}
 				}
 				else
@@ -157,10 +155,7 @@ void UPhysAnimComponent::UnlockBringUpGroup(int32 GroupIndex, const TCHAR* Conte
 		}
 	}
 
-	UE_LOG(
-		LogPhysAnimBridge,
-		Log,
-		TEXT("[PhysAnim] Stabilization bring-up unlocked group %d/%d [%s] context=%s"),
+	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Stabilization bring-up unlocked group %d/%d [%s] context=%s"),
 		GroupIndex + 1,
 		GetBringUpGroupCount(),
 		*FString::Join(GroupBoneNames, TEXT(", ")),
@@ -468,10 +463,7 @@ bool UPhysAnimComponent::HandlePrePolicyShellRecovery(const FPhysAnimStabilizati
 	const double CurrentRecoveryTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	if (LastPrePolicyShellRecoveryLogTimeSeconds < 0.0 || (CurrentRecoveryTimeSeconds - LastPrePolicyShellRecoveryLogTimeSeconds) >= 0.5)
 	{
-		UE_LOG(
-			LogPhysAnimBridge,
-			Warning,
-			TEXT("[PhysAnim] Pre-policy shell recovery triggered: shellOffsetCm=%.1f rootAngDegPerSec=%.1f seeded=%s modifiersReset=%d error=%s"),
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnim] Pre-policy shell recovery triggered: shellOffsetCm=%.1f rootAngDegPerSec=%.1f seeded=%s modifiersReset=%d error=%s"),
 			ShellPlanarOffsetDeltaCm,
 			RootAngularSpeedDegPerSecond,
 			bSeeded ? TEXT("true") : TEXT("false"),
@@ -557,26 +549,20 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 			const double WorldTime = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 			const float CurrentAngularVelocity = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
 			
-			UE_LOG(
-				LogPhysAnimBridge,
-				Log,
-				TEXT("[PhysAnimBalance] STATE FLIP - BEFORE FINAL RAMP: time=%.4f handoffAlpha=%.4f unlockedGroup=%d distalComposition=%s rootAngVel=%.2f"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] STATE FLIP - BEFORE FINAL RAMP: time=%.4f handoffAlpha=%.4f unlockedGroup=%d distalComposition=%s rootAngVel=%.2f"),
 				WorldTime,
 				SimulationHandoffAlpha,
 				HighestUnlockedBringUpGroupIndex,
 				bDistalLocomotionCompositionModeActive ? TEXT("On") : TEXT("Off"),
 				CurrentAngularVelocity);
 
-			UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_RAMP_ARMED group=%d"), CoreFinalGroupIndex);
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_RAMP_ARMED group=%d"), CoreFinalGroupIndex);
 
 			BringUpGroupControlRampStartTimeSeconds[CoreFinalGroupIndex] = WorldTime;
 			BringUpGroupStableAccumulatedSeconds = 0.0f;
 			
 			const float AngularVelocity = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
-			UE_LOG(
-				LogPhysAnimBridge,
-				Log,
-				TEXT("[PhysAnim] Stabilization final-group control ramp enabled for group %d/%d [hand_l, hand_r]. PelvisAngularVelocity=%.2f deg/s. PendingResets=%d"),
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Stabilization final-group control ramp enabled for group %d/%d [hand_l, hand_r]. PelvisAngularVelocity=%.2f deg/s. PendingResets=%d"),
 				CoreFinalGroupIndex + 1,
 				GetBringUpGroupCount(),
 				AngularVelocity,
@@ -586,10 +572,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 			// it means our bridge setup itself is explosive.
 			if (IsBalanceActiveState(RuntimeState) && AngularVelocity > EffectiveSettings.MaxRootAngularSpeedDegPerSecond)
 			{
-				UE_LOG(
-					LogPhysAnimBridge,
-					Error,
-					TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Ramp enable caused large root angular spike (%.2f > %.2f). reason=rampEnableRootSpike"),
+				PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Error, 1.0f, TEXT("[PhysAnimBalance] STATE MACHINE VIOLATION: Ramp enable caused large root angular spike (%.2f > %.2f). reason=rampEnableRootSpike"),
 					AngularVelocity,
 					EffectiveSettings.MaxRootAngularSpeedDegPerSecond);
 				FinalizeBalanceScenario(false, TEXT("rampEnableRootSpike"));
@@ -611,10 +594,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 		{
 			PolicyInfluenceRampStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : BridgeStartTimeSeconds;
 			BringUpGroupStableAccumulatedSeconds = 0.0f;
-			UE_LOG(
-				LogPhysAnimBridge,
-				Log,
-				TEXT("[PhysAnim] Stabilization policy influence ramp enabled after final-group control settle."));
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] Stabilization policy influence ramp enabled after final-group control settle."));
 			return;
 		}
 	}
@@ -640,7 +620,7 @@ void UPhysAnimComponent::AdvanceBringUpState(float DeltaTime, const FPhysAnimSta
 		BringUpGroupControlRampStartTimeSeconds[HighestUnlockedBringUpGroupIndex] = WorldTime;
 		BringUpGroupStableAccumulatedSeconds = 0.0f;
 
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_RAMP_ARMED group=%d"), HighestUnlockedBringUpGroupIndex);
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_RAMP_ARMED group=%d"), HighestUnlockedBringUpGroupIndex);
 		return;
 	}
 
@@ -734,7 +714,7 @@ float UPhysAnimComponent::CalculateBringUpGroupControlAuthorityAlpha(
 
 	if (Alpha > 0.0f && BringUpGroupAlphaActiveLogged.IsValidIndex(GroupIndex) && BringUpGroupAlphaActiveLogged[GroupIndex] == 0)
 	{
-		UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_ALPHA_ACTIVE group=%d alpha=%.4f"), GroupIndex, Alpha);
+		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnimBalance] PHASE1_BRINGUP_ALPHA_ACTIVE group=%d alpha=%.4f"), GroupIndex, Alpha);
 		BringUpGroupAlphaActiveLogged[GroupIndex] = 1;
 	}
 

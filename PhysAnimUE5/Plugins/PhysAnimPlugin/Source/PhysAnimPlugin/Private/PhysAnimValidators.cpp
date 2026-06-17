@@ -378,6 +378,13 @@ namespace PhysAnimValidators
 			? Arbitration.TerminalSubstepTimestamp
 			: Input.Values.TerminalSubstepTimestamp;
 
+		// Stage 2A Locomotion Telemetry
+		Snapshot.RootMode = Input.Values.RootMode;
+		Snapshot.LocomotionIntent = Input.Values.LocomotionIntent;
+		Snapshot.bPolicyOutputActive = Input.Values.bPolicyOutputActive;
+		Snapshot.CapsuleVelocity = Input.Values.CapsuleVelocity;
+		Snapshot.ShellDivergencePeak = Input.Values.ShellDivergencePeak;
+
 		return Snapshot;
 	}
 }

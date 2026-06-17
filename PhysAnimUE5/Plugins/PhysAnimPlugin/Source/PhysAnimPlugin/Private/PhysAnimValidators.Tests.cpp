@@ -565,9 +565,11 @@ namespace
 			Input.Values.PolicyActionRawMeanAbsMax = 0.35;
 			Input.Values.PolicyActionConditionedMeanAbsMax = 0.21;
 			Input.Values.PolicyActionClampedFloatMax = 2;
-			Input.Values.ControlTargetSampleCount = 5;
+			Input.Values.ControlTargetSampleCount = 17;
 			Input.Values.ControlTargetNormalWrites = 84;
 			Input.Values.ControlTargetTotalWrites = 89;
+			Input.Values.ControlledBodyCount = 11;
+			Input.Values.bPhysicsControlComponentAvailable = true;
 			Input.Values.ControlTargetMaxDeltaDeg = 4.5;
 			Input.Values.ControlTargetMeanDeltaDegMax = 1.25;
 			Input.Values.ControlTargetMaxRawPolicyOffsetDeg = 9.5;
@@ -576,6 +578,14 @@ namespace
 			Input.Values.RuntimeSimulatingBodyCount = 14;
 			Input.Values.RuntimeMaxBodyLinearSpeedCmPerSecond = 33.0;
 			Input.Values.RuntimeMaxBodyAngularSpeedDegPerSecond = 44.0;
+			Input.Values.RendererFacingMotionSampleCount = 3;
+			Input.Values.RendererFacingMotionActiveSampleCount = 1;
+			Input.Values.RendererFacingMotionMaxRootWorldPositionDriftCm = 18.75;
+			Input.Values.RendererFacingMotionMaxMeshWorldPositionDriftCm = 18.75;
+			Input.Values.RendererFacingMotionMaxRootYawDeltaDeg = 45.0;
+			Input.Values.RendererFacingMotionMaxBodyDeltaCm = 25.5;
+			Input.Values.RendererFacingMotionMaxBodyDeltaDeg = 90.0;
+			Input.Values.bRendererFacingMotionUsedNullRhi = true;
 			Input.Values.bPhysicalPerturbationApplied = true;
 			Input.Values.PerturbationMeasuredDeltaVCmPerSecond = 12.0;
 
@@ -592,9 +602,11 @@ namespace
 			TestEqual(TEXT("Artifact preserves policy_action_raw_mean_abs_max"), Snapshot.PolicyActionRawMeanAbsMax, 0.35);
 			TestEqual(TEXT("Artifact preserves policy_action_conditioned_mean_abs_max"), Snapshot.PolicyActionConditionedMeanAbsMax, 0.21);
 			TestEqual(TEXT("Artifact preserves policy_action_clamped_float_max"), Snapshot.PolicyActionClampedFloatMax, 2);
-			TestEqual(TEXT("Artifact preserves control_target_sample_count"), Snapshot.ControlTargetSampleCount, 5);
+			TestEqual(TEXT("Artifact preserves control_target_sample_count"), Snapshot.ControlTargetSampleCount, 17);
 			TestEqual(TEXT("Artifact preserves control_target_normal_writes"), Snapshot.ControlTargetNormalWrites, 84);
 			TestEqual(TEXT("Artifact preserves control_target_total_writes"), Snapshot.ControlTargetTotalWrites, 89);
+			TestEqual(TEXT("Artifact preserves controlled_body_count"), Snapshot.ControlledBodyCount, 11);
+			TestTrue(TEXT("Artifact preserves physics_control_component_available"), Snapshot.bPhysicsControlComponentAvailable);
 			TestEqual(TEXT("Artifact preserves control_target_max_delta_deg"), Snapshot.ControlTargetMaxDeltaDeg, 4.5);
 			TestEqual(TEXT("Artifact preserves control_target_mean_delta_deg_max"), Snapshot.ControlTargetMeanDeltaDegMax, 1.25);
 			TestEqual(TEXT("Artifact preserves control_target_max_raw_policy_offset_deg"), Snapshot.ControlTargetMaxRawPolicyOffsetDeg, 9.5);
@@ -603,9 +615,42 @@ namespace
 			TestEqual(TEXT("Artifact preserves runtime_simulating_body_count"), Snapshot.RuntimeSimulatingBodyCount, 14);
 			TestEqual(TEXT("Artifact preserves runtime_max_body_linear_speed_cm_per_second"), Snapshot.RuntimeMaxBodyLinearSpeedCmPerSecond, 33.0);
 			TestEqual(TEXT("Artifact preserves runtime_max_body_angular_speed_deg_per_second"), Snapshot.RuntimeMaxBodyAngularSpeedDegPerSecond, 44.0);
+			TestEqual(TEXT("Artifact preserves renderer_facing_motion_sample_count"), Snapshot.RendererFacingMotionSampleCount, 3);
+			TestEqual(TEXT("Artifact preserves renderer_facing_motion_active_sample_count"), Snapshot.RendererFacingMotionActiveSampleCount, 1);
+			TestEqual(TEXT("Artifact preserves renderer_facing_motion_max_root_world_position_drift_cm"), Snapshot.RendererFacingMotionMaxRootWorldPositionDriftCm, 18.75);
+			TestEqual(TEXT("Artifact preserves renderer_facing_motion_max_mesh_world_position_drift_cm"), Snapshot.RendererFacingMotionMaxMeshWorldPositionDriftCm, 18.75);
+			TestEqual(TEXT("Artifact preserves renderer_facing_motion_max_root_yaw_delta_deg"), Snapshot.RendererFacingMotionMaxRootYawDeltaDeg, 45.0);
 			TestTrue(TEXT("Artifact preserves physical_perturbation_applied"), Snapshot.bPhysicalPerturbationApplied);
 			TestEqual(TEXT("Artifact preserves perturbation_measured_delta_v_cm_per_second"), Snapshot.PerturbationMeasuredDeltaVCmPerSecond, 12.0);
 			TestEqual(TEXT("Artifact default terminal_reason is None/null"), static_cast<uint8>(Snapshot.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::None));
+		}
+
+		{
+			FPhysAnimRunArtifactSnapshotInput Input;
+			Input.Values.ControlTargetSampleCount = 17;
+			Input.Values.ControlTargetNormalWrites = 13;
+			Input.Values.bPhysicsControlComponentAvailable = true;
+
+			const FPhysAnimRunArtifactSnapshot Snapshot = PhysAnimValidators::BuildRunArtifactSnapshot(Input);
+
+			TestEqual(TEXT("Artifact preserves control_target_sample_count for normal-write evidence"), Snapshot.ControlTargetSampleCount, 17);
+			TestEqual(TEXT("Artifact preserves control_target_normal_writes for normal-write evidence"), Snapshot.ControlTargetNormalWrites, 13);
+			TestTrue(TEXT("Artifact preserves physics_control_component_available for normal-write evidence"), Snapshot.bPhysicsControlComponentAvailable);
+		}
+
+		{
+			FPhysAnimRunArtifactSnapshotInput Input;
+			Input.Values.ControlTargetSampleCount = 17;
+			Input.Values.ControlTargetNormalWrites = 13;
+			Input.Values.ControlTargetTotalWrites = 19;
+			Input.Values.bPhysicsControlComponentAvailable = true;
+
+			const FPhysAnimRunArtifactSnapshot Snapshot = PhysAnimValidators::BuildRunArtifactSnapshot(Input);
+
+			TestEqual(TEXT("Artifact preserves control_target_sample_count for total-write evidence"), Snapshot.ControlTargetSampleCount, 17);
+			TestEqual(TEXT("Artifact preserves control_target_normal_writes for total-write evidence"), Snapshot.ControlTargetNormalWrites, 13);
+			TestEqual(TEXT("Artifact preserves control_target_total_writes"), Snapshot.ControlTargetTotalWrites, 19);
+			TestTrue(TEXT("Artifact preserves physics_control_component_available for total-write evidence"), Snapshot.bPhysicsControlComponentAvailable);
 		}
 
 		{
@@ -659,6 +704,14 @@ namespace
 			Input.Values.SupportMode = EPhysAnimSupportMode::SingleFootSurvival;
 			Input.Values.SupportChurnCount = 3;
 			Input.Values.SupportChurnHz = 9.0;
+			Input.Values.RendererFacingMotionSampleCount = 4;
+			Input.Values.RendererFacingMotionActiveSampleCount = 2;
+			Input.Values.RendererFacingMotionMaxRootWorldPositionDriftCm = 18.75;
+			Input.Values.RendererFacingMotionMaxMeshWorldPositionDriftCm = 18.75;
+			Input.Values.RendererFacingMotionMaxRootYawDeltaDeg = 45.0;
+			Input.Values.RendererFacingMotionMaxBodyDeltaCm = 25.5;
+			Input.Values.RendererFacingMotionMaxBodyDeltaDeg = 90.0;
+			Input.Values.bRendererFacingMotionUsedNullRhi = true;
 
 			const FPhysAnimRunArtifactSnapshot Snapshot = PhysAnimValidators::BuildRunArtifactSnapshot(Input);
 
@@ -678,11 +731,56 @@ namespace
 			TestEqual(TEXT("Artifact maps movement_reclaim_count"), Snapshot.MovementReclaimCount, 1);
 			TestEqual(TEXT("Artifact maps shell_helper_used_count"), Snapshot.ShellHelperUsedCount, 1);
 			TestEqual(TEXT("Artifact maps controller_stability_failure_field"), static_cast<uint8>(Snapshot.ControllerStabilityFailureField), static_cast<uint8>(EPhysAnimControllerStabilityFailureField::ControllerGainScale));
+			TestEqual(TEXT("Artifact maps renderer_facing_motion_sample_count"), Snapshot.RendererFacingMotionSampleCount, 4);
+			TestEqual(TEXT("Artifact maps renderer_facing_motion_active_sample_count"), Snapshot.RendererFacingMotionActiveSampleCount, 2);
+			TestEqual(TEXT("Artifact maps renderer_facing_motion_max_root_world_position_drift_cm"), Snapshot.RendererFacingMotionMaxRootWorldPositionDriftCm, 18.75);
 			TestTrue(TEXT("Artifact preserves proxy_inside_hull false"), Snapshot.ProxyInsideHull.IsSet() && !Snapshot.ProxyInsideHull.GetValue());
 			TestEqual(TEXT("Artifact preserves proxy_outside_hull_duration_ms"), Snapshot.ProxyOutsideHullDurationMs.GetValue(), 101.0);
 			TestEqual(TEXT("Artifact primary terminal_reason uses validator order"), static_cast<uint8>(Snapshot.TerminalReason), static_cast<uint8>(EPhysAnimTerminalReason::ActivationPhysicsAssetContractViolation));
 			TestEqual(TEXT("Artifact records co_terminal_reasons"), Snapshot.CoTerminalReasons.Num(), 6);
 		}
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimValidatorsArtifactSnapshotRawPolicyOffsetPreservationTest,
+		"PhysAnim.Validators.ArtifactSnapshot.RawPolicyOffsetPreservation",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimValidatorsArtifactSnapshotRawPolicyOffsetPreservationTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimRunArtifactSnapshotInput Input;
+		Input.Values.ControlTargetSampleCount = 17;
+		Input.Values.ControlTargetNormalWrites = 13;
+		Input.Values.ControlTargetMaxRawPolicyOffsetDeg = 8.75;
+		Input.Values.ControlTargetMeanRawPolicyOffsetDegMax = 3.25;
+
+		const FPhysAnimRunArtifactSnapshot Snapshot = PhysAnimValidators::BuildRunArtifactSnapshot(Input);
+
+		TestEqual(TEXT("Artifact preserves control_target_sample_count"), Snapshot.ControlTargetSampleCount, 17);
+		TestEqual(TEXT("Artifact preserves control_target_normal_writes"), Snapshot.ControlTargetNormalWrites, 13);
+		TestEqual(TEXT("Artifact preserves control_target_max_raw_policy_offset_deg"), Snapshot.ControlTargetMaxRawPolicyOffsetDeg, 8.75);
+		TestEqual(TEXT("Artifact preserves control_target_mean_raw_policy_offset_deg_max"), Snapshot.ControlTargetMeanRawPolicyOffsetDegMax, 3.25);
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimValidatorsControlTargetDeltaPreservationTest,
+		"PhysAnim.Validators.ArtifactSnapshot.ControlTargetDeltaPreservation",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimValidatorsControlTargetDeltaPreservationTest::RunTest(const FString& Parameters)
+	{
+		FPhysAnimRunArtifactSnapshotInput Input;
+		Input.Values.ControlTargetMaxDeltaDeg = 6.5;
+		Input.Values.ControlTargetMeanDeltaDegMax = 2.25;
+
+		const FPhysAnimRunArtifactSnapshot Snapshot = PhysAnimValidators::BuildRunArtifactSnapshot(Input);
+
+		TestEqual(TEXT("Artifact preserves control_target_max_delta_deg exact value"), Snapshot.ControlTargetMaxDeltaDeg, 6.5);
+		TestEqual(TEXT("Artifact preserves control_target_mean_delta_deg_max exact value"), Snapshot.ControlTargetMeanDeltaDegMax, 2.25);
 
 		return true;
 	}

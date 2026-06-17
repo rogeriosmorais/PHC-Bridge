@@ -1,5 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimLogger.h"
 
 bool UPhysAnimComponent::StartBridge()
 {
@@ -20,7 +21,7 @@ bool UPhysAnimComponent::StartBridge()
 	FString Error;
 	if (!ResolveRuntimeContext(Error))
 	{
-		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked: %s"), *Error);
+		PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked: %s"), *Error);
 		EmitBridgeTraceEvent(TEXT("startup_blocked"), TEXT("Runtime context resolution failed during startup."), Error);
 		FailStop(FString::Printf(TEXT("Startup blocked: %s"), *Error));
 		return false;
@@ -33,7 +34,7 @@ bool UPhysAnimComponent::StartBridge()
 		!ValidatePoseSearchIntegration(Error) ||
 		!InitializeModel(Error))
 	{
-		UE_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked: %s"), *Error);
+		PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Startup blocked: %s"), *Error);
 		EmitBridgeTraceEvent(TEXT("startup_blocked"), TEXT("Startup validation failed before bridge activation."), Error);
 		FailStop(FString::Printf(TEXT("Startup blocked: %s"), *Error));
 		return false;
@@ -58,7 +59,7 @@ bool UPhysAnimComponent::StartBridge()
 	bLiveRuntimeEvidenceStartupVerificationHandoffArmed = false;
 	bLiveRuntimeEvidenceStartupProxySupportHandoffArmed = false;
 	bLiveRuntimeEvidenceProofShouldComplete = bRequestedProofShouldComplete;
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Proxy handoff reset state=%s"), GetRuntimeStateName(RuntimeState));
+	PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Proxy handoff reset state=%s"), GetRuntimeStateName(RuntimeState));
 	bEnableLiveRuntimeEvidenceProof = bRequestedLiveRuntimeEvidenceProof;
 	bForceSupportFailure = bRequestedForceSupportFailure;
 
@@ -69,7 +70,7 @@ bool UPhysAnimComponent::StartBridge()
 	InitialPoseSearchWaitStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	ConsecutiveInvalidPoseSearchFrames = 0;
 	LastValidPoseSearchResult = FPoseSearchBlueprintResult();
-	UE_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Startup pending initial PoseSearch result before taking physics ownership."));
+	PHYSANIM_LOG(LogPhysAnimBridge, Log, TEXT("[PhysAnim] Startup pending initial PoseSearch result before taking physics ownership."));
 	UpdateBridgeStatusIndicator(1.0f);
 	return true;
 }
@@ -95,7 +96,7 @@ void UPhysAnimComponent::StopBridge()
 	bLiveRuntimeEvidenceProofShouldComplete = true;
 	if (bV0PlantThighWorkDiagnosticEnabled)
 	{
-		UE_LOG(LogPhysAnimBridge, Display, TEXT("[PhysAnimV0] THIGH_WORK_DIAGNOSTIC positiveWork=%.6f negativeWork=%.6f"), 
+		PHYSANIM_LOG(LogPhysAnimBridge, Display, TEXT("[PhysAnimV0] THIGH_WORK_DIAGNOSTIC positiveWork=%.6f negativeWork=%.6f"), 
 			ActivatedStandingStabilityMetrics.ThighPositiveWorkAccumulated, 
 			ActivatedStandingStabilityMetrics.ThighNegativeWorkAccumulated);
 	}

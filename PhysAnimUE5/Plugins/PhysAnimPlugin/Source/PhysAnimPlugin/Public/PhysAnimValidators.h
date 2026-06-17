@@ -311,7 +311,16 @@ struct FPhysAnimRunArtifactSnapshot
 	bool bCalfContactTerminal = false;
 
 	double ControlAlpha = 0.0;
+	bool bPhysicsControlComponentAvailable = false;
+	int32 ControlledBodyCount = 0;
 	int32 PolicyInferenceSuccessCount = 0;
+	int32 PolicyInferenceAttemptCount = 0;
+	int32 PolicyInferenceFailureCount = 0;
+	double PolicyInferenceLatencyMsMax = 0.0;
+	bool bPolicyModelLoaded = false;
+	FString PolicyRuntimeName;
+	FString PolicyModelName;
+	bool bPolicyInputBuffersFinite = false;
 	int32 PolicyActionSampleCount = 0;
 	double PolicyActionRawMeanAbsMax = 0.0;
 	double PolicyActionConditionedMeanAbsMax = 0.0;
@@ -323,12 +332,32 @@ struct FPhysAnimRunArtifactSnapshot
 	double ControlTargetMeanDeltaDegMax = 0.0;
 	double ControlTargetMaxRawPolicyOffsetDeg = 0.0;
 	double ControlTargetMeanRawPolicyOffsetDegMax = 0.0;
+	int32 PoseSearchQueryCount = 0;
+	int32 PoseSearchValidResultCount = 0;
+	FString PoseSearchSelectedAnimationName;
+	double PoseSearchSelectedTime = 0.0;
+	int32 PoseSearchConsecutiveInvalidFrameCount = 0;
+	int32 RendererFacingMotionSampleCount = 0;
+	int32 RendererFacingMotionActiveSampleCount = 0;
+	double RendererFacingMotionMaxRootWorldPositionDriftCm = 0.0;
+	double RendererFacingMotionMaxMeshWorldPositionDriftCm = 0.0;
+	double RendererFacingMotionMaxRootYawDeltaDeg = 0.0;
+	double RendererFacingMotionMaxBodyDeltaCm = 0.0;
+	double RendererFacingMotionMaxBodyDeltaDeg = 0.0;
+	bool bRendererFacingMotionUsedNullRhi = false;
 	int32 RuntimeBodySampleCount = 0;
 	int32 RuntimeSimulatingBodyCount = 0;
+	int32 CriticalBodyValidMask = 0;
+	int32 CriticalBodySimulatingMask = 0;
+	int32 SupportBodyValidMask = 0;
+	int32 SupportBodySimulatingMask = 0;
 	double RuntimeMaxBodyLinearSpeedCmPerSecond = 0.0;
 	double RuntimeMaxBodyAngularSpeedDegPerSecond = 0.0;
 	bool bPhysicalPerturbationApplied = false;
 	double PerturbationMeasuredDeltaVCmPerSecond = 0.0;
+	double ThighBaselineWork = 0.0;
+	double ThighActivationWork = 0.0;
+	double ThighNetWork = 0.0;
 	FString ShellBookkeepingState;
 	double ShellInfluenceMateriality = 0.0;
 	int32 TopologyChangeCount = 0;
@@ -352,6 +381,15 @@ struct FPhysAnimRunArtifactSnapshot
 	TArray<EPhysAnimTerminalReason> CoTerminalReasons;
 	int64 TerminalSubstepTimestamp = 0;
 	bool bTerminalFrameArtifactCaptured = false;
+
+	// Stage 2A Locomotion Telemetry
+	FString RootMode;
+	FString LocomotionIntent;
+	bool bPolicyOutputActive = false;
+	FVector CapsuleVelocity = FVector::ZeroVector;
+	double ShellDivergencePeak = 0.0;
+
+	double ActionMagnitudeVariance = 0.0;
 };
 
 struct FPhysAnimRunArtifactSnapshotInput

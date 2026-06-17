@@ -1,8 +1,12 @@
 #include "PhysAnimProofArtifactEmitter.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimEvidenceClassifier.h"
+#include "PhysAnimEvidenceSummary.h"
+#include "PhysAnimLogger.h"
 
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
+#include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonSerializer.h"
@@ -79,6 +83,267 @@ namespace
 		return Result;
 	}
 
+	FPhysAnimEvidenceBaselineInput PhysAnimProof_BuildEvidenceBaselineInput(const FPhysAnimRunArtifactSnapshot& Artifact)
+	{
+		FPhysAnimEvidenceBaselineInput BaselineInput;
+
+		const auto HasStrictPhcPolicyEvidence = [&Artifact]()
+		{
+			return Artifact.bPolicyModelLoaded &&
+				Artifact.bPolicyInputBuffersFinite &&
+				Artifact.PolicyInferenceSuccessCount > 0 &&
+				Artifact.PolicyActionSampleCount > 0 &&
+				FMath::IsFinite(Artifact.PolicyActionRawMeanAbsMax) &&
+				FMath::IsFinite(Artifact.PolicyActionConditionedMeanAbsMax) &&
+				Artifact.PolicyActionRawMeanAbsMax > 0.0 &&
+				Artifact.PolicyActionConditionedMeanAbsMax > 0.0;
+		};
+
+		const auto ResolvePoseSearchSegmentState = [&Artifact]()
+		{
+			if (Artifact.PoseSearchQueryCount <= 0)
+			{
+				return EPhysAnimEvidenceBaselineSegmentState::NotReached;
+			}
+
+			return Artifact.PoseSearchValidResultCount > 0
+				? EPhysAnimEvidenceBaselineSegmentState::Active
+				: EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive;
+		};
+
+		const auto ResolvePhcPolicySegmentState = [&Artifact, &HasStrictPhcPolicyEvidence]()
+		{
+			if (Artifact.PolicyInferenceAttemptCount <= 0)
+			{
+				return EPhysAnimEvidenceBaselineSegmentState::NotReached;
+			}
+
+			return HasStrictPhcPolicyEvidence()
+				? EPhysAnimEvidenceBaselineSegmentState::Active
+				: EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive;
+		};
+
+		BaselineInput.Segments.PoseSearch = ResolvePoseSearchSegmentState();
+		BaselineInput.Segments.PhcPolicy = ResolvePhcPolicySegmentState();
+		if (!Artifact.bPhysicsControlComponentAvailable || Artifact.ControlTargetSampleCount <= 0)
+		{
+			BaselineInput.Segments.PhysicsControl = EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		}
+		else if (Artifact.ControlTargetNormalWrites <= 0)
+		{
+			BaselineInput.Segments.PhysicsControl = EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive;
+		}
+		else
+		{
+			BaselineInput.Segments.PhysicsControl = EPhysAnimEvidenceBaselineSegmentState::Active;
+		}
+		BaselineInput.Segments.Chaos =
+			Artifact.RuntimeSimulatingBodyCount > 0
+				? EPhysAnimEvidenceBaselineSegmentState::Active
+				: EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		if (Artifact.RendererFacingMotionSampleCount <= 0)
+		{
+			BaselineInput.Segments.RendererFacingMotion = EPhysAnimEvidenceBaselineSegmentState::NotReached;
+		}
+		else if (Artifact.RendererFacingMotionActiveSampleCount <= 0)
+		{
+			BaselineInput.Segments.RendererFacingMotion = EPhysAnimEvidenceBaselineSegmentState::ReachedButInactive;
+		}
+		else
+		{
+			BaselineInput.Segments.RendererFacingMotion = EPhysAnimEvidenceBaselineSegmentState::Active;
+		}
+
+		BaselineInput.TruthFlags.bAssistanceTruthClean =
+			Artifact.ShellHelperUsedCount == 0 &&
+			!Artifact.bMeshWideAssistDetected &&
+			!Artifact.bNonCriticalBodyAssistDetected;
+		BaselineInput.TruthFlags.bContinuityTruthClean =
+			Artifact.bPhysicalContinuityValidatorPassed &&
+			!Artifact.bContinuityBookkeepingMismatch;
+		BaselineInput.TruthFlags.bSupportTruthClean =
+			Artifact.SupportMode != EPhysAnimSupportMode::Airborne &&
+			Artifact.ActiveSupportSideCount > 0 &&
+			Artifact.SupportHullAreaCm2 > 0.0 &&
+			Artifact.SupportGapTimerMs <= 100.0 &&
+			(!Artifact.ProxyInsideHull.IsSet() || Artifact.ProxyInsideHull.GetValue()) &&
+			!Artifact.bCalfContactTerminal;
+		BaselineInput.TruthFlags.bSimulationTruthClean =
+			Artifact.RuntimeBodySampleCount > 0 &&
+			Artifact.RuntimeSimulatingBodyCount > 0;
+		BaselineInput.TruthFlags.bTerminalFailure = Artifact.TerminalReason != EPhysAnimTerminalReason::None;
+		BaselineInput.TruthFlags.bArtifactLogContradiction = false;
+		BaselineInput.TruthFlags.bMissingEvidence = !Artifact.bTerminalFrameArtifactCaptured;
+
+		BaselineInput.ProofSignals.TerminalProofJsonPassed =
+			Artifact.TerminalReason == EPhysAnimTerminalReason::None;
+		BaselineInput.ProofSignals.LogPass = BaselineInput.ProofSignals.TerminalProofJsonPassed;
+		BaselineInput.ProofSignals.ArtifactPass = BaselineInput.ProofSignals.TerminalProofJsonPassed;
+		BaselineInput.bHoldThresholdSatisfied = Artifact.HoldDurationSec >= 3.3;
+
+		return BaselineInput;
+	}
+
+	FPhysAnimEvidenceSummarySegment PhysAnimProof_MakeSummarySegment(
+		const FString& SegmentName,
+		const EPhysAnimEvidenceBaselineSegmentState State,
+		const int32 SampleCount,
+		const double Confidence,
+		const double Score,
+		const TCHAR* ProvenanceTag,
+		const FString& SelectedSourceIdentity = TEXT(""),
+		const double SelectedSourceTime = 0.0,
+		const int32 ConsecutiveInvalidSampleCount = 0,
+		const int32 InferenceAttemptCount = 0,
+		const int32 InferenceFailureCount = 0,
+		const double InferenceLatencyMsMax = 0.0,
+		const bool bModelLoaded = false,
+		const FString& RuntimeName = TEXT(""),
+		const bool bInputBuffersFinite = false,
+		const double ThighNetWork = 0.0,
+		const double ThighBaselineWork = 0.0,
+		const double ThighActivationWork = 0.0,
+		const double ActionMagnitudeVariance = 0.0)
+	{
+		FPhysAnimEvidenceSummarySegment Segment;
+		Segment.SegmentName = SegmentName;
+		Segment.State = State;
+		Segment.Metrics.SampleCount = SampleCount;
+		Segment.Metrics.Confidence = Confidence;
+		Segment.Metrics.Score = Score;
+		Segment.Metrics.SelectedSourceIdentity = SelectedSourceIdentity;
+		Segment.Metrics.SelectedSourceTime = SelectedSourceTime;
+		Segment.Metrics.ConsecutiveInvalidSampleCount = ConsecutiveInvalidSampleCount;
+		Segment.Metrics.InferenceAttemptCount = InferenceAttemptCount;
+		Segment.Metrics.InferenceFailureCount = InferenceFailureCount;
+		Segment.Metrics.InferenceLatencyMsMax = InferenceLatencyMsMax;
+		Segment.Metrics.bModelLoaded = bModelLoaded;
+		Segment.Metrics.RuntimeName = RuntimeName;
+		Segment.Metrics.bInputBuffersFinite = bInputBuffersFinite;
+
+		// Stage 2A Metrics
+		Segment.Metrics.ThighNetWork = ThighNetWork;
+		Segment.Metrics.ThighBaselineWork = ThighBaselineWork;
+		Segment.Metrics.ThighActivationWork = ThighActivationWork;
+		Segment.Metrics.ActionMagnitudeVariance = ActionMagnitudeVariance;
+
+		Segment.SourceProvenance.Add(ProvenanceTag);
+		Segment.SourceProvenance.Add(TEXT("EB-01"));
+		return Segment;
+	}
+
+	FPhysAnimEvidenceSummary PhysAnimProof_BuildEvidenceSummary(
+		const FPhysAnimProofArtifactEmitInput& Input,
+		const FPhysAnimRunArtifactSnapshot& Artifact,
+		const FPhysAnimEvidenceBaselineResult& ClassifierResult)
+	{
+		FPhysAnimEvidenceSummary Summary;
+		Summary.AttemptUuid = Input.AttemptUuid;
+		Summary.TestName = TEXT("PhysAnim.LiveRuntimeEvidence");
+		Summary.MapName = Artifact.BaselineId.IsEmpty() ? TEXT("UnknownMap") : Artifact.BaselineId;
+		Summary.Timestamp = Artifact.Timestamp;
+		Summary.TerminalReason = Artifact.TerminalReason;
+		Summary.TerminalArtifactPath = PhysAnimProofArtifactEmitter::BuildTerminalArtifactJsonPath(Input.AttemptUuid);
+		const FString CommandLine = FCommandLine::Get();
+		const FString WorkingDirectory = FPaths::LaunchDir();
+		if (!Summary.TestName.IsEmpty() && !CommandLine.IsEmpty() && !WorkingDirectory.IsEmpty())
+		{
+			FPhysAnimEvidenceSummaryCommandMetadata CommandMetadata;
+			CommandMetadata.CommandName = Summary.TestName;
+			CommandMetadata.CommandLine = CommandLine;
+			CommandMetadata.WorkingDirectory = WorkingDirectory;
+			Summary.CommandMetadata = CommandMetadata;
+		}
+		else
+		{
+			Summary.CommandMetadata.Reset();
+		}
+
+		Summary.Segments.Reserve(static_cast<int32>(EPhysAnimEvidenceBaselineSegment::Count));
+		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
+			TEXT("PoseSearch"),
+			ClassifierResult.Segments.PoseSearch,
+			Artifact.PoseSearchQueryCount,
+			Artifact.PoseSearchQueryCount > 0
+				? static_cast<double>(Artifact.PoseSearchValidResultCount) / static_cast<double>(Artifact.PoseSearchQueryCount)
+				: 0.0,
+			static_cast<double>(Artifact.PoseSearchValidResultCount),
+			TEXT("pose_search"),
+			Artifact.PoseSearchSelectedAnimationName,
+			Artifact.PoseSearchSelectedTime,
+			Artifact.PoseSearchConsecutiveInvalidFrameCount));
+		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
+			TEXT("PhcPolicy"),
+			ClassifierResult.Segments.PhcPolicy,
+			Artifact.PolicyInferenceAttemptCount,
+			Artifact.PolicyInferenceAttemptCount > 0
+				? static_cast<double>(Artifact.PolicyInferenceSuccessCount) / static_cast<double>(Artifact.PolicyInferenceAttemptCount)
+				: 0.0,
+			Artifact.PolicyActionConditionedMeanAbsMax,
+			TEXT("phc_policy"),
+			Artifact.PolicyModelName,
+			0.0, // SelectedSourceTime
+			0,   // ConsecutiveInvalidSampleCount
+			Artifact.PolicyInferenceAttemptCount,
+			Artifact.PolicyInferenceFailureCount,
+			Artifact.PolicyInferenceLatencyMsMax,
+			Artifact.bPolicyModelLoaded,
+			Artifact.PolicyRuntimeName,
+			Artifact.bPolicyInputBuffersFinite,
+			0.0, 0.0, 0.0, // ThighNetWork, ThighBaselineWork, ThighActivationWork
+			Artifact.ActionMagnitudeVariance));
+		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
+			TEXT("PhysicsControl"),
+			ClassifierResult.Segments.PhysicsControl,
+			Artifact.ControlTargetSampleCount,
+			Artifact.ControlTargetSampleCount > 0
+				? static_cast<double>(Artifact.ControlTargetNormalWrites) / static_cast<double>(Artifact.ControlTargetSampleCount)
+				: 0.0,
+			Artifact.ControlTargetMaxDeltaDeg,
+			TEXT("physics_control"),
+			FString::Printf(TEXT("%d_bodies"), Artifact.ControlledBodyCount),
+			0.0,
+			0,
+			0,
+			0,
+			0.0,
+			Artifact.bPhysicsControlComponentAvailable,
+			TEXT(""), // RuntimeName
+			false, // bInputBuffersFinite
+			Artifact.ThighNetWork,
+			Artifact.ThighBaselineWork,
+			Artifact.ThighActivationWork,
+			0.0)); // ActionMagnitudeVariance
+		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
+			TEXT("Chaos"),
+			ClassifierResult.Segments.Chaos,
+			Artifact.RuntimeBodySampleCount,
+			Artifact.RuntimeSimulatingBodyCount,
+			Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond,
+			TEXT("chaos")));
+		Summary.Segments.Add(PhysAnimProof_MakeSummarySegment(
+			TEXT("RendererFacingMotion"),
+			ClassifierResult.Segments.RendererFacingMotion,
+			Artifact.RendererFacingMotionSampleCount,
+			Artifact.RendererFacingMotionSampleCount > 0
+				? static_cast<double>(Artifact.RendererFacingMotionActiveSampleCount) /
+					static_cast<double>(Artifact.RendererFacingMotionSampleCount)
+				: 0.0,
+			Artifact.RendererFacingMotionMaxRootWorldPositionDriftCm,
+			TEXT("renderer")));
+
+		Summary.QualityFlags = ClassifierResult.TruthFlags;
+		Summary.StrictVerdict = ClassifierResult.Verdict;
+		return Summary;
+	}
+
+	FPhysAnimEvidenceBaselineResult PhysAnimProof_ClassifySummary(
+		const FPhysAnimRunArtifactSnapshot& Artifact)
+	{
+		const FPhysAnimEvidenceBaselineInput BaselineInput = PhysAnimProof_BuildEvidenceBaselineInput(Artifact);
+		return PhysAnimEvidenceClassifier::Classify(BaselineInput);
+	}
+
 	TSharedRef<FJsonObject> PhysAnimProof_ArtifactToJson(
 		const FPhysAnimRunArtifactSnapshot& Artifact,
 		const FPhysAnimProofArtifactEmitInput& Input)
@@ -153,7 +418,16 @@ namespace
 		Json->SetBoolField(TEXT("calf_contact_terminal"), Artifact.bCalfContactTerminal);
 
 		Json->SetNumberField(TEXT("control_alpha"), Artifact.ControlAlpha);
+		Json->SetBoolField(TEXT("physics_control_component_available"), Artifact.bPhysicsControlComponentAvailable);
+		Json->SetNumberField(TEXT("controlled_body_count"), Artifact.ControlledBodyCount);
 		Json->SetNumberField(TEXT("policy_inference_success_count"), Artifact.PolicyInferenceSuccessCount);
+		Json->SetNumberField(TEXT("policy_inference_attempt_count"), Artifact.PolicyInferenceAttemptCount);
+		Json->SetNumberField(TEXT("policy_inference_failure_count"), Artifact.PolicyInferenceFailureCount);
+		Json->SetNumberField(TEXT("policy_inference_latency_ms_max"), Artifact.PolicyInferenceLatencyMsMax);
+		Json->SetBoolField(TEXT("policy_model_loaded"), Artifact.bPolicyModelLoaded);
+		Json->SetStringField(TEXT("policy_runtime_name"), Artifact.PolicyRuntimeName);
+		Json->SetStringField(TEXT("policy_model_name"), Artifact.PolicyModelName);
+		Json->SetBoolField(TEXT("policy_input_buffers_finite"), Artifact.bPolicyInputBuffersFinite);
 		Json->SetNumberField(TEXT("policy_action_sample_count"), Artifact.PolicyActionSampleCount);
 		Json->SetNumberField(TEXT("policy_action_raw_mean_abs_max"), Artifact.PolicyActionRawMeanAbsMax);
 		Json->SetNumberField(TEXT("policy_action_conditioned_mean_abs_max"), Artifact.PolicyActionConditionedMeanAbsMax);
@@ -165,6 +439,31 @@ namespace
 		Json->SetNumberField(TEXT("control_target_mean_delta_deg_max"), Artifact.ControlTargetMeanDeltaDegMax);
 		Json->SetNumberField(TEXT("control_target_max_raw_policy_offset_deg"), Artifact.ControlTargetMaxRawPolicyOffsetDeg);
 		Json->SetNumberField(TEXT("control_target_mean_raw_policy_offset_deg_max"), Artifact.ControlTargetMeanRawPolicyOffsetDegMax);
+		Json->SetNumberField(TEXT("pose_search_query_count"), Artifact.PoseSearchQueryCount);
+		Json->SetNumberField(TEXT("pose_search_valid_result_count"), Artifact.PoseSearchValidResultCount);
+		Json->SetStringField(TEXT("pose_search_selected_animation_name"), Artifact.PoseSearchSelectedAnimationName);
+		Json->SetNumberField(TEXT("pose_search_selected_time"), Artifact.PoseSearchSelectedTime);
+		Json->SetNumberField(TEXT("pose_search_consecutive_invalid_frame_count"), Artifact.PoseSearchConsecutiveInvalidFrameCount);
+		Json->SetNumberField(TEXT("renderer_facing_motion_sample_count"), Artifact.RendererFacingMotionSampleCount);
+		Json->SetNumberField(TEXT("renderer_facing_motion_active_sample_count"), Artifact.RendererFacingMotionActiveSampleCount);
+		Json->SetNumberField(
+			TEXT("renderer_facing_motion_max_root_world_position_drift_cm"),
+			Artifact.RendererFacingMotionMaxRootWorldPositionDriftCm);
+		Json->SetNumberField(
+			TEXT("renderer_facing_motion_max_mesh_world_position_drift_cm"),
+			Artifact.RendererFacingMotionMaxMeshWorldPositionDriftCm);
+		Json->SetNumberField(
+			TEXT("renderer_facing_motion_max_root_yaw_delta_deg"),
+			Artifact.RendererFacingMotionMaxRootYawDeltaDeg);
+		Json->SetNumberField(
+			TEXT("renderer_facing_motion_max_body_delta_cm"),
+			Artifact.RendererFacingMotionMaxBodyDeltaCm);
+		Json->SetNumberField(
+			TEXT("renderer_facing_motion_max_body_delta_deg"),
+			Artifact.RendererFacingMotionMaxBodyDeltaDeg);
+		Json->SetBoolField(
+			TEXT("renderer_facing_motion_used_null_rhi"),
+			Artifact.bRendererFacingMotionUsedNullRhi);
 		Json->SetNumberField(TEXT("runtime_body_sample_count"), Artifact.RuntimeBodySampleCount);
 		Json->SetNumberField(TEXT("runtime_simulating_body_count"), Artifact.RuntimeSimulatingBodyCount);
 		Json->SetNumberField(TEXT("runtime_max_body_linear_speed_cm_per_second"), Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond);
@@ -195,6 +494,23 @@ namespace
 		Json->SetArrayField(TEXT("co_terminal_reasons"), PhysAnimProof_TerminalReasonArrayToJson(Artifact.CoTerminalReasons));
 		Json->SetNumberField(TEXT("terminal_substep_timestamp"), static_cast<double>(Artifact.TerminalSubstepTimestamp));
 		Json->SetBoolField(TEXT("terminal_frame_artifact_captured"), Artifact.bTerminalFrameArtifactCaptured);
+
+		// Stage 2A Locomotion Telemetry
+		Json->SetStringField(TEXT("root_mode"), Artifact.RootMode);
+		Json->SetStringField(TEXT("locomotion_intent"), Artifact.LocomotionIntent);
+		Json->SetBoolField(TEXT("policy_output_active"), Artifact.bPolicyOutputActive);
+		Json->SetNumberField(TEXT("capsule_velocity_x"), Artifact.CapsuleVelocity.X);
+		Json->SetNumberField(TEXT("capsule_velocity_y"), Artifact.CapsuleVelocity.Y);
+		Json->SetNumberField(TEXT("capsule_velocity_z"), Artifact.CapsuleVelocity.Z);
+		Json->SetNumberField(TEXT("shell_divergence_peak"), Artifact.ShellDivergencePeak);
+
+		Json->SetNumberField(TEXT("policy_inference_success_count"), Artifact.PolicyInferenceSuccessCount);
+		Json->SetNumberField(TEXT("policy_inference_attempt_count"), Artifact.PolicyInferenceAttemptCount);
+
+		Json->SetNumberField(TEXT("thigh_net_work"), Artifact.ThighNetWork);
+		Json->SetNumberField(TEXT("thigh_baseline_work"), Artifact.ThighBaselineWork);
+		Json->SetNumberField(TEXT("thigh_activation_work"), Artifact.ThighActivationWork);
+		Json->SetNumberField(TEXT("action_magnitude_variance"), Artifact.ActionMagnitudeVariance);
 
 		return Json;
 	}
@@ -260,7 +576,7 @@ namespace PhysAnimProofArtifactEmitter
 
 	void LogAttemptStart(const FString& AttemptUuid)
 	{
-		UE_LOG(LogPhysAnimBridge, Warning, TEXT("PhysAnimProof: AttemptStart uuid=%s"), *AttemptUuid);
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("PhysAnimProof: AttemptStart uuid=%s"), *AttemptUuid);
 	}
 
 	void LogRuntimeEvidence(
@@ -269,9 +585,10 @@ namespace PhysAnimProofArtifactEmitter
 		const int32 MappedSupportHitCount,
 		const FPhysAnimRunArtifactSnapshot& Artifact)
 	{
-		UE_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Verbose,
+			1.0f,
 			TEXT("PhysAnimProof: RuntimeEvidence uuid=%s hits=%d mapped=%d support_mode=%s active_sides=%d hull_area=%.3f inference=%d action_samples=%d action_abs=%.3f control_samples=%d control_writes=%d control_delta=%.3f sim_bodies=%d max_body_lin=%.3f max_body_ang=%.3f"),
 			*AttemptUuid,
 			RuntimeHitCount,
@@ -298,9 +615,10 @@ namespace PhysAnimProofArtifactEmitter
 		const int32 MappedSupportHitCount,
 		const FPhysAnimRunArtifactSnapshot& Artifact)
 	{
-		UE_LOG(
+		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
 			Warning,
+			1.0f,
 			TEXT("PhysAnimProof: StandingProgress uuid=%s t=%.3f terminal_reason=%s hits=%d mapped=%d support_mode=%s active_sides=%d hull_area=%.3f"),
 			*AttemptUuid,
 			StandingSeconds,
@@ -314,7 +632,7 @@ namespace PhysAnimProofArtifactEmitter
 
 	FString BuildTerminalArtifactJsonPath(const FString& AttemptUuid)
 	{
-		const FString Directory = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("PhysAnim"), TEXT("ProofArtifacts"));
+		const FString Directory = FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("test-results"), TEXT("proof-artifacts"));
 		const FString FileName = FString::Printf(TEXT("%s_terminal.json"), *PhysAnimProof_SanitizeFileToken(AttemptUuid));
 		return FPaths::Combine(Directory, FileName);
 	}
@@ -345,6 +663,7 @@ namespace PhysAnimProofArtifactEmitter
 		FPhysAnimProofArtifactEmitResult Result;
 
 		const FPhysAnimRunArtifactSnapshot& Artifact = Input.PipelineResult.StateApplyResult.State.TerminalArtifact;
+		const FPhysAnimEvidenceBaselineResult ClassifierResult = PhysAnimProof_ClassifySummary(Artifact);
 
 		const FString ProxyInsideText =
 			Artifact.ProxyInsideHull.IsSet()
@@ -359,7 +678,22 @@ namespace PhysAnimProofArtifactEmitter
 		Result.JsonPath = BuildTerminalArtifactJsonPath(Input.AttemptUuid);
 		Result.bJsonWritten = WriteTerminalArtifactJson(Result.JsonPath, Input);
 
-		UE_LOG(
+		FPhysAnimEvidenceSummaryWriteInput SummaryWriteInput;
+		SummaryWriteInput.Summary = PhysAnimProof_BuildEvidenceSummary(Input, Artifact, ClassifierResult);
+		SummaryWriteInput.ClassifierResult = ClassifierResult;
+		const FPhysAnimEvidenceSummaryWriteResult SummaryWriteResult =
+			PhysAnimEvidenceSummary::WriteEvidenceSummaryJson(SummaryWriteInput);
+		if (!SummaryWriteResult.bJsonWritten)
+		{
+			PHYSANIM_LOG(
+				LogPhysAnimBridge,
+				Warning,
+				TEXT("PhysAnimProof: EvidenceSummaryCaptureFailure uuid=%s summary_json=%s"),
+				*Input.AttemptUuid,
+				*SummaryWriteResult.JsonPath);
+		}
+
+		PHYSANIM_LOG(
 			LogPhysAnimBridge,
 			Warning,
 			TEXT("PhysAnimProof: TerminalArtifact uuid=%s terminal_reason=%s timestamp=%lld support_mode=%s active_sides=%d hull_area=%.3f support_gap=%.3f proxy_inside=%s proxy_outside_duration=%s terminal_frame_captured=%d coterminal_count=%d artifact_json=%s artifact_json_written=%d"),
@@ -388,7 +722,7 @@ namespace PhysAnimProofArtifactEmitter
 	{
 		if (bPassed)
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Warning,
 				TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=PASS duration=%.3f terminal_reason=%s"),
@@ -398,7 +732,7 @@ namespace PhysAnimProofArtifactEmitter
 		}
 		else
 		{
-			UE_LOG(
+			PHYSANIM_LOG(
 				LogPhysAnimBridge,
 				Warning,
 				TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=FAIL duration=%.3f terminal_reason=%s"),
