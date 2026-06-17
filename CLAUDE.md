@@ -8,6 +8,16 @@
     2. *Critical Failures*: Unrecoverable error paths and fail-states.
     3. *Temporary Debugging*: Permitted locally during active debugging, but **MUST be removed or commented out before committing**. Un-rate-limited logs in ticks must never be merged.
 
+## Dual-Graph Knowledge & Execution Workflow
+
+Este projeto utiliza um workflow híbrido que combina **Navegação via Grafo de Conhecimento** (via `graphify`) e **Gestão de Execução via Grafo de Tarefas** (via `mcp-graph`).
+
+1. **Navegação (Knowledge Graph):** Use `graphify query` para entender o código, mapear dependências e descobrir padrões arquiteturais. É a ferramenta primária de descoberta.
+2. **Execução (mcp-graph):** Fonte de verdade para o ciclo de vida (ANALYZE → DEPLOY). Nenhuma implementação ocorre sem um node no grafo de execução.
+3. **Sincronização:** Após qualquer mudança no código, você DEVE rodar `graphify update .` para manter o mapa de conhecimento atualizado.
+
+Ver `GEMINI.md` ou `AGENTS.md` para a matriz completa de ações por fase.
+
 ## mcp-graph — NewEngine-AgentB
 
 Este projeto usa **mcp-graph** para gestão de execução via grafo persistente (SQLite).

@@ -301,18 +301,18 @@ bool FWaitForBridgeBalanceActiveCommand::Update()
 		MeshComp->SetStaticMesh(CubeMesh);
 	}
 
-	// Disable collision entirely to prevent any physical displacement of the character or floor
-	MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// Disable collision with the world to prevent physical displacement of the character or floor,
+	// but we MUST use PhysicsOnly (not NoCollision) so the solver actually creates a rigid body with mass.
+	MeshComp->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
 	MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
 
 	// SetSimulatePhysics(true) so it has its own mass for the solver to work with
 	MeshComp->SetSimulatePhysics(true);
 	MeshComp->SetMassOverrideInKg(NAME_None, TargetMassKg, true);
 
-	// Attach to hand using SNAP_TO_TARGET but NOT including scale.
-	// Then manually set scale to be very small (e.g. 5cm cube).
-	MeshComp->AttachToComponent(TargetCharacter->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("hand_r"));
-	MeshComp->SetRelativeScale3D(FVector(0.05f)); 
+	// Set scale to be very small (e.g. 5cm cube). Do NOT attach to the character's hierarchy,
+	// because AttachToComponent breaks independent physics simulation on the child body.
+	MeshComp->SetWorldScale3D(FVector(0.05f)); 
 
 	// Use a Physics Constraint instead of Mass Injection for better stability.
 	// Soft constraints handle mass differences better than single-bone overrides.
