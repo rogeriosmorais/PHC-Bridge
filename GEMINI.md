@@ -6,7 +6,7 @@ This repository uses a hybrid workflow that combines **Knowledge Graph Navigatio
 `graphify` is the primary tool for codebase navigation, architectural mapping, and understanding system-wide dependencies.
 
 **Rules:**
-- **Navigation First:** For any codebase question, always run `graphify query "<question>"` first. Use `graphify path` for relationships and `graphify explain` for symbols.
+- **Navigation First:** For any codebase question, always run `graphify query "(question)"` first. Use `graphify path` for relationships and `graphify explain` for symbols.
 - **Deep Discovery:** Use `graphify-out/wiki/index.md` (if available) for broad navigation instead of raw source browsing.
 - **Sync Requirement:** After any code modification, you MUST run `graphify update .` to keep the knowledge graph current (AST-only, low cost).
 

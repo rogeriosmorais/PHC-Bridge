@@ -1366,6 +1366,8 @@ class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPo
 	friend class FPhysAnimStage2ATurnSmokeTest;
 	friend class FPhysAnimFailStopCircuitTest;
 	friend class FPhysAnimFailStopShortCircuitTest;
+	friend class FPhysAnimStage2ADumbbellLoadTest;
+	friend class FOverrideLoadTestSettingsCommand;
 
 
 public:
@@ -2936,6 +2938,8 @@ private:
 	friend class FPhysAnimStage2ATurnSmokeTest;
 	friend class FPhysAnimFailStopCircuitTest;
 	friend class FPhysAnimFailStopShortCircuitTest;
+	friend class FPhysAnimStage2ADumbbellLoadTest;
+	friend class FOverrideLoadTestSettingsCommand;
 
 	void UpdateBridgeStatusIndicator(float DisplayDurationSeconds) const;
 	double GetPhysAnimClockTime() const;

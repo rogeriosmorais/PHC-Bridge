@@ -80,3 +80,4 @@ test-results/proof-artifacts/
 test-results/evidence-summaries/
 test-results/phase1-autocalib/
 *_tests_results.xml
+graphify-out/

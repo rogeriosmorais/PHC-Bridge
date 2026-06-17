@@ -1,4 +1,5 @@
 #include "PhysAnimComponent.h"
+#include "PhysAnimStage1InitializerComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "PhysAnimLogger.h"
 #include "Misc/AutomationTest.h"
@@ -378,10 +379,89 @@ bool FWaitForBridgeBalanceActiveCommand::Update()
 		}
 	}
 	return true;
+}
+
+/**
+ * Strips UPhysAnimStage1InitializerComponent from the character to force
+ * full Stage 2 simulation (instead of kinematic-heavy Stage 1).
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND(FStripStage1ComponentCommand);
+bool FStripStage1ComponentCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
 	}
-	/**
-	* Command to enable the proof hook.
-	*/
+#endif
+	if (!World) World = GWorld;
+	if (!World) return true;
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			if (UActorComponent* Stage1 = It->FindComponentByClass<UPhysAnimStage1InitializerComponent>())
+			{
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] STRIPPING_STAGE1_COMPONENT from %s"), *It->GetName());
+				Stage1->DestroyComponent();
+			}
+			
+			// Also ensure we aren't using ECollisionEnabled::NoCollision on the mesh which breaks physics
+			It->GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		}
+	}
+
+	return true;
+}
+
+/**
+ * Overrides stabilization settings for the Load Test to be more lenient.
+ */
+DEFINE_LATENT_AUTOMATION_COMMAND(FOverrideLoadTestSettingsCommand);
+bool FOverrideLoadTestSettingsCommand::Update()
+{
+	UWorld* World = nullptr;
+#if WITH_EDITOR
+	if (GIsEditor)
+	{
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+			{
+				World = Context.World();
+				break;
+			}
+		}
+	}
+#endif
+	if (!World) World = GWorld;
+	if (!World) return true;
+
+	for (TActorIterator<ACharacter> It(World); It; ++It)
+	{
+		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
+		{
+			// Bump threshold to 20cm as requested for the load test.
+			Comp->StabilizationSettings.BalancePhase2AbortShellOffsetDelta = 20.0f;
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] OVERRIDING_SHELL_OFFSET_THRESHOLD to 20.0cm for %s"), *It->GetName());
+		}
+	}
+
+	return true;
+}
+
+/**
+* Command to enable the proof hook.
+*/
 
 DEFINE_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand);
 bool FEnableStandingProofCommand::Update()
@@ -5240,6 +5320,15 @@ bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
 
 	// 2. Wait for map to load
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(2.0f));
+
+	// 2.5 Force Stage 2 logic by stripping the Stage 1 initializer if it exists.
+	// Stage 1 uses kinematic upper bodies and bypasses balance phases, which
+	// makes the load test meaningless.
+	ADD_LATENT_AUTOMATION_COMMAND(FStripStage1ComponentCommand());
+
+	// 2.6 Override stabilization settings for the load test to be more lenient.
+	// Carrying 3kg+ will naturally cause the character to sag/lean more than 2cm.
+	ADD_LATENT_AUTOMATION_COMMAND(FOverrideLoadTestSettingsCommand());
 
 	// 3. Enable the proof. This calls StopBridge() + StartBridge() which destroys and
 	// recreates all skeletal mesh physics bodies via RecreatePhysicsState().
