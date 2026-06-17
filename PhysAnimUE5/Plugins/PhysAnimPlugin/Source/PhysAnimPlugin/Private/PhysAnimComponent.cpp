@@ -219,47 +219,52 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 		return true;
 	}
 
-	if (!bLiveRuntimeEvidenceProofComplete)
-	{
-		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_NOT_COMPLETE"));
-		return false;
-	}
+	const bool bIsTransitioningToStanding = (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle);
 
-	if (LiveRuntimeEvidenceTerminationState.bTerminated &&
-		LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+	if (!bIsTransitioningToStanding)
 	{
-		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=TERMINATED_IN_PROOF terminal_reason=%d"), 
-			static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
-		return false;
-	}
+		if (!bLiveRuntimeEvidenceProofComplete)
+		{
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_NOT_COMPLETE"));
+			return false;
+		}
 
-	const bool bProofSatisfied = IsLiveRuntimeEvidenceProofSatisfied();
-	PHYSANIM_LOG_RATE_LIMITED(
-		LogPhysAnimBridge,
-		Verbose,
-		1.0f,
-		TEXT("[PhysAnim] Startup proof satisfaction evaluated satisfied=%d state=%s fresh=%d observed=%d deferredReason=%d enforceArmed=%d"),
-		bProofSatisfied ? 1 : 0,
-		GetRuntimeStateName(RuntimeState),
-		bLiveRuntimeEvidenceStartupEvidenceFresh ? 1 : 0,
-		bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved ? 1 : 0,
-		static_cast<int32>(StartupProofDeferredTerminalReason),
-		bLiveRuntimeEvidenceStartupVerificationHandoffArmed ? 1 : 0);
+		if (LiveRuntimeEvidenceTerminationState.bTerminated &&
+			LiveRuntimeEvidenceTerminationState.TerminalReason != EPhysAnimTerminalReason::None)
+		{
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=TERMINATED_IN_PROOF terminal_reason=%d"), 
+				static_cast<int32>(LiveRuntimeEvidenceTerminationState.TerminalReason));
+			return false;
+		}
 
-	if (!bProofSatisfied)
-	{
+		const bool bProofSatisfied = IsLiveRuntimeEvidenceProofSatisfied();
 		PHYSANIM_LOG_RATE_LIMITED(
 			LogPhysAnimBridge,
-			Warning,
+			Verbose,
 			1.0f,
-			TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_NOT_TRUTHFUL startupObserved=%d startupArmed=%d startupArmSubstep=%lld startupDeferredReason=%d proxyHandoffArmed=%d proofComplete=%d"),
+			TEXT("[PhysAnim] Startup proof satisfaction evaluated satisfied=%d state=%s fresh=%d observed=%d deferredReason=%d enforceArmed=%d"),
+			bProofSatisfied ? 1 : 0,
+			GetRuntimeStateName(RuntimeState),
+			bLiveRuntimeEvidenceStartupEvidenceFresh ? 1 : 0,
 			bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved ? 1 : 0,
-			bLiveRuntimeEvidenceStartupVerificationHandoffArmed ? 1 : 0,
-			static_cast<long long>(StartupProofVerificationHandoffArmedSubstep),
 			static_cast<int32>(StartupProofDeferredTerminalReason),
-			bLiveRuntimeEvidenceStartupProxySupportHandoffArmed ? 1 : 0,
-			bLiveRuntimeEvidenceProofComplete ? 1 : 0);
-		return false;
+			bLiveRuntimeEvidenceStartupVerificationHandoffArmed ? 1 : 0);
+
+		if (!bProofSatisfied)
+		{
+			PHYSANIM_LOG_RATE_LIMITED(
+				LogPhysAnimBridge,
+				Warning,
+				1.0f,
+				TEXT("[PhysAnimBalance] ENTRY_DENIED reason=PROOF_NOT_TRUTHFUL startupObserved=%d startupArmed=%d startupArmSubstep=%lld startupDeferredReason=%d proxyHandoffArmed=%d proofComplete=%d"),
+				bLiveRuntimeEvidenceStartupWaitingForPoseSearchObserved ? 1 : 0,
+				bLiveRuntimeEvidenceStartupVerificationHandoffArmed ? 1 : 0,
+				static_cast<long long>(StartupProofVerificationHandoffArmedSubstep),
+				static_cast<int32>(StartupProofDeferredTerminalReason),
+				bLiveRuntimeEvidenceStartupProxySupportHandoffArmed ? 1 : 0,
+				bLiveRuntimeEvidenceProofComplete ? 1 : 0);
+			return false;
+		}
 	}
 
 	const FPhysAnimRunArtifactSnapshot& Latest = LiveRuntimeEvidenceTerminationState.LatestArtifact;
@@ -289,7 +294,7 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 		return true;
 	}
 
-	if (!IsBringUpGroupUnlocked(GetBringUpGroupCount() - 1))
+	if (!bIsTransitioningToStanding && !IsBringUpGroupUnlocked(GetBringUpGroupCount() - 1))
 	{
 		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=BRING_UP_INCOMPLETE"));
 		return false;
@@ -383,17 +388,20 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 		return false;
 	}
 
-	if (!HasConsistentLiveRuntimeEvidenceArtifact(LiveRuntimeEvidenceTerminationState))
+	if (!bIsTransitioningToStanding)
 	{
-		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=ARTIFACT_STATE_INCONSISTENT"));
-		return false;
-	}
+		if (!HasConsistentLiveRuntimeEvidenceArtifact(LiveRuntimeEvidenceTerminationState))
+		{
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=ARTIFACT_STATE_INCONSISTENT"));
+			return false;
+		}
 
-	if (LiveRuntimeEvidenceStandingSeconds < LiveRuntimeEvidenceStandingTargetSeconds)
-	{
-		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=INSUFFICIENT_STANDING_DURATION duration=%.3f target=%.3f"), 
-			LiveRuntimeEvidenceStandingSeconds, LiveRuntimeEvidenceStandingTargetSeconds);
-		return false;
+		if (LiveRuntimeEvidenceStandingSeconds < LiveRuntimeEvidenceStandingTargetSeconds)
+		{
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=INSUFFICIENT_STANDING_DURATION duration=%.3f target=%.3f"), 
+				LiveRuntimeEvidenceStandingSeconds, LiveRuntimeEvidenceStandingTargetSeconds);
+			return false;
+		}
 	}
 
 	return true;

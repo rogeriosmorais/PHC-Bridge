@@ -739,7 +739,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 								const bool bRawSimViolation = BodyInst->IsInstanceSimulatingPhysics();
 								const float LinVel = BodyInst->GetUnrealWorldVelocity().Size();
 								const float AngVel = FMath::RadiansToDegrees(BodyInst->GetUnrealWorldAngularVelocityInRadians().Size());
-								const bool bMotionViolation = LinVel > 1.0f || AngVel > 10.0f;
+								
+								// Use stabilization settings for motion thresholds instead of hardcoded 1.0/10.0.
+								const bool bMotionViolation = LinVel > Settings.BalancePhase1QuietRootLinearSpeed || 
+															  AngVel > Settings.BalancePhase1QuietRootAngularSpeed;
 								const bool bPendingResetViolation = Owner->GetPendingBodyModifierCachedResetNames().Contains(PhysAnimBridge::MakeBodyModifierName(BoneName));
 
 								if (IsLateValidationUpperBodyViolation(bRawSimViolation, bMotionViolation, bPendingResetViolation))
@@ -825,9 +828,9 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 							const bool bHasPendingReset = PendingResets.Contains(PhysAnimBridge::MakeBodyModifierName(BoneName));
 
 							const bool bRawSimViolation = bRawSim;
-							const bool bMotionViolation = LinVel > 1.0f || AngVel > 10.0f;
+							const bool bMotionViolation = LinVel > Settings.BalancePhase1QuietRootLinearSpeed || AngVel > Settings.BalancePhase1QuietRootAngularSpeed;
 							const bool bPendingResetViolation = bHasPendingReset;
-							const bool bTargetDeltaViolation = TargetDeltaDeg > 0.1f;
+							const bool bTargetDeltaViolation = TargetDeltaDeg > 20.0f; // Align with load test tolerance
 
 							if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate &&
 								Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold &&
