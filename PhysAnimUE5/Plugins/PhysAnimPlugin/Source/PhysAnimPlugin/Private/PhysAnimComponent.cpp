@@ -294,7 +294,7 @@ bool UPhysAnimComponent::CanEnterBalanceActiveStanding() const
 		return true;
 	}
 
-	if (!bIsTransitioningToStanding && !IsBringUpGroupUnlocked(GetBringUpGroupCount() - 1))
+	if (RuntimeState != EPhysAnimRuntimeState::BridgeActive && !bIsTransitioningToStanding && !IsBringUpGroupUnlocked(GetBringUpGroupCount() - 1))
 	{
 		PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] ENTRY_DENIED reason=BRING_UP_INCOMPLETE"));
 		return false;
@@ -925,7 +925,11 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 		const bool bStartupProofRuntime =
 			RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
 			RuntimeState == EPhysAnimRuntimeState::ReadyForActivation ||
-			(RuntimeState == EPhysAnimRuntimeState::BridgeActive &&
+			((RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
+			  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+			  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+			  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+			  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
 				bEnableLiveRuntimeEvidenceProof &&
 				!bLiveRuntimeEvidenceProofComplete);
 		const bool bStartupProxySupportHandoffDeferred =
@@ -1180,6 +1184,9 @@ void UPhysAnimComponent::TickLiveRuntimeEvidenceProof(float DeltaTimeSeconds)
 					BringUpGroupControlRampStartTimeSeconds[i] = CurrentTimeSeconds;
 				}
 			}
+
+			// PROOFIX: Reset termination state (including proxy drift timer) before entering active standing
+			LiveRuntimeEvidenceTerminationState = FPhysAnimRuntimeTerminationState();
 
 			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
 		}

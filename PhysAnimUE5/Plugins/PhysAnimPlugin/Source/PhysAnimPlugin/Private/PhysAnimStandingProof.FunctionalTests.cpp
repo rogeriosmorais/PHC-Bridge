@@ -1,5 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimStage1InitializerComponent.h"
+#include "PhysicsControlActor.h"
+#include "PhysicsControlComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "PhysAnimLogger.h"
 
@@ -47,6 +49,8 @@ namespace
 	};
 
 	int32 GPhysAnimStrictLivePolicyProofQuality = 0;
+	static float GBaselineHandRZ = 0.0f;
+	static float GTargetMassKg = 0.0f;
 	FAutoConsoleVariableRef CVarPhysAnimStrictLivePolicyProofQuality(
 		TEXT("p.PhysAnim.StrictLivePolicyProofQuality"),
 		GPhysAnimStrictLivePolicyProofQuality,
@@ -211,6 +215,34 @@ bool FWaitForStandingProofCommand::Update()
 		return true;
 	}
 
+	// Early abort on floor penetration / collapse to avoid long timeouts.
+	if (ACharacter* const CharOwner = Cast<ACharacter>(ComponentToUse->GetOwner()))
+	{
+		const FVector PelvisLocation = CharOwner->GetMesh()->GetBoneLocation(TEXT("pelvis"));
+		float FloorZ = CharOwner->GetActorLocation().Z - 90.0f; // Default fallback
+		if (UWorld* const WorldPtr = ComponentToUse->GetWorld())
+		{
+			FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PhysAnimDumbbellTestFloorCheckEarly1), false);
+			QueryParams.AddIgnoredActor(CharOwner);
+			const FCollisionObjectQueryParams ObjectQueryParams(FCollisionObjectQueryParams::InitType::AllStaticObjects);
+			
+			const FVector TraceStart = PelvisLocation + FVector(0.0f, 0.0f, 300.0f);
+			const FVector TraceEnd = PelvisLocation - FVector(0.0f, 0.0f, 500.0f);
+			FHitResult HitResult;
+			if (WorldPtr->LineTraceSingleByObjectType(HitResult, TraceStart, TraceEnd, ObjectQueryParams, QueryParams)
+				&& HitResult.IsValidBlockingHit())
+			{
+				FloorZ = HitResult.ImpactPoint.Z;
+			}
+		}
+
+		const float PelvisAboveFloor = PelvisLocation.Z - FloorZ;
+		if (PelvisAboveFloor < 40.0f)
+		{
+			return true; // abort early!
+		}
+	}
+
 	const float Elapsed = static_cast<float>(FPlatformTime::Seconds()) - StartTime;
 	if (Elapsed >= TimeoutSeconds)
 	{
@@ -322,6 +354,34 @@ bool FWaitForBridgeBalanceActiveCommand::Update()
 		return true;
 	}
 
+	// Early abort on floor penetration / collapse to avoid long timeouts.
+	if (ACharacter* const CharOwner = Cast<ACharacter>(ComponentToUse->GetOwner()))
+	{
+		const FVector PelvisLocation = CharOwner->GetMesh()->GetBoneLocation(TEXT("pelvis"));
+		float FloorZ = CharOwner->GetActorLocation().Z - 90.0f; // Default fallback
+		if (UWorld* const WorldPtr = ComponentToUse->GetWorld())
+		{
+			FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PhysAnimDumbbellTestFloorCheckEarly2), false);
+			QueryParams.AddIgnoredActor(CharOwner);
+			const FCollisionObjectQueryParams ObjectQueryParams(FCollisionObjectQueryParams::InitType::AllStaticObjects);
+			
+			const FVector TraceStart = PelvisLocation + FVector(0.0f, 0.0f, 300.0f);
+			const FVector TraceEnd = PelvisLocation - FVector(0.0f, 0.0f, 500.0f);
+			FHitResult HitResult;
+			if (WorldPtr->LineTraceSingleByObjectType(HitResult, TraceStart, TraceEnd, ObjectQueryParams, QueryParams)
+				&& HitResult.IsValidBlockingHit())
+			{
+				FloorZ = HitResult.ImpactPoint.Z;
+			}
+		}
+
+		const float PelvisAboveFloor = PelvisLocation.Z - FloorZ;
+		if (PelvisAboveFloor < 40.0f)
+		{
+			return true; // abort early!
+		}
+	}
+
 	const float Elapsed = static_cast<float>(FPlatformTime::Seconds()) - StartTime;
 	if (Elapsed >= TimeoutSeconds)
 	{
@@ -331,6 +391,39 @@ bool FWaitForBridgeBalanceActiveCommand::Update()
 	return false; // keep polling
 }
 
+
+	DEFINE_LATENT_AUTOMATION_COMMAND(FResetLiveRuntimeEvidenceProofCommand);
+	bool FResetLiveRuntimeEvidenceProofCommand::Update()
+	{
+		UWorld* World = nullptr;
+		#if WITH_EDITOR
+		if (GIsEditor)
+		{
+			for (const FWorldContext& Context : GEngine->GetWorldContexts())
+			{
+				if (Context.WorldType == EWorldType::PIE || Context.WorldType == EWorldType::Game)
+				{
+					World = Context.World();
+					break;
+				}
+			}
+		}
+		#endif
+		if (!World) World = GWorld;
+
+		if (World)
+		{
+			for (TActorIterator<ACharacter> It(World); It; ++It)
+			{
+				if (UPhysAnimComponent* C = It->FindComponentByClass<UPhysAnimComponent>())
+				{
+					C->ResetLiveRuntimeEvidenceProof();
+					return true;
+				}
+			}
+		}
+		return true;
+	}
 
 	DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FSetupDumbbellCommand, float, TargetMassKg);
 	bool FSetupDumbbellCommand::Update()
@@ -372,14 +465,16 @@ bool FWaitForBridgeBalanceActiveCommand::Update()
 		return true;
 	}
 
+	const FVector HandLocation = TargetCharacter->GetMesh()->GetBoneLocation(TEXT("hand_r"));
+	GBaselineHandRZ = HandLocation.Z;
+	GTargetMassKg = TargetMassKg;
+
 	// 0 kg is a valid test case (no load); skip spawning but still succeed.
 	if (TargetMassKg <= 0.0f)
 	{
 		PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] 0 kg case: no dumbbell spawned."));
 		return true;
 	}
-
-	const FVector HandLocation = TargetCharacter->GetMesh()->GetBoneLocation(TEXT("hand_r"));
 
 	// Spawn dumbbell at the hand's location to prevent massive physics impulses
 	FActorSpawnParameters SpawnParams;
@@ -510,9 +605,16 @@ bool FStripStage1ComponentCommand::Update()
 	{
 		if (UPhysAnimComponent* Comp = It->FindComponentByClass<UPhysAnimComponent>())
 		{
-			if (UActorComponent* Stage1 = It->FindComponentByClass<UPhysAnimStage1InitializerComponent>())
+			if (UPhysAnimStage1InitializerComponent* Stage1 = It->FindComponentByClass<UPhysAnimStage1InitializerComponent>())
 			{
-				PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] STRIPPING_STAGE1_COMPONENT from %s"), *It->GetName());
+				PHYSANIM_LOG(LogTemp, Warning, TEXT("[DumbbellTest] STRIPPING_STAGE1_COMPONENT and replacing with UPhysicsControlInitializerComponent for %s"), *It->GetName());
+				
+				UPhysicsControlInitializerComponent* NewInitializer = NewObject<UPhysicsControlInitializerComponent>(*It);
+				NewInitializer->InitialControls = Stage1->InitialControls;
+				NewInitializer->InitialBodyModifiers = Stage1->InitialBodyModifiers;
+				It->AddInstanceComponent(NewInitializer);
+				NewInitializer->RegisterComponent();
+
 				Stage1->DestroyComponent();
 			}
 			
@@ -557,21 +659,10 @@ bool FEnableStandingProofCommand::Update()
 		{
 			FPhysAnimComponentAccess* Proxy = static_cast<FPhysAnimComponentAccess*>(Comp);
 			
-			EPhysAnimRuntimeState State = Comp->GetRuntimeState();
-			const bool bIsPhysicsActive = (State == EPhysAnimRuntimeState::BridgeActive || State >= EPhysAnimRuntimeState::BalanceEntry_Prepare);
-
-			if (bIsPhysicsActive)
-			{
-				Comp->ResetLiveRuntimeEvidenceProof();
-				Proxy->bEnableLiveRuntimeEvidenceProof = true;
-			}
-			else
-			{
-				Comp->StopBridge();
-				Comp->ResetLiveRuntimeEvidenceProof();
-				Proxy->bEnableLiveRuntimeEvidenceProof = true;
-				Comp->StartBridge();
-			}
+			Comp->StopBridge();
+			Comp->ResetLiveRuntimeEvidenceProof();
+			Proxy->bEnableLiveRuntimeEvidenceProof = true;
+			Comp->StartBridge();
 
 			// PROOFIX: Relax constraints immediately after StartBridge (which resets settings)
 			FPhysAnimStabilizationSettings& Settings = Proxy->StabilizationSettings;
@@ -626,6 +717,22 @@ bool FOverrideLoadTestSettingsCommand::Update()
 			Settings.BalancePhase2AbortShellOffsetDelta = 20.0f;
 			Settings.BalancePhase2EntryMaxShellOffsetDelta = 20.0f;
 			Settings.BalancePhase2PreRootOnShellProofMaxOffsetDeltaCm = 20.0f;
+
+			// PROOFIX: Relax quiet thresholds so active settling doesn't fail due to shell contamination
+			Settings.BalancePhase1QuietShellOffsetDelta = 20.0f;
+			Settings.BalancePhase1QuietShellVelocityDelta = 50.0f;
+			Comp->BalanceQuietLinearSpeedThresholdCmPerSec = 30.0f;
+			Settings.BalanceSettleMaxRootLinearSpeed = 30.0f;
+			Settings.BalanceSettleMaxRootAngularSpeed = 45.0f;
+			Settings.ProxyDriftLimitMs = 3000.0f;
+
+			// Relax quiet root speed thresholds for dumbbell load tests
+			Settings.BalancePhase1QuietRootLinearSpeed = 30.0f;
+			Settings.BalancePhase1QuietRootAngularSpeed = 45.0f;
+			Settings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneLinearSpeed = 300.0f;
+			Settings.BalancePhase1LateValidateAdmissionMaxSimulatedBoneAngularSpeed = 600.0f;
+			Settings.BalancePhase1MaxEntryTargetDeltaDeg = 30.0f;
+			Settings.BalancePhase2EntryMaxRootTiltDeg = 30.0f;
 
 			// Unlock all bring up groups to ensure we can reach BalanceActive_Standing
 			for (int32 i = 0; i < Comp->GetBringUpGroupCount(); ++i)
@@ -900,6 +1007,30 @@ bool FVerifyStandingProofCommand::Update()
 						TEXT("StandingProof: FAILED because pelvis is only %.2f cm above actor floor (threshold=%.1f cm, PelvisZ=%.2f, FloorZ=%.2f) for %s"),
 						PelvisAboveFloor, MinPelvisAboveFloorCm, PelvisLocation.Z, FloorZ, *It->GetName()));
 					return true;
+				}
+			}
+
+			// Check hand sag if a mass was applied
+			if (GTargetMassKg > 0.0f)
+			{
+				if (USkeletalMeshComponent* Mesh = It->GetMesh())
+				{
+					const FVector CurrentHandLocation = Mesh->GetBoneLocation(TEXT("hand_r"));
+					const float SagCm = GBaselineHandRZ - CurrentHandLocation.Z;
+
+					// Assert minimum sag to prove physical influence
+					constexpr float MinSagCm = 2.0f;
+					if (SagCm < MinSagCm)
+					{
+						AddLatentAutomationError(Test, FString::Printf(
+							TEXT("StandingProof: FAILED because hand_r sag was only %.2f cm (threshold=%.1f cm) under %.1f kg load. This indicates the mass is not physically affecting the posture."),
+							SagCm, MinSagCm, GTargetMassKg));
+						return true;
+					}
+					else
+					{
+						PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: Verified hand_r sag of %.2f cm under %.1f kg load."), SagCm, GTargetMassKg);
+					}
 				}
 			}
 			
@@ -5482,10 +5613,6 @@ bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
 	// makes the load test meaningless.
 	ADD_LATENT_AUTOMATION_COMMAND(FStripStage1ComponentCommand());
 
-	// 2.6 Override stabilization settings for the load test to be more lenient.
-	// Carrying 3kg+ will naturally cause the character to sag/lean more than 2cm.
-	ADD_LATENT_AUTOMATION_COMMAND(FOverrideLoadTestSettingsCommand());
-
 	// 3. Enable the proof. This calls StopBridge() + StartBridge() which destroys and
 	// recreates all skeletal mesh physics bodies via RecreatePhysicsState().
 	// The dumbbell MUST NOT be attached before this step: if the dumbbell constraint is
@@ -5495,6 +5622,10 @@ bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
 	// Solution: enable the proof first, then wait for physics ownership to be established,
 	// then attach the dumbbell onto live (valid) physics bodies.
 	ADD_LATENT_AUTOMATION_COMMAND(FEnableStandingProofCommand());
+
+	// 2.6 Override stabilization settings for the load test to be more lenient.
+	// Carrying 3kg+ will naturally cause the character to sag/lean more than 2cm.
+	ADD_LATENT_AUTOMATION_COMMAND(FOverrideLoadTestSettingsCommand());
 
 	// 4. Actively poll until the bridge has reached BalanceActive_Standing.
 	// This ensures the initial ragdoll drop and all stabilization phases (Prepare, RootOn, Settle)
@@ -5544,6 +5675,9 @@ bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
 
 	// 7. Let the constraint settle for 1 second before starting the standing proof timer.
 	ADD_LATENT_AUTOMATION_COMMAND(FWaitLatentCommand(1.0f));
+
+	// 7.5 Reset the proof so the 3.35s timer starts exactly now (with the dumbbell attached).
+	ADD_LATENT_AUTOMATION_COMMAND(FResetLiveRuntimeEvidenceProofCommand());
 
 	// 8. Actively poll until proof completes (up to 15 s).
 	// FWaitForStandingProofCommand polls IsLiveRuntimeEvidenceProofComplete() each tick

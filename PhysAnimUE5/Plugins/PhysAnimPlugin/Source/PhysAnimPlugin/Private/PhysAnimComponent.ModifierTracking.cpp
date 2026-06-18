@@ -877,7 +877,11 @@ bool UPhysAnimComponent::ShouldDeferStartupProxyTerminalForProof(
 	const bool bStartupProofRuntime =
 		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
 		RuntimeState == EPhysAnimRuntimeState::ReadyForActivation ||
-		(RuntimeState == EPhysAnimRuntimeState::BridgeActive && bLiveProofEnabled && !bProofComplete);
+		((RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
+		  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+		  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
+		  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
+		  RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) && bLiveProofEnabled && !bProofComplete);
 
 	return bStartupProofRuntime &&
 		!bProxySupportHandoffArmed &&

@@ -745,7 +745,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 															  AngVel > Settings.BalancePhase1QuietRootAngularSpeed;
 								const bool bPendingResetViolation = Owner->GetPendingBodyModifierCachedResetNames().Contains(PhysAnimBridge::MakeBodyModifierName(BoneName));
 
-								if (IsLateValidationUpperBodyViolation(bRawSimViolation, bMotionViolation, bPendingResetViolation))
+								if (Owner->IsStage1() && IsLateValidationUpperBodyViolation(bRawSimViolation, bMotionViolation, bPendingResetViolation))
 								{
 									bUpperBodyInstability = true;
 									break;
@@ -834,7 +834,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 							if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate &&
 								Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold &&
-								bTargetDeltaViolation && !IsLateValidationUpperBodyViolation(bRawSimViolation, bMotionViolation, bPendingResetViolation) &&
+								bTargetDeltaViolation && !(Owner->IsStage1() && IsLateValidationUpperBodyViolation(bRawSimViolation, bMotionViolation, bPendingResetViolation)) &&
 								LinVel == 0.0f && AngVel == 0.0f)
 							{
 								static int32 LastSuppressedFrame = -1;
@@ -847,7 +847,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 								}
 							}
 
-							if (IsLateValidationUpperBodyViolation(bRawSimViolation, bMotionViolation, bPendingResetViolation))
+							if (Owner->IsStage1() && IsLateValidationUpperBodyViolation(bRawSimViolation, bMotionViolation, bPendingResetViolation))
 							{
 								bUpperBodyInstability = true;
 

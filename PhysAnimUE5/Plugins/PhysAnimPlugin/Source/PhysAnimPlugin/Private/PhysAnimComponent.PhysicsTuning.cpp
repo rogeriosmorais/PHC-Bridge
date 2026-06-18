@@ -2161,7 +2161,9 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 	}
 
 	const bool bUseAuthoritativePerBoneBodyModifierSync =
-		ShouldUseAuthoritativePerBoneBodyModifierSync(RuntimeState, BalanceReadyTransition.IsDistalKinematicAccepted());
+		ShouldUseAuthoritativePerBoneBodyModifierSync(RuntimeState, 
+			BalanceReadyTransition.IsDistalKinematicAccepted() || 
+			(RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare && EffectiveSettings.bPhase1DistalKinematicExperiment));
 	if (bUseAuthoritativePerBoneBodyModifierSync)
 	{
 		static bool bLoggedAuthoritativeWrite = false;
@@ -2183,6 +2185,11 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			ShouldUpdateBodyOnAuthoritativePerBoneKinematicWrite(RuntimeState);
 		for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 		{
+			if (!IsStage1() && BalanceTransitionSets::IsUpperBody(BoneName))
+			{
+				continue;
+			}
+
 			// Skip simulated carry-through bones during entry/settle so the later per-bone
 			// sync remains the first live movement-type write they see this tick.
 			if ((bPhase1Prepare || bPhase1LateValidate || RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle) &&
@@ -2246,7 +2253,8 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 				RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle ||
 				RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny) &&
-			BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, EffectiveSettings);
+			BalanceReadyTransition.ShouldKeepBoneKinematic(BoneName, EffectiveSettings) &&
+			(IsStage1() || !BalanceTransitionSets::IsUpperBody(BoneName));
 		const bool bTransitionOwnsRootOnThisTick =
 			bIsRootBodyModifier &&
 			bPhase2RootOnGuardWindow &&
@@ -2349,9 +2357,19 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 			else
 			{
 				// Upper body (Groups 2, 3, 4)
-				BodyModifierMovementType = EPhysicsMovementType::Kinematic;
-				BodyModifierCollisionType = ECollisionEnabled::NoCollision;
-				BodyModifierPhysicsBlendWeight = 0.0f;
+				if (IsStage1())
+				{
+					BodyModifierMovementType = EPhysicsMovementType::Kinematic;
+					BodyModifierCollisionType = ECollisionEnabled::NoCollision;
+					BodyModifierPhysicsBlendWeight = 0.0f;
+				}
+				else
+				{
+					// If Stage 1 is stripped, upper body simulates
+					BodyModifierMovementType = EPhysicsMovementType::Simulated;
+					BodyModifierCollisionType = ECollisionEnabled::QueryAndPhysics;
+					BodyModifierPhysicsBlendWeight = 1.0f;
+				}
 			}
 		}
 		if (bPhase2RootAuthorityQuarantined && !bTransitionOwnsRootOnThisTick && !bLastAppliedPresentationRootSimulationEnabled)
