@@ -1455,6 +1455,7 @@ public:
 	const TMap<FName, FQuat>& GetPolicyBlendStartControlTargetRotationsForDiagnostics() const { return PolicyBlendStartControlTargetRotations; }
 	void ConsumeUpperBodyPendingResets();
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
+	float GetAttachedLoadMassKg() const;
 	const FPhysAnimControlTargetDiagnostics& GetLastControlTargetDiagnostics() const { return LastControlTargetDiagnostics; }
 	bool WasPelvisResetAppliedThisTick() const { return bPelvisResetAppliedThisTick; }
 	bool WasPolicyTargetAppliedLastFrame() const { return bPolicyTargetsAppliedLastFrame; }

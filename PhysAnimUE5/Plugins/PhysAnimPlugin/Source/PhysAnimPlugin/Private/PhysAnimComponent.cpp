@@ -10,6 +10,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/Actor.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/PhysicsConstraintComponent.h"
 
 DEFINE_LOG_CATEGORY(LogPhysAnimBridge);
 
@@ -1828,6 +1829,7 @@ FPhysAnimSupportHitResultObservationInput UPhysAnimComponent::BuildLiveRuntimeEv
 	Input.PreviousSupportGapTimerMs = LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportGapTimerMs;
 	Input.SupportGapMaxMs = Settings.BalancePhase1AdmissionMaxSupportGapMs;
 	Input.ProxyDriftLimitMs = Settings.ProxyDriftLimitMs;
+	Input.SupportAreaMinCm2 = (GetAttachedLoadMassKg() <= 0.01f) ? 25.0 : 50.0;
 
 	if (LiveRuntimeEvidenceTerminationState.LatestArtifact.ProxyOutsideHullDurationMs.IsSet())
 	{
@@ -2367,4 +2369,37 @@ void UPhysAnimComponent::HardenStage2ALocomotionState()
 			Stage2ALocomotionRequestState = EBridgeLocomotionRequestState::BalanceActiveStanding;
 		}
 	}
+}
+
+float UPhysAnimComponent::GetAttachedLoadMassKg() const
+{
+	USkeletalMeshComponent* const SkeletalMesh = GetMeshComponent();
+	if (!SkeletalMesh)
+	{
+		return 0.0f;
+	}
+
+	TArray<USceneComponent*> Children;
+	SkeletalMesh->GetChildrenComponents(true, Children);
+
+	float TotalMass = 0.0f;
+	for (USceneComponent* Child : Children)
+	{
+		if (UPhysicsConstraintComponent* Constraint = Cast<UPhysicsConstraintComponent>(Child))
+		{
+			UPrimitiveComponent* Comp1 = Constraint->OverrideComponent1.IsValid() ? Constraint->OverrideComponent1.Get() : nullptr;
+			UPrimitiveComponent* Comp2 = Constraint->OverrideComponent2.IsValid() ? Constraint->OverrideComponent2.Get() : nullptr;
+
+			if (Comp1 && Comp1 != SkeletalMesh && Comp1->IsSimulatingPhysics())
+			{
+				TotalMass += Comp1->GetMass();
+			}
+			if (Comp2 && Comp2 != SkeletalMesh && Comp2->IsSimulatingPhysics())
+			{
+				TotalMass += Comp2->GetMass();
+			}
+		}
+	}
+
+	return TotalMass;
 }

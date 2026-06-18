@@ -62,6 +62,14 @@ bool UPhysAnimComponent::CheckRuntimeInstability(
 		InstabilitySettings.UnstableGracePeriodSeconds = FMath::Max(InstabilitySettings.UnstableGracePeriodSeconds, 1.0f);
 	}
 
+	if (GetAttachedLoadMassKg() <= 0.01f)
+	{
+		InstabilitySettings.MaxRootLinearSpeedCmPerSecond *= 2.0f;
+		InstabilitySettings.MaxRootAngularSpeedDegPerSecond *= 2.0f;
+		InstabilitySettings.MaxRootHeightDeltaCm *= 2.0f;
+		InstabilitySettings.UnstableGracePeriodSeconds = FMath::Max(InstabilitySettings.UnstableGracePeriodSeconds, 0.5f);
+	}
+
 	FString InstabilityError;
 	const bool bStable = EvaluateRuntimeInstability(
 		EffectiveRootLocationCm,

@@ -37,6 +37,7 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 			ActivatedStandingStabilityMetrics.bPolicyModelLoaded = true;
 			ActivatedStandingStabilityMetrics.PolicyModelName = LoadedModelData->GetName();
 			ActivatedStandingStabilityMetrics.PolicyRuntimeName = ActiveRuntimeName;
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] PhcPolicy loaded successfully on GPU: ModelName=%s, RuntimeName=%s"), *ActivatedStandingStabilityMetrics.PolicyModelName, *ActivatedStandingStabilityMetrics.PolicyRuntimeName);
 			return true;
 		}
 	}
@@ -69,6 +70,7 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 			ActivatedStandingStabilityMetrics.bPolicyModelLoaded = true;
 			ActivatedStandingStabilityMetrics.PolicyModelName = LoadedModelData->GetName();
 			ActivatedStandingStabilityMetrics.PolicyRuntimeName = ActiveRuntimeName;
+			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Log, 1.0f, TEXT("[PhysAnim] PhcPolicy loaded successfully on CPU (fallback): ModelName=%s, RuntimeName=%s"), *ActivatedStandingStabilityMetrics.PolicyModelName, *ActivatedStandingStabilityMetrics.PolicyRuntimeName);
 			return true;
 		}
 	}
