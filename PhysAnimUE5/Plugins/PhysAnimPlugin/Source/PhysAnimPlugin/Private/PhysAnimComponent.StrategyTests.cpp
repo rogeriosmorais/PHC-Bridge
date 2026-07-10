@@ -187,8 +187,8 @@ namespace
 		TestTrue(TEXT("Generic safe deny failure reports the non-truthful reason"), OutcomeError.Contains(TEXT("phase2_fail_stop_precursor")));
 
 		OutcomeError.Reset();
-		TestTrue(
-			TEXT("Canonical terminal failure is a truthful smoke diagnostic outcome"),
+		TestFalse(
+			TEXT("Canonical terminal failure remains a failing smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::FailStopped,
 				false,
@@ -200,11 +200,11 @@ namespace
 				TEXT(""),
 				TEXT(""),
 				false, OutcomeError));
-		TestTrue(TEXT("Canonical terminal outcome emits no benchmark error"), OutcomeError.IsEmpty());
+		TestTrue(TEXT("Canonical terminal outcome reports diagnostic-only failure"), OutcomeError.Contains(TEXT("terminal failure")));
 
 		OutcomeError.Reset();
-		TestTrue(
-			TEXT("BridgeActive with canonical terminal evidence is a truthful smoke diagnostic outcome"),
+		TestFalse(
+			TEXT("BridgeActive with canonical terminal evidence remains a failing smoke outcome"),
 			EvaluateBalanceModeSmokeOutcome(
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
@@ -216,7 +216,7 @@ namespace
 				TEXT(""),
 				TEXT(""),
 				false, OutcomeError));
-		TestTrue(TEXT("BridgeActive terminal diagnostic emits no benchmark error"), OutcomeError.IsEmpty());
+		TestTrue(TEXT("BridgeActive terminal outcome reports diagnostic-only failure"), OutcomeError.Contains(TEXT("terminal failure")));
 
 		OutcomeError.Reset();
 		TestFalse(

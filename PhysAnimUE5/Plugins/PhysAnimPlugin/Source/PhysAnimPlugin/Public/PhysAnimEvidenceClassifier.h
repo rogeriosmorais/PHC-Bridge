@@ -21,7 +21,7 @@ enum class EPhysAnimEvidenceBaselineSegmentState : uint8
 
 enum class EPhysAnimEvidenceBaselineVerdict : uint8
 {
-	ProductSuccessCandidate,
+	DiagnosticAllSignalsObserved,
 	Diagnostic,
 	Blocked,
 	Contradictory,

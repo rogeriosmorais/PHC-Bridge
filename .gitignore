@@ -79,5 +79,8 @@ test-results/logs/
 test-results/proof-artifacts/
 test-results/evidence-summaries/
 test-results/phase1-autocalib/
+test-results/**/*.receipt.json
+*.private.pem
+*.private.key
 *_tests_results.xml
 graphify-out/

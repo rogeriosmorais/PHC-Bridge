@@ -350,18 +350,27 @@ namespace
 	{
 		const TSharedRef<FJsonObject> Json = MakeShared<FJsonObject>();
 
+		Json->SetStringField(TEXT("schema_version"), TEXT("physanim-runtime-facts/v1"));
 		Json->SetStringField(TEXT("attempt_uuid"), Artifact.AttemptUuid);
 		Json->SetStringField(TEXT("emitter_attempt_uuid"), Input.AttemptUuid);
+		Json->SetStringField(TEXT("attempt_nonce"), Input.AttemptNonce);
+		Json->SetStringField(TEXT("captured_at_utc"), FDateTime::UtcNow().ToIso8601());
+		Json->SetStringField(TEXT("source_commit"), Input.SourceCommit);
+		Json->SetBoolField(TEXT("source_tree_dirty"), Input.bSourceTreeDirty);
+		Json->SetStringField(TEXT("final_runtime_outcome"), Input.FinalRuntimeOutcome);
+		PhysAnimProof_SetOptionalNumber(Json, TEXT("setup_override_count"), Input.SetupOverrideCount);
 		Json->SetNumberField(TEXT("timestamp"), Artifact.Timestamp);
 		Json->SetStringField(TEXT("baseline_id"), Artifact.BaselineId);
 		Json->SetStringField(TEXT("standing_reference_id"), Artifact.StandingReferenceId);
 
 		Json->SetNumberField(TEXT("standing_seconds_at_emit"), Input.StandingSeconds);
+		Json->SetNumberField(TEXT("standing_window_sample_count"), Input.StandingWindowSampleCount);
+		Json->SetNumberField(TEXT("standing_window_max_delta_sec"), Input.StandingWindowMaxDeltaSec);
 		Json->SetNumberField(TEXT("runtime_hit_count"), Input.RuntimeHitCount);
 		Json->SetNumberField(TEXT("mapped_support_hit_count"), Input.MappedSupportHitCount);
 
-		Json->SetBoolField(TEXT("physics_asset_contract_valid"), Artifact.bPhysicsAssetContractValid);
-		Json->SetBoolField(TEXT("skeleton_audit_passed"), Artifact.bSkeletonAuditPassed);
+		Json->SetNumberField(TEXT("physics_asset_violation_count"), Artifact.bPhysicsAssetContractValid ? 0 : 1);
+		Json->SetNumberField(TEXT("skeleton_contract_violation_count"), Artifact.bSkeletonAuditPassed ? 0 : 1);
 		Json->SetNumberField(TEXT("plant_failure_class"), static_cast<int32>(Artifact.PlantFailureClass));
 		Json->SetNumberField(TEXT("plant_failure_field"), static_cast<int32>(Artifact.PlantFailureField));
 		Json->SetNumberField(TEXT("mass_drift_total_pct"), Artifact.MassDriftTotalPct);
@@ -381,6 +390,8 @@ namespace
 		Json->SetBoolField(TEXT("cmc_updated_component_is_null"), Artifact.bCmcUpdatedComponentIsNull);
 
 		Json->SetNumberField(TEXT("hold_duration_sec"), Artifact.HoldDurationSec);
+		Json->SetNumberField(TEXT("balance_active_standing_continuous_sec"), Artifact.BalanceActiveStandingContinuousSec);
+		Json->SetNumberField(TEXT("balance_active_standing_exit_count"), Artifact.BalanceActiveStandingExitCount);
 		Json->SetNumberField(TEXT("support_uptime_sec"), Artifact.SupportUptimeSec);
 		Json->SetNumberField(TEXT("max_root_tilt_deg"), Artifact.MaxRootTiltDeg);
 		Json->SetNumberField(TEXT("peak_angular_speed_deg_per_sec"), Artifact.PeakAngularSpeedDegPerSec);
@@ -391,7 +402,6 @@ namespace
 		Json->SetNumberField(TEXT("mismatch_duration_ms"), Artifact.MismatchDurationMs);
 		Json->SetNumberField(TEXT("controller_gain_scale"), Artifact.ControllerGainScale);
 		Json->SetNumberField(TEXT("controller_damping_ratio"), Artifact.ControllerDampingRatio);
-		Json->SetBoolField(TEXT("controller_gain_damping_valid"), Artifact.bControllerGainDampingValid);
 		Json->SetNumberField(TEXT("controller_stability_failure_field"), static_cast<int32>(Artifact.ControllerStabilityFailureField));
 		Json->SetNumberField(TEXT("standing_validation_timeout_sec"), Artifact.StandingValidationTimeoutSec);
 		Json->SetBoolField(TEXT("standing_validation_timed_out"), Artifact.bStandingValidationTimedOut);
@@ -466,6 +476,11 @@ namespace
 			Artifact.bRendererFacingMotionUsedNullRhi);
 		Json->SetNumberField(TEXT("runtime_body_sample_count"), Artifact.RuntimeBodySampleCount);
 		Json->SetNumberField(TEXT("runtime_simulating_body_count"), Artifact.RuntimeSimulatingBodyCount);
+		Json->SetNumberField(TEXT("runtime_min_simulating_body_count"), Artifact.RuntimeMinSimulatingBodyCount);
+		Json->SetNumberField(TEXT("critical_body_valid_all_frames_mask"), Artifact.CriticalBodyValidAllFramesMask);
+		Json->SetNumberField(TEXT("critical_body_simulating_all_frames_mask"), Artifact.CriticalBodySimulatingAllFramesMask);
+		Json->SetNumberField(TEXT("support_body_valid_all_frames_mask"), Artifact.SupportBodyValidAllFramesMask);
+		Json->SetNumberField(TEXT("support_body_simulating_all_frames_mask"), Artifact.SupportBodySimulatingAllFramesMask);
 		Json->SetNumberField(TEXT("runtime_max_body_linear_speed_cm_per_second"), Artifact.RuntimeMaxBodyLinearSpeedCmPerSecond);
 		Json->SetNumberField(TEXT("runtime_max_body_angular_speed_deg_per_second"), Artifact.RuntimeMaxBodyAngularSpeedDegPerSecond);
 		Json->SetBoolField(TEXT("physical_perturbation_applied"), Artifact.bPhysicalPerturbationApplied);
@@ -478,7 +493,6 @@ namespace
 		Json->SetNumberField(TEXT("movement_reclaim_count"), Artifact.MovementReclaimCount);
 		Json->SetBoolField(TEXT("continuity_bookkeeping_mismatch"), Artifact.bContinuityBookkeepingMismatch);
 		Json->SetNumberField(TEXT("pelvis_sleep_duration_ms"), Artifact.PelvisSleepDurationMs);
-		Json->SetBoolField(TEXT("physical_continuity_validator_passed"), Artifact.bPhysicalContinuityValidatorPassed);
 
 		Json->SetNumberField(TEXT("contamination_class"), static_cast<int32>(Artifact.ContaminationClass));
 		Json->SetStringField(TEXT("contamination_source_body"), Artifact.ContaminationSourceBody.ToString());
@@ -498,7 +512,6 @@ namespace
 		// Stage 2A Locomotion Telemetry
 		Json->SetStringField(TEXT("root_mode"), Artifact.RootMode);
 		Json->SetStringField(TEXT("locomotion_intent"), Artifact.LocomotionIntent);
-		Json->SetBoolField(TEXT("policy_output_active"), Artifact.bPolicyOutputActive);
 		Json->SetNumberField(TEXT("capsule_velocity_x"), Artifact.CapsuleVelocity.X);
 		Json->SetNumberField(TEXT("capsule_velocity_y"), Artifact.CapsuleVelocity.Y);
 		Json->SetNumberField(TEXT("capsule_velocity_z"), Artifact.CapsuleVelocity.Z);
@@ -716,29 +729,17 @@ namespace PhysAnimProofArtifactEmitter
 
 	void LogAttemptResult(
 		const FString& AttemptUuid,
-		const bool bPassed,
+		const bool bCaptureCompleted,
 		const double StandingSeconds,
 		const EPhysAnimTerminalReason TerminalReason)
 	{
-		if (bPassed)
-		{
-			PHYSANIM_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=PASS duration=%.3f terminal_reason=%s"),
-				*AttemptUuid,
-				StandingSeconds,
-				*ToTerminalReasonString(TerminalReason));
-		}
-		else
-		{
-			PHYSANIM_LOG(
-				LogPhysAnimBridge,
-				Warning,
-				TEXT("PhysAnimProof: AttemptResult uuid=%s verdict=FAIL duration=%.3f terminal_reason=%s"),
-				*AttemptUuid,
-				StandingSeconds,
-				*ToTerminalReasonString(TerminalReason));
-		}
+		PHYSANIM_LOG(
+			LogPhysAnimBridge,
+			Warning,
+			TEXT("PhysAnimProof: AttemptCapture uuid=%s capture=%s active_standing_duration=%.3f terminal_reason=%s"),
+			*AttemptUuid,
+			bCaptureCompleted ? TEXT("COMPLETED") : TEXT("TERMINATED"),
+			StandingSeconds,
+			*ToTerminalReasonString(TerminalReason));
 	}
 }

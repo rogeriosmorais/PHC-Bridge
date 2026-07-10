@@ -60,7 +60,7 @@ class StabilityLinkageTests(unittest.TestCase):
                 saved_root / "PhysAnim" / "EvidenceSummaries" / "success_evidence_summary.json",
                 {
                     "attempt_uuid": "success",
-                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                    "diagnostic_classification": "DIAGNOSTIC_ALL_SIGNALS_OBSERVED",
                     "quality_flags": {
                         "missing_evidence": False,
                         "terminal_failure": False,
@@ -70,7 +70,10 @@ class StabilityLinkageTests(unittest.TestCase):
             )
             
             result = self._run_cli(repo_root)
-            self.assertIn("Verdict\n- PRODUCT SUCCESS", result.stdout)
+            self.assertIn(
+                "Local Diagnostic Classification\n- DIAGNOSTIC_ALL_SIGNALS_OBSERVED",
+                result.stdout,
+            )
 
     def test_failure_due_to_short_hold(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -97,8 +100,8 @@ class StabilityLinkageTests(unittest.TestCase):
             )
             
             result = self._run_cli(repo_root)
-            self.assertIn("Verdict\n- BLOCKED", result.stdout)
-            self.assertIn("terminal artifact does not satisfy the success support check", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
+            self.assertIn("terminal artifact does not satisfy the local diagnostic observation check", result.stdout)
 
     def test_failure_due_to_high_tilt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -126,7 +129,7 @@ class StabilityLinkageTests(unittest.TestCase):
             )
             
             result = self._run_cli(repo_root)
-            self.assertIn("Verdict\n- BLOCKED", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
 
     def test_failure_due_to_high_angular_speed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -154,7 +157,7 @@ class StabilityLinkageTests(unittest.TestCase):
             )
             
             result = self._run_cli(repo_root)
-            self.assertIn("Verdict\n- BLOCKED", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
 
     def test_failure_due_to_support_churn(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -182,7 +185,7 @@ class StabilityLinkageTests(unittest.TestCase):
             )
             
             result = self._run_cli(repo_root)
-            self.assertIn("Verdict\n- BLOCKED", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
 
     def test_failure_due_to_proxy_drift(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -210,7 +213,7 @@ class StabilityLinkageTests(unittest.TestCase):
             )
             
             result = self._run_cli(repo_root)
-            self.assertIn("Verdict\n- BLOCKED", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
 
     def test_failure_due_to_terminal_reason(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -237,7 +240,7 @@ class StabilityLinkageTests(unittest.TestCase):
             )
             
             result = self._run_cli(repo_root)
-            self.assertIn("Verdict\n- BLOCKED", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
 
     def test_failure_due_to_authority_conflict(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -265,7 +268,7 @@ class StabilityLinkageTests(unittest.TestCase):
             )
             
             result = self._run_cli(repo_root)
-            self.assertIn("Verdict\n- BLOCKED", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
 
 if __name__ == "__main__":
     unittest.main()

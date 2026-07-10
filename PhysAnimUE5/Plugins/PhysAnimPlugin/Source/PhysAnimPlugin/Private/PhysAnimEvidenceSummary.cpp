@@ -214,8 +214,8 @@ namespace
 	{
 		switch (Verdict)
 		{
-		case EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate:
-			return TEXT("PRODUCT_SUCCESS_CANDIDATE");
+		case EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved:
+			return TEXT("DIAGNOSTIC_ALL_SIGNALS_OBSERVED");
 		case EPhysAnimEvidenceBaselineVerdict::Diagnostic:
 			return TEXT("DIAGNOSTIC");
 		case EPhysAnimEvidenceBaselineVerdict::Blocked:
@@ -232,9 +232,10 @@ namespace
 	bool PhysAnimEvidenceSummary_TryParseStrictVerdict(const FString& Value, EPhysAnimEvidenceBaselineVerdict& OutVerdict)
 	{
 		if (Value.Equals(TEXT("PRODUCT_SUCCESS_CANDIDATE"), ESearchCase::IgnoreCase) ||
-			Value.Equals(TEXT("ProductSuccessCandidate"), ESearchCase::IgnoreCase))
+			Value.Equals(TEXT("DIAGNOSTIC_ALL_SIGNALS_OBSERVED"), ESearchCase::IgnoreCase) ||
+			Value.Equals(TEXT("DiagnosticAllSignalsObserved"), ESearchCase::IgnoreCase))
 		{
-			OutVerdict = EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate;
+			OutVerdict = EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved;
 			return true;
 		}
 
@@ -525,7 +526,7 @@ namespace PhysAnimEvidenceSummary
 		Json += FString::Printf(TEXT("\"terminal_reason\":\"%s\""), *PhysAnimProofArtifactEmitter::ToTerminalReasonString(Summary.TerminalReason));
 
 		PhysAnimEvidenceSummary_AppendCommaIfNeeded(Json, bFirstField);
-		Json += FString::Printf(TEXT("\"strict_verdict\":\"%s\""), *PhysAnimEvidenceSummary_BuildStrictVerdictString(Summary.StrictVerdict));
+		Json += FString::Printf(TEXT("\"diagnostic_classification\":\"%s\""), *PhysAnimEvidenceSummary_BuildStrictVerdictString(Summary.StrictVerdict));
 
 		PhysAnimEvidenceSummary_AppendCommaIfNeeded(Json, bFirstField);
 		Json += FString::Printf(TEXT("\"terminal_artifact_path\":\"%s\""), *PhysAnimEvidenceSummary_EscapeJsonString(Summary.TerminalArtifactPath));
@@ -634,7 +635,8 @@ namespace PhysAnimEvidenceSummary
 		}
 
 		FString StrictVerdictString;
-		if (!JsonObject->TryGetStringField(TEXT("strict_verdict"), StrictVerdictString) ||
+		if ((!JsonObject->TryGetStringField(TEXT("diagnostic_classification"), StrictVerdictString) &&
+			!JsonObject->TryGetStringField(TEXT("strict_verdict"), StrictVerdictString)) ||
 			!PhysAnimEvidenceSummary_TryParseStrictVerdict(StrictVerdictString, OutSummary.StrictVerdict))
 		{
 			return false;

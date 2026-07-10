@@ -48,19 +48,8 @@ namespace
 		{ TEXT("KineticGate_ForcedHold_0.20"), TEXT("7:-1.0") },
 	};
 
-	int32 GPhysAnimStrictLivePolicyProofQuality = 0;
 	static float GBaselineHandRZ = 0.0f;
 	static float GTargetMassKg = 0.0f;
-	FAutoConsoleVariableRef CVarPhysAnimStrictLivePolicyProofQuality(
-		TEXT("p.PhysAnim.StrictLivePolicyProofQuality"),
-		GPhysAnimStrictLivePolicyProofQuality,
-		TEXT("Require live PHC proof-quality assertions for standing and perturbation automation tests."),
-		ECVF_Default);
-
-	bool IsStrictLivePolicyProofQualityEnabled()
-	{
-		return GPhysAnimStrictLivePolicyProofQuality != 0;
-	}
 
 	constexpr int32 RequiredCriticalBodyMask =
 		(1 << 0) | // pelvis
@@ -664,21 +653,7 @@ bool FEnableStandingProofCommand::Update()
 			Proxy->bEnableLiveRuntimeEvidenceProof = true;
 			Comp->StartBridge();
 
-			// PROOFIX: Relax constraints immediately after StartBridge (which resets settings)
-			FPhysAnimStabilizationSettings& Settings = Proxy->StabilizationSettings;
-
-			Settings.BalancePhase1QuietRequiredSeconds = 0.10f;
-			Settings.BalancePhase1LateValidateRequiredSeconds = 0.10f;
-			Settings.BalancePhase1MaxEntryTargetDeltaDeg = 20.0f;
-			Settings.StartupQuietRequiredSeconds = 0.1f;
-			Settings.StartupQuietLinearSpeedThresholdCmPerSecond = 20.0f;
-			Settings.StartupQuietAngularSpeedThresholdDegPerSec = 45.0f;
-
-			// Also reduce motion thresholds to avoid "upper body instability" Safe Deny
-			Settings.BalancePhase1QuietRootLinearSpeed = 10.0f;
-			Settings.BalancePhase1QuietRootAngularSpeed = 30.0f;
-
-			PHYSANIM_LOG(LogTemp, Warning, TEXT("[!!!!PROOFIX!!!!] ENABLING_PROOF and RELAXING_THRESHOLDS for %s"), *It->GetName());
+			PHYSANIM_LOG(LogTemp, Warning, TEXT("StandingProof: evidence capture enabled without changing runtime thresholds for %s"), *It->GetName());
 			break;
 		}
 	}
@@ -2511,33 +2486,32 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics active support side count dropped below 1 for %s"), *It->GetName()));
 			}
 
-			const bool bStrictProofQuality = IsStrictLivePolicyProofQualityEnabled();
-			if (bStrictProofQuality && Metrics.PolicyInferenceSuccessCount <= 0)
+			if (Metrics.PolicyInferenceSuccessCount <= 0)
 			{
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no successful policy inference during hold for %s"), *It->GetName()));
 			}
 
-			if (bStrictProofQuality && (Metrics.PolicyActionSampleCount <= 0 || Metrics.PolicyActionConditionedMeanAbsMax <= 0.0))
+			if (Metrics.PolicyActionSampleCount <= 0 || Metrics.PolicyActionConditionedMeanAbsMax <= 0.0)
 			{
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no nonzero conditioned policy action during hold for %s"), *It->GetName()));
 			}
 
-			if (bStrictProofQuality && (Metrics.ControlTargetSampleCount <= 0 || Metrics.ControlTargetNormalWrites <= 0 || Metrics.ControlTargetTotalWrites <= 0))
+			if (Metrics.ControlTargetSampleCount <= 0 || Metrics.ControlTargetNormalWrites <= 0 || Metrics.ControlTargetTotalWrites <= 0)
 			{
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no PhysicsControl target writes during hold for %s"), *It->GetName()));
 			}
 
-			if (bStrictProofQuality && Metrics.ControlTargetMaxDeltaDeg <= 0.0 && Metrics.ControlTargetMaxRawPolicyOffsetDeg <= 0.0)
+			if (Metrics.ControlTargetMaxDeltaDeg <= 0.0 && Metrics.ControlTargetMaxRawPolicyOffsetDeg <= 0.0)
 			{
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no material policy target delta during hold for %s"), *It->GetName()));
 			}
 
-			if (bStrictProofQuality && (Metrics.BodyTelemetrySampleCount <= 0 || Metrics.SimulatingBodyCountMax <= 0))
+			if (Metrics.BodyTelemetrySampleCount <= 0 || Metrics.SimulatingBodyCountMax <= 0)
 			{
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics recorded no simulating body telemetry during hold for %s"), *It->GetName()));
 			}
 
-			if (bStrictProofQuality && (Metrics.CriticalBodyValidMask & RequiredCriticalBodyMask) != RequiredCriticalBodyMask)
+			if ((Metrics.CriticalBodyValidMask & RequiredCriticalBodyMask) != RequiredCriticalBodyMask)
 			{
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing valid critical bodies mask=0x%x required=0x%x for %s"),
 					Metrics.CriticalBodyValidMask,
@@ -2545,7 +2519,7 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 					*It->GetName()));
 			}
 
-			if (bStrictProofQuality && (Metrics.CriticalBodySimulatingMask & RequiredCriticalBodyMask) != RequiredCriticalBodyMask)
+			if ((Metrics.CriticalBodySimulatingMask & RequiredCriticalBodyMask) != RequiredCriticalBodyMask)
 			{
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing simulating critical bodies mask=0x%x required=0x%x for %s"),
 					Metrics.CriticalBodySimulatingMask,
@@ -2553,7 +2527,7 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 					*It->GetName()));
 			}
 
-			if (bStrictProofQuality && (Metrics.SupportBodyValidMask & RequiredSupportBodyMask) != RequiredSupportBodyMask)
+			if ((Metrics.SupportBodyValidMask & RequiredSupportBodyMask) != RequiredSupportBodyMask)
 			{
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing valid support bodies mask=0x%x required=0x%x for %s"),
 					Metrics.SupportBodyValidMask,
@@ -2561,7 +2535,7 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 					*It->GetName()));
 			}
 
-			if (bStrictProofQuality && (Metrics.SupportBodySimulatingMask & RequiredSupportBodyMask) != RequiredSupportBodyMask)
+			if ((Metrics.SupportBodySimulatingMask & RequiredSupportBodyMask) != RequiredSupportBodyMask)
 			{
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics missing simulating support bodies mask=0x%x required=0x%x for %s"),
 					Metrics.SupportBodySimulatingMask,
@@ -2569,16 +2543,15 @@ bool FVerifyActivatedStandingStabilityMetricsCommand::Update()
 					*It->GetName()));
 			}
 
-			if (bStrictProofQuality && Metrics.ExcludedRequiredBodySimulatingCountMax > 0)
+			if (Metrics.ExcludedRequiredBodySimulatingCountMax > 0)
 			{
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics has simulating non-V0 required bodies count=%d for %s"),
 					Metrics.ExcludedRequiredBodySimulatingCountMax,
 					*It->GetName()));
 			}
 
-			if (bStrictProofQuality &&
-				(!TerminationState.LatestArtifact.bPhysicalContinuityValidatorPassed ||
-					TerminationState.LatestArtifact.bContinuityBookkeepingMismatch))
+			if (!TerminationState.LatestArtifact.bPhysicalContinuityValidatorPassed ||
+					TerminationState.LatestArtifact.bContinuityBookkeepingMismatch)
 			{
 				Fail(FString::Printf(TEXT("StandingProof: StabilityMetrics physical continuity did not pass for %s"), *It->GetName()));
 			}
@@ -3558,14 +3531,7 @@ bool FApplyActivatedStandingPerturbationCommand::Update()
 	UPhysAnimComponent* const Component = State->Component.Get();
 	if (!Component->ApplyActivatedStandingPerturbation(EPhysAnimPerturbationDirection::Forward, EPhysAnimPerturbationMagnitude::Small))
 	{
-		if (IsStrictLivePolicyProofQualityEnabled())
-		{
-			PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
-		}
-		else
-		{
-			PHYSANIM_LOG(LogTemp, Warning, TEXT("PerturbationProof: physical perturbation was not applied; strict proof quality is opt-in"));
-		}
+		PHYSANIM_LOG(LogTemp, Error, TEXT("PerturbationProof: perturbation was not applied"));
 		return true;
 	}
 
@@ -3594,7 +3560,6 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 	const EPhysAnimRuntimeState RuntimeState = Component->GetRuntimeState();
 	const FPhysAnimRuntimeTerminationState& TerminationState = Component->GetLiveRuntimeEvidenceTerminationState();
 	const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
-	const bool bStrictProofQuality = IsStrictLivePolicyProofQualityEnabled();
 	const auto Fail = [&](const FString& Message)
 	{
 		AddLatentAutomationError(Test, Message);
@@ -3605,28 +3570,26 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 		Fail(TEXT("PerturbationProof: baseline was not captured"));
 	}
 
-	if (bStrictProofQuality && !State->bPerturbationApplied)
+	if (!State->bPerturbationApplied)
 	{
 		Fail(TEXT("PerturbationProof: perturbation was not applied"));
 	}
 
-	if (bStrictProofQuality && !Component->HasActivatedStandingPerturbationApplied())
+	if (!Component->HasActivatedStandingPerturbationApplied())
 	{
 		Fail(TEXT("PerturbationProof: component did not remember the perturbation"));
 	}
 
 	constexpr double RequiredPhysicalPerturbationDeltaVCmPerSecond = 5.0;
-	if (bStrictProofQuality &&
-		(!Metrics.bPhysicalPerturbationApplied ||
-			Metrics.PerturbationMeasuredDeltaVCmPerSecond < RequiredPhysicalPerturbationDeltaVCmPerSecond))
+	if (!Metrics.bPhysicalPerturbationApplied ||
+			Metrics.PerturbationMeasuredDeltaVCmPerSecond < RequiredPhysicalPerturbationDeltaVCmPerSecond)
 	{
 		Fail(FString::Printf(TEXT("PerturbationProof: physical pelvis impulse response was not proven deltaV=%.2f threshold=%.2f"),
 			Metrics.PerturbationMeasuredDeltaVCmPerSecond,
 			RequiredPhysicalPerturbationDeltaVCmPerSecond));
 	}
 
-	if (bStrictProofQuality &&
-		Metrics.BodyVelocityNonZeroSampleCount <= State->BaselineMetrics.BodyVelocityNonZeroSampleCount)
+	if (Metrics.BodyVelocityNonZeroSampleCount <= State->BaselineMetrics.BodyVelocityNonZeroSampleCount)
 	{
 		Fail(FString::Printf(TEXT("PerturbationProof: body velocity telemetry did not become nonzero after perturbation baseline=%d current=%d maxLinear=%.2f maxAngular=%.2f"),
 			State->BaselineMetrics.BodyVelocityNonZeroSampleCount,
@@ -3639,8 +3602,7 @@ bool FVerifyActivatedStandingPerturbationCommand::Update()
 		(World && State->PerturbationAppliedWorldTimeSeconds >= 0.0)
 			? (World->GetTimeSeconds() - State->PerturbationAppliedWorldTimeSeconds)
 			: -1.0;
-	if ((bStrictProofQuality || State->bPerturbationApplied) &&
-		(!FMath::IsFinite(RecoveryDurationSec) || RecoveryDurationSec < 0.0))
+	if (!FMath::IsFinite(RecoveryDurationSec) || RecoveryDurationSec < 0.0)
 	{
 		Fail(TEXT("PerturbationProof: recovery duration is invalid"));
 	}
@@ -3752,7 +3714,14 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimRawSimulationOwnershipBisectDiagnosti
 
 void FPhysAnimRawSimulationOwnershipBisectDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
-	// Pruned to avoid test bloat and long execution times.
+	OutBeautifiedNames.Add(TEXT("PelvisAndSpineOnly"));
+	OutTestCommands.Add(TEXT("1"));
+	OutBeautifiedNames.Add(TEXT("PelvisSpineAndThighs"));
+	OutTestCommands.Add(TEXT("2"));
+	OutBeautifiedNames.Add(TEXT("AddSupportBodies"));
+	OutTestCommands.Add(TEXT("3"));
+	OutBeautifiedNames.Add(TEXT("FullRequiredBodies"));
+	OutTestCommands.Add(TEXT("4"));
 }
 
 bool FPhysAnimRawSimulationOwnershipBisectDiagnosticTest::RunTest(const FString& Parameters)
@@ -3797,7 +3766,33 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimControlIsolationMatrixDiagnosticTest,
 
 void FPhysAnimControlIsolationMatrixDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
-	// Pruned to avoid test bloat and long execution times.
+	const auto AddCase = [&OutBeautifiedNames, &OutTestCommands](const TCHAR* CaseName)
+	{
+		OutBeautifiedNames.Add(CaseName);
+		OutTestCommands.Add(CaseName);
+	};
+
+	AddCase(TEXT("A1"));
+	AddCase(TEXT("A1-full"));
+	AddCase(TEXT("A1-passive"));
+	AddCase(TEXT("A2"));
+	AddCase(TEXT("A3"));
+	AddCase(TEXT("A3-full"));
+	AddCase(TEXT("A3-ramp"));
+	AddCase(TEXT("A3-low-02"));
+	AddCase(TEXT("A3-low-05"));
+	AddCase(TEXT("A3-low-10"));
+	AddCase(TEXT("A3-low-20"));
+	AddCase(TEXT("A4"));
+	AddCase(TEXT("A5-torso"));
+	AddCase(TEXT("A6-thigh-02"));
+	AddCase(TEXT("A6-thigh-05"));
+	AddCase(TEXT("A6-thigh-10"));
+	AddCase(TEXT("A6-thigh-20"));
+	AddCase(TEXT("A7-support"));
+	AddCase(TEXT("B"));
+	AddCase(TEXT("C"));
+	AddCase(TEXT("D"));
 }
 
 bool FPhysAnimControlIsolationMatrixDiagnosticTest::RunTest(const FString& Parameters)
@@ -5226,6 +5221,11 @@ IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimThighRestoreDiagnosticTest, "PhysAnim
 
 void FPhysAnimThighRestoreDiagnosticTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
+	for (const FThighRestoreDiagnosticVariant& Variant : ThighRestoreDiagnosticVariants)
+	{
+		OutBeautifiedNames.Add(Variant.Name);
+		OutTestCommands.Add(Variant.Command);
+	}
 }
 
 bool FPhysAnimThighRestoreDiagnosticTest::RunTest(const FString& Parameters)
@@ -5579,7 +5579,7 @@ bool FPhysAnimActivatedStandingLocomotionHandoffCommitTest::RunTest(const FStrin
 // STAGE 2A DUMBBELL LOAD TEST
 // ---------------------------------------------------------------------------------------------------------------------
 
-IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStage2ADumbbellLoadTest, "PhysAnim.StandingProof.LoadTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(FPhysAnimStage2ADumbbellLoadTest, "PhysAnim.Diagnostics.StandingLoadTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 void FPhysAnimStage2ADumbbellLoadTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
 {
@@ -5599,8 +5599,8 @@ bool FPhysAnimStage2ADumbbellLoadTest::RunTest(const FString& Parameters)
 	// 1. Load the map
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
 
-	// NOTE: StrictLivePolicyProofQuality is intentionally NOT disabled here.
-	// A previous version of this test suppressed the quality gate because the dumbbell
+	// Policy, control-write, and body-continuity assertions are mandatory here.
+	// A previous version of this diagnostic suppressed them because the dumbbell
 	// shifts the CoM outside the support polygon. That suppression was hiding the
 	// exact failure mode the test is meant to detect. The policy must adapt to the load;
 	// if it cannot maintain support under N kg, the test should FAIL, not bypass the check.
@@ -5771,7 +5771,7 @@ bool FVerifyBridgePersistenceCommand::Update()
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimBridgePersistenceRegressionTest, "PhysAnim.Regression.BridgePersistenceUnderLoad", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPhysAnimBridgePersistenceRegressionTest, "PhysAnim.Diagnostics.BridgePersistenceUnderLoad", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPhysAnimBridgePersistenceRegressionTest::RunTest(const FString& Parameters)
 {
 	AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));

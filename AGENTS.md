@@ -47,6 +47,10 @@ Interpretation:
       1. *Lifecycle & Startup*: One-off setup/shutdown diagnostics, asset loading, or level transitions.
       2. *Critical Failures*: Unrecoverable error paths and fail-states.
       3. *Temporary Debugging*: Permitted locally during active debugging, but **MUST be removed or commented out before committing**. Un-rate-limited logs in ticks must never be merged.
+14. Local tests, diagnostic classifiers, evidence summaries, graph nodes, and completed workflow states NEVER constitute product success.
+15. Product-objective completion and release require a fresh Ed25519-signed `mcp-product-gate-receipt/v1` from the protected oracle at `F:\GlobalMCP2\physanim-product-oracle`. The signing key must not be available to implementation agents.
+16. Run `.\scripts\run_external_product_gate.ps1` for the authoritative product gate. `scripts/product_gate.py` is local diagnostic preflight only and cannot emit an authoritative verdict or receipt.
+17. Locked oracle contracts are append-only. Runtime/producer changes and oracle/contract changes require separate changes and independent ownership; never move thresholds to make a failing implementation pass.
 
 # Dual-Graph Knowledge & Execution Workflow
 

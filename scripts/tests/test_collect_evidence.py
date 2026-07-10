@@ -55,6 +55,143 @@ class CollectEvidenceCLITests(unittest.TestCase):
             command.extend(["--attempt-uuid", attempt_uuid])
         return subprocess.run(command, capture_output=True, text=True, check=False)
 
+    def _complete_runtime_facts(self, attempt_uuid: str) -> dict:
+        contract_path = SCRIPT_PATH.parents[1] / "product-gates" / "standing-v0.v1.json"
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        facts: dict[str, object] = {}
+        for criterion in contract["criteria"]:
+            fact = criterion["fact"]
+            operator = criterion["operator"]
+            if operator == "equals":
+                facts[fact] = criterion["value"]
+            elif operator == "nonempty":
+                facts[fact] = f"observed-{fact}"
+            elif operator == "timestamp":
+                facts[fact] = "2026-07-10T12:00:00Z"
+            elif operator == "commit":
+                facts[fact] = "0123456789abcdef0123456789abcdef01234567"
+            elif operator == "one_of":
+                facts[fact] = criterion["value"][0]
+            elif operator in {"minimum", "maximum"}:
+                facts[fact] = criterion["value"]
+            elif operator == "positive":
+                facts[fact] = 1.0
+            else:
+                self.fail(f"unsupported contract operator in fixture: {operator}")
+
+        facts.update(
+            {
+                "attempt_uuid": attempt_uuid,
+                "emitter_attempt_uuid": attempt_uuid,
+                "terminal_frame_artifact_captured": True,
+                "runtime_simulating_body_count": 10,
+                "hold_duration_sec": 3.0,
+                "thigh_net_work": 1.0,
+            }
+        )
+        return facts
+
+    def _complete_summary(self, attempt_uuid: str) -> dict:
+        return {
+            "attempt_uuid": attempt_uuid,
+            "diagnostic_classification": "DIAGNOSTIC_ALL_SIGNALS_OBSERVED",
+            "missing_evidence": False,
+            "quality_flags": {
+                "missing_evidence": False,
+                "terminal_failure": False,
+                "artifact_log_contradiction": False,
+            },
+            "segments": [
+                {"segment_name": name, "state": "Active"}
+                for name in (
+                    "PoseSearch",
+                    "PhcPolicy",
+                    "PhysicsControl",
+                    "Chaos",
+                    "RendererFacingMotion",
+                )
+            ],
+        }
+
+    def test_complete_production_facts_remain_non_authoritative_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            self._write_json(
+                repo_root / "test-results" / "proof-artifacts" / "complete_terminal.json",
+                self._complete_runtime_facts("complete"),
+                20.0,
+            )
+            self._write_json(
+                repo_root / "test-results" / "evidence-summaries" / "complete_evidence_summary.json",
+                self._complete_summary("complete"),
+                20.0,
+            )
+            self._write_text(
+                repo_root / "test-results" / "logs" / "complete.log",
+                "PhysAnimProof: AttemptCapture uuid=complete capture=COMPLETED "
+                "active_standing_duration=3.500 terminal_reason=None\n",
+                20.0,
+            )
+
+            result = self._run_cli(repo_root, attempt_uuid="complete")
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("Local Diagnostic Classification\n- DIAGNOSTIC", result.stdout)
+            self.assertNotIn(
+                "Local Diagnostic Classification\n- DIAGNOSTIC_ALL_SIGNALS_OBSERVED",
+                result.stdout,
+            )
+            self.assertIn("AttemptCapture", result.stdout)
+
+    def test_default_selection_does_not_merge_different_attempts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            self._write_json(
+                repo_root / "test-results" / "proof-artifacts" / "a_terminal.json",
+                self._complete_runtime_facts("attempt-a"),
+                20.0,
+            )
+            self._write_json(
+                repo_root / "test-results" / "evidence-summaries" / "b_evidence_summary.json",
+                self._complete_summary("attempt-b"),
+                30.0,
+            )
+
+            result = self._run_cli(repo_root)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("a_terminal.json", result.stdout)
+            self.assertNotIn("b_evidence_summary.json", result.stdout)
+            self.assertIn("INSUFFICIENT_EVIDENCE", result.stdout)
+
+    def test_incomplete_artifact_cannot_be_promoted_by_runtime_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            self._write_json(
+                repo_root / "test-results" / "proof-artifacts" / "incomplete_terminal.json",
+                {
+                    "attempt_uuid": "incomplete",
+                    "hold_duration_sec": 3.0,
+                    "runtime_simulating_body_count": 10,
+                    "thigh_net_work": 1.0,
+                    "policy_inference_success_count": 1,
+                    "policy_inference_attempt_count": 1,
+                },
+                20.0,
+            )
+            self._write_json(
+                repo_root / "test-results" / "evidence-summaries" / "incomplete_evidence_summary.json",
+                self._complete_summary("incomplete"),
+                20.0,
+            )
+
+            result = self._run_cli(repo_root, attempt_uuid="incomplete")
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing mandatory terminal field: schema_version", result.stdout)
+            self.assertIn("missing mandatory terminal field: setup_override_count", result.stdout)
+            self.assertIn("INSUFFICIENT_EVIDENCE", result.stdout)
+
     def test_latest_artifacts_are_selected_and_pass_log_is_marked_contradictory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
@@ -111,7 +248,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertIn("Contradictions", result.stdout)
             self.assertIn("Missing Evidence", result.stdout)
             self.assertIn("Next Blocking Segment", result.stdout)
-            self.assertIn("Verdict", result.stdout)
+            self.assertIn("Local Diagnostic Classification", result.stdout)
             self.assertIn("new_terminal.json", result.stdout)
             self.assertIn("new_evidence_summary.json", result.stdout)
             self.assertIn("CONTRADICTORY", result.stdout)
@@ -159,7 +296,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertIn("terminal proof evidence:", result.stdout)
             self.assertIn("Weak Evidence", result.stdout)
             self.assertIn("Contradictions\n- none", result.stdout)
-            self.assertIn("Verdict\n- BLOCKED", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
             self.assertNotIn("CONTRADICTORY", result.stdout)
 
     def test_missing_summary_is_explicit_and_never_passes(self) -> None:
@@ -251,7 +388,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertNotIn("newer_evidence_summary.json", result.stdout)
             self.assertIn("segment_name=PhcPolicy", result.stdout)
             self.assertNotIn("segment_name=PhysicsControl", result.stdout)
-            self.assertIn("Verdict\n- BLOCKED", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
 
     def test_attempt_uuid_missing_evidence_does_not_fall_back_to_global_latest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -334,7 +471,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertIn("attempt-old Result: BLOCKED", result.stdout)
             self.assertNotIn("attempt-new Result: PASSED", result.stdout)
             self.assertIn("Contradictions\n- none", result.stdout)
-            self.assertIn("Verdict\n- BLOCKED", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
 
     def test_default_repo_root_uses_script_location(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -398,7 +535,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
                 saved_root / "PhysAnim" / "EvidenceSummaries" / "one_evidence_summary.json",
                 {
                     "attempt_uuid": "one",
-                    "strict_verdict": "DIAGNOSTIC",
+                    "diagnostic_classification": "DIAGNOSTIC",
                     "missing_evidence": False,
                     "segments": [
                         {"segment_name": "PoseSearch", "state": "Active"},
@@ -416,7 +553,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertNotIn("segment_name=PoseSearch, state=Active", result.stdout)
             self.assertIn("DIAGNOSTIC", result.stdout)
 
-    def test_product_success_candidate_is_recognized_as_artifact_success(self) -> None:
+    def test_legacy_product_success_candidate_cannot_grant_product_success(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
             saved_root = repo_root / "PhysAnimUE5" / "Saved"
@@ -455,8 +592,9 @@ class CollectEvidenceCLITests(unittest.TestCase):
             result = self._run_cli(repo_root)
 
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn("PRODUCT SUCCESS", result.stdout)
-            self.assertIn("No blocking segment found.", result.stdout)
+            self.assertIn("LOCAL_DIAGNOSTIC_ONLY", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- CONTRADICTORY", result.stdout)
+            self.assertNotIn("PRODUCT SUCCESS\n", result.stdout)
 
     def test_incidental_log_words_do_not_create_contradictions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -494,7 +632,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("Contradictions\n- none", result.stdout)
-            self.assertIn("Verdict\n- BLOCKED", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
             self.assertNotIn("CONTRADICTORY", result.stdout)
 
     def test_invalid_stability_metrics_are_reported_as_critical(self) -> None:
@@ -517,7 +655,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
                 saved_root / "PhysAnim" / "EvidenceSummaries" / "bad_evidence_summary.json",
                 {
                     "attempt_uuid": "bad",
-                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                    "diagnostic_classification": "DIAGNOSTIC_ALL_SIGNALS_OBSERVED",
                 },
                 20.0,
             )
@@ -550,7 +688,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
                 saved_root / "PhysAnim" / "EvidenceSummaries" / "missing_field_summary.json",
                 {
                     "attempt_uuid": "missing",
-                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                    "diagnostic_classification": "DIAGNOSTIC_ALL_SIGNALS_OBSERVED",
                 },
                 20.0,
             )
@@ -583,7 +721,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
                 saved_root / "PhysAnim" / "EvidenceSummaries" / "one_evidence_summary.json",
                 {
                     "attempt_uuid": "one",
-                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                    "diagnostic_classification": "DIAGNOSTIC_ALL_SIGNALS_OBSERVED",
                     "missing_evidence": False,
                     "quality_flags": {
                         "missing_evidence": False,
@@ -669,7 +807,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
                 repo_root / "test-results" / "evidence-summaries" / "attempt_evidence_summary.json",
                 {
                     "attempt_uuid": "attempt-123",
-                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                    "diagnostic_classification": "DIAGNOSTIC_ALL_SIGNALS_OBSERVED",
                     "missing_evidence": False,
                     "quality_flags": {
                         "missing_evidence": False,
@@ -706,7 +844,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertIn("attempt-123.log", result.stdout)
             self.assertNotIn("PhysAnimUE5.log", result.stdout)
             self.assertIn("attempt-123 Result: PASSED", result.stdout)
-            self.assertIn("PRODUCT SUCCESS", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- DIAGNOSTIC_ALL_SIGNALS_OBSERVED", result.stdout)
 
     def test_prefer_attempt_log_resolved_from_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -728,7 +866,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
                 repo_root / "test-results" / "evidence-summaries" / "attempt_evidence_summary.json",
                 {
                     "attempt_uuid": "attempt-999",
-                    "strict_verdict": "PRODUCT_SUCCESS_CANDIDATE",
+                    "diagnostic_classification": "DIAGNOSTIC_ALL_SIGNALS_OBSERVED",
                     "missing_evidence": False,
                     "quality_flags": {
                         "missing_evidence": False,
@@ -765,7 +903,7 @@ class CollectEvidenceCLITests(unittest.TestCase):
             self.assertIn("attempt-999.log", result.stdout)
             self.assertNotIn("PhysAnimUE5.log", result.stdout)
             self.assertIn("attempt-999 Result: PASSED", result.stdout)
-            self.assertIn("PRODUCT SUCCESS", result.stdout)
+            self.assertIn("Local Diagnostic Classification\n- DIAGNOSTIC_ALL_SIGNALS_OBSERVED", result.stdout)
 
 
 if __name__ == "__main__":

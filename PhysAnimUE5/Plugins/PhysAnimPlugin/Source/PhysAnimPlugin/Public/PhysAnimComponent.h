@@ -17,6 +17,7 @@
 
 #include "PhysAnimRuntimeTerminationPipeline.h"
 #include "PhysAnimProofArtifactEmitter.h"
+#include "PhysAnimProductGateFacts.h"
 #include "PhysAnimComponent.generated.h"
 
 class UAnimInstance;
@@ -1068,6 +1069,9 @@ struct FPhysAnimActivatedStandingStabilityMetrics
 	double RootAngularDriftDeg = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
+	double MaxRootTiltDeg = 0.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
 	double MaxBodyLinearSpeedCmPerSecond = 0.0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "PhysAnim|Balance")
@@ -2076,12 +2080,10 @@ private:
 	bool bLiveRuntimeEvidenceTerminalArtifactEmitted = false;
 	EPhysAnimTerminalReason StartupProofDeferredTerminalReason = EPhysAnimTerminalReason::None;
 
-	/** Persistent session state: true if at least one attempt achieved authentic product success. 
-	 * Used to gate the activation of detailed stability measurement metrics. */
-	bool bFirstProductSuccessAchieved = false;
-
 	FString LiveRuntimeEvidenceAttemptUuid;
 	float LiveRuntimeEvidenceStandingSeconds = 0.0f;
+	FPhysAnimStandingWindowAccumulator ProductGateStandingWindow;
+	FPhysAnimBodyContinuityAccumulator ProductGateBodyContinuity;
 	float LiveRuntimeEvidenceLastProgressLogSeconds = -1.0f;
 	int64 LiveRuntimeEvidenceSubstepCounter = 0;
 

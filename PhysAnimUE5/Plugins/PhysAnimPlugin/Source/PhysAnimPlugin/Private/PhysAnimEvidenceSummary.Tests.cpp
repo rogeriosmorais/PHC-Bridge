@@ -96,7 +96,7 @@ namespace
 		Result.ProofSignals.LogPass = true;
 		Result.ProofSignals.ArtifactPass = true;
 		Result.bHoldThresholdSatisfied = true;
-		Result.Verdict = EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate;
+		Result.Verdict = EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved;
 		return Result;
 	}
 
@@ -623,7 +623,7 @@ namespace
 			TestNotEqual(
 				TEXT("Structurally empty policy output cannot become product success"),
 				static_cast<uint8>(Parsed.StrictVerdict),
-				static_cast<uint8>(EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate));
+				static_cast<uint8>(EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved));
 
 			IFileManager::Get().Delete(*TerminalPath);
 			IFileManager::Get().Delete(*SummaryPath);
@@ -1120,7 +1120,8 @@ namespace
 		TestTrue(TEXT("segments field is present"), Json.Contains(TEXT("\"segments\":")));
 		TestTrue(TEXT("quality_flags field is present"), Json.Contains(TEXT("\"quality_flags\":")));
 		TestTrue(TEXT("terminal_reason field is present"), Json.Contains(TEXT("\"terminal_reason\":")));
-		TestTrue(TEXT("strict_verdict field is present"), Json.Contains(TEXT("\"strict_verdict\":")));
+		TestTrue(TEXT("diagnostic classification field is present"), Json.Contains(TEXT("\"diagnostic_classification\":")));
+		TestFalse(TEXT("runtime summary does not claim a strict verdict"), Json.Contains(TEXT("\"strict_verdict\":")));
 		TestTrue(TEXT("terminal_artifact_path field is present"), Json.Contains(TEXT("\"terminal_artifact_path\":")));
 		TestTrue(TEXT("segment_name field is present"), Json.Contains(TEXT("\"segment_name\":")));
 		TestTrue(TEXT("state field is present"), Json.Contains(TEXT("\"state\":")));
@@ -1144,14 +1145,15 @@ namespace
 		const FString ExpectedProofPath = PhysAnimProofArtifactEmitter::BuildTerminalArtifactJsonPath(Summary.AttemptUuid);
 		const FString SummaryPath = BuildEvidenceSummaryJsonPath(Summary.AttemptUuid);
 		TestTrue(TEXT("Evidence summary path differs from terminal proof path"), SummaryPath != ExpectedProofPath);
-		TestTrue(TEXT("Evidence summary path uses the dedicated directory"), SummaryPath.Contains(TEXT("EvidenceSummaries")));
+		TestTrue(TEXT("Evidence summary path uses the dedicated directory"), SummaryPath.Contains(TEXT("evidence-summaries")));
 		TestEqual(
 			TEXT("Evidence summary path uses the sanitized attempt token"),
 			SummaryPath,
 			FPaths::Combine(
-				FPaths::ProjectSavedDir(),
-				TEXT("PhysAnim"),
-				TEXT("EvidenceSummaries"),
+				FPaths::ProjectDir(),
+				TEXT(".."),
+				TEXT("test-results"),
+				TEXT("evidence-summaries"),
 				TEXT("attempt_001_evidence_summary.json")));
 
 		FPhysAnimEvidenceSummary Parsed;
@@ -1205,7 +1207,7 @@ namespace
 		TestFalse(TEXT("Sidecar summary write is not reported as capture failure"), WriteResult.bEvidenceCaptureFailure);
 		TestEqual(TEXT("Sidecar summary path is built from the attempt UUID"), WriteResult.JsonPath, BuildEvidenceSummaryJsonPath(AttemptUuid));
 		TestTrue(TEXT("Sidecar summary path differs from terminal proof path"), WriteResult.JsonPath != Input.Summary.TerminalArtifactPath);
-		TestTrue(TEXT("Sidecar summary path uses the dedicated directory"), WriteResult.JsonPath.Contains(TEXT("EvidenceSummaries")));
+		TestTrue(TEXT("Sidecar summary path uses the dedicated directory"), WriteResult.JsonPath.Contains(TEXT("evidence-summaries")));
 		TestTrue(TEXT("Sidecar summary file exists after write"), IFileManager::Get().FileExists(*WriteResult.JsonPath));
 		TestEqual(TEXT("Exactly one sidecar summary exists for the attempt"), CountFilesForAttempt(AttemptUuid), 1);
 

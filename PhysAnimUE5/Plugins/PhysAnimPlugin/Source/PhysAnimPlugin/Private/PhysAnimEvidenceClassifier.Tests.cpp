@@ -83,7 +83,7 @@ namespace
 		{
 			const FPhysAnimEvidenceBaselineResult Result = Classify(MakeAuthoritativeSuccessInput());
 
-			TestEqual(TEXT("All-active clean evidence reaches product-success candidate"), static_cast<uint8>(Result.Verdict), static_cast<uint8>(EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate));
+			TestEqual(TEXT("All-active clean evidence reaches product-success candidate"), static_cast<uint8>(Result.Verdict), static_cast<uint8>(EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved));
 		}
 
 		{

@@ -1,10 +1,9 @@
 {
   "mcpServers": {
     "mcp-graph": {
-      "command": "npx",
+      "command": "C:\\Users\\roger\\AppData\\Local\\Volta\\tools\\image\\node\\22.22.1\\node.exe",
       "args": [
-        "-y",
-        "@mcp-graph-workflow/mcp-graph"
+        "F:\\GlobalMCP2\\mcp-graph-workflow\\compat\\mcp-graph-13.27-gate\\dist\\proxy.js"
       ]
     },
     "context7": {

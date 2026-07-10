@@ -128,7 +128,7 @@ namespace PhysAnimEvidenceClassifier
 
 		if (HasAllSegmentsActive(Input.Segments) && Input.bHoldThresholdSatisfied)
 		{
-			Result.Verdict = EPhysAnimEvidenceBaselineVerdict::ProductSuccessCandidate;
+			Result.Verdict = EPhysAnimEvidenceBaselineVerdict::DiagnosticAllSignalsObserved;
 			return Result;
 		}
 

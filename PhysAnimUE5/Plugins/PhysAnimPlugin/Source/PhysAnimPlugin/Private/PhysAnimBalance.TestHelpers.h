@@ -45,14 +45,15 @@ namespace PhysAnimBalanceTestHelpers
 		const bool bHasSafePhase2Denial,
 		const FString& SafePhase2DenialReason,
 		const FString& BalanceReadyTransitionFailureReason,
-		const bool bIsStage1,
+		const bool bLegacyStage1Context,
 		FString& OutError)
 	{
 		OutError.Reset();
+		static_cast<void>(bLegacyStage1Context);
 
 		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
 		{
-			if (!bHasPhysicalContinuityEvidence && !bIsStage1)
+			if (!bHasPhysicalContinuityEvidence)
 			{
 				OutError = TEXT("[PhysAnimPieBalanceSmoke] BalanceActive_Standing is not a benchmark success without physical continuity evidence.");
 				return false;
@@ -85,7 +86,10 @@ namespace PhysAnimBalanceTestHelpers
 
 		if (IsTruthfulBalanceSmokeTerminalReason(TerminalReason))
 		{
-			return true;
+			OutError = FString::Printf(
+				TEXT("[PhysAnimPieBalanceSmoke] Recorded terminal failure is diagnostic evidence, not a passing smoke outcome. reason=%d."),
+				static_cast<int32>(TerminalReason));
+			return false;
 		}
 
 		if (RuntimeState == EPhysAnimRuntimeState::FailStopped || bHasTransitionFailure)
