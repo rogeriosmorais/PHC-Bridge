@@ -1,0 +1,132 @@
+{
+  "schema_version": "physanim-product-protocol/v1",
+  "protocol_id": "causal-standing",
+  "version": 1,
+  "status": "LOCKED",
+  "change_control": "Never edit this file after its protocol commit. Add a new version and record why the acceptance contract changed.",
+  "scope_root": "F:\\NewEngine-AgentB",
+  "map": "/Game/ThirdPerson/Lvl_ThirdPerson",
+  "actor_class": "/Game/Characters/Mannequins/Blueprints/BP_PhysAnimCharacter.BP_PhysAnimCharacter_C",
+  "skeleton": "Manny",
+  "model_asset": "/Game/NNEModels/phc_policy.phc_policy",
+  "model_source": {
+    "runtime_onnx": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+    "runtime_uasset": "PhysAnimUE5/Content/NNEModels/phc_policy.uasset",
+    "checkpoint_available_in_scope": false,
+    "provenance_statement": "The imported runtime artifact is evaluated as-is. No checkpoint or sibling checkout is part of this protocol."
+  },
+  "architecture": [
+    "PoseSearch",
+    "NNE/ONNX",
+    "PhysicsControl",
+    "Chaos",
+    "Renderer"
+  ],
+  "test_family": "PhysAnim.Product.CausalStanding",
+  "renderer_mode": "RenderOffscreen",
+  "variants": [
+    "Normal",
+    "ZeroActions",
+    "DropControlDispatch",
+    "ForcedSupportLoss"
+  ],
+  "outcomes": [
+    "PASS",
+    "FAIL",
+    "INVALID",
+    "BLOCKED"
+  ],
+  "repetitions": {
+    "Normal": 3,
+    "ZeroActions": 3,
+    "DropControlDispatch": 1,
+    "ForcedSupportLoss": 1
+  },
+  "sample_streams": {
+    "physics": {
+      "clock": "game_tick",
+      "required_fields": [
+        "sequence",
+        "time_sec",
+        "runtime_state",
+        "pelvis_height_cm",
+        "root_tilt_deg",
+        "max_penetration_cm",
+        "support_gap_ms",
+        "critical_body_valid_mask",
+        "critical_body_simulating_mask",
+        "support_body_valid_mask",
+        "support_body_simulating_mask",
+        "root_is_simulating",
+        "cmc_active",
+        "cmc_tick_enabled",
+        "cmc_updated_component_is_null",
+        "capsule_collision_enabled",
+        "movement_reclaim_count",
+        "shell_helper_used_count",
+        "topology_change_count",
+        "pose_rms_error_deg"
+      ]
+    },
+    "policy": {
+      "clock": "policy_step",
+      "expected_rate_hz": 30,
+      "required_fields": [
+        "sequence",
+        "time_sec",
+        "pose_search_valid",
+        "selected_animation",
+        "inference_attempted",
+        "inference_succeeded",
+        "raw_action_l2",
+        "conditioned_action_l2",
+        "target_write_attempt_count",
+        "target_readback_match_count",
+        "target_readback_max_error_deg"
+      ]
+    }
+  },
+  "perturbation": {
+    "body": "pelvis",
+    "direction": "world_forward",
+    "application": "velocity_change",
+    "delta_v_cm_per_sec": 15.0
+  },
+  "acceptance": {
+    "startup_timeout_sec": 20.0,
+    "standing_window_sec": 10.0,
+    "baseline_window_sec": 2.0,
+    "post_perturbation_window_sec": 8.0,
+    "perturbation_delta_v_cm_per_sec": 15.0,
+    "recovery_deadline_sec": 3.0,
+    "recovery_hold_sec": 2.0,
+    "recovery_pose_rms_floor_deg": 10.0,
+    "recovery_pose_rms_baseline_multiplier": 1.5,
+    "minimum_pelvis_height_ratio": 0.7,
+    "maximum_root_tilt_deg": 45.0,
+    "maximum_penetration_cm": 2.0,
+    "maximum_support_gap_ms": 100.0,
+    "minimum_policy_step_coverage": 0.9,
+    "maximum_target_readback_error_deg": 0.5,
+    "minimum_target_readback_match_ratio": 0.95,
+    "normal_to_zero_recovery_auc_ratio_max": 0.8,
+    "required_runtime_state": "BalanceActive_Standing",
+    "required_pose_search_animation": "MM_Idle",
+    "required_critical_body_mask": 63,
+    "required_support_body_mask": 15,
+    "require_root_simulating": true,
+    "require_zero_inference_failures": true,
+    "require_cmc_inactive": true,
+    "require_capsule_collision_disabled": true,
+    "require_no_movement_reclaim": true,
+    "require_no_shell_helper": true,
+    "require_no_topology_change": true,
+    "require_nonblank_render_capture": true
+  },
+  "verdict_rules": {
+    "PASS": "All three Normal repetitions satisfy every absolute criterion, paired Normal recovery AUC is at most 80 percent of ZeroActions, and both destructive controls are rejected for their intended reason.",
+    "FAIL": "The run is valid but one or more behavioral or causal criteria are not satisfied.",
+    "INVALID": "The protocol, variant, manifest, raw streams, cadence, renderer capture, or same-attempt linkage is malformed or incomplete.",
+    "BLOCKED": "The project, imported model, UE executable, map, or required runtime capability is unavailable before the experiment starts."
+  }
+}
