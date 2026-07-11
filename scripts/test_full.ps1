@@ -3,7 +3,8 @@ param()
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$NodeGate = Join-Path $PSScriptRoot "test_node.ps1"
+$RuntimeGate = Join-Path $PSScriptRoot "test_runtime.ps1"
+$ProductGate = Join-Path $PSScriptRoot "run_causal_standing.ps1"
 
 Push-Location $RepoRoot
 try {
@@ -12,9 +13,14 @@ try {
         throw "Python integrity suite failed with exit code $LASTEXITCODE"
     }
 
-    & $NodeGate
+    & $RuntimeGate
     if ($LASTEXITCODE -ne 0) {
-        throw "UE node gate failed with exit code $LASTEXITCODE"
+        throw "UE runtime tier failed with exit code $LASTEXITCODE"
+    }
+
+    & $ProductGate -Mode Milestone
+    if ($LASTEXITCODE -ne 0) {
+        throw "Causal-standing product tier returned verdict code $LASTEXITCODE"
     }
 }
 finally {

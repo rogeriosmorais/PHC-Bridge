@@ -104,11 +104,14 @@ class ProductTestIntegrityTests(unittest.TestCase):
             self.emitter,
         )
 
-    def test_current_state_is_blocked_without_a_signed_receipt(self) -> None:
+    def test_current_state_reports_observed_behavior_without_receipt_dependency(self) -> None:
         current_state = read(REPO_ROOT / "docs" / "evidence" / "CURRENT_STATE_ANALYSIS.md")
-        self.assertRegex(current_state, r"(?i)authoritative product status:\s*\*\*BLOCKED\*\*")
-        self.assertRegex(current_state, r"(?i)signed receipt:\s*\*\*ABSENT\*\*")
-        self.assertIn("## Not Verified", current_state)
+        self.assertRegex(current_state, r"(?i)product behavior is \*\*FAIL\*\*")
+        self.assertIn("## Latest Observed Attempt", current_state)
+        self.assertIn("phase1_late_validate_upper_body_instability", current_state)
+        self.assertIn("The evaluator returned\n`FAIL`, not `INVALID` or `BLOCKED`", current_state)
+        self.assertIn("not blocked by a signer", current_state)
+        self.assertNotRegex(current_state, r"(?i)signed receipt:\s*\*\*ABSENT\*\*")
         self.assertNotIn("Proceed immediately", current_state)
         self.assertNotIn("technically complete and verified", current_state)
 
@@ -122,9 +125,11 @@ class ProductTestIntegrityTests(unittest.TestCase):
         scripts = package.get("scripts", {})
 
         self.assertIn("python -m pytest scripts/tests", scripts.get("test:blast", ""))
-        self.assertIn("scripts/test_node.ps1", scripts.get("test:node", ""))
+        self.assertIn("python -m pytest scripts/tests", scripts.get("test:fast", ""))
+        self.assertIn("scripts/test_runtime.ps1", scripts.get("test:runtime", ""))
+        self.assertIn("scripts/run_causal_standing.ps1 -Mode Milestone", scripts.get("test:product", ""))
         self.assertIn("scripts/test_full.ps1", scripts.get("test", ""))
-        self.assertTrue((REPO_ROOT / "scripts" / "test_node.ps1").is_file())
+        self.assertTrue((REPO_ROOT / "scripts" / "test_runtime.ps1").is_file())
         self.assertTrue((REPO_ROOT / "scripts" / "test_full.ps1").is_file())
 
     def test_project_mcp_uses_the_guarded_globalmcp2_runtime(self) -> None:

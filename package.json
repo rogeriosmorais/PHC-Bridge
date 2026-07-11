@@ -1,8 +1,11 @@
 {
   "private": true,
   "scripts": {
+    "test:fast": "python -m pytest scripts/tests -q",
+    "test:runtime": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/test_runtime.ps1",
+    "test:product": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/run_causal_standing.ps1 -Mode Milestone",
     "test:blast": "python -m pytest scripts/tests -q",
-    "test:node": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/test_node.ps1",
+    "test:node": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/test_runtime.ps1",
     "test": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/test_full.ps1"
   },
   "dependencies": {
