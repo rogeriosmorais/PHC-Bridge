@@ -2,7 +2,17 @@ param (
     [switch]$Full,  # Perform full plugin packaging (Slow)
     [switch]$Run,   # Launch the Editor on success
     [switch]$Clean,  # Wipe Binaries/Intermediate before building
-    [string]$Test    # Optional Unreal automation test name to run after a successful build
+    [string]$Test,    # Optional Unreal automation test name to run after a successful build
+    [switch]$SkipBuild,
+    [ValidateSet("NullRHI", "RenderOffscreen")]
+    [string]$TestMode = "NullRHI",
+    [string]$ReportExportPath,
+    [string]$ProductRunRoot,
+    [string]$ProductRunId,
+    [string]$ProductVariant,
+    [int]$ProductRepetition = 0,
+    [string]$SourceCommit,
+    [string]$ModelOnnxSha256
 )
 
 # 1. Environment Setup
@@ -52,18 +62,26 @@ if ($Clean) {
 Write-Host "--- Starting Build (Mode: $(if($Full){"Full Package"}else{"Fast Iteration"})) ---" -ForegroundColor Yellow
 
 # 4. Compile Step (Default Path)
-Write-Host "[1] Compiling Editor Binaries..." -ForegroundColor Green
-& "$env:UE5_PATH\Build\BatchFiles\Build.bat" PhysAnimUE5Editor Win64 Development `
-    -Project="$ProjectFile" `
-    -Progress -NoHotReloadFromIDE
+if (-not $SkipBuild) {
+    Write-Host "[1] Compiling Editor Binaries..." -ForegroundColor Green
+    & "$env:UE5_PATH\Build\BatchFiles\Build.bat" PhysAnimUE5Editor Win64 Development `
+        -Project="$ProjectFile" `
+        -Progress -NoHotReloadFromIDE
 
-if ($LASTEXITCODE -ne 0) { 
-    Write-Host "!!! COMPILATION FAILED !!!" -ForegroundColor Red
-    exit $LASTEXITCODE 
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "!!! COMPILATION FAILED !!!" -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
+}
+else {
+    Write-Host "[1] Reusing existing Editor binaries." -ForegroundColor Green
 }
 
 # 5. Full Packaging (Only if -Full is passed)
 if ($Full) {
+    if ($SkipBuild) {
+        throw "-Full cannot be combined with -SkipBuild."
+    }
     Write-Host "[2] Packaging Plugin..." -ForegroundColor Green
     if (Test-Path $PackageDir) { Remove-Item -Recurse -Force $PackageDir }
 
@@ -82,9 +100,43 @@ if ($Full) {
 # 6. Optional Automation Test Run
 if ($Test) {
     Write-Host "[3] Running Automation Test: $Test" -ForegroundColor Green
-    & "$EditorCmdExe" "$ProjectFile" `
-        -ExecCmds="Automation RunTests $Test; Quit" `
-        -NullRHI -NoSound -Unattended -Log
+    $EditorArguments = @(
+        $ProjectFile,
+        "-ExecCmds=Automation RunTests $Test; Quit",
+        "-TestExit=Automation Test Queue Empty",
+        "-NoSound",
+        "-Unattended",
+        "-Log"
+    )
+    if ($TestMode -eq "RenderOffscreen") {
+        $EditorArguments += "-RenderOffscreen"
+    }
+    else {
+        $EditorArguments += "-NullRHI"
+    }
+    if ($ReportExportPath) {
+        $EditorArguments += "-ReportExportPath=$ReportExportPath"
+    }
+    if ($ProductRunRoot) {
+        $EditorArguments += "-PhysAnimProductRunRoot=$ProductRunRoot"
+    }
+    if ($ProductRunId) {
+        $EditorArguments += "-PhysAnimProductRunId=$ProductRunId"
+    }
+    if ($ProductVariant) {
+        $EditorArguments += "-PhysAnimProductVariant=$ProductVariant"
+    }
+    if ($ProductRepetition -gt 0) {
+        $EditorArguments += "-PhysAnimProductRepetition=$ProductRepetition"
+    }
+    if ($SourceCommit) {
+        $EditorArguments += "-PhysAnimSourceCommit=$SourceCommit"
+    }
+    if ($ModelOnnxSha256) {
+        $EditorArguments += "-PhysAnimModelOnnxSha256=$ModelOnnxSha256"
+    }
+
+    & "$EditorCmdExe" $EditorArguments
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "!!! AUTOMATION TEST FAILED !!!" -ForegroundColor Red
