@@ -12,6 +12,8 @@ from scripts.product_gate import CONTRACT_PATH, evaluate_product_gate, parse_arg
 
 
 NOW = datetime(2026, 7, 10, 12, 0, 0, tzinfo=timezone.utc)
+REPOSITORY_ORACLE_ADAPTER = Path(__file__).parents[1] / "run_external_product_gate.ps1"
+V2_CONTRACT_SHA256 = "ce3e094c6e1731eb26222bb17c70dd82db76561c43f1fec3daed518c140cf32d"
 
 
 def canonical_evidence() -> dict[str, object]:
@@ -26,6 +28,8 @@ def canonical_evidence() -> dict[str, object]:
         "terminal_reason": 0,
         "terminal_reason_name": "None",
         "balance_active_standing_continuous_sec": 3.25,
+        "standing_window_sample_count": 100,
+        "standing_window_max_delta_sec": 1.0 / 60.0,
         "balance_active_standing_exit_count": 0,
         "physics_asset_violation_count": 0,
         "skeleton_contract_violation_count": 0,
@@ -67,6 +71,7 @@ def canonical_evidence() -> dict[str, object]:
         "control_target_sample_count": 100,
         "control_target_normal_writes": 100,
         "control_target_total_writes": 100,
+        "control_target_max_delta_deg": 1.0,
         "runtime_body_sample_count": 100,
         "runtime_min_simulating_body_count": 10,
         "critical_body_valid_all_frames_mask": 0x3F,
@@ -77,6 +82,8 @@ def canonical_evidence() -> dict[str, object]:
         "pose_search_query_count": 100,
         "pose_search_valid_result_count": 100,
         "pose_search_selected_animation_name": "MM_Idle",
+        "renderer_facing_motion_sample_count": 100,
+        "renderer_facing_motion_active_sample_count": 100,
         "renderer_facing_motion_used_null_rhi": False,
         "topology_change_count": 0,
         "authority_conflict_count": 0,
@@ -86,7 +93,7 @@ def canonical_evidence() -> dict[str, object]:
         "pelvis_sleep_duration_ms": 0.0,
         "mesh_wide_assist_detected": False,
         "non_critical_body_assist_detected": False,
-        "setup_override_count": 0,
+        "thigh_net_work": 1.0,
     }
 
 
@@ -105,16 +112,21 @@ class ProductGateTests(unittest.TestCase):
             )
             return result, evidence_bytes
 
-    def test_complete_factual_evidence_emits_non_authoritative_diagnostic_report(self) -> None:
+    def test_v2_diagnostic_reference_is_the_external_locked_contract(self) -> None:
+        self.assertEqual(hashlib.sha256(CONTRACT_PATH.read_bytes()).hexdigest(), V2_CONTRACT_SHA256)
+        attributes = (CONTRACT_PATH.parents[1] / ".gitattributes").read_text(encoding="utf-8")
+        self.assertIn("product-gates/standing-v0.v*.json text eol=lf", attributes)
+
+    def test_contract_shaped_input_emits_non_authoritative_diagnostic_report(self) -> None:
         result, evidence_bytes = self._evaluate(canonical_evidence())
 
         self.assertTrue(result.passed, result.failures)
         self.assertNotIn("verdict", result.report)
         self.assertEqual(result.report["authority"], "LOCAL_DIAGNOSTIC_ONLY")
         self.assertEqual(result.report["diagnostic_outcome"], "ALL_CRITERIA_OBSERVED")
-        self.assertEqual(result.report["schema_version"], "physanim-local-gate-diagnostic/v1")
+        self.assertEqual(result.report["schema_version"], "physanim-local-gate-diagnostic/v2")
         self.assertEqual(result.report["gate_id"], "standing-v0")
-        self.assertEqual(result.report["gate_version"], 1)
+        self.assertEqual(result.report["gate_version"], 2)
         self.assertEqual(
             result.report["evidence_sha256"], hashlib.sha256(evidence_bytes).hexdigest()
         )
@@ -126,7 +138,7 @@ class ProductGateTests(unittest.TestCase):
             result.report["git_revision"],
             "0123456789abcdef0123456789abcdef01234567",
         )
-        self.assertRegex(str(result.report["verifier_version"]), r"^1\.")
+        self.assertRegex(str(result.report["verifier_version"]), r"^2\.")
 
     def test_missing_required_fact_fails_closed(self) -> None:
         evidence = canonical_evidence()
@@ -150,7 +162,7 @@ class ProductGateTests(unittest.TestCase):
         for field in (
             "balance_active_standing_exit_count",
             "policy_inference_failure_count",
-            "setup_override_count",
+            "standing_window_max_delta_sec",
             "max_root_tilt_deg",
             "capsule_lock_delta_cm",
         ):
@@ -188,7 +200,7 @@ class ProductGateTests(unittest.TestCase):
         result, _ = self._evaluate(evidence)
 
         self.assertFalse(result.passed)
-        self.assertIn("control_target_normal_writes must be >= 1", result.failures)
+        self.assertIn("control_target_normal_writes must be >= 90", result.failures)
         self.assertFalse(any("strict_verdict" in item for item in result.checks))
 
     def test_embedded_threshold_override_has_no_authority(self) -> None:
@@ -200,7 +212,7 @@ class ProductGateTests(unittest.TestCase):
         result, _ = self._evaluate(evidence)
 
         self.assertFalse(result.passed)
-        self.assertIn("max_root_tilt_deg must be <= 20.0", result.failures)
+        self.assertIn("max_root_tilt_deg must be between 0.0 and 20.0", result.failures)
 
     def test_each_product_boundary_fails_when_inactive_or_assisted(self) -> None:
         cases = {
@@ -210,9 +222,12 @@ class ProductGateTests(unittest.TestCase):
             "insufficient simulated bodies": ("runtime_min_simulating_body_count", 9),
             "incomplete critical mask": ("critical_body_simulating_all_frames_mask", 0x3E),
             "short active standing window": ("balance_active_standing_continuous_sec", 2.99),
+            "single-sample cadence claim": ("standing_window_sample_count", 1),
             "null renderer": ("renderer_facing_motion_used_null_rhi", True),
+            "missing rendered samples": ("renderer_facing_motion_sample_count", 0),
             "shell assistance": ("shell_helper_used_count", 1),
-            "test setup override": ("setup_override_count", 1),
+            "zero control work": ("control_target_max_delta_deg", 0.0),
+            "zero thigh work": ("thigh_net_work", 0.0),
         }
         for label, (field, value) in cases.items():
             with self.subTest(label=label):
@@ -242,6 +257,15 @@ class ProductGateTests(unittest.TestCase):
                     "mutable.json",
                 ]
             )
+
+    def test_repository_cannot_invoke_or_parameterize_the_external_signer(self) -> None:
+        adapter = REPOSITORY_ORACLE_ADAPTER.read_text(encoding="utf-8")
+
+        self.assertNotIn("PHYSANIM_PRODUCT_ORACLE_PRIVATE_KEY_PEM", adapter)
+        self.assertNotIn("[string]$Evidence", adapter)
+        self.assertNotIn("--evidence", adapter)
+        self.assertNotIn("src\\cli.js", adapter)
+        self.assertIn("cannot invoke the protected product signer", adapter)
 
 
 if __name__ == "__main__":

@@ -48,9 +48,10 @@ Interpretation:
       2. *Critical Failures*: Unrecoverable error paths and fail-states.
       3. *Temporary Debugging*: Permitted locally during active debugging, but **MUST be removed or commented out before committing**. Un-rate-limited logs in ticks must never be merged.
 14. Local tests, diagnostic classifiers, evidence summaries, graph nodes, and completed workflow states NEVER constitute product success.
-15. Product-objective completion and release require a fresh Ed25519-signed `mcp-product-gate-receipt/v1` from the protected oracle at `F:\GlobalMCP2\physanim-product-oracle`. The signing key must not be available to implementation agents.
-16. Run `.\scripts\run_external_product_gate.ps1` for the authoritative product gate. `scripts/product_gate.py` is local diagnostic preflight only and cannot emit an authoritative verdict or receipt.
-17. Locked oracle contracts are append-only. Runtime/producer changes and oracle/contract changes require separate changes and independent ownership; never move thresholds to make a failing implementation pass.
+15. Product-objective completion and release require a fresh challenge-bound Ed25519 `mcp-product-gate-receipt/v1` from the protected v2 oracle at `F:\GlobalMCP2\physanim-product-oracle`. Its signing key, service account, output root, and trust-anchor provisioning must not be available to implementation agents.
+16. The implementation repository cannot invoke the authoritative signer. `.\scripts\run_external_product_gate.ps1` intentionally fails. A separately owned service must consume the MCP-issued challenge and run `F:\GlobalMCP2\physanim-product-oracle\run-standing-gate.ps1`; `scripts/product_gate.py` remains diagnostic-only.
+17. Locked oracle contracts are append-only. Runtime/producer changes and oracle contract/runner changes require separate ownership and review; never move thresholds, classifications, setup, or terminology to make a failing implementation pass.
+18. A receipt is not sufficient by itself: MCP completion must select one unconsumed receipt whose exact envelope, challenge, attempt, clean commit/tree, and latest `in_progress` transition all match at completion.
 
 # Dual-Graph Knowledge & Execution Workflow
 

@@ -7,268 +7,187 @@ import tempfile
 import unittest
 from pathlib import Path
 
+
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "collect_evidence.py"
+CONTRACT_PATH = SCRIPT_PATH.parents[1] / "product-gates" / "standing-v0.v2.json"
+SEGMENTS = (
+    "PoseSearch",
+    "PhcPolicy",
+    "PhysicsControl",
+    "Chaos",
+    "RendererFacingMotion",
+)
+
 
 class StabilityLinkageTests(unittest.TestCase):
-    def _remap_path(self, path: Path) -> Path:
-        path_str = path.as_posix()
-        if "PhysAnimUE5/Saved/PhysAnim/ProofArtifacts" in path_str:
-            path_str = path_str.replace("PhysAnimUE5/Saved/PhysAnim/ProofArtifacts", "test-results/proof-artifacts")
-        elif "PhysAnimUE5/Saved/PhysAnim/EvidenceSummaries" in path_str:
-            path_str = path_str.replace("PhysAnimUE5/Saved/PhysAnim/EvidenceSummaries", "test-results/evidence-summaries")
-        return Path(path_str)
+    def _complete_runtime_facts(self, attempt_uuid: str) -> dict:
+        contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        facts: dict[str, object] = {}
+        for criterion in contract["criteria"]:
+            operator = criterion["operator"]
+            if operator == "equals":
+                value = criterion["value"]
+            elif operator == "nonempty":
+                value = f"observed-{criterion['fact']}"
+            elif operator == "timestamp":
+                value = "2026-07-10T12:00:00Z"
+            elif operator == "commit":
+                value = "0123456789abcdef0123456789abcdef01234567"
+            elif operator == "one_of":
+                value = criterion["value"][0]
+            elif operator in {"minimum", "maximum"}:
+                value = criterion["value"]
+            elif operator == "range":
+                value = criterion["maximum"]
+            elif operator == "positive":
+                value = 1.0
+            else:
+                self.fail(f"unsupported contract operator in fixture: {operator}")
+            facts[criterion["fact"]] = value
 
-    def _write_json(self, path: Path, payload: dict) -> None:
-        mapped_path = self._remap_path(path)
-        mapped_path.parent.mkdir(parents=True, exist_ok=True)
-        if "terminal" in path.name:
-            if "thigh_net_work" not in payload:
-                payload["thigh_net_work"] = 1.0
-            if "policy_inference_success_count" not in payload:
-                payload["policy_inference_success_count"] = 5
-            if "policy_inference_attempt_count" not in payload:
-                payload["policy_inference_attempt_count"] = 5
-            if "terminal_reason_name" not in payload:
-                payload["terminal_reason_name"] = "None"
-        mapped_path.write_text(json.dumps(payload), encoding="utf-8")
+        facts.update(
+            {
+                "attempt_uuid": attempt_uuid,
+                "emitter_attempt_uuid": attempt_uuid,
+                "terminal_frame_artifact_captured": True,
+                "standing_window_sample_count": 180,
+                "standing_window_max_delta_sec": 1.0 / 60.0,
+                "policy_inference_attempt_count": 180,
+                "policy_inference_success_count": 180,
+                "policy_action_sample_count": 180,
+                "control_target_sample_count": 180,
+                "control_target_normal_writes": 180,
+                "control_target_total_writes": 180,
+                "runtime_body_sample_count": 180,
+                "renderer_facing_motion_sample_count": 180,
+                "renderer_facing_motion_active_sample_count": 180,
+                "setup_override_count": None,
+                "runtime_simulating_body_count": 10,
+                "hold_duration_sec": 3.0,
+                "thigh_net_work": 1.0,
+            }
+        )
+        return facts
 
-    def _run_cli(self, repo_root: Path) -> subprocess.CompletedProcess[str]:
-        command = [sys.executable, str(SCRIPT_PATH), "--repo-root", str(repo_root)]
-        return subprocess.run(command, capture_output=True, text=True, check=False)
+    def _summary(self, attempt_uuid: str, terminal_failure: bool = False) -> dict:
+        return {
+            "attempt_uuid": attempt_uuid,
+            "diagnostic_classification": "DIAGNOSTIC",
+            "missing_evidence": False,
+            "quality_flags": {
+                "missing_evidence": False,
+                "terminal_failure": terminal_failure,
+                "artifact_log_contradiction": False,
+            },
+            "segments": [
+                {"segment_name": name, "state": "Active"}
+                for name in SEGMENTS
+            ],
+        }
 
-    def test_success_with_perfect_metrics(self) -> None:
+    def _run_attempt(
+        self,
+        repo_root: Path,
+        facts: dict,
+        *,
+        terminal_failure: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        attempt_uuid = str(facts["attempt_uuid"])
+        artifact_path = (
+            repo_root / "test-results" / "proof-artifacts" / f"{attempt_uuid}_terminal.json"
+        )
+        summary_path = (
+            repo_root
+            / "test-results"
+            / "evidence-summaries"
+            / f"{attempt_uuid}_evidence_summary.json"
+        )
+        log_path = repo_root / "test-results" / "logs" / f"{attempt_uuid}.log"
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        artifact_path.write_text(json.dumps(facts), encoding="utf-8")
+        summary_path.write_text(
+            json.dumps(self._summary(attempt_uuid, terminal_failure)),
+            encoding="utf-8",
+        )
+        capture = "TERMINATED" if terminal_failure else "COMPLETED"
+        log_path.write_text(
+            "PhysAnimProof: AttemptCapture "
+            f"uuid={attempt_uuid} capture={capture} "
+            "active_standing_duration="
+            f"{float(facts['balance_active_standing_continuous_sec']):.3f} "
+            f"terminal_reason={facts['terminal_reason_name']}\n",
+            encoding="utf-8",
+        )
+        return subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT_PATH),
+                "--repo-root",
+                str(repo_root),
+                "--attempt-uuid",
+                attempt_uuid,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def _assert_contract_blocked(self, field: str, value: object) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
-            saved_root = repo_root / "PhysAnimUE5" / "Saved"
-            
-            self._write_json(
-                saved_root / "PhysAnim" / "ProofArtifacts" / "success_terminal.json",
-                {
-                    "attempt_uuid": "success",
-                    "physical_continuity_validator_passed": True,
-                    "runtime_simulating_body_count": 22,
-                    "hold_duration_sec": 3.0,
-                    "max_root_tilt_deg": 10.0,
-                    "peak_angular_speed_deg_per_sec": 100.0,
-                    "support_churn_hz": 5.0,
-                    "proxy_outside_hull_duration_ms": 0.0,
-                    "terminal_reason": 0,
-                    "terminal_reason_name": "None"
-                }
-            )
-            self._write_json(
-                saved_root / "PhysAnim" / "EvidenceSummaries" / "success_evidence_summary.json",
-                {
-                    "attempt_uuid": "success",
-                    "diagnostic_classification": "DIAGNOSTIC_ALL_SIGNALS_OBSERVED",
-                    "quality_flags": {
-                        "missing_evidence": False,
-                        "terminal_failure": False,
-                        "artifact_log_contradiction": False
-                    }
-                }
-            )
-            
-            result = self._run_cli(repo_root)
-            self.assertIn(
-                "Local Diagnostic Classification\n- DIAGNOSTIC_ALL_SIGNALS_OBSERVED",
-                result.stdout,
-            )
+            facts = self._complete_runtime_facts(field)
+            facts[field] = value
 
-    def test_failure_due_to_short_hold(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_root = Path(tmp_dir)
-            saved_root = repo_root / "PhysAnimUE5" / "Saved"
-            
-            self._write_json(
-                saved_root / "PhysAnim" / "ProofArtifacts" / "short_terminal.json",
-                {
-                    "attempt_uuid": "short",
-                    "physical_continuity_validator_passed": True,
-                    "runtime_simulating_body_count": 22,
-                    "hold_duration_sec": 2.9,
-                    "terminal_reason": 0
-                }
-            )
-            self._write_json(
-                saved_root / "PhysAnim" / "EvidenceSummaries" / "short_evidence_summary.json",
-                {
-                    "attempt_uuid": "short",
-                    "strict_verdict": "BLOCKED",
-                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
-                }
-            )
-            
-            result = self._run_cli(repo_root)
-            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
-            self.assertIn("terminal artifact does not satisfy the local diagnostic observation check", result.stdout)
+            result = self._run_attempt(repo_root, facts)
 
-    def test_failure_due_to_high_tilt(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_root = Path(tmp_dir)
-            saved_root = repo_root / "PhysAnimUE5" / "Saved"
-            
-            self._write_json(
-                saved_root / "PhysAnim" / "ProofArtifacts" / "tilt_terminal.json",
-                {
-                    "attempt_uuid": "tilt",
-                    "physical_continuity_validator_passed": True,
-                    "runtime_simulating_body_count": 22,
-                    "hold_duration_sec": 3.0,
-                    "max_root_tilt_deg": 20.1,
-                    "terminal_reason": 0
-                }
-            )
-            self._write_json(
-                saved_root / "PhysAnim" / "EvidenceSummaries" / "tilt_evidence_summary.json",
-                {
-                    "attempt_uuid": "tilt",
-                    "strict_verdict": "BLOCKED",
-                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
-                }
-            )
-            
-            result = self._run_cli(repo_root)
-            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
-
-    def test_failure_due_to_high_angular_speed(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_root = Path(tmp_dir)
-            saved_root = repo_root / "PhysAnimUE5" / "Saved"
-            
-            self._write_json(
-                saved_root / "PhysAnim" / "ProofArtifacts" / "speed_terminal.json",
-                {
-                    "attempt_uuid": "speed",
-                    "physical_continuity_validator_passed": True,
-                    "runtime_simulating_body_count": 22,
-                    "hold_duration_sec": 3.0,
-                    "peak_angular_speed_deg_per_sec": 720.1,
-                    "terminal_reason": 0
-                }
-            )
-            self._write_json(
-                saved_root / "PhysAnim" / "EvidenceSummaries" / "speed_evidence_summary.json",
-                {
-                    "attempt_uuid": "speed",
-                    "strict_verdict": "BLOCKED",
-                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
-                }
-            )
-            
-            result = self._run_cli(repo_root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"locked contract observation failed: {field}", result.stdout)
             self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
 
-    def test_failure_due_to_support_churn(self) -> None:
+    def test_complete_stability_observations_are_diagnostic_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             repo_root = Path(tmp_dir)
-            saved_root = repo_root / "PhysAnimUE5" / "Saved"
-            
-            self._write_json(
-                saved_root / "PhysAnim" / "ProofArtifacts" / "churn_terminal.json",
-                {
-                    "attempt_uuid": "churn",
-                    "physical_continuity_validator_passed": True,
-                    "runtime_simulating_body_count": 22,
-                    "hold_duration_sec": 3.0,
-                    "support_churn_hz": 12.1,
-                    "terminal_reason": 0
-                }
-            )
-            self._write_json(
-                saved_root / "PhysAnim" / "EvidenceSummaries" / "churn_evidence_summary.json",
-                {
-                    "attempt_uuid": "churn",
-                    "strict_verdict": "BLOCKED",
-                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
-                }
-            )
-            
-            result = self._run_cli(repo_root)
+            facts = self._complete_runtime_facts("stable")
+
+            result = self._run_attempt(repo_root, facts)
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("Local Diagnostic Classification\n- DIAGNOSTIC", result.stdout)
+            self.assertIn("LOCAL_DIAGNOSTIC_ONLY", result.stdout)
+
+    def test_short_standing_window_is_blocked(self) -> None:
+        self._assert_contract_blocked("balance_active_standing_continuous_sec", 2.9)
+
+    def test_excessive_root_tilt_is_blocked(self) -> None:
+        self._assert_contract_blocked("max_root_tilt_deg", 20.1)
+
+    def test_excessive_angular_speed_is_blocked(self) -> None:
+        self._assert_contract_blocked("peak_angular_speed_deg_per_sec", 720.1)
+
+    def test_excessive_support_churn_is_blocked(self) -> None:
+        self._assert_contract_blocked("support_churn_hz", 12.1)
+
+    def test_excessive_proxy_drift_is_blocked(self) -> None:
+        self._assert_contract_blocked("proxy_outside_hull_duration_ms", 100.1)
+
+    def test_authority_conflict_is_blocked(self) -> None:
+        self._assert_contract_blocked("authority_conflict_count", 1)
+
+    def test_terminal_failure_is_blocked_without_summary_contradiction(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            facts = self._complete_runtime_facts("terminal-failure")
+            facts["terminal_reason"] = 9
+            facts["terminal_reason_name"] = "ActivationInstabilityThresholdBreach"
+
+            result = self._run_attempt(repo_root, facts, terminal_failure=True)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Contradictions\n- none", result.stdout)
             self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
 
-    def test_failure_due_to_proxy_drift(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_root = Path(tmp_dir)
-            saved_root = repo_root / "PhysAnimUE5" / "Saved"
-            
-            self._write_json(
-                saved_root / "PhysAnim" / "ProofArtifacts" / "drift_terminal.json",
-                {
-                    "attempt_uuid": "drift",
-                    "physical_continuity_validator_passed": True,
-                    "runtime_simulating_body_count": 22,
-                    "hold_duration_sec": 3.0,
-                    "proxy_outside_hull_duration_ms": 100.1,
-                    "terminal_reason": 0
-                }
-            )
-            self._write_json(
-                saved_root / "PhysAnim" / "EvidenceSummaries" / "drift_evidence_summary.json",
-                {
-                    "attempt_uuid": "drift",
-                    "strict_verdict": "BLOCKED",
-                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
-                }
-            )
-            
-            result = self._run_cli(repo_root)
-            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
-
-    def test_failure_due_to_terminal_reason(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_root = Path(tmp_dir)
-            saved_root = repo_root / "PhysAnimUE5" / "Saved"
-            
-            self._write_json(
-                saved_root / "PhysAnim" / "ProofArtifacts" / "fail_terminal.json",
-                {
-                    "attempt_uuid": "fail",
-                    "physical_continuity_validator_passed": True,
-                    "runtime_simulating_body_count": 22,
-                    "hold_duration_sec": 3.0,
-                    "terminal_reason": 9 # activation_instability_threshold_breach
-                }
-            )
-            self._write_json(
-                saved_root / "PhysAnim" / "EvidenceSummaries" / "fail_evidence_summary.json",
-                {
-                    "attempt_uuid": "fail",
-                    "strict_verdict": "BLOCKED",
-                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
-                }
-            )
-            
-            result = self._run_cli(repo_root)
-            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
-
-    def test_failure_due_to_authority_conflict(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo_root = Path(tmp_dir)
-            saved_root = repo_root / "PhysAnimUE5" / "Saved"
-            
-            self._write_json(
-                saved_root / "PhysAnim" / "ProofArtifacts" / "conflict_terminal.json",
-                {
-                    "attempt_uuid": "conflict",
-                    "physical_continuity_validator_passed": True,
-                    "runtime_simulating_body_count": 22,
-                    "hold_duration_sec": 3.0,
-                    "authority_conflict_count": 1,
-                    "terminal_reason": 0
-                }
-            )
-            self._write_json(
-                saved_root / "PhysAnim" / "EvidenceSummaries" / "conflict_evidence_summary.json",
-                {
-                    "attempt_uuid": "conflict",
-                    "strict_verdict": "BLOCKED",
-                    "quality_flags": {"missing_evidence": False, "terminal_failure": False}
-                }
-            )
-            
-            result = self._run_cli(repo_root)
-            self.assertIn("Local Diagnostic Classification\n- BLOCKED", result.stdout)
 
 if __name__ == "__main__":
     unittest.main()

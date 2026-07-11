@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -154,7 +155,7 @@ def collect_log_claims(lines: Iterable[str]) -> List[str]:
 
 
 def load_required_terminal_fields() -> Tuple[List[str], Optional[str]]:
-    contract_path = repo_root_from_script() / "product-gates" / "standing-v0.v1.json"
+    contract_path = repo_root_from_script() / "product-gates" / "standing-v0.v2.json"
     contract = load_json_file(contract_path)
     if contract is None:
         return [], f"locked product contract unavailable: {contract_path}"
@@ -174,6 +175,117 @@ def load_required_terminal_fields() -> Tuple[List[str], Optional[str]]:
         if fact not in fields:
             fields.append(fact)
     return fields, None
+
+
+def scalar_matches(actual: Any, expected: Any) -> bool:
+    if isinstance(expected, bool):
+        return isinstance(actual, bool) and actual is expected
+    if isinstance(expected, (int, float)) and not isinstance(expected, bool):
+        actual_number = finite_number(actual)
+        return actual_number is not None and actual_number == float(expected)
+    return type(actual) is type(expected) and actual == expected
+
+
+def finite_number(value: Any) -> Optional[float]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    result = float(value)
+    return result if math.isfinite(result) else None
+
+
+def is_utc_timestamp(value: Any) -> bool:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        return False
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
+def validate_contract_observations(terminal: Dict[str, Any]) -> List[str]:
+    contract_path = repo_root_from_script() / "product-gates" / "standing-v0.v2.json"
+    contract = load_json_file(contract_path)
+    if contract is None or not isinstance(contract.get("criteria"), list):
+        return []
+
+    failures: List[str] = []
+    for criterion in contract["criteria"]:
+        if not isinstance(criterion, dict):
+            continue
+        fact = normalize_text(criterion.get("fact"))
+        operator = normalize_text(criterion.get("operator"))
+        if not fact or fact not in terminal or terminal.get(fact) is None:
+            continue
+
+        actual = terminal[fact]
+        expected = criterion.get("value")
+        passed = False
+        expectation = f"{operator} {expected!r}"
+        if operator == "equals":
+            passed = scalar_matches(actual, expected)
+        elif operator == "nonempty":
+            passed = isinstance(actual, str) and bool(actual.strip())
+        elif operator == "timestamp":
+            passed = is_utc_timestamp(actual)
+        elif operator == "commit":
+            passed = isinstance(actual, str) and re.fullmatch(r"[0-9a-f]{40}", actual) is not None
+        elif operator == "one_of" and isinstance(expected, list):
+            passed = any(scalar_matches(actual, candidate) for candidate in expected)
+        elif operator in {"minimum", "maximum", "positive"}:
+            actual_number = finite_number(actual)
+            expected_number = finite_number(expected)
+            if actual_number is not None and actual_number >= 0.0:
+                if operator == "minimum" and expected_number is not None:
+                    passed = actual_number >= expected_number
+                elif operator == "maximum" and expected_number is not None:
+                    passed = actual_number <= expected_number
+                elif operator == "positive":
+                    passed = actual_number > 0.0
+        elif operator == "range":
+            actual_number = finite_number(actual)
+            minimum = finite_number(criterion.get("minimum"))
+            maximum = finite_number(criterion.get("maximum"))
+            exclusive_minimum = criterion.get("exclusive_minimum", False)
+            expectation = f"range {criterion.get('minimum')}..{criterion.get('maximum')}"
+            if exclusive_minimum is True:
+                expectation += " (exclusive minimum)"
+            if (
+                actual_number is not None
+                and minimum is not None
+                and maximum is not None
+                and minimum <= maximum
+                and isinstance(exclusive_minimum, bool)
+            ):
+                lower_passed = (
+                    actual_number > minimum
+                    if exclusive_minimum
+                    else actual_number >= minimum
+                )
+                passed = lower_passed and actual_number <= maximum
+
+        if not passed:
+            failures.append(
+                f"locked contract observation failed: {fact} {expectation}; observed {actual!r}"
+            )
+
+    invariants = contract.get("invariants")
+    if isinstance(invariants, list):
+        for invariant in invariants:
+            if not isinstance(invariant, dict) or invariant.get("operator") != "less_than_or_equal":
+                continue
+            left = normalize_text(invariant.get("left"))
+            right = normalize_text(invariant.get("right"))
+            if not left or not right or terminal.get(left) is None or terminal.get(right) is None:
+                continue
+            left_number = finite_number(terminal[left])
+            right_number = finite_number(terminal[right])
+            if left_number is None or right_number is None or left_number < 0.0 or right_number < 0.0 or left_number > right_number:
+                failures.append(
+                    f"locked contract invariant failed: {left} <= {right}; "
+                    f"observed {terminal[left]!r} > {terminal[right]!r}"
+                )
+    return failures
 
 
 def missing_terminal_fields(terminal: Dict[str, Any], required_fields: Sequence[str]) -> List[str]:
@@ -291,14 +403,20 @@ def summarize_log(path: Optional[Path], lines: Sequence[str]) -> List[str]:
     return result
 
 
-def terminal_has_runtime_failure(terminal: Dict[str, Any]) -> bool:
-    terminal_reason = terminal.get("terminal_reason")
-    terminal_reason_name = normalize_upper(terminal.get("terminal_reason_name"))
-    final_outcome = normalize_text(terminal.get("final_runtime_outcome"))
+def runtime_failure_state(terminal: Dict[str, Any]) -> Optional[bool]:
+    required_fields = (
+        "terminal_reason",
+        "terminal_reason_name",
+        "final_runtime_outcome",
+        "terminal_frame_artifact_captured",
+    )
+    if any(field not in terminal or terminal.get(field) is None for field in required_fields):
+        return None
+
     return (
-        terminal_reason not in (0, "0")
-        or terminal_reason_name not in {"NONE", "NULLPTR"}
-        or final_outcome != "BalanceActive_Standing"
+        terminal.get("terminal_reason") not in (0, "0")
+        or normalize_upper(terminal.get("terminal_reason_name")) != "NONE"
+        or normalize_text(terminal.get("final_runtime_outcome")) != "BalanceActive_Standing"
         or terminal.get("terminal_frame_artifact_captured") is not True
     )
 
@@ -325,17 +443,18 @@ def validate_attempt_capture(
         return missing, contradictions
 
     capture = captures[0]
-    runtime_failed = terminal_has_runtime_failure(terminal)
-    expected_capture = "TERMINATED" if runtime_failed else "COMPLETED"
-    actual_capture = normalize_upper(capture.group("capture"))
-    if actual_capture != expected_capture:
-        contradictions.append(
-            f"log reports capture={actual_capture} but terminal facts require capture={expected_capture}"
-        )
+    runtime_failed = runtime_failure_state(terminal)
+    if runtime_failed is not None:
+        expected_capture = "TERMINATED" if runtime_failed else "COMPLETED"
+        actual_capture = normalize_upper(capture.group("capture"))
+        if actual_capture != expected_capture:
+            contradictions.append(
+                f"log reports capture={actual_capture} but terminal facts require capture={expected_capture}"
+            )
 
     artifact_reason = normalize_upper(terminal.get("terminal_reason_name"))
     log_reason = normalize_upper(capture.group("reason"))
-    if log_reason != artifact_reason:
+    if artifact_reason and log_reason != artifact_reason:
         contradictions.append(
             f"log reports terminal_reason={log_reason} but artifact reports terminal_reason={artifact_reason}"
         )
@@ -390,6 +509,7 @@ def build_report_result(
 
     missing_items: List[str] = []
     contradiction_items: List[str] = []
+    observation_failures: List[str] = []
 
     if terminal_path is None or terminal is None:
         suffix = f" for attempt_uuid={requested_attempt_uuid}" if requested_attempt_uuid else ""
@@ -406,6 +526,7 @@ def build_report_result(
     if terminal is not None:
         for field in missing_terminal_fields(terminal, required_fields):
             missing_items.append(f"missing mandatory terminal field: {field}")
+        observation_failures.extend(validate_contract_observations(terminal))
 
         artifact_attempt_uuid = normalize_text(terminal.get("attempt_uuid"))
         emitter_attempt_uuid = normalize_text(terminal.get("emitter_attempt_uuid"))
@@ -435,16 +556,20 @@ def build_report_result(
                 f"terminal attempt_uuid={terminal_uuid} but summary attempt_uuid={summary_uuid}"
             )
 
+        factual_failure = runtime_failure_state(terminal)
         producer_classification = normalize_upper(summary.get("diagnostic_classification"))
-        if producer_classification == PRODUCER_OBSERVED_CLASSIFICATION and terminal_has_runtime_failure(terminal):
+        if producer_classification == PRODUCER_OBSERVED_CLASSIFICATION and factual_failure is True:
             contradiction_items.append(
                 "producer summary claims all signals observed but terminal facts report runtime failure"
             )
 
         quality_flags = summary.get("quality_flags")
-        if isinstance(quality_flags, dict) and "terminal_failure" in quality_flags:
+        if (
+            factual_failure is not None
+            and isinstance(quality_flags, dict)
+            and "terminal_failure" in quality_flags
+        ):
             claimed_failure = truthy(quality_flags.get("terminal_failure"))
-            factual_failure = terminal_has_runtime_failure(terminal)
             if claimed_failure != factual_failure:
                 contradiction_items.append(
                     "summary quality_flags.terminal_failure disagrees with terminal facts"
@@ -467,7 +592,7 @@ def build_report_result(
         classification = FINAL_CONTRADICTORY
     elif missing_items:
         classification = FINAL_INSUFFICIENT
-    elif terminal is not None and terminal_has_runtime_failure(terminal):
+    elif observation_failures or (terminal is not None and runtime_failure_state(terminal) is True):
         classification = FINAL_BLOCKED
     else:
         classification = FINAL_DIAGNOSTIC
@@ -538,6 +663,9 @@ def build_report_result(
         "",
         "Missing Evidence",
         *([f"- {line}" for line in missing_items] if missing_items else ["- none"]),
+        "",
+        "Diagnostic Contract Findings",
+        *([f"- {line}" for line in observation_failures] if observation_failures else ["- none"]),
         "",
         "Segment Status",
         *segment_lines,

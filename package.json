@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "scripts": {
+    "test:blast": "python -m pytest scripts/tests -q",
+    "test:node": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/test_node.ps1",
+    "test": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/test_full.ps1"
+  },
+  "dependencies": {
+    "@google/gemini-cli": "^0.47.0",
+    "http-proxy": "^1.18.1",
+    "onnxruntime-node": "^1.26.0"
+  }
+}

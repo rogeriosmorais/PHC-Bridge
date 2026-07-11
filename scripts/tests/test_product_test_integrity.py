@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -115,6 +116,29 @@ class ProductTestIntegrityTests(unittest.TestCase):
         self.assertNotIn('return "PRODUCT SUCCESS"', self.collector)
         self.assertNotIn('summary.get("strict_verdict")', self.collector)
         self.assertIn('"Local Diagnostic Classification"', self.collector)
+
+    def test_workflow_test_gates_execute_real_suites(self) -> None:
+        package = json.loads(read(REPO_ROOT / "package.json"))
+        scripts = package.get("scripts", {})
+
+        self.assertIn("python -m pytest scripts/tests", scripts.get("test:blast", ""))
+        self.assertIn("scripts/test_node.ps1", scripts.get("test:node", ""))
+        self.assertIn("scripts/test_full.ps1", scripts.get("test", ""))
+        self.assertTrue((REPO_ROOT / "scripts" / "test_node.ps1").is_file())
+        self.assertTrue((REPO_ROOT / "scripts" / "test_full.ps1").is_file())
+
+    def test_project_mcp_uses_the_guarded_globalmcp2_runtime(self) -> None:
+        config = json.loads(read(REPO_ROOT / ".mcp.json"))["mcpServers"]["mcp-graph"]
+        self.assertEqual(
+            config["command"],
+            r"C:\Users\roger\AppData\Local\Volta\tools\image\node\22.22.1\node.exe",
+        )
+        self.assertEqual(
+            config["args"],
+            [
+                r"F:\GlobalMCP2\mcp-graph-workflow\compat\mcp-graph-13.27-gate\dist\proxy.js"
+            ],
+        )
 
 
 if __name__ == "__main__":

@@ -13,13 +13,13 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
-VERIFIER_VERSION = "1.0.0"
+VERIFIER_VERSION = "2.0.0"
 REPO_ROOT = Path(__file__).resolve().parents[1]
-CONTRACT_PATH = REPO_ROOT / "product-gates" / "standing-v0.v1.json"
+CONTRACT_PATH = REPO_ROOT / "product-gates" / "standing-v0.v2.json"
 
 # This digest is deliberately duplicated in executable code. Changing a locked
 # contract is therefore a code change, not a data-only threshold adjustment.
-EXPECTED_CONTRACT_SHA256 = "44e3a23e43c854cbac9509a948826f499f7125dbd9d1dc1e8059179ed12c5bee"
+EXPECTED_CONTRACT_SHA256 = "ce3e094c6e1731eb26222bb17c70dd82db76561c43f1fec3daed518c140cf32d"
 
 UNTRUSTED_RESULT_FIELDS = {
     "artifact_pass",
@@ -71,12 +71,12 @@ def _load_locked_contract() -> tuple[Mapping[str, Any], bytes, str]:
     digest = _sha256(contract_bytes)
     if digest != EXPECTED_CONTRACT_SHA256:
         raise ProductGateConfigurationError(
-            "locked product-gate contract digest mismatch; append a new version instead of editing v1"
+            "locked product-gate contract digest mismatch; append a new version instead of editing v2"
         )
     contract = _load_json_bytes(contract_bytes, "contract")
     if contract.get("status") != "LOCKED":
         raise ProductGateConfigurationError("product-gate contract is not LOCKED")
-    if contract.get("schema_version") != "physanim-product-gate-contract/v1":
+    if contract.get("schema_version") != "physanim-product-gate-contract/v2":
         raise ProductGateConfigurationError("unsupported product-gate contract schema")
     return contract, contract_bytes, digest
 
@@ -138,6 +138,28 @@ def _evaluate_criterion(criterion: Mapping[str, Any], evidence: Mapping[str, Any
             return passed, f"{fact} must be <= {expected}"
         passed = actual > 0
         return passed, f"{fact} must be > 0"
+    if operator == "range":
+        minimum = criterion.get("minimum")
+        maximum = criterion.get("maximum")
+        exclusive_minimum = criterion.get("exclusive_minimum", False)
+        if (
+            not _is_finite_number(minimum)
+            or not _is_finite_number(maximum)
+            or minimum > maximum
+            or not isinstance(exclusive_minimum, bool)
+        ):
+            raise ProductGateConfigurationError(
+                f"range criterion for {fact} requires valid minimum and maximum"
+            )
+        if not _is_finite_number(actual):
+            return False, f"{fact} must be finite"
+        if actual < 0:
+            return False, f"{fact} must be non-negative"
+        lower_passed = actual > minimum if exclusive_minimum else actual >= minimum
+        passed = lower_passed and actual <= maximum
+        if exclusive_minimum:
+            return passed, f"{fact} must be > {minimum} and <= {maximum}"
+        return passed, f"{fact} must be between {minimum} and {maximum}"
     raise ProductGateConfigurationError(f"unsupported criterion operator: {operator}")
 
 
@@ -219,7 +241,7 @@ def evaluate_product_gate(
     passed = not failures
     ignored_fields = sorted(UNTRUSTED_RESULT_FIELDS.intersection(evidence))
     report: dict[str, Any] = {
-        "schema_version": "physanim-local-gate-diagnostic/v1",
+        "schema_version": "physanim-local-gate-diagnostic/v2",
         "authority": "LOCAL_DIAGNOSTIC_ONLY",
         "verifier_version": VERIFIER_VERSION,
         "gate_id": contract["gate_id"],
