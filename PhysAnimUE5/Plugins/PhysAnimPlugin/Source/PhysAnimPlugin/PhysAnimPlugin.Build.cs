@@ -26,7 +26,8 @@ public class PhysAnimPlugin : ModuleRules
                 new[]
                 {
                     "LevelEditor",
-                    "UnrealEd"
+                    "UnrealEd",
+                    "ImageWrapper"
                 });
         }
     }

@@ -898,6 +898,33 @@ bool UPhysAnimComponent::ShouldPreserveGameplayShellDuringBridgeActive(
 }
 
 
+void UPhysAnimComponent::ApplyCharacterMovementBridgeOwnership(
+	UCharacterMovementComponent* CharacterMovement,
+	bool bPreserveGameplayShell)
+{
+	if (!CharacterMovement)
+	{
+		return;
+	}
+
+	if (bPreserveGameplayShell)
+	{
+		CharacterMovement->Activate(true);
+		CharacterMovement->SetComponentTickEnabled(true);
+		if (CharacterMovement->MovementMode == MOVE_None)
+		{
+			CharacterMovement->SetMovementMode(MOVE_Walking);
+		}
+		return;
+	}
+
+	CharacterMovement->StopMovementImmediately();
+	CharacterMovement->DisableMovement();
+	CharacterMovement->SetComponentTickEnabled(false);
+	CharacterMovement->Deactivate();
+}
+
+
 FString UPhysAnimComponent::BuildBridgeStatusIndicatorText(EPhysAnimRuntimeState State, bool bBridgeOwnsPhysics)
 {
 	const TCHAR* const StateName = GetRuntimeStateName(State);

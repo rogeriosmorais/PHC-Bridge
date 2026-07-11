@@ -27,6 +27,7 @@ def make_run(
     cmc_active: bool = False,
     dispatch: bool = True,
     support_loss: bool = False,
+    no_policy: bool = False,
 ) -> Path:
     run_dir = root / f"{variant}-{repetition}"
     run_dir.mkdir(parents=True)
@@ -85,7 +86,7 @@ def make_run(
         )
 
     write_jsonl(physics_path, physics_rows)
-    write_jsonl(policy_path, policy_rows)
+    write_jsonl(policy_path, [] if no_policy else policy_rows)
     manifest = {
         "schema_version": "physanim-product-run/v1",
         "fixture_authority": "EVALUATOR_UNIT_ONLY",
@@ -143,6 +144,14 @@ def test_non_monotonic_stream_is_invalid(tmp_path: Path) -> None:
 
     with pytest.raises(EvaluationError, match="strictly increasing"):
         evaluate_manifest(manifest_path)
+
+
+def test_policy_not_reached_is_behavioral_failure_not_invalid(tmp_path: Path) -> None:
+    result = evaluate_manifest(make_run(tmp_path, no_policy=True))
+
+    assert result["status"] == "FAIL"
+    assert "policy_step_coverage" in result["failed_criteria"]
+    assert "inference" in result["failed_criteria"]
 
 
 def test_bundle_requires_all_variants_and_causal_advantage(tmp_path: Path) -> None:

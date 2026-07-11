@@ -631,6 +631,12 @@ void UPhysAnimComponent::ApplyControlTargets(
 					bDistalLocomotionCompositionModeActive,
 					TargetWriteDeltaTime);
 
+#if WITH_DEV_AUTOMATION_TESTS
+			if (bProductControlDispatchDroppedForTesting)
+			{
+				continue;
+			}
+#endif
 			PhysicsControl->SetControlTargetOrientation(
 				ControlName,
 				LimitedRotation.Rotator(),

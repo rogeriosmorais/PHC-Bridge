@@ -12,7 +12,8 @@ param (
     [string]$ProductVariant,
     [int]$ProductRepetition = 0,
     [string]$SourceCommit,
-    [string]$ModelOnnxSha256
+    [string]$ModelOnnxSha256,
+    [bool]$SourceTreeDirty = $false
 )
 
 # 1. Environment Setup
@@ -135,6 +136,7 @@ if ($Test) {
     if ($ModelOnnxSha256) {
         $EditorArguments += "-PhysAnimModelOnnxSha256=$ModelOnnxSha256"
     }
+    $EditorArguments += "-PhysAnimSourceTreeDirty=$(if ($SourceTreeDirty) { 1 } else { 0 })"
 
     & "$EditorCmdExe" $EditorArguments
 

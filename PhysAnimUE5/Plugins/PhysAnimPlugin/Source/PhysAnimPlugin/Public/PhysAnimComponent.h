@@ -260,10 +260,10 @@ struct FPhysAnimStabilizationSettings
 	bool bDelayMovementUnlockUntilPolicySettled = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady"))
-	bool bRestoreCharacterMovementAfterStartupReady = true;
+	bool bRestoreCharacterMovementAfterStartupReady = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady"))
-	bool bEnableBridgeOwnedMovementWhileCharacterMovementLocked = true;
+	bool bEnableBridgeOwnedMovementWhileCharacterMovementLocked = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (EditCondition = "bLockCharacterMovementUntilStartupReady && !bRestoreCharacterMovementAfterStartupReady && bEnableBridgeOwnedMovementWhileCharacterMovementLocked", ClampMin = "0.0"))
 	float BridgeOwnedMovementMaxPlanarSpeedCmPerSecond = 240.0f;
@@ -1457,6 +1457,12 @@ public:
 	const TArray<FName>& GetPendingBodyModifierCachedResetNames() const { return PendingBodyModifierCachedResetNames; }
 	const TMap<FName, FQuat>& GetPreviousControlTargetRotationsForDiagnostics() const { return PreviousControlTargetRotations; }
 	const TMap<FName, FQuat>& GetPolicyBlendStartControlTargetRotationsForDiagnostics() const { return PolicyBlendStartControlTargetRotations; }
+	const TArray<float>& GetRawPolicyActionsForDiagnostics() const { return ActionOutputBuffer; }
+	const TArray<float>& GetConditionedPolicyActionsForDiagnostics() const { return ConditionedActionBuffer; }
+#if WITH_DEV_AUTOMATION_TESTS
+	void SetProductControlDispatchDroppedForTesting(bool bDropped) { bProductControlDispatchDroppedForTesting = bDropped; }
+	bool IsProductControlDispatchDroppedForTesting() const { return bProductControlDispatchDroppedForTesting; }
+#endif
 	void ConsumeUpperBodyPendingResets();
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
 	float GetAttachedLoadMassKg() const;
@@ -2355,6 +2361,9 @@ private:
 	TArray<float> RecentActionMagnitudeHistory;
 	TArray<float> PreviousConditionedActionBuffer;
 	TArray<float> ConditionedActionBuffer;
+#if WITH_DEV_AUTOMATION_TESTS
+	bool bProductControlDispatchDroppedForTesting = false;
+#endif
 	TArray<UE::NNE::FTensorBindingCPU> InputBindings;
 	TArray<UE::NNE::FTensorBindingCPU> OutputBindings;
 
@@ -2510,6 +2519,7 @@ private:
 	ECollisionEnabled::Type OriginalCapsuleCollisionEnabled = ECollisionEnabled::NoCollision;
 	bool bHasSavedCapsuleCollisionState = false;
 	bool bHasSavedCharacterMovementState = false;
+	bool bOriginalCharacterMovementActive = true;
 	bool bOriginalCharacterMovementTickEnabled = false;
 	uint8 OriginalCharacterMovementMode = 0;
 	uint8 OriginalCharacterCustomMovementMode = 0;
@@ -2833,6 +2843,9 @@ public:
 	static bool ShouldPreserveGameplayShellDuringBridgeActive(
 		bool bMovementSmokeModeEnabled,
 		bool bAllowCharacterMovementInBridgeActive);
+	static void ApplyCharacterMovementBridgeOwnership(
+		UCharacterMovementComponent* CharacterMovement,
+		bool bPreserveGameplayShell);
 	static FVector ResolveMovementSmokeLocalIntent(float ElapsedSeconds);
 	static FName ResolveMovementSmokePhaseName(float ElapsedSeconds);
 	static float GetMovementSmokeDurationSeconds();

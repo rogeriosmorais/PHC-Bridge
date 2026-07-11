@@ -1046,23 +1046,12 @@ void UPhysAnimComponent::ActivateBridgePhysicsState(const FPhysAnimStabilization
 			{
 				OriginalCharacterMovementMode = CharacterMovement->MovementMode;
 				OriginalCharacterCustomMovementMode = CharacterMovement->CustomMovementMode;
+				bOriginalCharacterMovementActive = CharacterMovement->IsActive();
 				bOriginalCharacterMovementTickEnabled = CharacterMovement->IsComponentTickEnabled();
 				bHasSavedCharacterMovementState = true;
 			}
 
-			if (!bPreserveGameplayShell)
-			{
-				CharacterMovement->DisableMovement();
-				CharacterMovement->SetComponentTickEnabled(false);
-			}
-			else
-			{
-				CharacterMovement->SetComponentTickEnabled(true);
-				if (CharacterMovement->MovementMode == MOVE_None)
-				{
-					CharacterMovement->SetMovementMode(MOVE_Walking);
-				}
-			}
+			ApplyCharacterMovementBridgeOwnership(CharacterMovement, bPreserveGameplayShell);
 		}
 	}
 
@@ -1546,6 +1535,7 @@ void UPhysAnimComponent::ResetBridgePhysicsState()
 		{
 			if (bHasSavedCharacterMovementState)
 			{
+				CharacterMovement->SetActive(bOriginalCharacterMovementActive, true);
 				CharacterMovement->SetComponentTickEnabled(bOriginalCharacterMovementTickEnabled);
 				CharacterMovement->SetMovementMode(static_cast<EMovementMode>(OriginalCharacterMovementMode), OriginalCharacterCustomMovementMode);
 				bHasSavedCharacterMovementState = false;

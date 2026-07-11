@@ -26,12 +26,12 @@ def _read_json(path: Path, label: str) -> dict:
     return value
 
 
-def _read_jsonl(path: Path, label: str) -> list[dict]:
+def _read_jsonl(path: Path, label: str, *, allow_empty: bool = False) -> list[dict]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError as exc:
         raise EvaluationError(f"{label} does not exist: {path}") from exc
-    if not lines:
+    if not lines and not allow_empty:
         raise EvaluationError(f"{label} is empty: {path}")
     rows: list[dict] = []
     for line_number, line in enumerate(lines, start=1):
@@ -139,7 +139,7 @@ def evaluate_manifest(manifest_path: Path | str) -> dict:
             raise EvaluationError(f"{label} must stay inside the run directory")
 
     physics_rows = _read_jsonl(physics_path, "physics samples")
-    policy_rows = _read_jsonl(policy_path, "policy samples")
+    policy_rows = _read_jsonl(policy_path, "policy samples", allow_empty=True)
     _validate_monotonic(physics_rows, "physics samples")
     _validate_monotonic(policy_rows, "policy samples")
 
@@ -197,11 +197,15 @@ def evaluate_manifest(manifest_path: Path | str) -> dict:
     attempted_writes = sum(int(row["target_write_attempt_count"]) for row in window_policy)
     matched_writes = sum(int(row["target_readback_match_count"]) for row in window_policy)
     match_ratio = matched_writes / attempted_writes if attempted_writes > 0 else 0.0
+    max_readback_error = max(
+        (float(row["target_readback_max_error_deg"]) for row in window_policy),
+        default=math.inf,
+    )
     require(
         "target_readback",
         attempted_writes > 0
         and match_ratio >= acceptance["minimum_target_readback_match_ratio"]
-        and max(float(row["target_readback_max_error_deg"]) for row in window_policy) <= acceptance["maximum_target_readback_error_deg"],
+        and max_readback_error <= acceptance["maximum_target_readback_error_deg"],
     )
 
     baseline_rms = math.sqrt(sum(float(row["pose_rms_error_deg"]) ** 2 for row in pre_impulse) / len(pre_impulse))

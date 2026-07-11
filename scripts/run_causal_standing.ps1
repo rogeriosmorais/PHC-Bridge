@@ -3,7 +3,9 @@ param(
     [ValidateSet("Development", "Milestone")]
     [string]$Mode = "Milestone",
     [string]$OutputRoot,
-    [switch]$AllowDirty
+    [switch]$AllowDirty,
+    [ValidateSet("Normal", "ZeroActions", "DropControlDispatch", "ForcedSupportLoss")]
+    [string[]]$Variants
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,6 +57,10 @@ New-Item -ItemType Directory -Path $SessionRoot -ErrorAction Stop | Out-Null
 
 $RunSpecifications = @()
 if ($Mode -eq "Milestone") {
+    if ($Variants.Count -gt 0) {
+        Write-Error "INVALID: milestone mode always runs the complete locked variant set"
+        exit 2
+    }
     foreach ($Variant in $Protocol.variants) {
         $Count = [int]$Protocol.repetitions.$Variant
         for ($Repetition = 1; $Repetition -le $Count; $Repetition++) {
@@ -63,7 +69,8 @@ if ($Mode -eq "Milestone") {
     }
 }
 else {
-    foreach ($Variant in $Protocol.variants) {
+    $DevelopmentVariants = if ($Variants.Count -gt 0) { $Variants } else { $Protocol.variants }
+    foreach ($Variant in $DevelopmentVariants) {
         $RunSpecifications += [pscustomobject]@{ Variant = $Variant; Repetition = 1 }
     }
 }
@@ -96,7 +103,8 @@ try {
             -ProductVariant $Variant `
             -ProductRepetition $Repetition `
             -SourceCommit $SourceCommit `
-            -ModelOnnxSha256 $ModelHash
+            -ModelOnnxSha256 $ModelHash `
+            -SourceTreeDirty $SourceTreeDirty
         if ($LASTEXITCODE -ne 0) {
             Write-Error "INVALID: UE automation failed for $Variant repetition $Repetition"
             exit 2
