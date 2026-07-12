@@ -371,22 +371,24 @@ void UPhysAnimComponent::ApplyControlTargets(
 		// Continuous rebase during settlement provides "Active Damping" (Strength*0 + Damping*Vel).
 		if ((bKineticGateReleasedThisFrame || bInSettlementWindow) && Mesh)
 		{
-			for (const FName& BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			TMap<FName, FPhysAnimControlTargetSeed> CurrentPhysicalPoseSeeds;
+			FString CurrentPhysicalPoseError;
+			if (!GatherCurrentPoseControlTargetSeeds(CurrentPhysicalPoseSeeds, CurrentPhysicalPoseError))
 			{
-				const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
-				
-				const FQuat ChildWorldRot = Mesh->GetBoneQuaternion(BoneName, EBoneSpaces::WorldSpace);
-				const FName ParentBoneName = Mesh->GetParentBone(BoneName);
-				const FQuat ParentWorldRot = (ParentBoneName != NAME_None) ? 
-					Mesh->GetBoneQuaternion(ParentBoneName, EBoneSpaces::WorldSpace) : 
-					FQuat::Identity;
+				OutError = FString::Printf(
+					TEXT("Could not capture the physical parent-relative target seed during settlement: %s"),
+					*CurrentPhysicalPoseError);
+				return;
+			}
 
-				const FQuat LocalRot = (ParentWorldRot.Inverse() * ChildWorldRot).GetNormalized();
-				PreviousControlTargetRotations.Add(ControlName, LocalRot);
+			for (const TPair<FName, FPhysAnimControlTargetSeed>& Pair : CurrentPhysicalPoseSeeds)
+			{
+				const FQuat& ParentRelativeTarget = Pair.Value.ParentRelativeTargetRotation;
+				PreviousControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
 
-				// During settlement, we keep updating the blend start so it carries the final settled pose 
-				// into the handover phase at Tick 21.
-				PolicyBlendStartControlTargetRotations.Add(ControlName, LocalRot);
+				// Settlement remains policy-free. Capture its latest physical pose as the seed,
+				// then preserve that seed unchanged once the handover ramp starts.
+				PolicyBlendStartControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
 			}
 		}
 
@@ -483,16 +485,14 @@ void UPhysAnimComponent::ApplyControlTargets(
 					return;
 				}
 
-				if (bRebaseControlTargetHistoryThisFrame)
+				if (bRebaseControlTargetHistoryThisFrame &&
+					(!PreviousControlTargetRotations.Contains(ControlName) ||
+					 !PolicyBlendStartControlTargetRotations.Contains(ControlName)))
 				{
-					if (!PreviousControlTargetRotations.Contains(ControlName))
-					{
-						PreviousControlTargetRotations.Add(ControlName, Pair.Value);
-					}
-					if (!PolicyBlendStartControlTargetRotations.Contains(ControlName))
-					{
-						PolicyBlendStartControlTargetRotations.Add(ControlName, Pair.Value);
-					}
+					OutError = FString::Printf(
+						TEXT("Missing captured parent-relative seed for control '%s' on the first policy frame."),
+						*ControlName.ToString());
+					return;
 				}
 
 				// §EPIC-13.2 - Phase 3 Soft Handover
@@ -763,11 +763,16 @@ void UPhysAnimComponent::ApplyControlTargets(
 }
 
 
-FQuat UPhysAnimComponent::BuildCurrentPoseControlTargetOrientation(
+FPhysAnimControlTargetSeed UPhysAnimComponent::BuildCurrentPoseControlTargetSeed(
 	const FQuat& ParentWorldRotation,
 	const FQuat& ChildWorldRotation)
 {
-	return (ParentWorldRotation.Inverse() * ChildWorldRotation).GetNormalized();
+	FPhysAnimControlTargetSeed Seed;
+	Seed.ParentWorldRotation = ParentWorldRotation.GetNormalized();
+	Seed.ChildWorldRotation = ChildWorldRotation.GetNormalized();
+	Seed.ParentRelativeTargetRotation =
+		(Seed.ParentWorldRotation.Inverse() * Seed.ChildWorldRotation).GetNormalized();
+	return Seed;
 }
 
 

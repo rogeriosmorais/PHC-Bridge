@@ -29,6 +29,13 @@ class UPhysicsControlComponent;
 class UPoseSearchDatabase;
 class USkeletalMeshComponent;
 
+struct FPhysAnimControlTargetSeed
+{
+	FQuat ParentWorldRotation = FQuat::Identity;
+	FQuat ChildWorldRotation = FQuat::Identity;
+	FQuat ParentRelativeTargetRotation = FQuat::Identity;
+};
+
 struct FBridgeIntentState
 {
 	FVector WorldMoveDirection = FVector::ZeroVector;
@@ -2168,7 +2175,7 @@ private:
 	void ApplyTrainingAlignedToeLimitPolicy(const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResetTrainingAlignedToeLimitPolicy();
 	void ResetBridgePhysicsState();
-	bool GatherCurrentPoseControlTargetOrientations(TMap<FName, FQuat>& OutTargetOrientations, FString& OutError) const;
+	bool GatherCurrentPoseControlTargetSeeds(TMap<FName, FPhysAnimControlTargetSeed>& OutTargetSeeds, FString& OutError) const;
 	bool SeedControlTargetsFromCurrentPose(float DeltaTime, FString& OutError);
 	void UpdateBridgeLocomotionGateTiming(const FPhysAnimStabilizationSettings& EffectiveSettings, double CurrentTimeSeconds);
 	void UpdateBridgeLocomotionAuthorityState(const FVector& QueryVelocity, const FPhysAnimStabilizationSettings& EffectiveSettings, double CurrentTimeSeconds);
@@ -2634,7 +2641,7 @@ public:
 		FPhysAnimRuntimeInstabilityDiagnostics& OutDiagnostics,
 		FString& OutError);
 
-	static FQuat BuildCurrentPoseControlTargetOrientation(
+	static FPhysAnimControlTargetSeed BuildCurrentPoseControlTargetSeed(
 		const FQuat& ParentWorldRotation,
 		const FQuat& ChildWorldRotation);
 	static float CalculateNeutralCalibratedPelvisTiltDegrees(

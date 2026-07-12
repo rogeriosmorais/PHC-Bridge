@@ -174,16 +174,16 @@ void FPhysAnimBalanceReadyTransition::Start(const FString& InRequestReason, UPhy
 	SafePhase2DenialReason.Reset();
 	ResetRootOnWarmStartMotionCache(Owner);
 
-	TMap<FName, FQuat> CurrentPoseControlTargets;
+	TMap<FName, FPhysAnimControlTargetSeed> CurrentPoseControlTargets;
 	FString CurrentPoseTargetError;
-	if (Owner->GatherCurrentPoseControlTargetOrientations(CurrentPoseControlTargets, CurrentPoseTargetError))
+	if (Owner->GatherCurrentPoseControlTargetSeeds(CurrentPoseControlTargets, CurrentPoseTargetError))
 	{
 		for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
 		{
 			const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
-			if (const FQuat* const ParentRelativeTarget = CurrentPoseControlTargets.Find(ControlName))
+			if (const FPhysAnimControlTargetSeed* const TargetSeed = CurrentPoseControlTargets.Find(ControlName))
 			{
-				EntryHoldRotations.Add(BoneName, *ParentRelativeTarget);
+				EntryHoldRotations.Add(BoneName, TargetSeed->ParentRelativeTargetRotation);
 			}
 		}
 	}
@@ -740,10 +740,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 						const bool bFirstLateValidateFrame = !bLoggedPhase1UpperBodyAudit;
 						float MaxAuditTargetDelta = 0.0f;
 						FName MaxAuditTargetDeltaBone = NAME_None;
-						TMap<FName, FQuat> CurrentParentRelativeTargets;
+						TMap<FName, FPhysAnimControlTargetSeed> CurrentPhysicalTargetSeeds;
 						FString CurrentTargetGatherError;
 						const bool bGatheredCurrentParentRelativeTargets =
-							Owner->GatherCurrentPoseControlTargetOrientations(CurrentParentRelativeTargets, CurrentTargetGatherError);
+							Owner->GatherCurrentPoseControlTargetSeeds(CurrentPhysicalTargetSeeds, CurrentTargetGatherError);
 						if (!bGatheredCurrentParentRelativeTargets)
 						{
 							PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f,
@@ -768,7 +768,10 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 							const FPhysicsControlRecord* const ControlRecord =
 								FPhysAnimPhysicsControlAccessor::GetControlRecord(Owner->PhysicsControlComponent.Get(), ControlName);
 							const FQuat* const HoldRotation = EntryHoldRotations.Find(BoneName);
-							const FQuat* const CurrentRelativeRotation = CurrentParentRelativeTargets.Find(ControlName);
+							const FPhysAnimControlTargetSeed* const CurrentTargetSeed = CurrentPhysicalTargetSeeds.Find(ControlName);
+							const FQuat* const CurrentRelativeRotation = CurrentTargetSeed
+								? &CurrentTargetSeed->ParentRelativeTargetRotation
+								: nullptr;
 
 							bOutModifierMovementTypeMismatch = !ModifierRecord ||
 								ModifierRecord->BodyModifier.ModifierData.MovementType != EPhysicsMovementType::Kinematic;
@@ -836,8 +839,11 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 
 								float TargetDeltaDeg = 0.0f;
 								const FQuat* HoldRot = EntryHoldRotations.Find(AuditBone);
-								const FQuat* CurrentRelativeRotation =
-									CurrentParentRelativeTargets.Find(PhysAnimBridge::MakeControlName(AuditBone));
+								const FPhysAnimControlTargetSeed* const AuditTargetSeed =
+									CurrentPhysicalTargetSeeds.Find(PhysAnimBridge::MakeControlName(AuditBone));
+								const FQuat* CurrentRelativeRotation = AuditTargetSeed
+									? &AuditTargetSeed->ParentRelativeTargetRotation
+									: nullptr;
 								if (HoldRot && CurrentRelativeRotation)
 								{
 									TargetDeltaDeg = FMath::RadiansToDegrees(HoldRot->AngularDistance(*CurrentRelativeRotation));

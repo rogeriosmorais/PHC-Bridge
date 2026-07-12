@@ -92,15 +92,37 @@ namespace
 		const FQuat ParentWorldRotation(FVector::UpVector, FMath::DegreesToRadians(70.0f));
 		const FQuat ExpectedParentRelativeRotation(FVector::RightVector, FMath::DegreesToRadians(25.0f));
 		const FQuat ChildWorldRotation = (ParentWorldRotation * ExpectedParentRelativeRotation).GetNormalized();
-		const FQuat CapturedControlTarget = UPhysAnimComponent::BuildCurrentPoseControlTargetOrientation(
+		const FPhysAnimControlTargetSeed CapturedSeed = UPhysAnimComponent::BuildCurrentPoseControlTargetSeed(
 			ParentWorldRotation,
 			ChildWorldRotation);
 		TestTrue(
-			TEXT("Current-pose targets are captured in Physics Control parent-relative space"),
-			CapturedControlTarget.AngularDistance(ExpectedParentRelativeRotation) <= KINDA_SMALL_NUMBER);
+			TEXT("The captured parent world rotation remains distinct from the published target"),
+			CapturedSeed.ParentWorldRotation.AngularDistance(ParentWorldRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("The captured child world rotation remains distinct from the published target"),
+			CapturedSeed.ChildWorldRotation.AngularDistance(ChildWorldRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Current-pose targets are published in Physics Control parent-relative space"),
+			CapturedSeed.ParentRelativeTargetRotation.AngularDistance(ExpectedParentRelativeRotation) <= KINDA_SMALL_NUMBER);
 		TestTrue(
 			TEXT("Parent-relative targets are not the child world rotation"),
-			CapturedControlTarget.AngularDistance(ChildWorldRotation) > FMath::DegreesToRadians(1.0f));
+			CapturedSeed.ParentRelativeTargetRotation.AngularDistance(ChildWorldRotation) > FMath::DegreesToRadians(1.0f));
+		TestFalse(
+			TEXT("Standing policy targets remain explicit parent-relative targets when policy influence is active"),
+			UPhysAnimComponent::ShouldUseSkeletalAnimationTargetRepresentation(false, true));
+		TestFalse(
+			TEXT("The legacy skeletal-animation target flag cannot override the standing target contract"),
+			UPhysAnimComponent::ShouldUseSkeletalAnimationTargetRepresentation(true, true));
+		TestFalse(
+			TEXT("The first policy frame does not reset the captured parent-relative seed to zero"),
+			UPhysAnimComponent::ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(true, true));
+		const FQuat PolicyRotation(FVector::ForwardVector, FMath::DegreesToRadians(35.0f));
+		TestTrue(
+			TEXT("Zero policy influence exactly preserves the captured parent-relative seed"),
+			UPhysAnimComponent::BlendPolicyTargetRotation(
+				ExpectedParentRelativeRotation,
+				PolicyRotation,
+				0.0f).AngularDistance(ExpectedParentRelativeRotation) <= KINDA_SMALL_NUMBER);
 
 		const FQuat NeutralPelvisActorRelativeRotation =
 			(FQuat(FVector::ForwardVector, FMath::DegreesToRadians(90.0f)) *

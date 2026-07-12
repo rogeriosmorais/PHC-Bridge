@@ -55,7 +55,11 @@ bool UPhysAnimComponent::ShouldUseSkeletalAnimationTargetRepresentation(
 	bool bConfiguredUseSkeletalAnimationTargets,
 	bool bPolicyInfluenceActive)
 {
-	return bConfiguredUseSkeletalAnimationTargets || bPolicyInfluenceActive;
+	(void)bConfiguredUseSkeletalAnimationTargets;
+	(void)bPolicyInfluenceActive;
+	// Standing targets are an explicit parent-relative contract. Skeletal-animation
+	// offsets would change their reference frame and make policy activation discontinuous.
+	return false;
 }
 
 
@@ -63,7 +67,9 @@ bool UPhysAnimComponent::ShouldResetAllControlOffsetsForPolicyTargetRepresentati
 	bool bUseSkeletalAnimationTargetRepresentation,
 	bool bFirstPolicyEnabledFrame)
 {
-	return bUseSkeletalAnimationTargetRepresentation && bFirstPolicyEnabledFrame;
+	(void)bUseSkeletalAnimationTargetRepresentation;
+	(void)bFirstPolicyEnabledFrame;
+	return false;
 }
 
 

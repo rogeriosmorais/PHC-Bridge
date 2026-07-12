@@ -935,6 +935,11 @@ bool UPhysAnimComponent::ActivateRuntimePhysicsControl(FString& OutError)
 		return false;
 	}
 
+	// Controls are created before targets can be addressed. Keep them disabled until
+	// ActivateBridgeFromReadyState seeds every explicit parent-relative target and then
+	// publishes runtime tuning, which is the sole enable point for this activation.
+	PhysicsControl->SetControlsInSetEnabled(TEXT("All"), false);
+
 	if (!ValidateRuntimePhysicsControl(OutError))
 	{
 		return false;
