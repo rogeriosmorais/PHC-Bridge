@@ -84,3 +84,12 @@ test-results/**/*.receipt.json
 *.private.key
 *_tests_results.xml
 graphify-out/
+
+# Serena keeps its shared project configuration in version control, while
+# indexes and agent memories are local runtime state.
+.serena/.cache/
+.serena/memories/
+.serena/compile_commands.json
+.serena/logs/
+.serena/project.local.yml
+.serena/.gitignore

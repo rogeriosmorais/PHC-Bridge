@@ -13,6 +13,8 @@ CompileFlags:
     - "-Wno-unused-parameter"
     - "-Wno-missing-field-initializers"
     - "-std=c++20"
+    - "-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH"
+    - "-ferror-limit=200"
   CompilationDatabase: "F:/NewEngine-AgentB"
 
 Index:
