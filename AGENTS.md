@@ -66,6 +66,21 @@ This project has a knowledge graph under `graphify-out/`.
 - Prefer `graphify-out/wiki/index.md` for broad navigation.
 - After modifying code, run `graphify update .`.
 
+## Serena-First Code Intelligence
+
+Serena is the required first-line tool for code navigation and symbol-aware work.
+
+1. Before any code task, call Serena's `initial_instructions` and ensure `PHC-Bridge` is the active project.
+2. Use Serena's `get_symbols_overview` or `find_symbol` before reading a C++ source or header file in full.
+3. Use `find_referencing_symbols`, `find_declaration`, or `find_implementations` before changing a symbol or its contract.
+4. Prefer Serena's symbol-aware editing tools for whole-symbol changes. Use normal patch editing for small changes within a symbol.
+5. After changing C++ code, run Serena diagnostics on the affected files before building or testing.
+6. Do not launch concurrent Serena code-intelligence requests while clangd is performing its initial Unreal Engine index. Issue requests sequentially until the index is warm.
+7. Delegated agents and subagents must follow these Serena requirements independently; the parent agent must include this requirement in delegated task instructions.
+8. Graphify remains the required first step for broad codebase, architecture, and relationship questions. Use Serena after Graphify for live symbol-level verification.
+9. Fall back to `rg`, targeted file reads, or other local tools only when Serena is unavailable, times out, lacks the required operation, or returns unusable results. State the fallback reason explicitly and do not represent fallback results as Serena-derived evidence.
+10. Serena availability, local indexing, symbol results, or diagnostics are development evidence only and do not constitute product success.
+
 ## Current Product Direction
 
 The active milestone is causal standing with Manny:
