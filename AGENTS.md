@@ -66,15 +66,6 @@ This project has a knowledge graph under `graphify-out/`.
 - Prefer `graphify-out/wiki/index.md` for broad navigation.
 - After modifying code, run `graphify update .`.
 
-## Execution Tracking
-
-`mcp-graph` may be used as a local task ledger. It is not product authority.
-
-- Nodes, lifecycle phases, DoD scores, harness scores, receipts, and completion states describe engineering workflow only.
-- A missing node must never block a necessary diagnostic or product fix.
-- Completing a task or epic must never change a product verdict.
-- Product verdicts come only from the active product protocol and its immutable run artifacts.
-
 ## Current Product Direction
 
 The active milestone is causal standing with Manny:
@@ -87,3 +78,11 @@ The active milestone is causal standing with Manny:
 - material improvement over zero-action and dropped-dispatch controls
 
 Walking and Quinn validation follow only after causal standing passes.
+
+## Mandatory Path Forward
+
+All implementation work for the current milestone must follow:
+
+`plans/stage1/20-execution/mandatory-path-forward.md`
+
+If that document conflicts with older execution notes, follow the mandatory path forward document for the current causal-standing work until it is explicitly superseded.
