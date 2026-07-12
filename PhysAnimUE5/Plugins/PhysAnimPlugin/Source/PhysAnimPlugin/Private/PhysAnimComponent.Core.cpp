@@ -98,7 +98,13 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		SafePhase1ConvergenceSnapshot.RootAngularSpeed = LastRuntimeInstabilityDiagnostics.RootAngularSpeedDegPerSecond;
 
 		FString TiltSource;
-		const float ResolvedTilt = UPhysAnimComponent::ResolvePhase1Uprightness(GetMeshComponent(), GetOwner(), PhysAnimBridge::GetRootBoneName(), TiltSource);
+		const float ResolvedTilt = UPhysAnimComponent::ResolvePhase1Uprightness(
+			GetMeshComponent(),
+			GetOwner(),
+			PhysAnimBridge::GetRootBoneName(),
+			bHasNeutralPelvisActorRelativeRotation,
+			NeutralPelvisActorRelativeRotation,
+			TiltSource);
 		SafePhase1ConvergenceSnapshot.RootTilt = ResolvedTilt;
 
 		SafePhase1ConvergenceSnapshot.ShellPlanarOffset = GetCurrentShellPlanarOffsetDeltaCm();

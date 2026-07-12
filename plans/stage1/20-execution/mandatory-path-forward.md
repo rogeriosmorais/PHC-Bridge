@@ -12,8 +12,7 @@ The humanoid is not currently getting a fair standing attempt. The runtime rejec
   6. Policy activation produces a recorded 178.4° target discontinuity.
   7. Intended topology is reported as actual topology without reading Physics Control or Chaos state.
   8. The pelvis tilt metric uses Manny’s local Z axis incorrectly, making an upright pelvis appear roughly 91° tilted.
-  9. The original PHC action-to-PD transformation is not present authoritatively in this checkout. Existing documents contradict each other about PI * action versus normalized PD-
-     range mapping.
+  9. The original PHC action-to-PD transformation is not present authoritatively in this checkout. Existing documents contradict each other about PI * action versus normalized PD-range mapping.
 
 
   This is largely self-inflicted runtime complexity, not evidence that humanoid balance is beyond the model or engine.

@@ -1270,7 +1270,9 @@ void UPhysAnimComponent::UpdateActivatedStandingStabilityMetrics(float DeltaTime
 	}
 
 	FString TiltSource;
-	const float CurrentRootTiltDeg = ResolvePhase1Uprightness(Mesh, OwnerActor, PhysAnimBridge::GetRootBoneName(), TiltSource);
+	const float CurrentRootTiltDeg = ResolvePhase1Uprightness(
+		Mesh, OwnerActor, PhysAnimBridge::GetRootBoneName(),
+		bHasNeutralPelvisActorRelativeRotation, NeutralPelvisActorRelativeRotation, TiltSource);
 	const FVector CurrentRootLocationCm = LastRuntimeInstabilityDiagnostics.RootLocationCm;
 	const double CurrentSupportHullAreaCm2 = LiveRuntimeEvidenceTerminationState.LatestArtifact.SupportHullAreaCm2;
 	const double CurrentActiveSupportSideCount = static_cast<double>(LiveRuntimeEvidenceTerminationState.LatestArtifact.ActiveSupportSideCount);

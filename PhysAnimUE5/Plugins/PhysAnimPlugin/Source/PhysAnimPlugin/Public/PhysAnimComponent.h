@@ -2347,6 +2347,8 @@ private:
 	TSharedPtr<UE::NNE::IModelInstanceCPU> ModelInstanceCPU;
 
 	TArray<FTransform> CachedSmplObservationRestComponentTransforms;
+	bool bHasNeutralPelvisActorRelativeRotation = false;
+	FQuat NeutralPelvisActorRelativeRotation = FQuat::Identity;
 
 	TObjectPtr<UNNEModelData> LoadedModelData = nullptr;
 	TObjectPtr<UPoseSearchDatabase> LoadedPoseSearchDatabase = nullptr;
@@ -2635,6 +2637,11 @@ public:
 	static FQuat BuildCurrentPoseControlTargetOrientation(
 		const FQuat& ParentWorldRotation,
 		const FQuat& ChildWorldRotation);
+	static float CalculateNeutralCalibratedPelvisTiltDegrees(
+		const FQuat& CurrentPelvisWorldRotation,
+		const FQuat& NeutralPelvisActorRelativeRotation,
+		const FQuat& ActorWorldRotation);
+	static bool ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState RuntimeState);
 	static float ResolveShellCouplingPlanarOffsetDeltaCm(
 		const FVector& OwnerLocationCm,
 		const FVector& RootLocationCm,
@@ -2936,6 +2943,8 @@ public:
 		class USkeletalMeshComponent* SkeletalMesh,
 		class AActor* Owner,
 		const FName& PelvisBoneName,
+		bool bHasNeutralPelvisOrientation,
+		const FQuat& NeutralPelvisActorRelativeRotation,
 		FString& OutSourceName);
 
 	// TestOnly Seams for Watchdog Robustness (S1-FIX-WATCHDOG-ROBUSTNESS-01)

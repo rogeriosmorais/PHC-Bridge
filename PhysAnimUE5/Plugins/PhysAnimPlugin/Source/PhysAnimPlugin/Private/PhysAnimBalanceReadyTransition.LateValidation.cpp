@@ -17,9 +17,34 @@ FString FPhysAnimBalanceReadyTransition::ClassifyLateValidationFailureReason(boo
 	return TEXT("phase1_late_validate_unknown");
 }
 
-bool FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(bool bRawSimViolation, bool bMotionViolation, bool bPendingResetViolation)
+bool FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(
+	bool bModifierMovementTypeMismatch,
+	bool bRawSimViolation,
+	bool bPendingResetViolation,
+	bool bRelativePoseViolation,
+	bool bControlReadbackViolation)
 {
-	return bRawSimViolation || bMotionViolation || bPendingResetViolation;
+	return bModifierMovementTypeMismatch ||
+		bRawSimViolation ||
+		bPendingResetViolation ||
+		bRelativePoseViolation ||
+		bControlReadbackViolation;
+}
+
+bool FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(
+	bool bViolationThisFrame,
+	float DeltaTimeSeconds,
+	float GraceDurationSeconds,
+	float& InOutViolationDurationSeconds)
+{
+	if (!bViolationThisFrame)
+	{
+		InOutViolationDurationSeconds = 0.0f;
+		return false;
+	}
+
+	InOutViolationDurationSeconds += FMath::Max(0.0f, DeltaTimeSeconds);
+	return InOutViolationDurationSeconds + KINDA_SMALL_NUMBER >= FMath::Max(0.0f, GraceDurationSeconds);
 }
 
 FString FPhysAnimBalanceReadyTransition::ResolveRootOnReadinessGateReason(

@@ -599,7 +599,7 @@ bool FPhysAnimBalanceReadyTransition::ValidatePhase2EntryPreconditions(UPhysAnim
 	FPhysAnimCertifiedHandoffSnapshot CurrentSnapshot;
 	FPhysAnimLateValidationResult CurrentResult;
 	// Phase 2 entry must consume the accepted live RootOn-ready handoff, not persist the LateValidate hold mode.
-	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult, false))
+	if (!BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult))
 	{
 		OutReason = TEXT("phase2_handoff_invalidated");
 		return false;

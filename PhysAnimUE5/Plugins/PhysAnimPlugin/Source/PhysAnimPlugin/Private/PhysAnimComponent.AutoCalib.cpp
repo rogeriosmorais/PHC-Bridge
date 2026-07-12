@@ -391,7 +391,9 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibLiveMetrics(FPhase1AutoCalibLiveM
 	OutMetrics.TransitionPhase = BalanceReadyTransition.GetPhase();
 	OutMetrics.RootLinearSpeedCmPerSecond = RootBody->GetUnrealWorldVelocity().Size();
 	OutMetrics.RootAngularSpeedDegPerSecond = FMath::RadiansToDegrees(RootBody->GetUnrealWorldAngularVelocityInRadians().Size());
-	OutMetrics.RootTiltDeg = ResolvePhase1Uprightness(MeshComponent.Get(), GetOwner(), RootBoneName, TiltSource);
+	OutMetrics.RootTiltDeg = ResolvePhase1Uprightness(
+		MeshComponent.Get(), GetOwner(), RootBoneName,
+		bHasNeutralPelvisActorRelativeRotation, NeutralPelvisActorRelativeRotation, TiltSource);
 	OutMetrics.ShellOffsetDeltaCm = GetCurrentShellPlanarOffsetDeltaCm();
 	OutMetrics.ShellVelocityDeltaCmPerSecond = GetCurrentShellPlanarVelocityDeltaCmPerSecond();
 	OutMetrics.MaxTargetDeltaDeg = LastControlTargetDiagnostics.MaxTargetDeltaDegrees;

@@ -83,6 +83,94 @@ namespace
 #endif
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMandatoryPathFirstSliceContractTest,
+		"PhysAnim.Component.MandatoryPath.FirstSliceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimMandatoryPathFirstSliceContractTest::RunTest(const FString& Parameters)
+	{
+		const FQuat ParentWorldRotation(FVector::UpVector, FMath::DegreesToRadians(70.0f));
+		const FQuat ExpectedParentRelativeRotation(FVector::RightVector, FMath::DegreesToRadians(25.0f));
+		const FQuat ChildWorldRotation = (ParentWorldRotation * ExpectedParentRelativeRotation).GetNormalized();
+		const FQuat CapturedControlTarget = UPhysAnimComponent::BuildCurrentPoseControlTargetOrientation(
+			ParentWorldRotation,
+			ChildWorldRotation);
+		TestTrue(
+			TEXT("Current-pose targets are captured in Physics Control parent-relative space"),
+			CapturedControlTarget.AngularDistance(ExpectedParentRelativeRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Parent-relative targets are not the child world rotation"),
+			CapturedControlTarget.AngularDistance(ChildWorldRotation) > FMath::DegreesToRadians(1.0f));
+
+		const FQuat NeutralPelvisActorRelativeRotation =
+			(FQuat(FVector::ForwardVector, FMath::DegreesToRadians(90.0f)) *
+			 FQuat(FVector::UpVector, FMath::DegreesToRadians(15.0f))).GetNormalized();
+		const FQuat ActorWorldRotation(FVector::UpVector, FMath::DegreesToRadians(40.0f));
+		const FQuat NeutralPelvisWorldRotation =
+			(ActorWorldRotation * NeutralPelvisActorRelativeRotation).GetNormalized();
+		TestTrue(
+			TEXT("Manny's captured neutral pelvis orientation reports zero tilt"),
+			FMath::IsNearlyZero(UPhysAnimComponent::CalculateNeutralCalibratedPelvisTiltDegrees(
+				NeutralPelvisWorldRotation,
+				NeutralPelvisActorRelativeRotation,
+				ActorWorldRotation), 0.01f));
+		const FQuat TiltedPelvisWorldRotation =
+			(FQuat(FVector::RightVector, FMath::DegreesToRadians(30.0f)) * NeutralPelvisWorldRotation).GetNormalized();
+		TestTrue(
+			TEXT("Neutral-calibrated pelvis tilt measures physical pitch rather than Manny local Z"),
+			FMath::IsNearlyEqual(UPhysAnimComponent::CalculateNeutralCalibratedPelvisTiltDegrees(
+				TiltedPelvisWorldRotation,
+				NeutralPelvisActorRelativeRotation,
+				ActorWorldRotation), 30.0f, 0.05f));
+
+		TestTrue(
+			TEXT("Prepare suppresses policy dispatch independently of evidence collection"),
+			UPhysAnimComponent::ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState::BalanceEntry_Prepare));
+		TestTrue(
+			TEXT("LateValidate suppresses policy dispatch independently of evidence collection"),
+			UPhysAnimComponent::ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState::BalanceEntry_LateValidate));
+		TestFalse(
+			TEXT("Standing does not suppress policy dispatch"),
+			UPhysAnimComponent::ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState::BalanceActive_Standing));
+
+		TestFalse(
+			TEXT("Kinematic animation velocity alone is not an upper-body physical-state violation"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, false, false, false, false));
+		TestTrue(
+			TEXT("Modifier movement-type mismatch is observed"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(true, false, false, false, false));
+		TestTrue(
+			TEXT("Raw simulation mismatch is observed"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, true, false, false, false));
+		TestTrue(
+			TEXT("Pending cached reset is observed"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, false, true, false, false));
+		TestTrue(
+			TEXT("Parent-relative pose mismatch is observed"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, false, false, true, false));
+		TestTrue(
+			TEXT("Physics Control target readback mismatch is observed"),
+			FPhysAnimBalanceReadyTransition::IsLateValidationUpperBodyViolation(false, false, false, false, true));
+
+		float ViolationDurationSeconds = 0.0f;
+		TestFalse(
+			TEXT("A first transient violation remains inside the sustained grace period"),
+			FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(true, 0.04f, 0.10f, ViolationDurationSeconds));
+		TestFalse(
+			TEXT("A second transient violation remains inside the sustained grace period"),
+			FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(true, 0.04f, 0.10f, ViolationDurationSeconds));
+		TestTrue(
+			TEXT("A sustained violation trips after the configured grace period"),
+			FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(true, 0.04f, 0.10f, ViolationDurationSeconds));
+		TestFalse(
+			TEXT("A clean frame resets sustained violation state"),
+			FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(false, 0.04f, 0.10f, ViolationDurationSeconds));
+		TestTrue(TEXT("The clean frame clears the accumulated violation duration"), FMath::IsNearlyZero(ViolationDurationSeconds));
+
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimBalanceModeSmokeOutcomeTest,
 		"PhysAnim.Component.BalanceModeSmokeOutcome",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

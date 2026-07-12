@@ -239,6 +239,8 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		}
 	}
 
+	// Publish movement types and phase-dependent gains every tick before targets are dispatched.
+	ApplyRuntimeControlTuning(EffectiveSettings);
 	ApplyControlTargets(
 		bRunPolicyUpdateThisTick ? (PolicyControlIntervalSeconds * FMath::Max(ElapsedPolicySteps, 1)) : 0.0f,
 		EffectiveSettings,

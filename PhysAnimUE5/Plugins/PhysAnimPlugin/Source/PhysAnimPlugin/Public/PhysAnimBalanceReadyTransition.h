@@ -450,6 +450,7 @@ struct FPhysAnimBalanceReadyTransitionSnapshot
 	int32 ConsecutivePelvisNotSimulatingTicks = 0;
 	int32 ConsecutiveBodyMotionInstabilityTicks = 0;
 	float LateValidationAccumulatedSeconds = 0.0f;
+	float LateValidationUpperBodyViolationAccumulatedSeconds = 0.0f;
 	float RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 	float RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
 	float RootOnReadinessShellProofStartOffsetCm = 0.0f;
@@ -668,7 +669,17 @@ public:
 		bool bTiltLimitedByUprightness,
 		float PolicyInfluenceAlphaAtCapture);
 	static FString ClassifyLateValidationFailureReason(bool bUpperBodyInstability, bool bSimCoverageRegressed, bool bTargetDiscontinuity);
-	static bool IsLateValidationUpperBodyViolation(bool bRawSimViolation, bool bMotionViolation, bool bPendingResetViolation);
+	static bool IsLateValidationUpperBodyViolation(
+		bool bModifierMovementTypeMismatch,
+		bool bRawSimViolation,
+		bool bPendingResetViolation,
+		bool bRelativePoseViolation,
+		bool bControlReadbackViolation);
+	static bool UpdateSustainedViolation(
+		bool bViolationThisFrame,
+		float DeltaTimeSeconds,
+		float GraceDurationSeconds,
+		float& InOutViolationDurationSeconds);
 	static bool IsFailureClassRetryable(const FString& FailureReason);
 	static EBalanceReadyConditionOwner ClassifyConditionOwner(const FString& Reason);
 	static bool IsPhase1OwnedCondition(const FString& Reason);
@@ -690,7 +701,7 @@ private:
 	bool ValidatePhase2EntryPreconditions(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidatePhase2Continuity(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidatePhase3Continuity(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
-	bool BuildCertifiedHandoffSnapshot(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FPhysAnimCertifiedHandoffSnapshot& OutSnapshot, FPhysAnimLateValidationResult& OutResult, bool bUseFrozenTopology = true) const;
+	bool BuildCertifiedHandoffSnapshot(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FPhysAnimCertifiedHandoffSnapshot& OutSnapshot, FPhysAnimLateValidationResult& OutResult) const;
 	bool CaptureLateValidationBaseline(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool CaptureCertifiedHandoff(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	bool ValidateCertifiedHandoff(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings, FString& OutReason) const;
@@ -725,6 +736,7 @@ private:
 	int32 ConsecutivePelvisNotSimulatingTicks = 0;
 	int32 ConsecutiveBodyMotionInstabilityTicks = 0;
 	float LateValidationAccumulatedSeconds = 0.0f;
+	float LateValidationUpperBodyViolationAccumulatedSeconds = 0.0f;
 	float RootOnReadinessShellHoldAccumulatedSeconds = 0.0f;
 	float RootOnReadinessShellProofAccumulatedSeconds = 0.0f;
 	float RootOnReadinessShellProofStartOffsetCm = 0.0f;

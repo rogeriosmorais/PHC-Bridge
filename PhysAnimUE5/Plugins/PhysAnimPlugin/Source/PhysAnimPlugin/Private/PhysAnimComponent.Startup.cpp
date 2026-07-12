@@ -48,6 +48,17 @@ bool UPhysAnimComponent::FinalizeStartupTPoseCaptureAndStartBridge(FString& OutE
 		return false;
 	}
 
+	const int32 PelvisBoneIndex = SkeletalMesh->GetBoneIndex(PhysAnimBridge::GetRootBoneName());
+	const AActor* const OwnerActor = GetOwner();
+	if (PelvisBoneIndex == INDEX_NONE || !OwnerActor)
+	{
+		OutError = TEXT("Live T-pose capture could not resolve Manny's neutral pelvis orientation.");
+		return false;
+	}
+	NeutralPelvisActorRelativeRotation =
+		(OwnerActor->GetActorQuat().Inverse() * SkeletalMesh->GetBoneTransform(PelvisBoneIndex).GetRotation()).GetNormalized();
+	bHasNeutralPelvisActorRelativeRotation = true;
+
 	if (bRunStartupTPoseIdentityCheck)
 	{
 		LogTPoseIdentityCheck();

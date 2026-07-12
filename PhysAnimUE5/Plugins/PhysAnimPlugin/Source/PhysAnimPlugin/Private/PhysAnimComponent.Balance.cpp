@@ -894,7 +894,9 @@ bool UPhysAnimComponent::EvaluateBalanceBridgeActivePreEntryPrerequisitesFromTel
 bool UPhysAnimComponent::EvaluateBalanceBridgeActivePreEntryPrerequisites(const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutReason) const
 {
 	FString RootTiltSource;
-	const float RootTiltDeg = ResolvePhase1Uprightness(GetMeshComponent(), GetOwner(), PhysAnimBridge::GetRootBoneName(), RootTiltSource);
+	const float RootTiltDeg = ResolvePhase1Uprightness(
+		GetMeshComponent(), GetOwner(), PhysAnimBridge::GetRootBoneName(),
+		bHasNeutralPelvisActorRelativeRotation, NeutralPelvisActorRelativeRotation, RootTiltSource);
 	const FPhysAnimControlTargetDiagnostics& ControlTargetDiagnostics = GetLastControlTargetDiagnostics();
 	return EvaluateBalanceBridgeActivePreEntryPrerequisitesFromTelemetry(
 		RuntimeState,

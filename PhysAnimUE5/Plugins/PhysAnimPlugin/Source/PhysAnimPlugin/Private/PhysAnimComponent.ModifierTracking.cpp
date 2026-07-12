@@ -253,7 +253,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return FVector(OwnerVelocity.X, OwnerVelocity.Y, 0.0f).Size();
 	}();
 
-	const bool bIsPhase1PolicyLoopSuppressed = (bPhase1Prepare || bPhase1LateValidate) && !bEnableLiveRuntimeEvidenceProof;
+	const bool bIsPhase1PolicyLoopSuppressed = ShouldSuppressPolicyDispatchForTransitionState(RuntimeState);
 	bool bSuppressPostShellPolicy = false;
 
 	const float TargetWriteDeltaTime =
@@ -340,9 +340,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	if (bApplyNewPolicyStepThisTick)
 	{
-		// Phase 1 Transition Rule: Normally no normal policy writes during Prepare/LateValidate.
-		// HOWEVER, if bEnableLiveRuntimeEvidenceProof is active, we ALLOW these writes to provide 
-		// authentic telemetry of the policy's intent during the validation hold.
+		// Prepare/LateValidate preserve the parent-relative seed. Evidence collection never changes dispatch.
 
 
 		bool bPolicyTargetsAppliedThisTick = true;

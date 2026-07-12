@@ -2488,7 +2488,9 @@ void UPhysAnimComponent::ApplyPhase1PelvisRootCouplingSolve()
 	const float PelvisThighRErrorCm = PelvisThighRRecord.bConstraintFound ? PelvisThighRRecord.AnchorDistanceCm : PelvisThighRRecord.BodyOriginDistanceCm;
 	const float PelvisSpine01ErrorCm = PelvisSpine01Record.bConstraintFound ? PelvisSpine01Record.AnchorDistanceCm : PelvisSpine01Record.BodyOriginDistanceCm;
 	FString SolvedTiltSource;
-	const float SolvedTiltDeg = ResolvePhase1Uprightness(Mesh, GetOwner(), RootBoneName, SolvedTiltSource);
+	const float SolvedTiltDeg = ResolvePhase1Uprightness(
+		Mesh, GetOwner(), RootBoneName,
+		bHasNeutralPelvisActorRelativeRotation, NeutralPelvisActorRelativeRotation, SolvedTiltSource);
 	const int32 TiltProtectionForced = (bProtectLiveTilt &&
 		BestUnconstrainedRotationEvaluation.MaxAngularErrorDeg < TNumericLimits<float>::Max() &&
 		!BestUnconstrainedRotationEvaluation.bTiltAdmissible &&

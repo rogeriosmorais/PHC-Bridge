@@ -44,6 +44,13 @@ bool UPhysAnimComponent::ShouldApplyPolicyTargetToBone(FName BoneName, bool bPol
 }
 
 
+bool UPhysAnimComponent::ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState RuntimeState)
+{
+	return RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
+}
+
+
 bool UPhysAnimComponent::ShouldUseSkeletalAnimationTargetRepresentation(
 	bool bConfiguredUseSkeletalAnimationTargets,
 	bool bPolicyInfluenceActive)
@@ -89,10 +96,29 @@ float UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(
 }
 
 
+float UPhysAnimComponent::CalculateNeutralCalibratedPelvisTiltDegrees(
+	const FQuat& CurrentPelvisWorldRotation,
+	const FQuat& NeutralPelvisActorRelativeRotation,
+	const FQuat& ActorWorldRotation)
+{
+	const FQuat ExpectedNeutralWorldRotation =
+		(ActorWorldRotation * NeutralPelvisActorRelativeRotation).GetNormalized();
+	const FQuat NeutralToCurrentWorldDelta =
+		(CurrentPelvisWorldRotation * ExpectedNeutralWorldRotation.Inverse()).GetNormalized();
+	const FVector CurrentUpFromNeutral = NeutralToCurrentWorldDelta.RotateVector(FVector::UpVector);
+	return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(
+		FVector::DotProduct(CurrentUpFromNeutral, FVector::UpVector),
+		-1.0f,
+		1.0f)));
+}
+
+
 float UPhysAnimComponent::ResolvePhase1Uprightness(
 	USkeletalMeshComponent* SkeletalMesh,
 	AActor* Owner,
 	const FName& PelvisBoneName,
+	bool bHasNeutralPelvisOrientation,
+	const FQuat& NeutralPelvisActorRelativeRotation,
 	FString& OutSourceName)
 {
 	if (!SkeletalMesh)
@@ -105,8 +131,16 @@ float UPhysAnimComponent::ResolvePhase1Uprightness(
 	if (const FBodyInstance* const PelvisBody = SkeletalMesh->GetBodyInstance(PelvisBoneName))
 	{
 		const FTransform PelvisTransform = PelvisBody->GetUnrealWorldTransform();
+		if (bHasNeutralPelvisOrientation && Owner)
+		{
+			OutSourceName = TEXT("pelvis_body_neutral_calibrated");
+			return CalculateNeutralCalibratedPelvisTiltDegrees(
+				PelvisTransform.GetRotation(),
+				NeutralPelvisActorRelativeRotation,
+				Owner->GetActorQuat());
+		}
 		
-		// Robustly find the axis most aligned with World Up
+		// Fallback for callers that have not completed the startup neutral capture.
 		const FVector AxisX = PelvisTransform.GetUnitAxis(EAxis::X);
 		const FVector AxisY = PelvisTransform.GetUnitAxis(EAxis::Y);
 		const FVector AxisZ = PelvisTransform.GetUnitAxis(EAxis::Z);
