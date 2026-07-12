@@ -180,6 +180,18 @@ bool FPhysAnimBalanceReadyTransition::ValidateLateValidationBaselineSnapshot(
 		return false;
 	}
 
+	if (!Snapshot.bPolicySuppressed)
+	{
+		OutReason = TEXT("phase1_late_validate_baseline_policy_write_observed");
+		return false;
+	}
+
+	if (!Snapshot.bResetsSuppressed)
+	{
+		OutReason = TEXT("phase1_late_validate_baseline_reset_observed");
+		return false;
+	}
+
 	return true;
 }
 
@@ -351,8 +363,14 @@ bool FPhysAnimBalanceReadyTransition::BuildCertifiedHandoffSnapshot(UPhysAnimCom
 	OutSnapshot.UpperBodyOwnershipMode = UpperSimCount > 0
 		? EBalanceReadyUpperBodyOwnershipMode::None
 		: EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
-	OutSnapshot.bPolicySuppressed = ShouldSuppressPolicy();
-	OutSnapshot.bResetsSuppressed = ShouldSuppressResets();
+	OutSnapshot.PolicyTargetsWrittenAtCapture = ControlTargetDiagnostics.NumNormalPolicyTargetsWritten;
+	OutSnapshot.PendingResetCountAtCapture = Owner->GetPendingBodyModifierCachedResetNames().Num();
+	OutSnapshot.ResetRequestsWrittenAtCapture = Owner->GetLastBodyModifierResetRequestCount();
+	OutSnapshot.bPolicySuppressed =
+		WasPolicySuppressedInObservedFrame(OutSnapshot.PolicyTargetsWrittenAtCapture);
+	OutSnapshot.bResetsSuppressed = WereResetsSuppressedInObservedFrame(
+		OutSnapshot.PendingResetCountAtCapture,
+		OutSnapshot.ResetRequestsWrittenAtCapture);
 	OutSnapshot.bControlAuthoritySettled = Owner->CalculateCurrentControlAuthorityAlpha(Settings) >= 1.0f - KINDA_SMALL_NUMBER;
 	const int32 FinalBringUpGroupIndex = Owner->GetBringUpGroupCount() - 1;
 	OutSnapshot.FinalBringUpGroupControlAuthorityAlpha = Owner->CalculateBringUpGroupControlAuthorityAlpha(FinalBringUpGroupIndex, Settings);

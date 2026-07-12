@@ -189,6 +189,106 @@ namespace
 			FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(false, 0.04f, 0.10f, ViolationDurationSeconds));
 		TestTrue(TEXT("The clean frame clears the accumulated violation duration"), FMath::IsNearlyZero(ViolationDurationSeconds));
 
+		TestFalse(
+			TEXT("A fully observed simulated body is an authoritative topology observation"),
+			FPhysAnimBalanceReadyTransition::IsPhase1TopologyObservationMismatch(
+				true,
+				true,
+				true,
+				false,
+				true,
+				true));
+		TestTrue(
+			TEXT("A failed simulated modifier command is recorded as a topology mismatch"),
+			FPhysAnimBalanceReadyTransition::IsPhase1TopologyObservationMismatch(
+				true,
+				true,
+				false,
+				true,
+				true,
+				false));
+		TestTrue(
+			TEXT("Modifier and raw-body disagreement is recorded as a topology mismatch"),
+			FPhysAnimBalanceReadyTransition::IsPhase1TopologyObservationMismatch(
+				true,
+				true,
+				true,
+				false,
+				true,
+				false));
+		TestTrue(
+			TEXT("Missing live topology records cannot be authoritative"),
+			FPhysAnimBalanceReadyTransition::IsPhase1TopologyObservationMismatch(
+				false,
+				false,
+				false,
+				false,
+				false,
+				false));
+
+		TestFalse(
+			TEXT("Elapsed release timers cannot bypass a dirty current upper-body observation"),
+			FPhysAnimBalanceReadyTransition::CanReleaseLateValidationUpperBody(true, false, 0.04f));
+		TestFalse(
+			TEXT("Elapsed release timers cannot bypass an outstanding sub-grace violation"),
+			FPhysAnimBalanceReadyTransition::CanReleaseLateValidationUpperBody(true, true, 0.04f));
+		TestTrue(
+			TEXT("Upper-body release requires elapsed timers, a clean observation, and no outstanding violation"),
+			FPhysAnimBalanceReadyTransition::CanReleaseLateValidationUpperBody(true, true, 0.0f));
+
+		TestTrue(
+			TEXT("No policy writes is observed policy suppression"),
+			FPhysAnimBalanceReadyTransition::WasPolicySuppressedInObservedFrame(0));
+		TestFalse(
+			TEXT("A policy write invalidates certified policy suppression"),
+			FPhysAnimBalanceReadyTransition::WasPolicySuppressedInObservedFrame(1));
+		TestTrue(
+			TEXT("No pending or written reset request is observed reset suppression"),
+			FPhysAnimBalanceReadyTransition::WereResetsSuppressedInObservedFrame(0, 0));
+		TestFalse(
+			TEXT("A pending reset invalidates certified reset suppression"),
+			FPhysAnimBalanceReadyTransition::WereResetsSuppressedInObservedFrame(1, 0));
+		TestFalse(
+			TEXT("A consumed reset request still invalidates certified reset suppression"),
+			FPhysAnimBalanceReadyTransition::WereResetsSuppressedInObservedFrame(0, 1));
+
+		FPhysAnimCertifiedHandoffSnapshot SuppressionSnapshot;
+		SuppressionSnapshot.ProximalSimCount = 5;
+		SuppressionSnapshot.UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold;
+		SuppressionSnapshot.bControlAuthoritySettled = true;
+		SuppressionSnapshot.bPolicySuppressed = false;
+		SuppressionSnapshot.bResetsSuppressed = true;
+		FPhysAnimLateValidationResult SuppressionResult;
+		SuppressionResult.Outcome = EBalanceLateValidationOutcome::Outcome_Pending;
+		FPhysAnimStabilizationSettings SuppressionSettings;
+		FString SuppressionFailureReason;
+		TestFalse(
+			TEXT("A policy write prevents the observed baseline from being certified"),
+			FPhysAnimBalanceReadyTransition::ValidateLateValidationBaselineSnapshot(
+				SuppressionSnapshot,
+				SuppressionResult,
+				SuppressionSettings,
+				SuppressionFailureReason));
+		TestEqual(
+			TEXT("Policy-write certification failure is explicit"),
+			SuppressionFailureReason,
+			FString(TEXT("phase1_late_validate_baseline_policy_write_observed")));
+
+		SuppressionSnapshot.bPolicySuppressed = true;
+		SuppressionSnapshot.bResetsSuppressed = false;
+		SuppressionFailureReason.Reset();
+		TestFalse(
+			TEXT("A reset request prevents the observed baseline from being certified"),
+			FPhysAnimBalanceReadyTransition::ValidateLateValidationBaselineSnapshot(
+				SuppressionSnapshot,
+				SuppressionResult,
+				SuppressionSettings,
+				SuppressionFailureReason));
+		TestEqual(
+			TEXT("Reset certification failure is explicit"),
+			SuppressionFailureReason,
+			FString(TEXT("phase1_late_validate_baseline_reset_observed")));
+
 		return true;
 	}
 

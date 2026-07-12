@@ -47,6 +47,52 @@ bool FPhysAnimBalanceReadyTransition::UpdateSustainedViolation(
 	return InOutViolationDurationSeconds + KINDA_SMALL_NUMBER >= FMath::Max(0.0f, GraceDurationSeconds);
 }
 
+
+bool FPhysAnimBalanceReadyTransition::IsPhase1TopologyObservationMismatch(
+	bool bExpectedSimulating,
+	bool bModifierRecordPresent,
+	bool bModifierReportedSimulating,
+	bool bModifierReportedKinematic,
+	bool bBodyInstanceValid,
+	bool bBodySimulating)
+{
+	const bool bModifierMatchesExpected = bExpectedSimulating
+		? bModifierReportedSimulating
+		: bModifierReportedKinematic;
+	const bool bModifierMatchesBody =
+		(bModifierReportedSimulating && bBodySimulating) ||
+		(bModifierReportedKinematic && !bBodySimulating);
+	return !bModifierRecordPresent ||
+		!bBodyInstanceValid ||
+		!bModifierMatchesExpected ||
+		!bModifierMatchesBody;
+}
+
+
+bool FPhysAnimBalanceReadyTransition::CanReleaseLateValidationUpperBody(
+	bool bReleaseTimersSatisfied,
+	bool bCurrentObservationClean,
+	float OutstandingViolationDurationSeconds)
+{
+	return bReleaseTimersSatisfied &&
+		bCurrentObservationClean &&
+		OutstandingViolationDurationSeconds <= KINDA_SMALL_NUMBER;
+}
+
+
+bool FPhysAnimBalanceReadyTransition::WasPolicySuppressedInObservedFrame(int32 NumNormalPolicyTargetsWritten)
+{
+	return NumNormalPolicyTargetsWritten == 0;
+}
+
+
+bool FPhysAnimBalanceReadyTransition::WereResetsSuppressedInObservedFrame(
+	int32 PendingResetCount,
+	int32 ResetRequestsWritten)
+{
+	return PendingResetCount == 0 && ResetRequestsWritten == 0;
+}
+
 FString FPhysAnimBalanceReadyTransition::ResolveRootOnReadinessGateReason(
 	EBalanceReadyRootOnReadinessClassification Classification,
 	bool bDirectPelvisLinkPositionSatisfied,
@@ -136,6 +182,18 @@ bool FPhysAnimBalanceReadyTransition::ValidateLateValidationHandoffSnapshot(cons
 	if (!Snapshot.bControlAuthoritySettled)
 	{
 		OutReason = TEXT("phase2_control_authority_not_settled");
+		return false;
+	}
+
+	if (!Snapshot.bPolicySuppressed)
+	{
+		OutReason = TEXT("phase2_policy_write_observed_during_suppression");
+		return false;
+	}
+
+	if (!Snapshot.bResetsSuppressed)
+	{
+		OutReason = TEXT("phase2_reset_observed_during_suppression");
 		return false;
 	}
 

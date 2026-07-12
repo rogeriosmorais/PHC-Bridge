@@ -275,6 +275,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		}
 	}
 
+	if (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare &&
+		(!bHasPhase1TopologyRecord || !Phase1TopologyRecord.bAuthoritative))
+	{
+		CapturePhase1TopologyRecord(Owner, Settings);
+	}
+
 	PhaseTimeSeconds += DeltaTime;
 	TotalTransitionTimeSeconds += DeltaTime;
 
@@ -426,7 +432,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		bool bQuietThisFrame = true;
 		FString QuietBlockReason;
 
-		if (!bReadyThisFrame)
+		if (!bHasPhase1TopologyRecord || !Phase1TopologyRecord.bAuthoritative)
+		{
+			bQuietThisFrame = false;
+			QuietBlockReason = TEXT("phase1_topology_observation_mismatch");
+		}
+		else if (!bReadyThisFrame)
 		{
 			bQuietThisFrame = false;
 			QuietBlockReason = BlockReason;
@@ -675,7 +686,12 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		FString LateValidateBlockReason;
 		const float PolicyInfluenceAlpha = Owner->CalculateCurrentPolicyInfluenceAlpha(Settings);
 
-		if (!bReadyThisFrame)
+		if (!bHasPhase1TopologyRecord || !Phase1TopologyRecord.bAuthoritative)
+		{
+			bLateValidationThisFrame = false;
+			LateValidateBlockReason = TEXT("phase1_topology_observation_mismatch");
+		}
+		else if (!bReadyThisFrame)
 		{
 			bLateValidationThisFrame = false;
 			LateValidateBlockReason = BlockReason;
@@ -685,15 +701,15 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			bLateValidationThisFrame = false;
 			LateValidateBlockReason = TEXT("instability_precursor");
 		}
-		else if (!Phase1TopologyRecord.bResetsSuppressed && CachedConvergenceSnapshot.bHasPendingResets)
+		else if (CachedConvergenceSnapshot.bHasPendingResets)
 		{
 			bLateValidationThisFrame = false;
 			LateValidateBlockReason = TEXT("pending_resets");
 		}
-		else if (!Phase1TopologyRecord.bPolicySuppressed && PolicyInfluenceAlpha <= KINDA_SMALL_NUMBER)
+		else if (Owner->GetLastControlTargetDiagnostics().NumNormalPolicyTargetsWritten > 0)
 		{
 			bLateValidationThisFrame = false;
-			LateValidateBlockReason = TEXT("policy_influence_inactive");
+			LateValidateBlockReason = TEXT("policy_writes_observed");
 		}
 		else if (Diagnostics.RootSpeed > Settings.BalancePhase1QuietRootLinearSpeed || Diagnostics.RootAngularSpeed > Settings.BalancePhase1QuietRootAngularSpeed)
 		{
@@ -723,14 +739,14 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 		const bool bCurrentSnapshotValid = BuildCertifiedHandoffSnapshot(Owner, Settings, CurrentSnapshot, CurrentResult);
 		const bool bLiveSnapshotValid = BuildCertifiedHandoffSnapshot(Owner, Settings, LiveSnapshot, LiveResult);
 
-		const bool bExpectedUpperBodyRelease = Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold &&
+		const bool bUpperBodyReleaseTimersSatisfied = Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold &&
 			LateValidationAccumulatedSeconds >= Settings.BalancePhase1LateValidateRequiredSeconds &&
 			RootOnReadinessShellHoldAccumulatedSeconds >= Settings.BalancePhase2RequiredShellHoldDuration;
 
-		bLateValidationProofPassed = bExpectedUpperBodyRelease;
-
+		bLateValidationProofPassed = false;
 		bool bUpperBodyInstability = false;
-		if (bCurrentSnapshotValid && bLiveSnapshotValid && !bExpectedUpperBodyRelease)
+		bool bCurrentUpperBodyObservationClean = false;
+		if (bCurrentSnapshotValid && bLiveSnapshotValid)
 		{
 			if (Phase1TopologyRecord.UpperBodyOwnershipMode == EBalanceReadyUpperBodyOwnershipMode::LateValidationKinematicHold)
 			{
@@ -831,6 +847,7 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 								DeltaTime,
 								Settings.BalancePhase1LateValidateBodyMotionGraceDuration,
 								LateValidationUpperBodyViolationAccumulatedSeconds);
+							bCurrentUpperBodyObservationClean = !bUpperBodyContractViolationObserved;
 
 							for (const FName AuditBone : AuditBones)
 							{
@@ -934,9 +951,15 @@ void FPhysAnimBalanceReadyTransition::Tick(float DeltaTime, UPhysAnimComponent* 
 			}
 			else
 			{
-				// Fallback removed: detailed observed-violation gate above is now authoritative.
+				bCurrentUpperBodyObservationClean = true;
 			}
 		}
+
+		const bool bExpectedUpperBodyRelease = CanReleaseLateValidationUpperBody(
+			bUpperBodyReleaseTimersSatisfied,
+			bCurrentUpperBodyObservationClean,
+			LateValidationUpperBodyViolationAccumulatedSeconds);
+		bLateValidationProofPassed = bExpectedUpperBodyRelease;
 
 		const bool bSimCoverageRegressed = bCurrentSnapshotValid && bLiveSnapshotValid &&
 			(LiveSnapshot.SimCount < Phase1TopologyRecord.TotalSimCount ||

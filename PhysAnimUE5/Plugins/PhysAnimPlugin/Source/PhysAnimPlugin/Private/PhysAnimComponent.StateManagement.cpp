@@ -28,6 +28,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	PreviousControlTargetRotations.Reset();
 	LastActionDiagnostics = {};
 	LastControlTargetDiagnostics = {};
+	LastBodyModifierResetRequestCount = 0;
 	RuntimeInstabilityState = {};
 	LastRuntimeInstabilityDiagnostics = {};
 	RecoveryPreEntryTelemetrySkipFrames = 0;

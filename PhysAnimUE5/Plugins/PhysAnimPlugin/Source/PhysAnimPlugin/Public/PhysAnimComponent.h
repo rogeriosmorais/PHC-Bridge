@@ -1020,6 +1020,7 @@ struct FPhase1AutoCalibBaselineSnapshot
 	bool bPhase1TiltDiagnosticEmitted = false;
 	bool bPhase1PelvisCouplingSkipLogged = false;
 	bool bPelvisResetAppliedThisTick = false;
+	int32 LastBodyModifierResetRequestCount = 0;
 	int32 HipQuarantineTicksRemaining = 0;
 	uint32 BalanceEntryRootOnFrameCount = 0;
 	uint32 BalanceEntrySettleFrameCount = 0;
@@ -1474,6 +1475,7 @@ public:
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
 	float GetAttachedLoadMassKg() const;
 	const FPhysAnimControlTargetDiagnostics& GetLastControlTargetDiagnostics() const { return LastControlTargetDiagnostics; }
+	int32 GetLastBodyModifierResetRequestCount() const { return LastBodyModifierResetRequestCount; }
 	bool WasPelvisResetAppliedThisTick() const { return bPelvisResetAppliedThisTick; }
 	bool WasPolicyTargetAppliedLastFrame() const { return bPolicyTargetsAppliedLastFrame; }
 	bool WasPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame() const { return bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame; }
@@ -2563,6 +2565,7 @@ private:
 	bool bPhase1PelvisCouplingSkipLogged = false;
 	FPhase1PelvisCouplingRotationForensics LastPhase1PelvisCouplingRotationForensics;
 	bool bPelvisResetAppliedThisTick = false;
+	int32 LastBodyModifierResetRequestCount = 0;
 #if !UE_BUILD_SHIPPING
 	TOptional<FPhase1AutoCalibParams> ActivePhase1AutoCalibParams;
 	bool bPhase1AutoCalibOwnsStartRequests = false;

@@ -209,6 +209,9 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	EBalanceReadyUpperBodyOwnershipMode UpperBodyOwnershipMode = EBalanceReadyUpperBodyOwnershipMode::None;
 	bool bPolicySuppressed = false;
 	bool bResetsSuppressed = false;
+	int32 PolicyTargetsWrittenAtCapture = 0;
+	int32 PendingResetCountAtCapture = 0;
+	int32 ResetRequestsWrittenAtCapture = 0;
 	bool bControlAuthoritySettled = false;
 	bool bFinalBringUpGroupUnlocked = false;
 	bool bFinalBringUpGroupRampActive = false;
@@ -253,6 +256,19 @@ struct FPhysAnimCertifiedHandoffSnapshot
 	bool bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
 };
 
+struct FPhysAnimPhase1BodyTopologyObservation
+{
+	FName BoneName = NAME_None;
+	bool bExpectedSimulating = false;
+	bool bModifierRecordPresent = false;
+	bool bModifierReportedSimulating = false;
+	bool bModifierReportedKinematic = false;
+	bool bBodyInstanceValid = false;
+	bool bBodySimulating = false;
+	bool bMismatch = false;
+	FString MismatchReason;
+};
+
 struct FPhysAnimPhase1TopologySnapshot
 {
 	EBalanceReadyGroupOwnershipMode RootOwnershipMode = EBalanceReadyGroupOwnershipMode::Kinematic;
@@ -264,10 +280,13 @@ struct FPhysAnimPhase1TopologySnapshot
 	int32 DistalSimCount = 0;
 	int32 UpperBodySimCount = 0;
 	int32 TotalSimCount = 0;
+	int32 MismatchCount = 0;
+	TArray<FPhysAnimPhase1BodyTopologyObservation> BodyObservations;
 
 	bool bRootSimulating = false;
 	bool bPolicySuppressed = false;
 	bool bResetsSuppressed = false;
+	bool bAuthoritative = false;
 };
 
 namespace BalanceReadinessReasons
@@ -680,6 +699,20 @@ public:
 		float DeltaTimeSeconds,
 		float GraceDurationSeconds,
 		float& InOutViolationDurationSeconds);
+	static bool IsPhase1TopologyObservationMismatch(
+		bool bExpectedSimulating,
+		bool bModifierRecordPresent,
+		bool bModifierReportedSimulating,
+		bool bModifierReportedKinematic,
+		bool bBodyInstanceValid,
+		bool bBodySimulating);
+	static bool CanReleaseLateValidationUpperBody(
+		bool bReleaseTimersSatisfied,
+		bool bCurrentObservationClean,
+		float OutstandingViolationDurationSeconds);
+	static bool WasPolicySuppressedInObservedFrame(int32 NumNormalPolicyTargetsWritten);
+	static bool WereResetsSuppressedInObservedFrame(int32 PendingResetCount, int32 ResetRequestsWritten);
+	static bool ValidateLateValidationBaselineSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	static bool IsFailureClassRetryable(const FString& FailureReason);
 	static EBalanceReadyConditionOwner ClassifyConditionOwner(const FString& Reason);
 	static bool IsPhase1OwnedCondition(const FString& Reason);
@@ -708,7 +741,6 @@ private:
 	bool ValidateLateValidationHandoffSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const FPhysAnimStabilizationSettings& Settings, FString& OutReason) const;
 	bool ValidateRootOnReadinessSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const FPhysAnimStabilizationSettings& Settings, FString& OutReason) const;
 	bool ValidatePreRootOnShellSafetyProofSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const FPhysAnimStabilizationSettings& Settings, FString& OutReason) const;
-	static bool ValidateLateValidationBaselineSnapshot(const FPhysAnimCertifiedHandoffSnapshot& Snapshot, const FPhysAnimLateValidationResult& Result, const FPhysAnimStabilizationSettings& Settings, FString& OutReason);
 	static FString BuildCertifiedHandoffTopologyClass(bool bRootSimulating, int32 ProximalSimCount, int32 DistalSimCount, int32 UpperSimCount);
 	void ReturnToPhase1Prepare(class UPhysAnimComponent* Owner, const FString& Reason, const TCHAR* EventName);
 	void CapturePhase1TopologyRecord(class UPhysAnimComponent* Owner, const struct FPhysAnimStabilizationSettings& Settings);

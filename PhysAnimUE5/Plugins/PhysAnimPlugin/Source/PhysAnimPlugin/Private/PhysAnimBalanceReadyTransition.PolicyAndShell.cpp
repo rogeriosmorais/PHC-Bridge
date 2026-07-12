@@ -14,11 +14,6 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPolicy() const
 		return true;
 	}
 
-	if (bHasPhase1TopologyRecord && (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate))
-	{
-		return Phase1TopologyRecord.bPolicySuppressed;
-	}
-
 	return IsActive() &&
 		(InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
 		 InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||
@@ -61,11 +56,6 @@ bool FPhysAnimBalanceReadyTransition::ShouldSuppressPerturbations() const { retu
 
 bool FPhysAnimBalanceReadyTransition::ShouldSuppressResets() const
 {
-	if (bHasPhase1TopologyRecord && (InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare || InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate))
-	{
-		return Phase1TopologyRecord.bResetsSuppressed;
-	}
-
 	return InternalPhase == EBalanceReadyTransitionPhase::BRT_SafeDenied ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_Prepare ||
 		InternalPhase == EBalanceReadyTransitionPhase::BRT_Phase1_LateValidate ||

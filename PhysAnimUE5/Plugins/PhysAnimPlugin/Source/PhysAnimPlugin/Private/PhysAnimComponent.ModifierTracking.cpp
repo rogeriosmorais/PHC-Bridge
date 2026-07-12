@@ -4,6 +4,7 @@
 
 void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 {
+	LastBodyModifierResetRequestCount = 0;
 	UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get();
 	const bool bPhase1Prepare = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Prepare;
 	const bool bPhase1LateValidate = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_LateValidate;
@@ -72,6 +73,7 @@ void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 		EResetToCachedTargetBehavior::ResetDuringUpdateControls,
 		true,
 		false);
+	LastBodyModifierResetRequestCount = ModifierNamesToReset.Num();
 
 	for (const FName ModifierName : ModifierNamesToReset)
 	{

@@ -165,6 +165,7 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibBaseline(FPhase1AutoCalibBaseline
 	OutSnapshot.bPhase1TiltDiagnosticEmitted = bPhase1TiltDiagnosticEmitted;
 	OutSnapshot.bPhase1PelvisCouplingSkipLogged = bPhase1PelvisCouplingSkipLogged;
 	OutSnapshot.bPelvisResetAppliedThisTick = bPelvisResetAppliedThisTick;
+	OutSnapshot.LastBodyModifierResetRequestCount = LastBodyModifierResetRequestCount;
 	OutSnapshot.HipQuarantineTicksRemaining = HipQuarantineTicksRemaining;
 	OutSnapshot.BalanceEntryRootOnFrameCount = BalanceEntryRootOnFrameCount;
 	OutSnapshot.BalanceEntrySettleFrameCount = BalanceEntrySettleFrameCount;
@@ -344,6 +345,7 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 	bPhase1TiltDiagnosticEmitted = Snapshot.bPhase1TiltDiagnosticEmitted;
 	bPhase1PelvisCouplingSkipLogged = Snapshot.bPhase1PelvisCouplingSkipLogged;
 	bPelvisResetAppliedThisTick = Snapshot.bPelvisResetAppliedThisTick;
+	LastBodyModifierResetRequestCount = Snapshot.LastBodyModifierResetRequestCount;
 	HipQuarantineTicksRemaining = Snapshot.HipQuarantineTicksRemaining;
 	BalanceEntryRootOnFrameCount = Snapshot.BalanceEntryRootOnFrameCount;
 	BalanceEntrySettleFrameCount = Snapshot.BalanceEntrySettleFrameCount;
