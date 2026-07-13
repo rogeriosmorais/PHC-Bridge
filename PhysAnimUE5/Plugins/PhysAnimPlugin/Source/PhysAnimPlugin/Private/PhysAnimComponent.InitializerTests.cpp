@@ -135,6 +135,47 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMannySelfCollisionContractTest,
+		"PhysAnim.Component.MannySelfCollisionContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimMannySelfCollisionContractTest::RunTest(const FString& Parameters)
+	{
+		const UPhysicsAsset* const PhysicsAsset = LoadObject<UPhysicsAsset>(nullptr, TEXT("/Game/Characters/Mannequins/Rigs/PA_Mannequin.PA_Mannequin"));
+		TestNotNull(TEXT("Manny physics asset should load"), PhysicsAsset);
+		if (!PhysicsAsset) return false;
+
+		const TArray<FName>& RequiredBodies = PhysAnimBridge::GetRequiredBodyModifierBoneNames();
+		int32 EnabledSelfCollisionPairCount = 0;
+		FString FirstEnabledPair;
+		for (int32 FirstIndex = 0; FirstIndex < RequiredBodies.Num(); ++FirstIndex)
+		{
+			for (int32 SecondIndex = FirstIndex + 1; SecondIndex < RequiredBodies.Num(); ++SecondIndex)
+			{
+				const int32 FirstBodyIndex = PhysicsAsset->FindBodyIndex(RequiredBodies[FirstIndex]);
+				const int32 SecondBodyIndex = PhysicsAsset->FindBodyIndex(RequiredBodies[SecondIndex]);
+				if (FirstBodyIndex != INDEX_NONE && SecondBodyIndex != INDEX_NONE &&
+					PhysicsAsset->IsCollisionEnabled(FirstBodyIndex, SecondBodyIndex))
+				{
+					++EnabledSelfCollisionPairCount;
+					if (FirstEnabledPair.IsEmpty())
+					{
+						FirstEnabledPair = FString::Printf(
+							TEXT("%s/%s"),
+							*RequiredBodies[FirstIndex].ToString(),
+							*RequiredBodies[SecondIndex].ToString());
+					}
+				}
+			}
+		}
+		TestEqual(
+			*FString::Printf(TEXT("Manny controlled-body self collision is disabled; first enabled pair=%s"), *FirstEnabledPair),
+			EnabledSelfCollisionPairCount,
+			0);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimMannyToeConstraintRefPoseContractTest,
 		"PhysAnim.Component.MannyToeConstraintRefPoseContract",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
