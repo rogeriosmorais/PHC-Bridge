@@ -57,7 +57,7 @@ namespace PhysAnimStage1InitializerComponentInternal
 		// coefficient. Keep the authored plant within the solver's temporal range.
 		Data.AngularStrength = 8.0f;
 		Data.AngularDampingRatio = 1.0f;
-		Data.AngularExtraDamping = 10.0f;
+		Data.AngularExtraDamping = 25.0f;
 		Data.MaxTorque = 500000.0f;
 		Data.LinearTargetVelocityMultiplier = 0.0f;
 		Data.AngularTargetVelocityMultiplier = 0.0f;
