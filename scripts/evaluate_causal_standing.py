@@ -14,6 +14,9 @@ class EvaluationError(ValueError):
     pass
 
 
+TIME_ENDPOINT_EPSILON_SECONDS = 1.0e-6
+
+
 def _read_json(path: Path, label: str) -> dict:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -217,8 +220,12 @@ def evaluate_manifest(manifest_path: Path | str) -> dict:
         if candidate_time > recovery_deadline:
             break
         hold_end = candidate_time + acceptance["recovery_hold_sec"]
-        hold_rows = [row for row in post_impulse if candidate_time <= float(row["time_sec"]) <= hold_end]
-        if hold_rows and float(hold_rows[-1]["time_sec"]) >= hold_end and _all(hold_rows, lambda row: float(row["pose_rms_error_deg"]) <= recovery_limit):
+        hold_rows = [
+            row
+            for row in post_impulse
+            if candidate_time <= float(row["time_sec"]) <= hold_end + TIME_ENDPOINT_EPSILON_SECONDS
+        ]
+        if hold_rows and float(hold_rows[-1]["time_sec"]) >= hold_end - TIME_ENDPOINT_EPSILON_SECONDS and _all(hold_rows, lambda row: float(row["pose_rms_error_deg"]) <= recovery_limit):
             recovered = True
             break
     require("recovery", recovered)

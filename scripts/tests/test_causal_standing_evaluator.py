@@ -118,6 +118,22 @@ def test_normal_fixture_proves_evaluator_logic_only(tmp_path: Path) -> None:
     assert result["recovery_auc"] > 0.0
 
 
+def test_recovery_hold_accepts_float_step_endpoint(tmp_path: Path) -> None:
+    manifest_path = make_run(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    physics_path = manifest_path.parent / manifest["physics_samples"]
+    rows = [json.loads(line) for line in physics_path.read_text(encoding="utf-8").splitlines()]
+    for row in rows:
+        row["time_sec"] = row["sequence"] * 0.100000005
+    rows[100]["time_sec"] = 10.0
+    write_jsonl(physics_path, rows)
+
+    result = evaluate_manifest(manifest_path)
+
+    assert result["status"] == "PASS"
+    assert "recovery" not in result["failed_criteria"]
+
+
 def test_cmc_assistance_is_a_behavioral_failure(tmp_path: Path) -> None:
     result = evaluate_manifest(make_run(tmp_path, cmc_active=True))
 
