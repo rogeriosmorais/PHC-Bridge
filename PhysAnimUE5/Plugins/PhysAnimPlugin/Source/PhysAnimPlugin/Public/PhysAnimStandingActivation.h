@@ -21,7 +21,6 @@ struct PHYSANIMPLUGIN_API FPhysAnimStandingBodyPlan
 	bool bSimulated = true;
 	float PhysicsBlendWeight = 1.0f;
 	ECollisionEnabled::Type CollisionEnabled = ECollisionEnabled::QueryAndPhysics;
-	float MaxDepenetrationVelocityCmPerSec = 200.0f;
 	bool bUpdateKinematicFromSimulation = false;
 
 	bool operator==(const FPhysAnimStandingBodyPlan& Other) const;
@@ -79,7 +78,6 @@ struct PHYSANIMPLUGIN_API FPhysAnimStandingActivationReadback
 	bool bFullSimulationCommitted = false;
 	int32 ModifierSimulationMatchCount = 0;
 	int32 RawSimulationMatchCount = 0;
-	int32 ContactCorrectionMatchCount = 0;
 	int32 ControlGainMatchCount = 0;
 };
 
@@ -90,7 +88,6 @@ struct PHYSANIMPLUGIN_API FPhysAnimStandingActivationStatus
 	bool bFullSimulationCommitted = false;
 	int32 ModifierSimulationMatchCount = 0;
 	int32 RawSimulationMatchCount = 0;
-	int32 ContactCorrectionMatchCount = 0;
 	int32 ControlGainMatchCount = 0;
 	FString FailureReason;
 

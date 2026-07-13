@@ -8,7 +8,6 @@ bool FPhysAnimStandingBodyPlan::operator==(const FPhysAnimStandingBodyPlan& Othe
 	return bSimulated == Other.bSimulated
 		&& FMath::IsNearlyEqual(PhysicsBlendWeight, Other.PhysicsBlendWeight)
 		&& CollisionEnabled == Other.CollisionEnabled
-		&& FMath::IsNearlyEqual(MaxDepenetrationVelocityCmPerSec, Other.MaxDepenetrationVelocityCmPerSec)
 		&& bUpdateKinematicFromSimulation == Other.bUpdateKinematicFromSimulation;
 }
 
@@ -203,7 +202,6 @@ bool FPhysAnimStandingActivation::IsReadbackValid(const FPhysAnimStandingActivat
 	return Readback.bFullSimulationCommitted
 		&& Readback.ModifierSimulationMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount
 		&& Readback.RawSimulationMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount
-		&& Readback.ContactCorrectionMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount
 		&& Readback.ControlGainMatchCount == FPhysAnimStandingActivationPlan::RequiredControlCount;
 }
 
@@ -212,7 +210,6 @@ void FPhysAnimStandingActivation::ApplyReadback(const FPhysAnimStandingActivatio
 	Status.bFullSimulationCommitted = Readback.bFullSimulationCommitted;
 	Status.ModifierSimulationMatchCount = Readback.ModifierSimulationMatchCount;
 	Status.RawSimulationMatchCount = Readback.RawSimulationMatchCount;
-	Status.ContactCorrectionMatchCount = Readback.ContactCorrectionMatchCount;
 	Status.ControlGainMatchCount = Readback.ControlGainMatchCount;
 }
 

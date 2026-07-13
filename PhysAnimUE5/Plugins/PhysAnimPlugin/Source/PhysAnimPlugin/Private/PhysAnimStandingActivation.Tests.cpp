@@ -14,7 +14,6 @@ FPhysAnimStandingActivationReadback MakeValidReadback()
 	Readback.bFullSimulationCommitted = true;
 	Readback.ModifierSimulationMatchCount = FPhysAnimStandingActivationPlan::RequiredBodyCount;
 	Readback.RawSimulationMatchCount = FPhysAnimStandingActivationPlan::RequiredBodyCount;
-	Readback.ContactCorrectionMatchCount = FPhysAnimStandingActivationPlan::RequiredBodyCount;
 	Readback.ControlGainMatchCount = FPhysAnimStandingActivationPlan::RequiredControlCount;
 	return Readback;
 }
@@ -118,7 +117,6 @@ bool FPhysAnimStandingActivationUniformPlanTest::RunTest(const FString& Paramete
 			(BodyNames[BodyIndex] == TEXT("ball_l") || BodyNames[BodyIndex] == TEXT("ball_r"));
 		TestTrue(TEXT("Every body is simulated"), Body.bSimulated);
 		TestEqual(TEXT("Every body has full physics blend"), Body.PhysicsBlendWeight, 1.0f);
-		TestEqual(TEXT("Every body uses the bounded contact correction velocity"), Body.MaxDepenetrationVelocityCmPerSec, 200.0f);
 		TestEqual(
 			bBallBody ? TEXT("Ball bodies stay simulated without unstable contact") : TEXT("Load-bearing bodies retain query and physics collision"),
 			Body.CollisionEnabled,

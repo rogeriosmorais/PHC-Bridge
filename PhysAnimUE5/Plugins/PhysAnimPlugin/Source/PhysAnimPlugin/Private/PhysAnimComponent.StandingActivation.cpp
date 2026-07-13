@@ -238,7 +238,6 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 				ExpectedBody.bUpdateKinematicFromSimulation);
 			FBodyInstance* const Body = Mesh->GetBodyInstance(BoneName);
 			Body->SetInstanceSimulatePhysics(ExpectedBody.bSimulated, true);
-			Body->SetMaxDepenetrationVelocity(ExpectedBody.MaxDepenetrationVelocityCmPerSec);
 			if (ExpectedBody.bSimulated)
 			{
 				Body->WakeInstance();
@@ -310,12 +309,6 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 		{
 			++Readback.RawSimulationMatchCount;
 		}
-		if (Body &&
-			Body->GetOverrideMaxDepenetrationVelocity() &&
-			FMath::IsNearlyEqual(Body->GetMaxDepenetrationVelocity(), ExpectedBody.MaxDepenetrationVelocityCmPerSec))
-		{
-			++Readback.ContactCorrectionMatchCount;
-		}
 	}
 
 	FString FirstControlMismatch;
@@ -350,7 +343,6 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 	const bool bReadbackMatches =
 		Readback.ModifierSimulationMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount &&
 		Readback.RawSimulationMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount &&
-		Readback.ContactCorrectionMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount &&
 		Readback.ControlGainMatchCount == FPhysAnimStandingActivationPlan::RequiredControlCount;
 	if (bCommitFullSimulation && bReadbackMatches)
 	{
@@ -364,10 +356,9 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 	if (!bReadbackMatches)
 	{
 		OutFailureReason = FString::Printf(
-			TEXT("standing_activation_readback_mismatch:modifier=%d/22 raw=%d/22 contact_correction=%d/22 controls=%d/21 first_modifier=%s first_control=%s"),
+			TEXT("standing_activation_readback_mismatch:modifier=%d/22 raw=%d/22 controls=%d/21 first_modifier=%s first_control=%s"),
 			Readback.ModifierSimulationMatchCount,
 			Readback.RawSimulationMatchCount,
-			Readback.ContactCorrectionMatchCount,
 			Readback.ControlGainMatchCount,
 			*FirstModifierMismatch,
 			*FirstControlMismatch);
