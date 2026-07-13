@@ -28,6 +28,31 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+namespace
+{
+	struct FStandingPlantSpeedExtrema
+	{
+		void Observe(FName BodyName, double LinearSpeedCmPerSec, double AngularSpeedDegPerSec)
+		{
+			if (LinearSpeedCmPerSec > MaxLinearSpeedCmPerSec)
+			{
+				MaxLinearBody = BodyName;
+				MaxLinearSpeedCmPerSec = LinearSpeedCmPerSec;
+			}
+			if (AngularSpeedDegPerSec > MaxAngularSpeedDegPerSec)
+			{
+				MaxAngularBody = BodyName;
+				MaxAngularSpeedDegPerSec = AngularSpeedDegPerSec;
+			}
+		}
+
+		FName MaxLinearBody = NAME_None;
+		double MaxLinearSpeedCmPerSec = 0.0;
+		FName MaxAngularBody = NAME_None;
+		double MaxAngularSpeedDegPerSec = 0.0;
+	};
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPhysAnimProductHarnessDropDispatchSwitchTest,
 	"PhysAnim.ProductHarness.DropDispatchSwitch",
@@ -35,6 +60,15 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Parameters)
 {
+	FStandingPlantSpeedExtrema Extrema;
+	Extrema.Observe(TEXT("pelvis"), 10.0, 20.0);
+	Extrema.Observe(TEXT("calf_l"), 15.0, 5.0);
+	Extrema.Observe(TEXT("foot_l"), 15.0, 30.0);
+	TestEqual(TEXT("Linear speed diagnostic keeps first maximum body"), Extrema.MaxLinearBody, FName(TEXT("calf_l")));
+	TestEqual(TEXT("Linear speed diagnostic records the maximum"), Extrema.MaxLinearSpeedCmPerSec, 15.0);
+	TestEqual(TEXT("Angular speed diagnostic records its body independently"), Extrema.MaxAngularBody, FName(TEXT("foot_l")));
+	TestEqual(TEXT("Angular speed diagnostic records the maximum"), Extrema.MaxAngularSpeedDegPerSec, 30.0);
+
 	UPhysAnimComponent* const Component = NewObject<UPhysAnimComponent>();
 	TestNotNull(TEXT("Transient product harness component"), Component);
 	if (!Component)
@@ -452,8 +486,7 @@ namespace
 			ReadBodyMasks(Mesh, SupportBones, SupportValidMask, SupportSimulatingMask);
 			int32 BodyValidCount = 0;
 			int32 BodySimulatingCount = 0;
-			double MaxBodyLinearSpeedCmPerSec = 0.0;
-			double MaxBodyAngularSpeedDegPerSec = 0.0;
+			FStandingPlantSpeedExtrema SpeedExtrema;
 			if (Mesh)
 			{
 				for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
@@ -465,11 +498,9 @@ namespace
 					}
 					++BodyValidCount;
 					BodySimulatingCount += Body->IsInstanceSimulatingPhysics() ? 1 : 0;
-					MaxBodyLinearSpeedCmPerSec = FMath::Max(
-						MaxBodyLinearSpeedCmPerSec,
-						static_cast<double>(Body->GetUnrealWorldVelocity().Size()));
-					MaxBodyAngularSpeedDegPerSec = FMath::Max(
-						MaxBodyAngularSpeedDegPerSec,
+					SpeedExtrema.Observe(
+						BoneName,
+						static_cast<double>(Body->GetUnrealWorldVelocity().Size()),
 						static_cast<double>(FMath::RadiansToDegrees(Body->GetUnrealWorldAngularVelocityInRadians().Size())));
 				}
 			}
@@ -506,8 +537,10 @@ namespace
 			Row->SetBoolField(TEXT("full_simulation_committed"), StandingStatus.bFullSimulationCommitted);
 			Row->SetNumberField(TEXT("root_linear_speed_cm_per_sec"), RootLinearSpeedCmPerSec);
 			Row->SetNumberField(TEXT("root_angular_speed_deg_per_sec"), RootAngularSpeedDegPerSec);
-			Row->SetNumberField(TEXT("max_body_linear_speed_cm_per_sec"), MaxBodyLinearSpeedCmPerSec);
-			Row->SetNumberField(TEXT("max_body_angular_speed_deg_per_sec"), MaxBodyAngularSpeedDegPerSec);
+			Row->SetNumberField(TEXT("max_body_linear_speed_cm_per_sec"), SpeedExtrema.MaxLinearSpeedCmPerSec);
+			Row->SetStringField(TEXT("max_body_linear_speed_bone"), SpeedExtrema.MaxLinearBody.ToString());
+			Row->SetNumberField(TEXT("max_body_angular_speed_deg_per_sec"), SpeedExtrema.MaxAngularSpeedDegPerSec);
+			Row->SetStringField(TEXT("max_body_angular_speed_bone"), SpeedExtrema.MaxAngularBody.ToString());
 			Row->SetBoolField(TEXT("root_is_simulating"), PelvisBody && PelvisBody->IsValidBodyInstance() && PelvisBody->IsInstanceSimulatingPhysics());
 			Row->SetBoolField(TEXT("cmc_active"), Movement && Movement->IsActive());
 			Row->SetBoolField(TEXT("cmc_tick_enabled"), Movement && Movement->IsComponentTickEnabled());
