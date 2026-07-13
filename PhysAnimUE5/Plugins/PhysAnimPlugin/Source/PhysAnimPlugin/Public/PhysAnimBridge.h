@@ -192,6 +192,10 @@ namespace PhysAnimBridge
 		FString& OutError);
 
 	PHYSANIMPLUGIN_API const TArray<FVector2D>& GetTerrainSampleOffsets();
+	PHYSANIMPLUGIN_API FVector BuildTerrainSampleWorldLocation(
+		const FVector& RootWorldLocationCm,
+		const FQuat& RootWorldRotation,
+		const FVector2D& LocalOffsetCm);
 	PHYSANIMPLUGIN_API bool BuildTerrainObservation(
 		float RootHeight,
 		const TArray<float>& SampleGroundHeights,

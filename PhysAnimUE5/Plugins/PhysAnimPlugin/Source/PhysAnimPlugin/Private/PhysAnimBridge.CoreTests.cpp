@@ -474,6 +474,26 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimTerrainTraceFrameContractTest,
+		"PhysAnim.Bridge.TerrainTraceFrameContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimTerrainTraceFrameContractTest::RunTest(const FString& Parameters)
+	{
+		const FVector RootWorldLocationCm(1234.0f, -567.0f, 250.0f);
+		const FQuat RootWorldRotation(FVector::UpVector, FMath::DegreesToRadians(90.0f));
+		const FVector SampleWorldLocationCm = BuildTerrainSampleWorldLocation(
+			RootWorldLocationCm,
+			RootWorldRotation,
+			FVector2D(100.0f, 0.0f));
+
+		TestTrue(
+			TEXT("Terrain sample keeps the root in UE world centimeters"),
+			SampleWorldLocationCm.Equals(FVector(1234.0f, -467.0f, 250.0f), KINDA_SMALL_NUMBER));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimBalanceStatelessTests,
 		"PhysAnim.Bridge.BalanceStateless",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

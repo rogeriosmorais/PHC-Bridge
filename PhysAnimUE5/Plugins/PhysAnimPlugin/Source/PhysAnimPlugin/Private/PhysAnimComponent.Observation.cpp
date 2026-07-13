@@ -103,11 +103,18 @@ bool UPhysAnimComponent::BuildTerrainObservation(
 
 	const FPhysAnimBodySample& RootSample = CurrentBodySamples[0];
 	const float GroundHeight = ResolveSelfObservationGroundHeight(CurrentBodySamples);
+	const USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	if (!Mesh)
+	{
+		OutError = TEXT("Cannot build terrain observation without a skeletal mesh component.");
+		return false;
+	}
+	const FTransform RootWorldTransform = Mesh->GetSocketTransform(PhysAnimBridge::GetRootBoneName(), RTS_World);
 
 	TArray<float> SampleGroundHeights;
 	if (!SampleTerrainGroundHeights(
-		RootSample.Position,
-		RootSample.Rotation,
+		RootWorldTransform.GetLocation(),
+		RootWorldTransform.GetRotation(),
 		GroundHeight,
 		SampleGroundHeights,
 		OutError))
@@ -156,12 +163,12 @@ bool UPhysAnimComponent::SampleTerrainGroundHeights(
 	}
 
 	const FCollisionObjectQueryParams ObjectQueryParams(FCollisionObjectQueryParams::InitType::AllStaticObjects);
-	const FQuat RootYawRotation = FRotator(0.0f, RootRotation.Rotator().Yaw, 0.0f).Quaternion();
-
 	for (int32 SampleIndex = 0; SampleIndex < TerrainSampleOffsets.Num(); ++SampleIndex)
 	{
-		const FVector LocalOffset(TerrainSampleOffsets[SampleIndex].X, TerrainSampleOffsets[SampleIndex].Y, 0.0f);
-		const FVector SampleLocation = RootLocation + RootYawRotation.RotateVector(LocalOffset);
+		const FVector SampleLocation = PhysAnimBridge::BuildTerrainSampleWorldLocation(
+			RootLocation,
+			RootRotation,
+			TerrainSampleOffsets[SampleIndex]);
 		const FVector TraceStart(SampleLocation.X, SampleLocation.Y, RootLocation.Z + PhysAnimComponentInternal::TerrainTraceStartAboveRootCm);
 		const FVector TraceEnd(SampleLocation.X, SampleLocation.Y, RootLocation.Z - PhysAnimComponentInternal::TerrainTraceEndBelowRootCm);
 

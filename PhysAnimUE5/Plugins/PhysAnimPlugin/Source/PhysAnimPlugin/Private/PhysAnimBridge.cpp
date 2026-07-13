@@ -742,6 +742,15 @@ namespace PhysAnimBridge
 		return MakeTerrainSampleOffsets();
 	}
 
+	FVector BuildTerrainSampleWorldLocation(
+		const FVector& RootWorldLocationCm,
+		const FQuat& RootWorldRotation,
+		const FVector2D& LocalOffsetCm)
+	{
+		const FQuat RootYawRotation = FRotator(0.0f, RootWorldRotation.Rotator().Yaw, 0.0f).Quaternion();
+		return RootWorldLocationCm + RootYawRotation.RotateVector(FVector(LocalOffsetCm.X, LocalOffsetCm.Y, 0.0f));
+	}
+
 	bool BuildTerrainObservation(
 		float RootHeight,
 		const TArray<float>& SampleGroundHeights,
