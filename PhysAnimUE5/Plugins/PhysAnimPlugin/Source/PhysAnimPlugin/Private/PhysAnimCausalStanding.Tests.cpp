@@ -32,24 +32,41 @@ namespace
 {
 	struct FStandingPlantSpeedExtrema
 	{
-		void Observe(FName BodyName, double LinearSpeedCmPerSec, double AngularSpeedDegPerSec)
+		void Observe(
+			FName BodyName,
+			double LinearSpeedCmPerSec,
+			double AngularSpeedDegPerSec,
+			double MassKg,
+			const FVector& InertiaTensorKgCmSq)
 		{
+			const double MinInertiaKgCmSq = FMath::Min3(
+				static_cast<double>(InertiaTensorKgCmSq.X),
+				static_cast<double>(InertiaTensorKgCmSq.Y),
+				static_cast<double>(InertiaTensorKgCmSq.Z));
 			if (LinearSpeedCmPerSec > MaxLinearSpeedCmPerSec)
 			{
 				MaxLinearBody = BodyName;
 				MaxLinearSpeedCmPerSec = LinearSpeedCmPerSec;
+				MaxLinearBodyMassKg = MassKg;
+				MaxLinearBodyMinInertiaKgCmSq = MinInertiaKgCmSq;
 			}
 			if (AngularSpeedDegPerSec > MaxAngularSpeedDegPerSec)
 			{
 				MaxAngularBody = BodyName;
 				MaxAngularSpeedDegPerSec = AngularSpeedDegPerSec;
+				MaxAngularBodyMassKg = MassKg;
+				MaxAngularBodyMinInertiaKgCmSq = MinInertiaKgCmSq;
 			}
 		}
 
 		FName MaxLinearBody = NAME_None;
 		double MaxLinearSpeedCmPerSec = 0.0;
+		double MaxLinearBodyMassKg = 0.0;
+		double MaxLinearBodyMinInertiaKgCmSq = 0.0;
 		FName MaxAngularBody = NAME_None;
 		double MaxAngularSpeedDegPerSec = 0.0;
+		double MaxAngularBodyMassKg = 0.0;
+		double MaxAngularBodyMinInertiaKgCmSq = 0.0;
 	};
 
 	struct FStandingPlantPoseErrorSummary
@@ -125,13 +142,17 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Parameters)
 {
 	FStandingPlantSpeedExtrema Extrema;
-	Extrema.Observe(TEXT("pelvis"), 10.0, 20.0);
-	Extrema.Observe(TEXT("calf_l"), 15.0, 5.0);
-	Extrema.Observe(TEXT("foot_l"), 15.0, 30.0);
+	Extrema.Observe(TEXT("pelvis"), 10.0, 20.0, 10.0, FVector(20.0, 30.0, 40.0));
+	Extrema.Observe(TEXT("calf_l"), 15.0, 5.0, 5.0, FVector(10.0, 15.0, 20.0));
+	Extrema.Observe(TEXT("foot_l"), 15.0, 30.0, 2.0, FVector(1.0, 2.0, 3.0));
 	TestEqual(TEXT("Linear speed diagnostic keeps first maximum body"), Extrema.MaxLinearBody, FName(TEXT("calf_l")));
 	TestEqual(TEXT("Linear speed diagnostic records the maximum"), Extrema.MaxLinearSpeedCmPerSec, 15.0);
+	TestEqual(TEXT("Linear speed diagnostic records the matching body mass"), Extrema.MaxLinearBodyMassKg, 5.0);
+	TestEqual(TEXT("Linear speed diagnostic records the matching minimum inertia"), Extrema.MaxLinearBodyMinInertiaKgCmSq, 10.0);
 	TestEqual(TEXT("Angular speed diagnostic records its body independently"), Extrema.MaxAngularBody, FName(TEXT("foot_l")));
 	TestEqual(TEXT("Angular speed diagnostic records the maximum"), Extrema.MaxAngularSpeedDegPerSec, 30.0);
+	TestEqual(TEXT("Angular speed diagnostic records the matching body mass"), Extrema.MaxAngularBodyMassKg, 2.0);
+	TestEqual(TEXT("Angular speed diagnostic records the matching minimum inertia"), Extrema.MaxAngularBodyMinInertiaKgCmSq, 1.0);
 	FStandingPlantPoseErrorSummary PoseErrors;
 	PoseErrors.Observe(TEXT("spine_01"), 3.0, false);
 	PoseErrors.Observe(TEXT("thigh_l"), 4.0, true);
@@ -597,7 +618,9 @@ namespace
 					SpeedExtrema.Observe(
 						BoneName,
 						static_cast<double>(Body->GetUnrealWorldVelocity().Size()),
-						static_cast<double>(FMath::RadiansToDegrees(Body->GetUnrealWorldAngularVelocityInRadians().Size())));
+						static_cast<double>(FMath::RadiansToDegrees(Body->GetUnrealWorldAngularVelocityInRadians().Size())),
+						Body->GetBodyMass(),
+						Body->GetBodyInertiaTensor());
 					MassExtrema.Observe(BoneName, Body->GetBodyMass(), Body->GetBodyInertiaTensor());
 				}
 			}
@@ -649,8 +672,12 @@ namespace
 			Row->SetNumberField(TEXT("root_angular_speed_deg_per_sec"), RootAngularSpeedDegPerSec);
 			Row->SetNumberField(TEXT("max_body_linear_speed_cm_per_sec"), SpeedExtrema.MaxLinearSpeedCmPerSec);
 			Row->SetStringField(TEXT("max_body_linear_speed_bone"), SpeedExtrema.MaxLinearBody.ToString());
+			Row->SetNumberField(TEXT("max_body_linear_speed_body_mass_kg"), SpeedExtrema.MaxLinearBodyMassKg);
+			Row->SetNumberField(TEXT("max_body_linear_speed_body_min_inertia_kg_cm_sq"), SpeedExtrema.MaxLinearBodyMinInertiaKgCmSq);
 			Row->SetNumberField(TEXT("max_body_angular_speed_deg_per_sec"), SpeedExtrema.MaxAngularSpeedDegPerSec);
 			Row->SetStringField(TEXT("max_body_angular_speed_bone"), SpeedExtrema.MaxAngularBody.ToString());
+			Row->SetNumberField(TEXT("max_body_angular_speed_body_mass_kg"), SpeedExtrema.MaxAngularBodyMassKg);
+			Row->SetNumberField(TEXT("max_body_angular_speed_body_min_inertia_kg_cm_sq"), SpeedExtrema.MaxAngularBodyMinInertiaKgCmSq);
 			Row->SetNumberField(TEXT("minimum_body_mass_kg"), MassExtrema.MinMassKg);
 			Row->SetStringField(TEXT("minimum_body_mass_bone"), MassExtrema.MinMassBody.ToString());
 			Row->SetNumberField(TEXT("minimum_body_inertia_kg_cm_sq"), MassExtrema.MinInertiaKgCmSq);
