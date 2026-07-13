@@ -1,0 +1,90 @@
+{
+  "schema_version": "physanim-development-protocol/v1",
+  "protocol_id": "standing-plant-ladder",
+  "version": 1,
+  "status": "LOCKED",
+  "authority": "DEVELOPMENT_GATE_ONLY",
+  "change_control": "Never edit this file after its protocol commit. Add a new version and record why the development contract changed.",
+  "scope_root": "F:\\NewEngine-AgentB",
+  "map": "/Game/ThirdPerson/Lvl_ThirdPerson",
+  "skeleton": "Manny",
+  "model_asset": "/Game/NNEModels/phc_policy.phc_policy",
+  "runtime_onnx": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+  "test_family": "PhysAnim.Development.StandingPlant",
+  "outcomes": [
+    "PASS",
+    "FAIL",
+    "INVALID",
+    "BLOCKED"
+  ],
+  "ordered_layers": [
+    "ControlsOff",
+    "DampingOnly",
+    "FixedNeutralTarget",
+    "ZeroActions",
+    "RealOnnxPolicy"
+  ],
+  "execution_rule": "Run layers in order and stop at the first FAIL, INVALID, or BLOCKED layer.",
+  "invariants": {
+    "required_body_count": 22,
+    "required_control_count": 21,
+    "require_all_bodies_raw_simulating": true,
+    "require_character_movement_inactive": true,
+    "require_capsule_collision_disabled": true,
+    "require_no_shell_helper": true,
+    "require_no_movement_reclaim": true,
+    "maximum_root_linear_speed_cm_per_sec": 1200.0,
+    "maximum_root_angular_speed_deg_per_sec": 720.0,
+    "maximum_body_linear_speed_cm_per_sec": 1000.0,
+    "maximum_body_angular_speed_deg_per_sec": 4000.0
+  },
+  "layers": {
+    "ControlsOff": {
+      "capture_window_sec": 0.25,
+      "control_strength": "zero",
+      "control_damping": "zero",
+      "target_dispatch": "disabled",
+      "policy_inference": "disabled",
+      "acceptance": "The full-simulation plant remains finite and below the locked explosion limits without actuation. Falling under gravity is not failure."
+    },
+    "DampingOnly": {
+      "capture_window_sec": 0.5,
+      "control_strength": "zero",
+      "control_damping": "configured",
+      "target_dispatch": "disabled",
+      "policy_inference": "disabled",
+      "acceptance": "The same plant remains finite and below the locked explosion limits with damping but no positional strength. Falling under gravity is not failure."
+    },
+    "FixedNeutralTarget": {
+      "capture_window_sec": 10.0,
+      "control_strength": "configured",
+      "control_damping": "configured",
+      "target_dispatch": "captured_parent_relative_neutral",
+      "policy_inference": "disabled",
+      "acceptance": "The fixed captured neutral target holds the full-simulation plant for the complete window while all topology and assistance invariants remain true."
+    },
+    "ZeroActions": {
+      "capture_window_sec": 10.0,
+      "control_strength": "configured",
+      "control_damping": "configured",
+      "target_dispatch": "real_action_path",
+      "policy_inference": "required_then_zeroed",
+      "acceptance": "Zero actions traverse the real conditioning and target path for the complete window with valid readback and unchanged topology."
+    },
+    "RealOnnxPolicy": {
+      "capture_window_sec": 10.0,
+      "control_strength": "configured",
+      "control_damping": "configured",
+      "target_dispatch": "real_action_path",
+      "policy_inference": "required_existing_onnx",
+      "acceptance": "The existing ONNX traverses the real action path for the complete window with valid readback and unchanged topology. This layer does not by itself confer product success."
+    }
+  },
+  "verdict_rules": {
+    "PASS": "The current layer satisfies every invariant and its layer-specific acceptance rule using raw UE runtime observations.",
+    "FAIL": "The run is well formed but violates an invariant or layer-specific behavioral rule.",
+    "INVALID": "The protocol linkage, requested layer, raw observations, cadence, or evidence artifact is malformed or incomplete.",
+    "BLOCKED": "The UE project, map, Manny asset, Physics Control capability, or existing ONNX required by the layer is unavailable before execution."
+  },
+  "product_success": "Never. Product success remains exclusively governed by locked causal-standing product protocol execution."
+}
