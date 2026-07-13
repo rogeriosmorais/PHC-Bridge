@@ -4,6 +4,8 @@
 
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 FPhysAnimRuntimeTerminationPipelineResult UPhysAnimComponent::BuildProofFailureFailStopRoutingResult(
 	const FPhysAnimRuntimeTerminationState& PreviousState,
@@ -134,7 +136,21 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 	}
 
 	LogBridgeStateSnapshot(TEXT("FailStop"));
-	PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: %s"), *Reason);
+	FString ProductRunRoot;
+	const bool bProductRun = FParse::Value(
+		FCommandLine::Get(),
+		TEXT("PhysAnimProductRunRoot="),
+		ProductRunRoot);
+	if (bProductRun)
+	{
+		// Product fail-stop is behavioral evidence. Keep it in the raw UE log without
+		// turning a valid captured failure into an automation-infrastructure failure.
+		PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[PhysAnim] Fail-stop: %s"), *Reason);
+	}
+	else
+	{
+		PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: %s"), *Reason);
+	}
 	EmitBridgeTraceEvent(TEXT("fail_stop"), TEXT("Bridge entered fail-stop."), Reason);
 	const bool bStandingActivationFailure = IsStandingActivationRuntimeState(RuntimeState);
 	if (!bStandingActivationFailure)
