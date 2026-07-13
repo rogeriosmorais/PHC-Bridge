@@ -113,20 +113,18 @@ bool FPhysAnimStandingActivationUniformPlanTest::RunTest(const FString& Paramete
 	for (int32 BodyIndex = 0; BodyIndex < Normal.Bodies.Num(); ++BodyIndex)
 	{
 		const FPhysAnimStandingBodyPlan& Body = Normal.Bodies[BodyIndex];
-		const bool bContactExcludedBody = BodyNames.IsValidIndex(BodyIndex) &&
-			(BodyNames[BodyIndex] == TEXT("ball_l") || BodyNames[BodyIndex] == TEXT("ball_r") ||
-			 BodyNames[BodyIndex] == TEXT("head") || BodyNames[BodyIndex] == TEXT("hand_l") ||
-			 BodyNames[BodyIndex] == TEXT("hand_r"));
+		const bool bBallBody = BodyNames.IsValidIndex(BodyIndex) &&
+			(BodyNames[BodyIndex] == TEXT("ball_l") || BodyNames[BodyIndex] == TEXT("ball_r"));
 		TestTrue(TEXT("Every body is simulated"), Body.bSimulated);
 		TestEqual(TEXT("Every body has full physics blend"), Body.PhysicsBlendWeight, 1.0f);
 		TestEqual(
-			bContactExcludedBody ? TEXT("Small extremity bodies stay simulated without unstable contact") : TEXT("Load-bearing bodies retain query and physics collision"),
+			bBallBody ? TEXT("Ball bodies stay simulated without unstable contact") : TEXT("Load-bearing bodies retain query and physics collision"),
 			Body.CollisionEnabled,
-			bContactExcludedBody ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics);
+			bBallBody ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics);
 		TestFalse(TEXT("No body updates kinematic pose from simulation"), Body.bUpdateKinematicFromSimulation);
-		ContactExcludedBodyCount += bContactExcludedBody ? 1 : 0;
+		ContactExcludedBodyCount += bBallBody ? 1 : 0;
 	}
-	TestEqual(TEXT("Only Manny's five small extremity bodies are excluded from contact"), ContactExcludedBodyCount, 5);
+	TestEqual(TEXT("Only Manny's two ball bodies are excluded from contact"), ContactExcludedBodyCount, 2);
 	for (const FPhysAnimStandingControlPlan& Control : Normal.Controls)
 	{
 		TestTrue(TEXT("Every control is enabled for every variant"), Control.bEnabled);

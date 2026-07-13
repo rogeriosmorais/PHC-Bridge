@@ -82,14 +82,8 @@ public:
 		{
 			const FBodyInstance* const FootBody = Mesh->GetBodyInstance(TEXT("foot_l"));
 			const FBodyInstance* const BallBody = Mesh->GetBodyInstance(TEXT("ball_l"));
-			const FBodyInstance* const HeadBody = Mesh->GetBodyInstance(TEXT("head"));
-			const FBodyInstance* const LeftHandBody = Mesh->GetBodyInstance(TEXT("hand_l"));
-			const FBodyInstance* const RightHandBody = Mesh->GetBodyInstance(TEXT("hand_r"));
 			Test->TestNotNull(TEXT("Manny left foot body exists"), FootBody);
 			Test->TestNotNull(TEXT("Manny left ball body exists"), BallBody);
-			Test->TestNotNull(TEXT("Manny head body exists"), HeadBody);
-			Test->TestNotNull(TEXT("Manny left hand body exists"), LeftHandBody);
-			Test->TestNotNull(TEXT("Manny right hand body exists"), RightHandBody);
 			if (FootBody)
 			{
 				Test->TestEqual(TEXT("Manny foot body remains simulation-enabled"), FootBody->GetCollisionEnabled(false), ECollisionEnabled::QueryAndPhysics);
@@ -100,22 +94,6 @@ public:
 				Test->TestEqual(TEXT("Manny ball body stays simulation-enabled"), BallBody->GetCollisionEnabled(false), ECollisionEnabled::QueryAndPhysics);
 				Test->TestEqual(TEXT("Manny ball shape is removed from contact only"), BallBody->GetShapeCollisionEnabled(0), ECollisionEnabled::NoCollision);
 				Test->TestTrue(TEXT("Manny ball body remains simulated"), BallBody->IsInstanceSimulatingPhysics());
-			}
-			for (const TPair<const TCHAR*, const FBodyInstance*> SmallExtremity : {
-				TPair<const TCHAR*, const FBodyInstance*>(TEXT("head"), HeadBody),
-				TPair<const TCHAR*, const FBodyInstance*>(TEXT("hand_l"), LeftHandBody),
-				TPair<const TCHAR*, const FBodyInstance*>(TEXT("hand_r"), RightHandBody) })
-			{
-				if (SmallExtremity.Value)
-				{
-					Test->TestEqual(
-						*FString::Printf(TEXT("Manny %s shape is removed from unstable plant contact"), SmallExtremity.Key),
-						SmallExtremity.Value->GetShapeCollisionEnabled(0),
-						ECollisionEnabled::NoCollision);
-					Test->TestTrue(
-						*FString::Printf(TEXT("Manny %s body remains simulated"), SmallExtremity.Key),
-						SmallExtremity.Value->IsInstanceSimulatingPhysics());
-				}
 			}
 		}
 		Test->TestFalse(TEXT("Standing never owns an explicit shell lock"), Component->HasExplicitTransitionOwnedShellLock());

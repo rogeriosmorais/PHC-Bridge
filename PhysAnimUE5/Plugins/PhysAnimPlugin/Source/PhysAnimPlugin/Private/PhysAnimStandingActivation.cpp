@@ -51,9 +51,7 @@ FPhysAnimStandingActivationPlan FPhysAnimStandingActivationPlan::BuildBlended(
 	const TArray<FName>& BodyNames = PhysAnimBridge::GetRequiredBodyModifierBoneNames();
 	for (int32 BodyIndex = 0; BodyIndex < Plan.Bodies.Num() && BodyIndex < BodyNames.Num(); ++BodyIndex)
 	{
-		const FName BodyName = BodyNames[BodyIndex];
-		if (BodyName == TEXT("ball_l") || BodyName == TEXT("ball_r") ||
-			BodyName == TEXT("head") || BodyName == TEXT("hand_l") || BodyName == TEXT("hand_r"))
+		if (BodyNames[BodyIndex] == TEXT("ball_l") || BodyNames[BodyIndex] == TEXT("ball_r"))
 		{
 			Plan.Bodies[BodyIndex].CollisionEnabled = ECollisionEnabled::NoCollision;
 		}
