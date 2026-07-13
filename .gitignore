@@ -78,6 +78,7 @@ test-results/logs/
 test-results/proof-artifacts/
 test-results/evidence-summaries/
 test-results/product-runs/
+test-results/standing-plant-runs/
 test-results/phase1-autocalib/
 test-results/**/*.receipt.json
 *.private.pem

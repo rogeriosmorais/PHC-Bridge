@@ -31,3 +31,9 @@ def test_runner_keeps_raw_runs_local_and_append_only() -> None:
     assert "-TestMode RenderOffscreen" in source
     assert "-SourceCommit $SourceCommit" in source
     assert "-ModelOnnxSha256 $ModelHash" in source
+
+
+def test_generated_ladder_evidence_does_not_dirty_the_source_tree() -> None:
+    ignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+
+    assert "test-results/standing-plant-runs/" in ignore
