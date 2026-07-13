@@ -32,15 +32,17 @@ namespace
 		{
 			TestEqual(*FString::Printf(TEXT("%s uses an 8 Hz angular spring"), *Pair.Key.ToString()), Pair.Value.ControlData.AngularStrength, 8.0f);
 			TestEqual(*FString::Printf(TEXT("%s starts critically damped"), *Pair.Key.ToString()), Pair.Value.ControlData.AngularDampingRatio, 1.0f);
-			TestEqual(*FString::Printf(TEXT("%s uses bounded extra damping"), *Pair.Key.ToString()), Pair.Value.ControlData.AngularExtraDamping, 1.0f);
+			TestEqual(*FString::Printf(TEXT("%s uses plant-scale extra damping"), *Pair.Key.ToString()), Pair.Value.ControlData.AngularExtraDamping, 50.0f);
 		}
 		FInitialPhysicsControl* const MutatedControl = Initializer->InitialControls.Find(PhysAnimBridge::MakeControlName(TEXT("thigh_l")));
 		TestNotNull(TEXT("Thigh control exists for runtime contract check"), MutatedControl);
 		if (MutatedControl)
 		{
 			MutatedControl->ControlData.AngularStrength = 800.0f;
+			MutatedControl->ControlData.AngularExtraDamping = 1.0f;
 			Initializer->PrepareRuntimeDefaults();
 			TestEqual(TEXT("Runtime defaults replace stale serialized strength"), MutatedControl->ControlData.AngularStrength, 8.0f);
+			TestEqual(TEXT("Runtime defaults replace stale serialized extra damping"), MutatedControl->ControlData.AngularExtraDamping, 50.0f);
 		}
 		return true;
 	}
