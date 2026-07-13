@@ -277,6 +277,10 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 	if (bCommitFullSimulation && bReadbackMatches)
 	{
 		bStandingFullSimulationCommitted = true;
+		// The atomic standing publisher replaces the legacy per-tick tuning path, so it
+		// must also publish the committed root-simulation observation consumed by target
+		// dispatch. Otherwise every policy step is misclassified as a fresh sim flip.
+		bLastAppliedPresentationRootSimulationEnabled = true;
 	}
 	Readback.bFullSimulationCommitted = bStandingFullSimulationCommitted && bReadbackMatches;
 	if (!bReadbackMatches)

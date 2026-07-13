@@ -53,6 +53,9 @@ public:
 		Test->TestEqual(TEXT("All modifier readbacks remain simulated"), Status.ModifierSimulationMatchCount, 22);
 		Test->TestEqual(TEXT("All raw Chaos bodies remain simulated"), Status.RawSimulationMatchCount, 22);
 		Test->TestEqual(TEXT("All control gain readbacks remain matched"), Status.ControlGainMatchCount, 21);
+		Test->TestTrue(
+			TEXT("Atomic standing activation publishes the committed pelvis simulation state to target dispatch"),
+			Component->WasPelvisSimulatingLastFrame());
 		if (!Status.FailureReason.IsEmpty())
 		{
 			Test->AddError(FString::Printf(TEXT("Standing activation failure: %s"), *Status.FailureReason));
