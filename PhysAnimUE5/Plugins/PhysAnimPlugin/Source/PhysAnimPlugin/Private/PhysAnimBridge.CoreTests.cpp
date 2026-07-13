@@ -396,8 +396,8 @@ namespace
 			BodySamples[i].AngularVelocity = FVector::ZeroVector;
 		}
 
-		// Root height test (Pelvis is at 100cm, Ground at 0cm)
-		BodySamples[0].Position = FVector(0, 0, 100);
+		// The pure builder receives runtime-converted policy-space positions in meters.
+		BodySamples[0].Position = FVector(0.0f, 0.0f, 1.0f);
 		
 		TArray<float> SelfObs;
 		FString Error;
@@ -405,15 +405,14 @@ namespace
 		TestEqual(TEXT("SelfObs size"), SelfObs.Num(), SelfObsSize);
 		
 		// Index 0 in self_obs is root height relative to ground (meters)
-		TestEqual(TEXT("Root height (100cm -> 1.0)"), SelfObs[0], 1.0f);
+		TestEqual(TEXT("Root height (meters)"), SelfObs[0], 1.0f);
 
 		// Thigh_l (Index 1) position relative to root
-		BodySamples[1].Position = FVector(0, 50, 100); // 50cm to the right
+		BodySamples[1].Position = FVector(0.5f, 0.0f, 1.0f);
 		SelfObs.Reset();
 		TestTrue(TEXT("Relative pos build succeed"), BuildSelfObservation(BodySamples, 0.0f, SelfObs, Error));
 		
-		// Relative positions start at index 1. Index 1: X, 2: Y, 3: Z in SMPL basis.
-		// Ue(0, 50, 0) -> Smpl(50, 0, 0) -> Meters(0.5, 0.0, 0.0)
+		// Relative positions start at index 1. Index 1: X, 2: Y, 3: Z in policy basis.
 		TestEqual(TEXT("Thigh_l relative X (meters)"), SelfObs[1], 0.5f);
 		return true;
 	}
@@ -439,16 +438,15 @@ namespace
 			FutureSamples.Add(Sample);
 		}
 
-		// Move future pelvis to verify delta packing (Frame 0 -> Frame 1)
-		FutureSamples[0].BodyTransforms[0].SetLocation(FVector(10, 0, 0)); // 10cm forward
+		// Future samples already use the policy basis and meters at this boundary.
+		FutureSamples[0].BodyTransforms[0].SetLocation(FVector(0.0f, 0.0f, 0.1f));
 
 		TArray<float> MimicObs;
 		FString Error;
 		TestTrue(TEXT("Mimic build succeed"), BuildMimicTargetPoses(CurrentSamples, FutureSamples, MimicObs, Error));
 		TestEqual(TEXT("Mimic size"), MimicObs.Num(), MimicTargetPosesSize);
 
-		// First block is relative positions to PREVIOUS frame. 
-		// Ue(10, 0, 0) -> Smpl(0, 0, 10) -> Meters(0.0, 0.0, 0.1)
+		// First block is relative positions to the previous frame in policy space.
 		// Index 0: X, 1: Y, 2: Z
 		TestEqual(TEXT("Future Pelvis relative Z (meters)"), MimicObs[2], 0.1f);
 		return true;
@@ -463,12 +461,12 @@ namespace
 	{
 		TArray<float> Heights;
 		Heights.Init(0.0f, TerrainSize);
-		Heights[0] = -50.0f; // 50cm below ground
+		Heights[0] = -0.5f;
 
 		TArray<float> Terrain;
 		FString Error;
-		// Character root at 100cm. Sample 0 is at -50cm. Delta is 150cm -> 1.5m
-		TestTrue(TEXT("Terrain build succeed"), BuildTerrainObservation(100.0f, Heights, Terrain, Error));
+		// Root and sampled ground heights are already expressed in meters.
+		TestTrue(TEXT("Terrain build succeed"), BuildTerrainObservation(1.0f, Heights, Terrain, Error));
 		TestEqual(TEXT("Sample 0 height (meters)"), Terrain[0], 1.5f);
 		return true;
 	}
