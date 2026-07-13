@@ -293,11 +293,11 @@ namespace
 				Body.LinearDamping,
 				Body.AngularDamping));
 			TestTrue(
-				*FString::Printf(TEXT("%s linear damping is authored at 30.0"), *BoneName.ToString()),
-				FMath::IsNearlyEqual(Body.LinearDamping, 30.0f));
+				*FString::Printf(TEXT("%s linear damping is authored at 100.0"), *BoneName.ToString()),
+				FMath::IsNearlyEqual(Body.LinearDamping, 100.0f));
 			TestTrue(
-				*FString::Printf(TEXT("%s angular damping is authored at 100.0"), *BoneName.ToString()),
-				FMath::IsNearlyEqual(Body.AngularDamping, 100.0f));
+				*FString::Printf(TEXT("%s angular damping is authored at 200.0"), *BoneName.ToString()),
+				FMath::IsNearlyEqual(Body.AngularDamping, 200.0f));
 		}
 		return true;
 	}
