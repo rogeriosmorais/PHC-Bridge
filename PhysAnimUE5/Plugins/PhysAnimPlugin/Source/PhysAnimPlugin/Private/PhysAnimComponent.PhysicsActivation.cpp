@@ -271,17 +271,33 @@ bool UPhysAnimComponent::SeedControlTargetsFromCurrentPose(float DeltaTime, FStr
 
 	for (const TPair<FName, FPhysAnimControlTargetSeed>& Pair : CurrentPoseTargetSeeds)
 	{
-		const FQuat& ParentRelativeTarget = Pair.Value.ParentRelativeTargetRotation;
+		if (!PhysicsControl->SetControlTargetPoses(
+			Pair.Key,
+			FVector::ZeroVector,
+			Pair.Value.ParentWorldRotation.Rotator(),
+			FVector::ZeroVector,
+			Pair.Value.ChildWorldRotation.Rotator(),
+			DeltaTime,
+			true))
+		{
+			OutError = FString::Printf(
+				TEXT("Physics Control rejected current-pose target '%s'."),
+				*Pair.Key.ToString());
+			return false;
+		}
+		FPhysicsControlTarget Readback;
+		if (!PhysicsControl->GetControlTarget(Pair.Key, Readback) ||
+			Pair.Value.ParentRelativeTargetRotation.AngularDistance(Readback.TargetOrientation.Quaternion()) >
+				FMath::DegreesToRadians(0.1f))
+		{
+			OutError = FString::Printf(
+				TEXT("Current-pose target readback mismatch for '%s'."),
+				*Pair.Key.ToString());
+			return false;
+		}
+		const FQuat ParentRelativeTarget = Readback.TargetOrientation.Quaternion();
 		PreviousControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
 		PolicyBlendStartControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
-		PhysicsControl->SetControlTargetOrientation(
-			Pair.Key,
-			ParentRelativeTarget.Rotator(),
-			DeltaTime,
-			true,
-			false,
-			true,
-			false);
 	}
 
 	return true;

@@ -185,9 +185,17 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 
 	for (const FName BoneName : ControlBones)
 	{
+		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
 		PhysicsControl->SetControlMultiplier(
-			PhysAnimBridge::MakeControlName(BoneName),
+			ControlName,
 			ControlMultiplier,
+			ExpectedControl.bEnabled,
+			true,
+			false);
+		// SetControlMultiplier can enable a disabled control but does not disable an
+		// enabled one when bEnableControl is false. Publish activation explicitly.
+		PhysicsControl->SetControlEnabled(
+			ControlName,
 			ExpectedControl.bEnabled,
 			true,
 			false);
@@ -264,6 +272,7 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 		}
 	}
 
+	FString FirstControlMismatch;
 	for (const FName BoneName : ControlBones)
 	{
 		const FPhysicsControlRecord* const Control = FPhysAnimPhysicsControlAccessor::GetControlRecord(
@@ -277,6 +286,18 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 			FMath::IsNearlyEqual(Control->PhysicsControl.ControlMultiplier.AngularExtraDampingMultiplier, ControlMultiplier.AngularExtraDampingMultiplier))
 		{
 			++Readback.ControlGainMatchCount;
+		}
+		else if (FirstControlMismatch.IsEmpty())
+		{
+			FirstControlMismatch = Control
+				? FString::Printf(
+					TEXT("%s{enabled=%d strength=%.3f damping=%.3f extra=%.3f}"),
+					*BoneName.ToString(),
+					Control->PhysicsControl.IsEnabled() ? 1 : 0,
+					Control->PhysicsControl.ControlMultiplier.AngularStrengthMultiplier,
+					Control->PhysicsControl.ControlMultiplier.AngularDampingRatioMultiplier,
+					Control->PhysicsControl.ControlMultiplier.AngularExtraDampingMultiplier)
+				: FString::Printf(TEXT("%s{missing}"), *BoneName.ToString());
 		}
 	}
 
@@ -296,11 +317,12 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 	if (!bReadbackMatches)
 	{
 		OutFailureReason = FString::Printf(
-			TEXT("standing_activation_readback_mismatch:modifier=%d/22 raw=%d/22 controls=%d/21 first=%s"),
+			TEXT("standing_activation_readback_mismatch:modifier=%d/22 raw=%d/22 controls=%d/21 first_modifier=%s first_control=%s"),
 			Readback.ModifierSimulationMatchCount,
 			Readback.RawSimulationMatchCount,
 			Readback.ControlGainMatchCount,
-			*FirstModifierMismatch);
+			*FirstModifierMismatch,
+			*FirstControlMismatch);
 	}
 	return Readback;
 }

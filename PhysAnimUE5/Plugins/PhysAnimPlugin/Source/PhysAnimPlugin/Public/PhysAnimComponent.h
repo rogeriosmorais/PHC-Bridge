@@ -142,7 +142,7 @@ struct FPhysAnimStabilizationSettings
 	float ActionSmoothingAlpha = 0.25f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
-	float StartupRampSeconds = 1.0f;
+	float StartupRampSeconds = 0.25f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "1.0"))
 	float PolicyControlRateHz = 30.0f;
