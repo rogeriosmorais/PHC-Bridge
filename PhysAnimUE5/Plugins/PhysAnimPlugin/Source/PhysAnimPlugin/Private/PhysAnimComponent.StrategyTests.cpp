@@ -2084,6 +2084,7 @@ namespace
 		FPhysAnimStabilizationSettings Settings;
 		FPhysAnimStabilizationSettings OverrideSettings = Settings;
 		TestFalse(TEXT("Force-zero actions defaults to disabled"), Settings.bForceZeroActions);
+		TestEqual(TEXT("Standing policy authority defaults to the calibrated action scale"), Settings.ActionScale, 0.2f);
 		TestEqual(TEXT("Policy control rate defaults to the ProtoMotions-trained cadence"), Settings.PolicyControlRateHz, 30.0f);
 		TestEqual(TEXT("Phase 2 RootOn root linear spike budget stays at the documented POC threshold"), Settings.BalancePhase2AbortRootLinearSpeed, 1200.0f);
 		TestEqual(TEXT("Phase 2 RootOn root angular spike budget stays at the documented POC threshold"), Settings.BalancePhase2AbortRootAngularSpeed, 4000.0f);
