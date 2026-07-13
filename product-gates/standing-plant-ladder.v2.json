@@ -1,0 +1,162 @@
+{
+  "schema_version": "physanim-development-protocol/v1",
+  "protocol_id": "standing-plant-ladder",
+  "version": 2,
+  "supersedes_version": 1,
+  "supersession_reason": "Version 1 named a ten-second hold but omitted the raw sample contract and numeric hold criteria. Version 2 reuses the already-locked causal-standing v1 absolute hold limits without changing plant safety limits or product authority.",
+  "status": "LOCKED",
+  "authority": "DEVELOPMENT_GATE_ONLY",
+  "change_control": "Never edit this file after its protocol commit. Add a new version and record why the development contract changed.",
+  "scope_root": "F:\\NewEngine-AgentB",
+  "map": "/Game/ThirdPerson/Lvl_ThirdPerson",
+  "skeleton": "Manny",
+  "model_asset": "/Game/NNEModels/phc_policy.phc_policy",
+  "runtime_onnx": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+  "test_family": "PhysAnim.Development.StandingPlant",
+  "outcomes": [
+    "PASS",
+    "FAIL",
+    "INVALID",
+    "BLOCKED"
+  ],
+  "ordered_layers": [
+    "ControlsOff",
+    "DampingOnly",
+    "FixedNeutralTarget",
+    "ZeroActions",
+    "RealOnnxPolicy"
+  ],
+  "execution_rule": "Run layers in order and stop at the first FAIL, INVALID, or BLOCKED layer.",
+  "invariants": {
+    "required_body_count": 22,
+    "required_control_count": 21,
+    "require_all_bodies_raw_simulating": true,
+    "require_full_simulation_committed": true,
+    "require_control_gain_readback": true,
+    "require_character_movement_inactive": true,
+    "require_capsule_collision_disabled": true,
+    "require_no_shell_helper": true,
+    "require_no_movement_reclaim": true,
+    "maximum_root_linear_speed_cm_per_sec": 1200.0,
+    "maximum_root_angular_speed_deg_per_sec": 720.0,
+    "maximum_body_linear_speed_cm_per_sec": 1000.0,
+    "maximum_body_angular_speed_deg_per_sec": 4000.0
+  },
+  "hold_acceptance_source": {
+    "protocol": "product-gates/causal-standing.v1.json",
+    "sha256": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a"
+  },
+  "hold_acceptance": {
+    "applies_to_layers": [
+      "FixedNeutralTarget",
+      "ZeroActions",
+      "RealOnnxPolicy"
+    ],
+    "minimum_pelvis_height_ratio": 0.7,
+    "maximum_root_tilt_deg": 45.0,
+    "maximum_penetration_cm": 2.0,
+    "maximum_support_gap_ms": 100.0,
+    "required_runtime_state": "BalanceActive_Standing"
+  },
+  "sample_streams": {
+    "physics": {
+      "clock": "game_tick",
+      "required_fields": [
+        "sequence",
+        "time_sec",
+        "runtime_state",
+        "pelvis_height_cm",
+        "root_tilt_deg",
+        "max_penetration_cm",
+        "support_gap_ms",
+        "root_is_simulating",
+        "body_valid_count",
+        "body_simulating_count",
+        "control_gain_match_count",
+        "full_simulation_committed",
+        "cmc_active",
+        "cmc_tick_enabled",
+        "cmc_updated_component_is_null",
+        "capsule_collision_enabled",
+        "movement_reclaim_count",
+        "shell_helper_used_count",
+        "topology_change_count",
+        "root_linear_speed_cm_per_sec",
+        "root_angular_speed_deg_per_sec",
+        "max_body_linear_speed_cm_per_sec",
+        "max_body_angular_speed_deg_per_sec"
+      ]
+    },
+    "policy": {
+      "clock": "policy_step",
+      "required_for_layers": [
+        "ZeroActions",
+        "RealOnnxPolicy"
+      ],
+      "expected_rate_hz": 30,
+      "minimum_step_coverage": 0.9,
+      "maximum_target_readback_error_deg": 0.5,
+      "minimum_target_readback_match_ratio": 0.95,
+      "required_fields": [
+        "sequence",
+        "time_sec",
+        "inference_attempted",
+        "inference_succeeded",
+        "raw_action_l2",
+        "conditioned_action_l2",
+        "target_write_attempt_count",
+        "target_readback_match_count",
+        "target_readback_max_error_deg"
+      ]
+    }
+  },
+  "layers": {
+    "ControlsOff": {
+      "capture_window_sec": 0.25,
+      "control_strength": "zero",
+      "control_damping": "zero",
+      "target_dispatch": "disabled",
+      "policy_inference": "disabled",
+      "acceptance": "The full-simulation plant remains finite and below the locked explosion limits without actuation. Falling under gravity is not failure."
+    },
+    "DampingOnly": {
+      "capture_window_sec": 0.5,
+      "control_strength": "zero",
+      "control_damping": "configured",
+      "target_dispatch": "disabled",
+      "policy_inference": "disabled",
+      "acceptance": "The same plant remains finite and below the locked explosion limits with damping but no positional strength. Falling under gravity is not failure."
+    },
+    "FixedNeutralTarget": {
+      "capture_window_sec": 10.0,
+      "control_strength": "configured",
+      "control_damping": "configured",
+      "target_dispatch": "captured_parent_relative_neutral",
+      "policy_inference": "disabled",
+      "acceptance": "Every physics sample satisfies hold_acceptance for the complete window while all topology and assistance invariants remain true."
+    },
+    "ZeroActions": {
+      "capture_window_sec": 10.0,
+      "control_strength": "configured",
+      "control_damping": "configured",
+      "target_dispatch": "real_action_path",
+      "policy_inference": "required_then_zeroed",
+      "acceptance": "Every physics sample satisfies hold_acceptance; successful inference is conditioned to zero; the real target path meets cadence and readback requirements."
+    },
+    "RealOnnxPolicy": {
+      "capture_window_sec": 10.0,
+      "control_strength": "configured",
+      "control_damping": "configured",
+      "target_dispatch": "real_action_path",
+      "policy_inference": "required_existing_onnx",
+      "acceptance": "Every physics sample satisfies hold_acceptance; the existing ONNX and real target path meet cadence and readback requirements. This layer does not by itself confer product success."
+    }
+  },
+  "verdict_rules": {
+    "PASS": "The current layer satisfies every invariant and its layer-specific acceptance rule using raw UE runtime observations.",
+    "FAIL": "The run is well formed but violates an invariant or layer-specific behavioral rule.",
+    "INVALID": "The protocol linkage, requested layer, raw observations, cadence, or evidence artifact is malformed or incomplete.",
+    "BLOCKED": "The UE project, map, Manny asset, Physics Control capability, or existing ONNX required by the layer is unavailable before execution."
+  },
+  "product_success": "Never. Product success remains exclusively governed by locked causal-standing product protocol execution."
+}
