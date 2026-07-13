@@ -208,7 +208,7 @@ struct FPhysAnimStabilizationSettings
 	float MaxAngularStepDegreesPerSecond = 180.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
-	float AngularStrengthMultiplier = 0.35f;
+	float AngularStrengthMultiplier = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float AngularDampingRatioMultiplier = 1.5f;

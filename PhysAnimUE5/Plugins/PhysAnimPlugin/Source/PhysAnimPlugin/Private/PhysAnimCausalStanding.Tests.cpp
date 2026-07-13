@@ -175,7 +175,7 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	}
 	const FPhysAnimStabilizationSettings DefaultSettings;
 	TestEqual(TEXT("Standing gain ramp preserves the seeded plant"), DefaultSettings.StartupRampSeconds, 0.25f);
-	TestEqual(TEXT("Standing uses bounded startup control authority"), DefaultSettings.AngularStrengthMultiplier, 0.35f);
+	TestEqual(TEXT("Standing publishes the configured eight-hertz control authority"), DefaultSettings.AngularStrengthMultiplier, 1.0f);
 
 	TestFalse(TEXT("Dispatch fault is disabled by default"), Component->IsProductControlDispatchDroppedForTesting());
 	Component->SetProductControlDispatchDroppedForTesting(true);
