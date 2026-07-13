@@ -35,6 +35,7 @@ namespace
 			TestEqual(*FString::Printf(TEXT("%s starts critically damped"), *Pair.Key.ToString()), Pair.Value.ControlData.AngularDampingRatio, 1.0f);
 			TestEqual(*FString::Printf(TEXT("%s uses solver-stable extra damping"), *Pair.Key.ToString()), Pair.Value.ControlData.AngularExtraDamping, 0.25f);
 			TestEqual(*FString::Printf(TEXT("%s has a finite angular torque ceiling"), *Pair.Key.ToString()), Pair.Value.ControlData.MaxTorque, 500000.0f);
+			TestFalse(*FString::Printf(TEXT("%s applies equal and opposite actuator effort"), *Pair.Key.ToString()), Pair.Value.ControlData.bOnlyControlChildObject);
 		}
 		FInitialPhysicsControl* const MutatedControl = Initializer->InitialControls.Find(PhysAnimBridge::MakeControlName(TEXT("thigh_l")));
 		TestNotNull(TEXT("Thigh control exists for runtime contract check"), MutatedControl);

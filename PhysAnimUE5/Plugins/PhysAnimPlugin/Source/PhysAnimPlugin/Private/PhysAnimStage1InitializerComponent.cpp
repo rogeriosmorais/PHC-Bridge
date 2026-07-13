@@ -65,7 +65,7 @@ namespace PhysAnimStage1InitializerComponentInternal
 		Data.bUseCustomControlPoint = false;
 		Data.bUseSkeletalAnimation = false;
 		Data.bDisableCollision = true;
-		Data.bOnlyControlChildObject = true;
+		Data.bOnlyControlChildObject = false;
 		return Data;
 	}
 
