@@ -1381,7 +1381,7 @@ class PHYSANIMPLUGIN_API UPhysAnimComponent : public UActorComponent, public IPo
 	friend class FPhysAnimStage2ATurnIntentTest;
 	friend class FPhysAnimStage2ATurnSmokeTest;
 	friend class FPhysAnimFailStopCircuitTest;
-	friend class FPhysAnimFailStopShortCircuitTest;
+	friend class FPhysAnimSteadyActionConditioningTest;
 	friend class FPhysAnimStage2ADumbbellLoadTest;
 	friend class FOverrideLoadTestSettingsCommand;
 
@@ -3000,7 +3000,7 @@ private:
 	friend class FPhysAnimStage2ATurnIntentTest;
 	friend class FPhysAnimStage2ATurnSmokeTest;
 	friend class FPhysAnimFailStopCircuitTest;
-	friend class FPhysAnimFailStopShortCircuitTest;
+	friend class FPhysAnimSteadyActionConditioningTest;
 	friend class FPhysAnimStage2ADumbbellLoadTest;
 	friend class FOverrideLoadTestSettingsCommand;
 

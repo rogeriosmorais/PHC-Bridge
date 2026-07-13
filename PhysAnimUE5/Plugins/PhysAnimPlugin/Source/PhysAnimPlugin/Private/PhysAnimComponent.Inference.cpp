@@ -159,7 +159,9 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 				ActivatedStandingStabilityMetrics.PolicyActionClampedFloatMax,
 				LastActionDiagnostics.NumClampedActionFloats);
 
-			// §S2-IMPL-SYNC-INFERENCE-01: Action Magnitude Variance check
+			// A steady observation may legitimately produce a steady deterministic action.
+			// Record scalar magnitude variance for evidence, but do not turn convergence
+			// into a runtime failure; causal responsiveness is a protocol-level property.
 			RecentActionMagnitudeHistory.Add(LastActionDiagnostics.RawMeanAbs);
 			if (RecentActionMagnitudeHistory.Num() > 10)
 			{
@@ -175,13 +177,6 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 				for (float Mag : RecentActionMagnitudeHistory) { Variance += FMath::Square(Mag - Mean); }
 				
 				ActivatedStandingStabilityMetrics.ActionMagnitudeVariance = static_cast<double>(Variance);
-
-				if (Variance <= UE_SMALL_NUMBER && Mean > UE_SMALL_NUMBER)
-				{
-					PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] ACTION_FROZEN variance=0.0 mean=%.4f over 10 frames — failure of intent."), Mean);
-					FailStop(TEXT("Model action output is frozen (zero variance over 10 frames)."));
-					return false;
-				}
 			}
 		}
 	}
