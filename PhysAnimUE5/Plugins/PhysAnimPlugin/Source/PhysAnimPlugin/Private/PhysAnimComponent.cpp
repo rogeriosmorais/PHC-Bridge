@@ -777,11 +777,6 @@ FString UPhysAnimComponent::GenerateNewAttemptUuid()
 
 void UPhysAnimComponent::RecordLiveRuntimeEvidencePoseSearchQueryResult(const bool bPoseSearchValid, const FString& SelectedAnimName, double SelectedTime)
 {
-	if (!bEnableLiveRuntimeEvidenceProof)
-	{
-		return;
-	}
-
 	++ActivatedStandingStabilityMetrics.PoseSearchQueryCount;
 	if (bPoseSearchValid)
 	{

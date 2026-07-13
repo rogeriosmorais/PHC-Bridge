@@ -2771,7 +2771,7 @@ namespace
 			return false;
 		}
 
-		Component->bEnableLiveRuntimeEvidenceProof = true;
+		TestFalse(TEXT("Legacy evidence proof defaults off"), Component->bEnableLiveRuntimeEvidenceProof);
 
 		const bool bFirstQueryResult = false;
 		Component->TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(bFirstQueryResult);
@@ -2782,7 +2782,7 @@ namespace
 		TestTrue(TEXT("Caller PoseSearch result remains true after recording"), bSecondQueryResult);
 
 		const FPhysAnimActivatedStandingStabilityMetrics& Metrics = Component->GetActivatedStandingStabilityMetrics();
-		TestEqual(TEXT("PoseSearch query count increments across recordings"), Metrics.PoseSearchQueryCount, 2);
+		TestEqual(TEXT("PoseSearch query count is observational even when legacy evidence proof is off"), Metrics.PoseSearchQueryCount, 2);
 		TestEqual(TEXT("PoseSearch valid result count only increments for true results"), Metrics.PoseSearchValidResultCount, 1);
 
 		Component->TestOnlyRecordLiveRuntimeEvidencePoseSearchQueryResult(false);
