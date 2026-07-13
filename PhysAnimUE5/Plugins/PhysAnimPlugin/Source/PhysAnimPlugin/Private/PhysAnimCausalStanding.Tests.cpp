@@ -136,6 +136,7 @@ namespace
 
 	TOptional<double> ResolveCausalStandingSampleTime(double ActualTimeSeconds, double CaptureWindowSeconds);
 	double GetCausalStandingFixedDeltaTimeSeconds();
+	double AdvanceCausalStandingSupportGapMs(double CurrentGapMs, bool bHasSupportContact, double DeltaTimeSeconds);
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -194,6 +195,16 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	TestFalse(
 		TEXT("A post-window runtime observation cannot be relabeled as endpoint evidence"),
 		ResolveCausalStandingSampleTime(0.89, 0.5).IsSet());
+	TestTrue(
+		TEXT("Missing support advances the product support-gap timer at the raw fixed step"),
+		FMath::IsNearlyEqual(
+			AdvanceCausalStandingSupportGapMs(50.0, false, 1.0 / 60.0),
+			50.0 + 1000.0 / 60.0,
+			1.0e-9));
+	TestEqual(
+		TEXT("Observed support resets the product support-gap timer"),
+		AdvanceCausalStandingSupportGapMs(50.0, true, 1.0 / 60.0),
+		0.0);
 
 	TestFalse(TEXT("Dispatch fault is disabled by default"), Component->IsProductControlDispatchDroppedForTesting());
 	Component->SetProductControlDispatchDroppedForTesting(true);
@@ -207,9 +218,14 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=ControlsOff"));
 	TestEqual(TEXT("Command line selects controls-off before startup"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::ControlsOff);
 	TestFalse(TEXT("Controls-off does not drop the already-disabled dispatch path"), Component->IsProductControlDispatchDroppedForTesting());
+	TestFalse(TEXT("Plant-only variants do not start product evidence capture"), Component->bEnableLiveRuntimeEvidenceProof);
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-ExecCmds=\"Automation RunTests PhysAnim.Development.StandingPlant.ZeroActions\" -PhysAnimProductVariant=ZeroActions"));
+	TestFalse(TEXT("The plant ZeroActions layer remains outside product evidence capture"), Component->bEnableLiveRuntimeEvidenceProof);
 	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=DropControlDispatch"));
 	TestEqual(TEXT("Command line selects dropped-dispatch activation"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::DropControlDispatch);
 	TestTrue(TEXT("Dropped-dispatch command line arms the destructive control"), Component->IsProductControlDispatchDroppedForTesting());
+	TestFalse(TEXT("Product capture remains independent of the legacy proof lifecycle"), Component->bEnableLiveRuntimeEvidenceProof);
 	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=Normal"));
 	TestEqual(TEXT("Normal command line restores normal activation"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::Normal);
 	TestFalse(TEXT("Normal command line clears dropped dispatch"), Component->IsProductControlDispatchDroppedForTesting());
@@ -269,6 +285,16 @@ namespace
 	double GetCausalStandingFixedDeltaTimeSeconds()
 	{
 		return CausalStandingFixedDeltaTimeSeconds;
+	}
+
+	double AdvanceCausalStandingSupportGapMs(
+		double CurrentGapMs,
+		bool bHasSupportContact,
+		double DeltaTimeSeconds)
+	{
+		return bHasSupportContact
+			? 0.0
+			: CurrentGapMs + FMath::Max(0.0, DeltaTimeSeconds) * 1000.0;
 	}
 
 	struct FCausalStandingRunConfig
@@ -657,6 +683,10 @@ namespace
 
 		void CapturePhysicsSample(UWorld* World, UPhysAnimComponent* Component, double TimeSeconds)
 		{
+			ProductSupportGapTimerMs = AdvanceCausalStandingSupportGapMs(
+				ProductSupportGapTimerMs,
+				Component && Component->HasProductSupportContactForTesting(),
+				CausalStandingFixedDeltaTimeSeconds);
 			ACharacter* Character = Component ? Cast<ACharacter>(Component->GetOwner()) : nullptr;
 			USkeletalMeshComponent* Mesh = Component ? Component->GetMeshComponent() : nullptr;
 			UPhysicsControlComponent* PhysicsControl = Character ? Character->FindComponentByClass<UPhysicsControlComponent>() : nullptr;
@@ -724,7 +754,7 @@ namespace
 			Row->SetNumberField(TEXT("pelvis_height_cm"), MeasurePelvisHeight(World, Character, PelvisBody));
 			Row->SetNumberField(TEXT("root_tilt_deg"), MeasureRootTilt(Component));
 			Row->SetNumberField(TEXT("max_penetration_cm"), Artifact ? Artifact->MaxPenetrationCm : 0.0);
-			Row->SetNumberField(TEXT("support_gap_ms"), Artifact ? Artifact->SupportGapTimerMs : 0.0);
+			Row->SetNumberField(TEXT("support_gap_ms"), ProductSupportGapTimerMs);
 			Row->SetNumberField(TEXT("critical_body_valid_mask"), CriticalValidMask);
 			Row->SetNumberField(TEXT("critical_body_simulating_mask"), CriticalSimulatingMask);
 			Row->SetNumberField(TEXT("support_body_valid_mask"), SupportValidMask);
@@ -930,6 +960,7 @@ namespace
 		double StartupRealTime = 0.0;
 		double ObservationStartWorldTime = 0.0;
 		double LastPhysicsTimeSeconds = -1.0;
+		double ProductSupportGapTimerMs = 0.0;
 		bool bObservationStarted = false;
 		bool bVariantApplied = false;
 		bool bPerturbationApplied = false;

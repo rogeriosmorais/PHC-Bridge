@@ -1658,6 +1658,16 @@ bool UPhysAnimComponent::ApplyActivatedStandingPerturbation(
 	return true;
 }
 
+#if WITH_DEV_AUTOMATION_TESTS
+bool UPhysAnimComponent::HasProductSupportContactForTesting() const
+{
+	TArray<FHitResult> HitResults;
+	int32 MappedSupportHitCount = 0;
+	return CaptureLiveRuntimeEvidenceHitResults(HitResults, MappedSupportHitCount) &&
+		MappedSupportHitCount > 0;
+}
+#endif
+
 bool UPhysAnimComponent::CaptureLiveRuntimeEvidenceHitResults(TArray<FHitResult>& OutHitResults, int32& OutMappedSupportHitCount) const
 {
 	OutHitResults.Reset();

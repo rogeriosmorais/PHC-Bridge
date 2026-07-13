@@ -1533,6 +1533,9 @@ public:
 	EPhysAnimRuntimeState GetRuntimeState() const { return RuntimeState; }
 	bool GetForceSupportFailure() const { return bForceSupportFailure; }
 	void SetForceSupportFailure(bool bInForce) { bForceSupportFailure = bInForce; }
+#if WITH_DEV_AUTOMATION_TESTS
+	bool HasProductSupportContactForTesting() const;
+#endif
 	EBridgeLocomotionAuthorityState GetLocomotionAuthorityState() const { return BridgeLocomotionAuthorityState; }
 	bool DoesBridgeOwnPhysics() const { return RuntimeStateOwnsBridgePhysics(RuntimeState); }
 	EBridgeLocomotionRequestState GetLocomotionRequestState() const { return BridgeLocomotionRequestState; }
