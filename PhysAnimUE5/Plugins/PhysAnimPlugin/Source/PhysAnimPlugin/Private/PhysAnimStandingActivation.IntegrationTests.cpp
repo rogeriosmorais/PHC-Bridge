@@ -80,6 +80,20 @@ public:
 		Test->TestNotNull(TEXT("Manny skeletal mesh exists"), Mesh);
 		if (Mesh)
 		{
+			for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				const FBodyInstance* const Body = Mesh->GetBodyInstance(BoneName);
+				if (Body)
+				{
+					Test->TestTrue(
+						*FString::Printf(TEXT("Manny %s overrides contact correction velocity"), *BoneName.ToString()),
+						Body->GetOverrideMaxDepenetrationVelocity());
+					Test->TestEqual(
+						*FString::Printf(TEXT("Manny %s bounds contact correction velocity"), *BoneName.ToString()),
+						Body->GetMaxDepenetrationVelocity(),
+						200.0f);
+				}
+			}
 			const FBodyInstance* const FootBody = Mesh->GetBodyInstance(TEXT("foot_l"));
 			const FBodyInstance* const BallBody = Mesh->GetBodyInstance(TEXT("ball_l"));
 			Test->TestNotNull(TEXT("Manny left foot body exists"), FootBody);

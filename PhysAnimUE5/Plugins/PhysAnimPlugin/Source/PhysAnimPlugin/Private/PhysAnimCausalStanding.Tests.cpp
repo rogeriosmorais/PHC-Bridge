@@ -663,6 +663,7 @@ namespace
 			Row->SetNumberField(TEXT("body_valid_count"), BodyValidCount);
 			Row->SetNumberField(TEXT("body_simulating_count"), BodySimulatingCount);
 			Row->SetNumberField(TEXT("control_gain_match_count"), StandingStatus.ControlGainMatchCount);
+			Row->SetNumberField(TEXT("contact_correction_match_count"), StandingStatus.ContactCorrectionMatchCount);
 			Row->SetNumberField(TEXT("control_base_angular_strength_hz"), bHasGainProbe ? GainProbeData.AngularStrength : 0.0);
 			Row->SetNumberField(TEXT("control_angular_strength_multiplier"), bHasGainProbe ? GainProbeMultiplier.AngularStrengthMultiplier : 0.0);
 			Row->SetNumberField(TEXT("control_angular_damping_ratio_multiplier"), bHasGainProbe ? GainProbeMultiplier.AngularDampingRatioMultiplier : 0.0);
