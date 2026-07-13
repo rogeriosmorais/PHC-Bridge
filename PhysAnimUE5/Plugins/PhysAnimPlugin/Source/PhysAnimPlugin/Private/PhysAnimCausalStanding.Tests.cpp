@@ -85,6 +85,10 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	Component->SetStandingVariantForTesting(EPhysAnimStandingVariant::DampingOnly);
 	TestEqual(TEXT("Plant harness can select damping-only"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::DampingOnly);
 	Component->SetStandingVariantForTesting(EPhysAnimStandingVariant::Normal);
+	float NeutralCalibratedTiltDeg = 0.0f;
+	TestFalse(
+		TEXT("Neutral-calibrated tilt requires a live owner, mesh, pelvis body, and startup calibration"),
+		Component->TryMeasureNeutralCalibratedPelvisTiltDegrees(NeutralCalibratedTiltDeg));
 
 	return true;
 }
@@ -297,14 +301,12 @@ namespace
 		return PelvisLocation.Z - Hit.ImpactPoint.Z;
 	}
 
-	double MeasureRootTilt(FBodyInstance* PelvisBody)
+	double MeasureRootTilt(UPhysAnimComponent* Component)
 	{
-		if (!PelvisBody || !PelvisBody->IsValidBodyInstance())
-		{
-			return 180.0;
-		}
-		const FVector RootUp = PelvisBody->GetUnrealWorldTransform().GetRotation().GetUpVector();
-		return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(RootUp, FVector::UpVector), -1.0f, 1.0f)));
+		float TiltDegrees = 180.0f;
+		return Component && Component->TryMeasureNeutralCalibratedPelvisTiltDegrees(TiltDegrees)
+			? static_cast<double>(TiltDegrees)
+			: 180.0;
 	}
 
 	double MeasurePoseRms(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* PhysicsControl, const TMap<FName, FQuat>& IntendedTargets)
@@ -524,7 +526,7 @@ namespace
 			Row->SetNumberField(TEXT("time_sec"), TimeSeconds);
 			Row->SetStringField(TEXT("runtime_state"), Component ? RuntimeStateName(Component->GetRuntimeState()) : TEXT("Uninitialized"));
 			Row->SetNumberField(TEXT("pelvis_height_cm"), MeasurePelvisHeight(World, Character, PelvisBody));
-			Row->SetNumberField(TEXT("root_tilt_deg"), MeasureRootTilt(PelvisBody));
+			Row->SetNumberField(TEXT("root_tilt_deg"), MeasureRootTilt(Component));
 			Row->SetNumberField(TEXT("max_penetration_cm"), Artifact ? Artifact->MaxPenetrationCm : 0.0);
 			Row->SetNumberField(TEXT("support_gap_ms"), Artifact ? Artifact->SupportGapTimerMs : 0.0);
 			Row->SetNumberField(TEXT("critical_body_valid_mask"), CriticalValidMask);

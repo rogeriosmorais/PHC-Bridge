@@ -2676,6 +2676,7 @@ public:
 		const FQuat& CurrentPelvisWorldRotation,
 		const FQuat& NeutralPelvisActorRelativeRotation,
 		const FQuat& ActorWorldRotation);
+	bool TryMeasureNeutralCalibratedPelvisTiltDegrees(float& OutTiltDegrees) const;
 	static bool ShouldSuppressPolicyDispatchForTransitionState(EPhysAnimRuntimeState RuntimeState);
 	static float ResolveShellCouplingPlanarOffsetDeltaCm(
 		const FVector& OwnerLocationCm,

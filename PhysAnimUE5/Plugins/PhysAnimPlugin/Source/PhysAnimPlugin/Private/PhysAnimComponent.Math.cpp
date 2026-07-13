@@ -103,6 +103,30 @@ float UPhysAnimComponent::CalculateNeutralCalibratedPelvisTiltDegrees(
 }
 
 
+bool UPhysAnimComponent::TryMeasureNeutralCalibratedPelvisTiltDegrees(float& OutTiltDegrees) const
+{
+	OutTiltDegrees = 180.0f;
+	const AActor* const OwnerActor = GetOwner();
+	const USkeletalMeshComponent* const Mesh = MeshComponent.Get();
+	if (!OwnerActor || !Mesh || !bHasNeutralPelvisActorRelativeRotation)
+	{
+		return false;
+	}
+
+	const FBodyInstance* const PelvisBody = Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName());
+	if (!PelvisBody || !PelvisBody->IsValidBodyInstance())
+	{
+		return false;
+	}
+
+	OutTiltDegrees = CalculateNeutralCalibratedPelvisTiltDegrees(
+		PelvisBody->GetUnrealWorldTransform().GetRotation(),
+		NeutralPelvisActorRelativeRotation,
+		OwnerActor->GetActorQuat());
+	return FMath::IsFinite(OutTiltDegrees);
+}
+
+
 float UPhysAnimComponent::ResolvePhase1Uprightness(
 	USkeletalMeshComponent* SkeletalMesh,
 	AActor* Owner,
