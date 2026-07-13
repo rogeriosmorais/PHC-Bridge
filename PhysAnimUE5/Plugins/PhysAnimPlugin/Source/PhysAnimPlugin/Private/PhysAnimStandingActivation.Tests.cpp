@@ -1,5 +1,4 @@
 #include "PhysAnimComponent.h"
-#include "PhysAnimBridge.h"
 #include "PhysAnimStandingActivation.h"
 
 #include "Misc/AutomationTest.h"
@@ -97,23 +96,13 @@ bool FPhysAnimStandingActivationUniformPlanTest::RunTest(const FString& Paramete
 	TestFalse(TEXT("Fixed neutral preserves its captured target"), FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(EPhysAnimStandingVariant::FixedNeutralTarget));
 	TestTrue(TEXT("Zero actions uses the real target path"), FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(EPhysAnimStandingVariant::ZeroActions));
 	TestTrue(TEXT("Real ONNX uses the real target path"), FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(EPhysAnimStandingVariant::RealOnnxPolicy));
-	const TArray<FName>& BodyNames = PhysAnimBridge::GetRequiredBodyModifierBoneNames();
-	int32 ContactExcludedBodyCount = 0;
-	for (int32 BodyIndex = 0; BodyIndex < Normal.Bodies.Num(); ++BodyIndex)
+	for (const FPhysAnimStandingBodyPlan& Body : Normal.Bodies)
 	{
-		const FPhysAnimStandingBodyPlan& Body = Normal.Bodies[BodyIndex];
-		const bool bBallBody = BodyNames.IsValidIndex(BodyIndex) &&
-			(BodyNames[BodyIndex] == TEXT("ball_l") || BodyNames[BodyIndex] == TEXT("ball_r"));
 		TestTrue(TEXT("Every body is simulated"), Body.bSimulated);
 		TestEqual(TEXT("Every body has full physics blend"), Body.PhysicsBlendWeight, 1.0f);
-		TestEqual(
-			bBallBody ? TEXT("Ball bodies stay simulated without unstable contact") : TEXT("Load-bearing bodies retain query and physics collision"),
-			Body.CollisionEnabled,
-			bBallBody ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics);
+		TestEqual(TEXT("Every body has query and physics collision"), Body.CollisionEnabled, ECollisionEnabled::QueryAndPhysics);
 		TestFalse(TEXT("No body updates kinematic pose from simulation"), Body.bUpdateKinematicFromSimulation);
-		ContactExcludedBodyCount += bBallBody ? 1 : 0;
 	}
-	TestEqual(TEXT("Only Manny's two ball bodies are excluded from contact"), ContactExcludedBodyCount, 2);
 	for (const FPhysAnimStandingControlPlan& Control : Normal.Controls)
 	{
 		TestTrue(TEXT("Every control is enabled for every variant"), Control.bEnabled);
