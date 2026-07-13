@@ -85,6 +85,15 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	Component->SetStandingVariantForTesting(EPhysAnimStandingVariant::DampingOnly);
 	TestEqual(TEXT("Plant harness can select damping-only"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::DampingOnly);
 	Component->SetStandingVariantForTesting(EPhysAnimStandingVariant::Normal);
+	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=ControlsOff"));
+	TestEqual(TEXT("Command line selects controls-off before startup"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::ControlsOff);
+	TestFalse(TEXT("Controls-off does not drop the already-disabled dispatch path"), Component->IsProductControlDispatchDroppedForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=DropControlDispatch"));
+	TestEqual(TEXT("Command line selects dropped-dispatch activation"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::DropControlDispatch);
+	TestTrue(TEXT("Dropped-dispatch command line arms the destructive control"), Component->IsProductControlDispatchDroppedForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=Normal"));
+	TestEqual(TEXT("Normal command line restores normal activation"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::Normal);
+	TestFalse(TEXT("Normal command line clears dropped dispatch"), Component->IsProductControlDispatchDroppedForTesting());
 	float NeutralCalibratedTiltDeg = 0.0f;
 	TestFalse(
 		TEXT("Neutral-calibrated tilt requires a live owner, mesh, pelvis body, and startup calibration"),

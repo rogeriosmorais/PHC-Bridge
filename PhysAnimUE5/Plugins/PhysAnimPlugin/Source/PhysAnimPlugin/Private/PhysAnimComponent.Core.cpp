@@ -5,6 +5,9 @@
 #include "PhysAnimPhase1PelvisCouplingSearch.h"
 #include "PhysAnimLogger.h"
 
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+
 namespace
 {
 }
@@ -12,6 +15,10 @@ namespace
 void UPhysAnimComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+#if WITH_DEV_AUTOMATION_TESTS
+	ApplyProductVariantFromCommandLineForTesting(FCommandLine::Get());
+#endif
 
 	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnim] GStrictPhase1Certification = %d"), GStrictPhase1Certification);
 
@@ -23,6 +30,51 @@ void UPhysAnimComponent::BeginPlay()
 		UpdateBridgeStatusIndicator(5.0f);
 	}
 }
+
+#if WITH_DEV_AUTOMATION_TESTS
+void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine)
+{
+	FString VariantName;
+	if (!CommandLine || !FParse::Value(CommandLine, TEXT("PhysAnimProductVariant="), VariantName))
+	{
+		return;
+	}
+
+	EPhysAnimStandingVariant ResolvedVariant = EPhysAnimStandingVariant::Normal;
+	if (VariantName == TEXT("ZeroActions"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::ZeroActions;
+	}
+	else if (VariantName == TEXT("DropControlDispatch"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::DropControlDispatch;
+	}
+	else if (VariantName == TEXT("ControlsOff"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::ControlsOff;
+	}
+	else if (VariantName == TEXT("DampingOnly"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::DampingOnly;
+	}
+	else if (VariantName == TEXT("FixedNeutralTarget"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::FixedNeutralTarget;
+	}
+	else if (VariantName == TEXT("RealOnnxPolicy"))
+	{
+		ResolvedVariant = EPhysAnimStandingVariant::RealOnnxPolicy;
+	}
+	else if (VariantName != TEXT("Normal") && VariantName != TEXT("ForcedSupportLoss"))
+	{
+		return;
+	}
+
+	StandingVariantForTesting = ResolvedVariant;
+	bProductControlDispatchDroppedForTesting =
+		ResolvedVariant == EPhysAnimStandingVariant::DropControlDispatch;
+}
+#endif
 
 
 void UPhysAnimComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)

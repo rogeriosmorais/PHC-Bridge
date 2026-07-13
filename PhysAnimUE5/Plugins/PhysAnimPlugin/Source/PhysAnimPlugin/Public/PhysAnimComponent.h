@@ -1476,6 +1476,7 @@ public:
 	bool IsProductControlDispatchDroppedForTesting() const { return bProductControlDispatchDroppedForTesting; }
 	void SetStandingVariantForTesting(EPhysAnimStandingVariant Variant) { StandingVariantForTesting = Variant; }
 	EPhysAnimStandingVariant GetStandingVariantForTesting() const { return StandingVariantForTesting; }
+	void ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine);
 #endif
 	void ConsumeUpperBodyPendingResets();
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
