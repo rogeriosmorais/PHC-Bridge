@@ -9,7 +9,11 @@ enum class EPhysAnimStandingVariant : uint8
 {
 	Normal,
 	ZeroActions,
-	DropControlDispatch
+	DropControlDispatch,
+	ControlsOff,
+	DampingOnly,
+	FixedNeutralTarget,
+	RealOnnxPolicy
 };
 
 struct PHYSANIMPLUGIN_API FPhysAnimStandingBodyPlan
@@ -52,6 +56,9 @@ struct PHYSANIMPLUGIN_API FPhysAnimStandingActivationPlan
 		float ConfiguredDampingRatio,
 		float BootstrapExtraDamping,
 		float StandingExtraDamping);
+	static bool UsesPolicyInference(EPhysAnimStandingVariant Variant);
+	static bool UsesPolicyTargetDispatch(EPhysAnimStandingVariant Variant);
+	static bool RequiresStandingHold(EPhysAnimStandingVariant Variant);
 
 	bool operator==(const FPhysAnimStandingActivationPlan& Other) const;
 };

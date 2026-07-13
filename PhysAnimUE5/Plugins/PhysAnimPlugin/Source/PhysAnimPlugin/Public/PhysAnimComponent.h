@@ -1474,6 +1474,8 @@ public:
 #if WITH_DEV_AUTOMATION_TESTS
 	void SetProductControlDispatchDroppedForTesting(bool bDropped) { bProductControlDispatchDroppedForTesting = bDropped; }
 	bool IsProductControlDispatchDroppedForTesting() const { return bProductControlDispatchDroppedForTesting; }
+	void SetStandingVariantForTesting(EPhysAnimStandingVariant Variant) { StandingVariantForTesting = Variant; }
+	EPhysAnimStandingVariant GetStandingVariantForTesting() const { return StandingVariantForTesting; }
 #endif
 	void ConsumeUpperBodyPendingResets();
 	USkeletalMeshComponent* GetMeshComponent() const { return MeshComponent.Get(); }
@@ -2393,6 +2395,7 @@ private:
 	TArray<float> ConditionedActionBuffer;
 #if WITH_DEV_AUTOMATION_TESTS
 	bool bProductControlDispatchDroppedForTesting = false;
+	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
 #endif
 	TArray<UE::NNE::FTensorBindingCPU> InputBindings;
 	TArray<UE::NNE::FTensorBindingCPU> OutputBindings;

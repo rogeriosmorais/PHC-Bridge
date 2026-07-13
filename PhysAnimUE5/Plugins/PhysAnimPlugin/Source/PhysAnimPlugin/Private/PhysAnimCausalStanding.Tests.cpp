@@ -47,6 +47,10 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	TestTrue(TEXT("Dispatch fault can be enabled for a destructive control"), Component->IsProductControlDispatchDroppedForTesting());
 	Component->SetProductControlDispatchDroppedForTesting(false);
 	TestFalse(TEXT("Dispatch fault can be restored"), Component->IsProductControlDispatchDroppedForTesting());
+	TestEqual(TEXT("Standing variant defaults to Normal"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::Normal);
+	Component->SetStandingVariantForTesting(EPhysAnimStandingVariant::DampingOnly);
+	TestEqual(TEXT("Plant harness can select damping-only"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::DampingOnly);
+	Component->SetStandingVariantForTesting(EPhysAnimStandingVariant::Normal);
 
 	return true;
 }
@@ -92,6 +96,13 @@ namespace
 		FString ModelOnnxSha256;
 		int32 Repetition = 0;
 		bool bSourceTreeDirty = false;
+		bool bPlantRun = false;
+		double CaptureWindowSeconds = StandingWindowSeconds;
+		bool bApplyPerturbation = true;
+		FString ProtocolRelativePath = TEXT("../product-gates/causal-standing.v1.json");
+		FString FixtureAuthority = TEXT("PRODUCT_RUN");
+		FString RunSchemaVersion = TEXT("physanim-product-run/v1");
+		EPhysAnimStandingVariant StandingVariant = EPhysAnimStandingVariant::Normal;
 
 		bool ReadFromCommandLine(FString& OutError)
 		{
@@ -113,6 +124,46 @@ namespace
 				return false;
 			}
 			RunRoot = FPaths::ConvertRelativePathToFull(RunRoot);
+			return true;
+		}
+
+		bool ConfigurePlantLayer(FString& OutError)
+		{
+			bPlantRun = true;
+			bApplyPerturbation = false;
+			ProtocolRelativePath = TEXT("../product-gates/standing-plant-ladder.v2.json");
+			FixtureAuthority = TEXT("DEVELOPMENT_GATE_RUN");
+			RunSchemaVersion = TEXT("physanim-development-run/v1");
+			if (Variant == TEXT("ControlsOff"))
+			{
+				StandingVariant = EPhysAnimStandingVariant::ControlsOff;
+				CaptureWindowSeconds = 0.25;
+			}
+			else if (Variant == TEXT("DampingOnly"))
+			{
+				StandingVariant = EPhysAnimStandingVariant::DampingOnly;
+				CaptureWindowSeconds = 0.5;
+			}
+			else if (Variant == TEXT("FixedNeutralTarget"))
+			{
+				StandingVariant = EPhysAnimStandingVariant::FixedNeutralTarget;
+				CaptureWindowSeconds = 10.0;
+			}
+			else if (Variant == TEXT("ZeroActions"))
+			{
+				StandingVariant = EPhysAnimStandingVariant::ZeroActions;
+				CaptureWindowSeconds = 10.0;
+			}
+			else if (Variant == TEXT("RealOnnxPolicy"))
+			{
+				StandingVariant = EPhysAnimStandingVariant::RealOnnxPolicy;
+				CaptureWindowSeconds = 10.0;
+			}
+			else
+			{
+				OutError = FString::Printf(TEXT("Unknown standing plant layer '%s'"), *Variant);
+				return false;
+			}
 			return true;
 		}
 	};
@@ -322,13 +373,23 @@ namespace
 				{
 					Component->SetProductControlDispatchDroppedForTesting(true);
 				}
+				Component->SetStandingVariantForTesting(Config.StandingVariant);
 				bVariantApplied = true;
 			}
 
 			if (!bObservationStarted)
 			{
-				const bool bStanding = Component && Component->GetRuntimeState() == EPhysAnimRuntimeState::BalanceActive_Standing;
-				if (!bStanding && FPlatformTime::Seconds() - StartupRealTime < StartupTimeoutSeconds)
+				const bool bPlantRequiresStandingHold = Config.bPlantRun &&
+					FPhysAnimStandingActivationPlan::RequiresStandingHold(Config.StandingVariant);
+				const bool bPlantReady = Component && (bPlantRequiresStandingHold
+					? (Component->GetRuntimeState() == EPhysAnimRuntimeState::BalanceActive_Standing ||
+						Component->GetRuntimeState() == EPhysAnimRuntimeState::FailStopped)
+					: (Component->GetStandingActivationStatus().bFullSimulationCommitted ||
+						Component->GetRuntimeState() == EPhysAnimRuntimeState::FailStopped));
+				const bool bReady = Component && (Config.bPlantRun
+					? bPlantReady
+					: Component->GetRuntimeState() == EPhysAnimRuntimeState::BalanceActive_Standing);
+				if (!bReady && FPlatformTime::Seconds() - StartupRealTime < StartupTimeoutSeconds)
 				{
 					return false;
 				}
@@ -346,7 +407,7 @@ namespace
 			}
 
 			const double TimeSeconds = World->GetTimeSeconds() - ObservationStartWorldTime;
-			const double SampleTimeSeconds = FMath::Min(TimeSeconds, StandingWindowSeconds);
+			const double SampleTimeSeconds = FMath::Min(TimeSeconds, Config.CaptureWindowSeconds);
 			if (SampleTimeSeconds <= LastPhysicsTimeSeconds)
 			{
 				return false;
@@ -355,13 +416,13 @@ namespace
 			CapturePhysicsSample(World, Component, SampleTimeSeconds);
 			CapturePolicySample(Component, SampleTimeSeconds);
 
-			if (!bPerturbationApplied && TimeSeconds >= PerturbationTimeSeconds)
+			if (Config.bApplyPerturbation && !bPerturbationApplied && TimeSeconds >= PerturbationTimeSeconds)
 			{
 				ApplyPerturbation(Component);
 				bPerturbationApplied = true;
 			}
 
-			if (TimeSeconds < StandingWindowSeconds)
+			if (TimeSeconds < Config.CaptureWindowSeconds)
 			{
 				return false;
 			}
@@ -389,10 +450,42 @@ namespace
 			int32 SupportSimulatingMask = 0;
 			ReadBodyMasks(Mesh, CriticalBones, CriticalValidMask, CriticalSimulatingMask);
 			ReadBodyMasks(Mesh, SupportBones, SupportValidMask, SupportSimulatingMask);
+			int32 BodyValidCount = 0;
+			int32 BodySimulatingCount = 0;
+			double MaxBodyLinearSpeedCmPerSec = 0.0;
+			double MaxBodyAngularSpeedDegPerSec = 0.0;
+			if (Mesh)
+			{
+				for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+				{
+					const FBodyInstance* const Body = Mesh->GetBodyInstance(BoneName);
+					if (!Body || !Body->IsValidBodyInstance())
+					{
+						continue;
+					}
+					++BodyValidCount;
+					BodySimulatingCount += Body->IsInstanceSimulatingPhysics() ? 1 : 0;
+					MaxBodyLinearSpeedCmPerSec = FMath::Max(
+						MaxBodyLinearSpeedCmPerSec,
+						static_cast<double>(Body->GetUnrealWorldVelocity().Size()));
+					MaxBodyAngularSpeedDegPerSec = FMath::Max(
+						MaxBodyAngularSpeedDegPerSec,
+						static_cast<double>(FMath::RadiansToDegrees(Body->GetUnrealWorldAngularVelocityInRadians().Size())));
+				}
+			}
+			const double RootLinearSpeedCmPerSec = PelvisBody
+				? PelvisBody->GetUnrealWorldVelocity().Size()
+				: 0.0;
+			const double RootAngularSpeedDegPerSec = PelvisBody
+				? FMath::RadiansToDegrees(PelvisBody->GetUnrealWorldAngularVelocityInRadians().Size())
+				: 0.0;
 
 			const FPhysAnimRunArtifactSnapshot* Artifact = Component
 				? &Component->GetLiveRuntimeEvidenceTerminationState().LatestArtifact
 				: nullptr;
+			const FPhysAnimStandingActivationStatus StandingStatus = Component
+				? Component->GetStandingActivationStatus()
+				: FPhysAnimStandingActivationStatus{};
 			UCharacterMovementComponent* Movement = Character ? Character->GetCharacterMovement() : nullptr;
 			UCapsuleComponent* Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
 			const TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -407,6 +500,14 @@ namespace
 			Row->SetNumberField(TEXT("critical_body_simulating_mask"), CriticalSimulatingMask);
 			Row->SetNumberField(TEXT("support_body_valid_mask"), SupportValidMask);
 			Row->SetNumberField(TEXT("support_body_simulating_mask"), SupportSimulatingMask);
+			Row->SetNumberField(TEXT("body_valid_count"), BodyValidCount);
+			Row->SetNumberField(TEXT("body_simulating_count"), BodySimulatingCount);
+			Row->SetNumberField(TEXT("control_gain_match_count"), StandingStatus.ControlGainMatchCount);
+			Row->SetBoolField(TEXT("full_simulation_committed"), StandingStatus.bFullSimulationCommitted);
+			Row->SetNumberField(TEXT("root_linear_speed_cm_per_sec"), RootLinearSpeedCmPerSec);
+			Row->SetNumberField(TEXT("root_angular_speed_deg_per_sec"), RootAngularSpeedDegPerSec);
+			Row->SetNumberField(TEXT("max_body_linear_speed_cm_per_sec"), MaxBodyLinearSpeedCmPerSec);
+			Row->SetNumberField(TEXT("max_body_angular_speed_deg_per_sec"), MaxBodyAngularSpeedDegPerSec);
 			Row->SetBoolField(TEXT("root_is_simulating"), PelvisBody && PelvisBody->IsValidBodyInstance() && PelvisBody->IsInstanceSimulatingPhysics());
 			Row->SetBoolField(TEXT("cmc_active"), Movement && Movement->IsActive());
 			Row->SetBoolField(TEXT("cmc_tick_enabled"), Movement && Movement->IsComponentTickEnabled());
@@ -486,6 +587,7 @@ namespace
 				return;
 			}
 			Component->SetProductControlDispatchDroppedForTesting(false);
+			Component->SetStandingVariantForTesting(EPhysAnimStandingVariant::Normal);
 			Component->SetForceSupportFailure(false);
 		}
 
@@ -549,10 +651,10 @@ namespace
 			const bool bPolicyWritten = FFileHelper::SaveStringToFile(PolicyContents, *PolicyPath);
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
 
-			const FString ProtocolPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("../product-gates/causal-standing.v1.json")));
+			const FString ProtocolPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), Config.ProtocolRelativePath));
 			const TSharedRef<FJsonObject> Manifest = MakeShared<FJsonObject>();
-			Manifest->SetStringField(TEXT("schema_version"), TEXT("physanim-product-run/v1"));
-			Manifest->SetStringField(TEXT("fixture_authority"), TEXT("PRODUCT_RUN"));
+			Manifest->SetStringField(TEXT("schema_version"), Config.RunSchemaVersion);
+			Manifest->SetStringField(TEXT("fixture_authority"), Config.FixtureAuthority);
 			Manifest->SetStringField(TEXT("run_id"), Config.RunId);
 			Manifest->SetStringField(TEXT("protocol_path"), ProtocolPath);
 			Manifest->SetStringField(TEXT("variant"), Config.Variant);
@@ -562,7 +664,8 @@ namespace
 			Manifest->SetStringField(TEXT("model_onnx_sha256"), Config.ModelOnnxSha256);
 			Manifest->SetNumberField(TEXT("reference_pelvis_height_cm"), MannyReferencePelvisHeightCm);
 			Manifest->SetNumberField(TEXT("standing_window_start_sec"), 0.0);
-			Manifest->SetNumberField(TEXT("perturbation_time_sec"), PerturbationTimeSeconds);
+			Manifest->SetNumberField(TEXT("capture_window_sec"), Config.CaptureWindowSeconds);
+			Manifest->SetNumberField(TEXT("perturbation_time_sec"), Config.bApplyPerturbation ? PerturbationTimeSeconds : -1.0);
 			Manifest->SetStringField(TEXT("physics_samples"), TEXT("physics.jsonl"));
 			Manifest->SetStringField(TEXT("policy_samples"), TEXT("policy.jsonl"));
 			Manifest->SetStringField(TEXT("render_capture"), TEXT("render.png"));
@@ -639,6 +742,46 @@ bool FPhysAnimCausalStandingProductTest::RunTest(const FString& Parameters)
 	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"), true))
 	{
 		AddError(TEXT("Unable to open the causal-standing product map"));
+		return false;
+	}
+	AddCommand(new FStartPIECommand(false));
+	AddCommand(new FCausalStandingCaptureCommand(this, Config));
+	AddCommand(new FEndPlayMapCommand());
+	AddCommand(new FResetCausalStandingVariantCommand());
+	return true;
+}
+
+IMPLEMENT_COMPLEX_AUTOMATION_TEST(
+	FPhysAnimStandingPlantDevelopmentTest,
+	"PhysAnim.Development.StandingPlant",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+void FPhysAnimStandingPlantDevelopmentTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+{
+	for (const TCHAR* Layer : { TEXT("ControlsOff"), TEXT("DampingOnly"), TEXT("FixedNeutralTarget"), TEXT("ZeroActions"), TEXT("RealOnnxPolicy") })
+	{
+		OutBeautifiedNames.Add(Layer);
+		OutTestCommands.Add(Layer);
+	}
+}
+
+bool FPhysAnimStandingPlantDevelopmentTest::RunTest(const FString& Parameters)
+{
+	FCausalStandingRunConfig Config;
+	FString ConfigError;
+	if (!Config.ReadFromCommandLine(ConfigError) || !Config.ConfigurePlantLayer(ConfigError))
+	{
+		AddError(ConfigError);
+		return false;
+	}
+	if (Config.Variant != Parameters)
+	{
+		AddError(FString::Printf(TEXT("Requested plant layer '%s' does not match test '%s'"), *Config.Variant, *Parameters));
+		return false;
+	}
+	if (!AutomationOpenMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"), true))
+	{
+		AddError(TEXT("Unable to open the standing-plant development map"));
 		return false;
 	}
 	AddCommand(new FStartPIECommand(false));

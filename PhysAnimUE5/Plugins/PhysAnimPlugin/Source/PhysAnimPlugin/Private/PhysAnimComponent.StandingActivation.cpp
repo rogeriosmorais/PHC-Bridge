@@ -166,21 +166,29 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 	}
 
 	const float Alpha = FMath::Clamp(LinearBlendAlpha, 0.0f, 1.0f);
-	const float ExtraDamping = EffectiveSettings.AngularExtraDampingMultiplier * FMath::Lerp(
-		EffectiveSettings.BalanceBootstrapExtraDampingMultiplier,
-		EffectiveSettings.BalanceActiveExtraDampingMultiplier,
-		Alpha);
+	EPhysAnimStandingVariant StandingVariant = EPhysAnimStandingVariant::Normal;
+#if WITH_DEV_AUTOMATION_TESTS
+	StandingVariant = StandingVariantForTesting;
+#endif
+	const FPhysAnimStandingActivationPlan ActivationPlan = FPhysAnimStandingActivationPlan::BuildBlended(
+		StandingVariant,
+		Alpha,
+		EffectiveSettings.AngularStrengthMultiplier,
+		EffectiveSettings.AngularDampingRatioMultiplier,
+		EffectiveSettings.AngularExtraDampingMultiplier * EffectiveSettings.BalanceBootstrapExtraDampingMultiplier,
+		EffectiveSettings.AngularExtraDampingMultiplier * EffectiveSettings.BalanceActiveExtraDampingMultiplier);
+	const FPhysAnimStandingControlPlan& ExpectedControl = ActivationPlan.Controls[0];
 	FPhysicsControlMultiplier ControlMultiplier;
-	ControlMultiplier.AngularStrengthMultiplier = EffectiveSettings.AngularStrengthMultiplier * Alpha;
-	ControlMultiplier.AngularDampingRatioMultiplier = EffectiveSettings.AngularDampingRatioMultiplier;
-	ControlMultiplier.AngularExtraDampingMultiplier = ExtraDamping;
+	ControlMultiplier.AngularStrengthMultiplier = ExpectedControl.AngularStrength;
+	ControlMultiplier.AngularDampingRatioMultiplier = ExpectedControl.DampingRatio;
+	ControlMultiplier.AngularExtraDampingMultiplier = ExpectedControl.ExtraDamping;
 
 	for (const FName BoneName : ControlBones)
 	{
 		PhysicsControl->SetControlMultiplier(
 			PhysAnimBridge::MakeControlName(BoneName),
 			ControlMultiplier,
-			true,
+			ExpectedControl.bEnabled,
 			true,
 			false);
 	}
@@ -261,7 +269,9 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 		const FPhysicsControlRecord* const Control = FPhysAnimPhysicsControlAccessor::GetControlRecord(
 			PhysicsControl,
 			PhysAnimBridge::MakeControlName(BoneName));
-		if (Control && Control->PhysicsControl.IsEnabled() &&
+		const bool bEnabledMatches = Control &&
+			(Control->PhysicsControl.IsEnabled() == ExpectedControl.bEnabled);
+		if (bEnabledMatches &&
 			FMath::IsNearlyEqual(Control->PhysicsControl.ControlMultiplier.AngularStrengthMultiplier, ControlMultiplier.AngularStrengthMultiplier) &&
 			FMath::IsNearlyEqual(Control->PhysicsControl.ControlMultiplier.AngularDampingRatioMultiplier, ControlMultiplier.AngularDampingRatioMultiplier) &&
 			FMath::IsNearlyEqual(Control->PhysicsControl.ControlMultiplier.AngularExtraDampingMultiplier, ControlMultiplier.AngularExtraDampingMultiplier))

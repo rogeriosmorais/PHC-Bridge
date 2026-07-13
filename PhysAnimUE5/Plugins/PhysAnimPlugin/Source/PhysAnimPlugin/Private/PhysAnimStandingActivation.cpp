@@ -41,19 +41,45 @@ FPhysAnimStandingActivationPlan FPhysAnimStandingActivationPlan::BuildBlended(
 	float BootstrapExtraDamping,
 	float StandingExtraDamping)
 {
-	(void)Variant;
 	const float Alpha = FMath::Clamp(LinearBlendAlpha, 0.0f, 1.0f);
+	const bool bControlsOff = Variant == EPhysAnimStandingVariant::ControlsOff;
+	const bool bDampingOnly = Variant == EPhysAnimStandingVariant::DampingOnly;
 	FPhysAnimStandingActivationPlan Plan;
 	Plan.Bodies.SetNum(RequiredBodyCount);
 	Plan.Controls.SetNum(RequiredControlCount);
 	for (FPhysAnimStandingControlPlan& Control : Plan.Controls)
 	{
-		Control.bEnabled = true;
-		Control.AngularStrength = ConfiguredAngularStrength * Alpha;
-		Control.DampingRatio = ConfiguredDampingRatio;
-		Control.ExtraDamping = FMath::Lerp(BootstrapExtraDamping, StandingExtraDamping, Alpha);
+		Control.bEnabled = !bControlsOff;
+		Control.AngularStrength = (bControlsOff || bDampingOnly)
+			? 0.0f
+			: ConfiguredAngularStrength * Alpha;
+		Control.DampingRatio = bControlsOff ? 0.0f : ConfiguredDampingRatio;
+		Control.ExtraDamping = bControlsOff
+			? 0.0f
+			: FMath::Lerp(BootstrapExtraDamping, StandingExtraDamping, Alpha);
 	}
 	return Plan;
+}
+
+bool FPhysAnimStandingActivationPlan::UsesPolicyInference(EPhysAnimStandingVariant Variant)
+{
+	return Variant != EPhysAnimStandingVariant::ControlsOff &&
+		Variant != EPhysAnimStandingVariant::DampingOnly &&
+		Variant != EPhysAnimStandingVariant::FixedNeutralTarget;
+}
+
+bool FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(EPhysAnimStandingVariant Variant)
+{
+	return Variant != EPhysAnimStandingVariant::ControlsOff &&
+		Variant != EPhysAnimStandingVariant::DampingOnly &&
+		Variant != EPhysAnimStandingVariant::FixedNeutralTarget;
+}
+
+bool FPhysAnimStandingActivationPlan::RequiresStandingHold(EPhysAnimStandingVariant Variant)
+{
+	return Variant == EPhysAnimStandingVariant::FixedNeutralTarget ||
+		Variant == EPhysAnimStandingVariant::ZeroActions ||
+		Variant == EPhysAnimStandingVariant::RealOnnxPolicy;
 }
 
 FPhysAnimStandingPublicationDecision FPhysAnimStandingPublicationDecision::Build(

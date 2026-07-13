@@ -56,11 +56,46 @@ bool FPhysAnimStandingActivationUniformPlanTest::RunTest(const FString& Paramete
 	const FPhysAnimStandingActivationPlan Normal = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::Normal, 1000.0f, 1.0f, 50.0f);
 	const FPhysAnimStandingActivationPlan Zero = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::ZeroActions, 1000.0f, 1.0f, 50.0f);
 	const FPhysAnimStandingActivationPlan Dropped = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::DropControlDispatch, 1000.0f, 1.0f, 50.0f);
+	const FPhysAnimStandingActivationPlan ControlsOff = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::ControlsOff, 1000.0f, 1.0f, 50.0f);
+	const FPhysAnimStandingActivationPlan DampingOnly = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::DampingOnly, 1000.0f, 1.0f, 50.0f);
+	const FPhysAnimStandingActivationPlan FixedNeutral = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::FixedNeutralTarget, 1000.0f, 1.0f, 50.0f);
+	const FPhysAnimStandingActivationPlan RealOnnx = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::RealOnnxPolicy, 1000.0f, 1.0f, 50.0f);
 
 	TestEqual(TEXT("Every variant plans all Manny bodies"), Normal.Bodies.Num(), FPhysAnimStandingActivationPlan::RequiredBodyCount);
 	TestEqual(TEXT("Every variant plans all controlled joints"), Normal.Controls.Num(), FPhysAnimStandingActivationPlan::RequiredControlCount);
 	TestTrue(TEXT("ZeroActions activation matches Normal"), Normal == Zero);
 	TestTrue(TEXT("Dropped dispatch activation matches Normal"), Normal == Dropped);
+	TestTrue(TEXT("Fixed neutral activation uses configured controls"), Normal == FixedNeutral);
+	TestTrue(TEXT("Real ONNX activation uses configured controls"), Normal == RealOnnx);
+	for (const FPhysAnimStandingControlPlan& Control : ControlsOff.Controls)
+	{
+		TestFalse(TEXT("Controls-off disables every control"), Control.bEnabled);
+		TestEqual(TEXT("Controls-off publishes zero strength"), Control.AngularStrength, 0.0f);
+		TestEqual(TEXT("Controls-off publishes zero damping ratio"), Control.DampingRatio, 0.0f);
+		TestEqual(TEXT("Controls-off publishes zero extra damping"), Control.ExtraDamping, 0.0f);
+	}
+	for (const FPhysAnimStandingControlPlan& Control : DampingOnly.Controls)
+	{
+		TestTrue(TEXT("Damping-only keeps controls enabled"), Control.bEnabled);
+		TestEqual(TEXT("Damping-only publishes zero strength"), Control.AngularStrength, 0.0f);
+		TestEqual(TEXT("Damping-only preserves configured damping ratio"), Control.DampingRatio, 1.0f);
+		TestEqual(TEXT("Damping-only preserves configured extra damping"), Control.ExtraDamping, 50.0f);
+	}
+	TestFalse(TEXT("Controls-off skips policy inference"), FPhysAnimStandingActivationPlan::UsesPolicyInference(EPhysAnimStandingVariant::ControlsOff));
+	TestFalse(TEXT("Damping-only skips policy inference"), FPhysAnimStandingActivationPlan::UsesPolicyInference(EPhysAnimStandingVariant::DampingOnly));
+	TestFalse(TEXT("Fixed neutral skips policy inference"), FPhysAnimStandingActivationPlan::UsesPolicyInference(EPhysAnimStandingVariant::FixedNeutralTarget));
+	TestTrue(TEXT("Zero actions still runs inference before zeroing"), FPhysAnimStandingActivationPlan::UsesPolicyInference(EPhysAnimStandingVariant::ZeroActions));
+	TestTrue(TEXT("Real ONNX runs inference"), FPhysAnimStandingActivationPlan::UsesPolicyInference(EPhysAnimStandingVariant::RealOnnxPolicy));
+	TestFalse(TEXT("Controls-off is a passive plant check"), FPhysAnimStandingActivationPlan::RequiresStandingHold(EPhysAnimStandingVariant::ControlsOff));
+	TestFalse(TEXT("Damping-only is a passive plant check"), FPhysAnimStandingActivationPlan::RequiresStandingHold(EPhysAnimStandingVariant::DampingOnly));
+	TestTrue(TEXT("Fixed neutral requires active standing"), FPhysAnimStandingActivationPlan::RequiresStandingHold(EPhysAnimStandingVariant::FixedNeutralTarget));
+	TestTrue(TEXT("Zero actions requires active standing"), FPhysAnimStandingActivationPlan::RequiresStandingHold(EPhysAnimStandingVariant::ZeroActions));
+	TestTrue(TEXT("Real ONNX requires active standing"), FPhysAnimStandingActivationPlan::RequiresStandingHold(EPhysAnimStandingVariant::RealOnnxPolicy));
+	TestFalse(TEXT("Controls-off skips target dispatch"), FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(EPhysAnimStandingVariant::ControlsOff));
+	TestFalse(TEXT("Damping-only skips target dispatch"), FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(EPhysAnimStandingVariant::DampingOnly));
+	TestFalse(TEXT("Fixed neutral preserves its captured target"), FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(EPhysAnimStandingVariant::FixedNeutralTarget));
+	TestTrue(TEXT("Zero actions uses the real target path"), FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(EPhysAnimStandingVariant::ZeroActions));
+	TestTrue(TEXT("Real ONNX uses the real target path"), FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(EPhysAnimStandingVariant::RealOnnxPolicy));
 	for (const FPhysAnimStandingBodyPlan& Body : Normal.Bodies)
 	{
 		TestTrue(TEXT("Every body is simulated"), Body.bSimulated);

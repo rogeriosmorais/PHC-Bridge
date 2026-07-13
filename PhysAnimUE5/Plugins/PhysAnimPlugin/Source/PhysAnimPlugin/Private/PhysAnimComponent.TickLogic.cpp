@@ -146,6 +146,13 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		PolicyUpdateAccumulatorSeconds,
 		ElapsedPolicySteps);
 	LastPolicyElapsedSteps = ElapsedPolicySteps;
+	bool bStandingVariantUsesPolicyInference = true;
+	bool bStandingVariantForcesZeroActions = false;
+#if WITH_DEV_AUTOMATION_TESTS
+	bStandingVariantUsesPolicyInference =
+		FPhysAnimStandingActivationPlan::UsesPolicyInference(StandingVariantForTesting);
+	bStandingVariantForcesZeroActions = StandingVariantForTesting == EPhysAnimStandingVariant::ZeroActions;
+#endif
 
 	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Verbose, 1.0f, TEXT("[PhysAnim] TICK_POLICY state=%s runPolicy=%d steps=%d acc=%.4f interval=%.4f dt=%.4f"),
 		GetRuntimeStateName(RuntimeState), bRunPolicyUpdateThisTick ? 1 : 0, ElapsedPolicySteps, PolicyUpdateAccumulatorSeconds, PolicyControlIntervalSeconds, DeltaTime);
@@ -216,7 +223,7 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 
 		const int32 V0PlantReviewMode = PhysAnimComponentInternal::CVarPhysAnimV0PlantReviewMode.GetValueOnGameThread();
 		const bool bV0PlantReviewStaticTargets = V0PlantReviewMode == 1 && RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
-		if (!bEnablePolicyInference)
+		if (!bEnablePolicyInference || !bStandingVariantUsesPolicyInference)
 		{
 			// SafetyGrip fallback: neural inference is disabled. Zero the raw action buffer
 			// so ConditionModelActions produces zero conditioned actions, keeping joints at
@@ -231,7 +238,8 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			return;
 		}
 
-		if (V0PlantReviewMode == 2 && RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		if ((V0PlantReviewMode == 2 || bStandingVariantForcesZeroActions) &&
+			IsStandingActivationRuntimeState(RuntimeState))
 		{
 			ActionOutputBuffer.Init(0.0f, PhysAnimBridge::NumActionFloats);
 		}

@@ -171,6 +171,16 @@ void UPhysAnimComponent::ApplyControlTargets(
 		return;
 	}
 
+#if WITH_DEV_AUTOMATION_TESTS
+	if (IsStandingActivationRuntimeState(RuntimeState) &&
+		!FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(StandingVariantForTesting))
+	{
+		LastControlTargetDiagnostics = {};
+		bPolicyTargetsAppliedLastFrame = false;
+		return;
+	}
+#endif
+
 	USkeletalMeshComponent* const Mesh = GetMeshComponent();
 	const FBodyInstance* const PelvisBodyScope = Mesh ? Mesh->GetBodyInstance(PhysAnimBridge::GetRootBoneName()) : nullptr;
 
