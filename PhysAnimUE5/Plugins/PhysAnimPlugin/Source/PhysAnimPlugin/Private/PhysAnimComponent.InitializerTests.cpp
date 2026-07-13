@@ -356,6 +356,16 @@ namespace
 				*FString::Printf(TEXT("%s has zero restitution"), *BoneName.ToString()),
 				FMath::IsNearlyZero(Material->Restitution));
 			TestTrue(
+				*FString::Printf(TEXT("%s uses 0.2 passive contact friction"), *BoneName.ToString()),
+				FMath::IsNearlyEqual(Material->Friction, 0.2f));
+			TestTrue(
+				*FString::Printf(TEXT("%s overrides friction combination"), *BoneName.ToString()),
+				Material->bOverrideFrictionCombineMode);
+			TestEqual(
+				*FString::Printf(TEXT("%s uses minimum friction combination"), *BoneName.ToString()),
+				Material->FrictionCombineMode,
+				EFrictionCombineMode::Min);
+			TestTrue(
 				*FString::Printf(TEXT("%s overrides restitution combination"), *BoneName.ToString()),
 				Material->bOverrideRestitutionCombineMode);
 			TestEqual(
