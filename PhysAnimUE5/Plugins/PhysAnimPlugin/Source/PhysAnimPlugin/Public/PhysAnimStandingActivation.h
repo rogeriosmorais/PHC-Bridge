@@ -43,6 +43,7 @@ struct PHYSANIMPLUGIN_API FPhysAnimStandingActivationPlan
 
 	TArray<FPhysAnimStandingBodyPlan> Bodies;
 	TArray<FPhysAnimStandingControlPlan> Controls;
+	bool bEnablePassiveConstraintVelocityDrives = false;
 
 	static FPhysAnimStandingActivationPlan Build(
 		EPhysAnimStandingVariant Variant,
@@ -79,6 +80,7 @@ struct PHYSANIMPLUGIN_API FPhysAnimStandingActivationReadback
 	int32 ModifierSimulationMatchCount = 0;
 	int32 RawSimulationMatchCount = 0;
 	int32 ControlGainMatchCount = 0;
+	int32 PassiveConstraintVelocityDriveMatchCount = 0;
 };
 
 struct PHYSANIMPLUGIN_API FPhysAnimStandingActivationStatus
@@ -89,6 +91,7 @@ struct PHYSANIMPLUGIN_API FPhysAnimStandingActivationStatus
 	int32 ModifierSimulationMatchCount = 0;
 	int32 RawSimulationMatchCount = 0;
 	int32 ControlGainMatchCount = 0;
+	int32 PassiveConstraintVelocityDriveMatchCount = 0;
 	FString FailureReason;
 
 	bool bRetryRequested = false;

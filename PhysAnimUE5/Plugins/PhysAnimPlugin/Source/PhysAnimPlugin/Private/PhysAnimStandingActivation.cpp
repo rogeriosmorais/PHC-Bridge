@@ -46,6 +46,7 @@ FPhysAnimStandingActivationPlan FPhysAnimStandingActivationPlan::BuildBlended(
 	const bool bControlsOff = Variant == EPhysAnimStandingVariant::ControlsOff;
 	const bool bDampingOnly = Variant == EPhysAnimStandingVariant::DampingOnly;
 	FPhysAnimStandingActivationPlan Plan;
+	Plan.bEnablePassiveConstraintVelocityDrives = bControlsOff;
 	Plan.Bodies.SetNum(RequiredBodyCount);
 	Plan.Controls.SetNum(RequiredControlCount);
 	const TArray<FName>& BodyNames = PhysAnimBridge::GetRequiredBodyModifierBoneNames();
@@ -105,7 +106,9 @@ FPhysAnimStandingPublicationDecision FPhysAnimStandingPublicationDecision::Build
 
 bool FPhysAnimStandingActivationPlan::operator==(const FPhysAnimStandingActivationPlan& Other) const
 {
-	return Bodies == Other.Bodies && Controls == Other.Controls;
+	return Bodies == Other.Bodies &&
+		Controls == Other.Controls &&
+		bEnablePassiveConstraintVelocityDrives == Other.bEnablePassiveConstraintVelocityDrives;
 }
 
 void FPhysAnimStandingActivation::Start()
@@ -202,7 +205,8 @@ bool FPhysAnimStandingActivation::IsReadbackValid(const FPhysAnimStandingActivat
 	return Readback.bFullSimulationCommitted
 		&& Readback.ModifierSimulationMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount
 		&& Readback.RawSimulationMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount
-		&& Readback.ControlGainMatchCount == FPhysAnimStandingActivationPlan::RequiredControlCount;
+		&& Readback.ControlGainMatchCount == FPhysAnimStandingActivationPlan::RequiredControlCount
+		&& Readback.PassiveConstraintVelocityDriveMatchCount == FPhysAnimStandingActivationPlan::RequiredControlCount;
 }
 
 void FPhysAnimStandingActivation::ApplyReadback(const FPhysAnimStandingActivationReadback& Readback)
@@ -211,6 +215,7 @@ void FPhysAnimStandingActivation::ApplyReadback(const FPhysAnimStandingActivatio
 	Status.ModifierSimulationMatchCount = Readback.ModifierSimulationMatchCount;
 	Status.RawSimulationMatchCount = Readback.RawSimulationMatchCount;
 	Status.ControlGainMatchCount = Readback.ControlGainMatchCount;
+	Status.PassiveConstraintVelocityDriveMatchCount = Readback.PassiveConstraintVelocityDriveMatchCount;
 }
 
 void FPhysAnimStandingActivation::Fail(const FString& FailureReason)

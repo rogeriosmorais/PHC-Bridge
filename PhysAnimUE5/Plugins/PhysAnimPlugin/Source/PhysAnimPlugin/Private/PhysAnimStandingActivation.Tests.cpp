@@ -15,6 +15,7 @@ FPhysAnimStandingActivationReadback MakeValidReadback()
 	Readback.ModifierSimulationMatchCount = FPhysAnimStandingActivationPlan::RequiredBodyCount;
 	Readback.RawSimulationMatchCount = FPhysAnimStandingActivationPlan::RequiredBodyCount;
 	Readback.ControlGainMatchCount = FPhysAnimStandingActivationPlan::RequiredControlCount;
+	Readback.PassiveConstraintVelocityDriveMatchCount = FPhysAnimStandingActivationPlan::RequiredControlCount;
 	return Readback;
 }
 }
@@ -75,6 +76,9 @@ bool FPhysAnimStandingActivationUniformPlanTest::RunTest(const FString& Paramete
 	TestTrue(TEXT("Dropped dispatch activation matches Normal"), Normal == Dropped);
 	TestTrue(TEXT("Fixed neutral activation uses configured controls"), Normal == FixedNeutral);
 	TestTrue(TEXT("Real ONNX activation uses configured controls"), Normal == RealOnnx);
+	TestTrue(TEXT("Controls-off retains passive Physics Asset velocity drives"), ControlsOff.bEnablePassiveConstraintVelocityDrives);
+	TestFalse(TEXT("Damping-only gives Physics Control sole velocity-drive ownership"), DampingOnly.bEnablePassiveConstraintVelocityDrives);
+	TestFalse(TEXT("Active standing gives Physics Control sole velocity-drive ownership"), Normal.bEnablePassiveConstraintVelocityDrives);
 	for (const FPhysAnimStandingControlPlan& Control : ControlsOff.Controls)
 	{
 		TestFalse(TEXT("Controls-off disables every control"), Control.bEnabled);
@@ -202,6 +206,17 @@ bool FPhysAnimStandingActivationFailStopTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Failure does not demote topology"), Status.bKinematicDemotionRequested);
 	TestFalse(TEXT("Failure does not request a cached reset"), Status.bResetRequested);
 	TestFalse(TEXT("Failure does not publish BalanceSafeDeny"), Status.bBalanceSafeDenyPublished);
+
+	FPhysAnimStandingActivation PassiveDriveMismatch;
+	PassiveDriveMismatch.Start();
+	PassiveDriveMismatch.CompletePreparation(true, TEXT(""));
+	FPhysAnimStandingActivationReadback PassiveReadback = MakeValidReadback();
+	PassiveReadback.PassiveConstraintVelocityDriveMatchCount = FPhysAnimStandingActivationPlan::RequiredControlCount - 1;
+	PassiveDriveMismatch.CompleteFullSimulationActivation(PassiveReadback, TEXT("passive_drive_readback_mismatch"));
+	TestEqual(
+		TEXT("Passive constraint drive mismatch fail-stops"),
+		PassiveDriveMismatch.GetStatus().RuntimeState,
+		EPhysAnimRuntimeState::FailStopped);
 
 	FPhysAnimStandingActivation WithoutEvidence;
 	WithoutEvidence.SetObservationalEvidenceFlags(false, false);

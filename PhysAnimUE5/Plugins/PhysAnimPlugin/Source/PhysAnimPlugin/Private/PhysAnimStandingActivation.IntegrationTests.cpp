@@ -8,6 +8,7 @@
 #include "Misc/AutomationTest.h"
 #include "PhysicsControlComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/ConstraintInstance.h"
 #include "Tests/AutomationCommon.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "UObject/UObjectIterator.h"
@@ -53,6 +54,7 @@ public:
 		Test->TestEqual(TEXT("All modifier readbacks remain simulated"), Status.ModifierSimulationMatchCount, 22);
 		Test->TestEqual(TEXT("All raw Chaos bodies remain simulated"), Status.RawSimulationMatchCount, 22);
 		Test->TestEqual(TEXT("All control gain readbacks remain matched"), Status.ControlGainMatchCount, 21);
+		Test->TestEqual(TEXT("All passive constraint drive readbacks remain matched"), Status.PassiveConstraintVelocityDriveMatchCount, 21);
 		Test->TestTrue(
 			TEXT("Atomic standing activation publishes the committed pelvis simulation state to target dispatch"),
 			Component->WasPelvisSimulatingLastFrame());
@@ -80,6 +82,19 @@ public:
 		Test->TestNotNull(TEXT("Manny skeletal mesh exists"), Mesh);
 		if (Mesh)
 		{
+			for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+			{
+				const FConstraintInstance* const Constraint = Mesh->FindConstraintInstance(BoneName);
+				Test->TestNotNull(
+					*FString::Printf(TEXT("Manny %s live constraint exists"), *BoneName.ToString()),
+					Constraint);
+				if (Constraint)
+				{
+					Test->TestFalse(
+						*FString::Printf(TEXT("Physics Control solely owns %s velocity drive"), *BoneName.ToString()),
+						Constraint->IsAngularVelocityDriveEnabled());
+				}
+			}
 			for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
 			{
 				const FBodyInstance* const Body = Mesh->GetBodyInstance(BoneName);

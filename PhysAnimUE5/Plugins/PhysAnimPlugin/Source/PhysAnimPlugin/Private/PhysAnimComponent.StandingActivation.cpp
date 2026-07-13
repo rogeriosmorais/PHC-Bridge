@@ -10,6 +10,7 @@
 #include "PhysicsControlComponent.h"
 #include "PhysicsControlRecord.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/ConstraintInstance.h"
 
 bool UPhysAnimComponent::ValidateStandingActivationRecords(FString& OutFailureReason) const
 {
@@ -185,6 +186,14 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 
 	for (const FName BoneName : ControlBones)
 	{
+		FConstraintInstance* const Constraint = Mesh->FindConstraintInstance(BoneName);
+		if (!Constraint)
+		{
+			OutFailureReason = FString::Printf(TEXT("standing_activation_missing_constraint:%s"), *BoneName.ToString());
+			return Readback;
+		}
+		Constraint->SetAngularVelocityDriveSLERP(ActivationPlan.bEnablePassiveConstraintVelocityDrives);
+
 		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
 		PhysicsControl->SetControlMultiplier(
 			ControlName,
@@ -312,8 +321,26 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 	}
 
 	FString FirstControlMismatch;
+	FString FirstPassiveConstraintDriveMismatch;
 	for (const FName BoneName : ControlBones)
 	{
+		const FConstraintInstance* const Constraint = Mesh->FindConstraintInstance(BoneName);
+		if (Constraint &&
+			Constraint->IsAngularVelocityDriveEnabled() == ActivationPlan.bEnablePassiveConstraintVelocityDrives)
+		{
+			++Readback.PassiveConstraintVelocityDriveMatchCount;
+		}
+		else if (FirstPassiveConstraintDriveMismatch.IsEmpty())
+		{
+			FirstPassiveConstraintDriveMismatch = Constraint
+				? FString::Printf(
+					TEXT("%s{velocity_drive_enabled=%d expected=%d}"),
+					*BoneName.ToString(),
+					Constraint->IsAngularVelocityDriveEnabled() ? 1 : 0,
+					ActivationPlan.bEnablePassiveConstraintVelocityDrives ? 1 : 0)
+				: FString::Printf(TEXT("%s{missing}"), *BoneName.ToString());
+		}
+
 		const FPhysicsControlRecord* const Control = FPhysAnimPhysicsControlAccessor::GetControlRecord(
 			PhysicsControl,
 			PhysAnimBridge::MakeControlName(BoneName));
@@ -343,7 +370,8 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 	const bool bReadbackMatches =
 		Readback.ModifierSimulationMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount &&
 		Readback.RawSimulationMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount &&
-		Readback.ControlGainMatchCount == FPhysAnimStandingActivationPlan::RequiredControlCount;
+		Readback.ControlGainMatchCount == FPhysAnimStandingActivationPlan::RequiredControlCount &&
+		Readback.PassiveConstraintVelocityDriveMatchCount == FPhysAnimStandingActivationPlan::RequiredControlCount;
 	if (bCommitFullSimulation && bReadbackMatches)
 	{
 		bStandingFullSimulationCommitted = true;
@@ -356,12 +384,14 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 	if (!bReadbackMatches)
 	{
 		OutFailureReason = FString::Printf(
-			TEXT("standing_activation_readback_mismatch:modifier=%d/22 raw=%d/22 controls=%d/21 first_modifier=%s first_control=%s"),
+			TEXT("standing_activation_readback_mismatch:modifier=%d/22 raw=%d/22 controls=%d/21 passive_drives=%d/21 first_modifier=%s first_control=%s first_passive_drive=%s"),
 			Readback.ModifierSimulationMatchCount,
 			Readback.RawSimulationMatchCount,
 			Readback.ControlGainMatchCount,
+			Readback.PassiveConstraintVelocityDriveMatchCount,
 			*FirstModifierMismatch,
-			*FirstControlMismatch);
+			*FirstControlMismatch,
+			*FirstPassiveConstraintDriveMismatch);
 	}
 	return Readback;
 }
