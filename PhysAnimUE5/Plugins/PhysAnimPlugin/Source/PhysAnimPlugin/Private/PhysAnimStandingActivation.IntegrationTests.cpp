@@ -80,6 +80,21 @@ public:
 		Test->TestNotNull(TEXT("Manny skeletal mesh exists"), Mesh);
 		if (Mesh)
 		{
+			for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
+			{
+				const FBodyInstance* const Body = Mesh->GetBodyInstance(BoneName);
+				if (Body)
+				{
+					Test->TestEqual(
+						*FString::Printf(TEXT("Manny %s publishes passive linear damping to Chaos"), *BoneName.ToString()),
+						Body->LinearDamping,
+						30.0f);
+					Test->TestEqual(
+						*FString::Printf(TEXT("Manny %s publishes passive angular damping to Chaos"), *BoneName.ToString()),
+						Body->AngularDamping,
+						100.0f);
+				}
+			}
 			const FBodyInstance* const FootBody = Mesh->GetBodyInstance(TEXT("foot_l"));
 			const FBodyInstance* const BallBody = Mesh->GetBodyInstance(TEXT("ball_l"));
 			Test->TestNotNull(TEXT("Manny left foot body exists"), FootBody);
