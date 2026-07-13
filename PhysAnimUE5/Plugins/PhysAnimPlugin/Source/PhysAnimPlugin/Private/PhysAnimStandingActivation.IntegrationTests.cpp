@@ -85,6 +85,9 @@ public:
 				const FBodyInstance* const Body = Mesh->GetBodyInstance(BoneName);
 				if (Body)
 				{
+					Test->TestTrue(
+						*FString::Printf(TEXT("Manny %s publishes continuous collision detection to Chaos"), *BoneName.ToString()),
+						Body->bUseCCD);
 					Test->TestEqual(
 						*FString::Printf(TEXT("Manny %s publishes passive linear damping to Chaos"), *BoneName.ToString()),
 						Body->LinearDamping,

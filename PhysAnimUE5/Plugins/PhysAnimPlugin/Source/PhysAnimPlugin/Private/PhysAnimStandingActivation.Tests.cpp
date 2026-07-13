@@ -117,6 +117,7 @@ bool FPhysAnimStandingActivationUniformPlanTest::RunTest(const FString& Paramete
 			(BodyNames[BodyIndex] == TEXT("ball_l") || BodyNames[BodyIndex] == TEXT("ball_r"));
 		TestTrue(TEXT("Every body is simulated"), Body.bSimulated);
 		TestEqual(TEXT("Every body has full physics blend"), Body.PhysicsBlendWeight, 1.0f);
+		TestTrue(TEXT("Every body uses continuous collision detection"), Body.bUseCcd);
 		TestEqual(
 			bBallBody ? TEXT("Ball bodies stay simulated without unstable contact") : TEXT("Load-bearing bodies retain query and physics collision"),
 			Body.CollisionEnabled,

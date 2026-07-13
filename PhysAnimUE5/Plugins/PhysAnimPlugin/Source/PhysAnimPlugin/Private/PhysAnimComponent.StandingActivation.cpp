@@ -238,6 +238,7 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 				ExpectedBody.bUpdateKinematicFromSimulation);
 			FBodyInstance* const Body = Mesh->GetBodyInstance(BoneName);
 			Body->SetInstanceSimulatePhysics(ExpectedBody.bSimulated, true);
+			Body->SetUseCCD(ExpectedBody.bUseCcd);
 			if (ExpectedBody.bSimulated)
 			{
 				Body->WakeInstance();

@@ -21,6 +21,7 @@ struct PHYSANIMPLUGIN_API FPhysAnimStandingBodyPlan
 	bool bSimulated = true;
 	float PhysicsBlendWeight = 1.0f;
 	ECollisionEnabled::Type CollisionEnabled = ECollisionEnabled::QueryAndPhysics;
+	bool bUseCcd = true;
 	bool bUpdateKinematicFromSimulation = false;
 
 	bool operator==(const FPhysAnimStandingBodyPlan& Other) const;
