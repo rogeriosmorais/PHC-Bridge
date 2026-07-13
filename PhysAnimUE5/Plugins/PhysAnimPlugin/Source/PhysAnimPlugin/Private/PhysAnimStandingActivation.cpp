@@ -1,0 +1,158 @@
+#include "PhysAnimStandingActivation.h"
+
+bool FPhysAnimStandingBodyPlan::operator==(const FPhysAnimStandingBodyPlan& Other) const
+{
+	return bSimulated == Other.bSimulated
+		&& FMath::IsNearlyEqual(PhysicsBlendWeight, Other.PhysicsBlendWeight)
+		&& CollisionEnabled == Other.CollisionEnabled
+		&& bUpdateKinematicFromSimulation == Other.bUpdateKinematicFromSimulation;
+}
+
+bool FPhysAnimStandingControlPlan::operator==(const FPhysAnimStandingControlPlan& Other) const
+{
+	return bEnabled == Other.bEnabled
+		&& FMath::IsNearlyEqual(AngularStrength, Other.AngularStrength)
+		&& FMath::IsNearlyEqual(DampingRatio, Other.DampingRatio)
+		&& FMath::IsNearlyEqual(ExtraDamping, Other.ExtraDamping);
+}
+
+FPhysAnimStandingActivationPlan FPhysAnimStandingActivationPlan::Build(
+	EPhysAnimStandingVariant Variant,
+	float AngularStrength,
+	float DampingRatio,
+	float ExtraDamping)
+{
+	(void)Variant;
+	FPhysAnimStandingActivationPlan Plan;
+	Plan.Bodies.SetNum(RequiredBodyCount);
+	Plan.Controls.SetNum(RequiredControlCount);
+	for (FPhysAnimStandingControlPlan& Control : Plan.Controls)
+	{
+		Control.bEnabled = true;
+		Control.AngularStrength = AngularStrength;
+		Control.DampingRatio = DampingRatio;
+		Control.ExtraDamping = ExtraDamping;
+	}
+	return Plan;
+}
+
+bool FPhysAnimStandingActivationPlan::operator==(const FPhysAnimStandingActivationPlan& Other) const
+{
+	return Bodies == Other.Bodies && Controls == Other.Controls;
+}
+
+void FPhysAnimStandingActivation::Start()
+{
+	Status = FPhysAnimStandingActivationStatus();
+	Status.RuntimeState = EPhysAnimRuntimeState::Standing_Preparation;
+}
+
+void FPhysAnimStandingActivation::CompletePreparation(bool bPreparationValid, const FString& FailureReason)
+{
+	if (Status.RuntimeState != EPhysAnimRuntimeState::Standing_Preparation)
+	{
+		Fail(TEXT("invalid_preparation_state"));
+		return;
+	}
+	if (!bPreparationValid)
+	{
+		Fail(FailureReason.IsEmpty() ? TEXT("standing_preparation_failed") : FailureReason);
+		return;
+	}
+	Status.RuntimeState = EPhysAnimRuntimeState::Standing_FullSimulationActivation;
+}
+
+void FPhysAnimStandingActivation::CompleteFullSimulationActivation(
+	const FPhysAnimStandingActivationReadback& Readback,
+	const FString& FailureReason)
+{
+	if (Status.RuntimeState != EPhysAnimRuntimeState::Standing_FullSimulationActivation)
+	{
+		Fail(TEXT("invalid_full_simulation_activation_state"));
+		return;
+	}
+	ApplyReadback(Readback);
+	if (!IsReadbackValid(Readback))
+	{
+		Fail(FailureReason.IsEmpty() ? TEXT("standing_activation_readback_mismatch") : FailureReason);
+		return;
+	}
+	Status.RuntimeState = EPhysAnimRuntimeState::Standing_PolicyBlend;
+}
+
+void FPhysAnimStandingActivation::TickPolicyBlend(
+	float ElapsedSeconds,
+	float StartupRampSeconds,
+	const FPhysAnimStandingActivationReadback& Readback,
+	const FString& FailureReason)
+{
+	if (Status.RuntimeState != EPhysAnimRuntimeState::Standing_PolicyBlend)
+	{
+		Fail(TEXT("invalid_policy_blend_state"));
+		return;
+	}
+	ApplyReadback(Readback);
+	if (!IsReadbackValid(Readback))
+	{
+		Fail(FailureReason.IsEmpty() ? TEXT("standing_policy_blend_readback_mismatch") : FailureReason);
+		return;
+	}
+	Status.LinearBlendAlpha = StartupRampSeconds > SMALL_NUMBER
+		? FMath::Clamp(ElapsedSeconds / StartupRampSeconds, 0.0f, 1.0f)
+		: 1.0f;
+	if (Status.LinearBlendAlpha >= 1.0f)
+	{
+		Status.RuntimeState = EPhysAnimRuntimeState::BalanceActive_Standing;
+	}
+}
+
+void FPhysAnimStandingActivation::ObserveStanding(
+	const FPhysAnimStandingActivationReadback& Readback,
+	const FString& FailureReason)
+{
+	if (Status.RuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		Fail(TEXT("invalid_standing_observation_state"));
+		return;
+	}
+	ApplyReadback(Readback);
+	if (!IsReadbackValid(Readback))
+	{
+		Fail(FailureReason.IsEmpty() ? TEXT("standing_readback_mismatch") : FailureReason);
+	}
+}
+
+void FPhysAnimStandingActivation::SetObservationalEvidenceFlags(
+	bool bEvidenceEnabled,
+	bool bRendererInstrumentationEnabled)
+{
+	(void)bEvidenceEnabled;
+	(void)bRendererInstrumentationEnabled;
+}
+
+bool FPhysAnimStandingActivation::IsReadbackValid(const FPhysAnimStandingActivationReadback& Readback)
+{
+	return Readback.bFullSimulationCommitted
+		&& Readback.ModifierSimulationMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount
+		&& Readback.RawSimulationMatchCount == FPhysAnimStandingActivationPlan::RequiredBodyCount
+		&& Readback.ControlGainMatchCount == FPhysAnimStandingActivationPlan::RequiredControlCount;
+}
+
+void FPhysAnimStandingActivation::ApplyReadback(const FPhysAnimStandingActivationReadback& Readback)
+{
+	Status.bFullSimulationCommitted = Readback.bFullSimulationCommitted;
+	Status.ModifierSimulationMatchCount = Readback.ModifierSimulationMatchCount;
+	Status.RawSimulationMatchCount = Readback.RawSimulationMatchCount;
+	Status.ControlGainMatchCount = Readback.ControlGainMatchCount;
+}
+
+void FPhysAnimStandingActivation::Fail(const FString& FailureReason)
+{
+	Status.RuntimeState = EPhysAnimRuntimeState::FailStopped;
+	Status.FailureReason = FailureReason;
+	Status.bRetryRequested = false;
+	Status.bKinematicDemotionRequested = false;
+	Status.bResetRequested = false;
+	Status.bBalanceSafeDenyPublished = false;
+}
+
