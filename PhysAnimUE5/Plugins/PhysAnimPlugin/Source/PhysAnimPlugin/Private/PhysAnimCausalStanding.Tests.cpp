@@ -51,6 +51,70 @@ namespace
 		FName MaxAngularBody = NAME_None;
 		double MaxAngularSpeedDegPerSec = 0.0;
 	};
+
+	struct FStandingPlantPoseErrorSummary
+	{
+		void Observe(FName BoneName, double ErrorDegrees, bool bLowerLimb)
+		{
+			SumSquares += ErrorDegrees * ErrorDegrees;
+			++Count;
+			if (bLowerLimb)
+			{
+				LowerLimbSumSquares += ErrorDegrees * ErrorDegrees;
+				++LowerLimbCount;
+			}
+			if (ErrorDegrees > MaxErrorDegrees)
+			{
+				MaxErrorDegrees = ErrorDegrees;
+				MaxErrorBone = BoneName;
+			}
+		}
+
+		double RmsDegrees() const
+		{
+			return Count > 0 ? FMath::Sqrt(SumSquares / static_cast<double>(Count)) : 180.0;
+		}
+
+		double LowerLimbRmsDegrees() const
+		{
+			return LowerLimbCount > 0
+				? FMath::Sqrt(LowerLimbSumSquares / static_cast<double>(LowerLimbCount))
+				: 180.0;
+		}
+
+		double SumSquares = 0.0;
+		double LowerLimbSumSquares = 0.0;
+		double MaxErrorDegrees = 0.0;
+		int32 Count = 0;
+		int32 LowerLimbCount = 0;
+		FName MaxErrorBone = NAME_None;
+	};
+
+	struct FStandingPlantMassExtrema
+	{
+		void Observe(FName BodyName, double MassKg, const FVector& InertiaTensorKgCmSq)
+		{
+			if (MassKg < MinMassKg)
+			{
+				MinMassBody = BodyName;
+				MinMassKg = MassKg;
+			}
+			const double MinInertia = FMath::Min3(
+				static_cast<double>(InertiaTensorKgCmSq.X),
+				static_cast<double>(InertiaTensorKgCmSq.Y),
+				static_cast<double>(InertiaTensorKgCmSq.Z));
+			if (MinInertia < MinInertiaKgCmSq)
+			{
+				MinInertiaBody = BodyName;
+				MinInertiaKgCmSq = MinInertia;
+			}
+		}
+
+		FName MinMassBody = NAME_None;
+		double MinMassKg = TNumericLimits<double>::Max();
+		FName MinInertiaBody = NAME_None;
+		double MinInertiaKgCmSq = TNumericLimits<double>::Max();
+	};
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -68,6 +132,19 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	TestEqual(TEXT("Linear speed diagnostic records the maximum"), Extrema.MaxLinearSpeedCmPerSec, 15.0);
 	TestEqual(TEXT("Angular speed diagnostic records its body independently"), Extrema.MaxAngularBody, FName(TEXT("foot_l")));
 	TestEqual(TEXT("Angular speed diagnostic records the maximum"), Extrema.MaxAngularSpeedDegPerSec, 30.0);
+	FStandingPlantPoseErrorSummary PoseErrors;
+	PoseErrors.Observe(TEXT("spine_01"), 3.0, false);
+	PoseErrors.Observe(TEXT("thigh_l"), 4.0, true);
+	TestEqual(TEXT("Pose error diagnostic records the maximum body"), PoseErrors.MaxErrorBone, FName(TEXT("thigh_l")));
+	TestEqual(TEXT("Pose error diagnostic records whole-body RMS"), PoseErrors.RmsDegrees(), FMath::Sqrt(12.5));
+	TestEqual(TEXT("Pose error diagnostic records lower-limb RMS"), PoseErrors.LowerLimbRmsDegrees(), 4.0);
+	FStandingPlantMassExtrema MassExtrema;
+	MassExtrema.Observe(TEXT("pelvis"), 10.0, FVector(20.0, 30.0, 40.0));
+	MassExtrema.Observe(TEXT("ball_r"), 0.1, FVector(0.5, 0.25, 0.75));
+	TestEqual(TEXT("Mass diagnostic records the lightest body"), MassExtrema.MinMassBody, FName(TEXT("ball_r")));
+	TestEqual(TEXT("Mass diagnostic records the minimum mass"), MassExtrema.MinMassKg, 0.1);
+	TestEqual(TEXT("Inertia diagnostic records the lowest-inertia body"), MassExtrema.MinInertiaBody, FName(TEXT("ball_r")));
+	TestEqual(TEXT("Inertia diagnostic records the minimum tensor component"), MassExtrema.MinInertiaKgCmSq, 0.25);
 
 	UPhysAnimComponent* const Component = NewObject<UPhysAnimComponent>();
 	TestNotNull(TEXT("Transient product harness component"), Component);
@@ -75,6 +152,9 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	{
 		return false;
 	}
+	const FPhysAnimStabilizationSettings DefaultSettings;
+	TestEqual(TEXT("Standing gain ramp preserves the seeded plant"), DefaultSettings.StartupRampSeconds, 0.25f);
+	TestEqual(TEXT("Standing uses bounded startup control authority"), DefaultSettings.AngularStrengthMultiplier, 0.35f);
 
 	TestFalse(TEXT("Dispatch fault is disabled by default"), Component->IsProductControlDispatchDroppedForTesting());
 	Component->SetProductControlDispatchDroppedForTesting(true);
@@ -318,15 +398,20 @@ namespace
 			: 180.0;
 	}
 
-	double MeasurePoseRms(USkeletalMeshComponent* Mesh, UPhysicsControlComponent* PhysicsControl, const TMap<FName, FQuat>& IntendedTargets)
+	FStandingPlantPoseErrorSummary MeasurePoseErrors(
+		USkeletalMeshComponent* Mesh,
+		UPhysicsControlComponent* PhysicsControl,
+		const TMap<FName, FQuat>& IntendedTargets)
 	{
+		FStandingPlantPoseErrorSummary Summary;
 		if (!Mesh || !PhysicsControl || !Mesh->GetSkeletalMeshAsset())
 		{
-			return 180.0;
+			return Summary;
 		}
 		const FReferenceSkeleton& ReferenceSkeleton = Mesh->GetSkeletalMeshAsset()->GetRefSkeleton();
-		double SumSquares = 0.0;
-		int32 Count = 0;
+		static const TSet<FName> LowerLimbBones = {
+			TEXT("thigh_l"), TEXT("calf_l"), TEXT("foot_l"), TEXT("ball_l"),
+			TEXT("thigh_r"), TEXT("calf_r"), TEXT("foot_r"), TEXT("ball_r") };
 		for (const TPair<FName, FQuat>& Pair : IntendedTargets)
 		{
 			const FName BoneName = PhysAnimBridge::GetBoneNameFromControlName(Pair.Key);
@@ -345,10 +430,9 @@ namespace
 				: Mesh->GetComponentQuat();
 			const FQuat ActualRelative = ParentRotation.Inverse() * ChildBody->GetUnrealWorldTransform().GetRotation();
 			const double ErrorDegrees = FMath::RadiansToDegrees(ActualRelative.AngularDistance(Target.TargetOrientation.Quaternion()));
-			SumSquares += ErrorDegrees * ErrorDegrees;
-			++Count;
+			Summary.Observe(BoneName, ErrorDegrees, LowerLimbBones.Contains(BoneName));
 		}
-		return Count > 0 ? FMath::Sqrt(SumSquares / static_cast<double>(Count)) : 180.0;
+		return Summary;
 	}
 
 	void MeasureTargetReadback(
@@ -498,6 +582,7 @@ namespace
 			int32 BodyValidCount = 0;
 			int32 BodySimulatingCount = 0;
 			FStandingPlantSpeedExtrema SpeedExtrema;
+			FStandingPlantMassExtrema MassExtrema;
 			if (Mesh)
 			{
 				for (const FName BoneName : PhysAnimBridge::GetRequiredBodyModifierBoneNames())
@@ -513,6 +598,7 @@ namespace
 						BoneName,
 						static_cast<double>(Body->GetUnrealWorldVelocity().Size()),
 						static_cast<double>(FMath::RadiansToDegrees(Body->GetUnrealWorldAngularVelocityInRadians().Size())));
+					MassExtrema.Observe(BoneName, Body->GetBodyMass(), Body->GetBodyInertiaTensor());
 				}
 			}
 			const double RootLinearSpeedCmPerSec = PelvisBody
@@ -528,6 +614,15 @@ namespace
 			const FPhysAnimStandingActivationStatus StandingStatus = Component
 				? Component->GetStandingActivationStatus()
 				: FPhysAnimStandingActivationStatus{};
+			FPhysicsControlData GainProbeData;
+			FPhysicsControlMultiplier GainProbeMultiplier;
+			const FName GainProbeControl = PhysAnimBridge::MakeControlName(TEXT("thigh_l"));
+			const bool bHasGainProbe = PhysicsControl &&
+				PhysicsControl->GetControlData(GainProbeControl, GainProbeData) &&
+				PhysicsControl->GetControlMultiplier(GainProbeControl, GainProbeMultiplier);
+			const FStandingPlantPoseErrorSummary PoseErrors = Component
+				? MeasurePoseErrors(Mesh, PhysicsControl, Component->GetPreviousControlTargetRotationsForDiagnostics())
+				: FStandingPlantPoseErrorSummary{};
 			UCharacterMovementComponent* Movement = Character ? Character->GetCharacterMovement() : nullptr;
 			UCapsuleComponent* Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
 			const TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -545,6 +640,10 @@ namespace
 			Row->SetNumberField(TEXT("body_valid_count"), BodyValidCount);
 			Row->SetNumberField(TEXT("body_simulating_count"), BodySimulatingCount);
 			Row->SetNumberField(TEXT("control_gain_match_count"), StandingStatus.ControlGainMatchCount);
+			Row->SetNumberField(TEXT("control_base_angular_strength_hz"), bHasGainProbe ? GainProbeData.AngularStrength : 0.0);
+			Row->SetNumberField(TEXT("control_angular_strength_multiplier"), bHasGainProbe ? GainProbeMultiplier.AngularStrengthMultiplier : 0.0);
+			Row->SetNumberField(TEXT("control_angular_damping_ratio_multiplier"), bHasGainProbe ? GainProbeMultiplier.AngularDampingRatioMultiplier : 0.0);
+			Row->SetNumberField(TEXT("control_angular_extra_damping_multiplier"), bHasGainProbe ? GainProbeMultiplier.AngularExtraDampingMultiplier : 0.0);
 			Row->SetBoolField(TEXT("full_simulation_committed"), StandingStatus.bFullSimulationCommitted);
 			Row->SetNumberField(TEXT("root_linear_speed_cm_per_sec"), RootLinearSpeedCmPerSec);
 			Row->SetNumberField(TEXT("root_angular_speed_deg_per_sec"), RootAngularSpeedDegPerSec);
@@ -552,6 +651,10 @@ namespace
 			Row->SetStringField(TEXT("max_body_linear_speed_bone"), SpeedExtrema.MaxLinearBody.ToString());
 			Row->SetNumberField(TEXT("max_body_angular_speed_deg_per_sec"), SpeedExtrema.MaxAngularSpeedDegPerSec);
 			Row->SetStringField(TEXT("max_body_angular_speed_bone"), SpeedExtrema.MaxAngularBody.ToString());
+			Row->SetNumberField(TEXT("minimum_body_mass_kg"), MassExtrema.MinMassKg);
+			Row->SetStringField(TEXT("minimum_body_mass_bone"), MassExtrema.MinMassBody.ToString());
+			Row->SetNumberField(TEXT("minimum_body_inertia_kg_cm_sq"), MassExtrema.MinInertiaKgCmSq);
+			Row->SetStringField(TEXT("minimum_body_inertia_bone"), MassExtrema.MinInertiaBody.ToString());
 			Row->SetBoolField(TEXT("root_is_simulating"), PelvisBody && PelvisBody->IsValidBodyInstance() && PelvisBody->IsInstanceSimulatingPhysics());
 			Row->SetBoolField(TEXT("cmc_active"), Movement && Movement->IsActive());
 			Row->SetBoolField(TEXT("cmc_tick_enabled"), Movement && Movement->IsComponentTickEnabled());
@@ -560,7 +663,10 @@ namespace
 			Row->SetNumberField(TEXT("movement_reclaim_count"), Artifact ? Artifact->MovementReclaimCount : 0);
 			Row->SetNumberField(TEXT("shell_helper_used_count"), Artifact ? Artifact->ShellHelperUsedCount : 0);
 			Row->SetNumberField(TEXT("topology_change_count"), Artifact ? Artifact->TopologyChangeCount : 0);
-			Row->SetNumberField(TEXT("pose_rms_error_deg"), Component ? MeasurePoseRms(Mesh, PhysicsControl, Component->GetPreviousControlTargetRotationsForDiagnostics()) : 180.0);
+			Row->SetNumberField(TEXT("pose_rms_error_deg"), Component ? PoseErrors.RmsDegrees() : 180.0);
+			Row->SetNumberField(TEXT("lower_limb_pose_rms_error_deg"), Component ? PoseErrors.LowerLimbRmsDegrees() : 180.0);
+			Row->SetNumberField(TEXT("max_pose_error_deg"), Component ? PoseErrors.MaxErrorDegrees : 180.0);
+			Row->SetStringField(TEXT("max_pose_error_bone"), PoseErrors.MaxErrorBone.ToString());
 			PhysicsRows.Add(SerializeJson(Row));
 		}
 
@@ -578,10 +684,14 @@ namespace
 			ACharacter* Character = Cast<ACharacter>(Component->GetOwner());
 			UPhysicsControlComponent* PhysicsControl = Character ? Character->FindComponentByClass<UPhysicsControlComponent>() : nullptr;
 			const TMap<FName, FQuat>& IntendedTargets = Component->GetPreviousControlTargetRotationsForDiagnostics();
-			int32 ReadbackMatches = 0;
-			double MaxReadbackErrorDegrees = 180.0;
-			MeasureTargetReadback(PhysicsControl, IntendedTargets, ReadbackMatches, MaxReadbackErrorDegrees);
 			const FPhysAnimControlTargetDiagnostics& Diagnostics = Component->GetLastControlTargetDiagnostics();
+			int32 ReadbackMatches = 0;
+			double MaxReadbackErrorDegrees = 0.0;
+			if (Diagnostics.NumTotalTargetsWritten > 0)
+			{
+				MaxReadbackErrorDegrees = 180.0;
+				MeasureTargetReadback(PhysicsControl, IntendedTargets, ReadbackMatches, MaxReadbackErrorDegrees);
+			}
 
 			const TSharedRef<FJsonObject> Row = MakeShared<FJsonObject>();
 			Row->SetNumberField(TEXT("sequence"), PolicySequence++);
