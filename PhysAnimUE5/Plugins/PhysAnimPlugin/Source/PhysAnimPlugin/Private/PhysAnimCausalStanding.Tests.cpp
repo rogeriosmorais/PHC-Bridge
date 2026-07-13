@@ -13,6 +13,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "HAL/IConsoleManager.h"
 #include "ImageUtils.h"
+#include "Misc/App.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
@@ -132,6 +133,9 @@ namespace
 		FName MinInertiaBody = NAME_None;
 		double MinInertiaKgCmSq = TNumericLimits<double>::Max();
 	};
+
+	TOptional<double> ResolveCausalStandingSampleTime(double ActualTimeSeconds, double CaptureWindowSeconds);
+	double GetCausalStandingFixedDeltaTimeSeconds();
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -176,6 +180,20 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	const FPhysAnimStabilizationSettings DefaultSettings;
 	TestEqual(TEXT("Standing gain ramp preserves the seeded plant"), DefaultSettings.StartupRampSeconds, 0.25f);
 	TestEqual(TEXT("Standing publishes the configured eight-hertz control authority"), DefaultSettings.AngularStrengthMultiplier, 1.0f);
+	TestTrue(
+		TEXT("Causal standing uses a deterministic sixty-hertz runtime step"),
+		FMath::IsNearlyEqual(GetCausalStandingFixedDeltaTimeSeconds(), 1.0 / 60.0, 1.0e-9));
+	TestEqual(
+		TEXT("An in-window raw sample keeps its observed time"),
+		ResolveCausalStandingSampleTime(0.495, 0.5).GetValue(),
+		0.495);
+	TestEqual(
+		TEXT("Floating-point endpoint noise is normalized to the locked window"),
+		ResolveCausalStandingSampleTime(0.50000001, 0.5).GetValue(),
+		0.5);
+	TestFalse(
+		TEXT("A post-window runtime observation cannot be relabeled as endpoint evidence"),
+		ResolveCausalStandingSampleTime(0.89, 0.5).IsSet());
 
 	TestFalse(TEXT("Dispatch fault is disabled by default"), Component->IsProductControlDispatchDroppedForTesting());
 	Component->SetProductControlDispatchDroppedForTesting(true);
@@ -234,6 +252,24 @@ namespace
 	constexpr double PerturbationTimeSeconds = 2.0;
 	constexpr float PerturbationDeltaVCmPerSecond = 15.0f;
 	constexpr float MannyReferencePelvisHeightCm = PhysAnimBridge::MannyRootHeightMeters * 100.0f;
+	constexpr double CausalStandingFixedDeltaTimeSeconds = 1.0 / 60.0;
+	constexpr double CaptureEndpointToleranceSeconds = 1.0e-6;
+
+	TOptional<double> ResolveCausalStandingSampleTime(
+		double ActualTimeSeconds,
+		double CaptureWindowSeconds)
+	{
+		if (ActualTimeSeconds > CaptureWindowSeconds + CaptureEndpointToleranceSeconds)
+		{
+			return {};
+		}
+		return FMath::Min(ActualTimeSeconds, CaptureWindowSeconds);
+	}
+
+	double GetCausalStandingFixedDeltaTimeSeconds()
+	{
+		return CausalStandingFixedDeltaTimeSeconds;
+	}
 
 	struct FCausalStandingRunConfig
 	{
@@ -503,14 +539,21 @@ namespace
 		{
 		}
 
+		virtual ~FCausalStandingCaptureCommand() override
+		{
+			RestoreFixedTimeStep();
+		}
+
 		virtual bool Update() override
 		{
+			ConfigureFixedTimeStep();
 			UWorld* World = FindProductWorld();
 			if (!World)
 			{
 				if (FPlatformTime::Seconds() - StartupRealTime >= StartupTimeoutSeconds)
 				{
 					Test->AddError(TEXT("PIE world was unavailable for the causal-standing product run"));
+					RestoreFixedTimeStep();
 					return true;
 				}
 				return false;
@@ -557,14 +600,15 @@ namespace
 			}
 
 			const double TimeSeconds = World->GetTimeSeconds() - ObservationStartWorldTime;
-			const double SampleTimeSeconds = FMath::Min(TimeSeconds, Config.CaptureWindowSeconds);
-			if (SampleTimeSeconds <= LastPhysicsTimeSeconds)
+			const TOptional<double> SampleTimeSeconds = ResolveCausalStandingSampleTime(
+				TimeSeconds,
+				Config.CaptureWindowSeconds);
+			if (SampleTimeSeconds.IsSet() && SampleTimeSeconds.GetValue() > LastPhysicsTimeSeconds)
 			{
-				return false;
+				LastPhysicsTimeSeconds = SampleTimeSeconds.GetValue();
+				CapturePhysicsSample(World, Component, SampleTimeSeconds.GetValue());
+				CapturePolicySample(Component, SampleTimeSeconds.GetValue());
 			}
-			LastPhysicsTimeSeconds = SampleTimeSeconds;
-			CapturePhysicsSample(World, Component, SampleTimeSeconds);
-			CapturePolicySample(Component, SampleTimeSeconds);
 
 			if (Config.bApplyPerturbation && !bPerturbationApplied && TimeSeconds >= PerturbationTimeSeconds)
 			{
@@ -582,10 +626,35 @@ namespace
 			{
 				Test->AddError(TEXT("Failed to write causal-standing product evidence"));
 			}
+			RestoreFixedTimeStep();
 			return true;
 		}
 
 	private:
+		void ConfigureFixedTimeStep()
+		{
+			if (bFixedTimeStepConfigured)
+			{
+				return;
+			}
+			bPreviousUseFixedTimeStep = FApp::UseFixedTimeStep();
+			PreviousFixedDeltaTimeSeconds = FApp::GetFixedDeltaTime();
+			FApp::SetFixedDeltaTime(GetCausalStandingFixedDeltaTimeSeconds());
+			FApp::SetUseFixedTimeStep(true);
+			bFixedTimeStepConfigured = true;
+		}
+
+		void RestoreFixedTimeStep()
+		{
+			if (!bFixedTimeStepConfigured)
+			{
+				return;
+			}
+			FApp::SetUseFixedTimeStep(bPreviousUseFixedTimeStep);
+			FApp::SetFixedDeltaTime(PreviousFixedDeltaTimeSeconds);
+			bFixedTimeStepConfigured = false;
+		}
+
 		void CapturePhysicsSample(UWorld* World, UPhysAnimComponent* Component, double TimeSeconds)
 		{
 			ACharacter* Character = Component ? Cast<ACharacter>(Component->GetOwner()) : nullptr;
@@ -864,6 +933,9 @@ namespace
 		bool bObservationStarted = false;
 		bool bVariantApplied = false;
 		bool bPerturbationApplied = false;
+		bool bFixedTimeStepConfigured = false;
+		bool bPreviousUseFixedTimeStep = false;
+		double PreviousFixedDeltaTimeSeconds = 0.0;
 		int32 PhysicsSequence = 0;
 		int32 PolicySequence = 0;
 		int32 LastPolicyActionSampleCount = 0;
