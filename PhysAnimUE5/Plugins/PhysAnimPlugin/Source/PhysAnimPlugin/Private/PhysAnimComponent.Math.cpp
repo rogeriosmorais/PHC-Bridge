@@ -783,6 +783,14 @@ bool UPhysAnimComponent::AdvancePolicyControlAccumulator(
 }
 
 
+FQuat UPhysAnimComponent::ComposePolicyActionOffset(
+	const FQuat& NeutralParentRelativeRotation,
+	const FQuat& PolicyActionOffsetRotation)
+{
+	return (NeutralParentRelativeRotation * PolicyActionOffsetRotation).GetNormalized();
+}
+
+
 FQuat UPhysAnimComponent::BlendPolicyTargetRotation(
 	const FQuat& BaselineRotation,
 	const FQuat& PolicyTargetRotation,

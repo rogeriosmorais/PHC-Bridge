@@ -2853,6 +2853,7 @@ public:
 		float PolicyControlIntervalSeconds,
 		float& InOutAccumulatorSeconds,
 		int32& OutElapsedSteps);
+	static FQuat ComposePolicyActionOffset(const FQuat& NeutralParentRelativeRotation, const FQuat& PolicyActionOffsetRotation);
 	static FQuat BlendPolicyTargetRotation(const FQuat& BaselineRotation, const FQuat& PolicyTargetRotation, float PolicyAlpha);
 	static float CalculateControlTargetDeltaDegrees(const FQuat& PreviousRotation, const FQuat& TargetRotation);
 	static float CalculateControlAuthorityAlpha(

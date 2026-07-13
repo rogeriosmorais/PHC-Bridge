@@ -123,6 +123,17 @@ namespace
 				ExpectedParentRelativeRotation,
 				PolicyRotation,
 				0.0f).AngularDistance(ExpectedParentRelativeRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Identity policy action offset exactly reproduces Manny's captured neutral target"),
+			UPhysAnimComponent::ComposePolicyActionOffset(
+				ExpectedParentRelativeRotation,
+				FQuat::Identity).AngularDistance(ExpectedParentRelativeRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Policy action offsets are composed in the captured joint-local frame"),
+			UPhysAnimComponent::ComposePolicyActionOffset(
+				ExpectedParentRelativeRotation,
+				PolicyRotation).AngularDistance(
+					(ExpectedParentRelativeRotation * PolicyRotation).GetNormalized()) <= KINDA_SMALL_NUMBER);
 
 		const FQuat NeutralPelvisActorRelativeRotation =
 			(FQuat(FVector::ForwardVector, FMath::DegreesToRadians(90.0f)) *

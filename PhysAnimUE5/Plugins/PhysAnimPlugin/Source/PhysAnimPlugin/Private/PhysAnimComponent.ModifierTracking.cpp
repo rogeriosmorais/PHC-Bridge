@@ -503,15 +503,21 @@ void UPhysAnimComponent::ApplyControlTargets(
 					return;
 				}
 
+				const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
+				const FQuat* const BlendStartRotation = PolicyBlendStartControlTargetRotations.Find(ControlName);
+				const FQuat NeutralReferencedPolicyRotation = BlendStartRotation
+					? ComposePolicyActionOffset(*BlendStartRotation, Pair.Value)
+					: Pair.Value;
+
 				// §EPIC-13.2 - Phase 3 Soft Handover
-				FQuat BasePolicyRotation = Pair.Value;
+				FQuat BasePolicyRotation = NeutralReferencedPolicyRotation;
 				if (bIsPhase3HandoverBlend && EffectiveHandoverAlpha < 1.0f - KINDA_SMALL_NUMBER)
 				{
 					// Blend from the physically settled pose (captured at Tick 20) to the current policy target
 					const FQuat* const StartRotPtr = PolicyBlendStartControlTargetRotations.Find(ControlName);
 					if (StartRotPtr)
 					{
-						BasePolicyRotation = FQuat::Slerp(*StartRotPtr, Pair.Value, EffectiveHandoverAlpha).GetNormalized();
+						BasePolicyRotation = FQuat::Slerp(*StartRotPtr, NeutralReferencedPolicyRotation, EffectiveHandoverAlpha).GetNormalized();
 					}
 				}
 				else if (bInSettlementWindow)
@@ -523,9 +529,6 @@ void UPhysAnimComponent::ApplyControlTargets(
 						BasePolicyRotation = *SettledRotPtr;
 					}
 				}
-
-				const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
-				const FQuat* const BlendStartRotation = PolicyBlendStartControlTargetRotations.Find(ControlName);
 
 				const bool bApplyTrainingAlignedLowerLimbTargetRangePolicy =
 				ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
