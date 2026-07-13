@@ -95,8 +95,8 @@ bool FPhysAnimBalanceReadyTransition::IsSnapshotReady(const FPhysAnimStabilizati
 
 	if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase3_Settle)
 	{
-		LinearThreshold *= 2.0f;
-		AngularThreshold *= 2.0f;
+		LinearThreshold *= 2.5f;
+		AngularThreshold *= 3.0f;
 		InstabilityReason = BalanceReadinessReasons::Phase3InstabilitySpike;
 	}
 	else if (Domain.CurrentPhase == EBalanceReadyTransitionPhase::BRT_Phase2_RootOn ||
