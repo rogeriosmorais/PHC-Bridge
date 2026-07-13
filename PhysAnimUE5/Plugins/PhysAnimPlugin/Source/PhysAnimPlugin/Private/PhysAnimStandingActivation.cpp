@@ -8,7 +8,6 @@ bool FPhysAnimStandingBodyPlan::operator==(const FPhysAnimStandingBodyPlan& Othe
 	return bSimulated == Other.bSimulated
 		&& FMath::IsNearlyEqual(PhysicsBlendWeight, Other.PhysicsBlendWeight)
 		&& CollisionEnabled == Other.CollisionEnabled
-		&& bUseCcd == Other.bUseCcd
 		&& bUpdateKinematicFromSimulation == Other.bUpdateKinematicFromSimulation;
 }
 
