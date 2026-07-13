@@ -7,6 +7,7 @@
 #include "PhysicsEngine/SkeletalBodySetup.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "AnimationRuntime.h"
 #include "Engine/SkeletalMesh.h"
 #include "Misc/AutomationTest.h"
 
@@ -130,6 +131,87 @@ namespace
 			}
 		}
 
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMannyToeConstraintRefPoseContractTest,
+		"PhysAnim.Component.MannyToeConstraintRefPoseContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimMannyToeConstraintRefPoseContractTest::RunTest(const FString& Parameters)
+	{
+		const UPhysicsAsset* const PhysicsAsset = LoadObject<UPhysicsAsset>(nullptr, TEXT("/Game/Characters/Mannequins/Rigs/PA_Mannequin.PA_Mannequin"));
+		const USkeletalMesh* const SkeletalMesh = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple"));
+		TestNotNull(TEXT("Manny physics asset should load"), PhysicsAsset);
+		TestNotNull(TEXT("Manny skeletal mesh should load"), SkeletalMesh);
+		if (!PhysicsAsset || !SkeletalMesh) return false;
+
+		const FReferenceSkeleton& ReferenceSkeleton = SkeletalMesh->GetRefSkeleton();
+		TArray<FTransform> ComponentSpaceRefPose;
+		FAnimationRuntime::FillUpComponentSpaceTransforms(
+			ReferenceSkeleton,
+			ReferenceSkeleton.GetRefBonePose(),
+			ComponentSpaceRefPose);
+
+		static const TPair<FName, FName> ToeLinks[] =
+		{
+			{ TEXT("foot_l"), TEXT("ball_l") },
+			{ TEXT("foot_r"), TEXT("ball_r") }
+		};
+		for (const TPair<FName, FName>& Link : ToeLinks)
+		{
+			const int32 ParentBoneIndex = ReferenceSkeleton.FindBoneIndex(Link.Key);
+			const int32 ChildBoneIndex = ReferenceSkeleton.FindBoneIndex(Link.Value);
+			const int32 ConstraintIndex = PhysicsAsset->FindConstraintIndex(Link.Value, Link.Key);
+			TestTrue(*FString::Printf(TEXT("Toe parent bone exists: %s"), *Link.Key.ToString()), ComponentSpaceRefPose.IsValidIndex(ParentBoneIndex));
+			TestTrue(*FString::Printf(TEXT("Toe child bone exists: %s"), *Link.Value.ToString()), ComponentSpaceRefPose.IsValidIndex(ChildBoneIndex));
+			TestTrue(*FString::Printf(TEXT("Toe constraint exists: %s/%s"), *Link.Key.ToString(), *Link.Value.ToString()), PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex));
+			if (!ComponentSpaceRefPose.IsValidIndex(ParentBoneIndex) ||
+				!ComponentSpaceRefPose.IsValidIndex(ChildBoneIndex) ||
+				!PhysicsAsset->ConstraintSetup.IsValidIndex(ConstraintIndex) ||
+				!PhysicsAsset->ConstraintSetup[ConstraintIndex])
+			{
+				continue;
+			}
+
+			const FConstraintInstance& Constraint = PhysicsAsset->ConstraintSetup[ConstraintIndex]->DefaultInstance;
+			const FTransform ChildFrame = Constraint.GetRefFrame(EConstraintFrame::Frame1) * ComponentSpaceRefPose[ChildBoneIndex];
+			const FTransform ParentFrame = Constraint.GetRefFrame(EConstraintFrame::Frame2) * ComponentSpaceRefPose[ParentBoneIndex];
+			const double AnchorSeparationCm = FVector::Distance(ChildFrame.GetTranslation(), ParentFrame.GetTranslation());
+			const double AngularMismatchDeg = FMath::RadiansToDegrees(
+				ChildFrame.GetRotation().AngularDistance(ParentFrame.GetRotation()));
+			AddInfo(FString::Printf(
+				TEXT("TOE_CONSTRAINT_REF_POSE link=%s/%s anchor_separation_cm=%.6f angular_mismatch_deg=%.6f swing1=%d/%.3f swing2=%d/%.3f twist=%d/%.3f"),
+				*Link.Key.ToString(),
+				*Link.Value.ToString(),
+				AnchorSeparationCm,
+				AngularMismatchDeg,
+				static_cast<int32>(Constraint.GetAngularSwing1Motion()),
+				Constraint.GetAngularSwing1Limit(),
+				static_cast<int32>(Constraint.GetAngularSwing2Motion()),
+				Constraint.GetAngularSwing2Limit(),
+				static_cast<int32>(Constraint.GetAngularTwistMotion()),
+				Constraint.GetAngularTwistLimit()));
+			TestTrue(
+				*FString::Printf(TEXT("Toe constraint anchors coincide in Manny's reference pose: %s/%s"), *Link.Key.ToString(), *Link.Value.ToString()),
+				AnchorSeparationCm <= 0.1);
+			TestTrue(
+				*FString::Printf(TEXT("Toe constraint frames align in Manny's reference pose: %s/%s"), *Link.Key.ToString(), *Link.Value.ToString()),
+				AngularMismatchDeg <= 0.1);
+			TestEqual(
+				*FString::Printf(TEXT("Toe swing 1 is free: %s/%s"), *Link.Key.ToString(), *Link.Value.ToString()),
+				Constraint.GetAngularSwing1Motion(),
+				ACM_Free);
+			TestEqual(
+				*FString::Printf(TEXT("Toe swing 2 is free: %s/%s"), *Link.Key.ToString(), *Link.Value.ToString()),
+				Constraint.GetAngularSwing2Motion(),
+				ACM_Free);
+			TestEqual(
+				*FString::Printf(TEXT("Toe twist is free: %s/%s"), *Link.Key.ToString(), *Link.Value.ToString()),
+				Constraint.GetAngularTwistMotion(),
+				ACM_Free);
+		}
 		return true;
 	}
 
