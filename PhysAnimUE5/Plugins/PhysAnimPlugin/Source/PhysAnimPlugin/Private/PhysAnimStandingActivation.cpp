@@ -1,5 +1,6 @@
 #include "PhysAnimStandingActivation.h"
 
+#include "PhysAnimBridge.h"
 #include "PhysAnimComponent.h"
 
 bool FPhysAnimStandingBodyPlan::operator==(const FPhysAnimStandingBodyPlan& Other) const
@@ -47,6 +48,14 @@ FPhysAnimStandingActivationPlan FPhysAnimStandingActivationPlan::BuildBlended(
 	FPhysAnimStandingActivationPlan Plan;
 	Plan.Bodies.SetNum(RequiredBodyCount);
 	Plan.Controls.SetNum(RequiredControlCount);
+	const TArray<FName>& BodyNames = PhysAnimBridge::GetRequiredBodyModifierBoneNames();
+	for (int32 BodyIndex = 0; BodyIndex < Plan.Bodies.Num() && BodyIndex < BodyNames.Num(); ++BodyIndex)
+	{
+		if (BodyNames[BodyIndex] == TEXT("ball_l") || BodyNames[BodyIndex] == TEXT("ball_r"))
+		{
+			Plan.Bodies[BodyIndex].CollisionEnabled = ECollisionEnabled::NoCollision;
+		}
+	}
 	for (FPhysAnimStandingControlPlan& Control : Plan.Controls)
 	{
 		Control.bEnabled = !bControlsOff;
