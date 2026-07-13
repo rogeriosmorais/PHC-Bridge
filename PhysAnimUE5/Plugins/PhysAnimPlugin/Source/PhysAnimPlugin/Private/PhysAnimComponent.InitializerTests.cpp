@@ -34,9 +34,56 @@ namespace
 
 	bool FPhysAnimMannyConstraintInventoryTest::RunTest(const FString& Parameters)
 	{
-		UPhysicsAsset* const PhysicsAsset = LoadObject<UPhysicsAsset>(nullptr, TEXT("/Game/Characters/Mannequins/Rigs/PA_Mannequin.PA_Mannequin"));
+		const UPhysicsAsset* const PhysicsAsset = LoadObject<UPhysicsAsset>(nullptr, TEXT("/Game/Characters/Mannequins/Rigs/PA_Mannequin.PA_Mannequin"));
 		TestNotNull(TEXT("Manny physics asset should load"), PhysicsAsset);
-		return PhysicsAsset != nullptr;
+		if (!PhysicsAsset)
+		{
+			return false;
+		}
+
+		static const TPair<FName, FName> RequiredJointPairs[] =
+		{
+			{ TEXT("pelvis"), TEXT("thigh_l") },
+			{ TEXT("thigh_l"), TEXT("calf_l") },
+			{ TEXT("calf_l"), TEXT("foot_l") },
+			{ TEXT("foot_l"), TEXT("ball_l") },
+			{ TEXT("pelvis"), TEXT("thigh_r") },
+			{ TEXT("thigh_r"), TEXT("calf_r") },
+			{ TEXT("calf_r"), TEXT("foot_r") },
+			{ TEXT("foot_r"), TEXT("ball_r") },
+			{ TEXT("pelvis"), TEXT("spine_01") },
+			{ TEXT("spine_01"), TEXT("spine_02") },
+			{ TEXT("spine_02"), TEXT("spine_03") },
+			{ TEXT("spine_03"), TEXT("neck_01") },
+			{ TEXT("neck_01"), TEXT("head") },
+			{ TEXT("spine_03"), TEXT("clavicle_l") },
+			{ TEXT("clavicle_l"), TEXT("upperarm_l") },
+			{ TEXT("upperarm_l"), TEXT("lowerarm_l") },
+			{ TEXT("lowerarm_l"), TEXT("hand_l") },
+			{ TEXT("spine_03"), TEXT("clavicle_r") },
+			{ TEXT("clavicle_r"), TEXT("upperarm_r") },
+			{ TEXT("upperarm_r"), TEXT("lowerarm_r") },
+			{ TEXT("lowerarm_r"), TEXT("hand_r") }
+		};
+		for (const TPair<FName, FName>& Pair : RequiredJointPairs)
+		{
+			const int32 ParentBodyIndex = PhysicsAsset->FindBodyIndex(Pair.Key);
+			const int32 ChildBodyIndex = PhysicsAsset->FindBodyIndex(Pair.Value);
+			TestTrue(
+				*FString::Printf(TEXT("Required parent body exists: %s"), *Pair.Key.ToString()),
+				PhysicsAsset->SkeletalBodySetups.IsValidIndex(ParentBodyIndex));
+			TestTrue(
+				*FString::Printf(TEXT("Required child body exists: %s"), *Pair.Value.ToString()),
+				PhysicsAsset->SkeletalBodySetups.IsValidIndex(ChildBodyIndex));
+			if (PhysicsAsset->SkeletalBodySetups.IsValidIndex(ParentBodyIndex) &&
+				PhysicsAsset->SkeletalBodySetups.IsValidIndex(ChildBodyIndex))
+			{
+				TestFalse(
+					*FString::Printf(TEXT("Adjacent plant bodies do not collide: %s/%s"), *Pair.Key.ToString(), *Pair.Value.ToString()),
+					PhysicsAsset->IsCollisionEnabled(ParentBodyIndex, ChildBodyIndex));
+			}
+		}
+		return true;
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -81,11 +128,11 @@ namespace
 				Body.LinearDamping,
 				Body.AngularDamping));
 			TestTrue(
-				*FString::Printf(TEXT("%s linear damping is authored at 0.1"), *BoneName.ToString()),
-				FMath::IsNearlyEqual(Body.LinearDamping, 0.1f));
+				*FString::Printf(TEXT("%s linear damping is authored at 1.0"), *BoneName.ToString()),
+				FMath::IsNearlyEqual(Body.LinearDamping, 1.0f));
 			TestTrue(
-				*FString::Printf(TEXT("%s angular damping is authored at 1.0"), *BoneName.ToString()),
-				FMath::IsNearlyEqual(Body.AngularDamping, 1.0f));
+				*FString::Printf(TEXT("%s angular damping is authored at 5.0"), *BoneName.ToString()),
+				FMath::IsNearlyEqual(Body.AngularDamping, 5.0f));
 		}
 		return true;
 	}
