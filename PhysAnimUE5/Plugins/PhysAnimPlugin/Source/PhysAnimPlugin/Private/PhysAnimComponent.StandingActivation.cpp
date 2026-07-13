@@ -217,39 +217,78 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 		Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		Mesh->SetEnablePhysicsBlending(true);
 		Mesh->SetAllBodiesPhysicsBlendWeight(1.0f);
-		for (const FName BoneName : BodyBones)
+		for (int32 BodyIndex = 0; BodyIndex < BodyBones.Num(); ++BodyIndex)
 		{
+			const FName BoneName = BodyBones[BodyIndex];
+			const FPhysAnimStandingBodyPlan& ExpectedBody = ActivationPlan.Bodies[BodyIndex];
+			const EPhysicsMovementType MovementType = ExpectedBody.bSimulated
+				? EPhysicsMovementType::Simulated
+				: EPhysicsMovementType::Kinematic;
 			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
-			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, false, true, false);
-			PhysicsControl->SetBodyModifierMovementType(ModifierName, EPhysicsMovementType::Simulated, true, false);
-			PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, 1.0f, true, false);
-			PhysicsControl->SetBodyModifierCollisionType(ModifierName, ECollisionEnabled::QueryAndPhysics, true, false);
+			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, ExpectedBody.bUpdateKinematicFromSimulation, true, false);
+			PhysicsControl->SetBodyModifierMovementType(ModifierName, MovementType, true, false);
+			PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, ExpectedBody.PhysicsBlendWeight, true, false);
+			PhysicsControl->SetBodyModifierCollisionType(ModifierName, ExpectedBody.CollisionEnabled, true, false);
 			ForceBodyModifierRecordState(
 				PhysicsControl,
 				ModifierName,
-				EPhysicsMovementType::Simulated,
-				1.0f,
-				ECollisionEnabled::QueryAndPhysics,
-				false);
+				MovementType,
+				ExpectedBody.PhysicsBlendWeight,
+				ExpectedBody.CollisionEnabled,
+				ExpectedBody.bUpdateKinematicFromSimulation);
 			FBodyInstance* const Body = Mesh->GetBodyInstance(BoneName);
-			Body->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-			Body->SetInstanceSimulatePhysics(true, true);
-			Body->WakeInstance();
+			Body->SetInstanceSimulatePhysics(ExpectedBody.bSimulated, true);
+			if (ExpectedBody.bSimulated)
+			{
+				Body->WakeInstance();
+			}
 		}
 		PhysicsControl->UpdateControls(0.0f);
 	}
 
-	for (const FName BoneName : BodyBones)
+	// Movement ownership changes atomically above. Collision, blend, and
+	// kinematic-readback tuning remain per-tick publications so no legacy writer
+	// can silently replace the standing plan after the activation frame.
+	if (bStandingFullSimulationCommitted)
 	{
+		for (int32 BodyIndex = 0; BodyIndex < BodyBones.Num(); ++BodyIndex)
+		{
+			const FName BoneName = BodyBones[BodyIndex];
+			const FPhysAnimStandingBodyPlan& ExpectedBody = ActivationPlan.Bodies[BodyIndex];
+			const EPhysicsMovementType MovementType = ExpectedBody.bSimulated
+				? EPhysicsMovementType::Simulated
+				: EPhysicsMovementType::Kinematic;
+			const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
+			PhysicsControl->SetBodyModifierUpdateKinematicFromSimulation(ModifierName, ExpectedBody.bUpdateKinematicFromSimulation, true, false);
+			PhysicsControl->SetBodyModifierPhysicsBlendWeight(ModifierName, ExpectedBody.PhysicsBlendWeight, true, false);
+			PhysicsControl->SetBodyModifierCollisionType(ModifierName, ExpectedBody.CollisionEnabled, true, false);
+			ForceBodyModifierRecordState(
+				PhysicsControl,
+				ModifierName,
+				MovementType,
+				ExpectedBody.PhysicsBlendWeight,
+				ExpectedBody.CollisionEnabled,
+				ExpectedBody.bUpdateKinematicFromSimulation);
+		}
+		PhysicsControl->UpdateControls(0.0f);
+	}
+
+	for (int32 BodyIndex = 0; BodyIndex < BodyBones.Num(); ++BodyIndex)
+	{
+		const FName BoneName = BodyBones[BodyIndex];
+		const FPhysAnimStandingBodyPlan& ExpectedBody = ActivationPlan.Bodies[BodyIndex];
+		const EPhysicsMovementType ExpectedMovementType = ExpectedBody.bSimulated
+			? EPhysicsMovementType::Simulated
+			: EPhysicsMovementType::Kinematic;
 		const FName ModifierName = PhysAnimBridge::MakeBodyModifierName(BoneName);
 		const FPhysicsBodyModifierRecord* const Modifier =
 			FPhysAnimPhysicsControlAccessor::GetModifierRecord(PhysicsControl, ModifierName);
 		const FBodyInstance* const Body = Mesh->GetBodyInstance(BoneName);
 		const bool bModifierMatches = Modifier &&
-			Modifier->BodyModifier.ModifierData.MovementType == EPhysicsMovementType::Simulated &&
-			FMath::IsNearlyEqual(Modifier->BodyModifier.ModifierData.PhysicsBlendWeight, 1.0f) &&
-			Modifier->BodyModifier.ModifierData.CollisionType == ECollisionEnabled::QueryAndPhysics &&
-			!Modifier->BodyModifier.ModifierData.bUpdateKinematicFromSimulation;
+			Modifier->BodyModifier.ModifierData.MovementType == ExpectedMovementType &&
+			FMath::IsNearlyEqual(Modifier->BodyModifier.ModifierData.PhysicsBlendWeight, ExpectedBody.PhysicsBlendWeight) &&
+			Modifier->BodyModifier.ModifierData.CollisionType == ExpectedBody.CollisionEnabled &&
+			Modifier->BodyModifier.ModifierData.bUpdateKinematicFromSimulation == ExpectedBody.bUpdateKinematicFromSimulation;
 		if (bModifierMatches)
 		{
 			++Readback.ModifierSimulationMatchCount;
@@ -266,7 +305,7 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 					Modifier->BodyModifier.ModifierData.bUpdateKinematicFromSimulation ? 1 : 0)
 				: FString::Printf(TEXT("%s{missing}"), *BoneName.ToString());
 		}
-		if (Body && Body->IsInstanceSimulatingPhysics())
+		if (Body && Body->IsInstanceSimulatingPhysics() == ExpectedBody.bSimulated)
 		{
 			++Readback.RawSimulationMatchCount;
 		}

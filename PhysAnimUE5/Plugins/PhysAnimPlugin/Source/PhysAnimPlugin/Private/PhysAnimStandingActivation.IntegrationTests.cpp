@@ -64,6 +64,7 @@ public:
 		ACharacter* const Character = Cast<ACharacter>(Component->GetOwner());
 		UCharacterMovementComponent* const Movement = Character ? Character->GetCharacterMovement() : nullptr;
 		UCapsuleComponent* const Capsule = Character ? Character->GetCapsuleComponent() : nullptr;
+		USkeletalMeshComponent* const Mesh = Character ? Character->GetMesh() : nullptr;
 		Test->TestNotNull(TEXT("Manny CharacterMovement exists"), Movement);
 		Test->TestNotNull(TEXT("Manny capsule exists"), Capsule);
 		if (Movement)
@@ -75,6 +76,25 @@ public:
 		if (Capsule)
 		{
 			Test->TestEqual(TEXT("Capsule collision is disabled"), Capsule->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
+		}
+		Test->TestNotNull(TEXT("Manny skeletal mesh exists"), Mesh);
+		if (Mesh)
+		{
+			const FBodyInstance* const FootBody = Mesh->GetBodyInstance(TEXT("foot_l"));
+			const FBodyInstance* const BallBody = Mesh->GetBodyInstance(TEXT("ball_l"));
+			Test->TestNotNull(TEXT("Manny left foot body exists"), FootBody);
+			Test->TestNotNull(TEXT("Manny left ball body exists"), BallBody);
+			if (FootBody)
+			{
+				Test->TestEqual(TEXT("Manny foot body remains simulation-enabled"), FootBody->GetCollisionEnabled(false), ECollisionEnabled::QueryAndPhysics);
+				Test->TestEqual(TEXT("Manny foot shape remains load-bearing"), FootBody->GetShapeCollisionEnabled(0), ECollisionEnabled::QueryAndPhysics);
+			}
+			if (BallBody)
+			{
+				Test->TestEqual(TEXT("Manny ball body stays simulation-enabled"), BallBody->GetCollisionEnabled(false), ECollisionEnabled::QueryAndPhysics);
+				Test->TestEqual(TEXT("Manny ball shape is removed from contact only"), BallBody->GetShapeCollisionEnabled(0), ECollisionEnabled::NoCollision);
+				Test->TestTrue(TEXT("Manny ball body remains simulated"), BallBody->IsInstanceSimulatingPhysics());
+			}
 		}
 		Test->TestFalse(TEXT("Standing never owns an explicit shell lock"), Component->HasExplicitTransitionOwnedShellLock());
 		return true;
