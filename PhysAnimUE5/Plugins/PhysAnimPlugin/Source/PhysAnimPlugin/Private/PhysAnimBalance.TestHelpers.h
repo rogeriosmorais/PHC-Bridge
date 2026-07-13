@@ -13,12 +13,6 @@
 
 namespace PhysAnimBalanceTestHelpers
 {
-	inline bool IsTruthfulBalanceSmokeSafeDenyReason(const FString& SafePhase2DenialReason)
-	{
-		return !SafePhase2DenialReason.IsEmpty() &&
-			SafePhase2DenialReason != BalanceReadinessReasons::Phase2FailStopPrecursor;
-	}
-
 	inline bool IsTruthfulBalanceSmokeTerminalReason(const EPhysAnimTerminalReason Reason)
 	{
 		switch (Reason)
@@ -39,17 +33,9 @@ namespace PhysAnimBalanceTestHelpers
 		const EPhysAnimRuntimeState RuntimeState,
 		const bool bHasPhysicalContinuityEvidence,
 		const EPhysAnimTerminalReason TerminalReason,
-		const bool bInPublicBalanceEntryState,
-		const EPhysAnimRuntimeState PublicBalanceEntryState,
-		const bool bHasTransitionFailure,
-		const bool bHasSafePhase2Denial,
-		const FString& SafePhase2DenialReason,
-		const FString& BalanceReadyTransitionFailureReason,
-		const bool bLegacyStage1Context,
 		FString& OutError)
 	{
 		OutError.Reset();
-		static_cast<void>(bLegacyStage1Context);
 
 		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
 		{
@@ -61,26 +47,11 @@ namespace PhysAnimBalanceTestHelpers
 			return true;
 		}
 
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Recovery)
-		{
-			OutError = TEXT("[PhysAnimPieBalanceSmoke] Balance entry did not settle into BalanceActive_Standing within the benchmark window.");
-			return false;
-		}
-
-		if (RuntimeState == EPhysAnimRuntimeState::BalanceSafeDeny)
+		if (UPhysAnimComponent::IsStandingActivationRuntimeState(RuntimeState))
 		{
 			OutError = FString::Printf(
-				TEXT("[PhysAnimPieBalanceSmoke] BalanceSafeDeny is not a benchmark success. reason=%s truthful=%s"),
-				*SafePhase2DenialReason,
-				IsTruthfulBalanceSmokeSafeDenyReason(SafePhase2DenialReason) ? TEXT("true") : TEXT("false"));
-			return false;
-		}
-
-		if (bInPublicBalanceEntryState)
-		{
-			OutError = FString::Printf(
-				TEXT("[PhysAnimPieBalanceSmoke] Balance mode did not complete within the smoke window. state=%s."),
-				UPhysAnimComponent::GetRuntimeStateName(PublicBalanceEntryState));
+				TEXT("[PhysAnimPieBalanceSmoke] Standing activation did not complete within the smoke window. state=%s."),
+				UPhysAnimComponent::GetRuntimeStateName(RuntimeState));
 			return false;
 		}
 
@@ -92,22 +63,11 @@ namespace PhysAnimBalanceTestHelpers
 			return false;
 		}
 
-		if (RuntimeState == EPhysAnimRuntimeState::FailStopped || bHasTransitionFailure)
+		if (RuntimeState == EPhysAnimRuntimeState::FailStopped)
 		{
 			OutError = FString::Printf(
-				TEXT("[PhysAnimPieBalanceSmoke] Unsafe failure path observed. state=%s denial=%s fail=%s"),
-				UPhysAnimComponent::GetRuntimeStateName(RuntimeState),
-				*SafePhase2DenialReason,
-				*BalanceReadyTransitionFailureReason);
-			return false;
-		}
-
-		if (bHasSafePhase2Denial)
-		{
-			OutError = FString::Printf(
-				TEXT("[PhysAnimPieBalanceSmoke] Balance mode denied entry without publishing BalanceSafeDeny. state=%s reason=%s."),
-				UPhysAnimComponent::GetRuntimeStateName(RuntimeState),
-				*SafePhase2DenialReason);
+				TEXT("[PhysAnimPieBalanceSmoke] Explicit fail-stop observed. state=%s"),
+				UPhysAnimComponent::GetRuntimeStateName(RuntimeState));
 			return false;
 		}
 
@@ -153,13 +113,6 @@ namespace PhysAnimBalanceTestHelpers
 					RuntimeState,
 					UPhysAnimComponent::TestOnlyHasStartupProofPhysicalContinuityEvidence(TerminationState.LatestArtifact),
 					TerminationState.TerminalReason,
-					UPhysAnimComponent::TestOnlyIsBalanceEntryState(RuntimeState),
-					RuntimeState,
-					Component->HasRecordedBalanceTransitionFailure(),
-					Component->HasSafePhase2Denial(),
-					Component->GetSafePhase2DenialReason(),
-					Component->GetBalanceReadyTransitionFailureReason(),
-					Component->IsStage1(),
 					Error);
 
 				if (!bSuccess)

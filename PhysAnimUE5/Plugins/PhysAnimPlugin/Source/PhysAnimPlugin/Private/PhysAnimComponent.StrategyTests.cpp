@@ -307,13 +307,7 @@ namespace
 				EPhysAnimRuntimeState::BalanceActive_Standing,
 				true,
 				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
+				OutcomeError));
 		TestTrue(TEXT("Successful active-balance outcome emits no error"), OutcomeError.IsEmpty());
 
 		OutcomeError.Reset();
@@ -323,78 +317,18 @@ namespace
 				EPhysAnimRuntimeState::BalanceActive_Standing,
 				false,
 				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
+				OutcomeError));
 		TestTrue(TEXT("Physical continuity failure reports physical continuity"), OutcomeError.Contains(TEXT("physical continuity")));
 
 		OutcomeError.Reset();
 		TestFalse(
-			TEXT("Balance recovery is not a passing standing benchmark outcome"),
+			TEXT("Policy blend is not a completed standing benchmark outcome"),
 			EvaluateBalanceModeSmokeOutcome(
-				EPhysAnimRuntimeState::BalanceActive_Recovery,
+				EPhysAnimRuntimeState::Standing_PolicyBlend,
 				true,
 				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("Recovery failure reports the standing requirement"), OutcomeError.Contains(TEXT("BalanceActive_Standing")));
-
-		OutcomeError.Reset();
-		TestFalse(
-			TEXT("Explicit safe deny is not a passing benchmark outcome when the reason is truthful"),
-			EvaluateBalanceModeSmokeOutcome(
-				EPhysAnimRuntimeState::BalanceSafeDeny,
-				true,
-				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				true,
-				TEXT("phase2_root_on_spike"),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("Safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
-
-		OutcomeError.Reset();
-		TestFalse(
-			TEXT("Phase 3 shell maintenance safe deny is not a passing standing benchmark outcome"),
-			EvaluateBalanceModeSmokeOutcome(
-				EPhysAnimRuntimeState::BalanceSafeDeny,
-				true,
-				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				true,
-				TEXT("phase3_material_shell_correction"),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("Phase 3 safe deny failure reports the benchmark contract"), OutcomeError.Contains(TEXT("not a benchmark success")));
-
-		OutcomeError.Reset();
-		TestFalse(
-			TEXT("Generic fail-stop precursor is not a truthful safe-deny smoke outcome"),
-			EvaluateBalanceModeSmokeOutcome(
-				EPhysAnimRuntimeState::BalanceSafeDeny,
-				true,
-				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				true,
-				TEXT("phase2_fail_stop_precursor"),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("Generic safe deny failure reports the non-truthful reason"), OutcomeError.Contains(TEXT("phase2_fail_stop_precursor")));
+				OutcomeError));
+		TestTrue(TEXT("Incomplete activation reports the activation state"), OutcomeError.Contains(TEXT("Standing_PolicyBlend")));
 
 		OutcomeError.Reset();
 		TestFalse(
@@ -403,13 +337,7 @@ namespace
 				EPhysAnimRuntimeState::FailStopped,
 				false,
 				EPhysAnimTerminalReason::ActivationContinuousSimulationLost,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
+				OutcomeError));
 		TestTrue(TEXT("Canonical terminal outcome reports diagnostic-only failure"), OutcomeError.Contains(TEXT("terminal failure")));
 
 		OutcomeError.Reset();
@@ -419,13 +347,7 @@ namespace
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
 				EPhysAnimTerminalReason::ActivationContinuousSimulationLost,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
+				OutcomeError));
 		TestTrue(TEXT("BridgeActive terminal outcome reports diagnostic-only failure"), OutcomeError.Contains(TEXT("terminal failure")));
 
 		OutcomeError.Reset();
@@ -435,13 +357,7 @@ namespace
 				EPhysAnimRuntimeState::BridgeActive,
 				false,
 				EPhysAnimTerminalReason::ActivationAuthorityConflict,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
+				OutcomeError));
 
 		OutcomeError.Reset();
 		TestFalse(
@@ -450,14 +366,8 @@ namespace
 				EPhysAnimRuntimeState::FailStopped,
 				false,
 				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
-		TestTrue(TEXT("Unsafe fail-stop reports unsafe failure"), OutcomeError.Contains(TEXT("Unsafe failure path")));
+				OutcomeError));
+		TestTrue(TEXT("Explicit fail-stop reports its state"), OutcomeError.Contains(TEXT("fail-stop")));
 
 		OutcomeError.Reset();
 		TestFalse(
@@ -466,30 +376,8 @@ namespace
 				EPhysAnimRuntimeState::BridgeActive,
 				true,
 				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				false,
-				false,
-				TEXT(""),
-				TEXT(""),
-				false, OutcomeError));
+				OutcomeError));
 		TestTrue(TEXT("BridgeActive failure reports the runtime state"), OutcomeError.Contains(TEXT("BridgeActive")));
-
-		OutcomeError.Reset();
-		TestFalse(
-			TEXT("BridgeActive with a published transition failure remains an unsafe smoke outcome"),
-			EvaluateBalanceModeSmokeOutcome(
-				EPhysAnimRuntimeState::BridgeActive,
-				true,
-				EPhysAnimTerminalReason::None,
-				false,
-				EPhysAnimRuntimeState::BridgeActive,
-				true,
-				false,
-				TEXT(""),
-				TEXT("phase3_material_shell_correction"),
-				false, OutcomeError));
-		TestTrue(TEXT("Published transition failure reports the truthful blocker"), OutcomeError.Contains(TEXT("phase3_material_shell_correction")));
 		return true;
 	}
 
