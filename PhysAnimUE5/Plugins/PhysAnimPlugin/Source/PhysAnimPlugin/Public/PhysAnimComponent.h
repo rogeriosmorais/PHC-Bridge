@@ -133,7 +133,7 @@ struct FPhysAnimStabilizationSettings
 	bool bForceZeroActions = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
-	float ActionScale = 0.2f;
+	float ActionScale = 0.1f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float ActionClampAbs = 0.2f;
