@@ -116,6 +116,24 @@ namespace
 			if (ConstraintTemplate)
 			{
 				const FConstraintInstance& Constraint = ConstraintTemplate->DefaultInstance;
+				float AngularSpring = 0.0f;
+				float AngularDamping = 0.0f;
+				float AngularForceLimit = 0.0f;
+				Constraint.GetAngularDriveParams(AngularSpring, AngularDamping, AngularForceLimit);
+				AddInfo(FString::Printf(
+					TEXT("PASSIVE_CONSTRAINT_DRIVE link=%s/%s mode=%d motion=%d/%d/%d orientation_enabled=%d velocity_enabled=%d acceleration=%d spring=%.3f damping=%.3f force_limit=%.3f"),
+					*Pair.Key.ToString(),
+					*Pair.Value.ToString(),
+					static_cast<int32>(Constraint.ProfileInstance.AngularDrive.AngularDriveMode.GetValue()),
+					static_cast<int32>(Constraint.GetAngularTwistMotion()),
+					static_cast<int32>(Constraint.GetAngularSwing1Motion()),
+					static_cast<int32>(Constraint.GetAngularSwing2Motion()),
+					Constraint.IsAngularOrientationDriveEnabled() ? 1 : 0,
+					Constraint.IsAngularVelocityDriveEnabled() ? 1 : 0,
+					Constraint.ProfileInstance.AngularDrive.bAccelerationMode ? 1 : 0,
+					AngularSpring,
+					AngularDamping,
+					AngularForceLimit));
 				TestFalse(
 					*FString::Printf(TEXT("Physics Asset linear position drive is disabled: %s/%s"), *Pair.Key.ToString(), *Pair.Value.ToString()),
 					Constraint.IsLinearPositionDriveEnabled());
@@ -126,8 +144,26 @@ namespace
 					*FString::Printf(TEXT("Physics Asset angular orientation drive is disabled: %s/%s"), *Pair.Key.ToString(), *Pair.Value.ToString()),
 					Constraint.IsAngularOrientationDriveEnabled());
 				TestTrue(
+					*FString::Printf(TEXT("Physics Asset passive angular velocity drive is enabled: %s/%s"), *Pair.Key.ToString(), *Pair.Value.ToString()),
+					Constraint.IsAngularVelocityDriveEnabled());
+				TestTrue(
 					*FString::Printf(TEXT("Physics Asset angular velocity target is passive: %s/%s"), *Pair.Key.ToString(), *Pair.Value.ToString()),
 					Constraint.ProfileInstance.AngularDrive.AngularVelocityTarget.IsNearlyZero());
+				TestTrue(
+					*FString::Printf(TEXT("Physics Asset SLERP drive has no locked angular axis: %s/%s"), *Pair.Key.ToString(), *Pair.Value.ToString()),
+					Constraint.GetAngularTwistMotion() != ACM_Locked &&
+						Constraint.GetAngularSwing1Motion() != ACM_Locked &&
+						Constraint.GetAngularSwing2Motion() != ACM_Locked);
+				TestEqual(
+					*FString::Printf(TEXT("Physics Asset passive drive uses SLERP because no axis is locked: %s/%s"), *Pair.Key.ToString(), *Pair.Value.ToString()),
+					Constraint.ProfileInstance.AngularDrive.AngularDriveMode.GetValue(),
+					EAngularDriveMode::SLERP);
+				TestTrue(
+					*FString::Printf(TEXT("Physics Asset passive drive is mass-independent: %s/%s"), *Pair.Key.ToString(), *Pair.Value.ToString()),
+					Constraint.ProfileInstance.AngularDrive.bAccelerationMode);
+				TestTrue(
+					*FString::Printf(TEXT("Physics Asset passive angular damping is 100: %s/%s"), *Pair.Key.ToString(), *Pair.Value.ToString()),
+					FMath::IsNearlyEqual(AngularDamping, 100.0f));
 			}
 		}
 
