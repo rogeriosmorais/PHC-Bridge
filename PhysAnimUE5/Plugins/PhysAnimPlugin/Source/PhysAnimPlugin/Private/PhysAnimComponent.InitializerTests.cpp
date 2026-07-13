@@ -30,6 +30,7 @@ namespace
 		TestEqual(TEXT("Manny initializer creates every controlled joint"), Initializer->InitialControls.Num(), 21);
 		for (TPair<FName, FInitialPhysicsControl>& Pair : Initializer->InitialControls)
 		{
+			TestFalse(*FString::Printf(TEXT("%s remains disabled until atomic standing publication"), *Pair.Key.ToString()), Pair.Value.ControlData.bEnabled);
 			TestEqual(*FString::Printf(TEXT("%s uses an 8 Hz angular spring"), *Pair.Key.ToString()), Pair.Value.ControlData.AngularStrength, 8.0f);
 			TestEqual(*FString::Printf(TEXT("%s starts critically damped"), *Pair.Key.ToString()), Pair.Value.ControlData.AngularDampingRatio, 1.0f);
 			TestEqual(*FString::Printf(TEXT("%s uses plant-scale extra damping"), *Pair.Key.ToString()), Pair.Value.ControlData.AngularExtraDamping, 50.0f);

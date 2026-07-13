@@ -48,7 +48,7 @@ namespace PhysAnimStage1InitializerComponentInternal
 	FPhysicsControlData MakeDefaultStage1ControlData()
 	{
 		FPhysicsControlData Data;
-		Data.bEnabled = true;
+		Data.bEnabled = false;
 		Data.LinearStrength = 0.0f;
 		Data.LinearDampingRatio = 1.0f;
 		Data.LinearExtraDamping = 0.0f;
