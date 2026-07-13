@@ -1,5 +1,7 @@
 #include "PhysAnimStandingActivation.h"
 
+#include "PhysAnimComponent.h"
+
 bool FPhysAnimStandingBodyPlan::operator==(const FPhysAnimStandingBodyPlan& Other) const
 {
 	return bSimulated == Other.bSimulated

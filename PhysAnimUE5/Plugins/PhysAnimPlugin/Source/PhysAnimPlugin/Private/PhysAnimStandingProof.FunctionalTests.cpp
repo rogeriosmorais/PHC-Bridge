@@ -116,6 +116,12 @@ namespace
 			return TEXT("ReadyForActivation");
 		case EPhysAnimRuntimeState::BridgeActive:
 			return TEXT("BridgeActive");
+		case EPhysAnimRuntimeState::Standing_Preparation:
+			return TEXT("Standing_Preparation");
+		case EPhysAnimRuntimeState::Standing_FullSimulationActivation:
+			return TEXT("Standing_FullSimulationActivation");
+		case EPhysAnimRuntimeState::Standing_PolicyBlend:
+			return TEXT("Standing_PolicyBlend");
 		case EPhysAnimRuntimeState::FailStopped:
 			return TEXT("FailStopped");
 		case EPhysAnimRuntimeState::BalanceEntry_Prepare:

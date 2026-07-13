@@ -1,6 +1,9 @@
 #pragma once
 
-#include "PhysAnimComponent.h"
+#include "CoreMinimal.h"
+#include "Engine/EngineTypes.h"
+
+enum class EPhysAnimRuntimeState : uint8;
 
 enum class EPhysAnimStandingVariant : uint8
 {
@@ -73,7 +76,7 @@ struct PHYSANIMPLUGIN_API FPhysAnimStandingActivationReadback
 
 struct PHYSANIMPLUGIN_API FPhysAnimStandingActivationStatus
 {
-	EPhysAnimRuntimeState RuntimeState = EPhysAnimRuntimeState::Uninitialized;
+	EPhysAnimRuntimeState RuntimeState = static_cast<EPhysAnimRuntimeState>(0);
 	float LinearBlendAlpha = 0.0f;
 	bool bFullSimulationCommitted = false;
 	int32 ModifierSimulationMatchCount = 0;

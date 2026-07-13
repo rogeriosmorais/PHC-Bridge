@@ -47,89 +47,92 @@ void UPhysAnimComponent::ProcessPendingDistalOwnershipChecks()
 
 void UPhysAnimComponent::TickRuntimeStateMachine(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings)
 {
-	BalanceReadyTransition.Tick(DeltaTime, this, EffectiveSettings);
-
-	// Authoritative state sync
+	switch (RuntimeState)
 	{
-		EBalanceReadyTransitionPhase TransitionPhase = BalanceReadyTransition.GetPhase();
-		if (TransitionPhase == EBalanceReadyTransitionPhase::BRT_Succeeded)
+	case EPhysAnimRuntimeState::BridgeActive:
+		if (LastValidPoseSearchResult.SelectedAnim != nullptr)
 		{
-			if (!IsBalanceActiveState(RuntimeState))
-			{
-				CompleteBalanceModeEntry();
-			}
-			TransitionPhase = BalanceReadyTransition.GetPhase();
+			StandingActivation.Start();
+			StandingActivationElapsedSeconds = 0.0f;
+			bPendingBalanceModeStartRequest = false;
+			bPendingBalanceModeStartAttemptIssued = false;
+			PendingBalanceModeStartReason.Reset();
+			PendingBalanceModeRequestTimeSeconds = -1.0;
+			TransitionRuntimeState(EPhysAnimRuntimeState::Standing_Preparation);
 		}
+		break;
 
-		const EPhysAnimRuntimeState MappedRuntimeState =
-			UPhysAnimComponent::MapBalanceTransitionPhaseToRuntimeState(TransitionPhase);
-
-		if (TransitionPhase == EBalanceReadyTransitionPhase::BRT_Inactive)
+	case EPhysAnimRuntimeState::Standing_Preparation:
+	{
+		FString FailureReason;
+		const bool bPrepared = PrepareStandingActivation(FailureReason);
+		StandingActivation.CompletePreparation(bPrepared, FailureReason);
+		if (StandingActivation.GetStatus().RuntimeState == EPhysAnimRuntimeState::FailStopped)
 		{
-			if (!IsBalanceActiveState(RuntimeState) &&
-				RuntimeState != EPhysAnimRuntimeState::BalanceSafeDeny &&
-				RuntimeState != EPhysAnimRuntimeState::LocomotionActiveShell &&
-				RuntimeState != EPhysAnimRuntimeState::LocomotionActiveShellDenied)
-			{
-				TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
-			}
+			FailStop(StandingActivation.GetStatus().FailureReason);
+			return;
 		}
-		else
-		{
-			TransitionRuntimeState(MappedRuntimeState);
-		}
+		TransitionRuntimeState(EPhysAnimRuntimeState::Standing_FullSimulationActivation);
+		break;
 	}
 
-	// Auto-trigger: when in BridgeActive with no pending request and no ongoing transition,
-	// queue an "auto_trigger" balance start request so the state machine progresses toward
-	// BalanceActive_Standing. This call site was previously missing, leaving the component
-	// permanently stuck in BridgeActive. (S2-FIX-BALANCE-STARTUP-TICK-RACE-01)
+	case EPhysAnimRuntimeState::Standing_FullSimulationActivation:
 	{
-		UPhysAnimPhase1AutoCalibSubsystem* const AutoCalibSubsystem =
-			GetWorld() ? GetWorld()->GetSubsystem<UPhysAnimPhase1AutoCalibSubsystem>() : nullptr;
-		const bool bAutoCalibSubsystemActive = AutoCalibSubsystem && AutoCalibSubsystem->IsPhase1AutoCalibActive();
-
-		if (ShouldAttemptAutoTriggeredBalanceStart(
-				RuntimeState,
-				bPendingBalanceModeStartRequest,
-				BalanceReadyTransition.HasAnyInternalPhase(),
-				bPhase1AutoCalibOwnsStartRequests,
-				bAutoCalibSubsystemActive))
+		FString FailureReason;
+		const FPhysAnimStandingActivationReadback Readback =
+			PublishStandingPhysicsControlState(EffectiveSettings, 0.0f, true, FailureReason);
+		StandingActivation.CompleteFullSimulationActivation(Readback, FailureReason);
+		if (StandingActivation.GetStatus().RuntimeState == EPhysAnimRuntimeState::FailStopped)
 		{
-			if (!ShouldDeferAutoTriggeredBalanceStartForRecoveryTelemetry(RecoveryPreEntryTelemetrySkipFrames))
-			{
-				QueueBalanceModeStartRequest(TEXT("auto_trigger"));
-			}
-			else
-			{
-				--RecoveryPreEntryTelemetrySkipFrames;
-			}
+			FailStop(StandingActivation.GetStatus().FailureReason);
+			return;
 		}
-
-		TryStartPendingBalanceModeRequest(EffectiveSettings);
+		StandingActivationElapsedSeconds = 0.0f;
+		TransitionRuntimeState(EPhysAnimRuntimeState::Standing_PolicyBlend);
+		break;
 	}
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	case EPhysAnimRuntimeState::Standing_PolicyBlend:
 	{
-		const EPhysAnimRuntimeState EvaluatedState = EvaluateBalanceActiveStanding();
-		if (EvaluatedState != RuntimeState)
+		StandingActivationElapsedSeconds += FMath::Max(DeltaTime, 0.0f);
+		const float Alpha = EffectiveSettings.StartupRampSeconds > SMALL_NUMBER
+			? FMath::Clamp(StandingActivationElapsedSeconds / EffectiveSettings.StartupRampSeconds, 0.0f, 1.0f)
+			: 1.0f;
+		FString FailureReason;
+		const FPhysAnimStandingActivationReadback Readback =
+			PublishStandingPhysicsControlState(EffectiveSettings, Alpha, false, FailureReason);
+		StandingActivation.TickPolicyBlend(
+			StandingActivationElapsedSeconds,
+			EffectiveSettings.StartupRampSeconds,
+			Readback,
+			FailureReason);
+		if (StandingActivation.GetStatus().RuntimeState == EPhysAnimRuntimeState::FailStopped)
 		{
-			TransitionRuntimeState(EvaluatedState);
+			FailStop(StandingActivation.GetStatus().FailureReason);
+			return;
 		}
+		if (StandingActivation.GetStatus().RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+		{
+			CompleteBalanceModeEntry();
+		}
+		break;
 	}
 
-	if (RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle)
+	case EPhysAnimRuntimeState::BalanceActive_Standing:
 	{
-		if (ShouldExitStandingToSafeDeny(LiveRuntimeEvidenceTerminationState))
+		FString FailureReason;
+		const FPhysAnimStandingActivationReadback Readback =
+			PublishStandingPhysicsControlState(EffectiveSettings, 1.0f, false, FailureReason);
+		StandingActivation.ObserveStanding(Readback, FailureReason);
+		if (StandingActivation.GetStatus().RuntimeState == EPhysAnimRuntimeState::FailStopped)
 		{
-			const FPhysAnimRunArtifactSnapshot& Latest = LiveRuntimeEvidenceTerminationState.LatestArtifact;
-			PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Warning, 1.0f, TEXT("[PhysAnimBalance] SETTLE_DENIED reason=PHASE3_ACTIVE_SUPPORT_FAILURE hull_area=%.1f gap=%.1f proxy_inside=%d proxy_drift=%.1f"),
-				Latest.SupportHullAreaCm2,
-				Latest.SupportGapTimerMs,
-				Latest.ProxyInsideHull.IsSet() ? (Latest.ProxyInsideHull.GetValue() ? 1 : 0) : -1,
-				Latest.ProxyOutsideHullDurationMs.IsSet() ? Latest.ProxyOutsideHullDurationMs.GetValue() : 0.0);
-			TransitionRuntimeState(EPhysAnimRuntimeState::BalanceSafeDeny);
+			FailStop(StandingActivation.GetStatus().FailureReason);
 		}
+		break;
+	}
+
+	default:
+		break;
 	}
 }
 
@@ -239,8 +242,17 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		}
 	}
 
-	// Publish movement types and phase-dependent gains every tick before targets are dispatched.
-	ApplyRuntimeControlTuning(EffectiveSettings);
+	// Standing topology and gains are published and read back by TickRuntimeStateMachine
+	// before target dispatch. Keep the legacy tuning path only for disconnected future states.
+	if (!IsStandingActivationRuntimeState(RuntimeState))
+	{
+		ApplyRuntimeControlTuning(EffectiveSettings);
+	}
+	if (RuntimeState == EPhysAnimRuntimeState::Standing_Preparation ||
+		RuntimeState == EPhysAnimRuntimeState::Standing_FullSimulationActivation)
+	{
+		return;
+	}
 	ApplyControlTargets(
 		bRunPolicyUpdateThisTick ? (PolicyControlIntervalSeconds * FMath::Max(ElapsedPolicySteps, 1)) : 0.0f,
 		EffectiveSettings,
@@ -288,10 +300,18 @@ void UPhysAnimComponent::UpdateStartupMovementLockState(const FPhysAnimStabiliza
 	}
 }
 
-void UPhysAnimComponent::HandleInitialPoseSearchWait(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError, FPoseSearchBlueprintResult& OutSearchResult)
+void UPhysAnimComponent::HandleInitialPoseSearchWait(
+	float DeltaTime,
+	const FPhysAnimStabilizationSettings& EffectiveSettings,
+	FString& OutError,
+	FPoseSearchBlueprintResult& OutSearchResult)
 {
+	(void)DeltaTime;
+	(void)EffectiveSettings;
 	const bool bPoseSearchValid = QueryPoseSearch(OutSearchResult, OutError);
-	RecordLiveRuntimeEvidencePoseSearchQueryResult(bPoseSearchValid, OutSearchResult.SelectedAnim ? OutSearchResult.SelectedAnim->GetName() : TEXT(""));
+	RecordLiveRuntimeEvidencePoseSearchQueryResult(
+		bPoseSearchValid,
+		OutSearchResult.SelectedAnim ? OutSearchResult.SelectedAnim->GetName() : TEXT(""));
 
 	if (!bPoseSearchValid)
 	{
@@ -305,33 +325,10 @@ void UPhysAnimComponent::HandleInitialPoseSearchWait(float DeltaTime, const FPhy
 
 	LastValidPoseSearchResult = OutSearchResult;
 	ConsecutiveInvalidPoseSearchFrames = 0;
-
-	if (EffectiveSettings.bLockCharacterMovementUntilStartupReady)
+	if (!ActivateRuntimePhysicsControl(OutError))
 	{
-		float LinSpeed, AngSpeed;
-		if (!UpdateStartupQuietWindow(DeltaTime, EffectiveSettings, LinSpeed, AngSpeed))
-		{
-			return;
-		}
-		ReleaseStartupMovementLock(true);
+		FailStop(FString::Printf(TEXT("Failed to create standing Physics Control records: %s"), *OutError));
+		return;
 	}
-
-	// Activate physics ownership and the bringup ramp sequence.
-	// bRequireLiveProofSatisfied=false because proof hasn't completed yet —
-	// it runs during BridgeActive. Without this call, physics bodies stay
-	// kinematic, bringup groups never unlock, PolicyInfluenceRampStartTimeSeconds
-	// stays -1, and the BalanceReadyTransition preflight gate permanently blocks.
-	// (S2-FIX-BALANCE-STARTUP-TICK-RACE-01)
-	if (EffectiveSettings.bForceZeroActions)
-	{
-		TransitionRuntimeState(EPhysAnimRuntimeState::ReadyForActivation);
-	}
-	else
-	{
-		FString ActivationError;
-		if (!ActivateBridgeFromReadyState(EffectiveSettings, TEXT("InitialPoseSearchSuccess"), ActivationError, false))
-		{
-			FailStop(FString::Printf(TEXT("Failed to activate bridge from ready state: %s"), *ActivationError));
-		}
-	}
+	TransitionRuntimeState(EPhysAnimRuntimeState::BridgeActive);
 }

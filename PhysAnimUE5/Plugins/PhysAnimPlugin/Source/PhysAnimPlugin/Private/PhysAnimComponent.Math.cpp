@@ -23,24 +23,8 @@ bool UPhysAnimComponent::IsInitialPoseSearchWaitTimedOut(double ElapsedSeconds, 
 
 bool UPhysAnimComponent::ShouldApplyPolicyTargetToBone(FName BoneName, bool bPolicyInfluenceActive)
 {
-	if (!bPolicyInfluenceActive)
-	{
-		return false;
-	}
-
-	return BoneName != TEXT("clavicle_l") &&
-		BoneName != TEXT("spine_01") &&
-		BoneName != TEXT("spine_02") &&
-		BoneName != TEXT("spine_03") &&
-		BoneName != TEXT("upperarm_l") &&
-		BoneName != TEXT("lowerarm_l") &&
-		BoneName != TEXT("hand_l") &&
-		BoneName != TEXT("neck_01") &&
-		BoneName != TEXT("head") &&
-		BoneName != TEXT("clavicle_r") &&
-		BoneName != TEXT("upperarm_r") &&
-		BoneName != TEXT("lowerarm_r") &&
-		BoneName != TEXT("hand_r");
+	(void)BoneName;
+	return bPolicyInfluenceActive;
 }
 
 
@@ -1041,9 +1025,8 @@ bool UPhysAnimComponent::ShouldSuspendPolicyInfluenceDuringPresentationPerturbat
 
 EPhysAnimRuntimeState UPhysAnimComponent::ResolveInitialPoseSearchSuccessState(bool bForceZeroActions)
 {
-	return bForceZeroActions
-		? EPhysAnimRuntimeState::ReadyForActivation
-		: EPhysAnimRuntimeState::BridgeActive;
+	(void)bForceZeroActions;
+	return EPhysAnimRuntimeState::BridgeActive;
 }
 
 
@@ -1516,6 +1499,12 @@ const TCHAR* UPhysAnimComponent::GetRuntimeStateName(EPhysAnimRuntimeState State
 		return TEXT("ReadyForActivation");
 	case EPhysAnimRuntimeState::BridgeActive:
 		return TEXT("BridgeActive");
+	case EPhysAnimRuntimeState::Standing_Preparation:
+		return TEXT("Standing_Preparation");
+	case EPhysAnimRuntimeState::Standing_FullSimulationActivation:
+		return TEXT("Standing_FullSimulationActivation");
+	case EPhysAnimRuntimeState::Standing_PolicyBlend:
+		return TEXT("Standing_PolicyBlend");
 	case EPhysAnimRuntimeState::BalanceEntry_Prepare:
 		return TEXT("BalanceEntry_Prepare");
 	case EPhysAnimRuntimeState::BalanceEntry_LateValidate:

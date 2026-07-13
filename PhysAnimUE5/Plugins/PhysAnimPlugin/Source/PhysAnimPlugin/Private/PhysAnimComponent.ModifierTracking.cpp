@@ -155,8 +155,10 @@ void UPhysAnimComponent::ApplyControlTargets(
 	bool bApplyNewPolicyStepThisTick,
 	FString& OutError)
 {
-	// Evaluate cached targets reset before updating controls so we don't clobber the frame's true targets.
-	ResetPendingBodyModifiersToCachedTargets();
+	if (!IsStandingActivationRuntimeState(RuntimeState))
+	{
+		ResetPendingBodyModifiersToCachedTargets();
+	}
 
 	// Consecutive active frame tracking is now handled at the end of ApplyControlTargets to ensure it only increments on successful writes.
 
@@ -179,12 +181,14 @@ void UPhysAnimComponent::ApplyControlTargets(
 	const bool bPhase1Settle = RuntimeState == EPhysAnimRuntimeState::BalanceEntry_Settle;
 	const bool bApplyPhase1HoldPoseThisFrame = bPhase1Prepare || bPhase1LateValidate;
 	const bool bPolicyInfluenceActive =
-		PolicyInfluenceRampStartTimeSeconds >= 0.0 &&
-		(
+		RuntimeState == EPhysAnimRuntimeState::Standing_PolicyBlend ||
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		(PolicyInfluenceRampStartTimeSeconds >= 0.0 &&
+			(
 			RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
 			IsBalanceActiveState(RuntimeState) ||
 			bPhase1RootOn ||
-			bPhase1Settle);
+			bPhase1Settle));
 	FPhysAnimControlTargetDiagnostics ControlTargetDiagnostics;
 	ControlTargetDiagnostics.bPolicyInfluenceActive = bPolicyInfluenceActive;
 	ControlTargetDiagnostics.bFirstPolicyEnabledFrame = bPolicyInfluenceActive && !bPolicyTargetsAppliedLastFrame;
@@ -197,15 +201,6 @@ void UPhysAnimComponent::ApplyControlTargets(
 	}
 
 	const float PolicyInfluenceAlpha = CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
-
-	if (EffectiveSettings.bForceZeroActions)
-	{
-		PreviousControlTargetRotations.Reset();
-		PolicyBlendStartControlTargetRotations.Reset();
-		LastControlTargetDiagnostics = {};
-		bPolicyTargetsAppliedLastFrame = false;
-		return;
-	}
 
 	if (!bPolicyInfluenceActive && !bApplyPhase1HoldPoseThisFrame)
 	{
@@ -240,7 +235,8 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
 	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
-	const bool bHipQuarantineActiveThisFrame = HipQuarantineTicksRemaining > 0;
+	const bool bHipQuarantineActiveThisFrame =
+		!IsStandingActivationRuntimeState(RuntimeState) && HipQuarantineTicksRemaining > 0;
 	float ThighLDeltaPre = 0.0f;
 	float ThighRDeltaPre = 0.0f;
 	const float OwnerPlanarSpeedCmPerSec = [this]() -> float

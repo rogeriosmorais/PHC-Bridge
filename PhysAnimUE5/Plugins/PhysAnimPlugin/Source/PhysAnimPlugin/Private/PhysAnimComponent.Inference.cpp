@@ -128,8 +128,9 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 	ConditioningSettings.bForceZeroActions = EffectiveSettings.bForceZeroActions;
 	ConditioningSettings.ActionClampAbs = EffectiveSettings.ActionClampAbs;
 	ConditioningSettings.ActionSmoothingAlpha = EffectiveSettings.ActionSmoothingAlpha;
-	ConditioningSettings.ActionScale =
-		EffectiveSettings.ActionScale * CalculateCurrentPolicyInfluenceAlpha(EffectiveSettings);
+	// Standing influence is applied once in parent-relative target space. Keep raw policy
+	// conditioning variant-specific, but do not multiply the shared activation alpha here.
+	ConditioningSettings.ActionScale = EffectiveSettings.ActionScale;
 	const bool bSuccess = BuildConditionedActions(
 		ActionOutputBuffer,
 		PreviousConditionedActionBuffer.Num() == ActionOutputBuffer.Num() ? &PreviousConditionedActionBuffer : nullptr,

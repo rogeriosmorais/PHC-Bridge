@@ -13,6 +13,7 @@
 #include "Animation/TrajectoryTypes.h"
 #include "PhysAnimBridge.h"
 #include "PhysAnimBalanceReadyTransition.h"
+#include "PhysAnimStandingActivation.h"
 #include "PhysAnimTruthTypes.h"
 
 #include "PhysAnimRuntimeTerminationPipeline.h"
@@ -28,7 +29,6 @@ class UCharacterMovementComponent;
 class UPhysicsControlComponent;
 class UPoseSearchDatabase;
 class USkeletalMeshComponent;
-struct FPhysAnimStandingActivationReadback;
 
 struct FPhysAnimControlTargetSeed
 {
@@ -1581,6 +1581,14 @@ public:
 	bool HasActivatedStandingPerturbationApplied() const { return bActivatedStandingPerturbationApplied; }
 
 	static EPhysAnimRuntimeState MapBalanceTransitionPhaseToRuntimeState(EBalanceReadyTransitionPhase TransitionPhase);
+	static bool IsStandingActivationRuntimeState(EPhysAnimRuntimeState State)
+	{
+		return State == EPhysAnimRuntimeState::Standing_Preparation ||
+			State == EPhysAnimRuntimeState::Standing_FullSimulationActivation ||
+			State == EPhysAnimRuntimeState::Standing_PolicyBlend ||
+			State == EPhysAnimRuntimeState::BalanceActive_Standing;
+	}
+	FPhysAnimStandingActivationStatus GetStandingActivationStatus() const { return StandingActivation.GetStatus(); }
 
 	UFUNCTION(BlueprintPure, Category = "PhysAnim")
 	bool IsReadyForScriptedPresentation() const;
@@ -2188,6 +2196,8 @@ private:
 	bool IsBridgeLocomotionQueryActive() const;
 	bool IsBridgeLocomotionEntryRequested(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	bool PrepareStandingActivation(FString& OutFailureReason);
+	bool ValidateStandingActivationRecords(FString& OutFailureReason) const;
 	FPhysAnimStandingActivationReadback PublishStandingPhysicsControlState(
 		const FPhysAnimStabilizationSettings& EffectiveSettings,
 		float LinearBlendAlpha,
@@ -2564,6 +2574,8 @@ private:
 	FVector BalanceScenarioImpactPelvisAngularVelPost = FVector::ZeroVector;
 
 	FPhysAnimBalanceReadyTransition BalanceReadyTransition;
+	FPhysAnimStandingActivation StandingActivation;
+	float StandingActivationElapsedSeconds = 0.0f;
 	bool bStandingFullSimulationCommitted = false;
 	FPhase1AcceptedConvergenceSnapshot SafePhase1ConvergenceSnapshot;
 	bool bPendingBalanceModeStartRequest = false;

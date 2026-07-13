@@ -228,10 +228,9 @@ bool UPhysAnimComponent::IsBalanceScenarioQuietEnough(
 
 bool UPhysAnimComponent::IsBalanceEntryState(EPhysAnimRuntimeState State)
 {
-	return (State == EPhysAnimRuntimeState::BalanceEntry_Prepare ||
-			State == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
-			State == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
-			State == EPhysAnimRuntimeState::BalanceEntry_Settle);
+	return State == EPhysAnimRuntimeState::Standing_Preparation ||
+		State == EPhysAnimRuntimeState::Standing_FullSimulationActivation ||
+		State == EPhysAnimRuntimeState::Standing_PolicyBlend;
 }
 
 EPhysAnimRuntimeState UPhysAnimComponent::GetPublicBalanceEntryRuntimeState() const
@@ -250,7 +249,6 @@ bool UPhysAnimComponent::TryGetPublicBalanceEntryRuntimeState(EPhysAnimRuntimeSt
 bool UPhysAnimComponent::IsBalanceActiveState(EPhysAnimRuntimeState State)
 {
 	return State == EPhysAnimRuntimeState::BalanceActive_Standing ||
-		State == EPhysAnimRuntimeState::BalanceActive_Recovery ||
 		State == EPhysAnimRuntimeState::LocomotionActiveShell ||
 		State == EPhysAnimRuntimeState::LocomotionActiveShellDenied;
 }
@@ -1035,38 +1033,6 @@ void UPhysAnimComponent::CompleteBalanceModeEntry()
 	PendingBalanceModeStartReason.Reset();
 	PendingBalanceModeRequestTimeSeconds = -1.0;
 	ClearPublishedBalanceTransitionFailureReason();
-	BalanceReadyTransition.Cancel(this);
-	
-	if (!CanEnterBalanceActiveStanding())
-	{
-		TransitionRuntimeState(EPhysAnimRuntimeState::BalanceSafeDeny);
-		return;
-	}
-
-	const double CurrentWorldTimeSeconds = World->GetTimeSeconds();
-	const FPhysAnimStabilizationSettings RecoverySettings = ResolveEffectiveStabilizationSettings();
-	const double SettledRampStartTimeSeconds =
-		CurrentWorldTimeSeconds - static_cast<double>(FMath::Max(RecoverySettings.StartupRampSeconds, 0.0f)) - 0.01;
-	HighestUnlockedBringUpGroupIndex = GetBringUpGroupCount() - 1;
-	BringUpGroupStableAccumulatedSeconds = 0.0f;
-	for (int32 GroupIndex = 0; GroupIndex < GetBringUpGroupCount(); ++GroupIndex)
-	{
-		if (BringUpGroupActivationTimeSeconds.IsValidIndex(GroupIndex))
-		{
-			BringUpGroupActivationTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
-		}
-		if (BringUpGroupControlRampStartTimeSeconds.IsValidIndex(GroupIndex))
-		{
-			BringUpGroupControlRampStartTimeSeconds[GroupIndex] = SettledRampStartTimeSeconds;
-		}
-		if (BringUpGroupAlphaActiveLogged.IsValidIndex(GroupIndex))
-		{
-			BringUpGroupAlphaActiveLogged[GroupIndex] = 1;
-		}
-	}
-
-	BridgeStartTimeSeconds = SettledRampStartTimeSeconds;
-	PolicyInfluenceRampStartTimeSeconds = SettledRampStartTimeSeconds;
 
 	TransitionRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing);
 	ArmStartupProofTerminalEnforcement();

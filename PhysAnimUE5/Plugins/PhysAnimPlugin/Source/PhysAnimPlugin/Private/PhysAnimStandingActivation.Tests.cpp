@@ -1,3 +1,4 @@
+#include "PhysAnimComponent.h"
 #include "PhysAnimStandingActivation.h"
 
 #include "Misc/AutomationTest.h"
@@ -103,6 +104,22 @@ bool FPhysAnimStandingActivationPublicationTest::RunTest(const FString& Paramete
 	TestEqual(TEXT("Configured damping ratio remains active at blend end"), End.Controls[0].DampingRatio, 1.5f);
 	TestEqual(TEXT("Extra damping begins at bootstrap"), Start.Controls[0].ExtraDamping, 2.0f);
 	TestEqual(TEXT("Extra damping reaches standing"), End.Controls[0].ExtraDamping, 1.2f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimStandingActivationOwnershipBoundaryTest,
+	"PhysAnim.Component.StandingActivation.OwnershipBoundary",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimStandingActivationOwnershipBoundaryTest::RunTest(const FString& Parameters)
+{
+	TestTrue(TEXT("Preparation is owned by the unified standing path"), UPhysAnimComponent::IsStandingActivationRuntimeState(EPhysAnimRuntimeState::Standing_Preparation));
+	TestTrue(TEXT("Atomic activation is owned by the unified standing path"), UPhysAnimComponent::IsStandingActivationRuntimeState(EPhysAnimRuntimeState::Standing_FullSimulationActivation));
+	TestTrue(TEXT("Policy blend is owned by the unified standing path"), UPhysAnimComponent::IsStandingActivationRuntimeState(EPhysAnimRuntimeState::Standing_PolicyBlend));
+	TestTrue(TEXT("Standing remains owned by the unified standing path"), UPhysAnimComponent::IsStandingActivationRuntimeState(EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(TEXT("Legacy phase states are not owned by the standing path"), UPhysAnimComponent::IsStandingActivationRuntimeState(EPhysAnimRuntimeState::BalanceEntry_RootOn));
+	TestFalse(TEXT("Future locomotion remains outside standing ownership"), UPhysAnimComponent::IsStandingActivationRuntimeState(EPhysAnimRuntimeState::LocomotionActiveShell));
 	return true;
 }
 

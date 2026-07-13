@@ -136,12 +136,19 @@ void UPhysAnimComponent::FailStop(const FString& Reason)
 	LogBridgeStateSnapshot(TEXT("FailStop"));
 	PHYSANIM_LOG(LogPhysAnimBridge, Error, TEXT("[PhysAnim] Fail-stop: %s"), *Reason);
 	EmitBridgeTraceEvent(TEXT("fail_stop"), TEXT("Bridge entered fail-stop."), Reason);
-	DeactivateRuntimePhysicsControl(TEXT("FailStop"));
-	ResetBridgePhysicsState();
+	const bool bStandingActivationFailure = IsStandingActivationRuntimeState(RuntimeState);
+	if (!bStandingActivationFailure)
+	{
+		DeactivateRuntimePhysicsControl(TEXT("FailStop"));
+		ResetBridgePhysicsState();
+	}
 	TransitionRuntimeState(EPhysAnimRuntimeState::FailStopped);
 	StopBridgeTraceSession(TEXT("FailStop"), TEXT("Bridge trace session stopped after fail-stop."));
 	SetComponentTickEnabled(false);
-	ResetStabilizationRuntimeState();
+	if (!bStandingActivationFailure)
+	{
+		ResetStabilizationRuntimeState();
+	}
 }
 
 #if !UE_BUILD_SHIPPING
@@ -250,34 +257,6 @@ void UPhysAnimComponent::TransitionRuntimeState(EPhysAnimRuntimeState NewState)
 		FString(),
 		PreviousStateName,
 		NewStateName);
-
-	if (IsBalanceEntryState(NewState))
-	{
-		if (NewState == EPhysAnimRuntimeState::BalanceEntry_RootOn)
-		{
-			BalanceEntryRootOnFrameCount = 0;
-			bPhase2Tick4AuditArmed = false;
-		}
-		if (NewState == EPhysAnimRuntimeState::BalanceEntry_Settle)
-		{
-			BalanceEntrySettleFrameCount = 0;
-			BalanceScenarioStartTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-			RuntimeInstabilityState = FPhysAnimRuntimeInstabilityState();
-		}
-
-		// Phase 2 states (RootOn/Settle) will receive their tuning via the normal per-tick path in TickComponent.
-		// Phase 1 states (Prepare/LateValidate) still require the eager publishing here.
-		if (NewState != EPhysAnimRuntimeState::BalanceEntry_RootOn && NewState != EPhysAnimRuntimeState::BalanceEntry_Settle)
-		{
-			ApplyRuntimeControlTuning(ResolveEffectiveStabilizationSettings());
-		}
-	}
-
-	if (NewState == EPhysAnimRuntimeState::BalanceEntry_Prepare)
-	{
-		bPhase2Tick4AuditArmed = false;
-		ReconcilePhase1DistalModifierRecords(ResolveEffectiveStabilizationSettings());
-	}
 
 	UpdateBridgeStatusIndicator(60.0f);
 }
