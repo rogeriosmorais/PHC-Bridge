@@ -28,6 +28,7 @@ class UCharacterMovementComponent;
 class UPhysicsControlComponent;
 class UPoseSearchDatabase;
 class USkeletalMeshComponent;
+struct FPhysAnimStandingActivationReadback;
 
 struct FPhysAnimControlTargetSeed
 {
@@ -2187,6 +2188,11 @@ private:
 	bool IsBridgeLocomotionQueryActive() const;
 	bool IsBridgeLocomotionEntryRequested(const FPhysAnimStabilizationSettings& EffectiveSettings) const;
 	void ApplyRuntimeControlTuning(const FPhysAnimStabilizationSettings& EffectiveSettings);
+	FPhysAnimStandingActivationReadback PublishStandingPhysicsControlState(
+		const FPhysAnimStabilizationSettings& EffectiveSettings,
+		float LinearBlendAlpha,
+		bool bCommitFullSimulation,
+		FString& OutFailureReason);
 	void LogActivationSummary(
 		const FPhysAnimStabilizationSettings& EffectiveSettings,
 		const TCHAR* Context,
@@ -2558,6 +2564,7 @@ private:
 	FVector BalanceScenarioImpactPelvisAngularVelPost = FVector::ZeroVector;
 
 	FPhysAnimBalanceReadyTransition BalanceReadyTransition;
+	bool bStandingFullSimulationCommitted = false;
 	FPhase1AcceptedConvergenceSnapshot SafePhase1ConvergenceSnapshot;
 	bool bPendingBalanceModeStartRequest = false;
 	bool bPendingBalanceModeStartAttemptIssued = false;

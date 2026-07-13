@@ -22,18 +22,46 @@ FPhysAnimStandingActivationPlan FPhysAnimStandingActivationPlan::Build(
 	float DampingRatio,
 	float ExtraDamping)
 {
+	return BuildBlended(
+		Variant,
+		1.0f,
+		AngularStrength,
+		DampingRatio,
+		ExtraDamping,
+		ExtraDamping);
+}
+
+FPhysAnimStandingActivationPlan FPhysAnimStandingActivationPlan::BuildBlended(
+	EPhysAnimStandingVariant Variant,
+	float LinearBlendAlpha,
+	float ConfiguredAngularStrength,
+	float ConfiguredDampingRatio,
+	float BootstrapExtraDamping,
+	float StandingExtraDamping)
+{
 	(void)Variant;
+	const float Alpha = FMath::Clamp(LinearBlendAlpha, 0.0f, 1.0f);
 	FPhysAnimStandingActivationPlan Plan;
 	Plan.Bodies.SetNum(RequiredBodyCount);
 	Plan.Controls.SetNum(RequiredControlCount);
 	for (FPhysAnimStandingControlPlan& Control : Plan.Controls)
 	{
 		Control.bEnabled = true;
-		Control.AngularStrength = AngularStrength;
-		Control.DampingRatio = DampingRatio;
-		Control.ExtraDamping = ExtraDamping;
+		Control.AngularStrength = ConfiguredAngularStrength * Alpha;
+		Control.DampingRatio = ConfiguredDampingRatio;
+		Control.ExtraDamping = FMath::Lerp(BootstrapExtraDamping, StandingExtraDamping, Alpha);
 	}
 	return Plan;
+}
+
+FPhysAnimStandingPublicationDecision FPhysAnimStandingPublicationDecision::Build(
+	bool bFullSimulationAlreadyCommitted,
+	bool bPublishControlGains)
+{
+	FPhysAnimStandingPublicationDecision Decision;
+	Decision.bWriteMovementTypes = !bFullSimulationAlreadyCommitted;
+	Decision.bWriteControlGains = bPublishControlGains;
+	return Decision;
 }
 
 bool FPhysAnimStandingActivationPlan::operator==(const FPhysAnimStandingActivationPlan& Other) const
@@ -155,4 +183,3 @@ void FPhysAnimStandingActivation::Fail(const FString& FailureReason)
 	Status.bResetRequested = false;
 	Status.bBalanceSafeDenyPublished = false;
 }
-

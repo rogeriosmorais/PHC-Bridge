@@ -42,8 +42,25 @@ struct PHYSANIMPLUGIN_API FPhysAnimStandingActivationPlan
 		float AngularStrength,
 		float DampingRatio,
 		float ExtraDamping);
+	static FPhysAnimStandingActivationPlan BuildBlended(
+		EPhysAnimStandingVariant Variant,
+		float LinearBlendAlpha,
+		float ConfiguredAngularStrength,
+		float ConfiguredDampingRatio,
+		float BootstrapExtraDamping,
+		float StandingExtraDamping);
 
 	bool operator==(const FPhysAnimStandingActivationPlan& Other) const;
+};
+
+struct PHYSANIMPLUGIN_API FPhysAnimStandingPublicationDecision
+{
+	bool bWriteMovementTypes = false;
+	bool bWriteControlGains = true;
+
+	static FPhysAnimStandingPublicationDecision Build(
+		bool bFullSimulationAlreadyCommitted,
+		bool bPublishControlGains);
 };
 
 struct PHYSANIMPLUGIN_API FPhysAnimStandingActivationReadback
@@ -100,4 +117,3 @@ private:
 
 	FPhysAnimStandingActivationStatus Status;
 };
-

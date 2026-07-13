@@ -75,6 +75,38 @@ bool FPhysAnimStandingActivationUniformPlanTest::RunTest(const FString& Paramete
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimStandingActivationPublicationTest,
+	"PhysAnim.Component.StandingActivation.Publication",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimStandingActivationPublicationTest::RunTest(const FString& Parameters)
+{
+	const FPhysAnimStandingPublicationDecision First =
+		FPhysAnimStandingPublicationDecision::Build(false, true);
+	const FPhysAnimStandingPublicationDecision Later =
+		FPhysAnimStandingPublicationDecision::Build(true, true);
+	TestTrue(TEXT("The first atomic publication commits movement types"), First.bWriteMovementTypes);
+	TestFalse(TEXT("Movement types are never republished after commit"), Later.bWriteMovementTypes);
+	TestTrue(TEXT("Gains are published on the activation tick"), First.bWriteControlGains);
+	TestTrue(TEXT("Gains are republished after topology commit"), Later.bWriteControlGains);
+
+	const FPhysAnimStandingActivationPlan Start =
+		FPhysAnimStandingActivationPlan::BuildBlended(EPhysAnimStandingVariant::Normal, 0.0f, 1000.0f, 1.5f, 2.0f, 1.2f);
+	const FPhysAnimStandingActivationPlan Mid =
+		FPhysAnimStandingActivationPlan::BuildBlended(EPhysAnimStandingVariant::ZeroActions, 0.5f, 1000.0f, 1.5f, 2.0f, 1.2f);
+	const FPhysAnimStandingActivationPlan End =
+		FPhysAnimStandingActivationPlan::BuildBlended(EPhysAnimStandingVariant::DropControlDispatch, 1.0f, 1000.0f, 1.5f, 2.0f, 1.2f);
+	TestEqual(TEXT("Strength begins at zero"), Start.Controls[0].AngularStrength, 0.0f);
+	TestEqual(TEXT("Strength uses the shared midpoint alpha"), Mid.Controls[0].AngularStrength, 500.0f);
+	TestEqual(TEXT("Strength reaches the configured endpoint"), End.Controls[0].AngularStrength, 1000.0f);
+	TestEqual(TEXT("Configured damping ratio remains active at blend start"), Start.Controls[0].DampingRatio, 1.5f);
+	TestEqual(TEXT("Configured damping ratio remains active at blend end"), End.Controls[0].DampingRatio, 1.5f);
+	TestEqual(TEXT("Extra damping begins at bootstrap"), Start.Controls[0].ExtraDamping, 2.0f);
+	TestEqual(TEXT("Extra damping reaches standing"), End.Controls[0].ExtraDamping, 1.2f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPhysAnimStandingActivationFailStopTest,
 	"PhysAnim.Component.StandingActivation.FailStop",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
