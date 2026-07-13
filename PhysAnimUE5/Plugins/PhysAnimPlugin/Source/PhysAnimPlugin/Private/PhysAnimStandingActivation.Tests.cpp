@@ -59,6 +59,13 @@ bool FPhysAnimStandingActivationUniformPlanTest::RunTest(const FString& Paramete
 	const FPhysAnimStandingActivationPlan Dropped = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::DropControlDispatch, 1000.0f, 1.0f, 50.0f);
 	const FPhysAnimStandingActivationPlan ControlsOff = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::ControlsOff, 1000.0f, 1.0f, 50.0f);
 	const FPhysAnimStandingActivationPlan DampingOnly = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::DampingOnly, 1000.0f, 1.0f, 50.0f);
+	const FPhysAnimStandingActivationPlan DampingOnlyAfterBlend = FPhysAnimStandingActivationPlan::BuildBlended(
+		EPhysAnimStandingVariant::DampingOnly,
+		1.0f,
+		1000.0f,
+		1.0f,
+		50.0f,
+		10.0f);
 	const FPhysAnimStandingActivationPlan FixedNeutral = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::FixedNeutralTarget, 1000.0f, 1.0f, 50.0f);
 	const FPhysAnimStandingActivationPlan RealOnnx = FPhysAnimStandingActivationPlan::Build(EPhysAnimStandingVariant::RealOnnxPolicy, 1000.0f, 1.0f, 50.0f);
 
@@ -81,6 +88,10 @@ bool FPhysAnimStandingActivationUniformPlanTest::RunTest(const FString& Paramete
 		TestEqual(TEXT("Damping-only publishes zero strength"), Control.AngularStrength, 0.0f);
 		TestEqual(TEXT("Damping-only preserves configured damping ratio"), Control.DampingRatio, 1.0f);
 		TestEqual(TEXT("Damping-only preserves configured extra damping"), Control.ExtraDamping, 50.0f);
+	}
+	for (const FPhysAnimStandingControlPlan& Control : DampingOnlyAfterBlend.Controls)
+	{
+		TestEqual(TEXT("Damping-only does not decay passive damping during the standing blend"), Control.ExtraDamping, 50.0f);
 	}
 	TestFalse(TEXT("Controls-off skips policy inference"), FPhysAnimStandingActivationPlan::UsesPolicyInference(EPhysAnimStandingVariant::ControlsOff));
 	TestFalse(TEXT("Damping-only skips policy inference"), FPhysAnimStandingActivationPlan::UsesPolicyInference(EPhysAnimStandingVariant::DampingOnly));

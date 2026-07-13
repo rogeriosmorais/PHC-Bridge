@@ -65,7 +65,9 @@ FPhysAnimStandingActivationPlan FPhysAnimStandingActivationPlan::BuildBlended(
 		Control.DampingRatio = bControlsOff ? 0.0f : ConfiguredDampingRatio;
 		Control.ExtraDamping = bControlsOff
 			? 0.0f
-			: FMath::Lerp(BootstrapExtraDamping, StandingExtraDamping, Alpha);
+			: bDampingOnly
+				? BootstrapExtraDamping
+				: FMath::Lerp(BootstrapExtraDamping, StandingExtraDamping, Alpha);
 	}
 	return Plan;
 }
