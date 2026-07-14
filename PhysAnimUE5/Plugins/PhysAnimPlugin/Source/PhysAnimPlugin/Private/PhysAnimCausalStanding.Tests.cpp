@@ -289,12 +289,6 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("First-policy delay defaults to zero ticks"),
 		Component->GetExperimentalFirstPolicyDelayTicksForTesting(),
 		0);
-	TestFalse(
-		TEXT("The zero-delay default cannot suppress a due policy update"),
-		Component->ConsumeExperimentalFirstPolicyDelayTickForTesting(
-			true,
-			true,
-			EPhysAnimStandingVariant::RealOnnxPolicy));
 	Component->ApplyProductVariantFromCommandLineForTesting(
 		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalFirstPolicyDelayTicks=3"));
 	TestEqual(
@@ -319,45 +313,6 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("Above-range first-policy delays are rejected to the zero-delay default"),
 		Component->GetExperimentalFirstPolicyDelayTicksForTesting(),
 		0);
-	Component->ApplyProductVariantFromCommandLineForTesting(
-		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalFirstPolicyDelayTicks=3"));
-	TestFalse(
-		TEXT("A tick without a due policy update cannot consume startup delay"),
-		Component->ConsumeExperimentalFirstPolicyDelayTickForTesting(
-			false,
-			true,
-			EPhysAnimStandingVariant::RealOnnxPolicy));
-	TestFalse(
-		TEXT("Disabled inference cannot consume startup delay"),
-		Component->ConsumeExperimentalFirstPolicyDelayTickForTesting(
-			true,
-			false,
-			EPhysAnimStandingVariant::RealOnnxPolicy));
-	TestFalse(
-		TEXT("A non-policy plant variant cannot consume startup delay"),
-		Component->ConsumeExperimentalFirstPolicyDelayTickForTesting(
-			true,
-			true,
-			EPhysAnimStandingVariant::FixedNeutralTarget));
-	for (int32 DelayIndex = 0; DelayIndex < Component->GetExperimentalFirstPolicyDelayTicksForTesting(); ++DelayIndex)
-	{
-		TestTrue(
-			TEXT("Each configured due policy tick is delayed exactly once"),
-			Component->ConsumeExperimentalFirstPolicyDelayTickForTesting(
-				true,
-				true,
-				EPhysAnimStandingVariant::RealOnnxPolicy));
-	}
-	TestFalse(
-		TEXT("Policy updates resume after the configured delay is exhausted"),
-		Component->ConsumeExperimentalFirstPolicyDelayTickForTesting(
-			true,
-			true,
-			EPhysAnimStandingVariant::RealOnnxPolicy));
-	TestEqual(
-		TEXT("Consumed startup delay remains bounded by its configuration"),
-		Component->GetExperimentalFirstPolicyDelayTicksConsumedForTesting(),
-		Component->GetExperimentalFirstPolicyDelayTicksForTesting());
 	TestFalse(
 		TEXT("Constraint-range remap bypass is disabled without its explicit development flag"),
 		Component->IsConstraintRangeRemapBypassEnabledForTesting());

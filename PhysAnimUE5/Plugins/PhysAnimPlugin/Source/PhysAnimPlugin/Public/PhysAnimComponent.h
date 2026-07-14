@@ -1492,22 +1492,6 @@ public:
 	static constexpr int32 GetMaximumExperimentalFirstPolicyDelayTicksForTesting() { return 8; }
 	int32 GetExperimentalFirstPolicyDelayTicksForTesting() const { return ExperimentalFirstPolicyDelayTicksForTesting; }
 	int32 GetExperimentalFirstPolicyDelayTicksConsumedForTesting() const { return ExperimentalFirstPolicyDelayTicksConsumedForTesting; }
-	bool ConsumeExperimentalFirstPolicyDelayTickForTesting(
-		bool bPolicyUpdateDue,
-		bool bPolicyInferenceEnabled,
-		EPhysAnimStandingVariant Variant)
-	{
-		if (!bPolicyUpdateDue ||
-			!bPolicyInferenceEnabled ||
-			Variant != EPhysAnimStandingVariant::RealOnnxPolicy ||
-			ExperimentalFirstPolicyDelayTicksConsumedForTesting >= ExperimentalFirstPolicyDelayTicksForTesting)
-		{
-			return false;
-		}
-
-		++ExperimentalFirstPolicyDelayTicksConsumedForTesting;
-		return true;
-	}
 	bool IsConstraintRangeRemapBypassEnabledForTesting() const { return bConstraintRangeRemapBypassEnabledForTesting; }
 	bool ShouldBypassConstraintRangeRemapForTesting(
 		EPhysAnimRuntimeState State,
