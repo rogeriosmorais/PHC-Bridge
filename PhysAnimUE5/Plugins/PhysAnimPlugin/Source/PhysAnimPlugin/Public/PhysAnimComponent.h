@@ -1488,6 +1488,15 @@ public:
 	void SetStandingVariantForTesting(EPhysAnimStandingVariant Variant) { StandingVariantForTesting = Variant; }
 	EPhysAnimStandingVariant GetStandingVariantForTesting() const { return StandingVariantForTesting; }
 	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
+	bool IsConstraintRangeRemapBypassEnabledForTesting() const { return bConstraintRangeRemapBypassEnabledForTesting; }
+	bool ShouldBypassConstraintRangeRemapForTesting(
+		EPhysAnimRuntimeState State,
+		EPhysAnimStandingVariant Variant) const
+	{
+		return bConstraintRangeRemapBypassEnabledForTesting &&
+			State == EPhysAnimRuntimeState::BalanceActive_Standing &&
+			Variant == EPhysAnimStandingVariant::RealOnnxPolicy;
+	}
 	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
 	{
 		return FirstActiveStandingActionSemanticTrace;
@@ -2422,6 +2431,7 @@ private:
 	PhysAnimBridge::FPhysAnimActionSemanticTrace FirstActiveStandingActionSemanticTrace;
 	bool bProductControlDispatchDroppedForTesting = false;
 	bool bActionSemanticTraceEnabledForTesting = false;
+	bool bConstraintRangeRemapBypassEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
 #endif
 	TArray<UE::NNE::FTensorBindingCPU> InputBindings;

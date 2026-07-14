@@ -14,7 +14,8 @@ param (
     [string]$SourceCommit,
     [string]$ModelOnnxSha256,
     [bool]$SourceTreeDirty = $false,
-    [switch]$ActionSemanticTrace
+    [switch]$ActionSemanticTrace,
+    [switch]$ExperimentalConstraintRangeRemapBypass
 )
 
 # 1. Environment Setup
@@ -139,6 +140,9 @@ if ($Test) {
     }
     if ($ActionSemanticTrace) {
         $EditorArguments += "-PhysAnimActionSemanticTrace"
+    }
+    if ($ExperimentalConstraintRangeRemapBypass) {
+        $EditorArguments += "-PhysAnimExperimentalConstraintRangeRemapBypass"
     }
     $EditorArguments += "-PhysAnimSourceTreeDirty=$(if ($SourceTreeDirty) { 1 } else { 0 })"
 

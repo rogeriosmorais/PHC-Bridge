@@ -273,6 +273,33 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	TestFalse(
 		TEXT("Removing the development flag restores the trace-off default"),
 		Component->IsActionSemanticTraceEnabledForTesting());
+	TestFalse(
+		TEXT("Constraint-range remap bypass is disabled without its explicit development flag"),
+		Component->IsConstraintRangeRemapBypassEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalConstraintRangeRemapBypass"));
+	TestTrue(
+		TEXT("The explicit development flag enables the constraint-range remap experiment"),
+		Component->IsConstraintRangeRemapBypassEnabledForTesting());
+	TestTrue(
+		TEXT("The remap bypass is owned only by active-standing RealOnnxPolicy"),
+		Component->ShouldBypassConstraintRangeRemapForTesting(
+			EPhysAnimRuntimeState::BalanceActive_Standing,
+			EPhysAnimStandingVariant::RealOnnxPolicy));
+	TestFalse(
+		TEXT("The remap bypass cannot alter standing preparation"),
+		Component->ShouldBypassConstraintRangeRemapForTesting(
+			EPhysAnimRuntimeState::Standing_Preparation,
+			EPhysAnimStandingVariant::RealOnnxPolicy));
+	TestFalse(
+		TEXT("The remap bypass cannot alter a non-policy plant variant"),
+		Component->ShouldBypassConstraintRangeRemapForTesting(
+			EPhysAnimRuntimeState::BalanceActive_Standing,
+			EPhysAnimStandingVariant::Normal));
+	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
+	TestFalse(
+		TEXT("Removing the development flag restores the remap-on default"),
+		Component->IsConstraintRangeRemapBypassEnabledForTesting());
 	float NeutralCalibratedTiltDeg = 0.0f;
 	TestFalse(
 		TEXT("Neutral-calibrated tilt requires a live owner, mesh, pelvis body, and startup calibration"),
