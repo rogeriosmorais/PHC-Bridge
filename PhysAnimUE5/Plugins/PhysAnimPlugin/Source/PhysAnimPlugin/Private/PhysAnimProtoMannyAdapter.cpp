@@ -65,6 +65,59 @@ namespace
 		return FMath::DegreesToRadians(FMath::Clamp(LimitDegrees, 0.0f, 180.0f));
 	}
 
+	FVector ResolveRotationVectorRadians(FQuat Rotation)
+	{
+		Rotation.Normalize();
+		Rotation.EnforceShortestArcWith(FQuat::Identity);
+		const FVector Imaginary(Rotation.X, Rotation.Y, Rotation.Z);
+		const double SinHalfAngle = Imaginary.Size();
+		if (SinHalfAngle <= UE_SMALL_NUMBER)
+		{
+			return Imaginary * 2.0;
+		}
+
+		const double AngleRadians = 2.0 * FMath::Atan2(SinHalfAngle, Rotation.W);
+		return Imaginary * (AngleRadians / SinHalfAngle);
+	}
+
+	FQuat BuildRotationFromVectorRadians(const FVector& RotationVectorRadians)
+	{
+		const double AngleRadians = RotationVectorRadians.Size();
+		if (AngleRadians <= UE_SMALL_NUMBER)
+		{
+			return FQuat::Identity;
+		}
+
+		return FQuat(RotationVectorRadians / AngleRadians, AngleRadians).GetNormalized();
+	}
+
+	float ResolveAvailableRangeScale(
+		const EAngularConstraintMotion Motion,
+		const float LimitDegrees,
+		const float BindAngleRadians,
+		const double ProtoRotationComponentRadians)
+	{
+		if (Motion == ACM_Free)
+		{
+			return 1.0f;
+		}
+
+		const float LimitRadians = ResolveAngularLimitRadians(Motion, LimitDegrees);
+		if (LimitRadians <= UE_SMALL_NUMBER)
+		{
+			return 0.0f;
+		}
+
+		const float ClampedBindAngle = FMath::Clamp(
+			BindAngleRadians,
+			-LimitRadians,
+			LimitRadians);
+		const float AvailableRadians = ProtoRotationComponentRadians >= 0.0
+			? LimitRadians - ClampedBindAngle
+			: LimitRadians + ClampedBindAngle;
+		return FMath::Max(0.0f, AvailableRadians) / UE_PI;
+	}
+
 	float ResolveSignedTwistAngleRadians(const FQuat& InTwist)
 	{
 		FQuat Twist = InTwist.GetNormalized();
@@ -374,6 +427,58 @@ bool PhysAnimProtoMannyAdapter::BuildConstraintProfile(
 	return true;
 }
 
+FQuat PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
+	const FQuat& ParentRelativeTargetRotation,
+	const FQuat& MannyBindParentRelativeRotation,
+	const FPhysAnimMannyConstraintProfile& ConstraintProfile)
+{
+	const FQuat ParentConstraintFrameRotation =
+		ConstraintProfile.ParentConstraintFrameRotation.GetNormalized();
+	const FQuat ChildConstraintFrameRotation =
+		ConstraintProfile.ChildConstraintFrameRotation.GetNormalized();
+	const FQuat BindInConstraintSpace = (
+		ParentConstraintFrameRotation.Inverse() *
+		MannyBindParentRelativeRotation.GetNormalized() *
+		ChildConstraintFrameRotation).GetNormalized();
+	const FQuat TargetInConstraintSpace = (
+		ParentConstraintFrameRotation.Inverse() *
+		ParentRelativeTargetRotation.GetNormalized() *
+		ChildConstraintFrameRotation).GetNormalized();
+	FQuat BindSwing;
+	FQuat BindTwist;
+	BindInConstraintSpace.ToSwingTwist(FVector::ForwardVector, BindSwing, BindTwist);
+	BindSwing.Normalize();
+	BindTwist.Normalize();
+	const FVector2f BindSwingAnglesRadians = ResolveSwingAnglesRadians(BindSwing);
+	const float BindTwistAngleRadians = ResolveSignedTwistAngleRadians(BindTwist);
+
+	FVector ProtoRotationVectorRadians = ResolveRotationVectorRadians(
+		(TargetInConstraintSpace * BindInConstraintSpace.Inverse()).GetNormalized());
+	ProtoRotationVectorRadians.X *= ResolveAvailableRangeScale(
+		ConstraintProfile.TwistMotion,
+		ConstraintProfile.TwistLimitDegrees,
+		BindTwistAngleRadians,
+		ProtoRotationVectorRadians.X);
+	ProtoRotationVectorRadians.Y *= ResolveAvailableRangeScale(
+		ConstraintProfile.Swing2Motion,
+		ConstraintProfile.Swing2LimitDegrees,
+		BindSwingAnglesRadians.X,
+		ProtoRotationVectorRadians.Y);
+	ProtoRotationVectorRadians.Z *= ResolveAvailableRangeScale(
+		ConstraintProfile.Swing1Motion,
+		ConstraintProfile.Swing1LimitDegrees,
+		BindSwingAnglesRadians.Y,
+		ProtoRotationVectorRadians.Z);
+
+	const FQuat MappedTargetInConstraintSpace = (
+		BuildRotationFromVectorRadians(ProtoRotationVectorRadians) *
+		BindInConstraintSpace).GetNormalized();
+	return (
+		ParentConstraintFrameRotation *
+		MappedTargetInConstraintSpace *
+		ChildConstraintFrameRotation.Inverse()).GetNormalized();
+}
+
 FQuat PhysAnimProtoMannyAdapter::AdaptParentRelativeTarget(
 	const FQuat& ParentRelativeTargetRotation,
 	const FQuat& MannyBindParentRelativeRotation,
@@ -399,9 +504,8 @@ FQuat PhysAnimProtoMannyAdapter::AdaptParentRelativeTarget(
 		ParentConstraintFrameRotation.Inverse() *
 		ParentRelativeTargetRotation.GetNormalized() *
 		ChildConstraintFrameRotation).GetNormalized();
-	// ProtoMotions has already converted the normalized action to an absolute
-	// joint angle (PI * action for this SMPL checkpoint). Preserve that requested
-	// angle here; this adapter only expresses and projects it in Chaos's authored
+	// Range mapping has already selected the desired absolute actuator target.
+	// This final safety stage only expresses and projects it in Chaos's authored
 	// constraint frame.
 	TargetInConstraintSpace.EnforceShortestArcWith(FQuat::Identity);
 

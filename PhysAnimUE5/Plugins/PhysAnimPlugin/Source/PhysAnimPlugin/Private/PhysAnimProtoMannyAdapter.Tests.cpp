@@ -300,6 +300,48 @@ bool FPhysAnimProtoMannyConstraintProjectionTest::RunTest(const FString& Paramet
 	Profile.Swing1LimitDegrees = 30.0f;
 	Profile.Swing2LimitDegrees = 40.0f;
 
+	const FQuat HalfRangeProtoTwist(
+		FVector::ForwardVector,
+		FMath::DegreesToRadians(90.0f));
+	const FQuat HalfRangeMannyTwist =
+		PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
+			HalfRangeProtoTwist,
+			FQuat::Identity,
+			Profile);
+	TestEqual(
+		TEXT("Half of Proto's twist range maps to half of Manny's twist range"),
+		SignedTwistDegrees(HalfRangeMannyTwist),
+		10.0f,
+		0.02f);
+
+	const FQuat OffsetBindTwist(
+		FVector::ForwardVector,
+		FMath::DegreesToRadians(-15.0f));
+	const FQuat OffsetBindHalfRangeTarget =
+		(HalfRangeProtoTwist * OffsetBindTwist).GetNormalized();
+	const FQuat OffsetBindHalfRangeResult =
+		PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
+			OffsetBindHalfRangeTarget,
+			OffsetBindTwist,
+			Profile);
+	TestEqual(
+		TEXT("Positive Proto occupancy uses the positive range available from Manny's asymmetric bind"),
+		SignedTwistDegrees(OffsetBindHalfRangeResult),
+		2.5f,
+		0.02f);
+
+	const FQuat HalfRangeProtoSwing2 = BuildSwing(90.0f, 0.0f);
+	const FQuat HalfRangeMannySwing2 =
+		PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
+			HalfRangeProtoSwing2,
+			FQuat::Identity,
+			Profile);
+	TestEqual(
+		TEXT("Half of Proto's Swing2 range maps to half of Manny's Swing2 range"),
+		SwingDegrees(HalfRangeMannySwing2).X,
+		20.0,
+		0.02);
+
 	const FQuat IdentityResult = PhysAnimProtoMannyAdapter::AdaptParentRelativeTarget(
 		FQuat::Identity,
 		FQuat::Identity,
@@ -510,8 +552,13 @@ bool FPhysAnimProtoMannyKneeAxisContractTest::RunTest(const FString& Parameters)
 		Profile.ParentConstraintFrameRotation.Inverse() *
 		RawParentRelativeTarget *
 		Profile.ChildConstraintFrameRotation).GetNormalized();
+	const FQuat RangeMappedParentRelativeTarget =
+		PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
+			RawParentRelativeTarget,
+			BindParentRelativeRotation,
+			Profile);
 	const FQuat AdaptedParentRelativeTarget = PhysAnimProtoMannyAdapter::AdaptParentRelativeTarget(
-		RawParentRelativeTarget,
+		RangeMappedParentRelativeTarget,
 		BindParentRelativeRotation,
 		Profile);
 
@@ -523,6 +570,9 @@ bool FPhysAnimProtoMannyKneeAxisContractTest::RunTest(const FString& Parameters)
 		Profile.ParentConstraintFrameRotation.Inverse() *
 		AdaptedParentRelativeTarget *
 		Profile.ChildConstraintFrameRotation).GetNormalized();
+	const float BindTwistDegrees = SignedTwistDegrees(BindInConstraintSpace);
+	const float ExpectedMappedTwistDegrees =
+		BindTwistDegrees + 0.5f * (Profile.TwistLimitDegrees - BindTwistDegrees);
 	const FVector2D RawSwingDegrees = SwingDegrees(RawTargetInConstraintSpace);
 	const FVector2D AdaptedSwingDegrees = SwingDegrees(AdaptedTargetInConstraintSpace);
 	AddInfo(FString::Printf(
@@ -558,8 +608,11 @@ bool FPhysAnimProtoMannyKneeAxisContractTest::RunTest(const FString& Parameters)
 		TEXT("Manny's asymmetric knee range is represented by a 40-50 degree neutral constraint offset"),
 		BindConstraintOffsetDegrees >= 40.0 && BindConstraintOffsetDegrees <= 50.0);
 	TestTrue(
-		TEXT("A canonical 90-degree SMPL knee flexion remains a 90-degree Manny knee command"),
-		RetainedFlexionDegrees >= 85.0 && RetainedFlexionDegrees <= 95.0);
+		TEXT("A half-range Proto knee command occupies approximately half of Manny's available positive knee travel"),
+		FMath::IsNearlyEqual(
+			SignedTwistDegrees(AdaptedTargetInConstraintSpace),
+			ExpectedMappedTwistDegrees,
+			1.0f));
 	TestTrue(
 		TEXT("The adapted knee twist remains within Manny's authored limit"),
 		FMath::Abs(SignedTwistDegrees(AdaptedTargetInConstraintSpace)) <= Profile.TwistLimitDegrees + 0.1);

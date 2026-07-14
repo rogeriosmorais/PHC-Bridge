@@ -578,8 +578,13 @@ void UPhysAnimComponent::ApplyControlTargets(
 						InitialControl->ParentBoneName,
 						ConstraintProfile))
 					{
+						const FQuat RangeMappedPolicyRotation =
+							PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
+								DistalLocomotionAlignedPolicyRotation,
+								MannyBindNeutralRotation,
+								ConstraintProfile);
 						ConstraintAdaptedPolicyRotation = PhysAnimProtoMannyAdapter::AdaptParentRelativeTarget(
-							DistalLocomotionAlignedPolicyRotation,
+							RangeMappedPolicyRotation,
 							MannyBindNeutralRotation,
 							ConstraintProfile);
 					}

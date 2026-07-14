@@ -77,8 +77,15 @@ namespace PhysAnimProtoMannyAdapter
 		FName ParentBoneName,
 		FPhysAnimMannyConstraintProfile& OutProfile);
 
-	// Preserves Proto's already-resolved absolute joint angle, expresses it in
-	// Manny's constraint frame, and projects only values outside the hard envelope.
+	// Maps Proto's full-range PI * action exponential-map delta into the
+	// corresponding authored Manny twist/swing range, relative to bind.
+	PHYSANIMPLUGIN_API FQuat MapProtoPolicyTargetToMannyConstraintRange(
+		const FQuat& ParentRelativeTargetRotation,
+		const FQuat& MannyBindParentRelativeRotation,
+		const FPhysAnimMannyConstraintProfile& ConstraintProfile);
+
+	// Preserves the desired absolute joint angle, expresses it in Manny's
+	// constraint frame, and projects only values outside the hard envelope.
 	PHYSANIMPLUGIN_API FQuat AdaptParentRelativeTarget(
 		const FQuat& ParentRelativeTargetRotation,
 		const FQuat& MannyBindParentRelativeRotation,
