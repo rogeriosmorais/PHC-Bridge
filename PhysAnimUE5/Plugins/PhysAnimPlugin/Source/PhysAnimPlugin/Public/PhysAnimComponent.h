@@ -1511,6 +1511,10 @@ public:
 	{
 		return StartupChronologyTrace;
 	}
+	const PhysAnimBridge::FPhysAnimFirstPolicyBodySourceTrace& GetFirstPolicyBodySourceTraceForTesting() const
+	{
+		return FirstPolicyBodySourceTrace;
+	}
 	void ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine);
 #endif
 	void ConsumeUpperBodyPendingResets();
@@ -2449,6 +2453,7 @@ private:
 	PhysAnimBridge::FPhysAnimActionSemanticTrace FirstActiveStandingActionSemanticTrace;
 	PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot FirstPolicyInputProvenanceSnapshot;
 	PhysAnimBridge::FPhysAnimStartupChronologyTrace StartupChronologyTrace;
+	PhysAnimBridge::FPhysAnimFirstPolicyBodySourceTrace FirstPolicyBodySourceTrace;
 	bool bProductControlDispatchDroppedForTesting = false;
 	bool bActionSemanticTraceEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;

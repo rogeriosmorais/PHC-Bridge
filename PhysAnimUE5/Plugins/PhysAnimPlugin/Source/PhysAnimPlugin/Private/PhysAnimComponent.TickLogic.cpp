@@ -190,6 +190,29 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		{
 			return;
 		}
+#if WITH_DEV_AUTOMATION_TESTS
+		const bool bRecordFirstPolicyBodySource =
+			bStartupChronologyTraceEnabledForTesting &&
+			StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+			bEnablePolicyInference &&
+			bStandingVariantUsesPolicyInference &&
+			PolicyControlTicksExecuted == 1;
+		FString BodySourceTraceError;
+		if (!FirstPolicyBodySourceTrace.RecordFirstPolicySourceIf(
+				bRecordFirstPolicyBodySource,
+				TEXT("first_policy_pre_adapter"),
+				GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
+				GetRuntimeStateName(RuntimeState),
+				PolicyControlTicksExecuted,
+				MannyCurrentBodySamples,
+				BodySourceTraceError))
+		{
+			OutError = FString::Printf(
+				TEXT("Could not record the first-policy body-source trace: %s"),
+				*BodySourceTraceError);
+			return;
+		}
+#endif
 		TArray<FPhysAnimBodySample> CurrentBodySamples;
 		if (!PhysAnimProtoMannyAdapter::AdaptBodySamplesToCanonicalSmpl(
 			MannyCurrentBodySamples,

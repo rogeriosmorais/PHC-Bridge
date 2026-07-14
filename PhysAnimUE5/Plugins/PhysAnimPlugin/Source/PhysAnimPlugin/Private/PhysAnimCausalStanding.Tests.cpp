@@ -888,6 +888,45 @@ namespace
 		return Root;
 	}
 
+	TSharedRef<FJsonObject> BuildFirstPolicyBodySourceRecordJson(
+		const PhysAnimBridge::FPhysAnimFirstPolicyBodySourceRecord& Record)
+	{
+		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetBoolField(TEXT("recorded"), Record.bRecorded);
+		Root->SetStringField(TEXT("stage"), Record.Stage);
+		Root->SetNumberField(TEXT("world_time_seconds"), Record.WorldTimeSeconds);
+		Root->SetStringField(TEXT("runtime_state"), Record.RuntimeState);
+		Root->SetNumberField(TEXT("policy_control_tick"), Record.PolicyControlTick);
+		Root->SetNumberField(TEXT("body_sample_count"), Record.BodySampleCount);
+		Root->SetStringField(TEXT("fingerprint_algorithm"), Record.FingerprintAlgorithm);
+		Root->SetStringField(TEXT("fingerprint"), Record.Fingerprint);
+		Root->SetArrayField(TEXT("body_samples"), BuildPolicyInputProvenanceBodySamplesJson(Record.BodySamples));
+		return Root;
+	}
+
+	TSharedRef<FJsonObject> BuildFirstPolicyBodySourceJson(
+		const PhysAnimBridge::FPhysAnimFirstPolicyBodySourceTrace& Trace)
+	{
+		FString ValidationError;
+		const bool bValid = PhysAnimBridge::ValidateFirstPolicyBodySourceTrace(Trace, ValidationError);
+		const bool bComplete = Trace.bFirstInferenceRecorded &&
+			Trace.Prior.bRecorded &&
+			Trace.Live.bRecorded &&
+			Trace.Effective.bRecorded;
+
+		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("schema_version"), TEXT("physanim-first-policy-body-source/v1"));
+		Root->SetStringField(TEXT("authority"), TEXT("DEVELOPMENT_DIAGNOSTIC_ONLY"));
+		Root->SetBoolField(TEXT("product_success_authority"), false);
+		Root->SetBoolField(TEXT("complete"), bComplete);
+		Root->SetBoolField(TEXT("valid"), bValid);
+		Root->SetStringField(TEXT("error"), ValidationError);
+		Root->SetObjectField(TEXT("prior"), BuildFirstPolicyBodySourceRecordJson(Trace.Prior));
+		Root->SetObjectField(TEXT("live"), BuildFirstPolicyBodySourceRecordJson(Trace.Live));
+		Root->SetObjectField(TEXT("effective"), BuildFirstPolicyBodySourceRecordJson(Trace.Effective));
+		return Root;
+	}
+
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPolicyInputProvenancePublicationContractTest,
@@ -1028,6 +1067,111 @@ namespace
 			TEXT("Each chronology stage publishes all SMPL bodies"),
 			Samples[0]->AsObject()->GetArrayField(TEXT("body_samples")).Num(),
 			PhysAnimBridge::NumSmplBodies);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimFirstPolicyBodySourcePublicationContractTest,
+		"PhysAnim.ProductHarness.FirstPolicyBodySourcePublicationContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimFirstPolicyBodySourcePublicationContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<FPhysAnimBodySample> PriorBodySamples;
+		TArray<FPhysAnimBodySample> LiveBodySamples;
+		PriorBodySamples.SetNum(PhysAnimBridge::NumSmplBodies);
+		PriorBodySamples[0].Position = FVector(0.25, -0.5, 100.0);
+		LiveBodySamples = PriorBodySamples;
+		LiveBodySamples[0].Position += FVector(1.0, 2.0, 3.0);
+
+		PhysAnimBridge::FPhysAnimFirstPolicyBodySourceTrace Trace;
+		TestTrue(
+			TEXT("Publication fixture captures the prior body source"),
+			Trace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorBodySamples));
+		FString RecordError;
+		TestTrue(
+			TEXT("Publication fixture records the live first-policy source"),
+			Trace.RecordFirstPolicySourceIf(
+				true,
+				TEXT("first_policy_pre_adapter"),
+				2.0,
+				TEXT("BridgeActive"),
+				1,
+				LiveBodySamples,
+				RecordError));
+		TestTrue(TEXT("Publication fixture records without error"), RecordError.IsEmpty());
+
+		const TSharedRef<FJsonObject> Json = BuildFirstPolicyBodySourceJson(Trace);
+		TestEqual(
+			TEXT("First-policy body-source schema is versioned"),
+			Json->GetStringField(TEXT("schema_version")),
+			FString(TEXT("physanim-first-policy-body-source/v1")));
+		TestEqual(
+			TEXT("First-policy body-source publication is development-only"),
+			Json->GetStringField(TEXT("authority")),
+			FString(TEXT("DEVELOPMENT_DIAGNOSTIC_ONLY")));
+		TestFalse(
+			TEXT("First-policy body-source publication cannot establish product success"),
+			Json->GetBoolField(TEXT("product_success_authority")));
+		TestTrue(TEXT("First-policy body-source publication reports completion"), Json->GetBoolField(TEXT("complete")));
+		TestTrue(TEXT("First-policy body-source publication reports validity"), Json->GetBoolField(TEXT("valid")));
+		TestTrue(TEXT("Valid first-policy body-source publication has no error"), Json->GetStringField(TEXT("error")).IsEmpty());
+		TestFalse(TEXT("Instrumentation publication has no configured behavior field"), Json->HasField(TEXT("configured")));
+		TestFalse(TEXT("Instrumentation publication has no consumed behavior field"), Json->HasField(TEXT("consumed")));
+		TestFalse(TEXT("Instrumentation publication has no replay behavior field"), Json->HasField(TEXT("replay")));
+
+		const TSharedPtr<FJsonObject> PriorJson = Json->GetObjectField(TEXT("prior"));
+		const TSharedPtr<FJsonObject> LiveJson = Json->GetObjectField(TEXT("live"));
+		const TSharedPtr<FJsonObject> EffectiveJson = Json->GetObjectField(TEXT("effective"));
+		TestEqual(TEXT("Prior metadata publishes its stage"), PriorJson->GetStringField(TEXT("stage")), FString(TEXT("pre_state_machine")));
+		TestEqual(TEXT("Prior metadata publishes its runtime state"), PriorJson->GetStringField(TEXT("runtime_state")), FString(TEXT("WaitingForPoseSearch")));
+		TestEqual(TEXT("Prior metadata publishes policy tick zero"), static_cast<int32>(PriorJson->GetNumberField(TEXT("policy_control_tick"))), 0);
+		TestEqual(TEXT("Live metadata publishes its stage"), LiveJson->GetStringField(TEXT("stage")), FString(TEXT("first_policy_pre_adapter")));
+		TestEqual(TEXT("Live metadata publishes policy tick one"), static_cast<int32>(LiveJson->GetNumberField(TEXT("policy_control_tick"))), 1);
+		TestEqual(
+			TEXT("Every source publishes the SMPL body count"),
+			static_cast<int32>(PriorJson->GetNumberField(TEXT("body_sample_count"))),
+			PhysAnimBridge::NumSmplBodies);
+		TestEqual(
+			TEXT("Every source publishes the locked fingerprint algorithm"),
+			LiveJson->GetStringField(TEXT("fingerprint_algorithm")),
+			FString(PhysAnimBridge::FirstPolicyBodySourceFingerprintAlgorithm));
+		TestFalse(TEXT("Live source publishes a fingerprint"), LiveJson->GetStringField(TEXT("fingerprint")).IsEmpty());
+		TestEqual(
+			TEXT("Every source publishes raw body samples"),
+			PriorJson->GetArrayField(TEXT("body_samples")).Num(),
+			PhysAnimBridge::NumSmplBodies);
+		const TSharedPtr<FJsonObject> FirstPriorBody = PriorJson->GetArrayField(TEXT("body_samples"))[0]->AsObject();
+		TestEqual(
+			TEXT("Raw body-sample position is preserved"),
+			FirstPriorBody->GetArrayField(TEXT("position_xyz"))[0]->AsNumber(),
+			0.25);
+		TestEqual(
+			TEXT("Instrumentation-only effective source is byte-for-byte JSON-identical to live"),
+			SerializeJson(EffectiveJson.ToSharedRef()),
+			SerializeJson(LiveJson.ToSharedRef()));
+
+		Trace.Effective.BodySamples[0].Position.X += 1.0;
+		FString FingerprintError;
+		TestTrue(
+			TEXT("Divergent effective-source fixture remains internally fingerprint-consistent"),
+			PhysAnimBridge::BuildFirstPolicyBodySourceFingerprint(
+				Trace.Effective.BodySamples,
+				Trace.Effective.Fingerprint,
+				FingerprintError));
+		const TSharedRef<FJsonObject> InvalidJson = BuildFirstPolicyBodySourceJson(Trace);
+		TestFalse(
+			TEXT("Instrumentation rejects an effective source that differs from live"),
+			InvalidJson->GetBoolField(TEXT("valid")));
+		TestTrue(
+			TEXT("Effective/live divergence is explained"),
+			InvalidJson->GetStringField(TEXT("error")).Contains(TEXT("did not preserve the exact live source")));
 		return true;
 	}
 
@@ -1429,6 +1573,7 @@ namespace
 			bool bActionSemanticTraceWritten = true;
 			bool bPolicyInputProvenanceWritten = true;
 			bool bStartupChronologyWritten = true;
+			bool bFirstPolicyBodySourceWritten = true;
 			if (Config.bPlantRun)
 			{
 				const FString ActiveStandingSnapshotPath = FPaths::Combine(
@@ -1498,6 +1643,14 @@ namespace
 							Component->GetStartupChronologyTraceForTesting(),
 							true)) + TEXT("\n"),
 						*StartupChronologyPath);
+
+					const FString FirstPolicyBodySourcePath = FPaths::Combine(
+						Config.RunRoot,
+						TEXT("first-policy-body-source.json"));
+					bFirstPolicyBodySourceWritten = FFileHelper::SaveStringToFile(
+						SerializeJson(BuildFirstPolicyBodySourceJson(
+							Component->GetFirstPolicyBodySourceTraceForTesting())) + TEXT("\n"),
+						*FirstPolicyBodySourcePath);
 				}
 			}
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
@@ -1530,6 +1683,7 @@ namespace
 				bActionSemanticTraceWritten &&
 				bPolicyInputProvenanceWritten &&
 				bStartupChronologyWritten &&
+				bFirstPolicyBodySourceWritten &&
 				bManifestWritten;
 		}
 

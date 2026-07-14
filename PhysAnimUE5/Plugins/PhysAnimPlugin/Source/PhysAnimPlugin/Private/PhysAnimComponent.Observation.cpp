@@ -100,10 +100,18 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 #if WITH_DEV_AUTOMATION_TESTS
 void UPhysAnimComponent::CaptureStartupChronologySampleForTesting(const TCHAR* Stage)
 {
-	if (!bStartupChronologyTraceEnabledForTesting ||
-		StandingVariantForTesting != EPhysAnimStandingVariant::RealOnnxPolicy ||
-		StartupChronologyTrace.bComplete ||
-		!StartupChronologyTrace.CaptureError.IsEmpty())
+	const bool bRealOnnxPolicy = StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy;
+	const bool bCaptureStartupChronology =
+		bStartupChronologyTraceEnabledForTesting &&
+		bRealOnnxPolicy &&
+		!StartupChronologyTrace.bComplete &&
+		StartupChronologyTrace.CaptureError.IsEmpty();
+	const bool bCaptureFirstPolicyPriorSource =
+		bStartupChronologyTraceEnabledForTesting &&
+		bRealOnnxPolicy &&
+		!FirstPolicyBodySourceTrace.Prior.bRecorded &&
+		FirstPolicyBodySourceTrace.ValidationError.IsEmpty();
+	if (!bCaptureStartupChronology && !bCaptureFirstPolicyPriorSource)
 	{
 		return;
 	}
@@ -122,6 +130,20 @@ void UPhysAnimComponent::CaptureStartupChronologySampleForTesting(const TCHAR* S
 	if (!GatherCurrentBodySamples(BodySamples, CaptureError))
 	{
 		StartupChronologyTrace.CaptureError = CaptureError;
+		return;
+	}
+
+	FirstPolicyBodySourceTrace.CapturePriorIf(
+		bCaptureFirstPolicyPriorSource &&
+			FCString::Strcmp(Stage, TEXT("pre_state_machine")) == 0 &&
+			RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch,
+		Stage,
+		World->GetTimeSeconds(),
+		GetRuntimeStateName(RuntimeState),
+		PolicyControlTicksExecuted,
+		BodySamples);
+	if (!bCaptureStartupChronology)
+	{
 		return;
 	}
 

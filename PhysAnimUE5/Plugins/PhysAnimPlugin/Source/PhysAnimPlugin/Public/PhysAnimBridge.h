@@ -370,6 +370,61 @@ namespace PhysAnimBridge
 		const FPhysAnimPolicyInputProvenanceSnapshot& Snapshot,
 		FString& OutError);
 
+	inline constexpr const TCHAR* FirstPolicyBodySourceFingerprintAlgorithm =
+		TEXT("fnv1a64-ieee754-f64-le-v1");
+
+	struct PHYSANIMPLUGIN_API FPhysAnimFirstPolicyBodySourceRecord
+	{
+		void Reset();
+
+		bool bRecorded = false;
+		FString Stage;
+		double WorldTimeSeconds = -1.0;
+		FString RuntimeState;
+		int32 PolicyControlTick = INDEX_NONE;
+		int32 BodySampleCount = 0;
+		FString FingerprintAlgorithm;
+		FString Fingerprint;
+		TArray<FPhysAnimBodySample> BodySamples;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimFirstPolicyBodySourceTrace
+	{
+		bool CapturePriorIf(
+			bool bCondition,
+			const FString& InStage,
+			double InWorldTimeSeconds,
+			const FString& InRuntimeState,
+			int32 InPolicyControlTick,
+			TConstArrayView<FPhysAnimBodySample> InBodySamples);
+
+		bool RecordFirstPolicySourceIf(
+			bool bCondition,
+			const FString& InStage,
+			double InWorldTimeSeconds,
+			const FString& InRuntimeState,
+			int32 InPolicyControlTick,
+			TConstArrayView<FPhysAnimBodySample> InLiveBodySamples,
+			FString& OutError);
+
+		void Reset();
+
+		bool bFirstInferenceRecorded = false;
+		FString ValidationError;
+		FPhysAnimFirstPolicyBodySourceRecord Prior;
+		FPhysAnimFirstPolicyBodySourceRecord Live;
+		FPhysAnimFirstPolicyBodySourceRecord Effective;
+	};
+
+	PHYSANIMPLUGIN_API bool BuildFirstPolicyBodySourceFingerprint(
+		TConstArrayView<FPhysAnimBodySample> BodySamples,
+		FString& OutFingerprint,
+		FString& OutError);
+
+	PHYSANIMPLUGIN_API bool ValidateFirstPolicyBodySourceTrace(
+		const FPhysAnimFirstPolicyBodySourceTrace& Trace,
+		FString& OutError);
+
 	inline constexpr int32 MaxStartupChronologySamples = 12;
 
 	struct PHYSANIMPLUGIN_API FPhysAnimStartupChronologySample

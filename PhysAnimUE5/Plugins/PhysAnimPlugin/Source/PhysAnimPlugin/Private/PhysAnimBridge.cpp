@@ -969,6 +969,364 @@ namespace PhysAnimBridge
 		return true;
 	}
 
+	namespace
+	{
+		bool ValidateFirstPolicyBodySamples(
+			TConstArrayView<FPhysAnimBodySample> BodySamples,
+			const TCHAR* Label,
+			FString& OutError)
+		{
+			if (BodySamples.Num() != NumSmplBodies)
+			{
+				OutError = FString::Printf(
+					TEXT("%s has %d bodies instead of %d."),
+					Label,
+					BodySamples.Num(),
+					NumSmplBodies);
+				return false;
+			}
+
+			for (int32 BodyIndex = 0; BodyIndex < BodySamples.Num(); ++BodyIndex)
+			{
+				const FPhysAnimBodySample& Sample = BodySamples[BodyIndex];
+				const bool bFinite =
+					FMath::IsFinite(Sample.Position.X) &&
+					FMath::IsFinite(Sample.Position.Y) &&
+					FMath::IsFinite(Sample.Position.Z) &&
+					FMath::IsFinite(Sample.Rotation.X) &&
+					FMath::IsFinite(Sample.Rotation.Y) &&
+					FMath::IsFinite(Sample.Rotation.Z) &&
+					FMath::IsFinite(Sample.Rotation.W) &&
+					FMath::IsFinite(Sample.LinearVelocity.X) &&
+					FMath::IsFinite(Sample.LinearVelocity.Y) &&
+					FMath::IsFinite(Sample.LinearVelocity.Z) &&
+					FMath::IsFinite(Sample.AngularVelocity.X) &&
+					FMath::IsFinite(Sample.AngularVelocity.Y) &&
+					FMath::IsFinite(Sample.AngularVelocity.Z);
+				if (!bFinite || !Sample.Rotation.IsNormalized())
+				{
+					OutError = FString::Printf(
+						TEXT("%s body %d is non-finite or has a non-normalized rotation."),
+						Label,
+						BodyIndex);
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		bool FirstPolicyBodySamplesEqual(
+			TConstArrayView<FPhysAnimBodySample> A,
+			TConstArrayView<FPhysAnimBodySample> B)
+		{
+			if (A.Num() != B.Num())
+			{
+				return false;
+			}
+
+			for (int32 BodyIndex = 0; BodyIndex < A.Num(); ++BodyIndex)
+			{
+				const FPhysAnimBodySample& Left = A[BodyIndex];
+				const FPhysAnimBodySample& Right = B[BodyIndex];
+				if (Left.Position != Right.Position ||
+					Left.Rotation != Right.Rotation ||
+					Left.LinearVelocity != Right.LinearVelocity ||
+					Left.AngularVelocity != Right.AngularVelocity)
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		bool BuildFirstPolicyBodySourceRecord(
+			const FString& Stage,
+			const double WorldTimeSeconds,
+			const FString& RuntimeState,
+			const int32 PolicyControlTick,
+			TConstArrayView<FPhysAnimBodySample> BodySamples,
+			FPhysAnimFirstPolicyBodySourceRecord& OutRecord,
+			FString& OutError)
+		{
+			if (Stage.IsEmpty() ||
+				RuntimeState.IsEmpty() ||
+				!FMath::IsFinite(WorldTimeSeconds) ||
+				WorldTimeSeconds < 0.0 ||
+				PolicyControlTick < 0)
+			{
+				OutError = TEXT("First-policy body-source metadata is invalid.");
+				return false;
+			}
+			if (!ValidateFirstPolicyBodySamples(BodySamples, TEXT("First-policy body source"), OutError))
+			{
+				return false;
+			}
+
+			FString Fingerprint;
+			if (!BuildFirstPolicyBodySourceFingerprint(BodySamples, Fingerprint, OutError))
+			{
+				return false;
+			}
+
+			FPhysAnimFirstPolicyBodySourceRecord Record;
+			Record.bRecorded = true;
+			Record.Stage = Stage;
+			Record.WorldTimeSeconds = WorldTimeSeconds;
+			Record.RuntimeState = RuntimeState;
+			Record.PolicyControlTick = PolicyControlTick;
+			Record.BodySampleCount = BodySamples.Num();
+			Record.FingerprintAlgorithm = FirstPolicyBodySourceFingerprintAlgorithm;
+			Record.Fingerprint = MoveTemp(Fingerprint);
+			Record.BodySamples.Append(BodySamples.GetData(), BodySamples.Num());
+			OutRecord = MoveTemp(Record);
+			return true;
+		}
+	}
+
+	void FPhysAnimFirstPolicyBodySourceRecord::Reset()
+	{
+		bRecorded = false;
+		Stage.Reset();
+		WorldTimeSeconds = -1.0;
+		RuntimeState.Reset();
+		PolicyControlTick = INDEX_NONE;
+		BodySampleCount = 0;
+		FingerprintAlgorithm.Reset();
+		Fingerprint.Reset();
+		BodySamples.Reset();
+	}
+
+	bool BuildFirstPolicyBodySourceFingerprint(
+		TConstArrayView<FPhysAnimBodySample> BodySamples,
+		FString& OutFingerprint,
+		FString& OutError)
+	{
+		OutFingerprint.Reset();
+		OutError.Reset();
+		if (!ValidateFirstPolicyBodySamples(BodySamples, TEXT("Fingerprint body source"), OutError))
+		{
+			return false;
+		}
+
+		static_assert(sizeof(double) == 8, "The body-source fingerprint requires IEEE-754 binary64 values.");
+		uint64 Hash = 14695981039346656037ull;
+		constexpr uint64 Prime = 1099511628211ull;
+		auto AppendDoubleLittleEndian = [&Hash](const double Value)
+		{
+			uint64 Bits = 0;
+			FMemory::Memcpy(&Bits, &Value, sizeof(Bits));
+			for (int32 ByteIndex = 0; ByteIndex < 8; ++ByteIndex)
+			{
+				Hash ^= (Bits >> (ByteIndex * 8)) & 0xffull;
+				Hash *= Prime;
+			}
+		};
+
+		for (const FPhysAnimBodySample& Sample : BodySamples)
+		{
+			AppendDoubleLittleEndian(static_cast<double>(Sample.Position.X));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.Position.Y));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.Position.Z));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.Rotation.X));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.Rotation.Y));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.Rotation.Z));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.Rotation.W));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.LinearVelocity.X));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.LinearVelocity.Y));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.LinearVelocity.Z));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.AngularVelocity.X));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.AngularVelocity.Y));
+			AppendDoubleLittleEndian(static_cast<double>(Sample.AngularVelocity.Z));
+		}
+
+		OutFingerprint = FString::Printf(TEXT("%016llX"), static_cast<unsigned long long>(Hash));
+		return true;
+	}
+
+	bool FPhysAnimFirstPolicyBodySourceTrace::CapturePriorIf(
+		const bool bCondition,
+		const FString& InStage,
+		const double InWorldTimeSeconds,
+		const FString& InRuntimeState,
+		const int32 InPolicyControlTick,
+		TConstArrayView<FPhysAnimBodySample> InBodySamples)
+	{
+		if (!bCondition || Prior.bRecorded || !ValidationError.IsEmpty())
+		{
+			return false;
+		}
+		if (InStage != TEXT("pre_state_machine") ||
+			InRuntimeState != TEXT("WaitingForPoseSearch") ||
+			InPolicyControlTick != 0)
+		{
+			ValidationError = TEXT("The prior body source must come from pre_state_machine in WaitingForPoseSearch before any policy tick.");
+			return false;
+		}
+
+		FString Error;
+		if (!BuildFirstPolicyBodySourceRecord(
+				InStage,
+				InWorldTimeSeconds,
+				InRuntimeState,
+				InPolicyControlTick,
+				InBodySamples,
+				Prior,
+				Error))
+		{
+			ValidationError = MoveTemp(Error);
+			return false;
+		}
+		return true;
+	}
+
+	bool FPhysAnimFirstPolicyBodySourceTrace::RecordFirstPolicySourceIf(
+		const bool bCondition,
+		const FString& InStage,
+		const double InWorldTimeSeconds,
+		const FString& InRuntimeState,
+		const int32 InPolicyControlTick,
+		TConstArrayView<FPhysAnimBodySample> InLiveBodySamples,
+		FString& OutError)
+	{
+		OutError.Reset();
+		if (!bCondition || bFirstInferenceRecorded)
+		{
+			return true;
+		}
+		if (!ValidationError.IsEmpty())
+		{
+			OutError = ValidationError;
+			return false;
+		}
+		if (!Prior.bRecorded)
+		{
+			ValidationError = TEXT("The first-policy source cannot be selected before the prior source is captured.");
+			OutError = ValidationError;
+			return false;
+		}
+		if (InStage != TEXT("first_policy_pre_adapter") ||
+			InPolicyControlTick != 1 ||
+			!FMath::IsFinite(InWorldTimeSeconds) ||
+			InWorldTimeSeconds <= Prior.WorldTimeSeconds)
+		{
+			ValidationError = TEXT("The live first-policy source metadata does not identify the first post-prior policy tick.");
+			OutError = ValidationError;
+			return false;
+		}
+
+		FPhysAnimFirstPolicyBodySourceRecord LiveRecord;
+		if (!BuildFirstPolicyBodySourceRecord(
+				InStage,
+				InWorldTimeSeconds,
+				InRuntimeState,
+				InPolicyControlTick,
+				InLiveBodySamples,
+				LiveRecord,
+				OutError))
+		{
+			ValidationError = OutError;
+			return false;
+		}
+
+		FPhysAnimFirstPolicyBodySourceRecord EffectiveRecord;
+		if (!BuildFirstPolicyBodySourceRecord(
+				InStage,
+				InWorldTimeSeconds,
+				InRuntimeState,
+				InPolicyControlTick,
+				InLiveBodySamples,
+				EffectiveRecord,
+				OutError))
+		{
+			ValidationError = OutError;
+			return false;
+		}
+
+		Live = MoveTemp(LiveRecord);
+		Effective = MoveTemp(EffectiveRecord);
+		bFirstInferenceRecorded = true;
+		return true;
+	}
+
+	void FPhysAnimFirstPolicyBodySourceTrace::Reset()
+	{
+		bFirstInferenceRecorded = false;
+		ValidationError.Reset();
+		Prior.Reset();
+		Live.Reset();
+		Effective.Reset();
+	}
+
+	bool ValidateFirstPolicyBodySourceTrace(
+		const FPhysAnimFirstPolicyBodySourceTrace& Trace,
+		FString& OutError)
+	{
+		OutError.Reset();
+		if (!Trace.ValidationError.IsEmpty())
+		{
+			OutError = Trace.ValidationError;
+			return false;
+		}
+		if (!Trace.bFirstInferenceRecorded ||
+			!Trace.Prior.bRecorded ||
+			!Trace.Live.bRecorded ||
+			!Trace.Effective.bRecorded)
+		{
+			OutError = TEXT("First-policy body-source evidence is incomplete.");
+			return false;
+		}
+		if (Trace.Prior.Stage != TEXT("pre_state_machine") ||
+			Trace.Prior.RuntimeState != TEXT("WaitingForPoseSearch") ||
+			Trace.Prior.PolicyControlTick != 0 ||
+			Trace.Live.Stage != TEXT("first_policy_pre_adapter") ||
+			Trace.Live.PolicyControlTick != 1 ||
+			Trace.Effective.Stage != Trace.Live.Stage ||
+			Trace.Effective.RuntimeState != Trace.Live.RuntimeState ||
+			Trace.Effective.PolicyControlTick != Trace.Live.PolicyControlTick ||
+			Trace.Effective.WorldTimeSeconds != Trace.Live.WorldTimeSeconds ||
+			Trace.Prior.WorldTimeSeconds >= Trace.Live.WorldTimeSeconds)
+		{
+			OutError = TEXT("First-policy body-source stage, state, time, or tick ownership is invalid.");
+			return false;
+		}
+
+		auto ValidateRecord = [&](const FPhysAnimFirstPolicyBodySourceRecord& Record, const TCHAR* Label)
+		{
+			if (Record.BodySampleCount != Record.BodySamples.Num() ||
+				Record.FingerprintAlgorithm != FirstPolicyBodySourceFingerprintAlgorithm)
+			{
+				OutError = FString::Printf(TEXT("%s count or fingerprint algorithm is invalid."), Label);
+				return false;
+			}
+			FString RecomputedFingerprint;
+			FString FingerprintError;
+			if (!BuildFirstPolicyBodySourceFingerprint(Record.BodySamples, RecomputedFingerprint, FingerprintError) ||
+				RecomputedFingerprint != Record.Fingerprint)
+			{
+				OutError = FingerprintError.IsEmpty()
+					? FString::Printf(TEXT("%s fingerprint does not match its body samples."), Label)
+					: FingerprintError;
+				return false;
+			}
+			return true;
+		};
+		if (!ValidateRecord(Trace.Prior, TEXT("Prior source")) ||
+			!ValidateRecord(Trace.Live, TEXT("Live source")) ||
+			!ValidateRecord(Trace.Effective, TEXT("Effective source")))
+		{
+			return false;
+		}
+
+		if (!FirstPolicyBodySamplesEqual(Trace.Effective.BodySamples, Trace.Live.BodySamples))
+		{
+			OutError = TEXT("Instrumentation-only recording did not preserve the exact live source as effective.");
+			return false;
+		}
+		return true;
+	}
+
 	bool ValidateStartupChronologyTrace(
 		const FPhysAnimStartupChronologyTrace& Trace,
 		FString& OutError)

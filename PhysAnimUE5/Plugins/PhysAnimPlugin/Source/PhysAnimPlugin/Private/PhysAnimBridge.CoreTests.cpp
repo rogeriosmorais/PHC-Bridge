@@ -1014,6 +1014,184 @@ namespace
 		TestEqual(TEXT("Reset clears chronology samples"), Trace.Samples.Num(), 0);
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimFirstPolicyBodySourceTraceContractTest,
+		"PhysAnim.Bridge.FirstPolicyBodySourceTraceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimFirstPolicyBodySourceTraceContractTest::RunTest(const FString& Parameters)
+	{
+		auto MakeBodySamples = [](const double Seed)
+		{
+			TArray<FPhysAnimBodySample> Samples;
+			Samples.Reserve(NumSmplBodies);
+			for (int32 BodyIndex = 0; BodyIndex < NumSmplBodies; ++BodyIndex)
+			{
+				const double Value = Seed + static_cast<double>(BodyIndex);
+				Samples.Add(FPhysAnimBodySample(
+					FVector(Value, Value + 0.1, Value + 0.2),
+					FQuat(0.001 * Value, 0.002 * Value, 0.003 * Value, 1.0).GetNormalized(),
+					FVector(Value + 0.3, Value + 0.4, Value + 0.5),
+					FVector(Value + 0.6, Value + 0.7, Value + 0.8)));
+			}
+			return Samples;
+		};
+		auto SamplesEqual = [](TConstArrayView<FPhysAnimBodySample> A, TConstArrayView<FPhysAnimBodySample> B)
+		{
+			if (A.Num() != B.Num())
+			{
+				return false;
+			}
+			for (int32 BodyIndex = 0; BodyIndex < A.Num(); ++BodyIndex)
+			{
+				if (A[BodyIndex].Position != B[BodyIndex].Position ||
+					A[BodyIndex].Rotation != B[BodyIndex].Rotation ||
+					A[BodyIndex].LinearVelocity != B[BodyIndex].LinearVelocity ||
+					A[BodyIndex].AngularVelocity != B[BodyIndex].AngularVelocity)
+				{
+					return false;
+				}
+			}
+			return true;
+		};
+
+		const TArray<FPhysAnimBodySample> PriorSamples = MakeBodySamples(1.0);
+		const TArray<FPhysAnimBodySample> LiveSamples = MakeBodySamples(101.0);
+		FString Error;
+
+		FPhysAnimFirstPolicyBodySourceTrace DisabledTrace;
+		TArray<FPhysAnimBodySample> DisabledEffective = LiveSamples;
+		TestFalse(
+			TEXT("A disabled prior-source capture does not retain body data"),
+			DisabledTrace.CapturePriorIf(
+				false,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorSamples));
+		TestTrue(
+			TEXT("A disabled first-policy recording is a behavior-neutral no-op"),
+			DisabledTrace.RecordFirstPolicySourceIf(
+				false,
+				TEXT("first_policy_pre_adapter"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				DisabledEffective,
+				Error));
+		TestFalse(TEXT("Disabled tracing does not record a prior source"), DisabledTrace.Prior.bRecorded);
+		TestFalse(TEXT("Disabled tracing does not record first inference"), DisabledTrace.bFirstInferenceRecorded);
+		TestTrue(TEXT("Disabled tracing leaves the live source untouched"), SamplesEqual(DisabledEffective, LiveSamples));
+
+		FPhysAnimFirstPolicyBodySourceTrace LiveTrace;
+		TestTrue(
+			TEXT("The exact WaitingForPoseSearch pre-state-machine source is captured once"),
+			LiveTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorSamples));
+		TestFalse(
+			TEXT("A captured prior source cannot be replaced"),
+			LiveTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.5 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				LiveSamples));
+		TestTrue(TEXT("The prior cache owns an exact sample copy"), SamplesEqual(LiveTrace.Prior.BodySamples, PriorSamples));
+		TestEqual(TEXT("The prior cache records the fixed body count"), LiveTrace.Prior.BodySampleCount, NumSmplBodies);
+		TestEqual(
+			TEXT("The prior cache declares its deterministic fingerprint contract"),
+			LiveTrace.Prior.FingerprintAlgorithm,
+			FString(FirstPolicyBodySourceFingerprintAlgorithm));
+
+		FString MutatedFingerprint;
+		TArray<FPhysAnimBodySample> MutatedPrior = PriorSamples;
+		MutatedPrior[7].Position.Z += 0.0001;
+		TestTrue(
+			TEXT("A finite fixed-width source can be fingerprinted"),
+			BuildFirstPolicyBodySourceFingerprint(MutatedPrior, MutatedFingerprint, Error));
+		TestNotEqual(
+			TEXT("The fingerprint changes when one source scalar changes"),
+			MutatedFingerprint,
+			LiveTrace.Prior.Fingerprint);
+
+		TArray<FPhysAnimBodySample> LiveEffective = LiveSamples;
+		TestTrue(
+			TEXT("The instrumentation-only path records the live source"),
+			LiveTrace.RecordFirstPolicySourceIf(
+				true,
+				TEXT("first_policy_pre_adapter"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				LiveEffective,
+				Error));
+		TestTrue(TEXT("The first-policy source recording is one-shot"), LiveTrace.bFirstInferenceRecorded);
+		TestTrue(TEXT("The live source is copied into the live record"), SamplesEqual(LiveTrace.Live.BodySamples, LiveSamples));
+		TestTrue(TEXT("The effective source remains exactly live"), SamplesEqual(LiveTrace.Effective.BodySamples, LiveSamples));
+		TestTrue(TEXT("Live selection does not mutate the caller's source"), SamplesEqual(LiveEffective, LiveSamples));
+		TestTrue(
+			TEXT("A complete live-source trace satisfies its invariant contract"),
+			ValidateFirstPolicyBodySourceTrace(LiveTrace, Error));
+		TestTrue(TEXT("A valid live-source trace has no validation error"), Error.IsEmpty());
+
+		TArray<FPhysAnimBodySample> SecondSelectionInput = MakeBodySamples(201.0);
+		const TArray<FPhysAnimBodySample> SecondSelectionBefore = SecondSelectionInput;
+		TestTrue(
+			TEXT("A repeated recording call is an accepted no-op"),
+			LiveTrace.RecordFirstPolicySourceIf(
+				true,
+				TEXT("first_policy_pre_adapter"),
+				3.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				2,
+				SecondSelectionInput,
+				Error));
+		TestTrue(TEXT("A repeated recording cannot mutate a later source"), SamplesEqual(SecondSelectionInput, SecondSelectionBefore));
+
+		FPhysAnimFirstPolicyBodySourceTrace InvalidCountTrace;
+		TArray<FPhysAnimBodySample> ShortSamples = PriorSamples;
+		ShortSamples.Pop();
+		TestFalse(
+			TEXT("A prior source with the wrong body count is rejected"),
+			InvalidCountTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				ShortSamples));
+		TestFalse(TEXT("Invalid body count produces explicit diagnostic evidence"), InvalidCountTrace.ValidationError.IsEmpty());
+
+		FPhysAnimFirstPolicyBodySourceTrace InvalidFiniteTrace;
+		TArray<FPhysAnimBodySample> NonFiniteSamples = PriorSamples;
+		NonFiniteSamples[3].LinearVelocity.Y = std::numeric_limits<double>::quiet_NaN();
+		TestFalse(
+			TEXT("A non-finite prior source is rejected"),
+			InvalidFiniteTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				NonFiniteSamples));
+		TestFalse(TEXT("Non-finite source rejection is explicit"), InvalidFiniteTrace.ValidationError.IsEmpty());
+
+		LiveTrace.Reset();
+		TestFalse(TEXT("Reset clears the prior cache"), LiveTrace.Prior.bRecorded);
+		TestFalse(TEXT("Reset clears the live source"), LiveTrace.Live.bRecorded);
+		TestFalse(TEXT("Reset clears the effective source"), LiveTrace.Effective.bRecorded);
+		TestFalse(TEXT("Reset clears one-shot recording state"), LiveTrace.bFirstInferenceRecorded);
+		TestTrue(TEXT("Reset clears validation evidence"), LiveTrace.ValidationError.IsEmpty());
+		return true;
+	}
 #endif
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
