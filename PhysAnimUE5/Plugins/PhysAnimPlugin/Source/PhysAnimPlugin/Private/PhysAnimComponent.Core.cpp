@@ -38,6 +38,19 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 		FParse::Param(CommandLine, TEXT("PhysAnimActionSemanticTrace"));
 	bPolicyInputProvenanceTraceEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimPolicyInputProvenanceTrace"));
+	ExperimentalFirstPolicyDelayTicksForTesting = 0;
+	ExperimentalFirstPolicyDelayTicksConsumedForTesting = 0;
+	int32 ParsedFirstPolicyDelayTicks = 0;
+	if (CommandLine &&
+		FParse::Value(
+			CommandLine,
+			TEXT("PhysAnimExperimentalFirstPolicyDelayTicks="),
+			ParsedFirstPolicyDelayTicks) &&
+		ParsedFirstPolicyDelayTicks >= 0 &&
+		ParsedFirstPolicyDelayTicks <= GetMaximumExperimentalFirstPolicyDelayTicksForTesting())
+	{
+		ExperimentalFirstPolicyDelayTicksForTesting = ParsedFirstPolicyDelayTicks;
+	}
 	bConstraintRangeRemapBypassEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalConstraintRangeRemapBypass"));
 

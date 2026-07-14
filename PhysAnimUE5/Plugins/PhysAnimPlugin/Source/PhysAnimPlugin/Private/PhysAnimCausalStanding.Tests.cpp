@@ -285,6 +285,34 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	TestFalse(
 		TEXT("Removing the development flag restores the provenance trace-off default"),
 		Component->IsPolicyInputProvenanceTraceEnabledForTesting());
+	TestEqual(
+		TEXT("First-policy delay defaults to zero ticks"),
+		Component->GetExperimentalFirstPolicyDelayTicksForTesting(),
+		0);
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalFirstPolicyDelayTicks=3"));
+	TestEqual(
+		TEXT("An in-range first-policy delay is owned by the development command line"),
+		Component->GetExperimentalFirstPolicyDelayTicksForTesting(),
+		3);
+	TestEqual(
+		TEXT("Parsing a delay resets its consumed-tick diagnostic"),
+		Component->GetExperimentalFirstPolicyDelayTicksConsumedForTesting(),
+		0);
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalFirstPolicyDelayTicks=-1"));
+	TestEqual(
+		TEXT("Negative first-policy delays are rejected to the zero-delay default"),
+		Component->GetExperimentalFirstPolicyDelayTicksForTesting(),
+		0);
+	const FString AboveRangeDelay = FString::Printf(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalFirstPolicyDelayTicks=%d"),
+		UPhysAnimComponent::GetMaximumExperimentalFirstPolicyDelayTicksForTesting() + 1);
+	Component->ApplyProductVariantFromCommandLineForTesting(*AboveRangeDelay);
+	TestEqual(
+		TEXT("Above-range first-policy delays are rejected to the zero-delay default"),
+		Component->GetExperimentalFirstPolicyDelayTicksForTesting(),
+		0);
 	TestFalse(
 		TEXT("Constraint-range remap bypass is disabled without its explicit development flag"),
 		Component->IsConstraintRangeRemapBypassEnabledForTesting());
@@ -793,7 +821,9 @@ namespace
 
 	TSharedRef<FJsonObject> BuildPolicyInputProvenanceJson(
 		const PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot& Snapshot,
-		const bool bEnabled)
+		const bool bEnabled,
+		const int32 ExperimentalFirstPolicyDelayTicks,
+		const int32 ExperimentalFirstPolicyDelayTicksConsumed)
 	{
 		FString ValidationError;
 		const bool bValid = bEnabled &&
@@ -810,6 +840,8 @@ namespace
 		Root->SetBoolField(TEXT("captured"), Snapshot.bCaptured);
 		Root->SetBoolField(TEXT("valid"), bValid);
 		Root->SetStringField(TEXT("validation_error"), ValidationError);
+		Root->SetNumberField(TEXT("experimental_first_policy_delay_ticks"), ExperimentalFirstPolicyDelayTicks);
+		Root->SetNumberField(TEXT("experimental_first_policy_delay_ticks_consumed"), ExperimentalFirstPolicyDelayTicksConsumed);
 		Root->SetStringField(TEXT("capture_scope"), Snapshot.CaptureScope);
 		Root->SetStringField(TEXT("runtime_state"), Snapshot.RuntimeState);
 		Root->SetNumberField(TEXT("world_time_seconds"), Snapshot.WorldTimeSeconds);
@@ -842,10 +874,17 @@ namespace
 	bool FPhysAnimPolicyInputProvenancePublicationContractTest::RunTest(const FString& Parameters)
 	{
 		const PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot EmptySnapshot;
-		const TSharedRef<FJsonObject> DisabledJson = BuildPolicyInputProvenanceJson(EmptySnapshot, false);
+		const TSharedRef<FJsonObject> DisabledJson = BuildPolicyInputProvenanceJson(EmptySnapshot, false, 0, 0);
 		TestFalse(TEXT("Provenance publication reports the default-off state"), DisabledJson->GetBoolField(TEXT("enabled")));
 		TestFalse(TEXT("Disabled provenance publication is uncaptured"), DisabledJson->GetBoolField(TEXT("captured")));
 		TestFalse(TEXT("Disabled provenance publication is not validated"), DisabledJson->GetBoolField(TEXT("valid")));
+		TestTrue(
+			TEXT("Published delay configuration is nonnegative"),
+			DisabledJson->GetIntegerField(TEXT("experimental_first_policy_delay_ticks")) >= 0);
+		TestTrue(
+			TEXT("Published consumed delay cannot exceed its configuration"),
+			DisabledJson->GetIntegerField(TEXT("experimental_first_policy_delay_ticks_consumed")) <=
+				DisabledJson->GetIntegerField(TEXT("experimental_first_policy_delay_ticks")));
 
 		TArray<FPhysAnimBodySample> BodySamples;
 		BodySamples.SetNum(PhysAnimBridge::NumSmplBodies);
@@ -885,7 +924,7 @@ namespace
 				TerrainGroundHeights,
 				PreviousActions));
 
-		const TSharedRef<FJsonObject> Json = BuildPolicyInputProvenanceJson(Snapshot, true);
+		const TSharedRef<FJsonObject> Json = BuildPolicyInputProvenanceJson(Snapshot, true, 3, 2);
 		TestEqual(
 			TEXT("Provenance publication schema is versioned"),
 			Json->GetStringField(TEXT("schema_version")),
@@ -893,6 +932,14 @@ namespace
 		TestTrue(TEXT("Provenance publication reports explicit enablement"), Json->GetBoolField(TEXT("enabled")));
 		TestTrue(TEXT("Provenance publication reports capture"), Json->GetBoolField(TEXT("captured")));
 		TestTrue(TEXT("Provenance publication reports contract validity"), Json->GetBoolField(TEXT("valid")));
+		TestEqual(
+			TEXT("Provenance publishes the applied experimental delay configuration"),
+			Json->GetIntegerField(TEXT("experimental_first_policy_delay_ticks")),
+			3);
+		TestEqual(
+			TEXT("Provenance publishes the consumed experimental delay ticks"),
+			Json->GetIntegerField(TEXT("experimental_first_policy_delay_ticks_consumed")),
+			2);
 		TestEqual(
 			TEXT("Canonical body sources publish in SMPL order"),
 			Json->GetArrayField(TEXT("canonical_body_samples")).Num(),
@@ -1371,7 +1418,9 @@ namespace
 					bPolicyInputProvenanceWritten = FFileHelper::SaveStringToFile(
 						SerializeJson(BuildPolicyInputProvenanceJson(
 							Component->GetPolicyInputProvenanceSnapshotForTesting(),
-							true)) + TEXT("\n"),
+							true,
+							Component->GetExperimentalFirstPolicyDelayTicksForTesting(),
+							Component->GetExperimentalFirstPolicyDelayTicksConsumedForTesting())) + TEXT("\n"),
 						*PolicyInputProvenancePath);
 				}
 			}
