@@ -2,6 +2,7 @@
   "schema_version": "physanim-investigation-experiment/v1",
   "experiment_id": "real-onnx-prior-body-replay-e10",
   "recorded_utc": "2026-07-14T21:55:42.1633758Z",
+  "updated_utc": "2026-07-14T22:00:51.2599480Z",
   "experiment_type": "DEVELOPMENT_SEMANTIC_AB",
   "authority": "DEVELOPMENT_EVIDENCE_ONLY",
   "product_success": false,
@@ -276,8 +277,11 @@
     "promotion_decision": "REJECT_EXPERIMENTAL_REPLAY_BEHAVIOR_RETAIN_GENERAL_DIAGNOSTICS",
     "causal_standing_status": "NOT_PROVEN",
     "cleanup": {
-      "status": "PENDING_SEPARATE_COMMIT_AT_RECORD_TIME",
-      "required": "Remove the replay flag, mutation path, configured/consumed behavior publication, and runner plumbing while retaining the behavior-neutral source trace and publication."
+      "status": "COMPLETED_SEPARATE_COMMIT",
+      "commit": "5d5a4d7fe3686ce1571ed9bfc44558194bb6b339",
+      "removed": "Replay flag, mutation path, configured/consumed behavior publication, and runner plumbing.",
+      "retained": "Behavior-neutral prior/live/effective source trace, deterministic fingerprinting, validation, and development-only publication.",
+      "verification": "All ten reverted paths are byte-for-byte identical to instrumentation commit 9e84b4fef9e2550587925a0647c43215b6200ab7; post-revert Serena diagnostics and Graphify update passed."
     }
   },
   "next_highest_information_experiment": {
