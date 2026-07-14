@@ -389,6 +389,55 @@ bool PhysAnimProtoMannyAdapter::AdaptFuturePoseSamplesToCanonicalSmpl(
 	return true;
 }
 
+FTransform PhysAnimProtoMannyAdapter::BuildRigidRootAlignment(
+	const FTransform& SourceRoot,
+	const FTransform& TargetRoot)
+{
+	const FQuat SourceRotation = SourceRoot.GetRotation().GetNormalized();
+	const FQuat TargetRotation = TargetRoot.GetRotation().GetNormalized();
+	const FQuat AlignmentRotation = (TargetRotation * SourceRotation.Inverse()).GetNormalized();
+	const FVector AlignmentTranslation =
+		TargetRoot.GetLocation() - AlignmentRotation.RotateVector(SourceRoot.GetLocation());
+	return FTransform(AlignmentRotation, AlignmentTranslation);
+}
+
+bool PhysAnimProtoMannyAdapter::ApplyRigidAlignmentToFuturePoseSamples(
+	const FTransform& Alignment,
+	const TArray<FPhysAnimFuturePoseSample>& SourceSamples,
+	TArray<FPhysAnimFuturePoseSample>& OutAlignedSamples,
+	FString& OutError)
+{
+	const FQuat AlignmentRotation = Alignment.GetRotation().GetNormalized();
+	const FVector AlignmentTranslation = Alignment.GetLocation();
+	OutAlignedSamples = SourceSamples;
+
+	for (int32 FutureIndex = 0; FutureIndex < OutAlignedSamples.Num(); ++FutureIndex)
+	{
+		FPhysAnimFuturePoseSample& FutureSample = OutAlignedSamples[FutureIndex];
+		if (FutureSample.BodyTransforms.Num() != PhysAnimBridge::NumSmplBodies)
+		{
+			OutAlignedSamples.Reset();
+			OutError = FString::Printf(
+				TEXT("Expected %d canonical future body transforms at step %d but found %d."),
+				PhysAnimBridge::NumSmplBodies,
+				FutureIndex,
+				FutureSample.BodyTransforms.Num());
+			return false;
+		}
+
+		for (FTransform& BodyTransform : FutureSample.BodyTransforms)
+		{
+			BodyTransform.SetLocation(
+				AlignmentTranslation + AlignmentRotation.RotateVector(BodyTransform.GetLocation()));
+			BodyTransform.SetRotation(
+				(AlignmentRotation * BodyTransform.GetRotation().GetNormalized()).GetNormalized());
+		}
+	}
+
+	OutError.Reset();
+	return true;
+}
+
 bool PhysAnimProtoMannyAdapter::BuildConstraintProfile(
 	const UPhysicsAsset* const PhysicsAsset,
 	const FName ChildBoneName,

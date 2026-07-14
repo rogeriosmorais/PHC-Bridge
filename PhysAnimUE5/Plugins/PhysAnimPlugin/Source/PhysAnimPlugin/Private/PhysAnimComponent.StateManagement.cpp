@@ -30,6 +30,9 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	FirstPolicyInferenceSnapshot.Reset();
 #if WITH_DEV_AUTOMATION_TESTS
 	FirstActiveStandingPolicyInferenceSnapshot.Reset();
+	bHasExperimentalStandingTargetRootAlignment = false;
+	ExperimentalStandingTargetRootAlignment = FTransform::Identity;
+	ExperimentalStandingTargetRootAlignmentDegrees = -1.0f;
 #endif
 	PreviousControlTargetRotations.Reset();
 	PolicyNeutralControlTargetRotations.Reset();

@@ -70,6 +70,18 @@ namespace PhysAnimProtoMannyAdapter
 		TArray<FPhysAnimFuturePoseSample>& OutProtoFuturePoseSamples,
 		FString& OutError);
 
+	// Builds and applies a rigid global-frame change without altering joint-local
+	// geometry or the relative motion between future samples.
+	PHYSANIMPLUGIN_API FTransform BuildRigidRootAlignment(
+		const FTransform& SourceRoot,
+		const FTransform& TargetRoot);
+
+	PHYSANIMPLUGIN_API bool ApplyRigidAlignmentToFuturePoseSamples(
+		const FTransform& Alignment,
+		const TArray<FPhysAnimFuturePoseSample>& SourceSamples,
+		TArray<FPhysAnimFuturePoseSample>& OutAlignedSamples,
+		FString& OutError);
+
 	// Returns false when the requested body pair has no direct authored constraint.
 	PHYSANIMPLUGIN_API bool BuildConstraintProfile(
 		const UPhysicsAsset* PhysicsAsset,

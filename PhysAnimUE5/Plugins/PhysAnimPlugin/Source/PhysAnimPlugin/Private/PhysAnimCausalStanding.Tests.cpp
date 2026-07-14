@@ -261,6 +261,18 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=Normal"));
 	TestEqual(TEXT("Normal command line restores normal activation"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::Normal);
 	TestFalse(TEXT("Normal command line clears dropped dispatch"), Component->IsProductControlDispatchDroppedForTesting());
+	TestFalse(
+		TEXT("Experimental standing target alignment is disabled without its explicit flag"),
+		Component->IsExperimentalStandingTargetRootAlignmentEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalStandingTargetRootAlignment"));
+	TestTrue(
+		TEXT("The explicit development flag enables standing target alignment"),
+		Component->IsExperimentalStandingTargetRootAlignmentEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
+	TestFalse(
+		TEXT("Removing the development flag restores the production default"),
+		Component->IsExperimentalStandingTargetRootAlignmentEnabledForTesting());
 	float NeutralCalibratedTiltDeg = 0.0f;
 	TestFalse(
 		TEXT("Neutral-calibrated tilt requires a live owner, mesh, pelvis body, and startup calibration"),
@@ -999,6 +1011,15 @@ namespace
 				ActiveStandingSnapshotJson->SetStringField(
 					TEXT("capture_scope"),
 					TEXT("first_active_standing_inference"));
+				ActiveStandingSnapshotJson->SetBoolField(
+					TEXT("experimental_standing_target_root_alignment_enabled"),
+					Component && Component->IsExperimentalStandingTargetRootAlignmentEnabledForTesting());
+				ActiveStandingSnapshotJson->SetBoolField(
+					TEXT("experimental_standing_target_root_alignment_captured"),
+					Component && Component->HasCapturedExperimentalStandingTargetRootAlignmentForTesting());
+				ActiveStandingSnapshotJson->SetNumberField(
+					TEXT("experimental_standing_target_root_alignment_deg"),
+					Component ? Component->GetExperimentalStandingTargetRootAlignmentDegreesForTesting() : -1.0f);
 				ActiveStandingSnapshotJson->SetBoolField(TEXT("captured"), ActiveStandingSnapshot.bCaptured);
 				ActiveStandingSnapshotJson->SetNumberField(TEXT("self_observation_width"), ActiveStandingSnapshot.SelfObservation.Num());
 				ActiveStandingSnapshotJson->SetNumberField(TEXT("mimic_target_poses_width"), ActiveStandingSnapshot.MimicTargetPoses.Num());

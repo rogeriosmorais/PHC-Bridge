@@ -231,13 +231,68 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		}
 
 		TArray<FPhysAnimBodySample> MimicCurrentReferenceBodySamples;
-		MakeMimicTargetDataFrameBodySamples(
-			CurrentBodySamples,
-			MimicTargetReferenceWorldRoot,
-			MimicTargetReferenceDataRoot,
-			MimicCurrentReferenceBodySamples);
+		const TArray<FPhysAnimFuturePoseSample>* EffectiveFuturePoseSamples = &FuturePoseSamples;
+#if WITH_DEV_AUTOMATION_TESTS
+		TArray<FPhysAnimFuturePoseSample> ExperimentallyAlignedFuturePoseSamples;
+		const bool bApplyExperimentalStandingTargetRootAlignment =
+			bExperimentalStandingTargetRootAlignmentForTesting &&
+			StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+		if (bApplyExperimentalStandingTargetRootAlignment)
+		{
+			if (CurrentBodySamples.IsEmpty() ||
+				FuturePoseSamples.IsEmpty() ||
+				FuturePoseSamples[0].BodyTransforms.IsEmpty())
+			{
+				OutError = TEXT("Experimental standing target alignment requires live and future canonical root samples.");
+				return;
+			}
 
-		if (!PhysAnimBridge::BuildMimicTargetPoses(MimicCurrentReferenceBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, OutError))
+			if (!bHasExperimentalStandingTargetRootAlignment)
+			{
+				const FTransform SourceFutureRoot = FuturePoseSamples[0].BodyTransforms[0];
+				const FTransform LiveRoot(
+					CurrentBodySamples[0].Rotation.GetNormalized(),
+					CurrentBodySamples[0].Position);
+				ExperimentalStandingTargetRootAlignment =
+					PhysAnimProtoMannyAdapter::BuildRigidRootAlignment(SourceFutureRoot, LiveRoot);
+				ExperimentalStandingTargetRootAlignmentDegrees = FMath::RadiansToDegrees(
+					ExperimentalStandingTargetRootAlignment.GetRotation().GetAngle());
+				bHasExperimentalStandingTargetRootAlignment = true;
+				PHYSANIM_LOG_RATE_LIMITED(
+					LogPhysAnimBridge,
+					Warning,
+					1.0f,
+					TEXT("[PhysAnimExperiment] Captured active-standing target-root alignment angle=%.3fdeg."),
+					ExperimentalStandingTargetRootAlignmentDegrees);
+			}
+
+			MimicCurrentReferenceBodySamples = CurrentBodySamples;
+			if (!PhysAnimProtoMannyAdapter::ApplyRigidAlignmentToFuturePoseSamples(
+				ExperimentalStandingTargetRootAlignment,
+				FuturePoseSamples,
+				ExperimentallyAlignedFuturePoseSamples,
+				OutError))
+			{
+				return;
+			}
+			EffectiveFuturePoseSamples = &ExperimentallyAlignedFuturePoseSamples;
+		}
+		else
+#endif
+		{
+			MakeMimicTargetDataFrameBodySamples(
+				CurrentBodySamples,
+				MimicTargetReferenceWorldRoot,
+				MimicTargetReferenceDataRoot,
+				MimicCurrentReferenceBodySamples);
+		}
+
+		if (!PhysAnimBridge::BuildMimicTargetPoses(
+			MimicCurrentReferenceBodySamples,
+			*EffectiveFuturePoseSamples,
+			MimicTargetPosesBuffer,
+			OutError))
 		{
 			return;
 		}

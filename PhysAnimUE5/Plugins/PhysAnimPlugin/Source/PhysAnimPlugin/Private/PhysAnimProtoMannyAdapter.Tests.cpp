@@ -706,4 +706,91 @@ bool FPhysAnimProtoMannyObservationGeometryTest::RunTest(const FString& Paramete
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimProtoMannyRigidRootAlignmentTest,
+	"PhysAnim.Adapter.ProtoMannyRigidRootAlignment",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimProtoMannyRigidRootAlignmentTest::RunTest(const FString& Parameters)
+{
+	const FTransform SourceRoot(
+		FQuat(FVector::UpVector, FMath::DegreesToRadians(35.0f)),
+		FVector(4.0, -2.0, 0.9));
+	const FTransform TargetRoot(
+		(FQuat(FVector::ForwardVector, FMath::DegreesToRadians(-12.0f)) *
+		 FQuat(FVector::UpVector, FMath::DegreesToRadians(80.0f))).GetNormalized(),
+		FVector(-3.0, 6.0, 1.1));
+	const FTransform Alignment = PhysAnimProtoMannyAdapter::BuildRigidRootAlignment(
+		SourceRoot,
+		TargetRoot);
+
+	FPhysAnimFuturePoseSample FirstSample;
+	FirstSample.FutureTimeSeconds = 1.0f / 30.0f;
+	FirstSample.BodyTransforms.Add(SourceRoot);
+	const FVector ChildOffset(0.25, -0.1, 0.4);
+	const FQuat ChildLocalRotation(FVector::RightVector, FMath::DegreesToRadians(20.0f));
+	FirstSample.BodyTransforms.Add(FTransform(
+		(SourceRoot.GetRotation() * ChildLocalRotation).GetNormalized(),
+		SourceRoot.GetLocation() + SourceRoot.GetRotation().RotateVector(ChildOffset)));
+	for (int32 BodyIndex = FirstSample.BodyTransforms.Num(); BodyIndex < PhysAnimBridge::NumSmplBodies; ++BodyIndex)
+	{
+		FirstSample.BodyTransforms.Add(SourceRoot);
+	}
+
+	const FTransform SourceSecondRoot(
+		(SourceRoot.GetRotation() * FQuat(FVector::UpVector, FMath::DegreesToRadians(3.0f))).GetNormalized(),
+		SourceRoot.GetLocation() + SourceRoot.GetRotation().RotateVector(FVector(0.05, 0.0, 0.0)));
+	FPhysAnimFuturePoseSample SecondSample = FirstSample;
+	SecondSample.FutureTimeSeconds = 2.0f / 30.0f;
+	for (FTransform& BodyTransform : SecondSample.BodyTransforms)
+	{
+		const FTransform RelativeToFirstRoot = BodyTransform.GetRelativeTransform(SourceRoot);
+		BodyTransform = RelativeToFirstRoot * SourceSecondRoot;
+	}
+
+	TArray<FPhysAnimFuturePoseSample> AlignedSamples;
+	FString Error;
+	TestTrue(
+		TEXT("Complete canonical future samples accept a rigid global-frame alignment"),
+		PhysAnimProtoMannyAdapter::ApplyRigidAlignmentToFuturePoseSamples(
+			Alignment,
+			TArray<FPhysAnimFuturePoseSample>{FirstSample, SecondSample},
+			AlignedSamples,
+			Error));
+	TestTrue(TEXT("Rigid alignment reports no error"), Error.IsEmpty());
+	TestEqual(TEXT("Rigid alignment preserves sample count"), AlignedSamples.Num(), 2);
+	TestTrue(
+		TEXT("The source root maps exactly to the target root"),
+		AlignedSamples[0].BodyTransforms[0].Equals(TargetRoot, 0.0001));
+	TestTrue(
+		TEXT("Rigid alignment preserves child root-relative position"),
+		(AlignedSamples[0].BodyTransforms[1].GetLocation() - TargetRoot.GetLocation()).Equals(
+			TargetRoot.GetRotation().RotateVector(ChildOffset),
+			0.0001));
+	TestTrue(
+		TEXT("Rigid alignment preserves child local rotation"),
+		QuaternionsNear(
+			(TargetRoot.GetRotation().Inverse() * AlignedSamples[0].BodyTransforms[1].GetRotation()).GetNormalized(),
+			ChildLocalRotation,
+			0.0001));
+	const FTransform SourceFutureDelta = SourceSecondRoot.GetRelativeTransform(SourceRoot);
+	const FTransform AlignedFutureDelta =
+		AlignedSamples[1].BodyTransforms[0].GetRelativeTransform(AlignedSamples[0].BodyTransforms[0]);
+	TestTrue(
+		TEXT("Rigid alignment preserves future root motion"),
+		AlignedFutureDelta.Equals(SourceFutureDelta, 0.0001));
+
+	FPhysAnimFuturePoseSample InvalidSample;
+	Error.Reset();
+	TestFalse(
+		TEXT("Incomplete canonical samples cannot enter the policy through alignment"),
+		PhysAnimProtoMannyAdapter::ApplyRigidAlignmentToFuturePoseSamples(
+			Alignment,
+			TArray<FPhysAnimFuturePoseSample>{InvalidSample},
+			AlignedSamples,
+			Error));
+	TestFalse(TEXT("Incomplete aligned sample rejection is explicit"), Error.IsEmpty());
+	return true;
+}
+
 #endif

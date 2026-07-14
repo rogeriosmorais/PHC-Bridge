@@ -13,7 +13,8 @@ param (
     [int]$ProductRepetition = 0,
     [string]$SourceCommit,
     [string]$ModelOnnxSha256,
-    [bool]$SourceTreeDirty = $false
+    [bool]$SourceTreeDirty = $false,
+    [switch]$ExperimentalStandingTargetRootAlignment
 )
 
 # 1. Environment Setup
@@ -135,6 +136,9 @@ if ($Test) {
     }
     if ($ModelOnnxSha256) {
         $EditorArguments += "-PhysAnimModelOnnxSha256=$ModelOnnxSha256"
+    }
+    if ($ExperimentalStandingTargetRootAlignment) {
+        $EditorArguments += "-PhysAnimExperimentalStandingTargetRootAlignment"
     }
     $EditorArguments += "-PhysAnimSourceTreeDirty=$(if ($SourceTreeDirty) { 1 } else { 0 })"
 
