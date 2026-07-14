@@ -141,7 +141,7 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 {
 	const float PolicyControlIntervalSeconds = ResolvePolicyControlIntervalSeconds(EffectiveSettings.PolicyControlRateHz);
 	int32 ElapsedPolicySteps = 0;
-	const bool bRunPolicyUpdateThisTick = AdvancePolicyControlAccumulator(
+	bool bRunPolicyUpdateThisTick = AdvancePolicyControlAccumulator(
 		DeltaTime,
 		PolicyControlIntervalSeconds,
 		PolicyUpdateAccumulatorSeconds,
@@ -153,6 +153,13 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 	bStandingVariantUsesPolicyInference =
 		FPhysAnimStandingActivationPlan::UsesPolicyInference(StandingVariantForTesting);
 	bStandingVariantForcesZeroActions = StandingVariantForTesting == EPhysAnimStandingVariant::ZeroActions;
+	if (ConsumeExperimentalFirstPolicyDelayTickForTesting(
+		bRunPolicyUpdateThisTick,
+		bEnablePolicyInference && bStandingVariantUsesPolicyInference,
+		StandingVariantForTesting))
+	{
+		bRunPolicyUpdateThisTick = false;
+	}
 #endif
 
 	PHYSANIM_LOG_RATE_LIMITED(LogPhysAnimBridge, Verbose, 1.0f, TEXT("[PhysAnim] TICK_POLICY state=%s runPolicy=%d steps=%d acc=%.4f interval=%.4f dt=%.4f"),
