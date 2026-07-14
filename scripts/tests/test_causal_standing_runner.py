@@ -26,3 +26,11 @@ def test_build_script_supports_one_build_many_renderer_runs() -> None:
     assert '$EditorArguments += "-RenderOffscreen"' in source
     assert '$EditorArguments += "-ReportExportPath=$ReportExportPath"' in source
     assert '$EditorArguments += "-PhysAnimProductRunRoot=$ProductRunRoot"' in source
+
+
+def test_build_script_forwards_startup_chronology_only_when_explicitly_requested() -> None:
+    source = (REPO_ROOT / "scripts" / "build.ps1").read_text(encoding="utf-8")
+
+    assert "[switch]$StartupChronologyTrace" in source
+    assert "if ($StartupChronologyTrace)" in source
+    assert '$EditorArguments += "-PhysAnimStartupChronologyTrace"' in source
