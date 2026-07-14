@@ -1515,6 +1515,10 @@ public:
 	{
 		return FirstPolicyBodySourceTrace;
 	}
+	const PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceTrace& GetFirstPolicyGroundReferenceTraceForTesting() const
+	{
+		return FirstPolicyGroundReferenceTrace;
+	}
 	void ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine);
 #endif
 	void ConsumeUpperBodyPendingResets();
@@ -2271,7 +2275,14 @@ private:
 	bool CheckRuntimeInstability(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings, FString& OutError);
 	void LogBodyModifierTelemetrySnapshot(const TCHAR* Context) const;
 	void ResetPendingBodyModifiersToCachedTargets();
+#if WITH_DEV_AUTOMATION_TESTS
+	float ResolveSelfObservationGroundHeight(
+		const TArray<FPhysAnimBodySample>& CurrentBodySamples,
+		PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues* OutGroundReferenceValues = nullptr
+		) const;
+#else
 	float ResolveSelfObservationGroundHeight(const TArray<FPhysAnimBodySample>& CurrentBodySamples) const;
+#endif
 	bool BuildTerrainObservation(
 		const TArray<FPhysAnimBodySample>& CurrentBodySamples,
 		TArray<float>& OutTerrain,
@@ -2454,6 +2465,7 @@ private:
 	PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot FirstPolicyInputProvenanceSnapshot;
 	PhysAnimBridge::FPhysAnimStartupChronologyTrace StartupChronologyTrace;
 	PhysAnimBridge::FPhysAnimFirstPolicyBodySourceTrace FirstPolicyBodySourceTrace;
+	PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceTrace FirstPolicyGroundReferenceTrace;
 	bool bProductControlDispatchDroppedForTesting = false;
 	bool bActionSemanticTraceEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;

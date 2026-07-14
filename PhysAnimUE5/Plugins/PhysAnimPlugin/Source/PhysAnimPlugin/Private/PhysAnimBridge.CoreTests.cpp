@@ -1192,6 +1192,223 @@ namespace
 		TestTrue(TEXT("Reset clears validation evidence"), LiveTrace.ValidationError.IsEmpty());
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimFirstPolicyGroundReferenceTraceContractTest,
+		"PhysAnim.Bridge.FirstPolicyGroundReferenceTraceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimFirstPolicyGroundReferenceTraceContractTest::RunTest(const FString& Parameters)
+	{
+		auto MakeValues = [](
+			const double BodyRootProtoZM,
+			const double RootBoneWorldZCm,
+			const bool bStaticTraceSucceeded,
+			const double StaticTraceImpactZCm,
+			const bool bHasWalkableFloor,
+			const bool bHasBlockingFloorHit,
+			const double FloorImpactZCm)
+		{
+			FPhysAnimSelfObservationGroundReferenceValues Values;
+			Values.BodyRootProtoZM = BodyRootProtoZM;
+			Values.RootBoneWorldZCm = RootBoneWorldZCm;
+			Values.bStaticTraceAttempted = true;
+			Values.bStaticTraceSucceeded = bStaticTraceSucceeded;
+			Values.StaticTraceImpactZCm = StaticTraceImpactZCm;
+			Values.bHasWalkableFloor = bHasWalkableFloor;
+			Values.bHasBlockingFloorHit = bHasBlockingFloorHit;
+			Values.FloorImpactZCm = FloorImpactZCm;
+			Values.bCapsuleAvailable = true;
+			Values.CapsuleCenterZCm = 100.0;
+			Values.CapsuleHalfHeightCm = 50.0;
+			Values.FloorDistanceCm = 3.0;
+			Values.FallbackGroundWorldZCm = 0.0;
+
+			const float GroundWorldZCm = bStaticTraceSucceeded
+				? static_cast<float>(StaticTraceImpactZCm)
+				: (bHasWalkableFloor
+					? (bHasBlockingFloorHit
+						? static_cast<float>(FloorImpactZCm)
+						: static_cast<float>(Values.CapsuleCenterZCm) -
+							static_cast<float>(Values.CapsuleHalfHeightCm) -
+							FMath::Max(static_cast<float>(Values.FloorDistanceCm), 0.0f))
+					: static_cast<float>(Values.FallbackGroundWorldZCm));
+			const float DesiredRootHeightM =
+				(static_cast<float>(RootBoneWorldZCm) - GroundWorldZCm) * CmToMeters;
+			const volatile float ObservationFrameRootZM = static_cast<float>(BodyRootProtoZM);
+			const float SyntheticGroundHeightM =
+				ObservationFrameRootZM - DesiredRootHeightM;
+			Values.GroundWorldZCm = GroundWorldZCm;
+			Values.SyntheticGroundHeightM = SyntheticGroundHeightM;
+			Values.FinalRootHeightM = static_cast<float>(
+				BodyRootProtoZM - static_cast<double>(SyntheticGroundHeightM));
+			return Values;
+		};
+
+		const FPhysAnimSelfObservationGroundReferenceValues PriorValues = MakeValues(
+			1.0,
+			100.0,
+			true,
+			0.0,
+			false,
+			false,
+			0.0);
+		const FPhysAnimSelfObservationGroundReferenceValues LiveValues = MakeValues(
+			1.25,
+			127.0,
+			false,
+			0.0,
+			true,
+			true,
+			2.0);
+
+		FPhysAnimFirstPolicyGroundReferenceTrace DisabledTrace;
+		FString Error;
+		TestFalse(
+			TEXT("Disabled prior ground-reference capture retains no values"),
+			DisabledTrace.CapturePriorIf(
+				false,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorValues));
+		TestTrue(
+			TEXT("Disabled live ground-reference capture is an accepted no-op"),
+			DisabledTrace.RecordFirstPolicyIf(
+				false,
+				TEXT("first_policy_self_observation"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				LiveValues,
+				Error));
+		TestFalse(TEXT("Disabled ground-reference tracing remains incomplete"), DisabledTrace.bFirstPolicyRecorded);
+
+		FPhysAnimFirstPolicyGroundReferenceTrace Trace;
+		TestTrue(
+			TEXT("The prior ground reference is owned by the WaitingForPoseSearch pre-state-machine boundary"),
+			Trace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorValues));
+		TestFalse(
+			TEXT("The prior ground reference cannot be replaced"),
+			Trace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.5 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				LiveValues));
+		TestEqual(TEXT("The retained prior body-root value is exact"), Trace.Prior.Values.BodyRootProtoZM, PriorValues.BodyRootProtoZM);
+
+		TestTrue(
+			TEXT("The actual first-policy self-observation ground reference is captured once"),
+			Trace.RecordFirstPolicyIf(
+				true,
+				TEXT("first_policy_self_observation"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				LiveValues,
+				Error));
+		TestTrue(TEXT("The two-record trace is complete"), Trace.bFirstPolicyRecorded);
+		TestTrue(
+			TEXT("A complete trace preserves stage, tick, finite-value, and float-arithmetic invariants"),
+			ValidateFirstPolicyGroundReferenceTrace(Trace, Error));
+		TestTrue(TEXT("A valid ground-reference trace has no validation error"), Error.IsEmpty());
+
+		FPhysAnimFirstPolicyGroundReferenceTrace DecimalTrace;
+		TestTrue(
+			TEXT("Decimal arithmetic fixture prior is captured"),
+			DecimalTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorValues));
+		const FPhysAnimSelfObservationGroundReferenceValues DecimalLiveValues = MakeValues(
+			1.2,
+			120.0,
+			true,
+			0.0,
+			false,
+			false,
+			0.0);
+		TestTrue(
+			*FString::Printf(TEXT("Non-binary decimal inputs preserve exact float-path arithmetic: %s"), *Error),
+			DecimalTrace.RecordFirstPolicyIf(
+				true,
+				TEXT("first_policy_self_observation"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				DecimalLiveValues,
+				Error));
+
+		const double RetainedLiveRootWorldZ = Trace.Live.Values.RootBoneWorldZCm;
+		TestTrue(
+			TEXT("A repeated live capture is an accepted no-op"),
+			Trace.RecordFirstPolicyIf(
+				true,
+				TEXT("first_policy_self_observation"),
+				3.0 / 60.0,
+				TEXT("BalanceActive_Standing"),
+				2,
+				PriorValues,
+				Error));
+		TestEqual(TEXT("A repeated live capture cannot replace the first record"), Trace.Live.Values.RootBoneWorldZCm, RetainedLiveRootWorldZ);
+
+		FPhysAnimFirstPolicyGroundReferenceTrace ArithmeticTrace;
+		TestTrue(
+			TEXT("Arithmetic fixture prior is captured"),
+			ArithmeticTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorValues));
+		FPhysAnimSelfObservationGroundReferenceValues TamperedLive = LiveValues;
+		TamperedLive.FinalRootHeightM += 0.25;
+		TestFalse(
+			TEXT("A live record inconsistent with the exact float arithmetic is rejected"),
+			ArithmeticTrace.RecordFirstPolicyIf(
+				true,
+				TEXT("first_policy_self_observation"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				TamperedLive,
+				Error));
+		TestFalse(TEXT("Arithmetic rejection is explicit"), Error.IsEmpty());
+
+		FPhysAnimFirstPolicyGroundReferenceTrace NonFiniteTrace;
+		FPhysAnimSelfObservationGroundReferenceValues NonFinitePrior = PriorValues;
+		NonFinitePrior.FloorDistanceCm = std::numeric_limits<double>::quiet_NaN();
+		TestFalse(
+			TEXT("A non-finite prior ground-reference input is rejected"),
+			NonFiniteTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				NonFinitePrior));
+		TestFalse(TEXT("Non-finite rejection is explicit"), NonFiniteTrace.ValidationError.IsEmpty());
+
+		Trace.Reset();
+		TestFalse(TEXT("Reset clears the prior ground-reference record"), Trace.Prior.bRecorded);
+		TestFalse(TEXT("Reset clears the live ground-reference record"), Trace.Live.bRecorded);
+		TestFalse(TEXT("Reset clears first-policy completion"), Trace.bFirstPolicyRecorded);
+		TestTrue(TEXT("Reset clears validation evidence"), Trace.ValidationError.IsEmpty());
+		return true;
+	}
 #endif
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(

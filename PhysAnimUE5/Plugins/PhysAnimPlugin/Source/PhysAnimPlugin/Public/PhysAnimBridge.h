@@ -425,6 +425,69 @@ namespace PhysAnimBridge
 		const FPhysAnimFirstPolicyBodySourceTrace& Trace,
 		FString& OutError);
 
+	struct PHYSANIMPLUGIN_API FPhysAnimSelfObservationGroundReferenceValues
+	{
+		double BodyRootProtoZM = 0.0;
+		double RootBoneWorldZCm = 0.0;
+		bool bStaticTraceAttempted = false;
+		bool bStaticTraceSucceeded = false;
+		double StaticTraceImpactZCm = 0.0;
+		bool bHasWalkableFloor = false;
+		bool bHasBlockingFloorHit = false;
+		double FloorImpactZCm = 0.0;
+		bool bCapsuleAvailable = false;
+		double CapsuleCenterZCm = 0.0;
+		double CapsuleHalfHeightCm = 0.0;
+		double FloorDistanceCm = 0.0;
+		double FallbackGroundWorldZCm = 0.0;
+		double GroundWorldZCm = 0.0;
+		double SyntheticGroundHeightM = 0.0;
+		double FinalRootHeightM = 0.0;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimFirstPolicyGroundReferenceRecord
+	{
+		void Reset();
+
+		bool bRecorded = false;
+		FString Stage;
+		double WorldTimeSeconds = -1.0;
+		FString RuntimeState;
+		int32 PolicyControlTick = INDEX_NONE;
+		FPhysAnimSelfObservationGroundReferenceValues Values;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimFirstPolicyGroundReferenceTrace
+	{
+		bool CapturePriorIf(
+			bool bCondition,
+			const FString& InStage,
+			double InWorldTimeSeconds,
+			const FString& InRuntimeState,
+			int32 InPolicyControlTick,
+			const FPhysAnimSelfObservationGroundReferenceValues& InValues);
+
+		bool RecordFirstPolicyIf(
+			bool bCondition,
+			const FString& InStage,
+			double InWorldTimeSeconds,
+			const FString& InRuntimeState,
+			int32 InPolicyControlTick,
+			const FPhysAnimSelfObservationGroundReferenceValues& InValues,
+			FString& OutError);
+
+		void Reset();
+
+		bool bFirstPolicyRecorded = false;
+		FString ValidationError;
+		FPhysAnimFirstPolicyGroundReferenceRecord Prior;
+		FPhysAnimFirstPolicyGroundReferenceRecord Live;
+	};
+
+	PHYSANIMPLUGIN_API bool ValidateFirstPolicyGroundReferenceTrace(
+		const FPhysAnimFirstPolicyGroundReferenceTrace& Trace,
+		FString& OutError);
+
 	inline constexpr int32 MaxStartupChronologySamples = 12;
 
 	struct PHYSANIMPLUGIN_API FPhysAnimStartupChronologySample

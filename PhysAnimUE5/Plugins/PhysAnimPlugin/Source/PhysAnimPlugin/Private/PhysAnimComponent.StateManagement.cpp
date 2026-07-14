@@ -34,6 +34,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	FirstPolicyInputProvenanceSnapshot.Reset();
 	StartupChronologyTrace.Reset();
 	FirstPolicyBodySourceTrace.Reset();
+	FirstPolicyGroundReferenceTrace.Reset();
 #endif
 	PreviousControlTargetRotations.Reset();
 	PolicyNeutralControlTargetRotations.Reset();

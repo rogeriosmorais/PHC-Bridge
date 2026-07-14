@@ -1327,6 +1327,254 @@ namespace PhysAnimBridge
 		return true;
 	}
 
+	namespace
+	{
+		bool ValidateGroundReferenceValues(
+			const FPhysAnimSelfObservationGroundReferenceValues& Values,
+			FString& OutError)
+		{
+			const bool bFinite =
+				FMath::IsFinite(Values.BodyRootProtoZM) &&
+				FMath::IsFinite(Values.RootBoneWorldZCm) &&
+				FMath::IsFinite(Values.StaticTraceImpactZCm) &&
+				FMath::IsFinite(Values.FloorImpactZCm) &&
+				FMath::IsFinite(Values.CapsuleCenterZCm) &&
+				FMath::IsFinite(Values.CapsuleHalfHeightCm) &&
+				FMath::IsFinite(Values.FloorDistanceCm) &&
+				FMath::IsFinite(Values.FallbackGroundWorldZCm) &&
+				FMath::IsFinite(Values.GroundWorldZCm) &&
+				FMath::IsFinite(Values.SyntheticGroundHeightM) &&
+				FMath::IsFinite(Values.FinalRootHeightM);
+			if (!bFinite)
+			{
+				OutError = TEXT("Ground-reference evidence contains a non-finite value.");
+				return false;
+			}
+			if (Values.bStaticTraceSucceeded && !Values.bStaticTraceAttempted)
+			{
+				OutError = TEXT("A successful static ground trace must have been attempted.");
+				return false;
+			}
+			if (Values.CapsuleHalfHeightCm < 0.0)
+			{
+				OutError = TEXT("Ground-reference capsule half-height cannot be negative.");
+				return false;
+			}
+
+			const float ExpectedGroundWorldZCm = Values.bStaticTraceSucceeded
+				? static_cast<float>(Values.StaticTraceImpactZCm)
+				: (Values.bHasWalkableFloor
+					? (Values.bHasBlockingFloorHit
+						? static_cast<float>(Values.FloorImpactZCm)
+						: static_cast<float>(Values.CapsuleCenterZCm) -
+							static_cast<float>(Values.CapsuleHalfHeightCm) -
+							FMath::Max(static_cast<float>(Values.FloorDistanceCm), 0.0f))
+					: static_cast<float>(Values.FallbackGroundWorldZCm));
+			if (static_cast<float>(Values.GroundWorldZCm) != ExpectedGroundWorldZCm)
+			{
+				OutError = TEXT("Resolved ground-world Z does not match the recorded branch inputs.");
+				return false;
+			}
+
+			const float ExpectedDesiredRootHeightM =
+				(static_cast<float>(Values.RootBoneWorldZCm) - ExpectedGroundWorldZCm) * CmToMeters;
+			const float ExpectedSyntheticGroundHeightM =
+				static_cast<float>(Values.BodyRootProtoZM) - ExpectedDesiredRootHeightM;
+			if (static_cast<float>(Values.SyntheticGroundHeightM) != ExpectedSyntheticGroundHeightM)
+			{
+				OutError = FString::Printf(
+					TEXT("Synthetic ground height does not match the recorded float-path inputs: recorded=%.17g expected=%.17g body_root=%.17g desired_root_height=%.17g."),
+					Values.SyntheticGroundHeightM,
+					static_cast<double>(ExpectedSyntheticGroundHeightM),
+					Values.BodyRootProtoZM,
+					static_cast<double>(ExpectedDesiredRootHeightM));
+				return false;
+			}
+
+			const float ExpectedFinalRootHeightM = static_cast<float>(
+				Values.BodyRootProtoZM - static_cast<double>(ExpectedSyntheticGroundHeightM));
+			if (static_cast<float>(Values.FinalRootHeightM) != ExpectedFinalRootHeightM)
+			{
+				OutError = TEXT("Final self-observation root height does not match the recorded float-path arithmetic.");
+				return false;
+			}
+			return true;
+		}
+
+		bool BuildGroundReferenceRecord(
+			const FString& Stage,
+			const double WorldTimeSeconds,
+			const FString& RuntimeState,
+			const int32 PolicyControlTick,
+			const FPhysAnimSelfObservationGroundReferenceValues& Values,
+			FPhysAnimFirstPolicyGroundReferenceRecord& OutRecord,
+			FString& OutError)
+		{
+			if (Stage.IsEmpty() ||
+				RuntimeState.IsEmpty() ||
+				!FMath::IsFinite(WorldTimeSeconds) ||
+				WorldTimeSeconds < 0.0 ||
+				PolicyControlTick < 0)
+			{
+				OutError = TEXT("Ground-reference record metadata is invalid.");
+				return false;
+			}
+			if (!ValidateGroundReferenceValues(Values, OutError))
+			{
+				return false;
+			}
+
+			FPhysAnimFirstPolicyGroundReferenceRecord Record;
+			Record.bRecorded = true;
+			Record.Stage = Stage;
+			Record.WorldTimeSeconds = WorldTimeSeconds;
+			Record.RuntimeState = RuntimeState;
+			Record.PolicyControlTick = PolicyControlTick;
+			Record.Values = Values;
+			OutRecord = MoveTemp(Record);
+			return true;
+		}
+	}
+
+	void FPhysAnimFirstPolicyGroundReferenceRecord::Reset()
+	{
+		bRecorded = false;
+		Stage.Reset();
+		WorldTimeSeconds = -1.0;
+		RuntimeState.Reset();
+		PolicyControlTick = INDEX_NONE;
+		Values = FPhysAnimSelfObservationGroundReferenceValues();
+	}
+
+	bool FPhysAnimFirstPolicyGroundReferenceTrace::CapturePriorIf(
+		const bool bCondition,
+		const FString& InStage,
+		const double InWorldTimeSeconds,
+		const FString& InRuntimeState,
+		const int32 InPolicyControlTick,
+		const FPhysAnimSelfObservationGroundReferenceValues& InValues)
+	{
+		if (!bCondition || Prior.bRecorded || !ValidationError.IsEmpty())
+		{
+			return false;
+		}
+		if (InStage != TEXT("pre_state_machine") ||
+			InRuntimeState != TEXT("WaitingForPoseSearch") ||
+			InPolicyControlTick != 0)
+		{
+			ValidationError = TEXT("The prior ground reference must come from pre_state_machine in WaitingForPoseSearch before any policy tick.");
+			return false;
+		}
+
+		FString Error;
+		if (!BuildGroundReferenceRecord(
+				InStage,
+				InWorldTimeSeconds,
+				InRuntimeState,
+				InPolicyControlTick,
+				InValues,
+				Prior,
+				Error))
+		{
+			ValidationError = MoveTemp(Error);
+			return false;
+		}
+		return true;
+	}
+
+	bool FPhysAnimFirstPolicyGroundReferenceTrace::RecordFirstPolicyIf(
+		const bool bCondition,
+		const FString& InStage,
+		const double InWorldTimeSeconds,
+		const FString& InRuntimeState,
+		const int32 InPolicyControlTick,
+		const FPhysAnimSelfObservationGroundReferenceValues& InValues,
+		FString& OutError)
+	{
+		OutError.Reset();
+		if (!bCondition || bFirstPolicyRecorded)
+		{
+			return true;
+		}
+		if (!ValidationError.IsEmpty())
+		{
+			OutError = ValidationError;
+			return false;
+		}
+		if (!Prior.bRecorded)
+		{
+			ValidationError = TEXT("The first-policy ground reference cannot be recorded before the prior reference.");
+			OutError = ValidationError;
+			return false;
+		}
+		if (InStage != TEXT("first_policy_self_observation") ||
+			InPolicyControlTick != 1 ||
+			!FMath::IsFinite(InWorldTimeSeconds) ||
+			InWorldTimeSeconds <= Prior.WorldTimeSeconds)
+		{
+			ValidationError = TEXT("The live ground-reference metadata does not identify the first post-prior policy observation.");
+			OutError = ValidationError;
+			return false;
+		}
+
+		if (!BuildGroundReferenceRecord(
+				InStage,
+				InWorldTimeSeconds,
+				InRuntimeState,
+				InPolicyControlTick,
+				InValues,
+				Live,
+				OutError))
+		{
+			ValidationError = OutError;
+			return false;
+		}
+		bFirstPolicyRecorded = true;
+		return true;
+	}
+
+	void FPhysAnimFirstPolicyGroundReferenceTrace::Reset()
+	{
+		bFirstPolicyRecorded = false;
+		ValidationError.Reset();
+		Prior.Reset();
+		Live.Reset();
+	}
+
+	bool ValidateFirstPolicyGroundReferenceTrace(
+		const FPhysAnimFirstPolicyGroundReferenceTrace& Trace,
+		FString& OutError)
+	{
+		OutError.Reset();
+		if (!Trace.ValidationError.IsEmpty())
+		{
+			OutError = Trace.ValidationError;
+			return false;
+		}
+		if (!Trace.bFirstPolicyRecorded || !Trace.Prior.bRecorded || !Trace.Live.bRecorded)
+		{
+			OutError = TEXT("First-policy ground-reference evidence is incomplete.");
+			return false;
+		}
+		if (Trace.Prior.Stage != TEXT("pre_state_machine") ||
+			Trace.Prior.RuntimeState != TEXT("WaitingForPoseSearch") ||
+			Trace.Prior.PolicyControlTick != 0 ||
+			Trace.Live.Stage != TEXT("first_policy_self_observation") ||
+			Trace.Live.RuntimeState == TEXT("WaitingForPoseSearch") ||
+			Trace.Live.PolicyControlTick != 1 ||
+			Trace.Prior.WorldTimeSeconds >= Trace.Live.WorldTimeSeconds)
+		{
+			OutError = TEXT("First-policy ground-reference stage, state, time, or tick ownership is invalid.");
+			return false;
+		}
+		if (!ValidateGroundReferenceValues(Trace.Prior.Values, OutError) ||
+			!ValidateGroundReferenceValues(Trace.Live.Values, OutError))
+		{
+			return false;
+		}
+		return true;
+	}
+
 	bool ValidateStartupChronologyTrace(
 		const FPhysAnimStartupChronologyTrace& Trace,
 		FString& OutError)

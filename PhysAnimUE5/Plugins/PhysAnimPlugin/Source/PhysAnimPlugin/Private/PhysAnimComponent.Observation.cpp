@@ -111,7 +111,14 @@ void UPhysAnimComponent::CaptureStartupChronologySampleForTesting(const TCHAR* S
 		bRealOnnxPolicy &&
 		!FirstPolicyBodySourceTrace.Prior.bRecorded &&
 		FirstPolicyBodySourceTrace.ValidationError.IsEmpty();
-	if (!bCaptureStartupChronology && !bCaptureFirstPolicyPriorSource)
+	const bool bCaptureFirstPolicyGroundReferencePrior =
+		bStartupChronologyTraceEnabledForTesting &&
+		bRealOnnxPolicy &&
+		!FirstPolicyGroundReferenceTrace.Prior.bRecorded &&
+		FirstPolicyGroundReferenceTrace.ValidationError.IsEmpty();
+	if (!bCaptureStartupChronology &&
+		!bCaptureFirstPolicyPriorSource &&
+		!bCaptureFirstPolicyGroundReferencePrior)
 	{
 		return;
 	}
@@ -142,6 +149,22 @@ void UPhysAnimComponent::CaptureStartupChronologySampleForTesting(const TCHAR* S
 		GetRuntimeStateName(RuntimeState),
 		PolicyControlTicksExecuted,
 		BodySamples);
+	const bool bAtPriorBoundary =
+		FCString::Strcmp(Stage, TEXT("pre_state_machine")) == 0 &&
+		RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch &&
+		PolicyControlTicksExecuted == 0;
+	if (bCaptureFirstPolicyGroundReferencePrior && bAtPriorBoundary)
+	{
+		PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues GroundReferenceValues;
+		ResolveSelfObservationGroundHeight(BodySamples, &GroundReferenceValues);
+		FirstPolicyGroundReferenceTrace.CapturePriorIf(
+			true,
+			Stage,
+			World->GetTimeSeconds(),
+			GetRuntimeStateName(RuntimeState),
+			PolicyControlTicksExecuted,
+			GroundReferenceValues);
+	}
 	if (!bCaptureStartupChronology)
 	{
 		return;
@@ -177,8 +200,22 @@ void UPhysAnimComponent::CaptureStartupChronologySampleForTesting(const TCHAR* S
 #endif
 
 
-float UPhysAnimComponent::ResolveSelfObservationGroundHeight(const TArray<FPhysAnimBodySample>& CurrentBodySamples) const
+#if WITH_DEV_AUTOMATION_TESTS
+float UPhysAnimComponent::ResolveSelfObservationGroundHeight(
+	const TArray<FPhysAnimBodySample>& CurrentBodySamples,
+	PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues* OutGroundReferenceValues
+	) const
+#else
+float UPhysAnimComponent::ResolveSelfObservationGroundHeight(
+	const TArray<FPhysAnimBodySample>& CurrentBodySamples) const
+#endif
 {
+#if WITH_DEV_AUTOMATION_TESTS
+	if (OutGroundReferenceValues)
+	{
+		*OutGroundReferenceValues = PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues();
+	}
+#endif
 	if (!CurrentBodySamples.IsValidIndex(0))
 	{
 		return 0.0f;
@@ -195,9 +232,15 @@ float UPhysAnimComponent::ResolveSelfObservationGroundHeight(const TArray<FPhysA
 
 	const FVector RootWorldLocation = SkeletalMesh->GetBoneLocation(PhysAnimBridge::GetRootBoneName());
 	FHitResult StaticGroundHit;
+#if WITH_DEV_AUTOMATION_TESTS
+	bool bStaticGroundTraceAttempted = false;
+#endif
 	bool bHasStaticGroundTrace = false;
 	if (UWorld* const World = GetWorld())
 	{
+#if WITH_DEV_AUTOMATION_TESTS
+		bStaticGroundTraceAttempted = true;
+#endif
 		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PhysAnimSelfObservationGround), false);
 		if (const AActor* const Owner = GetOwner())
 		{
@@ -226,10 +269,33 @@ float UPhysAnimComponent::ResolveSelfObservationGroundHeight(const TArray<FPhysA
 		CurrentFloor ? CurrentFloor->GetDistanceToFloor() : 0.0f,
 		0.0f);
 
-	return ResolveSelfObservationSyntheticGroundHeight(
+	const float SyntheticGroundHeight = ResolveSelfObservationSyntheticGroundHeight(
 		CurrentBodySamples[0].Position.Z,
 		RootWorldLocation.Z,
 		GroundWorldZ);
+#if WITH_DEV_AUTOMATION_TESTS
+	if (OutGroundReferenceValues)
+	{
+		OutGroundReferenceValues->BodyRootProtoZM = CurrentBodySamples[0].Position.Z;
+		OutGroundReferenceValues->RootBoneWorldZCm = RootWorldLocation.Z;
+		OutGroundReferenceValues->bStaticTraceAttempted = bStaticGroundTraceAttempted;
+		OutGroundReferenceValues->bStaticTraceSucceeded = bHasStaticGroundTrace;
+		OutGroundReferenceValues->StaticTraceImpactZCm = StaticGroundHit.ImpactPoint.Z;
+		OutGroundReferenceValues->bHasWalkableFloor = CurrentFloor && CurrentFloor->IsWalkableFloor();
+		OutGroundReferenceValues->bHasBlockingFloorHit = CurrentFloor && CurrentFloor->HitResult.IsValidBlockingHit();
+		OutGroundReferenceValues->FloorImpactZCm = CurrentFloor ? CurrentFloor->HitResult.ImpactPoint.Z : 0.0;
+		OutGroundReferenceValues->bCapsuleAvailable = CapsuleComponent != nullptr;
+		OutGroundReferenceValues->CapsuleCenterZCm = CapsuleComponent ? CapsuleComponent->GetComponentLocation().Z : 0.0;
+		OutGroundReferenceValues->CapsuleHalfHeightCm = CapsuleComponent ? CapsuleComponent->GetScaledCapsuleHalfHeight() : 0.0;
+		OutGroundReferenceValues->FloorDistanceCm = CurrentFloor ? CurrentFloor->GetDistanceToFloor() : 0.0;
+		OutGroundReferenceValues->FallbackGroundWorldZCm = 0.0;
+		OutGroundReferenceValues->GroundWorldZCm = GroundWorldZ;
+		OutGroundReferenceValues->SyntheticGroundHeightM = SyntheticGroundHeight;
+		OutGroundReferenceValues->FinalRootHeightM = static_cast<float>(
+			CurrentBodySamples[0].Position.Z - static_cast<double>(SyntheticGroundHeight));
+	}
+#endif
+	return SyntheticGroundHeight;
 }
 
 

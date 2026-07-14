@@ -927,6 +927,56 @@ namespace
 		return Root;
 	}
 
+	TSharedRef<FJsonObject> BuildFirstPolicyGroundReferenceRecordJson(
+		const PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceRecord& Record)
+	{
+		const PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues& Values = Record.Values;
+		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetBoolField(TEXT("recorded"), Record.bRecorded);
+		Root->SetStringField(TEXT("stage"), Record.Stage);
+		Root->SetNumberField(TEXT("world_time_seconds"), Record.WorldTimeSeconds);
+		Root->SetStringField(TEXT("runtime_state"), Record.RuntimeState);
+		Root->SetNumberField(TEXT("policy_control_tick"), Record.PolicyControlTick);
+		Root->SetNumberField(TEXT("body_root_proto_z_m"), Values.BodyRootProtoZM);
+		Root->SetNumberField(TEXT("root_bone_world_z_cm"), Values.RootBoneWorldZCm);
+		Root->SetBoolField(TEXT("static_trace_attempted"), Values.bStaticTraceAttempted);
+		Root->SetBoolField(TEXT("static_trace_succeeded"), Values.bStaticTraceSucceeded);
+		Root->SetNumberField(TEXT("static_trace_impact_z_cm"), Values.StaticTraceImpactZCm);
+		Root->SetBoolField(TEXT("walkable_floor"), Values.bHasWalkableFloor);
+		Root->SetBoolField(TEXT("blocking_floor_hit"), Values.bHasBlockingFloorHit);
+		Root->SetNumberField(TEXT("floor_impact_z_cm"), Values.FloorImpactZCm);
+		Root->SetBoolField(TEXT("capsule_available"), Values.bCapsuleAvailable);
+		Root->SetNumberField(TEXT("capsule_center_z_cm"), Values.CapsuleCenterZCm);
+		Root->SetNumberField(TEXT("capsule_half_height_cm"), Values.CapsuleHalfHeightCm);
+		Root->SetNumberField(TEXT("floor_distance_cm"), Values.FloorDistanceCm);
+		Root->SetNumberField(TEXT("fallback_ground_world_z_cm"), Values.FallbackGroundWorldZCm);
+		Root->SetNumberField(TEXT("resolved_ground_world_z_cm"), Values.GroundWorldZCm);
+		Root->SetNumberField(TEXT("synthetic_ground_height_m"), Values.SyntheticGroundHeightM);
+		Root->SetNumberField(TEXT("final_root_height_m"), Values.FinalRootHeightM);
+		return Root;
+	}
+
+	TSharedRef<FJsonObject> BuildFirstPolicyGroundReferenceJson(
+		const PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceTrace& Trace)
+	{
+		FString ValidationError;
+		const bool bValid = PhysAnimBridge::ValidateFirstPolicyGroundReferenceTrace(Trace, ValidationError);
+		const bool bComplete = Trace.bFirstPolicyRecorded &&
+			Trace.Prior.bRecorded &&
+			Trace.Live.bRecorded;
+
+		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("schema_version"), TEXT("physanim-first-policy-ground-reference/v1"));
+		Root->SetStringField(TEXT("authority"), TEXT("DEVELOPMENT_DIAGNOSTIC_ONLY"));
+		Root->SetBoolField(TEXT("product_success_authority"), false);
+		Root->SetBoolField(TEXT("complete"), bComplete);
+		Root->SetBoolField(TEXT("valid"), bValid);
+		Root->SetStringField(TEXT("error"), ValidationError);
+		Root->SetObjectField(TEXT("prior"), BuildFirstPolicyGroundReferenceRecordJson(Trace.Prior));
+		Root->SetObjectField(TEXT("live"), BuildFirstPolicyGroundReferenceRecordJson(Trace.Live));
+		return Root;
+	}
+
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPolicyInputProvenancePublicationContractTest,
@@ -1172,6 +1222,114 @@ namespace
 		TestTrue(
 			TEXT("Effective/live divergence is explained"),
 			InvalidJson->GetStringField(TEXT("error")).Contains(TEXT("did not preserve the exact live source")));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimFirstPolicyGroundReferencePublicationContractTest,
+		"PhysAnim.ProductHarness.FirstPolicyGroundReferencePublicationContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimFirstPolicyGroundReferencePublicationContractTest::RunTest(const FString& Parameters)
+	{
+		auto MakeValues = [](const double BodyRootProtoZM, const double RootBoneWorldZCm)
+		{
+			PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues Values;
+			Values.BodyRootProtoZM = BodyRootProtoZM;
+			Values.RootBoneWorldZCm = RootBoneWorldZCm;
+			Values.bStaticTraceAttempted = true;
+			Values.bStaticTraceSucceeded = true;
+			Values.StaticTraceImpactZCm = 0.0;
+			Values.bCapsuleAvailable = true;
+			Values.CapsuleCenterZCm = RootBoneWorldZCm;
+			Values.CapsuleHalfHeightCm = 50.0;
+			const float GroundWorldZCm = static_cast<float>(Values.StaticTraceImpactZCm);
+			const float DesiredRootHeightM =
+				(static_cast<float>(RootBoneWorldZCm) - GroundWorldZCm) * PhysAnimBridge::CmToMeters;
+			const volatile float ObservationFrameRootZM = static_cast<float>(BodyRootProtoZM);
+			const float SyntheticGroundHeightM =
+				ObservationFrameRootZM - DesiredRootHeightM;
+			Values.GroundWorldZCm = GroundWorldZCm;
+			Values.SyntheticGroundHeightM = SyntheticGroundHeightM;
+			Values.FinalRootHeightM = static_cast<float>(
+				BodyRootProtoZM - static_cast<double>(SyntheticGroundHeightM));
+			return Values;
+		};
+
+		const PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceTrace EmptyTrace;
+		const TSharedRef<FJsonObject> EmptyJson = BuildFirstPolicyGroundReferenceJson(EmptyTrace);
+		TestFalse(TEXT("An empty ground-reference publication is incomplete"), EmptyJson->GetBoolField(TEXT("complete")));
+		TestFalse(TEXT("An empty ground-reference publication is invalid"), EmptyJson->GetBoolField(TEXT("valid")));
+
+		PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceTrace Trace;
+		TestTrue(
+			TEXT("Publication fixture captures the prior ground reference"),
+			Trace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				MakeValues(1.0, 100.0)));
+		FString RecordError;
+		TestTrue(
+			*FString::Printf(
+				TEXT("Publication fixture captures the first-policy ground reference: %s"),
+				*RecordError),
+			Trace.RecordFirstPolicyIf(
+				true,
+				TEXT("first_policy_self_observation"),
+				2.0,
+				TEXT("Standing_Preparation"),
+				1,
+				MakeValues(1.2, 120.0),
+				RecordError));
+
+		const TSharedRef<FJsonObject> Json = BuildFirstPolicyGroundReferenceJson(Trace);
+		TestEqual(
+			TEXT("First-policy ground-reference schema is versioned"),
+			Json->GetStringField(TEXT("schema_version")),
+			FString(TEXT("physanim-first-policy-ground-reference/v1")));
+		TestEqual(
+			TEXT("First-policy ground-reference publication is development-only"),
+			Json->GetStringField(TEXT("authority")),
+			FString(TEXT("DEVELOPMENT_DIAGNOSTIC_ONLY")));
+		TestFalse(
+			TEXT("Ground-reference diagnostics cannot establish product success"),
+			Json->GetBoolField(TEXT("product_success_authority")));
+		TestTrue(TEXT("Ground-reference publication reports completion"), Json->GetBoolField(TEXT("complete")));
+		TestTrue(TEXT("Ground-reference publication reports validity"), Json->GetBoolField(TEXT("valid")));
+		TestTrue(TEXT("Valid ground-reference publication has no error"), Json->GetStringField(TEXT("error")).IsEmpty());
+		TestTrue(TEXT("The prior record is published"), Json->HasField(TEXT("prior")));
+		TestTrue(TEXT("The live record is published"), Json->HasField(TEXT("live")));
+		TestFalse(TEXT("The two-record diagnostic has no synthetic effective record"), Json->HasField(TEXT("effective")));
+
+		const TSharedPtr<FJsonObject> PriorJson = Json->GetObjectField(TEXT("prior"));
+		const TSharedPtr<FJsonObject> LiveJson = Json->GetObjectField(TEXT("live"));
+		TestEqual(TEXT("Prior metadata owns policy tick zero"), static_cast<int32>(PriorJson->GetNumberField(TEXT("policy_control_tick"))), 0);
+		TestEqual(TEXT("Live metadata owns policy tick one"), static_cast<int32>(LiveJson->GetNumberField(TEXT("policy_control_tick"))), 1);
+		for (const TCHAR* RequiredField : {
+			TEXT("body_root_proto_z_m"),
+			TEXT("root_bone_world_z_cm"),
+			TEXT("static_trace_attempted"),
+			TEXT("static_trace_succeeded"),
+			TEXT("static_trace_impact_z_cm"),
+			TEXT("walkable_floor"),
+			TEXT("blocking_floor_hit"),
+			TEXT("floor_impact_z_cm"),
+			TEXT("capsule_available"),
+			TEXT("capsule_center_z_cm"),
+			TEXT("capsule_half_height_cm"),
+			TEXT("floor_distance_cm"),
+			TEXT("fallback_ground_world_z_cm"),
+			TEXT("resolved_ground_world_z_cm"),
+			TEXT("synthetic_ground_height_m"),
+			TEXT("final_root_height_m")})
+		{
+			TestTrue(
+				FString::Printf(TEXT("Both records publish required field '%s'"), RequiredField),
+				PriorJson->HasField(RequiredField) && LiveJson->HasField(RequiredField));
+		}
 		return true;
 	}
 
@@ -1574,6 +1732,7 @@ namespace
 			bool bPolicyInputProvenanceWritten = true;
 			bool bStartupChronologyWritten = true;
 			bool bFirstPolicyBodySourceWritten = true;
+			bool bFirstPolicyGroundReferenceWritten = true;
 			if (Config.bPlantRun)
 			{
 				const FString ActiveStandingSnapshotPath = FPaths::Combine(
@@ -1651,6 +1810,14 @@ namespace
 						SerializeJson(BuildFirstPolicyBodySourceJson(
 							Component->GetFirstPolicyBodySourceTraceForTesting())) + TEXT("\n"),
 						*FirstPolicyBodySourcePath);
+
+					const FString FirstPolicyGroundReferencePath = FPaths::Combine(
+						Config.RunRoot,
+						TEXT("first-policy-ground-reference.json"));
+					bFirstPolicyGroundReferenceWritten = FFileHelper::SaveStringToFile(
+						SerializeJson(BuildFirstPolicyGroundReferenceJson(
+							Component->GetFirstPolicyGroundReferenceTraceForTesting())) + TEXT("\n"),
+						*FirstPolicyGroundReferencePath);
 				}
 			}
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
@@ -1684,6 +1851,7 @@ namespace
 				bPolicyInputProvenanceWritten &&
 				bStartupChronologyWritten &&
 				bFirstPolicyBodySourceWritten &&
+				bFirstPolicyGroundReferenceWritten &&
 				bManifestWritten;
 		}
 

@@ -247,7 +247,32 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			return;
 		}
 
+#if WITH_DEV_AUTOMATION_TESTS
+		const bool bRecordFirstPolicyGroundReference =
+			bStartupChronologyTraceEnabledForTesting &&
+			StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+			bEnablePolicyInference &&
+			bStandingVariantUsesPolicyInference &&
+			PolicyControlTicksExecuted == 1 &&
+			!FirstPolicyGroundReferenceTrace.bFirstPolicyRecorded;
+		PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues GroundReferenceValues;
+		const float MimicTargetReferenceGroundHeight = ResolveSelfObservationGroundHeight(
+			CurrentBodySamples,
+			bRecordFirstPolicyGroundReference ? &GroundReferenceValues : nullptr);
+		FString GroundReferenceTraceError;
+		// This diagnostic must remain observational: validation failures are published
+		// by the trace artifact and must not abort or otherwise alter policy execution.
+		FirstPolicyGroundReferenceTrace.RecordFirstPolicyIf(
+			bRecordFirstPolicyGroundReference,
+			TEXT("first_policy_self_observation"),
+			GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
+			GetRuntimeStateName(RuntimeState),
+			PolicyControlTicksExecuted,
+			GroundReferenceValues,
+			GroundReferenceTraceError);
+#else
 		const float MimicTargetReferenceGroundHeight = ResolveSelfObservationGroundHeight(CurrentBodySamples);
+#endif
 		if (!PhysAnimBridge::BuildSelfObservation(CurrentBodySamples, MimicTargetReferenceGroundHeight, SelfObservationBuffer, OutError))
 		{
 			return;
