@@ -983,6 +983,35 @@ namespace
 			const bool bPolicyInputSnapshotWritten = FFileHelper::SaveStringToFile(
 				SerializeJson(SnapshotJson) + TEXT("\n"),
 				*PolicyInputSnapshotPath);
+			bool bActiveStandingPolicyInputSnapshotWritten = true;
+			if (Config.bPlantRun)
+			{
+				const FString ActiveStandingSnapshotPath = FPaths::Combine(
+					Config.RunRoot,
+					TEXT("active-standing-policy-input-snapshot.json"));
+				const PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot& ActiveStandingSnapshot = Component
+					? Component->GetFirstActiveStandingPolicyInferenceSnapshotForDiagnostics()
+					: EmptySnapshot;
+				const TSharedRef<FJsonObject> ActiveStandingSnapshotJson = MakeShared<FJsonObject>();
+				ActiveStandingSnapshotJson->SetStringField(
+					TEXT("schema_version"),
+					TEXT("physanim-policy-input-snapshot/v1"));
+				ActiveStandingSnapshotJson->SetStringField(
+					TEXT("capture_scope"),
+					TEXT("first_active_standing_inference"));
+				ActiveStandingSnapshotJson->SetBoolField(TEXT("captured"), ActiveStandingSnapshot.bCaptured);
+				ActiveStandingSnapshotJson->SetNumberField(TEXT("self_observation_width"), ActiveStandingSnapshot.SelfObservation.Num());
+				ActiveStandingSnapshotJson->SetNumberField(TEXT("mimic_target_poses_width"), ActiveStandingSnapshot.MimicTargetPoses.Num());
+				ActiveStandingSnapshotJson->SetNumberField(TEXT("terrain_width"), ActiveStandingSnapshot.Terrain.Num());
+				ActiveStandingSnapshotJson->SetNumberField(TEXT("action_width"), ActiveStandingSnapshot.Actions.Num());
+				ActiveStandingSnapshotJson->SetArrayField(TEXT("self_observation"), BuildPolicyActionJsonArray(ActiveStandingSnapshot.SelfObservation));
+				ActiveStandingSnapshotJson->SetArrayField(TEXT("mimic_target_poses"), BuildPolicyActionJsonArray(ActiveStandingSnapshot.MimicTargetPoses));
+				ActiveStandingSnapshotJson->SetArrayField(TEXT("terrain"), BuildPolicyActionJsonArray(ActiveStandingSnapshot.Terrain));
+				ActiveStandingSnapshotJson->SetArrayField(TEXT("actions"), BuildPolicyActionJsonArray(ActiveStandingSnapshot.Actions));
+				bActiveStandingPolicyInputSnapshotWritten = FFileHelper::SaveStringToFile(
+					SerializeJson(ActiveStandingSnapshotJson) + TEXT("\n"),
+					*ActiveStandingSnapshotPath);
+			}
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
 
 			const FString ProtocolPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), Config.ProtocolRelativePath));
@@ -1006,7 +1035,11 @@ namespace
 			Manifest->SetStringField(TEXT("render_capture"), TEXT("render.png"));
 			Manifest->SetNumberField(TEXT("render_nonblank_pixel_count"), NonblankPixels);
 			const bool bManifestWritten = FFileHelper::SaveStringToFile(SerializeJson(Manifest) + TEXT("\n"), *ManifestPath);
-			return bPhysicsWritten && bPolicyWritten && bPolicyInputSnapshotWritten && bManifestWritten;
+			return bPhysicsWritten &&
+				bPolicyWritten &&
+				bPolicyInputSnapshotWritten &&
+				bActiveStandingPolicyInputSnapshotWritten &&
+				bManifestWritten;
 		}
 
 		FAutomationTestBase* Test = nullptr;

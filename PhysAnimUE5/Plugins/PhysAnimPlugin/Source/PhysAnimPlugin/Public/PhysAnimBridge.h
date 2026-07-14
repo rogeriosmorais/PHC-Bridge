@@ -156,6 +156,20 @@ namespace PhysAnimBridge
 			return true;
 		}
 
+		bool CaptureFirstIf(
+			bool bCondition,
+			TConstArrayView<float> InSelfObservation,
+			TConstArrayView<float> InMimicTargetPoses,
+			TConstArrayView<float> InTerrain,
+			TConstArrayView<float> InActions)
+		{
+			return bCondition && CaptureFirst(
+				InSelfObservation,
+				InMimicTargetPoses,
+				InTerrain,
+				InActions);
+		}
+
 		void Reset()
 		{
 			bCaptured = false;

@@ -96,6 +96,14 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		MimicTargetPosesBuffer,
 		TerrainBuffer,
 		ActionOutputBuffer);
+#if WITH_DEV_AUTOMATION_TESTS
+	FirstActiveStandingPolicyInferenceSnapshot.CaptureFirstIf(
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing,
+		SelfObservationBuffer,
+		MimicTargetPosesBuffer,
+		TerrainBuffer,
+		ActionOutputBuffer);
+#endif
 	PreviousActionOutputBuffer = ActionOutputsBeforeRun;
 	if (bCaptureMetrics)
 	{

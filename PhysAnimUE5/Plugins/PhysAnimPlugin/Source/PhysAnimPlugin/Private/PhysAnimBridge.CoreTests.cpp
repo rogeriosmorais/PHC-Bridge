@@ -566,6 +566,10 @@ namespace
 
 		FPhysAnimPolicyInferenceSnapshot Snapshot;
 		TestFalse(TEXT("New policy snapshot is uncaptured"), Snapshot.bCaptured);
+		TestFalse(
+			TEXT("A gated snapshot ignores inference outside its requested runtime state"),
+			Snapshot.CaptureFirstIf(false, SelfObservation, MimicTargetPoses, Terrain, Actions));
+		TestFalse(TEXT("A rejected gated capture leaves the snapshot uncaptured"), Snapshot.bCaptured);
 		TestTrue(TEXT("First successful inference is captured"), Snapshot.CaptureFirst(SelfObservation, MimicTargetPoses, Terrain, Actions));
 		TestTrue(TEXT("Captured policy snapshot is marked captured"), Snapshot.bCaptured);
 		TestEqual(TEXT("Captured self observation width"), Snapshot.SelfObservation.Num(), SelfObsSize);
@@ -593,6 +597,9 @@ namespace
 		TestEqual(TEXT("Reset clears mimic target poses"), Snapshot.MimicTargetPoses.Num(), 0);
 		TestEqual(TEXT("Reset clears terrain"), Snapshot.Terrain.Num(), 0);
 		TestEqual(TEXT("Reset clears actions"), Snapshot.Actions.Num(), 0);
+		TestTrue(
+			TEXT("A gated snapshot captures the first inference inside its requested runtime state"),
+			Snapshot.CaptureFirstIf(true, SelfObservation, MimicTargetPoses, Terrain, Actions));
 		return true;
 	}
 

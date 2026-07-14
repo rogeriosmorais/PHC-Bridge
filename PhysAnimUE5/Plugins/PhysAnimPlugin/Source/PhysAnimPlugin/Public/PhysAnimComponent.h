@@ -1479,6 +1479,10 @@ public:
 	const TArray<float>& GetConditionedPolicyActionsForDiagnostics() const { return ConditionedActionBuffer; }
 	const PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot& GetFirstPolicyInferenceSnapshotForDiagnostics() const { return FirstPolicyInferenceSnapshot; }
 #if WITH_DEV_AUTOMATION_TESTS
+	const PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot& GetFirstActiveStandingPolicyInferenceSnapshotForDiagnostics() const
+	{
+		return FirstActiveStandingPolicyInferenceSnapshot;
+	}
 	void SetProductControlDispatchDroppedForTesting(bool bDropped) { bProductControlDispatchDroppedForTesting = bDropped; }
 	bool IsProductControlDispatchDroppedForTesting() const { return bProductControlDispatchDroppedForTesting; }
 	void SetStandingVariantForTesting(EPhysAnimStandingVariant Variant) { StandingVariantForTesting = Variant; }
@@ -2409,6 +2413,7 @@ private:
 	TArray<float> ConditionedActionBuffer;
 	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstPolicyInferenceSnapshot;
 #if WITH_DEV_AUTOMATION_TESTS
+	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstActiveStandingPolicyInferenceSnapshot;
 	bool bProductControlDispatchDroppedForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
 #endif
