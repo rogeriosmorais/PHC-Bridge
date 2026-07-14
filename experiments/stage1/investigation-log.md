@@ -143,3 +143,19 @@ Machine-readable record: `experiments/stage1/real-onnx-waiting-chronology.e9.jso
 **Next experiment selected.** Add development-only observation of the root-height ground-reference decomposition at the prior and first-inference boundaries: body-root Z, root-bone world Z, static ground hit, floor fallback inputs, resolved world ground Z, synthetic ground height, and final root height. First prove behavior neutrality; do not override any value, change production defaults, or tune physics.
 
 Machine-readable record: `experiments/stage1/real-onnx-prior-body-replay.e10.json`.
+
+## E11 — First-policy ground-reference decomposition (2026-07-14)
+
+**Hypothesis.** Historical Mode B pairs the prior Manny body-root Z with its contemporaneous prior root-bone world Z and unchanged resolved world ground; E10 missed root-height index 0 because it paired the prior body root with the live root-world reference.
+
+**Baseline configuration and result.** Commit `d4f81d9ba2fad626acf92e220b4781321215718b`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s; 10 s; unchanged seed and pose; no perturbation; action/provenance diagnostics on; startup chronology off. Automation passed. The snapshot was exact Mode A `AAAF45E7…`; evaluator `FAIL`: body linear speed, pelvis height, root tilt; readback 1.0.
+
+**Experimental configuration and result.** Identical clean commit, binary, model, protocol, harness, evaluator, and diagnostics with only `-PhysAnimStartupChronologyTrace` enabled. Automation passed and the new ground-reference artifact was complete and valid. Every shared snapshot, provenance, semantic, physics, policy, and render artifact was byte-identical to baseline. Prior and live static traces both resolved ground Z to exactly 210 cm. Root-bone world Z moved by `0.00440216064453125` cm. The actual prior decomposition produced root height `0.9379022717475891` m (`0x3F701A5D`), exactly Mode B; the live decomposition produced Mode A `0.9379460215568542` m (`0x3F701D3B`). The evaluator failure set and readback remained unchanged.
+
+**Supported or falsified.** Supported. The instrumentation was behavior-neutral, the resolved-ground branch did not change, and the contemporaneous prior root-world reference closed E10's final Mode-B root-height gap exactly.
+
+**What was learned.** The remaining E10 mismatch was temporal incoherence at the root-height reference boundary, not static-ground selection, floor fallback, policy decoding, dispatch, or the physical plant. No physics tuning is implicated. The behavior-neutral diagnostic remains; no runtime behavior or production default was promoted.
+
+**Next experiment selected.** Run a default-off coherent prior-observation replay with three locked arms on one commit/binary: unchanged production control, prior-body/live-ground E10 control, and prior-body/prior-ground candidate. The primary causal comparison changes only the ground-reference epoch with prior body replay held fixed. Exact Mode-B raw/section/action hashes and unchanged unrelated provenance are the judges.
+
+Machine-readable record: `experiments/stage1/real-onnx-ground-reference.e11.json`.

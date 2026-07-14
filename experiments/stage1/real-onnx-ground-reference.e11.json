@@ -1,0 +1,230 @@
+{
+  "schema_version": "physanim-investigation-experiment/v1",
+  "experiment_id": "real-onnx-ground-reference-e11",
+  "recorded_utc": "2026-07-14T22:36:47.6822001Z",
+  "experiment_type": "DEVELOPMENT_INSTRUMENTATION_AB",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "NOT_RUN_BY_E11",
+  "hypothesis": "Historical Mode B pairs the prior Manny body-root Z with its contemporaneous prior root-bone world Z and unchanged resolved world ground, while E10 paired the prior body root with the live root-world reference and therefore missed Mode-B self-observation index 0.",
+  "supporting_evidence_before_experiment": [
+    "E10 prior-body replay matched 357 of 358 self-observation values and matched all mimic and terrain values exactly; only root-height index 0 remained different.",
+    "The E10 prior/live root-bone world-Z delta was 0.00440216064453125 cm and accounted for the remaining root-height mismatch to float precision.",
+    "ResolveSelfObservationGroundHeight computes synthetic ground from body-root Z, root-bone world Z, and resolved world ground before BuildSelfObservation publishes root height."
+  ],
+  "competing_explanations": [
+    "The resolved static/floor ground branch changes between prior and first inference and, rather than root-world timing, explains the residual.",
+    "Another root-frame conversion or float-rounding boundary outside the observed resolver inputs determines Mode-B root height."
+  ],
+  "single_changed_variable": "The existing default-off -PhysAnimStartupChronologyTrace diagnostic additionally recorded the prior and live self-observation ground-reference decomposition. It performed one prior read-only ground query and observed the existing live query; no observation, inference, physics, dispatch, protocol, default, manifest, or readback behavior changed.",
+  "expected_if_hypothesis_correct": "Trace-off and trace-on runs remain exact Mode A and byte-identical on all shared outputs; prior and live resolved ground are unchanged; the actual prior decomposition produces Mode-B root-height index 0 exactly while the live decomposition produces Mode-A index 0 exactly.",
+  "falsification_observation": "The trace is valid and neutral, but the prior decomposition does not yield Mode-B root height exactly, or a changed resolved-ground branch rather than the prior/live root-world delta accounts for the residual.",
+  "locked_judges": {
+    "protocol": {
+      "path": "product-gates/standing-plant-ladder.v2.json",
+      "sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB"
+    },
+    "model": {
+      "path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+      "sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19"
+    },
+    "oracle": "experiments/stage1/oracles/real-onnx-first-policy-modes.v1.json",
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "initial_pose": "unchanged standing-plant harness default",
+    "perturbation": "none",
+    "seed": "unchanged standing-plant harness default",
+    "metrics": [
+      "exact raw Mode-A snapshot and section hashes",
+      "exact baseline/trace shared-artifact hashes",
+      "complete and valid prior/live ground-reference evidence",
+      "exact prior and live float32 root-height bits",
+      "resolved-ground branch identity",
+      "locked evaluator failure set",
+      "target readback ratio"
+    ]
+  },
+  "implementation": {
+    "instrumentation_commit": "d4f81d9ba2fad626acf92e220b4781321215718b",
+    "source_tree_dirty_at_runtime": false,
+    "runtime_binary_reused_between_variants": true,
+    "new_runtime_flag": false,
+    "production_default_changed": false,
+    "protocol_or_manifest_changed": false,
+    "validation": {
+      "serena_diagnostics": "PASS_NO_DIAGNOSTICS",
+      "editor_build": "PASS",
+      "ue_contracts": {
+        "PhysAnim.Bridge.FirstPolicyGroundReferenceTraceContract": "PASS",
+        "PhysAnim.ProductHarness.FirstPolicyGroundReferencePublicationContract": "PASS",
+        "PhysAnim.Bridge.FirstPolicyBodySourceTraceContract": "PASS",
+        "PhysAnim.ProductHarness.FirstPolicyBodySourcePublicationContract": "PASS",
+        "PhysAnim.Bridge.StartupChronologyTraceContract": "PASS",
+        "PhysAnim.ProductHarness.StartupChronologyPublicationContract": "PASS"
+      },
+      "python_fast_tier": "PASS_88_OF_88",
+      "graphify_update": "PASS_6387_NODES_8660_EDGES",
+      "fixture_arithmetic_note": "A decimal contract case exposed MSVC fast-float retention of a double test operand across a cast. The fixture now forces the same float materialization as the runtime function boundary; exact invariant checks and thresholds were retained."
+    }
+  },
+  "baseline": {
+    "run_id": "RealOnnxPolicy-ground-reference-e11-baseline",
+    "artifact_root": "test-results/adapter-ground-reference-e11/baseline",
+    "configuration": "Clean instrumentation commit; locked v2 protocol; RealOnnxPolicy; 1/60 s; 10 s; unchanged seed and initial pose; no perturbation; action-semantic and provenance diagnostics on; startup chronology and ground-reference diagnostics off.",
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "target_readback_match_ratio": 1.0,
+    "snapshot": {
+      "raw_file_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "mode_a_exact": true,
+      "sections": {
+        "self_observation": "2045AB1CC5211D435337E586B306876AD53CFBB5A87817BCB6DB4C46605C5C1E",
+        "mimic_target_poses": "47EEAABE940E38166BE996905563F040657ED07EA2CEB4C954EF639FC3C64872",
+        "terrain": "D1941B7FE1F2B5BBBBF85B0ECF923FD3E9BBE1832E45D797314EF6E6CE46E025",
+        "actions": "9D531D04843511E1FDAAE5EF1672ABCFFFCAE6735B180AB5BAD787AB35CE1083"
+      }
+    },
+    "key_metrics": {
+      "sample_count": 601,
+      "policy_sample_count": 300,
+      "minimum_pelvis_height_cm": 13.986960983769706,
+      "maximum_root_tilt_deg": 105.40127563476562,
+      "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+      "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+      "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+      "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "first_inference_action_l2": 1.000538419457652,
+      "first_active_standing_action_l2": 0.9551095633271672
+    }
+  },
+  "experimental": {
+    "run_id": "RealOnnxPolicy-ground-reference-e11-trace-on",
+    "artifact_root": "test-results/adapter-ground-reference-e11/trace-on",
+    "configuration": "Identical source commit, binary, model, protocol, timestep, window, seed, pose, perturbation, evaluator, action-semantic trace, and provenance trace; only -PhysAnimStartupChronologyTrace was added.",
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "target_readback_match_ratio": 1.0,
+    "snapshot": {
+      "raw_file_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "mode_a_exact": true,
+      "sections": {
+        "self_observation": "2045AB1CC5211D435337E586B306876AD53CFBB5A87817BCB6DB4C46605C5C1E",
+        "mimic_target_poses": "47EEAABE940E38166BE996905563F040657ED07EA2CEB4C954EF639FC3C64872",
+        "terrain": "D1941B7FE1F2B5BBBBF85B0ECF923FD3E9BBE1832E45D797314EF6E6CE46E025",
+        "actions": "9D531D04843511E1FDAAE5EF1672ABCFFFCAE6735B180AB5BAD787AB35CE1083"
+      }
+    },
+    "ground_reference_evidence": {
+      "schema_version": "physanim-first-policy-ground-reference/v1",
+      "complete": true,
+      "valid": true,
+      "artifact_sha256": "DD59984292E1E550B68A27B7E83EE75CB0E78E893FA1394E98AA6C249093258C",
+      "prior": {
+        "world_time_seconds": 0.01666666753590107,
+        "runtime_state": "WaitingForPoseSearch",
+        "policy_control_tick": 0,
+        "body_root_proto_z_m": 3.0379021526362062,
+        "root_bone_world_z_cm": 303.7902220538612,
+        "static_trace_attempted": true,
+        "static_trace_succeeded": true,
+        "resolved_ground_world_z_cm": 210.0,
+        "synthetic_ground_height_m": 2.0999999046325684,
+        "final_root_height_m": 0.9379022717475891,
+        "final_root_height_float32_bits": "0x3F701A5D"
+      },
+      "live": {
+        "world_time_seconds": 0.03333333507180214,
+        "runtime_state": "Standing_Preparation",
+        "policy_control_tick": 1,
+        "body_root_proto_z_m": 3.0379461742416676,
+        "root_bone_world_z_cm": 303.79462421450575,
+        "static_trace_attempted": true,
+        "static_trace_succeeded": true,
+        "resolved_ground_world_z_cm": 210.0,
+        "synthetic_ground_height_m": 2.1000001430511475,
+        "final_root_height_m": 0.9379460215568542,
+        "final_root_height_float32_bits": "0x3F701D3B"
+      },
+      "comparison": {
+        "resolved_ground_delta_cm": 0.0,
+        "root_bone_world_z_delta_cm": 0.00440216064453125,
+        "mode_b_root_height_m": 0.9379022717475891,
+        "mode_b_root_height_float32_bits": "0x3F701A5D",
+        "prior_final_root_height_equals_mode_b_exactly": true,
+        "live_final_root_height_equals_mode_a_exactly": true
+      }
+    },
+    "key_metrics": {
+      "sample_count": 601,
+      "policy_sample_count": 300,
+      "minimum_pelvis_height_cm": 13.986960983769706,
+      "maximum_root_tilt_deg": 105.40127563476562,
+      "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+      "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+      "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+      "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "first_inference_action_l2": 1.000538419457652,
+      "first_active_standing_action_l2": 0.9551095633271672
+    }
+  },
+  "comparison": {
+    "baseline_mode_a_exact": true,
+    "trace_mode_a_exact": true,
+    "instrumentation_neutrality_supported": true,
+    "shared_artifacts_byte_identical": {
+      "policy_input_snapshot": true,
+      "active_standing_policy_input_snapshot": true,
+      "action_semantic_trace": true,
+      "policy_input_provenance": true,
+      "physics_stream": true,
+      "policy_stream": true,
+      "render": true
+    },
+    "shared_sha256": {
+      "policy_input_snapshot": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_policy_input_snapshot": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+      "policy_input_provenance": "055E74345E4738065EB6C5B8AE6D4758D91A8A6C4A5E7235EC2C9732F2FFE6B9",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "render": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C"
+    },
+    "trace_only_sha256": {
+      "first_policy_body_source": "CC0D625101AB8C9F63BFA7A08C0158A8D192C5CAF83E78151023A4084367EFDF",
+      "startup_chronology": "CF2AF337C48FF6705184132646B4730ECA859A00D2A4E9315CDB19AC0EBA1890",
+      "first_policy_ground_reference": "DD59984292E1E550B68A27B7E83EE75CB0E78E893FA1394E98AA6C249093258C"
+    }
+  },
+  "conclusion": {
+    "hypothesis_status": "SUPPORTED",
+    "experiment_status": "VALID_INSTRUMENTATION_RESULT",
+    "summary": "The actual prior ground-reference decomposition yields historical Mode-B root-height index 0 exactly, while the live decomposition yields Mode A exactly. The ground source and branch remain unchanged; the decisive difference is the contemporaneous root-world reference paired with the prior body root.",
+    "what_was_learned": "E10's last mismatch was a temporal-coherence error at the root-height reference boundary, not a ground collision, floor fallback, policy, dispatch, or physical-plant problem. Reconstructing Mode B now requires testing a coherent prior observation epoch rather than layering more physics tuning.",
+    "promotion_decision": "RETAIN_BEHAVIOR_NEUTRAL_DIAGNOSTICS_ONLY",
+    "causal_standing_status": "NOT_PROVEN"
+  },
+  "next_highest_information_experiment": {
+    "status": "SELECTED_NOT_RUN",
+    "name": "Coherent prior observation-epoch replay",
+    "hypothesis": "At first inference, selecting the cached prior observation epoch coherently for Manny body samples and their paired root-height reference reconstructs historical Mode B exactly.",
+    "single_variable": "A default-off development harness variant selects the first-inference current-observation epoch. The primary causal comparison holds prior body replay fixed and changes only its root-height reference from live to contemporaneous prior; an unchanged production arm remains beside both as the required neutrality control.",
+    "expected_if_correct": "The unchanged arm remains exact Mode A; the prior-body/live-ground control reproduces E10; the coherent prior-body/prior-ground arm equals Mode B exactly in raw snapshot, all four sections, and model actions.",
+    "falsifier": "The coherent arm is confirmed consumed with valid source evidence but any Mode-B snapshot section or action differs, or any unrelated provenance field changes.",
+    "locked_judges": "Same commit, binary, model, protocol, timestep, seed, pose, perturbation, capture window, and evaluator across all arms; exact Mode-A/Mode-B oracle hashes; complete source and ground-reference evidence; unchanged downstream evaluator/readback hashes. No production default or protocol promotion."
+  }
+}
