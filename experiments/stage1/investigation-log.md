@@ -63,3 +63,19 @@ Machine-readable record: `experiments/stage1/active-standing-constraint-range-re
 **Next experiment selected.** Add a development-only, behavior-neutral first-policy provenance trace covering live actor/component/root and per-body observation transforms, PoseSearch selection/time and target root, previous action, and terrain sample origin/raw height before tensor packing. First prove trace neutrality; then compare the earliest source field across the two known snapshot hashes. If all sources are equal, move to tensor assembly or memory ownership.
 
 Machine-readable record: `experiments/stage1/real-onnx-preintervention-determinism.e5.json`.
+
+## E6 — First-policy input provenance (2026-07-14)
+
+**Hypothesis.** The two E5 first-policy input modes already differ in a shared pre-flattening source: live canonical body state, PoseSearch target/reference state, or terrain root/ground state.
+
+**Baseline configuration and result.** Commit `cd767f0ac4e227b9c56655e9406a42acfc3dafd4`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s; 10 s; unchanged default seed, initial pose, no perturbation, action trace on, and provenance trace off. Result: valid development run, Mode A hash `AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA`, evaluator `FAIL` on body linear speed, pelvis height, and root tilt, readback 1.0.
+
+**Experimental configuration and result.** Identical configuration with only `-PhysAnimPolicyInputProvenanceTrace` enabled. Two trace-on runs were byte-identical to baseline across the first and active input snapshots, semantic trace, physics, and policy streams; both had the same locked `FAIL` and readback 1.0. Their valid provenance artifacts were also byte-identical (`055E74345E4738065EB6C5B8AE6D4758D91A8A6C4A5E7235EC2C9732F2FFE6B9`). Mode B did not recur.
+
+**Supported or falsified.** The source-location hypothesis was not adjudicated: neither supported nor falsified because only Mode A occurred. The prerequisite claim that the trace is behavior-neutral was supported.
+
+**What was learned.** Mode A reaches first inference on policy tick 1 at world time 0.033333335 s with `MM_Idle` at 5.433333397 s, zero previous action and canonical velocities, and valid counts for every traced source. Uncontrolled relaunches are now low-information; repetitions stopped after the third unchanged behavioral failure.
+
+**Next experiment selected.** Test whether one fixed startup pose-propagation tick causes the mode split. Use a development-only runtime sweep of first-policy delay `{0,1}` ticks with the validated provenance trace and otherwise identical locked harness. Mode B's exact input hash and the earliest provenance delta are the judges; do not change production defaults or thresholds.
+
+Machine-readable record: `experiments/stage1/real-onnx-policy-input-provenance.e6.json`.

@@ -1,0 +1,303 @@
+{
+  "schema_version": "physanim-evidence-driven-investigation/v1",
+  "experiment_id": "real-onnx-policy-input-provenance-e6",
+  "recorded_utc": "2026-07-14T18:40:02.935Z",
+  "experiment_type": "behavior-neutral-instrumentation-and-source-localization",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "NONE",
+  "hypothesis": "The two E5 first-policy input modes already differ in a shared pre-flattening source: the live canonical body state, PoseSearch target/reference state, or terrain root/ground state.",
+  "supporting_evidence_before_experiment": {
+    "source_experiment": "experiments/stage1/real-onnx-preintervention-determinism.e5.json",
+    "known_mode_a_first_policy_input_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+    "known_mode_b_first_policy_input_sha256": "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3",
+    "self_observation_max_abs_difference": 0.002320558,
+    "mimic_target_max_abs_difference": 0.002570421,
+    "terrain_max_abs_difference": 0.000044107,
+    "first_action_max_abs_difference": 0.008536816,
+    "terrain_difference_pattern": "Every packed terrain element differed by the same absolute amount, implicating a shared root or ground reference before packing."
+  },
+  "competing_explanations": [
+    "All pre-flattening sources are identical and tensor assembly, buffer ownership, or stale memory creates the packed-input difference.",
+    "PoseSearch time or reference state differs while the live body source remains identical.",
+    "The known Mode B depends on an uncontrolled startup scheduling state that will not recur in a bounded unchanged repetition set."
+  ],
+  "single_changed_variable": {
+    "name": "policy_input_provenance_trace",
+    "baseline_value": false,
+    "experimental_value": true,
+    "build_script_switch": "-PolicyInputProvenanceTrace",
+    "runtime_switch": "-PhysAnimPolicyInputProvenanceTrace",
+    "compile_scope": "WITH_DEV_AUTOMATION_TESTS",
+    "runtime_behavior_override": "none",
+    "production_default_changed": false,
+    "activation_contract_changed": false,
+    "production_serialization_contract_changed": false,
+    "acceptance_thresholds_changed": false
+  },
+  "expected_if_hypothesis_correct": "The trace is behavior-neutral for a repeated known mode, and when both known packed-input hashes occur at least one captured pre-flattening source field separates them.",
+  "falsification_observation": "Both known packed-input hashes occur while all captured pre-flattening source fields remain identical.",
+  "locked_judges": {
+    "protocol": "product-gates/standing-plant-ladder.v2.json",
+    "protocol_version": 2,
+    "protocol_status": "LOCKED",
+    "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+    "evaluator": "scripts/evaluate_standing_plant.py",
+    "automation_test": "PhysAnim.Development.StandingPlant.RealOnnxPolicy",
+    "variant": "RealOnnxPolicy",
+    "fixed_delta_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "perturbation": "none_for_standing_plant_layer",
+    "deterministic_seed": "unchanged_harness_default_no_override",
+    "initial_pose": "unchanged_standing_plant_fixture",
+    "model_path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+    "model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+    "acceptance_threshold_changes": "none",
+    "primary_metrics": [
+      "exact first-policy input snapshot hash",
+      "exact active-standing input snapshot hash",
+      "exact action-semantic trace hash",
+      "exact physics and policy stream hashes",
+      "exact provenance trace hash for unchanged trace-on repetitions",
+      "provenance validity, source counts, and source values",
+      "locked evaluator status and failed-criteria set",
+      "target readback match ratio"
+    ]
+  },
+  "instrumentation": {
+    "source_commit": "cd767f0ac4e227b9c56655e9406a42acfc3dafd4",
+    "source_tree_dirty_at_runtime": false,
+    "commit_subject": "Add test-only policy input provenance trace",
+    "capture_scope": "first_policy_input_pre_flattening",
+    "capture_conditions": "RealOnnxPolicy, inference enabled, explicit trace switch, first policy-control tick only",
+    "publication": "policy-input-provenance.json is written before render capture and only when explicitly enabled",
+    "captured_sources": [
+      "runtime state, world time, and policy tick",
+      "PoseSearch animation, selected time, and mirror state",
+      "owner, mesh, and root-bone world transforms",
+      "mimic reference world and data roots",
+      "24 pre-adapter Manny body samples and 24 canonical body samples",
+      "24 mimic reference body transforms",
+      "15 by 24 pre-adapter Manny and canonical future transforms",
+      "self-observation ground and 256 raw terrain ground heights",
+      "69 previous-action values"
+    ],
+    "deterministic_contracts": [
+      {
+        "test": "PhysAnim.Bridge.PolicyInputProvenanceSnapshotContract",
+        "result": "PASS",
+        "coverage": "default state, explicit capture, first-capture latch/reset, finite values, quaternion normalization, and exact counts"
+      },
+      {
+        "test": "PhysAnim.ProductHarness.DropDispatchSwitch",
+        "result": "PASS",
+        "coverage": "default-off and explicit-on command-line ownership"
+      },
+      {
+        "test": "PhysAnim.ProductHarness.PolicyInputProvenancePublicationContract",
+        "result": "PASS",
+        "coverage": "development-only JSON publication contract"
+      }
+    ],
+    "full_editor_compilation": "PASS",
+    "serena_diagnostics_affected_cpp_and_headers": "PASS_NO_DIAGNOSTICS",
+    "graphify_update": "PASS_6350_NODES_8536_EDGES",
+    "raw_ue_log_added": false
+  },
+  "baseline": {
+    "run_id": "RealOnnxPolicy-provenance-e6-baseline",
+    "artifact_root": "test-results/adapter-policy-input-provenance-e6/RealOnnxPolicy-provenance-e6-baseline",
+    "configuration": "Locked RealOnnxPolicy standing-plant v2 configuration; 1/60 s; 10 s; unchanged default seed, initial pose, no perturbation, action-semantic trace on, policy-input provenance trace off.",
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "target_readback_match_ratio": 1.0,
+    "policy_input_provenance_artifact_present": false,
+    "sha256": {
+      "first_policy_input_snapshot": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_policy_input_snapshot": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "manifest": "A7C3ED171D211C119C940E3924D8679FCA72B46F70F6B3FA07F6147A162D82E6",
+      "evaluation": "E629F5D454D07946D749F6D1686EF7F78C61E73AEB66DC7DC54B45C6FD9A1C0E"
+    },
+    "key_metrics": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.986961,
+      "minimum_pelvis_height_ratio": 0.153366,
+      "maximum_root_tilt_deg": 105.401276,
+      "maximum_root_linear_speed_cm_per_sec": 818.946884,
+      "maximum_root_angular_speed_deg_per_sec": 558.735126,
+      "maximum_body_linear_speed_cm_per_sec": 1119.794147,
+      "maximum_body_angular_speed_deg_per_sec": 1742.669912,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0
+    }
+  },
+  "experimental": {
+    "configuration": "Identical binary, model, protocol, seed, pose, fixed step, capture window, evaluator, and action trace; only policy-input provenance trace was enabled.",
+    "runs": [
+      {
+        "run_id": "RealOnnxPolicy-provenance-e6-experimental",
+        "artifact_root": "test-results/adapter-policy-input-provenance-e6/RealOnnxPolicy-provenance-e6-experimental",
+        "automation_status": "PASS",
+        "evaluator_status": "FAIL",
+        "failed_criteria": [
+          "body_linear_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "target_readback_match_ratio": 1.0,
+        "manifest_sha256": "AAB973C4DF3BF8DB433C3CF8562C5E5037414A74BF662937479400815BD83D0D",
+        "evaluation_sha256": "CFB23B4883B0C05192496AFBBD5A5C9D6574E222854543DF4DE8C146DEA4A77E",
+        "provenance_sha256": "055E74345E4738065EB6C5B8AE6D4758D91A8A6C4A5E7235EC2C9732F2FFE6B9"
+      },
+      {
+        "run_id": "RealOnnxPolicy-provenance-e6-mode-search-r2",
+        "artifact_root": "test-results/adapter-policy-input-provenance-e6/RealOnnxPolicy-provenance-e6-mode-search-r2",
+        "automation_status": "PASS",
+        "evaluator_status": "FAIL",
+        "failed_criteria": [
+          "body_linear_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "target_readback_match_ratio": 1.0,
+        "manifest_sha256": "30782A34BCD4C36FCEEF595189350A235E991155C9A94B14DC9944ED1004D861",
+        "evaluation_sha256": "2D90B71EA5F6DB384BE25EA737813226123A06B57241A9EE8D4F6287758F0BCA",
+        "provenance_sha256": "055E74345E4738065EB6C5B8AE6D4758D91A8A6C4A5E7235EC2C9732F2FFE6B9"
+      }
+    ],
+    "sha256_shared_by_both_trace_on_runs_and_baseline": {
+      "first_policy_input_snapshot": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_policy_input_snapshot": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201"
+    },
+    "trace_neutrality": {
+      "all_locked_raw_streams_byte_identical": true,
+      "failed_criteria_identical": true,
+      "target_readback_match_ratio_identical": true,
+      "render_hash_used_as_locked_judge": false,
+      "result": "SUPPORTED_FOR_KNOWN_MODE_A"
+    },
+    "provenance": {
+      "schema_version": "physanim-policy-input-provenance/v1",
+      "authority": "DEVELOPMENT_DIAGNOSTIC_ONLY",
+      "enabled": true,
+      "captured": true,
+      "valid": true,
+      "validation_error": "",
+      "file_size_bytes": 173074,
+      "sha256_identical_across_trace_on_runs": true,
+      "capture_scope": "first_policy_input_pre_flattening",
+      "runtime_state": "Standing_Preparation",
+      "world_time_seconds": 0.03333333507180214,
+      "policy_control_tick": 1,
+      "pose_search_animation": "MM_Idle",
+      "pose_search_selected_time": 5.433333396911621,
+      "pose_search_mirrored": false,
+      "source_counts": {
+        "manny_body_samples": 24,
+        "canonical_body_samples": 24,
+        "mimic_reference_bodies": 24,
+        "manny_future_frames": 15,
+        "canonical_future_frames": 15,
+        "body_transforms_per_future_frame": 24,
+        "terrain_ground_heights": 256,
+        "previous_actions": 69
+      },
+      "owner_actor_translation_xyz_cm": [
+        -200.00004237284472,
+        -149.999967149414,
+        302.1500009349342
+      ],
+      "mesh_translation_xyz_cm": [
+        -200.00004237284472,
+        -149.999967149414,
+        213.1500009349342
+      ],
+      "root_bone_world_translation_xyz_cm": [
+        -201.2591181336861,
+        -151.68557434431452,
+        303.79462421450575
+      ],
+      "mimic_reference_world_root_translation_xyz_m": [
+        -2.0100890013694936,
+        1.5123723436264151,
+        3.072119371224114
+      ],
+      "mimic_reference_data_root_translation_xyz_m": [
+        0.012372705659880356,
+        0.010088622344539555,
+        0.9406194095175096
+      ],
+      "self_observation_ground_height_m": 2.1000001430511475,
+      "canonical_root_position_xyz_m": [
+        -2.0125911363519426,
+        1.5168557095387774,
+        3.0379461742416676
+      ],
+      "canonical_root_linear_velocity_xyz_m_per_sec": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "canonical_root_angular_velocity_xyz_rad_per_sec": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "terrain_ground_height_min_m": 2.0,
+      "terrain_ground_height_max_m": 2.0999999046325684,
+      "terrain_unique_value_count": 3,
+      "previous_action_l2": 0.0,
+      "previous_action_nonzero_count": 0
+    },
+    "key_metrics_shared_by_both_trace_on_runs_and_baseline": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.986961,
+      "minimum_pelvis_height_ratio": 0.153366,
+      "maximum_root_tilt_deg": 105.401276,
+      "maximum_root_linear_speed_cm_per_sec": 818.946884,
+      "maximum_root_angular_speed_deg_per_sec": 558.735126,
+      "maximum_body_linear_speed_cm_per_sec": 1119.794147,
+      "maximum_body_angular_speed_deg_per_sec": 1742.669912,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0
+    }
+  },
+  "mode_capture_attempt": {
+    "known_mode_a_observed": true,
+    "known_mode_b_observed": false,
+    "unchanged_behavioral_failures": 3,
+    "repeat_rule_decision": "Stopped after the third unchanged behavioral failure; no fourth launch was run.",
+    "source_localization_possible": false,
+    "reason": "Only Mode A was observed, so no cross-mode provenance comparison exists."
+  },
+  "conclusion": {
+    "hypothesis_status": "NOT_ADJUDICATED",
+    "instrumentation_neutrality_status": "SUPPORTED",
+    "experiment_status": "INSTRUMENTATION_VALIDATED_HYPOTHESIS_NOT_ADJUDICATED",
+    "summary": "The development-only provenance trace is valid and behavior-neutral for known Mode A: trace-off and two trace-on runs are byte-identical across all five locked raw streams and have the same locked failure set and readback ratio. The alternate Mode B did not recur within the three-run limit, so the experiment neither supports nor falsifies the claim that the modes differ in a captured pre-flattening source.",
+    "what_was_learned": "Mode A enters first inference on policy tick 1 at world time 0.033333335 s, with MM_Idle selected at 5.433333397 s, zero previous action and canonical velocities, and a fully valid source trace. Repeated uncontrolled launches are now low-information because they did not reproduce Mode B within the allowed bound.",
+    "promotion_decision": "KEEP_DEVELOPMENT_ONLY_DIAGNOSTIC_NO_PRODUCTION_PROMOTION",
+    "causal_standing_status": "NOT_PROVEN"
+  },
+  "next_highest_information_experiment": {
+    "status": "SELECTED_NOT_RUN",
+    "name": "First-policy startup pose-propagation timing control",
+    "hypothesis": "The E5 mode split is caused by whether first policy inference observes the startup pose before or after one fixed skeletal and physics pose-propagation tick.",
+    "single_variable": "A development-only first-policy delay measured in fixed ticks, swept through runtime overrides with baseline 0 and candidate 1 while all other harness inputs remain locked.",
+    "instrumentation": "Reuse the validated provenance trace; add no production readback or serialization requirement.",
+    "expected_if_correct": "Exactly one delay value reproduces known Mode B hash 723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3 and exposes the earlier source field that changes.",
+    "falsifier": "Neither fixed-tick value reproduces Mode B, or both values retain Mode A without a source change.",
+    "locked_metrics": "Known exact first-input hashes, provenance source deltas, all five existing raw stream hashes, locked evaluator status/failure set, and target readback ratio; unchanged protocol and thresholds."
+  }
+}
