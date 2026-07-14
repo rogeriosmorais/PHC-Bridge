@@ -107,8 +107,7 @@ void UPhysAnimComponent::CaptureStartupChronologySampleForTesting(const TCHAR* S
 		!StartupChronologyTrace.bComplete &&
 		StartupChronologyTrace.CaptureError.IsEmpty();
 	const bool bCaptureFirstPolicyPriorSource =
-		(bStartupChronologyTraceEnabledForTesting ||
-			bReplayPriorBodySamplesAtFirstInferenceForTesting) &&
+		bStartupChronologyTraceEnabledForTesting &&
 		bRealOnnxPolicy &&
 		!FirstPolicyBodySourceTrace.Prior.bRecorded &&
 		FirstPolicyBodySourceTrace.ValidationError.IsEmpty();

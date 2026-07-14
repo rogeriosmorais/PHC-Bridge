@@ -298,23 +298,6 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("Removing the development flag restores the startup chronology trace-off default"),
 		Component->IsStartupChronologyTraceEnabledForTesting());
 	TestFalse(
-		TEXT("First-policy prior-body replay is disabled without its explicit experimental flag"),
-		Component->IsReplayPriorBodySamplesAtFirstInferenceEnabledForTesting());
-	Component->ApplyProductVariantFromCommandLineForTesting(
-		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimStartupChronologyTrace"));
-	TestFalse(
-		TEXT("Startup chronology tracing alone cannot enable first-policy prior-body replay"),
-		Component->IsReplayPriorBodySamplesAtFirstInferenceEnabledForTesting());
-	Component->ApplyProductVariantFromCommandLineForTesting(
-		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimStartupChronologyTrace -PhysAnimExperimentalReplayPriorBodySamplesAtFirstInference"));
-	TestTrue(
-		TEXT("The explicit experimental flag enables first-policy prior-body replay"),
-		Component->IsReplayPriorBodySamplesAtFirstInferenceEnabledForTesting());
-	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
-	TestFalse(
-		TEXT("Removing the experimental flag restores the first-policy replay-off default"),
-		Component->IsReplayPriorBodySamplesAtFirstInferenceEnabledForTesting());
-	TestFalse(
 		TEXT("Constraint-range remap bypass is disabled without its explicit development flag"),
 		Component->IsConstraintRangeRemapBypassEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(
@@ -935,8 +918,6 @@ namespace
 		Root->SetStringField(TEXT("schema_version"), TEXT("physanim-first-policy-body-source/v1"));
 		Root->SetStringField(TEXT("authority"), TEXT("DEVELOPMENT_DIAGNOSTIC_ONLY"));
 		Root->SetBoolField(TEXT("product_success_authority"), false);
-		Root->SetBoolField(TEXT("configured"), Trace.bReplayConfigured);
-		Root->SetBoolField(TEXT("consumed"), Trace.bReplayConsumed);
 		Root->SetBoolField(TEXT("complete"), bComplete);
 		Root->SetBoolField(TEXT("valid"), bValid);
 		Root->SetStringField(TEXT("error"), ValidationError);
@@ -1116,9 +1097,8 @@ namespace
 		FString RecordError;
 		TestTrue(
 			TEXT("Publication fixture records the live first-policy source"),
-			Trace.SelectFirstPolicySourceIf(
+			Trace.RecordFirstPolicySourceIf(
 				true,
-				false,
 				TEXT("first_policy_pre_adapter"),
 				2.0,
 				TEXT("BridgeActive"),
@@ -1142,8 +1122,8 @@ namespace
 		TestTrue(TEXT("First-policy body-source publication reports completion"), Json->GetBoolField(TEXT("complete")));
 		TestTrue(TEXT("First-policy body-source publication reports validity"), Json->GetBoolField(TEXT("valid")));
 		TestTrue(TEXT("Valid first-policy body-source publication has no error"), Json->GetStringField(TEXT("error")).IsEmpty());
-		TestFalse(TEXT("Baseline publication records replay as unconfigured"), Json->GetBoolField(TEXT("configured")));
-		TestFalse(TEXT("Baseline publication records replay as unconsumed"), Json->GetBoolField(TEXT("consumed")));
+		TestFalse(TEXT("Instrumentation publication has no configured behavior field"), Json->HasField(TEXT("configured")));
+		TestFalse(TEXT("Instrumentation publication has no consumed behavior field"), Json->HasField(TEXT("consumed")));
 		TestFalse(TEXT("Instrumentation publication has no replay behavior field"), Json->HasField(TEXT("replay")));
 
 		const TSharedPtr<FJsonObject> PriorJson = Json->GetObjectField(TEXT("prior"));
@@ -1176,61 +1156,6 @@ namespace
 			TEXT("Instrumentation-only effective source is byte-for-byte JSON-identical to live"),
 			SerializeJson(EffectiveJson.ToSharedRef()),
 			SerializeJson(LiveJson.ToSharedRef()));
-
-		PhysAnimBridge::FPhysAnimFirstPolicyBodySourceTrace ReplayTrace;
-		TestTrue(
-			TEXT("Replay publication fixture captures the same prior body source"),
-			ReplayTrace.CapturePriorIf(
-				true,
-				TEXT("pre_state_machine"),
-				1.0,
-				TEXT("WaitingForPoseSearch"),
-				0,
-				PriorBodySamples));
-		TArray<FPhysAnimBodySample> ReplayEffectiveBodySamples = LiveBodySamples;
-		FString ReplayError;
-		TestTrue(
-			TEXT("Replay publication fixture selects the prior source at first inference"),
-			ReplayTrace.SelectFirstPolicySourceIf(
-				true,
-				true,
-				TEXT("first_policy_pre_adapter"),
-				2.0,
-				TEXT("BridgeActive"),
-				1,
-				ReplayEffectiveBodySamples,
-				ReplayError));
-		TestTrue(TEXT("Replay publication fixture selects without error"), ReplayError.IsEmpty());
-
-		const TSharedRef<FJsonObject> ReplayJson = BuildFirstPolicyBodySourceJson(ReplayTrace);
-		TestTrue(TEXT("Experimental publication records replay as configured"), ReplayJson->GetBoolField(TEXT("configured")));
-		TestTrue(TEXT("Experimental publication records replay as consumed"), ReplayJson->GetBoolField(TEXT("consumed")));
-		TestTrue(TEXT("Experimental publication reports completion"), ReplayJson->GetBoolField(TEXT("complete")));
-		TestTrue(TEXT("Experimental publication reports validity"), ReplayJson->GetBoolField(TEXT("valid")));
-		const TSharedPtr<FJsonObject> ReplayPriorJson = ReplayJson->GetObjectField(TEXT("prior"));
-		const TSharedPtr<FJsonObject> ReplayLiveJson = ReplayJson->GetObjectField(TEXT("live"));
-		const TSharedPtr<FJsonObject> ReplayEffectiveJson = ReplayJson->GetObjectField(TEXT("effective"));
-		TestEqual(
-			TEXT("Consumed replay publishes the exact prior fingerprint as effective"),
-			ReplayEffectiveJson->GetStringField(TEXT("fingerprint")),
-			ReplayPriorJson->GetStringField(TEXT("fingerprint")));
-		TestNotEqual(
-			TEXT("The synthetic live source remains discriminative from the replayed prior source"),
-			ReplayLiveJson->GetStringField(TEXT("fingerprint")),
-			ReplayEffectiveJson->GetStringField(TEXT("fingerprint")));
-		const TArray<TSharedPtr<FJsonValue>>& ReplayPriorBodies = ReplayPriorJson->GetArrayField(TEXT("body_samples"));
-		const TArray<TSharedPtr<FJsonValue>>& ReplayEffectiveBodies = ReplayEffectiveJson->GetArrayField(TEXT("body_samples"));
-		TestEqual(
-			TEXT("Consumed replay preserves the prior body-sample width"),
-			ReplayEffectiveBodies.Num(),
-			ReplayPriorBodies.Num());
-		for (int32 BodyIndex = 0; BodyIndex < ReplayPriorBodies.Num(); ++BodyIndex)
-		{
-			TestEqual(
-				FString::Printf(TEXT("Consumed replay publishes prior raw body sample %d exactly"), BodyIndex),
-				SerializeJson(ReplayEffectiveBodies[BodyIndex]->AsObject().ToSharedRef()),
-				SerializeJson(ReplayPriorBodies[BodyIndex]->AsObject().ToSharedRef()));
-		}
 
 		Trace.Effective.BodySamples[0].Position.X += 1.0;
 		FString FingerprintError;

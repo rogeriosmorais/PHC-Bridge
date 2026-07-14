@@ -17,8 +17,7 @@ param (
     [switch]$ActionSemanticTrace,
     [switch]$PolicyInputProvenanceTrace,
     [switch]$StartupChronologyTrace,
-    [switch]$ExperimentalConstraintRangeRemapBypass,
-    [switch]$ExperimentalReplayPriorBodySamplesAtFirstInference
+    [switch]$ExperimentalConstraintRangeRemapBypass
 )
 
 # 1. Environment Setup
@@ -152,9 +151,6 @@ if ($Test) {
     }
     if ($ExperimentalConstraintRangeRemapBypass) {
         $EditorArguments += "-PhysAnimExperimentalConstraintRangeRemapBypass"
-    }
-    if ($ExperimentalReplayPriorBodySamplesAtFirstInference) {
-        $EditorArguments += "-PhysAnimExperimentalReplayPriorBodySamplesAtFirstInference"
     }
     $EditorArguments += "-PhysAnimSourceTreeDirty=$(if ($SourceTreeDirty) { 1 } else { 0 })"
 

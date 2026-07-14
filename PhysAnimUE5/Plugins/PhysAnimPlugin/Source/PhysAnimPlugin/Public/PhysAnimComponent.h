@@ -1490,10 +1490,6 @@ public:
 	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
-	bool IsReplayPriorBodySamplesAtFirstInferenceEnabledForTesting() const
-	{
-		return bReplayPriorBodySamplesAtFirstInferenceForTesting;
-	}
 	bool IsConstraintRangeRemapBypassEnabledForTesting() const { return bConstraintRangeRemapBypassEnabledForTesting; }
 	bool ShouldBypassConstraintRangeRemapForTesting(
 		EPhysAnimRuntimeState State,
@@ -2462,7 +2458,6 @@ private:
 	bool bActionSemanticTraceEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
 	bool bStartupChronologyTraceEnabledForTesting = false;
-	bool bReplayPriorBodySamplesAtFirstInferenceForTesting = false;
 	bool bConstraintRangeRemapBypassEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
 #endif

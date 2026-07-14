@@ -1181,14 +1181,13 @@ namespace PhysAnimBridge
 		return true;
 	}
 
-	bool FPhysAnimFirstPolicyBodySourceTrace::SelectFirstPolicySourceIf(
+	bool FPhysAnimFirstPolicyBodySourceTrace::RecordFirstPolicySourceIf(
 		const bool bCondition,
-		const bool bReplayPriorBodySamples,
 		const FString& InStage,
 		const double InWorldTimeSeconds,
 		const FString& InRuntimeState,
 		const int32 InPolicyControlTick,
-		TArray<FPhysAnimBodySample>& InOutBodySamples,
+		TConstArrayView<FPhysAnimBodySample> InLiveBodySamples,
 		FString& OutError)
 	{
 		OutError.Reset();
@@ -1196,8 +1195,6 @@ namespace PhysAnimBridge
 		{
 			return true;
 		}
-		bReplayConfigured = bReplayPriorBodySamples;
-		bReplayConsumed = false;
 		if (!ValidationError.IsEmpty())
 		{
 			OutError = ValidationError;
@@ -1225,7 +1222,7 @@ namespace PhysAnimBridge
 				InWorldTimeSeconds,
 				InRuntimeState,
 				InPolicyControlTick,
-				InOutBodySamples,
+				InLiveBodySamples,
 				LiveRecord,
 				OutError))
 		{
@@ -1233,17 +1230,13 @@ namespace PhysAnimBridge
 			return false;
 		}
 
-		const TArray<FPhysAnimBodySample>& EffectiveBodySamples =
-			bReplayPriorBodySamples
-				? Prior.BodySamples
-				: InOutBodySamples;
 		FPhysAnimFirstPolicyBodySourceRecord EffectiveRecord;
 		if (!BuildFirstPolicyBodySourceRecord(
 				InStage,
 				InWorldTimeSeconds,
 				InRuntimeState,
 				InPolicyControlTick,
-				EffectiveBodySamples,
+				InLiveBodySamples,
 				EffectiveRecord,
 				OutError))
 		{
@@ -1251,22 +1244,15 @@ namespace PhysAnimBridge
 			return false;
 		}
 
-		if (bReplayPriorBodySamples)
-		{
-			InOutBodySamples = Prior.BodySamples;
-		}
 		Live = MoveTemp(LiveRecord);
 		Effective = MoveTemp(EffectiveRecord);
 		bFirstInferenceRecorded = true;
-		bReplayConsumed = bReplayPriorBodySamples;
 		return true;
 	}
 
 	void FPhysAnimFirstPolicyBodySourceTrace::Reset()
 	{
 		bFirstInferenceRecorded = false;
-		bReplayConfigured = false;
-		bReplayConsumed = false;
 		ValidationError.Reset();
 		Prior.Reset();
 		Live.Reset();
@@ -1289,11 +1275,6 @@ namespace PhysAnimBridge
 			!Trace.Effective.bRecorded)
 		{
 			OutError = TEXT("First-policy body-source evidence is incomplete.");
-			return false;
-		}
-		if (Trace.bReplayConfigured != Trace.bReplayConsumed)
-		{
-			OutError = TEXT("A complete first-policy body-source trace must consume replay exactly when it was configured.");
 			return false;
 		}
 		if (Trace.Prior.Stage != TEXT("pre_state_machine") ||
@@ -1338,15 +1319,9 @@ namespace PhysAnimBridge
 			return false;
 		}
 
-		const TArray<FPhysAnimBodySample>& ExpectedEffectiveBodySamples =
-			Trace.bReplayConsumed
-				? Trace.Prior.BodySamples
-				: Trace.Live.BodySamples;
-		if (!FirstPolicyBodySamplesEqual(Trace.Effective.BodySamples, ExpectedEffectiveBodySamples))
+		if (!FirstPolicyBodySamplesEqual(Trace.Effective.BodySamples, Trace.Live.BodySamples))
 		{
-			OutError = Trace.bReplayConsumed
-				? TEXT("Configured replay did not publish the exact prior source as effective.")
-				: TEXT("Default-off selection did not preserve the exact live source as effective.");
+			OutError = TEXT("Instrumentation-only recording did not preserve the exact live source as effective.");
 			return false;
 		}
 		return true;
