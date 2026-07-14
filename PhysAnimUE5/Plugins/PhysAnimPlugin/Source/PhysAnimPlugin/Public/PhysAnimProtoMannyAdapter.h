@@ -70,6 +70,19 @@ namespace PhysAnimProtoMannyAdapter
 		TArray<FPhysAnimFuturePoseSample>& OutProtoFuturePoseSamples,
 		FString& OutError);
 
+	// Freezes a selected PoseSearch motion into the live policy frame. Capturing
+	// this once preserves the recovery error instead of letting the target follow
+	// the simulated root after a perturbation.
+	PHYSANIMPLUGIN_API FTransform BuildFrozenTargetRootAlignment(
+		const FTransform& SelectedDataRoot,
+		const FTransform& LivePolicyRoot);
+
+	PHYSANIMPLUGIN_API bool ApplyFrozenTargetRootAlignment(
+		const FTransform& DataToPolicyAlignment,
+		const TArray<FPhysAnimFuturePoseSample>& DataFrameFuturePoseSamples,
+		TArray<FPhysAnimFuturePoseSample>& OutPolicyFrameFuturePoseSamples,
+		FString& OutError);
+
 	// Returns false when the requested body pair has no direct authored constraint.
 	PHYSANIMPLUGIN_API bool BuildConstraintProfile(
 		const UPhysicsAsset* PhysicsAsset,

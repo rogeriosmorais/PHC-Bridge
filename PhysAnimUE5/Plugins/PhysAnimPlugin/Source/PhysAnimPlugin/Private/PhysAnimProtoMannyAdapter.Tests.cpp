@@ -706,4 +706,80 @@ bool FPhysAnimProtoMannyObservationGeometryTest::RunTest(const FString& Paramete
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimProtoMannyFrozenTargetAlignmentTest,
+	"PhysAnim.Adapter.ProtoMannyFrozenTargetAlignment",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimProtoMannyFrozenTargetAlignmentTest::RunTest(const FString& Parameters)
+{
+	const FTransform SelectedDataRoot(
+		FQuat(FVector::UpVector, FMath::DegreesToRadians(35.0f)),
+		FVector(4.0, -2.0, 0.9));
+	const FTransform LivePolicyRoot(
+		(FQuat(FVector::ForwardVector, FMath::DegreesToRadians(-12.0f)) *
+		 FQuat(FVector::UpVector, FMath::DegreesToRadians(80.0f))).GetNormalized(),
+		FVector(-3.0, 6.0, 1.1));
+	const FTransform Alignment = PhysAnimProtoMannyAdapter::BuildFrozenTargetRootAlignment(
+		SelectedDataRoot,
+		LivePolicyRoot);
+
+	FPhysAnimFuturePoseSample ReferenceSample;
+	ReferenceSample.FutureTimeSeconds = 1.0f / 30.0f;
+	ReferenceSample.BodyTransforms.Add(SelectedDataRoot);
+	const FVector ChildOffsetData(0.25, -0.1, 0.4);
+	const FQuat ChildLocalRotation(FVector::RightVector, FMath::DegreesToRadians(20.0f));
+	ReferenceSample.BodyTransforms.Add(FTransform(
+		(SelectedDataRoot.GetRotation() * ChildLocalRotation).GetNormalized(),
+		SelectedDataRoot.GetLocation() + SelectedDataRoot.GetRotation().RotateVector(ChildOffsetData)));
+	for (int32 BodyIndex = ReferenceSample.BodyTransforms.Num(); BodyIndex < PhysAnimBridge::NumSmplBodies; ++BodyIndex)
+	{
+		ReferenceSample.BodyTransforms.Add(SelectedDataRoot);
+	}
+
+	TArray<FPhysAnimFuturePoseSample> AlignedSamples;
+	FString Error;
+	TestTrue(
+		TEXT("A complete PoseSearch sample can be aligned into the frozen live frame"),
+		PhysAnimProtoMannyAdapter::ApplyFrozenTargetRootAlignment(
+			Alignment,
+			TArray<FPhysAnimFuturePoseSample>{ReferenceSample},
+			AlignedSamples,
+			Error));
+	TestTrue(TEXT("Frozen target alignment reports no error"), Error.IsEmpty());
+	TestEqual(TEXT("The aligned sample count is preserved"), AlignedSamples.Num(), 1);
+	TestEqual(TEXT("The future time channel is preserved"), AlignedSamples[0].FutureTimeSeconds, ReferenceSample.FutureTimeSeconds);
+	TestTrue(
+		TEXT("The selected data root maps exactly onto the captured live root"),
+		AlignedSamples[0].BodyTransforms[0].GetLocation().Equals(LivePolicyRoot.GetLocation(), 0.0001));
+	TestTrue(
+		TEXT("The selected data root rotation maps exactly onto the captured live root"),
+		QuaternionsNear(AlignedSamples[0].BodyTransforms[0].GetRotation(), LivePolicyRoot.GetRotation(), 0.0001));
+	TestTrue(
+		TEXT("Rigid alignment preserves the child's root-relative position"),
+		(AlignedSamples[0].BodyTransforms[1].GetLocation() - LivePolicyRoot.GetLocation()).Equals(
+			LivePolicyRoot.GetRotation().RotateVector(ChildOffsetData),
+			0.0001));
+	TestTrue(
+		TEXT("Rigid alignment preserves the child's local rotation"),
+		QuaternionsNear(
+			(LivePolicyRoot.GetRotation().Inverse() * AlignedSamples[0].BodyTransforms[1].GetRotation()).GetNormalized(),
+			ChildLocalRotation,
+			0.0001));
+
+	FPhysAnimFuturePoseSample InvalidSample;
+	InvalidSample.FutureTimeSeconds = 2.0f / 30.0f;
+	Error.Reset();
+	TestFalse(
+		TEXT("An incomplete fixed-width target cannot silently enter policy inference"),
+		PhysAnimProtoMannyAdapter::ApplyFrozenTargetRootAlignment(
+			Alignment,
+			TArray<FPhysAnimFuturePoseSample>{InvalidSample},
+			AlignedSamples,
+			Error));
+	TestFalse(TEXT("Incomplete aligned target rejection is explicit"), Error.IsEmpty());
+
+	return true;
+}
+
 #endif
