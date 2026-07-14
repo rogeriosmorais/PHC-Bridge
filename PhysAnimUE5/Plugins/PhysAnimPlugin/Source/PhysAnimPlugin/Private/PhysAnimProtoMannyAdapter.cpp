@@ -389,55 +389,6 @@ bool PhysAnimProtoMannyAdapter::AdaptFuturePoseSamplesToCanonicalSmpl(
 	return true;
 }
 
-FTransform PhysAnimProtoMannyAdapter::BuildFrozenTargetRootAlignment(
-	const FTransform& SelectedDataRoot,
-	const FTransform& LivePolicyRoot)
-{
-	const FQuat SourceRotation = SelectedDataRoot.GetRotation().GetNormalized();
-	const FQuat TargetRotation = LivePolicyRoot.GetRotation().GetNormalized();
-	const FQuat AlignmentRotation = (TargetRotation * SourceRotation.Inverse()).GetNormalized();
-	const FVector AlignmentTranslation =
-		LivePolicyRoot.GetLocation() - AlignmentRotation.RotateVector(SelectedDataRoot.GetLocation());
-	return FTransform(AlignmentRotation, AlignmentTranslation);
-}
-
-bool PhysAnimProtoMannyAdapter::ApplyFrozenTargetRootAlignment(
-	const FTransform& DataToPolicyAlignment,
-	const TArray<FPhysAnimFuturePoseSample>& DataFrameFuturePoseSamples,
-	TArray<FPhysAnimFuturePoseSample>& OutPolicyFrameFuturePoseSamples,
-	FString& OutError)
-{
-	const FQuat AlignmentRotation = DataToPolicyAlignment.GetRotation().GetNormalized();
-	const FVector AlignmentTranslation = DataToPolicyAlignment.GetLocation();
-	OutPolicyFrameFuturePoseSamples = DataFrameFuturePoseSamples;
-
-	for (int32 FutureIndex = 0; FutureIndex < OutPolicyFrameFuturePoseSamples.Num(); ++FutureIndex)
-	{
-		FPhysAnimFuturePoseSample& FutureSample = OutPolicyFrameFuturePoseSamples[FutureIndex];
-		if (FutureSample.BodyTransforms.Num() != PhysAnimBridge::NumSmplBodies)
-		{
-			OutPolicyFrameFuturePoseSamples.Reset();
-			OutError = FString::Printf(
-				TEXT("Expected %d canonical future body transforms at step %d but found %d."),
-				PhysAnimBridge::NumSmplBodies,
-				FutureIndex,
-				FutureSample.BodyTransforms.Num());
-			return false;
-		}
-
-		for (FTransform& BodyTransform : FutureSample.BodyTransforms)
-		{
-			BodyTransform.SetLocation(
-				AlignmentTranslation + AlignmentRotation.RotateVector(BodyTransform.GetLocation()));
-			BodyTransform.SetRotation(
-				(AlignmentRotation * BodyTransform.GetRotation().GetNormalized()).GetNormalized());
-		}
-	}
-
-	OutError.Reset();
-	return true;
-}
-
 bool PhysAnimProtoMannyAdapter::BuildConstraintProfile(
 	const UPhysicsAsset* const PhysicsAsset,
 	const FName ChildBoneName,

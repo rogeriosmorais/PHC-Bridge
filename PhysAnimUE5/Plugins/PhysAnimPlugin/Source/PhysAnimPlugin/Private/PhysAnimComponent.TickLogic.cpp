@@ -230,34 +230,14 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			return;
 		}
 
-		if (!bHasFrozenMimicTargetDataToPolicyAlignment)
-		{
-			if (CurrentBodySamples.IsEmpty())
-			{
-				OutError = TEXT("Mimic target alignment requires the live canonical root sample.");
-				return;
-			}
-			const FTransform LivePolicyRoot(
-				CurrentBodySamples[0].Rotation.GetNormalized(),
-				CurrentBodySamples[0].Position);
-			FrozenMimicTargetDataToPolicyAlignment =
-				PhysAnimProtoMannyAdapter::BuildFrozenTargetRootAlignment(
-					MimicTargetReferenceDataRoot,
-					LivePolicyRoot);
-			bHasFrozenMimicTargetDataToPolicyAlignment = true;
-		}
+		TArray<FPhysAnimBodySample> MimicCurrentReferenceBodySamples;
+		MakeMimicTargetDataFrameBodySamples(
+			CurrentBodySamples,
+			MimicTargetReferenceWorldRoot,
+			MimicTargetReferenceDataRoot,
+			MimicCurrentReferenceBodySamples);
 
-		TArray<FPhysAnimFuturePoseSample> PolicyFrameFuturePoseSamples;
-		if (!PhysAnimProtoMannyAdapter::ApplyFrozenTargetRootAlignment(
-			FrozenMimicTargetDataToPolicyAlignment,
-			FuturePoseSamples,
-			PolicyFrameFuturePoseSamples,
-			OutError))
-		{
-			return;
-		}
-
-		if (!PhysAnimBridge::BuildMimicTargetPoses(CurrentBodySamples, PolicyFrameFuturePoseSamples, MimicTargetPosesBuffer, OutError))
+		if (!PhysAnimBridge::BuildMimicTargetPoses(MimicCurrentReferenceBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, OutError))
 		{
 			return;
 		}

@@ -28,8 +28,6 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	PreviousConditionedActionBuffer.Reset();
 	PreviousActionOutputBuffer.Reset();
 	FirstPolicyInferenceSnapshot.Reset();
-	FrozenMimicTargetDataToPolicyAlignment = FTransform::Identity;
-	bHasFrozenMimicTargetDataToPolicyAlignment = false;
 	PreviousControlTargetRotations.Reset();
 	PolicyNeutralControlTargetRotations.Reset();
 	LastActionDiagnostics = {};

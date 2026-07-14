@@ -975,8 +975,6 @@ struct FPhase1AutoCalibBaselineSnapshot
 	TArray<float> SelfObservationBuffer;
 	TArray<float> MimicTargetPosesBuffer;
 	TArray<float> TerrainBuffer;
-	FTransform FrozenMimicTargetDataToPolicyAlignment = FTransform::Identity;
-	bool bHasFrozenMimicTargetDataToPolicyAlignment = false;
 	TArray<float> ActionOutputBuffer;
 	TArray<float> PreviousActionOutputBuffer;
 	FPoseSearchBlueprintResult LastValidPoseSearchResult;
@@ -2404,8 +2402,6 @@ private:
 	TArray<float> SelfObservationBuffer;
 	TArray<float> MimicTargetPosesBuffer;
 	TArray<float> TerrainBuffer;
-	FTransform FrozenMimicTargetDataToPolicyAlignment = FTransform::Identity;
-	bool bHasFrozenMimicTargetDataToPolicyAlignment = false;
 	TArray<float> ActionOutputBuffer;
 	TArray<float> PreviousActionOutputBuffer;
 	TArray<float> RecentActionMagnitudeHistory;

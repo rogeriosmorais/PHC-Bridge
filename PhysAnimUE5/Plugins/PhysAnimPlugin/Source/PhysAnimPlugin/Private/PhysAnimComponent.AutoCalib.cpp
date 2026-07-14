@@ -107,8 +107,6 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibBaseline(FPhase1AutoCalibBaseline
 	OutSnapshot.SelfObservationBuffer = SelfObservationBuffer;
 	OutSnapshot.MimicTargetPosesBuffer = MimicTargetPosesBuffer;
 	OutSnapshot.TerrainBuffer = TerrainBuffer;
-	OutSnapshot.FrozenMimicTargetDataToPolicyAlignment = FrozenMimicTargetDataToPolicyAlignment;
-	OutSnapshot.bHasFrozenMimicTargetDataToPolicyAlignment = bHasFrozenMimicTargetDataToPolicyAlignment;
 	StorePhase1AutoCalibActionHistory(
 		OutSnapshot,
 		ConditionedActionBuffer,
@@ -291,8 +289,6 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 	SelfObservationBuffer = Snapshot.SelfObservationBuffer;
 	MimicTargetPosesBuffer = Snapshot.MimicTargetPosesBuffer;
 	TerrainBuffer = Snapshot.TerrainBuffer;
-	FrozenMimicTargetDataToPolicyAlignment = Snapshot.FrozenMimicTargetDataToPolicyAlignment;
-	bHasFrozenMimicTargetDataToPolicyAlignment = Snapshot.bHasFrozenMimicTargetDataToPolicyAlignment;
 	RestorePhase1AutoCalibActionHistory(
 		Snapshot,
 		ConditionedActionBuffer,
