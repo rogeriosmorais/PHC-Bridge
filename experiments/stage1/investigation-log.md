@@ -47,3 +47,19 @@ Machine-readable record: `experiments/stage1/active-standing-action-semantics.e3
 **Next experiment selected.** Run three consecutive unchanged, trace-enabled, remap-enabled `RealOnnxPolicy` baselines on the same clean commit/binary. Compare exact first-policy snapshot hashes, first actions, active-standing snapshots, and metric spread. If variation reproduces, instrument its earliest observation source; if all three are identical, classify this baseline as malformed and rerun E4 with exact pre-intervention equality required.
 
 Machine-readable record: `experiments/stage1/active-standing-constraint-range-remap-bypass.e4.json`.
+
+## E5 — RealOnnxPolicy pre-intervention determinism control (2026-07-14)
+
+**Hypothesis.** The standing-plant fixture has launch-to-launch variation before active-standing intervention, so nominally identical runs can enter different first-policy input modes and invalidate semantic A/B comparisons.
+
+**Baseline configuration and result.** Commit `5de9aeb47c52b663b65ac8768a7ed3372dc9889f`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s fixed step; 10 s; unchanged default seed, initial pose, no perturbation, action trace on, range remap enabled, and no behavior override. Repetitions 1 and 2 were byte-identical across first and active snapshots, semantic trace, physics, and policy streams. Both evaluator results were `FAIL` on body linear speed, pelvis height, and root tilt with readback 1.0.
+
+**Experimental configuration and result.** The third repetition used the identical binary, model, runtime flags, evaluator, and physics configuration; only artifact identity/repetition metadata changed, which targeted source inspection confirmed is not used for runtime seeding, pose, policy, or physics. All three repetition-3 attempts produced the same raw hashes, but one wrapper timeout and two identical `CaptureRender` access violations left every full run `INVALID` without a manifest/evaluator result. Before that downstream failure, all three captured 601 physics samples and the same complete semantic trace. Their first-policy hash differed from repetitions 1/2, with maximum differences of 0.002321 in self observation, 0.002570 in mimic targets, 0.000044 in terrain, and 0.008537 in the first action. The two hashes exactly reproduce E4's baseline and experimental pre-intervention modes.
+
+**Supported or falsified.** Supported by the pre-intervention raw evidence. The full repetition-3 behavioral runs remain `INVALID`, and no standing or product pass is claimed.
+
+**What was learned.** E4's mismatch was neither isolated nor caused by its active-standing remap-bypass branch. The fixture has at least two reproducible startup modes before NNE/action intervention. The alternate malformed-run raw stream was standing-like, but that is diagnostic only because render/manifest publication failed and no negative-control product protocol ran.
+
+**Next experiment selected.** Add a development-only, behavior-neutral first-policy provenance trace covering live actor/component/root and per-body observation transforms, PoseSearch selection/time and target root, previous action, and terrain sample origin/raw height before tensor packing. First prove trace neutrality; then compare the earliest source field across the two known snapshot hashes. If all sources are equal, move to tensor assembly or memory ownership.
+
+Machine-readable record: `experiments/stage1/real-onnx-preintervention-determinism.e5.json`.
