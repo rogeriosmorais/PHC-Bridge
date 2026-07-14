@@ -95,3 +95,19 @@ Machine-readable record: `experiments/stage1/real-onnx-policy-input-provenance.e
 **Next experiment selected.** Add observation-only startup chronology instrumentation before and after the runtime-state-machine update on each fixed tick through first inference. Test whether an existing earlier live-body sample reconstructs Mode B and whether velocity publication timing separates the modes. Do not run extra inference or change production behavior, protocol, or thresholds.
 
 Machine-readable record: `experiments/stage1/real-onnx-first-policy-delay.e7.json`.
+
+## E8 — Observation-only startup chronology (2026-07-14)
+
+**Hypothesis.** Historical Mode B is the live Manny/SMPL body state from one fixed tick earlier than Mode A, with startup velocity publication timing distinguishing the states.
+
+**Baseline configuration and result.** Commit `3a654c8ef1c5cc2bec817a9db4703f50e9a7f3e7`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s; 10 s; unchanged seed and pose; no perturbation; action/provenance traces on; startup chronology off. Automation passed. The evaluator `FAIL` remained body linear speed, pelvis height, and root tilt with readback 1.0; first-input hash was Mode A `AAAF45E7…`.
+
+**Experimental configuration and result.** Identical commit, binary, model, protocol, harness, and evaluator with only `-PhysAnimStartupChronologyTrace` enabled. Automation passed; evaluator failure set and readback were identical. First and active input snapshots, semantic trace, provenance, physics, policy, and render were byte-identical to baseline. The valid three-sample chronology occurred entirely at 0.033333335 s: `BridgeActive` before the state update, `Standing_Preparation` after it, and policy tick 1 after inference. All owner/mesh/root/body values were identical across the three samples and exactly matched the Mode-A first-input Manny source; all published body velocities were zero.
+
+**Supported or falsified.** Neither; inconclusive. Trace neutrality was supported, and the same-tick state transition was excluded as the source of Mode B. The registered earlier-fixed-tick hypothesis was not adjudicated because `WaitingForPoseSearch` returns before the trace hooks, so no 0.0166667 s sample was captured.
+
+**What was learned.** Mode A is already fully selected at the first observed `BridgeActive` tick; neither the transition to `Standing_Preparation` nor the first policy update changes its live source. The missing information boundary is the preceding `WaitingForPoseSearch` tick, not damping, friction, contact, drag, thresholds, or another policy delay.
+
+**Next experiment selected.** Extend only the explicit development chronology across the `WaitingForPoseSearch` early-return path, without extra PoseSearch calls, inference, raycasts, physics changes, or dispatch. Compare the newly observed prior-tick per-body signed pose/velocity delta against Mode A and E7 delay-plus-one; keep the same hashes, evaluator, and readback judges.
+
+Machine-readable record: `experiments/stage1/real-onnx-startup-chronology.e8.json`.
