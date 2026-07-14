@@ -1487,18 +1487,6 @@ public:
 	bool IsProductControlDispatchDroppedForTesting() const { return bProductControlDispatchDroppedForTesting; }
 	void SetStandingVariantForTesting(EPhysAnimStandingVariant Variant) { StandingVariantForTesting = Variant; }
 	EPhysAnimStandingVariant GetStandingVariantForTesting() const { return StandingVariantForTesting; }
-	bool IsExperimentalStandingTargetRootAlignmentEnabledForTesting() const
-	{
-		return bExperimentalStandingTargetRootAlignmentForTesting;
-	}
-	bool HasCapturedExperimentalStandingTargetRootAlignmentForTesting() const
-	{
-		return bHasExperimentalStandingTargetRootAlignment;
-	}
-	float GetExperimentalStandingTargetRootAlignmentDegreesForTesting() const
-	{
-		return ExperimentalStandingTargetRootAlignmentDegrees;
-	}
 	void ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine);
 #endif
 	void ConsumeUpperBodyPendingResets();
@@ -2428,10 +2416,6 @@ private:
 	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstActiveStandingPolicyInferenceSnapshot;
 	bool bProductControlDispatchDroppedForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
-	bool bExperimentalStandingTargetRootAlignmentForTesting = false;
-	bool bHasExperimentalStandingTargetRootAlignment = false;
-	FTransform ExperimentalStandingTargetRootAlignment = FTransform::Identity;
-	float ExperimentalStandingTargetRootAlignmentDegrees = -1.0f;
 #endif
 	TArray<UE::NNE::FTensorBindingCPU> InputBindings;
 	TArray<UE::NNE::FTensorBindingCPU> OutputBindings;

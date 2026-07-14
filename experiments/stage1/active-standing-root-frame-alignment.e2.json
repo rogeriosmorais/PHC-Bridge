@@ -1,0 +1,169 @@
+{
+  "schema_version": "physanim-evidence-driven-investigation/v1",
+  "experiment_id": "active-standing-root-frame-alignment-e2",
+  "recorded_utc": "2026-07-14T17:01:44Z",
+  "experiment_type": "same_commit_runtime_ab",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "The approximately 31 degree target-relative root mismatch at the first active-standing policy inference is a causal driver of the RealOnnxPolicy collapse. Removing only that rigid global mismatch should improve the policy input distribution and the locked standing-plant metrics without changing target readback.",
+  "supporting_evidence_before_experiment": {
+    "source_experiment": "experiments/stage1/active-standing-root-frame-observation.e1.json",
+    "first_active_standing_root_relative_rotation_deg": 31.037,
+    "first_active_standing_relative_position_max_abs_sigma": 12.2,
+    "first_active_standing_relative_rotation_max_abs_sigma": 10.5,
+    "target_readback_match_ratio": 1.0,
+    "controlled_target_plant_can_stand": true
+  },
+  "competing_explanations": [
+    "The root mismatch is a valid recovery error signal expected by the policy rather than an erroneous coordinate offset.",
+    "An independent observation/action frame, action decoding, or Manny constraint-frame error dominates the collapse even when the root mismatch is removed."
+  ],
+  "single_changed_variable": {
+    "name": "active_standing_future_target_rigid_root_alignment",
+    "baseline": false,
+    "experimental": true,
+    "activation": "-PhysAnimExperimentalStandingTargetRootAlignment",
+    "scope": "WITH_DEV_AUTOMATION_TESTS and RealOnnxPolicy and BalanceActive_Standing only",
+    "capture_rule": "At the first BalanceActive_Standing policy update, rigidly map the first canonical future root to the live canonical root and freeze that transform for the run.",
+    "production_default_changed": false,
+    "activation_contract_changed": false,
+    "serialization_contract_changed": false,
+    "acceptance_thresholds_changed": false
+  },
+  "expected_if_hypothesis_correct": "The first active-standing target-relative root approaches identity, normalized first-slice target outliers decrease, and at least the pelvis-height, root-tilt, or body-speed metrics improve while target readback remains unchanged.",
+  "falsification_observation": "The override corrects the measured target-root mismatch and input-distribution outliers, but locked standing behavior remains equal or becomes worse with unchanged target readback.",
+  "locked_judges": {
+    "protocol": "product-gates/standing-plant-ladder.v2.json",
+    "protocol_version": 2,
+    "protocol_status": "LOCKED",
+    "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+    "evaluator": "scripts/evaluate_standing_plant.py",
+    "automation_test": "PhysAnim.Development.StandingPlant.RealOnnxPolicy",
+    "variant": "RealOnnxPolicy",
+    "fixed_delta_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "perturbation": "none_for_standing_plant_layer",
+    "deterministic_seed": "unchanged_harness_default_no_override",
+    "initial_pose": "unchanged_standing_plant_fixture",
+    "repetition": 1,
+    "acceptance_threshold_changes": "none"
+  },
+  "implementation": {
+    "source_commit": "47a1bfc517a620f76c3de74e1170bc03fb3b79e1",
+    "source_tree_dirty": false,
+    "commit_subject": "Add test-only standing target root alignment",
+    "model_path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+    "model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+    "deterministic_contract_tests": [
+      "PhysAnim.Adapter.ProtoMannyRigidRootAlignment",
+      "PhysAnim.ProductHarness.DropDispatchSwitch",
+      "PhysAnim.Component.MandatoryPath.FirstSliceContract"
+    ],
+    "deterministic_contract_test_status": "PASS"
+  },
+  "baseline": {
+    "artifact_root": "test-results/adapter-root-frame-ab/RealOnnxPolicy-root-align-e2-baseline",
+    "override_enabled": false,
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "semantic_metrics": {
+      "first_active_standing_root_relative_rotation_deg": 31.036801,
+      "relative_position_max_abs_sigma": 12.202569,
+      "relative_position_rms_sigma": 1.370378,
+      "relative_position_first_slice_rms_sigma": 5.29699,
+      "relative_position_values_above_5_sigma": 26,
+      "relative_rotation_max_abs_sigma": 10.501945,
+      "relative_rotation_rms_sigma": 0.974302,
+      "relative_rotation_first_slice_rms_sigma": 3.74064,
+      "relative_rotation_values_above_5_sigma": 25,
+      "first_active_action_l2": 0.95511
+    },
+    "key_metrics": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.986961,
+      "minimum_pelvis_height_ratio": 0.153366,
+      "maximum_root_tilt_deg": 105.401276,
+      "maximum_root_linear_speed_cm_per_sec": 818.946884,
+      "maximum_root_angular_speed_deg_per_sec": 558.735126,
+      "maximum_body_linear_speed_cm_per_sec": 1119.794147,
+      "maximum_body_angular_speed_deg_per_sec": 1742.669912,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "target_readback_match_ratio": 1.0
+    }
+  },
+  "experimental": {
+    "artifact_root": "test-results/adapter-root-frame-ab/RealOnnxPolicy-root-align-e2-experimental",
+    "override_enabled": true,
+    "captured_alignment_deg": 61.303566,
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "root_angular_speed",
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt",
+      "support_gap"
+    ],
+    "semantic_metrics": {
+      "first_active_standing_root_relative_rotation_deg": 0.0,
+      "relative_position_max_abs_sigma": 3.381111,
+      "relative_position_rms_sigma": 0.261514,
+      "relative_position_first_slice_rms_sigma": 0.95671,
+      "relative_position_values_above_5_sigma": 0,
+      "relative_rotation_max_abs_sigma": 3.562294,
+      "relative_rotation_rms_sigma": 0.324897,
+      "relative_rotation_first_slice_rms_sigma": 1.156198,
+      "relative_rotation_values_above_5_sigma": 0,
+      "first_active_action_l2": 0.685672
+    },
+    "key_metrics": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 14.085046,
+      "minimum_pelvis_height_ratio": 0.154441,
+      "maximum_root_tilt_deg": 133.221268,
+      "maximum_root_linear_speed_cm_per_sec": 898.95949,
+      "maximum_root_angular_speed_deg_per_sec": 916.987637,
+      "maximum_body_linear_speed_cm_per_sec": 1599.647449,
+      "maximum_body_angular_speed_deg_per_sec": 3554.375618,
+      "maximum_support_gap_ms": 416.666667,
+      "maximum_penetration_cm": 0.0,
+      "target_readback_match_ratio": 1.0
+    }
+  },
+  "result_comparison": {
+    "intervention_semantically_valid": true,
+    "root_relative_rotation_change_deg": -31.036801,
+    "relative_position_values_above_5_sigma_change": -26,
+    "relative_rotation_values_above_5_sigma_change": -25,
+    "minimum_pelvis_height_ratio_change": 0.001075,
+    "maximum_root_tilt_deg_change": 27.819992,
+    "maximum_root_angular_speed_deg_per_sec_change": 358.252511,
+    "maximum_body_linear_speed_cm_per_sec_change": 479.853301,
+    "maximum_support_gap_ms_change": 416.666667,
+    "target_readback_match_ratio_change": 0.0,
+    "behavioral_result": "WORSE"
+  },
+  "conclusion": {
+    "hypothesis_status": "FALSIFIED",
+    "summary": "The one-time rigid alignment successfully removed the measured first active-standing root mismatch and all greater-than-five-sigma target-position and target-rotation outliers. Standing nevertheless became materially worse and acquired root-angular-speed and support-gap failures while target readback remained perfect. The approximately 31 degree mismatch is therefore not, by itself, the causal explanation for collapse; it may be a meaningful recovery signal, or an independent action/constraint semantic error may dominate.",
+    "promotion_decision": "REJECT_AND_REMOVE_EXPERIMENTAL_BEHAVIOR"
+  },
+  "next_highest_information_experiment": {
+    "status": "PROPOSED_NOT_RUN",
+    "hypothesis": "The remaining collapse is caused by a mismatch between ProtoMotions joint-action semantics and the joint-local Manny constraint frames used to publish Physics Control targets.",
+    "first_step": "Add instrumentation that records, for the first active-standing inference, each raw Proto action triplet, its decoded SMPL local rotation, the mapped Manny constraint-frame target, authored constraint axes and limits, and the applied/read-back target.",
+    "single_variable_for_followup_behavior_test": "After instrumentation proves a specific frame mismatch, change only that identified joint-frame transform behind a development-only override.",
+    "primary_semantic_metrics": [
+      "per-joint action-to-local-rotation reconstruction error",
+      "per-joint constraint-frame projection error",
+      "limit occupancy and sign consistency for bilateral joint pairs"
+    ],
+    "required_ab": "Rerun the unchanged RealOnnxPolicy baseline beside the single joint-frame correction using the same commit, seed, timestep, initial pose, capture window, and evaluator."
+  }
+}
