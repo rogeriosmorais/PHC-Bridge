@@ -185,8 +185,8 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			SearchResult = LastValidPoseSearchResult;
 		}
 
-		TArray<FPhysAnimBodySample> MannyCurrentBodySamples;
-		if (!GatherCurrentBodySamples(MannyCurrentBodySamples, OutError))
+		TArray<FPhysAnimBodySample> MannyLiveBodySamples;
+		if (!GatherCurrentBodySamples(MannyLiveBodySamples, OutError))
 		{
 			return;
 		}
@@ -204,7 +204,7 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 				GetWorld() ? GetWorld()->GetTimeSeconds() : -1.0,
 				GetRuntimeStateName(RuntimeState),
 				PolicyControlTicksExecuted,
-				MannyCurrentBodySamples,
+				MannyLiveBodySamples,
 				BodySourceTraceError))
 		{
 			OutError = FString::Printf(
@@ -212,6 +212,40 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 				*BodySourceTraceError);
 			return;
 		}
+
+		const bool bEvaluateFirstPolicyObservationSourceExperiment =
+			StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+			bEnablePolicyInference &&
+			bStandingVariantUsesPolicyInference &&
+			PolicyControlTicksExecuted == 1 &&
+			(bStartupChronologyTraceEnabledForTesting ||
+				bFirstPolicyObservationSourceExperimentConfiguredForTesting);
+		TArray<FPhysAnimBodySample> MannyCurrentBodySamples;
+		if (bEvaluateFirstPolicyObservationSourceExperiment)
+		{
+			FString ExperimentBodyError;
+			if (!FirstPolicyObservationSourceExperimentTrace.SelectBodySamples(
+					FirstPolicyBodySourceTrace.Prior.BodySamples,
+					MannyLiveBodySamples,
+					MannyCurrentBodySamples,
+					ExperimentBodyError))
+			{
+				MannyCurrentBodySamples = MannyLiveBodySamples;
+				if (bFirstPolicyObservationSourceExperimentConfiguredForTesting)
+				{
+					OutError = FString::Printf(
+						TEXT("The first-policy observation-source experiment body stage was invalid: %s"),
+						*ExperimentBodyError);
+					return;
+				}
+			}
+		}
+		else
+		{
+			MannyCurrentBodySamples = MannyLiveBodySamples;
+		}
+#else
+		TArray<FPhysAnimBodySample> MannyCurrentBodySamples = MoveTemp(MannyLiveBodySamples);
 #endif
 		TArray<FPhysAnimBodySample> CurrentBodySamples;
 		if (!PhysAnimProtoMannyAdapter::AdaptBodySamplesToCanonicalSmpl(
@@ -256,9 +290,11 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			PolicyControlTicksExecuted == 1 &&
 			!FirstPolicyGroundReferenceTrace.bFirstPolicyRecorded;
 		PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues GroundReferenceValues;
-		const float MimicTargetReferenceGroundHeight = ResolveSelfObservationGroundHeight(
+		float MimicTargetReferenceGroundHeight = ResolveSelfObservationGroundHeight(
 			CurrentBodySamples,
-			bRecordFirstPolicyGroundReference ? &GroundReferenceValues : nullptr);
+			(bRecordFirstPolicyGroundReference || bEvaluateFirstPolicyObservationSourceExperiment)
+				? &GroundReferenceValues
+				: nullptr);
 		FString GroundReferenceTraceError;
 		// This diagnostic must remain observational: validation failures are published
 		// by the trace artifact and must not abort or otherwise alter policy execution.
@@ -270,6 +306,34 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			PolicyControlTicksExecuted,
 			GroundReferenceValues,
 			GroundReferenceTraceError);
+		if (bEvaluateFirstPolicyObservationSourceExperiment)
+		{
+			const PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues* PriorGroundReference =
+				FirstPolicyGroundReferenceTrace.Prior.bRecorded
+					? &FirstPolicyGroundReferenceTrace.Prior.Values
+					: nullptr;
+			float AppliedSyntheticGroundHeightM = MimicTargetReferenceGroundHeight;
+			FString ExperimentGroundError;
+			if (!FirstPolicyObservationSourceExperimentTrace.SelectGroundReference(
+					PriorGroundReference,
+					GroundReferenceValues,
+					CurrentBodySamples[0].Position.Z,
+					AppliedSyntheticGroundHeightM,
+					ExperimentGroundError))
+			{
+				if (bFirstPolicyObservationSourceExperimentConfiguredForTesting)
+				{
+					OutError = FString::Printf(
+						TEXT("The first-policy observation-source experiment ground stage was invalid: %s"),
+						*ExperimentGroundError);
+					return;
+				}
+			}
+			else
+			{
+				MimicTargetReferenceGroundHeight = AppliedSyntheticGroundHeightM;
+			}
+		}
 #else
 		const float MimicTargetReferenceGroundHeight = ResolveSelfObservationGroundHeight(CurrentBodySamples);
 #endif
@@ -277,6 +341,22 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		{
 			return;
 		}
+#if WITH_DEV_AUTOMATION_TESTS
+		if (bEvaluateFirstPolicyObservationSourceExperiment)
+		{
+			FString ExperimentConsumptionError;
+			if (!FirstPolicyObservationSourceExperimentTrace.MarkConsumed(
+					SelfObservationBuffer[0],
+					ExperimentConsumptionError) &&
+				bFirstPolicyObservationSourceExperimentConfiguredForTesting)
+			{
+				OutError = FString::Printf(
+					TEXT("The first-policy observation-source experiment was not consumable: %s"),
+					*ExperimentConsumptionError);
+				return;
+			}
+		}
+#endif
 
 		TArray<FPhysAnimBodySample> MimicCurrentReferenceBodySamples;
 		MakeMimicTargetDataFrameBodySamples(

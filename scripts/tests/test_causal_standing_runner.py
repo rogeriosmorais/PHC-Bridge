@@ -34,3 +34,16 @@ def test_build_script_forwards_startup_chronology_only_when_explicitly_requested
     assert "[switch]$StartupChronologyTrace" in source
     assert "if ($StartupChronologyTrace)" in source
     assert '$EditorArguments += "-PhysAnimStartupChronologyTrace"' in source
+
+
+def test_build_script_forwards_only_locked_first_policy_observation_source_experiments() -> None:
+    source = (REPO_ROOT / "scripts" / "build.ps1").read_text(encoding="utf-8")
+
+    assert '[ValidateSet("PriorBodyLiveGround", "PriorBodyPriorGround")]' in source
+    assert "[string]$FirstPolicyObservationSourceExperiment" in source
+    assert "if ($FirstPolicyObservationSourceExperiment)" in source
+    assert (
+        '$EditorArguments += "-PhysAnimFirstPolicyObservationSourceExperiment='
+        '$FirstPolicyObservationSourceExperiment"'
+    ) in source
+    assert "$FirstPolicyObservationSourceExperiment =" not in source

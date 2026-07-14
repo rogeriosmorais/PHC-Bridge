@@ -1490,6 +1490,18 @@ public:
 	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
+	PhysAnimBridge::EPhysAnimFirstPolicyObservationSourceMode GetFirstPolicyObservationSourceModeForTesting() const
+	{
+		return FirstPolicyObservationSourceModeForTesting;
+	}
+	bool IsFirstPolicyObservationSourceExperimentConfiguredForTesting() const
+	{
+		return bFirstPolicyObservationSourceExperimentConfiguredForTesting;
+	}
+	const FString& GetFirstPolicyObservationSourceExperimentConfigurationErrorForTesting() const
+	{
+		return FirstPolicyObservationSourceExperimentConfigurationErrorForTesting;
+	}
 	bool IsConstraintRangeRemapBypassEnabledForTesting() const { return bConstraintRangeRemapBypassEnabledForTesting; }
 	bool ShouldBypassConstraintRangeRemapForTesting(
 		EPhysAnimRuntimeState State,
@@ -1518,6 +1530,11 @@ public:
 	const PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceTrace& GetFirstPolicyGroundReferenceTraceForTesting() const
 	{
 		return FirstPolicyGroundReferenceTrace;
+	}
+	const PhysAnimBridge::FPhysAnimFirstPolicyObservationSourceExperimentTrace&
+		GetFirstPolicyObservationSourceExperimentTraceForTesting() const
+	{
+		return FirstPolicyObservationSourceExperimentTrace;
 	}
 	void ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine);
 #endif
@@ -2466,10 +2483,16 @@ private:
 	PhysAnimBridge::FPhysAnimStartupChronologyTrace StartupChronologyTrace;
 	PhysAnimBridge::FPhysAnimFirstPolicyBodySourceTrace FirstPolicyBodySourceTrace;
 	PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceTrace FirstPolicyGroundReferenceTrace;
+	PhysAnimBridge::FPhysAnimFirstPolicyObservationSourceExperimentTrace FirstPolicyObservationSourceExperimentTrace;
 	bool bProductControlDispatchDroppedForTesting = false;
 	bool bActionSemanticTraceEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
 	bool bStartupChronologyTraceEnabledForTesting = false;
+	bool bFirstPolicyObservationSourceExperimentConfiguredForTesting = false;
+	PhysAnimBridge::EPhysAnimFirstPolicyObservationSourceMode FirstPolicyObservationSourceModeForTesting =
+		PhysAnimBridge::EPhysAnimFirstPolicyObservationSourceMode::LiveBodyLiveGround;
+	FString FirstPolicyObservationSourceExperimentRequestedModeNameForTesting = TEXT("LiveBodyLiveGround");
+	FString FirstPolicyObservationSourceExperimentConfigurationErrorForTesting;
 	bool bConstraintRangeRemapBypassEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
 #endif

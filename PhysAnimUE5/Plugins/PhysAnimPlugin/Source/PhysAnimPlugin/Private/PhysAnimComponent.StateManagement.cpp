@@ -35,6 +35,20 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	StartupChronologyTrace.Reset();
 	FirstPolicyBodySourceTrace.Reset();
 	FirstPolicyGroundReferenceTrace.Reset();
+	if (FirstPolicyObservationSourceExperimentConfigurationErrorForTesting.IsEmpty())
+	{
+		FString TraceConfigurationError;
+		FirstPolicyObservationSourceExperimentTrace.Configure(
+			bFirstPolicyObservationSourceExperimentConfiguredForTesting,
+			FirstPolicyObservationSourceModeForTesting,
+			TraceConfigurationError);
+	}
+	else
+	{
+		FirstPolicyObservationSourceExperimentTrace.RejectConfiguration(
+			FirstPolicyObservationSourceExperimentRequestedModeNameForTesting,
+			FirstPolicyObservationSourceExperimentConfigurationErrorForTesting);
+	}
 #endif
 	PreviousControlTargetRotations.Reset();
 	PolicyNeutralControlTargetRotations.Reset();
