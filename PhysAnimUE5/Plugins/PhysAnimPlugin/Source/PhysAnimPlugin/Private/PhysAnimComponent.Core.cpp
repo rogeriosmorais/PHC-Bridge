@@ -42,50 +42,6 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 		FParse::Param(CommandLine, TEXT("PhysAnimStartupChronologyTrace"));
 	bConstraintRangeRemapBypassEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalConstraintRangeRemapBypass"));
-	bFirstPolicyObservationSourceExperimentConfiguredForTesting = false;
-	FirstPolicyObservationSourceModeForTesting =
-		PhysAnimBridge::EPhysAnimFirstPolicyObservationSourceMode::LiveBodyLiveGround;
-	FirstPolicyObservationSourceExperimentRequestedModeNameForTesting = TEXT("LiveBodyLiveGround");
-	FirstPolicyObservationSourceExperimentConfigurationErrorForTesting.Reset();
-
-	FString ObservationSourceModeName;
-	if (CommandLine && FParse::Value(
-			CommandLine,
-			TEXT("PhysAnimFirstPolicyObservationSourceExperiment="),
-			ObservationSourceModeName))
-	{
-		bFirstPolicyObservationSourceExperimentConfiguredForTesting = true;
-		FirstPolicyObservationSourceExperimentRequestedModeNameForTesting = ObservationSourceModeName;
-		if (!PhysAnimBridge::TryParseFirstPolicyObservationSourceMode(
-				ObservationSourceModeName,
-				FirstPolicyObservationSourceModeForTesting,
-				FirstPolicyObservationSourceExperimentConfigurationErrorForTesting))
-		{
-			FirstPolicyObservationSourceExperimentTrace.RejectConfiguration(
-				ObservationSourceModeName,
-				FirstPolicyObservationSourceExperimentConfigurationErrorForTesting);
-		}
-		else
-		{
-			FString TraceConfigurationError;
-			if (!FirstPolicyObservationSourceExperimentTrace.Configure(
-					true,
-					FirstPolicyObservationSourceModeForTesting,
-					TraceConfigurationError))
-			{
-				FirstPolicyObservationSourceExperimentConfigurationErrorForTesting =
-					MoveTemp(TraceConfigurationError);
-			}
-		}
-	}
-	else
-	{
-		FString TraceConfigurationError;
-		FirstPolicyObservationSourceExperimentTrace.Configure(
-			false,
-			FirstPolicyObservationSourceModeForTesting,
-			TraceConfigurationError);
-	}
 
 	FString VariantName;
 	if (!CommandLine || !FParse::Value(CommandLine, TEXT("PhysAnimProductVariant="), VariantName))

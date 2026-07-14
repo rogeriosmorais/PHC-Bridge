@@ -17,8 +17,6 @@ param (
     [switch]$ActionSemanticTrace,
     [switch]$PolicyInputProvenanceTrace,
     [switch]$StartupChronologyTrace,
-    [ValidateSet("PriorBodyLiveGround", "PriorBodyPriorGround")]
-    [string]$FirstPolicyObservationSourceExperiment,
     [switch]$ExperimentalConstraintRangeRemapBypass
 )
 
@@ -150,9 +148,6 @@ if ($Test) {
     }
     if ($StartupChronologyTrace) {
         $EditorArguments += "-PhysAnimStartupChronologyTrace"
-    }
-    if ($FirstPolicyObservationSourceExperiment) {
-        $EditorArguments += "-PhysAnimFirstPolicyObservationSourceExperiment=$FirstPolicyObservationSourceExperiment"
     }
     if ($ExperimentalConstraintRangeRemapBypass) {
         $EditorArguments += "-PhysAnimExperimentalConstraintRangeRemapBypass"

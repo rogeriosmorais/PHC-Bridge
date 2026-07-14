@@ -298,59 +298,6 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("Removing the development flag restores the startup chronology trace-off default"),
 		Component->IsStartupChronologyTraceEnabledForTesting());
 	TestFalse(
-		TEXT("The observation-source experiment is default-off"),
-		Component->IsFirstPolicyObservationSourceExperimentConfiguredForTesting());
-	TestEqual(
-		TEXT("The omitted observation-source selector retains live body and live ground"),
-		Component->GetFirstPolicyObservationSourceModeForTesting(),
-		PhysAnimBridge::EPhysAnimFirstPolicyObservationSourceMode::LiveBodyLiveGround);
-	TestTrue(
-		TEXT("The omitted observation-source selector has no configuration error"),
-		Component->GetFirstPolicyObservationSourceExperimentConfigurationErrorForTesting().IsEmpty());
-	Component->ApplyProductVariantFromCommandLineForTesting(
-		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimFirstPolicyObservationSourceExperiment=PriorBodyLiveGround"));
-	TestTrue(
-		TEXT("The explicit prior-body/live-ground experiment is configured"),
-		Component->IsFirstPolicyObservationSourceExperimentConfiguredForTesting());
-	TestEqual(
-		TEXT("The command line selects prior body with live ground"),
-		Component->GetFirstPolicyObservationSourceModeForTesting(),
-		PhysAnimBridge::EPhysAnimFirstPolicyObservationSourceMode::PriorBodyLiveGround);
-	TestTrue(
-		TEXT("The prior-body/live-ground selector has no configuration error"),
-		Component->GetFirstPolicyObservationSourceExperimentConfigurationErrorForTesting().IsEmpty());
-	Component->ApplyProductVariantFromCommandLineForTesting(
-		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimFirstPolicyObservationSourceExperiment=PriorBodyPriorGround"));
-	TestEqual(
-		TEXT("The command line selects coherent prior body and ground"),
-		Component->GetFirstPolicyObservationSourceModeForTesting(),
-		PhysAnimBridge::EPhysAnimFirstPolicyObservationSourceMode::PriorBodyPriorGround);
-	TestTrue(
-		TEXT("The coherent prior selector has no configuration error"),
-		Component->GetFirstPolicyObservationSourceExperimentConfigurationErrorForTesting().IsEmpty());
-	Component->ApplyProductVariantFromCommandLineForTesting(
-		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimFirstPolicyObservationSourceExperiment=Invalid"));
-	TestTrue(
-		TEXT("An invalid explicit observation-source selector remains visibly configured"),
-		Component->IsFirstPolicyObservationSourceExperimentConfiguredForTesting());
-	TestFalse(
-		TEXT("An invalid observation-source selector is rejected explicitly"),
-		Component->GetFirstPolicyObservationSourceExperimentConfigurationErrorForTesting().IsEmpty());
-	TestTrue(
-		TEXT("An invalid selector completes an invalid experiment trace"),
-		Component->GetFirstPolicyObservationSourceExperimentTraceForTesting().bComplete);
-	TestFalse(
-		TEXT("An invalid selector cannot publish valid experiment evidence"),
-		Component->GetFirstPolicyObservationSourceExperimentTraceForTesting().bValid);
-	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
-	TestFalse(
-		TEXT("Removing the selector restores the default-off experiment state"),
-		Component->IsFirstPolicyObservationSourceExperimentConfiguredForTesting());
-	TestEqual(
-		TEXT("Removing the selector restores live body and live ground"),
-		Component->GetFirstPolicyObservationSourceModeForTesting(),
-		PhysAnimBridge::EPhysAnimFirstPolicyObservationSourceMode::LiveBodyLiveGround);
-	TestFalse(
 		TEXT("Constraint-range remap bypass is disabled without its explicit development flag"),
 		Component->IsConstraintRangeRemapBypassEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(
@@ -1030,54 +977,6 @@ namespace
 		return Root;
 	}
 
-	TSharedRef<FJsonObject> BuildFirstPolicyObservationSourceExperimentJson(
-		const PhysAnimBridge::FPhysAnimFirstPolicyObservationSourceExperimentTrace& Trace)
-	{
-		FString ValidationError;
-		const bool bValid =
-			PhysAnimBridge::ValidateFirstPolicyObservationSourceExperimentTrace(Trace, ValidationError);
-		const TSharedRef<FJsonObject> BodyStage = MakeShared<FJsonObject>();
-		BodyStage->SetBoolField(TEXT("recorded"), Trace.bBodyStageRecorded);
-		BodyStage->SetNumberField(TEXT("sequence"), Trace.BodyStageSequence);
-		BodyStage->SetStringField(TEXT("fingerprint_algorithm"), Trace.BodyFingerprintAlgorithm);
-		BodyStage->SetStringField(TEXT("prior_fingerprint"), Trace.PriorBodyFingerprint);
-		BodyStage->SetStringField(TEXT("live_fingerprint"), Trace.LiveBodyFingerprint);
-		BodyStage->SetStringField(TEXT("effective_fingerprint"), Trace.EffectiveBodyFingerprint);
-
-		const TSharedRef<FJsonObject> GroundStage = MakeShared<FJsonObject>();
-		GroundStage->SetBoolField(TEXT("recorded"), Trace.bGroundStageRecorded);
-		GroundStage->SetNumberField(TEXT("sequence"), Trace.GroundStageSequence);
-		GroundStage->SetNumberField(
-			TEXT("prior_synthetic_ground_height_m"),
-			Trace.PriorSyntheticGroundHeightM);
-		GroundStage->SetNumberField(
-			TEXT("live_synthetic_ground_height_m"),
-			Trace.LiveSyntheticGroundHeightM);
-		GroundStage->SetNumberField(
-			TEXT("applied_synthetic_ground_height_m"),
-			Trace.AppliedSyntheticGroundHeightM);
-		GroundStage->SetNumberField(TEXT("effective_body_root_proto_z_m"), Trace.EffectiveBodyRootProtoZM);
-		GroundStage->SetNumberField(TEXT("effective_final_root_height_m"), Trace.EffectiveFinalRootHeightM);
-
-		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-		Root->SetStringField(
-			TEXT("schema_version"),
-			TEXT("physanim-first-policy-observation-source-experiment/v1"));
-		Root->SetStringField(TEXT("authority"), TEXT("DEVELOPMENT_EXPERIMENT_ONLY"));
-		Root->SetBoolField(TEXT("product_success_authority"), false);
-		Root->SetStringField(TEXT("requested_mode"), Trace.RequestedModeName);
-		Root->SetStringField(TEXT("applied_mode"), Trace.AppliedModeName);
-		Root->SetBoolField(TEXT("configured"), Trace.bConfigured);
-		Root->SetBoolField(TEXT("applied"), Trace.bApplied);
-		Root->SetBoolField(TEXT("consumed"), Trace.bConsumed);
-		Root->SetBoolField(TEXT("complete"), Trace.bComplete);
-		Root->SetBoolField(TEXT("valid"), bValid);
-		Root->SetStringField(TEXT("error"), ValidationError);
-		Root->SetObjectField(TEXT("body_stage"), BodyStage);
-		Root->SetObjectField(TEXT("ground_stage"), GroundStage);
-		return Root;
-	}
-
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPolicyInputProvenancePublicationContractTest,
@@ -1431,152 +1330,6 @@ namespace
 				FString::Printf(TEXT("Both records publish required field '%s'"), RequiredField),
 				PriorJson->HasField(RequiredField) && LiveJson->HasField(RequiredField));
 		}
-		return true;
-	}
-
-	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-		FPhysAnimFirstPolicyObservationSourceExperimentPublicationContractTest,
-		"PhysAnim.ProductHarness.FirstPolicyObservationSourceExperimentPublicationContract",
-		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-	bool FPhysAnimFirstPolicyObservationSourceExperimentPublicationContractTest::RunTest(
-		const FString& Parameters)
-	{
-		auto MakeBodySamples = [](const double RootHeightM, const double Seed)
-		{
-			TArray<FPhysAnimBodySample> Samples;
-			Samples.SetNum(PhysAnimBridge::NumSmplBodies);
-			for (int32 BodyIndex = 0; BodyIndex < Samples.Num(); ++BodyIndex)
-			{
-				Samples[BodyIndex].Position = FVector(Seed, BodyIndex * 0.01, RootHeightM + BodyIndex * 0.001);
-				Samples[BodyIndex].Rotation = FQuat::Identity;
-				Samples[BodyIndex].LinearVelocity = FVector(Seed, 0.0, 0.0);
-				Samples[BodyIndex].AngularVelocity = FVector(0.0, Seed, 0.0);
-			}
-			Samples[0].Position.Z = RootHeightM;
-			return Samples;
-		};
-		auto MakeGroundReference = [](const double BodyRootProtoZM, const double RootBoneWorldZCm)
-		{
-			PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues Values;
-			Values.BodyRootProtoZM = BodyRootProtoZM;
-			Values.RootBoneWorldZCm = RootBoneWorldZCm;
-			Values.bStaticTraceAttempted = true;
-			Values.bStaticTraceSucceeded = true;
-			Values.StaticTraceImpactZCm = 10.0;
-			Values.bCapsuleAvailable = true;
-			Values.CapsuleCenterZCm = RootBoneWorldZCm;
-			Values.CapsuleHalfHeightCm = 50.0;
-			const float GroundWorldZCm = static_cast<float>(Values.StaticTraceImpactZCm);
-			const float DesiredRootHeightM =
-				(static_cast<float>(RootBoneWorldZCm) - GroundWorldZCm) * PhysAnimBridge::CmToMeters;
-			const volatile float ObservationFrameRootZM = static_cast<float>(BodyRootProtoZM);
-			const float SyntheticGroundHeightM = ObservationFrameRootZM - DesiredRootHeightM;
-			Values.GroundWorldZCm = GroundWorldZCm;
-			Values.SyntheticGroundHeightM = SyntheticGroundHeightM;
-			Values.FinalRootHeightM = static_cast<float>(
-				BodyRootProtoZM - static_cast<double>(SyntheticGroundHeightM));
-			return Values;
-		};
-
-		const PhysAnimBridge::FPhysAnimFirstPolicyObservationSourceExperimentTrace EmptyTrace;
-		const TSharedRef<FJsonObject> EmptyJson =
-			BuildFirstPolicyObservationSourceExperimentJson(EmptyTrace);
-		TestFalse(TEXT("An empty observation-source experiment is incomplete"), EmptyJson->GetBoolField(TEXT("complete")));
-		TestFalse(TEXT("An empty observation-source experiment is invalid"), EmptyJson->GetBoolField(TEXT("valid")));
-
-		const TArray<FPhysAnimBodySample> PriorBodySamples = MakeBodySamples(1.1, 0.25);
-		const TArray<FPhysAnimBodySample> LiveBodySamples = MakeBodySamples(1.3, 0.75);
-		const PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues PriorGround =
-			MakeGroundReference(PriorBodySamples[0].Position.Z, 130.0);
-		const PhysAnimBridge::FPhysAnimSelfObservationGroundReferenceValues LiveGround =
-			MakeGroundReference(PriorBodySamples[0].Position.Z, 150.0);
-
-		PhysAnimBridge::FPhysAnimFirstPolicyObservationSourceExperimentTrace Trace;
-		FString Error;
-		TestTrue(
-			TEXT("Publication fixture configures the coherent prior mode"),
-			Trace.Configure(
-				true,
-				PhysAnimBridge::EPhysAnimFirstPolicyObservationSourceMode::PriorBodyPriorGround,
-				Error));
-		TArray<FPhysAnimBodySample> EffectiveBodySamples;
-		TestTrue(
-			TEXT("Publication fixture selects the prior body"),
-			Trace.SelectBodySamples(PriorBodySamples, LiveBodySamples, EffectiveBodySamples, Error));
-		float AppliedGroundHeightM = 0.0f;
-		TestTrue(
-			TEXT("Publication fixture selects the prior ground reference"),
-			Trace.SelectGroundReference(
-				&PriorGround,
-				LiveGround,
-				EffectiveBodySamples[0].Position.Z,
-				AppliedGroundHeightM,
-				Error));
-		const float PublishedFinalRootHeightM = static_cast<float>(
-			EffectiveBodySamples[0].Position.Z - static_cast<double>(AppliedGroundHeightM));
-		TestTrue(
-			TEXT("Publication fixture records consumption"),
-			Trace.MarkConsumed(PublishedFinalRootHeightM, Error));
-
-		const TSharedRef<FJsonObject> Json = BuildFirstPolicyObservationSourceExperimentJson(Trace);
-		TestEqual(
-			TEXT("Observation-source experiment schema is versioned"),
-			Json->GetStringField(TEXT("schema_version")),
-			FString(TEXT("physanim-first-policy-observation-source-experiment/v1")));
-		TestEqual(
-			TEXT("Observation-source experiment is explicitly development-only"),
-			Json->GetStringField(TEXT("authority")),
-			FString(TEXT("DEVELOPMENT_EXPERIMENT_ONLY")));
-		TestFalse(
-			TEXT("Observation-source experiment cannot establish product success"),
-			Json->GetBoolField(TEXT("product_success_authority")));
-		TestEqual(
-			TEXT("The requested mode is published"),
-			Json->GetStringField(TEXT("requested_mode")),
-			FString(TEXT("PriorBodyPriorGround")));
-		TestEqual(
-			TEXT("The applied mode is published"),
-			Json->GetStringField(TEXT("applied_mode")),
-			FString(TEXT("PriorBodyPriorGround")));
-		TestTrue(TEXT("Configured state is published"), Json->GetBoolField(TEXT("configured")));
-		TestTrue(TEXT("Applied state is published"), Json->GetBoolField(TEXT("applied")));
-		TestTrue(TEXT("Consumed state is published"), Json->GetBoolField(TEXT("consumed")));
-		TestTrue(TEXT("Completion is published"), Json->GetBoolField(TEXT("complete")));
-		TestTrue(TEXT("Validity is published"), Json->GetBoolField(TEXT("valid")));
-		TestTrue(TEXT("A valid experiment has no error"), Json->GetStringField(TEXT("error")).IsEmpty());
-
-		const TSharedPtr<FJsonObject> BodyStage = Json->GetObjectField(TEXT("body_stage"));
-		TestTrue(TEXT("The body stage is recorded"), BodyStage->GetBoolField(TEXT("recorded")));
-		TestEqual(TEXT("The body stage is first"), static_cast<int32>(BodyStage->GetNumberField(TEXT("sequence"))), 1);
-		for (const TCHAR* Field : {
-			TEXT("fingerprint_algorithm"),
-			TEXT("prior_fingerprint"),
-			TEXT("live_fingerprint"),
-			TEXT("effective_fingerprint")})
-		{
-			TestTrue(FString::Printf(TEXT("Body stage publishes '%s'"), Field), BodyStage->HasField(Field));
-		}
-		const TSharedPtr<FJsonObject> GroundStage = Json->GetObjectField(TEXT("ground_stage"));
-		TestTrue(TEXT("The ground stage is recorded"), GroundStage->GetBoolField(TEXT("recorded")));
-		TestEqual(TEXT("The ground stage is second"), static_cast<int32>(GroundStage->GetNumberField(TEXT("sequence"))), 2);
-		for (const TCHAR* Field : {
-			TEXT("prior_synthetic_ground_height_m"),
-			TEXT("live_synthetic_ground_height_m"),
-			TEXT("applied_synthetic_ground_height_m"),
-			TEXT("effective_body_root_proto_z_m"),
-			TEXT("effective_final_root_height_m")})
-		{
-			TestTrue(FString::Printf(TEXT("Ground stage publishes '%s'"), Field), GroundStage->HasField(Field));
-		}
-
-		PhysAnimBridge::FPhysAnimFirstPolicyObservationSourceExperimentTrace InvalidTrace;
-		InvalidTrace.RejectConfiguration(TEXT("Invalid"), TEXT("invalid selector"));
-		const TSharedRef<FJsonObject> InvalidJson =
-			BuildFirstPolicyObservationSourceExperimentJson(InvalidTrace);
-		TestTrue(TEXT("A rejected configuration is complete"), InvalidJson->GetBoolField(TEXT("complete")));
-		TestFalse(TEXT("A rejected configuration is invalid"), InvalidJson->GetBoolField(TEXT("valid")));
-		TestFalse(TEXT("A rejected configuration publishes its error"), InvalidJson->GetStringField(TEXT("error")).IsEmpty());
 		return true;
 	}
 
@@ -1980,7 +1733,6 @@ namespace
 			bool bStartupChronologyWritten = true;
 			bool bFirstPolicyBodySourceWritten = true;
 			bool bFirstPolicyGroundReferenceWritten = true;
-			bool bFirstPolicyObservationSourceExperimentWritten = true;
 			if (Config.bPlantRun)
 			{
 				const FString ActiveStandingSnapshotPath = FPaths::Combine(
@@ -2066,14 +1818,6 @@ namespace
 						SerializeJson(BuildFirstPolicyGroundReferenceJson(
 							Component->GetFirstPolicyGroundReferenceTraceForTesting())) + TEXT("\n"),
 						*FirstPolicyGroundReferencePath);
-
-					const FString FirstPolicyObservationSourceExperimentPath = FPaths::Combine(
-						Config.RunRoot,
-						TEXT("first-policy-observation-source-experiment.json"));
-					bFirstPolicyObservationSourceExperimentWritten = FFileHelper::SaveStringToFile(
-						SerializeJson(BuildFirstPolicyObservationSourceExperimentJson(
-							Component->GetFirstPolicyObservationSourceExperimentTraceForTesting())) + TEXT("\n"),
-						*FirstPolicyObservationSourceExperimentPath);
 				}
 			}
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
@@ -2108,7 +1852,6 @@ namespace
 				bStartupChronologyWritten &&
 				bFirstPolicyBodySourceWritten &&
 				bFirstPolicyGroundReferenceWritten &&
-				bFirstPolicyObservationSourceExperimentWritten &&
 				bManifestWritten;
 		}
 
