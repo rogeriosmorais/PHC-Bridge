@@ -2,6 +2,7 @@
   "schema_version": "physanim-investigation-experiment/v1",
   "experiment_id": "real-onnx-coherent-prior-epoch-e12",
   "recorded_utc": "2026-07-14T23:19:13.8650712Z",
+  "updated_utc": "2026-07-14T23:27:06.6902660Z",
   "experiment_type": "DEVELOPMENT_SEMANTIC_THREE_ARM_AB",
   "authority": "DEVELOPMENT_EVIDENCE_ONLY",
   "product_success": false,
@@ -79,6 +80,15 @@
       },
       "python_fast_tier": "PASS_89_OF_89",
       "graphify_update": "PASS_6413_NODES_8732_EDGES"
+    },
+    "cleanup_validation": {
+      "commit": "ec5234c4bef2747d35038d56b76767bdf52a3e2c",
+      "exact_pre_experiment_blob_match": "PASS_ALL_10_PATHS_EQUAL_EXPERIMENT_COMMIT_PARENT",
+      "serena_diagnostics": "PASS_NO_DIAGNOSTICS",
+      "editor_build": "PASS",
+      "retained_ue_contracts": "PASS_7_OF_7",
+      "python_fast_tier": "PASS_88_OF_88",
+      "graphify_update": "PASS_FORCE_ACKNOWLEDGED_INTENTIONAL_DELETION_6389_NODES_8662_EDGES"
     }
   },
   "arms": {
@@ -320,8 +330,11 @@
     "promotion_reason": "Exact historical-mode reconstruction proves a semantic boundary but provides no standing improvement and no evidence that the prior epoch is the correct production contract.",
     "causal_standing_status": "NOT_PROVEN",
     "cleanup": {
-      "status": "PENDING_SEPARATE_COMMIT",
-      "retain": "General E10 body-source, E11 ground-reference, chronology, provenance, and action-semantic diagnostics."
+      "status": "COMPLETED_SEPARATE_COMMIT",
+      "commit": "ec5234c4bef2747d35038d56b76767bdf52a3e2c",
+      "removed": "E12 observation-source selector, behavior mutation, experiment-only artifact, runner plumbing, and experiment-specific contracts.",
+      "retained": "General E10 body-source, E11 ground-reference, chronology, provenance, and action-semantic diagnostics.",
+      "verification": "All ten affected paths are byte-for-byte identical to the parent of experimental behavior commit 6c7df5062b751bfb6e53dbd6f769a3e79d2c7ef7; the clean editor build, seven retained UE contracts, 88 deterministic tests, Serena diagnostics, and forced graph deletion refresh passed."
     }
   },
   "next_highest_information_experiment": {
