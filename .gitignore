@@ -64,6 +64,7 @@ memory-bank/projectbrief.md
 memory-bank/systemPatterns.md
 memory-bank/techContext.md
 _tmp/
+.codex-tmp/
 .aider*
 .playwright-mcp/*
 workflow-graph/
@@ -79,6 +80,8 @@ test-results/proof-artifacts/
 test-results/evidence-summaries/
 test-results/product-runs/
 test-results/standing-plant-runs/
+test-results/standing-input-snapshots/
+test-results/adapter-*/
 test-results/phase1-autocalib/
 test-results/**/*.receipt.json
 *.private.pem
