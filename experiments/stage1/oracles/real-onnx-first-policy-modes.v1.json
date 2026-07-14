@@ -1,0 +1,95 @@
+{
+  "schema_version": "physanim-policy-input-mode-oracle/v1",
+  "oracle_id": "real-onnx-first-policy-modes-v1",
+  "recorded_utc": "2026-07-14T20:37:18.4111380Z",
+  "status": "LOCKED",
+  "authority": "DEVELOPMENT_EXPERIMENT_ORACLE_ONLY",
+  "product_success_authority": false,
+  "protocol": {
+    "path": "product-gates/standing-plant-ladder.v2.json",
+    "version": 2,
+    "sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB"
+  },
+  "model": {
+    "path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+    "sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19"
+  },
+  "section_hash_encoding": {
+    "algorithm": "SHA-256",
+    "value_encoding": "IEEE-754 binary32 little-endian",
+    "framing": "Values concatenated in array order without prefix or delimiter; counts are validated separately."
+  },
+  "sections": {
+    "self_observation": {
+      "count": 358,
+      "mode_a_sha256": "2045AB1CC5211D435337E586B306876AD53CFBB5A87817BCB6DB4C46605C5C1E",
+      "mode_b_sha256": "1ED0917AC3C84C56C15607768C918A25B52D8B9F73A4E0FB111E84EFFD27BF77"
+    },
+    "mimic_target_poses": {
+      "count": 6495,
+      "mode_a_sha256": "47EEAABE940E38166BE996905563F040657ED07EA2CEB4C954EF639FC3C64872",
+      "mode_b_sha256": "179161EF97302AE41235A29083CD5B23DF4A50103FC0EED3557315A55E26253E"
+    },
+    "terrain": {
+      "count": 256,
+      "mode_a_sha256": "D1941B7FE1F2B5BBBBF85B0ECF923FD3E9BBE1832E45D797314EF6E6CE46E025",
+      "mode_b_sha256": "C852FC38C3576F71A091F2E9188AC0200018A7594EC7DF9456BA86EA8CDE45B7"
+    },
+    "actions": {
+      "semantic": "model_output",
+      "count": 69,
+      "mode_a_sha256": "9D531D04843511E1FDAAE5EF1672ABCFFFCAE6735B180AB5BAD787AB35CE1083",
+      "mode_b_sha256": "DAABF06884601F9B3F8F720DD232EC7B2BDF9D7EED40943C715982B841269267"
+    }
+  },
+  "mode_a": {
+    "meaning": "Current-tick first-inference source",
+    "reference_path": "test-results/adapter-waiting-chronology-e9/RealOnnxPolicy-waiting-chronology-e9-baseline/policy-input-snapshot.json",
+    "reference_file_size_bytes": 150263,
+    "raw_file_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+    "source_commit": "656e78fd623c396f57776b4ff64e24e9bad46556",
+    "fixture_status": "VALID_DEVELOPMENT_RUN_EVALUATOR_FAIL"
+  },
+  "mode_b": {
+    "meaning": "Historical earlier-pose first-inference mode",
+    "reference_path": "test-results/adapter-constraint-range-remap-e4/RealOnnxPolicy-constraint-remap-e4-baseline/policy-input-snapshot.json",
+    "reference_file_size_bytes": 150262,
+    "raw_file_sha256": "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3",
+    "source_commit": "98433c4d8fb963403223e6631b6fc364ad40d382",
+    "fixture_status": "VALID_DEVELOPMENT_RUN_EVALUATOR_FAIL"
+  },
+  "mode_b_minus_mode_a_differences": {
+    "self_observation": {
+      "different_count": 214,
+      "maximum_absolute_difference": 0.0023205578327178955,
+      "rms_difference": 0.0004396168480912154
+    },
+    "mimic_target_poses": {
+      "different_count": 384,
+      "maximum_absolute_difference": 0.002570420503616333,
+      "rms_difference": 0.0001085753662782977
+    },
+    "terrain": {
+      "different_count": 256,
+      "maximum_absolute_difference": 0.00004410743713378906,
+      "rms_difference": 0.00004410743713378906
+    },
+    "actions": {
+      "different_count": 69,
+      "maximum_absolute_difference": 0.008536815643310547,
+      "rms_difference": 0.0025178867488572596
+    }
+  },
+  "experiment_success_contract": {
+    "baseline": "Fresh baseline raw file and all four section hashes must equal Mode A.",
+    "experimental": "Replay diagnostic must prove configured=true and consumed=true, and the raw file plus all four section hashes must equal Mode B.",
+    "pass": "Baseline equals Mode A and the confirmed-consumed replay equals Mode B exactly.",
+    "fail": "Baseline equals Mode A and replay consumption is valid, but the candidate raw hash or any section differs from Mode B.",
+    "invalid": "Reference drift, malformed or non-finite input, width/count mismatch, baseline not Mode A, or replay not confirmed consumed."
+  },
+  "notes": [
+    "The snapshot schema has four arrays only: self_observation, mimic_target_poses, terrain, and actions.",
+    "The actions array is the model output captured after RunSync; provenance previous_actions is the independent pre-inference source.",
+    "Exact Mode-B reconstruction is a semantic development result, not standing or product success."
+  ]
+}

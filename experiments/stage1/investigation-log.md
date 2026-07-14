@@ -124,6 +124,6 @@ Machine-readable record: `experiments/stage1/real-onnx-startup-chronology.e8.jso
 
 **What was learned.** The live pose follows an almost symmetric one-tick-before/Mode-A/one-tick-after sequence, and runtime-state changes within the observed ticks do not alter that source. Historical Mode B differs from Mode A in all 214 self-observation pose slots and none of the 144 all-zero velocity slots. The remaining high-information boundary is observation reconstruction from the prior-tick Manny body source, not more physics tuning.
 
-**Next experiment selected.** Cache and replay only prior-tick `MannyCurrentBodySamples` at first inference before the unchanged Manny-to-canonical adapter; do not override root frames, terrain, PoseSearch, future references, timing, physics, or dispatch. Seek exact historical Mode-B equality for the full hash and self, mimic, terrain, model-output, and action sections, with configured/consumed/source-time/source-hash evidence in a separate development-only artifact.
+**Next experiment selected.** Cache and replay only prior-tick `MannyCurrentBodySamples` at first inference before the unchanged Manny-to-canonical adapter; do not override root frames, terrain, PoseSearch, future references, timing, physics, or dispatch. Seek exact historical Mode-B equality for the full hash and the self, mimic, terrain, and actions (model output) sections, with configured/consumed/source-time/source-hash evidence in a separate development-only artifact.
 
 Machine-readable record: `experiments/stage1/real-onnx-waiting-chronology.e9.json`.
