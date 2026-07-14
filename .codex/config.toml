@@ -20,3 +20,12 @@ approval_mode = "approve"
 
 [mcp_servers.graph.tools.update_status]
 approval_mode = "approve"
+
+[agents.implementation_medium]
+description = """
+Medium-effort implementation and testing worker.
+Use for coding, test construction, builds, experiment execution,
+artifact collection, and mechanical analysis.
+It must not make causal, architectural, or product-direction decisions.
+"""
+config_file = "agents/implementation-medium.toml"
