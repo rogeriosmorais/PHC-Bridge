@@ -127,3 +127,19 @@ Machine-readable record: `experiments/stage1/real-onnx-startup-chronology.e8.jso
 **Next experiment selected.** Cache and replay only prior-tick `MannyCurrentBodySamples` at first inference before the unchanged Manny-to-canonical adapter; do not override root frames, terrain, PoseSearch, future references, timing, physics, or dispatch. Seek exact historical Mode-B equality for the full hash and the self, mimic, terrain, and actions (model output) sections, with configured/consumed/source-time/source-hash evidence in a separate development-only artifact.
 
 Machine-readable record: `experiments/stage1/real-onnx-waiting-chronology.e9.json`.
+
+## E10 — First-inference prior-body replay (2026-07-14)
+
+**Hypothesis.** Replaying only the cached 0.0166667 s `MannyCurrentBodySamples` at first inference before the unchanged Manny-to-canonical adapter reconstructs historical Mode B exactly.
+
+**Baseline configuration and result.** Commit `37724a3b86094776eecba8413636bd65f54ceb1c`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s; 10 s; unchanged seed and pose; no perturbation; action, provenance, chronology, and body-source diagnostics on; replay off. Automation passed. The valid source record was configured/consumed `false/false`, effective equaled live, and the snapshot exactly reproduced Mode A `AAAF45E7…`. Evaluator `FAIL`: body linear speed, pelvis height, root tilt; readback 1.0.
+
+**Experimental configuration and result.** Identical clean commit, binary, model, protocol, harness, and evaluator with only `-PhysAnimExperimentalReplayPriorBodySamplesAtFirstInference` added. Automation passed; source evidence was valid, configured/consumed `true/true`, prior/live records were exactly the same as baseline, and effective equaled prior. The candidate hash was `586CC117…`, not Mode B `723FD942…`. Mimic and terrain matched Mode B exactly. Self observation matched 357/358 values; only root-height index 0 differed by `4.3869019e-5` m. All 69 actions differed from Mode B with maximum `8.2850456e-5` and RMS `2.5648583e-5`. The evaluator failure set and readback were unchanged; active-standing, semantic, physics, policy, render, and chronology artifacts were byte-identical.
+
+**Supported or falsified.** Falsified for exact reconstruction. Prior-body replay is necessary for the Mode-B pose direction but is insufficient without its contemporaneous root-height ground reference. This is not causal-standing proof.
+
+**What was learned.** The prior replay exactly reconstructed all local positions, rotations, velocities, mimic targets, and terrain. `ResolveSelfObservationGroundHeight` paired the prior body-root Z with the live mesh root-world Z, shifting synthetic ground height and preserving Mode-A root height. The prior/live root-world Z delta was `0.00440216` cm, accounting for the remaining Mode-B residual to `1.53e-7` m. The next uncertainty is semantic root/ground-frame ownership, not physics tuning.
+
+**Next experiment selected.** Add development-only observation of the root-height ground-reference decomposition at the prior and first-inference boundaries: body-root Z, root-bone world Z, static ground hit, floor fallback inputs, resolved world ground Z, synthetic ground height, and final root height. First prove behavior neutrality; do not override any value, change production defaults, or tune physics.
+
+Machine-readable record: `experiments/stage1/real-onnx-prior-body-replay.e10.json`.
