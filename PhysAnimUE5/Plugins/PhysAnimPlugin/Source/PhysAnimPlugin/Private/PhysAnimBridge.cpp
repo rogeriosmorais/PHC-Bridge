@@ -818,6 +818,158 @@ namespace PhysAnimBridge
 		return true;
 	}
 
+
+#if WITH_DEV_AUTOMATION_TESTS
+	bool ValidatePolicyInputProvenanceSnapshot(
+		const FPhysAnimPolicyInputProvenanceSnapshot& Snapshot,
+		FString& OutError)
+	{
+		auto IsFiniteVector = [](const FVector& Value)
+		{
+			return FMath::IsFinite(Value.X) && FMath::IsFinite(Value.Y) && FMath::IsFinite(Value.Z);
+		};
+		auto IsFiniteNormalizedQuat = [](const FQuat& Value)
+		{
+			return FMath::IsFinite(Value.X) &&
+				FMath::IsFinite(Value.Y) &&
+				FMath::IsFinite(Value.Z) &&
+				FMath::IsFinite(Value.W) &&
+				Value.IsNormalized();
+		};
+		auto IsFiniteTransform = [&](const FTransform& Value)
+		{
+			return IsFiniteVector(Value.GetLocation()) &&
+				IsFiniteNormalizedQuat(Value.GetRotation()) &&
+				IsFiniteVector(Value.GetScale3D());
+		};
+		auto IsFiniteBodySample = [&](const FPhysAnimBodySample& Sample)
+		{
+			return IsFiniteVector(Sample.Position) &&
+				IsFiniteNormalizedQuat(Sample.Rotation) &&
+				IsFiniteVector(Sample.LinearVelocity) &&
+				IsFiniteVector(Sample.AngularVelocity);
+		};
+		auto ValidateBodySamples = [&](TConstArrayView<FPhysAnimBodySample> Samples, const TCHAR* Label)
+		{
+			if (Samples.Num() != NumSmplBodies)
+			{
+				OutError = FString::Printf(
+					TEXT("%s has %d bodies instead of %d."),
+					Label,
+					Samples.Num(),
+					NumSmplBodies);
+				return false;
+			}
+			for (int32 BodyIndex = 0; BodyIndex < Samples.Num(); ++BodyIndex)
+			{
+				if (!IsFiniteBodySample(Samples[BodyIndex]))
+				{
+					OutError = FString::Printf(TEXT("%s body %d is non-finite or has a non-normalized rotation."), Label, BodyIndex);
+					return false;
+				}
+			}
+			return true;
+		};
+		auto ValidateFutureSamples = [&](TConstArrayView<FPhysAnimFuturePoseSample> Samples, const TCHAR* Label)
+		{
+			if (Samples.Num() != NumFutureSteps)
+			{
+				OutError = FString::Printf(
+					TEXT("%s has %d future samples instead of %d."),
+					Label,
+					Samples.Num(),
+					NumFutureSteps);
+				return false;
+			}
+			for (int32 FutureIndex = 0; FutureIndex < Samples.Num(); ++FutureIndex)
+			{
+				const FPhysAnimFuturePoseSample& Sample = Samples[FutureIndex];
+				if (!FMath::IsFinite(Sample.FutureTimeSeconds) || Sample.BodyTransforms.Num() != NumSmplBodies)
+				{
+					OutError = FString::Printf(TEXT("%s future sample %d has an invalid time or body count."), Label, FutureIndex);
+					return false;
+				}
+				for (int32 BodyIndex = 0; BodyIndex < Sample.BodyTransforms.Num(); ++BodyIndex)
+				{
+					if (!IsFiniteTransform(Sample.BodyTransforms[BodyIndex]))
+					{
+						OutError = FString::Printf(TEXT("%s future sample %d body %d is invalid."), Label, FutureIndex, BodyIndex);
+						return false;
+					}
+				}
+			}
+			return true;
+		};
+
+		OutError.Reset();
+		if (!Snapshot.bCaptured || Snapshot.CaptureScope.IsEmpty())
+		{
+			OutError = TEXT("Policy-input provenance was not captured.");
+			return false;
+		}
+		if (Snapshot.RuntimeState.IsEmpty() ||
+			Snapshot.PoseSearchAnimation.IsEmpty() ||
+			!FMath::IsFinite(Snapshot.WorldTimeSeconds) ||
+			!FMath::IsFinite(Snapshot.PoseSearchSelectedTime) ||
+			!FMath::IsFinite(Snapshot.SelfObservationGroundHeight) ||
+			Snapshot.PolicyControlTick < 1)
+		{
+			OutError = TEXT("Policy-input provenance identity or scalar fields are invalid.");
+			return false;
+		}
+		if (!IsFiniteTransform(Snapshot.OwnerActorWorldTransform) ||
+			!IsFiniteTransform(Snapshot.MeshWorldTransform) ||
+			!IsFiniteTransform(Snapshot.RootBoneWorldTransform) ||
+			!IsFiniteTransform(Snapshot.MimicTargetReferenceWorldRoot) ||
+			!IsFiniteTransform(Snapshot.MimicTargetReferenceDataRoot))
+		{
+			OutError = TEXT("Policy-input provenance contains an invalid transform.");
+			return false;
+		}
+		if (!ValidateBodySamples(Snapshot.MannyBodySamples, TEXT("Manny body source")) ||
+			!ValidateBodySamples(Snapshot.CanonicalBodySamples, TEXT("Canonical body source")) ||
+			!ValidateBodySamples(Snapshot.MimicReferenceBodySamples, TEXT("Mimic reference body source")) ||
+			!ValidateFutureSamples(Snapshot.MannyFuturePoseSamples, TEXT("Manny future source")) ||
+			!ValidateFutureSamples(Snapshot.CanonicalFuturePoseSamples, TEXT("Canonical future source")))
+		{
+			return false;
+		}
+		if (Snapshot.TerrainGroundHeights.Num() != TerrainSize)
+		{
+			OutError = FString::Printf(
+				TEXT("Terrain provenance has %d samples instead of %d."),
+				Snapshot.TerrainGroundHeights.Num(),
+				TerrainSize);
+			return false;
+		}
+		for (const float GroundHeight : Snapshot.TerrainGroundHeights)
+		{
+			if (!FMath::IsFinite(GroundHeight))
+			{
+				OutError = TEXT("Terrain provenance contains a non-finite ground height.");
+				return false;
+			}
+		}
+		if (Snapshot.PreviousActions.Num() != NumActionFloats)
+		{
+			OutError = FString::Printf(
+				TEXT("Previous-action provenance has %d floats instead of %d."),
+				Snapshot.PreviousActions.Num(),
+				NumActionFloats);
+			return false;
+		}
+		for (const float Action : Snapshot.PreviousActions)
+		{
+			if (!FMath::IsFinite(Action))
+			{
+				OutError = TEXT("Previous-action provenance contains a non-finite value.");
+				return false;
+			}
+		}
+		return true;
+	}
+#endif
+
 	void BuildZeroTerrain(TArray<float>& OutTerrain)
 	{
 		OutTerrain.Init(0.0f, TerrainSize);

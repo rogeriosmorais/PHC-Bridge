@@ -157,7 +157,9 @@ float UPhysAnimComponent::ResolveSelfObservationGroundHeight(const TArray<FPhysA
 bool UPhysAnimComponent::BuildTerrainObservation(
 	const TArray<FPhysAnimBodySample>& CurrentBodySamples,
 	TArray<float>& OutTerrain,
-	FString& OutError) const
+	FString& OutError,
+	TArray<float>* OutGroundHeightsForDiagnostics,
+	FTransform* OutRootWorldTransformForDiagnostics) const
 {
 	if (!CurrentBodySamples.IsValidIndex(0))
 	{
@@ -174,6 +176,10 @@ bool UPhysAnimComponent::BuildTerrainObservation(
 		return false;
 	}
 	const FTransform RootWorldTransform = Mesh->GetSocketTransform(PhysAnimBridge::GetRootBoneName(), RTS_World);
+	if (OutRootWorldTransformForDiagnostics)
+	{
+		*OutRootWorldTransformForDiagnostics = RootWorldTransform;
+	}
 
 	TArray<float> SampleGroundHeights;
 	if (!SampleTerrainGroundHeights(
@@ -184,6 +190,10 @@ bool UPhysAnimComponent::BuildTerrainObservation(
 		OutError))
 	{
 		return false;
+	}
+	if (OutGroundHeightsForDiagnostics)
+	{
+		*OutGroundHeightsForDiagnostics = SampleGroundHeights;
 	}
 
 	return PhysAnimBridge::BuildTerrainObservation(

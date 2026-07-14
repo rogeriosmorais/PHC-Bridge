@@ -263,6 +263,114 @@ namespace PhysAnimBridge
 		TArray<float> Actions;
 	};
 
+
+#if WITH_DEV_AUTOMATION_TESTS
+	struct PHYSANIMPLUGIN_API FPhysAnimPolicyInputProvenanceSnapshot
+	{
+		bool CaptureFirstIf(
+			bool bCondition,
+			const FString& InRuntimeState,
+			double InWorldTimeSeconds,
+			int32 InPolicyControlTick,
+			const FString& InPoseSearchAnimation,
+			float InPoseSearchSelectedTime,
+			bool bInPoseSearchMirrored,
+			const FTransform& InOwnerActorWorldTransform,
+			const FTransform& InMeshWorldTransform,
+			const FTransform& InRootBoneWorldTransform,
+			const FTransform& InMimicTargetReferenceWorldRoot,
+			const FTransform& InMimicTargetReferenceDataRoot,
+			float InSelfObservationGroundHeight,
+			TConstArrayView<FPhysAnimBodySample> InMannyBodySamples,
+			TConstArrayView<FPhysAnimBodySample> InCanonicalBodySamples,
+			TConstArrayView<FPhysAnimBodySample> InMimicReferenceBodySamples,
+			TConstArrayView<FPhysAnimFuturePoseSample> InMannyFuturePoseSamples,
+			TConstArrayView<FPhysAnimFuturePoseSample> InCanonicalFuturePoseSamples,
+			TConstArrayView<float> InTerrainGroundHeights,
+			TConstArrayView<float> InPreviousActions)
+		{
+			if (!bCondition || bCaptured)
+			{
+				return false;
+			}
+
+			CaptureScope = TEXT("first_policy_input_pre_flattening");
+			RuntimeState = InRuntimeState;
+			WorldTimeSeconds = InWorldTimeSeconds;
+			PolicyControlTick = InPolicyControlTick;
+			PoseSearchAnimation = InPoseSearchAnimation;
+			PoseSearchSelectedTime = InPoseSearchSelectedTime;
+			bPoseSearchMirrored = bInPoseSearchMirrored;
+			OwnerActorWorldTransform = InOwnerActorWorldTransform;
+			MeshWorldTransform = InMeshWorldTransform;
+			RootBoneWorldTransform = InRootBoneWorldTransform;
+			MimicTargetReferenceWorldRoot = InMimicTargetReferenceWorldRoot;
+			MimicTargetReferenceDataRoot = InMimicTargetReferenceDataRoot;
+			SelfObservationGroundHeight = InSelfObservationGroundHeight;
+			MannyBodySamples.Append(InMannyBodySamples.GetData(), InMannyBodySamples.Num());
+			CanonicalBodySamples.Append(InCanonicalBodySamples.GetData(), InCanonicalBodySamples.Num());
+			MimicReferenceBodySamples.Append(InMimicReferenceBodySamples.GetData(), InMimicReferenceBodySamples.Num());
+			MannyFuturePoseSamples.Append(InMannyFuturePoseSamples.GetData(), InMannyFuturePoseSamples.Num());
+			CanonicalFuturePoseSamples.Append(InCanonicalFuturePoseSamples.GetData(), InCanonicalFuturePoseSamples.Num());
+			TerrainGroundHeights.Append(InTerrainGroundHeights.GetData(), InTerrainGroundHeights.Num());
+			PreviousActions.Append(InPreviousActions.GetData(), InPreviousActions.Num());
+			bCaptured = true;
+			return true;
+		}
+
+		void Reset()
+		{
+			bCaptured = false;
+			CaptureScope.Reset();
+			RuntimeState.Reset();
+			WorldTimeSeconds = 0.0;
+			PolicyControlTick = 0;
+			PoseSearchAnimation.Reset();
+			PoseSearchSelectedTime = 0.0f;
+			bPoseSearchMirrored = false;
+			OwnerActorWorldTransform = FTransform::Identity;
+			MeshWorldTransform = FTransform::Identity;
+			RootBoneWorldTransform = FTransform::Identity;
+			MimicTargetReferenceWorldRoot = FTransform::Identity;
+			MimicTargetReferenceDataRoot = FTransform::Identity;
+			SelfObservationGroundHeight = 0.0f;
+			MannyBodySamples.Reset();
+			CanonicalBodySamples.Reset();
+			MimicReferenceBodySamples.Reset();
+			MannyFuturePoseSamples.Reset();
+			CanonicalFuturePoseSamples.Reset();
+			TerrainGroundHeights.Reset();
+			PreviousActions.Reset();
+		}
+
+		bool bCaptured = false;
+		FString CaptureScope;
+		FString RuntimeState;
+		double WorldTimeSeconds = 0.0;
+		int32 PolicyControlTick = 0;
+		FString PoseSearchAnimation;
+		float PoseSearchSelectedTime = 0.0f;
+		bool bPoseSearchMirrored = false;
+		FTransform OwnerActorWorldTransform = FTransform::Identity;
+		FTransform MeshWorldTransform = FTransform::Identity;
+		FTransform RootBoneWorldTransform = FTransform::Identity;
+		FTransform MimicTargetReferenceWorldRoot = FTransform::Identity;
+		FTransform MimicTargetReferenceDataRoot = FTransform::Identity;
+		float SelfObservationGroundHeight = 0.0f;
+		TArray<FPhysAnimBodySample> MannyBodySamples;
+		TArray<FPhysAnimBodySample> CanonicalBodySamples;
+		TArray<FPhysAnimBodySample> MimicReferenceBodySamples;
+		TArray<FPhysAnimFuturePoseSample> MannyFuturePoseSamples;
+		TArray<FPhysAnimFuturePoseSample> CanonicalFuturePoseSamples;
+		TArray<float> TerrainGroundHeights;
+		TArray<float> PreviousActions;
+	};
+
+	PHYSANIMPLUGIN_API bool ValidatePolicyInputProvenanceSnapshot(
+		const FPhysAnimPolicyInputProvenanceSnapshot& Snapshot,
+		FString& OutError);
+#endif
+
 	PHYSANIMPLUGIN_API const TArray<FName>& GetControlledBoneNames();
 	PHYSANIMPLUGIN_API const TArray<FPhysAnimProtoActionJointDescriptor>& GetProtoActionJointDescriptors();
 	PHYSANIMPLUGIN_API const TArray<FName>& GetRequiredBodyModifierBoneNames();

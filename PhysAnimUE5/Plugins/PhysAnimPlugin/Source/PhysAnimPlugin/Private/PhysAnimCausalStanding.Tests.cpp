@@ -274,6 +274,18 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("Removing the development flag restores the trace-off default"),
 		Component->IsActionSemanticTraceEnabledForTesting());
 	TestFalse(
+		TEXT("Policy-input provenance tracing is disabled without its explicit development flag"),
+		Component->IsPolicyInputProvenanceTraceEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimPolicyInputProvenanceTrace"));
+	TestTrue(
+		TEXT("The explicit development flag enables policy-input provenance tracing"),
+		Component->IsPolicyInputProvenanceTraceEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
+	TestFalse(
+		TEXT("Removing the development flag restores the provenance trace-off default"),
+		Component->IsPolicyInputProvenanceTraceEnabledForTesting());
+	TestFalse(
 		TEXT("Constraint-range remap bypass is disabled without its explicit development flag"),
 		Component->IsConstraintRangeRemapBypassEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(
@@ -731,6 +743,184 @@ namespace
 		return Root;
 	}
 
+
+	TSharedRef<FJsonObject> BuildPolicyInputProvenanceTransformJson(const FTransform& Transform)
+	{
+		const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+		Object->SetArrayField(TEXT("translation_xyz"), BuildVectorJsonArray(Transform.GetLocation()));
+		Object->SetArrayField(TEXT("rotation_xyzw"), BuildQuaternionJsonArray(Transform.GetRotation()));
+		Object->SetArrayField(TEXT("scale_xyz"), BuildVectorJsonArray(Transform.GetScale3D()));
+		return Object;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BuildPolicyInputProvenanceBodySamplesJson(
+		TConstArrayView<FPhysAnimBodySample> Samples)
+	{
+		TArray<TSharedPtr<FJsonValue>> Values;
+		Values.Reserve(Samples.Num());
+		for (const FPhysAnimBodySample& Sample : Samples)
+		{
+			const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+			Object->SetArrayField(TEXT("position_xyz"), BuildVectorJsonArray(Sample.Position));
+			Object->SetArrayField(TEXT("rotation_xyzw"), BuildQuaternionJsonArray(Sample.Rotation));
+			Object->SetArrayField(TEXT("linear_velocity_xyz"), BuildVectorJsonArray(Sample.LinearVelocity));
+			Object->SetArrayField(TEXT("angular_velocity_xyz"), BuildVectorJsonArray(Sample.AngularVelocity));
+			Values.Add(MakeShared<FJsonValueObject>(Object));
+		}
+		return Values;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BuildPolicyInputProvenanceFutureSamplesJson(
+		TConstArrayView<FPhysAnimFuturePoseSample> Samples)
+	{
+		TArray<TSharedPtr<FJsonValue>> Values;
+		Values.Reserve(Samples.Num());
+		for (const FPhysAnimFuturePoseSample& Sample : Samples)
+		{
+			const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+			Object->SetNumberField(TEXT("future_time_seconds"), Sample.FutureTimeSeconds);
+			TArray<TSharedPtr<FJsonValue>> BodyTransforms;
+			BodyTransforms.Reserve(Sample.BodyTransforms.Num());
+			for (const FTransform& BodyTransform : Sample.BodyTransforms)
+			{
+				BodyTransforms.Add(MakeShared<FJsonValueObject>(BuildPolicyInputProvenanceTransformJson(BodyTransform)));
+			}
+			Object->SetArrayField(TEXT("body_transforms"), BodyTransforms);
+			Values.Add(MakeShared<FJsonValueObject>(Object));
+		}
+		return Values;
+	}
+
+	TSharedRef<FJsonObject> BuildPolicyInputProvenanceJson(
+		const PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot& Snapshot,
+		const bool bEnabled)
+	{
+		FString ValidationError;
+		const bool bValid = bEnabled &&
+			PhysAnimBridge::ValidatePolicyInputProvenanceSnapshot(Snapshot, ValidationError);
+		if (!bEnabled)
+		{
+			ValidationError.Reset();
+		}
+
+		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("schema_version"), TEXT("physanim-policy-input-provenance/v1"));
+		Root->SetStringField(TEXT("authority"), TEXT("DEVELOPMENT_DIAGNOSTIC_ONLY"));
+		Root->SetBoolField(TEXT("enabled"), bEnabled);
+		Root->SetBoolField(TEXT("captured"), Snapshot.bCaptured);
+		Root->SetBoolField(TEXT("valid"), bValid);
+		Root->SetStringField(TEXT("validation_error"), ValidationError);
+		Root->SetStringField(TEXT("capture_scope"), Snapshot.CaptureScope);
+		Root->SetStringField(TEXT("runtime_state"), Snapshot.RuntimeState);
+		Root->SetNumberField(TEXT("world_time_seconds"), Snapshot.WorldTimeSeconds);
+		Root->SetNumberField(TEXT("policy_control_tick"), Snapshot.PolicyControlTick);
+		Root->SetStringField(TEXT("pose_search_animation"), Snapshot.PoseSearchAnimation);
+		Root->SetNumberField(TEXT("pose_search_selected_time"), Snapshot.PoseSearchSelectedTime);
+		Root->SetBoolField(TEXT("pose_search_mirrored"), Snapshot.bPoseSearchMirrored);
+		Root->SetObjectField(TEXT("owner_actor_world_transform"), BuildPolicyInputProvenanceTransformJson(Snapshot.OwnerActorWorldTransform));
+		Root->SetObjectField(TEXT("mesh_world_transform"), BuildPolicyInputProvenanceTransformJson(Snapshot.MeshWorldTransform));
+		Root->SetObjectField(TEXT("root_bone_world_transform"), BuildPolicyInputProvenanceTransformJson(Snapshot.RootBoneWorldTransform));
+		Root->SetObjectField(TEXT("mimic_target_reference_world_root"), BuildPolicyInputProvenanceTransformJson(Snapshot.MimicTargetReferenceWorldRoot));
+		Root->SetObjectField(TEXT("mimic_target_reference_data_root"), BuildPolicyInputProvenanceTransformJson(Snapshot.MimicTargetReferenceDataRoot));
+		Root->SetNumberField(TEXT("self_observation_ground_height"), Snapshot.SelfObservationGroundHeight);
+		Root->SetArrayField(TEXT("manny_body_samples"), BuildPolicyInputProvenanceBodySamplesJson(Snapshot.MannyBodySamples));
+		Root->SetArrayField(TEXT("canonical_body_samples"), BuildPolicyInputProvenanceBodySamplesJson(Snapshot.CanonicalBodySamples));
+		Root->SetArrayField(TEXT("mimic_reference_body_samples"), BuildPolicyInputProvenanceBodySamplesJson(Snapshot.MimicReferenceBodySamples));
+		Root->SetArrayField(TEXT("manny_future_pose_samples"), BuildPolicyInputProvenanceFutureSamplesJson(Snapshot.MannyFuturePoseSamples));
+		Root->SetArrayField(TEXT("canonical_future_pose_samples"), BuildPolicyInputProvenanceFutureSamplesJson(Snapshot.CanonicalFuturePoseSamples));
+		Root->SetArrayField(TEXT("terrain_ground_heights"), BuildPolicyActionJsonArray(Snapshot.TerrainGroundHeights));
+		Root->SetArrayField(TEXT("previous_actions"), BuildPolicyActionJsonArray(Snapshot.PreviousActions));
+		return Root;
+	}
+
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyInputProvenancePublicationContractTest,
+		"PhysAnim.ProductHarness.PolicyInputProvenancePublicationContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPolicyInputProvenancePublicationContractTest::RunTest(const FString& Parameters)
+	{
+		const PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot EmptySnapshot;
+		const TSharedRef<FJsonObject> DisabledJson = BuildPolicyInputProvenanceJson(EmptySnapshot, false);
+		TestFalse(TEXT("Provenance publication reports the default-off state"), DisabledJson->GetBoolField(TEXT("enabled")));
+		TestFalse(TEXT("Disabled provenance publication is uncaptured"), DisabledJson->GetBoolField(TEXT("captured")));
+		TestFalse(TEXT("Disabled provenance publication is not validated"), DisabledJson->GetBoolField(TEXT("valid")));
+
+		TArray<FPhysAnimBodySample> BodySamples;
+		BodySamples.SetNum(PhysAnimBridge::NumSmplBodies);
+		TArray<FPhysAnimFuturePoseSample> FutureSamples;
+		FutureSamples.SetNum(PhysAnimBridge::NumFutureSteps);
+		for (FPhysAnimFuturePoseSample& FutureSample : FutureSamples)
+		{
+			FutureSample.BodyTransforms.Init(FTransform::Identity, PhysAnimBridge::NumSmplBodies);
+		}
+		TArray<float> TerrainGroundHeights;
+		TerrainGroundHeights.Init(0.0f, PhysAnimBridge::TerrainSize);
+		TArray<float> PreviousActions;
+		PreviousActions.Init(0.0f, PhysAnimBridge::NumActionFloats);
+
+		PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot Snapshot;
+		TestTrue(
+			TEXT("Publication fixture captures complete provenance"),
+			Snapshot.CaptureFirstIf(
+				true,
+				TEXT("Standing_Preparation"),
+				1.0,
+				1,
+				TEXT("Idle"),
+				0.0f,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				0.0f,
+				BodySamples,
+				BodySamples,
+				BodySamples,
+				FutureSamples,
+				FutureSamples,
+				TerrainGroundHeights,
+				PreviousActions));
+
+		const TSharedRef<FJsonObject> Json = BuildPolicyInputProvenanceJson(Snapshot, true);
+		TestEqual(
+			TEXT("Provenance publication schema is versioned"),
+			Json->GetStringField(TEXT("schema_version")),
+			FString(TEXT("physanim-policy-input-provenance/v1")));
+		TestTrue(TEXT("Provenance publication reports explicit enablement"), Json->GetBoolField(TEXT("enabled")));
+		TestTrue(TEXT("Provenance publication reports capture"), Json->GetBoolField(TEXT("captured")));
+		TestTrue(TEXT("Provenance publication reports contract validity"), Json->GetBoolField(TEXT("valid")));
+		TestEqual(
+			TEXT("Canonical body sources publish in SMPL order"),
+			Json->GetArrayField(TEXT("canonical_body_samples")).Num(),
+			PhysAnimBridge::NumSmplBodies);
+		TestEqual(
+			TEXT("Mimic reference body sources publish in SMPL order"),
+			Json->GetArrayField(TEXT("mimic_reference_body_samples")).Num(),
+			PhysAnimBridge::NumSmplBodies);
+		const TArray<TSharedPtr<FJsonValue>>& CanonicalFuture = Json->GetArrayField(TEXT("canonical_future_pose_samples"));
+		TestEqual(
+			TEXT("Canonical future sources publish the configured horizon"),
+			CanonicalFuture.Num(),
+			PhysAnimBridge::NumFutureSteps);
+		TestEqual(
+			TEXT("Each future source publishes every SMPL body"),
+			CanonicalFuture[0]->AsObject()->GetArrayField(TEXT("body_transforms")).Num(),
+			PhysAnimBridge::NumSmplBodies);
+		TestEqual(
+			TEXT("Terrain source publication preserves the sample grid"),
+			Json->GetArrayField(TEXT("terrain_ground_heights")).Num(),
+			PhysAnimBridge::TerrainSize);
+		TestEqual(
+			TEXT("Previous-action publication preserves checkpoint width"),
+			Json->GetArrayField(TEXT("previous_actions")).Num(),
+			PhysAnimBridge::NumActionFloats);
+		return true;
+	}
+
 	class FCausalStandingCaptureCommand final : public IAutomationLatentCommand
 	{
 	public:
@@ -1127,6 +1317,7 @@ namespace
 				*PolicyInputSnapshotPath);
 			bool bActiveStandingPolicyInputSnapshotWritten = true;
 			bool bActionSemanticTraceWritten = true;
+			bool bPolicyInputProvenanceWritten = true;
 			if (Config.bPlantRun)
 			{
 				const FString ActiveStandingSnapshotPath = FPaths::Combine(
@@ -1169,6 +1360,20 @@ namespace
 						ActionSemanticTrace,
 						bActionSemanticTraceEnabled)) + TEXT("\n"),
 					*ActionSemanticTracePath);
+
+				const bool bPolicyInputProvenanceEnabled =
+					Component && Component->IsPolicyInputProvenanceTraceEnabledForTesting();
+				if (bPolicyInputProvenanceEnabled)
+				{
+					const FString PolicyInputProvenancePath = FPaths::Combine(
+						Config.RunRoot,
+						TEXT("policy-input-provenance.json"));
+					bPolicyInputProvenanceWritten = FFileHelper::SaveStringToFile(
+						SerializeJson(BuildPolicyInputProvenanceJson(
+							Component->GetPolicyInputProvenanceSnapshotForTesting(),
+							true)) + TEXT("\n"),
+						*PolicyInputProvenancePath);
+				}
 			}
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
 
@@ -1198,6 +1403,7 @@ namespace
 				bPolicyInputSnapshotWritten &&
 				bActiveStandingPolicyInputSnapshotWritten &&
 				bActionSemanticTraceWritten &&
+				bPolicyInputProvenanceWritten &&
 				bManifestWritten;
 		}
 

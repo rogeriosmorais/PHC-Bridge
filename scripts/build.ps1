@@ -15,6 +15,7 @@ param (
     [string]$ModelOnnxSha256,
     [bool]$SourceTreeDirty = $false,
     [switch]$ActionSemanticTrace,
+    [switch]$PolicyInputProvenanceTrace,
     [switch]$ExperimentalConstraintRangeRemapBypass
 )
 
@@ -140,6 +141,9 @@ if ($Test) {
     }
     if ($ActionSemanticTrace) {
         $EditorArguments += "-PhysAnimActionSemanticTrace"
+    }
+    if ($PolicyInputProvenanceTrace) {
+        $EditorArguments += "-PhysAnimPolicyInputProvenanceTrace"
     }
     if ($ExperimentalConstraintRangeRemapBypass) {
         $EditorArguments += "-PhysAnimExperimentalConstraintRangeRemapBypass"

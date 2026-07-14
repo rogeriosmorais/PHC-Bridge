@@ -699,6 +699,159 @@ namespace
 		return true;
 	}
 
+
+#if WITH_DEV_AUTOMATION_TESTS
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyInputProvenanceSnapshotContractTest,
+		"PhysAnim.Bridge.PolicyInputProvenanceSnapshotContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPolicyInputProvenanceSnapshotContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<FPhysAnimBodySample> MannyBodySamples;
+		TArray<FPhysAnimBodySample> CanonicalBodySamples;
+		TArray<FPhysAnimBodySample> MimicReferenceBodySamples;
+		MannyBodySamples.SetNum(NumSmplBodies);
+		CanonicalBodySamples.SetNum(NumSmplBodies);
+		MimicReferenceBodySamples.SetNum(NumSmplBodies);
+		for (int32 BodyIndex = 0; BodyIndex < NumSmplBodies; ++BodyIndex)
+		{
+			const FPhysAnimBodySample Sample(
+				FVector(BodyIndex, BodyIndex + 1.0, BodyIndex + 2.0),
+				FQuat::Identity,
+				FVector(0.1, 0.2, 0.3),
+				FVector(0.4, 0.5, 0.6));
+			MannyBodySamples[BodyIndex] = Sample;
+			CanonicalBodySamples[BodyIndex] = Sample;
+			MimicReferenceBodySamples[BodyIndex] = Sample;
+		}
+
+		TArray<FPhysAnimFuturePoseSample> MannyFutureSamples;
+		TArray<FPhysAnimFuturePoseSample> CanonicalFutureSamples;
+		MannyFutureSamples.SetNum(NumFutureSteps);
+		CanonicalFutureSamples.SetNum(NumFutureSteps);
+		for (int32 FutureIndex = 0; FutureIndex < NumFutureSteps; ++FutureIndex)
+		{
+			MannyFutureSamples[FutureIndex].FutureTimeSeconds = FutureIndex * 0.1f;
+			CanonicalFutureSamples[FutureIndex].FutureTimeSeconds = FutureIndex * 0.1f;
+			MannyFutureSamples[FutureIndex].BodyTransforms.Init(FTransform::Identity, NumSmplBodies);
+			CanonicalFutureSamples[FutureIndex].BodyTransforms.Init(FTransform::Identity, NumSmplBodies);
+		}
+
+		TArray<float> TerrainGroundHeights;
+		TerrainGroundHeights.Init(0.0f, TerrainSize);
+		TArray<float> PreviousActions;
+		PreviousActions.Init(0.0f, NumActionFloats);
+
+		FPhysAnimPolicyInputProvenanceSnapshot Snapshot;
+		TestFalse(TEXT("New provenance snapshot is uncaptured"), Snapshot.bCaptured);
+		TestFalse(
+			TEXT("Disabled provenance tracing does not capture"),
+			Snapshot.CaptureFirstIf(
+				false,
+				TEXT("Standing_Preparation"),
+				1.0,
+				1,
+				TEXT("Idle"),
+				0.25f,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				0.0f,
+				MannyBodySamples,
+				CanonicalBodySamples,
+				MimicReferenceBodySamples,
+				MannyFutureSamples,
+				CanonicalFutureSamples,
+				TerrainGroundHeights,
+				PreviousActions));
+		TestFalse(TEXT("Disabled capture leaves the provenance snapshot empty"), Snapshot.bCaptured);
+
+		TestTrue(
+			TEXT("Enabled provenance tracing captures the first complete source state"),
+			Snapshot.CaptureFirstIf(
+				true,
+				TEXT("Standing_Preparation"),
+				1.0,
+				1,
+				TEXT("Idle"),
+				0.25f,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				0.0f,
+				MannyBodySamples,
+				CanonicalBodySamples,
+				MimicReferenceBodySamples,
+				MannyFutureSamples,
+				CanonicalFutureSamples,
+				TerrainGroundHeights,
+				PreviousActions));
+		TestTrue(TEXT("Captured provenance is marked captured"), Snapshot.bCaptured);
+		TestEqual(TEXT("Canonical body count is exact"), Snapshot.CanonicalBodySamples.Num(), NumSmplBodies);
+		TestEqual(TEXT("Canonical future count is exact"), Snapshot.CanonicalFuturePoseSamples.Num(), NumFutureSteps);
+		TestEqual(TEXT("Terrain source count is exact"), Snapshot.TerrainGroundHeights.Num(), TerrainSize);
+		TestEqual(TEXT("Previous action count is exact"), Snapshot.PreviousActions.Num(), NumActionFloats);
+
+		FString ValidationError;
+		TestTrue(
+			TEXT("A complete finite provenance snapshot satisfies its contract"),
+			ValidatePolicyInputProvenanceSnapshot(Snapshot, ValidationError));
+		TestTrue(TEXT("Valid provenance has no validation error"), ValidationError.IsEmpty());
+
+		CanonicalBodySamples[0].Position.X = 100.0;
+		TestFalse(
+			TEXT("Later policy input construction does not overwrite the first provenance snapshot"),
+			Snapshot.CaptureFirstIf(
+				true,
+				TEXT("BalanceActive_Standing"),
+				2.0,
+				2,
+				TEXT("Other"),
+				0.5f,
+				true,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				1.0f,
+				MannyBodySamples,
+				CanonicalBodySamples,
+				MimicReferenceBodySamples,
+				MannyFutureSamples,
+				CanonicalFutureSamples,
+				TerrainGroundHeights,
+				PreviousActions));
+		TestEqual(TEXT("First canonical root remains latched"), Snapshot.CanonicalBodySamples[0].Position.X, 0.0);
+
+		FPhysAnimPolicyInputProvenanceSnapshot InvalidSnapshot = Snapshot;
+		InvalidSnapshot.CanonicalBodySamples.Pop();
+		TestFalse(
+			TEXT("An incomplete canonical body source is rejected"),
+			ValidatePolicyInputProvenanceSnapshot(InvalidSnapshot, ValidationError));
+		InvalidSnapshot = Snapshot;
+		InvalidSnapshot.PreviousActions[0] = std::numeric_limits<float>::quiet_NaN();
+		TestFalse(
+			TEXT("A non-finite previous action is rejected"),
+			ValidatePolicyInputProvenanceSnapshot(InvalidSnapshot, ValidationError));
+
+		Snapshot.Reset();
+		TestFalse(TEXT("Reset clears the provenance captured flag"), Snapshot.bCaptured);
+		TestEqual(TEXT("Reset clears canonical bodies"), Snapshot.CanonicalBodySamples.Num(), 0);
+		TestEqual(TEXT("Reset clears canonical future poses"), Snapshot.CanonicalFuturePoseSamples.Num(), 0);
+		TestEqual(TEXT("Reset clears terrain sources"), Snapshot.TerrainGroundHeights.Num(), 0);
+		TestEqual(TEXT("Reset clears previous actions"), Snapshot.PreviousActions.Num(), 0);
+		return true;
+	}
+#endif
+
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimTerrainTraceFrameContractTest,
 		"PhysAnim.Bridge.TerrainTraceFrameContract",

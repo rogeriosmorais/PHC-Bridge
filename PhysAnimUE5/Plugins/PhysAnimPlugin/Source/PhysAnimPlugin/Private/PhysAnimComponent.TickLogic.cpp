@@ -242,13 +242,61 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			return;
 		}
 
-		if (!BuildTerrainObservation(CurrentBodySamples, TerrainBuffer, OutError))
+#if WITH_DEV_AUTOMATION_TESTS
+		const bool bCapturePolicyInputProvenanceThisStep =
+			bPolicyInputProvenanceTraceEnabledForTesting &&
+			StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+			bEnablePolicyInference &&
+			bStandingVariantUsesPolicyInference &&
+			!FirstPolicyInputProvenanceSnapshot.bCaptured;
+		TArray<float> TerrainGroundHeightsForDiagnostics;
+		FTransform TerrainRootWorldTransformForDiagnostics = FTransform::Identity;
+#endif
+		if (!BuildTerrainObservation(
+			CurrentBodySamples,
+			TerrainBuffer,
+			OutError
+#if WITH_DEV_AUTOMATION_TESTS
+			,
+			bCapturePolicyInputProvenanceThisStep ? &TerrainGroundHeightsForDiagnostics : nullptr,
+			bCapturePolicyInputProvenanceThisStep ? &TerrainRootWorldTransformForDiagnostics : nullptr
+#endif
+			))
 		{
 			return;
 		}
 
 		const int32 V0PlantReviewMode = PhysAnimComponentInternal::CVarPhysAnimV0PlantReviewMode.GetValueOnGameThread();
 		const bool bV0PlantReviewStaticTargets = V0PlantReviewMode == 1 && RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+#if WITH_DEV_AUTOMATION_TESTS
+		if (bCapturePolicyInputProvenanceThisStep && !bV0PlantReviewStaticTargets)
+		{
+			const AActor* const OwnerActor = GetOwner();
+			const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+			const UWorld* const World = GetWorld();
+			FirstPolicyInputProvenanceSnapshot.CaptureFirstIf(
+				true,
+				GetRuntimeStateName(RuntimeState),
+				World ? World->GetTimeSeconds() : 0.0,
+				PolicyControlTicksExecuted,
+				GetNameSafe(SearchResult.SelectedAnim),
+				SearchResult.SelectedTime,
+				SearchResult.bIsMirrored,
+				OwnerActor ? OwnerActor->GetActorTransform() : FTransform::Identity,
+				SkeletalMesh ? SkeletalMesh->GetComponentTransform() : FTransform::Identity,
+				TerrainRootWorldTransformForDiagnostics,
+				MimicTargetReferenceWorldRoot,
+				MimicTargetReferenceDataRoot,
+				MimicTargetReferenceGroundHeight,
+				MannyCurrentBodySamples,
+				CurrentBodySamples,
+				MimicCurrentReferenceBodySamples,
+				MannyFuturePoseSamples,
+				FuturePoseSamples,
+				TerrainGroundHeightsForDiagnostics,
+				ActionOutputBuffer);
+		}
+#endif
 		if (!bEnablePolicyInference || !bStandingVariantUsesPolicyInference)
 		{
 			// SafetyGrip fallback: neural inference is disabled. Zero the raw action buffer

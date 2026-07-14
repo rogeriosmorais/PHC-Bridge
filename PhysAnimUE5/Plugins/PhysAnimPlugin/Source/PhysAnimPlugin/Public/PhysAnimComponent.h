@@ -1488,6 +1488,7 @@ public:
 	void SetStandingVariantForTesting(EPhysAnimStandingVariant Variant) { StandingVariantForTesting = Variant; }
 	EPhysAnimStandingVariant GetStandingVariantForTesting() const { return StandingVariantForTesting; }
 	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
+	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsConstraintRangeRemapBypassEnabledForTesting() const { return bConstraintRangeRemapBypassEnabledForTesting; }
 	bool ShouldBypassConstraintRangeRemapForTesting(
 		EPhysAnimRuntimeState State,
@@ -1500,6 +1501,10 @@ public:
 	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
 	{
 		return FirstActiveStandingActionSemanticTrace;
+	}
+	const PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot& GetPolicyInputProvenanceSnapshotForTesting() const
+	{
+		return FirstPolicyInputProvenanceSnapshot;
 	}
 	void ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine);
 #endif
@@ -2255,7 +2260,12 @@ private:
 	void LogBodyModifierTelemetrySnapshot(const TCHAR* Context) const;
 	void ResetPendingBodyModifiersToCachedTargets();
 	float ResolveSelfObservationGroundHeight(const TArray<FPhysAnimBodySample>& CurrentBodySamples) const;
-	bool BuildTerrainObservation(const TArray<FPhysAnimBodySample>& CurrentBodySamples, TArray<float>& OutTerrain, FString& OutError) const;
+	bool BuildTerrainObservation(
+		const TArray<FPhysAnimBodySample>& CurrentBodySamples,
+		TArray<float>& OutTerrain,
+		FString& OutError,
+		TArray<float>* OutGroundHeightsForDiagnostics = nullptr,
+		FTransform* OutRootWorldTransformForDiagnostics = nullptr) const;
 	bool SampleTerrainGroundHeights(
 		const FVector& RootLocation,
 		const FQuat& RootRotation,
@@ -2429,8 +2439,10 @@ private:
 #if WITH_DEV_AUTOMATION_TESTS
 	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstActiveStandingPolicyInferenceSnapshot;
 	PhysAnimBridge::FPhysAnimActionSemanticTrace FirstActiveStandingActionSemanticTrace;
+	PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot FirstPolicyInputProvenanceSnapshot;
 	bool bProductControlDispatchDroppedForTesting = false;
 	bool bActionSemanticTraceEnabledForTesting = false;
+	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
 	bool bConstraintRangeRemapBypassEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
 #endif
