@@ -286,6 +286,18 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("Removing the development flag restores the provenance trace-off default"),
 		Component->IsPolicyInputProvenanceTraceEnabledForTesting());
 	TestFalse(
+		TEXT("Startup chronology tracing is disabled without its explicit development flag"),
+		Component->IsStartupChronologyTraceEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimStartupChronologyTrace"));
+	TestTrue(
+		TEXT("The explicit development flag enables startup chronology tracing"),
+		Component->IsStartupChronologyTraceEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
+	TestFalse(
+		TEXT("Removing the development flag restores the startup chronology trace-off default"),
+		Component->IsStartupChronologyTraceEnabledForTesting());
+	TestFalse(
 		TEXT("Constraint-range remap bypass is disabled without its explicit development flag"),
 		Component->IsConstraintRangeRemapBypassEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(
@@ -833,6 +845,49 @@ namespace
 		return Root;
 	}
 
+	TSharedRef<FJsonObject> BuildStartupChronologyJson(
+		const PhysAnimBridge::FPhysAnimStartupChronologyTrace& Trace,
+		const bool bEnabled)
+	{
+		FString ValidationError;
+		const bool bValid = bEnabled &&
+			PhysAnimBridge::ValidateStartupChronologyTrace(Trace, ValidationError);
+		if (!bEnabled)
+		{
+			ValidationError.Reset();
+		}
+
+		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("schema_version"), TEXT("physanim-startup-chronology/v1"));
+		Root->SetStringField(TEXT("authority"), TEXT("DEVELOPMENT_DIAGNOSTIC_ONLY"));
+		Root->SetBoolField(TEXT("enabled"), bEnabled);
+		Root->SetBoolField(TEXT("complete"), Trace.bComplete);
+		Root->SetBoolField(TEXT("valid"), bValid);
+		Root->SetStringField(TEXT("capture_error"), Trace.CaptureError);
+		Root->SetStringField(TEXT("validation_error"), ValidationError);
+		TArray<TSharedPtr<FJsonValue>> Samples;
+		Samples.Reserve(Trace.Samples.Num());
+		for (const PhysAnimBridge::FPhysAnimStartupChronologySample& Sample : Trace.Samples)
+		{
+			const TSharedRef<FJsonObject> SampleJson = MakeShared<FJsonObject>();
+			SampleJson->SetNumberField(TEXT("sequence"), Sample.Sequence);
+			SampleJson->SetStringField(TEXT("stage"), Sample.Stage);
+			SampleJson->SetNumberField(TEXT("world_time_seconds"), Sample.WorldTimeSeconds);
+			SampleJson->SetStringField(TEXT("runtime_state"), Sample.RuntimeState);
+			SampleJson->SetNumberField(TEXT("policy_update_accumulator_seconds"), Sample.PolicyUpdateAccumulatorSeconds);
+			SampleJson->SetNumberField(TEXT("last_policy_elapsed_steps"), Sample.LastPolicyElapsedSteps);
+			SampleJson->SetNumberField(TEXT("policy_control_ticks_executed"), Sample.PolicyControlTicksExecuted);
+			SampleJson->SetBoolField(TEXT("first_policy_input_captured"), Sample.bFirstPolicyInputCaptured);
+			SampleJson->SetObjectField(TEXT("owner_actor_world_transform"), BuildPolicyInputProvenanceTransformJson(Sample.OwnerActorWorldTransform));
+			SampleJson->SetObjectField(TEXT("mesh_world_transform"), BuildPolicyInputProvenanceTransformJson(Sample.MeshWorldTransform));
+			SampleJson->SetObjectField(TEXT("root_bone_world_transform"), BuildPolicyInputProvenanceTransformJson(Sample.RootBoneWorldTransform));
+			SampleJson->SetArrayField(TEXT("body_samples"), BuildPolicyInputProvenanceBodySamplesJson(Sample.BodySamples));
+			Samples.Add(MakeShared<FJsonValueObject>(SampleJson));
+		}
+		Root->SetArrayField(TEXT("samples"), Samples);
+		return Root;
+	}
+
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimPolicyInputProvenancePublicationContractTest,
@@ -918,6 +973,61 @@ namespace
 			TEXT("Previous-action publication preserves checkpoint width"),
 			Json->GetArrayField(TEXT("previous_actions")).Num(),
 			PhysAnimBridge::NumActionFloats);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimStartupChronologyPublicationContractTest,
+		"PhysAnim.ProductHarness.StartupChronologyPublicationContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimStartupChronologyPublicationContractTest::RunTest(const FString& Parameters)
+	{
+		const PhysAnimBridge::FPhysAnimStartupChronologyTrace EmptyTrace;
+		const TSharedRef<FJsonObject> DisabledJson = BuildStartupChronologyJson(EmptyTrace, false);
+		TestFalse(TEXT("Startup chronology publication reports default-off"), DisabledJson->GetBoolField(TEXT("enabled")));
+		TestFalse(TEXT("Disabled startup chronology is incomplete"), DisabledJson->GetBoolField(TEXT("complete")));
+		TestFalse(TEXT("Disabled startup chronology is not validated"), DisabledJson->GetBoolField(TEXT("valid")));
+
+		TArray<FPhysAnimBodySample> BodySamples;
+		BodySamples.SetNum(PhysAnimBridge::NumSmplBodies);
+		PhysAnimBridge::FPhysAnimStartupChronologyTrace Trace;
+		for (int32 StageIndex = 0; StageIndex < 3; ++StageIndex)
+		{
+			const TCHAR* Stage = StageIndex == 0
+				? TEXT("pre_state_machine")
+				: (StageIndex == 1 ? TEXT("post_state_machine") : TEXT("post_policy"));
+			TestTrue(
+				FString::Printf(TEXT("Publication fixture captures chronology stage %d"), StageIndex),
+				Trace.CaptureIf(
+					true,
+					Stage,
+					1.0,
+					TEXT("Standing_Preparation"),
+					0.0f,
+					StageIndex == 2 ? 1 : 0,
+					StageIndex == 2 ? 1 : 0,
+					StageIndex == 2,
+					FTransform::Identity,
+					FTransform::Identity,
+					FTransform::Identity,
+					BodySamples));
+		}
+
+		const TSharedRef<FJsonObject> Json = BuildStartupChronologyJson(Trace, true);
+		TestEqual(
+			TEXT("Startup chronology schema is versioned"),
+			Json->GetStringField(TEXT("schema_version")),
+			FString(TEXT("physanim-startup-chronology/v1")));
+		TestTrue(TEXT("Startup chronology reports explicit enablement"), Json->GetBoolField(TEXT("enabled")));
+		TestTrue(TEXT("Startup chronology reports completion"), Json->GetBoolField(TEXT("complete")));
+		TestTrue(TEXT("Startup chronology reports contract validity"), Json->GetBoolField(TEXT("valid")));
+		const TArray<TSharedPtr<FJsonValue>>& Samples = Json->GetArrayField(TEXT("samples"));
+		TestEqual(TEXT("Startup chronology publishes the ordered triplet"), Samples.Num(), 3);
+		TestEqual(
+			TEXT("Each chronology stage publishes all SMPL bodies"),
+			Samples[0]->AsObject()->GetArrayField(TEXT("body_samples")).Num(),
+			PhysAnimBridge::NumSmplBodies);
 		return true;
 	}
 
@@ -1318,6 +1428,7 @@ namespace
 			bool bActiveStandingPolicyInputSnapshotWritten = true;
 			bool bActionSemanticTraceWritten = true;
 			bool bPolicyInputProvenanceWritten = true;
+			bool bStartupChronologyWritten = true;
 			if (Config.bPlantRun)
 			{
 				const FString ActiveStandingSnapshotPath = FPaths::Combine(
@@ -1374,6 +1485,20 @@ namespace
 							true)) + TEXT("\n"),
 						*PolicyInputProvenancePath);
 				}
+
+				const bool bStartupChronologyEnabled =
+					Component && Component->IsStartupChronologyTraceEnabledForTesting();
+				if (bStartupChronologyEnabled)
+				{
+					const FString StartupChronologyPath = FPaths::Combine(
+						Config.RunRoot,
+						TEXT("startup-chronology.json"));
+					bStartupChronologyWritten = FFileHelper::SaveStringToFile(
+						SerializeJson(BuildStartupChronologyJson(
+							Component->GetStartupChronologyTraceForTesting(),
+							true)) + TEXT("\n"),
+						*StartupChronologyPath);
+				}
 			}
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
 
@@ -1404,6 +1529,7 @@ namespace
 				bActiveStandingPolicyInputSnapshotWritten &&
 				bActionSemanticTraceWritten &&
 				bPolicyInputProvenanceWritten &&
+				bStartupChronologyWritten &&
 				bManifestWritten;
 		}
 

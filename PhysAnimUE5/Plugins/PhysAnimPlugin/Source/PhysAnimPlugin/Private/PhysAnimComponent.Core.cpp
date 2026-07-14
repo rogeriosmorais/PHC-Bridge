@@ -38,6 +38,8 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 		FParse::Param(CommandLine, TEXT("PhysAnimActionSemanticTrace"));
 	bPolicyInputProvenanceTraceEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimPolicyInputProvenanceTrace"));
+	bStartupChronologyTraceEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimStartupChronologyTrace"));
 	bConstraintRangeRemapBypassEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalConstraintRangeRemapBypass"));
 
@@ -142,8 +144,17 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 		return;
 	}
 
+#if WITH_DEV_AUTOMATION_TESTS
+	CaptureStartupChronologySampleForTesting(TEXT("pre_state_machine"));
+#endif
 	TickRuntimeStateMachine(DeltaTime, EffectiveSettings);
+#if WITH_DEV_AUTOMATION_TESTS
+	CaptureStartupChronologySampleForTesting(TEXT("post_state_machine"));
+#endif
 	TickPolicyAndUpdateMetrics(DeltaTime, EffectiveSettings, TickError);
+#if WITH_DEV_AUTOMATION_TESTS
+	CaptureStartupChronologySampleForTesting(TEXT("post_policy"));
+#endif
 	ProcessPendingDistalOwnershipChecks();
 
 	if (bEnableLiveRuntimeEvidenceProof)

@@ -369,6 +369,78 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API bool ValidatePolicyInputProvenanceSnapshot(
 		const FPhysAnimPolicyInputProvenanceSnapshot& Snapshot,
 		FString& OutError);
+
+	inline constexpr int32 MaxStartupChronologySamples = 12;
+
+	struct PHYSANIMPLUGIN_API FPhysAnimStartupChronologySample
+	{
+		int32 Sequence = 0;
+		FString Stage;
+		double WorldTimeSeconds = 0.0;
+		FString RuntimeState;
+		float PolicyUpdateAccumulatorSeconds = 0.0f;
+		int32 LastPolicyElapsedSteps = 0;
+		int32 PolicyControlTicksExecuted = 0;
+		bool bFirstPolicyInputCaptured = false;
+		FTransform OwnerActorWorldTransform = FTransform::Identity;
+		FTransform MeshWorldTransform = FTransform::Identity;
+		FTransform RootBoneWorldTransform = FTransform::Identity;
+		TArray<FPhysAnimBodySample> BodySamples;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimStartupChronologyTrace
+	{
+		bool CaptureIf(
+			bool bCondition,
+			const FString& InStage,
+			double InWorldTimeSeconds,
+			const FString& InRuntimeState,
+			float InPolicyUpdateAccumulatorSeconds,
+			int32 InLastPolicyElapsedSteps,
+			int32 InPolicyControlTicksExecuted,
+			bool bInFirstPolicyInputCaptured,
+			const FTransform& InOwnerActorWorldTransform,
+			const FTransform& InMeshWorldTransform,
+			const FTransform& InRootBoneWorldTransform,
+			TConstArrayView<FPhysAnimBodySample> InBodySamples)
+		{
+			if (!bCondition || bComplete || Samples.Num() >= MaxStartupChronologySamples)
+			{
+				return false;
+			}
+
+			FPhysAnimStartupChronologySample& Sample = Samples.AddDefaulted_GetRef();
+			Sample.Sequence = Samples.Num() - 1;
+			Sample.Stage = InStage;
+			Sample.WorldTimeSeconds = InWorldTimeSeconds;
+			Sample.RuntimeState = InRuntimeState;
+			Sample.PolicyUpdateAccumulatorSeconds = InPolicyUpdateAccumulatorSeconds;
+			Sample.LastPolicyElapsedSteps = InLastPolicyElapsedSteps;
+			Sample.PolicyControlTicksExecuted = InPolicyControlTicksExecuted;
+			Sample.bFirstPolicyInputCaptured = bInFirstPolicyInputCaptured;
+			Sample.OwnerActorWorldTransform = InOwnerActorWorldTransform;
+			Sample.MeshWorldTransform = InMeshWorldTransform;
+			Sample.RootBoneWorldTransform = InRootBoneWorldTransform;
+			Sample.BodySamples.Append(InBodySamples.GetData(), InBodySamples.Num());
+			bComplete = InStage == TEXT("post_policy") && InPolicyControlTicksExecuted > 0;
+			return true;
+		}
+
+		void Reset()
+		{
+			bComplete = false;
+			CaptureError.Reset();
+			Samples.Reset();
+		}
+
+		bool bComplete = false;
+		FString CaptureError;
+		TArray<FPhysAnimStartupChronologySample> Samples;
+	};
+
+	PHYSANIMPLUGIN_API bool ValidateStartupChronologyTrace(
+		const FPhysAnimStartupChronologyTrace& Trace,
+		FString& OutError);
 #endif
 
 	PHYSANIMPLUGIN_API const TArray<FName>& GetControlledBoneNames();

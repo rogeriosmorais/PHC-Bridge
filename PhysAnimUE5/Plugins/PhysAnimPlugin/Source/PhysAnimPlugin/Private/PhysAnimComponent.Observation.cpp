@@ -97,6 +97,63 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 	return true;
 }
 
+#if WITH_DEV_AUTOMATION_TESTS
+void UPhysAnimComponent::CaptureStartupChronologySampleForTesting(const TCHAR* Stage)
+{
+	if (!bStartupChronologyTraceEnabledForTesting ||
+		StandingVariantForTesting != EPhysAnimStandingVariant::RealOnnxPolicy ||
+		StartupChronologyTrace.bComplete ||
+		!StartupChronologyTrace.CaptureError.IsEmpty())
+	{
+		return;
+	}
+
+	const AActor* const OwnerActor = GetOwner();
+	const USkeletalMeshComponent* const SkeletalMesh = MeshComponent.Get();
+	const UWorld* const World = GetWorld();
+	if (!Stage || !OwnerActor || !SkeletalMesh || !World)
+	{
+		StartupChronologyTrace.CaptureError = TEXT("Runtime context was incomplete during startup chronology capture.");
+		return;
+	}
+
+	TArray<FPhysAnimBodySample> BodySamples;
+	FString CaptureError;
+	if (!GatherCurrentBodySamples(BodySamples, CaptureError))
+	{
+		StartupChronologyTrace.CaptureError = CaptureError;
+		return;
+	}
+
+	const FName RootBoneName = PhysAnimBridge::GetRootBoneName();
+	if (SkeletalMesh->GetBoneIndex(RootBoneName) == INDEX_NONE)
+	{
+		StartupChronologyTrace.CaptureError = FString::Printf(
+			TEXT("Root observation bone '%s' was missing during startup chronology capture."),
+			*RootBoneName.ToString());
+		return;
+	}
+
+	const bool bCaptured = StartupChronologyTrace.CaptureIf(
+		true,
+		Stage,
+		World->GetTimeSeconds(),
+		GetRuntimeStateName(RuntimeState),
+		PolicyUpdateAccumulatorSeconds,
+		LastPolicyElapsedSteps,
+		PolicyControlTicksExecuted,
+		FirstPolicyInputProvenanceSnapshot.bCaptured,
+		OwnerActor->GetActorTransform(),
+		SkeletalMesh->GetComponentTransform(),
+		SkeletalMesh->GetBoneTransform(RootBoneName, RTS_World),
+		BodySamples);
+	if (!bCaptured && !StartupChronologyTrace.bComplete)
+	{
+		StartupChronologyTrace.CaptureError = TEXT("Startup chronology reached its fixed sample bound before the first policy tick.");
+	}
+}
+#endif
+
 
 float UPhysAnimComponent::ResolveSelfObservationGroundHeight(const TArray<FPhysAnimBodySample>& CurrentBodySamples) const
 {

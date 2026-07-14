@@ -968,6 +968,121 @@ namespace PhysAnimBridge
 		}
 		return true;
 	}
+
+	bool ValidateStartupChronologyTrace(
+		const FPhysAnimStartupChronologyTrace& Trace,
+		FString& OutError)
+	{
+		auto IsFiniteVector = [](const FVector& Value)
+		{
+			return FMath::IsFinite(Value.X) && FMath::IsFinite(Value.Y) && FMath::IsFinite(Value.Z);
+		};
+		auto IsFiniteNormalizedQuat = [](const FQuat& Value)
+		{
+			return FMath::IsFinite(Value.X) &&
+				FMath::IsFinite(Value.Y) &&
+				FMath::IsFinite(Value.Z) &&
+				FMath::IsFinite(Value.W) &&
+				Value.IsNormalized();
+		};
+		auto IsFiniteTransform = [&](const FTransform& Value)
+		{
+			return IsFiniteVector(Value.GetLocation()) &&
+				IsFiniteNormalizedQuat(Value.GetRotation()) &&
+				IsFiniteVector(Value.GetScale3D());
+		};
+		auto IsFiniteBodySample = [&](const FPhysAnimBodySample& Sample)
+		{
+			return IsFiniteVector(Sample.Position) &&
+				IsFiniteNormalizedQuat(Sample.Rotation) &&
+				IsFiniteVector(Sample.LinearVelocity) &&
+				IsFiniteVector(Sample.AngularVelocity);
+		};
+
+		OutError.Reset();
+		if (!Trace.CaptureError.IsEmpty())
+		{
+			OutError = FString::Printf(TEXT("Startup chronology capture failed: %s"), *Trace.CaptureError);
+			return false;
+		}
+		if (!Trace.bComplete ||
+			Trace.Samples.Num() < 3 ||
+			Trace.Samples.Num() > MaxStartupChronologySamples ||
+			Trace.Samples.Num() % 3 != 0)
+		{
+			OutError = TEXT("Startup chronology is incomplete or has an invalid sample count.");
+			return false;
+		}
+
+		double PreviousWorldTimeSeconds = -TNumericLimits<double>::Max();
+		int32 PreviousPolicyControlTicks = 0;
+		for (int32 SampleIndex = 0; SampleIndex < Trace.Samples.Num(); ++SampleIndex)
+		{
+			const FPhysAnimStartupChronologySample& Sample = Trace.Samples[SampleIndex];
+			const TCHAR* ExpectedStage = SampleIndex % 3 == 0
+				? TEXT("pre_state_machine")
+				: (SampleIndex % 3 == 1 ? TEXT("post_state_machine") : TEXT("post_policy"));
+			if (Sample.Sequence != SampleIndex || Sample.Stage != ExpectedStage)
+			{
+				OutError = FString::Printf(TEXT("Startup chronology sample %d has invalid ordering."), SampleIndex);
+				return false;
+			}
+			if (Sample.RuntimeState.IsEmpty() ||
+				!FMath::IsFinite(Sample.WorldTimeSeconds) ||
+				!FMath::IsFinite(Sample.PolicyUpdateAccumulatorSeconds) ||
+				Sample.LastPolicyElapsedSteps < 0 ||
+				Sample.PolicyControlTicksExecuted < 0 ||
+				Sample.WorldTimeSeconds < PreviousWorldTimeSeconds ||
+				Sample.PolicyControlTicksExecuted < PreviousPolicyControlTicks)
+			{
+				OutError = FString::Printf(TEXT("Startup chronology sample %d has invalid scalar metadata."), SampleIndex);
+				return false;
+			}
+			if (SampleIndex % 3 != 0 &&
+				!FMath::IsNearlyEqual(Sample.WorldTimeSeconds, Trace.Samples[SampleIndex - 1].WorldTimeSeconds, 1.0e-9))
+			{
+				OutError = FString::Printf(TEXT("Startup chronology sample %d crossed a world tick inside a stage triplet."), SampleIndex);
+				return false;
+			}
+			if (!IsFiniteTransform(Sample.OwnerActorWorldTransform) ||
+				!IsFiniteTransform(Sample.MeshWorldTransform) ||
+				!IsFiniteTransform(Sample.RootBoneWorldTransform))
+			{
+				OutError = FString::Printf(TEXT("Startup chronology sample %d contains an invalid transform."), SampleIndex);
+				return false;
+			}
+			if (Sample.BodySamples.Num() != NumSmplBodies)
+			{
+				OutError = FString::Printf(
+					TEXT("Startup chronology sample %d has %d bodies instead of %d."),
+					SampleIndex,
+					Sample.BodySamples.Num(),
+					NumSmplBodies);
+				return false;
+			}
+			for (int32 BodyIndex = 0; BodyIndex < Sample.BodySamples.Num(); ++BodyIndex)
+			{
+				if (!IsFiniteBodySample(Sample.BodySamples[BodyIndex]))
+				{
+					OutError = FString::Printf(
+						TEXT("Startup chronology sample %d body %d is invalid."),
+						SampleIndex,
+						BodyIndex);
+					return false;
+				}
+			}
+			PreviousWorldTimeSeconds = Sample.WorldTimeSeconds;
+			PreviousPolicyControlTicks = Sample.PolicyControlTicksExecuted;
+		}
+
+		const FPhysAnimStartupChronologySample& LastSample = Trace.Samples.Last();
+		if (LastSample.Stage != TEXT("post_policy") || LastSample.PolicyControlTicksExecuted < 1)
+		{
+			OutError = TEXT("Startup chronology did not close after a completed policy-control tick.");
+			return false;
+		}
+		return true;
+	}
 #endif
 
 	void BuildZeroTerrain(TArray<float>& OutTerrain)

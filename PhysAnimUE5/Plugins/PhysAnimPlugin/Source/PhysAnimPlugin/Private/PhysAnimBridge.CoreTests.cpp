@@ -850,6 +850,170 @@ namespace
 		TestEqual(TEXT("Reset clears previous actions"), Snapshot.PreviousActions.Num(), 0);
 		return true;
 	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimStartupChronologyTraceContractTest,
+		"PhysAnim.Bridge.StartupChronologyTraceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimStartupChronologyTraceContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<FPhysAnimBodySample> BodySamples;
+		BodySamples.SetNum(NumSmplBodies);
+		for (int32 BodyIndex = 0; BodyIndex < BodySamples.Num(); ++BodyIndex)
+		{
+			BodySamples[BodyIndex] = FPhysAnimBodySample(
+				FVector(BodyIndex, BodyIndex + 1.0, BodyIndex + 2.0),
+				FQuat::Identity,
+				FVector(0.1, 0.2, 0.3),
+				FVector(0.4, 0.5, 0.6));
+		}
+
+		FPhysAnimStartupChronologyTrace Trace;
+		TestFalse(TEXT("A new startup chronology trace is incomplete"), Trace.bComplete);
+		TestEqual(TEXT("A new startup chronology trace has no samples"), Trace.Samples.Num(), 0);
+		TestFalse(
+			TEXT("A disabled startup chronology trace does not capture"),
+			Trace.CaptureIf(
+				false,
+				TEXT("pre_state_machine"),
+				1.0,
+				TEXT("BridgeActive"),
+				-1.0f,
+				0,
+				0,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples));
+
+		auto CaptureCycle = [&](const double WorldTimeSeconds, const int32 PolicyControlTicks)
+		{
+			const bool bPreCaptured = Trace.CaptureIf(
+				true,
+				TEXT("pre_state_machine"),
+				WorldTimeSeconds,
+				TEXT("Standing_Preparation"),
+				0.0f,
+				0,
+				PolicyControlTicks,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples);
+			const bool bPostStateCaptured = Trace.CaptureIf(
+				true,
+				TEXT("post_state_machine"),
+				WorldTimeSeconds,
+				TEXT("Standing_FullSimulationActivation"),
+				0.0f,
+				0,
+				PolicyControlTicks,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples);
+			const bool bPostPolicyCaptured = Trace.CaptureIf(
+				true,
+				TEXT("post_policy"),
+				WorldTimeSeconds,
+				TEXT("Standing_FullSimulationActivation"),
+				0.0f,
+				PolicyControlTicks > 0 ? 1 : 0,
+				PolicyControlTicks,
+				PolicyControlTicks > 0,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples);
+			return bPreCaptured && bPostStateCaptured && bPostPolicyCaptured;
+		};
+
+		TestTrue(TEXT("The first startup tick captures an ordered chronology triplet"), CaptureCycle(1.0, 0));
+		TestFalse(TEXT("A chronology without a policy update remains open"), Trace.bComplete);
+		TestTrue(TEXT("The first policy tick captures a second chronology triplet"), CaptureCycle(1.0 + 1.0 / 60.0, 1));
+		TestTrue(TEXT("The first completed policy tick closes the chronology"), Trace.bComplete);
+		TestEqual(TEXT("Two startup ticks publish six chronology samples"), Trace.Samples.Num(), 6);
+
+		FString ValidationError;
+		TestTrue(
+			TEXT("A complete ordered finite startup chronology satisfies its contract"),
+			ValidateStartupChronologyTrace(Trace, ValidationError));
+		TestTrue(TEXT("A valid startup chronology has no validation error"), ValidationError.IsEmpty());
+		TestFalse(
+			TEXT("A completed startup chronology cannot append more samples"),
+			Trace.CaptureIf(
+				true,
+				TEXT("pre_state_machine"),
+				2.0,
+				TEXT("Standing_PolicyBlend"),
+				0.0f,
+				0,
+				1,
+				true,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples));
+
+		FPhysAnimStartupChronologyTrace InvalidTrace = Trace;
+		InvalidTrace.Samples[1].Stage = TEXT("post_policy");
+		TestFalse(
+			TEXT("An out-of-order chronology stage is rejected"),
+			ValidateStartupChronologyTrace(InvalidTrace, ValidationError));
+		InvalidTrace = Trace;
+		InvalidTrace.Samples[0].BodySamples[0].LinearVelocity.X =
+			std::numeric_limits<double>::quiet_NaN();
+		TestFalse(
+			TEXT("A non-finite live body value is rejected"),
+			ValidateStartupChronologyTrace(InvalidTrace, ValidationError));
+
+		FPhysAnimStartupChronologyTrace BoundedTrace;
+		for (int32 SampleIndex = 0; SampleIndex < MaxStartupChronologySamples; ++SampleIndex)
+		{
+			const TCHAR* Stage = SampleIndex % 3 == 0
+				? TEXT("pre_state_machine")
+				: (SampleIndex % 3 == 1 ? TEXT("post_state_machine") : TEXT("post_policy"));
+			TestTrue(
+				FString::Printf(TEXT("Bounded chronology accepts sample %d"), SampleIndex),
+				BoundedTrace.CaptureIf(
+					true,
+					Stage,
+					1.0 + (SampleIndex / 3) / 60.0,
+					TEXT("Standing_Preparation"),
+					0.0f,
+					0,
+					0,
+					false,
+					FTransform::Identity,
+					FTransform::Identity,
+					FTransform::Identity,
+					BodySamples));
+		}
+		TestFalse(
+			TEXT("The chronology refuses samples beyond its fixed diagnostic bound"),
+			BoundedTrace.CaptureIf(
+				true,
+				TEXT("pre_state_machine"),
+				2.0,
+				TEXT("Standing_Preparation"),
+				0.0f,
+				0,
+				0,
+				false,
+				FTransform::Identity,
+				FTransform::Identity,
+				FTransform::Identity,
+				BodySamples));
+
+		Trace.Reset();
+		TestFalse(TEXT("Reset clears chronology completion"), Trace.bComplete);
+		TestEqual(TEXT("Reset clears chronology samples"), Trace.Samples.Num(), 0);
+		return true;
+	}
 #endif
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(

@@ -1489,6 +1489,7 @@ public:
 	EPhysAnimStandingVariant GetStandingVariantForTesting() const { return StandingVariantForTesting; }
 	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
+	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
 	bool IsConstraintRangeRemapBypassEnabledForTesting() const { return bConstraintRangeRemapBypassEnabledForTesting; }
 	bool ShouldBypassConstraintRangeRemapForTesting(
 		EPhysAnimRuntimeState State,
@@ -1505,6 +1506,10 @@ public:
 	const PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot& GetPolicyInputProvenanceSnapshotForTesting() const
 	{
 		return FirstPolicyInputProvenanceSnapshot;
+	}
+	const PhysAnimBridge::FPhysAnimStartupChronologyTrace& GetStartupChronologyTraceForTesting() const
+	{
+		return StartupChronologyTrace;
 	}
 	void ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine);
 #endif
@@ -2199,6 +2204,9 @@ private:
 	bool ValidateModelDescriptorContract(FString& OutError);
 	bool QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	bool GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& OutBodySamples, FString& OutError) const;
+#if WITH_DEV_AUTOMATION_TESTS
+	void CaptureStartupChronologySampleForTesting(const TCHAR* Stage);
+#endif
 	bool SampleFuturePoses(const FPoseSearchBlueprintResult& SearchResult, TArray<FPhysAnimFuturePoseSample>& OutFutureSamples, FString& OutError) const;
 	bool ResolveMimicTargetReferenceDataFrame(
 		const FPoseSearchBlueprintResult& SearchResult,
@@ -2440,9 +2448,11 @@ private:
 	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstActiveStandingPolicyInferenceSnapshot;
 	PhysAnimBridge::FPhysAnimActionSemanticTrace FirstActiveStandingActionSemanticTrace;
 	PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot FirstPolicyInputProvenanceSnapshot;
+	PhysAnimBridge::FPhysAnimStartupChronologyTrace StartupChronologyTrace;
 	bool bProductControlDispatchDroppedForTesting = false;
 	bool bActionSemanticTraceEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
+	bool bStartupChronologyTraceEnabledForTesting = false;
 	bool bConstraintRangeRemapBypassEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
 #endif
