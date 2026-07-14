@@ -34,6 +34,9 @@ void UPhysAnimComponent::BeginPlay()
 #if WITH_DEV_AUTOMATION_TESTS
 void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine)
 {
+	bActionSemanticTraceEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimActionSemanticTrace"));
+
 	FString VariantName;
 	if (!CommandLine || !FParse::Value(CommandLine, TEXT("PhysAnimProductVariant="), VariantName))
 	{

@@ -237,6 +237,38 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	const float MaxAngularStepDegrees =
 		FMath::Max(0.0f, EffectiveSettings.MaxAngularStepDegreesPerSecond) * PolicyStepDeltaTime;
+#if WITH_DEV_AUTOMATION_TESTS
+	PhysAnimBridge::FPhysAnimActionSemanticTrace PendingActionSemanticTrace;
+	TMap<FName, PhysAnimBridge::FPhysAnimControlTargetSemanticTrace> PendingControlTargetSemanticTraces;
+	bool bCaptureActionSemanticTraceThisStep =
+		bActionSemanticTraceEnabledForTesting &&
+		StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
+		!FirstActiveStandingActionSemanticTrace.bCaptured &&
+		FirstActiveStandingActionSemanticTrace.CaptureError.IsEmpty();
+	if (bCaptureActionSemanticTraceThisStep)
+	{
+		PendingActionSemanticTrace.CaptureScope = TEXT("first_active_standing_target_write");
+		PendingActionSemanticTrace.PolicyStepDeltaTime = PolicyStepDeltaTime;
+		PendingActionSemanticTrace.PolicyInfluenceAlpha = PolicyInfluenceAlpha;
+		PendingActionSemanticTrace.MaxAngularStepDegrees = MaxAngularStepDegrees;
+		PendingActionSemanticTrace.bConstraintAdapterEnabled =
+			EffectiveSettings.bEnableProtoMannyConstraintAdapter;
+		FString TraceError;
+		if (!PhysAnimBridge::BuildActionJointSemanticTrace(
+			ActionOutputBuffer,
+			ConditionedActionBuffer,
+			PendingActionSemanticTrace.ActionJoints,
+			TraceError))
+		{
+			FirstActiveStandingActionSemanticTrace.Reset();
+			FirstActiveStandingActionSemanticTrace.CaptureScope =
+				PendingActionSemanticTrace.CaptureScope;
+			FirstActiveStandingActionSemanticTrace.CaptureError = TraceError;
+			bCaptureActionSemanticTraceThisStep = false;
+		}
+	}
+#endif
 	const bool bUseSkeletalAnimationTargetRepresentation =
 		ShouldUseSkeletalAnimationTargetRepresentation(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
@@ -580,6 +612,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 					RangeAlignedPolicyRotation,
 					DistalLocomotionTargetScale);
 				FQuat ConstraintAdaptedPolicyRotation = DistalLocomotionAlignedPolicyRotation;
+#if WITH_DEV_AUTOMATION_TESTS
+				FQuat TraceConstraintRangeMappedRotation = DistalLocomotionAlignedPolicyRotation;
+				FPhysAnimMannyConstraintProfile TraceConstraintProfile;
+				bool bTraceHasConstraintProfile = false;
+#endif
 				if (EffectiveSettings.bEnableProtoMannyConstraintAdapter && PhysicsAsset)
 				{
 					const FInitialPhysicsControl* const InitialControl = FindInitialControl(ControlName);
@@ -599,6 +636,14 @@ void UPhysAnimComponent::ApplyControlTargets(
 							RangeMappedPolicyRotation,
 							MannyPolicyNeutralRotation,
 							ConstraintProfile);
+#if WITH_DEV_AUTOMATION_TESTS
+						if (bCaptureActionSemanticTraceThisStep)
+						{
+							TraceConstraintRangeMappedRotation = RangeMappedPolicyRotation;
+							TraceConstraintProfile = ConstraintProfile;
+							bTraceHasConstraintProfile = true;
+						}
+#endif
 					}
 				}
 				const float RangeAlignedPolicyOffsetDegrees = CalculateControlTargetDeltaDegrees(
@@ -715,7 +760,109 @@ void UPhysAnimComponent::ApplyControlTargets(
 				false,
 				true,
 				false);
+#if WITH_DEV_AUTOMATION_TESTS
+			if (bCaptureActionSemanticTraceThisStep)
+			{
+				PhysAnimBridge::FPhysAnimControlTargetSemanticTrace& TraceEntry =
+					PendingControlTargetSemanticTraces.FindOrAdd(Pair.Key);
+				TraceEntry.MannyBoneName = Pair.Key;
+				TraceEntry.ControlName = ControlName;
+				for (const PhysAnimBridge::FPhysAnimProtoActionJointDescriptor& Descriptor :
+					PhysAnimBridge::GetProtoActionJointDescriptors())
+				{
+					if (Descriptor.MannyBoneName == Pair.Key)
+					{
+						TraceEntry.SourceProtoJointIndices.Add(Descriptor.ProtoJointIndex);
+					}
+				}
+				TraceEntry.CombinedDecodedRotationUe = Pair.Value.GetNormalized();
+				TraceEntry.MannyNeutralRotation = MannyPolicyNeutralRotation;
+				TraceEntry.BindComposedRotation = AbsoluteBindCalibratedPolicyRotation;
+				TraceEntry.RangeScaledRotation = RangeAlignedPolicyRotation;
+				TraceEntry.DistalScaledRotation = DistalLocomotionAlignedPolicyRotation;
+				TraceEntry.ConstraintRangeMappedRotation = TraceConstraintRangeMappedRotation;
+				TraceEntry.ConstraintAdaptedRotation = ConstraintAdaptedPolicyRotation;
+				TraceEntry.BlendedRotation = BlendedPolicyRotation;
+				TraceEntry.PublishedRotation = LimitedRotation.GetNormalized();
+				TraceEntry.bHasConstraintProfile = bTraceHasConstraintProfile;
+				TraceEntry.bTargetWritten = true;
+				if (bTraceHasConstraintProfile)
+				{
+					TraceEntry.TwistMotion = static_cast<int32>(TraceConstraintProfile.TwistMotion);
+					TraceEntry.Swing1Motion = static_cast<int32>(TraceConstraintProfile.Swing1Motion);
+					TraceEntry.Swing2Motion = static_cast<int32>(TraceConstraintProfile.Swing2Motion);
+					TraceEntry.TwistLimitDegrees = TraceConstraintProfile.TwistLimitDegrees;
+					TraceEntry.Swing1LimitDegrees = TraceConstraintProfile.Swing1LimitDegrees;
+					TraceEntry.Swing2LimitDegrees = TraceConstraintProfile.Swing2LimitDegrees;
+				}
+				TraceEntry.LowerLimbRangeScale = LowerLimbTargetRangeScale;
+				TraceEntry.DistalRangeScale = DistalLocomotionTargetScale;
+				TraceEntry.RawPolicyOffsetDegrees = RawPolicyOffsetDegrees;
+				TraceEntry.RangeScaleDeltaDegrees = CalculateControlTargetDeltaDegrees(
+					AbsoluteBindCalibratedPolicyRotation,
+					RangeAlignedPolicyRotation);
+				TraceEntry.DistalScaleDeltaDegrees = CalculateControlTargetDeltaDegrees(
+					RangeAlignedPolicyRotation,
+					DistalLocomotionAlignedPolicyRotation);
+				TraceEntry.ConstraintRangeMappingDeltaDegrees = CalculateControlTargetDeltaDegrees(
+					DistalLocomotionAlignedPolicyRotation,
+					TraceConstraintRangeMappedRotation);
+				TraceEntry.ConstraintProjectionDeltaDegrees = CalculateControlTargetDeltaDegrees(
+					TraceConstraintRangeMappedRotation,
+					ConstraintAdaptedPolicyRotation);
+				TraceEntry.AdaptedToPublishedDeltaDegrees = CalculateControlTargetDeltaDegrees(
+					ConstraintAdaptedPolicyRotation,
+					LimitedRotation);
+
+				FPhysicsControlTarget Readback;
+				TraceEntry.bReadbackSucceeded = PhysicsControl->GetControlTarget(ControlName, Readback);
+				if (TraceEntry.bReadbackSucceeded)
+				{
+					TraceEntry.ReadbackRotation = Readback.TargetOrientation.Quaternion().GetNormalized();
+					TraceEntry.ReadbackErrorDegrees = CalculateControlTargetDeltaDegrees(
+						TraceEntry.PublishedRotation,
+						TraceEntry.ReadbackRotation);
+				}
+				else
+				{
+					TraceEntry.ReadbackErrorDegrees = 180.0f;
+				}
 			}
+#endif
+			}
+#if WITH_DEV_AUTOMATION_TESTS
+			if (bCaptureActionSemanticTraceThisStep)
+			{
+				for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+				{
+					const PhysAnimBridge::FPhysAnimControlTargetSemanticTrace* const TraceEntry =
+						PendingControlTargetSemanticTraces.Find(BoneName);
+					if (!TraceEntry)
+					{
+						PendingActionSemanticTrace.CaptureError = FString::Printf(
+							TEXT("No action semantic target trace was captured for '%s'."),
+							*BoneName.ToString());
+						break;
+					}
+					PendingActionSemanticTrace.ControlTargets.Add(*TraceEntry);
+				}
+
+				PendingActionSemanticTrace.bCaptured =
+					PendingActionSemanticTrace.CaptureError.IsEmpty();
+				if (PendingActionSemanticTrace.bCaptured)
+				{
+					FString ValidationError;
+					if (!PhysAnimBridge::ValidateActionSemanticTrace(
+						PendingActionSemanticTrace,
+						ValidationError))
+					{
+						PendingActionSemanticTrace.bCaptured = false;
+						PendingActionSemanticTrace.CaptureError = ValidationError;
+					}
+				}
+				FirstActiveStandingActionSemanticTrace = MoveTemp(PendingActionSemanticTrace);
+			}
+#endif
 		}
 	}
 

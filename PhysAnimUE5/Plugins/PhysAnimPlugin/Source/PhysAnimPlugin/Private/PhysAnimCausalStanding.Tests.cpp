@@ -261,6 +261,18 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=Normal"));
 	TestEqual(TEXT("Normal command line restores normal activation"), Component->GetStandingVariantForTesting(), EPhysAnimStandingVariant::Normal);
 	TestFalse(TEXT("Normal command line clears dropped dispatch"), Component->IsProductControlDispatchDroppedForTesting());
+	TestFalse(
+		TEXT("Action semantic tracing is disabled without its explicit development flag"),
+		Component->IsActionSemanticTraceEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimActionSemanticTrace"));
+	TestTrue(
+		TEXT("The explicit development flag enables action semantic tracing"),
+		Component->IsActionSemanticTraceEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
+	TestFalse(
+		TEXT("Removing the development flag restores the trace-off default"),
+		Component->IsActionSemanticTraceEnabledForTesting());
 	float NeutralCalibratedTiltDeg = 0.0f;
 	TestFalse(
 		TEXT("Neutral-calibrated tilt requires a live owner, mesh, pelvis body, and startup calibration"),
@@ -587,6 +599,109 @@ namespace
 			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Output);
 		FJsonSerializer::Serialize(Object, Writer);
 		return Output;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BuildVectorJsonArray(const FVector& Value)
+	{
+		return {
+			MakeShared<FJsonValueNumber>(Value.X),
+			MakeShared<FJsonValueNumber>(Value.Y),
+			MakeShared<FJsonValueNumber>(Value.Z) };
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BuildQuaternionJsonArray(const FQuat& Value)
+	{
+		return {
+			MakeShared<FJsonValueNumber>(Value.X),
+			MakeShared<FJsonValueNumber>(Value.Y),
+			MakeShared<FJsonValueNumber>(Value.Z),
+			MakeShared<FJsonValueNumber>(Value.W) };
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BuildIntegerJsonArray(const TArray<int32>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Result;
+		Result.Reserve(Values.Num());
+		for (const int32 Value : Values)
+		{
+			Result.Add(MakeShared<FJsonValueNumber>(Value));
+		}
+		return Result;
+	}
+
+	TSharedRef<FJsonObject> BuildActionSemanticTraceJson(
+		const PhysAnimBridge::FPhysAnimActionSemanticTrace& Trace,
+		const bool bEnabled)
+	{
+		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("schema_version"), TEXT("physanim-action-semantic-trace/v1"));
+		Root->SetStringField(TEXT("authority"), TEXT("DEVELOPMENT_DIAGNOSTIC_ONLY"));
+		Root->SetBoolField(TEXT("enabled"), bEnabled);
+		Root->SetBoolField(TEXT("captured"), Trace.bCaptured);
+		Root->SetStringField(TEXT("capture_scope"), Trace.CaptureScope);
+		Root->SetStringField(TEXT("capture_error"), Trace.CaptureError);
+		Root->SetNumberField(TEXT("policy_step_delta_time"), Trace.PolicyStepDeltaTime);
+		Root->SetNumberField(TEXT("policy_influence_alpha"), Trace.PolicyInfluenceAlpha);
+		Root->SetNumberField(TEXT("max_angular_step_deg"), Trace.MaxAngularStepDegrees);
+		Root->SetBoolField(TEXT("constraint_adapter_enabled"), Trace.bConstraintAdapterEnabled);
+
+		TArray<TSharedPtr<FJsonValue>> JointValues;
+		JointValues.Reserve(Trace.ActionJoints.Num());
+		for (const PhysAnimBridge::FPhysAnimActionJointSemanticTrace& Entry : Trace.ActionJoints)
+		{
+			const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+			Object->SetNumberField(TEXT("proto_joint_index"), Entry.ProtoJointIndex);
+			Object->SetStringField(TEXT("proto_joint_name"), Entry.ProtoJointName.ToString());
+			Object->SetStringField(TEXT("manny_bone_name"), Entry.MannyBoneName.ToString());
+			Object->SetBoolField(TEXT("shares_mapped_control"), Entry.bSharesMappedControl);
+			Object->SetArrayField(TEXT("raw_action"), BuildVectorJsonArray(Entry.RawAction));
+			Object->SetArrayField(TEXT("conditioned_action"), BuildVectorJsonArray(Entry.ConditionedAction));
+			Object->SetArrayField(TEXT("raw_decoded_rotation_ue_xyzw"), BuildQuaternionJsonArray(Entry.RawDecodedRotationUe));
+			Object->SetArrayField(TEXT("conditioned_decoded_rotation_ue_xyzw"), BuildQuaternionJsonArray(Entry.ConditionedDecodedRotationUe));
+			JointValues.Add(MakeShared<FJsonValueObject>(Object));
+		}
+		Root->SetArrayField(TEXT("action_joints"), JointValues);
+
+		TArray<TSharedPtr<FJsonValue>> ControlValues;
+		ControlValues.Reserve(Trace.ControlTargets.Num());
+		for (const PhysAnimBridge::FPhysAnimControlTargetSemanticTrace& Entry : Trace.ControlTargets)
+		{
+			const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+			Object->SetStringField(TEXT("manny_bone_name"), Entry.MannyBoneName.ToString());
+			Object->SetStringField(TEXT("control_name"), Entry.ControlName.ToString());
+			Object->SetArrayField(TEXT("source_proto_joint_indices"), BuildIntegerJsonArray(Entry.SourceProtoJointIndices));
+			Object->SetArrayField(TEXT("combined_decoded_rotation_ue_xyzw"), BuildQuaternionJsonArray(Entry.CombinedDecodedRotationUe));
+			Object->SetArrayField(TEXT("manny_neutral_rotation_xyzw"), BuildQuaternionJsonArray(Entry.MannyNeutralRotation));
+			Object->SetArrayField(TEXT("bind_composed_rotation_xyzw"), BuildQuaternionJsonArray(Entry.BindComposedRotation));
+			Object->SetArrayField(TEXT("range_scaled_rotation_xyzw"), BuildQuaternionJsonArray(Entry.RangeScaledRotation));
+			Object->SetArrayField(TEXT("distal_scaled_rotation_xyzw"), BuildQuaternionJsonArray(Entry.DistalScaledRotation));
+			Object->SetArrayField(TEXT("constraint_range_mapped_rotation_xyzw"), BuildQuaternionJsonArray(Entry.ConstraintRangeMappedRotation));
+			Object->SetArrayField(TEXT("constraint_adapted_rotation_xyzw"), BuildQuaternionJsonArray(Entry.ConstraintAdaptedRotation));
+			Object->SetArrayField(TEXT("blended_rotation_xyzw"), BuildQuaternionJsonArray(Entry.BlendedRotation));
+			Object->SetArrayField(TEXT("published_rotation_xyzw"), BuildQuaternionJsonArray(Entry.PublishedRotation));
+			Object->SetArrayField(TEXT("readback_rotation_xyzw"), BuildQuaternionJsonArray(Entry.ReadbackRotation));
+			Object->SetBoolField(TEXT("has_constraint_profile"), Entry.bHasConstraintProfile);
+			Object->SetBoolField(TEXT("target_written"), Entry.bTargetWritten);
+			Object->SetBoolField(TEXT("readback_succeeded"), Entry.bReadbackSucceeded);
+			Object->SetNumberField(TEXT("twist_motion"), Entry.TwistMotion);
+			Object->SetNumberField(TEXT("swing1_motion"), Entry.Swing1Motion);
+			Object->SetNumberField(TEXT("swing2_motion"), Entry.Swing2Motion);
+			Object->SetNumberField(TEXT("twist_limit_deg"), Entry.TwistLimitDegrees);
+			Object->SetNumberField(TEXT("swing1_limit_deg"), Entry.Swing1LimitDegrees);
+			Object->SetNumberField(TEXT("swing2_limit_deg"), Entry.Swing2LimitDegrees);
+			Object->SetNumberField(TEXT("lower_limb_range_scale"), Entry.LowerLimbRangeScale);
+			Object->SetNumberField(TEXT("distal_range_scale"), Entry.DistalRangeScale);
+			Object->SetNumberField(TEXT("raw_policy_offset_deg"), Entry.RawPolicyOffsetDegrees);
+			Object->SetNumberField(TEXT("range_scale_delta_deg"), Entry.RangeScaleDeltaDegrees);
+			Object->SetNumberField(TEXT("distal_scale_delta_deg"), Entry.DistalScaleDeltaDegrees);
+			Object->SetNumberField(TEXT("constraint_range_mapping_delta_deg"), Entry.ConstraintRangeMappingDeltaDegrees);
+			Object->SetNumberField(TEXT("constraint_projection_delta_deg"), Entry.ConstraintProjectionDeltaDegrees);
+			Object->SetNumberField(TEXT("adapted_to_published_delta_deg"), Entry.AdaptedToPublishedDeltaDegrees);
+			Object->SetNumberField(TEXT("readback_error_deg"), Entry.ReadbackErrorDegrees);
+			ControlValues.Add(MakeShared<FJsonValueObject>(Object));
+		}
+		Root->SetArrayField(TEXT("control_targets"), ControlValues);
+		return Root;
 	}
 
 	class FCausalStandingCaptureCommand final : public IAutomationLatentCommand
@@ -984,6 +1099,7 @@ namespace
 				SerializeJson(SnapshotJson) + TEXT("\n"),
 				*PolicyInputSnapshotPath);
 			bool bActiveStandingPolicyInputSnapshotWritten = true;
+			bool bActionSemanticTraceWritten = true;
 			if (Config.bPlantRun)
 			{
 				const FString ActiveStandingSnapshotPath = FPaths::Combine(
@@ -1011,6 +1127,21 @@ namespace
 				bActiveStandingPolicyInputSnapshotWritten = FFileHelper::SaveStringToFile(
 					SerializeJson(ActiveStandingSnapshotJson) + TEXT("\n"),
 					*ActiveStandingSnapshotPath);
+
+				const FString ActionSemanticTracePath = FPaths::Combine(
+					Config.RunRoot,
+					TEXT("action-semantic-trace.json"));
+				const PhysAnimBridge::FPhysAnimActionSemanticTrace EmptyActionSemanticTrace;
+				const PhysAnimBridge::FPhysAnimActionSemanticTrace& ActionSemanticTrace = Component
+					? Component->GetActionSemanticTraceForTesting()
+					: EmptyActionSemanticTrace;
+				const bool bActionSemanticTraceEnabled =
+					Component && Component->IsActionSemanticTraceEnabledForTesting();
+				bActionSemanticTraceWritten = FFileHelper::SaveStringToFile(
+					SerializeJson(BuildActionSemanticTraceJson(
+						ActionSemanticTrace,
+						bActionSemanticTraceEnabled)) + TEXT("\n"),
+					*ActionSemanticTracePath);
 			}
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
 
@@ -1039,6 +1170,7 @@ namespace
 				bPolicyWritten &&
 				bPolicyInputSnapshotWritten &&
 				bActiveStandingPolicyInputSnapshotWritten &&
+				bActionSemanticTraceWritten &&
 				bManifestWritten;
 		}
 

@@ -224,6 +224,36 @@ namespace PhysAnimBridge
 		return MakeControlledBones();
 	}
 
+	const TArray<FPhysAnimProtoActionJointDescriptor>& GetProtoActionJointDescriptors()
+	{
+		static const TArray<FPhysAnimProtoActionJointDescriptor> Descriptors = {
+			{ 0, TEXT("L_Hip"), TEXT("thigh_l"), false },
+			{ 1, TEXT("L_Knee"), TEXT("calf_l"), false },
+			{ 2, TEXT("L_Ankle"), TEXT("foot_l"), false },
+			{ 3, TEXT("L_Toe"), TEXT("ball_l"), false },
+			{ 4, TEXT("R_Hip"), TEXT("thigh_r"), false },
+			{ 5, TEXT("R_Knee"), TEXT("calf_r"), false },
+			{ 6, TEXT("R_Ankle"), TEXT("foot_r"), false },
+			{ 7, TEXT("R_Toe"), TEXT("ball_r"), false },
+			{ 8, TEXT("Torso"), TEXT("spine_01"), false },
+			{ 9, TEXT("Spine"), TEXT("spine_02"), false },
+			{ 10, TEXT("Chest"), TEXT("spine_03"), false },
+			{ 11, TEXT("Neck"), TEXT("neck_01"), false },
+			{ 12, TEXT("Head"), TEXT("head"), false },
+			{ 13, TEXT("L_Thorax"), TEXT("clavicle_l"), false },
+			{ 14, TEXT("L_Shoulder"), TEXT("upperarm_l"), false },
+			{ 15, TEXT("L_Elbow"), TEXT("lowerarm_l"), false },
+			{ 16, TEXT("L_Wrist"), TEXT("hand_l"), true },
+			{ 17, TEXT("L_Hand"), TEXT("hand_l"), true },
+			{ 18, TEXT("R_Thorax"), TEXT("clavicle_r"), false },
+			{ 19, TEXT("R_Shoulder"), TEXT("upperarm_r"), false },
+			{ 20, TEXT("R_Elbow"), TEXT("lowerarm_r"), false },
+			{ 21, TEXT("R_Wrist"), TEXT("hand_r"), true },
+			{ 22, TEXT("R_Hand"), TEXT("hand_r"), true }
+		};
+		return Descriptors;
+	}
+
 	const TArray<FName>& GetRequiredBodyModifierBoneNames()
 	{
 		return MakeRequiredModifiers();
@@ -892,6 +922,182 @@ namespace PhysAnimBridge
 		OutControlRotations.Add(TEXT("lowerarm_r"), ProtoJointQuaternionToUe(ProtoJointRotations[20]));
 		OutControlRotations.Add(TEXT("hand_r"), ProtoJointQuaternionToUe(CollapseDistalHandRotation(ProtoJointRotations[21], ProtoJointRotations[22])));
 
+		return true;
+	}
+
+	bool BuildActionJointSemanticTrace(
+		const TArray<float>& RawActions,
+		const TArray<float>& ConditionedActions,
+		TArray<FPhysAnimActionJointSemanticTrace>& OutTrace,
+		FString& OutError)
+	{
+		OutTrace.Reset();
+		if (RawActions.Num() != NumActionFloats || ConditionedActions.Num() != NumActionFloats)
+		{
+			OutError = FString::Printf(
+				TEXT("Action semantic trace requires %d raw and conditioned values but found %d and %d."),
+				NumActionFloats,
+				RawActions.Num(),
+				ConditionedActions.Num());
+			return false;
+		}
+		if (!ValidateFiniteFloatBuffer(TEXT("Raw action semantic trace"), RawActions, OutError) ||
+			!ValidateFiniteFloatBuffer(TEXT("Conditioned action semantic trace"), ConditionedActions, OutError))
+		{
+			return false;
+		}
+
+		const TArray<FPhysAnimProtoActionJointDescriptor>& Descriptors = GetProtoActionJointDescriptors();
+		if (Descriptors.Num() != NumActionJoints)
+		{
+			OutError = FString::Printf(
+				TEXT("Action semantic trace expected %d joint descriptors but found %d."),
+				NumActionJoints,
+				Descriptors.Num());
+			return false;
+		}
+
+		OutTrace.Reserve(NumActionJoints);
+		for (const FPhysAnimProtoActionJointDescriptor& Descriptor : Descriptors)
+		{
+			const int32 BaseIndex = Descriptor.ProtoJointIndex * 3;
+			FPhysAnimActionJointSemanticTrace& Entry = OutTrace.AddDefaulted_GetRef();
+			Entry.ProtoJointIndex = Descriptor.ProtoJointIndex;
+			Entry.ProtoJointName = Descriptor.ProtoJointName;
+			Entry.MannyBoneName = Descriptor.MannyBoneName;
+			Entry.bSharesMappedControl = Descriptor.bSharesMappedControl;
+			Entry.RawAction = FVector(
+				RawActions[BaseIndex + 0],
+				RawActions[BaseIndex + 1],
+				RawActions[BaseIndex + 2]);
+			Entry.ConditionedAction = FVector(
+				ConditionedActions[BaseIndex + 0],
+				ConditionedActions[BaseIndex + 1],
+				ConditionedActions[BaseIndex + 2]);
+			Entry.RawDecodedRotationUe = ProtoJointQuaternionToUe(
+				ExpMapToQuaternion(PI * Entry.RawAction));
+			Entry.ConditionedDecodedRotationUe = ProtoJointQuaternionToUe(
+				ExpMapToQuaternion(PI * Entry.ConditionedAction));
+		}
+
+		OutError.Reset();
+		return true;
+	}
+
+	bool ValidateActionSemanticTrace(
+		const FPhysAnimActionSemanticTrace& Trace,
+		FString& OutError)
+	{
+		auto IsFiniteVector = [](const FVector& Value)
+		{
+			return FMath::IsFinite(Value.X) && FMath::IsFinite(Value.Y) && FMath::IsFinite(Value.Z);
+		};
+		auto IsFiniteNormalizedQuat = [](const FQuat& Value)
+		{
+			return FMath::IsFinite(Value.X) && FMath::IsFinite(Value.Y) &&
+				FMath::IsFinite(Value.Z) && FMath::IsFinite(Value.W) && Value.IsNormalized();
+		};
+		if (!Trace.bCaptured || Trace.CaptureScope.IsEmpty() || !Trace.CaptureError.IsEmpty())
+		{
+			OutError = TEXT("Action semantic trace is not a successful named capture.");
+			return false;
+		}
+		if (!FMath::IsFinite(Trace.PolicyStepDeltaTime) || Trace.PolicyStepDeltaTime < 0.0f ||
+			!FMath::IsFinite(Trace.PolicyInfluenceAlpha) || Trace.PolicyInfluenceAlpha < 0.0f || Trace.PolicyInfluenceAlpha > 1.0f ||
+			!FMath::IsFinite(Trace.MaxAngularStepDegrees) || Trace.MaxAngularStepDegrees < 0.0f)
+		{
+			OutError = TEXT("Action semantic trace has invalid global policy-step values.");
+			return false;
+		}
+
+		const TArray<FPhysAnimProtoActionJointDescriptor>& Descriptors = GetProtoActionJointDescriptors();
+		if (Trace.ActionJoints.Num() != NumActionJoints || Descriptors.Num() != NumActionJoints)
+		{
+			OutError = FString::Printf(
+				TEXT("Action semantic trace expected %d ordered joints but found %d."),
+				NumActionJoints,
+				Trace.ActionJoints.Num());
+			return false;
+		}
+		for (int32 JointIndex = 0; JointIndex < NumActionJoints; ++JointIndex)
+		{
+			const FPhysAnimActionJointSemanticTrace& Entry = Trace.ActionJoints[JointIndex];
+			const FPhysAnimProtoActionJointDescriptor& Descriptor = Descriptors[JointIndex];
+			if (Entry.ProtoJointIndex != JointIndex ||
+				Entry.ProtoJointName != Descriptor.ProtoJointName ||
+				Entry.MannyBoneName != Descriptor.MannyBoneName ||
+				Entry.bSharesMappedControl != Descriptor.bSharesMappedControl ||
+				!IsFiniteVector(Entry.RawAction) ||
+				!IsFiniteVector(Entry.ConditionedAction) ||
+				!IsFiniteNormalizedQuat(Entry.RawDecodedRotationUe) ||
+				!IsFiniteNormalizedQuat(Entry.ConditionedDecodedRotationUe))
+			{
+				OutError = FString::Printf(TEXT("Action semantic trace joint %d is malformed."), JointIndex);
+				return false;
+			}
+		}
+
+		const TArray<FName>& ControlledBones = GetControlledBoneNames();
+		if (Trace.ControlTargets.Num() != NumControlledBones || ControlledBones.Num() != NumControlledBones)
+		{
+			OutError = FString::Printf(
+				TEXT("Action semantic trace expected %d control targets but found %d."),
+				NumControlledBones,
+				Trace.ControlTargets.Num());
+			return false;
+		}
+		for (int32 ControlIndex = 0; ControlIndex < NumControlledBones; ++ControlIndex)
+		{
+			const FPhysAnimControlTargetSemanticTrace& Entry = Trace.ControlTargets[ControlIndex];
+			const FName ExpectedBoneName = ControlledBones[ControlIndex];
+			TArray<int32> ExpectedSourceIndices;
+			for (const FPhysAnimProtoActionJointDescriptor& Descriptor : Descriptors)
+			{
+				if (Descriptor.MannyBoneName == ExpectedBoneName)
+				{
+					ExpectedSourceIndices.Add(Descriptor.ProtoJointIndex);
+				}
+			}
+
+			const bool bFiniteScalars =
+				FMath::IsFinite(Entry.TwistLimitDegrees) &&
+				FMath::IsFinite(Entry.Swing1LimitDegrees) &&
+				FMath::IsFinite(Entry.Swing2LimitDegrees) &&
+				FMath::IsFinite(Entry.LowerLimbRangeScale) && Entry.LowerLimbRangeScale >= 0.0f &&
+				FMath::IsFinite(Entry.DistalRangeScale) && Entry.DistalRangeScale >= 0.0f &&
+				FMath::IsFinite(Entry.RawPolicyOffsetDegrees) && Entry.RawPolicyOffsetDegrees >= 0.0f &&
+				FMath::IsFinite(Entry.RangeScaleDeltaDegrees) && Entry.RangeScaleDeltaDegrees >= 0.0f &&
+				FMath::IsFinite(Entry.DistalScaleDeltaDegrees) && Entry.DistalScaleDeltaDegrees >= 0.0f &&
+				FMath::IsFinite(Entry.ConstraintRangeMappingDeltaDegrees) && Entry.ConstraintRangeMappingDeltaDegrees >= 0.0f &&
+				FMath::IsFinite(Entry.ConstraintProjectionDeltaDegrees) && Entry.ConstraintProjectionDeltaDegrees >= 0.0f &&
+				FMath::IsFinite(Entry.AdaptedToPublishedDeltaDegrees) && Entry.AdaptedToPublishedDeltaDegrees >= 0.0f &&
+				FMath::IsFinite(Entry.ReadbackErrorDegrees) && Entry.ReadbackErrorDegrees >= 0.0f;
+			const bool bFiniteStages =
+				IsFiniteNormalizedQuat(Entry.CombinedDecodedRotationUe) &&
+				IsFiniteNormalizedQuat(Entry.MannyNeutralRotation) &&
+				IsFiniteNormalizedQuat(Entry.BindComposedRotation) &&
+				IsFiniteNormalizedQuat(Entry.RangeScaledRotation) &&
+				IsFiniteNormalizedQuat(Entry.DistalScaledRotation) &&
+				IsFiniteNormalizedQuat(Entry.ConstraintRangeMappedRotation) &&
+				IsFiniteNormalizedQuat(Entry.ConstraintAdaptedRotation) &&
+				IsFiniteNormalizedQuat(Entry.BlendedRotation) &&
+				IsFiniteNormalizedQuat(Entry.PublishedRotation) &&
+				IsFiniteNormalizedQuat(Entry.ReadbackRotation);
+			if (Entry.MannyBoneName != ExpectedBoneName ||
+				Entry.ControlName != MakeControlName(ExpectedBoneName) ||
+				Entry.SourceProtoJointIndices != ExpectedSourceIndices ||
+				!Entry.bTargetWritten || !Entry.bReadbackSucceeded ||
+				!bFiniteScalars || !bFiniteStages)
+			{
+				OutError = FString::Printf(
+					TEXT("Action semantic trace control target %d (%s) is malformed."),
+					ControlIndex,
+					*ExpectedBoneName.ToString());
+				return false;
+			}
+		}
+
+		OutError.Reset();
 		return true;
 	}
 

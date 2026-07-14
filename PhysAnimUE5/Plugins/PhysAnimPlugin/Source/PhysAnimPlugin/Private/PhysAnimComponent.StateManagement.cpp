@@ -30,6 +30,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	FirstPolicyInferenceSnapshot.Reset();
 #if WITH_DEV_AUTOMATION_TESTS
 	FirstActiveStandingPolicyInferenceSnapshot.Reset();
+	FirstActiveStandingActionSemanticTrace.Reset();
 #endif
 	PreviousControlTargetRotations.Reset();
 	PolicyNeutralControlTargetRotations.Reset();

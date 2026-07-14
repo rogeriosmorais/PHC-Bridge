@@ -350,6 +350,102 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimActionSemanticTraceContractTest,
+		"PhysAnim.Bridge.ActionSemanticTraceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimActionSemanticTraceContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<float> RawActions;
+		RawActions.Init(0.0f, NumActionFloats);
+		TArray<float> ConditionedActions;
+		ConditionedActions.Init(0.0f, NumActionFloats);
+		RawActions[0] = 0.25f;
+		ConditionedActions[0] = 0.125f;
+
+		TArray<FPhysAnimActionJointSemanticTrace> JointTrace;
+		FString Error;
+		TestTrue(
+			TEXT("Finite action buffers build an ordered semantic trace"),
+			BuildActionJointSemanticTrace(RawActions, ConditionedActions, JointTrace, Error));
+		TestEqual(TEXT("Trace contains every Proto action joint"), JointTrace.Num(), NumActionJoints);
+
+		static const TArray<FName> ExpectedProtoJointNames = {
+			TEXT("L_Hip"), TEXT("L_Knee"), TEXT("L_Ankle"), TEXT("L_Toe"),
+			TEXT("R_Hip"), TEXT("R_Knee"), TEXT("R_Ankle"), TEXT("R_Toe"),
+			TEXT("Torso"), TEXT("Spine"), TEXT("Chest"), TEXT("Neck"), TEXT("Head"),
+			TEXT("L_Thorax"), TEXT("L_Shoulder"), TEXT("L_Elbow"), TEXT("L_Wrist"), TEXT("L_Hand"),
+			TEXT("R_Thorax"), TEXT("R_Shoulder"), TEXT("R_Elbow"), TEXT("R_Wrist"), TEXT("R_Hand") };
+		static const TArray<FName> ExpectedMannyBoneNames = {
+			TEXT("thigh_l"), TEXT("calf_l"), TEXT("foot_l"), TEXT("ball_l"),
+			TEXT("thigh_r"), TEXT("calf_r"), TEXT("foot_r"), TEXT("ball_r"),
+			TEXT("spine_01"), TEXT("spine_02"), TEXT("spine_03"), TEXT("neck_01"), TEXT("head"),
+			TEXT("clavicle_l"), TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"), TEXT("hand_l"),
+			TEXT("clavicle_r"), TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r"), TEXT("hand_r") };
+		for (int32 JointIndex = 0; JointIndex < JointTrace.Num(); ++JointIndex)
+		{
+			const FPhysAnimActionJointSemanticTrace& Entry = JointTrace[JointIndex];
+			TestEqual(TEXT("Trace preserves the Proto joint index"), Entry.ProtoJointIndex, JointIndex);
+			TestEqual(TEXT("Trace preserves the Proto DFS joint name"), Entry.ProtoJointName, ExpectedProtoJointNames[JointIndex]);
+			TestEqual(TEXT("Trace preserves the mapped Manny bone"), Entry.MannyBoneName, ExpectedMannyBoneNames[JointIndex]);
+			TestTrue(TEXT("Raw decoded action is normalized"), Entry.RawDecodedRotationUe.IsNormalized());
+			TestTrue(TEXT("Conditioned decoded action is normalized"), Entry.ConditionedDecodedRotationUe.IsNormalized());
+		}
+		TestTrue(TEXT("Left wrist reports its collapsed control"), JointTrace[16].bSharesMappedControl);
+		TestTrue(TEXT("Left hand reports its collapsed control"), JointTrace[17].bSharesMappedControl);
+		TestFalse(TEXT("Left elbow owns a unique control"), JointTrace[15].bSharesMappedControl);
+		TestTrue(
+			TEXT("Conditioned trace uses the checkpoint's pi-scaled Proto action contract"),
+			JointTrace[0].ConditionedDecodedRotationUe.Equals(
+				ProtoJointQuaternionToUe(ExpMapToQuaternion(FVector(0.125 * PI, 0.0, 0.0))),
+				1.0e-4f));
+
+		FPhysAnimActionSemanticTrace CompleteTrace;
+		CompleteTrace.bCaptured = true;
+		CompleteTrace.CaptureScope = TEXT("first_active_standing_target_write");
+		CompleteTrace.ActionJoints = JointTrace;
+		for (const FName BoneName : GetControlledBoneNames())
+		{
+			FPhysAnimControlTargetSemanticTrace& ControlEntry = CompleteTrace.ControlTargets.AddDefaulted_GetRef();
+			ControlEntry.MannyBoneName = BoneName;
+			ControlEntry.ControlName = MakeControlName(BoneName);
+			ControlEntry.bTargetWritten = true;
+			ControlEntry.bReadbackSucceeded = true;
+			for (const FPhysAnimActionJointSemanticTrace& JointEntry : JointTrace)
+			{
+				if (JointEntry.MannyBoneName == BoneName)
+				{
+					ControlEntry.SourceProtoJointIndices.Add(JointEntry.ProtoJointIndex);
+				}
+			}
+		}
+		TestTrue(
+			TEXT("A complete finite trace satisfies the publication contract"),
+			ValidateActionSemanticTrace(CompleteTrace, Error));
+		FPhysAnimActionSemanticTrace InvalidTrace = CompleteTrace;
+		InvalidTrace.ControlTargets[0].PublishedRotation = FQuat(0.0, 0.0, 0.0, 0.0);
+		TestFalse(
+			TEXT("Trace rejects a non-normalized publication stage"),
+			ValidateActionSemanticTrace(InvalidTrace, Error));
+		InvalidTrace = CompleteTrace;
+		InvalidTrace.ControlTargets.Pop();
+		TestFalse(
+			TEXT("Trace rejects an incomplete control target set"),
+			ValidateActionSemanticTrace(InvalidTrace, Error));
+
+		TArray<float> MalformedActions = RawActions;
+		MalformedActions.Pop();
+		TestFalse(
+			TEXT("Trace rejects malformed action width"),
+			BuildActionJointSemanticTrace(MalformedActions, ConditionedActions, JointTrace, Error));
+		RawActions[0] = std::numeric_limits<float>::quiet_NaN();
+		TestFalse(
+			TEXT("Trace rejects non-finite actions"),
+			BuildActionJointSemanticTrace(RawActions, ConditionedActions, JointTrace, Error));
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimActionToBoneMappingContractTest,
 		"PhysAnim.Bridge.ActionToBoneMappingContract",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

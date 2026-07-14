@@ -1487,6 +1487,11 @@ public:
 	bool IsProductControlDispatchDroppedForTesting() const { return bProductControlDispatchDroppedForTesting; }
 	void SetStandingVariantForTesting(EPhysAnimStandingVariant Variant) { StandingVariantForTesting = Variant; }
 	EPhysAnimStandingVariant GetStandingVariantForTesting() const { return StandingVariantForTesting; }
+	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
+	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
+	{
+		return FirstActiveStandingActionSemanticTrace;
+	}
 	void ApplyProductVariantFromCommandLineForTesting(const TCHAR* CommandLine);
 #endif
 	void ConsumeUpperBodyPendingResets();
@@ -2414,7 +2419,9 @@ private:
 	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstPolicyInferenceSnapshot;
 #if WITH_DEV_AUTOMATION_TESTS
 	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstActiveStandingPolicyInferenceSnapshot;
+	PhysAnimBridge::FPhysAnimActionSemanticTrace FirstActiveStandingActionSemanticTrace;
 	bool bProductControlDispatchDroppedForTesting = false;
+	bool bActionSemanticTraceEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
 #endif
 	TArray<UE::NNE::FTensorBindingCPU> InputBindings;

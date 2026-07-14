@@ -135,6 +135,83 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API inline constexpr float MetersToCm = 100.0f;
 	PHYSANIMPLUGIN_API inline constexpr float MannyRootHeightMeters = 0.912f;
 
+	struct PHYSANIMPLUGIN_API FPhysAnimProtoActionJointDescriptor
+	{
+		int32 ProtoJointIndex = INDEX_NONE;
+		FName ProtoJointName = NAME_None;
+		FName MannyBoneName = NAME_None;
+		bool bSharesMappedControl = false;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimActionJointSemanticTrace
+	{
+		int32 ProtoJointIndex = INDEX_NONE;
+		FName ProtoJointName = NAME_None;
+		FName MannyBoneName = NAME_None;
+		bool bSharesMappedControl = false;
+		FVector RawAction = FVector::ZeroVector;
+		FVector ConditionedAction = FVector::ZeroVector;
+		FQuat RawDecodedRotationUe = FQuat::Identity;
+		FQuat ConditionedDecodedRotationUe = FQuat::Identity;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimControlTargetSemanticTrace
+	{
+		FName MannyBoneName = NAME_None;
+		FName ControlName = NAME_None;
+		TArray<int32> SourceProtoJointIndices;
+		FQuat CombinedDecodedRotationUe = FQuat::Identity;
+		FQuat MannyNeutralRotation = FQuat::Identity;
+		FQuat BindComposedRotation = FQuat::Identity;
+		FQuat RangeScaledRotation = FQuat::Identity;
+		FQuat DistalScaledRotation = FQuat::Identity;
+		FQuat ConstraintRangeMappedRotation = FQuat::Identity;
+		FQuat ConstraintAdaptedRotation = FQuat::Identity;
+		FQuat BlendedRotation = FQuat::Identity;
+		FQuat PublishedRotation = FQuat::Identity;
+		FQuat ReadbackRotation = FQuat::Identity;
+		bool bHasConstraintProfile = false;
+		bool bTargetWritten = false;
+		bool bReadbackSucceeded = false;
+		int32 TwistMotion = INDEX_NONE;
+		int32 Swing1Motion = INDEX_NONE;
+		int32 Swing2Motion = INDEX_NONE;
+		float TwistLimitDegrees = 0.0f;
+		float Swing1LimitDegrees = 0.0f;
+		float Swing2LimitDegrees = 0.0f;
+		float LowerLimbRangeScale = 1.0f;
+		float DistalRangeScale = 1.0f;
+		float RawPolicyOffsetDegrees = 0.0f;
+		float RangeScaleDeltaDegrees = 0.0f;
+		float DistalScaleDeltaDegrees = 0.0f;
+		float ConstraintRangeMappingDeltaDegrees = 0.0f;
+		float ConstraintProjectionDeltaDegrees = 0.0f;
+		float AdaptedToPublishedDeltaDegrees = 0.0f;
+		float ReadbackErrorDegrees = 0.0f;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimActionSemanticTrace
+	{
+		void Reset()
+		{
+			bCaptured = false;
+			CaptureScope.Reset();
+			CaptureError.Reset();
+			ActionJoints.Reset();
+			ControlTargets.Reset();
+		}
+
+		bool bCaptured = false;
+		FString CaptureScope;
+		FString CaptureError;
+		float PolicyStepDeltaTime = 0.0f;
+		float PolicyInfluenceAlpha = 0.0f;
+		float MaxAngularStepDegrees = 0.0f;
+		bool bConstraintAdapterEnabled = false;
+		TArray<FPhysAnimActionJointSemanticTrace> ActionJoints;
+		TArray<FPhysAnimControlTargetSemanticTrace> ControlTargets;
+	};
+
 	struct PHYSANIMPLUGIN_API FPhysAnimPolicyInferenceSnapshot
 	{
 		bool CaptureFirst(
@@ -187,6 +264,7 @@ namespace PhysAnimBridge
 	};
 
 	PHYSANIMPLUGIN_API const TArray<FName>& GetControlledBoneNames();
+	PHYSANIMPLUGIN_API const TArray<FPhysAnimProtoActionJointDescriptor>& GetProtoActionJointDescriptors();
 	PHYSANIMPLUGIN_API const TArray<FName>& GetRequiredBodyModifierBoneNames();
 	PHYSANIMPLUGIN_API const TArray<FName>& GetSmplObservationBoneNames();
 	PHYSANIMPLUGIN_API FName GetRootBoneName();
@@ -268,6 +346,16 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API bool ConvertModelActionsToControlRotations(
 		const TArray<float>& ModelActions,
 		TMap<FName, FQuat>& OutControlRotations,
+		FString& OutError);
+
+	PHYSANIMPLUGIN_API bool BuildActionJointSemanticTrace(
+		const TArray<float>& RawActions,
+		const TArray<float>& ConditionedActions,
+		TArray<FPhysAnimActionJointSemanticTrace>& OutTrace,
+		FString& OutError);
+
+	PHYSANIMPLUGIN_API bool ValidateActionSemanticTrace(
+		const FPhysAnimActionSemanticTrace& Trace,
 		FString& OutError);
 
 	PHYSANIMPLUGIN_API FQuat LimitControlRotationStep(
