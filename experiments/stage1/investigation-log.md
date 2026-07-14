@@ -111,3 +111,19 @@ Machine-readable record: `experiments/stage1/real-onnx-first-policy-delay.e7.jso
 **Next experiment selected.** Extend only the explicit development chronology across the `WaitingForPoseSearch` early-return path, without extra PoseSearch calls, inference, raycasts, physics changes, or dispatch. Compare the newly observed prior-tick per-body signed pose/velocity delta against Mode A and E7 delay-plus-one; keep the same hashes, evaluator, and readback judges.
 
 Machine-readable record: `experiments/stage1/real-onnx-startup-chronology.e8.json`.
+
+## E9 — WaitingForPoseSearch startup chronology (2026-07-14)
+
+**Hypothesis.** The fixed tick immediately before Mode A contains the live body pose in the historical Mode-B direction, and its velocity publication differs from Mode A.
+
+**Baseline configuration and result.** Commit `656e78fd623c396f57776b4ff64e24e9bad46556`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s; 10 s; unchanged seed and pose; no perturbation; action/provenance traces on; startup chronology off. Automation passed with no errors. The evaluator `FAIL` remained body linear speed, pelvis height, and root tilt with readback 1.0; first-input hash was Mode A `AAAF45E7…`.
+
+**Experimental configuration and result.** Identical clean commit, binary, model, protocol, harness, and evaluator with only `-PhysAnimStartupChronologyTrace` enabled. Automation passed; the evaluator failure set and readback were identical. First/active input, semantic, provenance, physics, policy, and render artifacts were byte-identical to baseline. The valid six-stage trace exposed a 0.016666668 s `WaitingForPoseSearch → BridgeActive` tick before the existing 0.033333335 s `BridgeActive → Standing_Preparation → policy tick 1` sequence. The prior-tick body position and rotation deltas versus Mode A were near-perfect signed inverses of authoritative E7 delay +1: correlations `-0.9999968702` and `-0.9999981786`, scales `-1.0008553753` and `-1.0001182905`, with maximum inverse residuals `2.93e-6` m and `2.30e-6`. Both prior and Mode-A samples published exactly zero linear and angular velocity.
+
+**Supported or falsified.** Partially supported: the earlier-pose component was supported; the velocity-discriminator component was falsified. Historical Mode B was not yet reconstructed, so this is not causal-standing proof.
+
+**What was learned.** The live pose follows an almost symmetric one-tick-before/Mode-A/one-tick-after sequence, and runtime-state changes within the observed ticks do not alter that source. Historical Mode B differs from Mode A in all 214 self-observation pose slots and none of the 144 all-zero velocity slots. The remaining high-information boundary is observation reconstruction from the prior-tick Manny body source, not more physics tuning.
+
+**Next experiment selected.** Cache and replay only prior-tick `MannyCurrentBodySamples` at first inference before the unchanged Manny-to-canonical adapter; do not override root frames, terrain, PoseSearch, future references, timing, physics, or dispatch. Seek exact historical Mode-B equality for the full hash and self, mimic, terrain, model-output, and action sections, with configured/consumed/source-time/source-hash evidence in a separate development-only artifact.
+
+Machine-readable record: `experiments/stage1/real-onnx-waiting-chronology.e9.json`.
