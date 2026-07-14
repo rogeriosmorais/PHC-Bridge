@@ -398,18 +398,21 @@ namespace PhysAnimBridge
 			int32 InPolicyControlTick,
 			TConstArrayView<FPhysAnimBodySample> InBodySamples);
 
-		bool RecordFirstPolicySourceIf(
+		bool SelectFirstPolicySourceIf(
 			bool bCondition,
+			bool bReplayPriorBodySamples,
 			const FString& InStage,
 			double InWorldTimeSeconds,
 			const FString& InRuntimeState,
 			int32 InPolicyControlTick,
-			TConstArrayView<FPhysAnimBodySample> InLiveBodySamples,
+			TArray<FPhysAnimBodySample>& InOutBodySamples,
 			FString& OutError);
 
 		void Reset();
 
 		bool bFirstInferenceRecorded = false;
+		bool bReplayConfigured = false;
+		bool bReplayConsumed = false;
 		FString ValidationError;
 		FPhysAnimFirstPolicyBodySourceRecord Prior;
 		FPhysAnimFirstPolicyBodySourceRecord Live;

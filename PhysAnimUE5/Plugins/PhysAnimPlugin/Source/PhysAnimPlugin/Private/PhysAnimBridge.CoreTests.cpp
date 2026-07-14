@@ -1073,7 +1073,8 @@ namespace
 				PriorSamples));
 		TestTrue(
 			TEXT("A disabled first-policy recording is a behavior-neutral no-op"),
-			DisabledTrace.RecordFirstPolicySourceIf(
+			DisabledTrace.SelectFirstPolicySourceIf(
+				false,
 				false,
 				TEXT("first_policy_pre_adapter"),
 				2.0 / 60.0,
@@ -1083,6 +1084,8 @@ namespace
 				Error));
 		TestFalse(TEXT("Disabled tracing does not record a prior source"), DisabledTrace.Prior.bRecorded);
 		TestFalse(TEXT("Disabled tracing does not record first inference"), DisabledTrace.bFirstInferenceRecorded);
+		TestFalse(TEXT("Disabled tracing does not configure replay"), DisabledTrace.bReplayConfigured);
+		TestFalse(TEXT("Disabled tracing does not consume replay"), DisabledTrace.bReplayConsumed);
 		TestTrue(TEXT("Disabled tracing leaves the live source untouched"), SamplesEqual(DisabledEffective, LiveSamples));
 
 		FPhysAnimFirstPolicyBodySourceTrace LiveTrace;
@@ -1125,8 +1128,9 @@ namespace
 		TArray<FPhysAnimBodySample> LiveEffective = LiveSamples;
 		TestTrue(
 			TEXT("The instrumentation-only path records the live source"),
-			LiveTrace.RecordFirstPolicySourceIf(
+			LiveTrace.SelectFirstPolicySourceIf(
 				true,
+				false,
 				TEXT("first_policy_pre_adapter"),
 				2.0 / 60.0,
 				TEXT("Standing_Preparation"),
@@ -1134,6 +1138,8 @@ namespace
 				LiveEffective,
 				Error));
 		TestTrue(TEXT("The first-policy source recording is one-shot"), LiveTrace.bFirstInferenceRecorded);
+		TestFalse(TEXT("Default-off selection does not configure replay"), LiveTrace.bReplayConfigured);
+		TestFalse(TEXT("Default-off selection does not consume replay"), LiveTrace.bReplayConsumed);
 		TestTrue(TEXT("The live source is copied into the live record"), SamplesEqual(LiveTrace.Live.BodySamples, LiveSamples));
 		TestTrue(TEXT("The effective source remains exactly live"), SamplesEqual(LiveTrace.Effective.BodySamples, LiveSamples));
 		TestTrue(TEXT("Live selection does not mutate the caller's source"), SamplesEqual(LiveEffective, LiveSamples));
@@ -1146,8 +1152,9 @@ namespace
 		const TArray<FPhysAnimBodySample> SecondSelectionBefore = SecondSelectionInput;
 		TestTrue(
 			TEXT("A repeated recording call is an accepted no-op"),
-			LiveTrace.RecordFirstPolicySourceIf(
+			LiveTrace.SelectFirstPolicySourceIf(
 				true,
+				false,
 				TEXT("first_policy_pre_adapter"),
 				3.0 / 60.0,
 				TEXT("Standing_Preparation"),
@@ -1155,6 +1162,81 @@ namespace
 				SecondSelectionInput,
 				Error));
 		TestTrue(TEXT("A repeated recording cannot mutate a later source"), SamplesEqual(SecondSelectionInput, SecondSelectionBefore));
+
+		FPhysAnimFirstPolicyBodySourceTrace ReplayTrace;
+		TestTrue(
+			TEXT("Replay captures the same valid prior-source contract"),
+			ReplayTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorSamples));
+		TArray<FPhysAnimBodySample> ReplayEffective = LiveSamples;
+		TestTrue(
+			TEXT("Configured replay selects the prior source at first inference"),
+			ReplayTrace.SelectFirstPolicySourceIf(
+				true,
+				true,
+				TEXT("first_policy_pre_adapter"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				ReplayEffective,
+				Error));
+		TestTrue(TEXT("Replay configuration is recorded"), ReplayTrace.bReplayConfigured);
+		TestTrue(TEXT("Successful first-inference replay is consumed"), ReplayTrace.bReplayConsumed);
+		TestTrue(TEXT("Replay preserves the exact live source as evidence"), SamplesEqual(ReplayTrace.Live.BodySamples, LiveSamples));
+		TestTrue(TEXT("Replay records the exact prior source as effective"), SamplesEqual(ReplayTrace.Effective.BodySamples, PriorSamples));
+		TestTrue(TEXT("Replay replaces only the caller's effective source"), SamplesEqual(ReplayEffective, PriorSamples));
+		TestTrue(
+			TEXT("A complete replay-source trace satisfies its invariant contract"),
+			ValidateFirstPolicyBodySourceTrace(ReplayTrace, Error));
+		TestTrue(TEXT("A valid replay-source trace has no validation error"), Error.IsEmpty());
+
+		TArray<FPhysAnimBodySample> SecondReplayInput = MakeBodySamples(301.0);
+		const TArray<FPhysAnimBodySample> SecondReplayBefore = SecondReplayInput;
+		TestTrue(
+			TEXT("Replay consumption is one-shot"),
+			ReplayTrace.SelectFirstPolicySourceIf(
+				true,
+				true,
+				TEXT("first_policy_pre_adapter"),
+				3.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				2,
+				SecondReplayInput,
+				Error));
+		TestTrue(TEXT("Consumed replay cannot mutate a later source"), SamplesEqual(SecondReplayInput, SecondReplayBefore));
+
+		FPhysAnimFirstPolicyBodySourceTrace InvalidLiveTrace;
+		TestTrue(
+			TEXT("Invalid-live testing starts from a valid prior source"),
+			InvalidLiveTrace.CapturePriorIf(
+				true,
+				TEXT("pre_state_machine"),
+				1.0 / 60.0,
+				TEXT("WaitingForPoseSearch"),
+				0,
+				PriorSamples));
+		TArray<FPhysAnimBodySample> InvalidLiveSamples = LiveSamples;
+		InvalidLiveSamples.Pop();
+		const TArray<FPhysAnimBodySample> InvalidLiveBefore = InvalidLiveSamples;
+		TestFalse(
+			TEXT("Replay rejects an invalid live source before mutation"),
+			InvalidLiveTrace.SelectFirstPolicySourceIf(
+				true,
+				true,
+				TEXT("first_policy_pre_adapter"),
+				2.0 / 60.0,
+				TEXT("Standing_Preparation"),
+				1,
+				InvalidLiveSamples,
+				Error));
+		TestTrue(TEXT("Rejected replay records that it was configured"), InvalidLiveTrace.bReplayConfigured);
+		TestFalse(TEXT("Rejected replay is not consumed"), InvalidLiveTrace.bReplayConsumed);
+		TestTrue(TEXT("Rejected replay leaves caller data untouched"), SamplesEqual(InvalidLiveSamples, InvalidLiveBefore));
 
 		FPhysAnimFirstPolicyBodySourceTrace InvalidCountTrace;
 		TArray<FPhysAnimBodySample> ShortSamples = PriorSamples;
@@ -1184,12 +1266,14 @@ namespace
 				NonFiniteSamples));
 		TestFalse(TEXT("Non-finite source rejection is explicit"), InvalidFiniteTrace.ValidationError.IsEmpty());
 
-		LiveTrace.Reset();
-		TestFalse(TEXT("Reset clears the prior cache"), LiveTrace.Prior.bRecorded);
-		TestFalse(TEXT("Reset clears the live source"), LiveTrace.Live.bRecorded);
-		TestFalse(TEXT("Reset clears the effective source"), LiveTrace.Effective.bRecorded);
-		TestFalse(TEXT("Reset clears one-shot recording state"), LiveTrace.bFirstInferenceRecorded);
-		TestTrue(TEXT("Reset clears validation evidence"), LiveTrace.ValidationError.IsEmpty());
+		ReplayTrace.Reset();
+		TestFalse(TEXT("Reset clears the prior cache"), ReplayTrace.Prior.bRecorded);
+		TestFalse(TEXT("Reset clears the live source"), ReplayTrace.Live.bRecorded);
+		TestFalse(TEXT("Reset clears the effective source"), ReplayTrace.Effective.bRecorded);
+		TestFalse(TEXT("Reset clears one-shot recording state"), ReplayTrace.bFirstInferenceRecorded);
+		TestFalse(TEXT("Reset clears replay configuration"), ReplayTrace.bReplayConfigured);
+		TestFalse(TEXT("Reset clears replay consumption"), ReplayTrace.bReplayConsumed);
+		TestTrue(TEXT("Reset clears validation evidence"), ReplayTrace.ValidationError.IsEmpty());
 		return true;
 	}
 #endif

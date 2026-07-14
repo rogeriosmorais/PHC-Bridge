@@ -34,3 +34,19 @@ def test_build_script_forwards_startup_chronology_only_when_explicitly_requested
     assert "[switch]$StartupChronologyTrace" in source
     assert "if ($StartupChronologyTrace)" in source
     assert '$EditorArguments += "-PhysAnimStartupChronologyTrace"' in source
+
+
+def test_build_script_forwards_first_policy_body_replay_only_when_explicitly_requested() -> None:
+    source = (REPO_ROOT / "scripts" / "build.ps1").read_text(encoding="utf-8")
+    forwarding_line = (
+        '$EditorArguments += "-PhysAnimExperimentalReplayPriorBodySamplesAtFirstInference"'
+    )
+    guarded_forwarding = (
+        "if ($ExperimentalReplayPriorBodySamplesAtFirstInference) {\n"
+        f"        {forwarding_line}\n"
+        "    }"
+    )
+
+    assert "[switch]$ExperimentalReplayPriorBodySamplesAtFirstInference" in source
+    assert guarded_forwarding in source
+    assert source.count(forwarding_line) == 1
