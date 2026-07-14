@@ -1,0 +1,204 @@
+{
+  "schema_version": "physanim-evidence-driven-investigation/v1",
+  "experiment_id": "active-standing-action-semantics-e3",
+  "recorded_utc": "2026-07-14T17:36:07Z",
+  "experiment_type": "same_commit_instrumentation_ab",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "The first active-standing action path materially changes otherwise valid ProtoMotions absolute joint targets during Manny neutral/bind composition or constraint adaptation, producing a systematic range, projection, axis, or sign distortion before Physics Control publication.",
+  "supporting_evidence_before_experiment": {
+    "source_experiment": "experiments/stage1/active-standing-root-frame-alignment.e2.json",
+    "controlled_target_plant_can_stand": true,
+    "real_onnx_baseline_failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "first_policy_enabled_max_raw_policy_offset_bone": "calf_l",
+    "first_policy_enabled_max_raw_policy_offset_deg": 115.2,
+    "first_policy_enabled_lower_limb_limit_occupancy_bone": "calf_l",
+    "first_policy_enabled_lower_limb_limit_occupancy_ratio": 12.7,
+    "target_readback_match_ratio": 1.0,
+    "checkpoint_action_count": 69,
+    "checkpoint_joint_count": 23,
+    "checkpoint_mimic_residual_control": false,
+    "checkpoint_map_actions_to_pd_range": true,
+    "checkpoint_action_scale": 1.0,
+    "checkpoint_action_clamp": 1.0
+  },
+  "competing_explanations": [
+    "The action adapter is semantically correct and the large targets are legitimate recovery commands from the policy.",
+    "A remaining observation-frame or checkpoint-compatibility error causes the policy to request poor targets even though decoding and publication are correct."
+  ],
+  "single_changed_variable": {
+    "name": "first_active_standing_action_semantic_trace",
+    "baseline": false,
+    "experimental": true,
+    "activation": "-PhysAnimActionSemanticTrace",
+    "scope": "WITH_DEV_AUTOMATION_TESTS and RealOnnxPolicy and first BalanceActive_Standing target write only",
+    "behavior_changed": false,
+    "production_default_changed": false,
+    "activation_contract_changed": false,
+    "serialization_contract_changed": false,
+    "acceptance_thresholds_changed": false
+  },
+  "expected_if_hypothesis_correct": "At least one target stage shows a systematic material change, projection, saturation, or bilateral axis/sign inconsistency while the final target readback still matches publication.",
+  "falsification_observation": "All 23 actions decode in the checkpoint order, all 21 controlled targets reconstruct through the adapter without systematic stage changes or constraint projection, and publication/readback remains exact.",
+  "locked_judges": {
+    "protocol": "product-gates/standing-plant-ladder.v2.json",
+    "protocol_version": 2,
+    "protocol_status": "LOCKED",
+    "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+    "evaluator": "scripts/evaluate_standing_plant.py",
+    "automation_test": "PhysAnim.Development.StandingPlant.RealOnnxPolicy",
+    "variant": "RealOnnxPolicy",
+    "fixed_delta_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "perturbation": "none_for_standing_plant_layer",
+    "deterministic_seed": "unchanged_harness_default_no_override",
+    "initial_pose": "unchanged_standing_plant_fixture",
+    "repetition": 1,
+    "acceptance_threshold_changes": "none"
+  },
+  "implementation": {
+    "source_commit": "8640197929b33842f58be3483456d5edd5ea07ee",
+    "source_tree_dirty": false,
+    "commit_subject": "Instrument active standing action semantics",
+    "model_path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+    "model_sha256": "c8df64f75e10b3f71766895c054466db1918582ba5a5a85538a1dec8594bbe19",
+    "trace_schema": "physanim-action-semantic-trace/v1",
+    "trace_authority": "DEVELOPMENT_DIAGNOSTIC_ONLY",
+    "deterministic_contract_tests": [
+      "PhysAnim.Bridge.ActionSemanticTraceContract",
+      "PhysAnim.ProductHarness.DropDispatchSwitch"
+    ],
+    "deterministic_contract_test_status": "PASS"
+  },
+  "baseline": {
+    "artifact_root": "test-results/action-semantic-trace/RealOnnxPolicy-action-trace-e3-baseline",
+    "trace_enabled": false,
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "trace": {
+      "enabled": false,
+      "captured": false,
+      "sha256": "55B2937501E18360B83252FBC6AA0D688B75AFCEDE3BB77F15605CBE26966028"
+    },
+    "key_metrics": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.986961,
+      "minimum_pelvis_height_ratio": 0.153366,
+      "maximum_root_tilt_deg": 105.401276,
+      "maximum_root_linear_speed_cm_per_sec": 818.946884,
+      "maximum_root_angular_speed_deg_per_sec": 558.735126,
+      "maximum_body_linear_speed_cm_per_sec": 1119.794147,
+      "maximum_body_angular_speed_deg_per_sec": 1742.669912,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "target_readback_match_ratio": 1.0
+    }
+  },
+  "experimental": {
+    "artifact_root": "test-results/action-semantic-trace/RealOnnxPolicy-action-trace-e3-experimental",
+    "trace_enabled": true,
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "trace": {
+      "enabled": true,
+      "captured": true,
+      "capture_scope": "first_active_standing_target_write",
+      "capture_error": "",
+      "action_joint_count": 23,
+      "control_target_count": 21,
+      "policy_step_delta_time": 0.03333333507180214,
+      "policy_influence_alpha": 1.0,
+      "max_angular_step_deg": 0.0,
+      "constraint_adapter_enabled": true,
+      "constraint_profile_count": 17,
+      "missing_constraint_profile_bones": [
+        "neck_01",
+        "head",
+        "clavicle_l",
+        "clavicle_r"
+      ],
+      "target_write_count": 21,
+      "readback_success_count": 21,
+      "maximum_readback_error_deg": 0.0,
+      "maximum_range_or_distal_scale_delta_deg": 0.000001708,
+      "constraint_range_mapped_control_count": 14,
+      "mean_constraint_range_mapping_delta_deg": 19.008891,
+      "maximum_constraint_range_mapping_delta_deg": 72.824051,
+      "maximum_constraint_range_mapping_bone": "lowerarm_r",
+      "lower_body_mean_constraint_range_mapping_delta_deg": 27.156594,
+      "lower_body_maximum_constraint_range_mapping_delta_deg": 47.093262,
+      "lower_body_maximum_constraint_range_mapping_bone": "foot_l",
+      "controls_projected_over_0_001_deg": 4,
+      "maximum_constraint_projection_delta_deg": 8.858796,
+      "maximum_constraint_projection_bone": "calf_r",
+      "maximum_adapted_to_published_delta_deg": 0.000001708,
+      "sha256": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94"
+    },
+    "lower_body_stage_deltas": [
+      {"bone": "thigh_l", "raw_policy_offset_deg": 39.085846, "constraint_range_mapping_delta_deg": 31.877089, "constraint_projection_delta_deg": 0.000056},
+      {"bone": "calf_l", "raw_policy_offset_deg": 44.964436, "constraint_range_mapping_delta_deg": 36.864639, "constraint_projection_delta_deg": 0.924516},
+      {"bone": "foot_l", "raw_policy_offset_deg": 64.616295, "constraint_range_mapping_delta_deg": 47.093262, "constraint_projection_delta_deg": 0.86225},
+      {"bone": "ball_l", "raw_policy_offset_deg": 19.797316, "constraint_range_mapping_delta_deg": 0.0, "constraint_projection_delta_deg": 0.000011},
+      {"bone": "thigh_r", "raw_policy_offset_deg": 46.508232, "constraint_range_mapping_delta_deg": 30.620892, "constraint_projection_delta_deg": 0.000046},
+      {"bone": "calf_r", "raw_policy_offset_deg": 76.474091, "constraint_range_mapping_delta_deg": 31.304176, "constraint_projection_delta_deg": 8.858796},
+      {"bone": "foot_r", "raw_policy_offset_deg": 40.092453, "constraint_range_mapping_delta_deg": 39.492691, "constraint_projection_delta_deg": 3.842969},
+      {"bone": "ball_r", "raw_policy_offset_deg": 16.058672, "constraint_range_mapping_delta_deg": 0.0, "constraint_projection_delta_deg": 0.000006}
+    ],
+    "key_metrics": {
+      "sample_count": 601,
+      "minimum_pelvis_height_cm": 13.986961,
+      "minimum_pelvis_height_ratio": 0.153366,
+      "maximum_root_tilt_deg": 105.401276,
+      "maximum_root_linear_speed_cm_per_sec": 818.946884,
+      "maximum_root_angular_speed_deg_per_sec": 558.735126,
+      "maximum_body_linear_speed_cm_per_sec": 1119.794147,
+      "maximum_body_angular_speed_deg_per_sec": 1742.669912,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "target_readback_match_ratio": 1.0
+    }
+  },
+  "result_comparison": {
+    "instrumentation_valid": true,
+    "physics_stream_bit_identical": true,
+    "policy_stream_bit_identical": true,
+    "active_standing_policy_input_snapshot_bit_identical": true,
+    "policy_input_snapshot_bit_identical": true,
+    "physics_sha256": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+    "policy_sha256": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+    "active_standing_policy_input_snapshot_sha256": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+    "policy_input_snapshot_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+    "locked_metric_changes": "none",
+    "behavioral_result": "IDENTICAL_AS_REQUIRED_FOR_INSTRUMENTATION"
+  },
+  "conclusion": {
+    "hypothesis_status": "SUPPORTED",
+    "support_scope": "LOCALIZATION_ONLY_NOT_CAUSAL_PROOF",
+    "summary": "The first active-standing trace preserved the exact 23-joint checkpoint order and reached all 21 Physics Control targets with zero measured readback error. Neutral/bind composition, optional lower-limb/distal scaling, blending, publication, and readback did not introduce a material extra change. The Manny constraint-range mapper was the dominant systematic transformation: it changed 14 controls, averaged 27.157 degrees across the eight lower-body controls, and changed the left foot by 47.093 degrees. The following safety projection changed four controls by more than 0.001 degrees and changed the right calf by 8.859 degrees. This supports the adapter-stage localization hypothesis, but an observation-only experiment cannot yet prove that the range mapping is causally harmful rather than required Manny adaptation.",
+    "promotion_decision": "RETAIN_DIAGNOSTIC_AND_RUN_SINGLE_VARIABLE_BEHAVIOR_TEST"
+  },
+  "next_highest_information_experiment": {
+    "status": "SELECTED_NOT_RUN",
+    "hypothesis": "The full-range-to-Manny constraint remapping is the causal distortion; bypassing only that remap while retaining the same constraint-frame safety projection will improve locked standing metrics.",
+    "single_variable": "bypass MapProtoPolicyTargetToMannyConstraintRange for RealOnnxPolicy active standing behind a WITH_DEV_AUTOMATION_TESTS runtime flag, while retaining AdaptParentRelativeTarget and every other target stage",
+    "baseline": "Trace enabled, range remapping enabled",
+    "experimental": "Trace enabled, range remapping bypassed, safety projection still enabled",
+    "expected_if_correct": "The trace shows zero range-mapping delta and a changed projection result, while at least one locked pelvis-height, root-tilt, or body-speed metric improves with full target readback.",
+    "falsifier": "The remap is verifiably bypassed but locked standing metrics are unchanged or worse, or projection saturates the unremapped targets without behavioral improvement.",
+    "required_ab": "Fresh same-commit RealOnnxPolicy baseline and experimental runs with identical seed, timestep, initial pose, no perturbation, capture window, trace, and locked evaluator."
+  }
+}

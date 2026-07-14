@@ -82,6 +82,7 @@ test-results/product-runs/
 test-results/standing-plant-runs/
 test-results/standing-input-snapshots/
 test-results/adapter-*/
+test-results/action-semantic-trace/
 test-results/phase1-autocalib/
 test-results/**/*.receipt.json
 *.private.pem

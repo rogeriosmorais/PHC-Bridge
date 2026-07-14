@@ -15,3 +15,19 @@
 **Next experiment selected.** Instrument the first active-standing action path per joint: raw Proto action triplet → decoded SMPL local rotation → mapped Manny constraint-frame target → authored axes/limits → applied/read-back target. Change no behavior until that trace identifies a specific frame or sign mismatch.
 
 Machine-readable record: `experiments/stage1/active-standing-root-frame-alignment.e2.json`.
+
+## E3 — First active-standing action semantics (2026-07-14)
+
+**Hypothesis.** The first active-standing action path materially distorts valid ProtoMotions absolute joint targets during Manny neutral/bind composition or constraint adaptation before Physics Control publication.
+
+**Baseline configuration and result.** Commit `8640197929b33842f58be3483456d5edd5ea07ee`; locked standing-plant v2 protocol; `RealOnnxPolicy`; 1/60 s fixed step; 10 s window; unchanged default seed, initial pose, and no perturbation; trace off. Result: `FAIL` on body linear speed, pelvis height, and root tilt; minimum pelvis ratio 0.153366; maximum root tilt 105.401°; maximum body linear speed 1119.794 cm/s; readback 1.0.
+
+**Experimental configuration and result.** Identical configuration, commit, binary, and evaluator with only `-PhysAnimActionSemanticTrace` enabled. Result: the physics, policy, and both observation-snapshot streams were bit-identical to baseline; evaluator `FAIL` was identical. The valid trace captured 23 ordered action joints and 21 targets. Constraint-range remapping changed 14 controls, averaged 27.157° across the eight lower-body controls, and changed `foot_l` by 47.093°; the following projection reached 8.859° on `calf_r`; publication/readback error was 0°.
+
+**Supported or falsified.** Supported as a localization hypothesis, not yet as causal proof. The dominant systematic action transformation is constraint-range remapping, while downstream publication and readback are exact.
+
+**What was learned.** Raw action decoding preserves the checkpoint's 23-joint order, all 21 targets are written/read back, and neither optional range/distal scaling nor blending/publication explains the collapse. The Manny range mapper is now the highest-information causal candidate; the retained trace is behavior-neutral.
+
+**Next experiment selected.** Behind a development-only runtime flag, bypass only `MapProtoPolicyTargetToMannyConstraintRange` during active standing while retaining `AdaptParentRelativeTarget` safety projection. Run a fresh same-commit trace-enabled baseline beside it under the unchanged locked protocol.
+
+Machine-readable record: `experiments/stage1/active-standing-action-semantics.e3.json`.
