@@ -137,6 +137,16 @@ namespace
 	TOptional<double> ResolveCausalStandingSampleTime(double ActualTimeSeconds, double CaptureWindowSeconds);
 	double GetCausalStandingFixedDeltaTimeSeconds();
 	double AdvanceCausalStandingSupportGapMs(double CurrentGapMs, bool bHasSupportContact, double DeltaTimeSeconds);
+	TArray<TSharedPtr<FJsonValue>> BuildPolicyActionJsonArray(const TArray<float>& Actions)
+	{
+		TArray<TSharedPtr<FJsonValue>> JsonActions;
+		JsonActions.Reserve(Actions.Num());
+		for (const float Action : Actions)
+		{
+			JsonActions.Add(MakeShared<FJsonValueNumber>(static_cast<double>(Action)));
+		}
+		return JsonActions;
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -171,6 +181,28 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	TestEqual(TEXT("Mass diagnostic records the minimum mass"), MassExtrema.MinMassKg, 0.1);
 	TestEqual(TEXT("Inertia diagnostic records the lowest-inertia body"), MassExtrema.MinInertiaBody, FName(TEXT("ball_r")));
 	TestEqual(TEXT("Inertia diagnostic records the minimum tensor component"), MassExtrema.MinInertiaKgCmSq, 0.25);
+
+	TArray<float> ZeroActions;
+	ZeroActions.Init(0.0f, 69);
+	const TArray<TSharedPtr<FJsonValue>> ZeroActionJson = BuildPolicyActionJsonArray(ZeroActions);
+	TestEqual(TEXT("Policy evidence preserves the 69-action width"), ZeroActionJson.Num(), 69);
+	for (int32 ActionIndex = 0; ActionIndex < ZeroActionJson.Num(); ++ActionIndex)
+	{
+		TestEqual(
+			FString::Printf(TEXT("Zero policy action %d remains exactly zero"), ActionIndex),
+			ZeroActionJson[ActionIndex]->AsNumber(),
+			0.0);
+	}
+
+	TArray<float> IndexedActions;
+	IndexedActions.Init(0.0f, 69);
+	IndexedActions[0] = -0.25f;
+	IndexedActions[34] = 0.5f;
+	IndexedActions[68] = 0.75f;
+	const TArray<TSharedPtr<FJsonValue>> IndexedActionJson = BuildPolicyActionJsonArray(IndexedActions);
+	TestEqual(TEXT("Policy evidence preserves action index 0"), IndexedActionJson[0]->AsNumber(), -0.25);
+	TestEqual(TEXT("Policy evidence preserves action index 34"), IndexedActionJson[34]->AsNumber(), 0.5);
+	TestEqual(TEXT("Policy evidence preserves action index 68"), IndexedActionJson[68]->AsNumber(), 0.75);
 
 	UPhysAnimComponent* const Component = NewObject<UPhysAnimComponent>();
 	TestNotNull(TEXT("Transient product harness component"), Component);
@@ -829,6 +861,8 @@ namespace
 			Row->SetBoolField(TEXT("inference_succeeded"), Metrics.PolicyInferenceSuccessCount > LastInferenceSuccessCount);
 			Row->SetNumberField(TEXT("raw_action_l2"), L2Norm(Component->GetRawPolicyActionsForDiagnostics()));
 			Row->SetNumberField(TEXT("conditioned_action_l2"), L2Norm(Component->GetConditionedPolicyActionsForDiagnostics()));
+			Row->SetArrayField(TEXT("raw_actions"), BuildPolicyActionJsonArray(Component->GetRawPolicyActionsForDiagnostics()));
+			Row->SetArrayField(TEXT("conditioned_actions"), BuildPolicyActionJsonArray(Component->GetConditionedPolicyActionsForDiagnostics()));
 			Row->SetNumberField(TEXT("target_write_attempt_count"), Diagnostics.NumTotalTargetsWritten);
 			Row->SetNumberField(TEXT("target_readback_match_count"), ReadbackMatches);
 			Row->SetNumberField(TEXT("target_readback_max_error_deg"), MaxReadbackErrorDegrees);
@@ -925,11 +959,30 @@ namespace
 			IFileManager::Get().MakeDirectory(*Config.RunRoot, true);
 			const FString PhysicsPath = FPaths::Combine(Config.RunRoot, TEXT("physics.jsonl"));
 			const FString PolicyPath = FPaths::Combine(Config.RunRoot, TEXT("policy.jsonl"));
+			const FString PolicyInputSnapshotPath = FPaths::Combine(Config.RunRoot, TEXT("policy-input-snapshot.json"));
 			const FString RenderPath = FPaths::Combine(Config.RunRoot, TEXT("render.png"));
 			const FString ManifestPath = FPaths::Combine(Config.RunRoot, TEXT("manifest.json"));
 			const bool bPhysicsWritten = FFileHelper::SaveStringToFile(FString::Join(PhysicsRows, TEXT("\n")) + TEXT("\n"), *PhysicsPath);
 			const FString PolicyContents = PolicyRows.IsEmpty() ? FString() : FString::Join(PolicyRows, TEXT("\n")) + TEXT("\n");
 			const bool bPolicyWritten = FFileHelper::SaveStringToFile(PolicyContents, *PolicyPath);
+			const PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot EmptySnapshot;
+			const PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot& Snapshot = Component
+				? Component->GetFirstPolicyInferenceSnapshotForDiagnostics()
+				: EmptySnapshot;
+			const TSharedRef<FJsonObject> SnapshotJson = MakeShared<FJsonObject>();
+			SnapshotJson->SetStringField(TEXT("schema_version"), TEXT("physanim-policy-input-snapshot/v1"));
+			SnapshotJson->SetBoolField(TEXT("captured"), Snapshot.bCaptured);
+			SnapshotJson->SetNumberField(TEXT("self_observation_width"), Snapshot.SelfObservation.Num());
+			SnapshotJson->SetNumberField(TEXT("mimic_target_poses_width"), Snapshot.MimicTargetPoses.Num());
+			SnapshotJson->SetNumberField(TEXT("terrain_width"), Snapshot.Terrain.Num());
+			SnapshotJson->SetNumberField(TEXT("action_width"), Snapshot.Actions.Num());
+			SnapshotJson->SetArrayField(TEXT("self_observation"), BuildPolicyActionJsonArray(Snapshot.SelfObservation));
+			SnapshotJson->SetArrayField(TEXT("mimic_target_poses"), BuildPolicyActionJsonArray(Snapshot.MimicTargetPoses));
+			SnapshotJson->SetArrayField(TEXT("terrain"), BuildPolicyActionJsonArray(Snapshot.Terrain));
+			SnapshotJson->SetArrayField(TEXT("actions"), BuildPolicyActionJsonArray(Snapshot.Actions));
+			const bool bPolicyInputSnapshotWritten = FFileHelper::SaveStringToFile(
+				SerializeJson(SnapshotJson) + TEXT("\n"),
+				*PolicyInputSnapshotPath);
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
 
 			const FString ProtocolPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), Config.ProtocolRelativePath));
@@ -949,10 +1002,11 @@ namespace
 			Manifest->SetNumberField(TEXT("perturbation_time_sec"), Config.bApplyPerturbation ? PerturbationTimeSeconds : -1.0);
 			Manifest->SetStringField(TEXT("physics_samples"), TEXT("physics.jsonl"));
 			Manifest->SetStringField(TEXT("policy_samples"), TEXT("policy.jsonl"));
+			Manifest->SetStringField(TEXT("policy_input_snapshot"), TEXT("policy-input-snapshot.json"));
 			Manifest->SetStringField(TEXT("render_capture"), TEXT("render.png"));
 			Manifest->SetNumberField(TEXT("render_nonblank_pixel_count"), NonblankPixels);
 			const bool bManifestWritten = FFileHelper::SaveStringToFile(SerializeJson(Manifest) + TEXT("\n"), *ManifestPath);
-			return bPhysicsWritten && bPolicyWritten && bManifestWritten;
+			return bPhysicsWritten && bPolicyWritten && bPolicyInputSnapshotWritten && bManifestWritten;
 		}
 
 		FAutomationTestBase* Test = nullptr;

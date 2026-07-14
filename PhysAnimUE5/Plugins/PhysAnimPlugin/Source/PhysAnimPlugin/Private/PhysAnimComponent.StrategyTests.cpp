@@ -102,6 +102,9 @@ namespace
 			TEXT("The captured child world rotation remains distinct from the published target"),
 			CapturedSeed.ChildWorldRotation.AngularDistance(ChildWorldRotation) <= KINDA_SMALL_NUMBER);
 		TestTrue(
+			TEXT("A current-pose seed initially uses its physical parent as the action-axis reference"),
+			CapturedSeed.ParentActionAxisReferenceRotation.AngularDistance(ParentWorldRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
 			TEXT("Current-pose targets are published in Physics Control parent-relative space"),
 			CapturedSeed.ParentRelativeTargetRotation.AngularDistance(ExpectedParentRelativeRotation) <= KINDA_SMALL_NUMBER);
 		TestTrue(
@@ -116,24 +119,88 @@ namespace
 		TestFalse(
 			TEXT("The first policy frame does not reset the captured parent-relative seed to zero"),
 			UPhysAnimComponent::ShouldResetAllControlOffsetsForPolicyTargetRepresentationSwitch(true, true));
+		TestEqual(
+			TEXT("ProtoMotions position-only PD does not synthesize angular velocity for a changing proximal target"),
+			UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(
+				TEXT("calf_l"),
+				false,
+				false,
+				false,
+				1.0f / 30.0f),
+			0.0f);
+		TestEqual(
+			TEXT("ProtoMotions position-only PD remains velocity-free on the first policy frame"),
+			UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(
+				TEXT("spine_01"),
+				true,
+				true,
+				false,
+				1.0f / 30.0f),
+			0.0f);
 		const FQuat PolicyRotation(FVector::ForwardVector, FMath::DegreesToRadians(35.0f));
+		const FQuat LiveHandoverRotation(FVector::RightVector, FMath::DegreesToRadians(-15.0f));
+		const FQuat ExpectedBindCalibratedPolicyRotation =
+			(ParentWorldRotation.Inverse() *
+			 PolicyRotation *
+			 ParentWorldRotation *
+			 ExpectedParentRelativeRotation).GetNormalized();
 		TestTrue(
-			TEXT("Zero policy influence exactly preserves the captured parent-relative seed"),
+			TEXT("Zero policy influence exactly preserves the live handover seed"),
 			UPhysAnimComponent::BlendPolicyTargetRotation(
-				ExpectedParentRelativeRotation,
-				PolicyRotation,
-				0.0f).AngularDistance(ExpectedParentRelativeRotation) <= KINDA_SMALL_NUMBER);
+				LiveHandoverRotation,
+				ExpectedBindCalibratedPolicyRotation,
+				0.0f).AngularDistance(LiveHandoverRotation) <= KINDA_SMALL_NUMBER);
 		TestTrue(
-			TEXT("Identity policy action offset exactly reproduces Manny's captured neutral target"),
-			UPhysAnimComponent::ComposePolicyActionOffset(
-				ExpectedParentRelativeRotation,
+			TEXT("Identity Proto policy rotation exactly reproduces Manny's T-pose bind target"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetInMannyBindFrame(
+				CapturedSeed,
 				FQuat::Identity).AngularDistance(ExpectedParentRelativeRotation) <= KINDA_SMALL_NUMBER);
 		TestTrue(
-			TEXT("Policy action offsets are composed in the captured joint-local frame"),
-			UPhysAnimComponent::ComposePolicyActionOffset(
-				ExpectedParentRelativeRotation,
-				PolicyRotation).AngularDistance(
-					(ExpectedParentRelativeRotation * PolicyRotation).GetNormalized()) <= KINDA_SMALL_NUMBER);
+			TEXT("Proto policy rotations are conjugated into Manny's parent bind frame before the bind neutral"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetInMannyBindFrame(
+				CapturedSeed,
+				PolicyRotation).AngularDistance(ExpectedBindCalibratedPolicyRotation) <= KINDA_SMALL_NUMBER);
+		const FQuat ExpectedStableNeutralPolicyRotation =
+			(ParentWorldRotation.Inverse() *
+			 PolicyRotation *
+			 ParentWorldRotation *
+			 LiveHandoverRotation).GetNormalized();
+		TestTrue(
+			TEXT("Identity Proto policy rotation exactly reproduces the captured stable Manny neutral"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
+				CapturedSeed,
+				LiveHandoverRotation,
+				FQuat::Identity).AngularDistance(LiveHandoverRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Nonzero Proto policy rotations compose in bind axes around the same stable Manny neutral"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
+				CapturedSeed,
+				LiveHandoverRotation,
+				PolicyRotation).AngularDistance(ExpectedStableNeutralPolicyRotation) <= KINDA_SMALL_NUMBER);
+		FPhysAnimControlTargetSeed AxisCalibratedSeed = CapturedSeed;
+		AxisCalibratedSeed.ParentActionAxisReferenceRotation =
+			FQuat(FVector::UpVector, FMath::DegreesToRadians(-20.0f));
+		const FQuat ExpectedAxisCalibratedPolicyRotation =
+			(AxisCalibratedSeed.ParentActionAxisReferenceRotation.Inverse() *
+			 PolicyRotation *
+			 AxisCalibratedSeed.ParentActionAxisReferenceRotation *
+			 LiveHandoverRotation).GetNormalized();
+		TestTrue(
+			TEXT("A T-pose bone-axis calibration can be distinct from the physical neutral seed"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
+				AxisCalibratedSeed,
+				LiveHandoverRotation,
+				PolicyRotation).AngularDistance(ExpectedAxisCalibratedPolicyRotation) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Bind-frame target composition is distinct from the legacy live-neutral right composition"),
+			ExpectedBindCalibratedPolicyRotation.AngularDistance(
+				(LiveHandoverRotation * PolicyRotation).GetNormalized()) > FMath::DegreesToRadians(1.0f));
+		TestTrue(
+			TEXT("Full policy influence reaches the absolute bind-calibrated target"),
+			UPhysAnimComponent::BlendPolicyTargetRotation(
+				LiveHandoverRotation,
+				ExpectedBindCalibratedPolicyRotation,
+				1.0f).AngularDistance(ExpectedBindCalibratedPolicyRotation) <= KINDA_SMALL_NUMBER);
 
 		const FQuat NeutralPelvisActorRelativeRotation =
 			(FQuat(FVector::ForwardVector, FMath::DegreesToRadians(90.0f)) *
@@ -155,6 +222,83 @@ namespace
 				TiltedPelvisWorldRotation,
 				NeutralPelvisActorRelativeRotation,
 				ActorWorldRotation), 30.0f, 0.05f));
+
+		TestEqual(
+			TEXT("A Chaos static-world trace grounds self observation when CharacterMovement has no floor"),
+			UPhysAnimComponent::ResolveObservationGroundWorldZ(
+				true, 210.0f,
+				false, false, 0.0f,
+				300.0f, 90.0f, 0.0f,
+				0.0f),
+			210.0f);
+		TestEqual(
+			TEXT("The current Chaos trace is authoritative over stale CharacterMovement floor data"),
+			UPhysAnimComponent::ResolveObservationGroundWorldZ(
+				true, 210.0f,
+				true, true, 100.0f,
+				300.0f, 90.0f, 0.0f,
+				0.0f),
+			210.0f);
+		TestEqual(
+			TEXT("CharacterMovement floor data remains the fallback when the static-world trace misses"),
+			UPhysAnimComponent::ResolveObservationGroundWorldZ(
+				false, 0.0f,
+				true, true, 205.0f,
+				300.0f, 90.0f, 0.0f,
+				0.0f),
+			205.0f);
+
+		const FQuat WorldRootRotation(FVector::UpVector, FMath::DegreesToRadians(90.0f));
+		const FQuat DataRootRotation(FVector::UpVector, FMath::DegreesToRadians(-20.0f));
+		const FTransform SelectedWorldRoot(WorldRootRotation, FVector(10.0, 20.0, 3.0));
+		const FTransform SelectedDataRoot(DataRootRotation, FVector(1.0, 2.0, 0.9));
+		const FVector BodyPositionInRootFrame(0.4, -0.2, 0.7);
+		const FQuat BodyRotationInRootFrame(FVector::RightVector, FMath::DegreesToRadians(15.0f));
+		const FVector LinearVelocityInRootFrame(1.0, 2.0, 3.0);
+		const FVector AngularVelocityInRootFrame(-0.5, 0.25, 0.75);
+		TArray<FPhysAnimBodySample> WorldFrameSamples;
+		WorldFrameSamples.Add(FPhysAnimBodySample{
+			SelectedWorldRoot.GetLocation(),
+			SelectedWorldRoot.GetRotation(),
+			WorldRootRotation.RotateVector(LinearVelocityInRootFrame),
+			WorldRootRotation.RotateVector(AngularVelocityInRootFrame)});
+		WorldFrameSamples.Add(FPhysAnimBodySample{
+			SelectedWorldRoot.GetLocation() + WorldRootRotation.RotateVector(BodyPositionInRootFrame),
+			(WorldRootRotation * BodyRotationInRootFrame).GetNormalized(),
+			WorldRootRotation.RotateVector(LinearVelocityInRootFrame),
+			WorldRootRotation.RotateVector(AngularVelocityInRootFrame)});
+		TArray<FPhysAnimBodySample> DataFrameSamples;
+		UPhysAnimComponent::MakeMimicTargetDataFrameBodySamples(
+			WorldFrameSamples,
+			SelectedWorldRoot,
+			SelectedDataRoot,
+			DataFrameSamples);
+		TestEqual(TEXT("Mimic frame conversion preserves every body sample"), DataFrameSamples.Num(), WorldFrameSamples.Num());
+		TestTrue(
+			TEXT("The selected runtime root maps exactly onto the selected motion-data root"),
+			DataFrameSamples[0].Position.Equals(SelectedDataRoot.GetLocation(), KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("The selected runtime root rotation maps exactly onto the motion-data root rotation"),
+			DataFrameSamples[0].Rotation.AngularDistance(SelectedDataRoot.GetRotation()) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Manny body positions are rotated and translated into the ProtoMotions data frame"),
+			DataFrameSamples[1].Position.Equals(
+				SelectedDataRoot.GetLocation() + DataRootRotation.RotateVector(BodyPositionInRootFrame),
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Manny body rotations are expressed in the same frame as future motion targets"),
+			DataFrameSamples[1].Rotation.AngularDistance(
+				(DataRootRotation * BodyRotationInRootFrame).GetNormalized()) <= KINDA_SMALL_NUMBER);
+		TestTrue(
+			TEXT("Linear velocity follows the same world-to-data frame rotation"),
+			DataFrameSamples[1].LinearVelocity.Equals(
+				DataRootRotation.RotateVector(LinearVelocityInRootFrame),
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("Angular velocity follows the same world-to-data frame rotation"),
+			DataFrameSamples[1].AngularVelocity.Equals(
+				DataRootRotation.RotateVector(AngularVelocityInRootFrame),
+				KINDA_SMALL_NUMBER));
 
 		TestTrue(
 			TEXT("Prepare suppresses policy dispatch independently of evidence collection"),
@@ -2084,6 +2228,9 @@ namespace
 		FPhysAnimStabilizationSettings Settings;
 		FPhysAnimStabilizationSettings OverrideSettings = Settings;
 		TestFalse(TEXT("Force-zero actions defaults to disabled"), Settings.bForceZeroActions);
+		TestTrue(TEXT("Proto-to-Manny constraint adaptation defaults to enabled"), Settings.bEnableProtoMannyConstraintAdapter);
+		OverrideSettings.bEnableProtoMannyConstraintAdapter = false;
+		TestTrue(TEXT("Constraint-adapter enablement participates in settings equality"), Settings != OverrideSettings);
 		TestEqual(TEXT("Policy control rate defaults to the ProtoMotions-trained cadence"), Settings.PolicyControlRateHz, 30.0f);
 		TestEqual(TEXT("Phase 2 RootOn root linear spike budget stays at the documented POC threshold"), Settings.BalancePhase2AbortRootLinearSpeed, 1200.0f);
 		TestEqual(TEXT("Phase 2 RootOn root angular spike budget stays at the documented POC threshold"), Settings.BalancePhase2AbortRootAngularSpeed, 4000.0f);

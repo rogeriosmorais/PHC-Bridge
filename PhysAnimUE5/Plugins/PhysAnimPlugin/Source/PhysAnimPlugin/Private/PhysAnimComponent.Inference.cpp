@@ -91,6 +91,11 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		}
 		return false;
 	}
+	FirstPolicyInferenceSnapshot.CaptureFirst(
+		SelfObservationBuffer,
+		MimicTargetPosesBuffer,
+		TerrainBuffer,
+		ActionOutputBuffer);
 	PreviousActionOutputBuffer = ActionOutputsBeforeRun;
 	if (bCaptureMetrics)
 	{

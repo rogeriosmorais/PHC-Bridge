@@ -35,6 +35,7 @@ struct FPhysAnimControlTargetSeed
 	FQuat ParentWorldRotation = FQuat::Identity;
 	FQuat ChildWorldRotation = FQuat::Identity;
 	FQuat ParentRelativeTargetRotation = FQuat::Identity;
+	FQuat ParentActionAxisReferenceRotation = FQuat::Identity;
 };
 
 struct FBridgeIntentState
@@ -133,13 +134,16 @@ struct FPhysAnimStabilizationSettings
 	bool bForceZeroActions = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
-	float ActionScale = 0.1f;
+	float ActionScale = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float ActionClampAbs = 0.2f;
+	float ActionClampAbs = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float ActionSmoothingAlpha = 0.25f;
+	float ActionSmoothingAlpha = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
+	bool bEnableProtoMannyConstraintAdapter = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float StartupRampSeconds = 0.25f;
@@ -172,13 +176,13 @@ struct FPhysAnimStabilizationSettings
 	float TrainingAlignedToeLimitPolicyBlend = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
-	bool bApplyTrainingAlignedLowerLimbTargetRangePolicy = true;
+	bool bApplyTrainingAlignedLowerLimbTargetRangePolicy = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float TrainingAlignedLowerLimbTargetRangePolicyBlend = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
-	bool bApplyTrainingAlignedDistalLocomotionTargetPolicy = true;
+	bool bApplyTrainingAlignedDistalLocomotionTargetPolicy = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float TrainingAlignedDistalLocomotionTargetPolicyBlend = 1.0f;
@@ -187,7 +191,7 @@ struct FPhysAnimStabilizationSettings
 	float DistalLocomotionTargetPolicyActivationSpeedCmPerSec = 50.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization")
-	bool bApplyTrainingAlignedDistalLocomotionCompositionPolicy = true;
+	bool bApplyTrainingAlignedDistalLocomotionCompositionPolicy = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float DistalLocomotionCompositionPolicyActivationSpeedCmPerSec = 50.0f;
@@ -205,7 +209,7 @@ struct FPhysAnimStabilizationSettings
 	float DistalLocomotionCompositionPolicyIntentGraceSeconds = 0.20f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
-	float MaxAngularStepDegreesPerSecond = 180.0f;
+	float MaxAngularStepDegreesPerSecond = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PhysAnim|Stabilization", meta = (ClampMin = "0.0"))
 	float AngularStrengthMultiplier = 1.0f;
@@ -500,6 +504,7 @@ struct FPhysAnimStabilizationSettings
 			FMath::IsNearlyEqual(ActionScale, Other.ActionScale) &&
 			FMath::IsNearlyEqual(ActionClampAbs, Other.ActionClampAbs) &&
 			FMath::IsNearlyEqual(ActionSmoothingAlpha, Other.ActionSmoothingAlpha) &&
+			bEnableProtoMannyConstraintAdapter == Other.bEnableProtoMannyConstraintAdapter &&
 			FMath::IsNearlyEqual(StartupRampSeconds, Other.StartupRampSeconds) &&
 			FMath::IsNearlyEqual(PolicyControlRateHz, Other.PolicyControlRateHz) &&
 			bApplyTrainingAlignedMassScales == Other.bApplyTrainingAlignedMassScales &&
@@ -964,6 +969,7 @@ struct FPhase1AutoCalibBaselineSnapshot
 	TArray<FPhase1AutoCalibBodyModifierState> BodyModifiers;
 	TMap<FName, FQuat> PreviousControlTargetRotations;
 	TMap<FName, FQuat> PolicyBlendStartControlTargetRotations;
+	TMap<FName, FQuat> PolicyNeutralControlTargetRotations;
 	TArray<float> ConditionedActionBuffer;
 	TArray<float> PreviousConditionedActionBuffer;
 	TArray<float> SelfObservationBuffer;
@@ -1471,6 +1477,7 @@ public:
 	const TMap<FName, FQuat>& GetPolicyBlendStartControlTargetRotationsForDiagnostics() const { return PolicyBlendStartControlTargetRotations; }
 	const TArray<float>& GetRawPolicyActionsForDiagnostics() const { return ActionOutputBuffer; }
 	const TArray<float>& GetConditionedPolicyActionsForDiagnostics() const { return ConditionedActionBuffer; }
+	const PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot& GetFirstPolicyInferenceSnapshotForDiagnostics() const { return FirstPolicyInferenceSnapshot; }
 #if WITH_DEV_AUTOMATION_TESTS
 	void SetProductControlDispatchDroppedForTesting(bool bDropped) { bProductControlDispatchDroppedForTesting = bDropped; }
 	bool IsProductControlDispatchDroppedForTesting() const { return bProductControlDispatchDroppedForTesting; }
@@ -2170,9 +2177,10 @@ private:
 	bool QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	bool GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& OutBodySamples, FString& OutError) const;
 	bool SampleFuturePoses(const FPoseSearchBlueprintResult& SearchResult, TArray<FPhysAnimFuturePoseSample>& OutFutureSamples, FString& OutError) const;
-	bool ResolveMimicTargetReferenceDataOffset(
+	bool ResolveMimicTargetReferenceDataFrame(
 		const FPoseSearchBlueprintResult& SearchResult,
-		FVector2D& OutDataOffsetXY,
+		FTransform& OutWorldRoot,
+		FTransform& OutDataRoot,
 		FString& OutError) const;
 	bool RunInference(FString& OutError);
 	FPhysAnimStabilizationSettings ResolveEffectiveStabilizationSettings() const;
@@ -2381,6 +2389,8 @@ private:
 	TSharedPtr<UE::NNE::IModelInstanceCPU> ModelInstanceCPU;
 
 	TArray<FTransform> CachedSmplObservationRestComponentTransforms;
+	TArray<FQuat> CachedSmplObservationRestBodyComponentRotations;
+	TMap<FName, FPhysAnimControlTargetSeed> CachedTPoseControlTargetSeeds;
 	bool bHasNeutralPelvisActorRelativeRotation = false;
 	FQuat NeutralPelvisActorRelativeRotation = FQuat::Identity;
 
@@ -2397,6 +2407,7 @@ private:
 	TArray<float> RecentActionMagnitudeHistory;
 	TArray<float> PreviousConditionedActionBuffer;
 	TArray<float> ConditionedActionBuffer;
+	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstPolicyInferenceSnapshot;
 #if WITH_DEV_AUTOMATION_TESTS
 	bool bProductControlDispatchDroppedForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
@@ -2470,6 +2481,7 @@ private:
 	double BridgeTraceLastFlushTimeSeconds = -1.0;
 	TMap<FName, FQuat> PreviousControlTargetRotations;
 	TMap<FName, FQuat> PolicyBlendStartControlTargetRotations;
+	TMap<FName, FQuat> PolicyNeutralControlTargetRotations;
 	bool bPolicyTargetsAppliedLastFrame = false;
 	bool bPolicyInfluenceRampReanchoredOnFirstPolicyEnabledFrame = false;
 	bool bStartupBringUpFrozenByBalanceEntry = false;
@@ -2676,6 +2688,11 @@ public:
 	static FPhysAnimControlTargetSeed BuildCurrentPoseControlTargetSeed(
 		const FQuat& ParentWorldRotation,
 		const FQuat& ChildWorldRotation);
+	static bool BuildSmplBindBodyComponentRotations(
+		const FQuat& MeshWorldRotation,
+		const TMap<FName, FPhysAnimControlTargetSeed>& TPoseControlTargetSeeds,
+		TArray<FQuat>& OutBodyComponentRotations,
+		FString& OutError);
 	static float CalculateNeutralCalibratedPelvisTiltDegrees(
 		const FQuat& CurrentPelvisWorldRotation,
 		const FQuat& NeutralPelvisActorRelativeRotation,
@@ -2783,6 +2800,16 @@ public:
 		bool bFirstPolicyEnabledFrame,
 		bool bDistalLocomotionCompositionModeActive,
 		float DeltaTime);
+	static float ResolveObservationGroundWorldZ(
+		bool bHasStaticGroundTrace,
+		float StaticGroundTraceZ,
+		bool bHasWalkableFloor,
+		bool bHasBlockingFloorHit,
+		float FloorImpactPointZ,
+		float CapsuleCenterZ,
+		float CapsuleHalfHeight,
+		float FloorDistance,
+		float FallbackGroundWorldZ);
 	static float ResolveObservationGroundWorldZFromFloor(
 		bool bHasWalkableFloor,
 		bool bHasBlockingFloorHit,
@@ -2799,13 +2826,10 @@ public:
 		const TArray<FPhysAnimBodySample>& SourceBodySamples,
 		float GroundWorldZ,
 		TArray<FPhysAnimBodySample>& OutBodySamples);
-	static FVector2D ResolveMimicTargetReferenceDataOffsetXY(
-		const FVector& CurrentSelectedWorldRootPosition,
-		const FVector& CurrentSelectedDataRootPosition);
-	static void MakeMimicTargetCurrentReferenceBodySamples(
+	static void MakeMimicTargetDataFrameBodySamples(
 		const TArray<FPhysAnimBodySample>& SourceBodySamples,
-		const FVector2D& DataOffsetXY,
-		float GroundWorldZ,
+		const FTransform& CurrentSelectedWorldRoot,
+		const FTransform& CurrentSelectedDataRoot,
 		TArray<FPhysAnimBodySample>& OutBodySamples);
 	static float ResolvePolicyControlIntervalSeconds(float PolicyControlRateHz);
 	static bool ShouldPrewarmPhysicsControlActivationPose(bool bHasSkeletalMeshComponent, bool bHasLeaderPoseComponent);
@@ -2856,7 +2880,13 @@ public:
 		float PolicyControlIntervalSeconds,
 		float& InOutAccumulatorSeconds,
 		int32& OutElapsedSteps);
-	static FQuat ComposePolicyActionOffset(const FQuat& NeutralParentRelativeRotation, const FQuat& PolicyActionOffsetRotation);
+	static FQuat ComposeProtoPolicyTargetInMannyBindFrame(
+		const FPhysAnimControlTargetSeed& MannyBindSeed,
+		const FQuat& ProtoPolicyRotationUe);
+	static FQuat ComposeProtoPolicyTargetAroundMannyNeutral(
+		const FPhysAnimControlTargetSeed& MannyBindSeed,
+		const FQuat& MannyNeutralParentRelativeRotation,
+		const FQuat& ProtoPolicyRotationUe);
 	static FQuat BlendPolicyTargetRotation(const FQuat& BaselineRotation, const FQuat& PolicyTargetRotation, float PolicyAlpha);
 	static float CalculateControlTargetDeltaDegrees(const FQuat& PreviousRotation, const FQuat& TargetRotation);
 	static float CalculateControlAuthorityAlpha(

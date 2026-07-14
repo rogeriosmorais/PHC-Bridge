@@ -29,9 +29,10 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 				OutError = TEXT("PhysAnimComponent requires a valid TPoseReference animation to align bone axes. Please assign a 1-frame T-Pose AnimSequence.");
 				return false;
 			}
-			if (CachedSmplObservationRestComponentTransforms.IsEmpty())
+			if (CachedSmplObservationRestComponentTransforms.IsEmpty() ||
+				CachedSmplObservationRestBodyComponentRotations.Num() != PhysAnimBridge::NumSmplBodies)
 			{
-				OutError = TEXT("Live T-pose capture did not populate cached rest transforms before model initialization.");
+				OutError = TEXT("Live T-pose capture did not populate synchronized bone/body rest transforms before model initialization.");
 				return false;
 			}
 			ActivatedStandingStabilityMetrics.bPolicyModelLoaded = true;
@@ -62,9 +63,10 @@ bool UPhysAnimComponent::InitializeModel(FString& OutError)
 				OutError = TEXT("PhysAnimComponent requires a valid TPoseReference animation to align bone axes. Please assign a 1-frame T-Pose AnimSequence.");
 				return false;
 			}
-			if (CachedSmplObservationRestComponentTransforms.IsEmpty())
+			if (CachedSmplObservationRestComponentTransforms.IsEmpty() ||
+				CachedSmplObservationRestBodyComponentRotations.Num() != PhysAnimBridge::NumSmplBodies)
 			{
-				OutError = TEXT("Live T-pose capture did not populate cached rest transforms before model initialization.");
+				OutError = TEXT("Live T-pose capture did not populate synchronized bone/body rest transforms before model initialization.");
 				return false;
 			}
 			ActivatedStandingStabilityMetrics.bPolicyModelLoaded = true;

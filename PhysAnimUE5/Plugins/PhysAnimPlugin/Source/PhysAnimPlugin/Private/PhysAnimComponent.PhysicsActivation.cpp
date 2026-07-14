@@ -268,6 +268,7 @@ bool UPhysAnimComponent::SeedControlTargetsFromCurrentPose(float DeltaTime, FStr
 
 	PreviousControlTargetRotations.Reset();
 	PolicyBlendStartControlTargetRotations.Reset();
+	PolicyNeutralControlTargetRotations.Reset();
 
 	for (const TPair<FName, FPhysAnimControlTargetSeed>& Pair : CurrentPoseTargetSeeds)
 	{
@@ -298,6 +299,7 @@ bool UPhysAnimComponent::SeedControlTargetsFromCurrentPose(float DeltaTime, FStr
 		const FQuat ParentRelativeTarget = Readback.TargetOrientation.Quaternion();
 		PreviousControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
 		PolicyBlendStartControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
+		PolicyNeutralControlTargetRotations.Add(Pair.Key, ParentRelativeTarget);
 	}
 
 	return true;

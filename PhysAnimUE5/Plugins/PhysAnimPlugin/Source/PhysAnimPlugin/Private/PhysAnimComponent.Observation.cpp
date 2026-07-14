@@ -1,5 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
+#include "PhysAnimProtoMannyAdapter.h"
+#include "PhysicsEngine/BodyInstance.h"
 
 bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& OutBodySamples, FString& OutError) const
 {
@@ -12,9 +14,24 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 
 	OutBodySamples.Reset();
 	OutBodySamples.Reserve(PhysAnimBridge::NumSmplBodies);
+	if (CachedSmplObservationRestBodyComponentRotations.Num() != PhysAnimBridge::NumSmplBodies)
+	{
+		OutError = TEXT("The synchronized T-pose PhysicsAsset body-frame calibration is incomplete.");
+		return false;
+	}
+	if (CachedSmplObservationRestComponentTransforms.Num() != PhysAnimBridge::NumSmplBodies)
+	{
+		OutError = TEXT("The T-pose bone-frame calibration is incomplete.");
+		return false;
+	}
+	TArray<FQuat> CurrentBodyComponentRotations;
+	CurrentBodyComponentRotations.Reserve(PhysAnimBridge::NumSmplBodies);
+	FQuat CurrentRootBoneComponentRotation = FQuat::Identity;
 
 	const TArray<FName>& BoneNames = PhysAnimBridge::GetSmplObservationBoneNames();
-	const FQuat MeshWorldRotation = SkeletalMesh->GetComponentQuat();
+	const FQuat MeshWorldRotation = SkeletalMesh->GetComponentQuat().GetNormalized();
+	const FQuat WorldToComponentRotation = MeshWorldRotation.Inverse();
+	USkeletalMeshComponent* const MutableMesh = const_cast<USkeletalMeshComponent*>(SkeletalMesh);
 
 	for (int32 i = 0; i < BoneNames.Num(); ++i)
 	{
@@ -26,30 +43,55 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 		}
 
 		const FTransform BoneWorldTransform = SkeletalMesh->GetBoneTransform(BoneName, RTS_World);
-		USkeletalMeshComponent* const MutableMesh = const_cast<USkeletalMeshComponent*>(SkeletalMesh);
+		if (i == 0)
+		{
+			CurrentRootBoneComponentRotation =
+				(WorldToComponentRotation * BoneWorldTransform.GetRotation().GetNormalized()).GetNormalized();
+		}
 		const FVector BoneLinearVelocity = MutableMesh->GetPhysicsLinearVelocity(BoneName);
 		const FVector BoneAngularVelocity = MutableMesh->GetPhysicsAngularVelocityInRadians(BoneName);
-
-		FTransform CurrentComponentTransform = BoneWorldTransform.GetRelativeTransform(SkeletalMesh->GetComponentTransform());
-		CurrentComponentTransform.NormalizeRotation();
-
-		FQuat CorrectedComponentRotation = CurrentComponentTransform.GetRotation().GetNormalized();
-		if (CachedSmplObservationRestComponentTransforms.IsValidIndex(i))
+		const FBodyInstance* const BodyInstance = MutableMesh->GetBodyInstance(BoneName);
+		if (!BodyInstance || !BodyInstance->IsValidBodyInstance())
 		{
-			const FMatrix CurrentComponentMatrix = CurrentComponentTransform.ToMatrixNoScale();
-			const FMatrix RestComponentMatrix = CachedSmplObservationRestComponentTransforms[i].ToMatrixNoScale();
-			const FMatrix CorrectedComponentMatrix = CurrentComponentMatrix * RestComponentMatrix.InverseFast();
-			CorrectedComponentRotation = FQuat(CorrectedComponentMatrix).GetNormalized();
+			OutError = FString::Printf(
+				TEXT("Missing synchronized physics body for observation bone '%s'."),
+				*BoneName.ToString());
+			return false;
 		}
-
-		const FQuat CorrectedWorldRotation =
-			(MeshWorldRotation * CorrectedComponentRotation).GetNormalized();
-
+		const FQuat BodyWorldRotation =
+			BodyInstance->GetUnrealWorldTransform().GetRotation().GetNormalized();
+		CurrentBodyComponentRotations.Add(
+			(WorldToComponentRotation * BodyWorldRotation).GetNormalized());
 		OutBodySamples.Add(FPhysAnimBodySample(
 			PhysAnimBridge::UeWorldPositionToProtoRuntime(BoneWorldTransform.GetLocation()),
-			PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CorrectedWorldRotation),
+			FQuat::Identity,
 			PhysAnimBridge::UeWorldVelocityToProtoRuntime(BoneLinearVelocity),
 			PhysAnimBridge::UeWorldRotationVectorToProtoRuntime(BoneAngularVelocity)));
+	}
+	const FQuat RootCanonicalRotation =
+		PhysAnimProtoMannyAdapter::BuildCanonicalSmplRootRotationFromBonePose(
+			MeshWorldRotation,
+			CachedSmplObservationRestComponentTransforms[0].GetRotation(),
+			CurrentRootBoneComponentRotation);
+
+	TArray<FQuat> CanonicalGlobalRotations;
+	FString AdapterError;
+	if (!PhysAnimProtoMannyAdapter::BuildCanonicalSmplRotationsFromBodyPose(
+		RootCanonicalRotation,
+		CachedSmplObservationRestBodyComponentRotations,
+		CurrentBodyComponentRotations,
+		CanonicalGlobalRotations,
+		AdapterError))
+	{
+		OutBodySamples.Reset();
+		OutError = FString::Printf(TEXT("Could not adapt live Manny bone rotations to SMPL: %s"), *AdapterError);
+		return false;
+	}
+
+	for (int32 BodyIndex = 0; BodyIndex < OutBodySamples.Num(); ++BodyIndex)
+	{
+		OutBodySamples[BodyIndex].Rotation =
+			PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CanonicalGlobalRotations[BodyIndex]);
 	}
 
 	return true;
@@ -67,20 +109,42 @@ float UPhysAnimComponent::ResolveSelfObservationGroundHeight(const TArray<FPhysA
 	const ACharacter* const CharacterOwner = Cast<ACharacter>(GetOwner());
 	const UCharacterMovementComponent* const CharacterMovement = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr;
 	const UCapsuleComponent* const CapsuleComponent = CharacterOwner ? CharacterOwner->GetCapsuleComponent() : nullptr;
-	if (!SkeletalMesh || !CharacterMovement || !CapsuleComponent)
+	if (!SkeletalMesh)
 	{
 		return 0.0f;
 	}
 
 	const FVector RootWorldLocation = SkeletalMesh->GetBoneLocation(PhysAnimBridge::GetRootBoneName());
-	const FFindFloorResult& CurrentFloor = CharacterMovement->CurrentFloor;
-	const float GroundWorldZ = ResolveObservationGroundWorldZFromFloor(
-		CurrentFloor.IsWalkableFloor(),
-		CurrentFloor.HitResult.IsValidBlockingHit(),
-		CurrentFloor.HitResult.ImpactPoint.Z,
-		CapsuleComponent->GetComponentLocation().Z,
-		CapsuleComponent->GetScaledCapsuleHalfHeight(),
-		CurrentFloor.GetDistanceToFloor(),
+	FHitResult StaticGroundHit;
+	bool bHasStaticGroundTrace = false;
+	if (UWorld* const World = GetWorld())
+	{
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PhysAnimSelfObservationGround), false);
+		if (const AActor* const Owner = GetOwner())
+		{
+			QueryParams.AddIgnoredActor(Owner);
+		}
+
+		const FVector TraceStart = RootWorldLocation + FVector(0.0, 0.0, PhysAnimComponentInternal::TerrainTraceStartAboveRootCm);
+		const FVector TraceEnd = RootWorldLocation - FVector(0.0, 0.0, PhysAnimComponentInternal::TerrainTraceEndBelowRootCm);
+		bHasStaticGroundTrace = World->LineTraceSingleByObjectType(
+			StaticGroundHit,
+			TraceStart,
+			TraceEnd,
+			FCollisionObjectQueryParams(FCollisionObjectQueryParams::InitType::AllStaticObjects),
+			QueryParams) && StaticGroundHit.IsValidBlockingHit();
+	}
+
+	const FFindFloorResult* const CurrentFloor = CharacterMovement ? &CharacterMovement->CurrentFloor : nullptr;
+	const float GroundWorldZ = ResolveObservationGroundWorldZ(
+		bHasStaticGroundTrace,
+		StaticGroundHit.ImpactPoint.Z,
+		CurrentFloor && CurrentFloor->IsWalkableFloor(),
+		CurrentFloor && CurrentFloor->HitResult.IsValidBlockingHit(),
+		CurrentFloor ? CurrentFloor->HitResult.ImpactPoint.Z : 0.0f,
+		CapsuleComponent ? CapsuleComponent->GetComponentLocation().Z : 0.0f,
+		CapsuleComponent ? CapsuleComponent->GetScaledCapsuleHalfHeight() : 0.0f,
+		CurrentFloor ? CurrentFloor->GetDistanceToFloor() : 0.0f,
 		0.0f);
 
 	return ResolveSelfObservationSyntheticGroundHeight(

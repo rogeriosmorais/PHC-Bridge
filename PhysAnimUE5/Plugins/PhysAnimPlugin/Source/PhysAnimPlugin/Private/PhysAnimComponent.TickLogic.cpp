@@ -2,6 +2,7 @@
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimLogger.h"
 #include "PhysAnimPhase1AutoCalibSubsystem.h"
+#include "PhysAnimProtoMannyAdapter.h"
 
 #include "Components/SkeletalMeshComponent.h"
 #include "PhysicsControlComponent.h"
@@ -184,20 +185,41 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 			SearchResult = LastValidPoseSearchResult;
 		}
 
+		TArray<FPhysAnimBodySample> MannyCurrentBodySamples;
+		if (!GatherCurrentBodySamples(MannyCurrentBodySamples, OutError))
+		{
+			return;
+		}
 		TArray<FPhysAnimBodySample> CurrentBodySamples;
-		if (!GatherCurrentBodySamples(CurrentBodySamples, OutError))
+		if (!PhysAnimProtoMannyAdapter::AdaptBodySamplesToCanonicalSmpl(
+			MannyCurrentBodySamples,
+			CurrentBodySamples,
+			OutError))
 		{
 			return;
 		}
 
+		TArray<FPhysAnimFuturePoseSample> MannyFuturePoseSamples;
+		if (!SampleFuturePoses(SearchResult, MannyFuturePoseSamples, OutError))
+		{
+			return;
+		}
 		TArray<FPhysAnimFuturePoseSample> FuturePoseSamples;
-		if (!SampleFuturePoses(SearchResult, FuturePoseSamples, OutError))
+		if (!PhysAnimProtoMannyAdapter::AdaptFuturePoseSamplesToCanonicalSmpl(
+			MannyFuturePoseSamples,
+			FuturePoseSamples,
+			OutError))
 		{
 			return;
 		}
 
-		FVector2D MimicTargetReferenceDataOffsetXY = FVector2D::ZeroVector;
-		if (!ResolveMimicTargetReferenceDataOffset(SearchResult, MimicTargetReferenceDataOffsetXY, OutError))
+		FTransform MimicTargetReferenceWorldRoot = FTransform::Identity;
+		FTransform MimicTargetReferenceDataRoot = FTransform::Identity;
+		if (!ResolveMimicTargetReferenceDataFrame(
+			SearchResult,
+			MimicTargetReferenceWorldRoot,
+			MimicTargetReferenceDataRoot,
+			OutError))
 		{
 			return;
 		}
@@ -209,7 +231,11 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		}
 
 		TArray<FPhysAnimBodySample> MimicCurrentReferenceBodySamples;
-		MakeMimicTargetCurrentReferenceBodySamples(CurrentBodySamples, MimicTargetReferenceDataOffsetXY, MimicTargetReferenceGroundHeight, MimicCurrentReferenceBodySamples);
+		MakeMimicTargetDataFrameBodySamples(
+			CurrentBodySamples,
+			MimicTargetReferenceWorldRoot,
+			MimicTargetReferenceDataRoot,
+			MimicCurrentReferenceBodySamples);
 
 		if (!PhysAnimBridge::BuildMimicTargetPoses(MimicCurrentReferenceBodySamples, FuturePoseSamples, MimicTargetPosesBuffer, OutError))
 		{

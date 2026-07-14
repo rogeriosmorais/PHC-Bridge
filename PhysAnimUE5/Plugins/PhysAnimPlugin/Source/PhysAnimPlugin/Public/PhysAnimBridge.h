@@ -132,7 +132,45 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API inline constexpr int32 NumFutureSteps = 15;
 	PHYSANIMPLUGIN_API inline constexpr float FutureStepSeconds = 1.0f / 30.0f;
 	PHYSANIMPLUGIN_API inline constexpr float CmToMeters = 0.01f;
+	PHYSANIMPLUGIN_API inline constexpr float MetersToCm = 100.0f;
 	PHYSANIMPLUGIN_API inline constexpr float MannyRootHeightMeters = 0.912f;
+
+	struct PHYSANIMPLUGIN_API FPhysAnimPolicyInferenceSnapshot
+	{
+		bool CaptureFirst(
+			TConstArrayView<float> InSelfObservation,
+			TConstArrayView<float> InMimicTargetPoses,
+			TConstArrayView<float> InTerrain,
+			TConstArrayView<float> InActions)
+		{
+			if (bCaptured)
+			{
+				return false;
+			}
+
+			SelfObservation.Append(InSelfObservation.GetData(), InSelfObservation.Num());
+			MimicTargetPoses.Append(InMimicTargetPoses.GetData(), InMimicTargetPoses.Num());
+			Terrain.Append(InTerrain.GetData(), InTerrain.Num());
+			Actions.Append(InActions.GetData(), InActions.Num());
+			bCaptured = true;
+			return true;
+		}
+
+		void Reset()
+		{
+			bCaptured = false;
+			SelfObservation.Reset();
+			MimicTargetPoses.Reset();
+			Terrain.Reset();
+			Actions.Reset();
+		}
+
+		bool bCaptured = false;
+		TArray<float> SelfObservation;
+		TArray<float> MimicTargetPoses;
+		TArray<float> Terrain;
+		TArray<float> Actions;
+	};
 
 	PHYSANIMPLUGIN_API const TArray<FName>& GetControlledBoneNames();
 	PHYSANIMPLUGIN_API const TArray<FName>& GetRequiredBodyModifierBoneNames();
@@ -170,6 +208,8 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API FVector UeVectorToSmpl(const FVector& UeVector);
 	PHYSANIMPLUGIN_API FQuat SmplQuaternionToUe(const FQuat& SmplQuaternion);
 	PHYSANIMPLUGIN_API FQuat UeQuaternionToSmpl(const FQuat& UeQuaternion);
+	// Policy actions are Isaac simulator joint coordinates, not raw SMPL authoring coordinates.
+	PHYSANIMPLUGIN_API FQuat ProtoJointQuaternionToUe(const FQuat& ProtoJointQuaternion);
 	PHYSANIMPLUGIN_API FVector UeWorldPositionToProtoRuntime(const FVector& UeVector);
 	PHYSANIMPLUGIN_API FVector UeWorldVelocityToProtoRuntime(const FVector& UeVector);
 	PHYSANIMPLUGIN_API FVector UeWorldRotationVectorToProtoRuntime(const FVector& UeVector);
@@ -195,7 +235,7 @@ namespace PhysAnimBridge
 	PHYSANIMPLUGIN_API FVector BuildTerrainSampleWorldLocation(
 		const FVector& RootWorldLocationCm,
 		const FQuat& RootWorldRotation,
-		const FVector2D& LocalOffsetCm);
+		const FVector2D& LocalOffsetMeters);
 	PHYSANIMPLUGIN_API bool BuildTerrainObservation(
 		float RootHeight,
 		const TArray<float>& SampleGroundHeights,

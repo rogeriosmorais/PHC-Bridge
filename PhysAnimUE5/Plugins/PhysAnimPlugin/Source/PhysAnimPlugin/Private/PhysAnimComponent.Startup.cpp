@@ -42,9 +42,35 @@ bool UPhysAnimComponent::FinalizeStartupTPoseCaptureAndStartBridge(FString& OutE
 
 	ForceTPoseReferenceOntoMesh(SkeletalMesh, TPoseReference);
 	CacheRestPoses(TPoseReference);
-	if (CachedSmplObservationRestComponentTransforms.IsEmpty())
+	if (CachedSmplObservationRestComponentTransforms.Num() != PhysAnimBridge::NumSmplBodies)
 	{
-		OutError = TEXT("Live T-pose capture did not populate any cached rest transforms.");
+		OutError = TEXT("Live T-pose capture did not populate the complete bone-axis calibration required by the Proto-Manny adapter.");
+		return false;
+	}
+	if (!GatherCurrentPoseControlTargetSeeds(CachedTPoseControlTargetSeeds, OutError))
+	{
+		OutError = FString::Printf(
+			TEXT("Live T-pose capture could not populate Physics Control bind targets: %s"),
+			*OutError);
+		return false;
+	}
+	if (CachedTPoseControlTargetSeeds.Num() != PhysAnimBridge::GetControlledBoneNames().Num())
+	{
+		OutError = FString::Printf(
+			TEXT("Live T-pose capture populated %d Physics Control bind targets; expected %d."),
+			CachedTPoseControlTargetSeeds.Num(),
+			PhysAnimBridge::GetControlledBoneNames().Num());
+		return false;
+	}
+	if (!BuildSmplBindBodyComponentRotations(
+		SkeletalMesh->GetComponentQuat(),
+		CachedTPoseControlTargetSeeds,
+		CachedSmplObservationRestBodyComponentRotations,
+		OutError))
+	{
+		OutError = FString::Printf(
+			TEXT("Live T-pose capture could not populate synchronized PhysicsAsset body frames: %s"),
+			*OutError);
 		return false;
 	}
 
@@ -209,6 +235,7 @@ void UPhysAnimComponent::LogTPoseIdentityCheck() const
 void UPhysAnimComponent::CacheRestPoses(UAnimSequence* TPoseAnim)
 {
 	CachedSmplObservationRestComponentTransforms.Reset();
+	CachedSmplObservationRestBodyComponentRotations.Reset();
 
 	const USkeletalMeshComponent* const Mesh = MeshComponent.Get();
 	if (!TPoseAnim)
@@ -233,8 +260,8 @@ void UPhysAnimComponent::CacheRestPoses(UAnimSequence* TPoseAnim)
 		if (Mesh->GetBoneIndex(BoneName) == INDEX_NONE)
 		{
 			PHYSANIM_LOG(LogPhysAnimBridge, Warning, TEXT("[%s] Could not find bone '%s' for live rest pose caching."), *GetName(), *BoneName.ToString());
-			CachedSmplObservationRestComponentTransforms.Add(FTransform::Identity);
-			continue;
+			CachedSmplObservationRestComponentTransforms.Reset();
+			return;
 		}
 
 		FTransform BoneWorldTransform = Mesh->GetBoneTransform(BoneName, RTS_World);
@@ -242,5 +269,62 @@ void UPhysAnimComponent::CacheRestPoses(UAnimSequence* TPoseAnim)
 		BoneComponentTransform.NormalizeRotation();
 		CachedSmplObservationRestComponentTransforms.Add(BoneComponentTransform);
 	}
+}
+
+
+bool UPhysAnimComponent::BuildSmplBindBodyComponentRotations(
+	const FQuat& MeshWorldRotation,
+	const TMap<FName, FPhysAnimControlTargetSeed>& TPoseControlTargetSeeds,
+	TArray<FQuat>& OutBodyComponentRotations,
+	FString& OutError)
+{
+	OutBodyComponentRotations.Reset();
+	OutBodyComponentRotations.Reserve(PhysAnimBridge::NumSmplBodies);
+
+	const FQuat WorldToComponentRotation = MeshWorldRotation.GetNormalized().Inverse();
+	const TArray<FName>& ObservationBones = PhysAnimBridge::GetSmplObservationBoneNames();
+	const FPhysAnimControlTargetSeed* const RootChildSeed =
+		TPoseControlTargetSeeds.Find(PhysAnimBridge::MakeControlName(TEXT("thigh_l")));
+	if (!RootChildSeed)
+	{
+		OutError = TEXT("Missing the left-thigh T-pose seed required to recover the pelvis body frame.");
+		return false;
+	}
+
+	for (int32 BodyIndex = 0; BodyIndex < ObservationBones.Num(); ++BodyIndex)
+	{
+		FQuat BodyWorldRotation = RootChildSeed->ParentWorldRotation;
+		if (BodyIndex > 0)
+		{
+			const FName BoneName = ObservationBones[BodyIndex];
+			const FPhysAnimControlTargetSeed* const Seed =
+				TPoseControlTargetSeeds.Find(PhysAnimBridge::MakeControlName(BoneName));
+			if (!Seed)
+			{
+				OutBodyComponentRotations.Reset();
+				OutError = FString::Printf(
+					TEXT("Missing synchronized T-pose body seed for observation bone '%s'."),
+					*BoneName.ToString());
+				return false;
+			}
+			BodyWorldRotation = Seed->ChildWorldRotation;
+		}
+
+		OutBodyComponentRotations.Add(
+			(WorldToComponentRotation * BodyWorldRotation.GetNormalized()).GetNormalized());
+	}
+
+	if (OutBodyComponentRotations.Num() != PhysAnimBridge::NumSmplBodies)
+	{
+		OutBodyComponentRotations.Reset();
+		OutError = FString::Printf(
+			TEXT("Built %d synchronized body frames instead of %d."),
+			ObservationBones.Num(),
+			PhysAnimBridge::NumSmplBodies);
+		return false;
+	}
+
+	OutError.Reset();
+	return true;
 }
 

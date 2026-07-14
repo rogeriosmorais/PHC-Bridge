@@ -224,6 +224,61 @@ namespace
 		const FQuat SmplRotation = ExpMapToQuaternion(FVector(0.2, -0.1, 0.3));
 		const FQuat RoundTrip = UeQuaternionToSmpl(SmplQuaternionToUe(SmplRotation));
 		TestTrue(TEXT("Quaternion roundtrip should stay close"), RoundTrip.Equals(SmplRotation, 1.0e-3f));
+
+		const FQuat ProtoJointXRotation = ExpMapToQuaternion(FVector(0.5 * PI, 0.0, 0.0));
+		const FQuat ExpectedUeJointXRotation(FVector::ForwardVector, -0.5 * PI);
+		TestTrue(
+			TEXT("ProtoMotions joint-local X rotation includes the Isaac-to-UE handedness change"),
+			ProtoJointQuaternionToUe(ProtoJointXRotation).Equals(ExpectedUeJointXRotation, 1.0e-3f));
+
+		const FQuat ProtoJointYRotation = ExpMapToQuaternion(FVector(0.0, 0.5 * PI, 0.0));
+		const FQuat ExpectedUeJointYRotation(FVector::RightVector, 0.5 * PI);
+		TestTrue(
+			TEXT("ProtoMotions joint-local Y rotation preserves the lateral axis sign"),
+			ProtoJointQuaternionToUe(ProtoJointYRotation).Equals(ExpectedUeJointYRotation, 1.0e-3f));
+
+		const FQuat ProtoJointZRotation = ExpMapToQuaternion(FVector(0.0, 0.0, 0.5 * PI));
+		const FQuat ExpectedUeJointZRotation(FVector::UpVector, -0.5 * PI);
+		TestTrue(
+			TEXT("ProtoMotions joint-local Z rotation includes the Isaac-to-UE handedness change"),
+			ProtoJointQuaternionToUe(ProtoJointZRotation).Equals(ExpectedUeJointZRotation, 1.0e-3f));
+
+		TestTrue(
+			TEXT("UE angular velocity about X converts as an axial vector"),
+			UeWorldRotationVectorToProtoRuntime(FVector::ForwardVector).Equals(
+				-FVector::ForwardVector,
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("UE angular velocity about Y preserves the lateral axial component"),
+			UeWorldRotationVectorToProtoRuntime(FVector::RightVector).Equals(
+				FVector::RightVector,
+				KINDA_SMALL_NUMBER));
+		TestTrue(
+			TEXT("UE angular velocity about Z converts as an axial vector"),
+			UeWorldRotationVectorToProtoRuntime(FVector::UpVector).Equals(
+				-FVector::UpVector,
+				KINDA_SMALL_NUMBER));
+
+		const double SmallWorldRotation = 1.0e-3;
+		const FVector UeAngularAxes[] =
+		{
+			FVector::ForwardVector,
+			FVector::RightVector,
+			FVector::UpVector,
+		};
+		for (int32 AxisIndex = 0; AxisIndex < UE_ARRAY_COUNT(UeAngularAxes); ++AxisIndex)
+		{
+			const FVector& UeAxis = UeAngularAxes[AxisIndex];
+			const FQuat ConvertedIntegratedRotation = UeWorldQuaternionToProtoRuntime(
+				FQuat(UeAxis, SmallWorldRotation));
+			const FQuat IntegratedConvertedAngularVelocity = ExpMapToQuaternion(
+				UeWorldRotationVectorToProtoRuntime(UeAxis) * SmallWorldRotation);
+			TestTrue(
+				*FString::Printf(
+					TEXT("World angular-velocity conversion matches converted quaternion integration for UE axis %d"),
+					AxisIndex),
+				ConvertedIntegratedRotation.Equals(IntegratedConvertedAngularVelocity, 1.0e-5));
+		}
 		return true;
 	}
 
@@ -234,6 +289,24 @@ namespace
 
 	bool FPhysAnimActionConditioningContractTest::RunTest(const FString& Parameters)
 	{
+		const FPhysAnimStabilizationSettings RuntimeDefaults;
+		TestEqual(TEXT("ProtoMotions action scale defaults to full authority"), RuntimeDefaults.ActionScale, 1.0f);
+		TestEqual(TEXT("ProtoMotions action clamp defaults to the trained range"), RuntimeDefaults.ActionClampAbs, 1.0f);
+		TestEqual(TEXT("ProtoMotions actions are not temporally smoothed by default"), RuntimeDefaults.ActionSmoothingAlpha, 1.0f);
+		TestFalse(
+			TEXT("Lower-limb policy targets are not range-reduced by default"),
+			RuntimeDefaults.bApplyTrainingAlignedLowerLimbTargetRangePolicy);
+		TestFalse(
+			TEXT("Distal locomotion policy targets are not range-reduced by default"),
+			RuntimeDefaults.bApplyTrainingAlignedDistalLocomotionTargetPolicy);
+		TestFalse(
+			TEXT("Distal target-write composition is not altered by default"),
+			RuntimeDefaults.bApplyTrainingAlignedDistalLocomotionCompositionPolicy);
+		TestEqual(
+			TEXT("Policy target slew limiting is disabled by default"),
+			RuntimeDefaults.MaxAngularStepDegreesPerSecond,
+			0.0f);
+
 		TArray<float> RawActions;
 		RawActions.Init(2.0f, NumActionFloats);
 
@@ -286,8 +359,8 @@ namespace
 		TArray<float> Actions;
 		Actions.Init(0.0f, NumActionFloats);
 		
-		// Joint 0 in Smpl is L_Hip -> thigh_l
-		Actions[0] = 0.5f; // X axis in Smpl
+		// Joint 0 in ProtoMotions runtime order is L_Hip -> thigh_l.
+		Actions[0] = 0.5f; // +90 degrees about the Isaac joint-local X axis.
 		
 		TMap<FName, FQuat> ControlRotations;
 		FString Error;
@@ -311,6 +384,10 @@ namespace
 		{
 			const FQuat ThighRot = ControlRotations[TEXT("thigh_l")];
 			TestFalse(TEXT("thigh_l rotation is non-identity"), ThighRot.IsIdentity());
+			const FQuat ExpectedThighRotation(FVector::ForwardVector, -0.5 * PI);
+			TestTrue(
+				TEXT("thigh_l action uses the ProtoMotions Isaac joint basis in UE"),
+				ThighRot.Equals(ExpectedThighRotation, 1.0e-3f));
 		}
 
 		// Distal Collapse Verification: Joint 16 (L_Wrist) and 17 (L_Hand)
@@ -472,6 +549,54 @@ namespace
 	}
 
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimPolicyInferenceSnapshotContractTest,
+		"PhysAnim.Bridge.PolicyInferenceSnapshotContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimPolicyInferenceSnapshotContractTest::RunTest(const FString& Parameters)
+	{
+		TArray<float> SelfObservation;
+		SelfObservation.Init(1.0f, SelfObsSize);
+		TArray<float> MimicTargetPoses;
+		MimicTargetPoses.Init(2.0f, MimicTargetPosesSize);
+		TArray<float> Terrain;
+		Terrain.Init(3.0f, TerrainSize);
+		TArray<float> Actions;
+		Actions.Init(4.0f, NumActionFloats);
+
+		FPhysAnimPolicyInferenceSnapshot Snapshot;
+		TestFalse(TEXT("New policy snapshot is uncaptured"), Snapshot.bCaptured);
+		TestTrue(TEXT("First successful inference is captured"), Snapshot.CaptureFirst(SelfObservation, MimicTargetPoses, Terrain, Actions));
+		TestTrue(TEXT("Captured policy snapshot is marked captured"), Snapshot.bCaptured);
+		TestEqual(TEXT("Captured self observation width"), Snapshot.SelfObservation.Num(), SelfObsSize);
+		TestEqual(TEXT("Captured mimic target width"), Snapshot.MimicTargetPoses.Num(), MimicTargetPosesSize);
+		TestEqual(TEXT("Captured terrain width"), Snapshot.Terrain.Num(), TerrainSize);
+		TestEqual(TEXT("Captured action width"), Snapshot.Actions.Num(), NumActionFloats);
+		TestEqual(TEXT("Captured self observation value"), Snapshot.SelfObservation[0], 1.0f);
+		TestEqual(TEXT("Captured mimic target value"), Snapshot.MimicTargetPoses[0], 2.0f);
+		TestEqual(TEXT("Captured terrain value"), Snapshot.Terrain[0], 3.0f);
+		TestEqual(TEXT("Captured action value"), Snapshot.Actions[0], 4.0f);
+
+		SelfObservation[0] = 10.0f;
+		MimicTargetPoses[0] = 20.0f;
+		Terrain[0] = 30.0f;
+		Actions[0] = 40.0f;
+		TestFalse(TEXT("Later inference does not overwrite the first snapshot"), Snapshot.CaptureFirst(SelfObservation, MimicTargetPoses, Terrain, Actions));
+		TestEqual(TEXT("First self observation remains latched"), Snapshot.SelfObservation[0], 1.0f);
+		TestEqual(TEXT("First mimic target remains latched"), Snapshot.MimicTargetPoses[0], 2.0f);
+		TestEqual(TEXT("First terrain remains latched"), Snapshot.Terrain[0], 3.0f);
+		TestEqual(TEXT("First action remains latched"), Snapshot.Actions[0], 4.0f);
+
+		Snapshot.Reset();
+		TestFalse(TEXT("Reset clears the captured flag"), Snapshot.bCaptured);
+		TestEqual(TEXT("Reset clears self observation"), Snapshot.SelfObservation.Num(), 0);
+		TestEqual(TEXT("Reset clears mimic target poses"), Snapshot.MimicTargetPoses.Num(), 0);
+		TestEqual(TEXT("Reset clears terrain"), Snapshot.Terrain.Num(), 0);
+		TestEqual(TEXT("Reset clears actions"), Snapshot.Actions.Num(), 0);
+		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimTerrainTraceFrameContractTest,
 		"PhysAnim.Bridge.TerrainTraceFrameContract",
 		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -483,10 +608,10 @@ namespace
 		const FVector SampleWorldLocationCm = BuildTerrainSampleWorldLocation(
 			RootWorldLocationCm,
 			RootWorldRotation,
-			FVector2D(100.0f, 0.0f));
+			FVector2D(1.0f, 0.0f));
 
 		TestTrue(
-			TEXT("Terrain sample keeps the root in UE world centimeters"),
+			TEXT("A one-meter ProtoMotions terrain offset becomes 100 UE centimeters"),
 			SampleWorldLocationCm.Equals(FVector(1234.0f, -467.0f, 250.0f), KINDA_SMALL_NUMBER));
 		return true;
 	}

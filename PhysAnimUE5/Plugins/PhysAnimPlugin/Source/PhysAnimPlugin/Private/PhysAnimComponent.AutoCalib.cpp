@@ -103,6 +103,7 @@ bool UPhysAnimComponent::CapturePhase1AutoCalibBaseline(FPhase1AutoCalibBaseline
 
 	OutSnapshot.PreviousControlTargetRotations = PreviousControlTargetRotations;
 	OutSnapshot.PolicyBlendStartControlTargetRotations = PolicyBlendStartControlTargetRotations;
+	OutSnapshot.PolicyNeutralControlTargetRotations = PolicyNeutralControlTargetRotations;
 	OutSnapshot.SelfObservationBuffer = SelfObservationBuffer;
 	OutSnapshot.MimicTargetPosesBuffer = MimicTargetPosesBuffer;
 	OutSnapshot.TerrainBuffer = TerrainBuffer;
@@ -269,6 +270,7 @@ bool UPhysAnimComponent::RestorePhase1AutoCalibBaseline(const FPhase1AutoCalibBa
 
 	PreviousControlTargetRotations = Snapshot.PreviousControlTargetRotations;
 	PolicyBlendStartControlTargetRotations = Snapshot.PolicyBlendStartControlTargetRotations;
+	PolicyNeutralControlTargetRotations = Snapshot.PolicyNeutralControlTargetRotations;
 	if (UPhysicsControlComponent* const PhysicsControl = PhysicsControlComponent.Get())
 	{
 		// Restore-side cache sync keeps the next trial from inheriting stale

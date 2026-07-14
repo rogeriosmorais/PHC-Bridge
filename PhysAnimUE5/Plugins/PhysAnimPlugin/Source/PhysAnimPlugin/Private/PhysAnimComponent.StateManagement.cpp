@@ -27,7 +27,9 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	ConditionedActionBuffer.Reset();
 	PreviousConditionedActionBuffer.Reset();
 	PreviousActionOutputBuffer.Reset();
+	FirstPolicyInferenceSnapshot.Reset();
 	PreviousControlTargetRotations.Reset();
+	PolicyNeutralControlTargetRotations.Reset();
 	LastActionDiagnostics = {};
 	LastControlTargetDiagnostics = {};
 	LastBodyModifierResetRequestCount = 0;

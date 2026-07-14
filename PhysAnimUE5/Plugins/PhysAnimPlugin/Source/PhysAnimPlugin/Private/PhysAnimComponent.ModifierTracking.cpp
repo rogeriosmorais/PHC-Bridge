@@ -1,6 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimLogger.h"
+#include "PhysAnimProtoMannyAdapter.h"
 
 void UPhysAnimComponent::ResetPendingBodyModifiersToCachedTargets()
 {
@@ -241,6 +242,24 @@ void UPhysAnimComponent::ApplyControlTargets(
 			EffectiveSettings.bUseSkeletalAnimationTargets,
 			bPolicyInfluenceActive);
 	UPhysicsAsset* const PhysicsAsset = Mesh ? Mesh->GetPhysicsAsset() : nullptr;
+	AActor* const OwnerActor = GetOwner();
+	const UPhysAnimStage1InitializerComponent* const Stage1Initializer = OwnerActor
+		? OwnerActor->FindComponentByClass<UPhysAnimStage1InitializerComponent>()
+		: nullptr;
+	const UPhysicsControlInitializerComponent* const PhysicsControlInitializer =
+		OwnerActor && !Stage1Initializer
+			? OwnerActor->FindComponentByClass<UPhysicsControlInitializerComponent>()
+			: nullptr;
+	auto FindInitialControl = [Stage1Initializer, PhysicsControlInitializer](const FName ControlName) -> const FInitialPhysicsControl*
+	{
+		if (Stage1Initializer)
+		{
+			return Stage1Initializer->InitialControls.Find(ControlName);
+		}
+		return PhysicsControlInitializer
+			? PhysicsControlInitializer->InitialControls.Find(ControlName)
+			: nullptr;
+	};
 
 
 	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
@@ -505,73 +524,98 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 				const FQuat* const PreviousRotation = PreviousControlTargetRotations.Find(ControlName);
 				const FQuat* const BlendStartRotation = PolicyBlendStartControlTargetRotations.Find(ControlName);
-				const FQuat NeutralReferencedPolicyRotation = BlendStartRotation
-					? ComposePolicyActionOffset(*BlendStartRotation, Pair.Value)
-					: Pair.Value;
-
-				// §EPIC-13.2 - Phase 3 Soft Handover
-				FQuat BasePolicyRotation = NeutralReferencedPolicyRotation;
-				if (bIsPhase3HandoverBlend && EffectiveHandoverAlpha < 1.0f - KINDA_SMALL_NUMBER)
+				const FPhysAnimControlTargetSeed* const BindSeed = CachedTPoseControlTargetSeeds.Find(ControlName);
+				if (!BindSeed)
 				{
-					// Blend from the physically settled pose (captured at Tick 20) to the current policy target
-					const FQuat* const StartRotPtr = PolicyBlendStartControlTargetRotations.Find(ControlName);
-					if (StartRotPtr)
-					{
-						BasePolicyRotation = FQuat::Slerp(*StartRotPtr, NeutralReferencedPolicyRotation, EffectiveHandoverAlpha).GetNormalized();
-					}
+					OutError = FString::Printf(
+						TEXT("Missing T-pose bind calibration for control '%s' during target write."),
+						*ControlName.ToString());
+					return;
 				}
-				else if (bInSettlementWindow)
-				{
-					// During settlement, strictly follow the rebased physical pose
-					const FQuat* const SettledRotPtr = PreviousControlTargetRotations.Find(ControlName);
-					if (SettledRotPtr)
-					{
-						BasePolicyRotation = *SettledRotPtr;
-					}
-				}
+				const FQuat MannyBindNeutralRotation = BindSeed->ParentRelativeTargetRotation.GetNormalized();
+				const FQuat AbsoluteBindCalibratedPolicyRotation =
+					ComposeProtoPolicyTargetInMannyBindFrame(*BindSeed, Pair.Value);
 
 				const bool bApplyTrainingAlignedLowerLimbTargetRangePolicy =
-				ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
-					EffectiveSettings.bApplyTrainingAlignedLowerLimbTargetRangePolicy,
-					EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend);
-			const float LowerLimbTargetRangeScale = bApplyTrainingAlignedLowerLimbTargetRangePolicy
-				? ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(
-					Pair.Key,
-					EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend)
-				: 1.0f;
-			const bool bApplyTrainingAlignedDistalLocomotionTargetPolicy =
-				ShouldApplyTrainingAlignedDistalLocomotionTargetPolicy(
-					EffectiveSettings.bApplyTrainingAlignedDistalLocomotionTargetPolicy,
-					EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend,
-					OwnerPlanarSpeedCmPerSec,
-					EffectiveSettings.DistalLocomotionTargetPolicyActivationSpeedCmPerSec);
-			const float DistalLocomotionTargetScale = bApplyTrainingAlignedDistalLocomotionTargetPolicy
-				? ResolveTrainingAlignedDistalLocomotionTargetScaleForBone(
-					Pair.Key,
-					EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend)
-				: 1.0f;
-			const float RawPolicyOffsetDegrees = BlendStartRotation
-				? CalculateControlTargetDeltaDegrees(*BlendStartRotation, BasePolicyRotation)
-				: 0.0f;
-			const FQuat RangeAlignedPolicyRotation = BlendStartRotation
-				? BlendPolicyTargetRotation(*BlendStartRotation, BasePolicyRotation, LowerLimbTargetRangeScale)
-				: BasePolicyRotation;
+					ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
+						EffectiveSettings.bApplyTrainingAlignedLowerLimbTargetRangePolicy,
+						EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend);
+				const float LowerLimbTargetRangeScale = bApplyTrainingAlignedLowerLimbTargetRangePolicy
+					? ResolveTrainingAlignedLowerLimbTargetRangeScaleForBone(
+						Pair.Key,
+						EffectiveSettings.TrainingAlignedLowerLimbTargetRangePolicyBlend)
+					: 1.0f;
+				const bool bApplyTrainingAlignedDistalLocomotionTargetPolicy =
+					ShouldApplyTrainingAlignedDistalLocomotionTargetPolicy(
+						EffectiveSettings.bApplyTrainingAlignedDistalLocomotionTargetPolicy,
+						EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend,
+						OwnerPlanarSpeedCmPerSec,
+						EffectiveSettings.DistalLocomotionTargetPolicyActivationSpeedCmPerSec);
+				const float DistalLocomotionTargetScale = bApplyTrainingAlignedDistalLocomotionTargetPolicy
+					? ResolveTrainingAlignedDistalLocomotionTargetScaleForBone(
+						Pair.Key,
+						EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend)
+					: 1.0f;
+				const float RawPolicyOffsetDegrees = CalculateControlTargetDeltaDegrees(
+					MannyBindNeutralRotation,
+					AbsoluteBindCalibratedPolicyRotation);
+				const FQuat RangeAlignedPolicyRotation = BlendPolicyTargetRotation(
+					MannyBindNeutralRotation,
+					AbsoluteBindCalibratedPolicyRotation,
+					LowerLimbTargetRangeScale);
+				const FQuat DistalLocomotionAlignedPolicyRotation = BlendPolicyTargetRotation(
+					MannyBindNeutralRotation,
+					RangeAlignedPolicyRotation,
+					DistalLocomotionTargetScale);
+				FQuat ConstraintAdaptedPolicyRotation = DistalLocomotionAlignedPolicyRotation;
+				if (EffectiveSettings.bEnableProtoMannyConstraintAdapter && PhysicsAsset)
+				{
+					const FInitialPhysicsControl* const InitialControl = FindInitialControl(ControlName);
+					FPhysAnimMannyConstraintProfile ConstraintProfile;
+					if (InitialControl && PhysAnimProtoMannyAdapter::BuildConstraintProfile(
+						PhysicsAsset,
+						InitialControl->ChildBoneName,
+						InitialControl->ParentBoneName,
+						ConstraintProfile))
+					{
+						ConstraintAdaptedPolicyRotation = PhysAnimProtoMannyAdapter::AdaptParentRelativeTarget(
+							DistalLocomotionAlignedPolicyRotation,
+							MannyBindNeutralRotation,
+							ConstraintProfile);
+					}
+				}
+				const float RangeAlignedPolicyOffsetDegrees = CalculateControlTargetDeltaDegrees(
+					MannyBindNeutralRotation,
+					ConstraintAdaptedPolicyRotation);
 
-			const FQuat DistalLocomotionAlignedPolicyRotation = BlendStartRotation
-				? BlendPolicyTargetRotation(*BlendStartRotation, RangeAlignedPolicyRotation, DistalLocomotionTargetScale)
-				: RangeAlignedPolicyRotation;
-			const float RangeAlignedPolicyOffsetDegrees = BlendStartRotation
-				? CalculateControlTargetDeltaDegrees(*BlendStartRotation, DistalLocomotionAlignedPolicyRotation)
-				: 0.0f;
-			const FQuat BlendedPolicyRotation = BlendStartRotation
-				? BlendPolicyTargetRotation(*BlendStartRotation, DistalLocomotionAlignedPolicyRotation, PolicyInfluenceAlpha)
-				: DistalLocomotionAlignedPolicyRotation;
-			const float TargetDeltaDegrees = PreviousRotation
-				? CalculateControlTargetDeltaDegrees(*PreviousRotation, BlendedPolicyRotation)
-				: 0.0f;
-			FQuat LimitedRotation = PreviousRotation
-				? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
-				: BlendedPolicyRotation;
+				// ProtoMotions mimic_residual_control is false for this checkpoint: actions
+				// are absolute SMPL joint targets. The bind capture defines both Proto axes
+				// and policy zero; the outer influence ramp performs the live-pose handover.
+				FQuat BasePolicyRotation = ConstraintAdaptedPolicyRotation;
+				if (bIsPhase3HandoverBlend && EffectiveHandoverAlpha < 1.0f - KINDA_SMALL_NUMBER)
+				{
+					if (BlendStartRotation)
+					{
+						BasePolicyRotation = FQuat::Slerp(
+							*BlendStartRotation,
+							ConstraintAdaptedPolicyRotation,
+							EffectiveHandoverAlpha).GetNormalized();
+					}
+				}
+				else if (bInSettlementWindow && PreviousRotation)
+				{
+					BasePolicyRotation = *PreviousRotation;
+				}
+
+				const FQuat BlendedPolicyRotation = BlendStartRotation
+					? BlendPolicyTargetRotation(*BlendStartRotation, BasePolicyRotation, PolicyInfluenceAlpha)
+					: BasePolicyRotation;
+				const float TargetDeltaDegrees = PreviousRotation
+					? CalculateControlTargetDeltaDegrees(*PreviousRotation, BlendedPolicyRotation)
+					: 0.0f;
+				FQuat LimitedRotation = PreviousRotation
+					? LimitTargetRotationStep(*PreviousRotation, BlendedPolicyRotation, MaxAngularStepDegrees)
+					: BlendedPolicyRotation;
 
 			if (bHipQuarantineActiveThisFrame && (Pair.Key == "thigh_l" || Pair.Key == "thigh_r") && Mesh)
 			{
@@ -781,6 +825,7 @@ FPhysAnimControlTargetSeed UPhysAnimComponent::BuildCurrentPoseControlTargetSeed
 	FPhysAnimControlTargetSeed Seed;
 	Seed.ParentWorldRotation = ParentWorldRotation.GetNormalized();
 	Seed.ChildWorldRotation = ChildWorldRotation.GetNormalized();
+	Seed.ParentActionAxisReferenceRotation = Seed.ParentWorldRotation;
 	Seed.ParentRelativeTargetRotation =
 		(Seed.ParentWorldRotation.Inverse() * Seed.ChildWorldRotation).GetNormalized();
 	return Seed;

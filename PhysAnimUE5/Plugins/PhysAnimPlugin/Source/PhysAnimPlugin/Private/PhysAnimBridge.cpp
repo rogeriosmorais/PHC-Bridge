@@ -488,6 +488,15 @@ namespace PhysAnimBridge
 		return MakeQuaternionFromBasis(SmplRotatedXAxis, SmplRotatedZAxis);
 	}
 
+	FQuat ProtoJointQuaternionToUe(const FQuat& ProtoJointQuaternion)
+	{
+		const FVector UeXAxisInProto = UeVectorToIsaacGym(FVector::ForwardVector);
+		const FVector UeZAxisInProto = UeVectorToIsaacGym(FVector::UpVector);
+		const FVector UeRotatedXAxis = IsaacGymVectorToUe(ProtoJointQuaternion.RotateVector(UeXAxisInProto));
+		const FVector UeRotatedZAxis = IsaacGymVectorToUe(ProtoJointQuaternion.RotateVector(UeZAxisInProto));
+		return MakeQuaternionFromBasis(UeRotatedXAxis, UeRotatedZAxis);
+	}
+
 	FQuat UeQuaternionToIsaacGym(const FQuat& UeQuaternion)
 	{
 		const FVector IsaacXAxisInUe = IsaacGymVectorToUe(FVector::ForwardVector);
@@ -509,7 +518,10 @@ namespace PhysAnimBridge
 	
 	FVector UeWorldRotationVectorToProtoRuntime(const FVector& UeVector)
 	{
-		return UeVectorToIsaacGym(UeVector);
+		// Angular velocity is an axial vector. Crossing from UE's left-handed
+		// basis to ProtoMotions' right-handed basis therefore needs the
+		// determinant sign in addition to the polar-vector Y reflection.
+		return FVector(-UeVector.X, UeVector.Y, -UeVector.Z);
 	}
 
 	FQuat UeWorldQuaternionToProtoRuntime(const FQuat& UeQuaternion)
@@ -745,10 +757,11 @@ namespace PhysAnimBridge
 	FVector BuildTerrainSampleWorldLocation(
 		const FVector& RootWorldLocationCm,
 		const FQuat& RootWorldRotation,
-		const FVector2D& LocalOffsetCm)
+		const FVector2D& LocalOffsetMeters)
 	{
 		const FQuat RootYawRotation = FRotator(0.0f, RootWorldRotation.Rotator().Yaw, 0.0f).Quaternion();
-		return RootWorldLocationCm + RootYawRotation.RotateVector(FVector(LocalOffsetCm.X, LocalOffsetCm.Y, 0.0f));
+		const FVector LocalOffsetCm(LocalOffsetMeters.X * MetersToCm, LocalOffsetMeters.Y * MetersToCm, 0.0f);
+		return RootWorldLocationCm + RootYawRotation.RotateVector(LocalOffsetCm);
 	}
 
 	bool BuildTerrainObservation(
@@ -844,7 +857,7 @@ namespace PhysAnimBridge
 			return false;
 		}
 
-		TStaticArray<FQuat, NumActionJoints> SmplJointRotations;
+		TStaticArray<FQuat, NumActionJoints> ProtoJointRotations;
 		for (int32 JointIndex = 0; JointIndex < NumActionJoints; ++JointIndex)
 		{
 			const int32 BaseIndex = JointIndex * 3;
@@ -852,32 +865,32 @@ namespace PhysAnimBridge
 				static_cast<double>(PI) * ModelActions[BaseIndex + 0],
 				static_cast<double>(PI) * ModelActions[BaseIndex + 1],
 				static_cast<double>(PI) * ModelActions[BaseIndex + 2]);
-			SmplJointRotations[JointIndex] = ExpMapToQuaternion(ExpMap);
+			ProtoJointRotations[JointIndex] = ExpMapToQuaternion(ExpMap);
 		}
 
 		OutControlRotations.Reset();
 		OutControlRotations.Reserve(NumControlledBones);
-		OutControlRotations.Add(TEXT("thigh_l"), SmplQuaternionToUe(SmplJointRotations[0]));
-		OutControlRotations.Add(TEXT("calf_l"), SmplQuaternionToUe(SmplJointRotations[1]));
-		OutControlRotations.Add(TEXT("foot_l"), SmplQuaternionToUe(SmplJointRotations[2]));
-		OutControlRotations.Add(TEXT("ball_l"), SmplQuaternionToUe(SmplJointRotations[3]));
-		OutControlRotations.Add(TEXT("thigh_r"), SmplQuaternionToUe(SmplJointRotations[4]));
-		OutControlRotations.Add(TEXT("calf_r"), SmplQuaternionToUe(SmplJointRotations[5]));
-		OutControlRotations.Add(TEXT("foot_r"), SmplQuaternionToUe(SmplJointRotations[6]));
-		OutControlRotations.Add(TEXT("ball_r"), SmplQuaternionToUe(SmplJointRotations[7]));
-		OutControlRotations.Add(TEXT("spine_01"), SmplQuaternionToUe(SmplJointRotations[8]));
-		OutControlRotations.Add(TEXT("spine_02"), SmplQuaternionToUe(SmplJointRotations[9]));
-		OutControlRotations.Add(TEXT("spine_03"), SmplQuaternionToUe(SmplJointRotations[10]));
-		OutControlRotations.Add(TEXT("neck_01"), SmplQuaternionToUe(SmplJointRotations[11]));
-		OutControlRotations.Add(TEXT("head"), SmplQuaternionToUe(SmplJointRotations[12]));
-		OutControlRotations.Add(TEXT("clavicle_l"), SmplQuaternionToUe(SmplJointRotations[13]));
-		OutControlRotations.Add(TEXT("upperarm_l"), SmplQuaternionToUe(SmplJointRotations[14]));
-		OutControlRotations.Add(TEXT("lowerarm_l"), SmplQuaternionToUe(SmplJointRotations[15]));
-		OutControlRotations.Add(TEXT("hand_l"), SmplQuaternionToUe(CollapseDistalHandRotation(SmplJointRotations[16], SmplJointRotations[17])));
-		OutControlRotations.Add(TEXT("clavicle_r"), SmplQuaternionToUe(SmplJointRotations[18]));
-		OutControlRotations.Add(TEXT("upperarm_r"), SmplQuaternionToUe(SmplJointRotations[19]));
-		OutControlRotations.Add(TEXT("lowerarm_r"), SmplQuaternionToUe(SmplJointRotations[20]));
-		OutControlRotations.Add(TEXT("hand_r"), SmplQuaternionToUe(CollapseDistalHandRotation(SmplJointRotations[21], SmplJointRotations[22])));
+		OutControlRotations.Add(TEXT("thigh_l"), ProtoJointQuaternionToUe(ProtoJointRotations[0]));
+		OutControlRotations.Add(TEXT("calf_l"), ProtoJointQuaternionToUe(ProtoJointRotations[1]));
+		OutControlRotations.Add(TEXT("foot_l"), ProtoJointQuaternionToUe(ProtoJointRotations[2]));
+		OutControlRotations.Add(TEXT("ball_l"), ProtoJointQuaternionToUe(ProtoJointRotations[3]));
+		OutControlRotations.Add(TEXT("thigh_r"), ProtoJointQuaternionToUe(ProtoJointRotations[4]));
+		OutControlRotations.Add(TEXT("calf_r"), ProtoJointQuaternionToUe(ProtoJointRotations[5]));
+		OutControlRotations.Add(TEXT("foot_r"), ProtoJointQuaternionToUe(ProtoJointRotations[6]));
+		OutControlRotations.Add(TEXT("ball_r"), ProtoJointQuaternionToUe(ProtoJointRotations[7]));
+		OutControlRotations.Add(TEXT("spine_01"), ProtoJointQuaternionToUe(ProtoJointRotations[8]));
+		OutControlRotations.Add(TEXT("spine_02"), ProtoJointQuaternionToUe(ProtoJointRotations[9]));
+		OutControlRotations.Add(TEXT("spine_03"), ProtoJointQuaternionToUe(ProtoJointRotations[10]));
+		OutControlRotations.Add(TEXT("neck_01"), ProtoJointQuaternionToUe(ProtoJointRotations[11]));
+		OutControlRotations.Add(TEXT("head"), ProtoJointQuaternionToUe(ProtoJointRotations[12]));
+		OutControlRotations.Add(TEXT("clavicle_l"), ProtoJointQuaternionToUe(ProtoJointRotations[13]));
+		OutControlRotations.Add(TEXT("upperarm_l"), ProtoJointQuaternionToUe(ProtoJointRotations[14]));
+		OutControlRotations.Add(TEXT("lowerarm_l"), ProtoJointQuaternionToUe(ProtoJointRotations[15]));
+		OutControlRotations.Add(TEXT("hand_l"), ProtoJointQuaternionToUe(CollapseDistalHandRotation(ProtoJointRotations[16], ProtoJointRotations[17])));
+		OutControlRotations.Add(TEXT("clavicle_r"), ProtoJointQuaternionToUe(ProtoJointRotations[18]));
+		OutControlRotations.Add(TEXT("upperarm_r"), ProtoJointQuaternionToUe(ProtoJointRotations[19]));
+		OutControlRotations.Add(TEXT("lowerarm_r"), ProtoJointQuaternionToUe(ProtoJointRotations[20]));
+		OutControlRotations.Add(TEXT("hand_r"), ProtoJointQuaternionToUe(CollapseDistalHandRotation(ProtoJointRotations[21], ProtoJointRotations[22])));
 
 		return true;
 	}

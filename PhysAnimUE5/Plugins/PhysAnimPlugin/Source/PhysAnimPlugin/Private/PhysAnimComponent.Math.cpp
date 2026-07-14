@@ -73,16 +73,17 @@ float UPhysAnimComponent::ResolvePolicyTargetAngularVelocityDeltaTime(
 	bool bDistalLocomotionCompositionModeActive,
 	float DeltaTime)
 {
-	if (bDistalLocomotionCompositionModeActive &&
-		ShouldForceExplicitOnlyDistalLocomotionTargetMode(BoneName))
-	{
-		return 0.0f;
-	}
+	(void)BoneName;
+	(void)bUseSkeletalAnimationTargetRepresentation;
+	(void)bFirstPolicyEnabledFrame;
+	(void)bDistalLocomotionCompositionModeActive;
+	(void)DeltaTime;
 
-	return ResolvePolicyTargetWriteDeltaTime(
-		bUseSkeletalAnimationTargetRepresentation,
-		bFirstPolicyEnabledFrame,
-		DeltaTime);
+	// ProtoMotions v2.3 publishes only a DOF position target through
+	// Isaac Gym's built-in PD drive. A nonzero delta time here makes Physics
+	// Control synthesize a target angular velocity that the source controller
+	// never had, turning ordinary 30 Hz action changes into feed-forward kicks.
+	return 0.0f;
 }
 
 
@@ -191,6 +192,33 @@ float UPhysAnimComponent::ResolvePhase1Uprightness(
 }
 
 
+float UPhysAnimComponent::ResolveObservationGroundWorldZ(
+	bool bHasStaticGroundTrace,
+	float StaticGroundTraceZ,
+	bool bHasWalkableFloor,
+	bool bHasBlockingFloorHit,
+	float FloorImpactPointZ,
+	float CapsuleCenterZ,
+	float CapsuleHalfHeight,
+	float FloorDistance,
+	float FallbackGroundWorldZ)
+{
+	if (bHasStaticGroundTrace)
+	{
+		return StaticGroundTraceZ;
+	}
+
+	return ResolveObservationGroundWorldZFromFloor(
+		bHasWalkableFloor,
+		bHasBlockingFloorHit,
+		FloorImpactPointZ,
+		CapsuleCenterZ,
+		CapsuleHalfHeight,
+		FloorDistance,
+		FallbackGroundWorldZ);
+}
+
+
 float UPhysAnimComponent::ResolveObservationGroundWorldZFromFloor(
 	bool bHasWalkableFloor,
 	bool bHasBlockingFloorHit,
@@ -237,28 +265,24 @@ void UPhysAnimComponent::MakeGroundRelativeCurrentReferenceBodySamples(
 }
 
 
-FVector2D UPhysAnimComponent::ResolveMimicTargetReferenceDataOffsetXY(
-	const FVector& CurrentSelectedWorldRootPosition,
-	const FVector& CurrentSelectedDataRootPosition)
-{
-	return FVector2D(
-		CurrentSelectedWorldRootPosition.X - CurrentSelectedDataRootPosition.X,
-		CurrentSelectedWorldRootPosition.Y - CurrentSelectedDataRootPosition.Y);
-}
-
-
-void UPhysAnimComponent::MakeMimicTargetCurrentReferenceBodySamples(
+void UPhysAnimComponent::MakeMimicTargetDataFrameBodySamples(
 	const TArray<FPhysAnimBodySample>& SourceBodySamples,
-	const FVector2D& DataOffsetXY,
-	float GroundWorldZ,
+	const FTransform& CurrentSelectedWorldRoot,
+	const FTransform& CurrentSelectedDataRoot,
 	TArray<FPhysAnimBodySample>& OutBodySamples)
 {
+	const FQuat WorldToDataRotation =
+		(CurrentSelectedDataRoot.GetRotation() * CurrentSelectedWorldRoot.GetRotation().Inverse()).GetNormalized();
+	const FVector WorldRootPosition = CurrentSelectedWorldRoot.GetLocation();
+	const FVector DataRootPosition = CurrentSelectedDataRoot.GetLocation();
+
 	OutBodySamples = SourceBodySamples;
 	for (FPhysAnimBodySample& BodySample : OutBodySamples)
 	{
-		BodySample.Position.X -= DataOffsetXY.X;
-		BodySample.Position.Y -= DataOffsetXY.Y;
-		BodySample.Position.Z -= GroundWorldZ;
+		BodySample.Position = DataRootPosition + WorldToDataRotation.RotateVector(BodySample.Position - WorldRootPosition);
+		BodySample.Rotation = (WorldToDataRotation * BodySample.Rotation).GetNormalized();
+		BodySample.LinearVelocity = WorldToDataRotation.RotateVector(BodySample.LinearVelocity);
+		BodySample.AngularVelocity = WorldToDataRotation.RotateVector(BodySample.AngularVelocity);
 	}
 }
 
@@ -783,11 +807,29 @@ bool UPhysAnimComponent::AdvancePolicyControlAccumulator(
 }
 
 
-FQuat UPhysAnimComponent::ComposePolicyActionOffset(
-	const FQuat& NeutralParentRelativeRotation,
-	const FQuat& PolicyActionOffsetRotation)
+FQuat UPhysAnimComponent::ComposeProtoPolicyTargetInMannyBindFrame(
+	const FPhysAnimControlTargetSeed& MannyBindSeed,
+	const FQuat& ProtoPolicyRotationUe)
 {
-	return (NeutralParentRelativeRotation * PolicyActionOffsetRotation).GetNormalized();
+	return ComposeProtoPolicyTargetAroundMannyNeutral(
+		MannyBindSeed,
+		MannyBindSeed.ParentRelativeTargetRotation,
+		ProtoPolicyRotationUe);
+}
+
+
+FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
+	const FPhysAnimControlTargetSeed& MannyBindSeed,
+	const FQuat& MannyNeutralParentRelativeRotation,
+	const FQuat& ProtoPolicyRotationUe)
+{
+	const FQuat ParentBindWorldRotation = MannyBindSeed.ParentActionAxisReferenceRotation.GetNormalized();
+	const FQuat PolicyRotationInParentBindFrame =
+		(ParentBindWorldRotation.Inverse() *
+		 ProtoPolicyRotationUe.GetNormalized() *
+		 ParentBindWorldRotation).GetNormalized();
+	return (PolicyRotationInParentBindFrame *
+		MannyNeutralParentRelativeRotation.GetNormalized()).GetNormalized();
 }
 
 
