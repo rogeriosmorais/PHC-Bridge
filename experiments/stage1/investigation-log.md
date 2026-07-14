@@ -159,3 +159,19 @@ Machine-readable record: `experiments/stage1/real-onnx-prior-body-replay.e10.jso
 **Next experiment selected.** Run a default-off coherent prior-observation replay with three locked arms on one commit/binary: unchanged production control, prior-body/live-ground E10 control, and prior-body/prior-ground candidate. The primary causal comparison changes only the ground-reference epoch with prior body replay held fixed. Exact Mode-B raw/section/action hashes and unchanged unrelated provenance are the judges.
 
 Machine-readable record: `experiments/stage1/real-onnx-ground-reference.e11.json`.
+
+## E12 — Coherent prior observation epoch (2026-07-14)
+
+**Hypothesis.** With prior Manny body samples held fixed, changing only their root-height reference from the live first-policy reference to the contemporaneous prior reference reconstructs historical Mode B exactly.
+
+**Baseline configuration and result.** Commit `6c7df5062b751bfb6e53dbd6f769a3e79d2c7ef7`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s; 10 s; unchanged seed and pose; no perturbation; action, provenance, chronology, body-source, and ground-reference diagnostics on. The unchanged live/live control was exact Mode A `AAAF45E7…`. The primary prior-body/live-ground baseline was valid, configured/applied/consumed, and exactly reproduced E10 `586CC117…`. Both evaluator results were `FAIL` on body linear speed, pelvis height, and root tilt with readback 1.0.
+
+**Experimental configuration and result.** Identical commit, binary, model, protocol, harness, and diagnostics; only `ground_reference_epoch` changed from live to prior while the effective body fingerprint remained prior `45E954D382D46B12`. The trace was complete and valid; it applied prior synthetic ground `2.0999999046325684` m and published root height `0.9379022717475891` m (`0x3F701A5D`). The raw snapshot exactly equaled Mode B `723FD942…`; self, mimic, terrain, and all 69 action section hashes were exact. The evaluator still `FAIL`ed on the same three criteria with readback 1.0. Active-standing input, semantic trace, physics, policy, render, chronology, and the general body-source diagnostic were byte-identical across all three arms.
+
+**Supported or falsified.** Supported for exact semantic reconstruction. This is a valid behavioral failure, not causal-standing or product success.
+
+**What was learned.** Historical Mode B is fully explained by a coherent one-tick-prior current-observation epoch; no hidden float, tensor, frame, ground-branch, or provenance dependency remains at this boundary. The startup mode is not causal for standing because all three arms converge to the same active-standing input and byte-identical downstream behavior. The test-only replay behavior will be removed separately; general diagnostics remain.
+
+**Next experiment selected.** Rerun E4's active-standing constraint-range-remap bypass with an exact Mode-A first-input requirement and byte-identical active-standing pre-intervention snapshot. Change only the existing development-only range-remap bypass, retain safety projection, and judge the unchanged locked failure set, physical metrics, semantic-stage deltas, and readback. This resolves E4's former startup-mode confound without returning to broad physics tuning.
+
+Machine-readable record: `experiments/stage1/real-onnx-coherent-prior-epoch.e12.json`.

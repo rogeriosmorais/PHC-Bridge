@@ -1,0 +1,338 @@
+{
+  "schema_version": "physanim-investigation-experiment/v1",
+  "experiment_id": "real-onnx-coherent-prior-epoch-e12",
+  "recorded_utc": "2026-07-14T23:19:13.8650712Z",
+  "experiment_type": "DEVELOPMENT_SEMANTIC_THREE_ARM_AB",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "NOT_RUN_BY_E12",
+  "preregistration": {
+    "path": "experiments/stage1/real-onnx-coherent-prior-epoch.e12.preregister.json",
+    "commit": "bf6a970",
+    "base_commit": "106c374867dba3f29d9fee2da307a7bce2e99513"
+  },
+  "hypothesis": "With the prior Manny body pose held fixed, changing only its root-height reference from the live first-policy reference to the contemporaneous prior reference reconstructs historical Mode B exactly.",
+  "supporting_runtime_evidence_before_experiment": [
+    "E10 prior-body/live-ground replay matched 357 of 358 self-observation values and every mimic-target and terrain value; only self root-height index 0 remained different.",
+    "E11 observed the same successful static-ground branch and resolved ground Z of 210 cm at both boundaries.",
+    "E11's actual prior decomposition produced final root height 0.9379022717475891 m, float32 bits 0x3F701A5D, exactly equal to historical Mode-B self-observation index 0."
+  ],
+  "competing_explanations": [
+    "Another unobserved root-frame or float-materialization boundary still distinguishes the historical snapshot.",
+    "A downstream tensor or provenance dependency changes when the prior body and prior ground reference are paired, preventing exact Mode-B actions or sections."
+  ],
+  "primary_causal_variable": {
+    "name": "ground_reference_epoch",
+    "held_constant": "prior Manny body source at first inference",
+    "baseline_value": "live first-policy root-height reference",
+    "experimental_value": "contemporaneous prior root-height reference"
+  },
+  "expected_if_hypothesis_correct": "The unchanged arm is exact Mode A; the prior-body/live-ground arm reproduces E10; the coherent prior-body/prior-ground arm is exact Mode B in the raw snapshot and self-observation, mimic-target, terrain, and model-action section hashes.",
+  "falsification_observation": "The E10 replication control is valid, the coherent override is confirmed consumed with valid prior body and ground evidence, but any Mode-B raw/section/action hash differs or any unrelated provenance field changes.",
+  "locked_judges": {
+    "protocol": {
+      "path": "product-gates/standing-plant-ladder.v2.json",
+      "sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB"
+    },
+    "model": {
+      "path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+      "sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19"
+    },
+    "oracle": "experiments/stage1/oracles/real-onnx-first-policy-modes.v1.json",
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "initial_pose": "unchanged standing-plant harness default",
+    "perturbation": "none",
+    "seed": "unchanged standing-plant harness default",
+    "evaluator": "scripts/evaluate_standing_plant.py",
+    "section_hash_encoding": "SHA-256 over concatenated IEEE-754 binary32 little-endian values",
+    "metrics": [
+      "exact raw policy-input snapshot SHA-256",
+      "exact self-observation, mimic-target, terrain, and action float32 section SHA-256",
+      "configured/applied/consumed source-epoch evidence",
+      "prior/live/effective body fingerprints and applied root-height reference",
+      "unrelated provenance identity",
+      "locked evaluator failure set and target readback ratio",
+      "active-standing snapshot, semantic trace, physics, policy, render, and chronology SHA-256"
+    ]
+  },
+  "implementation": {
+    "experimental_behavior_commit": "6c7df5062b751bfb6e53dbd6f769a3e79d2c7ef7",
+    "source_tree_dirty_at_runtime": false,
+    "runtime_binary_reused_between_variants": true,
+    "production_default_changed": false,
+    "protocol_or_manifest_changed": false,
+    "validation": {
+      "serena_diagnostics": "PASS_NO_DIAGNOSTICS",
+      "editor_build": "PASS",
+      "ue_contracts": {
+        "PhysAnim.Bridge.FirstPolicyObservationSourceExperimentContract": "PASS",
+        "PhysAnim.ProductHarness.FirstPolicyObservationSourceExperimentPublicationContract": "PASS",
+        "PhysAnim.ProductHarness.DropDispatchSwitch": "PASS",
+        "PhysAnim.Bridge.FirstPolicyBodySourceTraceContract": "PASS",
+        "PhysAnim.Bridge.FirstPolicyGroundReferenceTraceContract": "PASS",
+        "PhysAnim.ProductHarness.FirstPolicyBodySourcePublicationContract": "PASS",
+        "PhysAnim.ProductHarness.FirstPolicyGroundReferencePublicationContract": "PASS",
+        "PhysAnim.Bridge.StartupChronologyTraceContract": "PASS",
+        "PhysAnim.ProductHarness.StartupChronologyPublicationContract": "PASS"
+      },
+      "python_fast_tier": "PASS_89_OF_89",
+      "graphify_update": "PASS_6413_NODES_8732_EDGES"
+    }
+  },
+  "arms": {
+    "live_body_live_ground": {
+      "role": "unchanged production control",
+      "artifact_root": "test-results/adapter-coherent-prior-epoch-e12/live-body-live-ground",
+      "run_id": "RealOnnxPolicy-coherent-prior-e12-live-live",
+      "override": "none",
+      "automation_status": "PASS",
+      "evaluator_status": "FAIL",
+      "failed_criteria": [
+        "body_linear_speed",
+        "pelvis_height",
+        "root_tilt"
+      ],
+      "target_readback_match_ratio": 1.0,
+      "experiment_evidence": {
+        "requested_mode": "LiveBodyLiveGround",
+        "applied_mode": "LiveBodyLiveGround",
+        "configured": false,
+        "applied": true,
+        "consumed": true,
+        "complete": true,
+        "valid": true,
+        "prior_body_fingerprint": "45E954D382D46B12",
+        "live_body_fingerprint": "478120A83B032011",
+        "effective_body_fingerprint": "478120A83B032011",
+        "prior_synthetic_ground_height_m": 2.0999999046325684,
+        "live_synthetic_ground_height_m": 2.1000001430511475,
+        "applied_synthetic_ground_height_m": 2.1000001430511475,
+        "final_root_height_m": 0.9379460215568542,
+        "final_root_height_float32_bits": "0x3F701D3B"
+      },
+      "snapshot": {
+        "raw_sha256": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "oracle_mode": "MODE_A",
+        "oracle_exact": true,
+        "counts": {
+          "self_observation": 358,
+          "mimic_target_poses": 6495,
+          "terrain": 256,
+          "actions": 69
+        },
+        "sections": {
+          "self_observation": "2045AB1CC5211D435337E586B306876AD53CFBB5A87817BCB6DB4C46605C5C1E",
+          "mimic_target_poses": "47EEAABE940E38166BE996905563F040657ED07EA2CEB4C954EF639FC3C64872",
+          "terrain": "D1941B7FE1F2B5BBBBF85B0ECF923FD3E9BBE1832E45D797314EF6E6CE46E025",
+          "actions": "9D531D04843511E1FDAAE5EF1672ABCFFFCAE6735B180AB5BAD787AB35CE1083"
+        }
+      },
+      "first_inference_action_l2": 1.000538419457652,
+      "artifact_sha256": {
+        "first_policy_observation_source_experiment": "7A3E0B932FA33E1C11B46ABFA74A5C58D19F7D33E1E2FE0AF36A515B54932B35",
+        "first_policy_body_source": "CC0D625101AB8C9F63BFA7A08C0158A8D192C5CAF83E78151023A4084367EFDF",
+        "first_policy_ground_reference": "DD59984292E1E550B68A27B7E83EE75CB0E78E893FA1394E98AA6C249093258C",
+        "policy_input_provenance": "055E74345E4738065EB6C5B8AE6D4758D91A8A6C4A5E7235EC2C9732F2FFE6B9",
+        "evaluation": "0DBDAF3ADBBA7411939A17DF156883136EBCFB9EF29EF8F38CD1E99C5C0CD921"
+      }
+    },
+    "prior_body_live_ground": {
+      "role": "primary causal baseline and E10 replication control",
+      "artifact_root": "test-results/adapter-coherent-prior-epoch-e12/prior-body-live-ground",
+      "run_id": "RealOnnxPolicy-coherent-prior-e12-prior-live",
+      "override": "PriorBodyLiveGround",
+      "automation_status": "PASS",
+      "evaluator_status": "FAIL",
+      "failed_criteria": [
+        "body_linear_speed",
+        "pelvis_height",
+        "root_tilt"
+      ],
+      "target_readback_match_ratio": 1.0,
+      "experiment_evidence": {
+        "requested_mode": "PriorBodyLiveGround",
+        "applied_mode": "PriorBodyLiveGround",
+        "configured": true,
+        "applied": true,
+        "consumed": true,
+        "complete": true,
+        "valid": true,
+        "prior_body_fingerprint": "45E954D382D46B12",
+        "live_body_fingerprint": "478120A83B032011",
+        "effective_body_fingerprint": "45E954D382D46B12",
+        "prior_synthetic_ground_height_m": 2.0999999046325684,
+        "live_synthetic_ground_height_m": 2.0999560356140137,
+        "applied_synthetic_ground_height_m": 2.0999560356140137,
+        "final_root_height_m": 0.9379461407661438,
+        "final_root_height_float32_bits": "0x3F701D3D"
+      },
+      "snapshot": {
+        "raw_sha256": "586CC117F617143056ED6676E712E13EFC94496E53D990F15BC13A7C812728AC",
+        "oracle_mode": "E10_MIXED_EPOCH_CONTROL",
+        "oracle_exact": true,
+        "counts": {
+          "self_observation": 358,
+          "mimic_target_poses": 6495,
+          "terrain": 256,
+          "actions": 69
+        },
+        "sections": {
+          "self_observation": "1CB9FCEBF7821A4FDC8B5BD784BC70AB4FBA1386DE1AFC8AC4F3A550741FCF26",
+          "mimic_target_poses": "179161EF97302AE41235A29083CD5B23DF4A50103FC0EED3557315A55E26253E",
+          "terrain": "C852FC38C3576F71A091F2E9188AC0200018A7594EC7DF9456BA86EA8CDE45B7",
+          "actions": "5B2AD9CE78EE7F6B3E260BBE91418C32BF364FA4B2AC4932E61AC1AD89C50AED"
+        }
+      },
+      "first_inference_action_l2": 0.9967229510698407,
+      "artifact_sha256": {
+        "first_policy_observation_source_experiment": "9A7B6EEDC90BA59A391A407C55BF185A806E92A9FF0E51D9DA8692478533B48A",
+        "first_policy_body_source": "CC0D625101AB8C9F63BFA7A08C0158A8D192C5CAF83E78151023A4084367EFDF",
+        "first_policy_ground_reference": "F2820CF24D1C0DBABD00F67631D33F8639ED9D32110682673E3ED4EE17C3C6D4",
+        "policy_input_provenance": "92E4B12E80ACFC3BD8F9D3A6705C47B86ABEE571385452AC57E65D6C3D1B9525",
+        "evaluation": "4592B5473793424487123BD5C3A9C6D4A2E81EF8EB4C205CF8033AC3E8AB3DEA"
+      }
+    },
+    "prior_body_prior_ground": {
+      "role": "primary experimental arm",
+      "artifact_root": "test-results/adapter-coherent-prior-epoch-e12/prior-body-prior-ground",
+      "run_id": "RealOnnxPolicy-coherent-prior-e12-prior-prior",
+      "override": "PriorBodyPriorGround",
+      "automation_status": "PASS",
+      "evaluator_status": "FAIL",
+      "failed_criteria": [
+        "body_linear_speed",
+        "pelvis_height",
+        "root_tilt"
+      ],
+      "target_readback_match_ratio": 1.0,
+      "experiment_evidence": {
+        "requested_mode": "PriorBodyPriorGround",
+        "applied_mode": "PriorBodyPriorGround",
+        "configured": true,
+        "applied": true,
+        "consumed": true,
+        "complete": true,
+        "valid": true,
+        "prior_body_fingerprint": "45E954D382D46B12",
+        "live_body_fingerprint": "478120A83B032011",
+        "effective_body_fingerprint": "45E954D382D46B12",
+        "prior_synthetic_ground_height_m": 2.0999999046325684,
+        "live_synthetic_ground_height_m": 2.0999560356140137,
+        "applied_synthetic_ground_height_m": 2.0999999046325684,
+        "final_root_height_m": 0.9379022717475891,
+        "final_root_height_float32_bits": "0x3F701A5D"
+      },
+      "snapshot": {
+        "raw_sha256": "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3",
+        "oracle_mode": "MODE_B",
+        "oracle_exact": true,
+        "counts": {
+          "self_observation": 358,
+          "mimic_target_poses": 6495,
+          "terrain": 256,
+          "actions": 69
+        },
+        "sections": {
+          "self_observation": "1ED0917AC3C84C56C15607768C918A25B52D8B9F73A4E0FB111E84EFFD27BF77",
+          "mimic_target_poses": "179161EF97302AE41235A29083CD5B23DF4A50103FC0EED3557315A55E26253E",
+          "terrain": "C852FC38C3576F71A091F2E9188AC0200018A7594EC7DF9456BA86EA8CDE45B7",
+          "actions": "DAABF06884601F9B3F8F720DD232EC7B2BDF9D7EED40943C715982B841269267"
+        }
+      },
+      "first_inference_action_l2": 0.9967669495130528,
+      "artifact_sha256": {
+        "first_policy_observation_source_experiment": "B3D56E31096C90A4AE7D142452226F11CA788A2BDCCCF6466518619BF0B45081",
+        "first_policy_body_source": "CC0D625101AB8C9F63BFA7A08C0158A8D192C5CAF83E78151023A4084367EFDF",
+        "first_policy_ground_reference": "F2820CF24D1C0DBABD00F67631D33F8639ED9D32110682673E3ED4EE17C3C6D4",
+        "policy_input_provenance": "3E57922A991A4AFE1E1CB67377F70E7C9B9F2A98260A5157210D05730B0DF36C",
+        "evaluation": "8CCD76AE5F49C92016C3BBB7230134F38550BF39790D0CF3138A131644A928A8"
+      }
+    }
+  },
+  "common_behavioral_result": {
+    "key_metrics": {
+      "sample_count": 601,
+      "policy_sample_count": 300,
+      "minimum_pelvis_height_cm": 13.986960983769706,
+      "maximum_root_tilt_deg": 105.40127563476562,
+      "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+      "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+      "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+      "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "first_active_standing_action_l2": 0.9551095633271672,
+      "target_readback_match_ratio": 1.0
+    },
+    "shared_artifacts_byte_identical": {
+      "active_standing_policy_input_snapshot": true,
+      "action_semantic_trace": true,
+      "physics_stream": true,
+      "policy_stream": true,
+      "render": true,
+      "startup_chronology": true,
+      "general_first_policy_body_source": true
+    },
+    "shared_sha256": {
+      "active_standing_policy_input_snapshot": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "render": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C",
+      "startup_chronology": "CF2AF337C48FF6705184132646B4730ECA859A00D2A4E9315CDB19AC0EBA1890",
+      "general_first_policy_body_source": "CC0D625101AB8C9F63BFA7A08C0158A8D192C5CAF83E78151023A4084367EFDF"
+    }
+  },
+  "comparison": {
+    "live_control_mode_a_exact": true,
+    "mixed_epoch_control_e10_exact": true,
+    "coherent_prior_mode_b_exact": true,
+    "coherent_prior_all_69_model_actions_mode_b_exact": true,
+    "experiment_consumption_valid": true,
+    "downstream_behavior_identical": true,
+    "provenance_changed_fields": {
+      "live_vs_prior_live": [
+        "self_observation_ground_height",
+        "manny_body_samples",
+        "canonical_body_samples",
+        "mimic_reference_body_samples"
+      ],
+      "live_vs_prior_prior": [
+        "self_observation_ground_height",
+        "manny_body_samples",
+        "canonical_body_samples",
+        "mimic_reference_body_samples"
+      ],
+      "prior_live_vs_prior_prior": [
+        "self_observation_ground_height"
+      ]
+    },
+    "unrelated_provenance_identity": true
+  },
+  "conclusion": {
+    "hypothesis_status": "SUPPORTED",
+    "experiment_status": "VALID_SEMANTIC_RESULT_BEHAVIORAL_FAIL",
+    "summary": "The coherent prior body and prior root-height reference reconstructed historical Mode B exactly: raw snapshot, all 7,178 input/output float32 values across the four locked sections, and all 69 model actions matched the oracle. The unchanged arm remained exact Mode A and the mixed-epoch arm reproduced E10 exactly.",
+    "what_was_learned": "Historical Mode B is fully explained by a coherent one-tick-prior current-observation epoch. No hidden tensor, float, frame, ground-branch, or provenance dependency remains at this boundary. Because all three arms converged to byte-identical active-standing inputs, targets, physics, policy samples, and render output, first-inference startup mode is not causal for the standing failure.",
+    "promotion_decision": "DO_NOT_PROMOTE_DELETE_EXPERIMENTAL_BEHAVIOR_IN_SEPARATE_COMMIT",
+    "promotion_reason": "Exact historical-mode reconstruction proves a semantic boundary but provides no standing improvement and no evidence that the prior epoch is the correct production contract.",
+    "causal_standing_status": "NOT_PROVEN",
+    "cleanup": {
+      "status": "PENDING_SEPARATE_COMMIT",
+      "retain": "General E10 body-source, E11 ground-reference, chronology, provenance, and action-semantic diagnostics."
+    }
+  },
+  "next_highest_information_experiment": {
+    "status": "SELECTED_NOT_RUN",
+    "name": "Controlled active-standing constraint-range-remap bypass rerun",
+    "hypothesis": "The full-range-to-Manny constraint remapping is the causal active-standing distortion; bypassing only that remap while retaining constraint-frame safety projection will improve locked standing metrics.",
+    "supporting_evidence": "E3 localized the dominant target transformation to the range mapper: 14 controls changed, lower-body mean delta 27.156594 degrees, left-foot maximum 47.093262 degrees. E4 applied the intervention but was invalid because its two launches entered different first-policy modes. E12 now explains those modes and shows they converge before active standing.",
+    "single_variable": "The existing development-only active-standing constraint-range-remap bypass, with every observation source, action, timing, safety projection, physics setting, protocol, threshold, and diagnostic held fixed.",
+    "required_precondition": "Fresh baseline and experimental runs must both equal exact Mode A at first inference and be byte-identical at the active-standing input immediately before the intervention.",
+    "expected_if_correct": "The trace confirms zero range-mapping delta, safety projection remains active, readback remains complete, and at least one locked pelvis-height, root-tilt, or body-speed metric improves without a new failed criterion.",
+    "falsifier": "Pre-intervention equivalence is exact and the bypass is confirmed consumed, but locked standing metrics are unchanged or worse, new criteria fail, or safety projection absorbs the unremapped targets without improvement.",
+    "locked_judges": "Same clean commit/binary/model/protocol, Mode-A raw and section hashes, exact active-standing pre-intervention snapshot, same seed/timestep/pose/no perturbation/window/evaluator, action-semantic stage deltas, failed-criteria set, physical metrics, and target readback."
+  }
+}
