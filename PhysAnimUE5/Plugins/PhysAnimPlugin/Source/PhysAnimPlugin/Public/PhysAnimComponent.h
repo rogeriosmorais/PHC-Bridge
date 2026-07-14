@@ -1489,9 +1489,6 @@ public:
 	EPhysAnimStandingVariant GetStandingVariantForTesting() const { return StandingVariantForTesting; }
 	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
-	static constexpr int32 GetMaximumExperimentalFirstPolicyDelayTicksForTesting() { return 8; }
-	int32 GetExperimentalFirstPolicyDelayTicksForTesting() const { return ExperimentalFirstPolicyDelayTicksForTesting; }
-	int32 GetExperimentalFirstPolicyDelayTicksConsumedForTesting() const { return ExperimentalFirstPolicyDelayTicksConsumedForTesting; }
 	bool IsConstraintRangeRemapBypassEnabledForTesting() const { return bConstraintRangeRemapBypassEnabledForTesting; }
 	bool ShouldBypassConstraintRangeRemapForTesting(
 		EPhysAnimRuntimeState State,
@@ -2446,8 +2443,6 @@ private:
 	bool bProductControlDispatchDroppedForTesting = false;
 	bool bActionSemanticTraceEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
-	int32 ExperimentalFirstPolicyDelayTicksForTesting = 0;
-	int32 ExperimentalFirstPolicyDelayTicksConsumedForTesting = 0;
 	bool bConstraintRangeRemapBypassEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
 #endif

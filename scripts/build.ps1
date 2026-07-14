@@ -16,8 +16,6 @@ param (
     [bool]$SourceTreeDirty = $false,
     [switch]$ActionSemanticTrace,
     [switch]$PolicyInputProvenanceTrace,
-    [ValidateRange(0, 8)]
-    [int]$ExperimentalFirstPolicyDelayTicks,
     [switch]$ExperimentalConstraintRangeRemapBypass
 )
 
@@ -146,9 +144,6 @@ if ($Test) {
     }
     if ($PolicyInputProvenanceTrace) {
         $EditorArguments += "-PhysAnimPolicyInputProvenanceTrace"
-    }
-    if ($PSBoundParameters.ContainsKey('ExperimentalFirstPolicyDelayTicks')) {
-        $EditorArguments += "-PhysAnimExperimentalFirstPolicyDelayTicks=$ExperimentalFirstPolicyDelayTicks"
     }
     if ($ExperimentalConstraintRangeRemapBypass) {
         $EditorArguments += "-PhysAnimExperimentalConstraintRangeRemapBypass"
