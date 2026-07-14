@@ -2,6 +2,7 @@
   "schema_version": "physanim-investigation-experiment/v1",
   "experiment_id": "active-standing-constraint-range-remap-controlled-e13",
   "recorded_utc": "2026-07-14T23:40:14.6689454Z",
+  "updated_utc": "2026-07-14T23:52:04.5650272Z",
   "experiment_type": "DEVELOPMENT_CONTROLLED_BEHAVIOR_AB",
   "authority": "DEVELOPMENT_EVIDENCE_ONLY",
   "product_success": false,
@@ -66,7 +67,16 @@
       "remap_enabled": "PASS",
       "remap_bypassed": "PASS"
     },
-    "logs_read_after_ue_runs": true
+    "logs_read_after_ue_runs": true,
+    "cleanup": {
+      "commit": "d16972b36428a87c5552f974fcd4ba007a389d68",
+      "serena_diagnostics": "PASS_NO_DIAGNOSTICS",
+      "editor_build": "PASS",
+      "retained_ue_contracts": "PASS_2_OF_2",
+      "python_fast_tier": "PASS_88_OF_88",
+      "graphify_update": "PASS_6389_NODES_8660_EDGES_579_COMMUNITIES",
+      "executable_override_reference_scan": "PASS_NONE_FOUND"
+    }
   },
   "pre_intervention_equivalence": {
     "passed": true,
@@ -253,8 +263,11 @@
     "promotion_decision": "REJECT_AND_DELETE_EXPERIMENTAL_BYPASS_IN_SEPARATE_COMMIT",
     "causal_standing_status": "NOT_PROVEN",
     "cleanup": {
-      "status": "PENDING_SEPARATE_COMMIT",
-      "retain": "Action-semantic stage trace, target publication/readback diagnostics, and general constraint adapter contracts."
+      "status": "COMPLETED_SEPARATE_COMMIT",
+      "commit": "d16972b36428a87c5552f974fcd4ba007a389d68",
+      "removed": "Constraint-range-remap bypass parser state, runtime branch, test accessors/state, runner flag, and experiment-specific assertions.",
+      "retained": "Unconditional Manny range mapping, AdaptParentRelativeTarget safety projection, action-semantic stage trace, target publication/readback diagnostics, and general constraint adapter contracts.",
+      "verification": "No executable bypass references remain; the clean editor build, retained UE contracts, 88 deterministic tests, Serena diagnostics, and Graphify update passed."
     }
   },
   "next_highest_information_experiment": {
