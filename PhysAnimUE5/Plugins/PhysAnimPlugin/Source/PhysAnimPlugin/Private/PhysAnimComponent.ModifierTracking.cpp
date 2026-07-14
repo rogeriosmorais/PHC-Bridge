@@ -532,9 +532,21 @@ void UPhysAnimComponent::ApplyControlTargets(
 						*ControlName.ToString());
 					return;
 				}
-				const FQuat MannyBindNeutralRotation = BindSeed->ParentRelativeTargetRotation.GetNormalized();
+				const FQuat* const StableNeutralRotation =
+					PolicyNeutralControlTargetRotations.Find(ControlName);
+				if (!StableNeutralRotation)
+				{
+					OutError = FString::Printf(
+						TEXT("Missing captured stable neutral for control '%s' during target write."),
+						*ControlName.ToString());
+					return;
+				}
+				const FQuat MannyPolicyNeutralRotation = StableNeutralRotation->GetNormalized();
 				const FQuat AbsoluteBindCalibratedPolicyRotation =
-					ComposeProtoPolicyTargetInMannyBindFrame(*BindSeed, Pair.Value);
+					ComposeProtoPolicyTargetAroundMannyNeutral(
+						*BindSeed,
+						MannyPolicyNeutralRotation,
+						Pair.Value);
 
 				const bool bApplyTrainingAlignedLowerLimbTargetRangePolicy =
 					ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
@@ -557,14 +569,14 @@ void UPhysAnimComponent::ApplyControlTargets(
 						EffectiveSettings.TrainingAlignedDistalLocomotionTargetPolicyBlend)
 					: 1.0f;
 				const float RawPolicyOffsetDegrees = CalculateControlTargetDeltaDegrees(
-					MannyBindNeutralRotation,
+					MannyPolicyNeutralRotation,
 					AbsoluteBindCalibratedPolicyRotation);
 				const FQuat RangeAlignedPolicyRotation = BlendPolicyTargetRotation(
-					MannyBindNeutralRotation,
+					MannyPolicyNeutralRotation,
 					AbsoluteBindCalibratedPolicyRotation,
 					LowerLimbTargetRangeScale);
 				const FQuat DistalLocomotionAlignedPolicyRotation = BlendPolicyTargetRotation(
-					MannyBindNeutralRotation,
+					MannyPolicyNeutralRotation,
 					RangeAlignedPolicyRotation,
 					DistalLocomotionTargetScale);
 				FQuat ConstraintAdaptedPolicyRotation = DistalLocomotionAlignedPolicyRotation;
@@ -581,21 +593,21 @@ void UPhysAnimComponent::ApplyControlTargets(
 						const FQuat RangeMappedPolicyRotation =
 							PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
 								DistalLocomotionAlignedPolicyRotation,
-								MannyBindNeutralRotation,
+								MannyPolicyNeutralRotation,
 								ConstraintProfile);
 						ConstraintAdaptedPolicyRotation = PhysAnimProtoMannyAdapter::AdaptParentRelativeTarget(
 							RangeMappedPolicyRotation,
-							MannyBindNeutralRotation,
+							MannyPolicyNeutralRotation,
 							ConstraintProfile);
 					}
 				}
 				const float RangeAlignedPolicyOffsetDegrees = CalculateControlTargetDeltaDegrees(
-					MannyBindNeutralRotation,
+					MannyPolicyNeutralRotation,
 					ConstraintAdaptedPolicyRotation);
 
 				// ProtoMotions mimic_residual_control is false for this checkpoint: actions
-				// are absolute SMPL joint targets. The bind capture defines both Proto axes
-				// and policy zero; the outer influence ramp performs the live-pose handover.
+				// are absolute SMPL joint targets. The synchronized body calibration defines
+				// Proto axes; the captured activation pose is Manny's retargeted policy zero.
 				FQuat BasePolicyRotation = ConstraintAdaptedPolicyRotation;
 				if (bIsPhase3HandoverBlend && EffectiveHandoverAlpha < 1.0f - KINDA_SMALL_NUMBER)
 				{
