@@ -134,7 +134,14 @@ void UPhysAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 
 	if (RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch)
 	{
+#if WITH_DEV_AUTOMATION_TESTS
+		CaptureStartupChronologySampleForTesting(TEXT("pre_state_machine"));
+#endif
 		HandleInitialPoseSearchWait(DeltaTime, EffectiveSettings, TickError, SearchResult);
+#if WITH_DEV_AUTOMATION_TESTS
+		CaptureStartupChronologySampleForTesting(TEXT("post_state_machine"));
+		CaptureStartupChronologySampleForTesting(TEXT("post_policy"));
+#endif
 		return;
 	}
 
