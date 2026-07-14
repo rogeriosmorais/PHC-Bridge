@@ -266,12 +266,29 @@ bool UPhysAnimComponent::ResolveMimicTargetReferenceDataFrame(
 		UPoseSearchAssetSamplerLibrary::GetTransformByName(WorldPose, PhysAnimBridge::GetRootBoneName(), EPoseSearchAssetSamplerSpace::World);
 	const FTransform DataRootTransform =
 		UPoseSearchAssetSamplerLibrary::GetTransformByName(DataPose, PhysAnimBridge::GetRootBoneName(), EPoseSearchAssetSamplerSpace::World);
+	if (!CachedSmplObservationRestComponentTransforms.IsValidIndex(0))
+	{
+		OutError = TEXT("Mimic target reference alignment requires the cached Manny root rest frame.");
+		return false;
+	}
+	const FQuat RestRootComponentRotation =
+		CachedSmplObservationRestComponentTransforms[0].GetRotation().GetNormalized();
+	const FQuat CanonicalWorldRootRotation =
+		PhysAnimProtoMannyAdapter::BuildCanonicalSmplRootRotationFromBonePose(
+			FQuat::Identity,
+			RestRootComponentRotation,
+			WorldRootTransform.GetRotation());
+	const FQuat CanonicalDataRootRotation =
+		PhysAnimProtoMannyAdapter::BuildCanonicalSmplRootRotationFromBonePose(
+			FQuat::Identity,
+			RestRootComponentRotation,
+			DataRootTransform.GetRotation());
 
 	OutWorldRoot = FTransform(
-		PhysAnimBridge::UeWorldQuaternionToProtoRuntime(WorldRootTransform.GetRotation()),
+		PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CanonicalWorldRootRotation),
 		PhysAnimBridge::UeWorldPositionToProtoRuntime(WorldRootTransform.GetLocation()));
 	OutDataRoot = FTransform(
-		PhysAnimBridge::UeWorldQuaternionToProtoRuntime(DataRootTransform.GetRotation()),
+		PhysAnimBridge::UeWorldQuaternionToProtoRuntime(CanonicalDataRootRotation),
 		PhysAnimBridge::UeWorldPositionToProtoRuntime(DataRootTransform.GetLocation()));
 	return true;
 }
