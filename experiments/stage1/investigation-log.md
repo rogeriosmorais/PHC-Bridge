@@ -79,3 +79,19 @@ Machine-readable record: `experiments/stage1/real-onnx-preintervention-determini
 **Next experiment selected.** Test whether one fixed startup pose-propagation tick causes the mode split. Use a development-only runtime sweep of first-policy delay `{0,1}` ticks with the validated provenance trace and otherwise identical locked harness. Mode B's exact input hash and the earliest provenance delta are the judges; do not change production defaults or thresholds.
 
 Machine-readable record: `experiments/stage1/real-onnx-policy-input-provenance.e6.json`.
+
+## E7 — First-policy fixed-tick delay (2026-07-14)
+
+**Hypothesis.** The E5 startup-mode split is caused by whether first policy inference samples Manny before or after one fixed skeletal and physics pose-propagation tick; delaying Mode A by one fixed tick should reproduce known Mode B.
+
+**Baseline configuration and result.** Commit `817a96a4714e2af9018b14924c3847acfa11a729`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s; 10 s; unchanged seed, pose, no perturbation, action/provenance traces on, delay `0`. The valid run reproduced Mode A hash `AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA` at world time 0.033333335 s in `Standing_Preparation`. Evaluator `FAIL`: body linear speed, pelvis height, root tilt; readback 1.0.
+
+**Experimental configuration and result.** Identical clean commit, binary, model, protocol, and harness with only delay changed to `1`; provenance confirmed configured/consumed `1/1`. First inference moved to world time 0.050000003 s in `Standing_FullSimulationActivation`, but produced new hash `CA62E6D543A73A887FC1153FE2C528E4E4845696211C2AA9AB13EF305556C723`, not Mode B `723FD942…`. Active-standing snapshot, semantic trace, physics, policy, and render were byte-identical to baseline. The evaluator and readback were also identical.
+
+**Supported or falsified.** Falsified. One tick later does not reproduce Mode B and has no downstream standing effect.
+
+**What was learned.** The changed source is the live root/body sample: owner/mesh transforms, PoseSearch identity/time, mimic reference frames, future poses, raw terrain heights, and previous actions stayed exact. Delay +1 and historical Mode B have nearly perfect opposite signed deltas for mimic targets (`-0.999997` correlation) and terrain (`-1.0`), selecting an earlier-sample hypothesis. Startup velocities at the delayed boundary also varied between a metadata-invalid diagnostic attempt and the authoritative run, while positions/rotations were reproducible. The rejected override, parser, publication fields, and tests were removed in commits `5e12162` and `b863294`; the general E6 provenance trace remains.
+
+**Next experiment selected.** Add observation-only startup chronology instrumentation before and after the runtime-state-machine update on each fixed tick through first inference. Test whether an existing earlier live-body sample reconstructs Mode B and whether velocity publication timing separates the modes. Do not run extra inference or change production behavior, protocol, or thresholds.
+
+Machine-readable record: `experiments/stage1/real-onnx-first-policy-delay.e7.json`.
