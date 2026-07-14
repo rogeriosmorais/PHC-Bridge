@@ -175,3 +175,19 @@ Machine-readable record: `experiments/stage1/real-onnx-ground-reference.e11.json
 **Next experiment selected.** Rerun E4's active-standing constraint-range-remap bypass with an exact Mode-A first-input requirement and byte-identical active-standing pre-intervention snapshot. Change only the existing development-only range-remap bypass, retain safety projection, and judge the unchanged locked failure set, physical metrics, semantic-stage deltas, and readback. This resolves E4's former startup-mode confound without returning to broad physics tuning.
 
 Machine-readable record: `experiments/stage1/real-onnx-coherent-prior-epoch.e12.json`.
+
+## E13 — Controlled constraint-range-remap bypass (2026-07-14)
+
+**Hypothesis.** Manny full-range remapping is the causal active-standing distortion; bypassing only `MapProtoPolicyTargetToMannyConstraintRange` while retaining `AdaptParentRelativeTarget` safety projection will strictly improve the locked standing verdict.
+
+**Baseline configuration and result.** Commit `49e0b8c14d2b15ad40dea21d7f5d5f1ef4d9be9f`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s; 10 s; unchanged seed and pose; no perturbation; action, provenance, and chronology traces on; remap enabled. The run was exact Mode A `AAAF45E7…`, active-standing input `6FC88062…`, and evaluator `FAIL`ed on body linear speed, pelvis height, and root tilt with readback 1.0. The mapper changed lower-body targets by 27.157° on average; safety projection averaged 0.690° and peaked at 8.859°.
+
+**Experimental configuration and result.** Identical clean commit, binary, model, protocol, harness, evaluator, and diagnostics; only `-PhysAnimExperimentalConstraintRangeRemapBypass` was added. First and active-standing inputs, provenance, and chronology were byte-identical to baseline. The trace verified approximately zero remap delta, retained 21/21 projection/publication/readback, and increased safety projection to 10.334° mean and 67.033° maximum. The evaluator `FAIL` set expanded to root angular speed, body linear speed, body angular speed, pelvis height, root tilt, and support gap. Readback remained 1.0.
+
+**Supported or falsified.** Falsified. This is a valid causal result: E4's previously confounded adverse direction reproduced exactly after passing the pre-intervention equivalence gate.
+
+**What was learned.** The current Manny range mapper is protective under the existing constraint pipeline; deleting it forces the safety projection to absorb much larger targets and materially worsens every affected stability metric. This does not prove that the mapper is the authoritative ProtoMotions transform. The remaining semantic uncertainty is upstream action decoding, neutral/frame meaning, units, ordering, and training-time `map_actions_to_pd_range` preprocessing. The rejected bypass will be removed separately; the general semantic/readback trace remains.
+
+**Next experiment selected.** Add a behavior-neutral authoritative ProtoMotions action-decoding contract trace. Compare each raw 3-value joint action, training-time PD offset/scale and joint frame, resulting SMPL-space target, and current UE decoder output. First prove trace neutrality; a deterministic order, axis/sign, neutral, unit, or range mismatch supports the hypothesis, while exact agreement across all 23 joints falsifies it.
+
+Machine-readable record: `experiments/stage1/active-standing-constraint-range-remap-controlled.e13.json`.
