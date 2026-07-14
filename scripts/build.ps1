@@ -16,8 +16,7 @@ param (
     [bool]$SourceTreeDirty = $false,
     [switch]$ActionSemanticTrace,
     [switch]$PolicyInputProvenanceTrace,
-    [switch]$StartupChronologyTrace,
-    [switch]$ExperimentalConstraintRangeRemapBypass
+    [switch]$StartupChronologyTrace
 )
 
 # 1. Environment Setup
@@ -148,9 +147,6 @@ if ($Test) {
     }
     if ($StartupChronologyTrace) {
         $EditorArguments += "-PhysAnimStartupChronologyTrace"
-    }
-    if ($ExperimentalConstraintRangeRemapBypass) {
-        $EditorArguments += "-PhysAnimExperimentalConstraintRangeRemapBypass"
     }
     $EditorArguments += "-PhysAnimSourceTreeDirty=$(if ($SourceTreeDirty) { 1 } else { 0 })"
 

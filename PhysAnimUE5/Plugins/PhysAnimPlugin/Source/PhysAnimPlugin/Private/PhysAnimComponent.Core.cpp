@@ -40,8 +40,6 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 		FParse::Param(CommandLine, TEXT("PhysAnimPolicyInputProvenanceTrace"));
 	bStartupChronologyTraceEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimStartupChronologyTrace"));
-	bConstraintRangeRemapBypassEnabledForTesting = CommandLine &&
-		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalConstraintRangeRemapBypass"));
 
 	FString VariantName;
 	if (!CommandLine || !FParse::Value(CommandLine, TEXT("PhysAnimProductVariant="), VariantName))

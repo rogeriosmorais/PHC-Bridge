@@ -238,8 +238,6 @@ void UPhysAnimComponent::ApplyControlTargets(
 	const float MaxAngularStepDegrees =
 		FMath::Max(0.0f, EffectiveSettings.MaxAngularStepDegreesPerSecond) * PolicyStepDeltaTime;
 #if WITH_DEV_AUTOMATION_TESTS
-	const bool bBypassConstraintRangeRemapThisStep =
-		ShouldBypassConstraintRangeRemapForTesting(RuntimeState, StandingVariantForTesting);
 	PhysAnimBridge::FPhysAnimActionSemanticTrace PendingActionSemanticTrace;
 	TMap<FName, PhysAnimBridge::FPhysAnimControlTargetSemanticTrace> PendingControlTargetSemanticTraces;
 	bool bCaptureActionSemanticTraceThisStep =
@@ -629,16 +627,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 						InitialControl->ParentBoneName,
 						ConstraintProfile))
 					{
-						FQuat RangeMappedPolicyRotation = DistalLocomotionAlignedPolicyRotation;
-#if WITH_DEV_AUTOMATION_TESTS
-						if (!bBypassConstraintRangeRemapThisStep)
-#endif
-						{
-							RangeMappedPolicyRotation = PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
+						const FQuat RangeMappedPolicyRotation =
+							PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
 								DistalLocomotionAlignedPolicyRotation,
 								MannyPolicyNeutralRotation,
 								ConstraintProfile);
-						}
 						ConstraintAdaptedPolicyRotation = PhysAnimProtoMannyAdapter::AdaptParentRelativeTarget(
 							RangeMappedPolicyRotation,
 							MannyPolicyNeutralRotation,

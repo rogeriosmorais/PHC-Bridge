@@ -1490,15 +1490,6 @@ public:
 	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
-	bool IsConstraintRangeRemapBypassEnabledForTesting() const { return bConstraintRangeRemapBypassEnabledForTesting; }
-	bool ShouldBypassConstraintRangeRemapForTesting(
-		EPhysAnimRuntimeState State,
-		EPhysAnimStandingVariant Variant) const
-	{
-		return bConstraintRangeRemapBypassEnabledForTesting &&
-			State == EPhysAnimRuntimeState::BalanceActive_Standing &&
-			Variant == EPhysAnimStandingVariant::RealOnnxPolicy;
-	}
 	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
 	{
 		return FirstActiveStandingActionSemanticTrace;
@@ -2470,7 +2461,6 @@ private:
 	bool bActionSemanticTraceEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
 	bool bStartupChronologyTraceEnabledForTesting = false;
-	bool bConstraintRangeRemapBypassEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
 #endif
 	TArray<UE::NNE::FTensorBindingCPU> InputBindings;
