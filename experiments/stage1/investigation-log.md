@@ -31,3 +31,19 @@ Machine-readable record: `experiments/stage1/active-standing-root-frame-alignmen
 **Next experiment selected.** Behind a development-only runtime flag, bypass only `MapProtoPolicyTargetToMannyConstraintRange` during active standing while retaining `AdaptParentRelativeTarget` safety projection. Run a fresh same-commit trace-enabled baseline beside it under the unchanged locked protocol.
 
 Machine-readable record: `experiments/stage1/active-standing-action-semantics.e3.json`.
+
+## E4 — Active-standing constraint-range remap bypass (2026-07-14)
+
+**Hypothesis.** Proto's full-range action is already an absolute joint target, so Manny constraint-range remapping is a causal distortion; bypassing only that remap while retaining safety projection should reduce the locked failure set.
+
+**Baseline configuration and result.** Commit `98433c4d8fb963403223e6631b6fc364ad40d382`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s fixed step; 10 s; unchanged default seed, initial pose, and no perturbation; action trace on; remap enabled. Result: `FAIL` on body linear speed, pelvis height, and root tilt; maximum root tilt 103.503°; maximum body linear speed 1183.699 cm/s; readback 1.0.
+
+**Experimental configuration and result.** Identical declared configuration and commit with only `-PhysAnimExperimentalConstraintRangeRemapBypass` added. Trace confirmed remap delta fell from 19.091° mean to numerical zero while safety-projection maximum rose from 8.856° to 67.033° and 21/21 targets still read back. Result: `FAIL` on root angular speed, body linear speed, body angular speed, pelvis height, root tilt, and support gap; maximum body linear speed 1888.966 cm/s; maximum body angular speed 9404.083°/s; support gap 450 ms; readback 1.0.
+
+**Supported or falsified.** Neither; `INVALID`. The first policy-input snapshot already differed before the active-standing-only intervention could execute: self-observation maximum absolute difference 0.002321 and first-action maximum absolute difference 0.008537. The required pre-intervention equivalence was not established.
+
+**What was learned.** The override and retained projection behaved exactly as designed, and the observed direction strongly favors the competing explanation that Manny range mapping is necessary. That direction is not a causal verdict because launch-to-launch input variation confounded the pair. No production behavior is promoted; the override remains test-only for one controlled rerun.
+
+**Next experiment selected.** Run three consecutive unchanged, trace-enabled, remap-enabled `RealOnnxPolicy` baselines on the same clean commit/binary. Compare exact first-policy snapshot hashes, first actions, active-standing snapshots, and metric spread. If variation reproduces, instrument its earliest observation source; if all three are identical, classify this baseline as malformed and rerun E4 with exact pre-intervention equality required.
+
+Machine-readable record: `experiments/stage1/active-standing-constraint-range-remap-bypass.e4.json`.
