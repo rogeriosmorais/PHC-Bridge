@@ -202,7 +202,10 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 		bRestoreCausalStandingNeck =
 			bExperimentalCausalStandingNeckEnabledForTesting;
 		bRestoreCausalStandingHead =
-			bExperimentalCausalStandingHeadEnabledForTesting;
+			ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+				bExperimentalCausalStandingHeadEnabledForTesting,
+				bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting,
+				RuntimeState);
 #endif
 		ApplyCausalStandingPolicyActionCompatibility(
 			IsStandingActivationRuntimeState(RuntimeState),

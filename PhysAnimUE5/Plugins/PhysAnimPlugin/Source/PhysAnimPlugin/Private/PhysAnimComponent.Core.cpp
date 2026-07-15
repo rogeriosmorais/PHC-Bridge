@@ -49,6 +49,7 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 	bExperimentalCausalStandingNeckHeadEnabledForTesting = false;
 	bExperimentalCausalStandingNeckEnabledForTesting = false;
 	bExperimentalCausalStandingHeadEnabledForTesting = false;
+	bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting = false;
 	FString ExperimentalCausalStandingUpperBodyName;
 	if (CommandLine &&
 		FParse::Value(
@@ -61,8 +62,11 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 		bExperimentalCausalStandingNeckEnabledForTesting =
 			ExperimentalCausalStandingUpperBodyName == TEXT("Neck") ||
 			bExperimentalCausalStandingNeckHeadEnabledForTesting;
+		bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting =
+			ExperimentalCausalStandingUpperBodyName == TEXT("HeadActiveOnly");
 		bExperimentalCausalStandingHeadEnabledForTesting =
 			ExperimentalCausalStandingUpperBodyName == TEXT("Head") ||
+			bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting ||
 			bExperimentalCausalStandingNeckHeadEnabledForTesting;
 	}
 	bExperimentalPolicyActionBaselineResidualEnabledForTesting = CommandLine &&

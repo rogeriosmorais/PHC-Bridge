@@ -432,6 +432,50 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("E36 development option enables head restoration"),
 		Component->IsExperimentalCausalStandingHeadEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCausalStandingUpperBody=HeadActiveOnly"));
+	TestTrue(
+		TEXT("E37 active-only option enables head restoration"),
+		Component->IsExperimentalCausalStandingHeadEnabledForTesting());
+	TestTrue(
+		TEXT("E37 active-only option records delayed activation"),
+		Component->IsExperimentalCausalStandingHeadActiveOnlyEnabledForTesting());
+	TestFalse(
+		TEXT("E37 keeps head masked during standing preparation"),
+		UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+			true,
+			true,
+			EPhysAnimRuntimeState::Standing_Preparation));
+	TestFalse(
+		TEXT("E37 keeps head masked during full simulation activation"),
+		UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+			true,
+			true,
+			EPhysAnimRuntimeState::Standing_FullSimulationActivation));
+	TestFalse(
+		TEXT("E37 keeps head masked during policy blend"),
+		UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+			true,
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend));
+	TestTrue(
+		TEXT("E37 restores head only in active standing"),
+		UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+			true,
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestTrue(
+		TEXT("Non-delayed head mode remains active throughout standing activation"),
+		UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+			true,
+			false,
+			EPhysAnimRuntimeState::Standing_Preparation));
+	TestFalse(
+		TEXT("Disabled head restoration remains inactive"),
+		UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+			false,
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	Component->ApplyProductVariantFromCommandLineForTesting(
 		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalActionFamily=LowerOnly"));
 	TestEqual(
 		TEXT("Command line selects the lower-body-only action mask"),

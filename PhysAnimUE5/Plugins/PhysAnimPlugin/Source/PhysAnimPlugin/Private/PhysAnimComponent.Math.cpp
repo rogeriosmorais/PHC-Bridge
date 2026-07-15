@@ -949,6 +949,20 @@ bool UPhysAnimComponent::ShouldBypassExperimentalConstraintRangeRemapFromFirstPo
 	return bConfigured && IsStandingActivationRuntimeState(InRuntimeState);
 }
 
+bool UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+	bool bHeadEnabled,
+	bool bActiveOnly,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	if (!bHeadEnabled)
+	{
+		return false;
+	}
+	return bActiveOnly
+		? InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing
+		: IsStandingActivationRuntimeState(InRuntimeState);
+}
+
 bool UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
 	bool bConfigured,
 	bool bFirstActiveStandingPolicyCaptured,
