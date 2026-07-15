@@ -407,6 +407,14 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		UPhysAnimComponent::ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
 			true,
 			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(
+		TEXT("Causal standing neck/head restoration is disabled by default after flag reset"),
+		Component->IsExperimentalCausalStandingNeckHeadEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCausalStandingUpperBody=NeckHead"));
+	TestTrue(
+		TEXT("Explicit development option enables causal standing neck/head restoration"),
+		Component->IsExperimentalCausalStandingNeckHeadEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(
 		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalActionFamily=LowerOnly"));
 	TestEqual(
@@ -429,6 +437,20 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			*FString::Printf(TEXT("Production standing-policy action scalar %d matches compatibility mask"), Index),
 			ProductionCompatibleActions[Index],
 			Index < 24 ? FamilyActions[Index] : 0.0f);
+	}
+	TArray<float> NeckHeadRestoredActions = FamilyActions;
+	UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+		true,
+		true,
+		NeckHeadRestoredActions);
+	for (int32 Index = 0; Index < NeckHeadRestoredActions.Num(); ++Index)
+	{
+		const int32 JointIndex = Index / 3;
+		const bool bExpectedRetained = JointIndex < 8 || (JointIndex >= 11 && JointIndex < 13);
+		TestEqual(
+			*FString::Printf(TEXT("E34 neck/head candidate action scalar %d matches preregistered mask"), Index),
+			NeckHeadRestoredActions[Index],
+			bExpectedRetained ? FamilyActions[Index] : 0.0f);
 	}
 	TArray<float> NonPolicyCompatibleActions = FamilyActions;
 	UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(

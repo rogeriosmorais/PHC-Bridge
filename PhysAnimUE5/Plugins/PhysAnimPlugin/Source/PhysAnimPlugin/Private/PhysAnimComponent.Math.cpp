@@ -837,15 +837,32 @@ void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
 	bool bStandingPolicyMode,
 	TArray<float>& InOutActions)
 {
+	ApplyCausalStandingPolicyActionCompatibility(
+		bStandingPolicyMode,
+		false,
+		InOutActions);
+}
+
+void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+	bool bStandingPolicyMode,
+	bool bRestoreNeckHead,
+	TArray<float>& InOutActions)
+{
 	if (!bStandingPolicyMode)
 	{
 		return;
 	}
 
-	constexpr int32 RetainedLowerBodyScalarCount = 8 * 3;
-	for (int32 ScalarIndex = RetainedLowerBodyScalarCount; ScalarIndex < InOutActions.Num(); ++ScalarIndex)
+	for (int32 ScalarIndex = 0; ScalarIndex < InOutActions.Num(); ++ScalarIndex)
 	{
-		InOutActions[ScalarIndex] = 0.0f;
+		const int32 JointIndex = ScalarIndex / 3;
+		const bool bRetainJoint =
+			JointIndex < 8 ||
+			(bRestoreNeckHead && JointIndex >= 11 && JointIndex < 13);
+		if (!bRetainJoint)
+		{
+			InOutActions[ScalarIndex] = 0.0f;
+		}
 	}
 }
 
