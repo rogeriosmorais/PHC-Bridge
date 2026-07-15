@@ -1,0 +1,49 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "lower-joint-recovery-screen-e26",
+  "recorded_utc": "2026-07-15T18:10:00Z",
+  "authority": "DEVELOPMENT_SCREENING_EVIDENCE",
+  "product_success": false,
+  "hypothesis": "One or more individual lower-body ProtoMotions action joints can retain nonzero policy behavior while reducing locked post-impulse pose-error AUC below the zero-action reference.",
+  "arms": [
+    {"name":"left_hip", "start_joint":0, "joint_count":1},
+    {"name":"left_knee", "start_joint":1, "joint_count":1},
+    {"name":"left_ankle", "start_joint":2, "joint_count":1},
+    {"name":"left_toe", "start_joint":3, "joint_count":1},
+    {"name":"right_hip", "start_joint":4, "joint_count":1},
+    {"name":"right_knee", "start_joint":5, "joint_count":1},
+    {"name":"right_ankle", "start_joint":6, "joint_count":1},
+    {"name":"right_toe", "start_joint":7, "joint_count":1}
+  ],
+  "reference": {
+    "source":"E25 ZeroActions repetitions 1-3",
+    "median_recovery_auc":41.14179622283463,
+    "locked_candidate_max_auc":32.913436978267704,
+    "reason":"The three zero repetitions were numerically identical under the same binary, protocol, timestep, perturbation, pose, and evaluator."
+  },
+  "single_changed_variable":"The one retained post-conditioning lower-body Proto joint; all other conditioned actions are exactly zero.",
+  "locked_configuration": {
+    "runtime_behavior_commit":"c01d2d9cd609312c7b844e813aea1eb8ed877ecf",
+    "test":"PhysAnim.Product.CausalStanding.Normal",
+    "protocol":"locked causal-standing v1",
+    "action_axis":"mesh-component parent-bind axis from first policy",
+    "neutral_source":"captured stable standing neutral",
+    "range_mapping_and_projection":"enabled",
+    "actuation":"current 8 Hz acceleration-mode plant",
+    "fixed_timestep_seconds":0.016666666666666666,
+    "perturbation_delta_v_cm_per_sec":15.0,
+    "capture_window_seconds":10.0,
+    "renderer":"RenderOffscreen"
+  },
+  "validity_gates": [
+    "Each run is PRODUCT_RUN authority and references the locked protocol hash.",
+    "First-policy raw output is present and the selected conditioned triplet is nonzero.",
+    "Every nonselected conditioned triplet is exactly zero.",
+    "Target readback ratio is 1.0 and raw streams/render are complete."
+  ],
+  "screening_success": "At least one arm passes all absolute criteria and has recovery AUC <= 32.913436978267704.",
+  "partial_result": "An arm improves on E25 lower-only but does not cross the locked candidate threshold; use it only to guide pair or axis-component tests.",
+  "falsification": "No individual joint passes the AUC threshold.",
+  "promotion_rule": "Any screening candidate must be rerun in the complete 3+3+2 locked product bundle before product implementation or success can be claimed.",
+  "next": "Select the lowest-AUC passing individual. If none crosses threshold, test within-joint axis components or small combinations guided by the observed AUC ordering."
+}
