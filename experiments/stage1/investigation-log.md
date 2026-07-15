@@ -472,3 +472,19 @@ Machine-readable record: `experiments/stage1/acceleration-strength-screen.e30.js
 **Promotion decision.** The candidate still uses development flags. Promote the lower-body compatibility mask and 1.5 policy-mode authority into explicit production behavior through TDD, then rerun the full bundle without any experimental arguments before claiming production success.
 
 Machine-readable record: `experiments/stage1/lower-policy-authority-bundle.e31.json`.
+
+## E32 — No-flag production causal standing (2026-07-15)
+
+**Hypothesis.** Promoting the E31 lower-body compatibility mask and delayed 1.5 policy authority into production would reproduce the complete locked bundle without experimental command-line flags.
+
+**Configuration.** Production commit `b82131b893ab23b87a037b862093a50057c7058b`, locked PRODUCT_RUN protocol, Normal repetition 1, no experimental arguments, and action-semantic evidence enabled. The full bundle was to continue only if required Normal arms remained viable.
+
+**Validity.** The manifest reports a clean source tree and the process command line contains no experimental flags. Conditioned action scalars 0–23 retain the policy output and every scalar 24–68 is exactly zero. Physics evidence shows angular strength 1.0 at time zero and 1.5 from 0.0167 s onward. Target readback is 1.0.
+
+**Result.** Normal failed pelvis height, root tilt, support gap, and recovery with AUC 145.4728. The required first Normal arm is therefore sufficient to falsify the bundle; additional E32 repetitions were not run.
+
+**Supported or falsified.** Falsified. E31 depended on the component-axis adapter as well as the promoted action mask and strength. With the production-default cached-world action axis, the otherwise correct lower-body targets inject high-energy instability.
+
+**Next experiment selected.** Promote the already validated component-axis action composition into the standing-policy production path through red-green TDD, then rerun the complete eight-run bundle without experimental flags.
+
+Machine-readable record: `experiments/stage1/production-causal-standing.e32.json`.
