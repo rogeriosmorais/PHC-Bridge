@@ -1,0 +1,171 @@
+{
+  "schema_version": "physanim-investigation-experiment/v1",
+  "experiment_id": "startup-repeatability-e17",
+  "recorded_utc": "2026-07-15T15:23:31.203269+00:00",
+  "status": "VALID",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "FAIL",
+  "preregistration": {
+    "path": "experiments/stage1/startup-repeatability.e17.preregister.json",
+    "commit": "649fe7b5cf27920bf371cd11ec7a6b31e5b2213c"
+  },
+  "hypothesis": "E16 attempt 2's first-policy mismatch was an anomalous malformed run, not normal startup nondeterminism or a hidden pre-active flag side effect.",
+  "result": {
+    "classification": "DETERMINISTIC_STARTUP_NO_HIDDEN_PREACTIVE_FLAG_SIDE_EFFECT",
+    "A1_A2_first_policy_exact": true,
+    "A1_B_first_policy_exact": true,
+    "all_active_standing_inputs_exact": true,
+    "A1_A2_downstream_exact": true,
+    "axis_semantic_evaluation": {
+      "status": "VALID",
+      "hypothesis_verdict": "SUPPORTED",
+      "metrics": {
+        "baseline_single_trace_verdict": "MISMATCH",
+        "complete_control_count_per_arm": 21,
+        "decisive_case_count_per_arm": 152,
+        "decisive_control_count_per_arm": 19,
+        "experimental_single_trace_verdict": "MISMATCH",
+        "maximum_actual_error_minus_identity_error_absolute_residual_degrees": 1.3892789696434704e-11,
+        "maximum_actual_runtime_target_recompute_error_degrees": 0.0,
+        "maximum_effective_axis_vs_observation_parent_bind_component_degrees": 0.0,
+        "maximum_identity_error_cross_arm_delta_degrees": 1.1723955140041653e-13,
+        "maximum_identity_input_cross_arm_delta_degrees": 0.0,
+        "maximum_identity_target_cross_arm_delta_degrees": 0.0,
+        "maximum_probe_error_minus_identity_error_absolute_residual_degrees": 2.7785551637293793e-11
+      }
+    }
+  },
+  "arms": {
+    "A1": {
+      "artifact_root": "test-results/action-axis-frame/startup-repeatability-e17/e17-a1",
+      "evaluation": {
+        "failed_criteria": [
+          "body_linear_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\startup-repeatability\\e17-a1\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-startup-repeatability-e17-A1",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "physics_sample_count": 601,
+        "policy_sample_count": 300,
+        "minimum_pelvis_height_ratio": 0.15336580018044577,
+        "maximum_root_tilt_deg": 105.40127563476562,
+        "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+        "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+        "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+        "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+        "target_readback_match_ratio": 1.0
+      },
+      "sha256": {
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "active-standing-policy-input-snapshot.json": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+        "action-semantic-trace.json": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+        "manny-local-frame-roundtrip.json": "78C43AF605B5952D4E321396EF51B6B5EA0DEA84AB41E861004984A45AA71BD0",
+        "physics.jsonl": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+        "policy.jsonl": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+        "render.png": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C",
+        "evaluation.json": "07615F3075DA341E29C3F402A2FB6B360197CAD23EB9B43B2FBFB030B82C229F"
+      }
+    },
+    "A2": {
+      "artifact_root": "test-results/action-axis-frame/startup-repeatability-e17/e17-a2",
+      "evaluation": {
+        "failed_criteria": [
+          "body_linear_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\startup-repeatability\\e17-a2\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-startup-repeatability-e17-A2",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "physics_sample_count": 601,
+        "policy_sample_count": 300,
+        "minimum_pelvis_height_ratio": 0.15336580018044577,
+        "maximum_root_tilt_deg": 105.40127563476562,
+        "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+        "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+        "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+        "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+        "target_readback_match_ratio": 1.0
+      },
+      "sha256": {
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "active-standing-policy-input-snapshot.json": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+        "action-semantic-trace.json": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+        "manny-local-frame-roundtrip.json": "78C43AF605B5952D4E321396EF51B6B5EA0DEA84AB41E861004984A45AA71BD0",
+        "physics.jsonl": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+        "policy.jsonl": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+        "render.png": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C",
+        "evaluation.json": "C03E22867957BCE3A984E439C42C7377DB6D6E4327821932C224A7BD91C739E2"
+      }
+    },
+    "B": {
+      "artifact_root": "test-results/action-axis-frame/startup-repeatability-e17/e17-b",
+      "evaluation": {
+        "failed_criteria": [
+          "root_linear_speed",
+          "root_angular_speed",
+          "body_linear_speed",
+          "pelvis_height",
+          "root_tilt"
+        ],
+        "fixture_authority": "DEVELOPMENT_GATE_RUN",
+        "layer": "RealOnnxPolicy",
+        "manifest": "F:\\NewEngine-AgentB\\test-results\\startup-repeatability\\e17-b\\manifest.json",
+        "protocol_sha256": "0473596fe581bbf25341d7096c91e3df2e67319193a604105cd5d64f599079ab",
+        "repetition": 1,
+        "run_id": "RealOnnxPolicy-startup-repeatability-e17-B",
+        "schema_version": "physanim-development-evaluation/v1",
+        "status": "FAIL",
+        "target_readback_match_ratio": 1.0
+      },
+      "metrics": {
+        "physics_sample_count": 601,
+        "policy_sample_count": 300,
+        "minimum_pelvis_height_ratio": 0.14944073177469483,
+        "maximum_root_tilt_deg": 109.23167419433594,
+        "maximum_root_linear_speed_cm_per_sec": 1712.6396909869982,
+        "maximum_root_angular_speed_deg_per_sec": 882.8583696503056,
+        "maximum_body_linear_speed_cm_per_sec": 3066.237188895585,
+        "maximum_body_angular_speed_deg_per_sec": 3983.4775471338567,
+        "target_readback_match_ratio": 1.0
+      },
+      "sha256": {
+        "policy-input-snapshot.json": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+        "active-standing-policy-input-snapshot.json": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+        "action-semantic-trace.json": "D6088F30762731BCD684BEF329E41FA69AF414A786CE5CF064A74D729FA101F4",
+        "manny-local-frame-roundtrip.json": "93214EE62519EB84C210F7639F2858533BB18D38E2BD8638E72F0D637B51DFAD",
+        "physics.jsonl": "61917DDE96881CC7AB4CC2AB0088355B4169D9880506F957F072967A64E6FD57",
+        "policy.jsonl": "21A45D4D06493B5AEA77989C49ABE9F8892F750F174A32DBD4D9C98407FE81A5",
+        "render.png": "875A9EA1F21BCB43AC0156B230077D5C03E53A61A4DCEC8A8F8350D6B359C665",
+        "evaluation.json": "B1D08F05B1717821B439136ABC3A469BF10095E9FF855E826B18E74AC26552AE"
+      }
+    }
+  },
+  "conclusion": {
+    "supported_or_falsified": "FALSIFIED_STARTUP_NONDETERMINISM_AND_HIDDEN_SIDE_EFFECT",
+    "learned": "Three fresh same-binary runs were exact through first policy. A1 and A2 were byte-identical through the full 10-second run. B was exact through active-standing input and diverged only after the intended component-axis intervention. Therefore E16 attempt 2's earlier first-policy mismatch was a malformed isolated run and the fresh A/B result is admissible.",
+    "semantic_causal_result": "Component-space action-axis conjugation removes all non-identity round-trip excess to numerical noise while preserving identity residuals.",
+    "physical_causal_result": "Despite semantic correction, component-space action-axis conjugation worsens standing substantially. The remaining identity residual from captured policy neutral versus bind is now the primary causal candidate.",
+    "production_promotion": false
+  },
+  "next_experiment": "Run a preregistered 2x2 active-standing intervention over action-axis frame (world/component) and neutral source (captured stable neutral/bind-calibrated neutral), activated only in BalanceActive_Standing. Require exact first-policy and active-standing input/action captures. The semantic prediction is that component+bind eliminates both identity and non-identity round-trip residuals; the physical judge determines whether the captured neutral is compensatory or causal."
+}

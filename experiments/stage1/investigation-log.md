@@ -258,3 +258,22 @@ Machine-readable record: `experiments/stage1/active-standing-action-axis-frame.e
 **Next experiment selected.** Run a behavior-neutral A/A/B startup-repeatability experiment on one commit/binary. Trace configured/effective axis mode at every target write from first policy through active standing. If A/A also differs while active-boundary hashes converge, redesign the causal physical test around deterministic action replay or a same-state counterfactual. If only B differs while the override is proven ineffective, find the hidden command-line side effect before testing captured-neutral ownership.
 
 Machine-readable record: `experiments/stage1/active-standing-action-axis-frame.e16.attempt2.json`.
+
+
+## E17 — Startup repeatability and admissible delayed-axis A/B (2026-07-15)
+
+**Hypothesis.** E16 attempt 2's first-policy mismatch was either normal startup nondeterminism or a hidden pre-active side effect of the component-axis flag.
+
+**Configuration.** Three fresh runs on commit `649fe7b5cf27920bf371cd11ec7a6b31e5b2213c`, one reused binary, locked standing-plant v2 protocol/model/timestep/window/pose, no perturbation, action and local-frame traces on. A1 and A2 were identical world-axis controls; B added only the component-axis override, effective solely in `BalanceActive_Standing`.
+
+**Result.** A1 and A2 were byte-identical at first policy, active-standing input, action trace, physics, policy, and render. B was also byte-identical to both controls at first policy and active-standing input. The active-boundary evaluator returned `VALID/SUPPORTED`: identity inputs/targets were exact, maximum identity-error delta was `1.172e-13°`, maximum actual-minus-identity residual was `1.389e-11°`, and maximum probe-minus-identity residual was `2.779e-11°` against the locked `0.001°` threshold.
+
+**Physical result.** A1/A2 reproduced the established failure on body linear speed, pelvis height, and root tilt. B worsened to root linear/angular speed, body linear speed, pelvis height, and root tilt; maximum body speed rose from `1119.794` to `3066.237 cm/s` and maximum root speed from `818.947` to `1712.640 cm/s`. Readback remained 1.0.
+
+**Supported or falsified.** Startup nondeterminism and hidden pre-active flag side effect were both falsified. The fresh delayed-axis A/B is admissible and supports the frame-algebra hypothesis, but the semantically corrected component axis worsens standing.
+
+**What was learned.** E16 attempt 2's earlier first-policy mismatch was an isolated malformed run. World-space conjugation causes the non-identity round-trip excess, yet appears to compensate physically for the remaining captured-neutral-versus-bind identity residual. No production behavior is promoted.
+
+**Next experiment selected.** Run a preregistered 2x2 active-standing intervention over action-axis frame (world/component) and neutral source (captured stable neutral/bind-calibrated neutral). Require exact pre-intervention captures. The component+bind arm should eliminate both identity and non-identity residuals; physical outcomes determine whether captured neutral is compensatory or causal.
+
+Machine-readable record: `experiments/stage1/startup-repeatability.e17.json`.
