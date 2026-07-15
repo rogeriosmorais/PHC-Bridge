@@ -554,3 +554,15 @@ Machine-readable record: `experiments/stage1/upper-body-neck-restoration.e35.jso
 **Next experiment selected.** Keep Head masked during preparation and enable it only in `BalanceActive_Standing`, testing whether deterministic E33 startup can be retained without losing Head's recovery benefit.
 
 Machine-readable record: `experiments/stage1/upper-body-head-restoration.e36.json`.
+
+## E37 — Head restoration only in active standing (2026-07-15)
+
+**Hypothesis.** Masking Head during preparation/blend and restoring it only in `BalanceActive_Standing` preserves E36's causal benefit while restoring exact repeatability.
+
+**Result.** The locked bundle passed at ratio 0.733380. Normal AUCs were 30.1726, 30.0320, and 30.1726; all absolute and destructive-control gates behaved correctly. Exact determinism still failed with the same two first-active input trajectories.
+
+**Supported or falsified.** Partially supported. Active-state timing improves causal recovery but is still early enough to permit startup bifurcation.
+
+**Next experiment selected.** Restore Head only after `FirstActiveStandingPolicyInferenceSnapshot` is captured, matching the proven post-capture strength transition boundary.
+
+Machine-readable record: `experiments/stage1/upper-body-head-active-only.e37.json`.
