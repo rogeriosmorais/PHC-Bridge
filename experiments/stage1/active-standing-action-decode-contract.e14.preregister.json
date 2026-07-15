@@ -1,0 +1,122 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "active-standing-action-decode-contract-e14",
+  "preregistered_utc": "2026-07-15T00:00:49.8228460Z",
+  "base_commit": "c2f19bb35cda13da0c96e5b0cdbe41e6e60c9fda",
+  "authority": "DEVELOPMENT_EXPERIMENT_PREREGISTRATION_ONLY",
+  "product_success_authority": false,
+  "hypothesis": "The UE bridge does not decode the checkpoint's 69 normalized actions according to the authoritative ProtoMotions v2.3 SMPL absolute-PD-target contract, causing a scale, ordering, or exponential-map mismatch before Manny neutral and constraint adaptation.",
+  "supporting_runtime_evidence": [
+    "The E3 first-active-standing trace showed exact Physics Control publication/readback but large lower-body raw policy offsets from 16.058672 to 76.474091 degrees while the RealOnnxPolicy arm failed pelvis-height, root-tilt, and body-speed criteria.",
+    "E13 falsified the claim that Manny constraint-range adaptation caused the fall: bypassing the mapper expanded the locked failure set from three to six and increased maximum body angular speed from 1742.669912 to 9404.085237 degrees per second.",
+    "The controlled-target plant has stood under the same fully simulated topology, localizing the unresolved defect upstream of target publication or in the policy/adapter semantic contract."
+  ],
+  "competing_explanations": [
+    "The current decoder is exact: the checkpoint's SMPL asset produces zero PD offset and pi scale for every three-DOF joint, and ProtoMotions interprets each scaled xyz triplet as one exponential-map rotation just as the bridge does.",
+    "The decoder is correct, but an observation-frame, neutral-pose, SMPL-to-Manny calibration, or policy-target meaning error causes otherwise faithfully decoded actions to be inappropriate for Manny."
+  ],
+  "single_changed_variable": {
+    "name": "first_active_standing_action_semantic_trace",
+    "baseline_value": "disabled",
+    "experimental_value": "enabled",
+    "activation": "existing development-only action semantic trace override",
+    "scope": "WITH_DEV_AUTOMATION_TESTS, RealOnnxPolicy, first active-standing target write",
+    "behavior_change": "none",
+    "held_constant": [
+      "source commit, binary, and ONNX model",
+      "seed, fixed timestep, initial pose, perturbation, and capture window",
+      "policy input and inference",
+      "action conditioning and target conversion",
+      "Manny neutral, bind, range adaptation, and safety projection",
+      "Physics Control publication/readback and Chaos settings",
+      "locked protocol, evaluator, metrics, and thresholds"
+    ]
+  },
+  "expected_if_hypothesis_correct": "The trace-on arm remains behaviorally identical to baseline, but the independent ProtoMotions v2.3 evaluator finds at least one conditioned scalar, joint ordering entry, or sign-invariant decoded quaternion outside the locked tolerance.",
+  "falsification_observation": "The trace-on arm is behaviorally identical to baseline and all 69 conditioned scalars, all 23 ordered xyz joint groups, and all 23 decoded UE quaternions match the independently evaluated ProtoMotions v2.3 contract within the locked tolerances.",
+  "authoritative_contract": {
+    "repository": "https://github.com/NVlabs/ProtoMotions",
+    "tag": "v2.3",
+    "commit": "4a905b998101333a2fb91f2de8e2cab4bd0db68e",
+    "checkpoint_config": "data/pretrained_models/motion_tracker/smpl/config.yaml",
+    "checkpoint_fields": {
+      "number_of_actions": 69,
+      "mimic_residual_control": false,
+      "map_actions_to_pd_range": true,
+      "action_scale": 1.0,
+      "clamp_actions": 1.0
+    },
+    "source_files": [
+      "protomotions/config/robot/smpl.yaml",
+      "protomotions/data/assets/mjcf/smpl_humanoid.xml",
+      "protomotions/envs/base_env/env_utils/humanoid_utils.py",
+      "protomotions/simulator/base_simulator/simulator.py"
+    ],
+    "derived_reference": "For each of the 23 xyz joints, clamp each normalized action to [-1,1], multiply by pi because the symmetric three-DOF SMPL limits saturate build_pd_action_offset_scale at pi with zero offset, interpret the resulting xyz vector as an exponential map, then reflect the right-handed Isaac basis into UE's left-handed basis."
+  },
+  "arms": [
+    {
+      "name": "trace_disabled",
+      "role": "fresh unchanged baseline",
+      "override": "none"
+    },
+    {
+      "name": "trace_enabled",
+      "role": "behavior-neutral instrumentation arm",
+      "override": "existing action semantic trace override"
+    }
+  ],
+  "invalid_run_conditions": [
+    "The two arms do not use one clean commit and reused binary.",
+    "Seed, timestep, initial pose, perturbation, capture window, model, protocol, evaluator, or thresholds differ.",
+    "Physics, policy, first-policy input, or first-active-standing input streams differ outside run identity.",
+    "The trace-on arm does not contain exactly 23 ordered action joints and 69 raw and conditioned scalar values.",
+    "The trace or any required raw artifact is malformed or missing.",
+    "The independent evaluator reads UE production implementation code or imports ProtoMotions at runtime instead of evaluating the pinned contract independently."
+  ],
+  "locked_judges": {
+    "protocol": {
+      "path": "product-gates/standing-plant-ladder.v2.json",
+      "sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB"
+    },
+    "model": {
+      "path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+      "sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19"
+    },
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "initial_pose": "unchanged standing-plant harness default",
+    "perturbation": "none",
+    "seed": "unchanged standing-plant harness default",
+    "runtime_evaluator": "scripts/evaluate_standing_plant.py",
+    "contract_evaluator": "scripts/evaluate_action_decode_contract.py",
+    "contract_tolerances": {
+      "conditioned_scalar_absolute_error": 0.000001,
+      "sign_invariant_quaternion_component_absolute_error": 0.000002,
+      "quaternion_angular_error_degrees": 0.001
+    },
+    "instrumentation_neutrality_metrics": [
+      "physics stream SHA-256 equality",
+      "policy stream SHA-256 equality",
+      "first-policy input snapshot SHA-256 equality",
+      "first-active-standing policy-input snapshot SHA-256 equality",
+      "exact locked failed-criteria set and behavioral metrics"
+    ],
+    "contract_metrics": [
+      "action-joint count and exact ProtoMotions joint order",
+      "maximum conditioned scalar absolute error and mismatch count",
+      "maximum sign-invariant quaternion component absolute error and mismatch count",
+      "maximum decoded quaternion angular error",
+      "per-joint expected PD target radians and expected/observed decoded quaternion"
+    ],
+    "support_rule": "Instrumentation is neutral and at least one ordered joint, conditioned scalar, or decoded quaternion exceeds its locked tolerance.",
+    "falsification_rule": "Instrumentation is neutral and every ordered joint, conditioned scalar, and decoded quaternion is within its locked tolerance."
+  },
+  "implementation_constraints": [
+    "Add no runtime behavior, production default, activation-contract, serialization, protocol, threshold, physics, or target-publication change.",
+    "The evaluator must be deterministic, standard-library-only, and independently implement the pinned mathematical contract from the trace artifact.",
+    "Tests must validate malformed-input rejection, quaternion sign invariance, normalization, ordering, range, and correct metric publication rather than endorsing a candidate tuning constant.",
+    "Run a fresh unchanged baseline beside trace-on using one clean commit and reused binary, then record the raw artifacts and conclusion before selecting another experiment."
+  ]
+}
