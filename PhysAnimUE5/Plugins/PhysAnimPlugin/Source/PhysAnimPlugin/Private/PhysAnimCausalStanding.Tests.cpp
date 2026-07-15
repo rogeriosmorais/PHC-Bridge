@@ -2548,6 +2548,43 @@ namespace
 					SerializeJson(ObservationPositionTrace) + TEXT("\n"),
 					*ObservationPositionTracePath);
 			}
+			if (!Config.bPlantRun)
+			{
+				const FString ObservationPositionTracePath = FPaths::Combine(
+					Config.RunRoot,
+					TEXT("rigid-body-position-observation.json"));
+				const TSharedRef<FJsonObject> ObservationPositionTrace = MakeShared<FJsonObject>();
+				ObservationPositionTrace->SetStringField(
+					TEXT("schema_version"),
+					TEXT("physanim-rigid-body-position-observation/v1"));
+				ObservationPositionTrace->SetBoolField(
+					TEXT("physics_body_positions_selected"),
+					Component && Component->IsExperimentalPhysicsBodyObservationPositionsEnabledForTesting());
+				TArray<TSharedPtr<FJsonValue>> PositionEntries;
+				if (Component)
+				{
+					const TArray<FName>& ObservationBones = PhysAnimBridge::GetSmplObservationBoneNames();
+					const TArray<FVector>& BonePositions = Component->GetObservationBoneWorldPositionsForTesting();
+					const TArray<FVector>& BodyPositions = Component->GetObservationPhysicsBodyWorldPositionsForTesting();
+					const int32 EntryCount = FMath::Min3(ObservationBones.Num(), BonePositions.Num(), BodyPositions.Num());
+					for (int32 EntryIndex = 0; EntryIndex < EntryCount; ++EntryIndex)
+					{
+						const TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+						Entry->SetNumberField(TEXT("index"), EntryIndex);
+						Entry->SetStringField(TEXT("bone_name"), ObservationBones[EntryIndex].ToString());
+						Entry->SetArrayField(TEXT("bone_world_position_cm"), BuildVectorJsonArray(BonePositions[EntryIndex]));
+						Entry->SetArrayField(TEXT("physics_body_world_position_cm"), BuildVectorJsonArray(BodyPositions[EntryIndex]));
+						Entry->SetArrayField(TEXT("body_minus_bone_cm"), BuildVectorJsonArray(BodyPositions[EntryIndex] - BonePositions[EntryIndex]));
+						Entry->SetNumberField(TEXT("delta_magnitude_cm"), FVector::Distance(BonePositions[EntryIndex], BodyPositions[EntryIndex]));
+						PositionEntries.Add(MakeShared<FJsonValueObject>(Entry));
+					}
+				}
+				ObservationPositionTrace->SetNumberField(TEXT("entry_count"), PositionEntries.Num());
+				ObservationPositionTrace->SetArrayField(TEXT("bodies"), PositionEntries);
+				bObservationPositionTraceWritten = FFileHelper::SaveStringToFile(
+					SerializeJson(ObservationPositionTrace) + TEXT("\n"),
+					*ObservationPositionTracePath);
+			}
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
 
 			const FString ProtocolPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), Config.ProtocolRelativePath));
