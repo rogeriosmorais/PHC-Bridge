@@ -428,3 +428,17 @@ Machine-readable record: `experiments/stage1/policy-action-baseline-residual.e27
 **Next experiment selected.** Audit perturbation-induced self-observation velocities and heading-frame/basis conversion against the pinned ProtoMotions checkpoint implementation. Test only a source-supported basis or sign correction.
 
 Machine-readable record: `experiments/stage1/policy-action-zero-until-baseline.e28.json`.
+
+## E29 — Physics-body position observation provenance (2026-07-15)
+
+**Hypothesis.** ProtoMotions observes one coherent rigid-body state, while UE appeared to mix skeletal bone positions with physics-body rotations and velocities; selecting physics-body transform origins should improve policy response.
+
+**Configuration.** Same-binary PRODUCT_RUN control with bone positions, Normal with physics-body positions, and ZeroActions guard. Rotation, velocities, lower-only action mask, target mapping/projection, 8 Hz acceleration plant, perturbation, and evaluator were unchanged. A 24-body trace recorded bone and body origins.
+
+**Result.** All arms passed absolute acceptance and target readback. Control AUC was 65.6985, physics-body positions AUC 65.5364, and ZeroActions AUC 41.1418. The largest measured bone-to-body origin delta was only 0.000006512 cm.
+
+**Supported or falsified.** Falsified. For Manny's PhysicsAsset the BodyInstance transform origin is numerically the bone origin, so the apparent source-level mismatch does not exist at runtime.
+
+**Next experiment selected.** Test state-triggered acceleration-mode angular authority under the locked perturbation, leaving observations, actions, target semantics, and acceptance thresholds unchanged.
+
+Machine-readable record: `experiments/stage1/rigid-body-position-observation.e29.json`.

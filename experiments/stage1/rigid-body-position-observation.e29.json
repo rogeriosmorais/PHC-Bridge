@@ -1,0 +1,31 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "rigid-body-position-observation-e29",
+  "recorded_utc": "2026-07-15T19:50:00Z",
+  "source_commit": "0f3b72af0e0e0faa6924953914e8072cc02f0d1b",
+  "status": "VALID",
+  "hypothesis_verdict": "FALSIFIED",
+  "product_success": false,
+  "arms": {
+    "control_bone_positions": {"status":"PASS", "recovery_auc":65.69851225230799, "physics_body_positions_selected":false, "position_trace_entries":24},
+    "experimental_body_positions": {"status":"PASS", "recovery_auc":65.5364274759111, "physics_body_positions_selected":true, "position_trace_entries":24},
+    "zero_body_position_guard": {"status":"PASS", "recovery_auc":41.14179622283463, "physics_body_positions_selected":true, "position_trace_entries":24}
+  },
+  "validity": {
+    "fixture_authority":"PRODUCT_RUN",
+    "protocol_sha256":"75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+    "target_readback_all_one":true,
+    "position_source_trace_complete":true,
+    "zero_actions_preserved":true
+  },
+  "measured_position_provenance": {
+    "maximum_bone_to_body_origin_delta_cm": 0.000006512295606665208,
+    "interpretation":"For Manny's PhysicsAsset, FBodyInstance::GetUnrealWorldTransform().GetLocation() and the skeletal bone world origin are numerically coincident at observation time."
+  },
+  "causal_findings": [
+    "The source-level rigid-body-state consistency concern is not a runtime mismatch for this asset because bone and body transform origins coincide to sub-micrometer precision.",
+    "Selecting physics-body positions changes recovery AUC by only 0.1621 and remains far above the locked causal threshold.",
+    "Observation position provenance is not the dominant causal-standing blocker."
+  ],
+  "next": "Test source-independent recovery authority in the existing acceleration-mode plant: state-triggered angular-strength and damping profiles under the locked perturbation, with no change to action decoding, observations, or acceptance thresholds."
+}
