@@ -153,6 +153,11 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 		OutError);
 	if (bSuccess)
 	{
+#if WITH_DEV_AUTOMATION_TESTS
+		ApplyExperimentalActionFamilyMaskForTesting(
+			ExperimentalActionFamilyMaskForTesting,
+			ConditionedActionBuffer);
+#endif
 		PreviousConditionedActionBuffer = ConditionedActionBuffer;
 		const bool bCaptureMetrics = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
 			((RuntimeState == EPhysAnimRuntimeState::BridgeActive ||

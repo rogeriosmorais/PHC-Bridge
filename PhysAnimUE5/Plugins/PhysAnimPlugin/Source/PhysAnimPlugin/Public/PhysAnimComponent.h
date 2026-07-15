@@ -654,6 +654,15 @@ enum class EPhysAnimRuntimeState : uint8
 	LocomotionActiveShellDenied
 };
 
+enum class EPhysAnimExperimentalActionFamilyMask : uint8
+{
+	All,
+	Zero,
+	LowerOnly,
+	AxialOnly,
+	ArmsOnly,
+};
+
 UENUM(BlueprintType)
 enum class EPhysAnimBridgeTraceOutputMode : uint8
 {
@@ -1514,6 +1523,13 @@ public:
 	static bool ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
 		bool bConfigured,
 		EPhysAnimRuntimeState InRuntimeState);
+	EPhysAnimExperimentalActionFamilyMask GetExperimentalActionFamilyMaskForTesting() const
+	{
+		return ExperimentalActionFamilyMaskForTesting;
+	}
+	static void ApplyExperimentalActionFamilyMaskForTesting(
+		EPhysAnimExperimentalActionFamilyMask Mask,
+		TArray<float>& InOutActions);
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
 	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
@@ -2495,6 +2511,8 @@ private:
 	bool bExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting = false;
 	bool bExperimentalBindNeutralFromFirstPolicyEnabledForTesting = false;
 	bool bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = false;
+	EPhysAnimExperimentalActionFamilyMask ExperimentalActionFamilyMaskForTesting =
+		EPhysAnimExperimentalActionFamilyMask::All;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
 	bool bStartupChronologyTraceEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;

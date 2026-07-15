@@ -862,6 +862,29 @@ bool UPhysAnimComponent::ShouldBypassExperimentalConstraintRangeRemapFromFirstPo
 	return bConfigured && IsStandingActivationRuntimeState(InRuntimeState);
 }
 
+void UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
+	EPhysAnimExperimentalActionFamilyMask Mask,
+	TArray<float>& InOutActions)
+{
+	if (Mask == EPhysAnimExperimentalActionFamilyMask::All)
+	{
+		return;
+	}
+
+	for (int32 ScalarIndex = 0; ScalarIndex < InOutActions.Num(); ++ScalarIndex)
+	{
+		const int32 JointIndex = ScalarIndex / 3;
+		const bool bKeep =
+			(Mask == EPhysAnimExperimentalActionFamilyMask::LowerOnly && JointIndex < 8) ||
+			(Mask == EPhysAnimExperimentalActionFamilyMask::AxialOnly && JointIndex >= 8 && JointIndex < 13) ||
+			(Mask == EPhysAnimExperimentalActionFamilyMask::ArmsOnly && JointIndex >= 13);
+		if (!bKeep)
+		{
+			InOutActions[ScalarIndex] = 0.0f;
+		}
+	}
+}
+
 FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
 	const FQuat& ActionBindComponentWorldRotation,
 	const FQuat& CachedWorldActionAxisRotation)

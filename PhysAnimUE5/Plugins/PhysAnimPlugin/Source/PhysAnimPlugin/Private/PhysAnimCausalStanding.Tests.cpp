@@ -406,12 +406,70 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		UPhysAnimComponent::ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
 			true,
 			EPhysAnimRuntimeState::BalanceActive_Standing));
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalActionFamily=LowerOnly"));
+	TestEqual(
+		TEXT("Command line selects the lower-body-only action mask"),
+		Component->GetExperimentalActionFamilyMaskForTesting(),
+		EPhysAnimExperimentalActionFamilyMask::LowerOnly);
+	TArray<float> FamilyActions;
+	FamilyActions.SetNumUninitialized(PhysAnimBridge::NumActionFloats);
+	for (int32 Index = 0; Index < FamilyActions.Num(); ++Index)
+	{
+		FamilyActions[Index] = static_cast<float>(Index + 1);
+	}
+	TArray<float> LowerOnlyActions = FamilyActions;
+	UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
+		EPhysAnimExperimentalActionFamilyMask::LowerOnly,
+		LowerOnlyActions);
+	for (int32 Index = 0; Index < LowerOnlyActions.Num(); ++Index)
+	{
+		TestEqual(
+			*FString::Printf(TEXT("Lower-only action scalar %d matches its anatomical mask"), Index),
+			LowerOnlyActions[Index],
+			Index < 24 ? FamilyActions[Index] : 0.0f);
+	}
+	TArray<float> AxialOnlyActions = FamilyActions;
+	UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
+		EPhysAnimExperimentalActionFamilyMask::AxialOnly,
+		AxialOnlyActions);
+	for (int32 Index = 0; Index < AxialOnlyActions.Num(); ++Index)
+	{
+		TestEqual(
+			*FString::Printf(TEXT("Axial-only action scalar %d matches its anatomical mask"), Index),
+			AxialOnlyActions[Index],
+			(Index >= 24 && Index < 39) ? FamilyActions[Index] : 0.0f);
+	}
+	TArray<float> ArmsOnlyActions = FamilyActions;
+	UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
+		EPhysAnimExperimentalActionFamilyMask::ArmsOnly,
+		ArmsOnlyActions);
+	for (int32 Index = 0; Index < ArmsOnlyActions.Num(); ++Index)
+	{
+		TestEqual(
+			*FString::Printf(TEXT("Arms-only action scalar %d matches its anatomical mask"), Index),
+			ArmsOnlyActions[Index],
+			Index >= 39 ? FamilyActions[Index] : 0.0f);
+	}
+	TArray<float> ZeroFamilyActions = FamilyActions;
+	UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
+		EPhysAnimExperimentalActionFamilyMask::Zero,
+		ZeroFamilyActions);
+	for (int32 Index = 0; Index < ZeroFamilyActions.Num(); ++Index)
+	{
+		TestEqual(
+			*FString::Printf(TEXT("Zero-family action scalar %d is cleared"), Index),
+			ZeroFamilyActions[Index],
+			0.0f);
+	}
 	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
 	TestFalse(
-		TEXT("Omitting factorial flags restores captured neutral, cached-world axis, and range mapping"),
+		TEXT("Omitting experimental flags restores captured neutral, cached-world axis, range mapping, and all actions"),
 		Component->IsExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting() ||
 			Component->IsExperimentalBindNeutralFromFirstPolicyEnabledForTesting() ||
-			Component->IsExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting());
+			Component->IsExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting() ||
+			Component->GetExperimentalActionFamilyMaskForTesting() !=
+				EPhysAnimExperimentalActionFamilyMask::All);
 	TestFalse(
 		TEXT("Policy-input provenance tracing is disabled without its explicit development flag"),
 		Component->IsPolicyInputProvenanceTraceEnabledForTesting());

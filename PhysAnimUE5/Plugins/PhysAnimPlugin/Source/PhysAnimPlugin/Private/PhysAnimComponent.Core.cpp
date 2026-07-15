@@ -46,6 +46,31 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalBindNeutralFromFirstPolicy"));
 	bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalConstraintRangeRemapBypassFromFirstPolicy"));
+	ExperimentalActionFamilyMaskForTesting = EPhysAnimExperimentalActionFamilyMask::All;
+	FString ExperimentalActionFamilyName;
+	if (CommandLine &&
+		FParse::Value(
+			CommandLine,
+			TEXT("PhysAnimExperimentalActionFamily="),
+			ExperimentalActionFamilyName))
+	{
+		if (ExperimentalActionFamilyName == TEXT("Zero"))
+		{
+			ExperimentalActionFamilyMaskForTesting = EPhysAnimExperimentalActionFamilyMask::Zero;
+		}
+		else if (ExperimentalActionFamilyName == TEXT("LowerOnly"))
+		{
+			ExperimentalActionFamilyMaskForTesting = EPhysAnimExperimentalActionFamilyMask::LowerOnly;
+		}
+		else if (ExperimentalActionFamilyName == TEXT("AxialOnly"))
+		{
+			ExperimentalActionFamilyMaskForTesting = EPhysAnimExperimentalActionFamilyMask::AxialOnly;
+		}
+		else if (ExperimentalActionFamilyName == TEXT("ArmsOnly"))
+		{
+			ExperimentalActionFamilyMaskForTesting = EPhysAnimExperimentalActionFamilyMask::ArmsOnly;
+		}
+	}
 	bPolicyInputProvenanceTraceEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimPolicyInputProvenanceTrace"));
 	bStartupChronologyTraceEnabledForTesting = CommandLine &&
