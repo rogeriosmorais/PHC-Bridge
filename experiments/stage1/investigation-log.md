@@ -538,3 +538,19 @@ Machine-readable record: `experiments/stage1/upper-body-neck-head-restoration.e3
 **Next experiment selected.** Keep E33 lower-only production unchanged and run separately preregistered Head-only restoration.
 
 Machine-readable record: `experiments/stage1/upper-body-neck-restoration.e35.json`.
+
+## E36 — Head-only upper-body restoration (2026-07-15)
+
+**Hypothesis.** Restoring only Proto joint 12 (`Head`) in addition to production joints 0–7 preserves the complete locked causal-standing contract.
+
+**Configuration.** Same locked 3+3+2 PRODUCT_RUN bundle and E33 plant, with only `-PhysAnimExperimentalCausalStandingUpperBody=Head`. Neck and every other upper-body output remained exactly zero.
+
+**Validity.** All manifests used clean source commit `646cf99990db169a96e79f41c5b5c2b69ef7bd44`, locked model/protocol hashes, correct masks and strength paths, and only the intended option. ZeroActions was byte-deterministic and both destructive controls remained discriminative.
+
+**Result.** The authoritative bundle passed with median Normal AUC 30.5563 versus ZeroActions 41.1418, ratio 0.742708 below the locked 0.8 maximum. Head is therefore recovery-beneficial. Exact product acceptance was not met because Normal split into two policy/input/physics trajectories: repetition 1 AUC 29.7672, repetitions 2–3 AUC 30.5563.
+
+**Supported or falsified.** Partially supported. Head-only is causal and absolutely stable, but not exactly deterministic when active throughout standing preparation.
+
+**Next experiment selected.** Keep Head masked during preparation and enable it only in `BalanceActive_Standing`, testing whether deterministic E33 startup can be retained without losing Head's recovery benefit.
+
+Machine-readable record: `experiments/stage1/upper-body-head-restoration.e36.json`.
