@@ -1,0 +1,12 @@
+{
+  "schema_version":"physanim-experiment-preregistration/v1",
+  "experiment_id":"deterministic-head-after-first-policy-e46",
+  "preregistered_utc":"2026-07-15T23:02:00Z",
+  "production_baseline_commit":"a8ee5efab94f4de43dcba6729137b78cd4d3ab28",
+  "prior_head_evidence":"E38 passed causally but was blocked by multithread startup bifurcation.",
+  "hypothesis":"Restoring only Head joint 12 from the second active policy inference onward is causal and exactly repeatable on top of production DistalHands under -onethread.",
+  "single_behavior_variable":"Head joint 12 transitions from masked to full conditioned action after the first active-policy cycle; Neck remains zero.",
+  "execution_arguments":["-onethread","-PhysAnimExperimentalCausalStandingUpperBody=HeadAfterFirstPolicy"],
+  "acceptance":{"bundle_status":"PASS","normal_to_zero_recovery_auc_ratio_max":0.8,"normal_and_zero_byte_deterministic":true,"first_active_head_triplet_exact_zero":true,"later_head_nonzero_present":true,"neck_and_proximal_arms_exact_zero":true,"destructive_controls_fail_only_intended_criteria":true},
+  "decision_rule":{"supported":"Promote delayed Head behavior into production using a production-safe first-active-cycle latch.","falsified":"Keep Head masked and screen reduced Head scale after the first cycle."}
+}
