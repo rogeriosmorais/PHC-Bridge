@@ -207,3 +207,19 @@ Machine-readable record: `experiments/stage1/active-standing-constraint-range-re
 **Next experiment selected.** Add a behavior-neutral Manny neutral/bind and per-joint local-frame round-trip trace. Test Proto identity, known-axis rotations, multiplication direction, and bilateral frame symmetry before range adaptation, using a fresh same-commit trace-off/trace-on A/B and unchanged locked runtime judges.
 
 Machine-readable record: `experiments/stage1/active-standing-action-decode-contract.e14.json`.
+
+## E15 — Manny local-frame action/observation round trip (2026-07-14)
+
+**Hypothesis.** The action-side Manny neutral/bind-axis composition is not symmetric with the observation-side Manny-bind recovery, so absolute ProtoMotions joint targets do not return as the same canonical joint rotations before constraint-range adaptation.
+
+**Baseline configuration and result.** Commit `59bcf9ba39d2aab8dd101745039355224aa96354`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s; 10 s; unchanged seed and pose; no perturbation; local-frame trace off. Automation passed with warnings; the evaluator `FAIL`ed on body linear speed, pelvis height, and root tilt. Minimum pelvis ratio was 0.153366, maximum root tilt was 105.401°, maximum body linear speed was 1119.794 cm/s, and target readback was 1.0.
+
+**Experimental configuration and result.** Identical clean commit, reused binary, model, protocol, harness, evaluator, and thresholds with only `-PhysAnimMannyLocalFrameRoundtripTrace` enabled. Physics, policy, first-policy input, active-standing input, existing action-semantic trace, render, failed criteria, and every locked behavioral metric were exact. The independent evaluator returned `VALID/MISMATCH`: all 19 decisive joints failed identity and actual-target round trips and all 114 decisive axis probes failed. Maximum identity, actual, and probe errors were 35.963°, 106.602°, and 47.155°. Policy neutral differed from bind by up to 35.963°; action and observation bind rotations matched exactly. The parent action axis matched the observation bind frame only after removing a constant 90° component-to-world rotation.
+
+**Supported or falsified.** Supported. This is valid behavior-neutral semantic evidence, not causal-standing or product success.
+
+**What was learned.** The action and observation adapters are not inverses in the live harness. Identity input isolates the captured-neutral-versus-bind offset. Nonzero inputs additionally expose world-frame action conjugation against component-frame observation recovery. The underlying cached bind calibration is coherent; the runtime choice of neutral and frame is not. Broad physics tuning remains unjustified.
+
+**Next experiment selected.** Change only the action conjugation axis behind a development override from cached parent world space to equivalent mesh component space. Keep the captured neutral and every downstream stage unchanged. The locked semantic prediction is that identity errors remain unchanged while actual and axis-probe errors collapse to the existing per-joint identity residuals; rerun the unchanged baseline beside it and report the physical verdict without promotion or threshold changes.
+
+Machine-readable record: `experiments/stage1/active-standing-manny-local-frame-roundtrip.e15.json`.
