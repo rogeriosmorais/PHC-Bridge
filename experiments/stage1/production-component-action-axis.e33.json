@@ -1,0 +1,121 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "production-component-action-axis-e33",
+  "recorded_utc": "2026-07-15T19:44:32Z",
+  "preregistration_commit": "c4240df",
+  "source_commit": "1555e8863d00cd4fbe6fc293cac93966fca9682c",
+  "behavior_commit": "1555e8863d00cd4fbe6fc293cac93966fca9682c",
+  "status": "VALID",
+  "hypothesis_verdict": "SUPPORTED",
+  "product_candidate_success": true,
+  "production_success": true,
+  "bundle_status": "PASS",
+  "fixture_authority": "PRODUCT_RUN",
+  "protocol_sha256": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+  "model_onnx_sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+  "experimental_command_line_flags": [],
+  "normal_to_zero_recovery_auc_ratio": 0.7382890311905358,
+  "runs": {
+    "Normal": [
+      {
+        "repetition": 1,
+        "status": "PASS",
+        "recovery_auc": 30.374536874795023,
+        "target_readback_match_ratio": 1.0,
+        "failed_criteria": []
+      },
+      {
+        "repetition": 2,
+        "status": "PASS",
+        "recovery_auc": 30.374536874795023,
+        "target_readback_match_ratio": 1.0,
+        "failed_criteria": []
+      },
+      {
+        "repetition": 3,
+        "status": "PASS",
+        "recovery_auc": 30.374536874795023,
+        "target_readback_match_ratio": 1.0,
+        "failed_criteria": []
+      }
+    ],
+    "ZeroActions": [
+      {
+        "repetition": 1,
+        "status": "PASS",
+        "recovery_auc": 41.14179622283463,
+        "target_readback_match_ratio": 1.0,
+        "failed_criteria": []
+      },
+      {
+        "repetition": 2,
+        "status": "PASS",
+        "recovery_auc": 41.14179622283463,
+        "target_readback_match_ratio": 1.0,
+        "failed_criteria": []
+      },
+      {
+        "repetition": 3,
+        "status": "PASS",
+        "recovery_auc": 41.14179622283463,
+        "target_readback_match_ratio": 1.0,
+        "failed_criteria": []
+      }
+    ],
+    "DropControlDispatch": {
+      "repetition": 1,
+      "status": "FAIL",
+      "recovery_auc": 32.20028559305426,
+      "target_readback_match_ratio": 0.6190476190476191,
+      "failed_criteria": ["target_readback"]
+    },
+    "ForcedSupportLoss": {
+      "repetition": 1,
+      "status": "FAIL",
+      "recovery_auc": 30.388316976413297,
+      "target_readback_match_ratio": 1.0,
+      "failed_criteria": ["support_gap"]
+    }
+  },
+  "validity": {
+    "source_tree_clean_in_all_manifests": true,
+    "source_commit_matches_all_runs": true,
+    "model_hash_matches_all_runs": true,
+    "locked_protocol_hash_matches": true,
+    "runner_contains_experimental_argument": false,
+    "evidence_contains_experimental_argument": false,
+    "normal_upper_body_conditioned_scalars_exactly_zero": true,
+    "normal_lower_body_nonzero_policy_actions_present": true,
+    "zero_actions_all_conditioned_scalars_exactly_zero": true,
+    "normal_strength_multiplier_transition": [1.0, 1.5],
+    "zero_actions_strength_multipliers": [1.0],
+    "normal_policy_stream_deterministic": true,
+    "normal_physics_stream_deterministic": true,
+    "normal_policy_input_snapshot_deterministic": true,
+    "zero_policy_stream_deterministic": true,
+    "zero_physics_stream_deterministic": true,
+    "zero_policy_input_snapshot_deterministic": true
+  },
+  "determinism_sha256": {
+    "Normal": {
+      "policy": "0CBEC45602A58F9150EE6B6D2B7DD148AEEBFD2B2D2FE6B00150AC91D31F5E5B",
+      "physics": "4CB246664DBBD596A0C03104D17458B683E7DB0B68049B9CAF72EDCF3F76C4CD",
+      "policy_input_snapshot": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    },
+    "ZeroActions": {
+      "policy": "2F714337B24256890CECE5FE16974CB6994F15FE432D5C6EAD02372CF4D65BE5",
+      "physics": "CD4BA773254E8BA604B6B9BDC92535DECDE1FF0291584B4352DF5BED96AFD7F4",
+      "policy_input_snapshot": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    }
+  },
+  "causal_findings": [
+    "The exact component-axis action composition is a required production dependency of the validated standing policy.",
+    "With the action mask and authority held fixed, E32 cached-world composition failed Normal at AUC 145.47282397075423, while E33 component-space composition passed at AUC 30.374536874795023.",
+    "The learned lower-body policy causally outperforms ZeroActions under the locked metric, with median Normal/ZeroActions ratio 0.7382890311905358 <= 0.8.",
+    "Destructive controls retain discrimination: dropped dispatch fails target readback and forced support loss fails support gap.",
+    "The complete production configuration now reproduces the E31 candidate without any experimental command-line flags."
+  ],
+  "authoritative_bundle_artifact": "test-results/causal-standing/e33-production-component-axis/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/production-component-action-axis.e33.audit.json",
+  "next": "Treat commit 1555e8863d00cd4fbe6fc293cac93966fca9682c as the immutable causal-standing production baseline before beginning separately preregistered upper-body restoration experiments."
+}

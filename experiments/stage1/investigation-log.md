@@ -488,3 +488,21 @@ Machine-readable record: `experiments/stage1/lower-policy-authority-bundle.e31.j
 **Next experiment selected.** Promote the already validated component-axis action composition into the standing-policy production path through red-green TDD, then rerun the complete eight-run bundle without experimental flags.
 
 Machine-readable record: `experiments/stage1/production-causal-standing.e32.json`.
+
+## E33 — Production component-axis causal standing (2026-07-15)
+
+**Hypothesis.** Promoting the exact E18/E31 component-axis action composition into the standing-policy production path would restore the complete locked bundle without experimental command-line flags.
+
+**TDD.** Red produced exactly three unresolved production helper symbols. Green passed `PhysAnim.ProductHarness.DropDispatchSwitch` and `PhysAnim.Bridge.MannyLocalFrameRoundtripTraceContract`. Production routing is active throughout standing activation and the legacy test helpers now delegate to the production quaternion implementation.
+
+**Configuration.** Source commit `1555e8863d00cd4fbe6fc293cac93966fca9682c`, one binary, locked PRODUCT_RUN protocol SHA256 `75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a`, no `PhysAnimExperimental` arguments, lower-body compatibility mask, delayed 1.5 nonzero-policy authority, and production component-axis target composition.
+
+**Result.** Bundle PASS. Normal x3 each AUC 30.374536874795023 with all absolute gates and readback 1.0. ZeroActions x3 each AUC 41.14179622283463. Median Normal/ZeroActions ratio 0.7382890311905358. DropControlDispatch failed only target readback at 0.6190476190476191. ForcedSupportLoss failed only support gap.
+
+**Validity.** All manifests are clean and match the source/model/protocol. Normal and Zero policy, physics, and input-snapshot streams are exact across repetitions. Normal conditioned scalars 24–68 are always zero while lower-body policy actions remain nonzero. ZeroActions conditioned scalars are all zero. Normal strength transitions 1.0 to 1.5; ZeroActions remains 1.0. No experimental argument appears in the runner or run evidence.
+
+**Supported or falsified.** Supported. Holding the mask and authority fixed, E32 cached-world composition failed at AUC 145.47282397075423; E33 component-space composition passes at AUC 30.374536874795023. Production causal standing is achieved.
+
+**Baseline.** Treat `1555e8863d00cd4fbe6fc293cac93966fca9682c` as immutable before separately preregistered upper-body restoration.
+
+Machine-readable records: `experiments/stage1/production-component-action-axis.e33.json` and `experiments/stage1/production-component-action-axis.e33.audit.json`.

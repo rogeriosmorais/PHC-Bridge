@@ -1,0 +1,200 @@
+{
+  "bundle_status": "PASS",
+  "evidence_experimental_hits": [],
+  "manifest_checks": {
+    "DropControlDispatch-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ForcedSupportLoss-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-2": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-3": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-1": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-2": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-3": {
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    }
+  },
+  "normal_determinism": {
+    "physics_sha256": true,
+    "policy_input_snapshot_sha256": true,
+    "policy_sha256": true
+  },
+  "normal_hash_sets": {
+    "physics_sha256": [
+      "4CB246664DBBD596A0C03104D17458B683E7DB0B68049B9CAF72EDCF3F76C4CD"
+    ],
+    "policy_input_snapshot_sha256": [
+      "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    ],
+    "policy_sha256": [
+      "0CBEC45602A58F9150EE6B6D2B7DD148AEEBFD2B2D2FE6B00150AC91D31F5E5B"
+    ]
+  },
+  "normal_to_zero_recovery_auc_ratio": 0.7382890311905358,
+  "physics_checks": {
+    "DropControlDispatch-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "ForcedSupportLoss-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "Normal-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "Normal-2": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "Normal-3": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "ZeroActions-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1,
+      "strength_multipliers": [
+        1
+      ]
+    },
+    "ZeroActions-2": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1,
+      "strength_multipliers": [
+        1
+      ]
+    },
+    "ZeroActions-3": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1,
+      "strength_multipliers": [
+        1
+      ]
+    }
+  },
+  "policy_checks": {
+    "Normal-1": {
+      "all_upper_scalars_exact_zero": true,
+      "lower_policy_nonzero_present": true,
+      "sample_count": 300
+    },
+    "Normal-2": {
+      "all_upper_scalars_exact_zero": true,
+      "lower_policy_nonzero_present": true,
+      "sample_count": 300
+    },
+    "Normal-3": {
+      "all_upper_scalars_exact_zero": true,
+      "lower_policy_nonzero_present": true,
+      "sample_count": 300
+    },
+    "ZeroActions-1": {
+      "all_conditioned_scalars_exact_zero": true,
+      "sample_count": 300
+    },
+    "ZeroActions-2": {
+      "all_conditioned_scalars_exact_zero": true,
+      "sample_count": 300
+    },
+    "ZeroActions-3": {
+      "all_conditioned_scalars_exact_zero": true,
+      "sample_count": 300
+    }
+  },
+  "protocol_sha256_actual": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+  "protocol_sha256_matches_locked": true,
+  "runner_contains_experimental_argument": false,
+  "schema_version": "physanim-e33-audit/v1",
+  "status": "PASS",
+  "zero_determinism": {
+    "physics_sha256": true,
+    "policy_input_snapshot_sha256": true,
+    "policy_sha256": true
+  },
+  "zero_hash_sets": {
+    "physics_sha256": [
+      "CD4BA773254E8BA604B6B9BDC92535DECDE1FF0291584B4352DF5BED96AFD7F4"
+    ],
+    "policy_input_snapshot_sha256": [
+      "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    ],
+    "policy_sha256": [
+      "2F714337B24256890CECE5FE16974CB6994F15FE432D5C6EAD02372CF4D65BE5"
+    ]
+  }
+}
