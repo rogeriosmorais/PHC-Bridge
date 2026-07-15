@@ -1015,6 +1015,14 @@ bool UPhysAnimComponent::ApplyExperimentalPolicyActionZeroUntilBaselineForTestin
 	return true;
 }
 
+FVector UPhysAnimComponent::SelectObservationWorldPositionForTesting(
+	bool bUsePhysicsBodyPosition,
+	const FVector& BoneWorldPosition,
+	const FVector& PhysicsBodyWorldPosition)
+{
+	return bUsePhysicsBodyPosition ? PhysicsBodyWorldPosition : BoneWorldPosition;
+}
+
 FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
 	const FQuat& ActionBindComponentWorldRotation,
 	const FQuat& CachedWorldActionAxisRotation)

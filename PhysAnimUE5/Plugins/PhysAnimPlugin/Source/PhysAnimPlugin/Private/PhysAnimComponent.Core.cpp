@@ -50,6 +50,8 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalPolicyActionBaselineResidual"));
 	bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalPolicyActionZeroUntilBaseline"));
+	bExperimentalPhysicsBodyObservationPositionsEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalPhysicsBodyObservationPositions"));
 	bExperimentalPolicyActionBaselineResidualStartedForTesting = false;
 	bExperimentalCheckpointTorqueCeilingEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalCheckpointTorqueCeiling"));

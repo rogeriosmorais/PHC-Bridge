@@ -1555,6 +1555,22 @@ public:
 	{
 		return bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting;
 	}
+	bool IsExperimentalPhysicsBodyObservationPositionsEnabledForTesting() const
+	{
+		return bExperimentalPhysicsBodyObservationPositionsEnabledForTesting;
+	}
+	static FVector SelectObservationWorldPositionForTesting(
+		bool bUsePhysicsBodyPosition,
+		const FVector& BoneWorldPosition,
+		const FVector& PhysicsBodyWorldPosition);
+	const TArray<FVector>& GetObservationBoneWorldPositionsForTesting() const
+	{
+		return ObservationBoneWorldPositionsForTesting;
+	}
+	const TArray<FVector>& GetObservationPhysicsBodyWorldPositionsForTesting() const
+	{
+		return ObservationPhysicsBodyWorldPositionsForTesting;
+	}
 	static bool ApplyExperimentalPolicyActionZeroUntilBaselineForTesting(
 		bool bConfigured,
 		bool bBaselineAvailable,
@@ -2567,7 +2583,10 @@ private:
 	int32 ExperimentalActionJointRangeCountForTesting = 0;
 	bool bExperimentalPolicyActionBaselineResidualEnabledForTesting = false;
 	bool bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting = false;
+	bool bExperimentalPhysicsBodyObservationPositionsEnabledForTesting = false;
 	bool bExperimentalPolicyActionBaselineResidualStartedForTesting = false;
+	mutable TArray<FVector> ObservationBoneWorldPositionsForTesting;
+	mutable TArray<FVector> ObservationPhysicsBodyWorldPositionsForTesting;
 	bool bExperimentalCheckpointTorqueCeilingEnabledForTesting = false;
 	bool bExperimentalCheckpointForcePdEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;

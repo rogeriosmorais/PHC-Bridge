@@ -32,6 +32,14 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 	const FQuat MeshWorldRotation = SkeletalMesh->GetComponentQuat().GetNormalized();
 	const FQuat WorldToComponentRotation = MeshWorldRotation.Inverse();
 	USkeletalMeshComponent* const MutableMesh = const_cast<USkeletalMeshComponent*>(SkeletalMesh);
+	bool bUsePhysicsBodyObservationPositions = false;
+#if WITH_DEV_AUTOMATION_TESTS
+	bUsePhysicsBodyObservationPositions = bExperimentalPhysicsBodyObservationPositionsEnabledForTesting;
+	ObservationBoneWorldPositionsForTesting.Reset();
+	ObservationBoneWorldPositionsForTesting.Reserve(PhysAnimBridge::NumSmplBodies);
+	ObservationPhysicsBodyWorldPositionsForTesting.Reset();
+	ObservationPhysicsBodyWorldPositionsForTesting.Reserve(PhysAnimBridge::NumSmplBodies);
+#endif
 
 	for (int32 i = 0; i < BoneNames.Num(); ++i)
 	{
@@ -58,12 +66,22 @@ bool UPhysAnimComponent::GatherCurrentBodySamples(TArray<FPhysAnimBodySample>& O
 				*BoneName.ToString());
 			return false;
 		}
-		const FQuat BodyWorldRotation =
-			BodyInstance->GetUnrealWorldTransform().GetRotation().GetNormalized();
+		const FTransform PhysicsBodyWorldTransform = BodyInstance->GetUnrealWorldTransform();
+		const FQuat BodyWorldRotation = PhysicsBodyWorldTransform.GetRotation().GetNormalized();
+		const FVector BoneWorldPosition = BoneWorldTransform.GetLocation();
+		const FVector PhysicsBodyWorldPosition = PhysicsBodyWorldTransform.GetLocation();
+#if WITH_DEV_AUTOMATION_TESTS
+		ObservationBoneWorldPositionsForTesting.Add(BoneWorldPosition);
+		ObservationPhysicsBodyWorldPositionsForTesting.Add(PhysicsBodyWorldPosition);
+#endif
+		const FVector ObservationWorldPosition = SelectObservationWorldPositionForTesting(
+			bUsePhysicsBodyObservationPositions,
+			BoneWorldPosition,
+			PhysicsBodyWorldPosition);
 		CurrentBodyComponentRotations.Add(
 			(WorldToComponentRotation * BodyWorldRotation).GetNormalized());
 		OutBodySamples.Add(FPhysAnimBodySample(
-			PhysAnimBridge::UeWorldPositionToProtoRuntime(BoneWorldTransform.GetLocation()),
+			PhysAnimBridge::UeWorldPositionToProtoRuntime(ObservationWorldPosition),
 			FQuat::Identity,
 			PhysAnimBridge::UeWorldVelocityToProtoRuntime(BoneLinearVelocity),
 			PhysAnimBridge::UeWorldRotationVectorToProtoRuntime(BoneAngularVelocity)));

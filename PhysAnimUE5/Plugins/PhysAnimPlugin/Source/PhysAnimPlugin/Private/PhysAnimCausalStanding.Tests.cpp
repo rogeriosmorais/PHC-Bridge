@@ -585,6 +585,28 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			true,
 			ExplicitZeroActions));
 	TestFalse(
+		TEXT("Physics-body observation positions are disabled by default"),
+		Component->IsExperimentalPhysicsBodyObservationPositionsEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalPhysicsBodyObservationPositions"));
+	TestTrue(
+		TEXT("Explicit development flag enables physics-body observation positions"),
+		Component->IsExperimentalPhysicsBodyObservationPositionsEnabledForTesting());
+	const FVector BoneObservationPosition(1.0, 2.0, 3.0);
+	const FVector PhysicsBodyObservationPosition(4.0, 5.0, 6.0);
+	TestTrue(
+		TEXT("Disabled observation-position override preserves bone origin"),
+		UPhysAnimComponent::SelectObservationWorldPositionForTesting(
+			false,
+			BoneObservationPosition,
+			PhysicsBodyObservationPosition).Equals(BoneObservationPosition));
+	TestTrue(
+		TEXT("Enabled observation-position override selects physics-body origin"),
+		UPhysAnimComponent::SelectObservationWorldPositionForTesting(
+			true,
+			BoneObservationPosition,
+			PhysicsBodyObservationPosition).Equals(PhysicsBodyObservationPosition));
+	TestFalse(
 		TEXT("Checkpoint torque ceiling is disabled by default"),
 		Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(
@@ -712,6 +734,7 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			Component->GetExperimentalActionJointRangeCountForTesting() != 0 ||
 			Component->IsExperimentalPolicyActionBaselineResidualEnabledForTesting() ||
 			Component->IsExperimentalPolicyActionZeroUntilBaselineEnabledForTesting() ||
+			Component->IsExperimentalPhysicsBodyObservationPositionsEnabledForTesting() ||
 			Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting() ||
 			Component->IsExperimentalCheckpointForcePdEnabledForTesting());
 	TestFalse(
@@ -2387,6 +2410,7 @@ namespace
 			bool bStartupChronologyWritten = true;
 			bool bFirstPolicyBodySourceWritten = true;
 			bool bFirstPolicyGroundReferenceWritten = true;
+			bool bObservationPositionTraceWritten = true;
 			if (Config.bPlantRun)
 			{
 				const FString ActiveStandingSnapshotPath = FPaths::Combine(
@@ -2488,6 +2512,41 @@ namespace
 							Component->GetFirstPolicyGroundReferenceTraceForTesting())) + TEXT("\n"),
 						*FirstPolicyGroundReferencePath);
 				}
+
+				const FString ObservationPositionTracePath = FPaths::Combine(
+					Config.RunRoot,
+					TEXT("rigid-body-position-observation.json"));
+				const TSharedRef<FJsonObject> ObservationPositionTrace = MakeShared<FJsonObject>();
+				ObservationPositionTrace->SetStringField(
+					TEXT("schema_version"),
+					TEXT("physanim-rigid-body-position-observation/v1"));
+				ObservationPositionTrace->SetBoolField(
+					TEXT("physics_body_positions_selected"),
+					Component && Component->IsExperimentalPhysicsBodyObservationPositionsEnabledForTesting());
+				TArray<TSharedPtr<FJsonValue>> PositionEntries;
+				if (Component)
+				{
+					const TArray<FName>& ObservationBones = PhysAnimBridge::GetSmplObservationBoneNames();
+					const TArray<FVector>& BonePositions = Component->GetObservationBoneWorldPositionsForTesting();
+					const TArray<FVector>& BodyPositions = Component->GetObservationPhysicsBodyWorldPositionsForTesting();
+					const int32 EntryCount = FMath::Min3(ObservationBones.Num(), BonePositions.Num(), BodyPositions.Num());
+					for (int32 EntryIndex = 0; EntryIndex < EntryCount; ++EntryIndex)
+					{
+						const TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+						Entry->SetNumberField(TEXT("index"), EntryIndex);
+						Entry->SetStringField(TEXT("bone_name"), ObservationBones[EntryIndex].ToString());
+						Entry->SetArrayField(TEXT("bone_world_position_cm"), BuildVectorJsonArray(BonePositions[EntryIndex]));
+						Entry->SetArrayField(TEXT("physics_body_world_position_cm"), BuildVectorJsonArray(BodyPositions[EntryIndex]));
+						Entry->SetArrayField(TEXT("body_minus_bone_cm"), BuildVectorJsonArray(BodyPositions[EntryIndex] - BonePositions[EntryIndex]));
+						Entry->SetNumberField(TEXT("delta_magnitude_cm"), FVector::Distance(BonePositions[EntryIndex], BodyPositions[EntryIndex]));
+						PositionEntries.Add(MakeShared<FJsonValueObject>(Entry));
+					}
+				}
+				ObservationPositionTrace->SetNumberField(TEXT("entry_count"), PositionEntries.Num());
+				ObservationPositionTrace->SetArrayField(TEXT("bodies"), PositionEntries);
+				bObservationPositionTraceWritten = FFileHelper::SaveStringToFile(
+					SerializeJson(ObservationPositionTrace) + TEXT("\n"),
+					*ObservationPositionTracePath);
 			}
 			const int32 NonblankPixels = CaptureRender(World, Component, RenderPath);
 
@@ -2522,6 +2581,7 @@ namespace
 				bStartupChronologyWritten &&
 				bFirstPolicyBodySourceWritten &&
 				bFirstPolicyGroundReferenceWritten &&
+				bObservationPositionTraceWritten &&
 				bManifestWritten;
 		}
 

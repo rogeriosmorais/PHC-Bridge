@@ -25,6 +25,7 @@ param (
     [int]$ExperimentalActionJointCount = 0,
     [switch]$ExperimentalPolicyActionBaselineResidual,
     [switch]$ExperimentalPolicyActionZeroUntilBaseline,
+    [switch]$ExperimentalPhysicsBodyObservationPositions,
     [switch]$ExperimentalCheckpointTorqueCeiling,
     [switch]$ExperimentalCheckpointForcePd,
     [switch]$PolicyInputProvenanceTrace,
@@ -181,6 +182,9 @@ if ($Test) {
     }
     if ($ExperimentalPolicyActionZeroUntilBaseline) {
         $EditorArguments += "-PhysAnimExperimentalPolicyActionZeroUntilBaseline"
+    }
+    if ($ExperimentalPhysicsBodyObservationPositions) {
+        $EditorArguments += "-PhysAnimExperimentalPhysicsBodyObservationPositions"
     }
     if ($ExperimentalCheckpointTorqueCeiling) {
         $EditorArguments += "-PhysAnimExperimentalCheckpointTorqueCeiling"
