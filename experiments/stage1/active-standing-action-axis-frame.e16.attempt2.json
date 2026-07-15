@@ -1,0 +1,166 @@
+{
+  "schema_version": "physanim-investigation-experiment/v1",
+  "experiment_id": "active-standing-action-axis-frame-e16-attempt2",
+  "recorded_utc": "2026-07-15T15:10:27.7140804Z",
+  "status": "INVALID",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "FAIL",
+  "preregistration": {
+    "path": "experiments/stage1/active-standing-action-axis-frame.e16.attempt2.preregister.json",
+    "commit": "6d953ec9f332ca98799939faa6851b4bc4c3dce6"
+  },
+  "hypothesis": "E15's non-identity round-trip excess is caused by using the cached Manny parent action axis in world space. Expressing that axis in mesh-component space only after entering BalanceActive_Standing will preserve the locked pre-intervention policy state and make every actual-action and axis-probe error equal the unchanged per-joint identity residual.",
+  "single_changed_variable": {
+    "name": "action_conjugation_axis_frame_after_active_standing_entry",
+    "baseline": "cached_parent_world",
+    "experimental": "cached_parent_mesh_component only in BalanceActive_Standing",
+    "override": "-PhysAnimExperimentalComponentActionAxis",
+    "production_default_changed": false,
+    "protocol_or_threshold_changed": false
+  },
+  "implementation": {
+    "runtime_source_commit": "46fa0dbde4390c778fa42dedebcdc43395a1b208",
+    "behavior_commit": "46fa0dbde4390c778fa42dedebcdc43395a1b208",
+    "source_tree_dirty": false,
+    "binary_reused_between_arms": true,
+    "production_defaults_changed": false,
+    "activation_contract": "configured && RuntimeState == BalanceActive_Standing"
+  },
+  "validation": {
+    "test_first_red": {
+      "status": "PASS",
+      "observed_failure": "LNK2019 unresolved ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting before implementation"
+    },
+    "focused_unreal_test": {
+      "command": ".\\scripts\\build.ps1 -Test PhysAnim.ProductHarness.DropDispatchSwitch",
+      "status": "PASS",
+      "contract": "override false in Standing_Preparation, Standing_FullSimulationActivation, and Standing_PolicyBlend; true only in BalanceActive_Standing when configured"
+    },
+    "focused_python_tests": {
+      "command": "python -m pytest scripts/tests/test_manny_local_frame_roundtrip_evaluator.py scripts/tests/test_action_axis_frame_experiment_evaluator.py -q",
+      "status": "PASS",
+      "passed": 24
+    },
+    "runtime_automation": {
+      "baseline": "PASS_WITH_WARNINGS",
+      "experimental": "PASS_WITH_WARNINGS",
+      "experimental_exit_code": 0,
+      "runtime_logs_read": true
+    }
+  },
+  "locked_judges": {
+    "protocol_path": "product-gates/standing-plant-ladder.v2.json",
+    "protocol_sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB",
+    "model_sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "perturbation": "none",
+    "roundtrip_tolerance_degrees": 0.001,
+    "required_preintervention_equality": [
+      "first-policy input snapshot",
+      "first-active-standing input snapshot",
+      "first-active canonical decoded actions"
+    ]
+  },
+  "baseline": {
+    "name": "world_axis_baseline",
+    "artifact_root": "test-results/action-axis-frame/world-axis-46fa0db",
+    "runtime_evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "key_metrics": {
+      "physics_sample_count": 601,
+      "policy_sample_count": 300,
+      "minimum_pelvis_height_ratio": 0.15336580018044577,
+      "maximum_root_tilt_deg": 105.40127563476562,
+      "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+      "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+      "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+      "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+      "maximum_support_gap_ms": 0.0,
+      "target_readback_match_ratio": 1.0
+    },
+    "sha256": {
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "first_policy_input": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_input": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "55B2937501E18360B83252FBC6AA0D688B75AFCEDE3BB77F15605CBE26966028",
+      "manny_local_frame_trace": "78C43AF605B5952D4E321396EF51B6B5EA0DEA84AB41E861004984A45AA71BD0"
+    }
+  },
+  "experimental": {
+    "name": "component_axis_delayed_experiment",
+    "artifact_root": "test-results/action-axis-frame/component-axis-delayed-46fa0db",
+    "runtime_evaluator_status": "FAIL",
+    "failed_criteria": [
+      "root_linear_speed",
+      "root_angular_speed",
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "key_metrics": {
+      "physics_sample_count": 601,
+      "policy_sample_count": 300,
+      "minimum_pelvis_height_ratio": 0.14944073177469483,
+      "maximum_root_tilt_deg": 109.23167419433594,
+      "maximum_root_linear_speed_cm_per_sec": 1712.6396909869982,
+      "maximum_root_angular_speed_deg_per_sec": 882.8583696503056,
+      "maximum_body_linear_speed_cm_per_sec": 3066.237188895585,
+      "maximum_body_angular_speed_deg_per_sec": 3983.4775471338567,
+      "maximum_support_gap_ms": 0.0,
+      "target_readback_match_ratio": 1.0
+    },
+    "sha256": {
+      "physics": "61917DDE96881CC7AB4CC2AB0088355B4169D9880506F957F072967A64E6FD57",
+      "policy": "21A45D4D06493B5AEA77989C49ABE9F8892F750F174A32DBD4D9C98407FE81A5",
+      "first_policy_input": "8D27B374597EA15131B4BF979F1F2CB84E434BA0296D65BF15C2D544AC091CAC",
+      "active_standing_input": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "55B2937501E18360B83252FBC6AA0D688B75AFCEDE3BB77F15605CBE26966028",
+      "manny_local_frame_trace": "93214EE62519EB84C210F7639F2858533BB18D38E2BD8638E72F0D637B51DFAD"
+    }
+  },
+  "preintervention_gates": {
+    "first_policy_input_exact": false,
+    "first_policy_difference": {
+      "self_observation_changed_values": 144,
+      "maximum_self_observation_absolute_difference": 41.637840270996094,
+      "mimic_target_poses_changed_values": 0,
+      "terrain_changed_values": 0,
+      "actions_changed_values": 69,
+      "maximum_action_absolute_difference": 0.479092001914978
+    },
+    "active_standing_input_exact": true,
+    "first_active_canonical_actions_exact": true,
+    "active_standing_input_sha256": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+    "action_semantic_trace_sha256": "55B2937501E18360B83252FBC6AA0D688B75AFCEDE3BB77F15605CBE26966028",
+    "overall_valid": false,
+    "invalid_reason": "The preregistration required exact first-policy input equality. The two arms differed materially at that capture before the intended BalanceActive_Standing intervention."
+  },
+  "active_boundary_semantic_evaluation": {
+    "artifact": "test-results/action-axis-frame/e16-attempt2-evaluation-46fa0db.json",
+    "sha256": "A68B6377F9233F93E791E536CEB4866C7383839F42B44E236124308DEF2F2711",
+    "status": "VALID",
+    "hypothesis_verdict": "SUPPORTED",
+    "maximum_identity_input_cross_arm_delta_degrees": 0.0,
+    "maximum_identity_target_cross_arm_delta_degrees": 0.0,
+    "maximum_identity_error_cross_arm_delta_degrees": 1.1723955140041653e-13,
+    "maximum_actual_error_minus_identity_error_absolute_residual_degrees": 1.3892789696434704e-11,
+    "maximum_probe_error_minus_identity_error_absolute_residual_degrees": 2.7785551637293793e-11,
+    "maximum_actual_runtime_target_recompute_error_degrees": 0.0,
+    "note": "This proves the local active-boundary frame algebra on equal captured inputs/actions, but it does not override the broader preregistered first-policy invalidity gate."
+  },
+  "conclusion": {
+    "hypothesis_supported_or_falsified": "NEITHER_INVALID_RUN",
+    "learned": "Delaying the override fixed E16 attempt 1's active-standing confound: the active input and canonical decoded actions were byte-identical, identity residuals were unchanged, and component-space conjugation removed all non-identity excess to numerical noise. However, the earlier first-policy snapshot differed materially between arms, violating the attempt-2 preregistration. The physical result also worsened, but it is non-authoritative as a causal A/B result under the failed gate. No production behavior is promoted.",
+    "thresholds_or_protocol_changed": false,
+    "production_promotion": false
+  },
+  "next_experiment": "Before another behavioral hypothesis, run a behavior-neutral startup-repeatability experiment on one commit and binary with A/A/B arms. Trace configured and effective action-axis mode at every target write from first policy through BalanceActive_Standing, and compare first-policy plus active-standing state/action hashes. If A/A also diverges while all active-boundary hashes converge, classify the first-policy capture as harness startup nondeterminism and redesign the causal gate around a deterministic action replay or same-state counterfactual. If only B diverges while the override is proven ineffective, search for a hidden command-line side effect before proceeding to the captured-neutral hypothesis."
+}

@@ -239,3 +239,22 @@ Machine-readable record: `experiments/stage1/active-standing-manny-local-frame-r
 **Next experiment selected.** Rerun E16 with the same hypothesis and judges, but make the development-only override effective only in `BalanceActive_Standing`. Add a contract that preparation remains on the baseline path. Require exact first-policy and first-active input/action equality before interpreting the semantic or physical result.
 
 Machine-readable record: `experiments/stage1/active-standing-action-axis-frame.e16.attempt1.json`.
+
+
+## E16 attempt 2 — Delayed component-space action axis (INVALID, 2026-07-15)
+
+**Hypothesis.** Cached-world action-axis conjugation causes E15's non-identity round-trip excess; activating the equivalent mesh-component axis only in `BalanceActive_Standing` should preserve all locked pre-intervention state while leaving identity residuals unchanged and collapsing actual/probe excess to those residuals.
+
+**Implementation and tests.** Preregistered at `6d953ec`; behavior commit `46fa0db`. A test-first activation contract deliberately failed with `LNK2019` before implementation, then passed after the override was constrained to `configured && RuntimeState == BalanceActive_Standing`. `PhysAnim.ProductHarness.DropDispatchSwitch` passed, and the focused evaluator suite passed 24/24. Both runtime arms reused the same clean binary, model, protocol, timestep, capture window, pose, seed, perturbation, evaluators, and thresholds.
+
+**Baseline result.** World-axis root `test-results/action-axis-frame/world-axis-46fa0db` exactly reproduced the established baseline physics/policy hashes. The standing evaluator `FAIL`ed body linear speed, pelvis height, and root tilt; minimum pelvis ratio was 0.153366, maximum root tilt 105.401°, maximum body speed 1119.794 cm/s, and readback was 1.0.
+
+**Experimental result.** Delayed component-axis root `test-results/action-axis-frame/component-axis-delayed-46fa0db` completed successfully and readback remained 1.0. The active-standing input and first-active action-semantic trace were byte-identical to baseline. The active-boundary evaluator returned `VALID/SUPPORTED`: identity inputs/targets were exactly equal, maximum identity-error delta was `1.172e-13°`, and actual-minus-identity plus probe-minus-identity residuals collapsed to `1.389e-11°` and `2.779e-11°`. However, the first-policy snapshot differed materially before the intended intervention: 144 self-observation values changed (maximum 41.638), all 69 action values changed (maximum 0.4791), while mimic and terrain remained exact. This violated the preregistered first-policy equality gate. The physical evaluator `FAIL` set expanded to root linear/angular speed, body linear speed, pelvis height, and root tilt; maximum body speed rose to 3066.237 cm/s.
+
+**Supported or falsified.** Neither under the complete preregistration. The run is `INVALID` because the locked first-policy equality gate failed. Separately, the equal active-boundary semantic evidence strongly supports the local frame-algebra mechanism, but it cannot override the broader invalidity rule or establish product success.
+
+**What was learned.** Delayed activation removed attempt 1's active-standing confound and proved that component-space conjugation eliminates the non-identity round-trip excess on identical active input/actions. A separate startup repeatability problem remains at the first-policy capture, and component-axis behavior alone does not produce standing. No production default, protocol, or threshold changed.
+
+**Next experiment selected.** Run a behavior-neutral A/A/B startup-repeatability experiment on one commit/binary. Trace configured/effective axis mode at every target write from first policy through active standing. If A/A also differs while active-boundary hashes converge, redesign the causal physical test around deterministic action replay or a same-state counterfactual. If only B differs while the override is proven ineffective, find the hidden command-line side effect before testing captured-neutral ownership.
+
+Machine-readable record: `experiments/stage1/active-standing-action-axis-frame.e16.attempt2.json`.
