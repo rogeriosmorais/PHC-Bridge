@@ -498,6 +498,56 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			0.0f);
 	}
 	TestFalse(
+		TEXT("Policy action baseline residual is disabled by default"),
+		Component->IsExperimentalPolicyActionBaselineResidualEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalPolicyActionBaselineResidual"));
+	TestTrue(
+		TEXT("Explicit development flag enables policy action baseline residual"),
+		Component->IsExperimentalPolicyActionBaselineResidualEnabledForTesting());
+	const TArray<float> BaselinePolicyActions = { 0.25f, -0.50f, 0.75f };
+	TArray<float> ResidualPolicyActions = { 0.50f, -0.25f, 0.25f };
+	TestTrue(
+		TEXT("Matching policy baseline is applied when configured"),
+		UPhysAnimComponent::ApplyExperimentalPolicyActionBaselineResidualForTesting(
+			true,
+			false,
+			BaselinePolicyActions,
+			ResidualPolicyActions));
+	TestEqual(TEXT("Residual action zero subtracts baseline"), ResidualPolicyActions[0], 0.25f);
+	TestEqual(TEXT("Residual action one subtracts baseline"), ResidualPolicyActions[1], 0.25f);
+	TestEqual(TEXT("Residual action two subtracts baseline"), ResidualPolicyActions[2], -0.50f);
+	TArray<float> DisabledResidualActions = { 0.50f, -0.25f, 0.25f };
+	TestFalse(
+		TEXT("Disabled policy baseline residual preserves actions"),
+		UPhysAnimComponent::ApplyExperimentalPolicyActionBaselineResidualForTesting(
+			false,
+			false,
+			BaselinePolicyActions,
+			DisabledResidualActions));
+	TestEqual(TEXT("Disabled residual preserves first action"), DisabledResidualActions[0], 0.50f);
+	TArray<float> ZeroVariantActions = { 0.0f, 0.0f, 0.0f };
+	TestFalse(
+		TEXT("Forced-zero variant bypasses policy baseline residual"),
+		UPhysAnimComponent::ApplyExperimentalPolicyActionBaselineResidualForTesting(
+			true,
+			true,
+			BaselinePolicyActions,
+			ZeroVariantActions));
+	for (const float Value : ZeroVariantActions)
+	{
+		TestEqual(TEXT("Forced-zero action remains zero"), Value, 0.0f);
+	}
+	TArray<float> MismatchedResidualActions = { 0.50f, -0.25f };
+	TestFalse(
+		TEXT("Mismatched policy baseline size is rejected without mutation"),
+		UPhysAnimComponent::ApplyExperimentalPolicyActionBaselineResidualForTesting(
+			true,
+			false,
+			BaselinePolicyActions,
+			MismatchedResidualActions));
+	TestEqual(TEXT("Mismatched residual preserves action"), MismatchedResidualActions[0], 0.50f);
+	TestFalse(
 		TEXT("Checkpoint torque ceiling is disabled by default"),
 		Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(
@@ -623,6 +673,7 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 				EPhysAnimExperimentalActionFamilyMask::All ||
 			Component->GetExperimentalActionJointRangeStartForTesting() != INDEX_NONE ||
 			Component->GetExperimentalActionJointRangeCountForTesting() != 0 ||
+			Component->IsExperimentalPolicyActionBaselineResidualEnabledForTesting() ||
 			Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting() ||
 			Component->IsExperimentalCheckpointForcePdEnabledForTesting());
 	TestFalse(

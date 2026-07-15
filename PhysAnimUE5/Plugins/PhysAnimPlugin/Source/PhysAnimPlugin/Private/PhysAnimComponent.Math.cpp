@@ -982,6 +982,24 @@ void UPhysAnimComponent::ApplyExperimentalActionJointRangeForTesting(
 	}
 }
 
+bool UPhysAnimComponent::ApplyExperimentalPolicyActionBaselineResidualForTesting(
+	bool bConfigured,
+	bool bForceZeroActions,
+	TConstArrayView<float> BaselineActions,
+	TArray<float>& InOutActions)
+{
+	if (!bConfigured || bForceZeroActions || BaselineActions.Num() != InOutActions.Num())
+	{
+		return false;
+	}
+
+	for (int32 ActionIndex = 0; ActionIndex < InOutActions.Num(); ++ActionIndex)
+	{
+		InOutActions[ActionIndex] -= BaselineActions[ActionIndex];
+	}
+	return true;
+}
+
 FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
 	const FQuat& ActionBindComponentWorldRotation,
 	const FQuat& CachedWorldActionAxisRotation)

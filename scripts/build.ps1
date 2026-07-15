@@ -23,6 +23,7 @@ param (
     [string]$ExperimentalActionFamily,
     [int]$ExperimentalActionJointStart = -1,
     [int]$ExperimentalActionJointCount = 0,
+    [switch]$ExperimentalPolicyActionBaselineResidual,
     [switch]$ExperimentalCheckpointTorqueCeiling,
     [switch]$ExperimentalCheckpointForcePd,
     [switch]$PolicyInputProvenanceTrace,
@@ -173,6 +174,9 @@ if ($Test) {
     if ($ExperimentalActionJointStart -ge 0) {
         $EditorArguments += "-PhysAnimExperimentalActionJointStart=$ExperimentalActionJointStart"
         $EditorArguments += "-PhysAnimExperimentalActionJointCount=$ExperimentalActionJointCount"
+    }
+    if ($ExperimentalPolicyActionBaselineResidual) {
+        $EditorArguments += "-PhysAnimExperimentalPolicyActionBaselineResidual"
     }
     if ($ExperimentalCheckpointTorqueCeiling) {
         $EditorArguments += "-PhysAnimExperimentalCheckpointTorqueCeiling"

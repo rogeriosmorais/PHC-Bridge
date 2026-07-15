@@ -1542,6 +1542,15 @@ public:
 		int32 StartJointIndex,
 		int32 JointCount,
 		TArray<float>& InOutActions);
+	bool IsExperimentalPolicyActionBaselineResidualEnabledForTesting() const
+	{
+		return bExperimentalPolicyActionBaselineResidualEnabledForTesting;
+	}
+	static bool ApplyExperimentalPolicyActionBaselineResidualForTesting(
+		bool bConfigured,
+		bool bForceZeroActions,
+		TConstArrayView<float> BaselineActions,
+		TArray<float>& InOutActions);
 	bool IsExperimentalCheckpointTorqueCeilingEnabledForTesting() const
 	{
 		return bExperimentalCheckpointTorqueCeilingEnabledForTesting;
@@ -2547,6 +2556,8 @@ private:
 		EPhysAnimExperimentalActionFamilyMask::All;
 	int32 ExperimentalActionJointRangeStartForTesting = INDEX_NONE;
 	int32 ExperimentalActionJointRangeCountForTesting = 0;
+	bool bExperimentalPolicyActionBaselineResidualEnabledForTesting = false;
+	bool bExperimentalPolicyActionBaselineResidualStartedForTesting = false;
 	bool bExperimentalCheckpointTorqueCeilingEnabledForTesting = false;
 	bool bExperimentalCheckpointForcePdEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;

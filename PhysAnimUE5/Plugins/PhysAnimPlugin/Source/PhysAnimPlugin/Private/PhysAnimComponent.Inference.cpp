@@ -144,9 +144,36 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 	// Standing influence is applied once in parent-relative target space. Keep raw policy
 	// conditioning variant-specific, but do not multiply the shared activation alpha here.
 	ConditioningSettings.ActionScale = EffectiveSettings.ActionScale;
+	const TArray<float>* ActionsForConditioning = &ActionOutputBuffer;
+#if WITH_DEV_AUTOMATION_TESTS
+	TArray<float> BaselineResidualActions;
+	if (bExperimentalPolicyActionBaselineResidualEnabledForTesting)
+	{
+		BaselineResidualActions = ActionOutputBuffer;
+		const bool bActionsExplicitlyZero = !ActionOutputBuffer.ContainsByPredicate(
+			[](const float Value)
+			{
+				return !FMath::IsNearlyZero(Value);
+			});
+		const bool bResidualApplied = ApplyExperimentalPolicyActionBaselineResidualForTesting(
+			true,
+			EffectiveSettings.bForceZeroActions || bActionsExplicitlyZero,
+			FirstActiveStandingPolicyInferenceSnapshot.Actions,
+			BaselineResidualActions);
+		if (bResidualApplied)
+		{
+			ActionsForConditioning = &BaselineResidualActions;
+			if (!bExperimentalPolicyActionBaselineResidualStartedForTesting)
+			{
+				PreviousConditionedActionBuffer.Reset();
+				bExperimentalPolicyActionBaselineResidualStartedForTesting = true;
+			}
+		}
+	}
+#endif
 	const bool bSuccess = BuildConditionedActions(
-		ActionOutputBuffer,
-		PreviousConditionedActionBuffer.Num() == ActionOutputBuffer.Num() ? &PreviousConditionedActionBuffer : nullptr,
+		*ActionsForConditioning,
+		PreviousConditionedActionBuffer.Num() == ActionsForConditioning->Num() ? &PreviousConditionedActionBuffer : nullptr,
 		ConditioningSettings,
 		ConditionedActionBuffer,
 		LastActionDiagnostics,
