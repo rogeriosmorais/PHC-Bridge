@@ -1,0 +1,35 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "exact-adapter-range-remap-e19",
+  "recorded_utc": "2026-07-15T16:00:00Z",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "With the exact component-axis plus bind-neutral action adapter held fixed, MapProtoPolicyTargetToMannyConstraintRange is the remaining causal distortion preventing standing. Bypassing only that range remap while retaining constraint safety projection will improve the locked standing trajectory.",
+  "arms": [
+    {"name":"control_exact_adapter_remap_on","component_axis":true,"bind_neutral":true,"range_remap_bypass":false},
+    {"name":"experimental_exact_adapter_remap_off","component_axis":true,"bind_neutral":true,"range_remap_bypass":true}
+  ],
+  "single_changed_variable": "Whether MapProtoPolicyTargetToMannyConstraintRange is called after the exact pre-range target; AdaptParentRelativeTarget remains enabled.",
+  "locked_configuration": {
+    "base_commit":"0de3c84e0dfac0d678149c4424c3fb31f4c6d7d9",
+    "model_sha256":"C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+    "protocol_sha256":"0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB",
+    "variant":"RealOnnxPolicy",
+    "fixed_timestep_seconds":0.016666666666666666,
+    "capture_window_seconds":10.0,
+    "action_adapter":"component parent-bind axis plus bind parent-relative neutral from first policy",
+    "constraint_safety_projection":"enabled and unchanged",
+    "step_limit_gains_timing_pose_seed_perturbation":"unchanged; no perturbation"
+  },
+  "validity_gates": [
+    "Same clean behavior commit and reused binary.",
+    "First-policy snapshot including model output actions is byte-identical.",
+    "Exact pre-range adapter trace remains 0 degrees for identity, actual, and probes in both arms.",
+    "Control range-map delta remains nonzero; experimental range-map delta is at most 0.001 degrees.",
+    "Target readback ratio is 1.0 in both arms."
+  ],
+  "support": "Validity gates pass and bypass strictly improves time to pelvis below 80 cm plus the locked failed-criterion set or all major stability maxima.",
+  "falsification": "Validity gates pass but bypass does not improve the physical result. Increased safety-projection demand with worse standing falsifies range remap as the remaining cause under the exact adapter.",
+  "physical_judge":"Unchanged scripts/evaluate_standing_plant.py and standing-plant-ladder.v2 thresholds; no threshold or protocol changes.",
+  "next_if_falsified":"Keep the exact adapter and protective range mapper. Test whether the checkpoint's action targets are being interpreted as positions when the trained controller expects PD target offsets/drive characteristics downstream, beginning with control gain/torque and target-rate diagnostics rather than deleting safety stages."
+}
