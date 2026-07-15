@@ -240,6 +240,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 #if WITH_DEV_AUTOMATION_TESTS
 	PhysAnimBridge::FPhysAnimActionSemanticTrace PendingActionSemanticTrace;
 	TMap<FName, PhysAnimBridge::FPhysAnimControlTargetSemanticTrace> PendingControlTargetSemanticTraces;
+	PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace PendingMannyLocalFrameRoundtripTrace;
+	TMap<FName, PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl>
+		PendingMannyLocalFrameRoundtripControls;
 	bool bCaptureActionSemanticTraceThisStep =
 		bActionSemanticTraceEnabledForTesting &&
 		StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
@@ -267,6 +270,19 @@ void UPhysAnimComponent::ApplyControlTargets(
 			FirstActiveStandingActionSemanticTrace.CaptureError = TraceError;
 			bCaptureActionSemanticTraceThisStep = false;
 		}
+	}
+	const bool bCaptureMannyLocalFrameRoundtripThisStep =
+		bMannyLocalFrameRoundtripTraceEnabledForTesting &&
+		StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing &&
+		!FirstActiveStandingMannyLocalFrameRoundtripTrace.bCaptured &&
+		FirstActiveStandingMannyLocalFrameRoundtripTrace.CaptureError.IsEmpty();
+	if (bCaptureMannyLocalFrameRoundtripThisStep)
+	{
+		PendingMannyLocalFrameRoundtripTrace.CaptureScope =
+			TEXT("first_active_standing_pre_range_target");
+		PendingMannyLocalFrameRoundtripTrace.AxisProbeDegrees =
+			PhysAnimBridge::MannyLocalFrameRoundtripAxisProbeDegrees;
 	}
 #endif
 	const bool bUseSkeletalAnimationTargetRepresentation =
@@ -579,6 +595,46 @@ void UPhysAnimComponent::ApplyControlTargets(
 						*BindSeed,
 						MannyPolicyNeutralRotation,
 						Pair.Value);
+#if WITH_DEV_AUTOMATION_TESTS
+				if (bCaptureMannyLocalFrameRoundtripThisStep &&
+					PendingMannyLocalFrameRoundtripTrace.CaptureError.IsEmpty())
+				{
+					const FInitialPhysicsControl* const RoundtripInitialControl =
+						FindInitialControl(ControlName);
+					if (!RoundtripInitialControl)
+					{
+						PendingMannyLocalFrameRoundtripTrace.CaptureError = FString::Printf(
+							TEXT("Missing initial control ownership for '%s'."),
+							*ControlName.ToString());
+					}
+					else
+					{
+						PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl TraceEntry;
+						FString RoundtripError;
+						const int32 ControlIndex =
+							PhysAnimBridge::GetControlledBoneNames().IndexOfByKey(Pair.Key);
+						if (!BuildMannyLocalFrameRoundtripControlForTesting(
+							ControlIndex,
+							Pair.Key,
+							ControlName,
+							RoundtripInitialControl->ChildBoneName,
+							RoundtripInitialControl->ParentBoneName,
+							*BindSeed,
+							MannyPolicyNeutralRotation,
+							Pair.Value,
+							AbsoluteBindCalibratedPolicyRotation,
+							TraceEntry,
+							RoundtripError))
+						{
+							PendingMannyLocalFrameRoundtripTrace.CaptureError = RoundtripError;
+						}
+						else
+						{
+							PendingMannyLocalFrameRoundtripControls.Add(Pair.Key, MoveTemp(TraceEntry));
+						}
+					}
+				}
+#endif
 
 				const bool bApplyTrainingAlignedLowerLimbTargetRangePolicy =
 					ShouldApplyTrainingAlignedLowerLimbTargetRangePolicy(
@@ -861,6 +917,41 @@ void UPhysAnimComponent::ApplyControlTargets(
 					}
 				}
 				FirstActiveStandingActionSemanticTrace = MoveTemp(PendingActionSemanticTrace);
+			}
+			if (bCaptureMannyLocalFrameRoundtripThisStep)
+			{
+				for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+				{
+					const PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl* const TraceEntry =
+						PendingMannyLocalFrameRoundtripControls.Find(BoneName);
+					if (!TraceEntry)
+					{
+						if (PendingMannyLocalFrameRoundtripTrace.CaptureError.IsEmpty())
+						{
+							PendingMannyLocalFrameRoundtripTrace.CaptureError = FString::Printf(
+								TEXT("No Manny local-frame round-trip trace was captured for '%s'."),
+								*BoneName.ToString());
+						}
+						break;
+					}
+					PendingMannyLocalFrameRoundtripTrace.Controls.Add(*TraceEntry);
+				}
+
+				PendingMannyLocalFrameRoundtripTrace.bCaptured =
+					PendingMannyLocalFrameRoundtripTrace.CaptureError.IsEmpty();
+				if (PendingMannyLocalFrameRoundtripTrace.bCaptured)
+				{
+					FString ValidationError;
+					if (!PhysAnimBridge::ValidateMannyLocalFrameRoundtripTrace(
+						PendingMannyLocalFrameRoundtripTrace,
+						ValidationError))
+					{
+						PendingMannyLocalFrameRoundtripTrace.bCaptured = false;
+						PendingMannyLocalFrameRoundtripTrace.CaptureError = ValidationError;
+					}
+				}
+				FirstActiveStandingMannyLocalFrameRoundtripTrace =
+					MoveTemp(PendingMannyLocalFrameRoundtripTrace);
 			}
 #endif
 		}

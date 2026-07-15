@@ -445,6 +445,101 @@ namespace
 		return true;
 	}
 
+#if WITH_DEV_AUTOMATION_TESTS
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+		FPhysAnimMannyLocalFrameRoundtripTraceContractTest,
+		"PhysAnim.Bridge.MannyLocalFrameRoundtripTraceContract",
+		EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+	bool FPhysAnimMannyLocalFrameRoundtripTraceContractTest::RunTest(const FString& Parameters)
+	{
+		static const int32 CanonicalSmplParentIndices[NumSmplBodies] = {
+			-1, 0, 1, 2, 3, 0, 5, 6, 7, 0, 9, 10,
+			11, 12, 11, 14, 15, 16, 17, 11, 19, 20, 21, 22
+		};
+		static const TArray<FName> CaseLabels = {
+			TEXT("identity"),
+			TEXT("actual_decoded"),
+			TEXT("positive_x_10_deg"),
+			TEXT("negative_x_10_deg"),
+			TEXT("positive_y_10_deg"),
+			TEXT("negative_y_10_deg"),
+			TEXT("positive_z_10_deg"),
+			TEXT("negative_z_10_deg")
+		};
+
+		FPhysAnimMannyLocalFrameRoundtripTrace Trace;
+		Trace.bCaptured = true;
+		Trace.CaptureScope = TEXT("first_active_standing_pre_range_target");
+		const TArray<FName>& ObservationBodyNames = GetSmplObservationBoneNames();
+		const TArray<FPhysAnimProtoActionJointDescriptor>& Descriptors = GetProtoActionJointDescriptors();
+		for (int32 ControlIndex = 0; ControlIndex < GetControlledBoneNames().Num(); ++ControlIndex)
+		{
+			const FName MannyBoneName = GetControlledBoneNames()[ControlIndex];
+			FPhysAnimMannyLocalFrameRoundtripControl& Entry = Trace.Controls.AddDefaulted_GetRef();
+			Entry.ControlIndex = ControlIndex;
+			Entry.MannyBoneName = MannyBoneName;
+			Entry.ControlName = MakeControlName(MannyBoneName);
+			Entry.InitialControlChildBoneName = MannyBoneName;
+			for (const FPhysAnimProtoActionJointDescriptor& Descriptor : Descriptors)
+			{
+				if (Descriptor.MannyBoneName == MannyBoneName)
+				{
+					const int32 ObservationBodyIndex = Descriptor.ProtoJointIndex + 1;
+					Entry.SourceProtoJointIndices.Add(Descriptor.ProtoJointIndex);
+					Entry.SourceProtoJointNames.Add(Descriptor.ProtoJointName);
+					Entry.ObservationBodyIndices.Add(ObservationBodyIndex);
+					Entry.ObservationBodyNames.Add(ObservationBodyNames[ObservationBodyIndex]);
+				}
+			}
+
+			Entry.RoundtripObservationBodyIndex = Entry.ObservationBodyIndices[0];
+			Entry.RoundtripObservationBodyName = Entry.ObservationBodyNames[0];
+			Entry.ObservationParentBodyIndex =
+				CanonicalSmplParentIndices[Entry.RoundtripObservationBodyIndex];
+			Entry.ObservationParentBodyName = ObservationBodyNames[Entry.ObservationParentBodyIndex];
+			Entry.InitialControlParentBoneName = Entry.ObservationParentBodyName;
+			Entry.bDecisiveOneToOne = Entry.SourceProtoJointIndices.Num() == 1;
+			Entry.bOwnershipComplete = true;
+			for (const FName Label : CaseLabels)
+			{
+				FPhysAnimMannyLocalFrameRoundtripCase& Case = Entry.RoundtripCases.AddDefaulted_GetRef();
+				Case.Label = Label;
+			}
+		}
+
+		FString Error;
+		TestTrue(
+			TEXT("Complete normalized trace satisfies ownership and frame contracts"),
+			ValidateMannyLocalFrameRoundtripTrace(Trace, Error));
+		TestEqual(
+			TEXT("Exactly 19 controls are decisive one-to-one mappings"),
+			Trace.Controls.FilterByPredicate(
+				[](const FPhysAnimMannyLocalFrameRoundtripControl& Entry)
+				{
+					return Entry.bDecisiveOneToOne;
+				}).Num(),
+			19);
+
+		FPhysAnimMannyLocalFrameRoundtripTrace InvalidTrace = Trace;
+		InvalidTrace.Controls[0].CachedActionAxisReferenceRotation = FQuat(0.0, 0.0, 0.0, 2.0);
+		TestFalse(
+			TEXT("Trace rejects a non-normalized runtime frame"),
+			ValidateMannyLocalFrameRoundtripTrace(InvalidTrace, Error));
+		InvalidTrace = Trace;
+		InvalidTrace.Controls.Pop();
+		TestFalse(
+			TEXT("Trace rejects an incomplete control set"),
+			ValidateMannyLocalFrameRoundtripTrace(InvalidTrace, Error));
+		InvalidTrace = Trace;
+		InvalidTrace.Controls[0].bOwnershipComplete = false;
+		TestFalse(
+			TEXT("Trace rejects incomplete initial-control ownership"),
+			ValidateMannyLocalFrameRoundtripTrace(InvalidTrace, Error));
+		return true;
+	}
+#endif
+
 	IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 		FPhysAnimActionToBoneMappingContractTest,
 		"PhysAnim.Bridge.ActionToBoneMappingContract",

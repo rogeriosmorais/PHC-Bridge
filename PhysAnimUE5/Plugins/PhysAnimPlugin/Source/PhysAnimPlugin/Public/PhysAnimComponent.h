@@ -1488,11 +1488,16 @@ public:
 	void SetStandingVariantForTesting(EPhysAnimStandingVariant Variant) { StandingVariantForTesting = Variant; }
 	EPhysAnimStandingVariant GetStandingVariantForTesting() const { return StandingVariantForTesting; }
 	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
+	bool IsMannyLocalFrameRoundtripTraceEnabledForTesting() const { return bMannyLocalFrameRoundtripTraceEnabledForTesting; }
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
 	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
 	{
 		return FirstActiveStandingActionSemanticTrace;
+	}
+	const PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace& GetMannyLocalFrameRoundtripTraceForTesting() const
+	{
+		return FirstActiveStandingMannyLocalFrameRoundtripTrace;
 	}
 	const PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot& GetPolicyInputProvenanceSnapshotForTesting() const
 	{
@@ -2453,12 +2458,14 @@ private:
 #if WITH_DEV_AUTOMATION_TESTS
 	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstActiveStandingPolicyInferenceSnapshot;
 	PhysAnimBridge::FPhysAnimActionSemanticTrace FirstActiveStandingActionSemanticTrace;
+	PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace FirstActiveStandingMannyLocalFrameRoundtripTrace;
 	PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot FirstPolicyInputProvenanceSnapshot;
 	PhysAnimBridge::FPhysAnimStartupChronologyTrace StartupChronologyTrace;
 	PhysAnimBridge::FPhysAnimFirstPolicyBodySourceTrace FirstPolicyBodySourceTrace;
 	PhysAnimBridge::FPhysAnimFirstPolicyGroundReferenceTrace FirstPolicyGroundReferenceTrace;
 	bool bProductControlDispatchDroppedForTesting = false;
 	bool bActionSemanticTraceEnabledForTesting = false;
+	bool bMannyLocalFrameRoundtripTraceEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
 	bool bStartupChronologyTraceEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
@@ -2938,6 +2945,20 @@ public:
 		const FPhysAnimControlTargetSeed& MannyBindSeed,
 		const FQuat& MannyNeutralParentRelativeRotation,
 		const FQuat& ProtoPolicyRotationUe);
+#if WITH_DEV_AUTOMATION_TESTS
+	bool BuildMannyLocalFrameRoundtripControlForTesting(
+		int32 ControlIndex,
+		FName MannyBoneName,
+		FName ControlName,
+		FName InitialControlChildBoneName,
+		FName InitialControlParentBoneName,
+		const FPhysAnimControlTargetSeed& MannyBindSeed,
+		const FQuat& MannyNeutralParentRelativeRotation,
+		const FQuat& ActualDecodedRotationUe,
+		const FQuat& ActualMannyPreRangeTargetParentRelative,
+		PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl& OutTrace,
+		FString& OutError) const;
+#endif
 	static FQuat BlendPolicyTargetRotation(const FQuat& BaselineRotation, const FQuat& PolicyTargetRotation, float PolicyAlpha);
 	static float CalculateControlTargetDeltaDegrees(const FQuat& PreviousRotation, const FQuat& TargetRotation);
 	static float CalculateControlAuthorityAlpha(

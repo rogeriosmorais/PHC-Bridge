@@ -274,6 +274,18 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("Removing the development flag restores the trace-off default"),
 		Component->IsActionSemanticTraceEnabledForTesting());
 	TestFalse(
+		TEXT("Manny local-frame round-trip tracing is disabled without its explicit development flag"),
+		Component->IsMannyLocalFrameRoundtripTraceEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimMannyLocalFrameRoundtripTrace"));
+	TestTrue(
+		TEXT("The explicit development flag enables Manny local-frame round-trip tracing"),
+		Component->IsMannyLocalFrameRoundtripTraceEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
+	TestFalse(
+		TEXT("Removing the development flag restores the Manny round-trip trace-off default"),
+		Component->IsMannyLocalFrameRoundtripTraceEnabledForTesting());
+	TestFalse(
 		TEXT("Policy-input provenance tracing is disabled without its explicit development flag"),
 		Component->IsPolicyInputProvenanceTraceEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(
@@ -653,6 +665,17 @@ namespace
 		return Result;
 	}
 
+	TArray<TSharedPtr<FJsonValue>> BuildNameJsonArray(const TArray<FName>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Result;
+		Result.Reserve(Values.Num());
+		for (const FName Value : Values)
+		{
+			Result.Add(MakeShared<FJsonValueString>(Value.ToString()));
+		}
+		return Result;
+	}
+
 	TSharedRef<FJsonObject> BuildActionSemanticTraceJson(
 		const PhysAnimBridge::FPhysAnimActionSemanticTrace& Trace,
 		const bool bEnabled)
@@ -725,6 +748,161 @@ namespace
 			ControlValues.Add(MakeShared<FJsonValueObject>(Object));
 		}
 		Root->SetArrayField(TEXT("control_targets"), ControlValues);
+		return Root;
+	}
+
+	TSharedRef<FJsonObject> BuildMannyLocalFrameRoundtripJson(
+		const PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace& Trace,
+		const bool bEnabled)
+	{
+		FString ValidationError;
+		const bool bValid = bEnabled &&
+			PhysAnimBridge::ValidateMannyLocalFrameRoundtripTrace(Trace, ValidationError);
+		if (!bEnabled)
+		{
+			ValidationError.Reset();
+		}
+
+		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(
+			TEXT("schema_version"),
+			TEXT("physanim-manny-local-frame-roundtrip/v1"));
+		Root->SetStringField(TEXT("authority"), TEXT("DEVELOPMENT_DIAGNOSTIC_ONLY"));
+		Root->SetBoolField(TEXT("product_success"), false);
+		Root->SetBoolField(TEXT("enabled"), bEnabled);
+		Root->SetBoolField(TEXT("captured"), Trace.bCaptured);
+		Root->SetBoolField(TEXT("valid"), bValid);
+		Root->SetStringField(TEXT("validation_error"), ValidationError);
+		Root->SetStringField(TEXT("capture_scope"), Trace.CaptureScope);
+		Root->SetStringField(TEXT("capture_error"), Trace.CaptureError);
+		Root->SetNumberField(TEXT("axis_probe_degrees"), Trace.AxisProbeDegrees);
+		Root->SetStringField(TEXT("quaternion_layout"), TEXT("xyzw"));
+		Root->SetStringField(
+			TEXT("quaternion_multiplication"),
+			PhysAnimBridge::MannyLocalFrameRoundtripQuaternionMultiplication);
+		Root->SetStringField(
+			TEXT("action_composition_order"),
+			PhysAnimBridge::MannyLocalFrameRoundtripActionCompositionOrder);
+		Root->SetStringField(
+			TEXT("observation_recovery_order"),
+			PhysAnimBridge::MannyLocalFrameRoundtripObservationRecoveryOrder);
+		Root->SetStringField(
+			TEXT("roundtrip_observation_body_selection"),
+			PhysAnimBridge::MannyLocalFrameRoundtripObservationBodySelection);
+		Root->SetStringField(
+			TEXT("cached_action_axis_reference_frame"),
+			PhysAnimBridge::MannyLocalFrameRoundtripActionAxisFrame);
+		Root->SetStringField(
+			TEXT("action_bind_component_world_rotation_frame"),
+			PhysAnimBridge::MannyLocalFrameRoundtripActionBindComponentWorldFrame);
+		Root->SetStringField(
+			TEXT("observation_bind_rotation_frame"),
+			PhysAnimBridge::MannyLocalFrameRoundtripObservationBindFrame);
+
+		TArray<TSharedPtr<FJsonValue>> ControlValues;
+		ControlValues.Reserve(Trace.Controls.Num());
+		for (const PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl& Entry : Trace.Controls)
+		{
+			const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+			Object->SetNumberField(TEXT("control_index"), Entry.ControlIndex);
+			Object->SetStringField(TEXT("manny_bone_name"), Entry.MannyBoneName.ToString());
+			Object->SetStringField(TEXT("control_name"), Entry.ControlName.ToString());
+			Object->SetStringField(
+				TEXT("initial_control_child_bone_name"),
+				Entry.InitialControlChildBoneName.ToString());
+			Object->SetStringField(
+				TEXT("initial_control_parent_bone_name"),
+				Entry.InitialControlParentBoneName.ToString());
+			Object->SetArrayField(
+				TEXT("source_proto_joint_indices"),
+				BuildIntegerJsonArray(Entry.SourceProtoJointIndices));
+			Object->SetArrayField(
+				TEXT("source_proto_joint_names"),
+				BuildNameJsonArray(Entry.SourceProtoJointNames));
+			Object->SetArrayField(
+				TEXT("observation_body_indices"),
+				BuildIntegerJsonArray(Entry.ObservationBodyIndices));
+			Object->SetArrayField(
+				TEXT("observation_body_names"),
+				BuildNameJsonArray(Entry.ObservationBodyNames));
+			Object->SetNumberField(
+				TEXT("roundtrip_observation_body_index"),
+				Entry.RoundtripObservationBodyIndex);
+			Object->SetStringField(
+				TEXT("roundtrip_observation_body_name"),
+				Entry.RoundtripObservationBodyName.ToString());
+			Object->SetNumberField(
+				TEXT("observation_parent_body_index"),
+				Entry.ObservationParentBodyIndex);
+			Object->SetStringField(
+				TEXT("observation_parent_body_name"),
+				Entry.ObservationParentBodyName.ToString());
+			Object->SetBoolField(TEXT("decisive_one_to_one"), Entry.bDecisiveOneToOne);
+			Object->SetBoolField(TEXT("ownership_complete"), Entry.bOwnershipComplete);
+			Object->SetArrayField(
+				TEXT("cached_action_axis_reference_rotation_xyzw"),
+				BuildQuaternionJsonArray(Entry.CachedActionAxisReferenceRotation));
+			Object->SetArrayField(
+				TEXT("action_bind_component_world_rotation_xyzw"),
+				BuildQuaternionJsonArray(Entry.ActionBindComponentWorldRotation));
+			Object->SetArrayField(
+				TEXT("action_bind_parent_relative_rotation_xyzw"),
+				BuildQuaternionJsonArray(Entry.ActionBindParentRelativeRotation));
+			Object->SetArrayField(
+				TEXT("policy_neutral_parent_relative_rotation_xyzw"),
+				BuildQuaternionJsonArray(Entry.PolicyNeutralParentRelativeRotation));
+			Object->SetArrayField(
+				TEXT("observation_parent_bind_component_rotation_xyzw"),
+				BuildQuaternionJsonArray(Entry.ObservationParentBindComponentRotation));
+			Object->SetArrayField(
+				TEXT("observation_body_bind_component_rotation_xyzw"),
+				BuildQuaternionJsonArray(Entry.ObservationBodyBindComponentRotation));
+			Object->SetArrayField(
+				TEXT("observation_bind_parent_relative_rotation_xyzw"),
+				BuildQuaternionJsonArray(Entry.ObservationBindParentRelativeRotation));
+			Object->SetArrayField(
+				TEXT("actual_decoded_rotation_ue_xyzw"),
+				BuildQuaternionJsonArray(Entry.ActualDecodedRotationUe));
+			Object->SetArrayField(
+				TEXT("actual_manny_pre_range_target_parent_relative_xyzw"),
+				BuildQuaternionJsonArray(Entry.ActualMannyPreRangeTargetParentRelative));
+			Object->SetNumberField(
+				TEXT("action_axis_vs_observation_parent_bind_angular_delta_degrees"),
+				Entry.ActionAxisVsObservationParentBindAngularDeltaDegrees);
+			Object->SetNumberField(
+				TEXT("action_bind_vs_observation_bind_parent_relative_angular_delta_degrees"),
+				Entry.ActionBindVsObservationBindParentRelativeAngularDeltaDegrees);
+			Object->SetNumberField(
+				TEXT("policy_neutral_vs_action_bind_parent_relative_angular_delta_degrees"),
+				Entry.PolicyNeutralVsActionBindParentRelativeAngularDeltaDegrees);
+			Object->SetNumberField(
+				TEXT("policy_neutral_vs_observation_bind_parent_relative_angular_delta_degrees"),
+				Entry.PolicyNeutralVsObservationBindParentRelativeAngularDeltaDegrees);
+
+			TArray<TSharedPtr<FJsonValue>> CaseValues;
+			CaseValues.Reserve(Entry.RoundtripCases.Num());
+			for (const PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripCase& Case : Entry.RoundtripCases)
+			{
+				const TSharedRef<FJsonObject> CaseObject = MakeShared<FJsonObject>();
+				CaseObject->SetStringField(TEXT("label"), Case.Label.ToString());
+				CaseObject->SetArrayField(
+					TEXT("input_canonical_rotation_ue_xyzw"),
+					BuildQuaternionJsonArray(Case.InputCanonicalRotationUe));
+				CaseObject->SetArrayField(
+					TEXT("manny_pre_range_target_parent_relative_xyzw"),
+					BuildQuaternionJsonArray(Case.MannyPreRangeTargetParentRelative));
+				CaseObject->SetArrayField(
+					TEXT("recovered_canonical_rotation_ue_xyzw"),
+					BuildQuaternionJsonArray(Case.RecoveredCanonicalRotationUe));
+				CaseObject->SetNumberField(
+					TEXT("angular_error_degrees"),
+					Case.AngularErrorDegrees);
+				CaseValues.Add(MakeShared<FJsonValueObject>(CaseObject));
+			}
+			Object->SetArrayField(TEXT("roundtrip_cases"), CaseValues);
+			ControlValues.Add(MakeShared<FJsonValueObject>(Object));
+		}
+		Root->SetArrayField(TEXT("controls"), ControlValues);
 		return Root;
 	}
 
@@ -1702,6 +1880,7 @@ namespace
 				*PolicyInputSnapshotPath);
 			bool bActiveStandingPolicyInputSnapshotWritten = true;
 			bool bActionSemanticTraceWritten = true;
+			bool bMannyLocalFrameRoundtripTraceWritten = true;
 			bool bPolicyInputProvenanceWritten = true;
 			bool bStartupChronologyWritten = true;
 			bool bFirstPolicyBodySourceWritten = true;
@@ -1748,6 +1927,21 @@ namespace
 						ActionSemanticTrace,
 						bActionSemanticTraceEnabled)) + TEXT("\n"),
 					*ActionSemanticTracePath);
+
+				const FString MannyLocalFrameRoundtripTracePath = FPaths::Combine(
+					Config.RunRoot,
+					TEXT("manny-local-frame-roundtrip.json"));
+				const PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace EmptyMannyLocalFrameRoundtripTrace;
+				const PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace& MannyLocalFrameRoundtripTrace = Component
+					? Component->GetMannyLocalFrameRoundtripTraceForTesting()
+					: EmptyMannyLocalFrameRoundtripTrace;
+				const bool bMannyLocalFrameRoundtripTraceEnabled =
+					Component && Component->IsMannyLocalFrameRoundtripTraceEnabledForTesting();
+				bMannyLocalFrameRoundtripTraceWritten = FFileHelper::SaveStringToFile(
+					SerializeJson(BuildMannyLocalFrameRoundtripJson(
+						MannyLocalFrameRoundtripTrace,
+						bMannyLocalFrameRoundtripTraceEnabled)) + TEXT("\n"),
+					*MannyLocalFrameRoundtripTracePath);
 
 				const bool bPolicyInputProvenanceEnabled =
 					Component && Component->IsPolicyInputProvenanceTraceEnabledForTesting();
@@ -1821,6 +2015,7 @@ namespace
 				bPolicyInputSnapshotWritten &&
 				bActiveStandingPolicyInputSnapshotWritten &&
 				bActionSemanticTraceWritten &&
+				bMannyLocalFrameRoundtripTraceWritten &&
 				bPolicyInputProvenanceWritten &&
 				bStartupChronologyWritten &&
 				bFirstPolicyBodySourceWritten &&

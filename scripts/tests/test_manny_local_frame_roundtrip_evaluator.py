@@ -168,6 +168,9 @@ def _refresh_entry(entry: dict) -> None:
     entry["action_axis_vs_observation_parent_bind_angular_delta_degrees"] = _angle(
         axis, parent_bind
     )
+    entry[
+        "action_bind_vs_observation_bind_parent_relative_angular_delta_degrees"
+    ] = _angle(entry["action_bind_parent_relative_rotation_xyzw"], bind_relative)
     entry["policy_neutral_vs_action_bind_parent_relative_angular_delta_degrees"] = _angle(
         neutral, entry["action_bind_parent_relative_rotation_xyzw"]
     )
@@ -203,6 +206,7 @@ def _make_trace(path: Path) -> Path:
             "decisive_one_to_one": len(source_indices) == 1,
             "ownership_complete": True,
             "cached_action_axis_reference_rotation_xyzw": parent_bind,
+            "action_bind_component_world_rotation_xyzw": [0.0, 0.0, 0.0, 1.0],
             "action_bind_parent_relative_rotation_xyzw": bind_relative,
             "policy_neutral_parent_relative_rotation_xyzw": bind_relative,
             "observation_parent_bind_component_rotation_xyzw": parent_bind,
@@ -236,6 +240,11 @@ def _make_trace(path: Path) -> Path:
             "inverse(observation_parent_bind)"
         ),
         "roundtrip_observation_body_selection": "lowest_source_proto_joint_index",
+        "cached_action_axis_reference_frame": "world_rotation_at_initial_control_bind_capture",
+        "action_bind_component_world_rotation_frame": (
+            "component_to_world_rotation_derived_from_initial_parent_and_observation_parent_bind"
+        ),
+        "observation_bind_rotation_frame": "skeletal_mesh_component_space_bind",
         "controls": controls,
     }
     path.write_text(json.dumps(trace), encoding="utf-8")
@@ -263,6 +272,9 @@ def test_symmetric_frames_match_and_publish_complete_metrics(tmp_path: Path) -> 
     assert result["metrics"]["maximum_identity_roundtrip_angular_error_degrees"] < 1.0e-9
     assert result["metrics"]["maximum_actual_roundtrip_angular_error_degrees"] < 1.0e-9
     assert result["metrics"]["maximum_axis_probe_roundtrip_angular_error_degrees"] < 1.0e-9
+    assert result["metrics"][
+        "maximum_action_bind_vs_observation_bind_parent_relative_angular_delta_degrees"
+    ] < 1.0e-9
     assert result["metrics"]["failing_identity_joints"] == []
     assert result["metrics"]["failing_actual_joints"] == []
     assert result["metrics"]["failing_axis_probes"] == []
@@ -285,6 +297,26 @@ def test_asymmetric_neutral_is_a_valid_contract_mismatch(tmp_path: Path) -> None
     assert result["metrics"]["failing_identity_joints"] == ["thigh_l"]
     assert "thigh_l" in result["metrics"]["failing_actual_joints"]
     assert result["metrics"]["maximum_identity_roundtrip_angular_error_degrees"] > 1.9
+
+
+def test_action_and_observation_bind_mismatch_is_independently_reported(
+    tmp_path: Path,
+) -> None:
+    path = _make_trace(tmp_path / "trace.json")
+    trace = _load(path)
+    entry = trace["controls"][0]
+    entry["action_bind_parent_relative_rotation_xyzw"] = _mul(
+        _axis_angle(0, 5.0), entry["observation_bind_parent_relative_rotation_xyzw"]
+    )
+    _refresh_entry(entry)
+    _store(path, trace)
+
+    result = evaluate_trace(path)
+
+    assert result["contract_verdict"] == "MATCH"
+    assert result["metrics"][
+        "maximum_action_bind_vs_observation_bind_parent_relative_angular_delta_degrees"
+    ] > 4.9
 
 
 def test_quaternion_sign_is_invariant(tmp_path: Path) -> None:

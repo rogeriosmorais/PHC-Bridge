@@ -36,6 +36,11 @@ OBSERVATION_RECOVERY_ORDER = (
     "inverse(observation_parent_bind)"
 )
 ROUNDTRIP_BODY_SELECTION = "lowest_source_proto_joint_index"
+ACTION_AXIS_FRAME = "world_rotation_at_initial_control_bind_capture"
+ACTION_BIND_COMPONENT_WORLD_FRAME = (
+    "component_to_world_rotation_derived_from_initial_parent_and_observation_parent_bind"
+)
+OBSERVATION_BIND_FRAME = "skeletal_mesh_component_space_bind"
 
 PROTO_JOINT_NAMES = (
     "L_Hip",
@@ -332,6 +337,9 @@ def evaluate_trace(trace_path: Path | str) -> dict:
             "action_composition_order",
             "observation_recovery_order",
             "roundtrip_observation_body_selection",
+            "cached_action_axis_reference_frame",
+            "action_bind_component_world_rotation_frame",
+            "observation_bind_rotation_frame",
             "controls",
         ),
         "Manny local-frame round-trip trace",
@@ -361,6 +369,9 @@ def evaluate_trace(trace_path: Path | str) -> dict:
         "action_composition_order": ACTION_COMPOSITION_ORDER,
         "observation_recovery_order": OBSERVATION_RECOVERY_ORDER,
         "roundtrip_observation_body_selection": ROUNDTRIP_BODY_SELECTION,
+        "cached_action_axis_reference_frame": ACTION_AXIS_FRAME,
+        "action_bind_component_world_rotation_frame": ACTION_BIND_COMPONENT_WORLD_FRAME,
+        "observation_bind_rotation_frame": OBSERVATION_BIND_FRAME,
     }
     for field, expected in metadata_contract.items():
         if trace[field] != expected:
@@ -377,6 +388,7 @@ def evaluate_trace(trace_path: Path | str) -> dict:
     actual_errors: list[tuple[str, float]] = []
     probe_errors: list[tuple[str, str, float]] = []
     axis_relationships: list[tuple[str, float]] = []
+    action_observation_bind_deltas: list[tuple[str, float]] = []
     neutral_action_bind_deltas: list[tuple[str, float]] = []
     neutral_observation_bind_deltas: list[tuple[str, float]] = []
     control_results: list[dict] = []
@@ -384,6 +396,7 @@ def evaluate_trace(trace_path: Path | str) -> dict:
 
     frame_fields = (
         "cached_action_axis_reference_rotation_xyzw",
+        "action_bind_component_world_rotation_xyzw",
         "action_bind_parent_relative_rotation_xyzw",
         "policy_neutral_parent_relative_rotation_xyzw",
         "observation_parent_bind_component_rotation_xyzw",
@@ -418,6 +431,7 @@ def evaluate_trace(trace_path: Path | str) -> dict:
                 "ownership_complete",
                 *frame_fields,
                 "action_axis_vs_observation_parent_bind_angular_delta_degrees",
+                "action_bind_vs_observation_bind_parent_relative_angular_delta_degrees",
                 "policy_neutral_vs_action_bind_parent_relative_angular_delta_degrees",
                 "policy_neutral_vs_observation_bind_parent_relative_angular_delta_degrees",
                 "roundtrip_cases",
@@ -463,6 +477,9 @@ def evaluate_trace(trace_path: Path | str) -> dict:
             for field in frame_fields
         }
         action_axis = frames["cached_action_axis_reference_rotation_xyzw"]
+        action_bind_component_world = frames[
+            "action_bind_component_world_rotation_xyzw"
+        ]
         action_bind_relative = frames["action_bind_parent_relative_rotation_xyzw"]
         policy_neutral = frames["policy_neutral_parent_relative_rotation_xyzw"]
         parent_bind = frames["observation_parent_bind_component_rotation_xyzw"]
@@ -485,7 +502,14 @@ def evaluate_trace(trace_path: Path | str) -> dict:
         relationship_values = (
             (
                 "action_axis_vs_observation_parent_bind_angular_delta_degrees",
-                _angular_error_degrees(action_axis, parent_bind),
+                _angular_error_degrees(
+                    _normalize(_multiply(_inverse(action_bind_component_world), action_axis)),
+                    parent_bind,
+                ),
+            ),
+            (
+                "action_bind_vs_observation_bind_parent_relative_angular_delta_degrees",
+                _angular_error_degrees(action_bind_relative, observation_bind_relative),
             ),
             (
                 "policy_neutral_vs_action_bind_parent_relative_angular_delta_degrees",
@@ -501,8 +525,9 @@ def evaluate_trace(trace_path: Path | str) -> dict:
             if abs(published - recomputed) > SCALAR_PUBLICATION_TOLERANCE:
                 raise EvaluationError(f"{label} {field} does not match recomputed value")
         axis_relationships.append((expected_bone, relationship_values[0][1]))
-        neutral_action_bind_deltas.append((expected_bone, relationship_values[1][1]))
-        neutral_observation_bind_deltas.append((expected_bone, relationship_values[2][1]))
+        action_observation_bind_deltas.append((expected_bone, relationship_values[1][1]))
+        neutral_action_bind_deltas.append((expected_bone, relationship_values[2][1]))
+        neutral_observation_bind_deltas.append((expected_bone, relationship_values[3][1]))
 
         cases = entry["roundtrip_cases"]
         if not isinstance(cases, list) or len(cases) != len(CASE_LABELS):
@@ -598,11 +623,14 @@ def evaluate_trace(trace_path: Path | str) -> dict:
                 "action_axis_vs_observation_parent_bind_angular_delta_degrees": relationship_values[
                     0
                 ][1],
-                "policy_neutral_vs_action_bind_parent_relative_angular_delta_degrees": relationship_values[
+                "action_bind_vs_observation_bind_parent_relative_angular_delta_degrees": relationship_values[
                     1
                 ][1],
-                "policy_neutral_vs_observation_bind_parent_relative_angular_delta_degrees": relationship_values[
+                "policy_neutral_vs_action_bind_parent_relative_angular_delta_degrees": relationship_values[
                     2
+                ][1],
+                "policy_neutral_vs_observation_bind_parent_relative_angular_delta_degrees": relationship_values[
+                    3
                 ][1],
                 "roundtrip_cases": recomputed_cases,
             }
@@ -665,6 +693,9 @@ def evaluate_trace(trace_path: Path | str) -> dict:
             "failing_axis_probes": failing_probes,
             "maximum_action_axis_vs_observation_parent_bind_angular_delta_degrees": max(
                 error for _, error in axis_relationships
+            ),
+            "maximum_action_bind_vs_observation_bind_parent_relative_angular_delta_degrees": max(
+                error for _, error in action_observation_bind_deltas
             ),
             "maximum_policy_neutral_vs_action_bind_parent_relative_angular_delta_degrees": max(
                 error for _, error in neutral_action_bind_deltas

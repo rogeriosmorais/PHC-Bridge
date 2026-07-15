@@ -265,6 +265,86 @@ namespace PhysAnimBridge
 
 
 #if WITH_DEV_AUTOMATION_TESTS
+	inline constexpr double MannyLocalFrameRoundtripAxisProbeDegrees = 10.0;
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripQuaternionMultiplication =
+		TEXT("Hamilton product; expressions are evaluated in the explicitly parenthesized order");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripActionCompositionOrder =
+		TEXT("inverse(action_axis_reference) * canonical_input * action_axis_reference * policy_neutral");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripObservationRecoveryOrder =
+		TEXT("observation_parent_bind * (manny_target * inverse(observation_bind_parent_relative)) * inverse(observation_parent_bind)");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripObservationBodySelection =
+		TEXT("lowest_source_proto_joint_index");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripActionAxisFrame =
+		TEXT("world_rotation_at_initial_control_bind_capture");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripActionBindComponentWorldFrame =
+		TEXT("component_to_world_rotation_derived_from_initial_parent_and_observation_parent_bind");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripObservationBindFrame =
+		TEXT("skeletal_mesh_component_space_bind");
+
+	struct PHYSANIMPLUGIN_API FPhysAnimMannyLocalFrameRoundtripCase
+	{
+		FName Label = NAME_None;
+		FQuat InputCanonicalRotationUe = FQuat::Identity;
+		FQuat MannyPreRangeTargetParentRelative = FQuat::Identity;
+		FQuat RecoveredCanonicalRotationUe = FQuat::Identity;
+		double AngularErrorDegrees = 0.0;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimMannyLocalFrameRoundtripControl
+	{
+		int32 ControlIndex = INDEX_NONE;
+		FName MannyBoneName = NAME_None;
+		FName ControlName = NAME_None;
+		FName InitialControlChildBoneName = NAME_None;
+		FName InitialControlParentBoneName = NAME_None;
+		TArray<int32> SourceProtoJointIndices;
+		TArray<FName> SourceProtoJointNames;
+		TArray<int32> ObservationBodyIndices;
+		TArray<FName> ObservationBodyNames;
+		int32 RoundtripObservationBodyIndex = INDEX_NONE;
+		FName RoundtripObservationBodyName = NAME_None;
+		int32 ObservationParentBodyIndex = INDEX_NONE;
+		FName ObservationParentBodyName = NAME_None;
+		bool bDecisiveOneToOne = false;
+		bool bOwnershipComplete = false;
+		FQuat CachedActionAxisReferenceRotation = FQuat::Identity;
+		FQuat ActionBindComponentWorldRotation = FQuat::Identity;
+		FQuat ActionBindParentRelativeRotation = FQuat::Identity;
+		FQuat PolicyNeutralParentRelativeRotation = FQuat::Identity;
+		FQuat ObservationParentBindComponentRotation = FQuat::Identity;
+		FQuat ObservationBodyBindComponentRotation = FQuat::Identity;
+		FQuat ObservationBindParentRelativeRotation = FQuat::Identity;
+		FQuat ActualDecodedRotationUe = FQuat::Identity;
+		FQuat ActualMannyPreRangeTargetParentRelative = FQuat::Identity;
+		double ActionAxisVsObservationParentBindAngularDeltaDegrees = 0.0;
+		double ActionBindVsObservationBindParentRelativeAngularDeltaDegrees = 0.0;
+		double PolicyNeutralVsActionBindParentRelativeAngularDeltaDegrees = 0.0;
+		double PolicyNeutralVsObservationBindParentRelativeAngularDeltaDegrees = 0.0;
+		TArray<FPhysAnimMannyLocalFrameRoundtripCase> RoundtripCases;
+	};
+
+	struct PHYSANIMPLUGIN_API FPhysAnimMannyLocalFrameRoundtripTrace
+	{
+		void Reset()
+		{
+			bCaptured = false;
+			CaptureScope.Reset();
+			CaptureError.Reset();
+			AxisProbeDegrees = MannyLocalFrameRoundtripAxisProbeDegrees;
+			Controls.Reset();
+		}
+
+		bool bCaptured = false;
+		FString CaptureScope;
+		FString CaptureError;
+		double AxisProbeDegrees = MannyLocalFrameRoundtripAxisProbeDegrees;
+		TArray<FPhysAnimMannyLocalFrameRoundtripControl> Controls;
+	};
+
+	PHYSANIMPLUGIN_API bool ValidateMannyLocalFrameRoundtripTrace(
+		const FPhysAnimMannyLocalFrameRoundtripTrace& Trace,
+		FString& OutError);
+
 	struct PHYSANIMPLUGIN_API FPhysAnimPolicyInputProvenanceSnapshot
 	{
 		bool CaptureFirstIf(

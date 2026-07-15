@@ -1974,6 +1974,176 @@ namespace PhysAnimBridge
 		return true;
 	}
 
+#if WITH_DEV_AUTOMATION_TESTS
+	bool ValidateMannyLocalFrameRoundtripTrace(
+		const FPhysAnimMannyLocalFrameRoundtripTrace& Trace,
+		FString& OutError)
+	{
+		auto IsFiniteNormalizedQuat = [](const FQuat& Value)
+		{
+			return FMath::IsFinite(Value.X) && FMath::IsFinite(Value.Y) &&
+				FMath::IsFinite(Value.Z) && FMath::IsFinite(Value.W) && Value.IsNormalized();
+		};
+		auto IsFiniteNonNegative = [](double Value)
+		{
+			return FMath::IsFinite(Value) && Value >= 0.0;
+		};
+
+		if (!Trace.bCaptured ||
+			Trace.CaptureScope != TEXT("first_active_standing_pre_range_target") ||
+			!Trace.CaptureError.IsEmpty())
+		{
+			OutError = TEXT("Manny local-frame round-trip trace is not a successful first-active-standing capture.");
+			return false;
+		}
+		if (!FMath::IsFinite(Trace.AxisProbeDegrees) ||
+			!FMath::IsNearlyEqual(Trace.AxisProbeDegrees, MannyLocalFrameRoundtripAxisProbeDegrees))
+		{
+			OutError = TEXT("Manny local-frame round-trip trace has an invalid axis probe.");
+			return false;
+		}
+
+		const TArray<FName>& ControlledBones = GetControlledBoneNames();
+		const TArray<FName>& ObservationBodyNames = GetSmplObservationBoneNames();
+		const TArray<FPhysAnimProtoActionJointDescriptor>& Descriptors = GetProtoActionJointDescriptors();
+		if (Trace.Controls.Num() != NumControlledBones ||
+			ControlledBones.Num() != NumControlledBones ||
+			ObservationBodyNames.Num() != NumSmplBodies ||
+			Descriptors.Num() != NumActionJoints)
+		{
+			OutError = FString::Printf(
+				TEXT("Manny local-frame round-trip trace expected %d ordered controls but found %d."),
+				NumControlledBones,
+				Trace.Controls.Num());
+			return false;
+		}
+
+		static const TArray<FName> ExpectedCaseLabels = {
+			TEXT("identity"),
+			TEXT("actual_decoded"),
+			TEXT("positive_x_10_deg"),
+			TEXT("negative_x_10_deg"),
+			TEXT("positive_y_10_deg"),
+			TEXT("negative_y_10_deg"),
+			TEXT("positive_z_10_deg"),
+			TEXT("negative_z_10_deg")
+		};
+
+		int32 DecisiveControlCount = 0;
+		for (int32 ControlIndex = 0; ControlIndex < NumControlledBones; ++ControlIndex)
+		{
+			const FPhysAnimMannyLocalFrameRoundtripControl& Entry = Trace.Controls[ControlIndex];
+			const FName ExpectedBoneName = ControlledBones[ControlIndex];
+			TArray<int32> ExpectedSourceIndices;
+			TArray<FName> ExpectedSourceNames;
+			TArray<int32> ExpectedObservationIndices;
+			TArray<FName> ExpectedObservationNames;
+			for (const FPhysAnimProtoActionJointDescriptor& Descriptor : Descriptors)
+			{
+				if (Descriptor.MannyBoneName != ExpectedBoneName)
+				{
+					continue;
+				}
+				const int32 ObservationBodyIndex = Descriptor.ProtoJointIndex + 1;
+				if (!ObservationBodyNames.IsValidIndex(ObservationBodyIndex))
+				{
+					OutError = FString::Printf(
+						TEXT("Manny local-frame round-trip control %d has an invalid observation body mapping."),
+						ControlIndex);
+					return false;
+				}
+				ExpectedSourceIndices.Add(Descriptor.ProtoJointIndex);
+				ExpectedSourceNames.Add(Descriptor.ProtoJointName);
+				ExpectedObservationIndices.Add(ObservationBodyIndex);
+				ExpectedObservationNames.Add(ObservationBodyNames[ObservationBodyIndex]);
+			}
+
+			const bool bExpectedDecisive = ExpectedSourceIndices.Num() == 1;
+			DecisiveControlCount += bExpectedDecisive ? 1 : 0;
+			const bool bValidParent =
+				ObservationBodyNames.IsValidIndex(Entry.ObservationParentBodyIndex) &&
+				Entry.ObservationParentBodyName == ObservationBodyNames[Entry.ObservationParentBodyIndex] &&
+				Entry.InitialControlParentBoneName == Entry.ObservationParentBodyName;
+			const bool bValidFrames =
+				IsFiniteNormalizedQuat(Entry.CachedActionAxisReferenceRotation) &&
+				IsFiniteNormalizedQuat(Entry.ActionBindComponentWorldRotation) &&
+				IsFiniteNormalizedQuat(Entry.ActionBindParentRelativeRotation) &&
+				IsFiniteNormalizedQuat(Entry.PolicyNeutralParentRelativeRotation) &&
+				IsFiniteNormalizedQuat(Entry.ObservationParentBindComponentRotation) &&
+				IsFiniteNormalizedQuat(Entry.ObservationBodyBindComponentRotation) &&
+				IsFiniteNormalizedQuat(Entry.ObservationBindParentRelativeRotation) &&
+				IsFiniteNormalizedQuat(Entry.ActualDecodedRotationUe) &&
+				IsFiniteNormalizedQuat(Entry.ActualMannyPreRangeTargetParentRelative);
+			const bool bValidRelationshipMetrics =
+				IsFiniteNonNegative(Entry.ActionAxisVsObservationParentBindAngularDeltaDegrees) &&
+				IsFiniteNonNegative(Entry.ActionBindVsObservationBindParentRelativeAngularDeltaDegrees) &&
+				IsFiniteNonNegative(Entry.PolicyNeutralVsActionBindParentRelativeAngularDeltaDegrees) &&
+				IsFiniteNonNegative(Entry.PolicyNeutralVsObservationBindParentRelativeAngularDeltaDegrees);
+
+			if (Entry.ControlIndex != ControlIndex ||
+				Entry.MannyBoneName != ExpectedBoneName ||
+				Entry.ControlName != MakeControlName(ExpectedBoneName) ||
+				Entry.InitialControlChildBoneName != ExpectedBoneName ||
+				Entry.SourceProtoJointIndices != ExpectedSourceIndices ||
+				Entry.SourceProtoJointNames != ExpectedSourceNames ||
+				Entry.ObservationBodyIndices != ExpectedObservationIndices ||
+				Entry.ObservationBodyNames != ExpectedObservationNames ||
+				ExpectedObservationIndices.IsEmpty() ||
+				Entry.RoundtripObservationBodyIndex != ExpectedObservationIndices[0] ||
+				Entry.RoundtripObservationBodyName != ExpectedObservationNames[0] ||
+				Entry.bDecisiveOneToOne != bExpectedDecisive ||
+				!Entry.bOwnershipComplete || !bValidParent || !bValidFrames || !bValidRelationshipMetrics ||
+				Entry.RoundtripCases.Num() != ExpectedCaseLabels.Num())
+			{
+				OutError = FString::Printf(
+					TEXT("Manny local-frame round-trip control %d (%s) is malformed."),
+					ControlIndex,
+					*ExpectedBoneName.ToString());
+				return false;
+			}
+
+			for (int32 CaseIndex = 0; CaseIndex < ExpectedCaseLabels.Num(); ++CaseIndex)
+			{
+				const FPhysAnimMannyLocalFrameRoundtripCase& Case = Entry.RoundtripCases[CaseIndex];
+				if (Case.Label != ExpectedCaseLabels[CaseIndex] ||
+					!IsFiniteNormalizedQuat(Case.InputCanonicalRotationUe) ||
+					!IsFiniteNormalizedQuat(Case.MannyPreRangeTargetParentRelative) ||
+					!IsFiniteNormalizedQuat(Case.RecoveredCanonicalRotationUe) ||
+					!IsFiniteNonNegative(Case.AngularErrorDegrees))
+				{
+					OutError = FString::Printf(
+						TEXT("Manny local-frame round-trip control %d case %d is malformed."),
+						ControlIndex,
+						CaseIndex);
+					return false;
+				}
+			}
+
+			const FPhysAnimMannyLocalFrameRoundtripCase& ActualCase = Entry.RoundtripCases[1];
+			if (!ActualCase.InputCanonicalRotationUe.Equals(Entry.ActualDecodedRotationUe) ||
+				!ActualCase.MannyPreRangeTargetParentRelative.Equals(
+					Entry.ActualMannyPreRangeTargetParentRelative))
+			{
+				OutError = FString::Printf(
+					TEXT("Manny local-frame round-trip control %d actual case does not match captured runtime values."),
+					ControlIndex);
+				return false;
+			}
+		}
+
+		if (DecisiveControlCount != 19)
+		{
+			OutError = FString::Printf(
+				TEXT("Manny local-frame round-trip trace expected 19 decisive controls but found %d."),
+				DecisiveControlCount);
+			return false;
+		}
+
+		OutError.Reset();
+		return true;
+	}
+#endif
+
 	FQuat LimitControlRotationStep(
 		const FQuat& PreviousRotation,
 		const FQuat& TargetRotation,

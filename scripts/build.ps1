@@ -15,6 +15,7 @@ param (
     [string]$ModelOnnxSha256,
     [bool]$SourceTreeDirty = $false,
     [switch]$ActionSemanticTrace,
+    [switch]$MannyLocalFrameRoundtripTrace,
     [switch]$PolicyInputProvenanceTrace,
     [switch]$StartupChronologyTrace
 )
@@ -141,6 +142,9 @@ if ($Test) {
     }
     if ($ActionSemanticTrace) {
         $EditorArguments += "-PhysAnimActionSemanticTrace"
+    }
+    if ($MannyLocalFrameRoundtripTrace) {
+        $EditorArguments += "-PhysAnimMannyLocalFrameRoundtripTrace"
     }
     if ($PolicyInputProvenanceTrace) {
         $EditorArguments += "-PhysAnimPolicyInputProvenanceTrace"

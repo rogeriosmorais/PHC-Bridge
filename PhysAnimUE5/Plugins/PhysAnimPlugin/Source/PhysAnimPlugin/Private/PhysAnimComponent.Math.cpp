@@ -1,6 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 #include "PhysAnimBalanceReadyTransitionPrivate.h"
+#include "PhysAnimProtoMannyAdapter.h"
 
 bool UPhysAnimComponent::IsPelvisSimulatingNow() const
 {
@@ -831,6 +832,167 @@ FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
 	return (PolicyRotationInParentBindFrame *
 		MannyNeutralParentRelativeRotation.GetNormalized()).GetNormalized();
 }
+
+
+#if WITH_DEV_AUTOMATION_TESTS
+bool UPhysAnimComponent::BuildMannyLocalFrameRoundtripControlForTesting(
+	int32 ControlIndex,
+	FName MannyBoneName,
+	FName ControlName,
+	FName InitialControlChildBoneName,
+	FName InitialControlParentBoneName,
+	const FPhysAnimControlTargetSeed& MannyBindSeed,
+	const FQuat& MannyNeutralParentRelativeRotation,
+	const FQuat& ActualDecodedRotationUe,
+	const FQuat& ActualMannyPreRangeTargetParentRelative,
+	PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl& OutTrace,
+	FString& OutError) const
+{
+	OutTrace = {};
+	OutTrace.ControlIndex = ControlIndex;
+	OutTrace.MannyBoneName = MannyBoneName;
+	OutTrace.ControlName = ControlName;
+	OutTrace.InitialControlChildBoneName = InitialControlChildBoneName;
+	OutTrace.InitialControlParentBoneName = InitialControlParentBoneName;
+
+	const TArray<FName>& ObservationBodyNames = PhysAnimBridge::GetSmplObservationBoneNames();
+	if (CachedSmplObservationRestBodyComponentRotations.Num() != PhysAnimBridge::NumSmplBodies ||
+		ObservationBodyNames.Num() != PhysAnimBridge::NumSmplBodies)
+	{
+		OutError = TEXT("The synchronized SMPL observation bind frames are incomplete.");
+		return false;
+	}
+
+	for (const PhysAnimBridge::FPhysAnimProtoActionJointDescriptor& Descriptor :
+		PhysAnimBridge::GetProtoActionJointDescriptors())
+	{
+		if (Descriptor.MannyBoneName != MannyBoneName)
+		{
+			continue;
+		}
+		const int32 ObservationBodyIndex = Descriptor.ProtoJointIndex + 1;
+		if (!ObservationBodyNames.IsValidIndex(ObservationBodyIndex))
+		{
+			OutError = FString::Printf(
+				TEXT("Proto joint %d for '%s' has no corresponding observation body."),
+				Descriptor.ProtoJointIndex,
+				*MannyBoneName.ToString());
+			return false;
+		}
+		OutTrace.SourceProtoJointIndices.Add(Descriptor.ProtoJointIndex);
+		OutTrace.SourceProtoJointNames.Add(Descriptor.ProtoJointName);
+		OutTrace.ObservationBodyIndices.Add(ObservationBodyIndex);
+		OutTrace.ObservationBodyNames.Add(ObservationBodyNames[ObservationBodyIndex]);
+	}
+
+	if (OutTrace.SourceProtoJointIndices.IsEmpty())
+	{
+		OutError = FString::Printf(
+			TEXT("Control '%s' has no Proto action owner."),
+			*ControlName.ToString());
+		return false;
+	}
+
+	OutTrace.RoundtripObservationBodyIndex = OutTrace.ObservationBodyIndices[0];
+	OutTrace.RoundtripObservationBodyName =
+		ObservationBodyNames[OutTrace.RoundtripObservationBodyIndex];
+	OutTrace.ObservationParentBodyIndex =
+		ObservationBodyNames.IndexOfByKey(InitialControlParentBoneName);
+	if (!ObservationBodyNames.IsValidIndex(OutTrace.ObservationParentBodyIndex))
+	{
+		OutError = FString::Printf(
+			TEXT("Control '%s' parent '%s' is not an SMPL observation body."),
+			*ControlName.ToString(),
+			*InitialControlParentBoneName.ToString());
+		return false;
+	}
+	OutTrace.ObservationParentBodyName =
+		ObservationBodyNames[OutTrace.ObservationParentBodyIndex];
+	OutTrace.bDecisiveOneToOne =
+		OutTrace.SourceProtoJointIndices.Num() == 1 &&
+		OutTrace.ObservationBodyIndices.Num() == 1;
+	OutTrace.bOwnershipComplete =
+		InitialControlChildBoneName == MannyBoneName &&
+		OutTrace.RoundtripObservationBodyName == MannyBoneName &&
+		OutTrace.ObservationParentBodyName == InitialControlParentBoneName;
+
+	OutTrace.CachedActionAxisReferenceRotation =
+		MannyBindSeed.ParentActionAxisReferenceRotation.GetNormalized();
+	OutTrace.ActionBindParentRelativeRotation =
+		MannyBindSeed.ParentRelativeTargetRotation.GetNormalized();
+	OutTrace.PolicyNeutralParentRelativeRotation =
+		MannyNeutralParentRelativeRotation.GetNormalized();
+	OutTrace.ObservationParentBindComponentRotation =
+		CachedSmplObservationRestBodyComponentRotations[
+			OutTrace.ObservationParentBodyIndex].GetNormalized();
+	OutTrace.ActionBindComponentWorldRotation =
+		(MannyBindSeed.ParentWorldRotation *
+		 OutTrace.ObservationParentBindComponentRotation.Inverse()).GetNormalized();
+	OutTrace.ObservationBodyBindComponentRotation =
+		CachedSmplObservationRestBodyComponentRotations[
+			OutTrace.RoundtripObservationBodyIndex].GetNormalized();
+	OutTrace.ObservationBindParentRelativeRotation =
+		(OutTrace.ObservationParentBindComponentRotation.Inverse() *
+		 OutTrace.ObservationBodyBindComponentRotation).GetNormalized();
+	OutTrace.ActualDecodedRotationUe = ActualDecodedRotationUe.GetNormalized();
+	OutTrace.ActualMannyPreRangeTargetParentRelative =
+		ActualMannyPreRangeTargetParentRelative.GetNormalized();
+	OutTrace.ActionAxisVsObservationParentBindAngularDeltaDegrees =
+		FMath::RadiansToDegrees(
+			(OutTrace.ActionBindComponentWorldRotation.Inverse() *
+			 OutTrace.CachedActionAxisReferenceRotation).GetNormalized().AngularDistance(
+				OutTrace.ObservationParentBindComponentRotation));
+	OutTrace.ActionBindVsObservationBindParentRelativeAngularDeltaDegrees =
+		FMath::RadiansToDegrees(
+			OutTrace.ActionBindParentRelativeRotation.AngularDistance(
+				OutTrace.ObservationBindParentRelativeRotation));
+	OutTrace.PolicyNeutralVsActionBindParentRelativeAngularDeltaDegrees =
+		FMath::RadiansToDegrees(
+			OutTrace.PolicyNeutralParentRelativeRotation.AngularDistance(
+				OutTrace.ActionBindParentRelativeRotation));
+	OutTrace.PolicyNeutralVsObservationBindParentRelativeAngularDeltaDegrees =
+		FMath::RadiansToDegrees(
+			OutTrace.PolicyNeutralParentRelativeRotation.AngularDistance(
+				OutTrace.ObservationBindParentRelativeRotation));
+
+	auto AddRoundtripCase = [this, &MannyBindSeed, &OutTrace](
+		const FName Label,
+		const FQuat& CanonicalInput)
+	{
+		PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripCase& Case =
+			OutTrace.RoundtripCases.AddDefaulted_GetRef();
+		Case.Label = Label;
+		Case.InputCanonicalRotationUe = CanonicalInput.GetNormalized();
+		Case.MannyPreRangeTargetParentRelative =
+			ComposeProtoPolicyTargetAroundMannyNeutral(
+				MannyBindSeed,
+				OutTrace.PolicyNeutralParentRelativeRotation,
+				Case.InputCanonicalRotationUe);
+		Case.RecoveredCanonicalRotationUe =
+			PhysAnimProtoMannyAdapter::RecoverCanonicalJointRotation(
+				OutTrace.ObservationParentBindComponentRotation,
+				OutTrace.ObservationBindParentRelativeRotation,
+				Case.MannyPreRangeTargetParentRelative);
+		Case.AngularErrorDegrees = FMath::RadiansToDegrees(
+			Case.InputCanonicalRotationUe.AngularDistance(
+				Case.RecoveredCanonicalRotationUe));
+	};
+
+	const double ProbeRadians = FMath::DegreesToRadians(
+		PhysAnimBridge::MannyLocalFrameRoundtripAxisProbeDegrees);
+	AddRoundtripCase(TEXT("identity"), FQuat::Identity);
+	AddRoundtripCase(TEXT("actual_decoded"), OutTrace.ActualDecodedRotationUe);
+	AddRoundtripCase(TEXT("positive_x_10_deg"), FQuat(FVector::ForwardVector, ProbeRadians));
+	AddRoundtripCase(TEXT("negative_x_10_deg"), FQuat(FVector::ForwardVector, -ProbeRadians));
+	AddRoundtripCase(TEXT("positive_y_10_deg"), FQuat(FVector::RightVector, ProbeRadians));
+	AddRoundtripCase(TEXT("negative_y_10_deg"), FQuat(FVector::RightVector, -ProbeRadians));
+	AddRoundtripCase(TEXT("positive_z_10_deg"), FQuat(FVector::UpVector, ProbeRadians));
+	AddRoundtripCase(TEXT("negative_z_10_deg"), FQuat(FVector::UpVector, -ProbeRadians));
+
+	OutError.Reset();
+	return true;
+}
+#endif
 
 
 FQuat UPhysAnimComponent::BlendPolicyTargetRotation(
