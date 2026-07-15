@@ -506,3 +506,19 @@ Machine-readable record: `experiments/stage1/production-causal-standing.e32.json
 **Baseline.** Treat `1555e8863d00cd4fbe6fc293cac93966fca9682c` as immutable before separately preregistered upper-body restoration.
 
 Machine-readable records: `experiments/stage1/production-component-action-axis.e33.json` and `experiments/stage1/production-component-action-axis.e33.audit.json`.
+
+## E34 — Neck/head upper-body restoration candidate (2026-07-15)
+
+**Hypothesis.** Restoring ProtoMotions neck/head joints 11–12 in addition to the production lower-body set preserves the complete locked causal-standing product contract.
+
+**Configuration.** Same committed binary and locked 3+3+2 PRODUCT_RUN bundle as E33, with one development option adding only joints 11–12 to retained joints 0–7. Component-axis composition, neutral, range mapping/projection, 8 Hz acceleration plant, delayed 1.5 Normal authority, perturbation, model, and thresholds were unchanged.
+
+**Validity.** Every manifest used clean source commit `d3582083b04c5874a3cfcfd80d2d1b2a602400e2`, the locked protocol/model hashes, and only the intended `NeckHead` option. Normal traces retained nonzero lower and neck/head actions while joints 8–10 and 13–22 were exactly zero. ZeroActions stayed exactly zero; strength paths and destructive controls remained correct.
+
+**Result.** All three Normal and all three ZeroActions runs passed absolute gates with readback 1.0. Normal median recovery AUC worsened to 35.6079 versus ZeroActions 41.1418, ratio 0.865491 above the locked maximum 0.8. The bundle failed only `causal_recovery_advantage`. Normal also split into two policy/physics trajectories; repetitions 1 and 3 matched, while repetition 2 had a different first-policy input snapshot and AUC 35.7462. ZeroActions remained byte-deterministic.
+
+**Supported or falsified.** Falsified. Neck/head together can stand, but they consume the causal recovery margin and violate deterministic acceptance.
+
+**Next experiment selected.** Keep E33 lower-only production unchanged and localize the pair with separately preregistered single-joint experiments, beginning with Proto joint 11 (`Neck`).
+
+Machine-readable record: `experiments/stage1/upper-body-neck-head-restoration.e34.json`.
