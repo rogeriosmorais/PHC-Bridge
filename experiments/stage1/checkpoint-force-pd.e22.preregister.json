@@ -1,0 +1,54 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "checkpoint-force-pd-e22",
+  "recorded_utc": "2026-07-15T18:00:00Z",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "The all-action policy fails because UE applies uniform 8 Hz acceleration-mode drives instead of the exact ProtoMotions SMPL force-PD actuator response. Replacing only the post-capture drive mode and per-family Kp/Kd/effort values will improve or restore standing.",
+  "authoritative_source": {
+    "repository_commit": "4a905b998101333a2fb91f2de8e2cab4bd0db68e",
+    "checkpoint_config": "data/pretrained_models/motion_tracker/smpl/config.yaml",
+    "actuator_source": "protomotions/simulator/isaaclab/utils/robots.py::SMPL_CFG",
+    "control_rate_hz": 30,
+    "profiles": {
+      "hips_knees_ankles": {"kp_nm_per_rad": 800, "kd_nm_s_per_rad": 80, "effort_nm": 500},
+      "toes": {"kp_nm_per_rad": 500, "kd_nm_s_per_rad": 50, "effort_nm": 500},
+      "torso_spine_chest": {"kp_nm_per_rad": 1000, "kd_nm_s_per_rad": 100, "effort_nm": 500},
+      "neck_head_thorax_shoulders_elbows": {"kp_nm_per_rad": 500, "kd_nm_s_per_rad": 50, "effort_nm": 500},
+      "wrists_hands": {"kp_nm_per_rad": 300, "kd_nm_s_per_rad": 30, "effort_nm": 500}
+    },
+    "ue_conversion": {
+      "force_mode": true,
+      "kp_engine_per_rad": "kp_nm_per_rad * 10000",
+      "angular_strength_hz": "sqrt(kp_engine_per_rad) / (2*pi)",
+      "angular_damping_ratio": 0,
+      "angular_extra_damping": "kd_nm_s_per_rad * 10000",
+      "max_torque_engine_units": 5000000
+    }
+  },
+  "arms": [
+    {"name":"control_acceleration_pd","drive_mode":"acceleration", "control_data":"existing uniform 8 Hz"},
+    {"name":"experimental_checkpoint_force_pd","drive_mode":"force", "control_data":"checkpoint family profile"}
+  ],
+  "single_changed_variable": "Post-capture angular drive response: current acceleration-PD versus checkpoint force-PD profile.",
+  "locked_configuration": {
+    "base_commit":"a4cbec0ed0281dd8557c632cb6918bbf5a032c55",
+    "same_binary":true,
+    "variant":"RealOnnxPolicy",
+    "action_family":"All",
+    "action_adapter":"component parent-bind axis plus bind parent-relative neutral",
+    "range_mapping_and_safety_projection":"enabled and unchanged",
+    "targets_timing_pose_seed_perturbation":"unchanged; no perturbation",
+    "capture_window_seconds":10
+  },
+  "validity_gates": [
+    "First-policy and first-active-standing input/output/action traces are byte-identical.",
+    "Experimental intervention remains off until FirstActiveStandingPolicyInferenceSnapshot is captured.",
+    "Runtime readback reports 21/21 controls with the checkpoint family data, force mode, and 500 N*m effort after intervention.",
+    "Control reports the existing acceleration mode and data.",
+    "Target readback is 1.0 in both arms."
+  ],
+  "support": "Validity gates pass and checkpoint force-PD strictly improves the failure set, time to collapse, and major stability metrics, or passes the locked hold.",
+  "falsification": "Validity gates pass but checkpoint force-PD is neutral or worsens standing.",
+  "next_if_falsified": "Retain the known-stable current plant and subdivide the independently harmful axial/arm action families to identify the minimum failing joint subset and inspect its future-reference/retarget contract."
+}
