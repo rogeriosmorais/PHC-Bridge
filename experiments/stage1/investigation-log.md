@@ -566,3 +566,19 @@ Machine-readable record: `experiments/stage1/upper-body-head-restoration.e36.jso
 **Next experiment selected.** Restore Head only after `FirstActiveStandingPolicyInferenceSnapshot` is captured, matching the proven post-capture strength transition boundary.
 
 Machine-readable record: `experiments/stage1/upper-body-head-active-only.e37.json`.
+
+## E38 — Head restoration after first active-policy cycle (2026-07-15)
+
+**Hypothesis.** Keeping Head zero through the first active-policy conditioning cycle, then restoring it from the next active inference onward, preserves the causal benefit and eliminates the startup trajectory split.
+
+**Configuration.** Same locked 3+3+2 PRODUCT_RUN bundle and E33 plant, with only `-PhysAnimExperimentalCausalStandingUpperBody=HeadAfterFirstPolicy`. Dedicated evidence captured the first active conditioned action vector before later product sampling.
+
+**Validity.** Every first-active Head triplet was exactly `[0,0,0]` at action width 69, while later Normal policy samples contained nonzero Head behavior. Masks, strengths, model/protocol hashes, clean manifests, target readback, and destructive controls were correct.
+
+**Result.** The bundle passed at median Normal AUC 29.9655 versus ZeroActions 41.1418, ratio 0.728347. Normal repetitions 1–2 matched exactly, but repetition 3 entered the alternate first-policy input trajectory and scored 29.7989. ZeroActions remained byte-deterministic.
+
+**Supported or falsified.** Partially supported. Post-snapshot Head is causally beneficial and its timing is proven, but the upstream first-policy snapshot bifurcation remains and blocks production promotion.
+
+**Next experiment selected.** Keep E33 lower-only production unchanged; preserve Head-after-first-policy as a proven experimental candidate and test Spine+Chest (Proto joints 9–10) separately, excluding catastrophic torso joint 8.
+
+Machine-readable record: `experiments/stage1/upper-body-head-after-first-policy.e38.json`.

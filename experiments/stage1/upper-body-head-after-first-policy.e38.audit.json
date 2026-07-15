@@ -1,0 +1,326 @@
+{
+  "acceptance_checks": {
+    "bundle_pass": true,
+    "causal_ratio_at_most_0_8": true,
+    "first_active_head_exact_zero": true,
+    "later_head_nonzero_present": true,
+    "normal_deterministic": false,
+    "zero_deterministic": true
+  },
+  "behavior_commit": "a25b3143baf1f134d0a609eb3162ec44a923f78b",
+  "bundle_failed_criteria": [],
+  "bundle_status": "PASS",
+  "evidence_source_commit": "fa4b8824656c8dbc6e9f1e2c2ad630fa62900c79",
+  "first_active_conditioned_action_checks": {
+    "DropControlDispatch-1": {
+      "action_width": 69,
+      "captured": true,
+      "head_triplet": [
+        0,
+        0,
+        0
+      ],
+      "head_triplet_exact_zero": true
+    },
+    "ForcedSupportLoss-1": {
+      "action_width": 69,
+      "captured": true,
+      "head_triplet": [
+        0,
+        0,
+        0
+      ],
+      "head_triplet_exact_zero": true
+    },
+    "Normal-1": {
+      "action_width": 69,
+      "captured": true,
+      "head_triplet": [
+        0,
+        0,
+        0
+      ],
+      "head_triplet_exact_zero": true
+    },
+    "Normal-2": {
+      "action_width": 69,
+      "captured": true,
+      "head_triplet": [
+        0,
+        0,
+        0
+      ],
+      "head_triplet_exact_zero": true
+    },
+    "Normal-3": {
+      "action_width": 69,
+      "captured": true,
+      "head_triplet": [
+        0,
+        0,
+        0
+      ],
+      "head_triplet_exact_zero": true
+    },
+    "ZeroActions-1": {
+      "action_width": 69,
+      "captured": true,
+      "head_triplet": [
+        0,
+        0,
+        0
+      ],
+      "head_triplet_exact_zero": true
+    },
+    "ZeroActions-2": {
+      "action_width": 69,
+      "captured": true,
+      "head_triplet": [
+        0,
+        0,
+        0
+      ],
+      "head_triplet_exact_zero": true
+    },
+    "ZeroActions-3": {
+      "action_width": 69,
+      "captured": true,
+      "head_triplet": [
+        0,
+        0,
+        0
+      ],
+      "head_triplet_exact_zero": true
+    }
+  },
+  "hypothesis_verdict": "PARTIALLY_SUPPORTED",
+  "manifest_checks": {
+    "DropControlDispatch-1": {
+      "first_active_artifact_referenced": true,
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ForcedSupportLoss-1": {
+      "first_active_artifact_referenced": true,
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-1": {
+      "first_active_artifact_referenced": true,
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-2": {
+      "first_active_artifact_referenced": true,
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "Normal-3": {
+      "first_active_artifact_referenced": true,
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-1": {
+      "first_active_artifact_referenced": true,
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-2": {
+      "first_active_artifact_referenced": true,
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    },
+    "ZeroActions-3": {
+      "first_active_artifact_referenced": true,
+      "fixture_authority": "PRODUCT_RUN",
+      "model_hash_matches": true,
+      "protocol_hash_matches_evaluation": true,
+      "source_commit_matches": true,
+      "source_tree_clean": true
+    }
+  },
+  "normal_determinism": {
+    "first_active_conditioned_actions_sha256": false,
+    "physics_sha256": false,
+    "policy_input_snapshot_sha256": false,
+    "policy_sha256": false
+  },
+  "normal_hash_sets": {
+    "first_active_conditioned_actions_sha256": [
+      "6995283A86D536A72B32E64B20548F9361E2161C3577879DBD8F8C38B0EBF4C0",
+      "707715D478C121D76B25826C90A77F5233A195F4052AABC7970F79314B1127B5"
+    ],
+    "physics_sha256": [
+      "5925A6239DE33BD4EFB40E04328903B17F944DFCC11BF9968E733EBB5F32E832",
+      "E4FA1665630B0125A01545A5D5EF57693C13B41B1CAD041CA22B0C9F915643D3"
+    ],
+    "policy_input_snapshot_sha256": [
+      "723FD94212B9047A079C11D7ABD572ADCA78DC1C62C87E3CD861D2F9ECEC2CC3",
+      "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    ],
+    "policy_sha256": [
+      "A13A3C5378D0BB2A83DE52C44A312D5AF46716A59687F5FF9D0DBC3D35A38822",
+      "BB0266301D0D4420D6731381473C90C03F99F1C78C0FA11838C4F7999CF8FAF6"
+    ]
+  },
+  "normal_to_zero_recovery_auc_ratio": 0.7283469509509215,
+  "physics_checks": {
+    "DropControlDispatch-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "ForcedSupportLoss-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "Normal-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "Normal-2": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "Normal-3": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1.5,
+      "strength_multipliers": [
+        1,
+        1.5
+      ]
+    },
+    "ZeroActions-1": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1,
+      "strength_multipliers": [
+        1
+      ]
+    },
+    "ZeroActions-2": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1,
+      "strength_multipliers": [
+        1
+      ]
+    },
+    "ZeroActions-3": {
+      "initial_strength": 1,
+      "sample_count": 601,
+      "second_strength": 1,
+      "strength_multipliers": [
+        1
+      ]
+    }
+  },
+  "policy_checks": {
+    "Normal-1": {
+      "arms_exact_zero": true,
+      "joints_8_to_10_exact_zero": true,
+      "later_head_nonzero_present": true,
+      "lower_nonzero_present": true,
+      "neck_exact_zero": true,
+      "sample_count": 300
+    },
+    "Normal-2": {
+      "arms_exact_zero": true,
+      "joints_8_to_10_exact_zero": true,
+      "later_head_nonzero_present": true,
+      "lower_nonzero_present": true,
+      "neck_exact_zero": true,
+      "sample_count": 300
+    },
+    "Normal-3": {
+      "arms_exact_zero": true,
+      "joints_8_to_10_exact_zero": true,
+      "later_head_nonzero_present": true,
+      "lower_nonzero_present": true,
+      "neck_exact_zero": true,
+      "sample_count": 300
+    },
+    "ZeroActions-1": {
+      "all_conditioned_scalars_exact_zero": true,
+      "sample_count": 300
+    },
+    "ZeroActions-2": {
+      "all_conditioned_scalars_exact_zero": true,
+      "sample_count": 300
+    },
+    "ZeroActions-3": {
+      "all_conditioned_scalars_exact_zero": true,
+      "sample_count": 300
+    }
+  },
+  "protocol_sha256_actual": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+  "protocol_sha256_matches_locked": true,
+  "runner_experimental_tokens": [
+    "PhysAnimExperimentalCausalStandingUpperBody=HeadAfterFirstPolicy"
+  ],
+  "runner_has_only_intended_experimental_argument": true,
+  "schema_version": "physanim-e38-audit/v2",
+  "status": "VALID",
+  "validity_checks_pass": true,
+  "zero_determinism": {
+    "first_active_conditioned_actions_sha256": true,
+    "physics_sha256": true,
+    "policy_input_snapshot_sha256": true,
+    "policy_sha256": true
+  },
+  "zero_hash_sets": {
+    "first_active_conditioned_actions_sha256": [
+      "0CDB154D0961A673CE36BC8D9A3F51D7E0221857E686EDFE917A8E23F038D3F3"
+    ],
+    "physics_sha256": [
+      "CD4BA773254E8BA604B6B9BDC92535DECDE1FF0291584B4352DF5BED96AFD7F4"
+    ],
+    "policy_input_snapshot_sha256": [
+      "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA"
+    ],
+    "policy_sha256": [
+      "2F714337B24256890CECE5FE16974CB6994F15FE432D5C6EAD02372CF4D65BE5"
+    ]
+  }
+}
