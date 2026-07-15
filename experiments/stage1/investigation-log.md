@@ -662,3 +662,19 @@ Machine-readable record: `experiments/stage1/deterministic-pre-pie-fixed-step.e4
 **Next experiment selected.** Rerun DistalHands under the deterministic configuration and promote if the complete bundle remains causal and exact.
 
 Machine-readable record: `experiments/stage1/deterministic-single-thread-execution.e43.json`.
+
+## E44 — Deterministic distal wrist/hand restoration (2026-07-15)
+
+**Hypothesis.** E41's DistalHands candidate becomes exactly repeatable under the supported `-onethread` acceptance configuration.
+
+**Configuration.** Restore Proto joints 16–17 and 21–22 on top of production lower body and Spine/Chest; keep proximal arms, torso, Neck and Head masked. Run the locked bundle with `DistalHands` and `-onethread`.
+
+**Validity.** Clean preregistration commit `45c0cfbaff9959c868b43c9a5c2b7bc296904549`, locked model/protocol, exact masks/strengths and intended destructive controls.
+
+**Result.** Bundle PASS at ratio 0.752739. Normal AUC was exactly 29.6199 in all three repetitions; ZeroActions was exactly 39.3495. All streams were byte-identical within each variant.
+
+**Supported or falsified.** Supported. DistalHands is eligible for production promotion.
+
+**Next experiment selected.** Promote DistalHands into the default production mask and rerun with no PhysAnim experimental behavior arguments under `-onethread`.
+
+Machine-readable record: `experiments/stage1/deterministic-distal-hands-restoration.e44.json`.

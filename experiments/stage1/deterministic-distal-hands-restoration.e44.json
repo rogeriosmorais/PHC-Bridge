@@ -1,0 +1,23 @@
+{
+  "schema_version":"physanim-investigation-result/v1",
+  "experiment_id":"deterministic-distal-hands-restoration-e44",
+  "recorded_utc":"2026-07-15T22:47:00Z",
+  "preregistration_commit":"45c0cfbaff9959c868b43c9a5c2b7bc296904549",
+  "candidate_behavior_commit":"54ce5b188dd5934818fba8f5330f315084f05c01",
+  "deterministic_execution_evidence_commit":"217b66376606e32df39779272af4d2009bf6d6d1",
+  "status":"VALID",
+  "hypothesis_verdict":"SUPPORTED",
+  "bundle_status":"PASS",
+  "normal_to_zero_recovery_auc_ratio":0.7527391996643784,
+  "normal_recovery_auc":[29.619879918145482,29.619879918145482,29.619879918145482],
+  "zero_actions_recovery_auc":[39.34945852607651,39.34945852607651,39.34945852607651],
+  "normal_repetitions_byte_deterministic":true,
+  "zero_repetitions_byte_deterministic":true,
+  "restored_proto_joints":[16,17,21,22],
+  "execution_arguments":["-onethread","-PhysAnimExperimentalCausalStandingUpperBody=DistalHands"],
+  "destructive_controls":{"DropControlDispatch":{"failed_criteria":["target_readback"]},"ForcedSupportLoss":{"failed_criteria":["support_gap"]}},
+  "findings":["Distal wrists/hands are causally beneficial, absolutely stable and exactly repeatable under deterministic execution.","The four source-joint triplets remain nonzero while proximal arms, torso, Neck and Head remain masked.","DistalHands is eligible for a separate production-default promotion."],
+  "authoritative_bundle_artifact":"test-results/causal-standing/e44-deterministic-distal-hands/bundle-evaluation.json",
+  "audit_artifact":"experiments/stage1/deterministic-distal-hands-restoration.e44.audit.json",
+  "next":"Promote DistalHands into the default production standing mask and rerun the no-PhysAnimExperimental bundle under -onethread."
+}
