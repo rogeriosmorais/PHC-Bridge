@@ -350,3 +350,19 @@ Machine-readable record: `experiments/stage1/checkpoint-force-pd.e22.json`.
 **Next experiment selected.** Run indices 8, 9, 10, 18, 19, and 20 individually from the same binary with a zero control. If individuals pass, run preregistered contiguous pairs before adding noncontiguous mask support.
 
 Machine-readable record: `experiments/stage1/upper-action-subset-ablation.e23.json`.
+
+## E24 — Individual harmful-joint ablation (2026-07-15)
+
+**Hypothesis.** At least one individual ProtoMotions joint inside each E23-sufficient region is independently sufficient for standing failure on the Manny plant.
+
+**Configuration.** Seven same-binary arms using the E23 range mask: zero, `Torso` index 8, `Spine` 9, `Chest` 10, `R_Thorax` 18, `R_Shoulder` 19, and `R_Elbow` 20. Component-space action axis, captured standing neutral, range mapping, safety projection, 8 Hz acceleration controls, timing, pose, and no perturbation remained fixed.
+
+**Validity.** All first-policy snapshots were byte-identical, all nonselected conditioned triplets were exactly zero, target readback was 1.0, and the zero arm was physically stable with only the intentional nonzero-action criterion absent.
+
+**Result.** `Torso` alone reproduced catastrophic collapse at the same boundary as the full trunk subset: pelvis crossed 80% height at 0.333 s, root tilt crossed 45° at 0.350 s, maximum body linear speed reached 1552.28 cm/s, and maximum body angular speed reached 4097.43°/s. `Spine` and `Chest` passed. Every individual right-proximal joint also passed, with maximum root tilt below 5.60°.
+
+**Supported or falsified.** Partially supported. The trunk failure is completely localized to Proto joint 8. The right-proximal failure is an interaction among otherwise safe individual joints.
+
+**Next experiment selected.** Run right-proximal contiguous pairs 18–19 and 19–20. In parallel, test the already stable lower-only policy under the complete locked causal-standing product bundle.
+
+Machine-readable record: `experiments/stage1/individual-harmful-joint-ablation.e24.json`.
