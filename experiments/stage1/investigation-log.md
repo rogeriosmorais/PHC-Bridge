@@ -277,3 +277,22 @@ Machine-readable record: `experiments/stage1/active-standing-action-axis-frame.e
 **Next experiment selected.** Run a preregistered 2x2 active-standing intervention over action-axis frame (world/component) and neutral source (captured stable neutral/bind-calibrated neutral). Require exact pre-intervention captures. The component+bind arm should eliminate both identity and non-identity residuals; physical outcomes determine whether captured neutral is compensatory or causal.
 
 Machine-readable record: `experiments/stage1/startup-repeatability.e17.json`.
+
+
+## E18 — Action-adapter axis/neutral factorial (2026-07-15)
+
+**Hypothesis.** The live action adapter uses both the wrong parent-axis frame and a captured standing neutral that differs from observation bind. Component-space axis plus bind neutral should make action composition and observation recovery exact inverses and may improve standing.
+
+**Configuration.** Four arms on clean commit `b582421aba2891a7aa9a9627ad28be09e2bf546d`, one reused binary, locked standing-plant v2 protocol/model/timestep/window/pose, no perturbation, and unchanged range mapping, safety projection, gains, timing, and readback. The factors began only after the first policy snapshot/output: world versus component parent axis, and captured versus bind neutral.
+
+**Semantic result.** The evaluator returned `VALID/SUPPORTED`; first-policy input and output were byte-identical and readback was 1.0 in every arm. A reproduced 35.963° identity residual and up to 91.364° non-identity excess. B preserved the identity residual but reduced non-identity excess to `2.779e-11°`. C removed identity residual but retained up to 104.016° world-axis error. D produced exactly `0°` identity, actual-action, and every decisive axis-probe error.
+
+**Physical result.** All arms failed. A fell below 80 cm pelvis height at 0.267 s. D entered active standing nearly upright and delayed that crossing to 0.417 s, but still fell below 20 cm by 0.600 s and failed body linear/angular speed, pelvis height, and root tilt. D maximum body speed was 1555.042 cm/s versus A's 1119.794 cm/s; readback remained 1.0.
+
+**Supported or falsified.** The adapter hypothesis is supported semantically, while its sufficiency as the cause of standing failure is falsified. Exact action/observation inversion improves the initial transient but does not produce standing.
+
+**What was learned.** The largest measured downstream semantic distortion is now the unchanged constraint-range mapper: in D it rotates the exact pre-range target by 19.94° on average and up to 58.18°, while subsequent safety projection averages only 0.045°. No production behavior is promoted.
+
+**Next experiment selected.** Hold component+bind fixed and bypass only `MapProtoPolicyTargetToMannyConstraintRange` from first policy, retaining `AdaptParentRelativeTarget`, step limiting, gains, timing, and all locked judges. Require exact first-policy snapshot/output and readback 1.0.
+
+Machine-readable record: `experiments/stage1/action-adapter-factorial.e18.json`.
