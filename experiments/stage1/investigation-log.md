@@ -398,3 +398,19 @@ Machine-readable record: `experiments/stage1/lower-only-causal-standing.e25.json
 **Next experiment selected.** Capture the standing policy action as a calibration vector and dispatch only subsequent action deviations, preserving raw inference, timing, action mapping, plant, and locked product evaluator.
 
 Machine-readable record: `experiments/stage1/lower-joint-recovery-screen.e26.json`.
+
+## E27 — First-active policy action baseline residual (2026-07-15)
+
+**Hypothesis.** E25's persistent pose error is caused by a steady absolute policy-action bias; dispatching only current-minus-first-active action deviations should preserve response while removing the incompatible offset.
+
+**Configuration.** Same-binary PRODUCT_RUN arms: lower-only absolute control, lower-only baseline residual, and ZeroActions with the residual flag. Raw ONNX output remained stored separately; the residual vector entered the unchanged conditioning/mask/decode/mapping path. The zero path was explicitly guarded.
+
+**Result.** All arms passed absolute acceptance and target readback 1.0. Control reproduced AUC 65.6985. Residualization reduced AUC to 45.6597, a 20.0388-unit improvement, but remained worse than ZeroActions 41.1418 and above the locked candidate threshold 32.9134. ZeroActions conditioned action magnitude remained exactly zero.
+
+**Supported or falsified.** Partially supported. The steady action bias is causal, but first-active residualization alone is insufficient.
+
+**What was learned.** Before the first active-standing snapshot exists, the flag still allows absolute actions during preparation/policy blend. That can bias the body state used for calibration and explains why the residual controller does not recover to the passive trajectory.
+
+**Next experiment selected.** Hold conditioned policy actions at zero until the first active-standing baseline is captured, reset smoothing at the domain switch, then dispatch residual actions.
+
+Machine-readable record: `experiments/stage1/policy-action-baseline-residual.e27.json`.

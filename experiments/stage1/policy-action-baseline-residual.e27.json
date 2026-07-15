@@ -1,0 +1,31 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "policy-action-baseline-residual-e27",
+  "recorded_utc": "2026-07-15T19:00:00Z",
+  "source_commit": "2420d9c4ac88c4c711dfa22a7498aa381e2cf4e3",
+  "status": "VALID",
+  "hypothesis_verdict": "PARTIALLY_SUPPORTED",
+  "product_success": false,
+  "arms": {
+    "control_lower_absolute": {"status":"PASS", "recovery_auc":65.69851225230799, "target_readback_ratio":1.0},
+    "experimental_lower_residual": {"status":"PASS", "recovery_auc":45.659736465490084, "target_readback_ratio":1.0},
+    "zero_residual_guard": {"status":"PASS", "recovery_auc":41.14179622283463, "target_readback_ratio":1.0, "conditioned_action_l2_max":0.0}
+  },
+  "validity": {
+    "first_policy_snapshot_sha256_all_arms":"AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+    "all_absolute_criteria_pass":true,
+    "raw_policy_snapshot_unchanged":true,
+    "zero_actions_preserved":true
+  },
+  "causal_result": {
+    "absolute_to_residual_auc_reduction":20.038775786817906,
+    "residual_to_zero_auc_ratio":1.109817040383416,
+    "locked_candidate_max_auc":32.913436978267704
+  },
+  "causal_findings": [
+    "Subtracting the first active-standing raw action baseline removes most of E25's steady absolute-action penalty.",
+    "The residual controller remains worse than zero actions and does not satisfy causal advantage.",
+    "Absolute actions are still dispatched before the active-standing baseline snapshot exists, so the calibration state is already policy-biased."
+  ],
+  "next": "Zero conditioned actions while baseline capture is unavailable, then switch once to current-minus-baseline residual actions at the first active-standing capture."
+}
