@@ -1,0 +1,36 @@
+{
+  "schema_version": "physanim-investigation-experiment/v1",
+  "experiment_id": "checkpoint-torque-ceiling-e21-attempt1",
+  "recorded_utc": "2026-07-15T17:20:00Z",
+  "status": "INVALID",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "NOT_EVALUATED",
+  "preregistration": {
+    "path": "experiments/stage1/checkpoint-torque-ceiling.e21.preregister.json",
+    "commit": "7974d9057bd607f560e6a537cdffef1bef7a8430"
+  },
+  "behavior_commit": "3a984e84b48670d261d48635d3d0d9c8a819d3f7",
+  "invalid_reasons": [
+    "The flag was enabled during Standing_Preparation, changing 144 first-policy self-observation values and all 69 first-policy output actions before the intended intervention.",
+    "Standing states bypass ApplyRuntimeControlTuning and republish control authority through PublishStandingPhysicsControlState. The experimental physics evidence therefore showed MaxTorqueMultiplier=1.0, identical to control, so no torque intervention occurred."
+  ],
+  "preintervention_difference": {
+    "self_observation_changed_values": 144,
+    "maximum_self_observation_absolute_difference": 41.637840270996094,
+    "mimic_target_poses_changed_values": 0,
+    "terrain_changed_values": 0,
+    "actions_changed_values": 69,
+    "maximum_action_absolute_difference": 0.479092001914978
+  },
+  "published_multiplier": {
+    "control": [1.0],
+    "experimental": [1.0]
+  },
+  "conclusion": {
+    "hypothesis_supported_or_falsified": "NEITHER_INVALID_RUN",
+    "learned": "The authoritative standing-control setter is PublishStandingPhysicsControlState, not ApplyRuntimeControlTuning. The fresh intervention must remain at multiplier 1.0 through the first active-standing input/action capture and publish 10.0 only on subsequent standing-control updates.",
+    "production_promotion": false
+  },
+  "next_experiment": "E21 attempt 2: route the checkpoint ceiling through PublishStandingPhysicsControlState and gate it on FirstActiveStandingPolicyInferenceSnapshot.bCaptured. Require exact first-policy and first-active input/action artifacts, multiplier 1.0 at the pre-intervention boundary, then multiplier 10.0 in subsequent experimental physics samples."
+}
