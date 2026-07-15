@@ -1,0 +1,40 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "deterministic-single-thread-execution-e43",
+  "preregistered_utc": "2026-07-15T22:23:39Z",
+  "production_controller_commit": "3bbcfc54225293a185b23c8d211f25b853cb91f6",
+  "fixed_step_harness_commit": "64e5a8cb93eaf1bca199a7812c892a2a2419e5cb",
+  "hypothesis": "Running the causal-standing product fixture with Unreal's documented -onethread switch eliminates the recurring first-policy startup-state bifurcation by removing asynchronous engine and physics initialization ordering, while preserving the locked causal-standing verdict.",
+  "single_variable": {
+    "name": "unreal_single_thread_execution",
+    "control": "Normal UnrealEditor-Cmd threading configuration.",
+    "candidate": "Add only -onethread to every product arm."
+  },
+  "local_engine_source_basis": [
+    "GenericPlatformMisc.cpp treats -onethread as a rendering/thread-disabling compatibility option.",
+    "App.cpp includes -onethread in the OnlyOneThread decision used by FApp thread capability."
+  ],
+  "controller_behavior_changes": [],
+  "source_changes_after_preregistration": [],
+  "locked_bundle": ["Normal x3","ZeroActions x3","DropControlDispatch x1","ForcedSupportLoss x1"],
+  "acceptance": {
+    "bundle_status": "PASS",
+    "normal_to_zero_recovery_auc_ratio_max": 0.8,
+    "normal_repetitions_byte_deterministic": true,
+    "zero_actions_repetitions_byte_deterministic": true,
+    "normal_first_policy_snapshot_unique_hash_count": 1,
+    "zero_first_policy_snapshot_unique_hash_count": 1,
+    "destructive_controls_fail_only_intended_criteria": true,
+    "all_manifests_source_tree_clean": true,
+    "runner_has_no_PhysAnimExperimental_arguments": true,
+    "runner_contains_onethread": true
+  },
+  "falsification": [
+    "More than one Normal or ZeroActions first-policy snapshot hash.",
+    "Any locked bundle failure or ratio above 0.8.",
+    "Any destructive control losing its intended failure.",
+    "Any source behavior change beyond preregistration/evidence."
+  ],
+  "next_if_supported": "Make single-thread execution part of the causal-standing acceptance harness, rerun E41 DistalHands, promote if deterministic, and continue remaining joints.",
+  "next_if_falsified": "Stop pursuing cross-process exact startup determinism; preregister deterministic same-state replay or in-process counterfactual acceptance, then continue joint restoration under that architecture."
+}
