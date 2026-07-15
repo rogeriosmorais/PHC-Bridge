@@ -293,6 +293,31 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	TestTrue(
 		TEXT("Explicit development flag enables the component-space action axis"),
 		Component->IsExperimentalComponentActionAxisEnabledForTesting());
+	TestFalse(
+		TEXT("Configured component-space action axis remains inactive during standing preparation"),
+		UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::Standing_Preparation));
+	TestFalse(
+		TEXT("Configured component-space action axis remains inactive during full simulation activation"),
+		UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::Standing_FullSimulationActivation));
+	TestFalse(
+		TEXT("Configured component-space action axis remains inactive during policy blend"),
+		UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend));
+	TestTrue(
+		TEXT("Configured component-space action axis becomes effective only in active standing"),
+		UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(
+		TEXT("Unconfigured component-space action axis remains inactive in active standing"),
+		UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
 	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
 	TestFalse(
 		TEXT("Omitting the development flag restores the cached-world action-axis path"),

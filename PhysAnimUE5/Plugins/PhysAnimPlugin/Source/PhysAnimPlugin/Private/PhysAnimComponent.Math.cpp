@@ -834,6 +834,13 @@ FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
 }
 
 #if WITH_DEV_AUTOMATION_TESTS
+bool UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
+	bool bConfigured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bConfigured && InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+}
+
 FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
 	const FQuat& ActionBindComponentWorldRotation,
 	const FQuat& CachedWorldActionAxisRotation)

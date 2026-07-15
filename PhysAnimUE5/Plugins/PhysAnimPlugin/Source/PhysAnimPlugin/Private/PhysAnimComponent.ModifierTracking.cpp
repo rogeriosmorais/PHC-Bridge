@@ -243,6 +243,10 @@ void UPhysAnimComponent::ApplyControlTargets(
 	PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace PendingMannyLocalFrameRoundtripTrace;
 	TMap<FName, PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl>
 		PendingMannyLocalFrameRoundtripControls;
+	const bool bUseExperimentalComponentActionAxisThisStep =
+		ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
+			bExperimentalComponentActionAxisEnabledForTesting,
+			RuntimeState);
 	bool bCaptureActionSemanticTraceThisStep =
 		bActionSemanticTraceEnabledForTesting &&
 		StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
@@ -282,7 +286,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		PendingMannyLocalFrameRoundtripTrace.CaptureScope =
 			TEXT("first_active_standing_pre_range_target");
 		PendingMannyLocalFrameRoundtripTrace.ConfiguredActionAxisMode =
-			bExperimentalComponentActionAxisEnabledForTesting
+			bUseExperimentalComponentActionAxisThisStep
 				? PhysAnimBridge::MannyLocalFrameRoundtripComponentAxisMode
 				: PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode;
 		PendingMannyLocalFrameRoundtripTrace.AxisProbeDegrees =
@@ -604,7 +608,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 					PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode;
 				FQuat EffectiveActionAxisRotation =
 					BindSeed->ParentActionAxisReferenceRotation.GetNormalized();
-				if (bExperimentalComponentActionAxisEnabledForTesting)
+				if (bUseExperimentalComponentActionAxisThisStep)
 				{
 					const FInitialPhysicsControl* const ExperimentalInitialControl =
 						FindInitialControl(ControlName);

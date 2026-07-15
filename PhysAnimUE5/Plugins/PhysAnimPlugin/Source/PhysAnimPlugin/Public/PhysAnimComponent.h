@@ -1490,6 +1490,9 @@ public:
 	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
 	bool IsMannyLocalFrameRoundtripTraceEnabledForTesting() const { return bMannyLocalFrameRoundtripTraceEnabledForTesting; }
 	bool IsExperimentalComponentActionAxisEnabledForTesting() const { return bExperimentalComponentActionAxisEnabledForTesting; }
+	static bool ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
+		bool bConfigured,
+		EPhysAnimRuntimeState InRuntimeState);
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
 	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
