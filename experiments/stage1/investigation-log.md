@@ -382,3 +382,19 @@ Machine-readable record: `experiments/stage1/individual-harmful-joint-ablation.e
 **Next experiment selected.** Screen Proto lower-body joints 0–7 individually under the same product perturbation and evaluator. A viable candidate must pass all absolute gates and have recovery AUC no greater than 32.9134 against the observed deterministic zero reference.
 
 Machine-readable record: `experiments/stage1/lower-only-causal-standing.e25.json`.
+
+## E26 — Individual lower-joint recovery screen (2026-07-15)
+
+**Hypothesis.** One individual lower-body ProtoMotions joint can retain nonzero policy behavior and reduce post-impulse pose-error AUC below the zero-action reference.
+
+**Configuration.** Eight PRODUCT_RUN Normal screens under the locked causal-standing perturbation, each retaining exactly one lower-body Proto joint through the existing range mask. The E25 deterministic ZeroActions median AUC of 41.1418 supplied the screening reference; the locked candidate threshold was 32.9134.
+
+**Result.** No arm crossed the threshold. `R_Ankle` was best at AUC 40.1759. `L_Knee`, `L_Toe`, `R_Hip`, and `R_Toe` were effectively neutral around 41–42. `L_Ankle` and `R_Knee` worsened AUC to 47.2274 and 53.0417. `L_Hip` lost standing and failed recovery with AUC 115.5441.
+
+**Supported or falsified.** Falsified. Static single-joint selection cannot establish causal advantage.
+
+**What was learned.** The useful signal, if present, is not an isolated absolute joint target. The policy carries a steady action bias that changes pose even before perturbation; safe single-joint actions mostly reproduce the passive trajectory rather than improve it.
+
+**Next experiment selected.** Capture the standing policy action as a calibration vector and dispatch only subsequent action deviations, preserving raw inference, timing, action mapping, plant, and locked product evaluator.
+
+Machine-readable record: `experiments/stage1/lower-joint-recovery-screen.e26.json`.
