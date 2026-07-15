@@ -7,13 +7,22 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-from scripts.evaluate_manny_local_frame_roundtrip import (
-    ANGULAR_TOLERANCE_DEGREES,
-    COMPONENT_AXIS_MODE,
-    EvaluationError,
-    WORLD_AXIS_MODE,
-    evaluate_trace,
-)
+try:
+    from scripts.evaluate_manny_local_frame_roundtrip import (
+        ANGULAR_TOLERANCE_DEGREES,
+        COMPONENT_AXIS_MODE,
+        EvaluationError,
+        WORLD_AXIS_MODE,
+        evaluate_trace,
+    )
+except ModuleNotFoundError:  # Direct execution via `python scripts/...`.
+    from evaluate_manny_local_frame_roundtrip import (
+        ANGULAR_TOLERANCE_DEGREES,
+        COMPONENT_AXIS_MODE,
+        EvaluationError,
+        WORLD_AXIS_MODE,
+        evaluate_trace,
+    )
 
 EVALUATION_SCHEMA = "physanim-action-adapter-factorial-evaluation/v1"
 EXPECTED_MODES = {
@@ -128,7 +137,7 @@ def evaluate_factorial(
     manifests: dict[str, dict] = {}
     traces: dict[str, dict] = {}
     singles: dict[str, dict] = {}
-    first_policy_rows: dict[str, dict] = {}
+    first_policy_snapshots: dict[str, dict] = {}
     readback_ratios: dict[str, float] = {}
 
     for name, root in roots.items():
@@ -145,7 +154,9 @@ def evaluate_factorial(
             raise ActionAdapterFactorialError(f"{name} configured action-axis mode is wrong")
         if traces[name].get("effective_action_axis_mode") != EXPECTED_MODES[name]:
             raise ActionAdapterFactorialError(f"{name} effective action-axis mode is wrong")
-        first_policy_rows[name] = _read_first_jsonl(root / "policy.jsonl", f"{name} policy")
+        first_policy_snapshots[name] = _read_json(
+            root / "policy-input-snapshot.json", f"{name} first-policy snapshot"
+        )
         policy_rows = _read_jsonl(root / "policy.jsonl", f"{name} policy")
         attempts = sum(int(row.get("target_write_attempt_count", 0)) for row in policy_rows)
         matches = sum(int(row.get("target_readback_match_count", 0)) for row in policy_rows)
@@ -172,13 +183,20 @@ def evaluate_factorial(
 
     snapshot_paths = [root / "policy-input-snapshot.json" for root in roots.values()]
     if not _same_bytes(snapshot_paths):
-        raise ActionAdapterFactorialError("First-policy input snapshots differ across arms")
-    reference_row = first_policy_rows["A_world_captured"]
-    for name, row in first_policy_rows.items():
-        if row.get("raw_actions") != reference_row.get("raw_actions"):
-            raise ActionAdapterFactorialError(f"First-policy raw actions differ in {name}")
-        if row.get("conditioned_actions") != reference_row.get("conditioned_actions"):
-            raise ActionAdapterFactorialError(f"First-policy conditioned actions differ in {name}")
+        raise ActionAdapterFactorialError(
+            "First-policy input/output snapshots differ across arms"
+        )
+    reference_snapshot = first_policy_snapshots["A_world_captured"]
+    for name, snapshot in first_policy_snapshots.items():
+        for field in ("self_observation", "mimic_target_poses", "terrain"):
+            if snapshot.get(field) != reference_snapshot.get(field):
+                raise ActionAdapterFactorialError(
+                    f"First-policy input field {field} differs in {name}"
+                )
+        if snapshot.get("actions") != reference_snapshot.get("actions"):
+            raise ActionAdapterFactorialError(
+                f"First-policy model output actions differ in {name}"
+            )
 
     metrics = {
         name: _arm_metrics(traces[name], singles[name])
