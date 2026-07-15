@@ -48,6 +48,8 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalConstraintRangeRemapBypassFromFirstPolicy"));
 	bExperimentalPolicyActionBaselineResidualEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalPolicyActionBaselineResidual"));
+	bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalPolicyActionZeroUntilBaseline"));
 	bExperimentalPolicyActionBaselineResidualStartedForTesting = false;
 	bExperimentalCheckpointTorqueCeilingEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalCheckpointTorqueCeiling"));

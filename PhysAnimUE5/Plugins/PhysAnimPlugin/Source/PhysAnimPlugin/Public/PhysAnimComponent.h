@@ -1551,6 +1551,15 @@ public:
 		bool bForceZeroActions,
 		TConstArrayView<float> BaselineActions,
 		TArray<float>& InOutActions);
+	bool IsExperimentalPolicyActionZeroUntilBaselineEnabledForTesting() const
+	{
+		return bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting;
+	}
+	static bool ApplyExperimentalPolicyActionZeroUntilBaselineForTesting(
+		bool bConfigured,
+		bool bBaselineAvailable,
+		bool bForceZeroActions,
+		TArray<float>& InOutActions);
 	bool IsExperimentalCheckpointTorqueCeilingEnabledForTesting() const
 	{
 		return bExperimentalCheckpointTorqueCeilingEnabledForTesting;
@@ -2557,6 +2566,7 @@ private:
 	int32 ExperimentalActionJointRangeStartForTesting = INDEX_NONE;
 	int32 ExperimentalActionJointRangeCountForTesting = 0;
 	bool bExperimentalPolicyActionBaselineResidualEnabledForTesting = false;
+	bool bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting = false;
 	bool bExperimentalPolicyActionBaselineResidualStartedForTesting = false;
 	bool bExperimentalCheckpointTorqueCeilingEnabledForTesting = false;
 	bool bExperimentalCheckpointForcePdEnabledForTesting = false;

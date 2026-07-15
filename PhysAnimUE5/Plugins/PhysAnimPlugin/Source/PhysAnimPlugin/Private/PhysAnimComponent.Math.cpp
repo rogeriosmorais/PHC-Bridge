@@ -1000,6 +1000,21 @@ bool UPhysAnimComponent::ApplyExperimentalPolicyActionBaselineResidualForTesting
 	return true;
 }
 
+bool UPhysAnimComponent::ApplyExperimentalPolicyActionZeroUntilBaselineForTesting(
+	bool bConfigured,
+	bool bBaselineAvailable,
+	bool bForceZeroActions,
+	TArray<float>& InOutActions)
+{
+	if (!bConfigured || bBaselineAvailable || bForceZeroActions)
+	{
+		return false;
+	}
+
+	InOutActions.Init(0.0f, InOutActions.Num());
+	return true;
+}
+
 FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
 	const FQuat& ActionBindComponentWorldRotation,
 	const FQuat& CachedWorldActionAxisRotation)

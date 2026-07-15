@@ -147,7 +147,10 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 	const TArray<float>* ActionsForConditioning = &ActionOutputBuffer;
 #if WITH_DEV_AUTOMATION_TESTS
 	TArray<float> BaselineResidualActions;
-	if (bExperimentalPolicyActionBaselineResidualEnabledForTesting)
+	const bool bResidualModeConfigured =
+		bExperimentalPolicyActionBaselineResidualEnabledForTesting ||
+		bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting;
+	if (bResidualModeConfigured)
 	{
 		BaselineResidualActions = ActionOutputBuffer;
 		const bool bActionsExplicitlyZero = !ActionOutputBuffer.ContainsByPredicate(
@@ -155,19 +158,32 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 			{
 				return !FMath::IsNearlyZero(Value);
 			});
-		const bool bResidualApplied = ApplyExperimentalPolicyActionBaselineResidualForTesting(
-			true,
-			EffectiveSettings.bForceZeroActions || bActionsExplicitlyZero,
-			FirstActiveStandingPolicyInferenceSnapshot.Actions,
+		const bool bForceZeroActions = EffectiveSettings.bForceZeroActions || bActionsExplicitlyZero;
+		const bool bBaselineAvailable =
+			FirstActiveStandingPolicyInferenceSnapshot.Actions.Num() == ActionOutputBuffer.Num();
+		const bool bPreCaptureZeroApplied = ApplyExperimentalPolicyActionZeroUntilBaselineForTesting(
+			bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting,
+			bBaselineAvailable,
+			bForceZeroActions,
 			BaselineResidualActions);
-		if (bResidualApplied)
+		const bool bResidualApplied = !bPreCaptureZeroApplied &&
+			ApplyExperimentalPolicyActionBaselineResidualForTesting(
+				true,
+				bForceZeroActions,
+				FirstActiveStandingPolicyInferenceSnapshot.Actions,
+				BaselineResidualActions);
+		if (bPreCaptureZeroApplied || bResidualApplied)
 		{
 			ActionsForConditioning = &BaselineResidualActions;
-			if (!bExperimentalPolicyActionBaselineResidualStartedForTesting)
-			{
-				PreviousConditionedActionBuffer.Reset();
-				bExperimentalPolicyActionBaselineResidualStartedForTesting = true;
-			}
+		}
+		if (bPreCaptureZeroApplied)
+		{
+			PreviousConditionedActionBuffer.Reset();
+		}
+		else if (bResidualApplied && !bExperimentalPolicyActionBaselineResidualStartedForTesting)
+		{
+			PreviousConditionedActionBuffer.Reset();
+			bExperimentalPolicyActionBaselineResidualStartedForTesting = true;
 		}
 	}
 #endif

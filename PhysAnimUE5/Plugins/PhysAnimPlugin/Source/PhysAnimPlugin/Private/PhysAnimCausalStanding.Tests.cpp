@@ -548,6 +548,43 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			MismatchedResidualActions));
 	TestEqual(TEXT("Mismatched residual preserves action"), MismatchedResidualActions[0], 0.50f);
 	TestFalse(
+		TEXT("Policy action zero-until-baseline is disabled by default"),
+		Component->IsExperimentalPolicyActionZeroUntilBaselineEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalPolicyActionZeroUntilBaseline"));
+	TestTrue(
+		TEXT("Explicit development flag enables policy action zero-until-baseline"),
+		Component->IsExperimentalPolicyActionZeroUntilBaselineEnabledForTesting());
+	TArray<float> PreBaselineActions = { 0.50f, -0.25f, 0.75f };
+	TestTrue(
+		TEXT("Configured pre-baseline policy actions are zeroed"),
+		UPhysAnimComponent::ApplyExperimentalPolicyActionZeroUntilBaselineForTesting(
+			true,
+			false,
+			false,
+			PreBaselineActions));
+	for (const float Value : PreBaselineActions)
+	{
+		TestEqual(TEXT("Pre-baseline action is exactly zero"), Value, 0.0f);
+	}
+	TArray<float> BaselineAvailableActions = { 0.50f, -0.25f, 0.75f };
+	TestFalse(
+		TEXT("Available baseline bypasses pre-baseline zeroing"),
+		UPhysAnimComponent::ApplyExperimentalPolicyActionZeroUntilBaselineForTesting(
+			true,
+			true,
+			false,
+			BaselineAvailableActions));
+	TestEqual(TEXT("Available-baseline action is preserved"), BaselineAvailableActions[0], 0.50f);
+	TArray<float> ExplicitZeroActions = { 0.0f, 0.0f, 0.0f };
+	TestFalse(
+		TEXT("Explicit ZeroActions bypasses pre-baseline zeroing"),
+		UPhysAnimComponent::ApplyExperimentalPolicyActionZeroUntilBaselineForTesting(
+			true,
+			false,
+			true,
+			ExplicitZeroActions));
+	TestFalse(
 		TEXT("Checkpoint torque ceiling is disabled by default"),
 		Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(
@@ -674,6 +711,7 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			Component->GetExperimentalActionJointRangeStartForTesting() != INDEX_NONE ||
 			Component->GetExperimentalActionJointRangeCountForTesting() != 0 ||
 			Component->IsExperimentalPolicyActionBaselineResidualEnabledForTesting() ||
+			Component->IsExperimentalPolicyActionZeroUntilBaselineEnabledForTesting() ||
 			Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting() ||
 			Component->IsExperimentalCheckpointForcePdEnabledForTesting());
 	TestFalse(
