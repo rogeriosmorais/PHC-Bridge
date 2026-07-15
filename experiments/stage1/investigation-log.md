@@ -366,3 +366,19 @@ Machine-readable record: `experiments/stage1/upper-action-subset-ablation.e23.js
 **Next experiment selected.** Run right-proximal contiguous pairs 18–19 and 19–20. In parallel, test the already stable lower-only policy under the complete locked causal-standing product bundle.
 
 Machine-readable record: `experiments/stage1/individual-harmful-joint-ablation.e24.json`.
+
+## E25 — Lower-only full causal-standing bundle (2026-07-15)
+
+**Hypothesis.** The E20-proven stable lower-body ONNX action subset supplies causal perturbation recovery while incompatible upper-body outputs are unnecessary for the locked product contract.
+
+**Configuration.** Three `Normal`, three `ZeroActions`, one `DropControlDispatch`, and one `ForcedSupportLoss` PRODUCT_RUN on the locked causal-standing protocol. The Normal candidate retained Proto joints 0–7 with component-space action axis, captured standing neutral, protective range mapping/projection, and the current 8 Hz acceleration plant.
+
+**Validity and absolute result.** All three Normal and all three ZeroActions repetitions passed every absolute criterion with target readback 1.0. Drop dispatch failed only target readback and forced support loss failed support gap, as intended.
+
+**Causal result.** The bundle failed only `causal_recovery_advantage`. Median Normal recovery AUC was 65.6985 versus ZeroActions 41.1418, a ratio of 1.59688 against the locked maximum 0.8. Lower-only therefore stands but is not causal standing.
+
+**What was learned.** The deficit is persistent pose error rather than a missed recovery deadline. Normal post-impulse RMS averaged 8.217° versus zero 5.142°, and `foot_l` was the maximum-error bone in 476 of 481 post-impulse samples. No acceptance threshold changed.
+
+**Next experiment selected.** Screen Proto lower-body joints 0–7 individually under the same product perturbation and evaluator. A viable candidate must pass all absolute gates and have recovery AUC no greater than 32.9134 against the observed deterministic zero reference.
+
+Machine-readable record: `experiments/stage1/lower-only-causal-standing.e25.json`.

@@ -1,0 +1,45 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "lower-only-causal-standing-e25",
+  "recorded_utc": "2026-07-15T18:05:00Z",
+  "source_commit": "d15c8563ab9176e19e6e1915087729c9663f7fb8",
+  "status": "VALID",
+  "hypothesis_verdict": "FALSIFIED",
+  "product_success": false,
+  "bundle_status": "FAIL",
+  "bundle_failed_criteria": ["causal_recovery_advantage"],
+  "fixture_authority": "PRODUCT_RUN",
+  "protocol_sha256": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+  "absolute_and_control_results": {
+    "normal_repetitions_passed": 3,
+    "zero_actions_repetitions_passed": 3,
+    "drop_control_dispatch_failed_for": ["target_readback"],
+    "forced_support_loss_failed_for": ["support_gap"],
+    "target_readback_match_ratio_normal": 1.0,
+    "target_readback_match_ratio_zero": 1.0
+  },
+  "causal_result": {
+    "median_normal_recovery_auc": 65.69851225230799,
+    "median_zero_actions_recovery_auc": 41.14179622283463,
+    "normal_to_zero_recovery_auc_ratio": 1.5968800170140318,
+    "locked_maximum_ratio": 0.8,
+    "maximum_passing_normal_auc_against_observed_zero": 32.913436978267704
+  },
+  "diagnostic_decomposition": {
+    "normal_pre_impulse_pose_rms_mean_deg": 12.118717713601916,
+    "zero_pre_impulse_pose_rms_mean_deg": 4.987945608653219,
+    "normal_post_impulse_pose_rms_mean_deg": 8.216833437730344,
+    "zero_post_impulse_pose_rms_mean_deg": 5.142333911554765,
+    "normal_post_impulse_lower_limb_auc": 95.3465468772822,
+    "zero_post_impulse_lower_limb_auc": 48.81129123999378,
+    "normal_dominant_post_impulse_max_error_bone": "foot_l",
+    "normal_dominant_bone_sample_count": 476,
+    "post_impulse_sample_count": 481
+  },
+  "causal_findings": [
+    "Lower-only policy actions satisfy every absolute standing and destructive-control gate.",
+    "They do not provide causal recovery advantage; they increase post-impulse pose-error AUC by about 59.7 percent over zero actions.",
+    "The failure is dominated by persistent left-foot tracking error rather than a transient inability to recover."
+  ],
+  "next": "Screen each lower-body Proto joint individually under the locked product perturbation, comparing absolute acceptance and recovery AUC to the deterministic zero-action reference."
+}
