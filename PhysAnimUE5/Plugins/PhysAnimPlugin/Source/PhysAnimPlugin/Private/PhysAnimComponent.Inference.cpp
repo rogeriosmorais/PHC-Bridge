@@ -97,6 +97,8 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		TerrainBuffer,
 		ActionOutputBuffer);
 #if WITH_DEV_AUTOMATION_TESTS
+	bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting =
+		FirstActiveStandingPolicyInferenceSnapshot.bCaptured;
 	FirstActiveStandingPolicyInferenceSnapshot.CaptureFirstIf(
 		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing,
 		SelfObservationBuffer,
@@ -202,10 +204,15 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 		bRestoreCausalStandingNeck =
 			bExperimentalCausalStandingNeckEnabledForTesting;
 		bRestoreCausalStandingHead =
-			ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
-				bExperimentalCausalStandingHeadEnabledForTesting,
-				bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting,
-				RuntimeState);
+			bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting
+				? ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
+					bExperimentalCausalStandingHeadEnabledForTesting,
+					bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting,
+					RuntimeState)
+				: ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+					bExperimentalCausalStandingHeadEnabledForTesting,
+					bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting,
+					RuntimeState);
 #endif
 		ApplyCausalStandingPolicyActionCompatibility(
 			IsStandingActivationRuntimeState(RuntimeState),

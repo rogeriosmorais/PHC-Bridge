@@ -1564,9 +1564,17 @@ public:
 	{
 		return bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting;
 	}
+	bool IsExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting() const
+	{
+		return bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting;
+	}
 	static bool ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
 		bool bHeadEnabled,
 		bool bActiveOnly,
+		EPhysAnimRuntimeState InRuntimeState);
+	static bool ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
+		bool bHeadEnabled,
+		bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
 		EPhysAnimRuntimeState InRuntimeState);
 	EPhysAnimExperimentalActionFamilyMask GetExperimentalActionFamilyMaskForTesting() const
 	{
@@ -2634,6 +2642,8 @@ private:
 	bool bExperimentalCausalStandingNeckEnabledForTesting = false;
 	bool bExperimentalCausalStandingHeadEnabledForTesting = false;
 	bool bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting = false;
+	bool bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting = false;
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting = false;
 	EPhysAnimExperimentalActionFamilyMask ExperimentalActionFamilyMaskForTesting =
 		EPhysAnimExperimentalActionFamilyMask::All;
 	int32 ExperimentalActionJointRangeStartForTesting = INDEX_NONE;

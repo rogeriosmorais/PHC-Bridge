@@ -963,6 +963,16 @@ bool UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadForRuntimeSt
 		: IsStandingActivationRuntimeState(InRuntimeState);
 }
 
+bool UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
+	bool bHeadEnabled,
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bHeadEnabled &&
+		bFirstActiveStandingPolicyCapturedBeforeCurrentInference &&
+		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+}
+
 bool UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
 	bool bConfigured,
 	bool bFirstActiveStandingPolicyCaptured,

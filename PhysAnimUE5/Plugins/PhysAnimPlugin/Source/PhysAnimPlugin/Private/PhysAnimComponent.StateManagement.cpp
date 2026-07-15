@@ -30,6 +30,7 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	FirstPolicyInferenceSnapshot.Reset();
 #if WITH_DEV_AUTOMATION_TESTS
 	FirstActiveStandingPolicyInferenceSnapshot.Reset();
+	bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting = false;
 	FirstActiveStandingActionSemanticTrace.Reset();
 	FirstActiveStandingMannyLocalFrameRoundtripTrace.Reset();
 	FirstPolicyInputProvenanceSnapshot.Reset();

@@ -476,6 +476,32 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			false,
 			EPhysAnimRuntimeState::BalanceActive_Standing));
 	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCausalStandingUpperBody=HeadAfterFirstPolicy"));
+	TestTrue(
+		TEXT("E38 option enables head restoration"),
+		Component->IsExperimentalCausalStandingHeadEnabledForTesting());
+	TestTrue(
+		TEXT("E38 option records post-snapshot activation"),
+		Component->IsExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting());
+	TestFalse(
+		TEXT("E38 keeps head masked on the first active-policy inference"),
+		UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
+			true,
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestTrue(
+		TEXT("E38 restores head after the first active-policy snapshot existed before inference"),
+		UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
+			true,
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(
+		TEXT("E38 remains inactive outside active standing after capture"),
+		UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
+			true,
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend));
+	Component->ApplyProductVariantFromCommandLineForTesting(
 		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalActionFamily=LowerOnly"));
 	TestEqual(
 		TEXT("Command line selects the lower-body-only action mask"),
