@@ -740,3 +740,15 @@ Machine-readable record: `experiments/stage1/production-head-after-first-policy.
 **Next experiment selected.** Neck at a reduced delayed scale.
 
 Machine-readable record: `experiments/stage1/scaled-delayed-restoration-framework.e48.json`.
+
+## E49 — Neck at 50% after first active policy cycle (2026-07-15)
+
+**Hypothesis.** Neck joint 11 at 0.5 delayed scale preserves the locked causal-standing contract.
+
+**Result.** Valid deterministic bundle, but FAIL only on causal recovery. Normal AUC was exactly 31.9974, ZeroActions exactly 39.3495, ratio 0.813160. Absolute standing and destructive controls remained correct; first active Neck was zero and later Neck was nonzero.
+
+**Supported or falsified.** Falsified at scale 0.5.
+
+**Next experiment selected.** Neck at 0.25 with identical timing and execution.
+
+Machine-readable record: `experiments/stage1/scaled-delayed-neck.e49.json`.
