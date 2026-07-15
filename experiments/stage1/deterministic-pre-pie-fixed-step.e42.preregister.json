@@ -1,0 +1,34 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "deterministic-pre-pie-fixed-step-e42",
+  "preregistered_utc": "2026-07-15T22:11:24Z",
+  "production_baseline_commit": "3bbcfc54225293a185b23c8d211f25b853cb91f6",
+  "e41_candidate_commit": "54ce5b188dd5934818fba8f5330f315084f05c01",
+  "hypothesis": "Configuring the locked 60 Hz fixed timestep before FStartPIECommand, rather than on the first capture-command update after PIE startup, eliminates the recurring two-state first-policy snapshot bifurcation without changing controller behavior or causal standing performance.",
+  "single_variable": {
+    "name": "causal_standing_fixed_step_activation_order",
+    "control": "Configure fixed timestep inside FCausalStandingCaptureCommand after PIE has started.",
+    "candidate": "Configure fixed timestep in a dedicated latent command before FStartPIECommand and restore it after FEndPlayMapCommand."
+  },
+  "controller_behavior_changes": [],
+  "test_harness_change_only": true,
+  "locked_fixed_delta_seconds": 0.016666666666666666,
+  "acceptance": {
+    "focused_lifecycle_contract_passes": true,
+    "unchanged_e40_no_flag_bundle_status": "PASS",
+    "normal_to_zero_recovery_auc_ratio_max": 0.8,
+    "normal_repetitions_byte_deterministic": true,
+    "zero_actions_repetitions_byte_deterministic": true,
+    "destructive_controls_fail_only_intended_criteria": true,
+    "all_manifests_source_tree_clean": true,
+    "no_experimental_behavior_arguments": true
+  },
+  "falsification": [
+    "Any changed controller source file outside the causal-standing test harness.",
+    "Any remaining multiple first-policy snapshot hash families in Normal or ZeroActions.",
+    "Any locked bundle failure or causal ratio above 0.8.",
+    "Any destructive control losing its intended discrimination."
+  ],
+  "next_if_supported": "Use the corrected deterministic harness to rerun E41 DistalHands, then continue remaining joints.",
+  "next_if_falsified": "Instrument the pre-PIE/PIE startup frame chronology and physics initialization order; do not reinterpret joint restoration failures as deterministic."
+}
