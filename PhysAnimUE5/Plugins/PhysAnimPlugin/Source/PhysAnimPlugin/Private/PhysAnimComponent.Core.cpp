@@ -48,6 +48,9 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalConstraintRangeRemapBypassFromFirstPolicy"));
 	bExperimentalCausalStandingSpineChestEnabledForTesting = false;
 	bExperimentalCausalStandingDistalHandsEnabledForTesting = false;
+	ExperimentalCausalStandingScaledRegionForTesting =
+		EPhysAnimExperimentalCausalStandingScaledRegion::None;
+	ExperimentalCausalStandingScaledScaleForTesting = 1.0f;
 	bExperimentalCausalStandingNeckHeadEnabledForTesting = false;
 	bExperimentalCausalStandingNeckEnabledForTesting = false;
 	bExperimentalCausalStandingHeadEnabledForTesting = false;
@@ -79,6 +82,45 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 			bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting ||
 			bExperimentalCausalStandingNeckHeadEnabledForTesting;
 	}
+	FString ExperimentalCausalStandingScaledRegionName;
+	if (CommandLine &&
+		FParse::Value(
+			CommandLine,
+			TEXT("PhysAnimExperimentalCausalStandingScaledRegion="),
+			ExperimentalCausalStandingScaledRegionName))
+	{
+		if (ExperimentalCausalStandingScaledRegionName == TEXT("Torso"))
+		{
+			ExperimentalCausalStandingScaledRegionForTesting =
+				EPhysAnimExperimentalCausalStandingScaledRegion::Torso;
+		}
+		else if (ExperimentalCausalStandingScaledRegionName == TEXT("Neck"))
+		{
+			ExperimentalCausalStandingScaledRegionForTesting =
+				EPhysAnimExperimentalCausalStandingScaledRegion::Neck;
+		}
+		else if (ExperimentalCausalStandingScaledRegionName == TEXT("LeftProximal"))
+		{
+			ExperimentalCausalStandingScaledRegionForTesting =
+				EPhysAnimExperimentalCausalStandingScaledRegion::LeftProximal;
+		}
+		else if (ExperimentalCausalStandingScaledRegionName == TEXT("RightProximal"))
+		{
+			ExperimentalCausalStandingScaledRegionForTesting =
+				EPhysAnimExperimentalCausalStandingScaledRegion::RightProximal;
+		}
+	}
+	if (CommandLine)
+	{
+		FParse::Value(
+			CommandLine,
+			TEXT("PhysAnimExperimentalCausalStandingScaledScale="),
+			ExperimentalCausalStandingScaledScaleForTesting);
+	}
+	ExperimentalCausalStandingScaledScaleForTesting = FMath::Clamp(
+		ExperimentalCausalStandingScaledScaleForTesting,
+		0.0f,
+		1.0f);
 	bExperimentalPolicyActionBaselineResidualEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalPolicyActionBaselineResidual"));
 	bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting = CommandLine &&

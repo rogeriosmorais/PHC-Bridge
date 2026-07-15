@@ -204,20 +204,27 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 		OutError);
 	if (bSuccess)
 	{
-		bool bRestoreCausalStandingSpineChest = true;
-		bool bRestoreCausalStandingNeck = false;
-		bool bRestoreCausalStandingHead =
-			ShouldRestoreCausalStandingHeadAfterFirstPolicy(
-				bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
-				RuntimeState);
-		bool bRestoreCausalStandingDistalHands = true;
+		float TorsoScale = 0.0f;
+		float SpineChestScale = 1.0f;
+		float NeckScale = 0.0f;
+		float HeadScale = ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+			RuntimeState)
+			? 1.0f
+			: 0.0f;
+		float LeftProximalScale = 0.0f;
+		float LeftDistalScale = 1.0f;
+		float RightProximalScale = 0.0f;
+		float RightDistalScale = 1.0f;
 #if WITH_DEV_AUTOMATION_TESTS
-		bRestoreCausalStandingNeck =
-			bExperimentalCausalStandingNeckEnabledForTesting;
+		if (bExperimentalCausalStandingNeckEnabledForTesting)
+		{
+			NeckScale = 1.0f;
+		}
 		if (bExperimentalCausalStandingHeadEnabledForTesting)
 		{
-			bRestoreCausalStandingHead =
-				bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting
+			HeadScale =
+				(bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting
 					? ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
 						true,
 						bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting,
@@ -225,15 +232,44 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 					: ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
 						true,
 						bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting,
-						RuntimeState);
+						RuntimeState))
+				? 1.0f
+				: 0.0f;
+		}
+		if (IsExperimentalCausalStandingScaledRegionActiveForTesting() &&
+			ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+				bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+				RuntimeState))
+		{
+			switch (ExperimentalCausalStandingScaledRegionForTesting)
+			{
+			case EPhysAnimExperimentalCausalStandingScaledRegion::Torso:
+				TorsoScale = ExperimentalCausalStandingScaledScaleForTesting;
+				break;
+			case EPhysAnimExperimentalCausalStandingScaledRegion::Neck:
+				NeckScale = ExperimentalCausalStandingScaledScaleForTesting;
+				break;
+			case EPhysAnimExperimentalCausalStandingScaledRegion::LeftProximal:
+				LeftProximalScale = ExperimentalCausalStandingScaledScaleForTesting;
+				break;
+			case EPhysAnimExperimentalCausalStandingScaledRegion::RightProximal:
+				RightProximalScale = ExperimentalCausalStandingScaledScaleForTesting;
+				break;
+			default:
+				break;
+			}
 		}
 #endif
-		ApplyCausalStandingPolicyActionCompatibility(
+		ApplyCausalStandingPolicyActionScales(
 			IsStandingActivationRuntimeState(RuntimeState),
-			bRestoreCausalStandingSpineChest,
-			bRestoreCausalStandingNeck,
-			bRestoreCausalStandingHead,
-			bRestoreCausalStandingDistalHands,
+			TorsoScale,
+			SpineChestScale,
+			NeckScale,
+			HeadScale,
+			LeftProximalScale,
+			LeftDistalScale,
+			RightProximalScale,
+			RightDistalScale,
 			ConditionedActionBuffer);
 #if WITH_DEV_AUTOMATION_TESTS
 		ApplyExperimentalActionFamilyMaskForTesting(

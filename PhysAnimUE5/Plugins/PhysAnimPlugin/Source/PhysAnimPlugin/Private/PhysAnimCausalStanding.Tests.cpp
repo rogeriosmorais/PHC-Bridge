@@ -567,6 +567,15 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	TestFalse(
 		TEXT("E41 distal hand option keeps head restoration disabled"),
 		Component->IsExperimentalCausalStandingHeadEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCausalStandingScaledRegion=Neck -PhysAnimExperimentalCausalStandingScaledScale=0.5"));
+	TestEqual(
+		TEXT("E48 parser selects the scaled Neck region"),
+		Component->GetExperimentalCausalStandingScaledRegionForTesting(),
+		EPhysAnimExperimentalCausalStandingScaledRegion::Neck);
+	TestTrue(
+		TEXT("E48 parser preserves the requested region scale"),
+		FMath::IsNearlyEqual(Component->GetExperimentalCausalStandingScaledScaleForTesting(), 0.5f));
 	TArray<float> FirstActiveCaptureSource;
 	FirstActiveCaptureSource.SetNumUninitialized(PhysAnimBridge::NumActionFloats);
 	for (int32 Index = 0; Index < FirstActiveCaptureSource.Num(); ++Index)
@@ -711,6 +720,59 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			*FString::Printf(TEXT("E41 distal hand candidate action scalar %d matches preregistered mask"), Index),
 			DistalHandsRestoredActions[Index],
 			bExpectedRetained ? FamilyActions[Index] : 0.0f);
+	}
+	TArray<float> ScaledRegionActions = FamilyActions;
+	UPhysAnimComponent::ApplyCausalStandingPolicyActionScales(
+		true,
+		0.25f,
+		1.0f,
+		0.5f,
+		1.0f,
+		0.75f,
+		1.0f,
+		0.6f,
+		1.0f,
+		ScaledRegionActions);
+	for (int32 Index = 0; Index < ScaledRegionActions.Num(); ++Index)
+	{
+		const int32 JointIndex = Index / 3;
+		float ExpectedScale = 1.0f;
+		if (JointIndex == 8)
+		{
+			ExpectedScale = 0.25f;
+		}
+		else if (JointIndex >= 9 && JointIndex < 11)
+		{
+			ExpectedScale = 1.0f;
+		}
+		else if (JointIndex == 11)
+		{
+			ExpectedScale = 0.5f;
+		}
+		else if (JointIndex == 12)
+		{
+			ExpectedScale = 1.0f;
+		}
+		else if (JointIndex >= 13 && JointIndex < 16)
+		{
+			ExpectedScale = 0.75f;
+		}
+		else if (JointIndex >= 16 && JointIndex < 18)
+		{
+			ExpectedScale = 1.0f;
+		}
+		else if (JointIndex >= 18 && JointIndex < 21)
+		{
+			ExpectedScale = 0.6f;
+		}
+		else if (JointIndex >= 21)
+		{
+			ExpectedScale = 1.0f;
+		}
+		TestEqual(
+			*FString::Printf(TEXT("E48 scaled action scalar %d matches its isolated region scale"), Index),
+			ScaledRegionActions[Index],
+			FamilyActions[Index] * ExpectedScale);
 	}
 	TArray<float> NonPolicyCompatibleActions = FamilyActions;
 	UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(

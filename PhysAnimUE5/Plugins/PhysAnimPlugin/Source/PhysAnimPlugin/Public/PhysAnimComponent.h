@@ -663,6 +663,15 @@ enum class EPhysAnimExperimentalActionFamilyMask : uint8
 	ArmsOnly,
 };
 
+enum class EPhysAnimExperimentalCausalStandingScaledRegion : uint8
+{
+	None,
+	Torso,
+	Neck,
+	LeftProximal,
+	RightProximal,
+};
+
 UENUM(BlueprintType)
 enum class EPhysAnimBridgeTraceOutputMode : uint8
 {
@@ -1512,6 +1521,17 @@ public:
 		bool bRestoreHead,
 		bool bRestoreDistalHands,
 		TArray<float>& InOutActions);
+	static void ApplyCausalStandingPolicyActionScales(
+		bool bStandingPolicyMode,
+		float TorsoScale,
+		float SpineChestScale,
+		float NeckScale,
+		float HeadScale,
+		float LeftProximalScale,
+		float LeftDistalScale,
+		float RightProximalScale,
+		float RightDistalScale,
+		TArray<float>& InOutActions);
 	static float ResolveCausalStandingPolicyStrengthFactor(
 		bool bStandingPolicyMode,
 		bool bFirstActiveStandingPolicyCaptured,
@@ -1584,6 +1604,19 @@ public:
 	bool IsExperimentalCausalStandingDistalHandsEnabledForTesting() const
 	{
 		return bExperimentalCausalStandingDistalHandsEnabledForTesting;
+	}
+	EPhysAnimExperimentalCausalStandingScaledRegion GetExperimentalCausalStandingScaledRegionForTesting() const
+	{
+		return ExperimentalCausalStandingScaledRegionForTesting;
+	}
+	float GetExperimentalCausalStandingScaledScaleForTesting() const
+	{
+		return ExperimentalCausalStandingScaledScaleForTesting;
+	}
+	bool IsExperimentalCausalStandingScaledRegionActiveForTesting() const
+	{
+		return ExperimentalCausalStandingScaledRegionForTesting !=
+			EPhysAnimExperimentalCausalStandingScaledRegion::None;
 	}
 	bool IsExperimentalCausalStandingNeckHeadEnabledForTesting() const
 	{
@@ -2681,6 +2714,9 @@ private:
 	bool bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = false;
 	bool bExperimentalCausalStandingSpineChestEnabledForTesting = false;
 	bool bExperimentalCausalStandingDistalHandsEnabledForTesting = false;
+	EPhysAnimExperimentalCausalStandingScaledRegion ExperimentalCausalStandingScaledRegionForTesting =
+		EPhysAnimExperimentalCausalStandingScaledRegion::None;
+	float ExperimentalCausalStandingScaledScaleForTesting = 1.0f;
 	bool bExperimentalCausalStandingNeckHeadEnabledForTesting = false;
 	bool bExperimentalCausalStandingNeckEnabledForTesting = false;
 	bool bExperimentalCausalStandingHeadEnabledForTesting = false;

@@ -896,26 +896,82 @@ void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
 	bool bRestoreDistalHands,
 	TArray<float>& InOutActions)
 {
+	ApplyCausalStandingPolicyActionScales(
+		bStandingPolicyMode,
+		0.0f,
+		bRestoreSpineChest ? 1.0f : 0.0f,
+		bRestoreNeck ? 1.0f : 0.0f,
+		bRestoreHead ? 1.0f : 0.0f,
+		0.0f,
+		bRestoreDistalHands ? 1.0f : 0.0f,
+		0.0f,
+		bRestoreDistalHands ? 1.0f : 0.0f,
+		InOutActions);
+}
+
+void UPhysAnimComponent::ApplyCausalStandingPolicyActionScales(
+	bool bStandingPolicyMode,
+	float TorsoScale,
+	float SpineChestScale,
+	float NeckScale,
+	float HeadScale,
+	float LeftProximalScale,
+	float LeftDistalScale,
+	float RightProximalScale,
+	float RightDistalScale,
+	TArray<float>& InOutActions)
+{
 	if (!bStandingPolicyMode)
 	{
 		return;
 	}
 
+	TorsoScale = FMath::Clamp(TorsoScale, 0.0f, 1.0f);
+	SpineChestScale = FMath::Clamp(SpineChestScale, 0.0f, 1.0f);
+	NeckScale = FMath::Clamp(NeckScale, 0.0f, 1.0f);
+	HeadScale = FMath::Clamp(HeadScale, 0.0f, 1.0f);
+	LeftProximalScale = FMath::Clamp(LeftProximalScale, 0.0f, 1.0f);
+	LeftDistalScale = FMath::Clamp(LeftDistalScale, 0.0f, 1.0f);
+	RightProximalScale = FMath::Clamp(RightProximalScale, 0.0f, 1.0f);
+	RightDistalScale = FMath::Clamp(RightDistalScale, 0.0f, 1.0f);
+
 	for (int32 ScalarIndex = 0; ScalarIndex < InOutActions.Num(); ++ScalarIndex)
 	{
 		const int32 JointIndex = ScalarIndex / 3;
-		const bool bRetainJoint =
-			JointIndex < 8 ||
-			(bRestoreSpineChest && JointIndex >= 9 && JointIndex < 11) ||
-			(bRestoreNeck && JointIndex == 11) ||
-			(bRestoreHead && JointIndex == 12) ||
-			(bRestoreDistalHands &&
-				((JointIndex >= 16 && JointIndex < 18) ||
-				 (JointIndex >= 21 && JointIndex < 23)));
-		if (!bRetainJoint)
+		float Scale = 1.0f;
+		if (JointIndex == 8)
 		{
-			InOutActions[ScalarIndex] = 0.0f;
+			Scale = TorsoScale;
 		}
+		else if (JointIndex >= 9 && JointIndex < 11)
+		{
+			Scale = SpineChestScale;
+		}
+		else if (JointIndex == 11)
+		{
+			Scale = NeckScale;
+		}
+		else if (JointIndex == 12)
+		{
+			Scale = HeadScale;
+		}
+		else if (JointIndex >= 13 && JointIndex < 16)
+		{
+			Scale = LeftProximalScale;
+		}
+		else if (JointIndex >= 16 && JointIndex < 18)
+		{
+			Scale = LeftDistalScale;
+		}
+		else if (JointIndex >= 18 && JointIndex < 21)
+		{
+			Scale = RightProximalScale;
+		}
+		else if (JointIndex >= 21)
+		{
+			Scale = RightDistalScale;
+		}
+		InOutActions[ScalarIndex] *= Scale;
 	}
 }
 
