@@ -237,6 +237,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 
 	const float MaxAngularStepDegrees =
 		FMath::Max(0.0f, EffectiveSettings.MaxAngularStepDegreesPerSecond) * PolicyStepDeltaTime;
+	const bool bUseCausalStandingComponentActionAxisThisStep =
+		ShouldUseCausalStandingComponentActionAxis(RuntimeState);
+	bool bUseComponentActionAxisThisStep = bUseCausalStandingComponentActionAxisThisStep;
+	bool bUseBindNeutralThisStep = false;
+	bool bBypassConstraintRangeRemapThisStep = false;
 #if WITH_DEV_AUTOMATION_TESTS
 	PhysAnimBridge::FPhysAnimActionSemanticTrace PendingActionSemanticTrace;
 	TMap<FName, PhysAnimBridge::FPhysAnimControlTargetSemanticTrace> PendingControlTargetSemanticTraces;
@@ -250,11 +255,13 @@ void UPhysAnimComponent::ApplyControlTargets(
 		ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
 			bExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting,
 			RuntimeState);
-	const bool bUseExperimentalBindNeutralThisStep =
+	bUseComponentActionAxisThisStep =
+		bUseComponentActionAxisThisStep || bUseExperimentalComponentActionAxisThisStep;
+	bUseBindNeutralThisStep =
 		ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
 			bExperimentalBindNeutralFromFirstPolicyEnabledForTesting,
 			RuntimeState);
-	const bool bBypassExperimentalConstraintRangeRemapThisStep =
+	bBypassConstraintRangeRemapThisStep =
 		ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
 			bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting,
 			RuntimeState);
@@ -297,7 +304,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 		PendingMannyLocalFrameRoundtripTrace.CaptureScope =
 			TEXT("first_active_standing_pre_range_target");
 		PendingMannyLocalFrameRoundtripTrace.ConfiguredActionAxisMode =
-			bUseExperimentalComponentActionAxisThisStep
+			bUseComponentActionAxisThisStep
 				? PhysAnimBridge::MannyLocalFrameRoundtripComponentAxisMode
 				: PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode;
 		PendingMannyLocalFrameRoundtripTrace.AxisProbeDegrees =
@@ -608,36 +615,32 @@ void UPhysAnimComponent::ApplyControlTargets(
 						*ControlName.ToString());
 					return;
 				}
-				const FQuat MannyPolicyNeutralRotation = bUseExperimentalBindNeutralThisStep
+				const FQuat MannyPolicyNeutralRotation = bUseBindNeutralThisStep
 					? BindSeed->ParentRelativeTargetRotation.GetNormalized()
 					: StableNeutralRotation->GetNormalized();
+				FQuat EffectiveActionAxisRotation =
+					BindSeed->ParentActionAxisReferenceRotation.GetNormalized();
 				FQuat AbsoluteBindCalibratedPolicyRotation =
 					ComposeProtoPolicyTargetAroundMannyNeutral(
 						*BindSeed,
 						MannyPolicyNeutralRotation,
 						Pair.Value);
-#if WITH_DEV_AUTOMATION_TESTS
-				FString EffectiveActionAxisMode =
-					PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode;
-				FQuat EffectiveActionAxisRotation =
-					BindSeed->ParentActionAxisReferenceRotation.GetNormalized();
-				if (bUseExperimentalComponentActionAxisThisStep)
+				if (bUseComponentActionAxisThisStep)
 				{
-					const FInitialPhysicsControl* const ExperimentalInitialControl =
+					const FInitialPhysicsControl* const InitialControl =
 						FindInitialControl(ControlName);
 					const TArray<FName>& ObservationBodyNames =
 						PhysAnimBridge::GetSmplObservationBoneNames();
-					const int32 ObservationParentBodyIndex = ExperimentalInitialControl
-						? ObservationBodyNames.IndexOfByKey(
-							ExperimentalInitialControl->ParentBoneName)
+					const int32 ObservationParentBodyIndex = InitialControl
+						? ObservationBodyNames.IndexOfByKey(InitialControl->ParentBoneName)
 						: INDEX_NONE;
-					if (!ExperimentalInitialControl ||
+					if (!InitialControl ||
 						!ObservationBodyNames.IsValidIndex(ObservationParentBodyIndex) ||
 						!CachedSmplObservationRestBodyComponentRotations.IsValidIndex(
 							ObservationParentBodyIndex))
 					{
 						OutError = FString::Printf(
-							TEXT("Experimental component action axis cannot resolve parent bind for '%s'."),
+							TEXT("Component action axis cannot resolve parent bind for '%s'."),
 							*ControlName.ToString());
 						return;
 					}
@@ -648,17 +651,19 @@ void UPhysAnimComponent::ApplyControlTargets(
 						(BindSeed->ParentWorldRotation *
 						 ObservationParentBindComponentRotation.Inverse()).GetNormalized();
 					EffectiveActionAxisRotation =
-						ExpressCachedWorldActionAxisInMeshComponentForTesting(
+						ExpressCachedWorldActionAxisInMeshComponent(
 							ActionBindComponentWorldRotation,
 							BindSeed->ParentActionAxisReferenceRotation);
-					EffectiveActionAxisMode =
-						PhysAnimBridge::MannyLocalFrameRoundtripComponentAxisMode;
 					AbsoluteBindCalibratedPolicyRotation =
-						ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+						ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxis(
 							EffectiveActionAxisRotation,
 							MannyPolicyNeutralRotation,
 							Pair.Value);
 				}
+#if WITH_DEV_AUTOMATION_TESTS
+				const FString EffectiveActionAxisMode = bUseComponentActionAxisThisStep
+					? PhysAnimBridge::MannyLocalFrameRoundtripComponentAxisMode
+					: PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode;
 				if (bCaptureMannyLocalFrameRoundtripThisStep &&
 					PendingMannyLocalFrameRoundtripTrace.CaptureError.IsEmpty())
 				{
@@ -749,7 +754,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 						ConstraintProfile))
 					{
 						const FQuat RangeMappedPolicyRotation =
-							bBypassExperimentalConstraintRangeRemapThisStep
+							bBypassConstraintRangeRemapThisStep
 								? DistalLocomotionAlignedPolicyRotation
 								: PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
 									DistalLocomotionAlignedPolicyRotation,

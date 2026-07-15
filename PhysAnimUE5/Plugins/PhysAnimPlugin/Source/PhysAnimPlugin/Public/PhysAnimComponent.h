@@ -1487,6 +1487,22 @@ public:
 	const TArray<float>& GetRawPolicyActionsForDiagnostics() const { return ActionOutputBuffer; }
 	const TArray<float>& GetConditionedPolicyActionsForDiagnostics() const { return ConditionedActionBuffer; }
 	const PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot& GetFirstPolicyInferenceSnapshotForDiagnostics() const { return FirstPolicyInferenceSnapshot; }
+	static void ApplyCausalStandingPolicyActionCompatibility(
+		bool bStandingPolicyMode,
+		TArray<float>& InOutActions);
+	static float ResolveCausalStandingPolicyStrengthFactor(
+		bool bStandingPolicyMode,
+		bool bFirstActiveStandingPolicyCaptured,
+		EPhysAnimRuntimeState InRuntimeState);
+	static bool ShouldUseCausalStandingComponentActionAxis(
+		EPhysAnimRuntimeState InRuntimeState);
+	static FQuat ExpressCachedWorldActionAxisInMeshComponent(
+		const FQuat& ActionBindComponentWorldRotation,
+		const FQuat& CachedWorldActionAxisRotation);
+	static FQuat ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxis(
+		const FQuat& EffectiveActionAxisRotation,
+		const FQuat& MannyNeutralParentRelativeRotation,
+		const FQuat& ProtoPolicyRotationUe);
 #if WITH_DEV_AUTOMATION_TESTS
 	const PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot& GetFirstActiveStandingPolicyInferenceSnapshotForDiagnostics() const
 	{
@@ -1527,13 +1543,6 @@ public:
 	{
 		return ExperimentalActionFamilyMaskForTesting;
 	}
-	static void ApplyCausalStandingPolicyActionCompatibility(
-		bool bStandingPolicyMode,
-		TArray<float>& InOutActions);
-	static float ResolveCausalStandingPolicyStrengthFactor(
-		bool bStandingPolicyMode,
-		bool bFirstActiveStandingPolicyCaptured,
-		EPhysAnimRuntimeState InRuntimeState);
 	static void ApplyExperimentalActionFamilyMaskForTesting(
 		EPhysAnimExperimentalActionFamilyMask Mask,
 		TArray<float>& InOutActions);

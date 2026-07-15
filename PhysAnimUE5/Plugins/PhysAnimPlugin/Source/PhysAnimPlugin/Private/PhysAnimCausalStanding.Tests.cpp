@@ -469,6 +469,62 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			true,
 			EPhysAnimRuntimeState::BalanceActive_Standing),
 		1.0f);
+	TestFalse(
+		TEXT("Production component action axis is inactive before standing activation"),
+		UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
+			EPhysAnimRuntimeState::RuntimeReady));
+	TestTrue(
+		TEXT("Production component action axis is active during standing preparation"),
+		UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
+			EPhysAnimRuntimeState::Standing_Preparation));
+	TestTrue(
+		TEXT("Production component action axis remains active during full simulation activation"),
+		UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
+			EPhysAnimRuntimeState::Standing_FullSimulationActivation));
+	TestTrue(
+		TEXT("Production component action axis remains active during policy blend"),
+		UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
+			EPhysAnimRuntimeState::Standing_PolicyBlend));
+	TestTrue(
+		TEXT("Production component action axis remains active during active standing"),
+		UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	const FQuat ActionBindComponentWorldRotation(
+		FVector::UpVector,
+		FMath::DegreesToRadians(23.0f));
+	const FQuat CachedWorldActionAxisRotation(
+		FVector::RightVector,
+		FMath::DegreesToRadians(-31.0f));
+	const FQuat ProductionComponentActionAxis =
+		UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponent(
+			ActionBindComponentWorldRotation,
+			CachedWorldActionAxisRotation);
+	const FQuat ValidatedComponentActionAxis =
+		UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
+			ActionBindComponentWorldRotation,
+			CachedWorldActionAxisRotation);
+	TestTrue(
+		TEXT("Production action-axis transform matches the validated E18 adapter"),
+		ProductionComponentActionAxis.Equals(ValidatedComponentActionAxis, 1.0e-6f));
+	const FQuat MannyNeutralParentRelativeRotation(
+		FVector::ForwardVector,
+		FMath::DegreesToRadians(17.0f));
+	const FQuat ProtoPolicyRotationUe(
+		FVector(1.0f, 1.0f, 0.5f).GetSafeNormal(),
+		FMath::DegreesToRadians(11.0f));
+	const FQuat ProductionPolicyTarget =
+		UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxis(
+			ProductionComponentActionAxis,
+			MannyNeutralParentRelativeRotation,
+			ProtoPolicyRotationUe);
+	const FQuat ValidatedPolicyTarget =
+		UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+			ValidatedComponentActionAxis,
+			MannyNeutralParentRelativeRotation,
+			ProtoPolicyRotationUe);
+	TestTrue(
+		TEXT("Production target composition matches the validated E18 adapter"),
+		ProductionPolicyTarget.Equals(ValidatedPolicyTarget, 1.0e-6f));
 	TArray<float> LowerOnlyActions = FamilyActions;
 	UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
 		EPhysAnimExperimentalActionFamilyMask::LowerOnly,

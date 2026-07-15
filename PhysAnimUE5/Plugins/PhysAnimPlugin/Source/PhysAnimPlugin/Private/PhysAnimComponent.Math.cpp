@@ -833,6 +833,62 @@ FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
 		MannyNeutralParentRelativeRotation.GetNormalized()).GetNormalized();
 }
 
+void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+	bool bStandingPolicyMode,
+	TArray<float>& InOutActions)
+{
+	if (!bStandingPolicyMode)
+	{
+		return;
+	}
+
+	constexpr int32 RetainedLowerBodyScalarCount = 8 * 3;
+	for (int32 ScalarIndex = RetainedLowerBodyScalarCount; ScalarIndex < InOutActions.Num(); ++ScalarIndex)
+	{
+		InOutActions[ScalarIndex] = 0.0f;
+	}
+}
+
+float UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
+	bool bStandingPolicyMode,
+	bool bFirstActiveStandingPolicyCaptured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bStandingPolicyMode &&
+		bFirstActiveStandingPolicyCaptured &&
+		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing
+			? 1.5f
+			: 1.0f;
+}
+
+bool UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return IsStandingActivationRuntimeState(InRuntimeState);
+}
+
+FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponent(
+	const FQuat& ActionBindComponentWorldRotation,
+	const FQuat& CachedWorldActionAxisRotation)
+{
+	return (ActionBindComponentWorldRotation.GetNormalized().Inverse() *
+		CachedWorldActionAxisRotation.GetNormalized()).GetNormalized();
+}
+
+FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxis(
+	const FQuat& EffectiveActionAxisRotation,
+	const FQuat& MannyNeutralParentRelativeRotation,
+	const FQuat& ProtoPolicyRotationUe)
+{
+	const FQuat NormalizedActionAxis = EffectiveActionAxisRotation.GetNormalized();
+	const FQuat PolicyRotationInEffectiveAxisFrame =
+		(NormalizedActionAxis.Inverse() *
+		 ProtoPolicyRotationUe.GetNormalized() *
+		 NormalizedActionAxis).GetNormalized();
+	return (PolicyRotationInEffectiveAxisFrame *
+		MannyNeutralParentRelativeRotation.GetNormalized()).GetNormalized();
+}
+
 #if WITH_DEV_AUTOMATION_TESTS
 bool UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
 	bool bConfigured,
@@ -932,34 +988,6 @@ bool UPhysAnimComponent::TryBuildCheckpointForcePdControlDataForTesting(
 	OutControlData.AngularExtraDamping = KdNmSecPerRad * EngineTorqueUnitsPerNewtonMeter;
 	OutControlData.MaxTorque = 500.0f * EngineTorqueUnitsPerNewtonMeter;
 	return true;
-}
-
-void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
-	bool bStandingPolicyMode,
-	TArray<float>& InOutActions)
-{
-	if (!bStandingPolicyMode)
-	{
-		return;
-	}
-
-	constexpr int32 RetainedLowerBodyScalarCount = 8 * 3;
-	for (int32 ScalarIndex = RetainedLowerBodyScalarCount; ScalarIndex < InOutActions.Num(); ++ScalarIndex)
-	{
-		InOutActions[ScalarIndex] = 0.0f;
-	}
-}
-
-float UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
-	bool bStandingPolicyMode,
-	bool bFirstActiveStandingPolicyCaptured,
-	EPhysAnimRuntimeState InRuntimeState)
-{
-	return bStandingPolicyMode &&
-		bFirstActiveStandingPolicyCaptured &&
-		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing
-			? 1.5f
-			: 1.0f;
 }
 
 void UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
@@ -1068,8 +1096,9 @@ FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
 	const FQuat& ActionBindComponentWorldRotation,
 	const FQuat& CachedWorldActionAxisRotation)
 {
-	return (ActionBindComponentWorldRotation.GetNormalized().Inverse() *
-		CachedWorldActionAxisRotation.GetNormalized()).GetNormalized();
+	return ExpressCachedWorldActionAxisInMeshComponent(
+		ActionBindComponentWorldRotation,
+		CachedWorldActionAxisRotation);
 }
 
 FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
@@ -1077,13 +1106,10 @@ FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAx
 	const FQuat& MannyNeutralParentRelativeRotation,
 	const FQuat& ProtoPolicyRotationUe)
 {
-	const FQuat NormalizedActionAxis = EffectiveActionAxisRotation.GetNormalized();
-	const FQuat PolicyRotationInEffectiveAxisFrame =
-		(NormalizedActionAxis.Inverse() *
-		 ProtoPolicyRotationUe.GetNormalized() *
-		 NormalizedActionAxis).GetNormalized();
-	return (PolicyRotationInEffectiveAxisFrame *
-		MannyNeutralParentRelativeRotation.GetNormalized()).GetNormalized();
+	return ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxis(
+		EffectiveActionAxisRotation,
+		MannyNeutralParentRelativeRotation,
+		ProtoPolicyRotationUe);
 }
 
 bool UPhysAnimComponent::BuildMannyLocalFrameRoundtripControlForTesting(
