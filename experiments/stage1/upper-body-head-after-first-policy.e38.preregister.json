@@ -1,0 +1,42 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "upper-body-head-after-first-policy-e38",
+  "preregistered_utc": "2026-07-15T20:45:48Z",
+  "production_baseline_behavior_commit": "1555e8863d00cd4fbe6fc293cac93966fca9682c",
+  "latest_evidence_commit": "41530b1caf7373119eff97ae7f030d7a931145c4",
+  "hypothesis": "Restoring Head only from the active-policy inference after the first active-standing snapshot was already captured preserves E37's causal recovery advantage and eliminates its two startup trajectories.",
+  "causal_variable": {
+    "name": "head_action_activation_boundary",
+    "control": "first inference in BalanceActive_Standing",
+    "candidate": "first subsequent inference after FirstActiveStandingPolicyInferenceSnapshot was captured",
+    "command_line_opt_in": "-PhysAnimExperimentalCausalStandingUpperBody=HeadAfterFirstPolicy"
+  },
+  "held_constant": [
+    "Head-only action membership",
+    "all E33 plant, model, protocol, strength, perturbation and evaluator settings",
+    "all non-lower and non-Head action triplets exactly zero"
+  ],
+  "implementation_plan": [
+    "Capture whether the first active-standing snapshot existed before the current inference call.",
+    "Add an automation-only HeadAfterFirstPolicy parser and tested gate requiring active standing plus the pre-inference capture latch.",
+    "Run focused red-green contract and commit the candidate.",
+    "Run and audit the complete locked 3+3+2 bundle."
+  ],
+  "acceptance": {
+    "bundle_status": "PASS",
+    "maximum_normal_to_zero_recovery_auc_ratio": 0.8,
+    "normal_absolute_pass_count": 3,
+    "zero_actions_absolute_pass_count": 3,
+    "normal_repetitions_deterministic": true,
+    "zero_repetitions_deterministic": true,
+    "first_active_policy_snapshot_deterministic": true,
+    "head_first_active_conditioned_triplet": "exactly zero",
+    "head_later_active_conditioned_behavior": "nonzero present",
+    "destructive_controls": "fail only intended criteria"
+  },
+  "decision_rule": {
+    "supported": "Record E38 and preregister separate production promotion/no-flag acceptance.",
+    "falsified": "Keep E33 lower-only production unchanged and move to spine/chest restoration.",
+    "invalid": "Repeat only for a violated validity condition."
+  }
+}
