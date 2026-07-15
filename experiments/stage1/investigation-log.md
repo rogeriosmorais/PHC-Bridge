@@ -598,3 +598,19 @@ Machine-readable record: `experiments/stage1/upper-body-head-after-first-policy.
 **Next experiment selected.** Promote Spine+Chest into the default production mask through TDD, then rerun the strict no-experimental-flag bundle.
 
 Machine-readable record: `experiments/stage1/upper-body-spine-chest-restoration.e39.json`.
+
+## E40 — Production Spine+Chest promotion (2026-07-15)
+
+**Hypothesis.** Promoting the E39 Spine+Chest mask into default production behavior reproduces the complete locked causal-standing contract without experimental behavior arguments.
+
+**Configuration.** Default standing now retains Proto joints 0–7 and 9–10. Torso joint 8, Neck, Head and all arm actions remain exactly zero. The strict 3+3+2 PRODUCT_RUN bundle used clean source commit `3bbcfc54225293a185b23c8d211f25b853cb91f6` with no `PhysAnimExperimental` arguments.
+
+**Validity.** Runner and evidence contained no experimental arguments. All manifests used the locked model/protocol hashes and clean source commit. First-active and full policy evidence showed the exact production mask. Normal and ZeroActions streams were byte-deterministic; strength paths and destructive controls remained correct.
+
+**Result.** Bundle status `PASS`. Normal AUC was deterministically 31.9287, ZeroActions 41.1418, ratio 0.776066 against the locked maximum 0.8. Drop dispatch failed only target readback and forced support loss failed only support gap.
+
+**Supported or falsified.** Supported. Spine+Chest is now validated production behavior and the new immutable upper-body restoration baseline.
+
+**Next experiment selected.** Separately preregister distal wrist/hand restoration against production commit `3bbcfc54225293a185b23c8d211f25b853cb91f6`.
+
+Machine-readable record: `experiments/stage1/production-spine-chest-restoration.e40.json`.
