@@ -223,3 +223,19 @@ Machine-readable record: `experiments/stage1/active-standing-action-decode-contr
 **Next experiment selected.** Change only the action conjugation axis behind a development override from cached parent world space to equivalent mesh component space. Keep the captured neutral and every downstream stage unchanged. The locked semantic prediction is that identity errors remain unchanged while actual and axis-probe errors collapse to the existing per-joint identity residuals; rerun the unchanged baseline beside it and report the physical verdict without promotion or threshold changes.
 
 Machine-readable record: `experiments/stage1/active-standing-manny-local-frame-roundtrip.e15.json`.
+
+## E16 attempt 1 — Component-space action axis (INVALID, 2026-07-14)
+
+**Hypothesis.** Cached-world action-axis conjugation causes E15's non-identity round-trip excess; the equivalent mesh-component axis should leave identity residuals unchanged and collapse each actual/probe error to that residual.
+
+**Baseline configuration and result.** Commit `3e6a7d5ebb2d43b09381c65bab9af8f9900973da`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s; 10 s; unchanged seed and pose; no perturbation; trace on; component-axis override off. The baseline exactly reproduced E15's physics, policy, first/active inputs, action trace, and render. It `FAIL`ed body linear speed, pelvis height, and root tilt; minimum pelvis ratio was 0.153366, maximum root tilt 105.401°, maximum body speed 1119.794 cm/s, and readback 1.0.
+
+**Experimental configuration and result.** Same clean commit, reused binary, model, protocol, harness, evaluator, and thresholds; only `-PhysAnimExperimentalComponentActionAxis` was enabled. Automation completed and readback was 1.0, but the locked semantic evaluator returned `INVALID`: first-active decoded `thigh_l` already differed by 58.4543°. The first-policy input remained exact, while the active-standing input, policy stream, physics, and render diverged. The post-intervention trace algebra collapsed actual/identity and probe/identity residuals to `1.389e-11°` and `2.779e-11°`, but those values are non-authoritative because pre-intervention equivalence failed. The physical run `FAIL`ed root angular speed, body linear/angular speed, pelvis height, root tilt, and support gap.
+
+**Supported or falsified.** Neither. The run was malformed under the preregistered validity gates, so the hypothesis was not evaluated.
+
+**What was learned.** The override was applied during `Standing_Preparation`, altering the closed-loop state before the first active-standing capture. The evaluator prevented a mathematically attractive post-intervention signature from being misreported as causal evidence. No threshold, protocol, or production default changed.
+
+**Next experiment selected.** Rerun E16 with the same hypothesis and judges, but make the development-only override effective only in `BalanceActive_Standing`. Add a contract that preparation remains on the baseline path. Require exact first-policy and first-active input/action equality before interpreting the semantic or physical result.
+
+Machine-readable record: `experiments/stage1/active-standing-action-axis-frame.e16.attempt1.json`.
