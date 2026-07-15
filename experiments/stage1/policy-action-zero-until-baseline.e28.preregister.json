@@ -1,0 +1,39 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "policy-action-zero-until-baseline-e28",
+  "recorded_utc": "2026-07-15T19:05:00Z",
+  "authority": "DEVELOPMENT_CAUSAL_EVIDENCE",
+  "product_success": false,
+  "hypothesis": "E27 remains above zero because absolute policy actions alter the body during preparation before calibration; holding actions at zero until the first active-standing baseline is captured will calibrate on the stable passive pose and make subsequent residual actions recovery-beneficial.",
+  "arms": [
+    {"name":"control_lower_absolute", "variant":"Normal", "action_family":"LowerOnly", "zero_until_baseline":false},
+    {"name":"experimental_lower_zero_then_residual", "variant":"Normal", "action_family":"LowerOnly", "zero_until_baseline":true},
+    {"name":"zero_mode_guard", "variant":"ZeroActions", "action_family":"LowerOnly", "zero_until_baseline":true}
+  ],
+  "single_changed_variable": "Whether conditioned actions are held at exact zero while the active-standing baseline snapshot is unavailable, followed by one smoothing reset and current-minus-baseline residual actions.",
+  "locked_configuration": {
+    "same_binary":true,
+    "test":"PhysAnim.Product.CausalStanding",
+    "protocol":"locked causal-standing v1",
+    "action_axis":"mesh-component parent-bind axis from first policy",
+    "neutral_source":"captured stable standing neutral",
+    "retained_actions":"Proto joints 0-7",
+    "range_mapping_and_projection":"enabled",
+    "actuation":"current 8 Hz acceleration-mode plant",
+    "fixed_timestep_seconds":0.016666666666666666,
+    "perturbation_delta_v_cm_per_sec":15.0,
+    "capture_window_seconds":10.0,
+    "renderer":"RenderOffscreen"
+  },
+  "validity_gates": [
+    "Raw first-policy ONNX snapshots remain byte-identical across Normal arms.",
+    "Before baseline availability, the experimental conditioning input and output are exact zero.",
+    "At baseline availability, smoothing history is reset exactly once and current-minus-baseline begins from zero.",
+    "ZeroActions remains exactly zero for the entire run.",
+    "Target readback is 1.0 and all streams/render are complete."
+  ],
+  "support": "Experimental Normal passes every absolute criterion and recovery AUC is <= 32.913436978267704.",
+  "partial_support": "AUC improves below E27 but remains above the locked threshold; next vary calibration duration or residual scale.",
+  "falsification": "The experimental arm does not improve over E27, loses standing, or corrupts raw/zero evidence.",
+  "next": "If supported, run the full bundle. If partial, screen fixed calibration durations of 0.5, 1.0, and 1.5 seconds while maintaining zero actions before capture."
+}
