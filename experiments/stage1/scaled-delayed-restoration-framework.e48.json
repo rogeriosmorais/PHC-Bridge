@@ -1,0 +1,21 @@
+{
+  "schema_version":"physanim-investigation-result/v1",
+  "experiment_id":"scaled-delayed-restoration-framework-e48",
+  "recorded_utc":"2026-07-15T23:37:00Z",
+  "preregistration_commit":"07d0e2931e04e5ca976c7e4d5b8e90e464415fe8",
+  "framework_commit":"093717ce172b35f2680ce70a504c3fb0e76d7682",
+  "zero_normalization_commit":"aea5d7c3796bb4c5734563614fe04822cc2e1c93",
+  "production_baseline_commit":"a88f786c18a77b2e5f48cfad3b3f25247240d108",
+  "status":"VALID",
+  "hypothesis_verdict":"SUPPORTED",
+  "supported_regions":["Torso","Neck","LeftProximal","RightProximal"],
+  "scale_range":[0.0,1.0],
+  "activation_timing":"after one completed active-standing policy inference",
+  "focused_contract_status":"PASS",
+  "no_option_normal_status":"PASS",
+  "no_option_normal_recovery_auc":30.006571987977196,
+  "no_option_byte_identity":{"policy_input_snapshot":true,"first_active_conditioned_actions":true,"policy_stream":true,"physics_stream":true},
+  "production_behavior_changed_without_selector":false,
+  "command_line":{"region":"PhysAnimExperimentalCausalStandingScaledRegion","scale":"PhysAnimExperimentalCausalStandingScaledScale"},
+  "next":"Evaluate Neck, LeftProximal, RightProximal and Torso independently under -onethread."
+}

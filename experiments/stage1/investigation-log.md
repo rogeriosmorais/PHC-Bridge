@@ -726,3 +726,17 @@ Machine-readable record: `experiments/stage1/deterministic-head-after-first-poli
 **Next experiment selected.** A reusable scaled, delayed restoration framework for Neck, left proximal arm, right proximal arm and Torso.
 
 Machine-readable record: `experiments/stage1/production-head-after-first-policy.e47.json`.
+
+## E48 — Scaled delayed restoration framework (2026-07-15)
+
+**Purpose.** Add reusable per-region scaling for the four remaining masked regions without changing production behavior.
+
+**Configuration.** Region selector for Torso, Neck, LeftProximal or RightProximal; scale clamped to [0,1]; activation only after one completed active-standing policy inference.
+
+**Validity.** Exact parser/scaling/legacy-overload tests passed. A clean no-option Normal run from commit `aea5d7c3796bb4c5734563614fe04822cc2e1c93` is byte-identical to E47 across policy input, first-active actions, policy and physics streams.
+
+**Supported or falsified.** Supported. The framework is behavior-neutral without a selector and ready for isolated region restoration.
+
+**Next experiment selected.** Neck at a reduced delayed scale.
+
+Machine-readable record: `experiments/stage1/scaled-delayed-restoration-framework.e48.json`.
