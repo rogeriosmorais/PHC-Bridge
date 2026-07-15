@@ -1,0 +1,57 @@
+{
+  "schema_version": "physanim-investigation-experiment/v1",
+  "experiment_id": "checkpoint-torque-ceiling-e21-attempt2",
+  "recorded_utc": "2026-07-15T17:45:00Z",
+  "status": "VALID",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "FAIL",
+  "preregistration": {
+    "path": "experiments/stage1/checkpoint-torque-ceiling.e21.attempt2.preregister.json",
+    "commit": "fe53cd8c5dad80b6c4a8689549771bd06ee599a9"
+  },
+  "behavior_commit": "e78eb3f0ca96bf7cca84ddd21827977b298c4947",
+  "validity": {
+    "first_policy_snapshot_exact": true,
+    "first_active_standing_snapshot_exact": true,
+    "action_semantic_trace_exact": true,
+    "manny_local_frame_trace_exact": true,
+    "control_multiplier_transitions": [[0.0, 1.0]],
+    "experimental_multiplier_transitions": [[0.0, 1.0], [0.01666666753590107, 10.0]],
+    "target_readback_ratio_control": 1.0,
+    "target_readback_ratio_experimental": 1.0
+  },
+  "control": {
+    "artifact_root": "test-results/action-axis-frame/e21-torque-attempt2/control_current_ceiling",
+    "failed_criteria": ["root_angular_speed", "body_linear_speed", "body_angular_speed", "pelvis_height", "root_tilt", "support_gap"],
+    "minimum_pelvis_height_ratio": 0.15773154655174942,
+    "pelvis_below_80_cm_sec": 0.46666669100522995,
+    "pelvis_below_20_cm_sec": 0.6333333663642406,
+    "maximum_root_tilt_deg": 119.27613067626953,
+    "maximum_root_linear_speed_cm_per_sec": 1125.2602811118936,
+    "maximum_root_angular_speed_deg_per_sec": 1226.4575596554985,
+    "maximum_body_linear_speed_cm_per_sec": 1761.481564281443,
+    "maximum_body_angular_speed_deg_per_sec": 4382.048416648814,
+    "maximum_support_gap_ms": 150.0
+  },
+  "experimental": {
+    "artifact_root": "test-results/action-axis-frame/e21-torque-attempt2/experimental_checkpoint_ceiling",
+    "failed_criteria": ["root_angular_speed", "body_linear_speed", "body_angular_speed", "pelvis_height", "root_tilt", "support_gap"],
+    "minimum_pelvis_height_ratio": 0.15773154655174942,
+    "pelvis_below_80_cm_sec": 0.46666669100522995,
+    "pelvis_below_20_cm_sec": 0.6333333663642406,
+    "maximum_root_tilt_deg": 119.27613067626953,
+    "maximum_root_linear_speed_cm_per_sec": 1125.2602811118936,
+    "maximum_root_angular_speed_deg_per_sec": 1226.4575596554985,
+    "maximum_body_linear_speed_cm_per_sec": 1761.481564281443,
+    "maximum_body_angular_speed_deg_per_sec": 4382.048416648814,
+    "maximum_support_gap_ms": 150.0
+  },
+  "conclusion": {
+    "hypothesis_supported_or_falsified": "FALSIFIED",
+    "learned": "The checkpoint-equivalent 500 N*m torque ceiling is behaviorally neutral under the current 8 Hz acceleration-mode drives. The current 50 N*m ceiling is not binding during the failing standing trajectory. The remaining authoritative actuation mismatch is drive mode and per-family Kp/Kd, not effort limit.",
+    "production_promotion": false,
+    "thresholds_or_protocol_changed": false
+  },
+  "next_experiment": "Hold the exact component-axis plus bind-neutral adapter fixed and replace only the post-capture UE acceleration-mode drive with the pinned checkpoint's force-mode per-family Kp/Kd and 500 N*m effort limit. Require exact pre-intervention state/action/target traces and direct runtime readback of drive mode and per-family control data."
+}
