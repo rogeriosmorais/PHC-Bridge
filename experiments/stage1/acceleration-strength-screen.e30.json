@@ -1,0 +1,38 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "acceleration-strength-screen-e30",
+  "recorded_utc": "2026-07-15T20:20:00Z",
+  "source_commit": "6029541064d28010ef0477a6b66f20a14720d5ed",
+  "status": "VALID",
+  "hypothesis_verdict": "SUPPORTED",
+  "product_success": false,
+  "arms": {
+    "control_1_0": {"status":"PASS", "recovery_auc":65.69851225230799, "failed_criteria":[], "strength_transitions":[[0.0,1.0]]},
+    "strength_1_25": {"status":"PASS", "recovery_auc":45.24850063850691, "failed_criteria":[], "strength_transitions":[[0.0,1.0],[0.01666666753590107,1.25]]},
+    "strength_1_5": {"status":"PASS", "recovery_auc":30.374536874795023, "failed_criteria":[], "strength_transitions":[[0.0,1.0],[0.01666666753590107,1.5]]},
+    "strength_2_0": {"status":"FAIL", "recovery_auc":39.16399643564378, "failed_criteria":["pelvis_height","root_tilt"], "strength_transitions":[[0.0,1.0],[0.01666666753590107,2.0]]},
+    "zero_guard_1_0": {"status":"PASS", "recovery_auc":41.14179622283463, "failed_criteria":[], "conditioned_action_l2_max":0.0, "strength_transitions":[[0.0,1.0]]}
+  },
+  "validity": {
+    "first_policy_snapshot_sha256_all_arms":"AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+    "base_strength_multiplier_at_capture_all_arms":1.0,
+    "damping_ratio_multiplier_all_arms":1.5,
+    "extra_damping_multiplier_all_arms":2.4,
+    "torque_multiplier_all_arms":1.0,
+    "target_readback_ratio_all_arms":1.0,
+    "zero_guard_auc":41.14179622283463
+  },
+  "causal_result": {
+    "winning_strength_factor":1.5,
+    "winning_recovery_auc":30.374536874795023,
+    "locked_maximum_candidate_auc":32.913436978267704,
+    "winning_to_zero_auc_ratio":0.7382938822754809,
+    "control_to_zero_auc_ratio":1.5968800170140318
+  },
+  "causal_findings": [
+    "The lower-only policy direction is recovery-beneficial when the acceleration-mode plant has sufficient authority.",
+    "A 1.5 strength factor crosses the locked causal threshold while preserving every absolute criterion.",
+    "The response has a bounded stability window: 2.0 overshoots and violates pelvis-height and root-tilt criteria."
+  ],
+  "next": "Run the complete locked 3 Normal + 3 ZeroActions + DropControlDispatch + ForcedSupportLoss bundle with the 1.5 policy-mode strength factor."
+}

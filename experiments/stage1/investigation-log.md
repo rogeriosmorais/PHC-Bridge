@@ -442,3 +442,19 @@ Machine-readable record: `experiments/stage1/policy-action-zero-until-baseline.e
 **Next experiment selected.** Test state-triggered acceleration-mode angular authority under the locked perturbation, leaving observations, actions, target semantics, and acceptance thresholds unchanged.
 
 Machine-readable record: `experiments/stage1/rigid-body-position-observation.e29.json`.
+
+## E30 — Delayed acceleration-strength screen (2026-07-15)
+
+**Hypothesis.** Lower-only policy targets are recovery-beneficial but undertracked by the same 8 Hz authority used for ZeroActions; a moderate post-capture strength increase should reduce actual-to-target error.
+
+**Configuration.** Same-binary PRODUCT_RUN Normal arms at strength factors 1.0, 1.25, 1.5, and 2.0, plus a ZeroActions 1.0 guard. The factor activated only after the first active-standing policy snapshot. Damping ratio, extra damping, torque, targets, observations, actions, mapping, perturbation, and evaluator remained fixed.
+
+**Validity.** Every first-policy snapshot had SHA256 `AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA`. Physics evidence showed multiplier 1.0 at capture and the configured factor from 0.0167 s onward. Damping ratio stayed 1.5, extra damping 2.4, torque multiplier 1.0, and target readback 1.0.
+
+**Result.** Control AUC was 65.6985. Factor 1.25 passed at 45.2485. Factor 1.5 passed at 30.3745, below the locked maximum 32.9134 and at 0.7383 of ZeroActions AUC. Factor 2.0 overshot, failing pelvis height and root tilt at AUC 39.1640. ZeroActions remained unchanged at 41.1418.
+
+**Supported or falsified.** Supported. The policy direction is causal once its targets receive sufficient acceleration-mode authority, with a bounded optimum near factor 1.5.
+
+**Next experiment selected.** Run the complete locked 3+3+2 causal-standing bundle at policy-mode strength factor 1.5.
+
+Machine-readable record: `experiments/stage1/acceleration-strength-screen.e30.json`.
