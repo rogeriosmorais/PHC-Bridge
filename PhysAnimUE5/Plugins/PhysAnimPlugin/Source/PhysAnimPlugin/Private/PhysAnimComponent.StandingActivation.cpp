@@ -183,6 +183,15 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 	ControlMultiplier.AngularStrengthMultiplier = ExpectedControl.AngularStrength;
 	ControlMultiplier.AngularDampingRatioMultiplier = ExpectedControl.DampingRatio;
 	ControlMultiplier.AngularExtraDampingMultiplier = ExpectedControl.ExtraDamping;
+#if WITH_DEV_AUTOMATION_TESTS
+	ControlMultiplier.MaxTorqueMultiplier =
+		ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
+			bExperimentalCheckpointTorqueCeilingEnabledForTesting,
+			FirstActiveStandingPolicyInferenceSnapshot.bCaptured,
+			RuntimeState)
+			? 10.0f
+			: 1.0f;
+#endif
 
 	for (const FName BoneName : ControlBones)
 	{

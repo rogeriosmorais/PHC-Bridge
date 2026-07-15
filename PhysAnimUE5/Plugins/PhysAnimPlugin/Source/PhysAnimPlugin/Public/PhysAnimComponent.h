@@ -1536,6 +1536,7 @@ public:
 	}
 	static bool ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
 		bool bConfigured,
+		bool bFirstActiveStandingPolicyCaptured,
 		EPhysAnimRuntimeState InRuntimeState);
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }

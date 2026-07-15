@@ -474,21 +474,31 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("Checkpoint torque ceiling remains inactive before standing activation"),
 		UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
 			true,
+			true,
 			EPhysAnimRuntimeState::RuntimeReady));
-	TestTrue(
-		TEXT("Checkpoint torque ceiling is active during standing preparation"),
+	TestFalse(
+		TEXT("Checkpoint torque ceiling remains inactive during standing preparation"),
 		UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
 			true,
+			true,
 			EPhysAnimRuntimeState::Standing_Preparation));
-	TestTrue(
-		TEXT("Checkpoint torque ceiling remains active in standing"),
+	TestFalse(
+		TEXT("Checkpoint torque ceiling remains inactive before the first active-standing policy capture"),
 		UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
+			true,
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestTrue(
+		TEXT("Checkpoint torque ceiling activates after the first active-standing policy capture"),
+		UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
+			true,
 			true,
 			EPhysAnimRuntimeState::BalanceActive_Standing));
 	TestFalse(
 		TEXT("Unconfigured checkpoint torque ceiling remains inactive"),
 		UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
 			false,
+			true,
 			EPhysAnimRuntimeState::BalanceActive_Standing));
 	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
 	TestFalse(

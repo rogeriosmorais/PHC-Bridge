@@ -864,9 +864,12 @@ bool UPhysAnimComponent::ShouldBypassExperimentalConstraintRangeRemapFromFirstPo
 
 bool UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
 	bool bConfigured,
+	bool bFirstActiveStandingPolicyCaptured,
 	EPhysAnimRuntimeState InRuntimeState)
 {
-	return bConfigured && IsStandingActivationRuntimeState(InRuntimeState);
+	return bConfigured &&
+		bFirstActiveStandingPolicyCaptured &&
+		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
 }
 
 void UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
