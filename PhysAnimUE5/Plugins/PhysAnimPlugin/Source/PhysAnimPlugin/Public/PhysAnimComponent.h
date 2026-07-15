@@ -1538,6 +1538,18 @@ public:
 		bool bConfigured,
 		bool bFirstActiveStandingPolicyCaptured,
 		EPhysAnimRuntimeState InRuntimeState);
+	bool IsExperimentalCheckpointForcePdEnabledForTesting() const
+	{
+		return bExperimentalCheckpointForcePdEnabledForTesting;
+	}
+	static bool ShouldUseExperimentalCheckpointForcePdForRuntimeStateForTesting(
+		bool bConfigured,
+		bool bFirstActiveStandingPolicyCaptured,
+		EPhysAnimRuntimeState InRuntimeState);
+	static bool TryBuildCheckpointForcePdControlDataForTesting(
+		FName BoneName,
+		const FPhysicsControlData& BaselineData,
+		FPhysicsControlData& OutControlData);
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
 	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
@@ -2522,6 +2534,7 @@ private:
 	EPhysAnimExperimentalActionFamilyMask ExperimentalActionFamilyMaskForTesting =
 		EPhysAnimExperimentalActionFamilyMask::All;
 	bool bExperimentalCheckpointTorqueCeilingEnabledForTesting = false;
+	bool bExperimentalCheckpointForcePdEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
 	bool bStartupChronologyTraceEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;

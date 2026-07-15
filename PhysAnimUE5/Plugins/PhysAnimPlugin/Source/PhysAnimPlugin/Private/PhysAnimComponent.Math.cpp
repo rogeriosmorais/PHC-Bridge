@@ -872,6 +872,68 @@ bool UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeS
 		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
 }
 
+bool UPhysAnimComponent::ShouldUseExperimentalCheckpointForcePdForRuntimeStateForTesting(
+	bool bConfigured,
+	bool bFirstActiveStandingPolicyCaptured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bConfigured &&
+		bFirstActiveStandingPolicyCaptured &&
+		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+}
+
+bool UPhysAnimComponent::TryBuildCheckpointForcePdControlDataForTesting(
+	FName BoneName,
+	const FPhysicsControlData& BaselineData,
+	FPhysicsControlData& OutControlData)
+{
+	float KpNmPerRad = 0.0f;
+	float KdNmSecPerRad = 0.0f;
+	if (BoneName == TEXT("thigh_l") || BoneName == TEXT("thigh_r") ||
+		BoneName == TEXT("calf_l") || BoneName == TEXT("calf_r") ||
+		BoneName == TEXT("foot_l") || BoneName == TEXT("foot_r"))
+	{
+		KpNmPerRad = 800.0f;
+		KdNmSecPerRad = 80.0f;
+	}
+	else if (BoneName == TEXT("ball_l") || BoneName == TEXT("ball_r"))
+	{
+		KpNmPerRad = 500.0f;
+		KdNmSecPerRad = 50.0f;
+	}
+	else if (BoneName == TEXT("spine_01") || BoneName == TEXT("spine_02") || BoneName == TEXT("spine_03"))
+	{
+		KpNmPerRad = 1000.0f;
+		KdNmSecPerRad = 100.0f;
+	}
+	else if (BoneName == TEXT("neck_01") || BoneName == TEXT("head") ||
+		BoneName == TEXT("clavicle_l") || BoneName == TEXT("clavicle_r") ||
+		BoneName == TEXT("upperarm_l") || BoneName == TEXT("upperarm_r") ||
+		BoneName == TEXT("lowerarm_l") || BoneName == TEXT("lowerarm_r"))
+	{
+		KpNmPerRad = 500.0f;
+		KdNmSecPerRad = 50.0f;
+	}
+	else if (BoneName == TEXT("hand_l") || BoneName == TEXT("hand_r"))
+	{
+		KpNmPerRad = 300.0f;
+		KdNmSecPerRad = 30.0f;
+	}
+	else
+	{
+		return false;
+	}
+
+	constexpr float EngineTorqueUnitsPerNewtonMeter = 10000.0f;
+	const float KpEnginePerRad = KpNmPerRad * EngineTorqueUnitsPerNewtonMeter;
+	OutControlData = BaselineData;
+	OutControlData.AngularStrength = FMath::Sqrt(KpEnginePerRad) / (2.0f * PI);
+	OutControlData.AngularDampingRatio = 0.0f;
+	OutControlData.AngularExtraDamping = KdNmSecPerRad * EngineTorqueUnitsPerNewtonMeter;
+	OutControlData.MaxTorque = 500.0f * EngineTorqueUnitsPerNewtonMeter;
+	return true;
+}
+
 void UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
 	EPhysAnimExperimentalActionFamilyMask Mask,
 	TArray<float>& InOutActions)

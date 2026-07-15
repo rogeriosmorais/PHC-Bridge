@@ -22,6 +22,7 @@
 #include "PhysicsControlComponent.h"
 #include "PhysicsControlData.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/ConstraintInstance.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "Tests/AutomationCommon.h"
@@ -500,15 +501,94 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			false,
 			true,
 			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(
+		TEXT("Checkpoint force PD is disabled by default"),
+		Component->IsExperimentalCheckpointForcePdEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCheckpointForcePd"));
+	TestTrue(
+		TEXT("Explicit development flag enables checkpoint force PD"),
+		Component->IsExperimentalCheckpointForcePdEnabledForTesting());
+	TestFalse(
+		TEXT("Checkpoint force PD remains inactive before first active-standing policy capture"),
+		UPhysAnimComponent::ShouldUseExperimentalCheckpointForcePdForRuntimeStateForTesting(
+			true,
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestTrue(
+		TEXT("Checkpoint force PD activates after first active-standing policy capture"),
+		UPhysAnimComponent::ShouldUseExperimentalCheckpointForcePdForRuntimeStateForTesting(
+			true,
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(
+		TEXT("Checkpoint force PD remains inactive outside active standing"),
+		UPhysAnimComponent::ShouldUseExperimentalCheckpointForcePdForRuntimeStateForTesting(
+			true,
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend));
+	FPhysicsControlData BaselineCheckpointData;
+	BaselineCheckpointData.LinearStrength = 17.0f;
+	BaselineCheckpointData.AngularTargetVelocityMultiplier = 0.25f;
+	auto ValidateCheckpointProfile = [this, &BaselineCheckpointData](
+		const FName BoneName,
+		const float ExpectedKpNmPerRad,
+		const float ExpectedKdNmSecPerRad)
+	{
+		FPhysicsControlData ProfileData;
+		TestTrue(
+			*FString::Printf(TEXT("Checkpoint force-PD profile resolves for %s"), *BoneName.ToString()),
+			UPhysAnimComponent::TryBuildCheckpointForcePdControlDataForTesting(
+				BoneName,
+				BaselineCheckpointData,
+				ProfileData));
+		const float PublishedKpEngine = FMath::Square(ProfileData.AngularStrength * 2.0f * PI);
+		TestTrue(
+			*FString::Printf(TEXT("Checkpoint Kp matches for %s"), *BoneName.ToString()),
+			FMath::IsNearlyEqual(PublishedKpEngine, ExpectedKpNmPerRad * 10000.0f, 2.0f));
+		TestEqual(
+			*FString::Printf(TEXT("Checkpoint damping ratio is zero for %s"), *BoneName.ToString()),
+			ProfileData.AngularDampingRatio,
+			0.0f);
+		TestEqual(
+			*FString::Printf(TEXT("Checkpoint Kd matches for %s"), *BoneName.ToString()),
+			ProfileData.AngularExtraDamping,
+			ExpectedKdNmSecPerRad * 10000.0f);
+		TestEqual(
+			*FString::Printf(TEXT("Checkpoint effort matches for %s"), *BoneName.ToString()),
+			ProfileData.MaxTorque,
+			5000000.0f);
+		TestEqual(
+			*FString::Printf(TEXT("Unrelated linear strength is preserved for %s"), *BoneName.ToString()),
+			ProfileData.LinearStrength,
+			BaselineCheckpointData.LinearStrength);
+		TestEqual(
+			*FString::Printf(TEXT("Target velocity multiplier is preserved for %s"), *BoneName.ToString()),
+			ProfileData.AngularTargetVelocityMultiplier,
+			BaselineCheckpointData.AngularTargetVelocityMultiplier);
+	};
+	ValidateCheckpointProfile(TEXT("thigh_l"), 800.0f, 80.0f);
+	ValidateCheckpointProfile(TEXT("ball_l"), 500.0f, 50.0f);
+	ValidateCheckpointProfile(TEXT("spine_02"), 1000.0f, 100.0f);
+	ValidateCheckpointProfile(TEXT("upperarm_r"), 500.0f, 50.0f);
+	ValidateCheckpointProfile(TEXT("hand_r"), 300.0f, 30.0f);
+	FPhysicsControlData UnknownCheckpointData;
+	TestFalse(
+		TEXT("Unknown bones do not receive an invented checkpoint profile"),
+		UPhysAnimComponent::TryBuildCheckpointForcePdControlDataForTesting(
+			TEXT("unknown_bone"),
+			BaselineCheckpointData,
+			UnknownCheckpointData));
 	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
 	TestFalse(
-		TEXT("Omitting experimental flags restores captured neutral, cached-world axis, range mapping, all actions, and the authored torque ceiling"),
+		TEXT("Omitting experimental flags restores captured neutral, cached-world axis, range mapping, all actions, and authored actuation"),
 		Component->IsExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting() ||
 			Component->IsExperimentalBindNeutralFromFirstPolicyEnabledForTesting() ||
 			Component->IsExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting() ||
 			Component->GetExperimentalActionFamilyMaskForTesting() !=
 				EPhysAnimExperimentalActionFamilyMask::All ||
-			Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting());
+			Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting() ||
+			Component->IsExperimentalCheckpointForcePdEnabledForTesting());
 	TestFalse(
 		TEXT("Policy-input provenance tracing is disabled without its explicit development flag"),
 		Component->IsPolicyInputProvenanceTraceEnabledForTesting());
@@ -1914,6 +1994,49 @@ namespace
 			const bool bHasGainProbe = PhysicsControl &&
 				PhysicsControl->GetControlData(GainProbeControl, GainProbeData) &&
 				PhysicsControl->GetControlMultiplier(GainProbeControl, GainProbeMultiplier);
+			FConstraintInstance* const GainProbeConstraint = Mesh
+				? Mesh->FindConstraintInstance(TEXT("thigh_l"))
+				: nullptr;
+			int32 CheckpointForcePdProfileMatchCount = 0;
+			int32 CheckpointForcePdForceModeCount = 0;
+			if (PhysicsControl && Mesh)
+			{
+				for (const FName BoneName : PhysAnimBridge::GetControlledBoneNames())
+				{
+					FPhysicsControlData ActualControlData;
+					FPhysicsControlData ExpectedCheckpointData;
+					const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+					if (PhysicsControl->GetControlData(ControlName, ActualControlData) &&
+						UPhysAnimComponent::TryBuildCheckpointForcePdControlDataForTesting(
+							BoneName,
+							ActualControlData,
+							ExpectedCheckpointData) &&
+						FMath::IsNearlyEqual(
+							ActualControlData.AngularStrength,
+							ExpectedCheckpointData.AngularStrength,
+							1.0e-3f) &&
+						FMath::IsNearlyEqual(
+							ActualControlData.AngularDampingRatio,
+							ExpectedCheckpointData.AngularDampingRatio,
+							1.0e-6f) &&
+						FMath::IsNearlyEqual(
+							ActualControlData.AngularExtraDamping,
+							ExpectedCheckpointData.AngularExtraDamping,
+							1.0f) &&
+						FMath::IsNearlyEqual(
+							ActualControlData.MaxTorque,
+							ExpectedCheckpointData.MaxTorque,
+							1.0f))
+					{
+						++CheckpointForcePdProfileMatchCount;
+					}
+					if (FConstraintInstance* const Constraint = Mesh->FindConstraintInstance(BoneName))
+					{
+						CheckpointForcePdForceModeCount +=
+							Constraint->ProfileInstance.AngularDrive.GetAccelerationMode() ? 0 : 1;
+					}
+				}
+			}
 			const FStandingPlantPoseErrorSummary PoseErrors = Component
 				? MeasurePoseErrors(Mesh, PhysicsControl, Component->GetPreviousControlTargetRotationsForDiagnostics())
 				: FStandingPlantPoseErrorSummary{};
@@ -1936,6 +2059,14 @@ namespace
 			Row->SetNumberField(TEXT("control_gain_match_count"), StandingStatus.ControlGainMatchCount);
 			Row->SetNumberField(TEXT("passive_constraint_velocity_drive_match_count"), StandingStatus.PassiveConstraintVelocityDriveMatchCount);
 			Row->SetNumberField(TEXT("control_base_angular_strength_hz"), bHasGainProbe ? GainProbeData.AngularStrength : 0.0);
+			Row->SetNumberField(TEXT("control_base_angular_damping_ratio"), bHasGainProbe ? GainProbeData.AngularDampingRatio : 0.0);
+			Row->SetNumberField(TEXT("control_base_angular_extra_damping"), bHasGainProbe ? GainProbeData.AngularExtraDamping : 0.0);
+			Row->SetNumberField(TEXT("control_base_max_torque_engine_units"), bHasGainProbe ? GainProbeData.MaxTorque : 0.0);
+			Row->SetBoolField(
+				TEXT("control_angular_acceleration_mode"),
+				GainProbeConstraint ? GainProbeConstraint->ProfileInstance.AngularDrive.GetAccelerationMode() : true);
+			Row->SetNumberField(TEXT("checkpoint_force_pd_profile_match_count"), CheckpointForcePdProfileMatchCount);
+			Row->SetNumberField(TEXT("checkpoint_force_pd_force_mode_count"), CheckpointForcePdForceModeCount);
 			Row->SetNumberField(TEXT("control_angular_strength_multiplier"), bHasGainProbe ? GainProbeMultiplier.AngularStrengthMultiplier : 0.0);
 			Row->SetNumberField(TEXT("control_angular_damping_ratio_multiplier"), bHasGainProbe ? GainProbeMultiplier.AngularDampingRatioMultiplier : 0.0);
 			Row->SetNumberField(TEXT("control_angular_extra_damping_multiplier"), bHasGainProbe ? GainProbeMultiplier.AngularExtraDampingMultiplier : 0.0);

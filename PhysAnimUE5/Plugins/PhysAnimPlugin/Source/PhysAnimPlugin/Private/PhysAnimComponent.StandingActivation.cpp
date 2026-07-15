@@ -191,6 +191,11 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 			RuntimeState)
 			? 10.0f
 			: 1.0f;
+	const bool bUseCheckpointForcePd =
+		ShouldUseExperimentalCheckpointForcePdForRuntimeStateForTesting(
+			bExperimentalCheckpointForcePdEnabledForTesting,
+			FirstActiveStandingPolicyInferenceSnapshot.bCaptured,
+			RuntimeState);
 #endif
 
 	for (const FName BoneName : ControlBones)
@@ -204,6 +209,30 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 		Constraint->SetAngularVelocityDriveSLERP(ActivationPlan.bEnablePassiveConstraintVelocityDrives);
 
 		const FName ControlName = PhysAnimBridge::MakeControlName(BoneName);
+#if WITH_DEV_AUTOMATION_TESTS
+		if (bUseCheckpointForcePd)
+		{
+			FPhysicsControlData BaselineControlData;
+			FPhysicsControlData CheckpointControlData;
+			if (!PhysicsControl->GetControlData(ControlName, BaselineControlData) ||
+				!TryBuildCheckpointForcePdControlDataForTesting(
+					BoneName,
+					BaselineControlData,
+					CheckpointControlData))
+			{
+				OutFailureReason = FString::Printf(
+					TEXT("standing_activation_checkpoint_force_pd_profile_failed:%s"),
+					*BoneName.ToString());
+				return Readback;
+			}
+			PhysicsControl->SetControlData(
+				ControlName,
+				CheckpointControlData,
+				true,
+				false);
+			Constraint->SetAngularDriveAccelerationMode(false);
+		}
+#endif
 		PhysicsControl->SetControlMultiplier(
 			ControlName,
 			ControlMultiplier,

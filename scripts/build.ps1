@@ -22,6 +22,7 @@ param (
     [switch]$ExperimentalConstraintRangeRemapBypassFromFirstPolicy,
     [string]$ExperimentalActionFamily,
     [switch]$ExperimentalCheckpointTorqueCeiling,
+    [switch]$ExperimentalCheckpointForcePd,
     [switch]$PolicyInputProvenanceTrace,
     [switch]$StartupChronologyTrace
 )
@@ -169,6 +170,9 @@ if ($Test) {
     }
     if ($ExperimentalCheckpointTorqueCeiling) {
         $EditorArguments += "-PhysAnimExperimentalCheckpointTorqueCeiling"
+    }
+    if ($ExperimentalCheckpointForcePd) {
+        $EditorArguments += "-PhysAnimExperimentalCheckpointForcePd"
     }
     if ($PolicyInputProvenanceTrace) {
         $EditorArguments += "-PhysAnimPolicyInputProvenanceTrace"
