@@ -1,0 +1,43 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "acceleration-strength-screen-e30",
+  "recorded_utc": "2026-07-15T20:00:00Z",
+  "authority": "DEVELOPMENT_SCREENING_EVIDENCE",
+  "product_success": false,
+  "hypothesis": "E25's stable lower-only policy publishes larger joint targets than ZeroActions but uses identical 8 Hz acceleration authority. A moderate post-capture strength increase will reduce actual-to-target pose error enough to establish causal recovery advantage without changing policy semantics or damping.",
+  "arms": [
+    {"name":"control_1_0", "strength_factor":1.0},
+    {"name":"strength_1_25", "strength_factor":1.25},
+    {"name":"strength_1_5", "strength_factor":1.5},
+    {"name":"strength_2_0", "strength_factor":2.0},
+    {"name":"zero_guard_1_0", "variant":"ZeroActions", "strength_factor":1.0}
+  ],
+  "single_changed_variable": "A multiplicative factor on Physics Control AngularStrengthMultiplier, activated only after the first active-standing policy snapshot. Angular damping ratio, extra damping, torque limit, target trajectory, observations, timing, and action values remain unchanged.",
+  "locked_configuration": {
+    "same_binary":true,
+    "normal_variant":"Normal",
+    "action_family":"LowerOnly",
+    "protocol":"locked causal-standing v1",
+    "action_axis":"mesh-component parent-bind axis from first policy",
+    "neutral_source":"captured stable standing neutral",
+    "range_mapping_and_projection":"enabled",
+    "base_angular_strength_hz":8.0,
+    "angular_damping_ratio_multiplier":1.5,
+    "angular_extra_damping_multiplier":2.0,
+    "fixed_timestep_seconds":0.016666666666666666,
+    "perturbation_delta_v_cm_per_sec":15.0,
+    "capture_window_seconds":10.0
+  },
+  "validity_gates": [
+    "All Normal first-policy and first-active snapshots are byte-identical before the factor activates.",
+    "Physics evidence records strength multiplier 1.0 at capture and the configured factor thereafter.",
+    "Damping-ratio, extra-damping, torque, targets, raw actions, and conditioned actions are unchanged across Normal arms.",
+    "Target readback ratio is 1.0 and raw streams/render are complete.",
+    "Zero guard reproduces AUC 41.14179622283463 within deterministic tolerance."
+  ],
+  "screening_success": "At least one Normal arm passes all absolute criteria and recovery AUC <= 32.913436978267704.",
+  "partial_support": "AUC improves monotonically but misses the threshold; use the best stable factor to screen damping separately.",
+  "falsification": "Strength increase does not lower AUC or violates absolute stability.",
+  "promotion_rule": "A screening winner requires a fresh complete 3+3+2 product bundle before production implementation.",
+  "next": "If a factor crosses threshold, run the full bundle. Otherwise hold the best stable strength factor and screen damping ratio as a separate experiment."
+}
