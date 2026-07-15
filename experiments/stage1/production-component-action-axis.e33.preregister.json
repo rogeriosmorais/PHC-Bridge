@@ -1,0 +1,47 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "production-component-action-axis-e33",
+  "recorded_utc": "2026-07-15T19:17:39Z",
+  "authority": "PRODUCTION_PROMOTION",
+  "product_success": false,
+  "hypothesis": "Promoting the exact E18/E31 component-axis action composition into the standing-policy production path will restore the complete locked bundle PASS without experimental command-line flags.",
+  "production_changes": [
+    "During every standing activation runtime state, express the cached world action axis in the synchronized SMPL observation-parent component bind frame.",
+    "Compose decoded Proto policy rotations around the captured Manny neutral using that component-space action axis.",
+    "Retain the existing development flags as default-off diagnostics; production standing no longer depends on them."
+  ],
+  "non_changes": [
+    "Raw ONNX inference output and evidence",
+    "Lower-body production action mask",
+    "Delayed 1.5 policy-mode angular strength authority",
+    "Captured standing neutral",
+    "Constraint-range mapping and safety projection",
+    "Observation values and ordering",
+    "Damping ratio, extra damping, torque ceiling",
+    "Policy cadence, timestep, perturbation",
+    "Locked protocol, evaluator, and thresholds"
+  ],
+  "tdd_contract": [
+    "Production component-axis routing is enabled for Standing_Preparation, Standing_FullSimulationActivation, Standing_PolicyBlend, and BalanceActive_Standing, and disabled before standing activation.",
+    "The production world-to-component action-axis transform is quaternion-equivalent to the validated E18 helper.",
+    "The production target composition is quaternion-equivalent to the validated E18 helper.",
+    "The runtime target-write path uses production component-axis composition without requiring a development flag."
+  ],
+  "final_bundle": {
+    "Normal": [1,2,3],
+    "ZeroActions": [1,2,3],
+    "DropControlDispatch": [1],
+    "ForcedSupportLoss": [1],
+    "experimental_flags": []
+  },
+  "validity_gates": [
+    "Clean source commit and one binary for all eight runs.",
+    "No PhysAnimExperimental argument appears in any manifest or process command line.",
+    "Normal physics evidence shows policy strength 1.5 after capture; ZeroActions remains 1.0.",
+    "Normal conditioned actions have upper-body scalars exactly zero; ZeroActions all scalars exactly zero.",
+    "All fixtures are PRODUCT_RUN with locked protocol SHA256 75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a."
+  ],
+  "production_success": "The no-flag bundle evaluator returns PASS with all Normal absolute criteria, intended destructive-control failures, and median Normal/ZeroActions AUC ratio <= 0.8.",
+  "falsification": "Any no-flag Normal arm fails an absolute criterion, target semantics differ from the validated component-axis path, destructive controls lose discrimination, or the causal ratio exceeds 0.8.",
+  "next": "If PASS, record production causal standing achieved, verify the tracked worktree is clean, and stop the experiment sequence."
+}
