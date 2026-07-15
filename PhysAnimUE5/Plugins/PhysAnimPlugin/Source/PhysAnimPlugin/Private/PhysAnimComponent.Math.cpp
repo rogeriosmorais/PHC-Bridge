@@ -971,7 +971,14 @@ void UPhysAnimComponent::ApplyCausalStandingPolicyActionScales(
 		{
 			Scale = RightDistalScale;
 		}
-		InOutActions[ScalarIndex] *= Scale;
+		if (Scale <= 0.0f)
+		{
+			InOutActions[ScalarIndex] = 0.0f;
+		}
+		else if (Scale < 1.0f)
+		{
+			InOutActions[ScalarIndex] *= Scale;
+		}
 	}
 }
 
