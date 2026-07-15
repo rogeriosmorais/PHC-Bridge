@@ -842,6 +842,7 @@ void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
 		true,
 		false,
 		false,
+		true,
 		InOutActions);
 }
 

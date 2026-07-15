@@ -606,9 +606,13 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	for (int32 Index = 0; Index < ProductionCompatibleActions.Num(); ++Index)
 	{
 		const int32 JointIndex = Index / 3;
-		const bool bExpectedRetained = JointIndex < 8 || (JointIndex >= 9 && JointIndex < 11);
+		const bool bExpectedRetained =
+			JointIndex < 8 ||
+			(JointIndex >= 9 && JointIndex < 11) ||
+			(JointIndex >= 16 && JointIndex < 18) ||
+			(JointIndex >= 21 && JointIndex < 23);
 		TestEqual(
-			*FString::Printf(TEXT("Production standing-policy action scalar %d matches promoted Spine+Chest mask"), Index),
+			*FString::Printf(TEXT("Production standing-policy action scalar %d matches promoted Spine+Chest+DistalHands mask"), Index),
 			ProductionCompatibleActions[Index],
 			bExpectedRetained ? FamilyActions[Index] : 0.0f);
 	}
