@@ -1,0 +1,48 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "upper-action-subset-ablation-e23",
+  "recorded_utc": "2026-07-15T18:35:00Z",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "E20's independently harmful axial and arm families can be localized to one or more smaller contiguous ProtoMotions joint subsets while raw inference, observations, the known-stable acceleration plant, and all downstream target stages remain unchanged.",
+  "joint_order": {
+    "8-10": "Torso, Spine, Chest",
+    "11-12": "Neck, Head",
+    "13-15": "Left thorax, shoulder, elbow",
+    "16-17": "Left wrist and hand, both collapsed to Manny hand_l",
+    "18-20": "Right thorax, shoulder, elbow",
+    "21-22": "Right wrist and hand, both collapsed to Manny hand_r"
+  },
+  "arms": [
+    {"name":"zero", "start_joint":0, "joint_count":0},
+    {"name":"trunk", "start_joint":8, "joint_count":3},
+    {"name":"neck_head", "start_joint":11, "joint_count":2},
+    {"name":"left_proximal", "start_joint":13, "joint_count":3},
+    {"name":"left_collapsed_distal", "start_joint":16, "joint_count":2},
+    {"name":"right_proximal", "start_joint":18, "joint_count":3},
+    {"name":"right_collapsed_distal", "start_joint":21, "joint_count":2}
+  ],
+  "single_changed_variable": "The contiguous post-conditioning action-joint range retained; all other conditioned scalars are set to zero after raw ONNX output is captured.",
+  "locked_configuration": {
+    "base_commit":"19e6cf43ce894c42a6aaf6b51984595220f1add4",
+    "same_binary":true,
+    "variant":"RealOnnxPolicy",
+    "action_axis":"mesh-component parent-bind axis from first policy",
+    "neutral_source":"captured stable standing neutral",
+    "constraint_range_mapping_and_projection":"enabled and unchanged",
+    "actuation":"known-stable current 8 Hz acceleration-mode plant",
+    "fixed_timestep_seconds":0.016666666666666666,
+    "capture_window_seconds":10.0,
+    "perturbation":"none"
+  },
+  "validity_gates": [
+    "First-policy snapshot and raw model outputs are byte-identical across all arms.",
+    "Every conditioned scalar exactly matches the declared retained joint range.",
+    "Zero arm remains physically stable for ten seconds.",
+    "Inference cadence and target readback ratio remain valid in every arm."
+  ],
+  "support": "At least one smaller subset independently reproduces the locked physical failure while another passes, localizing a minimum harmful region.",
+  "interaction_result": "All smaller subsets pass despite their parent family failing, proving a within-family interaction and requiring pairwise combinations.",
+  "falsification": "Every smaller subset fails similarly, so the family cannot be localized at this resolution.",
+  "next": "Split any sufficient subset down to individual joints; if only collapsed distal subsets fail, test wrist versus hand descriptors and their two-to-one Manny collapse separately."
+}
