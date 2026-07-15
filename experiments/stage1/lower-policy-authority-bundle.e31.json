@@ -1,0 +1,38 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "lower-policy-authority-bundle-e31",
+  "recorded_utc": "2026-07-15T20:45:00Z",
+  "source_commit": "03308383405d6c679c2f5eacc46f933046ef5f8b",
+  "status": "VALID",
+  "hypothesis_verdict": "SUPPORTED",
+  "product_candidate_success": true,
+  "production_success": false,
+  "bundle_status": "PASS",
+  "failed_criteria": [],
+  "fixture_authority": "PRODUCT_RUN",
+  "protocol_sha256": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+  "normal_recovery_auc": [30.374536874795023,30.374536874795023,30.374536874795023],
+  "zero_actions_recovery_auc": [41.14179622283463,41.14179622283463,41.14179622283463],
+  "normal_to_zero_recovery_auc_ratio": 0.7382890311905358,
+  "locked_maximum_ratio": 0.8,
+  "normal_absolute_pass_count": 3,
+  "zero_actions_absolute_pass_count": 3,
+  "target_readback_ratio_normal": 1.0,
+  "target_readback_ratio_zero_actions": 1.0,
+  "destructive_controls": {
+    "DropControlDispatch": {"status":"FAIL", "failed_criteria":["target_readback"], "target_readback_match_ratio":0.6190476190476191},
+    "ForcedSupportLoss": {"status":"FAIL", "failed_criteria":["support_gap"], "target_readback_match_ratio":1.0}
+  },
+  "candidate_behavior": {
+    "retained_policy_actions":"Proto joints 0-7",
+    "policy_mode_active_strength_factor":1.5,
+    "zero_actions_active_strength_factor":1.0,
+    "strength_activation":"after first active-standing policy snapshot"
+  },
+  "causal_findings": [
+    "The candidate passes the complete locked causal-standing product bundle with deterministic results across all repetitions.",
+    "Policy recovery AUC is 26.17 percent lower than ZeroActions and below the locked 0.8 ratio.",
+    "Both destructive controls remain discriminative for their intended failure reasons."
+  ],
+  "next": "Promote the proven lower-body compatibility mask and 1.5 policy-mode authority into explicit production behavior through TDD, then rerun the complete bundle with no experimental flags."
+}

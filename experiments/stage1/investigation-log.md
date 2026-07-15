@@ -458,3 +458,17 @@ Machine-readable record: `experiments/stage1/rigid-body-position-observation.e29
 **Next experiment selected.** Run the complete locked 3+3+2 causal-standing bundle at policy-mode strength factor 1.5.
 
 Machine-readable record: `experiments/stage1/acceleration-strength-screen.e30.json`.
+
+## E31 — Complete lower-policy authority candidate bundle (2026-07-15)
+
+**Hypothesis.** Lower-only policy actions with delayed 1.5 acceleration-strength authority satisfy the complete locked causal-standing product contract.
+
+**Configuration.** Three Normal repetitions at lower-only actions and 1.5 policy-mode authority, three ZeroActions repetitions at the unchanged 1.0 plant, plus DropControlDispatch and ForcedSupportLoss controls. All used one binary, the locked protocol, fixed timestep, perturbation, render, and evaluator.
+
+**Result.** Bundle status `PASS`. Every Normal and ZeroActions repetition passed absolute criteria with target readback 1.0. Normal AUC was deterministically 30.3745; ZeroActions was 41.1418; ratio 0.738289 against the locked maximum 0.8. Drop dispatch failed target readback at ratio 0.6190, and forced support loss failed support gap, as intended.
+
+**Supported or falsified.** Supported. This is the first complete causal-standing product-candidate PASS.
+
+**Promotion decision.** The candidate still uses development flags. Promote the lower-body compatibility mask and 1.5 policy-mode authority into explicit production behavior through TDD, then rerun the full bundle without any experimental arguments before claiming production success.
+
+Machine-readable record: `experiments/stage1/lower-policy-authority-bundle.e31.json`.
