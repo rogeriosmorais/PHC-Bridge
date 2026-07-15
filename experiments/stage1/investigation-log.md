@@ -694,3 +694,19 @@ Machine-readable record: `experiments/stage1/deterministic-distal-hands-restorat
 **Next experiment selected.** Head restoration after the first active policy snapshot.
 
 Machine-readable record: `experiments/stage1/production-distal-hands-restoration.e45.json`.
+
+## E46 — Deterministic Head after first active policy cycle (2026-07-15)
+
+**Hypothesis.** Head joint 12 can be restored from the second active policy inference onward under deterministic execution.
+
+**Configuration.** Production lower body + Spine/Chest + distal hands; Head delayed one active-policy cycle; Neck, torso and proximal arms masked; `-onethread`.
+
+**Validity.** Clean preregistration commit `718607ef5773691a95493163bed2078c9417e694`, locked model/protocol, exact timing/mask/strength contracts and intended destructive controls.
+
+**Result.** Bundle PASS at ratio 0.762566. Normal AUC exactly 30.0066; ZeroActions exactly 39.3495; all streams byte-identical. First active Head triplet is exactly zero and later Head is nonzero.
+
+**Supported or falsified.** Supported. Delayed Head is eligible for production promotion.
+
+**Next experiment selected.** Production-safe first-active-cycle latch and no-flag Head promotion.
+
+Machine-readable record: `experiments/stage1/deterministic-head-after-first-policy.e46.json`.
