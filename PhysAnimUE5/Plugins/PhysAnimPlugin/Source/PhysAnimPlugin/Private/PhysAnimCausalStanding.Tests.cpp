@@ -530,6 +530,21 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			true,
 			true,
 			EPhysAnimRuntimeState::Standing_PolicyBlend));
+	TestFalse(
+		TEXT("E47 production Head remains masked on the first active-policy inference"),
+		UPhysAnimComponent::ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestTrue(
+		TEXT("E47 production Head restores after an earlier active-policy inference"),
+		UPhysAnimComponent::ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(
+		TEXT("E47 production Head remains masked outside active standing"),
+		UPhysAnimComponent::ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend));
 	Component->ApplyProductVariantFromCommandLineForTesting(
 		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCausalStandingUpperBody=SpineChest"));
 	TestTrue(

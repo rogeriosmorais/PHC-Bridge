@@ -28,6 +28,8 @@ void UPhysAnimComponent::ResetStabilizationRuntimeState()
 	PreviousConditionedActionBuffer.Reset();
 	PreviousActionOutputBuffer.Reset();
 	FirstPolicyInferenceSnapshot.Reset();
+	bFirstActiveStandingPolicyInferenceCompleted = false;
+	bFirstActiveStandingPolicyCapturedBeforeCurrentInference = false;
 #if WITH_DEV_AUTOMATION_TESTS
 	FirstActiveStandingPolicyInferenceSnapshot.Reset();
 	bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting = false;

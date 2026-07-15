@@ -931,6 +931,14 @@ float UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
 			: 1.0f;
 }
 
+bool UPhysAnimComponent::ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bFirstActiveStandingPolicyCapturedBeforeCurrentInference &&
+		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+}
+
 bool UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
 	EPhysAnimRuntimeState InRuntimeState)
 {
@@ -1008,8 +1016,9 @@ bool UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadAfterFirstPo
 	EPhysAnimRuntimeState InRuntimeState)
 {
 	return bHeadEnabled &&
-		bFirstActiveStandingPolicyCapturedBeforeCurrentInference &&
-		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+		ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+			bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+			InRuntimeState);
 }
 
 bool UPhysAnimComponent::CaptureFirstActiveStandingConditionedActionsForTesting(

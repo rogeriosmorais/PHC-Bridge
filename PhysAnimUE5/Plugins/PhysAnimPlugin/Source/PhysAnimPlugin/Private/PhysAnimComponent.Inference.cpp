@@ -96,9 +96,15 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 		MimicTargetPosesBuffer,
 		TerrainBuffer,
 		ActionOutputBuffer);
+	bFirstActiveStandingPolicyCapturedBeforeCurrentInference =
+		bFirstActiveStandingPolicyInferenceCompleted;
+	if (RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		bFirstActiveStandingPolicyInferenceCompleted = true;
+	}
 #if WITH_DEV_AUTOMATION_TESTS
 	bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting =
-		FirstActiveStandingPolicyInferenceSnapshot.bCaptured;
+		bFirstActiveStandingPolicyCapturedBeforeCurrentInference;
 	FirstActiveStandingPolicyInferenceSnapshot.CaptureFirstIf(
 		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing,
 		SelfObservationBuffer,
@@ -200,21 +206,27 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 	{
 		bool bRestoreCausalStandingSpineChest = true;
 		bool bRestoreCausalStandingNeck = false;
-		bool bRestoreCausalStandingHead = false;
+		bool bRestoreCausalStandingHead =
+			ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+				bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+				RuntimeState);
 		bool bRestoreCausalStandingDistalHands = true;
 #if WITH_DEV_AUTOMATION_TESTS
 		bRestoreCausalStandingNeck =
 			bExperimentalCausalStandingNeckEnabledForTesting;
-		bRestoreCausalStandingHead =
-			bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting
-				? ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
-					bExperimentalCausalStandingHeadEnabledForTesting,
-					bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting,
-					RuntimeState)
-				: ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
-					bExperimentalCausalStandingHeadEnabledForTesting,
-					bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting,
-					RuntimeState);
+		if (bExperimentalCausalStandingHeadEnabledForTesting)
+		{
+			bRestoreCausalStandingHead =
+				bExperimentalCausalStandingHeadAfterFirstPolicyEnabledForTesting
+					? ShouldRestoreExperimentalCausalStandingHeadAfterFirstPolicyForTesting(
+						true,
+						bFirstActiveStandingPolicyCapturedBeforeCurrentInferenceForTesting,
+						RuntimeState)
+					: ShouldRestoreExperimentalCausalStandingHeadForRuntimeStateForTesting(
+						true,
+						bExperimentalCausalStandingHeadActiveOnlyEnabledForTesting,
+						RuntimeState);
+		}
 #endif
 		ApplyCausalStandingPolicyActionCompatibility(
 			IsStandingActivationRuntimeState(RuntimeState),

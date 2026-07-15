@@ -1516,6 +1516,9 @@ public:
 		bool bStandingPolicyMode,
 		bool bFirstActiveStandingPolicyCaptured,
 		EPhysAnimRuntimeState InRuntimeState);
+	static bool ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+		bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference,
+		EPhysAnimRuntimeState InRuntimeState);
 	static bool ShouldUseCausalStandingComponentActionAxis(
 		EPhysAnimRuntimeState InRuntimeState);
 	static FQuat ExpressCachedWorldActionAxisInMeshComponent(
@@ -2657,6 +2660,8 @@ private:
 	TArray<float> PreviousConditionedActionBuffer;
 	TArray<float> ConditionedActionBuffer;
 	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstPolicyInferenceSnapshot;
+	bool bFirstActiveStandingPolicyInferenceCompleted = false;
+	bool bFirstActiveStandingPolicyCapturedBeforeCurrentInference = false;
 #if WITH_DEV_AUTOMATION_TESTS
 	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstActiveStandingPolicyInferenceSnapshot;
 	TArray<float> FirstActiveStandingConditionedActionsForTesting;
