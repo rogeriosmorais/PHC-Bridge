@@ -1,0 +1,11 @@
+{
+  "schema_version":"physanim-experiment-preregistration/v1",
+  "experiment_id":"production-distal-hands-restoration-e45",
+  "preregistered_utc":"2026-07-15T22:50:00Z",
+  "production_baseline_commit":"3bbcfc54225293a185b23c8d211f25b853cb91f6",
+  "supported_candidate_evidence_commit":"94bc5eb8642a9670f6187dd797cf053c14d19f3f",
+  "hypothesis":"Making Proto joints 16-17 and 21-22 part of the production default standing mask exactly reproduces E44 under the deterministic -onethread acceptance configuration without any PhysAnim experimental behavior argument.",
+  "single_variable":"Default bRestoreCausalStandingDistalHands changes from false to true.",
+  "acceptance":{"focused_default_mask_contract_passes":true,"bundle_status":"PASS","normal_to_zero_recovery_auc_ratio_max":0.8,"normal_and_zero_byte_deterministic":true,"no_PhysAnimExperimental_arguments":true,"runner_contains_onethread":true,"destructive_controls_fail_only_intended_criteria":true},
+  "decision_rule":{"supported":"Adopt the resulting behavior commit as the next production baseline and proceed to Head restoration.","falsified":"Revert the production-default change while retaining E44 evidence and selector."}
+}
