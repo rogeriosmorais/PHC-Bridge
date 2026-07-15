@@ -1,0 +1,57 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "active-standing-action-axis-frame-e16-attempt2",
+  "preregistered_utc": "2026-07-15T14:55:34.8185862Z",
+  "base_commit": "521270e436b17532a240014104757361204940ae",
+  "authority": "DEVELOPMENT_EXPERIMENT_PREREGISTRATION_ONLY",
+  "product_success_authority": false,
+  "hypothesis": "E15's non-identity round-trip excess is caused by using the cached Manny parent action axis in world space. Expressing that axis in mesh-component space only after entering BalanceActive_Standing will preserve the locked pre-intervention policy state and make every actual-action and axis-probe error equal the unchanged per-joint identity residual.",
+  "supporting_runtime_evidence": [
+    "E15 behavior-neutral tracing measured a constant 90-degree component-to-world rotation, exact action/observation bind agreement, unchanged identity residuals up to 35.962549 degrees, and nonzero-input excess up to 106.601652 degrees.",
+    "E16 attempt 1 reproduced the baseline exactly and its post-intervention component-axis algebra collapsed actual/probe excess to below 3e-11 degrees.",
+    "E16 attempt 1 was invalid only because the override was active during Standing_Preparation and changed the closed-loop first-active policy action before the intended intervention boundary."
+  ],
+  "competing_explanations": [
+    "The world-space axis is intentional and the apparent algebraic collapse is not the live causal transform.",
+    "Quaternion multiplication direction or another hidden target frame, rather than world/component axis selection, causes the excess.",
+    "Even activation at BalanceActive_Standing may occur too early to preserve the evaluator's first-active pre-intervention policy input and decoded canonical action."
+  ],
+  "single_changed_variable": {
+    "name": "action_conjugation_axis_frame_after_active_standing_entry",
+    "baseline": "cached_parent_world_for_all_runtime_states",
+    "experimental": "cached_parent_world_before_BalanceActive_Standing_then_cached_parent_mesh_component_in_BalanceActive_Standing",
+    "override": "-PhysAnimExperimentalComponentActionAxis",
+    "implementation_scope": "development-only runtime-state guard around the existing component-axis override",
+    "production_default_changed": false,
+    "protocol_or_threshold_changed": false
+  },
+  "expected_if_hypothesis_correct": "The baseline reproduces E15/E16-attempt1 baseline. The experimental arm has exact first-policy input, first-active-standing input, and first-active canonical decoded actions versus baseline; the trace confirms world-axis behavior before BalanceActive_Standing and component-axis behavior at the captured first active target; identity errors remain unchanged within 0.001 degrees; and every decisive actual/probe error differs from its joint identity residual by at most 0.001 degrees.",
+  "falsification_observation": "With the component-axis mode confirmed effective only in BalanceActive_Standing and all pre-intervention equality gates passing, any decisive identity residual changes beyond 0.001 degrees or any actual/probe residual exceeds 0.001 degrees.",
+  "invalidity_conditions": [
+    "The experimental path is effective in Standing_Preparation, Standing_FullSimulationActivation, or Standing_PolicyBlend.",
+    "First-policy input, first-active-standing input, or first-active canonical decoded action differs from baseline before the axis transform is interpreted.",
+    "Source commit, binary, model, seed, timestep, pose, perturbation, capture window, protocol, evaluator, or thresholds differ between arms.",
+    "The runtime trace does not prove configured and effective axis modes."
+  ],
+  "locked_judges": {
+    "protocol": "product-gates/standing-plant-ladder.v2.json",
+    "variant": "RealOnnxPolicy",
+    "model_sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "initial_pose": "unchanged standing-plant harness default",
+    "perturbation": "none",
+    "seed": "unchanged standing-plant harness default",
+    "roundtrip_tolerance_degrees": 0.001,
+    "runtime_evaluator": "scripts/evaluate_standing_plant.py",
+    "semantic_evaluator": "scripts/evaluate_action_axis_frame_experiment.py",
+    "required_baseline_reproduction": "E15/E16-attempt1 world-axis baseline",
+    "required_preintervention_equality": [
+      "first-policy input snapshot",
+      "first-active-standing input snapshot",
+      "first-active canonical decoded actions"
+    ]
+  },
+  "test_first_contract": "Before changing behavior, add a unit contract proving that the override is ineffective in Standing_Preparation, Standing_FullSimulationActivation, and Standing_PolicyBlend and effective only in BalanceActive_Standing when explicitly configured.",
+  "promotion_policy": "Do not promote to production or alter neutral-pose behavior in this experiment. Record evidence and stop after the A/B conclusion."
+}
