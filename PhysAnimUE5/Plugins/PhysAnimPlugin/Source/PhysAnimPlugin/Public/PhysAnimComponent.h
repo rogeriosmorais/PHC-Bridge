@@ -1530,6 +1530,18 @@ public:
 	static void ApplyExperimentalActionFamilyMaskForTesting(
 		EPhysAnimExperimentalActionFamilyMask Mask,
 		TArray<float>& InOutActions);
+	int32 GetExperimentalActionJointRangeStartForTesting() const
+	{
+		return ExperimentalActionJointRangeStartForTesting;
+	}
+	int32 GetExperimentalActionJointRangeCountForTesting() const
+	{
+		return ExperimentalActionJointRangeCountForTesting;
+	}
+	static void ApplyExperimentalActionJointRangeForTesting(
+		int32 StartJointIndex,
+		int32 JointCount,
+		TArray<float>& InOutActions);
 	bool IsExperimentalCheckpointTorqueCeilingEnabledForTesting() const
 	{
 		return bExperimentalCheckpointTorqueCeilingEnabledForTesting;
@@ -2533,6 +2545,8 @@ private:
 	bool bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = false;
 	EPhysAnimExperimentalActionFamilyMask ExperimentalActionFamilyMaskForTesting =
 		EPhysAnimExperimentalActionFamilyMask::All;
+	int32 ExperimentalActionJointRangeStartForTesting = INDEX_NONE;
+	int32 ExperimentalActionJointRangeCountForTesting = 0;
 	bool bExperimentalCheckpointTorqueCeilingEnabledForTesting = false;
 	bool bExperimentalCheckpointForcePdEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;

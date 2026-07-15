@@ -957,6 +957,31 @@ void UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
 	}
 }
 
+void UPhysAnimComponent::ApplyExperimentalActionJointRangeForTesting(
+	int32 StartJointIndex,
+	int32 JointCount,
+	TArray<float>& InOutActions)
+{
+	if (StartJointIndex == INDEX_NONE)
+	{
+		return;
+	}
+
+	const int32 ClampedStartJoint = FMath::Clamp(StartJointIndex, 0, PhysAnimBridge::NumActionFloats / 3);
+	const int32 ClampedEndJoint = FMath::Clamp(
+		ClampedStartJoint + FMath::Max(0, JointCount),
+		ClampedStartJoint,
+		PhysAnimBridge::NumActionFloats / 3);
+	for (int32 ScalarIndex = 0; ScalarIndex < InOutActions.Num(); ++ScalarIndex)
+	{
+		const int32 JointIndex = ScalarIndex / 3;
+		if (JointIndex < ClampedStartJoint || JointIndex >= ClampedEndJoint)
+		{
+			InOutActions[ScalarIndex] = 0.0f;
+		}
+	}
+}
+
 FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
 	const FQuat& ActionBindComponentWorldRotation,
 	const FQuat& CachedWorldActionAxisRotation)

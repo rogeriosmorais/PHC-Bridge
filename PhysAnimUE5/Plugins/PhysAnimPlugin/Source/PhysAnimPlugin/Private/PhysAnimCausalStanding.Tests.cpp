@@ -463,6 +463,40 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			ZeroFamilyActions[Index],
 			0.0f);
 	}
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalActionJointStart=11 -PhysAnimExperimentalActionJointCount=2"));
+	TestEqual(
+		TEXT("Command line selects the requested action-joint range start"),
+		Component->GetExperimentalActionJointRangeStartForTesting(),
+		11);
+	TestEqual(
+		TEXT("Command line selects the requested action-joint range count"),
+		Component->GetExperimentalActionJointRangeCountForTesting(),
+		2);
+	TArray<float> NeckHeadRangeActions = FamilyActions;
+	UPhysAnimComponent::ApplyExperimentalActionJointRangeForTesting(
+		11,
+		2,
+		NeckHeadRangeActions);
+	for (int32 Index = 0; Index < NeckHeadRangeActions.Num(); ++Index)
+	{
+		TestEqual(
+			*FString::Printf(TEXT("Neck/head range scalar %d matches the requested joint interval"), Index),
+			NeckHeadRangeActions[Index],
+			(Index >= 33 && Index < 39) ? FamilyActions[Index] : 0.0f);
+	}
+	TArray<float> EmptyJointRangeActions = FamilyActions;
+	UPhysAnimComponent::ApplyExperimentalActionJointRangeForTesting(
+		0,
+		0,
+		EmptyJointRangeActions);
+	for (int32 Index = 0; Index < EmptyJointRangeActions.Num(); ++Index)
+	{
+		TestEqual(
+			*FString::Printf(TEXT("Empty action-joint range scalar %d is cleared"), Index),
+			EmptyJointRangeActions[Index],
+			0.0f);
+	}
 	TestFalse(
 		TEXT("Checkpoint torque ceiling is disabled by default"),
 		Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting());
@@ -587,6 +621,8 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			Component->IsExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting() ||
 			Component->GetExperimentalActionFamilyMaskForTesting() !=
 				EPhysAnimExperimentalActionFamilyMask::All ||
+			Component->GetExperimentalActionJointRangeStartForTesting() != INDEX_NONE ||
+			Component->GetExperimentalActionJointRangeCountForTesting() != 0 ||
 			Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting() ||
 			Component->IsExperimentalCheckpointForcePdEnabledForTesting());
 	TestFalse(

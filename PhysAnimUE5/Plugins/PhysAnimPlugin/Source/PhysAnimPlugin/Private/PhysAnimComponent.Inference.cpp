@@ -157,6 +157,10 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 		ApplyExperimentalActionFamilyMaskForTesting(
 			ExperimentalActionFamilyMaskForTesting,
 			ConditionedActionBuffer);
+		ApplyExperimentalActionJointRangeForTesting(
+			ExperimentalActionJointRangeStartForTesting,
+			ExperimentalActionJointRangeCountForTesting,
+			ConditionedActionBuffer);
 #endif
 		PreviousConditionedActionBuffer = ConditionedActionBuffer;
 		const bool bCaptureMetrics = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||

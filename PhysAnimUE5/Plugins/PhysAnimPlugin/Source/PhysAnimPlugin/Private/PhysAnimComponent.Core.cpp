@@ -75,6 +75,25 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 			ExperimentalActionFamilyMaskForTesting = EPhysAnimExperimentalActionFamilyMask::ArmsOnly;
 		}
 	}
+	ExperimentalActionJointRangeStartForTesting = INDEX_NONE;
+	ExperimentalActionJointRangeCountForTesting = 0;
+	if (CommandLine)
+	{
+		int32 ParsedJointStart = INDEX_NONE;
+		int32 ParsedJointCount = 0;
+		if (FParse::Value(
+				CommandLine,
+				TEXT("PhysAnimExperimentalActionJointStart="),
+				ParsedJointStart))
+		{
+			ExperimentalActionJointRangeStartForTesting = ParsedJointStart;
+			FParse::Value(
+				CommandLine,
+				TEXT("PhysAnimExperimentalActionJointCount="),
+				ParsedJointCount);
+			ExperimentalActionJointRangeCountForTesting = FMath::Max(0, ParsedJointCount);
+		}
+	}
 	bPolicyInputProvenanceTraceEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimPolicyInputProvenanceTrace"));
 	bStartupChronologyTraceEnabledForTesting = CommandLine &&
