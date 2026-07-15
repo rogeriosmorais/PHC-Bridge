@@ -419,6 +419,56 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	{
 		FamilyActions[Index] = static_cast<float>(Index + 1);
 	}
+	TArray<float> ProductionCompatibleActions = FamilyActions;
+	UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+		true,
+		ProductionCompatibleActions);
+	for (int32 Index = 0; Index < ProductionCompatibleActions.Num(); ++Index)
+	{
+		TestEqual(
+			*FString::Printf(TEXT("Production standing-policy action scalar %d matches compatibility mask"), Index),
+			ProductionCompatibleActions[Index],
+			Index < 24 ? FamilyActions[Index] : 0.0f);
+	}
+	TArray<float> NonPolicyCompatibleActions = FamilyActions;
+	UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+		false,
+		NonPolicyCompatibleActions);
+	for (int32 Index = 0; Index < NonPolicyCompatibleActions.Num(); ++Index)
+	{
+		TestEqual(
+			*FString::Printf(TEXT("Non-policy action scalar %d is preserved"), Index),
+			NonPolicyCompatibleActions[Index],
+			FamilyActions[Index]);
+	}
+	TestEqual(
+		TEXT("Production policy authority is identity before active capture"),
+		UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
+			true,
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		1.0f);
+	TestEqual(
+		TEXT("Production policy authority is identity outside active standing"),
+		UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
+			true,
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend),
+		1.0f);
+	TestEqual(
+		TEXT("Production nonzero standing policy receives proven authority"),
+		UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
+			true,
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		1.5f);
+	TestEqual(
+		TEXT("Zero or passive standing mode retains identity authority"),
+		UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
+			false,
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		1.0f);
 	TArray<float> LowerOnlyActions = FamilyActions;
 	UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
 		EPhysAnimExperimentalActionFamilyMask::LowerOnly,

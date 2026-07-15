@@ -196,6 +196,9 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 		OutError);
 	if (bSuccess)
 	{
+		ApplyCausalStandingPolicyActionCompatibility(
+			IsStandingActivationRuntimeState(RuntimeState),
+			ConditionedActionBuffer);
 #if WITH_DEV_AUTOMATION_TESTS
 		ApplyExperimentalActionFamilyMaskForTesting(
 			ExperimentalActionFamilyMaskForTesting,

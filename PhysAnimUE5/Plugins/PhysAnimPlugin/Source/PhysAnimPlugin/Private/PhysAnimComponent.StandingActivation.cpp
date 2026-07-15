@@ -183,6 +183,14 @@ FPhysAnimStandingActivationReadback UPhysAnimComponent::PublishStandingPhysicsCo
 	ControlMultiplier.AngularStrengthMultiplier = ExpectedControl.AngularStrength;
 	ControlMultiplier.AngularDampingRatioMultiplier = ExpectedControl.DampingRatio;
 	ControlMultiplier.AngularExtraDampingMultiplier = ExpectedControl.ExtraDamping;
+	const bool bCausalStandingPolicyMode =
+		FPhysAnimStandingActivationPlan::UsesPolicyInference(StandingVariant) &&
+		StandingVariant != EPhysAnimStandingVariant::ZeroActions;
+	ControlMultiplier.AngularStrengthMultiplier *=
+		ResolveCausalStandingPolicyStrengthFactor(
+			bCausalStandingPolicyMode,
+			FirstActiveStandingPolicyInferenceSnapshot.bCaptured,
+			RuntimeState);
 #if WITH_DEV_AUTOMATION_TESTS
 	ControlMultiplier.AngularStrengthMultiplier *=
 		ResolveExperimentalActiveStrengthFactorForTesting(

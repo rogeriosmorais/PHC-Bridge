@@ -934,6 +934,34 @@ bool UPhysAnimComponent::TryBuildCheckpointForcePdControlDataForTesting(
 	return true;
 }
 
+void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+	bool bStandingPolicyMode,
+	TArray<float>& InOutActions)
+{
+	if (!bStandingPolicyMode)
+	{
+		return;
+	}
+
+	constexpr int32 RetainedLowerBodyScalarCount = 8 * 3;
+	for (int32 ScalarIndex = RetainedLowerBodyScalarCount; ScalarIndex < InOutActions.Num(); ++ScalarIndex)
+	{
+		InOutActions[ScalarIndex] = 0.0f;
+	}
+}
+
+float UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
+	bool bStandingPolicyMode,
+	bool bFirstActiveStandingPolicyCaptured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bStandingPolicyMode &&
+		bFirstActiveStandingPolicyCaptured &&
+		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing
+			? 1.5f
+			: 1.0f;
+}
+
 void UPhysAnimComponent::ApplyExperimentalActionFamilyMaskForTesting(
 	EPhysAnimExperimentalActionFamilyMask Mask,
 	TArray<float>& InOutActions)

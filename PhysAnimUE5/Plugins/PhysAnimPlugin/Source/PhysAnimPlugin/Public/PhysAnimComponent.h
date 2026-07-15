@@ -1527,6 +1527,13 @@ public:
 	{
 		return ExperimentalActionFamilyMaskForTesting;
 	}
+	static void ApplyCausalStandingPolicyActionCompatibility(
+		bool bStandingPolicyMode,
+		TArray<float>& InOutActions);
+	static float ResolveCausalStandingPolicyStrengthFactor(
+		bool bStandingPolicyMode,
+		bool bFirstActiveStandingPolicyCaptured,
+		EPhysAnimRuntimeState InRuntimeState);
 	static void ApplyExperimentalActionFamilyMaskForTesting(
 		EPhysAnimExperimentalActionFamilyMask Mask,
 		TArray<float>& InOutActions);
