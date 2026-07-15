@@ -414,3 +414,17 @@ Machine-readable record: `experiments/stage1/lower-joint-recovery-screen.e26.jso
 **Next experiment selected.** Hold conditioned policy actions at zero until the first active-standing baseline is captured, reset smoothing at the domain switch, then dispatch residual actions.
 
 Machine-readable record: `experiments/stage1/policy-action-baseline-residual.e27.json`.
+
+## E28 — Zero policy actions until active baseline capture (2026-07-15)
+
+**Hypothesis.** E27 remained above zero because absolute actions contaminated the body before calibration; zeroing actions until the first active-standing baseline should yield a stable calibration state and recovery-beneficial residuals.
+
+**Configuration.** Same-binary PRODUCT_RUN control, lower-only zero-then-residual experimental arm, and ZeroActions guard. The experimental mode zeroed pre-capture conditioning inputs, reset smoothing at residual activation, and left raw inference unchanged.
+
+**Result.** Control passed with AUC 65.6985. The experimental arm worsened to AUC 70.2901 and failed pelvis-height and root-tilt criteria, despite target readback 1.0. ZeroActions remained unchanged at AUC 41.1418 with exactly zero conditioned actions.
+
+**Supported or falsified.** Falsified. Preparation actions are stabilizing rather than the remaining source of causal error.
+
+**Next experiment selected.** Audit perturbation-induced self-observation velocities and heading-frame/basis conversion against the pinned ProtoMotions checkpoint implementation. Test only a source-supported basis or sign correction.
+
+Machine-readable record: `experiments/stage1/policy-action-zero-until-baseline.e28.json`.
