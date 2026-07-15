@@ -1,0 +1,32 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "startup-repeatability-e17",
+  "recorded_utc": "2026-07-15T15:15:00Z",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "E16 attempt 2's first-policy mismatch is ordinary harness startup nondeterminism rather than a hidden side effect of the component-axis flag. Two identical world-axis controls will differ at first policy at least as materially as the world/component pair, while all arms converge to the same active-standing input and first-active canonical actions.",
+  "arms": [
+    {"name": "A1", "axis_mode": "cached_parent_world", "override": false},
+    {"name": "A2", "axis_mode": "cached_parent_world", "override": false},
+    {"name": "B", "axis_mode": "cached_parent_mesh_component only in BalanceActive_Standing", "override": true}
+  ],
+  "single_changed_variable": "Only arm B adds -PhysAnimExperimentalComponentActionAxis; A1 and A2 are identical repeats.",
+  "locked_configuration": {
+    "source_commit": "a8ac62cea35577276aec45c16a734f199270764a",
+    "binary_reused_across_arms": true,
+    "model_sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+    "protocol_sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB",
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "perturbation": "none",
+    "traces": ["action semantic", "Manny local-frame roundtrip"]
+  },
+  "classification": {
+    "startup_nondeterminism_supported": "A1/A2 first-policy snapshots or actions differ materially, with active-standing input/action captures equal across A1/A2/B.",
+    "hidden_flag_side_effect_supported": "A1/A2 first-policy captures are exact but B differs before active standing.",
+    "inconclusive": "Active-standing pre-intervention captures fail to converge or artifacts are incomplete."
+  },
+  "next_if_startup_nondeterminism": "Replace the nondeterministic first-policy cross-run gate with deterministic same-state action replay or an in-process counterfactual at the first active-standing write, then evaluate captured-neutral and frame choices without closed-loop divergence.",
+  "next_if_hidden_side_effect": "Add configured/effective axis-mode chronology at every policy target write and isolate the command-line side effect before any further behavioral experiment."
+}
