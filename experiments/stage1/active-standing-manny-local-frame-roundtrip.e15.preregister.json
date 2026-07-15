@@ -1,0 +1,112 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "active-standing-manny-local-frame-roundtrip-e15",
+  "preregistered_utc": "2026-07-15T00:35:57.3835838Z",
+  "base_commit": "9ed9af27d041e3df3a18f9d02b0c34c6e77096fb",
+  "authority": "DEVELOPMENT_EXPERIMENT_PREREGISTRATION_ONLY",
+  "product_success_authority": false,
+  "hypothesis": "The action-side Manny neutral/bind-axis composition is not symmetric with the observation-side Manny-bind-to-canonical-SMPL recovery, so an absolute ProtoMotions joint target does not round-trip through the two adapters as the same canonical joint rotation before constraint-range adaptation.",
+  "supporting_runtime_evidence": [
+    "E14 established that all 69 conditioned action scalars and all 23 decoded UE quaternions match the pinned ProtoMotions v2.3 contract, while the locked RealOnnxPolicy run still failed body linear speed, pelvis height, and root tilt.",
+    "E3 established exact Physics Control target publication/readback while the first active-standing trace showed that the action-side neutral/bind stage changed the decoded left-thigh target into a distinct Manny parent-relative target before protective range adaptation.",
+    "E13 showed that bypassing Manny constraint-range adaptation worsened the locked result from three failed criteria to six, increasing the information value of testing the upstream observation/action frame contract rather than more physics or range tuning.",
+    "The controlled-target plant has stood under the same fully simulated topology, so the remaining failure is consistent with a semantic target/observation mismatch rather than an incapable physical plant."
+  ],
+  "competing_explanations": [
+    "The action and observation transforms are symmetric for every one-to-one mapped joint; the captured activation neutral is the correct Manny representation of ProtoMotions identity and all known-axis probes round-trip within tolerance.",
+    "The adapter is symmetric, but the checkpoint receives an incorrect root, heading, future-pose, velocity, or other observation semantic that causes it to emit physically unsuitable yet correctly decoded targets.",
+    "The full adapter contract is correct and this checkpoint/reference state does not contain a standing solution for the current initial condition."
+  ],
+  "single_changed_variable": {
+    "name": "first_active_standing_manny_local_frame_roundtrip_trace",
+    "baseline_value": "disabled",
+    "experimental_value": "enabled",
+    "activation": "new development-only command-line diagnostic override",
+    "scope": "WITH_DEV_AUTOMATION_TESTS, RealOnnxPolicy, first active-standing target write",
+    "behavior_change": "none",
+    "held_constant": [
+      "source commit, binary, and ONNX model",
+      "seed, fixed timestep, initial pose, perturbation, and capture window",
+      "policy inputs, inference, and decoded actions",
+      "Manny neutral, bind composition, range adaptation, safety projection, and publication",
+      "Physics Control, Chaos, rendering, and evaluator",
+      "locked protocol, metrics, and thresholds"
+    ]
+  },
+  "expected_if_hypothesis_correct": "The trace-on arm remains behaviorally identical to baseline, but at least one one-to-one mapped joint exceeds the locked angular tolerance when Proto identity, the actual decoded target, or a known-axis probe is composed into Manny and recovered through the observation-side bind calibration; the trace identifies the first stage and frame values responsible.",
+  "falsification_observation": "The trace-on arm is behaviorally identical to baseline and every one-to-one mapped joint returns Proto identity, the actual decoded target, and each positive/negative X/Y/Z probe through the observation/action adapter round trip within the locked tolerance, with complete finite frame data and matching ownership.",
+  "semantic_contract": {
+    "checkpoint_action_meaning": "ProtoMotions v2.3 absolute three-DOF SMPL joint PD targets because mimic_residual_control is false",
+    "observation_recovery": "Current Manny parent-relative body rotation is compared with the synchronized Manny T-pose bind rotation and conjugated by the parent bind component rotation to recover the canonical SMPL joint rotation.",
+    "action_composition": "Decoded canonical UE joint rotation is conjugated by the cached Manny parent action-axis reference and left-multiplied onto the captured Manny policy-neutral parent-relative rotation.",
+    "roundtrip_under_test": "canonical Proto/UE local joint target -> Manny parent-relative target before range adaptation -> observation-side canonical joint recovery",
+    "decisive_scope": "the 19 controls with exactly one Proto action joint and one corresponding SMPL observation body; collapsed hand controls remain diagnostic only"
+  },
+  "arms": [
+    {
+      "name": "trace_disabled",
+      "role": "fresh unchanged baseline",
+      "override": "none"
+    },
+    {
+      "name": "trace_enabled",
+      "role": "behavior-neutral instrumentation arm",
+      "override": "development-only local-frame round-trip trace"
+    }
+  ],
+  "invalid_run_conditions": [
+    "The two arms do not use one clean commit and reused binary.",
+    "Seed, timestep, initial pose, perturbation, capture window, model, protocol, evaluator, or thresholds differ.",
+    "Physics, policy, first-policy input, first-active-standing input, action-semantic, or render streams differ outside run identity.",
+    "The trace does not contain all 21 Manny controls, identify exactly 19 decisive one-to-one controls, or publish finite normalized frame quaternions.",
+    "Any decisive joint lacks the cached bind seed, captured policy neutral, observation bind parent/body rotations, source action, or round-trip metrics.",
+    "The trace or any required raw artifact is malformed or missing."
+  ],
+  "locked_judges": {
+    "protocol": {
+      "path": "product-gates/standing-plant-ladder.v2.json",
+      "sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB"
+    },
+    "model": {
+      "path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+      "sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19"
+    },
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "initial_pose": "unchanged standing-plant harness default",
+    "perturbation": "none",
+    "seed": "unchanged standing-plant harness default",
+    "runtime_evaluator": "scripts/evaluate_standing_plant.py",
+    "contract_evaluator": "scripts/evaluate_manny_local_frame_roundtrip.py",
+    "angular_tolerance_degrees": 0.001,
+    "axis_probe_degrees": 10.0,
+    "instrumentation_neutrality_metrics": [
+      "physics stream SHA-256 equality",
+      "policy stream SHA-256 equality",
+      "first-policy input snapshot SHA-256 equality",
+      "first-active-standing policy-input snapshot SHA-256 equality",
+      "action-semantic trace SHA-256 equality",
+      "render SHA-256 equality",
+      "exact locked failed-criteria set and behavioral metrics"
+    ],
+    "contract_metrics": [
+      "total control count, decisive one-to-one count, and exact source/body ownership",
+      "maximum identity action-observation round-trip angular error and failing joints",
+      "maximum actual decoded action-observation round-trip angular error and failing joints",
+      "maximum positive/negative X/Y/Z probe round-trip angular error and failing joint/axis probes",
+      "action-axis reference versus observation parent-bind frame angular relationship",
+      "captured Manny neutral versus synchronized Manny bind parent-relative angular delta",
+      "finite normalized quaternion and complete-frame counts"
+    ],
+    "support_rule": "Instrumentation is neutral and at least one decisive joint's identity, actual decoded, or known-axis action-observation round trip exceeds 0.001 degrees with complete finite trace data.",
+    "falsification_rule": "Instrumentation is neutral and all decisive joints' identity, actual decoded, and all known-axis action-observation round trips are at or below 0.001 degrees with complete finite trace data."
+  },
+  "implementation_constraints": [
+    "Add no target behavior, production default, activation-contract, serialization, locked protocol, threshold, physics, or target-publication change.",
+    "Capture the actual runtime bind seed, policy neutral, observation bind frames, decoded target, and composition outputs; do not substitute synthetic fixture values for runtime evidence.",
+    "The independent evaluator must be deterministic and must reject missing, non-finite, non-normalized, duplicate, or ownership-inconsistent trace entries.",
+    "Tests must validate round-trip invariants, frame ownership, ranges, malformed-input rejection, and metric publication rather than asserting a candidate production constant.",
+    "Run a fresh unchanged baseline beside trace-on using one clean commit and reused binary, record the raw artifacts and conclusion, then stop before any behavior experiment or promotion."
+  ]
+}
