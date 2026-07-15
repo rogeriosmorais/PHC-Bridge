@@ -1,0 +1,46 @@
+{
+  "schema_version": "physanim-investigation-preregistration/v1",
+  "experiment_id": "checkpoint-torque-ceiling-e21-attempt2",
+  "recorded_utc": "2026-07-15T17:25:00Z",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "hypothesis": "After an exact first-active-standing state/action capture, increasing only the authoritative standing-control torque ceiling from approximately 50 N*m to the ProtoMotions checkpoint's 500 N*m will improve or restore standing.",
+  "authoritative_source": {
+    "repository_commit": "4a905b998101333a2fb91f2de8e2cab4bd0db68e",
+    "checkpoint_config": "data/pretrained_models/motion_tracker/smpl/config.yaml",
+    "actuator_source": "protomotions/simulator/isaaclab/utils/robots.py::SMPL_CFG",
+    "effort_limit_nm": 500,
+    "control_rate_hz": 30,
+    "ue_control_data_max_torque": 500000,
+    "experimental_max_torque_multiplier": 10.0
+  },
+  "arms": [
+    {"name":"control_current_ceiling","post_capture_max_torque_multiplier":1.0},
+    {"name":"experimental_checkpoint_ceiling","post_capture_max_torque_multiplier":10.0}
+  ],
+  "single_changed_variable": "MaxTorqueMultiplier in PublishStandingPhysicsControlState after FirstActiveStandingPolicyInferenceSnapshot is captured.",
+  "locked_configuration": {
+    "base_commit":"de56116346e168194d68061f5c865e8d54f32aaa",
+    "same_binary":true,
+    "variant":"RealOnnxPolicy",
+    "action_family":"All",
+    "action_axis":"mesh-component parent-bind axis from first policy",
+    "neutral_source":"captured stable standing neutral",
+    "range_mapping_and_safety_projection":"enabled and unchanged",
+    "angular_strength_hz":8.0,
+    "damping":"unchanged",
+    "fixed_timestep_seconds":0.016666666666666666,
+    "capture_window_seconds":10.0,
+    "perturbation":"none"
+  },
+  "validity_gates": [
+    "First-policy input/output snapshots are byte-identical.",
+    "First-active-standing input snapshot and canonical action trace are byte-identical.",
+    "Pre-torque target traces are byte-identical.",
+    "The experimental multiplier remains 1.0 until the first active-standing snapshot is captured, then is 10.0 in subsequent physics samples; control remains 1.0.",
+    "Target readback ratio is 1.0 in both arms."
+  ],
+  "support": "Validity gates pass and the experimental ceiling strictly improves the failure set, time to collapse, and major speed/tilt metrics, or passes the locked standing hold.",
+  "falsification": "Validity gates pass but the experimental ceiling is neutral or worsens standing.",
+  "next_if_falsified": "Implement an authoritative per-family PD response experiment using the checkpoint's Kp/Kd and the now-validated effort ceiling, rather than uniform 8 Hz acceleration drives."
+}
