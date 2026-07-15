@@ -606,6 +606,44 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			true,
 			BoneObservationPosition,
 			PhysicsBodyObservationPosition).Equals(PhysicsBodyObservationPosition));
+	TestEqual(
+		TEXT("Experimental active strength factor defaults to identity"),
+		Component->GetExperimentalActiveStrengthFactorForTesting(),
+		1.0f);
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalActiveStrengthFactor=1.5"));
+	TestEqual(
+		TEXT("Command line selects the experimental active strength factor"),
+		Component->GetExperimentalActiveStrengthFactorForTesting(),
+		1.5f);
+	TestEqual(
+		TEXT("Strength factor remains identity before active-standing capture"),
+		UPhysAnimComponent::ResolveExperimentalActiveStrengthFactorForTesting(
+			1.5f,
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		1.0f);
+	TestEqual(
+		TEXT("Strength factor remains identity outside active standing"),
+		UPhysAnimComponent::ResolveExperimentalActiveStrengthFactorForTesting(
+			1.5f,
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend),
+		1.0f);
+	TestEqual(
+		TEXT("Configured strength factor activates after active-standing capture"),
+		UPhysAnimComponent::ResolveExperimentalActiveStrengthFactorForTesting(
+			1.5f,
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		1.5f);
+	TestEqual(
+		TEXT("Sub-identity configured strength factor is clamped to zero rather than inverted"),
+		UPhysAnimComponent::ResolveExperimentalActiveStrengthFactorForTesting(
+			-2.0f,
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing),
+		0.0f);
 	TestFalse(
 		TEXT("Checkpoint torque ceiling is disabled by default"),
 		Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting());
@@ -735,6 +773,7 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			Component->IsExperimentalPolicyActionBaselineResidualEnabledForTesting() ||
 			Component->IsExperimentalPolicyActionZeroUntilBaselineEnabledForTesting() ||
 			Component->IsExperimentalPhysicsBodyObservationPositionsEnabledForTesting() ||
+			!FMath::IsNearlyEqual(Component->GetExperimentalActiveStrengthFactorForTesting(), 1.0f) ||
 			Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting() ||
 			Component->IsExperimentalCheckpointForcePdEnabledForTesting());
 	TestFalse(

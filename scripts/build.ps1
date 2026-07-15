@@ -26,6 +26,7 @@ param (
     [switch]$ExperimentalPolicyActionBaselineResidual,
     [switch]$ExperimentalPolicyActionZeroUntilBaseline,
     [switch]$ExperimentalPhysicsBodyObservationPositions,
+    [double]$ExperimentalActiveStrengthFactor = 1.0,
     [switch]$ExperimentalCheckpointTorqueCeiling,
     [switch]$ExperimentalCheckpointForcePd,
     [switch]$PolicyInputProvenanceTrace,
@@ -185,6 +186,9 @@ if ($Test) {
     }
     if ($ExperimentalPhysicsBodyObservationPositions) {
         $EditorArguments += "-PhysAnimExperimentalPhysicsBodyObservationPositions"
+    }
+    if ([Math]::Abs($ExperimentalActiveStrengthFactor - 1.0) -gt 1.0e-9) {
+        $EditorArguments += "-PhysAnimExperimentalActiveStrengthFactor=$ExperimentalActiveStrengthFactor"
     }
     if ($ExperimentalCheckpointTorqueCeiling) {
         $EditorArguments += "-PhysAnimExperimentalCheckpointTorqueCeiling"

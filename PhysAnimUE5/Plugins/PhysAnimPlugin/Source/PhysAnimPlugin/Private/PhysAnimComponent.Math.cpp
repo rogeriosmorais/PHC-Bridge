@@ -1023,6 +1023,19 @@ FVector UPhysAnimComponent::SelectObservationWorldPositionForTesting(
 	return bUsePhysicsBodyPosition ? PhysicsBodyWorldPosition : BoneWorldPosition;
 }
 
+float UPhysAnimComponent::ResolveExperimentalActiveStrengthFactorForTesting(
+	float ConfiguredFactor,
+	bool bFirstActiveStandingPolicyCaptured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	if (!bFirstActiveStandingPolicyCaptured ||
+		InRuntimeState != EPhysAnimRuntimeState::BalanceActive_Standing)
+	{
+		return 1.0f;
+	}
+	return FMath::Max(0.0f, ConfiguredFactor);
+}
+
 FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
 	const FQuat& ActionBindComponentWorldRotation,
 	const FQuat& CachedWorldActionAxisRotation)

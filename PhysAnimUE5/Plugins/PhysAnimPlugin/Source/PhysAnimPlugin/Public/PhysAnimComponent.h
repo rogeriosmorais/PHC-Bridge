@@ -1576,6 +1576,14 @@ public:
 		bool bBaselineAvailable,
 		bool bForceZeroActions,
 		TArray<float>& InOutActions);
+	float GetExperimentalActiveStrengthFactorForTesting() const
+	{
+		return ExperimentalActiveStrengthFactorForTesting;
+	}
+	static float ResolveExperimentalActiveStrengthFactorForTesting(
+		float ConfiguredFactor,
+		bool bFirstActiveStandingPolicyCaptured,
+		EPhysAnimRuntimeState InRuntimeState);
 	bool IsExperimentalCheckpointTorqueCeilingEnabledForTesting() const
 	{
 		return bExperimentalCheckpointTorqueCeilingEnabledForTesting;
@@ -2585,6 +2593,7 @@ private:
 	bool bExperimentalPolicyActionZeroUntilBaselineEnabledForTesting = false;
 	bool bExperimentalPhysicsBodyObservationPositionsEnabledForTesting = false;
 	bool bExperimentalPolicyActionBaselineResidualStartedForTesting = false;
+	float ExperimentalActiveStrengthFactorForTesting = 1.0f;
 	mutable TArray<FVector> ObservationBoneWorldPositionsForTesting;
 	mutable TArray<FVector> ObservationPhysicsBodyWorldPositionsForTesting;
 	bool bExperimentalCheckpointTorqueCeilingEnabledForTesting = false;
