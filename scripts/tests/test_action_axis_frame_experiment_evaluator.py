@@ -122,6 +122,9 @@ def test_two_arm_component_axis_supports_locked_residual_contract(tmp_path: Path
     assert result["metrics"][
         "maximum_actual_runtime_target_recompute_error_degrees"
     ] < 1.0e-9
+    assert result["metrics"][
+        "maximum_effective_axis_vs_observation_parent_bind_component_degrees"
+    ] <= 1.0e-3
 
 
 def test_valid_two_arm_result_can_falsify_axis_hypothesis(tmp_path: Path) -> None:
@@ -135,6 +138,9 @@ def test_valid_two_arm_result_can_falsify_axis_hypothesis(tmp_path: Path) -> Non
     assert result["metrics"][
         "maximum_effective_axis_vs_observation_parent_bind_component_degrees"
     ] > 4.9
+    assert result["metrics"][
+        "maximum_actual_runtime_target_recompute_error_degrees"
+    ] <= 1.0e-3
 
 
 def test_e15_v1_trace_remains_historically_evaluable(tmp_path: Path) -> None:

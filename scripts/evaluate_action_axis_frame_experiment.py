@@ -311,12 +311,16 @@ def evaluate_experiment(
     maximum_identity_error_delta = max(identity_error_deltas)
     maximum_actual_residual = max(actual_residuals)
     maximum_probe_residual = max(probe_residuals)
+    maximum_effective_axis_relationship = max(effective_axis_relationships)
+    maximum_actual_target_recompute_error = max(actual_target_recompute_errors)
     supported = (
         maximum_identity_input_delta <= ANGULAR_TOLERANCE_DEGREES
         and maximum_identity_target_delta <= ANGULAR_TOLERANCE_DEGREES
         and maximum_identity_error_delta <= ANGULAR_TOLERANCE_DEGREES
         and maximum_actual_residual <= ANGULAR_TOLERANCE_DEGREES
         and maximum_probe_residual <= ANGULAR_TOLERANCE_DEGREES
+        and maximum_effective_axis_relationship <= ANGULAR_TOLERANCE_DEGREES
+        and maximum_actual_target_recompute_error <= ANGULAR_TOLERANCE_DEGREES
     )
 
     return {
@@ -342,8 +346,8 @@ def evaluate_experiment(
             "maximum_identity_error_cross_arm_delta_degrees": maximum_identity_error_delta,
             "maximum_actual_error_minus_identity_error_absolute_residual_degrees": maximum_actual_residual,
             "maximum_probe_error_minus_identity_error_absolute_residual_degrees": maximum_probe_residual,
-            "maximum_effective_axis_vs_observation_parent_bind_component_degrees": max(effective_axis_relationships),
-            "maximum_actual_runtime_target_recompute_error_degrees": max(actual_target_recompute_errors),
+            "maximum_effective_axis_vs_observation_parent_bind_component_degrees": maximum_effective_axis_relationship,
+            "maximum_actual_runtime_target_recompute_error_degrees": maximum_actual_target_recompute_error,
             "baseline_single_trace_verdict": baseline_single["contract_verdict"],
             "experimental_single_trace_verdict": experimental_single["contract_verdict"],
         },
