@@ -861,6 +861,21 @@ void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
 	bool bRestoreHead,
 	TArray<float>& InOutActions)
 {
+	ApplyCausalStandingPolicyActionCompatibility(
+		bStandingPolicyMode,
+		false,
+		bRestoreNeck,
+		bRestoreHead,
+		InOutActions);
+}
+
+void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+	bool bStandingPolicyMode,
+	bool bRestoreSpineChest,
+	bool bRestoreNeck,
+	bool bRestoreHead,
+	TArray<float>& InOutActions)
+{
 	if (!bStandingPolicyMode)
 	{
 		return;
@@ -871,6 +886,7 @@ void UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
 		const int32 JointIndex = ScalarIndex / 3;
 		const bool bRetainJoint =
 			JointIndex < 8 ||
+			(bRestoreSpineChest && JointIndex >= 9 && JointIndex < 11) ||
 			(bRestoreNeck && JointIndex == 11) ||
 			(bRestoreHead && JointIndex == 12);
 		if (!bRetainJoint)

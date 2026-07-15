@@ -501,6 +501,17 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			true,
 			true,
 			EPhysAnimRuntimeState::Standing_PolicyBlend));
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCausalStandingUpperBody=SpineChest"));
+	TestTrue(
+		TEXT("E39 development option enables spine/chest restoration"),
+		Component->IsExperimentalCausalStandingSpineChestEnabledForTesting());
+	TestFalse(
+		TEXT("E39 spine/chest option keeps neck restoration disabled"),
+		Component->IsExperimentalCausalStandingNeckEnabledForTesting());
+	TestFalse(
+		TEXT("E39 spine/chest option keeps head restoration disabled"),
+		Component->IsExperimentalCausalStandingHeadEnabledForTesting());
 	TArray<float> FirstActiveCaptureSource;
 	FirstActiveCaptureSource.SetNumUninitialized(PhysAnimBridge::NumActionFloats);
 	for (int32 Index = 0; Index < FirstActiveCaptureSource.Num(); ++Index)
@@ -601,6 +612,22 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TestEqual(
 			*FString::Printf(TEXT("E36 head candidate action scalar %d matches preregistered mask"), Index),
 			HeadRestoredActions[Index],
+			bExpectedRetained ? FamilyActions[Index] : 0.0f);
+	}
+	TArray<float> SpineChestRestoredActions = FamilyActions;
+	UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+		true,
+		true,
+		false,
+		false,
+		SpineChestRestoredActions);
+	for (int32 Index = 0; Index < SpineChestRestoredActions.Num(); ++Index)
+	{
+		const int32 JointIndex = Index / 3;
+		const bool bExpectedRetained = JointIndex < 8 || (JointIndex >= 9 && JointIndex < 11);
+		TestEqual(
+			*FString::Printf(TEXT("E39 spine/chest candidate action scalar %d matches preregistered mask"), Index),
+			SpineChestRestoredActions[Index],
 			bExpectedRetained ? FamilyActions[Index] : 0.0f);
 	}
 	TArray<float> NonPolicyCompatibleActions = FamilyActions;

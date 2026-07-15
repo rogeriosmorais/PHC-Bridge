@@ -198,9 +198,12 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 		OutError);
 	if (bSuccess)
 	{
+		bool bRestoreCausalStandingSpineChest = false;
 		bool bRestoreCausalStandingNeck = false;
 		bool bRestoreCausalStandingHead = false;
 #if WITH_DEV_AUTOMATION_TESTS
+		bRestoreCausalStandingSpineChest =
+			bExperimentalCausalStandingSpineChestEnabledForTesting;
 		bRestoreCausalStandingNeck =
 			bExperimentalCausalStandingNeckEnabledForTesting;
 		bRestoreCausalStandingHead =
@@ -216,6 +219,7 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 #endif
 		ApplyCausalStandingPolicyActionCompatibility(
 			IsStandingActivationRuntimeState(RuntimeState),
+			bRestoreCausalStandingSpineChest,
 			bRestoreCausalStandingNeck,
 			bRestoreCausalStandingHead,
 			ConditionedActionBuffer);
