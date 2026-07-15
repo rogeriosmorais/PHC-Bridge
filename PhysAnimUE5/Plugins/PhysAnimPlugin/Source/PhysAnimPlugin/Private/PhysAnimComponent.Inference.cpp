@@ -227,6 +227,11 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 			ExperimentalActionJointRangeStartForTesting,
 			ExperimentalActionJointRangeCountForTesting,
 			ConditionedActionBuffer);
+		CaptureFirstActiveStandingConditionedActionsForTesting(
+			RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing,
+			ConditionedActionBuffer,
+			bFirstActiveStandingConditionedActionsCapturedForTesting,
+			FirstActiveStandingConditionedActionsForTesting);
 #endif
 		PreviousConditionedActionBuffer = ConditionedActionBuffer;
 		const bool bCaptureMetrics = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||

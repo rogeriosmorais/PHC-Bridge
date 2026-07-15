@@ -1517,6 +1517,19 @@ public:
 	{
 		return FirstActiveStandingPolicyInferenceSnapshot;
 	}
+	bool HasFirstActiveStandingConditionedActionsForTesting() const
+	{
+		return bFirstActiveStandingConditionedActionsCapturedForTesting;
+	}
+	const TArray<float>& GetFirstActiveStandingConditionedActionsForTesting() const
+	{
+		return FirstActiveStandingConditionedActionsForTesting;
+	}
+	static bool CaptureFirstActiveStandingConditionedActionsForTesting(
+		bool bActiveStanding,
+		TConstArrayView<float> ConditionedActions,
+		bool& bInOutCaptured,
+		TArray<float>& OutActions);
 	void SetProductControlDispatchDroppedForTesting(bool bDropped) { bProductControlDispatchDroppedForTesting = bDropped; }
 	bool IsProductControlDispatchDroppedForTesting() const { return bProductControlDispatchDroppedForTesting; }
 	void SetStandingVariantForTesting(EPhysAnimStandingVariant Variant) { StandingVariantForTesting = Variant; }
@@ -2625,6 +2638,8 @@ private:
 	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstPolicyInferenceSnapshot;
 #if WITH_DEV_AUTOMATION_TESTS
 	PhysAnimBridge::FPhysAnimPolicyInferenceSnapshot FirstActiveStandingPolicyInferenceSnapshot;
+	TArray<float> FirstActiveStandingConditionedActionsForTesting;
+	bool bFirstActiveStandingConditionedActionsCapturedForTesting = false;
 	PhysAnimBridge::FPhysAnimActionSemanticTrace FirstActiveStandingActionSemanticTrace;
 	PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripTrace FirstActiveStandingMannyLocalFrameRoundtripTrace;
 	PhysAnimBridge::FPhysAnimPolicyInputProvenanceSnapshot FirstPolicyInputProvenanceSnapshot;

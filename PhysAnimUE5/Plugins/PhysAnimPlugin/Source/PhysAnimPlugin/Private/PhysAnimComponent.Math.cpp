@@ -973,6 +973,23 @@ bool UPhysAnimComponent::ShouldRestoreExperimentalCausalStandingHeadAfterFirstPo
 		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
 }
 
+bool UPhysAnimComponent::CaptureFirstActiveStandingConditionedActionsForTesting(
+	bool bActiveStanding,
+	TConstArrayView<float> ConditionedActions,
+	bool& bInOutCaptured,
+	TArray<float>& OutActions)
+{
+	if (!bActiveStanding || bInOutCaptured)
+	{
+		return false;
+	}
+
+	OutActions.Reset(ConditionedActions.Num());
+	OutActions.Append(ConditionedActions.GetData(), ConditionedActions.Num());
+	bInOutCaptured = true;
+	return true;
+}
+
 bool UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
 	bool bConfigured,
 	bool bFirstActiveStandingPolicyCaptured,

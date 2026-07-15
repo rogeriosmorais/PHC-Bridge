@@ -501,6 +501,41 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			true,
 			true,
 			EPhysAnimRuntimeState::Standing_PolicyBlend));
+	TArray<float> FirstActiveCaptureSource;
+	FirstActiveCaptureSource.SetNumUninitialized(PhysAnimBridge::NumActionFloats);
+	for (int32 Index = 0; Index < FirstActiveCaptureSource.Num(); ++Index)
+	{
+		FirstActiveCaptureSource[Index] = static_cast<float>(Index + 1);
+	}
+	bool bFirstActiveCaptureRecorded = false;
+	TArray<float> FirstActiveCapturedActions;
+	TestFalse(
+		TEXT("First active conditioned-action evidence ignores non-active samples"),
+		UPhysAnimComponent::CaptureFirstActiveStandingConditionedActionsForTesting(
+			false,
+			FirstActiveCaptureSource,
+			bFirstActiveCaptureRecorded,
+			FirstActiveCapturedActions));
+	TestTrue(
+		TEXT("First active conditioned-action evidence captures the first active sample"),
+		UPhysAnimComponent::CaptureFirstActiveStandingConditionedActionsForTesting(
+			true,
+			FirstActiveCaptureSource,
+			bFirstActiveCaptureRecorded,
+			FirstActiveCapturedActions));
+	TestTrue(TEXT("First active conditioned-action evidence records capture state"), bFirstActiveCaptureRecorded);
+	TestEqual(TEXT("First active conditioned-action evidence preserves action width"), FirstActiveCapturedActions.Num(), FirstActiveCaptureSource.Num());
+	TestEqual(TEXT("First active conditioned-action evidence preserves Head X"), FirstActiveCapturedActions[36], FirstActiveCaptureSource[36]);
+	TArray<float> ReplacementActions;
+	ReplacementActions.Init(-1.0f, PhysAnimBridge::NumActionFloats);
+	TestFalse(
+		TEXT("First active conditioned-action evidence does not overwrite the first sample"),
+		UPhysAnimComponent::CaptureFirstActiveStandingConditionedActionsForTesting(
+			true,
+			ReplacementActions,
+			bFirstActiveCaptureRecorded,
+			FirstActiveCapturedActions));
+	TestEqual(TEXT("First active conditioned-action evidence remains immutable"), FirstActiveCapturedActions[36], FirstActiveCaptureSource[36]);
 	Component->ApplyProductVariantFromCommandLineForTesting(
 		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalActionFamily=LowerOnly"));
 	TestEqual(
@@ -2687,6 +2722,7 @@ namespace
 				SerializeJson(SnapshotJson) + TEXT("\n"),
 				*PolicyInputSnapshotPath);
 			bool bActiveStandingPolicyInputSnapshotWritten = true;
+			bool bFirstActiveStandingConditionedActionsWritten = true;
 			bool bActionSemanticTraceWritten = true;
 			bool bMannyLocalFrameRoundtripTraceWritten = true;
 			bool bPolicyInputProvenanceWritten = true;
@@ -2721,6 +2757,43 @@ namespace
 				bActiveStandingPolicyInputSnapshotWritten = FFileHelper::SaveStringToFile(
 					SerializeJson(ActiveStandingSnapshotJson) + TEXT("\n"),
 					*ActiveStandingSnapshotPath);
+
+				const FString FirstActiveConditionedActionsPath = FPaths::Combine(
+					Config.RunRoot,
+					TEXT("first-active-conditioned-actions.json"));
+				const TArray<float> EmptyConditionedActions;
+				const TArray<float>& FirstActiveConditionedActions = Component
+					? Component->GetFirstActiveStandingConditionedActionsForTesting()
+					: EmptyConditionedActions;
+				TArray<float> FirstActiveHeadTriplet;
+				for (int32 ScalarIndex = 36;
+					ScalarIndex < FMath::Min(39, FirstActiveConditionedActions.Num());
+					++ScalarIndex)
+				{
+					FirstActiveHeadTriplet.Add(FirstActiveConditionedActions[ScalarIndex]);
+				}
+				const TSharedRef<FJsonObject> FirstActiveConditionedActionsJson = MakeShared<FJsonObject>();
+				FirstActiveConditionedActionsJson->SetStringField(
+					TEXT("schema_version"),
+					TEXT("physanim-first-active-conditioned-actions/v1"));
+				FirstActiveConditionedActionsJson->SetStringField(
+					TEXT("capture_scope"),
+					TEXT("first_active_standing_conditioning"));
+				FirstActiveConditionedActionsJson->SetBoolField(
+					TEXT("captured"),
+					Component && Component->HasFirstActiveStandingConditionedActionsForTesting());
+				FirstActiveConditionedActionsJson->SetNumberField(
+					TEXT("action_width"),
+					FirstActiveConditionedActions.Num());
+				FirstActiveConditionedActionsJson->SetArrayField(
+					TEXT("conditioned_actions"),
+					BuildPolicyActionJsonArray(FirstActiveConditionedActions));
+				FirstActiveConditionedActionsJson->SetArrayField(
+					TEXT("head_triplet"),
+					BuildPolicyActionJsonArray(FirstActiveHeadTriplet));
+				bFirstActiveStandingConditionedActionsWritten = FFileHelper::SaveStringToFile(
+					SerializeJson(FirstActiveConditionedActionsJson) + TEXT("\n"),
+					*FirstActiveConditionedActionsPath);
 
 				const FString ActionSemanticTracePath = FPaths::Combine(
 					Config.RunRoot,
@@ -2888,6 +2961,12 @@ namespace
 			Manifest->SetStringField(TEXT("physics_samples"), TEXT("physics.jsonl"));
 			Manifest->SetStringField(TEXT("policy_samples"), TEXT("policy.jsonl"));
 			Manifest->SetStringField(TEXT("policy_input_snapshot"), TEXT("policy-input-snapshot.json"));
+			if (Config.bPlantRun)
+			{
+				Manifest->SetStringField(
+					TEXT("first_active_conditioned_actions"),
+					TEXT("first-active-conditioned-actions.json"));
+			}
 			Manifest->SetStringField(TEXT("render_capture"), TEXT("render.png"));
 			Manifest->SetNumberField(TEXT("render_nonblank_pixel_count"), NonblankPixels);
 			const bool bManifestWritten = FFileHelper::SaveStringToFile(SerializeJson(Manifest) + TEXT("\n"), *ManifestPath);
@@ -2895,6 +2974,7 @@ namespace
 				bPolicyWritten &&
 				bPolicyInputSnapshotWritten &&
 				bActiveStandingPolicyInputSnapshotWritten &&
+				bFirstActiveStandingConditionedActionsWritten &&
 				bActionSemanticTraceWritten &&
 				bMannyLocalFrameRoundtripTraceWritten &&
 				bPolicyInputProvenanceWritten &&
