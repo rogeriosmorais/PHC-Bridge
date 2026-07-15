@@ -332,3 +332,21 @@ Machine-readable record: `experiments/stage1/policy-action-family-ablation.e20.j
 **Next experiment selected.** Return to E20's localized upper-body target failure and subdivide axial and arm action groups until the minimum independently sufficient failing joint subset is identified.
 
 Machine-readable record: `experiments/stage1/checkpoint-force-pd.e22.json`.
+
+## E23 — Upper-action contiguous subset ablation (2026-07-15)
+
+**Hypothesis.** E20's independently harmful axial and arm families can be localized to smaller contiguous ProtoMotions joint subsets while raw inference, observations, the known-stable acceleration plant, and downstream target stages remain unchanged.
+
+**Configuration.** Seven same-binary arms on commit `c01d2d9cd609312c7b844e813aea1eb8ed877ecf`, with component-space parent-axis composition, captured standing neutral, protective range mapping, safety projection, 8 Hz acceleration controls, timing, pose, and no perturbation held fixed. A generic post-conditioning range mask retained zero actions, trunk indices 8–10, neck/head 11–12, left proximal 13–15, left collapsed distal 16–17, right proximal 18–20, or right collapsed distal 21–22.
+
+**Validity.** All first-policy snapshots, including all 69 raw ONNX actions, were byte-identical. Every action triplet outside the declared range was exactly zero. Every arm produced 601 physics samples and 300 policy samples with target readback ratio 1.0. The zero arm remained physically stable and failed only the intentionally absent `real_policy_action` criterion.
+
+**Result.** Trunk indices 8–10 were independently catastrophic: pelvis crossed 80% height at 0.333 s, root tilt crossed 45° at 0.350 s, maximum body linear speed reached 1555.38 cm/s, and maximum body angular speed reached 4617.80°/s. Right proximal indices 18–20 were independently sufficient for delayed collapse, crossing both height and tilt limits at about 7.0 s. Neck/head, both collapsed distal groups, and the full left proximal chain passed ten seconds with maximum tilt below 7.27° and readback 1.0.
+
+**Supported or falsified.** Supported. The axial failure is confined to `Torso/Spine/Chest`; the arm failure is asymmetric and confined at this resolution to the right proximal chain.
+
+**What was learned.** The collapsed wrist/hand mappings are not independently harmful. Left proximal outputs are also safe in isolation. Two distinct remaining regions require individual-joint resolution: Proto joints 8–10 and 18–20.
+
+**Next experiment selected.** Run indices 8, 9, 10, 18, 19, and 20 individually from the same binary with a zero control. If individuals pass, run preregistered contiguous pairs before adding noncontiguous mask support.
+
+Machine-readable record: `experiments/stage1/upper-action-subset-ablation.e23.json`.
