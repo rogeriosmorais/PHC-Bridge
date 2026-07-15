@@ -2730,6 +2730,43 @@ namespace
 			bool bFirstPolicyBodySourceWritten = true;
 			bool bFirstPolicyGroundReferenceWritten = true;
 			bool bObservationPositionTraceWritten = true;
+			const FString FirstActiveConditionedActionsPath = FPaths::Combine(
+				Config.RunRoot,
+				TEXT("first-active-conditioned-actions.json"));
+			const TArray<float> EmptyConditionedActions;
+			const TArray<float>& FirstActiveConditionedActions = Component
+				? Component->GetFirstActiveStandingConditionedActionsForTesting()
+				: EmptyConditionedActions;
+			TArray<float> FirstActiveHeadTriplet;
+			for (int32 ScalarIndex = 36;
+				ScalarIndex < FMath::Min(39, FirstActiveConditionedActions.Num());
+				++ScalarIndex)
+			{
+				FirstActiveHeadTriplet.Add(FirstActiveConditionedActions[ScalarIndex]);
+			}
+			const TSharedRef<FJsonObject> FirstActiveConditionedActionsJson = MakeShared<FJsonObject>();
+			FirstActiveConditionedActionsJson->SetStringField(
+				TEXT("schema_version"),
+				TEXT("physanim-first-active-conditioned-actions/v1"));
+			FirstActiveConditionedActionsJson->SetStringField(
+				TEXT("capture_scope"),
+				TEXT("first_active_standing_conditioning"));
+			FirstActiveConditionedActionsJson->SetBoolField(
+				TEXT("captured"),
+				Component && Component->HasFirstActiveStandingConditionedActionsForTesting());
+			FirstActiveConditionedActionsJson->SetNumberField(
+				TEXT("action_width"),
+				FirstActiveConditionedActions.Num());
+			FirstActiveConditionedActionsJson->SetArrayField(
+				TEXT("conditioned_actions"),
+				BuildPolicyActionJsonArray(FirstActiveConditionedActions));
+			FirstActiveConditionedActionsJson->SetArrayField(
+				TEXT("head_triplet"),
+				BuildPolicyActionJsonArray(FirstActiveHeadTriplet));
+			bFirstActiveStandingConditionedActionsWritten = FFileHelper::SaveStringToFile(
+				SerializeJson(FirstActiveConditionedActionsJson) + TEXT("\n"),
+				*FirstActiveConditionedActionsPath);
+
 			if (Config.bPlantRun)
 			{
 				const FString ActiveStandingSnapshotPath = FPaths::Combine(
@@ -2757,43 +2794,6 @@ namespace
 				bActiveStandingPolicyInputSnapshotWritten = FFileHelper::SaveStringToFile(
 					SerializeJson(ActiveStandingSnapshotJson) + TEXT("\n"),
 					*ActiveStandingSnapshotPath);
-
-				const FString FirstActiveConditionedActionsPath = FPaths::Combine(
-					Config.RunRoot,
-					TEXT("first-active-conditioned-actions.json"));
-				const TArray<float> EmptyConditionedActions;
-				const TArray<float>& FirstActiveConditionedActions = Component
-					? Component->GetFirstActiveStandingConditionedActionsForTesting()
-					: EmptyConditionedActions;
-				TArray<float> FirstActiveHeadTriplet;
-				for (int32 ScalarIndex = 36;
-					ScalarIndex < FMath::Min(39, FirstActiveConditionedActions.Num());
-					++ScalarIndex)
-				{
-					FirstActiveHeadTriplet.Add(FirstActiveConditionedActions[ScalarIndex]);
-				}
-				const TSharedRef<FJsonObject> FirstActiveConditionedActionsJson = MakeShared<FJsonObject>();
-				FirstActiveConditionedActionsJson->SetStringField(
-					TEXT("schema_version"),
-					TEXT("physanim-first-active-conditioned-actions/v1"));
-				FirstActiveConditionedActionsJson->SetStringField(
-					TEXT("capture_scope"),
-					TEXT("first_active_standing_conditioning"));
-				FirstActiveConditionedActionsJson->SetBoolField(
-					TEXT("captured"),
-					Component && Component->HasFirstActiveStandingConditionedActionsForTesting());
-				FirstActiveConditionedActionsJson->SetNumberField(
-					TEXT("action_width"),
-					FirstActiveConditionedActions.Num());
-				FirstActiveConditionedActionsJson->SetArrayField(
-					TEXT("conditioned_actions"),
-					BuildPolicyActionJsonArray(FirstActiveConditionedActions));
-				FirstActiveConditionedActionsJson->SetArrayField(
-					TEXT("head_triplet"),
-					BuildPolicyActionJsonArray(FirstActiveHeadTriplet));
-				bFirstActiveStandingConditionedActionsWritten = FFileHelper::SaveStringToFile(
-					SerializeJson(FirstActiveConditionedActionsJson) + TEXT("\n"),
-					*FirstActiveConditionedActionsPath);
 
 				const FString ActionSemanticTracePath = FPaths::Combine(
 					Config.RunRoot,
@@ -2961,12 +2961,9 @@ namespace
 			Manifest->SetStringField(TEXT("physics_samples"), TEXT("physics.jsonl"));
 			Manifest->SetStringField(TEXT("policy_samples"), TEXT("policy.jsonl"));
 			Manifest->SetStringField(TEXT("policy_input_snapshot"), TEXT("policy-input-snapshot.json"));
-			if (Config.bPlantRun)
-			{
-				Manifest->SetStringField(
-					TEXT("first_active_conditioned_actions"),
-					TEXT("first-active-conditioned-actions.json"));
-			}
+			Manifest->SetStringField(
+				TEXT("first_active_conditioned_actions"),
+				TEXT("first-active-conditioned-actions.json"));
 			Manifest->SetStringField(TEXT("render_capture"), TEXT("render.png"));
 			Manifest->SetNumberField(TEXT("render_nonblank_pixel_count"), NonblankPixels);
 			const bool bManifestWritten = FFileHelper::SaveStringToFile(SerializeJson(Manifest) + TEXT("\n"), *ManifestPath);
