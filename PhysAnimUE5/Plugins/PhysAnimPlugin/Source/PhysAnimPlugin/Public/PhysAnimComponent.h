@@ -1507,6 +1507,13 @@ public:
 	static bool ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
 		bool bConfigured,
 		EPhysAnimRuntimeState InRuntimeState);
+	bool IsExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting() const
+	{
+		return bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting;
+	}
+	static bool ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
+		bool bConfigured,
+		EPhysAnimRuntimeState InRuntimeState);
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
 	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
@@ -2487,6 +2494,7 @@ private:
 	bool bExperimentalComponentActionAxisEnabledForTesting = false;
 	bool bExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting = false;
 	bool bExperimentalBindNeutralFromFirstPolicyEnabledForTesting = false;
+	bool bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
 	bool bStartupChronologyTraceEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;

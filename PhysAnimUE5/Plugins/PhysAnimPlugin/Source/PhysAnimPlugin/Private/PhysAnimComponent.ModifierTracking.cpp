@@ -254,6 +254,10 @@ void UPhysAnimComponent::ApplyControlTargets(
 		ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
 			bExperimentalBindNeutralFromFirstPolicyEnabledForTesting,
 			RuntimeState);
+	const bool bBypassExperimentalConstraintRangeRemapThisStep =
+		ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
+			bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting,
+			RuntimeState);
 	bool bCaptureActionSemanticTraceThisStep =
 		bActionSemanticTraceEnabledForTesting &&
 		StandingVariantForTesting == EPhysAnimStandingVariant::RealOnnxPolicy &&
@@ -745,10 +749,12 @@ void UPhysAnimComponent::ApplyControlTargets(
 						ConstraintProfile))
 					{
 						const FQuat RangeMappedPolicyRotation =
-							PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
-								DistalLocomotionAlignedPolicyRotation,
-								MannyPolicyNeutralRotation,
-								ConstraintProfile);
+							bBypassExperimentalConstraintRangeRemapThisStep
+								? DistalLocomotionAlignedPolicyRotation
+								: PhysAnimProtoMannyAdapter::MapProtoPolicyTargetToMannyConstraintRange(
+									DistalLocomotionAlignedPolicyRotation,
+									MannyPolicyNeutralRotation,
+									ConstraintProfile);
 						ConstraintAdaptedPolicyRotation = PhysAnimProtoMannyAdapter::AdaptParentRelativeTarget(
 							RangeMappedPolicyRotation,
 							MannyPolicyNeutralRotation,

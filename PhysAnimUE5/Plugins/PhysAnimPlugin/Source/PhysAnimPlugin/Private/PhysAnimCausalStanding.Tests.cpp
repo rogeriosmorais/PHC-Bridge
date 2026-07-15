@@ -383,11 +383,35 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		UPhysAnimComponent::ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
 			true,
 			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(
+		TEXT("Constraint-range-remap bypass is disabled by default after flag reset"),
+		Component->IsExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalConstraintRangeRemapBypassFromFirstPolicy"));
+	TestTrue(
+		TEXT("Explicit development flag enables constraint-range-remap bypass from first policy"),
+		Component->IsExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting());
+	TestFalse(
+		TEXT("Constraint-range-remap bypass remains inactive before standing activation"),
+		UPhysAnimComponent::ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::RuntimeReady));
+	TestTrue(
+		TEXT("Constraint-range-remap bypass is active during standing preparation"),
+		UPhysAnimComponent::ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::Standing_Preparation));
+	TestTrue(
+		TEXT("Constraint-range-remap bypass remains active in standing"),
+		UPhysAnimComponent::ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
 	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
 	TestFalse(
-		TEXT("Omitting factorial flags restores captured neutral and cached-world axis"),
+		TEXT("Omitting factorial flags restores captured neutral, cached-world axis, and range mapping"),
 		Component->IsExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting() ||
-			Component->IsExperimentalBindNeutralFromFirstPolicyEnabledForTesting());
+			Component->IsExperimentalBindNeutralFromFirstPolicyEnabledForTesting() ||
+			Component->IsExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting());
 	TestFalse(
 		TEXT("Policy-input provenance tracing is disabled without its explicit development flag"),
 		Component->IsPolicyInputProvenanceTraceEnabledForTesting());

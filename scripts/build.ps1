@@ -19,6 +19,7 @@ param (
     [switch]$ExperimentalComponentActionAxis,
     [switch]$ExperimentalComponentActionAxisFromFirstPolicy,
     [switch]$ExperimentalBindNeutralFromFirstPolicy,
+    [switch]$ExperimentalConstraintRangeRemapBypassFromFirstPolicy,
     [switch]$PolicyInputProvenanceTrace,
     [switch]$StartupChronologyTrace
 )
@@ -157,6 +158,9 @@ if ($Test) {
     }
     if ($ExperimentalBindNeutralFromFirstPolicy) {
         $EditorArguments += "-PhysAnimExperimentalBindNeutralFromFirstPolicy"
+    }
+    if ($ExperimentalConstraintRangeRemapBypassFromFirstPolicy) {
+        $EditorArguments += "-PhysAnimExperimentalConstraintRangeRemapBypassFromFirstPolicy"
     }
     if ($PolicyInputProvenanceTrace) {
         $EditorArguments += "-PhysAnimPolicyInputProvenanceTrace"

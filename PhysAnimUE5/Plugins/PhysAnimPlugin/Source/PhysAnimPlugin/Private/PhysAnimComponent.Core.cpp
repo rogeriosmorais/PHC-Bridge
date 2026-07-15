@@ -44,6 +44,8 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalComponentActionAxisFromFirstPolicy"));
 	bExperimentalBindNeutralFromFirstPolicyEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalBindNeutralFromFirstPolicy"));
+	bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalConstraintRangeRemapBypassFromFirstPolicy"));
 	bPolicyInputProvenanceTraceEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimPolicyInputProvenanceTrace"));
 	bStartupChronologyTraceEnabledForTesting = CommandLine &&

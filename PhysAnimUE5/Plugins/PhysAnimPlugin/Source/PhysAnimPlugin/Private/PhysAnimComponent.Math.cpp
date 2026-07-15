@@ -855,6 +855,13 @@ bool UPhysAnimComponent::ShouldUseExperimentalBindNeutralFromFirstPolicyForRunti
 	return bConfigured && IsStandingActivationRuntimeState(InRuntimeState);
 }
 
+bool UPhysAnimComponent::ShouldBypassExperimentalConstraintRangeRemapFromFirstPolicyForRuntimeStateForTesting(
+	bool bConfigured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bConfigured && IsStandingActivationRuntimeState(InRuntimeState);
+}
+
 FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
 	const FQuat& ActionBindComponentWorldRotation,
 	const FQuat& CachedWorldActionAxisRotation)
