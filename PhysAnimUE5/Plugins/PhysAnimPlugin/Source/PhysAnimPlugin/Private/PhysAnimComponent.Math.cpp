@@ -833,8 +833,21 @@ FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
 		MannyNeutralParentRelativeRotation.GetNormalized()).GetNormalized();
 }
 
-
 #if WITH_DEV_AUTOMATION_TESTS
+FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+	const FQuat& EffectiveActionAxisRotation,
+	const FQuat& MannyNeutralParentRelativeRotation,
+	const FQuat& ProtoPolicyRotationUe)
+{
+	const FQuat NormalizedActionAxis = EffectiveActionAxisRotation.GetNormalized();
+	const FQuat PolicyRotationInEffectiveAxisFrame =
+		(NormalizedActionAxis.Inverse() *
+		 ProtoPolicyRotationUe.GetNormalized() *
+		 NormalizedActionAxis).GetNormalized();
+	return (PolicyRotationInEffectiveAxisFrame *
+		MannyNeutralParentRelativeRotation.GetNormalized()).GetNormalized();
+}
+
 bool UPhysAnimComponent::BuildMannyLocalFrameRoundtripControlForTesting(
 	int32 ControlIndex,
 	FName MannyBoneName,
@@ -845,6 +858,8 @@ bool UPhysAnimComponent::BuildMannyLocalFrameRoundtripControlForTesting(
 	const FQuat& MannyNeutralParentRelativeRotation,
 	const FQuat& ActualDecodedRotationUe,
 	const FQuat& ActualMannyPreRangeTargetParentRelative,
+	const FString& EffectiveActionAxisMode,
+	const FQuat& EffectiveActionAxisRotation,
 	PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl& OutTrace,
 	FString& OutError) const
 {
@@ -854,6 +869,15 @@ bool UPhysAnimComponent::BuildMannyLocalFrameRoundtripControlForTesting(
 	OutTrace.ControlName = ControlName;
 	OutTrace.InitialControlChildBoneName = InitialControlChildBoneName;
 	OutTrace.InitialControlParentBoneName = InitialControlParentBoneName;
+	OutTrace.EffectiveActionAxisMode = EffectiveActionAxisMode;
+	if (EffectiveActionAxisMode != PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode &&
+		EffectiveActionAxisMode != PhysAnimBridge::MannyLocalFrameRoundtripComponentAxisMode)
+	{
+		OutError = FString::Printf(
+			TEXT("Unsupported effective action-axis mode '%s'."),
+			*EffectiveActionAxisMode);
+		return false;
+	}
 
 	const TArray<FName>& ObservationBodyNames = PhysAnimBridge::GetSmplObservationBoneNames();
 	if (CachedSmplObservationRestBodyComponentRotations.Num() != PhysAnimBridge::NumSmplBodies ||
@@ -928,6 +952,10 @@ bool UPhysAnimComponent::BuildMannyLocalFrameRoundtripControlForTesting(
 	OutTrace.ActionBindComponentWorldRotation =
 		(MannyBindSeed.ParentWorldRotation *
 		 OutTrace.ObservationParentBindComponentRotation.Inverse()).GetNormalized();
+	OutTrace.ComponentCorrectedActionAxisRotation =
+		(OutTrace.ActionBindComponentWorldRotation.Inverse() *
+		 OutTrace.CachedActionAxisReferenceRotation).GetNormalized();
+	OutTrace.EffectiveActionAxisRotation = EffectiveActionAxisRotation.GetNormalized();
 	OutTrace.ObservationBodyBindComponentRotation =
 		CachedSmplObservationRestBodyComponentRotations[
 			OutTrace.RoundtripObservationBodyIndex].GetNormalized();
@@ -942,6 +970,15 @@ bool UPhysAnimComponent::BuildMannyLocalFrameRoundtripControlForTesting(
 			(OutTrace.ActionBindComponentWorldRotation.Inverse() *
 			 OutTrace.CachedActionAxisReferenceRotation).GetNormalized().AngularDistance(
 				OutTrace.ObservationParentBindComponentRotation));
+	const FQuat EffectiveActionAxisInObservationComponent =
+		EffectiveActionAxisMode == PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode
+			? (OutTrace.ActionBindComponentWorldRotation.Inverse() *
+			   OutTrace.EffectiveActionAxisRotation).GetNormalized()
+			: OutTrace.EffectiveActionAxisRotation;
+	OutTrace.EffectiveActionAxisVsObservationParentBindComponentAngularDeltaDegrees =
+		FMath::RadiansToDegrees(
+			EffectiveActionAxisInObservationComponent.AngularDistance(
+				OutTrace.ObservationParentBindComponentRotation));
 	OutTrace.ActionBindVsObservationBindParentRelativeAngularDeltaDegrees =
 		FMath::RadiansToDegrees(
 			OutTrace.ActionBindParentRelativeRotation.AngularDistance(
@@ -955,7 +992,7 @@ bool UPhysAnimComponent::BuildMannyLocalFrameRoundtripControlForTesting(
 			OutTrace.PolicyNeutralParentRelativeRotation.AngularDistance(
 				OutTrace.ObservationBindParentRelativeRotation));
 
-	auto AddRoundtripCase = [this, &MannyBindSeed, &OutTrace](
+	auto AddRoundtripCase = [&OutTrace](
 		const FName Label,
 		const FQuat& CanonicalInput)
 	{
@@ -964,8 +1001,8 @@ bool UPhysAnimComponent::BuildMannyLocalFrameRoundtripControlForTesting(
 		Case.Label = Label;
 		Case.InputCanonicalRotationUe = CanonicalInput.GetNormalized();
 		Case.MannyPreRangeTargetParentRelative =
-			ComposeProtoPolicyTargetAroundMannyNeutral(
-				MannyBindSeed,
+			ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+				OutTrace.EffectiveActionAxisRotation,
 				OutTrace.PolicyNeutralParentRelativeRotation,
 				Case.InputCanonicalRotationUe);
 		Case.RecoveredCanonicalRotationUe =

@@ -281,6 +281,8 @@ void UPhysAnimComponent::ApplyControlTargets(
 	{
 		PendingMannyLocalFrameRoundtripTrace.CaptureScope =
 			TEXT("first_active_standing_pre_range_target");
+		PendingMannyLocalFrameRoundtripTrace.ConfiguredActionAxisMode =
+			PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode;
 		PendingMannyLocalFrameRoundtripTrace.AxisProbeDegrees =
 			PhysAnimBridge::MannyLocalFrameRoundtripAxisProbeDegrees;
 	}
@@ -623,6 +625,8 @@ void UPhysAnimComponent::ApplyControlTargets(
 							MannyPolicyNeutralRotation,
 							Pair.Value,
 							AbsoluteBindCalibratedPolicyRotation,
+							PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode,
+							BindSeed->ParentActionAxisReferenceRotation,
 							TraceEntry,
 							RoundtripError))
 						{
@@ -935,6 +939,11 @@ void UPhysAnimComponent::ApplyControlTargets(
 						break;
 					}
 					PendingMannyLocalFrameRoundtripTrace.Controls.Add(*TraceEntry);
+				}
+				if (!PendingMannyLocalFrameRoundtripTrace.Controls.IsEmpty())
+				{
+					PendingMannyLocalFrameRoundtripTrace.EffectiveActionAxisMode =
+						PendingMannyLocalFrameRoundtripTrace.Controls[0].EffectiveActionAxisMode;
 				}
 
 				PendingMannyLocalFrameRoundtripTrace.bCaptured =

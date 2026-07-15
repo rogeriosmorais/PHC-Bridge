@@ -471,6 +471,8 @@ namespace
 		FPhysAnimMannyLocalFrameRoundtripTrace Trace;
 		Trace.bCaptured = true;
 		Trace.CaptureScope = TEXT("first_active_standing_pre_range_target");
+		Trace.ConfiguredActionAxisMode = MannyLocalFrameRoundtripWorldAxisMode;
+		Trace.EffectiveActionAxisMode = MannyLocalFrameRoundtripWorldAxisMode;
 		const TArray<FName>& ObservationBodyNames = GetSmplObservationBoneNames();
 		const TArray<FPhysAnimProtoActionJointDescriptor>& Descriptors = GetProtoActionJointDescriptors();
 		for (int32 ControlIndex = 0; ControlIndex < GetControlledBoneNames().Num(); ++ControlIndex)
@@ -481,6 +483,7 @@ namespace
 			Entry.MannyBoneName = MannyBoneName;
 			Entry.ControlName = MakeControlName(MannyBoneName);
 			Entry.InitialControlChildBoneName = MannyBoneName;
+			Entry.EffectiveActionAxisMode = MannyLocalFrameRoundtripWorldAxisMode;
 			for (const FPhysAnimProtoActionJointDescriptor& Descriptor : Descriptors)
 			{
 				if (Descriptor.MannyBoneName == MannyBoneName)
@@ -520,6 +523,37 @@ namespace
 					return Entry.bDecisiveOneToOne;
 				}).Num(),
 			19);
+
+		const FPhysAnimControlTargetSeed Seed{
+			FQuat(FVector::UpVector, FMath::DegreesToRadians(90.0)),
+			FQuat::Identity,
+			FQuat(FVector::RightVector, FMath::DegreesToRadians(12.0)),
+			FQuat(FVector::UpVector, FMath::DegreesToRadians(90.0))
+		};
+		const FQuat Neutral = FQuat(FVector::RightVector, FMath::DegreesToRadians(7.0));
+		const FQuat Canonical = FQuat(FVector::ForwardVector, FMath::DegreesToRadians(10.0));
+		TestTrue(
+			TEXT("Explicit cached-world axis composition is pre-intervention equivalent"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+				Seed.ParentActionAxisReferenceRotation,
+				Neutral,
+				Canonical).Equals(
+					UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
+						Seed,
+						Neutral,
+						Canonical),
+					1.0e-6));
+		TestTrue(
+			TEXT("Identity input is invariant to the selected action axis"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+				FQuat::Identity,
+				Neutral,
+				FQuat::Identity).Equals(
+					UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+						Seed.ParentActionAxisReferenceRotation,
+						Neutral,
+						FQuat::Identity),
+					1.0e-6));
 
 		FPhysAnimMannyLocalFrameRoundtripTrace InvalidTrace = Trace;
 		InvalidTrace.Controls[0].CachedActionAxisReferenceRotation = FQuat(0.0, 0.0, 0.0, 2.0);

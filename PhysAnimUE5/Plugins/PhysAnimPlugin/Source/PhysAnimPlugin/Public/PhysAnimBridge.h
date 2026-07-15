@@ -280,6 +280,10 @@ namespace PhysAnimBridge
 		TEXT("component_to_world_rotation_derived_from_initial_parent_and_observation_parent_bind");
 	inline constexpr const TCHAR* MannyLocalFrameRoundtripObservationBindFrame =
 		TEXT("skeletal_mesh_component_space_bind");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripWorldAxisMode =
+		TEXT("cached_parent_world");
+	inline constexpr const TCHAR* MannyLocalFrameRoundtripComponentAxisMode =
+		TEXT("cached_parent_mesh_component");
 
 	struct PHYSANIMPLUGIN_API FPhysAnimMannyLocalFrameRoundtripCase
 	{
@@ -307,8 +311,11 @@ namespace PhysAnimBridge
 		FName ObservationParentBodyName = NAME_None;
 		bool bDecisiveOneToOne = false;
 		bool bOwnershipComplete = false;
+		FString EffectiveActionAxisMode;
 		FQuat CachedActionAxisReferenceRotation = FQuat::Identity;
 		FQuat ActionBindComponentWorldRotation = FQuat::Identity;
+		FQuat ComponentCorrectedActionAxisRotation = FQuat::Identity;
+		FQuat EffectiveActionAxisRotation = FQuat::Identity;
 		FQuat ActionBindParentRelativeRotation = FQuat::Identity;
 		FQuat PolicyNeutralParentRelativeRotation = FQuat::Identity;
 		FQuat ObservationParentBindComponentRotation = FQuat::Identity;
@@ -317,6 +324,7 @@ namespace PhysAnimBridge
 		FQuat ActualDecodedRotationUe = FQuat::Identity;
 		FQuat ActualMannyPreRangeTargetParentRelative = FQuat::Identity;
 		double ActionAxisVsObservationParentBindAngularDeltaDegrees = 0.0;
+		double EffectiveActionAxisVsObservationParentBindComponentAngularDeltaDegrees = 0.0;
 		double ActionBindVsObservationBindParentRelativeAngularDeltaDegrees = 0.0;
 		double PolicyNeutralVsActionBindParentRelativeAngularDeltaDegrees = 0.0;
 		double PolicyNeutralVsObservationBindParentRelativeAngularDeltaDegrees = 0.0;
@@ -330,6 +338,8 @@ namespace PhysAnimBridge
 			bCaptured = false;
 			CaptureScope.Reset();
 			CaptureError.Reset();
+			ConfiguredActionAxisMode.Reset();
+			EffectiveActionAxisMode.Reset();
 			AxisProbeDegrees = MannyLocalFrameRoundtripAxisProbeDegrees;
 			Controls.Reset();
 		}
@@ -337,6 +347,8 @@ namespace PhysAnimBridge
 		bool bCaptured = false;
 		FString CaptureScope;
 		FString CaptureError;
+		FString ConfiguredActionAxisMode;
+		FString EffectiveActionAxisMode;
 		double AxisProbeDegrees = MannyLocalFrameRoundtripAxisProbeDegrees;
 		TArray<FPhysAnimMannyLocalFrameRoundtripControl> Controls;
 	};

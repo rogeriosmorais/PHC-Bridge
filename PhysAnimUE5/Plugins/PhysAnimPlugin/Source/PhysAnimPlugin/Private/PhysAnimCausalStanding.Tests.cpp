@@ -766,7 +766,7 @@ namespace
 		const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
 		Root->SetStringField(
 			TEXT("schema_version"),
-			TEXT("physanim-manny-local-frame-roundtrip/v1"));
+			TEXT("physanim-manny-local-frame-roundtrip/v2"));
 		Root->SetStringField(TEXT("authority"), TEXT("DEVELOPMENT_DIAGNOSTIC_ONLY"));
 		Root->SetBoolField(TEXT("product_success"), false);
 		Root->SetBoolField(TEXT("enabled"), bEnabled);
@@ -775,6 +775,12 @@ namespace
 		Root->SetStringField(TEXT("validation_error"), ValidationError);
 		Root->SetStringField(TEXT("capture_scope"), Trace.CaptureScope);
 		Root->SetStringField(TEXT("capture_error"), Trace.CaptureError);
+		Root->SetStringField(
+			TEXT("configured_action_axis_mode"),
+			Trace.ConfiguredActionAxisMode);
+		Root->SetStringField(
+			TEXT("effective_action_axis_mode"),
+			Trace.EffectiveActionAxisMode);
 		Root->SetNumberField(TEXT("axis_probe_degrees"), Trace.AxisProbeDegrees);
 		Root->SetStringField(TEXT("quaternion_layout"), TEXT("xyzw"));
 		Root->SetStringField(
@@ -839,12 +845,24 @@ namespace
 				Entry.ObservationParentBodyName.ToString());
 			Object->SetBoolField(TEXT("decisive_one_to_one"), Entry.bDecisiveOneToOne);
 			Object->SetBoolField(TEXT("ownership_complete"), Entry.bOwnershipComplete);
+			Object->SetStringField(
+				TEXT("effective_action_axis_mode"),
+				Entry.EffectiveActionAxisMode);
 			Object->SetArrayField(
 				TEXT("cached_action_axis_reference_rotation_xyzw"),
 				BuildQuaternionJsonArray(Entry.CachedActionAxisReferenceRotation));
 			Object->SetArrayField(
+				TEXT("cached_action_axis_world_rotation_xyzw"),
+				BuildQuaternionJsonArray(Entry.CachedActionAxisReferenceRotation));
+			Object->SetArrayField(
 				TEXT("action_bind_component_world_rotation_xyzw"),
 				BuildQuaternionJsonArray(Entry.ActionBindComponentWorldRotation));
+			Object->SetArrayField(
+				TEXT("component_corrected_action_axis_rotation_xyzw"),
+				BuildQuaternionJsonArray(Entry.ComponentCorrectedActionAxisRotation));
+			Object->SetArrayField(
+				TEXT("effective_action_axis_rotation_xyzw"),
+				BuildQuaternionJsonArray(Entry.EffectiveActionAxisRotation));
 			Object->SetArrayField(
 				TEXT("action_bind_parent_relative_rotation_xyzw"),
 				BuildQuaternionJsonArray(Entry.ActionBindParentRelativeRotation));
@@ -869,6 +887,9 @@ namespace
 			Object->SetNumberField(
 				TEXT("action_axis_vs_observation_parent_bind_angular_delta_degrees"),
 				Entry.ActionAxisVsObservationParentBindAngularDeltaDegrees);
+			Object->SetNumberField(
+				TEXT("effective_action_axis_vs_observation_parent_bind_component_angular_delta_degrees"),
+				Entry.EffectiveActionAxisVsObservationParentBindComponentAngularDeltaDegrees);
 			Object->SetNumberField(
 				TEXT("action_bind_vs_observation_bind_parent_relative_angular_delta_degrees"),
 				Entry.ActionBindVsObservationBindParentRelativeAngularDeltaDegrees);

@@ -12,7 +12,9 @@ class EvaluationError(ValueError):
     pass
 
 
-TRACE_SCHEMA = "physanim-manny-local-frame-roundtrip/v1"
+TRACE_SCHEMA_V1 = "physanim-manny-local-frame-roundtrip/v1"
+TRACE_SCHEMA_V2 = "physanim-manny-local-frame-roundtrip/v2"
+TRACE_SCHEMA = TRACE_SCHEMA_V1
 EVALUATION_SCHEMA = "physanim-manny-local-frame-roundtrip-evaluation/v1"
 TRACE_AUTHORITY = "DEVELOPMENT_DIAGNOSTIC_ONLY"
 CAPTURE_SCOPE = "first_active_standing_pre_range_target"
@@ -41,6 +43,8 @@ ACTION_BIND_COMPONENT_WORLD_FRAME = (
     "component_to_world_rotation_derived_from_initial_parent_and_observation_parent_bind"
 )
 OBSERVATION_BIND_FRAME = "skeletal_mesh_component_space_bind"
+WORLD_AXIS_MODE = "cached_parent_world"
+COMPONENT_AXIS_MODE = "cached_parent_mesh_component"
 
 PROTO_JOINT_NAMES = (
     "L_Hip",
@@ -344,8 +348,24 @@ def evaluate_trace(trace_path: Path | str) -> dict:
         ),
         "Manny local-frame round-trip trace",
     )
-    if trace["schema_version"] != TRACE_SCHEMA:
+    trace_schema = trace["schema_version"]
+    if trace_schema not in (TRACE_SCHEMA_V1, TRACE_SCHEMA_V2):
         raise EvaluationError("trace schema_version is unsupported")
+    if trace_schema == TRACE_SCHEMA_V2:
+        _require_fields(
+            trace,
+            ("configured_action_axis_mode", "effective_action_axis_mode"),
+            "Manny local-frame round-trip v2 trace",
+        )
+        configured_axis_mode = trace["configured_action_axis_mode"]
+        effective_axis_mode = trace["effective_action_axis_mode"]
+        if configured_axis_mode not in (WORLD_AXIS_MODE, COMPONENT_AXIS_MODE):
+            raise EvaluationError("trace configured_action_axis_mode is unsupported")
+        if effective_axis_mode != configured_axis_mode:
+            raise EvaluationError("trace configured/effective action-axis modes disagree")
+    else:
+        configured_axis_mode = WORLD_AXIS_MODE
+        effective_axis_mode = WORLD_AXIS_MODE
     if trace["authority"] != TRACE_AUTHORITY:
         raise EvaluationError("trace authority is unsupported")
     if trace["enabled"] is not True or trace["captured"] is not True:
@@ -388,6 +408,7 @@ def evaluate_trace(trace_path: Path | str) -> dict:
     actual_errors: list[tuple[str, float]] = []
     probe_errors: list[tuple[str, str, float]] = []
     axis_relationships: list[tuple[str, float]] = []
+    effective_axis_relationships: list[tuple[str, float]] = []
     action_observation_bind_deltas: list[tuple[str, float]] = []
     neutral_action_bind_deltas: list[tuple[str, float]] = []
     neutral_observation_bind_deltas: list[tuple[str, float]] = []
@@ -405,6 +426,13 @@ def evaluate_trace(trace_path: Path | str) -> dict:
         "actual_decoded_rotation_ue_xyzw",
         "actual_manny_pre_range_target_parent_relative_xyzw",
     )
+    if trace_schema == TRACE_SCHEMA_V2:
+        frame_fields = (
+            *frame_fields,
+            "cached_action_axis_world_rotation_xyzw",
+            "component_corrected_action_axis_rotation_xyzw",
+            "effective_action_axis_rotation_xyzw",
+        )
 
     for control_index, (expected, entry) in enumerate(zip(EXPECTED_CONTROLS, controls)):
         expected_bone, expected_source_indices = expected
@@ -438,6 +466,20 @@ def evaluate_trace(trace_path: Path | str) -> dict:
             ),
             label,
         )
+        if trace_schema == TRACE_SCHEMA_V2:
+            _require_fields(
+                entry,
+                (
+                    "effective_action_axis_mode",
+                    "cached_action_axis_world_rotation_xyzw",
+                    "component_corrected_action_axis_rotation_xyzw",
+                    "effective_action_axis_rotation_xyzw",
+                    "effective_action_axis_vs_observation_parent_bind_component_angular_delta_degrees",
+                ),
+                f"{label} v2 action-axis fields",
+            )
+            if entry["effective_action_axis_mode"] != effective_axis_mode:
+                raise EvaluationError(f"{label} effective action-axis mode is inconsistent")
         expected_observation_indices = tuple(index + 1 for index in expected_source_indices)
         expected_source_names = tuple(PROTO_JOINT_NAMES[index] for index in expected_source_indices)
         expected_observation_names = tuple(
@@ -491,6 +533,33 @@ def evaluate_trace(trace_path: Path | str) -> dict:
         actual_manny_target = frames[
             "actual_manny_pre_range_target_parent_relative_xyzw"
         ]
+        component_corrected_axis = _normalize(
+            _multiply(_inverse(action_bind_component_world), action_axis)
+        )
+        if trace_schema == TRACE_SCHEMA_V2:
+            _require_published_quaternion(
+                frames["cached_action_axis_world_rotation_xyzw"],
+                action_axis,
+                f"{label} cached world action-axis alias",
+            )
+            _require_published_quaternion(
+                frames["component_corrected_action_axis_rotation_xyzw"],
+                component_corrected_axis,
+                f"{label} component-corrected action axis",
+            )
+            expected_effective_axis = (
+                action_axis
+                if effective_axis_mode == WORLD_AXIS_MODE
+                else component_corrected_axis
+            )
+            _require_published_quaternion(
+                frames["effective_action_axis_rotation_xyzw"],
+                expected_effective_axis,
+                f"{label} effective action axis",
+            )
+            effective_action_axis = frames["effective_action_axis_rotation_xyzw"]
+        else:
+            effective_action_axis = action_axis
 
         recomputed_bind_relative = _normalize(_multiply(_inverse(parent_bind), body_bind))
         _require_published_quaternion(
@@ -499,6 +568,13 @@ def evaluate_trace(trace_path: Path | str) -> dict:
             f"{label} observation bind parent-relative publication",
         )
 
+        effective_axis_in_observation_component = (
+            _normalize(
+                _multiply(_inverse(action_bind_component_world), effective_action_axis)
+            )
+            if effective_axis_mode == WORLD_AXIS_MODE
+            else effective_action_axis
+        )
         relationship_values = (
             (
                 "action_axis_vs_observation_parent_bind_angular_delta_degrees",
@@ -520,11 +596,32 @@ def evaluate_trace(trace_path: Path | str) -> dict:
                 _angular_error_degrees(policy_neutral, observation_bind_relative),
             ),
         )
+        if trace_schema == TRACE_SCHEMA_V2:
+            effective_relationship = _angular_error_degrees(
+                effective_axis_in_observation_component,
+                parent_bind,
+            )
+            published_effective_relationship = _finite_nonnegative(
+                entry[
+                    "effective_action_axis_vs_observation_parent_bind_component_angular_delta_degrees"
+                ],
+                f"{label} effective action-axis relationship",
+            )
+            if (
+                abs(published_effective_relationship - effective_relationship)
+                > SCALAR_PUBLICATION_TOLERANCE
+            ):
+                raise EvaluationError(
+                    f"{label} effective action-axis relationship does not match recomputed value"
+                )
+        else:
+            effective_relationship = relationship_values[0][1]
         for field, recomputed in relationship_values:
             published = _finite_nonnegative(entry[field], f"{label} {field}")
             if abs(published - recomputed) > SCALAR_PUBLICATION_TOLERANCE:
                 raise EvaluationError(f"{label} {field} does not match recomputed value")
         axis_relationships.append((expected_bone, relationship_values[0][1]))
+        effective_axis_relationships.append((expected_bone, effective_relationship))
         action_observation_bind_deltas.append((expected_bone, relationship_values[1][1]))
         neutral_action_bind_deltas.append((expected_bone, relationship_values[2][1]))
         neutral_observation_bind_deltas.append((expected_bone, relationship_values[3][1]))
@@ -569,7 +666,7 @@ def evaluate_trace(trace_path: Path | str) -> dict:
             )
             _require_published_quaternion(published_input, expected_input, f"{case_label} input")
             recomputed_target = _compose_action_target(
-                action_axis, expected_input, policy_neutral
+                effective_action_axis, expected_input, policy_neutral
             )
             recomputed_recovered = _recover_observation_rotation(
                 parent_bind, observation_bind_relative, recomputed_target
@@ -620,12 +717,14 @@ def evaluate_trace(trace_path: Path | str) -> dict:
                 "control_index": control_index,
                 "manny_bone_name": expected_bone,
                 "decisive_one_to_one": expected_decisive,
+                "effective_action_axis_mode": effective_axis_mode,
                 "action_axis_vs_observation_parent_bind_angular_delta_degrees": relationship_values[
                     0
                 ][1],
                 "action_bind_vs_observation_bind_parent_relative_angular_delta_degrees": relationship_values[
                     1
                 ][1],
+                "effective_action_axis_vs_observation_parent_bind_component_angular_delta_degrees": effective_relationship,
                 "policy_neutral_vs_action_bind_parent_relative_angular_delta_degrees": relationship_values[
                     2
                 ][1],
@@ -662,6 +761,9 @@ def evaluate_trace(trace_path: Path | str) -> dict:
         "authority": "DEVELOPMENT_EVIDENCE_ONLY",
         "product_success": False,
         "trace": str(trace_path),
+        "trace_schema_version": trace_schema,
+        "configured_action_axis_mode": configured_axis_mode,
+        "effective_action_axis_mode": effective_axis_mode,
         "tolerances": {
             "roundtrip_angular_error_degrees": ANGULAR_TOLERANCE_DEGREES,
             "axis_probe_degrees": AXIS_PROBE_DEGREES,
@@ -693,6 +795,9 @@ def evaluate_trace(trace_path: Path | str) -> dict:
             "failing_axis_probes": failing_probes,
             "maximum_action_axis_vs_observation_parent_bind_angular_delta_degrees": max(
                 error for _, error in axis_relationships
+            ),
+            "maximum_effective_action_axis_vs_observation_parent_bind_component_angular_delta_degrees": max(
+                error for _, error in effective_axis_relationships
             ),
             "maximum_action_bind_vs_observation_bind_parent_relative_angular_delta_degrees": max(
                 error for _, error in action_observation_bind_deltas

@@ -2946,6 +2946,10 @@ public:
 		const FQuat& MannyNeutralParentRelativeRotation,
 		const FQuat& ProtoPolicyRotationUe);
 #if WITH_DEV_AUTOMATION_TESTS
+	static FQuat ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+		const FQuat& EffectiveActionAxisRotation,
+		const FQuat& MannyNeutralParentRelativeRotation,
+		const FQuat& ProtoPolicyRotationUe);
 	bool BuildMannyLocalFrameRoundtripControlForTesting(
 		int32 ControlIndex,
 		FName MannyBoneName,
@@ -2956,6 +2960,8 @@ public:
 		const FQuat& MannyNeutralParentRelativeRotation,
 		const FQuat& ActualDecodedRotationUe,
 		const FQuat& ActualMannyPreRangeTargetParentRelative,
+		const FString& EffectiveActionAxisMode,
+		const FQuat& EffectiveActionAxisRotation,
 		PhysAnimBridge::FPhysAnimMannyLocalFrameRoundtripControl& OutTrace,
 		FString& OutError) const;
 #endif

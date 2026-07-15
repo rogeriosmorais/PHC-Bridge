@@ -2002,6 +2002,15 @@ namespace PhysAnimBridge
 			OutError = TEXT("Manny local-frame round-trip trace has an invalid axis probe.");
 			return false;
 		}
+		const bool bValidConfiguredMode =
+			Trace.ConfiguredActionAxisMode == MannyLocalFrameRoundtripWorldAxisMode ||
+			Trace.ConfiguredActionAxisMode == MannyLocalFrameRoundtripComponentAxisMode;
+		if (!bValidConfiguredMode ||
+			Trace.EffectiveActionAxisMode != Trace.ConfiguredActionAxisMode)
+		{
+			OutError = TEXT("Manny local-frame round-trip trace has inconsistent configured/effective action-axis modes.");
+			return false;
+		}
 
 		const TArray<FName>& ControlledBones = GetControlledBoneNames();
 		const TArray<FName>& ObservationBodyNames = GetSmplObservationBoneNames();
@@ -2067,6 +2076,8 @@ namespace PhysAnimBridge
 			const bool bValidFrames =
 				IsFiniteNormalizedQuat(Entry.CachedActionAxisReferenceRotation) &&
 				IsFiniteNormalizedQuat(Entry.ActionBindComponentWorldRotation) &&
+				IsFiniteNormalizedQuat(Entry.ComponentCorrectedActionAxisRotation) &&
+				IsFiniteNormalizedQuat(Entry.EffectiveActionAxisRotation) &&
 				IsFiniteNormalizedQuat(Entry.ActionBindParentRelativeRotation) &&
 				IsFiniteNormalizedQuat(Entry.PolicyNeutralParentRelativeRotation) &&
 				IsFiniteNormalizedQuat(Entry.ObservationParentBindComponentRotation) &&
@@ -2076,6 +2087,7 @@ namespace PhysAnimBridge
 				IsFiniteNormalizedQuat(Entry.ActualMannyPreRangeTargetParentRelative);
 			const bool bValidRelationshipMetrics =
 				IsFiniteNonNegative(Entry.ActionAxisVsObservationParentBindAngularDeltaDegrees) &&
+				IsFiniteNonNegative(Entry.EffectiveActionAxisVsObservationParentBindComponentAngularDeltaDegrees) &&
 				IsFiniteNonNegative(Entry.ActionBindVsObservationBindParentRelativeAngularDeltaDegrees) &&
 				IsFiniteNonNegative(Entry.PolicyNeutralVsActionBindParentRelativeAngularDeltaDegrees) &&
 				IsFiniteNonNegative(Entry.PolicyNeutralVsObservationBindParentRelativeAngularDeltaDegrees);
@@ -2091,6 +2103,7 @@ namespace PhysAnimBridge
 				ExpectedObservationIndices.IsEmpty() ||
 				Entry.RoundtripObservationBodyIndex != ExpectedObservationIndices[0] ||
 				Entry.RoundtripObservationBodyName != ExpectedObservationNames[0] ||
+				Entry.EffectiveActionAxisMode != Trace.EffectiveActionAxisMode ||
 				Entry.bDecisiveOneToOne != bExpectedDecisive ||
 				!Entry.bOwnershipComplete || !bValidParent || !bValidFrames || !bValidRelationshipMetrics ||
 				Entry.RoundtripCases.Num() != ExpectedCaseLabels.Num())
@@ -2099,6 +2112,23 @@ namespace PhysAnimBridge
 					TEXT("Manny local-frame round-trip control %d (%s) is malformed."),
 					ControlIndex,
 					*ExpectedBoneName.ToString());
+				return false;
+			}
+
+			const FQuat ExpectedComponentCorrectedAxis =
+				(Entry.ActionBindComponentWorldRotation.Inverse() *
+				 Entry.CachedActionAxisReferenceRotation).GetNormalized();
+			const FQuat ExpectedEffectiveAxis =
+				Trace.EffectiveActionAxisMode == MannyLocalFrameRoundtripWorldAxisMode
+					? Entry.CachedActionAxisReferenceRotation
+					: ExpectedComponentCorrectedAxis;
+			if (ExpectedComponentCorrectedAxis.AngularDistance(
+					Entry.ComponentCorrectedActionAxisRotation) > 1.0e-6 ||
+				ExpectedEffectiveAxis.AngularDistance(Entry.EffectiveActionAxisRotation) > 1.0e-6)
+			{
+				OutError = FString::Printf(
+					TEXT("Manny local-frame round-trip control %d effective action axis does not match its mode."),
+					ControlIndex);
 				return false;
 			}
 
