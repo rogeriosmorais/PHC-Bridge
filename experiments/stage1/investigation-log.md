@@ -630,3 +630,19 @@ Machine-readable record: `experiments/stage1/production-spine-chest-restoration.
 **Next experiment selected.** Resolve the startup snapshot bifurcation before production promotion, then rerun distal hands from the fixed deterministic baseline.
 
 Machine-readable record: `experiments/stage1/upper-body-distal-hands-restoration.e41.json`.
+
+## E42 — Fixed timestep before PIE startup (2026-07-15)
+
+**Hypothesis.** The recurring first-policy snapshot bifurcation is caused by enabling the fixed 60 Hz timestep only after PIE has already started.
+
+**Configuration.** Harness-only change. A dedicated latent command enables fixed timestep before `FStartPIECommand`; capture retains it through PIE and a post-play command restores the prior clock. The production controller and no-flag E40 joint mask remain unchanged.
+
+**Validity.** The full 3+3+2 PRODUCT_RUN bundle used clean harness commit `64e5a8cb93eaf1bca199a7812c892a2a2419e5cb`, locked model/protocol hashes, no experimental behavior arguments, exact production masks and strengths, and discriminative destructive controls.
+
+**Result.** Bundle PASS at ratio 0.772007. Normal repetitions 1-2 exactly reproduced AUC 31.9287 and snapshot `AAAF45...`; repetition 3 used snapshot `723FD9...` and AUC 30.7547. ZeroActions was internally deterministic at AUC 41.3581 on the `723FD9...` startup family.
+
+**Supported or falsified.** Falsified. Pre-PIE fixed timestep is valid and behavior-neutral, but is not sufficient to eliminate the two startup state families.
+
+**Next experiment selected.** Screen single-threaded engine/Chaos execution. If the bifurcation remains, adopt deterministic same-state replay or an in-process counterfactual for joint promotion rather than relying on exact cross-process startup reproduction.
+
+Machine-readable record: `experiments/stage1/deterministic-pre-pie-fixed-step.e42.json`.
