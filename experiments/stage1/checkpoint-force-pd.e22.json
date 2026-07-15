@@ -1,0 +1,65 @@
+{
+  "schema_version": "physanim-investigation-experiment/v1",
+  "experiment_id": "checkpoint-force-pd-e22",
+  "recorded_utc": "2026-07-15T18:25:00Z",
+  "status": "VALID",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "FAIL",
+  "preregistration": {
+    "path": "experiments/stage1/checkpoint-force-pd.e22.preregister.json",
+    "commit": "c4496cbcfcf1493b6174dcfc47e3735a02885d98"
+  },
+  "behavior_commit": "3e13a6968344e6756020f0d8680e095374e309ce",
+  "validity": {
+    "first_policy_snapshot_exact": true,
+    "first_active_standing_snapshot_exact": true,
+    "action_semantic_trace_exact": true,
+    "manny_local_frame_trace_exact": true,
+    "control_initial_profile_match_count": 0,
+    "experimental_post_capture_profile_match_count": 21,
+    "experimental_post_capture_force_mode_count": 21,
+    "experimental_thigh_profile": {
+      "angular_strength_hz": 450.1581726074219,
+      "angular_damping_ratio": 0.0,
+      "angular_extra_damping": 800000.0,
+      "max_torque_engine_units": 5000000.0,
+      "acceleration_mode": false
+    },
+    "target_readback_ratio_control": 1.0,
+    "target_readback_ratio_experimental": 1.0
+  },
+  "control": {
+    "artifact_root": "test-results/action-axis-frame/e22-force-pd/control_acceleration_pd",
+    "failed_criteria": ["body_linear_speed", "body_angular_speed", "pelvis_height", "root_tilt"],
+    "minimum_pelvis_height_ratio": 0.15755675785486445,
+    "pelvis_below_80_cm_sec": 0.41666668839752674,
+    "pelvis_below_20_cm_sec": 0.6000000312924385,
+    "maximum_root_tilt_deg": 111.7818603515625,
+    "maximum_root_linear_speed_cm_per_sec": 994.9657366660241,
+    "maximum_root_angular_speed_deg_per_sec": 647.244369565149,
+    "maximum_body_linear_speed_cm_per_sec": 1555.0421822027376,
+    "maximum_body_angular_speed_deg_per_sec": 5752.9134001422,
+    "maximum_support_gap_ms": 0.0
+  },
+  "experimental": {
+    "artifact_root": "test-results/action-axis-frame/e22-force-pd/experimental_checkpoint_force_pd",
+    "failed_criteria": ["root_linear_speed", "root_angular_speed", "body_linear_speed", "body_angular_speed", "runtime_state", "pelvis_height", "root_tilt", "support_gap", "policy_step_coverage"],
+    "minimum_pelvis_height_ratio": 0.1431675967077569,
+    "pelvis_below_80_cm_sec": 1.5833334159106016,
+    "pelvis_below_20_cm_sec": 1.8500000964850187,
+    "maximum_root_tilt_deg": 178.14527893066406,
+    "maximum_root_linear_speed_cm_per_sec": 3255.1697270929008,
+    "maximum_root_angular_speed_deg_per_sec": 11340.790630970507,
+    "maximum_body_linear_speed_cm_per_sec": 10797.401855758997,
+    "maximum_body_angular_speed_deg_per_sec": 30499.98943828468,
+    "maximum_support_gap_ms": 883.3333333333327
+  },
+  "conclusion": {
+    "hypothesis_supported_or_falsified": "FALSIFIED",
+    "learned": "The exact pinned ProtoMotions force-PD profile is not dynamically compatible with the UE Manny physics asset. It delayed pelvis collapse but produced orders-of-magnitude larger angular and linear velocities and terminated the policy window. The current 8 Hz acceleration-mode plant is strongly protective. The remaining causal boundary is the upper-body action target/retarget contract, already localized by E20.",
+    "production_promotion": false,
+    "thresholds_or_protocol_changed": false
+  },
+  "next_experiment": "Subdivide axial actions into torso-spine-chest versus neck-head and arm actions into left/right proximal versus collapsed wrist-hand subsets, preserving raw inference and the known-stable acceleration plant. Identify the minimum independently sufficient failing joint set."
+}

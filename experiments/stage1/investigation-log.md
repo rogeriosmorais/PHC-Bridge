@@ -315,3 +315,20 @@ Machine-readable record: `experiments/stage1/action-adapter-factorial.e18.json`.
 **Next experiment selected.** Compare checkpoint per-joint PD authority and limits with UE, then subdivide axial actions into torso/spine/chest versus neck/head and arms into proximal versus distal groups.
 
 Machine-readable record: `experiments/stage1/policy-action-family-ablation.e20.json`.
+
+
+## E22 — Exact checkpoint force-PD response (2026-07-15)
+
+**Hypothesis.** The all-action policy fails because UE uses uniform 8 Hz acceleration-mode drives instead of the pinned ProtoMotions SMPL force-PD response.
+
+**Configuration.** Same-binary A/B on commit `3e13a6968344e6756020f0d8680e095374e309ce`, with exact component-axis plus bind-neutral action mapping, all ONNX actions, unchanged range mapping and safety projection, and intervention only after the first active-standing policy capture.
+
+**Validity.** First-policy input/output, first-active-standing input, action semantic trace, and Manny local-frame trace were byte-identical. The experimental arm transitioned from the existing 8 Hz acceleration drive to 21/21 checkpoint family profiles in force mode. Thigh readback was 450.158 Hz equivalent strength, zero damping ratio, 800000 extra damping units, 5000000 torque units, and force mode. Target readback remained 1.0.
+
+**Result.** The control failed after crossing 80 cm pelvis height at 0.417 s. Checkpoint force-PD delayed that crossing to 1.583 s, but maximum body linear speed rose from 1555.0 to 10797.4 cm/s, maximum body angular speed from 5752.9 to 30499.99 deg/s, maximum root angular speed from 647.2 to 11340.8 deg/s, and support loss reached 883.3 ms. The policy window terminated early.
+
+**Supported or falsified.** Falsified. The exact trained actuator response is not dynamically compatible with the UE Manny plant; the current acceleration-mode controls are protective.
+
+**Next experiment selected.** Return to E20's localized upper-body target failure and subdivide axial and arm action groups until the minimum independently sufficient failing joint subset is identified.
+
+Machine-readable record: `experiments/stage1/checkpoint-force-pd.e22.json`.
