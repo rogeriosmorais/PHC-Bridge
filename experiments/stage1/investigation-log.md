@@ -678,3 +678,19 @@ Machine-readable record: `experiments/stage1/deterministic-single-thread-executi
 **Next experiment selected.** Promote DistalHands into the default production mask and rerun with no PhysAnim experimental behavior arguments under `-onethread`.
 
 Machine-readable record: `experiments/stage1/deterministic-distal-hands-restoration.e44.json`.
+
+## E45 — Production distal wrist/hand restoration (2026-07-15)
+
+**Hypothesis.** Making joints 16–17 and 21–22 part of the default mask reproduces E44 without a PhysAnim experimental behavior flag.
+
+**Configuration.** Production lower body + Spine/Chest + both distal wrist/hand pairs; deterministic `-onethread` execution.
+
+**Validity.** Clean production commit `a8ee5efab94f4de43dcba6729137b78cd4d3ab28`, locked model/protocol, no PhysAnim experimental arguments, exact masks/strengths and intended destructive controls.
+
+**Result.** Bundle PASS at ratio 0.752739. Normal AUC exactly 29.6199; ZeroActions exactly 39.3495; all repetitions byte-identical.
+
+**Supported or falsified.** Supported. DistalHands is now production behavior.
+
+**Next experiment selected.** Head restoration after the first active policy snapshot.
+
+Machine-readable record: `experiments/stage1/production-distal-hands-restoration.e45.json`.

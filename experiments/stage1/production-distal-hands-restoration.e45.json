@@ -1,0 +1,22 @@
+{
+  "schema_version":"physanim-investigation-result/v1",
+  "experiment_id":"production-distal-hands-restoration-e45",
+  "recorded_utc":"2026-07-15T22:58:00Z",
+  "preregistration_commit":"2cc128647964c7b48a6d5a1f26f0b6add6d61380",
+  "production_behavior_commit":"a8ee5efab94f4de43dcba6729137b78cd4d3ab28",
+  "status":"VALID",
+  "hypothesis_verdict":"SUPPORTED",
+  "bundle_status":"PASS",
+  "normal_to_zero_recovery_auc_ratio":0.7527391996643784,
+  "normal_recovery_auc":[29.619879918145482,29.619879918145482,29.619879918145482],
+  "zero_actions_recovery_auc":[39.34945852607651,39.34945852607651,39.34945852607651],
+  "production_default_proto_joints":[0,1,2,3,4,5,6,7,9,10,16,17,21,22],
+  "normal_repetitions_byte_deterministic":true,
+  "zero_repetitions_byte_deterministic":true,
+  "runner_arguments":["-onethread"],
+  "physanim_experimental_arguments":[],
+  "destructive_controls":{"DropControlDispatch":{"failed_criteria":["target_readback"]},"ForcedSupportLoss":{"failed_criteria":["support_gap"]}},
+  "authoritative_bundle_artifact":"test-results/causal-standing/e45-production-distal-hands/bundle-evaluation.json",
+  "audit_artifact":"experiments/stage1/production-distal-hands-restoration.e45.audit.json",
+  "next":"Evaluate Head restoration after the first active policy snapshot on top of production commit a8ee5ef."
+}
