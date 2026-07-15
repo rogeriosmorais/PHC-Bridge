@@ -1489,6 +1489,7 @@ public:
 	EPhysAnimStandingVariant GetStandingVariantForTesting() const { return StandingVariantForTesting; }
 	bool IsActionSemanticTraceEnabledForTesting() const { return bActionSemanticTraceEnabledForTesting; }
 	bool IsMannyLocalFrameRoundtripTraceEnabledForTesting() const { return bMannyLocalFrameRoundtripTraceEnabledForTesting; }
+	bool IsExperimentalComponentActionAxisEnabledForTesting() const { return bExperimentalComponentActionAxisEnabledForTesting; }
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
 	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
@@ -2466,6 +2467,7 @@ private:
 	bool bProductControlDispatchDroppedForTesting = false;
 	bool bActionSemanticTraceEnabledForTesting = false;
 	bool bMannyLocalFrameRoundtripTraceEnabledForTesting = false;
+	bool bExperimentalComponentActionAxisEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
 	bool bStartupChronologyTraceEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;
@@ -2946,6 +2948,9 @@ public:
 		const FQuat& MannyNeutralParentRelativeRotation,
 		const FQuat& ProtoPolicyRotationUe);
 #if WITH_DEV_AUTOMATION_TESTS
+	static FQuat ExpressCachedWorldActionAxisInMeshComponentForTesting(
+		const FQuat& ActionBindComponentWorldRotation,
+		const FQuat& CachedWorldActionAxisRotation);
 	static FQuat ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
 		const FQuat& EffectiveActionAxisRotation,
 		const FQuat& MannyNeutralParentRelativeRotation,

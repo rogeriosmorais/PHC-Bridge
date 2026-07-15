@@ -282,7 +282,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 		PendingMannyLocalFrameRoundtripTrace.CaptureScope =
 			TEXT("first_active_standing_pre_range_target");
 		PendingMannyLocalFrameRoundtripTrace.ConfiguredActionAxisMode =
-			PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode;
+			bExperimentalComponentActionAxisEnabledForTesting
+				? PhysAnimBridge::MannyLocalFrameRoundtripComponentAxisMode
+				: PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode;
 		PendingMannyLocalFrameRoundtripTrace.AxisProbeDegrees =
 			PhysAnimBridge::MannyLocalFrameRoundtripAxisProbeDegrees;
 	}
@@ -592,12 +594,54 @@ void UPhysAnimComponent::ApplyControlTargets(
 					return;
 				}
 				const FQuat MannyPolicyNeutralRotation = StableNeutralRotation->GetNormalized();
-				const FQuat AbsoluteBindCalibratedPolicyRotation =
+				FQuat AbsoluteBindCalibratedPolicyRotation =
 					ComposeProtoPolicyTargetAroundMannyNeutral(
 						*BindSeed,
 						MannyPolicyNeutralRotation,
 						Pair.Value);
 #if WITH_DEV_AUTOMATION_TESTS
+				FString EffectiveActionAxisMode =
+					PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode;
+				FQuat EffectiveActionAxisRotation =
+					BindSeed->ParentActionAxisReferenceRotation.GetNormalized();
+				if (bExperimentalComponentActionAxisEnabledForTesting)
+				{
+					const FInitialPhysicsControl* const ExperimentalInitialControl =
+						FindInitialControl(ControlName);
+					const TArray<FName>& ObservationBodyNames =
+						PhysAnimBridge::GetSmplObservationBoneNames();
+					const int32 ObservationParentBodyIndex = ExperimentalInitialControl
+						? ObservationBodyNames.IndexOfByKey(
+							ExperimentalInitialControl->ParentBoneName)
+						: INDEX_NONE;
+					if (!ExperimentalInitialControl ||
+						!ObservationBodyNames.IsValidIndex(ObservationParentBodyIndex) ||
+						!CachedSmplObservationRestBodyComponentRotations.IsValidIndex(
+							ObservationParentBodyIndex))
+					{
+						OutError = FString::Printf(
+							TEXT("Experimental component action axis cannot resolve parent bind for '%s'."),
+							*ControlName.ToString());
+						return;
+					}
+					const FQuat ObservationParentBindComponentRotation =
+						CachedSmplObservationRestBodyComponentRotations[
+							ObservationParentBodyIndex].GetNormalized();
+					const FQuat ActionBindComponentWorldRotation =
+						(BindSeed->ParentWorldRotation *
+						 ObservationParentBindComponentRotation.Inverse()).GetNormalized();
+					EffectiveActionAxisRotation =
+						ExpressCachedWorldActionAxisInMeshComponentForTesting(
+							ActionBindComponentWorldRotation,
+							BindSeed->ParentActionAxisReferenceRotation);
+					EffectiveActionAxisMode =
+						PhysAnimBridge::MannyLocalFrameRoundtripComponentAxisMode;
+					AbsoluteBindCalibratedPolicyRotation =
+						ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+							EffectiveActionAxisRotation,
+							MannyPolicyNeutralRotation,
+							Pair.Value);
+				}
 				if (bCaptureMannyLocalFrameRoundtripThisStep &&
 					PendingMannyLocalFrameRoundtripTrace.CaptureError.IsEmpty())
 				{
@@ -625,8 +669,8 @@ void UPhysAnimComponent::ApplyControlTargets(
 							MannyPolicyNeutralRotation,
 							Pair.Value,
 							AbsoluteBindCalibratedPolicyRotation,
-							PhysAnimBridge::MannyLocalFrameRoundtripWorldAxisMode,
-							BindSeed->ParentActionAxisReferenceRotation,
+							EffectiveActionAxisMode,
+							EffectiveActionAxisRotation,
 							TraceEntry,
 							RoundtripError))
 						{

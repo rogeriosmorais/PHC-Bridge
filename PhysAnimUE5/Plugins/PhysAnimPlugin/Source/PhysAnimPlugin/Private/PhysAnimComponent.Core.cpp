@@ -38,6 +38,8 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 		FParse::Param(CommandLine, TEXT("PhysAnimActionSemanticTrace"));
 	bMannyLocalFrameRoundtripTraceEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimMannyLocalFrameRoundtripTrace"));
+	bExperimentalComponentActionAxisEnabledForTesting = CommandLine &&
+		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalComponentActionAxis"));
 	bPolicyInputProvenanceTraceEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimPolicyInputProvenanceTrace"));
 	bStartupChronologyTraceEnabledForTesting = CommandLine &&

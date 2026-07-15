@@ -16,6 +16,7 @@ param (
     [bool]$SourceTreeDirty = $false,
     [switch]$ActionSemanticTrace,
     [switch]$MannyLocalFrameRoundtripTrace,
+    [switch]$ExperimentalComponentActionAxis,
     [switch]$PolicyInputProvenanceTrace,
     [switch]$StartupChronologyTrace
 )
@@ -145,6 +146,9 @@ if ($Test) {
     }
     if ($MannyLocalFrameRoundtripTrace) {
         $EditorArguments += "-PhysAnimMannyLocalFrameRoundtripTrace"
+    }
+    if ($ExperimentalComponentActionAxis) {
+        $EditorArguments += "-PhysAnimExperimentalComponentActionAxis"
     }
     if ($PolicyInputProvenanceTrace) {
         $EditorArguments += "-PhysAnimPolicyInputProvenanceTrace"

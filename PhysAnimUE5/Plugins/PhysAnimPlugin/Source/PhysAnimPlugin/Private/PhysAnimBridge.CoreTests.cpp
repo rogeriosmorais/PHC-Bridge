@@ -554,6 +554,28 @@ namespace
 						Neutral,
 						FQuat::Identity),
 					1.0e-6));
+		const FQuat ComponentWorld =
+			FQuat(FVector::UpVector, FMath::DegreesToRadians(90.0));
+		const FQuat ParentAxisInComponent =
+			FQuat(FVector::ForwardVector, FMath::DegreesToRadians(23.0));
+		const FQuat CachedParentWorldAxis =
+			(ComponentWorld * ParentAxisInComponent).GetNormalized();
+		TestTrue(
+			TEXT("World-captured action axis converts into the same mesh-component parent axis"),
+			UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
+				ComponentWorld,
+				CachedParentWorldAxis).Equals(ParentAxisInComponent, 1.0e-6));
+		TestFalse(
+			TEXT("Non-identity input distinguishes cached-world and component-corrected axes"),
+			UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+				CachedParentWorldAxis,
+				Neutral,
+				Canonical).Equals(
+					UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
+						ParentAxisInComponent,
+						Neutral,
+						Canonical),
+					1.0e-4));
 
 		FPhysAnimMannyLocalFrameRoundtripTrace InvalidTrace = Trace;
 		InvalidTrace.Controls[0].CachedActionAxisReferenceRotation = FQuat(0.0, 0.0, 0.0, 2.0);

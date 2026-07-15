@@ -834,6 +834,14 @@ FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutral(
 }
 
 #if WITH_DEV_AUTOMATION_TESTS
+FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
+	const FQuat& ActionBindComponentWorldRotation,
+	const FQuat& CachedWorldActionAxisRotation)
+{
+	return (ActionBindComponentWorldRotation.GetNormalized().Inverse() *
+		CachedWorldActionAxisRotation.GetNormalized()).GetNormalized();
+}
+
 FQuat UPhysAnimComponent::ComposeProtoPolicyTargetAroundMannyNeutralWithActionAxisForTesting(
 	const FQuat& EffectiveActionAxisRotation,
 	const FQuat& MannyNeutralParentRelativeRotation,
@@ -953,8 +961,9 @@ bool UPhysAnimComponent::BuildMannyLocalFrameRoundtripControlForTesting(
 		(MannyBindSeed.ParentWorldRotation *
 		 OutTrace.ObservationParentBindComponentRotation.Inverse()).GetNormalized();
 	OutTrace.ComponentCorrectedActionAxisRotation =
-		(OutTrace.ActionBindComponentWorldRotation.Inverse() *
-		 OutTrace.CachedActionAxisReferenceRotation).GetNormalized();
+		ExpressCachedWorldActionAxisInMeshComponentForTesting(
+			OutTrace.ActionBindComponentWorldRotation,
+			OutTrace.CachedActionAxisReferenceRotation);
 	OutTrace.EffectiveActionAxisRotation = EffectiveActionAxisRotation.GetNormalized();
 	OutTrace.ObservationBodyBindComponentRotation =
 		CachedSmplObservationRestBodyComponentRotations[

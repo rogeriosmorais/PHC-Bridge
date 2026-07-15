@@ -286,6 +286,18 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("Removing the development flag restores the Manny round-trip trace-off default"),
 		Component->IsMannyLocalFrameRoundtripTraceEnabledForTesting());
 	TestFalse(
+		TEXT("Experimental component action axis is disabled by default"),
+		Component->IsExperimentalComponentActionAxisEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalComponentActionAxis"));
+	TestTrue(
+		TEXT("Explicit development flag enables the component-space action axis"),
+		Component->IsExperimentalComponentActionAxisEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
+	TestFalse(
+		TEXT("Omitting the development flag restores the cached-world action-axis path"),
+		Component->IsExperimentalComponentActionAxisEnabledForTesting());
+	TestFalse(
 		TEXT("Policy-input provenance tracing is disabled without its explicit development flag"),
 		Component->IsPolicyInputProvenanceTraceEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(
