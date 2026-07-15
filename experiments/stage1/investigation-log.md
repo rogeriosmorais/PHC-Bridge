@@ -710,3 +710,19 @@ Machine-readable record: `experiments/stage1/production-distal-hands-restoration
 **Next experiment selected.** Production-safe first-active-cycle latch and no-flag Head promotion.
 
 Machine-readable record: `experiments/stage1/deterministic-head-after-first-policy.e46.json`.
+
+## E47 — Production delayed Head restoration (2026-07-15)
+
+**Hypothesis.** A production runtime latch can reproduce E46 without a PhysAnim experimental flag.
+
+**Configuration.** Production lower body + Spine/Chest + distal hands; Head enabled only after one completed active-standing policy inference; `-onethread`.
+
+**Validity.** Clean production commit `a88f786c18a77b2e5f48cfad3b3f25247240d108`, locked model/protocol, no PhysAnim experimental arguments, exact timing/mask/strength contracts and intended destructive controls.
+
+**Result.** Bundle PASS at ratio 0.762566. Normal AUC exactly 30.0066; ZeroActions exactly 39.3495; all repetitions byte-identical. First active Head is zero and later Head is nonzero.
+
+**Supported or falsified.** Supported. Delayed Head is now production behavior.
+
+**Next experiment selected.** A reusable scaled, delayed restoration framework for Neck, left proximal arm, right proximal arm and Torso.
+
+Machine-readable record: `experiments/stage1/production-head-after-first-policy.e47.json`.
