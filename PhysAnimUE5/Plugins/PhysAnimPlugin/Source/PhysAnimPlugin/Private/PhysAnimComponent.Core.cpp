@@ -47,6 +47,8 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 	bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalConstraintRangeRemapBypassFromFirstPolicy"));
 	bExperimentalCausalStandingNeckHeadEnabledForTesting = false;
+	bExperimentalCausalStandingNeckEnabledForTesting = false;
+	bExperimentalCausalStandingHeadEnabledForTesting = false;
 	FString ExperimentalCausalStandingUpperBodyName;
 	if (CommandLine &&
 		FParse::Value(
@@ -56,6 +58,12 @@ void UPhysAnimComponent::ApplyProductVariantFromCommandLineForTesting(const TCHA
 	{
 		bExperimentalCausalStandingNeckHeadEnabledForTesting =
 			ExperimentalCausalStandingUpperBodyName == TEXT("NeckHead");
+		bExperimentalCausalStandingNeckEnabledForTesting =
+			ExperimentalCausalStandingUpperBodyName == TEXT("Neck") ||
+			bExperimentalCausalStandingNeckHeadEnabledForTesting;
+		bExperimentalCausalStandingHeadEnabledForTesting =
+			ExperimentalCausalStandingUpperBodyName == TEXT("Head") ||
+			bExperimentalCausalStandingNeckHeadEnabledForTesting;
 	}
 	bExperimentalPolicyActionBaselineResidualEnabledForTesting = CommandLine &&
 		FParse::Param(CommandLine, TEXT("PhysAnimExperimentalPolicyActionBaselineResidual"));

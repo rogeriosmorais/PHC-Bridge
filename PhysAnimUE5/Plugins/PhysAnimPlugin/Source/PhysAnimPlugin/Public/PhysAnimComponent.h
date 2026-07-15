@@ -1494,6 +1494,11 @@ public:
 		bool bStandingPolicyMode,
 		bool bRestoreNeckHead,
 		TArray<float>& InOutActions);
+	static void ApplyCausalStandingPolicyActionCompatibility(
+		bool bStandingPolicyMode,
+		bool bRestoreNeck,
+		bool bRestoreHead,
+		TArray<float>& InOutActions);
 	static float ResolveCausalStandingPolicyStrengthFactor(
 		bool bStandingPolicyMode,
 		bool bFirstActiveStandingPolicyCaptured,
@@ -1546,6 +1551,14 @@ public:
 	bool IsExperimentalCausalStandingNeckHeadEnabledForTesting() const
 	{
 		return bExperimentalCausalStandingNeckHeadEnabledForTesting;
+	}
+	bool IsExperimentalCausalStandingNeckEnabledForTesting() const
+	{
+		return bExperimentalCausalStandingNeckEnabledForTesting;
+	}
+	bool IsExperimentalCausalStandingHeadEnabledForTesting() const
+	{
+		return bExperimentalCausalStandingHeadEnabledForTesting;
 	}
 	EPhysAnimExperimentalActionFamilyMask GetExperimentalActionFamilyMaskForTesting() const
 	{
@@ -2610,6 +2623,8 @@ private:
 	bool bExperimentalBindNeutralFromFirstPolicyEnabledForTesting = false;
 	bool bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = false;
 	bool bExperimentalCausalStandingNeckHeadEnabledForTesting = false;
+	bool bExperimentalCausalStandingNeckEnabledForTesting = false;
+	bool bExperimentalCausalStandingHeadEnabledForTesting = false;
 	EPhysAnimExperimentalActionFamilyMask ExperimentalActionFamilyMaskForTesting =
 		EPhysAnimExperimentalActionFamilyMask::All;
 	int32 ExperimentalActionJointRangeStartForTesting = INDEX_NONE;
