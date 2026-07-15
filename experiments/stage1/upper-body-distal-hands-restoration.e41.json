@@ -1,0 +1,52 @@
+{
+  "schema_version": "physanim-investigation-result/v1",
+  "experiment_id": "upper-body-distal-hands-restoration-e41",
+  "recorded_utc": "2026-07-15T22:06:24Z",
+  "preregistration_commit": "c0815402f606a92490b3280585dab6ebca0eea85",
+  "candidate_behavior_commit": "54ce5b188dd5934818fba8f5330f315084f05c01",
+  "production_baseline_commit": "3bbcfc54225293a185b23c8d211f25b853cb91f6",
+  "status": "VALID",
+  "hypothesis_verdict": "PARTIALLY_SUPPORTED",
+  "product_candidate_success": false,
+  "production_success": false,
+  "bundle_status": "PASS",
+  "bundle_failed_criteria": [],
+  "fixture_authority": "PRODUCT_RUN",
+  "protocol_sha256": "75b29360907028d081cbfa43e965a35fef760873c76d71b52f2147e99f54606a",
+  "model_onnx_sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19",
+  "experimental_command_line_flags": ["PhysAnimExperimentalCausalStandingUpperBody=DistalHands"],
+  "candidate_action_joint_indices": [0,1,2,3,4,5,6,7,9,10,16,17,21,22],
+  "normal_recovery_auc": [29.835803994590194,30.538612746702157,30.538612746702157],
+  "zero_actions_recovery_auc": [41.14179622283463,41.35809319979309,41.14179622283463],
+  "normal_to_zero_recovery_auc_ratio": 0.7422770892475651,
+  "locked_maximum_ratio": 0.8,
+  "normal_absolute_pass_count": 3,
+  "zero_actions_absolute_pass_count": 3,
+  "destructive_controls": {
+    "DropControlDispatch": {"status":"FAIL","failed_criteria":["target_readback"],"target_readback_match_ratio":0.4664755534320752},
+    "ForcedSupportLoss": {"status":"FAIL","failed_criteria":["support_gap"],"target_readback_match_ratio":1.0}
+  },
+  "validity": {
+    "source_tree_clean_in_all_manifests": true,
+    "source_commit_matches_all_runs": true,
+    "model_hash_matches_all_runs": true,
+    "locked_protocol_hash_matches": true,
+    "runner_has_only_intended_experimental_argument": true,
+    "normal_distal_hand_joints_nonzero_present": true,
+    "normal_proximal_arms_exact_zero": true,
+    "zero_actions_all_conditioned_scalars_exact_zero": true,
+    "normal_strength_multiplier_transition": [1.0,1.5],
+    "zero_actions_strength_multipliers": [1.0],
+    "normal_repetitions_deterministic": false,
+    "zero_repetitions_deterministic": false
+  },
+  "causal_findings": [
+    "Restoring both collapsed wrist/hand source-joint pairs is causally strong and passes every absolute and destructive-control gate.",
+    "The causal ratio is 0.7422770892475651, substantially below the locked maximum 0.8.",
+    "Promotion is blocked by the recurring two-state startup snapshot bifurcation, which also appeared in a ZeroActions repetition and therefore is upstream of distal-hand action application.",
+    "The production baseline remains unchanged at commit 3bbcfc54225293a185b23c8d211f25b853cb91f6."
+  ],
+  "authoritative_bundle_artifact": "test-results/causal-standing/e41-distal-hands-restoration/bundle-evaluation.json",
+  "audit_artifact": "experiments/stage1/upper-body-distal-hands-restoration.e41.audit.json",
+  "next": "Resolve the recurring first-policy startup snapshot bifurcation before promoting distal hands or interpreting exact-repeat failures in subsequent upper-body regions."
+}

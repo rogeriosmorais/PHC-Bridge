@@ -614,3 +614,19 @@ Machine-readable record: `experiments/stage1/upper-body-spine-chest-restoration.
 **Next experiment selected.** Separately preregister distal wrist/hand restoration against production commit `3bbcfc54225293a185b23c8d211f25b853cb91f6`.
 
 Machine-readable record: `experiments/stage1/production-spine-chest-restoration.e40.json`.
+
+## E41 — Distal wrist/hand restoration (2026-07-15)
+
+**Hypothesis.** Restoring Proto joints 16–17 and 21–22 (`L_Wrist`, `L_Hand`, `R_Wrist`, `R_Hand`) on top of production Spine+Chest preserves the locked causal-standing contract.
+
+**Configuration.** Same locked 3+3+2 PRODUCT_RUN bundle, with only `-PhysAnimExperimentalCausalStandingUpperBody=DistalHands`. Proximal arms, torso joint 8, Neck and Head remained exactly zero.
+
+**Validity.** All manifests used clean source commit `54ce5b188dd5934818fba8f5330f315084f05c01`, locked model/protocol hashes, exact masks and strength paths, and only the intended option. The four distal source-joint triplets were nonzero in Normal and every conditioned scalar was zero in ZeroActions.
+
+**Result.** The authoritative bundle passed at ratio 0.742277. Normal AUCs were 29.8358, 30.5386 and 30.5386; ZeroActions AUCs were 41.1418, 41.3581 and 41.1418. Destructive controls failed only their intended criteria.
+
+**Supported or falsified.** Partially supported. Distal hands are causally beneficial and absolutely stable, but exact repeatability fails because the recurring two-state first-policy startup snapshot bifurcation also appears in ZeroActions. This is upstream of distal-hand action application.
+
+**Next experiment selected.** Resolve the startup snapshot bifurcation before production promotion, then rerun distal hands from the fixed deterministic baseline.
+
+Machine-readable record: `experiments/stage1/upper-body-distal-hands-restoration.e41.json`.
