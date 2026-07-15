@@ -137,6 +137,14 @@ namespace
 
 	TOptional<double> ResolveCausalStandingSampleTime(double ActualTimeSeconds, double CaptureWindowSeconds);
 	double GetCausalStandingFixedDeltaTimeSeconds();
+	void ConfigureCausalStandingFixedTimeStep(
+		bool& bInOutConfigured,
+		bool& bOutPreviousUseFixedTimeStep,
+		double& OutPreviousFixedDeltaTimeSeconds);
+	void RestoreCausalStandingFixedTimeStep(
+		bool& bInOutConfigured,
+		bool bPreviousUseFixedTimeStep,
+		double PreviousFixedDeltaTimeSeconds);
 	double AdvanceCausalStandingSupportGapMs(double CurrentGapMs, bool bHasSupportContact, double DeltaTimeSeconds);
 	TArray<TSharedPtr<FJsonValue>> BuildPolicyActionJsonArray(const TArray<float>& Actions)
 	{
@@ -217,6 +225,27 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	TestTrue(
 		TEXT("Causal standing uses a deterministic sixty-hertz runtime step"),
 		FMath::IsNearlyEqual(GetCausalStandingFixedDeltaTimeSeconds(), 1.0 / 60.0, 1.0e-9));
+	bool bFixedStepLifecycleConfigured = false;
+	bool bPreviousUseFixedTimeStep = false;
+	double PreviousFixedDeltaTimeSeconds = 0.0;
+	ConfigureCausalStandingFixedTimeStep(
+		bFixedStepLifecycleConfigured,
+		bPreviousUseFixedTimeStep,
+		PreviousFixedDeltaTimeSeconds);
+	TestTrue(TEXT("E42 fixed-step lifecycle records configured state"), bFixedStepLifecycleConfigured);
+	TestTrue(TEXT("E42 fixed-step lifecycle enables fixed timestep before PIE"), FApp::UseFixedTimeStep());
+	TestTrue(
+		TEXT("E42 fixed-step lifecycle publishes the locked delta before PIE"),
+		FMath::IsNearlyEqual(FApp::GetFixedDeltaTime(), GetCausalStandingFixedDeltaTimeSeconds(), 1.0e-12));
+	RestoreCausalStandingFixedTimeStep(
+		bFixedStepLifecycleConfigured,
+		bPreviousUseFixedTimeStep,
+		PreviousFixedDeltaTimeSeconds);
+	TestFalse(TEXT("E42 fixed-step lifecycle clears configured state on restore"), bFixedStepLifecycleConfigured);
+	TestEqual(TEXT("E42 fixed-step lifecycle restores prior fixed-step mode"), FApp::UseFixedTimeStep(), bPreviousUseFixedTimeStep);
+	TestTrue(
+		TEXT("E42 fixed-step lifecycle restores prior delta"),
+		FMath::IsNearlyEqual(FApp::GetFixedDeltaTime(), PreviousFixedDeltaTimeSeconds, 1.0e-12));
 	TestEqual(
 		TEXT("An in-window raw sample keeps its observed time"),
 		ResolveCausalStandingSampleTime(0.495, 0.5).GetValue(),
@@ -1197,6 +1226,99 @@ namespace
 	{
 		return CausalStandingFixedDeltaTimeSeconds;
 	}
+
+	void ConfigureCausalStandingFixedTimeStep(
+		bool& bInOutConfigured,
+		bool& bOutPreviousUseFixedTimeStep,
+		double& OutPreviousFixedDeltaTimeSeconds)
+	{
+		if (bInOutConfigured)
+		{
+			return;
+		}
+
+		bOutPreviousUseFixedTimeStep = FApp::UseFixedTimeStep();
+		OutPreviousFixedDeltaTimeSeconds = FApp::GetFixedDeltaTime();
+		FApp::SetFixedDeltaTime(GetCausalStandingFixedDeltaTimeSeconds());
+		FApp::SetUseFixedTimeStep(true);
+		bInOutConfigured = true;
+	}
+
+	void RestoreCausalStandingFixedTimeStep(
+		bool& bInOutConfigured,
+		bool bPreviousUseFixedTimeStep,
+		double PreviousFixedDeltaTimeSeconds)
+	{
+		if (!bInOutConfigured)
+		{
+			return;
+		}
+
+		FApp::SetUseFixedTimeStep(bPreviousUseFixedTimeStep);
+		FApp::SetFixedDeltaTime(PreviousFixedDeltaTimeSeconds);
+		bInOutConfigured = false;
+	}
+
+	struct FCausalStandingFixedTimeStepState
+	{
+		bool bConfigured = false;
+		bool bPreviousUseFixedTimeStep = false;
+		double PreviousFixedDeltaTimeSeconds = 0.0;
+
+		void Configure()
+		{
+			ConfigureCausalStandingFixedTimeStep(
+				bConfigured,
+				bPreviousUseFixedTimeStep,
+				PreviousFixedDeltaTimeSeconds);
+		}
+
+		void Restore()
+		{
+			RestoreCausalStandingFixedTimeStep(
+				bConfigured,
+				bPreviousUseFixedTimeStep,
+				PreviousFixedDeltaTimeSeconds);
+		}
+	};
+
+	class FConfigureCausalStandingFixedTimeStepCommand final : public IAutomationLatentCommand
+	{
+	public:
+		explicit FConfigureCausalStandingFixedTimeStepCommand(
+			const TSharedRef<FCausalStandingFixedTimeStepState>& InState)
+			: State(InState)
+		{
+		}
+
+		virtual bool Update() override
+		{
+			State->Configure();
+			return true;
+		}
+
+	private:
+		TSharedRef<FCausalStandingFixedTimeStepState> State;
+	};
+
+	class FRestoreCausalStandingFixedTimeStepCommand final : public IAutomationLatentCommand
+	{
+	public:
+		explicit FRestoreCausalStandingFixedTimeStepCommand(
+			const TSharedRef<FCausalStandingFixedTimeStepState>& InState)
+			: State(InState)
+		{
+		}
+
+		virtual bool Update() override
+		{
+			State->Restore();
+			return true;
+		}
+
+	private:
+		TSharedRef<FCausalStandingFixedTimeStepState> State;
+	};
 
 	double AdvanceCausalStandingSupportGapMs(
 		double CurrentGapMs,
@@ -2339,26 +2461,26 @@ namespace
 	class FCausalStandingCaptureCommand final : public IAutomationLatentCommand
 	{
 	public:
-		FCausalStandingCaptureCommand(FAutomationTestBase* InTest, const FCausalStandingRunConfig& InConfig)
-			: Test(InTest), Config(InConfig), StartupRealTime(FPlatformTime::Seconds())
+		FCausalStandingCaptureCommand(
+			FAutomationTestBase* InTest,
+			const FCausalStandingRunConfig& InConfig,
+			const TSharedRef<FCausalStandingFixedTimeStepState>& InFixedTimeStepState)
+			: Test(InTest),
+			  Config(InConfig),
+			  FixedTimeStepState(InFixedTimeStepState),
+			  StartupRealTime(FPlatformTime::Seconds())
 		{
-		}
-
-		virtual ~FCausalStandingCaptureCommand() override
-		{
-			RestoreFixedTimeStep();
 		}
 
 		virtual bool Update() override
 		{
-			ConfigureFixedTimeStep();
 			UWorld* World = FindProductWorld();
 			if (!World)
 			{
 				if (FPlatformTime::Seconds() - StartupRealTime >= StartupTimeoutSeconds)
 				{
 					Test->AddError(TEXT("PIE world was unavailable for the causal-standing product run"));
-					RestoreFixedTimeStep();
+					FixedTimeStepState->Restore();
 					return true;
 				}
 				return false;
@@ -2431,35 +2553,10 @@ namespace
 			{
 				Test->AddError(TEXT("Failed to write causal-standing product evidence"));
 			}
-			RestoreFixedTimeStep();
 			return true;
 		}
 
 	private:
-		void ConfigureFixedTimeStep()
-		{
-			if (bFixedTimeStepConfigured)
-			{
-				return;
-			}
-			bPreviousUseFixedTimeStep = FApp::UseFixedTimeStep();
-			PreviousFixedDeltaTimeSeconds = FApp::GetFixedDeltaTime();
-			FApp::SetFixedDeltaTime(GetCausalStandingFixedDeltaTimeSeconds());
-			FApp::SetUseFixedTimeStep(true);
-			bFixedTimeStepConfigured = true;
-		}
-
-		void RestoreFixedTimeStep()
-		{
-			if (!bFixedTimeStepConfigured)
-			{
-				return;
-			}
-			FApp::SetUseFixedTimeStep(bPreviousUseFixedTimeStep);
-			FApp::SetFixedDeltaTime(PreviousFixedDeltaTimeSeconds);
-			bFixedTimeStepConfigured = false;
-		}
-
 		void CapturePhysicsSample(UWorld* World, UPhysAnimComponent* Component, double TimeSeconds)
 		{
 			ProductSupportGapTimerMs = AdvanceCausalStandingSupportGapMs(
@@ -3045,6 +3142,7 @@ namespace
 
 		FAutomationTestBase* Test = nullptr;
 		FCausalStandingRunConfig Config;
+		TSharedRef<FCausalStandingFixedTimeStepState> FixedTimeStepState;
 		double StartupRealTime = 0.0;
 		double ObservationStartWorldTime = 0.0;
 		double LastPhysicsTimeSeconds = -1.0;
@@ -3052,9 +3150,6 @@ namespace
 		bool bObservationStarted = false;
 		bool bVariantApplied = false;
 		bool bPerturbationApplied = false;
-		bool bFixedTimeStepConfigured = false;
-		bool bPreviousUseFixedTimeStep = false;
-		double PreviousFixedDeltaTimeSeconds = 0.0;
 		int32 PhysicsSequence = 0;
 		int32 PolicySequence = 0;
 		int32 LastPolicyActionSampleCount = 0;
@@ -3117,9 +3212,13 @@ bool FPhysAnimCausalStandingProductTest::RunTest(const FString& Parameters)
 		AddError(TEXT("Unable to open the causal-standing product map"));
 		return false;
 	}
+	const TSharedRef<FCausalStandingFixedTimeStepState> FixedTimeStepState =
+		MakeShared<FCausalStandingFixedTimeStepState>();
+	AddCommand(new FConfigureCausalStandingFixedTimeStepCommand(FixedTimeStepState));
 	AddCommand(new FStartPIECommand(false));
-	AddCommand(new FCausalStandingCaptureCommand(this, Config));
+	AddCommand(new FCausalStandingCaptureCommand(this, Config, FixedTimeStepState));
 	AddCommand(new FEndPlayMapCommand());
+	AddCommand(new FRestoreCausalStandingFixedTimeStepCommand(FixedTimeStepState));
 	AddCommand(new FResetCausalStandingVariantCommand());
 	return true;
 }
@@ -3157,9 +3256,13 @@ bool FPhysAnimStandingPlantDevelopmentTest::RunTest(const FString& Parameters)
 		AddError(TEXT("Unable to open the standing-plant development map"));
 		return false;
 	}
+	const TSharedRef<FCausalStandingFixedTimeStepState> FixedTimeStepState =
+		MakeShared<FCausalStandingFixedTimeStepState>();
+	AddCommand(new FConfigureCausalStandingFixedTimeStepCommand(FixedTimeStepState));
 	AddCommand(new FStartPIECommand(false));
-	AddCommand(new FCausalStandingCaptureCommand(this, Config));
+	AddCommand(new FCausalStandingCaptureCommand(this, Config, FixedTimeStepState));
 	AddCommand(new FEndPlayMapCommand());
+	AddCommand(new FRestoreCausalStandingFixedTimeStepCommand(FixedTimeStepState));
 	AddCommand(new FResetCausalStandingVariantCommand());
 	return true;
 }
