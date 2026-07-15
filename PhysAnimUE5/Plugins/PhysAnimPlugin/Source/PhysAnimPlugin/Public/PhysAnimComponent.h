@@ -1530,6 +1530,13 @@ public:
 	static void ApplyExperimentalActionFamilyMaskForTesting(
 		EPhysAnimExperimentalActionFamilyMask Mask,
 		TArray<float>& InOutActions);
+	bool IsExperimentalCheckpointTorqueCeilingEnabledForTesting() const
+	{
+		return bExperimentalCheckpointTorqueCeilingEnabledForTesting;
+	}
+	static bool ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
+		bool bConfigured,
+		EPhysAnimRuntimeState InRuntimeState);
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
 	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
@@ -2513,6 +2520,7 @@ private:
 	bool bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = false;
 	EPhysAnimExperimentalActionFamilyMask ExperimentalActionFamilyMaskForTesting =
 		EPhysAnimExperimentalActionFamilyMask::All;
+	bool bExperimentalCheckpointTorqueCeilingEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
 	bool bStartupChronologyTraceEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;

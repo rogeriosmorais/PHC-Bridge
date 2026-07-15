@@ -1922,6 +1922,14 @@ void UPhysAnimComponent::ApplyRuntimeControlTuning(const FPhysAnimStabilizationS
 		ControlMultiplier.AngularExtraDampingMultiplier =
 			EffectiveSettings.AngularExtraDampingMultiplier * FamilyExtraDampingScale * LocomotionLowerLimbExtraDampingScale *
 			BalanceReadyTransition.GetTransitionExtraDampingMultiplier(BoneName, EffectiveSettings);
+#if WITH_DEV_AUTOMATION_TESTS
+		ControlMultiplier.MaxTorqueMultiplier =
+			ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
+				bExperimentalCheckpointTorqueCeilingEnabledForTesting,
+				RuntimeState)
+				? 10.0f
+				: 1.0f;
+#endif
 
 		if (bHipQuarantineActiveThisFrame &&
 			!bPhase2RootOnGuardWindow &&

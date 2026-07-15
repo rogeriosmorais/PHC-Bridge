@@ -462,14 +462,43 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			ZeroFamilyActions[Index],
 			0.0f);
 	}
+	TestFalse(
+		TEXT("Checkpoint torque ceiling is disabled by default"),
+		Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCheckpointTorqueCeiling"));
+	TestTrue(
+		TEXT("Explicit development flag enables the checkpoint torque ceiling"),
+		Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting());
+	TestFalse(
+		TEXT("Checkpoint torque ceiling remains inactive before standing activation"),
+		UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::RuntimeReady));
+	TestTrue(
+		TEXT("Checkpoint torque ceiling is active during standing preparation"),
+		UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::Standing_Preparation));
+	TestTrue(
+		TEXT("Checkpoint torque ceiling remains active in standing"),
+		UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(
+		TEXT("Unconfigured checkpoint torque ceiling remains inactive"),
+		UPhysAnimComponent::ShouldUseExperimentalCheckpointTorqueCeilingForRuntimeStateForTesting(
+			false,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
 	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
 	TestFalse(
-		TEXT("Omitting experimental flags restores captured neutral, cached-world axis, range mapping, and all actions"),
+		TEXT("Omitting experimental flags restores captured neutral, cached-world axis, range mapping, all actions, and the authored torque ceiling"),
 		Component->IsExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting() ||
 			Component->IsExperimentalBindNeutralFromFirstPolicyEnabledForTesting() ||
 			Component->IsExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting() ||
 			Component->GetExperimentalActionFamilyMaskForTesting() !=
-				EPhysAnimExperimentalActionFamilyMask::All);
+				EPhysAnimExperimentalActionFamilyMask::All ||
+			Component->IsExperimentalCheckpointTorqueCeilingEnabledForTesting());
 	TestFalse(
 		TEXT("Policy-input provenance tracing is disabled without its explicit development flag"),
 		Component->IsPolicyInputProvenanceTraceEnabledForTesting());
@@ -1900,6 +1929,7 @@ namespace
 			Row->SetNumberField(TEXT("control_angular_strength_multiplier"), bHasGainProbe ? GainProbeMultiplier.AngularStrengthMultiplier : 0.0);
 			Row->SetNumberField(TEXT("control_angular_damping_ratio_multiplier"), bHasGainProbe ? GainProbeMultiplier.AngularDampingRatioMultiplier : 0.0);
 			Row->SetNumberField(TEXT("control_angular_extra_damping_multiplier"), bHasGainProbe ? GainProbeMultiplier.AngularExtraDampingMultiplier : 0.0);
+			Row->SetNumberField(TEXT("control_max_torque_multiplier"), bHasGainProbe ? GainProbeMultiplier.MaxTorqueMultiplier : 0.0);
 			Row->SetBoolField(TEXT("full_simulation_committed"), StandingStatus.bFullSimulationCommitted);
 			Row->SetNumberField(TEXT("root_linear_speed_cm_per_sec"), RootLinearSpeedCmPerSec);
 			Row->SetNumberField(TEXT("root_angular_speed_deg_per_sec"), RootAngularSpeedDegPerSec);
