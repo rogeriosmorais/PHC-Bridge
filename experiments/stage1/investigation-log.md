@@ -296,3 +296,22 @@ Machine-readable record: `experiments/stage1/startup-repeatability.e17.json`.
 **Next experiment selected.** Hold component+bind fixed and bypass only `MapProtoPolicyTargetToMannyConstraintRange` from first policy, retaining `AdaptParentRelativeTarget`, step limiting, gains, timing, and all locked judges. Require exact first-policy snapshot/output and readback 1.0.
 
 Machine-readable record: `experiments/stage1/action-adapter-factorial.e18.json`.
+
+
+## E20 — Policy action-family ablation (2026-07-15)
+
+**Hypothesis.** Nonzero ONNX output destabilizes standing through a specific anatomical action family rather than through inference, target dispatch, controls, or the passive plant.
+
+**Configuration.** Five same-binary arms on commit `e45ac4232ef629e7f195ca26283018c893badb45`, with component-space parent-axis composition, captured standing neutral, protective range mapping, safety projection, gains, timing, pose, and no perturbation held fixed. Raw ONNX output remained unchanged; only the post-conditioning retained family differed: zero, lower-only, axial-only, arms-only, or all.
+
+**Validity.** First-policy snapshots were byte-identical. Every conditioned scalar matched the declared anatomical mask over all 300 policy steps. Inference and target dispatch remained live, and readback was 1.0 in every arm.
+
+**Result.** Lower-only passed the full ten-second hold with pelvis ratio 0.960, maximum root tilt 17.664°, maximum body speed 140.146 cm/s, and no support gap. Axial-only failed catastrophically, crossing 80 cm pelvis height at 0.333 s and 20 cm at 0.450 s. Arms-only failed independently, crossing 80 cm at 1.783 s and losing support for 1566.7 ms. All actions failed. The zero arm remained physically upright and bounded; its RealOnnxPolicy evaluation failed only the intentionally required nonzero-action criterion, consistent with the separately passing locked ZeroActions layer.
+
+**Supported or falsified.** Supported with two independently sufficient harmful families. Lower-body policy actions are compatible with standing; axial and arm outputs can each destroy it.
+
+**What was learned.** The failure is not a generic policy-output magnitude problem and is not caused by the lower-body balance commands. The next causal boundary is upper-body target or actuator compatibility. The exact pinned ProtoMotions checkpoint package is now available locally for authoritative comparison.
+
+**Next experiment selected.** Compare checkpoint per-joint PD authority and limits with UE, then subdivide axial actions into torso/spine/chest versus neck/head and arms into proximal versus distal groups.
+
+Machine-readable record: `experiments/stage1/policy-action-family-ablation.e20.json`.
