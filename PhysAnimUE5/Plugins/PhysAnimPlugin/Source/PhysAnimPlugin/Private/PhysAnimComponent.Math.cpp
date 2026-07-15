@@ -841,6 +841,20 @@ bool UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisForRuntimeState
 	return bConfigured && InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
 }
 
+bool UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
+	bool bConfigured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bConfigured && IsStandingActivationRuntimeState(InRuntimeState);
+}
+
+bool UPhysAnimComponent::ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
+	bool bConfigured,
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return bConfigured && IsStandingActivationRuntimeState(InRuntimeState);
+}
+
 FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponentForTesting(
 	const FQuat& ActionBindComponentWorldRotation,
 	const FQuat& CachedWorldActionAxisRotation)

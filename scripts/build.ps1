@@ -17,6 +17,8 @@ param (
     [switch]$ActionSemanticTrace,
     [switch]$MannyLocalFrameRoundtripTrace,
     [switch]$ExperimentalComponentActionAxis,
+    [switch]$ExperimentalComponentActionAxisFromFirstPolicy,
+    [switch]$ExperimentalBindNeutralFromFirstPolicy,
     [switch]$PolicyInputProvenanceTrace,
     [switch]$StartupChronologyTrace
 )
@@ -149,6 +151,12 @@ if ($Test) {
     }
     if ($ExperimentalComponentActionAxis) {
         $EditorArguments += "-PhysAnimExperimentalComponentActionAxis"
+    }
+    if ($ExperimentalComponentActionAxisFromFirstPolicy) {
+        $EditorArguments += "-PhysAnimExperimentalComponentActionAxisFromFirstPolicy"
+    }
+    if ($ExperimentalBindNeutralFromFirstPolicy) {
+        $EditorArguments += "-PhysAnimExperimentalBindNeutralFromFirstPolicy"
     }
     if ($PolicyInputProvenanceTrace) {
         $EditorArguments += "-PhysAnimPolicyInputProvenanceTrace"

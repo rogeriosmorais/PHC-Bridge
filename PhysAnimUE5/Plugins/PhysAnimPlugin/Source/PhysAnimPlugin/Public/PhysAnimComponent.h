@@ -1493,6 +1493,20 @@ public:
 	static bool ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
 		bool bConfigured,
 		EPhysAnimRuntimeState InRuntimeState);
+	bool IsExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting() const
+	{
+		return bExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting;
+	}
+	static bool ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
+		bool bConfigured,
+		EPhysAnimRuntimeState InRuntimeState);
+	bool IsExperimentalBindNeutralFromFirstPolicyEnabledForTesting() const
+	{
+		return bExperimentalBindNeutralFromFirstPolicyEnabledForTesting;
+	}
+	static bool ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
+		bool bConfigured,
+		EPhysAnimRuntimeState InRuntimeState);
 	bool IsPolicyInputProvenanceTraceEnabledForTesting() const { return bPolicyInputProvenanceTraceEnabledForTesting; }
 	bool IsStartupChronologyTraceEnabledForTesting() const { return bStartupChronologyTraceEnabledForTesting; }
 	const PhysAnimBridge::FPhysAnimActionSemanticTrace& GetActionSemanticTraceForTesting() const
@@ -2471,6 +2485,8 @@ private:
 	bool bActionSemanticTraceEnabledForTesting = false;
 	bool bMannyLocalFrameRoundtripTraceEnabledForTesting = false;
 	bool bExperimentalComponentActionAxisEnabledForTesting = false;
+	bool bExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting = false;
+	bool bExperimentalBindNeutralFromFirstPolicyEnabledForTesting = false;
 	bool bPolicyInputProvenanceTraceEnabledForTesting = false;
 	bool bStartupChronologyTraceEnabledForTesting = false;
 	EPhysAnimStandingVariant StandingVariantForTesting = EPhysAnimStandingVariant::Normal;

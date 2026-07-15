@@ -323,6 +323,72 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("Omitting the development flag restores the cached-world action-axis path"),
 		Component->IsExperimentalComponentActionAxisEnabledForTesting());
 	TestFalse(
+		TEXT("First-policy component-axis override is disabled by default"),
+		Component->IsExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalComponentActionAxisFromFirstPolicy"));
+	TestTrue(
+		TEXT("Explicit development flag enables component-axis composition from first policy"),
+		Component->IsExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting());
+	TestFalse(
+		TEXT("First-policy component-axis composition remains inactive before standing activation"),
+		UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::RuntimeReady));
+	TestTrue(
+		TEXT("First-policy component-axis composition is active during standing preparation"),
+		UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::Standing_Preparation));
+	TestTrue(
+		TEXT("First-policy component-axis composition remains active during policy blend"),
+		UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend));
+	TestTrue(
+		TEXT("First-policy component-axis composition remains active in standing"),
+		UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(
+		TEXT("Unconfigured first-policy component-axis composition remains inactive"),
+		UPhysAnimComponent::ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
+			false,
+			EPhysAnimRuntimeState::Standing_Preparation));
+	TestFalse(
+		TEXT("First-policy bind-neutral override is disabled by default after flag reset"),
+		Component->IsExperimentalBindNeutralFromFirstPolicyEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalBindNeutralFromFirstPolicy"));
+	TestTrue(
+		TEXT("Explicit development flag enables bind neutral from first policy"),
+		Component->IsExperimentalBindNeutralFromFirstPolicyEnabledForTesting());
+	TestFalse(
+		TEXT("Bind neutral remains inactive before standing activation"),
+		UPhysAnimComponent::ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::RuntimeReady));
+	TestTrue(
+		TEXT("Bind neutral is active during standing preparation"),
+		UPhysAnimComponent::ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::Standing_Preparation));
+	TestTrue(
+		TEXT("Bind neutral remains active during policy blend"),
+		UPhysAnimComponent::ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::Standing_PolicyBlend));
+	TestTrue(
+		TEXT("Bind neutral remains active in standing"),
+		UPhysAnimComponent::ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
+			true,
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	Component->ApplyProductVariantFromCommandLineForTesting(TEXT("-PhysAnimProductVariant=RealOnnxPolicy"));
+	TestFalse(
+		TEXT("Omitting factorial flags restores captured neutral and cached-world axis"),
+		Component->IsExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting() ||
+			Component->IsExperimentalBindNeutralFromFirstPolicyEnabledForTesting());
+	TestFalse(
 		TEXT("Policy-input provenance tracing is disabled without its explicit development flag"),
 		Component->IsPolicyInputProvenanceTraceEnabledForTesting());
 	Component->ApplyProductVariantFromCommandLineForTesting(

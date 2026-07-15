@@ -246,6 +246,13 @@ void UPhysAnimComponent::ApplyControlTargets(
 	const bool bUseExperimentalComponentActionAxisThisStep =
 		ShouldUseExperimentalComponentActionAxisForRuntimeStateForTesting(
 			bExperimentalComponentActionAxisEnabledForTesting,
+			RuntimeState) ||
+		ShouldUseExperimentalComponentActionAxisFromFirstPolicyForRuntimeStateForTesting(
+			bExperimentalComponentActionAxisFromFirstPolicyEnabledForTesting,
+			RuntimeState);
+	const bool bUseExperimentalBindNeutralThisStep =
+		ShouldUseExperimentalBindNeutralFromFirstPolicyForRuntimeStateForTesting(
+			bExperimentalBindNeutralFromFirstPolicyEnabledForTesting,
 			RuntimeState);
 	bool bCaptureActionSemanticTraceThisStep =
 		bActionSemanticTraceEnabledForTesting &&
@@ -597,7 +604,9 @@ void UPhysAnimComponent::ApplyControlTargets(
 						*ControlName.ToString());
 					return;
 				}
-				const FQuat MannyPolicyNeutralRotation = StableNeutralRotation->GetNormalized();
+				const FQuat MannyPolicyNeutralRotation = bUseExperimentalBindNeutralThisStep
+					? BindSeed->ParentRelativeTargetRotation.GetNormalized()
+					: StableNeutralRotation->GetNormalized();
 				FQuat AbsoluteBindCalibratedPolicyRotation =
 					ComposeProtoPolicyTargetAroundMannyNeutral(
 						*BindSeed,
