@@ -191,3 +191,19 @@ Machine-readable record: `experiments/stage1/real-onnx-coherent-prior-epoch.e12.
 **Next experiment selected.** Add a behavior-neutral authoritative ProtoMotions action-decoding contract trace. Compare each raw 3-value joint action, training-time PD offset/scale and joint frame, resulting SMPL-space target, and current UE decoder output. First prove trace neutrality; a deterministic order, axis/sign, neutral, unit, or range mismatch supports the hypothesis, while exact agreement across all 23 joints falsifies it.
 
 Machine-readable record: `experiments/stage1/active-standing-constraint-range-remap-controlled.e13.json`.
+
+## E14 — Authoritative ProtoMotions action-decoding contract (2026-07-14)
+
+**Hypothesis.** The UE bridge decodes the checkpoint's 69 normalized actions with the wrong scale, order, exponential-map meaning, or handedness before Manny neutral and constraint adaptation.
+
+**Baseline configuration and result.** Commit `ed6ea5a2c6bf146167ac7d6cd38a97e283d7732a`; locked standing-plant v2; `RealOnnxPolicy`; 1/60 s; 10 s; unchanged seed and pose; no perturbation; action trace off. Automation passed; the evaluator `FAIL`ed on body linear speed, pelvis height, and root tilt. Minimum pelvis ratio was 0.153366, maximum root tilt was 105.401°, maximum body linear speed was 1119.794 cm/s, and readback was 1.0. A preliminary relative-output-path invocation was `INVALID` because it produced no manifest and was not used as evidence.
+
+**Experimental configuration and result.** Identical clean commit, reused binary, model, protocol, harness, evaluator, and thresholds with only `-PhysAnimActionSemanticTrace` enabled. Physics, policy, first-policy input, active-standing input, render, failed criteria, and every locked metric were bit-identical to baseline. The independent ProtoMotions v2.3 evaluator returned `VALID/MATCH`: 0/69 conditioned-scalar mismatches and 0/23 decoded-quaternion mismatches; maximum quaternion-component error was `1.461e-8` and maximum angular error was `1.708e-6°`.
+
+**Supported or falsified.** Falsified. This is a valid behavior-neutral contract result, not causal-standing or product success.
+
+**What was learned.** The checkpoint contract and UE decoder agree on joint order, clamp, zero-offset/π PD scaling, xyz exponential-map decoding, and Isaac-to-UE handedness. The standing failure is downstream of raw action decoding or elsewhere in the observation/policy contract; broad physics tuning remains unjustified.
+
+**Next experiment selected.** Add a behavior-neutral Manny neutral/bind and per-joint local-frame round-trip trace. Test Proto identity, known-axis rotations, multiplication direction, and bilateral frame symmetry before range adaptation, using a fresh same-commit trace-off/trace-on A/B and unchanged locked runtime judges.
+
+Machine-readable record: `experiments/stage1/active-standing-action-decode-contract.e14.json`.

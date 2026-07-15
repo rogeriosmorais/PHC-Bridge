@@ -1,0 +1,274 @@
+{
+  "schema_version": "physanim-evidence-driven-investigation/v1",
+  "experiment_id": "active-standing-action-decode-contract-e14",
+  "recorded_utc": "2026-07-15T00:26:45.2549010Z",
+  "experiment_type": "same_commit_behavior_neutral_instrumentation_ab_with_independent_contract_evaluator",
+  "authority": "DEVELOPMENT_EVIDENCE_ONLY",
+  "product_success": false,
+  "product_verdict": "NOT_ESTABLISHED",
+  "preregistration": {
+    "path": "experiments/stage1/active-standing-action-decode-contract.e14.preregister.json",
+    "commit": "f9b2eea798b8af99335fe0d8e28de5e57a4290fa"
+  },
+  "hypothesis": "The UE bridge does not decode the checkpoint's 69 normalized actions according to the authoritative ProtoMotions v2.3 SMPL absolute-PD-target contract, causing a scale, ordering, or exponential-map mismatch before Manny neutral and constraint adaptation.",
+  "supporting_runtime_evidence_before_experiment": [
+    "E3 showed exact target publication/readback but first-active-standing lower-body raw policy offsets from 16.058672 to 76.474091 degrees while RealOnnxPolicy failed body linear speed, pelvis height, and root tilt.",
+    "E13 showed that bypassing Manny constraint-range adaptation worsened the locked result from three failures to six, localizing the remaining uncertainty upstream of protective range adaptation.",
+    "The controlled-target plant has stood with the same fully simulated topology."
+  ],
+  "competing_explanations": [
+    "The current decoder is exact because the checkpoint's three-DOF SMPL groups map normalized actions to zero-offset, pi-scaled exponential maps, matching the UE implementation.",
+    "The decoder is correct, but an observation-frame, neutral-pose, SMPL-to-Manny calibration, constraint-frame, or policy-target meaning error makes faithfully decoded targets unsuitable for Manny."
+  ],
+  "single_changed_variable": {
+    "name": "first_active_standing_action_semantic_trace",
+    "baseline_value": false,
+    "experimental_value": true,
+    "activation": "-PhysAnimActionSemanticTrace",
+    "behavior_change": "none",
+    "production_default_change": "none",
+    "protocol_or_threshold_change": "none"
+  },
+  "expected_if_hypothesis_correct": "The trace-on arm remains behaviorally identical to baseline, but the independent ProtoMotions v2.3 evaluator finds at least one conditioned scalar, joint-order entry, or sign-invariant decoded quaternion outside its locked tolerance.",
+  "falsification_observation": "The trace-on arm is behaviorally identical to baseline and all 69 conditioned scalars, all 23 ordered xyz joint groups, and all 23 decoded UE quaternions match the independent ProtoMotions v2.3 reference within locked tolerances.",
+  "authoritative_contract": {
+    "repository": "https://github.com/NVlabs/ProtoMotions",
+    "tag": "v2.3",
+    "commit": "4a905b998101333a2fb91f2de8e2cab4bd0db68e",
+    "checkpoint_config": "data/pretrained_models/motion_tracker/smpl/config.yaml",
+    "number_of_actions": 69,
+    "joint_count": 23,
+    "mimic_residual_control": false,
+    "map_actions_to_pd_range": true,
+    "action_scale": 1.0,
+    "action_clamp": 1.0,
+    "three_dof_pd_action_offset_radians": 0.0,
+    "three_dof_pd_action_scale": "pi",
+    "joint_representation": "xyz exponential map",
+    "source_files": [
+      "protomotions/config/robot/smpl.yaml",
+      "protomotions/data/assets/mjcf/smpl_humanoid.xml",
+      "protomotions/envs/base_env/env_utils/humanoid_utils.py",
+      "protomotions/simulator/base_simulator/simulator.py"
+    ]
+  },
+  "locked_judges": {
+    "protocol": {
+      "path": "product-gates/standing-plant-ladder.v2.json",
+      "sha256": "0473596FE581BBF25341D7096C91E3DF2E67319193A604105CD5D64F599079AB"
+    },
+    "model": {
+      "path": "PhysAnimUE5/Content/NNEModels/phc_policy.onnx",
+      "sha256": "C8DF64F75E10B3F71766895C054466DB1918582BA5A5A85538A1DEC8594BBE19"
+    },
+    "runtime_evaluator": "scripts/evaluate_standing_plant.py",
+    "contract_evaluator": "scripts/evaluate_action_decode_contract.py",
+    "variant": "RealOnnxPolicy",
+    "fixed_timestep_seconds": 0.016666666666666666,
+    "capture_window_seconds": 10.0,
+    "initial_pose": "unchanged standing-plant harness default",
+    "perturbation": "none",
+    "seed": "unchanged standing-plant harness default",
+    "contract_tolerances": {
+      "conditioned_scalar_absolute_error": 0.000001,
+      "sign_invariant_quaternion_component_absolute_error": 0.000002,
+      "quaternion_angular_error_degrees": 0.001
+    }
+  },
+  "implementation": {
+    "runtime_source_commit": "ed6ea5a2c6bf146167ac7d6cd38a97e283d7732a",
+    "source_tree_dirty": false,
+    "build_count": 1,
+    "binary_reused_between_arms": true,
+    "evaluator": "scripts/evaluate_action_decode_contract.py",
+    "evaluator_test": "scripts/tests/test_action_decode_contract_evaluator.py",
+    "runtime_behavior_files_changed": false,
+    "production_defaults_changed": false
+  },
+  "validation": {
+    "focused_contract_evaluator_tests": {
+      "command": "python -m pytest scripts/tests/test_action_decode_contract_evaluator.py -q",
+      "status": "PASS",
+      "passed": 11
+    },
+    "fast_deterministic_tests": {
+      "command": "python -m pytest scripts/tests -q",
+      "status": "PASS",
+      "passed": 99
+    },
+    "ue_build": {
+      "command": ".\\scripts\\build.ps1",
+      "status": "PASS",
+      "result": "target up to date"
+    },
+    "runtime_log_readback": {
+      "command": "python .\\scripts\\read_logs.py",
+      "status": "READ",
+      "automation_errors": 0,
+      "automation_warnings_per_valid_arm": 48,
+      "warning_sequence_equal": true,
+      "notes": "Both arms contained the same strict-certification, balance-entry, missing-bone-data, and foot_l/ball_l ALL_SAMPLES_FAILED warnings."
+    }
+  },
+  "preliminary_invalid_attempt": {
+    "status": "INVALID",
+    "behavioral_evidence": false,
+    "arm": "trace_disabled",
+    "automation_exit_code": 0,
+    "reason": "Relative ProductRunRoot and ReportExportPath values did not produce the required repository artifact root or manifest.",
+    "correction": "The valid A/B used fully resolved absolute paths. No runtime, model, protocol, seed, pose, timestep, capture-window, evaluator, or threshold setting changed.",
+    "retries_before_direction_change": 1
+  },
+  "baseline": {
+    "name": "trace_disabled",
+    "run_id": "RealOnnxPolicy-action-decode-e14-trace-disabled",
+    "artifact_root": "test-results/action-decode-contract-e14/trace-disabled",
+    "configuration": "Clean runtime commit; reused binary; locked v2 protocol; RealOnnxPolicy; 1/60 s; 10 s; unchanged seed and initial pose; no perturbation; action trace disabled.",
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "trace": {
+      "enabled": false,
+      "captured": false,
+      "action_joint_count": 0,
+      "control_target_count": 0
+    },
+    "key_metrics": {
+      "physics_sample_count": 601,
+      "policy_sample_count": 300,
+      "minimum_pelvis_height_cm": 13.986960983769706,
+      "minimum_pelvis_height_ratio": 0.15336580018044577,
+      "maximum_root_tilt_deg": 105.40127563476562,
+      "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+      "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+      "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+      "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "target_write_attempts": 6300,
+      "target_readback_matches": 6300,
+      "target_readback_match_ratio": 1.0,
+      "maximum_readback_error_deg": 0.000004517745487845102,
+      "inference_successes": 300,
+      "pose_search_valid_samples": 300,
+      "minimum_simulated_bodies": 22,
+      "minimum_matching_controls": 21,
+      "movement_reclaim_count": 0,
+      "shell_helper_used_count": 0,
+      "topology_change_count": 0
+    },
+    "sha256": {
+      "automation_report": "1C5BC13B97FDDB11E60905FE1420897225E42E80751647550B77D2579265400B",
+      "manifest": "AA5E60903939786E7158DF11A5D6EFBBEC83C0D86431770A33D487BBA4C6D51C",
+      "evaluation": "BE7A15CF7E3F8261C37B7B75D5C2CA457991CE2FB2502CDAFCE2A81B35237A7E",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "first_policy_input": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_input": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "55B2937501E18360B83252FBC6AA0D688B75AFCEDE3BB77F15605CBE26966028",
+      "render": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C"
+    }
+  },
+  "experimental": {
+    "name": "trace_enabled",
+    "run_id": "RealOnnxPolicy-action-decode-e14-trace-enabled",
+    "artifact_root": "test-results/action-decode-contract-e14/trace-enabled",
+    "configuration": "Identical clean commit, binary, model, protocol, timestep, window, seed, pose, perturbation, evaluator, and thresholds; only -PhysAnimActionSemanticTrace was enabled.",
+    "automation_status": "PASS",
+    "evaluator_status": "FAIL",
+    "failed_criteria": [
+      "body_linear_speed",
+      "pelvis_height",
+      "root_tilt"
+    ],
+    "trace": {
+      "enabled": true,
+      "captured": true,
+      "capture_scope": "first_active_standing_target_write",
+      "capture_error": "",
+      "action_joint_count": 23,
+      "control_target_count": 21
+    },
+    "key_metrics": {
+      "physics_sample_count": 601,
+      "policy_sample_count": 300,
+      "minimum_pelvis_height_cm": 13.986960983769706,
+      "minimum_pelvis_height_ratio": 0.15336580018044577,
+      "maximum_root_tilt_deg": 105.40127563476562,
+      "maximum_root_linear_speed_cm_per_sec": 818.9468842693387,
+      "maximum_root_angular_speed_deg_per_sec": 558.7351261343875,
+      "maximum_body_linear_speed_cm_per_sec": 1119.7941473105468,
+      "maximum_body_angular_speed_deg_per_sec": 1742.6699117624898,
+      "maximum_support_gap_ms": 0.0,
+      "maximum_penetration_cm": 0.0,
+      "target_write_attempts": 6300,
+      "target_readback_matches": 6300,
+      "target_readback_match_ratio": 1.0,
+      "maximum_readback_error_deg": 0.000004517745487845102,
+      "inference_successes": 300,
+      "pose_search_valid_samples": 300,
+      "minimum_simulated_bodies": 22,
+      "minimum_matching_controls": 21,
+      "movement_reclaim_count": 0,
+      "shell_helper_used_count": 0,
+      "topology_change_count": 0
+    },
+    "contract_evaluation": {
+      "artifact": "test-results/action-decode-contract-e14/trace-enabled/action-decode-contract-evaluation.json",
+      "status": "VALID",
+      "contract_verdict": "MATCH",
+      "product_success": false,
+      "joint_count": 23,
+      "conditioned_scalar_count": 69,
+      "conditioned_scalar_mismatch_count": 0,
+      "decoded_quaternion_count": 23,
+      "decoded_quaternion_mismatch_count": 0,
+      "maximum_conditioned_scalar_absolute_error": 0.0,
+      "maximum_sign_invariant_quaternion_component_absolute_error": 0.000000014609901399786906,
+      "maximum_decoded_quaternion_angular_error_degrees": 0.0000017075472925031877,
+      "maximum_observed_quaternion_norm_error": 0.0000000000000002220446049250313,
+      "sha256": "62C63E11107318F634DBDDE36007FDE29E2FD83F748409DBBE00269FDE8D1834"
+    },
+    "sha256": {
+      "automation_report": "7F2742BAB92D1D0853DB743231DC626AA97009079B3BA5CA0E539291B9823535",
+      "manifest": "A6A4EF2FAD11EE047915A9B9A26E94019846FE255C32B33959D5CFCCB31F088E",
+      "evaluation": "E02C83154CF4577672F655004817FB660EC0559DAE68BBD7B992CD8B070E0EA6",
+      "physics": "D190E1B293FC91582B32A74D5489694D1395CE2063F1D939DD2AC7E3D87014C5",
+      "policy": "AEA93FC912B18DA02E0465D152720FE19305EF770281A3B3F97CC92557176201",
+      "first_policy_input": "AAAF45E77B0D8BFAFD231C3E32A2F852CD2CF420128B74EFF6651E62FBB316AA",
+      "active_standing_input": "6FC88062170EC12B51F558D28FDCD81DD1C85DFEE48ADC515E0DAB435E4113D9",
+      "action_semantic_trace": "805A1E9E80F30550C055017D2A2A32522FA57FB7F7DD14EC874558B24A51FA94",
+      "render": "DD77E476FB4C6079C269B6C7950C47C56FB3A8EBB4B63EEC09FA6EC5C484B79C"
+    }
+  },
+  "comparison": {
+    "run_validity": "VALID",
+    "instrumentation_neutral": true,
+    "physics_stream_bit_identical": true,
+    "policy_stream_bit_identical": true,
+    "first_policy_input_bit_identical": true,
+    "active_standing_input_bit_identical": true,
+    "render_bit_identical": true,
+    "locked_failed_criteria_equal": true,
+    "locked_behavioral_metrics_equal": true,
+    "contract_match": true
+  },
+  "conclusion": {
+    "hypothesis_status": "FALSIFIED",
+    "summary": "The UE action decoder matches the authoritative ProtoMotions v2.3 SMPL contract for ordering, clamp, pi PD scaling, xyz exponential-map decoding, and Isaac-to-UE handedness conversion. The independent evaluator found zero scalar and quaternion mismatches, and trace instrumentation left every locked runtime stream and metric unchanged.",
+    "learned": "The current failure is not caused by the 69-value action scale, order, exponential-map interpretation, or global Isaac-to-UE handedness transform. Semantic investigation should move downstream to neutral/bind and per-joint SMPL-to-Manny local-frame composition, not to broad physics tuning.",
+    "promotion_decision": "RETAIN_INDEPENDENT_EVALUATOR_AND_GENERAL_TRACE; NO_RUNTIME_BEHAVIOR_TO_PROMOTE"
+  },
+  "next_highest_information_experiment": {
+    "name": "Manny neutral and per-joint local-frame round-trip trace",
+    "hypothesis": "Correctly decoded absolute SMPL joint rotations are composed with Manny's activation neutral, bind reference, or per-joint calibrated frame in the wrong direction or multiplication order before constraint-range adaptation.",
+    "single_variable": "Enable a behavior-neutral first-active-standing local-frame round-trip trace; do not change target behavior.",
+    "expected_if_correct": "At least one mapped joint fails identity/known-axis round-trip or bilateral frame symmetry before range adaptation while the trace-on runtime remains byte-identical to baseline.",
+    "falsifier": "Every mapped joint reconstructs Manny policy-neutral for Proto identity, known Proto basis rotations round-trip through calibrated Manny frames within locked angular tolerance, bilateral counterparts preserve the declared reflection contract, and trace-on runtime is byte-identical to baseline.",
+    "required_ab": "Fresh same-commit RealOnnxPolicy trace-off/trace-on runs with unchanged seed, timestep, pose, no perturbation, 10-second window, model, protocol, evaluator, and thresholds."
+  }
+}
