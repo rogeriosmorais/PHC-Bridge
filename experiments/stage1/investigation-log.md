@@ -646,3 +646,19 @@ Machine-readable record: `experiments/stage1/upper-body-distal-hands-restoration
 **Next experiment selected.** Screen single-threaded engine/Chaos execution. If the bifurcation remains, adopt deterministic same-state replay or an in-process counterfactual for joint promotion rather than relying on exact cross-process startup reproduction.
 
 Machine-readable record: `experiments/stage1/deterministic-pre-pie-fixed-step.e42.json`.
+
+## E43 — Single-threaded deterministic acceptance execution (2026-07-15)
+
+**Hypothesis.** Unreal's documented `-onethread` execution switch removes the asynchronous startup ordering responsible for the recurring first-policy state bifurcation.
+
+**Configuration.** Same fixed-step harness and unchanged E40 production controller, with only `-onethread` added to every PRODUCT_RUN arm. No PhysAnim experimental behavior arguments.
+
+**Validity.** Clean preregistration commit `b4f4f9255da3bf07a74ac7b3e5809c3741a02c08`, locked model/protocol, exact production masks and strengths, and intended destructive controls.
+
+**Result.** Full bundle PASS at ratio 0.756685. Normal AUC was exactly 29.7751 in all three repetitions; ZeroActions was exactly 39.3495 in all three. Policy-input, policy, first-active and physics streams were byte-identical within both variants. Controls failed only their intended criteria.
+
+**Supported or falsified.** Supported. `-onethread` is the deterministic causal-standing acceptance configuration for subsequent upper-body restoration.
+
+**Next experiment selected.** Rerun DistalHands under the deterministic configuration and promote if the complete bundle remains causal and exact.
+
+Machine-readable record: `experiments/stage1/deterministic-single-thread-execution.e43.json`.
