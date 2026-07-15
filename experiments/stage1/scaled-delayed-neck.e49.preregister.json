@@ -1,0 +1,13 @@
+{
+  "schema_version":"physanim-experiment-preregistration/v1",
+  "experiment_id":"scaled-delayed-neck-e49",
+  "preregistered_utc":"2026-07-15T23:41:00Z",
+  "production_baseline_commit":"a88f786c18a77b2e5f48cfad3b3f25247240d108",
+  "framework_commit":"aea5d7c3796bb4c5734563614fe04822cc2e1c93",
+  "prior_evidence":"E35 full-strength Neck was deterministic but failed causal ratio at 0.8439508775286823 on the earlier lower-only baseline.",
+  "hypothesis":"Neck joint 11 at 0.5 scale, activated after the first active-policy cycle, preserves the locked causal-standing contract on the current production baseline.",
+  "single_behavior_variable":{"region":"Neck","scale":0.5,"activation":"after first active-policy cycle"},
+  "execution_arguments":["-onethread","-PhysAnimExperimentalCausalStandingScaledRegion=Neck","-PhysAnimExperimentalCausalStandingScaledScale=0.5"],
+  "acceptance":{"bundle_status":"PASS","normal_to_zero_recovery_auc_ratio_max":0.8,"normal_and_zero_byte_deterministic":true,"first_active_neck_triplet_exact_zero":true,"later_neck_nonzero_at_half_scale":true,"other_remaining_regions_exact_zero":true,"destructive_controls_fail_only_intended_criteria":true},
+  "decision_rule":{"supported":"Promote delayed Neck scale 0.5 into production.","falsified":"Preregister Neck scale 0.25; do not change other regions."}
+}
