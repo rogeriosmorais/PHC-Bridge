@@ -201,7 +201,10 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 		bool bRestoreCausalStandingSpineChest = true;
 		bool bRestoreCausalStandingNeck = false;
 		bool bRestoreCausalStandingHead = false;
+		bool bRestoreCausalStandingDistalHands = false;
 #if WITH_DEV_AUTOMATION_TESTS
+		bRestoreCausalStandingDistalHands =
+			bExperimentalCausalStandingDistalHandsEnabledForTesting;
 		bRestoreCausalStandingNeck =
 			bExperimentalCausalStandingNeckEnabledForTesting;
 		bRestoreCausalStandingHead =
@@ -220,6 +223,7 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 			bRestoreCausalStandingSpineChest,
 			bRestoreCausalStandingNeck,
 			bRestoreCausalStandingHead,
+			bRestoreCausalStandingDistalHands,
 			ConditionedActionBuffer);
 #if WITH_DEV_AUTOMATION_TESTS
 		ApplyExperimentalActionFamilyMaskForTesting(

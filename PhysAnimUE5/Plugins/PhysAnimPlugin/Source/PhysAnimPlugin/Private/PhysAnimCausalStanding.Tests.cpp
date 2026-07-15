@@ -512,6 +512,17 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 	TestFalse(
 		TEXT("E39 spine/chest option keeps head restoration disabled"),
 		Component->IsExperimentalCausalStandingHeadEnabledForTesting());
+	Component->ApplyProductVariantFromCommandLineForTesting(
+		TEXT("-PhysAnimProductVariant=RealOnnxPolicy -PhysAnimExperimentalCausalStandingUpperBody=DistalHands"));
+	TestTrue(
+		TEXT("E41 development option enables distal hand restoration"),
+		Component->IsExperimentalCausalStandingDistalHandsEnabledForTesting());
+	TestFalse(
+		TEXT("E41 distal hand option keeps neck restoration disabled"),
+		Component->IsExperimentalCausalStandingNeckEnabledForTesting());
+	TestFalse(
+		TEXT("E41 distal hand option keeps head restoration disabled"),
+		Component->IsExperimentalCausalStandingHeadEnabledForTesting());
 	TArray<float> FirstActiveCaptureSource;
 	FirstActiveCaptureSource.SetNumUninitialized(PhysAnimBridge::NumActionFloats);
 	for (int32 Index = 0; Index < FirstActiveCaptureSource.Num(); ++Index)
@@ -630,6 +641,27 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TestEqual(
 			*FString::Printf(TEXT("E39 spine/chest candidate action scalar %d matches preregistered mask"), Index),
 			SpineChestRestoredActions[Index],
+			bExpectedRetained ? FamilyActions[Index] : 0.0f);
+	}
+	TArray<float> DistalHandsRestoredActions = FamilyActions;
+	UPhysAnimComponent::ApplyCausalStandingPolicyActionCompatibility(
+		true,
+		true,
+		false,
+		false,
+		true,
+		DistalHandsRestoredActions);
+	for (int32 Index = 0; Index < DistalHandsRestoredActions.Num(); ++Index)
+	{
+		const int32 JointIndex = Index / 3;
+		const bool bExpectedRetained =
+			JointIndex < 8 ||
+			(JointIndex >= 9 && JointIndex < 11) ||
+			(JointIndex >= 16 && JointIndex < 18) ||
+			(JointIndex >= 21 && JointIndex < 23);
+		TestEqual(
+			*FString::Printf(TEXT("E41 distal hand candidate action scalar %d matches preregistered mask"), Index),
+			DistalHandsRestoredActions[Index],
 			bExpectedRetained ? FamilyActions[Index] : 0.0f);
 	}
 	TArray<float> NonPolicyCompatibleActions = FamilyActions;

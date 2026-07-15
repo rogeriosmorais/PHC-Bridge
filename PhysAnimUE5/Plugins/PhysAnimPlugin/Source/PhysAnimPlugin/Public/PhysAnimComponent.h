@@ -1505,6 +1505,13 @@ public:
 		bool bRestoreNeck,
 		bool bRestoreHead,
 		TArray<float>& InOutActions);
+	static void ApplyCausalStandingPolicyActionCompatibility(
+		bool bStandingPolicyMode,
+		bool bRestoreSpineChest,
+		bool bRestoreNeck,
+		bool bRestoreHead,
+		bool bRestoreDistalHands,
+		TArray<float>& InOutActions);
 	static float ResolveCausalStandingPolicyStrengthFactor(
 		bool bStandingPolicyMode,
 		bool bFirstActiveStandingPolicyCaptured,
@@ -1570,6 +1577,10 @@ public:
 	bool IsExperimentalCausalStandingSpineChestEnabledForTesting() const
 	{
 		return bExperimentalCausalStandingSpineChestEnabledForTesting;
+	}
+	bool IsExperimentalCausalStandingDistalHandsEnabledForTesting() const
+	{
+		return bExperimentalCausalStandingDistalHandsEnabledForTesting;
 	}
 	bool IsExperimentalCausalStandingNeckHeadEnabledForTesting() const
 	{
@@ -2664,6 +2675,7 @@ private:
 	bool bExperimentalBindNeutralFromFirstPolicyEnabledForTesting = false;
 	bool bExperimentalConstraintRangeRemapBypassFromFirstPolicyEnabledForTesting = false;
 	bool bExperimentalCausalStandingSpineChestEnabledForTesting = false;
+	bool bExperimentalCausalStandingDistalHandsEnabledForTesting = false;
 	bool bExperimentalCausalStandingNeckHeadEnabledForTesting = false;
 	bool bExperimentalCausalStandingNeckEnabledForTesting = false;
 	bool bExperimentalCausalStandingHeadEnabledForTesting = false;
