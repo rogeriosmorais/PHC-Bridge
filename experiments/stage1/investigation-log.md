@@ -522,3 +522,19 @@ Machine-readable records: `experiments/stage1/production-component-action-axis.e
 **Next experiment selected.** Keep E33 lower-only production unchanged and localize the pair with separately preregistered single-joint experiments, beginning with Proto joint 11 (`Neck`).
 
 Machine-readable record: `experiments/stage1/upper-body-neck-head-restoration.e34.json`.
+
+## E35 — Neck-only upper-body restoration (2026-07-15)
+
+**Hypothesis.** Restoring only Proto joint 11 (`Neck`) in addition to production joints 0–7 preserves the complete locked causal-standing contract.
+
+**Configuration.** Same locked 3+3+2 PRODUCT_RUN bundle and E33 plant, with only `-PhysAnimExperimentalCausalStandingUpperBody=Neck`. Joint 12 and all other upper-body outputs remained exactly zero.
+
+**Validity.** All manifests used clean source commit `6740a49b81d8a64725de39116890377511f1567a`, locked model/protocol hashes, correct masks and strength paths, and only the intended option. Normal and ZeroActions streams were byte-deterministic. Destructive controls failed only their intended criteria.
+
+**Result.** All Normal and ZeroActions repetitions passed absolute gates and readback 1.0. Neck-only Normal AUC was deterministically 34.7217 versus ZeroActions 41.1418, ratio 0.843951 above the locked maximum 0.8. The bundle failed only `causal_recovery_advantage`.
+
+**Supported or falsified.** Falsified. Neck alone is stable and deterministic but consumes too much of the causal recovery advantage.
+
+**Next experiment selected.** Keep E33 lower-only production unchanged and run separately preregistered Head-only restoration.
+
+Machine-readable record: `experiments/stage1/upper-body-neck-restoration.e35.json`.
