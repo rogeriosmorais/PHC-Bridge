@@ -582,3 +582,19 @@ Machine-readable record: `experiments/stage1/upper-body-head-active-only.e37.jso
 **Next experiment selected.** Keep E33 lower-only production unchanged; preserve Head-after-first-policy as a proven experimental candidate and test Spine+Chest (Proto joints 9–10) separately, excluding catastrophic torso joint 8.
 
 Machine-readable record: `experiments/stage1/upper-body-head-after-first-policy.e38.json`.
+
+## E39 — Spine+Chest upper-body restoration (2026-07-15)
+
+**Hypothesis.** Restoring Proto joints 9–10 (`Spine`, `Chest`) while keeping catastrophic torso joint 8 and all other upper-body actions zero preserves the locked causal-standing contract.
+
+**Configuration.** Same locked 3+3+2 PRODUCT_RUN bundle and E33 plant, with only `-PhysAnimExperimentalCausalStandingUpperBody=SpineChest`.
+
+**Validity.** All manifests used clean source commit `25b68038df230a4cb408a04239deeca496dfdc8b`, locked model/protocol hashes, exact masks and strength paths, and only the intended option. First-active and complete policy evidence showed nonzero joints 9–10, exact-zero joint 8 and joints 11–22. Normal and ZeroActions streams were byte-deterministic.
+
+**Result.** Every Normal and ZeroActions run passed absolute gates and readback 1.0. Normal AUC was deterministically 31.9287 versus ZeroActions 41.1418, ratio 0.776066 below the locked maximum 0.8. Destructive controls failed only their intended criteria.
+
+**Supported or falsified.** Supported. Spine+Chest is the first deterministic upper-body region to pass the complete causal product bundle.
+
+**Next experiment selected.** Promote Spine+Chest into the default production mask through TDD, then rerun the strict no-experimental-flag bundle.
+
+Machine-readable record: `experiments/stage1/upper-body-spine-chest-restoration.e39.json`.
