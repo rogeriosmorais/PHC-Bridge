@@ -857,6 +857,52 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 			NonPolicyCompatibleActions[Index],
 			FamilyActions[Index]);
 	}
+	TestTrue(
+		TEXT("E63 active standing remains a causal policy-control state"),
+		UPhysAnimComponent::IsCausalPolicyControlRuntimeState(
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestTrue(
+		TEXT("E63 active shell locomotion continues the causal policy-control state"),
+		UPhysAnimComponent::IsCausalPolicyControlRuntimeState(
+			EPhysAnimRuntimeState::LocomotionActiveShell));
+	TestFalse(
+		TEXT("E63 denied locomotion is not a causal policy-control state"),
+		UPhysAnimComponent::IsCausalPolicyControlRuntimeState(
+			EPhysAnimRuntimeState::LocomotionActiveShellDenied));
+	TestEqual(
+		TEXT("E63 production locomotion retains proven policy authority"),
+		UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
+			true,
+			true,
+			EPhysAnimRuntimeState::LocomotionActiveShell),
+		1.5f);
+	TestTrue(
+		TEXT("E63 production component action axis remains active during locomotion"),
+		UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
+			EPhysAnimRuntimeState::LocomotionActiveShell));
+	TestTrue(
+		TEXT("E63 delayed Head remains restored during locomotion"),
+		UPhysAnimComponent::ShouldRestoreCausalStandingHeadAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::LocomotionActiveShell));
+	TestEqual(
+		TEXT("E63 validated Neck scale remains active during locomotion"),
+		UPhysAnimComponent::ResolveCausalStandingNeckScaleAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::LocomotionActiveShell),
+		0.25f);
+	TestEqual(
+		TEXT("E63 validated right proximal scale remains active during locomotion"),
+		UPhysAnimComponent::ResolveCausalStandingRightProximalScaleAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::LocomotionActiveShell),
+		0.03125f);
+	TestEqual(
+		TEXT("E63 validated Torso scale remains active during locomotion"),
+		UPhysAnimComponent::ResolveCausalStandingTorsoScaleAfterFirstPolicy(
+			true,
+			EPhysAnimRuntimeState::LocomotionActiveShell),
+		0.0000152587890625f);
 	TestEqual(
 		TEXT("Production policy authority is identity before active capture"),
 		UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(

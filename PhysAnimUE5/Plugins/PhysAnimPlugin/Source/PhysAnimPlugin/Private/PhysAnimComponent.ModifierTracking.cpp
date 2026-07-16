@@ -156,7 +156,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 	bool bApplyNewPolicyStepThisTick,
 	FString& OutError)
 {
-	if (!IsStandingActivationRuntimeState(RuntimeState))
+	if (!IsCausalPolicyControlRuntimeState(RuntimeState))
 	{
 		ResetPendingBodyModifiersToCachedTargets();
 	}
@@ -173,7 +173,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 	}
 
 #if WITH_DEV_AUTOMATION_TESTS
-	if (IsStandingActivationRuntimeState(RuntimeState) &&
+	if (IsCausalPolicyControlRuntimeState(RuntimeState) &&
 		!FPhysAnimStandingActivationPlan::UsesPolicyTargetDispatch(StandingVariantForTesting))
 	{
 		LastControlTargetDiagnostics = {};
@@ -194,6 +194,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 	const bool bPolicyInfluenceActive =
 		RuntimeState == EPhysAnimRuntimeState::Standing_PolicyBlend ||
 		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell ||
 		(PolicyInfluenceRampStartTimeSeconds >= 0.0 &&
 			(
 			RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
@@ -339,7 +340,7 @@ void UPhysAnimComponent::ApplyControlTargets(
 	const bool bAllowRootSim = ShouldAllowBalanceSimulation(EffectiveSettings);
 	const bool bRootSimFlipFrame = bAllowRootSim && !bLastAppliedPresentationRootSimulationEnabled;
 	const bool bHipQuarantineActiveThisFrame =
-		!IsStandingActivationRuntimeState(RuntimeState) && HipQuarantineTicksRemaining > 0;
+		!IsCausalPolicyControlRuntimeState(RuntimeState) && HipQuarantineTicksRemaining > 0;
 	float ThighLDeltaPre = 0.0f;
 	float ThighRDeltaPre = 0.0f;
 	const float OwnerPlanarSpeedCmPerSec = [this]() -> float

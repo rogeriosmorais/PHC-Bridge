@@ -1533,6 +1533,7 @@ public:
 		float RightProximalScale,
 		float RightDistalScale,
 		TArray<float>& InOutActions);
+	static bool IsCausalPolicyControlRuntimeState(EPhysAnimRuntimeState InRuntimeState);
 	static float ResolveCausalStandingPolicyStrengthFactor(
 		bool bStandingPolicyMode,
 		bool bFirstActiveStandingPolicyCaptured,

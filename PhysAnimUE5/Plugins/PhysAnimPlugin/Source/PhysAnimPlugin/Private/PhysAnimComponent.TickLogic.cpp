@@ -132,6 +132,17 @@ void UPhysAnimComponent::TickRuntimeStateMachine(float DeltaTime, const FPhysAni
 		break;
 	}
 
+	case EPhysAnimRuntimeState::LocomotionActiveShell:
+	{
+		FString FailureReason;
+		PublishStandingPhysicsControlState(EffectiveSettings, 1.0f, false, FailureReason);
+		if (!FailureReason.IsEmpty())
+		{
+			FailStop(FString::Printf(TEXT("Could not preserve production policy-control state during locomotion: %s"), *FailureReason));
+		}
+		break;
+	}
+
 	default:
 		break;
 	}
@@ -361,7 +372,7 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 		}
 
 		if ((V0PlantReviewMode == 2 || bStandingVariantForcesZeroActions) &&
-			IsStandingActivationRuntimeState(RuntimeState))
+			IsCausalPolicyControlRuntimeState(RuntimeState))
 		{
 			ActionOutputBuffer.Init(0.0f, PhysAnimBridge::NumActionFloats);
 		}
@@ -374,7 +385,7 @@ void UPhysAnimComponent::TickPolicyAndUpdateMetrics(float DeltaTime, const FPhys
 
 	// Standing topology and gains are published and read back by TickRuntimeStateMachine
 	// before target dispatch. Keep the legacy tuning path only for disconnected future states.
-	if (!IsStandingActivationRuntimeState(RuntimeState))
+	if (!IsCausalPolicyControlRuntimeState(RuntimeState))
 	{
 		ApplyRuntimeControlTuning(EffectiveSettings);
 	}

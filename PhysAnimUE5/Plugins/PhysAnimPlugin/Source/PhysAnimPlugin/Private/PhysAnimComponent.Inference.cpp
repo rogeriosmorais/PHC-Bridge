@@ -269,7 +269,7 @@ bool UPhysAnimComponent::ConditionModelActions(const FPhysAnimStabilizationSetti
 		}
 #endif
 		ApplyCausalStandingPolicyActionScales(
-			IsStandingActivationRuntimeState(RuntimeState),
+			IsCausalPolicyControlRuntimeState(RuntimeState),
 			TorsoScale,
 			SpineChestScale,
 			NeckScale,

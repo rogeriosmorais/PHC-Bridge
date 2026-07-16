@@ -982,6 +982,13 @@ void UPhysAnimComponent::ApplyCausalStandingPolicyActionScales(
 	}
 }
 
+bool UPhysAnimComponent::IsCausalPolicyControlRuntimeState(
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return IsStandingActivationRuntimeState(InRuntimeState) ||
+		InRuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell;
+}
+
 float UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
 	bool bStandingPolicyMode,
 	bool bFirstActiveStandingPolicyCaptured,
@@ -989,7 +996,8 @@ float UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
 {
 	return bStandingPolicyMode &&
 		bFirstActiveStandingPolicyCaptured &&
-		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing
+		(InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		 InRuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell)
 			? 1.5f
 			: 1.0f;
 }
@@ -999,7 +1007,8 @@ bool UPhysAnimComponent::ShouldRestoreCausalStandingHeadAfterFirstPolicy(
 	EPhysAnimRuntimeState InRuntimeState)
 {
 	return bFirstActiveStandingPolicyCapturedBeforeCurrentInference &&
-		InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+		(InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		 InRuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell);
 }
 
 float UPhysAnimComponent::ResolveCausalStandingNeckScaleAfterFirstPolicy(
@@ -1049,7 +1058,7 @@ float UPhysAnimComponent::ResolveCausalStandingTorsoScaleAfterFirstPolicy(
 bool UPhysAnimComponent::ShouldUseCausalStandingComponentActionAxis(
 	EPhysAnimRuntimeState InRuntimeState)
 {
-	return IsStandingActivationRuntimeState(InRuntimeState);
+	return IsCausalPolicyControlRuntimeState(InRuntimeState);
 }
 
 FQuat UPhysAnimComponent::ExpressCachedWorldActionAxisInMeshComponent(
@@ -1819,7 +1828,8 @@ bool UPhysAnimComponent::RuntimeStateOwnsBridgePhysics(EPhysAnimRuntimeState Sta
 			State == EPhysAnimRuntimeState::BalanceEntry_LateValidate ||
 			State == EPhysAnimRuntimeState::BalanceEntry_RootOn ||
 			State == EPhysAnimRuntimeState::BalanceEntry_Settle ||
-			IsBalanceActiveState(State);
+			IsBalanceActiveState(State) ||
+			State == EPhysAnimRuntimeState::LocomotionActiveShell;
 }
 
 bool UPhysAnimComponent::ShouldRunRootOnReadinessUltraFineMarginSweep(float RootOnReadinessTotalDeficitDeg)

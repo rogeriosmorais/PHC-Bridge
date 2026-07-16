@@ -37,7 +37,7 @@ float UPhysAnimComponent::CalculateCurrentControlAuthorityAlpha(const FPhysAnimS
 
 float UPhysAnimComponent::CalculateCurrentPolicyInfluenceAlpha(const FPhysAnimStabilizationSettings& EffectiveSettings) const
 {
-	if (IsStandingActivationRuntimeState(RuntimeState))
+	if (IsCausalPolicyControlRuntimeState(RuntimeState))
 	{
 		return StandingActivation.GetStatus().LinearBlendAlpha;
 	}
