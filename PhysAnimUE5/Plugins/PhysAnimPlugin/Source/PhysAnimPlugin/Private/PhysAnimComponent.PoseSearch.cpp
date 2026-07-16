@@ -19,7 +19,7 @@ bool UPhysAnimComponent::QueryPoseSearch(FPoseSearchBlueprintResult& OutSearchRe
 		return false;
 	}
 
-	if (IsBalanceActiveState(RuntimeState))
+	if (ShouldUseBalanceIdlePoseSearchState(RuntimeState))
 	{
 		if (bHasBalanceIdlePoseSearchResult && BalanceIdlePoseSearchResult.SelectedAnim != nullptr)
 		{

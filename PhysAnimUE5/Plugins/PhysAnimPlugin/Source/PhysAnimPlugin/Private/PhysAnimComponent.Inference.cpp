@@ -5,7 +5,9 @@ bool UPhysAnimComponent::RunInference(FString& OutError)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(UPhysAnimComponent_RunInference);
 
-	const bool bCaptureMetrics = RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+	const bool bCaptureMetrics =
+		RuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing ||
+		RuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell ||
 		((RuntimeState == EPhysAnimRuntimeState::BridgeActive ||
 		  RuntimeState == EPhysAnimRuntimeState::WaitingForPoseSearch ||
 		  RuntimeState == EPhysAnimRuntimeState::ReadyForActivation) && bLiveRuntimeEvidenceProofActive);

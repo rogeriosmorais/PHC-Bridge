@@ -869,6 +869,18 @@ bool FPhysAnimProductHarnessDropDispatchSwitchTest::RunTest(const FString& Param
 		TEXT("E63 denied locomotion is not a causal policy-control state"),
 		UPhysAnimComponent::IsCausalPolicyControlRuntimeState(
 			EPhysAnimRuntimeState::LocomotionActiveShellDenied));
+	TestTrue(
+		TEXT("E64 standing uses the locked idle Pose Search path"),
+		UPhysAnimComponent::ShouldUseBalanceIdlePoseSearchState(
+			EPhysAnimRuntimeState::BalanceActive_Standing));
+	TestFalse(
+		TEXT("E64 active locomotion uses trajectory-driven Pose Search"),
+		UPhysAnimComponent::ShouldUseBalanceIdlePoseSearchState(
+			EPhysAnimRuntimeState::LocomotionActiveShell));
+	TestFalse(
+		TEXT("E64 denied locomotion does not masquerade as standing idle Pose Search"),
+		UPhysAnimComponent::ShouldUseBalanceIdlePoseSearchState(
+			EPhysAnimRuntimeState::LocomotionActiveShellDenied));
 	TestEqual(
 		TEXT("E63 production locomotion retains proven policy authority"),
 		UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(

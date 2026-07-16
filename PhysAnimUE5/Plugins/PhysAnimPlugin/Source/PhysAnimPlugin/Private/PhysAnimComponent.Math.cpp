@@ -989,6 +989,12 @@ bool UPhysAnimComponent::IsCausalPolicyControlRuntimeState(
 		InRuntimeState == EPhysAnimRuntimeState::LocomotionActiveShell;
 }
 
+bool UPhysAnimComponent::ShouldUseBalanceIdlePoseSearchState(
+	EPhysAnimRuntimeState InRuntimeState)
+{
+	return InRuntimeState == EPhysAnimRuntimeState::BalanceActive_Standing;
+}
+
 float UPhysAnimComponent::ResolveCausalStandingPolicyStrengthFactor(
 	bool bStandingPolicyMode,
 	bool bFirstActiveStandingPolicyCaptured,
