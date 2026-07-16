@@ -1,6 +1,7 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimBridge.h"
 
+#include "Animation/AnimSequence.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Editor.h"
@@ -160,6 +161,59 @@ namespace
 		}
 		return JsonActions;
 	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPhysAnimPoseSearchLocomotionAssetDirectionAuditTest,
+	"PhysAnim.Development.PoseSearchAssetDirections",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FPhysAnimPoseSearchLocomotionAssetDirectionAuditTest::RunTest(const FString& Parameters)
+{
+	struct FAssetDirectionExpectation
+	{
+		const TCHAR* AssetName;
+		FVector ExpectedDirection;
+	};
+	static const FAssetDirectionExpectation Expectations[] =
+	{
+		{ TEXT("MF_Unarmed_Walk_Fwd"), FVector(0.0f, 1.0f, 0.0f) },
+		{ TEXT("MF_Unarmed_Walk_Fwd_Left"), FVector(1.0f, 1.0f, 0.0f).GetSafeNormal() },
+		{ TEXT("MF_Unarmed_Walk_Left"), FVector(1.0f, 0.0f, 0.0f) },
+		{ TEXT("MF_Unarmed_Walk_Bwd_Left"), FVector(1.0f, -1.0f, 0.0f).GetSafeNormal() },
+		{ TEXT("MF_Unarmed_Walk_Bwd"), FVector(0.0f, -1.0f, 0.0f) },
+		{ TEXT("MF_Unarmed_Walk_Bwd_Right"), FVector(-1.0f, -1.0f, 0.0f).GetSafeNormal() },
+		{ TEXT("MF_Unarmed_Walk_Right"), FVector(-1.0f, 0.0f, 0.0f) },
+		{ TEXT("MF_Unarmed_Walk_Fwd_Right"), FVector(-1.0f, 1.0f, 0.0f).GetSafeNormal() },
+	};
+	for (const FAssetDirectionExpectation& Expectation : Expectations)
+	{
+		const FString AssetPath = FString::Printf(
+			TEXT("/Game/Characters/Mannequins/Anims/Unarmed/Walk/%s.%s"),
+			Expectation.AssetName,
+			Expectation.AssetName);
+		UAnimSequence* const Sequence = LoadObject<UAnimSequence>(nullptr, *AssetPath);
+		TestNotNull(FString::Printf(TEXT("Load %s"), Expectation.AssetName), Sequence);
+		if (!Sequence)
+		{
+			continue;
+		}
+		const double SampleEndTime = FMath::Min(0.5, Sequence->GetPlayLength());
+		const FAnimExtractContext ExtractionContext;
+		const FVector RootDelta = Sequence
+			->ExtractRootMotionFromRange(0.0, SampleEndTime, ExtractionContext)
+			.GetTranslation();
+		TestTrue(
+			FString::Printf(TEXT("%s has nonzero planar root motion"), Expectation.AssetName),
+			RootDelta.SizeSquared2D() > 1.0);
+		TestTrue(
+			FString::Printf(TEXT("%s root motion matches its locked database axis"), Expectation.AssetName),
+			FVector::DotProduct(RootDelta.GetSafeNormal2D(), Expectation.ExpectedDirection) > 0.999f);
+		TestTrue(
+			FString::Printf(TEXT("%s half-second root travel remains a walk-scale displacement"), Expectation.AssetName),
+			RootDelta.Size2D() > 140.0f && RootDelta.Size2D() < 160.0f);
+	}
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
