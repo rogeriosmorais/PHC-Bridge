@@ -1,0 +1,32 @@
+{
+  "schema_version": "physanim-experiment-preregistration/v1",
+  "experiment_id": "E80",
+  "title": "Place locomotion mimic futures on the authoritative query trajectory root",
+  "status": "PREREGISTERED",
+  "baseline_commit": "c62425af539f1bf4687509ad63767da2a0392b4e",
+  "single_change": "During LocomotionActiveShell only, preserve every selected animation body's transform relative to its sampled canonical root, but rigidly place that root on the corresponding BridgePoseSearchTrajectory sample before BuildMimicTargetPoses. Standing and all non-locomotion states keep the raw sampled futures.",
+  "locked_invariants": [
+    "scripted-locomotion.v2.json and its SHA-256 remain unchanged",
+    "E77 mesh-facing Pose Search query and world velocity remain unchanged",
+    "selected asset, selected time, animation-relative body pose, and policy model remain unchanged",
+    "shell speed, trajectory, timing, root authority, actions, gains, Physics Control, and Chaos settings remain unchanged",
+    "placement errors fail the policy step explicitly; no silent fallback to raw root motion"
+  ],
+  "fast_acceptance": [
+    "A pure typed test converts +80 cm and +30 degrees in the UE query trajectory into +0.8 m and +30 degrees in the canonical selected data frame.",
+    "Raw animation root progression of 1.5 m is replaced while every body-to-root relative transform is preserved.",
+    "Zero trajectory delta preserves the current selected data root exactly.",
+    "Malformed future counts or body widths are rejected.",
+    "All PhysAnim.Frames, PhysAnim.Locomotion.FrameAdapter, PhysAnim.Locomotion, and standing control regression tests pass."
+  ],
+  "authoritative_probe_acceptance": [
+    "Independent protocol evaluator reports protocol_linkage_valid=true and evidence_valid=true.",
+    "At least 270 policy samples and 590 physics samples are recorded.",
+    "All scripted phases execute with 211.8 cm nominal shell path and 30 degree turn under v2.",
+    "Pose Search selects a non-idle locomotion asset during movement.",
+    "Final runtime state is BalanceActive_Standing.",
+    "Maximum root-shell tracking error is at most 150 cm and final tracking error is at most 50 cm.",
+    "No script step, inference, target readback, support, or topology failure occurs."
+  ],
+  "scope_gate": "Run one authoritative Normal probe only after fast acceptance and a clean immutable behavior commit. Do not start the causal 3+3+1+1 bundle unless this probe passes."
+}
