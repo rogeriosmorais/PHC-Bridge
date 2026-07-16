@@ -99,6 +99,15 @@ if ($Protocol.status -ne "LOCKED") {
     Write-Error "INVALID: protocol must declare status LOCKED: $ProtocolPath"
     exit 2
 }
+$ExpectedVariantTestName = if ($Protocol.test_family -and $Variant) {
+    "$($Protocol.test_family).$Variant"
+} else {
+    $null
+}
+if ($ExpectedVariantTestName -and $TestName -ne $ExpectedVariantTestName) {
+    Write-Error "INVALID: authoritative variant runs require the exact test '$ExpectedVariantTestName'; received '$TestName'."
+    exit 2
+}
 if ($PolicyInputProvenanceTrace -and
     $Protocol.test_family -eq "PhysAnim.Product.ScriptedLocomotion" -and
     $RequiredArtifactFields -notcontains "locomotion_frame_replay") {
@@ -171,6 +180,7 @@ $StderrPath = Join-Path $RunRoot "automation.stderr.log"
 $ValidationPath = Join-Path $RunRoot "fixture-validation.json"
 $FingerprintPath = Join-Path $RunRoot "environment-fingerprint.json"
 $OrchestrationPath = Join-Path $RunRoot "orchestration.json"
+$ChildExitCodePath = Join-Path $RunRoot "child-exit-code.txt"
 $ModelHash = Get-Sha256 $ModelPath
 
 $Plan = [ordered]@{
@@ -218,6 +228,7 @@ $EscapedRunId = $RunId.Replace("'", "''")
 $EscapedVariant = $Variant.Replace("'", "''")
 $EscapedSourceCommit = $SourceCommit.Replace("'", "''")
 $EscapedModelHash = $ModelHash.Replace("'", "''")
+$EscapedChildExitCodePath = $ChildExitCodePath.Replace("'", "''")
 $SkipBuildLiteral = if ($SkipCompile) { '$true' } else { '$false' }
 $DirtyLiteral = if ($SourceTreeDirty) { '$true' } else { '$false' }
 $PolicyInputProvenanceLiteral = if ($PolicyInputProvenanceTrace) { '$true' } else { '$false' }
@@ -239,7 +250,9 @@ $Invocation = @"
     PolicyInputProvenanceTrace = $PolicyInputProvenanceLiteral
 }
 & '$EscapedBuildScript' @Parameters
-exit `$LASTEXITCODE
+`$ChildExitCode = `$LASTEXITCODE
+Set-Content -LiteralPath '$EscapedChildExitCodePath' -Value `$ChildExitCode -Encoding ascii
+exit `$ChildExitCode
 "@
 $Invocation | Set-Content -LiteralPath $InvocationPath -Encoding utf8
 
@@ -290,7 +303,19 @@ while (-not $Process.HasExited) {
 # before classifying the child result.
 $Process.WaitForExit()
 $Process.Refresh()
-$ExitCode = $Process.ExitCode
+$ExitCode = if (Test-Path -LiteralPath $ChildExitCodePath -PathType Leaf) {
+    $ParsedExitCode = 0
+    $RawExitCode = (Get-Content -Raw -LiteralPath $ChildExitCodePath).Trim()
+    if ([int]::TryParse($RawExitCode, [ref]$ParsedExitCode)) {
+        $ParsedExitCode
+    } else {
+        1
+    }
+} elseif ($null -ne $Process.ExitCode) {
+    [int]$Process.ExitCode
+} else {
+    1
+}
 if ($ExitCode -ne 0) {
     $StdoutTail = if (Test-Path $StdoutPath) { (Get-Content $StdoutPath -Tail 80) -join "`n" } else { "" }
     $Verdict = if ($StdoutTail -match 'COMPILATION FAILED|Result: Failed') { "BLOCKED" } else { "INVALID" }
