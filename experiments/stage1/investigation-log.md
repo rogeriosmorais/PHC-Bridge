@@ -824,3 +824,11 @@ Machine-readable record: `experiments/stage1/scaled-delayed-torso.e56.json`.
 **Next experiment selected.** Promote this final joint into production and run the all-joint no-flag proof.
 
 Machine-readable record: `experiments/stage1/scaled-delayed-torso.e57.json`.
+
+## E58 — Production all-joint causal standing (2026-07-15)
+
+**Result.** Supported. The strict no-flag bundle passed with Normal AUC 31.0672, ZeroActions 39.3495 and ratio 0.789519. Every Proto joint triplet 0–22 became nonzero in all three Normal repetitions, ZeroActions remained exactly zero, Normal and ZeroActions evidence was byte-deterministic, and both destructive controls failed only their intended gates.
+
+**Milestone.** No joint remains permanently masked in the production standing controller. Delayed upper-body regions activate after the first active-policy inference at their individually validated scales. This proves all-joint causal standing under the locked product protocol; it does not yet prove full-strength control, walking, or general gameplay robustness.
+
+Machine-readable record: `experiments/stage1/production-all-joints.e58.json`.
