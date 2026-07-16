@@ -752,3 +752,13 @@ Machine-readable record: `experiments/stage1/scaled-delayed-restoration-framewor
 **Next experiment selected.** Neck at 0.25 with identical timing and execution.
 
 Machine-readable record: `experiments/stage1/scaled-delayed-neck.e49.json`.
+
+## E50 — Neck at 25% after first active policy cycle (2026-07-15)
+
+**Hypothesis.** Neck joint 11 at 0.25 delayed scale preserves the locked causal-standing contract.
+
+**Result.** Supported. The deterministic bundle passed with Normal AUC exactly 30.2616, ZeroActions exactly 39.3495 and ratio 0.769048. First-active Neck stayed zero, later Neck became nonzero, other unselected remaining regions stayed zero, and both destructive controls retained their intended failures.
+
+**Next experiment selected.** Promote delayed Neck scale 0.25 into production and rerun the no-flag deterministic bundle.
+
+Machine-readable record: `experiments/stage1/scaled-delayed-neck.e50.json`.
