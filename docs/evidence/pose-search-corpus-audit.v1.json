@@ -1,0 +1,425 @@
+{
+	"schema_version": "physanim-pose-search-corpus-audit/v1",
+	"expected_asset_count": 16,
+	"loaded_asset_count": 16,
+	"data_forward_axis": "+Y",
+	"standard_manny_mesh_relative_yaw": "-90 degrees",
+	"assets": [
+		{
+			"gait": "Walk",
+			"asset": "MF_Unarmed_Walk_Fwd",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Walk/MF_Unarmed_Walk_Fwd.MF_Unarmed_Walk_Fwd",
+			"duration_sec": 1.5,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				0,
+				150,
+				0
+			],
+			"full_root_delta_cm": [
+				0,
+				450,
+				0
+			],
+			"expected_data_direction": [
+				0,
+				1,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 300,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Walk",
+			"asset": "MF_Unarmed_Walk_Fwd_Left",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Walk/MF_Unarmed_Walk_Fwd_Left.MF_Unarmed_Walk_Fwd_Left",
+			"duration_sec": 1.5,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				106,
+				106,
+				0
+			],
+			"full_root_delta_cm": [
+				317.99996948242188,
+				317.99996948242188,
+				0
+			],
+			"expected_data_direction": [
+				0.70710678118654746,
+				0.70710678118654746,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 299.81327522309613,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Walk",
+			"asset": "MF_Unarmed_Walk_Left",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Walk/MF_Unarmed_Walk_Left.MF_Unarmed_Walk_Left",
+			"duration_sec": 1.5333333015441895,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				151.83006572723389,
+				0,
+				0
+			],
+			"full_root_delta_cm": [
+				461.18753337860107,
+				0,
+				0
+			],
+			"expected_data_direction": [
+				1,
+				0,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 303.66013145446777,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Walk",
+			"asset": "MF_Unarmed_Walk_Bwd_Left",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Walk/MF_Unarmed_Walk_Bwd_Left.MF_Unarmed_Walk_Bwd_Left",
+			"duration_sec": 2.1333334445953369,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				106.40624237060547,
+				-106.40624345015385,
+				0
+			],
+			"full_root_delta_cm": [
+				453.99984741210938,
+				-453.99985612105229,
+				0
+			],
+			"expected_data_direction": [
+				0.70710678118654746,
+				-0.70710678118654746,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 300.96230369004979,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Walk",
+			"asset": "MF_Unarmed_Walk_Bwd",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Walk/MF_Unarmed_Walk_Bwd.MF_Unarmed_Walk_Bwd",
+			"duration_sec": 2.1333334445953369,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				0,
+				-150.65456498335698,
+				0
+			],
+			"full_root_delta_cm": [
+				0,
+				-642.79285538863041,
+				0
+			],
+			"expected_data_direction": [
+				0,
+				-1,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 301.30912996671395,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Walk",
+			"asset": "MF_Unarmed_Walk_Bwd_Right",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Walk/MF_Unarmed_Walk_Bwd_Right.MF_Unarmed_Walk_Bwd_Right",
+			"duration_sec": 2.1333334445953369,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				-106.40624237060547,
+				-106.40624345015385,
+				0
+			],
+			"full_root_delta_cm": [
+				-453.99984741210938,
+				-453.99985612105229,
+				0
+			],
+			"expected_data_direction": [
+				-0.70710678118654746,
+				-0.70710678118654746,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 300.96230369004979,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Walk",
+			"asset": "MF_Unarmed_Walk_Right",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Walk/MF_Unarmed_Walk_Right.MF_Unarmed_Walk_Right",
+			"duration_sec": 1.5333333015441895,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				-150.02521944046021,
+				0,
+				0
+			],
+			"full_root_delta_cm": [
+				-460.07732820510864,
+				0,
+				0
+			],
+			"expected_data_direction": [
+				-1,
+				0,
+				0
+			],
+			"direction_dot": 0.99999999999999989,
+			"window_speed_cm_per_sec": 300.05043888092041,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Walk",
+			"asset": "MF_Unarmed_Walk_Fwd_Right",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Walk/MF_Unarmed_Walk_Fwd_Right.MF_Unarmed_Walk_Fwd_Right",
+			"duration_sec": 1.5,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				-106,
+				106,
+				0
+			],
+			"full_root_delta_cm": [
+				-317.99996948242188,
+				317.99996948242188,
+				0
+			],
+			"expected_data_direction": [
+				-0.70710678118654746,
+				0.70710678118654746,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 299.81327522309613,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Jog",
+			"asset": "MF_Unarmed_Jog_Fwd",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd.MF_Unarmed_Jog_Fwd",
+			"duration_sec": 1.7666666507720947,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				0,
+				262.45761108398438,
+				0
+			],
+			"full_root_delta_cm": [
+				0,
+				1060.601806640625,
+				0
+			],
+			"expected_data_direction": [
+				0,
+				1,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 524.91522216796875,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Jog",
+			"asset": "MF_Unarmed_Jog_Fwd_Left",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd_Left.MF_Unarmed_Jog_Fwd_Left",
+			"duration_sec": 1.7666666507720947,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				212.26412963867188,
+				212.26412963867188,
+				0
+			],
+			"full_root_delta_cm": [
+				749.9998779296875,
+				749.9998779296875,
+				0
+			],
+			"expected_data_direction": [
+				0.70710678118654746,
+				0.70710678118654746,
+				0
+			],
+			"direction_dot": 0.99999999999999978,
+			"window_speed_cm_per_sec": 600.37362188066129,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Jog",
+			"asset": "MF_Unarmed_Jog_Left",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Left.MF_Unarmed_Jog_Left",
+			"duration_sec": 1.5333333015441895,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				300.00003051757812,
+				0,
+				0
+			],
+			"full_root_delta_cm": [
+				920,
+				0,
+				0
+			],
+			"expected_data_direction": [
+				1,
+				0,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 600.00006103515625,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Jog",
+			"asset": "MF_Unarmed_Jog_Bwd_Left",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Bwd_Left.MF_Unarmed_Jog_Bwd_Left",
+			"duration_sec": 1.5,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				212,
+				-212,
+				0
+			],
+			"full_root_delta_cm": [
+				635.99993896484375,
+				-635.99993896484375,
+				0
+			],
+			"expected_data_direction": [
+				0.70710678118654746,
+				-0.70710678118654746,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 599.62655044619225,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Jog",
+			"asset": "MF_Unarmed_Jog_Bwd",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Bwd.MF_Unarmed_Jog_Bwd",
+			"duration_sec": 1.5,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				0,
+				-270.76763916015625,
+				0
+			],
+			"full_root_delta_cm": [
+				0,
+				-900.22906494140625,
+				0
+			],
+			"expected_data_direction": [
+				0,
+				-1,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 541.5352783203125,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Jog",
+			"asset": "MF_Unarmed_Jog_Bwd_Right",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Bwd_Right.MF_Unarmed_Jog_Bwd_Right",
+			"duration_sec": 1.5,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				-212,
+				-212,
+				0
+			],
+			"full_root_delta_cm": [
+				-635.99993896484375,
+				-635.99993896484375,
+				0
+			],
+			"expected_data_direction": [
+				-0.70710678118654746,
+				-0.70710678118654746,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 599.62655044619225,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Jog",
+			"asset": "MF_Unarmed_Jog_Right",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Right.MF_Unarmed_Jog_Right",
+			"duration_sec": 1.7333333492279053,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				-250.18971252441406,
+				0,
+				0
+			],
+			"full_root_delta_cm": [
+				-1040.1231689453125,
+				0,
+				0
+			],
+			"expected_data_direction": [
+				-1,
+				0,
+				0
+			],
+			"direction_dot": 1,
+			"window_speed_cm_per_sec": 500.37942504882812,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		},
+		{
+			"gait": "Jog",
+			"asset": "MF_Unarmed_Jog_Fwd_Right",
+			"asset_path": "/Game/Characters/Mannequins/Anims/Unarmed/Jog/MF_Unarmed_Jog_Fwd_Right.MF_Unarmed_Jog_Fwd_Right",
+			"duration_sec": 1.7666666507720947,
+			"audit_window_sec": 0.5,
+			"window_root_delta_cm": [
+				-212.26412963867188,
+				212.26412963867188,
+				0
+			],
+			"full_root_delta_cm": [
+				-749.9998779296875,
+				749.9998779296875,
+				0
+			],
+			"expected_data_direction": [
+				-0.70710678118654746,
+				0.70710678118654746,
+				0
+			],
+			"direction_dot": 0.99999999999999978,
+			"window_speed_cm_per_sec": 600.37362188066129,
+			"full_yaw_delta_deg": 0,
+			"direction_contract_pass": true
+		}
+	]
+}
