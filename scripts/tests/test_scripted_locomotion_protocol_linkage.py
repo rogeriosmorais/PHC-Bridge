@@ -38,7 +38,8 @@ def _make_valid_run(
     protocol_path = tmp_path / locked_protocol_path.name
     protocol_path.write_bytes(locked_protocol_path.read_bytes())
     protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
-    protocol_sha = hashlib.sha256(protocol_path.read_bytes()).hexdigest().upper()
+    protocol_bytes = protocol_path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    protocol_sha = hashlib.sha256(protocol_bytes).hexdigest().upper()
     script = protocol["script"]
     fixed_delta = float(script["fixed_delta_time_sec"])
 

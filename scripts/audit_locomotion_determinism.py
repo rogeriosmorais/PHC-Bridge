@@ -4,9 +4,13 @@ import argparse
 import hashlib
 import json
 import math
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any, Sequence
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.evaluate_scripted_locomotion_protocol import (
     ProtocolLinkageError,
@@ -37,6 +41,11 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest().lower()
+
+
+def _sha256_locked_text(path: Path) -> str:
+    normalized = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return hashlib.sha256(normalized).hexdigest().lower()
 
 
 def _finite(value: object, label: str) -> float:
@@ -312,12 +321,12 @@ def audit_run_roots(
             "verdict": "INVALID",
             "campaign_name": campaign_name,
             "protocol_path": str(protocol_path),
-            "protocol_sha256": _sha256(protocol_path),
+            "protocol_sha256": _sha256_locked_text(protocol_path),
             "load_errors": load_errors,
         }
     report = audit_campaign_records(protocol, campaign_name, records)
     report["protocol_path"] = str(protocol_path)
-    report["protocol_sha256"] = _sha256(protocol_path)
+    report["protocol_sha256"] = _sha256_locked_text(protocol_path)
     report["runs"] = records
     return report
 

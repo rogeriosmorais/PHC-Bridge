@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.environment_fingerprint import build_fingerprint, sha256_file
+from scripts.environment_fingerprint import (
+    build_fingerprint,
+    sha256_file,
+    sha256_locked_text_file,
+)
 
 
 def _write_json(path: Path, value: dict) -> None:
@@ -51,8 +55,18 @@ def test_fingerprint_hashes_authority_files_and_extracts_protocol_settings(tmp_p
     assert result["protocol"]["fixed_delta_time_sec"] == 1.0 / 60.0
     assert result["protocol"]["determinism"]["seed"] == 7
     assert result["artifacts"]["model_onnx_sha256"] == sha256_file(model)
-    assert result["artifacts"]["protocol_sha256"] == sha256_file(protocol)
+    assert result["artifacts"]["protocol_sha256"] == sha256_locked_text_file(protocol)
     assert result["authority_digest_sha256"]
+
+
+def test_locked_protocol_hash_is_line_ending_independent(tmp_path: Path) -> None:
+    lf = tmp_path / "lf.json"
+    crlf = tmp_path / "crlf.json"
+    lf.write_bytes(b'{\n  "status": "LOCKED"\n}\n')
+    crlf.write_bytes(b'{\r\n  "status": "LOCKED"\r\n}\r\n')
+
+    assert sha256_locked_text_file(lf) == sha256_locked_text_file(crlf)
+    assert sha256_file(lf) != sha256_file(crlf)
 
 
 def test_automation_report_device_is_included(tmp_path: Path) -> None:

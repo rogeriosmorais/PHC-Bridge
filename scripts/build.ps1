@@ -11,6 +11,7 @@ param (
     [string]$ProductRunRoot,
     [string]$ProductRunId,
     [string]$ProductVariant,
+    [string]$ProductProtocolPath,
     [int]$ProductRepetition = 0,
     [string]$SourceCommit,
     [string]$ModelOnnxSha256,
@@ -171,6 +172,9 @@ if ($Test) {
     }
     if ($ProductVariant) {
         $EditorArguments += "-PhysAnimProductVariant=$ProductVariant"
+    }
+    if ($ProductProtocolPath) {
+        $EditorArguments += "-PhysAnimProductProtocolPath=$ProductProtocolPath"
     }
     if ($ProductRepetition -gt 0) {
         $EditorArguments += "-PhysAnimProductRepetition=$ProductRepetition"

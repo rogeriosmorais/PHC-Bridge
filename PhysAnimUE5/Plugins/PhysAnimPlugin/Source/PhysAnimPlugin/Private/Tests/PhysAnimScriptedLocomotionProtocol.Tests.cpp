@@ -67,6 +67,20 @@ bool FPhysAnimScriptedLocomotionProtocolContractTest::RunTest(const FString& Par
 		V2.Sha256,
 		FString(TEXT("DA9830EC14EC659D85A4AF86CDD1CC44A3C7E57A544DD63A4A6C36C56705D381")));
 
+	FProtocol V3;
+	Error.Reset();
+	TestTrue(
+		TEXT("Locked v3 protocol loads while preserving the runtime schedule"),
+		LoadProtocolFromFile(ResolveProductGatePath(TEXT("scripted-locomotion.v3.json")), V3, Error));
+	TestTrue(TEXT("v3 load error is empty"), Error.IsEmpty());
+	TestEqual(TEXT("v3 version"), V3.Version, 3);
+	TestEqual(TEXT("v3 nominal speed preserves v2"), V3.NominalSpeedCmPerSecond, V2.NominalSpeedCmPerSecond);
+	TestEqual(TEXT("v3 capture window preserves v2"), V3.CaptureWindowSeconds, V2.CaptureWindowSeconds);
+	TestEqual(
+		TEXT("v3 bytes retain their locked SHA-256"),
+		V3.Sha256,
+		FString(TEXT("6EE4989D8D8E08391D50E74D9B673F02C6FA7CC401DFDC10554EB8C449EA4ED3")));
+
 	auto TestPhase = [this, &V2](double TimeSeconds, const TCHAR* ExpectedPhase)
 	{
 		TestEqual(

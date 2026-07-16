@@ -4,8 +4,12 @@ import argparse
 import hashlib
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any, Iterable
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.locomotion_causal_metrics import analyze_trace, evaluate_metric_contract
 
@@ -68,7 +72,8 @@ def _assert_close(actual: Any, expected: Any, label: str, *, tolerance: float = 
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+    normalized = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return hashlib.sha256(normalized).hexdigest().upper()
 
 
 def _resolve_step(protocol: dict[str, Any], time_sec: float) -> tuple[str, float, bool]:

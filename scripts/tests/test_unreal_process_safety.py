@@ -99,6 +99,7 @@ def test_orchestration_uses_version_scoped_process_checks_and_timeout_cleanup() 
     assert "[switch]$PolicyInputProvenanceTrace" in text
     assert "PolicyInputProvenanceTrace = $PolicyInputProvenanceTraceLiteral" in text
     assert "policy_input_provenance_trace = [bool]$PolicyInputProvenanceTrace" in text
+    assert "ProductProtocolPath = '$EscapedProtocolPath'" in text
     assert "taskkill" not in text.casefold()
     assert "Stop-Process" not in text
 
