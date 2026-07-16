@@ -1,21 +1,6 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 
-FQuat UPhysAnimComponent::ResolveBridgePoseSearchAnimationFrameRotation(
-	const FQuat& ActorWorldRotation,
-	const FQuat& MeshWorldRotation)
-{
-	const FQuat NormalizedActorRotation = ActorWorldRotation.GetNormalized();
-	const FQuat NormalizedMeshRotation = MeshWorldRotation.GetNormalized();
-	const FQuat ActorToMeshRotation =
-		(NormalizedActorRotation.Inverse() * NormalizedMeshRotation).GetNormalized();
-	return (
-		NormalizedActorRotation *
-		ActorToMeshRotation.Inverse() *
-		NormalizedActorRotation.Inverse()).GetNormalized();
-}
-
-
 void UPhysAnimComponent::GetGravity(FVector& OutGravityAccel)
 {
 	const UWorld* const World = GetWorld();
@@ -25,57 +10,31 @@ void UPhysAnimComponent::GetGravity(FVector& OutGravityAccel)
 
 void UPhysAnimComponent::GetCurrentState(FVector& OutPosition, FQuat& OutFacing, FVector& OutVelocity)
 {
-	const AActor* const OwnerActor = GetOwner();
-	const FQuat ActorWorldRotation = OwnerActor ? OwnerActor->GetActorQuat() : FQuat::Identity;
-	FQuat PoseSearchFrameRotation = FQuat::Identity;
-	if (OwnerActor)
+	if (const AActor* const OwnerActor = GetOwner())
 	{
 		OutPosition = OwnerActor->GetActorLocation();
-		if (const USkeletalMeshComponent* const SkeletalMesh = GetMeshComponent())
-		{
-			PoseSearchFrameRotation = ResolveBridgePoseSearchAnimationFrameRotation(
-				ActorWorldRotation,
-				SkeletalMesh->GetComponentQuat());
-		}
+		OutFacing = OwnerActor->GetActorQuat();
 	}
 	else
 	{
 		OutPosition = FVector::ZeroVector;
+		OutFacing = FQuat::Identity;
 	}
-	OutFacing = (PoseSearchFrameRotation * ActorWorldRotation).GetNormalized();
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	FVector WorldQueryVelocity = FVector::ZeroVector;
-	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, WorldQueryVelocity);
-	WorldQueryVelocity.Z = 0.0f;
-	BridgePoseSearchQueryVelocityCmPerSecond = WorldQueryVelocity;
-	BridgeTrajectoryState.QueryVelocityCmPerSecond = WorldQueryVelocity;
-	OutVelocity = PoseSearchFrameRotation.RotateVector(WorldQueryVelocity);
+	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, OutVelocity);
+	BridgePoseSearchQueryVelocityCmPerSecond = OutVelocity;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = OutVelocity;
 	OutVelocity.Z = 0.0f;
 }
 
 
 void UPhysAnimComponent::GetVelocity(FVector& OutVelocity)
 {
-	const AActor* const OwnerActor = GetOwner();
-	FQuat PoseSearchFrameRotation = FQuat::Identity;
-	if (OwnerActor)
-	{
-		if (const USkeletalMeshComponent* const SkeletalMesh = GetMeshComponent())
-		{
-			PoseSearchFrameRotation = ResolveBridgePoseSearchAnimationFrameRotation(
-				OwnerActor->GetActorQuat(),
-				SkeletalMesh->GetComponentQuat());
-		}
-	}
-
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
-	FVector WorldQueryVelocity = FVector::ZeroVector;
-	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, WorldQueryVelocity);
-	WorldQueryVelocity.Z = 0.0f;
-	BridgePoseSearchQueryVelocityCmPerSecond = WorldQueryVelocity;
-	BridgeTrajectoryState.QueryVelocityCmPerSecond = WorldQueryVelocity;
-	OutVelocity = PoseSearchFrameRotation.RotateVector(WorldQueryVelocity);
+	ResolveBridgePoseSearchQueryVelocity(EffectiveSettings, OutVelocity);
+	BridgePoseSearchQueryVelocityCmPerSecond = OutVelocity;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = OutVelocity;
 	OutVelocity.Z = 0.0f;
 }
 
@@ -90,44 +49,36 @@ void UPhysAnimComponent::Predict(FTransformTrajectory& InOutTrajectory, int32 Nu
 
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 
-	const FQuat ActorWorldRotation = OwnerActor->GetActorQuat();
-	FQuat PoseSearchFrameRotation = FQuat::Identity;
-	if (const USkeletalMeshComponent* const SkeletalMesh = GetMeshComponent())
-	{
-		PoseSearchFrameRotation = ResolveBridgePoseSearchAnimationFrameRotation(
-			ActorWorldRotation,
-			SkeletalMesh->GetComponentQuat());
-	}
-
 	FVector SimulatedPosition = OwnerActor->GetActorLocation();
-	FQuat SimulatedFacing = (PoseSearchFrameRotation * ActorWorldRotation).GetNormalized();
+	FQuat SimulatedFacing = OwnerActor->GetActorQuat();
 
 	float IntentMagnitude = 0.0f;
-	FVector WorldQueryVelocity = FVector::ZeroVector;
 	ResolveBridgePoseSearchQueryVelocity(
 		EffectiveSettings,
-		WorldQueryVelocity,
+		BridgePoseSearchQueryVelocityCmPerSecond,
 		&IntentMagnitude);
-	WorldQueryVelocity.Z = 0.0f;
-	BridgePoseSearchQueryVelocityCmPerSecond = WorldQueryVelocity;
-	BridgeTrajectoryState.QueryVelocityCmPerSecond = WorldQueryVelocity;
+	BridgeTrajectoryState.QueryVelocityCmPerSecond = BridgePoseSearchQueryVelocityCmPerSecond;
 
-	FVector SimulatedVelocity = PoseSearchFrameRotation.RotateVector(WorldQueryVelocity);
+	FVector SimulatedVelocity = BridgePoseSearchQueryVelocityCmPerSecond;
 	SimulatedVelocity.Z = 0.0f;
-	const FVector DesiredVelocity = SimulatedVelocity;
 
-	float DesiredWorldYawDegrees = ActorWorldRotation.Rotator().Yaw;
+	const FVector DesiredVelocity = BridgePoseSearchQueryVelocityCmPerSecond;
+
+	float DesiredYawDegrees = SimulatedFacing.Rotator().Yaw;
 	if (BridgeIntentState.bHasDesiredFacing)
 	{
-		DesiredWorldYawDegrees = BridgeIntentState.DesiredFacingYawDegrees;
+		DesiredYawDegrees = BridgeIntentState.DesiredFacingYawDegrees;
 	}
-	else if (!WorldQueryVelocity.IsNearlyZero())
+	else if (!DesiredVelocity.IsNearlyZero())
 	{
-		DesiredWorldYawDegrees = WorldQueryVelocity.Rotation().Yaw;
+		DesiredYawDegrees = DesiredVelocity.Rotation().Yaw;
 	}
-	const FQuat DesiredWorldFacing = FQuat(FRotator(0.0f, DesiredWorldYawDegrees, 0.0f));
-	const FQuat DesiredFacing =
-		(PoseSearchFrameRotation * DesiredWorldFacing).GetNormalized();
+	else if (SimulatedVelocity.SizeSquared2D() > KINDA_SMALL_NUMBER)
+	{
+		DesiredYawDegrees = SimulatedVelocity.Rotation().Yaw;
+	}
+
+	const FQuat DesiredFacing = FQuat(FRotator(0.0f, DesiredYawDegrees, 0.0f));
 
 	const float SafePredictionDt = FMath::Max(SecondsPerPredictionSample, KINDA_SMALL_NUMBER);
 	const float RotationAlphaPerStep = FMath::Clamp(
