@@ -1,6 +1,34 @@
 #include "PhysAnimComponent.h"
 #include "PhysAnimComponentPrivate.h"
 
+FQuat UPhysAnimComponent::ResolveBridgePoseSearchCurrentFacing(
+	const FQuat& ActorWorldFacing,
+	const FQuat& MeshWorldFacing,
+	bool bHasMesh)
+{
+	return (bHasMesh ? MeshWorldFacing : ActorWorldFacing).GetNormalized();
+}
+
+
+FQuat UPhysAnimComponent::ResolveBridgePoseSearchDesiredFacing(
+	const FQuat& DesiredActorWorldFacing,
+	const FQuat& CurrentActorWorldFacing,
+	const FQuat& CurrentMeshWorldFacing,
+	bool bHasMesh)
+{
+	if (!bHasMesh)
+	{
+		return DesiredActorWorldFacing.GetNormalized();
+	}
+
+	const FQuat ActorToMeshRelativeFacing =
+		(CurrentActorWorldFacing.GetNormalized().Inverse() *
+		 CurrentMeshWorldFacing.GetNormalized()).GetNormalized();
+	return (DesiredActorWorldFacing.GetNormalized() *
+		ActorToMeshRelativeFacing).GetNormalized();
+}
+
+
 void UPhysAnimComponent::GetGravity(FVector& OutGravityAccel)
 {
 	const UWorld* const World = GetWorld();
@@ -13,7 +41,11 @@ void UPhysAnimComponent::GetCurrentState(FVector& OutPosition, FQuat& OutFacing,
 	if (const AActor* const OwnerActor = GetOwner())
 	{
 		OutPosition = OwnerActor->GetActorLocation();
-		OutFacing = OwnerActor->GetActorQuat();
+		const USkeletalMeshComponent* const SkeletalMesh = GetMeshComponent();
+		OutFacing = ResolveBridgePoseSearchCurrentFacing(
+			OwnerActor->GetActorQuat(),
+			SkeletalMesh ? SkeletalMesh->GetComponentQuat() : FQuat::Identity,
+			SkeletalMesh != nullptr);
 	}
 	else
 	{
@@ -50,7 +82,15 @@ void UPhysAnimComponent::Predict(FTransformTrajectory& InOutTrajectory, int32 Nu
 	const FPhysAnimStabilizationSettings EffectiveSettings = ResolveEffectiveStabilizationSettings();
 
 	FVector SimulatedPosition = OwnerActor->GetActorLocation();
-	FQuat SimulatedFacing = OwnerActor->GetActorQuat();
+	const FQuat ActorWorldFacing = OwnerActor->GetActorQuat();
+	const USkeletalMeshComponent* const SkeletalMesh = GetMeshComponent();
+	const FQuat MeshWorldFacing = SkeletalMesh
+		? SkeletalMesh->GetComponentQuat()
+		: FQuat::Identity;
+	FQuat SimulatedFacing = ResolveBridgePoseSearchCurrentFacing(
+		ActorWorldFacing,
+		MeshWorldFacing,
+		SkeletalMesh != nullptr);
 
 	float IntentMagnitude = 0.0f;
 	ResolveBridgePoseSearchQueryVelocity(
@@ -64,21 +104,27 @@ void UPhysAnimComponent::Predict(FTransformTrajectory& InOutTrajectory, int32 Nu
 
 	const FVector DesiredVelocity = BridgePoseSearchQueryVelocityCmPerSecond;
 
-	float DesiredYawDegrees = SimulatedFacing.Rotator().Yaw;
+	float DesiredActorYawDegrees = ActorWorldFacing.Rotator().Yaw;
 	if (BridgeIntentState.bHasDesiredFacing)
 	{
-		DesiredYawDegrees = BridgeIntentState.DesiredFacingYawDegrees;
+		DesiredActorYawDegrees = BridgeIntentState.DesiredFacingYawDegrees;
 	}
 	else if (!DesiredVelocity.IsNearlyZero())
 	{
-		DesiredYawDegrees = DesiredVelocity.Rotation().Yaw;
+		DesiredActorYawDegrees = DesiredVelocity.Rotation().Yaw;
 	}
 	else if (SimulatedVelocity.SizeSquared2D() > KINDA_SMALL_NUMBER)
 	{
-		DesiredYawDegrees = SimulatedVelocity.Rotation().Yaw;
+		DesiredActorYawDegrees = SimulatedVelocity.Rotation().Yaw;
 	}
 
-	const FQuat DesiredFacing = FQuat(FRotator(0.0f, DesiredYawDegrees, 0.0f));
+	const FQuat DesiredActorFacing =
+		FQuat(FRotator(0.0f, DesiredActorYawDegrees, 0.0f));
+	const FQuat DesiredFacing = ResolveBridgePoseSearchDesiredFacing(
+		DesiredActorFacing,
+		ActorWorldFacing,
+		MeshWorldFacing,
+		SkeletalMesh != nullptr);
 
 	const float SafePredictionDt = FMath::Max(SecondsPerPredictionSample, KINDA_SMALL_NUMBER);
 	const float RotationAlphaPerStep = FMath::Clamp(

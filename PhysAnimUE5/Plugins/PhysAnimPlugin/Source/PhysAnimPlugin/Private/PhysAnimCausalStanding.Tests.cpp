@@ -213,6 +213,59 @@ bool FPhysAnimPoseSearchLocomotionAssetDirectionAuditTest::RunTest(const FString
 			FString::Printf(TEXT("%s half-second root travel remains a walk-scale displacement"), Expectation.AssetName),
 			RootDelta.Size2D() > 140.0f && RootDelta.Size2D() < 160.0f);
 	}
+
+	const FQuat ActorFacingYaw0 = FQuat::Identity;
+	const FQuat MeshFacingYawMinus90(FVector::UpVector, FMath::DegreesToRadians(-90.0f));
+	const FQuat QueryFacingYawMinus90 = UPhysAnimComponent::TestOnlyResolveBridgePoseSearchCurrentFacing(
+		ActorFacingYaw0,
+		MeshFacingYawMinus90,
+		true);
+	TestTrue(
+		TEXT("E77 current Pose Search facing follows the skeletal mesh world basis"),
+		QueryFacingYawMinus90.Equals(MeshFacingYawMinus90, 1.0e-6f));
+	const FVector WorldForwardVelocity(160.0f, 0.0f, 0.0f);
+	TestTrue(
+		TEXT("E77 unchanged world-forward velocity localizes to authored database-forward +Y"),
+		QueryFacingYawMinus90.Inverse().RotateVector(WorldForwardVelocity).Equals(
+			FVector(0.0f, 160.0f, 0.0f),
+			1.0e-4f));
+	TestTrue(
+		TEXT("E77 no-mesh current facing falls back to actor facing"),
+		UPhysAnimComponent::TestOnlyResolveBridgePoseSearchCurrentFacing(
+			ActorFacingYaw0,
+			MeshFacingYawMinus90,
+			false).Equals(ActorFacingYaw0, 1.0e-6f));
+
+	const FQuat ActorFacingYaw30(FVector::UpVector, FMath::DegreesToRadians(30.0f));
+	const FQuat MeshFacingYawMinus60(FVector::UpVector, FMath::DegreesToRadians(-60.0f));
+	const FVector TurnedActorForward = ActorFacingYaw30.RotateVector(WorldForwardVelocity);
+	const FQuat TurnedQueryFacing = UPhysAnimComponent::TestOnlyResolveBridgePoseSearchCurrentFacing(
+		ActorFacingYaw30,
+		MeshFacingYawMinus60,
+		true);
+	TestTrue(
+		TEXT("E77 turned mesh facing preserves authored local +Y for actor-forward velocity"),
+		TurnedQueryFacing.Inverse().RotateVector(TurnedActorForward).Equals(
+			FVector(0.0f, 160.0f, 0.0f),
+			1.0e-4f));
+	const FQuat DesiredQueryFacing = UPhysAnimComponent::TestOnlyResolveBridgePoseSearchDesiredFacing(
+		ActorFacingYaw30,
+		ActorFacingYaw30,
+		MeshFacingYawMinus60,
+		true);
+	TestTrue(
+		TEXT("E77 desired actor yaw 30 retains the current actor-to-mesh minus-90 offset"),
+		DesiredQueryFacing.Equals(MeshFacingYawMinus60, 1.0e-6f));
+	TestTrue(
+		TEXT("E77 no-mesh desired facing remains actor desired facing"),
+		UPhysAnimComponent::TestOnlyResolveBridgePoseSearchDesiredFacing(
+			ActorFacingYaw30,
+			ActorFacingYaw0,
+			MeshFacingYawMinus90,
+			false).Equals(ActorFacingYaw30, 1.0e-6f));
+	TestTrue(
+		TEXT("E77 facing-basis change leaves exact zero velocity unchanged"),
+		TurnedQueryFacing.Inverse().RotateVector(FVector::ZeroVector).Equals(FVector::ZeroVector, 0.0f));
 	return true;
 }
 

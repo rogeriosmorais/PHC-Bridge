@@ -1976,6 +1976,28 @@ public:
 	{
 		return StopStage2AScriptedLocomotionAndReturnToStanding();
 	}
+	static FQuat TestOnlyResolveBridgePoseSearchCurrentFacing(
+		const FQuat& ActorWorldFacing,
+		const FQuat& MeshWorldFacing,
+		bool bHasMesh)
+	{
+		return ResolveBridgePoseSearchCurrentFacing(
+			ActorWorldFacing,
+			MeshWorldFacing,
+			bHasMesh);
+	}
+	static FQuat TestOnlyResolveBridgePoseSearchDesiredFacing(
+		const FQuat& DesiredActorWorldFacing,
+		const FQuat& CurrentActorWorldFacing,
+		const FQuat& CurrentMeshWorldFacing,
+		bool bHasMesh)
+	{
+		return ResolveBridgePoseSearchDesiredFacing(
+			DesiredActorWorldFacing,
+			CurrentActorWorldFacing,
+			CurrentMeshWorldFacing,
+			bHasMesh);
+	}
 	const FBridgeIntentState& GetBridgeIntentStateForTesting() const { return BridgeIntentState; }
 	const FBridgeTrajectoryState& GetBridgeTrajectoryStateForTesting() const { return BridgeTrajectoryState; }
 	const FBridgeShellState& GetBridgeShellStateForTesting() const { return BridgeShellState; }
@@ -2632,6 +2654,15 @@ private:
 	bool QueryPoseSearchWithBridgeTrajectory(FPoseSearchBlueprintResult& OutSearchResult, FString& OutError);
 	void UpdateBridgePoseSearchTrajectory(float DeltaTime, const FPhysAnimStabilizationSettings& EffectiveSettings);
 	void ResolveBridgePoseSearchQueryVelocity(const FPhysAnimStabilizationSettings& EffectiveSettings, FVector& OutQueryVelocity, float* OutIntentMagnitude = nullptr) const;
+	static FQuat ResolveBridgePoseSearchCurrentFacing(
+		const FQuat& ActorWorldFacing,
+		const FQuat& MeshWorldFacing,
+		bool bHasMesh);
+	static FQuat ResolveBridgePoseSearchDesiredFacing(
+		const FQuat& DesiredActorWorldFacing,
+		const FQuat& CurrentActorWorldFacing,
+		const FQuat& CurrentMeshWorldFacing,
+		bool bHasMesh);
 	void ApplyBridgePoseSearchSelectionPolicy(
 		FPoseSearchBlueprintResult& InOutSearchResult,
 		float QueryDeltaTimeSeconds,
