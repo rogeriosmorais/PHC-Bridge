@@ -816,3 +816,11 @@ Machine-readable record: `experiments/stage1/production-scaled-delayed-right-pro
 **Next experiment selected.** Reduce Torso by 256× to scale 0.0000152587890625.
 
 Machine-readable record: `experiments/stage1/scaled-delayed-torso.e56.json`.
+
+## E57 — Torso at 0.0015258789% after first active policy cycle (2026-07-15)
+
+**Result.** Supported. Normal AUC was exactly 31.0672, ZeroActions 39.3495 and ratio 0.789519. Torso was zero on the first active snapshot and nonzero in all 300 later policy rows. All streams were deterministic.
+
+**Next experiment selected.** Promote this final joint into production and run the all-joint no-flag proof.
+
+Machine-readable record: `experiments/stage1/scaled-delayed-torso.e57.json`.
